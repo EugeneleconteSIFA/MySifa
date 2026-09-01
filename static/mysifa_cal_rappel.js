@@ -64,21 +64,23 @@
       '#mysifa-cal-rappels.ouvert{display:flex}',
       '#mysifa-cal-rappels .mcr-pile{display:flex;flex-direction:column;gap:12px;',
       'width:100%;max-width:400px;max-height:92vh;overflow-y:auto}',
-      '.mcr-card{background:var(--card,#111827);border:1px solid var(--border,#1e293b);',
-      'border-top:3px solid var(--accent,#22d3ee);border-radius:14px;padding:18px 18px 16px;',
-      'box-shadow:0 24px 60px rgba(0,0,0,.5);',
-      /* Le rappel arrive par-dessus une page deja chargee : la bordure qui
-         pulse fait revenir l'oeil dessus meme si l'ecran n'est pas regarde
-         au moment ou la fenetre s'ouvre. */
-      'animation:mcrIn .22s ease-out,mcrScintille 1.6s ease-in-out .22s infinite}',
+      '.mcr-card{position:relative;background:var(--card,#111827);',
+      'border:1px solid var(--border,#1e293b);border-top:3px solid var(--accent,#22d3ee);',
+      'border-radius:14px;padding:18px 18px 16px;',
+      'box-shadow:0 24px 60px rgba(0,0,0,.5);animation:mcrIn .22s ease-out}',
       '@keyframes mcrIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}',
-      '@keyframes mcrScintille{0%,100%{border-color:var(--border,#1e293b);',
-      'border-top-color:var(--accent,#22d3ee);',
-      'box-shadow:0 24px 60px rgba(0,0,0,.5),0 0 0 0 var(--accent-bg,rgba(34,211,238,.12))}',
-      '50%{border-color:var(--accent,#22d3ee);border-top-color:var(--accent,#22d3ee);',
-      'box-shadow:0 24px 60px rgba(0,0,0,.5),0 0 0 3px var(--accent,#22d3ee),',
-      '0 0 26px 6px var(--accent-bg,rgba(34,211,238,.12))}}',
-      '@media(prefers-reduced-motion:reduce){.mcr-card{animation:mcrIn .22s ease-out}}',
+      /* Le rappel arrive par-dessus une page deja chargee : le lisere accent
+         qui respire ramene l'oeil dessus. Un anneau en ::after plutot qu'une
+         animation de border-color sur la carte : la geometrie ne bouge pas,
+         seule l'opacite varie — pas de clignotement ni de saute de 1px. */
+      /* inset:0 et pas un anneau debordant : .mcr-pile est un conteneur de
+         defilement (overflow-y:auto), il rogne tout ce qui sort de la carte
+         — un halo en negatif disparaissait sur les cotes. */
+      '.mcr-card::after{content:"";position:absolute;inset:0;border-radius:14px;',
+      'pointer-events:none;border:2px solid var(--accent,#22d3ee);opacity:0;',
+      'animation:mcrHalo 2.2s ease-in-out .3s infinite}',
+      '@keyframes mcrHalo{0%,100%{opacity:.12}50%{opacity:.95}}',
+      '@media(prefers-reduced-motion:reduce){.mcr-card::after{animation:none;opacity:.5}}',
       '.mcr-quand{font-size:11px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;',
       'color:var(--accent,#22d3ee)}',
       '.mcr-titre{font-size:17px;font-weight:800;color:var(--text,#f1f5f9);margin-top:5px;line-height:1.3}',
@@ -101,10 +103,13 @@
       'font-weight:600;cursor:pointer;transition:border-color .15s,color .15s}',
       '.mcr-btn:hover{border-color:var(--accent,#22d3ee);color:var(--accent,#22d3ee)}',
       '.mcr-btn.mcr-ouvrir{background:var(--accent,#22d3ee);border-color:var(--accent,#22d3ee);',
-      /* Blanc en dur : le rappel s'affiche sur toutes les pages, et celles qui
-         ne definissent pas --sur-accent tombaient sur du texte sombre sur
-         fond accent — illisible. */
-      'color:#ffffff;font-weight:700}',
+      /* Le rappel s'affiche sur toutes les pages, dont celles qui ne
+         definissent pas --sur-accent : sans la regle body.light, le texte
+         tombait sur le fallback sombre sur fond accent bleu — illisible.
+         En theme sombre l'accent est cyan clair : le texte doit y rester
+         sombre, d'ou les deux regles plutot qu'un blanc en dur. */
+      'color:var(--sur-accent,#0a0e17);font-weight:700}',
+      'body.light .mcr-btn.mcr-ouvrir{color:#ffffff}',
       '@media(max-width:520px){#mysifa-cal-rappels{align-items:flex-end;padding:10px}',
       '#mysifa-cal-rappels .mcr-pile{max-width:none}}',
       '@media print{#mysifa-cal-rappels{display:none!important}}'

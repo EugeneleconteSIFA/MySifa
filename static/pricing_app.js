@@ -4288,13 +4288,16 @@
   function msProductCompLabel(produit, role) {
     const c = msProductComp(produit, role);
     if (!c) return '<span style="color:var(--muted)">—</span>';
-    // Le grammage affiché est celui que CE produit pose, plus le libellé de
-    // déclinaison : c'est lui qui distingue deux lignes portant le même
-    // adhésif, et c'est lui qu'on va corriger si le coût surprend.
-    const g = c.grammage_gsm
-      ? ` <span class="msp-decl">${escHtml(fmtNum(c.grammage_gsm, 0, 1))} g/m²</span>`
-      : "";
-    return escHtml(c.reference) + g;
+    // La référence seule : le grammage a sa propre colonne depuis le
+    // 31 août 2026, et l'écrire aux deux endroits ferait chercher lequel des
+    // deux fait foi le jour où ils diffèrent.
+    return escHtml(c.reference);
+  }
+
+  /** Le grammage d'adhésif que ce produit pose. */
+  function msProductGrammage(produit) {
+    const c = msProductComp(produit, "ADHESIF");
+    return c && c.grammage_gsm ? parseFloat(c.grammage_gsm) : null;
   }
 
   /** Le support du produit : la sous-section de son frontal, en badge MyStock. */
@@ -4375,26 +4378,32 @@
   }
 
   function renderMsProductsList() {
-    /* La colonne « Code » est partie le 31 août 2026 : 886-0001 n'apprend rien
-       qu'on cherche du regard, et il mangeait la largeur d'une désignation qui,
-       elle, se lit. Le code reste dans la recherche, sur la fiche, et en
-       infobulle de la désignation — on ne le perd pas, on cesse d'en faire une
-       colonne.
+    /* Code et désignation ont quitté le tableau (31 août 2026).
 
-       Le SUPPORT le remplace : thermique, couché, synthétique, vélin. C'est ce
-       qui distingue deux étiquettes à l'œil, et il se filtre. */
+       « 886-0001 » n'apprend rien qu'on cherche du regard. Et « Thermique
+       Pro 70g · Enlevable 22g, Jaune 60g standard » ne fait que recopier, en
+       prose et sur trois lignes, ce que les colonnes disent déjà en un coup
+       d'œil : c'est un produit fini, il EST sa composition. Les colonnes la
+       donnent mieux que sa phrase, et alignée d'une ligne à l'autre.
+
+       Ni l'un ni l'autre n'est perdu : la recherche en haut de page porte sur
+       le code ET la désignation, et la fiche montre les deux. */
     const COLS = [
       { cle: "caret", titre: "", style: "width:28px" },
-      { cle: "support", titre: "Support", style: "width:120px", filtre: "choix",
+      { cle: "support", titre: "Support", style: "width:118px", filtre: "choix",
         val: msProductSupportTexte },
-      { cle: "des", titre: "Désignation", filtre: "texte",
-        val: (p) => p.designation || "",
-        // Le code reste filtrable ici : il a quitté l'affichage, pas l'usage.
-        filtreVal: (p) => `${p.designation || ""} ${p.code || ""}` },
       { cle: "frontal", titre: "Frontal", filtre: "choix",
         val: (p) => (msProductComp(p, "FRONTAL") || {}).reference || "" },
       { cle: "adhesif", titre: "Adhésif", filtre: "choix",
         val: (p) => (msProductComp(p, "ADHESIF") || {}).reference || "" },
+      // Le grammage d'adhésif a sa colonne : c'est LUI qui sépare quatre
+      // produits portant le même 2028Y, et le seul chiffre du tableau qui se
+      // corrige à la main quand un coût surprend. Filtre par choix — les
+      // grammages sont une poignée de valeurs discrètes, pas du texte libre.
+      { cle: "gram", titre: "Grammage", style: "width:104px", filtre: "choix",
+        val: msProductGrammage,
+        filtreVal: (p) => { const g = msProductGrammage(p); return g == null ? "" : String(g); },
+        optLabel: (o) => `${o} g/m²` },
       { cle: "glassine", titre: "Glassine", filtre: "choix",
         val: (p) => (msProductComp(p, "GLASSINE") || {}).reference || "" },
       { cle: "autres", titre: "Autres", style: "width:70px",
@@ -4413,12 +4422,19 @@
         const c = p.cost;
         const open = !!S.expandedProd[p.id];
         const autres = (p.composants || []).filter((x) => x.role === "AUTRE").length;
-        return `<tr class="ms-row${open ? " open" : ""}" data-msp-row="${p.id}">
+        // Code et désignation restent à portée de survol : ils ont quitté les
+        // colonnes, pas la ligne.
+        return `<tr class="ms-row${open ? " open" : ""}" data-msp-row="${p.id}"
+            title="${escAttr((p.code || "") + " — " + (p.designation || ""))}">
             <td class="ms-caret">${open ? "▾" : "▸"}</td>
             <td>${msProductSupport(p)}</td>
-            <td title="${escAttr(p.code || "")}">${escHtml(p.designation)}</td>
             <td>${msProductCompLabel(p, "FRONTAL")}</td>
             <td>${msProductCompLabel(p, "ADHESIF")}</td>
+            <td class="msp-gram">${
+              msProductGrammage(p) != null
+                ? `${escHtml(fmtNum(msProductGrammage(p), 0, 1))} <span class="lbl-unit">g/m²</span>`
+                : '<span class="muted" title="Adhésif au kilo sans grammage : ce composant compte pour 0">—</span>'
+            }</td>
             <td>${msProductCompLabel(p, "GLASSINE")}</td>
             <td>${autres || '<span style="color:var(--muted)">—</span>'}</td>
             <td class="ms-prix-cell">${c ? fmtEurM2(c.total_eur_per_m2) : '<span style="color:var(--muted)">—</span>'}</td>
@@ -4437,7 +4453,7 @@
       <div class="pr-narrow">
         ${pageHead("Produits", `${S.msProducts.length} produit(s) MyStock`, productsTabsHtml())}
         <div class="filters">
-          <input type="search" class="search-input" id="msp-q" placeholder="Rechercher (code, désignation…)" value="${escAttr(S.filters.msProdQ)}"/>
+          <input type="search" class="search-input" id="msp-q" placeholder="Rechercher (code, désignation…)" title="Le code et la désignation ont quitté les colonnes : ils se cherchent ici, et se lisent au survol d'une ligne." value="${escAttr(S.filters.msProdQ)}"/>
           ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-msprod">+ Nouveau produit</button>' : ""}
         </div>
         <div class="table-wrap">

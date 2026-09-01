@@ -4055,19 +4055,13 @@ EXPE_MAIN_CSS = r"""
   .expe-departs-table th,.expe-hist-table th{padding:8px 4px;font-size:9.5px}
 }
 /* Boutons d'action compactés (colonne actions = 12% du tableau seulement) */
-.expe-departs-table .expe-dep-acts,.expe-hist-table .expe-dep-acts{gap:3px}
-.expe-departs-table .expe-dep-acts .btn-ghost,
-.expe-departs-table .expe-dep-acts .btn-danger,
-.expe-departs-table .expe-dep-acts .expe-avis-btn,
-.expe-hist-table .expe-dep-acts .btn-ghost,
-.expe-hist-table .expe-dep-acts .btn-danger,
-.expe-hist-table .expe-dep-acts .expe-avis-btn{width:26px;height:26px;border-radius:5px}
+.expe-departs-table .expe-dep-grp,.expe-hist-table .expe-dep-grp{gap:5px}
 .expe-departs-table .expe-dep-valider-btn,
 .expe-departs-table .expe-dep-invalider-btn,
 .expe-hist-table .expe-dep-valider-btn,
-.expe-hist-table .expe-dep-invalider-btn{padding:6px 8px;font-size:10.5px}
+.expe-hist-table .expe-dep-invalider-btn{padding:7px 14px;font-size:11.5px}
 .expe-departs-table .expe-dep-actions-cell,
-.expe-hist-table .expe-dep-actions-cell{gap:6px;flex-wrap:wrap}
+.expe-hist-table .expe-dep-actions-cell{gap:8px}
 .expe-day-sep-row td.expe-day-sep-cell {
   padding: 28px 14px 12px !important;
   background: var(--bg) !important;
@@ -4081,10 +4075,25 @@ EXPE_MAIN_CSS = r"""
   letter-spacing: 0.6px;
   color: var(--text2);
 }
-.expe-dep-actions-cell{display:flex;flex-direction:row;align-items:center;justify-content:flex-end;gap:10px}
-.expe-dep-acts{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;flex-shrink:0}
-.expe-dep-acts .btn-ghost,.expe-dep-acts .btn-danger,.expe-dep-acts .expe-avis-btn{width:32px;height:30px;padding:0;margin:0;
-  display:flex;align-items:center;justify-content:center;border-radius:6px}
+/* Cellule d'actions : deux rangees, quatre groupes separes par un ecart.
+   Rangee du haut : le jugement porte sur le depart (signaler / valoriser),
+   puis les actions courantes. Rangee du bas : le destructif d'un cote, la
+   validation de l'autre — les deux gestes qu'on ne veut pas voir voisiner
+   d'une icone. L'ecart entre groupes fait le travail qu'une grille reguliere
+   ne faisait pas : dire ce qui va avec quoi. */
+/* `width:max-content` + `margin-left:auto` : la cellule se cale sur la largeur
+   de sa rangee la plus large, et le `space-between` de la rangee du bas
+   repartit alors « supprimer » et « Valider » sur cette largeur-la, pas sur
+   toute la colonne — sinon le rouge partait se perdre sous la colonne Dossier. */
+.expe-dep-actions-cell{display:flex;flex-direction:column;align-items:stretch;gap:8px;
+  width:max-content;max-width:100%;margin-left:auto}
+.expe-dep-acts-row{display:flex;align-items:center;justify-content:flex-end;gap:18px;flex-wrap:nowrap}
+.expe-dep-acts-row.bas{width:100%;justify-content:space-between}
+.expe-dep-grp{display:flex;align-items:center;gap:5px;flex-shrink:0}
+.expe-dep-actions-cell .btn-ghost,
+.expe-dep-actions-cell .btn-danger,
+.expe-dep-actions-cell .expe-avis-btn{width:32px;height:32px;padding:0;margin:0;
+  display:flex;align-items:center;justify-content:center;border-radius:8px}
 .expe-dep-valider-btn{margin:0;padding:8px 12px;font-size:11px;font-weight:700;border-radius:10px;
   white-space:nowrap;flex-shrink:0}
 .expe-dep-invalider-btn{margin:0;padding:8px 12px;font-size:11px;font-weight:700;border-radius:10px;
@@ -4100,14 +4109,14 @@ EXPE_MAIN_CSS = r"""
 .expe-hist-pager .page-info{font-size:12px;color:var(--muted);padding:0 4px;white-space:nowrap}
 .expe-dep-ab[title],.expe-dep-valider-btn[title],.expe-dep-invalider-btn[title]{position:relative;overflow:visible}
 .expe-dep-ab[title]:hover::after,.expe-dep-valider-btn[title]:hover::after,.expe-dep-invalider-btn[title]:hover::after{
-  content:attr(title);position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);
-  background:var(--card);border:1px solid var(--border);border-radius:7px;
-  padding:6px 10px;font-size:10px;font-weight:500;color:var(--text2);line-height:1.4;
-  white-space:normal;max-width:240px;text-align:center;
-  pointer-events:none;z-index:200;box-shadow:0 4px 16px color-mix(in srgb,var(--bg) 55%,transparent)}
+  content:attr(title);position:absolute;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%);
+  background:var(--card);border:1px solid var(--border);border-radius:9px;
+  padding:9px 14px;font-size:12.5px;font-weight:500;color:var(--text);line-height:1.5;
+  white-space:normal;width:max-content;max-width:300px;text-align:center;
+  pointer-events:none;z-index:200;box-shadow:0 6px 22px color-mix(in srgb,var(--bg) 55%,transparent)}
 .expe-dep-ab[title]:hover::before,.expe-dep-valider-btn[title]:hover::before,.expe-dep-invalider-btn[title]:hover::before{
-  content:'';position:absolute;bottom:calc(100% + 2px);left:50%;transform:translateX(-50%);
-  border:5px solid transparent;border-top-color:var(--border);pointer-events:none;z-index:200}
+  content:'';position:absolute;bottom:calc(100% + 3px);left:50%;transform:translateX(-50%);
+  border:6px solid transparent;border-top-color:var(--border);pointer-events:none;z-index:200}
 .expe-hist-table th{padding:6px 10px;font-size:9px}
 
 /* MyExpé — onglets internes modal Ajouter départ */
@@ -5413,13 +5422,26 @@ function trpColorFromRow(r){
   return t?(t.couleur||''):'';
 }
 
-function expeDepartActsGrid(buttons,validerBtn){
-  const kids=(buttons||[]).filter(Boolean);
-  if(!kids.length&&!validerBtn) return null;
-  return h('div',{className:'expe-dep-actions-cell'},
-    kids.length?h('div',{className:'expe-dep-acts'},...kids):null,
-    validerBtn||null
-  );
+// Cellule d'actions d'une ligne de depart.
+//
+// `groupes` porte les trois familles dans l'ordre de lecture : le jugement sur
+// le depart (signaler / valoriser), les actions courantes, puis le destructif.
+// Une liste plate ne disait rien de ces familles — l'oeil ne distinguait pas
+// « supprimer » de « dupliquer », poses cote a cote et de meme taille.
+function expeDepartActsGrid(groupes,validerBtn){
+  const g=groupes||{};
+  const avis=(g.avis||[]).filter(Boolean);
+  const actions=(g.actions||[]).filter(Boolean);
+  const suppr=(g.suppr||[]).filter(Boolean);
+  if(!avis.length&&!actions.length&&!suppr.length&&!validerBtn) return null;
+  const grp=kids=>kids.length?h('div',{className:'expe-dep-grp'},...kids):null;
+  const haut=(avis.length||actions.length)
+    ?h('div',{className:'expe-dep-acts-row'},grp(avis),grp(actions))
+    :null;
+  const bas=(suppr.length||validerBtn)
+    ?h('div',{className:'expe-dep-acts-row bas'},grp(suppr),validerBtn||h('span',null))
+    :null;
+  return h('div',{className:'expe-dep-actions-cell'},haut,bas);
 }
 
 // ── MyExpé : suivi des palettes Europe ────────────────────────
@@ -6260,18 +6282,21 @@ function renderExpeSuiviDeparts(){
         h('span',{style:{color:'var(--muted)',fontSize:'11px'}},' '+(expePaletteTypeLabel(r)||''))),
       h('td',null,expeDossierCell(r)),
       expeCanWrite()?h('td',{className:'expe-dep-actions-td'},
-        expeDepartActsGrid([
-          ...expeAvisBoutons(r),
+        expeDepartActsGrid({
+          avis:expeAvisBoutons(r),
+          actions:[
           r.code_postal_destination?h('button',{className:'btn-ghost expe-dep-ab',type:'button',
             title:'Ouvrir une demande de devis préremplie avec les données de ce départ',
-            onClick:()=>ouvrirDevisDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeDevisIcon(14)):null,
+            onClick:()=>ouvrirDevisDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeDevisIcon(16)):null,
           (r.code_postal_destination&&(r.poids_total_kg||r.nb_palette))?h('button',{className:'btn-ghost expe-dep-ab',type:'button',
             title:'Comparer les tarifs des transporteurs pour ce départ',
-            onClick:()=>ouvrirComparateurDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeCompareIcon(14)):null,
+            onClick:()=>ouvrirComparateurDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeCompareIcon(16)):null,
           h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Dupliquer ce départ en nouvelle saisie',
-            onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',14)),
+            onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',16)),
           h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Modifier les informations de ce départ',
-            onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',14)),
+            onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',16))
+          ],
+          suppr:[
           h('button',{className:'btn-danger expe-dep-ab',type:'button',title:'Supprimer définitivement ce départ',onClick:async()=>{
             if(!confirm('Supprimer ce départ ?')) return;
             try{
@@ -6279,8 +6304,9 @@ function renderExpeSuiviDeparts(){
               toast('Départ supprimé');
               await loadExpeDepartJour();
             }catch(e){toast(e.message||'Suppression impossible','error');}
-          }},iconEl('trash',14))
-        ],h('button',{className:'btn expe-dep-valider-btn',type:'button',
+          }},iconEl('trash',16))
+          ]
+        },h('button',{className:'btn expe-dep-valider-btn',type:'button',
           title:'Valider ce départ et l\'archiver dans l\'historique',
           onClick:()=>expeValiderDepart(r.id)},'Valider'))
       ):h('td',null,'—')
@@ -6291,8 +6317,8 @@ function renderExpeSuiviDeparts(){
   // Colgroup : force la répartition des largeurs (table-layout:fixed). Toutes en % pour
   // s'adapter à la largeur du conteneur sans jamais dépasser.
   const departsCols=[
-    ['chev','3%'],['date','9%'],['transp','12%'],['client','19%'],['dest','8%'],
-    ['bl','12%'],['pal','9%'],['dossier','13%'],['acts','15%']
+    ['chev','3%'],['date','9%'],['transp','12%'],['client','17%'],['dest','8%'],
+    ['bl','11%'],['pal','9%'],['dossier','13%'],['acts','18%']
   ];
   const colgroup=h('colgroup',null,...departsCols.map(([c,w])=>h('col',{className:'expe-col-'+c,style:{width:w}})));
   const listCard=h('div',{className:'card'},
@@ -6451,12 +6477,15 @@ function renderExpeHistoriqueDeparts(){
       h('span',{style:{color:'var(--muted)',fontSize:'11px'}},' '+(expePaletteTypeLabel(r)||''))),
     h('td',null,expeDossierCell(r)),
     expeCanWrite()?h('td',{className:'expe-dep-actions-td'},
-      expeDepartActsGrid([
-        ...expeAvisBoutons(r),
+      expeDepartActsGrid({
+        avis:expeAvisBoutons(r),
+        actions:[
         h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Dupliquer ce départ en nouvelle saisie',
-          onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',14)),
+          onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',16)),
         h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Modifier les informations de ce départ',
-          onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',14)),
+          onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',16))
+        ],
+        suppr:[
         h('button',{className:'btn-danger expe-dep-ab',type:'button',title:'Supprimer définitivement ce départ de l\'historique',onClick:async()=>{
           if(!confirm('Supprimer ce départ ?')) return;
           try{
@@ -6464,8 +6493,9 @@ function renderExpeHistoriqueDeparts(){
             toast('Départ supprimé');
             await loadExpeDepartHistorique();
           }catch(e){toast(e.message||'Suppression impossible','error');}
-        }},iconEl('trash',14))
-      ],
+        }},iconEl('trash',16))
+        ]
+      },
       h('button',{className:'btn expe-dep-invalider-btn',type:'button',
         title:'Annuler la validation et remettre ce départ dans le suivi du jour',
         onClick:()=>void expeInvaliderDepart(r.id)},'Invalider'))
@@ -6494,12 +6524,12 @@ function renderExpeHistoriqueDeparts(){
           h('col',{style:{width:'3%'}}),   // chevron
           h('col',{style:{width:'12%'}}),  // Validé le
           h('col',{style:{width:'9%'}}),   // Date enl.
-          h('col',{style:{width:'19%'}}),  // Client
-          h('col',{style:{width:'12%'}}),  // N° BL
+          h('col',{style:{width:'18%'}}),  // Client
+          h('col',{style:{width:'11%'}}),  // N° BL
           h('col',{style:{width:'12%'}}),  // Transporteur
-          h('col',{style:{width:'9%'}}),   // Pal.
+          h('col',{style:{width:'8%'}}),   // Pal.
           h('col',{style:{width:'10%'}}),  // Dossier
-          h('col',{style:{width:'14%'}})   // Actions
+          h('col',{style:{width:'17%'}})   // Actions
         ),
         h('thead',null,head),h('tbody',null,...body))),
       pager

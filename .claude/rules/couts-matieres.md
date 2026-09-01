@@ -130,14 +130,25 @@ dans un menu : un menu cache l'état, et on cherche longtemps pourquoi la liste
 est vide. Un filtre actif se teinte, et un bandeau sous le tableau dit combien de
 lignes sont masquées avec un bouton pour tout relâcher.
 
-**Liste des produits** — la colonne « Code » est partie : `886-0001` n'apprend
-rien qu'on cherche du regard, et elle mangeait la largeur d'une désignation qui,
-elle, se lit. Le code reste dans la recherche, en infobulle de la désignation, et
-sur la fiche. Une colonne **Support** l'a remplacée : la sous-section du frontal
-(thermique, couché, synthétique, vélin), en badge, avec **les teintes exactes de
-MyStock** recopiées depuis `dash-mp-cat-*` (`app/web/stock_page.py`). Deux
-applications qui parlent du même papier doivent lui donner la même couleur ; si
-la palette bouge là-bas, elle doit bouger ici.
+**Liste des produits** — code et désignation ont quitté le tableau.
+`886-0001` n'apprend rien qu'on cherche du regard, et « Thermique Pro 70g ·
+Enlevable 22g, Jaune 60g standard » ne fait que recopier en prose, sur trois
+lignes, ce que les colonnes disent en un coup d'œil : un produit fini EST sa
+composition. Les deux restent cherchables (la recherche du haut porte sur
+`code LIKE ? OR designation LIKE ?`) et lisibles au survol de la ligne.
+
+À la place, deux colonnes qui font le travail :
+
+- **Support** — la sous-section du frontal (thermique, couché, synthétique,
+  vélin), en badge, avec **les teintes exactes de MyStock** recopiées depuis
+  `dash-mp-cat-*` (`app/web/stock_page.py`). Deux applications qui parlent du
+  même papier doivent lui donner la même couleur ; si la palette bouge là-bas,
+  elle doit bouger ici.
+- **Grammage** — celui de l'adhésif, porté par le composant. C'est lui qui
+  sépare quatre produits montés sur le même 2028Y, et le seul chiffre du tableau
+  qui se corrige à la main quand un coût surprend. La cellule Adhésif ne le
+  répète plus : l'écrire aux deux endroits ferait chercher lequel fait foi le
+  jour où ils diffèrent.
 
 Test : `node tests/test_pricing_vue_liste.js`.
 

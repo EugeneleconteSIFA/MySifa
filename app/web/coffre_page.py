@@ -552,7 +552,7 @@ document.getElementById('btn-logout').onclick=async()=>{
 })();
 window.addEventListener('hashchange',function(){try{showTab(_readCoffreTab(),{silent:true});}catch(e){}});
 </script>
-<script src="/static/mysifa_cal_rappel.js?v=5"></script>
+<script src="/static/mysifa_cal_rappel.js?v=6"></script>
 </body>
 </html>
 """

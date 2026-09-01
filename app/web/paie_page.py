@@ -377,7 +377,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=5"></script>
+<script src="/static/mysifa_cal_rappel.js?v=6"></script>
 <script>
 'use strict';
 

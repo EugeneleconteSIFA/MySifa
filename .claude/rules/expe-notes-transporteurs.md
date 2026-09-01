@@ -120,16 +120,28 @@ le bon chemin.
 
 ### Cellule d'actions des tableaux de départs
 
-`.expe-dep-acts` est une grille à **4 colonnes**, et les largeurs de colonne
-« Actions » sont 15 % au suivi, 14 % à l'historique. C'est calibré pour que la
-cellule tienne en **deux rangées** : 7 icônes au suivi (2 avis + devis +
-comparateur + dupliquer + modifier + supprimer), 5 à l'historique. Avec 3
-colonnes elle retombait à trois rangées et faisait grandir chaque ligne du
-tableau de 30 px pour rien.
+La cellule (`.expe-dep-actions-cell`) est une colonne de **deux rangées**, et
+chaque rangée porte des **groupes** séparés par un écart de 18 px :
 
-Un bouton ajouté à cette cellule oblige donc à revérifier le compte de
-rangées, et les boutons d'avis portent `expe-dep-ab` en plus de leur propre
-classe — c'est elle qui donne l'infobulle et la métrique commune.
+```
+[signaler][valoriser]      [devis][comparateur][dupliquer][modifier]
+[supprimer]                                            [   Valider   ]
+```
+
+L'écart entre groupes fait le travail qu'une grille régulière ne faisait pas :
+dire ce qui va avec quoi. « Supprimer » et « Valider » sont sur la rangée du
+bas, aux deux extrémités — ce sont les deux gestes qu'on ne veut pas voir
+voisiner d'une icône.
+
+La cellule est en `width:max-content; margin-left:auto` : elle se cale sur sa
+rangée la plus large, sans quoi le `space-between` de la rangée du bas envoyait
+« supprimer » se perdre sous la colonne Dossier. Les boutons font 32 × 32 avec
+une icône de 16 px, et la colonne « Actions » vaut 18 % au suivi, 17 % à
+l'historique — vérifié sans débordement de 1280 à 1920 px.
+
+Un bouton ajouté oblige à revérifier ces largeurs, et les boutons d'avis
+portent `expe-dep-ab` en plus de leur propre classe — c'est elle qui donne
+l'infobulle et la métrique commune.
 
 ### Comparateur — le piège déjà tombé une fois
 
