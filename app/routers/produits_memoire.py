@@ -37,6 +37,28 @@ from app.services import produit_memoire as pm
 router = APIRouter()
 
 SCAN_UPLOAD_DIR = os.path.join(UPLOAD_DIR, "of_scans")
+SAVOIR_UPLOAD_DIR = os.path.join(UPLOAD_DIR, "savoirs")
+
+# Une photo d'atelier redimensionnee cote navigateur pese moins de 1 Mo ; la
+# limite est celle d'un depot depuis un poste (capture d'ecran, PDF de fiche).
+PIECE_TAILLE_MAX = 25 * 1024 * 1024
+PIECES_PAR_NOTE_MAX = 8
+
+# Ce qui s'ouvre sans rien installer sur un poste d'atelier. Le reste se
+# refuse : une note d'atelier n'est pas une GED, et un .exe depose par erreur
+# dans data/uploads/ est un probleme qu'on n'a pas envie d'avoir.
+_PIECE_EXT_IMAGE = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".bmp"}
+_PIECE_EXT_DOC = {".pdf", ".docx", ".doc", ".xlsx", ".xls", ".csv", ".txt"}
+_PIECE_MIME = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+    ".gif": "image/gif", ".webp": "image/webp", ".heic": "image/heic",
+    ".heif": "image/heif", ".bmp": "image/bmp", ".pdf": "application/pdf",
+    ".txt": "text/plain", ".csv": "text/csv",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
 
 # Numero d'OF SIFA : meme pre-filtre que le pont Access et que l'import PDF.
 _OF_RACINE_RE = re.compile(r"\b(99\d{5})\b")
@@ -710,6 +732,125 @@ def voter_utile(savoir_id: int, request: Request):
         conn.execute("UPDATE produit_savoirs SET utile_count=? WHERE id=?", (n, savoir_id))
         conn.commit()
     return {"success": True, "utile_count": int(n or 0), "vote_utilisateur": not bool(deja)}
+
+
+# ─── Pieces jointes d'une note ───────────────────────────────────────────────
+#
+# Une note d'atelier montre autant qu'elle raconte : le defaut en rive gauche
+# se photographie, il ne se decrit pas. La photo est prise sur le moment, au
+# poste, et rejoint la note plutot qu'un telephone.
+
+def _piece_ou_404(conn, piece_id: int):
+    row = conn.execute(
+        "SELECT p.*, s.auteur AS savoir_auteur, s.ref_produit_norm "
+        "FROM produit_savoirs_pieces p "
+        "JOIN produit_savoirs s ON s.id = p.savoir_id WHERE p.id=?", (piece_id,)
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Piece jointe introuvable.")
+    return row
+
+
+@router.post("/api/produits/savoirs/{savoir_id}/pieces")
+async def ajouter_piece(savoir_id: int, request: Request, file: UploadFile = File(...)):
+    """Depot d'une piece jointe sur une note existante.
+
+    La note est creee d'abord, ses pieces ensuite : une photo qui n'arrive pas
+    (reseau d'atelier) ne doit pas emporter le texte avec elle.
+    """
+    user = get_current_user(request)
+    nom = os.path.basename(file.filename or "piece")
+    ext = os.path.splitext(nom)[1].lower()
+    if ext not in _PIECE_EXT_IMAGE and ext not in _PIECE_EXT_DOC:
+        raise HTTPException(
+            status_code=400,
+            detail="Format non accepte (photo, PDF, Word, Excel ou texte).",
+        )
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Fichier vide.")
+    if len(content) > PIECE_TAILLE_MAX:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Fichier trop lourd ({PIECE_TAILLE_MAX // (1024 * 1024)} Mo max).",
+        )
+
+    with get_db() as conn:
+        note = conn.execute(
+            "SELECT id, auteur, ref_produit_norm FROM produit_savoirs WHERE id=?", (savoir_id,)
+        ).fetchone()
+        if not note:
+            raise HTTPException(status_code=404, detail="Note introuvable.")
+        if note["auteur"] != _auteur(user) and not is_admin(user):
+            raise HTTPException(status_code=403, detail="Depot reserve a l'auteur de la note.")
+        deja = conn.execute(
+            "SELECT COUNT(*) AS n FROM produit_savoirs_pieces WHERE savoir_id=?", (savoir_id,)
+        ).fetchone()["n"]
+        if int(deja or 0) >= PIECES_PAR_NOTE_MAX:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{PIECES_PAR_NOTE_MAX} pieces au maximum par note.",
+            )
+
+        os.makedirs(SAVOIR_UPLOAD_DIR, exist_ok=True)
+        stamp = pm.now_iso().replace(":", "").replace("-", "").replace(" ", "_")
+        sur = _SAFE_NAME_RE.sub("_", os.path.splitext(nom)[0])[:60] or "piece"
+        fichier = f"note{savoir_id}_{stamp}_{sur}{ext}"[:180]
+        with open(os.path.join(SAVOIR_UPLOAD_DIR, fichier), "wb") as fh:
+            fh.write(content)
+
+        # Le mime du navigateur est indicatif : certains postes mobiles
+        # n'envoient rien sur une photo prise sur le moment. L'extension, elle,
+        # est toujours la — c'est elle qui decide de la vignette.
+        mime = file.content_type or _PIECE_MIME.get(ext) or "application/octet-stream"
+        cur = conn.execute(
+            """INSERT INTO produit_savoirs_pieces
+               (savoir_id, fichier, fichier_origine, mime, taille_octets,
+                est_image, auteur, created_at)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (savoir_id, fichier, nom, mime, len(content),
+             1 if ext in _PIECE_EXT_IMAGE else 0, _auteur(user), pm.now_iso()),
+        )
+        conn.commit()
+        piece_id = cur.lastrowid
+    return {"success": True, "id": piece_id, "fichier_origine": nom,
+            "est_image": ext in _PIECE_EXT_IMAGE, "taille_octets": len(content)}
+
+
+@router.get("/api/produits/savoirs/pieces/{piece_id}")
+def lire_piece(piece_id: int, request: Request):
+    get_current_user(request)
+    with get_db() as conn:
+        row = _piece_ou_404(conn, piece_id)
+    chemin = os.path.join(SAVOIR_UPLOAD_DIR, row["fichier"])
+    if not os.path.isfile(chemin):
+        raise HTTPException(status_code=404, detail="Fichier absent du serveur.")
+    # Pas de `filename=` : la photo s'ouvre dans la page plutot que de se
+    # telecharger. Le fichier ne change jamais apres son depot, donc le cache
+    # du navigateur est sur — `private`, la piece est derriere une session.
+    return FileResponse(
+        chemin, media_type=row["mime"] or "application/octet-stream",
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
+
+
+@router.delete("/api/produits/savoirs/pieces/{piece_id}")
+def supprimer_piece(piece_id: int, request: Request):
+    """Une piece deposee par erreur s'efface — c'est la difference avec la note,
+    qui se perime et se relit. Une photo floue, elle, n'apprend rien."""
+    user = get_current_user(request)
+    with get_db() as conn:
+        row = _piece_ou_404(conn, piece_id)
+        if row["savoir_auteur"] != _auteur(user) and not is_admin(user):
+            raise HTTPException(status_code=403, detail="Suppression reservee a l'auteur.")
+        conn.execute("DELETE FROM produit_savoirs_pieces WHERE id=?", (piece_id,))
+        conn.commit()
+        fichier = row["fichier"]
+    try:
+        os.remove(os.path.join(SAVOIR_UPLOAD_DIR, fichier))
+    except OSError:
+        pass
+    return {"success": True}
 
 
 # ─── Commentaires a promouvoir ───────────────────────────────────────────────

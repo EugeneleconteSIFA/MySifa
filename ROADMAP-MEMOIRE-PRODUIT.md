@@ -585,3 +585,64 @@ remplacé par ces deux scripts et déplacé dans `_to_delete/`.
 n° d'OF, rattachement par référence seule, mise en file quand le nom ne dit
 rien, déduplication par contenu (même PDF renommé = un seul document),
 parcours récursif des sous-dossiers d'année.
+
+---
+
+## 13. Notes de dossier — écrire depuis Saisieprod, avec des pièces jointes
+
+**1er septembre 2026.** Le panneau mémoire produit se lisait ; il ne s'écrivait
+que depuis l'onglet Notes, une fois le panneau ouvert. L'opérateur qui constate
+quelque chose en cours de production n'avait donc rien sous la main au moment
+où il l'a en tête.
+
+### Ce qui change
+
+| Avant | Après |
+|---|---|
+| Bouton « Commenter » dans le footer | « **Commenter la saisie** » — il n'a jamais rien commenté d'autre que la dernière saisie, et il voisine désormais avec un bouton de portée différente |
+| — | « **Ajouter une note au dossier de prod** », à côté. Présent seulement si le dossier est rattaché à une référence |
+| Formulaire inline dans l'onglet Notes | Un **composeur unique**, appelé depuis Saisieprod comme depuis la fiche produit |
+| Texte seul | Texte + **photo prise sur le moment**, photo du poste, PDF ou document — jusqu'à 8 pièces |
+| Une carte par note, triées à plat | **Un encart par dossier de production**, en-tête date · machine · opérateur |
+
+**Deux boutons plutôt qu'un menu, parce que les portées diffèrent.** Le
+commentaire explique UNE saisie (« pourquoi cet arrêt de 40 mn ») et vit dans la
+fiche du dossier. La note explique LE PRODUIT et sera relue au passage suivant
+de la référence, par quelqu'un d'autre. Les confondre reviendrait à faire
+remonter « R.A.S. » dans les consignes permanentes.
+
+**Le regroupement par dossier n'est pas cosmétique.** Une note dit « contre-partie
+2/10e plus bas » ; ce qui permet de décider si elle vaut encore, c'est de savoir
+sur quelle machine et quand elle a été écrite. À plat, trois productions se
+mélangent et plus aucune note ne dit de laquelle elle parle. Un lot qui porte une
+note épinglée remonte en tête — sinon l'épinglage se perdrait au fond d'un vieux
+dossier.
+
+### Mise en œuvre
+
+| Fichier | Modification |
+|---|---|
+| `app/core/migrations/2026_09_01_savoir_pieces.py` | `NOM = savoir_pieces_jointes`, `DEPEND = produit_memoire_tables` — table `produit_savoirs_pieces` |
+| `app/services/produit_memoire.py` | `pieces_savoirs()`, `contexte_notes_dossiers()` ; chaque note porte ses pièces et le contexte de son dossier |
+| `app/routers/produits_memoire.py` | dépôt, lecture et suppression d'une pièce (25 Mo, 8 par note, photo/PDF/Office/texte) |
+| `static/mysifa_produit_memoire.js` | composeur `ouvrirNote()`, encarts par dossier, vignettes et loupe |
+| `app/web/fabrication_page.py` | les deux boutons du footer, icône `message-square` (elle manquait : en vue opérateur le bouton s'affichait vide) |
+
+Les fichiers vivent dans `data/uploads/savoirs/`, jamais en base. Les photos sont
+**réduites à 1 600 px côté navigateur** avant l'envoi : une photo de téléphone
+pèse 4 Mo pour une vignette de 92 px, et le réseau d'atelier n'a pas à la porter.
+
+**La note part d'abord, ses pièces ensuite.** Une photo qui échoue ne doit pas
+emporter le texte avec elle : l'écran le dit (« note enregistrée — 1 pièce non
+envoyée ») plutôt que de tout perdre.
+
+**Une pièce se supprime, une note se périme.** C'est la seule entorse au principe
+n° 2 du module, et elle est volontaire : une note périmée s'apprend encore, une
+photo floue n'apprend rien.
+
+### Reste ouvert
+
+- Les pupitres d'atelier fixes n'ont pas de caméra : `capture` y retombe sur le
+  sélecteur de fichiers. À confirmer poste par poste — si la photo doit vraiment
+  se prendre au pupitre, il faudra une webcam ou passer par un téléphone.
+- Le guide in-app de Saisieprod ne mentionne pas encore le nouveau bouton.

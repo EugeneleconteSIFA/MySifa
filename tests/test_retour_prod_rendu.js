@@ -308,7 +308,7 @@ const avecSaisies = M.renderFeuille({
 });
 verifier("saisies : la section existe", avecSaisies.includes("rp-saisies"));
 verifier("saisies : le nombre est annonce",
-         avecSaisies.includes('<span class="rp-compte">2</span>'));
+         avecSaisies.includes('id="rp-sa-nb">2</span>'));
 verifier("saisies : plus de tableau des arrets",
          avecSaisies.indexOf(">Arrêt</th>") === -1);
 verifier("saisies : heure", avecSaisies.includes(">05:14<"));
@@ -320,7 +320,7 @@ verifier("saisies : ni dans l'arrivee personnel",
 verifier("saisies : l'operation garde son intitule au survol",
          avecSaisies.includes('<b title="Casse bande">'));
 verifier("saisies : le dossier a sa colonne",
-         avecSaisies.includes('<th>Dossier</th>') && avecSaisies.includes('rp-sa-dos'));
+         avecSaisies.includes('data-sa-tri="dossier"') && avecSaisies.includes('rp-sa-dos'));
 verifier("saisies : le numero de dossier y est seul sur sa ligne",
          avecSaisies.includes('<b title="D-501">D-501</b>'));
 verifier("saisies : reference produit et client dessous",
@@ -373,6 +373,83 @@ verifier("saisies : reference echappee dans l'attribut",
            { heure: "08:00", operateur: "M", operation: "03 - x", code: "03",
              statut: "production", no_dossier: '" onmouseover="alert(1)',
              minutes_txt: "1 h" }] }).indexOf('" onmouseover=') === -1);
+
+console.log("\n3 quater. Filtrer et trier le deroule");
+const LSA = [
+  { date_operation: "2026-08-31T05:54:00", heure: "05:54", operateur: "913 - VERNISSE Bastien",
+    operation: "03 - Production", code: "03", statut: "production", no_dossier: "9932259",
+    client: "GLS", ref_produit_norm: "324/0015", minutes: 46, minutes_txt: "46 min" },
+  { date_operation: "2026-08-31T06:40:00", heure: "06:40", operateur: "913 - VERNISSE Bastien",
+    operation: "50 - Arrêt machine", code: "50", statut: "arret", no_dossier: "9932259",
+    client: "GLS", ref_produit_norm: "324/0015", commentaire: "Tentative réglage les plis",
+    minutes: 15, minutes_txt: "15 min" },
+  { date_operation: "2026-08-31T06:59:00", heure: "06:59", operateur: "907 - DENIS Alan",
+    operation: "51 - Casse Echenillage", code: "51", statut: "arret", no_dossier: "D-800",
+    client: "KIABI", minutes: 49, minutes_txt: "49 min" },
+  { date_operation: "2026-08-31T07:10:00", heure: "07:10", operateur: "907 - DENIS Alan",
+    operation: "89 - Fin de production", code: "89", statut: "autre", no_dossier: "D-800",
+    client: "KIABI", minutes: null, minutes_txt: "—" }
+];
+const hh = (l) => l.map(r => r.heure).join(" ");
+
+verifier("tri : chronologique par defaut",
+         hh(M.filtrerTrier(LSA, {})) === "05:54 06:40 06:59 07:10");
+verifier("tri : chronologique inverse",
+         hh(M.filtrerTrier(LSA, { champ: "heure", sens: -1 })) === "07:10 06:59 06:40 05:54");
+verifier("tri : par duree decroissante",
+         hh(M.filtrerTrier(LSA, { champ: "duree", sens: -1 })) === "06:59 05:54 06:40 07:10");
+verifier("tri : duree inconnue en tete du croissant",
+         M.filtrerTrier(LSA, { champ: "duree", sens: 1 })[0].heure === "07:10");
+verifier("tri : par operateur",
+         hh(M.filtrerTrier(LSA, { champ: "operateur" })) === "06:59 07:10 05:54 06:40");
+verifier("tri : par dossier",
+         M.filtrerTrier(LSA, { champ: "dossier" })[0].no_dossier === "9932259");
+verifier("tri : par operation, sur l'intitule et non sur le code",
+         M.filtrerTrier(LSA, { champ: "operation" }).map(r => r.code).join(",")
+         === "50,51,89,03");
+verifier("tri : champ inconnu retombe sur l'heure",
+         hh(M.filtrerTrier(LSA, { champ: "n'importe quoi" })) === "05:54 06:40 06:59 07:10");
+verifier("tri : stable a valeur egale",
+         hh(M.filtrerTrier(LSA, { champ: "operateur" })).indexOf("06:59 07:10") === 0);
+
+verifier("filtre : sur le commentaire", hh(M.filtrerTrier(LSA, { q: "plis" })) === "06:40");
+verifier("filtre : sur le client",
+         hh(M.filtrerTrier(LSA, { q: "kiabi" })) === "06:59 07:10");
+verifier("filtre : sur le conducteur",
+         hh(M.filtrerTrier(LSA, { q: "vernisse" })) === "05:54 06:40");
+verifier("filtre : sur le dossier",
+         hh(M.filtrerTrier(LSA, { q: "9932259" })) === "05:54 06:40");
+verifier("filtre : sur la reference produit",
+         hh(M.filtrerTrier(LSA, { q: "324/" })) === "05:54 06:40");
+verifier("filtre : sur le code d'operation",
+         hh(M.filtrerTrier(LSA, { q: "51" })) === "06:59");
+verifier("filtre : accents ignores",
+         hh(M.filtrerTrier(LSA, { q: "arret machine" })) === "06:40");
+verifier("filtre : casse ignoree", hh(M.filtrerTrier(LSA, { q: "GLS" })) === "05:54 06:40");
+verifier("filtre : sans resultat", M.filtrerTrier(LSA, { q: "zzz" }).length === 0);
+verifier("filtre : vide ne retire rien", M.filtrerTrier(LSA, { q: "   " }).length === 4);
+
+verifier("etats : un statut exclu",
+         hh(M.filtrerTrier(LSA, { exclus: { arret: true } })) === "05:54 07:10");
+verifier("etats : deux statuts exclus",
+         hh(M.filtrerTrier(LSA, { exclus: { arret: true, autre: true } })) === "05:54");
+verifier("etats : filtre et recherche se combinent",
+         hh(M.filtrerTrier(LSA, { q: "kiabi", exclus: { autre: true } })) === "06:59");
+verifier("filtre : liste absente ne casse rien", M.filtrerTrier(null, {}).length === 0);
+
+const barre = M.renderFeuille({ machine: "C1", dossiers: 1, periode: {}, saisies: LSA });
+verifier("barre : champ de filtre", barre.includes('id="rp-sa-q"'));
+verifier("barre : les cinq etats", barre.split("data-sa-st=").length - 1 === 5);
+verifier("barre : tous actifs au depart",
+         barre.split('class="rp-sa-stp actif"').length - 1 === 5);
+verifier("entetes : les cinq colonnes triables",
+         barre.split("data-sa-tri=").length - 1 === 5);
+verifier("entetes : l'heure porte le tri courant",
+         barre.includes('data-sa-tri="heure" aria-sort="ascending"'));
+verifier("entetes : les autres ne le portent pas", barre.includes('aria-sort="none"'));
+verifier("compteur : sans filtre, le total seul",
+         barre.includes('id="rp-sa-nb">4</span>'));
+verifier("corps : identifie pour le repeindre seul", barre.includes('id="rp-sa-corps"'));
 
 console.log("\n4 bis. Le compte-rendu dit ce que ses chiffres couvrent");
 const crVie = M.renderCR({ no_dossier: "D-501", identite: { client: "KIABI", cloture: true },

@@ -462,7 +462,7 @@ body.light table.fab-table tr.fab-row-last td{
   font-weight:700;font-family:inherit;white-space:nowrap;transition:filter .15s;
 }
 .fab-search-btn:hover{filter:brightness(1.1)}
-.fab-comment-row{display:flex;gap:6px;align-items:center}
+.fab-comment-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 /* Tout ce qui parle des dossiers PASSES vit dans la colonne de gauche, sous
    l'identite du dossier et au-dessus de la consigne. `flex:0 0 auto` (pose
    par la regle de repartition ci-dessus) le rend incompressible : c'est la
@@ -1207,7 +1207,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/mysifa_cal_rappel.js?v=7"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.5"></script>
 <!-- Memoire produit : fiche par reference produit, partagee avec MyProd -->
-<script src="/static/mysifa_produit_memoire.js?v=2.0"></script>
+<script src="/static/mysifa_produit_memoire.js?v=2.1"></script>
 <script>
   // Démarre le polleur d'alertes maintenance dès que la page est prête.
   // Le runtime interroge /api/maintenance/alerts/active toutes les 15 s,
@@ -1747,6 +1747,7 @@ function icon(name,size=16){
     package:'<path d="M16.5 9.4l-9-5.19"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
     'refresh-ccw':'<polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10"/><path d="M3.51 15a9 9 0 0 0 14.85 3.36L23 14"/>',
     users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    'message-square':'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   };
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('width',String(size));svg.setAttribute('height',String(size));
@@ -5508,7 +5509,35 @@ function renderFooter(){
     disabled: !lastId,
     title:'Commenter la dernière saisie',
     onClick:()=>{ if(lastId) set({showCommentModal:true,commentSaisieId:lastId,commentText:(S.lastSaisie&&S.lastSaisie.commentaire)||''}); }
-  }, svgIcon('message-square',14),' Commenter');
+  }, svgIcon('message-square',14),' Commenter la saisie');
+
+  // Deux gestes voisins, deux portées differentes — d'où deux boutons plutôt
+  // qu'un menu. Le commentaire explique UNE saisie (« pourquoi cet arrêt de
+  // 40 mn ») et vit dans la fiche du dossier. La note explique LE PRODUIT
+  // (« contre-partie 2/10e plus bas, sinon casse échenillage ») et sera relue
+  // au prochain passage de la référence, par quelqu'un d'autre.
+  //
+  // Le bouton n'existe que si le dossier est rattaché à une référence : une
+  // note sans produit n'a nulle part où se ranger et disparaîtrait avec le
+  // dossier. Même règle que le bouton Historique — un bouton qui échoue
+  // systématiquement se lit comme un bug, pas comme une règle.
+  const refNote = fabRefProduit(S.dossier);
+  const noteBtn = (refNote && window.MySifaProduitMemoire && window.MySifaProduitMemoire.ouvrirNote)
+    ? h('button',{
+        className:'fab-btn fab-btn-ghost fab-btn-sm',
+        title:'Ajouter une note au dossier de prod — texte, photo prise sur le moment '
+             +'ou document, relus au prochain passage de '+refNote,
+        onClick:()=>window.MySifaProduitMemoire.ouvrirNote({
+          ref: refNote,
+          noDossier: (S.dossier && (S.dossier.reference || S.dossier.no_dossier)) || null,
+          machine: (S.dossier && S.dossier.machine_nom) || null,
+          // La note fait exister l'historique du produit : le badge et le
+          // bouton « Historique » doivent le refléter sans attendre le
+          // prochain rafraîchissement.
+          apres: ()=>loadSession({silent:true, preserveUi:true}),
+        })
+      }, svgIcon('edit',14),' Ajouter une note au dossier de prod')
+    : null;
 
   // La colonne de droite ne porte plus que la saisie d'operation et le bouton
   // Commenter. La memoire produit est repartie a gauche, sous l'identite du
@@ -5519,7 +5548,8 @@ function renderFooter(){
       searchInput,
     ),
     h('div',{className:'fab-comment-row'},
-      commentBtn
+      commentBtn,
+      noteBtn
     )
   );
 

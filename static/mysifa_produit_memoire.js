@@ -161,6 +161,51 @@
       '.pmem-info-ft{font-size:11px;color:var(--muted);margin-top:7px}',
       '.pmem-serie-info{margin-top:12px;padding-top:11px;border-top:1px solid var(--border)}',
       '.pmem-serie-info .pmem-info-txt{font-size:13px}',
+      /* Un encart par production : les notes d'un meme dossier se lisent
+         ensemble, sous la date et l'operateur qui les expliquent. Une pile de
+         notes triees par date seule melange trois productions et ne dit plus
+         de laquelle on parle. */
+      '.pmem-lot{background:var(--bg);border:1px solid var(--border);border-radius:12px;',
+      'padding:14px 16px;margin-bottom:12px}',
+      '.pmem-lot.is-epingle{border-color:var(--warn)}',
+      '.pmem-lot-hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;',
+      'margin-bottom:11px;padding-bottom:9px;border-bottom:1px solid var(--border)}',
+      '.pmem-lot-date{font-size:14px;font-weight:800;color:var(--text)}',
+      '.pmem-lot-meta{font-size:12px;color:var(--muted)}',
+      '.pmem-lot-n{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;',
+      'color:var(--muted);margin-left:auto}',
+      '.pmem-lot .pmem-note{background:var(--card);margin-bottom:9px}',
+      '.pmem-lot .pmem-note:last-child{margin-bottom:0}',
+      /* Pieces jointes : la vignette EST le contenu. Une liste de noms de
+         fichiers obligerait a ouvrir chaque piece pour savoir laquelle
+         montre le defaut. */
+      '.pmem-pj{display:flex;flex-wrap:wrap;gap:9px;margin-top:11px}',
+      '.pmem-pj-item{position:relative}',
+      '.pmem-pj-img{display:block;width:92px;height:92px;object-fit:cover;border-radius:9px;',
+      'border:1px solid var(--border);background:var(--card);cursor:zoom-in}',
+      '.pmem-pj-img:hover{border-color:var(--accent)}',
+      '.pmem-pj-doc{display:flex;align-items:center;gap:7px;max-width:230px;text-decoration:none;',
+      'background:var(--card);border:1px solid var(--border);border-radius:9px;padding:9px 12px;',
+      'font-size:12px;font-weight:700;color:var(--text2);overflow:hidden}',
+      '.pmem-pj-doc:hover{border-color:var(--accent);color:var(--accent)}',
+      '.pmem-pj-nom{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.pmem-pj-x{position:absolute;top:-7px;right:-7px;width:23px;height:23px;border-radius:50%;',
+      'background:var(--card);border:1px solid var(--border);color:var(--text2);cursor:pointer;',
+      'font-size:14px;line-height:1;font-family:inherit;padding:0}',
+      '.pmem-pj-x:hover{border-color:var(--danger,var(--warn));color:var(--danger,var(--warn))}',
+      '.pmem-loupe{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:2600;display:flex;',
+      'align-items:center;justify-content:center;padding:22px;cursor:zoom-out}',
+      '.pmem-loupe img{max-width:100%;max-height:100%;border-radius:10px}',
+      /* Composeur de note — surcouche propre, au-dessus de la fiche produit
+         comme au-dessus de Saisieprod. */
+      '.pmem-nov{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2400;display:flex;',
+      'align-items:flex-start;justify-content:center;padding:24px 16px;box-sizing:border-box;overflow-y:auto}',
+      '.pmem-npanel{background:var(--card);border:1px solid var(--border);border-radius:14px;',
+      'width:100%;max-width:620px;box-sizing:border-box;padding:20px 22px 18px}',
+      '.pmem-ntitle{font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px}',
+      '.pmem-nsub{font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5}',
+      '.pmem-nrow{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}',
+      '.pmem-nfoot{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}',
       '.pmem-note{background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--accent);',
       'border-radius:10px;padding:12px 14px;margin-bottom:10px}',
       '.pmem-note.is-epingle{border-left-color:var(--warn)}',
@@ -762,6 +807,12 @@
   }
 
   // ── Rendu : savoirs ────────────────────────────────────────────────
+  //
+  // Les notes ne se lisent pas a plat. Celle qui dit « contre-partie 2/10e
+  // plus bas » vient d'une production precise, sur une machine precise, ecrite
+  // par quelqu'un qui etait devant : c'est ce contexte qui permet de decider
+  // si elle s'applique aujourd'hui. On regroupe donc par dossier, et l'en-tete
+  // de l'encart porte la date, la machine et l'operateur.
   function renderSavoirs(d) {
     var out = [];
     var ref = d.ref_produit_norm;
@@ -772,38 +823,26 @@
         text: 'Ce dossier n\'est rattache a aucune reference produit : les notes partagees ne sont pas disponibles.' })];
     }
 
-    var ta = el('textarea', { rows: '3', placeholder: 'Ce qu\'il faut savoir la prochaine fois que cette reference passe…' });
-    var sel = el('select', {}, (window.__PMEM_TYPES__ || []).map(function (t) {
-      return el('option', { value: t.cle, text: t.label });
-    }));
-    var btn = el('button', { type: 'button', className: 'pmem-btn pmem-btn-accent', text: 'Enregistrer la note' });
-    btn.addEventListener('click', async function () {
-      var txt = (ta.value || '').trim();
-      if (!txt) { toast('Note vide.', 'danger'); return; }
-      btn.disabled = true;
-      try {
-        await api('/api/produits/' + encodeURI(ref) + '/savoirs', {
-          method: 'POST',
-          body: JSON.stringify({ texte: txt, type: sel.value, no_dossier: state.noDossier || null }),
-        });
-        ta.value = '';
-        toast('Note enregistree.');
-        await recharger();
-      } catch (e) { toast(e.message || 'Erreur.', 'danger'); }
-      btn.disabled = false;
+    var btn = el('button', {
+      type: 'button', className: 'pmem-btn pmem-btn-accent',
+      text: state.noDossier ? 'Ajouter une note au dossier de prod' : 'Ajouter une note',
+    });
+    btn.addEventListener('click', function () {
+      ouvrirNote({
+        ref: ref,
+        noDossier: state.noDossier || null,
+        machine: (d.contexte && d.contexte.machine) || null,
+        apres: recharger,
+      });
     });
 
     out.push(el('div', { className: 'pmem-form' }, [
-      el('label', { className: 'pmem-lbl', text: 'Ajouter une note sur ce produit' }),
-      ta,
-      el('div', { className: 'pmem-form-row' }, [
-        el('div', { style: 'flex:1;min-width:160px' }, [sel]),
-        btn,
-      ]),
+      el('label', { className: 'pmem-lbl', text: 'Ce qu\'il faut savoir la prochaine fois que cette reference passe' }),
       el('div', {
-        style: 'font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5',
-        text: 'Publiee immediatement. Votre nom et la date restent affiches, et vous pouvez la corriger ou la marquer perimee a tout moment.',
+        style: 'font-size:12px;color:var(--muted);margin:2px 0 12px;line-height:1.5',
+        text: 'Texte, photo prise sur le moment ou document. Publiee immediatement : votre nom et la date restent affiches, et vous pouvez la corriger ou la marquer perimee a tout moment.',
       }),
+      btn,
     ]));
 
     var savoirs = d.savoirs || [];
@@ -811,8 +850,70 @@
       out.push(el('div', { className: 'pmem-empty', text: 'Aucune note pour l\'instant.' }));
       return out;
     }
-    savoirs.forEach(function (s) { out.push(noteCard(s, d)); });
+    grouperNotes(savoirs).forEach(function (lot) { out.push(lotCard(lot, d)); });
     return out;
+  }
+
+  // Un lot = un dossier de production. Les notes arrivent deja triees
+  // (epinglees, puis les plus utiles, puis les plus recentes) : on conserve cet
+  // ordre a l'interieur de l'encart, et on classe les encarts par la note la
+  // plus recente qu'ils portent — un lot qui contient une note epinglee remonte
+  // en tete, sinon l'epinglage se perdrait au fond d'un vieux dossier.
+  function grouperNotes(savoirs) {
+    var index = {}, ordre = [];
+    savoirs.forEach(function (s) {
+      var cle = String(s.no_dossier_source || '').trim() || '__sans__';
+      var g = index[cle];
+      if (!g) {
+        g = index[cle] = {
+          cle: cle, no_dossier: cle === '__sans__' ? null : cle,
+          notes: [], epingle: false, recent: '', machine: null,
+          date: null, operateurs: [],
+        };
+        ordre.push(g);
+      }
+      g.notes.push(s);
+      if (s.epingle) g.epingle = true;
+      var dt = String(s.created_at || '');
+      if (dt > g.recent) g.recent = dt;
+      if (!g.machine && s.dossier_machine) g.machine = s.dossier_machine;
+      if (!g.date && s.dossier_date) g.date = s.dossier_date;
+      if (!g.operateurs.length && (s.dossier_operateurs || []).length) {
+        g.operateurs = s.dossier_operateurs;
+      }
+    });
+    ordre.sort(function (a, b) {
+      if (a.epingle !== b.epingle) return a.epingle ? -1 : 1;
+      if (a.recent === b.recent) return 0;
+      return a.recent > b.recent ? -1 : 1;
+    });
+    return ordre;
+  }
+
+  function lotCard(g, d) {
+    var auteurs = [];
+    g.notes.forEach(function (n) {
+      if (n.auteur && auteurs.indexOf(n.auteur) < 0) auteurs.push(n.auteur);
+    });
+    // Les operateurs de la serie disent qui conduisait ; a defaut, les auteurs
+    // des notes disent qui a ecrit. Les deux repondent a « qui me raconte ca ».
+    var ops = g.operateurs.length ? g.operateurs : auteurs;
+    var metas = [];
+    if (g.machine) metas.push(g.machine);
+    if (ops.length) metas.push(ops.join(', '));
+    if (g.no_dossier) metas.push('dossier ' + g.no_dossier);
+
+    var n = g.notes.length;
+    var enfants = [
+      el('div', { className: 'pmem-lot-hd' }, [
+        el('span', { className: 'pmem-lot-date',
+          text: g.no_dossier ? fDate(g.date || g.recent) : 'Hors production' }),
+        metas.length ? el('span', { className: 'pmem-lot-meta', text: metas.join(' · ') }) : null,
+        el('span', { className: 'pmem-lot-n', text: n + ' note' + (n > 1 ? 's' : '') }),
+      ]),
+    ];
+    g.notes.forEach(function (s) { enfants.push(noteCard(s, d)); });
+    return el('div', { className: 'pmem-lot' + (g.epingle ? ' is-epingle' : '') }, enfants);
   }
 
   function noteCard(s, d) {
@@ -869,11 +970,237 @@
       s.obsolete && s.obsolete_motif
         ? el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px', text: 'Motif : ' + s.obsolete_motif })
         : null,
+      piecesJointes(s, peutEditer),
       el('div', { className: 'pmem-note-ft' }, [
-        el('span', { text: (s.auteur || '?') + ' · ' + fDate(s.created_at) + (s.no_dossier_source ? ' · dossier ' + s.no_dossier_source : '') }),
+        el('span', { text: (s.auteur || '?') + ' · ' + fDate(s.created_at) }),
         el('span', { style: 'flex:1' }),
       ].concat(actions)),
     ]);
+  }
+
+  // ── Pieces jointes ─────────────────────────────────────────────────
+  function urlPiece(id) { return '/api/produits/savoirs/pieces/' + id; }
+
+  function loupe(url) {
+    var ov = el('div', { className: 'pmem-loupe' }, [el('img', { src: url, alt: '' })]);
+    ov.addEventListener('click', function () { ov.remove(); });
+    document.addEventListener('keydown', function esc(e) {
+      if (e.key === 'Escape') { ov.remove(); document.removeEventListener('keydown', esc); }
+    });
+    document.body.appendChild(ov);
+  }
+
+  function piecesJointes(s, peutEditer) {
+    var pieces = s.pieces || [];
+    if (!pieces.length) return null;
+    return el('div', { className: 'pmem-pj' }, pieces.map(function (pj) {
+      var url = urlPiece(pj.id);
+      var vue;
+      if (pj.est_image) {
+        vue = el('img', { className: 'pmem-pj-img', src: url, alt: pj.fichier_origine || 'photo',
+                          loading: 'lazy', title: pj.fichier_origine || '' });
+        vue.addEventListener('click', function () { loupe(url); });
+      } else {
+        vue = el('a', { className: 'pmem-pj-doc', href: url, target: '_blank',
+                        rel: 'noopener', title: pj.fichier_origine || '' }, [
+          el('span', { text: '📎' }),
+          el('span', { className: 'pmem-pj-nom', text: pj.fichier_origine || 'Document' }),
+        ]);
+      }
+      var enfants = [vue];
+      if (peutEditer) {
+        var x = el('button', { type: 'button', className: 'pmem-pj-x',
+                               title: 'Supprimer cette piece', text: '×' });
+        x.addEventListener('click', async function (e) {
+          e.stopPropagation();
+          if (!window.confirm('Supprimer cette piece jointe ?')) return;
+          try {
+            await api(urlPiece(pj.id), { method: 'DELETE' });
+            await recharger();
+          } catch (err) { toast(err.message || 'Erreur.', 'danger'); }
+        });
+        enfants.push(x);
+      }
+      return el('div', { className: 'pmem-pj-item' }, enfants);
+    }));
+  }
+
+  // ── Composeur de note ──────────────────────────────────────────────
+  //
+  // Un seul endroit ou l'on ecrit une note, appele depuis Saisieprod comme
+  // depuis la fiche produit : deux formulaires divergeraient au premier
+  // changement, et l'operateur verrait deux ecrans pour un meme geste.
+  //
+  // La note part d'abord, ses pieces ensuite. Sur le reseau d'atelier une
+  // photo peut echouer ; le texte, lui, doit etre enregistre.
+  var PIECES_MAX = 8;
+
+  // Une photo de telephone pese 4 Mo pour 4 000 px de large — illisible sur
+  // une vignette de 92 px et lourd sur un poste d'atelier. On reduit avant
+  // l'envoi, et on garde l'original si la reduction n'apporte rien.
+  function reduireImage(f) {
+    return new Promise(function (res) {
+      var type = f.type || '';
+      if (!/^image\//.test(type) || /heic|heif/i.test(type)) { res({ blob: f, nom: f.name }); return; }
+      var url = URL.createObjectURL(f);
+      var img = new Image();
+      img.onload = function () {
+        var w = img.naturalWidth, h = img.naturalHeight, max = 1600;
+        if (!w || !h) { URL.revokeObjectURL(url); res({ blob: f, nom: f.name }); return; }
+        var r = Math.min(1, max / Math.max(w, h));
+        if (r >= 1 && f.size < 1500000) { URL.revokeObjectURL(url); res({ blob: f, nom: f.name }); return; }
+        var c = document.createElement('canvas');
+        c.width = Math.round(w * r); c.height = Math.round(h * r);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        c.toBlob(function (b) {
+          URL.revokeObjectURL(url);
+          if (!b || b.size >= f.size) { res({ blob: f, nom: f.name }); return; }
+          res({ blob: b, nom: String(f.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg' });
+        }, 'image/jpeg', 0.82);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); res({ blob: f, nom: f.name }); };
+      img.src = url;
+    });
+  }
+
+  async function ouvrirNote(opts) {
+    var o = opts || {};
+    var ref = normRef(o.ref);
+    if (!ref) { toast('Aucune reference produit sur ce dossier.', 'danger'); return; }
+    ensureStyle();
+    await chargerTypes();
+
+    var pieces = [];   // { blob, nom, estImage, apercu }
+    var enCours = false;
+
+    var ta = el('textarea', { rows: '4',
+      placeholder: 'Ce qu\'il faut savoir la prochaine fois que cette reference passe…' });
+    var types = window.__PMEM_TYPES__ || [];
+    var sel = el('select', {}, types.map(function (t) {
+      return el('option', { value: t.cle, text: t.label });
+    }));
+    if (types.some(function (t) { return t.cle === 'reglage'; })) sel.value = 'reglage';
+
+    var liste = el('div', { className: 'pmem-pj' });
+    function rendreListe() {
+      liste.innerHTML = '';
+      pieces.forEach(function (pj, idx) {
+        var vue = pj.estImage
+          ? el('img', { className: 'pmem-pj-img', src: pj.apercu, alt: pj.nom })
+          : el('span', { className: 'pmem-pj-doc' }, [
+              el('span', { text: '📎' }),
+              el('span', { className: 'pmem-pj-nom', text: pj.nom }),
+            ]);
+        var x = el('button', { type: 'button', className: 'pmem-pj-x', text: '×',
+                               title: 'Retirer' });
+        x.addEventListener('click', function () {
+          if (pj.apercu) URL.revokeObjectURL(pj.apercu);
+          pieces.splice(idx, 1); rendreListe();
+        });
+        liste.appendChild(el('div', { className: 'pmem-pj-item' }, [vue, x]));
+      });
+    }
+
+    function ajouter(fichiers) {
+      var restants = PIECES_MAX - pieces.length;
+      if (restants <= 0) { toast(PIECES_MAX + ' pieces au maximum.', 'danger'); return; }
+      var lot = Array.prototype.slice.call(fichiers || []).slice(0, restants);
+      Promise.all(lot.map(reduireImage)).then(function (prets) {
+        prets.forEach(function (pr, i) {
+          var estImage = /^image\//.test(lot[i].type || '') || /\.(jpe?g|png|gif|webp|heic|heif|bmp)$/i.test(pr.nom || '');
+          pieces.push({
+            blob: pr.blob, nom: pr.nom || 'piece', estImage: estImage,
+            apercu: estImage ? URL.createObjectURL(pr.blob) : null,
+          });
+        });
+        rendreListe();
+      });
+    }
+
+    // `capture` ouvre directement l'appareil photo sur un poste qui en a un ;
+    // ailleurs le navigateur retombe sur le selecteur de fichiers, ce qui ne
+    // casse rien.
+    var inPhoto = el('input', { type: 'file', accept: 'image/*', capture: 'environment',
+                                style: 'display:none' });
+    var inFichier = el('input', { type: 'file', multiple: 'multiple',
+      accept: 'image/*,.pdf,.docx,.doc,.xlsx,.xls,.csv,.txt', style: 'display:none' });
+    inPhoto.addEventListener('change', function () { ajouter(inPhoto.files); inPhoto.value = ''; });
+    inFichier.addEventListener('change', function () { ajouter(inFichier.files); inFichier.value = ''; });
+
+    var btnPhoto = el('button', { type: 'button', className: 'pmem-btn', text: '📷 Prendre une photo' });
+    btnPhoto.addEventListener('click', function () { inPhoto.click(); });
+    var btnFichier = el('button', { type: 'button', className: 'pmem-btn', text: '📎 Ajouter un fichier' });
+    btnFichier.addEventListener('click', function () { inFichier.click(); });
+
+    var ov = el('div', { className: 'pmem-nov' });
+    function fermer() {
+      pieces.forEach(function (pj) { if (pj.apercu) URL.revokeObjectURL(pj.apercu); });
+      document.removeEventListener('keydown', onEsc);
+      ov.remove();
+    }
+    function onEsc(e) { if (e.key === 'Escape' && !enCours) fermer(); }
+    document.addEventListener('keydown', onEsc);
+    ov.addEventListener('click', function (e) { if (e.target === ov && !enCours) fermer(); });
+
+    var btnOk = el('button', { type: 'button', className: 'pmem-btn pmem-btn-accent',
+                               text: 'Enregistrer la note' });
+    var btnKo = el('button', { type: 'button', className: 'pmem-btn', text: 'Annuler' });
+    btnKo.addEventListener('click', function () { if (!enCours) fermer(); });
+
+    btnOk.addEventListener('click', async function () {
+      var txt = (ta.value || '').trim();
+      if (!txt) { toast('Note vide.', 'danger'); return; }
+      enCours = true;
+      btnOk.disabled = btnKo.disabled = true;
+      btnOk.textContent = 'Enregistrement…';
+      var creee = null;
+      try {
+        creee = await api('/api/produits/' + encodeURI(ref) + '/savoirs', {
+          method: 'POST',
+          body: JSON.stringify({ texte: txt, type: sel.value,
+                                 no_dossier: o.noDossier || null, machine: o.machine || null }),
+        });
+      } catch (e) {
+        enCours = false;
+        btnOk.disabled = btnKo.disabled = false;
+        btnOk.textContent = 'Enregistrer la note';
+        toast(e.message || 'Erreur.', 'danger');
+        return;
+      }
+      // Le texte est en base : a partir d'ici, un echec de piece jointe se
+      // signale mais ne perd rien.
+      var rates = 0;
+      for (var i = 0; i < pieces.length; i++) {
+        var fd = new FormData();
+        fd.append('file', pieces[i].blob, pieces[i].nom);
+        try {
+          await api('/api/produits/savoirs/' + creee.id + '/pieces', { method: 'POST', body: fd });
+        } catch (e2) { rates++; }
+      }
+      fermer();
+      toast(rates
+        ? ('Note enregistree — ' + rates + ' piece(s) non envoyee(s).')
+        : (pieces.length ? 'Note et pieces enregistrees.' : 'Note enregistree.'),
+        rates ? 'danger' : 'info');
+      if (typeof o.apres === 'function') { try { await o.apres(); } catch (e3) {} }
+    });
+
+    ov.appendChild(el('div', { className: 'pmem-npanel' }, [
+      el('div', { className: 'pmem-ntitle',
+        text: o.noDossier ? 'Ajouter une note au dossier de prod' : 'Ajouter une note produit' }),
+      el('div', { className: 'pmem-nsub',
+        text: 'Reference ' + ref + (o.noDossier ? ' · dossier ' + o.noDossier : '')
+              + ' · publiee immediatement, avec votre nom et la date.' }),
+      ta,
+      el('div', { className: 'pmem-form-row', style: 'margin-top:10px' }, [
+        el('div', { style: 'flex:1;min-width:160px' }, [sel]),
+      ]),
+      el('div', { className: 'pmem-nrow' }, [btnPhoto, btnFichier, inPhoto, inFichier]),
+      liste,
+      el('div', { className: 'pmem-nfoot' }, [btnKo, btnOk]),
+    ]));
+    document.body.appendChild(ov);
+    setTimeout(function () { ta.focus(); }, 60);
   }
 
   // ── Rendu : documents ──────────────────────────────────────────────
@@ -1624,6 +1951,7 @@
 
   window.MySifaProduitMemoire = {
     openHistorique: openHistorique,
+    ouvrirNote: ouvrirNote,
     openFiche: openFiche,
     openListe: openListe,
     openRattachement: openRattachement,

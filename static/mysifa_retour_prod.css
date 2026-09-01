@@ -196,7 +196,8 @@ table.rp-cr tbody tr:hover{background:var(--accent-bg);box-shadow:inset 3px 0 0 
 
 /* Animation neutralisee : meme regle que motion.css. */
 @media (prefers-reduced-motion: reduce){
-  .rp-sa-cadre,.rp-sa-plus,.rp-sa-plus svg,
+  .rp-sa-cadre,.rp-sa-plus,.rp-sa-plus svg,.rp-sa-stp,.rp-sa-barre input,
+  th.rp-sa-tri,
   .rp-kpi,.rp-mot,.rp-vig,.rp-vig .v-nb,.rp-rech-item,.rp-btn-mini,.rp-seg,.rp-select,
   table.rp-grille tbody tr,table.rp-cr tbody tr{transition:none !important}
   .rp-kpi:hover,.rp-rech-item:hover,.rp-btn-mini:hover,.rp-seg:hover,
@@ -207,7 +208,8 @@ body.reduce-anim .rp-rech-item,body.reduce-anim .rp-btn-mini,
 body.reduce-anim table.rp-grille tbody tr,body.reduce-anim table.rp-cr tbody tr,
 body.reduce-anim .rp-seg,body.reduce-anim .rp-select,
 body.reduce-anim .rp-sa-cadre,body.reduce-anim .rp-sa-plus,
-body.reduce-anim .rp-sa-plus svg{transition:none !important}
+body.reduce-anim .rp-sa-plus svg,body.reduce-anim .rp-sa-stp,
+body.reduce-anim .rp-sa-barre input,body.reduce-anim th.rp-sa-tri{transition:none !important}
 body.reduce-anim .rp-kpi:hover,body.reduce-anim .rp-rech-item:hover,
 body.reduce-anim .rp-btn-mini:hover,body.reduce-anim .rp-vig:hover .v-nb{transform:none !important}
 
@@ -238,6 +240,42 @@ body.reduce-anim .rp-btn-mini:hover,body.reduce-anim .rp-vig:hover .v-nb{transfo
    Le deroule d'une journee fait vite trente lignes : la liste defile dans sa
    propre fenetre plutot que de repousser tout le reste de la feuille. Le
    bouton d'entete l'ouvre en grand. */
+/* Barre de filtre : un champ libre et cinq pastilles d'etat. Le filtre est
+   local — la liste est deja entiere dans la page, un aller-retour serveur
+   n'apporterait qu'une attente. */
+.rp-sa-barre{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:10px}
+.rp-sa-barre input{flex:1 1 260px;min-width:0;background:var(--card);
+  border:1px solid var(--border);border-radius:9px;padding:8px 12px;
+  color:var(--text);font-size:13.5px;font-family:inherit;
+  transition:border-color var(--mo-fast,.15s) var(--ease-out,ease),
+             box-shadow var(--mo-fast,.15s) var(--ease-out,ease)}
+.rp-sa-barre input:focus{border-color:var(--accent);outline:none;
+  box-shadow:0 0 0 3px var(--accent-bg)}
+.rp-sa-st{display:flex;flex-wrap:wrap;gap:5px}
+.rp-sa-stp{display:inline-flex;align-items:center;gap:6px;background:var(--card);
+  border:1px solid var(--border);border-radius:999px;padding:5px 11px;
+  font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;
+  font-family:inherit;white-space:nowrap;opacity:.5;
+  transition:opacity var(--mo-fast,.15s) var(--ease-out,ease),
+             color var(--mo-fast,.15s) var(--ease-out,ease),
+             border-color var(--mo-fast,.15s) var(--ease-out,ease)}
+.rp-sa-stp.actif{opacity:1;color:var(--text2)}
+.rp-sa-stp:hover{border-color:var(--accent);opacity:1}
+/* Etat exclu : la pastille de couleur s'eteint aussi, sinon on ne sait plus
+   lequel des cinq est retire. */
+.rp-sa-stp:not(.actif) .rp-sa-pt{filter:grayscale(1)}
+
+/* Entetes triables. La fleche occupe une place fixe : sans elle, la colonne
+   se decale d'un caractere a chaque changement de tri. */
+th.rp-sa-tri{cursor:pointer;user-select:none;
+  transition:color var(--mo-fast,.15s) var(--ease-out,ease)}
+th.rp-sa-tri:hover{color:var(--accent)}
+th.rp-sa-tri.actif{color:var(--accent)}
+th.rp-sa-tri .rp-sa-fl{display:inline-block;width:12px;text-align:center;
+  font-size:11px;line-height:1}
+.rp-sa-rien{text-align:center;color:var(--muted);padding:26px 10px !important;
+  font-size:13.5px}
+
 .rp-sa-cadre{max-height:280px;overflow-y:auto;border:1px solid var(--border);
   border-radius:10px;
   transition:max-height var(--mo-slow,.28s) var(--ease-out,ease)}
@@ -428,7 +466,8 @@ body.reduce-anim .rp-btn-mini:hover,body.reduce-anim .rp-vig:hover .v-nb{transfo
   .rp-fr-seg{print-color-adjust:exact;-webkit-print-color-adjust:exact}
   .rp-tip{display:none !important}
   #rp-masques{display:none !important}
-  .rp-sa-plus{display:none !important}
+  .rp-sa-plus,.rp-sa-barre{display:none !important}
+  th.rp-sa-tri .rp-sa-fl{display:none}
   .rp-sa-cadre{max-height:none !important;overflow:visible !important}
   .rp-sa-cadre thead th{position:static}
 }
