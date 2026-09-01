@@ -8,6 +8,7 @@ from fastapi import APIRouter, Request, UploadFile, File, HTTPException
 from database import get_db
 from services.auth_service import get_current_user
 from services.devis_parser import parse_devis
+from app.services.dossier_stats import build_dossier_production_stats
 from config import ROLES_ADMIN
 
 router = APIRouter()
@@ -24,6 +25,47 @@ def require_rentabilite(request: Request) -> dict:
     return user
 
 
+def _reel_depuis_saisies(conn, no_dossiers: list[str]) -> dict:
+    """Le réel d'un devis, calculé par `build_dossier_production_stats`.
+
+    Pourquoi ne pas refaire le SQL ici. Ce module additionnait `metrage_reel`,
+    qui n'est pas un métrage produit mais un RELEVÉ DE COMPTEUR machine : sur
+    le dossier 9932259, la somme sortait 561 152 286 m là où le dossier en a
+    produit 154 701. Le métrage se lit en écart de compteur entre le 01 et le
+    89 d'un même cycle — c'est ce que fait `dossier_stats`, et c'est ce que
+    lisent les opérateurs dans MyProd.
+
+    La règle produit est qu'un dossier n'a qu'un chiffre : Rentabilité ne
+    recalcule donc plus rien, elle appelle le code de l'écran de référence.
+    Les temps suivent le même chemin, pour la même raison.
+    """
+    vide = {"metrage_ml": 0.0, "qte_etiquettes": 0.0, "temps_calage_mn": 0.0,
+            "temps_production_mn": 0.0, "temps_arret_mn": 0.0}
+    if not no_dossiers:
+        return dict(vide)
+
+    placeholders = ",".join("?" * len(no_dossiers))
+    lignes = [
+        dict(r) for r in conn.execute(
+            f"""SELECT * FROM production_data
+                WHERE no_dossier IN ({placeholders})
+                  AND COALESCE(est_annule, 0) = 0""",
+            no_dossiers,
+        ).fetchall()
+    ]
+
+    total = dict(vide)
+    for dos in no_dossiers:
+        st = build_dossier_production_stats(lignes, dos)
+        q, t = st["quantites"], st["temps_totaux"]
+        total["metrage_ml"] += float(q.get("metrage_m") or 0)
+        total["qte_etiquettes"] += float(q.get("etiquettes") or 0)
+        total["temps_calage_mn"] += float(t.get("calage_min") or 0)
+        total["temps_production_mn"] += float(t.get("production_min") or 0)
+        total["temps_arret_mn"] += float(t.get("arret_min") or 0)
+    return total
+
+
 def _comparaison_from_no_dossiers(conn, devis_row, no_dossiers: list[str]) -> dict:
     """Calcule la comparaison devis vs réel pour une liste de no_dossier (production_data)."""
     d = devis_row
@@ -31,62 +73,18 @@ def _comparaison_from_no_dossiers(conn, devis_row, no_dossiers: list[str]) -> di
     if not no_dossiers:
         return {"devis": dict(d), "reel": None, "message": "Aucun dossier lié"}
 
-    placeholders = ",".join("?" * len(no_dossiers))
+    reel_saisies = _reel_depuis_saisies(conn, no_dossiers)
+    qte_reel = reel_saisies["qte_etiquettes"]
+    metrage_reel = reel_saisies["metrage_ml"]
+    tps_calage_reel = reel_saisies["temps_calage_mn"]
+    tps_prod_reel = reel_saisies["temps_production_mn"]
+    tps_arret_reel = reel_saisies["temps_arret_mn"]
 
-    qte_reel = conn.execute(
-        f"""SELECT COALESCE(SUM(quantite_traitee), 0) as qte
-            FROM production_data
-            WHERE no_dossier IN ({placeholders}) AND operation_code='89'
-              AND COALESCE(est_annule, 0) = 0""",
-        no_dossiers,
-    ).fetchone()["qte"]
-
-    metrage_reel = conn.execute(
-        f"""SELECT COALESCE(SUM(metrage_reel), 0) as met
-            FROM production_data
-            WHERE no_dossier IN ({placeholders}) AND operation_code='89'
-              AND COALESCE(est_annule, 0) = 0""",
-        no_dossiers,
-    ).fetchone()["met"]
-
-    tps_calage_reel = conn.execute(
-        f"""
-        SELECT COALESCE(SUM(
-            CASE WHEN operation_code='02'
-            THEN (julianday(lead_date) - julianday(date_operation)) * 1440
-            ELSE 0 END
-        ), 0) as tps
-        FROM (
-            SELECT date_operation, operation_code,
-                   LEAD(date_operation) OVER (PARTITION BY operateur ORDER BY date_operation) as lead_date
-            FROM production_data
-            WHERE no_dossier IN ({placeholders})
-              AND COALESCE(est_annule, 0) = 0
-        ) WHERE operation_code='02'
-        """,
-        no_dossiers,
-    ).fetchone()["tps"]
-
-    tps_prod_reel = conn.execute(
-        f"""
-        SELECT COALESCE(SUM(
-            CASE WHEN operation_code IN ('03','88')
-            THEN (julianday(lead_date) - julianday(date_operation)) * 1440
-            ELSE 0 END
-        ), 0) as tps
-        FROM (
-            SELECT date_operation, operation_code,
-                   LEAD(date_operation) OVER (PARTITION BY operateur ORDER BY date_operation) as lead_date
-            FROM production_data
-            WHERE no_dossier IN ({placeholders})
-              AND COALESCE(est_annule, 0) = 0
-        ) WHERE operation_code IN ('03','88')
-        """,
-        no_dossiers,
-    ).fetchone()["tps"]
-
-    vitesse_reel = (metrage_reel / tps_prod_reel) if tps_prod_reel > 0 else 0
-    tps_total_reel = tps_calage_reel + tps_prod_reel
+    # Vitesse sur production + arret, comme MyProd : une machine arretee au
+    # milieu d'un dossier a bien produit ce metrage dans ce temps-la.
+    denom_vitesse = tps_prod_reel + tps_arret_reel
+    vitesse_reel = (metrage_reel / denom_vitesse) if denom_vitesse > 0 else 0
+    tps_total_reel = tps_calage_reel + denom_vitesse
     vitesse_avec_calage = (metrage_reel / tps_total_reel) if tps_total_reel > 0 else 0
 
     tps_total_theo = (d["temps_calage_mn"] or 0) + (d["temps_production_mn"] or 0)
@@ -105,6 +103,7 @@ def _comparaison_from_no_dossiers(conn, devis_row, no_dossiers: list[str]) -> di
     reel = {
         "temps_calage_mn":      round(tps_calage_reel, 1),
         "temps_production_mn":  round(tps_prod_reel, 1),
+        "temps_arret_mn":       round(tps_arret_reel, 1),
         "metrage_ml":           round(metrage_reel, 1),
         "qte_etiquettes":       round(qte_reel, 0),
         "vitesse":              round(vitesse_reel, 2),
@@ -454,6 +453,12 @@ async def link_dossiers(devis_id: int, request: Request):
 # ── Calcul rentabilité devis vs réel ─────────────────────────────
 @router.get("/api/rentabilite/devis/{devis_id}/comparaison")
 def comparaison(devis_id: int, request: Request):
+    """Comparaison devis vs réel.
+
+    Le corps de cette route était une copie mot pour mot de
+    `_comparaison_from_no_dossiers` : deux copies, c'est deux corrections à
+    faire et une à oublier. C'est précisément ce qui est arrivé au métrage.
+    """
     require_rentabilite(request)
 
     with get_db() as conn:
@@ -461,128 +466,13 @@ def comparaison(devis_id: int, request: Request):
         if not d:
             raise HTTPException(status_code=404, detail="Devis non trouvé")
 
-        dossiers = conn.execute(
-            "SELECT no_dossier FROM devis_dossiers WHERE devis_id=?", (devis_id,)
-        ).fetchall()
-        no_dossiers = [r["no_dossier"] for r in dossiers]
-
+        no_dossiers = [
+            r["no_dossier"] for r in conn.execute(
+                "SELECT no_dossier FROM devis_dossiers WHERE devis_id=?", (devis_id,)
+            ).fetchall()
+        ]
         if not no_dossiers:
-            return {"devis": dict(d), "reel": None, "message": "Aucun dossier lié à ce devis"}
+            return {"devis": dict(d), "reel": None,
+                    "message": "Aucun dossier lié à ce devis"}
 
-        placeholders = ",".join("?" * len(no_dossiers))
-
-        qte_reel = conn.execute(
-            f"""SELECT COALESCE(SUM(quantite_traitee), 0) as qte
-                FROM production_data
-                WHERE no_dossier IN ({placeholders}) AND operation_code='89'
-                  AND COALESCE(est_annule, 0) = 0""",
-            no_dossiers,
-        ).fetchone()["qte"]
-
-        metrage_reel = conn.execute(
-            f"""SELECT COALESCE(SUM(metrage_reel), 0) as met
-                FROM production_data
-                WHERE no_dossier IN ({placeholders}) AND operation_code='89'
-                  AND COALESCE(est_annule, 0) = 0""",
-            no_dossiers,
-        ).fetchone()["met"]
-
-        tps_calage_reel = conn.execute(
-            f"""
-            SELECT COALESCE(SUM(
-                CASE WHEN operation_code='02'
-                THEN (julianday(lead_date) - julianday(date_operation)) * 1440
-                ELSE 0 END
-            ), 0) as tps
-            FROM (
-                SELECT date_operation, operation_code,
-                       LEAD(date_operation) OVER (PARTITION BY operateur ORDER BY date_operation) as lead_date
-                FROM production_data
-                WHERE no_dossier IN ({placeholders})
-                  AND COALESCE(est_annule, 0) = 0
-            ) WHERE operation_code='02'
-            """,
-            no_dossiers,
-        ).fetchone()["tps"]
-
-        tps_prod_reel = conn.execute(
-            f"""
-            SELECT COALESCE(SUM(
-                CASE WHEN operation_code IN ('03','88')
-                THEN (julianday(lead_date) - julianday(date_operation)) * 1440
-                ELSE 0 END
-            ), 0) as tps
-            FROM (
-                SELECT date_operation, operation_code,
-                       LEAD(date_operation) OVER (PARTITION BY operateur ORDER BY date_operation) as lead_date
-                FROM production_data
-                WHERE no_dossier IN ({placeholders})
-                  AND COALESCE(est_annule, 0) = 0
-            ) WHERE operation_code IN ('03','88')
-            """,
-            no_dossiers,
-        ).fetchone()["tps"]
-
-    vitesse_reel = (metrage_reel / tps_prod_reel) if tps_prod_reel > 0 else 0
-    tps_total_reel = tps_calage_reel + tps_prod_reel
-    vitesse_avec_calage = (metrage_reel / tps_total_reel) if tps_total_reel > 0 else 0
-
-    tps_total_theo = (d["temps_calage_mn"] or 0) + (d["temps_production_mn"] or 0)
-    vitesse_theo_avec_calage = ((d["metrage_production_ml"] or 0) / tps_total_theo) if tps_total_theo > 0 else 0
-
-    def pct_diff(reel, theo):
-        if theo and theo != 0:
-            return round((reel - theo) / theo * 100, 1)
-        return None
-
-    def fmt_pct(v):
-        if v is None:
-            return None
-        return f"+{v}%" if v > 0 else f"{v}%"
-
-    reel = {
-        "temps_calage_mn":      round(tps_calage_reel, 1),
-        "temps_production_mn":  round(tps_prod_reel, 1),
-        "metrage_ml":           round(metrage_reel, 1),
-        "qte_etiquettes":       round(qte_reel, 0),
-        "vitesse":              round(vitesse_reel, 2),
-        "vitesse_avec_calage":  round(vitesse_avec_calage, 2),
-    }
-
-    theo = {
-        "temps_calage_mn":      d["temps_calage_mn"],
-        "temps_production_mn":  d["temps_production_mn"],
-        "metrage_ml":           d["metrage_production_ml"],
-        "qte_etiquettes":       d["qte_etiquettes"],
-        "vitesse":              d["vitesse_theorique"],
-        "vitesse_avec_calage":  round(vitesse_theo_avec_calage, 2),
-    }
-
-    ecarts = {
-        "temps_calage_mn":      fmt_pct(pct_diff(reel["temps_calage_mn"],     theo["temps_calage_mn"])),
-        "temps_production_mn":  fmt_pct(pct_diff(reel["temps_production_mn"], theo["temps_production_mn"])),
-        "metrage_ml":           fmt_pct(pct_diff(reel["metrage_ml"],           theo["metrage_ml"])),
-        "qte_etiquettes":       fmt_pct(pct_diff(reel["qte_etiquettes"],       theo["qte_etiquettes"])),
-        "vitesse":              fmt_pct(pct_diff(reel["vitesse"],              theo["vitesse"])),
-        "vitesse_avec_calage":  fmt_pct(pct_diff(reel["vitesse_avec_calage"],  theo["vitesse_avec_calage"])),
-    }
-
-    score = 0
-    if reel["vitesse"] > (theo["vitesse"] or 0): score += 1
-    if reel["temps_calage_mn"] < (theo["temps_calage_mn"] or 999): score += 1
-    if reel["qte_etiquettes"] >= (theo["qte_etiquettes"] or 0): score += 1
-
-    if score == 3:   conclusion = {"label": "Excellent", "color": "success"}
-    elif score == 2: conclusion = {"label": "Bon",        "color": "success"}
-    elif score == 1: conclusion = {"label": "Mitigé",     "color": "warn"}
-    else:            conclusion = {"label": "À améliorer", "color": "danger"}
-
-    return {
-        "devis":      dict(d),
-        "dossiers":   no_dossiers,
-        "theorique":  theo,
-        "reel":       reel,
-        "ecarts":     ecarts,
-        "conclusion": conclusion,
-    }
-
+        return _comparaison_from_no_dossiers(conn, d, no_dossiers)

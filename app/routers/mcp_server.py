@@ -334,7 +334,13 @@ def _traiter(message: dict[str, Any], nom_cle: Optional[str] = None,
 async def mcp_endpoint(request: Request):
     refus, nom_cle = _verifier_cle(request)
     if refus:
-        return _json({"error": refus}, 401)
+        # 403 et pas 401, volontairement. Un 401 est le signal normalise « ce
+        # serveur veut de l'OAuth » : le client MCP part alors en decouverte de
+        # metadonnees puis en enregistrement dynamique de client, echoue, et
+        # affiche « impossible de s'inscrire aupres du service de connexion »
+        # — au lieu d'utiliser simplement l'en-tete de cle API. Ici l'appelant
+        # n'a pas a s'authentifier autrement : il presente une cle ou rien.
+        return _json({"error": refus}, 403)
 
     try:
         corps = await request.json()
