@@ -253,17 +253,40 @@ body.reduce-anim .rp-btn-mini:hover,body.reduce-anim .rp-vig:hover .v-nb{transfo
 .rp-sa-plus.ouvert svg{transform:rotate(180deg)}
 .rp-sa-plus svg{transition:transform var(--mo-fast,.15s) var(--ease-out,ease)}
 
+/* Cinq colonnes, largeurs pilotees : sans elles, l'operation prenait toute la
+   place restante en laissant son texte tronque au tiers, et le dossier se
+   coupait a mi-mot sous elle. */
+.rp-sa-tbl{table-layout:fixed;width:100%}
 .rp-sa-h{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--muted);
-  width:1%;font-size:12.5px}
-.rp-sa-d{white-space:nowrap;font-variant-numeric:tabular-nums;width:1%}
-.rp-sa-qui{white-space:nowrap;color:var(--text2);font-size:12.5px}
-.rp-sa-op{display:flex;align-items:baseline;gap:8px}
+  width:56px;font-size:12.5px}
+.rp-sa-d{white-space:nowrap;font-variant-numeric:tabular-nums;width:74px}
+.rp-sa-qui{color:var(--text2);font-size:12.5px;width:23%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rp-sa-op{display:flex;align-items:baseline;gap:8px;width:36%}
 .rp-sa-op > span{display:flex;flex-direction:column;gap:1px;min-width:0}
+.rp-sa-op > span > b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Le dossier : son numero d'abord, la reference produit et le client dessous.
+   Le numero garde son titre au survol — certains font quarante caracteres. */
+.rp-sa-dos{width:auto;min-width:0}
+.rp-sa-dos > b{display:block;font-weight:700;color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rp-sa-dos .rp-sous{display:block;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
 /* La pastille reprend les couleurs de Saisieprod, comme la frise : l'atelier
    n'a pas a apprendre un second code. */
 .rp-sa-pt{width:9px;height:9px;border-radius:3px;flex-shrink:0;display:inline-block;
   position:relative;top:1px}
-.rp-sa-com{font-size:12px;color:var(--text2);font-style:italic}
+.rp-sa-com{font-size:12px;color:var(--text2);font-style:italic;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Etroit : on resserre plutot que de masquer. Retirer une colonne ferait
+   disparaitre une information — le nom du conducteur ici — sans que personne
+   ne sache qu'elle a existe. L'ellipse, elle, se voit. */
+@media (max-width:1000px){
+  .rp-sa-op{width:34%}
+  .rp-sa-qui{width:20%;font-size:12px}
+  .rp-sa-h{width:48px}
+}
 .rp-sa-pt.mst-production{background:#22c55e}
 .rp-sa-pt.mst-calage{background:#f97316}
 .rp-sa-pt.mst-arret{background:#ef4444}

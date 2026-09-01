@@ -507,17 +507,22 @@
     liste = liste || [];
     if (!liste.length) return "";
     var lignes = liste.map(function (r) {
-      var sous = [];
-      if (r.no_dossier) sous.push(escHtml(r.no_dossier));
-      if (r.client) sous.push(escHtml(r.client));
+      // Le dossier a sa propre colonne : porte sous l'operation, son numero
+      // etait tronque a mi-mot alors que la moitie de la ligne restait vide.
+      var repere = [r.ref_produit_norm, r.client].filter(Boolean).map(escHtml).join(" · ");
       return '<tr class="rp-sa-l">'
         + '<td class="rp-sa-h">' + escHtml(r.heure) + '</td>'
         + '<td class="rp-sa-op"><i class="rp-sa-pt mst-' + escAttr(r.statut || "autre") + '"'
         + ' title="' + escAttr(r.label || "") + '"></i>'
         + '<span><b>' + escHtml(sansCode(r.operation, r.code) || r.code || "—") + '</b>'
-        + (sous.length ? '<span class="rp-sous">' + sous.join(" · ") + '</span>' : '')
         + (r.commentaire ? '<span class="rp-sa-com">' + escHtml(r.commentaire) + '</span>' : '')
         + '</span></td>'
+        + '<td class="rp-sa-dos">'
+        + (r.no_dossier
+            ? '<b title="' + escAttr(r.no_dossier) + '">' + escHtml(r.no_dossier) + '</b>'
+              + (repere ? '<span class="rp-sous">' + repere + '</span>' : '')
+            : '<span class="rp-mut">—</span>')
+        + '</td>'
         + '<td class="rp-sa-qui">' + escHtml(r.operateur || "—") + '</td>'
         + '<td class="num rp-sa-d">' + escHtml(r.minutes_txt || "—") + '</td>'
         + '</tr>';
@@ -530,7 +535,7 @@
       + 'aria-label="Afficher plus de lignes">' + ICONE_ETENDRE + '</button></div>'
       + '<div class="rp-sa-cadre" id="rp-sa-cadre">'
       + '<table class="rp-grille rp-sa-tbl"><thead><tr><th>Heure</th><th>Op&eacute;ration</th>'
-      + '<th>Op&eacute;rateur</th><th class="num">Dur&eacute;e</th></tr></thead>'
+      + '<th>Dossier</th><th>Op&eacute;rateur</th><th class="num">Dur&eacute;e</th></tr></thead>'
       + '<tbody>' + lignes + '</tbody></table></div></div>';
   }
 

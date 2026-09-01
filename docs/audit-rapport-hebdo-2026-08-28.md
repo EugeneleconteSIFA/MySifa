@@ -1076,3 +1076,26 @@ deja faire les deux.
 et blancs, propagation a la frise, aux comptes-rendus et au deroule des
 saisies). `tests/test_reunion.py` : 9 cas sur la persistance du perimetre.
 `tests/test_reunions_rendu.js` : 10 cas sur les pastilles.
+
+### Le dossier prend sa propre colonne
+
+Le tableau des saisies tenait en quatre colonnes, dossier et client glisses en
+sous-ligne de l'operation. Resultat a l'ecran : « Marche 745 - Reliqua 3 -
+Maitre C… » coupe a mi-mot, et une bande blanche de trois cents pixels entre
+l'operation et l'operateur. La colonne Operation prenait toute la place restante
+sans pouvoir la donner a son contenu.
+
+Cinq colonnes maintenant — Heure, Operation, Dossier, Operateur, Duree — avec
+`table-layout:fixed` et des largeurs posees : 56 px pour l'heure, 36 % pour
+l'operation, 23 % pour l'operateur, 74 px pour la duree, le reste au dossier.
+Le numero de dossier occupe sa premiere ligne, la reference produit et le client
+la seconde. Le numero garde son `title` : certains font quarante caracteres et
+l'ellipse est alors la seule mise en page possible.
+
+La reference produit ne vit pas dans `production_data` — elle se lit par dossier
+via `produit_series` ou `dossier_info_prod`. `saisies_periode()` la resout une
+fois par dossier distinct, pas une fois par ligne.
+
+Sous 1000 px on resserre au lieu de masquer : retirer une colonne ferait
+disparaitre une information sans que personne ne sache qu'elle a existe, alors
+qu'une ellipse se voit.
