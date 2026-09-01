@@ -35,6 +35,8 @@ def _charger(nom: str, chemin: Path):
 
 svc = _charger("reunion", RACINE / "app" / "services" / "reunion.py")
 mig = _charger("mig_reunions", RACINE / "app" / "core" / "migrations" / "2026_08_31_reunions_prod.py")
+mig_mach = _charger("mig_reunion_machines",
+                    RACINE / "app" / "core" / "migrations" / "2026_09_01_reunion_machines.py")
 
 FAIL = []
 
@@ -51,6 +53,7 @@ def base():
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     mig.appliquer(conn)
+    mig_mach.appliquer(conn)
     return conn
 
 
@@ -204,6 +207,42 @@ def test_inconnu():
     verifier("aucune reunion ouverte", svc.ouverte_de(conn, "Personne"), None)
 
 
+def test_perimetre_machines():
+    print("\n7. Une reunion regarde une, plusieurs ou toutes les machines")
+    conn = base()
+
+    r = svc.lancer(conn, "Eugene", "2026-08-31")
+    verifier("par defaut, tout l'atelier", r["machines"], [])
+
+    r = svc.enregistrer(conn, r["id"], "Eugene", noms_machines=["Cohesio 1", "Cohesio 2"])
+    verifier("deux machines retenues", r["machines"], ["Cohesio 1", "Cohesio 2"])
+
+    r = svc.enregistrer(conn, r["id"], "Eugene", noms_machines=["Cohesio 2"])
+    verifier("le perimetre est remplace, pas cumule", r["machines"], ["Cohesio 2"])
+
+    r = svc.enregistrer(conn, r["id"], "Eugene", noms_machines=[])
+    verifier("liste vide = tout l'atelier", r["machines"], [])
+
+    r = svc.enregistrer(conn, r["id"], "Eugene", titre="Point du matin")
+    verifier("ne rien dire ne touche pas au perimetre", r["machines"], [])
+
+    # Un appelant qui ne connait qu'une machine reste coherent.
+    r = svc.enregistrer(conn, r["id"], "Eugene", machine="Repiquage")
+    verifier("une seule machine par l'ancien champ", r["machines"], ["Repiquage"])
+
+    # Au lancement.
+    conn2 = base()
+    r2 = svc.lancer(conn2, "Marc", "2026-08-31", noms_machines=["Cohesio 1", "Repiquage"])
+    verifier("perimetre pose au lancement", r2["machines"], ["Cohesio 1", "Repiquage"])
+    verifier("la liste le porte aussi", svc.liste(conn2)[0]["machines"],
+             ["Cohesio 1", "Repiquage"])
+
+    # La suppression emporte le perimetre.
+    svc.supprimer(conn2, r2["id"])
+    reste = conn2.execute("SELECT COUNT(*) AS c FROM reunion_machines").fetchone()["c"]
+    verifier("supprimer emporte le perimetre", reste, 0)
+
+
 if __name__ == "__main__":
     test_lancer()
     test_notes_et_cloture()
@@ -211,6 +250,7 @@ if __name__ == "__main__":
     test_liste()
     test_participants()
     test_inconnu()
+    test_perimetre_machines()
 
     print("\n" + "=" * 60)
     if FAIL:

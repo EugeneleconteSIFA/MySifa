@@ -88,6 +88,23 @@ table.reu-tbl tbody tr:hover .reu-sup{opacity:1}
 .reu-hdr input.reu-nom:focus{border-color:var(--accent);outline:none;background:var(--card)}
 .reu-meta{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
 
+/* Perimetre : une reunion regarde une machine, plusieurs, ou tout l'atelier.
+   Des pastilles a cocher plutot qu'un menu deroulant — un menu ne sait dire
+   qu'un choix, et on en veut souvent deux sur trois. */
+.reu-machines{min-width:0}
+.reu-mach{display:flex;flex-wrap:wrap;gap:6px;padding:2px 0}
+.reu-mach-p{background:var(--card);border:1px solid var(--border);color:var(--text2);
+  border-radius:999px;padding:7px 13px;font-size:12.5px;font-weight:600;
+  cursor:pointer;font-family:inherit;white-space:nowrap;
+  transition:border-color var(--mo-fast,.15s) var(--ease-out,ease),
+             background var(--mo-fast,.15s) var(--ease-out,ease),
+             color var(--mo-fast,.15s) var(--ease-out,ease),
+             transform var(--mo-fast,.15s) var(--ease-out,ease)}
+.reu-mach-p:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px)}
+.reu-mach-p:active{transform:translateY(0)}
+.reu-mach-p.actif{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+.reu-mach-p.actif:hover{color:var(--bg);filter:brightness(1.07)}
+
 .reu-split{display:grid;grid-template-columns:minmax(0,1fr) clamp(340px,24%,440px);
   gap:20px;align-items:start}
 .reu-colonne{position:sticky;top:16px;background:var(--card);border:1px solid var(--border);
@@ -182,7 +199,9 @@ table.reu-tbl tbody tr:hover .reu-sup{opacity:1}
 @media (prefers-reduced-motion: reduce){
   .reu-btn,.reu-champ input,.reu-champ select,.reu-actform input,
   .reu-hdr input.reu-nom,table.reu-tbl tbody tr,.reu-act .reu-a-sup,
-  .reu-sup,.reu-part-x,.reu-sugg,.reu-cherche input{transition:none !important}
+  .reu-sup,.reu-part-x,.reu-sugg,.reu-cherche input,
+  .reu-mach-p{transition:none !important}
+  .reu-mach-p:hover{transform:none !important}
   .reu-btn:hover{transform:none !important}
 }
 body.reduce-anim .reu-btn,body.reduce-anim .reu-champ input,
@@ -190,7 +209,9 @@ body.reduce-anim .reu-champ select,body.reduce-anim .reu-actform input,
 body.reduce-anim .reu-hdr input.reu-nom,body.reduce-anim table.reu-tbl tbody tr,
 body.reduce-anim .reu-act .reu-a-sup,
 body.reduce-anim .reu-sup,body.reduce-anim .reu-part-x,
-body.reduce-anim .reu-sugg,body.reduce-anim .reu-cherche input{transition:none !important}
+body.reduce-anim .reu-sugg,body.reduce-anim .reu-cherche input,
+body.reduce-anim .reu-mach-p{transition:none !important}
+body.reduce-anim .reu-mach-p:hover{transform:none !important}
 body.reduce-anim .reu-btn:hover{transform:none !important}
 
 /*

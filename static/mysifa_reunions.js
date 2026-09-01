@@ -191,6 +191,12 @@
           var periode = r.date_debut === r.date_fin
             ? dateFr(r.date_debut)
             : dateFr(r.date_debut) + ' → ' + dateFr(r.date_fin);
+          // Sans machine retenue, la reunion regarde tout l'atelier : le dire
+          // vaut mieux qu'une cellule vide, qu'on lirait comme une donnee
+          // manquante.
+          var perimetre = (r.machines && r.machines.length)
+            ? r.machines.join(' · ')
+            : (r.machine || 'Toutes les machines');
           var act = r.nb_actions
             ? (r.actions_restantes
                 ? '<span class="reu-pastille ouverte">' + r.actions_restantes + ' &agrave; faire</span>'
@@ -201,7 +207,7 @@
             + '<div class="reu-sous">' + esc(r.ouverte_par)
             + (r.a_des_notes ? ' · notes' : ' · sans notes') + '</div></td>'
             + '<td>' + esc(periode)
-            + (r.machine ? '<div class="reu-sous">' + esc(r.machine) + '</div>' : '') + '</td>'
+            + (perimetre ? '<div class="reu-sous">' + esc(perimetre) + '</div>' : '') + '</td>'
             + '<td>' + esc((r.participants || []).join(', ') || '—') + '</td>'
             + '<td>' + act + '</td>'
             + '<td>' + (r.ouverte
@@ -236,13 +242,8 @@
       +       '<input type="date" id="reu-du" value="' + escA(r.date_debut || '') + '"></div>'
       +     '<div class="reu-champ"><label for="reu-au">Au</label>'
       +       '<input type="date" id="reu-au" value="' + escA(r.date_fin || '') + '"></div>'
-      +     '<div class="reu-champ"><label for="reu-machine">Machine</label>'
-      +       '<select id="reu-machine"><option value="">Toutes les machines</option>'
-      +       machines.map(function(m){
-                return '<option value="' + escA(m) + '"'
-                     + (m === r.machine ? ' selected' : '') + '>' + esc(m) + '</option>';
-              }).join('')
-      +       '</select></div>'
+      +     '<div class="reu-champ reu-machines"><label>Machines</label>'
+      +       rendreMachines(machines, r.machines) + '</div>'
       +     '<button type="button" class="reu-btn ghost" data-r="imprimer">Imprimer</button>'
       +     '<button type="button" class="reu-btn" data-r="clore">'
       +       (r.ouverte ? 'Clore la r&eacute;union' : 'Rouvrir la r&eacute;union') + '</button>'
@@ -346,6 +347,29 @@
       + '</div>';
   }
 
+  /* Le perimetre d'une reunion : une machine, plusieurs, ou tout l'atelier.
+     « Toutes » n'est pas une machine de plus dans la liste — c'est l'absence de
+     choix, et cocher tout revient au meme. On l'affiche donc comme l'etat par
+     defaut, actif tant que rien n'est coche. */
+  function rendreMachines(disponibles, retenues){
+    disponibles = disponibles || [];
+    retenues = retenues || [];
+    var prises = {};
+    retenues.forEach(function(m){ prises[pli(m)] = true; });
+    var toutes = !retenues.length;
+    return '<div class="reu-mach">'
+      + '<button type="button" class="reu-mach-p' + (toutes ? ' actif' : '') + '" '
+      + 'data-mach-tout="1" aria-pressed="' + (toutes ? 'true' : 'false') + '">'
+      + 'Toutes</button>'
+      + disponibles.map(function(m){
+          var actif = !!prises[pli(m)];
+          return '<button type="button" class="reu-mach-p' + (actif ? ' actif' : '') + '" '
+               + 'data-mach="' + escA(m) + '" '
+               + 'aria-pressed="' + (actif ? 'true' : 'false') + '">' + esc(m) + '</button>';
+        }).join('')
+      + '</div>';
+  }
+
   function rendreActions(l){
     l = l || [];
     if(!l.length) return '<div class="reu-sauve">Aucune action pour l\'instant.</div>';
@@ -412,6 +436,27 @@
       + R.renderListe(S.prod.comptes_rendus || []) + '</div>';
     R.brancherFrise(box, {onClic: function(){}});
     R.brancher(null, {racine: box, toast: toast, onSaved: function(){ recharger(); }});
+  }
+
+  /* Perimetre : cocher une machine change les chiffres, donc on relit la
+     reunion entiere. Decocher la derniere revient a « toutes » — sans ca on
+     resterait sur un perimetre vide, qui ne montre rien. */
+  async function basculerMachine(nom){
+    if(!S.reunion) return;
+    var actuelles = (S.reunion.machines || []).slice();
+    var idx = -1;
+    actuelles.forEach(function(m, i){ if(pli(m) === pli(nom)) idx = i; });
+    if(idx >= 0) actuelles.splice(idx, 1);
+    else actuelles.push(nom);
+    await majMachines(actuelles);
+  }
+
+  async function majMachines(noms){
+    if(!S.reunion) return;
+    try{
+      await enregistrer({machines: noms}, true);
+      await recharger();
+    }catch(e){ toast(e.message, 'danger'); }
   }
 
   /* Le bloc se repeint seul : la colonne entiere se reconstruirait sinon, et
@@ -523,7 +568,9 @@
       +   '<h2>' + esc(r.titre || '') + '</h2>'
       +   '<div class="reu-doc-meta">'
       +     '<div><b>P&eacute;riode analys&eacute;e</b> : ' + esc(periode)
-      +       (r.machine ? ' · ' + esc(r.machine) : ' · toutes les machines') + '</div>'
+      +       ' · ' + esc((r.machines && r.machines.length)
+                          ? r.machines.join(' · ')
+                          : (r.machine || 'toutes les machines')) + '</div>'
       +     '<div><b>Participants</b> : ' + esc(noms.join(', ') || 'non renseignés') + '</div>'
       +     '<div><b>Ouverte par</b> ' + esc(r.ouverte_par || '—')
       +       ' le ' + esc(dateFr(r.ouverte_le))
@@ -583,7 +630,8 @@
         return;
       }
       var el = ev.target.closest
-        ? ev.target.closest('[data-r],[data-sup],[data-part-add],[data-part-sup]') : null;
+        ? ev.target.closest('[data-r],[data-sup],[data-part-add],[data-part-sup],'
+                            + '[data-mach],[data-mach-tout]') : null;
       if(el && rac.contains(el)){
         var act = el.getAttribute('data-r');
         if(act === 'liste'){
@@ -600,6 +648,12 @@
         if(act === 'clore'){ await clore(); return; }
         if(act === 'ajout-action'){ await ajouterAction(rac); return; }
         if(act === 'suppr-non'){ fermerSuppression(rac); return; }
+        if(el.getAttribute('data-mach-tout') !== null){
+          await majMachines([]);
+          return;
+        }
+        var mach = el.getAttribute('data-mach');
+        if(mach !== null){ await basculerMachine(mach); return; }
         var ajout = el.getAttribute('data-part-add');
         if(ajout !== null){ await majParticipants(rac, ajout, null); return; }
         var retrait = el.getAttribute('data-part-sup');
@@ -617,7 +671,6 @@
       if(t.id === 'reu-titre'){ await enregistrer({titre: t.value}); peindre(); return; }
       if(t.id === 'reu-du'){ await enregistrer({date_debut: t.value}, true); await recharger(); return; }
       if(t.id === 'reu-au'){ await enregistrer({date_fin: t.value}, true); await recharger(); return; }
-      if(t.id === 'reu-machine'){ await enregistrer({machine: t.value}, true); await recharger(); return; }
       if(t.hasAttribute && t.hasAttribute('data-coche')){
         await majAction(t.getAttribute('data-coche'), {fait: t.checked});
       }
@@ -814,6 +867,7 @@
     monter: monter, reset: reset,
     rendreListe: rendreListe, rendreReunion: rendreReunion,
     rendreActions: rendreActions, rendreParticipants: rendreParticipants,
+    rendreMachines: rendreMachines,
     rendreDocument: rendreDocument
   };
 })();

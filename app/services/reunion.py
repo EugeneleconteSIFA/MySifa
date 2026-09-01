@@ -67,6 +67,34 @@ def participants(conn, reunion_id: int) -> List[Dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+def machines(conn, reunion_id: int) -> List[str]:
+    """Les machines regardees par cette reunion. Vide = tout l'atelier.
+
+    L'absence de ligne est le seul sens que « toutes les machines » ait jamais
+    eu : on ne stocke pas la liste complete, qui changerait a chaque machine
+    ajoutee dans les Parametres.
+    """
+    if not _table_existe(conn, "reunion_machines"):
+        return []
+    rows = conn.execute(
+        "SELECT machine FROM reunion_machines WHERE reunion_id=? ORDER BY machine",
+        (int(reunion_id),),
+    ).fetchall()
+    return [r["machine"] for r in rows]
+
+
+def _poser_machines(conn, reunion_id: int, noms: Optional[List[str]]) -> None:
+    if noms is None or not _table_existe(conn, "reunion_machines"):
+        return
+    conn.execute("DELETE FROM reunion_machines WHERE reunion_id=?", (int(reunion_id),))
+    for nom in noms:
+        if _txt(nom):
+            conn.execute(
+                "INSERT OR IGNORE INTO reunion_machines (reunion_id, machine) VALUES (?,?)",
+                (int(reunion_id), _txt(nom)),
+            )
+
+
 def actions(conn, reunion_id: int) -> List[Dict[str, Any]]:
     if not _table_existe(conn, "reunion_actions"):
         return []
@@ -94,6 +122,7 @@ def reunion(conn, reunion_id: int) -> Optional[Dict[str, Any]]:
     d["ouverte"] = d.get("statut") == STATUT_OUVERTE
     d["actions"] = actions(conn, reunion_id)
     d["participants"] = participants(conn, reunion_id)
+    d["machines"] = machines(conn, reunion_id)
     d["actions_restantes"] = sum(1 for a in d["actions"] if not a["fait"])
     return d
 
@@ -125,6 +154,7 @@ def liste(conn, limite: int = 100) -> List[Dict[str, Any]]:
         d["nb_actions"] = len(actes)
         d["actions_restantes"] = sum(1 for a in actes if not a["fait"])
         d["participants"] = [p["nom"] for p in participants(conn, d["id"])]
+        d["machines"] = machines(conn, d["id"])
         out.append(d)
     return out
 
@@ -146,7 +176,8 @@ def ouverte_de(conn, auteur: str) -> Optional[Dict[str, Any]]:
 
 def lancer(conn, auteur: str, date_debut: str, date_fin: str = "",
            titre: str = "", machine: str = "",
-           noms_participants: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+           noms_participants: Optional[List[str]] = None,
+           noms_machines: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
     """Ouvre une reunion sur une plage de dates.
 
     Si l'auteur en a deja une ouverte, on la lui rend plutot que d'en creer une
@@ -172,6 +203,11 @@ def lancer(conn, auteur: str, date_debut: str, date_fin: str = "",
          STATUT_OUVERTE, _now(), _txt(auteur)),
     )
     rid = cur.lastrowid
+    # `machine` reste renseignee pour les lecteurs anciens ; le perimetre vit
+    # desormais dans reunion_machines, qui en accepte plusieurs.
+    _poser_machines(conn, rid, noms_machines
+                    if noms_machines is not None
+                    else ([_txt(machine)] if _txt(machine) else []))
     for nom in (noms_participants or []):
         if _txt(nom):
             conn.execute(
@@ -185,6 +221,7 @@ def lancer(conn, auteur: str, date_debut: str, date_fin: str = "",
 def enregistrer(conn, reunion_id: int, auteur: str, titre: Optional[str] = None,
                 notes: Optional[str] = None, date_debut: Optional[str] = None,
                 date_fin: Optional[str] = None, machine: Optional[str] = None,
+                noms_machines: Optional[List[str]] = None,
                 noms_participants: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
     """Met a jour ce qui est fourni, et rien d'autre.
 
@@ -206,10 +243,15 @@ def enregistrer(conn, reunion_id: int, auteur: str, titre: Optional[str] = None,
         champs.append("date_fin=?"); valeurs.append(_jour(date_fin))
     if machine is not None:
         champs.append("machine=?"); valeurs.append(_txt(machine) or None)
+    if noms_machines is None and machine is not None:
+        # Un appelant ancien qui ne connait qu'une machine reste coherent.
+        noms_machines = [_txt(machine)] if _txt(machine) else []
     if champs:
         champs += ["updated_at=?", "updated_par=?"]
         valeurs += [_now(), _txt(auteur), int(reunion_id)]
         conn.execute(f"UPDATE reunions SET {', '.join(champs)} WHERE id=?", valeurs)
+
+    _poser_machines(conn, reunion_id, noms_machines)
 
     if noms_participants is not None:
         conn.execute("DELETE FROM reunion_participants WHERE reunion_id=?", (int(reunion_id),))
@@ -253,6 +295,8 @@ def supprimer(conn, reunion_id: int) -> bool:
         return False
     conn.execute("DELETE FROM reunion_actions WHERE reunion_id=?", (int(reunion_id),))
     conn.execute("DELETE FROM reunion_participants WHERE reunion_id=?", (int(reunion_id),))
+    if _table_existe(conn, "reunion_machines"):
+        conn.execute("DELETE FROM reunion_machines WHERE reunion_id=?", (int(reunion_id),))
     conn.execute("DELETE FROM reunions WHERE id=?", (int(reunion_id),))
     conn.commit()
     return True
