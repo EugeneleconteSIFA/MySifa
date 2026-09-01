@@ -253,21 +253,31 @@ body.reduce-anim .rp-btn-mini:hover,body.reduce-anim .rp-vig:hover .v-nb{transfo
 .rp-sa-plus.ouvert svg{transform:rotate(180deg)}
 .rp-sa-plus svg{transition:transform var(--mo-fast,.15s) var(--ease-out,ease)}
 
-/* Cinq colonnes, largeurs pilotees : sans elles, l'operation prenait toute la
-   place restante en laissant son texte tronque au tiers, et le dossier se
-   coupait a mi-mot sous elle. */
+/* Cinq colonnes, largeurs pilotees par <colgroup>.
+   Deux pieges evites ici, tous deux vus a l'ecran :
+   - en `table-layout:fixed`, les largeurs se lisent sur la premiere rangee ou
+     sur les <col>. Posees sur les <td> du corps, elles sont ignorees ;
+   - un <td> en `display:flex` n'est plus une cellule de tableau : il sort de
+     l'algorithme, et aucune largeur ne le tient. Le flex vit donc dans un
+     conteneur INTERNE, la cellule reste une cellule. */
 .rp-sa-tbl{table-layout:fixed;width:100%}
+.rp-sa-tbl col.c-h{width:58px}
+.rp-sa-tbl col.c-op{width:30%}
+.rp-sa-tbl col.c-dos{width:auto}
+.rp-sa-tbl col.c-qui{width:22%}
+.rp-sa-tbl col.c-d{width:78px}
+
 .rp-sa-h{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--muted);
-  width:56px;font-size:12.5px}
-.rp-sa-d{white-space:nowrap;font-variant-numeric:tabular-nums;width:74px}
-.rp-sa-qui{color:var(--text2);font-size:12.5px;width:23%;
+  font-size:12.5px}
+.rp-sa-d{white-space:nowrap;font-variant-numeric:tabular-nums}
+.rp-sa-qui{color:var(--text2);font-size:12.5px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rp-sa-op{display:flex;align-items:baseline;gap:8px;width:36%}
-.rp-sa-op > span{display:flex;flex-direction:column;gap:1px;min-width:0}
-.rp-sa-op > span > b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rp-sa-opin{display:flex;align-items:baseline;gap:8px;min-width:0}
+.rp-sa-opin > span{display:flex;flex-direction:column;gap:1px;min-width:0}
+.rp-sa-opin > span > b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* Le dossier : son numero d'abord, la reference produit et le client dessous.
    Le numero garde son titre au survol — certains font quarante caracteres. */
-.rp-sa-dos{width:auto;min-width:0}
+.rp-sa-dos{min-width:0}
 .rp-sa-dos > b{display:block;font-weight:700;color:var(--text);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rp-sa-dos .rp-sous{display:block;overflow:hidden;text-overflow:ellipsis;
@@ -283,9 +293,10 @@ body.reduce-anim .rp-btn-mini:hover,body.reduce-anim .rp-vig:hover .v-nb{transfo
    disparaitre une information — le nom du conducteur ici — sans que personne
    ne sache qu'elle a existe. L'ellipse, elle, se voit. */
 @media (max-width:1000px){
-  .rp-sa-op{width:34%}
-  .rp-sa-qui{width:20%;font-size:12px}
-  .rp-sa-h{width:48px}
+  .rp-sa-tbl col.c-op{width:28%}
+  .rp-sa-tbl col.c-qui{width:20%}
+  .rp-sa-tbl col.c-h{width:50px}
+  .rp-sa-qui{font-size:12px}
 }
 .rp-sa-pt.mst-production{background:#22c55e}
 .rp-sa-pt.mst-calage{background:#f97316}

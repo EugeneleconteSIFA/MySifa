@@ -80,7 +80,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
      ressert l'ancienne et la section s'affiche nue. -->
 <link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem13">
 <link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__-sais1">
-<link rel="stylesheet" href="/static/mysifa_retour_prod.css?v=__V_LABEL__-reu8">
+<link rel="stylesheet" href="/static/mysifa_retour_prod.css?v=__V_LABEL__-reu10">
 <link rel="stylesheet" href="/static/mysifa_reunions.css?v=__V_LABEL__-reu9">
 <link rel="stylesheet" href="/static/mysifa_print_modal.css?v=__V_LABEL__">
 <script src="/static/motion.js?v=__V_LABEL__" defer></script>
@@ -97,7 +97,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <script src="/static/mysifa_theme.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_user_chip.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
-<script src="/static/mysifa_retour_prod.js?v=__V_LABEL__-reu8"></script>
+<script src="/static/mysifa_retour_prod.js?v=__V_LABEL__-reu10"></script>
 <!-- Points de production : monte par l'onglet Reunions de MyProd. Charge
      AVANT le coeur, qui le cherche sur window au moment du rendu. -->
 <script src="/static/mysifa_reunions.js?v=__V_LABEL__-reu9"></script>

@@ -512,11 +512,13 @@
       var repere = [r.ref_produit_norm, r.client].filter(Boolean).map(escHtml).join(" · ");
       return '<tr class="rp-sa-l">'
         + '<td class="rp-sa-h">' + escHtml(r.heure) + '</td>'
-        + '<td class="rp-sa-op"><i class="rp-sa-pt mst-' + escAttr(r.statut || "autre") + '"'
+        + '<td class="rp-sa-op"><div class="rp-sa-opin">'
+        + '<i class="rp-sa-pt mst-' + escAttr(r.statut || "autre") + '"'
         + ' title="' + escAttr(r.label || "") + '"></i>'
-        + '<span><b>' + escHtml(sansCode(r.operation, r.code) || r.code || "—") + '</b>'
+        + '<span><b title="' + escAttr(sansCode(r.operation, r.code) || r.code || "") + '">'
+        + escHtml(sansCode(r.operation, r.code) || r.code || "—") + '</b>'
         + (r.commentaire ? '<span class="rp-sa-com">' + escHtml(r.commentaire) + '</span>' : '')
-        + '</span></td>'
+        + '</span></div></td>'
         + '<td class="rp-sa-dos">'
         + (r.no_dossier
             ? '<b title="' + escAttr(r.no_dossier) + '">' + escHtml(r.no_dossier) + '</b>'
@@ -534,7 +536,10 @@
       + 'aria-expanded="false" title="Afficher plus de lignes" '
       + 'aria-label="Afficher plus de lignes">' + ICONE_ETENDRE + '</button></div>'
       + '<div class="rp-sa-cadre" id="rp-sa-cadre">'
-      + '<table class="rp-grille rp-sa-tbl"><thead><tr><th>Heure</th><th>Op&eacute;ration</th>'
+      + '<table class="rp-grille rp-sa-tbl">'
+      + '<colgroup><col class="c-h"><col class="c-op"><col class="c-dos">'
+      + '<col class="c-qui"><col class="c-d"></colgroup>'
+      + '<thead><tr><th>Heure</th><th>Op&eacute;ration</th>'
       + '<th>Dossier</th><th>Op&eacute;rateur</th><th class="num">Dur&eacute;e</th></tr></thead>'
       + '<tbody>' + lignes + '</tbody></table></div></div>';
   }

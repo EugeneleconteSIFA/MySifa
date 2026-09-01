@@ -313,10 +313,12 @@ verifier("saisies : plus de tableau des arrets",
          avecSaisies.indexOf(">Arrêt</th>") === -1);
 verifier("saisies : heure", avecSaisies.includes(">05:14<"));
 verifier("saisies : le code est retire de l'operation",
-         avecSaisies.includes("<b>Casse bande</b>") && !avecSaisies.includes("53 - Casse bande"));
+         avecSaisies.includes(">Casse bande</b>") && !avecSaisies.includes("53 - Casse bande"));
 verifier("saisies : ni dans l'arrivee personnel",
-         avecSaisies.includes("<b>Arrivée personnel</b>")
+         avecSaisies.includes(">Arrivée personnel</b>")
          && !avecSaisies.includes("86 - Arrivée personnel"));
+verifier("saisies : l'operation garde son intitule au survol",
+         avecSaisies.includes('<b title="Casse bande">'));
 verifier("saisies : le dossier a sa colonne",
          avecSaisies.includes('<th>Dossier</th>') && avecSaisies.includes('rp-sa-dos'));
 verifier("saisies : le numero de dossier y est seul sur sa ligne",
@@ -339,6 +341,16 @@ verifier("saisies : duree", avecSaisies.includes(">14 min<"));
 verifier("saisies : pastille aux couleurs de Saisieprod",
          avecSaisies.includes('rp-sa-pt mst-arret') && avecSaisies.includes('rp-sa-pt mst-autre'));
 verifier("saisies : cadre defilant", avecSaisies.includes('id="rp-sa-cadre"'));
+// Deux pieges de mise en page, verifies dans le rendu parce qu'ils ne se
+// voient qu'a l'ecran : sans <colgroup>, `table-layout:fixed` ignore les
+// largeurs ; avec un <td> en flex, la cellule sort de l'algorithme.
+verifier("saisies : les largeurs passent par un colgroup",
+         avecSaisies.includes('<colgroup><col class="c-h"><col class="c-op">'
+                              + '<col class="c-dos"><col class="c-qui"><col class="c-d">'));
+verifier("saisies : cinq colonnes declarees",
+         avecSaisies.split("<col ").length - 1 === 5);
+verifier("saisies : le flex est dans la cellule, pas sur elle",
+         avecSaisies.includes('<td class="rp-sa-op"><div class="rp-sa-opin">'));
 verifier("saisies : bouton etendre accessible",
          avecSaisies.includes('id="rp-sa-plus"') && avecSaisies.includes('aria-expanded="false"'));
 verifier("saisies : icone et non emoji",

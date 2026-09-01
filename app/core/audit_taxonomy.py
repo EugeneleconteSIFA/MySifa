@@ -57,6 +57,7 @@ MODULE_LABELS: dict[str, str] = {
     "imports": "Imports",
     "learning": "Formations",
     "maintenance": "Maintenance",
+    "mcp": "Serveur MCP",
     "maintenance_alerts": "Maintenance · alertes",
     "maintenance_codes": "Maintenance · codes",
     "maintenance_docs": "Maintenance · documents",
@@ -363,6 +364,11 @@ SKIP_PREFIXES: tuple[str, ...] = (
     "/api/ai",
     "/api/health",
     "/healthz",
+    # Le serveur MCP ne fait que lire : le journal trace ce qui change, pas ce
+    # qu'on regarde, et journaliser chaque `initialize` / `tools/list` noierait
+    # l'ecran. Ce qui compte — quel outil, quelle requete SQL — est ecrit
+    # explicitement par le routeur via log_action(module="mcp").
+    "/mcp",
     "/api/filters",
     "/static/",
     "/uploads/",

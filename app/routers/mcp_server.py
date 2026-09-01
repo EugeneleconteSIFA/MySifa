@@ -24,6 +24,7 @@ from fastapi.responses import JSONResponse, Response
 
 from config import APP_VERSION
 from app.core.database import get_db
+from app.services.audit_service import log_action
 from app.services import mcp_data
 
 router = APIRouter(tags=["mcp"])
@@ -87,11 +88,11 @@ def _cle_brute(request: Request) -> Optional[str]:
     return None
 
 
-def _verifier_cle(request: Request) -> Optional[str]:
-    """Renvoie None si l'accès est accordé, sinon le motif du refus."""
+def _verifier_cle(request: Request) -> tuple[Optional[str], Optional[str]]:
+    """Renvoie (motif de refus, nom de la clé). Le motif est None si l'accès passe."""
     brute = _cle_brute(request)
     if not brute:
-        return "Clé API manquante (en-tête X-Api-Key ou Authorization: Bearer)."
+        return "Clé API manquante (en-tête X-Api-Key ou Authorization: Bearer).", None
     empreinte = hashlib.sha256(brute.encode()).hexdigest()
     with get_db() as conn:
         row = conn.execute(
@@ -99,10 +100,10 @@ def _verifier_cle(request: Request) -> Optional[str]:
             (empreinte,),
         ).fetchone()
         if not row or not row["is_active"]:
-            return "Clé API invalide ou révoquée."
+            return "Clé API invalide ou révoquée.", None
         portees = [s.strip() for s in (row["scopes"] or "").split(",")]
         if SCOPE_MCP not in portees:
-            return f"Cette clé n'a pas la portée « {SCOPE_MCP} »."
+            return f"Cette clé n'a pas la portée « {SCOPE_MCP} ».", None
         try:
             conn.execute(
                 "UPDATE api_keys SET last_used_at=? WHERE id=?",
@@ -111,7 +112,8 @@ def _verifier_cle(request: Request) -> Optional[str]:
             conn.commit()
         except Exception:
             pass
-    return None
+        nom_cle = row["name"]
+    return None, nom_cle
 
 
 # ── Catalogue d'outils ───────────────────────────────────────────────────────
@@ -243,7 +245,36 @@ def _texte(valeur: Any) -> dict[str, Any]:
     }
 
 
-def _traiter(message: dict[str, Any]) -> Optional[dict[str, Any]]:
+def _journaliser(nom_cle: Optional[str], outil: str, args: dict[str, Any],
+                 echec: bool, request: Any = None) -> None:
+    """Trace un appel d'outil dans le journal des actions.
+
+    Le transport lui-meme est dans SKIP_PREFIXES : sans cet appel, une lecture
+    de la base de production par un agent externe ne laisserait aucune trace.
+    On ecrit ce qui a du sens — quel outil, sur quelle base, quelle requete —
+    et rien du resultat.
+    """
+    detail: dict[str, Any] = {"outil": outil}
+    for cle in ("base", "table", "filtre", "limite"):
+        if args.get(cle) is not None:
+            detail[cle] = args[cle]
+    sql = args.get("sql")
+    if sql:
+        detail["sql"] = str(sql)[:1000]
+    if echec:
+        detail["echec"] = True
+    log_action(
+        user={"nom": f"Clé MCP · {nom_cle or 'inconnue'}", "role": "mcp"},
+        action="SEARCH",
+        module="mcp",
+        objet=f"{outil} · {args.get('base') or '—'}",
+        detail=detail,
+        request=request,
+    )
+
+
+def _traiter(message: dict[str, Any], nom_cle: Optional[str] = None,
+             request: Any = None) -> Optional[dict[str, Any]]:
     """Traite un message JSON-RPC. Renvoie None pour une notification."""
     methode = message.get("method") or ""
     rid = message.get("id")
@@ -277,16 +308,19 @@ def _traiter(message: dict[str, Any]) -> Optional[dict[str, Any]]:
         except mcp_data.ErreurMCP as e:
             # Erreur métier : elle remonte comme resultat d'outil en erreur, pas
             # comme erreur de protocole — le modele doit pouvoir la lire et corriger.
+            _journaliser(nom_cle, nom, args, True, request)
             return _resultat(rid, {
                 "content": [{"type": "text", "text": str(e)}],
                 "isError": True,
             })
         except Exception:
             logger.exception("MCP — echec de l'outil %s", nom)
+            _journaliser(nom_cle, nom, args, True, request)
             return _resultat(rid, {
                 "content": [{"type": "text", "text": "Erreur interne pendant l'exécution de l'outil."}],
                 "isError": True,
             })
+        _journaliser(nom_cle, nom, args, False, request)
         return _resultat(rid, _texte(valeur))
 
     if notification:
@@ -298,7 +332,7 @@ def _traiter(message: dict[str, Any]) -> Optional[dict[str, Any]]:
 
 @router.post("/mcp")
 async def mcp_endpoint(request: Request):
-    refus = _verifier_cle(request)
+    refus, nom_cle = _verifier_cle(request)
     if refus:
         return _json({"error": refus}, 401)
 
@@ -308,7 +342,9 @@ async def mcp_endpoint(request: Request):
         return _json(_erreur(None, -32700, "JSON invalide."), 400)
 
     if isinstance(corps, list):
-        reponses = [r for r in (_traiter(m) for m in corps if isinstance(m, dict)) if r]
+        reponses = [
+            r for r in (_traiter(m, nom_cle, request) for m in corps if isinstance(m, dict)) if r
+        ]
         if not reponses:
             return Response(status_code=202)
         return _json(reponses)
@@ -316,7 +352,7 @@ async def mcp_endpoint(request: Request):
     if not isinstance(corps, dict):
         return _json(_erreur(None, -32600, "Requête JSON-RPC invalide."), 400)
 
-    reponse = _traiter(corps)
+    reponse = _traiter(corps, nom_cle, request)
     if reponse is None:
         return Response(status_code=202)
     return _json(reponse)

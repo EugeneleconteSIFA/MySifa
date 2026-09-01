@@ -1150,3 +1150,30 @@ decocher la case.
 colonne vide, poste coche, demande explicite qui repond quand meme, presence
 dans le selecteur). `tests/test_reunions_rendu.js` : 7 cas sur la pastille en
 retrait.
+
+### Deux pieges de tableau, corriges ensemble
+
+La colonne Operation s'est retrouvee ecrasee a cinquante pixels (« Arrive… »,
+« Netto… », « Repris… ») avec un large vide a sa droite. Deux causes qui se
+combinaient, toutes deux invisibles au test de rendu tant qu'on ne regarde que
+la chaine produite :
+
+1. **Un `<td>` en `display:flex` n'est plus une cellule de tableau.** Il sort de
+   l'algorithme de mise en page, et plus aucune largeur ne le tient. La regle
+   existait deja avant `table-layout:fixed` — elle passait inapercue parce que
+   l'algorithme automatique repartissait quand meme. Le flex vit maintenant dans
+   un conteneur INTERNE (`.rp-sa-opin`), la cellule reste une cellule.
+
+2. **En `table-layout:fixed`, les largeurs se lisent sur la premiere rangee ou
+   sur les `<col>`.** Les miennes etaient posees sur les `<td>` du corps : elles
+   etaient purement et simplement ignorees. Un `<colgroup>` de cinq `<col>`
+   nomme desormais chaque colonne, et c'est lui qui porte les largeurs.
+
+L'intitule de l'operation gagne au passage son `title` au survol, comme le
+numero de dossier : quand la colonne est etroite, l'ellipse est la seule mise en
+page possible, mais le texte entier doit rester atteignable.
+
+`tests/test_retour_prod_rendu.js` : 3 cas de plus qui verrouillent la structure
+elle-meme (colgroup present, cinq colonnes declarees, flex a l'interieur de la
+cellule et non sur elle). Ils ne remplacent pas un oeil sur l'ecran, mais ils
+empechent la regression silencieuse.

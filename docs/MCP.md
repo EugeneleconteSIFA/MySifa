@@ -118,6 +118,20 @@ Une clé absente ou sans la portée `mcp:read` répond 401.
 
 ---
 
+## Ce que le journal en garde
+
+Le transport (`POST /mcp`) est dans `SKIP_PREFIXES` : journaliser chaque
+`initialize` et chaque `tools/list` noierait l'écran du journal sous du bruit
+de protocole. Mais chaque **appel d'outil** est écrit explicitement, module
+`mcp`, action « Recherche » : quel outil, sur quelle base, et la requête SQL
+elle-même (tronquée à 1 000 caractères). L'auteur est le nom de la clé API.
+
+Sans cela, une lecture de la base de production par un agent externe ne
+laisserait aucune trace — le journal ne trace que les écritures, et le MCP
+n'écrit rien.
+
+---
+
 ## Les règles de lecture voyagent avec le serveur
 
 Le champ `instructions` renvoyé à l'`initialize` porte les règles qui ont coûté
