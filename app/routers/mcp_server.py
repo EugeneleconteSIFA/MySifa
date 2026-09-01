@@ -26,6 +26,7 @@ from config import APP_VERSION
 from app.core.database import get_db
 from app.services.audit_service import log_action
 from app.services import mcp_data
+from app.services import mcp_metier
 
 router = APIRouter(tags=["mcp"])
 logger = logging.getLogger("mysifa.mcp")
@@ -47,9 +48,12 @@ Deux bases :
 - `rvgi` : miroir en lecture seule de l'ERP RVGI — commandes, factures, livraisons,
   articles, tiers. Le sens d'écriture est unique : RVGI est la source, MySifa lit.
 
-Méthode : commence par `mysifa_schema` sur la base et le sujet visés, puis écris
-le SQL. Ne devine jamais un nom de colonne — la structure est irrégulière,
-surtout côté RVGI.
+Méthode. Un temps ou un métrage se demande à `mysifa_metric`, jamais en SQL :
+ces chiffres sont calculés par le code des écrans, et les recalculer produit un
+troisième chiffre pour le même dossier. Un identifiant approximatif passe par
+`mysifa_resolve` avant tout le reste. Pour le reste, `mysifa_schema` sur la base
+et le sujet visés, puis le SQL — et ne devine jamais un nom de colonne, la
+structure est irrégulière, surtout côté RVGI.
 
 Règles de lecture RVGI, établies à l'usage et non négociables :
 - Ne prendre que les lignes `corbeille = 0` : RVGI ne supprime pas, il marque.
@@ -190,6 +194,86 @@ OUTILS: list[dict[str, Any]] = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "mysifa_metric",
+        "title": "Les chiffres qui font foi",
+        "description": "Métrage, temps de calage / production / arrêt, vitesse et cadence — "
+                       "pour un dossier, ou pour une période et une machine. Ces chiffres "
+                       "sont calculés par le code des écrans MySifa, jamais recalculés ici : "
+                       "utilise CET outil plutôt que du SQL dès qu'il s'agit d'un temps ou "
+                       "d'un métrage, sinon tu produiras un troisième chiffre pour le même "
+                       "dossier. Sans dates, la période est la dernière journée réellement "
+                       "travaillée — pas la veille calendaire.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "dossier": {"type": "string", "description": "Numéro de dossier exact. Si absent, on raisonne par période."},
+                "du": {"type": "string", "description": "Début de période, AAAA-MM-JJ."},
+                "au": {"type": "string", "description": "Fin de période, AAAA-MM-JJ."},
+                "machine": {"type": "string", "description": "Nom de machine ; vide = toutes."},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "mysifa_dossier",
+        "title": "Un dossier d'un bloc",
+        "description": "Tout ce qu'un dossier de production a produit comme information : "
+                       "saisies et intervalles, temps par catégorie, métrage, seuils d'arrêt "
+                       "franchis, non-conformités, info prod, commentaires et notes, repères "
+                       "de la référence, points de vigilance. Une réponse au lieu de six "
+                       "requêtes. Si le numéro est inexact, l'erreur propose les dossiers proches.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "no_dossier": {"type": "string", "description": "Numéro de dossier tel qu'il est saisi."},
+            },
+            "required": ["no_dossier"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "mysifa_resolve",
+        "title": "Retrouver l'identifiant exact",
+        "description": "Un numéro de dossier chez SIFA n'est pas un identifiant propre : "
+                       "« 9932236 (marché 747) », « Reliquat 9932250 + Stock », "
+                       "« 9932219 à 9932290 ». Donne un fragment — un numéro partiel, un nom "
+                       "de client, un nom de machine — et récupère la forme exacte avant "
+                       "d'écrire une requête. À appeler AVANT mysifa_dossier ou mysifa_sql "
+                       "quand l'identifiant vient de l'utilisateur.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "terme": {"type": "string", "description": "Fragment recherché, 2 caractères minimum."},
+                "genre": {
+                    "type": "string",
+                    "enum": ["auto", "dossier", "machine", "produit"],
+                    "default": "auto",
+                },
+            },
+            "required": ["terme"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "mysifa_anomalies",
+        "title": "Ce qui est incomplet",
+        "description": "Les trous d'une période, dossier par dossier : clôture sans info prod, "
+                       "seuil d'arrêt franchi sans explication, saisie restée ouverte d'un jour "
+                       "à l'autre, métrage non calculable faute de compteur de début, part "
+                       "d'arrêts au-delà de 30 %. C'est ce qui est INCOMPLET, pas ce qui est "
+                       "mauvais. Sans dates, la dernière journée réellement travaillée.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "du": {"type": "string", "description": "AAAA-MM-JJ."},
+                "au": {"type": "string", "description": "AAAA-MM-JJ."},
+                "machine": {"type": "string"},
+                "limite": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50},
+            },
+            "additionalProperties": False,
+        },
+    },
 ]
 
 
@@ -213,6 +297,19 @@ def _executer_outil(nom: str, args: dict[str, Any]) -> Any:
             args.get("base", ""),
             args.get("table", ""),
             int(args.get("limite") or 20),
+        )
+    if nom == "mysifa_metric":
+        return mcp_metier.metric(
+            args.get("dossier"), args.get("du"), args.get("au"), args.get("machine"),
+        )
+    if nom == "mysifa_dossier":
+        return mcp_metier.dossier(args.get("no_dossier", ""))
+    if nom == "mysifa_resolve":
+        return mcp_metier.resolve(args.get("terme", ""), args.get("genre", "auto"))
+    if nom == "mysifa_anomalies":
+        return mcp_metier.anomalies(
+            args.get("du"), args.get("au"), args.get("machine"),
+            int(args.get("limite") or 50),
         )
     raise mcp_data.ErreurMCP(f"Outil inconnu : « {nom} ».")
 
@@ -362,16 +459,6 @@ async def mcp_endpoint(request: Request):
     if reponse is None:
         return Response(status_code=202)
     return _json(reponse)
-
-
-@router.get("/mcp")
-async def mcp_sse_non_supporte():
-    """Le serveur ne tient pas de flux SSE : chaque échange est un POST autonome."""
-    return _json(
-        {"error": "Ce serveur MCP ne gère que le POST (Streamable HTTP sans flux SSE)."},
-        405,
-        {"Allow": "POST, DELETE"},
-    )
 
 
 @router.delete("/mcp")
