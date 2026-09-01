@@ -195,8 +195,14 @@ else:
     verifier("les regles de lecture RVGI voyagent avec le serveur",
              "corbeille = 0" in r["instructions"] and "htn" in r["instructions"], True)
     noms = [t["name"] for t in rpc("tools/list")["result"]["tools"]]
-    verifier("le catalogue d'outils est complet", sorted(noms),
-             ["mysifa_apercu_table", "mysifa_bases", "mysifa_schema", "mysifa_sql"])
+    # Quatre outils d'acces brut a la base, quatre outils metier qui appellent
+    # le code des ecrans au lieu de recalculer.
+    verifier("le catalogue d'outils est complet", sorted(noms), [
+        "mysifa_anomalies", "mysifa_apercu_table", "mysifa_bases", "mysifa_dossier",
+        "mysifa_metric", "mysifa_resolve", "mysifa_schema", "mysifa_sql",
+    ])
+    metier = {"mysifa_metric", "mysifa_dossier", "mysifa_resolve", "mysifa_anomalies"}
+    verifier("les outils metier sont tous exposes", sorted(metier - set(noms)), [])
     verifier("chaque outil declare un schema d'entree",
              all("inputSchema" in t for t in rpc("tools/list")["result"]["tools"]), True)
     verifier("une notification ne repond pas",

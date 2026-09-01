@@ -25,10 +25,51 @@ Deux bases sont exposées :
 | `mysifa` | `DB_PATH` | Dossiers, saisies opérateurs, arrêts, planning, stock et matières, expéditions, qualité, maintenance |
 | `rvgi` | `ERP_MIRROR_DB` | Miroir en lecture seule de l'ERP RVGI : commandes, factures, livraisons, articles, tiers |
 
-Quatre outils : `mysifa_bases`, `mysifa_schema`, `mysifa_sql`,
+Huit outils, en deux familles.
+
+**Accès brut à la base** — `mysifa_bases`, `mysifa_schema`, `mysifa_sql`,
 `mysifa_apercu_table`. Le SQL générique couvre à lui seul prod, stock,
-expéditions et ERP ; les outils métier spécialisés viendront quand l'usage aura
-montré lesquels valent la peine.
+expéditions et ERP.
+
+**Outils métier** (`app/services/mcp_metier.py`) — `mysifa_metric`,
+`mysifa_dossier`, `mysifa_resolve`, `mysifa_anomalies`. Ils ne calculent rien :
+ils appellent `rapport_dossier` et `dossier_stats`, c'est-à-dire le code des
+écrans. La règle n'a pas d'exception, et elle a une raison datée : le
+01/09/2026, MyRentabilité additionnait `metrage_reel` — un relevé de compteur —
+là où MyProd calculait un écart de compteur. 561 152 286 m contre 154 701 sur le
+même dossier, pendant des mois, sans que personne le voie. Un MCP qui referait
+ses propres jointures serait simplement le troisième écran avec le troisième
+chiffre. Corollaire assumé : quand un chiffre est faux ici, il est faux dans
+MySifa aussi — on corrige à la source.
+
+| Outil | Ce qu'il rend |
+|---|---|
+| `mysifa_metric` | Métrage, temps par catégorie, vitesse et cadence — un dossier, ou une période et une machine |
+| `mysifa_dossier` | Un dossier d'un bloc : saisies, temps, seuils, NC, info prod, notes, repères, vigilance |
+| `mysifa_resolve` | La forme exacte d'un identifiant à partir d'un fragment — un dossier s'appelle « 9932236 (marché 747) » |
+| `mysifa_anomalies` | Les trous d'une période : clôture sans info prod, seuil sans explication, saisie restée ouverte, métrage non calculable |
+
+Sans dates, `mysifa_metric` et `mysifa_anomalies` prennent la **dernière journée
+réellement travaillée** — pas la veille calendaire.
+
+---
+
+## La page `/mcp`
+
+Même URL que l'endpoint, deux niveaux, selon la session MySifa du visiteur.
+
+**Sans session** : une carte minimale — le serveur tourne, sa version, une clé
+API est requise. Le catalogue d'outils et les règles de lecture n'y figurent
+pas : ils nomment les tables, les conventions internes et l'ordre de grandeur du
+chiffre d'affaires. Ce n'est pas un oubli.
+
+**Direction ou superadmin connecté** : la console. Clés portant la portée
+`mcp:read` et leur dernière utilisation, outils exposés, et le journal des
+derniers appels avec la requête SQL exacte. C'est la réponse à « qu'est-ce que
+l'agent a lu dans ma base ».
+
+Le code est dans `app/web/mcp_page.py`. `GET /mcp` sert la page, `POST /mcp` sert
+le protocole : deux routeurs, un seul chemin.
 
 ---
 

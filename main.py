@@ -113,6 +113,7 @@ from app.routers.rvgi import router as rvgi_api_router
 from app.routers.stock_compare import router as stock_compare_router
 from app.routers.rvgi_tiers import router as rvgi_tiers_router
 from app.routers.mcp_server import router as mcp_router
+from app.web.mcp_page import router as mcp_page_router
 from app.web.erp_page import router as erp_page_router
 
 
@@ -580,6 +581,8 @@ app.include_router(rvgi_tiers_router)
 # Serveur MCP (POST /mcp) : lecture seule, authentifie par cle API a portee
 # mcp:read. Sans include_router, le connecteur Claude tombe sur un 404.
 app.include_router(mcp_router)
+# GET /mcp : la page. POST /mcp : le protocole. Deux routeurs, un chemin.
+app.include_router(mcp_page_router)
 
 
 @app.get("/healthz", include_in_schema=False)
