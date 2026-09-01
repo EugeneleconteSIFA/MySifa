@@ -176,6 +176,8 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 @media (max-width:900px){.head-actions{display:none}}
 .pill{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;font-size:11px;font-weight:600;background:var(--bg);border:1px solid var(--border);color:var(--text2)}
 .pill.lecture{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.pill.miroir{background:rgba(52,211,153,.14);border-color:var(--ok);color:var(--ok)}
+body.light .pill.miroir{background:rgba(5,150,105,.10)}
 .pill.vieux{background:rgba(251,191,36,.14);border-color:var(--warn);color:var(--warn)}
 
 /* ── Menu (accueil du module) ── */
@@ -791,7 +793,7 @@ body.light .tdb-tip{box-shadow:0 12px 34px rgba(15,23,42,.16)}
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         </button>
         <button type="button" class="head-btn" id="hd-retour" title="Retour à MySifa" aria-label="Retour à MySifa">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/></svg>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/></svg>
         </button>
         <button type="button" class="head-btn" id="hd-theme" title="Changer de thème" aria-label="Changer de thème"></button>
         <button type="button" class="head-btn danger" id="hd-logout" title="Déconnexion" aria-label="Déconnexion">
@@ -1272,7 +1274,7 @@ function renderFraicheur(){
   const j=(new Date()-new Date(d.replace(' ','T')))/86400000;
   const vieux=isFinite(j)&&j>2;
   hote.innerHTML='<span class="pill lecture">Lecture seule</span>'+
-    '<span class="pill'+(vieux?' vieux':'')+'">Miroir du '+esc(fmtDateHeure(d))+'</span>';
+    '<span class="pill miroir'+(vieux?' vieux':'')+'">Miroir du '+esc(fmtDateHeure(d))+'</span>';
 }
 
 // ── Vue menu ─────────────────────────────────────────────────────

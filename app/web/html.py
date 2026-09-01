@@ -1795,7 +1795,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/mysifa_humeur.js"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=4"></script>
+<script src="/static/mysifa_cal_rappel.js?v=5"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/mysifa_landscape.js?v=2"></script>
 <script src="/static/mysifa_guides.js"></script>
@@ -11125,11 +11125,10 @@ function openProfileSheet(){
       nbT>0?(nbT>9?'9+':String(nbT)):''));
   }
   items.push(item('messagerie', ICO.mail, 'Messagerie', msgUnread>0?(msgUnread>9?'9+':String(msgUnread)):''));
-  if(isSuper||isDir||isAdmin){
-    const nbC=Number(S.calInvitCount||0);
-    items.push(item('calendrier', ICO.calendar, 'Calendrier',
-      nbC>0?(nbC>9?'9+':String(nbC)):''));
-  }
+  // Calendrier : tous les services y ont accès.
+  const nbC=Number(S.calInvitCount||0);
+  items.push(item('calendrier', ICO.calendar, 'Calendrier',
+    nbC>0?(nbC>9?'9+':String(nbC)):''));
   if(isSuper||isDir){
     items.push(item('db', ICO.database, 'Base de données', ''));
   }

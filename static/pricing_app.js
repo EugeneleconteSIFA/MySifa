@@ -54,6 +54,11 @@
       msProdQ: "",
       tarifQ: "",
     },
+    // Tri et filtres de colonne, par tableau. Vivent dans l'état plutôt que
+    // dans le DOM : la liste se reconstruit à chaque enregistrement, et un tri
+    // qui saute au premier prix corrigé serait pire que pas de tri du tout.
+    tri: { matieres: null, produits: null },
+    colFiltres: { matieres: {}, produits: {} },
     msDecls: [],
     msProducts: [],
     expandedProd: {},
@@ -1226,7 +1231,29 @@
         )
         .join("");
 
-    const lignes = S.mystock.map(mystockMatiereRowHtml).join("");
+    // Les colonnes déclarent comment se trier et se filtrer. Le prix se trie
+    // sur sa valeur numérique, pas sur son texte : « 10 » avant « 9 » est le
+    // classique d'un tri alphabétique sur des nombres.
+    const COLS = [
+      { cle: "cat", titre: "Cat.", style: "width:92px", filtre: "choix",
+        val: (m) => m.categorie },
+      { cle: "ref", titre: "Référence", filtre: "texte", val: (m) => m.reference },
+      { cle: "des", titre: "Désignation", filtre: "texte", val: (m) => m.designation || "" },
+      { cle: "fourn", titre: "Fournisseur principal", filtre: "choix",
+        val: (m) => {
+          const f = msFournisseursPrincipaux(m).map((x) => x.nom).filter(Boolean);
+          return f.length === 1 ? f[0] : (f.length > 1 ? f.length + " fournisseurs" : "");
+        } },
+      { cle: "prix", titre: "Prix d'achat", val: (m) => (m.prix_min == null ? null : m.prix_min),
+        suffixe: `<span class="msl-th-hint">${icon("edit", 11)} modifiable ici</span>` },
+      { cle: "maj", titre: "Dernier prix", val: (m) => m.prix_maj_le || null,
+        aide: "Date de la dernière saisie du prix — donc la dernière fois qu'il a été revu" },
+      { cle: "act", titre: "", style: "width:172px" },
+    ];
+
+    const filtrees = filtresAppliquer("matieres", S.mystock, COLS);
+    const triees = triAppliquer("matieres", filtrees, COLS);
+    const lignes = triees.map(mystockMatiereRowHtml).join("");
     const sousTitre = `${S.mystock.length} matière(s) · cliquez sur un prix d'achat pour le modifier`;
 
     setContent(`
@@ -1248,17 +1275,16 @@
               <col style="width:180px"><col style="width:215px">
               <col style="width:120px"><col style="width:172px">
             </colgroup>
-            <thead><tr>
-              <th>Cat.</th><th>Référence</th><th>Désignation</th><th>Fournisseur principal</th>
-              <th class="msl-th-prix">Prix d'achat <span class="msl-th-hint">${icon("edit", 11)} modifiable ici</span></th>
-              <th title="Date de la dernière saisie du prix — donc la dernière fois qu'il a été revu">Dernier prix</th>
-              <th class="ms-actions"></th>
-            </tr></thead>
+            ${enTetesTriables("matieres", COLS, S.mystock)}
             <tbody>${lignes || '<tr><td colspan="7" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
           </table>
         </div>
+        ${filtresActifsHtml("matieres", COLS, S.mystock.length, triees.length)}
       </div>
     `);
+
+    bindEnTetes("matieres", renderMystockList);
+    bindRaz("matieres", renderMystockList);
 
     const qEl = document.getElementById("ms-q");
     let t;
@@ -1744,6 +1770,212 @@
       };
     };
     dessiner();
+  }
+
+  /* Le SUPPORT d'un frontal : thermique, couché, synthétique, vélin.
+
+     C'est ce qui distingue deux étiquettes à l'œil, bien avant leur code —
+     « Thermique Pro 70g » et « Eco Thermal 70g » se ressemblent en liste, leur
+     support non. MyStock classe déjà les frontaux ainsi (`sous_section`), avec
+     ses propres teintes ; on les reprend à l'identique plutôt que d'inventer
+     une seconde classification, sans quoi les deux applications diraient deux
+     choses du même papier.
+
+     Une matière sans sous-section retombe sur sa catégorie : mieux vaut
+     « ADHÉSIF » que rien du tout sur une ligne dont le frontal manque. */
+  const SUPPORT_LABELS = {
+    couche: "Couché", synthetique: "Synthétique",
+    thermiques: "Thermique", thermique: "Thermique", velin: "Vélin",
+  };
+
+  function supportCle(v) {
+    return String(v || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "");
+  }
+
+  function supportBadge(sousSection, categorie) {
+    const k = supportCle(sousSection);
+    if (k) {
+      return `<span class="mps-support mps-support-${escAttr(k)}">${escHtml(SUPPORT_LABELS[k] || sousSection)}</span>`;
+    }
+    const c = supportCle(categorie);
+    if (!c) return '<span class="muted">—</span>';
+    return `<span class="mps-support mps-support-cat-${escAttr(c)}">${escHtml(categorie)}</span>`;
+  }
+
+  /* ── Tri et filtre par colonne, partagés par les deux listes ─────────────
+
+     Les deux tableaux — matières et produits — servaient la même recherche
+     unique en haut de page. Elle répond bien à « où est 1408 », jamais à
+     « quels produits sont en thermique », ni à « quels prix n'ont pas été
+     revus depuis deux ans ». D'où des en-têtes qui trient et qui filtrent,
+     colonne par colonne.
+
+     La déclaration d'une colonne dit trois choses : sa clé, comment en tirer
+     la valeur d'une ligne (`val`, pour le tri) et le type de filtre
+     (`filtre: "texte" | "choix"`). Le reste — l'ordre, les flèches, la liste
+     des valeurs distinctes d'un `choix` — se déduit tout seul, pour que
+     déclarer une colonne reste une ligne et pas un formulaire.
+
+     Le filtre `choix` propose les valeurs RÉELLEMENT présentes dans les
+     données affichées : une liste figée finit toujours par proposer une
+     catégorie que plus rien ne porte, et par taire celle qu'on vient
+     d'ajouter. */
+  function triEtat(table) {
+    return (S.tri && S.tri[table]) || null;
+  }
+
+  function triBascule(table, cle) {
+    const t = triEtat(table);
+    // Trois états plutôt que deux : croissant, décroissant, puis retour à
+    // l'ordre naturel de la liste. Sans le troisième, un tri posé par erreur
+    // ne se retire plus qu'en rechargeant la page.
+    if (!t || t.cle !== cle) S.tri[table] = { cle: cle, sens: 1 };
+    else if (t.sens === 1) S.tri[table] = { cle: cle, sens: -1 };
+    else S.tri[table] = null;
+  }
+
+  function triAppliquer(table, lignes, colonnes) {
+    const t = triEtat(table);
+    if (!t) return lignes;
+    const col = colonnes.find((c) => c.cle === t.cle);
+    if (!col || !col.val) return lignes;
+    // Copie avant tri : `sort` trie en place, et réordonner S.mystock ferait
+    // dériver l'état par un simple clic d'en-tête.
+    return [...lignes].sort((a, b) => {
+      const va = col.val(a), vb = col.val(b);
+      const aVide = va == null || va === "";
+      const bVide = vb == null || vb === "";
+      // Les valeurs manquantes vont toujours en bas, dans les deux sens :
+      // remonter une colonne de tirets en tête d'un tri décroissant
+      // n'apprend rien et cache ce qu'on cherchait.
+      if (aVide && bVide) return 0;
+      if (aVide) return 1;
+      if (bVide) return -1;
+      if (typeof va === "number" && typeof vb === "number") return (va - vb) * t.sens;
+      return String(va).localeCompare(String(vb), "fr", { numeric: true }) * t.sens;
+    });
+  }
+
+  function colFiltre(table, cle) {
+    return ((S.colFiltres && S.colFiltres[table]) || {})[cle] || "";
+  }
+
+  function filtresAppliquer(table, lignes, colonnes) {
+    const actifs = colonnes.filter((c) => c.filtre && colFiltre(table, c.cle));
+    if (!actifs.length) return lignes;
+    return lignes.filter((l) =>
+      actifs.every((c) => {
+        const v = c.filtreVal ? c.filtreVal(l) : c.val(l);
+        const f = colFiltre(table, c.cle);
+        if (c.filtre === "choix") return String(v == null ? "" : v) === f;
+        return String(v == null ? "" : v).toLowerCase().includes(f.toLowerCase());
+      })
+    );
+  }
+
+  /** Les valeurs distinctes d'une colonne, telles qu'elles sont dans les données. */
+  function choixDeColonne(lignes, col) {
+    const vus = new Set();
+    lignes.forEach((l) => {
+      const v = col.filtreVal ? col.filtreVal(l) : col.val(l);
+      if (v != null && v !== "") vus.add(String(v));
+    });
+    return [...vus].sort((a, b) => a.localeCompare(b, "fr", { numeric: true }));
+  }
+
+  /* Deux rangées dans le `thead` : les libellés cliquables, puis les filtres.
+
+     Un menu par colonne aurait été plus compact, mais il cache l'état : on ne
+     voit plus qu'un filtre est posé, et on cherche longtemps pourquoi la liste
+     est vide. Les champs restent donc visibles, et un filtre actif se teinte. */
+  function enTetesTriables(table, colonnes, lignesSource) {
+    const t = triEtat(table);
+    const libelles = colonnes.map((c) => {
+      if (!c.val) return `<th${c.style ? ` style="${c.style}"` : ""}>${c.titre || ""}</th>`;
+      const actif = t && t.cle === c.cle;
+      const fleche = actif ? (t.sens === 1 ? "↑" : "↓") : "";
+      // `suffixe` : du HTML composé par MySifa lui-même, jamais de la saisie —
+      // l'indice « modifiable ici » de la colonne Prix, par exemple. Il vit à
+      // côté du bouton de tri et non dedans, sinon cliquer sur l'indice
+      // trierait, ce que personne n'a demandé.
+      return `<th${c.style ? ` style="${c.style}"` : ""} class="th-tri${actif ? " on" : ""}"${c.aide ? ` title="${escAttr(c.aide)}"` : ""}>
+        <button type="button" data-tri="${escAttr(table)}|${escAttr(c.cle)}"
+          title="Trier par ${escAttr(c.titre || c.cle)}">${escHtml(c.titre || "")}<span class="th-fleche">${fleche}</span></button>${c.suffixe || ""}
+      </th>`;
+    }).join("");
+
+    const filtres = colonnes.map((c) => {
+      if (!c.filtre) return "<th></th>";
+      const v = colFiltre(table, c.cle);
+      const attr = `data-colfiltre="${escAttr(table)}|${escAttr(c.cle)}"`;
+      if (c.filtre === "choix") {
+        const opts = choixDeColonne(lignesSource, c)
+          .map((o) => `<option value="${escAttr(o)}"${o === v ? " selected" : ""}>${escHtml(c.optLabel ? c.optLabel(o) : o)}</option>`)
+          .join("");
+        return `<th class="th-filtre"><select ${attr} class="${v ? "on" : ""}">
+          <option value="">Tous</option>${opts}</select></th>`;
+      }
+      return `<th class="th-filtre"><input type="search" ${attr} class="${v ? "on" : ""}"
+        value="${escAttr(v)}" placeholder="filtrer"/></th>`;
+    }).join("");
+
+    return `<thead><tr>${libelles}</tr><tr class="th-filtres">${filtres}</tr></thead>`;
+  }
+
+  /* Le tri se rejoue sur place : reconstruire la page entière ferait perdre le
+     focus du champ de filtre qu'on est en train de remplir. */
+  function bindEnTetes(table, redessiner) {
+    document.querySelectorAll(`[data-tri^="${table}|"]`).forEach((b) => {
+      b.onclick = () => {
+        triBascule(table, b.getAttribute("data-tri").split("|")[1]);
+        redessiner();
+      };
+    });
+    document.querySelectorAll(`[data-colfiltre^="${table}|"]`).forEach((el) => {
+      const cle = el.getAttribute("data-colfiltre").split("|")[1];
+      const poser = (v) => {
+        S.colFiltres[table][cle] = v;
+        redessiner();
+      };
+      if (el.tagName === "SELECT") el.onchange = () => poser(el.value);
+      else {
+        el.oninput = () => {
+          clearTimeout(el._deb);
+          el._deb = setTimeout(() => {
+            const pos = el.selectionStart;
+            poser(el.value);
+            // Le champ est recréé par le redessin : on lui rend le curseur,
+            // sinon taper trois lettres demande trois clics.
+            const neuf = document.querySelector(`[data-colfiltre="${table}|${cle}"]`);
+            if (neuf) { neuf.focus(); try { neuf.setSelectionRange(pos, pos); } catch (e) {} }
+          }, 250);
+        };
+      }
+    });
+  }
+
+  /** Bandeau « n lignes sur m » + bouton pour tout relâcher d'un coup. */
+  function filtresActifsHtml(table, colonnes, total, montrees) {
+    const actifs = colonnes.filter((c) => c.filtre && colFiltre(table, c.cle));
+    if (!actifs.length && !triEtat(table)) return "";
+    const bouts = actifs.map((c) => `${escHtml(c.titre)} : <strong>${escHtml(colFiltre(table, c.cle))}</strong>`);
+    return `<div class="th-actifs">
+      <span>${montrees} ligne(s) sur ${total}${bouts.length ? " — " + bouts.join(" · ") : ""}</span>
+      <button type="button" data-raz="${escAttr(table)}">Tout afficher</button>
+    </div>`;
+  }
+
+  function bindRaz(table, redessiner) {
+    const b = document.querySelector(`[data-raz="${table}"]`);
+    if (b) b.onclick = () => {
+      S.colFiltres[table] = {};
+      S.tri[table] = null;
+      redessiner();
+    };
   }
 
   function categorieBadge(cat) {
@@ -4049,13 +4281,34 @@
    * « Toutes déclinaisons » n'apprend rien : quand la déclinaison n'a pas de
    * valeur, on n'affiche que la référence de la matière.
    */
+  function msProductComp(produit, role) {
+    return (produit.composants || []).find((x) => x.role === role) || null;
+  }
+
   function msProductCompLabel(produit, role) {
-    const c = (produit.composants || []).find((x) => x.role === role);
+    const c = msProductComp(produit, role);
     if (!c) return '<span style="color:var(--muted)">—</span>';
-    const val = c.libelle && c.libelle !== "Toutes déclinaisons"
-      ? ` <span class="msp-decl">${escHtml(c.libelle)}</span>`
+    // Le grammage affiché est celui que CE produit pose, plus le libellé de
+    // déclinaison : c'est lui qui distingue deux lignes portant le même
+    // adhésif, et c'est lui qu'on va corriger si le coût surprend.
+    const g = c.grammage_gsm
+      ? ` <span class="msp-decl">${escHtml(fmtNum(c.grammage_gsm, 0, 1))} g/m²</span>`
       : "";
-    return escHtml(c.reference) + val;
+    return escHtml(c.reference) + g;
+  }
+
+  /** Le support du produit : la sous-section de son frontal, en badge MyStock. */
+  function msProductSupport(produit) {
+    const f = msProductComp(produit, "FRONTAL");
+    return f ? supportBadge(f.sous_section, f.categorie) : "";
+  }
+
+  function msProductSupportTexte(produit) {
+    const f = msProductComp(produit, "FRONTAL");
+    if (!f) return "";
+    const k = supportCle(f.sous_section);
+    if (k) return SUPPORT_LABELS[k] || f.sous_section;
+    return f.categorie || "";
   }
 
   /**
@@ -4122,15 +4375,48 @@
   }
 
   function renderMsProductsList() {
-    const rows = S.msProducts
+    /* La colonne « Code » est partie le 31 août 2026 : 886-0001 n'apprend rien
+       qu'on cherche du regard, et il mangeait la largeur d'une désignation qui,
+       elle, se lit. Le code reste dans la recherche, sur la fiche, et en
+       infobulle de la désignation — on ne le perd pas, on cesse d'en faire une
+       colonne.
+
+       Le SUPPORT le remplace : thermique, couché, synthétique, vélin. C'est ce
+       qui distingue deux étiquettes à l'œil, et il se filtre. */
+    const COLS = [
+      { cle: "caret", titre: "", style: "width:28px" },
+      { cle: "support", titre: "Support", style: "width:120px", filtre: "choix",
+        val: msProductSupportTexte },
+      { cle: "des", titre: "Désignation", filtre: "texte",
+        val: (p) => p.designation || "",
+        // Le code reste filtrable ici : il a quitté l'affichage, pas l'usage.
+        filtreVal: (p) => `${p.designation || ""} ${p.code || ""}` },
+      { cle: "frontal", titre: "Frontal", filtre: "choix",
+        val: (p) => (msProductComp(p, "FRONTAL") || {}).reference || "" },
+      { cle: "adhesif", titre: "Adhésif", filtre: "choix",
+        val: (p) => (msProductComp(p, "ADHESIF") || {}).reference || "" },
+      { cle: "glassine", titre: "Glassine", filtre: "choix",
+        val: (p) => (msProductComp(p, "GLASSINE") || {}).reference || "" },
+      { cle: "autres", titre: "Autres", style: "width:70px",
+        val: (p) => (p.composants || []).filter((x) => x.role === "AUTRE").length },
+      { cle: "cout", titre: "Coût", val: (p) => (p.cost ? parseFloat(p.cost.total_eur_per_m2) : null) },
+      { cle: "vente", titre: "Vente", val: (p) => (p.cost ? parseFloat(p.cost.sell_price_eur_m2) : null) },
+      { cle: "marge", titre: "Marge", val: (p) => (p.cost ? parseFloat(p.cost.margin_pct) : null) },
+      { cle: "act", titre: "", style: "width:96px" },
+    ];
+
+    const filtres = filtresAppliquer("produits", S.msProducts, COLS);
+    const triees = triAppliquer("produits", filtres, COLS);
+
+    const rows = triees
       .map((p) => {
         const c = p.cost;
         const open = !!S.expandedProd[p.id];
         const autres = (p.composants || []).filter((x) => x.role === "AUTRE").length;
         return `<tr class="ms-row${open ? " open" : ""}" data-msp-row="${p.id}">
             <td class="ms-caret">${open ? "▾" : "▸"}</td>
-            <td><strong>${escHtml(p.code)}</strong></td>
-            <td>${escHtml(p.designation)}</td>
+            <td>${msProductSupport(p)}</td>
+            <td title="${escAttr(p.code || "")}">${escHtml(p.designation)}</td>
             <td>${msProductCompLabel(p, "FRONTAL")}</td>
             <td>${msProductCompLabel(p, "ADHESIF")}</td>
             <td>${msProductCompLabel(p, "GLASSINE")}</td>
@@ -4156,13 +4442,16 @@
         </div>
         <div class="table-wrap">
           <table class="pr-table msp-table">
-            <thead><tr><th style="width:28px"></th><th>Code</th><th>Désignation</th><th>Frontal</th><th>Adhésif</th><th>Glassine</th><th>Autres</th><th>Coût</th><th>Vente</th><th>Marge</th><th></th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="11" class="empty">Aucun produit MyStock. Crée le premier avec le bouton ci-dessus.</td></tr>'}</tbody>
+            ${enTetesTriables("produits", COLS, S.msProducts)}
+            <tbody>${rows || '<tr><td colspan="11" class="empty">Aucun produit pour ce filtre.</td></tr>'}</tbody>
           </table>
         </div>
+        ${filtresActifsHtml("produits", COLS, S.msProducts.length, triees.length)}
       </div>
     `);
 
+    bindEnTetes("produits", renderMsProductsList);
+    bindRaz("produits", renderMsProductsList);
     bindProductsTabs();
     const q = document.getElementById("msp-q");
     if (q) {

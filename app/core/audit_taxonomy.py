@@ -446,6 +446,58 @@ def redact(value):
     return value
 
 
+METHODES_ECRITURE = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+def parcourir_routes(objet, prefixe: str = "", _profondeur: int = 0):
+    """Enumere `(methodes, chemin)` pour toutes les routes d'une application.
+
+    Pourquoi ce n'est pas un simple `for route in app.routes` : selon la
+    version de FastAPI, `include_router` ne range pas les routes au meme
+    endroit. Jusqu'a la 0.115 (celle epinglee en production) il aplatit tout
+    dans `app.routes` ; a partir de la 0.140 il pose un routeur paresseux qui
+    garde ses routes dans `original_router` et son prefixe dans
+    `include_context`. Une couverture qui ne connaitrait qu'une seule de ces
+    deux formes annoncerait « 4 routes » sur l'autre — un ecran de couverture
+    qui ment est pire que pas d'ecran du tout.
+
+    On descend donc sur ce que l'objet expose, sans dependre d'un nom de
+    classe interne.
+    """
+    if _profondeur > 8:
+        return
+
+    methodes = getattr(objet, "methods", None)
+    chemin = getattr(objet, "path", None)
+    if methodes and chemin is not None:
+        yield {str(m).upper() for m in methodes}, prefixe + chemin
+        return
+
+    # FastAPI >= 0.140 : inclusion paresseuse.
+    inclus = getattr(objet, "original_router", None)
+    if inclus is not None:
+        contexte = getattr(objet, "include_context", None)
+        yield from parcourir_routes(
+            inclus,
+            prefixe + (getattr(contexte, "prefix", "") or ""),
+            _profondeur + 1,
+        )
+        return
+
+    enfants = getattr(objet, "routes", None)
+    if enfants:
+        base = prefixe + (chemin or "")
+        for enfant in enfants:
+            yield from parcourir_routes(enfant, base, _profondeur + 1)
+
+
+def routes_ecriture(app):
+    """Les `(methode, chemin)` d'ecriture de l'application, doublons compris."""
+    for methodes, chemin in parcourir_routes(app):
+        for methode in sorted(methodes & METHODES_ECRITURE):
+            yield methode, chemin
+
+
 def humaniser_endpoint(nom: Optional[str]) -> str:
     """`creer_tache_commentaire` → `Creer tache commentaire`."""
     if not nom:

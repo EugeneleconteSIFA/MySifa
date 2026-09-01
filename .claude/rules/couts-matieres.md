@@ -112,6 +112,33 @@ Fiche, et MyStock ↗. Le champ se verrouille quand la matière a plusieurs
 fournisseurs — un prix unique en écraserait un avec le tarif de l'autre — et la
 ligne le dit.
 
+**En-têtes qui trient et qui filtrent** (31 août 2026), sur les deux listes —
+matières et produits. La recherche unique en haut de page répond bien à « où est
+1408 », jamais à « quels produits sont en thermique » ni à « quels prix n'ont pas
+été revus depuis deux ans ».
+
+Une colonne se déclare en une ligne dans un tableau `COLS` : sa clé, comment en
+tirer la valeur (`val`, pour le tri) et le type de filtre (`texte` ou `choix`).
+Le reste se déduit — flèches, ordre, valeurs distinctes d'un `choix`, prises
+dans les données réelles et non dans une liste figée qui finit toujours par
+proposer une catégorie que plus rien ne porte.
+
+Trois états de tri : croissant, décroissant, ordre naturel — sans le troisième,
+un tri posé par erreur ne se retire plus. Les valeurs manquantes vont toujours en
+bas, dans les deux sens. Les champs de filtre restent visibles plutôt que cachés
+dans un menu : un menu cache l'état, et on cherche longtemps pourquoi la liste
+est vide. Un filtre actif se teinte, et un bandeau sous le tableau dit combien de
+lignes sont masquées avec un bouton pour tout relâcher.
+
+**Liste des produits** — la colonne « Code » est partie : `886-0001` n'apprend
+rien qu'on cherche du regard, et elle mangeait la largeur d'une désignation qui,
+elle, se lit. Le code reste dans la recherche, en infobulle de la désignation, et
+sur la fiche. Une colonne **Support** l'a remplacée : la sous-section du frontal
+(thermique, couché, synthétique, vélin), en badge, avec **les teintes exactes de
+MyStock** recopiées depuis `dash-mp-cat-*` (`app/web/stock_page.py`). Deux
+applications qui parlent du même papier doivent lui donner la même couleur ; si
+la palette bouge là-bas, elle doit bouger ici.
+
 Test : `node tests/test_pricing_vue_liste.js`.
 
 ### Le poids au m² appartient au PRODUIT, pas à la matière (31 août 2026)

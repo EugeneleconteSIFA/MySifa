@@ -118,6 +118,19 @@ ne sera pas traitée : la phrase a existé une journée et a été retirée le
 le transporteur. Ne pas la réintroduire : les trois étapes suffisent à indiquer
 le bon chemin.
 
+### Cellule d'actions des tableaux de départs
+
+`.expe-dep-acts` est une grille à **4 colonnes**, et les largeurs de colonne
+« Actions » sont 15 % au suivi, 14 % à l'historique. C'est calibré pour que la
+cellule tienne en **deux rangées** : 7 icônes au suivi (2 avis + devis +
+comparateur + dupliquer + modifier + supprimer), 5 à l'historique. Avec 3
+colonnes elle retombait à trois rangées et faisait grandir chaque ligne du
+tableau de 30 px pour rien.
+
+Un bouton ajouté à cette cellule oblige donc à revérifier le compte de
+rangées, et les boutons d'avis portent `expe-dep-ab` en plus de leur propre
+classe — c'est elle qui donne l'infobulle et la métrique commune.
+
 ### Comparateur — le piège déjà tombé une fois
 
 `renderTransporteurs()` préserve le focus et le curseur de **tout** champ

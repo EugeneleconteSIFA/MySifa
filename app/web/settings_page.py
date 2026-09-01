@@ -2175,7 +2175,12 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;
                 gap:12px;margin-bottom:16px;flex-wrap:wrap">
-          <div style="font-size:15px;font-weight:700;color:var(--text)">Journal des actions</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="font-size:15px;font-weight:700;color:var(--text)">Journal des actions</div>
+            <button type="button" class="btn btn-ghost"
+                    style="padding:5px 11px;font-size:12px;border:1px solid var(--border)"
+                    onclick="openAuditCouverture()">Ce qui est journalisé</button>
+          </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <input type="text" id="audit-search"
                    placeholder="Rechercher (utilisateur, objet, requête Google…)"
@@ -2205,6 +2210,27 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
                     margin-top:12px;font-size:12px;color:var(--muted)"></div>
       </div>
     </section>
+
+    <!-- Couverture du journal : quelles actions alimentent le log, appli par appli -->
+    <div id="audit-couv-overlay" class="hidden"
+         style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:800;
+                align-items:center;justify-content:center;padding:20px"
+         onclick="if(event.target===this)closeAuditCouverture()">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;
+                  width:min(880px,96vw);max-height:88vh;display:flex;flex-direction:column">
+        <div style="padding:22px 26px 14px;border-bottom:1px solid var(--border)">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+            <div>
+              <h2 style="margin:0 0 4px;font-size:17px">Ce qui est journalisé</h2>
+              <div id="audit-couv-resume" style="font-size:12px;color:var(--muted)">Chargement…</div>
+            </div>
+            <button type="button" class="btn btn-sec" style="padding:6px 12px;font-size:12px"
+                    onclick="closeAuditCouverture()">Fermer</button>
+          </div>
+        </div>
+        <div id="audit-couv-corps" style="padding:8px 26px 22px;overflow:auto"></div>
+      </div>
+    </div>
 
     <section id="panel-fsc" class="hidden">
       <div class="fsc-toolbar">
@@ -3161,7 +3187,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=4"></script>
+<script src="/static/mysifa_cal_rappel.js?v=5"></script>
 <script>
 /*__TRACA_GUIDE__*/
 const API = window.location.origin;
@@ -9141,6 +9167,112 @@ async function loadApiKeys() {
       </div>
     </div>
   `).join('');
+}
+
+// ── Couverture du journal ────────────────────────────────────
+// « Qu'est-ce qui alimente le log, et pour quelle appli ? » n'avait aucune
+// reponse consultable : il fallait ouvrir les routers. La modale la donne, et
+// elle la tient de l'application vivante — /api/settings/audit/couverture
+// parcourt les routes reellement enregistrees, pas une liste ecrite a la main.
+// Chaque verbe est cliquable : il filtre le journal dessous, ce qui evite
+// d'avoir a retenir un vocabulaire de trente actions.
+let _auditCouvChargee = false;
+
+function openAuditCouverture() {
+  const ov = document.getElementById('audit-couv-overlay');
+  if (!ov) return;
+  ov.style.display = 'flex';
+  ov.classList.remove('hidden');
+  if (!_auditCouvChargee) loadAuditCouverture();
+}
+
+function closeAuditCouverture() {
+  const ov = document.getElementById('audit-couv-overlay');
+  if (ov) { ov.style.display = 'none'; ov.classList.add('hidden'); }
+}
+
+function filtrerJournalDepuisCouverture(module, action) {
+  const selM = document.getElementById('audit-filter-module');
+  const selA = document.getElementById('audit-filter-action');
+  if (selM) selM.value = module || '';
+  if (selA) selA.value = action || '';
+  _auditOffset = 0;
+  closeAuditCouverture();
+  loadAuditLogs();
+}
+
+async function loadAuditCouverture() {
+  const corps  = document.getElementById('audit-couv-corps');
+  const resume = document.getElementById('audit-couv-resume');
+  if (!corps) return;
+  corps.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px 0">Chargement…</div>';
+  let d;
+  try {
+    const r = await fetch('/api/settings/audit/couverture', { credentials: 'include' });
+    if (!r.ok) throw new Error('erreur');
+    d = await r.json();
+  } catch (e) {
+    corps.innerHTML = '<div style="color:var(--danger);font-size:13px;padding:20px 0">Erreur de chargement.</div>';
+    return;
+  }
+  _auditCouvChargee = true;
+
+  if (resume) {
+    resume.textContent = `${d.total_routes} action${d.total_routes > 1 ? 's' : ''} d'écriture `
+      + `réparties sur ${(d.applis || []).length} applications · `
+      + `${d.total_entrees.toLocaleString('fr-FR')} entrée${d.total_entrees > 1 ? 's' : ''} enregistrée${d.total_entrees > 1 ? 's' : ''} à ce jour. `
+      + `Cliquez une action pour filtrer le journal.`;
+  }
+
+  const applis = (d.applis || []).map(a => {
+    const verbes = (a.actions || []).map(act => `
+      <button type="button"
+              onclick="filtrerJournalDepuisCouverture('${escAttr(a.module)}','${escAttr(act.action)}')"
+              title="${escAttr(act.entrees ? act.entrees + ' entrée(s) · dernière le ' + (act.derniere || '—') : 'Aucune entrée pour le moment')}"
+              style="display:inline-flex;align-items:center;gap:6px;background:var(--bg);
+                     border:1px solid var(--border);border-radius:20px;padding:3px 10px;
+                     font-family:inherit;font-size:11px;color:var(--text2);cursor:pointer">
+        <span style="width:7px;height:7px;border-radius:50%;background:${act.color};
+                     ${act.entrees ? '' : 'opacity:.35'}"></span>
+        ${esc(act.label)}
+        <span style="color:var(--muted)">${act.routes}</span>
+      </button>`).join(' ');
+    return `
+      <div style="padding:14px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:8px">
+          <button type="button"
+                  onclick="filtrerJournalDepuisCouverture('${escAttr(a.module)}','')"
+                  style="background:none;border:none;padding:0;font-family:inherit;font-size:13px;
+                         font-weight:700;color:var(--text);cursor:pointer;text-align:left">
+            ${esc(a.label)}
+          </button>
+          <div style="font-size:11px;color:var(--muted);white-space:nowrap">
+            ${a.routes} action${a.routes > 1 ? 's' : ''} ·
+            ${a.entrees ? a.entrees.toLocaleString('fr-FR') + ' entrée' + (a.entrees > 1 ? 's' : '')
+                        : 'aucune entrée'}${a.derniere ? ' · ' + esc(a.derniere) : ''}
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">${verbes}</div>
+      </div>`;
+  }).join('');
+
+  const exclues = (d.exclues || []).length ? `
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px">
+        Volontairement hors journal
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
+        Appels émis par la machine, pas par une personne : les journaliser noierait
+        le journal sous des milliers de lignes sans auteur ni intention.
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${d.exclues.map(e => `<span style="font-family:monospace;font-size:10px;color:var(--muted);
+                 background:var(--bg);border:1px solid var(--border);border-radius:6px;
+                 padding:2px 7px">${esc(e.methodes.join('/'))} ${esc(e.chemin)}</span>`).join('')}
+      </div>
+    </div>` : '';
+
+  corps.innerHTML = applis + exclues;
 }
 
 async function loadAuditLogs() {

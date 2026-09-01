@@ -1821,6 +1821,7 @@ def list_mystock_declinaisons(request: Request):
                     "id": d["id"],
                     "matiere_id": m["id"],
                     "categorie": m["categorie"],
+                    "sous_section": m.get("sous_section"),
                     "reference": m["reference"],
                     "designation": m["designation"],
                     "libelle": d["libelle"],

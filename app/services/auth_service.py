@@ -38,9 +38,14 @@ from config import (
     APPS_CATALOG,
 )
 
-# MyCalendrier — accès page (pas de rôle rh en base). Inclut le rôle legacy
-# `administration` + les deux nouveaux rôles issus du split (v163).
-CALENDRIER_PAGE_ROLES = frozenset({ROLE_SUPERADMIN, ROLE_DIRECTION} | ROLES_ADMINISTRATION_ALL)
+# MyCalendrier — accès page ouvert à tous les services : une réunion concerne
+# aussi bien la fabrication ou l'expédition que l'administration, et un invité
+# qui ne peut pas ouvrir la page ne peut ni voir ni refuser sa convocation.
+# ASSIGNABLE_ROLES couvre tous les rôles proposés en Paramètres ; on y ajoute
+# le superadmin et le rôle legacy `administration` (users non migrés v163).
+CALENDRIER_PAGE_ROLES = frozenset(
+    {ROLE_SUPERADMIN, ROLE_DIRECTION} | ROLES_ADMINISTRATION_ALL | set(ASSIGNABLE_ROLES)
+)
 
 # ─── Impersonation (superadmin uniquement) ────────────────────────
 # Cookie posé par POST /api/impersonate, retiré par DELETE /api/impersonate.

@@ -144,7 +144,57 @@ def test_redaction():
     verifier("donnee anodine conservee", net["imbrique"]["qte"], 3)
 
 
-# ─── 2. Le middleware, si FastAPI est disponible ────────────────────
+# ─── 2. La couverture voit les routes, quelle que soit la version ───
+def test_parcours_des_routes():
+    """`routes_ecriture` doit voir a travers `include_router`.
+
+    Selon la version de FastAPI, l'inclusion aplatit les routes dans
+    `app.routes` (<= 0.115, celle de production) ou pose un routeur paresseux
+    qui les garde ailleurs (>= 0.140). Un parcours qui ne connaitrait qu'une
+    forme afficherait « 4 routes couvertes » sur l'autre — un ecran de
+    couverture qui ment.
+    """
+    try:
+        from fastapi import APIRouter, FastAPI
+    except Exception:
+        print("  --   parcours des routes : FastAPI absent, cas saute")
+        return
+
+    tx.MODULE_LABELS.setdefault("taches", "Tâches")
+    interne = APIRouter()
+
+    @interne.post("/api/taches")
+    def creer():
+        return {}
+
+    @interne.delete("/api/taches/{tid}")
+    def supprimer(tid: int):
+        return {}
+
+    @interne.get("/api/taches")
+    def lister():
+        return {}
+
+    prefixe = APIRouter(prefix="/api/expe")
+
+    @prefixe.post("/departs")
+    def creer_depart():
+        return {}
+
+    application = FastAPI()
+    application.include_router(interne)
+    application.include_router(prefixe)
+
+    vues = sorted(tx.routes_ecriture(application))
+    verifier(
+        "routes d'ecriture vues a travers include_router",
+        vues,
+        [("DELETE", "/api/taches/{tid}"), ("POST", "/api/expe/departs"),
+         ("POST", "/api/taches")],
+    )
+
+
+# ─── 3. Le middleware, si FastAPI est disponible ────────────────────
 def test_middleware():
     try:
         from fastapi import FastAPI, HTTPException, Request
@@ -217,6 +267,7 @@ if __name__ == "__main__":
     test_verbe_deduit_du_chemin()
     test_module_prefixe_le_plus_precis()
     test_redaction()
+    test_parcours_des_routes()
     test_middleware()
     print("\n" + "=" * 62)
     if FAIL:

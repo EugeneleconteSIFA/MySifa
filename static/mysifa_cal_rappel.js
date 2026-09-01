@@ -66,8 +66,19 @@
       'width:100%;max-width:400px;max-height:92vh;overflow-y:auto}',
       '.mcr-card{background:var(--card,#111827);border:1px solid var(--border,#1e293b);',
       'border-top:3px solid var(--accent,#22d3ee);border-radius:14px;padding:18px 18px 16px;',
-      'box-shadow:0 24px 60px rgba(0,0,0,.5);animation:mcrIn .22s ease-out}',
+      'box-shadow:0 24px 60px rgba(0,0,0,.5);',
+      /* Le rappel arrive par-dessus une page deja chargee : la bordure qui
+         pulse fait revenir l'oeil dessus meme si l'ecran n'est pas regarde
+         au moment ou la fenetre s'ouvre. */
+      'animation:mcrIn .22s ease-out,mcrScintille 1.6s ease-in-out .22s infinite}',
       '@keyframes mcrIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}',
+      '@keyframes mcrScintille{0%,100%{border-color:var(--border,#1e293b);',
+      'border-top-color:var(--accent,#22d3ee);',
+      'box-shadow:0 24px 60px rgba(0,0,0,.5),0 0 0 0 var(--accent-bg,rgba(34,211,238,.12))}',
+      '50%{border-color:var(--accent,#22d3ee);border-top-color:var(--accent,#22d3ee);',
+      'box-shadow:0 24px 60px rgba(0,0,0,.5),0 0 0 3px var(--accent,#22d3ee),',
+      '0 0 26px 6px var(--accent-bg,rgba(34,211,238,.12))}}',
+      '@media(prefers-reduced-motion:reduce){.mcr-card{animation:mcrIn .22s ease-out}}',
       '.mcr-quand{font-size:11px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;',
       'color:var(--accent,#22d3ee)}',
       '.mcr-titre{font-size:17px;font-weight:800;color:var(--text,#f1f5f9);margin-top:5px;line-height:1.3}',
@@ -90,7 +101,10 @@
       'font-weight:600;cursor:pointer;transition:border-color .15s,color .15s}',
       '.mcr-btn:hover{border-color:var(--accent,#22d3ee);color:var(--accent,#22d3ee)}',
       '.mcr-btn.mcr-ouvrir{background:var(--accent,#22d3ee);border-color:var(--accent,#22d3ee);',
-      'color:var(--sur-accent,#0a0e17)}',
+      /* Blanc en dur : le rappel s'affiche sur toutes les pages, et celles qui
+         ne definissent pas --sur-accent tombaient sur du texte sombre sur
+         fond accent — illisible. */
+      'color:#ffffff;font-weight:700}',
       '@media(max-width:520px){#mysifa-cal-rappels{align-items:flex-end;padding:10px}',
       '#mysifa-cal-rappels .mcr-pile{max-width:none}}',
       '@media print{#mysifa-cal-rappels{display:none!important}}'
@@ -166,8 +180,8 @@
   function afficher(r) {
     if (etat.montres[r.id] || estMasque(r.id)) return;
     var mins = minutesAvant(r.debut);
-    var quand = mins == null ? 'Bientôt'
-      : (mins <= 0 ? 'Ça commence' : 'Dans ' + mins + ' min');
+    var quand = 'Rappel · ' + (mins == null ? 'bientôt'
+      : (mins <= 0 ? 'ça commence' : 'dans ' + mins + ' min'));
     var heure = String(r.debut || '').slice(11, 16);
     var sous = r.reunion
       ? (r.organisateur ? 'Réunion que vous organisez · ' + heure
