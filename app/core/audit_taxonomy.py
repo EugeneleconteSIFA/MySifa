@@ -47,6 +47,7 @@ MODULE_LABELS: dict[str, str] = {
     "compta": "Comptabilité",
     "dashboards": "Tableaux de bord",
     "db": "Base de données",
+    "diagnostic": "Diagnostic SQL",
     "dossiers": "Dossiers",
     "erp": "ERP / RVGI",
     "expe": "MyExpé",
@@ -186,6 +187,11 @@ PATH_MODULES: dict[str, str] = {
     "/api/compta": "compta",
     "/api/dashboards": "dashboards",
     "/api/db": "db",
+    # Une lecture SQL encadrée sur la base de production, réservée aux
+    # superadmins. C'est un POST qui ne lit que — mais journaliser QUI a
+    # interrogé QUOI est précisément la raison d'être de cet écran. La ranger
+    # dans le bruit technique aurait été le seul vrai contresens.
+    "/api/diagnostic": "diagnostic",
     "/api/dossiers": "dossiers",
     "/api/erp": "erp",
     "/api/rvgi": "erp",
