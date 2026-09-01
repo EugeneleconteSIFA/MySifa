@@ -462,7 +462,7 @@ body.light table.fab-table tr.fab-row-last td{
   font-weight:700;font-family:inherit;white-space:nowrap;transition:filter .15s;
 }
 .fab-search-btn:hover{filter:brightness(1.1)}
-.fab-comment-row{display:flex;gap:6px;align-items:center}
+.fab-comment-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 /* Tout ce qui parle des dossiers PASSES vit dans la colonne de gauche, sous
    l'identite du dossier et au-dessus de la consigne. `flex:0 0 auto` (pose
    par la regle de repartition ci-dessus) le rend incompressible : c'est la
@@ -1747,6 +1747,7 @@ function icon(name,size=16){
     package:'<path d="M16.5 9.4l-9-5.19"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
     'refresh-ccw':'<polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10"/><path d="M3.51 15a9 9 0 0 0 14.85 3.36L23 14"/>',
     users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    'message-square':'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   };
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('width',String(size));svg.setAttribute('height',String(size));
