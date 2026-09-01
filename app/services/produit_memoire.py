@@ -602,10 +602,85 @@ def savoirs_produit(conn, ref_produit_norm: str, inclure_obsoletes: bool = False
                 [user_login] + ids,
             ).fetchall()
         }
+    pieces = pieces_savoirs(conn, [r["id"] for r in rows])
+    # L'encart d'une note est celui de SA production : le dossier d'origine
+    # porte la date, la machine et l'operateur qui donnent son sens au texte.
+    ctxs = contexte_notes_dossiers(
+        conn, [r.get("no_dossier_source") for r in rows if r.get("no_dossier_source")]
+    )
     for r in rows:
         r["type_label"] = LABELS_TYPE_SAVOIR.get(r.get("type") or "autre", "Autre")
         r["vote_utilisateur"] = r["id"] in votes
+        r["pieces"] = pieces.get(r["id"], [])
+        ctx = ctxs.get(str(r.get("no_dossier_source") or "").strip()) or {}
+        r["dossier_machine"] = ctx.get("machine")
+        r["dossier_operateurs"] = ctx.get("operateurs") or []
+        r["dossier_date"] = ctx.get("date")
     return rows
+
+
+def pieces_savoirs(conn, savoir_ids: List[int]) -> Dict[int, List[dict]]:
+    """Pieces jointes, par note. Le contenu du fichier n'est jamais lu ici."""
+    if not savoir_ids or "produit_savoirs_pieces" not in _tables(conn):
+        return {}
+    out: Dict[int, List[dict]] = {}
+    ids = [int(i) for i in savoir_ids]
+    for i in range(0, len(ids), 400):
+        lot = ids[i:i + 400]
+        marks = ",".join("?" * len(lot))
+        rows = conn.execute(
+            f"SELECT id, savoir_id, fichier_origine, mime, taille_octets, est_image, "
+            f"auteur, created_at FROM produit_savoirs_pieces "
+            f"WHERE savoir_id IN ({marks}) ORDER BY id", lot
+        ).fetchall()
+        for r in rows:
+            d = dict(r)
+            d["est_image"] = bool(d.get("est_image"))
+            out.setdefault(int(d["savoir_id"]), []).append(d)
+    return out
+
+
+def contexte_notes_dossiers(conn, no_dossiers: List[str]) -> Dict[str, dict]:
+    """De quoi titrer un encart de notes : quand, sur quelle machine, avec qui.
+
+    Les notes d'une meme production se lisent ensemble — c'est la production
+    qui les explique, pas leur ordre d'ecriture. L'en-tete vient de la serie
+    quand elle est materialisee ; sinon du planning, parce qu'un dossier en
+    cours n'a pas encore de serie et que c'est precisement celui sur lequel on
+    ecrit.
+    """
+    refs = [str(d).strip() for d in (no_dossiers or []) if str(d or "").strip()]
+    if not refs:
+        return {}
+    out: Dict[str, dict] = {}
+    tables = _tables(conn)
+    if "produit_series" in tables:
+        for i in range(0, len(refs), 300):
+            lot = refs[i:i + 300]
+            marks = ",".join("?" * len(lot))
+            rows = conn.execute(
+                f"SELECT no_dossier, machine, operateurs, date_debut, date_fin "
+                f"FROM produit_series WHERE trim(no_dossier) IN ({marks})", lot
+            ).fetchall()
+            for r in rows:
+                d = dict(r)
+                ops = d.get("operateurs")
+                if ops:
+                    try:
+                        ops = json.loads(ops)
+                    except (ValueError, TypeError):
+                        ops = None
+                out[str(d["no_dossier"]).strip()] = {
+                    "machine": d.get("machine"),
+                    "operateurs": ops if isinstance(ops, list) else [],
+                    "date": d.get("date_fin") or d.get("date_debut"),
+                }
+    manquants = [r for r in refs if r not in out]
+    if manquants and "planning_entries" in tables:
+        for ref in manquants:
+            ctx = contexte_dossier(conn, ref)
+            out[ref] = {"machine": ctx.get("machine"), "operateurs": [], "date": None}
+    return out
 
 
 def documents_produit(conn, ref_produit_norm: str) -> List[dict]:

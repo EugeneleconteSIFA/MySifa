@@ -1207,7 +1207,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/mysifa_cal_rappel.js?v=7"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.5"></script>
 <!-- Memoire produit : fiche par reference produit, partagee avec MyProd -->
-<script src="/static/mysifa_produit_memoire.js?v=2.0"></script>
+<script src="/static/mysifa_produit_memoire.js?v=2.1"></script>
 <script>
   // Démarre le polleur d'alertes maintenance dès que la page est prête.
   // Le runtime interroge /api/maintenance/alerts/active toutes les 15 s,
@@ -5508,7 +5508,35 @@ function renderFooter(){
     disabled: !lastId,
     title:'Commenter la dernière saisie',
     onClick:()=>{ if(lastId) set({showCommentModal:true,commentSaisieId:lastId,commentText:(S.lastSaisie&&S.lastSaisie.commentaire)||''}); }
-  }, svgIcon('message-square',14),' Commenter');
+  }, svgIcon('message-square',14),' Commenter la saisie');
+
+  // Deux gestes voisins, deux portées differentes — d'où deux boutons plutôt
+  // qu'un menu. Le commentaire explique UNE saisie (« pourquoi cet arrêt de
+  // 40 mn ») et vit dans la fiche du dossier. La note explique LE PRODUIT
+  // (« contre-partie 2/10e plus bas, sinon casse échenillage ») et sera relue
+  // au prochain passage de la référence, par quelqu'un d'autre.
+  //
+  // Le bouton n'existe que si le dossier est rattaché à une référence : une
+  // note sans produit n'a nulle part où se ranger et disparaîtrait avec le
+  // dossier. Même règle que le bouton Historique — un bouton qui échoue
+  // systématiquement se lit comme un bug, pas comme une règle.
+  const refNote = fabRefProduit(S.dossier);
+  const noteBtn = (refNote && window.MySifaProduitMemoire && window.MySifaProduitMemoire.ouvrirNote)
+    ? h('button',{
+        className:'fab-btn fab-btn-ghost fab-btn-sm',
+        title:'Ajouter une note au dossier de prod — texte, photo prise sur le moment '
+             +'ou document, relus au prochain passage de '+refNote,
+        onClick:()=>window.MySifaProduitMemoire.ouvrirNote({
+          ref: refNote,
+          noDossier: (S.dossier && (S.dossier.reference || S.dossier.no_dossier)) || null,
+          machine: (S.dossier && S.dossier.machine_nom) || null,
+          // La note fait exister l'historique du produit : le badge et le
+          // bouton « Historique » doivent le refléter sans attendre le
+          // prochain rafraîchissement.
+          apres: ()=>loadSession({silent:true, preserveUi:true}),
+        })
+      }, svgIcon('edit',14),' Ajouter une note au dossier de prod')
+    : null;
 
   // La colonne de droite ne porte plus que la saisie d'operation et le bouton
   // Commenter. La memoire produit est repartie a gauche, sous l'identite du
@@ -5519,7 +5547,8 @@ function renderFooter(){
       searchInput,
     ),
     h('div',{className:'fab-comment-row'},
-      commentBtn
+      commentBtn,
+      noteBtn
     )
   );
 

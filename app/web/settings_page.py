@@ -6926,12 +6926,18 @@ async function saveOpForm() {
   };
   try {
     if (_opEditCode) {
-      await api('/api/settings/operation-codes/' + encodeURIComponent(_opEditCode), {
+      const r = await api('/api/settings/operation-codes/' + encodeURIComponent(_opEditCode), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      toast('Code mis à jour');
+      // Le referentiel fait foi sur l'historique : dire combien de saisies ont
+      // change de categorie evite de se demander si le geste a servi a quelque
+      // chose — c'est precisement la question qu'on s'est posee le 01/09/2026.
+      const n = (r && r.saisies_reclassees) || 0;
+      toast(n
+        ? ('Code mis à jour — ' + n + ' saisie' + (n > 1 ? 's' : '') + ' reclassée' + (n > 1 ? 's' : ''))
+        : 'Code mis à jour');
     } else {
       await api('/api/settings/operation-codes', {
         method: 'POST',
