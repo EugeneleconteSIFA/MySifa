@@ -999,3 +999,40 @@ compte que ce qui s'y est passe (et le total tient dans la journee), une saisie
 de fin de cycle ne dure pas, un intervalle a cheval est borne des deux cotes sans
 perdre sa duree reelle. `tests/test_retour_prod_rendu.js` : 4 cas sur la portee
 affichee. Les 41 suites du depot restent vertes.
+
+### La section « Arrets » devient « Saisies »
+
+Le classement des cinq arrets les plus couteux se lisait deja ailleurs : le KPI
+« Arrets » donne le total et sa part du temps, la frise montre ou ils tombent.
+Ce qui manquait, c'est le deroule de la journee — impossible a lire depuis un
+point de production sans changer d'onglet.
+
+La section liste donc les saisies de la periode : heure, pastille de statut aux
+couleurs de Saisieprod, operation (sans son code), dossier et client en
+sous-ligne, commentaire s'il y en a un, operateur, duree.
+
+**Uniquement les saisies de production.** `/api/saisies` fusionne dans sa liste
+les mouvements de stock (`kind: "stock"`) et les validations d'alerte
+(`kind: "ack"`) ; `saisies_periode()` ne lit que `production_data`. Un point de
+production regarde ce que la machine a fait, pas ce qui a transite par le
+magasin. Les saisies annulees sont ecartees, et les codes de debut, de fin et de
+pointage sont masques sur Repiquage — le meme masquage que l'onglet Saisies,
+sinon les deux ecrans ne diraient pas la meme chose.
+
+La duree est celle de partout ailleurs : l'ecart avec la saisie suivante du meme
+operateur, bornee a la periode. Les voisines d'un jour avant et d'un jour apres
+sont lues pour cela — sans la suivante, la derniere saisie de la journee n'aurait
+pas de duree — mais elles ne figurent pas dans la liste.
+
+Une journee fait vite trente lignes : la liste defile dans sa propre fenetre
+(280 px) plutot que de repousser le reste de la feuille, et le bouton d'entete
+l'ouvre a 72 % de la hauteur d'ecran. A l'impression, elle sort en entier, sans
+ascenseur ni bouton. Plafond a 400 lignes, les plus recentes gardees.
+
+`arrets_couteux` reste calcule et renvoye par l'API : l'information n'a rien
+perdu de sa valeur, elle n'a simplement plus de section a elle. La remettre ne
+coute qu'un bloc de rendu.
+
+`tests/test_rapport_dossier.py` : deux familles de cas (le deroule d'une periode
+et son bornage, les masquages Repiquage). `tests/test_retour_prod_rendu.js` :
+16 cas sur le rendu de la section.

@@ -196,6 +196,7 @@ table.rp-cr tbody tr:hover{background:var(--accent-bg);box-shadow:inset 3px 0 0 
 
 /* Animation neutralisee : meme regle que motion.css. */
 @media (prefers-reduced-motion: reduce){
+  .rp-sa-cadre,.rp-sa-plus,.rp-sa-plus svg,
   .rp-kpi,.rp-mot,.rp-vig,.rp-vig .v-nb,.rp-rech-item,.rp-btn-mini,.rp-seg,.rp-select,
   table.rp-grille tbody tr,table.rp-cr tbody tr{transition:none !important}
   .rp-kpi:hover,.rp-rech-item:hover,.rp-btn-mini:hover,.rp-seg:hover,
@@ -204,7 +205,9 @@ table.rp-cr tbody tr:hover{background:var(--accent-bg);box-shadow:inset 3px 0 0 
 body.reduce-anim .rp-kpi,body.reduce-anim .rp-mot,body.reduce-anim .rp-vig,
 body.reduce-anim .rp-rech-item,body.reduce-anim .rp-btn-mini,
 body.reduce-anim table.rp-grille tbody tr,body.reduce-anim table.rp-cr tbody tr,
-body.reduce-anim .rp-seg,body.reduce-anim .rp-select{transition:none !important}
+body.reduce-anim .rp-seg,body.reduce-anim .rp-select,
+body.reduce-anim .rp-sa-cadre,body.reduce-anim .rp-sa-plus,
+body.reduce-anim .rp-sa-plus svg{transition:none !important}
 body.reduce-anim .rp-kpi:hover,body.reduce-anim .rp-rech-item:hover,
 body.reduce-anim .rp-btn-mini:hover,body.reduce-anim .rp-vig:hover .v-nb{transform:none !important}
 
@@ -230,6 +233,42 @@ body.reduce-anim .rp-btn-mini:hover,body.reduce-anim .rp-vig:hover .v-nb{transfo
   .rp-bloc{break-inside:avoid}
   .rp-kpi:hover,.rp-mot:hover,.rp-vig:hover{background:none !important;transform:none !important}
 }
+
+/* ── Saisies de la periode ───────────────────────────────────────
+   Le deroule d'une journee fait vite trente lignes : la liste defile dans sa
+   propre fenetre plutot que de repousser tout le reste de la feuille. Le
+   bouton d'entete l'ouvre en grand. */
+.rp-sa-cadre{max-height:280px;overflow-y:auto;border:1px solid var(--border);
+  border-radius:10px;
+  transition:max-height var(--mo-slow,.28s) var(--ease-out,ease)}
+.rp-sa-cadre.ouvert{max-height:72vh}
+.rp-sa-cadre table.rp-grille{border:none;border-radius:0}
+.rp-sa-cadre thead th{position:sticky;top:0;z-index:2;background:var(--bg)}
+.rp-sa-plus{background:var(--card);border:1px solid var(--border);border-radius:8px;
+  color:var(--muted);cursor:pointer;padding:4px 7px;line-height:0;font-family:inherit;
+  transition:color var(--mo-fast,.15s) var(--ease-out,ease),
+             border-color var(--mo-fast,.15s) var(--ease-out,ease),
+             transform var(--mo-fast,.15s) var(--ease-out,ease)}
+.rp-sa-plus:hover{color:var(--accent);border-color:var(--accent)}
+.rp-sa-plus.ouvert svg{transform:rotate(180deg)}
+.rp-sa-plus svg{transition:transform var(--mo-fast,.15s) var(--ease-out,ease)}
+
+.rp-sa-h{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--muted);
+  width:1%;font-size:12.5px}
+.rp-sa-d{white-space:nowrap;font-variant-numeric:tabular-nums;width:1%}
+.rp-sa-qui{white-space:nowrap;color:var(--text2);font-size:12.5px}
+.rp-sa-op{display:flex;align-items:baseline;gap:8px}
+.rp-sa-op > span{display:flex;flex-direction:column;gap:1px;min-width:0}
+/* La pastille reprend les couleurs de Saisieprod, comme la frise : l'atelier
+   n'a pas a apprendre un second code. */
+.rp-sa-pt{width:9px;height:9px;border-radius:3px;flex-shrink:0;display:inline-block;
+  position:relative;top:1px}
+.rp-sa-com{font-size:12px;color:var(--text2);font-style:italic}
+.rp-sa-pt.mst-production{background:#22c55e}
+.rp-sa-pt.mst-calage{background:#f97316}
+.rp-sa-pt.mst-arret{background:#ef4444}
+.rp-sa-pt.mst-nettoyage{background:#c084fc}
+.rp-sa-pt.mst-autre{background:#94a3b8}
 
 /* ── Frise de production ─────────────────────────────────────────
    Meme allure que le planning, posee sur de vraies dates. Les positions
@@ -355,4 +394,7 @@ body.reduce-anim .rp-btn-mini:hover,body.reduce-anim .rp-vig:hover .v-nb{transfo
   .rp-fr-seg{print-color-adjust:exact;-webkit-print-color-adjust:exact}
   .rp-tip{display:none !important}
   #rp-masques{display:none !important}
+  .rp-sa-plus{display:none !important}
+  .rp-sa-cadre{max-height:none !important;overflow:visible !important}
+  .rp-sa-cadre thead th{position:static}
 }
