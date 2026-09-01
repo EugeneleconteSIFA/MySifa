@@ -116,12 +116,32 @@ async function startTracaExampleScan(onDone){
       // un TypeError avale par le catch — le scan restait indefiniment « En attente… ».
       reader=new ZXing.MultiFormatReader();
       reader.setHints(hints);
+      // Passes alternees, une par tick : cadrage du viseur puis plus large, chacune
+      // dans les deux orientations. Un echec coute ~150 ms, une lecture ~10 ms.
+      var SCAN_PASSES = [
+        { zoom: 0.56, rot: 0 }, { zoom: 0.56, rot: 90 },
+        { zoom: 0.42, rot: 0 }, { zoom: 0.42, rot: 90 },
+        { zoom: 0.75, rot: 0 }, { zoom: 0.75, rot: 90 },
+      ];
+      var passIndex = 0;
       var loop=function(){
         if(!scanning)return;
         if(video.readyState<2||!video.videoWidth){setTimeout(loop,100);return}
         try{
-          canvas.width=video.videoWidth;canvas.height=video.videoHeight;
-          ctx.drawImage(video,0,0);
+          // Recadrage sur le viseur + rotation : deux faces d'un meme constat.
+          // (1) Le lecteur 1D binarise chaque ligne sur un histogramme GLOBAL. Une ligne qui
+          //     traverse l'etiquette ET le fond (bois clair, carton sombre) prend un seuil qui
+          //     noie les barres. Mesure sur une frame reelle en 720p : plein cadre -> echec,
+          //     recadre sur le viseur -> lu en 5 ms.
+          // (2) RGBLuminanceSource.isRotateSupported() vaut false : TRY_HARDER n'essaie donc
+          //     JAMAIS l'orientation a 90 degres. Un code tenu a la verticale — le cas normal
+          //     sur une bobine — etait illisible. On tourne nous-memes, canvas carre a l'appui.
+          var pass = SCAN_PASSES[passIndex++ % SCAN_PASSES.length];
+          var side = Math.min(Math.round(video.videoWidth * pass.zoom), video.videoHeight);
+          var sx = (video.videoWidth - side) / 2, sy = (video.videoHeight - side) / 2;
+          canvas.width = side; canvas.height = side;
+          if (pass.rot) { ctx.translate(side / 2, side / 2); ctx.rotate(Math.PI / 2); ctx.translate(-side / 2, -side / 2); }
+          ctx.drawImage(video, sx, sy, side, side, 0, 0, side, side);
           var img=ctx.getImageData(0,0,canvas.width,canvas.height);
           // getImageData rend du RGBA ; RGBLuminanceSource ne convertit que les
           // Int32Array. Sans cette conversion il lisait R,G,B,A comme 4 pixels gris.
@@ -133,7 +153,7 @@ async function startTracaExampleScan(onDone){
           var res=reader.decodeWithState(bmp);
           if(res)onCode(res.getText());
         }catch(e){}
-        if(scanning)setTimeout(loop,150);
+        if(scanning)setTimeout(loop, 60);
       };
       setTimeout(loop,400);
     }

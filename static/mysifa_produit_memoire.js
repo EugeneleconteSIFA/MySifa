@@ -229,8 +229,26 @@
       'width:100%;max-width:620px;box-sizing:border-box;padding:20px 22px 18px}',
       '.pmem-ntitle{font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px}',
       '.pmem-nsub{font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5}',
-      '.pmem-nrow{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}',
-      '.pmem-nfoot{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}',
+      /* Les champs du composeur ne sont pas dans un .pmem-form : sans regle a
+         eux, le navigateur servait un textarea de 20 colonnes et un select
+         systeme, larges comme rien, au milieu d'une modale de 620 px. */
+      '.pmem-npanel textarea,.pmem-npanel select{width:100%;box-sizing:border-box;',
+      'background:var(--bg);border:1px solid var(--border);border-radius:10px;',
+      'padding:11px 14px;color:var(--text);font-size:14px;font-family:inherit;',
+      'outline:none;transition:border-color .15s}',
+      '.pmem-npanel textarea{min-height:112px;line-height:1.55;resize:vertical;display:block}',
+      '.pmem-npanel select{height:44px}',
+      '.pmem-npanel textarea:focus,.pmem-npanel select:focus{border-color:var(--accent)}',
+      '.pmem-npanel .pmem-lbl{margin-top:15px}',
+      '.pmem-npanel .pmem-lbl:first-of-type{margin-top:0}',
+      /* Deux rangees de deux boutons, memes colonnes : pieces jointes au-dessus,
+         Annuler / Enregistrer en dessous. Des boutons de largeurs libres, les
+         uns a gauche et les autres a droite, donnaient quatre bords differents
+         dans une modale qui n'en a que deux. */
+      '.pmem-nrow,.pmem-nfoot{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}',
+      '.pmem-nrow .pmem-btn,.pmem-nfoot .pmem-btn{display:inline-flex;align-items:center;',
+      'justify-content:center;gap:8px;padding:12px 14px;font-size:13px}',
+      '@media(max-width:520px){.pmem-nrow,.pmem-nfoot{grid-template-columns:1fr}}',
       '.pmem-note{background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--accent);',
       'border-radius:10px;padding:12px 14px;margin-bottom:10px}',
       '.pmem-note.is-epingle{border-left-color:var(--warn)}',
@@ -1220,11 +1238,12 @@
       el('div', { className: 'pmem-nsub',
         text: 'Reference ' + ref + (o.noDossier ? ' · dossier ' + o.noDossier : '')
               + ' · publiee immediatement, avec votre nom et la date.' }),
+      el('label', { className: 'pmem-lbl', text: 'Note' }),
       ta,
-      el('div', { className: 'pmem-form-row', style: 'margin-top:10px' }, [
-        el('div', { style: 'flex:1;min-width:160px' }, [sel]),
-      ]),
-      el('div', { className: 'pmem-nrow' }, [btnPhoto, btnFichier, inPhoto, inFichier]),
+      el('label', { className: 'pmem-lbl', text: 'Type de note' }),
+      sel,
+      el('div', { className: 'pmem-nrow' }, [btnPhoto, btnFichier]),
+      inPhoto, inFichier,
       liste,
       el('div', { className: 'pmem-nfoot' }, [btnKo, btnOk]),
     ]));
