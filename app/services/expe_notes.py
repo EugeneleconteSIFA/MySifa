@@ -451,6 +451,8 @@ def _classer(
         base = NOTE_DEPART if note_valeur is None else float(note_valeur)
         score_note = base / 10.0
         score_exp = (poids_exp / max_poids) if max_poids else 0.0
+        points_note = score_note * POIDS_NOTE * 100
+        points_exp = score_exp * POIDS_EXPERIENCE * 100
         score = score_note * POIDS_NOTE + score_exp * POIDS_EXPERIENCE
 
         eligible = bool(trp[zone_col]) if zone_col else True
@@ -468,6 +470,13 @@ def _classer(
                 "nb_avis": nb_avis,
                 "nb_expeditions": nb,
                 "experience": round(poids_exp, 2),
+                "experience_max": round(max_poids, 2),
+                # Les deux moitiés du score, AVANT la pénalité hors zone : le
+                # détail dépliable de l'écran montre d'où viennent les points,
+                # et une somme qui ne retombe pas sur le total afficherait un
+                # calcul faux plutôt qu'une pénalité.
+                "points_note": round(points_note, 1),
+                "points_experience": round(points_exp, 1),
                 "derniere_expedition": dernier or "",
                 "eligible_zone": eligible,
                 "jamais_utilise": nb == 0,

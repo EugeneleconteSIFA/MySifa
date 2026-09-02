@@ -127,6 +127,18 @@ expérience = Σ (chaque transport × poids de récence)
   départ enregistré : mieux vaut un blanc qu'une recommandation inventée.
 - `carte_zones()` fait **une seule passe** sur `expe_departs` pour toutes les
   régions. Ne pas repasser à un balayage par zone.
+- **Le type d'envoi vaut « Affrètement » par défaut**, et le bouton Rechercher
+  recharge la carte avec ce type en même temps qu'il interroge la région. Sans
+  ce rechargement, on lit un classement en affrètement sur une carte coloriée
+  pour un autre type — deux réponses différentes à l'écran, dont une fausse.
+- **Le détail d'un transporteur se déplie ligne par ligne** (clic sur l'entête),
+  et le premier du classement s'ouvre tout seul à chaque interrogation : c'est la
+  réponse à la question que pose l'écran, elle ne doit pas coûter un clic. Le
+  détail montre d'où viennent les points (`points_note`, `points_experience`,
+  `experience`, `experience_max`, renvoyés par `_classer`). Ces deux moitiés sont
+  données AVANT la pénalité hors zone, et l'écran affiche la pénalité sur une
+  ligne à part (« × 0,4 → … ») : une addition qui ne retombe pas sur le score de
+  l'entête ferait passer une règle du barème pour une erreur de calcul.
 - **La carte des régions n'est pas dessinée à la main.**
   `app/web/expe_france_regions.svg` est l'union géométrique des départements de
   `expe_france_departments.svg`, produite par

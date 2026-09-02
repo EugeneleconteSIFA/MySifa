@@ -150,14 +150,24 @@ EXPE_ZONES_CSS = r"""
 .expe-zn-dest-cp{font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.4px}
 .expe-zn-dest-meta{font-size:12px;color:var(--muted)}
 .expe-zn-liste{display:flex;flex-direction:column;gap:8px}
-.expe-zn-item{display:flex;align-items:center;gap:12px;background:var(--bg);border:1px solid var(--border);
-  border-radius:10px;padding:12px 14px}
+.expe-zn-item{display:flex;flex-direction:column;background:var(--bg);border:1px solid var(--border);
+  border-radius:10px;overflow:hidden}
+.expe-zn-tete{display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;background:none;border:0;
+  font:inherit;color:inherit;text-align:left;cursor:pointer}
+.expe-zn-tete:hover{background:color-mix(in srgb,var(--accent) 6%,transparent)}
+.expe-zn-tete:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.expe-zn-chev{color:var(--muted);flex-shrink:0;transition:transform .15s ease}
+.expe-zn-item.ouvert .expe-zn-chev{transform:rotate(90deg)}
+.expe-zn-detail{border-top:1px solid var(--border);padding:10px 14px 12px;display:flex;flex-direction:column;gap:6px}
+.expe-zn-det-l{display:flex;justify-content:space-between;align-items:baseline;gap:14px;font-size:12px}
+.expe-zn-det-lib{color:var(--muted)}
+.expe-zn-det-val{color:var(--text);font-weight:600;text-align:right}
+.expe-zn-det-note{font-size:11px;color:var(--muted);line-height:1.5;margin-top:2px}
 .expe-zn-item.premier{border-color:var(--accent);background:var(--accent-bg)}
 .expe-zn-item.hors-zone{opacity:.6}
 .expe-zn-rang{font-size:13px;font-weight:800;color:var(--muted);width:20px;flex-shrink:0;text-align:center}
 .expe-zn-corps{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
 .expe-zn-nom{font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.expe-zn-meta{font-size:11px;color:var(--muted);line-height:1.5}
 .expe-zn-tag{display:inline-block;background:var(--card);border:1px solid var(--border);border-radius:6px;
   font-size:10px;font-weight:600;padding:2px 7px;color:var(--text2)}
 .expe-zn-tag.neuf{border-color:color-mix(in srgb,var(--accent) 40%,var(--border));color:var(--accent)}
@@ -720,8 +730,14 @@ EXPE_ZONES_JS = r"""
 // la frappe — c'est le bug qu'a connu le comparateur.
 const Z={
   saisie:'',
-  typeEnvoi:'',
+  // Affrètement par défaut : c'est le type d'envoi que l'écran sert le plus
+  // souvent, et « Tous types » ne dit pas quelles zones déclarées appliquer.
+  typeEnvoi:'affretement',
   region:'',
+  // Transporteurs dont le détail est déplié, par id. Le premier du classement
+  // s'ouvre tout seul à chaque interrogation : c'est la réponse à la question
+  // que pose l'écran, elle ne doit pas demander un clic de plus.
+  ouverts:[],
   data:null,
   loading:false,
   suggestions:[],
@@ -777,6 +793,8 @@ async function expeZonesInterroger(params){
     if(Z.typeEnvoi)qs.set('type_envoi',Z.typeEnvoi);
     Z.data=await api('/api/expe/zones/recommandation?'+qs.toString());
     Z.region=(Z.data&&Z.data.region)||'';
+    const premier=(Z.data&&Z.data.transporteurs&&Z.data.transporteurs[0])||null;
+    Z.ouverts=premier?[premier.transporteur_id]:[];
   }catch(e){
     Z.data=null;
     toast(e.message||'Destination introuvable','error');
@@ -785,9 +803,26 @@ async function expeZonesInterroger(params){
   renderTransporteurs();
 }
 
+function expeZonesBasculerDetail(id){
+  const i=Z.ouverts.indexOf(id);
+  if(i===-1)Z.ouverts.push(id); else Z.ouverts.splice(i,1);
+  renderTransporteurs();
+}
+
+// Un nombre lisible cote francais : le score et l'experience sont des
+// decimaux, et « 12.5 » au milieu d'une phrase en francais accroche l'oeil.
+function expeZnNum(v,dec){
+  const n=Number(v||0);
+  return n.toFixed(dec===undefined?1:dec).replace('.',',');
+}
+
 function expeZonesRechercher(){
   const saisie=String(Z.saisie||'').trim();
   if(!saisie){toast('Saisir une ville ou un code postal.','error');return;}
+  // La carte suit le type d'envoi de la recherche : sans ce rechargement, on
+  // lit un classement en affrètement sur une carte coloriée en messagerie.
+  Z.carteChargee=false;
+  void expeZonesChargerCarte();
   // Le serveur sait déjà démêler ville et code postal, puis remonter à la
   // région : on lui envoie la saisie telle quelle plutôt que de dupliquer la
   // règle ici.
@@ -836,6 +871,44 @@ const EXPE_ZN_SCORE_AIDE='Score de pertinence sur 100 : note de confiance 50 %, 
   +'expérience sur la région 50 % — le nombre de transports déjà faits, pondéré par '
   +'leur récence (moins de 3 mois, 6, 12, 24), rapporté au transporteur le plus actif '
   +'de la région.';
+
+function expeZnDetLigne(libelle,valeur){
+  return h('div',{className:'expe-zn-det-l'},
+    h('span',{className:'expe-zn-det-lib'},libelle),
+    h('span',{className:'expe-zn-det-val'},valeur));
+}
+
+// Le détail d'un transporteur : ce qui compose son score, et d'où viennent ses
+// points. La somme affichée doit toujours retomber sur le score de l'entête —
+// d'où la ligne séparée pour la pénalité hors zone, qui multiplie le total au
+// lieu d'entrer dans l'addition.
+function expeZonesDetail(r){
+  const d=h('div',{className:'expe-zn-detail'});
+  d.appendChild(expeZnDetLigne('Expéditions sur la région',
+    String(r.nb_expeditions)
+    +(r.derniere_expedition?(' · dernière le '+r.derniere_expedition):'')));
+  d.appendChild(expeZnDetLigne('Expérience pondérée',
+    expeZnNum(r.experience)+' sur '+expeZnNum(r.experience_max)+' (max région)'));
+  const note=(r.note_valeur===null||r.note_valeur===undefined)
+    ? 'note de départ'
+    : (expeZnNum(r.note_valeur)+' / 10'+(r.note_lettre?(' · '+r.note_lettre):''));
+  d.appendChild(expeZnDetLigne('Note de confiance',
+    note+' · '+(r.nb_avis?(r.nb_avis+' avis'):'aucun avis')));
+  d.appendChild(expeZnDetLigne('Grille tarifaire', r.grille_tarifaire?'oui':'non'));
+  const brut=(r.points_note||0)+(r.points_experience||0);
+  d.appendChild(expeZnDetLigne('Score',
+    'note '+expeZnNum(r.points_note)+' + expérience '+expeZnNum(r.points_experience)
+    +' = '+expeZnNum(brut)+(r.eligible_zone?' / 100':'')));
+  if(!r.eligible_zone){
+    d.appendChild(expeZnDetLigne('Hors zone', '× 0,4 → '+expeZnNum(r.score)+' / 100'));
+  }
+  if(!r.nb_avis){
+    d.appendChild(h('div',{className:'expe-zn-det-note'},
+      'Aucun avis émis : ce transporteur porte la note de départ de 5/10, qui '
+      +'pèse dans le score comme n\'importe quelle autre note.'));
+  }
+  return d;
+}
 
 function renderExpeZones(){
   if(!Z.carteChargee&&!Z.carteEnCours)void expeZonesChargerCarte();
@@ -922,22 +995,25 @@ function renderExpeZones(){
       if(r.jamais_utilise)tags.push(h('span',{className:'expe-zn-tag neuf'},'Jamais utilisé ici'));
       if(!r.eligible_zone)tags.push(h('span',{className:'expe-zn-tag hors'},'Hors zone déclarée'));
       if(r.grille_tarifaire)tags.push(h('span',{className:'expe-zn-tag'},'Grille tarifaire'));
-      const detail=[];
-      detail.push(r.nb_expeditions+' expédition'+(r.nb_expeditions>1?'s':'')+' sur cette région');
-      if(r.derniere_expedition)detail.push('dernière le '+r.derniere_expedition);
-      detail.push(r.nb_avis?(r.nb_avis+' avis'):'note de départ');
-      liste.appendChild(h('div',{className:'expe-zn-item'+(r.rang===1?' premier':'')+(r.eligible_zone?'':' hors-zone')},
+      const ouvert=Z.ouverts.indexOf(r.transporteur_id)!==-1;
+      const tete=h('button',{type:'button',className:'expe-zn-tete',
+          title:ouvert?'Masquer le détail':'Afficher le détail',
+          onClick:()=>expeZonesBasculerDetail(r.transporteur_id)},
         h('span',{className:'expe-zn-rang'},String(r.rang)),
         expeNoteBadge(r),
         h('div',{className:'expe-zn-corps'},
           h('div',{className:'expe-zn-nom'},
             r.couleur?trpTag(r.transporteur,r.couleur):h('span',null,r.transporteur),
-            ...tags),
-          h('div',{className:'expe-zn-meta'},detail.join(' · '))
+            ...tags)
         ),
         h('span',{className:'expe-zn-score',title:EXPE_ZN_SCORE_AIDE},
-          r.score>0?(Math.round(r.score)+' / 100'):'—')
-      ));
+          r.score>0?(Math.round(r.score)+' / 100'):'—'),
+        h('span',{className:'expe-zn-chev'},iconEl('chevron-right',14))
+      );
+      const item=h('div',{className:'expe-zn-item'+(r.rang===1?' premier':'')
+        +(r.eligible_zone?'':' hors-zone')+(ouvert?' ouvert':'')},tete);
+      if(ouvert)item.appendChild(expeZonesDetail(r));
+      liste.appendChild(item);
     });
     corps.appendChild(liste);
   }

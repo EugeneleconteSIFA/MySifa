@@ -3577,10 +3577,18 @@ function transportBadgeHtml(s){
   if(!t) return "";
   const col=trCouleur(t);
   const id=Number(t.depart_id)||0;
-  const camion='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 3h13v13H1z"/><path d="M14 8h4l3 3v5h-7z"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/></svg>';
-  const clic=id?` onclick="event.stopPropagation();ouvrirDepartExpe(${id})" style="cursor:pointer;"`:"";
+  // Pastille posée sur le fond de carte, pas sur la couleur du créneau : les
+  // slots sont pastel et changent de teinte à chaque dossier, une icône
+  // simplement colorée s'y noyait. Fond neutre + contour et camion à la
+  // couleur de tension = lisible sur n'importe quel créneau, dans les deux
+  // thèmes, sans une seule couleur codée en dur.
+  const camion='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 3h13v13H1z"/><path d="M14 8h4l3 3v5h-7z"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/></svg>';
+  const clic=id?` onclick="event.stopPropagation();ouvrirDepartExpe(${id})"`:"";
   return `<span class="slot-camion" title="${escAttr(trLibelle(t))}"${clic}`
-    +` style="display:inline-flex;align-items:center;color:${col};margin-left:4px;vertical-align:middle;${id?'cursor:pointer;':''}">${camion}</span>`;
+    +` style="display:inline-flex;align-items:center;justify-content:center;`
+    +`color:${col};background:var(--card);border:1px solid ${col};border-radius:6px;`
+    +`padding:2px 5px;margin:0 4px 0 8px;vertical-align:middle;line-height:0;`
+    +`${id?'cursor:pointer;':''}">${camion}</span>`;
 }
 // Le départ s'ouvre dans MyExpé, onglet Départs programmés, modale déjà ouverte
 // sur la ligne concernée. Nouvel onglet : le planificateur ne perd pas sa vue.
