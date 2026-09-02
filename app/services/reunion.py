@@ -153,6 +153,10 @@ def liste(conn, limite: int = 100) -> List[Dict[str, Any]]:
         actes = actions(conn, d["id"])
         d["nb_actions"] = len(actes)
         d["actions_restantes"] = sum(1 for a in actes if not a["fait"])
+        # La liste porte les actions elles-memes, pas seulement leur nombre :
+        # l'historique sert a retrouver ce qui a ete decide, et un compteur ne
+        # le dit pas. Le detail reste leger — quelques lignes de texte.
+        d["actions"] = actes
         d["participants"] = [p["nom"] for p in participants(conn, d["id"])]
         d["machines"] = machines(conn, d["id"])
         out.append(d)

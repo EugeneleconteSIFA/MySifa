@@ -34,7 +34,7 @@ from config import (
     public_base_url,
 )
 from app.services import expe_evenements as expe_ev
-from app.services import expe_notes
+from app.services import expe_notes, expe_regions
 from app.services.expe_transporteurs_seed import seed_expe_transporteurs_if_empty
 from database import get_db
 from services.auth_service import get_current_user, user_can_write_expe, user_has_app_access
@@ -6149,7 +6149,7 @@ def zones_villes(request: Request, q: str = ""):
 
 @router.get("/zones/carte")
 def zones_carte(request: Request, type_envoi: str = ""):
-    """Transporteur recommandé par département — alimente la carte de France."""
+    """Transporteur recommandé par région — alimente la carte de France."""
     _require_expe(request)
     with get_db() as conn:
         return expe_notes.carte_zones(conn, type_envoi=type_envoi)
@@ -6161,39 +6161,68 @@ def zones_recommandation(
     ville: str = "",
     cp: str = "",
     dept: str = "",
+    region: str = "",
     type_envoi: str = "",
 ):
-    """Transporteurs à prioriser pour une destination."""
+    """Transporteurs à prioriser pour une destination.
+
+    La zone de classement est la région. Le département reste calculé quand la
+    destination vient d'une ville ou d'un code postal : c'est lui qui porte le
+    délai indicatif. Un clic sur la carte donne la région seule, donc pas de
+    délai — il n'y a pas de département à interroger.
+    """
     _require_expe(request)
     with get_db() as conn:
-        if dept.strip():
-            # Clic direct sur la carte : le département est déjà connu, il n'y
-            # a pas de code postal à résoudre.
-            dest = {"cp": "", "ville": "", "departement": dept.strip().upper()}
+        if region.strip():
+            # Clic direct sur la carte : la région est déjà connue, il n'y a
+            # rien à résoudre.
+            code = expe_regions.normaliser(region)
+            dest = {
+                "cp": "",
+                "ville": "",
+                "departement": "",
+                "region": code or "",
+                "region_nom": expe_regions.nom_region(code or ""),
+            }
+        elif dept.strip():
+            departement = dept.strip().upper()
+            code = expe_regions.region_du_departement(departement)
+            dest = {
+                "cp": "",
+                "ville": "",
+                "departement": departement,
+                "region": code,
+                "region_nom": expe_regions.nom_region(code),
+            }
         else:
             dest = expe_notes.resoudre_destination(conn, ville=ville, cp=cp)
-        dept = dest["departement"]
-        if not dept:
+            code = dest["region"]
+        if not code:
             raise HTTPException(
                 status_code=400,
                 detail="Destination introuvable — saisir une ville connue ou un code postal.",
             )
+        departement = dest.get("departement") or ""
         transporteurs = expe_notes.recommander_transporteurs(
-            conn, dept, type_envoi=type_envoi
+            conn, code, type_envoi=type_envoi
         )
-        delai_row = conn.execute(
-            """SELECT delai_texte, zone_label FROM expe_delais
-                WHERE departement=? AND transporteur_id IS NULL
-                ORDER BY CASE WHEN type_envoi=? THEN 0 ELSE 1 END LIMIT 1""",
-            (dept, type_envoi or "default"),
-        ).fetchone()
+        delai_row = None
+        if departement:
+            delai_row = conn.execute(
+                """SELECT delai_texte, zone_label FROM expe_delais
+                    WHERE departement=? AND transporteur_id IS NULL
+                    ORDER BY CASE WHEN type_envoi=? THEN 0 ELSE 1 END LIMIT 1""",
+                (departement, type_envoi or "default"),
+            ).fetchone()
         nb_departs = conn.execute(
             "SELECT COUNT(*) AS n FROM expe_departs "
             "WHERE code_postal_destination IS NOT NULL AND code_postal_destination <> ''"
         ).fetchone()["n"]
     return {
         "destination": dest,
-        "departement": dept,
+        "region": code,
+        "region_nom": expe_regions.nom_region(code),
+        "departement": departement,
         "delai": dict(delai_row) if delai_row else None,
         "transporteurs": transporteurs,
         "historique_global": nb_departs,

@@ -144,7 +144,7 @@ EXPE_ZONES_CSS = r"""
 .expe-zn-map-wrap{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:8px;
   display:flex;align-items:center;justify-content:center;min-height:320px}
 .expe-zn-map-wrap .expe-carte-svg{width:100%;height:auto;max-height:620px;display:block}
-.expe-zn-dept--sel{stroke:var(--text)!important;stroke-width:2.4!important}
+.expe-zn-zone--sel{stroke:var(--text)!important;stroke-width:2.4!important}
 .expe-zn-legende{font-size:11px;color:var(--muted);line-height:1.6;margin-top:8px}
 .expe-zn-dest{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 .expe-zn-dest-cp{font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.4px}
@@ -704,10 +704,16 @@ EXPE_ZONES_JS = r"""
 //
 // On saisit une ville ou un code postal, on obtient les transporteurs à
 // prioriser sur cette destination : croisement de l'historique réel des
-// départs et de la note de confiance. La carte reprend le SVG des
-// départements déjà utilisé par le widget des délais — un département est
-// colorié de la couleur du transporteur recommandé, et reste neutre s'il n'a
-// jamais été livré : mieux vaut un blanc qu'une recommandation inventée.
+// départs et de la note de confiance. La zone de classement est la RÉGION,
+// pas le département — un transporteur qui dessert bien Lille dessert le
+// Pas-de-Calais, et découper l'historique en 101 morceaux fabriquait des
+// zones à un seul départ où le premier transporteur croisé passait meilleur.
+//
+// La carte est celle des régions (`EXPE_FRANCE_REGIONS_SVG_MARKUP`), pas
+// celle des départements du widget des délais : les contours sont fusionnés,
+// une région est un seul tracé, et une région se colorie de la couleur du
+// transporteur recommandé. Elle reste neutre si elle n'a jamais été livrée :
+// mieux vaut un blanc qu'une recommandation inventée.
 //
 // Les render() passent par renderTransporteurs(), qui rend la main au champ
 // en cours de saisie. Un render() nu viderait le champ destination pendant
@@ -715,7 +721,7 @@ EXPE_ZONES_JS = r"""
 const Z={
   saisie:'',
   typeEnvoi:'',
-  dept:'',
+  region:'',
   data:null,
   loading:false,
   suggestions:[],
@@ -770,7 +776,7 @@ async function expeZonesInterroger(params){
     Object.keys(params||{}).forEach(k=>{if(params[k])qs.set(k,params[k]);});
     if(Z.typeEnvoi)qs.set('type_envoi',Z.typeEnvoi);
     Z.data=await api('/api/expe/zones/recommandation?'+qs.toString());
-    Z.dept=(Z.data&&Z.data.departement)||'';
+    Z.region=(Z.data&&Z.data.region)||'';
   }catch(e){
     Z.data=null;
     toast(e.message||'Destination introuvable','error');
@@ -782,8 +788,9 @@ async function expeZonesInterroger(params){
 function expeZonesRechercher(){
   const saisie=String(Z.saisie||'').trim();
   if(!saisie){toast('Saisir une ville ou un code postal.','error');return;}
-  // Le serveur sait déjà démêler ville et code postal : on lui envoie la
-  // saisie telle quelle plutôt que de dupliquer la règle ici.
+  // Le serveur sait déjà démêler ville et code postal, puis remonter à la
+  // région : on lui envoie la saisie telle quelle plutôt que de dupliquer la
+  // règle ici.
   void expeZonesInterroger({ville:saisie});
 }
 
@@ -791,26 +798,26 @@ function expeZonesRelancer(){
   if(!Z.data)return;
   Z.carteChargee=false;
   void expeZonesChargerCarte();
-  if(Z.dept)void expeZonesInterroger({dept:Z.dept});
+  if(Z.region)void expeZonesInterroger({region:Z.region});
 }
 
-function expeZonesClicDept(dept){
+function expeZonesClicRegion(region){
   Z.saisie='';
-  void expeZonesInterroger({dept:dept});
+  void expeZonesInterroger({region:region});
 }
 
 function expeZonesAppliquerCarte(){
   const host=document.getElementById('expe-zn-svg-host');
   if(!host)return;
   const carte=Z.carte||{};
-  host.querySelectorAll('path[id], rect[id][data-dept]').forEach(el=>{
-    const code=el.getAttribute('data-dept')||el.id;
+  host.querySelectorAll('[data-region]').forEach(el=>{
+    const code=el.getAttribute('data-region');
     if(!code)return;
     const info=carte[code];
     el.style.cursor='pointer';
     el.style.fill=info?(info.couleur||'var(--accent-bg)'):'var(--card)';
-    el.classList.toggle('expe-zn-dept--sel',Z.dept===code);
-    const bouts=[code];
+    el.classList.toggle('expe-zn-zone--sel',Z.region===code);
+    const bouts=[(info&&info.region_nom)||code];
     if(info){
       bouts.push('à prioriser : '+info.transporteur+(info.note_lettre?(' ('+info.note_lettre+')'):''));
       bouts.push(info.nb_expeditions+' expédition'+(info.nb_expeditions>1?'s':''));
@@ -820,10 +827,15 @@ function expeZonesAppliquerCarte(){
     el.setAttribute('title',bouts.join(' · '));
     if(!el.dataset.znWired){
       el.dataset.znWired='1';
-      el.addEventListener('click',()=>expeZonesClicDept(code));
+      el.addEventListener('click',()=>expeZonesClicRegion(code));
     }
   });
 }
+
+const EXPE_ZN_SCORE_AIDE='Score de pertinence sur 100 : note de confiance 50 %, '
+  +'expérience sur la région 50 % — le nombre de transports déjà faits, pondéré par '
+  +'leur récence (moins de 3 mois, 6, 12, 24), rapporté au transporteur le plus actif '
+  +'de la région.';
 
 function renderExpeZones(){
   if(!Z.carteChargee&&!Z.carteEnCours)void expeZonesChargerCarte();
@@ -850,7 +862,7 @@ function renderExpeZones(){
     Z.typeEnvoi=e.target.value;
     Z.carteChargee=false;
     void expeZonesChargerCarte();
-    if(Z.dept)void expeZonesInterroger({dept:Z.dept});
+    if(Z.region)void expeZonesInterroger({region:Z.region});
   });
 
   const formCard=h('div',{className:'card',style:{padding:'16px 18px'}},
@@ -862,7 +874,7 @@ function renderExpeZones(){
     ),
     h('div',{className:'expe-help',style:{marginTop:'10px'}},
       'Les villes proposées sont celles du référentiel clients. Un code postal non répertorié '
-      +'reste accepté : seul le département compte pour le classement.')
+      +'reste accepté : il suffit à retrouver la région, qui est la zone de classement.')
   );
 
   const mapCard=h('div',{className:'card'},
@@ -870,8 +882,8 @@ function renderExpeZones(){
     h('div',{style:{padding:'12px 14px 16px'}},
       h('div',{className:'expe-zn-map-wrap',id:'expe-zn-svg-host'}),
       h('div',{className:'expe-zn-legende'},
-        'Chaque département est colorié de la couleur du transporteur à prioriser. '
-        +'Un département neutre n\'a encore aucun départ enregistré. Cliquer sur un département '
+        'Chaque région est coloriée de la couleur du transporteur à prioriser. '
+        +'Une région neutre n\'a encore aucun départ enregistré. Cliquer sur une région '
         +'affiche son classement.')
     )
   );
@@ -884,22 +896,22 @@ function renderExpeZones(){
     corps.appendChild(h('div',{className:'expe-zn-vide'},'Calcul en cours…'));
   }else if(!Z.data){
     corps.appendChild(h('div',{className:'expe-zn-vide'},
-      'Saisir une ville ou un code postal, ou cliquer sur un département de la carte.'));
+      'Saisir une ville ou un code postal, ou cliquer sur une région de la carte.'));
   }else{
     const d=Z.data;
     const dest=d.destination||{};
     const meta=[];
     if(dest.ville)meta.push(dest.ville);
+    if(d.departement)meta.push('dép. '+d.departement);
     if(d.delai&&d.delai.delai_texte)meta.push('délai indicatif '+d.delai.delai_texte);
     corps.appendChild(h('div',{className:'expe-zn-dest'},
-      h('span',{className:'expe-zn-dest-cp'},'Département '+(d.departement||'—')),
+      h('span',{className:'expe-zn-dest-cp'},d.region_nom||d.region||'—'),
       meta.length?h('span',{className:'expe-zn-dest-meta'},meta.join(' · ')):null
     ));
     // Un nombre sans unite lisible ne veut rien dire : la legende est dans
     // l'ecran, pas seulement dans l'infobulle du chiffre.
     corps.appendChild(h('div',{className:'expe-zn-legende',style:{margin:'0 0 12px'}},
-      'Score de priorité sur 100 : note de confiance 55 %, expéditions déjà faites '
-      +'vers ce département 30 %, ancienneté de la dernière 15 %.'));
+      EXPE_ZN_SCORE_AIDE));
     const liste=h('div',{className:'expe-zn-liste'});
     const rows=d.transporteurs||[];
     if(!rows.length){
@@ -911,7 +923,7 @@ function renderExpeZones(){
       if(!r.eligible_zone)tags.push(h('span',{className:'expe-zn-tag hors'},'Hors zone déclarée'));
       if(r.grille_tarifaire)tags.push(h('span',{className:'expe-zn-tag'},'Grille tarifaire'));
       const detail=[];
-      detail.push(r.nb_expeditions+' expédition'+(r.nb_expeditions>1?'s':'')+' sur ce département');
+      detail.push(r.nb_expeditions+' expédition'+(r.nb_expeditions>1?'s':'')+' sur cette région');
       if(r.derniere_expedition)detail.push('dernière le '+r.derniere_expedition);
       detail.push(r.nb_avis?(r.nb_avis+' avis'):'note de départ');
       liste.appendChild(h('div',{className:'expe-zn-item'+(r.rang===1?' premier':'')+(r.eligible_zone?'':' hors-zone')},
@@ -923,7 +935,7 @@ function renderExpeZones(){
             ...tags),
           h('div',{className:'expe-zn-meta'},detail.join(' · '))
         ),
-        h('span',{className:'expe-zn-score',title:'Score de priorité sur 100 : note de confiance 55 %, expéditions déjà faites vers ce département 30 %, ancienneté de la dernière 15 %'},
+        h('span',{className:'expe-zn-score',title:EXPE_ZN_SCORE_AIDE},
           r.score>0?(Math.round(r.score)+' / 100'):'—')
       ));
     });
@@ -933,8 +945,8 @@ function renderExpeZones(){
 
   requestAnimationFrame(()=>{
     const host=document.getElementById('expe-zn-svg-host');
-    if(host&&!host.firstChild&&typeof EXPE_FRANCE_SVG_MARKUP==='string'){
-      host.innerHTML=EXPE_FRANCE_SVG_MARKUP;
+    if(host&&!host.firstChild&&typeof EXPE_FRANCE_REGIONS_SVG_MARKUP==='string'){
+      host.innerHTML=EXPE_FRANCE_REGIONS_SVG_MARKUP;
     }
     expeZonesAppliquerCarte();
   });

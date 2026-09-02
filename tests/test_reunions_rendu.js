@@ -68,6 +68,21 @@ const liste = M.rendreListe([{
   machine: "", ouverte_par: "Sophie", a_des_notes: false,
   participants: [], nb_actions: 3, actions_restantes: 0, ouverte: false
 }]);
+// La colonne « Actions a mener » : le detail quand l'API le sert, le compteur
+// sinon. Les deux lignes ci-dessus n'ont que le compteur, celle-ci le detail.
+const listeDetail = M.rendreListe([{
+  id: 20, titre: "02/09/2026", date_debut: "2026-09-01", date_fin: "2026-09-02",
+  machine: "", ouverte_par: "Marc", a_des_notes: true, participants: ["Marc"],
+  nb_actions: 5, actions_restantes: 3, ouverte: false,
+  actions: [
+    { id: 1, texte: "Regler la tension", responsable: "Marc",
+      echeance: "2026-09-05", fait: false },
+    { id: 2, texte: "Commander le film", responsable: "", echeance: "", fait: true },
+    { id: 3, texte: "Voir le calage", responsable: "Sophie", echeance: "", fait: false },
+    { id: 4, texte: "Rappeler le client", responsable: "", echeance: "", fait: false },
+    { id: 5, texte: "Nettoyer le poste", responsable: "", echeance: "", fait: true }
+  ]
+}]);
 verifier("liste : identifiant de ligne", liste.includes('data-id="12"'));
 verifier("liste : titre", liste.includes("31/08/2026"));
 verifier("liste : jour unique sans fleche",
@@ -79,11 +94,45 @@ verifier("liste : sans machine, tout l'atelier est dit",
 verifier("liste : presence de notes", liste.includes("notes") && liste.includes("sans notes"));
 verifier("liste : participants", liste.includes("Marc, Sophie"));
 verifier("liste : participants absents", liste.includes("—"));
-verifier("liste : actions restantes", liste.includes("1 &agrave; faire"));
-verifier("liste : actions toutes faites", liste.includes("3 faites"));
-verifier("liste : etat en cours", liste.includes(">en cours<"));
-verifier("liste : etat close", liste.includes(">close<"));
+verifier("liste : sans detail, le compteur reste", liste.includes("1 &agrave; faire"));
+verifier("liste : sans detail, actions toutes faites", liste.includes("3 faites"));
+verifier("liste : la reunion en cours est signalee", liste.includes(">en cours<"));
+verifier("liste : plus de colonne Etat", liste.indexOf("&Eacute;tat") === -1);
+verifier("liste : une reunion close ne porte pas de pastille d'etat",
+         liste.indexOf(">close<") === -1);
+verifier("liste : cinq colonnes", liste.split("<th>").length - 1 === 5);
 verifier("liste : tableau ferme", liste.trim().endsWith("</table>"));
+
+console.log("\n2 ter. La colonne dit les actions, pas leur nombre");
+verifier("actions a mener : intitule de colonne",
+         liste.includes("Actions &agrave; mener"));
+verifier("actions a mener : le texte de l'action est la",
+         listeDetail.includes("Regler la tension"));
+verifier("actions a mener : responsable et echeance",
+         listeDetail.includes("Marc · 05/09/2026"));
+verifier("actions a mener : ce qui reste a faire passe devant",
+         listeDetail.includes("Voir le calage") && listeDetail.includes("Rappeler le client")
+         && listeDetail.indexOf("Commander le film") === -1);
+verifier("actions a mener : trois lignes au plus",
+         listeDetail.split('<div class="reu-todo"').length - 1 === 3);
+verifier("actions a mener : le reste est compte",
+         listeDetail.includes("+ 2 autres"));
+verifier("actions a mener : une faite est marquee",
+         M.rendreListe([{ id: 21, titre: "x", date_debut: "2026-09-01",
+           date_fin: "2026-09-01", ouverte_par: "Marc", participants: [],
+           nb_actions: 1, actions_restantes: 0, ouverte: false,
+           actions: [{ id: 9, texte: "Fini", responsable: "", echeance: "", fait: true }]
+         }]).includes('class="reu-todo fait"'));
+verifier("actions a mener : sans action, un tiret",
+         M.rendreListe([{ id: 22, titre: "x", date_debut: "2026-09-01",
+           date_fin: "2026-09-01", ouverte_par: "Marc", participants: [],
+           nb_actions: 0, ouverte: false, actions: [] }]).includes("&mdash;"));
+verifier("actions a mener : texte echappe",
+         !M.rendreListe([{ id: 23, titre: "x", date_debut: "2026-09-01",
+           date_fin: "2026-09-01", ouverte_par: "Marc", participants: [],
+           nb_actions: 1, actions_restantes: 1, ouverte: false,
+           actions: [{ id: 9, texte: piegeNom, responsable: piegeNom, echeance: "",
+                       fait: false }] }]).includes("<img src=x"));
 
 console.log("\n2 bis. Chaque ligne porte sa corbeille");
 verifier("corbeille : bouton par ligne",
@@ -94,8 +143,8 @@ verifier("corbeille : titre porte pour la confirmation",
 verifier("corbeille : intitule accessible", liste.includes("aria-label=\"Supprimer"));
 verifier("corbeille : icone et non emoji",
          liste.includes("<svg") && !/[\u{1F300}-\u{1FAFF}]/u.test(liste));
-verifier("corbeille : hors de la cellule d'etat",
-         liste.indexOf("reu-td-sup") > liste.indexOf("reu-pastille ouverte"));
+verifier("corbeille : derniere cellule de la ligne",
+         liste.indexOf("reu-td-sup") > liste.indexOf("reu-td-act"));
 verifier("corbeille : titre echappe dans l'attribut",
          !M.rendreListe([{ id: 1, titre: '" onfocus="alert(1)', date_debut: "2026-08-28",
            date_fin: "2026-08-28", ouverte_par: "x", participants: [], nb_actions: 0,
@@ -116,6 +165,11 @@ verifier("reunion : la machine retenue est cochee",
 verifier("reunion : l'autre ne l'est pas",
          ecran.includes('data-mach="Cohesio 2" aria-pressed="false"'));
 verifier("reunion : bouton imprimer", ecran.includes('data-r="imprimer"'));
+verifier("reunion : bouton plein ecran", ecran.includes('data-r="plein"')
+         && ecran.includes("Plein &eacute;cran"));
+verifier("reunion : en plein ecran, le bouton propose d'en sortir",
+         M.rendreReunion(REUNION, null, { plein: true })
+          .includes("Quitter le plein &eacute;cran"));
 verifier("reunion : clore quand ouverte", ecran.includes("Clore la r&eacute;union"));
 verifier("reunion : rouvrir quand close",
          M.rendreReunion(Object.assign({}, REUNION, { ouverte: false, statut: "close",

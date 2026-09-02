@@ -56,7 +56,8 @@ table.reu-tbl{width:100%;border-collapse:collapse;font-size:14.5px;background:va
 table.reu-tbl th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.5px;
   color:var(--muted);font-weight:700;padding:11px 12px;background:var(--bg);
   border-bottom:1px solid var(--border)}
-table.reu-tbl td{padding:12px;border-bottom:1px solid var(--border);color:var(--text2)}
+table.reu-tbl td{padding:10px 12px;border-bottom:1px solid var(--border);color:var(--text2);
+  vertical-align:top}
 table.reu-tbl tbody tr:last-child td{border-bottom:none}
 table.reu-tbl tbody tr{cursor:pointer;
   transition:background var(--mo-fast,.15s) var(--ease-out,ease),
@@ -65,18 +66,53 @@ table.reu-tbl tbody tr:hover{background:var(--accent-bg);box-shadow:inset 3px 0 
 .reu-nom-cell{font-weight:700;color:var(--text)}
 .reu-sous{font-size:12px;color:var(--muted);margin-top:2px}
 
-/* La corbeille reste discrete tant qu'on ne survole pas sa ligne : c'est une
-   action destructrice, elle ne doit pas attirer le clic. */
-table.reu-tbl td.reu-td-sup{width:1%;white-space:nowrap;text-align:right}
-.reu-sup{background:transparent;border:1px solid transparent;border-radius:8px;
-  color:var(--muted);cursor:pointer;padding:5px 7px;line-height:0;
-  font-family:inherit;opacity:.35;
-  transition:opacity var(--mo-fast,.15s) var(--ease-out,ease),
-             color var(--mo-fast,.15s) var(--ease-out,ease),
+/* Largeurs : la colonne « Actions a mener » porte du texte, les autres des
+   libelles courts. Sans largeurs fixes, les trois premieres colonnes prennent
+   la place au prorata de leur contenu et les actions se rendent sur six
+   lignes. Elles sont donc bornees, et la place restante va aux actions. */
+table.reu-tbl{table-layout:fixed}
+table.reu-tbl th:nth-child(1),table.reu-tbl td:nth-child(1){width:17%}
+table.reu-tbl th:nth-child(2),table.reu-tbl td:nth-child(2){width:15%}
+table.reu-tbl th:nth-child(3),table.reu-tbl td:nth-child(3){width:20%}
+table.reu-tbl th:nth-child(5),table.reu-tbl td:nth-child(5){width:52px}
+.reu-nom-cell,table.reu-tbl td{overflow-wrap:anywhere}
+/* Les presents sont une information de contexte : deux lignes suffisent, la
+   liste complete est dans la reunion. Le rognage vit sur un bloc interieur —
+   pose sur la cellule, `display:-webkit-box` lui retire sa nature de cellule
+   et disloque le tableau. */
+.reu-part-liste{font-size:13.5px;line-height:1.45;display:-webkit-box;
+  -webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.reu-nom-cell .reu-pastille{vertical-align:middle;margin-left:5px}
+
+/* ── Actions a mener ─────────────────────────────────────────── */
+.reu-todos{display:flex;flex-direction:column;gap:5px}
+.reu-todo{display:flex;gap:7px;align-items:flex-start;font-size:13.5px;
+  color:var(--text);line-height:1.4}
+.reu-todo .reu-todo-p{flex:none;width:6px;height:6px;margin-top:6px;border-radius:50%;
+  background:var(--warn,#fbbf24)}
+.reu-todo .reu-todo-t{min-width:0}
+.reu-todo em{display:block;font-style:normal;font-size:11.5px;color:var(--muted);
+  margin-top:1px}
+.reu-todo.fait{color:var(--muted)}
+/* Seul l'intitule se barre : barrer aussi le responsable et l'echeance rendait
+   la ligne illisible. */
+.reu-todo.fait .reu-todo-l{text-decoration:line-through}
+.reu-todo.fait .reu-todo-p{background:var(--success,#34d399)}
+.reu-todo-plus{font-size:11.5px;color:var(--muted);padding-left:13px}
+
+/* La corbeille se voit : elle etait a 35 % d'opacite et n'apparaissait qu'au
+   survol de la ligne, donc introuvable a la souris comme au doigt. Elle porte
+   maintenant son cadre en permanence, et ne devient rouge qu'au survol — vue
+   sans etre attirante. */
+table.reu-tbl td.reu-td-sup{white-space:nowrap;text-align:right}
+.reu-sup{background:var(--card);border:1px solid var(--border);border-radius:8px;
+  color:var(--text2);cursor:pointer;padding:6px 8px;line-height:0;
+  font-family:inherit;
+  transition:color var(--mo-fast,.15s) var(--ease-out,ease),
+             background var(--mo-fast,.15s) var(--ease-out,ease),
              border-color var(--mo-fast,.15s) var(--ease-out,ease)}
-table.reu-tbl tbody tr:hover .reu-sup{opacity:1}
-.reu-sup:hover{color:var(--danger);border-color:var(--danger);opacity:1}
-.reu-sup:focus-visible{opacity:1;outline:2px solid var(--accent);outline-offset:2px}
+.reu-sup:hover{color:#fff;background:var(--danger);border-color:var(--danger)}
+.reu-sup:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* ── Reunion ouverte ─────────────────────────────────────────── */
 .reu-hdr{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin:0 0 18px}
@@ -181,6 +217,24 @@ table.reu-tbl tbody tr:hover .reu-sup{opacity:1}
 .reu-actform input:focus{border-color:var(--accent);outline:none}
 .reu-actform .reu-duo{display:flex;gap:7px}
 .reu-actform .reu-duo input{flex:1;min-width:0}
+
+/* ── Plein ecran ─────────────────────────────────────────────────
+   Pendant un point de production, l'ecran est regarde a plusieurs : la barre
+   laterale, le titre de page et les sous-onglets n'apportent rien et prennent
+   un quart de la largeur. La classe est posee sur <body> par
+   mysifa_reunions.js — on masque la coquille, on ne change pas de page : la
+   reunion ouverte et la frappe en cours survivent au retour.
+   Les selecteurs restent dans .main : ils ne doivent rien masquer ailleurs. */
+body.reu-plein .sidebar,
+body.reu-plein .sidebar-overlay,
+body.reu-plein .mobile-topbar{display:none !important}
+body.reu-plein .main{padding:14px 20px}
+body.reu-plein .main .container,
+body.reu-plein .main .container.reu-large{max-width:none}
+body.reu-plein .main .container > h1,
+body.reu-plein .main .container > .subtitle,
+body.reu-plein .main .nav-tabs{display:none}
+body.reu-plein .reu-colonne{max-height:calc(100vh - 32px)}
 
 /* ── Modale de lancement ─────────────────────────────────────── */
 .reu-modal-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:800;
