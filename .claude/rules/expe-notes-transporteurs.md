@@ -73,12 +73,34 @@ note = (NOTE_DEPART × 1  +  Σ(note_i × poids_thématique_i × poids_anciennet
 ### Zone géographique
 
 `/expe` › Référentiel › Zone géographique : on saisit une ville ou un code
-postal, on obtient les transporteurs à prioriser sur le département.
+postal, on obtient les transporteurs à prioriser sur la **région**.
 
 ```
-score = note 55 %  +  expérience sur la zone 30 %  +  fraîcheur 15 %
+score = note de confiance 50 %  +  expérience sur la région 50 %
+
+expérience = Σ (chaque transport × poids de récence)
+             rapportée au transporteur le plus actif de la région
 ```
 
+- **La zone de classement est la région, pas le département** (02/09/2026).
+  Découpé en 101 morceaux, l'historique fabriquait des zones à un ou deux
+  départs où le premier transporteur croisé passait « le meilleur ». Une région
+  regroupe assez de départs pour qu'un classement veuille dire quelque chose, et
+  reste plus fine que la France entière. Le référentiel des 18 régions (13
+  métropolitaines + 5 DOM) vit dans `app/services/expe_regions.py`, en dur : il
+  n'a pas bougé depuis 2016, et une table de plus se désynchroniserait du SVG.
+- **Récence d'un transport**, par paliers comme l'ancienneté des avis, mais avec
+  un premier palier plus court — ≤ 3 mois : 1 ; ≤ 6 mois : 0,75 ; ≤ 12 mois :
+  0,5 ; ≤ 24 mois : 0,25 ; au-delà : 0,1. Un transport sans date lisible tombe
+  au palier le plus faible plutôt que d'être ignoré : il a bien eu lieu.
+- L'expérience est **relative** : elle est divisée par celle du mieux-disant de
+  la région. Sur une région où personne n'a beaucoup roulé, celui qui a roulé le
+  plus prend quand même les points — c'est un classement, pas une note absolue.
+- **Conséquence assumée du 50/50** : un transporteur moins bien noté mais
+  nettement plus actif récemment peut passer devant un mieux noté. Les deux
+  poids sont `POIDS_NOTE` et `POIDS_EXPERIENCE` (`expe_notes.py`) et font 1 : les
+  déplacer se fait des deux côtés à la fois, et le test
+  `tests/test_expe_notes.py` verrouille l'arbitrage tel qu'il est réglé.
 - Un transporteur sans avis apporte 0,5 au score de note : c'est
   mécaniquement `NOTE_DEPART / 10`, pas une exception dans le code.
 - Le score s'affiche sur 100, avec sa composition en toutes lettres dans
@@ -91,16 +113,28 @@ score = note 55 %  +  expérience sur la zone 30 %  +  fraîcheur 15 %
   ne fait que reconduire les habitudes, et un bon transporteur n'a jamais sa
   première chance.
 - La présence d'une grille tarifaire est **affichée, pas comptée** : une grille
-  absente ne dit rien de la qualité du service.
+  absente ne dit rien de la qualité du service. Une grille sur un seul
+  département de la région suffit à l'afficher.
+- Le **délai indicatif** reste départemental : il n'apparaît que si la
+  destination vient d'une ville ou d'un code postal. Un clic sur la carte donne
+  la région seule — pas de département, donc pas de délai, plutôt qu'un délai
+  pris au hasard dans la région.
 - Le référentiel de villes est celui des **clients** (`clients.cp` /
   `clients.ville`) : ce sont exactement les destinations vers lesquelles SIFA
-  expédie. Un code postal non répertorié reste accepté — seul le département
-  compte.
-- La carte ne colorie qu'un département **déjà livré**. Un département neutre
-  n'a aucun départ enregistré : mieux vaut un blanc qu'une recommandation
-  inventée.
-- `carte_zones()` fait **une seule passe** sur `expe_departs` pour les 101
-  départements. Ne pas repasser à un balayage par département.
+  expédie. Un code postal non répertorié reste accepté — il suffit à retrouver
+  la région.
+- La carte ne colorie qu'une région **déjà livrée**. Une région neutre n'a aucun
+  départ enregistré : mieux vaut un blanc qu'une recommandation inventée.
+- `carte_zones()` fait **une seule passe** sur `expe_departs` pour toutes les
+  régions. Ne pas repasser à un balayage par zone.
+- **La carte des régions n'est pas dessinée à la main.**
+  `app/web/expe_france_regions.svg` est l'union géométrique des départements de
+  `expe_france_departments.svg`, produite par
+  `tools/build_expe_france_regions.py` (shapely). Les deux cartes restent donc
+  superposables au pixel près, et la carte des départements continue de servir
+  au widget des délais, qui se règle bien département par département. Retoucher
+  le SVG des régions à la main, c'est créer une deuxième source de vérité qui
+  divergera au premier ajustement de l'autre.
 
 ### Marque côté transporteur
 
