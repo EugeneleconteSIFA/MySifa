@@ -136,6 +136,34 @@ def _effective_level(role, uid, app_id, module_id, role_defaults, user_overrides
     return "none"
 
 
+# ═══════════════════════════════════════════════════════════════
+# CONTRAINTE TRANSPORT (planning de production ↔ MyExpé)
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/api/settings/transport-planning")
+def get_transport_planning(request: Request):
+    """Réglages de la contrainte transport du planning de production."""
+    require_settings(request)
+    from database import get_db
+    from app.services import transport_planning as tp
+    with get_db() as conn:
+        return tp.charger_params(conn)
+
+
+@router.put("/api/settings/transport-planning")
+async def set_transport_planning(request: Request):
+    """Body : {actif, heure_limite, seuil_palettes, marge_pct}. Champs absents inchangés."""
+    require_settings(request)
+    from database import get_db
+    from app.services import transport_planning as tp
+    body = await request.json()
+    with get_db() as conn:
+        try:
+            return tp.enregistrer_params(conn, body)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+
 @router.get("/api/settings/access-matrix")
 def access_matrix(request: Request):
     """Matrice complète pour l'écran /settings → Matrice d'accès.

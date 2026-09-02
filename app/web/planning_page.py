@@ -2740,12 +2740,13 @@ function mkTL(mon,slots){
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
       data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}" data-qte-etiq="${escAttr(qteEtiq!=null?fmtQty(qteEtiq):"")}" data-nb-palettes="${escAttr(nbPalettes!=null?String(nbPalettes):"")}"`+
       ` data-prise-rdv="${s.prise_rdv?'1':'0'}" data-dept="${escAttr(s.departement_livraison||"")}" data-dl-imp="${dlImp?'1':'0'}" data-support="${escAttr(s.ft_support||"")}" data-adhesif="${escAttr(s.ft_adhesif||"")}" data-palette-type="${escAttr(s.ft_palette_type||"")}" data-mandrin="${escAttr(s.ft_mandrin_dia||"")}" data-cond="${escAttr(s.ft_conditionnement_phrase||"")}" data-laize="${escAttr(s.laize?String(s.laize)+' mm':"")}"`+
+      ` data-tr="${s.transport?'1':'0'}" data-tr-transp="${escAttr((s.transport&&s.transport.transporteur)||"")}" data-tr-date="${escAttr((s.transport&&s.transport.date_enlevement)||"")}" data-tr-pal="${escAttr(s.transport&&s.transport.palettes!=null?String(s.transport.palettes):"")}" data-tr-limite="${escAttr((s.transport&&s.transport.limite)||"")}" data-tr-tension="${escAttr((s.transport&&s.transport.tension)||"")}" data-tr-marge="${escAttr(s.transport&&s.transport.marge_heures?String(s.transport.marge_heures):"")}" data-tr-nb="${escAttr(String((s.transport&&s.transport.departs&&s.transport.departs.length)||0))}"`+
       ` data-annule="${annuleSlot?'1':'0'}" data-annule-motif="${escAttr(s.annule_motif||"")}" data-annule-par="${escAttr(s.annule_par||"")}" data-annule-count="${escAttr(String(s.annule_count||0))}"`+
       ` data-planned-start="${escAttr(String(s.start||""))}" data-planned-end="${escAttr(String(s.end||""))}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
       ${resizeHandle}
-      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}${annuleBadgeHtml(s)}</span>${line2SlotHtml?`<span class="line2">${line2SlotHtml}</span>`:""}${line3SlotHtml?`<span class="line3">${line3SlotHtml}</span>`:""}${(()=>{const _isExpe=(S.planningVue==="expe"||S.planningVue==="prod_expe");if(_isExpe){return qteEtiq==null?`<span class="line-no-of">pas d'OF lié</span>`:"";}return exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:"";})()}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
+      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}${transportBadgeHtml(s)}${annuleBadgeHtml(s)}</span>${line2SlotHtml?`<span class="line2">${line2SlotHtml}</span>`:""}${line3SlotHtml?`<span class="line3">${line3SlotHtml}</span>`:""}${(()=>{const _isExpe=(S.planningVue==="expe"||S.planningVue==="prod_expe");if(_isExpe){return qteEtiq==null?`<span class="line-no-of">pas d'OF lié</span>`:"";}return exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:"";})()}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
   });
 
   const np=gp(now);
@@ -2950,6 +2951,26 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
     : `<div class="tip-grid">${colGen}${qteTxt?`<span class="k">Qté étiquettes</span><span class="v" style="color:var(--accent);font-weight:600">${escHtml(qteTxt)}</span>`:""}</div>`;
   tipEl.innerHTML=`<div class="tip-hdr"><div class="tip-bar" style="background:${d.co||"#888"}"></div><div><div class="tip-ref">${d.ref||"—"}</div>${sub}</div></div>
     ${liv?`<div class="tip-livraison" style="${livStyle}">Livraison : ${escHtml(liv)}${livSuffix}</div>`:""}
+    ${d.tr==="1"?(()=>{
+      const col=trCouleur({tension:d.trTension});
+      const pal=d.trPal?(Number(d.trPal).toLocaleString("fr-FR")+" palettes"):"palettes non précisées";
+      const transp=(d.trTransp||"").trim()||"transporteur non précisé";
+      const lim=(d.trLimite||"").trim();
+      const limTxt=lim?(trFmtDate(lim.slice(0,10))+" à "+lim.slice(11,16).replace(":","h").replace("h00","h")):"";
+      const marge=Number(d.trMarge||0);
+      const nb=Number(d.trNb||0);
+      const etat=d.trTension==="depasse"?"Fin de production après l'enlèvement"
+                :d.trTension==="juste"?"Moins d'une journée de battement"
+                :"Marge suffisante";
+      return `<div class="tip-transport" style="margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--bg);border-left:3px solid ${col}">
+        <span class="k" style="color:${col}">Transport réservé</span>
+        <div style="font-size:12px;color:var(--text2);margin-top:2px">${escHtml(transp)} · ${escHtml(pal)}</div>
+        ${limTxt?`<div style="font-size:12px;color:var(--text2)">À terminer avant le ${escHtml(limTxt)}</div>`:""}
+        ${marge>0?`<div style="font-size:11px;color:var(--muted)">Marge de production ajoutée : ${escHtml(marge.toLocaleString("fr-FR"))} h</div>`:""}
+        ${nb>1?`<div style="font-size:11px;color:var(--muted)">${nb} départs réservés sur ce dossier</div>`:""}
+        <div style="font-size:11px;color:${col};font-weight:600;margin-top:2px">${escHtml(etat)}</div>
+      </div>`;
+    })():""}
     ${d.annule==="1"?`<div class="tip-annule"><span class="k">Dossier annulé en production${(d.annuleCount&&+d.annuleCount>1)?" (×"+escHtml(d.annuleCount)+")":""}</span>${escHtml((d.annuleMotif||"").trim()||"Motif non renseigné")}${(d.annulePar||"").trim()?`<div style="margin-top:4px;font-size:10px;font-weight:600;color:var(--text2)">par ${escHtml(d.annulePar)}</div>`:""}</div>`:""}
     ${(exigTip && !isExpeVueTip)?`<div class="tip-exig"><span class="k">Exigences de production</span>${escHtml(exigTip)}</div>`:""}
     ${bodyHtml}
@@ -3524,6 +3545,49 @@ const FSC_REQ_OPTIONS=__FSC_REQ_OPTIONS__;
 const FSC_CLAIM_DEFAUT="__FSC_CLAIM_DEFAUT__";
 const FSC_REQ_CODES=FSC_REQ_OPTIONS.map(o=>o[0]);
 const FSC_REQ_LABELS=Object.fromEntries(FSC_REQ_OPTIONS);
+
+// ── Transport réservé ───────────────────────────────────────────────────────
+// Le camion n'apparaît que sur les dossiers réellement contraints : un départ
+// à venir d'au moins le seuil de palettes réglé dans Paramètres. En dessous,
+// le planning ne change pas — c'est la règle décidée avec SIFA, pas un oubli.
+function trFmtDate(iso){
+  const s=String(iso||"").trim();
+  if(s.length<10) return s;
+  return s.slice(8,10)+"/"+s.slice(5,7)+"/"+s.slice(0,4);
+}
+function trFmtHeure(h){
+  const v=Number(h);
+  if(!isFinite(v)) return "";
+  const hh=Math.floor(v), mm=Math.round((v-hh)*60);
+  return mm?(hh+"h"+String(mm).padStart(2,"0")):(hh+"h");
+}
+function trCouleur(t){
+  const s=(t&&t.tension)||"ok";
+  return s==="depasse"?"var(--danger)":(s==="juste"?"var(--warn)":"var(--success)");
+}
+function trLibelle(t){
+  if(!t) return "";
+  const transp=(t.transporteur||"").trim()||"transporteur non précisé";
+  const pal=(t.palettes!=null)?(" · "+Number(t.palettes).toLocaleString("fr-FR")+" palettes"):"";
+  return "Transport réservé — "+transp+" · enlèvement le "+trFmtDate(t.date_enlevement)
+       +" avant "+trFmtHeure(t.heure_limite)+pal;
+}
+function transportBadgeHtml(s){
+  const t=s&&s.transport;
+  if(!t) return "";
+  const col=trCouleur(t);
+  const id=Number(t.depart_id)||0;
+  const camion='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 3h13v13H1z"/><path d="M14 8h4l3 3v5h-7z"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/></svg>';
+  const clic=id?` onclick="event.stopPropagation();ouvrirDepartExpe(${id})" style="cursor:pointer;"`:"";
+  return `<span class="slot-camion" title="${escAttr(trLibelle(t))}"${clic}`
+    +` style="display:inline-flex;align-items:center;color:${col};margin-left:4px;vertical-align:middle;${id?'cursor:pointer;':''}">${camion}</span>`;
+}
+// Le départ s'ouvre dans MyExpé, onglet Départs programmés, modale déjà ouverte
+// sur la ligne concernée. Nouvel onglet : le planificateur ne perd pas sa vue.
+function ouvrirDepartExpe(departId){
+  if(!departId) return;
+  window.open("/expe?depart="+encodeURIComponent(departId)+"#suivi_departs","_blank","noopener");
+}
 
 function fscBadgeHtml(e){
   if(!e||!(e.fsc_requis===1||e.fsc_requis===true)) return "";
