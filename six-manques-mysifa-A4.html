@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>MySifa — six manques, six scènes d'atelier</title>
+<style>
+  @page { size: A4 portrait; margin: 0; }
+  :root{
+    --ink:#0f1a20; --ink2:#3b4b53; --mute:#6c7c84; --line:#d2dadd; --line2:#e6ecee;
+    --accent:#0b6e6a; --accent-bg:#e6f1f0;
+    --sig:#8f5207; --sig-bg:#f7edda;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#94a3b8;font-family:"Segoe UI",Arial,Helvetica,sans-serif;
+    color:var(--ink);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{width:210mm;height:297mm;background:#fff;margin:0 auto;padding:10mm 12mm 7mm;
+    display:flex;flex-direction:column}
+
+  header{border-bottom:2px solid var(--ink);padding-bottom:3mm;margin-bottom:3.2mm}
+  .brand{font-size:8pt;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:var(--accent)}
+  h1{font-size:17pt;font-weight:800;letter-spacing:-.4px;margin-top:1.5mm;line-height:1.08}
+  .sub{font-size:8.2pt;color:var(--mute);margin-top:1.6mm;line-height:1.4;max-width:150mm}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:2.8mm;flex:1;grid-auto-rows:1fr}
+
+  .block{border:1px solid var(--line);border-radius:2.5mm;overflow:hidden;display:flex;flex-direction:column}
+  .bhead{display:flex;align-items:center;gap:2.4mm;padding:1.6mm 3mm;
+    border-bottom:1px solid var(--line);background:var(--accent-bg)}
+  .tag{font-size:7.5pt;font-weight:800;letter-spacing:.6px;padding:.9mm 2.2mm;border-radius:1.4mm;
+    color:#fff;background:var(--accent);white-space:nowrap}
+  .btitle{font-size:9.8pt;font-weight:800;color:var(--accent);line-height:1.1}
+  .bwhen{margin-left:auto;font-size:7.2pt;color:var(--mute);font-weight:700;
+    text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
+
+  .urgent .bhead{background:var(--sig-bg)}
+  .urgent .tag{background:var(--sig)}
+  .urgent .btitle{color:var(--sig)}
+  .urgent .bwhen{color:var(--sig)}
+
+  .body{padding:2.2mm 3mm 2.4mm;display:flex;flex-direction:column;gap:1.7mm;flex:1}
+  .row .lbl{font-size:6.8pt;font-weight:800;text-transform:uppercase;letter-spacing:.7px;
+    color:var(--mute);margin-bottom:.4mm}
+  .row p{font-size:8pt;line-height:1.36;color:var(--ink2)}
+  .row.scene p{color:var(--ink)}
+  .row.gap-t{border-top:1px dotted var(--line);padding-top:1.5mm}
+  .row.manque .lbl{color:var(--sig)}
+  .row.brique .lbl{color:var(--accent)}
+  code{font-family:Consolas,"DejaVu Sans Mono",monospace;font-size:7.4pt;
+    background:var(--line2);padding:.2mm 1mm;border-radius:.8mm;color:var(--ink)}
+  b{color:var(--ink)}
+
+  footer{margin-top:2.8mm;padding-top:2.2mm;border-top:1px solid var(--line);
+    display:flex;gap:6mm;align-items:flex-start}
+  .fnote{font-size:7pt;color:var(--ink2);line-height:1.36;flex:1}
+  .fnote b{color:var(--sig)}
+  .fsrc{font-size:6.4pt;color:var(--mute);line-height:1.36;width:48mm;text-align:right}
+
+  @media print{ body{background:#fff} .page{margin:0;box-shadow:none} }
+  @media screen{ .page{box-shadow:0 4px 24px rgba(0,0,0,.25);margin:14px auto} }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="brand">MySifa &middot; état des lieux &middot; septembre 2026</div>
+    <h1>Six manques, six scènes d'atelier</h1>
+    <p class="sub">Six briques standard d'un SaaS industriel que MySifa n'a pas encore, chacune ramenée à un moment réel de l'atelier de Loos.</p>
+  </header>
+
+  <div class="grid">
+
+    <div class="block">
+      <div class="bhead"><span class="tag">01</span><span class="btitle">TRS / OEE</span><span class="bwhen">quand on veut</span></div>
+      <div class="body">
+        <div class="row scene"><div class="lbl">La scène</div><p>26 août, point de production. Cohésio 1 a déclaré <b>5 200 000 étiquettes</b> la veille, avec cinq <code>75</code> changement de cliché, huit reprises et un <code>69</code> arrêt d'urgence Errepi. « Est-ce que C1 a bien tourné, hier ? » Le chef d'atelier compte en heures, la direction en étiquettes.</p></div>
+        <div class="row manque gap-t"><div class="lbl">Ce qui manque</div><p>Les trois composantes sont déjà en base ; aucune synthèse ne les publie. Rien ne se compare d'une machine, d'une équipe ou d'une semaine à l'autre.</p></div>
+        <div class="row brique gap-t"><div class="lbl">Avec la brique</div><p>Un TRS par machine et par journée, décomposé en disponibilité, performance et qualité — chaque composante ouvrant la feuille atelier déjà filtrée. La réunion débat du poste de perte, plus du chiffre.</p></div>
+      </div>
+    </div>
+
+    <div class="block urgent">
+      <div class="bhead"><span class="tag">02</span><span class="btitle">Mode hors-ligne</span><span class="bwhen">n'attend pas</span></div>
+      <div class="body">
+        <div class="row scene"><div class="lbl">La scène</div><p>14 h 07, <code>53</code> casse bande sur Cohésio 2. À 14 h 22 l'opérateur saisit la reprise <code>88</code> : le wifi de bout d'atelier vient de lâcher. La saisie n'est mise en file nulle part. Le soir, 1 h 30 de la journée n'est ni production, ni arrêt, ni nettoyage.</p></div>
+        <div class="row manque gap-t"><div class="lbl">Ce qui manque</div><p>La donnée qui fait foi dépend du réseau, à l'endroit du bâtiment où il est le plus faible. Une saisie perdue ne se retrouve pas : elle se reconstitue de mémoire, ou elle manque.</p></div>
+        <div class="row brique gap-t"><div class="lbl">Avec la brique</div><p>File locale dans le navigateur, bandeau « 3 saisies en attente de synchro », horodatage à l'heure du geste et non de la remontée. L'opérateur ne change rien à sa façon de travailler.</p></div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="bhead"><span class="tag">03</span><span class="btitle">Chaîne de données RVGI</span><span class="bwhen">quand on veut</span></div>
+      <div class="body">
+        <div class="row scene"><div class="lbl">La scène</div><p>05 h 00, la synchro doit partir d'une machine du réseau SIFA. Poste éteint — ou export refusé après l'erreur 72326 du pilote HFSQL — ou import qui échoue après un « 200 » optimiste. À 08 h 15, le TDB ADV s'ouvre sur le relevé de la veille.</p></div>
+        <div class="row manque gap-t"><div class="lbl">Ce qui manque</div><p>La lecture HFSQL est la partie solide. L'alarme, elle, est un code de sortie que personne ne lit et un journal sur un poste que personne n'ouvre. Le miroir gèle sans le dire.</p></div>
+        <div class="row brique gap-t"><div class="lbl">Avec la brique</div><p>Un chien de garde côté serveur, un bilan remonté à chaque exécution même en échec, une réponse au push qui attend la fin de l'import, et un delta de 30 min sur les tables chaudes.</p></div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="bhead"><span class="tag">04</span><span class="btitle">Habilitations opérateur</span><span class="bwhen">quand on veut</span></div>
+      <div class="body">
+        <div class="row scene"><div class="lbl">La scène</div><p>Lundi 6 h, un renfort est placé sur Cohésio 2 par le planning RH. Il ouvre un dossier <code>01</code> et lance le calage : rien ne dit s'il a déjà tourné sur cette machine. Trois casses bande dans la matinée, découvertes le soir dans le Retour de prod.</p></div>
+        <div class="row manque gap-t"><div class="lbl">Ce qui manque</div><p>MySifa sait qui a produit quoi, jamais qui sait produire quoi. Ni matrice de polyvalence, ni date de formation, ni renouvellement — la compétence n'existe pas dans le modèle.</p></div>
+        <div class="row brique gap-t"><div class="lbl">Avec la brique</div><p>Une matrice opérateur × machine × opération dans les Paramètres, un planning RH qui signale l'affectation non couverte, et un TRS lisible par niveau de qualification.</p></div>
+      </div>
+    </div>
+
+    <div class="block urgent">
+      <div class="bhead"><span class="tag">05</span><span class="btitle">Continuité de service</span><span class="bwhen">n'attend pas</span></div>
+      <div class="body">
+        <div class="row scene"><div class="lbl">La scène</div><p>6 h 40, le VPS ne répond plus. À 7 h, Saisieprod ne s'ouvre pas. Suivent MyStock, MyExpé, le planning, la paie, MyQualité et le miroir ERP. L'atelier continue de tourner ; l'entreprise ne sait plus ce qu'il produit.</p></div>
+        <div class="row manque gap-t"><div class="lbl">Ce qui manque</div><p>La sauvegarde existe — pré-promotion, resync nocturne, sept rotations — mais tout vit sur le même VPS et aucune restauration n'a jamais été jouée. Le délai de reprise est inconnu.</p></div>
+        <div class="row brique gap-t"><div class="lbl">Avec la brique</div><p>Une copie chiffrée hors hébergeur, une restauration chronométrée deux fois par an, une perte maximale décidée, et un écran d'état à deux dates : dernière sauvegarde, dernière restauration testée.</p></div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="bhead"><span class="tag">06</span><span class="btitle">SSO et double facteur</span><span class="bwhen">quand on veut</span></div>
+      <div class="body">
+        <div class="row scene"><div class="lbl">La scène</div><p>Le poste d'atelier reste ouvert de 8 h au soir ; l'équipe d'après-midi saisit ses <code>01</code>, <code>03</code> et <code>89</code> sous la session du matin. Un salarié parti en juillet a toujours un compte actif.</p></div>
+        <div class="row manque gap-t"><div class="lbl">Ce qui manque</div><p>L'identité dans MySifa vit hors de l'annuaire de l'entreprise : le journal des actions trace des comptes, pas des personnes. Entre Internet et toute la production, un mot de passe superadmin.</p></div>
+        <div class="row brique gap-t"><div class="lbl">Avec la brique</div><p>Connexion par le compte Microsoft de l'entreprise, badge ou code court au poste atelier, second facteur obligatoire sur superadmin et direction.</p></div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    <p class="fnote"><b>Deux briques n'attendent pas.</b> Le mode hors-ligne, parce que chaque journée sans file locale laisse des trous définitifs dans la seule donnée qui fait foi. La continuité de service, parce qu'elle ne se prépare pas le jour où on en a besoin : tant qu'aucune restauration n'a été jouée, le délai de reprise est un chiffre qu'on découvre au pire moment. Les quatre autres se posent quand on veut : le TRS vaut même rétroactivement, les trois autres s'ajoutent sans rien reprendre.</p>
+    <p class="fsrc">Relevés base et dépôt MySifa,<br>25 août – 1<sup>er</sup> septembre 2026.<br>Écarté après vérification : le traceur FSC bidirectionnel et la comparaison devis / réel existent déjà.</p>
+  </footer>
+
+</div>
+</body>
+</html>

@@ -14,11 +14,15 @@ Les cas verrouilles ici sont ceux ou une erreur produirait un ecran plausible
   mecanisme d'avis devient decoratif ;
 - l'ajustement est borne ;
 - les seuils de lettre ne bougent pas, et 5/10 tombe bien dans la bande C ;
-- la recommandation par zone n'ecarte pas un transporteur jamais utilise, et
-  fait passer la note avant l'habitude.
+- la recommandation par zone n'ecarte pas un transporteur jamais utilise ;
+- la zone de classement est la REGION : deux departs sur deux departements
+  d'une meme region comptent ensemble ;
+- l'experience sur la zone est le nombre de transports PONDERE par leur
+  recence — dix transports de 2023 ne valent pas dix transports du trimestre ;
+- a experience egale, la note departage ; a note egale, l'experience departe.
 
-Le service ne touche a aucun module de l'application : il prend une connexion
-sqlite et rien d'autre. Le test s'execute donc sur une base en memoire, sans
+Le service ne touche qu'au referentiel des regions (`expe_regions`, stdlib
+seule) : il prend une connexion sqlite et rien d'autre. Le test s'execute donc sur une base en memoire, sans
 charger `database` ni FastAPI.
 
 Lancer : python3 tests/test_expe_notes.py
@@ -31,6 +35,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 RACINE = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(RACINE))
 
 
 def _charger(nom: str, chemin: Path):
@@ -41,6 +46,7 @@ def _charger(nom: str, chemin: Path):
 
 
 svc = _charger("expe_notes", RACINE / "app" / "services" / "expe_notes.py")
+reg = _charger("expe_regions", RACINE / "app" / "services" / "expe_regions.py")
 mig = _charger(
     "mig_notes",
     RACINE / "app" / "core" / "migrations" / "2026_08_31_expe_notes_transporteurs.py",
@@ -248,16 +254,27 @@ def test_provisoire_et_cache():
 
 
 def test_departements():
-    print("\n8. Departement deduit du code postal")
+    print("\n8. Departement deduit du code postal, puis region")
     for cp, attendu in (
         ("59100", "59"), ("75011", "75"), ("20190", "2A"), ("20200", "2B"),
         ("97400", "974"), ("", ""),
     ):
         verifier(f"{cp or '(vide)'} -> {attendu or '(vide)'}", svc._norm_dept(cp), attendu)
+    for dept, attendu in (
+        ("59", "HDF"), ("75", "IDF"), ("2A", "COR"), ("974", "REU"), ("ZZ", ""),
+    ):
+        verifier(
+            f"region de {dept} -> {attendu or '(vide)'}",
+            reg.region_du_departement(dept),
+            attendu,
+        )
+    couverts = sorted(d for _, depts in reg.REGIONS.values() for d in depts)
+    verifier("aucun departement en double", len(couverts), len(set(couverts)))
+    verifier("101 departements couverts", len(couverts), 101)
 
 
 def test_recommandation():
-    print("\n9. Recommandation par zone")
+    print("\n9. Recommandation par region")
     conn = base()
     bien = ajouter_transporteur(conn, "Bien note")
     habitue = ajouter_transporteur(conn, "Habitue mal note")
@@ -266,6 +283,8 @@ def test_recommandation():
         avis(conn, bien, 10, sens="appreciation")
         avis(conn, habitue, 2)
     hier = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    # Deux departements DIFFERENTS de la meme region : c'est la region qui
+    # regroupe l'historique, pas le departement.
     conn.execute(
         "INSERT INTO expe_departs (transporteur_id, code_postal_destination, date_enlevement)"
         " VALUES (?,?,?)",
@@ -275,14 +294,21 @@ def test_recommandation():
         conn.execute(
             "INSERT INTO expe_departs (transporteur_id, code_postal_destination, date_enlevement)"
             " VALUES (?,?,?)",
-            (habitue, "75012", hier),
+            (habitue, "77100", hier),
         )
     svc.recalculer_toutes(conn)
 
-    classement = svc.recommander_transporteurs(conn, "75")
+    classement = svc.recommander_transporteurs(conn, "IDF")
     noms = [r["transporteur"] for r in classement]
     verifier("les trois sont classes", len(classement), 3)
-    verifier("la note passe avant l'habitude", noms[0], "Bien note")
+    verifier(
+        "les departs des deux departements comptent sur la meme region",
+        sum(r["nb_expeditions"] for r in classement),
+        9,
+    )
+    # Arbitrage assume : a 50/50, huit transports recents pesent plus qu'un
+    # ecart de note. Le transporteur habituel passe donc devant.
+    verifier("le volume recent l'emporte a 50/50", noms[0], "Habitue mal note")
     verifier(
         "le transporteur jamais utilise reste present",
         "Jamais utilise" in noms,
@@ -299,15 +325,85 @@ def test_recommandation():
         "C",
     )
     verifier("rangs numerotes", [r["rang"] for r in classement], [1, 2, 3])
+    verifier("aucune recommandation hors region connue", svc.recommander_transporteurs(conn, "ZZZ"), [])
 
     carte = svc.carte_zones(conn)
-    verifier("la carte ne colorie que les departements livres", sorted(carte.keys()), ["75"])
-    verifier("et y met le mieux classe", carte["75"]["transporteur"], "Bien note")
-    verifier("avec le total des expeditions", carte["75"]["nb_expeditions"], 9)
+    verifier("la carte ne colorie que les regions livrees", sorted(carte.keys()), ["IDF"])
+    verifier("et y met le mieux classe", carte["IDF"]["transporteur"], "Habitue mal note")
+    verifier("avec le total des expeditions", carte["IDF"]["nb_expeditions"], 9)
+    verifier("et le nom de la region", carte["IDF"]["region_nom"], "Île-de-France")
+
+
+def test_note_departage():
+    print("\n10. A experience egale, la note departage")
+    conn = base()
+    bien = ajouter_transporteur(conn, "Bien note")
+    mal = ajouter_transporteur(conn, "Mal note")
+    for _ in range(3):
+        avis(conn, bien, 10, sens="appreciation")
+        avis(conn, mal, 2)
+    hier = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    for trp in (bien, mal):
+        for _ in range(4):
+            conn.execute(
+                "INSERT INTO expe_departs (transporteur_id, code_postal_destination,"
+                " date_enlevement) VALUES (?,?,?)",
+                (trp, "59000", hier),
+            )
+    svc.recalculer_toutes(conn)
+    classement = svc.recommander_transporteurs(conn, "HDF")
+    verifier("meme volume : la note decide", classement[0]["transporteur"], "Bien note")
+
+
+def test_recence_des_transports():
+    print("\n11. L'experience est ponderee par la recence")
+    conn = base()
+    ancien = ajouter_transporteur(conn, "Beaucoup mais vieux")
+    recent = ajouter_transporteur(conn, "Moins mais recent")
+
+    def depart(trp, jours):
+        quand = (datetime.now() - timedelta(days=jours)).strftime("%Y-%m-%d")
+        conn.execute(
+            "INSERT INTO expe_departs (transporteur_id, code_postal_destination,"
+            " date_enlevement) VALUES (?,?,?)",
+            (trp, "33000", quand),
+        )
+
+    for _ in range(10):
+        depart(ancien, 1100)   # plus de 24 mois -> 0,1 chacun, soit 1,0
+    for _ in range(4):
+        depart(recent, 10)     # moins de 3 mois -> 1,0 chacun, soit 4,0
+    svc.recalculer_toutes(conn)
+
+    classement = svc.recommander_transporteurs(conn, "NAQ")
+    par_nom = {r["transporteur"]: r for r in classement}
+    verifier("dix vieux transports pesent 1", par_nom["Beaucoup mais vieux"]["experience"], 1.0)
+    verifier("quatre recents pesent 4", par_nom["Moins mais recent"]["experience"], 4.0)
+    verifier(
+        "le recent passe devant malgre moins de transports",
+        classement[0]["transporteur"],
+        "Moins mais recent",
+    )
+    verifier(
+        "le compte brut reste affiche tel quel",
+        par_nom["Beaucoup mais vieux"]["nb_expeditions"],
+        10,
+    )
+    verifier(
+        "les paliers de recence",
+        [
+            svc.poids_recence_transport(
+                (datetime.now() - timedelta(days=j)).strftime("%Y-%m-%d"),
+                datetime.now(),
+            )
+            for j in (10, 120, 200, 400, 900)
+        ],
+        [1.0, 0.75, 0.5, 0.25, 0.1],
+    )
 
 
 def test_resolution_ville():
-    print("\n10. Ville et code postal")
+    print("\n12. Ville, code postal et region")
     conn = base()
     conn.execute("INSERT INTO clients (cp, ville) VALUES ('69003','LYON')")
     conn.execute("INSERT INTO clients (cp, ville) VALUES ('59000','LILLE')")
@@ -317,24 +413,34 @@ def test_resolution_ville():
         "69",
     )
     verifier(
+        "et sa region",
+        svc.resoudre_destination(conn, ville="lyon")["region"],
+        "ARA",
+    )
+    verifier(
         "accents et casse",
         svc.resoudre_destination(conn, ville="Lille")["cp"],
         "59000",
     )
     verifier(
         "code postal tape dans le champ ville",
-        svc.resoudre_destination(conn, ville="75011")["departement"],
-        "75",
+        svc.resoudre_destination(conn, ville="75011")["region"],
+        "IDF",
     )
     verifier(
         "ville inconnue",
-        svc.resoudre_destination(conn, ville="Zzz")["departement"],
+        svc.resoudre_destination(conn, ville="Zzz")["region"],
         "",
     )
     verifier(
         "suggestions",
         [s["ville"] for s in svc.chercher_villes(conn, "li")],
         ["LILLE"],
+    )
+    verifier(
+        "les suggestions portent la region",
+        [s["region"] for s in svc.chercher_villes(conn, "li")],
+        ["HDF"],
     )
 
 
@@ -348,6 +454,8 @@ if __name__ == "__main__":
     test_provisoire_et_cache()
     test_departements()
     test_recommandation()
+    test_note_departage()
+    test_recence_des_transports()
     test_resolution_ville()
 
     print("\n" + "=" * 60)

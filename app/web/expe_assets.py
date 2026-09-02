@@ -2,7 +2,10 @@
 import json
 
 from app.web.expe_france_delais_data import DELAIS_FRANCE_JSON
-from app.web.expe_france_map_svg import EXPE_FRANCE_SVG_MARKUP
+from app.web.expe_france_map_svg import (
+    EXPE_FRANCE_SVG_MARKUP,
+    EXPE_FRANCE_REGIONS_SVG_MARKUP,
+)
 
 EXPE_TRANSPORTEURS_CSS = r"""
 /* ── MyExpé — transporteurs ── */
@@ -3619,6 +3622,12 @@ const DELAIS_FRANCE_DEFAULT = """
     + r""";
 const EXPE_FRANCE_SVG_MARKUP = """
     + json.dumps(EXPE_FRANCE_SVG_MARKUP)
+    + r""";
+// Carte des régions — écran Référentiel › Zone géographique. Elle vit ici, à
+// côté de celle des départements, parce que les deux sont injectées dans le
+// même bundle et doivent rester lisibles au même endroit.
+const EXPE_FRANCE_REGIONS_SVG_MARKUP = """
+    + json.dumps(EXPE_FRANCE_REGIONS_SVG_MARKUP)
     + r""";
 const EXPE_ZONE_COLORS = {
   france: 'var(--accent)',

@@ -31,6 +31,7 @@
     ouverteId: null,                   // reunion laissee ouverte au demarrage
     notesLocal: null,                  // frappe non encore enregistree
     notesEtat: '',
+    plein: false,                      // reunion affichee seule, sans la coquille
     aSupprimer: null,                  // reunion dont la suppression est demandee
     erreur: null,
     contexteCharge: false
@@ -177,6 +178,47 @@
      Fonctions pures : elles recoivent leurs donnees, ne lisent pas S et ne
      touchent pas au DOM. Exportees pour etre testables. */
 
+  /* La colonne « Actions a mener » : ce qui a ete decide, pas son compteur.
+     Un point de production se relit pour retrouver l'action, et « 2 a faire »
+     obligeait a ouvrir la reunion pour savoir lesquelles. Ce qui reste a faire
+     passe devant, ce qui est fait suit, barre. Au-dela de trois lignes la
+     cellule dirait un paragraphe : le reste est compte, et la reunion s'ouvre.
+     Repli sur le compteur si la liste ne porte pas encore le detail (API plus
+     ancienne servie a un onglet deja ouvert). */
+  var ACTIONS_VUES = 3;
+
+  function rendreAMener(r){
+    var l = (r && r.actions) || null;
+    if(!l || !l.length){
+      if(r && r.nb_actions){
+        return r.actions_restantes
+          ? '<span class="reu-pastille ouverte">' + r.actions_restantes + ' &agrave; faire</span>'
+          : '<span class="reu-pastille close">' + r.nb_actions + ' faites</span>';
+      }
+      return '<span class="reu-pastille">&mdash;</span>';
+    }
+    var restent = [], faites = [];
+    l.forEach(function(a){ (a.fait ? faites : restent).push(a); });
+    var vues = restent.concat(faites).slice(0, ACTIONS_VUES);
+    var reste = l.length - vues.length;
+    return '<div class="reu-todos">'
+      + vues.map(function(a){
+          var meta = (a.responsable || a.echeance)
+            ? '<em>' + esc(a.responsable || '')
+              + (a.echeance ? (a.responsable ? ' · ' : '') + dateFr(a.echeance) : '')
+              + '</em>'
+            : '';
+          return '<div class="reu-todo' + (a.fait ? ' fait' : '') + '">'
+               + '<span class="reu-todo-p" aria-hidden="true"></span>'
+               + '<span class="reu-todo-t"><span class="reu-todo-l">' + esc(a.texte)
+               + '</span>' + meta + '</span></div>';
+        }).join('')
+      + (reste > 0
+          ? '<div class="reu-todo-plus">+ ' + reste + ' autre' + (reste > 1 ? 's' : '') + '</div>'
+          : '')
+      + '</div>';
+  }
+
   function rendreListe(l){
     if(l === null || l === undefined) return '<div class="reu-vide">Chargement&hellip;</div>';
     if(!l.length){
@@ -185,8 +227,8 @@
            + 'derni&egrave;re journ&eacute;e travaill&eacute;e.</div>';
     }
     return '<table class="reu-tbl"><thead><tr><th>R&eacute;union</th>'
-      + '<th>P&eacute;riode analys&eacute;e</th><th>Participants</th>'
-      + '<th>Actions</th><th>&Eacute;tat</th><th></th></tr></thead><tbody>'
+      + '<th>P&eacute;riode</th><th>Participants</th>'
+      + '<th>Actions &agrave; mener</th><th></th></tr></thead><tbody>'
       + l.map(function(r){
           var periode = r.date_debut === r.date_fin
             ? dateFr(r.date_debut)
@@ -197,22 +239,17 @@
           var perimetre = (r.machines && r.machines.length)
             ? r.machines.join(' · ')
             : (r.machine || 'Toutes les machines');
-          var act = r.nb_actions
-            ? (r.actions_restantes
-                ? '<span class="reu-pastille ouverte">' + r.actions_restantes + ' &agrave; faire</span>'
-                : '<span class="reu-pastille close">' + r.nb_actions + ' faites</span>')
-            : '<span class="reu-pastille">&mdash;</span>';
           return '<tr data-id="' + escA(r.id) + '">'
-            + '<td><div class="reu-nom-cell">' + esc(r.titre) + '</div>'
+            + '<td><div class="reu-nom-cell">' + esc(r.titre)
+            + (r.ouverte ? ' <span class="reu-pastille ouverte">en cours</span>' : '')
+            + '</div>'
             + '<div class="reu-sous">' + esc(r.ouverte_par)
             + (r.a_des_notes ? ' · notes' : ' · sans notes') + '</div></td>'
             + '<td>' + esc(periode)
             + (perimetre ? '<div class="reu-sous">' + esc(perimetre) + '</div>' : '') + '</td>'
-            + '<td>' + esc((r.participants || []).join(', ') || '—') + '</td>'
-            + '<td>' + act + '</td>'
-            + '<td>' + (r.ouverte
-                ? '<span class="reu-pastille ouverte">en cours</span>'
-                : '<span class="reu-pastille close">close</span>') + '</td>'
+            + '<td><div class="reu-part-liste">'
+            + esc((r.participants || []).join(', ') || '—') + '</div></td>'
+            + '<td class="reu-td-act">' + rendreAMener(r) + '</td>'
             + '<td class="reu-td-sup"><button type="button" class="reu-sup" '
             + 'data-suppr-reunion="' + escA(r.id) + '" '
             + 'data-suppr-titre="' + escA(r.titre || '') + '" '
@@ -244,6 +281,9 @@
       +       '<input type="date" id="reu-au" value="' + escA(r.date_fin || '') + '"></div>'
       +     '<div class="reu-champ reu-machines"><label>Machines</label>'
       +       rendreMachines(machines, r.machines, etat.horsProd) + '</div>'
+      +     '<button type="button" class="reu-btn ghost" data-r="plein" '
+      +       'title="' + (etat.plein ? '&Eacute;chap pour revenir' : 'La r&eacute;union seule, sans la barre lat&eacute;rale ni l\'en-t&ecirc;te') + '">'
+      +       (etat.plein ? 'Quitter le plein &eacute;cran' : 'Plein &eacute;cran') + '</button>'
       +     '<button type="button" class="reu-btn ghost" data-r="imprimer">Imprimer</button>'
       +     '<button type="button" class="reu-btn" data-r="clore">'
       +       (r.ouverte ? 'Clore la r&eacute;union' : 'Rouvrir la r&eacute;union') + '</button>'
@@ -394,6 +434,43 @@
     }).join('');
   }
 
+  /* Plein ecran -------------------------------------------------
+     Un point de production se tient a plusieurs devant un ecran : la barre
+     laterale, le titre de page et les sous-onglets ne servent a personne
+     pendant la reunion. On ne change pas de page pour autant — la classe est
+     posee sur <body> et la feuille de style masque la coquille, donc l'etat de
+     MyProd, la reunion ouverte et la frappe en cours sont intacts au retour. */
+
+  function appliquerPlein(){
+    try{
+      var actif = !!(S.plein && S.vue === 'reunion');
+      document.body.classList.toggle('reu-plein', actif);
+    }catch(e){}
+  }
+
+  function basculerPlein(valeur){
+    S.plein = (valeur === undefined) ? !S.plein : !!valeur;
+    appliquerPlein();
+    peindre();
+    if(S.plein){ try{ window.scrollTo(0, 0); }catch(e){} }
+  }
+
+  // Echap rend la coquille : c'est le geste attendu d'un plein ecran, et il
+  // faut pouvoir sortir meme si le bouton est passe sous le pli. Pose une
+  // seule fois, sur le document — la racine du module est repeinte en boucle.
+  var echapPose = false;
+  function poserEchap(){
+    if(echapPose) return;
+    echapPose = true;
+    document.addEventListener('keydown', function(ev){
+      if(ev.key !== 'Escape' || !S.plein) return;
+      // La recherche de participants a deja son Echap : vider le champ passe
+      // avant de quitter l'ecran.
+      if(ev.target && ev.target.id === 'reu-p-q') return;
+      basculerPlein(false);
+    });
+  }
+
   /* Peinture ---------------------------------------------------- */
 
   function peindre(){
@@ -416,11 +493,17 @@
             : '<span class="reu-pastille close">close</span>')
         : '';
     }
+    // Filet : le plein ecran masque la coquille de MyProd. Il ne doit exister
+    // que tant qu'une reunion est a l'ecran — sinon la barre laterale
+    // resterait cachee sur une page qui n'a rien demande.
+    if(S.vue !== 'reunion' && S.plein){ S.plein = false; }
+    appliquerPlein();
     var vue = rac.querySelector('#reu-vue');
     if(!vue) return;
     if(S.vue === 'reunion'){
       vue.innerHTML = rendreReunion(S.reunion, S.prod, {
         notes: S.notesEtat, personnes: S.personnes, recherche: S.rechercheP,
+        plein: S.plein,
         horsProd: (S.prod && S.prod.machines_hors_production) || []
       });
       var ta = vue.querySelector('#reu-notes');
@@ -644,6 +727,7 @@
         var act = el.getAttribute('data-r');
         if(act === 'liste'){
           S.vue = 'liste'; S.reunion = null; S.prod = null; S.notesLocal = null;
+          S.plein = false; appliquerPlein();
           peindre();
           try{ await chargerListe(); }catch(e){ S.erreur = e.message; }
           peindre();
@@ -652,6 +736,7 @@
         if(act === 'lancer'){ ouvrirModale(rac); return; }
         if(act === 'annuler'){ fermerModale(rac); return; }
         if(act === 'creer'){ await creer(rac); return; }
+        if(act === 'plein'){ basculerPlein(); return; }
         if(act === 'imprimer'){ imprimer(); return; }
         if(act === 'clore'){ await clore(); return; }
         if(act === 'ajout-action'){ await ajouterAction(rac); return; }
@@ -860,11 +945,14 @@
     racineCourante = racine;
     racine.innerHTML = squelette();
     brancher(racine);
+    poserEchap();
+    appliquerPlein();
     if(!S.contexteCharge || S.reunions === null){ amorcer(); }
     else{ peindre(); }
   }
 
   function reset(){
+    S.plein = false; appliquerPlein();
     S.vue = 'liste'; S.reunion = null; S.prod = null;
     S.reunions = null; S.notesLocal = null; S.notesEtat = ''; S.erreur = null;
     S.personnes = []; S.rechercheP = '';

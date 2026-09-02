@@ -292,20 +292,28 @@
            + '</div></div>';
     }).join("");
 
+    // Le commentaire et l'operateur sont ce qu'on vient lire : ils passent
+    // devant. Le reste de la ligne (dossier, operation, date, mention traite)
+    // reste en retrait, et les boutons tiennent sur la meme ligne que cette
+    // signature au lieu d'ouvrir une rangee de plus sous chaque carte.
+    var signature = ''
+      + (e.origine ? '<span class="m-tag">' + escHtml(LIB_ORIGINE[e.origine] || e.origine) + '</span>' : '')
+      + (e.auteur ? '<b class="m-qui">' + escHtml(e.auteur) + '</b>' : '')
+      + (opts.avecDossier && e.no_dossier ? (e.auteur ? ' · ' : '') + escHtml(e.no_dossier) : '')
+      + (e.operation ? ' · ' + escHtml(sansCode(e.operation, e.operation_code)) : '')
+      + (e.date ? ' · ' + escHtml(dateFr(e.date)) : '')
+      + (e.valide ? '<span class="rp-vu">traité' + (e.valide_par ? ' par ' + escHtml(e.valide_par) : '')
+                    + (e.valide_le ? ' le ' + escHtml(dateFr(e.valide_le)) : '') + '</span>' : '');
+
     return '<div class="rp-mot' + (e.valide ? ' est-valide' : '')
       + (e.masque ? ' est-masque' : '') + '">'
       + '<div class="m-txt" id="rp-e-vue-' + id + '">' + escHtml(e.texte) + '</div>'
-      + '<div class="m-meta">'
-      + (e.origine ? '<span class="m-tag">' + escHtml(LIB_ORIGINE[e.origine] || e.origine) + '</span>' : '')
-      + (opts.avecDossier && e.no_dossier ? escHtml(e.no_dossier) + ' · ' : '')
-      + (e.operation ? escHtml(sansCode(e.operation, e.operation_code)) + ' · ' : '')
-      + escHtml(e.auteur || "")
-      + (e.date ? ' · ' + escHtml(dateFr(e.date)) : '')
-      + (e.valide ? '<span class="rp-vu">traité' + (e.valide_par ? ' par ' + escHtml(e.valide_par) : '')
-                    + (e.valide_le ? ' le ' + escHtml(dateFr(e.valide_le)) : '') + '</span>' : '')
+      + '<div class="m-pied">'
+      +   '<div class="m-meta">' + signature + '</div>'
+      +   (actions.length
+            ? '<div class="rp-edit-actions m-actions">' + actions.join("") + '</div>' : '')
       + '</div>'
       + reponses
-      + (actions.length ? '<div class="rp-edit-actions">' + actions.join("") + '</div>' : '')
       + '<div class="rp-edit" id="rp-e-form-' + id + '" style="display:none">'
       + '<textarea id="rp-e-txt-' + id + '">' + escHtml(e.texte || "") + '</textarea>'
       + '<div class="rp-edit-actions">'
@@ -393,7 +401,7 @@
     if ((d.ecrits || []).length) {
       var restants = d.ecrits.filter(function (e) { return !e.valide; }).length;
       var masques = d.ecrits_masques || [];
-      h += '<div class="rp-bloc"><div class="rp-titre rp-titre-ligne"><span>Vos écrits'
+      h += '<div class="rp-bloc"><div class="rp-titre rp-titre-ligne"><span>Commentaires en production'
          + (restants ? ' <span class="rp-compte">' + restants + ' à traiter</span>' : '')
          + '</span>'
          + (masques.length

@@ -2274,6 +2274,29 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
           </div>
         </div>
 
+        <!-- Le serveur MCP se pilote par une cle de cette page : son etat, ses
+             outils et le journal de ce qu'un agent a lu se consultent la-bas.
+             Sans ce lien, cette console n'etait atteignable qu'en tapant l'URL. -->
+        <a href="/mcp" style="display:flex;align-items:center;gap:14px;margin-bottom:24px;
+             padding:14px 18px;border-radius:12px;background:var(--card);
+             border:1px solid var(--border);text-decoration:none;transition:border-color .12s"
+           onmouseover="this.style.borderColor='var(--accent)'"
+           onmouseout="this.style.borderColor='var(--border)'">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)"
+               stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none">
+            <rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/>
+            <line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+          <span style="flex:1;min-width:0">
+            <span style="display:block;font-size:14px;font-weight:700;color:var(--text)">Serveur MCP</span>
+            <span style="display:block;font-size:12px;color:var(--muted);margin-top:2px">
+              État du serveur, outils exposés, et journal des requêtes faites par l'agent.
+              Nécessite une clé de portée « mcp:read ».</span>
+          </span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none">
+            <polyline points="9 18 15 12 9 6"/></svg>
+        </a>
+
         <!-- Formulaire création -->
         <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px">
           <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:14px;text-transform:uppercase;letter-spacing:.5px">Nouvelle clé</div>

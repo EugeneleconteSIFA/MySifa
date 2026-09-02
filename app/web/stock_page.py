@@ -4282,7 +4282,11 @@ async function startCamera() {
         if (video.readyState < 2 || !video.videoWidth) { setTimeout(barcodeLoop, 100); return; }
         try {
           const found = await detector.detect(video);
-          if (found.length > 0) { onSearchCode(found[0].rawValue); return; }
+          // Pas de `return` ici : le `return` tuait la boucle quand le code etait lu pendant la fenetre
+          // anti-parasite de 1,5 s : lecture ignoree ET plus aucun tick replanifie. La ligne de fin de
+          // boucle (`if (scanning) setTimeout(...)`) decide seule : lecture acceptee -> scanning=false,
+          // pas de replanification ; lecture ignoree -> on continue.
+          if (found.length > 0) onSearchCode(found[0].rawValue);
         } catch(e) {}
         if (S.scanning) setTimeout(barcodeLoop, 150);
       };
@@ -4340,7 +4344,11 @@ async function startCamera() {
           const lum = new ZXing.RGBLuminanceSource(gray, canvas.width, canvas.height);
           const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
           const result = reader.decodeWithState(bmp);
-          if (result) { onSearchCode(result.getText()); return; }
+          // Pas de `return` ici : le `return` tuait la boucle quand le code etait lu pendant la fenetre
+          // anti-parasite de 1,5 s : lecture ignoree ET plus aucun tick replanifie. La ligne de fin de
+          // boucle (`if (scanning) setTimeout(...)`) decide seule : lecture acceptee -> scanning=false,
+          // pas de replanification ; lecture ignoree -> on continue.
+          if (result) onSearchCode(result.getText());
         } catch(e) {}
         if (S.scanning) setTimeout(loop, 60);
       };
@@ -17065,7 +17073,11 @@ async function recepStartCamera(opts) {
         if (video.readyState < 2 || !video.videoWidth) { setTimeout(barcodeLoop, 100); return; }
         try {
           const found = await detector.detect(video);
-          if (found.length > 0) { onRecepCode(found[0].rawValue); return; }
+          // Pas de `return` ici : le `return` tuait la boucle quand le code etait lu pendant la fenetre
+          // anti-parasite de 1,5 s : lecture ignoree ET plus aucun tick replanifie. La ligne de fin de
+          // boucle (`if (scanning) setTimeout(...)`) decide seule : lecture acceptee -> scanning=false,
+          // pas de replanification ; lecture ignoree -> on continue.
+          if (found.length > 0) onRecepCode(found[0].rawValue);
         } catch(e) {}
         if (S.recepScanning) setTimeout(barcodeLoop, 150);
       };
@@ -17130,7 +17142,11 @@ async function recepStartCamera(opts) {
           const lum = new ZXing.RGBLuminanceSource(gray, canvas.width, canvas.height);
           const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
           const result = reader.decodeWithState(bmp);
-          if (result) { onRecepCode(result.getText().trim()); return; }
+          // Pas de `return` ici : le `return` tuait la boucle quand le code etait lu pendant la fenetre
+          // anti-parasite de 1,5 s : lecture ignoree ET plus aucun tick replanifie. La ligne de fin de
+          // boucle (`if (scanning) setTimeout(...)`) decide seule : lecture acceptee -> scanning=false,
+          // pas de replanification ; lecture ignoree -> on continue.
+          if (result) onRecepCode(result.getText().trim());
         } catch(e) {}
         if (S.recepScanning) setTimeout(loop, 60);
       };

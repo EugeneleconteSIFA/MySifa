@@ -34,6 +34,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
+from app.services import expe_regions
+
 # Note attribuée à un transporteur sur lequel rien n'a encore été signalé, et
 # poids qu'elle garde dans la moyenne (celui d'un avis).
 NOTE_DEPART = 5.0
@@ -78,6 +80,25 @@ NOTE_MAX = 10.0
 
 # Amplitude maximale d'un ajustement manuel, en points.
 AJUSTEMENT_MAX = 3.0
+
+# ── Score de pertinence par zone (écran Zone géographique) ──
+#
+# Deux moitiés, et rien d'autre : ce que valent les avis, et ce que le
+# transporteur a réellement transporté sur la zone. Les deux poids font 1.
+POIDS_NOTE = 0.50
+POIDS_EXPERIENCE = 0.50
+
+# Récence d'un transport, en jours : 3, 6, 12 puis 24 mois. Premier palier
+# atteint = poids retenu. Le premier palier est plus court que celui des avis :
+# un transport récent dit que la ligne tourne aujourd'hui, un avis récent dit
+# seulement que le jugement est frais.
+PALIERS_RECENCE_TRANSPORT: list[tuple[int, float]] = [
+    (91, 1.0),
+    (183, 0.75),
+    (365, 0.5),
+    (730, 0.25),
+]
+POIDS_TRANSPORT_ANCIEN = 0.1
 
 
 def lettre_pour(valeur: Optional[float]) -> Optional[str]:
@@ -227,12 +248,15 @@ def _norm_texte(valeur: Any) -> str:
 
 
 def resoudre_destination(conn, ville: str = "", cp: str = "") -> dict:
-    """Résout une saisie ville ou code postal en département.
+    """Résout une saisie ville ou code postal en département, puis en région.
 
     Le référentiel de villes est celui des clients : ce sont exactement les
     destinations vers lesquelles SIFA expédie. Chercher une commune que
     personne n'a jamais livrée n'apporterait rien de plus qu'un code postal
     saisi à la main, qui reste accepté.
+
+    Le département reste calculé — c'est lui qui porte le délai indicatif — mais
+    c'est la région qui sert de zone de classement.
     """
     cp_txt = (cp or "").strip()
     ville_txt = (ville or "").strip()
@@ -240,6 +264,16 @@ def resoudre_destination(conn, ville: str = "", cp: str = "") -> dict:
     if not cp_txt and ville_txt and ville_txt[:2].isdigit():
         # L'utilisateur a tapé un code postal dans le champ ville.
         cp_txt, ville_txt = ville_txt, ""
+
+    def _sortie(cp_out: str, ville_out: str, dept: str) -> dict:
+        region = expe_regions.region_du_departement(dept)
+        return {
+            "cp": cp_out,
+            "ville": ville_out,
+            "departement": dept,
+            "region": region,
+            "region_nom": expe_regions.nom_region(region),
+        }
 
     if cp_txt:
         dept = _norm_dept(cp_txt)
@@ -251,7 +285,7 @@ def resoudre_destination(conn, ville: str = "", cp: str = "") -> dict:
         ).fetchone()
         if row:
             ville_trouvee = row["ville"]
-        return {"cp": cp_txt, "ville": ville_trouvee, "departement": dept}
+        return _sortie(cp_txt, ville_trouvee, dept)
 
     if ville_txt:
         cible = _norm_texte(ville_txt)
@@ -261,20 +295,12 @@ def resoudre_destination(conn, ville: str = "", cp: str = "") -> dict:
         ).fetchall()
         for row in rows:
             if _norm_texte(row["ville"]) == cible:
-                return {
-                    "cp": row["cp"],
-                    "ville": row["ville"],
-                    "departement": _norm_dept(row["cp"]),
-                }
+                return _sortie(row["cp"], row["ville"], _norm_dept(row["cp"]))
         for row in rows:
             if cible and cible in _norm_texte(row["ville"]):
-                return {
-                    "cp": row["cp"],
-                    "ville": row["ville"],
-                    "departement": _norm_dept(row["cp"]),
-                }
+                return _sortie(row["cp"], row["ville"], _norm_dept(row["cp"]))
 
-    return {"cp": "", "ville": ville_txt, "departement": ""}
+    return _sortie("", ville_txt, "")
 
 
 def chercher_villes(conn, requete: str, limite: int = 12) -> list[dict]:
@@ -296,10 +322,12 @@ def chercher_villes(conn, requete: str, limite: int = 12) -> list[dict]:
             continue
         vus.add(cle)
         nom = _norm_texte(row["ville"])
+        dept = _norm_dept(cle[1])
         item = {
             "ville": cle[0],
             "cp": cle[1],
-            "departement": _norm_dept(cle[1]),
+            "departement": dept,
+            "region": expe_regions.region_du_departement(dept),
         }
         if nom.startswith(cible) or cle[1].startswith(requete.strip()):
             debut.append(item)
@@ -316,17 +344,41 @@ def _zone_colonne(type_envoi: str) -> str:
     }.get(type_envoi, "zone_france")
 
 
-def _usages_par_departement(conn) -> dict[str, dict[int, dict]]:
-    """Historique des départs, groupé par département puis par transporteur.
+def poids_recence_transport(date_depart: Any, maintenant: datetime) -> float:
+    """Poids d'un transport selon son âge, par paliers.
 
-    Une seule passe sur `expe_departs` : la carte demande les 101 départements
-    d'un coup, et refaire un balayage par département coûterait cent fois le
+    Même logique que l'ancienneté des avis, avec un premier palier plus court :
+    un transport d'il y a deux mois prouve que la ligne tourne aujourd'hui, un
+    transport d'il y a deux ans prouve seulement qu'elle a tourné. Un transport
+    sans date lisible compte pour le palier le plus faible plutôt que d'être
+    ignoré : il a bien eu lieu.
+    """
+    dt = _parse_iso(date_depart)
+    if dt is None:
+        return POIDS_TRANSPORT_ANCIEN
+    jours = max(0, (maintenant - dt).days)
+    for limite, poids in PALIERS_RECENCE_TRANSPORT:
+        if jours <= limite:
+            return poids
+    return POIDS_TRANSPORT_ANCIEN
+
+
+def _usages_par_region(conn) -> dict[str, dict[int, dict]]:
+    """Historique des départs, groupé par région puis par transporteur.
+
+    Une seule passe sur `expe_departs` : la carte demande toutes les régions
+    d'un coup, et refaire un balayage par région coûterait dix-huit fois le
     même travail.
+
+    L'expérience d'un transporteur sur une région n'est pas son nombre de
+    départs mais leur somme pondérée par la récence — dix départs de 2019 ne
+    valent pas dix départs du trimestre.
     """
     transporteurs = conn.execute(
         "SELECT id, nom FROM expe_transporteurs"
     ).fetchall()
     par_nom = {_norm_texte(t["nom"]): t["id"] for t in transporteurs}
+    maintenant = datetime.now()
 
     usages: dict[str, dict[int, dict]] = {}
     departs = conn.execute(
@@ -337,36 +389,25 @@ def _usages_par_departement(conn) -> dict[str, dict[int, dict]]:
               AND code_postal_destination <> ''"""
     ).fetchall()
     for dep in departs:
-        dept = _norm_dept(dep["code_postal_destination"])
-        if not dept:
+        region = expe_regions.region_du_departement(
+            _norm_dept(dep["code_postal_destination"])
+        )
+        if not region:
             continue
         trp_id = dep["transporteur_id"]
         if not trp_id:
             trp_id = par_nom.get(_norm_texte(dep["transporteur"]))
         if not trp_id:
             continue
-        entree = usages.setdefault(dept, {}).setdefault(
-            trp_id, {"nb": 0, "dernier": ""}
+        entree = usages.setdefault(region, {}).setdefault(
+            trp_id, {"nb": 0, "dernier": "", "poids": 0.0}
         )
         entree["nb"] += 1
         date_dep = str(dep["date_enlevement"] or "")[:10]
+        entree["poids"] += poids_recence_transport(date_dep, maintenant)
         if date_dep > entree["dernier"]:
             entree["dernier"] = date_dep
     return usages
-
-
-def _score_recence(dernier: str, maintenant: datetime) -> float:
-    dt_dernier = _parse_iso(dernier)
-    if dt_dernier is None:
-        return 0.0
-    jours = max(0, (maintenant - dt_dernier).days)
-    if jours <= 90:
-        return 1.0
-    if jours <= 365:
-        return 0.6
-    if jours <= 730:
-        return 0.3
-    return 0.0
 
 
 def _note_de(trp) -> tuple[Optional[float], Optional[str], int]:
@@ -379,32 +420,38 @@ def _note_de(trp) -> tuple[Optional[float], Optional[str], int]:
 
 def _classer(
     transporteurs: list,
-    usages_dept: dict[int, dict],
+    usages_region: dict[int, dict],
     zone_col: str,
-    maintenant: datetime,
 ) -> list[dict]:
-    """Score de priorité : note de confiance, expérience sur la zone, fraîcheur.
+    """Score de pertinence : note de confiance et expérience sur la région.
+
+    Deux moitiés, et rien d'autre : ce que valent les avis (`POIDS_NOTE`) et ce
+    que le transporteur a réellement transporté sur la zone, pondéré par la
+    récence de ces transports (`POIDS_EXPERIENCE`). L'expérience est rapportée
+    au mieux-disant de la région : c'est un classement relatif, pas une note
+    absolue — sur une région où personne n'a beaucoup roulé, celui qui a roulé
+    le plus prend quand même les points.
 
     Un transporteur jamais utilisé sur la zone n'est pas écarté — il descend en
     bas de liste, signalé comme piste non testée. Sinon le classement ne ferait
     que reconduire les habitudes, et un bon transporteur n'aurait jamais sa
     première chance.
     """
-    max_usage = max([u["nb"] for u in usages_dept.values()], default=0)
+    max_poids = max([u.get("poids", 0.0) for u in usages_region.values()], default=0.0)
     resultats: list[dict] = []
     for trp in transporteurs:
-        usage = usages_dept.get(trp["id"], {"nb": 0, "dernier": ""})
+        usage = usages_region.get(trp["id"], {"nb": 0, "dernier": "", "poids": 0.0})
         nb = usage["nb"]
         dernier = usage["dernier"]
+        poids_exp = float(usage.get("poids", 0.0))
         note_valeur, note_lettre, nb_avis = _note_de(trp)
 
         # `note_valeur` est nulle seulement si le cache n'a jamais été calculé ;
         # on retombe alors sur la note de départ, comme le calcul lui-même.
         base = NOTE_DEPART if note_valeur is None else float(note_valeur)
         score_note = base / 10.0
-        score_usage = (nb / max_usage) if max_usage else 0.0
-        score_recence = _score_recence(dernier, maintenant)
-        score = score_note * 0.55 + score_usage * 0.30 + score_recence * 0.15
+        score_exp = (poids_exp / max_poids) if max_poids else 0.0
+        score = score_note * POIDS_NOTE + score_exp * POIDS_EXPERIENCE
 
         eligible = bool(trp[zone_col]) if zone_col else True
         if not eligible:
@@ -420,6 +467,7 @@ def _classer(
                 "note_libelle": libelle_lettre(note_lettre),
                 "nb_avis": nb_avis,
                 "nb_expeditions": nb,
+                "experience": round(poids_exp, 2),
                 "derniere_expedition": dernier or "",
                 "eligible_zone": eligible,
                 "jamais_utilise": nb == 0,
@@ -434,13 +482,13 @@ def _classer(
 
 def recommander_transporteurs(
     conn,
-    departement: str,
+    region: str,
     type_envoi: str = "",
     limite: int = 0,
 ) -> list[dict]:
-    """Classe les transporteurs actifs pour une destination."""
-    dept = (departement or "").strip().upper()
-    if not dept:
+    """Classe les transporteurs actifs pour une région."""
+    code = expe_regions.normaliser(region)
+    if not code:
         return []
     transporteurs = conn.execute(
         "SELECT * FROM expe_transporteurs WHERE actif = 1 ORDER BY nom"
@@ -448,20 +496,25 @@ def recommander_transporteurs(
     if not transporteurs:
         return []
 
-    usages = _usages_par_departement(conn).get(dept, {})
+    usages = _usages_par_region(conn).get(code, {})
     zone_col = _zone_colonne(type_envoi) if type_envoi else ""
-    resultats = _classer(transporteurs, usages, zone_col, datetime.now())
+    resultats = _classer(transporteurs, usages, zone_col)
 
-    # Grille tarifaire connue sur la zone : information affichée, pas critère
+    # Grille tarifaire connue sur la région : information affichée, pas critère
     # de classement — une grille absente ne dit rien de la qualité du service.
+    # Une grille sur un seul département de la région suffit à l'afficher : le
+    # transporteur y a bien un tarif.
+    depts = list(expe_regions.departements_de(code))
+    trous = ",".join("?" for _ in depts)
+    like = " OR ".join(["zone_valeur LIKE ?"] * len(depts))
     for item in resultats:
         tarif = conn.execute(
-            """SELECT 1 FROM expe_tarifs
-                WHERE transporteur_id = ? AND actif = 1
-                  AND ((zone_type = 'departement' AND zone_valeur = ?)
-                    OR (zone_type = 'code_postal' AND zone_valeur LIKE ?))
-                LIMIT 1""",
-            (item["transporteur_id"], dept, dept + "%"),
+            f"""SELECT 1 FROM expe_tarifs
+                 WHERE transporteur_id = ? AND actif = 1
+                   AND ((zone_type = 'departement' AND zone_valeur IN ({trous}))
+                     OR (zone_type = 'code_postal' AND ({like})))
+                 LIMIT 1""",
+            [item["transporteur_id"]] + depts + [d + "%" for d in depts],
         ).fetchone()
         item["grille_tarifaire"] = bool(tarif)
 
@@ -469,11 +522,11 @@ def recommander_transporteurs(
 
 
 def carte_zones(conn, type_envoi: str = "") -> dict:
-    """Pour chaque département, le transporteur à prioriser et l'historique.
+    """Pour chaque région, le transporteur à prioriser et l'historique.
 
-    Alimente la carte de France de l'écran Zone géographique : un département
-    se colore de la couleur du transporteur recommandé, et n'est colorié que
-    s'il a une histoire — un département jamais livré reste neutre plutôt que
+    Alimente la carte de France de l'écran Zone géographique : une région se
+    colore de la couleur du transporteur recommandé, et n'est coloriée que si
+    elle a une histoire — une région jamais livrée reste neutre plutôt que
     d'afficher une recommandation fabriquée de toutes pièces.
     """
     transporteurs = conn.execute(
@@ -482,21 +535,22 @@ def carte_zones(conn, type_envoi: str = "") -> dict:
     if not transporteurs:
         return {}
     zone_col = _zone_colonne(type_envoi) if type_envoi else ""
-    maintenant = datetime.now()
-    usages = _usages_par_departement(conn)
+    usages = _usages_par_region(conn)
 
     carte: dict[str, dict] = {}
-    for dept, usages_dept in usages.items():
-        classement = _classer(transporteurs, usages_dept, zone_col, maintenant)
+    for region, usages_region in usages.items():
+        classement = _classer(transporteurs, usages_region, zone_col)
         if not classement:
             continue
         premier = classement[0]
-        carte[dept] = {
+        carte[region] = {
+            "region": region,
+            "region_nom": expe_regions.nom_region(region),
             "transporteur_id": premier["transporteur_id"],
             "transporteur": premier["transporteur"],
             "couleur": premier["couleur"],
             "note_lettre": premier["note_lettre"],
-            "nb_expeditions": sum(u["nb"] for u in usages_dept.values()),
-            "nb_transporteurs": len([u for u in usages_dept.values() if u["nb"]]),
+            "nb_expeditions": sum(u["nb"] for u in usages_region.values()),
+            "nb_transporteurs": len([u for u in usages_region.values() if u["nb"]]),
         }
     return carte
