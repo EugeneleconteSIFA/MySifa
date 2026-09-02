@@ -264,6 +264,16 @@ verifier("avec son texte", avecReponse.includes("Vu avec la maintenance"));
 verifier("et son auteur", avecReponse.includes("Eugene"));
 verifier("bouton Masquer propose", avecReponse.includes('data-masquer="saisie:12"')
          && avecReponse.includes(">Masquer</button>"));
+// Le commentaire se lit d'abord : l'operateur est mis en avant, et les boutons
+// tiennent sur la ligne de signature plutot que d'ouvrir une rangee de plus.
+verifier("l'operateur est mis en avant", avecReponse.includes('<b class="m-qui">Sophie</b>'));
+verifier("signature et boutons sur la meme ligne",
+         avecReponse.includes('class="m-pied"')
+         && avecReponse.includes('class="rp-edit-actions m-actions"'));
+verifier("les boutons sont dans le pied, pas apres la citation",
+         avecReponse.indexOf("m-actions") < avecReponse.indexOf("rp-citation"));
+verifier("le texte du commentaire reste en tete",
+         avecReponse.indexOf("Casse a repetition") < avecReponse.indexOf('class="m-pied"'));
 
 const masque = M.renderEcrit({ cle: "saisie:13", origine: "commentaire", reference: 13,
   no_dossier: "D-1", texte: "10h", auteur: "Marc", modifiable: true, masque: true });
@@ -278,6 +288,8 @@ const feuilleMasques = M.renderFeuille({
   ecrits_masques: [{ cle: "saisie:9", texte: "10h", origine: "commentaire",
                      no_dossier: "D-1", auteur: "Marc", modifiable: true, masque: true }]
 });
+verifier("feuille : le bloc s'appelle Commentaires en production",
+         feuilleMasques.includes("Commentaires en production"));
 verifier("feuille : bouton des commentaires masques",
          feuilleMasques.includes("Commentaires masqués (1)"));
 verifier("feuille : la liste masquee est repliee",
