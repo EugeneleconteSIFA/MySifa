@@ -28,6 +28,7 @@ from config import (
 )
 from app.services.audit_service import log_action
 from app.services.date_livraison import parse_date_livraison
+from app.services import transport_planning as tp
 from services.auth_service import require_admin, get_current_user, user_has_app_access
 from services.dossier_stats import build_dossier_production_stats
 
@@ -995,7 +996,8 @@ def _of_timeline_fields(e: dict) -> Tuple[bool, Optional[float]]:
     return True, v
 
 
-def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
+def _slot_payload(e: dict, start_iso: str, end_iso: str,
+                  contrainte: Optional[dict] = None) -> dict:
     has_of, qte_etiquettes = _of_timeline_fields(e)
     return {
         "entry_id": e["id"],
@@ -1044,7 +1046,251 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
         "ft_palette_type": _normalize_palette_type(e.get("_ft_palette_type")),
         "ft_conditionnement_phrase": _build_conditionnement_phrase(e),
         "ft_mandrin_dia": (e.get("_ft_mandrin_dia") or "").strip() or None,
+        # Contrainte transport : absente sur la très grande majorité des
+        # dossiers (aucun départ réservé de 6 palettes ou plus).
+        "transport": _transport_payload(e, end_iso, contrainte),
     }
+
+
+# ═══════════════════════════════════════════════════════════════
+# CONTRAINTE TRANSPORT (MyExpé → planning)
+# ═══════════════════════════════════════════════════════════════
+#
+# Un dossier dont l'expédition est déjà réservée ne peut plus être repoussé
+# librement : le camion, lui, ne se décale pas. La règle et ses paramètres
+# vivent dans app/services/transport_planning.py ; ici on ne fait que deux
+# choses — donner au calcul du planning la durée majorée de la marge, et
+# refuser les gestes qui feraient rater un enlèvement.
+#
+# Le nombre de palettes de repli vient de la fiche technique, via exactement
+# la même requête que la timeline : c'est pourquoi elle est devenue une
+# constante partagée plutôt qu'un bloc recopié dans chaque endpoint.
+
+_SQL_ENTRIES_ENRICHIES = """
+            SELECT pe.*,
+                   oi.qte_etiquettes  AS _of_qte_etiquettes,
+                   oi.qte_bobines     AS _of_qte_bobines,
+                   ft.nb_bobines_carton          AS _ft_nb_bobines_carton,
+                   ft.palette_nb_cartons_sol     AS _ft_palette_nb_cartons_sol,
+                   ft.palette_nb_cartons_hauteur AS _ft_palette_nb_cartons_hauteur,
+                   ft.support                    AS _ft_support,
+                   ft.adhesif                    AS _ft_adhesif,
+                   ft.palette_type               AS _ft_palette_type,
+                   ft.cartons                    AS _ft_cartons,
+                   ft.mandrin_dia                AS _ft_mandrin_dia,
+                   ft.nb_etiq_bobin              AS _ft_nb_etiq_bobin
+            FROM planning_entries pe
+            LEFT JOIN of_imports oi
+                ON oi.id = pe.of_import_id
+            -- Liaison fiche ↔ dossier : on matche en priorité sur la clé
+            -- produit normalisée (XXX/NNNN), insensible aux variantes
+            -- machine/laize présentes dans le libellé. Quand plusieurs
+            -- fiches partagent la même clé (une variante par machine),
+            -- on retient celle dont `machine` correspond à la machine
+            -- courante du planning. Fallback sur la référence textuelle
+            -- complète pour les fiches non encore re-parsées.
+            LEFT JOIN fiches_techniques ft ON ft.id = (
+                SELECT ft2.id FROM fiches_techniques ft2
+                WHERE COALESCE(NULLIF(TRIM(ft2.ref_produit_norm), ''),
+                               LOWER(TRIM(ft2.reference)))
+                    = COALESCE(NULLIF(TRIM(pe.ref_produit_norm), ''),
+                               LOWER(TRIM(pe.ref_produit)))
+                ORDER BY
+                  CASE
+                    WHEN LOWER(TRIM(COALESCE(ft2.machine,''))) = LOWER(TRIM(?))
+                         AND TRIM(COALESCE(ft2.machine,'')) != '' THEN 0
+                    WHEN TRIM(COALESCE(ft2.machine,'')) = '' THEN 1
+                    ELSE 2
+                  END,
+                  ft2.id
+                LIMIT 1
+            )
+            WHERE pe.machine_id = ?
+            ORDER BY pe.position ASC
+            """
+
+
+def _entries_enrichies(conn, machine_id: int, machine_nom: str = "") -> List[dict]:
+    """Dossiers de la machine, enrichis de l'OF et de la fiche technique liés.
+
+    `machine_nom` départage plusieurs fiches partageant la même référence
+    produit ; il se relit tout seul quand l'appelant ne l'a pas sous la main.
+    """
+    if not machine_nom:
+        row = conn.execute("SELECT nom FROM machines WHERE id=?", (machine_id,)).fetchone()
+        machine_nom = (row["nom"] if row else "") or ""
+    rows = conn.execute(_SQL_ENTRIES_ENRICHIES, (machine_nom, machine_id)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _palettes_par_entry(entries: List[dict]) -> Dict[int, Optional[int]]:
+    """Nombre de palettes calculé par dossier — repli quand MyExpé ne dit rien."""
+    out: Dict[int, Optional[int]] = {}
+    for e in entries:
+        eid = e.get("id")
+        if eid is None:
+            continue
+        out[int(eid)] = _compute_nb_palettes(e)
+    return out
+
+
+def _contraintes_transport(conn, entries: List[dict]) -> Dict[int, dict]:
+    """Contrainte transport de chaque dossier de la liste (vide si règle inactive)."""
+    try:
+        return tp.contraintes_pour(conn, entries, _palettes_par_entry(entries))
+    except Exception:
+        # La contrainte transport est une surcouche : elle ne doit jamais
+        # empêcher le planning de s'afficher.
+        _log.exception("contrainte transport : calcul impossible")
+        return {}
+
+
+def _ordre_timeline(entries: List[dict]) -> List[dict]:
+    """Ordre réellement produit : les dossiers « à placer » passent en fin de file.
+
+    Intercalés, ils se superposeraient visuellement aux dossiers planifiés. Toute
+    simulation doit donc utiliser cet ordre-là, sinon elle ne prédit pas ce que
+    la timeline affichera.
+    """
+    principaux: List[dict] = []
+    a_placer: List[dict] = []
+    for e in entries:
+        st = (e.get("statut") or "attente").strip()
+        try:
+            ap = int(e.get("a_placer") or 0)
+        except (TypeError, ValueError):
+            ap = 0
+        (a_placer if (st == "attente" and ap == 1) else principaux).append(e)
+    return principaux + a_placer
+
+
+def _fins_par_entry(
+    m: dict, cal: tuple, entries: List[dict], contraintes: Dict[int, dict]
+) -> Dict[int, Optional[datetime]]:
+    ends = _simulate_planned_ends(m, cal[0], cal[1], cal[2], cal[3], entries, contraintes)
+    out: Dict[int, Optional[datetime]] = {}
+    for i, e in enumerate(entries):
+        eid = e.get("id")
+        if eid is not None and i < len(ends):
+            out[int(eid)] = ends[i]
+    return out
+
+
+def _transport_etat(
+    conn, machine_id: int, ordre_ids: Optional[List[int]] = None
+) -> Tuple[List[dict], Dict[int, dict], Dict[int, Optional[datetime]]]:
+    """Photo de la machine : dossiers ordonnés, contraintes transport, fins simulées.
+
+    `ordre_ids` permet de photographier un ordre HYPOTHÉTIQUE — celui que le
+    planificateur vient de demander — sans rien écrire en base.
+    """
+    mac = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()
+    if not mac:
+        return [], {}, {}
+    entries = _entries_enrichies(conn, machine_id)
+    if ordre_ids:
+        rang = {int(i): k for k, i in enumerate(ordre_ids)}
+        entries.sort(key=lambda e: rang.get(int(e.get("id") or 0), 10 ** 6))
+    entries = _ordre_timeline(entries)
+    contraintes = _contraintes_transport(conn, entries)
+    if not contraintes:
+        return entries, {}, {}
+    try:
+        cal = _load_planning_calendar_maps(conn, machine_id)
+    except Exception:
+        return entries, contraintes, {}
+    return entries, contraintes, _fins_par_entry(dict(mac), cal, entries, contraintes)
+
+
+def _refus_transport(violations: List[dict]) -> HTTPException:
+    """409 avec un message lisible : la règle refuse, elle explique pourquoi."""
+    msgs = [v["message"] for v in violations[:2]]
+    reste = len(violations) - len(msgs)
+    if reste > 0:
+        msgs.append(f"Et {reste} autre dossier concerné." if reste == 1
+                    else f"Et {reste} autres dossiers concernés.")
+    return HTTPException(409, " ".join(msgs))
+
+
+def _garde_transport_reorder(conn, machine_id: int, ordre_ids: List[int]) -> None:
+    """Refuse un réordonnancement qui ferait rater un enlèvement déjà réservé."""
+    _, contraintes, fins_avant = _transport_etat(conn, machine_id)
+    if not contraintes:
+        return
+    entries_apres, contraintes_apres, fins_apres = _transport_etat(
+        conn, machine_id, [int(i) for i in ordre_ids]
+    )
+    v = tp.violations(entries_apres, contraintes_apres, fins_avant, fins_apres)
+    if v:
+        raise _refus_transport(v)
+
+
+def _transport_avant(conn, machine_id: int) -> Tuple[Dict[int, dict], Dict[int, Optional[datetime]]]:
+    """État à capturer AVANT une écriture de calendrier ou une insertion."""
+    _, contraintes, fins = _transport_etat(conn, machine_id)
+    return contraintes, fins
+
+
+def _garde_transport_apres_ecriture(conn, machine_id: int, avant: tuple) -> None:
+    """Refuse une écriture déjà faite mais pas encore committée.
+
+    Les jours chômés, les horaires et les insertions ne se simulent pas
+    proprement à la main : on écrit, on recalcule, et on lève avant le
+    `commit()`. La connexion se referme alors sans valider — SQLite annule la
+    transaction, rien n'a bougé.
+    """
+    contraintes_avant, fins_avant = avant
+    entries, contraintes, fins_apres = _transport_etat(conn, machine_id)
+    if not contraintes and not contraintes_avant:
+        return
+    v = tp.violations(entries, contraintes, fins_avant, fins_apres)
+    if v:
+        raise _refus_transport(v)
+
+
+def _duree_effective_defaut(e: dict, contraintes: Optional[Dict[int, dict]]) -> float:
+    """Durée effective d'une simulation : 8 h par défaut, comme le calcul d'origine."""
+    base = e.get("duree_heures")
+    try:
+        base = float(base) if base not in (None, "") else 8.0
+    except (TypeError, ValueError):
+        base = 8.0
+    eid = e.get("id")
+    c = (contraintes or {}).get(int(eid)) if eid is not None else None
+    return tp.duree_effective(base, c)
+
+
+def _transport_payload(e: dict, end_iso: str, contrainte: Optional[dict]) -> Optional[dict]:
+    """Ce que le créneau montre du transport réservé : le camion et son infobulle.
+
+    `tension` pilote la couleur : vert tant qu'il reste du battement, ambre
+    quand il en reste moins d'une journée ouvrée, rouge quand la fin calculée
+    passe après l'enlèvement.
+    """
+    if not contrainte:
+        return None
+    fin = _parse_planned_dt(end_iso)
+    base = e.get("duree_heures")
+    return {
+        "depart_id": contrainte.get("depart_id"),
+        "transporteur": contrainte.get("transporteur") or "",
+        "date_enlevement": contrainte.get("date_enlevement") or "",
+        "palettes": contrainte.get("palettes"),
+        "source_palettes": contrainte.get("source_palettes"),
+        "limite": contrainte.get("limite_iso"),
+        "heure_limite": contrainte.get("heure_limite"),
+        "marge_pct": contrainte.get("marge_pct"),
+        "marge_heures": round(tp.marge_heures(base, contrainte), 2),
+        "tension": tp.tension(contrainte, fin),
+        "departs": contrainte.get("departs") or [],
+    }
+
+
+def _duree_effective(e: dict, contraintes: Dict[int, dict]) -> float:
+    """Durée occupée sur la machine : durée du dossier + marge transport."""
+    eid = e.get("id")
+    c = contraintes.get(int(eid)) if eid is not None else None
+    return tp.duree_effective(e.get("duree_heures"), c)
 
 
 def _compute_timeline_slots(
@@ -1058,6 +1304,7 @@ def _compute_timeline_slots(
     entries: List[dict],
     *,
     persist: bool = True,
+    contraintes: Optional[Dict[int, dict]] = None,
 ) -> List[dict]:
     """Calcule les créneaux : terminé / en cours figés ; en attente (et en_cours sans plan) dynamiques + persistés.
 
@@ -1067,6 +1314,12 @@ def _compute_timeline_slots(
     advance_to_work, consume_duration_from = _make_work_duration_consumer(
         m, configs, off_days, day_worked_map, day_horaires_map
     )
+    if contraintes is None:
+        contraintes = _contraintes_transport(conn, entries)
+
+    def _c(e: dict) -> Optional[dict]:
+        eid = e.get("id")
+        return contraintes.get(int(eid)) if eid is not None else None
 
     slots: List[dict] = []
     cursor = advance_to_work(datetime.now().replace(minute=0, second=0, microsecond=0))
@@ -1092,7 +1345,7 @@ def _compute_timeline_slots(
             fresh_pend = None
             if run_start is not None and not manual_end:
                 try:
-                    duree_h = float(e.get("duree_heures") or 0)
+                    duree_h = _duree_effective(e, contraintes)
                     if duree_h > 0:
                         _, fresh_pend, _ = consume_duration_from(
                             run_start.replace(microsecond=0), duree_h
@@ -1117,7 +1370,7 @@ def _compute_timeline_slots(
                 cand = advance_to_work(pend)
                 if cand and cand > cursor:
                     cursor = cand
-            slots.append(_slot_payload(e, ps, pe))
+            slots.append(_slot_payload(e, ps, pe, _c(e)))
             continue
         if st == "termine":
             continue
@@ -1128,7 +1381,7 @@ def _compute_timeline_slots(
             ref = (e.get("numero_of") or e.get("reference") or "").strip()
             run_start = _prod_run_start_for_machine(conn, machine_id, m, ref) if ref else None
             if run_start is not None and not manual_end:
-                duree_h = float(e.get("duree_heures") or 0)
+                duree_h = _duree_effective(e, contraintes)
                 p0 = run_start.replace(microsecond=0)
                 ps = _fmt_ts(p0)
                 _, pe_dt, _ = consume_duration_from(p0, duree_h)
@@ -1161,11 +1414,13 @@ def _compute_timeline_slots(
                 cand = advance_to_work(pend)
                 if cand and cand > cursor:
                     cursor = cand
-            slots.append(_slot_payload(e, ps, pe))
+            slots.append(_slot_payload(e, ps, pe, _c(e)))
             continue
 
         # ── Attente et en_cours sans dates : calcul dynamique depuis cursor
-        slot_start, slot_end, cursor = consume_duration_from(cursor, e["duree_heures"])
+        slot_start, slot_end, cursor = consume_duration_from(
+            cursor, _duree_effective(e, contraintes)
+        )
         ps, pe = _fmt_ts(slot_start), _fmt_ts(slot_end)
         if persist:
             conn.execute(
@@ -1174,7 +1429,7 @@ def _compute_timeline_slots(
                 (ps, pe, now_u, e["id"], machine_id),
             )
         ee = {**e, "planned_start": ps, "planned_end": pe}
-        slots.append(_slot_payload(ee, ps, pe))
+        slots.append(_slot_payload(ee, ps, pe, _c(e)))
 
     return slots
 
@@ -1211,6 +1466,7 @@ def _entry_tardiness_h(entry: dict, end_dt: Optional[datetime]) -> float:
 def _simulate_planned_ends(
     m: dict, configs: dict, off_days: dict, day_worked_map: Dict[str, int],
     day_horaires_map: Dict[str, Tuple[float, float]], ordered_entries: List[dict],
+    contraintes: Optional[Dict[int, dict]] = None,
 ) -> List[Optional[datetime]]:
     """Simule (sans persister) les dates de fin de prod d'une séquence ordonnée.
 
@@ -1246,7 +1502,9 @@ def _simulate_planned_ends(
             # Terminé sans dates : neutre, on ne consomme pas.
             ends.append(None)
             continue
-        slot_start, slot_end, cursor = consume_duration_from(cursor, float(e.get("duree_heures") or 8.0))
+        slot_start, slot_end, cursor = consume_duration_from(
+            cursor, _duree_effective_defaut(e, contraintes)
+        )
         ends.append(slot_end)
     return ends
 
@@ -1271,13 +1529,10 @@ def _compute_smart_position(
         return None
     m = dict(mac)
 
-    rows = conn.execute(
-        """SELECT id, position, statut, planned_start, planned_end, duree_heures,
-                  date_livraison, numero_of, reference
-           FROM planning_entries WHERE machine_id=? ORDER BY position ASC""",
-        (machine_id,),
-    ).fetchall()
-    ordered = [dict(r) for r in rows]
+    # Dossiers enrichis (OF + fiche technique) : le placement automatique doit
+    # voir les mêmes palettes que la timeline, sinon il proposerait une position
+    # que la règle transport refuserait juste après.
+    ordered = _entries_enrichies(conn, machine_id)
     max_pos = max((int(e["position"]) for e in ordered), default=0)
 
     # Index du premier créneau déplaçable : juste après le dernier dossier figé (terminé/en_cours).
@@ -1292,6 +1547,16 @@ def _compute_smart_position(
         return None
 
     new_entry = {"statut": "attente", "duree_heures": float(new_duree), "date_livraison": None}
+    contraintes = _contraintes_transport(conn, ordered)
+
+    def _fins(ends_list: List[Optional[datetime]], idx_insere: Optional[int] = None) -> Dict[int, Optional[datetime]]:
+        """Fin simulée par dossier existant. `idx_insere` décale les indices d'après."""
+        out: Dict[int, Optional[datetime]] = {}
+        for k, e in enumerate(ordered):
+            pos = k if (idx_insere is None or k < idx_insere) else k + 1
+            if e.get("id") is not None and pos < len(ends_list):
+                out[int(e["id"])] = ends_list[pos]
+        return out
 
     def pos_for_idx(idx: int) -> int:
         return int(ordered[idx]["position"]) if idx < len(ordered) else max_pos + 1
@@ -1303,15 +1568,21 @@ def _compute_smart_position(
         return str(e.get("date_livraison") or "").strip()
 
     # Retards de référence (sans le nouveau dossier).
-    base_ends = _simulate_planned_ends(m, cfgs, off, dw, dh, ordered)
+    base_ends = _simulate_planned_ends(m, cfgs, off, dw, dh, ordered, contraintes)
     base_tard = [_entry_tardiness_h(ordered[i], base_ends[i]) for i in range(len(ordered))]
+    base_fins = _fins(base_ends)
 
     feasible_pos: Optional[int] = None
     sat_best: Optional[tuple] = None  # (cost, idx, position, c_at_risk, c_deadline_str, risks)
 
     for idx in range(first_movable, len(ordered) + 1):
         trial = ordered[:idx] + [new_entry] + ordered[idx:]
-        ends = _simulate_planned_ends(m, cfgs, off, dw, dh, trial)
+        ends = _simulate_planned_ends(m, cfgs, off, dw, dh, trial, contraintes)
+        # Une position qui fait rater un enlèvement déjà réservé n'est pas
+        # tenable, quel que soit le délai client : le camion ne se décale pas.
+        rate_transport = tp.violations(
+            ordered, contraintes, base_fins, _fins(ends, idx)
+        )
         c_end = ends[idx]
         c_tard = (
             max(0.0, (c_end - new_deadline).total_seconds() / 3600.0) if c_end else 1e9
@@ -1325,11 +1596,15 @@ def _compute_smart_position(
             if delta > 1e-6:
                 added += delta
                 risks.append({"ref": ref_of(ordered[j]), "date": liv_str(ordered[j])})
+        for vt in rate_transport:
+            risks.append({"ref": vt.get("reference") or "?", "date": vt.get("date_enlevement") or ""})
         c_on_time = c_tard <= 1e-6
-        if c_on_time and added <= 1e-6:
+        if c_on_time and added <= 1e-6 and not rate_transport:
             feasible_pos = pos_for_idx(idx)  # garde la dernière (= la plus tardive) tenable
         else:
-            cost = added + c_tard
+            # Un enlèvement raté coûte volontairement très cher : le placement
+            # automatique ne doit y venir qu'en dernier recours absolu.
+            cost = added + c_tard + 1000.0 * len(rate_transport)
             cand = (cost, idx, pos_for_idx(idx), c_tard > 1e-6, str(new_date_liv or "").strip()[:10], risks)
             if (
                 sat_best is None
@@ -1551,12 +1826,14 @@ async def set_machine_horaires(machine_id: int, request: Request):
     col = _HORAIRES_COL[day]
     machine_nom = ""
     with get_db() as conn:
+        _tr_avant = _transport_avant(conn, machine_id)
         ex = conn.execute("SELECT id, nom FROM machines WHERE id=?", (machine_id,)).fetchone()
         if not ex:
             raise HTTPException(404, "Machine non trouvée")
         machine_nom = ex["nom"] or ""
         conn.execute(f"UPDATE machines SET {col} = ? WHERE id = ?", (val, machine_id))
         _invalidate_attente_plans(conn, machine_id)
+        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
         conn.commit()
     log_action(
         user=user,
@@ -1603,12 +1880,14 @@ async def set_machine_horaires_bulk(machine_id: int, request: Request):
         raise HTTPException(400, "Aucun champ horaires_* à mettre à jour")
 
     with get_db() as conn:
+        _tr_avant = _transport_avant(conn, machine_id)
         ex = conn.execute("SELECT id FROM machines WHERE id=?", (machine_id,)).fetchone()
         if not ex:
             raise HTTPException(404, "Machine non trouvée")
         sets = ", ".join([f"{col}=?" for col in updates.keys()])
         conn.execute(f"UPDATE machines SET {sets} WHERE id=?", (*updates.values(), machine_id))
         _invalidate_attente_plans(conn, machine_id)
+        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
         conn.commit()
     return {"success": True, "updated": updates}
 
@@ -1628,6 +1907,7 @@ async def set_machine_horaires_parity(machine_id: int, request: Request):
         raise HTTPException(400, "Body invalide")
     normalized = _normalize_parity_body(body)
     with get_db() as conn:
+        _tr_avant = _transport_avant(conn, machine_id)
         ex = conn.execute("SELECT id FROM machines WHERE id=?", (machine_id,)).fetchone()
         if not ex:
             raise HTTPException(404, "Machine non trouvée")
@@ -1636,6 +1916,7 @@ async def set_machine_horaires_parity(machine_id: int, request: Request):
             (json.dumps(normalized), machine_id),
         )
         _invalidate_attente_plans(conn, machine_id)
+        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
         conn.commit()
     return {"success": True, "horaires_parity": normalized}
 
@@ -2676,6 +2957,8 @@ async def reorder_entries(machine_id: int, request: Request):
             if wanted_index.get(eid) != old_idx:
                 raise HTTPException(400, "Impossible de déplacer un dossier en cours/terminé")
 
+        _garde_transport_reorder(conn, machine_id, wanted_ids)
+
         for pos, eid in enumerate(entry_ids, start=1):
             conn.execute(
                 "UPDATE planning_entries SET position=?, updated_at=? WHERE id=? AND machine_id=?",
@@ -2757,6 +3040,7 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
         "date_livraison_imposee": _parse_a_placer(body.get("date_livraison_imposee"), default=0),
     }
     with get_db() as conn:
+        _tr_avant = _transport_avant(conn, machine_id)
         pe_cols = _ensure_planning_entry_columns(conn)
         conn.execute(
             "UPDATE planning_entries SET position = position + 1 WHERE machine_id=? AND position >= ?",
@@ -2771,6 +3055,7 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
         new_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
         _backfill_group_id(conn, new_id, pe_cols)
         _invalidate_attente_plans(conn, machine_id)
+        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
         conn.commit()
 
     return {"success": True, "position": new_position}
@@ -2856,6 +3141,7 @@ def reset_default_days(machine_id: int, request: Request):
     """
     require_admin(request)
     with get_db() as conn:
+        _tr_avant = _transport_avant(conn, machine_id)
         m = conn.execute("SELECT id, nom, code FROM machines WHERE id=?", (machine_id,)).fetchone()
         if not m:
             raise HTTPException(404, "Machine non trouvée")
@@ -2881,6 +3167,7 @@ def reset_default_days(machine_id: int, request: Request):
             ("5,21", "5,21", "5,21", "5,21", "6,20", machine_id),
         )
         _invalidate_attente_plans(conn, machine_id)
+        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
         conn.commit()
     return {"success": True}
 
@@ -2899,6 +3186,7 @@ async def set_day_work(machine_id: int, request: Request):
     except ValueError:
         raise HTTPException(400, "date invalide (YYYY-MM-DD)")
     with get_db() as conn:
+        _tr_avant = _transport_avant(conn, machine_id)
         conn.execute(
             """INSERT INTO planning_day_worked (machine_id, date, is_worked)
                VALUES (?,?,?)
@@ -2912,6 +3200,7 @@ async def set_day_work(machine_id: int, request: Request):
                 (machine_id, date),
             )
         _invalidate_attente_plans(conn, machine_id)
+        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
         conn.commit()
     return {"success": True}
 
@@ -2927,6 +3216,7 @@ async def set_holiday(machine_id: int, request: Request):
     is_off = 1 if body.get("is_off", 1) else 0
     label = body.get("label", "") or ""
     with get_db() as conn:
+        _tr_avant = _transport_avant(conn, machine_id)
         conn.execute(
             """INSERT INTO planning_holidays (machine_id,date,is_off,label)
                VALUES (?,?,?,?)
@@ -2935,6 +3225,7 @@ async def set_holiday(machine_id: int, request: Request):
             (machine_id, date, is_off, label),
         )
         _invalidate_attente_plans(conn, machine_id)
+        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
         conn.commit()
     return {"success": True}
 
@@ -2990,10 +3281,14 @@ async def set_day_horaires(machine_id: int, request: Request):
     # Suppression de l'override (heure_debut null ET pas de journee_entiere).
     if body.get("heure_debut") is None and je == 0:
         with get_db() as conn:
+            _tr_avant = _transport_avant(conn, machine_id)
             conn.execute(
                 "DELETE FROM planning_day_horaires WHERE machine_id=? AND date=?",
                 (machine_id, date),
             )
+            # Retirer un horaire élargi raccourcit la journée : c'est un geste
+            # qui repousse la production, au même titre qu'un jour chômé.
+            _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
             conn.commit()
         return {"success": True, "deleted": True}
 
@@ -3009,6 +3304,7 @@ async def set_day_horaires(machine_id: int, request: Request):
             raise HTTPException(400, "Plage invalide : 0 ≤ début < fin ≤ 24")
 
     with get_db() as conn:
+        _tr_avant = _transport_avant(conn, machine_id)
         conn.execute(
             """INSERT INTO planning_day_horaires (machine_id, date, heure_debut, heure_fin, journee_entiere)
                VALUES (?,?,?,?,?)
@@ -3019,6 +3315,7 @@ async def set_day_horaires(machine_id: int, request: Request):
             (machine_id, date, hd, hf, je),
         )
         _invalidate_attente_plans(conn, machine_id)
+        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
         conn.commit()
     return {"success": True, "journee_entiere": je}
 
@@ -3124,6 +3421,7 @@ async def set_machine_journee_entiere(machine_id: int, request: Request):
     except (TypeError, ValueError):
         je = 0
     with get_db() as conn:
+        _tr_avant = _transport_avant(conn, machine_id)
         ex = conn.execute("SELECT id, nom FROM machines WHERE id=?", (machine_id,)).fetchone()
         if not ex:
             raise HTTPException(404, "Machine non trouvée")
@@ -3132,6 +3430,7 @@ async def set_machine_journee_entiere(machine_id: int, request: Request):
             (je, machine_id),
         )
         _invalidate_attente_plans(conn, machine_id)
+        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
         conn.commit()
     try:
         log_action(
@@ -3339,70 +3638,10 @@ def get_timeline(machine_id: int, request: Request, semaine: Optional[str] = Non
         ).fetchone()
         machine_nom = machine_nom_row["nom"] if machine_nom_row else ""
 
-        rows = conn.execute(
-            """
-            SELECT pe.*,
-                   oi.qte_etiquettes  AS _of_qte_etiquettes,
-                   oi.qte_bobines     AS _of_qte_bobines,
-                   ft.nb_bobines_carton          AS _ft_nb_bobines_carton,
-                   ft.palette_nb_cartons_sol     AS _ft_palette_nb_cartons_sol,
-                   ft.palette_nb_cartons_hauteur AS _ft_palette_nb_cartons_hauteur,
-                   ft.support                    AS _ft_support,
-                   ft.adhesif                    AS _ft_adhesif,
-                   ft.palette_type               AS _ft_palette_type,
-                   ft.cartons                    AS _ft_cartons,
-                   ft.mandrin_dia                AS _ft_mandrin_dia,
-                   ft.nb_etiq_bobin              AS _ft_nb_etiq_bobin
-            FROM planning_entries pe
-            LEFT JOIN of_imports oi
-                ON oi.id = pe.of_import_id
-            -- Liaison fiche ↔ dossier : on matche en priorité sur la clé
-            -- produit normalisée (XXX/NNNN), insensible aux variantes
-            -- machine/laize présentes dans le libellé. Quand plusieurs
-            -- fiches partagent la même clé (une variante par machine),
-            -- on retient celle dont `machine` correspond à la machine
-            -- courante du planning. Fallback sur la référence textuelle
-            -- complète pour les fiches non encore re-parsées.
-            LEFT JOIN fiches_techniques ft ON ft.id = (
-                SELECT ft2.id FROM fiches_techniques ft2
-                WHERE COALESCE(NULLIF(TRIM(ft2.ref_produit_norm), ''),
-                               LOWER(TRIM(ft2.reference)))
-                    = COALESCE(NULLIF(TRIM(pe.ref_produit_norm), ''),
-                               LOWER(TRIM(pe.ref_produit)))
-                ORDER BY
-                  CASE
-                    WHEN LOWER(TRIM(COALESCE(ft2.machine,''))) = LOWER(TRIM(?))
-                         AND TRIM(COALESCE(ft2.machine,'')) != '' THEN 0
-                    WHEN TRIM(COALESCE(ft2.machine,'')) = '' THEN 1
-                    ELSE 2
-                  END,
-                  ft2.id
-                LIMIT 1
-            )
-            WHERE pe.machine_id = ?
-            ORDER BY pe.position ASC
-            """,
-            (machine_nom or "", machine_id),
-        ).fetchall()
-        entries_list = [dict(r) for r in rows]
+        entries_list = _entries_enrichies(conn, machine_id, machine_nom)
 
-        # Les dossiers "à placer" doivent apparaître à la suite de la timeline,
-        # pas intercalés (sinon superpositions visuelles avec les dossiers planifiés).
-        # On garde l'ordre relatif (position) dans chaque groupe.
-        main_entries: List[dict] = []
-        aplacer_entries: List[dict] = []
-        for e in entries_list:
-            try:
-                st = (e.get("statut") or "attente").strip()
-                ap = int(e.get("a_placer") or 0)
-            except Exception:
-                st = (e.get("statut") or "attente").strip()
-                ap = 0
-            if st == "attente" and ap == 1:
-                aplacer_entries.append(e)
-            else:
-                main_entries.append(e)
-        entries_list = main_entries + aplacer_entries
+        # Les dossiers "à placer" passent en fin de file (cf. _ordre_timeline).
+        entries_list = _ordre_timeline(entries_list)
 
         slots = _compute_timeline_slots(
             conn,

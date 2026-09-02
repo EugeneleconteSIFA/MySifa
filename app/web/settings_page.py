@@ -910,6 +910,10 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v18"/><path d="M18 3v18"/><path d="M6 8h12"/><path d="M6 16h12"/></svg>
         Appairage matières
       </button>
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="transport" title="Contrainte transport sur le planning de production">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 3h13v13H1z"/><path d="M14 8h4l3 3v5h-7z"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/></svg>
+        Contrainte transport
+      </button>
       <div class="nav-subgroup-label" data-req-section="contacts"><span>Contacts</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-req-section="contacts" data-tab="users">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -1918,6 +1922,44 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <div style="margin:22px 0 8px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Matières Coûts matières sans référence MyStock</div>
         <div id="bridge-orphans-mc" style="display:flex;flex-direction:column;gap:6px"></div>
         <p id="bridge-orphans-mc-empty" class="sub" style="display:none;margin:12px 0 0;font-size:13px">Toutes les matières Coûts matières sont référencées côté MyStock.</p>
+      </div>
+    </section>
+
+    <section id="panel-transport" class="hidden">
+      <div class="card">
+        <div style="margin-bottom:16px">
+          <h2 style="margin:0 0 4px">Contrainte transport</h2>
+          <p class="sub" style="margin:0;font-size:12px">Un dossier de production dont l'expédition est déjà réservée ne peut plus être repoussé au-delà de l'enlèvement. La règle ne s'applique qu'aux départs volumineux : en dessous du seuil de palettes, le planning ne change pas.</p>
+        </div>
+
+        <label id="tp-actif-row" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer;margin-bottom:6px;font-size:13px">
+          <input type="checkbox" id="tp-actif">
+          <span style="font-weight:600;color:var(--text)">Règle active</span>
+        </label>
+        <p class="sub" style="margin:0 0 18px;font-size:11px;color:var(--muted)">Décochée, le planning de production se comporte exactement comme avant : aucun camion sur les créneaux, aucune marge de durée, aucun refus de déplacement.</p>
+
+        <div style="display:flex;gap:18px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <label class="sub" style="display:block;margin-bottom:6px">Heure limite le jour de l'enlèvement</label>
+            <input type="text" id="tp-heure" inputmode="decimal" placeholder="11" autocomplete="off" style="width:100%;font-family:ui-monospace,monospace">
+            <p class="hint" style="margin-top:6px;font-size:11px">En heures décimales : 11 pour 11h00, 11.5 pour 11h30. La production doit être terminée avant cette heure, le jour de l'enlèvement.</p>
+          </div>
+          <div style="flex:1;min-width:200px">
+            <label class="sub" style="display:block;margin-bottom:6px">Seuil de palettes</label>
+            <input type="text" id="tp-seuil" inputmode="decimal" placeholder="6" autocomplete="off" style="width:100%;font-family:ui-monospace,monospace">
+            <p class="hint" style="margin-top:6px;font-size:11px">La règle s'applique à partir de ce nombre de palettes, seuil compris. En dessous, un transport réservé n'a aucun effet sur le planning.</p>
+          </div>
+          <div style="flex:1;min-width:200px">
+            <label class="sub" style="display:block;margin-bottom:6px">Marge de production (%)</label>
+            <input type="text" id="tp-marge" inputmode="decimal" placeholder="20" autocomplete="off" style="width:100%;font-family:ui-monospace,monospace">
+            <p class="hint" style="margin-top:6px;font-size:11px">Durée ajoutée au dossier contraint. Elle occupe réellement le créneau et décale les dossiers suivants ; elle n'est jamais écrite dans la durée du dossier.</p>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;align-items:center;margin-top:18px;flex-wrap:wrap">
+          <button type="button" class="btn" id="tp-save">Enregistrer</button>
+          <span class="hint" id="tp-hint"></span>
+        </div>
       </div>
     </section>
 
@@ -3473,7 +3515,7 @@ document.addEventListener('keydown', function (ev) {
   }
 });
 
-const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','emplacements','laizes','mandrins','importations','bridge','updates','audit','fsc','dashboards','api','promote','printers','formations','diagnostic'];
+const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','emplacements','laizes','mandrins','importations','bridge','transport','updates','audit','fsc','dashboards','api','promote','printers','formations','diagnostic'];
 
 function setTab(id, opts) {
   if (!VALID_TABS.includes(id)) id = 'menu';
@@ -3495,7 +3537,7 @@ function setTab(id, opts) {
       }
     } catch(e){}
   }
-  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations', 'diagnostic'].forEach(p => {
+  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'transport', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations', 'diagnostic'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -3513,6 +3555,7 @@ function setTab(id, opts) {
   if (id === 'mandrins') initMandrinsPanel();
   if (id === 'importations') initImportationsPanel();
   if (id === 'bridge') initBridgePanel();
+  if (id === 'transport') initTransportPanel();
   if (id === 'updates') loadUpdates();
   if (id === 'audit') loadAuditLogs();
   if (id === 'fsc') initFscPanel();
@@ -8014,6 +8057,85 @@ try {
 
 // ─── Appairage matières (bridge MyStock <-> Coûts matières) ────────────
 let _bridgeCache = null;
+
+// ── Contrainte transport (planning ↔ MyExpé) ─────────────────────────────
+function _tpFmt(v) {
+  const n = Number(v);
+  return isFinite(n) ? String(n).replace('.', ',') : '';
+}
+function _tpLire(id) {
+  const el = document.getElementById(id);
+  if (!el) return null;
+  const brut = String(el.value || '').trim().replace(',', '.');
+  if (!brut) return null;
+  const n = Number(brut);
+  return isFinite(n) ? n : NaN;
+}
+function _tpAppliquer(p) {
+  const a = document.getElementById('tp-actif');
+  if (a) a.checked = !!(p && p.actif);
+  const h = document.getElementById('tp-heure');
+  if (h) h.value = _tpFmt(p && p.heure_limite);
+  const s = document.getElementById('tp-seuil');
+  if (s) s.value = _tpFmt(p && p.seuil_palettes);
+  const m = document.getElementById('tp-marge');
+  if (m) m.value = _tpFmt(p && p.marge_pct);
+}
+function _tpHint(txt, err) {
+  const el = document.getElementById('tp-hint');
+  if (!el) return;
+  el.textContent = txt || '';
+  el.style.color = err ? 'var(--danger)' : 'var(--muted)';
+}
+async function initTransportPanel() {
+  const btn = document.getElementById('tp-save');
+  if (btn && !btn._wired) {
+    btn._wired = true;
+    btn.addEventListener('click', saveTransportParams);
+  }
+  _tpHint('Chargement…');
+  try {
+    const r = await fetch('/api/settings/transport-planning', { credentials: 'include' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    _tpAppliquer(await r.json());
+    _tpHint('');
+  } catch (e) {
+    _tpHint('Chargement impossible : ' + (e && e.message || e), true);
+  }
+}
+async function saveTransportParams() {
+  const heure = _tpLire('tp-heure');
+  const seuil = _tpLire('tp-seuil');
+  const marge = _tpLire('tp-marge');
+  for (const [v, nom] of [[heure, 'heure limite'], [seuil, 'seuil de palettes'], [marge, 'marge']]) {
+    if (v === null || Number.isNaN(v)) {
+      toast('Valeur invalide — ' + nom + ' : un nombre est attendu.', true);
+      return;
+    }
+  }
+  const body = {
+    actif: !!(document.getElementById('tp-actif') || {}).checked,
+    heure_limite: heure,
+    seuil_palettes: seuil,
+    marge_pct: marge,
+  };
+  _tpHint('Enregistrement…');
+  try {
+    const r = await fetch('/api/settings/transport-planning', {
+      method: 'PUT', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error((j && j.detail) || ('HTTP ' + r.status));
+    _tpAppliquer(j);
+    _tpHint('');
+    toast('Réglages enregistrés.');
+  } catch (e) {
+    _tpHint('');
+    toast(String((e && e.message) || e), true);
+  }
+}
 
 async function initBridgePanel() {
   const btn = document.getElementById('bridge-refresh');
