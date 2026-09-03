@@ -784,7 +784,7 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
    d'icones du coin porte deja les memes compteurs.
    ══════════════════════════════════════════════════════════════════════ */
 
-.portal-mcol,.portal-msearch,.portal-atelier,.portal-reprendre,.portal-mobile-hello{display:none}
+.portal-mcol,.portal-msearch,.portal-atelier,.portal-mobile-hello{display:none}
 
 @media (max-width:900px){
 
@@ -859,30 +859,21 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
     font-family:ui-monospace,'Cascadia Code',monospace;font-variant-numeric:tabular-nums;
   }
 
-  /* Reprendre : le dernier module ouvert depuis ce portail. */
-  .portal-reprendre{display:block;order:7;width:100%}
-  .portal-reprendre-btn{
-    display:flex;align-items:center;gap:11px;width:100%;
-    padding:11px 13px;border:1px solid var(--border);border-radius:12px;
-    background:var(--card);color:inherit;font:inherit;text-align:left;cursor:pointer;
-  }
-  .portal-reprendre-btn:hover{background:var(--bg);border-color:var(--accent)}
-  .portal-reprendre-ico{
-    width:34px;height:34px;flex:0 0 34px;border-radius:10px;
-    background:var(--accent-bg);color:var(--accent);
-    display:flex;align-items:center;justify-content:center;
-  }
-  .portal-reprendre-ico svg{width:18px;height:18px}
-  .portal-reprendre-txt{flex:1;min-width:0}
-  .portal-reprendre-txt b{display:block;font-size:13.5px;font-weight:700;color:var(--text)}
-  .portal-reprendre-txt span{display:block;font-size:11px;color:var(--muted)}
-
   /* Badge de tuile : porte par toutes les tuiles qui ont un compteur, plus
      seulement MyQualite et Coffre RH. */
   .portal-app-badge{box-shadow:0 0 0 2px var(--card)}
 
   /* Un bloc sans donnee ne laisse pas un titre orphelin. */
-  .portal-atelier--vide,.portal-reprendre--vide{display:none!important}
+  .portal-atelier--vide{display:none!important}
+
+  /* Pas de survol au doigt : le chevron des volets doit etre visible en
+     permanence, sinon les sous-menus du module — exactement ce qu'on vient
+     chercher au telephone — sont inatteignables. */
+  .portal-app .portal-app-chev{display:flex;width:26px;height:26px;top:4px;right:4px}
+  /* L'etoile reste au bureau : epingler est un geste de configuration, et a
+     22 px sur une tuile de 96 on la touche en voulant ouvrir l'application. */
+  .portal-app .portal-app-star{display:none!important}
+  .portal-apps-sec-btn{min-height:34px}
 
   /* Ligne machine : c'est un bouton, on annule le style natif. */
   .portal-mach{
@@ -894,17 +885,17 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
 
   /* Les blocs mobiles s'alignent sur la largeur de la grille de tuiles,
      sinon le portail donne l'impression de deux mises en page superposees. */
-  .portal-mcol,.portal-atelier,.portal-reprendre{
+  .portal-mcol,.portal-atelier{
     max-width:min(100%,320px);margin-left:auto;margin-right:auto;
   }
 }
 
 @media (min-width:520px) and (max-width:900px){
-  .portal-mcol,.portal-atelier,.portal-reprendre{max-width:min(100%,400px)}
+  .portal-mcol,.portal-atelier{max-width:min(100%,400px)}
 }
 
 /* Portrait : l'ordre de lecture est bonjour → chercher → ce qui m'attend →
-   mes apps → l'atelier → reprendre. */
+   mes apps → l'atelier. */
 @media (max-width:900px) and (orientation:portrait){
   .portal-page{gap:14px}
   .portal-mobile-header{margin-bottom:2px}
@@ -964,7 +955,7 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
   .portal-app-name{font-size:11px}
   .portal-app-desc{display:none}
   .portal-logo,.portal-search,.portal-user,.portal-apps-hint,
-  .portal-atelier,.portal-reprendre{display:none!important}
+  .portal-atelier{display:none!important}
 }
 
 """
@@ -1936,7 +1927,7 @@ function renderPortal(){
   );
 
 
-  /* ══ Blocs mobiles : recherche unifiée, « À traiter », atelier, reprendre ══
+  /* ══ Blocs mobiles : recherche unifiée, « À traiter », atelier ══════════
      Montés dans le DOM en permanence mais affichés seulement sous 900 px
      (voir PORTAL_MAIN_CSS) : sur le bureau, la barre d'icônes du coin porte
      déjà les mêmes compteurs et la grille tient sans aide.
@@ -1985,7 +1976,7 @@ function renderPortal(){
   }
 
   setTimeout(()=>{
-    fetch('/api/portal/a-traiter',{credentials:'include'})
+    fetch('/api/portail/a-traiter',{credentials:'include'})
       .then(r=>r.ok?r.json():null)
       .then(d=>{
         if(!d)return;
@@ -2077,7 +2068,7 @@ function renderPortal(){
     _atelierBody
   );
   setTimeout(()=>{
-    fetch('/api/portal/atelier',{credentials:'include'})
+    fetch('/api/portail/atelier',{credentials:'include'})
       .then(r=>r.ok?r.json():null)
       .then(d=>{
         const ms=(d&&Array.isArray(d.machines))?d.machines:[];
@@ -2112,48 +2103,6 @@ function renderPortal(){
         _atelierBlock.classList.remove('portal-atelier--vide');
       })
       .catch(()=>{});
-  },0);
-
-  // ── Reprendre : la dernière tuile ouverte depuis ce portail ───────────
-  // Volontairement local au portail : on ne va pas instrumenter chaque page
-  // pour ça, le portail retient ce qu'il a lui-même lancé.
-  const _reprendreBody=h('div',{className:'portal-reprendre-body'});
-  const _reprendreBlock=h('div',{className:'portal-reprendre portal-reprendre--vide'},
-    h('div',{className:'msf-sect'},h('b',null,'Reprendre')),
-    _reprendreBody
-  );
-  setTimeout(()=>{
-    const CLE='mysifa.portal.derniere-app';
-    try{
-      appsWrap.addEventListener('click',(ev)=>{
-        const t=(ev.target&&ev.target.closest)?ev.target.closest('[data-portal-id]'):null;
-        if(!t||_portalDragSuppressClick)return;
-        try{localStorage.setItem(CLE,t.getAttribute('data-portal-id')||'');}catch(err){}
-      },true);
-    }catch(err){}
-    let last='';
-    try{last=localStorage.getItem(CLE)||'';}catch(err){}
-    if(!last)return;
-    const spec=orderedTiles.find(x=>x.id===last);
-    if(!spec)return;
-    const nomEl=spec.el.querySelector('.portal-app-name');
-    if(!nomEl)return;
-    const svgEl=spec.el.querySelector('.portal-app-icon svg');
-    const ico=h('span',{className:'portal-reprendre-ico'});
-    if(svgEl)ico.appendChild(svgEl.cloneNode(true));
-    _reprendreBody.appendChild(h('button',{
-      type:'button',
-      className:'portal-reprendre-btn',
-      onClick:()=>{spec.el.click();}
-    },
-      ico,
-      h('span',{className:'portal-reprendre-txt'},
-        h('b',null,nomEl.textContent||''),
-        h('span',null,'dernière application ouverte')
-      ),
-      iconEl('chevron-right',17)
-    ));
-    _reprendreBlock.classList.remove('portal-reprendre--vide');
   },0);
 
   const portalEl=h('div',{className:'portal-page'},
@@ -2305,7 +2254,6 @@ function renderPortal(){
     gBox,
     appsBlock,
     _atelierBlock,
-    _reprendreBlock,
     h('div',{className:'portal-user'},
       h('span',{style:{display:'inline-flex',alignItems:'center',gap:'8px'}},iconEl('user',14),document.createTextNode(' '+((S.user&&S.user.nom)?S.user.nom:''))),
       // Rejouer la présentation du portail. Visible en permanence : la visite

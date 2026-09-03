@@ -157,9 +157,9 @@
 .msf-icon-btn--on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 /* Dans une carte ou une feuille, on inverse le fond pour garder le contraste. */
 .msf-card .msf-btn--ghost,.msf-card .msf-icon-btn,
-.msf-sheet .msf-btn--ghost,.msf-sheet .msf-icon-btn,
+.msf-bs .msf-btn--ghost,.msf-bs .msf-icon-btn,
 .msf-rows .msf-btn--ghost,.msf-rows .msf-icon-btn{background:var(--bg)}
-.msf-card .msf-btn--ghost:hover,.msf-sheet .msf-btn--ghost:hover{background:var(--card)}
+.msf-card .msf-btn--ghost:hover,.msf-bs .msf-btn--ghost:hover{background:var(--card)}
 
 /* ── Bouton flottant ─────────────────────────────────────────────────── */
 
@@ -174,22 +174,26 @@
 .msf-fab:hover{filter:brightness(1.05)}
 
 /* ── Feuille remontante ──────────────────────────────────────────────── */
+/* Prefixe msf-bs- et non msf-sheet- : ce dernier appartient deja a la feuille
+   profil definie dans app/web/html.py (#msf-sheet-root). Deux definitions du
+   meme selecteur dans deux fichiers ne se voient qu'au moment ou l'une declare
+   une propriete que l'autre ignore — donc tard, et sur un ecran precis. */
 
-.msf-sheet-backdrop{
+.msf-bs-backdrop{
   position:fixed;inset:0;z-index:8990;background:color-mix(in srgb,var(--bg) 62%,transparent);
   backdrop-filter:blur(3px);
 }
-.msf-sheet{
+.msf-bs{
   position:fixed;left:0;right:0;bottom:0;z-index:9000;
   background:var(--card);border-top:1px solid var(--border);
   border-radius:16px 16px 0 0;
   display:flex;flex-direction:column;max-height:92dvh;
   box-shadow:0 -18px 50px color-mix(in srgb,var(--bg) 55%,transparent);
 }
-.msf-sheet-grab{width:40px;height:4px;border-radius:2px;background:var(--border);margin:9px auto 4px;flex:0 0 auto}
-.msf-sheet-head{padding:6px 16px 12px;border-bottom:1px solid var(--border);flex:0 0 auto}
-.msf-sheet-body{padding:14px 16px;overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;min-height:0}
-.msf-sheet-foot{
+.msf-bs-grab{width:40px;height:4px;border-radius:2px;background:var(--border);margin:9px auto 4px;flex:0 0 auto}
+.msf-bs-head{padding:6px 16px 12px;border-bottom:1px solid var(--border);flex:0 0 auto}
+.msf-bs-body{padding:14px 16px;overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;min-height:0}
+.msf-bs-foot{
   flex:0 0 auto;display:flex;gap:8px;align-items:center;
   padding:11px 14px calc(11px + env(safe-area-inset-bottom));
   border-top:1px solid var(--border);
