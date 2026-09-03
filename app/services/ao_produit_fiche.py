@@ -2,8 +2,25 @@
 from __future__ import annotations
 
 import json
+import re
 from html import escape
 from typing import Any
+
+
+# Zone imprimee : le champ est libre, mais dans 9 fiches sur 10 le fournisseur
+# y saisit un pourcentage de couverture ("20"). Sans signe, "20" se lit aussi
+# bien comme 20 mm : on suffixe donc toute valeur purement numerique. Une
+# saisie qui porte deja une unite ou une phrase ("2 x 18,9 mm toutes les 10
+# etiquettes", "20 %") est rendue telle quelle.
+_NUM_SEUL = re.compile(r"^\d+(?:[.,]\d+)?$")
+
+
+def format_printing_area(value: Any) -> str:
+    """Formatte une zone d'impression pour l'affichage (fiche, BAT, PDF)."""
+    texte = str(value or "").strip()
+    if not texte:
+        return ""
+    return f"{texte} %" if _NUM_SEUL.match(texte) else texte
 
 
 def default_fiche() -> dict[str, Any]:
@@ -195,12 +212,12 @@ def render_fiche_html(
         for i, d in enumerate(imp.get("recto_details") or [], 1):
             imp_rows += _row_html(
                 f"Recto {i}",
-                f"{d.get('couleur', '')} — {d.get('printing_area', '')}".strip(" —"),
+                f"{d.get('couleur', '')} — {format_printing_area(d.get('printing_area'))}".strip(" —"),
             )
         for i, d in enumerate(imp.get("verso_details") or [], 1):
             imp_rows += _row_html(
                 f"Verso {i}",
-                f"{d.get('couleur', '')} — {d.get('printing_area', '')}".strip(" —"),
+                f"{d.get('couleur', '')} — {format_printing_area(d.get('printing_area'))}".strip(" —"),
             )
 
     sections = [

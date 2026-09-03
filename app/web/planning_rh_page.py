@@ -668,7 +668,7 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='planning_rh';</script>
-<link rel="stylesheet" href="/static/mysifa_dock.css">
+<link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js"></script>
@@ -679,7 +679,7 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=4"></script>
+<script src="/static/mysifa_cal_rappel.js?v=5"></script>
 <div id="root" class="app">
   <div class="sidebar-overlay" id="rh-sb-overlay" onclick="closeSidebar()"></div>
   <nav class="sidebar" id="rh-sb">

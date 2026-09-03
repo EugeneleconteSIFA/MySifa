@@ -532,7 +532,7 @@ body.cal-dragging{user-select:none}
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/mysifa_calendar.js"></script>
 <script>window.__MYSIFA_APP__='calendrier';</script>
-<link rel="stylesheet" href="/static/mysifa_dock.css">
+<link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js"></script>
@@ -542,7 +542,7 @@ body.cal-dragging{user-select:none}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=4"></script>
+<script src="/static/mysifa_cal_rappel.js?v=5"></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div class="layout">
   <aside class="sidebar">

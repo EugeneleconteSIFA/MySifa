@@ -433,7 +433,7 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='profil';</script>
-<link rel="stylesheet" href="/static/mysifa_dock.css">
+<link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js"></script>
@@ -443,7 +443,7 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=4"></script>
+<script src="/static/mysifa_cal_rappel.js?v=5"></script>
 <script>
 const ROLE_LABELS={
   direction:'Direction',administration:'Administration',fabrication:'Fabrication',

@@ -351,8 +351,7 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script>window.__MYSIFA_APP__='db';</script>
-<link rel="stylesheet" href="/static/mysifa_landscape.css">
-<link rel="stylesheet" href="/static/mysifa_dock.css">
+<link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js"></script>
@@ -361,9 +360,7 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=4"></script>
-<script src="/static/mysifa_landscape.js?v=2"></script>
-<script>window.MySifaLandscape&&MySifaLandscape.enable();</script>
+<script src="/static/mysifa_cal_rappel.js?v=5"></script>
 <script>
 (function(){{
   function bootChatDock(){{

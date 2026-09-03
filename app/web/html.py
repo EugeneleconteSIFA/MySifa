@@ -87,11 +87,11 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css">
-<link rel="stylesheet" href="/static/mysifa_dock.css">
+<link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_resize.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
-<link rel="stylesheet" href="/static/mysifa_landscape.css">
+<link rel="stylesheet" href="/static/mysifa_mobile.css?v=1">
 <link rel="stylesheet" href="/static/motion.css">
 <link rel="stylesheet" href="/static/mysifa_perf.css">
 <!-- Chargé sans defer et avant tout le reste : sur un poste déjà connu comme lent,
@@ -1706,27 +1706,25 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 }
 .portal-mobile-header-brand span{color:var(--accent)}
 .portal-mobile-header-actions{display:flex;align-items:center;gap:10px}
-.portal-mobile-google-btn,.portal-mobile-profile-btn{
+.portal-mobile-profile-btn{
   border:1px solid var(--border);background:var(--card);
   border-radius:999px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
   transition:background .12s,border-color .12s;font-family:inherit;color:var(--text);
 }
-.portal-mobile-google-btn{
-  width:38px;height:38px;padding:0;
-}
-.portal-mobile-google-btn:hover{border-color:var(--accent);background:var(--accent-bg)}
-.portal-mobile-google-btn svg{width:20px;height:20px}
+/* Refonte mobile 03/09/2026 : le prenom passe dans le bonjour, le bouton
+   profil redevient un simple avatar rond. Le bouton Google a quitte
+   l'en-tete pour la pastille du champ de recherche (.portal-msearch-google). */
 .portal-mobile-profile-btn{
-  height:38px;padding:0 12px 0 4px;gap:8px;
-  font-size:13px;font-weight:600;
+  width:42px;height:42px;flex:0 0 42px;padding:0;gap:0;
 }
+.portal-mobile-profile-name{display:none}
 .portal-mobile-profile-btn:hover{border-color:var(--accent)}
 .portal-mobile-profile-avatar{
   position:relative;
-  width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;
+  width:38px;height:38px;border-radius:50%;background:var(--accent);color:#fff;
   display:flex;align-items:center;justify-content:center;
-  font-size:11px;font-weight:800;letter-spacing:.02em;overflow:visible;
+  font-size:13px;font-weight:800;letter-spacing:.02em;overflow:visible;
   flex-shrink:0;
 }
 .portal-mobile-profile-avatar img{
@@ -1739,7 +1737,11 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
   display:flex;align-items:center;justify-content:center;
   font-size:11px;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.15);
 }
-.portal-mobile-profile-name{max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:900px) and (orientation:landscape){
+  /* Le paysage a desormais sa propre mise en page (deux colonnes) : l'en-tete
+     y sert de bloc de contexte, il ne doit plus etre masque. */
+  .portal-mobile-header{display:flex}
+}
 @media (max-width:900px) and (orientation:portrait){
   .portal-mobile-header{display:flex}
   /* Masquer les anciens éléments remplacés sur portrait mobile uniquement */
@@ -1784,9 +1786,8 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/mysifa_humeur.js"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=4"></script>
+<script src="/static/mysifa_cal_rappel.js?v=5"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
-<script src="/static/mysifa_landscape.js?v=2"></script>
 <script src="/static/mysifa_guides.js"></script>
 <script src="/static/motion.js" defer></script>
 <script>
@@ -10918,6 +10919,8 @@ function openProfileSheet(){
     database:'<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>',
     taches:'<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
     logout:'<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+    erp:'<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="10"/><line x1="10" y1="20" x2="10" y2="4"/><line x1="16" y1="20" x2="16" y2="13"/><line x1="2" y1="20" x2="22" y2="20"/></svg>',
+    langs:'<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h11"/><path d="M9 3v2c0 5-2.5 8-6 9"/><path d="M6 10c0 3 3 5.5 8 6.5"/><path d="M14 21l4-9 4 9"/><path d="M15.5 18h5"/></svg>',
   };
   function item(id,ico,label,extra,klass){
     const badge=extra?('<span class="msf-sheet-item-badge">'+extra+'</span>'):'';
@@ -10945,6 +10948,10 @@ function openProfileSheet(){
   if(isSuper||isDir){
     items.push(item('db', ICO.database, 'Base de données', ''));
   }
+  if(isSuper||isDir||isAdmin){
+    items.push(item('erp', ICO.erp, 'ERP — lecture RVGI', ''));
+  }
+  items.push(item('traduction', ICO.langs, 'MyTraduction', ''));
   items.push('<div class="msf-sheet-sep"></div>');
   items.push(item('logout', ICO.logout, 'Déconnexion', '', 'danger'));
 
@@ -10970,6 +10977,8 @@ function openProfileSheet(){
       else if(id==='messagerie'){set({app:'messages'});loadMessagesUnread().catch(()=>{});loadMessages().catch(()=>{});}
       else if(id==='calendrier')window.location.href='/calendrier';
       else if(id==='db')      window.location.href='/db';
+      else if(id==='erp')     window.location.href='/erp';
+      else if(id==='traduction'){if(typeof openMyTraduction==='function')openMyTraduction();}
       else if(id==='logout')  doLogout();
     });
   });
@@ -11195,16 +11204,8 @@ function render(){
   }
   if(window.MySifaDock && typeof window.MySifaDock.layout==='function') window.MySifaDock.layout();
 
-  if(S.app==='prod'||S.app==='expe'){
-    if(window.MySifaLandscape&&typeof window.MySifaLandscape.enable==='function') window.MySifaLandscape.enable();
-  }else{
-    if(window.MySifaLandscape&&typeof window.MySifaLandscape.disable==='function') window.MySifaLandscape.disable();
-    else{
-      document.body.classList.remove('mysifa-landscape-required');
-      document.body.classList.remove('mysifa-portrait');
-      document.body.classList.remove('mysifa-force-landscape');
-    }
-  }
+  // Rotation paysage forcee retiree le 03/09/2026 : MyProd et MyExpe ont
+  // desormais une mise en page portrait native (voir static/mysifa_mobile.css).
 
   // PWA: feature temporairement retirée. (setupInstallButton supprimé)
 

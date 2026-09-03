@@ -895,14 +895,59 @@ def set_parametrage(
     poser("updated_at", _now())
     poser("updated_by_name", user_name)
     args.append(declinaison_id)
+
+    # Écrire là où le calcul lit.
+    #
+    # Depuis que le tarif a quitté la déclinaison pour le fournisseur (migration
+    # du 6 août 2026), `reglages_ligne` lit le transport et les taxes sur
+    # `mc_tarif_fournisseur`, et la devise sur le fournisseur lui-même. La fiche,
+    # elle, continuait d'écrire sur la seule déclinaison : on cochait « importée »,
+    # on passait en USD, on enregistrait — et la relecture réaffichait les valeurs
+    # du tarif, sans que rien ne dise que la saisie n'avait servi à rien. Les
+    # réglages de calcul partent donc au tarif du fournisseur principal, la devise
+    # au fournisseur, et la déclinaison garde les mêmes valeurs comme repli pour
+    # les lignes sans fournisseur.
     st_avant = sous_total_declinaison(conn, declinaison_id)
+    row_principal = conn.execute(
+        """SELECT fournisseur_id FROM mp_matiere_prix
+            WHERE declinaison_id=? AND principal=1 LIMIT 1""",
+        (declinaison_id,),
+    ).fetchone()
+    fid = row_principal["fournisseur_id"] if row_principal else None
+    tarif_ecrit = False
+    if fid is not None:
+        patch_tarif = {c: patch[c] for c in CHAMPS_TARIF if c in patch}
+        if patch_tarif and tarifs_disponibles(conn):
+            r = set_tarif(
+                conn,
+                fournisseur_id=int(fid),
+                matiere_id=int(_col(actuelle, "matiere_id")),
+                patch=patch_tarif,
+                user_name=user_name,
+                origine="Coûts matières — paramétrage",
+            )
+            if not r.get("ok"):
+                return r
+            tarif_ecrit = True
+        if "price_currency" in patch:
+            r = set_devise_fournisseur(
+                conn, fournisseur_id=int(fid), devise=patch["price_currency"]
+            )
+            # Base non migrée : la colonne devise n'existe pas encore côté
+            # fournisseur. La déclinaison reste seule porteuse — déjà écrite
+            # plus haut — et refuser ici bloquerait une fiche qui marche.
+            if not r.get("ok") and "non migrée" not in (r.get("reason") or ""):
+                return r
+
     conn.execute(
         f"UPDATE mp_matiere_declinaison SET {', '.join(sets)} WHERE id=?", args
     )
     # Transport et taxes déplacent le sous-total sans toucher au prix d'achat :
-    # la valorisation MyStock doit suivre, et l'historique doit le dire.
+    # la valorisation MyStock doit suivre, et l'historique doit le dire. Quand le
+    # tarif a fait le travail, il a déjà journalisé et poussé la valorisation pour
+    # toutes les déclinaisons qu'il pilote : journaliser ici doublerait la ligne.
     st_apres = sous_total_declinaison(conn, declinaison_id)
-    if abs(st_avant - st_apres) > 1e-9:
+    if not tarif_ecrit and abs(st_avant - st_apres) > 1e-9:
         prix_row = conn.execute(
             "SELECT prix FROM mp_matiere_prix WHERE declinaison_id=? AND principal=1 LIMIT 1",
             (declinaison_id,),
@@ -1309,6 +1354,7 @@ def set_tarif(
     patch: dict,
     user_id: Optional[int] = None,
     user_name: Optional[str] = None,
+    origine: str = "Coûts matières — tarif fournisseur",
 ) -> dict:
     """
     Enregistre le tarif d'un fournisseur pour une matière.
@@ -1412,7 +1458,7 @@ def set_tarif(
             conn, declinaison_id=decl_id, fournisseur_id=fournisseur_id,
             prix_avant=prix, prix_apres=prix,
             sous_total_avant=avant[decl_id], sous_total_apres=apres,
-            origine="Coûts matières — tarif fournisseur",
+            origine=origine,
             user_id=user_id, user_name=user_name,
         )
         _mirror_principal(

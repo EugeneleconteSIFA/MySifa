@@ -639,6 +639,7 @@ body.light .tdb-tip{box-shadow:0 12px 34px rgba(15,23,42,.16)}
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_guides.js"></script>
+<script src="/static/mysifa_cal_rappel.js?v=5"></script>
 
 <div class="sidebar-overlay" id="sb-ov" onclick="fermerSidebar()"></div>
 

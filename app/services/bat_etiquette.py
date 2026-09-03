@@ -31,6 +31,8 @@ import os
 import re
 import unicodedata
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+from app.services.ao_produit_fiche import format_printing_area
  
 # ---------------------------------------------------------------------------
 # Charte du plan technique
@@ -42,6 +44,13 @@ COLOR_DIM = "#2F6FB5"        # cotes support
 COLOR_INK = "#111820"        # trait et texte neutres
 COLOR_MUTED = "#8A94A1"      # mention d'echelle
 COLOR_WHITE = "#FFFFFF"
+
+# Zone imprimee marquee sur l'etiquette elle-meme. Violet volontairement :
+# le rouge est la decoupe et le bleu la glassine / les cotes ; une troisieme
+# signification demande une troisieme couleur, sinon un aplat bleu clair a
+# l'interieur d'une etiquette se lit comme du support qui remonte.
+COLOR_PRINT = "#5B4B9E"
+COLOR_PRINT_BG = "#EDE9F8"
 
 # Bandeau "croquis automatique". Ambre plutot que rouge : le rouge est deja
 # la couleur de la decoupe, un bandeau rouge se lirait comme une cote.
@@ -207,6 +216,7 @@ TEXTS: Dict[str, Dict[str, Any]] = {
         "solid": "Aplat",
         "area": "Zone",
         "face_none": "sans impression",
+        "print_zone": "Zone imprimée",
         "print_no_detail": "Detail des couleurs non renseigne",
         "print_more": "+{n} autre(s) couleur(s)",
         "print_summary": "Impression {r} recto / {v} verso",
@@ -253,6 +263,7 @@ TEXTS: Dict[str, Dict[str, Any]] = {
         "solid": "Solid ink",
         "area": "Area",
         "face_none": "no printing",
+        "print_zone": "Printed area",
         "print_no_detail": "No colour breakdown provided",
         "print_more": "+{n} more colour(s)",
         "print_summary": "Printing {r} front / {v} back",
@@ -533,7 +544,7 @@ def _collect_colors(imp: Dict[str, Any], ft: Dict[str, Any]) -> List[Dict[str, A
                 "label": " ".join(x for x in (pantone, nom) if x).strip(),
                 "hex": _guess_hex(nom or pantone),
                 "face": "recto",
-                "area": str(ft.get(f"tete{n}_zone") or "").strip(),
+                "area": format_printing_area(ft.get(f"tete{n}_zone")),
             })
     if colors:
         return colors
@@ -546,7 +557,7 @@ def _collect_colors(imp: Dict[str, Any], ft: Dict[str, Any]) -> List[Dict[str, A
                 "label": label,
                 "hex": _guess_hex(label),
                 "face": face,
-                "area": str((row or {}).get("printing_area") or "").strip(),
+                "area": format_printing_area((row or {}).get("printing_area")),
             })
     return colors
  
@@ -810,6 +821,9 @@ def build_bat_ops(spec: Dict[str, Any], lang: Optional[str] = None,
         ops.append(_line(xv, y0, xv, y0 + th_s, stroke=COLOR_CUT, sw=0.4,
                          dash=dash or (1.4, 0.7)))
     ops.append(_CLIP_POP)
+
+    # --- marquage de l'impression sur l'etiquette de reference -------------
+    _build_print_overlay(ops, spec, g, t)
  
     # --- cotes -------------------------------------------------------------
     _dim_h(ops, x0, x0 + gw_s, y0 - 11, f"{fmt_mm(g['glassine_w'])} mm",
@@ -890,6 +904,75 @@ def build_bat_ops(spec: Dict[str, Any], lang: Optional[str] = None,
     _build_print_panel(ops, spec, t)
     _build_cartouche(ops, spec, g, t, perf_on)
     return ops
+
+
+
+def _print_overlay_lines(spec: Dict[str, Any], t: Dict[str, Any]) -> List[str]:
+    """Libelles portes par la zone imprimee, du plus important au moins.
+
+    Tout passe par TEXTS : le BAT part chez des fournisseurs etrangers et un
+    croquis qui annonce « Recto » en francais dans un document anglais est
+    exactement le genre de detail qui fait rappeler l'atelier.
+    """
+    couleurs = spec.get("couleurs") or []
+    recto = [c for c in couleurs if (c or {}).get("face") != "verso"]
+    verso = [c for c in couleurs if (c or {}).get("face") == "verso"]
+    nb_r = _i(spec.get("nb_recto")) or len(recto)
+    nb_v = _i(spec.get("nb_verso")) or len(verso)
+
+    lines = [str(t["print_zone"])]
+    lines.append(f"{t['front']} - " + (_nb_colors(nb_r, t) if nb_r > 0 else t["face_none"]))
+    if nb_v > 0:
+        lines.append(f"{t['back']} - {_nb_colors(nb_v, t)}")
+    if spec.get("aplat"):
+        pct = _f(spec.get("aplat_pourcent"))
+        lines.append(f"{t['solid']} {fmt_mm(pct)} %" if pct > 0 else str(t["solid"]))
+    return lines
+
+
+def _build_print_overlay(ops: List[Dict[str, Any]], spec: Dict[str, Any],
+                         g: Dict[str, Any], t: Dict[str, Any]) -> None:
+    """Teinte la surface imprimee de l'etiquette de reference et la nomme.
+
+    Le cartouche et l'encart Impressions disaient deja qu'il y a une
+    impression, mais a cote du croquis : un fournisseur qui regarde le plan
+    voyait une etiquette blanche et devait deduire l'impression d'un autre
+    bloc de la page. La marque est donc portee par l'etiquette elle-meme.
+
+    Elle reste en aplat translucide : la perforation verticale, la decoupe et
+    le rayon d'angle doivent continuer de se lire au travers.
+    """
+    if not spec.get("imprime"):
+        return
+
+    lx, lw, lh = g["label_x"], g["label_w"], g["label_h"]
+    # Sous cette taille l'encart ne serait plus lisible et masquerait les
+    # cotes : le cartouche et l'encart Impressions portent seuls l'info.
+    if lw < 14.0 or lh < 8.0:
+        return
+
+    pad_x = min(max(lw * 0.10, 1.2), 5.0)
+    pad_y = min(max(lh * 0.10, 1.2), 5.0)
+    zx, zy = lx + pad_x, g["y_main"] + pad_y
+    zw, zh = lw - 2 * pad_x, lh - 2 * pad_y
+
+    ops.append(_rect(zx, zy, zw, zh, rx=min(1.2, zh * 0.15),
+                     fill=COLOR_PRINT_BG, fill_opacity=0.75,
+                     stroke=COLOR_PRINT, sw=0.25, dash=(1.2, 1.0)))
+
+    lines = _print_overlay_lines(spec, t)
+    size = min(max(zw / 13.0, 2.0), 3.2)
+    step = size * 1.5
+    room = max(int((zh - 1.0) // step), 1)
+    lines = lines[:room]
+
+    cx = zx + zw / 2
+    y = zy + zh / 2 - (len(lines) - 1) * step / 2 + size * 0.35
+    for idx, line in enumerate(lines):
+        bold = idx == 0
+        ops.append(_text(cx, y, _clip_text(line, size, zw - 1.6, bold=bold),
+                         size=size, anchor="middle", bold=bold, fill=COLOR_PRINT))
+        y += step
 
 
 def _build_radius_callout(ops: List[Dict[str, Any]], spec: Dict[str, Any],
@@ -1036,6 +1119,27 @@ def _build_auto_warning(ops: List[Dict[str, Any]], t: Dict[str, Any]) -> None:
                      italic=True))
 
 
+def _prefix_once(label: Any, value: Any) -> str:
+    """Prefixe une valeur par son libelle, sauf si elle le repete deja.
+
+    Les designations matiere de la base portent souvent deja le mot du
+    libelle ("adhesif permanent 2028Y"), ce qui donnait « Adhésif adhesif
+    permanent 2028Y » sur le cartouche — et « Adhesive permanent adhesive
+    2028Y » une fois traduit, ou le mot repete passe en fin de chaine. On
+    teste donc la presence du mot, pas seulement le debut.
+    """
+    val = str(value or "").strip()
+    lbl = str(label or "").strip()
+    if not val:
+        return lbl
+    if not lbl:
+        return val
+    mots = set(_WORD_RE.findall(_strip_accents(val).lower()))
+    if _strip_accents(lbl).lower() in mots:
+        return val
+    return f"{lbl} {val}"
+
+
 def _build_cartouche(ops, spec, g, t, perf_on):
     bx, by, bw, bh = BOX_X, BOX_Y, BOX_W, BOX_H
     ops.append(_rect(bx, by, bw, bh, rx=3, stroke=COLOR_INK, sw=0.45))
@@ -1071,7 +1175,7 @@ def _build_cartouche(ops, spec, g, t, perf_on):
     if spec.get("support"):
         rows.append((str(spec["support"]), COLOR_INK))
     if spec.get("adhesif"):
-        rows.append((f"{t['adhesive']} {spec['adhesif']}", COLOR_INK))
+        rows.append((_prefix_once(t["adhesive"], spec["adhesif"]), COLOR_INK))
     if _i(spec.get("nb_etiquettes")) > 0:
         rows.append((t["roll_of"].format(n=_i(spec["nb_etiquettes"])), COLOR_INK))
     if perf_on:

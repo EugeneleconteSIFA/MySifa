@@ -166,12 +166,17 @@
   }
 }
 
-/* Apps paysage : pas de barre messagerie bas-gauche, bulle à droite */
-body.mysifa-landscape-required #cw-bar {
-  display: none !important;
-}
-body.mysifa-landscape-required #cw-bubble {
-  left: auto !important;
+/* Mobile : pas de barre messagerie bas-gauche, bulle a droite.
+   Portait auparavant sur body.mysifa-landscape-required, classe posee par
+   la rotation forcee (retiree le 03/09/2026). Le critere reel etait la
+   petite largeur, pas l'orientation : on le dit directement. */
+@media (max-width: 900px) {
+  #cw-bar {
+    display: none !important;
+  }
+  #cw-bubble {
+    left: auto !important;
+  }
 }
 
 /* Mobile paysage — FABs en ligne, panneaux pleine hauteur utile */

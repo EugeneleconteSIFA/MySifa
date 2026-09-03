@@ -8,6 +8,14 @@
  * Le même appel sert la pastille d'invitations en attente : un seul aller-retour
  * toutes les minutes, diffusé aux pages intéressées par l'événement
  * `mysifa:cal-invitations`.
+ *
+ * Deux règles tiennent le comportement multi-onglets :
+ *  - le rappel s'affiche sur TOUS les écrans ouverts, y compris les onglets
+ *    d'arrière-plan — on continue donc d'interroger le serveur quand la page
+ *    est masquée, sinon la fenêtre n'existe que dans l'onglet regardé ;
+ *  - mais un bouton ne se clique QU'UNE FOIS : « J'ai vu », « Dans 5 min » et
+ *    les réponses sont écrits en localStorage, et l'événement `storage`
+ *    répercute le geste dans les autres onglets.
  */
 (function (global) {
   'use strict';
@@ -15,6 +23,7 @@
   var URL_API = '/api/calendrier/notifications';
   var PERIODE_MS = 60000;
   var LS_VUS = 'mysifa_cal_rappels_vus';
+  var LS_REP = 'mysifa_cal_rappels_reponses';
   var SNOOZE_MIN = 5;
 
   var etat = { invitations: 0, timer: null, enCours: false, montres: {}, dernier: null };
@@ -46,6 +55,34 @@
   function estMasque(id) {
     var o = lireVus();
     return typeof o[id] === 'number' && o[id] > maintenant();
+  }
+
+  /* Reponses deja donnees, partagees entre onglets : repondre « Oui » sur un
+     ecran doit se voir sur les autres sans avoir a recliquer. */
+  function lireReponses() {
+    try {
+      var raw = localStorage.getItem(LS_REP);
+      var o = raw ? JSON.parse(raw) : null;
+      if (!o || typeof o !== 'object') return {};
+      var out = {}, t = maintenant();
+      Object.keys(o).forEach(function (k) {
+        if (o[k] && typeof o[k] === 'object' && o[k].exp > t) out[k] = o[k];
+      });
+      return out;
+    } catch (e) { return {}; }
+  }
+
+  function noterReponse(id, statut) {
+    try {
+      var o = lireReponses();
+      o[id] = { statut: statut, exp: maintenant() + 720 * 60000 };
+      localStorage.setItem(LS_REP, JSON.stringify(o));
+    } catch (e) { /* ignore */ }
+  }
+
+  function reponseConnue(id) {
+    var o = lireReponses();
+    return o[id] ? o[id].statut : null;
   }
 
   function injecterCss() {
@@ -153,6 +190,13 @@
     { cle: 'refuse', libelle: 'Non' }
   ];
 
+  function marquerReponse(card, statut) {
+    if (!card) return;
+    card.querySelectorAll('[data-rep]').forEach(function (x) {
+      x.classList.toggle('actif', x.getAttribute('data-rep') === statut);
+    });
+  }
+
   function repondre(id, statut) {
     var brut = String(id || '').replace(/^perso-/, '');
     return fetch('/api/calendrier/events/perso/' + encodeURIComponent(brut) + '/reponse', {
@@ -182,10 +226,11 @@
     // Un invité qui n'a pas encore tranché peut le faire ici : c'est le moment
     // où il y pense, pas quand il rouvrira le calendrier.
     var rep = '';
+    var monStatut = reponseConnue(r.id) || r.mon_statut;
     if (r.mon_statut) {
       rep = '<div class="mcr-rep">' + REPONSES.map(function (x) {
         return '<button type="button" class="mcr-btn' +
-          (r.mon_statut === x.cle ? ' actif' : '') +
+          (monStatut === x.cle ? ' actif' : '') +
           '" data-rep="' + x.cle + '">' + x.libelle + '</button>';
       }).join('') + '</div>' +
       '<button type="button" class="mcr-lien" data-mcr="autre">Proposer un autre horaire</button>';
@@ -212,10 +257,9 @@
       b.onclick = function () {
         var statut = b.getAttribute('data-rep');
         repondre(r.id, statut).then(function () {
+          noterReponse(r.id, statut);
           if (statut === 'refuse') { masquer(r.id, 720); fermer(); return; }
-          card.querySelectorAll('[data-rep]').forEach(function (x) {
-            x.classList.toggle('actif', x.getAttribute('data-rep') === statut);
-          });
+          marquerReponse(card, statut);
         }).catch(function () { /* silencieux : le calendrier reste la source */ });
       };
     });
@@ -237,6 +281,27 @@
     });
     racine().appendChild(card);
     majVoile();
+  }
+
+  /* Un geste fait sur un ecran vaut pour tous : localStorage porte l'etat,
+     l'evenement `storage` (emis uniquement dans les AUTRES onglets) le
+     repercute sans attendre le prochain tour d'horloge. */
+  function synchroniserOnglets(e) {
+    if (!e || (e.key !== LS_VUS && e.key !== LS_REP)) return;
+    if (e.key === LS_VUS) {
+      Object.keys(etat.montres).forEach(function (id) {
+        if (!estMasque(id)) return;
+        var c = etat.montres[id];
+        if (c && c.parentNode) c.parentNode.removeChild(c);
+        delete etat.montres[id];
+      });
+      majVoile();
+      return;
+    }
+    var reps = lireReponses();
+    Object.keys(etat.montres).forEach(function (id) {
+      if (reps[id]) marquerReponse(etat.montres[id], reps[id].statut);
+    });
   }
 
   function diffuserInvitations(n) {
@@ -286,14 +351,18 @@
   function demarrer() {
     if (etat.timer) return;
     verifier();
+    /* On interroge aussi quand l'onglet est masque : une reunion doit avoir
+       sa fenetre prete sur CHAQUE ecran ouvert, pas seulement sur celui que
+       l'utilisateur regardait a l'heure du rappel. Le geste, lui, ne se fait
+       qu'une fois — la synchro localStorage ferme les autres. */
     etat.timer = setInterval(function () {
       majCompteurs();
-      if (document.hidden) return;
       verifier();
     }, PERIODE_MS);
     document.addEventListener('visibilitychange', function () {
       if (!document.hidden) verifier();
     });
+    global.addEventListener('storage', synchroniserOnglets);
   }
 
   if (document.readyState === 'loading') {
