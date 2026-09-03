@@ -28,7 +28,11 @@
     // Fiche de paramétrage d'une déclinaison MyStock (route /pricing/mystock/:id).
     declForm: null,
     declPreview: null,
-    declDirty: false,
+    // État de l'enregistrement automatique de la fiche déclinaison :
+    // "vierge" (rien à sauver), "attente" (débounce en cours),
+    // "cours", "ok", "err". La bar affiche le message correspondant.
+    declSaveStatus: "vierge",
+    declSavedAt: null,
     products: [],
     settings: null,
     // Observateur de hauteur du bandeau d'actions fixe (voir syncSavebarSpacer).
@@ -71,6 +75,14 @@
     drawerMaterial: null,
     debounceMat: null,
     debounceProd: null,
+    // Débounces d'enregistrement : la sauvegarde suit la frappe (voir
+    // autoEnregistrerMat / autoEnregistrerDecl) — un mot en cours de frappe
+    // ne part pas en base pour chaque touche.
+    debounceMatSave: null,
+    debounceDeclSave: null,
+    // Idem pour la fiche matière : "vierge" tant que rien n'a bougé.
+    matSaveStatus: "vierge",
+    matSavedAt: null,
     // Taux USD → EUR tapé dans le panneau Paramètres et pas encore enregistré.
     // Voir fxEssai() : il sert à recalculer, jamais à écrire.
     debounceFx: null,
@@ -2071,7 +2083,9 @@
   }
 
   async function loadMaterialForm(id) {
-    S.matDirty = false;
+    S.matSaveStatus = "vierge";
+    S.matSavedAt = null;
+    clearTimeout(S.debounceMatSave);
     S.fxDraft = null;
     if (!id) {
       S.formMaterial = defaultMaterialForm();
@@ -2458,15 +2472,189 @@
     }
   }
 
+  // ─── Enregistrement automatique des fiches ────────────────────────────────
+  //
+  // La saisie ne s'attend pas : on enregistre ce qui a changé pendant que
+  // l'utilisateur tape, avec un débounce court (voir DELAI_SAVE_MS). Un
+  // « Enregistrer » qu'on attend jamais est un piège — la valeur reste dans
+  // la fiche, ne part pas au calcul, et le lendemain personne ne sait
+  // pourquoi le prix n'a pas bougé.
+  //
+  // La bar d'actions montre l'état plutôt que d'attendre un clic : vierge
+  // (rien à sauver), attente (débounce en cours), cours (requête en vol),
+  // ok (dernier enregistrement + heure), err (message d'erreur). Elle
+  // remplace « Modifications non enregistrées » et le bouton Enregistrer.
+  const DELAI_APERCU_MS = 150;
+  const DELAI_SAVE_MS = 900;
+
+  function heureCourte(d) {
+    if (!d) return "";
+    const h = String(d.getHours()).padStart(2, "0");
+    const m = String(d.getMinutes()).padStart(2, "0");
+    return h + ":" + m;
+  }
+
+  /** HTML du pastille d'état de sauvegarde. */
+  function saveStatusHtml(statut, savedAt) {
+    if (statut === "cours") {
+      return '<span class="dot dot-cours"></span>Enregistrement…';
+    }
+    if (statut === "attente") {
+      return '<span class="dot dot-attente"></span>Modifications non enregistrées';
+    }
+    if (statut === "err") {
+      return '<span class="dot dot-err"></span>Erreur — réessayer';
+    }
+    if (statut === "ok" && savedAt) {
+      return '<span class="dot dot-ok"></span>Enregistré · ' + heureCourte(savedAt);
+    }
+    return '<span class="dot dot-vierge"></span>Aucune modification';
+  }
+
+  /** Met à jour la pastille sans re-render (le curseur reste dans le champ). */
+  function setMatSaveStatus(statut) {
+    S.matSaveStatus = statut;
+    if (statut === "ok") S.matSavedAt = new Date();
+    const el = document.getElementById("mat-save-status");
+    if (el) {
+      el.className = "savebar-state savebar-state-" + statut;
+      el.innerHTML = saveStatusHtml(statut, S.matSavedAt);
+    }
+  }
+  function setDeclSaveStatus(statut) {
+    S.declSaveStatus = statut;
+    if (statut === "ok") S.declSavedAt = new Date();
+    const el = document.getElementById("decl-save-status");
+    if (el) {
+      el.className = "savebar-state savebar-state-" + statut;
+      el.innerHTML = saveStatusHtml(statut, S.declSavedAt);
+    }
+  }
+
+  /**
+   * Enregistre la fiche matière ouverte, débouncé.
+   *
+   * Ne s'appelle QUE sur une matière existante (isNew traité par le bouton
+   * « Créer »). Le contenu envoyé est le même que `saveMaterialForm` — pas de
+   * duplication de la charge utile, on partage `materialPatchBody`.
+   */
+  function autoEnregistrerMat() {
+    if (!S.route || !S.route.id) return;
+    setMatSaveStatus("attente");
+    clearTimeout(S.debounceMatSave);
+    S.debounceMatSave = setTimeout(async () => {
+      const body = materialPatchBody();
+      if (!body) {
+        // Champs invalides (nom vide, grammage manquant au kilo) : on
+        // n'enregistre pas, on garde la pastille d'attente pour que l'écart
+        // reste visible.
+        return;
+      }
+      setMatSaveStatus("cours");
+      try {
+        const maj = await api("/api/pricing/materials/" + S.route.id, {
+          method: "PATCH", body,
+        });
+        // On ne re-rend PAS la fiche : le curseur resterait perdu au milieu
+        // d'une frappe. On rafraîchit seulement le récap, qui vit dans son
+        // propre conteneur.
+        S.matPreview = maj.computed || S.matPreview;
+        const rec = document.getElementById("mat-recap");
+        if (rec) rec.innerHTML = recapTableHtml(S.matPreview);
+        const sum = document.getElementById("mat-summary");
+        if (sum) sum.innerHTML = matSummaryHtml(S.matPreview);
+        setMatSaveStatus("ok");
+      } catch (e) {
+        setMatSaveStatus("err");
+        showToast(e.message, "danger");
+      }
+    }, DELAI_SAVE_MS);
+  }
+
+  /** Charge utile PATCH matière, ou null si un champ requis manque. */
+  function materialPatchBody() {
+    const f = S.formMaterial;
+    const body = {
+      name: (f.name || "").trim(),
+      appellation_code: (f.appellation_code || "").trim(),
+      category_id: f.category_id,
+      fournisseur_fsc_id: f.fournisseur_fsc_id ? parseInt(f.fournisseur_fsc_id, 10) : null,
+      grammage_gsm: parseFloat(f.grammage_gsm) || 0,
+      perte_pct: parseFloat(f.perte_pct) || 0,
+      price_currency: f.price_currency,
+      unit_price: parseFloat(f.unit_price) || 0,
+      price_basis: f.price_basis,
+      taxe_pct: parseFloat(f.taxe_pct) || 0,
+      is_imported: !!f.is_imported,
+      applique_marge: f.applique_marge !== false,
+      transport_mode: f.transport_mode || "AMOUNT",
+      transport_unit_price: parseFloat(f.transport_unit_price) || 0,
+      transport_pct: parseFloat(f.transport_pct) || 0,
+      transport_cout: parseFloat(f.transport_cout) || 0,
+      transport_quantite: parseFloat(f.transport_quantite) || 0,
+      price_history_source: "Saisie interface",
+    };
+    if (!body.name) return null;
+    if (body.price_basis === "PER_KG" && !(body.grammage_gsm > 0)) return null;
+    return body;
+  }
+
+  /** Enregistre la fiche déclinaison ouverte, débouncé. */
+  function autoEnregistrerDecl() {
+    setDeclSaveStatus("attente");
+    clearTimeout(S.debounceDeclSave);
+    S.debounceDeclSave = setTimeout(async () => {
+      const f = S.declForm;
+      setDeclSaveStatus("cours");
+      try {
+        const maj = await api(
+          "/api/pricing/mystock/declinaisons/" + f.declinaison_id + "/parametrage",
+          {
+            method: "PATCH",
+            body: {
+              price_currency: f.price_currency,
+              price_basis: f.price_basis,
+              taxe_pct: parseFloat(f.taxe_pct) || 0,
+              is_imported: !!f.is_imported,
+              applique_marge: f.applique_marge !== false,
+              transport_mode: f.transport_mode || "AMOUNT",
+              transport_unit_price: parseFloat(f.transport_unit_price) || 0,
+              transport_pct: parseFloat(f.transport_pct) || 0,
+              transport_cout: parseFloat(f.transport_cout) || 0,
+              transport_quantite: parseFloat(f.transport_quantite) || 0,
+              grammage_gsm: parseFloat(f.grammage_gsm) || 0,
+              perte_pct: parseFloat(f.perte_pct) || 0,
+            },
+          }
+        );
+        // On ne remplace pas S.declForm ni ne re-rend : le curseur resterait
+        // perdu. Seul le récap se met à jour, en place.
+        S.declPreview = maj.computed || S.declPreview;
+        const rec = document.getElementById("decl-recap");
+        if (rec) rec.innerHTML = recapTableHtml(S.declPreview);
+        const sum = document.getElementById("decl-summary");
+        if (sum) sum.innerHTML = matSummaryHtml(S.declPreview);
+        const eq = document.getElementById("d-transport-eq");
+        if (eq) eq.innerHTML = transportEqText(S.declPreview);
+        setDeclSaveStatus("ok");
+      } catch (e) {
+        setDeclSaveStatus("err");
+        showToast(e.message, "danger");
+      }
+    }, DELAI_SAVE_MS);
+  }
+
   function matSaveBarHtml(isNew) {
-    const dirty = S.matDirty ? "" : " hidden";
+    // Une matière neuve n'a pas d'ID : on ne peut pas PATCH, il faut d'abord
+    // POST — d'où le bouton « Créer ». Une fois créée, elle bascule sur
+    // l'enregistrement automatique comme les autres.
     return `<div class="savebar-spacer" aria-hidden="true"></div>
       <div class="pr-savebar">
         <button type="button" class="btn btn-soft btn-sm" id="btn-back-mat">${icon("arrow-left", 14)} Retour liste</button>
-        <div class="savebar-state" id="mat-dirty"${dirty}><span class="dot"></span>Modifications non enregistrées</div>
+        <div class="savebar-state savebar-state-${S.matSaveStatus}" id="mat-save-status">${saveStatusHtml(S.matSaveStatus, S.matSavedAt)}</div>
         <div class="savebar-actions">
           ${!isNew && S.canWrite ? '<button type="button" class="btn btn-danger btn-sm" id="btn-del-mat">Supprimer</button>' : ""}
-          ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-save-mat">Enregistrer</button>' : ""}
+          ${isNew && S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-save-mat">Créer la matière</button>' : ""}
         </div>
       </div>`;
   }
@@ -2604,20 +2792,15 @@
       refreshMaterialPreview();
     }, refreshMaterialPreview);
 
-    // Le bandeau signale qu'une saisie attend d'être enregistrée. Déclaré ici
-    // parce que la case « Appliquer la marge » vit maintenant dans le panneau
-    // Paramètres, hors de la carte du formulaire : elle doit salir la fiche
-    // elle aussi.
-    const marquerMat = () => {
-      if (S.matDirty) return;
-      S.matDirty = true;
-      const t = document.getElementById("mat-dirty");
-      if (t) t.hidden = false;
-    };
+    // Une fiche existante s'enregistre pendant qu'on la modifie : chaque
+    // frappe planifie un aperçu (voir DELAI_APERCU_MS) et un PATCH
+    // (DELAI_SAVE_MS), la pastille de la bar suit l'état. Une matière neuve,
+    // elle, attend le bouton « Créer » — pas d'ID, pas de PATCH possible.
+    const marquerMat = isNew ? () => {} : autoEnregistrerMat;
 
     const bindPreview = () => {
       clearTimeout(S.debounceMat);
-      S.debounceMat = setTimeout(refreshMaterialPreview, 300);
+      S.debounceMat = setTimeout(refreshMaterialPreview, DELAI_APERCU_MS);
     };
     const refreshAltPrice = () => {
       const alt = document.getElementById("f-unit-alt");
@@ -2632,6 +2815,7 @@
         syncMaterialFormFromDom();
         refreshAltPrice();
         bindPreview();
+        marquerMat();
       };
     });
     // Fournisseur du formulaire matière. Favoris = la catégorie de la
@@ -2646,9 +2830,9 @@
           emptyLabel: "— Aucun —",
           resolveCategories: () => fournCatsDepuisMatiere(f),
           onSelect: () => {
-            marquerMat();
             syncMaterialFormFromDom();
             refreshMaterialPreview();
+            marquerMat();
           },
         });
       }
@@ -2656,9 +2840,9 @@
 
     const chkMarge = document.getElementById("f-marge");
     if (chkMarge) chkMarge.onchange = () => {
-      marquerMat();
       syncMaterialFormFromDom();
       bindPreview();
+      marquerMat();
     };
     ["f-cur", "f-basis", "f-imp", "f-tmode"].forEach((id) => {
       const el = document.getElementById(id);
@@ -2666,19 +2850,28 @@
         syncMaterialFormFromDom();
         renderMaterialForm(isNew);
         refreshMaterialPreview();
+        marquerMat();
       };
     });
 
-    // Le drapeau vit dans S : le formulaire se re-rend tout seul quand la devise
-    // ou la base de prix change, un état local serait perdu à chaque fois.
+    // Un champ oublié dans les listes ci-dessus déclenche quand même
+    // l'enregistrement : tout input/change dans la carte compte comme une
+    // modification. Sans ça, changer le nom ou le fournisseur ne partait pas.
     const carte = document.querySelector(".form-layout > .form-card");
     if (carte) {
-      carte.addEventListener("input", marquerMat);
-      carte.addEventListener("change", marquerMat);
+      carte.addEventListener("input", () => {
+        syncMaterialFormFromDom();
+        marquerMat();
+      });
+      carte.addEventListener("change", () => {
+        syncMaterialFormFromDom();
+        marquerMat();
+      });
     }
 
     if (S.canWrite) {
-      document.getElementById("btn-save-mat").onclick = () => saveMaterialForm(isNew);
+      const btnSave = document.getElementById("btn-save-mat");
+      if (btnSave) btnSave.onclick = () => saveMaterialForm(isNew);
       const delBtn = document.getElementById("btn-del-mat");
       if (delBtn) {
         delBtn.onclick = async () => {
@@ -3468,7 +3661,9 @@
   // déclinaison. Aucune fiche de la base historique n'est nécessaire.
 
   async function loadDeclinaisonForm(id) {
-    S.declDirty = false;
+    S.declSaveStatus = "vierge";
+    S.declSavedAt = null;
+    clearTimeout(S.debounceDeclSave);
     S.fxDraft = null;
     S.declForm = await api("/api/pricing/mystock/declinaisons/" + id + "/parametrage");
     S.declPreview = S.declForm.computed || null;
@@ -3576,14 +3771,12 @@
   }
 
   function declSaveBarHtml() {
-    const dirty = S.declDirty ? "" : " hidden";
     return `<div class="savebar-spacer" aria-hidden="true"></div>
       <div class="pr-savebar">
         <button type="button" class="btn btn-soft btn-sm" id="btn-back-decl">${icon("arrow-left", 14)} Retour liste</button>
-        <div class="savebar-state" id="decl-dirty"${dirty}><span class="dot"></span>Modifications non enregistrées</div>
+        <div class="savebar-state savebar-state-${S.declSaveStatus}" id="decl-save-status">${saveStatusHtml(S.declSaveStatus, S.declSavedAt)}</div>
         <div class="savebar-actions">
           <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${S.declForm.matiere_id}" target="_blank" rel="noopener" title="Ouvrir la matière dans MyStock">MyStock ↗</a>
-          ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-save-decl">Enregistrer</button>' : ""}
         </div>
       </div>`;
   }
