@@ -4268,6 +4268,44 @@ EXPE_MAIN_CSS = r"""
 .expe-score .medal{font-size:24px;flex-shrink:0}
 .expe-note{font-size:10px;color:rgba(148,163,184,.8);margin-top:12px}
 
+/* ── Sous 700 px : une ligne de tableau devient une carte ─────────────────
+   Neuf colonnes en table-layout:fixed sur 390 px, c'est un nom de client sur
+   deux coupé à l'ellipse. Au-delà de 700 px le tableau reste le bon outil :
+   on ne remplace pas, on ajoute un second rendu. La bascule se fait en JS
+   (expeEnCartes()), pas en display:none — un tableau caché reste construit. */
+.expe-cartes{display:flex;flex-direction:column;gap:9px}
+.expe-carte{padding:0;overflow:hidden}
+.expe-carte-tete{
+  display:block;width:100%;text-align:left;padding:12px 13px;
+  background:none;border:0;color:inherit;font:inherit;cursor:pointer;
+}
+.expe-carte-tete:hover{background:var(--bg)}
+.expe-carte .msf-card-head{margin-bottom:6px}
+.expe-carte-refs{margin-top:5px}
+.expe-carte .expe-badge-devis{cursor:default}
+.expe-carte-refs .expe-carte-bl{font-family:ui-monospace,'Cascadia Code',monospace}
+.expe-carte-detail{padding:0 13px 12px}
+.expe-carte-pied{display:flex;gap:8px;padding:0 13px 12px}
+.expe-carte-pied .btn{flex:1;height:44px;border-radius:10px;font-size:14px;font-weight:800}
+.expe-carte-plus{
+  width:44px;height:44px;flex:0 0 44px;border-radius:10px;
+  border:1px solid var(--border);background:var(--bg);color:var(--text2);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.expe-carte-plus:hover{border-color:var(--accent);color:var(--accent)}
+.expe-carte-plus.est-ouvert{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+/* Les actions de ligne font 26 px au bureau. Au doigt, c'est en dessous du
+   plancher de 44 px : Supprimer et Valider seraient à quelques pixels. */
+.expe-carte-actions{
+  display:flex;flex-wrap:wrap;gap:8px;
+  padding:12px 13px;border-top:1px solid var(--border);
+}
+.expe-carte-actions .expe-dep-ab{
+  width:44px;height:44px;min-width:44px;border-radius:10px;
+  display:inline-flex;align-items:center;justify-content:center;
+}
+.expe-carte-actions .expe-dep-ab svg{width:18px;height:18px}
+
 /* MyExpé — mobile : titres de page / sections déjà dans la topbar */
 @media (max-width:900px){
   body.mysifa-app-expe .main .container > h1,
@@ -6382,6 +6420,9 @@ function renderExpeSuiviDeparts(){
       ):null
     )
   );
+  // Sous 700 px, le tableau n'est pas construit du tout : un tableau caché
+  // en display:none reste assemblé à chaque rendu, pour rien.
+  if(expeEnCartes()) return h('div',null,topBar,expeCartesDeparts('jour'));
   const rows=S.expeDepartList||[];
   // Sept colonnes au lieu de quatorze. Le reste n'a pas disparu : il est dans
   // le dépliant. Quatorze colonnes dont la moitié est tronquée par une ellipse
@@ -6391,13 +6432,7 @@ function renderExpeSuiviDeparts(){
     ...['','Date enl.','Transporteur','Client','Destination','N° BL','Pal.','Dossier',''].map(t=>h('th',null,t))
   );
   const COLSPAN = 9;
-  function formatDateFr(iso){
-    if(!iso||iso.length<10)return iso||'—';
-    const d=new Date(iso+'T00:00:00');
-    const jours=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
-    const mois=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
-    return jours[d.getDay()]+' '+d.getDate()+' '+mois[d.getMonth()]+' '+d.getFullYear();
-  }
+  const formatDateFr = expeDateFr;
   let prevDate=null;
   const bodyRows=[];
   rows.forEach(r=>{
@@ -6427,37 +6462,11 @@ function renderExpeSuiviDeparts(){
         (r.nb_palette!=null?String(r.nb_palette):'—'),
         h('span',{style:{color:'var(--muted)',fontSize:'11px'}},' '+(expePaletteTypeLabel(r)||''))),
       h('td',null,expeDossierCell(r)),
-      expeCanWrite()?h('td',{className:'expe-dep-actions-td'},
-        expeDepartActsGrid({
-          paires:[
-            expeAvisBoutons(r),
-            [
-              h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Dupliquer ce départ en nouvelle saisie',
-                onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',16)),
-              h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Modifier les informations de ce départ',
-                onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',16))
-            ]
-          ],
-          fin:[
-          (r.code_postal_destination&&(r.poids_total_kg||r.nb_palette))?h('button',{className:'btn-ghost expe-dep-ab',type:'button',
-            title:'Comparer les tarifs des transporteurs pour ce départ',
-            onClick:()=>ouvrirComparateurDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeCompareIcon(16)):null,
-          r.code_postal_destination?h('button',{className:'btn-ghost expe-dep-ab',type:'button',
-            title:'Ouvrir une demande de devis préremplie avec les données de ce départ',
-            onClick:()=>ouvrirDevisDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeDevisIcon(16)):null,
-          h('button',{className:'btn-danger expe-dep-ab',type:'button',title:'Supprimer définitivement ce départ',onClick:async()=>{
-            if(!confirm('Supprimer ce départ ?')) return;
-            try{
-              await api('/api/expe/departs/'+r.id,{method:'DELETE'});
-              toast('Départ supprimé');
-              await loadExpeDepartJour();
-            }catch(e){toast(e.message||'Suppression impossible','error');}
-          }},iconEl('trash',16))
-          ]
-        },h('button',{className:'btn expe-dep-valider-btn',type:'button',
-          title:'Valider ce départ et l\'archiver dans l\'historique',
-          onClick:()=>expeValiderDepart(r.id)},'Valider'))
-      ):h('td',null,'—')
+      expeCanWrite()?(function(){
+        const b=expeDepartBoutons(r,'jour');
+        return h('td',{className:'expe-dep-actions-td'},
+          expeDepartActsGrid({paires:b.paires,fin:b.fin},b.principal));
+      })():h('td',null,'—')
     ));
     if(ouvert) bodyRows.push(expeRowDetail(r, COLSPAN));
   });
@@ -6502,6 +6511,73 @@ function expeFscBadgeHtml(d){
 // ── Ligne dépliable ──────────────────────────────────────────────
 // Le tableau garde ce qu'on compare d'une ligne à l'autre ; le dépliant porte
 // ce qu'on lit sur UNE ligne à la fois. Rien n'est supprimé, tout est lisible.
+/* Rendu carte : vrai en dessous de 700 px.
+
+   Le choix est fait au moment du render(), donc une rotation du téléphone ne
+   changerait rien sans cet écouteur — c'est le défaut de tous les rendus
+   conditionnels du dépôt (html.py:5243, planning_rh_page.py:1422). */
+var _expeMqCartes=null;
+function expeEnCartes(){
+  try{
+    if(!_expeMqCartes){
+      _expeMqCartes=window.matchMedia('(max-width:700px)');
+      var _maj=function(){ if(S.app==='expe' && typeof render==='function') render(); };
+      if(_expeMqCartes.addEventListener)_expeMqCartes.addEventListener('change',_maj);
+      else if(_expeMqCartes.addListener)_expeMqCartes.addListener(_maj);
+    }
+    return !!_expeMqCartes.matches;
+  }catch(e){ return false; }
+}
+
+function expeDateFr(iso){
+  if(!iso||iso.length<10)return iso||'—';
+  const d=new Date(iso+'T00:00:00');
+  const jours=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+  const mois=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  return jours[d.getDay()]+' '+d.getDate()+' '+mois[d.getMonth()]+' '+d.getFullYear();
+}
+
+/* Boutons d'action d'un départ — une seule définition pour le tableau et pour
+   la carte. Deux listes séparées, c'est une action qui existe sur un écran et
+   pas sur l'autre sans que personne ne s'en aperçoive.
+   La forme retournée est celle qu'attend expeDepartActsGrid, pour que le
+   rendu bureau reste rigoureusement identique. */
+function expeDepartBoutons(r, ctx){
+  const hist = ctx==='historique';
+  const recharger = hist ? loadExpeDepartHistorique : loadExpeDepartJour;
+  const copier=h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Dupliquer ce départ en nouvelle saisie',
+    onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',16));
+  const modifier=h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Modifier les informations de ce départ',
+    onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',16));
+  const supprimer=h('button',{className:'btn-danger expe-dep-ab',type:'button',
+    title:hist?'Supprimer définitivement ce départ de l\'historique':'Supprimer définitivement ce départ',
+    onClick:async()=>{
+      if(!confirm('Supprimer ce départ ?')) return;
+      try{
+        await api('/api/expe/departs/'+r.id,{method:'DELETE'});
+        toast('Départ supprimé');
+        await recharger();
+      }catch(e){toast(e.message||'Suppression impossible','error');}
+    }},iconEl('trash',16));
+  const fin = hist ? [supprimer] : [
+    (r.code_postal_destination&&(r.poids_total_kg||r.nb_palette))?h('button',{className:'btn-ghost expe-dep-ab',type:'button',
+      title:'Comparer les tarifs des transporteurs pour ce départ',
+      onClick:()=>ouvrirComparateurDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeCompareIcon(16)):null,
+    r.code_postal_destination?h('button',{className:'btn-ghost expe-dep-ab',type:'button',
+      title:'Ouvrir une demande de devis préremplie avec les données de ce départ',
+      onClick:()=>ouvrirDevisDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeDevisIcon(16)):null,
+    supprimer
+  ];
+  const principal = hist
+    ? h('button',{className:'btn expe-dep-invalider-btn',type:'button',
+        title:'Annuler la validation et remettre ce départ dans le suivi du jour',
+        onClick:()=>void expeInvaliderDepart(r.id)},'Invalider')
+    : h('button',{className:'btn expe-dep-valider-btn',type:'button',
+        title:'Valider ce départ et l\'archiver dans l\'historique',
+        onClick:()=>expeValiderDepart(r.id)},'Valider');
+  return {paires:[expeAvisBoutons(r),[copier,modifier]], fin:fin, principal:principal};
+}
+
 function expeRowIsOpen(id){
   return !!(S.expeDepartRowsOpen && S.expeDepartRowsOpen[String(id)]);
 }
@@ -6531,9 +6607,7 @@ function expeDossierCell(r){
       : expeFscBadge(r));
 }
 
-function expeRowDetail(r, colspan){
-  const dl = (lbl, val) => h('div',null,
-    h('dt',null,lbl), h('dd',null, (val==null||val==='')?'—':String(val)));
+function expeDetailPaires(r){
   const ds = Array.isArray(r.dossiers) ? r.dossiers : [];
   const dossiersTxt = ds.length
     ? ds.map(x=>(x.reference||('#'+x.planning_entry_id))
@@ -6541,21 +6615,116 @@ function expeRowDetail(r, colspan){
     : (Number(r.sans_dossier)
         ? 'Non lié à une production — '+(EXPE_MOTIF_LABELS[r.sans_dossier_motif]||r.sans_dossier_motif||'motif non précisé')
         : 'Aucun dossier rattaché, aucun motif déclaré');
+  return [
+    ['Dossiers de production', dossiersTxt],
+    ['ARC', r.arc],
+    ['Réf. SIFA', r.ref_sifa],
+    ['N° récépissé', r.no_cde_transport],
+    ['Affréteurs', r.affreteurs],
+    ['Type de palette', expePaletteTypeLabel(r)],
+    ['Poids total', r.poids_total_kg!=null?(r.poids_total_kg+' kg'):null],
+    ['Livraison prévue', (r.date_livraison||'').slice(0,10)],
+    ['Palette Europe', Number(r.palette_europe)?'Suivie au retour':'—']
+  ];
+}
+
+function expeDetailDl(r, cls){
+  const dl = (lbl, val) => h('div',null,
+    h('dt',null,lbl), h('dd',null, (val==null||val==='')?'—':String(val)));
+  return h('dl',{className:cls||'expe-row-detail'},
+    ...expeDetailPaires(r).map(p=>dl(p[0],p[1])));
+}
+
+function expeRowDetail(r, colspan){
   return h('tr',{className:'expe-row-detail-row'},
-    h('td',{colSpan:colspan,className:'expe-row-detail-cell'},
-      h('dl',{className:'expe-row-detail'},
-        dl('Dossiers de production', dossiersTxt),
-        dl('ARC', r.arc),
-        dl('Réf. SIFA', r.ref_sifa),
-        dl('N° récépissé', r.no_cde_transport),
-        dl('Affréteurs', r.affreteurs),
-        dl('Type de palette', expePaletteTypeLabel(r)),
-        dl('Poids total', r.poids_total_kg!=null?(r.poids_total_kg+' kg'):null),
-        dl('Livraison prévue', (r.date_livraison||'').slice(0,10)),
-        dl('Palette Europe', Number(r.palette_europe)?'Suivie au retour':'—')
-      )
-    )
+    h('td',{colSpan:colspan,className:'expe-row-detail-cell'}, expeDetailDl(r))
   );
+}
+
+/* ── Carte de départ (mobile) ─────────────────────────────────────────
+   Trois niveaux : qui transporte et pour qui, où et combien, les références.
+   Le dépliant est le même que celui du tableau (expeDetailDl), l'action
+   primaire est sous le pouce, et les six autres se déplient au bouton ⋯
+   plutôt que de tenir en 26 px les unes contre les autres. */
+function expeCarteDepart(r, ctx){
+  const hist = ctx==='historique';
+  const cle = (hist?'h':'')+r.id;
+  const ouvert = expeRowIsOpen(cle);
+  const actionsOuvertes = String(S.expeCarteActions||'')===String(cle);
+  const coul = trpColorFromRow(r);
+  const pal = (r.nb_palette!=null?String(r.nb_palette)+' pal.':null);
+  const typePal = expePaletteTypeLabel(r)||'';
+  const meta = [];
+  if(r.code_postal_destination) meta.push(r.code_postal_destination);
+  if(pal) meta.push(pal+(typePal?' '+typePal:''));
+  const b = expeCanWrite() ? expeDepartBoutons(r, ctx) : null;
+  const secondaires = b ? [].concat(b.paires[0], b.paires[1], b.fin).filter(Boolean) : [];
+  if(b && r.source_devis_demande_id){
+    secondaires.unshift(h('button',{className:'btn-ghost expe-dep-ab',type:'button',
+      title:'Rouvrir la demande de devis à l\'origine de ce départ',
+      onClick:()=>{set({expeTab:'devis'});setTimeout(()=>void ouvrirDetailDemande(r.source_devis_demande_id),50);}},
+      iconEl('external',16)));
+  }
+  const badgeDevis = r.source_devis_reponse_id
+    ? h('span',{className:'expe-badge-devis',title:'Départ créé depuis un devis retenu'},'issu d’un devis')
+    : null;
+  return h('div',{className:'msf-card expe-carte'},
+    h('button',{type:'button',className:'expe-carte-tete',
+      'aria-expanded':ouvert?'true':'false',
+      onClick:()=>expeToggleRow(cle)},
+      h('span',{className:'msf-card-head'},
+        coul?trpTag(r.transporteur||'—',coul):h('span',null,r.transporteur||'—'),
+        h('span',{className:'msf-card-title'},r.client||'—'),
+        badgeDevis,
+        h('span',{className:'msf-chevron'},iconEl(ouvert?'chevron-down':'chevron-right',17))
+      ),
+      h('span',{className:'msf-card-sub'},
+        ...(meta.length?[meta.join(' · ')]:['—']),
+        hist?h('span',{className:'msf-badge'},'Validé '+((r.validated_at||'').replace('T',' ').slice(0,16)||'—')):null
+      ),
+      h('span',{className:'msf-card-sub expe-carte-refs'},
+        h('span',{className:'expe-carte-bl'},'BL '+(r.no_bl||'—')),
+        expeDossierCell(r)
+      )
+    ),
+    ouvert?h('div',{className:'expe-carte-detail'},expeDetailDl(r,'msf-dl')):null,
+    b?h('div',{className:'expe-carte-pied'},
+      b.principal,
+      h('button',{type:'button',
+        className:'expe-carte-plus'+(actionsOuvertes?' est-ouvert':''),
+        title:'Autres actions','aria-label':'Autres actions',
+        onClick:()=>set({expeCarteActions:actionsOuvertes?null:cle})},iconEl('sliders',18))
+    ):null,
+    (b&&actionsOuvertes)?h('div',{className:'expe-carte-actions'},...secondaires):null
+  );
+}
+
+function expeCartesDeparts(ctx){
+  const hist = ctx==='historique';
+  const rows = (hist ? S.expeDepartHist : S.expeDepartList) || [];
+  const chargement = hist ? S.expeDepartHistLoading : S.expeDepartLoading;
+  if(!rows.length){
+    return h('div',{className:'msf-empty'},
+      chargement?'Chargement…'
+        :(hist?'Aucune entrée (ou affiner la recherche)':'Aucun départ en attente pour ce jour'));
+  }
+  const out=[];
+  let prev=null;
+  rows.forEach(r=>{
+    if(!hist){
+      const d=(r.date_enlevement||'').slice(0,10);
+      if(d!==prev){
+        const jour=rows.filter(x=>(x.date_enlevement||'').slice(0,10)===d);
+        const nbPal=jour.reduce((t,x)=>t+(Number(x.nb_palette)||0),0);
+        out.push(h('div',{className:'msf-daybar'},
+          h('b',null,expeDateFr(d)),
+          h('span',null,jour.length+(jour.length>1?' départs':' départ')+(nbPal?' · '+nbPal+' pal.':''))));
+        prev=d;
+      }
+    }
+    out.push(expeCarteDepart(r,ctx));
+  });
+  return h('div',{className:'expe-cartes'},...out);
 }
 
 const EXPE_MOTIF_LABELS = {
@@ -6590,7 +6759,7 @@ function renderExpeHistoriqueDeparts(){
     type:'search',
     placeholder:'Réf. SIFA, client, ARC, BL, type palette, transporteur…',
     value:S.expeDepartHistQ||'',
-    style:{width:'100%',maxWidth:'560px',padding:'10px 12px',borderRadius:'8px',border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',marginBottom:'12px'},
+    style:{width:'100%',maxWidth:expeEnCartes()?'none':'560px',padding:'12px',borderRadius:'10px',border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',marginBottom:expeEnCartes()?'0':'12px'},
     onInput:e=>{
       // Ne pas déclencher un render à chaque caractère (sinon perte de focus).
       S.expeDepartHistQ = e.target.value;
@@ -6624,32 +6793,11 @@ function renderExpeHistoriqueDeparts(){
       (r.nb_palette!=null?String(r.nb_palette):'—'),
       h('span',{style:{color:'var(--muted)',fontSize:'11px'}},' '+(expePaletteTypeLabel(r)||''))),
     h('td',null,expeDossierCell(r)),
-    expeCanWrite()?h('td',{className:'expe-dep-actions-td'},
-      expeDepartActsGrid({
-        paires:[
-          expeAvisBoutons(r),
-          [
-            h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Dupliquer ce départ en nouvelle saisie',
-              onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',16)),
-            h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Modifier les informations de ce départ',
-              onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',16))
-          ]
-        ],
-        fin:[
-        h('button',{className:'btn-danger expe-dep-ab',type:'button',title:'Supprimer définitivement ce départ de l\'historique',onClick:async()=>{
-          if(!confirm('Supprimer ce départ ?')) return;
-          try{
-            await api('/api/expe/departs/'+r.id,{method:'DELETE'});
-            toast('Départ supprimé');
-            await loadExpeDepartHistorique();
-          }catch(e){toast(e.message||'Suppression impossible','error');}
-        }},iconEl('trash',16))
-        ]
-      },
-      h('button',{className:'btn expe-dep-invalider-btn',type:'button',
-        title:'Annuler la validation et remettre ce départ dans le suivi du jour',
-        onClick:()=>void expeInvaliderDepart(r.id)},'Invalider'))
-    ):h('td',null,'—')
+    expeCanWrite()?(function(){
+      const b=expeDepartBoutons(r,'historique');
+      return h('td',{className:'expe-dep-actions-td'},
+        expeDepartActsGrid({paires:b.paires,fin:b.fin},b.principal));
+    })():h('td',null,'—')
     ));
     if(ouvert) bodyRows.push(expeRowDetail(r, HCOLSPAN));
   });
@@ -6661,12 +6809,22 @@ function renderExpeHistoriqueDeparts(){
     h('button',{type:'button',className:'page-btn',disabled:page<=1,onClick:()=>expeHistChangePage(-1)},'‹ Précédent'),
     h('button',{type:'button',className:'page-btn',disabled:page>=pages,onClick:()=>expeHistChangePage(1)},'Suivant ›')
   );
+  const carteRecherche=h('div',{className:'card',style:{marginBottom:'12px',padding:'14px 18px'}},
+    h('h3',{style:{fontSize:'14px',fontWeight:'700',marginBottom:'8px'}},'Recherche'),
+    h('div',{className:'expe-help',style:{marginBottom:'8px'}},'Mots séparés par des espaces : tous doivent être trouvés (ref., client, ARC, BL, etc.). Insensible à la casse. Résultats paginés par 50.'),
+    qInp
+  );
+  // En cartes, la recherche est le sujet de l'écran : elle monte en tête, sans
+  // l'encadré d'aide qui prend un tiers de la hauteur utile d'un téléphone.
+  if(expeEnCartes()){
+    return h('div',null,
+      h('div',{className:'card',style:{marginBottom:'12px',padding:'12px 13px'}},qInp),
+      expeCartesDeparts('historique'),
+      pager
+    );
+  }
   return h('div',null,
-    h('div',{className:'card',style:{marginBottom:'12px',padding:'14px 18px'}},
-      h('h3',{style:{fontSize:'14px',fontWeight:'700',marginBottom:'8px'}},'Recherche'),
-      h('div',{className:'expe-help',style:{marginBottom:'8px'}},'Mots séparés par des espaces : tous doivent être trouvés (ref., client, ARC, BL, etc.). Insensible à la casse. Résultats paginés par 50.'),
-      qInp
-    ),
+    carteRecherche,
     h('div',{className:'card'},
       h('div',{className:'card-header'},h('h3',{className:'expe-mobile-hide-head'},'Historique des départs validés')),
       h('div',{className:'expe-departs-tbl-wrap'},h('table',{className:'table-std expe-hist-table'},
