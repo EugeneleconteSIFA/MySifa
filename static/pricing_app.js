@@ -71,6 +71,10 @@
     drawerMaterial: null,
     debounceMat: null,
     debounceProd: null,
+    // Taux USD → EUR tapé dans le panneau Paramètres et pas encore enregistré.
+    // Voir fxEssai() : il sert à recalculer, jamais à écrire.
+    debounceFx: null,
+    fxDraft: null,
     selectedProductIds: new Set(),
   };
 
@@ -415,12 +419,32 @@
   };
 
   /**
+   * Le taux tapé dans le panneau Paramètres, tant qu'il n'est pas enregistré.
+   *
+   * Le taux est un réglage global : l'écrire à chaque touche déplacerait le prix
+   * de tout le catalogue pendant qu'on cherche la bonne valeur. On l'envoie donc
+   * à l'aperçu — qui ne persiste rien — et « Appliquer » reste seul à le graver.
+   * `undefined` quand rien n'est en essai : la clé disparaît alors du JSON.
+   */
+  function fxEssai() {
+    const v = parseFloat(S.fxDraft);
+    return Number.isFinite(v) && v > 0 ? Math.round(v * 10000) / 10000 : undefined;
+  }
+
+  /** Le taux que l'écran doit refléter : celui qu'on essaie, sinon l'enregistré. */
+  function tauxCourant() {
+    const essai = fxEssai();
+    if (essai !== undefined) return essai;
+    return parseFloat((S.settings && S.settings.eur_usd_rate) || 0);
+  }
+
+  /**
    * Contrepartie du prix d'achat dans l'AUTRE devise.
    * Le taux stocké est un USD → EUR (1 USD = taux €) : on multiplie pour aller
    * du dollar vers l'euro, on divise dans l'autre sens.
    */
   function otherCurrencyPrice(value, currency, basis) {
-    const rate = parseFloat((S.settings && S.settings.eur_usd_rate) || 0);
+    const rate = tauxCourant();
     const v = parseFloat(value);
     if (!rate || rate <= 0 || Number.isNaN(v)) return null;
     const cur = (currency || "EUR").toUpperCase();
@@ -2048,6 +2072,7 @@
 
   async function loadMaterialForm(id) {
     S.matDirty = false;
+    S.fxDraft = null;
     if (!id) {
       S.formMaterial = defaultMaterialForm();
       S.matPreview = null;
@@ -2101,6 +2126,7 @@
       transport_pct: parseFloat(f.transport_pct) || 0,
       transport_cout: parseFloat(f.transport_cout) || 0,
       transport_quantite: parseFloat(f.transport_quantite) || 0,
+      eur_usd_rate: fxEssai(),
     };
   }
 
@@ -2262,6 +2288,10 @@
       ? String(s.eur_usd_rate_updated_at).replace("T", " ").slice(0, 16)
       : "—";
     const stale = isFxStale(s.eur_usd_rate_updated_at);
+    // Un taux en essai ne porte ni date ni source : il n'est pas enregistré.
+    const essaiFx =
+      fxEssai() !== undefined &&
+      Math.abs(fxEssai() - parseFloat(s.eur_usd_rate || 0)) > 1e-9;
     return `
       <aside class="settings-side">
         <div class="si-head">Paramètres</div>
@@ -2269,8 +2299,12 @@
         <div class="si-block">
           <div class="si-sub">Toutes les matières</div>
           <div class="field"><label>Taux USD → EUR ${stale ? fxStaleBadgeHtml() : ""}</label>
-            <input type="number" step="0.0001" id="si-rate" value="${escAttr(s.eur_usd_rate)}"/>
-            <div class="si-meta">MAJ ${escHtml(fxDate)} · ${escHtml(s.eur_usd_rate_source || "—")}</div>
+            <input type="number" step="0.0001" id="si-rate" value="${escAttr(S.fxDraft != null ? S.fxDraft : s.eur_usd_rate)}"/>
+            <div class="si-meta" id="si-rate-meta">${
+              essaiFx
+                ? "Taux d'essai — le calcul en tient compte. Appliquer l'enregistre pour toutes les matières."
+                : `MAJ ${escHtml(fxDate)} · ${escHtml(s.eur_usd_rate_source || "—")}`
+            }</div>
           </div>
           <div class="field"><label>Marge par défaut <span class="lbl-unit">%</span></label>
             <input type="number" step="0.01" id="si-margin" value="${escAttr(s.default_margin_pct)}"/>
@@ -2288,8 +2322,25 @@
    * fiche déclinaison. Sans lui, appliquer un taux depuis la fiche déclinaison
    * redessinait la fiche matière.
    */
-  function bindInlineSettings(rafraichir) {
+  function bindInlineSettings(rafraichir, recalculer) {
     const redessiner = typeof rafraichir === "function" ? rafraichir : () => {};
+    const recalculerApercu = typeof recalculer === "function" ? recalculer : () => {};
+    // Un taux se juge au prix qu'il donne, pas au chiffre qu'on tape : la fiche
+    // se recalcule pendant la frappe. Rien n'est enregistré tant qu'on n'a pas
+    // cliqué Appliquer — voir fxEssai().
+    const champTaux = document.getElementById("si-rate");
+    if (champTaux) {
+      champTaux.oninput = () => {
+        S.fxDraft = champTaux.value;
+        const meta = document.getElementById("si-rate-meta");
+        if (meta) {
+          meta.textContent =
+            "Taux d'essai — le calcul en tient compte. Appliquer l'enregistre pour toutes les matières.";
+        }
+        clearTimeout(S.debounceFx);
+        S.debounceFx = setTimeout(recalculerApercu, 250);
+      };
+    }
     const save = document.getElementById("si-save");
     if (save) {
       save.onclick = async () => {
@@ -2301,6 +2352,7 @@
               default_margin_pct: parseFloat(document.getElementById("si-margin").value),
             },
           });
+          S.fxDraft = null;
           showToast("Paramètres enregistrés pour toutes les matières.", "success");
           redessiner();
         } catch (e) {
@@ -2314,6 +2366,7 @@
         try {
           const r = await api("/api/pricing/settings/refresh-fx", { method: "POST" });
           showToast("Taux mis à jour : " + fmtNum(r.eur_usd_rate, 4, 4), "success");
+          S.fxDraft = null;
           S.settings = await api("/api/pricing/settings");
           redessiner();
         } catch (e) {
@@ -2498,7 +2551,7 @@
                 <span class="price-arrow" aria-hidden="true">→</span>
                 <span id="f-unit-alt">${otherPriceHtml(ms ? ms.unit_price : f.unit_price, ms ? ms.price_currency : f.price_currency, ms ? ms.price_basis : f.price_basis)}</span>
               </div>
-              <div class="field-hint">Contrepartie au taux ${escHtml(fmtNum((S.settings && S.settings.eur_usd_rate) || 0, 4, 4))} USD → EUR — indicatif, non enregistré.</div>
+              <div class="field-hint">Contrepartie au taux ${escHtml(fmtNum(tauxCourant(), 4, 4))} USD → EUR — indicatif, non enregistré.</div>
             </div>
           </div>
 
@@ -2549,7 +2602,7 @@
     bindInlineSettings(() => {
       renderMaterialForm(isNew);
       refreshMaterialPreview();
-    });
+    }, refreshMaterialPreview);
 
     // Le bandeau signale qu'une saisie attend d'être enregistrée. Déclaré ici
     // parce que la case « Appliquer la marge » vit maintenant dans le panneau
@@ -3416,6 +3469,7 @@
 
   async function loadDeclinaisonForm(id) {
     S.declDirty = false;
+    S.fxDraft = null;
     S.declForm = await api("/api/pricing/mystock/declinaisons/" + id + "/parametrage");
     S.declPreview = S.declForm.computed || null;
   }
@@ -3458,6 +3512,7 @@
           transport_pct: parseFloat(f.transport_pct) || 0,
           transport_cout: parseFloat(f.transport_cout) || 0,
           transport_quantite: parseFloat(f.transport_quantite) || 0,
+          eur_usd_rate: fxEssai(),
         },
       });
     } catch (e) {
@@ -3577,7 +3632,8 @@
               <div class="field f-mid"><label>Devise achat</label><select id="d-cur">
                 <option value="EUR" ${f.price_currency==="EUR"?"selected":""}>EUR — euro (€)</option>
                 <option value="USD" ${f.price_currency==="USD"?"selected":""}>USD — dollar américain ($)</option>
-              </select></div>
+              </select>
+              ${declPrincipal ? `<div class="field-hint">Enregistrée sur ${escHtml(declPrincipal.fournisseur_nom)} : une devise vaut pour tout ce qu'un fournisseur vend.</div>` : ""}</div>
               <div class="field"><label>Base de prix</label><select id="d-basis">
                 <option value="PER_KG" ${f.price_basis==="PER_KG"?"selected":""}>${escHtml(BASIS_LABEL.PER_KG)}</option>
                 <option value="PER_M2" ${f.price_basis==="PER_M2"?"selected":""}>${escHtml(BASIS_LABEL.PER_M2)}</option>
@@ -3591,7 +3647,11 @@
                 <input type="checkbox" id="d-imp" ${f.is_imported?"checked":""}/>
                 <span>
                   <span class="check-title">Matière importée</span>
-                  <span class="check-sub">Un coût de transport s'ajoute au prix d'achat avant conversion.</span>
+                  <span class="check-sub">Un coût de transport s'ajoute au prix d'achat avant conversion.${
+                    declPrincipal
+                      ? ` Import, transport et taxes s'enregistrent sur le tarif ${escHtml(declPrincipal.fournisseur_nom)} × cette matière : ils valent pour toutes ses déclinaisons.`
+                      : " Aucun fournisseur principal : ces réglages ne valent que pour cette déclinaison."
+                  }</span>
                 </span>
               </label>
               <div id="d-import-fields" class="import-fields" style="${f.is_imported?"":"display:none"}">
@@ -3628,7 +3688,7 @@
     bindInlineSettings(() => {
       renderDeclinaisonForm();
       refreshDeclPreview();
-    });
+    }, refreshDeclPreview);
 
     const marquer = () => {
       if (S.declDirty) return;

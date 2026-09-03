@@ -666,8 +666,8 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <div id="app"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='planning';</script>
-<link rel="stylesheet" href="/static/mysifa_landscape.css">
-<link rel="stylesheet" href="/static/mysifa_dock.css">
+<link rel="stylesheet" href="/static/mysifa_mobile.css?v=1">
+<link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js"></script>
@@ -678,10 +678,8 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=7"></script>
-<script src="/static/mysifa_landscape.js?v=2"></script>
+<script src="/static/mysifa_cal_rappel.js?v=8"></script>
 <script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
-<script>window.MySifaLandscape&&MySifaLandscape.enable();</script>
 <script>
 // Handler d'erreurs installé *avant* le script principal (capte aussi les erreurs de parsing).
 function showFatal(message, lineno, colno, extra){

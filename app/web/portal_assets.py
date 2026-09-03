@@ -775,6 +775,198 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
   .mytraduction-swap-btn:hover{transform:rotate(270deg)}
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   Portail mobile — refonte du 03/09/2026
+   ----------------------------------------------------------------------
+   La mise en page mobile du portail fonctionnait deja. Ce qui lui manquait,
+   c'est de DIRE quelque chose : quatorze tuiles identiques et deux badges.
+   Ces blocs n'existent qu'en dessous de 900 px — sur le bureau, la barre
+   d'icones du coin porte deja les memes compteurs.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.portal-mcol,.portal-msearch,.portal-atelier,.portal-reprendre,.portal-mobile-hello{display:none}
+
+@media (max-width:900px){
+
+  /* En-tete : l'avatar ouvre la feuille profil, le bonjour donne la date. */
+  .portal-mobile-header{align-items:center;gap:11px}
+  .portal-mobile-hello{display:block;flex:1;min-width:0}
+  .portal-mobile-hello b{
+    display:block;font-size:18px;font-weight:800;letter-spacing:-.4px;line-height:1.15;
+    color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .portal-mobile-hello span{
+    display:block;font-size:11.5px;color:var(--muted);margin-top:1px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+
+  /* Colonne contexte : recherche + a traiter. Un seul conteneur pour que le
+     paysage puisse la poser dans une cellule de grille. */
+  .portal-mcol{display:flex;flex-direction:column;gap:12px;order:3;width:100%}
+
+  /* Faux champ de recherche : ouvre la palette de commandes, pas le clavier.
+     Chercher un n° de BL est cent fois plus frequent au telephone que
+     chercher sur le web — Google passe en repli, dans la pastille de droite. */
+  .portal-msearch{
+    display:flex;align-items:center;gap:9px;width:100%;
+    height:46px;padding:0 10px 0 13px;
+    border:1px solid var(--border);border-radius:10px;background:var(--card);
+    color:var(--muted);font:inherit;font-size:13.5px;text-align:left;cursor:pointer;
+  }
+  .portal-msearch:hover{border-color:var(--accent)}
+  .portal-msearch svg{flex:0 0 auto}
+  .portal-msearch-label{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .portal-msearch-google{
+    flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;
+    height:30px;padding:0 9px;border-radius:8px;
+    border:1px solid var(--border);background:var(--bg);
+    font:600 11px/1 inherit;color:var(--text2);cursor:pointer;
+  }
+  .portal-msearch-google:hover{border-color:var(--accent);color:var(--accent)}
+  .portal-msearch-google svg{width:14px;height:14px}
+
+  /* A traiter : les compteurs deja servis un par un, rendus tapables. */
+  .portal-atraiter{width:100%}
+  .portal-atraiter-empty{
+    display:flex;align-items:center;gap:9px;padding:13px 14px;
+    border:1px solid var(--border);border-radius:12px;background:var(--card);
+    font-size:12.5px;color:var(--muted);
+  }
+  .portal-atraiter-empty svg{color:var(--success);flex:0 0 auto}
+
+  /* Atelier maintenant : etat instantane des machines. */
+  .portal-atelier{display:block;order:6;width:100%}
+  .portal-atelier-body{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:2px 13px}
+  .portal-mach{
+    display:flex;align-items:center;gap:10px;
+    min-height:46px;padding:7px 0;border-bottom:1px solid var(--border);
+  }
+  .portal-mach:last-child{border-bottom:0}
+  .portal-mach-dot{width:9px;height:9px;flex:0 0 9px;border-radius:50%;background:var(--muted)}
+  .portal-mach-dot--prod{background:var(--success)}
+  .portal-mach-dot--planifie{background:var(--warn)}
+  .portal-mach-nom{
+    width:82px;flex:0 0 82px;font-size:12.5px;font-weight:700;letter-spacing:-.1px;color:var(--text);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .portal-mach-qui{
+    flex:1;min-width:0;font-size:11.5px;color:var(--text2);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .portal-mach-qui em{font-style:normal;color:var(--muted)}
+  .portal-mach-pct{
+    flex:0 0 auto;font-size:11px;color:var(--muted);white-space:nowrap;
+    font-family:ui-monospace,'Cascadia Code',monospace;font-variant-numeric:tabular-nums;
+  }
+
+  /* Reprendre : le dernier module ouvert depuis ce portail. */
+  .portal-reprendre{display:block;order:7;width:100%}
+  .portal-reprendre-btn{
+    display:flex;align-items:center;gap:11px;width:100%;
+    padding:11px 13px;border:1px solid var(--border);border-radius:12px;
+    background:var(--card);color:inherit;font:inherit;text-align:left;cursor:pointer;
+  }
+  .portal-reprendre-btn:hover{background:var(--bg);border-color:var(--accent)}
+  .portal-reprendre-ico{
+    width:34px;height:34px;flex:0 0 34px;border-radius:10px;
+    background:var(--accent-bg);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .portal-reprendre-ico svg{width:18px;height:18px}
+  .portal-reprendre-txt{flex:1;min-width:0}
+  .portal-reprendre-txt b{display:block;font-size:13.5px;font-weight:700;color:var(--text)}
+  .portal-reprendre-txt span{display:block;font-size:11px;color:var(--muted)}
+
+  /* Badge de tuile : porte par toutes les tuiles qui ont un compteur, plus
+     seulement MyQualite et Coffre RH. */
+  .portal-app-badge{box-shadow:0 0 0 2px var(--card)}
+
+  /* Un bloc sans donnee ne laisse pas un titre orphelin. */
+  .portal-atelier--vide,.portal-reprendre--vide{display:none!important}
+
+  /* Ligne machine : c'est un bouton, on annule le style natif. */
+  .portal-mach{
+    width:100%;background:none;border:0;border-bottom:1px solid var(--border);
+    color:inherit;font:inherit;text-align:left;cursor:pointer;
+  }
+  .portal-mach:last-child{border-bottom:0}
+  .portal-mach:hover{background:var(--bg)}
+
+  /* Les blocs mobiles s'alignent sur la largeur de la grille de tuiles,
+     sinon le portail donne l'impression de deux mises en page superposees. */
+  .portal-mcol,.portal-atelier,.portal-reprendre{
+    max-width:min(100%,320px);margin-left:auto;margin-right:auto;
+  }
+}
+
+@media (min-width:520px) and (max-width:900px){
+  .portal-mcol,.portal-atelier,.portal-reprendre{max-width:min(100%,400px)}
+}
+
+/* Portrait : l'ordre de lecture est bonjour → chercher → ce qui m'attend →
+   mes apps → l'atelier → reprendre. */
+@media (max-width:900px) and (orientation:portrait){
+  .portal-page{gap:14px}
+  .portal-mobile-header{margin-bottom:2px}
+}
+
+/* ── Paysage : deux colonnes. Le defilement horizontal des tuiles disparait,
+      les quatorze applications tiennent a l'ecran. Ce bloc vient APRES le
+      bloc paysage historique : a specificite egale, c'est lui qui gagne. ── */
+@media (max-width:900px) and (orientation:landscape){
+  .portal-page{
+    display:grid;
+    grid-template-columns:minmax(0,300px) minmax(0,1fr);
+    grid-template-rows:auto minmax(0,1fr);
+    gap:8px 14px;
+    align-content:stretch;
+    height:100dvh;
+    min-height:0;
+    overflow:hidden;
+    padding:max(6px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(8px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px));
+  }
+  .portal-mobile-header{
+    display:flex;grid-column:1;grid-row:1;
+    max-width:100%;margin:0;align-items:center;gap:10px;
+  }
+  .portal-mobile-hello b{font-size:15px}
+  .portal-mobile-hello span{font-size:10.5px}
+  .portal-mcol{
+    grid-column:1;grid-row:2;min-height:0;overflow-y:auto;gap:10px;padding-bottom:4px;
+    max-width:100%;margin:0;
+  }
+  .portal-corner-stack{
+    grid-column:2;grid-row:1;
+    position:static;flex-direction:row;flex-wrap:nowrap;justify-content:flex-end;
+    align-items:center;gap:6px;width:auto;margin:0;padding:0;
+    background:none;border:0;border-radius:0;box-shadow:none;
+  }
+  .portal-corner-stack .portal-settings-corner{width:34px;height:34px;border-radius:10px;
+    background:var(--card);border:1px solid var(--border)}
+  .portal-corner-stack .portal-settings-corner:hover{background:var(--bg);border-color:var(--accent)}
+  .portal-apps-block{
+    grid-column:2;grid-row:2;min-height:0;overflow-y:auto;
+    width:100%;max-width:100%;margin:0;
+  }
+  .portal-apps{
+    display:grid;grid-auto-flow:row;
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    grid-template-rows:none;
+    gap:8px;width:100%;max-width:100%;overflow:visible;
+    justify-content:stretch;
+  }
+  .portal-app{
+    width:auto;height:auto;min-height:0;max-height:none;flex:none;aspect-ratio:auto;
+    padding:9px 5px 8px;gap:5px;
+  }
+  .portal-app-icon{width:34px;height:34px;border-radius:10px}
+  .portal-app-icon svg{width:19px;height:19px}
+  .portal-app-name{font-size:11px}
+  .portal-app-desc{display:none}
+  .portal-logo,.portal-search,.portal-user,.portal-apps-hint,
+  .portal-atelier,.portal-reprendre{display:none!important}
+}
+
 """
 
 PORTAL_MAIN_JS = r"""
@@ -1384,13 +1576,17 @@ function renderPortal(){
 
   if(isExpe){
     const id='expe';
+    // Compteur de departs en attente de validation : la tuile la plus
+    // consultee au telephone est aussi celle qui portait le moins d'info.
+    const eIcoEl=h('div',{className:'portal-app-icon'},iconEl('truck',28));
+    eIcoEl.appendChild(h('span',{className:'portal-app-badge',id:'portal-expe-badge',style:{display:'none'}},'0'));
     tileSpecs.push({id,el:h('div',{
       className:'portal-app'+(S.portalLoading==='expe'?' portal-app--busy':''),
       'data-portal-id':id,
       draggable:S.portalLoading==='expe'?'false':'true',
       onClick:async()=>{if(_portalDragSuppressClick)return;window.location.href='/expe';}
     },
-      h('div',{className:'portal-app-icon'},iconEl('truck',28)),
+      eIcoEl,
       h('div',{className:'portal-app-name'},'MyExpé'),
       h('div',{className:'portal-app-desc'},
         ((urole==='logistique'||urole==='commercial')&&!isSuper)?'Expédition & suivi — lecture seule':'Expédition & Suivi')
@@ -1682,13 +1878,16 @@ function renderPortal(){
     return nom.split(/\s+/)[0]||'';
   })();
   const _googleLogoSvg=(()=>{const w=document.createElement('span');w.className='mob-google-svg';w.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>';return w;})();
+  // Refonte mobile 03/09/2026 : Google n'est plus l'action principale de la
+  // recherche du portail, il devient une pastille dans le champ. Le bouton
+  // garde son comportement (modal de recherche Google), il change de place.
   const _mobGoogleBtn=h('button',{
     type:'button',
-    className:'portal-mobile-google-btn',
-    'aria-label':'Recherche Google',
-    title:'Recherche Google',
-    onClick:(e)=>{openGoogleSearch(e&&e.currentTarget?e.currentTarget:null);}
-  }, _googleLogoSvg);
+    className:'portal-msearch-google',
+    'aria-label':'Rechercher sur Google',
+    title:'Rechercher sur Google',
+    onClick:(e)=>{e.stopPropagation();openGoogleSearch(e&&e.currentTarget?e.currentTarget:null);}
+  }, _googleLogoSvg, document.createTextNode('Google'));
   // Avatar : photo si dispo, sinon initiales ; badge humeur si active + aujourd'hui
   const _mobTodayIso=(()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
   const _mobAvatarUrl=(S.user&&S.user.avatar_url)?String(S.user.avatar_url).trim():'';
@@ -1710,13 +1909,256 @@ function renderPortal(){
     _mobAvatarEl,
     h('span',{className:'portal-mobile-profile-name'},_mobFirstName)
   );
+  // La marque sort de l'en-tete mobile : sur un telephone, savoir ou on est
+  // n'est pas la question, savoir ce qui attend l'est. L'avatar passe a
+  // gauche (il ouvre la feuille profil) et le prenom quitte le bouton
+  // puisqu'il est deja dans le bonjour.
+  const _mobDateTxt=(function(){
+    const d=new Date();
+    const J=['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
+    const M=['janvier','février','mars','avril','mai','juin','juillet','août',
+             'septembre','octobre','novembre','décembre'];
+    const j=J[d.getDay()];
+    const txt=j.charAt(0).toUpperCase()+j.slice(1)+' '+d.getDate()+' '+M[d.getMonth()];
+    // Numero de semaine ISO 8601 : on se cale sur le jeudi de la semaine.
+    const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+    t.setUTCDate(t.getUTCDate()+4-(t.getUTCDay()||7));
+    const an=new Date(Date.UTC(t.getUTCFullYear(),0,1));
+    const sem=Math.ceil(((t-an)/86400000+1)/7);
+    return txt+' · semaine '+sem;
+  })();
   const _mobileHeader=h('div',{className:'portal-mobile-header'},
-    h('div',{className:'portal-mobile-header-brand'},'My',h('span',null,'Sifa')),
-    h('div',{className:'portal-mobile-header-actions'},_mobGoogleBtn,_mobProfileBtn)
+    _mobProfileBtn,
+    h('div',{className:'portal-mobile-hello'},
+      h('b',null,_mobFirstName?('Bonjour '+_mobFirstName):'Bonjour'),
+      h('span',null,_mobDateTxt)
+    )
   );
+
+
+  /* ══ Blocs mobiles : recherche unifiée, « À traiter », atelier, reprendre ══
+     Montés dans le DOM en permanence mais affichés seulement sous 900 px
+     (voir PORTAL_MAIN_CSS) : sur le bureau, la barre d'icônes du coin porte
+     déjà les mêmes compteurs et la grille tient sans aide.
+     Aucun chiffre n'est recalculé ici : /api/portal/a-traiter délègue aux
+     endpoints de badge existants et /api/portal/atelier reprend le calcul
+     d'avancement du planning — deux écrans ne doivent jamais donner deux
+     chiffres pour le même dossier. */
+  const _pl=(n,s1,s2)=>(Number(n)>1?s2:s1);
+  const _hFmt=(v)=>{
+    const t=Math.round(Number(v||0)*60), hh=Math.floor(t/60), mm=t%60;
+    return mm?(hh+'h'+String(mm).padStart(2,'0')):(hh+'h');
+  };
+
+  // Le champ de recherche mobile ouvre la palette de commandes, pas Google :
+  // au téléphone on cherche un n° de BL, pas le web. Google reste dans la
+  // pastille de droite.
+  const _mobSearchBtn=h('button',{
+    type:'button',
+    className:'portal-msearch',
+    'aria-label':'Rechercher un dossier, une référence, un client',
+    onClick:()=>{if(window.MysifaCmdK)window.MysifaCmdK.open();}
+  },
+    iconEl('search',18),
+    h('span',{className:'portal-msearch-label'},'Dossier, réf., client, module…'),
+    _mobGoogleBtn
+  );
+
+  const _atraiterBody=h('div',{className:'portal-atraiter-body'});
+  const _atraiterBlock=h('div',{className:'portal-atraiter'},
+    h('div',{className:'msf-sect'},h('b',null,'À traiter')),
+    _atraiterBody
+  );
+  const _mobCol=h('div',{className:'portal-mcol'},_mobSearchBtn,_atraiterBlock);
+
+  function _atRow(o){
+    return h('button',{
+      type:'button',
+      className:'msf-row',
+      onClick:()=>{window.location.href=o.href;}
+    },
+      h('span',{className:'msf-row-ico'+(o.ton?' msf-row-ico--'+o.ton:'')},iconEl(o.icone,18)),
+      h('span',{className:'msf-row-txt'},h('b',null,o.titre),h('span',null,o.sous)),
+      h('span',{className:'msf-row-n',style:{color:o.couleur||'var(--accent)'}},String(o.n)),
+      iconEl('chevron-right',17)
+    );
+  }
+
+  setTimeout(()=>{
+    fetch('/api/portal/a-traiter',{credentials:'include'})
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{
+        if(!d)return;
+        const e=d.expe||{}, q=d.qualite||{}, rh=d.rh_coffre||{}, tk=d.taches||{};
+
+        // Le compteur de départs alimente aussi la pastille de la tuile.
+        const eb=document.getElementById('portal-expe-badge');
+        if(eb){
+          const n=Number(e.en_attente||0);
+          if(n>0){eb.style.display='inline-flex';eb.textContent=n>99?'99+':String(n);}
+          else eb.style.display='none';
+        }
+
+        const rows=[];
+        const nExpe=Number(e.en_attente||0);
+        if(nExpe>0){
+          const retard=Number(e.en_retard||0), auj=Number(e.aujourdhui||0);
+          let sous='MyExpé';
+          if(retard>0) sous='MyExpé · '+retard+' en retard';
+          else if(auj>0) sous='MyExpé · '+auj+" aujourd'hui";
+          rows.push(_atRow({
+            icone:'truck',
+            ton:retard>0?'danger':null,
+            couleur:retard>0?'var(--danger)':'var(--accent)',
+            titre:nExpe+' '+_pl(nExpe,'départ à valider','départs à valider'),
+            sous:sous, n:nExpe, href:'/expe'
+          }));
+        }
+
+        const nQ=Number(q.nc_unread||0)+Number(q.audits_unread||0);
+        const nAff=Number(q.audits_assigned_open||0);
+        if(nQ>0){
+          rows.push(_atRow({
+            icone:'shield-check', ton:'danger', couleur:'var(--danger)',
+            titre:nQ+' '+_pl(nQ,'message qualité non lu','messages qualité non lus'),
+            sous:'MyQualité · non-conformités et audits', n:nQ, href:'/qualite'
+          }));
+        }else if(nAff>0){
+          rows.push(_atRow({
+            icone:'shield-check', ton:'warn', couleur:'var(--warn)',
+            titre:nAff+' '+_pl(nAff,'audit qui vous est affecté','audits qui vous sont affectés'),
+            sous:'MyQualité', n:nAff, href:'/qualite'
+          }));
+        }
+
+        const nNdf=Number(rh.ndf_soumises||0);
+        if(nNdf>0){
+          rows.push(_atRow({
+            icone:'folder', ton:'warn', couleur:'var(--warn)',
+            titre:nNdf+' '+_pl(nNdf,'note de frais à valider','notes de frais à valider'),
+            sous:'Coffre RH', n:nNdf, href:'/rh/coffre'
+          }));
+        }
+
+        const nT=Number(tk.count||0), tR=Number(tk.en_retard||0);
+        if(nT>0){
+          rows.push(_atRow({
+            icone:'clipboard',
+            ton:tR>0?'danger':'muted',
+            couleur:tR>0?'var(--danger)':'var(--text2)',
+            titre:nT+' '+_pl(nT,'tâche assignée','tâches assignées'),
+            sous:tR>0?('Gestionnaire de tâches · '+tR+' en retard'):'Gestionnaire de tâches',
+            n:nT, href:'/taches'
+          }));
+        }
+
+        while(_atraiterBody.firstChild)_atraiterBody.removeChild(_atraiterBody.firstChild);
+        if(rows.length){
+          _atraiterBody.className='portal-atraiter-body msf-rows';
+          rows.forEach(r=>_atraiterBody.appendChild(r));
+        }else{
+          _atraiterBody.className='portal-atraiter-body';
+          _atraiterBody.appendChild(h('div',{className:'portal-atraiter-empty'},
+            iconEl('check-circle',18),
+            document.createTextNode('Rien à traiter — tout est à jour.')
+          ));
+        }
+      })
+      .catch(()=>{});
+  },0);
+
+  // ── Atelier maintenant ────────────────────────────────────────────────
+  const _atelierBody=h('div',{className:'portal-atelier-body'});
+  const _atelierBlock=h('div',{className:'portal-atelier portal-atelier--vide'},
+    h('div',{className:'msf-sect'},
+      h('b',null,'Atelier maintenant'),
+      h('button',{type:'button',onClick:()=>{window.location.href='/planning';}},'Ouvrir le planning')
+    ),
+    _atelierBody
+  );
+  setTimeout(()=>{
+    fetch('/api/portal/atelier',{credentials:'include'})
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{
+        const ms=(d&&Array.isArray(d.machines))?d.machines:[];
+        if(!ms.length)return;
+        ms.forEach(m=>{
+          const quiEl=h('span',{className:'portal-mach-qui'});
+          if(m.etat==='libre'){
+            quiEl.appendChild(h('em',null,'Aucun dossier en cours'));
+          }else{
+            const qui=String(m.client||m.no_dossier||'').trim()||'—';
+            quiEl.appendChild(document.createTextNode(qui));
+            if(m.etat==='planifie'){
+              // Un dossier en_cours au planning sans saisie ouverte : c'est
+              // exactement ce qu'on veut voir depuis son téléphone.
+              quiEl.appendChild(document.createTextNode(' '));
+              quiEl.appendChild(h('em',null,'· pas de saisie ouverte'));
+            }else if(m.duree_heures){
+              quiEl.appendChild(document.createTextNode(' · '+_hFmt(m.duree_heures)));
+            }
+          }
+          _atelierBody.appendChild(h('button',{
+            type:'button',
+            className:'portal-mach',
+            onClick:()=>{window.location.href='/planning?machine='+encodeURIComponent(m.id);}
+          },
+            h('span',{className:'portal-mach-dot'+(m.etat&&m.etat!=='libre'?' portal-mach-dot--'+m.etat:'')}),
+            h('span',{className:'portal-mach-nom'},String(m.nom||'')),
+            quiEl,
+            h('span',{className:'portal-mach-pct'},(m.avancement_pct!==null&&m.avancement_pct!==undefined)?(m.avancement_pct+' %'):'—')
+          ));
+        });
+        _atelierBlock.classList.remove('portal-atelier--vide');
+      })
+      .catch(()=>{});
+  },0);
+
+  // ── Reprendre : la dernière tuile ouverte depuis ce portail ───────────
+  // Volontairement local au portail : on ne va pas instrumenter chaque page
+  // pour ça, le portail retient ce qu'il a lui-même lancé.
+  const _reprendreBody=h('div',{className:'portal-reprendre-body'});
+  const _reprendreBlock=h('div',{className:'portal-reprendre portal-reprendre--vide'},
+    h('div',{className:'msf-sect'},h('b',null,'Reprendre')),
+    _reprendreBody
+  );
+  setTimeout(()=>{
+    const CLE='mysifa.portal.derniere-app';
+    try{
+      appsWrap.addEventListener('click',(ev)=>{
+        const t=(ev.target&&ev.target.closest)?ev.target.closest('[data-portal-id]'):null;
+        if(!t||_portalDragSuppressClick)return;
+        try{localStorage.setItem(CLE,t.getAttribute('data-portal-id')||'');}catch(err){}
+      },true);
+    }catch(err){}
+    let last='';
+    try{last=localStorage.getItem(CLE)||'';}catch(err){}
+    if(!last)return;
+    const spec=orderedTiles.find(x=>x.id===last);
+    if(!spec)return;
+    const nomEl=spec.el.querySelector('.portal-app-name');
+    if(!nomEl)return;
+    const svgEl=spec.el.querySelector('.portal-app-icon svg');
+    const ico=h('span',{className:'portal-reprendre-ico'});
+    if(svgEl)ico.appendChild(svgEl.cloneNode(true));
+    _reprendreBody.appendChild(h('button',{
+      type:'button',
+      className:'portal-reprendre-btn',
+      onClick:()=>{spec.el.click();}
+    },
+      ico,
+      h('span',{className:'portal-reprendre-txt'},
+        h('b',null,nomEl.textContent||''),
+        h('span',null,'dernière application ouverte')
+      ),
+      iconEl('chevron-right',17)
+    ));
+    _reprendreBlock.classList.remove('portal-reprendre--vide');
+  },0);
 
   const portalEl=h('div',{className:'portal-page'},
     _mobileHeader,
+    _mobCol,
     h('div',{className:'portal-corner-stack'},
       h('button',{
         type:'button',
@@ -1862,6 +2304,8 @@ function renderPortal(){
     })(),
     gBox,
     appsBlock,
+    _atelierBlock,
+    _reprendreBlock,
     h('div',{className:'portal-user'},
       h('span',{style:{display:'inline-flex',alignItems:'center',gap:'8px'}},iconEl('user',14),document.createTextNode(' '+((S.user&&S.user.nom)?S.user.nom:''))),
       // Rejouer la présentation du portail. Visible en permanence : la visite

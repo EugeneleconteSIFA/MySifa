@@ -308,10 +308,10 @@ function buildImpDetailRows(kind, count, details) {
     html += '<div class="pf-imp-row" data-imp="'+kind+'" data-idx="'+i+'">'+
       '<div class="pf-imp-field">'+pfLbl(k+' '+(i+1)+' couleur'+req)+
       '<input type="text" class="imp-couleur" required value="'+escAttr(d.couleur||'')+
-      '" placeholder="Couleur"></div>'+
+      '" placeholder="Couleur — ex. Yellow"></div>'+
       '<div class="pf-imp-field">'+pfLbl('Printing area'+req)+
       '<input type="text" class="imp-area" required value="'+escAttr(d.printing_area||'')+
-      '" placeholder="Zone"></div></div>';
+      '" placeholder="Zone — ex. 20 (%)"></div></div>';
   }
   return html;
 }

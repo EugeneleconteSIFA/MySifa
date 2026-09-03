@@ -38,6 +38,8 @@ from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph
 
+from app.services.ao_produit_fiche import format_printing_area
+
 
 # ── Coordonnées SIFA (siège social) ─────────────────────────────────
 SIFA_NAME    = "SIFA"
@@ -645,7 +647,7 @@ def _face_rows(details: list[dict], nb: int, face: str) -> list[tuple]:
     details = [d for d in (details or []) if isinstance(d, dict)]
     for i, d in enumerate(details, 1):
         rows.append(_color(i, str(d.get("couleur") or "").strip(),
-                           str(d.get("printing_area") or "").strip()))
+                           format_printing_area(d.get("printing_area"))))
     if not rows:
         if nb > 0:
             fr, en = _plural(nb, "couleur annoncée", "colour declared")

@@ -696,9 +696,45 @@ with dbmod.get_db() as conn:
     check("un prix inchangé n'encombre pas l'historique",
           len(MP.historique_prix(conn, d_test)), n)
 
+    # Les réglages de calcul ne se LISENT plus sur la déclinaison : depuis le
+    # passage au tarif fournisseur, `reglages_ligne` va les chercher sur le
+    # tarif du principal, et la devise sur le fournisseur. Une fiche qui écrit
+    # ailleurs saisit dans le vide — la valeur revient à l'ancienne dès la
+    # relecture, sans que rien ne le signale. C'était le bug de septembre 2026.
+    print("\n--- la fiche écrit là où le calcul lit ---")
+    MP.set_parametrage(conn, declinaison_id=d_test, patch={
+        "is_imported": True, "transport_mode": "CONTENEUR",
+        "transport_cout": 6000, "transport_quantite": 300000,
+        "taxe_pct": 4, "price_currency": "USD",
+    }, user_name="Test")
+    conn.commit()
+    tarif_ecrit = MP.fetch_tarif(conn, f["Meltavis"], 2)
+    check("le transport atterrit sur le tarif du fournisseur",
+          tarif_ecrit["transport_mode"], "CONTENEUR")
+    check("avec ses deux valeurs",
+          (tarif_ecrit["transport_cout"], tarif_ecrit["transport_quantite"]),
+          (6000.0, 300000.0))
+    check("les taxes aussi", tarif_ecrit["taxe_pct"], 4.0)
+    check("et l'import", tarif_ecrit["is_imported"], 1)
+    relu = MP.parametrage(conn, d_test)
+    check("la relecture rend ce qui a été saisi", relu["transport_cout"], 6000.0)
+    check("la devise part sur le fournisseur", relu["price_currency"], "USD")
+    check("elle y est vraiment", conn.execute(
+        "SELECT price_currency FROM fournisseurs_fsc WHERE id=?", (f["Meltavis"],)
+    ).fetchone()[0], "USD")
+    prix_principal = conn.execute(
+        "SELECT prix FROM mp_matiere_prix WHERE declinaison_id=? AND principal=1",
+        (d_test,),
+    ).fetchone()[0]
+    check("et le sous-total suit le transport saisi",
+          round(MP.sous_total_declinaison(conn, d_test), 4),
+          round((prix_principal + 6000 / 300000) * 1.04, 4))
+
     # On remet la déclinaison dans son état d'origine pour la suite du scénario.
     MP.set_parametrage(conn, declinaison_id=d_test, patch={
-        "is_imported": False, "transport_pct": 0, "taxe_pct": 0,
+        "is_imported": False, "transport_mode": "AMOUNT", "transport_pct": 0,
+        "transport_cout": 0, "transport_quantite": 0, "taxe_pct": 0,
+        "price_currency": "EUR",
     })
     MP.set_prix(conn, declinaison_id=d_test, fournisseur_id=f["Meltavis"], prix=1.62)
     conn.commit()
