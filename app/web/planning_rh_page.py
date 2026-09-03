@@ -3365,7 +3365,7 @@ function initPlanningRhGuides(){
 })();
 window.addEventListener('hashchange',function(){try{setTab(_readPrhTab(),{silent:true});}catch(e){}});
 </script>
-<script src="/static/mysifa_impersonate.js"></script>
+<script src="/static/mysifa_impersonate.js?v=2"></script>
 </body>
 </html>"""
 

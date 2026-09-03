@@ -6002,6 +6002,92 @@ async function expePatchContestation(id, patch){
   }catch(e){ toast(e.message||'Mise à jour impossible','error'); }
 }
 
+/* ── Palettes Europe : les deux champs de saisie inline ──────────────────
+   Sortis de la boucle du tableau pour que la carte mobile les reprenne à
+   l'identique — même débounce de 800 ms, même PATCH, même rechargement.
+   Deux implémentations du même champ, c'est une note qui s'enregistre sur un
+   écran et se perd sur l'autre. */
+/* Actions d'une ligne palette Europe. Sorties de la boucle du tableau : la
+   carte mobile a besoin des mêmes quatre boutons, aux mêmes conditions de
+   statut. Les réécrire aurait donné un écran où « réinitialiser » manque. */
+function expePalActionsBoutons(r, statut){
+  return [
+    statut!=='retournee' ? h('button',{type:'button',className:'expe-pal-eur-act expe-pal-eur-act--ok',
+      title:'Marquer comme retournée (date du jour)',
+      onClick:()=>expeChangePaletteEuropeStatut(r.id,'retournee',expeParisDayISO())
+    },iconEl('check-circle',14)) : null,
+    statut!=='perdue' ? h('button',{type:'button',className:'expe-pal-eur-act expe-pal-eur-act--bad',
+      title:'Marquer comme perdue',
+      onClick:()=>{
+        if(!confirm('Marquer cette palette comme perdue ?')) return;
+        expeChangePaletteEuropeStatut(r.id,'perdue', null);
+      }
+    },iconEl('x',14)) : null,
+    statut!=='en_attente' ? h('button',{type:'button',className:'expe-pal-eur-act',
+      title:'Réinitialiser le statut (en attente)',
+      onClick:()=>expeChangePaletteEuropeStatut(r.id,'en_attente', '')
+    },iconEl('rotate-ccw',13)) : null,
+    // Ouvrir une contestation depuis le départ : c'est là qu'on a le
+    // récépissé et le client sous les yeux, les ressaisir serait une
+    // occasion d'erreur pour rien.
+    expeCanWrite() ? h('button',{type:'button',className:'expe-pal-eur-act',
+      title:'Ouvrir une contestation sur ce départ',
+      onClick:()=>ouvrirSaisieContestation({
+        transporteur_id:r.transporteur_id, transporteur:r.transporteur,
+        depart_id:r.id, client:r.client, recepisse:r.arc||r.no_bl,
+        nb_palette:r.nb_palette, date:(r.date_enlevement||'').slice(0,10)
+      })
+    },iconEl('alert-circle',13)) : null
+  ].filter(Boolean);
+}
+
+function expePalNoteInput(r){
+  const noteInp = h('input',{
+    type:'text',
+    placeholder:'Note…',
+    value:r.palette_europe_note||'',
+    style:{width:'100%',padding:'4px 8px',fontSize:'11px',background:'var(--bg)',
+      border:'1px solid var(--border)',borderRadius:'6px',color:'var(--text)'}
+  });
+  let _noteT = null;
+  noteInp.addEventListener('input',e=>{
+    const v = e.target.value;
+    if(_noteT) clearTimeout(_noteT);
+    _noteT = setTimeout(async()=>{
+      try{
+        await api('/api/expe/departs/'+r.id+'/palette-europe',{
+          method:'PATCH',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({note: v})
+        });
+      }catch(e){ /* silencieux */ }
+    }, 800);
+  });
+  return noteInp;
+}
+
+function expePalDateRetourInput(r, statut){
+  const dateInp = h('input',{
+    type:'date',
+    value:(r.palette_europe_date_retour||'').slice(0,10),
+    style:{padding:'4px 8px',fontSize:'12px',background:'var(--bg)',
+      border:'1px solid var(--border)',borderRadius:'6px',color:'var(--text)'}
+  });
+  dateInp.addEventListener('change',async(e)=>{
+    const v = e.target.value;
+    try{
+      await api('/api/expe/departs/'+r.id+'/palette-europe',{
+        method:'PATCH',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({date_retour: v, statut: v ? 'retournee' : statut})
+      });
+      toast('Date retour enregistrée');
+      await loadExpePalettesEurope();
+    }catch(e){ toast(e.message||'Erreur','error'); }
+  });
+  return dateInp;
+}
+
 function renderExpePalettesEurope(){
   const data = S.expePalettesEuropeData || {departs:[], recap_clients:[], recap_transporteurs:[], totaux:{}};
   let departs = data.departs || [];
@@ -6275,45 +6361,8 @@ function renderExpePalettesEurope(){
   });
   const bodyRows = departs.length ? departs.map(r=>{
     const statut = r.palette_europe_statut || 'en_attente';
-    const noteInp = h('input',{
-      type:'text',
-      placeholder:'Note…',
-      value:r.palette_europe_note||'',
-      style:{width:'100%',padding:'4px 8px',fontSize:'11px',background:'var(--bg)',
-        border:'1px solid var(--border)',borderRadius:'6px',color:'var(--text)'}
-    });
-    let _noteT = null;
-    noteInp.addEventListener('input',e=>{
-      const v = e.target.value;
-      if(_noteT) clearTimeout(_noteT);
-      _noteT = setTimeout(async()=>{
-        try{
-          await api('/api/expe/departs/'+r.id+'/palette-europe',{
-            method:'PATCH',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({note: v})
-          });
-        }catch(e){ /* silencieux */ }
-      }, 800);
-    });
-    const dateInp = h('input',{
-      type:'date',
-      value:(r.palette_europe_date_retour||'').slice(0,10),
-      style:{padding:'4px 8px',fontSize:'12px',background:'var(--bg)',
-        border:'1px solid var(--border)',borderRadius:'6px',color:'var(--text)'}
-    });
-    dateInp.addEventListener('change',async(e)=>{
-      const v = e.target.value;
-      try{
-        await api('/api/expe/departs/'+r.id+'/palette-europe',{
-          method:'PATCH',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({date_retour: v, statut: v ? 'retournee' : statut})
-        });
-        toast('Date retour enregistrée');
-        await loadExpePalettesEurope();
-      }catch(e){ toast(e.message||'Erreur','error'); }
-    });
+    const noteInp = expePalNoteInput(r);
+    const dateInp = expePalDateRetourInput(r, statut);
     return h('tr',null,
       h('td',null,(r.date_enlevement||'').slice(0,10)),
       h('td',null,r.client||'—'),
@@ -6325,34 +6374,7 @@ function renderExpePalettesEurope(){
       h('td',null,dateInp),
       h('td',{style:{minWidth:'140px'}},noteInp),
       h('td',{className:'expe-pal-eur-acts-cell'},
-        h('div',{className:'expe-pal-eur-acts'},
-          statut!=='retournee' ? h('button',{type:'button',className:'expe-pal-eur-act expe-pal-eur-act--ok',
-            title:'Marquer comme retournée (date du jour)',
-            onClick:()=>expeChangePaletteEuropeStatut(r.id,'retournee',expeParisDayISO())
-          },iconEl('check-circle',14)) : null,
-          statut!=='perdue' ? h('button',{type:'button',className:'expe-pal-eur-act expe-pal-eur-act--bad',
-            title:'Marquer comme perdue',
-            onClick:()=>{
-              if(!confirm('Marquer cette palette comme perdue ?')) return;
-              expeChangePaletteEuropeStatut(r.id,'perdue', null);
-            }
-          },iconEl('x',14)) : null,
-          statut!=='en_attente' ? h('button',{type:'button',className:'expe-pal-eur-act',
-            title:'Réinitialiser le statut (en attente)',
-            onClick:()=>expeChangePaletteEuropeStatut(r.id,'en_attente', '')
-          },iconEl('rotate-ccw',13)) : null,
-          // Ouvrir une contestation depuis le départ : c'est là qu'on a le
-          // récépissé et le client sous les yeux, les ressaisir serait une
-          // occasion d'erreur pour rien.
-          expeCanWrite() ? h('button',{type:'button',className:'expe-pal-eur-act',
-            title:'Ouvrir une contestation sur ce départ',
-            onClick:()=>ouvrirSaisieContestation({
-              transporteur_id:r.transporteur_id, transporteur:r.transporteur,
-              depart_id:r.id, client:r.client, recepisse:r.arc||r.no_bl,
-              nb_palette:r.nb_palette, date:(r.date_enlevement||'').slice(0,10)
-            })
-          },iconEl('alert-circle',13)) : null
-        )
+        h('div',{className:'expe-pal-eur-acts'},...expePalActionsBoutons(r, statut))
       )
     );
   }) : [h('tr',null,h('td',{colSpan:10,style:{color:'var(--muted)',padding:'18px',textAlign:'center'}},
