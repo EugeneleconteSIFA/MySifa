@@ -4703,6 +4703,29 @@ function expePaletteTypeLabel(row){
   if(!m) return '—';
   return (m.reference||'').trim() || '—';
 }
+// Le planning de production connaît la contrainte transport ; MyExpé se
+// contente de la dire. Réserver reste possible : une date de fin de production
+// est une prévision, on ne bloque pas une expédition sur une prévision.
+function expeAvertirTransport(rep){
+  try{
+    const av=rep&&rep.avertissements;
+    if(!av||!av.length) return;
+    av.forEach(m=>toast(m,'error'));
+  }catch(e){}
+}
+// Ouverture directe d'un départ depuis le camion du planning : /expe?depart=<id>
+let _expeDepartOuvertParUrl=false;
+function _expeOuvrirDepartDepuisUrl(){
+  if(_expeDepartOuvertParUrl) return;
+  let id=0;
+  try{ id=Number(new URLSearchParams(location.search).get('depart')||0); }catch(e){ return; }
+  if(!id) return;
+  const row=(S.expeDepartList||[]).find(r=>Number(r.id)===id);
+  if(!row) return;
+  _expeDepartOuvertParUrl=true;
+  expeOpenDepartModal(row,'edit');
+}
+
 async function loadExpeDepartJour(){
   if(S.app!=='expe')return;
   void loadExpePaletteTypes();
@@ -4712,6 +4735,7 @@ async function loadExpeDepartJour(){
     try{
       const rows=await api('/api/expe/departs/jour');
       set({expeDepartList:Array.isArray(rows)?rows:[],expeDepartLoading:false});
+      _expeOuvrirDepartDepuisUrl();
     }catch(e){
       set({expeDepartLoading:false});
       toast(e.message||'Chargement impossible','error');
@@ -5264,8 +5288,9 @@ function renderExpeDepartModal(){
     set({expeDepartSubmitting:true});
     try{
       if(isEdit){
-        await api('/api/expe/departs/'+S.expeDepartEditId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        const maj=await api('/api/expe/departs/'+S.expeDepartEditId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
         toast('Départ modifié');
+        expeAvertirTransport(maj);
       }else{
         const cree=await api('/api/expe/departs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
         // Le rattachement RVGI attendait que le départ ait un id : on le pose
@@ -5283,6 +5308,7 @@ function renderExpeDepartModal(){
           }
         }
         toast('Départ enregistré');
+        expeAvertirTransport(cree);
       }
       set({expeDepartSubmitting:false});
       expeCloseDepartModal();

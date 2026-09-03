@@ -2298,168 +2298,22 @@ function setupTlDD(){
   });
 }
 
-// ── Déstockage matière d'une production terminée ──────────────────────────
-// Le bouton ne bascule plus un statut : il ouvre ce que la matière a coûté.
-// L'opératrice voit ce que le calcul propose, corrige ce qu'elle a réellement
-// consommé, et c'est sa saisie qui fait foi — le calcul n'est qu'un point de
-// départ. La validation écrit de vraies sorties de stock dans MyStock.
-const apiAbs=(p,o={})=>fetch(p,{credentials:"include",cache:"no-store",headers:{"Content-Type":"application/json",...(o.headers||{})},...o}).then(async r=>{
-  if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.detail||("HTTP "+r.status)); }
-  return r.json();
-});
-
-let _destockData=null;
-
-async function toggleDestockage(entryId){ return openDestockageModal(entryId); }
-
-async function openDestockageModal(entryId){
+// ── Déstockage matière : marquage visuel seulement ────────────────────────
+// Le bouton ne bascule qu'un statut : le point gris sur la timeline, et rien
+// d'autre. La modale qui écrivait de vraies sorties de stock est débranchée le
+// temps de revoir la méthode de gestion des stocks — les endpoints
+// /api/stock/destockage/… existent toujours côté serveur, plus rien ne les
+// appelle depuis ici.
+async function toggleDestockage(entryId){
   if(!CAN_EDIT) return;
-  const root=document.getElementById("mroot");
-  root.innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md" style="width:860px;max-width:96vw">
-    <h3 style="margin:0 0 18px;font-size:18px;font-family:var(--mono);color:var(--text)">Déstockage matière</h3><p style="color:var(--muted);font-size:13px">Chargement…</p></div></div>`;
   try{
-    _destockData=await apiAbs(`/api/stock/destockage/${entryId}`);
-  }catch(e){
-    root.innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md" style="width:520px;max-width:95vw">
-      <h3 style="margin:0 0 18px;font-size:18px;font-family:var(--mono);color:var(--text)">Déstockage matière</h3>
-      <p style="color:var(--danger,#ef4444);font-size:13px">${escHtml(e.message||"Chargement impossible")}</p>
-      <div class="md-acts" style="display:flex;justify-content:flex-end;gap:10px"><button class="btn-s" onclick="closeM()">Fermer</button></div></div></div>`;
-    return;
-  }
-  renderDestockModal(entryId);
-}
-
-function _dqFmt(v,u){
-  if(v==null) return "—";
-  const n=Math.abs(v)>=100?Math.round(v):Math.round(v*1000)/1000;
-  return String(n).replace(".",",")+(u?" "+u:"");
-}
-
-function renderDestockModal(entryId){
-  const d=_destockData;
-  const dj=(d.dossier.destockage||"todo")==="done";
-  const src=d.source_calcul==="reel"
-    ? `<span style="color:var(--success,#22c55e);font-weight:600">saisies d'atelier</span> — ${_dqFmt(d.reel.metrage,"m")} produits`
-    : `<span style="color:var(--warn,#d97706);font-weight:600">quantités théoriques</span> (aucune saisie de production trouvée)`;
-
-  let corps="";
-  if(dj){
-    // Déjà déstocké : on montre ce qui est sorti, par qui, et rien d'autre.
-    const mvts=(d.mouvements||[]).filter(m=>!m.annule_mouvement_id);
-    const annules=new Set((d.mouvements||[]).filter(m=>m.annule_mouvement_id).map(m=>m.annule_mouvement_id));
-    const actifs=mvts.filter(m=>!annules.has(m.id));
-    corps=`<div style="background:rgba(56,189,248,.10);border:1px solid #38bdf8;border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px">
-        <strong style="color:#38bdf8">Matière déjà déstockée</strong><br>
-        <span style="color:var(--muted)">Validé par ${escHtml((actifs[0]||{}).created_by_name||"—")} le ${escHtml(((actifs[0]||{}).created_at||"").slice(0,16).replace("T"," "))}</span>
-      </div>
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead><tr style="text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase">
-          <th style="padding:6px 8px">Matière</th><th style="padding:6px 8px;text-align:right">Sortie</th>
-          <th style="padding:6px 8px;text-align:right">Stock après</th></tr></thead>
-        <tbody>${actifs.map(m=>`<tr style="border-top:1px solid var(--border)">
-          <td style="padding:7px 8px;font-weight:600">${escHtml(m.matiere_ref||"—")}</td>
-          <td style="padding:7px 8px;text-align:right">${_dqFmt(m.quantite)}</td>
-          <td style="padding:7px 8px;text-align:right;color:${m.quantite_apres<0?"var(--danger,#ef4444)":"var(--muted)"}">${_dqFmt(m.quantite_apres)}</td>
-        </tr>`).join("")||`<tr><td colspan="3" style="padding:10px;color:var(--muted)">Aucun mouvement enregistré.</td></tr>`}</tbody>
-      </table>`;
-  }else{
-    const dispo=d.lignes.filter(l=>l.destockable);
-    const bloques=d.lignes.filter(l=>!l.destockable);
-    corps=`<p style="color:var(--muted);font-size:12px;margin:0 0 12px">Calculé à partir des ${src}. Corrige les quantités réellement consommées avant de valider.</p>
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead><tr style="text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase">
-          <th style="padding:6px 8px">Matière</th><th style="padding:6px 8px">Laize</th>
-          <th style="padding:6px 8px;text-align:right">Stock</th>
-          <th style="padding:6px 8px;text-align:right">À sortir</th></tr></thead>
-        <tbody>${dispo.map((l,i)=>`<tr style="border-top:1px solid var(--border)">
-          <td style="padding:7px 8px">
-            <div style="font-weight:600">${escHtml(l.matiere_ref||"—")}</div>
-            <div style="font-size:11px;color:var(--muted)">${escHtml(l.matiere_designation||l.source_value||"")}${l.detail?" · "+escHtml(l.detail):""}</div>
-          </td>
-          <td style="padding:7px 8px">${l.laizee&&l.laizes.length
-            ? `<select id="dq-lz-${i}" style="padding:5px 8px;background:var(--bg);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px">
-                 ${l.laizes.map(z=>`<option value="${z.laize_id}"${z.laize_id===l.laize_id?" selected":""}>${escHtml(z.label||z.valeur_mm+" mm")} (${_dqFmt(z.stock)})</option>`).join("")}
-               </select>`
-            : `<span style="color:var(--muted)">—</span>`}</td>
-          <td style="padding:7px 8px;text-align:right;color:var(--muted)">${_dqFmt(l.stock_actuel)}</td>
-          <td style="padding:7px 8px;text-align:right;white-space:nowrap">
-            <input id="dq-q-${i}" type="number" step="0.001" min="0" value="${l.quantite}"
-              data-mid="${l.matiere_id}"
-              style="width:96px;padding:5px 8px;background:var(--bg);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:13px;text-align:right">
-            <span style="color:var(--muted);font-size:11px;margin-left:4px">${escHtml(l.unite||"")}</span>
-          </td>
-        </tr>`).join("")}</tbody>
-      </table>
-      ${bloques.length?`<div style="margin-top:14px;padding:10px 12px;border:1px solid var(--warn,#d97706);border-radius:8px;background:rgba(251,146,60,.08);font-size:12px">
-        <strong style="color:var(--warn,#d97706)">${bloques.length} ligne${bloques.length>1?"s":""} non déstockée${bloques.length>1?"s":""}</strong>
-        <ul style="margin:6px 0 0;padding-left:18px;color:var(--muted)">
-          ${bloques.map(l=>`<li>${escHtml(l.source_value||l.kind)} — ${escHtml((l.manque||[]).join(" ; ")||"non chiffrable")}</li>`).join("")}
-        </ul></div>`:""}
-      <div class="fd" style="margin-top:14px"><label>Commentaire (optionnel)</label>
-        <input id="dq-note" type="text" placeholder="Ex. bobine entamée terminée sur ce dossier"
-          style="width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px"></div>`;
-  }
-
-  const actions=dj
-    ? `<button class="btn-s" onclick="closeM()">Fermer</button>
-       <button class="btn-p" style="background:var(--warn,#d97706)" onclick="annulerDestockage(${entryId})">Annuler le déstockage</button>`
-    : `<button class="btn-s" onclick="closeM()">Annuler</button>
-       <button class="btn-p" onclick="validerDestockage(${entryId})">Valider le déstockage</button>`;
-
-  document.getElementById("mroot").innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()">
-    <div class="md" style="width:860px;max-width:96vw;max-height:88vh;overflow-y:auto">
-      <h3 style="margin:0 0 18px;font-size:18px;font-family:var(--mono);color:var(--text)">Déstockage matière — ${escHtml(d.dossier.reference||"")}</h3>
-      ${corps}
-      <div id="dq-err" style="color:var(--danger,#ef4444);font-size:12px;margin-top:10px"></div>
-      <div class="md-acts" style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:18px">${actions}</div>
-    </div></div>`;
-}
-
-async function validerDestockage(entryId){
-  const d=_destockData; if(!d) return;
-  const dispo=d.lignes.filter(l=>l.destockable);
-  const lignes=[];
-  dispo.forEach((l,i)=>{
-    const inp=document.getElementById("dq-q-"+i);
-    const q=parseFloat((inp&&inp.value||"0").replace(",","."));
-    if(!(q>0)) return;   // remise à zéro = refus explicite de déstocker cette ligne
-    const sel=document.getElementById("dq-lz-"+i);
-    lignes.push({matiere_id:l.matiere_id, quantite:q,
-                 laize_id: sel?parseInt(sel.value,10):l.laize_id});
-  });
-  if(!lignes.length){ document.getElementById("dq-err").textContent="Toutes les lignes sont à zéro : rien à déstocker."; return; }
-  const note=(document.getElementById("dq-note")||{}).value||"";
-  try{
-    const r=await apiAbs(`/api/stock/destockage/${entryId}/valider`,
-      {method:"POST",body:JSON.stringify({lignes,note})});
-    closeM();
-    appliquerDestockage(entryId,"done");
-    if((r.stocks_negatifs||[]).length){
-      alert("Déstockage enregistré. Attention : "+r.stocks_negatifs.length
-        +" matière(s) passent en stock négatif — un inventaire est à prévoir.");
-    }
-  }catch(e){ document.getElementById("dq-err").textContent=e.message||"Enregistrement impossible"; }
-}
-
-async function annulerDestockage(entryId){
-  const d=_destockData; if(!d) return;
-  const actifs=(d.mouvements||[]).filter(m=>!m.annule_mouvement_id);
-  const detail=actifs.map(m=>"• "+(m.matiere_ref||"?")+" : +"+_dqFmt(m.quantite)).join("\n");
-  if(!confirm("Remettre en stock la matière déstockée sur ce dossier ?\n\n"+detail
-    +"\n\nLes sorties ne sont pas effacées : elles sont contre-passées, et les deux écritures restent à l'historique.")) return;
-  try{
-    await apiAbs(`/api/stock/destockage/${entryId}/annuler`,{method:"POST",body:"{}"});
-    closeM();
-    appliquerDestockage(entryId,"todo");
-  }catch(e){ document.getElementById("dq-err").textContent=e.message||"Annulation impossible"; }
-}
-
-function appliquerDestockage(entryId,val){
-  (S.timeline||[]).forEach(s=>{if((s.entry_id||0)===entryId) s.destockage=val;});
-  const ent=(S.entries||[]).find(x=>x.id===entryId);
-  if(ent) ent.destockage=val;
-  renderTL();
-  updateDestockBtn(entryId, val);
+    const r=await api(`/machines/${MID}/entries/${entryId}/destockage`,{method:"PUT"});
+    (S.timeline||[]).forEach(s=>{if((s.entry_id||0)===entryId) s.destockage=r.destockage;});
+    const ent=(S.entries||[]).find(x=>x.id===entryId);
+    if(ent) ent.destockage=r.destockage;
+    renderTL();
+    updateDestockBtn(entryId, r.destockage);
+  }catch(e){ console.error("toggleDestockage",e); }
 }
 
 function updateDestockBtn(entryId, val){
@@ -2740,12 +2594,13 @@ function mkTL(mon,slots){
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
       data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}" data-qte-etiq="${escAttr(qteEtiq!=null?fmtQty(qteEtiq):"")}" data-nb-palettes="${escAttr(nbPalettes!=null?String(nbPalettes):"")}"`+
       ` data-prise-rdv="${s.prise_rdv?'1':'0'}" data-dept="${escAttr(s.departement_livraison||"")}" data-dl-imp="${dlImp?'1':'0'}" data-support="${escAttr(s.ft_support||"")}" data-adhesif="${escAttr(s.ft_adhesif||"")}" data-palette-type="${escAttr(s.ft_palette_type||"")}" data-mandrin="${escAttr(s.ft_mandrin_dia||"")}" data-cond="${escAttr(s.ft_conditionnement_phrase||"")}" data-laize="${escAttr(s.laize?String(s.laize)+' mm':"")}"`+
+      ` data-tr="${s.transport?'1':'0'}" data-tr-transp="${escAttr((s.transport&&s.transport.transporteur)||"")}" data-tr-date="${escAttr((s.transport&&s.transport.date_enlevement)||"")}" data-tr-pal="${escAttr(s.transport&&s.transport.palettes!=null?String(s.transport.palettes):"")}" data-tr-limite="${escAttr((s.transport&&s.transport.limite)||"")}" data-tr-tension="${escAttr((s.transport&&s.transport.tension)||"")}" data-tr-marge="${escAttr(s.transport&&s.transport.marge_heures?String(s.transport.marge_heures):"")}" data-tr-nb="${escAttr(String((s.transport&&s.transport.departs&&s.transport.departs.length)||0))}"`+
       ` data-annule="${annuleSlot?'1':'0'}" data-annule-motif="${escAttr(s.annule_motif||"")}" data-annule-par="${escAttr(s.annule_par||"")}" data-annule-count="${escAttr(String(s.annule_count||0))}"`+
       ` data-planned-start="${escAttr(String(s.start||""))}" data-planned-end="${escAttr(String(s.end||""))}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
       ${resizeHandle}
-      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}${annuleBadgeHtml(s)}</span>${line2SlotHtml?`<span class="line2">${line2SlotHtml}</span>`:""}${line3SlotHtml?`<span class="line3">${line3SlotHtml}</span>`:""}${(()=>{const _isExpe=(S.planningVue==="expe"||S.planningVue==="prod_expe");if(_isExpe){return qteEtiq==null?`<span class="line-no-of">pas d'OF lié</span>`:"";}return exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:"";})()}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
+      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}${transportBadgeHtml(s)}${annuleBadgeHtml(s)}</span>${line2SlotHtml?`<span class="line2">${line2SlotHtml}</span>`:""}${line3SlotHtml?`<span class="line3">${line3SlotHtml}</span>`:""}${(()=>{const _isExpe=(S.planningVue==="expe"||S.planningVue==="prod_expe");if(_isExpe){return qteEtiq==null?`<span class="line-no-of">pas d'OF lié</span>`:"";}return exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:"";})()}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
   });
 
   const np=gp(now);
@@ -2950,6 +2805,26 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
     : `<div class="tip-grid">${colGen}${qteTxt?`<span class="k">Qté étiquettes</span><span class="v" style="color:var(--accent);font-weight:600">${escHtml(qteTxt)}</span>`:""}</div>`;
   tipEl.innerHTML=`<div class="tip-hdr"><div class="tip-bar" style="background:${d.co||"#888"}"></div><div><div class="tip-ref">${d.ref||"—"}</div>${sub}</div></div>
     ${liv?`<div class="tip-livraison" style="${livStyle}">Livraison : ${escHtml(liv)}${livSuffix}</div>`:""}
+    ${d.tr==="1"?(()=>{
+      const col=trCouleur({tension:d.trTension});
+      const pal=d.trPal?(Number(d.trPal).toLocaleString("fr-FR")+" palettes"):"palettes non précisées";
+      const transp=(d.trTransp||"").trim()||"transporteur non précisé";
+      const lim=(d.trLimite||"").trim();
+      const limTxt=lim?(trFmtDate(lim.slice(0,10))+" à "+lim.slice(11,16).replace(":","h").replace("h00","h")):"";
+      const marge=Number(d.trMarge||0);
+      const nb=Number(d.trNb||0);
+      const etat=d.trTension==="depasse"?"Fin de production après l'enlèvement"
+                :d.trTension==="juste"?"Moins d'une journée de battement"
+                :"Marge suffisante";
+      return `<div class="tip-transport" style="margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--bg);border-left:3px solid ${col}">
+        <span class="k" style="color:${col}">Transport réservé</span>
+        <div style="font-size:12px;color:var(--text2);margin-top:2px">${escHtml(transp)} · ${escHtml(pal)}</div>
+        ${limTxt?`<div style="font-size:12px;color:var(--text2)">À terminer avant le ${escHtml(limTxt)}</div>`:""}
+        ${marge>0?`<div style="font-size:11px;color:var(--muted)">Marge de production ajoutée : ${escHtml(marge.toLocaleString("fr-FR"))} h</div>`:""}
+        ${nb>1?`<div style="font-size:11px;color:var(--muted)">${nb} départs réservés sur ce dossier</div>`:""}
+        <div style="font-size:11px;color:${col};font-weight:600;margin-top:2px">${escHtml(etat)}</div>
+      </div>`;
+    })():""}
     ${d.annule==="1"?`<div class="tip-annule"><span class="k">Dossier annulé en production${(d.annuleCount&&+d.annuleCount>1)?" (×"+escHtml(d.annuleCount)+")":""}</span>${escHtml((d.annuleMotif||"").trim()||"Motif non renseigné")}${(d.annulePar||"").trim()?`<div style="margin-top:4px;font-size:10px;font-weight:600;color:var(--text2)">par ${escHtml(d.annulePar)}</div>`:""}</div>`:""}
     ${(exigTip && !isExpeVueTip)?`<div class="tip-exig"><span class="k">Exigences de production</span>${escHtml(exigTip)}</div>`:""}
     ${bodyHtml}
@@ -3524,6 +3399,57 @@ const FSC_REQ_OPTIONS=__FSC_REQ_OPTIONS__;
 const FSC_CLAIM_DEFAUT="__FSC_CLAIM_DEFAUT__";
 const FSC_REQ_CODES=FSC_REQ_OPTIONS.map(o=>o[0]);
 const FSC_REQ_LABELS=Object.fromEntries(FSC_REQ_OPTIONS);
+
+// ── Transport réservé ───────────────────────────────────────────────────────
+// Le camion n'apparaît que sur les dossiers réellement contraints : un départ
+// à venir d'au moins le seuil de palettes réglé dans Paramètres. En dessous,
+// le planning ne change pas — c'est la règle décidée avec SIFA, pas un oubli.
+function trFmtDate(iso){
+  const s=String(iso||"").trim();
+  if(s.length<10) return s;
+  return s.slice(8,10)+"/"+s.slice(5,7)+"/"+s.slice(0,4);
+}
+function trFmtHeure(h){
+  const v=Number(h);
+  if(!isFinite(v)) return "";
+  const hh=Math.floor(v), mm=Math.round((v-hh)*60);
+  return mm?(hh+"h"+String(mm).padStart(2,"0")):(hh+"h");
+}
+function trCouleur(t){
+  const s=(t&&t.tension)||"ok";
+  return s==="depasse"?"var(--danger)":(s==="juste"?"var(--warn)":"var(--success)");
+}
+function trLibelle(t){
+  if(!t) return "";
+  const transp=(t.transporteur||"").trim()||"transporteur non précisé";
+  const pal=(t.palettes!=null)?(" · "+Number(t.palettes).toLocaleString("fr-FR")+" palettes"):"";
+  return "Transport réservé — "+transp+" · enlèvement le "+trFmtDate(t.date_enlevement)
+       +" avant "+trFmtHeure(t.heure_limite)+pal;
+}
+function transportBadgeHtml(s){
+  const t=s&&s.transport;
+  if(!t) return "";
+  const col=trCouleur(t);
+  const id=Number(t.depart_id)||0;
+  // Pastille posée sur le fond de carte, pas sur la couleur du créneau : les
+  // slots sont pastel et changent de teinte à chaque dossier, une icône
+  // simplement colorée s'y noyait. Fond neutre + contour et camion à la
+  // couleur de tension = lisible sur n'importe quel créneau, dans les deux
+  // thèmes, sans une seule couleur codée en dur.
+  const camion='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 3h13v13H1z"/><path d="M14 8h4l3 3v5h-7z"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/></svg>';
+  const clic=id?` onclick="event.stopPropagation();ouvrirDepartExpe(${id})"`:"";
+  return `<span class="slot-camion" title="${escAttr(trLibelle(t))}"${clic}`
+    +` style="display:inline-flex;align-items:center;justify-content:center;`
+    +`color:${col};background:var(--card);border:1px solid ${col};border-radius:6px;`
+    +`padding:2px 5px;margin:0 4px 0 8px;vertical-align:middle;line-height:0;`
+    +`${id?'cursor:pointer;':''}">${camion}</span>`;
+}
+// Le départ s'ouvre dans MyExpé, onglet Départs programmés, modale déjà ouverte
+// sur la ligne concernée. Nouvel onglet : le planificateur ne perd pas sa vue.
+function ouvrirDepartExpe(departId){
+  if(!departId) return;
+  window.open("/expe?depart="+encodeURIComponent(departId)+"#suivi_departs","_blank","noopener");
+}
 
 function fscBadgeHtml(e){
   if(!e||!(e.fsc_requis===1||e.fsc_requis===true)) return "";

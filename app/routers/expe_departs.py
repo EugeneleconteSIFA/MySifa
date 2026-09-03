@@ -34,6 +34,7 @@ from config import (
     public_base_url,
 )
 from app.services import expe_evenements as expe_ev
+from app.services import transport_planning as tp
 from app.services import expe_notes, expe_regions
 from app.services.expe_transporteurs_seed import seed_expe_transporteurs_if_empty
 from database import get_db
@@ -173,6 +174,54 @@ _DEPARTS_SELECT = """
     LEFT JOIN expe_transporteurs t ON t.id = d.transporteur_id
     LEFT JOIN planning_entries pe ON pe.id = d.planning_entry_id
 """
+
+
+def _avertissements_transport(conn, depart_id: int) -> list[str]:
+    """Dossiers de ce départ dont la production finit après l'heure limite.
+
+    MyExpé n'empêche jamais de réserver : la donnée de planning est une
+    prévision, et une expédition ne se bloque pas sur une prévision. On le dit,
+    c'est tout — le camion rouge sur le planning fait le reste du travail.
+    """
+    try:
+        params = tp.charger_params(conn)
+        if not params["actif"]:
+            return []
+        rows = conn.execute(
+            """SELECT pe.id, pe.reference, pe.numero_of, pe.statut, pe.planned_end
+                 FROM expe_depart_dossiers dd
+                 JOIN planning_entries pe ON pe.id = dd.planning_entry_id
+                WHERE dd.depart_id = ?""",
+            (depart_id,),
+        ).fetchall()
+        if not rows:
+            return []
+        entries = [dict(r) for r in rows]
+        contraintes = tp.contraintes_pour(conn, entries, {})
+        out: list[str] = []
+        for e in entries:
+            c = contraintes.get(int(e["id"]))
+            if not c or int(c.get("depart_id") or 0) != int(depart_id):
+                continue
+            fin = e.get("planned_end")
+            fin_dt = None
+            if fin:
+                try:
+                    fin_dt = datetime.strptime(str(fin)[:19], "%Y-%m-%dT%H:%M:%S")
+                except ValueError:
+                    fin_dt = None
+            lim = c.get("limite")
+            if fin_dt is None or lim is None or fin_dt <= lim:
+                continue
+            ref = str(e.get("numero_of") or e.get("reference") or "?").strip()
+            out.append(
+                f"Le dossier {ref} n'est pas terminé avant l'enlèvement : "
+                f"fin de production prévue le {tp.fmt_jour_heure(fin_dt)}, "
+                f"enlèvement le {tp.fmt_jour_heure(lim)}."
+            )
+        return out
+    except Exception:
+        return []
 
 
 def _depart_dict(row) -> dict:
@@ -1021,6 +1070,7 @@ def create_depart(request: Request, body: dict = Body(...)):
         row = conn.execute(
             f"{_DEPARTS_SELECT} WHERE d.id=?", (rid,)
         ).fetchone()
+        avertissements = _avertissements_transport(conn, rid)
     client_nom = (body.get("client") or "").strip() or "—"
     log_action(
         user=user,
@@ -1029,7 +1079,10 @@ def create_depart(request: Request, body: dict = Body(...)):
         objet=f"Départ {client_nom} · {date_enl}",
         ip=request.client.host if request.client else None,
     )
-    return _depart_dict(row)
+    sortie = _depart_dict(row)
+    if avertissements:
+        sortie["avertissements"] = avertissements
+    return sortie
 
 
 @router.post("/departs/{depart_id}/valider")
@@ -1238,6 +1291,7 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
         row = conn.execute(
             f"{_DEPARTS_SELECT} WHERE d.id=?", (depart_id,)
         ).fetchone()
+        avertissements = _avertissements_transport(conn, depart_id)
     client_nom = (row["client"] or "").strip() if row else "—"
     log_action(
         user=user,
@@ -1246,7 +1300,10 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
         objet=f"Départ #{depart_id} · {client_nom}",
         ip=request.client.host if request.client else None,
     )
-    return _depart_dict(row)
+    sortie = _depart_dict(row)
+    if avertissements:
+        sortie["avertissements"] = avertissements
+    return sortie
 
 
 @router.patch("/departs/{depart_id}/palette-europe")
