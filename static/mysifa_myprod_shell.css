@@ -194,9 +194,15 @@ body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rg
 
 /* ── Responsive (mobile / tablette portrait) ─────────────────────── */
 @media (max-width: 900px){
+  /* La topbar de ce shell est en position:sticky, donc DANS le flux. La
+     compensation de 74 px de mysifa_mobile_topbar.css (importée par
+     mysifa_theme.css) est prévue pour une topbar fixed : ici elle ajoutait
+     une bande vide de 74 px au-dessus de la topbar. Sa spécificité
+     (body.has-topbar .main) impose de la reprendre au même niveau. */
+  body.has-topbar .main{padding-top:14px}
   .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:9000;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 16px 48px rgba(0,0,0,.55)}
   body.sb-open .sidebar{transform:translateX(0)}
-  .main{padding:18px}
+  .main{padding:14px}
   .mobile-topbar{display:flex}
 }
 @media (display-mode: standalone), (max-width: 900px){

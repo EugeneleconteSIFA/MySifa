@@ -78,7 +78,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
      s'en charge sur staging), or cette feuille porte desormais le style des
      intitules de section de la barre laterale. Sans suffixe, le navigateur
      ressert l'ancienne et la section s'affiche nue. -->
-<link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem13">
+<link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem13-mob1">
 <link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__-sais1">
 <link rel="stylesheet" href="/static/mysifa_retour_prod.css?v=__V_LABEL__-reu11">
 <link rel="stylesheet" href="/static/mysifa_reunions.css?v=__V_LABEL__-reu9">
@@ -108,6 +108,6 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__"></script>
 <!-- Memoire produit : fiche par reference (partagee avec Saisieprod) -->
 <script src="/static/mysifa_produit_memoire.js?v=__V_LABEL__-pmem17"></script>
-<script src="/static/mysifa_cal_rappel.js?v=7"></script>
+<script src="/static/mysifa_cal_rappel.js?v=8"></script>
 </body>
 </html>"""

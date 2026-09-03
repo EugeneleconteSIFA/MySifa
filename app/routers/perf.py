@@ -305,7 +305,9 @@ async function charger(){
   ) : '<div class="vide">Aucune mesure en affichage complet.</div>';
 }
 charger();
-</script></body></html>"""
+</script>
+<script src="/static/mysifa_cal_rappel.js?v=5"></script>
+</body></html>"""
 
 
 @router.get("/perf-postes", response_class=HTMLResponse)

@@ -318,6 +318,11 @@ class MaterialPreviewIn(BaseModel):
     transport_quantite: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=14)
     container_kg: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     container_cost_usd: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
+    # Taux USD → EUR d'essai : le panneau Paramètres recalcule la fiche pendant
+    # qu'on tape le taux, sans rien enregistrer. Absent, c'est celui de la base
+    # qui s'applique — « Appliquer » reste seul à graver un taux pour toutes les
+    # matières.
+    eur_usd_rate: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
 
 
 class McMaterialCategoryOut(BaseModel):

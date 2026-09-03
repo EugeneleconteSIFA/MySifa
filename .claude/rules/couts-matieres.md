@@ -17,9 +17,31 @@ adhésif. La déclinaison porte tout ce qui fait un coût :
 
 - son **prix d'achat** : une ligne par fournisseur dans `mp_matiere_prix`, celle
   marquée `principal = 1` est le prix en vigueur ;
-- son **paramétrage** : poids, grammage, devise, base de prix, incidence des taxes,
-  import et transport — des colonnes de `mp_matiere_declinaison` depuis le
-  4 août 2026.
+- son **paramétrage** : poids, grammage, perte, marge — colonnes de
+  `mp_matiere_declinaison` depuis le 4 août 2026. Le **transport, les taxes,
+  l'import et la base de prix** ont quitté la déclinaison le 6 août 2026 pour le
+  **tarif du fournisseur** (`mc_tarif_fournisseur`, une ligne par fournisseur ×
+  matière) ; la **devise** vit sur le fournisseur
+  (`fournisseurs_fsc.price_currency`). La déclinaison en garde une copie, qui ne
+  sert que de repli pour une ligne sans fournisseur.
+
+### Où s'écrit un réglage de calcul
+
+`reglages_ligne` LIT le transport et les taxes sur le tarif du fournisseur de la
+ligne, et `devise_ligne` la devise sur le fournisseur. Un écran qui écrit sur la
+seule déclinaison saisit donc dans le vide : la valeur revient à l'ancienne dès
+la relecture, sans message d'erreur. C'était le bug de septembre 2026 sur la
+fiche `/pricing/mystock/<id>` — taux de change et paramètres d'import sans effet
+sur le prix, parce que le fournisseur principal facturait en EUR sans transport.
+
+`set_parametrage` route maintenant chaque réglage vers son porteur : `set_tarif`
+pour le tarif du fournisseur principal, `set_devise_fournisseur` pour la devise,
+la déclinaison pour ce qui lui appartient vraiment. La portée s'élargit d'autant
+et la fiche doit le dire : ce qu'on saisit vaut pour **toutes les déclinaisons de
+cette matière chez ce fournisseur**, et la devise pour **tout ce qu'il vend**.
+
+L'historique nomme l'ÉCRAN, pas la table écrite : `set_tarif` accepte un
+`origine`, et la fiche déclinaison journalise « Coûts matières — paramétrage ».
 
 De là, `compute_material_price_per_m2` sort un coût au m² sans qu'aucune fiche de
 la base historique n'intervienne. La page se trouve à `/pricing/mystock/<id>` —
@@ -217,6 +239,12 @@ les fusionner reviendrait à choisir un prix à la place de quelqu'un.
 ### Comment un prix d'achat devient un coût au m²
 
     prix de revient €/m² = (prix d'achat + transport + taxes) × taux de change
+
+Le **taux de change** est un réglage global (`mc_setting.eur_usd_rate`). Le
+panneau Paramètres des deux fiches le recalcule **à la frappe** : le taux tapé
+part dans `POST /api/pricing/materials/preview` (champ `eur_usd_rate`), qui ne
+persiste rien. « Appliquer » reste seul à le graver pour tout le catalogue — un
+taux se juge sur le prix qu'il donne, pas sur le chiffre qu'on tape.
 
 Les mêmes réglages sur les deux fiches (base CM et MyStock) :
 

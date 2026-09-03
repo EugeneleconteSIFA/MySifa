@@ -351,8 +351,7 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script>window.__MYSIFA_APP__='db';</script>
-<link rel="stylesheet" href="/static/mysifa_landscape.css">
-<link rel="stylesheet" href="/static/mysifa_dock.css">
+<link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js"></script>
@@ -361,9 +360,7 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=7"></script>
-<script src="/static/mysifa_landscape.js?v=2"></script>
-<script>window.MySifaLandscape&&MySifaLandscape.enable();</script>
+<script src="/static/mysifa_cal_rappel.js?v=8"></script>
 <script>
 (function(){{
   function bootChatDock(){{
@@ -996,7 +993,7 @@ function rowsIco(s=14) {{
   return `<svg width="${{s}}" height="${{s}}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1" fill="currentColor"/><circle cx="3" cy="12" r="1" fill="currentColor"/><circle cx="3" cy="18" r="1" fill="currentColor"/></svg>`;
 }}
 </script>
-<script src="/static/mysifa_impersonate.js"></script>
+<script src="/static/mysifa_impersonate.js?v=2"></script>
 </body>
 </html>"""
     return HTMLResponse(

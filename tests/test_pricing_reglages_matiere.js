@@ -163,5 +163,32 @@ check('plus de note sur la page Produits MyStock',
   src.includes('Ces produits sont composés de'), false);
 check('colonne fournisseur principal', src.includes('Fournisseur principal'), true);
 
+// ─── Le taux de change s'essaie à la frappe ─────────────────────────────────
+// Le taux vaut pour tout le catalogue : on le juge sur le prix qu'il donne
+// AVANT de l'écrire. Le champ recalcule donc la fiche pendant la frappe et
+// n'enregistre rien — « Appliquer » reste seul à graver le taux.
+const ctxFx = {
+  console, Math, Number, parseFloat,
+  S: { fxDraft: null, settings: { eur_usd_rate: 0.86 } },
+};
+vm.createContext(ctxFx);
+vm.runInContext([extraire('fxEssai'), extraire('tauxCourant')].join('\n'), ctxFx);
+check('rien tapé : aucun taux d\'essai', ctxFx.fxEssai(), undefined);
+check('c\'est le taux enregistré qui vaut', ctxFx.tauxCourant(), 0.86);
+ctxFx.S.fxDraft = '0.9123';
+check('un taux tapé est essayé', ctxFx.fxEssai(), 0.9123);
+check('et prend la main à l\'écran', ctxFx.tauxCourant(), 0.9123);
+ctxFx.S.fxDraft = '';
+check('champ vidé : on retombe sur l\'enregistré', ctxFx.tauxCourant(), 0.86);
+ctxFx.S.fxDraft = '0';
+check('un taux nul n\'annule pas les prix', ctxFx.fxEssai(), undefined);
+check('les deux aperçus envoient le taux essayé',
+  extraire('materialPreviewPayload').includes('eur_usd_rate: fxEssai()')
+    && extraire('refreshDeclPreview').includes('eur_usd_rate: fxEssai()'), true);
+const panneauFx = extraire('bindInlineSettings');
+check('la frappe alimente l\'essai', panneauFx.includes('S.fxDraft = champTaux.value'), true);
+check('et déclenche un recalcul', panneauFx.includes('recalculerApercu'), true);
+check('enregistrer efface l\'essai', panneauFx.includes('S.fxDraft = null'), true);
+
 console.log(ko === 0 ? '\nTOUT EST VERT' : '\n' + ko + ' ECHEC(S)');
 process.exit(ko === 0 ? 0 : 1);

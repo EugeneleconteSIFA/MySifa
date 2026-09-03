@@ -1,0 +1,253 @@
+/* MySifa — socle mobile partagé (portail, MyExpé, planning).
+ *
+ * Ce fichier remplace la rotation paysage forcée : au lieu de faire tourner
+ * le corps de page de 90 degres pour continuer a servir une interface de
+ * bureau, on donne aux ecrans mobiles leurs propres composants.
+ *
+ * Regle : aucune couleur en dur, tout passe par les tokens de
+ * app/web/components/theme.py (miroir static/mysifa_theme.css).
+ *
+ * Convention de nommage : prefixe .msf-  (MySifa Mobile).
+ * Les composants sont definis sans media query pour rester utilisables en
+ * paysage ; c'est chaque page qui decide quand elle les affiche.
+ */
+
+/* ── Bases ───────────────────────────────────────────────────────────── */
+
+.msf-safe-bottom{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
+
+/* Cible tactile minimale. 44 px est le plancher : en dessous, on vise le
+   voisin. Les boutons d'action de ligne du bureau font 26 px. */
+.msf-tap{min-width:44px;min-height:44px}
+
+/* ── Carte ───────────────────────────────────────────────────────────── */
+
+.msf-card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:12px 13px;
+}
+.msf-card + .msf-card{margin-top:9px}
+.msf-card--flat{padding:0;overflow:hidden}
+.msf-card-head{display:flex;align-items:center;gap:8px;margin-bottom:7px;min-width:0}
+.msf-card-title{
+  flex:1;min-width:0;font-size:14.5px;font-weight:700;letter-spacing:-.2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.msf-card-sub{
+  display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;
+  font-size:11.5px;color:var(--muted);
+}
+.msf-card-sub + .msf-card-sub{margin-top:5px}
+.msf-chevron{flex:0 0 auto;color:var(--muted);display:inline-flex}
+
+/* ── Liste de lignes (une carte qui contient des rangees) ────────────── */
+
+.msf-rows{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.msf-row{
+  display:flex;align-items:center;gap:11px;
+  min-height:52px;padding:8px 12px;
+  border-bottom:1px solid var(--border);
+  background:none;border-left:0;border-right:0;border-top:0;
+  width:100%;text-align:left;color:inherit;font:inherit;cursor:pointer;
+}
+.msf-row:last-child{border-bottom:0}
+.msf-row:hover{background:var(--bg)}
+.msf-row-ico{
+  width:32px;height:32px;flex:0 0 32px;border-radius:9px;
+  background:var(--accent-bg);color:var(--accent);
+  display:flex;align-items:center;justify-content:center;
+}
+.msf-row-ico--warn{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+.msf-row-ico--danger{background:color-mix(in srgb,var(--danger) 16%,transparent);color:var(--danger)}
+.msf-row-ico--ok{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success)}
+.msf-row-ico--muted{background:var(--bg);color:var(--text2)}
+.msf-row-txt{flex:1;min-width:0}
+.msf-row-txt b{display:block;font-size:13.5px;font-weight:700;letter-spacing:-.15px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msf-row-txt span{display:block;font-size:11px;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msf-row-n{
+  font-size:17px;font-weight:800;font-family:ui-monospace,'Cascadia Code',monospace;
+  font-variant-numeric:tabular-nums;
+}
+
+/* ── Titre de section ────────────────────────────────────────────────── */
+
+.msf-sect{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:2px 2px 8px}
+.msf-sect b{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.msf-sect button{
+  background:none;border:0;padding:0;cursor:pointer;font:inherit;
+  font-size:11.5px;font-weight:600;color:var(--accent);
+}
+
+/* ── Pastilles / puces ───────────────────────────────────────────────── */
+
+.msf-chips{display:flex;gap:7px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.msf-chips::-webkit-scrollbar{display:none}
+.msf-chip{
+  flex:0 0 auto;height:34px;display:inline-flex;align-items:center;gap:6px;padding:0 13px;
+  border-radius:17px;border:1px solid var(--border);background:var(--card);color:var(--text2);
+  font:600 12.5px/1 inherit;white-space:nowrap;cursor:pointer;
+}
+.msf-chip:hover{background:var(--bg)}
+.msf-chip--on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:700}
+.msf-chip--on:hover{background:var(--accent-bg)}
+
+/* ── Segmente ────────────────────────────────────────────────────────── */
+
+.msf-seg{display:flex;gap:4px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:4px}
+.msf-seg button{
+  flex:1;height:38px;border:0;border-radius:9px;background:transparent;color:var(--muted);
+  font:600 13px/1 inherit;display:flex;align-items:center;justify-content:center;gap:6px;
+  white-space:nowrap;cursor:pointer;
+}
+.msf-seg button:hover{color:var(--text2)}
+.msf-seg button[aria-selected="true"],
+.msf-seg button.msf-seg-on{background:var(--accent-bg);color:var(--accent);font-weight:700}
+
+/* ── Badges ──────────────────────────────────────────────────────────── */
+
+.msf-badge{
+  display:inline-flex;align-items:center;
+  font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+  border-radius:5px;padding:2px 6px;white-space:nowrap;
+  border:1px solid var(--border);color:var(--muted);background:transparent;
+}
+.msf-badge--accent{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.msf-badge--ok{background:color-mix(in srgb,var(--success) 16%,transparent);
+  border-color:color-mix(in srgb,var(--success) 45%,transparent);color:var(--success)}
+.msf-badge--warn{background:color-mix(in srgb,var(--warn) 16%,transparent);
+  border-color:color-mix(in srgb,var(--warn) 45%,transparent);color:var(--warn)}
+.msf-badge--danger{background:color-mix(in srgb,var(--danger) 16%,transparent);
+  border-color:color-mix(in srgb,var(--danger) 45%,transparent);color:var(--danger)}
+
+/* Pastille de compteur posee sur une icone. */
+.msf-count{
+  position:absolute;top:-6px;right:-8px;
+  min-width:20px;height:19px;padding:0 5px;border-radius:10px;
+  background:var(--danger);color:#ffffff; /* hex-ok : texte sur fond rouge, lisible dans les 2 themes */
+  font:700 10.5px/19px ui-monospace,'Cascadia Code',monospace;text-align:center;
+  box-shadow:0 0 0 2px var(--card);
+}
+
+/* ── Boutons ─────────────────────────────────────────────────────────── */
+/* Regle du design system : jamais de fond transparent au repos.
+   Sur la page (fond --bg) → --card. Dans une carte/feuille (fond --card) → --bg. */
+
+.msf-btn{
+  height:50px;padding:0 20px;border-radius:10px;border:0;cursor:pointer;
+  background:var(--accent);color:var(--bg);
+  font:800 14.5px/1 inherit;letter-spacing:-.1px;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+}
+.msf-btn:hover{filter:brightness(1.05)}
+.msf-btn--sm{height:44px;font-size:13.5px}
+.msf-btn--block{width:100%}
+.msf-btn--ghost{background:var(--card);border:1px solid var(--border);color:var(--text2);font-weight:700}
+.msf-btn--ghost:hover{background:var(--bg);filter:none}
+.msf-btn--danger{background:var(--danger);color:#ffffff} /* hex-ok : texte sur fond rouge */
+.msf-icon-btn{
+  width:44px;height:44px;flex:0 0 44px;border-radius:10px;
+  border:1px solid var(--border);background:var(--card);color:var(--text2);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;position:relative;
+}
+.msf-icon-btn:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
+.msf-icon-btn--on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+/* Dans une carte ou une feuille, on inverse le fond pour garder le contraste. */
+.msf-card .msf-btn--ghost,.msf-card .msf-icon-btn,
+.msf-bs .msf-btn--ghost,.msf-bs .msf-icon-btn,
+.msf-rows .msf-btn--ghost,.msf-rows .msf-icon-btn{background:var(--bg)}
+.msf-card .msf-btn--ghost:hover,.msf-bs .msf-btn--ghost:hover{background:var(--card)}
+
+/* ── Bouton flottant ─────────────────────────────────────────────────── */
+
+.msf-fab{
+  position:fixed;right:16px;z-index:420;
+  bottom:calc(86px + env(safe-area-inset-bottom));
+  width:54px;height:54px;border-radius:50%;border:0;cursor:pointer;
+  background:var(--accent);color:var(--bg);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 8px 22px color-mix(in srgb,var(--accent) 34%,transparent);
+}
+.msf-fab:hover{filter:brightness(1.05)}
+
+/* ── Feuille remontante ──────────────────────────────────────────────── */
+/* Prefixe msf-bs- et non msf-sheet- : ce dernier appartient deja a la feuille
+   profil definie dans app/web/html.py (#msf-sheet-root). Deux definitions du
+   meme selecteur dans deux fichiers ne se voient qu'au moment ou l'une declare
+   une propriete que l'autre ignore — donc tard, et sur un ecran precis. */
+
+.msf-bs-backdrop{
+  position:fixed;inset:0;z-index:8990;background:color-mix(in srgb,var(--bg) 62%,transparent);
+  backdrop-filter:blur(3px);
+}
+.msf-bs{
+  position:fixed;left:0;right:0;bottom:0;z-index:9000;
+  background:var(--card);border-top:1px solid var(--border);
+  border-radius:16px 16px 0 0;
+  display:flex;flex-direction:column;max-height:92dvh;
+  box-shadow:0 -18px 50px color-mix(in srgb,var(--bg) 55%,transparent);
+}
+.msf-bs-grab{width:40px;height:4px;border-radius:2px;background:var(--border);margin:9px auto 4px;flex:0 0 auto}
+.msf-bs-head{padding:6px 16px 12px;border-bottom:1px solid var(--border);flex:0 0 auto}
+.msf-bs-body{padding:14px 16px;overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;min-height:0}
+.msf-bs-foot{
+  flex:0 0 auto;display:flex;gap:8px;align-items:center;
+  padding:11px 14px calc(11px + env(safe-area-inset-bottom));
+  border-top:1px solid var(--border);
+}
+
+/* ── En-tete de jour collant ─────────────────────────────────────────── */
+
+.msf-daybar{
+  position:sticky;top:0;z-index:3;
+  display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  padding:9px 2px 7px;margin-bottom:9px;
+  background:var(--bg);border-bottom:1px solid var(--border);
+}
+.msf-daybar b{font-size:11.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--text2)}
+.msf-daybar span{font-size:11px;color:var(--muted)}
+
+/* ── Jauge ───────────────────────────────────────────────────────────── */
+
+.msf-gauge{height:5px;border-radius:3px;background:var(--border);overflow:hidden;width:74px;flex:0 0 74px}
+.msf-gauge i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.msf-gauge i.msf-gauge-hot{background:var(--warn)}
+
+/* ── Paires libelle / valeur ─────────────────────────────────────────── */
+
+.msf-dl{display:grid;grid-template-columns:1fr 1fr;gap:11px 14px;margin:0}
+.msf-dl>div{min-width:0}
+.msf-dl dt{
+  font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:2px;
+}
+.msf-dl dd{margin:0;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.msf-dl .msf-dl-full{grid-column:1/-1}
+
+/* ── Vide ────────────────────────────────────────────────────────────── */
+
+.msf-empty{padding:26px 12px;text-align:center;color:var(--muted);font-size:12.5px}
+
+/* ── Utilitaires d'orientation ───────────────────────────────────────── */
+/* Remplacent la rotation forcee : on montre ou on cache, on ne tourne plus. */
+
+.msf-only-portrait,.msf-only-landscape,.msf-only-mobile{display:none}
+@media (max-width:900px){
+  .msf-only-mobile{display:revert}
+  .msf-hide-mobile{display:none!important}
+}
+@media (max-width:900px) and (orientation:portrait){
+  .msf-only-portrait{display:revert}
+  .msf-hide-portrait{display:none!important}
+}
+@media (max-width:900px) and (orientation:landscape){
+  .msf-only-landscape{display:revert}
+  .msf-hide-landscape{display:none!important}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .msf-fab,.msf-btn,.msf-chip,.msf-row{transition:none!important}
+}

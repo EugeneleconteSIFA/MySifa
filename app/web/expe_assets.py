@@ -1092,6 +1092,11 @@ function renderExpeTranspList(){
       actionCell
     );
   });
+  if(expeEnCartes()){
+    return h('div',{className:'expe-cartes',style:{padding:'0 4px'}},
+      ...rows.map(expeCarteTransp)
+    );
+  }
   return h('div',{className:'expe-trp-table-wrap'},
     h('table',{className:'table-std expe-trp-table'},h('thead',null,head),h('tbody',null,...body))
   );
@@ -3381,6 +3386,14 @@ function renderExpeProspectsSection(){
       expeCanWrite()?h('td',null,h('button',{type:'button',className:'btn-ghost',title:'Modifier',onClick:e=>{e.stopPropagation();ouvrirModalProspect(p.id);}},iconEl('edit',14))):h('td',null,'—')
     );
   }):[h('tr',null,h('td',{colSpan:7,style:{color:'var(--muted)',fontStyle:'italic'}},'Aucun prospect.'))];
+  if(expeEnCartes()){
+    return h('div',{id:'section-prospects'},
+      head,
+      rows.length
+        ? h('div',{className:'expe-cartes'},...rows.map(expeCarteProspect))
+        : h('div',{className:'msf-empty'},'Aucun prospect.')
+    );
+  }
   return h('div',{id:'section-prospects'},
     head,
     h('div',{className:'expe-prospects-table-wrap'},
@@ -4267,6 +4280,98 @@ EXPE_MAIN_CSS = r"""
 .expe-score .price .unit{font-size:13px;font-weight:500;color:var(--muted);margin-left:4px}
 .expe-score .medal{font-size:24px;flex-shrink:0}
 .expe-note{font-size:10px;color:rgba(148,163,184,.8);margin-top:12px}
+
+/* ── Sous 700 px : une ligne de tableau devient une carte ─────────────────
+   Neuf colonnes en table-layout:fixed sur 390 px, c'est un nom de client sur
+   deux coupé à l'ellipse. Au-delà de 700 px le tableau reste le bon outil :
+   on ne remplace pas, on ajoute un second rendu. La bascule se fait en JS
+   (expeEnCartes()), pas en display:none — un tableau caché reste construit. */
+.expe-cartes{display:flex;flex-direction:column;gap:9px}
+.expe-carte{padding:0;overflow:hidden}
+.expe-carte-tete{
+  display:block;width:100%;text-align:left;padding:12px 13px;
+  background:none;border:0;color:inherit;font:inherit;cursor:pointer;
+}
+.expe-carte-tete:hover{background:var(--bg)}
+.expe-carte .msf-card-head{margin-bottom:6px}
+.expe-carte-refs{margin-top:5px}
+.expe-carte .expe-badge-devis{cursor:default}
+.expe-carte-refs .expe-carte-bl{font-family:ui-monospace,'Cascadia Code',monospace}
+.expe-carte-detail{padding:0 13px 12px}
+.expe-carte-pied{display:flex;gap:8px;padding:0 13px 12px}
+.expe-carte-pied .btn{flex:1;height:44px;border-radius:10px;font-size:14px;font-weight:800}
+.expe-carte-plus{
+  width:44px;height:44px;flex:0 0 44px;border-radius:10px;
+  border:1px solid var(--border);background:var(--bg);color:var(--text2);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.expe-carte-plus:hover{border-color:var(--accent);color:var(--accent)}
+.expe-carte-plus.est-ouvert{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+/* Les actions de ligne font 26 px au bureau. Au doigt, c'est en dessous du
+   plancher de 44 px : Supprimer et Valider seraient à quelques pixels. */
+.expe-carte-actions{
+  display:flex;flex-wrap:wrap;gap:8px;
+  padding:12px 13px;border-top:1px solid var(--border);
+}
+.expe-carte-actions .expe-dep-ab{
+  width:44px;height:44px;min-width:44px;border-radius:10px;
+  display:inline-flex;align-items:center;justify-content:center;
+}
+.expe-carte-actions .expe-dep-ab svg{width:18px;height:18px}
+
+/* ── Compte transporteur : le solde est ce qu'on vient chercher ─────────── */
+.expe-carte-solde{
+  margin-left:auto;text-align:right;font-family:ui-monospace,'Cascadia Code',monospace;
+  font-variant-numeric:tabular-nums;font-weight:800;
+}
+.expe-carte-solde b{display:block;font-size:22px;letter-spacing:-.5px;line-height:1.05}
+.expe-carte-solde small{
+  display:block;font-size:9.5px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted);margin-top:2px;
+}
+.expe-carte--debt .expe-carte-solde b{color:var(--warn)}
+.expe-carte--ok .expe-carte-solde b{color:var(--success)}
+.expe-carte-flux{
+  display:flex;flex-wrap:wrap;gap:8px 16px;
+  padding:0 13px 12px;font-size:12px;color:var(--text2);
+}
+.expe-carte-flux b{
+  color:var(--text);font-weight:700;
+  font-family:ui-monospace,'Cascadia Code',monospace;font-variant-numeric:tabular-nums;
+}
+.expe-carte-flux .flux-ok b{color:var(--success)}
+.expe-carte-flux .flux-bad b{color:var(--danger)}
+
+/* ── Départ Palette Europe : bouton primaire « Retournée » ──────────────── */
+.expe-carte-palfields{
+  display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:0 13px 12px;
+}
+.expe-carte-palfields label{
+  display:block;font-size:10px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:4px;
+}
+.expe-carte-palfields input{
+  width:100%;padding:9px 10px;font-size:14px;border-radius:8px;
+  border:1px solid var(--border);background:var(--bg);color:var(--text);
+}
+.expe-carte-palfields .col-full{grid-column:1/-1}
+
+/* ── Transporteur en carte : nom à gauche, note à droite ────────────────── */
+.expe-carte-note{
+  margin-left:auto;display:flex;align-items:center;gap:7px;flex:0 0 auto;
+}
+.expe-carte-note-txt{font-size:10.5px;color:var(--muted);white-space:nowrap}
+.expe-carte-zones{
+  display:flex;flex-wrap:wrap;gap:4px;padding:0 13px 12px;
+}
+
+/* ── Prospect : statut coloré, email tapable ────────────────────────────── */
+.expe-carte-statut{
+  margin-left:auto;font-size:11px;font-weight:700;
+  padding:3px 8px;border-radius:5px;white-space:nowrap;
+}
+.expe-carte--ecarte{opacity:.6}
+
 
 /* MyExpé — mobile : titres de page / sections déjà dans la topbar */
 @media (max-width:900px){
@@ -5964,6 +6069,92 @@ async function expePatchContestation(id, patch){
   }catch(e){ toast(e.message||'Mise à jour impossible','error'); }
 }
 
+/* ── Palettes Europe : les deux champs de saisie inline ──────────────────
+   Sortis de la boucle du tableau pour que la carte mobile les reprenne à
+   l'identique — même débounce de 800 ms, même PATCH, même rechargement.
+   Deux implémentations du même champ, c'est une note qui s'enregistre sur un
+   écran et se perd sur l'autre. */
+/* Actions d'une ligne palette Europe. Sorties de la boucle du tableau : la
+   carte mobile a besoin des mêmes quatre boutons, aux mêmes conditions de
+   statut. Les réécrire aurait donné un écran où « réinitialiser » manque. */
+function expePalActionsBoutons(r, statut){
+  return [
+    statut!=='retournee' ? h('button',{type:'button',className:'expe-pal-eur-act expe-pal-eur-act--ok',
+      title:'Marquer comme retournée (date du jour)',
+      onClick:()=>expeChangePaletteEuropeStatut(r.id,'retournee',expeParisDayISO())
+    },iconEl('check-circle',14)) : null,
+    statut!=='perdue' ? h('button',{type:'button',className:'expe-pal-eur-act expe-pal-eur-act--bad',
+      title:'Marquer comme perdue',
+      onClick:()=>{
+        if(!confirm('Marquer cette palette comme perdue ?')) return;
+        expeChangePaletteEuropeStatut(r.id,'perdue', null);
+      }
+    },iconEl('x',14)) : null,
+    statut!=='en_attente' ? h('button',{type:'button',className:'expe-pal-eur-act',
+      title:'Réinitialiser le statut (en attente)',
+      onClick:()=>expeChangePaletteEuropeStatut(r.id,'en_attente', '')
+    },iconEl('rotate-ccw',13)) : null,
+    // Ouvrir une contestation depuis le départ : c'est là qu'on a le
+    // récépissé et le client sous les yeux, les ressaisir serait une
+    // occasion d'erreur pour rien.
+    expeCanWrite() ? h('button',{type:'button',className:'expe-pal-eur-act',
+      title:'Ouvrir une contestation sur ce départ',
+      onClick:()=>ouvrirSaisieContestation({
+        transporteur_id:r.transporteur_id, transporteur:r.transporteur,
+        depart_id:r.id, client:r.client, recepisse:r.arc||r.no_bl,
+        nb_palette:r.nb_palette, date:(r.date_enlevement||'').slice(0,10)
+      })
+    },iconEl('alert-circle',13)) : null
+  ].filter(Boolean);
+}
+
+function expePalNoteInput(r){
+  const noteInp = h('input',{
+    type:'text',
+    placeholder:'Note…',
+    value:r.palette_europe_note||'',
+    style:{width:'100%',padding:'4px 8px',fontSize:'11px',background:'var(--bg)',
+      border:'1px solid var(--border)',borderRadius:'6px',color:'var(--text)'}
+  });
+  let _noteT = null;
+  noteInp.addEventListener('input',e=>{
+    const v = e.target.value;
+    if(_noteT) clearTimeout(_noteT);
+    _noteT = setTimeout(async()=>{
+      try{
+        await api('/api/expe/departs/'+r.id+'/palette-europe',{
+          method:'PATCH',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({note: v})
+        });
+      }catch(e){ /* silencieux */ }
+    }, 800);
+  });
+  return noteInp;
+}
+
+function expePalDateRetourInput(r, statut){
+  const dateInp = h('input',{
+    type:'date',
+    value:(r.palette_europe_date_retour||'').slice(0,10),
+    style:{padding:'4px 8px',fontSize:'12px',background:'var(--bg)',
+      border:'1px solid var(--border)',borderRadius:'6px',color:'var(--text)'}
+  });
+  dateInp.addEventListener('change',async(e)=>{
+    const v = e.target.value;
+    try{
+      await api('/api/expe/departs/'+r.id+'/palette-europe',{
+        method:'PATCH',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({date_retour: v, statut: v ? 'retournee' : statut})
+      });
+      toast('Date retour enregistrée');
+      await loadExpePalettesEurope();
+    }catch(e){ toast(e.message||'Erreur','error'); }
+  });
+  return dateInp;
+}
+
 function renderExpePalettesEurope(){
   const data = S.expePalettesEuropeData || {departs:[], recap_clients:[], recap_transporteurs:[], totaux:{}};
   let departs = data.departs || [];
@@ -6055,6 +6246,12 @@ function renderExpePalettesEurope(){
   }) : [h('tr',null,h('td',{colSpan:9,style:{color:'var(--muted)',padding:'18px',textAlign:'center'}},
     S.expePalettesEuropeLoading?'Chargement…':'Aucun compte palette Europe ouvert.'))];
 
+  // Sous 700 px, les deux sous-onglets où on décide (comptes + départs) passent
+  // en cartes. Les deux autres (contestations et récap clients) gardent leur
+  // rendu actuel : le récap est déjà en cartes, les contestations sont rares
+  // et rester au tableau évite d'ajouter deux nouveaux composants pour rien.
+  const modeCartes = expeEnCartes();
+
   const trpBlock = h('div',{className:'card'},
     h('div',{className:'card-header',style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
       h('h3',{className:'expe-mobile-hide-head'},'Comptes transporteurs'),
@@ -6067,8 +6264,14 @@ function renderExpePalettesEurope(){
     ),
     h('div',{style:{padding:'0 18px 10px',fontSize:'11px',color:'var(--muted)'}},
       'Solde = report + données − rendues − perdues. Une palette contestée reste dans le solde tant que le litige n’est pas tranché.'),
-    h('div',{style:{overflowX:'auto'}},
-      h('table',{className:'table-std expe-pal-eur-trp-table'},h('thead',null,trpHead),h('tbody',null,...trpRows)))
+    modeCartes
+      ? h('div',{style:{padding:'12px'}},
+          recapTrp.length
+            ? h('div',{className:'expe-cartes'},...recapTrp.map(expeCarteCompteTrp))
+            : h('div',{className:'msf-empty'},
+                S.expePalettesEuropeLoading?'Chargement…':'Aucun compte palette Europe ouvert.'))
+      : h('div',{style:{overflowX:'auto'}},
+          h('table',{className:'table-std expe-pal-eur-trp-table'},h('thead',null,trpHead),h('tbody',null,...trpRows)))
   );
 
   // Bloc contestations — le registre qui sert à réclamer
@@ -6237,45 +6440,8 @@ function renderExpePalettesEurope(){
   });
   const bodyRows = departs.length ? departs.map(r=>{
     const statut = r.palette_europe_statut || 'en_attente';
-    const noteInp = h('input',{
-      type:'text',
-      placeholder:'Note…',
-      value:r.palette_europe_note||'',
-      style:{width:'100%',padding:'4px 8px',fontSize:'11px',background:'var(--bg)',
-        border:'1px solid var(--border)',borderRadius:'6px',color:'var(--text)'}
-    });
-    let _noteT = null;
-    noteInp.addEventListener('input',e=>{
-      const v = e.target.value;
-      if(_noteT) clearTimeout(_noteT);
-      _noteT = setTimeout(async()=>{
-        try{
-          await api('/api/expe/departs/'+r.id+'/palette-europe',{
-            method:'PATCH',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({note: v})
-          });
-        }catch(e){ /* silencieux */ }
-      }, 800);
-    });
-    const dateInp = h('input',{
-      type:'date',
-      value:(r.palette_europe_date_retour||'').slice(0,10),
-      style:{padding:'4px 8px',fontSize:'12px',background:'var(--bg)',
-        border:'1px solid var(--border)',borderRadius:'6px',color:'var(--text)'}
-    });
-    dateInp.addEventListener('change',async(e)=>{
-      const v = e.target.value;
-      try{
-        await api('/api/expe/departs/'+r.id+'/palette-europe',{
-          method:'PATCH',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({date_retour: v, statut: v ? 'retournee' : statut})
-        });
-        toast('Date retour enregistrée');
-        await loadExpePalettesEurope();
-      }catch(e){ toast(e.message||'Erreur','error'); }
-    });
+    const noteInp = expePalNoteInput(r);
+    const dateInp = expePalDateRetourInput(r, statut);
     return h('tr',null,
       h('td',null,(r.date_enlevement||'').slice(0,10)),
       h('td',null,r.client||'—'),
@@ -6287,34 +6453,7 @@ function renderExpePalettesEurope(){
       h('td',null,dateInp),
       h('td',{style:{minWidth:'140px'}},noteInp),
       h('td',{className:'expe-pal-eur-acts-cell'},
-        h('div',{className:'expe-pal-eur-acts'},
-          statut!=='retournee' ? h('button',{type:'button',className:'expe-pal-eur-act expe-pal-eur-act--ok',
-            title:'Marquer comme retournée (date du jour)',
-            onClick:()=>expeChangePaletteEuropeStatut(r.id,'retournee',expeParisDayISO())
-          },iconEl('check-circle',14)) : null,
-          statut!=='perdue' ? h('button',{type:'button',className:'expe-pal-eur-act expe-pal-eur-act--bad',
-            title:'Marquer comme perdue',
-            onClick:()=>{
-              if(!confirm('Marquer cette palette comme perdue ?')) return;
-              expeChangePaletteEuropeStatut(r.id,'perdue', null);
-            }
-          },iconEl('x',14)) : null,
-          statut!=='en_attente' ? h('button',{type:'button',className:'expe-pal-eur-act',
-            title:'Réinitialiser le statut (en attente)',
-            onClick:()=>expeChangePaletteEuropeStatut(r.id,'en_attente', '')
-          },iconEl('rotate-ccw',13)) : null,
-          // Ouvrir une contestation depuis le départ : c'est là qu'on a le
-          // récépissé et le client sous les yeux, les ressaisir serait une
-          // occasion d'erreur pour rien.
-          expeCanWrite() ? h('button',{type:'button',className:'expe-pal-eur-act',
-            title:'Ouvrir une contestation sur ce départ',
-            onClick:()=>ouvrirSaisieContestation({
-              transporteur_id:r.transporteur_id, transporteur:r.transporteur,
-              depart_id:r.id, client:r.client, recepisse:r.arc||r.no_bl,
-              nb_palette:r.nb_palette, date:(r.date_enlevement||'').slice(0,10)
-            })
-          },iconEl('alert-circle',13)) : null
-        )
+        h('div',{className:'expe-pal-eur-acts'},...expePalActionsBoutons(r, statut))
       )
     );
   }) : [h('tr',null,h('td',{colSpan:10,style:{color:'var(--muted)',padding:'18px',textAlign:'center'}},
@@ -6333,11 +6472,17 @@ function renderExpePalettesEurope(){
         },'× Filtre : '+S.expePalettesEuropeClientFilter) : null
       )
     ),
-    h('div',{style:{overflowX:'auto'}},
-      h('table',{className:'table-std expe-departs-table'},
-        h('thead',null,head),
-        h('tbody',null,...bodyRows)
-      )
+    modeCartes
+      ? h('div',{style:{padding:'12px'}},
+          departs.length
+            ? h('div',{className:'expe-cartes'},...departs.map(expeCartePalDepart))
+            : h('div',{className:'msf-empty'},
+                S.expePalettesEuropeLoading?'Chargement…':'Aucun départ palette Europe pour ces filtres'))
+      : h('div',{style:{overflowX:'auto'}},
+          h('table',{className:'table-std expe-departs-table'},
+            h('thead',null,head),
+            h('tbody',null,...bodyRows)
+          )
     )
   );
 
@@ -6382,6 +6527,9 @@ function renderExpeSuiviDeparts(){
       ):null
     )
   );
+  // Sous 700 px, le tableau n'est pas construit du tout : un tableau caché
+  // en display:none reste assemblé à chaque rendu, pour rien.
+  if(expeEnCartes()) return h('div',null,topBar,expeCartesDeparts('jour'));
   const rows=S.expeDepartList||[];
   // Sept colonnes au lieu de quatorze. Le reste n'a pas disparu : il est dans
   // le dépliant. Quatorze colonnes dont la moitié est tronquée par une ellipse
@@ -6391,13 +6539,7 @@ function renderExpeSuiviDeparts(){
     ...['','Date enl.','Transporteur','Client','Destination','N° BL','Pal.','Dossier',''].map(t=>h('th',null,t))
   );
   const COLSPAN = 9;
-  function formatDateFr(iso){
-    if(!iso||iso.length<10)return iso||'—';
-    const d=new Date(iso+'T00:00:00');
-    const jours=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
-    const mois=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
-    return jours[d.getDay()]+' '+d.getDate()+' '+mois[d.getMonth()]+' '+d.getFullYear();
-  }
+  const formatDateFr = expeDateFr;
   let prevDate=null;
   const bodyRows=[];
   rows.forEach(r=>{
@@ -6427,37 +6569,11 @@ function renderExpeSuiviDeparts(){
         (r.nb_palette!=null?String(r.nb_palette):'—'),
         h('span',{style:{color:'var(--muted)',fontSize:'11px'}},' '+(expePaletteTypeLabel(r)||''))),
       h('td',null,expeDossierCell(r)),
-      expeCanWrite()?h('td',{className:'expe-dep-actions-td'},
-        expeDepartActsGrid({
-          paires:[
-            expeAvisBoutons(r),
-            [
-              h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Dupliquer ce départ en nouvelle saisie',
-                onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',16)),
-              h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Modifier les informations de ce départ',
-                onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',16))
-            ]
-          ],
-          fin:[
-          (r.code_postal_destination&&(r.poids_total_kg||r.nb_palette))?h('button',{className:'btn-ghost expe-dep-ab',type:'button',
-            title:'Comparer les tarifs des transporteurs pour ce départ',
-            onClick:()=>ouvrirComparateurDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeCompareIcon(16)):null,
-          r.code_postal_destination?h('button',{className:'btn-ghost expe-dep-ab',type:'button',
-            title:'Ouvrir une demande de devis préremplie avec les données de ce départ',
-            onClick:()=>ouvrirDevisDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeDevisIcon(16)):null,
-          h('button',{className:'btn-danger expe-dep-ab',type:'button',title:'Supprimer définitivement ce départ',onClick:async()=>{
-            if(!confirm('Supprimer ce départ ?')) return;
-            try{
-              await api('/api/expe/departs/'+r.id,{method:'DELETE'});
-              toast('Départ supprimé');
-              await loadExpeDepartJour();
-            }catch(e){toast(e.message||'Suppression impossible','error');}
-          }},iconEl('trash',16))
-          ]
-        },h('button',{className:'btn expe-dep-valider-btn',type:'button',
-          title:'Valider ce départ et l\'archiver dans l\'historique',
-          onClick:()=>expeValiderDepart(r.id)},'Valider'))
-      ):h('td',null,'—')
+      expeCanWrite()?(function(){
+        const b=expeDepartBoutons(r,'jour');
+        return h('td',{className:'expe-dep-actions-td'},
+          expeDepartActsGrid({paires:b.paires,fin:b.fin},b.principal));
+      })():h('td',null,'—')
     ));
     if(ouvert) bodyRows.push(expeRowDetail(r, COLSPAN));
   });
@@ -6502,6 +6618,73 @@ function expeFscBadgeHtml(d){
 // ── Ligne dépliable ──────────────────────────────────────────────
 // Le tableau garde ce qu'on compare d'une ligne à l'autre ; le dépliant porte
 // ce qu'on lit sur UNE ligne à la fois. Rien n'est supprimé, tout est lisible.
+/* Rendu carte : vrai en dessous de 700 px.
+
+   Le choix est fait au moment du render(), donc une rotation du téléphone ne
+   changerait rien sans cet écouteur — c'est le défaut de tous les rendus
+   conditionnels du dépôt (html.py:5243, planning_rh_page.py:1422). */
+var _expeMqCartes=null;
+function expeEnCartes(){
+  try{
+    if(!_expeMqCartes){
+      _expeMqCartes=window.matchMedia('(max-width:700px)');
+      var _maj=function(){ if(S.app==='expe' && typeof render==='function') render(); };
+      if(_expeMqCartes.addEventListener)_expeMqCartes.addEventListener('change',_maj);
+      else if(_expeMqCartes.addListener)_expeMqCartes.addListener(_maj);
+    }
+    return !!_expeMqCartes.matches;
+  }catch(e){ return false; }
+}
+
+function expeDateFr(iso){
+  if(!iso||iso.length<10)return iso||'—';
+  const d=new Date(iso+'T00:00:00');
+  const jours=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+  const mois=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  return jours[d.getDay()]+' '+d.getDate()+' '+mois[d.getMonth()]+' '+d.getFullYear();
+}
+
+/* Boutons d'action d'un départ — une seule définition pour le tableau et pour
+   la carte. Deux listes séparées, c'est une action qui existe sur un écran et
+   pas sur l'autre sans que personne ne s'en aperçoive.
+   La forme retournée est celle qu'attend expeDepartActsGrid, pour que le
+   rendu bureau reste rigoureusement identique. */
+function expeDepartBoutons(r, ctx){
+  const hist = ctx==='historique';
+  const recharger = hist ? loadExpeDepartHistorique : loadExpeDepartJour;
+  const copier=h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Dupliquer ce départ en nouvelle saisie',
+    onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',16));
+  const modifier=h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Modifier les informations de ce départ',
+    onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',16));
+  const supprimer=h('button',{className:'btn-danger expe-dep-ab',type:'button',
+    title:hist?'Supprimer définitivement ce départ de l\'historique':'Supprimer définitivement ce départ',
+    onClick:async()=>{
+      if(!confirm('Supprimer ce départ ?')) return;
+      try{
+        await api('/api/expe/departs/'+r.id,{method:'DELETE'});
+        toast('Départ supprimé');
+        await recharger();
+      }catch(e){toast(e.message||'Suppression impossible','error');}
+    }},iconEl('trash',16));
+  const fin = hist ? [supprimer] : [
+    (r.code_postal_destination&&(r.poids_total_kg||r.nb_palette))?h('button',{className:'btn-ghost expe-dep-ab',type:'button',
+      title:'Comparer les tarifs des transporteurs pour ce départ',
+      onClick:()=>ouvrirComparateurDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeCompareIcon(16)):null,
+    r.code_postal_destination?h('button',{className:'btn-ghost expe-dep-ab',type:'button',
+      title:'Ouvrir une demande de devis préremplie avec les données de ce départ',
+      onClick:()=>ouvrirDevisDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeDevisIcon(16)):null,
+    supprimer
+  ];
+  const principal = hist
+    ? h('button',{className:'btn expe-dep-invalider-btn',type:'button',
+        title:'Annuler la validation et remettre ce départ dans le suivi du jour',
+        onClick:()=>void expeInvaliderDepart(r.id)},'Invalider')
+    : h('button',{className:'btn expe-dep-valider-btn',type:'button',
+        title:'Valider ce départ et l\'archiver dans l\'historique',
+        onClick:()=>expeValiderDepart(r.id)},'Valider');
+  return {paires:[expeAvisBoutons(r),[copier,modifier]], fin:fin, principal:principal};
+}
+
 function expeRowIsOpen(id){
   return !!(S.expeDepartRowsOpen && S.expeDepartRowsOpen[String(id)]);
 }
@@ -6531,9 +6714,7 @@ function expeDossierCell(r){
       : expeFscBadge(r));
 }
 
-function expeRowDetail(r, colspan){
-  const dl = (lbl, val) => h('div',null,
-    h('dt',null,lbl), h('dd',null, (val==null||val==='')?'—':String(val)));
+function expeDetailPaires(r){
   const ds = Array.isArray(r.dossiers) ? r.dossiers : [];
   const dossiersTxt = ds.length
     ? ds.map(x=>(x.reference||('#'+x.planning_entry_id))
@@ -6541,22 +6722,291 @@ function expeRowDetail(r, colspan){
     : (Number(r.sans_dossier)
         ? 'Non lié à une production — '+(EXPE_MOTIF_LABELS[r.sans_dossier_motif]||r.sans_dossier_motif||'motif non précisé')
         : 'Aucun dossier rattaché, aucun motif déclaré');
+  return [
+    ['Dossiers de production', dossiersTxt],
+    ['ARC', r.arc],
+    ['Réf. SIFA', r.ref_sifa],
+    ['N° récépissé', r.no_cde_transport],
+    ['Affréteurs', r.affreteurs],
+    ['Type de palette', expePaletteTypeLabel(r)],
+    ['Poids total', r.poids_total_kg!=null?(r.poids_total_kg+' kg'):null],
+    ['Livraison prévue', (r.date_livraison||'').slice(0,10)],
+    ['Palette Europe', Number(r.palette_europe)?'Suivie au retour':'—']
+  ];
+}
+
+function expeDetailDl(r, cls){
+  const dl = (lbl, val) => h('div',null,
+    h('dt',null,lbl), h('dd',null, (val==null||val==='')?'—':String(val)));
+  return h('dl',{className:cls||'expe-row-detail'},
+    ...expeDetailPaires(r).map(p=>dl(p[0],p[1])));
+}
+
+function expeRowDetail(r, colspan){
   return h('tr',{className:'expe-row-detail-row'},
-    h('td',{colSpan:colspan,className:'expe-row-detail-cell'},
-      h('dl',{className:'expe-row-detail'},
-        dl('Dossiers de production', dossiersTxt),
-        dl('ARC', r.arc),
-        dl('Réf. SIFA', r.ref_sifa),
-        dl('N° récépissé', r.no_cde_transport),
-        dl('Affréteurs', r.affreteurs),
-        dl('Type de palette', expePaletteTypeLabel(r)),
-        dl('Poids total', r.poids_total_kg!=null?(r.poids_total_kg+' kg'):null),
-        dl('Livraison prévue', (r.date_livraison||'').slice(0,10)),
-        dl('Palette Europe', Number(r.palette_europe)?'Suivie au retour':'—')
+    h('td',{colSpan:colspan,className:'expe-row-detail-cell'}, expeDetailDl(r))
+  );
+}
+
+/* ── Carte de départ (mobile) ─────────────────────────────────────────
+   Trois niveaux : qui transporte et pour qui, où et combien, les références.
+   Le dépliant est le même que celui du tableau (expeDetailDl), l'action
+   primaire est sous le pouce, et les six autres se déplient au bouton ⋯
+   plutôt que de tenir en 26 px les unes contre les autres. */
+function expeCarteDepart(r, ctx){
+  const hist = ctx==='historique';
+  const cle = (hist?'h':'')+r.id;
+  const ouvert = expeRowIsOpen(cle);
+  const actionsOuvertes = String(S.expeCarteActions||'')===String(cle);
+  const coul = trpColorFromRow(r);
+  const pal = (r.nb_palette!=null?String(r.nb_palette)+' pal.':null);
+  const typePal = expePaletteTypeLabel(r)||'';
+  const meta = [];
+  if(r.code_postal_destination) meta.push(r.code_postal_destination);
+  if(pal) meta.push(pal+(typePal?' '+typePal:''));
+  const b = expeCanWrite() ? expeDepartBoutons(r, ctx) : null;
+  const secondaires = b ? [].concat(b.paires[0], b.paires[1], b.fin).filter(Boolean) : [];
+  if(b && r.source_devis_demande_id){
+    secondaires.unshift(h('button',{className:'btn-ghost expe-dep-ab',type:'button',
+      title:'Rouvrir la demande de devis à l\'origine de ce départ',
+      onClick:()=>{set({expeTab:'devis'});setTimeout(()=>void ouvrirDetailDemande(r.source_devis_demande_id),50);}},
+      iconEl('external',16)));
+  }
+  const badgeDevis = r.source_devis_reponse_id
+    ? h('span',{className:'expe-badge-devis',title:'Départ créé depuis un devis retenu'},'issu d’un devis')
+    : null;
+  return h('div',{className:'msf-card expe-carte'},
+    h('button',{type:'button',className:'expe-carte-tete',
+      'aria-expanded':ouvert?'true':'false',
+      onClick:()=>expeToggleRow(cle)},
+      h('span',{className:'msf-card-head'},
+        coul?trpTag(r.transporteur||'—',coul):h('span',null,r.transporteur||'—'),
+        h('span',{className:'msf-card-title'},r.client||'—'),
+        badgeDevis,
+        h('span',{className:'msf-chevron'},iconEl(ouvert?'chevron-down':'chevron-right',17))
+      ),
+      h('span',{className:'msf-card-sub'},
+        ...(meta.length?[meta.join(' · ')]:['—']),
+        hist?h('span',{className:'msf-badge'},'Validé '+((r.validated_at||'').replace('T',' ').slice(0,16)||'—')):null
+      ),
+      h('span',{className:'msf-card-sub expe-carte-refs'},
+        h('span',{className:'expe-carte-bl'},'BL '+(r.no_bl||'—')),
+        expeDossierCell(r)
       )
+    ),
+    ouvert?h('div',{className:'expe-carte-detail'},expeDetailDl(r,'msf-dl')):null,
+    b?h('div',{className:'expe-carte-pied'},
+      b.principal,
+      h('button',{type:'button',
+        className:'expe-carte-plus'+(actionsOuvertes?' est-ouvert':''),
+        title:'Autres actions','aria-label':'Autres actions',
+        onClick:()=>set({expeCarteActions:actionsOuvertes?null:cle})},iconEl('sliders',18))
+    ):null,
+    (b&&actionsOuvertes)?h('div',{className:'expe-carte-actions'},...secondaires):null
+  );
+}
+
+function expeCartesDeparts(ctx){
+  const hist = ctx==='historique';
+  const rows = (hist ? S.expeDepartHist : S.expeDepartList) || [];
+  const chargement = hist ? S.expeDepartHistLoading : S.expeDepartLoading;
+  if(!rows.length){
+    return h('div',{className:'msf-empty'},
+      chargement?'Chargement…'
+        :(hist?'Aucune entrée (ou affiner la recherche)':'Aucun départ en attente pour ce jour'));
+  }
+  const out=[];
+  let prev=null;
+  rows.forEach(r=>{
+    if(!hist){
+      const d=(r.date_enlevement||'').slice(0,10);
+      if(d!==prev){
+        const jour=rows.filter(x=>(x.date_enlevement||'').slice(0,10)===d);
+        const nbPal=jour.reduce((t,x)=>t+(Number(x.nb_palette)||0),0);
+        out.push(h('div',{className:'msf-daybar'},
+          h('b',null,expeDateFr(d)),
+          h('span',null,jour.length+(jour.length>1?' départs':' départ')+(nbPal?' · '+nbPal+' pal.':''))));
+        prev=d;
+      }
+    }
+    out.push(expeCarteDepart(r,ctx));
+  });
+  return h('div',{className:'expe-cartes'},...out);
+}
+
+/* ── Compte transporteur (Palettes Europe) en carte ─────────────────────
+   Une pastille transporteur à gauche, le solde en gros à droite. Les
+   quatre chiffres du bureau (report, données, rendues, perdues) passent
+   dessous, en ligne. La carte est tapable (relevé de compte), le + est
+   un bouton distinct pour saisir un mouvement. */
+function expeCarteCompteTrp(t){
+  const solde = _expePalNum(t.solde);
+  const cls = solde>0 ? ' expe-carte--debt' : (solde<0 ? '' : ' expe-carte--ok');
+  const coul = (function(){
+    const ref=(T.list||[]).find(x=>String(x.id)===String(t.transporteur_id));
+    return ref?ref.couleur:null;
+  })();
+  const flux = h('div',{className:'expe-carte-flux'},
+    t.report ? h('span',null,'Report ',h('b',null,_expePalFmt(t.report))) : null,
+    h('span',null,'Données ',h('b',null,_expePalFmt(t.donnees))),
+    h('span',{className:'flux-ok'},'Rendues ',h('b',null,_expePalFmt(t.rendues))),
+    Number(t.perdues) ? h('span',{className:'flux-bad'},'Perdues ',h('b',null,_expePalFmt(t.perdues))) : null,
+    t.nb_contestations ? h('span',null,h('span',{className:'msf-badge msf-badge--danger'},
+      _expePalFmt(t.nb_pal_contestees)+' en litige')) : null
+  );
+  return h('div',{className:'msf-card expe-carte'+cls},
+    h('button',{type:'button',className:'expe-carte-tete',
+      onClick:()=>void ouvrirJournalPalettes(t)},
+      h('span',{className:'msf-card-head'},
+        coul?trpTag(t.transporteur||'—',coul):h('span',{style:{fontWeight:'700'}},t.transporteur||'—'),
+        h('span',{className:'expe-carte-solde'},
+          h('b',null,_expePalFmt(solde)),
+          h('small',null,solde>0?'palettes dues':(solde<0?'crédit':'à jour'))
+        )
+      ),
+      t.dernier_mouvement ? h('span',{className:'msf-card-sub',style:{marginTop:'5px'}},
+        'Dernier mouvement : ',t.dernier_mouvement) : null
+    ),
+    flux,
+    expeCanWrite() ? h('div',{className:'expe-carte-pied'},
+      h('button',{type:'button',className:'btn expe-dep-valider-btn',
+        onClick:()=>void ouvrirJournalPalettes(t)},iconEl('clipboard',16),' Relevé de compte'),
+      h('button',{type:'button',className:'expe-carte-plus',
+        title:'Saisir une restitution','aria-label':'Saisir une restitution',
+        onClick:e=>{e.stopPropagation();ouvrirSaisieMouvementPalettes(t);}},iconEl('plus',18))
+    ) : null
+  );
+}
+
+/* ── Départs détaillés (Palettes Europe) en carte ────────────────────────
+   Bouton primaire = « Retournée » : c'est le geste de 9 fois sur 10.
+   La date de retour et la note restent éditables en place — les mêmes
+   helpers que le tableau (expePalDateRetourInput, expePalNoteInput). */
+function expeCartePalDepart(r){
+  const statut = r.palette_europe_statut || 'en_attente';
+  const coul = trpColorFromRow(r);
+  const meta = [];
+  if(r.date_enlevement) meta.push((r.date_enlevement||'').slice(0,10));
+  if(r.nb_palette!=null) meta.push(r.nb_palette+' pal.');
+  const refs = [];
+  if(r.arc) refs.push(h('span',{style:{fontFamily:'ui-monospace,monospace'}},'ARC '+r.arc));
+  if(r.no_bl) refs.push(h('span',{style:{fontFamily:'ui-monospace,monospace'}},'BL '+r.no_bl));
+  const noteInp = expePalNoteInput(r);
+  const dateInp = expePalDateRetourInput(r, statut);
+  return h('div',{className:'msf-card expe-carte'},
+    h('div',{className:'expe-carte-tete',style:{cursor:'default'}},
+      h('span',{className:'msf-card-head'},
+        coul?trpTag(r.transporteur||'—',coul):h('span',null,r.transporteur||'—'),
+        h('span',{className:'msf-card-title'},r.client||'—'),
+        _expePalEuropeStatutBadge(statut)
+      ),
+      h('span',{className:'msf-card-sub'},meta.join(' · ')||'—'),
+      refs.length ? h('span',{className:'msf-card-sub expe-carte-refs'},...refs) : null
+    ),
+    h('div',{className:'expe-carte-palfields'},
+      h('div',null,h('label',null,'Date de retour'),dateInp),
+      h('div',null,h('label',null,'Statut actuel'),
+        h('div',{style:{padding:'9px 10px'}},_expePalEuropeStatutLabel(statut))),
+      h('div',{className:'col-full'},h('label',null,'Note'),noteInp)
+    ),
+    expeCanWrite() ? h('div',{className:'expe-carte-actions'},
+      statut!=='retournee' ? h('button',{type:'button',className:'btn expe-dep-valider-btn',style:{flex:'1',height:'44px'},
+        onClick:()=>expeChangePaletteEuropeStatut(r.id,'retournee',expeParisDayISO())
+      },iconEl('check-circle',18),' Retournée') : null,
+      statut!=='perdue' ? h('button',{type:'button',className:'btn-danger expe-dep-ab',title:'Marquer comme perdue',
+        onClick:()=>{
+          if(!confirm('Marquer cette palette comme perdue ?')) return;
+          expeChangePaletteEuropeStatut(r.id,'perdue', null);
+        }
+      },iconEl('x',18)) : null,
+      statut!=='en_attente' ? h('button',{type:'button',className:'btn-ghost expe-dep-ab',title:'Réinitialiser',
+        onClick:()=>expeChangePaletteEuropeStatut(r.id,'en_attente', '')
+      },iconEl('rotate-ccw',17)) : null,
+      h('button',{type:'button',className:'btn-ghost expe-dep-ab',title:'Ouvrir une contestation',
+        onClick:()=>ouvrirSaisieContestation({
+          transporteur_id:r.transporteur_id, transporteur:r.transporteur,
+          depart_id:r.id, client:r.client, recepisse:r.arc||r.no_bl,
+          nb_palette:r.nb_palette, date:(r.date_enlevement||'').slice(0,10)
+        })
+      },iconEl('alert-circle',17))
+    ) : null
+  );
+}
+
+/* ── Transporteur en carte ─────────────────────────────────────────────
+   Le nom en pastille, la note (avec son badge) à droite. Les zones et
+   services en dessous. Tap sur la carte = modifier ; le tarif en lien
+   distinct pour ne pas déclencher la modale. */
+function expeCarteTransp(tr){
+  const inactive=!Number(tr.actif);
+  const zones=expeTrpZonesBadges(tr);
+  const services=expeTrpServiceBadges(tr);
+  const taxe=tr.taxe_carburant_pct!=null?Number(tr.taxe_carburant_pct):0;
+  const nbAvis=Number(tr.note_nb_avis||0);
+  return h('div',{className:'msf-card expe-carte'+(inactive?' expe-carte--ecarte':'')},
+    h('button',{type:'button',className:'expe-carte-tete',
+      onClick:()=>expeCanWrite() && openTransporteurModal(tr.id)},
+      h('span',{className:'msf-card-head'},
+        tr.couleur?trpTag(tr.nom||'',tr.couleur):h('span',{className:'msf-card-title'},tr.nom||''),
+        inactive?h('span',{className:'msf-badge'},'Inactif'):null,
+        h('span',{className:'expe-carte-note'},
+          expeNoteBadge(tr),
+          h('span',{className:'expe-carte-note-txt'},nbAvis?(nbAvis+' avis'):'note de départ')
+        )
+      ),
+      h('span',{className:'msf-card-sub'},
+        h('span',null,String(taxe)+' % carburant'),
+        expeTrpContactCell(tr)
+      )
+    ),
+    (zones.length||services.length) ? h('div',{className:'expe-carte-zones'},
+      ...zones.map(z=>h('span',{className:'msf-badge msf-badge--accent'},z)),
+      ...services.map(sv=>h('span',{className:'msf-badge'},sv))
+    ) : null,
+    (tr.tarif_url||expeCanWrite()) ? h('div',{className:'expe-carte-actions'},
+      tr.tarif_url ? h('a',{href:expeTrpTarifUrl(tr.id),target:'_blank',rel:'noopener',
+        className:'btn-ghost expe-dep-ab',style:{textDecoration:'none',padding:'0 12px',width:'auto',gap:'6px'},
+        onClick:e=>e.stopPropagation()},iconEl('file',16),' Tarif') : null,
+      expeCanWrite() ? h('button',{type:'button',className:'btn-ghost expe-dep-ab',
+        title:Number(tr.actif)?'Désactiver':'Réactiver',
+        onClick:e=>{e.stopPropagation();toggleActif(tr.id,Number(tr.actif)?0:1);}
+      },iconEl('sliders',17)) : null
+    ) : null
+  );
+}
+
+/* ── Prospect en carte ─────────────────────────────────────────────────
+   escHtml() est utilisé ici comme dans le tableau : c'est le comportement
+   actuel (double-échappement sur & < > possible), ne pas « corriger »
+   dans ce chantier. */
+function expeCarteProspect(p){
+  const LABELS={
+    a_contacter:{label:'A contacter',color:'var(--warn)',bg:'color-mix(in srgb,var(--warn) 16%,transparent)'},
+    en_discussion:{label:'En discussion',color:'var(--accent)',bg:'var(--accent-bg)'},
+    reference:{label:'Référence',color:'var(--success)',bg:'color-mix(in srgb,var(--success) 16%,transparent)'},
+    ecarte:{label:'Ecarté',color:'var(--muted)',bg:'transparent'}
+  };
+  const st = LABELS[p.statut_demarchage] || {label:p.statut_demarchage,color:'var(--muted)',bg:'transparent'};
+  const meta = [];
+  if(p.zone_couverte) meta.push(escHtml(p.zone_couverte));
+  if(p.type_service) meta.push(escHtml(p.type_service));
+  if(p.capacite_max_pal!=null) meta.push(p.capacite_max_pal+' pal.');
+  return h('div',{className:'msf-card expe-carte'+(p.statut_demarchage==='ecarte'?' expe-carte--ecarte':'')},
+    h('button',{type:'button',className:'expe-carte-tete',
+      onClick:()=>expeCanWrite() && ouvrirModalProspect(p.id)},
+      h('span',{className:'msf-card-head'},
+        h('span',{className:'msf-card-title'},escHtml(p.nom||'')),
+        h('span',{className:'expe-carte-statut',style:{color:st.color,background:st.bg}},escHtml(st.label))
+      ),
+      meta.length ? h('span',{className:'msf-card-sub'},meta.join(' · ')) : null,
+      p.contact_email ? h('span',{className:'msf-card-sub'},
+        h('a',{href:'mailto:'+p.contact_email,style:{color:'var(--accent)',textDecoration:'none'},
+          onClick:e=>e.stopPropagation()},escHtml(p.contact_email))
+      ) : null
     )
   );
 }
+
 
 const EXPE_MOTIF_LABELS = {
   stock_ancien:'Stock ancien', sous_traitance:'Sous-traitance', negoce:'Négoce',
@@ -6590,7 +7040,7 @@ function renderExpeHistoriqueDeparts(){
     type:'search',
     placeholder:'Réf. SIFA, client, ARC, BL, type palette, transporteur…',
     value:S.expeDepartHistQ||'',
-    style:{width:'100%',maxWidth:'560px',padding:'10px 12px',borderRadius:'8px',border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',marginBottom:'12px'},
+    style:{width:'100%',maxWidth:expeEnCartes()?'none':'560px',padding:'12px',borderRadius:'10px',border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',marginBottom:expeEnCartes()?'0':'12px'},
     onInput:e=>{
       // Ne pas déclencher un render à chaque caractère (sinon perte de focus).
       S.expeDepartHistQ = e.target.value;
@@ -6624,32 +7074,11 @@ function renderExpeHistoriqueDeparts(){
       (r.nb_palette!=null?String(r.nb_palette):'—'),
       h('span',{style:{color:'var(--muted)',fontSize:'11px'}},' '+(expePaletteTypeLabel(r)||''))),
     h('td',null,expeDossierCell(r)),
-    expeCanWrite()?h('td',{className:'expe-dep-actions-td'},
-      expeDepartActsGrid({
-        paires:[
-          expeAvisBoutons(r),
-          [
-            h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Dupliquer ce départ en nouvelle saisie',
-              onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',16)),
-            h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Modifier les informations de ce départ',
-              onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',16))
-          ]
-        ],
-        fin:[
-        h('button',{className:'btn-danger expe-dep-ab',type:'button',title:'Supprimer définitivement ce départ de l\'historique',onClick:async()=>{
-          if(!confirm('Supprimer ce départ ?')) return;
-          try{
-            await api('/api/expe/departs/'+r.id,{method:'DELETE'});
-            toast('Départ supprimé');
-            await loadExpeDepartHistorique();
-          }catch(e){toast(e.message||'Suppression impossible','error');}
-        }},iconEl('trash',16))
-        ]
-      },
-      h('button',{className:'btn expe-dep-invalider-btn',type:'button',
-        title:'Annuler la validation et remettre ce départ dans le suivi du jour',
-        onClick:()=>void expeInvaliderDepart(r.id)},'Invalider'))
-    ):h('td',null,'—')
+    expeCanWrite()?(function(){
+      const b=expeDepartBoutons(r,'historique');
+      return h('td',{className:'expe-dep-actions-td'},
+        expeDepartActsGrid({paires:b.paires,fin:b.fin},b.principal));
+    })():h('td',null,'—')
     ));
     if(ouvert) bodyRows.push(expeRowDetail(r, HCOLSPAN));
   });
@@ -6661,12 +7090,22 @@ function renderExpeHistoriqueDeparts(){
     h('button',{type:'button',className:'page-btn',disabled:page<=1,onClick:()=>expeHistChangePage(-1)},'‹ Précédent'),
     h('button',{type:'button',className:'page-btn',disabled:page>=pages,onClick:()=>expeHistChangePage(1)},'Suivant ›')
   );
+  const carteRecherche=h('div',{className:'card',style:{marginBottom:'12px',padding:'14px 18px'}},
+    h('h3',{style:{fontSize:'14px',fontWeight:'700',marginBottom:'8px'}},'Recherche'),
+    h('div',{className:'expe-help',style:{marginBottom:'8px'}},'Mots séparés par des espaces : tous doivent être trouvés (ref., client, ARC, BL, etc.). Insensible à la casse. Résultats paginés par 50.'),
+    qInp
+  );
+  // En cartes, la recherche est le sujet de l'écran : elle monte en tête, sans
+  // l'encadré d'aide qui prend un tiers de la hauteur utile d'un téléphone.
+  if(expeEnCartes()){
+    return h('div',null,
+      h('div',{className:'card',style:{marginBottom:'12px',padding:'12px 13px'}},qInp),
+      expeCartesDeparts('historique'),
+      pager
+    );
+  }
   return h('div',null,
-    h('div',{className:'card',style:{marginBottom:'12px',padding:'14px 18px'}},
-      h('h3',{style:{fontSize:'14px',fontWeight:'700',marginBottom:'8px'}},'Recherche'),
-      h('div',{className:'expe-help',style:{marginBottom:'8px'}},'Mots séparés par des espaces : tous doivent être trouvés (ref., client, ARC, BL, etc.). Insensible à la casse. Résultats paginés par 50.'),
-      qInp
-    ),
+    carteRecherche,
     h('div',{className:'card'},
       h('div',{className:'card-header'},h('h3',{className:'expe-mobile-hide-head'},'Historique des départs validés')),
       h('div',{className:'expe-departs-tbl-wrap'},h('table',{className:'table-std expe-hist-table'},

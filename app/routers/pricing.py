@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import re
 import sqlite3
+from dataclasses import replace
 from datetime import date, datetime, timedelta as _dt_timedelta
 from decimal import Decimal
 from typing import Any, Optional
@@ -354,6 +355,11 @@ def preview_material_price(request: Request, body: MaterialPreviewIn):
     _require_read(request)
     with get_db() as conn:
         settings = load_pricing_settings(conn)
+    # Taux d'essai envoyé par la fiche : on recalcule avec, on n'enregistre rien.
+    # Un taux nul ou négatif est ignoré plutôt que refusé — pendant la frappe, le
+    # champ passe par « 0 » et par « » sans que ce soit une erreur de saisie.
+    if body.eur_usd_rate is not None and body.eur_usd_rate > 0:
+        settings = replace(settings, eur_usd_rate=body.eur_usd_rate)
     from app.services.pricing.types import PricingMaterial
 
     pm = PricingMaterial(

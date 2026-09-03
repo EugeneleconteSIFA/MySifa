@@ -1190,8 +1190,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='fabrication';</script>
-<link rel="stylesheet" href="/static/mysifa_landscape.css">
-<link rel="stylesheet" href="/static/mysifa_dock.css">
+<link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
@@ -1204,7 +1203,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=7"></script>
+<script src="/static/mysifa_cal_rappel.js?v=8"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.5"></script>
 <!-- Memoire produit : fiche par reference produit, partagee avec MyProd -->
 <script src="/static/mysifa_produit_memoire.js?v=2.3"></script>
@@ -1241,8 +1240,6 @@ body.has-topbar .fab-main{padding-top:74px}
     }
   }
 </script>
-<script src="/static/mysifa_landscape.js?v=2"></script>
-<script>window.MySifaLandscape&&MySifaLandscape.enable();</script>
 <script>
 'use strict';
 /*__TRACA_GUIDE__*/
@@ -3375,7 +3372,7 @@ function _fabPrintWin(title, pageSize, css, bodyHtml){
   if(!w) return;
   w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+title+'</title><style>'
     +'@page{size:'+pageSize+';margin:0}body{margin:0;padding:0;font-family:Arial,sans-serif}'+css+'</style></head><body>'
-    +bodyHtml+'<script>window.onload=function(){window.focus();window.print();}<\/script><script src="/static/mysifa_impersonate.js"><\/script></body></html>');
+    +bodyHtml+'<script>window.onload=function(){window.focus();window.print();}<\/script><script src="/static/mysifa_impersonate.js?v=2"><\/script></body></html>');
   w.document.close();
 }
 
