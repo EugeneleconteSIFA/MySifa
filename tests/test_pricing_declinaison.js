@@ -27,7 +27,9 @@ function check(label, got, attendu) {
 // ─── Route ──────────────────────────────────────────────────────────────────
 const ctx = { window: { location: { pathname: '/' } }, S: {}, console };
 vm.createContext(ctx);
-vm.runInContext(extraire('parseRoute') + '\n' + extraire('icon') + '\n' + extraire('declSaveBarHtml'), ctx);
+vm.runInContext([extraire('parseRoute'), extraire('icon'),
+                 extraire('heureCourte'), extraire('saveStatusHtml'),
+                 extraire('declSaveBarHtml')].join('\n'), ctx);
 
 function route(p) { ctx.window.location.pathname = p; return ctx.parseRoute(); }
 check('une déclinaison ouvre sa fiche', route('/pricing/mystock/12'), { name: 'mystock-edit', id: '12' });
@@ -42,19 +44,34 @@ check('plus de route tableau de bord', src.includes('renderDashboard'), false);
 check('les routes existantes ne bougent pas',
   route('/pricing/materials/7'), { name: 'material-edit', id: '7' });
 
-// ─── Bandeau d'enregistrement ───────────────────────────────────────────────
-ctx.S = { canWrite: true, declDirty: false, declForm: { matiere_id: 42 } };
+// ─── Bandeau d'enregistrement — pastille automatique ────────────────────────
+// Plus de bouton « Enregistrer » : la saisie s'écrit à la volée. La pastille
+// dit où on en est (vierge / attente / cours / ok / err), pas d'action à
+// prendre par l'utilisateur pour valider ce qu'il vient de taper.
+ctx.S = { canWrite: true, declSaveStatus: "vierge", declSavedAt: null,
+          declForm: { matiere_id: 42 } };
 let bar = ctx.declSaveBarHtml();
-check('bouton enregistrer présent', bar.includes('id="btn-save-decl"'), true);
+check('plus de bouton Enregistrer', bar.includes('id="btn-save-decl"'), false);
 check('retour liste présent', bar.includes('id="btn-back-decl"'), true);
 check('lien vers MyStock sur la bonne matière', bar.includes('matiere=42'), true);
-check('drapeau masqué au chargement', bar.includes('id="decl-dirty" hidden'), true);
+check('pastille au chargement : Aucune modification',
+  bar.includes('Aucune modification'), true);
 
-ctx.S.declDirty = true;
-check('drapeau visible après saisie', ctx.declSaveBarHtml().includes('id="decl-dirty"><span'), true);
+ctx.S.declSaveStatus = "attente";
+check('pastille pendant la frappe : attente',
+  ctx.declSaveBarHtml().includes('Modifications non enregistrées'), true);
+ctx.S.declSaveStatus = "cours";
+check('pastille pendant le PATCH : Enregistrement…',
+  ctx.declSaveBarHtml().includes('Enregistrement'), true);
+ctx.S.declSaveStatus = "ok"; ctx.S.declSavedAt = new Date(2026, 8, 3, 14, 7);
+check('pastille après succès : heure de sauvegarde',
+  ctx.declSaveBarHtml().includes('14:07'), true);
+ctx.S.declSaveStatus = "err";
+check('pastille après échec : Erreur — réessayer',
+  ctx.declSaveBarHtml().includes('Erreur'), true);
 
-ctx.S = { canWrite: false, declDirty: false, declForm: { matiere_id: 42 } };
-check('lecture seule : pas de bouton enregistrer',
+ctx.S = { canWrite: false, declSaveStatus: "vierge", declForm: { matiere_id: 42 } };
+check('lecture seule : bar sans action d\'écriture',
   ctx.declSaveBarHtml().includes('btn-save-decl'), false);
 
 // ─── L'appairage a bien disparu de l'interface ──────────────────────────────
@@ -68,8 +85,8 @@ check('plus de colonne Coût €/m² dans la liste', /Coût €\/m²/.test(vueLi
 check('la fiche reste le chemin vers le paramétrage',
   src.includes('href="/pricing/mystock/${decls[0].id}"'), true);
 
-// ─── Le formulaire envoie bien ce que l'API attend ──────────────────────────
-const save = extraire('saveDeclinaisonForm');
+// ─── L'enregistrement automatique envoie ce que l'API attend ─────────────────
+const save = extraire('autoEnregistrerDecl');
 for (const champ of ['price_currency', 'price_basis', 'taxe_pct', 'is_imported',
                      'applique_marge', 'transport_mode', 'transport_unit_price',
                      'transport_pct']) {
@@ -82,7 +99,10 @@ for (const champ of ['grammage_gsm', 'perte_pct']) {
   check('champ retiré : ' + champ, save.includes(champ + ':'), false);
 }
 check('méthode PATCH', save.includes("method: \"PATCH\""), true);
-check('drapeau remis à zéro après enregistrement', save.includes('S.declDirty = false'), true);
+check('débounce d\'écriture', save.includes('DELAI_SAVE_MS'), true);
+check('la pastille passe à « cours »', save.includes('setDeclSaveStatus("cours")'), true);
+check('puis à « ok » sur succès', save.includes('setDeclSaveStatus("ok")'), true);
+check('à « err » sur erreur', save.includes('setDeclSaveStatus("err")'), true);
 // Le poids n'est plus saisi : il découle du grammage et de la perte.
 check('plus de poids envoyé à la main', save.includes('weight_per_m2'), false);
 

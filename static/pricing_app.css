@@ -359,9 +359,18 @@ body.has-staging-bandeau .pr-savebar{top:44px}
 .pr-savebar .savebar-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:auto}
 .pr-savebar .btn-soft{background:var(--card)}
 .pr-savebar .btn-soft:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
-.savebar-state{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--warn)}
-.savebar-state .dot{width:7px;height:7px;border-radius:50%;background:var(--warn);flex-shrink:0}
+/* La pastille d'enregistrement automatique. Cinq états, cinq couleurs — la
+   sévérité change avec la situation, pas le libellé. */
+.savebar-state{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--muted)}
+.savebar-state .dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0}
 .savebar-state[hidden]{display:none}
+.savebar-state-vierge{color:var(--muted)}
+.savebar-state-attente{color:var(--warn)}
+.savebar-state-cours{color:var(--accent)}
+.savebar-state-cours .dot{animation:savebar-pulse 1s ease-in-out infinite}
+.savebar-state-ok{color:var(--success)}
+.savebar-state-err{color:var(--danger)}
+@keyframes savebar-pulse{0%,100%{opacity:1}50%{opacity:.3}}
 /* Sous 900px la barre latérale passe en tiroir : le bandeau reprend la largeur. */
 @media(max-width:900px){
   .pr-savebar{left:16px;right:16px}

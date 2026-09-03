@@ -2622,8 +2622,10 @@
               transport_pct: parseFloat(f.transport_pct) || 0,
               transport_cout: parseFloat(f.transport_cout) || 0,
               transport_quantite: parseFloat(f.transport_quantite) || 0,
-              grammage_gsm: parseFloat(f.grammage_gsm) || 0,
-              perte_pct: parseFloat(f.perte_pct) || 0,
+              // Pas de grammage ni de perte : sur un adhésif, un grammage
+              // envoyé DÉPLACE la déclinaison (`set_declinaison_valeur`), et
+              // le laisser partir à chaque frappe rebaptiserait la matière.
+              // Ce réglage vit sur la fiche matière MyStock.
             },
           }
         );
@@ -2959,9 +2961,12 @@
         showToast("Matière créée.", "success");
         navigate("/pricing/materials/" + r.id);
       } else {
+        // Chemin de secours : le bouton n'est plus rendu pour une matière
+        // existante — autoEnregistrerMat s'en charge à la frappe. Garder la
+        // fonction opérationnelle évite de découvrir dans six mois qu'une
+        // matière ne s'enregistre plus si le flux change.
         await api("/api/pricing/materials/" + S.route.id, { method: "PATCH", body });
-        showToast("Matière enregistrée.", "success");
-        S.matDirty = false;
+        setMatSaveStatus("ok");
         await loadMaterialForm(S.route.id);
         renderMaterialForm(false);
       }
@@ -3939,40 +3944,9 @@
       });
     }
 
-    const save = document.getElementById("btn-save-decl");
-    if (save) save.onclick = () => saveDeclinaisonForm();
-  }
-
-  async function saveDeclinaisonForm() {
-    syncDeclFormFromDom();
-    const f = S.declForm;
-    try {
-      const maj = await api(
-        "/api/pricing/mystock/declinaisons/" + f.declinaison_id + "/parametrage",
-        {
-          method: "PATCH",
-          body: {
-            price_currency: f.price_currency,
-            price_basis: f.price_basis,
-            taxe_pct: parseFloat(f.taxe_pct) || 0,
-            is_imported: !!f.is_imported,
-            applique_marge: f.applique_marge !== false,
-            transport_mode: f.transport_mode || "AMOUNT",
-            transport_unit_price: parseFloat(f.transport_unit_price) || 0,
-            transport_pct: parseFloat(f.transport_pct) || 0,
-            transport_cout: parseFloat(f.transport_cout) || 0,
-            transport_quantite: parseFloat(f.transport_quantite) || 0,
-          },
-        }
-      );
-      S.declForm = maj;
-      S.declPreview = maj.computed || null;
-      S.declDirty = false;
-      showToast("Réglages enregistrés.", "success");
-      renderDeclinaisonForm();
-    } catch (e) {
-      showToast(e.message, "danger");
-    }
+    // Plus de bouton « Enregistrer » sur cette fiche : l'enregistrement
+    // suit la frappe (autoEnregistrerDecl). La pastille de la bar dit où
+    // on en est.
   }
 
   // ─── Produits devisés à partir des matières MyStock ─────────────────────
