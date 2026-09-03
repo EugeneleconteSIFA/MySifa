@@ -652,8 +652,132 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 .of-tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
 .of-tab-pane{flex:1;display:flex;flex-direction:column;overflow:hidden}
 .of-tab-pane.hidden{display:none}
-.of-mismatch-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;
-  max-width:440px;width:100%;padding:28px 24px;display:flex;flex-direction:column;gap:16px}
+/* ══════════════════════════════════════════════════════════════════════
+   Planning — agenda vertical mobile (sous 700 px)
+   ------------------------------------------------------------------
+   Le rendu bureau reste intact. Ici, on garde le même modèle temps
+   (heures ouvrées, calculées par computeTlWeekModel) mais on projette
+   l'axe sur la VERTICALE : le temps descend, les jours s'empilent.
+   Une carte a une hauteur proportionnelle à sa durée en heures ouvrées
+   (PX_PAR_H = 18 px/h, plancher à 64 px pour que le nom du dossier ait
+   toujours la place de tenir).
+   ══════════════════════════════════════════════════════════════════════ */
+.plan-agenda{padding:8px 12px 100px}
+.plan-agenda-machines{
+  display:flex;gap:7px;overflow-x:auto;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none;padding:6px 0 10px;
+}
+.plan-agenda-machines::-webkit-scrollbar{display:none}
+.plan-agenda-chip{
+  flex:0 0 auto;height:38px;display:inline-flex;align-items:center;gap:6px;padding:0 15px;
+  border-radius:19px;border:1px solid var(--border);background:var(--card);color:var(--text2);
+  font:600 13px/1 inherit;white-space:nowrap;cursor:pointer;
+}
+.plan-agenda-chip:hover{background:var(--bg)}
+.plan-agenda-chip.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:700}
+.plan-agenda-wknav{
+  display:flex;gap:7px;padding:0 0 12px;align-items:center;
+}
+.plan-agenda-wknav .plan-agenda-chip{flex:1;justify-content:center}
+.plan-agenda-wknav .wknav-arrow{width:44px;flex:0 0 44px;padding:0;justify-content:center}
+.plan-agenda-daybar{
+  position:sticky;top:0;z-index:5;
+  display:flex;align-items:center;gap:10px;
+  padding:9px 4px 8px;margin:6px 0 8px;
+  background:var(--bg);border-bottom:1px solid var(--border);
+}
+.plan-agenda-daybar b{
+  font-size:12px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--text);
+  flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.plan-agenda-daybar .win{
+  font-size:11px;color:var(--muted);font-family:ui-monospace,'Cascadia Code',monospace;
+  white-space:nowrap;
+}
+.plan-agenda-daybar .charge{
+  width:56px;height:5px;flex:0 0 56px;border-radius:3px;background:var(--border);overflow:hidden;
+}
+.plan-agenda-daybar .charge i{display:block;height:100%;background:var(--accent)}
+.plan-agenda-daybar .charge i.hot{background:var(--warn)}
+.plan-agenda-daybar.today b{color:var(--accent)}
+.plan-agenda-day{position:relative;padding-left:50px;margin-bottom:4px}
+.plan-agenda-hours{
+  position:absolute;left:0;top:0;bottom:0;width:44px;
+  pointer-events:none;
+}
+.plan-agenda-hours i{
+  position:absolute;right:6px;font-style:normal;font-size:10px;color:var(--muted);
+  font-family:ui-monospace,'Cascadia Code',monospace;transform:translateY(-50%);
+}
+.plan-agenda-tl{position:relative}
+.plan-agenda-grid{
+  position:absolute;left:0;right:0;height:1px;background:var(--border);opacity:.5;
+}
+.plan-agenda-slot{
+  position:absolute;left:0;right:0;
+  border-radius:10px;padding:7px 11px 7px 14px;overflow:hidden;
+  color:#0f172a;display:flex;flex-direction:column;justify-content:center;gap:1px;
+  cursor:pointer;
+}
+.plan-agenda-slot .rail{position:absolute;left:0;top:0;bottom:0;width:5px;background:rgba(15,23,42,.4)}
+.plan-agenda-slot .l1{font-size:14px;font-weight:800;letter-spacing:-.2px;
+  display:flex;align-items:center;gap:6px;padding-right:60px;min-width:0}
+.plan-agenda-slot .l1 em{font-style:normal;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;min-width:0;flex:1}
+.plan-agenda-slot .l2{font-size:11.5px;font-weight:600;color:#334155;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plan-agenda-slot .l3{font-size:10.5px;font-weight:600;color:#475569;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;gap:8px;align-items:center}
+.plan-agenda-slot .dur{
+  position:absolute;right:10px;top:8px;font-size:11.5px;font-weight:800;color:#1e293b;
+  font-family:ui-monospace,'Cascadia Code',monospace;
+}
+.plan-agenda-slot .exig{
+  margin-top:3px;background:#fef08a;border:1px solid #eab308;color:#713f12;
+  font-size:10px;font-weight:800;border-radius:5px;padding:2px 6px;align-self:flex-start;
+  max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.plan-agenda-slot.done{opacity:.5;filter:grayscale(35%)}
+.plan-agenda-slot.live{outline:2px solid var(--accent);outline-offset:-2px}
+.plan-agenda-slot.fsc{box-shadow:0 0 0 2px rgba(16,185,129,.95)}
+.plan-agenda-slot.hatch::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(135deg,transparent 0 7px,rgba(15,23,42,.14) 7px 14px)}
+.plan-agenda-slot.canc{outline:2px solid var(--danger);outline-offset:-2px}
+.plan-agenda-slot.canc::before{
+  content:"";position:absolute;top:8px;bottom:8px;left:50%;width:2px;
+  background:var(--danger);opacity:.35;transform:rotate(-8deg);
+}
+.plan-agenda-slot.short{padding:5px 11px 5px 14px}
+.plan-agenda-slot.short .l2,.plan-agenda-slot.short .l3,
+.plan-agenda-slot.short .exig{display:none}
+.plan-agenda-slot.short .l1{font-size:12.5px;padding-right:50px}
+.plan-agenda-now{
+  position:absolute;left:0;right:0;height:2px;z-index:4;
+  background:var(--danger);box-shadow:0 0 8px var(--danger);
+  pointer-events:none;
+}
+.plan-agenda-now b{
+  position:absolute;left:-50px;top:-9px;background:var(--danger);color:#ffffff;
+  font-size:9.5px;font-weight:800;border-radius:9px;padding:2px 6px;
+  font-family:ui-monospace,'Cascadia Code',monospace;
+}
+.plan-agenda-off{
+  padding:22px 12px;text-align:center;color:var(--muted);font-size:12.5px;
+  border:1px dashed var(--border);border-radius:10px;margin-bottom:8px;
+}
+.plan-agenda-fab{
+  position:fixed;right:16px;bottom:calc(20px + env(safe-area-inset-bottom));
+  width:54px;height:54px;border-radius:50%;border:0;cursor:pointer;
+  background:var(--accent);color:var(--bg);z-index:100;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 8px 22px color-mix(in srgb,var(--accent) 34%,transparent);
+}
+/* La topbar mobile porte déjà le titre en mode <900px ; on cache le header
+   plein pour libérer la hauteur sur l'agenda. */
+@media (max-width:700px){
+  body.has-topbar .planning-container .header{display:none}
+  body.has-topbar .planning-container>section.sec{display:none}
+}
 </style>
 <link rel="stylesheet" href="/static/mysifa_perf.css">
 <script src="/static/mysifa_perf.js"></script>
@@ -1856,6 +1980,181 @@ function renderContactModal(){
   </div>`;
 }
 
+// Rendu mobile : vrai en dessous de 700 px. Un écouteur matchMedia
+// re-render à la rotation du téléphone — sans lui, on resterait sur la
+// mise en page évaluée au moment du premier render().
+var _planMqMobile=null;
+function planningEnAgenda(){
+  try{
+    if(!_planMqMobile){
+      _planMqMobile=window.matchMedia('(max-width:700px)');
+      var _maj=function(){ if(typeof render==='function') render(); };
+      if(_planMqMobile.addEventListener) _planMqMobile.addEventListener('change',_maj);
+      else if(_planMqMobile.addListener) _planMqMobile.addListener(_maj);
+    }
+    return !!_planMqMobile.matches;
+  }catch(e){ return false; }
+}
+
+/* ── Agenda vertical (mobile) ─────────────────────────────────────────
+   Un bloc par jour ouvré. Chaque jour a sa propre échelle en heures
+   ouvrées (window.s → window.e), à raison de PX_PAR_H px par heure,
+   avec un plancher qui garantit qu'un dossier court reste lisible.
+   Les slots utilisent le même modèle temps que le tableau bureau
+   (computeTlWeekModel.gp), pour qu'un dossier soit à la même position
+   dans les deux vues. */
+var PLAN_AGENDA_PXH = 18;
+var PLAN_AGENDA_MIN_H = 56;
+
+function planAgendaSlotClass(s){
+  var cls='';
+  if(s.statut==='termine') cls+=' done';
+  else if(s.statut==='en_cours') cls+=' live';
+  var noOf=(s.numero_of||s.reference||'').trim().toLowerCase();
+  var activeNo=S.activeDossier?(S.activeDossier.no_dossier||'').trim().toLowerCase():'';
+  if(activeNo && noOf && activeNo===noOf) cls+=' live';
+  if((s.fsc_requis===1||s.fsc_requis===true)) cls+=' fsc';
+  if(Number(s.a_placer||0)===1 || Number(s.valide||0)===0) cls+=' hatch';
+  if(typeof isAnnuleEntry==='function' && isAnnuleEntry(s)) cls+=' canc';
+  return cls;
+}
+
+function renderPlanningAgenda(){
+  const a=document.getElementById("app");
+  const machinesChips = (S.machines||[]).map(x=>
+    `<button type="button" class="plan-agenda-chip${x.id===MID?' on':''}"
+       onclick="changeMachine(${x.id})">${escHtml(x.nom||'')}</button>`
+  ).join('');
+  if(!MID || !(S.machines&&S.machines.length)){
+    a.innerHTML=`<div class="app">${renderSidebar()}<main class="main">${renderPlanningMobileTopbar()}
+      <div class="planning-container plan-agenda">
+        <p style="color:var(--muted);padding:24px 4px 0">Aucune machine associée à votre compte.</p>
+      </div>${renderContactModal()}</main></div><div id="mroot"></div>`;
+    return;
+  }
+  const mon=addD(getMon(new Date()),S.wo*7);
+  const model=computeTlWeekModel(mon);
+  const wkLbl=S.wo===0?`S${wkNum(mon)} · cette semaine`
+             :S.wo===-1?`S${wkNum(mon)} · précédente`
+             :S.wo===1?`S${wkNum(mon)} · prochaine`
+             :`S${wkNum(mon)}`;
+  const wkNav=`<div class="plan-agenda-wknav">
+    <button type="button" class="plan-agenda-chip wknav-arrow"
+      onclick="S.wo--;load()" aria-label="Semaine précédente">${icon('chevron-left',18)}</button>
+    <button type="button" class="plan-agenda-chip${S.wo===0?' on':''}"
+      onclick="S.wo=0;load()">${escHtml(wkLbl)}</button>
+    <button type="button" class="plan-agenda-chip wknav-arrow"
+      onclick="S.wo++;load()" aria-label="Semaine suivante">${icon('chevron-right',18)}</button>
+  </div>`;
+
+  let daysHtml='';
+  const nowMs=Date.now();
+  const todayIso=ymd(new Date());
+  if(model.err){
+    daysHtml=`<div class="plan-agenda-off">Aucune journée travaillée cette semaine.</div>`;
+  }else{
+    (model.cols||[]).forEach(col=>{
+      const dayW=col.e-col.s;
+      const tlH=Math.max(PLAN_AGENDA_MIN_H*2, Math.round(dayW*PLAN_AGENDA_PXH));
+      // Slots qui recoupent ce jour
+      const daySlots=(S.timeline||[]).filter(s=>{
+        const ss=new Date(s.start), se=new Date(s.end);
+        return se>col.date && ss<addD(col.date,1);
+      });
+      const items=daySlots.map((s,idx)=>{
+        const ss=new Date(s.start), se=new Date(s.end);
+        const sod=new Date(col.date); sod.setHours(0,0,0,0);
+        const hStart=Math.max(col.s, Math.min(col.e, (ss-sod)/36e5));
+        const hEnd  =Math.max(col.s, Math.min(col.e, (se-sod)/36e5));
+        if(hEnd-hStart<=0.02) return '';
+        const top=Math.round((hStart-col.s)*PLAN_AGENDA_PXH);
+        const rawH=(hEnd-hStart)*PLAN_AGENDA_PXH;
+        const height=Math.max(PLAN_AGENDA_MIN_H, Math.round(rawH));
+        const co=colorForId(s.entry_id||idx+1);
+        const cli=(s.client||'').trim()||(s.numero_of||s.reference||'—');
+        const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:'';
+        const lz=s.laize?`${s.laize} mm`:'';
+        const l2=[fm,lz].filter(Boolean).join(' · ');
+        const startTxt=hhmmFromFloat(hStart);
+        const endTxt=hhmmFromFloat(hEnd);
+        const of=(s.numero_of||s.reference||'').trim();
+        const l3parts=[`${startTxt} → ${endTxt}`];
+        if(of) l3parts.push('OF '+of);
+        if(s.date_livraison) l3parts.push('livr. '+s.date_livraison);
+        const exig=s.exigences_production?String(s.exigences_production).trim():'';
+        const short=height<80;
+        const dur=fmtDur(s.duree_heures||0);
+        const cls=planAgendaSlotClass(s)+(short?' short':'');
+        return `<div class="plan-agenda-slot${cls}"
+          style="top:${top}px;height:${height-3}px;background:${co}"
+          data-eid="${s.entry_id||idx}"
+          onclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()">
+          <div class="rail"></div>
+          <div class="dur">${escHtml(dur)}</div>
+          <div class="l1"><em>${escHtml(cli)}</em>${fscBadgeHtml(s)}${transportBadgeHtml(s)}${annuleBadgeHtml(s)}</div>
+          ${l2?`<div class="l2">${escHtml(l2)}</div>`:''}
+          <div class="l3">${l3parts.map(escHtml).join(' · ')}</div>
+          ${exig?`<div class="exig" title="${escAttr(exig)}">${escHtml(exig)}</div>`:''}
+        </div>`;
+      }).join('');
+      // Lignes horaires : une tous les 2 h
+      let grid='';
+      let times='';
+      const step=2;
+      const s0=Math.ceil(col.s/step)*step;
+      for(let hh=s0; hh<=col.e; hh+=step){
+        const y=Math.round((hh-col.s)*PLAN_AGENDA_PXH);
+        grid+=`<div class="plan-agenda-grid" style="top:${y}px"></div>`;
+        times+=`<i style="top:${y}px">${String(hh).padStart(2,'0')}:00</i>`;
+      }
+      // Ligne "now" si on est dans ce jour
+      let nowLine='';
+      if(col.ds===todayIso){
+        const nowDt=new Date();
+        const localH=(nowDt-new Date(col.ds+'T00:00:00'))/36e5;
+        if(localH>=col.s && localH<=col.e){
+          const y=Math.round((localH-col.s)*PLAN_AGENDA_PXH);
+          nowLine=`<div class="plan-agenda-now" style="top:${y}px"><b>${hhmmFromFloat(localH)}</b></div>`;
+        }
+      }
+      // Barre de jour : jour long + fenêtre + charge (total prévu / capacité)
+      const totalPrevu=daySlots.reduce((t,s)=>{
+        const ss=new Date(s.start), se=new Date(s.end);
+        const sod=new Date(col.date); sod.setHours(0,0,0,0);
+        const hs=Math.max(col.s, Math.min(col.e, (ss-sod)/36e5));
+        const he=Math.max(col.s, Math.min(col.e, (se-sod)/36e5));
+        return t+Math.max(0,he-hs);
+      },0);
+      const pct=Math.min(100, Math.round(100*totalPrevu/dayW));
+      const isToday=col.ds===todayIso;
+      const dayLbl=fmtLivraisonLong(col.ds);
+      const dayCap=dayLbl.charAt(0).toUpperCase()+dayLbl.slice(1);
+      daysHtml+=`<div class="plan-agenda-daybar${isToday?' today':''}">
+        <b>${escHtml(dayCap)}</b>
+        <span class="win">${escHtml(col.hourLbl||'')}</span>
+        <span class="charge"><i class="${pct>=98?'hot':''}" style="width:${pct}%"></i></span>
+        <span class="win">${totalPrevu.toFixed(1)} h</span>
+      </div>
+      <div class="plan-agenda-day">
+        <div class="plan-agenda-hours">${times}</div>
+        <div class="plan-agenda-tl" style="height:${tlH}px">
+          ${grid}
+          ${items||'<div class="plan-agenda-off" style="margin:8px 0 0">Aucun dossier planifié</div>'}
+          ${nowLine}
+        </div>
+      </div>`;
+    });
+  }
+
+  a.innerHTML=`<div class="app">${renderSidebar()}<main class="main">${renderPlanningMobileTopbar()}
+    <div class="planning-container plan-agenda" data-page-enter>
+      <div class="plan-agenda-machines">${machinesChips}</div>
+      ${wkNav}
+      ${daysHtml}
+      ${CAN_EDIT?`<button type="button" class="plan-agenda-fab" onclick="openEdit(null)" aria-label="Ajouter un dossier">${icon('plus',26)}</button>`:''}
+    </div>${renderContactModal()}</main></div><div id="mroot"></div>`;
+}
+
 function render(){
   const a=document.getElementById("app");
   if(S.loading){
@@ -1868,6 +2167,10 @@ function render(){
   IS_PLANNING_RO_ROLE = !!(ME && ME.role==="commercial");
   const IS_COMPTA_RO = !!(ME && ME.role==="comptabilite");
   SHOW_DOSSIERS = CAN_EDIT;
+  // Sous 700 px, l'agenda vertical remplace tout le rendu bureau.
+  // Réutilise les mêmes données (S.machines, S.timeline, S.activeDossier)
+  // et les mêmes actions (changeMachine, openEdit, load).
+  if(planningEnAgenda()){ renderPlanningAgenda(); return; }
   let runLbl="";
   if(SHOW_DOSSIERS){
     const run=S.entries.find(e=>e.statut==="en_cours");
