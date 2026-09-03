@@ -21,7 +21,8 @@ function extraire(nom) {
 
 const ctx = { S: {} };
 vm.createContext(ctx);
-vm.runInContext(extraire('icon') + '\n' + extraire('matSaveBarHtml'), ctx);
+vm.runInContext([extraire('icon'), extraire('heureCourte'),
+                 extraire('saveStatusHtml'), extraire('matSaveBarHtml')].join('\n'), ctx);
 
 function html(opts) { Object.assign(ctx.S, opts.S); return ctx.matSaveBarHtml(opts.isNew); }
 
@@ -32,37 +33,55 @@ function check(label, got, attendu) {
   console.log((ok ? 'ok   ' : 'KO   ') + label.padEnd(56) + got + (ok ? '' : '   attendu ' + attendu));
 }
 
-const edition = html({ isNew: false, S: { canWrite: true, matDirty: false } });
-check('un seul bouton Enregistrer', (edition.match(/id="btn-save-mat"/g) || []).length, 1);
+// Une matière existante s'enregistre pendant qu'on la modifie : plus de
+// bouton « Enregistrer », plus de « Modifications non enregistrées » à
+// gérer. La pastille dit où on en est.
+const edition = html({ isNew: false, S: { canWrite: true, matSaveStatus: "vierge", matSavedAt: null } });
+check('plus de bouton Enregistrer sur une matière existante',
+  edition.includes('id="btn-save-mat"'), false);
 check('un seul bouton Supprimer', (edition.match(/id="btn-del-mat"/g) || []).length, 1);
 check('un seul retour liste', (edition.match(/id="btn-back-mat"/g) || []).length, 1);
-check('bandeau propre au chargement', edition.includes('id="mat-dirty" hidden'), true);
+check('pastille au chargement : Aucune modification',
+  edition.includes('Aucune modification'), true);
 
-const sale = html({ isNew: false, S: { canWrite: true, matDirty: true } });
-check('drapeau visible si saisie en cours', sale.includes('id="mat-dirty"><span'), true);
+const enFrappe = html({ isNew: false, S: { canWrite: true, matSaveStatus: "attente" } });
+check('pastille pendant la frappe', enFrappe.includes('Modifications non enregistrées'), true);
+const enCours = html({ isNew: false, S: { canWrite: true, matSaveStatus: "cours" } });
+check('pastille pendant le PATCH', enCours.includes('Enregistrement'), true);
+const succes = html({ isNew: false, S: { canWrite: true, matSaveStatus: "ok",
+                                          matSavedAt: new Date(2026, 8, 3, 9, 42) } });
+check('pastille après succès : heure', succes.includes('09:42'), true);
+const echec = html({ isNew: false, S: { canWrite: true, matSaveStatus: "err" } });
+check('pastille après échec : Erreur', echec.includes('Erreur'), true);
 
-const creation = html({ isNew: true, S: { canWrite: true, matDirty: false } });
+// Une matière neuve n'a pas d'ID : on ne peut pas PATCH, il faut d'abord
+// POST. D'où le bouton « Créer » — la pastille suit ensuite.
+const creation = html({ isNew: true, S: { canWrite: true, matSaveStatus: "vierge" } });
 check('pas de Supprimer sur une création', creation.includes('btn-del-mat'), false);
-check('Enregistrer présent sur une création', creation.includes('btn-save-mat'), true);
+check('bouton Créer présent sur une création', creation.includes('id="btn-save-mat"'), true);
 
-const lecture = html({ isNew: false, S: { canWrite: false, matDirty: false } });
+const lecture = html({ isNew: false, S: { canWrite: false, matSaveStatus: "vierge" } });
 check('lecture seule : aucun bouton d\'écriture',
   lecture.includes('btn-save-mat') || lecture.includes('btn-del-mat'), false);
 check('lecture seule : retour liste conservé', lecture.includes('btn-back-mat'), true);
 
 // Le formulaire ne doit plus porter de second jeu de boutons.
-const zone = src.slice(src.indexOf('function renderMaterialForm('), src.indexOf('function saveMaterialForm('));
+const zone = src.slice(src.indexOf('function renderMaterialForm('), src.indexOf('function syncMaterialFormFromDom('));
 check('les boutons ne sont plus dans le corps du formulaire',
   zone.includes('id="btn-save-mat"') || zone.includes('id="btn-del-mat"'), false);
-check('un seul btn-save-mat dans tout le fichier', (src.match(/id="btn-save-mat"/g) || []).length, 1);
-check('un seul btn-del-mat dans tout le fichier', (src.match(/id="btn-del-mat"/g) || []).length, 1);
-check('un seul btn-back-mat dans tout le fichier', (src.match(/id="btn-back-mat"/g) || []).length, 1);
+check('un seul btn-save-mat dans tout le fichier',
+  (src.match(/id="btn-save-mat"/g) || []).length, 1);
+check('un seul btn-del-mat dans tout le fichier',
+  (src.match(/id="btn-del-mat"/g) || []).length, 1);
+check('un seul btn-back-mat dans tout le fichier',
+  (src.match(/id="btn-back-mat"/g) || []).length, 1);
 check('plus de bloc form-actions dans la fiche matière', zone.includes('class="form-actions"'), false);
 
-// Le drapeau doit être remis à zéro au chargement ET après un enregistrement.
-check('drapeau remis à zéro au chargement', /loadMaterialForm\(id\)\s*\{\s*S\.matDirty = false;/.test(src), true);
-check('drapeau remis à zéro après enregistrement',
-  src.includes('showToast("Matière enregistrée.", "success");\n        S.matDirty = false;'), true);
+// L'état s'initialise proprement au chargement de la fiche.
+check('état remis à zéro au chargement',
+  /loadMaterialForm\(id\)\s*\{\s*S\.matSaveStatus = "vierge";/.test(src), true);
+check('débounce d\'écriture annulé au chargement',
+  /loadMaterialForm\(id\)[\s\S]{0,200}clearTimeout\(S\.debounceMatSave\)/.test(src), true);
 
 // ─── Le bandeau reste visible en permanence (position:fixed) ────────────────
 // En `sticky`, le bandeau ne colle qu'à l'intérieur de son conteneur ; en haut
@@ -87,7 +106,7 @@ check('chaque bandeau a son espaceur',
 // doit donc précéder le titre, pas le suivre.
 for (const [nom, borneFin] of [
   ['renderMaterialForm(', 'function syncMaterialFormFromDom('],
-  ['renderDeclinaisonForm(', 'async function saveDeclinaisonForm('],
+  ['renderDeclinaisonForm(', 'function productsTabsHtml('],
 ]) {
   const zone = src.slice(src.indexOf('function ' + nom), src.indexOf(borneFin));
   check(nom + ' : le bandeau précède le titre',

@@ -428,7 +428,7 @@ check('plus de section Caracteristiques', src.includes('<h3>Caractéristiques</h
 check('plus de champ grammage cote matiere',
   src.includes('id="f-gsm"') || src.includes('id="d-gsm"'), false);
 check('la fiche declinaison n\'envoie plus de grammage',
-  extraire('saveDeclinaisonForm').includes('grammage_gsm'), false);
+  extraire('autoEnregistrerDecl').includes('grammage_gsm'), false);
 
 console.log(ko === 0 ? '\nTOUT EST VERT' : '\n' + ko + ' ECHEC(S)');
 process.exit(ko === 0 ? 0 : 1);
