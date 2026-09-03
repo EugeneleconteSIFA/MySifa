@@ -2298,168 +2298,22 @@ function setupTlDD(){
   });
 }
 
-// ── Déstockage matière d'une production terminée ──────────────────────────
-// Le bouton ne bascule plus un statut : il ouvre ce que la matière a coûté.
-// L'opératrice voit ce que le calcul propose, corrige ce qu'elle a réellement
-// consommé, et c'est sa saisie qui fait foi — le calcul n'est qu'un point de
-// départ. La validation écrit de vraies sorties de stock dans MyStock.
-const apiAbs=(p,o={})=>fetch(p,{credentials:"include",cache:"no-store",headers:{"Content-Type":"application/json",...(o.headers||{})},...o}).then(async r=>{
-  if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.detail||("HTTP "+r.status)); }
-  return r.json();
-});
-
-let _destockData=null;
-
-async function toggleDestockage(entryId){ return openDestockageModal(entryId); }
-
-async function openDestockageModal(entryId){
+// ── Déstockage matière : marquage visuel seulement ────────────────────────
+// Le bouton ne bascule qu'un statut : le point gris sur la timeline, et rien
+// d'autre. La modale qui écrivait de vraies sorties de stock est débranchée le
+// temps de revoir la méthode de gestion des stocks — les endpoints
+// /api/stock/destockage/… existent toujours côté serveur, plus rien ne les
+// appelle depuis ici.
+async function toggleDestockage(entryId){
   if(!CAN_EDIT) return;
-  const root=document.getElementById("mroot");
-  root.innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md" style="width:860px;max-width:96vw">
-    <h3 style="margin:0 0 18px;font-size:18px;font-family:var(--mono);color:var(--text)">Déstockage matière</h3><p style="color:var(--muted);font-size:13px">Chargement…</p></div></div>`;
   try{
-    _destockData=await apiAbs(`/api/stock/destockage/${entryId}`);
-  }catch(e){
-    root.innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md" style="width:520px;max-width:95vw">
-      <h3 style="margin:0 0 18px;font-size:18px;font-family:var(--mono);color:var(--text)">Déstockage matière</h3>
-      <p style="color:var(--danger,#ef4444);font-size:13px">${escHtml(e.message||"Chargement impossible")}</p>
-      <div class="md-acts" style="display:flex;justify-content:flex-end;gap:10px"><button class="btn-s" onclick="closeM()">Fermer</button></div></div></div>`;
-    return;
-  }
-  renderDestockModal(entryId);
-}
-
-function _dqFmt(v,u){
-  if(v==null) return "—";
-  const n=Math.abs(v)>=100?Math.round(v):Math.round(v*1000)/1000;
-  return String(n).replace(".",",")+(u?" "+u:"");
-}
-
-function renderDestockModal(entryId){
-  const d=_destockData;
-  const dj=(d.dossier.destockage||"todo")==="done";
-  const src=d.source_calcul==="reel"
-    ? `<span style="color:var(--success,#22c55e);font-weight:600">saisies d'atelier</span> — ${_dqFmt(d.reel.metrage,"m")} produits`
-    : `<span style="color:var(--warn,#d97706);font-weight:600">quantités théoriques</span> (aucune saisie de production trouvée)`;
-
-  let corps="";
-  if(dj){
-    // Déjà déstocké : on montre ce qui est sorti, par qui, et rien d'autre.
-    const mvts=(d.mouvements||[]).filter(m=>!m.annule_mouvement_id);
-    const annules=new Set((d.mouvements||[]).filter(m=>m.annule_mouvement_id).map(m=>m.annule_mouvement_id));
-    const actifs=mvts.filter(m=>!annules.has(m.id));
-    corps=`<div style="background:rgba(56,189,248,.10);border:1px solid #38bdf8;border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px">
-        <strong style="color:#38bdf8">Matière déjà déstockée</strong><br>
-        <span style="color:var(--muted)">Validé par ${escHtml((actifs[0]||{}).created_by_name||"—")} le ${escHtml(((actifs[0]||{}).created_at||"").slice(0,16).replace("T"," "))}</span>
-      </div>
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead><tr style="text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase">
-          <th style="padding:6px 8px">Matière</th><th style="padding:6px 8px;text-align:right">Sortie</th>
-          <th style="padding:6px 8px;text-align:right">Stock après</th></tr></thead>
-        <tbody>${actifs.map(m=>`<tr style="border-top:1px solid var(--border)">
-          <td style="padding:7px 8px;font-weight:600">${escHtml(m.matiere_ref||"—")}</td>
-          <td style="padding:7px 8px;text-align:right">${_dqFmt(m.quantite)}</td>
-          <td style="padding:7px 8px;text-align:right;color:${m.quantite_apres<0?"var(--danger,#ef4444)":"var(--muted)"}">${_dqFmt(m.quantite_apres)}</td>
-        </tr>`).join("")||`<tr><td colspan="3" style="padding:10px;color:var(--muted)">Aucun mouvement enregistré.</td></tr>`}</tbody>
-      </table>`;
-  }else{
-    const dispo=d.lignes.filter(l=>l.destockable);
-    const bloques=d.lignes.filter(l=>!l.destockable);
-    corps=`<p style="color:var(--muted);font-size:12px;margin:0 0 12px">Calculé à partir des ${src}. Corrige les quantités réellement consommées avant de valider.</p>
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead><tr style="text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase">
-          <th style="padding:6px 8px">Matière</th><th style="padding:6px 8px">Laize</th>
-          <th style="padding:6px 8px;text-align:right">Stock</th>
-          <th style="padding:6px 8px;text-align:right">À sortir</th></tr></thead>
-        <tbody>${dispo.map((l,i)=>`<tr style="border-top:1px solid var(--border)">
-          <td style="padding:7px 8px">
-            <div style="font-weight:600">${escHtml(l.matiere_ref||"—")}</div>
-            <div style="font-size:11px;color:var(--muted)">${escHtml(l.matiere_designation||l.source_value||"")}${l.detail?" · "+escHtml(l.detail):""}</div>
-          </td>
-          <td style="padding:7px 8px">${l.laizee&&l.laizes.length
-            ? `<select id="dq-lz-${i}" style="padding:5px 8px;background:var(--bg);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px">
-                 ${l.laizes.map(z=>`<option value="${z.laize_id}"${z.laize_id===l.laize_id?" selected":""}>${escHtml(z.label||z.valeur_mm+" mm")} (${_dqFmt(z.stock)})</option>`).join("")}
-               </select>`
-            : `<span style="color:var(--muted)">—</span>`}</td>
-          <td style="padding:7px 8px;text-align:right;color:var(--muted)">${_dqFmt(l.stock_actuel)}</td>
-          <td style="padding:7px 8px;text-align:right;white-space:nowrap">
-            <input id="dq-q-${i}" type="number" step="0.001" min="0" value="${l.quantite}"
-              data-mid="${l.matiere_id}"
-              style="width:96px;padding:5px 8px;background:var(--bg);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:13px;text-align:right">
-            <span style="color:var(--muted);font-size:11px;margin-left:4px">${escHtml(l.unite||"")}</span>
-          </td>
-        </tr>`).join("")}</tbody>
-      </table>
-      ${bloques.length?`<div style="margin-top:14px;padding:10px 12px;border:1px solid var(--warn,#d97706);border-radius:8px;background:rgba(251,146,60,.08);font-size:12px">
-        <strong style="color:var(--warn,#d97706)">${bloques.length} ligne${bloques.length>1?"s":""} non déstockée${bloques.length>1?"s":""}</strong>
-        <ul style="margin:6px 0 0;padding-left:18px;color:var(--muted)">
-          ${bloques.map(l=>`<li>${escHtml(l.source_value||l.kind)} — ${escHtml((l.manque||[]).join(" ; ")||"non chiffrable")}</li>`).join("")}
-        </ul></div>`:""}
-      <div class="fd" style="margin-top:14px"><label>Commentaire (optionnel)</label>
-        <input id="dq-note" type="text" placeholder="Ex. bobine entamée terminée sur ce dossier"
-          style="width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px"></div>`;
-  }
-
-  const actions=dj
-    ? `<button class="btn-s" onclick="closeM()">Fermer</button>
-       <button class="btn-p" style="background:var(--warn,#d97706)" onclick="annulerDestockage(${entryId})">Annuler le déstockage</button>`
-    : `<button class="btn-s" onclick="closeM()">Annuler</button>
-       <button class="btn-p" onclick="validerDestockage(${entryId})">Valider le déstockage</button>`;
-
-  document.getElementById("mroot").innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()">
-    <div class="md" style="width:860px;max-width:96vw;max-height:88vh;overflow-y:auto">
-      <h3 style="margin:0 0 18px;font-size:18px;font-family:var(--mono);color:var(--text)">Déstockage matière — ${escHtml(d.dossier.reference||"")}</h3>
-      ${corps}
-      <div id="dq-err" style="color:var(--danger,#ef4444);font-size:12px;margin-top:10px"></div>
-      <div class="md-acts" style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:18px">${actions}</div>
-    </div></div>`;
-}
-
-async function validerDestockage(entryId){
-  const d=_destockData; if(!d) return;
-  const dispo=d.lignes.filter(l=>l.destockable);
-  const lignes=[];
-  dispo.forEach((l,i)=>{
-    const inp=document.getElementById("dq-q-"+i);
-    const q=parseFloat((inp&&inp.value||"0").replace(",","."));
-    if(!(q>0)) return;   // remise à zéro = refus explicite de déstocker cette ligne
-    const sel=document.getElementById("dq-lz-"+i);
-    lignes.push({matiere_id:l.matiere_id, quantite:q,
-                 laize_id: sel?parseInt(sel.value,10):l.laize_id});
-  });
-  if(!lignes.length){ document.getElementById("dq-err").textContent="Toutes les lignes sont à zéro : rien à déstocker."; return; }
-  const note=(document.getElementById("dq-note")||{}).value||"";
-  try{
-    const r=await apiAbs(`/api/stock/destockage/${entryId}/valider`,
-      {method:"POST",body:JSON.stringify({lignes,note})});
-    closeM();
-    appliquerDestockage(entryId,"done");
-    if((r.stocks_negatifs||[]).length){
-      alert("Déstockage enregistré. Attention : "+r.stocks_negatifs.length
-        +" matière(s) passent en stock négatif — un inventaire est à prévoir.");
-    }
-  }catch(e){ document.getElementById("dq-err").textContent=e.message||"Enregistrement impossible"; }
-}
-
-async function annulerDestockage(entryId){
-  const d=_destockData; if(!d) return;
-  const actifs=(d.mouvements||[]).filter(m=>!m.annule_mouvement_id);
-  const detail=actifs.map(m=>"• "+(m.matiere_ref||"?")+" : +"+_dqFmt(m.quantite)).join("\n");
-  if(!confirm("Remettre en stock la matière déstockée sur ce dossier ?\n\n"+detail
-    +"\n\nLes sorties ne sont pas effacées : elles sont contre-passées, et les deux écritures restent à l'historique.")) return;
-  try{
-    await apiAbs(`/api/stock/destockage/${entryId}/annuler`,{method:"POST",body:"{}"});
-    closeM();
-    appliquerDestockage(entryId,"todo");
-  }catch(e){ document.getElementById("dq-err").textContent=e.message||"Annulation impossible"; }
-}
-
-function appliquerDestockage(entryId,val){
-  (S.timeline||[]).forEach(s=>{if((s.entry_id||0)===entryId) s.destockage=val;});
-  const ent=(S.entries||[]).find(x=>x.id===entryId);
-  if(ent) ent.destockage=val;
-  renderTL();
-  updateDestockBtn(entryId, val);
+    const r=await api(`/machines/${MID}/entries/${entryId}/destockage`,{method:"PUT"});
+    (S.timeline||[]).forEach(s=>{if((s.entry_id||0)===entryId) s.destockage=r.destockage;});
+    const ent=(S.entries||[]).find(x=>x.id===entryId);
+    if(ent) ent.destockage=r.destockage;
+    renderTL();
+    updateDestockBtn(entryId, r.destockage);
+  }catch(e){ console.error("toggleDestockage",e); }
 }
 
 function updateDestockBtn(entryId, val){
