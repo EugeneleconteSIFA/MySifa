@@ -12082,7 +12082,7 @@ function _printWin(title, pageSize, css, body) {
 body{ font-family: Arial, Helvetica, sans-serif; background:#fff; }
 ${css}
 </style>
-</head><body>${body}<script>window.onload=function(){window.focus();window.print();}<\/script><script src="/static/mysifa_impersonate.js"><\/script>
+</head><body>${body}<script>window.onload=function(){window.focus();window.print();}<\/script><script src="/static/mysifa_impersonate.js?v=2"><\/script>
 </body></html>`);
   w.document.close();
   return w;

@@ -67,6 +67,12 @@
       +   'box-shadow:0 1px 6px rgba(220,38,38,.4);padding:0 12px}'
       + '.staging-bandeau::before{content:"●";color:#fef2f2;font-size:9px;line-height:1}'
       + '.staging-bandeau[hidden]{display:none}'
+      // Sans flex:0 0 auto ni nowrap, ce lien passait a la ligne sur un ecran
+      // etroit : la ligne flex depassait les 24 px de hauteur fixe et se
+      // peignait sous le bandeau, par-dessus la page.
+      + '.staging-bandeau{overflow:hidden}'
+      + '.staging-bandeau #msf-back-to-prod{flex:0 0 auto;white-space:nowrap}'
+      + '@media (max-width:760px){.staging-bandeau #msf-back-to-prod{display:none}}'
       + '.staging-bandeau.env-prod{background:#4f46e5;box-shadow:0 1px 6px rgba(79,70,229,.4)}'
       + '.staging-bandeau.env-prod::before{content:"●";color:#e0e7ff}'
       + '.staging-bandeau.impersonating{background:#d97706;box-shadow:0 1px 6px rgba(217,119,6,.4)}'

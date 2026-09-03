@@ -3450,7 +3450,7 @@ window.addEventListener('resize',()=>{
   }
 })();
 </script>
-<script src="/static/mysifa_impersonate.js"></script>
+<script src="/static/mysifa_impersonate.js?v=2"></script>
 </body>
 </html>
 """

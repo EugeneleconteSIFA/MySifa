@@ -7703,7 +7703,7 @@ window.addEventListener('hashchange',function(){try{var hv=_readQualiteView();if
 __GED_ASSETS__
 init();
 </script>
-<script src="/static/mysifa_impersonate.js"></script>
+<script src="/static/mysifa_impersonate.js?v=2"></script>
 <script src="/static/mysifa_cal_rappel.js?v=8"></script>
 </body>
 </html>

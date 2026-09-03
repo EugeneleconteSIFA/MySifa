@@ -11014,7 +11014,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/mysifa_maint_form.js?v=2.7.4-usure"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
 <script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_impersonate.js"></script>
+<script src="/static/mysifa_impersonate.js?v=2"></script>
 
 <!-- Modal saisie créneau (opérateur : ouvre au clic sur une carte).
      Liste toutes les ops du créneau, chacune avec son propre bouton

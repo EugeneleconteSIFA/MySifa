@@ -92,7 +92,7 @@ PLANNING_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/motion.css">
 <!-- Cette feuille n'avait aucun cache-buster : une modification n'arrivait
      jamais sur un poste qui l'avait deja chargee. -->
-<link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem13">
+<link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem13-mob1">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
@@ -616,7 +616,9 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 .of-dropzone:hover,.of-dropzone.of-dropzone--active{border-color:var(--accent);background:var(--accent-bg)}
 
 @media (max-width:900px){
-  body.has-topbar .main{padding-top:74px}
+  /* La topbar du planning est sticky (mysifa_myprod_shell.css) : pas de
+     compensation à faire, sinon on décale la page de 74 px pour rien. */
+  body.has-topbar .main{padding-top:14px}
   .main{padding:14px}
   .header{padding:0 0 14px}
   .sec{padding:16px}
@@ -5690,7 +5692,7 @@ async function acknowledgeUpdates(ids,overlay){
 
 boot();
 </script>
-<script src="/static/mysifa_impersonate.js"></script>
+<script src="/static/mysifa_impersonate.js?v=2"></script>
 </body>
 </html>
 """

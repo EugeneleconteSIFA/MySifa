@@ -179,6 +179,16 @@ __LOGIN_MAIN_CSS__
   box-shadow:0 1px 6px rgba(220,38,38,.4);padding:0 12px}
 .staging-bandeau::before{content:"●";color:#fef2f2;font-size:9px;line-height:1}
 .staging-bandeau[hidden]{display:none}
+/* Le lien « Aller sur MySifa · prod » n'avait aucune règle flex : sur un écran
+   étroit son texte passait à la ligne, la ligne flex dépassait les 24 px de
+   hauteur fixe, et la seconde ligne se peignait SOUS le bandeau — c'est le
+   « · PROD » gris qui traînait en haut de MyProd. */
+.staging-bandeau{overflow:hidden}
+.staging-bandeau #msf-back-to-prod{flex:0 0 auto;white-space:nowrap}
+@media (max-width:760px){
+  /* Le message du bandeau dit déjà qu'on est dans le bac à sable. */
+  .staging-bandeau #msf-back-to-prod{display:none}
+}
 /* Version prod : bandeau indigo (moins alarmant) — affiché uniquement pour superadmin */
 .staging-bandeau.env-prod{background:#4f46e5;box-shadow:0 1px 6px rgba(79,70,229,.4)}
 /* État impersonation active : ambre pour bien signaler qu'on joue un rôle */
@@ -218,7 +228,6 @@ body.has-staging-bandeau .mobile-topbar{top:24px}
 @media (max-width: 900px){
   .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:9000;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 16px 48px rgba(0,0,0,.55)}
   body.sb-open .sidebar{transform:translateX(0)}
-  .main{padding:18px}
   .sidebar-overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:8999}
   body:not(.sb-open) .sidebar-overlay{display:none}
 }
@@ -288,6 +297,15 @@ body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rg
 .upd-ok-btn{display:block;width:100%;margin-top:20px;padding:13px;border-radius:12px;border:none;background:var(--accent);color:#0a0e17;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;transition:filter .15s}
 .upd-ok-btn:hover{filter:brightness(1.08)}
 .main{flex:1;padding:28px;overflow-y:auto}.container{max-width:1200px;margin:0 auto}
+/* Mobile : 28 px de chaque côté sur un écran de 390 px, c'est un cinquième de
+   la largeur perdu en marge. La règle existait, dans le bloc @media du haut de
+   cette feuille — donc AVANT la ligne ci-dessus, à spécificité égale : elle
+   était neutralisée à toutes les largeurs. Elle doit venir après.
+   `padding-top` reste piloté par body.has-topbar (spécificité supérieure),
+   la topbar de la SPA étant en position:fixed. */
+@media (max-width:900px){
+  .main{padding:14px}
+}
 h1{font-size:22px;font-weight:700;margin-bottom:4px}
 .subtitle{font-size:13px;color:var(--muted);margin-bottom:24px}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px;margin-bottom:24px}
@@ -1782,7 +1800,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <div id="gsm-backdrop" class="gsm-backdrop" aria-hidden="true"></div>
 <div id="gsm-modal" class="gsm-modal" role="dialog" aria-modal="true" aria-label="Recherche Google" aria-hidden="true"></div>
 <script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_impersonate.js"></script>
+<script src="/static/mysifa_impersonate.js?v=2"></script>
 <script>window.__MYSIFA_APP__="__INITIAL_APP_VALUE__";</script>
 <script src="/static/mysifa_portail_tour.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_dock.js"></script>
