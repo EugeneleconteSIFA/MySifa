@@ -2497,6 +2497,11 @@ async def rattacher_fiche(planning_id: int, request: Request):
 # ═════════════════════════════════════════════════════════════════════════
 # Déstockage de production
 #
+# ⚠ Débranché côté planning depuis le 03/09/2026 : le bouton « À destocker »
+# ne fait à nouveau que basculer un statut (point gris sur la timeline). Les
+# trois endpoints ci-dessous restent en place et fonctionnels, mais plus aucune
+# page ne les appelle, le temps de revoir la méthode de gestion des stocks.
+#
 # Quand une production est réellement terminée, la matière consommée doit
 # sortir du stock. Le bouton « À destocker » du planning ne changeait qu'un
 # statut : le stock ne bougeait pas, il aurait fallu ressaisir chaque sortie à
