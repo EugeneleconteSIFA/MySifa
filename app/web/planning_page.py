@@ -615,6 +615,26 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 .of-dropzone{border:2px dashed var(--border);border-radius:12px;padding:36px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
 .of-dropzone:hover,.of-dropzone.of-dropzone--active{border-color:var(--accent);background:var(--accent-bg)}
 
+/* ── Sécurité des bords (encoche, arrondis, dynamic island) ────────────
+   Sur iPhone en portrait, la barre d'adresse et la lunette laissent des
+   « oreilles » : sans env(safe-area-inset), le contenu se retrouve sous
+   la barre. On applique les insets à la topbar sticky (padding gauche
+   /droite) et au main. */
+@media (max-width:900px){
+  .mobile-topbar{
+    padding-left:max(12px, env(safe-area-inset-left));
+    padding-right:max(12px, env(safe-area-inset-right));
+  }
+  .main{
+    padding-left:max(12px, env(safe-area-inset-left));
+    padding-right:max(12px, env(safe-area-inset-right));
+    padding-bottom:max(24px, env(safe-area-inset-bottom));
+  }
+  /* Le bandeau staging (fixed 24 px) et la topbar sont deux zones
+     empilées. Sans la classe, la topbar ne sait pas laisser sa place. */
+  body.has-staging-bandeau .mobile-topbar{top:24px}
+}
+
 @media (max-width:900px){
   /* La topbar du planning est sticky (mysifa_myprod_shell.css) : pas de
      compensation à faire, sinon on décale la page de 74 px pour rien. */
@@ -765,6 +785,50 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
   padding:22px 12px;text-align:center;color:var(--muted);font-size:12.5px;
   border:1px dashed var(--border);border-radius:10px;margin-bottom:8px;
 }
+/* ── Mode paysage : jours empilés en portrait → jours en colonnes ─── */
+.plan-agenda--paysage{padding:8px 12px 12px}
+.plan-agenda--paysage .plan-agenda-machines,
+.plan-agenda--paysage .plan-agenda-wknav{margin-bottom:8px}
+.plan-agenda-week{
+  display:grid;grid-auto-flow:column;
+  grid-auto-columns:minmax(160px, 1fr);
+  gap:8px;
+  overflow-x:auto;-webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;padding-bottom:8px;
+}
+.plan-agenda-week::-webkit-scrollbar{height:6px}
+.plan-agenda-week::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.plan-agenda-wcol{
+  display:flex;flex-direction:column;min-width:0;
+  border:1px solid var(--border);border-radius:12px;background:var(--card);
+  overflow:hidden;
+}
+.plan-agenda-wcol-head{
+  padding:8px 10px;border-bottom:1px solid var(--border);background:var(--card);
+  display:flex;flex-direction:column;gap:4px;flex:0 0 auto;
+}
+.plan-agenda-wcol-head b{font-size:12.5px;font-weight:800;color:var(--text);letter-spacing:-.15px}
+.plan-agenda-wcol-head .sub{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--muted)}
+.plan-agenda-wcol-head .sub .win{font-family:ui-monospace,'Cascadia Code',monospace}
+.plan-agenda-wcol-head .charge{
+  flex:1;height:4px;border-radius:2px;background:var(--border);overflow:hidden;
+}
+.plan-agenda-wcol-head .charge i{display:block;height:100%;background:var(--accent)}
+.plan-agenda-wcol-head .charge i.hot{background:var(--warn)}
+.plan-agenda-wcol.today .plan-agenda-wcol-head b{color:var(--accent)}
+.plan-agenda-wcol-body{
+  flex:1 1 auto;min-height:0;position:relative;
+  padding:6px 4px 6px 40px;overflow-y:auto;-webkit-overflow-scrolling:touch;
+}
+.plan-agenda-wcol .plan-agenda-hours{width:36px}
+.plan-agenda-wcol .plan-agenda-hours i{font-size:9px;right:5px}
+.plan-agenda-wcol .plan-agenda-slot{left:0;right:0}
+.plan-agenda-wcol .plan-agenda-slot .dur{font-size:10px;top:5px;right:6px}
+.plan-agenda-wcol .plan-agenda-slot .l1{font-size:12px;padding-right:38px;gap:4px}
+.plan-agenda-wcol .plan-agenda-slot .l2,
+.plan-agenda-wcol .plan-agenda-slot .l3{font-size:10px}
+.plan-agenda-wcol .plan-agenda-off{padding:12px 8px;font-size:11px;margin:6px 4px}
+
 .plan-agenda-fab{
   position:fixed;right:16px;bottom:calc(20px + env(safe-area-inset-bottom));
   width:54px;height:54px;border-radius:50%;border:0;cursor:pointer;
@@ -1983,17 +2047,28 @@ function renderContactModal(){
 // Rendu mobile : vrai en dessous de 700 px. Un écouteur matchMedia
 // re-render à la rotation du téléphone — sans lui, on resterait sur la
 // mise en page évaluée au moment du premier render().
-var _planMqMobile=null;
+// Rendu mobile : vrai en dessous de 900 px de large — soit un téléphone
+// en portrait, soit un téléphone en paysage (~852x393). Sans étendre à
+// 900 px, la rotation retombait sur la timeline bureau, illisible sur
+// 393 px de haut.
+var _planMqMobile=null, _planMqPortrait=null;
+function _planMobileSetup(){
+  if(_planMqMobile) return;
+  _planMqMobile=window.matchMedia('(max-width:900px)');
+  _planMqPortrait=window.matchMedia('(orientation:portrait)');
+  var _maj=function(){ if(typeof render==='function') render(); };
+  [_planMqMobile,_planMqPortrait].forEach(function(mq){
+    if(mq.addEventListener) mq.addEventListener('change',_maj);
+    else if(mq.addListener) mq.addListener(_maj);
+  });
+}
 function planningEnAgenda(){
-  try{
-    if(!_planMqMobile){
-      _planMqMobile=window.matchMedia('(max-width:700px)');
-      var _maj=function(){ if(typeof render==='function') render(); };
-      if(_planMqMobile.addEventListener) _planMqMobile.addEventListener('change',_maj);
-      else if(_planMqMobile.addListener) _planMqMobile.addListener(_maj);
-    }
-    return !!_planMqMobile.matches;
-  }catch(e){ return false; }
+  try{ _planMobileSetup(); return !!_planMqMobile.matches; }
+  catch(e){ return false; }
+}
+function planningEnPaysage(){
+  try{ _planMobileSetup(); return !!(_planMqPortrait && !_planMqPortrait.matches); }
+  catch(e){ return false; }
 }
 
 /* ── Agenda vertical (mobile) ─────────────────────────────────────────
@@ -2017,6 +2092,84 @@ function planAgendaSlotClass(s){
   if(Number(s.a_placer||0)===1 || Number(s.valide||0)===0) cls+=' hatch';
   if(typeof isAnnuleEntry==='function' && isAnnuleEntry(s)) cls+=' canc';
   return cls;
+}
+
+/* Rendu d'UN jour ouvré. Utilisé aussi bien en mode empilé qu'en colonnes.
+   pxParHeure et minHeightSlot sont paramétrables pour densifier la colonne
+   paysage (moins de hauteur disponible qu'un scroll vertical portrait). */
+function renderPlanAgendaJour(col, todayIso, pxParHeure, minHeightSlot){
+  const dayW=col.e-col.s;
+  const tlH=Math.max(minHeightSlot*2, Math.round(dayW*pxParHeure));
+  const daySlots=(S.timeline||[]).filter(s=>{
+    const ss=new Date(s.start), se=new Date(s.end);
+    return se>col.date && ss<addD(col.date,1);
+  });
+  const items=daySlots.map((s,idx)=>{
+    const ss=new Date(s.start), se=new Date(s.end);
+    const sod=new Date(col.date); sod.setHours(0,0,0,0);
+    const hStart=Math.max(col.s, Math.min(col.e, (ss-sod)/36e5));
+    const hEnd  =Math.max(col.s, Math.min(col.e, (se-sod)/36e5));
+    if(hEnd-hStart<=0.02) return '';
+    const top=Math.round((hStart-col.s)*pxParHeure);
+    const rawH=(hEnd-hStart)*pxParHeure;
+    const height=Math.max(minHeightSlot, Math.round(rawH));
+    const co=colorForId(s.entry_id||idx+1);
+    const cli=(s.client||'').trim()||(s.numero_of||s.reference||'—');
+    const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:'';
+    const lz=s.laize?`${s.laize} mm`:'';
+    const l2=[fm,lz].filter(Boolean).join(' · ');
+    const startTxt=hhmmFromFloat(hStart);
+    const endTxt=hhmmFromFloat(hEnd);
+    const of=(s.numero_of||s.reference||'').trim();
+    const l3parts=[`${startTxt} → ${endTxt}`];
+    if(of) l3parts.push('OF '+of);
+    if(s.date_livraison) l3parts.push('livr. '+s.date_livraison);
+    const exig=s.exigences_production?String(s.exigences_production).trim():'';
+    const short=height<80;
+    const dur=fmtDur(s.duree_heures||0);
+    const cls=planAgendaSlotClass(s)+(short?' short':'');
+    return `<div class="plan-agenda-slot${cls}"
+      style="top:${top}px;height:${height-3}px;background:${co}"
+      data-eid="${s.entry_id||idx}"
+      onclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()">
+      <div class="rail"></div>
+      <div class="dur">${escHtml(dur)}</div>
+      <div class="l1"><em>${escHtml(cli)}</em>${fscBadgeHtml(s)}${transportBadgeHtml(s)}${annuleBadgeHtml(s)}</div>
+      ${l2?`<div class="l2">${escHtml(l2)}</div>`:''}
+      <div class="l3">${l3parts.map(escHtml).join(' · ')}</div>
+      ${exig?`<div class="exig" title="${escAttr(exig)}">${escHtml(exig)}</div>`:''}
+    </div>`;
+  }).join('');
+  let grid='', times='';
+  const step=2;
+  const s0=Math.ceil(col.s/step)*step;
+  for(let hh=s0; hh<=col.e; hh+=step){
+    const y=Math.round((hh-col.s)*pxParHeure);
+    grid+=`<div class="plan-agenda-grid" style="top:${y}px"></div>`;
+    times+=`<i style="top:${y}px">${String(hh).padStart(2,'0')}:00</i>`;
+  }
+  let nowLine='';
+  if(col.ds===todayIso){
+    const nowDt=new Date();
+    const localH=(nowDt-new Date(col.ds+'T00:00:00'))/36e5;
+    if(localH>=col.s && localH<=col.e){
+      const y=Math.round((localH-col.s)*pxParHeure);
+      nowLine=`<div class="plan-agenda-now" style="top:${y}px"><b>${hhmmFromFloat(localH)}</b></div>`;
+    }
+  }
+  const totalPrevu=daySlots.reduce((t,s)=>{
+    const ss=new Date(s.start), se=new Date(s.end);
+    const sod=new Date(col.date); sod.setHours(0,0,0,0);
+    const hs=Math.max(col.s, Math.min(col.e, (ss-sod)/36e5));
+    const he=Math.max(col.s, Math.min(col.e, (se-sod)/36e5));
+    return t+Math.max(0,he-hs);
+  },0);
+  const pct=Math.min(100, Math.round(100*totalPrevu/dayW));
+  return {
+    slots: items || '<div class="plan-agenda-off" style="margin:8px 0 0">Aucun dossier planifié</div>',
+    grid, times, nowLine, tlH,
+    totalPrevu, pct, hourLbl: col.hourLbl||''
+  };
 }
 
 function renderPlanningAgenda(){
@@ -2047,107 +2200,66 @@ function renderPlanningAgenda(){
       onclick="S.wo++;load()" aria-label="Semaine suivante">${icon('chevron-right',18)}</button>
   </div>`;
 
-  let daysHtml='';
-  const nowMs=Date.now();
   const todayIso=ymd(new Date());
+  const paysage=planningEnPaysage();
+  // Densité : le portrait scrolle librement (18 px/h). Le paysage tient
+  // dans ~250 px de hauteur utile, on descend à 12 px/h et le plancher
+  // à 44 px pour qu'un dossier court reste tapable.
+  const PX=paysage?12:PLAN_AGENDA_PXH;
+  const MINH=paysage?44:PLAN_AGENDA_MIN_H;
+
+  let daysHtml='';
   if(model.err){
     daysHtml=`<div class="plan-agenda-off">Aucune journée travaillée cette semaine.</div>`;
+  }else if(paysage){
+    // Mode colonnes : une colonne par jour ouvré. La grille scrolle
+    // horizontalement si les 5 colonnes ne tiennent pas.
+    const cols=(model.cols||[]).map(col=>{
+      const j=renderPlanAgendaJour(col, todayIso, PX, MINH);
+      const isToday=col.ds===todayIso;
+      const short=fmtLivraisonLong(col.ds).replace(/\s\d{4}$/,'');
+      const cap=short.charAt(0).toUpperCase()+short.slice(1);
+      return `<div class="plan-agenda-wcol${isToday?' today':''}">
+        <div class="plan-agenda-wcol-head">
+          <b>${escHtml(cap)}</b>
+          <div class="sub"><span class="win">${escHtml(j.hourLbl)}</span>
+            <span class="charge"><i class="${j.pct>=98?'hot':''}" style="width:${j.pct}%"></i></span>
+            <span class="win">${j.totalPrevu.toFixed(1)}h</span></div>
+        </div>
+        <div class="plan-agenda-wcol-body">
+          <div class="plan-agenda-hours">${j.times}</div>
+          <div class="plan-agenda-tl" style="height:${j.tlH}px">
+            ${j.grid}${j.slots}${j.nowLine}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    daysHtml=`<div class="plan-agenda-week">${cols}</div>`;
   }else{
+    // Mode empilé (portrait) : les jours descendent, chacun avec sa barre.
     (model.cols||[]).forEach(col=>{
-      const dayW=col.e-col.s;
-      const tlH=Math.max(PLAN_AGENDA_MIN_H*2, Math.round(dayW*PLAN_AGENDA_PXH));
-      // Slots qui recoupent ce jour
-      const daySlots=(S.timeline||[]).filter(s=>{
-        const ss=new Date(s.start), se=new Date(s.end);
-        return se>col.date && ss<addD(col.date,1);
-      });
-      const items=daySlots.map((s,idx)=>{
-        const ss=new Date(s.start), se=new Date(s.end);
-        const sod=new Date(col.date); sod.setHours(0,0,0,0);
-        const hStart=Math.max(col.s, Math.min(col.e, (ss-sod)/36e5));
-        const hEnd  =Math.max(col.s, Math.min(col.e, (se-sod)/36e5));
-        if(hEnd-hStart<=0.02) return '';
-        const top=Math.round((hStart-col.s)*PLAN_AGENDA_PXH);
-        const rawH=(hEnd-hStart)*PLAN_AGENDA_PXH;
-        const height=Math.max(PLAN_AGENDA_MIN_H, Math.round(rawH));
-        const co=colorForId(s.entry_id||idx+1);
-        const cli=(s.client||'').trim()||(s.numero_of||s.reference||'—');
-        const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:'';
-        const lz=s.laize?`${s.laize} mm`:'';
-        const l2=[fm,lz].filter(Boolean).join(' · ');
-        const startTxt=hhmmFromFloat(hStart);
-        const endTxt=hhmmFromFloat(hEnd);
-        const of=(s.numero_of||s.reference||'').trim();
-        const l3parts=[`${startTxt} → ${endTxt}`];
-        if(of) l3parts.push('OF '+of);
-        if(s.date_livraison) l3parts.push('livr. '+s.date_livraison);
-        const exig=s.exigences_production?String(s.exigences_production).trim():'';
-        const short=height<80;
-        const dur=fmtDur(s.duree_heures||0);
-        const cls=planAgendaSlotClass(s)+(short?' short':'');
-        return `<div class="plan-agenda-slot${cls}"
-          style="top:${top}px;height:${height-3}px;background:${co}"
-          data-eid="${s.entry_id||idx}"
-          onclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()">
-          <div class="rail"></div>
-          <div class="dur">${escHtml(dur)}</div>
-          <div class="l1"><em>${escHtml(cli)}</em>${fscBadgeHtml(s)}${transportBadgeHtml(s)}${annuleBadgeHtml(s)}</div>
-          ${l2?`<div class="l2">${escHtml(l2)}</div>`:''}
-          <div class="l3">${l3parts.map(escHtml).join(' · ')}</div>
-          ${exig?`<div class="exig" title="${escAttr(exig)}">${escHtml(exig)}</div>`:''}
-        </div>`;
-      }).join('');
-      // Lignes horaires : une tous les 2 h
-      let grid='';
-      let times='';
-      const step=2;
-      const s0=Math.ceil(col.s/step)*step;
-      for(let hh=s0; hh<=col.e; hh+=step){
-        const y=Math.round((hh-col.s)*PLAN_AGENDA_PXH);
-        grid+=`<div class="plan-agenda-grid" style="top:${y}px"></div>`;
-        times+=`<i style="top:${y}px">${String(hh).padStart(2,'0')}:00</i>`;
-      }
-      // Ligne "now" si on est dans ce jour
-      let nowLine='';
-      if(col.ds===todayIso){
-        const nowDt=new Date();
-        const localH=(nowDt-new Date(col.ds+'T00:00:00'))/36e5;
-        if(localH>=col.s && localH<=col.e){
-          const y=Math.round((localH-col.s)*PLAN_AGENDA_PXH);
-          nowLine=`<div class="plan-agenda-now" style="top:${y}px"><b>${hhmmFromFloat(localH)}</b></div>`;
-        }
-      }
-      // Barre de jour : jour long + fenêtre + charge (total prévu / capacité)
-      const totalPrevu=daySlots.reduce((t,s)=>{
-        const ss=new Date(s.start), se=new Date(s.end);
-        const sod=new Date(col.date); sod.setHours(0,0,0,0);
-        const hs=Math.max(col.s, Math.min(col.e, (ss-sod)/36e5));
-        const he=Math.max(col.s, Math.min(col.e, (se-sod)/36e5));
-        return t+Math.max(0,he-hs);
-      },0);
-      const pct=Math.min(100, Math.round(100*totalPrevu/dayW));
+      const j=renderPlanAgendaJour(col, todayIso, PX, MINH);
       const isToday=col.ds===todayIso;
       const dayLbl=fmtLivraisonLong(col.ds);
       const dayCap=dayLbl.charAt(0).toUpperCase()+dayLbl.slice(1);
       daysHtml+=`<div class="plan-agenda-daybar${isToday?' today':''}">
         <b>${escHtml(dayCap)}</b>
-        <span class="win">${escHtml(col.hourLbl||'')}</span>
-        <span class="charge"><i class="${pct>=98?'hot':''}" style="width:${pct}%"></i></span>
-        <span class="win">${totalPrevu.toFixed(1)} h</span>
+        <span class="win">${escHtml(j.hourLbl)}</span>
+        <span class="charge"><i class="${j.pct>=98?'hot':''}" style="width:${j.pct}%"></i></span>
+        <span class="win">${j.totalPrevu.toFixed(1)} h</span>
       </div>
       <div class="plan-agenda-day">
-        <div class="plan-agenda-hours">${times}</div>
-        <div class="plan-agenda-tl" style="height:${tlH}px">
-          ${grid}
-          ${items||'<div class="plan-agenda-off" style="margin:8px 0 0">Aucun dossier planifié</div>'}
-          ${nowLine}
+        <div class="plan-agenda-hours">${j.times}</div>
+        <div class="plan-agenda-tl" style="height:${j.tlH}px">
+          ${j.grid}${j.slots}${j.nowLine}
         </div>
       </div>`;
     });
   }
 
+  const cls='planning-container plan-agenda'+(paysage?' plan-agenda--paysage':'');
   a.innerHTML=`<div class="app">${renderSidebar()}<main class="main">${renderPlanningMobileTopbar()}
-    <div class="planning-container plan-agenda" data-page-enter>
+    <div class="${cls}" data-page-enter>
       <div class="plan-agenda-machines">${machinesChips}</div>
       ${wkNav}
       ${daysHtml}
@@ -5862,6 +5974,11 @@ function initPlanningGuides(){
 
 async function boot(){
   document.body.classList.add("has-topbar");
+  // Bandeau staging (rouge) : posé sur body pour que le CSS puisse
+  // décaler la topbar mobile et le padding du main quand v1 est en ligne.
+  if((window.__MYSIFA_ENV__==='v1')||/^v1\./i.test((window.location&&window.location.hostname)||'')){
+    document.body.classList.add("has-staging-bandeau");
+  }
   try{ render(); }catch(e){}
   let r;
   try{r=await fetch("/api/auth/me",{credentials:"include"});}catch(e){location.href="/";return;}
