@@ -87,6 +87,11 @@
     // Voir fxEssai() : il sert à recalculer, jamais à écrire.
     debounceFx: null,
     fxDraft: null,
+    // Le panneau Paramètres s'enregistre lui aussi à la frappe : même
+    // débounce, même pastille d'état que les fiches.
+    debounceSettingsSave: null,
+    settingsSaveStatus: "vierge",
+    settingsSavedAt: null,
     selectedProductIds: new Set(),
   };
 
@@ -433,9 +438,10 @@
   /**
    * Le taux tapé dans le panneau Paramètres, tant qu'il n'est pas enregistré.
    *
-   * Le taux est un réglage global : l'écrire à chaque touche déplacerait le prix
-   * de tout le catalogue pendant qu'on cherche la bonne valeur. On l'envoie donc
-   * à l'aperçu — qui ne persiste rien — et « Appliquer » reste seul à le graver.
+   * Le taux est un réglage global : l'écrire à CHAQUE touche déplacerait le prix
+   * de tout le catalogue pendant qu'on cherche la bonne valeur. L'aperçu — qui
+   * ne persiste rien — travaille donc sur cet essai, le temps que le débounce
+   * d'enregistrement (DELAI_SAVE_MS) grave la valeur posée.
    * `undefined` quand rien n'est en essai : la clé disparaît alors du JSON.
    */
   function fxEssai() {
@@ -2087,6 +2093,7 @@
     S.matSavedAt = null;
     clearTimeout(S.debounceMatSave);
     S.fxDraft = null;
+    reinitSettingsSave();
     if (!id) {
       S.formMaterial = defaultMaterialForm();
       S.matPreview = null;
@@ -2270,14 +2277,25 @@
    * Il réunit deux portées que rien ne doit laisser confondre, d'où les deux
    * blocs titrés :
    *   - « Cette matière » : un réglage propre à la fiche ouverte (appliquer la
-   *     marge ou non). Il s'enregistre avec la matière, par le bandeau du haut.
+   *     marge ou non). Il part avec la fiche, et la pastille du bandeau du haut
+   *     dit où en est cet enregistrement-là.
    *   - « Toutes les matières » : le taux de change et la marge par défaut, qui
-   *     valent pour tout le module — d'où le bouton Appliquer distinct, pas
-   *     d'enregistrement silencieux à la frappe.
+   *     valent pour tout le module. Ils s'enregistrent à la frappe comme le
+   *     reste, mais leur portée est plus large — d'où le bloc titré et la
+   *     pastille qui leur est propre, pour qu'on voie QUOI vient de partir.
    *
    * `prefixe` vaut "f" (fiche matière) ou "d" (fiche déclinaison MyStock) : les
    * deux formulaires partagent ce panneau mais gardent leurs identifiants.
    */
+  /** « MAJ 2026-09-04 09:12 · BCE » — d'où vient le taux ENREGISTRÉ. */
+  function fxMetaText(s) {
+    const d =
+      s && s.eur_usd_rate_updated_at
+        ? String(s.eur_usd_rate_updated_at).replace("T", " ").slice(0, 16)
+        : "—";
+    return "MAJ " + d + " · " + ((s && s.eur_usd_rate_source) || "—");
+  }
+
   function inlineSettingsHtml(prefixe, f) {
     const s = S.settings;
     const ro = S.canWrite ? "" : " disabled";
@@ -2291,16 +2309,13 @@
             <span class="check-sub">Décoché, la matière entre dans le prix de revient mais on ne marge pas dessus.</span>
           </span>
         </label>
-        <div class="si-meta">Enregistré avec la matière, par le bouton Enregistrer du bandeau.</div>
+        <div class="si-meta">Enregistré avec la matière — voir la pastille du bandeau.</div>
       </div>`;
 
     if (!s || !S.canWrite) {
       return `<aside class="settings-side"><div class="si-head">Paramètres</div>${blocMatiere}</aside>`;
     }
 
-    const fxDate = s.eur_usd_rate_updated_at
-      ? String(s.eur_usd_rate_updated_at).replace("T", " ").slice(0, 16)
-      : "—";
     const stale = isFxStale(s.eur_usd_rate_updated_at);
     // Un taux en essai ne porte ni date ni source : il n'est pas enregistré.
     const essaiFx =
@@ -2316,15 +2331,17 @@
             <input type="number" step="0.0001" id="si-rate" value="${escAttr(S.fxDraft != null ? S.fxDraft : s.eur_usd_rate)}"/>
             <div class="si-meta" id="si-rate-meta">${
               essaiFx
-                ? "Taux d'essai — le calcul en tient compte. Appliquer l'enregistre pour toutes les matières."
-                : `MAJ ${escHtml(fxDate)} · ${escHtml(s.eur_usd_rate_source || "—")}`
+                ? "Taux d'essai — le calcul en tient compte, l'enregistrement suit dans la seconde."
+                : escHtml(fxMetaText(s))
             }</div>
           </div>
           <div class="field"><label>Marge par défaut <span class="lbl-unit">%</span></label>
             <input type="number" step="0.01" id="si-margin" value="${escAttr(s.default_margin_pct)}"/>
           </div>
+          <div class="savebar-state savebar-state-${S.settingsSaveStatus} si-state" id="si-save-status">${
+            saveStatusHtml(S.settingsSaveStatus, S.settingsSavedAt)
+          }</div>
           <div class="si-actions">
-            <button type="button" class="btn btn-accent btn-sm" id="si-save">Appliquer</button>
             <button type="button" class="btn btn-soft btn-sm" id="si-fx">Rafraîchir le taux</button>
           </div>
         </div>
@@ -2339,9 +2356,10 @@
   function bindInlineSettings(rafraichir, recalculer) {
     const redessiner = typeof rafraichir === "function" ? rafraichir : () => {};
     const recalculerApercu = typeof recalculer === "function" ? recalculer : () => {};
-    // Un taux se juge au prix qu'il donne, pas au chiffre qu'on tape : la fiche
-    // se recalcule pendant la frappe. Rien n'est enregistré tant qu'on n'a pas
-    // cliqué Appliquer — voir fxEssai().
+    // Un taux se juge au prix qu'il donne, pas au chiffre qu'on tape : la
+    // fiche se recalcule pendant la frappe (fxEssai() sert cet entre-deux),
+    // puis l'enregistrement part tout seul. Plus de bouton Appliquer : un
+    // bouton qu'on oublie de cliquer, c'est un taux qui n'a jamais changé.
     const champTaux = document.getElementById("si-rate");
     if (champTaux) {
       champTaux.oninput = () => {
@@ -2349,30 +2367,16 @@
         const meta = document.getElementById("si-rate-meta");
         if (meta) {
           meta.textContent =
-            "Taux d'essai — le calcul en tient compte. Appliquer l'enregistre pour toutes les matières.";
+            "Taux d'essai — le calcul en tient compte, l'enregistrement suit dans la seconde.";
         }
         clearTimeout(S.debounceFx);
         S.debounceFx = setTimeout(recalculerApercu, 250);
+        autoEnregistrerSettings(recalculerApercu);
       };
     }
-    const save = document.getElementById("si-save");
-    if (save) {
-      save.onclick = async () => {
-        try {
-          S.settings = await api("/api/pricing/settings", {
-            method: "PATCH",
-            body: {
-              eur_usd_rate: parseFloat(document.getElementById("si-rate").value),
-              default_margin_pct: parseFloat(document.getElementById("si-margin").value),
-            },
-          });
-          S.fxDraft = null;
-          showToast("Paramètres enregistrés pour toutes les matières.", "success");
-          redessiner();
-        } catch (e) {
-          showToast(e.message, "danger");
-        }
-      };
+    const champMarge = document.getElementById("si-margin");
+    if (champMarge) {
+      champMarge.oninput = () => autoEnregistrerSettings(recalculerApercu);
     }
     const fx = document.getElementById("si-fx");
     if (fx) {
@@ -2381,7 +2385,9 @@
           const r = await api("/api/pricing/settings/refresh-fx", { method: "POST" });
           showToast("Taux mis à jour : " + fmtNum(r.eur_usd_rate, 4, 4), "success");
           S.fxDraft = null;
+          clearTimeout(S.debounceSettingsSave);
           S.settings = await api("/api/pricing/settings");
+          setSettingsSaveStatus("ok");
           redessiner();
         } catch (e) {
           showToast(e.message, "danger");
@@ -2597,6 +2603,63 @@
     if (!body.name) return null;
     if (body.price_basis === "PER_KG" && !(body.grammage_gsm > 0)) return null;
     return body;
+  }
+
+  /** Une fiche qu'on ouvre repart d'une pastille neuve, panneau compris. */
+  function reinitSettingsSave() {
+    S.settingsSaveStatus = "vierge";
+    S.settingsSavedAt = null;
+    clearTimeout(S.debounceSettingsSave);
+  }
+
+  function setSettingsSaveStatus(statut) {
+    S.settingsSaveStatus = statut;
+    if (statut === "ok") S.settingsSavedAt = new Date();
+    const el = document.getElementById("si-save-status");
+    if (el) {
+      el.className = "savebar-state savebar-state-" + statut + " si-state";
+      el.innerHTML = saveStatusHtml(statut, S.settingsSavedAt);
+    }
+  }
+
+  /**
+   * Enregistre les paramètres du module (taux USD → EUR, marge par défaut),
+   * débouncé — même cadence et même pastille que les fiches.
+   *
+   * On ne re-rend pas la page après coup : le curseur est encore dans le
+   * champ. Seules la ligne de provenance du taux et la pastille bougent, puis
+   * l'aperçu se relance sur la valeur désormais enregistrée.
+   */
+  function autoEnregistrerSettings(recalculerApercu) {
+    setSettingsSaveStatus("attente");
+    clearTimeout(S.debounceSettingsSave);
+    S.debounceSettingsSave = setTimeout(async () => {
+      const lu = (id) => {
+        const el = document.getElementById(id);
+        return el ? parseFloat(el.value) : NaN;
+      };
+      const taux = lu("si-rate");
+      const marge = lu("si-margin");
+      // Champ vidé le temps de retaper : rien ne part, et la pastille reste
+      // sur « attente » pour que l'écart se voie. Un taux nul diviserait.
+      if (!(taux > 0) || !Number.isFinite(marge)) return;
+      setSettingsSaveStatus("cours");
+      try {
+        S.settings = await api("/api/pricing/settings", {
+          method: "PATCH",
+          body: { eur_usd_rate: taux, default_margin_pct: marge },
+        });
+        // Le taux tapé EST le taux enregistré : ce n'est plus un essai.
+        S.fxDraft = null;
+        const meta = document.getElementById("si-rate-meta");
+        if (meta) meta.textContent = fxMetaText(S.settings);
+        setSettingsSaveStatus("ok");
+        if (typeof recalculerApercu === "function") recalculerApercu();
+      } catch (e) {
+        setSettingsSaveStatus("err");
+        showToast(e.message, "danger");
+      }
+    }, DELAI_SAVE_MS);
   }
 
   /** Enregistre la fiche déclinaison ouverte, débouncé. */
@@ -3670,6 +3733,7 @@
     S.declSavedAt = null;
     clearTimeout(S.debounceDeclSave);
     S.fxDraft = null;
+    reinitSettingsSave();
     S.declForm = await api("/api/pricing/mystock/declinaisons/" + id + "/parametrage");
     S.declPreview = S.declForm.computed || null;
   }
