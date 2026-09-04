@@ -165,8 +165,8 @@ check('colonne fournisseur principal', src.includes('Fournisseur principal'), tr
 
 // ─── Le taux de change s'essaie à la frappe ─────────────────────────────────
 // Le taux vaut pour tout le catalogue : on le juge sur le prix qu'il donne
-// AVANT de l'écrire. Le champ recalcule donc la fiche pendant la frappe et
-// n'enregistre rien — « Appliquer » reste seul à graver le taux.
+// AVANT qu'il soit gravé. Le champ recalcule donc la fiche pendant la frappe
+// (fxEssai), puis le débounce d'enregistrement écrit la valeur posée.
 const ctxFx = {
   console, Math, Number, parseFloat,
   S: { fxDraft: null, settings: { eur_usd_rate: 0.86 } },
@@ -189,6 +189,36 @@ const panneauFx = extraire('bindInlineSettings');
 check('la frappe alimente l\'essai', panneauFx.includes('S.fxDraft = champTaux.value'), true);
 check('et déclenche un recalcul', panneauFx.includes('recalculerApercu'), true);
 check('enregistrer efface l\'essai', panneauFx.includes('S.fxDraft = null'), true);
+
+
+// ─── Le panneau Paramètres s'enregistre à la frappe ─────────────────────────
+// Régression : taux et marge par défaut attendaient un clic sur « Appliquer ».
+// Un bouton qu'on oublie, c'est un réglage qui n'a jamais changé — et rien à
+// l'écran ne le disait. Même patron que les fiches : débounce + pastille.
+check('plus de bouton Appliquer', src.includes('id="si-save"'), false);
+check('le panneau a sa pastille', panneau.includes('id="si-save-status"'), true);
+check('la pastille utilise le même rendu d\'état',
+  panneau.includes('saveStatusHtml(S.settingsSaveStatus'), true);
+check('« Rafraîchir le taux » reste un bouton', panneau.includes('id="si-fx"'), true);
+check('le taux enregistre à la frappe',
+  panneauFx.includes('autoEnregistrerSettings(recalculerApercu)'), true);
+check('la marge par défaut aussi', panneauFx.includes('champMarge'), true);
+const autoSet = extraire('autoEnregistrerSettings');
+check('un seul PATCH, sur les paramètres',
+  autoSet.includes('"/api/pricing/settings"'), true);
+check('taux et marge partent ensemble',
+  autoSet.includes('eur_usd_rate: taux') && autoSet.includes('default_margin_pct: marge'), true);
+check('un champ vide n\'écrit rien', autoSet.includes('if (!(taux > 0)'), true);
+check('la pastille passe par « cours »', autoSet.includes('setSettingsSaveStatus("cours")'), true);
+check('et par « err » sur erreur', autoSet.includes('setSettingsSaveStatus("err")'), true);
+check('enregistré, le taux n\'est plus un essai', autoSet.includes('S.fxDraft = null'), true);
+check('pas de re-render pendant la frappe', autoSet.includes('redessiner('), false);
+for (const fn of ['loadMaterialForm', 'loadDeclinaisonForm']) {
+  check('pastille remise à neuf : ' + fn,
+    extraire(fn).includes('reinitSettingsSave()'), true);
+}
+check('plus de mention du bouton Enregistrer du bandeau',
+  src.includes('par le bouton Enregistrer du bandeau'), false);
 
 console.log(ko === 0 ? '\nTOUT EST VERT' : '\n' + ko + ' ECHEC(S)');
 process.exit(ko === 0 ? 0 : 1);

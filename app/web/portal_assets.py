@@ -907,7 +907,7 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
 @media (max-width:900px) and (orientation:landscape){
   .portal-page{
     display:grid;
-    grid-template-columns:minmax(0,300px) minmax(0,1fr);
+    grid-template-columns:auto minmax(0,1fr) auto;
     grid-template-rows:auto minmax(0,1fr);
     gap:8px 14px;
     align-content:stretch;
@@ -918,16 +918,24 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
   }
   .portal-mobile-header{
     display:flex;grid-column:1;grid-row:1;
-    max-width:100%;margin:0;align-items:center;gap:10px;
+    max-width:34vw;margin:0;align-items:center;gap:10px;
   }
   .portal-mobile-hello b{font-size:15px}
   .portal-mobile-hello span{font-size:10.5px}
+  /* En paysage, « A traiter » prenait la moitie de l'ecran pour trois lignes.
+     Couche, l'accueil sert d'abord a ouvrir une application : on ne garde de
+     la colonne mobile que la recherche, posee au centre de l'en-tete. */
+  .portal-atraiter{display:none!important}
   .portal-mcol{
-    grid-column:1;grid-row:2;min-height:0;overflow-y:auto;gap:10px;padding-bottom:4px;
-    max-width:100%;margin:0;
-  }
-  .portal-corner-stack{
     grid-column:2;grid-row:1;
+    min-height:0;overflow:visible;gap:0;padding:0;
+    justify-content:center;
+    width:100%;max-width:min(100%,430px);margin:0 auto;
+  }
+  .portal-msearch{height:38px;font-size:12.5px;border-radius:10px;padding:0 8px 0 11px}
+  .portal-msearch-google{height:26px;font-size:10.5px;padding:0 8px}
+  .portal-corner-stack{
+    grid-column:3;grid-row:1;
     position:static;flex-direction:row;flex-wrap:nowrap;justify-content:flex-end;
     align-items:center;gap:6px;width:auto;margin:0;padding:0;
     background:none;border:0;border-radius:0;box-shadow:none;
@@ -935,24 +943,39 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
   .portal-corner-stack .portal-settings-corner{width:34px;height:34px;border-radius:10px;
     background:var(--card);border:1px solid var(--border)}
   .portal-corner-stack .portal-settings-corner:hover{background:var(--bg);border-color:var(--accent)}
+  /* Le bloc paysage historique laissait ce conteneur en display:flex centre.
+     Les deux en-tetes de section et les deux grilles de tuiles devenaient des
+     items d'une meme ligne : ecrases, superposes, illisibles. Ici il empile. */
   .portal-apps-block{
-    grid-column:2;grid-row:2;min-height:0;overflow-y:auto;
-    width:100%;max-width:100%;margin:0;
+    grid-column:1 / -1;grid-row:2;
+    display:block;
+    min-height:0;height:100%;
+    overflow-x:hidden;overflow-y:auto;
+    width:100%;max-width:100%;margin:0;padding:0 0 4px;
+    align-items:stretch;justify-content:flex-start;
   }
+  .portal-apps-sec{width:100%;margin:0 0 5px;padding:0 2px}
+  .portal-apps-sec h3{font-size:9px;white-space:nowrap}
+  .portal-apps-sec-btn{
+    font-size:10px;padding:3px 8px;min-height:28px;
+    white-space:nowrap;flex:0 0 auto;
+  }
+  .portal-apps--favoris{margin-bottom:8px}
   .portal-apps{
     display:grid;grid-auto-flow:row;
-    grid-template-columns:repeat(4,minmax(0,1fr));
+    grid-template-columns:repeat(auto-fill,minmax(104px,1fr));
     grid-template-rows:none;
     gap:8px;width:100%;max-width:100%;overflow:visible;
     justify-content:stretch;
   }
   .portal-app{
-    width:auto;height:auto;min-height:0;max-height:none;flex:none;aspect-ratio:auto;
-    padding:9px 5px 8px;gap:5px;
+    width:auto;height:auto;min-width:0;max-width:none;
+    min-height:0;max-height:none;flex:none;aspect-ratio:auto;
+    padding:7px 4px 6px;gap:4px;border-radius:12px;
   }
-  .portal-app-icon{width:34px;height:34px;border-radius:10px}
-  .portal-app-icon svg{width:19px;height:19px}
-  .portal-app-name{font-size:11px}
+  .portal-app-icon{width:30px;height:30px;border-radius:9px}
+  .portal-app-icon svg{width:17px;height:17px}
+  .portal-app-name{font-size:10.5px}
   .portal-app-desc{display:none}
   .portal-logo,.portal-search,.portal-user,.portal-apps-hint,
   .portal-atelier{display:none!important}
