@@ -398,15 +398,19 @@ def _dire_signature(typ: str, valeur: str, candidats: List[Dict[str, Any]]) -> s
         longueur, _, prefixe = valeur.partition("|")
         forme = "un code de %s chiffres commençant par %s" % (longueur, prefixe)
     elif typ == "gs1":
-        forme = "un code GS1 de préfixe entreprise %s" % valeur
+        forme = "le préfixe GS1 %s" % valeur
     else:
         premier, _, nb = valeur.partition("|")
         forme = "un code en %s parties commençant par %s" % (nb, premier)
     if len(candidats) == 1:
-        return "%d bobine(s) %s portaient %s." % (
-            total, candidats[0]["nom"], forme)
-    liste = ", ".join("%s (%d)" % (c["nom"], c["observations"]) for c in candidats[:4])
-    return "%s a déjà désigné plusieurs fournisseurs : %s." % (forme.capitalize(), liste)
+        return "%d bobine%s %s portai%s %s." % (
+            total, "s" if total > 1 else "", candidats[0]["nom"],
+            "ent" if total > 1 else "t", forme)
+    # Les noms et leurs comptes sont rendus a part, dans `candidats` : les
+    # repeter ici ferait trois lignes de texte la ou l'ecran en montre deja
+    # la liste, cliquable.
+    return "%s a déjà désigné %d fournisseurs différents." % (
+        forme[0].upper() + forme[1:], len(candidats))
 
 
 # ── Reconstruction ───────────────────────────────────────────────────────────

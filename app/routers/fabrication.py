@@ -2703,10 +2703,33 @@ async def add_matiere(request: Request):
                         if not _check_fsc_compatibility(dossier_type, bobine_fsc):
                             label = _fsc_type_label(dossier_type)
                             fsc_warning = True
-                            fsc_warning_message = (
-                                f"Cette bobine ({code_barre}) n'est pas certifiée {label}. "
-                                f"Le dossier {no_dossier} requiert une certification {label}."
-                            )
+                            # Deux situations tres differentes tombaient sous la
+                            # meme phrase. Une bobine dont le fournisseur porte
+                            # un certificat n'est pas « non certifiee » : c'est
+                            # la revendication de CETTE livraison qui manque,
+                            # faute de reception scannee. Dire l'un pour l'autre
+                            # apprend a l'atelier a ignorer l'avertissement.
+                            cert = conn.execute(
+                                """SELECT COALESCE(sr.certificat_fsc,
+                                                   fmu.certificat_fsc_manual) AS cert
+                                     FROM fab_matieres_utilisees fmu
+                                LEFT JOIN stock_receptions sr ON sr.id = fmu.reception_id
+                                    WHERE fmu.id=?""",
+                                (new_id,),
+                            ).fetchone()
+                            if cert and (cert["cert"] or "").strip():
+                                fsc_warning_message = (
+                                    f"Le fournisseur de cette bobine ({code_barre}) est "
+                                    f"certifié, mais la revendication {label} de cette "
+                                    f"livraison n'est pas démontrée : la bobine n'a pas "
+                                    f"été scannée en réception. Le dossier {no_dossier} "
+                                    f"exige {label}."
+                                )
+                            else:
+                                fsc_warning_message = (
+                                    f"Cette bobine ({code_barre}) n'est pas certifiée {label}. "
+                                    f"Le dossier {no_dossier} requiert une certification {label}."
+                                )
 
             conn.commit()
         except HTTPException:
