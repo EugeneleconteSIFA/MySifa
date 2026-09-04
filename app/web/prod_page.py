@@ -104,6 +104,9 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- Selecteur de pieces RVGI, partage avec le planning et MyExpe. Charge
      AVANT le coeur : la modale OF l'appelle des son premier rendu. -->
 <script src="/static/mysifa_rvgi_picker.js?v=__V_LABEL__"></script>
+<!-- Selecteur de reference matiere MyStock : c'est lui qui remplace le
+     texte libre des champs carton / mandrin / palette / adhesif / support. -->
+<script src="/static/mysifa_ref_matiere.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>

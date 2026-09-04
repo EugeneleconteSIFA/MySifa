@@ -2,6 +2,7 @@
 paths:
   - "app/routers/of_import.py"
   - "app/services/of_pdf_generator.py"
+  - "app/services/rvgi_article_fiche.py"
   - "app/routers/fabrication.py"
   - "app/routers/produits_memoire.py"
   - "app/routers/ao.py"
@@ -96,6 +97,8 @@ cases vides, jamais imposé : SIFA a cessé d'alimenter ce module en avril 2026.
 - ❌ Créer un OF ou une fiche sans marquer les champs saisis (`marquer_champs_manuels`)
 - ❌ Poser `valide = 1` à la création
 - ❌ Fabriquer un numéro d'OF côté client : la règle vit dans `proposer_reference()`
+- ❌ Laisser le client écrire la colonne texte d'un champ matière : elle découle de l'id
+- ❌ Ouvrir la modale OF sur une ligne de `/api/of/list`
 
 **Vérifier l'état d'une base**
 
@@ -110,6 +113,86 @@ court-circuite le service.
 Tests : `python3 tests/test_documents_verite.py` (arbitrage, péremption,
 journal) et `python3 tests/test_besoins_verrou_documents.py` (SQL réelle de
 Besoins matières + blocage du déstockage).
+
+---
+
+## Les champs matière pointent une RÉFÉRENCE, pas un texte
+
+Six familles — support, glassine, adhésif, carton, mandrin, palette — sont des
+matières de MyStock, pas des libellés. Elles portent donc un id
+(`*_ref_id` sur `of_imports` et `fiches_techniques`) et la colonne texte en
+DÉCOULE : `_appliquer_references()` la réécrit côté serveur depuis
+`matieres_premieres.designation`. Laisser le client poster les deux, c'est
+accepter qu'ils divergent le jour où une désignation change dans MyStock.
+
+Ce que ça remplace : `mp_fiche_mapping`, qui rapprochait APRÈS COUP un texte
+libre d'une référence. Il reste — les documents venus d'Access n'ont que du
+texte — mais un document saisi dans MySifa n'a plus besoin de lui. Une frappe
+près (« ITASA KA » contre « ITASA jaune KA ») suffisait à faire sortir un
+besoin matière faux, et l'erreur se voyait à l'inventaire, pas à l'écran.
+
+Un id à `None` détache la référence **sans effacer le texte** : un OF Access
+porte un libellé qu'aucune référence ne recouvre encore, et le perdre serait
+perdre la seule chose qu'on sache de sa matière. L'écran affiche alors
+« non rattaché au stock ».
+
+**Le type de palette est UN champ.** `palette_europe` / `palette_perdues`
+existent encore en base, vides et inutilisées : le type est un choix parmi des
+références (« Pallet Europe », « Pallet Perdue », « Anti-bactérienne »), pas
+deux compteurs. Le nombre vit dans `nb_palettes`.
+
+`POST /api/stock/matieres/brouillon` crée la référence qui manque, sans prix ni
+laize ni seuil, avec `brouillon = 1`. Sans cette porte, une ADV bloquée devant
+une liste sans son carton retape du texte libre et tout le mécanisme ne sert à
+rien. Mais un prix inventé est pire qu'un prix absent — il se propage dans la
+valorisation sans jamais lever d'alerte : c'est MyStock qui complète, depuis
+« matières à compléter ».
+
+---
+
+## Pré-remplir une fiche technique depuis RVGI
+
+`app/services/rvgi_article_fiche.py` joint les cinq tables que personne ne
+joignait à la main :
+
+    fic_art   l'article vendu — libellé, référence client, format commandé
+    gpr_ff    sa fiche de fabrication — machine, laize matière, outils, matière
+    out_dec   l'outil de découpe — LA source de la géométrie
+    mat_mat   la matière — support, adhésif, protecteur, grammage
+    gpr_ff1   l'impression — pantone, anilox, composition, tête par tête
+
+**`out_dec` est la table qui compte.** Vérifié sur la fiche papier de 623/0014,
+outil 2796 : `ftl`/`fta` = 104,5 × 148,4, `ray` = 6, `ftl+espl` / `fta+espa` =
+107,75 × 152,4 (le module), `espl` = 3,25 (latéral int.), `espa` = 4
+(horizontal), `espl/2` = 1,625 (latéral ext.), `nbd` = 192 dents, `nbl` = 4 de
+front, `nba` = 4 d'avance, `eps` = 52. Tout concorde au centième — et c'est ce
+relevé que `tests/test_of_creation.py` rejoue.
+
+`nbl` alimente `outil1_nb_front`, **jamais** `mod_nb_front`. Et la colonne
+« Laize » de l'outil sur le papier est celle de la BOBINE (`gpr_ff.laimat`),
+pas la laize développée de l'outil (`out_dec.lt`) : 440 contre 443,75.
+
+Trois précautions à ne pas retirer :
+
+- **Un zéro de RVGI n'est pas une valeur.** `laiout = 0`, `nbcoul = 0`,
+  `ray = 0` sont des cases vides ; les recopier écrit un zéro qui se lit
+  ensuite comme vérifié.
+- **On ne remplit que les cases vides.** Une fiche corrigée par l'atelier a
+  raison contre l'ERP.
+- **Chaque champ dit d'où il vient.** `provenance` nomme la table, l'écran
+  l'affiche. `gpr_ff` ne couvre que 585 articles sur 7 688, et la plupart de
+  ses lignes datent d'avant 2010 : c'est un service rendu, jamais une promesse.
+
+---
+
+## La modale OF charge l'OF entier, pas la ligne de liste
+
+`GET /api/of/{id}` existe pour ça. `/api/of/list` ne renvoie qu'une vingtaine
+de colonnes sur soixante ; la modale en poste quarante-deux. Ouverte sur une
+ligne de liste, elle affichait vides la laize, la glassine, la réf. adhésif et
+tout l'outillage — et « Enregistrer » les écrivait à NULL, parce que
+`autoriser_effacement=True` traite un champ vidé comme une décision humaine.
+Ce qu'il est, quand le champ a réellement été montré à un humain.
 
 ---
 

@@ -3888,11 +3888,13 @@
       refreshDeclPreview();
     }, refreshDeclPreview);
 
-    const marquer = () => {
-      if (S.declDirty) return;
-      S.declDirty = true;
-      const t = document.getElementById("decl-dirty");
-      if (t) t.hidden = false;
+    // Chaque frappe recopie l'écran dans S.declForm, planifie l'aperçu ET
+    // planifie l'enregistrement. Sans ce dernier appel, la saisie restait à
+    // l'écran, la pastille disait « Aucune modification » et rien ne partait
+    // au serveur : les réglages semblaient pris et ne l'étaient pas.
+    const marquerDecl = () => {
+      syncDeclFormFromDom();
+      autoEnregistrerDecl();
     };
 
     // Saisie libre : on recalcule à la volée, sans re-render (le curseur reste
@@ -3900,24 +3902,21 @@
     ["d-tax", "d-transport", "d-tcout", "d-tqte"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.oninput = () => {
-        marquer();
-        syncDeclFormFromDom();
+        marquerDecl();
         clearTimeout(S.debounceDecl);
         S.debounceDecl = setTimeout(refreshDeclPreview, 300);
       };
     });
     const chkMarge = document.getElementById("d-marge");
     if (chkMarge) chkMarge.onchange = () => {
-      marquer();
-      syncDeclFormFromDom();
+      marquerDecl();
       refreshDeclPreview();
     };
     // Ces champs changent les unités affichées partout : on re-rend.
     ["d-cur", "d-basis", "d-imp", "d-tmode"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.onchange = () => {
-        marquer();
-        syncDeclFormFromDom();
+        marquerDecl();
         renderDeclinaisonForm();
         refreshDeclPreview();
       };

@@ -11,99 +11,105 @@ sa date. Rien à ouvrir pour savoir où on en est.
 """
 
 EXPE_PILOTAGE_CSS = r"""
-/* ── MyExpé — pilotage des expéditions ── */
-.expe-pil-tuiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
-.expe-pil-tuile{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
-.expe-pil-tuile-lbl{font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--muted)}
-.expe-pil-tuile-val{font-size:26px;font-weight:800;color:var(--text);line-height:1.15;margin-top:4px}
-.expe-pil-tuile--retard{border-color:var(--danger)}
+/* ── MyExpé — pilotage des expéditions ──
+ *
+ * Densité : cet écran se lit d'un coup d'oeil, plusieurs fois par jour. La
+ * couleur y est un signal, pas une decoration — elle ne sert qu'au retard et a
+ * l'urgence, en filet vertical plutot qu'en aplat de ligne : un tableau ou une
+ * ligne sur deux est teintee ne signale plus rien.
+ */
+.expe-pil-tuiles{display:flex;flex-wrap:wrap;gap:22px;padding:12px 14px;margin-bottom:12px;
+  background:var(--card);border:1px solid var(--border);border-radius:10px}
+.expe-pil-tuile{min-width:96px}
+.expe-pil-tuile-lbl{font-size:10px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)}
+.expe-pil-tuile-val{font-size:19px;font-weight:700;color:var(--text);line-height:1.2;margin-top:1px}
 .expe-pil-tuile--retard .expe-pil-tuile-val{color:var(--danger)}
-.expe-pil-tuile--warn{border-color:var(--warn)}
 .expe-pil-tuile--warn .expe-pil-tuile-val{color:var(--warn)}
-.expe-pil-tuile--ok .expe-pil-tuile-val{color:var(--success)}
 
-.expe-pil-barre{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
-.expe-pil-seg{display:flex;gap:4px;flex-wrap:wrap}
+.expe-pil-barre{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.expe-pil-seg{display:flex;gap:3px;flex-wrap:wrap}
 .expe-pil-seg button{background:var(--card);border:1px solid var(--border);color:var(--text2);
-  border-radius:9px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
-  transition:filter .15s}
+  border-radius:8px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 .expe-pil-seg button:hover{background:var(--bg)}
 .expe-pil-seg button.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
-.expe-pil-search{flex:1;min-width:180px;max-width:340px;padding:9px 13px;background:var(--card);
-  border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;font-family:inherit;outline:none}
-.expe-pil-search:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent)}
+.expe-pil-search{flex:1;min-width:170px;max-width:300px;padding:7px 11px;background:var(--card);
+  border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:inherit;outline:none}
+.expe-pil-search:focus{border-color:var(--accent)}
 
 .expe-pil-wrap{overflow-x:auto}
-.expe-pil-table{width:100%;border-collapse:collapse;font-size:13px}
-.expe-pil-table th{font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
-  color:var(--muted);text-align:left;padding:9px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
-.expe-pil-table td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
+.expe-pil-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.expe-pil-table th{font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
+  color:var(--muted);text-align:left;padding:7px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+.expe-pil-table td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:top}
 .expe-pil-table tr:last-child td{border-bottom:none}
-.expe-pil-row--retard{background:color-mix(in srgb,var(--danger) 7%,transparent)}
-.expe-pil-row--urgent{background:color-mix(in srgb,var(--warn) 8%,transparent)}
-.expe-pil-row--parti{opacity:.62}
+/* Le filet vertical remplace l'aplat : meme information, sans repeindre la page. */
+.expe-pil-row--retard td:first-child{box-shadow:inset 3px 0 0 var(--danger)}
+.expe-pil-row--urgent td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
+.expe-pil-row--parti{opacity:.5}
 
-.expe-pil-quand{font-weight:800;white-space:nowrap}
-.expe-pil-j{font-size:11px;font-weight:700;white-space:nowrap}
-.expe-pil-j--retard{color:var(--danger)}
-.expe-pil-j--urgent{color:var(--warn)}
-.expe-pil-j--ok{color:var(--muted)}
-.expe-pil-src{font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--muted);
-  border:1px solid var(--border);border-radius:6px;padding:1px 5px;display:inline-block;margin-top:3px}
+.expe-pil-quand{font-weight:700;white-space:nowrap;font-size:13px}
+.expe-pil-meta{font-size:11px;color:var(--muted);white-space:nowrap;margin-top:1px}
+.expe-pil-meta--retard{color:var(--danger)}
+.expe-pil-meta--urgent{color:var(--warn)}
 
-.expe-pil-client{font-weight:700;color:var(--text)}
-.expe-pil-dest{font-size:12px;color:var(--muted);margin-top:2px}
-.expe-pil-dos{font-size:12px;color:var(--text2);margin-top:2px;line-height:1.5}
-.expe-pil-dos-ref{border:1px solid var(--border);border-radius:6px;padding:1px 6px;margin-right:4px;
-  display:inline-block;font-family:monospace;font-size:11px}
-.expe-pil-dos-ref--prod{border-color:var(--warn);color:var(--warn)}
-.expe-pil-dos-ref--ok{border-color:var(--success);color:var(--success)}
+.expe-pil-client{font-weight:600;color:var(--text)}
+.expe-pil-dest{font-size:11px;color:var(--muted);margin-top:1px}
+.expe-pil-dos{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.6}
+.expe-pil-dos-ref{font-family:monospace;font-size:11px;color:var(--text2);margin-right:8px;white-space:nowrap}
+.expe-pil-dos-ref--prod{color:var(--warn)}
 
-.expe-pil-pal{display:flex;align-items:center;gap:6px}
-.expe-pil-pal-val{font-family:monospace;font-size:15px;font-weight:800}
-.expe-pil-pal-input{width:62px;padding:5px 7px;background:var(--bg);border:1px solid var(--border);
-  border-radius:8px;color:var(--text);font-size:13px;font-family:monospace;text-align:right;outline:none}
+.expe-pil-pal{display:flex;align-items:baseline;gap:6px}
+.expe-pil-pal-val{font-family:monospace;font-size:13px;font-weight:700}
+.expe-pil-pal-input{width:52px;padding:4px 6px;background:var(--bg);border:1px solid var(--border);
+  border-radius:6px;color:var(--text);font-size:12.5px;font-family:monospace;text-align:right;outline:none}
 .expe-pil-pal-input:focus{border-color:var(--accent)}
-.expe-pil-pal-src{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:var(--muted)}
-.expe-pil-pal-src--estime{color:var(--warn)}
+.expe-pil-pal-src{font-size:11px;color:var(--muted)}
+.expe-pil-pal-src--estime{font-style:italic}
 
-.expe-pil-jalon{display:inline-flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap}
-.expe-pil-jalon--ok{color:var(--success);font-weight:700}
-.expe-pil-jalon-date{font-size:11px;color:var(--muted);display:block;margin-top:2px}
-.expe-pil-act{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;
-  padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;
-  transition:filter .15s}
+.expe-pil-jalon{font-size:12px;white-space:nowrap;color:var(--text2)}
+.expe-pil-jalon--ok{color:var(--success)}
+.expe-pil-jalon-date{font-size:11px;color:var(--muted);display:block;margin-top:1px}
+.expe-pil-nul{color:var(--muted);font-size:12px}
+.expe-pil-act{background:var(--bg);border:1px solid var(--border);color:var(--text2);border-radius:7px;
+  padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
 .expe-pil-act:hover{border-color:var(--accent);color:var(--accent)}
-.expe-pil-act--go{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
-.expe-pil-act:disabled{opacity:.45;cursor:not-allowed}
+.expe-pil-act--go{border-color:var(--accent);color:var(--accent)}
+.expe-pil-act:disabled{opacity:.35;cursor:not-allowed}
+.expe-pil-act:disabled:hover{border-color:var(--border);color:var(--text2)}
 
-.expe-pil-flag{font-size:11px;font-weight:700;border-radius:6px;padding:1px 6px;display:inline-block;margin-top:4px}
-.expe-pil-flag--prod{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
-.expe-pil-flag--part{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn)}
-.expe-pil-flag--fsc{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
+/* Marqueurs : du texte discret, pas des pastilles pleines. */
+.expe-pil-flag{font-size:11px;margin-right:8px;white-space:nowrap}
+.expe-pil-flag--prod{color:var(--danger)}
+.expe-pil-flag--part{color:var(--warn)}
+.expe-pil-flag--fsc{color:var(--accent)}
 
-.expe-pil-vide{text-align:center;color:var(--muted);padding:26px 12px;font-size:13px}
-.expe-pil-avert{border:1px solid var(--warn);background:color-mix(in srgb,var(--warn) 10%,transparent);
-  color:var(--text);border-radius:10px;padding:10px 13px;font-size:12px;margin-bottom:12px}
+.expe-pil-vide{text-align:center;color:var(--muted);padding:24px 12px;font-size:12.5px}
+.expe-pil-avert{font-size:11.5px;color:var(--muted);margin-bottom:8px;line-height:1.5}
+.expe-pil-avert b{color:var(--text2);font-weight:600}
 
-.expe-pil-reglages{margin-top:14px}
-.expe-pil-reglages-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-top:10px}
-.expe-pil-reglages label{display:block;font-size:11px;font-weight:600;letter-spacing:.5px;
-  text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+/* Reglages : la carte porte ses propres marges, la grille ne touche pas les bords. */
+.expe-pil-reglages{margin-top:16px}
+.expe-pil-reglages-corps{padding:16px 18px 18px}
+.expe-pil-reglages-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:18px 20px}
+.expe-pil-reglages label{display:block;font-size:10px;font-weight:600;letter-spacing:.5px;
+  text-transform:uppercase;color:var(--muted);margin-bottom:6px}
 .expe-pil-reglages input{width:100%;padding:8px 11px;background:var(--bg);border:1px solid var(--border);
-  border-radius:9px;color:var(--text);font-size:13px;font-family:inherit;outline:none}
+  border-radius:8px;color:var(--text);font-size:13px;font-family:inherit;outline:none}
 .expe-pil-reglages input:focus{border-color:var(--accent)}
-.expe-pil-aide{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.45}
+.expe-pil-reglages-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px;
+  padding-top:16px;border-top:1px solid var(--border)}
+.expe-pil-aide{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.45}
 
-/* Cartes sous 860 px : le tableau a huit colonnes, il ne tient pas. */
+/* Cartes sous 860 px : le tableau a six colonnes, il ne tient pas. */
 @media (max-width:860px){
-  .expe-pil-cartes{display:flex;flex-direction:column;gap:10px}
-  .expe-pil-carte{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 13px}
-  .expe-pil-carte--retard{border-color:var(--danger)}
-  .expe-pil-carte--urgent{border-color:var(--warn)}
+  .expe-pil-cartes{display:flex;flex-direction:column;gap:8px}
+  .expe-pil-carte{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 12px}
+  .expe-pil-carte--retard{border-left:3px solid var(--danger)}
+  .expe-pil-carte--urgent{border-left:3px solid var(--warn)}
   .expe-pil-carte-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
-  .expe-pil-carte-jalons{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;
-    padding-top:10px;border-top:1px solid var(--border)}
+  .expe-pil-carte-jalons{display:flex;gap:10px;flex-wrap:wrap;margin-top:9px;
+    padding-top:9px;border-top:1px solid var(--border)}
+  .expe-pil-tuiles{gap:16px}
 }
 """
 
@@ -156,11 +162,11 @@ function _expePilSrcLabel(src){
 
 function _expePilJours(env){
   const j=env.jours_restants;
-  if(j===null||j===undefined)return {txt:'date inconnue',cls:'expe-pil-j--retard'};
-  if(j<0)return {txt:'en retard de '+Math.abs(j)+' j',cls:'expe-pil-j--retard'};
-  if(j===0)return {txt:'aujourd’hui',cls:'expe-pil-j--urgent'};
-  if(j===1)return {txt:'demain',cls:'expe-pil-j--urgent'};
-  return {txt:'dans '+j+' j',cls:'expe-pil-j--ok'};
+  if(j===null||j===undefined)return {txt:'date inconnue',cls:'expe-pil-meta--retard'};
+  if(j<0)return {txt:'en retard de '+Math.abs(j)+' j',cls:'expe-pil-meta--retard'};
+  if(j===0)return {txt:'aujourd’hui',cls:'expe-pil-meta--urgent'};
+  if(j===1)return {txt:'demain',cls:'expe-pil-meta--urgent'};
+  return {txt:'dans '+j+' j',cls:''};
 }
 
 function _expePilCorrespond(env,q){
@@ -263,11 +269,11 @@ EXPE_PILOTAGE_JS += r"""
 
 function _expePilTuiles(r){
   const t=[
-    {lbl:'En retard',        val:r.retard,             cls:r.retard?'expe-pil-tuile--retard':''},
-    {lbl:'À commander',      val:r.a_commander,        cls:r.a_commander?'expe-pil-tuile--warn':''},
+    {lbl:'En retard',          val:r.retard,              cls:r.retard?'expe-pil-tuile--retard':''},
+    {lbl:'À commander',        val:r.a_commander,         cls:r.a_commander?'expe-pil-tuile--warn':''},
     {lbl:'Palettes à réserver',val:r.palettes_a_reserver||0,cls:''},
-    {lbl:'Transport commandé',val:r.transport_commande, cls:'expe-pil-tuile--ok'},
-    {lbl:'Sans BL',          val:r.bl_manquant,        cls:''}
+    {lbl:'Transport commandé', val:r.transport_commande,  cls:''},
+    {lbl:'Sans BL',            val:r.bl_manquant,         cls:''}
   ];
   return h('div',{className:'expe-pil-tuiles'},
     ...t.map(function(x){
@@ -278,20 +284,20 @@ function _expePilTuiles(r){
 }
 
 function _expePilCelluleQuand(env){
+  // Une date, une ligne de contexte. Le delai et l'origine de la date tiennent
+  // ensemble : trois lignes empilees par cellule rendaient le tableau illisible.
   const j=_expePilJours(env);
   return h('td',null,
     h('div',{className:'expe-pil-quand'},_expePilJourFR(env.date_cible)),
-    h('div',{className:'expe-pil-j '+j.cls},j.txt),
-    h('span',{className:'expe-pil-src',title:'Origine de la date d’expédition visée'},
-      _expePilSrcLabel(env.date_cible_source))
+    h('div',{className:'expe-pil-meta '+j.cls,
+      title:'Origine de la date d’expédition visée : '+_expePilSrcLabel(env.date_cible_source)},
+      j.txt+' · '+_expePilSrcLabel(env.date_cible_source))
   );
 }
 
 function _expePilCelluleEnvoi(env){
   const dos=(env.dossiers||[]).map(function(d){
-    const cls=d.etat==='termine'?'expe-pil-dos-ref--ok':
-              (d.etat==='en_cours'?'expe-pil-dos-ref--prod':'');
-    return h('span',{className:'expe-pil-dos-ref '+cls,
+    return h('span',{className:'expe-pil-dos-ref'+(d.etat==='en_cours'?' expe-pil-dos-ref--prod':''),
       title:(d.machine||'')+' · '+(d.etat==='termine'?'production terminée':
              d.etat==='en_cours'?'en production':'en attente de production')},
       d.reference||('#'+d.id));
@@ -299,99 +305,102 @@ function _expePilCelluleEnvoi(env){
   const flags=[];
   if(env.prod_apres_expedition)
     flags.push(h('span',{className:'expe-pil-flag expe-pil-flag--prod',
-      title:'Fin de production prévue le '+_expePilJourFR(env.prod_fin_prevue)},
-      'Prod après la date d’expédition'));
+      title:'Fin de production prévue le '+_expePilJourFR(env.prod_fin_prevue)+
+            ', après la date d’expédition visée'},'Prod tardive'));
   if((env.dossiers||[]).some(function(d){return d.fsc_requis;}))
-    flags.push(h('span',{className:'expe-pil-flag expe-pil-flag--fsc'},'FSC'));
+    flags.push(h('span',{className:'expe-pil-flag expe-pil-flag--fsc',title:'Dossier certifié FSC'},'FSC'));
   if((env.dossiers||[]).some(function(d){return d.prise_rdv;}))
-    flags.push(h('span',{className:'expe-pil-flag expe-pil-flag--part'},'Prise de RDV'));
+    flags.push(h('span',{className:'expe-pil-flag expe-pil-flag--part',
+      title:'Livraison sur rendez-vous'},'RDV'));
   return h('td',null,
     h('div',{className:'expe-pil-client'},env.client||'—'),
     h('div',{className:'expe-pil-dest'},
       [env.code_postal,env.ville].filter(Boolean).join(' ')||'destination inconnue'),
-    dos.length?h('div',{className:'expe-pil-dos'},...dos):null,
-    flags.length?h('div',null,...flags):null
+    (dos.length||flags.length)?h('div',{className:'expe-pil-dos'},...dos,...flags):null
   );
 }
 
 function _expePilCellulePalettes(env){
   const src=env.nb_palette_source;
-  const libelle={saisi:'saisi',bl:'bon de livraison',estime:'estimé'}[src]||'à estimer';
   const val=env.nb_palette;
   const peut=expeCanWrite()&&env.alerte!=='parti';
+  // Le mot sous le chiffre dit d'ou il vient — c'est ce qui distingue un
+  // nombre valide d'une estimation. Il reste, mais discret : gris, minuscule.
+  const libelle={saisi:'',bl:'du BL',estime:'estimé'}[src]||'à estimer';
+  const manques=(env.manques||[]).join(' · ');
+  const aide=src==='estime'
+    ?('Estimé depuis la fiche technique'+(env.nb_palette_estime_partiel?' — partiel : '+manques:''))
+    :(src==='bl'?'Compté sur le bon de livraison':(manques||'Corriger le nombre de palettes'));
   const champ=peut?h('input',{
     className:'expe-pil-pal-input',
     type:'text',
     value:(val!=null?String(val):''),
     placeholder:'—',
-    title:'Corriger le nombre de palettes',
+    title:aide,
     onKeyDown:function(e){if(e.key==='Enter'){e.preventDefault();void expePilPalettes(env,e.target.value);}},
     onBlur:function(e){
       const av=(val!=null?String(val):'');
       if(e.target.value.trim()!==av.trim())void expePilPalettes(env,e.target.value);
     }
-  }):h('span',{className:'expe-pil-pal-val'},val!=null?String(val):'—');
+  }):h('span',{className:'expe-pil-pal-val',title:aide},val!=null?String(val):'—');
   return h('td',null,
-    h('div',{className:'expe-pil-pal'},champ),
-    h('div',{className:'expe-pil-pal-src'+(src==='estime'?' expe-pil-pal-src--estime':'')},libelle),
-    env.nb_palette_estime_partiel?h('div',{className:'expe-pil-flag expe-pil-flag--part',
-      title:(env.manques||[]).join(' · ')},'estimation partielle'):null,
-    (val==null&&(env.manques||[]).length)?h('div',{className:'expe-pil-aide',
-      title:(env.manques||[]).join(' · ')},'Fiche incomplète'):null
+    h('div',{className:'expe-pil-pal'},champ,
+      libelle?h('span',{className:'expe-pil-pal-src'+(src==='estime'?' expe-pil-pal-src--estime':''),
+        title:aide},libelle+(env.nb_palette_estime_partiel?' (partiel)':'')):null)
   );
 }
 
 function _expePilCelluleTransport(env){
   const t=env.jalons.transport;
   if(t.fait){
+    const detail=[t.reference,t.date_enlevement?'enlèv. '+_expePilJourFR(t.date_enlevement):'']
+      .filter(Boolean).join(' · ');
     return h('td',null,
-      h('span',{className:'expe-pil-jalon expe-pil-jalon--ok'},iconEl('check-circle',13),' ',
-        t.transporteur||'commandé'),
-      h('span',{className:'expe-pil-jalon-date'},
-        (t.reference?t.reference+' · ':'')+
-        (t.date_enlevement?'enlèv. '+_expePilJourFR(t.date_enlevement):'')),
-      (!t.date_confirmee&&t.date_enlevement)?h('span',{className:'expe-pil-jalon-date',
-        title:'Date déduite du planning, pas encore arrêtée avec le transporteur'},'date prévisionnelle'):null
+      h('div',{className:'expe-pil-jalon expe-pil-jalon--ok',
+        title:(!t.date_confirmee&&t.date_enlevement)
+          ?'Date déduite du planning, pas encore arrêtée avec le transporteur':''},
+        t.transporteur||'Commandé'),
+      detail?h('span',{className:'expe-pil-jalon-date'},detail):null
     );
   }
-  if(!expeCanWrite())return h('td',null,h('span',{className:'expe-pil-jalon'},'—'));
+  if(!expeCanWrite())return h('td',null,h('span',{className:'expe-pil-nul'},'—'));
+  // L'echeance ne s'affiche que quand elle compte. Sur un envoi qui part dans
+  // trois semaines, « au plus tard le … » est du bruit sur chaque ligne.
   const presse=env.alerte==='retard'||env.alerte==='urgent'||env.alerte==='a_commander';
   return h('td',null,
     h('button',{type:'button',className:'expe-pil-act'+(presse?' expe-pil-act--go':''),
       title:env.a_commander_le?('À commander au plus tard le '+_expePilJourFR(env.a_commander_le)):'',
       onClick:function(){expePilOuvrirTransport(env);}},'Commander'),
-    env.a_commander_le?h('span',{className:'expe-pil-jalon-date'},
-      'au plus tard le '+_expePilJourFR(env.a_commander_le)):null
+    (presse&&env.a_commander_le)?h('span',{className:'expe-pil-jalon-date'},
+      'avant le '+_expePilJourFR(env.a_commander_le)):null
   );
 }
 
 function _expePilCelluleParti(env){
   const p=env.jalons.parti;
   if(p.fait)return h('td',null,
-    h('span',{className:'expe-pil-jalon expe-pil-jalon--ok'},iconEl('check-circle',13),' Parti'),
+    h('div',{className:'expe-pil-jalon expe-pil-jalon--ok'},'Parti'),
     h('span',{className:'expe-pil-jalon-date'},_expePilJourFR(p.le)));
-  if(!expeCanWrite())return h('td',null,h('span',{className:'expe-pil-jalon'},'—'));
+  if(!expeCanWrite())return h('td',null,h('span',{className:'expe-pil-nul'},'—'));
   const pret=env.jalons.transport.fait;
+  if(!pret)return h('td',null,h('span',{className:'expe-pil-nul',
+    title:'Commander le transport d’abord'},'—'));
   return h('td',null,
-    h('button',{type:'button',className:'expe-pil-act',disabled:!pret,
-      title:pret?'Déclarer l’enlèvement effectué':'Commander le transport d’abord',
+    h('button',{type:'button',className:'expe-pil-act',
+      title:'Déclarer l’enlèvement effectué',
       onClick:function(){void expePilMarquerParti(env);}},'Parti'));
 }
 
 function _expePilCelluleBL(env){
   const bl=env.jalons.bl;
-  if(bl.fait)return h('td',null,
-    h('span',{className:'expe-pil-jalon expe-pil-jalon--ok'},iconEl('check-circle',13),' ',
-      bl.numeros.slice(0,2).join(' · ')),
-    bl.numeros.length>2?h('span',{className:'expe-pil-jalon-date'},
-      '+ '+(bl.numeros.length-2)+' autre(s)'):null);
-  return h('td',null,h('span',{className:'expe-pil-jalon',
-    title:'Le bon de livraison se crée dans RVGI — MySifa le lit, il ne l’écrit pas'},'À faire'));
+  if(!bl.fait)return h('td',null,h('span',{className:'expe-pil-nul',
+    title:'Le bon de livraison se crée dans RVGI — MySifa le lit, il ne l’écrit pas'},'—'));
+  return h('td',null,
+    h('div',{className:'expe-pil-jalon expe-pil-jalon--ok',
+      title:bl.numeros.join(' · ')},bl.numeros[0]),
+    bl.numeros.length>1?h('span',{className:'expe-pil-jalon-date'},
+      '+ '+(bl.numeros.length-1)):null);
 }
-"""
-
-
-EXPE_PILOTAGE_JS += r"""
 
 function _expePilCarte(env){
   const j=_expePilJours(env);
@@ -405,7 +414,7 @@ function _expePilCarte(env){
           [env.code_postal,env.ville].filter(Boolean).join(' ')||'destination inconnue')),
       h('div',{style:{textAlign:'right'}},
         h('div',{className:'expe-pil-quand'},_expePilJourFR(env.date_cible)),
-        h('div',{className:'expe-pil-j '+j.cls},j.txt))
+        h('div',{className:'expe-pil-meta '+j.cls},j.txt))
     ),
     h('div',{className:'expe-pil-dos'},
       (env.nb_palette!=null?env.nb_palette+' palette(s)':'palettes à estimer')+
@@ -459,14 +468,15 @@ function _expePilReglages(data){
     }));
   return h('div',{className:'card expe-pil-reglages'},
     h('div',{className:'card-header'},h('h3',null,'Réglages du pilotage')),
-    grille,
-    h('div',{style:{display:'flex',gap:'8px',marginTop:'14px',flexWrap:'wrap'}},
-      expeCanWrite()?h('button',{type:'button',className:'btn-accent',onClick:function(){
-        const vals={};champs.forEach(function(c){vals[c.cle]=refs[c.cle].value;});
-        void expePilEnregistrerReglages(vals);
-      }},'Enregistrer'):null,
-      h('button',{type:'button',className:'expe-pil-act',
-        onClick:function(){set({expePilReglagesOuvert:false});}},'Fermer'))
+    h('div',{className:'expe-pil-reglages-corps'},
+      grille,
+      h('div',{className:'expe-pil-reglages-actions'},
+        expeCanWrite()?h('button',{type:'button',className:'btn-accent',onClick:function(){
+          const vals={};champs.forEach(function(c){vals[c.cle]=refs[c.cle].value;});
+          void expePilEnregistrerReglages(vals);
+        }},'Enregistrer'):null,
+        h('button',{type:'button',className:'expe-pil-act',
+          onClick:function(){set({expePilReglagesOuvert:false});}},'Fermer')))
   );
 }
 
@@ -555,22 +565,20 @@ function renderExpePilotage(){
       onClick:function(){void loadExpePilotage();}},iconEl('rotate-cw',13),' Actualiser')
   );
 
-  const avert=[];
+  // Les notes de contexte tiennent sur une ligne grise sous la barre de filtres.
+  // Ce sont des precisions, pas des alertes : les mettre en bandeau jaune leur
+  // donnait plus de poids visuel qu'aux retards du tableau.
+  const notes=[];
   if(data.rvgi&&!data.rvgi.present)
-    avert.push(h('div',{className:'expe-pil-avert'},
-      'Miroir RVGI indisponible — les dates d’expédition demandées, les adresses de '+
-      'livraison et les bons de livraison ne sont pas affichés. Le reste du tableau '+
-      'reste juste.'));
+    notes.push('Miroir RVGI indisponible — dates demandées, adresses et BL non affichés.');
   if((data.resume||{}).sans_estimation)
-    avert.push(h('div',{className:'expe-pil-avert'},
-      (data.resume.sans_estimation)+' envoi(s) sans nombre de palettes : fiche technique '+
-      'incomplète. Le chiffre peut être saisi directement dans la colonne Palettes.'));
+    notes.push(data.resume.sans_estimation+' sans palettes (fiche incomplète, saisie possible).');
   if((data.resume||{}).dormants)
-    avert.push(h('div',{className:'expe-pil-avert'},
-      (data.resume.dormants)+' dossier(s) au planning attendus avant le '+
-      _expePilJourFR(data.dormants_avant)+' et jamais soldés : écartés du tableau, '+
-      'parce qu’un envoi attendu il y a des mois n’est pas un transport à organiser. '+
-      'Le ménage se fait dans MyProd, pas ici.'));
+    notes.push(data.resume.dormants+' dossier(s) attendus avant le '+
+      _expePilJourFR(data.dormants_avant)+' écartés — à solder dans MyProd.');
+  const avert=notes.length
+    ?[h('div',{className:'expe-pil-avert'},notes.join('  ·  '))]
+    :[];
 
   const corps=expeEnCartes()
     ? (envois.length

@@ -134,8 +134,13 @@ _CHAMPS = [
     ("nb_cartons",            429.5, 247.9, 10,   True,  "g", _fmt),
     ("nb_mandrins",           429.0, 277.0, 10,   True,  "g", _fmt),
     ("nb_tubes",              429.0, 291.7, 10,   True,  "g", _fmt),
-    ("palette_europe",        432.0, 324.5, 10,   True,  "g", _fmt),
-    ("palette_perdues",       496.0, 324.5, 10,   True,  "g", _fmt),
+    # Une seule case pour le type de palette. Le modèle papier porte deux
+    # cadres, « Europe » et « perdues » — mais le type est un CHOIX parmi des
+    # références (« Pallet Europe », « Pallet Perdue », « Anti-bactérienne »),
+    # pas deux compteurs. La désignation s'écrit donc à cheval sur les deux,
+    # en 8 pt pour y tenir, et le nombre se pose à gauche des cadres.
+    ("nb_palettes",           427.0, 324.5, 10,   True,  "d", _fmt),
+    ("palette_type",          432.0, 324.5,  8,   True,  "g", _fmt),
     # Outil 1
     ("outil_1_forme",          58.0, 443.4, 10,   True,  "g", _fmt),
     ("outil_1_numero",        160.2, 442.3,  9,   True,  "g", _fmt),
