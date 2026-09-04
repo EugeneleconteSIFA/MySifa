@@ -910,6 +910,10 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v18"/><path d="M18 3v18"/><path d="M6 8h12"/><path d="M6 16h12"/></svg>
         Appairage matières
       </button>
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="typesarticle" title="Familles des types d'article de RVGI">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M7 12h13"/><path d="M11 18h9"/><circle cx="3.5" cy="12" r="1.2"/><circle cx="7.5" cy="18" r="1.2"/></svg>
+        Types d'article RVGI
+      </button>
       <button type="button" class="nav-btn" data-req-section="logistique" data-tab="transport" title="Contrainte transport sur le planning de production">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 3h13v13H1z"/><path d="M14 8h4l3 3v5h-7z"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/></svg>
         Contrainte transport
@@ -1105,6 +1109,11 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <button type="button" class="menu-item" data-goto="bridge">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v18"/><path d="M18 3v18"/><path d="M6 8h12"/><path d="M6 16h12"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Appairage matières</span><span class="mi-desc">Rapprocher les références MyStock avec Coûts matières.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button type="button" class="menu-item" data-goto="typesarticle">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M7 12h13"/><path d="M11 18h9"/><circle cx="3.5" cy="12" r="1.2"/><circle cx="7.5" cy="18" r="1.2"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Types d'article RVGI</span><span class="mi-desc">Matière, sous-traitance, outillage ou consommable.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
           </div>
@@ -1960,6 +1969,35 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
           <button type="button" class="btn" id="tp-save">Enregistrer</button>
           <span class="hint" id="tp-hint"></span>
         </div>
+      </div>
+    </section>
+
+    <section id="panel-typesarticle" class="hidden">
+      <div class="card">
+        <div style="margin-bottom:16px">
+          <h2 style="margin:0 0 4px">Types d'article RVGI</h2>
+          <p class="sub" style="margin:0;font-size:12px">RVGI type chaque ligne d'achat — Thermiques, Glassines, Adhésifs, Clichés, Outil de découpe… Ces types disent de quelle matière il s'agit, pas de quelle nature d'achat. Les regrouper en quatre familles permet de lire une réception d'un coup d'œil, et de savoir laquelle doit entrer en stock.</p>
+        </div>
+
+        <p class="sub" style="margin:0 0 14px;font-size:11px;color:var(--muted)">Le libellé de chaque type est lu dans l'ERP : le renommer dans RVGI le renomme ici. Seule la famille se décide dans MySifa. Un type laissé sans famille s'affiche sans, sur l'écran des réceptions — on ne devine pas à votre place.</p>
+
+        <div id="ta-alerte" class="hidden" style="padding:10px 12px;border:1px solid var(--warn,#c98a00);border-radius:10px;background:color-mix(in srgb,var(--warn,#c98a00) 8%,transparent);margin-bottom:14px;font-size:12.5px"></div>
+
+        <div style="overflow-x:auto">
+          <table class="tbl" style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr>
+                <th style="text-align:left;width:70px">Code</th>
+                <th style="text-align:left">Type dans RVGI</th>
+                <th style="text-align:right;width:120px">Réceptions</th>
+                <th style="text-align:left;width:250px">Famille MySifa</th>
+              </tr>
+            </thead>
+            <tbody id="ta-corps"><tr><td colspan="4" class="sub" style="padding:14px">Chargement…</td></tr></tbody>
+          </table>
+        </div>
+
+        <p class="hint" id="ta-hint" style="margin-top:14px;font-size:11px"></p>
       </div>
     </section>
 
@@ -3515,7 +3553,7 @@ document.addEventListener('keydown', function (ev) {
   }
 });
 
-const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','emplacements','laizes','mandrins','importations','bridge','transport','updates','audit','fsc','dashboards','api','promote','printers','formations','diagnostic'];
+const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','emplacements','laizes','mandrins','importations','bridge','transport','typesarticle','updates','audit','fsc','dashboards','api','promote','printers','formations','diagnostic'];
 
 function setTab(id, opts) {
   if (!VALID_TABS.includes(id)) id = 'menu';
@@ -3537,7 +3575,7 @@ function setTab(id, opts) {
       }
     } catch(e){}
   }
-  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'transport', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations', 'diagnostic'].forEach(p => {
+  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'transport', 'typesarticle', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations', 'diagnostic'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -3556,6 +3594,7 @@ function setTab(id, opts) {
   if (id === 'importations') initImportationsPanel();
   if (id === 'bridge') initBridgePanel();
   if (id === 'transport') initTransportPanel();
+  if (id === 'typesarticle') initTypesArticlePanel();
   if (id === 'updates') loadUpdates();
   if (id === 'audit') loadAuditLogs();
   if (id === 'fsc') initFscPanel();
@@ -8087,6 +8126,110 @@ function _tpHint(txt, err) {
   el.textContent = txt || '';
   el.style.color = err ? 'var(--danger)' : 'var(--muted)';
 }
+// ── Types d'article RVGI → familles MySifa ─────────────────────────────
+//
+// L'écran est une liste de types, pas un formulaire : un menu par ligne,
+// enregistré au `change`. Le tableau n'est pas reconstruit après coup — on
+// ne perd donc pas sa place en classant quinze types à la suite.
+
+let TA_FAMILLES = [];
+
+function _taHint(txt, err) {
+  const el = document.getElementById('ta-hint');
+  if (!el) return;
+  el.textContent = txt || '';
+  el.style.color = err ? 'var(--danger)' : 'var(--muted)';
+}
+
+function _taRendu(etat) {
+  TA_FAMILLES = etat.familles || [];
+  const corps = document.getElementById('ta-corps');
+  const alerte = document.getElementById('ta-alerte');
+  if (!corps) return;
+
+  // Un type non classé qui n'apparaît sur aucune réception ne dérange
+  // personne : le signaler serait du bruit. Un type non classé qui arrive
+  // chez le fournisseur, lui, laisse une colonne vide sur l'écran.
+  if (alerte) {
+    const n = etat.non_classes || 0;
+    alerte.classList.toggle('hidden', !n);
+    if (n) {
+      alerte.textContent = n === 1
+        ? "1 type apparaît en réception sans famille : sa ligne s'affiche sans regroupement dans MyERP."
+        : n + " types apparaissent en réception sans famille : leurs lignes s'affichent sans regroupement dans MyERP.";
+    }
+  }
+
+  const lignes = etat.types || [];
+  if (!lignes.length) {
+    corps.innerHTML = '<tr><td colspan="4" class="sub" style="padding:14px">'
+      + 'Aucun type lisible — le miroir de l\'ERP n\'a pas encore été construit.</td></tr>';
+    return;
+  }
+
+  corps.innerHTML = lignes.map(l => {
+    const options = ['<option value="">— sans famille —</option>'].concat(
+      TA_FAMILLES.map(f => '<option value="' + escAttr(f.cle) + '"'
+        + (f.cle === l.famille ? ' selected' : '') + '>' + esc(f.label) + '</option>')
+    ).join('');
+    const vu = l.receptions
+      ? l.receptions.toLocaleString('fr-FR')
+      : '<span class="sub">—</span>';
+    const nom = l.libelle
+      ? esc(l.libelle)
+      : '<span class="sub">Type non nommé dans l\'ERP</span>';
+    return '<tr' + (!l.famille && l.receptions ? ' style="background:color-mix(in srgb,var(--warn,#c98a00) 6%,transparent)"' : '') + '>'
+      + '<td style="font-family:ui-monospace,monospace">' + l.type_code + '</td>'
+      + '<td>' + nom + '</td>'
+      + '<td style="text-align:right;font-variant-numeric:tabular-nums">' + vu + '</td>'
+      + '<td><select data-tacode="' + l.type_code + '" style="width:100%">' + options + '</select></td>'
+      + '</tr>';
+  }).join('');
+
+  corps.querySelectorAll('select[data-tacode]').forEach(sel => {
+    sel.addEventListener('change', () => _taEnregistrer(sel));
+  });
+}
+
+async function _taEnregistrer(sel) {
+  const code = sel.getAttribute('data-tacode');
+  const avant = sel._avant != null ? sel._avant : '';
+  sel.disabled = true;
+  _taHint('Enregistrement…');
+  try {
+    const r = await fetch('/api/settings/erp-types-article', {
+      method: 'PUT', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type_code: Number(code), famille: sel.value || '' }),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    sel._avant = sel.value;
+    // La ligne d'alerte et le liseré ne se recalculent pas ici : ils viennent
+    // du serveur, et le tableau n'est pas reconstruit pour ne pas déplacer la
+    // ligne sous le curseur. Ils se remettront à jour à la prochaine ouverture.
+    _taHint('Enregistré.');
+  } catch (e) {
+    sel.value = avant;
+    _taHint('Enregistrement impossible : ' + (e && e.message || e), true);
+    toast('Le classement n\'a pas été enregistré.', true);
+  } finally {
+    sel.disabled = false;
+  }
+}
+
+async function initTypesArticlePanel() {
+  _taHint('Chargement…');
+  try {
+    const r = await fetch('/api/settings/erp-types-article', { credentials: 'include' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    _taRendu(await r.json());
+    document.querySelectorAll('#ta-corps select[data-tacode]').forEach(s => { s._avant = s.value; });
+    _taHint('');
+  } catch (e) {
+    _taHint('Chargement impossible : ' + (e && e.message || e), true);
+  }
+}
+
 async function initTransportPanel() {
   const btn = document.getElementById('tp-save');
   if (btn && !btn._wired) {

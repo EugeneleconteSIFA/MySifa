@@ -3707,8 +3707,12 @@ async function tracaSaveCode(code){
   const clean = code.trim();
   set({tracaAutoSaving:true});
   try{
+    // Le dossier part avec la question : les autres bobines de la meme serie
+    // sont le dernier indice utile quand le code n'a jamais ete vu.
+    const dossierRef = (S.dossier && S.dossier.reference) || '';
     const lookup = await apiFetch(
       '/api/fabrication/receptions/lookup?code_barre=' + encodeURIComponent(clean)
+      + (dossierRef ? '&no_dossier=' + encodeURIComponent(dossierRef) : '')
     );
     if(lookup && lookup.found){
       await tracaShowFicheConfirmation(clean, {
@@ -3718,7 +3722,7 @@ async function tracaSaveCode(code){
       });
     }else{
       await loadFournisseursFSC();
-      await tracaShowFicheManuelle(clean);
+      await tracaShowFicheManuelle(clean, (lookup && lookup.origine) || null);
     }
   }catch(e){
     showToast(e.message || 'Erreur scan.','danger');
@@ -3797,7 +3801,11 @@ function tracaShowFicheConfirmation(codeBarre, infos){
   });
 }
 
-function tracaShowFicheManuelle(codeBarre){
+// `origine` est ce que le serveur a pu reconstituer du fournisseur a partir du
+// seul code-barres (cf. app/services/origine_bobine.py). Il n'apporte AUCUN
+// certificat : la modale pre-remplit et explique sur quoi elle se fonde, mais
+// c'est toujours l'operateur qui arrete la reponse.
+function tracaShowFicheManuelle(codeBarre, origine){
   return new Promise((resolve) => {
     const list = Array.isArray(FOURNISSEURS_FSC) ? FOURNISSEURS_FSC : [];
     const overlay = document.createElement('div');
@@ -3807,6 +3815,40 @@ function tracaShowFicheManuelle(codeBarre){
     const opts = list.map(f =>
       `<option value="${escAttr(f.nom||'')}"></option>`
     ).join('');
+
+    // Une detection muette se subit ; une detection qui dit sur quoi elle
+    // repose se corrige. Le bandeau porte donc la regle en clair, et les
+    // autres fournisseurs deja vus sous cette forme restent a un clic.
+    const det = (origine && origine.trouve) ? origine : null;
+    const detNom = det ? (det.fournisseur || '') : '';
+    const CONF_MOT = {probable:'Détecté', suggere:'Probablement', ambigu:'Plusieurs pistes'};
+    let bandeau = '';
+    if(det){
+      const autres = (det.candidats||[]).filter(c => c.nom && c.nom !== detNom);
+      const chips = autres.slice(0,3).map(c =>
+        `<button type="button" class="fiche-alt" data-nom="${escAttr(c.nom)}"
+                 style="background:var(--bg);border:1px solid var(--border);border-radius:999px;
+                        padding:3px 10px;font:inherit;font-size:11px;color:var(--text2);
+                        cursor:pointer">${escHtml(c.nom)}</button>`).join('');
+      bandeau = `
+        <div style="background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--accent);
+                    border-radius:10px;padding:10px 12px;margin-bottom:12px">
+          <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
+                      color:var(--accent);margin-bottom:4px">
+            ${escHtml(CONF_MOT[det.confiance] || 'Piste')}${detNom ? ' · ' + escHtml(detNom) : ''}
+          </div>
+          <div style="font-size:11px;color:var(--text2);line-height:1.5">
+            ${escHtml(det.explication || '')}
+          </div>
+          ${chips ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+            <span style="font-size:11px;color:var(--muted);align-self:center">Sinon :</span>${chips}
+          </div>` : ''}
+          <div style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.4">
+            Origine déclarée, non démontrée : aucun certificat FSC n'est rattaché.
+            Seule une bobine scannée en réception l'est.
+          </div>
+        </div>`;
+    }
 
     overlay.innerHTML = `
       <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;
@@ -3819,8 +3861,9 @@ function tracaShowFicheManuelle(codeBarre){
         </div>
         <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:14px">
           Ce code n'est rattaché à aucune réception. Il sera quand même enregistré :
-          indiquez seulement de qui vient la bobine.
+          ${det ? 'vérifiez le fournisseur proposé.' : 'indiquez seulement de qui vient la bobine.'}
         </div>
+        ${bandeau}
 
         <label style="font-size:11px;font-weight:700;text-transform:uppercase;
                       letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:6px">
@@ -3949,6 +3992,44 @@ function tracaShowFicheManuelle(codeBarre){
       }
     }
 
+    // Ce qu'on inscrira dans la colonne d'origine. Il suit ce que l'operateur
+    // FAIT, pas ce que l'ecran a propose : des qu'il choisit autre chose que la
+    // detection, l'enregistrement redevient une saisie. Sans cette bascule, la
+    // colonne dirait « detecte » sur des lignes que quelqu'un a corrigees a la
+    // main — exactement l'inverse de ce qu'un audit vient y chercher.
+    let origSource = det ? (det.source || 'saisie') : 'saisie';
+    let origConf   = det ? (det.confiance || 'aucune') : 'aucune';
+    function marquerSaisie(){ origSource = 'saisie'; origConf = 'aucune'; }
+
+    // Pre-remplissage. Un nom detecte hors annuaire ouvre directement le champ
+    // libre : le proposer dans un picker qui ne le contient pas ne remplirait rien.
+    if(det && detNom){
+      if(det.hors_annuaire){
+        ficheElargi = true; ficheLibre = true;
+        if(porteeTxt) porteeTxt.textContent = 'Fournisseur hors annuaire';
+        if(elargirBtn) elargirBtn.style.display = 'none';
+        if(libreWrap) libreWrap.style.display = '';
+        if(libreInp) libreInp.value = detNom;
+      }else if(fournPickerFiche){
+        try{ fournPickerFiche.set(det.fournisseur_id || detNom, true); }catch(_){}
+      }else if(inp){
+        inp.value = detNom;
+      }
+      updateLicence();
+    }
+
+    // Les autres fournisseurs deja vus sous cette forme de code : un clic
+    // suffit a corriger, sans rouvrir l'annuaire.
+    overlay.querySelectorAll('.fiche-alt').forEach(b => {
+      b.onclick = () => {
+        const nom = b.getAttribute('data-nom') || '';
+        marquerSaisie();
+        if(fournPickerFiche){ try{ fournPickerFiche.set(nom, true); }catch(_){} }
+        else if(inp){ inp.value = nom; }
+        updateLicence();
+      };
+    });
+
     // Palier 1 : tout l'annuaire. Palier 2 : le champ libre. Deux clics, et
     // le second dit ce qu'il coute — l'operateur ne bascule pas hors
     // annuaire sans le savoir.
@@ -3976,11 +4057,17 @@ function tracaShowFicheManuelle(codeBarre){
       };
     }
     if(libreInp){
-      libreInp.addEventListener('input', updateLicence);
+      libreInp.addEventListener('input', () => { marquerSaisie(); updateLicence(); });
     }
     if (fournPickerFiche) {
-      fournPickerFiche.opts.onSelect = updateLicence;
-      fournPickerFiche.opts.onClear = updateLicence;
+      fournPickerFiche.opts.onSelect = () => {
+        const f = fournPickerFiche.get();
+        // Re-selectionner exactement le fournisseur detecte n'est pas une
+        // correction : l'origine reste celle de la detection.
+        if(!det || !f || String(f.nom||'') !== detNom) marquerSaisie();
+        updateLicence();
+      };
+      fournPickerFiche.opts.onClear = () => { marquerSaisie(); updateLicence(); };
       // requestAnimationFrame plutôt qu'un setTimeout à l'aveugle : le champ
       // vient d'être inséré, il est prêt au frame suivant.
       requestAnimationFrame(() => fournPickerFiche.focus());
@@ -4004,6 +4091,8 @@ function tracaShowFicheManuelle(codeBarre){
       const extra = f
         ? {fournisseur_fsc_id: parseInt(f.id, 10)}
         : {fournisseur_libre: libre};
+      extra.origine_detection = origSource;
+      extra.origine_confiance = origConf;
       overlay.remove();
       set({tracaAutoSaving:true});
       try{

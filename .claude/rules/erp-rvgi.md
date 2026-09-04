@@ -71,7 +71,52 @@ courant. `gpr_ff` (fiches de fabrication) fait exception et reste maintenue.
 
 Conséquence pour la traçabilité : le lien dossier ↔ lot matière que portait
 `gpr_mat.reflot` n'est plus alimenté côté ERP et doit exister dans MySifa.
-Côté entrée, `lif_ligne.lot` et `stm_hist.lot` restent vivants.
+
+**Et l'entrée non plus n'est pas tracée.** Ce document affirmait que
+`lif_ligne.lot` et `stm_hist.lot` « restent vivants ». C'est faux, relevé le
+02/09/2026 : **zéro ligne sur 8 984 réceptions et zéro sur 18 074 mouvements
+matière**, jusqu'aux écritures du jour même. Les colonnes existent, personne ne
+les saisit. Aucun numéro de lot n'entre donc dans MySifa par l'ERP — toute
+traçabilité amont, FSC comprise, se saisit côté MySifa, en réception MyStock.
+
+---
+
+## Le type d'article — `cdf_ligne.type`, et ses libellés dans `fic_para`
+
+`lif_ligne` ne porte **aucun article** : ni code, ni désignation, ni type. Elle
+dit qu'une quantité est arrivée sur la ligne n° X de la commande fournisseur
+n° Y. Ce qui a été reçu se lit sur `cdf_ligne`, jointe sur le **couple**
+`(numero, ligne)` — le numéro seul ramènerait toutes les lignes de la commande
+pour chaque réception. Couverture relevée le 02/09/2026 : 8 984 sur 8 984.
+
+`cdf_ligne.type` porte 18 valeurs sur les réceptions. Ce n'est pas
+`mat_mat.type` : la ligne d'achat réserve ses deux premiers rangs à ce qui n'est
+pas une matière — **1 pour l'article acheté** (3 825 des 3 832 lignes sont dans
+`fic_art` : c'est la sous-traitance), **2 pour l'outil de découpe** (1 367 sur
+1 367 dans `out_dec`). Le reste suit avec deux de décalage :
+
+    cdf_ligne.type = mat_mat.type + 2
+
+Vérifié sur les types purs : adhésifs 9 → 7 (169/169), encres 10 → 8 (462/462),
+clichés 11 → 9 (702/703). Quand les deux divergent sur une ligne, c'est une
+erreur de saisie RVGI — et **c'est le type de la ligne d'achat qui fait foi**,
+puisque c'est lui qui décrit ce qui a été commandé.
+
+**Les libellés se lisent dans `fic_para`**, contrairement à ce que le catalogue
+a longtemps supposé. Un paramètre porte un `numero` de la forme `15 TT PP`, où
+`TT` est le type de matière et `PP` le rang du paramètre ; le libellé est le
+suffixe de `des1` après « : ». On prend le suffixe **majoritaire** du bloc :
+RVGI porte ses propres coquilles de recopie (`150705` annonce « Encres » au
+milieu du bloc des adhésifs). `app/services/erp_types.py` fait ce travail — ne
+pas recopier ces libellés en dur, les renommer dans RVGI doit suffire.
+
+Le regroupement en **familles** (matière, sous-traitance, outillage,
+consommable), lui, n'existe pas dans RVGI : c'est une décision MySifa, stockée
+dans `erp_type_famille` et modifiable dans Paramètres › Types d'article RVGI.
+
+`cdf_ligne.code3` porte la **laize en mm**, remplie sur 100 % des lignes des six
+types laizés (complexes, glassines, vélins, couchés, thermiques, synthétiques)
+et vide partout ailleurs, adhésifs compris.
 
 ---
 

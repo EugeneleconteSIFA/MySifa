@@ -215,8 +215,11 @@ Trois conséquences directes :
   Ne rien construire dessus, ne pas les afficher comme un état courant.
 - La traçabilité dossier ↔ lot matière que portait `gpr_mat.reflot` n'est plus
   alimentée côté ERP. Elle doit exister dans MySifa — c'est le point dur de la
-  préparation FSC. Côté entrée, `lif_ligne.lot` et `stm_hist.lot` restent
-  vivants et donnent la maille réception.
+  préparation FSC. **Et l'entrée n'est pas tracée non plus** : ce document a
+  longtemps affirmé que `lif_ligne.lot` et `stm_hist.lot` restaient vivants.
+  Relevé le 02/09/2026, c'est faux — zéro sur 8 984 réceptions, zéro sur
+  18 074 mouvements matière, jusqu'aux écritures du jour. Les colonnes
+  existent, personne ne les saisit.
 - `gpr_ff` (fiches de fabrication) fait exception : encore écrite le
   08/07/2026. Le référentiel technique n'a pas été abandonné avec le suivi.
 
@@ -336,7 +339,14 @@ non exploitable en jointure fiable**.
 
 **`lif_ligne` — réceptions fournisseurs** · 8 949 · `numero` → `cdf_entete.numero` ·
 `ref` **n° de BL fournisseur** · `amjl` date de réception · `qte` ·
-**`lot` n° de lot** · `daa`.
+`lot` n° de lot — **jamais renseigné**, zéro ligne sur 8 984 · `daa`.
+
+Elle ne porte **aucun article**. Ce qui a été reçu se lit sur `cdf_ligne`,
+jointe sur le couple `(numero, ligne)` — 8 984 lignes sur 8 984 y trouvent leur
+ligne de commande. Le numéro seul ramènerait toutes les lignes de la commande
+pour chaque réception. De là viennent `code1`/`code2` (l'article), `des1`
+(la désignation), `code3` (la laize en mm sur les matières laizées) et `type`
+(le type d'article, cf. `app/services/erp_types.py`).
 
 **`stk_hist` — mouvements de stock produits finis** · 25 588 · **à la minute**
 `code1`/`code2`/`code3` · `mvt` type de mouvement · `amjh` horodatage ·
@@ -487,9 +497,10 @@ Depuis le 25 août 2026, l'essentiel :
    **À vérifier avant d'y compter : `amjl` porte-t-il la date promise
    d'origine, ou est-il réécrit à chaque modification ?**
 3. **`stk_hist` / `stm_hist` — les mouvements en continu.** La réconciliation
-   MyStock passe du dépôt manuel d'un xlsx à une synchro. `stm_hist.lot` et
-   `lif_ligne.lot` portent les numéros de lot côté réception : c'est la maille
-   d'entrée de la chaîne FSC.
+   MyStock passe du dépôt manuel d'un xlsx à une synchro. Attention :
+   `stm_hist.lot` et `lif_ligne.lot` sont **vides partout** (relevé du
+   02/09/2026). La maille d'entrée de la chaîne FSC ne viendra pas de l'ERP —
+   elle se saisit en réception MyStock.
 4. **Les prix.** `fic_artv`, `fic_arta`, `fic_artc`, `mat_mat.pafou*` — prix de
    vente, d'achat, négociés, par palier et par date de validité. Aujourd'hui
    ressaisis à la main dans MyStock.

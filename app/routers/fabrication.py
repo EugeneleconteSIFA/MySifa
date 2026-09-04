@@ -13,6 +13,7 @@ _PARIS = ZoneInfo("Europe/Paris")
 logger = logging.getLogger(__name__)
 
 from app.services.audit_service import log_action
+from app.services import origine_bobine
 from database import get_db, parse_datetime
 from config import classify_operation, FSC_CLAIM_LABELS, STOCK_UNITE_VENTE_DEFAUT
 from app.services.auth_service import get_current_user, is_fabrication, is_admin, effective_machine_id
@@ -2544,8 +2545,18 @@ def get_tracabilite_dossier(no_dossier: str, request: Request):
 
 
 @router.get("/api/fabrication/receptions/lookup")
-def lookup_reception_for_barcode(request: Request, code_barre: str):
-    """Lookup d'une réception matière depuis un code barre (pour Traça Fabrication)."""
+def lookup_reception_for_barcode(
+    request: Request, code_barre: str, no_dossier: str | None = None
+):
+    """Ce que l'application sait du fournisseur d'une bobine, avant de le demander.
+
+    La réponse garde `found` pour ce qu'il a toujours voulu dire — la bobine est
+    dans une réception, son origine est DÉMONTRÉE — et lui adjoint `origine`,
+    qui est ce que la cascade a pu reconstituer quand la réception ne dit rien.
+    Les deux ne se remplacent pas : la première ouvre l'écran de confirmation
+    avec certificat, la seconde ne fait que pré-remplir une saisie qui reste
+    déclarative.
+    """
     user = get_current_user(request)
     _check_fab_access(user)
     code = (code_barre or "").strip()
@@ -2566,7 +2577,17 @@ def lookup_reception_for_barcode(request: Request, code_barre: str):
             (code,),
         ).fetchone()
     if not row:
-        return {"found": False}
+        with get_db() as conn:
+            try:
+                origine = origine_bobine.resoudre(
+                    conn, code, (no_dossier or "").strip() or None
+                )
+            except Exception:
+                # Une détection en panne ne doit pas empêcher de scanner : on
+                # retombe simplement sur la saisie manuelle d'avant.
+                logger.warning("Résolution origine bobine échouée", exc_info=True)
+                origine = None
+        return {"found": False, "origine": origine}
     d = dict(row)
     return {
         "found": True,
@@ -2631,6 +2652,11 @@ async def add_matiere(request: Request):
     except (ValueError, TypeError):
         fournisseur_fsc_id = None
     fournisseur_libre = str(body.get("fournisseur_libre") or "").strip()
+    # Ce que l'écran a proposé et que l'opérateur a validé. Purement descriptif :
+    # six mois plus tard, c'est la seule façon de distinguer une origine devinée
+    # par l'application d'une origine que quelqu'un a réellement cherchée.
+    origine_det = _norm_origine(body.get("origine_detection"), "saisie")
+    origine_conf = _norm_confiance(body.get("origine_confiance"), "aucune")
 
     # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur
     operateur = user.get("operateur_lie") or ""
@@ -2658,7 +2684,8 @@ async def add_matiere(request: Request):
             new_id = cursor.lastrowid
             fid = _resolve_fournisseur_fsc_id(conn, fournisseur_fsc_id, None)
             _link_matiere_to_reception(
-                conn, new_id, code_barre, fid, fournisseur_libre
+                conn, new_id, code_barre, fid, fournisseur_libre,
+                origine=origine_det, confiance=origine_conf,
             )
 
             fsc_warning = False
@@ -2700,12 +2727,32 @@ async def add_matiere(request: Request):
     }
 
 
+# Chemins de détection acceptés depuis le client. La valeur ne sert qu'à
+# décrire COMMENT le fournisseur a été trouvé : elle n'ouvre aucun droit et ne
+# change aucun calcul. On la filtre quand même — une colonne d'audit qui accepte
+# n'importe quelle chaîne ne vaut plus rien comme colonne d'audit.
+_ORIGINES = ("reception", "historique", "signature", "dossier", "saisie")
+_CONFIANCES = ("certain", "probable", "suggere", "aucune")
+
+
+def _norm_origine(valeur, defaut: str) -> str:
+    v = str(valeur or "").strip().lower()
+    return v if v in _ORIGINES else defaut
+
+
+def _norm_confiance(valeur, defaut: str) -> str:
+    v = str(valeur or "").strip().lower()
+    return v if v in _CONFIANCES else defaut
+
+
 def _link_matiere_to_reception(
     conn,
     matiere_id: int,
     code_barre: str,
     fournisseur_fsc_id: int | None,
     fournisseur_libre: str | None = None,
+    origine: str = "saisie",
+    confiance: str = "aucune",
 ) -> None:
     """Lie un scan matière à une réception stock ou à un fournisseur (manuel).
 
@@ -2732,10 +2779,12 @@ def _link_matiere_to_reception(
         conn.execute(
             """UPDATE fab_matieres_utilisees
                SET reception_id=?, liaison_mode='reception',
-                   fournisseur_manual=NULL, certificat_fsc_manual=NULL
+                   fournisseur_manual=NULL, certificat_fsc_manual=NULL,
+                   origine_detection='reception', origine_confiance='certain'
                WHERE id=?""",
             (int(rec["reception_id"]), matiere_id),
         )
+        _apprendre_origine(conn, code_barre, rec["fournisseur"])
         return
     libre = (fournisseur_libre or "").strip()
     if not fournisseur_fsc_id and libre:
@@ -2748,10 +2797,12 @@ def _link_matiere_to_reception(
             conn.execute(
                 """UPDATE fab_matieres_utilisees
                    SET reception_id=NULL, liaison_mode='manual',
-                       fournisseur_manual=?, certificat_fsc_manual=NULL
+                       fournisseur_manual=?, certificat_fsc_manual=NULL,
+                       origine_detection=?, origine_confiance=?
                    WHERE id=?""",
-                (libre[:120], matiere_id),
+                (libre[:120], origine, confiance, matiere_id),
             )
+            _apprendre_origine(conn, code_barre, libre[:120])
             return
         raise HTTPException(
             status_code=409,
@@ -2766,10 +2817,30 @@ def _link_matiere_to_reception(
     conn.execute(
         """UPDATE fab_matieres_utilisees
            SET reception_id=NULL, liaison_mode='manual',
-               fournisseur_manual=?, certificat_fsc_manual=?
+               fournisseur_manual=?, certificat_fsc_manual=?,
+               origine_detection=?, origine_confiance=?
            WHERE id=?""",
-        (str(f["nom"]), str(f["certificat"] or ""), matiere_id),
+        (str(f["nom"]), str(f["certificat"] or ""), origine, confiance, matiere_id),
     )
+    _apprendre_origine(conn, code_barre, str(f["nom"]))
+
+
+def _apprendre_origine(conn, code_barre: str, fournisseur_nom) -> None:
+    """Nourrit la mémoire des signatures à chaque identification arrêtée.
+
+    Le geste qui coûte à l'opérateur — nommer le fournisseur d'une bobine — ne
+    doit lui être demandé qu'une fois par forme de code. C'est ici que sa
+    réponse devient une règle réutilisable ; sans cet appel, la détection
+    n'apprendrait rien de l'usage et resterait figée sur le seed initial.
+
+    Un échec ne remonte jamais : l'apprentissage est un bénéfice, pas une
+    condition. Perdre un scan matière parce qu'une table d'index a bronché
+    serait un très mauvais échange.
+    """
+    try:
+        origine_bobine.apprendre(conn, code_barre, str(fournisseur_nom or ""))
+    except Exception:
+        logger.warning("Apprentissage signature bobine ignoré", exc_info=True)
 
 
 @router.patch("/api/fabrication/matieres/{matiere_id}")
@@ -2785,6 +2856,8 @@ async def patch_matiere(matiere_id: int, request: Request):
 
     from_tracabilite = bool(body.get("tracabilite"))
     fournisseur_fsc_id = body.get("fournisseur_fsc_id")
+    origine_det = _norm_origine(body.get("origine_detection"), "saisie")
+    origine_conf = _norm_confiance(body.get("origine_confiance"), "aucune")
 
     operateur = user.get("operateur_lie") or ""
     if not operateur:
@@ -2817,7 +2890,10 @@ async def patch_matiere(matiere_id: int, request: Request):
                     "UPDATE fab_matieres_utilisees SET code_barre=? WHERE id=?",
                     (code_barre, matiere_id),
                 )
-            _link_matiere_to_reception(conn, matiere_id, code_barre, fid)
+            _link_matiere_to_reception(
+                conn, matiere_id, code_barre, fid,
+                origine=origine_det, confiance=origine_conf,
+            )
             conn.commit()
         except HTTPException:
             conn.rollback()

@@ -1708,7 +1708,9 @@ function renderTete(){
     const ep=S.epingles.indexOf(c.nom)>=0;
     // L'entonnoir n'a de sens que sur une colonne de RVGI : la colonne de
     // rattachement est du MySifa, elle a son propre filtre dans le rail.
-    const filtrable=opsCol(c).length>0&&(c.type||'')!=='ratt';
+    // `sans_filtre` dit la même chose d'une colonne dont le rail filtre déjà
+    // mieux — la famille d'article, dont le menu répéterait un libellé par code.
+    const filtrable=opsCol(c).length>0&&(c.type||'')!=='ratt'&&!c.sans_filtre;
     const posee=filtrable&&!!S.filtresCol[c.nom];
     const infob=posee?resumeFiltreCol(c):'Filtrer sur cette colonne';
     h+='<th data-col="'+esc(c.nom)+'" draggable="true" class="'+(posee?'filtree':'')+'" style="'+(c.largeur?('min-width:'+c.largeur+'px'):'')+'">'+

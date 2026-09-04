@@ -13,11 +13,21 @@ donne la vérité.
 
 Codes RVGI
 ----------
-RVGI affiche ses énumérations sous la forme « 1 - Fabrication ». Les libellés
-ne sont dans aucune table : ils sont codés dans l'application WinDev. Ceux
-d'ici ont été relevés sur les écrans de l'ERP. Un code inconnu s'affiche brut —
-on ne masque jamais une valeur qu'on ne sait pas traduire, ce serait pire que
-de montrer le code.
+RVGI affiche ses énumérations sous la forme « 1 - Fabrication ». La plupart des
+libellés ne sont dans aucune table : ils sont codés dans l'application WinDev,
+et ceux d'ici ont été relevés sur les écrans de l'ERP. Un code inconnu s'affiche
+brut — on ne masque jamais une valeur qu'on ne sait pas traduire, ce serait pire
+que de montrer le code.
+
+**Une exception, trouvée le 02/09/2026 : les types d'article.** Leurs libellés
+se lisent bien dans une table, `fic_para`, et `app/services/erp_types.py` les en
+sort. Ils n'ont donc rien à faire dans `ENUMS` : renommer un type dans RVGI doit
+le renommer ici sans qu'on y touche. Un relevé partiel de ce référentiel
+(`type_produit`, trois codes sur dix-huit) a été retiré à cette occasion — il ne
+servait aucune colonne.
+
+`enums()` est ce que la page reçoit : les relevés ci-dessous, plus ce qui se lit
+en base. Toujours passer par elle, jamais par `ENUMS` directement.
 """
 
 # ── Énumérations relevées sur les écrans RVGI ───────────────────────────────
@@ -45,12 +55,27 @@ ENUMS = {
     "laboratoire": {
         "1": "Renouvellement",
     },
-    "type_produit": {
-        "1": "Produits",
-        "11": "Clichés",
-        "19": "Cartons",
-    },
 }
+
+
+def enums():
+    """Les énumérations relevées, complétées par celles qui se lisent en base.
+
+    Les types d'article et leurs familles ne sont pas des constantes : les
+    libellés viennent de `fic_para` dans le miroir, le regroupement en familles
+    de `erp_type_famille` dans la base de production, que Paramètres modifie.
+    Les figer ici les ferait mentir dès le premier renommage.
+
+    Jamais bloquant : miroir absent ou base illisible, `erp_types` rend ce qu'il
+    sait et l'écran affiche les codes bruts.
+    """
+    tout = dict(ENUMS)
+    try:
+        from app.services import erp_types
+        tout.update(erp_types.enums())
+    except Exception:
+        pass
+    return tout
 
 # L'ordre et les noms sont ceux de la barre de menus de RVGI — Fichiers,
 # Ventes, Stocks, Production, Achats, Comptabilités. Quelqu'un qui passe d'un
@@ -120,6 +145,8 @@ LABELS = {
     "ttcn": "Total TTC", "tva": "TVA", "rem": "Remise", "mt": "Montant",
     "franco": "Franco", "escompte": "Escompte", "devise": "Devise",
     "fam": "Famille", "sfam": "Sous-famille", "gamme": "Gamme", "nomen": "Nomenclature",
+    "type": "Type d'article", "cua": "Unité d'achat", "cuv": "Unité de vente",
+    "cuc": "Unité de conditionnement",
     "depot": "Dépôt", "rang": "Rang", "lot": "N° de lot", "refbl": "Réf. BL",
     "ref": "Référence fournisseur", "vref": "Référence client", "nref": "Notre référence",
     "operateur": "Opérateur", "com": "Commentaire", "mvt": "Type de mouvement",
@@ -160,7 +187,16 @@ COLONNES_IDENTITE = {
 }
 
 
-def _c(ref, nom, label, type="texte", largeur=None, enum=None, aligne=None):
+def _c(ref, nom, label, type="texte", largeur=None, enum=None, aligne=None,
+       sans_filtre=False):
+    """Une colonne d'écran.
+
+    `sans_filtre` retire le filtre d'en-tête de CETTE colonne. À n'utiliser que
+    lorsqu'un filtre du rail fait le même travail en mieux — le cas de la
+    famille d'article, dont le menu d'en-tête proposerait un choix par code et
+    répéterait sept fois « Matière première ». Le refus est aussi appliqué côté
+    serveur : une colonne sans filtre n'en accepte pas, même forgé à la main.
+    """
     # Un numéro de pièce déclaré « nombre » est corrigé ici, une fois, plutôt
     # qu'à la main dans les quarante endroits qui le déclarent.
     if type == "nombre" and nom in COLONNES_IDENTITE:
@@ -172,6 +208,8 @@ def _c(ref, nom, label, type="texte", largeur=None, enum=None, aligne=None):
         d["enum"] = enum
     if aligne:
         d["aligne"] = aligne
+    if sans_filtre:
+        d["sans_filtre"] = True
     return d
 
 
@@ -466,11 +504,24 @@ ECRANS = [
         "domaine": "achats",
         "resume": "Lignes de réception fournisseur, avec le n° de BL et le lot.",
         "table": "lif_ligne", "alias": "l",
-        # Facultative, et c'est voulu : `cdf_entete` n'est pas l'entête du bon
-        # de réception, c'est la commande fournisseur qui l'a déclenché. Une
+        # `lif_ligne` ne porte AUCUN article : ni code, ni désignation, ni type.
+        # Elle dit qu'une quantité est arrivée sur la ligne n° X de la commande
+        # fournisseur n° Y, et rien de plus. Ce qui a été reçu se lit sur la
+        # ligne de commande — d'où la seconde jointure, sur le couple
+        # (numéro, ligne) : le numéro seul ramènerait toutes les lignes de la
+        # commande pour chaque réception. Couverture relevée le 02/09/2026 :
+        # 8 984 lignes de réception sur 8 984 trouvent leur ligne de commande.
+        #
+        # `cdf_entete` reste facultative, et c'est voulu : ce n'est pas l'entête
+        # du bon de réception, c'est la commande qui l'a déclenché. Une
         # réception sans commande reste une réception.
-        "jointures": [{"table": "cdf_entete", "alias": "e",
-                       "gauche": "e.numero", "droite": "l.numero"}],
+        "jointures": [
+            {"table": "cdf_entete", "alias": "e",
+             "gauche": "e.numero", "droite": "l.numero"},
+            {"table": "cdf_ligne", "alias": "c",
+             "gauche": "c.numero", "droite": "l.numero",
+             "et": [("c.ligne", "l.ligne")]},
+        ],
         "cle_ligne": "l.id",
         "tri_defaut": ("l.amjl", "desc"),
         "colonnes": [
@@ -479,22 +530,57 @@ ECRANS = [
             _c("l.ligne", "ligne", "Lg", "nombre", 45),
             _c("l.amjl", "amjl", "Réception", "date", 100),
             _c("e.rs", "fournisseur", "Fournisseur", "client", 190),
-            _c("l.qte", "qte", "Quantité", "qte", 110),
+            _article("c"),
+            _c("c.des1", "des1", "Désignation", "texte", 250),
+            # Deux lectures de la même valeur SQL. `c.type` porte le type
+            # d'article de RVGI ; la famille est le regroupement MySifa qui
+            # répond à « matière, sous-traitance ou outillage ». La famille ne
+            # porte pas de filtre d'en-tête : son menu proposerait un choix par
+            # code, donc « Matière première » sept fois de suite. Le rail de
+            # gauche fait le même travail en quatre entrées propres.
+            _c("c.type", "famille", "Famille", "enum", 150,
+               enum="famille_article", sans_filtre=True),
+            _c("c.type", "type_article", "Type d'article", "enum", 140,
+               enum="type_article"),
+            # Reçue et commandée côte à côte. Une réception seule ne dit pas si
+            # la ligne est complète : 277 couples (commande, ligne) reçoivent en
+            # plusieurs fois, et `lpos` est le seul champ qui tranche — c'est
+            # RVGI qui le tient à jour, pas nous.
+            _c("l.qte", "qte", "Reçue", "qte", 105),
+            _c("c.qte", "qte_cde", "Commandée", "qte", 105),
+            _c("c.lpos", "lpos", "Position", "enum", 110, enum="position"),
+            # `code3` porte la laize en mm, et seulement sur les matières
+            # laizées — vide sur les adhésifs, les cartons, l'outillage. Relevé
+            # le 02/09/2026 : rempli sur 100 % des lignes des six types laizés.
+            _c("c.code3", "laize", "Laize", "code", 80),
             _c("l.lot", "lot", "N° de lot", "code", 120),
             _c("l.depot", "depot", "Dépôt", "nombre", 70),
             _c("l.fac_no", "fac_no", "Facture", "nombre", 90),
             _c("l.operateur", "operateur", "Opérateur", "nombre", 80),
         ],
-        "recherche": ["l.ref", "l.numero", "l.lot", "e.rs", "l.note"],
+        "recherche": ["l.ref", "l.numero", "l.lot", "e.rs", "l.note",
+                      "c.des1", "c.code1", "c.code2"],
         "filtres": [
             {"nom": "fournisseur", "label": "Fournisseur", "col": "e.rs", "type": "contient", "exemple": "QRT"},
+            # Les clés de `famille_article_filtre` sont des listes de codes
+            # jointes par « | » : le moteur les développe en `IN (...)`. C'est
+            # ce qui permet de demander « Matière première » sans joindre la
+            # base de production à la requête du miroir.
+            {"nom": "famille", "label": "Famille", "col": "c.type", "type": "enum",
+             "enum": "famille_article_filtre"},
+            {"nom": "type_article", "label": "Type d'article", "col": "c.type",
+             "type": "enum", "enum": "type_article"},
+            {"nom": "position", "label": "Position de la ligne", "col": "c.lpos",
+             "type": "enum", "enum": "position",
+             "choix": [{"v": "0|1", "label": "Non soldée (en cours ou partielle)"}]},
             {"nom": "lot", "label": "N° de lot", "col": "l.lot", "type": "contient", "exemple": "BL137434"},
             {"nom": "depuis", "label": "Réception depuis", "col": "l.amjl", "type": "date_min"},
             {"nom": "jusqua", "label": "Réception jusqu'au", "col": "l.amjl", "type": "date_max"},
         ],
         "detail": [
             {"titre": "Réception", "champs": ["ref", "amjl", "amje", "qte", "lot", "depot", "operateur"]},
-            {"titre": "Commande", "champs": ["numero", "ligne", "rs", "numfou", "lpos"]},
+            {"titre": "Article", "champs": ["code1", "code2", "code3", "des1", "des2", "des3", "type", "fam", "sfam", "cua"]},
+            {"titre": "Commande", "champs": ["numero", "ligne", "rs", "numfou", "lpos", "amjl", "pa"]},
             {"titre": "Facturation", "champs": ["fac_no", "fac_lg", "daa"]},
             {"titre": "Notes", "champs": ["note", "note2", "com"]},
         ],
@@ -1161,7 +1247,16 @@ LIENS = {
         {"label": "Le client", "ecran": "clients", "sur": {"c.numero": "numclt"}},
     ],
     "commandes_fournisseur": [
-        {"label": "Réceptions", "ecran": "receptions", "sur": {"l.numero": "numero"}},
+        # Deux portées, et l'ordre compte : la ligne d'abord. Le lien ne portait
+        # que sur `numero`, donc depuis la ligne 3 d'une commande de six lignes
+        # il ramenait les six réceptions — impossible de savoir laquelle
+        # répondait à la ligne ouverte. `(numero, ligne)` est la vraie maille :
+        # `cdf_ligne` n'a aucun couple en double (relevé du 02/09/2026), et
+        # 277 couples reçoivent en plusieurs fois côté `lif_ligne`, ce que le
+        # lien de ligne montre justement.
+        {"label": "Réceptions de cette ligne", "ecran": "receptions",
+         "sur": {"l.numero": "numero", "l.ligne": "ligne"}},
+        {"label": "Réceptions de la commande", "ecran": "receptions", "sur": {"l.numero": "numero"}},
         {"label": "Factures fournisseurs", "ecran": "factures_fournisseur", "sur": {"l.livno": "numero"}},
         {"label": "Le fournisseur", "ecran": "fournisseurs", "sur": {"f.numero": "numfou"}},
         {"label": "L'article", "ecran": "articles",
@@ -1170,7 +1265,15 @@ LIENS = {
          "sur": {"m.code1": "code1", "m.code2": "code2"}},
     ],
     "receptions": [
+        # Symétrique du lien d'en face : la ligne commandée, puis la commande
+        # entière. Une réception répond toujours à UNE ligne de commande.
+        {"label": "La ligne de commande", "ecran": "commandes_fournisseur",
+         "sur": {"l.numero": "numero", "l.ligne": "ligne"}},
         {"label": "La commande fournisseur", "ecran": "commandes_fournisseur", "sur": {"l.numero": "numero"}},
+        {"label": "L'article", "ecran": "articles",
+         "sur": {"a.code1": "code1", "a.code2": "code2"}},
+        {"label": "La matière", "ecran": "stock_matiere",
+         "sur": {"m.code1": "code1", "m.code2": "code2"}},
         # `lot` est NULL partout dans le miroir, des deux côtés : RVGI ne s'en
         # sert pas. Le rapprochement se fait par le n° de commande fournisseur,
         # que la réception porte dans `numero` et le mouvement dans `numcde`.
@@ -1357,10 +1460,16 @@ def adapter_ecran(ec, colonnes_par_table):
     # sauf si elle est `obligatoire` : l'écran repose dessus pour ne pas montrer
     # de lignes sans pièce. L'abandonner en silence rendrait l'écran faux, donc
     # on préfère ne pas le proposer du tout.
-    perdues = [j for j in jointures if not (existe(j["gauche"]) and existe(j["droite"]))]
+    def jointure_ok(j):
+        refs = [j["gauche"], j["droite"]]
+        for gauche, droite in j.get("et", []):
+            refs += [gauche, droite]
+        return all(existe(r) for r in refs)
+
+    perdues = [j for j in jointures if not jointure_ok(j)]
     if any(j.get("obligatoire") for j in perdues):
         return None
-    jointures = [j for j in jointures if existe(j["gauche"]) and existe(j["droite"])]
+    jointures = [j for j in jointures if jointure_ok(j)]
     alias_gardes = {ec["alias"]} | {j["alias"] for j in jointures}
 
     def ref_ok(ref):
