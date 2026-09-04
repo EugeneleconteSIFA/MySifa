@@ -90,7 +90,7 @@ def erp_meta(request: Request):
             "menu": catalogue.menu_du_role(user.get("role"), set()),
             "domaines": catalogue.DOMAINES,
             "ecrans": [],
-            "enums": catalogue.ENUMS,
+            "enums": catalogue.enums(),
             "filtres_colonne": miroir.operateurs_disponibles(),
             "export_max": miroir.TAILLE_EXPORT_MAX,
             "message": (
@@ -135,7 +135,7 @@ def erp_meta(request: Request):
         "tables": len(infos["tables"]),
         "domaines": catalogue.DOMAINES,
         "ecrans": ecrans,
-        "enums": catalogue.ENUMS,
+        "enums": catalogue.enums(),
         # Quels opérateurs de filtre pour quelle famille de colonne, et
         # comment les nommer. La page n'en redéfinit aucun de son côté :
         # ajouter un opérateur ici suffit à le faire apparaître dans toutes
@@ -420,7 +420,7 @@ def _libelle_filtre_colonne(ec, nom, expr, enums):
 def _criteres(ec, meta_miroir, q, filtres, filtres_col, ratt, tri, sens,
               contexte, total, vue="ligne"):
     """Ce qui a produit ce fichier, en français, pour la seconde feuille."""
-    enums = catalogue.ENUMS
+    enums = catalogue.enums()
     # La maille est dite explicitement : « 312 exportées » sur un écran qui en
     # comptait 845 se lit comme un export tronqué, alors que c'est un
     # regroupement. Le mot « pièce » lève l'ambiguïté à lui seul.
@@ -577,7 +577,7 @@ def erp_export(
                          vue=vue)
 
     buf = export.construire(
-        ec["label"], colonnes, lignes, enums=catalogue.ENUMS,
+        ec["label"], colonnes, lignes, enums=catalogue.enums(),
         criteres=criteres, note=note, tronque=tronque,
     )
     nom = "myerp_%s_%s.xlsx" % (cle, datetime.now().strftime("%Y%m%d-%H%M"))

@@ -164,6 +164,55 @@ async def set_transport_planning(request: Request):
             raise HTTPException(400, str(e))
 
 
+@router.get("/api/settings/erp-types-article")
+def get_erp_types_article(request: Request):
+    """Les types d'article de RVGI et la famille MySifa de chacun.
+
+    Le libellé vient de l'ERP (`fic_para`), le classement de MySifa. La liste
+    part des types réellement vus en réception : un type qui apparaît chez le
+    fournisseur se présente ici sans qu'on ait à l'ajouter à la main.
+    """
+    require_settings(request)
+    from database import get_db
+    from app.services import erp_types
+    with get_db() as conn:
+        return erp_types.etat_parametres(conn)
+
+
+@router.put("/api/settings/erp-types-article")
+async def set_erp_type_article(request: Request):
+    """Body : {type_code, famille}. Une famille vide déclasse le type."""
+    actor = require_settings(request)
+    from database import get_db
+    from app.services import erp_types
+    body = await request.json()
+    with get_db() as conn:
+        avant = erp_types.familles_par_type(conn).get(
+            _entier_ou_none(body.get("type_code")), "")
+        try:
+            res = erp_types.enregistrer_famille(
+                conn, body.get("type_code"), body.get("famille"),
+                auteur=(actor or {}).get("nom") or (actor or {}).get("email"))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    log_action(
+        user=actor,
+        request=request,
+        module="settings",
+        action="UPDATE",
+        objet=f"erp:type_article:{res['type_code']}",
+        detail=f"famille: {avant or 'aucune'} → {res['famille'] or 'aucune'}",
+    )
+    return res
+
+
+def _entier_ou_none(v):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
 @router.get("/api/settings/access-matrix")
 def access_matrix(request: Request):
     """Matrice complète pour l'écran /settings → Matrice d'accès.

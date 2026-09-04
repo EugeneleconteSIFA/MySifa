@@ -418,6 +418,8 @@ def conditions_colonnes(colonnes, filtres_col):
         col = par_nom.get(nom)
         if not col:
             continue          # colonne inconnue de cet écran : ignorée sans bruit
+        if col.get("sans_filtre"):
+            continue          # colonne qui refuse le filtre d'en-tête, cf. `_c`
         op, _, reste = str(expr or "").partition(":")
         op = op.strip()
         if not op:
@@ -454,9 +456,19 @@ def _from(ec):
         _ident(j["alias"])
         _ref(j["gauche"])
         _ref(j["droite"])
-        depart += ' %s "%s" %s ON %s = %s' % (
+        # `et` : les conditions supplementaires d'une jointure a plusieurs
+        # colonnes. Une ligne de reception ne se rapproche pas de sa ligne de
+        # commande sur le seul numero de piece — il faut aussi le numero de
+        # ligne, sinon chaque reception ramene TOUTES les lignes de sa commande
+        # et l'ecran multiplie ses lignes sans le dire.
+        conditions = ["%s = %s" % (j["gauche"], j["droite"])]
+        for gauche, droite in j.get("et", []):
+            _ref(gauche)
+            _ref(droite)
+            conditions.append("%s = %s" % (gauche, droite))
+        depart += ' %s "%s" %s ON %s' % (
             "JOIN" if j.get("obligatoire") else "LEFT JOIN",
-            j["table"], j["alias"], j["gauche"], j["droite"]
+            j["table"], j["alias"], " AND ".join(conditions)
         )
     return depart
 
