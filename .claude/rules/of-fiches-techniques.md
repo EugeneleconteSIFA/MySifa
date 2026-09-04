@@ -183,6 +183,35 @@ Trois précautions à ne pas retirer :
   l'affiche. `gpr_ff` ne couvre que 585 articles sur 7 688, et la plupart de
   ses lignes datent d'avant 2010 : c'est un service rendu, jamais une promesse.
 
+### Rattacher une commande remplit l'OF
+
+Une ligne de commande porte un article, et l'article porte la moitié de l'OF.
+`prefill_of()` le rend au moment où l'ADV coche la ligne — mais **seulement si
+les lignes cochées portent UN SEUL article**. Deux articles dans un même OF,
+c'est un regroupement décidé en connaissance de cause : en prendre un au hasard
+serait pire que ne rien faire.
+
+Les libellés de `fic_art` ne sont pas de la décoration :
+
+    libc2  « Therm. Eco. Permanent, M. 76, Enr. Ext. »   matière, mandrin, enroulement
+    libc3  « Bobine de 300 étiquettes, M. 25. »          LE conditionnement de l'OF
+    libc4  « Carton de 16 bobines »                      nb bobines / carton
+
+`libc3` est mot pour mot ce que l'OF imprime — vérifié sur 24/0023 (« Paravent
+de 1000 plis de 4 étiquettes ») et 1164/0058. Ce sont des PHRASES : les motifs
+d'extraction sont ancrés au plus court et tout ce qui en sort est marqué
+`libellé` dans la provenance, parce qu'une extraction se trompe silencieusement
+là où une colonne vide se voit.
+
+**Le repli sur l'OF précédent n'est pas un bonus, c'est ce qui rend la
+fonction utilisable.** `gpr_ff` ne couvre que 585 articles sur 7 688 — 58 des
+125 articles en commande ouverte au 04/09/2026. Pour les autres, MySifa a déjà
+fabriqué le produit : `_completer_depuis_mysifa()` reprend le dernier OF de la
+même référence, sans jamais écraser ce que RVGI a répondu, et la provenance
+nomme l'OF repris (« OF 9931861 »). `_REPRISE_OF` liste ce qui décrit le
+PRODUIT ; quantités, dates et numéro en sont exclus — une quantité recopiée
+d'un OF précédent part en production.
+
 ---
 
 ## La modale OF charge l'OF entier, pas la ligne de liste

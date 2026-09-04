@@ -198,12 +198,28 @@ body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rg
      compensation de 74 px de mysifa_mobile_topbar.css (importée par
      mysifa_theme.css) est prévue pour une topbar fixed : ici elle ajoutait
      une bande vide de 74 px au-dessus de la topbar. Sa spécificité
-     (body.has-topbar .main) impose de la reprendre au même niveau. */
-  body.has-topbar .main{padding-top:14px}
+     (body.has-topbar .main) impose de la reprendre au même niveau.
+     Elle vaut 0 : la topbar doit toucher le haut de l'écran, ou le bandeau
+     staging, comme une barre d'application native. */
+  body.has-topbar .main{padding-top:0}
   .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:9000;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 16px 48px rgba(0,0,0,.55)}
   body.sb-open .sidebar{transform:translateX(0)}
-  .main{padding:14px}
-  .mobile-topbar{display:flex}
+  /* Une seule gouttiere laterale, portee par .main et exposee en variables
+     pour que les barres pleine largeur puissent la ressortir. Deux marges
+     empilees (.main puis le conteneur de page) coutaient un sixieme de la
+     largeur sur un ecran de 390 px. */
+  .main{
+    --msf-gl:max(12px, env(safe-area-inset-left));
+    --msf-gr:max(12px, env(safe-area-inset-right));
+    padding:0 var(--msf-gr) 14px var(--msf-gl);
+  }
+  /* Bord a bord : la topbar annule la gouttiere de son parent, quel que
+     soit ce parent — .main sur /planning, .container sur /prod. */
+  .mobile-topbar{
+    display:flex;
+    margin:0 calc(-1 * var(--msf-gr,12px)) 12px calc(-1 * var(--msf-gl,12px));
+    padding:10px var(--msf-gr,12px) 10px var(--msf-gl,12px);
+  }
 }
 @media (display-mode: standalone), (max-width: 900px){
   .theme-btn .theme-label{display:none}

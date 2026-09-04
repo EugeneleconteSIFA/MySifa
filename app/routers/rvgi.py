@@ -412,3 +412,20 @@ def rvgi_article_fiche(code1: str, code2: str, request: Request):
     if not res:
         raise HTTPException(status_code=404, detail="Article inconnu du miroir RVGI.")
     return res
+
+
+@router.get("/article/{code1}/{code2}/of")
+def rvgi_article_of(code1: str, code2: str, request: Request):
+    """Ce que RVGI sait dire d'un OF pour cet article.
+
+    Appelée quand l'ADV rattache une commande à un OF : la ligne de commande
+    porte un article, et l'article porte la moitié de l'OF — machine, laize,
+    matière, adhésif, outillage, conditionnement. Ce qui reste à saisir, ce
+    sont les quantités et les réglages du jour.
+    """
+    require_admin(request)
+    from app.services.rvgi_article_fiche import prefill_of
+    res = prefill_of(code1, code2)
+    if not res:
+        raise HTTPException(status_code=404, detail="Article inconnu du miroir RVGI.")
+    return res

@@ -391,6 +391,40 @@ verifier("le reglage rouvre la fenetre", len(t["envois"]), 2)
 verifier("plus aucun dormant", t["resume"]["dormants"], 0)
 
 
+# ── 13. Association a un depart existant ────────────────────────────────────
+print("\n13. Association — un depart rattache par la table de liaison est retrouve")
+
+conn = base()
+pil.infos_rvgi = avec_rvgi({"9932001": fiche_rvgi("2026-09-10")})
+dossier(conn, 1, "9932001", "EUROFINS", bobines=760)
+dossier(conn, 2, "9932001", "EUROFINS", bobines=760)
+
+# Depart saisi a la main dans « Departs programmes », sans planning_entry_id :
+# c'est exactement ce que produit l'ecran habituel. Le rattachement passe alors
+# par expe_depart_dossiers seul — si le tableau ne regardait que
+# planning_entry_id, il creerait un second depart pour le meme camion.
+conn.execute(
+    """INSERT INTO expe_departs
+         (id, date_enlevement, transporteur, no_cde_transport, statut, created_at,
+          cle_envoi, transport_commande_le)
+       VALUES (21, '2026-09-10', 'COQUELLE', 'MAIL-12', 'en_attente',
+               '2026-09-04T09:00:00', NULL, '2026-09-04T09:00:00')"""
+)
+for eid in (1, 2):
+    conn.execute(
+        """INSERT INTO expe_depart_dossiers (depart_id, planning_entry_id, created_at)
+           VALUES (21, ?, '2026-09-04T09:00:00')""", (eid,))
+conn.commit()
+
+t = tableau(conn)
+verifier("toujours un seul envoi", len(t["envois"]), 1)
+e = t["envois"][0]
+verifier("le depart existant est retrouve", (e["depart"] or {}).get("id"), 21)
+verifier("son transporteur remonte", e["jalons"]["transport"]["transporteur"], "COQUELLE")
+verifier("le jalon est pose", e["jalons"]["transport"]["fait"], True)
+verifier("l'alerte retombe", e["alerte"], "commande")
+
+
 print()
 if FAIL:
     print(f"ECHEC : {len(FAIL)} cas")

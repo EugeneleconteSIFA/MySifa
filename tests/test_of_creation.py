@@ -189,7 +189,8 @@ class TestPrefillDepuisRvgi(unittest.TestCase):
         c = sqlite3.connect(self.fichier)
         c.row_factory = sqlite3.Row
         c.execute("CREATE TABLE fic_art (corbeille INT, code1 TEXT, code2 TEXT, "
-                  "libc1 TEXT, cltc2 TEXT, ftl REAL, fth REAL, pdsn REAL)")
+                  "libc1 TEXT, libc2 TEXT, libc3 TEXT, libc4 TEXT, cltc2 TEXT, "
+                  "ftl REAL, fth REAL, pdsn REAL)")
         c.execute("CREATE TABLE gpr_ff (corbeille INT, code1 TEXT, code2 TEXT, "
                   "nmac1 INT, laiout REAL, laimat REAL, nbcoul INT, cliche TEXT, "
                   "m1cod1 TEXT, m1cod2 TEXT, ndec1 INT, ndec2 INT, ndec3 INT, amj TEXT)")
@@ -199,7 +200,12 @@ class TestPrefillDepuisRvgi(unittest.TestCase):
         c.execute("CREATE TABLE mat_mat (corbeille INT, code1 TEXT, code2 TEXT, "
                   "libc1 TEXT, libc2 TEXT, pds REAL, m1_epais REAL, m1_adh TEXT, m1_pro TEXT)")
         c.execute("CREATE TABLE mac_pro (corbeille INT, type INT, code INT, nom TEXT)")
-        c.execute("INSERT INTO fic_art VALUES (0,'623','0014','Etiquette 104.5 x 148.4 mm',"
+        # Les quatre libellés tels qu'ils sont en production. `libc3` est mot
+        # pour mot le conditionnement imprimé sur l'OF, `libc4` donne le
+        # nombre de bobines par carton de la fiche.
+        c.execute("INSERT INTO fic_art VALUES (0,'623','0014',"
+                  "'Etiquette 105 x 148 mm.','Thermique Eco Permanent.',"
+                  "'Bobine de 300 étiquettes, M. 25.','Carton de 16 bobines',"
                   "'REF-CLT',104.5,148.4,0)")
         c.execute("INSERT INTO gpr_ff VALUES (0,'623','0014',1,0,440.0,0,NULL,"
                   "'886','0021',2796,0,0,'2026-01-30 11:44:09')")
@@ -284,8 +290,126 @@ class TestPrefillDepuisRvgi(unittest.TestCase):
         # Le libellé et le format de l'article restent, eux.
         self.assertEqual(res["champs"]["eti_laize"], 104.5)
 
+    def test_les_libelles_donnent_le_produit_fini(self):
+        # « Bobine de 300 étiquettes, M. 25. » et « Carton de 16 bobines » :
+        # trois valeurs de la fiche, dans des phrases. C'est ce que l'écran
+        # MyERP affiche sous « Libellés », et c'est exploitable.
+        champs = raf.prefill_fiche("623", "0014")["champs"]
+        self.assertEqual(champs["conditionnement"], "Bobine de 300 étiquettes, M. 25")
+        self.assertEqual(champs["nb_etiq_bobin"], 300)
+        self.assertEqual(champs["nb_bobines_carton"], 16)
+        self.assertEqual(champs["mandrin_dia"], "25")
+
+    def test_of_depuis_le_meme_article(self):
+        res = raf.prefill_of("623", "0014")
+        champs = res["champs"]
+        self.assertEqual(champs["reference"], "623/0014")
+        self.assertEqual(champs["machine"], "COHESIO 1")
+        # La « Laize » de l'OF est celle de la bobine montée, pas celle de
+        # l'outil : 440 et non 443,75.
+        self.assertEqual(champs["laize"], 440.0)
+        self.assertEqual(champs["outil_1_numero"], "2796")
+        self.assertEqual(champs["outil_1_hauteur"], 450.0)
+        self.assertEqual(champs["conditionnement"], "Bobine de 300 étiquettes, M. 25")
+        self.assertEqual(champs["matiere"], "Thermique Eco 70g")
+        self.assertEqual(champs["glassine"], "Jaune 60g Standard")
+        self.assertEqual(champs["adhesif_label"], "Permanent 19g")
+        # Le chiffre encadré en orange sur l'OF, extrait du libellé matière.
+        self.assertEqual(champs["qte_adhesif_g"], 19.0)
+        # 1000 étiquettes ÷ 4 fronts × 152,4 mm = 38,1 m
+        self.assertEqual(champs["qte_au_mille"], 38.1)
+
+    def test_grammage_adhesif(self):
+        self.assertEqual(raf._grammage_adhesif("Permanent 19g"), 19.0)
+        self.assertEqual(raf._grammage_adhesif("Enlevable 1408 - 22"), None)
+        self.assertEqual(raf._grammage_adhesif(None), None)
+
     def test_article_inconnu(self):
         self.assertIsNone(raf.prefill_fiche("999", "9999"))
+        self.assertIsNone(raf.prefill_of("999", "9999"))
+
+
+class TestRepliSurOfPrecedent(unittest.TestCase):
+    """Sans fiche de fabrication RVGI, l'OF précédent prend le relais.
+
+    C'est le cas MAJORITAIRE : `gpr_ff` ne couvre que 585 articles sur 7 688.
+    Sans ce repli, le bouton « reprendre l'article » ne remplirait presque
+    rien sur la plupart des commandes, et l'ADV retournerait à la recopie.
+    """
+
+    def setUp(self):
+        self.fichier = tempfile.NamedTemporaryFile(suffix=".db", delete=False).name
+        c = sqlite3.connect(self.fichier)
+        c.row_factory = sqlite3.Row
+        c.execute("""CREATE TABLE of_imports (
+            id INTEGER PRIMARY KEY, of_numero TEXT, reference TEXT, machine TEXT,
+            laize REAL, matiere TEXT, glassine TEXT, adhesif_label TEXT,
+            conditionnement TEXT, outil_1_numero TEXT, outil_1_hauteur REAL,
+            qte_etiquettes INTEGER, date_creation TEXT, date_import TEXT,
+            matiere_ref_id INTEGER)""")
+        c.execute("INSERT INTO of_imports (of_numero, reference, machine, laize, "
+                  "matiere, glassine, adhesif_label, conditionnement, "
+                  "outil_1_numero, outil_1_hauteur, qte_etiquettes, date_creation, "
+                  "matiere_ref_id) VALUES "
+                  "('9931861','24/0023 - COHESIO1','COHESIO 1',470,'THERMIQUE PRO',"
+                  "'ITASA KA','Permanent 2028Y - 1','Paravent de 1 000 plis',"
+                  "'2850',454,660000,'2026-05-15',42)")
+        c.commit()
+        self.conn = c
+
+        import contextlib
+        import database
+
+        @contextlib.contextmanager
+        def fausse_base():
+            yield c
+
+        self._vrai = database.get_db
+        database.get_db = fausse_base
+
+    def tearDown(self):
+        import database
+        database.get_db = self._vrai
+        self.conn.close()
+        try:
+            os.unlink(self.fichier)
+        except OSError:
+            pass
+
+    def test_le_produit_est_repris_pas_la_commande(self):
+        champs, provenance = {}, {}
+        source = raf._completer_depuis_mysifa("24/0023", champs, provenance)
+        self.assertEqual(source, "OF 9931861")
+        self.assertEqual(champs["machine"], "COHESIO 1")
+        self.assertEqual(champs["laize"], 470)
+        self.assertEqual(champs["outil_1_numero"], "2850")
+        self.assertEqual(champs["matiere_ref_id"], 42)
+        self.assertEqual(provenance["machine"], "OF 9931861")
+        # Ce qui appartient à la commande du jour ne se reprend PAS : une
+        # quantité recopiée d'un OF précédent est une erreur qui part en
+        # production.
+        self.assertNotIn("qte_etiquettes", champs)
+        self.assertNotIn("of_numero", champs)
+        self.assertNotIn("date_creation", champs)
+
+    def test_le_suffixe_machine_de_la_reference_ne_bloque_pas(self):
+        # L'OF est enregistré « 24/0023 - COHESIO1 », l'article vaut « 24/0023 ».
+        champs, provenance = {}, {}
+        self.assertEqual(raf._completer_depuis_mysifa("24/0023", champs, provenance),
+                         "OF 9931861")
+
+    def test_rvgi_garde_la_main(self):
+        # Une valeur déjà posée par RVGI n'est jamais écrasée par l'historique.
+        champs = {"machine": "COHESIO 2"}
+        provenance = {"machine": "gpr_ff"}
+        raf._completer_depuis_mysifa("24/0023", champs, provenance)
+        self.assertEqual(champs["machine"], "COHESIO 2")
+        self.assertEqual(provenance["machine"], "gpr_ff")
+
+    def test_reference_jamais_fabriquee(self):
+        champs, provenance = {}, {}
+        self.assertIsNone(raf._completer_depuis_mysifa("999/9999", champs, provenance))
+        self.assertEqual(champs, {})
 
 
 if __name__ == "__main__":

@@ -224,6 +224,149 @@ def marquer_transport_commande(request: Request, cle: str, body: dict = Body(def
         return pil.construire_tableau(conn)
 
 
+@router.get("/pilotage/envois/{cle}/departs-candidats")
+def departs_candidats(request: Request, cle: str):
+    """Départs déjà saisis auxquels cet envoi pourrait se rattacher.
+
+    Le cas réel : le transport a été programmé dans « Départs programmés »
+    avant que le tableau de pilotage n'existe, ou par quelqu'un qui est passé
+    par l'écran habituel. Créer un second départ dupliquerait le camion. On
+    propose donc de rattacher plutôt que de créer.
+
+    Le tri place en tête ce qui a des chances d'être le bon : même client,
+    puis même destination, puis date d'enlèvement la plus proche de la date
+    visée. Chaque ligne dit POURQUOI elle remonte — l'expéditionnaire choisit,
+    l'écran ne décide pas à sa place.
+    """
+    _require_expe(request)
+    with get_db() as conn:
+        envoi = _envoi_ou_404(conn, cle)
+        rows = conn.execute(
+            """SELECT d.id, d.date_enlevement, d.transporteur, d.client,
+                      d.code_postal_destination, d.nb_palette, d.no_bl,
+                      d.no_cde_transport, d.arc, d.ref_sifa, d.statut,
+                      d.cle_envoi,
+                      (SELECT COUNT(*) FROM expe_depart_dossiers dd
+                        WHERE dd.depart_id = d.id) AS nb_dossiers
+                 FROM expe_departs d
+                WHERE d.statut IN ('prevu', 'en_attente')
+                  AND (d.cle_envoi IS NULL OR d.cle_envoi = ?)
+                ORDER BY d.date_enlevement DESC, d.id DESC
+                LIMIT 400""",
+            (cle,),
+        ).fetchall()
+
+    client = pil._norm(envoi.get("client"))
+    dept = pil._dept(envoi.get("code_postal"))
+    cible = envoi.get("date_cible") or ""
+
+    sortie = []
+    for r in rows:
+        d = dict(r)
+        raisons = []
+        if client and pil._norm(d.get("client")) == client:
+            raisons.append("même client")
+        if dept and pil._dept(d.get("code_postal_destination")) == dept:
+            raisons.append("même destination")
+        if cible and (d.get("date_enlevement") or "")[:10] == cible:
+            raisons.append("même date")
+        d["raisons"] = raisons
+        d["pertinent"] = bool(raisons)
+        d["ecart_jours"] = _ecart_jours(cible, d.get("date_enlevement"))
+        sortie.append(d)
+
+    sortie.sort(key=lambda d: (-len(d["raisons"]),
+                               abs(d["ecart_jours"]) if d["ecart_jours"] is not None else 9999,
+                               -int(d["id"])))
+    return {"envoi": {"client": envoi.get("client"),
+                      "code_postal": envoi.get("code_postal"),
+                      "ville": envoi.get("ville"),
+                      "date_cible": envoi.get("date_cible")},
+            "departs": sortie[:60]}
+
+
+def _ecart_jours(cible: Optional[str], autre: Optional[str]) -> Optional[int]:
+    from datetime import date as _date
+    def _d(v):
+        v = str(v or "")[:10]
+        try:
+            return _date(int(v[0:4]), int(v[5:7]), int(v[8:10]))
+        except (ValueError, TypeError):
+            return None
+    a, b = _d(cible), _d(autre)
+    return (b - a).days if (a and b) else None
+
+
+@router.post("/pilotage/envois/{cle}/associer")
+def associer_depart(request: Request, cle: str, body: dict = Body(...)):
+    """Rattache l'envoi à un départ déjà saisi, au lieu d'en créer un second.
+
+    Concrètement : les dossiers de l'envoi rejoignent ce départ, et la clé
+    d'envoi s'y inscrit pour que le tableau le retrouve aux rafraîchissements
+    suivants. Rien n'est écrasé sur le départ existant — ni son transporteur,
+    ni sa date, ni ses palettes : il a été saisi par quelqu'un qui savait ce
+    qu'il faisait.
+    """
+    user = _require_expe_write(request)
+    try:
+        depart_id = int((body or {}).get("depart_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Départ à associer obligatoire.")
+
+    with get_db() as conn:
+        envoi = _envoi_ou_404(conn, cle)
+        if (envoi.get("depart") or {}).get("id"):
+            raise HTTPException(
+                status_code=409,
+                detail="Cet envoi porte déjà un départ. Le détacher avant d'en associer un autre.",
+            )
+        ex = conn.execute(
+            "SELECT id, statut, cle_envoi, client FROM expe_departs WHERE id=?",
+            (depart_id,),
+        ).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Départ introuvable.")
+        if ex["statut"] not in ("prevu", "en_attente"):
+            raise HTTPException(
+                status_code=409,
+                detail="Ce départ est déjà validé — il ne peut plus recevoir de dossier.",
+            )
+        if ex["cle_envoi"] and ex["cle_envoi"] != cle:
+            raise HTTPException(
+                status_code=409,
+                detail="Ce départ est déjà rattaché à un autre envoi.",
+            )
+
+        now = _maintenant()
+        email = _email(user)
+        for d in envoi.get("dossiers", []):
+            conn.execute(
+                "INSERT OR IGNORE INTO expe_depart_dossiers "
+                "(depart_id, planning_entry_id, no_dossier, created_at, created_by) "
+                "VALUES (?,?,?,?,?)",
+                (depart_id, d["id"], d.get("reference"), now, email),
+            )
+        conn.execute(
+            "UPDATE expe_departs SET cle_envoi=COALESCE(cle_envoi, ?) WHERE id=?",
+            (cle, depart_id),
+        )
+        # Un départ déjà porteur d'un numéro de commande transport a bien été
+        # commandé : on date le jalon plutôt que de le laisser vide.
+        conn.execute(
+            "UPDATE expe_departs SET transport_commande_le=COALESCE(transport_commande_le, ?),"
+            " transport_commande_par=COALESCE(transport_commande_par, ?)"
+            " WHERE id=? AND TRIM(COALESCE(no_cde_transport,'')) != ''",
+            (now, email, depart_id),
+        )
+        conn.commit()
+
+    log_action(user=user, action="UPDATE", module="expe",
+               objet=f"Envoi rattaché au départ #{depart_id} · {envoi.get('client') or ''}",
+               ip=request.client.host if request.client else None)
+    with get_db() as conn:
+        return pil.construire_tableau(conn)
+
+
 @router.post("/pilotage/envois/{cle}/parti")
 def marquer_parti(request: Request, cle: str, body: dict = Body(default={})):
     """Envoi parti. Le départ existe forcément — sinon rien n'a été commandé."""

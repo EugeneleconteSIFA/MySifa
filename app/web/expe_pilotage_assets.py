@@ -5,7 +5,7 @@ construction de la vue dans app/services/expe_pilotage.py.
 
 Le parti pris d'affichage : une ligne = un envoi, et les trois questions
 d'Eugène deviennent trois colonnes qui se lisent de gauche à droite dans
-l'ordre où elles se posent — transport commandé, parti, bon de livraison. Ce
+l'ordre où elles se posent — transport programmé, parti, bon de livraison. Ce
 qui n'est pas encore fait est un bouton ; ce qui est fait est une pastille avec
 sa date. Rien à ouvrir pour savoir où on en est.
 """
@@ -100,6 +100,67 @@ EXPE_PILOTAGE_CSS = r"""
   padding-top:16px;border-top:1px solid var(--border)}
 .expe-pil-aide{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.45}
 
+/* ── Modal « Programmer le transport » ──
+ *
+ * Meme grammaire que les autres modals MyExpe (overlay centre, entete avec
+ * croix, pied a droite) : un ecran nouveau n'invente pas ses propres gestes.
+ * Ce qu'il ajoute : un bandeau de contexte, parce qu'on programme un camion
+ * en regardant la destination, les palettes et l'etat de la production —
+ * aller les rechercher dans le tableau derriere le modal serait absurde.
+ */
+.expe-pil-modal-overlay{position:fixed;inset:0;background:color-mix(in srgb,var(--bg) 62%,transparent);
+  z-index:12300;display:flex;align-items:center;justify-content:center;padding:16px;
+  backdrop-filter:blur(2px)}
+.expe-pil-modal{width:100%;max-width:600px;max-height:min(92vh,880px);overflow:auto;
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  box-shadow:0 24px 60px color-mix(in srgb,var(--bg) 55%,transparent)}
+.expe-pil-modal--large{max-width:820px}
+.expe-pil-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+  padding:18px 20px 14px;border-bottom:1px solid var(--border)}
+.expe-pil-modal-titre{font-size:16px;font-weight:800;color:var(--text);margin:0}
+.expe-pil-modal-sous{font-size:12px;color:var(--muted);margin-top:3px}
+.expe-pil-modal-x{background:var(--bg);border:1px solid var(--border);color:var(--muted);
+  border-radius:8px;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;
+  cursor:pointer;flex-shrink:0}
+.expe-pil-modal-x:hover{color:var(--text);border-color:var(--accent)}
+.expe-pil-modal-corps{padding:16px 20px 18px}
+
+/* Bandeau de contexte : trois faits, alignes, sans ornement. */
+.expe-pil-ctx{display:flex;flex-wrap:wrap;gap:20px;padding:11px 14px;margin-bottom:16px;
+  background:var(--bg);border:1px solid var(--border);border-radius:10px}
+.expe-pil-ctx-item{min-width:92px}
+.expe-pil-ctx-lbl{font-size:10px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)}
+.expe-pil-ctx-val{font-size:14px;font-weight:700;color:var(--text);margin-top:2px}
+.expe-pil-ctx-val--warn{color:var(--warn)}
+.expe-pil-ctx-val--danger{color:var(--danger)}
+.expe-pil-ctx-note{font-size:11px;color:var(--muted);font-weight:400;margin-top:1px}
+
+.expe-pil-modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px}
+.expe-pil-modal-grid label{display:block;font-size:10px;font-weight:600;letter-spacing:.5px;
+  text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.expe-pil-modal-grid input{width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);
+  border-radius:9px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box}
+.expe-pil-modal-grid input:focus{border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent)}
+.expe-pil-modal-aide{font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5}
+.expe-pil-modal-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:14px 20px 18px;border-top:1px solid var(--border)}
+.expe-pil-modal-foot-droite{margin-left:auto;display:flex;gap:8px}
+
+/* Liste des departs a associer. */
+.expe-pil-cand-liste{display:flex;flex-direction:column;gap:6px;max-height:46vh;overflow-y:auto;
+  margin-top:12px}
+.expe-pil-cand{display:flex;align-items:center;gap:12px;padding:9px 12px;background:var(--bg);
+  border:1px solid var(--border);border-radius:9px;cursor:pointer;text-align:left;width:100%;
+  font-family:inherit;color:var(--text)}
+.expe-pil-cand:hover{border-color:var(--accent)}
+.expe-pil-cand--pertinent{border-color:color-mix(in srgb,var(--accent) 45%,var(--border))}
+.expe-pil-cand-date{font-weight:700;font-size:12.5px;white-space:nowrap;min-width:86px}
+.expe-pil-cand-corps{flex:1;min-width:0}
+.expe-pil-cand-titre{font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.expe-pil-cand-meta{font-size:11px;color:var(--muted);margin-top:1px}
+.expe-pil-cand-raison{font-size:11px;color:var(--accent);white-space:nowrap}
+
 /* Cartes sous 860 px : le tableau a six colonnes, il ne tient pas. */
 @media (max-width:860px){
   .expe-pil-cartes{display:flex;flex-direction:column;gap:8px}
@@ -117,7 +178,7 @@ EXPE_PILOTAGE_CSS = r"""
 EXPE_PILOTAGE_JS = r"""
 // ── MyExpé — Pilotage des expéditions ────────────────────────────────────
 //
-// Répond à trois questions par envoi : le transport est-il commandé, est-ce
+// Répond à trois questions par envoi : le transport est-il programmé, est-ce
 // parti, le bon de livraison est-il fait ? Et surtout : que faut-il commander
 // AUJOURD'HUI pour ce qui part la semaine prochaine.
 //
@@ -128,7 +189,7 @@ EXPE_PILOTAGE_JS = r"""
 var EXPE_PIL_FILTRES=[
   {key:'a_faire',  label:'À traiter'},
   {key:'retard',   label:'En retard'},
-  {key:'commande', label:'Transport commandé'},
+  {key:'commande', label:'Transport programmé'},
   {key:'parti',    label:'Partis'},
   {key:'tout',     label:'Tout'}
 ];
@@ -212,18 +273,50 @@ async function expePilAction(cle,verbe,body){
 
 function expePilOuvrirTransport(env){
   set({expePilModal:{
+    mode:'form',
     cle:env.cle_envoi,
     client:env.client,
     ville:env.ville,
     code_postal:env.code_postal,
+    date_cible:env.date_cible,
+    jours_restants:env.jours_restants,
+    a_commander_le:env.a_commander_le,
+    nb_dossiers:(env.dossiers||[]).length,
+    nb_palette_source:env.nb_palette_source,
     transporteur:(env.jalons.transport.transporteur)||'',
     no_cde_transport:(env.jalons.transport.reference)||'',
     date_enlevement:env.date_cible||'',
     nb_palette:(env.nb_palette!=null?String(env.nb_palette):''),
     type_envoi:env.type_envoi,
     prod_prete:env.prod_prete,
-    prod_fin_prevue:env.prod_fin_prevue
+    prod_fin_prevue:env.prod_fin_prevue,
+    prod_apres_expedition:env.prod_apres_expedition,
+    candidats:null,
+    candidatsLoading:false
   }});
+}
+
+async function expePilChargerCandidats(){
+  const m=S.expePilModal;
+  if(!m)return;
+  set({expePilModal:Object.assign({},m,{mode:'assoc',candidatsLoading:true})});
+  try{
+    const r=await api('/api/expe/pilotage/envois/'+encodeURIComponent(m.cle)+'/departs-candidats');
+    const cur=S.expePilModal;
+    if(!cur||cur.cle!==m.cle)return;
+    set({expePilModal:Object.assign({},cur,{candidats:(r&&r.departs)||[],candidatsLoading:false})});
+  }catch(e){
+    const cur=S.expePilModal;
+    if(cur)set({expePilModal:Object.assign({},cur,{candidats:[],candidatsLoading:false})});
+    showToast(e.message||'Départs existants illisibles','danger');
+  }
+}
+
+async function expePilAssocier(departId){
+  const m=S.expePilModal;
+  if(!m)return;
+  const ok=await expePilAction(m.cle,'associer',{depart_id:departId});
+  if(ok)showToast('Envoi rattaché au départ existant.','success');
 }
 
 async function expePilValiderTransport(){
@@ -235,7 +328,7 @@ async function expePilValiderTransport(){
     date_enlevement:m.date_enlevement||null,
     nb_palette:m.nb_palette||null
   });
-  if(ok)showToast('Transport commandé. Le départ rejoint « Départs programmés ».','success');
+  if(ok)showToast('Transport programmé. Le départ rejoint « Départs programmés ».','success');
 }
 
 async function expePilMarquerParti(env){
@@ -270,9 +363,9 @@ EXPE_PILOTAGE_JS += r"""
 function _expePilTuiles(r){
   const t=[
     {lbl:'En retard',          val:r.retard,              cls:r.retard?'expe-pil-tuile--retard':''},
-    {lbl:'À commander',        val:r.a_commander,         cls:r.a_commander?'expe-pil-tuile--warn':''},
+    {lbl:'À programmer',       val:r.a_commander,         cls:r.a_commander?'expe-pil-tuile--warn':''},
     {lbl:'Palettes à réserver',val:r.palettes_a_reserver||0,cls:''},
-    {lbl:'Transport commandé', val:r.transport_commande,  cls:''},
+    {lbl:'Transport programmé',val:r.transport_commande,  cls:''},
     {lbl:'Sans BL',            val:r.bl_manquant,         cls:''}
   ];
   return h('div',{className:'expe-pil-tuiles'},
@@ -359,7 +452,7 @@ function _expePilCelluleTransport(env){
       h('div',{className:'expe-pil-jalon expe-pil-jalon--ok',
         title:(!t.date_confirmee&&t.date_enlevement)
           ?'Date déduite du planning, pas encore arrêtée avec le transporteur':''},
-        t.transporteur||'Commandé'),
+        t.transporteur||'Programmé'),
       detail?h('span',{className:'expe-pil-jalon-date'},detail):null
     );
   }
@@ -369,8 +462,8 @@ function _expePilCelluleTransport(env){
   const presse=env.alerte==='retard'||env.alerte==='urgent'||env.alerte==='a_commander';
   return h('td',null,
     h('button',{type:'button',className:'expe-pil-act'+(presse?' expe-pil-act--go':''),
-      title:env.a_commander_le?('À commander au plus tard le '+_expePilJourFR(env.a_commander_le)):'',
-      onClick:function(){expePilOuvrirTransport(env);}},'Commander'),
+      title:env.a_commander_le?('À programmer au plus tard le '+_expePilJourFR(env.a_commander_le)):'',
+      onClick:function(){expePilOuvrirTransport(env);}},'Programmer'),
     (presse&&env.a_commander_le)?h('span',{className:'expe-pil-jalon-date'},
       'avant le '+_expePilJourFR(env.a_commander_le)):null
   );
@@ -384,7 +477,7 @@ function _expePilCelluleParti(env){
   if(!expeCanWrite())return h('td',null,h('span',{className:'expe-pil-nul'},'—'));
   const pret=env.jalons.transport.fait;
   if(!pret)return h('td',null,h('span',{className:'expe-pil-nul',
-    title:'Commander le transport d’abord'},'—'));
+    title:'Programmer le transport d’abord'},'—'));
   return h('td',null,
     h('button',{type:'button',className:'expe-pil-act',
       title:'Déclarer l’enlèvement effectué',
@@ -423,10 +516,10 @@ function _expePilCarte(env){
     h('div',{className:'expe-pil-carte-jalons'},
       t.fait
         ?h('span',{className:'expe-pil-jalon expe-pil-jalon--ok'},iconEl('check-circle',13),' ',
-           t.transporteur||'Transport commandé')
+           t.transporteur||'Transport programmé')
         :(expeCanWrite()?h('button',{type:'button',className:'expe-pil-act expe-pil-act--go',
-           onClick:function(){expePilOuvrirTransport(env);}},'Commander le transport')
-          :h('span',{className:'expe-pil-jalon'},'Transport à commander')),
+           onClick:function(){expePilOuvrirTransport(env);}},'Programmer le transport')
+          :h('span',{className:'expe-pil-jalon'},'Transport à programmer')),
       env.jalons.parti.fait
         ?h('span',{className:'expe-pil-jalon expe-pil-jalon--ok'},iconEl('check-circle',13),' Parti')
         :(expeCanWrite()&&t.fait?h('button',{type:'button',className:'expe-pil-act',
@@ -449,9 +542,9 @@ function _expePilReglages(data){
   const p=data.params||{};
   const champs=[
     {cle:'horizon_jours',label:'Horizon (jours)',
-     aide:'Au-delà, les envois sortent du tableau — sauf ce qui est en retard ou à commander, jamais masqué.'},
+     aide:'Au-delà, les envois sortent du tableau — sauf ce qui est en retard ou à programmer, jamais masqué.'},
     {cle:'preavis_messagerie_jours',label:'Préavis messagerie (jours)',
-     aide:'À J-N avant la date d’expédition, l’envoi passe en « à commander ».'},
+     aide:'À J-N avant la date d’expédition, l’envoi passe en « à programmer ».'},
     {cle:'preavis_affretement_jours',label:'Préavis affrètement (jours)',
      aide:'Plus long : un camion complet se réserve plus tôt qu’une messagerie.'},
     {cle:'seuil_affretement_palettes',label:'Seuil affrètement (palettes)',
@@ -480,46 +573,154 @@ function _expePilReglages(data){
   );
 }
 
-function renderExpePilotageModal(){
-  const m=S.expePilModal;
-  if(!m)return null;
+function _expePilModalFermer(){ set({expePilModal:null}); }
+
+function _expePilModalContexte(m){
+  // Trois faits qu'on regarde en programmant un camion. Ils sont ici pour ne
+  // pas avoir a refermer le modal pour aller les relire dans le tableau.
+  const items=[];
+  items.push({lbl:'Départ visé',val:_expePilJourFR(m.date_cible),
+    note:(m.jours_restants!=null
+      ?(m.jours_restants<0?'en retard de '+Math.abs(m.jours_restants)+' j'
+        :m.jours_restants===0?'aujourd’hui'
+        :m.jours_restants===1?'demain':'dans '+m.jours_restants+' j')
+      :'date à confirmer'),
+    cls:(m.jours_restants!=null&&m.jours_restants<0)?'expe-pil-ctx-val--danger':''});
+  items.push({lbl:'Palettes',
+    val:(m.nb_palette!==''&&m.nb_palette!=null?String(m.nb_palette):'—'),
+    note:({saisi:'saisi',bl:'du bon de livraison',estime:'estimé'}[m.nb_palette_source]||'à estimer'),
+    cls:m.nb_palette_source==='estime'?'expe-pil-ctx-val--warn':''});
+  items.push({lbl:'Production',
+    val:m.prod_prete?'Terminée':'En cours',
+    note:m.prod_prete?(m.nb_dossiers+' dossier(s)')
+      :'fin prévue le '+_expePilJourFR(m.prod_fin_prevue),
+    cls:m.prod_apres_expedition?'expe-pil-ctx-val--danger':(m.prod_prete?'':'expe-pil-ctx-val--warn')});
+  return h('div',{className:'expe-pil-ctx'},
+    ...items.map(function(x){
+      return h('div',{className:'expe-pil-ctx-item'},
+        h('div',{className:'expe-pil-ctx-lbl'},x.lbl),
+        h('div',{className:'expe-pil-ctx-val '+(x.cls||'')},x.val),
+        h('div',{className:'expe-pil-ctx-note'},x.note));
+    }));
+}
+
+function _expePilModalForm(m){
   const champ=function(cle,label,attrs){
     const inp=h('input',Object.assign({
       value:m[cle]||'',
       onInput:function(e){m[cle]=e.target.value;}
     },attrs||{}));
-    return h('div',null,h('label',null,label),inp,null);
+    return h('div',null,h('label',null,label),inp);
   };
-  const overlay=h('div',{className:'expe-trp-overlay open',
-    onClick:function(e){if(e.target===overlay)set({expePilModal:null});}});
-  const box=h('div',{className:'card',style:{position:'fixed',top:'50%',left:'50%',
-    transform:'translate(-50%,-50%)',zIndex:'11502',width:'min(480px,94vw)',
-    maxHeight:'90vh',overflowY:'auto',padding:'18px 20px'}},
-    h('h3',{style:{marginTop:'0'}},'Commander le transport'),
-    h('div',{className:'expe-pil-dest',style:{marginBottom:'14px'}},
-      (m.client||'')+' · '+[m.code_postal,m.ville].filter(Boolean).join(' ')+
-      ' · '+(m.type_envoi==='affretement'?'affrètement':'messagerie')),
-    (!m.prod_prete&&m.prod_fin_prevue)?h('div',{className:'expe-pil-avert'},
-      'Production non terminée — fin prévue le '+_expePilJourFR(m.prod_fin_prevue)+
-      '. Réserver maintenant reste possible : c’est même l’objet de cet écran.'):null,
-    h('div',{className:'expe-pil-reglages-grid'},
-      champ('transporteur','Transporteur',{type:'text',list:'expe-pil-trp',placeholder:'Nom du transporteur'}),
-      champ('no_cde_transport','N° de commande transport',{type:'text',placeholder:'Référence ou « mail du … »'}),
+  return h('div',null,
+    _expePilModalContexte(m),
+    m.prod_apres_expedition?h('div',{className:'expe-pil-modal-aide',
+      style:{color:'var(--danger)',marginTop:'0',marginBottom:'14px'}},
+      'La production finit après la date visée — l’enlèvement devra être calé plus tard, '+
+      'ou la production avancée.'):null,
+    h('div',{className:'expe-pil-modal-grid'},
+      champ('transporteur','Transporteur',
+        {type:'text',list:'expe-pil-trp',placeholder:'Nom du transporteur',autofocus:true}),
+      champ('no_cde_transport','N° de commande transport',
+        {type:'text',placeholder:'Référence ou « mail du … »'}),
       champ('date_enlevement','Date d’enlèvement',{type:'date'}),
       champ('nb_palette','Nombre de palettes',{type:'text',placeholder:'—'})
     ),
     h('datalist',{id:'expe-pil-trp'},
       ...((T&&T.list)||[]).map(function(t){return h('option',{value:t.nom||''});})),
-    h('div',{className:'expe-pil-aide',style:{marginTop:'10px'}},
+    h('div',{className:'expe-pil-modal-aide'},
       'La plupart des transporteurs tarifent au nombre de palettes : c’est ce chiffre '+
-      'qu’il faut donner, le poids vient ensuite.'),
-    h('div',{style:{display:'flex',gap:'8px',marginTop:'16px',justifyContent:'flex-end'}},
-      h('button',{type:'button',className:'expe-pil-act',
-        onClick:function(){set({expePilModal:null});}},'Annuler'),
-      h('button',{type:'button',className:'btn-accent',
-        onClick:function(){void expePilValiderTransport();}},'Enregistrer'))
+      'qu’il faut donner, le poids vient ensuite. Une date saisie ici vaut date arrêtée '+
+      'avec le transporteur.')
   );
-  return h('div',null,overlay,box);
+}
+
+function _expePilModalAssoc(m){
+  const cands=m.candidats||[];
+  const q=(m.qCand||'').toLowerCase();
+  const vus=cands.filter(function(d){
+    if(!q)return true;
+    return [d.client,d.transporteur,d.code_postal_destination,d.no_bl,d.no_cde_transport,
+            d.arc,d.ref_sifa].join(' ').toLowerCase().indexOf(q)!==-1;
+  });
+  const liste=m.candidatsLoading
+    ?[h('div',{className:'expe-pil-vide'},'Lecture des départs…')]
+    :(vus.length?vus.map(function(d){
+        return h('button',{type:'button',
+          className:'expe-pil-cand'+(d.pertinent?' expe-pil-cand--pertinent':''),
+          onClick:function(){void expePilAssocier(d.id);}},
+          h('div',{className:'expe-pil-cand-date'},_expePilJourFR(d.date_enlevement)),
+          h('div',{className:'expe-pil-cand-corps'},
+            h('div',{className:'expe-pil-cand-titre'},
+              (d.transporteur||'Transporteur non renseigné')+' · '+(d.client||'client non renseigné')),
+            h('div',{className:'expe-pil-cand-meta'},
+              [d.code_postal_destination||null,
+               d.nb_palette!=null?d.nb_palette+' pal.':null,
+               d.no_bl?'BL '+d.no_bl:null,
+               d.nb_dossiers?d.nb_dossiers+' dossier(s)':'sans dossier'
+              ].filter(Boolean).join(' · '))),
+          d.raisons&&d.raisons.length
+            ?h('div',{className:'expe-pil-cand-raison'},d.raisons.join(', ')):null
+        );
+      })
+      :[h('div',{className:'expe-pil-vide'},
+          q?'Aucun départ ne correspond.'
+           :'Aucun départ programmé disponible — il faut en créer un.')]);
+  return h('div',null,
+    h('div',{className:'expe-pil-modal-aide',style:{marginTop:'0'}},
+      'Rattacher évite de créer un second départ pour le même camion. Le départ choisi '+
+      'garde son transporteur, sa date et ses palettes : les dossiers de cet envoi viennent '+
+      's’y ajouter.'),
+    // `.expe-pil-search` est taillee pour la barre de filtres (flex:1). Hors
+    // conteneur flex, elle se replie sur son contenu : on lui rend sa largeur.
+    h('input',{className:'expe-pil-search',
+      style:{maxWidth:'none',width:'100%',boxSizing:'border-box',marginTop:'12px'},
+      type:'search',placeholder:'Transporteur, client, CP, n° de BL…',
+      value:m.qCand||'',
+      onInput:function(e){
+        m.qCand=e.target.value;
+        if(_expePilSearchTimer)clearTimeout(_expePilSearchTimer);
+        _expePilSearchTimer=setTimeout(function(){ render(); },250);
+      }}),
+    h('div',{className:'expe-pil-cand-liste'},...liste)
+  );
+}
+
+function renderExpePilotageModal(){
+  const m=S.expePilModal;
+  if(!m)return null;
+  const assoc=m.mode==='assoc';
+  const overlay=h('div',{className:'expe-pil-modal-overlay',
+    onClick:function(e){if(e.target===overlay)_expePilModalFermer();}});
+  const box=h('div',{className:'expe-pil-modal'+(assoc?' expe-pil-modal--large':'')},
+    h('div',{className:'expe-pil-modal-head'},
+      h('div',null,
+        h('h3',{className:'expe-pil-modal-titre'},
+          assoc?'Associer un départ existant':'Programmer le transport'),
+        h('div',{className:'expe-pil-modal-sous'},
+          [(m.client||''),[m.code_postal,m.ville].filter(Boolean).join(' '),
+           (m.type_envoi==='affretement'?'affrètement':'messagerie')].filter(Boolean).join(' · '))),
+      h('button',{type:'button',className:'expe-pil-modal-x','aria-label':'Fermer',
+        onClick:_expePilModalFermer},iconEl('x',15))),
+    h('div',{className:'expe-pil-modal-corps'},
+      assoc?_expePilModalAssoc(m):_expePilModalForm(m)),
+    h('div',{className:'expe-pil-modal-foot'},
+      assoc
+        ?h('button',{type:'button',className:'expe-pil-act',
+            onClick:function(){set({expePilModal:Object.assign({},m,{mode:'form'})});}},
+            'Retour')
+        :h('button',{type:'button',className:'expe-pil-act',
+            title:'Rattacher cet envoi à un départ déjà saisi plutôt que d’en créer un',
+            onClick:function(){void expePilChargerCandidats();}},
+            'Associer un départ existant'),
+      h('div',{className:'expe-pil-modal-foot-droite'},
+        h('button',{type:'button',className:'expe-pil-act',
+          onClick:_expePilModalFermer},'Annuler'),
+        assoc?null:h('button',{type:'button',className:'btn-accent',
+          onClick:function(){void expePilValiderTransport();}},'Programmer')))
+  );
+  overlay.appendChild(box);
+  return overlay;
 }
 
 function renderExpePilotage(){
