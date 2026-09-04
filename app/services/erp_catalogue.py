@@ -188,8 +188,14 @@ COLONNES_IDENTITE = {
 
 
 def _c(ref, nom, label, type="texte", largeur=None, enum=None, aligne=None,
-       sans_filtre=False):
+       sans_filtre=False, saut=None):
     """Une colonne d'écran.
+
+    `saut` nomme un lien de `LIENS` par sa CLÉ : la cellule devient cliquable
+    dans la grille et ouvre l'écran d'en face sur cette ligne, sans passer par
+    le panneau « Pièces liées ». Le rang du lien — ce que le front envoie — est
+    résolu par `adapter_ecran`, jamais écrit ici : réordonner `LIENS` ne doit
+    pas faire pointer un saut sur le mauvais lien.
 
     `sans_filtre` retire le filtre d'en-tête de CETTE colonne. À n'utiliser que
     lorsqu'un filtre du rail fait le même travail en mieux — le cas de la
@@ -210,6 +216,8 @@ def _c(ref, nom, label, type="texte", largeur=None, enum=None, aligne=None,
         d["aligne"] = aligne
     if sans_filtre:
         d["sans_filtre"] = True
+    if saut:
+        d["saut"] = saut
     return d
 
 
@@ -472,14 +480,27 @@ ECRANS = [
         "cle_ligne": "l.id",
         "tri_defaut": ("e.amjc", "desc"),
         "colonnes": [
-            _c("l.numero", "numero", "N° cde", "nombre", 85),
-            _c("l.ligne", "ligne", "Lg", "nombre", 45),
+            _c("l.numero", "numero", "N° cde", "nombre", 85, saut="receptions_cde"),
+            _c("l.ligne", "ligne", "Lg", "nombre", 45, saut="receptions_ligne"),
             _c("e.rs", "fournisseur", "Fournisseur", "client", 190),
             _c("e.amjc", "amjc", "Créée le", "date", 95),
             _c("l.amjl", "amjl", "Livraison", "date", 95),
             _c("l.lpos", "lpos", "Position", "enum", 110, enum="position"),
             _article("l"),
             _c("l.des1", "des1", "Désignation", "texte", 240),
+            # La même paire que sur Réceptions, et lue au même endroit :
+            # `cdf_ligne.type` est LA colonne qui dit ce qui a été acheté —
+            # l'écran Réceptions ne fait que la relire par jointure. La montrer
+            # ici, c'est la montrer à sa source. Deux lectures du même code :
+            # la famille est le regroupement MySifa (matière, sous-traitance,
+            # outillage, consommable), le type est la valeur RVGI. La famille
+            # ne porte pas de filtre d'en-tête — son menu proposerait un choix
+            # par code, donc « Matière première » sept fois de suite ; le rail
+            # de gauche fait le même travail en quatre entrées propres.
+            _c("l.type", "famille", "Famille", "enum", 150,
+               enum="famille_article", sans_filtre=True),
+            _c("l.type", "type_article", "Type d'article", "enum", 140,
+               enum="type_article"),
             _c("l.qte", "qte", "Quantité", "qte", 110),
             _c("l.pa", "pa", "Prix d'achat", "prix", 100),
             _c("e.vref", "vref", "Référence", "texte", 180),
@@ -487,6 +508,12 @@ ECRANS = [
         "recherche": ["e.rs", "l.des1", "l.numero", "l.code1", "l.code2", "e.vref"],
         "filtres": [
             {"nom": "fournisseur", "label": "Fournisseur", "col": "e.rs", "type": "contient", "exemple": "QRT"},
+            # Les clés de `famille_article_filtre` sont des listes de codes
+            # jointes par « | » : le moteur les développe en `IN (...)`.
+            {"nom": "famille", "label": "Famille", "col": "l.type", "type": "enum",
+             "enum": "famille_article_filtre"},
+            {"nom": "type_article", "label": "Type d'article", "col": "l.type",
+             "type": "enum", "enum": "type_article"},
             {"nom": "position", "label": "Position", "col": "l.lpos", "type": "enum",
              "enum": "position", "defaut": "0",
              "choix": [{"v": "0|1", "label": "Non soldée (en cours ou partielle)"}]},
@@ -494,7 +521,7 @@ ECRANS = [
         ],
         "detail": [
             {"titre": "Commande", "champs": ["numero", "ligne", "amjc", "amjl", "rs", "numfou", "vref", "lpos"]},
-            {"titre": "Article", "champs": ["code1", "code2", "code3", "des1", "des2", "des3", "fam", "sfam"]},
+            {"titre": "Article", "champs": ["code1", "code2", "code3", "des1", "des2", "des3", "type", "fam", "sfam"]},
             {"titre": "Quantités et prix", "champs": ["qte", "qtb", "metb", "pa", "pun", "net", "cua"]},
         ],
     },
@@ -526,8 +553,8 @@ ECRANS = [
         "tri_defaut": ("l.amjl", "desc"),
         "colonnes": [
             _c("l.ref", "ref", "Référence BR", "code", 130),
-            _c("l.numero", "numero", "Commande", "nombre", 90),
-            _c("l.ligne", "ligne", "Lg", "nombre", 45),
+            _c("l.numero", "numero", "Commande", "nombre", 90, saut="cde_piece"),
+            _c("l.ligne", "ligne", "Lg", "nombre", 45, saut="cde_ligne"),
             _c("l.amjl", "amjl", "Réception", "date", 100),
             _c("e.rs", "fournisseur", "Fournisseur", "client", 190),
             _article("c"),
@@ -605,7 +632,7 @@ ECRANS = [
             _c("l.qte", "qte", "Quantité", "qte", 110),
             _c("l.pa", "pa", "Prix d'achat", "prix", 100),
             _c("l.net", "net", "Net", "montant", 100),
-            _c("l.livno", "livno", "Commande", "nombre", 90),
+            _c("l.livno", "livno", "Commande", "nombre", 90, saut="cde_piece"),
         ],
         "recherche": ["e.rs", "l.des1", "l.numero", "l.code1", "l.code2"],
         "filtres": [
@@ -1254,9 +1281,12 @@ LIENS = {
         # `cdf_ligne` n'a aucun couple en double (relevé du 02/09/2026), et
         # 277 couples reçoivent en plusieurs fois côté `lif_ligne`, ce que le
         # lien de ligne montre justement.
-        {"label": "Réceptions de cette ligne", "ecran": "receptions",
+        {"cle": "receptions_ligne",
+         "label": "Réceptions de cette ligne", "ecran": "receptions",
          "sur": {"l.numero": "numero", "l.ligne": "ligne"}},
-        {"label": "Réceptions de la commande", "ecran": "receptions", "sur": {"l.numero": "numero"}},
+        {"cle": "receptions_cde",
+         "label": "Réceptions de la commande", "ecran": "receptions",
+         "sur": {"l.numero": "numero"}},
         {"label": "Factures fournisseurs", "ecran": "factures_fournisseur", "sur": {"l.livno": "numero"}},
         {"label": "Le fournisseur", "ecran": "fournisseurs", "sur": {"f.numero": "numfou"}},
         {"label": "L'article", "ecran": "articles",
@@ -1267,9 +1297,12 @@ LIENS = {
     "receptions": [
         # Symétrique du lien d'en face : la ligne commandée, puis la commande
         # entière. Une réception répond toujours à UNE ligne de commande.
-        {"label": "La ligne de commande", "ecran": "commandes_fournisseur",
+        {"cle": "cde_ligne",
+         "label": "La ligne de commande", "ecran": "commandes_fournisseur",
          "sur": {"l.numero": "numero", "l.ligne": "ligne"}},
-        {"label": "La commande fournisseur", "ecran": "commandes_fournisseur", "sur": {"l.numero": "numero"}},
+        {"cle": "cde_piece",
+         "label": "La commande fournisseur", "ecran": "commandes_fournisseur",
+         "sur": {"l.numero": "numero"}},
         {"label": "L'article", "ecran": "articles",
          "sur": {"a.code1": "code1", "a.code2": "code2"}},
         {"label": "La matière", "ecran": "stock_matiere",
@@ -1281,7 +1314,9 @@ LIENS = {
         {"label": "Le fournisseur", "ecran": "fournisseurs", "sur": {"f.numero": "numfou"}},
     ],
     "factures_fournisseur": [
-        {"label": "La commande fournisseur", "ecran": "commandes_fournisseur", "sur": {"l.numero": "livno"}},
+        {"cle": "cde_piece",
+         "label": "La commande fournisseur", "ecran": "commandes_fournisseur",
+         "sur": {"l.numero": "livno"}},
         {"label": "Le fournisseur", "ecran": "fournisseurs", "sur": {"f.numero": "numfou"}},
         {"label": "L'article", "ecran": "articles",
          "sur": {"a.code1": "code1", "a.code2": "code2"}},
@@ -1424,6 +1459,19 @@ def ecran(cle):
     return PAR_CLE.get(cle)
 
 
+def _resoudre_saut(c, liens, rangs):
+    """La colonne, son saut traduit en (écran, rang) — ou sans saut du tout."""
+    cle = c.get("saut")
+    if not cle:
+        return c
+    rang = rangs.get(cle)
+    if rang is None:
+        return {k: v for k, v in c.items() if k != "saut"}
+    lien = liens[rang]
+    return dict(c, saut={"ecran": lien["ecran"], "lien": rang,
+                         "titre": lien["label"]})
+
+
 def adapter_ecran(ec, colonnes_par_table):
     """Élague l'écran de ce que le miroir n'a pas.
 
@@ -1501,6 +1549,14 @@ def adapter_ecran(ec, colonnes_par_table):
     adapte["filtres"] = [f for f in ec.get("filtres", []) if ref_ok(f["col"])]
     adapte["labels_detail"] = dict(LABELS, **(ec.get("labels_detail") or {}))
     adapte["liens"] = LIENS.get(ec["cle"], [])
+    # Un saut de colonne nomme son lien par sa CLÉ ; le front, lui, ne connaît
+    # que le RANG — c'est ce qu'attend `_condition_de_lien`. La traduction se
+    # fait ici, une fois : réordonner `LIENS` déplace le rang sans déplacer la
+    # clé, donc sans faire pointer un saut sur le mauvais lien. Un saut dont le
+    # lien n'existe pas laisse simplement la colonne telle quelle.
+    rangs = {l["cle"]: i for i, l in enumerate(adapte["liens"]) if l.get("cle")}
+    adapte["colonnes"] = [_resoudre_saut(c, adapte["liens"], rangs)
+                          for c in colonnes]
     adapte["piece"] = piece_de(adapte)
     r = RATTACHABLE.get(ec["cle"])
     # Le rattachement ne se propose que si les colonnes qu'il joint existent

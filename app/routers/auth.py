@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse, Response as PlainResponse
 
 from config import BASE_DIR, UPLOADS_ROOT
 from database import get_db
+from app.services import portail_prefs
 from services.audit_service import log_action
 from services.auth_service import (
     login_user,
@@ -39,68 +40,15 @@ from config import (
 
 router = APIRouter()
 
-# Identifiants des tuiles portail (ordre personnalisable, sauvegardé par utilisateur).
-_PORTAL_TILE_IDS = frozenset(
-    {
-        "fabrication",
-        "prod",
-        "stock",
-        "print",
-        "compta",
-        "expe",
-        "planning_rh",
-        "pricing",
-        "com_expe",
-        "com_devis",
-    }
-)
-
-
+# Preferences de tuiles du portail (ordre, favoris) : la validation vit dans
+# `app/services/portail_prefs.py`, avec le detail du bug qu'elle corrige.
 def _portal_order_list_from_db(val) -> List[str]:
-    if not val:
-        return []
-    try:
-        arr = json.loads(val) if isinstance(val, str) else val
-    except (json.JSONDecodeError, TypeError):
-        return []
-    if not isinstance(arr, list):
-        return []
-    out: List[str] = []
-    seen: set = set()
-    for x in arr:
-        if isinstance(x, str):
-            tid = x.strip()
-            if tid == "devis":
-                tid = "pricing"
-            if tid in _PORTAL_TILE_IDS and tid not in seen:
-                out.append(tid)
-                seen.add(tid)
-    return out
+    return portail_prefs.depuis_db(val)
 
 
 def _normalize_portal_order_for_db(raw) -> Optional[str]:
     """Valide et compacte la liste d'ids ; None si vide ou invalide."""
-    if raw is None:
-        return None
-    if isinstance(raw, str):
-        try:
-            raw = json.loads(raw)
-        except json.JSONDecodeError:
-            return None
-    if not isinstance(raw, list):
-        return None
-    out: List[str] = []
-    seen: set = set()
-    for x in raw:
-        if not isinstance(x, str):
-            continue
-        tid = x.strip()
-        if tid in _PORTAL_TILE_IDS and tid not in seen:
-            out.append(tid)
-            seen.add(tid)
-    if not out:
-        return None
-    return json.dumps(out, separators=(",", ":"))
+    return portail_prefs.pour_db(raw)
 
 
 def _norm_email(s: str) -> str:

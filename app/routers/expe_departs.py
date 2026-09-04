@@ -3413,10 +3413,19 @@ def _calculer_prix_base(ligne, poids: float, nb_pal: float) -> tuple[float, str]
     return prix_calc, detail
 
 
+# Libellés de frais qui désignent déjà le gasoil : sert à ne pas ajouter la taxe
+# carburant de la fiche transporteur par-dessus une ligne de grille qui la porte.
+_FRAIS_CARBURANT_RE = re.compile(r"gasoil|carburant|fuel", re.IGNORECASE)
+
+
 def _appliquer_frais(
-    conn, transporteur_id: int, prix_base: float, nb_pal: float = 0
+    conn,
+    transporteur_id: int,
+    prix_base: float,
+    nb_pal: float = 0,
+    taxe_carburant_pct: float = 0,
 ) -> tuple[list[dict], float]:
-    """Applique les frais par défaut du transporteur."""
+    """Applique la taxe carburant puis les frais par défaut du transporteur."""
     frais_rows = conn.execute(
         """
         SELECT * FROM expe_tarifs_frais
@@ -3428,6 +3437,30 @@ def _appliquer_frais(
 
     frais_list: list[dict] = []
     total_frais = 0.0
+
+    # Taxe carburant : elle vit sur la fiche transporteur, se renégocie chaque
+    # mois et s'applique au transport, jamais aux frais annexes. Elle était
+    # saisie dans le référentiel sans entrer dans aucun calcul : le comparateur
+    # annonçait un prix hors gasoil, jusqu'à un quart sous le prix facturé, et
+    # classait les transporteurs sur ce prix-là.
+    #
+    # Une grille importée peut déjà porter sa propre ligne gasoil en pourcentage
+    # du transport (parseur CEVA). Dans ce cas la ligne de grille fait foi et la
+    # taxe de fiche est ignorée : la compter deux fois serait pire que pas du tout.
+    taxe = float(taxe_carburant_pct or 0)
+    carburant_deja_dans_frais = any(
+        _FRAIS_CARBURANT_RE.search(str(fr["libelle"] or "")) for fr in frais_rows
+    )
+    if taxe > 0 and not carburant_deja_dans_frais:
+        montant_taxe = prix_base * taxe / 100
+        frais_list.append(
+            {
+                "libelle": "Taxe carburant",
+                "montant": round(montant_taxe, 2),
+                "detail": f"{taxe:g} % du transport = {montant_taxe:.2f} €",
+            }
+        )
+        total_frais += montant_taxe
 
     for fr in frais_rows:
         mode = fr["mode"]
@@ -3534,11 +3567,16 @@ def _calculer_comparateur(
 
         for ligne in lignes:
             prix_base, detail = _calculer_prix_base(ligne, poids, nb_pal)
-            frais_list, prix_frais = _appliquer_frais(conn, trp["id"], prix_base, nb_pal)
+            cles_trp = trp.keys()
+            taxe_trp = (
+                trp["taxe_carburant_pct"] if "taxe_carburant_pct" in cles_trp else 0
+            ) or 0
+            frais_list, prix_frais = _appliquer_frais(
+                conn, trp["id"], prix_base, nb_pal, taxe_trp
+            )
             prix_total = prix_base + prix_frais
             base_calcul = ligne["base_calcul"] or ""
 
-            cles_trp = trp.keys()
             eligibles.append(
                 {
                     "transporteur_id": trp["id"],

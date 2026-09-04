@@ -3824,59 +3824,59 @@ function tracaShowFicheManuelle(codeBarre, origine){
     const CONF_MOT = {probable:'Détecté', suggere:'Probablement', ambigu:'Plusieurs pistes'};
     let bandeau = '';
     if(det){
+      // Les autres fournisseurs deja vus sous cette forme de code. Trois au
+      // plus : au-dela, une liste de pastilles redevient l'annuaire qu'on
+      // cherchait justement a eviter.
       const autres = (det.candidats||[]).filter(c => c.nom && c.nom !== detNom);
       const chips = autres.slice(0,3).map(c =>
         `<button type="button" class="fiche-alt" data-nom="${escAttr(c.nom)}"
-                 style="background:var(--bg);border:1px solid var(--border);border-radius:999px;
-                        padding:3px 10px;font:inherit;font-size:11px;color:var(--text2);
-                        cursor:pointer">${escHtml(c.nom)}</button>`).join('');
+                 style="background:var(--card);border:1px solid var(--border);border-radius:999px;
+                        padding:4px 11px;font:inherit;font-size:12px;color:var(--text2);
+                        cursor:pointer">${escHtml(c.nom)}<span style="color:var(--muted)"> ${
+                          c.observations||0}</span></button>`).join('');
       bandeau = `
-        <div style="background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--accent);
-                    border-radius:10px;padding:10px 12px;margin-bottom:12px">
-          <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
-                      color:var(--accent);margin-bottom:4px">
+        <div style="background:var(--bg);border:1px solid var(--border);
+                    border-left:3px solid var(--accent);border-radius:10px;
+                    padding:12px 14px;margin-bottom:16px">
+          <div style="font-size:13px;font-weight:800;color:var(--accent);margin-bottom:4px">
             ${escHtml(CONF_MOT[det.confiance] || 'Piste')}${detNom ? ' · ' + escHtml(detNom) : ''}
           </div>
-          <div style="font-size:11px;color:var(--text2);line-height:1.5">
+          <div style="font-size:12px;color:var(--text2);line-height:1.5">
             ${escHtml(det.explication || '')}
           </div>
-          ${chips ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
-            <span style="font-size:11px;color:var(--muted);align-self:center">Sinon :</span>${chips}
+          ${chips ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">
+            <span style="font-size:12px;color:var(--muted);align-self:center">Sinon :</span>${chips}
           </div>` : ''}
-          <div style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.4">
-            Origine déclarée, non démontrée : aucun certificat FSC n'est rattaché.
-            Seule une bobine scannée en réception l'est.
-          </div>
         </div>`;
     }
 
     overlay.innerHTML = `
       <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;
-                  padding:20px;max-width:400px;width:100%">
-        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">
+                  padding:24px;max-width:420px;width:100%">
+        <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px">
           Bobine non réceptionnée
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-family:monospace">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:16px;font-family:monospace">
           ${escHtml(codeBarre)}
         </div>
-        <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:14px">
-          Ce code n'est rattaché à aucune réception. Il sera quand même enregistré :
-          ${det ? 'vérifiez le fournisseur proposé.' : 'indiquez seulement de qui vient la bobine.'}
-        </div>
+        ${det ? '' : `<div style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:16px">
+          Ce code n'est rattaché à aucune réception.
+          Il sera quand même enregistré : indiquez de qui vient la bobine.
+        </div>`}
         ${bandeau}
 
-        <label style="font-size:11px;font-weight:700;text-transform:uppercase;
-                      letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:6px">
+        <label style="font-size:11px;font-weight:800;text-transform:uppercase;
+                      letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:8px">
           Fournisseur (obligatoire)
         </label>
         <input id="fiche-fournisseur-input" type="text" list="${dlId}"
                placeholder="Tapez pour rechercher…" autocomplete="off" spellcheck="false"
-               style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;
-                      background:var(--bg);color:var(--text);font-size:13px;margin-bottom:12px;font-family:inherit;box-sizing:border-box"/>
+               style="width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:10px;
+                      background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;box-sizing:border-box"/>
         <datalist id="${dlId}">${opts}</datalist>
 
         <div id="fiche-portee" style="display:flex;align-items:center;justify-content:space-between;
-                    gap:8px;margin:-6px 0 12px;font-size:11px;color:var(--muted)">
+                    gap:12px;margin:10px 0 18px;font-size:12px;color:var(--muted)">
           <span id="fiche-portee-txt">Fournisseurs de bobines et complexes</span>
           <button type="button" id="fiche-elargir"
                   style="background:none;border:none;padding:0;font:inherit;font-weight:700;
@@ -3886,39 +3886,39 @@ function tracaShowFicheManuelle(codeBarre, origine){
         </div>
 
         <div id="fiche-libre-wrap" style="display:none;margin-bottom:12px">
-          <label style="font-size:11px;font-weight:700;text-transform:uppercase;
-                        letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:6px">
+          <label style="font-size:11px;font-weight:800;text-transform:uppercase;
+                        letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:8px">
             Nom du fournisseur, à la main
           </label>
           <input id="fiche-fournisseur-libre" type="text" maxlength="120"
                  placeholder="Nom du fournisseur" autocomplete="off" spellcheck="false"
-                 style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;
-                        background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box"/>
-          <div style="font-size:11px;color:#c2410c;line-height:1.5;margin-top:6px">
-            Hors annuaire : aucun certificat FSC ne sera rattaché. La bobine
-            ressortira en « non FSC » et sera signalée en écart sur un dossier certifié.
+                 style="width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:10px;
+                        background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;box-sizing:border-box"/>
+          <div style="font-size:12px;color:#c2410c;line-height:1.5;margin-top:8px">
+            Hors annuaire : aucun certificat FSC ne sera rattaché.
+            La bobine ressortira en « non FSC », signalée en écart.
           </div>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+            <div style="font-size:11px;font-weight:800;text-transform:uppercase;
                         letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Fournisseur</div>
             <div id="fiche-fournisseur-nom"
-                 style="font-size:13px;font-weight:600;color:var(--muted)">—</div>
+                 style="font-size:14px;font-weight:700;color:var(--muted)">—</div>
           </div>
-          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;
-                        letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Licence FSC</div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+            <div style="font-size:11px;font-weight:800;text-transform:uppercase;
+                        letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Certificat FSC</div>
             <div id="fiche-fournisseur-licence"
-                 style="font-size:13px;font-weight:600;color:var(--muted);font-family:monospace">—</div>
+                 style="font-size:14px;font-weight:700;color:var(--muted);font-family:monospace">—</div>
           </div>
         </div>
 
-        <div style="display:flex;gap:8px;justify-content:flex-end">
-          <button type="button" class="btn btn-ghost" id="fiche-manual-cancel" style="font-size:13px">Annuler</button>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button type="button" class="btn btn-ghost" id="fiche-manual-cancel" style="font-size:14px">Annuler</button>
           <button type="button" class="btn btn-accent" id="fiche-manual-confirm"
-                  style="font-size:13px;opacity:.5" disabled
+                  style="font-size:14px;opacity:.5" disabled
                   title="Choisissez un fournisseur dans la liste pour enregistrer">Enregistrer le scan</button>
         </div>
       </div>`;
