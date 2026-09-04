@@ -2261,7 +2261,13 @@ let S = {
   tracaPoste: null,
   tracaPrintModal: null,
   // Réception matière
-  recepSubTab: 'nouvelle', // 'nouvelle' | 'historique'
+  recepSubTab: 'nouvelle', // 'nouvelle' | 'historique' | 'rvgi'
+  // File des réceptions venues de l'ERP. `null` tant qu'on n'a pas chargé :
+  // c'est ce qui distingue « pas encore lu » de « rien à intégrer », et évite
+  // d'afficher une liste vide qu'on prendrait pour un stock à jour.
+  rvgiFile: null,
+  rvgiChargement: false,
+  rvgiErreur: null,
   recepItems: [],          // [{code, ts, isNew}] — tableau temporaire en cours de scan
   recepNote: '',           // note optionnelle sur la réception
   recepScanning: false,    // caméra active
@@ -18109,12 +18115,27 @@ function buildReception() {
   const wrap = el('div', { cls: 'recep-page' });
 
   // ── Header : titre + sous-onglets sur la même ligne ──
-  const sub = S.recepSubTab === 'historique' ? 'historique' : 'nouvelle';
+  const sub = ['historique', 'rvgi'].includes(S.recepSubTab) ? S.recepSubTab : 'nouvelle';
   const subtabs = el('div', { cls: 'recep-subtabs' },
     el('button', {
       cls: 'recep-subtab' + (sub === 'nouvelle' ? ' active' : ''),
       on: { click: () => { S.recepSubTab = 'nouvelle'; renderContent(); } }
     }, iconEl('scan', 13), ' Faire une réception'),
+    // Les entrées ne se saisissent plus : elles viennent des réceptions de
+    // l'ERP. Ce sous-onglet est leur file d'attente, et c'est là qu'on dit à
+    // quelle référence MySifa correspond un article RVGI — au moment où il se
+    // présente, pas dans un écran de référentiel qu'on n'ouvre jamais.
+    el('button', {
+      cls: 'recep-subtab' + (sub === 'rvgi' ? ' active' : ''),
+      on: { click: () => {
+        S.recepSubTab = 'rvgi';
+        recepStopCamera();
+        renderContent();
+        loadReceptionRvgi();
+      }}
+    }, iconEl('download', 13), ' Depuis l\'ERP',
+       (S.rvgiFile && S.rvgiFile.total
+        ? el('span', { cls: 'recep-hist-lot' }, String(S.rvgiFile.total)) : null)),
     el('button', {
       cls: 'recep-subtab' + (sub === 'historique' ? ' active' : ''),
       on: { click: () => {
@@ -18144,10 +18165,218 @@ function buildReception() {
 
   if (sub === 'nouvelle') {
     wrap.appendChild(buildReceptionNouvelle());
+  } else if (sub === 'rvgi') {
+    wrap.appendChild(buildReceptionRvgi());
   } else {
     wrap.appendChild(buildReceptionHistorique());
   }
   return wrap;
+}
+
+
+// ── Sous-onglet : réceptions venues de l'ERP ──────────────────────
+//
+// Une ligne = une réception RVGI qui n'est pas encore entrée en stock. Trois
+// états, et un seul geste possible dans chacun :
+//
+//   - article non apparié  → choisir la référence MySifa (proposition en tête)
+//   - quantité non convertible → la ligne dit ce qui manque sur la matière
+//   - prête                → intégrer
+//
+// Le client n'envoie JAMAIS de quantité : seulement des identifiants de ligne.
+// Le serveur relit tout. Une page restée ouverte pendant une synchro ne peut
+// donc pas écrire un chiffre périmé dans le stock.
+
+async function loadReceptionRvgi() {
+  S.rvgiChargement = true;
+  renderContent();
+  try {
+    const r = await fetch('/api/stock/reception-rvgi', { credentials: 'include' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    S.rvgiFile = await r.json();
+    S.rvgiErreur = null;
+  } catch (e) {
+    S.rvgiErreur = (e && e.message) || String(e);
+    S.rvgiFile = null;
+  } finally {
+    S.rvgiChargement = false;
+    renderContent();
+  }
+}
+
+async function rvgiApparier(ligne, matiereId) {
+  try {
+    const r = await fetch('/api/stock/reception-rvgi/apparier', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code1: ligne.code1, code2: ligne.code2,
+                             type_code: ligne.type_code, matiere_id: matiereId || null }),
+    });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || ('HTTP ' + r.status));
+    // L'appariement vaut pour TOUTES les lignes du même article, pas seulement
+    // celle-ci : on recharge la file plutôt que de retoucher une ligne.
+    await loadReceptionRvgi();
+  } catch (e) {
+    toast('Appariement impossible : ' + ((e && e.message) || e), true);
+  }
+}
+
+async function rvgiIntegrer(lifIds) {
+  if (!lifIds || !lifIds.length) return;
+  try {
+    const r = await fetch('/api/stock/reception-rvgi/integrer', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lif_ids: lifIds }),
+    });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || ('HTTP ' + r.status));
+    const res = await r.json();
+    const n = (res.integrees || []).length;
+    const bobines = (res.integrees || []).filter(x => x.regime === 'attente').length;
+    let msg = n + ' ligne' + (n > 1 ? 's' : '') + ' intégrée' + (n > 1 ? 's' : '');
+    if (bobines) msg += ' — ' + bobines + ' réception' + (bobines > 1 ? 's' : '')
+                      + ' de bobines en attente du scan';
+    toast(msg + '.');
+    (res.refusees || []).forEach(x => toast('Ligne ' + x.lif_id + ' : ' + x.motif, true));
+    await loadReceptionRvgi();
+  } catch (e) {
+    toast('Intégration impossible : ' + ((e && e.message) || e), true);
+  }
+}
+
+function buildReceptionRvgi() {
+  const wrap = el('div', { cls: 'recep-rvgi' });
+
+  if (S.rvgiChargement && !S.rvgiFile) {
+    wrap.appendChild(el('div', { cls: 'muted', style: { padding: '18px 2px' } }, 'Chargement…'));
+    return wrap;
+  }
+  if (S.rvgiErreur) {
+    wrap.appendChild(el('div', { cls: 'alert alert-danger' },
+      'Lecture impossible : ' + S.rvgiErreur));
+    return wrap;
+  }
+  const f = S.rvgiFile;
+  if (!f) { loadReceptionRvgi(); return wrap; }
+
+  // Tant qu'aucune date de bascule n'est posée, rien n'entre — et l'écran le
+  // dit plutôt que d'afficher une liste vide qu'on prendrait pour « à jour ».
+  if (f.message) {
+    wrap.appendChild(el('div', { cls: 'alert alert-info', style: { marginBottom: '14px' } },
+      f.message,
+      f.depuis ? null : el('div', { style: { marginTop: '8px', fontSize: '12px' } },
+        'Un administrateur matières pose la date de mise en service. ',
+        'Aucune réception antérieure ne sera reprise : le stock actuel reste la référence.')));
+    if (!f.lignes || !f.lignes.length) return wrap;
+  }
+
+  const lignes = f.lignes || [];
+  if (!lignes.length) {
+    wrap.appendChild(el('div', { cls: 'muted', style: { padding: '18px 2px' } },
+      'Rien à intégrer — toutes les réceptions de l\'ERP depuis le '
+      + (f.depuis || '?') + ' sont dans le stock.'));
+    return wrap;
+  }
+
+  const pretes = lignes.filter(l => l.integrable);
+  wrap.appendChild(el('div', {
+    style: { display: 'flex', alignItems: 'center', gap: '12px',
+             flexWrap: 'wrap', margin: '4px 0 14px' } },
+    el('span', { cls: 'muted', style: { fontSize: '12.5px' } },
+      lignes.length + ' ligne' + (lignes.length > 1 ? 's' : '') + ' à intégrer depuis le '
+      + (f.depuis || '?') + ' · ' + pretes.length + ' prête' + (pretes.length > 1 ? 's' : '')),
+    pretes.length
+      ? el('button', { cls: 'btn', on: { click: () => rvgiIntegrer(pretes.map(l => l.lif_id)) } },
+          'Intégrer les ' + pretes.length + ' lignes prêtes')
+      : null));
+
+  const tbody = el('tbody');
+  lignes.forEach(l => tbody.appendChild(rvgiLigne(l)));
+  const table = el('table', { cls: 'tbl', style: { width: '100%' } },
+    el('thead', null, el('tr', null,
+      el('th', { style: { textAlign: 'left' } }, 'Réception'),
+      el('th', { style: { textAlign: 'left' } }, 'Article RVGI'),
+      el('th', { style: { textAlign: 'left' } }, 'Référence MySifa'),
+      el('th', { style: { textAlign: 'right' } }, 'Quantité'),
+      el('th', { style: { textAlign: 'left' } }, ''))),
+    tbody);
+  wrap.appendChild(el('div', { style: { overflowX: 'auto' } }, table));
+  return wrap;
+}
+
+function rvgiLigne(l) {
+  const tr = el('tr');
+
+  tr.appendChild(el('td', null,
+    el('div', null, l.amjl || '—'),
+    el('div', { cls: 'muted', style: { fontSize: '11px' } },
+      'cde ' + l.numero + '/' + l.ligne + (l.fournisseur ? ' · ' + l.fournisseur : ''))));
+
+  tr.appendChild(el('td', null,
+    el('div', { style: { fontFamily: 'monospace' } }, l.article),
+    el('div', { cls: 'muted', style: { fontSize: '11px', maxWidth: '260px' } },
+      (l.libelle || '').slice(0, 70) + (l.laize_mm ? ' · laize ' + l.laize_mm + ' mm' : ''))));
+
+  // Colonne matière : la référence appariée, ou le choix à faire. Les
+  // candidates sont déjà restreintes à ce que le type RVGI peut désigner —
+  // on ne propose jamais un carton pour une bobine.
+  const tdMat = el('td');
+  if (l.matiere_id) {
+    tdMat.appendChild(el('div', null, l.matiere_ref || ('#' + l.matiere_id)));
+    tdMat.appendChild(el('button', {
+      cls: 'btn-sm btn-ghost', style: { fontSize: '11px', padding: '2px 6px' },
+      on: { click: () => rvgiApparier(l, null) },
+    }, 'délier'));
+  } else if ((l.propositions || []).length) {
+    const sel = el('select', { style: { maxWidth: '260px' } },
+      el('option', { attrs: { value: '' } }, '— choisir —'),
+      ...l.propositions.map((p, i) => el('option', {
+        attrs: Object.assign({ value: String(p.matiere_id) }, i === 0 ? { selected: 'selected' } : {}),
+      }, p.reference + '  (' + Math.round(p.score * 100) + ' %)')));
+    tdMat.appendChild(sel);
+    tdMat.appendChild(el('button', {
+      cls: 'btn-sm', style: { marginLeft: '6px' },
+      on: { click: () => sel.value && rvgiApparier(l, Number(sel.value)) },
+    }, 'Apparier'));
+  } else {
+    tdMat.appendChild(el('span', { cls: 'muted', style: { fontSize: '12px' } },
+      'Aucune référence proposée'));
+  }
+  tr.appendChild(tdMat);
+
+  const tdQte = el('td', { style: { textAlign: 'right', whiteSpace: 'nowrap' } });
+  if (l.quantite != null) {
+    tdQte.appendChild(el('div', null, String(l.quantite) + ' ' + (l.unite || '')));
+    if (l.detail) tdQte.appendChild(el('div', { cls: 'muted', style: { fontSize: '11px' } }, l.detail));
+  } else {
+    tdQte.appendChild(el('div', { cls: 'muted' }, String(l.qte_rvgi || '—')));
+  }
+  // Deux sources qui se contredisent sur la longueur de bobine : on le montre
+  // sans bloquer. Le stock entre quand même, mais quelqu'un sait qu'il faut
+  // corriger le conditionnement de la matière.
+  if (l.alerte) {
+    tdQte.appendChild(el('div', {
+      style: { fontSize: '11px', color: 'var(--warn, #c98a00)', maxWidth: '260px',
+               whiteSpace: 'normal', textAlign: 'right' } }, l.alerte));
+  }
+  tr.appendChild(tdQte);
+
+  const tdAct = el('td');
+  if (l.integrable) {
+    tdAct.appendChild(el('button', {
+      cls: 'btn-sm', on: { click: () => rvgiIntegrer([l.lif_id]) },
+    }, l.regime === 'attente' ? 'Créer la réception' : 'Entrer en stock'));
+    if (l.regime === 'attente') {
+      tdAct.appendChild(el('div', { cls: 'muted', style: { fontSize: '10.5px', marginTop: '3px' } },
+        'le stock bougera au scan'));
+    }
+  } else {
+    tdAct.appendChild(el('div', { cls: 'muted', style: { fontSize: '11px', maxWidth: '240px',
+                                                        whiteSpace: 'normal' } },
+      (l.manque || []).join(' · ')));
+  }
+  tr.appendChild(tdAct);
+  return tr;
 }
 
 // ── Sous-onglet : Faire une réception ─────────────────────────────

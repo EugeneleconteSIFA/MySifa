@@ -621,13 +621,10 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
    la barre. On applique les insets à la topbar sticky (padding gauche
    /droite) et au main. */
 @media (max-width:900px){
-  .mobile-topbar{
-    padding-left:max(12px, env(safe-area-inset-left));
-    padding-right:max(12px, env(safe-area-inset-right));
-  }
+  /* Les gouttieres laterales et leur inset d'encoche viennent desormais de
+     mysifa_myprod_shell.css (variables --msf-gl / --msf-gr sur .main). Ici,
+     seulement ce qui est propre au planning. */
   .main{
-    padding-left:max(12px, env(safe-area-inset-left));
-    padding-right:max(12px, env(safe-area-inset-right));
     padding-bottom:max(24px, env(safe-area-inset-bottom));
   }
   /* Le bandeau staging (fixed 24 px) et la topbar sont deux zones
@@ -636,10 +633,11 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 }
 
 @media (max-width:900px){
-  /* La topbar du planning est sticky (mysifa_myprod_shell.css) : pas de
-     compensation à faire, sinon on décale la page de 74 px pour rien. */
-  body.has-topbar .main{padding-top:14px}
-  .main{padding:14px}
+  /* La topbar du planning est sticky (mysifa_myprod_shell.css) : ni
+     compensation de 74 px, ni gouttière ici. Elle colle au haut de l'écran
+     et la marge latérale unique vient du shell — l'agenda ne doit donc pas
+     rajouter la sienne, sinon on empile deux gouttières. */
+  .main > .plan-agenda{padding-left:0;padding-right:0}
   .header{padding:0 0 14px}
   .sec{padding:16px}
   .wk-nav button{padding:6px 10px}

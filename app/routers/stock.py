@@ -9079,3 +9079,149 @@ async def creer_matiere_brouillon(request: Request):
     )
     return {"ok": True, "id": matiere_id, "existait": False,
             "designation": designation, "brouillon": True}
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# Réceptions RVGI — la file d'intégration
+#
+# Les entrées de matière ne se saisissent plus : elles viennent des réceptions
+# enregistrées dans l'ERP. Ce qui reste à faire côté MySifa, c'est dire à quelle
+# référence correspond l'article RVGI, une fois par article — le reste est
+# calculé.
+#
+# Toute la logique vit dans `app/services/reception_rvgi.py` : le périmètre, le
+# rapprochement, les conversions, les deux régimes. Ces endpoints ne font que
+# tenir la transaction et l'audit.
+#
+# L'écriture du stock passe par `appliquer_mouvement_mp`, le chemin canonique de
+# MyStock. Le service ne l'importe pas — il la reçoit — pour que ce module reste
+# lisible sans FastAPI et que le stock n'ait jamais deux façons de bouger.
+# ═════════════════════════════════════════════════════════════════════════
+
+
+@router.get("/api/stock/reception-rvgi")
+def reception_rvgi_file(request: Request, limite: int = 300):
+    """Ce que l'ERP a reçu et que MyStock n'a pas encore intégré."""
+    require_stock(request)
+    from app.services import erp_mirror as _miroir
+    from app.services import reception_rvgi as _rr
+
+    if not _miroir.miroir_present():
+        return {"depuis": None, "lignes": [], "total": 0,
+                "message": "Le miroir de l'ERP n'a pas encore été construit."}
+    limite = max(1, min(int(limite or 300), 1000))
+    try:
+        with get_db() as conn, _miroir.get_erp_db() as erp:
+            res = _rr.lignes_a_integrer(conn, erp, limite=limite)
+    except FileNotFoundError as e:
+        raise HTTPException(503, str(e)) from None
+    res["familles"] = {str(t): v[0] for t, v in _rr.PERIMETRE.items()}
+    return res
+
+
+@router.put("/api/stock/reception-rvgi/mise-en-service")
+async def reception_rvgi_mise_en_service(request: Request):
+    """La date à partir de laquelle les réceptions entrent en stock.
+
+    Body : { date: 'AAAA-MM-JJ' } — une date vide arrête l'intégration.
+    Aucune reprise rétroactive n'est prévue : reculer cette date ferait entrer
+    d'un coup un historique que le stock actuel contient déjà.
+    """
+    user = require_stock_matieres_admin(request)
+    from app.services import reception_rvgi as _rr
+
+    body = await request.json()
+    valeur = str((body or {}).get("date") or "").strip()[:10]
+    if valeur and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", valeur):
+        raise HTTPException(400, "Date attendue au format AAAA-MM-JJ.")
+    with get_db() as conn:
+        avant = _rr.date_de_mise_en_service(conn)
+        conn.execute(
+            "INSERT INTO stock_config (cle, valeur, updated_at) VALUES (?,?,?) "
+            "ON CONFLICT(cle) DO UPDATE SET valeur=excluded.valeur, "
+            "updated_at=excluded.updated_at",
+            (_rr.CLE_DEPUIS, valeur, datetime.now().isoformat(timespec="seconds")))
+        conn.commit()
+    log_action(user=user, request=request, module="stock", action="UPDATE",
+               objet="reception_rvgi:mise_en_service",
+               detail=f"{avant or 'aucune'} → {valeur or 'aucune'}")
+    return {"date": valeur or None}
+
+
+@router.post("/api/stock/reception-rvgi/apparier")
+async def reception_rvgi_apparier(request: Request):
+    """Lie un article RVGI à une référence MySifa.
+
+    Body : { code1, code2, type_code, matiere_id }. `matiere_id` vide délie.
+    """
+    user = require_stock_matieres_admin(request)
+    from app.services import reception_rvgi as _rr
+
+    body = await request.json() or {}
+    with get_db() as conn:
+        try:
+            res = _rr.apparier(
+                conn, body.get("code1"), body.get("code2"), body.get("type_code"),
+                body.get("matiere_id"),
+                auteur=(user.get("nom") or user.get("email")),
+                origine="manuel")
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        conn.commit()
+    log_action(user=user, request=request, module="stock", action="UPDATE",
+               objet="reception_rvgi:appariement:%s/%s/%s" % (
+                   res["code1"], res["code2"], res["type_code"]),
+               detail="matière %s" % (res["matiere_id"] or "déliée"))
+    return res
+
+
+@router.post("/api/stock/reception-rvgi/integrer")
+async def reception_rvgi_integrer(request: Request):
+    """Fait entrer une ou plusieurs lignes de réception dans le stock.
+
+    Body : { lif_ids: [...] }. Les lignes sont relues côté serveur : le client
+    envoie des identifiants, jamais des quantités — sinon une page restée
+    ouverte pendant une synchro écrirait des chiffres périmés.
+
+    Une ligne qui échoue n'annule pas les autres : elle est rendue avec son
+    motif. Refuser le lot entier pour une référence non appariée obligerait à
+    tout rejouer.
+    """
+    user = require_stock(request)
+    from app.services import erp_mirror as _miroir
+    from app.services import reception_rvgi as _rr
+
+    body = await request.json() or {}
+    voulus = body.get("lif_ids") or []
+    if not isinstance(voulus, list) or not voulus:
+        raise HTTPException(400, "Aucune ligne à intégrer.")
+    try:
+        voulus = {int(x) for x in voulus}
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Identifiants de ligne invalides.") from None
+
+    faits, refuses = [], []
+    try:
+        with get_db() as conn, _miroir.get_erp_db() as erp:
+            file = _rr.lignes_a_integrer(conn, erp, limite=2000)
+            par_id = {l["lif_id"]: l for l in file["lignes"]}
+            for lif_id in sorted(voulus):
+                ligne = par_id.get(lif_id)
+                if ligne is None:
+                    refuses.append({"lif_id": lif_id,
+                                    "motif": "Ligne absente de la file — déjà intégrée ?"})
+                    continue
+                try:
+                    faits.append(_rr.integrer(conn, ligne, user, appliquer_mouvement_mp))
+                except (ValueError, HTTPException) as e:
+                    refuses.append({"lif_id": lif_id,
+                                    "motif": getattr(e, "detail", None) or str(e)})
+            conn.commit()
+    except FileNotFoundError as e:
+        raise HTTPException(503, str(e)) from None
+
+    if faits:
+        log_action(user=user, request=request, module="stock", action="CREATE",
+                   objet="reception_rvgi:integration",
+                   detail="%d ligne(s) intégrée(s), %d refusée(s)" % (len(faits), len(refuses)))
+    return {"integrees": faits, "refusees": refuses}

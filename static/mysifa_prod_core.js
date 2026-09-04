@@ -1142,6 +1142,85 @@ function openOfCreateModal(){
 }
 window.openOfCreateModal = openOfCreateModal;
 
+/* Colonne de `of_imports` -> champ de la modale OF. Même rôle que
+   FCE_CHAMPS pour la fiche technique. Les `*_ref_id` n'y sont pas : ils ne
+   vivent pas dans le DOM, ils se posent sur la modale. */
+const OFE_CHAMPS = {
+  reference:'ofe-reference', format:'ofe-format', machine:'ofe-machine',
+  laize:'ofe-laize', matiere:'ofe-matiere', glassine:'ofe-glassine',
+  adhesif_label:'ofe-adhesif-label', ref_adhesif:'ofe-ref-adhesif',
+  qte_adhesif_g:'ofe-qte-adhesif-g', qte_adhesif_kg:'ofe-qte-adhesif-kg',
+  qte_au_mille:'ofe-qte-mille', nb_levees:'ofe-nb-levees',
+  conditionnement:'ofe-cond', tolerance:'ofe-tolerance',
+  cartons_type:'ofe-cartons-type', mandrins_dia:'ofe-mandrins-dia',
+  mandrin_longueur:'ofe-mandrin-longueur', cales_sachets:'ofe-cales',
+  palette_type:'ofe-palette-type',
+  outil_1_numero:'ofe-outil1-numero', outil_1_forme:'ofe-outil1-forme',
+  outil_1_hauteur:'ofe-outil1-hauteur', outil_1_angle:'ofe-outil1-angle',
+  outil_1_mag:'ofe-outil1-mag', outil_1_cp:'ofe-outil1-cp',
+  outil_2_numero:'ofe-outil2-numero', outil_2_hauteur:'ofe-outil2-hauteur',
+  outil_2_forme:'ofe-outil2-forme', outil_2_cp:'ofe-outil2-cp',
+  particularites:'ofe-particularites', observations:'ofe-observations',
+};
+
+const OFE_REFS = ['matiere_ref_id','glassine_ref_id','adhesif_ref_id',
+                  'carton_ref_id','mandrin_ref_id','palette_ref_id'];
+
+/* Reprend l'article de la commande rattachée.
+
+   Une ligne de commande RVGI porte un article, et l'article porte la moitié
+   de l'OF : machine, laize, matière, adhésif, outillage, conditionnement.
+   Les retaper à la main revient à recopier ce que l'ERP sait déjà — avec le
+   risque d'écart que ça suppose.
+
+   On ne remplit que les cases VIDES, et seulement si les lignes cochées
+   portent UN SEUL article : deux articles dans un même OF, c'est un choix de
+   regroupement que l'ADV a fait en connaissance de cause, et prendre l'un
+   des deux au hasard serait pire que ne rien faire. */
+async function ofeReprendreArticle(lignes){
+  const m=S.ofEditModal;
+  if(!m) return;
+  const articles=[...new Set((lignes||[])
+    .map(l=>(l.vu_article||'').trim()).filter(Boolean))];
+  if(!articles.length) return;
+  if(articles.length>1){
+    toast(articles.length+' articles différents sur les lignes cochées — '+
+          'rien n\'a été pré-rempli.','info');
+    return;
+  }
+  const bouts=articles[0].split('/');
+  if(bouts.length!==2) return;
+  let p=null;
+  try{
+    p=await api('/api/rvgi/article/'+encodeURIComponent(bouts[0].trim())+
+                '/'+encodeURIComponent(bouts[1].trim())+'/of');
+  }catch(e){
+    toast("Article "+articles[0]+" inconnu du miroir RVGI — rien n'a été pré-rempli.",'info');
+    return;
+  }
+  m._dom=m._dom||{};
+  let posés=0;
+  Object.keys(p.champs||{}).forEach(function(col){
+    if(OFE_REFS.indexOf(col)>=0){
+      if(!m[col]){ m[col]=p.champs[col]; posés++; }
+      return;
+    }
+    const id=OFE_CHAMPS[col];
+    if(!id) return;
+    const val=p.champs[col];
+    if(val==null||val==='') return;
+    const actuel=m._dom[id]!==undefined?m._dom[id]:m[col];
+    if(actuel===undefined||actuel===null||String(actuel).trim()===''){
+      m._dom[id]=String(val);
+      m[col]=val;
+      posés++;
+    }
+  });
+  m._rvgiOf=p;
+  toast('Article '+p.article.reference+' — '+posés+' champ'+(posés>1?'s':'')+
+        ' repris de MyERP.');
+}
+
 /* Sélecteur de commandes RVGI depuis la modale OF.
 
    En modification, l'OF a un id : le sélecteur enregistre lui-même côté
@@ -1170,6 +1249,10 @@ function ofeChoisirCommandes(){
       }
       set({ofEditModal:m});
       renderOfEditModal();
+      // La reprise de l'article se fait APRÈS le rendu : elle est
+      // asynchrone, et l'écran ne doit pas attendre le miroir pour montrer
+      // les commandes qui viennent d'être cochées.
+      ofeReprendreArticle(m._commandes).then(()=>renderOfEditModal());
     },
   });
 }
@@ -1427,7 +1510,21 @@ function renderOfEditModal(){
               : "Le sélecteur enregistre directement le rattachement de cet OF."}
           </div>
         </div>
-        <div id="ofe-cmd-resume" style="grid-column:1/-1"></div>`,true)}
+        <div id="ofe-cmd-resume" style="grid-column:1/-1"></div>
+        ${m._rvgiOf?`
+        <div style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.6">
+          ${(function(r){
+            const s=r.sources||{};
+            const bouts=[];
+            if(s.gpr_ff) bouts.push('fiche de fabrication RVGI');
+            if((s.out_dec||[]).length) bouts.push('outil'+(s.out_dec.length>1?'s':'')+' '+s.out_dec.join(', '));
+            if(s.mat_mat) bouts.push('matière '+escHtml(String(s.mat_mat)));
+            return 'Article <strong>'+escHtml(r.article.reference)+'</strong>'+
+                   (r.article.libelle?(' — '+escHtml(r.article.libelle)):'')+
+                   (bouts.length?('<br>Repris de MyERP : '+bouts.join(' · ')+'. À relire avant d\'enregistrer.'):'');
+          })(m._rvgiOf)}
+          ${(m._rvgiOf.manques||[]).map(x=>'<div style="color:var(--danger)">• '+escHtml(x)+'</div>').join('')}
+        </div>`:''}`,true)}
       ${_sec('Identification',[
         _f('ofe-numero','OF n°',m.of_numero),
         _f('ofe-reference','Référence',m.reference),
