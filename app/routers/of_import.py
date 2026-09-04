@@ -32,11 +32,11 @@ OF_ALLOWED_ROLES = frozenset({"superadmin", "direction", "administration", "admi
 
 OF_REAL_FIELDS = frozenset({
     "laize", "qte_adhesif_g", "qte_adhesif_kg", "qte_au_mille",
-    "qte_bobines", "mandrin_longueur", "outil_1_hauteur",
+    "qte_bobines", "mandrin_longueur", "outil_1_hauteur", "outil_2_hauteur",
 })
 OF_INT_FIELDS = frozenset({
     "nb_levees", "qte_etiquettes", "metrage", "nb_cartons",
-    "nb_mandrins", "nb_tubes",
+    "nb_mandrins", "nb_tubes", "palette_europe", "palette_perdues",
 })
 
 def _coerce_of_value(field: str, value):
@@ -67,6 +67,11 @@ OF_DATA_FIELDS = [
     "outil_1_angle", "outil_1_mag", "outil_1_cp", "outil_1_hauteur", "outil_1_fournisseur",
     "outil_2_forme", "outil_2_numero", "outil_2_angle", "outil_2_cp",
     "outil_alt_forme", "outil_alt_numero", "outil_alt_angle", "outil_alt_fournisseur",
+    # Le reste du papier atelier — saisissable dans MySifa, absent du parseur PDF.
+    "particularites", "cales_sachets", "observations", "ref_matiere_fournisseur",
+    "outil_2_mag", "outil_2_hauteur", "outil_2_fournisseur",
+    "palette_europe", "palette_perdues", "plieuse_pignon", "nb_pouces",
+    "texte_bobinettes",
 ]
 
 _PATTERNS = {
@@ -813,15 +818,11 @@ def _enrich_of_row_from_fiche(of_row: dict) -> dict:
 def preview_of_pdf(of_id: int, request: Request):
     get_current_user(request)
     with get_db() as conn:
+        # SELECT * volontaire : la liste explicite d'origine oubliait toute
+        # colonne ajoutée ensuite, et l'oubli ne se voyait pas — le PDF sortait
+        # simplement sans le champ.
         row = conn.execute(
-            """SELECT id, of_numero, reference, date_creation, delai_client,
-                      machine, format, matiere, ref_matiere, laize, qte_etiquettes, qte_bobines,
-                      metrage, conditionnement, nb_cartons, nb_mandrins, nb_tubes,
-                      mandrins_dia, outil_1_numero, pdf_filename,
-                      ref_adhesif, adhesif_label, qte_adhesif_g, qte_adhesif_kg,
-                      glassine, qte_au_mille
-               FROM of_imports WHERE id=?""",
-            (of_id,),
+            "SELECT * FROM of_imports WHERE id=?", (of_id,),
         ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="OF introuvable.")
@@ -968,6 +969,9 @@ async def update_fiche(fiche_id: int, request: Request):
         "nb_au_sol","nb_etage","nb_bobines_carton",
         "palette_type","palette_nb_cartons_sol","palette_nb_cartons_hauteur","palette_hauteur_max",
         "particularite","notes",
+        # Lien vers l'article de l'ERP. Stocké, pas redeviné : voir
+        # rvgi_rattachement.couper_reference.
+        "article_code1","article_code2","article_libelle",
     }
     updates = {k: v for k, v in body.items() if k in EDITABLE}
     if not updates:
@@ -1955,3 +1959,377 @@ def of_search(request: Request):
                 (limit,),
             ).fetchall()
     return {"items": [_row_dict(r) for r in rows]}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Création dans MySifa
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Jusqu'ici un OF et une fiche technique ne pouvaient qu'ARRIVER : du pont
+# Access ou de la lecture d'un PDF. L'ADV qui prépare une production devait
+# donc passer par Access pour créer le document, puis attendre la synchro pour
+# le voir dans MySifa. Ces deux routes ferment la boucle.
+#
+# Trois choses les distinguent d'un import, et expliquent le reste du code :
+#
+# 1. `source = 'mysifa'` — sans quoi un OF saisi ici est indiscernable d'un OF
+#    venu d'Access, et le prochain sync croirait devoir le compléter.
+# 2. Tout ce qui est saisi est marqué manuel. C'est le contrat de
+#    `documents_verite` : Access ne réécrit pas une valeur posée par un humain.
+# 3. `valide = 0`. Créer n'est pas relire — la validation reste un second geste,
+#    fait par quelqu'un qui contrôle, comme pour un document importé.
+
+from app.services import rvgi_rattachement as ratt  # noqa: E402  (bas de module)
+from app.services.audit_service import log_action  # noqa: E402
+
+
+def _valeurs_non_vides(champs: dict) -> list:
+    return [k for k, v in champs.items()
+            if v is not None and str(v).strip() != ""]
+
+
+def _lignes_commandes(brut) -> list:
+    """Normalise les lignes de commande postées par le sélecteur RVGI."""
+    lignes = []
+    for l in (brut or []):
+        if not isinstance(l, dict):
+            continue
+        numero = str(l.get("numero") or "").strip()
+        if not numero:
+            continue
+        lignes.append({
+            "numero": numero,
+            "ligne": l.get("ligne"),
+            "qte": l.get("qte"),
+            "vu_qte": l.get("vu_qte"),
+            "vu_article": l.get("vu_article"),
+            "vu_client": l.get("vu_client"),
+            "confirme": bool(l.get("confirme")),
+        })
+    return lignes
+
+
+@router.post("/api/of")
+async def create_of(request: Request):
+    """Crée un OF dans MySifa, éventuellement rattaché à des commandes RVGI.
+
+    Le numéro suit la règle des dossiers de fabrication : il se PROPOSE depuis
+    les numéros de commande rattachés (« 9932128+129 », « 9932128/L1-3 ») et
+    reste modifiable. Un OF peut couvrir une commande entière, quelques-unes de
+    ses lignes, ou plusieurs commandes — c'est l'ADV qui arbitre, parce qu'elle
+    seule sait ce qui part sur la même bobine.
+    """
+    user = _require_of_access(request)
+    body = await request.json()
+
+    champs = {k: _coerce_of_value(k, v) for k, v in body.items() if k in OF_DATA_FIELDS}
+    commandes = _lignes_commandes(body.get("commandes"))
+
+    numero = (champs.get("of_numero") or "").strip() if champs.get("of_numero") else ""
+    if not numero and commandes:
+        numero = ratt.proposer_reference(commandes)
+    if not numero:
+        raise HTTPException(
+            status_code=400,
+            detail="Numéro d'OF absent. Renseignez-le, ou rattachez au moins "
+                   "une commande pour qu'il soit proposé.",
+        )
+    champs["of_numero"] = numero
+
+    if not (champs.get("reference") or "").strip():
+        raise HTTPException(status_code=400, detail="Référence produit obligatoire.")
+
+    maintenant = _now_paris_iso()
+    qui = (user.get("nom") or user.get("email") or "").strip() or None
+
+    with get_db() as conn:
+        double = conn.execute(
+            "SELECT id FROM of_imports WHERE LOWER(TRIM(of_numero)) = LOWER(TRIM(?))",
+            (numero,),
+        ).fetchone()
+        if double:
+            # On refuse plutôt que de créer un homonyme : deux OF du même numéro
+            # rendraient le rapprochement dossier↔OF indécidable, et c'est
+            # exactement ce que l'onglet « Mappings à valider » sert à éviter.
+            raise HTTPException(
+                status_code=409,
+                detail="L'OF %s existe déjà (#%d)." % (numero, double["id"]),
+            )
+
+        colonnes = list(champs.keys()) + [
+            "source", "statut", "valide", "cree_par", "cree_le",
+            "date_import", "imported_by",
+        ]
+        valeurs = list(champs.values()) + [
+            "mysifa", "cree", 0, qui, maintenant, maintenant, qui,
+        ]
+        cur = conn.execute(
+            "INSERT INTO of_imports (%s) VALUES (%s)"
+            % (", ".join(colonnes), ", ".join("?" * len(colonnes))),
+            valeurs,
+        )
+        of_id = cur.lastrowid
+
+        marquer_champs_manuels(conn, "of_imports", of_id, _valeurs_non_vides(champs))
+
+        rattachement = None
+        if commandes:
+            try:
+                rattachement = ratt.enregistrer(
+                    conn, "of", of_id, "commande", commandes, qui or "",
+                )
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+        conn.commit()
+
+    linked = _autolink_of_to_planning(of_id, numero, created_by="of_mysifa")
+    _invalidate_pending_count_cache()
+
+    # Ligne explicite plutôt que la ligne générique du middleware : le journal
+    # doit dire QUEL OF a été créé et sur quelles commandes, sans quoi il faut
+    # rouvrir la base pour comprendre une entrée.
+    log_action(
+        user=user, action="CREATE", module="of",
+        objet="OF %s · %s" % (numero, champs.get("reference") or ""),
+        detail={"source": "mysifa",
+                "commandes": [l["numero"] for l in commandes],
+                "dossiers_relies": linked},
+        request=request,
+    )
+
+    return {
+        "created": True, "id": of_id, "of_numero": numero,
+        "rattachement": rattachement, "linked_entries": linked,
+    }
+
+
+@router.post("/api/fiches-techniques")
+async def create_fiche(request: Request):
+    """Crée une fiche technique dans MySifa.
+
+    La référence porte le lien vers l'ERP : « 1026/0020 » est le couple
+    code1/code2 d'un article de RVGI. On le résout à la création et on le
+    STOCKE — le redeviner à chaque lecture ferait glisser une fiche d'un
+    article à l'autre au premier renommage.
+    """
+    user = _require_of_access(request)
+    body = await request.json()
+
+    reference = str(body.get("reference") or "").strip()
+    if not reference:
+        raise HTTPException(status_code=400, detail="Référence obligatoire.")
+
+    EDITABLES = {
+        "reference", "designation", "client", "format",
+        "eti_laize", "eti_longueur", "eti_rayons", "eti_perforations",
+        "mod_laize", "mod_longueur", "mod_nb_front",
+        "lateral_ext", "horizontal", "lateral_int",
+        "support", "matiere", "glassine", "laize_optimale", "laize_optionnelle",
+        "epaisseur", "adhesif", "qte_au_mille",
+        "machine", "nb_couleurs", "recto", "verso",
+        "outil1_forme", "outil1_numero_sifa", "outil1_laize", "outil1_epaisseur",
+        "outil1_nb_dents", "outil1_nb_front", "outil1_nb_avance",
+        "outil2_forme", "outil2_numero_sifa", "outil2_epaisseur",
+        "outil2_nb_dents", "outil2_nb_front", "outil2_nb_avance",
+        "outil3_forme", "outil3_numero_sifa", "outil3_epaisseur",
+        "outil3_nb_dents", "outil3_nb_front", "outil3_nb_avance",
+        "tete1_pantone", "tete1_couleur", "tete1_anilox", "tete1_composition",
+        "tete2_pantone", "tete2_couleur", "tete2_anilox", "tete2_composition",
+        "tete3_pantone", "tete3_couleur", "tete3_anilox", "tete3_composition",
+        "remarque", "mandrin_dia", "mandrin_longueur", "enroulement",
+        "nb_etiq_bobin", "dia_ext", "poids", "conditionnement", "cales_sachets",
+        "cartons", "nb_au_sol", "nb_etage", "nb_bobines_carton",
+        "palette_type", "palette_nb_cartons_sol", "palette_nb_cartons_hauteur",
+        "palette_hauteur_max", "particularite", "notes",
+        "article_code1", "article_code2", "article_libelle",
+    }
+    champs = {k: v for k, v in body.items() if k in EDITABLES}
+    champs["reference"] = reference
+
+    # Résolution de l'article : ce que l'écran a explicitement choisi prime,
+    # sinon la référence elle-même le désigne.
+    if not champs.get("article_code1"):
+        couple = ratt.couper_reference(reference)
+        if couple:
+            champs["article_code1"], champs["article_code2"] = couple
+
+    maintenant = _now_paris_iso()
+    qui = (user.get("nom") or user.get("email") or "").strip() or None
+
+    with get_db() as conn:
+        double = conn.execute(
+            "SELECT id FROM fiches_techniques "
+            "WHERE LOWER(TRIM(reference)) = LOWER(TRIM(?))",
+            (reference,),
+        ).fetchone()
+        if double:
+            raise HTTPException(
+                status_code=409,
+                detail="Une fiche technique existe déjà pour %s (#%d). "
+                       "Modifiez-la plutôt que d'en créer une seconde."
+                       % (reference, double["id"]),
+            )
+
+        colonnes = list(champs.keys()) + [
+            "source", "valide", "cree_par", "cree_le", "date_import", "imported_by",
+        ]
+        valeurs = list(champs.values()) + [
+            "mysifa", 0, qui, maintenant, maintenant, qui,
+        ]
+        cur = conn.execute(
+            "INSERT INTO fiches_techniques (%s) VALUES (%s)"
+            % (", ".join(colonnes), ", ".join("?" * len(colonnes))),
+            valeurs,
+        )
+        fiche_id = cur.lastrowid
+        marquer_champs_manuels(
+            conn, "fiches_techniques", fiche_id, _valeurs_non_vides(champs),
+        )
+        conn.commit()
+
+    log_action(
+        user=user, action="CREATE", module="of",
+        objet="Fiche technique %s" % reference,
+        detail={"source": "mysifa",
+                "article": ("%s/%s" % (champs.get("article_code1"),
+                                       champs.get("article_code2"))
+                            if champs.get("article_code1") else None)},
+        request=request,
+    )
+
+    return {"created": True, "id": fiche_id, "reference": reference,
+            "article_code1": champs.get("article_code1"),
+            "article_code2": champs.get("article_code2")}
+
+
+def _date_iso(valeur) -> Optional[str]:
+    """« 08/06/2026 » → « 2026-06-08 ». Rend None sur tout le reste.
+
+    Le planning stocke des dates ISO ; l'OF les porte au format français.
+    Convertir ici évite qu'une date de livraison arrive au planning sous une
+    forme qu'il trie comme du texte.
+    """
+    brut = str(valeur or "").strip()
+    if not brut:
+        return None
+    for sep in ("/", "-", "."):
+        morceaux = brut.split(sep)
+        if len(morceaux) == 3 and len(morceaux[0]) <= 2:
+            j, m, a = (x.strip() for x in morceaux)
+            if j.isdigit() and m.isdigit() and a.isdigit():
+                if len(a) == 2:
+                    a = "20" + a
+                return "%s-%02d-%02d" % (a, int(m), int(j))
+    if len(brut) >= 10 and brut[4] == "-" and brut[7] == "-":
+        return brut[:10]
+    return None
+
+
+def _format_lh(valeur) -> tuple:
+    """« 85 x 51 mm » → (85.0, 51.0)."""
+    brut = str(valeur or "").lower().replace("mm", "").strip()
+    for sep in ("x", "×", "*"):
+        if sep in brut:
+            g, _, d = brut.partition(sep)
+            try:
+                return (float(g.strip().replace(",", ".")),
+                        float(d.strip().replace(",", ".")))
+            except ValueError:
+                return (None, None)
+    return (None, None)
+
+
+@router.get("/api/of/{of_id}/dossier-prefill")
+def of_dossier_prefill(of_id: int, request: Request):
+    """Ce qu'il faut pour ouvrir la modale « nouveau dossier » déjà remplie.
+
+    Le bouton « Créer directement un dossier de prod » n'écrit rien : il ouvre
+    la modale du planning avec ces valeurs. C'est un choix, pas une limitation
+    — la machine, la place dans la file et la durée sont des arbitrages de
+    planification que l'OF ne porte pas, et un dossier posé en silence au
+    mauvais endroit coûte plus cher que deux clics.
+
+    La référence du dossier suit la même règle que partout : elle se propose
+    depuis les commandes rattachées, et devient « Reliquat … » si l'une de ces
+    lignes a déjà porté une production.
+    """
+    _require_of_access(request)
+    with get_db() as conn:
+        of = conn.execute("SELECT * FROM of_imports WHERE id=?", (of_id,)).fetchone()
+        if not of:
+            raise HTTPException(status_code=404, detail="OF introuvable.")
+        of = dict(of)
+
+        lignes = [l for l in ratt.lister(conn, "of", of_id) if l["piece"] == "commande"]
+        reference = ""
+        if lignes:
+            reference = ratt.proposer_reference(
+                lignes, reliquat=ratt.deja_couvertes(conn, lignes, "commande"),
+            )
+        reference = reference or (of.get("of_numero") or "")
+
+        fiche = None
+        ref_produit = str(of.get("reference") or "").split(" - ")[0].strip()
+        if ref_produit:
+            fiche = conn.execute(
+                "SELECT * FROM fiches_techniques "
+                "WHERE LOWER(TRIM(reference)) = LOWER(TRIM(?)) "
+                "   OR LOWER(TRIM(reference)) LIKE LOWER(TRIM(?) || ' - %') "
+                "ORDER BY id LIMIT 1",
+                (of.get("reference") or "", ref_produit),
+            ).fetchone()
+            fiche = dict(fiche) if fiche else None
+
+        machine_id = None
+        nom_machine = (of.get("machine") or "").strip()
+        if nom_machine:
+            m = conn.execute(
+                "SELECT id FROM machines WHERE LOWER(TRIM(nom)) = LOWER(TRIM(?))",
+                (nom_machine,),
+            ).fetchone()
+            machine_id = m["id"] if m else None
+
+    largeur, hauteur = _format_lh(of.get("format"))
+    client = next((l["vu_client"] for l in lignes if l.get("vu_client")), None)
+    if not client and fiche:
+        client = fiche.get("client")
+
+    # Étiquettes par carton : le produit de deux valeurs de la fiche. On ne la
+    # propose que si les DEUX sont là — un carton « de 1 000 » déduit d'une
+    # moitié de fiche serait pris pour un chiffre vérifié.
+    etiq_carton = None
+    if fiche and fiche.get("nb_etiq_bobin") and fiche.get("nb_bobines_carton"):
+        try:
+            etiq_carton = int(fiche["nb_etiq_bobin"]) * int(fiche["nb_bobines_carton"])
+        except (TypeError, ValueError):
+            etiq_carton = None
+
+    return {
+        "of_id": of_id,
+        "machine_id": machine_id,
+        "machine": nom_machine or None,
+        "fiche_id": (fiche.get("id") if fiche else None),
+        "dossier": {
+            "reference": reference,
+            "numero_of": of.get("of_numero"),
+            "ref_produit": ref_produit or None,
+            "client": client or "",
+            "description": (fiche.get("designation") if fiche else None) or "",
+            "format_l": largeur,
+            "format_h": hauteur,
+            "laize": of.get("laize"),
+            "date_livraison": _date_iso(of.get("delai_client")),
+            "commentaire": of.get("particularites") or "",
+            "etiquettes_par_carton": etiq_carton,
+            "a_placer": 1,
+        },
+        # Les mêmes lignes seront rattachées au dossier créé : c'est ce qui
+        # fait tenir la chaîne commande → OF → dossier sans ressaisie.
+        "commandes": [
+            {"numero": l["numero"], "ligne": l["ligne"], "qte": l["qte"],
+             "vu_qte": l["vu_qte"], "vu_article": l["vu_article"],
+             "vu_client": l["vu_client"],
+             "confirme": (l["etat"] == "confirme")}
+            for l in lignes
+        ],
+    }

@@ -69,6 +69,11 @@ DEFAUTS: Dict[str, Any] = {
     "preavis_affretement_jours": 5.0,
     # Au-delà de ce nombre de palettes, l'envoi est traité en affrètement.
     "seuil_affretement_palettes": 6.0,
+    # Retard maximum affiché. Un envoi attendu il y a huit mois n'est pas un
+    # transport à organiser : c'est un dossier de planning que personne n'a
+    # soldé. Le faire entrer noie les vrais retards — mesuré le 04/09/2026 :
+    # 198 lignes « en retard » dont une poignée seulement étaient réelles.
+    "retard_max_jours": 21.0,
 }
 
 BORNES = {
@@ -76,6 +81,7 @@ BORNES = {
     "preavis_messagerie_jours": (0.0, 30.0),
     "preavis_affretement_jours": (0.0, 60.0),
     "seuil_affretement_palettes": (1.0, 99.0),
+    "retard_max_jours": (1.0, 365.0),
 }
 
 
@@ -248,7 +254,13 @@ _SQL_DOSSIERS = """
       LEFT JOIN fiches_techniques fta ON fta.id = ka.id
      WHERE COALESCE(pe.annule_count, 0) = 0
        AND (pe.statut IN ('attente', 'en_cours')
-            OR (pe.statut = 'termine' AND pe.updated_at >= ?))
+            -- Sur les dossiers terminés, la borne porte sur la FIN DE
+            -- PRODUCTION, pas sur `updated_at` : ce dernier bouge pour des
+            -- raisons qui n'ont rien à voir (une reprise de données l'a
+            -- touché sur les 255 dossiers d'un coup), et faisait entrer tout
+            -- l'historique dans le tableau.
+            OR (pe.statut = 'termine'
+                AND COALESCE(NULLIF(pe.planned_end, ''), pe.updated_at) >= ?))
      ORDER BY pe.position ASC, pe.id ASC
 """
 
@@ -404,6 +416,7 @@ def construire_tableau(conn, aujourdhui: Optional[date] = None) -> dict:
     p = charger_params(conn)
     horizon = int(p["horizon_jours"])
     seuil_aff = float(p["seuil_affretement_palettes"])
+    retard_max = int(p["retard_max_jours"])
 
     # Un dossier terminé il y a longtemps et jamais expédié n'est pas un envoi
     # à piloter, c'est de l'historique : on borne sur la fin de production.
@@ -433,6 +446,15 @@ def construire_tableau(conn, aujourdhui: Optional[date] = None) -> dict:
 
         cdes = _cdes_rvgi(d.get("numero_of"), d.get("reference"))
         infos = [rvgi[n] for n in cdes if n in rvgi]
+
+        # RVGI fait foi sur ce qui reste à livrer. Quand toutes les lignes des
+        # commandes du dossier sont soldées (`lpos = 2`), il n'y a plus rien à
+        # expédier : le dossier de planning est resté ouvert, la marchandise
+        # est partie. Sans ce test, le tableau annonçait 198 retards dont la
+        # quasi-totalité étaient des commandes livrées depuis des mois — un
+        # écran d'alerte qui crie tout le temps ne sert plus à rien.
+        if infos and all(i.get("lignes_ouvertes", 0) == 0 for i in infos):
+            continue
 
         # Date d'expédition visée, par ordre de fiabilité décroissante.
         date_cible, source = None, None
@@ -513,13 +535,25 @@ def construire_tableau(conn, aujourdhui: Optional[date] = None) -> dict:
 
     envois = [_finaliser(g, departs, today, p, seuil_aff) for g in groupes.values()]
 
-    # Horizon : on borne ce qui est LOIN, jamais ce qui est en retard ni ce qui
-    # n'a pas de date. Un envoi sans date est un trou à combler, le masquer
-    # reviendrait à le perdre.
-    borne = (today + timedelta(days=horizon)).isoformat()
+    # Deux bornes, symétriques et de nature différente.
+    #
+    # En avant, l'horizon : ce qui part dans deux mois n'a rien à faire dans
+    # un écran de décision quotidienne.
+    #
+    # En arrière, le retard maximum : un envoi attendu il y a six mois n'est
+    # pas un transport en retard, c'est un dossier de planning que personne
+    # n'a soldé. On ne le supprime pas en silence — il est compté à part et
+    # l'écran dit combien il y en a, pour que le ménage se fasse dans MyProd.
+    borne_avant = (today + timedelta(days=horizon)).isoformat()
+    borne_arriere = (today - timedelta(days=retard_max)).isoformat()
+
+    dormants = [e for e in envois
+                if e["date_cible"] and e["date_cible"] < borne_arriere]
+    envois = [e for e in envois
+              if not (e["date_cible"] and e["date_cible"] < borne_arriere)]
     envois = [e for e in envois
               if not e["date_cible"]
-              or e["date_cible"] <= borne
+              or e["date_cible"] <= borne_avant
               or e["alerte"] in ("retard", "urgent", "a_commander")]
 
     # Tri : ce qui brûle d'abord. Les envois sans date en fin, jamais masqués —
@@ -533,8 +567,9 @@ def construire_tableau(conn, aujourdhui: Optional[date] = None) -> dict:
         "envois": envois,
         "params": p,
         "rvgi": {"present": rvgi_present, "commandes_lues": len(rvgi)},
-        "horizon_jusquau": (today + timedelta(days=horizon)).isoformat(),
-        "resume": _resume(envois),
+        "horizon_jusquau": borne_avant,
+        "dormants_avant": borne_arriere,
+        "resume": _resume(envois, dormants),
         "genere_le": datetime.now().isoformat(timespec="seconds"),
     }
 
@@ -638,11 +673,12 @@ def _alerte(g: dict, today: date) -> str:
     return "a_venir"
 
 
-def _resume(envois: List[dict]) -> dict:
+def _resume(envois: List[dict], dormants: Optional[List[dict]] = None) -> dict:
     def n(pred):
         return sum(1 for e in envois if pred(e))
     return {
         "total": len(envois),
+        "dormants": len(dormants or []),
         "retard": n(lambda e: e["alerte"] == "retard"),
         "urgent": n(lambda e: e["alerte"] == "urgent"),
         "a_commander": n(lambda e: e["alerte"] in ("a_commander", "urgent")),

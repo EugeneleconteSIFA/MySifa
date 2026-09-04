@@ -133,10 +133,10 @@ def avec_rvgi(table):
     return _f
 
 
-def fiche_rvgi(amje, cp="59200", ville="TOURCOING", bls=None):
+def fiche_rvgi(amje, cp="59200", ville="TOURCOING", bls=None, ouvertes=1):
     return {"amje": amje, "amjl": None, "lrs": "DESTINATAIRE", "lcp": cp,
             "lville": ville, "lpays": "FRANCE", "client": "CLIENT RVGI",
-            "lignes_ouvertes": 1, "bls": bls or []}
+            "lignes_ouvertes": ouvertes, "bls": bls or []}
 
 
 JOUR = date(2026, 9, 4)
@@ -303,7 +303,7 @@ print("\n7. Horizon — il borne le lointain, pas le retard")
 
 conn = base()
 pil.infos_rvgi = avec_rvgi({"9932001": fiche_rvgi("2026-12-20"),
-                            "9932002": fiche_rvgi("2026-08-01", cp="75001")})
+                            "9932002": fiche_rvgi("2026-08-28", cp="75001")})
 dossier(conn, 1, "9932001", "EUROFINS", bobines=760)
 dossier(conn, 2, "9932002", "AUTRE", bobines=760)
 envois = tableau(conn)["envois"]
@@ -347,6 +347,49 @@ try:
     verifier("une valeur hors bornes est refusee", "acceptee", "refusee")
 except ValueError:
     verifier("une valeur hors bornes est refusee", "refusee", "refusee")
+
+# ── 11. RVGI fait foi : une commande soldee n'a plus rien a expedier ────────
+print("\n11. Commande soldee dans RVGI — le dossier de planning ne suffit pas")
+
+conn = base()
+pil.infos_rvgi = avec_rvgi({"9932001": fiche_rvgi("2026-09-10", ouvertes=0)})
+dossier(conn, 1, "9932001", "EUROFINS", bobines=760)
+verifier("commande soldee : rien a piloter", len(tableau(conn)["envois"]), 0)
+
+conn = base()
+pil.infos_rvgi = avec_rvgi({"9932001": fiche_rvgi("2026-09-10", ouvertes=0),
+                            "9932002": fiche_rvgi("2026-09-10", ouvertes=2)})
+dossier(conn, 1, "9932001", "EUROFINS", bobines=760)
+dossier(conn, 2, "9932002", "EUROFINS", bobines=760)
+e = tableau(conn)["envois"]
+verifier("seul le dossier encore ouvert reste", len(e), 1)
+verifier("et c'est le bon", e[0]["commandes_rvgi"], ["9932002"])
+
+conn = base()
+pil.infos_rvgi = sans_rvgi
+dossier(conn, 1, "9932001", "EUROFINS", date_livraison="2026-09-10", bobines=760)
+verifier("sans info RVGI, on n'ecarte rien", len(tableau(conn)["envois"]), 1)
+
+
+# ── 12. Retard maximum : les dormants sont ecartes, pas perdus ──────────────
+print("\n12. Retard maximum — un envoi attendu il y a 8 mois n'est pas un retard")
+
+conn = base()
+pil.infos_rvgi = avec_rvgi({"9932001": fiche_rvgi("2025-12-04"),
+                            "9932002": fiche_rvgi("2026-08-28", cp="75001")})
+dossier(conn, 1, "9932001", "XEROX", bobines=760)
+dossier(conn, 2, "9932002", "AUTRE", bobines=760)
+t = tableau(conn)
+verifier("le dormant sort du tableau", [e["client"] for e in t["envois"]], ["AUTRE"])
+verifier("le retard recent reste", t["envois"][0]["alerte"], "retard")
+verifier("les dormants sont comptes", t["resume"]["dormants"], 1)
+verifier("et la borne est annoncee", t["dormants_avant"], "2026-08-14")
+
+pil.enregistrer_params(conn, {"retard_max_jours": 365})
+t = tableau(conn)
+verifier("le reglage rouvre la fenetre", len(t["envois"]), 2)
+verifier("plus aucun dormant", t["resume"]["dormants"], 0)
+
 
 print()
 if FAIL:
