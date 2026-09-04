@@ -991,6 +991,7 @@ async function parseApiError(res){
     const d=j&&j.detail;
     if(typeof d==="string") msg=d;
     else if(Array.isArray(d)) msg=d.map(x=>(x&&x.msg)?x.msg:JSON.stringify(x)).join(" ");
+    else if(d&&typeof d==="object"&&d.message) msg=d.message;
     else if(d) msg=JSON.stringify(d);
   }catch(_){}
   const err=new Error(msg);
@@ -1001,12 +1002,100 @@ function apiErrorMessage(e,fallback){
   if(e&&e.message) return e.message;
   return fallback||"Erreur";
 }
-const api=(p,o={})=>fetch(`/api/planning${p}`,{credentials:"include",headers:{"Content-Type":"application/json",...(o.headers||{})},...o}).then(async r=>{
-  if(!r.ok) throw await parseApiError(r);
+// ── Gel des dossiers dont le camion part bientôt ────────────────────────────
+//
+// Passé H-48 de l'enlèvement, un geste qui repousse un dossier n'est plus
+// refusé ni accepté en silence : le serveur renvoie 409 avec le code
+// "gel_transport" et la liste de ce qui casse, et c'est ici qu'on demande à
+// l'écran de l'assumer. La confirmation est renvoyée dans le MÊME geste,
+// enrichi de `confirme_gel` et du motif — pas dans un second endpoint : le
+// planning n'a ainsi qu'un seul chemin d'écriture, déjà journalisé.
+//
+// La fenêtre vit dans son propre conteneur, jamais dans #mroot : le gel se
+// déclenche souvent depuis une modale déjà ouverte (insertion d'un dossier),
+// et réécrire #mroot la ferait disparaître sous les doigts du planificateur.
+let _gelResolve=null;
+function fermerGel(valide){
+  if(valide){
+    const motif=(document.getElementById("gel-motif")?.value||"").trim();
+    if(!motif){
+      const h=document.getElementById("gel-hint");
+      if(h){ h.textContent="Motif requis — une phrase suffit, elle part au journal."; h.style.color="var(--danger)"; }
+      document.getElementById("gel-motif")?.focus();
+      return;
+    }
+    const root=document.getElementById("gelroot"); if(root) root.remove();
+    const r=_gelResolve; _gelResolve=null; if(r) r(motif);
+    return;
+  }
+  const root=document.getElementById("gelroot"); if(root) root.remove();
+  const r=_gelResolve; _gelResolve=null; if(r) r(null);
+}
+function demanderConfirmationGel(d){
+  return new Promise(resolve=>{
+    _gelResolve=resolve;
+    const vieux=document.getElementById("gelroot"); if(vieux) vieux.remove();
+    const lst=Array.isArray(d.dossiers)?d.dossiers:[];
+    const lignes=lst.map(x=>`<li style="margin:0 0 8px;line-height:1.45">${escHtml(x.message||"")}</li>`).join("");
+    const el=document.createElement("div");
+    el.id="gelroot";
+    el.innerHTML=`<div class="mo" style="z-index:1200" onclick="if(event.target===this)fermerGel(false)">
+      <div class="md" style="width:640px">
+        <h3 style="margin:0 0 6px;font-size:18px;font-family:var(--mono);color:var(--text)">Dossier gelé</h3>
+        <p style="margin:0 0 14px;font-size:13px;color:var(--muted)">${escHtml(d.message||"")}</p>
+        <ul style="margin:0 0 18px;padding-left:18px;font-size:13px;color:var(--text)">${lignes}</ul>
+        <div class="fd"><label>Motif</label>
+          <textarea id="gel-motif" rows="3" placeholder="Ex : accord client obtenu pour livrer le 12, urgence machine sur le dossier amont…"
+            style="width:100%;padding:10px 12px;border:1px solid var(--border2);border-radius:10px;background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;resize:vertical;outline:none"></textarea></div>
+        <div id="gel-hint" style="font-size:12px;color:var(--muted);margin:6px 0 16px">Le motif est enregistré au journal des actions avec votre nom.</div>
+        <div class="md-acts" style="display:flex;align-items:center;justify-content:flex-end;gap:10px">
+          <button class="btn-s" onclick="fermerGel(false)">Ne rien changer</button>
+          <button class="btn-p" onclick="fermerGel(true)">J'ai compris, je maintiens</button>
+        </div>
+      </div></div>`;
+    document.body.appendChild(el);
+    setTimeout(()=>{document.getElementById("gel-motif")?.focus();},30);
+  });
+}
+// Le même geste, signé : dans le corps quand il y en a un, en paramètre d'URL
+// pour les rares endpoints qui n'en ont pas (remise des jours par défaut).
+function gelSigner(p,o,motif){
+  const out={...o};
+  if(typeof out.body==="string"&&out.body.trim().startsWith("{")){
+    try{
+      const b=JSON.parse(out.body);
+      b.confirme_gel=true; b.motif_gel=motif;
+      out.body=JSON.stringify(b);
+      return {p,o:out};
+    }catch(_){}
+  }
+  const sep=p.includes("?")?"&":"?";
+  return {p:p+sep+"confirme_gel=1&motif_gel="+encodeURIComponent(motif),o:out};
+}
+async function _apiAppel(p,o,gelPossible){
+  const r=await fetch(`/api/planning${p}`,{credentials:"include",headers:{"Content-Type":"application/json",...(o.headers||{})},...o});
+  if(!r.ok){
+    if(r.status===409&&gelPossible){
+      let d=null;
+      try{ const j=await r.clone().json(); d=j&&j.detail; }catch(_){}
+      if(d&&d.code==="gel_transport"){
+        const motif=await demanderConfirmationGel(d);
+        if(motif===null){
+          const e=new Error("Geste annulé — rien n'a bougé.");
+          e.status=409; e.gelAnnule=true;
+          throw e;
+        }
+        const suite=gelSigner(p,o,motif);
+        return _apiAppel(suite.p,suite.o,false);
+      }
+    }
+    throw await parseApiError(r);
+  }
   const ct=r.headers.get("content-type")||"";
   if(ct.includes("application/json")) return r.json();
   return null;
-});
+}
+function api(p,o={}){ return _apiAppel(p,o,true); }
 
 let _pToastTimer=null;
 function showToast(message,type){
@@ -2134,7 +2223,7 @@ function renderPlanAgendaJour(col, todayIso, pxParHeure, minHeightSlot){
       onclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()">
       <div class="rail"></div>
       <div class="dur">${escHtml(dur)}</div>
-      <div class="l1"><em>${escHtml(cli)}</em>${fscBadgeHtml(s)}${transportBadgeHtml(s)}${annuleBadgeHtml(s)}</div>
+      <div class="l1"><em>${escHtml(cli)}</em>${fscBadgeHtml(s)}${transportBadgeHtml(s)}${gelBadgeHtml(s)}${annuleBadgeHtml(s)}</div>
       ${l2?`<div class="l2">${escHtml(l2)}</div>`:''}
       <div class="l3">${l3parts.map(escHtml).join(' · ')}</div>
       ${exig?`<div class="exig" title="${escAttr(exig)}">${escHtml(exig)}</div>`:''}
@@ -3015,7 +3104,7 @@ function mkTL(mon,slots){
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
       ${resizeHandle}
-      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}${transportBadgeHtml(s)}${annuleBadgeHtml(s)}</span>${line2SlotHtml?`<span class="line2">${line2SlotHtml}</span>`:""}${line3SlotHtml?`<span class="line3">${line3SlotHtml}</span>`:""}${(()=>{const _isExpe=(S.planningVue==="expe"||S.planningVue==="prod_expe");if(_isExpe){return qteEtiq==null?`<span class="line-no-of">pas d'OF lié</span>`:"";}return exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:"";})()}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
+      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}${transportBadgeHtml(s)}${gelBadgeHtml(s)}${annuleBadgeHtml(s)}</span>${line2SlotHtml?`<span class="line2">${line2SlotHtml}</span>`:""}${line3SlotHtml?`<span class="line3">${line3SlotHtml}</span>`:""}${(()=>{const _isExpe=(S.planningVue==="expe"||S.planningVue==="prod_expe");if(_isExpe){return qteEtiq==null?`<span class="line-no-of">pas d'OF lié</span>`:"";}return exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:"";})()}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
   });
 
   const np=gp(now);
@@ -3840,6 +3929,25 @@ function trLibelle(t){
   const pal=(t.palettes!=null)?(" · "+Number(t.palettes).toLocaleString("fr-FR")+" palettes"):"";
   return "Transport réservé — "+transp+" · enlèvement le "+trFmtDate(t.date_enlevement)
        +" avant "+trFmtHeure(t.heure_limite)+pal;
+}
+// Le cadenas n'apparaît que dans la fenêtre de gel — donc rarement, et
+// toujours sur les dossiers qu'il ne faut plus tirer. Un repère permanent sur
+// tous les dossiers avec camion n'apprendrait rien à personne.
+function gelLibelle(g){
+  const transp=(g.transporteur||"").trim();
+  const h=Number(g.gel_heures);
+  const fenetre=isFinite(h)?(" (H-"+String(h).replace(/[.,]0$/,"")+")"):"";
+  return "Dossier gelé"+fenetre+" — enlèvement le "+trFmtDate(g.date_enlevement)
+    +(transp?(" · "+transp):"")+". Le repousser demande un motif.";
+}
+function gelBadgeHtml(s){
+  const g=s&&s.gel;
+  if(!g) return "";
+  const cad='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+  return `<span class="slot-gel" title="${escAttr(gelLibelle(g))}"`
+    +` style="display:inline-flex;align-items:center;justify-content:center;`
+    +`color:var(--warn);background:var(--card);border:1px solid var(--warn);border-radius:6px;`
+    +`padding:2px 5px;margin:0 4px 0 6px;vertical-align:middle;line-height:0">${cad}</span>`;
 }
 function transportBadgeHtml(s){
   const t=s&&s.transport;

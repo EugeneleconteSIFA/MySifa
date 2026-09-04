@@ -15,7 +15,9 @@ L'autre moitie verifie ce que la regle fait quand elle s'applique :
 - un reordonnancement qui ferait rater un enlevement est refuse ;
 - un jour passe en chome qui ferait rater un enlevement est refuse, et
   n'est pas ecrit ;
-- un dossier deja en retard ne bloque pas les gestes qui ne l'aggravent pas.
+- un dossier deja en retard ne bloque pas les gestes qui ne l'aggravent pas ;
+- depuis le 04/09/2026, le gel H-48 s'ajoute par-dessus : il ne refuse
+  jamais, il fait signer, et il ignore le seuil de palettes.
 
 Les assertions sont RELATIVES (avant/apres) et non calendaires : le planning
 part de l'instant courant, un test qui figerait des dates casserait au premier
@@ -296,13 +298,56 @@ with get_db() as conn:
 verifier("ordre inverse accepte", erreur, None)
 
 with get_db() as conn:
-    _depart(conn, ids[0], 1, 4.0)   # petit depart : aucune contrainte
+    _depart(conn, ids[0], 10, 4.0)  # petit depart, et loin : rien ne s'applique
     erreur = None
     try:
         P._garde_transport_reorder(conn, MACHINE_ID, list(reversed(ids)))
     except HTTPException as e:
         erreur = e
-verifier("petit depart : ordre inverse toujours accepte", erreur, None)
+verifier("petit depart lointain : ordre inverse toujours accepte", erreur, None)
+
+# ── 4 bis. Le gel, lui, ne connait pas le seuil de palettes ────────────────
+# Depuis le 04/09/2026 : le meme petit depart, mais a moins de 48 h, ne refuse
+# toujours pas — il demande de signer. C'est la difference entre les deux
+# regles, et c'est le seul endroit du planning ou l'outil demande « pourquoi ».
+print("\n4 bis. Gel H-48 — le petit depart imminent demande une confirmation")
+
+ids = _base((10.0, 20.0, 20.0, 20.0))
+with get_db() as conn:
+    _depart(conn, ids[0], 1, 4.0)   # 4 palettes : hors contrainte transport
+    erreur = None
+    try:
+        P._garde_transport_reorder(conn, MACHINE_ID, list(reversed(ids)))
+    except HTTPException as e:
+        erreur = e
+vrai("enlevement demain : confirmation demandee", erreur is not None)
+verifier("code HTTP 409", getattr(erreur, "status_code", None), 409)
+verifier("code de la regle", (getattr(erreur, "detail", None) or {}).get("code"), "gel_transport")
+vrai("le detail nomme le dossier",
+     "OF-1" in str((getattr(erreur, "detail", None) or {}).get("dossiers")))
+
+with get_db() as conn:
+    erreur = None
+    try:
+        P._garde_transport_reorder(
+            conn, MACHINE_ID, list(reversed(ids)), None,
+            {"confirme_gel": True, "motif_gel": "accord client obtenu pour le 12"},
+        )
+    except HTTPException as e:
+        erreur = e
+verifier("confirme avec motif : le geste passe", erreur, None)
+
+with get_db() as conn:
+    erreur = None
+    try:
+        P._garde_transport_reorder(
+            conn, MACHINE_ID, list(reversed(ids)), None, {"confirme_gel": True}
+        )
+    except HTTPException as e:
+        erreur = e
+vrai("confirme sans motif : toujours refuse", erreur is not None)
+verifier("et le refus dit pourquoi",
+         (getattr(erreur, "detail", None) or {}).get("motif_manquant"), True)
 
 # ── 5. Un dossier deja en retard ne bloque pas ce qui ne l'aggrave pas ─────
 print("\n5. Existant — deja en retard, mais on ne bloque que l'aggravation")

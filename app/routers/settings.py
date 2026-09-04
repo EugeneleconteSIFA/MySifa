@@ -152,7 +152,7 @@ def get_transport_planning(request: Request):
 
 @router.put("/api/settings/transport-planning")
 async def set_transport_planning(request: Request):
-    """Body : {actif, heure_limite, seuil_palettes, marge_pct}. Champs absents inchangés."""
+    """Body : {actif, heure_limite, seuil_palettes, marge_pct, gel_actif, gel_heures}. Champs absents inchangés."""
     require_settings(request)
     from database import get_db
     from app.services import transport_planning as tp
