@@ -60,13 +60,13 @@ check('prix au m² importé : inutile aussi',
 //    Ses propres produits (`mc_product`) calculent encore en €/m² et ont besoin
 //    de ce poids ; le champ a disparu de l'écran, la valeur reste en base.
 check('fiche MyStock : grammage plus envoyé',
-  extraire('saveDeclinaisonForm').includes('grammage_gsm:'), false);
+  extraire('autoEnregistrerDecl').includes('grammage_gsm:'), false);
 check('fiche MyStock : perte plus envoyée',
-  extraire('saveDeclinaisonForm').includes('perte_pct:'), false);
+  extraire('autoEnregistrerDecl').includes('perte_pct:'), false);
 check('fiche matière : le grammage fait l\'aller-retour sans être saisi',
   extraire('saveMaterialForm').includes('grammage_gsm:'), true);
 
-for (const [nom, fn] of [['fiche matière', 'saveMaterialForm'], ['fiche MyStock', 'saveDeclinaisonForm']]) {
+for (const [nom, fn] of [['fiche matière', 'saveMaterialForm'], ['fiche MyStock', 'autoEnregistrerDecl']]) {
   const code = extraire(fn);
   check(nom + ' : taxe en pourcentage', code.includes('taxe_pct:'), true);
   check(nom + ' : choix de marge envoyé', code.includes('applique_marge:'), true);
@@ -142,7 +142,7 @@ check('conteneur et forfait ont coût + quantité',
   champs.includes('-tcout') && champs.includes('-tqte'), true);
 check('les libellés changent selon la méthode',
   src.includes('Coût du conteneur') && src.includes('Forfait de commande'), true);
-for (const [nom, fn] of [['fiche matière', 'saveMaterialForm'], ['fiche MyStock', 'saveDeclinaisonForm']]) {
+for (const [nom, fn] of [['fiche matière', 'saveMaterialForm'], ['fiche MyStock', 'autoEnregistrerDecl']]) {
   const code = extraire(fn);
   check(nom + ' : coût envoyé', code.includes('transport_cout:'), true);
   check(nom + ' : quantité envoyée', code.includes('transport_quantite:'), true);

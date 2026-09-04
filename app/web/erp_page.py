@@ -285,6 +285,16 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 td.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px}
 td.of{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--accent);font-weight:600}
 td.vide{color:var(--muted)}
+/* Saut de pièce : une référence de commande se clique dans la grille et ouvre
+   l'écran d'en face sur cette ligne. Le pointillé la distingue d'un numéro qui
+   ne mène nulle part — sans en faire un bouton : la cellule reste avant tout
+   une valeur qu'on lit et qu'on recopie. */
+.saut{display:inline-flex;align-items:center;gap:3px;color:var(--accent);
+      border-bottom:1px dashed var(--accent);cursor:pointer;font-weight:600}
+.saut:hover{border-bottom-style:solid;background:var(--accent-bg)}
+.saut .fl{display:inline-flex;opacity:.55}
+.saut:hover .fl{opacity:1}
+td.num .saut{justify-content:flex-end}
 .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:700;background:var(--accent-bg);color:var(--accent)}
 .badge.n0{background:rgba(148,163,184,.16);color:var(--muted)}
 .badge.n1{background:rgba(251,191,36,.16);color:var(--warn)}
@@ -1175,7 +1185,7 @@ const ERP_GUIDES = {
     {
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="14" y1="3" x2="14" y2="21"/><line x1="17" y1="9" x2="21" y2="9"/><line x1="17" y1="14" x2="21" y2="14"/></svg>',
       title: 'Ouvrir une ligne, suivre la pièce',
-      body: '<p>Un clic sur une ligne ouvre une <strong>fiche en grand</strong> par-dessus la grille : la ligne y est dépliée en blocs — la pièce, l\'article, les quantités et prix, la livraison. Ce que l\'écran ne montre pas est regroupé sous <span class="mguide-tag">Autres champs</span>, replié. Rien n\'est masqué : si RVGI porte l\'information, elle est là.</p><p>En bas, <span class="mguide-hl">Pièces liées</span> suit les clés de RVGI : d\'une commande vers ses bons de livraison, ses factures, ses mouvements de stock. Un clic sur une pièce l\'ouvre dans la même fiche — <span class="mguide-tag">Retour</span> revient d\'un cran, <span class="mguide-tag">Voir les N</span> bascule sur l\'écran complet. <span class="mguide-tag">Échap</span> referme.</p>',
+      body: '<p>Un clic sur une ligne ouvre une <strong>fiche en grand</strong> par-dessus la grille : la ligne y est dépliée en blocs — la pièce, l\'article, les quantités et prix, la livraison. Ce que l\'écran ne montre pas est regroupé sous <span class="mguide-tag">Autres champs</span>, replié. Rien n\'est masqué : si RVGI porte l\'information, elle est là.</p><p>En bas, <span class="mguide-hl">Pièces liées</span> suit les clés de RVGI : d\'une commande vers ses bons de livraison, ses factures, ses mouvements de stock. Un clic sur une pièce l\'ouvre dans la même fiche — <span class="mguide-tag">Retour</span> revient d\'un cran, <span class="mguide-tag">Voir les N</span> bascule sur l\'écran complet. <span class="mguide-tag">Échap</span> referme.</p><p>Sans même ouvrir la fiche : dans la grille, une <strong>référence de commande soulignée</strong> se clique et bascule directement sur l\'écran d\'en face — le n° de commande d\'une réception ouvre la commande fournisseur, celui d\'une commande ouvre ses réceptions, la ligne seule ne montre que ce qui la concerne. Un bandeau rappelle d\'où vient la liste et la rouvre en entier.</p>',
       illu: '<svg viewBox="0 0 340 160" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><g opacity=".28"><rect x="4" y="6" width="332" height="148" rx="8" fill="var(--bg)" stroke="var(--border)"/><line x1="4" y1="26" x2="336" y2="26" stroke="var(--border)"/><line x1="4" y1="46" x2="336" y2="46" stroke="var(--border)"/><line x1="4" y1="66" x2="336" y2="66" stroke="var(--border)"/><line x1="4" y1="86" x2="336" y2="86" stroke="var(--border)"/><line x1="4" y1="106" x2="336" y2="106" stroke="var(--border)"/><line x1="4" y1="126" x2="336" y2="126" stroke="var(--border)"/></g><rect x="26" y="12" width="288" height="136" rx="10" fill="var(--card)" stroke="var(--accent)"/><rect x="26" y="12" width="288" height="26" rx="10" fill="var(--bg)"/><text x="38" y="24" font-size="9" fill="var(--text)" font-weight="800">Commande 9932399</text><text x="38" y="34" font-size="7" fill="var(--muted)">LIDL · 890/0112 · 500 000</text><text x="302" y="29" font-size="10" fill="var(--muted)" text-anchor="end">×</text><line x1="26" y1="38" x2="314" y2="38" stroke="var(--border)"/><rect x="34" y="46" width="132" height="52" rx="7" fill="var(--bg)" stroke="var(--border)"/><text x="42" y="58" font-size="6.5" fill="var(--muted)" font-weight="800">LA PIÈCE</text><text x="42" y="72" font-size="7.5" fill="var(--text2)">N°</text><text x="158" y="72" font-size="7.5" fill="var(--text)" text-anchor="end" font-weight="700">9932399</text><line x1="42" y1="77" x2="158" y2="77" stroke="var(--border)"/><text x="42" y="90" font-size="7.5" fill="var(--text2)">Client</text><text x="158" y="90" font-size="7.5" fill="var(--text)" text-anchor="end" font-weight="700">LIDL</text><rect x="174" y="46" width="132" height="52" rx="7" fill="var(--bg)" stroke="var(--border)"/><text x="182" y="58" font-size="6.5" fill="var(--muted)" font-weight="800">QUANTITÉS ET PRIX</text><text x="182" y="72" font-size="7.5" fill="var(--text2)">Quantité</text><text x="298" y="72" font-size="7.5" fill="var(--text)" text-anchor="end" font-weight="700">500 000</text><line x1="182" y1="77" x2="298" y2="77" stroke="var(--border)"/><text x="182" y="90" font-size="7.5" fill="var(--text2)">Prix</text><text x="298" y="90" font-size="7.5" fill="var(--text)" text-anchor="end" font-weight="700">0,0142</text><text x="34" y="112" font-size="6.5" fill="var(--text2)" font-weight="800">PIÈCES LIÉES</text><line x1="92" y1="110" x2="306" y2="110" stroke="var(--border)"/><rect x="34" y="118" width="88" height="24" rx="7" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="42" y="128" font-size="7" fill="var(--accent)" font-weight="800">Bons de livraison</text><text x="42" y="138" font-size="6.5" fill="var(--accent)" opacity=".85">numcde 9932399</text><text x="114" y="133" font-size="7.5" fill="var(--accent)" text-anchor="end" font-weight="800">3</text><rect x="128" y="118" width="88" height="24" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="136" y="128" font-size="7" fill="var(--text)" font-weight="800">Factures</text><text x="136" y="138" font-size="6.5" fill="var(--muted)">livno 9932399</text><text x="208" y="133" font-size="7.5" fill="var(--text2)" text-anchor="end" font-weight="800">1</text><rect x="222" y="118" width="88" height="24" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="230" y="128" font-size="7" fill="var(--text)" font-weight="800">Mouvements</text><text x="230" y="138" font-size="6.5" fill="var(--muted)">Voir les 12 →</text><text x="302" y="133" font-size="7.5" fill="var(--text2)" text-anchor="end" font-weight="800">12</text></svg>'
     },
 
@@ -1708,7 +1718,9 @@ function renderTete(){
     const ep=S.epingles.indexOf(c.nom)>=0;
     // L'entonnoir n'a de sens que sur une colonne de RVGI : la colonne de
     // rattachement est du MySifa, elle a son propre filtre dans le rail.
-    const filtrable=opsCol(c).length>0&&(c.type||'')!=='ratt';
+    // `sans_filtre` dit la même chose d'une colonne dont le rail filtre déjà
+    // mieux — la famille d'article, dont le menu répéterait un libellé par code.
+    const filtrable=opsCol(c).length>0&&(c.type||'')!=='ratt'&&!c.sans_filtre;
     const posee=filtrable&&!!S.filtresCol[c.nom];
     const infob=posee?resumeFiltreCol(c):'Filtrer sur cette colonne';
     h+='<th data-col="'+esc(c.nom)+'" draggable="true" class="'+(posee?'filtree':'')+'" style="'+(c.largeur?('min-width:'+c.largeur+'px'):'')+'">'+
@@ -1852,11 +1864,20 @@ function renderGrille(){
     h+='<tr data-id="'+esc(l._id)+'"'+(String(S.selection)===String(l._id)?' class="sel"':'')+'>';
     S.colonnes.forEach(c=>{
       const r=cellule(c,l[c.nom]);
-      h+='<td class="'+r.cls+'">'+r.html+'</td>';
+      h+='<td class="'+r.cls+'">'+enveloppeSaut(c,l,r.html)+'</td>';
     });
     h+='</tr>';
   });
   tb.innerHTML=h;
+  tb.querySelectorAll('.saut').forEach(el=>{
+    el.addEventListener('click',ev=>{
+      ev.stopPropagation();                  // le saut prime sur l'ouverture du détail
+      if(S.glisse){S.glisse=false;return;}
+      sauter(el.getAttribute('data-ecran'),
+             Number(el.getAttribute('data-lien')),
+             el.getAttribute('data-src'));
+    });
+  });
   tb.querySelectorAll('[data-id]').forEach(tr=>{
     tr.addEventListener('click',()=>{
       if(S.glisse){S.glisse=false;return;}   // c'était un défilement, pas un clic
@@ -1864,6 +1885,34 @@ function renderGrille(){
     });
   });
   appliquerEpingles();
+}
+
+// Le catalogue marque certaines colonnes d'un saut : la référence de commande
+// d'une réception, le numéro de commande d'une facture. On n'enveloppe que si
+// la valeur existe ET que l'écran visé est servi par ce miroir — un lien mort
+// vaut moins qu'un nombre nu. La vue par pièce n'en porte pas : ses lignes sont
+// des agrégats, elles ne désignent aucune ligne d'origine à suivre.
+function ecranDispo(cle){
+  return !!(S.meta&&S.meta.ecrans&&S.meta.ecrans.some(e=>e.cle===cle));
+}
+function enveloppeSaut(col,ligne,html){
+  const s=col.saut;
+  if(!s||S.vue==='piece')return html;
+  const v=ligne[col.nom];
+  if(v==null||v==='')return html;
+  if(!ecranDispo(s.ecran))return html;
+  return '<span class="saut" title="'+esc(s.titre)+'" data-ecran="'+esc(s.ecran)+
+         '" data-lien="'+esc(String(s.lien))+'" data-src="'+esc(ligne._id)+'">'+
+         html+'<span class="fl">'+ICO_FLECHE+'</span></span>';
+}
+// Même chemin que « Voir les N → » du panneau des pièces liées : on ne pousse
+// jamais un nom de colonne, seulement l'écran d'origine, la ligne et le rang du
+// lien — le serveur reconstruit la condition depuis le catalogue. Le bandeau de
+// provenance dira d'où vient la grille, et comment en sortir.
+function sauter(cible,rang,srcId){
+  if(!cible||srcId==null||!(rang>=0))return;
+  S.ctxAttente={cible:cible,depuis:S.ecran,depuis_id:srcId,lien:rang};
+  if(location.hash==='#/'+cible)appliquerHash();else location.hash='#/'+cible;
 }
 
 function renderPied(){

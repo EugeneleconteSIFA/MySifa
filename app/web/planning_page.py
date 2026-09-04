@@ -615,11 +615,29 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 .of-dropzone{border:2px dashed var(--border);border-radius:12px;padding:36px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
 .of-dropzone:hover,.of-dropzone.of-dropzone--active{border-color:var(--accent);background:var(--accent-bg)}
 
+/* ── Sécurité des bords (encoche, arrondis, dynamic island) ────────────
+   Sur iPhone en portrait, la barre d'adresse et la lunette laissent des
+   « oreilles » : sans env(safe-area-inset), le contenu se retrouve sous
+   la barre. On applique les insets à la topbar sticky (padding gauche
+   /droite) et au main. */
 @media (max-width:900px){
-  /* La topbar du planning est sticky (mysifa_myprod_shell.css) : pas de
-     compensation à faire, sinon on décale la page de 74 px pour rien. */
-  body.has-topbar .main{padding-top:14px}
-  .main{padding:14px}
+  /* Les gouttieres laterales et leur inset d'encoche viennent desormais de
+     mysifa_myprod_shell.css (variables --msf-gl / --msf-gr sur .main). Ici,
+     seulement ce qui est propre au planning. */
+  .main{
+    padding-bottom:max(24px, env(safe-area-inset-bottom));
+  }
+  /* Le bandeau staging (fixed 24 px) et la topbar sont deux zones
+     empilées. Sans la classe, la topbar ne sait pas laisser sa place. */
+  body.has-staging-bandeau .mobile-topbar{top:24px}
+}
+
+@media (max-width:900px){
+  /* La topbar du planning est sticky (mysifa_myprod_shell.css) : ni
+     compensation de 74 px, ni gouttière ici. Elle colle au haut de l'écran
+     et la marge latérale unique vient du shell — l'agenda ne doit donc pas
+     rajouter la sienne, sinon on empile deux gouttières. */
+  .main > .plan-agenda{padding-left:0;padding-right:0}
   .header{padding:0 0 14px}
   .sec{padding:16px}
   .wk-nav button{padding:6px 10px}
@@ -765,6 +783,50 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
   padding:22px 12px;text-align:center;color:var(--muted);font-size:12.5px;
   border:1px dashed var(--border);border-radius:10px;margin-bottom:8px;
 }
+/* ── Mode paysage : jours empilés en portrait → jours en colonnes ─── */
+.plan-agenda--paysage{padding:8px 12px 12px}
+.plan-agenda--paysage .plan-agenda-machines,
+.plan-agenda--paysage .plan-agenda-wknav{margin-bottom:8px}
+.plan-agenda-week{
+  display:grid;grid-auto-flow:column;
+  grid-auto-columns:minmax(160px, 1fr);
+  gap:8px;
+  overflow-x:auto;-webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;padding-bottom:8px;
+}
+.plan-agenda-week::-webkit-scrollbar{height:6px}
+.plan-agenda-week::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.plan-agenda-wcol{
+  display:flex;flex-direction:column;min-width:0;
+  border:1px solid var(--border);border-radius:12px;background:var(--card);
+  overflow:hidden;
+}
+.plan-agenda-wcol-head{
+  padding:8px 10px;border-bottom:1px solid var(--border);background:var(--card);
+  display:flex;flex-direction:column;gap:4px;flex:0 0 auto;
+}
+.plan-agenda-wcol-head b{font-size:12.5px;font-weight:800;color:var(--text);letter-spacing:-.15px}
+.plan-agenda-wcol-head .sub{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--muted)}
+.plan-agenda-wcol-head .sub .win{font-family:ui-monospace,'Cascadia Code',monospace}
+.plan-agenda-wcol-head .charge{
+  flex:1;height:4px;border-radius:2px;background:var(--border);overflow:hidden;
+}
+.plan-agenda-wcol-head .charge i{display:block;height:100%;background:var(--accent)}
+.plan-agenda-wcol-head .charge i.hot{background:var(--warn)}
+.plan-agenda-wcol.today .plan-agenda-wcol-head b{color:var(--accent)}
+.plan-agenda-wcol-body{
+  flex:1 1 auto;min-height:0;position:relative;
+  padding:6px 4px 6px 40px;overflow-y:auto;-webkit-overflow-scrolling:touch;
+}
+.plan-agenda-wcol .plan-agenda-hours{width:36px}
+.plan-agenda-wcol .plan-agenda-hours i{font-size:9px;right:5px}
+.plan-agenda-wcol .plan-agenda-slot{left:0;right:0}
+.plan-agenda-wcol .plan-agenda-slot .dur{font-size:10px;top:5px;right:6px}
+.plan-agenda-wcol .plan-agenda-slot .l1{font-size:12px;padding-right:38px;gap:4px}
+.plan-agenda-wcol .plan-agenda-slot .l2,
+.plan-agenda-wcol .plan-agenda-slot .l3{font-size:10px}
+.plan-agenda-wcol .plan-agenda-off{padding:12px 8px;font-size:11px;margin:6px 4px}
+
 .plan-agenda-fab{
   position:fixed;right:16px;bottom:calc(20px + env(safe-area-inset-bottom));
   width:54px;height:54px;border-radius:50%;border:0;cursor:pointer;
@@ -927,6 +989,7 @@ async function parseApiError(res){
     const d=j&&j.detail;
     if(typeof d==="string") msg=d;
     else if(Array.isArray(d)) msg=d.map(x=>(x&&x.msg)?x.msg:JSON.stringify(x)).join(" ");
+    else if(d&&typeof d==="object"&&d.message) msg=d.message;
     else if(d) msg=JSON.stringify(d);
   }catch(_){}
   const err=new Error(msg);
@@ -937,12 +1000,113 @@ function apiErrorMessage(e,fallback){
   if(e&&e.message) return e.message;
   return fallback||"Erreur";
 }
-const api=(p,o={})=>fetch(`/api/planning${p}`,{credentials:"include",headers:{"Content-Type":"application/json",...(o.headers||{})},...o}).then(async r=>{
-  if(!r.ok) throw await parseApiError(r);
+// ── Gel des dossiers dont le camion part bientôt ────────────────────────────
+//
+// Passé H-48 de l'enlèvement, un geste qui repousse un dossier n'est plus
+// refusé ni accepté en silence : le serveur renvoie 409 avec le code
+// "gel_transport" et la liste de ce qui casse, et c'est ici qu'on demande à
+// l'écran de l'assumer. La confirmation est renvoyée dans le MÊME geste,
+// enrichi de `confirme_gel` et du motif — pas dans un second endpoint : le
+// planning n'a ainsi qu'un seul chemin d'écriture, déjà journalisé.
+//
+// La fenêtre vit dans son propre conteneur, jamais dans #mroot : le gel se
+// déclenche souvent depuis une modale déjà ouverte (insertion d'un dossier),
+// et réécrire #mroot la ferait disparaître sous les doigts du planificateur.
+let _gelResolve=null;
+function fermerGel(valide){
+  if(valide){
+    const motif=(document.getElementById("gel-motif")?.value||"").trim();
+    if(!motif){
+      const h=document.getElementById("gel-hint");
+      if(h){ h.textContent="Motif requis — une phrase suffit, elle part au journal."; h.style.color="var(--danger)"; }
+      document.getElementById("gel-motif")?.focus();
+      return;
+    }
+    const root=document.getElementById("gelroot"); if(root) root.remove();
+    const r=_gelResolve; _gelResolve=null; if(r) r(motif);
+    return;
+  }
+  const root=document.getElementById("gelroot"); if(root) root.remove();
+  const r=_gelResolve; _gelResolve=null; if(r) r(null);
+}
+function demanderConfirmationGel(d){
+  return new Promise(resolve=>{
+    _gelResolve=resolve;
+    const vieux=document.getElementById("gelroot"); if(vieux) vieux.remove();
+    const lst=Array.isArray(d.dossiers)?d.dossiers:[];
+    const lignes=lst.map(x=>`<li style="margin:0 0 8px;line-height:1.45">${escHtml(x.message||"")}</li>`).join("");
+    const el=document.createElement("div");
+    el.id="gelroot";
+    el.innerHTML=`<div class="mo" style="z-index:1200" onclick="if(event.target===this)fermerGel(false)">
+      <div class="md" style="width:640px">
+        <h3 style="margin:0 0 6px;font-size:18px;font-family:var(--mono);color:var(--text)">Dossier gelé</h3>
+        <p style="margin:0 0 14px;font-size:13px;color:var(--muted)">${escHtml(d.message||"")}</p>
+        <ul style="margin:0 0 18px;padding-left:18px;font-size:13px;color:var(--text)">${lignes}</ul>
+        <div class="fd"><label>Motif</label>
+          <textarea id="gel-motif" rows="3" placeholder="Ex : accord client obtenu pour livrer le 12, urgence machine sur le dossier amont…"
+            style="width:100%;padding:10px 12px;border:1px solid var(--border2);border-radius:10px;background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;resize:vertical;outline:none"></textarea></div>
+        <div id="gel-hint" style="font-size:12px;color:var(--muted);margin:6px 0 16px">Le motif est enregistré au journal des actions avec votre nom.</div>
+        <div class="md-acts" style="display:flex;align-items:center;justify-content:flex-end;gap:10px">
+          <button class="btn-s" onclick="fermerGel(false)">Ne rien changer</button>
+          <button class="btn-p" onclick="fermerGel(true)">J'ai compris, je maintiens</button>
+        </div>
+      </div></div>`;
+    document.body.appendChild(el);
+    setTimeout(()=>{document.getElementById("gel-motif")?.focus();},30);
+  });
+}
+// Le même geste, signé : dans le corps quand il y en a un, en paramètre d'URL
+// pour les rares endpoints qui n'en ont pas (remise des jours par défaut).
+function gelSigner(p,o,motif){
+  const out={...o};
+  if(typeof out.body==="string"&&out.body.trim().startsWith("{")){
+    try{
+      const b=JSON.parse(out.body);
+      b.confirme_gel=true; b.motif_gel=motif;
+      out.body=JSON.stringify(b);
+      return {p,o:out};
+    }catch(_){}
+  }
+  const sep=p.includes("?")?"&":"?";
+  return {p:p+sep+"confirme_gel=1&motif_gel="+encodeURIComponent(motif),o:out};
+}
+async function _apiAppel(p,o,gelPossible){
+  const r=await fetch(`/api/planning${p}`,{credentials:"include",headers:{"Content-Type":"application/json",...(o.headers||{})},...o});
+  if(!r.ok){
+    if(r.status===409&&gelPossible){
+      let d=null;
+      try{ const j=await r.clone().json(); d=j&&j.detail; }catch(_){}
+      if(d&&d.code==="gel_transport"){
+        const motif=await demanderConfirmationGel(d);
+        if(motif===null){
+          const e=new Error("Geste annulé — rien n'a bougé.");
+          e.status=409; e.gelAnnule=true;
+          throw e;
+        }
+        const suite=gelSigner(p,o,motif);
+        return _apiAppel(suite.p,suite.o,false);
+      }
+    }
+    throw await parseApiError(r);
+  }
   const ct=r.headers.get("content-type")||"";
   if(ct.includes("application/json")) return r.json();
   return null;
-});
+}
+function api(p,o={}){ return _apiAppel(p,o,true); }
+
+/* Les routes qui ne vivent PAS sous /api/planning. `api()` préfixe tout par
+   /api/planning : appeler /api/rvgi/... avec lui donne
+   /api/planning/api/rvgi/... — un 404 silencieux, avalé par le catch de
+   l'appelant. C'est ce qui faisait perdre le rattachement RVGI de tout
+   dossier créé depuis la modale (voir rvgiPoserEnAttente). */
+async function apiAbs(p,o={}){
+  const r=await fetch(p,{credentials:"include",
+    headers:{"Content-Type":"application/json",...(o.headers||{})},...o});
+  if(!r.ok) throw await parseApiError(r);
+  const ct=r.headers.get("content-type")||"";
+  return ct.includes("application/json")?r.json():null;
+}
 
 let _pToastTimer=null;
 function showToast(message,type){
@@ -1983,17 +2147,28 @@ function renderContactModal(){
 // Rendu mobile : vrai en dessous de 700 px. Un écouteur matchMedia
 // re-render à la rotation du téléphone — sans lui, on resterait sur la
 // mise en page évaluée au moment du premier render().
-var _planMqMobile=null;
+// Rendu mobile : vrai en dessous de 900 px de large — soit un téléphone
+// en portrait, soit un téléphone en paysage (~852x393). Sans étendre à
+// 900 px, la rotation retombait sur la timeline bureau, illisible sur
+// 393 px de haut.
+var _planMqMobile=null, _planMqPortrait=null;
+function _planMobileSetup(){
+  if(_planMqMobile) return;
+  _planMqMobile=window.matchMedia('(max-width:900px)');
+  _planMqPortrait=window.matchMedia('(orientation:portrait)');
+  var _maj=function(){ if(typeof render==='function') render(); };
+  [_planMqMobile,_planMqPortrait].forEach(function(mq){
+    if(mq.addEventListener) mq.addEventListener('change',_maj);
+    else if(mq.addListener) mq.addListener(_maj);
+  });
+}
 function planningEnAgenda(){
-  try{
-    if(!_planMqMobile){
-      _planMqMobile=window.matchMedia('(max-width:700px)');
-      var _maj=function(){ if(typeof render==='function') render(); };
-      if(_planMqMobile.addEventListener) _planMqMobile.addEventListener('change',_maj);
-      else if(_planMqMobile.addListener) _planMqMobile.addListener(_maj);
-    }
-    return !!_planMqMobile.matches;
-  }catch(e){ return false; }
+  try{ _planMobileSetup(); return !!_planMqMobile.matches; }
+  catch(e){ return false; }
+}
+function planningEnPaysage(){
+  try{ _planMobileSetup(); return !!(_planMqPortrait && !_planMqPortrait.matches); }
+  catch(e){ return false; }
 }
 
 /* ── Agenda vertical (mobile) ─────────────────────────────────────────
@@ -2017,6 +2192,84 @@ function planAgendaSlotClass(s){
   if(Number(s.a_placer||0)===1 || Number(s.valide||0)===0) cls+=' hatch';
   if(typeof isAnnuleEntry==='function' && isAnnuleEntry(s)) cls+=' canc';
   return cls;
+}
+
+/* Rendu d'UN jour ouvré. Utilisé aussi bien en mode empilé qu'en colonnes.
+   pxParHeure et minHeightSlot sont paramétrables pour densifier la colonne
+   paysage (moins de hauteur disponible qu'un scroll vertical portrait). */
+function renderPlanAgendaJour(col, todayIso, pxParHeure, minHeightSlot){
+  const dayW=col.e-col.s;
+  const tlH=Math.max(minHeightSlot*2, Math.round(dayW*pxParHeure));
+  const daySlots=(S.timeline||[]).filter(s=>{
+    const ss=new Date(s.start), se=new Date(s.end);
+    return se>col.date && ss<addD(col.date,1);
+  });
+  const items=daySlots.map((s,idx)=>{
+    const ss=new Date(s.start), se=new Date(s.end);
+    const sod=new Date(col.date); sod.setHours(0,0,0,0);
+    const hStart=Math.max(col.s, Math.min(col.e, (ss-sod)/36e5));
+    const hEnd  =Math.max(col.s, Math.min(col.e, (se-sod)/36e5));
+    if(hEnd-hStart<=0.02) return '';
+    const top=Math.round((hStart-col.s)*pxParHeure);
+    const rawH=(hEnd-hStart)*pxParHeure;
+    const height=Math.max(minHeightSlot, Math.round(rawH));
+    const co=colorForId(s.entry_id||idx+1);
+    const cli=(s.client||'').trim()||(s.numero_of||s.reference||'—');
+    const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:'';
+    const lz=s.laize?`${s.laize} mm`:'';
+    const l2=[fm,lz].filter(Boolean).join(' · ');
+    const startTxt=hhmmFromFloat(hStart);
+    const endTxt=hhmmFromFloat(hEnd);
+    const of=(s.numero_of||s.reference||'').trim();
+    const l3parts=[`${startTxt} → ${endTxt}`];
+    if(of) l3parts.push('OF '+of);
+    if(s.date_livraison) l3parts.push('livr. '+s.date_livraison);
+    const exig=s.exigences_production?String(s.exigences_production).trim():'';
+    const short=height<80;
+    const dur=fmtDur(s.duree_heures||0);
+    const cls=planAgendaSlotClass(s)+(short?' short':'');
+    return `<div class="plan-agenda-slot${cls}"
+      style="top:${top}px;height:${height-3}px;background:${co}"
+      data-eid="${s.entry_id||idx}"
+      onclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()">
+      <div class="rail"></div>
+      <div class="dur">${escHtml(dur)}</div>
+      <div class="l1"><em>${escHtml(cli)}</em>${fscBadgeHtml(s)}${transportBadgeHtml(s)}${gelBadgeHtml(s)}${annuleBadgeHtml(s)}</div>
+      ${l2?`<div class="l2">${escHtml(l2)}</div>`:''}
+      <div class="l3">${l3parts.map(escHtml).join(' · ')}</div>
+      ${exig?`<div class="exig" title="${escAttr(exig)}">${escHtml(exig)}</div>`:''}
+    </div>`;
+  }).join('');
+  let grid='', times='';
+  const step=2;
+  const s0=Math.ceil(col.s/step)*step;
+  for(let hh=s0; hh<=col.e; hh+=step){
+    const y=Math.round((hh-col.s)*pxParHeure);
+    grid+=`<div class="plan-agenda-grid" style="top:${y}px"></div>`;
+    times+=`<i style="top:${y}px">${String(hh).padStart(2,'0')}:00</i>`;
+  }
+  let nowLine='';
+  if(col.ds===todayIso){
+    const nowDt=new Date();
+    const localH=(nowDt-new Date(col.ds+'T00:00:00'))/36e5;
+    if(localH>=col.s && localH<=col.e){
+      const y=Math.round((localH-col.s)*pxParHeure);
+      nowLine=`<div class="plan-agenda-now" style="top:${y}px"><b>${hhmmFromFloat(localH)}</b></div>`;
+    }
+  }
+  const totalPrevu=daySlots.reduce((t,s)=>{
+    const ss=new Date(s.start), se=new Date(s.end);
+    const sod=new Date(col.date); sod.setHours(0,0,0,0);
+    const hs=Math.max(col.s, Math.min(col.e, (ss-sod)/36e5));
+    const he=Math.max(col.s, Math.min(col.e, (se-sod)/36e5));
+    return t+Math.max(0,he-hs);
+  },0);
+  const pct=Math.min(100, Math.round(100*totalPrevu/dayW));
+  return {
+    slots: items || '<div class="plan-agenda-off" style="margin:8px 0 0">Aucun dossier planifié</div>',
+    grid, times, nowLine, tlH,
+    totalPrevu, pct, hourLbl: col.hourLbl||''
+  };
 }
 
 function renderPlanningAgenda(){
@@ -2047,107 +2300,66 @@ function renderPlanningAgenda(){
       onclick="S.wo++;load()" aria-label="Semaine suivante">${icon('chevron-right',18)}</button>
   </div>`;
 
-  let daysHtml='';
-  const nowMs=Date.now();
   const todayIso=ymd(new Date());
+  const paysage=planningEnPaysage();
+  // Densité : le portrait scrolle librement (18 px/h). Le paysage tient
+  // dans ~250 px de hauteur utile, on descend à 12 px/h et le plancher
+  // à 44 px pour qu'un dossier court reste tapable.
+  const PX=paysage?12:PLAN_AGENDA_PXH;
+  const MINH=paysage?44:PLAN_AGENDA_MIN_H;
+
+  let daysHtml='';
   if(model.err){
     daysHtml=`<div class="plan-agenda-off">Aucune journée travaillée cette semaine.</div>`;
+  }else if(paysage){
+    // Mode colonnes : une colonne par jour ouvré. La grille scrolle
+    // horizontalement si les 5 colonnes ne tiennent pas.
+    const cols=(model.cols||[]).map(col=>{
+      const j=renderPlanAgendaJour(col, todayIso, PX, MINH);
+      const isToday=col.ds===todayIso;
+      const short=fmtLivraisonLong(col.ds).replace(/\s\d{4}$/,'');
+      const cap=short.charAt(0).toUpperCase()+short.slice(1);
+      return `<div class="plan-agenda-wcol${isToday?' today':''}">
+        <div class="plan-agenda-wcol-head">
+          <b>${escHtml(cap)}</b>
+          <div class="sub"><span class="win">${escHtml(j.hourLbl)}</span>
+            <span class="charge"><i class="${j.pct>=98?'hot':''}" style="width:${j.pct}%"></i></span>
+            <span class="win">${j.totalPrevu.toFixed(1)}h</span></div>
+        </div>
+        <div class="plan-agenda-wcol-body">
+          <div class="plan-agenda-hours">${j.times}</div>
+          <div class="plan-agenda-tl" style="height:${j.tlH}px">
+            ${j.grid}${j.slots}${j.nowLine}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    daysHtml=`<div class="plan-agenda-week">${cols}</div>`;
   }else{
+    // Mode empilé (portrait) : les jours descendent, chacun avec sa barre.
     (model.cols||[]).forEach(col=>{
-      const dayW=col.e-col.s;
-      const tlH=Math.max(PLAN_AGENDA_MIN_H*2, Math.round(dayW*PLAN_AGENDA_PXH));
-      // Slots qui recoupent ce jour
-      const daySlots=(S.timeline||[]).filter(s=>{
-        const ss=new Date(s.start), se=new Date(s.end);
-        return se>col.date && ss<addD(col.date,1);
-      });
-      const items=daySlots.map((s,idx)=>{
-        const ss=new Date(s.start), se=new Date(s.end);
-        const sod=new Date(col.date); sod.setHours(0,0,0,0);
-        const hStart=Math.max(col.s, Math.min(col.e, (ss-sod)/36e5));
-        const hEnd  =Math.max(col.s, Math.min(col.e, (se-sod)/36e5));
-        if(hEnd-hStart<=0.02) return '';
-        const top=Math.round((hStart-col.s)*PLAN_AGENDA_PXH);
-        const rawH=(hEnd-hStart)*PLAN_AGENDA_PXH;
-        const height=Math.max(PLAN_AGENDA_MIN_H, Math.round(rawH));
-        const co=colorForId(s.entry_id||idx+1);
-        const cli=(s.client||'').trim()||(s.numero_of||s.reference||'—');
-        const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:'';
-        const lz=s.laize?`${s.laize} mm`:'';
-        const l2=[fm,lz].filter(Boolean).join(' · ');
-        const startTxt=hhmmFromFloat(hStart);
-        const endTxt=hhmmFromFloat(hEnd);
-        const of=(s.numero_of||s.reference||'').trim();
-        const l3parts=[`${startTxt} → ${endTxt}`];
-        if(of) l3parts.push('OF '+of);
-        if(s.date_livraison) l3parts.push('livr. '+s.date_livraison);
-        const exig=s.exigences_production?String(s.exigences_production).trim():'';
-        const short=height<80;
-        const dur=fmtDur(s.duree_heures||0);
-        const cls=planAgendaSlotClass(s)+(short?' short':'');
-        return `<div class="plan-agenda-slot${cls}"
-          style="top:${top}px;height:${height-3}px;background:${co}"
-          data-eid="${s.entry_id||idx}"
-          onclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()">
-          <div class="rail"></div>
-          <div class="dur">${escHtml(dur)}</div>
-          <div class="l1"><em>${escHtml(cli)}</em>${fscBadgeHtml(s)}${transportBadgeHtml(s)}${annuleBadgeHtml(s)}</div>
-          ${l2?`<div class="l2">${escHtml(l2)}</div>`:''}
-          <div class="l3">${l3parts.map(escHtml).join(' · ')}</div>
-          ${exig?`<div class="exig" title="${escAttr(exig)}">${escHtml(exig)}</div>`:''}
-        </div>`;
-      }).join('');
-      // Lignes horaires : une tous les 2 h
-      let grid='';
-      let times='';
-      const step=2;
-      const s0=Math.ceil(col.s/step)*step;
-      for(let hh=s0; hh<=col.e; hh+=step){
-        const y=Math.round((hh-col.s)*PLAN_AGENDA_PXH);
-        grid+=`<div class="plan-agenda-grid" style="top:${y}px"></div>`;
-        times+=`<i style="top:${y}px">${String(hh).padStart(2,'0')}:00</i>`;
-      }
-      // Ligne "now" si on est dans ce jour
-      let nowLine='';
-      if(col.ds===todayIso){
-        const nowDt=new Date();
-        const localH=(nowDt-new Date(col.ds+'T00:00:00'))/36e5;
-        if(localH>=col.s && localH<=col.e){
-          const y=Math.round((localH-col.s)*PLAN_AGENDA_PXH);
-          nowLine=`<div class="plan-agenda-now" style="top:${y}px"><b>${hhmmFromFloat(localH)}</b></div>`;
-        }
-      }
-      // Barre de jour : jour long + fenêtre + charge (total prévu / capacité)
-      const totalPrevu=daySlots.reduce((t,s)=>{
-        const ss=new Date(s.start), se=new Date(s.end);
-        const sod=new Date(col.date); sod.setHours(0,0,0,0);
-        const hs=Math.max(col.s, Math.min(col.e, (ss-sod)/36e5));
-        const he=Math.max(col.s, Math.min(col.e, (se-sod)/36e5));
-        return t+Math.max(0,he-hs);
-      },0);
-      const pct=Math.min(100, Math.round(100*totalPrevu/dayW));
+      const j=renderPlanAgendaJour(col, todayIso, PX, MINH);
       const isToday=col.ds===todayIso;
       const dayLbl=fmtLivraisonLong(col.ds);
       const dayCap=dayLbl.charAt(0).toUpperCase()+dayLbl.slice(1);
       daysHtml+=`<div class="plan-agenda-daybar${isToday?' today':''}">
         <b>${escHtml(dayCap)}</b>
-        <span class="win">${escHtml(col.hourLbl||'')}</span>
-        <span class="charge"><i class="${pct>=98?'hot':''}" style="width:${pct}%"></i></span>
-        <span class="win">${totalPrevu.toFixed(1)} h</span>
+        <span class="win">${escHtml(j.hourLbl)}</span>
+        <span class="charge"><i class="${j.pct>=98?'hot':''}" style="width:${j.pct}%"></i></span>
+        <span class="win">${j.totalPrevu.toFixed(1)} h</span>
       </div>
       <div class="plan-agenda-day">
-        <div class="plan-agenda-hours">${times}</div>
-        <div class="plan-agenda-tl" style="height:${tlH}px">
-          ${grid}
-          ${items||'<div class="plan-agenda-off" style="margin:8px 0 0">Aucun dossier planifié</div>'}
-          ${nowLine}
+        <div class="plan-agenda-hours">${j.times}</div>
+        <div class="plan-agenda-tl" style="height:${j.tlH}px">
+          ${j.grid}${j.slots}${j.nowLine}
         </div>
       </div>`;
     });
   }
 
+  const cls='planning-container plan-agenda'+(paysage?' plan-agenda--paysage':'');
   a.innerHTML=`<div class="app">${renderSidebar()}<main class="main">${renderPlanningMobileTopbar()}
-    <div class="planning-container plan-agenda" data-page-enter>
+    <div class="${cls}" data-page-enter>
       <div class="plan-agenda-machines">${machinesChips}</div>
       ${wkNav}
       ${daysHtml}
@@ -2903,7 +3115,7 @@ function mkTL(mon,slots){
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
       ${resizeHandle}
-      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}${transportBadgeHtml(s)}${annuleBadgeHtml(s)}</span>${line2SlotHtml?`<span class="line2">${line2SlotHtml}</span>`:""}${line3SlotHtml?`<span class="line3">${line3SlotHtml}</span>`:""}${(()=>{const _isExpe=(S.planningVue==="expe"||S.planningVue==="prod_expe");if(_isExpe){return qteEtiq==null?`<span class="line-no-of">pas d'OF lié</span>`:"";}return exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:"";})()}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
+      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}${transportBadgeHtml(s)}${gelBadgeHtml(s)}${annuleBadgeHtml(s)}</span>${line2SlotHtml?`<span class="line2">${line2SlotHtml}</span>`:""}${line3SlotHtml?`<span class="line3">${line3SlotHtml}</span>`:""}${(()=>{const _isExpe=(S.planningVue==="expe"||S.planningVue==="prod_expe");if(_isExpe){return qteEtiq==null?`<span class="line-no-of">pas d'OF lié</span>`:"";}return exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:"";})()}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
   });
 
   const np=gp(now);
@@ -3729,6 +3941,25 @@ function trLibelle(t){
   return "Transport réservé — "+transp+" · enlèvement le "+trFmtDate(t.date_enlevement)
        +" avant "+trFmtHeure(t.heure_limite)+pal;
 }
+// Le cadenas n'apparaît que dans la fenêtre de gel — donc rarement, et
+// toujours sur les dossiers qu'il ne faut plus tirer. Un repère permanent sur
+// tous les dossiers avec camion n'apprendrait rien à personne.
+function gelLibelle(g){
+  const transp=(g.transporteur||"").trim();
+  const h=Number(g.gel_heures);
+  const fenetre=isFinite(h)?(" (H-"+String(h).replace(/[.,]0$/,"")+")"):"";
+  return "Dossier gelé"+fenetre+" — enlèvement le "+trFmtDate(g.date_enlevement)
+    +(transp?(" · "+transp):"")+". Le repousser demande un motif.";
+}
+function gelBadgeHtml(s){
+  const g=s&&s.gel;
+  if(!g) return "";
+  const cad='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+  return `<span class="slot-gel" title="${escAttr(gelLibelle(g))}"`
+    +` style="display:inline-flex;align-items:center;justify-content:center;`
+    +`color:var(--warn);background:var(--card);border:1px solid var(--warn);border-radius:6px;`
+    +`padding:2px 5px;margin:0 4px 0 6px;vertical-align:middle;line-height:0">${cad}</span>`;
+}
 function transportBadgeHtml(s){
   const t=s&&s.transport;
   if(!t) return "";
@@ -3853,7 +4084,7 @@ async function rvgiPoserEnAttente(nouvelId){
   if(!_rvgiEnAttente||!nouvelId)return;
   const paquet=_rvgiEnAttente;_rvgiEnAttente=null;
   try{
-    await api('/api/rvgi/rattachements',{method:'POST',body:JSON.stringify({
+    await apiAbs('/api/rvgi/rattachements',{method:'POST',body:JSON.stringify({
       objet:'dossier',objet_id:Number(nouvelId),
       lignes:paquet.lignes||[],etat:paquet.etat||null})});
   }catch(e){
@@ -4003,6 +4234,11 @@ function getFormData(withStatut){
 
 let _addTab='manual';
 let _addOfFile=null,_addOfParsed=null,_addOfParsing=false;
+/* Pré-remplissage venu d'un OF déjà enregistré dans MySifa (bouton « Créer
+   directement un dossier de prod » de MyProd). Différent de _addOfParsed, qui
+   est la lecture d'un PDF déposé à l'instant : ici l'OF EXISTE, on connaît son
+   id, ses commandes rattachées et sa fiche technique. */
+let _addPrefill=null;
 
 function addOfDelaiToDateInput(raw){
   const s=(raw!=null?String(raw):'').trim();
@@ -4026,6 +4262,14 @@ function dossierFieldsFromOfParsed(p){
 
 function renderAddModalBody(){
   if(_addTab==='manual'){
+    const p=_addPrefill&&_addPrefill.dossier;
+    if(p){
+      return dossierFields(p.numero_of||'',p.client||'',p.ref_produit||'',
+        p.laize!=null?String(p.laize):'',p.date_livraison||'',p.commentaire||'','',
+        p.format_l!=null?String(p.format_l):'',p.format_h!=null?String(p.format_h):'',
+        8,'attente',false,p.a_placer==null?1:p.a_placer,0,'','',0,0,0,
+        p.etiquettes_par_carton==null?null:p.etiquettes_par_carton,null);
+    }
     return dossierFields('','','','','','','','','',8,'attente',false);
   }
   if(_addOfParsing){
@@ -4051,17 +4295,23 @@ function renderAddModalBody(){
 
 function renderAddModal(){
   _dossierEditId=null;  // création : la case FSC part avec le POST, rien à enregistrer à la volée
-  const tabs=`<div class="view-tabs" style="margin-bottom:18px">
+  // Venant d'un OF existant, les deux onglets n'ont plus de sens : le
+  // document est déjà là, et proposer d'en déposer un autre inviterait à
+  // créer un doublon.
+  const tabs=_addPrefill?'':`<div class="view-tabs" style="margin-bottom:18px">
     <button type="button" class="view-tab ${_addTab==='manual'?'active':''}" onclick="openAddSwitchTab('manual')">Manuel</button>
     <button type="button" class="view-tab ${_addTab==='of'?'active':''}" onclick="openAddSwitchTab('of')">Depuis un OF PDF</button>
   </div>`;
+  const titre=_addPrefill
+    ? ("Nouveau dossier — OF "+escHtml(String((_addPrefill.dossier&&_addPrefill.dossier.numero_of)||'')))
+    : "Ajouter un dossier";
   const footerBtn=_addTab==='manual'
     ? `<button type="button" class="btn-p" onclick="submitAdd()"><span style="font-size:18px;line-height:1">+</span> Ajouter</button>`
     : (_addOfParsed?`<button type="button" class="btn-p" onclick="submitAddFromOf()">Valider et créer le dossier</button>`:'');
   document.getElementById("mroot").innerHTML=`<div class="mo modal-backdrop">
     <div class="md md--dossier" style="max-width:860px;width:100%;max-height:92vh;overflow-y:auto;padding:28px 32px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px">
-        <h3 style="margin:0;font-size:18px;font-family:var(--mono);color:var(--text)">Ajouter un dossier</h3>
+        <h3 style="margin:0;font-size:18px;font-family:var(--mono);color:var(--text)">${titre}</h3>
         <button type="button" onclick="closeM()" aria-label="Fermer"
           style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:22px;line-height:1;font-family:inherit">×</button>
       </div>
@@ -4078,13 +4328,36 @@ function renderAddModal(){
 function openAdd(){
   if(!CAN_EDIT) return;
   _addTab='manual';
-  _addOfFile=null;_addOfParsed=null;_addOfParsing=false;
+  _addOfFile=null;_addOfParsed=null;_addOfParsing=false;_addPrefill=null;
+  _rvgiEnAttente=null;
   renderAddModal();
 }
 
 function openAddSwitchTab(tab){
   _addTab=tab;
+  _addOfFile=null;_addOfParsed=null;_addOfParsing=false;_addPrefill=null;
+  renderAddModal();
+}
+
+/* Ouvre la modale « nouveau dossier » remplie depuis un OF de MySifa.
+
+   Le bouton de MyProd n'écrit rien de lui-même : la machine, la place dans la
+   file et la durée sont des arbitrages de planification que l'OF ne porte pas.
+   Ce qu'il apporte, c'est tout le reste — et les lignes de commande, posées en
+   attente pour être rattachées au dossier dès sa création. */
+async function openAddDepuisOf(ofId){
+  if(!CAN_EDIT) return;
+  let p=null;
+  try{
+    p=await apiAbs('/api/of/'+encodeURIComponent(ofId)+'/dossier-prefill');
+  }catch(e){
+    showToast(apiErrorMessage(e,"OF introuvable."),"danger");
+    return;
+  }
+  _addTab='manual';
   _addOfFile=null;_addOfParsed=null;_addOfParsing=false;
+  _addPrefill=p;
+  _rvgiEnAttente=(p.commandes&&p.commandes.length)?{lignes:p.commandes,etat:null}:null;
   renderAddModal();
 }
 
@@ -4160,12 +4433,31 @@ async function submitAddFromOf(){
   }
 }
 
+/* Relie explicitement le dossier créé à l'OF dont il est issu.
+
+   L'auto-rapprochement par numéro existe déjà côté serveur, mais il ne se
+   déclenche que si les numéros coïncident. Ici on SAIT de quel OF vient le
+   dossier : le deviner à nouveau serait rouvrir la porte à l'ambiguïté que
+   l'onglet « Mappings à valider » sert justement à trancher. */
+async function lierOfAuDossier(prefill,nouvelId){
+  if(!prefill||!prefill.of_id||!nouvelId) return;
+  try{
+    await apiAbs('/api/admin/planning-of-links',{method:'POST',
+      body:JSON.stringify({planning_id:Number(nouvelId),of_ids:[Number(prefill.of_id)]})});
+  }catch(e){
+    showToast("Dossier créé, mais le lien vers l'OF n'a pas pu être posé. "+
+              "Rattachez-le depuis l'onglet OF.","danger");
+  }
+}
+
 async function submitAdd(){
   const d=getFormData(false);
   if(!d.numero_of){ showToast("Numéro d'OF requis.","danger"); return; }
+  const prefill=_addPrefill;
   try{
     const res=await api(`/machines/${MID}/entries`,{method:"POST",body:JSON.stringify({reference:d.numero_of,...d})});
     await rvgiPoserEnAttente(res&&res.id);
+    await lierOfAuDossier(prefill,res&&res.id);
     closeM();load();
     if(res&&res.warning&&res.warning.message){ showToast(res.warning.message,"danger"); }
     else { showToast("Dossier ajouté.","success"); }
@@ -5862,6 +6154,11 @@ function initPlanningGuides(){
 
 async function boot(){
   document.body.classList.add("has-topbar");
+  // Bandeau staging (rouge) : posé sur body pour que le CSS puisse
+  // décaler la topbar mobile et le padding du main quand v1 est en ligne.
+  if((window.__MYSIFA_ENV__==='v1')||/^v1\./i.test((window.location&&window.location.hostname)||'')){
+    document.body.classList.add("has-staging-bandeau");
+  }
   try{ render(); }catch(e){}
   let r;
   try{r=await fetch("/api/auth/me",{credentials:"include"});}catch(e){location.href="/";return;}
@@ -5923,6 +6220,12 @@ async function boot(){
     }
     // Toujours recalculer les chips après le 1er load.
     scheduleCrossMachineSearch();
+    // Arrivée depuis le bouton « Créer directement un dossier de prod » de
+    // MyProd : la machine est déjà dans l'URL, il reste à ouvrir la modale.
+    const depuisOf=sp.get("depuis-of");
+    if(depuisOf&&/^\d+$/.test(depuisOf)){
+      setTimeout(()=>{try{openAddDepuisOf(parseInt(depuisOf,10));}catch(e){}},260);
+    }
   }catch(e){}
   // Vérifier les annonces de mise à jour après le chargement initial
   checkUpdates();

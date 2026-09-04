@@ -71,7 +71,82 @@ courant. `gpr_ff` (fiches de fabrication) fait exception et reste maintenue.
 
 Conséquence pour la traçabilité : le lien dossier ↔ lot matière que portait
 `gpr_mat.reflot` n'est plus alimenté côté ERP et doit exister dans MySifa.
-Côté entrée, `lif_ligne.lot` et `stm_hist.lot` restent vivants.
+
+**Et l'entrée non plus n'est pas tracée.** Ce document affirmait que
+`lif_ligne.lot` et `stm_hist.lot` « restent vivants ». C'est faux, relevé le
+02/09/2026 : **zéro ligne sur 8 984 réceptions et zéro sur 18 074 mouvements
+matière**, jusqu'aux écritures du jour même. Les colonnes existent, personne ne
+les saisit. Aucun numéro de lot n'entre donc dans MySifa par l'ERP — toute
+traçabilité amont, FSC comprise, se saisit côté MySifa, en réception MyStock.
+
+---
+
+## Le type d'article — `cdf_ligne.type`, et ses libellés dans `fic_para`
+
+`lif_ligne` ne porte **aucun article** : ni code, ni désignation, ni type. Elle
+dit qu'une quantité est arrivée sur la ligne n° X de la commande fournisseur
+n° Y. Ce qui a été reçu se lit sur `cdf_ligne`, jointe sur le **couple**
+`(numero, ligne)` — le numéro seul ramènerait toutes les lignes de la commande
+pour chaque réception. Couverture relevée le 02/09/2026 : 8 984 sur 8 984.
+
+`cdf_ligne.type` porte 18 valeurs sur les réceptions. Ce n'est pas
+`mat_mat.type` : la ligne d'achat réserve ses deux premiers rangs à ce qui n'est
+pas une matière — **1 pour l'article acheté** (3 825 des 3 832 lignes sont dans
+`fic_art` : c'est la sous-traitance), **2 pour l'outil de découpe** (1 367 sur
+1 367 dans `out_dec`). Le reste suit avec deux de décalage :
+
+    cdf_ligne.type = mat_mat.type + 2
+
+Vérifié sur les types purs : adhésifs 9 → 7 (169/169), encres 10 → 8 (462/462),
+clichés 11 → 9 (702/703). Quand les deux divergent sur une ligne, c'est une
+erreur de saisie RVGI — et **c'est le type de la ligne d'achat qui fait foi**,
+puisque c'est lui qui décrit ce qui a été commandé.
+
+**Les libellés se lisent dans `fic_para`**, contrairement à ce que le catalogue
+a longtemps supposé. Un paramètre porte un `numero` de la forme `15 TT PP`, où
+`TT` est le type de matière et `PP` le rang du paramètre ; le libellé est le
+suffixe de `des1` après « : ». On prend le suffixe **majoritaire** du bloc :
+RVGI porte ses propres coquilles de recopie (`150705` annonce « Encres » au
+milieu du bloc des adhésifs). `app/services/erp_types.py` fait ce travail — ne
+pas recopier ces libellés en dur, les renommer dans RVGI doit suffire.
+
+Le regroupement en **familles** (matière, sous-traitance, outillage,
+consommable), lui, n'existe pas dans RVGI : c'est une décision MySifa, stockée
+dans `erp_type_famille` et modifiable dans Paramètres › Types d'article RVGI.
+
+`cdf_ligne.code3` porte la **laize en mm**, remplie sur 100 % des lignes des six
+types laizés (complexes, glassines, vélins, couchés, thermiques, synthétiques)
+et vide partout ailleurs, adhésifs compris.
+
+---
+
+## Trois pièges relevés le 04/09/2026, à ne pas redécouvrir
+
+**1. La clé d'un article matière est le TRIPLET `(code1, code2, type)`.**
+`mat_mat` porte plusieurs lignes pour un même couple `code1`/`code2` — une par
+type. `1183/0001` existe en type 2 (« Siliconnée Jaune 60g »), 3 (« Velin teinté
+jaune fluo 70g »), 5, 1 et 802. Joindre sur le seul couple ramène donc un
+libellé au hasard, et c'est ainsi qu'une ligne de glassine s'est retrouvée
+nommée « Velin ». Le type de la ligne d'achat désigne laquelle est la bonne. Les
+types au-dessus de 100 (802, 807, 817…) sont des variantes : les écarter.
+
+**2. `cua` ne dit PAS l'unité de la quantité.** Sur les bobines il vaut
+massivement `10` ou `M²`, tous deux « mètre carré » dans `fic_ua` — et pourtant
+`lif_ligne.qte` est en **mètres linéaires**. Vérifié en croisant avec
+`stm_hist`, qui écrit la même valeur : `552/0007` reçoit `20 000` pour une
+bobine que `libt2` annonce à « 10.000 ml », soit exactement deux bobines ;
+`552/0005` reçoit `64 009` pour des bobines de « 16.000 ml », soit quatre.
+`cua` décrit l'unité de PRIX, comme `pun` ailleurs. Convertir une quantité de
+réception en divisant par la laize donnerait un métrage faux d'un facteur deux.
+
+**3. `mat_mat.libt2` porte la longueur de bobine**, en clair et de façon
+remarquablement régulière : « Ø 76 mm, Bobine 16.000 ml, CSO », « Roll 18 000
+ml », « Roll lenght 2.000 meters ». C'est l'équivalent RVGI de
+`matieres_premieres.metres_lineaires_par_bobine`, et il permet de chiffrer un
+attendu en bobines sans dépendre de la saisie MyStock — où cinq références
+portent encore 0. Attention en revanche à `libt1`, qui ne contient pas un
+libellé mais un **chemin réseau** vers la fiche technique
+(`R:\Matières\2-Glassine\LIKEXIN`).
 
 ---
 
@@ -168,6 +243,18 @@ n'envoie jamais un nom de colonne — il envoie l'écran d'origine, l'identifian
 de la ligne et le **rang** du lien, et le serveur reconstruit la condition
 depuis le catalogue. Ne pas réordonner `LIENS` sans y penser : le rang, c'est
 l'index dans la liste.
+
+**Une colonne peut porter un lien** : `_c(..., saut="<clé du lien>")` rend la
+cellule cliquable dans la grille — elle bascule sur l'écran d'en face, restreint
+à cette ligne, sans passer par le panneau. La colonne nomme le lien par sa
+**clé** (`"cle"` dans l'entrée de `LIENS`), jamais par son rang :
+`adapter_ecran()` traduit la clé en rang au moment de servir l'écran, ce qui
+rend un réordonnancement de `LIENS` inoffensif pour les sauts. Un saut dont la
+clé n'existe pas laisse la colonne telle quelle, et le front n'enveloppe que si
+l'écran visé est servi par ce miroir — un lien mort vaut moins qu'un nombre nu.
+Portés aujourd'hui : réceptions → commande fournisseur (`cde_piece`,
+`cde_ligne`), commandes fournisseur → réceptions (`receptions_cde`,
+`receptions_ligne`), factures fournisseur → commande (`cde_piece`).
 
 **Après tout ajout ou modification, lancer `python scripts/audit_liens_erp.py`.**
 Un lien branché sur une colonne que RVGI ne remplit jamais ne remonte rien et

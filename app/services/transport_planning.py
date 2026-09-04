@@ -17,6 +17,21 @@ En dessous du seuil de palettes, rien ne s'applique : ni camion, ni marge, ni
 refus. C'est un choix explicite — la regle n'existe que pour les expeditions
 volumineuses, les petits envois se replacent sans consequence.
 
+**Le gel H-48**, decide avec SIFA le 04/09/2026, est une seconde regle posee
+sur les memes departs, et il ne faut pas la confondre avec la premiere.
+
+- La contrainte transport ci-dessus REFUSE, sans appel, un geste qui ferait
+  rater un camion deja reserve. Elle ne regarde que les gros departs.
+- Le gel, lui, ne refuse rien : il ALERTE. Passe l'entree dans la fenetre de
+  gel (`gel_heures` avant l'heure limite du camion), tout geste qui repousse la
+  fin de production d'un dossier concerne demande une confirmation explicite,
+  motif a l'appui. Le motif part au journal des actions.
+
+Le gel ignore volontairement le seuil de palettes : un petit camion engage le
+delai client autant qu'un grand, et c'est justement la ou le planning glissait
+sans que personne n'ait a l'assumer. Le gel n'est pas la pour empecher de
+replanifier, il est la pour que replanifier a H-48 devienne un acte signe.
+
 Deux points de mecanique qui expliquent le code.
 
 1. **La marge ne s'ecrit jamais dans `duree_heures`.** La duree d'un dossier est
@@ -44,6 +59,8 @@ DEFAUTS: Dict[str, Any] = {
     "heure_limite": 11.0,
     "seuil_palettes": 6.0,
     "marge_pct": 20.0,
+    "gel_actif": 1,
+    "gel_heures": 48.0,
 }
 
 # Bornes de saisie cote Parametres. Une heure limite hors de la journee ou une
@@ -52,7 +69,14 @@ BORNES = {
     "heure_limite": (0.0, 23.99),
     "seuil_palettes": (1.0, 99.0),
     "marge_pct": (0.0, 100.0),
+    # 0 h desactive de fait le gel sans toucher a l'interrupteur ; deux semaines
+    # est la borne haute au-dela de laquelle ce n'est plus un gel mais un plan
+    # fige, ce que personne n'a demande.
+    "gel_heures": (0.0, 336.0),
 }
+
+CLES_BOOLEENNES = ("actif", "gel_actif")
+CLES_NUMERIQUES = ("heure_limite", "seuil_palettes", "marge_pct", "gel_heures")
 
 # Tolerance de comparaison des fins de production, en heures (1 minute).
 # Deux simulations successives ne retombent pas a la seconde pres : sans
@@ -79,8 +103,10 @@ def charger_params(conn) -> Dict[str, Any]:
         except Exception:
             pass
     out: Dict[str, Any] = {}
-    out["actif"] = str(vals.get("actif", 1)).strip() not in ("0", "", "false", "False")
-    for cle in ("heure_limite", "seuil_palettes", "marge_pct"):
+    for cle in CLES_BOOLEENNES:
+        brut = str(vals.get(cle, DEFAUTS[cle])).strip()
+        out[cle] = brut not in ("0", "", "false", "False")
+    for cle in CLES_NUMERIQUES:
         try:
             v = float(vals.get(cle))
         except (TypeError, ValueError):
@@ -97,10 +123,10 @@ def enregistrer_params(conn, valeurs: Dict[str, Any]) -> Dict[str, Any]:
             f"CREATE TABLE IF NOT EXISTS {TABLE_PARAMS} "
             "(cle TEXT PRIMARY KEY NOT NULL, valeur TEXT NOT NULL)"
         )
-    for cle in ("actif", "heure_limite", "seuil_palettes", "marge_pct"):
+    for cle in CLES_BOOLEENNES + CLES_NUMERIQUES:
         if cle not in valeurs or valeurs[cle] is None:
             continue
-        if cle == "actif":
+        if cle in CLES_BOOLEENNES:
             brut = valeurs[cle]
             txt = "1" if (brut is True or str(brut).strip() in ("1", "true", "True")) else "0"
         else:
@@ -412,3 +438,183 @@ def violations(
         )
     out.sort(key=lambda v: v["limite_iso"])
     return out
+
+
+# ─── Gel H-48 ────────────────────────────────────────────────────────────────
+#
+# Deuxieme regle, posee sur les memes departs que la contrainte transport mais
+# avec une intention differente : ne rien interdire, tout faire assumer.
+#
+# Un dossier entre en gel `gel_heures` avant l'heure limite de son camion. A
+# partir de la, un geste de planning qui repousse sa fin de production n'est
+# plus un simple glissement : il demande une confirmation ecrite. C'est le seul
+# endroit du planning ou l'outil demande « pourquoi ».
+
+
+def fenetre_gel(
+    date_enlevement: Any, heure_limite: float, gel_heures: float
+) -> tuple[Optional[datetime], Optional[datetime]]:
+    """(debut du gel, heure limite) pour un enlevement. (None, None) si illisible."""
+    lim = limite_pour(date_enlevement, heure_limite)
+    if lim is None:
+        return None, None
+    return lim - timedelta(hours=float(gel_heures)), lim
+
+
+def dossiers_geles(
+    conn,
+    entries: List[dict],
+    *,
+    params: Optional[Dict[str, Any]] = None,
+    maintenant: Optional[datetime] = None,
+) -> Dict[int, dict]:
+    """Dossiers actuellement dans la fenetre de gel, indexes par id.
+
+    Deux ecarts assumes avec `contraintes_pour` :
+
+    1. **Pas de seuil de palettes.** Le gel s'applique des qu'un depart a venir
+       est rattache au dossier. Un enlevement de deux palettes tient un delai
+       client comme un enlevement de dix.
+    2. **Pas de marge.** Le gel ne change aucun calcul de duree ; il ne fait que
+       qualifier un dossier comme « a ne plus bouger sans le dire ».
+
+    Un dossier termine est deja produit : plus rien a geler.
+    """
+    p = params or charger_params(conn)
+    if not p["gel_actif"] or not entries:
+        return {}
+    now = maintenant or datetime.now()
+    ids = [
+        int(e["id"])
+        for e in entries
+        if e.get("id") is not None and (e.get("statut") or "attente") != "termine"
+    ]
+    if not ids:
+        return {}
+    departs = departs_par_dossier(conn, ids, aujourdhui=now.date())
+    out: Dict[int, dict] = {}
+    for eid in ids:
+        deps = departs.get(eid) or []
+        if not deps:
+            continue
+        # Le depart le plus proche impose la fenetre : c'est lui qui part en premier.
+        premier = deps[0]
+        debut, lim = fenetre_gel(
+            premier["date_enlevement"], p["heure_limite"], p["gel_heures"]
+        )
+        if lim is None or debut is None or now < debut:
+            continue
+        out[eid] = {
+            "entry_id": eid,
+            "depart_id": premier["depart_id"],
+            "transporteur": premier["transporteur"],
+            "date_enlevement": premier["date_enlevement"],
+            "palettes": premier.get("nb_palette"),
+            "limite": lim,
+            "limite_iso": lim.strftime("%Y-%m-%dT%H:%M:%S"),
+            "gel_debut": debut,
+            "gel_debut_iso": debut.strftime("%Y-%m-%dT%H:%M:%S"),
+            "gel_heures": float(p["gel_heures"]),
+            "heure_limite": float(p["heure_limite"]),
+        }
+    return out
+
+
+def _fmt_duree_h(heures: float) -> str:
+    """« 45 min », « 3 h », « 3 h 30 » — jamais « 3.47 h »."""
+    minutes = int(round(float(heures) * 60.0))
+    if minutes < 60:
+        return f"{minutes} min"
+    h, m = divmod(minutes, 60)
+    return f"{h} h" if m == 0 else f"{h} h {m:02d}"
+
+
+def message_gel(
+    entry: dict, gel: dict, fin_avant: Optional[datetime], fin_apres: Optional[datetime]
+) -> str:
+    """Ce que la fenetre de confirmation affiche, dossier par dossier.
+
+    Trois informations, dans cet ordre : quel dossier, quel camion, de combien
+    ce geste le repousse. Le planificateur decide avec ca.
+    """
+    ref = str(entry.get("numero_of") or entry.get("reference") or "?").strip()
+    transp = (gel.get("transporteur") or "").strip()
+    qui = f" ({transp})" if transp else ""
+    ecart = ""
+    if fin_avant and fin_apres:
+        ecart = f" de {_fmt_duree_h((fin_apres - fin_avant).total_seconds() / 3600.0)}"
+    lim = gel.get("limite")
+    depasse = isinstance(lim, datetime) and fin_apres is not None and fin_apres > lim
+    fin_txt = _fmt_jour_heure(fin_apres) if fin_apres else "date inconnue"
+    suite = (
+        f" Fin de production repoussee{ecart}, au {fin_txt}"
+        + (" — apres l'heure limite du camion." if depasse else ".")
+    )
+    return (
+        f"{ref} — enlevement le {_fmt_jour_heure(lim)}{qui}, "
+        f"gele depuis le {_fmt_jour_heure(gel.get('gel_debut'))}." + suite
+    )
+
+
+def alertes_gel(
+    entries: List[dict],
+    gels: Dict[int, dict],
+    fins_avant: Dict[int, Optional[datetime]],
+    fins_apres: Dict[int, Optional[datetime]],
+) -> List[dict]:
+    """Dossiers geles que ce geste repousse.
+
+    Le critere est le retard ajoute, pas le deplacement : avancer un dossier
+    gele, ou en avancer un autre devant lui, ne fait rater personne et ne
+    declenche donc rien. Ce qui se confirme, c'est ce qui coute du temps.
+
+    Un dossier absent de `fins_avant` (celui qu'on vient d'inserer) n'a pas de
+    point de comparaison : il n'est pas repousse, il arrive.
+    """
+    par_id = {int(e["id"]): e for e in entries if e.get("id") is not None}
+    out: List[dict] = []
+    for eid, gel in gels.items():
+        avant = fins_avant.get(eid)
+        apres = fins_apres.get(eid)
+        if avant is None or apres is None:
+            continue
+        ecart_h = (apres - avant).total_seconds() / 3600.0
+        if ecart_h <= TOLERANCE_H:
+            continue
+        e = par_id.get(eid) or {"id": eid}
+        lim = gel.get("limite")
+        out.append(
+            {
+                "entry_id": eid,
+                "reference": str(e.get("numero_of") or e.get("reference") or "").strip(),
+                "depart_id": gel.get("depart_id"),
+                "transporteur": gel.get("transporteur"),
+                "date_enlevement": gel.get("date_enlevement"),
+                "limite_iso": gel.get("limite_iso"),
+                "gel_debut_iso": gel.get("gel_debut_iso"),
+                "gel_heures": gel.get("gel_heures"),
+                "fin_avant_iso": avant.strftime("%Y-%m-%dT%H:%M:%S"),
+                "fin_apres_iso": apres.strftime("%Y-%m-%dT%H:%M:%S"),
+                "ecart_h": round(ecart_h, 2),
+                "depasse_limite": bool(isinstance(lim, datetime) and apres > lim),
+                "message": message_gel(e, gel, avant, apres),
+            }
+        )
+    out.sort(key=lambda a: (a["limite_iso"] or "", a["reference"]))
+    return out
+
+
+def resume_gel(alertes: List[dict], gel_heures: Optional[float] = None) -> str:
+    """Phrase d'entete de la fenetre de confirmation."""
+    n = len(alertes)
+    if n == 0:
+        return ""
+    h = gel_heures
+    if h is None:
+        h = alertes[0].get("gel_heures") or DEFAUTS["gel_heures"]
+    fenetre = f"moins de {float(h):g} h"
+    if n == 1:
+        return (
+            f"Ce geste repousse un dossier dont le camion part dans {fenetre}."
+        )
+    return f"Ce geste repousse {n} dossiers dont le camion part dans {fenetre}."

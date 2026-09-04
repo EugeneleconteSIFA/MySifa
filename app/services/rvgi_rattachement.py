@@ -33,8 +33,17 @@ from app.services import erp_mirror as miroir
 MAX_LIGNES = 40
 LIMITE_RECHERCHE = 40
 
-OBJETS = ("dossier", "depart")
+OBJETS = ("dossier", "depart", "of")
 PIECES = ("commande", "livraison")
+
+# Où chaque objet range son état, et quelle nature de pièce il rattache.
+# `champ_texte` est la vitrine dénormalisée des numéros : tenue à jour,
+# jamais lue comme source.
+ACCUEIL = {
+    "dossier": ("planning_entries", "dos_rvgi", "commande"),
+    "depart":  ("expe_departs",     "no_bl",    "livraison"),
+    "of":      ("of_imports",       "cmd_rvgi", "commande"),
+}
 
 
 # ─── Références de dossier ───────────────────────────────────────────────────
@@ -138,6 +147,11 @@ def deja_couvertes(conn: sqlite3.Connection, lignes: List[Dict[str, Any]],
     etats = etat_des_lignes(conn, piece, lignes)
     for e in etats.values():
         for o in e.get("objets", []):
+            # Un OF pointe la même ligne que le dossier qui en sort : le compter
+            # ferait naître en « Reliquat » le premier dossier issu de cet OF.
+            # Ce qui fait reliquat, c'est une production déjà passée dessus.
+            if o["objet"] == "of":
+                continue
             if sauf and (o["objet"], int(o["objet_id"])) == (sauf[0], int(sauf[1])):
                 continue
             return True
@@ -213,6 +227,13 @@ def _libelles_objets(conn: sqlite3.Connection,
             "FROM expe_departs WHERE id IN (%s)" % ",".join("?" * len(ids_p)), ids_p
         ):
             out[("depart", r["id"])] = r["ref"]
+    ids_o = sorted({int(r["objet_id"]) for r in rattachements if r["objet"] == "of"})
+    if ids_o:
+        for r in conn.execute(
+            "SELECT id, COALESCE(NULLIF(TRIM(COALESCE(of_numero,'')),''), 'OF #'||id) AS ref "
+            "FROM of_imports WHERE id IN (%s)" % ",".join("?" * len(ids_o)), ids_o
+        ):
+            out[("of", r["id"])] = r["ref"]
     return out
 
 
@@ -352,9 +373,9 @@ def recalculer_etat(conn: sqlite3.Connection, objet: str, objet_id: int,
     `force` permet de poser « hors_commande » (production sans commande, assumée)
     ou « a_rattacher » (« je ne trouve pas ») sans rattachement à l'appui.
     """
-    table, champ_texte = (("planning_entries", "dos_rvgi") if objet == "dossier"
-                          else ("expe_departs", "no_bl"))
-    piece = "commande" if objet == "dossier" else "livraison"
+    if objet not in ACCUEIL:
+        raise ValueError("Objet inconnu : %r" % (objet,))
+    table, champ_texte, piece = ACCUEIL[objet]
     rows = [dict(r) for r in conn.execute(
         "SELECT * FROM rvgi_rattachements WHERE objet=? AND objet_id=? AND piece=?",
         (objet, int(objet_id), piece),
@@ -876,3 +897,134 @@ def entete_commande(numero: str) -> Optional[Dict[str, Any]]:
         "nb_lignes": nb_lignes,
         "soldee": soldee,
     }
+
+
+# ─── Articles ────────────────────────────────────────────────────────────────
+#
+# La référence d'une fiche technique MySifa (« 1026/0020 », parfois suivie de
+# « - COHESIO 1 ») est exactement le couple code1/code2 d'un article de RVGI.
+# C'est ce qui permet de relier les deux sans demander une saisie de plus —
+# mais le lien est STOCKÉ (article_code1/article_code2 sur la fiche) et non
+# redevine à chaque lecture : une référence corrigée ne doit pas déplacer
+# silencieusement une fiche d'un article à un autre.
+
+def couper_reference(reference: str) -> Optional[Tuple[str, str]]:
+    """« 1026/0020 - COHESIO 1 » → ('1026', '0020'). None si ce n'en est pas une.
+
+    Le suffixe machine est un ajout d'affichage côté SIFA ; RVGI ne connaît que
+    les deux codes. On ne normalise pas les zéros de tête : « 0020 » et « 20 »
+    sont deux articles différents dans l'ERP.
+    """
+    brut = str(reference or "").split(" - ")[0].strip()
+    if "/" not in brut:
+        return None
+    gauche, _, droite = brut.partition("/")
+    gauche, droite = gauche.strip(), droite.strip()
+    if not gauche or not droite:
+        return None
+    if not (gauche.isdigit() and droite.isdigit()):
+        return None
+    return gauche, droite
+
+
+def _article_ligne(r) -> Dict[str, Any]:
+    largeur, hauteur = _nombre(r["ftl"]), _nombre(r["fth"])
+    return {
+        "code1": str(r["code1"] or "").strip(),
+        "code2": str(r["code2"] or "").strip(),
+        "reference": "%s/%s" % (str(r["code1"] or "").strip(),
+                                str(r["code2"] or "").strip()),
+        "libelle": (r["libc1"] or None),
+        "ref_client": (str(r["cltc2"]).strip() or None) if r["cltc2"] else None,
+        "largeur": largeur,
+        "hauteur": hauteur,
+        "format": ("%s x %s mm" % (_texte_nombre(largeur), _texte_nombre(hauteur))
+                   if largeur and hauteur else None),
+    }
+
+
+def _texte_nombre(v: Optional[float]) -> str:
+    if v is None:
+        return ""
+    return str(int(v)) if float(v) == int(v) else str(v)
+
+
+def chercher_articles(q: str, limite: int = LIMITE_RECHERCHE) -> List[Dict[str, Any]]:
+    """Articles candidats pour une fiche technique.
+
+    Cherche sur les deux codes, le libellé et la référence client : c'est ce
+    que l'ADV a sous les yeux quand elle ouvre une fiche.
+    """
+    q = str(q or "").strip()
+    if len(q) < 2:
+        return []
+    # « 1026/0020 » tapé en entier doit tomber sur l'article exact, pas sur les
+    # cent articles dont le libellé contient « 1026 ».
+    exact = couper_reference(q)
+    with miroir.get_erp_db() as c:
+        if "fic_art" not in miroir.tables_presentes(c):
+            return []
+        if exact:
+            rows = c.execute(
+                "SELECT code1, code2, libc1, cltc2, ftl, fth FROM fic_art "
+                "WHERE corbeille = 0 AND code1 = ? AND code2 = ? LIMIT 1", exact,
+            ).fetchall()
+            if rows:
+                return [_article_ligne(r) for r in rows]
+        ou, params = _filtre_texte(q, ["code1", "code2", "libc1", "cltc2"])
+        rows = c.execute(
+            "SELECT code1, code2, libc1, cltc2, ftl, fth FROM fic_art "
+            "WHERE corbeille = 0 AND " + ou +
+            " ORDER BY CAST(code1 AS INTEGER), code2 LIMIT ?",
+            params + [int(limite)],
+        ).fetchall()
+    return [_article_ligne(r) for r in rows]
+
+
+def article(code1: str, code2: str) -> Optional[Dict[str, Any]]:
+    """L'article et ce que RVGI sait de sa fabrication.
+
+    `gpr_ff` est la fiche de fabrication de l'ERP. SIFA a cessé de l'alimenter
+    en avril 2026 — c'est précisément ce qui a donné naissance à MySifa. On la
+    lit donc comme une aide au pré-remplissage, jamais comme une vérité : le
+    bloc `fabrication` est renvoyé à part pour que l'écran puisse dire d'où
+    vient chaque valeur proposée.
+    """
+    a, b = str(code1 or "").strip(), str(code2 or "").strip()
+    if not a or not b:
+        return None
+    with miroir.get_erp_db() as c:
+        presentes = miroir.tables_presentes(c)
+        if "fic_art" not in presentes:
+            return None
+        r = c.execute(
+            "SELECT code1, code2, libc1, cltc2, ftl, fth FROM fic_art "
+            "WHERE corbeille = 0 AND code1 = ? AND code2 = ? LIMIT 1", (a, b),
+        ).fetchone()
+        if not r:
+            return None
+        out = _article_ligne(r)
+        out["fabrication"] = None
+        if "gpr_ff" in presentes:
+            f = c.execute(
+                "SELECT laimat, laiout, nbcoul, cliche, nmac1, amj FROM gpr_ff "
+                "WHERE corbeille = 0 AND code1 = ? AND code2 = ? "
+                "ORDER BY COALESCE(amj,'') DESC LIMIT 1", (a, b),
+            ).fetchone()
+            if f:
+                machines = {}
+                if "mac_pro" in presentes:
+                    for m in c.execute(
+                        "SELECT code, nom FROM mac_pro WHERE corbeille = 0 AND type = 1"
+                    ):
+                        if m["nom"]:
+                            machines[m["code"]] = str(m["nom"]).strip()
+                out["fabrication"] = {
+                    "laize_matiere": _nombre(f["laimat"]),
+                    "laize_outil": _nombre(f["laiout"]),
+                    "nb_couleurs": _nombre(f["nbcoul"]),
+                    "cliche": (f["cliche"] or None),
+                    "machine": machines.get(f["nmac1"]),
+                    "maj_le": (f["amj"] or None),
+                }
+    return out

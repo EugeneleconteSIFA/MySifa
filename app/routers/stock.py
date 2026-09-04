@@ -8935,3 +8935,293 @@ def get_matiere_laizes(matiere_id: int, request: Request):
         "metres_lineaires_par_bobine": float(mat["metres_lineaires_par_bobine"] or 0),
         "laizes": laizes,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Référentiel matière pour les documents de production (OF, fiche technique)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Un OF ne se saisit pas dans MyStock, mais il désigne des matières : un
+# carton, un mandrin, une palette, un adhésif, un support. Jusqu'ici ces
+# valeurs étaient tapées en texte libre et rapprochées après coup par
+# `mp_fiche_mapping` — une frappe près, et le besoin matière sort faux sans
+# que rien ne le signale.
+#
+# Ces deux routes permettent de choisir la référence AU MOMENT de la saisie,
+# et d'en créer une quand elle manque. Sans la seconde, la première ne servirait
+# à rien : une ADV bloquée devant une liste sans son carton retape du texte
+# libre, et on revient au point de départ.
+
+# Les familles de `mp_fiche_mapping` et les catégories MyStock qu'elles
+# recouvrent. « support » en couvre deux : un complexe est un frontal collé.
+_FAMILLES_DOCUMENT = {
+    "support":  ("frontal", "complexe"),
+    "glassine": ("glassine",),
+    "adhesif":  ("adhesif",),
+    "carton":   ("carton",),
+    "mandrin":  ("mandrin",),
+    "palette":  ("palette",),
+}
+
+
+def require_document_matieres(request: Request) -> dict:
+    """Choisir et créer une référence depuis un OF ou une fiche technique.
+
+    Le périmètre est celui de `_STOCK_MATIERES_ADMIN_ROLES`, identique à celui
+    qui autorise la saisie d'un OF — mais SANS exiger l'accès à l'application
+    MyStock : on désigne une matière depuis un document de production, on ne
+    consulte pas le stock.
+    """
+    user = get_current_user(request)
+    if (user.get("role") or "") not in _STOCK_MATIERES_ADMIN_ROLES:
+        raise HTTPException(403, "Accès réservé à la Direction et Administration")
+    return user
+
+
+@router.get("/api/stock/matieres/referentiel")
+def referentiel_matieres(request: Request):
+    """Les références d'une famille, pour le sélecteur d'un OF ou d'une fiche.
+
+    `famille` : support | glassine | adhesif | carton | mandrin | palette.
+    `q` filtre sur la référence, la désignation et la sous-catégorie.
+    """
+    require_document_matieres(request)
+    famille = (request.query_params.get("famille") or "").strip().lower()
+    q = (request.query_params.get("q") or "").strip()
+    if famille not in _FAMILLES_DOCUMENT:
+        raise HTTPException(
+            400, "Famille inconnue (attendu : %s)" % "|".join(sorted(_FAMILLES_DOCUMENT))
+        )
+    categories = _FAMILLES_DOCUMENT[famille]
+    params: list = list(categories)
+    sql = (
+        "SELECT id, categorie, reference, designation, sous_categorie, "
+        "       COALESCE(brouillon, 0) AS brouillon "
+        "  FROM matieres_premieres "
+        " WHERE COALESCE(actif, 1) = 1 AND categorie IN (%s)"
+        % ",".join("?" * len(categories))
+    )
+    if q:
+        like = "%" + q.replace("%", "") + "%"
+        sql += (" AND (reference LIKE ? OR designation LIKE ?"
+                "      OR COALESCE(sous_categorie,'') LIKE ?)")
+        params += [like, like, like]
+    # Les brouillons en dernier : ce sont des références incomplètes, elles ne
+    # doivent pas se présenter avant celles que MyStock a validées.
+    sql += " ORDER BY COALESCE(brouillon,0), COALESCE(sous_categorie,''), designation LIMIT 300"
+    with get_db() as conn:
+        rows = [dict(r) for r in conn.execute(sql, params)]
+    return {"famille": famille, "categories": list(categories),
+            "total": len(rows), "references": rows}
+
+
+@router.post("/api/stock/matieres/brouillon")
+async def creer_matiere_brouillon(request: Request):
+    """Crée une référence matière manquante, en brouillon, depuis un document.
+
+    Body : { famille, reference, designation, sous_categorie? }
+
+    Volontairement pauvre : ni prix, ni laize, ni seuil. L'ADV qui saisit un OF
+    n'a pas ces informations et ne doit pas être tentée de les inventer — un
+    prix faux est pire qu'un prix absent, il se propage dans la valorisation
+    sans jamais lever d'alerte. `brouillon = 1` fait remonter la référence dans
+    « matières à compléter » de MyStock jusqu'à ce qu'elle soit renseignée.
+    """
+    user = require_document_matieres(request)
+    body = await request.json()
+    famille = (body.get("famille") or "").strip().lower()
+    reference = (body.get("reference") or "").strip()
+    designation = (body.get("designation") or "").strip()
+    sous_categorie = (body.get("sous_categorie") or "").strip() or None
+
+    if famille not in _FAMILLES_DOCUMENT:
+        raise HTTPException(400, "Famille inconnue.")
+    if not designation:
+        raise HTTPException(400, "Désignation obligatoire.")
+    # La référence sert de clé dans MyStock. À défaut, la désignation en tient
+    # lieu : mieux vaut une référence lisible qu'un code inventé au hasard.
+    reference = reference or designation
+    # Une famille en couvre parfois deux catégories ; la première est celle du
+    # cas courant (« frontal » plutôt que « complexe »).
+    categorie = _FAMILLES_DOCUMENT[famille][0]
+
+    maintenant = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    qui = (user.get("nom") or user.get("email") or "").strip() or None
+    with get_db() as conn:
+        double = conn.execute(
+            "SELECT id, designation FROM matieres_premieres "
+            " WHERE categorie = ? AND LOWER(TRIM(reference)) = LOWER(TRIM(?))",
+            (categorie, reference),
+        ).fetchone()
+        if double:
+            # On ne crée pas un homonyme : on rend celle qui existe, l'écran la
+            # sélectionne, et l'ADV voit tout de suite que sa matière était là.
+            return {"ok": True, "id": double["id"], "existait": True,
+                    "designation": double["designation"]}
+        cur = conn.execute(
+            "INSERT INTO matieres_premieres "
+            "  (categorie, reference, designation, sous_categorie, actif, "
+            "   seuil_alerte, brouillon, brouillon_par, brouillon_le) "
+            "VALUES (?, ?, ?, ?, 1, 0, 1, ?, ?)",
+            (categorie, reference, designation, sous_categorie, qui, maintenant),
+        )
+        matiere_id = cur.lastrowid
+        conn.execute("INSERT INTO mp_stock (matiere_id, quantite) VALUES (?, 0)",
+                     (matiere_id,))
+        conn.commit()
+
+    log_action(
+        user=user, action="CREATE", module="stock",
+        objet="Matière (brouillon) %s · %s" % (categorie, designation),
+        detail={"famille": famille, "reference": reference,
+                "origine": "document de production"},
+        request=request,
+    )
+    return {"ok": True, "id": matiere_id, "existait": False,
+            "designation": designation, "brouillon": True}
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# Réceptions RVGI — la file d'intégration
+#
+# Les entrées de matière ne se saisissent plus : elles viennent des réceptions
+# enregistrées dans l'ERP. Ce qui reste à faire côté MySifa, c'est dire à quelle
+# référence correspond l'article RVGI, une fois par article — le reste est
+# calculé.
+#
+# Toute la logique vit dans `app/services/reception_rvgi.py` : le périmètre, le
+# rapprochement, les conversions, les deux régimes. Ces endpoints ne font que
+# tenir la transaction et l'audit.
+#
+# L'écriture du stock passe par `appliquer_mouvement_mp`, le chemin canonique de
+# MyStock. Le service ne l'importe pas — il la reçoit — pour que ce module reste
+# lisible sans FastAPI et que le stock n'ait jamais deux façons de bouger.
+# ═════════════════════════════════════════════════════════════════════════
+
+
+@router.get("/api/stock/reception-rvgi")
+def reception_rvgi_file(request: Request, limite: int = 300):
+    """Ce que l'ERP a reçu et que MyStock n'a pas encore intégré."""
+    require_stock(request)
+    from app.services import erp_mirror as _miroir
+    from app.services import reception_rvgi as _rr
+
+    if not _miroir.miroir_present():
+        return {"depuis": None, "lignes": [], "total": 0,
+                "message": "Le miroir de l'ERP n'a pas encore été construit."}
+    limite = max(1, min(int(limite or 300), 1000))
+    try:
+        with get_db() as conn, _miroir.get_erp_db() as erp:
+            res = _rr.lignes_a_integrer(conn, erp, limite=limite)
+    except FileNotFoundError as e:
+        raise HTTPException(503, str(e)) from None
+    res["familles"] = {str(t): v[0] for t, v in _rr.PERIMETRE.items()}
+    return res
+
+
+@router.put("/api/stock/reception-rvgi/mise-en-service")
+async def reception_rvgi_mise_en_service(request: Request):
+    """La date à partir de laquelle les réceptions entrent en stock.
+
+    Body : { date: 'AAAA-MM-JJ' } — une date vide arrête l'intégration.
+    Aucune reprise rétroactive n'est prévue : reculer cette date ferait entrer
+    d'un coup un historique que le stock actuel contient déjà.
+    """
+    user = require_stock_matieres_admin(request)
+    from app.services import reception_rvgi as _rr
+
+    body = await request.json()
+    valeur = str((body or {}).get("date") or "").strip()[:10]
+    if valeur and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", valeur):
+        raise HTTPException(400, "Date attendue au format AAAA-MM-JJ.")
+    with get_db() as conn:
+        avant = _rr.date_de_mise_en_service(conn)
+        conn.execute(
+            "INSERT INTO stock_config (cle, valeur, updated_at) VALUES (?,?,?) "
+            "ON CONFLICT(cle) DO UPDATE SET valeur=excluded.valeur, "
+            "updated_at=excluded.updated_at",
+            (_rr.CLE_DEPUIS, valeur, datetime.now().isoformat(timespec="seconds")))
+        conn.commit()
+    log_action(user=user, request=request, module="stock", action="UPDATE",
+               objet="reception_rvgi:mise_en_service",
+               detail=f"{avant or 'aucune'} → {valeur or 'aucune'}")
+    return {"date": valeur or None}
+
+
+@router.post("/api/stock/reception-rvgi/apparier")
+async def reception_rvgi_apparier(request: Request):
+    """Lie un article RVGI à une référence MySifa.
+
+    Body : { code1, code2, type_code, matiere_id }. `matiere_id` vide délie.
+    """
+    user = require_stock_matieres_admin(request)
+    from app.services import reception_rvgi as _rr
+
+    body = await request.json() or {}
+    with get_db() as conn:
+        try:
+            res = _rr.apparier(
+                conn, body.get("code1"), body.get("code2"), body.get("type_code"),
+                body.get("matiere_id"),
+                auteur=(user.get("nom") or user.get("email")),
+                origine="manuel")
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        conn.commit()
+    log_action(user=user, request=request, module="stock", action="UPDATE",
+               objet="reception_rvgi:appariement:%s/%s/%s" % (
+                   res["code1"], res["code2"], res["type_code"]),
+               detail="matière %s" % (res["matiere_id"] or "déliée"))
+    return res
+
+
+@router.post("/api/stock/reception-rvgi/integrer")
+async def reception_rvgi_integrer(request: Request):
+    """Fait entrer une ou plusieurs lignes de réception dans le stock.
+
+    Body : { lif_ids: [...] }. Les lignes sont relues côté serveur : le client
+    envoie des identifiants, jamais des quantités — sinon une page restée
+    ouverte pendant une synchro écrirait des chiffres périmés.
+
+    Une ligne qui échoue n'annule pas les autres : elle est rendue avec son
+    motif. Refuser le lot entier pour une référence non appariée obligerait à
+    tout rejouer.
+    """
+    user = require_stock(request)
+    from app.services import erp_mirror as _miroir
+    from app.services import reception_rvgi as _rr
+
+    body = await request.json() or {}
+    voulus = body.get("lif_ids") or []
+    if not isinstance(voulus, list) or not voulus:
+        raise HTTPException(400, "Aucune ligne à intégrer.")
+    try:
+        voulus = {int(x) for x in voulus}
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Identifiants de ligne invalides.") from None
+
+    faits, refuses = [], []
+    try:
+        with get_db() as conn, _miroir.get_erp_db() as erp:
+            file = _rr.lignes_a_integrer(conn, erp, limite=2000)
+            par_id = {l["lif_id"]: l for l in file["lignes"]}
+            for lif_id in sorted(voulus):
+                ligne = par_id.get(lif_id)
+                if ligne is None:
+                    refuses.append({"lif_id": lif_id,
+                                    "motif": "Ligne absente de la file — déjà intégrée ?"})
+                    continue
+                try:
+                    faits.append(_rr.integrer(conn, ligne, user, appliquer_mouvement_mp))
+                except (ValueError, HTTPException) as e:
+                    refuses.append({"lif_id": lif_id,
+                                    "motif": getattr(e, "detail", None) or str(e)})
+            conn.commit()
+    except FileNotFoundError as e:
+        raise HTTPException(503, str(e)) from None
+
+    if faits:
+        log_action(user=user, request=request, module="stock", action="CREATE",
+                   objet="reception_rvgi:integration",
+                   detail="%d ligne(s) intégrée(s), %d refusée(s)" % (len(faits), len(refuses)))
+    return {"integrees": faits, "refusees": refuses}

@@ -1102,10 +1102,264 @@ async function exportOfCsv(){
     toast(e.message||'Erreur export.','error');
   }
 }
-function openOfEditModal(row){
-  set({ofEditModal:{...row}});
+/* Rouvrir une modale la reconstruit entièrement : sans cela, tout ce qui a
+   été tapé et pas encore enregistré disparaît dès qu'on ouvre le sélecteur de
+   commandes ou qu'on cherche un article. On relève donc les champs du DOM
+   avant chaque re-render, et les fabriques de champs repartent de ce relevé. */
+function captureSaisie(prefixe,m){
+  if(!m) return;
+  m._dom=m._dom||{};
+  document.querySelectorAll('[id^="'+prefixe+'"]').forEach(el=>{
+    if(el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.tagName==='SELECT'){
+      m._dom[el.id]=el.value;
+    }
+  });
+}
+
+async function openOfEditModal(row){
+  // Une ligne sans id, c'est une création. La modale est la même : ce sont
+  // les mêmes champs, et l'ADV qui crée un OF corrige les mêmes cases que
+  // celle qui en relit un. Seuls le titre, le bouton et la route changent.
+  //
+  // Sur un OF existant on RECHARGE la ligne complète. Celle du tableau ne
+  // porte qu'une vingtaine de colonnes sur soixante : ouvrir la modale
+  // dessus affichait vides la laize, la glassine, la réf. adhésif et tout
+  // l'outillage — et « Enregistrer » les écrivait à NULL.
+  let plein=row;
+  if(row&&row.id){
+    try{
+      plein=await api('/api/of/'+row.id);
+    }catch(e){
+      toast(e.message||'Chargement de l\'OF impossible.','error');
+      return;
+    }
+  }
+  set({ofEditModal:{...plein}});
   renderOfEditModal();
 }
+function openOfCreateModal(){
+  openOfEditModal({_commandes:[]});
+}
+window.openOfCreateModal = openOfCreateModal;
+
+/* Colonne de `of_imports` -> champ de la modale OF. Même rôle que
+   FCE_CHAMPS pour la fiche technique. Les `*_ref_id` n'y sont pas : ils ne
+   vivent pas dans le DOM, ils se posent sur la modale. */
+const OFE_CHAMPS = {
+  reference:'ofe-reference', format:'ofe-format', machine:'ofe-machine',
+  laize:'ofe-laize', matiere:'ofe-matiere', glassine:'ofe-glassine',
+  adhesif_label:'ofe-adhesif-label', ref_adhesif:'ofe-ref-adhesif',
+  qte_adhesif_g:'ofe-qte-adhesif-g', qte_adhesif_kg:'ofe-qte-adhesif-kg',
+  qte_au_mille:'ofe-qte-mille', nb_levees:'ofe-nb-levees',
+  conditionnement:'ofe-cond', tolerance:'ofe-tolerance',
+  cartons_type:'ofe-cartons-type', mandrins_dia:'ofe-mandrins-dia',
+  mandrin_longueur:'ofe-mandrin-longueur', cales_sachets:'ofe-cales',
+  palette_type:'ofe-palette-type',
+  outil_1_numero:'ofe-outil1-numero', outil_1_forme:'ofe-outil1-forme',
+  outil_1_hauteur:'ofe-outil1-hauteur', outil_1_angle:'ofe-outil1-angle',
+  outil_1_mag:'ofe-outil1-mag', outil_1_cp:'ofe-outil1-cp',
+  outil_2_numero:'ofe-outil2-numero', outil_2_hauteur:'ofe-outil2-hauteur',
+  outil_2_forme:'ofe-outil2-forme', outil_2_cp:'ofe-outil2-cp',
+  particularites:'ofe-particularites', observations:'ofe-observations',
+};
+
+const OFE_REFS = ['matiere_ref_id','glassine_ref_id','adhesif_ref_id',
+                  'carton_ref_id','mandrin_ref_id','palette_ref_id'];
+
+/* Reprend l'article de la commande rattachée.
+
+   Une ligne de commande RVGI porte un article, et l'article porte la moitié
+   de l'OF : machine, laize, matière, adhésif, outillage, conditionnement.
+   Les retaper à la main revient à recopier ce que l'ERP sait déjà — avec le
+   risque d'écart que ça suppose.
+
+   On ne remplit que les cases VIDES, et seulement si les lignes cochées
+   portent UN SEUL article : deux articles dans un même OF, c'est un choix de
+   regroupement que l'ADV a fait en connaissance de cause, et prendre l'un
+   des deux au hasard serait pire que ne rien faire. */
+async function ofeReprendreArticle(lignes){
+  const m=S.ofEditModal;
+  if(!m) return;
+  const articles=[...new Set((lignes||[])
+    .map(l=>(l.vu_article||'').trim()).filter(Boolean))];
+  if(!articles.length) return;
+  if(articles.length>1){
+    toast(articles.length+' articles différents sur les lignes cochées — '+
+          'rien n\'a été pré-rempli.','info');
+    return;
+  }
+  const bouts=articles[0].split('/');
+  if(bouts.length!==2) return;
+  let p=null;
+  try{
+    p=await api('/api/rvgi/article/'+encodeURIComponent(bouts[0].trim())+
+                '/'+encodeURIComponent(bouts[1].trim())+'/of');
+  }catch(e){
+    toast("Article "+articles[0]+" inconnu du miroir RVGI — rien n'a été pré-rempli.",'info');
+    return;
+  }
+  m._dom=m._dom||{};
+  let posés=0;
+  Object.keys(p.champs||{}).forEach(function(col){
+    if(OFE_REFS.indexOf(col)>=0){
+      if(!m[col]){ m[col]=p.champs[col]; posés++; }
+      return;
+    }
+    const id=OFE_CHAMPS[col];
+    if(!id) return;
+    const val=p.champs[col];
+    if(val==null||val==='') return;
+    const actuel=m._dom[id]!==undefined?m._dom[id]:m[col];
+    if(actuel===undefined||actuel===null||String(actuel).trim()===''){
+      m._dom[id]=String(val);
+      m[col]=val;
+      posés++;
+    }
+  });
+  m._rvgiOf=p;
+  toast('Article '+p.article.reference+' — '+posés+' champ'+(posés>1?'s':'')+
+        ' repris de MyERP.');
+}
+
+/* Sélecteur de commandes RVGI depuis la modale OF.
+
+   En modification, l'OF a un id : le sélecteur enregistre lui-même côté
+   serveur. En création il n'y en a pas encore, donc on garde la sélection
+   dans la modale et elle part avec le POST — c'est le même mécanisme que le
+   planning utilise pour un dossier qui n'existe pas encore. */
+function ofeChoisirCommandes(){
+  const m=S.ofEditModal;
+  if(!m) return;
+  if(!window.MysRvgiPicker){toast('Sélecteur RVGI indisponible.','error');return;}
+  captureSaisie('ofe-',m);
+  m.of_numero=(m._dom&&m._dom['ofe-numero']!==undefined)?m._dom['ofe-numero']:m.of_numero;
+  MysRvgiPicker.ouvrir({
+    mode:'commande',
+    objet:'of',
+    objetId:m.id||null,
+    recherche:(m.of_numero||'').trim(),
+    onValider:function(res){
+      m._commandes=(res&&res.lignes)||[];
+      // Le numéro d'OF suit la même règle que la référence d'un dossier : il
+      // se propose depuis les commandes. On ne l'impose jamais — un numéro
+      // déjà saisi reste celui de l'ADV.
+      if(!(m.of_numero||'').trim() && res && res.reference){
+        m.of_numero=res.reference;
+        if(m._dom) m._dom['ofe-numero']=res.reference;
+      }
+      set({ofEditModal:m});
+      renderOfEditModal();
+      // La reprise de l'article se fait APRÈS le rendu : elle est
+      // asynchrone, et l'écran ne doit pas attendre le miroir pour montrer
+      // les commandes qui viennent d'être cochées.
+      ofeReprendreArticle(m._commandes).then(()=>renderOfEditModal());
+    },
+  });
+}
+window.ofeChoisirCommandes = ofeChoisirCommandes;
+
+/* Référence matière d'un OF.
+
+   Le texte imprimé sur l'OF est la désignation de la référence choisie : le
+   serveur le réécrit lui-même à l'enregistrement (voir _appliquer_references).
+   On le garde ici dans un champ caché pour que l'OF importé d'Access, qui n'a
+   qu'un libellé et aucune référence, ne le perde pas en passant par la modale. */
+function ofeChoisirRef(famille, colId, domId, colTxt){
+  const m=S.ofEditModal;
+  if(!m) return;
+  if(!window.MysRefMatiere){toast('Sélecteur de référence indisponible.','error');return;}
+  captureSaisie('ofe-',m);
+  MysRefMatiere.ouvrir({
+    famille: famille,
+    valeur: m[colTxt]||'',
+    refId: m[colId]||null,
+    onChoisir: function(r){
+      m[colId]=r.id;
+      m[colTxt]=r.designation;
+      m._dom=m._dom||{};
+      m._dom[domId]=r.designation;
+      set({ofEditModal:m});
+      renderOfEditModal();
+      if(r.brouillon) toast('Référence créée en brouillon — à compléter dans MyStock.','info');
+    },
+  });
+}
+window.ofeChoisirRef = ofeChoisirRef;
+
+/* Même geste pour une fiche technique. */
+function fceChoisirRef(famille, colId, domId, colTxt){
+  const m=S.ficheEditModal;
+  if(!m) return;
+  if(!window.MysRefMatiere){toast('Sélecteur de référence indisponible.','error');return;}
+  captureSaisie('fce-',m);
+  MysRefMatiere.ouvrir({
+    famille: famille,
+    valeur: m[colTxt]||'',
+    refId: m[colId]||null,
+    onChoisir: function(r){
+      m[colId]=r.id;
+      m[colTxt]=r.designation;
+      m._dom=m._dom||{};
+      m._dom[domId]=r.designation;
+      set({ficheEditModal:m});
+      renderFicheEditModal();
+      if(r.brouillon) toast('Référence créée en brouillon — à compléter dans MyStock.','info');
+    },
+  });
+}
+window.fceChoisirRef = fceChoisirRef;
+
+/* Fabrique du champ « référence matière », partagée par les deux modales.
+
+   Le champ n'est pas saisissable : c'est le point de la manœuvre. Un texte
+   libre ne se rattache au stock que par devinette, et la devinette sort à
+   l'inventaire. Le libellé reste visible, et un OF venu d'Access garde le
+   sien tant que personne n'a choisi de référence — d'où la mention
+   « non rattaché au stock », qui dit ce qui manque au lieu de le taire. */
+function champRefMatiere(prefixe, m, colId, domId, colTxt, famille, lbl){
+  const txt=(m._dom&&m._dom[domId]!==undefined)?m._dom[domId]:(m[colTxt]||'');
+  const lie=!!m[colId];
+  const fn=(prefixe==='ofe-')?'ofeChoisirRef':'fceChoisirRef';
+  return `<div style="grid-column:1/-1">
+    <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">${lbl}</label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;font-size:13px;min-height:19px;color:${txt?'var(--text)':'var(--muted)'}">
+        ${txt?escHtml(String(txt)):'—'}
+        ${(txt&&!lie)?'<span style="font-size:11px;color:var(--danger);margin-left:8px">non rattaché au stock</span>':''}
+      </div>
+      <button type="button" onclick="${fn}('${famille}','${colId}','${domId}','${colTxt}')"
+        style="padding:8px 13px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;white-space:nowrap">
+        ${lie?'Changer':'Choisir'}
+      </button>
+    </div>
+    <input type="hidden" id="${domId}" value="${String(txt).replace(/"/g,'&quot;')}">
+  </div>`;
+}
+
+/* « Créer directement un dossier de prod ».
+
+   On récupère d'abord le pré-remplissage, uniquement pour connaître la
+   machine : le planning est par machine, et y arriver sur la mauvaise ferait
+   poser le dossier au mauvais endroit. La modale, elle, est ouverte par le
+   planning lui-même — c'est lui qui sait placer un dossier. */
+async function ofCreerDossierProd(row){
+  if(!row||!row.id) return;
+  let p=null;
+  try{
+    p=await api('/api/of/'+row.id+'/dossier-prefill');
+  }catch(e){
+    toast(e.message||'Pré-remplissage impossible.','error');
+    return;
+  }
+  const sp=new URLSearchParams();
+  if(p&&p.machine_id) sp.set('machine',String(p.machine_id));
+  sp.set('depuis-of',String(row.id));
+  if(!p||!p.machine_id){
+    toast("Machine de l'OF inconnue — le planning s'ouvrira sur la dernière machine utilisée.",'info');
+  }
+  location.href='/planning?'+sp.toString();
+}
+window.ofCreerDossierProd = ofCreerDossierProd;
 function closeOfEditModal(){
   const existing=document.getElementById('of-edit-overlay');
   if(existing) existing.remove();
@@ -1164,15 +1418,44 @@ async function saveOfEdit(){
     outil_alt_numero:     tv('ofe-outa-numero'),
     outil_alt_angle:      tv('ofe-outa-angle'),
     outil_alt_fournisseur:tv('ofe-outa-fournisseur'),
+    // Le reste du papier atelier. Absent tant que l'OF ne pouvait qu'être
+    // importé : le parseur PDF ne sait pas lire ces cases, mais un OF saisi
+    // ici doit pouvoir les porter, sinon il sort plus pauvre que le papier
+    // qu'il remplace.
+    ref_matiere_fournisseur: tv('ofe-ref-matiere-f'),
+    outil_2_mag:          tv('ofe-outil2-mag'),
+    outil_2_hauteur:      nv('ofe-outil2-hauteur'),
+    outil_2_fournisseur:  tv('ofe-outil2-fournisseur'),
+    cales_sachets:        tv('ofe-cales'),
+    palette_type:         tv('ofe-palette-type'),
+    nb_palettes:          iv('ofe-nb-palettes'),
+    // Les ids de référence ne sont pas dans le DOM : ils vivent dans la
+    // modale, posés par le sélecteur. Le serveur en déduit le texte imprimé.
+    matiere_ref_id:       m.matiere_ref_id||null,
+    glassine_ref_id:      m.glassine_ref_id||null,
+    adhesif_ref_id:       m.adhesif_ref_id||null,
+    carton_ref_id:        m.carton_ref_id||null,
+    mandrin_ref_id:       m.mandrin_ref_id||null,
+    palette_ref_id:       m.palette_ref_id||null,
+    plieuse_pignon:       tv('ofe-plieuse'),
+    nb_pouces:            tv('ofe-pouces'),
+    particularites:       tv('ofe-particularites'),
+    observations:         tv('ofe-observations'),
   };
   try{
-    await api('/api/of/'+m.id,{method:'PATCH',body:JSON.stringify(payload)});
-    toast('OF mis à jour.');
+    if(m.id){
+      await api('/api/of/'+m.id,{method:'PATCH',body:JSON.stringify(payload)});
+      toast('OF mis à jour.');
+    }else{
+      payload.commandes=m._commandes||[];
+      const res=await api('/api/of',{method:'POST',body:JSON.stringify(payload)});
+      toast('OF '+(res&&res.of_numero?res.of_numero:'')+' créé.');
+    }
     closeOfEditModal();
     await loadOfImports();
     render();
   }catch(e){
-    toast(e.message||'Erreur mise à jour.','error');
+    toast(e.message||'Erreur enregistrement.','error');
   }
 }
 window.saveOfEdit = saveOfEdit;
@@ -1181,11 +1464,20 @@ function renderOfEditModal(){
   if(existing) existing.remove();
   const m=S.ofEditModal;
   if(!m) return;
+  const _v=(id,val)=>(m._dom&&m._dom[id]!==undefined)?m._dom[id]:val;
   const _f=(id,lbl,val,type='text')=>`<div>
     <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">${lbl}</label>
-    <input id="${id}" type="${type}" value="${String(val==null?'':val).replace(/"/g,'&quot;')}"
+    <input id="${id}" type="${type}" value="${String(_v(id,val)==null?'':_v(id,val)).replace(/"/g,'&quot;')}"
       style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
   </div>`;
+  const _ta=(id,lbl,val,rows=3)=>`<div style="grid-column:1/-1">
+    <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">${lbl}</label>
+    <textarea id="${id}" rows="${rows}"
+      style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;resize:vertical">${escHtml(_v(id,val)==null?'':String(_v(id,val)))}</textarea>
+  </div>`;
+  const creation=!m.id;
+  const _ref=(colId,domId,colTxt,famille,lbl)=>
+    champRefMatiere('ofe-',m,colId,domId,colTxt,famille,lbl);
   const _sec=(title,fields,open=true)=>`
     <div class="ofe-sec" style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">
       <div class="ofe-sec-hd" style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;cursor:pointer;background:var(--accent-bg);border-bottom:1px solid var(--border);user-select:none">
@@ -1203,9 +1495,36 @@ function renderOfEditModal(){
   overlay.innerHTML=`
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px 18px;max-width:900px;width:100%;max-height:92vh;overflow-y:auto;box-sizing:border-box">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-        <div style="font-size:15px;font-weight:700;color:var(--text)">Modifier l'OF</div>
+        <div style="font-size:15px;font-weight:700;color:var(--text)">${creation?"Nouvel OF":"Modifier l'OF"}</div>
         <button onclick="closeOfEditModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:20px;line-height:1;font-family:inherit">×</button>
       </div>
+      ${_sec('Commandes RVGI',`
+        <div style="grid-column:1/-1;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <button type="button" onclick="ofeChoisirCommandes()"
+            style="padding:8px 13px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">
+            ${(m._commandes&&m._commandes.length)||!creation?'Modifier les commandes':'Choisir des commandes'}
+          </button>
+          <div style="font-size:12px;color:var(--muted)">
+            ${creation
+              ? "Un OF peut couvrir une commande entière, quelques-unes de ses lignes, ou plusieurs commandes. Le numéro d'OF se propose à partir de ce choix."
+              : "Le sélecteur enregistre directement le rattachement de cet OF."}
+          </div>
+        </div>
+        <div id="ofe-cmd-resume" style="grid-column:1/-1"></div>
+        ${m._rvgiOf?`
+        <div style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.6">
+          ${(function(r){
+            const s=r.sources||{};
+            const bouts=[];
+            if(s.gpr_ff) bouts.push('fiche de fabrication RVGI');
+            if((s.out_dec||[]).length) bouts.push('outil'+(s.out_dec.length>1?'s':'')+' '+s.out_dec.join(', '));
+            if(s.mat_mat) bouts.push('matière '+escHtml(String(s.mat_mat)));
+            return 'Article <strong>'+escHtml(r.article.reference)+'</strong>'+
+                   (r.article.libelle?(' — '+escHtml(r.article.libelle)):'')+
+                   (bouts.length?('<br>Repris de MyERP : '+bouts.join(' · ')+'. À relire avant d\'enregistrer.'):'');
+          })(m._rvgiOf)}
+          ${(m._rvgiOf.manques||[]).map(x=>'<div style="color:var(--danger)">• '+escHtml(x)+'</div>').join('')}
+        </div>`:''}`,true)}
       ${_sec('Identification',[
         _f('ofe-numero','OF n°',m.of_numero),
         _f('ofe-reference','Référence',m.reference),
@@ -1216,15 +1535,16 @@ function renderOfEditModal(){
       ${_sec('Matière / Support',[
         _f('ofe-laize','Laize',m.laize,'number'),
         _f('ofe-format','Format',m.format),
-        _f('ofe-matiere','Matière',m.matiere),
-        _f('ofe-ref-matiere','Réf. matière',m.ref_matiere),
-        _f('ofe-glassine','Glassine',m.glassine),
+        _ref('matiere_ref_id','ofe-matiere','matiere','support','Matière / support'),
+        _ref('glassine_ref_id','ofe-glassine','glassine','glassine','Glassine'),
+        _f('ofe-ref-matiere','Substitution — matière',m.ref_matiere),
+        _f('ofe-ref-matiere-f','Substitution — fournisseur',m.ref_matiere_fournisseur),
       ].join(''))}
       ${_sec('Adhésif',[
+        _ref('adhesif_ref_id','ofe-adhesif-label','adhesif_label','adhesif','Adhésif'),
         _f('ofe-ref-adhesif','Réf. adhésif',m.ref_adhesif),
         _f('ofe-qte-adhesif-g','Qté adhésif (g)',m.qte_adhesif_g,'number'),
         _f('ofe-qte-adhesif-kg','Qté adhésif (kg)',m.qte_adhesif_kg,'number'),
-        _f('ofe-adhesif-label','Label adhésif',m.adhesif_label),
       ].join(''))}
       ${_sec('Quantités',[
         _f('ofe-qte-mille','Qté au mille',m.qte_au_mille,'number'),
@@ -1237,12 +1557,15 @@ function renderOfEditModal(){
       ].join(''))}
       ${_sec('Conditionnement',[
         _f('ofe-cond','Conditionnement',m.conditionnement),
-        _f('ofe-cartons-type','Type cartons',m.cartons_type),
+        _ref('carton_ref_id','ofe-cartons-type','cartons_type','carton','Type de carton'),
         _f('ofe-cartons','Nb cartons',m.nb_cartons,'number'),
-        _f('ofe-mandrins-dia','Mandrins dia.',m.mandrins_dia),
+        _ref('mandrin_ref_id','ofe-mandrins-dia','mandrins_dia','mandrin','Mandrin'),
         _f('ofe-mandrin-longueur','Mandrin long.',m.mandrin_longueur,'number'),
         _f('ofe-mandrins','Nb mandrins',m.nb_mandrins,'number'),
         _f('ofe-tubes','Nb tubes',m.nb_tubes,'number'),
+        _f('ofe-cales','Cales et sachets',m.cales_sachets),
+        _ref('palette_ref_id','ofe-palette-type','palette_type','palette','Type de palette'),
+        _f('ofe-nb-palettes','Nb palettes',m.nb_palettes,'number'),
       ].join(''))}
       ${_sec('Outillage',[
         _f('ofe-outil1-forme','Outil 1 — forme',m.outil_1_forme),
@@ -1256,14 +1579,27 @@ function renderOfEditModal(){
         _f('ofe-outil2-numero','Outil 2 — n°',m.outil_2_numero),
         _f('ofe-outil2-angle','Outil 2 — angle',m.outil_2_angle),
         _f('ofe-outil2-cp','Outil 2 — CP',m.outil_2_cp),
+        _f('ofe-outil2-mag','Outil 2 — mag.',m.outil_2_mag),
+        _f('ofe-outil2-hauteur','Outil 2 — hauteur',m.outil_2_hauteur,'number'),
+        _f('ofe-outil2-fournisseur','Outil 2 — fournisseur',m.outil_2_fournisseur),
         _f('ofe-outa-forme','Outil alt. — forme',m.outil_alt_forme),
         _f('ofe-outa-numero','Outil alt. — n°',m.outil_alt_numero),
         _f('ofe-outa-angle','Outil alt. — angle',m.outil_alt_angle),
         _f('ofe-outa-fournisseur','Outil alt. — fournisseur',m.outil_alt_fournisseur),
       ].join(''))}
-      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-        <button id="ofe-cancel-btn" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px">Annuler</button>
-        <button id="ofe-save-btn" style="padding:9px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">Enregistrer</button>
+      ${_sec('Plieuse',[
+        _f('ofe-plieuse','Pignon (nb dents)',m.plieuse_pignon),
+        _f('ofe-pouces','Nb pouces',m.nb_pouces),
+      ].join(''),false)}
+      ${_sec('Particularités et observations',
+        _ta('ofe-particularites','Particularités',m.particularites,3)
+        +_ta('ofe-observations','Observations',m.observations,4),false)}
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);flex-wrap:wrap">
+        <div>${m.id?`<button id="ofe-dossier-btn" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">Créer directement un dossier de prod</button>`:''}</div>
+        <div style="display:flex;gap:10px">
+          <button id="ofe-cancel-btn" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px">Annuler</button>
+          <button id="ofe-save-btn" style="padding:9px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">${creation?'Créer':'Enregistrer'}</button>
+        </div>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -1278,12 +1614,138 @@ function renderOfEditModal(){
   });
   overlay.querySelector('#ofe-cancel-btn').onclick=closeOfEditModal;
   overlay.querySelector('#ofe-save-btn').onclick=saveOfEdit;
+  const bDossier=overlay.querySelector('#ofe-dossier-btn');
+  if(bDossier) bDossier.onclick=()=>ofCreerDossierProd(m);
+
+  // Résumé du rattachement : servi par le serveur quand l'OF existe, peint
+  // localement quand il n'existe pas encore.
+  const zone=overlay.querySelector('#ofe-cmd-resume');
+  if(zone){
+    if(m.id&&window.MysRvgiPicker){
+      MysRvgiPicker.resume(zone,'of',m.id);
+    }else{
+      const l=m._commandes||[];
+      zone.innerHTML=l.length
+        ? '<div style="font-size:12px;color:var(--text2)">'+
+          l.map(x=>escHtml(String(x.numero)+(x.ligne?(' L'+x.ligne):''))).join(' · ')+
+          '</div>'
+        : '<div style="font-size:12px;color:var(--muted)">Aucune commande rattachée — le numéro d\'OF devra être saisi à la main.</div>';
+    }
+  }
 }
 
 function openFicheEditModal(row){
   set({ficheEditModal:{...row}});
   renderFicheEditModal();
 }
+function openFicheCreateModal(){
+  openFicheEditModal({});
+}
+window.openFicheCreateModal = openFicheCreateModal;
+
+/* Article RVGI d'une fiche technique.
+
+   La référence d'une fiche (« 1026/0020 ») EST le couple code1/code2 d'un
+   article de l'ERP. On pourrait donc la relire à chaque affichage — mais une
+   référence corrigée ferait alors glisser la fiche d'un article à l'autre
+   sans que personne l'ait décidé. Le lien est donc choisi une fois, et STOCKÉ.
+
+   Ce que RVGI sait de la fabrication (laize matière, nombre de couleurs,
+   cliché) est PROPOSÉ, pas imposé : SIFA a cessé d'alimenter ce module en
+   avril 2026, et c'est précisément ce qui a donné naissance à MySifa. */
+async function fceChercherArticle(){
+  const m=S.ficheEditModal;
+  if(!m) return;
+  captureSaisie('fce-',m);
+  const q=((m._dom&&m._dom['fce-ref'])||m.reference||'').trim();
+  if(q.length<2){toast('Saisissez au moins deux caractères de référence.','error');return;}
+  try{
+    const r=await api('/api/rvgi/articles?q='+encodeURIComponent(q));
+    m._articles=(r&&r.articles)||[];
+    if(!m._articles.length) toast('Aucun article RVGI pour « '+q+' ».','info');
+  }catch(e){
+    toast(e.message||'Recherche article impossible.','error');
+    return;
+  }
+  set({ficheEditModal:m});
+  renderFicheEditModal();
+}
+window.fceChercherArticle = fceChercherArticle;
+
+/* Colonne de `fiches_techniques` -> champ de la modale.
+
+   Sans cette table, le pré-remplissage devrait connaître les identifiants du
+   DOM, qui ne ressemblent pas aux noms de colonnes (`fce-o1-front` pour
+   `outil1_nb_front`). Une colonne absente d'ici n'est simplement pas remplie. */
+const FCE_CHAMPS = {
+  reference:'fce-ref', designation:'fce-desig', client:'fce-client',
+  machine:'fce-machine', format:'fce-format',
+  eti_laize:'fce-eti-laize', eti_longueur:'fce-eti-longueur',
+  eti_rayons:'fce-eti-rayons', eti_perforations:'fce-eti-perforations',
+  mod_laize:'fce-mod-laize', mod_longueur:'fce-mod-longueur',
+  mod_nb_front:'fce-mod-front',
+  lateral_ext:'fce-lat-ext', horizontal:'fce-horizontal', lateral_int:'fce-lat-int',
+  support:'fce-support', matiere:'fce-matiere', adhesif:'fce-adhesif',
+  glassine:'fce-glassine', laize_optimale:'fce-laize-opt',
+  laize_optionnelle:'fce-laize-optn', epaisseur:'fce-epaisseur',
+  grammage:'fce-grammage', qte_au_mille:'fce-qte-mille',
+  outil1_forme:'fce-o1-forme', outil1_numero_sifa:'fce-o1-numero',
+  outil1_laize:'fce-o1-laize', outil1_epaisseur:'fce-o1-epaisseur',
+  outil1_nb_dents:'fce-o1-dents', outil1_nb_front:'fce-o1-front',
+  outil1_nb_avance:'fce-o1-avance',
+  outil2_forme:'fce-o2-forme', outil2_numero_sifa:'fce-o2-numero',
+  outil2_epaisseur:'fce-o2-epaisseur', outil2_nb_dents:'fce-o2-dents',
+  outil2_nb_front:'fce-o2-front', outil2_nb_avance:'fce-o2-avance',
+  outil3_forme:'fce-o3-forme', outil3_numero_sifa:'fce-o3-numero',
+  outil3_epaisseur:'fce-o3-epaisseur', outil3_nb_dents:'fce-o3-dents',
+  outil3_nb_front:'fce-o3-front', outil3_nb_avance:'fce-o3-avance',
+  nb_couleurs:'fce-nb-couleurs', recto:'fce-recto', verso:'fce-verso',
+  tete1_pantone:'fce-t1-pantone', tete1_couleur:'fce-t1-couleur',
+  tete1_anilox:'fce-t1-anilox', tete1_composition:'fce-t1-compo',
+  tete2_pantone:'fce-t2-pantone', tete2_couleur:'fce-t2-couleur',
+  tete2_anilox:'fce-t2-anilox', tete2_composition:'fce-t2-compo',
+  tete3_pantone:'fce-t3-pantone', tete3_couleur:'fce-t3-couleur',
+  tete3_anilox:'fce-t3-anilox', tete3_composition:'fce-t3-compo',
+  remarque:'fce-remarque', conditionnement:'fce-cond',
+};
+
+async function fceChoisirArticle(code1,code2){
+  const m=S.ficheEditModal;
+  if(!m) return;
+  captureSaisie('fce-',m);
+  let a=null;
+  try{
+    a=await api('/api/rvgi/article/'+encodeURIComponent(code1)+'/'+encodeURIComponent(code2)+'/fiche');
+  }catch(e){
+    toast(e.message||'Article introuvable.','error');
+    return;
+  }
+  m.article_code1=a.article.code1;
+  m.article_code2=a.article.code2;
+  m.article_libelle=a.article.libelle||null;
+  m._rvgi=a;
+  m._articles=null;
+  m._dom=m._dom||{};
+  // On ne remplit que les cases VIDES. Une fiche déjà renseignée par l'atelier
+  // ne doit pas être réécrite par l'ERP au moment où on la relie : c'est
+  // l'atelier qui a raison sur ce qu'il a corrigé, pas RVGI.
+  let posés=0;
+  Object.keys(a.champs||{}).forEach(function(col){
+    const id=FCE_CHAMPS[col];
+    if(!id) return;
+    const val=a.champs[col];
+    if(val==null||val==='') return;
+    const actuel=m._dom[id]!==undefined?m._dom[id]:m[col];
+    if(actuel===undefined||actuel===null||String(actuel).trim()===''){
+      m._dom[id]=String(val);
+      posés++;
+    }
+  });
+  set({ficheEditModal:m});
+  renderFicheEditModal();
+  toast('Article '+a.article.reference+' rattaché — '+posés+' champ'+(posés>1?'s':'')+' pré-rempli'+(posés>1?'s':'')+'.');
+}
+window.fceChoisirArticle = fceChoisirArticle;
 function closeFicheEditModal(){
   const existing=document.getElementById('fiche-edit-overlay');
   if(existing) existing.remove();
@@ -1375,15 +1837,30 @@ async function saveFicheEdit(){
     palette_hauteur_max:        nv('fce-palette-hmax'),
     particularite:              tv('fce-particularite'),
     notes:                      tv('fce-notes'),
+    grammage:                   nv('fce-grammage'),
+    support_ref_id:             m.support_ref_id||null,
+    glassine_ref_id:            m.glassine_ref_id||null,
+    adhesif_ref_id:             m.adhesif_ref_id||null,
+    carton_ref_id:              m.carton_ref_id||null,
+    mandrin_ref_id:             m.mandrin_ref_id||null,
+    palette_ref_id:             m.palette_ref_id||null,
+    article_code1:              m.article_code1||null,
+    article_code2:              m.article_code2||null,
+    article_libelle:            m.article_libelle||null,
   };
   try{
-    await api('/api/fiches-techniques/'+m.id,{method:'PATCH',body:JSON.stringify(payload)});
-    toast('Fiche mise à jour.');
+    if(m.id){
+      await api('/api/fiches-techniques/'+m.id,{method:'PATCH',body:JSON.stringify(payload)});
+      toast('Fiche mise à jour.');
+    }else{
+      const res=await api('/api/fiches-techniques',{method:'POST',body:JSON.stringify(payload)});
+      toast('Fiche '+((res&&res.reference)||'')+' créée.');
+    }
     closeFicheEditModal();
     await loadFiches();
     render();
   }catch(e){
-    toast(e.message||'Erreur mise à jour.','error');
+    toast(e.message||'Erreur enregistrement.','error');
   }
 }
 function renderFicheEditModal(){
@@ -1391,16 +1868,20 @@ function renderFicheEditModal(){
   if(existing) existing.remove();
   const m=S.ficheEditModal;
   if(!m) return;
+  const creation=!m.id;
+  const _v=(id,val)=>(m._dom&&m._dom[id]!==undefined)?m._dom[id]:val;
+  const _ref=(colId,domId,colTxt,famille,lbl)=>
+    champRefMatiere('fce-',m,colId,domId,colTxt,famille,lbl);
   const _f=(id,lbl,val,type='text')=>`<div>
     <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">${lbl}</label>
-    <input id="${id}" type="${type}" value="${String(val==null?'':val).replace(/"/g,'&quot;')}"
+    <input id="${id}" type="${type}" value="${String(_v(id,val)==null?'':_v(id,val)).replace(/"/g,'&quot;')}"
       style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
   </div>`;
   const _cb=(id,lbl,val)=>`<div>
     <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">${lbl}</label>
     <select id="${id}" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
-      <option value="0" ${!val||val==0?'selected':''}>Non</option>
-      <option value="1" ${val==1?'selected':''}>Oui</option>
+      <option value="0" ${!_v(id,val)||_v(id,val)==0?'selected':''}>Non</option>
+      <option value="1" ${_v(id,val)==1?'selected':''}>Oui</option>
     </select>
   </div>`;
   const _sec=(title,fields,open=true)=>`
@@ -1420,9 +1901,47 @@ function renderFicheEditModal(){
   overlay.innerHTML=`
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px 18px;max-width:900px;width:100%;max-height:92vh;overflow-y:auto;box-sizing:border-box">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-        <div style="font-size:15px;font-weight:700;color:var(--text)">Modifier la fiche technique</div>
+        <div style="font-size:15px;font-weight:700;color:var(--text)">${creation?'Nouvelle fiche technique':'Modifier la fiche technique'}</div>
         <button onclick="closeFicheEditModal()" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:20px;line-height:1;font-family:inherit">×</button>
       </div>
+      ${_sec('Article RVGI',`
+        <div style="grid-column:1/-1;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <button type="button" onclick="fceChercherArticle()"
+            style="padding:8px 13px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">
+            ${m.article_code1?"Changer d'article":'Chercher l\'article'}
+          </button>
+          <div style="font-size:12px;color:${m.article_code1?'var(--text2)':'var(--muted)'}">
+            ${m.article_code1
+              ? ('Article '+escHtml(String(m.article_code1)+'/'+String(m.article_code2||''))+
+                 (m.article_libelle?(' — '+escHtml(String(m.article_libelle))):''))
+              : "Aucun article rattaché. La recherche part de la référence saisie ci-dessous."}
+          </div>
+        </div>
+        ${(m._articles&&m._articles.length)?`
+        <div style="grid-column:1/-1;border:1px solid var(--border);border-radius:8px;max-height:220px;overflow:auto">
+          ${m._articles.map(a=>`
+            <div onclick="fceChoisirArticle('${escAttr(a.code1)}','${escAttr(a.code2)}')"
+              style="padding:8px 11px;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px;display:flex;gap:10px;align-items:baseline">
+              <strong style="min-width:92px">${escHtml(a.reference||'')}</strong>
+              <span style="color:var(--text2);flex:1">${escHtml(a.libelle||'')}</span>
+              <span style="color:var(--muted);font-size:12px">${escHtml(a.format||'')}</span>
+            </div>`).join('')}
+        </div>`:''}
+        ${m._rvgi?`
+        <div style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.6">
+          ${(function(r){
+            const s=r.sources||{};
+            const bouts=[];
+            if(s.gpr_ff) bouts.push('fiche de fabrication RVGI'+(s.gpr_ff_maj_le?(' du '+escHtml(String(s.gpr_ff_maj_le).slice(0,10))):''));
+            if((s.out_dec||[]).length) bouts.push('outil'+(s.out_dec.length>1?'s':'')+' '+s.out_dec.join(', '));
+            if(s.mat_mat) bouts.push('matière '+escHtml(String(s.mat_mat)));
+            if(s.gpr_ff1) bouts.push('impression');
+            return bouts.length
+              ? ('Repris de RVGI : '+bouts.join(' · ')+'. Vérifiez avant d\'enregistrer — une fiche fausse ne se voit pas à l\'écran, elle sort à l\'inventaire.')
+              : 'RVGI ne connaît que le libellé et le format de cet article.';
+          })(m._rvgi)}
+          ${(m._rvgi.manques||[]).map(x=>'<div style="color:var(--danger)">• '+escHtml(x)+'</div>').join('')}
+        </div>`:''}`,true)}
       ${_sec('Identification',[
         _f('fce-ref','Référence',m.reference),
         _f('fce-desig','Désignation',m.designation),
@@ -1448,13 +1967,14 @@ function renderFicheEditModal(){
         _f('fce-lat-int','Latéral int.',m.lateral_int,'number'),
       ].join(''))}
       ${_sec('Matière',[
-        _f('fce-support','Support',m.support||m.matiere),
-        _f('fce-matiere','Matière',m.matiere),
-        _f('fce-adhesif','Adhésif',m.adhesif),
-        _f('fce-glassine','Glassine',m.glassine),
+        _ref('support_ref_id','fce-support','support','support','Support / frontal'),
+        _ref('adhesif_ref_id','fce-adhesif','adhesif','adhesif','Adhésif'),
+        _ref('glassine_ref_id','fce-glassine','glassine','glassine','Glassine'),
+        _f('fce-matiere','Matière (libellé libre)',m.matiere),
         _f('fce-laize-opt','Laize optimale',m.laize_optimale,'number'),
         _f('fce-laize-optn','Laize optionnelle',m.laize_optionnelle,'number'),
         _f('fce-epaisseur','Épaisseur',m.epaisseur,'number'),
+        _f('fce-grammage','Grammage (g)',m.grammage,'number'),
         _f('fce-qte-mille','Qté au mille',m.qte_au_mille,'number'),
       ].join(''))}
       ${_sec('Outil 1',[
@@ -1502,20 +2022,20 @@ function renderFicheEditModal(){
       ].join(''))}
       ${_sec('Conditionnement',[
         _f('fce-cond','Conditionnement',m.conditionnement),
-        _f('fce-mandrin-dia','Mandrin dia.',m.mandrin_dia),
+        _ref('mandrin_ref_id','fce-mandrin-dia','mandrin_dia','mandrin','Mandrin'),
         _f('fce-mandrin-longueur','Mandrin long.',m.mandrin_longueur,'number'),
         _f('fce-enroulement','Enroulement',m.enroulement),
         _f('fce-nb-etiq-bobin','Nb étiq./bobine',m.nb_etiq_bobin,'number'),
         _f('fce-dia-ext','Dia. ext.',m.dia_ext,'number'),
         _f('fce-poids','Poids',m.poids,'number'),
         _f('fce-cales-sachets','Cales / sachets',m.cales_sachets),
-        _f('fce-cartons','Cartons',m.cartons),
+        _ref('carton_ref_id','fce-cartons','cartons','carton','Type de carton'),
         _f('fce-nb-sol','Nb au sol',m.nb_au_sol,'number'),
         _f('fce-nb-etage','Nb étages',m.nb_etage,'number'),
         _f('fce-nb-bob-carton','Nb bob./carton',m.nb_bobines_carton,'number'),
       ].join(''))}
       ${_sec('Palettisation',[
-        _f('fce-palette-type','Type palette',m.palette_type),
+        _ref('palette_ref_id','fce-palette-type','palette_type','palette','Type de palette'),
         _f('fce-palette-sol','Nb cartons/sol',m.palette_nb_cartons_sol,'number'),
         _f('fce-palette-hauteur','Nb cartons/hauteur',m.palette_nb_cartons_hauteur,'number'),
         _f('fce-palette-hmax','Hauteur max. (cm)',m.palette_hauteur_max,'number'),
@@ -1527,7 +2047,7 @@ function renderFicheEditModal(){
       ].join(''))}
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <button id="fce-cancel-btn" style="padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;font-size:13px">Annuler</button>
-        <button id="fce-save-btn" style="padding:9px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">Enregistrer</button>
+        <button id="fce-save-btn" style="padding:9px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">${creation?'Créer':'Enregistrer'}</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -1658,6 +2178,11 @@ function renderOfTab(){
     }),
     h('button',{
       style:'padding:9px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap',
+      title:"Saisir un OF dans MySifa, sans passer par Access",
+      onClick:openOfCreateModal
+    },iconEl('plus',13),' Créer un OF'),
+    h('button',{
+      style:'padding:9px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap',
       onClick:openOfImportModal
     },iconEl('upload',13),' Importer un OF'),
     h('button',{
@@ -1705,6 +2230,12 @@ function renderOfTab(){
       // mis en cache lors du premier aperçu même après un ré-import.
       title:'Aperçu OF', onClick:()=>{window.open('/api/of/'+row.id+'/pdf-preview?v='+encodeURIComponent(row.date_import||Date.now()),'_blank');}
     },iconEl('eye',13)));
+    // Le geste qui suit l'OF : ouvrir le planning sur sa machine, modale
+    // dossier déjà remplie. Rien n'est créé ici — le placement se décide là-bas.
+    acts.push(h('button',{
+      style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
+      title:'Créer directement un dossier de prod', onClick:()=>ofCreerDossierProd(row)
+    },iconEl('calendar',13)));
     if(row.pdf_filename){
       // v1.7 — bouton Imprimer : ouvre le popup partage (mysifa_print_modal.js)
       // pour choisir imprimante + params + envoyer sur l'imprimante bureautique.
@@ -1823,6 +2354,11 @@ function renderFichesTab(){
         if(e.key==='Escape'){set({ficheSearch:'',fichePage:0});loadFiches().then(()=>render());e.target.value='';}
       },
     }),
+    h('button',{
+      style:'padding:9px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap',
+      title:"Saisir une fiche technique dans MySifa",
+      onClick:openFicheCreateModal
+    },iconEl('plus',13),' Créer une fiche'),
     h('button',{
       style:'padding:9px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap',
       title:'Exporter toutes les fiches (filtre appliqué) en CSV',

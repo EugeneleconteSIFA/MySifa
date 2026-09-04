@@ -170,49 +170,77 @@ input,select,textarea{font-family:inherit;color:var(--text)}
    info (.fab-footer-info) est masqué en mode opérateur mobile, et cette
    consigne doit rester lisible sur tous les onglets et tous les écrans.
    flex-shrink:0 pour qu'il ne se fasse jamais écraser par le contenu. */
-/* Fond BLANC volontaire, y compris en thème sombre : c'est le seul élément
-   de l'écran qui ne se fond pas dans l'interface, et c'est exactement ce
-   qu'on veut d'une consigne de certification. Le bord orange scintille pour
-   accrocher l'œil d'un opérateur qui passe devant l'écran sans s'arrêter. */
+/* Ce bandeau doit se DÉTACHER de l'écran, pas s'y fondre : c'est la seule
+   chose qui dit à l'opérateur que le dossier engage une certification. Un
+   fond blanc dans les deux thèmes ne tenait pas cette promesse — sur
+   l'interface claire, un bloc blanc bordé d'orange se lit comme un encadré
+   de plus. On inverse donc selon le thème, et le contraste vient de
+   l'opposition au fond de la page :
+
+     interface claire (body.light) → aplat orange soutenu, texte blanc
+     interface sombre (défaut)     → aplat clair, texte orange foncé
+
+   Dans les deux cas le bord scintille pour accrocher l'œil de quelqu'un qui
+   passe devant l'écran sans s'arrêter. */
 @keyframes fscBandeauPulse{
   0%,100%{border-color:#fb923c;box-shadow:inset 0 0 0 2px rgba(251,146,60,.95), 0 0 10px rgba(251,146,60,.35)}
   50%    {border-color:#fed7aa;box-shadow:inset 0 0 0 2px rgba(251,146,60,.35), 0 0 4px rgba(251,146,60,.12)}
+}
+/* Sur aplat orange, un halo orange ne se verrait pas : c'est un liseré blanc
+   qui bat, et l'ombre portée qui donne le relief. */
+@keyframes fscBandeauPulseClair{
+  0%,100%{border-color:#7c2d12;box-shadow:inset 0 0 0 2px rgba(255,255,255,.60), 0 0 12px rgba(194,65,12,.45)}
+  50%    {border-color:#c2410c;box-shadow:inset 0 0 0 2px rgba(255,255,255,.18), 0 0 4px rgba(194,65,12,.14)}
 }
 .fab-fsc-bandeau{
   flex-shrink:0;
   display:flex;align-items:center;gap:10px;flex-wrap:wrap;
   margin:8px 12px;padding:9px 16px;
   font-size:12px;font-weight:700;line-height:1.4;
-  background:#fff;
-  color:#c2410c;
+  background:#ffedd5;
+  color:#7c2d12;
   border:2px solid #fb923c;border-radius:10px;
   animation:fscBandeauPulse 1.8s ease-in-out infinite;
 }
+.fab-fsc-bandeau .fab-fsc-badge{
+  background:rgba(124,45,18,.12);color:#7c2d12;border-color:#c2410c;
+}
+.fab-fsc-bandeau .fab-fsc-bandeau-etat{
+  background:rgba(124,45,18,.14);color:#7c2d12;
+}
+
+/* Interface claire : l'aplat passe du côté du bandeau. #c2410c sous du blanc
+   gras tient un contraste de 5,2:1 — au-dessus du seuil AA, y compris sur le
+   petit compteur de droite. */
+body.light .fab-fsc-bandeau{
+  background:#c2410c;
+  color:#fff;
+  border-color:#7c2d12;
+  animation:fscBandeauPulseClair 1.8s ease-in-out infinite;
+}
+body.light .fab-fsc-bandeau .fab-fsc-badge{
+  background:rgba(255,255,255,.20);color:#fff;border-color:rgba(255,255,255,.55);
+}
+body.light .fab-fsc-bandeau .fab-fsc-bandeau-etat{
+  background:rgba(255,255,255,.24);color:#fff;
+}
+
 /* Écart = dossier FSC dont la traça matière est vide ou non conforme.
    On ne bloque pas la saisie (décision produit) : on rend l'écart
    impossible à ignorer, et il ressort tel quel dans le rapport d'audit.
-   Même habillage — le scintillement orange marque déjà l'exigence, c'est
-   le compteur en bout de ligne qui dit si elle est tenue. */
-.fab-fsc-bandeau.is-ecart{
-  background:#fff;
-  color:#c2410c;
-}
-.fab-fsc-bandeau .fab-fsc-badge{
-  background:rgba(251,146,60,.14);color:#c2410c;border-color:#fb923c;
-}
-.fab-fsc-bandeau .fab-fsc-bandeau-etat{
-  background:rgba(251,146,60,.20);color:#9a3412;
-}
-/* Le scintillement ne doit pas être imposé : bord orange fixe, même poids
+   Même habillage — le scintillement marque déjà l'exigence, c'est le
+   compteur en bout de ligne qui dit si elle est tenue — `is-ecart` reste
+   posee sur le noeud pour qui voudrait l'exploiter, sans style propre. */
+/* Le scintillement ne doit pas être imposé : bord fixe, même poids
    visuel, aucune animation. */
 @media (prefers-reduced-motion: reduce){
   .fab-fsc-bandeau{animation:none;box-shadow:inset 0 0 0 2px rgba(251,146,60,.95)}
+  body.light .fab-fsc-bandeau{animation:none;box-shadow:inset 0 0 0 2px rgba(255,255,255,.55)}
 }
 .fab-fsc-bandeau-txt{flex:1;min-width:180px}
 .fab-fsc-bandeau-etat{
   font-size:11px;font-weight:800;letter-spacing:.3px;
   padding:2px 8px;border-radius:20px;flex-shrink:0;
-  background:rgba(251,146,60,.18);
 }
 .fab-fsc-badge{
   display:inline-flex;align-items:center;gap:4px;flex-shrink:0;
@@ -3707,8 +3735,12 @@ async function tracaSaveCode(code){
   const clean = code.trim();
   set({tracaAutoSaving:true});
   try{
+    // Le dossier part avec la question : les autres bobines de la meme serie
+    // sont le dernier indice utile quand le code n'a jamais ete vu.
+    const dossierRef = (S.dossier && S.dossier.reference) || '';
     const lookup = await apiFetch(
       '/api/fabrication/receptions/lookup?code_barre=' + encodeURIComponent(clean)
+      + (dossierRef ? '&no_dossier=' + encodeURIComponent(dossierRef) : '')
     );
     if(lookup && lookup.found){
       await tracaShowFicheConfirmation(clean, {
@@ -3718,7 +3750,7 @@ async function tracaSaveCode(code){
       });
     }else{
       await loadFournisseursFSC();
-      await tracaShowFicheManuelle(clean);
+      await tracaShowFicheManuelle(clean, (lookup && lookup.origine) || null);
     }
   }catch(e){
     showToast(e.message || 'Erreur scan.','danger');
@@ -3797,7 +3829,11 @@ function tracaShowFicheConfirmation(codeBarre, infos){
   });
 }
 
-function tracaShowFicheManuelle(codeBarre){
+// `origine` est ce que le serveur a pu reconstituer du fournisseur a partir du
+// seul code-barres (cf. app/services/origine_bobine.py). Il n'apporte AUCUN
+// certificat : la modale pre-remplit et explique sur quoi elle se fonde, mais
+// c'est toujours l'operateur qui arrete la reponse.
+function tracaShowFicheManuelle(codeBarre, origine){
   return new Promise((resolve) => {
     const list = Array.isArray(FOURNISSEURS_FSC) ? FOURNISSEURS_FSC : [];
     const overlay = document.createElement('div');
@@ -3808,32 +3844,67 @@ function tracaShowFicheManuelle(codeBarre){
       `<option value="${escAttr(f.nom||'')}"></option>`
     ).join('');
 
+    // Une detection muette se subit ; une detection qui dit sur quoi elle
+    // repose se corrige. Le bandeau porte donc la regle en clair, et les
+    // autres fournisseurs deja vus sous cette forme restent a un clic.
+    const det = (origine && origine.trouve) ? origine : null;
+    const detNom = det ? (det.fournisseur || '') : '';
+    const CONF_MOT = {probable:'Détecté', suggere:'Probablement', ambigu:'Plusieurs pistes'};
+    let bandeau = '';
+    if(det){
+      // Les autres fournisseurs deja vus sous cette forme de code. Trois au
+      // plus : au-dela, une liste de pastilles redevient l'annuaire qu'on
+      // cherchait justement a eviter.
+      const autres = (det.candidats||[]).filter(c => c.nom && c.nom !== detNom);
+      const chips = autres.slice(0,3).map(c =>
+        `<button type="button" class="fiche-alt" data-nom="${escAttr(c.nom)}"
+                 style="background:var(--card);border:1px solid var(--border);border-radius:999px;
+                        padding:4px 11px;font:inherit;font-size:12px;color:var(--text2);
+                        cursor:pointer">${escHtml(c.nom)}<span style="color:var(--muted)"> ${
+                          c.observations||0}</span></button>`).join('');
+      bandeau = `
+        <div style="background:var(--bg);border:1px solid var(--border);
+                    border-left:3px solid var(--accent);border-radius:10px;
+                    padding:12px 14px;margin-bottom:16px">
+          <div style="font-size:13px;font-weight:800;color:var(--accent);margin-bottom:4px">
+            ${escHtml(CONF_MOT[det.confiance] || 'Piste')}${detNom ? ' · ' + escHtml(detNom) : ''}
+          </div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.5">
+            ${escHtml(det.explication || '')}
+          </div>
+          ${chips ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">
+            <span style="font-size:12px;color:var(--muted);align-self:center">Sinon :</span>${chips}
+          </div>` : ''}
+        </div>`;
+    }
+
     overlay.innerHTML = `
       <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;
-                  padding:20px;max-width:400px;width:100%">
-        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">
+                  padding:24px;max-width:420px;width:100%">
+        <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px">
           Bobine non réceptionnée
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-family:monospace">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:16px;font-family:monospace">
           ${escHtml(codeBarre)}
         </div>
-        <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:14px">
-          Ce code n'est rattaché à aucune réception. Il sera quand même enregistré :
-          indiquez seulement de qui vient la bobine.
-        </div>
+        ${det ? '' : `<div style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:16px">
+          Ce code n'est rattaché à aucune réception.
+          Il sera quand même enregistré : indiquez de qui vient la bobine.
+        </div>`}
+        ${bandeau}
 
-        <label style="font-size:11px;font-weight:700;text-transform:uppercase;
-                      letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:6px">
+        <label style="font-size:11px;font-weight:800;text-transform:uppercase;
+                      letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:8px">
           Fournisseur (obligatoire)
         </label>
         <input id="fiche-fournisseur-input" type="text" list="${dlId}"
                placeholder="Tapez pour rechercher…" autocomplete="off" spellcheck="false"
-               style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;
-                      background:var(--bg);color:var(--text);font-size:13px;margin-bottom:12px;font-family:inherit;box-sizing:border-box"/>
+               style="width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:10px;
+                      background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;box-sizing:border-box"/>
         <datalist id="${dlId}">${opts}</datalist>
 
         <div id="fiche-portee" style="display:flex;align-items:center;justify-content:space-between;
-                    gap:8px;margin:-6px 0 12px;font-size:11px;color:var(--muted)">
+                    gap:12px;margin:10px 0 18px;font-size:12px;color:var(--muted)">
           <span id="fiche-portee-txt">Fournisseurs de bobines et complexes</span>
           <button type="button" id="fiche-elargir"
                   style="background:none;border:none;padding:0;font:inherit;font-weight:700;
@@ -3843,39 +3914,39 @@ function tracaShowFicheManuelle(codeBarre){
         </div>
 
         <div id="fiche-libre-wrap" style="display:none;margin-bottom:12px">
-          <label style="font-size:11px;font-weight:700;text-transform:uppercase;
-                        letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:6px">
+          <label style="font-size:11px;font-weight:800;text-transform:uppercase;
+                        letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:8px">
             Nom du fournisseur, à la main
           </label>
           <input id="fiche-fournisseur-libre" type="text" maxlength="120"
                  placeholder="Nom du fournisseur" autocomplete="off" spellcheck="false"
-                 style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;
-                        background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box"/>
-          <div style="font-size:11px;color:#c2410c;line-height:1.5;margin-top:6px">
-            Hors annuaire : aucun certificat FSC ne sera rattaché. La bobine
-            ressortira en « non FSC » et sera signalée en écart sur un dossier certifié.
+                 style="width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:10px;
+                        background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;box-sizing:border-box"/>
+          <div style="font-size:12px;color:#c2410c;line-height:1.5;margin-top:8px">
+            Hors annuaire : aucun certificat FSC ne sera rattaché.
+            La bobine ressortira en « non FSC », signalée en écart.
           </div>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+            <div style="font-size:11px;font-weight:800;text-transform:uppercase;
                         letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Fournisseur</div>
             <div id="fiche-fournisseur-nom"
-                 style="font-size:13px;font-weight:600;color:var(--muted)">—</div>
+                 style="font-size:14px;font-weight:700;color:var(--muted)">—</div>
           </div>
-          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;
-                        letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Licence FSC</div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+            <div style="font-size:11px;font-weight:800;text-transform:uppercase;
+                        letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Certificat FSC</div>
             <div id="fiche-fournisseur-licence"
-                 style="font-size:13px;font-weight:600;color:var(--muted);font-family:monospace">—</div>
+                 style="font-size:14px;font-weight:700;color:var(--muted);font-family:monospace">—</div>
           </div>
         </div>
 
-        <div style="display:flex;gap:8px;justify-content:flex-end">
-          <button type="button" class="btn btn-ghost" id="fiche-manual-cancel" style="font-size:13px">Annuler</button>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button type="button" class="btn btn-ghost" id="fiche-manual-cancel" style="font-size:14px">Annuler</button>
           <button type="button" class="btn btn-accent" id="fiche-manual-confirm"
-                  style="font-size:13px;opacity:.5" disabled
+                  style="font-size:14px;opacity:.5" disabled
                   title="Choisissez un fournisseur dans la liste pour enregistrer">Enregistrer le scan</button>
         </div>
       </div>`;
@@ -3949,6 +4020,126 @@ function tracaShowFicheManuelle(codeBarre){
       }
     }
 
+    // Ce qu'on inscrira dans la colonne d'origine. Il suit ce que l'operateur
+    // FAIT, pas ce que l'ecran a propose : des qu'il choisit autre chose que la
+    // detection, l'enregistrement redevient une saisie. Sans cette bascule, la
+    // colonne dirait « detecte » sur des lignes que quelqu'un a corrigees a la
+    // main — exactement l'inverse de ce qu'un audit vient y chercher.
+    let origSource = det ? (det.source || 'saisie') : 'saisie';
+    let origConf   = det ? (det.confiance || 'aucune') : 'aucune';
+    function marquerSaisie(){ origSource = 'saisie'; origConf = 'aucune'; }
+
+    // Ou va le focus, et donc ce que fait la touche Entree. C'est tout le geste
+    // de l'atelier : douchette, Entree, bobine enregistree. Quand la reponse
+    // est deja dans le champ, le focus va au bouton — focaliser la recherche
+    // deroulerait l'annuaire par-dessus, et l'Entree suivante validerait le
+    // PREMIER nom de la liste au lieu du fournisseur detecte.
+    // Pose une seule fois : le pre-remplissage attend l'annuaire, le reste non,
+    // et deux focus concurrents rouvriraient la liste qu'on vient de fermer.
+    let focusPose = false;
+    // Vrai quand le pre-remplissage attend l'annuaire : c'est LUI qui posera le
+    // focus, une fois la reponse reellement dans le champ. Sans ce drapeau, le
+    // frame suivant arriverait avant la fin du chargement, verrait un bouton
+    // encore desactive et ouvrirait la liste — le bug qu'on corrige.
+    let focusConfie = false;
+    function placerFocus(){
+      if(focusPose) return;
+      focusPose = true;
+      if(btn && !btn.disabled){
+        try{ window.MysFournisseurPicker.close(); }catch(_){}
+        btn.focus();
+        return;
+      }
+      if(ficheLibre && libreInp) libreInp.focus();
+      else if(fournPickerFiche) fournPickerFiche.focus();
+      else if(inp) inp.focus();
+    }
+
+    // Pre-remplissage. Un nom detecte hors annuaire ouvre directement le champ
+    // libre : le proposer dans un picker qui ne le contient pas ne remplirait rien.
+    const preRempli = !!(det && detNom);
+    if(preRempli){
+      if(det.hors_annuaire){
+        ouvrirChampLibre(detNom);
+        updateLicence();
+      }else if(fournPickerFiche){
+        // `set()` differe son travail quand l'annuaire n'est pas encore
+        // charge. Enchainer sur `load()` garantit que le nom ET la licence
+        // sont poses avant qu'on regarde le resultat — sinon les deux cartes
+        // du bas restent a « — » sur une bobine pourtant reconnue.
+        const poser = () => {
+          try{ fournPickerFiche.set(det.fournisseur_id || detNom, true); }catch(_){}
+          // `set` n'ouvre rien, mais le champ a pu prendre le focus au
+          // montage : on referme pour de bon. Une liste ouverte au-dessus
+          // d'un champ deja rempli fait valider le PREMIER de la liste au
+          // coup d'Entree suivant — c'est-a-dire n'importe qui.
+          try{ window.MysFournisseurPicker.close(); }catch(_){}
+          updateLicence();
+          placerFocus();
+        };
+        const chargement = (window.MysFournisseurPicker && window.MysFournisseurPicker.load)
+          ? window.MysFournisseurPicker.load() : null;
+        if(chargement && chargement.then){
+          focusConfie = true;
+          chargement.then(poser).catch(poser);
+        }else{
+          poser();
+        }
+      }else if(inp){
+        inp.value = detNom;
+        updateLicence();
+      }
+    }
+
+    // Bascule le champ sur le second palier, celui du nom tape a la main.
+    // Extrait ici parce que trois chemins y menent : le bouton « Autre
+    // fournisseur », le pre-remplissage d'un nom hors annuaire, et le clic
+    // sur un candidat qui n'a pas de fiche.
+    function ouvrirChampLibre(valeur){
+      ficheElargi = true; ficheLibre = true;
+      if(porteeTxt) porteeTxt.textContent = 'Fournisseur hors annuaire';
+      if(elargirBtn) elargirBtn.style.display = 'none';
+      if(libreWrap) libreWrap.style.display = '';
+      if(fournPickerFiche) fournPickerFiche.clear(true);
+      if(libreInp) libreInp.value = valeur || '';
+    }
+
+    // Pose un fournisseur DEPUIS SON NOM. Le picker est en mode `id` : lui
+    // passer un nom lui fait tenter un Number() qui echoue, et il affiche
+    // « Fournisseur introuvable (#Likexin) » — le champ reste vide et le
+    // bouton desactive. On resout donc le nom en fiche avant, et on retombe
+    // sur le champ libre quand l'annuaire ne connait pas ce nom-la.
+    function choisirParNom(nom){
+      const f = (window.MysFournisseurPicker && window.MysFournisseurPicker.byNom)
+        ? window.MysFournisseurPicker.byNom(nom) : null;
+      if(f && fournPickerFiche){
+        if(!ficheElargi){
+          // Un candidat peut sortir des categories bobine : l'imposer sans
+          // elargir laisserait un champ rempli d'un nom que sa propre liste
+          // refuse d'afficher.
+          ficheElargi = true;
+          if(porteeTxt) porteeTxt.textContent = 'Annuaire complet';
+          fournPickerFiche.setCategories(CATS_BOBINE);
+        }
+        try{ fournPickerFiche.set(f.id, true); }catch(_){}
+      }else if(f && inp){
+        inp.value = f.nom;
+      }else{
+        ouvrirChampLibre(nom);
+      }
+      try{ window.MysFournisseurPicker.close(); }catch(_){}
+      updateLicence();
+    }
+
+    // Les autres fournisseurs deja vus sous cette forme de code : un clic
+    // suffit a corriger, sans rouvrir l'annuaire.
+    overlay.querySelectorAll('.fiche-alt').forEach(b => {
+      b.onclick = () => {
+        marquerSaisie();
+        choisirParNom(b.getAttribute('data-nom') || '');
+      };
+    });
+
     // Palier 1 : tout l'annuaire. Palier 2 : le champ libre. Deux clics, et
     // le second dit ce qu'il coute — l'operateur ne bascule pas hors
     // annuaire sans le savoir.
@@ -3976,19 +4167,24 @@ function tracaShowFicheManuelle(codeBarre){
       };
     }
     if(libreInp){
-      libreInp.addEventListener('input', updateLicence);
+      libreInp.addEventListener('input', () => { marquerSaisie(); updateLicence(); });
     }
     if (fournPickerFiche) {
-      fournPickerFiche.opts.onSelect = updateLicence;
-      fournPickerFiche.opts.onClear = updateLicence;
-      // requestAnimationFrame plutôt qu'un setTimeout à l'aveugle : le champ
-      // vient d'être inséré, il est prêt au frame suivant.
-      requestAnimationFrame(() => fournPickerFiche.focus());
-    } else if(inp){
+      fournPickerFiche.opts.onSelect = () => {
+        const f = fournPickerFiche.get();
+        // Re-selectionner exactement le fournisseur detecte n'est pas une
+        // correction : l'origine reste celle de la detection.
+        if(!det || !f || String(f.nom||'') !== detNom) marquerSaisie();
+        updateLicence();
+      };
+      fournPickerFiche.opts.onClear = () => { marquerSaisie(); updateLicence(); };
+    }else if(inp){
       inp.addEventListener('input', updateLicence);
       inp.addEventListener('change', updateLicence);
-      setTimeout(()=>inp.focus(), 50);
     }
+
+    // Le champ est insere au montage : il est pret au frame suivant.
+    if(!focusConfie) requestAnimationFrame(placerFocus);
 
     overlay.querySelector('#fiche-manual-cancel').onclick = () => {
       overlay.remove();
@@ -4004,6 +4200,8 @@ function tracaShowFicheManuelle(codeBarre){
       const extra = f
         ? {fournisseur_fsc_id: parseInt(f.id, 10)}
         : {fournisseur_libre: libre};
+      extra.origine_detection = origSource;
+      extra.origine_confiance = origConf;
       overlay.remove();
       set({tracaAutoSaving:true});
       try{

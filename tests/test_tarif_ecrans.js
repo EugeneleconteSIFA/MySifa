@@ -98,7 +98,7 @@ check('le bouton existe', app.includes('function transportPropagerHtml('), true)
 check('et son style', css.includes('.transport-propage{'), true);
 check('la modale tarif le pose', modale.includes('transportPropagerHtml("tf-prop"'), true);
 const fiche = app.slice(app.indexOf('function renderDeclinaisonForm('),
-                        app.indexOf('async function saveDeclinaisonForm('));
+                        app.indexOf('function productsTabsHtml('));
 check('la fiche déclinaison aussi', fiche.includes('"d-tprop"'), true);
 // La grille est en deux colonnes : l'action se pose DANS la field-row, à côté
 // des taxes, plutôt qu'en pied de bloc où elle laissait une colonne vide.
