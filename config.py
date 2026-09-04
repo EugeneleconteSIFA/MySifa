@@ -258,6 +258,13 @@ SUPERADMIN_EMAIL = "eleconte@sifa.pro"
 
 # Rôles ayant accès aux fonctions d'administration (imports, dossiers, stats, etc.)
 ROLES_ADMIN = {ROLE_DIRECTION, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
+
+# MyExpé — onglet Pilotage (tableau de bord amont des expéditions).
+# Restreint volontairement pendant le rodage : l'écran croise le planning et le
+# carnet RVGI, et tant que les dossiers de planning soldés ne sont pas nettoyés,
+# ses compteurs demandent une lecture avertie. À élargir à `expedition` et
+# `logistique` quand les chiffres seront stabilisés.
+ROLES_EXPE_PILOTAGE = {ROLE_DIRECTION, ROLE_SUPERADMIN}
 ROLES_STOCK = {ROLE_DIRECTION, ROLE_LOGISTIQUE, ROLE_EXPEDITION, ROLE_COMMERCIAL, ROLE_FABRICATION, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
 
 # MyStock — zone « Au sol - à expédier » : stock prêt à expédier (code technique, affiché « Au sol - à expédier »)

@@ -276,6 +276,15 @@ function escAttr(t){
   return escHtml(t).replace(/"/g,'&quot;');
 }
 
+function expePilotageVisible(){
+  // Onglet en rodage : direction et super administrateur uniquement. Le filtre
+  // qui protege est cote serveur (config.ROLES_EXPE_PILOTAGE) — ici on evite
+  // seulement de proposer une entree de menu qui repondrait 403.
+  const r=(S.user&&(S.user.effective_role||S.user.role))||
+          (typeof window.__USER_ROLE__==='string'?window.__USER_ROLE__:'')||'';
+  return r==='superadmin'||r==='direction';
+}
+
 function expeCanWrite(){
   const r=(S.user&&S.user.role)||(typeof window.__USER_ROLE__==='string'?window.__USER_ROLE__:'')||'';
   return r==='superadmin'||r==='direction'||r==='administration'||r==='administration_ventes'||r==='administration_technique'||r==='expedition';
@@ -7224,6 +7233,7 @@ function renderExpe(){
     S.expeDepartSubTab='historique';
   }
   if(S.expeTab==='dashboard')S.expeTab='suivi_departs';
+  if(S.expeTab==='pilotage'&&!expePilotageVisible())S.expeTab='suivi_departs';
   const tab=S.expeTab||'suivi_departs';
   _syncExpeHash();
   const sub=S.expeDepartSubTab||'jour';
@@ -7258,7 +7268,7 @@ function renderExpe(){
     (()=>{
       const SECTIONS = [
         { key:'ops', label:'Opérations', items:[
-          {tab:'pilotage',       ico:'activity',  label:'Pilotage'},
+          ...(expePilotageVisible()?[{tab:'pilotage',ico:'activity',label:'Pilotage'}]:[]),
           {tab:'suivi_departs',  ico:'clipboard', label:'Départs'},
           {tab:'palettes_europe',ico:'pallet',    label:'Palettes Europe'},
         ]},

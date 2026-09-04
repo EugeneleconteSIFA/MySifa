@@ -73,17 +73,32 @@ def _valeurs(champs: Any) -> Dict[str, Any]:
     return champs.dict()
 
 
+# Comment chaque objet se nomme à l'écran, et où lire sa référence lisible et
+# sa date. Le reste (table d'accueil, nature de pièce) vient de ratt.ACCUEIL :
+# une seule source, sinon les deux divergent au premier objet ajouté.
+LIBELLES = {"dossier": "dossier", "depart": "départ", "of": "OF"}
+COLONNES_LISTE = {
+    "dossier": ("reference", "created_at"),
+    "depart":  ("no_bl",     "created_at"),
+    "of":      ("of_numero", "date_import"),
+}
+
+
 def _piece_de(objet: str) -> str:
-    return "commande" if objet == "dossier" else "livraison"
+    return ratt.ACCUEIL[objet][2]
+
+
+def _table_de(objet: str) -> str:
+    return ratt.ACCUEIL[objet][0]
 
 
 def _existe(conn, objet: str, objet_id: int) -> None:
-    table = "planning_entries" if objet == "dossier" else "expe_departs"
+    table = _table_de(objet)
     row = conn.execute('SELECT id FROM "%s" WHERE id=?' % table, (objet_id,)).fetchone()
     if row is None:
         raise HTTPException(
             status_code=404,
-            detail="Ce %s n'existe pas." % ("dossier" if objet == "dossier" else "départ"),
+            detail="Ce %s n'existe pas." % LIBELLES.get(objet, objet),
         )
 
 
@@ -206,7 +221,7 @@ def rvgi_lire(objet: str, objet_id: int, request: Request):
     with get_db() as conn:
         _existe(conn, objet, objet_id)
         lignes = ratt.lister(conn, objet, objet_id)
-        table = "planning_entries" if objet == "dossier" else "expe_departs"
+        table = _table_de(objet)
         row = conn.execute(
             'SELECT rvgi_etat, rvgi_maj_le FROM "%s" WHERE id=?' % table, (objet_id,)
         ).fetchone()
@@ -324,14 +339,14 @@ def rvgi_a_rattacher(
     require_admin(request)
     if objet not in ratt.OBJETS:
         raise HTTPException(status_code=400, detail="Objet inconnu.")
-    table, ref = (("planning_entries", "reference") if objet == "dossier"
-                  else ("expe_departs", "no_bl"))
+    table = _table_de(objet)
+    ref, date_col = COLONNES_LISTE[objet]
     with get_db() as conn:
         rows = conn.execute(
-            'SELECT id, "%s" AS ref, rvgi_etat, rvgi_maj_le, created_at '
+            'SELECT id, "%s" AS ref, rvgi_etat, rvgi_maj_le, "%s" AS created_at '
             'FROM "%s" WHERE COALESCE(rvgi_etat, \'a_rattacher\') IN '
-            "('a_rattacher','a_verifier') ORDER BY COALESCE(created_at,'') DESC LIMIT ?"
-            % (ref, table), (limite,),
+            "('a_rattacher','a_verifier') ORDER BY COALESCE(\"%s\",'') DESC LIMIT ?"
+            % (ref, date_col, table, date_col), (limite,),
         ).fetchall()
     return {"objet": objet, "total": len(rows), "lignes": [dict(r) for r in rows]}
 
@@ -348,3 +363,35 @@ def rvgi_reprendre(request: Request):
         res = ratt.reprendre_apres_synchro(conn)
         conn.commit()
     return res
+
+
+# ── Articles ─────────────────────────────────────────────────────────────────
+
+@router.get("/articles")
+def rvgi_articles(
+    request: Request,
+    q: str = Query("", max_length=120),
+    limite: int = Query(ratt.LIMITE_RECHERCHE, ge=1, le=100),
+):
+    """Articles de RVGI candidats pour une fiche technique.
+
+    Sert le sélecteur d'article de la fiche : c'est le lien qui rattache un
+    produit fabriqué à l'article que l'ERP facture.
+    """
+    require_admin(request)
+    lignes = ratt.chercher_articles(q, limite)
+    return {"total": len(lignes), "articles": lignes}
+
+
+@router.get("/article/{code1}/{code2}")
+def rvgi_article(code1: str, code2: str, request: Request):
+    """Un article et ce que RVGI sait de sa fabrication, pour pré-remplir.
+
+    404 si l'article n'existe pas dans le miroir : mieux vaut le dire que
+    laisser croire à une fiche vide.
+    """
+    require_admin(request)
+    a = ratt.article(code1, code2)
+    if not a:
+        raise HTTPException(status_code=404, detail="Article inconnu du miroir RVGI.")
+    return a

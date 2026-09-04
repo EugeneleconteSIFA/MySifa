@@ -345,7 +345,7 @@ function _expePilCelluleTransport(env){
   const t=env.jalons.transport;
   if(t.fait){
     return h('td',null,
-      h('span',{className:'expe-pil-jalon expe-pil-jalon--ok'},iconEl('check',13),' ',
+      h('span',{className:'expe-pil-jalon expe-pil-jalon--ok'},iconEl('check-circle',13),' ',
         t.transporteur||'commandé'),
       h('span',{className:'expe-pil-jalon-date'},
         (t.reference?t.reference+' · ':'')+
@@ -368,7 +368,7 @@ function _expePilCelluleTransport(env){
 function _expePilCelluleParti(env){
   const p=env.jalons.parti;
   if(p.fait)return h('td',null,
-    h('span',{className:'expe-pil-jalon expe-pil-jalon--ok'},iconEl('check',13),' Parti'),
+    h('span',{className:'expe-pil-jalon expe-pil-jalon--ok'},iconEl('check-circle',13),' Parti'),
     h('span',{className:'expe-pil-jalon-date'},_expePilJourFR(p.le)));
   if(!expeCanWrite())return h('td',null,h('span',{className:'expe-pil-jalon'},'—'));
   const pret=env.jalons.transport.fait;
@@ -381,7 +381,7 @@ function _expePilCelluleParti(env){
 function _expePilCelluleBL(env){
   const bl=env.jalons.bl;
   if(bl.fait)return h('td',null,
-    h('span',{className:'expe-pil-jalon expe-pil-jalon--ok'},iconEl('check',13),' ',
+    h('span',{className:'expe-pil-jalon expe-pil-jalon--ok'},iconEl('check-circle',13),' ',
       bl.numeros.slice(0,2).join(' · ')),
     bl.numeros.length>2?h('span',{className:'expe-pil-jalon-date'},
       '+ '+(bl.numeros.length-2)+' autre(s)'):null);
@@ -413,17 +413,17 @@ function _expePilCarte(env){
       ' · '+(env.dossiers||[]).length+' dossier(s)'),
     h('div',{className:'expe-pil-carte-jalons'},
       t.fait
-        ?h('span',{className:'expe-pil-jalon expe-pil-jalon--ok'},iconEl('check',13),' ',
+        ?h('span',{className:'expe-pil-jalon expe-pil-jalon--ok'},iconEl('check-circle',13),' ',
            t.transporteur||'Transport commandé')
         :(expeCanWrite()?h('button',{type:'button',className:'expe-pil-act expe-pil-act--go',
            onClick:function(){expePilOuvrirTransport(env);}},'Commander le transport')
           :h('span',{className:'expe-pil-jalon'},'Transport à commander')),
       env.jalons.parti.fait
-        ?h('span',{className:'expe-pil-jalon expe-pil-jalon--ok'},iconEl('check',13),' Parti')
+        ?h('span',{className:'expe-pil-jalon expe-pil-jalon--ok'},iconEl('check-circle',13),' Parti')
         :(expeCanWrite()&&t.fait?h('button',{type:'button',className:'expe-pil-act',
            onClick:function(){void expePilMarquerParti(env);}},'Parti'):null),
       env.jalons.bl.fait
-        ?h('span',{className:'expe-pil-jalon expe-pil-jalon--ok'},iconEl('check',13),' BL ',
+        ?h('span',{className:'expe-pil-jalon expe-pil-jalon--ok'},iconEl('check-circle',13),' BL ',
            env.jalons.bl.numeros[0]||'')
         :h('span',{className:'expe-pil-jalon'},'BL à faire')
     )
@@ -446,7 +446,9 @@ function _expePilReglages(data){
     {cle:'preavis_affretement_jours',label:'Préavis affrètement (jours)',
      aide:'Plus long : un camion complet se réserve plus tôt qu’une messagerie.'},
     {cle:'seuil_affretement_palettes',label:'Seuil affrètement (palettes)',
-     aide:'Au-delà de ce nombre de palettes, l’envoi est traité en affrètement.'}
+     aide:'Au-delà de ce nombre de palettes, l’envoi est traité en affrètement.'},
+    {cle:'retard_max_jours',label:'Retard maximum affiché (jours)',
+     aide:'Au-delà, le dossier est écarté et compté à part : ce n’est plus un transport en retard, c’est un dossier de planning à solder.'}
   ];
   const refs={};
   const grille=h('div',{className:'expe-pil-reglages-grid'},
@@ -550,7 +552,7 @@ function renderExpePilotage(){
       })),
     recherche,
     h('button',{type:'button',className:'expe-pil-act',title:'Recharger',
-      onClick:function(){void loadExpePilotage();}},iconEl('refresh-cw',13),' Actualiser')
+      onClick:function(){void loadExpePilotage();}},iconEl('rotate-cw',13),' Actualiser')
   );
 
   const avert=[];
@@ -563,6 +565,12 @@ function renderExpePilotage(){
     avert.push(h('div',{className:'expe-pil-avert'},
       (data.resume.sans_estimation)+' envoi(s) sans nombre de palettes : fiche technique '+
       'incomplète. Le chiffre peut être saisi directement dans la colonne Palettes.'));
+  if((data.resume||{}).dormants)
+    avert.push(h('div',{className:'expe-pil-avert'},
+      (data.resume.dormants)+' dossier(s) au planning attendus avant le '+
+      _expePilJourFR(data.dormants_avant)+' et jamais soldés : écartés du tableau, '+
+      'parce qu’un envoi attendu il y a des mois n’est pas un transport à organiser. '+
+      'Le ménage se fait dans MyProd, pas ici.'));
 
   const corps=expeEnCartes()
     ? (envois.length

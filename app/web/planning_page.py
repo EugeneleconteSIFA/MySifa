@@ -1097,6 +1097,19 @@ async function _apiAppel(p,o,gelPossible){
 }
 function api(p,o={}){ return _apiAppel(p,o,true); }
 
+/* Les routes qui ne vivent PAS sous /api/planning. `api()` préfixe tout par
+   /api/planning : appeler /api/rvgi/... avec lui donne
+   /api/planning/api/rvgi/... — un 404 silencieux, avalé par le catch de
+   l'appelant. C'est ce qui faisait perdre le rattachement RVGI de tout
+   dossier créé depuis la modale (voir rvgiPoserEnAttente). */
+async function apiAbs(p,o={}){
+  const r=await fetch(p,{credentials:"include",
+    headers:{"Content-Type":"application/json",...(o.headers||{})},...o});
+  if(!r.ok) throw await parseApiError(r);
+  const ct=r.headers.get("content-type")||"";
+  return ct.includes("application/json")?r.json():null;
+}
+
 let _pToastTimer=null;
 function showToast(message,type){
   const t=type==="danger"?"danger":type==="info"?"info":"success";
@@ -4073,7 +4086,7 @@ async function rvgiPoserEnAttente(nouvelId){
   if(!_rvgiEnAttente||!nouvelId)return;
   const paquet=_rvgiEnAttente;_rvgiEnAttente=null;
   try{
-    await api('/api/rvgi/rattachements',{method:'POST',body:JSON.stringify({
+    await apiAbs('/api/rvgi/rattachements',{method:'POST',body:JSON.stringify({
       objet:'dossier',objet_id:Number(nouvelId),
       lignes:paquet.lignes||[],etat:paquet.etat||null})});
   }catch(e){
@@ -4223,6 +4236,11 @@ function getFormData(withStatut){
 
 let _addTab='manual';
 let _addOfFile=null,_addOfParsed=null,_addOfParsing=false;
+/* Pré-remplissage venu d'un OF déjà enregistré dans MySifa (bouton « Créer
+   directement un dossier de prod » de MyProd). Différent de _addOfParsed, qui
+   est la lecture d'un PDF déposé à l'instant : ici l'OF EXISTE, on connaît son
+   id, ses commandes rattachées et sa fiche technique. */
+let _addPrefill=null;
 
 function addOfDelaiToDateInput(raw){
   const s=(raw!=null?String(raw):'').trim();
@@ -4246,6 +4264,14 @@ function dossierFieldsFromOfParsed(p){
 
 function renderAddModalBody(){
   if(_addTab==='manual'){
+    const p=_addPrefill&&_addPrefill.dossier;
+    if(p){
+      return dossierFields(p.numero_of||'',p.client||'',p.ref_produit||'',
+        p.laize!=null?String(p.laize):'',p.date_livraison||'',p.commentaire||'','',
+        p.format_l!=null?String(p.format_l):'',p.format_h!=null?String(p.format_h):'',
+        8,'attente',false,p.a_placer==null?1:p.a_placer,0,'','',0,0,0,
+        p.etiquettes_par_carton==null?null:p.etiquettes_par_carton,null);
+    }
     return dossierFields('','','','','','','','','',8,'attente',false);
   }
   if(_addOfParsing){
@@ -4271,17 +4297,23 @@ function renderAddModalBody(){
 
 function renderAddModal(){
   _dossierEditId=null;  // création : la case FSC part avec le POST, rien à enregistrer à la volée
-  const tabs=`<div class="view-tabs" style="margin-bottom:18px">
+  // Venant d'un OF existant, les deux onglets n'ont plus de sens : le
+  // document est déjà là, et proposer d'en déposer un autre inviterait à
+  // créer un doublon.
+  const tabs=_addPrefill?'':`<div class="view-tabs" style="margin-bottom:18px">
     <button type="button" class="view-tab ${_addTab==='manual'?'active':''}" onclick="openAddSwitchTab('manual')">Manuel</button>
     <button type="button" class="view-tab ${_addTab==='of'?'active':''}" onclick="openAddSwitchTab('of')">Depuis un OF PDF</button>
   </div>`;
+  const titre=_addPrefill
+    ? ("Nouveau dossier — OF "+escHtml(String((_addPrefill.dossier&&_addPrefill.dossier.numero_of)||'')))
+    : "Ajouter un dossier";
   const footerBtn=_addTab==='manual'
     ? `<button type="button" class="btn-p" onclick="submitAdd()"><span style="font-size:18px;line-height:1">+</span> Ajouter</button>`
     : (_addOfParsed?`<button type="button" class="btn-p" onclick="submitAddFromOf()">Valider et créer le dossier</button>`:'');
   document.getElementById("mroot").innerHTML=`<div class="mo modal-backdrop">
     <div class="md md--dossier" style="max-width:860px;width:100%;max-height:92vh;overflow-y:auto;padding:28px 32px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px">
-        <h3 style="margin:0;font-size:18px;font-family:var(--mono);color:var(--text)">Ajouter un dossier</h3>
+        <h3 style="margin:0;font-size:18px;font-family:var(--mono);color:var(--text)">${titre}</h3>
         <button type="button" onclick="closeM()" aria-label="Fermer"
           style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:22px;line-height:1;font-family:inherit">×</button>
       </div>
@@ -4298,13 +4330,36 @@ function renderAddModal(){
 function openAdd(){
   if(!CAN_EDIT) return;
   _addTab='manual';
-  _addOfFile=null;_addOfParsed=null;_addOfParsing=false;
+  _addOfFile=null;_addOfParsed=null;_addOfParsing=false;_addPrefill=null;
+  _rvgiEnAttente=null;
   renderAddModal();
 }
 
 function openAddSwitchTab(tab){
   _addTab=tab;
+  _addOfFile=null;_addOfParsed=null;_addOfParsing=false;_addPrefill=null;
+  renderAddModal();
+}
+
+/* Ouvre la modale « nouveau dossier » remplie depuis un OF de MySifa.
+
+   Le bouton de MyProd n'écrit rien de lui-même : la machine, la place dans la
+   file et la durée sont des arbitrages de planification que l'OF ne porte pas.
+   Ce qu'il apporte, c'est tout le reste — et les lignes de commande, posées en
+   attente pour être rattachées au dossier dès sa création. */
+async function openAddDepuisOf(ofId){
+  if(!CAN_EDIT) return;
+  let p=null;
+  try{
+    p=await apiAbs('/api/of/'+encodeURIComponent(ofId)+'/dossier-prefill');
+  }catch(e){
+    showToast(apiErrorMessage(e,"OF introuvable."),"danger");
+    return;
+  }
+  _addTab='manual';
   _addOfFile=null;_addOfParsed=null;_addOfParsing=false;
+  _addPrefill=p;
+  _rvgiEnAttente=(p.commandes&&p.commandes.length)?{lignes:p.commandes,etat:null}:null;
   renderAddModal();
 }
 
@@ -4380,12 +4435,31 @@ async function submitAddFromOf(){
   }
 }
 
+/* Relie explicitement le dossier créé à l'OF dont il est issu.
+
+   L'auto-rapprochement par numéro existe déjà côté serveur, mais il ne se
+   déclenche que si les numéros coïncident. Ici on SAIT de quel OF vient le
+   dossier : le deviner à nouveau serait rouvrir la porte à l'ambiguïté que
+   l'onglet « Mappings à valider » sert justement à trancher. */
+async function lierOfAuDossier(prefill,nouvelId){
+  if(!prefill||!prefill.of_id||!nouvelId) return;
+  try{
+    await apiAbs('/api/admin/planning-of-links',{method:'POST',
+      body:JSON.stringify({planning_id:Number(nouvelId),of_ids:[Number(prefill.of_id)]})});
+  }catch(e){
+    showToast("Dossier créé, mais le lien vers l'OF n'a pas pu être posé. "+
+              "Rattachez-le depuis l'onglet OF.","danger");
+  }
+}
+
 async function submitAdd(){
   const d=getFormData(false);
   if(!d.numero_of){ showToast("Numéro d'OF requis.","danger"); return; }
+  const prefill=_addPrefill;
   try{
     const res=await api(`/machines/${MID}/entries`,{method:"POST",body:JSON.stringify({reference:d.numero_of,...d})});
     await rvgiPoserEnAttente(res&&res.id);
+    await lierOfAuDossier(prefill,res&&res.id);
     closeM();load();
     if(res&&res.warning&&res.warning.message){ showToast(res.warning.message,"danger"); }
     else { showToast("Dossier ajouté.","success"); }
@@ -6148,6 +6222,12 @@ async function boot(){
     }
     // Toujours recalculer les chips après le 1er load.
     scheduleCrossMachineSearch();
+    // Arrivée depuis le bouton « Créer directement un dossier de prod » de
+    // MyProd : la machine est déjà dans l'URL, il reste à ouvrir la modale.
+    const depuisOf=sp.get("depuis-of");
+    if(depuisOf&&/^\d+$/.test(depuisOf)){
+      setTimeout(()=>{try{openAddDepuisOf(parseInt(depuisOf,10));}catch(e){}},260);
+    }
   }catch(e){}
   // Vérifier les annonces de mise à jour après le chargement initial
   checkUpdates();

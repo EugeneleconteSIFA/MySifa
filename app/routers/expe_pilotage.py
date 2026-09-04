@@ -28,8 +28,14 @@ from fastapi import APIRouter, Body, HTTPException, Request
 
 from app.services import expe_pilotage as pil
 from app.services.audit_service import log_action
+from config import ROLES_EXPE_PILOTAGE
 from database import get_db
-from services.auth_service import get_current_user, user_can_write_expe, user_has_app_access
+from services.auth_service import (
+    effective_role,
+    get_current_user,
+    user_can_write_expe,
+    user_has_app_access,
+)
 
 router = APIRouter()
 
@@ -37,9 +43,21 @@ _PARIS = ZoneInfo("Europe/Paris")
 
 
 def _require_expe(request: Request) -> dict:
+    """Accès au pilotage : MyExpé, plus un rôle habilité.
+
+    L'écran est restreint pendant son rodage (`ROLES_EXPE_PILOTAGE` dans
+    `config.py`, direction et super administrateur). Le filtre est ici, côté
+    serveur : masquer l'entrée de menu ne protège rien, l'URL de l'API reste
+    appelable.
+    """
     user = get_current_user(request)
     if not user_has_app_access(user, "expe"):
         raise HTTPException(status_code=403, detail="Accès MyExpé requis")
+    if effective_role(user) not in ROLES_EXPE_PILOTAGE:
+        raise HTTPException(
+            status_code=403,
+            detail="Pilotage des expéditions — accès réservé pendant le rodage.",
+        )
     return user
 
 
