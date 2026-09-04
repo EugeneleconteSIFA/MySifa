@@ -4390,7 +4390,7 @@ EXPE_MAIN_CSS = r"""
 """
 
 EXPE_MAIN_JS = r"""
-var EXPE_VALID_TABS=['suivi_departs','palettes_europe','comparateur','devis','poids','transporteurs','zones','prospects'];
+var EXPE_VALID_TABS=['pilotage','suivi_departs','palettes_europe','comparateur','devis','poids','transporteurs','zones','prospects'];
 var _expeHashRestored=false;
 function _readExpeHash(){
   try{var h=(location.hash||'').replace(/^#/,'').trim();
@@ -4615,6 +4615,7 @@ __EXPE_CARTE_FRANCE_JS__
 __EXPE_NOTES_JS__
 __EXPE_THEMATIQUES_JS__
 __EXPE_ZONES_JS__
+__EXPE_PILOTAGE_JS__
 function renderExpePoids(){
   const rows=S.expePoidsRows||[];
   const fKg=v=>v.toFixed(3)+'\u00a0kg';
@@ -7242,6 +7243,10 @@ function renderExpe(){
     else if(tab==='prospects'){void chargerProspects();}
     else if(tab==='transporteurs'&&!T.pageLoaded){T.pageLoaded=true;void loadTransporteurs();}
     else if(tab==='palettes_europe'){void loadExpePalettesEurope();}
+    // Le pilotage recharge a chaque entree dans l'onglet : les jalons bougent
+    // en continu (un BL edite dans RVGI, un depart valide par un collegue) et
+    // un tableau de bord perime induit en erreur plus qu'il n'aide.
+    else if(tab==='pilotage'){void loadExpePilotage();if(!T.list.length&&!T.loading)void loadTransporteurs();}
   }
 
   const sidebar=h('nav',{className:'sidebar'},
@@ -7253,6 +7258,7 @@ function renderExpe(){
     (()=>{
       const SECTIONS = [
         { key:'ops', label:'Opérations', items:[
+          {tab:'pilotage',       ico:'activity',  label:'Pilotage'},
           {tab:'suivi_departs',  ico:'clipboard', label:'Départs'},
           {tab:'palettes_europe',ico:'pallet',    label:'Palettes Europe'},
         ]},
@@ -7334,6 +7340,7 @@ function renderExpe(){
     h('div',null,
       h('div',{className:'mobile-topbar-title'},'MyExpé'),
       h('div',{className:'mobile-topbar-sub'},
+        tab==='pilotage'?'Pilotage des expéditions':
         tab==='suivi_departs'?(sub==='historique'?'Historique départs':'Départs programmés'):
         tab==='palettes_europe'?'Suivi des palettes Europe consignées':
         tab==='transporteurs'?'Transporteurs':tab==='zones'?'Zone géographique':tab==='devis'?'Demandes de devis':tab==='prospects'?'Prospects transporteurs':tab==='poids'?'Calcul poids':'Comparateur tarifs')
@@ -7341,7 +7348,8 @@ function renderExpe(){
     h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
   );
 
-  const content=tab==='suivi_departs'?renderExpeSuiviDepartsWithSubtabs():
+  const content=tab==='pilotage'?renderExpePilotage():
+    tab==='suivi_departs'?renderExpeSuiviDepartsWithSubtabs():
     tab==='palettes_europe'?renderExpePalettesEurope():
     tab==='transporteurs'?renderExpeTransporteurs():tab==='poids'?renderExpePoids():
     tab==='zones'?renderExpeZones():
@@ -7365,12 +7373,13 @@ function renderExpe(){
     h('div',{className:'app'},
       sidebar,
       h('main',{className:'main'},
-        h('div',Object.assign({className:'container'},_moExpeEnter?{'data-page-enter':''}:{},(tab==='suivi_departs'||tab==='palettes_europe')?{style:{maxWidth:'1600px'}}:{}),
+        h('div',Object.assign({className:'container'},_moExpeEnter?{'data-page-enter':''}:{},(tab==='suivi_departs'||tab==='palettes_europe'||tab==='pilotage')?{style:{maxWidth:'1600px'}}:{}),
           topbar,
           h('h1',null,'MyExpé'),
           !expeCanWrite()?h('div',{className:'readonly-notice',style:{marginBottom:'12px'}},iconEl('eye',13),' Lecture seule — consultation des départs, transporteurs et délais'):null,
           h('div',{className:'subtitle'},
-            tab==='suivi_departs'?(sub==='historique'?'Recherche multi-critères sur les départs validés'
+            tab==='pilotage'?'Ce qui part bientôt : transport commandé, enlèvement, bon de livraison'
+            :tab==='suivi_departs'?(sub==='historique'?'Recherche multi-critères sur les départs validés'
               :'Enregistrement des enlèvements et validation vers l\'historique')
             :tab==='palettes_europe'?'Compte courant des palettes Europe — combien chaque transporteur nous doit'
             :tab==='comparateur'?'Comparaison des transporteurs selon les grilles tarifaires actives en base'

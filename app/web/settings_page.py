@@ -1965,6 +1965,23 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
           </div>
         </div>
 
+        <div style="margin:26px 0 8px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Gel avant enlèvement</div>
+        <p class="sub" style="margin:0 0 14px;font-size:12px">Passé cette fenêtre, un geste de planning qui repousse un dossier dont le camion est réservé demande une confirmation écrite, motif à l'appui, enregistrée au journal des actions. Rien n'est interdit : ce qui change, c'est que le retard est assumé par quelqu'un. Le gel ignore volontairement le seuil de palettes ci-dessus — un petit camion engage le délai client comme un grand.</p>
+
+        <label id="tp-gel-actif-row" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer;margin-bottom:6px;font-size:13px">
+          <input type="checkbox" id="tp-gel-actif">
+          <span style="font-weight:600;color:var(--text)">Gel actif</span>
+        </label>
+        <p class="sub" style="margin:0 0 18px;font-size:11px;color:var(--muted)">Décoché, la contrainte transport reste en place et la demande de confirmation disparaît.</p>
+
+        <div style="display:flex;gap:18px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px;max-width:320px">
+            <label class="sub" style="display:block;margin-bottom:6px">Fenêtre de gel (heures)</label>
+            <input type="text" id="tp-gel-heures" inputmode="decimal" placeholder="48" autocomplete="off" style="width:100%;font-family:ui-monospace,monospace">
+            <p class="hint" style="margin-top:6px;font-size:11px">Nombre d'heures avant l'heure limite du camion. 48 = la règle SIFA : un dossier livré à 11h se gèle l'avant-veille à 11h.</p>
+          </div>
+        </div>
+
         <div style="display:flex;gap:8px;align-items:center;margin-top:18px;flex-wrap:wrap">
           <button type="button" class="btn" id="tp-save">Enregistrer</button>
           <span class="hint" id="tp-hint"></span>
@@ -8119,6 +8136,10 @@ function _tpAppliquer(p) {
   if (s) s.value = _tpFmt(p && p.seuil_palettes);
   const m = document.getElementById('tp-marge');
   if (m) m.value = _tpFmt(p && p.marge_pct);
+  const ga = document.getElementById('tp-gel-actif');
+  if (ga) ga.checked = !!(p && p.gel_actif);
+  const gh = document.getElementById('tp-gel-heures');
+  if (gh) gh.value = _tpFmt(p && p.gel_heures);
 }
 function _tpHint(txt, err) {
   const el = document.getElementById('tp-hint');
@@ -8250,7 +8271,8 @@ async function saveTransportParams() {
   const heure = _tpLire('tp-heure');
   const seuil = _tpLire('tp-seuil');
   const marge = _tpLire('tp-marge');
-  for (const [v, nom] of [[heure, 'heure limite'], [seuil, 'seuil de palettes'], [marge, 'marge']]) {
+  const gelH = _tpLire('tp-gel-heures');
+  for (const [v, nom] of [[heure, 'heure limite'], [seuil, 'seuil de palettes'], [marge, 'marge'], [gelH, 'fenêtre de gel']]) {
     if (v === null || Number.isNaN(v)) {
       toast('Valeur invalide — ' + nom + ' : un nombre est attendu.', true);
       return;
@@ -8261,6 +8283,8 @@ async function saveTransportParams() {
     heure_limite: heure,
     seuil_palettes: seuil,
     marge_pct: marge,
+    gel_actif: !!(document.getElementById('tp-gel-actif') || {}).checked,
+    gel_heures: gelH,
   };
   _tpHint('Enregistrement…');
   try {

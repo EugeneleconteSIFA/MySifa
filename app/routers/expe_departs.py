@@ -1264,7 +1264,10 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
         ex = conn.execute("SELECT id, statut FROM expe_departs WHERE id=?", (depart_id,)).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Départ introuvable")
-        if ex["statut"] not in ("en_attente", "valide"):
+        # 'prevu' = départ né du tableau de bord de pilotage, avant toute
+        # commande de transport. Il s'édite comme les autres ; c'est seulement
+        # les LISTES qui l'ignorent, le temps qu'il devienne réel.
+        if ex["statut"] not in ("prevu", "en_attente", "valide"):
             raise HTTPException(status_code=409, detail="Modification impossible : départ annulé")
         if "no_bl" in body and not body.get("no_bl_doublon_confirme"):
             _check_no_bl_unique(conn, body.get("no_bl"), exclure_id=depart_id)
@@ -2006,7 +2009,7 @@ def delete_depart(request: Request, depart_id: int):
         ).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Départ introuvable")
-        if ex["statut"] not in ("en_attente", "valide"):
+        if ex["statut"] not in ("prevu", "en_attente", "valide"):
             raise HTTPException(status_code=409, detail="Suppression impossible : départ annulé")
 
         # Rétention FSC : un départ portant un claim est la PREUVE d'une vente

@@ -28,6 +28,7 @@ from config import (
 )
 from app.services.audit_service import log_action
 from app.services.date_livraison import parse_date_livraison
+from app.services import palettes_estimation
 from app.services import transport_planning as tp
 from services.auth_service import require_admin, get_current_user, user_has_app_access
 from services.dossier_stats import build_dossier_production_stats
@@ -858,31 +859,14 @@ def _normalize_palette_type(value) -> Optional[str]:
 
 
 def _is_palette_sized_box(label) -> bool:
-    """Détecte si le format de carton/conteneur a une taille proche d'une
-    palette standard (1200x800 mm). Dans ce cas, 1 carton = 1 palette.
-    Détection :
-      - mots-clés explicites : 'conteneur', 'container', 'box', 'palette box'
-      - dimensions parsées (XXXX x YYY) proches de 1200x800 avec tolérance ±150 mm
+    """Le carton est-il en realite un conteneur de taille palette ?
+
+    Delegue a `app/services/palettes_estimation.py` : le pilotage des
+    expeditions applique la meme regle, et deux implementations finiraient par
+    diverger. Conserve ici sous son nom d'origine, appele a plusieurs endroits
+    du planning.
     """
-    if not label:
-        return False
-    s = str(label).lower()
-    for kw in ("conteneur", "container", " box", "box ", "palette box"):
-        if kw in s:
-            return True
-    if s.strip().startswith("box"):
-        return True
-    m = re.search(r"(\d{3,4})\s*[x\u00d7]\s*(\d{3,4})", s)
-    if m:
-        try:
-            a, b = int(m.group(1)), int(m.group(2))
-            lo, hi = min(a, b), max(a, b)
-            # Format palette standard EUR : 1200x800 (tolérance ±150)
-            if 1050 <= hi <= 1350 and 650 <= lo <= 950:
-                return True
-        except Exception:
-            pass
-    return False
+    return palettes_estimation.est_conteneur_taille_palette(label)
 
 
 def _build_conditionnement_phrase(e: dict) -> Optional[str]:
@@ -941,41 +925,13 @@ def _build_conditionnement_phrase(e: dict) -> Optional[str]:
 
 
 def _compute_nb_palettes(e: dict) -> Optional[int]:
-    """Calcule le nombre de palettes nécessaires.
-    Formule classique :
-      nb_cartons  = ceil(qte_bobines / nb_bobines_carton)
-      nb_palettes = ceil(nb_cartons / (palette_nb_cartons_sol * palette_nb_cartons_hauteur))
-    Cas particulier : si le carton est en réalité un conteneur/box de taille palette
-    (détecté via le libellé du carton ou du type de palette), alors 1 carton = 1 palette.
-    Retourne None si données insuffisantes.
+    """Nombre de palettes d'un dossier enrichi, ou None si donnees insuffisantes.
+
+    Le calcul vit dans `app/services/palettes_estimation.py` : MyExpe s'en sert
+    pour estimer les palettes d'un envoi avant la fin de production, et les deux
+    ecrans doivent annoncer le meme chiffre.
     """
-    try:
-        qte_bobines       = e.get("_of_qte_bobines")
-        nb_bobines_carton = e.get("_ft_nb_bobines_carton")
-        if qte_bobines is None or nb_bobines_carton is None:
-            return None
-        qb  = float(qte_bobines)
-        nbc = float(nb_bobines_carton)
-        if nbc <= 0 or qb <= 0:
-            return None
-        nb_cartons = math.ceil(qb / nbc)
-        # Cas conteneur/box de taille palette → 1 carton = 1 palette
-        if (_is_palette_sized_box(e.get("_ft_cartons"))
-            or _is_palette_sized_box(e.get("_ft_palette_type"))):
-            return int(nb_cartons)
-        # Formule classique : nécessite cartons_sol et cartons_haut
-        cartons_sol  = e.get("_ft_palette_nb_cartons_sol")
-        cartons_haut = e.get("_ft_palette_nb_cartons_hauteur")
-        if cartons_sol is None or cartons_haut is None:
-            return None
-        cso = float(cartons_sol)
-        cha = float(cartons_haut)
-        if cso <= 0 or cha <= 0:
-            return None
-        nb_palettes = math.ceil(nb_cartons / (cso * cha))
-        return int(nb_palettes)
-    except Exception:
-        return None
+    return palettes_estimation.nb_palettes(e)
 
 
 def _of_timeline_fields(e: dict) -> Tuple[bool, Optional[float]]:
@@ -997,7 +953,8 @@ def _of_timeline_fields(e: dict) -> Tuple[bool, Optional[float]]:
 
 
 def _slot_payload(e: dict, start_iso: str, end_iso: str,
-                  contrainte: Optional[dict] = None) -> dict:
+                  contrainte: Optional[dict] = None,
+                  gel: Optional[dict] = None) -> dict:
     has_of, qte_etiquettes = _of_timeline_fields(e)
     return {
         "entry_id": e["id"],
@@ -1049,6 +1006,24 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str,
         # Contrainte transport : absente sur la très grande majorité des
         # dossiers (aucun départ réservé de 6 palettes ou plus).
         "transport": _transport_payload(e, end_iso, contrainte),
+        # Gel : présent dès qu'un départ est à moins de `gel_heures`, seuil de
+        # palettes ou non. Le créneau l'affiche pour que le planificateur voie
+        # la fenêtre AVANT de tirer le dossier, pas au moment du refus.
+        "gel": _gel_payload(gel),
+    }
+
+
+def _gel_payload(gel: Optional[dict]) -> Optional[dict]:
+    """Ce que le créneau montre du gel. `None` = dossier libre de bouger."""
+    if not gel:
+        return None
+    return {
+        "depart_id": gel.get("depart_id"),
+        "transporteur": gel.get("transporteur") or "",
+        "date_enlevement": gel.get("date_enlevement") or "",
+        "limite": gel.get("limite_iso"),
+        "depuis": gel.get("gel_debut_iso"),
+        "gel_heures": gel.get("gel_heures"),
     }
 
 
@@ -1176,30 +1151,45 @@ def _fins_par_entry(
     return out
 
 
-def _transport_etat(
+def _dossiers_geles(conn, entries: List[dict]) -> Dict[int, dict]:
+    """Dossiers dans la fenêtre de gel. Jamais bloquant : un échec = pas de gel."""
+    try:
+        return tp.dossiers_geles(conn, entries)
+    except Exception:
+        _log.exception("calcul du gel transport impossible")
+        return {}
+
+
+def _etat_machine(
     conn, machine_id: int, ordre_ids: Optional[List[int]] = None
-) -> Tuple[List[dict], Dict[int, dict], Dict[int, Optional[datetime]]]:
-    """Photo de la machine : dossiers ordonnés, contraintes transport, fins simulées.
+) -> Tuple[List[dict], Dict[int, dict], Dict[int, Optional[datetime]], Dict[int, dict]]:
+    """Photo de la machine : dossiers ordonnés, contraintes transport, fins simulées, dossiers gelés.
 
     `ordre_ids` permet de photographier un ordre HYPOTHÉTIQUE — celui que le
     planificateur vient de demander — sans rien écrire en base.
+
+    Les fins sont calculées dès qu'il y a une contrainte transport OU un dossier
+    gelé : le gel ignore le seuil de palettes, il existe donc sur des machines
+    où la contrainte transport ne dit rien, et sans les fins il n'aurait aucun
+    moyen de voir qu'un geste repousse quelque chose.
     """
     mac = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()
     if not mac:
-        return [], {}, {}
+        return [], {}, {}, {}
     entries = _entries_enrichies(conn, machine_id)
     if ordre_ids:
         rang = {int(i): k for k, i in enumerate(ordre_ids)}
         entries.sort(key=lambda e: rang.get(int(e.get("id") or 0), 10 ** 6))
     entries = _ordre_timeline(entries)
     contraintes = _contraintes_transport(conn, entries)
-    if not contraintes:
-        return entries, {}, {}
+    gels = _dossiers_geles(conn, entries)
+    if not contraintes and not gels:
+        return entries, {}, {}, {}
     try:
         cal = _load_planning_calendar_maps(conn, machine_id)
     except Exception:
-        return entries, contraintes, {}
-    return entries, contraintes, _fins_par_entry(dict(mac), cal, entries, contraintes)
+        return entries, contraintes, {}, gels
+    return entries, contraintes, _fins_par_entry(dict(mac), cal, entries, contraintes), gels
 
 
 def _refus_transport(violations: List[dict]) -> HTTPException:
@@ -1212,40 +1202,125 @@ def _refus_transport(violations: List[dict]) -> HTTPException:
     return HTTPException(409, " ".join(msgs))
 
 
-def _garde_transport_reorder(conn, machine_id: int, ordre_ids: List[int]) -> None:
-    """Refuse un réordonnancement qui ferait rater un enlèvement déjà réservé."""
-    _, contraintes, fins_avant = _transport_etat(conn, machine_id)
-    if not contraintes:
-        return
-    entries_apres, contraintes_apres, fins_apres = _transport_etat(
+def _gel_confirme(request: Optional[Request], body: Any = None) -> Tuple[bool, str]:
+    """Confirmation « j'ai compris » d'un geste sur un dossier gelé.
+
+    Elle voyage dans le corps de la requête (`confirme_gel` / `motif_gel`) et,
+    pour les rares endpoints sans corps, en paramètre d'URL. Ce choix n'est pas
+    esthétique : le journal des actions enregistre déjà automatiquement le corps
+    et l'URL de toute écriture aboutie, donc le motif s'y retrouve sans qu'on
+    ait à écrire une ligne d'audit depuis une transaction ouverte.
+    """
+    def _vrai(v: Any) -> bool:
+        return str(v).strip().lower() in ("1", "true", "oui", "yes", "on")
+
+    src = body if isinstance(body, dict) else {}
+    if _vrai(src.get("confirme_gel")):
+        return True, str(src.get("motif_gel") or "").strip()
+    if request is not None:
+        try:
+            qp = request.query_params
+        except Exception:
+            qp = {}
+        if _vrai(qp.get("confirme_gel")):
+            return True, str(qp.get("motif_gel") or "").strip()
+    return False, ""
+
+
+def _refus_gel(alertes: List[dict], motif_manquant: bool = False) -> HTTPException:
+    """409 structuré : le front en fait une fenêtre « j'ai compris », pas un toast.
+
+    Le détail est un objet et non une phrase — c'est ce qui permet à l'écran de
+    lister les dossiers un par un et de renvoyer le même geste confirmé. Un
+    client qui ne connaîtrait pas ce code affiche `message`, qui se suffit.
+    """
+    return HTTPException(
+        409,
+        detail={
+            "code": "gel_transport",
+            "message": tp.resume_gel(alertes),
+            "motif_requis": True,
+            "motif_manquant": bool(motif_manquant),
+            "dossiers": alertes,
+        },
+    )
+
+
+def _garde_gel(
+    entries: List[dict],
+    gels: Dict[int, dict],
+    fins_avant: Dict[int, Optional[datetime]],
+    fins_apres: Dict[int, Optional[datetime]],
+    *,
+    confirme_gel: bool,
+    motif: str,
+) -> List[dict]:
+    """Demande une confirmation quand le geste repousse un dossier gelé.
+
+    Contrairement à la garde transport, cette règle ne refuse jamais
+    définitivement : elle exige qu'on assume. Sans confirmation → 409 que le
+    front transforme en fenêtre ; avec confirmation et motif → le geste passe,
+    et le motif part au journal.
+    """
+    if not gels:
+        return []
+    alertes = tp.alertes_gel(entries, gels, fins_avant, fins_apres)
+    if not alertes:
+        return []
+    if not confirme_gel:
+        raise _refus_gel(alertes)
+    if not motif:
+        raise _refus_gel(alertes, motif_manquant=True)
+    return alertes
+
+
+def _garde_transport_reorder(
+    conn, machine_id: int, ordre_ids: List[int],
+    request: Optional[Request] = None, body: Any = None,
+) -> List[dict]:
+    """Refuse un réordonnancement qui ferait rater un enlèvement déjà réservé,
+    et fait confirmer celui qui repousse un dossier gelé."""
+    _, contraintes, fins_avant, gels = _etat_machine(conn, machine_id)
+    if not contraintes and not gels:
+        return []
+    entries_apres, contraintes_apres, fins_apres, _ = _etat_machine(
         conn, machine_id, [int(i) for i in ordre_ids]
     )
     v = tp.violations(entries_apres, contraintes_apres, fins_avant, fins_apres)
     if v:
         raise _refus_transport(v)
+    confirme, motif = _gel_confirme(request, body)
+    return _garde_gel(entries_apres, gels, fins_avant, fins_apres, confirme_gel=confirme, motif=motif)
 
 
-def _transport_avant(conn, machine_id: int) -> Tuple[Dict[int, dict], Dict[int, Optional[datetime]]]:
+def _transport_avant(
+    conn, machine_id: int
+) -> Tuple[Dict[int, dict], Dict[int, Optional[datetime]], Dict[int, dict]]:
     """État à capturer AVANT une écriture de calendrier ou une insertion."""
-    _, contraintes, fins = _transport_etat(conn, machine_id)
-    return contraintes, fins
+    _, contraintes, fins, gels = _etat_machine(conn, machine_id)
+    return contraintes, fins, gels
 
 
-def _garde_transport_apres_ecriture(conn, machine_id: int, avant: tuple) -> None:
+def _garde_transport_apres_ecriture(
+    conn, machine_id: int, avant: tuple,
+    request: Optional[Request] = None, body: Any = None,
+) -> List[dict]:
     """Refuse une écriture déjà faite mais pas encore committée.
 
     Les jours chômés, les horaires et les insertions ne se simulent pas
     proprement à la main : on écrit, on recalcule, et on lève avant le
     `commit()`. La connexion se referme alors sans valider — SQLite annule la
-    transaction, rien n'a bougé.
+    transaction, rien n'a bougé. Le gel emprunte exactement le même chemin : un
+    geste non confirmé lève, donc ne commite pas.
     """
-    contraintes_avant, fins_avant = avant
-    entries, contraintes, fins_apres = _transport_etat(conn, machine_id)
-    if not contraintes and not contraintes_avant:
-        return
-    v = tp.violations(entries, contraintes, fins_avant, fins_apres)
-    if v:
-        raise _refus_transport(v)
+    contraintes_avant, fins_avant, gels_avant = avant
+    entries, contraintes, fins_apres, _ = _etat_machine(conn, machine_id)
+    if contraintes or contraintes_avant:
+        v = tp.violations(entries, contraintes, fins_avant, fins_apres)
+        if v:
+            raise _refus_transport(v)
+    confirme, motif = _gel_confirme(request, body)
+    return _garde_gel(entries, gels_avant, fins_avant, fins_apres, confirme_gel=confirme, motif=motif)
 
 
 def _duree_effective_defaut(e: dict, contraintes: Optional[Dict[int, dict]]) -> float:
@@ -1316,10 +1391,15 @@ def _compute_timeline_slots(
     )
     if contraintes is None:
         contraintes = _contraintes_transport(conn, entries)
+    gels = _dossiers_geles(conn, entries)
 
     def _c(e: dict) -> Optional[dict]:
         eid = e.get("id")
         return contraintes.get(int(eid)) if eid is not None else None
+
+    def _g(e: dict) -> Optional[dict]:
+        eid = e.get("id")
+        return gels.get(int(eid)) if eid is not None else None
 
     slots: List[dict] = []
     cursor = advance_to_work(datetime.now().replace(minute=0, second=0, microsecond=0))
@@ -1370,7 +1450,7 @@ def _compute_timeline_slots(
                 cand = advance_to_work(pend)
                 if cand and cand > cursor:
                     cursor = cand
-            slots.append(_slot_payload(e, ps, pe, _c(e)))
+            slots.append(_slot_payload(e, ps, pe, _c(e), _g(e)))
             continue
         if st == "termine":
             continue
@@ -1414,7 +1494,7 @@ def _compute_timeline_slots(
                 cand = advance_to_work(pend)
                 if cand and cand > cursor:
                     cursor = cand
-            slots.append(_slot_payload(e, ps, pe, _c(e)))
+            slots.append(_slot_payload(e, ps, pe, _c(e), _g(e)))
             continue
 
         # ── Attente et en_cours sans dates : calcul dynamique depuis cursor
@@ -1429,7 +1509,7 @@ def _compute_timeline_slots(
                 (ps, pe, now_u, e["id"], machine_id),
             )
         ee = {**e, "planned_start": ps, "planned_end": pe}
-        slots.append(_slot_payload(ee, ps, pe, _c(e)))
+        slots.append(_slot_payload(ee, ps, pe, _c(e), _g(e)))
 
     return slots
 
@@ -1833,7 +1913,7 @@ async def set_machine_horaires(machine_id: int, request: Request):
         machine_nom = ex["nom"] or ""
         conn.execute(f"UPDATE machines SET {col} = ? WHERE id = ?", (val, machine_id))
         _invalidate_attente_plans(conn, machine_id)
-        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
+        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request, body)
         conn.commit()
     log_action(
         user=user,
@@ -1887,7 +1967,7 @@ async def set_machine_horaires_bulk(machine_id: int, request: Request):
         sets = ", ".join([f"{col}=?" for col in updates.keys()])
         conn.execute(f"UPDATE machines SET {sets} WHERE id=?", (*updates.values(), machine_id))
         _invalidate_attente_plans(conn, machine_id)
-        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
+        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request, body)
         conn.commit()
     return {"success": True, "updated": updates}
 
@@ -1916,7 +1996,7 @@ async def set_machine_horaires_parity(machine_id: int, request: Request):
             (json.dumps(normalized), machine_id),
         )
         _invalidate_attente_plans(conn, machine_id)
-        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
+        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request, body)
         conn.commit()
     return {"success": True, "horaires_parity": normalized}
 
@@ -2957,7 +3037,7 @@ async def reorder_entries(machine_id: int, request: Request):
             if wanted_index.get(eid) != old_idx:
                 raise HTTPException(400, "Impossible de déplacer un dossier en cours/terminé")
 
-        _garde_transport_reorder(conn, machine_id, wanted_ids)
+        _gel_force = _garde_transport_reorder(conn, machine_id, wanted_ids, request, body)
 
         for pos, eid in enumerate(entry_ids, start=1):
             conn.execute(
@@ -2971,7 +3051,19 @@ async def reorder_entries(machine_id: int, request: Request):
         action="REORDER",
         module="planning",
         objet=f"Réorganisation planning {machine_nom}",
-        detail={"entry_ids": entry_ids},
+        detail={
+            "entry_ids": entry_ids,
+            # Forçage du gel : ce que le planificateur a assumé, et pourquoi.
+            # Le journal doit pouvoir répondre « qui a repoussé ce camion ».
+            **({"gel_force": {
+                "motif": _gel_confirme(request, body)[1],
+                "dossiers": [
+                    {"reference": a["reference"], "date_enlevement": a["date_enlevement"],
+                     "retard_h": a["ecart_h"]}
+                    for a in _gel_force
+                ],
+            }} if _gel_force else {}),
+        },
         ip=request.client.host if request.client else None,
     )
     return {"success": True, "count": len(entry_ids)}
@@ -3055,7 +3147,7 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
         new_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
         _backfill_group_id(conn, new_id, pe_cols)
         _invalidate_attente_plans(conn, machine_id)
-        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
+        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request, body)
         conn.commit()
 
     return {"success": True, "position": new_position}
@@ -3167,7 +3259,7 @@ def reset_default_days(machine_id: int, request: Request):
             ("5,21", "5,21", "5,21", "5,21", "6,20", machine_id),
         )
         _invalidate_attente_plans(conn, machine_id)
-        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
+        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request)
         conn.commit()
     return {"success": True}
 
@@ -3200,7 +3292,7 @@ async def set_day_work(machine_id: int, request: Request):
                 (machine_id, date),
             )
         _invalidate_attente_plans(conn, machine_id)
-        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
+        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request, body)
         conn.commit()
     return {"success": True}
 
@@ -3225,7 +3317,7 @@ async def set_holiday(machine_id: int, request: Request):
             (machine_id, date, is_off, label),
         )
         _invalidate_attente_plans(conn, machine_id)
-        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
+        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request, body)
         conn.commit()
     return {"success": True}
 
@@ -3288,7 +3380,7 @@ async def set_day_horaires(machine_id: int, request: Request):
             )
             # Retirer un horaire élargi raccourcit la journée : c'est un geste
             # qui repousse la production, au même titre qu'un jour chômé.
-            _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
+            _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request, body)
             conn.commit()
         return {"success": True, "deleted": True}
 
@@ -3315,7 +3407,7 @@ async def set_day_horaires(machine_id: int, request: Request):
             (machine_id, date, hd, hf, je),
         )
         _invalidate_attente_plans(conn, machine_id)
-        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
+        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request, body)
         conn.commit()
     return {"success": True, "journee_entiere": je}
 
@@ -3430,7 +3522,7 @@ async def set_machine_journee_entiere(machine_id: int, request: Request):
             (je, machine_id),
         )
         _invalidate_attente_plans(conn, machine_id)
-        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant)
+        _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request, body)
         conn.commit()
     try:
         log_action(
