@@ -214,6 +214,18 @@ de la ligne et le **rang** du lien, et le serveur reconstruit la condition
 depuis le catalogue. Ne pas réordonner `LIENS` sans y penser : le rang, c'est
 l'index dans la liste.
 
+**Une colonne peut porter un lien** : `_c(..., saut="<clé du lien>")` rend la
+cellule cliquable dans la grille — elle bascule sur l'écran d'en face, restreint
+à cette ligne, sans passer par le panneau. La colonne nomme le lien par sa
+**clé** (`"cle"` dans l'entrée de `LIENS`), jamais par son rang :
+`adapter_ecran()` traduit la clé en rang au moment de servir l'écran, ce qui
+rend un réordonnancement de `LIENS` inoffensif pour les sauts. Un saut dont la
+clé n'existe pas laisse la colonne telle quelle, et le front n'enveloppe que si
+l'écran visé est servi par ce miroir — un lien mort vaut moins qu'un nombre nu.
+Portés aujourd'hui : réceptions → commande fournisseur (`cde_piece`,
+`cde_ligne`), commandes fournisseur → réceptions (`receptions_cde`,
+`receptions_ligne`), factures fournisseur → commande (`cde_piece`).
+
 **Après tout ajout ou modification, lancer `python scripts/audit_liens_erp.py`.**
 Un lien branché sur une colonne que RVGI ne remplit jamais ne remonte rien et
 ne le dit pas — le 25/08/2026, trois liens étaient dans ce cas : `col_ligne.numcde`
