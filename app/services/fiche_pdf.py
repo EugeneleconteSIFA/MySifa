@@ -241,8 +241,12 @@ def generate_fiche_pdf(fiche: dict) -> bytes:
     _draw_cell(c, ml + ep_w, y - row_h, adh_w, row_h, label="Adhésif : ", value=_f("adhesif"), bg=_LAVENDER, font_size=7)
     y -= row_h
 
-    _draw_cell(c, ml, y - row_h, ep_w, row_h, font_size=7)
-    _draw_cell(c, ml + ep_w, y - row_h, adh_w, row_h, label="Grammage : ", value=_f("qte_au_mille", " ml"), bg=_LAVENDER, font_size=7)
+    # La case « Grammage » affichait `qte_au_mille`, en millilitres — deux
+    # grandeurs sans rapport, sous une étiquette qui annonçait la première.
+    # Le grammage de la matière (149 g sur la fiche 623/0014) a désormais sa
+    # colonne ; la quantité au mille garde la sienne, à côté.
+    _draw_cell(c, ml, y - row_h, ep_w, row_h, label="Qté au mille : ", value=_f("qte_au_mille", " ml"), font_size=7)
+    _draw_cell(c, ml + ep_w, y - row_h, adh_w, row_h, label="Grammage : ", value=_f("grammage", " g"), bg=_LAVENDER, font_size=7)
     y -= row_h + 1 * mm
 
     # ── IMPRESSION ────────────────────────────────────────────────────

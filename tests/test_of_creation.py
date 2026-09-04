@@ -27,6 +27,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.services import rvgi_rattachement as ratt  # noqa: E402
+from app.services import rvgi_article_fiche as raf  # noqa: E402
 
 
 def _base_rattachements(chemin):
@@ -172,6 +173,119 @@ class TestModeleOf(unittest.TestCase):
         # Un « QQ » dans le flux fusionné fait afficher la page SANS aucune
         # valeur, sans erreur serveur : c'est le piège que _terminer_le_flux évite.
         self.assertNotIn(b"n Qq", pdf[:200])
+
+
+class TestPrefillDepuisRvgi(unittest.TestCase):
+    """La fiche technique déduite de l'article, vérifiée sur un document réel.
+
+    Les valeurs attendues ne sortent pas du code : elles sont relevées sur la
+    fiche de fabrication papier de 623/0014, celle que l'atelier utilise. C'est
+    ce qui donne son sens au test — si un jour la lecture de `out_dec` change,
+    c'est cette fiche-là qui doit continuer de tomber juste.
+    """
+
+    def setUp(self):
+        self.fichier = tempfile.NamedTemporaryFile(suffix=".db", delete=False).name
+        c = sqlite3.connect(self.fichier)
+        c.row_factory = sqlite3.Row
+        c.execute("CREATE TABLE fic_art (corbeille INT, code1 TEXT, code2 TEXT, "
+                  "libc1 TEXT, cltc2 TEXT, ftl REAL, fth REAL, pdsn REAL)")
+        c.execute("CREATE TABLE gpr_ff (corbeille INT, code1 TEXT, code2 TEXT, "
+                  "nmac1 INT, laiout REAL, laimat REAL, nbcoul INT, cliche TEXT, "
+                  "m1cod1 TEXT, m1cod2 TEXT, ndec1 INT, ndec2 INT, ndec3 INT, amj TEXT)")
+        c.execute("CREATE TABLE out_dec (corbeille INT, numero INT, machine INT, "
+                  "nbd INT, nbl INT, nba INT, nbt INT, ftl REAL, fta REAL, lt REAL, "
+                  "at REAL, espl REAL, espa REAL, eche REAL, ray REAL, eps REAL, hcou1 REAL)")
+        c.execute("CREATE TABLE mat_mat (corbeille INT, code1 TEXT, code2 TEXT, "
+                  "libc1 TEXT, libc2 TEXT, pds REAL, m1_epais REAL, m1_adh TEXT, m1_pro TEXT)")
+        c.execute("CREATE TABLE mac_pro (corbeille INT, type INT, code INT, nom TEXT)")
+        c.execute("INSERT INTO fic_art VALUES (0,'623','0014','Etiquette 104.5 x 148.4 mm',"
+                  "'REF-CLT',104.5,148.4,0)")
+        c.execute("INSERT INTO gpr_ff VALUES (0,'623','0014',1,0,440.0,0,NULL,"
+                  "'886','0021',2796,0,0,'2026-01-30 11:44:09')")
+        c.execute("INSERT INTO out_dec VALUES (0,2796,1,192,4,4,16,104.5,148.4,"
+                  "443.75,609.6,3.25,4.0,16.0,6.0,52,450)")
+        c.execute("INSERT INTO mat_mat VALUES (0,'886','0021','Thermique Eco 70g',"
+                  "'Permanent 19g, Jaune 60g Standard',149.0,0.0,'Permanent 19g',"
+                  "'Jaune 60g Standard')")
+        c.execute("INSERT INTO mac_pro VALUES (0,1,1,'COHESIO 1')")
+        c.commit()
+        self.conn = c
+
+        import contextlib
+
+        @contextlib.contextmanager
+        def faux_miroir(avec_mysifa=False):
+            yield c
+
+        self._vrai = raf.miroir.get_erp_db
+        self._vraies_tables = raf.miroir.tables_presentes
+        raf.miroir.get_erp_db = faux_miroir
+        raf.miroir.tables_presentes = lambda conn: {
+            "fic_art", "gpr_ff", "out_dec", "mat_mat", "mac_pro"}
+
+    def tearDown(self):
+        raf.miroir.get_erp_db = self._vrai
+        raf.miroir.tables_presentes = self._vraies_tables
+        self.conn.close()
+        try:
+            os.unlink(self.fichier)
+        except OSError:
+            pass
+
+    def test_geometrie_conforme_a_la_fiche_papier(self):
+        champs = raf.prefill_fiche("623", "0014")["champs"]
+        attendu = {
+            # ÉTIQUETTE
+            "eti_laize": 104.5, "eti_longueur": 148.4, "eti_rayons": 6.0,
+            # MODULE = étiquette + espacement
+            "mod_laize": 107.75, "mod_longueur": 152.4,
+            # ÉCHENILLAGE — le latéral extérieur vaut la moitié de l'espacement
+            "lateral_int": 3.25, "horizontal": 4.0, "lateral_ext": 1.625,
+            # OUTIL 1
+            "outil1_numero_sifa": "2796", "outil1_nb_dents": 192,
+            "outil1_nb_front": 4, "outil1_nb_avance": 4,
+            "outil1_epaisseur": 52.0, "outil1_laize": 440.0,
+            # MATIÈRE
+            "support": "Thermique Eco 70g", "adhesif": "Permanent 19g",
+            "glassine": "Jaune 60g Standard", "grammage": 149.0,
+            "machine": "COHESIO 1", "laize_optimale": 440.0,
+        }
+        for cle, val in attendu.items():
+            self.assertEqual(champs.get(cle), val, cle)
+
+    def test_le_nombre_de_fronts_ne_va_pas_dans_mod_nb_front(self):
+        # `mod_nb_front` vaut 1 sur 878 fiches sur 909 en production : ce n'est
+        # pas une donnée. Le vrai nombre de fronts est celui de l'outil.
+        champs = raf.prefill_fiche("623", "0014")["champs"]
+        self.assertNotIn("mod_nb_front", champs)
+        self.assertEqual(champs["outil1_nb_front"], 4)
+
+    def test_un_zero_de_rvgi_ne_devient_pas_une_valeur(self):
+        # laiout = 0 et nbcoul = 0 sont des cases vides du logiciel. Les
+        # recopier écrirait un zéro qui se lit ensuite comme vérifié.
+        champs = raf.prefill_fiche("623", "0014")["champs"]
+        self.assertNotIn("laize_optionnelle", champs)
+        self.assertNotIn("nb_couleurs", champs)
+
+    def test_chaque_champ_dit_d_ou_il_vient(self):
+        res = raf.prefill_fiche("623", "0014")
+        self.assertEqual(set(res["champs"]), set(res["provenance"]))
+        self.assertEqual(res["provenance"]["eti_laize"], "out_dec")
+        self.assertEqual(res["provenance"]["support"], "mat_mat")
+        self.assertEqual(res["provenance"]["qte_au_mille"], "calcul")
+
+    def test_sans_fiche_de_fabrication_on_le_dit(self):
+        self.conn.execute("DELETE FROM gpr_ff")
+        self.conn.commit()
+        res = raf.prefill_fiche("623", "0014")
+        self.assertTrue(res["manques"])
+        self.assertNotIn("outil1_nb_front", res["champs"])
+        # Le libellé et le format de l'article restent, eux.
+        self.assertEqual(res["champs"]["eti_laize"], 104.5)
+
+    def test_article_inconnu(self):
+        self.assertIsNone(raf.prefill_fiche("999", "9999"))
 
 
 if __name__ == "__main__":

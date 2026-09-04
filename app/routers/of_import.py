@@ -36,7 +36,9 @@ OF_REAL_FIELDS = frozenset({
 })
 OF_INT_FIELDS = frozenset({
     "nb_levees", "qte_etiquettes", "metrage", "nb_cartons",
-    "nb_mandrins", "nb_tubes", "palette_europe", "palette_perdues",
+    "nb_mandrins", "nb_tubes", "nb_palettes",
+    "matiere_ref_id", "glassine_ref_id", "adhesif_ref_id",
+    "carton_ref_id", "mandrin_ref_id", "palette_ref_id",
 })
 
 def _coerce_of_value(field: str, value):
@@ -70,8 +72,32 @@ OF_DATA_FIELDS = [
     # Le reste du papier atelier — saisissable dans MySifa, absent du parseur PDF.
     "particularites", "cales_sachets", "observations", "ref_matiere_fournisseur",
     "outil_2_mag", "outil_2_hauteur", "outil_2_fournisseur",
-    "palette_europe", "palette_perdues", "plieuse_pignon", "nb_pouces",
-    "texte_bobinettes",
+    "plieuse_pignon", "nb_pouces", "texte_bobinettes",
+    # Type de palette : UN champ, pas deux compteurs Europe/perdues.
+    "palette_type", "nb_palettes",
+    # Références MyStock. C'est l'id qui fait foi ; la colonne texte en
+    # découle (voir _appliquer_references).
+    "matiere_ref_id", "glassine_ref_id", "adhesif_ref_id",
+    "carton_ref_id", "mandrin_ref_id", "palette_ref_id",
+]
+
+# (colonne d'id, colonne texte imprimée sur le document)
+REFERENCES_OF = [
+    ("matiere_ref_id",  "matiere"),
+    ("glassine_ref_id", "glassine"),
+    ("adhesif_ref_id",  "adhesif_label"),
+    ("carton_ref_id",   "cartons_type"),
+    ("mandrin_ref_id",  "mandrins_dia"),
+    ("palette_ref_id",  "palette_type"),
+]
+
+REFERENCES_FT = [
+    ("support_ref_id",  "support"),
+    ("glassine_ref_id", "glassine"),
+    ("adhesif_ref_id",  "adhesif"),
+    ("carton_ref_id",   "cartons"),
+    ("mandrin_ref_id",  "mandrin_dia"),
+    ("palette_ref_id",  "palette_type"),
 ]
 
 _PATTERNS = {
@@ -184,6 +210,41 @@ def _coerce_payload(data: dict) -> dict[str, Any]:
         else:
             out[key] = str(raw).strip()
     return out
+
+
+def _appliquer_references(conn, valeurs: dict, liens) -> list:
+    """Réécrit la colonne texte à partir de la référence MyStock choisie.
+
+    C'est ici que se joue « la référence fait foi ». Laisser le client poster
+    les deux, c'est accepter qu'ils divergent : un jour la désignation change
+    dans MyStock, le document garde l'ancienne, et le rapprochement qu'on
+    voulait supprimer revient par la fenêtre. Le serveur écrit donc lui-même
+    le texte, depuis l'id.
+
+    Un id à `None` explicite détache la référence sans effacer le texte : un
+    OF venu d'Access porte un libellé qu'aucune référence ne recouvre encore,
+    et le perdre serait perdre la seule chose qu'on sache de sa matière.
+    """
+    ecrits = []
+    for col_id, col_txt in liens:
+        if col_id not in valeurs:
+            continue
+        ref_id = valeurs.get(col_id)
+        if ref_id in (None, "", 0):
+            valeurs[col_id] = None
+            continue
+        row = conn.execute(
+            "SELECT designation FROM matieres_premieres WHERE id=?", (int(ref_id),)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Référence matière %s introuvable." % ref_id,
+            )
+        valeurs[col_id] = int(ref_id)
+        valeurs[col_txt] = row["designation"]
+        ecrits.append(col_txt)
+    return ecrits
 
 
 def _row_dict(row) -> dict:
@@ -562,6 +623,7 @@ async def update_of_import(of_id: int, request: Request):
         row = conn.execute("SELECT id FROM of_imports WHERE id=?", (of_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="OF introuvable.")
+        _appliquer_references(conn, updates, REFERENCES_OF)
         # Une correction humaine a le dernier mot (`proteger_manuels=False`) et
         # devient protegee a son tour (`marquer_manuels=True`) : le prochain
         # sync Access ne la reecrira pas. Elle perime aussi la validation si
@@ -972,6 +1034,9 @@ async def update_fiche(fiche_id: int, request: Request):
         # Lien vers l'article de l'ERP. Stocké, pas redeviné : voir
         # rvgi_rattachement.couper_reference.
         "article_code1","article_code2","article_libelle",
+        "support_ref_id","glassine_ref_id","adhesif_ref_id",
+        "carton_ref_id","mandrin_ref_id","palette_ref_id",
+        "palette_type","grammage",
     }
     updates = {k: v for k, v in body.items() if k in EDITABLE}
     if not updates:
@@ -980,6 +1045,7 @@ async def update_fiche(fiche_id: int, request: Request):
     with get_db() as conn:
         if not conn.execute("SELECT id FROM fiches_techniques WHERE id=?", (fiche_id,)).fetchone():
             raise HTTPException(status_code=404, detail="Fiche introuvable.")
+        _appliquer_references(conn, updates, REFERENCES_FT)
         # Meme contrat que sur l'OF. C'est ici que se jouait la perte la plus
         # brutale : une correction atelier saisie dans MySifa etait ecrasee au
         # sync Access suivant, sans trace. Elle est desormais protegee.
@@ -2043,6 +2109,10 @@ async def create_of(request: Request):
     qui = (user.get("nom") or user.get("email") or "").strip() or None
 
     with get_db() as conn:
+        # La désignation de la référence devient le texte imprimé, AVANT
+        # l'insertion : sinon le document naîtrait avec un texte que personne
+        # n'a choisi.
+        _appliquer_references(conn, champs, REFERENCES_OF)
         double = conn.execute(
             "SELECT id FROM of_imports WHERE LOWER(TRIM(of_numero)) = LOWER(TRIM(?))",
             (numero,),
@@ -2140,8 +2210,10 @@ async def create_fiche(request: Request):
         "nb_etiq_bobin", "dia_ext", "poids", "conditionnement", "cales_sachets",
         "cartons", "nb_au_sol", "nb_etage", "nb_bobines_carton",
         "palette_type", "palette_nb_cartons_sol", "palette_nb_cartons_hauteur",
-        "palette_hauteur_max", "particularite", "notes",
+        "palette_hauteur_max", "particularite", "notes", "grammage",
         "article_code1", "article_code2", "article_libelle",
+        "support_ref_id", "glassine_ref_id", "adhesif_ref_id",
+        "carton_ref_id", "mandrin_ref_id", "palette_ref_id",
     }
     champs = {k: v for k, v in body.items() if k in EDITABLES}
     champs["reference"] = reference
@@ -2157,6 +2229,7 @@ async def create_fiche(request: Request):
     qui = (user.get("nom") or user.get("email") or "").strip() or None
 
     with get_db() as conn:
+        _appliquer_references(conn, champs, REFERENCES_FT)
         double = conn.execute(
             "SELECT id FROM fiches_techniques "
             "WHERE LOWER(TRIM(reference)) = LOWER(TRIM(?))",
@@ -2333,3 +2406,30 @@ def of_dossier_prefill(of_id: int, request: Request):
             for l in lignes
         ],
     }
+
+
+@router.get("/api/of/{of_id}")
+def get_of_import(of_id: int, request: Request):
+    """La ligne COMPLÈTE d'un OF, pour ouvrir la modale de modification.
+
+    Pourquoi cette route existe. `/api/of/list` ne renvoie que la vingtaine de
+    colonnes du tableau — la modale, elle, poste les quarante-deux champs de
+    l'OF. Ouverte sur une ligne de liste, elle affichait donc vides les vingt
+    autres (laize, glassine, réf. adhésif, outillage, tolérance…), et
+    « Enregistrer » les écrivait à NULL : `autoriser_effacement=True` traite un
+    champ vidé comme une décision humaine, ce qu'il est — quand le champ a
+    réellement été montré à un humain.
+
+    La modale charge donc l'OF entier avant de s'ouvrir. Ne pas la faire
+    revenir sur la ligne de liste.
+    """
+    _require_of_access(request)
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM of_imports WHERE id=?", (of_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="OF introuvable.")
+        of = _row_dict(row)
+        of["commandes"] = [
+            l for l in ratt.lister(conn, "of", of_id) if l["piece"] == "commande"
+        ]
+    return of

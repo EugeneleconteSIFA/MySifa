@@ -395,3 +395,20 @@ def rvgi_article(code1: str, code2: str, request: Request):
     if not a:
         raise HTTPException(status_code=404, detail="Article inconnu du miroir RVGI.")
     return a
+
+
+@router.get("/article/{code1}/{code2}/fiche")
+def rvgi_article_fiche(code1: str, code2: str, request: Request):
+    """Ce que RVGI sait dire d'une fiche technique pour cet article.
+
+    Sert le bouton « Reprendre les données RVGI » de la fiche : cinq tables
+    jointes en un appel, avec la provenance de chaque champ. L'écran affiche
+    cette provenance — une fiche technique fausse ne se voit pas à l'écran,
+    elle sort à l'inventaire, et celui qui valide doit savoir ce qu'il valide.
+    """
+    require_admin(request)
+    from app.services.rvgi_article_fiche import prefill_fiche
+    res = prefill_fiche(code1, code2)
+    if not res:
+        raise HTTPException(status_code=404, detail="Article inconnu du miroir RVGI.")
+    return res

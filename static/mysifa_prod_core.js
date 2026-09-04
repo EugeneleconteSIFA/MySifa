@@ -1116,11 +1116,25 @@ function captureSaisie(prefixe,m){
   });
 }
 
-function openOfEditModal(row){
+async function openOfEditModal(row){
   // Une ligne sans id, c'est une création. La modale est la même : ce sont
   // les mêmes champs, et l'ADV qui crée un OF corrige les mêmes cases que
   // celle qui en relit un. Seuls le titre, le bouton et la route changent.
-  set({ofEditModal:{...row}});
+  //
+  // Sur un OF existant on RECHARGE la ligne complète. Celle du tableau ne
+  // porte qu'une vingtaine de colonnes sur soixante : ouvrir la modale
+  // dessus affichait vides la laize, la glassine, la réf. adhésif et tout
+  // l'outillage — et « Enregistrer » les écrivait à NULL.
+  let plein=row;
+  if(row&&row.id){
+    try{
+      plein=await api('/api/of/'+row.id);
+    }catch(e){
+      toast(e.message||'Chargement de l\'OF impossible.','error');
+      return;
+    }
+  }
+  set({ofEditModal:{...plein}});
   renderOfEditModal();
 }
 function openOfCreateModal(){
@@ -1160,6 +1174,84 @@ function ofeChoisirCommandes(){
   });
 }
 window.ofeChoisirCommandes = ofeChoisirCommandes;
+
+/* Référence matière d'un OF.
+
+   Le texte imprimé sur l'OF est la désignation de la référence choisie : le
+   serveur le réécrit lui-même à l'enregistrement (voir _appliquer_references).
+   On le garde ici dans un champ caché pour que l'OF importé d'Access, qui n'a
+   qu'un libellé et aucune référence, ne le perde pas en passant par la modale. */
+function ofeChoisirRef(famille, colId, domId, colTxt){
+  const m=S.ofEditModal;
+  if(!m) return;
+  if(!window.MysRefMatiere){toast('Sélecteur de référence indisponible.','error');return;}
+  captureSaisie('ofe-',m);
+  MysRefMatiere.ouvrir({
+    famille: famille,
+    valeur: m[colTxt]||'',
+    refId: m[colId]||null,
+    onChoisir: function(r){
+      m[colId]=r.id;
+      m[colTxt]=r.designation;
+      m._dom=m._dom||{};
+      m._dom[domId]=r.designation;
+      set({ofEditModal:m});
+      renderOfEditModal();
+      if(r.brouillon) toast('Référence créée en brouillon — à compléter dans MyStock.','info');
+    },
+  });
+}
+window.ofeChoisirRef = ofeChoisirRef;
+
+/* Même geste pour une fiche technique. */
+function fceChoisirRef(famille, colId, domId, colTxt){
+  const m=S.ficheEditModal;
+  if(!m) return;
+  if(!window.MysRefMatiere){toast('Sélecteur de référence indisponible.','error');return;}
+  captureSaisie('fce-',m);
+  MysRefMatiere.ouvrir({
+    famille: famille,
+    valeur: m[colTxt]||'',
+    refId: m[colId]||null,
+    onChoisir: function(r){
+      m[colId]=r.id;
+      m[colTxt]=r.designation;
+      m._dom=m._dom||{};
+      m._dom[domId]=r.designation;
+      set({ficheEditModal:m});
+      renderFicheEditModal();
+      if(r.brouillon) toast('Référence créée en brouillon — à compléter dans MyStock.','info');
+    },
+  });
+}
+window.fceChoisirRef = fceChoisirRef;
+
+/* Fabrique du champ « référence matière », partagée par les deux modales.
+
+   Le champ n'est pas saisissable : c'est le point de la manœuvre. Un texte
+   libre ne se rattache au stock que par devinette, et la devinette sort à
+   l'inventaire. Le libellé reste visible, et un OF venu d'Access garde le
+   sien tant que personne n'a choisi de référence — d'où la mention
+   « non rattaché au stock », qui dit ce qui manque au lieu de le taire. */
+function champRefMatiere(prefixe, m, colId, domId, colTxt, famille, lbl){
+  const txt=(m._dom&&m._dom[domId]!==undefined)?m._dom[domId]:(m[colTxt]||'');
+  const lie=!!m[colId];
+  const fn=(prefixe==='ofe-')?'ofeChoisirRef':'fceChoisirRef';
+  return `<div style="grid-column:1/-1">
+    <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">${lbl}</label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;font-size:13px;min-height:19px;color:${txt?'var(--text)':'var(--muted)'}">
+        ${txt?escHtml(String(txt)):'—'}
+        ${(txt&&!lie)?'<span style="font-size:11px;color:var(--danger);margin-left:8px">non rattaché au stock</span>':''}
+      </div>
+      <button type="button" onclick="${fn}('${famille}','${colId}','${domId}','${colTxt}')"
+        style="padding:8px 13px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;white-space:nowrap">
+        ${lie?'Changer':'Choisir'}
+      </button>
+    </div>
+    <input type="hidden" id="${domId}" value="${String(txt).replace(/"/g,'&quot;')}">
+  </div>`;
+}
 
 /* « Créer directement un dossier de prod ».
 
@@ -1252,8 +1344,16 @@ async function saveOfEdit(){
     outil_2_hauteur:      nv('ofe-outil2-hauteur'),
     outil_2_fournisseur:  tv('ofe-outil2-fournisseur'),
     cales_sachets:        tv('ofe-cales'),
-    palette_europe:       iv('ofe-pal-europe'),
-    palette_perdues:      iv('ofe-pal-perdues'),
+    palette_type:         tv('ofe-palette-type'),
+    nb_palettes:          iv('ofe-nb-palettes'),
+    // Les ids de référence ne sont pas dans le DOM : ils vivent dans la
+    // modale, posés par le sélecteur. Le serveur en déduit le texte imprimé.
+    matiere_ref_id:       m.matiere_ref_id||null,
+    glassine_ref_id:      m.glassine_ref_id||null,
+    adhesif_ref_id:       m.adhesif_ref_id||null,
+    carton_ref_id:        m.carton_ref_id||null,
+    mandrin_ref_id:       m.mandrin_ref_id||null,
+    palette_ref_id:       m.palette_ref_id||null,
     plieuse_pignon:       tv('ofe-plieuse'),
     nb_pouces:            tv('ofe-pouces'),
     particularites:       tv('ofe-particularites'),
@@ -1293,6 +1393,8 @@ function renderOfEditModal(){
       style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;resize:vertical">${escHtml(_v(id,val)==null?'':String(_v(id,val)))}</textarea>
   </div>`;
   const creation=!m.id;
+  const _ref=(colId,domId,colTxt,famille,lbl)=>
+    champRefMatiere('ofe-',m,colId,domId,colTxt,famille,lbl);
   const _sec=(title,fields,open=true)=>`
     <div class="ofe-sec" style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">
       <div class="ofe-sec-hd" style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;cursor:pointer;background:var(--accent-bg);border-bottom:1px solid var(--border);user-select:none">
@@ -1336,16 +1438,16 @@ function renderOfEditModal(){
       ${_sec('Matière / Support',[
         _f('ofe-laize','Laize',m.laize,'number'),
         _f('ofe-format','Format',m.format),
-        _f('ofe-matiere','Matière',m.matiere),
-        _f('ofe-ref-matiere','Réf. matière',m.ref_matiere),
+        _ref('matiere_ref_id','ofe-matiere','matiere','support','Matière / support'),
+        _ref('glassine_ref_id','ofe-glassine','glassine','glassine','Glassine'),
+        _f('ofe-ref-matiere','Substitution — matière',m.ref_matiere),
         _f('ofe-ref-matiere-f','Substitution — fournisseur',m.ref_matiere_fournisseur),
-        _f('ofe-glassine','Glassine',m.glassine),
       ].join(''))}
       ${_sec('Adhésif',[
+        _ref('adhesif_ref_id','ofe-adhesif-label','adhesif_label','adhesif','Adhésif'),
         _f('ofe-ref-adhesif','Réf. adhésif',m.ref_adhesif),
         _f('ofe-qte-adhesif-g','Qté adhésif (g)',m.qte_adhesif_g,'number'),
         _f('ofe-qte-adhesif-kg','Qté adhésif (kg)',m.qte_adhesif_kg,'number'),
-        _f('ofe-adhesif-label','Label adhésif',m.adhesif_label),
       ].join(''))}
       ${_sec('Quantités',[
         _f('ofe-qte-mille','Qté au mille',m.qte_au_mille,'number'),
@@ -1358,15 +1460,15 @@ function renderOfEditModal(){
       ].join(''))}
       ${_sec('Conditionnement',[
         _f('ofe-cond','Conditionnement',m.conditionnement),
-        _f('ofe-cartons-type','Type cartons',m.cartons_type),
+        _ref('carton_ref_id','ofe-cartons-type','cartons_type','carton','Type de carton'),
         _f('ofe-cartons','Nb cartons',m.nb_cartons,'number'),
-        _f('ofe-mandrins-dia','Mandrins dia.',m.mandrins_dia),
+        _ref('mandrin_ref_id','ofe-mandrins-dia','mandrins_dia','mandrin','Mandrin'),
         _f('ofe-mandrin-longueur','Mandrin long.',m.mandrin_longueur,'number'),
         _f('ofe-mandrins','Nb mandrins',m.nb_mandrins,'number'),
         _f('ofe-tubes','Nb tubes',m.nb_tubes,'number'),
         _f('ofe-cales','Cales et sachets',m.cales_sachets),
-        _f('ofe-pal-europe','Palettes Europe',m.palette_europe,'number'),
-        _f('ofe-pal-perdues','Palettes perdues',m.palette_perdues,'number'),
+        _ref('palette_ref_id','ofe-palette-type','palette_type','palette','Type de palette'),
+        _f('ofe-nb-palettes','Nb palettes',m.nb_palettes,'number'),
       ].join(''))}
       ${_sec('Outillage',[
         _f('ofe-outil1-forme','Outil 1 — forme',m.outil_1_forme),
@@ -1473,42 +1575,78 @@ async function fceChercherArticle(){
 }
 window.fceChercherArticle = fceChercherArticle;
 
+/* Colonne de `fiches_techniques` -> champ de la modale.
+
+   Sans cette table, le pré-remplissage devrait connaître les identifiants du
+   DOM, qui ne ressemblent pas aux noms de colonnes (`fce-o1-front` pour
+   `outil1_nb_front`). Une colonne absente d'ici n'est simplement pas remplie. */
+const FCE_CHAMPS = {
+  reference:'fce-ref', designation:'fce-desig', client:'fce-client',
+  machine:'fce-machine', format:'fce-format',
+  eti_laize:'fce-eti-laize', eti_longueur:'fce-eti-longueur',
+  eti_rayons:'fce-eti-rayons', eti_perforations:'fce-eti-perforations',
+  mod_laize:'fce-mod-laize', mod_longueur:'fce-mod-longueur',
+  mod_nb_front:'fce-mod-front',
+  lateral_ext:'fce-lat-ext', horizontal:'fce-horizontal', lateral_int:'fce-lat-int',
+  support:'fce-support', matiere:'fce-matiere', adhesif:'fce-adhesif',
+  glassine:'fce-glassine', laize_optimale:'fce-laize-opt',
+  laize_optionnelle:'fce-laize-optn', epaisseur:'fce-epaisseur',
+  grammage:'fce-grammage', qte_au_mille:'fce-qte-mille',
+  outil1_forme:'fce-o1-forme', outil1_numero_sifa:'fce-o1-numero',
+  outil1_laize:'fce-o1-laize', outil1_epaisseur:'fce-o1-epaisseur',
+  outil1_nb_dents:'fce-o1-dents', outil1_nb_front:'fce-o1-front',
+  outil1_nb_avance:'fce-o1-avance',
+  outil2_forme:'fce-o2-forme', outil2_numero_sifa:'fce-o2-numero',
+  outil2_epaisseur:'fce-o2-epaisseur', outil2_nb_dents:'fce-o2-dents',
+  outil2_nb_front:'fce-o2-front', outil2_nb_avance:'fce-o2-avance',
+  outil3_forme:'fce-o3-forme', outil3_numero_sifa:'fce-o3-numero',
+  outil3_epaisseur:'fce-o3-epaisseur', outil3_nb_dents:'fce-o3-dents',
+  outil3_nb_front:'fce-o3-front', outil3_nb_avance:'fce-o3-avance',
+  nb_couleurs:'fce-nb-couleurs', recto:'fce-recto', verso:'fce-verso',
+  tete1_pantone:'fce-t1-pantone', tete1_couleur:'fce-t1-couleur',
+  tete1_anilox:'fce-t1-anilox', tete1_composition:'fce-t1-compo',
+  tete2_pantone:'fce-t2-pantone', tete2_couleur:'fce-t2-couleur',
+  tete2_anilox:'fce-t2-anilox', tete2_composition:'fce-t2-compo',
+  tete3_pantone:'fce-t3-pantone', tete3_couleur:'fce-t3-couleur',
+  tete3_anilox:'fce-t3-anilox', tete3_composition:'fce-t3-compo',
+  remarque:'fce-remarque', conditionnement:'fce-cond',
+};
+
 async function fceChoisirArticle(code1,code2){
   const m=S.ficheEditModal;
   if(!m) return;
   captureSaisie('fce-',m);
   let a=null;
   try{
-    a=await api('/api/rvgi/article/'+encodeURIComponent(code1)+'/'+encodeURIComponent(code2));
+    a=await api('/api/rvgi/article/'+encodeURIComponent(code1)+'/'+encodeURIComponent(code2)+'/fiche');
   }catch(e){
     toast(e.message||'Article introuvable.','error');
     return;
   }
-  m.article_code1=a.code1; m.article_code2=a.code2; m.article_libelle=a.libelle||null;
-  m._articleChoisi=a;
+  m.article_code1=a.article.code1;
+  m.article_code2=a.article.code2;
+  m.article_libelle=a.article.libelle||null;
+  m._rvgi=a;
   m._articles=null;
   m._dom=m._dom||{};
-  // On ne remplit que les cases VIDES : une fiche déjà renseignée par
-  // l'atelier ne doit pas être réécrite par l'ERP au moment où on la relie.
-  const poser=(id,val)=>{
+  // On ne remplit que les cases VIDES. Une fiche déjà renseignée par l'atelier
+  // ne doit pas être réécrite par l'ERP au moment où on la relie : c'est
+  // l'atelier qui a raison sur ce qu'il a corrigé, pas RVGI.
+  let posés=0;
+  Object.keys(a.champs||{}).forEach(function(col){
+    const id=FCE_CHAMPS[col];
+    if(!id) return;
+    const val=a.champs[col];
     if(val==null||val==='') return;
-    const actuel=m._dom[id];
-    if(actuel===undefined||String(actuel).trim()==='') m._dom[id]=String(val);
-  };
-  poser('fce-ref',a.reference);
-  poser('fce-desig',a.libelle);
-  poser('fce-format',a.format);
-  poser('fce-eti-laize',a.largeur);
-  poser('fce-eti-longueur',a.hauteur);
-  if(a.fabrication){
-    poser('fce-machine',a.fabrication.machine);
-    poser('fce-laize-opt',a.fabrication.laize_matiere);
-    poser('fce-nb-couleurs',a.fabrication.nb_couleurs);
-    poser('fce-remarque',a.fabrication.cliche?('Cliché '+a.fabrication.cliche):null);
-  }
+    const actuel=m._dom[id]!==undefined?m._dom[id]:m[col];
+    if(actuel===undefined||actuel===null||String(actuel).trim()===''){
+      m._dom[id]=String(val);
+      posés++;
+    }
+  });
   set({ficheEditModal:m});
   renderFicheEditModal();
-  toast('Article '+a.reference+' rattaché.');
+  toast('Article '+a.article.reference+' rattaché — '+posés+' champ'+(posés>1?'s':'')+' pré-rempli'+(posés>1?'s':'')+'.');
 }
 window.fceChoisirArticle = fceChoisirArticle;
 function closeFicheEditModal(){
@@ -1602,6 +1740,13 @@ async function saveFicheEdit(){
     palette_hauteur_max:        nv('fce-palette-hmax'),
     particularite:              tv('fce-particularite'),
     notes:                      tv('fce-notes'),
+    grammage:                   nv('fce-grammage'),
+    support_ref_id:             m.support_ref_id||null,
+    glassine_ref_id:            m.glassine_ref_id||null,
+    adhesif_ref_id:             m.adhesif_ref_id||null,
+    carton_ref_id:              m.carton_ref_id||null,
+    mandrin_ref_id:             m.mandrin_ref_id||null,
+    palette_ref_id:             m.palette_ref_id||null,
     article_code1:              m.article_code1||null,
     article_code2:              m.article_code2||null,
     article_libelle:            m.article_libelle||null,
@@ -1628,6 +1773,8 @@ function renderFicheEditModal(){
   if(!m) return;
   const creation=!m.id;
   const _v=(id,val)=>(m._dom&&m._dom[id]!==undefined)?m._dom[id]:val;
+  const _ref=(colId,domId,colTxt,famille,lbl)=>
+    champRefMatiere('fce-',m,colId,domId,colTxt,famille,lbl);
   const _f=(id,lbl,val,type='text')=>`<div>
     <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">${lbl}</label>
     <input id="${id}" type="${type}" value="${String(_v(id,val)==null?'':_v(id,val)).replace(/"/g,'&quot;')}"
@@ -1683,10 +1830,20 @@ function renderFicheEditModal(){
               <span style="color:var(--muted);font-size:12px">${escHtml(a.format||'')}</span>
             </div>`).join('')}
         </div>`:''}
-        ${(m._articleChoisi&&m._articleChoisi.fabrication)?`
-        <div style="grid-column:1/-1;font-size:12px;color:var(--muted)">
-          Proposé par la fiche de fabrication de RVGI (dernière mise à jour
-          ${escHtml(String(m._articleChoisi.fabrication.maj_le||'inconnue'))}) — vérifiez avant d'enregistrer.
+        ${m._rvgi?`
+        <div style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.6">
+          ${(function(r){
+            const s=r.sources||{};
+            const bouts=[];
+            if(s.gpr_ff) bouts.push('fiche de fabrication RVGI'+(s.gpr_ff_maj_le?(' du '+escHtml(String(s.gpr_ff_maj_le).slice(0,10))):''));
+            if((s.out_dec||[]).length) bouts.push('outil'+(s.out_dec.length>1?'s':'')+' '+s.out_dec.join(', '));
+            if(s.mat_mat) bouts.push('matière '+escHtml(String(s.mat_mat)));
+            if(s.gpr_ff1) bouts.push('impression');
+            return bouts.length
+              ? ('Repris de RVGI : '+bouts.join(' · ')+'. Vérifiez avant d\'enregistrer — une fiche fausse ne se voit pas à l\'écran, elle sort à l\'inventaire.')
+              : 'RVGI ne connaît que le libellé et le format de cet article.';
+          })(m._rvgi)}
+          ${(m._rvgi.manques||[]).map(x=>'<div style="color:var(--danger)">• '+escHtml(x)+'</div>').join('')}
         </div>`:''}`,true)}
       ${_sec('Identification',[
         _f('fce-ref','Référence',m.reference),
@@ -1713,13 +1870,14 @@ function renderFicheEditModal(){
         _f('fce-lat-int','Latéral int.',m.lateral_int,'number'),
       ].join(''))}
       ${_sec('Matière',[
-        _f('fce-support','Support',m.support||m.matiere),
-        _f('fce-matiere','Matière',m.matiere),
-        _f('fce-adhesif','Adhésif',m.adhesif),
-        _f('fce-glassine','Glassine',m.glassine),
+        _ref('support_ref_id','fce-support','support','support','Support / frontal'),
+        _ref('adhesif_ref_id','fce-adhesif','adhesif','adhesif','Adhésif'),
+        _ref('glassine_ref_id','fce-glassine','glassine','glassine','Glassine'),
+        _f('fce-matiere','Matière (libellé libre)',m.matiere),
         _f('fce-laize-opt','Laize optimale',m.laize_optimale,'number'),
         _f('fce-laize-optn','Laize optionnelle',m.laize_optionnelle,'number'),
         _f('fce-epaisseur','Épaisseur',m.epaisseur,'number'),
+        _f('fce-grammage','Grammage (g)',m.grammage,'number'),
         _f('fce-qte-mille','Qté au mille',m.qte_au_mille,'number'),
       ].join(''))}
       ${_sec('Outil 1',[
@@ -1767,20 +1925,20 @@ function renderFicheEditModal(){
       ].join(''))}
       ${_sec('Conditionnement',[
         _f('fce-cond','Conditionnement',m.conditionnement),
-        _f('fce-mandrin-dia','Mandrin dia.',m.mandrin_dia),
+        _ref('mandrin_ref_id','fce-mandrin-dia','mandrin_dia','mandrin','Mandrin'),
         _f('fce-mandrin-longueur','Mandrin long.',m.mandrin_longueur,'number'),
         _f('fce-enroulement','Enroulement',m.enroulement),
         _f('fce-nb-etiq-bobin','Nb étiq./bobine',m.nb_etiq_bobin,'number'),
         _f('fce-dia-ext','Dia. ext.',m.dia_ext,'number'),
         _f('fce-poids','Poids',m.poids,'number'),
         _f('fce-cales-sachets','Cales / sachets',m.cales_sachets),
-        _f('fce-cartons','Cartons',m.cartons),
+        _ref('carton_ref_id','fce-cartons','cartons','carton','Type de carton'),
         _f('fce-nb-sol','Nb au sol',m.nb_au_sol,'number'),
         _f('fce-nb-etage','Nb étages',m.nb_etage,'number'),
         _f('fce-nb-bob-carton','Nb bob./carton',m.nb_bobines_carton,'number'),
       ].join(''))}
       ${_sec('Palettisation',[
-        _f('fce-palette-type','Type palette',m.palette_type),
+        _ref('palette_ref_id','fce-palette-type','palette_type','palette','Type de palette'),
         _f('fce-palette-sol','Nb cartons/sol',m.palette_nb_cartons_sol,'number'),
         _f('fce-palette-hauteur','Nb cartons/hauteur',m.palette_nb_cartons_hauteur,'number'),
         _f('fce-palette-hmax','Hauteur max. (cm)',m.palette_hauteur_max,'number'),

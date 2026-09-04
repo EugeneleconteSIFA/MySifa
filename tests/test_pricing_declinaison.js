@@ -142,5 +142,22 @@ check('auteur inconnu reste neutre', hist.includes('—'), true);
 check('les balises sont équilibrées',
   (hist.match(/<td/g) || []).length, (hist.match(/<\/td>/g) || []).length);
 
+// ─── La saisie part vraiment au serveur ─────────────────────────────────────
+// Régression : les champs de la fiche déclinaison ne faisaient que rafraîchir
+// l'aperçu. Rien n'appelait autoEnregistrerDecl : la pastille restait sur
+// « Aucune modification » et le paramétrage saisi n'était jamais enregistré.
+const rdf = extraire('renderDeclinaisonForm');
+check('la frappe déclenche l\'enregistrement',
+  rdf.includes('autoEnregistrerDecl()'), true);
+check('plus de drapeau mort decl-dirty', rdf.includes('decl-dirty'), false);
+check('plus de S.declDirty', src.includes('S.declDirty'), false);
+for (const id of ['d-tax', 'd-transport', 'd-tcout', 'd-tqte', 'd-marge',
+                  'd-cur', 'd-basis', 'd-imp', 'd-tmode']) {
+  const i = rdf.indexOf('"' + id + '"');
+  check('champ enregistré : ' + id, i >= 0, true);
+}
+check('chaque gestionnaire passe par marquerDecl',
+  (rdf.match(/marquerDecl\(\)/g) || []).length, 3);
+
 console.log(ko === 0 ? '\nTOUT EST VERT' : '\n' + ko + ' ECHEC(S)');
 process.exit(ko === 0 ? 0 : 1);

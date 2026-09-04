@@ -120,6 +120,36 @@ et vide partout ailleurs, adhésifs compris.
 
 ---
 
+## Trois pièges relevés le 04/09/2026, à ne pas redécouvrir
+
+**1. La clé d'un article matière est le TRIPLET `(code1, code2, type)`.**
+`mat_mat` porte plusieurs lignes pour un même couple `code1`/`code2` — une par
+type. `1183/0001` existe en type 2 (« Siliconnée Jaune 60g »), 3 (« Velin teinté
+jaune fluo 70g »), 5, 1 et 802. Joindre sur le seul couple ramène donc un
+libellé au hasard, et c'est ainsi qu'une ligne de glassine s'est retrouvée
+nommée « Velin ». Le type de la ligne d'achat désigne laquelle est la bonne. Les
+types au-dessus de 100 (802, 807, 817…) sont des variantes : les écarter.
+
+**2. `cua` ne dit PAS l'unité de la quantité.** Sur les bobines il vaut
+massivement `10` ou `M²`, tous deux « mètre carré » dans `fic_ua` — et pourtant
+`lif_ligne.qte` est en **mètres linéaires**. Vérifié en croisant avec
+`stm_hist`, qui écrit la même valeur : `552/0007` reçoit `20 000` pour une
+bobine que `libt2` annonce à « 10.000 ml », soit exactement deux bobines ;
+`552/0005` reçoit `64 009` pour des bobines de « 16.000 ml », soit quatre.
+`cua` décrit l'unité de PRIX, comme `pun` ailleurs. Convertir une quantité de
+réception en divisant par la laize donnerait un métrage faux d'un facteur deux.
+
+**3. `mat_mat.libt2` porte la longueur de bobine**, en clair et de façon
+remarquablement régulière : « Ø 76 mm, Bobine 16.000 ml, CSO », « Roll 18 000
+ml », « Roll lenght 2.000 meters ». C'est l'équivalent RVGI de
+`matieres_premieres.metres_lineaires_par_bobine`, et il permet de chiffrer un
+attendu en bobines sans dépendre de la saisie MyStock — où cinq références
+portent encore 0. Attention en revanche à `libt1`, qui ne contient pas un
+libellé mais un **chemin réseau** vers la fiche technique
+(`R:\Matières\2-Glassine\LIKEXIN`).
+
+---
+
 ## ERP RVGI — l'app `/erp` et son miroir
 
 RVGI est l'ERP de SIFA (base HFSQL `sifa_cs`, serveur `192.168.100.199:4949`).

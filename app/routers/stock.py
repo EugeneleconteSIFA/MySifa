@@ -8935,3 +8935,147 @@ def get_matiere_laizes(matiere_id: int, request: Request):
         "metres_lineaires_par_bobine": float(mat["metres_lineaires_par_bobine"] or 0),
         "laizes": laizes,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Référentiel matière pour les documents de production (OF, fiche technique)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Un OF ne se saisit pas dans MyStock, mais il désigne des matières : un
+# carton, un mandrin, une palette, un adhésif, un support. Jusqu'ici ces
+# valeurs étaient tapées en texte libre et rapprochées après coup par
+# `mp_fiche_mapping` — une frappe près, et le besoin matière sort faux sans
+# que rien ne le signale.
+#
+# Ces deux routes permettent de choisir la référence AU MOMENT de la saisie,
+# et d'en créer une quand elle manque. Sans la seconde, la première ne servirait
+# à rien : une ADV bloquée devant une liste sans son carton retape du texte
+# libre, et on revient au point de départ.
+
+# Les familles de `mp_fiche_mapping` et les catégories MyStock qu'elles
+# recouvrent. « support » en couvre deux : un complexe est un frontal collé.
+_FAMILLES_DOCUMENT = {
+    "support":  ("frontal", "complexe"),
+    "glassine": ("glassine",),
+    "adhesif":  ("adhesif",),
+    "carton":   ("carton",),
+    "mandrin":  ("mandrin",),
+    "palette":  ("palette",),
+}
+
+
+def require_document_matieres(request: Request) -> dict:
+    """Choisir et créer une référence depuis un OF ou une fiche technique.
+
+    Le périmètre est celui de `_STOCK_MATIERES_ADMIN_ROLES`, identique à celui
+    qui autorise la saisie d'un OF — mais SANS exiger l'accès à l'application
+    MyStock : on désigne une matière depuis un document de production, on ne
+    consulte pas le stock.
+    """
+    user = get_current_user(request)
+    if (user.get("role") or "") not in _STOCK_MATIERES_ADMIN_ROLES:
+        raise HTTPException(403, "Accès réservé à la Direction et Administration")
+    return user
+
+
+@router.get("/api/stock/matieres/referentiel")
+def referentiel_matieres(request: Request):
+    """Les références d'une famille, pour le sélecteur d'un OF ou d'une fiche.
+
+    `famille` : support | glassine | adhesif | carton | mandrin | palette.
+    `q` filtre sur la référence, la désignation et la sous-catégorie.
+    """
+    require_document_matieres(request)
+    famille = (request.query_params.get("famille") or "").strip().lower()
+    q = (request.query_params.get("q") or "").strip()
+    if famille not in _FAMILLES_DOCUMENT:
+        raise HTTPException(
+            400, "Famille inconnue (attendu : %s)" % "|".join(sorted(_FAMILLES_DOCUMENT))
+        )
+    categories = _FAMILLES_DOCUMENT[famille]
+    params: list = list(categories)
+    sql = (
+        "SELECT id, categorie, reference, designation, sous_categorie, "
+        "       COALESCE(brouillon, 0) AS brouillon "
+        "  FROM matieres_premieres "
+        " WHERE COALESCE(actif, 1) = 1 AND categorie IN (%s)"
+        % ",".join("?" * len(categories))
+    )
+    if q:
+        like = "%" + q.replace("%", "") + "%"
+        sql += (" AND (reference LIKE ? OR designation LIKE ?"
+                "      OR COALESCE(sous_categorie,'') LIKE ?)")
+        params += [like, like, like]
+    # Les brouillons en dernier : ce sont des références incomplètes, elles ne
+    # doivent pas se présenter avant celles que MyStock a validées.
+    sql += " ORDER BY COALESCE(brouillon,0), COALESCE(sous_categorie,''), designation LIMIT 300"
+    with get_db() as conn:
+        rows = [dict(r) for r in conn.execute(sql, params)]
+    return {"famille": famille, "categories": list(categories),
+            "total": len(rows), "references": rows}
+
+
+@router.post("/api/stock/matieres/brouillon")
+async def creer_matiere_brouillon(request: Request):
+    """Crée une référence matière manquante, en brouillon, depuis un document.
+
+    Body : { famille, reference, designation, sous_categorie? }
+
+    Volontairement pauvre : ni prix, ni laize, ni seuil. L'ADV qui saisit un OF
+    n'a pas ces informations et ne doit pas être tentée de les inventer — un
+    prix faux est pire qu'un prix absent, il se propage dans la valorisation
+    sans jamais lever d'alerte. `brouillon = 1` fait remonter la référence dans
+    « matières à compléter » de MyStock jusqu'à ce qu'elle soit renseignée.
+    """
+    user = require_document_matieres(request)
+    body = await request.json()
+    famille = (body.get("famille") or "").strip().lower()
+    reference = (body.get("reference") or "").strip()
+    designation = (body.get("designation") or "").strip()
+    sous_categorie = (body.get("sous_categorie") or "").strip() or None
+
+    if famille not in _FAMILLES_DOCUMENT:
+        raise HTTPException(400, "Famille inconnue.")
+    if not designation:
+        raise HTTPException(400, "Désignation obligatoire.")
+    # La référence sert de clé dans MyStock. À défaut, la désignation en tient
+    # lieu : mieux vaut une référence lisible qu'un code inventé au hasard.
+    reference = reference or designation
+    # Une famille en couvre parfois deux catégories ; la première est celle du
+    # cas courant (« frontal » plutôt que « complexe »).
+    categorie = _FAMILLES_DOCUMENT[famille][0]
+
+    maintenant = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    qui = (user.get("nom") or user.get("email") or "").strip() or None
+    with get_db() as conn:
+        double = conn.execute(
+            "SELECT id, designation FROM matieres_premieres "
+            " WHERE categorie = ? AND LOWER(TRIM(reference)) = LOWER(TRIM(?))",
+            (categorie, reference),
+        ).fetchone()
+        if double:
+            # On ne crée pas un homonyme : on rend celle qui existe, l'écran la
+            # sélectionne, et l'ADV voit tout de suite que sa matière était là.
+            return {"ok": True, "id": double["id"], "existait": True,
+                    "designation": double["designation"]}
+        cur = conn.execute(
+            "INSERT INTO matieres_premieres "
+            "  (categorie, reference, designation, sous_categorie, actif, "
+            "   seuil_alerte, brouillon, brouillon_par, brouillon_le) "
+            "VALUES (?, ?, ?, ?, 1, 0, 1, ?, ?)",
+            (categorie, reference, designation, sous_categorie, qui, maintenant),
+        )
+        matiere_id = cur.lastrowid
+        conn.execute("INSERT INTO mp_stock (matiere_id, quantite) VALUES (?, 0)",
+                     (matiere_id,))
+        conn.commit()
+
+    log_action(
+        user=user, action="CREATE", module="stock",
+        objet="Matière (brouillon) %s · %s" % (categorie, designation),
+        detail={"famille": famille, "reference": reference,
+                "origine": "document de production"},
+        request=request,
+    )
+    return {"ok": True, "id": matiere_id, "existait": False,
+            "designation": designation, "brouillon": True}
