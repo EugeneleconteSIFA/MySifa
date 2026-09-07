@@ -1811,6 +1811,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
+<script src="/static/mysifa_bobine_edit.js?v=1.0"></script>
 <script src="/static/mysifa_expe_carte.js"></script>
 <script src="/static/mysifa_rvgi_picker.js"></script>
 <script src="/static/chat_mentions.js"></script>
@@ -6143,6 +6144,22 @@ function closeTracMatieresEditModal(){
   document.getElementById('trac-mat-edit-modal')?.remove();
 }
 
+/* Correction d'une bobine depuis le tableau de tracabilite.
+   La fenetre vit dans mysifa_bobine_edit.js, partagee avec la saisie de
+   production : meme geste, meme ecran des deux cotes. */
+function tracOuvrirEditBobine(m, ref){
+  if(!window.MysBobineEdit){
+    showToast('Module de correction non charge — rechargez la page.','danger');
+    return;
+  }
+  window.MysBobineEdit.ouvrir({
+    matiere: m,
+    tracabilite: true,
+    toast: (msg,type)=>showToast(msg,type),
+    onSaved: async ()=>{ if(ref) await loadTracabiliteDossier(ref); },
+  });
+}
+
 function tracResolveMachineId(dos, matieres){
   const dmid = dos && dos.machine_id;
   if(dmid!=null && dmid!==''){
@@ -6465,6 +6482,7 @@ function renderTracabiliteDossierDetail(){
   );
 
   // Matières table
+  const dosRef = (dos.reference||'').trim();
   const matiereRows = matieres.map(m=>{
     const dt = m.scanned_at ? new Date(m.scanned_at) : null;
     const dateStr = dt&&!isNaN(dt) ? dt.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
@@ -6475,14 +6493,33 @@ function renderTracabiliteDossierDetail(){
       : conf === false
         ? h('span',{style:{color:'var(--danger)',fontWeight:'800'}},'\u2717'+(m.fsc_warning?' (confirmé)':''))
         : h('span',{style:{color:'var(--muted)'}},'\u2014');
+    // Deux portes vers la meme fenetre : la cellule fournisseur, parce que
+    // c'est elle qu'on regarde quand on veut la corriger, et le crayon en bout
+    // de ligne, parce qu'une cellule cliquable ne se devine pas.
+    const ouvrir = ()=>tracOuvrirEditBobine(m, dosRef);
     return h('tr',null,
       h('td',null,h('span',{style:{fontFamily:'monospace',fontWeight:'700',color:'var(--accent)'}},m.code_barre)),
       h('td',null,m.machine_nom||'—'),
       h('td',null,m.operateur||'—'),
-      h('td',null,m.fournisseur||'—'),
+      h('td',null,h('button',{
+        type:'button',
+        className:'trac-four-btn',
+        title:'Corriger cette bobine — fournisseur, code barre, commentaire',
+        onClick:ouvrir,
+      }, m.fournisseur||'—')),
       h('td',null,claim),
       h('td',null,confCell),
-      h('td',null,dateStr)
+      h('td',null,dateStr),
+      h('td',{style:{textAlign:'right',whiteSpace:'nowrap'}},
+        h('button',{
+          type:'button',
+          className:'btn btn-sm btn-ghost',
+          title:'Corriger cette bobine',
+          'aria-label':'Corriger la bobine '+(m.code_barre||''),
+          style:{padding:'6px 8px'},
+          onClick:ouvrir,
+        }, iconEl('pencil',13))
+      )
     );
   });
 
@@ -6495,7 +6532,8 @@ function renderTracabiliteDossierDetail(){
           h('th',null,'Fournisseur'),
           h('th',null,'Claim FSC'),
           h('th',null,'Statut FSC'),
-          h('th',null,'Heure scan')
+          h('th',null,'Heure scan'),
+          h('th',{style:{textAlign:'right'}},'')
         )),
         h('tbody',null,...matiereRows)
       )

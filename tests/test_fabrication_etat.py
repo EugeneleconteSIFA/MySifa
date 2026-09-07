@@ -73,8 +73,8 @@ CAS = [
     (saisies("86", "01", "03", "66"), "en_arret", "66 attente matière"),
     (saisies("86", "01", "03", "89"), "fin_dossier", "89 fin de production"),
     (saisies("86", "01", "03", "87"), "sans_session", "87 départ personnel"),
-    (saisies("86", "01", "03", "90"), "en_cours_production", "90 annulation : on lit la saisie d'avant"),
-    (saisies("86", "01", "90"), "en_calage", "90 sur un 01 : retour au calage"),
+    (saisies("86", "01", "03", "90"), "fin_dossier", "90 annulation dossier : cycle clos, comme un 89"),
+    (saisies("86", "01", "90"), "fin_dossier", "90 sur un 01 : le dossier est abandonne, pas en calage"),
     (saisies("86", "01", "99"), "en_calage", "code hors référentiel : jamais « En production »"),
 ]
 for rows, attendu, libelle in CAS:
