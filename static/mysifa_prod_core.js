@@ -6677,8 +6677,10 @@ function renderSaisies(){
       rowBg = 'rgba(251,191,36,.08)';           // jaune doux calage
     }
     if (annuleRow) { rowBg = 'rgba(248,113,113,.08)'; tr.style.opacity = '.6'; }
-    // Cycle annule : liseré ambre, pleine opacité. La ligne compte toujours.
-    if (cycleAnnule) tr.style.boxShadow = 'inset 3px 0 0 rgba(251,191,36,.55)';
+    // Cycle annule : teinte ambre, pleine opacite. La ligne compte toujours,
+    // elle n'est ni barree ni grisee. Un box-shadow inset ne rend pas sur un
+    // <tr> en border-collapse : c'est le fond qui fait le bloc visuel.
+    if (cycleAnnule) rowBg = 'rgba(251,191,36,.13)';
     if (rowBg) tr.style.background = rowBg;
     if (S.selectedRows.has(row.id)) tr.style.background = 'rgba(34,211,238,.12)';
 
@@ -6721,12 +6723,19 @@ function renderSaisies(){
     },'ALERTE');
     else if(row.est_manuel) badge=h('span',{className:'badge-manuel'},'+ Manuel');
     else if(row.modifie_par) badge=h('span',{className:'badge-modif',title:'Modifié par '+row.modifie_par+' le '+fD(row.modifie_le)},'✏ Corrigé');
-    else if(cycleAnnule) badge=h('span',{className:'badge-cycle-annule',title:cycleTip,
-      style:{background:'rgba(251,191,36,.10)',color:'#fbbf24',border:'1px solid rgba(251,191,36,.30)',padding:'2px 8px',borderRadius:'6px',fontSize:'10px',fontWeight:'700',letterSpacing:'.3px',whiteSpace:'nowrap'}
-    },'CYCLE ANNULÉ');
+    // Pas de badge « cycle annulé » ici : le marqueur est dans la colonne
+    // Opération, où rien ne le dispute. La colonne badge sert la qualité de
+    // saisie (« + Manuel », « Corrigé ») et ne doit pas être prise.
  
     tr.appendChild(h('td',{style:{fontSize:'11px',color:'var(--muted)',whiteSpace:'nowrap',fontFamily:'monospace'}},fDSecs(row.date_operation)));
-    tr.appendChild(h('td',null,row.operation||'-'));
+    tr.appendChild(h('td',null,row.operation||'-',
+      cycleAnnule
+        ? h('span',{title:cycleTip,
+            style:{marginLeft:'6px',padding:'1px 6px',borderRadius:'4px',fontSize:'10px',
+                   fontWeight:'700',letterSpacing:'.2px',whiteSpace:'nowrap',
+                   background:'rgba(251,191,36,.18)',color:'#fbbf24',
+                   border:'1px solid rgba(251,191,36,.45)'}},'cycle annulé')
+        : null));
     tr.appendChild(h('td',{style:{whiteSpace:'nowrap',color:'var(--muted)'}},fmtDurMin(row.duree_min)));
     tr.appendChild(h('td',null,opName(row.operateur)));
     tr.appendChild(h('td',null,row.machine||'-'));
