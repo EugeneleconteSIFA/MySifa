@@ -364,8 +364,13 @@ def _compute_etat(saisies: list, ops: Optional[dict] = None) -> str:
     last = saisies[-1]
     code = str(last.get("operation_code") or "").strip()
 
-    if code == "90":  # Annulation saisie : on ignore et on regarde avant
-        return _compute_etat(saisies[:-1], ops)
+    if code == "90":  # Annulation de dossier : le cycle est clos, comme un 89
+        # Historiquement le code 90 annulait LA DERNIERE SAISIE : on l'ignorait
+        # et on relisait celle d'avant. Il annule aujourd'hui LE DOSSIER, et
+        # depuis le 07/09/2026 les saisies du cycle ne sont plus neutralisees.
+        # Relire celle d'avant afficherait donc « En production » sur une
+        # machine dont le dossier vient d'etre abandonne.
+        return "fin_dossier"
     if code == "87":  # Départ personnel
         return "sans_session"
     if code == "86":  # Arrivée personnel
@@ -396,13 +401,21 @@ def _compute_etat(saisies: list, ops: Optional[dict] = None) -> str:
 
 
 def _get_active_dossier(saisies: list):
-    """Retourne la ref du dossier actif (dernier Début sans Fin dossier correspondant)."""
+    """Retourne la ref du dossier actif (dernier Début sans Fin dossier correspondant).
+
+    Une annulation (90) ferme le cycle exactement comme une fin de production
+    (89). C'est nouveau : jusqu'au 07/09/2026 l'annulation neutralisait les
+    saisies du cycle (`est_annule=1`) et c'est leur disparition qui rendait le
+    dossier inactif. Elle ne les neutralise plus — le temps passé et la matière
+    engagée sont réels et doivent rester dans les chiffres — donc c'est la
+    trace 90, et elle seule, qui dit que le dossier n'est plus en cours.
+    """
     active = None
     for s in saisies:
         code = str(s.get("operation_code") or "").strip()
         if code == "01":
             active = s.get("no_dossier")
-        elif code == "89":
+        elif code in ("89", "90"):
             active = None
     return active
 
@@ -419,7 +432,12 @@ _CODE_ANNULATION = "90"
 
 
 def _saisies_non_annulees(saisies: list) -> list:
-    """Filtre les saisies neutralisees par une annulation de dossier."""
+    """Filtre les saisies neutralisees par une annulation de dossier.
+
+    Depuis le 07/09/2026 l'annulation ne pose plus `est_annule` : ce filtre ne
+    voit donc plus rien passer. Il reste en place pour les bases qui n'auraient
+    pas encore joue la migration `annulation_conserve_les_temps`.
+    """
     return [s for s in saisies if not int(s.get("est_annule") or 0)]
 
 
@@ -1846,8 +1864,12 @@ def _build_annulation_contexte(conn, user: dict, operateur: str, machine_id) -> 
     """Contexte partagé entre l'aperçu (GET) et l'annulation (POST).
 
     Le « cycle » annulable = toutes les saisies du dossier actif sur la machine
-    courante, depuis le dernier « Début de production » (01) non annulé, hors
-    pointage personnel (86/87) et hors traces d'annulation (90).
+    courante, depuis le dernier « Début de production » (01), hors pointage
+    personnel (86/87) et hors traces d'annulation (90).
+
+    Pas de double annulation possible : une fois la trace 90 posée, le dossier
+    n'est plus « actif » (`_get_active_dossier` ferme sur 89 comme sur 90) et
+    on sort plus haut sur « Aucun dossier en cours ».
     """
     out = {
         "annulable": False,
@@ -1913,7 +1935,9 @@ def _build_annulation_contexte(conn, user: dict, operateur: str, machine_id) -> 
     except (TypeError, ValueError):
         out["dernier_metrage"] = None
 
-    # Début du cycle courant : dernier 01 non annulé de ce dossier sur la machine.
+    # Debut du cycle courant : dernier 01 de ce dossier sur la machine. Le
+    # filtre est_annule ne sert plus qu'aux bases pas encore migrees (il
+    # n'est plus pose depuis le 07/09/2026) ; c'est la trace 90 qui ferme.
     mn, mc, mc2 = _machine_sql_match_params(out["machine_nom"], out["machine_code"])
     debut_row = conn.execute(
         """SELECT MAX(date_operation) AS dt FROM production_data
@@ -1999,11 +2023,20 @@ def _build_annulation_contexte(conn, user: dict, operateur: str, machine_id) -> 
 async def annuler_dossier(request: Request):
     """Annule le dossier en cours, à n'importe quel stade du cycle.
 
-    Toutes les saisies du cycle (01 + calages, production, arrêts, appro…)
-    passent en `est_annule=1` : elles restent en base, visibles et barrées dans
-    MyProd > Saisies, et sortent des lectures DOSSIER (rentabilité, comparaison
-    devis) — mais PAS des agrégats machine : le temps passé et la matière
-    engagée sont réels.
+    Les saisies du cycle (01 + calages, production, arrêts, appro…) ne sont PAS
+    neutralisées : elles gardent `est_annule=0` et comptent partout comme
+    n'importe quelle saisie. Elles reçoivent seulement `annule_le/par/motif`,
+    qui trace le cycle sans rien retirer aux chiffres.
+
+    Pourquoi (07/09/2026). Le cycle annulé garde son métrage — la trace 90
+    porte les compteurs début et fin — et ses entrées Z1. Poser `est_annule=1`
+    sur les saisies retirait leur DURÉE de toutes les lectures dossier
+    (rentabilité, mémoire produit, point de production) sans retirer ce
+    métrage : la vitesse d'un dossier annulé se calculait donc sur un métrage
+    complet et un temps amputé. Cas réel : 9932376-377, 46 668 m rapportés à
+    272 min au lieu de 571 → 171 m/min contre 82 réels. Le temps passé et la
+    matière engagée sont réels : seule la livraison du dossier n'a pas eu lieu,
+    et c'est le planning qui le dit.
 
     L'opérateur relève le compteur machine comme pour une fin de production.
     La trace « 90 - Annulation dossier » porte le compteur de début du cycle et
@@ -2092,10 +2125,12 @@ async def annuler_dossier(request: Request):
 
         ids = [int(r["id"]) for r in ctx["rows"]]
         placeholders = ",".join("?" * len(ids))
+        # `est_annule` n'est volontairement pas pose : voir la docstring. On
+        # marque le cycle (qui, quand, pourquoi) sans retirer ses minutes aux
+        # lectures, sinon le metrage du cycle reste et son temps disparait.
         conn.execute(
             f"""UPDATE production_data
-                   SET est_annule = 1,
-                       annule_le = ?,
+                   SET annule_le = ?,
                        annule_par = ?,
                        annule_motif = ?
                  WHERE id IN ({placeholders})""",
@@ -2317,6 +2352,7 @@ def list_matieres(request: Request, machine_id: int = None, no_dossier: str = No
               COALESCE(sr.fournisseur, fmu.fournisseur_manual) AS fournisseur,
               COALESCE(sr.certificat_fsc, fmu.certificat_fsc_manual) AS certificat_fsc,
               sr.fsc_type_claim AS fsc_type_claim,
+              ff.id AS fournisseur_id,
               ff.licence AS fournisseur_licence,
               CASE
                 WHEN sr.id IS NOT NULL THEN 'reception'
@@ -2400,6 +2436,7 @@ def get_tracabilite_dossier(no_dossier: str, request: Request):
                  COALESCE(sr.fsc_type_claim, NULL) AS fsc_type_claim,
                  sr.id AS reception_id,
                  sr.created_at AS reception_date,
+                 ff.id AS fournisseur_id,
                  ff.licence AS fournisseur_licence,
                  ff.certificat AS fournisseur_certificat
                FROM fab_matieres_utilisees fmu
@@ -2768,6 +2805,26 @@ def _norm_confiance(valeur, defaut: str) -> str:
     return v if v in _CONFIANCES else defaut
 
 
+def _reception_pour_code(conn, code_barre: str):
+    """Reception stock qui porte ce code barre, ou None.
+
+    Meme requete que `_link_matiere_to_reception` — la derniere reception
+    scannee gagne — isolee ici pour qu'un appelant puisse SAVOIR si la bobine
+    a une origine demontree sans avoir a la relier.
+    """
+    return conn.execute(
+        """
+        SELECT r.id AS reception_id
+        FROM stock_reception_items i
+        JOIN stock_receptions r ON r.id = i.reception_id
+        WHERE trim(i.code_barre) = trim(?)
+        ORDER BY i.scanned_at DESC, i.id DESC
+        LIMIT 1
+        """,
+        (code_barre,),
+    ).fetchone()
+
+
 def _link_matiere_to_reception(
     conn,
     matiere_id: int,
@@ -2902,6 +2959,27 @@ async def patch_matiere(matiere_id: int, request: Request):
         fid = _resolve_fournisseur_fsc_id(
             conn, fournisseur_fsc_id, exd.get("fournisseur_manual")
         )
+
+        # Bobine deja rattachee a une reception stock : son fournisseur est une
+        # origine DEMONTREE, pas une saisie. `_link_matiere_to_reception` le
+        # rappelle deja en ecrasant tout choix manuel, mais silencieusement —
+        # l'ecran croyait avoir enregistre. On refuse franchement, et seulement
+        # dans ce cas precis : corriger le code barre vers une reception reste
+        # permis (c'est la reception qui gagne, et c'est voulu).
+        if (
+            fournisseur_fsc_id is not None
+            and prev_code == code_barre
+            and _reception_pour_code(conn, code_barre)
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Bobine liee a une reception stock — son fournisseur vient "
+                    "du stock et ne se corrige pas ici. Corrigez la reception "
+                    "dans MyStock, ou le code barre si le scan porte sur une "
+                    "autre bobine."
+                ),
+            )
 
         if prev_code == code_barre and fid is None:
             return {"success": True, "matiere": exd}

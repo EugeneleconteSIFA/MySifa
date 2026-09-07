@@ -278,7 +278,11 @@ body.light .portal-vol-pop{box-shadow:0 18px 46px rgba(15,23,42,.14)}
   cursor:pointer;display:inline-flex;align-items:center;gap:6px;
   transition:background .15s,color .15s,border-color .15s}
 .portal-apps-sec-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.portal-apps--repliees{display:none}
+/* !important : les blocs mobiles (portrait, paysage) redeclarent
+   `.portal-apps{display:grid}` plus bas dans la feuille. A specificite egale,
+   c'est eux qui gagnaient — le bouton « Afficher / Masquer les autres »
+   basculait la classe sans que rien ne disparaisse. */
+.portal-apps--repliees{display:none!important}
 .portal-apps--favoris{margin-bottom:22px}
 
 /* ── ⌘K badge in the Google search input ── */

@@ -3790,6 +3790,23 @@ function closeTracMatieresEditModal(){
   document.getElementById('trac-mat-edit-modal')?.remove();
 }
 
+/* Correction d'une bobine depuis le tableau de tracabilite.
+   La fenetre elle-meme vit dans mysifa_bobine_edit.js : elle est partagee avec
+   la vue Traca de la saisie de production, pour que le meme geste donne le
+   meme ecran des deux cotes. */
+function tracOuvrirEditBobine(m, ref){
+  if(!window.MysBobineEdit){
+    showToast('Module de correction non charge — rechargez la page.','danger');
+    return;
+  }
+  window.MysBobineEdit.ouvrir({
+    matiere: m,
+    tracabilite: true,
+    toast: (msg,type)=>showToast(msg,type),
+    onSaved: async ()=>{ if(ref) await loadTracabiliteDossier(ref); },
+  });
+}
+
 function tracResolveMachineId(dos, matieres){
   const dmid = dos && dos.machine_id;
   if(dmid!=null && dmid!==''){
@@ -4228,6 +4245,7 @@ function renderTracabiliteDossierDetail(){
   );
 
   // Matières table
+  const dosRef = (dos.reference||'').trim();
   const matiereRows = matieres.map(m=>{
     const dt = m.scanned_at ? new Date(m.scanned_at) : null;
     const dateStr = dt&&!isNaN(dt) ? dt.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
@@ -4238,14 +4256,34 @@ function renderTracabiliteDossierDetail(){
       : conf === false
         ? h('span',{style:{color:'var(--danger)',fontWeight:'800'}},'\u2717'+(m.fsc_warning?' (confirmé)':''))
         : h('span',{style:{color:'var(--muted)'}},'\u2014');
+    // Deux portes vers la meme fenetre : la cellule fournisseur, parce que
+    // c'est elle qu'on regarde quand on veut la corriger, et le crayon en bout
+    // de ligne, parce qu'une cellule cliquable ne se devine pas.
+    const ouvrir = ()=>tracOuvrirEditBobine(m, dosRef);
+    const fournCell = h('button',{
+      type:'button',
+      className:'trac-four-btn',
+      title:'Corriger cette bobine — fournisseur, code barre, commentaire',
+      onClick:ouvrir,
+    }, m.fournisseur||'—');
     return h('tr',null,
       h('td',null,h('span',{style:{fontFamily:'monospace',fontWeight:'700',color:'var(--accent)'}},m.code_barre)),
       h('td',null,m.machine_nom||'—'),
       h('td',null,m.operateur||'—'),
-      h('td',null,m.fournisseur||'—'),
+      h('td',null,fournCell),
       h('td',null,claim),
       h('td',null,confCell),
-      h('td',null,dateStr)
+      h('td',null,dateStr),
+      h('td',{style:{textAlign:'right',whiteSpace:'nowrap'}},
+        h('button',{
+          type:'button',
+          className:'btn btn-sm btn-ghost',
+          title:'Corriger cette bobine',
+          'aria-label':'Corriger la bobine '+(m.code_barre||''),
+          style:{padding:'6px 8px'},
+          onClick:ouvrir,
+        }, iconEl('pencil',13))
+      )
     );
   });
 
@@ -4263,7 +4301,8 @@ function renderTracabiliteDossierDetail(){
           h('th',null,'Fournisseur'),
           h('th',null,'Claim FSC'),
           h('th',null,'Statut FSC'),
-          h('th',null,'Heure scan')
+          h('th',null,'Heure scan'),
+          h('th',{style:{textAlign:'right'}},'')
         )),
         h('tbody',null,...matiereRows)
       )
@@ -6587,16 +6626,31 @@ function renderSaisies(){
     const fictifRow = isFictifSaisieRow(row);
     // Saisie neutralisee par une annulation de dossier (MyProd fabrication) :
     // conservee pour l'audit, exclue de toutes les statistiques, non modifiable.
+    // 07/09/2026 : l'annulation ne pose plus est_annule (le temps passe et la
+    // matiere engagee sont reels et restent dans les chiffres). Ce cas ne
+    // concerne donc plus que les bases pas encore migrees.
     const annuleRow = !!Number(row.est_annule||0);
+    // Saisie d'un cycle annule mais qui COMPTE : elle porte le motif sans
+    // porter est_annule. On la marque, on ne la barre pas — la barrer
+    // laisserait croire qu'elle est sortie des totaux.
+    const cycleAnnule = !annuleRow && !!(row.annule_motif||'').trim()
+                        && (row.operation_code||'') !== '90';
     const annuleTip = annuleRow
       ? ('Saisie annulée avec le dossier'
           + (row.annule_motif ? ' — '+row.annule_motif : '')
           + (row.annule_par ? ' (par '+row.annule_par+')' : '')
           + (row.annule_le ? ' le '+fD(row.annule_le) : ''))
       : '';
+    const cycleTip = cycleAnnule
+      ? ('Cycle annulé — '+row.annule_motif
+          + (row.annule_par ? ' (par '+row.annule_par+')' : '')
+          + (row.annule_le ? ' le '+fD(row.annule_le) : '')
+          + '\nLa saisie reste comptée : le temps passé et la matière engagée sont réels.')
+      : '';
     const tr=h('tr',{className:'data-row'+(fictifRow?' saisie-row-fictif':'')+(annuleRow?' saisie-row-annule':''),
       style:{cursor:(readOnly||annuleRow)?'default':'pointer'}});
     if(annuleRow) tr.title = annuleTip;
+    else if(cycleAnnule) tr.title = cycleTip;
     // PAR — contrastes plus forts + catégorie production en vert
     const opCode = row.operation_code || '';
     const cat    = row.operation_category || '';
@@ -6623,6 +6677,10 @@ function renderSaisies(){
       rowBg = 'rgba(251,191,36,.08)';           // jaune doux calage
     }
     if (annuleRow) { rowBg = 'rgba(248,113,113,.08)'; tr.style.opacity = '.6'; }
+    // Cycle annule : teinte ambre, pleine opacite. La ligne compte toujours,
+    // elle n'est ni barree ni grisee. Un box-shadow inset ne rend pas sur un
+    // <tr> en border-collapse : c'est le fond qui fait le bloc visuel.
+    if (cycleAnnule) rowBg = 'rgba(251,191,36,.13)';
     if (rowBg) tr.style.background = rowBg;
     if (S.selectedRows.has(row.id)) tr.style.background = 'rgba(34,211,238,.12)';
 
@@ -6665,9 +6723,19 @@ function renderSaisies(){
     },'ALERTE');
     else if(row.est_manuel) badge=h('span',{className:'badge-manuel'},'+ Manuel');
     else if(row.modifie_par) badge=h('span',{className:'badge-modif',title:'Modifié par '+row.modifie_par+' le '+fD(row.modifie_le)},'✏ Corrigé');
+    // Pas de badge « cycle annulé » ici : le marqueur est dans la colonne
+    // Opération, où rien ne le dispute. La colonne badge sert la qualité de
+    // saisie (« + Manuel », « Corrigé ») et ne doit pas être prise.
  
     tr.appendChild(h('td',{style:{fontSize:'11px',color:'var(--muted)',whiteSpace:'nowrap',fontFamily:'monospace'}},fDSecs(row.date_operation)));
-    tr.appendChild(h('td',null,row.operation||'-'));
+    tr.appendChild(h('td',null,row.operation||'-',
+      cycleAnnule
+        ? h('span',{title:cycleTip,
+            style:{marginLeft:'6px',padding:'1px 6px',borderRadius:'4px',fontSize:'10px',
+                   fontWeight:'700',letterSpacing:'.2px',whiteSpace:'nowrap',
+                   background:'rgba(251,191,36,.18)',color:'#fbbf24',
+                   border:'1px solid rgba(251,191,36,.45)'}},'cycle annulé')
+        : null));
     tr.appendChild(h('td',{style:{whiteSpace:'nowrap',color:'var(--muted)'}},fmtDurMin(row.duree_min)));
     tr.appendChild(h('td',null,opName(row.operateur)));
     tr.appendChild(h('td',null,row.machine||'-'));
