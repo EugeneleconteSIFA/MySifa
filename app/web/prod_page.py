@@ -107,6 +107,10 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- Selecteur de reference matiere MyStock : c'est lui qui remplace le
      texte libre des champs carton / mandrin / palette / adhesif / support. -->
 <script src="/static/mysifa_ref_matiere.js?v=__V_LABEL__"></script>
+<!-- Correction d'une bobine depuis l'onglet Tracabilite : la fenetre et
+     son selecteur fournisseur, partages avec la saisie de production. -->
+<script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
+<script src="/static/mysifa_bobine_edit.js?v=1.0"></script>
 <script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>

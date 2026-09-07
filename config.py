@@ -310,7 +310,8 @@ FSC_CLAIM_DEFAUT = os.getenv("FSC_CLAIM_DEFAUT", "fsc_mix")
 # d'affichage — on ne veut pas qu'elle puisse être vidée depuis l'interface.
 FSC_WARNING_PROD = os.getenv(
     "FSC_WARNING_PROD",
-    "Dossier FSC — utiliser exclusivement de la matière certifiée FSC · "
+    "Dossier FSC — utiliser exclusivement de la matière certifiée FSC "
+    "(étiquettes vertes impératives) · "
     "traçabilité matière impérative (scanner chaque bobine) · "
     "entrée du produit fini en stock Z1 obligatoire",
 )

@@ -186,11 +186,11 @@ input,select,textarea{font-family:inherit;color:var(--text)}
   0%,100%{border-color:#fb923c;box-shadow:inset 0 0 0 2px rgba(251,146,60,.95), 0 0 10px rgba(251,146,60,.35)}
   50%    {border-color:#fed7aa;box-shadow:inset 0 0 0 2px rgba(251,146,60,.35), 0 0 4px rgba(251,146,60,.12)}
 }
-/* Sur aplat orange, un halo orange ne se verrait pas : c'est un liseré blanc
-   qui bat, et l'ombre portée qui donne le relief. */
+/* Sur aplat vert, un halo vert ne se verrait pas : c'est un lisere blanc
+   qui bat, et l'ombre portee qui donne le relief. */
 @keyframes fscBandeauPulseClair{
-  0%,100%{border-color:#7c2d12;box-shadow:inset 0 0 0 2px rgba(255,255,255,.60), 0 0 12px rgba(194,65,12,.45)}
-  50%    {border-color:#c2410c;box-shadow:inset 0 0 0 2px rgba(255,255,255,.18), 0 0 4px rgba(194,65,12,.14)}
+  0%,100%{border-color:#065f46;box-shadow:inset 0 0 0 2px rgba(255,255,255,.60), 0 0 12px rgba(4,120,87,.45)}
+  50%    {border-color:#10b981;box-shadow:inset 0 0 0 2px rgba(255,255,255,.18), 0 0 4px rgba(4,120,87,.14)}
 }
 .fab-fsc-bandeau{
   flex-shrink:0;
@@ -209,13 +209,15 @@ input,select,textarea{font-family:inherit;color:var(--text)}
   background:rgba(124,45,18,.14);color:#7c2d12;
 }
 
-/* Interface claire : l'aplat passe du côté du bandeau. #c2410c sous du blanc
-   gras tient un contraste de 5,2:1 — au-dessus du seuil AA, y compris sur le
-   petit compteur de droite. */
+/* Interface claire : l'aplat passe du cote du bandeau, et il prend le vert
+   du badge FSC plutot qu'un orange d'alerte — la consigne dit quelle matiere
+   monter, pas qu'il y a un probleme ; l'ecart, lui, se lit sur le compteur en
+   bout de ligne. #047857 sous du blanc gras tient un contraste de 5,0:1 —
+   au-dessus du seuil AA, y compris sur le petit compteur de droite. */
 body.light .fab-fsc-bandeau{
-  background:#c2410c;
+  background:#047857;
   color:#fff;
-  border-color:#7c2d12;
+  border-color:#065f46;
   animation:fscBandeauPulseClair 1.8s ease-in-out infinite;
 }
 body.light .fab-fsc-bandeau .fab-fsc-badge{
@@ -252,6 +254,34 @@ body.light .fab-fsc-bandeau .fab-fsc-bandeau-etat{
 }
 .fab-fsc-badge.is-ecart{
   background:rgba(251,146,60,.14);color:#fb923c;border-color:rgba(251,146,60,.45);
+}
+/* Variante « forte » du badge, reservee au footer de saisie : c'est le seul
+   endroit ou le badge doit accrocher l'oeil d'un conducteur qui ne regarde
+   pas l'ecran en face. Aplat plein + halo, la ou le badge de liste reste
+   discret parce qu'il y en a vingt a la suite. */
+.fab-fsc-badge--fort{
+  padding:4px 11px;border-radius:6px;
+  font-size:12px;letter-spacing:.9px;
+  background:#047857;color:#fff;border-color:#065f46;
+  box-shadow:0 0 0 3px rgba(4,120,87,.25);
+  animation:fscBadgeFortPulse 2.2s ease-in-out infinite;
+}
+.fab-fsc-badge--fort.is-ecart{
+  background:#c2410c;color:#fff;border-color:#7c2d12;
+  box-shadow:0 0 0 3px rgba(194,65,12,.28);
+  animation-name:fscBadgeFortPulseEcart;
+}
+@keyframes fscBadgeFortPulse{
+  0%,100%{box-shadow:0 0 0 3px rgba(4,120,87,.30)}
+  50%    {box-shadow:0 0 0 6px rgba(4,120,87,.06)}
+}
+@keyframes fscBadgeFortPulseEcart{
+  0%,100%{box-shadow:0 0 0 3px rgba(194,65,12,.34)}
+  50%    {box-shadow:0 0 0 6px rgba(194,65,12,.07)}
+}
+@media (prefers-reduced-motion: reduce){
+  .fab-fsc-badge--fort{animation:none;box-shadow:0 0 0 3px rgba(4,120,87,.30)}
+  .fab-fsc-badge--fort.is-ecart{animation:none;box-shadow:0 0 0 3px rgba(194,65,12,.34)}
 }
 .fab-dossier-ref-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .fab-etat-badge{
@@ -887,7 +917,7 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
 .fab-traca-actions{
   display:inline-flex;gap:6px;align-items:center;justify-content:flex-end;
 }
-.fab-traca-print,.fab-traca-del,.fab-traca-comment{
+.fab-traca-print,.fab-traca-del,.fab-traca-comment,.fab-traca-edit{
   display:inline-flex;align-items:center;justify-content:center;
   width:30px;height:30px;padding:0;border-radius:8px;
   background:rgba(148,163,184,.14);border:1px solid transparent;
@@ -898,6 +928,14 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
 }
 .fab-traca-print:hover{
   background:var(--accent,#14b8a6);border-color:var(--accent,#14b8a6);color:#fff;
+}
+/* Ambre : le crayon corrige, il ne cree ni ne detruit. Ni le bleu du
+   commentaire (qui ajoute), ni le rouge de la corbeille (qui retire). */
+.fab-traca-edit{
+  background:rgba(217,119,6,.14);color:var(--warn,#d97706);
+}
+.fab-traca-edit:hover{
+  background:var(--warn,#d97706);border-color:var(--warn,#d97706);color:#fff;
 }
 .fab-traca-comment{
   background:rgba(59,130,246,.14);color:#3b82f6;
@@ -1226,6 +1264,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
+<script src="/static/mysifa_bobine_edit.js?v=1.0"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/chat_mentions.js"></script>
@@ -2368,11 +2407,14 @@ function renderSidebar(){
 }
 
 /* ── Annulation de dossier (marche arriere) ──────────────────── */
-/* L'operateur a demarre un dossier (01) puis enchaine des calages et
-   s'apercoit qu'il n'a pas les elements pour le realiser. Tant qu'aucune
-   saisie de production reelle (03 / 88) n'a ete faite, il peut annuler :
-   toutes les saisies du cycle sont neutralisees et le dossier repart en
-   attente au planning avec le motif saisi. */
+/* L'operateur a demarre un dossier (01) puis s'apercoit qu'il n'a pas les
+   elements pour le realiser. Il peut annuler a tout moment du cycle : le
+   dossier repart en attente au planning avec le motif saisi.
+   07/09/2026 : les saisies du cycle ne sont PLUS neutralisees. Le temps passe
+   et la matiere engagee sont reels — les neutraliser retirait leurs minutes
+   des statistiques alors que le metrage du cycle (porte par la trace 90) y
+   restait, ce qui gonflait la vitesse du dossier. Elles portent seulement
+   `annule_motif`, qui les marque sans les retirer des totaux. */
 function fabSaisiesProd(){
   return (S.saisies||[]).filter(s=>(s.kind===undefined||s.kind==='prod'));
 }
@@ -2389,7 +2431,10 @@ function fabAnnulationPossible(){
     const nd = String(rows[i].no_dossier||'').trim();
     if(nd!==ref) continue;
     if(c==='01') debutIdx = i;
-    else if(c==='89') debutIdx = -1;
+    // 89 et 90 ferment le cycle. Le 90 doit le fermer explicitement depuis
+    // qu'il ne neutralise plus les saisies : sans lui, le bouton « Annuler le
+    // dossier » resterait propose sur un dossier deja annule.
+    else if(c==='89' || c==='90') debutIdx = -1;
   }
   // Pas de restriction sur l'avancement : un manque de matiere ou de
   // mandrins peut survenir en plein calage comme en pleine production.
@@ -4586,6 +4631,24 @@ async function tracaScanLoop(video, stream){
   }
 }
 
+/* Correction d'une bobine deja scannee. La fenetre vit dans
+   mysifa_bobine_edit.js, partagee avec l'outil de tracabilite de MyProd : le
+   conducteur qui corrige un fournisseur retrouve le meme ecran des deux cotes.
+   `tracabilite: false` — ici on est sur la machine, le back applique la regle
+   normale (auteur du scan ou meme machine), pas l'elargissement fabrication. */
+function tracaOuvrirEditBobine(m){
+  if(!window.MysBobineEdit){
+    showToast('Module de correction non charge — rechargez la page.','danger');
+    return;
+  }
+  window.MysBobineEdit.ouvrir({
+    matiere: m,
+    tracabilite: false,
+    toast: (msg,type)=>showToast(msg,type),
+    onSaved: async ()=>{ await loadMatieres(); render(); },
+  });
+}
+
 function renderTracaPanel(){
   const matieres = S.tracaMatieres;
   const machineName = (S.machine&&S.machine.nom)||(S.user&&S.user.machine_nom)||'—';
@@ -4613,7 +4676,14 @@ function renderTracaPanel(){
             h('span',{className:'fab-traca-code'},m.code_barre),
             fscWarn ? h('span',{className:'fab-traca-fsc-warn',title:m.fsc_warning_note||'Alerte certification FSC'},'\u26A0') : null
           ),
-          h('td',null,fournisseur ? h('span',{className:'fab-traca-supplier'},fournisseur) : h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—')),
+          h('td',null, h('button',{
+            type:'button',
+            className:'trac-four-btn',
+            title:'Corriger cette bobine — fournisseur, code barre, commentaire',
+            onClick:()=>tracaOuvrirEditBobine(m),
+          }, fournisseur
+              ? h('span',{className:'fab-traca-supplier'},fournisseur)
+              : h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—'))),
           h('td',null,licence ? h('span',{className:'fab-traca-licence',style:{fontFamily:'monospace',fontSize:'12px'}},licence) : h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—')),
           h('td',null,linkBadge),
           h('td',null,m.no_dossier||h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—')),
@@ -4622,6 +4692,9 @@ function renderTracaPanel(){
             h('div',{className:'fab-traca-actions'},
               h('button',{className:'fab-traca-print',title:'Réimprimer étiquette (bobine à remettre en stock)',
                 onClick:()=>tracaReprintEtiquette(m)},svgIcon('printer',14)),
+              h('button',{className:'fab-traca-edit',title:'Corriger la bobine (fournisseur, code barre, commentaire)',
+                'aria-label':'Corriger la bobine '+(m.code_barre||''),
+                onClick:()=>tracaOuvrirEditBobine(m)},svgIcon('edit',14)),
               h('button',{
                 className:'fab-traca-comment'+(m.commentaire?' has-comment':''),
                 title: m.commentaire ? ('Commentaire : '+m.commentaire) : 'Ajouter un commentaire',
@@ -5082,11 +5155,15 @@ function renderMain(){
         }
         const fictifRow = isFictifSaisieRow(s);
         const annuleRow = !!Number(s.est_annule||0);
+        // Saisie d'un cycle annule qui compte toujours : marquee, pas barree.
+        const cycleAnnule = !annuleRow && !!String(s.annule_motif||'').trim()
+                            && code !== '90';
         const opLblStyle = fictifRow
           ? null
           : {color:isLast?'var(--text)':'var(--text2)',fontWeight:isLast?'700':'500'};
         return h('tr',{className:'fab-table-row'+(isLast?' fab-row-last':'')+(fictifRow?' fab-row-fictif':'')+(annuleRow?' fab-row-annule':''),
-          title: annuleRow ? ('Saisie annulee avec le dossier'+(s.annule_motif?' — '+s.annule_motif:'')) : undefined},
+          title: annuleRow ? ('Saisie annulee avec le dossier'+(s.annule_motif?' — '+s.annule_motif:''))
+               : cycleAnnule ? ('Cycle annule — '+s.annule_motif+' · la saisie reste comptee') : undefined},
           h('td',null, h('span',{className:'fab-time'}, fmtTime(s.date_operation))),
           ...(isAdminView ? [h('td',null, h('span',{style:fictifRow?undefined:{fontWeight:'800',color:'var(--text)'}}, opNom))] : []),
           h('td',null, clientNom
@@ -5099,7 +5176,8 @@ function renderMain(){
           ),
           h('td',null, h('span',{...(opLblStyle?{style:opLblStyle}:{})},
             op.label||s.operation||code),
-            annuleRow ? h('span',{className:'fab-annule-tag'},'Annulé') : null),
+            annuleRow ? h('span',{className:'fab-annule-tag'},'Annulé') : null,
+            cycleAnnule ? h('span',{className:'fab-annule-tag',style:{opacity:'.75'}},'Cycle annulé') : null),
           h('td',null, metrageText ? h('span',{className:'fab-metrage'},metrageText) : null),
           h('td',null, s.commentaire
             ? h('span',{className:'fab-comment-cell',title:s.commentaire}, s.commentaire)
@@ -5545,7 +5623,7 @@ function renderFooter(){
           h('div',{className:'fab-dossier-ref'+(fictifDos?' fab-dossier-fictif':'')},
             fictifDos ? ('OF fictif '+fictifOfDisplay(d.reference||d.numero_of||'')) : (d.reference||'—')),
           fscOn ? h('span',{
-            className:'fab-fsc-badge'+(fscEcart?' is-ecart':''),
+            className:'fab-fsc-badge fab-fsc-badge--fort'+(fscEcart?' is-ecart':''),
             title: fscEcart
               ? 'Certification FSC requise — traçabilité matière incomplète ou en écart'
               : ('Certification FSC requise'+(fscTypeLbl?' — '+fscTypeLbl:'')),
