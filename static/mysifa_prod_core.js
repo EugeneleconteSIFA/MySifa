@@ -213,6 +213,15 @@
     rentList: null,
     rentSelEntryId: null,
     rentLinksById: {},
+    // Sous-onglet actif de Rentabilite. Defaut « dossiers » : le travail
+    // principal de la page est de relier les devis, pas de lire des chiffres.
+    rentSubTab: 'dossiers',
+    // Filtre de la file de travail : a_lier | comparables | tous.
+    rentFiltre: 'a_lier',
+    // Les liaisons sont-elles toutes chargees ? Tant que non, un dossier sans
+    // devis est « inconnu », jamais « il en manque un ».
+    rentLinksCharges: false,
+    rentDevisSel: null,
     rentCompById: {},
     rentQuery: '',
     rentTags: [],
@@ -420,6 +429,8 @@
       'play': '<polygon points="5 3 19 12 5 21 5 3"/>',
       'check-circle': '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
       'x': '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+      'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
+      'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
       'arrow-right': '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
       'menu': '<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>',
       'home': '<path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/>',
@@ -4825,25 +4836,336 @@ function renderLiaisonDossiers(devisId, dossiersLies, allDossiers){
   return wrap;
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   RENTABILITÉ — trois sous-onglets
+
+   Le travail principal ici n'est pas de lire des chiffres, c'est de RELIER :
+   un planning de plusieurs centaines de dossiers, dont presque aucun n'a
+   encore son devis. L'écran est donc construit pour ce geste-là — file des
+   dossiers à traiter, liaison, dossier suivant — et non comme un catalogue.
+
+   Pilotage : la couverture (combien de dossiers ont leur devis) et les écarts
+             des dossiers déjà comparables.
+   Dossiers : la file de travail. Par défaut, ceux à qui il manque un devis.
+   Devis    : la bibliothèque des devis importés, jusqu'ici invisible alors
+             qu'elle existait en base.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Les liaisons, toutes d'un coup. Sans ce chargement groupé, on ne connaît
+   l'état que des douze lignes affichées : ni compteur, ni filtre « il manque
+   un devis » ne sont possibles sur une information qu'on n'a pas. */
+async function loadRentLinks(){
+  try{
+    const d = await api('/api/rentabilite/links');
+    if(!Array.isArray(d)) return;
+    const map = {};
+    d.forEach(l=>{ map[Number(l.planning_entry_id)] = {
+      devis_id: l.devis_id||null, no_dossiers: l.no_dossiers||[] }; });
+    // Les entrées sans aucune liaison ne remontent pas de la base : on les
+    // pose vides, sinon elles resteraient éternellement « en cours de
+    // chargement » et le filtre les ignorerait.
+    (S.rentList||[]).forEach(e=>{
+      const id=Number(e.id);
+      if(id && !map[id]) map[id]={devis_id:null,no_dossiers:[]};
+    });
+    set({rentLinksById:map, rentLinksCharges:true});
+  }catch(e){ toast(e.message,'error'); }
+}
+
+async function rentEnsureLinks(entryId){
+  const mp = S.rentLinksById || {};
+  if(mp[entryId]) return mp[entryId];
+  const d = await api('/api/rentabilite/links/'+entryId);
+  const entry = {devis_id:d.devis_id||null, no_dossiers:d.no_dossiers||[]};
+  S.rentLinksById = {...(S.rentLinksById||{}), [entryId]:entry};
+  return entry;
+}
+
+async function rentSaveLinks(entryId, devis_id, no_dossiers){
+  await api('/api/rentabilite/links/'+entryId,{method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({devis_id,no_dossiers})});
+  const mp = S.rentLinksById || {};
+  set({rentLinksById:{...mp,[entryId]:{devis_id:devis_id||null,no_dossiers:no_dossiers||[]}}});
+  toast('Liaisons enregistrées');
+}
+
+async function rentLoadComparaison(entryId){
+  const d = await api('/api/rentabilite/planning/'+entryId+'/comparaison');
+  const mp = S.rentCompById || {};
+  set({rentCompById:{...mp,[entryId]:d}});
+  return d;
+}
+
+async function rentSuggestNoDossiers(q){
+  try{
+    const qq=String(q||'').trim();
+    if(!qq) return [];
+    const d = await api('/api/rentabilite/no-dossiers?q='+encodeURIComponent(qq)+'&limit=12');
+    return Array.isArray(d)?d:[];
+  }catch(e){return [];}
+}
+
+/* Une searchbar qui déclenche un `render()` global perd le focus à chaque
+   caractère : `render()` vide `#root` et le champ disparaît avec lui. Le
+   scroll était restauré, pas le focus — d'où la saisie impossible signalée
+   dans `frontend-comportement.md`. On rend la main au champ juste après le
+   rendu, curseur compris. */
+function rentSetGardeFocus(patch, inputId){
+  const ae = document.activeElement;
+  const snap = (ae && ae.id===inputId)
+    ? {start:ae.selectionStart, end:ae.selectionEnd} : null;
+  set(patch);
+  if(!snap) return;
+  requestAnimationFrame(()=>{
+    const el=document.getElementById(inputId);
+    if(!el) return;
+    el.focus();
+    try{ el.setSelectionRange(snap.start, snap.end); }catch(_){}
+  });
+}
+
+function rentFmtFormat(e){
+  const l=e.format_l!=null?String(e.format_l):'';
+  const ht=e.format_h!=null?String(e.format_h):'';
+  if(!l&&!ht) return '';
+  return l+'×'+ht;
+}
+
+/* L'état d'un dossier au regard de la rentabilité. `null` = on ne sait pas
+   encore (liaisons non chargées) — à ne jamais afficher comme « il manque ». */
+function rentEtat(head, link){
+  const statut = String(head.statut||'attente');
+  const aDevis = link ? !!link.devis_id : null;
+  const aProd  = link ? ((link.no_dossiers||[]).length>0) : null;
+  return {
+    statut, termine: statut==='termine', aDevis, aProd,
+    comparable: aDevis===true && aProd===true,
+    aLier: statut==='termine' && aDevis===false,
+  };
+}
+
+/* Regroupe les entrées de planning fractionnées : un dossier coupé en deux
+   créneaux reste UN dossier à lier, pas deux. */
+function rentGroupes(list){
+  const groups = {};
+  (list||[]).forEach(e=>{
+    const gid = String(e.group_id||e.id);
+    (groups[gid] = groups[gid] || []).push(e);
+  });
+  return Object.entries(groups).map(([group_id, entries])=>{
+    entries.sort((a,b)=>Number(a.position||0)-Number(b.position||0));
+    return {group_id, entries, head:entries[0]};
+  });
+}
+
+function rentPastille(txt, etat, titre){
+  // etat : 'ok' | 'manque' | 'attente'
+  return h('span',{className:'rent-pastille rent-pastille-'+etat, title:titre||''}, txt);
+}
+
+// ── Aiguillage ───────────────────────────────────────────────────
 function renderRentabilite(){
   // Un devis lu attend d'être validé : l'écran prend toute la place. Laisser
   // la liste derrière inviterait à cliquer ailleurs et à perdre la lecture.
   if(S.devisPreview) return renderDevisForm(S.devisPreview);
-  const list = S.rentList || [];
-  const devisList = S.devisList || [];
 
+  const sub = S.rentSubTab || 'dossiers';
+  const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Rentabilité'},
+    ...[
+      {key:'dossiers', label:'Dossiers', icon:'layers'},
+      {key:'pilotage', label:'Pilotage', icon:'trending-up'},
+      {key:'devis',    label:'Devis',    icon:'file'},
+    ].map(t=>h('button',{
+      type:'button', role:'tab',
+      'aria-selected': sub===t.key ? 'true' : 'false',
+      className:'nav-tab'+(sub===t.key?' active':''),
+      onClick:()=>set({rentSubTab:t.key}),
+    }, iconEl(t.icon,14), ' '+t.label))
+  );
+
+  const contenu = sub==='pilotage' ? renderRentPilotage()
+                : sub==='devis'    ? renderRentDevis()
+                :                    renderRentDossiers();
+  return h('div',null, subNav, contenu);
+}
+
+// ── Sous-onglet Pilotage ─────────────────────────────────────────
+function renderRentPilotage(){
+  const groupes = rentGroupes(S.rentList||[]);
+  const liens = S.rentLinksById||{};
+  const charges = !!S.rentLinksCharges;
+
+  let termines=0, avecDevis=0, comparables=0, aLier=0;
+  const parMachine = {};
+  groupes.forEach(g=>{
+    const e = rentEtat(g.head, liens[Number(g.head.id)]);
+    if(e.termine) termines++;
+    if(e.aDevis===true) avecDevis++;
+    if(e.comparable) comparables++;
+    if(e.aLier){
+      aLier++;
+      const m = (g.head.machine_nom||g.head.machine_code||'—');
+      parMachine[m] = (parMachine[m]||0)+1;
+    }
+  });
+
+  const couverture = termines ? Math.round(avecDevis/termines*100) : 0;
+  const kpi=(val,lbl,accent)=>h('div',{className:'rent-kpi'+(accent?' is-accent':'')},
+    h('div',{className:'rent-kpi-val'}, String(val)),
+    h('div',{className:'rent-kpi-lbl'}, lbl)
+  );
+
+  const tuiles = h('div',{className:'rent-kpis'},
+    kpi(groupes.length,'Dossiers au planning'),
+    kpi(termines,'Terminés'),
+    kpi(charges?avecDevis:'…','Avec devis lié'),
+    kpi(charges?comparables:'…','Comparables', true),
+    kpi(charges?aLier:'…','À lier')
+  );
+
+  /* La couverture dit en une ligne si l'outil sert à quelque chose : sans
+     devis liés, la comparaison devis/réel n'existe sur aucun dossier. */
+  const jauge = charges ? h('div',{className:'card',style:{padding:'16px 18px',marginBottom:'14px'}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'8px'}},
+      h('div',{style:{fontSize:'13px',fontWeight:'700',color:'var(--text)'}},'Couverture devis des dossiers terminés'),
+      h('div',{style:{fontSize:'13px',fontFamily:'monospace',color:'var(--text2)'}}, couverture+' %')
+    ),
+    h('div',{className:'rent-jauge'}, h('div',{className:'rent-jauge-part',style:{width:Math.max(0,Math.min(100,couverture))+'%'}})),
+    h('div',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'8px'}},
+      avecDevis+' dossier'+(avecDevis>1?'s':'')+' sur '+termines+' terminé'+(termines>1?'s':'')+
+      ' peuvent être comparés au devis.')
+  ) : null;
+
+  // Répartition du reste à faire, machine par machine : c'est là qu'on décide
+  // par quoi commencer.
+  const machines = Object.entries(parMachine).sort((a,b)=>b[1]-a[1]);
+  const resteAFaire = (charges && machines.length) ? h('div',{className:'card'},
+    h('div',{className:'card-header'}, h('h3',null,'Reste à lier, par machine')),
+    h('div',{style:{padding:'4px 18px 14px'}},
+      ...machines.map(([m,n])=>{
+        const pct = aLier ? Math.round(n/aLier*100) : 0;
+        return h('button',{type:'button',className:'rent-machine-ligne',
+          title:'Filtrer les dossiers à lier sur '+m,
+          onClick:()=>set({rentSubTab:'dossiers',rentFiltre:'a_lier',rentTags:[{kind:'machine',value:m,label:m}],rentOffset:0})},
+          h('span',{className:'rent-machine-nom'}, m),
+          h('span',{className:'rent-machine-jauge'}, h('span',{style:{width:pct+'%'}})),
+          h('span',{className:'rent-machine-nb'}, String(n))
+        );
+      })
+    )
+  ) : null;
+
+  // Écarts des dossiers déjà comparables. On ne les calcule que sur demande :
+  // c'est une requête par dossier, et afficher un chiffre faux serait pire
+  // que ne rien afficher.
+  const comps = S.rentCompById||{};
+  const lignesEcart = groupes
+    .map(g=>({g, comp:comps[Number(g.head.id)]}))
+    .filter(x=>x.comp && x.comp.reel)
+    .sort((a,b)=>{
+      const ea=Math.abs(parseFloat(String((a.comp.ecarts||{}).vitesse||'0'))||0);
+      const eb=Math.abs(parseFloat(String((b.comp.ecarts||{}).vitesse||'0'))||0);
+      return eb-ea;
+    });
+
+  const btnCalcul = h('button',{type:'button',className:'btn-sec',
+    disabled:!charges||!comparables,
+    onClick:async()=>{
+      const cibles = groupes.filter(g=>rentEtat(g.head, liens[Number(g.head.id)]).comparable)
+                            .map(g=>Number(g.head.id)).slice(0,40);
+      if(!cibles.length) return toast('Aucun dossier comparable.','warn');
+      toast('Calcul sur '+cibles.length+' dossier'+(cibles.length>1?'s':'')+'…');
+      let i=0;
+      const suivant=async()=>{
+        if(i>=cibles.length) return;
+        await rentLoadComparaison(cibles[i++]).catch(()=>{});
+        await suivant();
+      };
+      await Promise.allSettled(Array.from({length:Math.min(3,cibles.length)},()=>suivant()));
+      toast('Écarts à jour.');
+    }}, 'Calculer les écarts'+(comparables?(' ('+comparables+')'):''));
+
+  const tableauEcarts = h('div',{className:'card'},
+    h('div',{className:'card-header'},
+      h('h3',null,'Écarts devis / réel'+(lignesEcart.length?(' ('+lignesEcart.length+')'):'')),
+      btnCalcul
+    ),
+    lignesEcart.length
+      ? h('div',{style:{overflowX:'auto'}},
+          h('table',{className:'rent-table'},
+            h('thead',null,h('tr',null,
+              h('th',null,'Dossier'), h('th',null,'Machine'),
+              h('th',{className:'num'},'Vitesse'), h('th',{className:'num'},'Calage'),
+              h('th',{className:'num'},'Métrage'), h('th',null,'Verdict')
+            )),
+            h('tbody',null,...lignesEcart.map(({g,comp})=>{
+              const ec=comp.ecarts||{}; const co=comp.conclusion||{};
+              const cell=(v,invert)=>{
+                if(!v) return h('td',{className:'num'},'—');
+                const num=parseFloat(v);
+                const bon = invert ? num<0 : num>0;
+                return h('td',{className:'num '+(bon?'rent-bon':'rent-mauvais')}, v);
+              };
+              return h('tr',{style:{cursor:'pointer'},
+                onClick:()=>set({rentSubTab:'dossiers',rentSelEntryId:g.head.id,rentFiltre:'tous'})},
+                h('td',null,
+                  h('div',{style:{fontWeight:'600'}}, g.head.reference||'—'),
+                  h('div',{style:{fontSize:'11px',color:'var(--muted)'}}, g.head.client||'')),
+                h('td',null, g.head.machine_nom||'—'),
+                cell(ec.vitesse,false),
+                cell(ec.temps_calage_mn,true),
+                cell(ec.metrage_ml,false),
+                h('td',null,h('span',{className:'rent-verdict rent-verdict-'+(co.color||'muted')}, co.label||'—'))
+              );
+            }))
+          )
+        )
+      : h('div',{className:'card-empty'},
+          charges
+            ? (comparables
+                ? 'Aucun écart calculé. Clique sur « Calculer les écarts ».'
+                : 'Aucun dossier n\'a à la fois un devis et une production liés.')
+            : 'Chargement des liaisons…')
+  );
+
+  return h('div',null, tuiles, jauge, resteAFaire, tableauEcarts);
+}
+
+// ── Sous-onglet Dossiers ─────────────────────────────────────────
+function renderRentDossiers(){
+  const liens = S.rentLinksById||{};
+  const charges = !!S.rentLinksCharges;
   const tags = Array.isArray(S.rentTags) ? S.rentTags : [];
   const q = String(S.rentQuery||'').trim().toLowerCase();
+  const norm = x => String(x||'').toLowerCase().trim();
 
-  function norm(x){return String(x||'').toLowerCase().trim();}
-  function fmtFormat(e){
-    const l=e.format_l!=null?String(e.format_l):'';
-    const h=e.format_h!=null?String(e.format_h):'';
-    if(!l&&!h) return '';
-    return l+'×'+h;
-  }
+  const groupes = rentGroupes(S.rentList||[]);
 
-  // Suggestions (machines, clients, refs, format, laize, date)
+  // ── Filtres rapides. Le défaut est « À lier » : sur 321 lignes, la file
+  //    d'attente sert le travail, le catalogue ne sert personne.
+  const FILTRES = [
+    {key:'a_lier',      label:'À lier',      test:e=>e.aLier,
+     aide:'Dossiers terminés sans devis lié'},
+    {key:'comparables', label:'Comparables', test:e=>e.comparable,
+     aide:'Devis et production liés — l\'écart est calculable'},
+    {key:'tous',        label:'Tous',        test:()=>true, aide:'Tout le planning'},
+  ];
+  const filtreActif = S.rentFiltre || 'a_lier';
+  const compte = {};
+  FILTRES.forEach(f=>{ compte[f.key] = groupes.filter(g=>f.test(rentEtat(g.head, liens[Number(g.head.id)]))).length; });
+
+  const barreFiltres = h('div',{className:'rent-filtres'},
+    ...FILTRES.map(f=>h('button',{type:'button',
+      className:'rent-filtre'+(filtreActif===f.key?' is-active':''),
+      title:f.aide,
+      onClick:()=>set({rentFiltre:f.key,rentOffset:0,rentSelEntryId:null})},
+      f.label,
+      h('span',{className:'rent-filtre-nb'}, charges?String(compte[f.key]):'…')
+    ))
+  );
+
+  // ── Recherche par mots-clés cumulables (machine, client, dossier…)
   const pool=[];
   const pushSug=(kind,value,label)=>{
     if(!value) return;
@@ -4851,395 +5173,463 @@ function renderRentabilite(){
     if(pool.some(x=>x._k===k)) return;
     pool.push({_k:k,kind,value,label});
   };
-  list.forEach(e=>{
+  groupes.forEach(({head:e})=>{
     pushSug('machine', e.machine_nom||e.machine_code, e.machine_nom||e.machine_code);
     if(e.reference) pushSug('ref', e.reference, e.reference);
     if(e.client) pushSug('client', e.client, e.client);
-    const ff=fmtFormat(e); if(ff) pushSug('format', ff, 'Format '+ff);
+    const ff=rentFmtFormat(e); if(ff) pushSug('format', ff, 'Format '+ff);
     if(e.laize!=null && String(e.laize)!=='') pushSug('laize', String(e.laize), 'Laize '+String(e.laize));
     if(e.date_livraison) pushSug('date', e.date_livraison, 'Livraison '+e.date_livraison);
   });
-
   const kindLabel = {machine:'Machine',client:'Client',ref:'Dossier',format:'Format',laize:'Laize',date:'Date'};
   const kindOrder = {machine:0,client:1,ref:2,format:3,laize:4,date:5};
-  const filteredSuggestions = q
-    ? pool
-        .filter(s=>norm(s.label).includes(q) || norm(s.value).includes(q))
-        .sort((a,b)=>{
-          const ka = (kindOrder[a.kind]!=null)?kindOrder[a.kind]:99;
-          const kb = (kindOrder[b.kind]!=null)?kindOrder[b.kind]:99;
-          if(ka!==kb) return ka-kb;
-          return String(a.label||'').localeCompare(String(b.label||''), 'fr', {sensitivity:'base'});
-        })
-        .slice(0,12)
+  const suggestions = q
+    ? pool.filter(s=>norm(s.label).includes(q)||norm(s.value).includes(q))
+          .sort((a,b)=>{
+            const ka=kindOrder[a.kind]!=null?kindOrder[a.kind]:99;
+            const kb=kindOrder[b.kind]!=null?kindOrder[b.kind]:99;
+            if(ka!==kb) return ka-kb;
+            return String(a.label||'').localeCompare(String(b.label||''),'fr',{sensitivity:'base'});
+          }).slice(0,12)
     : [];
 
-  function addTag(sug){
-    const exists = tags.some(t=>t.kind===sug.kind && String(t.value)===String(sug.value));
-    if(exists) return;
-    set({rentTags:[...tags,{kind:sug.kind,value:sug.value,label:sug.label}],rentQuery:'',rentOffset:0});
-  }
-  function removeTag(i){
-    const nt=tags.slice(); nt.splice(i,1);
-    set({rentTags:nt,rentOffset:0});
-  }
+  const RENT_SEARCH_ID='rent-search';
+  const addTag=s=>{
+    if(tags.some(t=>t.kind===s.kind && String(t.value)===String(s.value))) return;
+    set({rentTags:[...tags,{kind:s.kind,value:s.value,label:s.label}],rentQuery:'',rentOffset:0});
+  };
+  const removeTag=i=>{ const nt=tags.slice(); nt.splice(i,1); set({rentTags:nt,rentOffset:0}); };
 
-  // Group split entries by group_id (same dossier). Display group row.
-  const groups = {};
-  list.forEach(e=>{
-    const gid = String(e.group_id||e.id);
-    if(!groups[gid]) groups[gid]=[];
-    groups[gid].push(e);
+  const inp=h('input',{type:'text',id:RENT_SEARCH_ID,
+    placeholder:'Rechercher (machine, dossier, format, client, date, laize)…',
+    value:S.rentQuery||'', style:{flex:'1',minWidth:'240px'}});
+  inp.addEventListener('input',()=>rentSetGardeFocus({rentQuery:inp.value},RENT_SEARCH_ID));
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){ e.preventDefault(); rentSetGardeFocus({rentQuery:''},RENT_SEARCH_ID); }
+    if(e.key==='Enter' && suggestions.length){ e.preventDefault(); addTag(suggestions[0]); }
   });
-  const groupList = Object.entries(groups).map(([group_id, entries])=>{
-    entries.sort((a,b)=>Number(a.position||0)-Number(b.position||0));
-    const head=entries[0];
-    return {group_id, entries, head};
-  });
+
+  const barreRecherche = h('div',{className:'card',style:{padding:'12px 14px',marginBottom:'14px'}},
+    h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}}, inp, barreFiltres),
+    tags.length ? h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'10px'}},
+      ...tags.map((t,i)=>h('span',{className:'dos-chip',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},
+        t.label, h('button',{onClick:()=>removeTag(i)},'×')))
+    ) : null,
+    suggestions.length ? h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'10px'}},
+      ...suggestions.map(s=>h('button',{type:'button',className:'btn-sec',onClick:()=>addTag(s)},
+        (kindLabel[s.kind]?(kindLabel[s.kind]+' · '):'')+s.label))
+    ) : null
+  );
 
   function matchesTags(g){
+    const head=g.head;
     for(const t of tags){
-      const head=g.head;
-      if(t.kind==='machine'){
-        const v = norm(head.machine_nom||head.machine_code);
-        if(!v.includes(norm(t.value))) return false;
-      }else if(t.kind==='ref'){
-        if(!norm(head.reference).includes(norm(t.value))) return false;
-      }else if(t.kind==='client'){
-        const v = norm(head.client);
-        if(!v.includes(norm(t.value))) return false;
-      }else if(t.kind==='format'){
-        if(norm(fmtFormat(head))!==norm(t.value)) return false;
-      }else if(t.kind==='laize'){
-        if(norm(String(head.laize||''))!==norm(String(t.value))) return false;
-      }else if(t.kind==='date'){
-        if(norm(head.date_livraison)!==norm(t.value)) return false;
-      }
+      if(t.kind==='machine'  && !norm(head.machine_nom||head.machine_code).includes(norm(t.value))) return false;
+      if(t.kind==='ref'      && !norm(head.reference).includes(norm(t.value))) return false;
+      if(t.kind==='client'   && !norm(head.client).includes(norm(t.value))) return false;
+      if(t.kind==='format'   && norm(rentFmtFormat(head))!==norm(t.value)) return false;
+      if(t.kind==='laize'    && norm(String(head.laize||''))!==norm(String(t.value))) return false;
+      if(t.kind==='date'     && norm(head.date_livraison)!==norm(t.value)) return false;
     }
     return true;
   }
 
-  const shown = groupList.filter(matchesTags);
-  const totalShown = shown.length;
-  const lim = Number(S.rentLimit||12) || 12;
-  const off = Math.max(0, Number(S.rentOffset||0) || 0);
-  const pageStart = Math.min(totalShown, off);
-  const pageEnd = Math.min(totalShown, off + lim);
-  const shownPage = shown.slice(pageStart, pageEnd);
+  const testFiltre = (FILTRES.find(f=>f.key===filtreActif)||FILTRES[2]).test;
+  const selId = S.rentSelEntryId!=null ? String(S.rentSelEntryId) : null;
 
-  const searchBox = (()=>{
-    const wrap=h('div',{className:'card',style:{padding:'12px 14px',marginBottom:'14px'}});
-    const row=h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}});
-    const inp=h('input',{type:'text',placeholder:'Rechercher (machine, dossier, format, client, date, laize)…',value:S.rentQuery||'',style:{flex:'1',minWidth:'260px'}});
-    inp.addEventListener('input',()=>set({rentQuery:inp.value}));
-    const chips=h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}},
-      ...tags.map((t,i)=>h('span',{className:'dos-chip',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},
-        t.label,
-        h('button',{onClick:()=>removeTag(i)},'×')
-      ))
-    );
-    row.appendChild(inp);
-    wrap.appendChild(row);
-    if(tags.length) wrap.appendChild(h('div',{style:{marginTop:'10px'}},chips));
-    if(filteredSuggestions.length){
-      const dd=h('div',{style:{marginTop:'10px',display:'flex',gap:'8px',flexWrap:'wrap'}},
-        ...filteredSuggestions.map(s=>h('button',{type:'button',className:'btn-sec',onClick:()=>addTag(s)},
-          (kindLabel[s.kind]? (kindLabel[s.kind]+' · ') : ''),
-          s.label
-        ))
-      );
-      wrap.appendChild(dd);
-    }
-    return wrap;
-  })();
+  /* Le dossier ouvert reste dans la liste même s'il ne correspond plus au
+     filtre. Sans ça, lier un devis depuis « À lier » fait disparaître la
+     ligne sous le curseur au moment même où on l'enregistre : le panneau se
+     referme tout seul et on ne voit pas le résultat de son geste. */
+  const shown = groupes.filter(g=>{
+    if(!matchesTags(g)) return false;
+    if(selId && String(g.head.id)===selId) return true;
+    return testFiltre(rentEtat(g.head, liens[Number(g.head.id)]));
+  });
+  const total = shown.length;
+  const lim = Number(S.rentLimit||12)||12;
+  const offBrut = Math.max(0, Number(S.rentOffset||0)||0);
+  let off = offBrut < total ? offBrut : Math.max(0, Math.floor(Math.max(0,total-1)/lim)*lim);
 
-  function getLink(entryId){
-    const m = (S.rentLinksById||{})[entryId];
-    return m || {devis_id:null,no_dossiers:[]};
+  /* Garder le dossier sélectionné à l'écran. Après « Enregistrer et suivant »,
+     la liste s'est recomposée — le suivant a pris la place du précédent, ou a
+     glissé sur une autre page. Recaler ici plutôt que de calculer une
+     pagination au moment du clic évite de raisonner sur une liste périmée. */
+  if(selId){
+    const iSel = shown.findIndex(g=>String(g.head.id)===selId);
+    if(iSel>=0 && (iSel<off || iSel>=off+lim)) off = Math.floor(iSel/lim)*lim;
   }
+  const page = shown.slice(off, off+lim);
 
-  // In-flight de-duplication: évite de lancer 2x la même requête si ensureLinks est appelé
-  // depuis le clic + le prefetch simultanément.
-  if(!window._rentLinksPending) window._rentLinksPending = {};
-  async function ensureLinks(entryId){
-    const mp = S.rentLinksById || {};
-    if(mp[entryId]) return mp[entryId];
-    const key = String(entryId);
-    if(window._rentLinksPending[key]) return window._rentLinksPending[key];
-    const p = api('/api/rentabilite/links/'+entryId).then(d=>{
-      delete window._rentLinksPending[key];
-      const entry = {devis_id:d.devis_id||null,no_dossiers:d.no_dossiers||[]};
-      S.rentLinksById = {...(S.rentLinksById||{}), [entryId]:entry};
-      render();
-      return entry;
-    }).catch(e=>{
-      delete window._rentLinksPending[key];
-      throw e;
-    });
-    window._rentLinksPending[key] = p;
-    return p;
-  }
-
-  async function saveLinks(entryId, devis_id, no_dossiers){
-    await api('/api/rentabilite/links/'+entryId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({devis_id,no_dossiers})});
-    const mp = S.rentLinksById || {};
-    set({rentLinksById:{...mp,[entryId]:{devis_id:devis_id||null,no_dossiers:no_dossiers||[]}}});
-    toast('Liaisons enregistrées');
-  }
-
-  async function loadRentComparaison(entryId){
-    const d = await api('/api/rentabilite/planning/'+entryId+'/comparaison');
-    const mp = S.rentCompById || {};
-    set({rentCompById:{...mp,[entryId]:d}});
-  }
-
-  async function rentSuggestNoDossiers(q){
-    try{
-      const qq=String(q||'').trim();
-      if(!qq) return [];
-      const d = await api('/api/rentabilite/no-dossiers?q='+encodeURIComponent(qq)+'&limit=12');
-      return Array.isArray(d)?d:[];
-    }catch(e){return [];}
-  }
-
-  function renderPanel(g){
+  const rows = page.map(g=>{
     const head=g.head;
-    const entryId = Number(head.id);
-    const panel=h('div',{style:{borderLeft:'3px solid var(--accent)',background:'rgba(34,211,238,.04)',padding:'16px 20px',marginBottom:'2px'}});
+    const entryId=Number(head.id);
+    const ouvert = String(S.rentSelEntryId||'')===String(head.id);
+    const etat = rentEtat(head, liens[entryId]);
 
-    // Links editor
-    const linkState = getLink(entryId);
-    const curDevis = linkState.devis_id;
-    let curDossiers = (linkState.no_dossiers||[]).slice();
+    const titre = [ (head.client||'').trim(),
+                    (rentFmtFormat(head)?rentFmtFormat(head)+' mm':''),
+                    (head.reference||'').trim() ].filter(Boolean).join(' · ')
+                  || (head.reference||'(sans référence)');
+    const sousTitre = [ (head.machine_nom||'').trim(),
+                        head.duree_heures!=null?('durée '+head.duree_heures+' h'):'',
+                        head.laize!=null?('laize '+head.laize):'',
+                        head.date_livraison?('livraison '+head.date_livraison):'' ].filter(Boolean);
 
-    const devisSel=h('select',{className:'form-sel',style:{minWidth:'280px'}},
-      h('option',{value:''},'Relier à un devis existant…'),
-      ...devisList.map(dv=>{
-        const opt=h('option',{value:String(dv.id)},(dv.client||dv.filename||('Devis #'+dv.id))+' (#'+dv.id+')');
-        if(curDevis && Number(curDevis)===Number(dv.id)) opt.selected=true;
-        return opt;
-      })
-    );
-    devisSel.addEventListener('change',()=>{ /* local */ });
-
-    const dosInput=h('input',{type:'text',placeholder:'Ajouter un n° dossier production (ex: 1003/0002)…',style:{minWidth:'260px'}});
-    const dosSugWrap=h('div',{style:{display:'none',gap:'8px',flexWrap:'wrap'}});
-    let dosSugToken=0;
-    const refreshDosSug=async()=>{
-      const v=String(dosInput.value||'').trim();
-      const tok=++dosSugToken;
-      if(v.length<2){ dosSugWrap.style.display='none'; dosSugWrap.innerHTML=''; return; }
-      const sugs=await rentSuggestNoDossiers(v);
-      if(tok!==dosSugToken) return;
-      dosSugWrap.innerHTML='';
-      if(!sugs.length){ dosSugWrap.style.display='none'; return; }
-      dosSugWrap.style.display='flex';
-      sugs.slice(0,8).forEach(s=>{
-        dosSugWrap.appendChild(h('button',{type:'button',className:'btn-sec',onClick:()=>{
-          const vv=String(s||'').trim();
-          if(vv && !curDossiers.includes(vv)){curDossiers.push(vv);refreshChips();}
-          dosInput.value='';
-          dosSugWrap.style.display='none';
-          dosSugWrap.innerHTML='';
-        }},s));
-      });
-    };
-    dosInput.addEventListener('input',()=>{ refreshDosSug(); });
-    const addDosBtn=h('button',{type:'button',className:'btn-sec',onClick:()=>{
-      const v=String(dosInput.value||'').trim();
-      if(!v) return;
-      if(!curDossiers.includes(v)){curDossiers.push(v);refreshChips();}
-      dosInput.value='';
-      dosSugWrap.style.display='none';
-      dosSugWrap.innerHTML='';
-    }},'+ Ajouter');
-
-    const chipsWrap=h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}});
-    const refreshChips=()=>{
-      chipsWrap.innerHTML='';
-      curDossiers.forEach((d,i)=>{
-        chipsWrap.appendChild(h('span',{className:'dos-chip'},'Dos. '+d,h('button',{onClick:()=>{curDossiers.splice(i,1);refreshChips();}},'×')));
-      });
-    };
-    refreshChips();
-
-    // Auto-détection : si aucun dossier n'est lié, chercher dans la prod via la référence planning
-    if(curDossiers.length===0 && (head.reference||'').trim()){
-      queueMicrotask(async()=>{
-        try{
-          const sugs = await rentSuggestNoDossiers((head.reference||'').trim());
-          if(sugs.length && curDossiers.length===0){
-            sugs.forEach(s=>{ if(!curDossiers.includes(s)) curDossiers.push(s); });
-            refreshChips();
-          }
-        }catch(_){}
-      });
+    /* N'afficher que ce qui apprend quelque chose.
+       Sur un dossier pas encore produit, « pas de devis » n'est pas un manque
+       — c'est l'état normal : on ne montre que son statut. Et dans la file
+       « À lier », le statut terminé et le devis absent SONT la définition du
+       filtre : les répéter sur 104 lignes redonne le mur de rouge qu'on
+       cherchait à supprimer. Ne reste alors que l'information non déductible
+       — la production déjà rattachée, qui dit que la moitié du travail est
+       faite. */
+    const dansFileALier = filtreActif==='a_lier';
+    const etats = [];
+    if(!dansFileALier){
+      etats.push(rentPastille(
+        etat.termine?'Terminé':(etat.statut==='en_cours'?'En cours':'En attente'),
+        etat.termine?'ok':'attente'));
     }
-
-    const saveBtn=h('button',{type:'button',className:'btn-sm',onClick:async()=>{
-      const did = devisSel.value ? Number(devisSel.value) : null;
-      await saveLinks(entryId, did, curDossiers);
-      await loadRentComparaison(entryId).catch(()=>{});
-    }},'💾 Enregistrer');
-
-    const compBtn=h('button',{type:'button',className:'btn-sec',onClick:async()=>{
-      await ensureLinks(entryId);
-      await loadRentComparaison(entryId);
-    }},'Comparer');
-
-    /* Dépôt d'un devis. Le fichier part en LECTURE, pas en enregistrement :
-       l'écran de validation s'ouvre avec les valeurs, leur provenance et leur
-       niveau de confiance, et la liaison à cette ligne de planning est
-       appliquée une fois la validation confirmée. Enregistrer sans montrer
-       ce que la machine a lu revient à mettre en base des chiffres que
-       personne n'a vus. */
-    const dz=h('div',{className:'drop-zone',style:{padding:'20px',marginTop:'12px'}},
-      h('div',{className:'dz-title',style:{fontSize:'13px'}},'Déposer un devis'),
-      h('div',{className:'dz-sub'},'Excel, PDF ou photo — lecture puis validation avant enregistrement')
-    );
-    const dzInp=h('input',{type:'file',accept:DEVIS_ACCEPT,style:{display:'none'}});
-    dzInp.addEventListener('change',async e=>{
-      const f=(e && e.target && e.target.files && e.target.files[0]) ? e.target.files[0] : null;
-      if(!f) return;
-      await uploadDevis(f,{rattachement:{
-        type:'planning', entryId:entryId, dossiers:curDossiers,
-        libelle:'cette ligne de planning'
-      }});
-    });
-    dz.addEventListener('click',()=>dzInp.click());
-    dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
-    dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
-    dz.addEventListener('drop',e=>{
-      e.preventDefault();dz.classList.remove('drag');
-      const f=(e && e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) ? e.dataTransfer.files[0] : null;
-      if(!f) return;
-      dzInp.files=e.dataTransfer.files;
-      dzInp.dispatchEvent(new Event('change'));
-    });
-    panel.appendChild(h('div',{className:'form-section-title'},'🔗 Liaisons'));
-    panel.appendChild(h('div',{style:{display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center'}},devisSel,dosInput,addDosBtn,saveBtn,compBtn));
-    panel.appendChild(h('div',{style:{marginTop:'10px'}},dosSugWrap));
-    panel.appendChild(h('div',{style:{marginTop:'10px'}},chipsWrap));
-    panel.appendChild(dz);
-    panel.appendChild(dzInp);
-
-    const comp = (S.rentCompById||{})[entryId];
-    if(comp){
-      if(comp.reel) panel.appendChild(renderComparaison(comp));
-      else panel.appendChild(h('div',{className:'card-empty',style:{padding:'18px'}},comp.message||'Aucune donnée.'));
-    }else{
-      panel.appendChild(h('div',{className:'card-empty',style:{padding:'18px'}},'Clique sur “Comparer” après avoir lié un devis + des dossiers production.'));
+    if(etat.termine || etat.aDevis===true){
+      if(etat.aDevis===null) etats.push(rentPastille('Devis …','attente'));
+      else if(etat.aDevis) etats.push(rentPastille('Devis','ok','Un devis est lié'));
+      else if(!dansFileALier) etats.push(rentPastille('Devis','manque','Dossier terminé sans devis lié'));
     }
-    return panel;
-  }
+    if(etat.termine || etat.aProd===true){
+      if(etat.aProd===null) etats.push(rentPastille('Prod …','attente'));
+      else if(etat.aProd) etats.push(rentPastille('Prod','ok','Des dossiers de production sont liés'));
+      else if(!dansFileALier) etats.push(rentPastille('Prod','manque','Aucun dossier de production lié'));
+    }
+    const pastilles = h('div',{className:'rent-etats'}, ...etats);
 
-  const rows = shownPage.map(g=>{
-    const head=g.head;
-    const isExp = String(S.rentSelEntryId||'')===String(head.id);
-    const topLine = [
-      (head.client||'').trim(),
-      (fmtFormat(head)?(fmtFormat(head)+' mm'):''),
-      (head.reference||'').trim()
-    ].filter(Boolean).join(' - ') || (head.reference||'(sans référence)');
-    const subBits = [
-      (head.machine_nom||'').trim(),
-      (head.duree_heures!=null?('durée '+String(head.duree_heures)+'h'):''),
-      (head.laize!=null?('laize '+head.laize):''),
-      (head.date_livraison?('date '+head.date_livraison):'')
-    ].filter(Boolean);
-
-    const link = (S.rentLinksById||{})[Number(head.id)] || null;
-    const devisLinked = link ? !!link.devis_id : null;
-    const prodLinked = link ? ((link.no_dossiers||[]).length>0) : null;
-    const stRaw = String(head.statut||'attente');
-    const stLbl = (stRaw==='en_cours')?'En cours':(stRaw==='termine')?'Terminé':'En attente';
-    const stCol = (stRaw==='termine')?'var(--success)':(stRaw==='en_cours')?'var(--warn)':'var(--muted)';
-    const mkBadge=(txt, okNull, okCol, noCol)=>{
-      const isOk = okNull===true;
-      const isNo = okNull===false;
-      const col = isOk?okCol:(isNo?noCol:'var(--muted)');
-      const bg = isOk?(okCol+'1A'):(isNo?(noCol+'1A'):'rgba(100,116,139,.10)');
-      return h('span',{style:{fontSize:'10px',fontWeight:'800',color:col,background:bg,border:'1px solid '+(col+'33'),padding:'3px 8px',borderRadius:'999px',whiteSpace:'nowrap'}},txt);
-    };
-    const row = h('div',{
-      className:'dossier-row',
-      style:{cursor:'pointer',background:isExp?'var(--accent-bg)':'',
-             borderLeft:isExp?'3px solid var(--accent)':'3px solid transparent',
-             transition:'all .15s'},
+    const ligne = h('div',{className:'rent-ligne'+(ouvert?' is-open':''),
       onClick:async()=>{
-        const next = isExp ? null : head.id;
-        set({rentSelEntryId:next});
-        if(next){
-          await ensureLinks(Number(next)).catch(()=>{});
-        }
-      }
-    },
+        const suivant = ouvert ? null : head.id;
+        set({rentSelEntryId:suivant});
+        if(suivant) await rentEnsureLinks(Number(suivant)).catch(()=>{});
+      }},
       h('div',{style:{flex:'1',minWidth:0}},
-        h('div',{style:{fontWeight:'700',color:'var(--text)',fontSize:'13px'}},topLine),
-        h('div',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'2px'}},
-          subBits.length?subBits.join(' — '):'—')
+        h('div',{className:'rent-ligne-titre'}, titre),
+        h('div',{className:'rent-ligne-sous'}, sousTitre.length?sousTitre.join(' — '):'—')
       ),
-      h('div',{style:{display:'flex',alignItems:'center',gap:'10px',flexShrink:0}},
-        h('div',{style:{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'6px'}},
-          mkBadge(stLbl, true, stCol, stCol),
-          mkBadge(devisLinked===null?'Devis …':(devisLinked?'Devis lié':'Devis non lié'), devisLinked, 'var(--success)', 'var(--danger)'),
-          (stRaw==='termine')
-            ? mkBadge(prodLinked===null?'Prod …':(prodLinked?'Prod liée':'Prod non liée'), prodLinked, 'var(--success)', 'var(--danger)')
-            : null
-        ),
-        h('span',{style:{fontSize:'14px',color:'var(--muted)',transition:'transform .15s',
-          transform:isExp?'rotate(180deg)':'rotate(0deg)'}},'▾')
-      )
+      pastilles,
+      h('span',{className:'rent-chevron'+(ouvert?' is-open':'')}, iconEl('chevron-down',16))
     );
-    if(!isExp) return row;
-    return h('div',null,row,renderPanel(g));
+    return ouvert ? h('div',null, ligne, renderRentPanneau(g, shown)) : ligne;
   });
 
-  // Précharger les liens avec une concurrence max de 3 pour ne pas saturer le navigateur.
-  try{
-    const CONCURRENCY = 3;
-    const toFetch = shownPage
-      .map(g=>Number(g.head&&g.head.id))
-      .filter(id=>id && !(S.rentLinksById||{})[id] && !((window._rentLinksPending||{})[id]));
-    if(toFetch.length){
-      queueMicrotask(async()=>{
-        let i = 0;
-        async function runNext(){
-          if(i >= toFetch.length) return;
-          const id = toFetch[i++];
-          await ensureLinks(id).catch(()=>{});
-          await runNext();
-        }
-        const workers = Array.from({length:Math.min(CONCURRENCY,toFetch.length)},()=>runNext());
-        await Promise.allSettled(workers);
-      });
-    }
-  }catch(e){}
-
-  const pager=h('div',{style:{display:'inline-flex',alignItems:'center',gap:'6px'}},
-    h('button',{className:'btn-ghost',title:'Page précédente',disabled:off<=0,onClick:()=>{
-      set({rentOffset:Math.max(0, off - lim)});
-    }},'‹'),
+  const pager = total>lim ? h('div',{style:{display:'inline-flex',alignItems:'center',gap:'6px'}},
+    h('button',{className:'btn-sec',title:'Page précédente',disabled:off<=0,
+      onClick:()=>set({rentOffset:Math.max(0,off-lim),rentSelEntryId:null})},'‹'),
     h('span',{style:{fontSize:'11px',color:'var(--muted)',fontFamily:'monospace'}},
-      totalShown?(`${pageStart+1}-${pageEnd}/${totalShown}`):'0'
-    ),
-    h('button',{className:'btn-ghost',title:'Page suivante',disabled:(off+lim)>=totalShown,onClick:()=>{
-      set({rentOffset:Math.min(Math.max(0,totalShown-lim), off + lim)});
-    }},'›'),
-  );
+      (off+1)+'-'+Math.min(total,off+lim)+' / '+total),
+    h('button',{className:'btn-sec',title:'Page suivante',disabled:(off+lim)>=total,
+      onClick:()=>set({rentOffset:off+lim,rentSelEntryId:null})},'›')
+  ) : null;
+
+  // Avant le chargement des liaisons, « a lier » ne peut rien trouver : le
+  // dire, plutot que d'annoncer a tort qu'il n'y a plus rien a faire.
+  const vide = !charges
+    ? 'Chargement des liaisons…'
+    : (q||tags.length
+        ? 'Aucun résultat pour ces filtres.'
+        : (filtreActif==='a_lier'
+            ? 'Aucun dossier terminé n\'attend son devis. Bascule sur « Tous » pour voir le planning.'
+            : 'Aucun dossier.'));
 
   return h('div',null,
-    searchBox,
+    barreRecherche,
     h('div',{className:'card'},
       h('div',{className:'card-header'},
-        h('h3',null,'Rentabilité — Dossiers planning ('+totalShown+')'),
+        h('h3',null, (FILTRES.find(f=>f.key===filtreActif)||{}).label+' — '+total+' dossier'+(total>1?'s':'')),
         h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
           pager,
-          h('button',{type:'button',className:'btn-sec',onClick:async()=>{await loadRentPlanning();toast('Planning rechargé');}},'Rafraîchir')
+          h('button',{type:'button',className:'btn-sec',onClick:async()=>{
+            await loadRentPlanning(); await loadRentLinks(); toast('Planning rechargé');
+          }},'Rafraîchir')
         )
       ),
-      rows.length? h('div',null,...rows) : h('div',{className:'card-empty'},'Aucun dossier ne correspond aux filtres.')
+      rows.length ? h('div',null,...rows) : h('div',{className:'card-empty'}, vide)
     )
+  );
+}
+
+/* Le panneau de liaison. C'est LE geste de la page : on choisit un devis (ou
+   on en dépose un), on confirme les dossiers de production, on enregistre, on
+   passe au suivant sans repasser par la liste. */
+function renderRentPanneau(g, listeVisible){
+  const head=g.head;
+  const entryId=Number(head.id);
+  const devisList=S.devisList||[];
+  const lien=(S.rentLinksById||{})[entryId]||{devis_id:null,no_dossiers:[]};
+  let curDossiers=(lien.no_dossiers||[]).slice();
+
+  const devisSel=h('select',{className:'form-sel',style:{minWidth:'260px',flex:'1'}},
+    h('option',{value:''},'Aucun devis lié'),
+    ...devisList.map(dv=>{
+      const lbl=(dv.client||dv.filename||('Devis #'+dv.id))
+        +(dv.qte_etiquettes?(' — '+Number(dv.qte_etiquettes).toLocaleString('fr-FR')+' ex'):'')
+        +(dv.vitesse_theorique?(' — '+dv.vitesse_theorique+' m/mn'):'');
+      // L'attribut, pas seulement la propriété : la sélection doit survivre à
+      // l'insertion des options dans le <select> et rester lisible dans le DOM.
+      return h('option',{value:String(dv.id),
+        selected:!!(lien.devis_id && Number(lien.devis_id)===Number(dv.id))}, lbl);
+    })
+  );
+
+  const dosInput=h('input',{type:'text',placeholder:'N° dossier production (ex : 1003/0002)…',style:{minWidth:'220px',flex:'1'}});
+  const dosSugWrap=h('div',{style:{display:'none',gap:'8px',flexWrap:'wrap',marginTop:'8px'}});
+  const chipsWrap=h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'10px'}});
+  const refreshChips=()=>{
+    chipsWrap.innerHTML='';
+    if(!curDossiers.length){
+      chipsWrap.appendChild(h('span',{style:{fontSize:'11px',color:'var(--muted)'}},'Aucun dossier de production lié.'));
+      return;
+    }
+    curDossiers.forEach((d,i)=>{
+      chipsWrap.appendChild(h('span',{className:'dos-chip'},'Dos. '+d,
+        h('button',{onClick:()=>{curDossiers.splice(i,1);refreshChips();}},'×')));
+    });
+  };
+  refreshChips();
+
+  let sugToken=0;
+  const refreshSug=async()=>{
+    const v=String(dosInput.value||'').trim();
+    const tok=++sugToken;
+    if(v.length<2){ dosSugWrap.style.display='none'; dosSugWrap.innerHTML=''; return; }
+    const sugs=await rentSuggestNoDossiers(v);
+    if(tok!==sugToken) return;
+    dosSugWrap.innerHTML='';
+    if(!sugs.length){ dosSugWrap.style.display='none'; return; }
+    dosSugWrap.style.display='flex';
+    sugs.slice(0,8).forEach(s=>dosSugWrap.appendChild(
+      h('button',{type:'button',className:'btn-sec',onClick:()=>{
+        const vv=String(s||'').trim();
+        if(vv && !curDossiers.includes(vv)){curDossiers.push(vv);refreshChips();}
+        dosInput.value=''; dosSugWrap.style.display='none'; dosSugWrap.innerHTML='';
+      }},s)));
+  };
+  dosInput.addEventListener('input',refreshSug);
+  const ajouterDos=()=>{
+    const v=String(dosInput.value||'').trim();
+    if(!v) return;
+    if(!curDossiers.includes(v)){curDossiers.push(v);refreshChips();}
+    dosInput.value=''; dosSugWrap.style.display='none'; dosSugWrap.innerHTML='';
+  };
+  dosInput.addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();ajouterDos();} });
+
+  // Auto-détection : la référence du planning correspond souvent au dossier
+  // de production. Proposer d'emblée évite une recherche manuelle par ligne.
+  if(!curDossiers.length && (head.reference||'').trim()){
+    queueMicrotask(async()=>{
+      try{
+        const sugs=await rentSuggestNoDossiers((head.reference||'').trim());
+        if(sugs.length && !curDossiers.length){
+          sugs.forEach(s=>{ if(!curDossiers.includes(s)) curDossiers.push(s); });
+          refreshChips();
+        }
+      }catch(_){}
+    });
+  }
+
+  // Enchaînement : après avoir lié, on passe au dossier suivant de la file
+  // sans revenir à la liste. C'est ce qui rend 300 liaisons tenables.
+  const indexCourant = listeVisible.findIndex(x=>String(x.head.id)===String(head.id));
+  const suivant = indexCourant>=0 ? listeVisible[indexCourant+1] : null;
+
+  const enregistrer=async(puisSuivant)=>{
+    const did = devisSel.value ? Number(devisSel.value) : null;
+    await rentSaveLinks(entryId, did, curDossiers);
+    if(puisSuivant && suivant){
+      // La pagination se recale au rendu, sur la liste à jour.
+      set({rentSelEntryId:suivant.head.id});
+      await rentEnsureLinks(Number(suivant.head.id)).catch(()=>{});
+      render();
+    }else{
+      await rentLoadComparaison(entryId).catch(()=>{});
+    }
+  };
+
+  const dz=h('div',{className:'drop-zone rent-dz'},
+    h('div',{className:'dz-title'},'Déposer un devis'),
+    h('div',{className:'dz-sub'},'Excel, PDF ou photo — lecture puis validation avant enregistrement')
+  );
+  const dzInp=h('input',{type:'file',accept:DEVIS_ACCEPT,style:{display:'none'}});
+  dzInp.addEventListener('change',async e=>{
+    const f=(e&&e.target&&e.target.files&&e.target.files[0])?e.target.files[0]:null;
+    if(!f) return;
+    await uploadDevis(f,{rattachement:{type:'planning',entryId:entryId,dossiers:curDossiers,
+      libelle:(head.reference||'cette ligne de planning')}});
+  });
+  dz.addEventListener('click',()=>dzInp.click());
+  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
+  dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+  dz.addEventListener('drop',e=>{
+    e.preventDefault();dz.classList.remove('drag');
+    const f=(e&&e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0])?e.dataTransfer.files[0]:null;
+    if(!f) return;
+    dzInp.files=e.dataTransfer.files;
+    dzInp.dispatchEvent(new Event('change'));
+  });
+
+  const comp=(S.rentCompById||{})[entryId];
+  const blocComparaison = comp
+    ? (comp.reel ? renderComparaison(comp)
+                 : h('div',{className:'card-empty',style:{padding:'18px'}}, comp.message||'Aucune donnée.'))
+    : h('div',{className:'card-empty',style:{padding:'18px'}},
+        'Lie un devis et des dossiers de production, puis clique sur « Comparer ».');
+
+  return h('div',{className:'rent-panneau'},
+    h('div',{className:'rent-panneau-grille'},
+      h('div',null,
+        h('div',{className:'form-section-title'},'Devis'),
+        h('div',{style:{display:'flex',gap:'10px',flexWrap:'wrap'}}, devisSel),
+        dz, dzInp
+      ),
+      h('div',null,
+        h('div',{className:'form-section-title'},'Dossiers de production'),
+        h('div',{style:{display:'flex',gap:'10px',flexWrap:'wrap'}},
+          dosInput,
+          h('button',{type:'button',className:'btn-sec',onClick:ajouterDos},'Ajouter')
+        ),
+        dosSugWrap,
+        chipsWrap
+      )
+    ),
+    h('div',{className:'rent-panneau-actions'},
+      h('button',{type:'button',className:'btn-sm',onClick:()=>enregistrer(false)},'Enregistrer'),
+      suivant
+        ? h('button',{type:'button',className:'btn-sec',onClick:()=>enregistrer(true)},
+            'Enregistrer et suivant', iconEl('chevron-right',14))
+        : null,
+      h('button',{type:'button',className:'btn-sec',onClick:async()=>{
+        await rentEnsureLinks(entryId).catch(()=>{});
+        await rentLoadComparaison(entryId);
+      }},'Comparer')
+    ),
+    blocComparaison
+  );
+}
+
+// ── Sous-onglet Devis ────────────────────────────────────────────
+function renderRentDevis(){
+  const devisList = S.devisList||[];
+  const sel = S.rentDevisSel!=null ? devisList.find(d=>Number(d.id)===Number(S.rentDevisSel)) : null;
+
+  const LIB_METHODE={regex:'Lecture directe',ia:'Lecture IA',mixte:'Directe + IA',
+                     manuel:'Saisie manuelle',historique:'Import historique',echec:'Lecture en échec'};
+
+  // Import libre : un devis peut arriver avant qu'on sache à quel dossier il
+  // se rattachera. Le lier reste possible depuis l'onglet Dossiers.
+  const dz=h('div',{className:'drop-zone rent-dz',style:{marginBottom:'14px'}},
+    h('div',{className:'dz-title'},'Importer un devis'),
+    h('div',{className:'dz-sub'},'Excel, PDF ou photo — il pourra être lié à un dossier ensuite')
+  );
+  const dzInp=h('input',{type:'file',accept:DEVIS_ACCEPT,style:{display:'none'}});
+  dzInp.addEventListener('change',async e=>{
+    const f=(e&&e.target&&e.target.files&&e.target.files[0])?e.target.files[0]:null;
+    if(f) await uploadDevis(f);
+  });
+  dz.addEventListener('click',()=>dzInp.click());
+  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
+  dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+  dz.addEventListener('drop',e=>{
+    e.preventDefault();dz.classList.remove('drag');
+    const f=(e&&e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0])?e.dataTransfer.files[0]:null;
+    if(!f) return;
+    dzInp.files=e.dataTransfer.files; dzInp.dispatchEvent(new Event('change'));
+  });
+
+  const fmt=(v,u)=>v!=null&&v!==''&&Number(v)!==0
+    ? Number(v).toLocaleString('fr-FR',{maximumFractionDigits:2})+(u?' '+u:'') : '—';
+
+  const table = devisList.length
+    ? h('div',{style:{overflowX:'auto'}},
+        h('table',{className:'rent-table'},
+          h('thead',null,h('tr',null,
+            h('th',null,'Client'), h('th',null,'Date'),
+            h('th',{className:'num'},'Quantité'), h('th',{className:'num'},'Vitesse'),
+            h('th',{className:'num'},'Calage'), h('th',null,'Lecture'),
+            h('th',{className:'num'},'Dossiers')
+          )),
+          h('tbody',null,...devisList.map(dv=>{
+            const calage=(Number(dv.temps_calage_mn)||0)+(Number(dv.temps_calage_impression_mn)||0);
+            const ouvert = sel && Number(sel.id)===Number(dv.id);
+            return h('tr',{className:ouvert?'is-open':'',style:{cursor:'pointer'},
+              onClick:()=>set({rentDevisSel:ouvert?null:dv.id})},
+              h('td',null,
+                h('div',{style:{fontWeight:'600'}}, dv.client||'(client non lu)'),
+                h('div',{style:{fontSize:'11px',color:'var(--muted)'}}, dv.filename||'')),
+              h('td',null, dv.date_devis||'—'),
+              h('td',{className:'num'}, fmt(dv.qte_etiquettes)),
+              h('td',{className:'num'}, fmt(dv.vitesse_theorique,'m/mn')),
+              h('td',{className:'num'}, calage?fmt(calage,'mn'):'—'),
+              h('td',null, h('span',{className:'rent-methode'}, LIB_METHODE[dv.extraction_methode]||'—')),
+              h('td',{className:'num'}, String(dv.nb_dossiers_lies||0))
+            );
+          }))
+        )
+      )
+    : h('div',{className:'card-empty'},'Aucun devis importé. Dépose un fichier ci-dessus.');
+
+  // Détail : ce que la lecture a produit, avec la provenance de chaque valeur.
+  let detail=null;
+  if(sel){
+    let champs={};
+    try{ champs = sel.extraction_json ? JSON.parse(sel.extraction_json) : {}; }catch(_){ champs={}; }
+    const lignes=Object.entries(champs);
+    detail=h('div',{className:'card',style:{marginTop:'14px'}},
+      h('div',{className:'card-header'},
+        h('h3',null,'Devis — '+(sel.client||sel.filename||('#'+sel.id))),
+        h('div',{style:{display:'flex',gap:'8px'}},
+          h('button',{type:'button',className:'btn-sec',onClick:()=>set({rentDevisSel:null})},'Fermer'),
+          h('button',{type:'button',className:'btn-danger',onClick:async()=>{
+            // deleteDevis pose deja la confirmation : en ajouter une seconde
+            // apprend a l'utilisateur a cliquer sans lire.
+            await deleteDevis(sel.id); set({rentDevisSel:null});
+          }},'Supprimer')
+        )
+      ),
+      lignes.length
+        ? h('div',{className:'rent-champs'},
+            ...lignes.map(([cle,m])=>h('div',{className:'rent-champ'},
+              h('div',{className:'rent-champ-lbl'}, (m&&m.libelle)||cle),
+              h('div',{className:'rent-champ-val'},
+                // Mêmes conventions que le tableau juste au-dessus : séparateur
+                // de milliers et virgule décimale. « 262000 » et « 67.5 » à
+                // côté de « 262 000 » et « 247,5 mn » se lisent comme deux
+                // outils différents.
+                (m&&m.valeur!=null&&m.valeur!=='')
+                  ? ((typeof m.valeur==='number' || (typeof m.valeur==='string' && m.valeur!=='' && !isNaN(Number(m.valeur))))
+                      ? Number(m.valeur).toLocaleString('fr-FR',{maximumFractionDigits:2})
+                      : String(m.valeur))
+                  : '—',
+                (m&&m.unite)?h('span',{className:'rent-champ-unite'},' '+m.unite):null),
+              h('div',{className:'devis-meta'},
+                (m&&m.source)?h('span',{className:'devis-source'},m.source):null,
+                (m&&m.confiance)?h('span',{className:'devis-conf devis-conf-'+m.confiance},
+                  m.confiance==='haute'?'sûr':(m.confiance==='moyenne'?'à vérifier':'incertain')):null,
+                (m&&m.origine==='ia')?h('span',{className:'devis-conf devis-conf-ia'},'IA'):null,
+                (m&&m.origine==='manuel')?h('span',{className:'devis-conf devis-conf-absent'},'saisi'):null
+              )
+            ))
+          )
+        : h('div',{className:'card-empty'},
+            'Ce devis a été importé avant le suivi de provenance : aucune source enregistrée.')
+    );
+  }
+
+  return h('div',null, dz, dzInp,
+    h('div',{className:'card'},
+      h('div',{className:'card-header'},
+        h('h3',null,'Devis importés ('+devisList.length+')'),
+        h('button',{type:'button',className:'btn-sec',onClick:async()=>{await loadDevis();toast('Devis rechargés');}},'Rafraîchir')
+      ),
+      table
+    ),
+    detail
   );
 }
 
@@ -6323,7 +6713,7 @@ function openEditStockModal(row){
   const rightWrap = h('div',{style:{display:'flex',gap:'8px'}});
   const cancelBtn = h('button',{style:{padding:'10px 16px',borderRadius:'8px',background:'transparent',border:'1px solid var(--border)',color:'var(--text2)',cursor:'pointer'}},'Annuler');
   cancelBtn.addEventListener('click',()=>overlay.remove());
-  const saveBtn = h('button',{className:'btn-accent',style:{padding:'10px 18px',borderRadius:'8px',fontWeight:'700'}},'Enregistrer');
+  const saveBtn = h('button',{className:'btn-sm',style:{padding:'10px 18px',borderRadius:'8px',fontWeight:'700'}},'Enregistrer');
   saveBtn.addEventListener('click', async ()=>{
     const body = {};
     fields.forEach(f=>{ const v=(f.inp.value||'').trim(); if(v!==String(row[f.key]||'')) body[f.key]=v||null; });
@@ -9473,6 +9863,9 @@ function renderProdKpis(){
       }else if(S.page === 'rentabilite'){
         await loadDevis();
         await loadRentPlanning();
+        // Les liaisons de TOUTES les entrees, pas seulement des douze
+        // affichees : sans elles, ni compteur ni filtre « a lier ».
+        await loadRentLinks();
       }else if(S.page === 'traceabilite'){
         S.traceabilite = null;
         S.traceabiliteDossier = undefined;
@@ -10207,7 +10600,11 @@ function renderProdKpis(){
     createDos, updStatut,
     loadComparaison, uploadDevis, saveDevis, linkDossiers, deleteDevis,
     renderDos, renderDevisForm, renderComparaison, renderLiaisonDossiers,
-    renderRentabilite, renderSuivi,
+    renderRentabilite, renderRentPilotage, renderRentDossiers, renderRentDevis,
+    renderRentPanneau, loadRentLinks, rentEnsureLinks, rentSaveLinks,
+    rentLoadComparaison, rentSuggestNoDossiers, rentSetGardeFocus,
+    rentFmtFormat, rentEtat, rentGroupes, rentPastille,
+    renderSuivi,
     loadTracabilite, loadTracabiliteDossier,
     renderTracabilite, renderTracabiliteDossiersVue, renderTracabiliteDossierDetail,
     renderTraceur, traceurOuvrir, traceurRechercher,
