@@ -30,6 +30,7 @@ import base64
 import io
 import json
 import os
+import re
 from typing import Any, Optional
 
 from config import (
@@ -61,8 +62,10 @@ CHAMPS_SOCLE = {
     "format_v":              ("Format laize",            "nombre", "mm"),
     "laize":                 ("Laize production",        "nombre", "mm"),
     "nb_couleurs":           ("Nombre de couleurs",      "nombre", ""),
-    "temps_calage_mn":       ("Temps de calage",         "nombre", "mn"),
-    "metrage_calage_ml":     ("Métrage de calage",       "nombre", "ml"),
+    "temps_calage_mn":       ("Temps de calage outil",   "nombre", "mn"),
+    "metrage_calage_ml":     ("Métrage de calage outil", "nombre", "ml"),
+    "temps_calage_impression_mn":   ("Temps de calage impression",   "nombre", "mn"),
+    "metrage_calage_impression_ml": ("Métrage de calage impression", "nombre", "ml"),
     "temps_production_mn":   ("Temps de production",     "nombre", "mn"),
     "metrage_production_ml": ("Métrage de production",   "nombre", "ml"),
     "vitesse_theorique":     ("Vitesse devisée",         "nombre", "m/mn"),
@@ -247,7 +250,7 @@ Règles, sans exception :
 3. LA VITESSE DEVISÉE est la vitesse de production retenue POUR CE DEVIS, en m/mn. Un fichier en contient souvent plusieurs (théorique, réelle, de conditionnement, de la machine). Retiens celle qui vérifie « métrage de production ≈ vitesse × temps de production », et explique ton choix dans `commentaire`. Si aucune ne le vérifie, prends la plus explicite et baisse la confiance à « moyenne » ou « basse ».
 4. UNITÉS. Temps en minutes (une valeur en heures est convertie, et tu le dis dans `commentaire`). Métrages en mètres linéaires. Vitesse en m/mn. Gâche en fraction : 5 % s'écrit 0.05.
 5. CONFIANCE. « haute » = le libellé est explicite et la valeur cohérente avec le reste. « moyenne » = déduit d'un libellé approchant, ou plusieurs candidats. « basse » = lecture incertaine, notamment sur photo ou scan.
-6. Le CALAGE et la PRODUCTION sont deux postes distincts : ne les additionne pas. « temps_calage_mn » est le calage seul.
+6. LE CALAGE SE DÉCOMPOSE EN DEUX POSTES, à ne jamais additionner entre eux ni avec la production. « temps_calage_mn » est le calage OUTIL (montage de l'outil de découpe). « temps_calage_impression_mn » est le calage IMPRESSION (mises en route couleurs et clichés, changements de couleur). Si le devis ne distingue pas les deux, mets tout dans le calage outil et dis-le dans `commentaire` — ne répartis pas au jugé.
 7. Dans `indicateurs`, mets tout le reste de chiffré et d'utile — nombre de fronts, poses, métrage total, prix au mille, nombre de bobines, quantité par rouleau, temps de conditionnement. Garde le libellé du fichier, pas une traduction.
 
 Appelle l'outil `enregistrer_devis`. Aucun texte libre en dehors de l'outil."""
@@ -264,8 +267,23 @@ def _client_anthropic():
     return anthropic.Anthropic(api_key=cle)
 
 
+def _rappel_deja_lu(indicateurs: list) -> str:
+    """Ce que la lecture directe a déjà relevé, pour ne pas le faire redire.
+
+    Sans ce rappel, le modèle réémet « NOMBRE FRONT » là où le motif a déjà
+    posé « Nombre de fronts » : même chiffre, deux libellés, et un écran de
+    validation qui donne l'impression que la machine hésite.
+    """
+    libelles = [i.get("libelle") for i in (indicateurs or []) if i.get("libelle")]
+    if not libelles:
+        return ""
+    return ("\n\nIndicateurs DÉJÀ relevés par la lecture directe — ne les remets "
+            "pas dans `indicateurs`, cherche ce qui manque :\n- "
+            + "\n- ".join(libelles))
+
+
 def _blocs_contenu(file_bytes: bytes, filename: str, content_type: str,
-                   type_fichier: str) -> tuple[list[dict], list[str]]:
+                   type_fichier: str, deja_lu: str = "") -> tuple[list[dict], list[str]]:
     """Construit les blocs de message envoyés au modèle."""
     avertissements: list[str] = []
     budget = DEVIS_IA_MAX_CARACTERES
@@ -276,13 +294,13 @@ def _blocs_contenu(file_bytes: bytes, filename: str, content_type: str,
         if not texte:
             return [], avertissements
         return [{"type": "text",
-                 "text": f"Fichier : {filename}\n\n{texte}"}], avertissements
+                 "text": f"Fichier : {filename}\n\n{texte}{deja_lu}"}], avertissements
 
     if type_fichier == "pdf":
         texte = _texte_pdf(file_bytes, budget)
         if texte:
             return [{"type": "text",
-                     "text": f"Fichier : {filename}\n\n{texte}"}], avertissements
+                     "text": f"Fichier : {filename}\n\n{texte}{deja_lu}"}], avertissements
         # PDF sans couche texte : c'est un scan, il part tel quel au modèle,
         # qui en lit les pages comme des images.
         avertissements.append("PDF sans texte : lu comme un document numérisé.")
@@ -290,7 +308,7 @@ def _blocs_contenu(file_bytes: bytes, filename: str, content_type: str,
             "type": "document",
             "source": {"type": "base64", "media_type": "application/pdf",
                        "data": base64.standard_b64encode(file_bytes).decode()},
-        }, {"type": "text", "text": f"Fichier : {filename}"}], avertissements
+        }, {"type": "text", "text": f"Fichier : {filename}{deja_lu}"}], avertissements
 
     if type_fichier == "image":
         return [{
@@ -298,7 +316,7 @@ def _blocs_contenu(file_bytes: bytes, filename: str, content_type: str,
             "source": {"type": "base64",
                        "media_type": _mime_image(filename, content_type),
                        "data": base64.standard_b64encode(file_bytes).decode()},
-        }, {"type": "text", "text": f"Fichier : {filename}"}], avertissements
+        }, {"type": "text", "text": f"Fichier : {filename}{deja_lu}"}], avertissements
 
     return [], ["Format de fichier non reconnu."]
 
@@ -370,13 +388,97 @@ def _fmt(n) -> str:
         return str(n)
 
 
-def controles_coherence(donnees: dict) -> list[dict]:
+def _indicateur(indicateurs: list, libelle: str):
+    for i in (indicateurs or []):
+        if (i.get("libelle") or "").strip().lower() == libelle.lower():
+            return i.get("valeur_nombre")
+    return None
+
+
+# « 29.000.000 », « 984.000 » : la quantité que le commercial met dans le nom
+# du fichier. Groupes de trois chiffres séparés par des points, uniquement —
+# une date compacte (16062025) ou un format (148x210) ne peut pas correspondre.
+# Pas de `\b` : le souligné EST un caractère de mot, donc `\b` ne se déclenche
+# pas dans « ..._29.000.000_16062025.xlsx » — exactement les noms de fichiers
+# que les commerciaux écrivent. On borne sur « pas un chiffre » à la place.
+_RE_QTE_NOM_FICHIER = re.compile(r"(?<!\d)\d{1,3}(?:\.\d{3}){1,4}(?!\d)")
+
+
+def _controles_paliers(donnees: dict, paliers: list) -> list[dict]:
+    """Vérifie sur QUELLE quantité les temps du devis ont été calculés.
+
+    Un devis chiffre plusieurs quantités, mais n'en calcule le temps et le
+    métrage que pour une seule. Si le dossier produit correspond à une autre,
+    la comparaison devis/réel compare deux affaires différentes — et rien dans
+    le classeur ne le signale. Ces contrôles ne choisissent pas : ils posent
+    la question avec les chiffres sous les yeux.
+    """
+    if not paliers:
+        return []
+    alertes: list[dict] = []
+    qte_calc = float(donnees.get("qte_etiquettes") or 0)
+    quantites = [float(p.get("quantite") or 0) for p in paliers]
+
+    if len(paliers) > 1:
+        detail = " ; ".join(
+            f"{_fmt(p['quantite'])} ex"
+            + (" à " + f"{p['prix_mille']:.2f}".replace(".", ",") + " €/mille"
+               if p.get("prix_mille") else "")
+            for p in paliers
+        )
+        alertes.append({
+            "niveau": "info",
+            "champs": ["qte_etiquettes"],
+            "message": (
+                f"Le devis chiffre {len(paliers)} quantités ({detail}). Les temps et "
+                f"métrages ci-dessous sont calculés pour {_fmt(qte_calc)} ex. "
+                "Vérifier que c'est bien la quantité du dossier."
+            ),
+        })
+
+    if qte_calc > 0 and not any(abs(q - qte_calc) < 1 for q in quantites):
+        alertes.append({
+            "niveau": "info",
+            "champs": ["qte_etiquettes"],
+            "message": (
+                f"La quantité des calculs ({_fmt(qte_calc)} ex) ne figure dans aucun "
+                f"palier proposé ({', '.join(_fmt(q) for q in quantites)}). "
+                "Le devis a pu être recalculé après la proposition de prix."
+            ),
+        })
+
+    # Le nom du fichier porte souvent la quantité commandée. Quand ce nombre
+    # correspond à un palier AUTRE que celui des calculs, ce n'est pas une
+    # coïncidence : le devis a été calculé pour une quantité différente.
+    nom = str(donnees.get("filename") or "")
+    for brut in _RE_QTE_NOM_FICHIER.findall(nom):
+        val = float(brut.replace(".", ""))
+        if qte_calc > 0 and abs(val - qte_calc) < 1:
+            continue
+        if any(abs(q - val) < 1 for q in quantites):
+            alertes.append({
+                "niveau": "avertissement",
+                "champs": ["qte_etiquettes"],
+                "message": (
+                    f"Le nom du fichier annonce {_fmt(val)} ex, qui est bien un palier "
+                    f"du devis — mais les temps sont calculés pour {_fmt(qte_calc)} ex. "
+                    "Comparer la production réelle à ces temps fausserait l'écart."
+                ),
+            })
+            break
+    return alertes
+
+
+def controles_coherence(donnees: dict, indicateurs: Optional[list] = None,
+                        paliers: Optional[list] = None) -> list[dict]:
     """Les vérifications qu'un chef de production ferait de tête.
 
     Elles ne corrigent rien : elles montrent ce qui ne tient pas debout, pour
     que la valeur soit revue AVANT d'entrer en base.
     """
-    alertes: list[dict] = []
+    # La quantité de référence passe en premier : si elle est en cause, tout
+    # le reste de la comparaison porte sur la mauvaise affaire.
+    alertes: list[dict] = _controles_paliers(donnees, paliers or [])
     tol = DEVIS_TOLERANCE_COHERENCE
 
     v = donnees.get("vitesse_theorique") or 0
@@ -399,6 +501,26 @@ def controles_coherence(donnees: dict) -> list[dict]:
             "niveau": "info",
             "champs": ["metrage_production_ml"],
             "message": f"Métrage de production absent. Vitesse × temps donnerait {_fmt(v * t)} ml.",
+        })
+
+    # Le calage devisé se paie en DEUX postes dans le modèle maison : le
+    # calage outil (« temps_calage_mn ») et le calage impression, porté à part.
+    # Sur le devis RIFO : 180 mn d'outil + 67,5 mn d'impression. Comparer un
+    # calage réel d'atelier — qui couvre tout le réglage — au seul poste outil
+    # fait perdre 37 % à la comparaison sans qu'aucun chiffre soit faux.
+    calage_impr = float(donnees.get("temps_calage_impression_mn") or 0)
+    calage_outil = donnees.get("temps_calage_mn") or 0
+    if calage_impr > 0 and calage_outil > 0:
+        alertes.append({
+            "niveau": "info",
+            "champs": ["temps_calage_mn", "temps_calage_impression_mn"],
+            "message": (
+                f"Calage devisé : {_fmt(calage_outil)} mn d'outil + "
+                f"{_fmt(calage_impr)} mn d'impression = "
+                f"{_fmt(calage_outil + calage_impr)} mn. C'est ce total que la "
+                "comparaison oppose au calage relevé en atelier, qui couvre lui "
+                "aussi les changements de couleur et de cliché."
+            ),
         })
 
     if (donnees.get("temps_calage_mn") or 0) > (donnees.get("temps_production_mn") or 0) > 0:
@@ -446,6 +568,8 @@ def extraire_devis(file_bytes: bytes, filename: str, content_type: str = "",
     type_fichier = _type_fichier(filename, content_type)
     socle = gabarit_devis(filename)
     champs: dict[str, dict] = {}
+    indicateurs: list[dict] = []
+    paliers: list[dict] = []
     avertissements: list[str] = []
     methode = "regex"
 
@@ -453,14 +577,41 @@ def extraire_devis(file_bytes: bytes, filename: str, content_type: str = "",
     if type_fichier == "excel":
         socle = parse_devis(file_bytes, filename)
         avertissements.extend(socle.get("parse_errors") or [])
+        indicateurs.extend(socle.get("indicateurs") or [])
+        paliers = socle.get("paliers") or []
+        # Les paliers rejoignent les indicateurs pour être conservés en base :
+        # savoir, six mois plus tard, que le devis proposait aussi 29 millions
+        # à 0,74 € vaut autant que le chiffre retenu.
+        for rang, p in enumerate(paliers, start=1):
+            indicateurs.append({
+                "libelle": f"Quantité proposée (palier {rang})",
+                "valeur_nombre": p.get("quantite"),
+                "valeur_texte": p.get("note") or "",
+                "unite": "ex", "source": p.get("source") or "",
+                "confiance": "haute", "origine": "regex",
+            })
+            if p.get("prix_mille") is not None:
+                indicateurs.append({
+                    "libelle": f"Prix au mille (palier {rang})",
+                    "valeur_nombre": p.get("prix_mille"),
+                    "valeur_texte": "", "unite": "€",
+                    "source": p.get("source_prix") or p.get("source") or "",
+                    "confiance": "haute", "origine": "regex",
+                })
+        # Un champ LU vaut zéro aussi bien qu'autre chose. Le devis « tabac »
+        # porte « NBRE COULEURS : 0 » — c'est la réalité de l'affaire, pas une
+        # lecture ratée. Ce qui compte ici est qu'une cellule ait été trouvée
+        # (`sources`), jamais la valeur qu'elle contient : afficher « non
+        # trouvé » sur un zéro légitime pousserait à corriger une valeur juste.
+        confiances = socle.get("confiances") or {}
         for cle, coord in (socle.get("sources") or {}).items():
-            if champ_vide(socle.get(cle)):
-                continue
             libelle, _nature, unite = CHAMPS_SOCLE.get(cle, (cle, "texte", ""))
+            conf = confiances.get(cle, "haute")
             champs[cle] = {
                 "valeur": socle.get(cle), "libelle": libelle, "unite": unite,
-                "source": coord, "confiance": "haute", "origine": "regex",
-                "commentaire": "",
+                "source": coord, "confiance": conf, "origine": "regex",
+                "commentaire": ("Libellé absent de la feuille : valeur déduite de sa "
+                                "position, à contrôler." if conf != "haute" else ""),
             }
 
     manquants = champs_cles_manquants(socle)
@@ -470,7 +621,8 @@ def extraire_devis(file_bytes: bytes, filename: str, content_type: str = "",
     resultat_ia = None
     modele = ""
     if besoin_ia and DEVIS_IA_ACTIVE:
-        blocs, avert_blocs = _blocs_contenu(file_bytes, filename, content_type, type_fichier)
+        blocs, avert_blocs = _blocs_contenu(file_bytes, filename, content_type,
+                                            type_fichier, _rappel_deja_lu(indicateurs))
         avertissements.extend(avert_blocs)
         if blocs:
             resultat_ia, erreur, modele = _appel_modele(blocs)
@@ -479,7 +631,6 @@ def extraire_devis(file_bytes: bytes, filename: str, content_type: str = "",
     elif besoin_ia and not DEVIS_IA_ACTIVE:
         avertissements.append("Extraction IA désactivée (DEVIS_IA_ACTIVE).")
 
-    indicateurs: list[dict] = []
     remarques = ""
     if resultat_ia:
         remarques = (resultat_ia.get("remarques") or "").strip()
@@ -507,10 +658,14 @@ def extraire_devis(file_bytes: bytes, filename: str, content_type: str = "",
             }
             socle[cle] = valeur
 
+        # Le modèle relit souvent des indicateurs que le motif a déjà relevés :
+        # on ne les pose qu'une fois, la lecture directe faisant foi.
+        deja = {(i.get("libelle") or "").strip().lower() for i in indicateurs}
         for item in (resultat_ia.get("indicateurs") or []):
             libelle = (item.get("libelle") or "").strip()
-            if not libelle:
+            if not libelle or libelle.lower() in deja:
                 continue
+            deja.add(libelle.lower())
             indicateurs.append({
                 "libelle": libelle,
                 "valeur_nombre": item.get("valeur_nombre"),
@@ -518,10 +673,20 @@ def extraire_devis(file_bytes: bytes, filename: str, content_type: str = "",
                 "unite": (item.get("unite") or "").strip(),
                 "source": (item.get("source") or "").strip(),
                 "confiance": item.get("confiance") or "moyenne",
+                "origine": "ia",
             })
 
+        # La méthode décrit ce qui a réellement produit la fiche. Le modèle
+        # peut n'avoir rien ajouté au socle et avoir tout de même trouvé des
+        # indicateurs : c'est « mixte », pas « regex ».
         origines = {c["origine"] for c in champs.values()}
-        methode = "mixte" if origines == {"regex", "ia"} else ("ia" if origines == {"ia"} else "regex")
+        origines |= {i.get("origine") for i in indicateurs if i.get("origine")}
+        if origines == {"ia"}:
+            methode = "ia"
+        elif "ia" in origines:
+            methode = "mixte"
+        else:
+            methode = "regex"
     elif besoin_ia:
         methode = "echec" if not champs else "regex"
 
@@ -531,14 +696,20 @@ def extraire_devis(file_bytes: bytes, filename: str, content_type: str = "",
         if socle.get(cle) is None:
             socle[cle] = 0.0
     socle["filename"] = filename
+    # Le socle repart au format historique : la provenance vit dans `champs`,
+    # les indicateurs dans leur propre liste.
     socle.pop("sources", None)
+    socle.pop("confiances", None)
+    socle.pop("indicateurs", None)
+    socle.pop("paliers", None)
     socle["parse_errors"] = avertissements
 
     return {
         "preview": socle,
         "champs": champs,
         "indicateurs": indicateurs,
-        "coherence": controles_coherence(socle),
+        "coherence": controles_coherence(socle, indicateurs, paliers),
+        "paliers": paliers,
         "methode": methode,
         "modele": modele,
         "remarques": remarques,
