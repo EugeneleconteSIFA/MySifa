@@ -2838,7 +2838,13 @@ def _controle_donnees(pe: dict, lignes: list) -> dict:
         blocages.append("aucune fiche technique rapprochée du dossier")
         ctl = None
     else:
-        ctl = controler_fiche(pe, _f(pe.get("laize")))
+        # `_load_dossiers` fusionne la fiche dans le dossier en préfixant ses
+        # colonnes de `ft_` (`ft_mod_laize`, `ft_outil1_nb_front`…).
+        # `controler_fiche` attend les noms nus : lui passer le dossier tel
+        # quel lui ferait lire des cases vides et conclure « indéterminable »
+        # sur toutes les fiches — un contrôle qui ne contrôle rien.
+        ft = {k[3:]: v for k, v in pe.items() if k.startswith("ft_")}
+        ctl = controler_fiche(ft, _f(pe.get("of_laize")) or _f(ft.get("laize")))
         facteur = ctl.get("facteur_erreur")
         if ctl.get("verdict") == "incoherent" and (
                 facteur is None or facteur > _FACTEUR_ERREUR_MAX):

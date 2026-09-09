@@ -1,20 +1,27 @@
 """
-Le verrou documentaire du déstockage, sur la vraie SQL.
+Le verrou du déstockage, sur la vraie SQL.
 
-Deux choses se vérifient ici et nulle part ailleurs :
+Trois choses se vérifient ici et nulle part ailleurs :
 
 1. Les requêtes `_SQL_PE` et `_SQL_FT` de Besoins matières tournent réellement
    sur le schéma migré. Elles nomment des colonnes ajoutées par migration
-   (`valide`, `invalide_motif`) : une faute de frappe ne se voit pas à la
-   lecture, elle sort en 500 sur les trois écrans d'un coup.
+   (`valide`, `invalide_motif`, et depuis le 09/09 `destockage_at`,
+   `destockage_reserve`) : une faute de frappe ne se voit pas à la lecture,
+   elle sort en 500 sur les trois écrans d'un coup.
 
-2. `_etat_documents` bloque bien, et raconte pourquoi. Un dossier dont la
-   validation est TOMBÉE ne se lit pas comme un dossier jamais relu : dans le
-   premier cas un chiffre a bougé sous une relecture acquise, et c'est
-   l'information qui décide quoi rouvrir en premier.
+2. `_etat_documents` raconte l'état de relecture des deux documents. Depuis le
+   09/09/2026 il ne BLOQUE plus rien — relevé de production : 0 OF validé sur
+   938, 0 fiche sur 920, le verrou refusait donc 100 % des dossiers et la
+   modale de déstockage avait fini par être débranchée. La fonction reste, son
+   verdict est affiché, il ne commande plus le stock.
+
+3. `_controle_donnees` est le verrou qui l'a remplacé, et c'est lui qu'il faut
+   protéger : il bloque sur ce qui rendrait le calcul faux (pas de quantité
+   produite, fiche qui ne boucle pas) et met en réserve ce qui rendrait le
+   déstockage incomplet (matière non rattachée). Un OF non relu ne bloque plus.
 
 Le code testé est extrait du router par découpage de source : le module entier
-tirerait fastapi et toute la base du projet pour trois fonctions pures.
+tirerait fastapi et toute la base du projet pour quelques fonctions pures.
 """
 import re
 import sqlite3
@@ -40,10 +47,25 @@ def check(libelle, obtenu, attendu):
 src = open("app/routers/besoins_matieres.py", encoding="utf-8").read()
 bloc_sql = src[src.index('_SQL_PE = """'):src.index("def _load_mapping(")]
 bloc_etat = src[src.index("def _etat_documents("):src.index("def _destockage_lignes(")]
-ns = {"re": re, "Optional": Optional}
+# `_controle_donnees` vit dans le même découpage et s'appuie sur deux noms du
+# module : `_f` (lecture tolérante d'un nombre) et `controler_fiche`. On les
+# fournit ici plutôt que d'élargir le découpage — le but reste d'exécuter le
+# code réel sans tirer fastapi.
+def _f(v):
+    try:
+        return float(str(v).replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+
+
+from app.services.coherence_fiche import controler as controler_fiche  # noqa: E402
+
+ns = {"re": re, "Optional": Optional, "sqlite3": sqlite3,
+      "_f": _f, "controler_fiche": controler_fiche}
 exec(compile(bloc_sql + "\n" + bloc_etat, "besoins_bloc", "exec"), ns)
 SQL_PE, SQL_PE_UN = ns["_SQL_PE"], ns["_SQL_PE_UN"]
 load_dossiers, etat_documents = ns["_load_dossiers"], ns["_etat_documents"]
+controle_donnees = ns["_controle_donnees"]
 
 # ── Base minimale, puis migration réelle ──────────────────────────────
 import importlib.util                                              # noqa: E402
@@ -51,6 +73,14 @@ spec = importlib.util.spec_from_file_location(
     "mig_dsv", "app/core/migrations/2026_08_07_documents_source_verite.py")
 mig = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mig)
+
+# La migration du 09/09 ajoute `destockage_at` et `destockage_reserve`, que
+# `_SQL_PE` nomme désormais. L'appliquer ici plutôt que de recopier les
+# colonnes dans le schéma de test : c'est la migration réelle qui est vérifiée.
+spec2 = importlib.util.spec_from_file_location(
+    "mig_dst", "app/core/migrations/2026_09_09_destockage_auto.py")
+mig_dst = importlib.util.module_from_spec(spec2)
+spec2.loader.exec_module(mig_dst)
 
 conn = sqlite3.connect(":memory:")
 conn.row_factory = sqlite3.Row
@@ -104,6 +134,13 @@ check("mouvement rattachable à ses documents",
 mig.appliquer(conn)  # rejouable
 check("rejouable sans casse", True, True)
 
+mig_dst.appliquer(conn)
+cols_pe = {r["name"] for r in conn.execute("PRAGMA table_info(planning_entries)")}
+check("colonnes de déstockage ajoutées",
+      {"destockage_at", "destockage_reserve"} <= cols_pe, True)
+mig_dst.appliquer(conn)  # rejouable
+check("migration déstockage rejouable", True, True)
+
 # ── Jeu de données ────────────────────────────────────────────────────
 conn.executescript("""
     INSERT INTO machines(id, nom) VALUES (1, 'Cohésio 1');
@@ -143,7 +180,7 @@ check("le nombre de fronts de l'outil est remonté, pas celui du module",
 un = load_dossiers(conn, SQL_PE_UN, (1,))
 check("la variante mono-dossier tourne aussi", (len(un), un[0]["id"]), (1, 1))
 
-print("\n2. Le verrou ne laisse passer que les deux documents validés")
+print("\n2. L'état de relecture des documents reste lisible (il ne bloque plus)")
 e1 = etat_documents(par_id[1])
 check("dossier complet : déstockage ouvert", (e1["complet"], e1["blocage"]), (True, None))
 
@@ -164,6 +201,51 @@ check("le motif est repris dans le blocage",
       "modifiée par Access" in e3["blocage"], True)
 check("et remonté à part pour l'interface", len(e3["motifs_invalidation"]), 1)
 check("un dossier jamais relu n'invente pas de motif", e2["motifs_invalidation"], [])
+
+# ── Le verrou réel : les données, pas la relecture ────────────────────
+print("\n4. Le contrôle des données décide, et distingue blocage et réserve")
+
+LIGNE_OK = {"kind": "glassine", "source_value": "Glassine 55g",
+            "destockable": True, "quantite": 12.0, "manque": []}
+LIGNE_TROU = {"kind": "support", "source_value": "VELIN H400",
+              "destockable": False, "quantite": None,
+              "manque": ["Valeur de fiche non associée à une référence MySifa"]}
+
+c1 = controle_donnees(par_id[1], [LIGNE_OK])
+check("dossier chiffré et cohérent : le stock peut bouger",
+      (c1["ok"], c1["blocage"], c1["reserves"]), (True, None, []))
+
+# Le cœur du changement du 09/09 : le dossier 2 n'a NI son OF NI sa fiche
+# validés. L'ancien verrou le refusait ; le nouveau le laisse passer, parce
+# qu'aucune de ses données n'est fausse.
+c2 = controle_donnees(par_id[2], [LIGNE_OK])
+check("un OF non relu ne bloque plus", c2["ok"], True)
+check("et l'état de relecture le dit toujours", etat_documents(par_id[2])["complet"], False)
+
+c3 = controle_donnees(par_id[1], [LIGNE_OK, LIGNE_TROU])
+check("matière non rattachée : ça sort quand même", c3["ok"], True)
+check("mais la réserve est nommée", len(c3["reserves"]), 1)
+check("et elle cite la matière", "VELIN H400" in c3["reserves"][0], True)
+check("le compte des lignes sortables est juste", c3["nb_sortables"], 1)
+
+sans_qte = dict(par_id[1], of_metrage=None, qte_etiquettes=None)
+c4 = controle_donnees(sans_qte, [LIGNE_OK])
+check("aucune quantité produite : bloqué", c4["ok"], False)
+check("et le blocage le dit", "aucune quantité produite" in c4["blocage"], True)
+
+sans_fiche = dict(par_id[4])
+c5 = controle_donnees(sans_fiche, [LIGNE_OK])
+check("aucune fiche rapprochée : bloqué", c5["ok"], False)
+check("et le blocage le dit", "aucune fiche technique" in c5["blocage"], True)
+
+c6 = controle_donnees(par_id[1], [LIGNE_TROU])
+check("rien de sortable : bloqué", c6["ok"], False)
+
+# Une fiche dont le module est plus large que la bobine ne peut pas boucler :
+# c'est le genre d'erreur qui a déjà sorti un dossier à 55 823 km de frontal.
+fiche_folle = dict(par_id[1], ft_mod_laize=9999.0, mod_laize=9999.0)
+c7 = controle_donnees(fiche_folle, [LIGNE_OK])
+check("fiche qui ne boucle pas : bloqué", c7["ok"], False)
 
 print()
 if ko:

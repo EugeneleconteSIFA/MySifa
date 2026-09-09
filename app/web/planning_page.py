@@ -2953,13 +2953,13 @@ function renderDestockageBody(d){
     const sousTitre=[des,laize?Math.round(Number(laize))+" mm":"",
                      l.hors_fiche?"ajoutée à la main":""].filter(Boolean).join(" · ");
     if(!l.destockable&&!l.hors_fiche){
-      const motif=escHtml((l.manque||["non rattachée à une référence MyStock"])[0]);
+      const motif=(l.manque||["non rattachée à une référence MyStock"])[0];
       return `<tr>
         <td style="padding:9px 10px"><div style="font-weight:700">${nom}</div>
           <div style="font-size:11px;color:var(--muted)">${sousTitre}</div></td>
         <td style="padding:9px 10px;text-align:right;color:var(--muted)">${drNombre(l.besoin)}</td>
         <td style="padding:9px 10px;text-align:right;color:var(--muted)">—</td>
-        <td colspan="2" style="padding:9px 10px;color:#fbbf24;font-size:11.5px">${motif}</td>
+        <td colspan="2" style="padding:9px 10px;color:#fbbf24;font-size:11.5px">${escHtml(motif)}</td>
       </tr>`;
     }
     const cible=l.sorti!=null?l.sorti:(l.quantite||0);
