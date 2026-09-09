@@ -55,7 +55,9 @@ CREATE TABLE fournisseurs_fsc (
   price_currency TEXT NOT NULL DEFAULT 'EUR',
   telephone TEXT, email TEXT, fax TEXT,
   mode_reglement TEXT, mode_livraison TEXT, delai_expedition_jours INTEGER,
-  regime_tva TEXT, rcs TEXT
+  regime_tva TEXT, rcs TEXT,
+  rvgi_numero INTEGER, rvgi_code TEXT, rvgi_etat TEXT, rvgi_motif TEXT,
+  rvgi_score REAL, rvgi_lie_le TEXT
 );
 
 -- Référence simple : rien n'empêche deux lignes sur le même fournisseur.
@@ -128,9 +130,11 @@ def peupler(chemin: str) -> tuple[int, int]:
     # pas — elles doivent être récupérées, pas perdues avec elle.
     c.execute(
         """INSERT INTO fournisseurs_fsc
-             (nom, has_fsc, licence, ville, siret, telephone, categories, notes)
+             (nom, has_fsc, licence, ville, siret, telephone, categories, notes,
+              rvgi_numero, rvgi_code, rvgi_etat, rvgi_motif)
            VALUES ('2DM', 1, 'FSC-C111111', 'LILLE', '12345678901234',
-                   '03 20 56 25 22', ?, 'Note source')""",
+                   '03 20 56 25 22', ?, 'Note source',
+                   42, 'DEUXDM', 'lie', 'siret')""",
         (json.dumps(["adhesif"]),),
     )
     src = c.lastrowid
@@ -212,9 +216,11 @@ def test_fusion():
     chemin = base_neuve()
     src, tgt = peupler(chemin)
 
-    res = S.merge_fournisseurs(src, tgt, _requete())
+    conn = _conn(chemin)
+    res = S.fusionner_fournisseurs(conn, src, tgt)
+    conn.close()
 
-    verifie(res.get("success") is True, "la fusion répond success")
+    verifie(res["target"]["id"] == tgt, "la fusion rend la fiche survivante")
     verifie(not q(chemin, "SELECT 1 FROM fournisseurs_fsc WHERE id=?", (src,)),
             "la fiche source est supprimée")
     verifie(bool(q(chemin, "SELECT 1 FROM fournisseurs_fsc WHERE id=?", (tgt,))),
@@ -279,6 +285,10 @@ def test_fusion():
     verifie(f["siret"] == "12345678901234", "le SIRET est récupéré")
     verifie(f["telephone"] == "03 20 56 25 22", "le téléphone est récupéré")
     verifie(f["has_fsc"] == 1, "has_fsc passe à 1 : la source était certifiée")
+    verifie(f["rvgi_numero"] == 42 and f["rvgi_etat"] == "lie",
+            "le lien ERP de la source est repris par la survivante — vu "
+            f"{f['rvgi_numero']} / {f['rvgi_etat']}")
+    verifie(f["rvgi_code"] == "DEUXDM", "le code ERP suit le numéro")
     cats = json.loads(f["categories"])
     verifie(sorted(cats) == ["adhesif", "frontal"],
             f"les catégories sont l'union des deux — vu {cats}")
@@ -299,16 +309,17 @@ def test_fusion_refuse_soi_meme():
     print("─" * 60)
     chemin = base_neuve()
     src, tgt = peupler(chemin)
-    from fastapi import HTTPException
 
+    conn = _conn(chemin)
     for a, b, quoi in ((src, src, "source = cible"),
                        (src, 99999, "cible inexistante"),
                        (99999, tgt, "source inexistante")):
         try:
-            S.merge_fournisseurs(a, b, _requete())
+            S.fusionner_fournisseurs(conn, a, b)
             verifie(False, f"{quoi} est refusé")
-        except HTTPException as e:
-            verifie(e.status_code in (400, 404), f"{quoi} est refusé ({e.status_code})")
+        except (ValueError, LookupError) as e:
+            verifie(True, f"{quoi} est refusé ({type(e).__name__})")
+    conn.close()
 
     verifie(q(chemin, "SELECT COUNT(*) n FROM fournisseurs_fsc")[0]["n"] == 3,
             "aucune fiche supprimée par un appel refusé")
@@ -416,6 +427,15 @@ def test_norm_noms():
     verifie(S._four_squash("2DM") == "2dm", "« 2DM » se tasse en « 2dm »")
     verifie(S._four_squash("Avery Dennison") != S._four_squash("Avery"),
             "deux noms réellement différents ne se confondent pas")
+
+
+def _conn(chemin: str) -> sqlite3.Connection:
+    """Connexion telle que `fusionner_fournisseurs` l'attend : des `Row`, et
+    l'autocommit — la fusion ouvre sa transaction par un BEGIN explicite."""
+    conn = sqlite3.connect(chemin)
+    conn.row_factory = sqlite3.Row
+    conn.isolation_level = None
+    return conn
 
 
 class _Faux:

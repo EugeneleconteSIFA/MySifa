@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>FSC — ADV, compta, administration technique (light)</title>
+<style>
+  :root{
+    --bg:#f1f5f9; --card:#ffffff; --border:#cbd5e1;
+    --text:#0f172a; --text2:#475569; --muted:#64748b;
+    --green:#059669; --green-bg:rgba(5,150,105,0.14); --green-bg-soft:rgba(5,150,105,0.07);
+    --red:#dc2626;
+  }
+  @page{ size:A4; margin:0 }
+  *{ box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:'Segoe UI',system-ui,sans-serif }
+  .page{
+    width:210mm; height:297mm; padding:17mm 14mm 12mm;
+    display:flex; flex-direction:column; gap:8mm;
+  }
+  /* ── Titre ── */
+  .hero{ display:flex; flex-direction:column; align-items:center; gap:4mm }
+  .hero .lockup{ display:flex; align-items:center; gap:18px }
+  .hero .mark{
+    width:56px; height:56px; border-radius:16px; flex-shrink:0;
+    background:var(--green-bg); color:var(--green);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .hero .mark svg{ width:34px; height:34px }
+  .hero h1{
+    margin:0; font-size:54px; line-height:1; font-weight:800; color:var(--text);
+    letter-spacing:-1.8px; text-transform:uppercase; white-space:nowrap;
+  }
+  .hero h1 em{ font-style:normal; color:var(--green) }
+  .hero .team{
+    display:inline-block; padding:7px 18px; border-radius:999px;
+    background:var(--green-bg); color:var(--green);
+    font-size:14px; font-weight:800; letter-spacing:2.6px; text-transform:uppercase;
+  }
+  /* ── Gestes ── */
+  .steps{
+    background:var(--card); border:1px solid var(--border); border-radius:18px;
+    box-shadow:0 1px 3px rgba(15,23,42,.04);
+    padding:0 7mm; flex:1;
+    display:flex; flex-direction:column;
+  }
+  .step{
+    flex:1 1 0; min-height:0; padding:0; display:flex; align-items:center; gap:6mm;
+    border-bottom:1px solid rgba(203,213,225,.7);
+  }
+  .step:last-child{ border-bottom:none }
+  .step .num{
+    width:38px; height:38px; border-radius:11px; flex-shrink:0;
+    background:var(--green-bg); color:var(--green);
+    display:flex; align-items:center; justify-content:center;
+    font-size:21px; font-weight:800;
+  }
+  .step .t{ font-size:21.5px; font-weight:800; color:var(--text); line-height:1.18; letter-spacing:-.4px }
+  .step .t em{ font-style:normal; color:var(--green) }
+  .step .c{ flex:1 }
+  .fsclogo{ height:46px; width:auto; display:inline-block; vertical-align:middle }
+  .opts{ display:flex; flex-direction:column; gap:7px; margin-top:9px }
+  .opt{ display:flex; align-items:center; gap:11px;
+    font-size:16px; font-weight:700; color:var(--text2); line-height:1.2 }
+  .opt .k.d{ color:var(--green); font-size:19px; letter-spacing:0; line-height:1 }
+  .opt .k{ font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:1.6px;
+    color:var(--muted); flex-shrink:0 }
+  .etq{
+    display:inline-block; vertical-align:2px; padding:3px 8px; border-radius:7px;
+    font-size:13px; font-weight:800; letter-spacing:1px; text-transform:uppercase;
+  }
+  .etq-v{ background:var(--green); color:#fff }
+  .etq-r{ background:var(--red); color:#fff }
+  /* ── Phrase ── */
+  .claimline{
+    background:var(--green-bg-soft); border:1px dashed rgba(5,150,105,.42);
+    border-radius:14px; padding:4.5mm 7mm; text-align:center;
+  }
+  .claimline p{
+    margin:0; font-size:17px; line-height:1.35; font-weight:600; color:var(--text2); letter-spacing:0;
+  }
+  .claimline p em{ font-style:normal; color:var(--green); font-weight:800 }
+  .ft{ font-size:9px; color:var(--muted); text-align:center; line-height:1.5 }
+  .ft .norme{ text-transform:uppercase; letter-spacing:1.5px; font-weight:700 }
+
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="hero">
+    <div class="lockup">
+    <div class="mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/>
+        <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
+      </svg>
+    </div>
+    <h1>Certification <em>FSC</em></h1>
+    </div>
+    <span class="team">ADV · Compta · Administration technique</span>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <span class="num">1</span>
+      <div class="t">Mention <em>FSC</em> dans le libellé du produit</div>
+    </div>
+
+    <div class="step">
+      <span class="num">2</span>
+      <div class="t">Cocher « Certification FSC requise » au planning</div>
+    </div>
+
+    <div class="step">
+      <span class="num">3</span>
+      <div class="t">Consigne FSC ajoutée au dossier de production</div>
+    </div>
+
+    <div class="step">
+      <span class="num">4</span>
+      <div class="t">Mention FSC + licence SIFA (BL, facture)</div>
+    </div>
+
+    <div class="step">
+      <span class="num">5</span>
+      <div class="t">Certificat fournisseur vérifié avant l'achat</div>
+    </div>
+  </div>
+
+  <div class="claimline">
+    <p>Un doute ? <em>Demandez et faites passer l'info</em> : ça se règle en deux minutes.</p>
+  </div>
+
+  <div class="ft">
+    <div class="norme">MySifa · FSC-STD-40-004 V3-1 · document interne SIFA</div>
+    <div>FSC® et Forest Stewardship Council® sont des marques déposées de Forest Stewardship Council A.C.
+    Aucune mention FSC sur un document ou un produit client avant l'obtention du certificat et du code de licence.</div>
+  </div>
+
+</div>
+</body>
+</html>

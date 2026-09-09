@@ -384,6 +384,12 @@
           ? vitesse(r.cadence_reference_m_min) + '<div class="rp-sous">'
             + r.series_passees + (r.series_passees > 1 ? ' prod.' : ' prod.') + '</div>'
           : '<span class="rp-mut">1re fois</span>';
+        // Serie trop courte : le chiffre reste, l'ecart disparait. Une cadence
+        // tiree de 4 minutes de production n'a pas a se comparer a quoi que
+        // ce soit — et le dire vaut mieux que laisser une case vide.
+        var ecart = (r.cadence_assez === false)
+          ? '<span class="rp-ecart none">série trop courte</span>'
+          : ecartHtml(r.ecart_pct);
         h += '<tr><td><b>' + escHtml(r.no_dossier) + '</b></td>'
            + '<td>' + escHtml(r.client || "—") + '</td>'
            + '<td>' + escHtml(r.ref_produit_norm || r.designation || "—") + '</td>'
@@ -391,7 +397,7 @@
            + '<td class="num">' + vitesse(r.cadence_m_min)
            + '<div class="rp-sous">' + vitesse(r.vitesse_m_min) + ' hors arrêts</div></td>'
            + '<td class="num">' + hab + '</td>'
-           + '<td class="num">' + ecartHtml(r.ecart_pct) + '</td></tr>';
+           + '<td class="num">' + ecart + '</td></tr>';
       });
       h += '</tbody></table></div>';
     }
