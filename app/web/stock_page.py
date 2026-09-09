@@ -1496,6 +1496,31 @@ body.light .hist-badge-mvt-inventaire{color:#7c3aed}
 .stat-value.warn{color:var(--warn)}
 .stat-value.danger{color:var(--danger)}
 
+/* ── Import d'une packing list ── */
+.plk-wrap{display:flex;flex-direction:column;gap:16px}
+.plk-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+.plk-card h3{margin:0 0 4px;font-size:13px;font-weight:700;color:var(--text)}
+.plk-card p.plk-hint{margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.5}
+.plk-drop{display:flex;flex-direction:column;align-items:center;gap:10px;padding:26px 16px;
+  border:1px dashed var(--border);border-radius:12px;background:var(--bg);color:var(--muted);font-size:13px;text-align:center}
+.plk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.plk-field{display:flex;flex-direction:column;gap:5px}
+.plk-field label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.plk-field select,.plk-field input{background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  padding:9px 10px;color:var(--text);font-size:13px}
+.plk-field select:disabled{color:var(--muted)}
+.plk-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:12px}
+.plk-laizes{display:flex;flex-wrap:wrap;gap:8px}
+.plk-laize{display:inline-flex;align-items:baseline;gap:6px;background:var(--bg);border:1px solid var(--border);
+  border-radius:20px;padding:4px 12px;font-size:12px;color:var(--text)}
+.plk-laize b{font-variant-numeric:tabular-nums}
+.plk-refus{margin-top:12px;font-size:12px;color:var(--warn);line-height:1.6}
+.plk-refus ul{margin:6px 0 0;padding-left:18px;color:var(--text2)}
+.plk-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:flex-end}
+.plk-check{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);margin-right:auto}
+.plk-ok{background:var(--card);border:1px solid var(--success);border-left-width:3px;border-radius:12px;
+  padding:14px 16px;font-size:13px;color:var(--text);line-height:1.6}
+
 /* ── Bobines : l'inventaire d'objets ── */
 .bob-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
 .bob-sub{font-size:11px;color:var(--muted);margin-top:4px}
@@ -2287,7 +2312,8 @@ let S = {
   tracaPoste: null,
   tracaPrintModal: null,
   // Réception matière
-  recepSubTab: 'nouvelle', // 'nouvelle' | 'historique' | 'rvgi'
+  recepSubTab: 'nouvelle', // 'nouvelle' | 'liste' | 'historique' | 'rvgi'
+  plk: null,               // import d'une packing list — voir buildReceptionListe()
   // File des réceptions venues de l'ERP. `null` tant qu'on n'a pas chargé :
   // c'est ce qui distingue « pas encore lu » de « rien à intégrer », et évite
   // d'afficher une liste vide qu'on prendrait pour un stock à jour.
@@ -6185,6 +6211,18 @@ function buildMatiereDetail() {
             ? el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } }, equiv)
             : null,
         ),
+        // Le stock réel, à côté du stock compté. Les deux sont justes en même
+        // temps : le magasin compte des objets, la production consomme de la
+        // matière. Affiché seulement quand on sait le calculer — un « 0 m »
+        // faute de métrage se lirait « il n'y en a plus ».
+        (m.stock_reel != null)
+          ? el('div', { cls: 'sc-stat' },
+              el('div', { cls: 'sc-stat-label' }, 'Stock réel'),
+              el('div', { cls: 'sc-stat-value' }, mpFmtReel(m)),
+              el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } },
+                 mpSourceReel(m)),
+            )
+          : null,
         el('div', { cls: 'sc-stat' },
           el('div', { cls: 'sc-stat-label' }, 'Mouvements'),
           el('div', { cls: 'sc-stat-value' }, String(mouvements.length)),
@@ -16172,6 +16210,34 @@ function renderContent() {
   if (content) area.appendChild(content);
 }
 
+// ── Les deux stocks ─────────────────────────────────────────────
+//
+// Le simplifié se compte (des bobines, des palettes), le réel se consomme (des
+// mètres, des kilos). MySifa affiche les deux plutôt que d'en choisir un :
+// « 15 bobines » ne dit pas si l'on tient la semaine, « 270 000 m » ne dit pas
+// s'il faut de la place dans l'allée.
+
+function mpFmtReel(m) {
+  if (m.stock_reel == null) return '—';
+  const n = Number(m.stock_reel).toLocaleString('fr-FR', { maximumFractionDigits: 0 });
+  return n + ' ' + (m.unite_reelle || '');
+}
+
+function mpSourceReel(m) {
+  // La source n'est pas de la décoration : « somme des bobines » est un relevé,
+  // « métrage standard » est une multiplication. Les confondre ferait prendre
+  // une estimation pour un inventaire.
+  if (m.stock_reel_source === 'bobines') {
+    let t = 'somme des ' + (m.bobines_en_stock || 0) + ' bobine(s) en stock';
+    if (m.bobines_sans_metrage) t += ' · ' + m.bobines_sans_metrage + ' sans métrage';
+    return t;
+  }
+  if (m.stock_reel_source === 'standard') return 'métrage standard × nb de bobines';
+  if (m.stock_reel_source === 'conditionnement') return 'conditionnement × nb de palettes';
+  if (m.stock_reel_source === 'stock') return 'quantité tenue en stock';
+  return '';
+}
+
 // ── Bobines : l'inventaire d'objets ─────────────────────────────
 //
 // Le compteur de stock (`mp_stock_laize`) et cette liste répondent à deux
@@ -16318,7 +16384,7 @@ function buildBobines() {
 
   const head = el('div', { cls: 'hist-head' },
     el('div', null,
-      el('h2', { cls: 'hist-title' }, 'Bobines'),
+      el('h2', { cls: 'hist-title' }, 'Traçabilité'),
       el('p', { cls: 'hist-subtitle' },
         "Une ligne par bobine physique — ce que le compteur de stock ne peut pas dire"),
     ),
@@ -17214,11 +17280,131 @@ function recepAddCode(code) {
     laize_valeur_mm: laizeValeurMm,
   };
   S.recepItems = [...S.recepItems, item];
+  recepPersisterSiChange();
+  // Ce que MySifa sait déjà de ce code — répondu après coup, pour ne pas
+  // faire attendre la douchette entre deux bobines.
+  recepReconnaitre(c);
   // Effacer le flag "nouveau" après 600ms (animation CSS)
   setTimeout(() => {
     S.recepItems = S.recepItems.map(i => i.code === c ? { ...i, isNew: false } : i);
     renderContent();
   }, 600);
+  renderContent();
+}
+
+// ── Le tampon de scan survit à un rechargement ──────────────────
+//
+// Quarante bobines scannées vivaient jusqu'ici dans `S.recepItems`, c'est-à-dire
+// dans la mémoire de l'onglet. Un rechargement, une mise en veille de la
+// tablette, une fausse manœuvre : tout est perdu, et l'écran le disait
+// franchement (« les N bobines scannées seront perdues »). Un magasinier qui
+// perd quarante scans ne rescanne pas — il retape à la main, ou il renonce, et
+// le mécanisme entier ne sert plus à rien.
+//
+// On écrit donc le tampon dans le navigateur à chaque changement. Rien n'est
+// envoyé au serveur : ce qui est enregistré ici n'est PAS du stock, c'est un
+// brouillon. Le stock ne bouge qu'à la validation, comme avant.
+
+const RECEP_BROUILLON = 'mysifa.recep.brouillon.v1';
+// Douze heures : au-delà, un tampon retrouvé n'est plus la réception en cours,
+// c'est celle d'hier qu'on n'a jamais validée. La restaurer ferait rentrer en
+// stock des bobines déjà rangées.
+const RECEP_BROUILLON_TTL_MS = 12 * 3600 * 1000;
+
+let _recepDernierEtat = null;
+
+function recepInstantane() {
+  return JSON.stringify({
+    items: S.recepItems || [],
+    categorie: S.recepCategorie || '',
+    matiereId: S.recepMatiereId || null,
+    matiereRef: S.recepMatiereRef || '',
+    matiereDes: S.recepMatiereDes || '',
+    laizeId: S.recepLaizeId || null,
+    laizeLabel: S.recepLaizeLabel || '',
+    laizeValeurMm: S.recepLaizeValeurMm || null,
+    fournisseur: S.recepFournisseur || '',
+    fournisseurId: S.recepFournisseurId || null,
+    note: S.recepNote || '',
+    fsc: S.recepFscTypeClaim || '',
+  });
+}
+
+function recepPersisterSiChange() {
+  let etat;
+  try { etat = recepInstantane(); } catch (e) { return; }
+  if (etat === _recepDernierEtat) return;
+  _recepDernierEtat = etat;
+  try {
+    if (!S.recepItems || !S.recepItems.length) localStorage.removeItem(RECEP_BROUILLON);
+    else localStorage.setItem(RECEP_BROUILLON, JSON.stringify({ t: Date.now(), d: etat }));
+  } catch (e) { /* navigation privée, quota : le tampon reste en mémoire */ }
+}
+
+function recepOublierBrouillon() {
+  _recepDernierEtat = null;
+  try { localStorage.removeItem(RECEP_BROUILLON); } catch (e) {}
+}
+
+function recepRestaurerBrouillon() {
+  let brut = null;
+  try { brut = localStorage.getItem(RECEP_BROUILLON); } catch (e) { return; }
+  if (!brut) return;
+  let enveloppe, d;
+  try {
+    enveloppe = JSON.parse(brut);
+    if (!enveloppe || !enveloppe.t || (Date.now() - enveloppe.t) > RECEP_BROUILLON_TTL_MS) {
+      recepOublierBrouillon();
+      return;
+    }
+    d = JSON.parse(enveloppe.d);
+  } catch (e) { recepOublierBrouillon(); return; }
+  if (!d || !Array.isArray(d.items) || !d.items.length) return;
+
+  S.recepItems = d.items;
+  S.recepCategorie = d.categorie || '';
+  S.recepMatiereId = d.matiereId || null;
+  S.recepMatiereRef = d.matiereRef || '';
+  S.recepMatiereDes = d.matiereDes || '';
+  S.recepLaizeId = d.laizeId || null;
+  S.recepLaizeLabel = d.laizeLabel || '';
+  S.recepLaizeValeurMm = d.laizeValeurMm || null;
+  S.recepFournisseur = d.fournisseur || '';
+  S.recepFournisseurId = d.fournisseurId || null;
+  S.recepNote = d.note || '';
+  if (d.fsc) S.recepFscTypeClaim = d.fsc;
+  try {
+    showToast(d.items.length + ' bobine(s) scannée(s) récupérée(s) — réception non validée.', 'info');
+  } catch (e) {}
+}
+
+// ── Reconnaissance d'un code au moment où il est scanné ──────────
+//
+// `recepAddCode` ne vérifiait que les doublons DU LOT en cours. Une bobine déjà
+// en stock, ou déjà consommée en production, passait donc sans un mot — et
+// c'est précisément le moment où le magasinier peut encore reposer la bobine
+// sur la palette et regarder ce qui se passe.
+//
+// La réponse arrive après coup : on ne bloque pas le scan suivant pour
+// l'attendre. En série, faire patienter la douchette est ce qui fait renoncer.
+
+async function recepReconnaitre(code) {
+  let r = null;
+  try {
+    r = await api('/api/stock/bobines/code/' + encodeURIComponent(code));
+  } catch (e) { return; }
+  if (!r || !r.trouvee) return;
+  const item = (S.recepItems || []).find(i => i.code === code);
+  if (item) item.deja = r.etat || 'stock';
+  const ou = r.matiere_ref ? ' (' + r.matiere_ref + ')' : '';
+  if (r.etat === 'consommee') {
+    showToast('Bobine ' + code + ou + ' déjà consommée' +
+              ((r.dossiers_scannes || []).length ? ' — dossier ' + r.dossiers_scannes.join(', ') : '') +
+              '. Elle sera rattachée, sans nouvelle entrée de stock.', 'error');
+  } else {
+    showToast('Bobine ' + code + ou + ' déjà en stock — elle sera rattachée, '
+              + 'sans nouvelle entrée de stock.', 'error');
+  }
   renderContent();
 }
 
@@ -17523,6 +17709,7 @@ async function recepValider() {
         })),
       };
       S.recepItems = []; S.recepNote = ''; S.recepFournisseur = ''; S.recepFournisseurId = null;
+      recepOublierBrouillon();
       S.recepFournisseurSearch = ''; S.recepFournisseurOpen = false;
       S.recepFscTypeClaim = 'fsc_mix';
       // Reset selecteurs de reception structuree (categorie/matiere/laize)
@@ -18398,12 +18585,24 @@ function buildReception() {
   const wrap = el('div', { cls: 'recep-page' });
 
   // ── Header : titre + sous-onglets sur la même ligne ──
-  const sub = ['historique', 'rvgi'].includes(S.recepSubTab) ? S.recepSubTab : 'nouvelle';
+  const sub = ['historique', 'rvgi', 'liste'].includes(S.recepSubTab) ? S.recepSubTab : 'nouvelle';
   const subtabs = el('div', { cls: 'recep-subtabs' },
     el('button', {
       cls: 'recep-subtab' + (sub === 'nouvelle' ? ' active' : ''),
       on: { click: () => { S.recepSubTab = 'nouvelle'; renderContent(); } }
     }, iconEl('scan', 13), ' Faire une réception'),
+    // Le magasin ne scannera pas 48 bobines une par une quand le fournisseur
+    // en livre la liste. Et la liste apporte ce que le scan ne peut pas
+    // donner : le métrage réel de chaque bobine, et sa laize.
+    el('button', {
+      cls: 'recep-subtab' + (sub === 'liste' ? ' active' : ''),
+      on: { click: () => {
+        S.recepSubTab = 'liste';
+        recepStopCamera();
+        renderContent();
+        loadRecepHistory();
+      }}
+    }, iconEl('upload', 13), ' Depuis une liste'),
     // Les entrées ne se saisissent plus : elles viennent des réceptions de
     // l'ERP. Ce sous-onglet est leur file d'attente, et c'est là qu'on dit à
     // quelle référence MySifa correspond un article RVGI — au moment où il se
@@ -18450,6 +18649,8 @@ function buildReception() {
     wrap.appendChild(buildReceptionNouvelle());
   } else if (sub === 'rvgi') {
     wrap.appendChild(buildReceptionRvgi());
+  } else if (sub === 'liste') {
+    wrap.appendChild(buildReceptionListe());
   } else {
     wrap.appendChild(buildReceptionHistorique());
   }
@@ -19013,6 +19214,287 @@ function buildReceptionNouvelle() {
 }
 
 // ── Sous-onglet : Historique des réceptions ───────────────────────
+// ── Import d'une packing list ───────────────────────────────────
+//
+// Trois écrans en un, dans l'ordre où l'on travaille : on dépose le fichier,
+// on vérifie que MySifa a compris quelle colonne est quoi, on dit dans quelle
+// matière et dans quelle réception ça entre. Rien n'est écrit avant le dernier
+// bouton — et ce qui entre est exactement ce que l'écran a montré.
+
+function plkEnsure() {
+  if (!S.plk) {
+    S.plk = {
+      file: null, analyse: null, loading: false, resultat: null,
+      receptionId: '', fournisseur: '', memoriser: true, importing: false,
+    };
+  }
+  return S.plk;
+}
+
+async function plkAnalyser(mapping) {
+  const p = plkEnsure();
+  if (!p.file) return;
+  p.loading = true;
+  p.resultat = null;
+  renderContent();
+  try {
+    const fd = new FormData();
+    fd.append('file', p.file);
+    if (p.receptionId) fd.append('reception_id', String(p.receptionId));
+    if (p.fournisseur) fd.append('fournisseur', p.fournisseur);
+    if (mapping) fd.append('mapping', JSON.stringify(mapping));
+    p.analyse = await apiUpload('/api/stock/packing-list/analyser', fd);
+  } catch (e) {
+    p.analyse = null;
+    showToast(e.message, 'error');
+  }
+  p.loading = false;
+  renderContent();
+}
+
+function plkChangerMapping(champ, valeur) {
+  const p = plkEnsure();
+  if (!p.analyse) return;
+  const m = Object.assign({}, p.analyse.mapping);
+  m[champ] = valeur || null;
+  plkAnalyser(m);
+}
+
+async function plkImporter() {
+  const p = plkEnsure();
+  const a = p.analyse;
+  if (!a || !a.lignes || !a.lignes.length) return;
+  if (!S.recepMatiereId) { showToast('Choisir la matière avant d\'importer.', 'error'); return; }
+  p.importing = true;
+  renderContent();
+  try {
+    p.resultat = await api('/api/stock/packing-list/importer', {
+      method: 'POST',
+      body: JSON.stringify({
+        matiere_id: S.recepMatiereId,
+        lignes: a.lignes,
+        reception_id: p.receptionId || null,
+        fournisseur: p.fournisseur || a.fournisseur || null,
+        fournisseur_id: a.fournisseur_id || null,
+        fichier: a.fichier,
+        mapping: a.mapping,
+        memoriser: !!p.memoriser,
+      }),
+    });
+    p.file = null;
+    p.analyse = null;
+    showToast(p.resultat.bobines_creees + ' bobine(s) entrée(s) en stock.', 'success');
+    loadRecepHistory();
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+  p.importing = false;
+  renderContent();
+}
+
+function plkSelectColonne(champ, libelle, obligatoire) {
+  const a = S.plk.analyse;
+  const sel = el('select', { on: { change: (ev) => plkChangerMapping(champ, ev.target.value) } });
+  const vide = el('option', { value: '' }, obligatoire ? '— à choisir —' : '— aucune —');
+  sel.appendChild(vide);
+  (a.entetes || []).forEach(h => {
+    const o = el('option', { value: h }, h);
+    if ((a.mapping || {})[champ] === h) o.selected = true;
+    sel.appendChild(o);
+  });
+  return el('div', { cls: 'plk-field' }, el('label', null, libelle), sel);
+}
+
+function plkSelectUnite(champ, libelle, unites) {
+  const a = S.plk.analyse;
+  const sel = el('select', { on: { change: (ev) => plkChangerMapping(champ, ev.target.value) } });
+  unites.forEach(u => {
+    const o = el('option', { value: u }, u);
+    if ((a.mapping || {})[champ] === u) o.selected = true;
+    sel.appendChild(o);
+  });
+  return el('div', { cls: 'plk-field' }, el('label', null, libelle), sel);
+}
+
+function plkCarteFichier() {
+  const p = S.plk;
+  const input = el('input', {
+    type: 'file', accept: '.xlsx,.xls,.csv',
+    on: { change: (ev) => {
+      const f = ev.target.files && ev.target.files[0];
+      if (!f) return;
+      p.file = f;
+      p.analyse = null;
+      plkAnalyser(null);
+    } },
+  });
+  return el('div', { cls: 'plk-card' },
+    el('h3', null, '1 · Le fichier du fournisseur'),
+    el('p', { cls: 'plk-hint' },
+      "Excel ou CSV, tel qu'il arrive. La première ligne n'a pas besoin d'être l'en-tête, "
+      + "et les colonnes peuvent porter n'importe quel nom — c'est l'étape suivante qui tranche."),
+    el('div', { cls: 'plk-drop' },
+      iconEl('upload', 22),
+      p.file ? el('b', null, p.file.name) : el('span', null, 'Aucun fichier'),
+      input,
+    ),
+  );
+}
+
+function plkCarteMapping() {
+  const a = S.plk.analyse;
+  const origine = { profil: 'Format déjà validé pour ce fournisseur — rien à refaire.',
+                    saisi: 'Correspondance corrigée à la main.',
+                    proposition: 'Correspondance proposée par lecture du fichier — à vérifier.' };
+  return el('div', { cls: 'plk-card' },
+    el('h3', null, '2 · Quelle colonne est quoi'),
+    el('p', { cls: 'plk-hint' },
+      (origine[a.mapping_origine] || '') + ' En-tête trouvé ligne ' + a.entete_ligne
+      + ', ' + a.nb_lignes_fichier + ' ligne(s) de données.'),
+    el('div', { cls: 'plk-grid' },
+      plkSelectColonne('code', 'Code-barres bobine', true),
+      plkSelectColonne('laize', 'Laize', true),
+      plkSelectUnite('unite_laize', 'Unité de laize', ['mm', 'cm', 'm', 'in']),
+      plkSelectColonne('metrage', 'Métrage', false),
+      plkSelectUnite('unite_metrage', 'Unité de métrage', ['m', 'km', 'yd']),
+      plkSelectColonne('lot', 'Lot fournisseur', false),
+    ),
+  );
+}
+
+function plkCarteApercu() {
+  const a = S.plk.analyse;
+  const sum = el('div', { cls: 'plk-sum' },
+    el('div', { cls: 'stat-card' },
+      el('div', { cls: 'stat-label' }, 'Bobines lues'),
+      el('div', { cls: 'stat-value accent' }, String(a.nb))),
+    el('div', { cls: 'stat-card' },
+      el('div', { cls: 'stat-label' }, 'Métrage total'),
+      el('div', { cls: 'stat-value' }, bobFmtM(a.metrage_total) || '—'),
+      a.sans_metrage ? el('div', { cls: 'bob-sub' }, a.sans_metrage + ' sans métrage') : null),
+    el('div', { cls: 'stat-card' },
+      el('div', { cls: 'stat-label' }, 'Refusées'),
+      el('div', { cls: 'stat-value' + (a.refusees && a.refusees.length ? ' warn' : '') },
+         String((a.refusees || []).length))),
+  );
+
+  const laizes = el('div', { cls: 'plk-laizes' }, ...(a.par_laize || []).map(l =>
+    el('span', { cls: 'plk-laize' },
+      l.laize_mm ? Math.round(l.laize_mm) + ' mm' : 'laize inconnue',
+      el('b', null, '×' + l.nb))));
+
+  const card = el('div', { cls: 'plk-card' },
+    el('h3', null, '3 · Ce qui entrerait en stock'), sum, laizes);
+
+  if (a.sans_laize) {
+    card.appendChild(el('div', { cls: 'plk-refus' },
+      a.sans_laize + " bobine(s) sans laize — elles seront refusées à l'import : "
+      + "une matière laizée ne peut pas entrer en stock sans sa laize."));
+  }
+  if (a.refusees && a.refusees.length) {
+    const ul = el('ul', null, ...a.refusees.slice(0, 8).map(r =>
+      el('li', null, 'ligne ' + r.ligne + (r.code_barre ? ' (' + r.code_barre + ')' : '')
+                     + ' — ' + r.motif)));
+    if (a.refusees.length > 8) ul.appendChild(el('li', null, '… et ' + (a.refusees.length - 8) + ' autre(s)'));
+    card.appendChild(el('div', { cls: 'plk-refus' }, 'Lignes écartées :', ul));
+  }
+  return card;
+}
+
+function plkCarteDestination() {
+  const p = S.plk;
+  const selRec = el('select', { on: { change: (ev) => { p.receptionId = ev.target.value; renderContent(); } } });
+  selRec.appendChild(el('option', { value: '' }, '— Nouveau lot de réception —'));
+  (S.recepHistory || []).slice(0, 40).forEach(r => {
+    const lbl = (r.lot_numero || ('#' + r.id))
+      + (r.fournisseur ? ' · ' + r.fournisseur : '')
+      + (r.rvgi_bl ? ' · BL ' + r.rvgi_bl : '');
+    const o = el('option', { value: String(r.id) }, lbl);
+    if (String(p.receptionId) === String(r.id)) o.selected = true;
+    selRec.appendChild(o);
+  });
+
+  const champFourn = el('input', {
+    type: 'text', placeholder: 'Nom du fournisseur', value: p.fournisseur || '',
+    on: { input: (ev) => { p.fournisseur = ev.target.value; } },
+  });
+
+  return el('div', { cls: 'plk-card' },
+    el('h3', null, '4 · Où ça entre'),
+    el('p', { cls: 'plk-hint' },
+      "La réception, c'est le Br auquel ces bobines se rattachent. La matière et la "
+      + "catégorie viennent du sélecteur ci-dessous — les laizes, elles, sont dans le fichier."),
+    el('div', { cls: 'plk-grid' },
+      el('div', { cls: 'plk-field' }, el('label', null, 'Réception'), selRec),
+      p.receptionId ? null
+        : el('div', { cls: 'plk-field' }, el('label', null, 'Fournisseur (nouveau lot)'), champFourn),
+    ),
+    buildReceptionPicker(false),
+  );
+}
+
+function plkCarteResultat() {
+  const r = S.plk.resultat;
+  const bits = [el('b', null, r.bobines_creees + ' bobine(s) entrée(s) en stock'),
+                document.createTextNode(' — lot ' + (r.lot_numero || '') + '.')];
+  if (r.bobines_rattachees) {
+    bits.push(el('div', null, r.bobines_rattachees
+      + ' bobine(s) déjà connue(s) : rattachées, sans nouvelle entrée de stock.'));
+  }
+  if (r.refusees && r.refusees.length) {
+    bits.push(el('div', null, r.refusees.length + ' ligne(s) refusée(s) — '
+      + r.refusees.slice(0, 3).map(x => x.motif).join(' · ')));
+  }
+  if (r.qte_attendue_erp) {
+    bits.push(el('div', { cls: 'bob-sub' },
+      "L'ERP annonçait " + r.qte_attendue_erp + " sur cette réception — à comparer, "
+      + "les deux ne sont pas dans la même unité."));
+  }
+  return el('div', { cls: 'plk-ok' }, ...bits);
+}
+
+function buildReceptionListe() {
+  const p = plkEnsure();
+  const wrap = el('div', { cls: 'plk-wrap' });
+
+  if (p.resultat) wrap.appendChild(plkCarteResultat());
+  wrap.appendChild(plkCarteFichier());
+
+  if (p.loading) {
+    wrap.appendChild(el('div', { cls: 'plk-card' },
+      el('div', { cls: 'hist-loading' }, el('div', { cls: 'hist-spinner' }), 'Lecture du fichier…')));
+    return wrap;
+  }
+  if (!p.analyse) return wrap;
+
+  wrap.appendChild(plkCarteMapping());
+  wrap.appendChild(plkCarteApercu());
+  wrap.appendChild(plkCarteDestination());
+
+  const pret = p.analyse.nb > 0 && !!S.recepMatiereId && !p.importing;
+  wrap.appendChild(el('div', { cls: 'plk-card' },
+    el('div', { cls: 'plk-actions' },
+      el('label', { cls: 'plk-check' },
+        el('input', {
+          type: 'checkbox', checked: !!p.memoriser,
+          on: { change: (ev) => { p.memoriser = ev.target.checked; } },
+        }),
+        ' Mémoriser ce format pour ce fournisseur'),
+      el('button', {
+        cls: 'btn btn-accent', type: 'button', disabled: !pret,
+        on: { click: plkImporter },
+      }, p.importing ? 'Import en cours…'
+                     : ('Faire entrer ' + p.analyse.nb + ' bobine(s) en stock')),
+    ),
+    !S.recepMatiereId
+      ? el('div', { cls: 'plk-hint', style: { marginTop: '8px', textAlign: 'right' } },
+           'Choisir la catégorie et la matière ci-dessus pour activer l\'import.')
+      : null,
+  ));
+
+  return wrap;
+}
+
 function buildReceptionHistorique() {
   const hist = el('div', { cls: 'recep-hist' });
   hist.appendChild(el('div', { cls: 'recep-hist-head' }, iconEl('truck', 14), ' Historique des réceptions'));
@@ -21697,7 +22179,7 @@ const STOCK_TAB_MOBILE_TITLES = {
   referentiel: 'Référentiel',
   inventaire: 'Inventaire',
   reception: 'Réception matière',
-  bobines: 'Bobines',
+  bobines: 'Traçabilité',
   historique: 'Historique',
   traca: 'Étiquettes traça',
   monitoring: 'Monitoring',
@@ -21722,9 +22204,9 @@ function buildSidebarNavStructure() {
       { kind: 'btn', tab: 'production', icon: 'cpu', label: 'Production' },
       { kind: 'sep', label: 'Matières premières' },
       { kind: 'btn', tab: 'matieres', icon: 'layers', label: 'Matières premières' },
-      { kind: 'btn', tab: 'bobines', icon: 'disc', label: 'Bobines' },
       { kind: 'sep', label: 'Outils' },
       { kind: 'btn', tab: 'historique', icon: 'clock', label: 'Historique mouvements' },
+      { kind: 'btn', tab: 'bobines', icon: 'disc', label: 'Traçabilité' },
       { kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes traça' },
       { kind: 'btn', tab: 'plan-entrepot', icon: 'map-pin', label: 'Plan entrepôt' },
     ];
@@ -21734,7 +22216,6 @@ function buildSidebarNavStructure() {
     { kind: 'sep', label: 'Matières premières' },
     { kind: 'btn', tab: 'matieres', icon: 'layers', label: 'Matières premières' },
     { kind: 'btn', tab: 'reception', icon: 'inbox', label: 'Réception matière' },
-    { kind: 'btn', tab: 'bobines', icon: 'disc', label: 'Bobines' },
   ];
   if (isMatieresAdmin() && !S.stockReadOnly) {
     items.push({ kind: 'btn', tab: 'matieres-inventaire', icon: 'clipboard', label: 'Inventaire matière' });
@@ -21757,6 +22238,7 @@ function buildSidebarNavStructure() {
   items.push(
     { kind: 'sep', label: 'Outils' },
     { kind: 'btn', tab: 'historique', icon: 'clock', label: 'Historique mouvements' },
+    { kind: 'btn', tab: 'bobines', icon: 'disc', label: 'Traçabilité' },
     { kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes traça' },
     { kind: 'btn', tab: 'plan-entrepot', icon: 'map-pin', label: 'Plan entrepôt' },
   );
@@ -22505,6 +22987,18 @@ async function init() {
   // Charger le compteur d'alertes inventaire en arrière-plan (badge sidebar)
   if (!S.tracaOnly && !S.fabStockMode) loadInvAlertCountBackground();
   try{ initStockGuides(); }catch(e){}
+
+  // Réception en cours retrouvée dans le navigateur. Restaurée APRÈS le
+  // rendu de l'onglet : elle ne décide pas où l'on arrive, elle rend
+  // seulement ce qui avait été scanné.
+  try {
+    recepRestaurerBrouillon();
+    if (S.recepItems && S.recepItems.length) renderContent();
+  } catch (e) {}
+  // Un tampon écrit à chaque changement, sans avoir à le penser à chaque
+  // endroit qui touche à `S.recepItems` — il y en a huit, et le jour où l'on
+  // en ajoute un neuvième, celui-là serait oublié.
+  try { setInterval(recepPersisterSiChange, 1500); } catch (e) {}
 }
 
 init();

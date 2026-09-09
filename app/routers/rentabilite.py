@@ -511,7 +511,27 @@ async def import_devis(request: Request, file: UploadFile = File(...),
     )
     resultat["fichier_chemin"] = _conserver_fichier(contents, filename)
     resultat["fichier_mime"] = file.content_type or ""
+
+    # Même empreinte que pour l'agent. Déposer deux fois le même classeur est
+    # le geste le plus banal du monde — on l'a vu produire deux lignes
+    # identiques dans la bibliothèque — et rien ne le signalait.
+    resultat["empreinte"] = hashlib.sha256(contents).hexdigest()
+    resultat["doublon_de"] = _devis_par_empreinte(resultat["empreinte"])
     return resultat
+
+
+def _devis_par_empreinte(empreinte: str):
+    """Le devis déjà en base portant ce contenu, s'il existe."""
+    if not empreinte:
+        return None
+    with get_db() as conn:
+        if "empreinte" not in _colonnes_devis(conn):
+            return None
+        row = conn.execute(
+            "SELECT id, client, filename, date_devis FROM devis WHERE empreinte=?",
+            (empreinte,),
+        ).fetchone()
+    return dict(row) if row else None
 
 
 # ── Valider et sauvegarder un devis ──────────────────────────────
@@ -521,6 +541,17 @@ async def create_devis(request: Request):
     body = await request.json()
 
     now = datetime.now().isoformat()
+
+    # Le même fichier déjà enregistré : on rend la ligne existante au lieu
+    # d'en créer une seconde. L'index unique sur l'empreinte l'interdirait de
+    # toute façon — autant répondre proprement plutôt que par une erreur 500.
+    empreinte = str(body.get("empreinte") or "")
+    if empreinte:
+        deja = _devis_par_empreinte(empreinte)
+        if deja:
+            return {"success": True, "doublon": True, "devis_id": deja["id"],
+                    "message": "Ce fichier est déjà enregistré."}
+
     with get_db() as conn:
         cursor = conn.execute(
             """INSERT INTO devis
@@ -590,6 +621,12 @@ async def create_devis(request: Request):
                     now,
                     devis_id,
                 ),
+            )
+
+        if empreinte and "empreinte" in cols_devis:
+            conn.execute(
+                "UPDATE devis SET empreinte=?, source=?, a_verifier=0 WHERE id=?",
+                (empreinte, "manuel", devis_id),
             )
 
         _remplacer_indicateurs(conn, devis_id, body.get("indicateurs") or [], now)

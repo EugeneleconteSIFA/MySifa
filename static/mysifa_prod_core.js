@@ -4516,6 +4516,13 @@ async function saveDevis(body){
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({devis_id:Number(r.devis_id),no_dossiers:(rat.dossiers||[])})}).catch(()=>{});
     }
+    if(r.doublon){
+      toast('Ce fichier était déjà enregistré — le devis existant a été conservé.','warn');
+      set({devisPreview:null,devisFichier:null,devisRattachement:null,
+           rentSubTab:'devis',rentDevisSel:r.devis_id});
+      await loadDevis();
+      return;
+    }
     toast('Devis enregistré'+(rat&&rat.libelle?' et lié à '+rat.libelle:'')+'.');
     set({devisPreview:null,devisFichier:null,devisRattachement:null});
     await loadDevis();
@@ -4627,6 +4634,24 @@ function renderDevisForm(resultat){
     )
   );
 
+  /* Le même fichier est déjà en base. Déposer deux fois le même classeur est
+     un geste banal — on l'a vu produire deux lignes identiques dans la
+     bibliothèque. On prévient AVANT d'enregistrer, et on propose d'ouvrir
+     celui qui existe plutôt que d'en créer un jumeau. */
+  const dejaLa = R.doublon_de || null;
+  const bandeauDoublon = dejaLa ? h('div',{className:'devis-alertes'},
+    h('div',{className:'devis-alerte devis-alerte-avertissement'},
+      iconEl('alert-triangle',13),
+      h('span',null,' Ce fichier est déjà enregistré'
+        + (dejaLa.client?(' pour « '+dejaLa.client+' »'):'')
+        + (dejaLa.date_devis?(' du '+dejaLa.date_devis):'') + '. '),
+      h('button',{type:'button',className:'btn-sec',style:{marginLeft:'8px'},
+        onClick:()=>set({devisPreview:null,devisFichier:null,devisRattachement:null,
+                         rentSubTab:'devis',rentDevisSel:dejaLa.id})},
+        'Ouvrir le devis existant')
+    )
+  ) : null;
+
   const remarques=(R.remarques||'').trim()
     ? h('div',{className:'devis-remarques'},h('strong',null,'Arbitrages : '),R.remarques)
     : null;
@@ -4672,6 +4697,7 @@ function renderDevisForm(resultat){
 
   return h('div',{className:'card',style:{padding:'24px'}},
     entete,
+    bandeauDoublon,
     alertes,
     avertissements,
     remarques,
@@ -4747,6 +4773,9 @@ function renderDevisForm(resultat){
         body.extraction_modele=R.modele||'';
         body.fichier_chemin=R.fichier_chemin||'';
         body.fichier_mime=R.fichier_mime||'';
+        // L'empreinte du contenu : c'est elle qui empêche le doublon côté
+        // serveur, même si l'avertissement a été ignoré.
+        body.empreinte=R.empreinte||'';
         saveDevis(body);
       }}, edition ? 'Enregistrer les corrections' : 'Enregistrer le devis')
     )
