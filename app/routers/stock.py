@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 
 from app.services import mystock_prix as _mystock_prix
+from app.services import stock_bobines as _sb
 from app.services.audit_service import log_action
 from app.services.conditionnement_pf import conditionnement_produit
 from app.services.fsc_certificat import evaluer_certificat
@@ -27,6 +28,7 @@ from config import (
     STOCK_EMPLACEMENT_SORTIE_PROD,
     STOCK_EMPLACEMENT_SORTIE_PROD_LABEL,
     ROLES_SETTINGS_LOGISTIQUE,
+    ROLES_TRACA_VIEWER,
 )
 from database import get_db, parse_file
 from services.auth_service import get_current_user, effective_role, user_has_app_access
@@ -4117,6 +4119,37 @@ async def create_reception(request: Request):
             merged = False
             new_total = nb_bobines_ajoutees
 
+        # ── Chaque code scanne devient une bobine dans l'inventaire d'objets ──
+        # Strictement additif : le compteur de stock ci-dessous n'est pas touche,
+        # et une erreur ici n'empeche jamais la reception d'etre enregistree.
+        #
+        # Un code deja connu est RATTACHE, jamais recree : `stock_bobines.code_barre`
+        # est unique. Ce cas ne se produit qu'apres une confirmation explicite de
+        # doublon (`_check_codes_barres_uniques` bloque les autres). Le compteur
+        # prend quand meme +1 -- l'operateur a bien recu une bobine de plus -- et
+        # c'est le controle de coherence qui montrera qu'une meme reference
+        # physique porte deux bobines. C'est la verite du terrain, pas un bug a
+        # masquer en creant un code invente.
+        bobines_creees, bobines_rattachees = 0, 0
+        for it in normalized_items:
+            try:
+                res_b = _sb.creer(
+                    conn,
+                    code_barre=it["code"],
+                    matiere_id=it.get("matiere_id"),
+                    laize_id=it.get("laize_id"),
+                    reception_id=reception_id,
+                    source=_sb.SOURCE_SCAN,
+                    auteur=created_by_name,
+                    note=doublon_note,
+                )
+            except (ValueError, sqlite3.Error):
+                continue
+            if res_b["cree"]:
+                bobines_creees += 1
+            else:
+                bobines_rattachees += 1
+
         # ── Pour chaque bobine liee a une matiere : +1 sur mp_stock_laize + mvt ──
         # Regroupement par (matiere_id, laize_id) pour un seul mvt par groupe.
         from collections import defaultdict
@@ -4185,6 +4218,8 @@ async def create_reception(request: Request):
         "nb_bobines_ajoutees": nb_bobines_ajoutees,
         "lot_numero": lot_numero,
         "merged": merged,
+        "bobines_creees": bobines_creees,
+        "bobines_rattachees": bobines_rattachees,
     }
 
 
@@ -4389,6 +4424,9 @@ def delete_reception(reception_id: int, request: Request):
         recap = _defalquer_bobines(
             conn, bobines, exd.get("lot_numero"), user, "Suppression reception"
         )
+        # Miroir de la defalque : les bobines encore en stock disparaissent,
+        # celles deja consommees restent et perdent seulement leur reception.
+        bobines_retirees = _sb.supprimer_de_la_reception(conn, reception_id)
         conn.execute("DELETE FROM stock_reception_items WHERE reception_id=?", (reception_id,))
         conn.execute("DELETE FROM stock_receptions WHERE id=?", (reception_id,))
         conn.commit()
@@ -4404,10 +4442,12 @@ def delete_reception(reception_id: int, request: Request):
             "fsc_type_claim": exd.get("fsc_type_claim"),
             "stock_defalque": recap["nb_bobines_stock"],
             "ecarts_stock": recap["ecarts"] or None,
+            "bobines_retirees": bobines_retirees,
         },
         ip=request.client.host if request.client else None,
     )
-    return {"success": True, "id": reception_id, **recap}
+    return {"success": True, "id": reception_id,
+            "bobines_retirees": bobines_retirees, **recap}
 
 
 @router.delete("/api/stock/receptions/{reception_id}/items/{item_id}")
@@ -4437,6 +4477,7 @@ def delete_reception_item(reception_id: int, item_id: int, request: Request):
         recap = _defalquer_bobines(
             conn, [bob], lot["lot_numero"], user, "Suppression bobine"
         )
+        _sb.supprimer_de_la_reception(conn, reception_id, codes=[bob["code_barre"]])
         conn.execute("DELETE FROM stock_reception_items WHERE id=?", (item_id,))
 
         # `nb_bobines` est un compteur dénormalisé : on le recale sur le compte
@@ -4480,6 +4521,194 @@ def delete_reception_item(reception_id: int, item_id: int, request: Request):
         "lot_supprime": lot_supprime,
         **recap,
     }
+
+
+# ── Bobines : l'inventaire d'objets ───────────────────────────────
+#
+# `mp_stock_laize` reste LE compteur de stock ; ces routes ne l'écrivent jamais.
+# Elles lisent et corrigent l'inventaire d'objets qui vit à côté, et
+# `/coherence` dit quand les deux ne se racontent plus la même histoire.
+
+
+@router.get("/api/stock/bobines")
+def bobines_lister(request: Request, matiere_id: int = 0, laize_id: int = 0,
+                   etat: str = "stock", q: str = "", reception_id: int = 0,
+                   no_dossier: str = "", limit: int = 200, offset: int = 0):
+    """Bobines en stock, filtrées.
+
+    `etat` vide ou `tous` rend les trois états. Le total et le métrage portent
+    sur le filtre entier, pas sur la page : un magasinier qui lit « 200 bobines »
+    en ayant 340 sous les yeux ne s'en aperçoit jamais.
+    """
+    require_stock(request)
+    etat = (etat or "").strip().lower()
+    if etat in ("", "tous", "all"):
+        etat = None
+    try:
+        limit = max(1, min(int(limit), 1000))
+        offset = max(0, int(offset))
+    except (TypeError, ValueError):
+        limit, offset = 200, 0
+    with get_db() as conn:
+        try:
+            return _sb.lister(
+                conn,
+                matiere_id=int(matiere_id) or None,
+                laize_id=int(laize_id) or None,
+                etat=etat,
+                q=(q or "").strip() or None,
+                reception_id=int(reception_id) or None,
+                no_dossier=(no_dossier or "").strip() or None,
+                limit=limit, offset=offset,
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+
+
+@router.get("/api/stock/bobines/coherence")
+def bobines_coherence(request: Request, matiere_id: int = 0):
+    """Écart entre le compteur `mp_stock_laize` et le nombre de bobines.
+
+    Constat, jamais correction : un écart peut vouloir dire une bobine sortie
+    sans être désignée, une entrée comptée deux fois, ou un stock ajusté à la
+    main — et seul le magasin sait laquelle des trois.
+    """
+    require_stock(request)
+    with get_db() as conn:
+        return _sb.coherence(conn, matiere_id=int(matiere_id) or None)
+
+
+@router.get("/api/stock/bobines/code/{code_barre}")
+def bobine_par_code(code_barre: str, request: Request):
+    """Ce que MySifa sait d'une bobine tenue en main, par son code-barres.
+
+    Ouvert aux rôles du traceur en plus de MyStock : c'est au poste qu'on a la
+    bobine dans les mains, et refuser la réponse là où la question se pose
+    reviendrait à faire retaper le fournisseur de mémoire — précisément ce que
+    `origine_bobine.py` a été écrit pour arrêter.
+    """
+    user = get_current_user(request)
+    if not user_has_app_access(user, "stock") and \
+            (user.get("role") or "") not in ROLES_TRACA_VIEWER:
+        raise HTTPException(403, "Accès non autorisé.")
+
+    code = _sb.normaliser_code(code_barre)
+    with get_db() as conn:
+        res = _sb.lister(conn, q=code, etat=None, limit=5)
+        bobine = next((b for b in res["items"] if b["code_barre"] == code), None)
+        if not bobine:
+            # Pas une erreur : un code inconnu de l'inventaire d'objets peut
+            # très bien figurer dans le journal de réception (bobines d'avant
+            # la mise en service) ou n'avoir jamais été reçu ici.
+            origine = _origine_bobine_reception(conn, code)
+            return {"trouvee": False, "code_barre": code, "reception": origine}
+        dossiers = [r["no_dossier"] for r in conn.execute(
+            """SELECT DISTINCT no_dossier FROM fab_matieres_utilisees
+                WHERE UPPER(code_barre)=? AND no_dossier IS NOT NULL
+                ORDER BY no_dossier""", (code,)).fetchall()]
+        bobine["dossiers_scannes"] = dossiers
+        return {"trouvee": True, **bobine}
+
+
+def _origine_bobine_reception(conn, code: str) -> Optional[dict]:
+    """Réception d'un code présent dans le journal mais pas dans l'inventaire."""
+    row = conn.execute(
+        """SELECT sr.id, sr.lot_numero, sr.fournisseur, sr.created_at,
+                  sr.fsc_type_claim
+             FROM stock_reception_items i
+             JOIN stock_receptions sr ON sr.id = i.reception_id
+            WHERE UPPER(i.code_barre) = ?
+            ORDER BY i.id DESC LIMIT 1""",
+        (code,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+@router.patch("/api/stock/bobines/{bobine_id}")
+async def bobine_corriger(bobine_id: int, request: Request):
+    """Corrige une bobine : métrage, état, matière, laize, lot, note.
+
+    Le métrage corrigé à la main devient `metrage_origine = 'saisie'` — un
+    chiffre mesuré au magasin n'est ni celui de la packing list ni le standard,
+    et l'écran doit pouvoir le dire.
+    """
+    user = require_stock_write(request)
+    body = await request.json()
+    with get_db() as conn:
+        b = conn.execute("SELECT * FROM stock_bobines WHERE id=?", (bobine_id,)).fetchone()
+        if not b:
+            raise HTTPException(404, "Bobine introuvable.")
+
+        maj, args, detail = [], [], {}
+
+        if "etat" in body:
+            etat = (body.get("etat") or "").strip()
+            if etat not in _sb.ETATS:
+                raise HTTPException(400, "État invalide — stock, consommee ou rebut.")
+            maj.append("etat=?")
+            args.append(etat)
+            detail["etat"] = [b["etat"], etat]
+            if etat == _sb.ETAT_CONSOMMEE:
+                maj.append("consomme_at=COALESCE(consomme_at, ?)")
+                args.append(datetime.now().isoformat(timespec="seconds"))
+            else:
+                maj.append("consomme_at=NULL")
+
+        if "metrage_restant" in body:
+            v = body.get("metrage_restant")
+            if v in (None, ""):
+                maj.append("metrage_restant=NULL")
+                detail["metrage_restant"] = [b["metrage_restant"], None]
+            else:
+                try:
+                    m = float(str(v).replace(",", "."))
+                except (TypeError, ValueError):
+                    raise HTTPException(400, "Métrage invalide.") from None
+                if m < 0:
+                    raise HTTPException(400, "Métrage invalide — valeur positive attendue.")
+                maj += ["metrage_restant=?", "metrage_origine=?"]
+                args += [m, _sb.ORIGINE_SAISIE]
+                detail["metrage_restant"] = [b["metrage_restant"], m]
+
+        for champ in ("matiere_id", "laize_id"):
+            if champ in body:
+                v = body.get(champ)
+                if v in (None, ""):
+                    maj.append("%s=NULL" % champ)
+                    detail[champ] = [b[champ], None]
+                else:
+                    try:
+                        iv = int(v)
+                    except (TypeError, ValueError):
+                        raise HTTPException(400, "%s invalide." % champ) from None
+                    maj.append("%s=?" % champ)
+                    args.append(iv)
+                    detail[champ] = [b[champ], iv]
+
+        for champ in ("lot_fournisseur", "note"):
+            if champ in body:
+                v = (str(body.get(champ) or "")).strip() or None
+                maj.append("%s=?" % champ)
+                args.append(v)
+                detail[champ] = [b[champ], v]
+
+        if not maj:
+            raise HTTPException(400, "Rien à corriger.")
+
+        maj.append("updated_at=?")
+        args.append(datetime.now().isoformat(timespec="seconds"))
+        args.append(bobine_id)
+        conn.execute("UPDATE stock_bobines SET %s WHERE id=?" % ", ".join(maj), args)
+        conn.commit()
+        apres = dict(conn.execute(
+            "SELECT * FROM stock_bobines WHERE id=?", (bobine_id,)).fetchone())
+
+    log_action(
+        user=user, action="UPDATE", module="stock",
+        objet=f"Bobine {b['code_barre']}", detail=detail,
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "bobine": apres}
 
 
 # ── Référentiel produits (référence + unité de vente) ─────────────

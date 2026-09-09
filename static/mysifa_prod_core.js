@@ -222,6 +222,8 @@
     // devis est « inconnu », jamais « il en manque un ».
     rentLinksCharges: false,
     rentDevisSel: null,
+    // Onglet Devis : « tous » ou « verifier » (ceux que l'agent a marques).
+    rentDevisFiltre: 'tous',
     rentCompById: {},
     rentQuery: '',
     rentTags: [],
@@ -4481,9 +4483,27 @@ async function uploadDevis(file, opts){
    planning d'où il vient, plutôt que d'obliger à refaire le geste ensuite. */
 async function saveDevis(body){
   try{
-    const r=await api('/api/rentabilite/devis',{method:'POST',
-      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    // Le même écran sert à valider un devis qui arrive et à corriger un devis
+    // déjà en base. La seule différence est le verbe : sans ça, chaque
+    // correction créerait un doublon au lieu de rectifier.
+    const edition = body.devis_id ? Number(body.devis_id) : null;
+    let r;
+    if(edition){
+      await api('/api/rentabilite/devis/'+edition,{method:'PUT',
+        headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      r={devis_id:edition};
+    }else{
+      r=await api('/api/rentabilite/devis',{method:'POST',
+        headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    }
     if(!r||!r.devis_id)return;
+    if(edition){
+      toast('Devis corrigé.');
+      set({devisPreview:null,devisFichier:null,devisRattachement:null,
+           rentDevisSel:edition});
+      await loadDevis();
+      return;
+    }
     const rat=S.devisRattachement||null;
     if(rat&&rat.type==='dossier'&&rat.reference){
       await api('/api/rentabilite/devis/'+r.devis_id+'/dossiers',{method:'PUT',
@@ -4589,9 +4609,11 @@ function renderDevisForm(resultat){
   };
 
   // Bandeau : ce qui a lu le fichier, et ce que ça a coûté d'arbitrages.
+  const edition = R.devis_id ? Number(R.devis_id) : null;
   const entete=h('div',{className:'devis-entete'},
     h('div',null,
-      h('h3',{style:{fontSize:'16px',fontWeight:'700',margin:'0 0 4px'}},'Valider le devis lu'),
+      h('h3',{style:{fontSize:'16px',fontWeight:'700',margin:'0 0 4px'}},
+        edition ? 'Corriger le devis' : 'Valider le devis lu'),
       h('div',{style:{fontSize:'12px',color:'var(--text2)'}},
         preview.filename||'devis',
         ' — ',
@@ -4704,6 +4726,7 @@ function renderDevisForm(resultat){
           body[k]=el.type==='number'?(parseFloat(el.value)||0):el.value;
         });
         body.filename=preview.filename;
+        if(edition) body.devis_id=edition;
         // La provenance suit la valeur : un champ corrigé à la main est
         // marqué comme tel, sinon la source affichée mentirait.
         const champsValides={};
@@ -4725,7 +4748,7 @@ function renderDevisForm(resultat){
         body.fichier_chemin=R.fichier_chemin||'';
         body.fichier_mime=R.fichier_mime||'';
         saveDevis(body);
-      }},'Enregistrer le devis')
+      }}, edition ? 'Enregistrer les corrections' : 'Enregistrer le devis')
     )
   );
 }
@@ -5024,6 +5047,18 @@ function renderRentPilotage(){
     kpi(charges?aLier:'…','À lier')
   );
 
+  /* Les devis ramassés automatiquement dont la lecture laisse un doute. Ce
+     compteur n'a de sens qu'en pilotage : c'est une dette de vérification,
+     pas un état de dossier. */
+  const devisDouteux = (S.devisList||[]).filter(d=>Number(d.a_verifier)===1);
+  const rappelDevis = devisDouteux.length ? h('button',{type:'button',
+    className:'rent-rappel',
+    onClick:()=>set({rentSubTab:'devis',rentDevisFiltre:'verifier',rentDevisSel:null})},
+    iconEl('alert-triangle',14),
+    h('span',null,' '+devisDouteux.length+' devis importé'+(devisDouteux.length>1?'s':'')
+      +' automatiquement demande'+(devisDouteux.length>1?'nt':'')+' une vérification')
+  ) : null;
+
   /* La couverture dit en une ligne si l'outil sert à quelque chose : sans
      devis liés, la comparaison devis/réel n'existe sur aucun dossier. */
   const jauge = charges ? h('div',{className:'card',style:{padding:'16px 18px',marginBottom:'14px'}},
@@ -5129,7 +5164,7 @@ function renderRentPilotage(){
             : 'Chargement des liaisons…')
   );
 
-  return h('div',null, tuiles, jauge, resteAFaire, tableauEcarts);
+  return h('div',null, tuiles, rappelDevis, jauge, resteAFaire, tableauEcarts);
 }
 
 // ── Sous-onglet Dossiers ─────────────────────────────────────────
@@ -5513,6 +5548,81 @@ function renderRentPanneau(g, listeVisible){
   );
 }
 
+/* Quinze cartes d'affilée ne se lisent pas : l'œil n'a aucun point d'appui
+   pour savoir où commence l'identification et où commence la production. Les
+   mêmes quinze valeurs, groupées en trois blocs titrés, se parcourent. */
+var SECTIONS_DEVIS = [
+  {titre:'Identification', cles:['client','date_devis']},
+  {titre:'Produit', cles:['format_v','format_h','laize','nb_couleurs','gache']},
+  {titre:'Production devisée', cles:[
+    'temps_calage_mn','metrage_calage_ml',
+    'temps_calage_impression_mn','metrage_calage_impression_ml',
+    'temps_production_mn','metrage_production_ml',
+    'vitesse_theorique','qte_etiquettes']},
+];
+
+/* Une carte de valeur, avec sa provenance.
+
+   La confiance « haute » ne s'affiche PAS. C'est le cas normal : quinze
+   pastilles « sûr » alignées ne signalent plus rien et noient la seule qui
+   dit « à vérifier ». Même principe que les pastilles de la liste des
+   dossiers — on ne marque que ce qui sort de l'ordinaire. */
+function renderChampDevis(cle, m){
+  const brut = m && m.valeur;
+  const estNombre = typeof brut==='number'
+    || (typeof brut==='string' && brut!=='' && !isNaN(Number(brut)));
+  const valeur = (brut!=null && brut!=='')
+    ? (estNombre ? Number(brut).toLocaleString('fr-FR',{maximumFractionDigits:2}) : String(brut))
+    : '—';
+  const meta = [];
+  if(m && m.source) meta.push(h('span',{className:'devis-source'}, m.source));
+  if(m && m.confiance && m.confiance!=='haute'){
+    meta.push(h('span',{className:'devis-conf devis-conf-'+m.confiance},
+      m.confiance==='moyenne'?'à vérifier':'incertain'));
+  }
+  if(m && m.origine==='ia') meta.push(h('span',{className:'devis-conf devis-conf-ia'},'IA'));
+  if(m && m.origine==='manuel') meta.push(h('span',{className:'devis-conf devis-conf-absent'},'saisi'));
+  if(m && m.origine==='repli') meta.push(h('span',{className:'devis-conf devis-conf-moyenne'},'déduit'));
+
+  return h('div',{className:'rent-champ'+(m&&m.confiance&&m.confiance!=='haute'?' is-doute':'')},
+    h('div',{className:'rent-champ-lbl'}, (m&&m.libelle)||cle),
+    h('div',{className:'rent-champ-val'}, valeur,
+      (m&&m.unite)?h('span',{className:'rent-champ-unite'},' '+m.unite):null),
+    meta.length?h('div',{className:'devis-meta'},...meta):null,
+    (m&&m.commentaire)?h('div',{className:'rent-champ-note'}, m.commentaire):null
+  );
+}
+
+/* Rouvre l'écran de validation sur un devis déjà enregistré.
+
+   On reconstitue la forme que rend l'import — socle, provenance par champ,
+   alertes — depuis ce que la base a conservé. Un devis ramassé par l'agent
+   n'a jamais été relu : « Modifier » est le geste qui le fait passer de
+   « lu par une machine » à « vu par quelqu'un ». */
+function ouvrirCorrectionDevis(dv){
+  if(!dv) return;
+  let champs={}, coherence=[];
+  try{ champs = dv.extraction_json ? JSON.parse(dv.extraction_json) : {}; }catch(_){ champs={}; }
+  try{ coherence = dv.coherence_json ? JSON.parse(dv.coherence_json) : []; }catch(_){ coherence=[]; }
+  const socle={};
+  ['client','date_devis','format_h','format_v','laize','nb_couleurs',
+   'temps_calage_mn','metrage_calage_ml','temps_calage_impression_mn',
+   'metrage_calage_impression_ml','temps_production_mn','metrage_production_ml',
+   'vitesse_theorique','qte_etiquettes','gache'].forEach(k=>{ socle[k]=dv[k]; });
+  socle.filename = dv.filename||'';
+  socle.parse_errors = [];
+  set({
+    devisPreview:{
+      preview:socle, champs:champs, indicateurs:[], coherence:coherence,
+      methode:dv.extraction_methode||'manuel', modele:dv.extraction_modele||'',
+      remarques:'', devis_id:dv.id,
+      fichier_chemin:dv.fichier_chemin||'', fichier_mime:dv.fichier_mime||'',
+    },
+    // Pas de fichier en mémoire : « Relire avec l'IA » n'a rien à renvoyer.
+    devisFichier:null, devisRattachement:null,
+  });
+}
+
 // ── Sous-onglet Devis ────────────────────────────────────────────
 function renderRentDevis(){
   const devisList = S.devisList||[];
@@ -5520,6 +5630,23 @@ function renderRentDevis(){
 
   const LIB_METHODE={regex:'Lecture directe',ia:'Lecture IA',mixte:'Directe + IA',
                      manuel:'Saisie manuelle',historique:'Import historique',echec:'Lecture en échec'};
+
+  /* Les devis ramassés par l'agent sur le partage réseau entrent sans que
+     personne les ait relus. C'est assumé — la saisie manuelle de centaines de
+     devis n'aurait jamais lieu — mais alors il faut que l'œil aille droit sur
+     ceux qui posent question. Le serveur lève `a_verifier` quand un champ clé
+     manque ou qu'un contrôle de cohérence est en défaut ; ici on les compte,
+     on les remonte en tête, et on affiche le motif. Sans ça, le drapeau
+     n'existerait que dans la base. */
+  const aVerifier = devisList.filter(d=>Number(d.a_verifier)===1);
+  const filtreDevis = S.rentDevisFiltre || 'tous';
+  const listeAffichee = (filtreDevis==='verifier' ? aVerifier : devisList)
+    .slice()
+    .sort((a,b)=>{
+      const va=Number(a.a_verifier)===1?0:1, vb=Number(b.a_verifier)===1?0:1;
+      if(va!==vb) return va-vb;
+      return String(b.date_devis||'').localeCompare(String(a.date_devis||''));
+    });
 
   // Import libre : un devis peut arriver avant qu'on sache à quel dossier il
   // se rattachera. Le lier reste possible depuis l'onglet Dossiers.
@@ -5545,7 +5672,16 @@ function renderRentDevis(){
   const fmt=(v,u)=>v!=null&&v!==''&&Number(v)!==0
     ? Number(v).toLocaleString('fr-FR',{maximumFractionDigits:2})+(u?' '+u:'') : '—';
 
-  const table = devisList.length
+  const barre = aVerifier.length ? h('div',{className:'rent-filtres',style:{marginBottom:'0'}},
+    ...[{key:'tous',label:'Tous',n:devisList.length},
+        {key:'verifier',label:'À vérifier',n:aVerifier.length}].map(f=>
+      h('button',{type:'button',
+        className:'rent-filtre'+(filtreDevis===f.key?' is-active':''),
+        onClick:()=>set({rentDevisFiltre:f.key,rentDevisSel:null})},
+        f.label, h('span',{className:'rent-filtre-nb'}, String(f.n))))
+  ) : null;
+
+  const table = listeAffichee.length
     ? h('div',{style:{overflowX:'auto'}},
         h('table',{className:'rent-table'},
           h('thead',null,h('tr',null,
@@ -5554,14 +5690,22 @@ function renderRentDevis(){
             h('th',{className:'num'},'Calage'), h('th',null,'Lecture'),
             h('th',{className:'num'},'Dossiers')
           )),
-          h('tbody',null,...devisList.map(dv=>{
+          h('tbody',null,...listeAffichee.map(dv=>{
             const calage=(Number(dv.temps_calage_mn)||0)+(Number(dv.temps_calage_impression_mn)||0);
             const ouvert = sel && Number(sel.id)===Number(dv.id);
+            const doute = Number(dv.a_verifier)===1;
             return h('tr',{className:ouvert?'is-open':'',style:{cursor:'pointer'},
               onClick:()=>set({rentDevisSel:ouvert?null:dv.id})},
               h('td',null,
-                h('div',{style:{fontWeight:'600'}}, dv.client||'(client non lu)'),
-                h('div',{style:{fontSize:'11px',color:'var(--muted)'}}, dv.filename||'')),
+                h('div',{style:{display:'flex',alignItems:'center',gap:'8px'}},
+                  h('span',{style:{fontWeight:'600'}}, dv.client||'(client non lu)'),
+                  doute?rentPastille('à vérifier','manque',dv.note||''):null,
+                  dv.source==='agent'?h('span',{className:'rent-methode',
+                    title:'Ramassé automatiquement sur le partage réseau'},'auto'):null),
+                h('div',{style:{fontSize:'11px',color:'var(--muted)'}}, dv.filename||''),
+                // Le motif du doute, sur la ligne : aller le chercher ailleurs
+                // reviendrait à ne jamais le lire.
+                (doute&&dv.note)?h('div',{className:'rent-motif'}, dv.note):null),
               h('td',null, dv.date_devis||'—'),
               h('td',{className:'num'}, fmt(dv.qte_etiquettes)),
               h('td',{className:'num'}, fmt(dv.vitesse_theorique,'m/mn')),
@@ -5572,7 +5716,10 @@ function renderRentDevis(){
           }))
         )
       )
-    : h('div',{className:'card-empty'},'Aucun devis importé. Dépose un fichier ci-dessus.');
+    : h('div',{className:'card-empty'},
+        filtreDevis==='verifier'
+          ? 'Aucun devis en attente de vérification.'
+          : 'Aucun devis importé. Dépose un fichier ci-dessus.');
 
   // Détail : ce que la lecture a produit, avec la provenance de chaque valeur.
   let detail=null;
@@ -5584,6 +5731,8 @@ function renderRentDevis(){
       h('div',{className:'card-header'},
         h('h3',null,'Devis — '+(sel.client||sel.filename||('#'+sel.id))),
         h('div',{style:{display:'flex',gap:'8px'}},
+          h('button',{type:'button',className:'btn-sm',
+            onClick:()=>ouvrirCorrectionDevis(sel)},'Modifier'),
           h('button',{type:'button',className:'btn-sec',onClick:()=>set({rentDevisSel:null})},'Fermer'),
           h('button',{type:'button',className:'btn-danger',onClick:async()=>{
             // deleteDevis pose deja la confirmation : en ajouter une seconde
@@ -5593,28 +5742,27 @@ function renderRentDevis(){
         )
       ),
       lignes.length
-        ? h('div',{className:'rent-champs'},
-            ...lignes.map(([cle,m])=>h('div',{className:'rent-champ'},
-              h('div',{className:'rent-champ-lbl'}, (m&&m.libelle)||cle),
-              h('div',{className:'rent-champ-val'},
-                // Mêmes conventions que le tableau juste au-dessus : séparateur
-                // de milliers et virgule décimale. « 262000 » et « 67.5 » à
-                // côté de « 262 000 » et « 247,5 mn » se lisent comme deux
-                // outils différents.
-                (m&&m.valeur!=null&&m.valeur!=='')
-                  ? ((typeof m.valeur==='number' || (typeof m.valeur==='string' && m.valeur!=='' && !isNaN(Number(m.valeur))))
-                      ? Number(m.valeur).toLocaleString('fr-FR',{maximumFractionDigits:2})
-                      : String(m.valeur))
-                  : '—',
-                (m&&m.unite)?h('span',{className:'rent-champ-unite'},' '+m.unite):null),
-              h('div',{className:'devis-meta'},
-                (m&&m.source)?h('span',{className:'devis-source'},m.source):null,
-                (m&&m.confiance)?h('span',{className:'devis-conf devis-conf-'+m.confiance},
-                  m.confiance==='haute'?'sûr':(m.confiance==='moyenne'?'à vérifier':'incertain')):null,
-                (m&&m.origine==='ia')?h('span',{className:'devis-conf devis-conf-ia'},'IA'):null,
-                (m&&m.origine==='manuel')?h('span',{className:'devis-conf devis-conf-absent'},'saisi'):null
-              )
-            ))
+        ? h('div',{className:'rent-champs-sections'},
+            ...SECTIONS_DEVIS.map(sec=>{
+              const dedans = sec.cles.filter(c=>champs[c]);
+              if(!dedans.length) return null;
+              return h('div',{className:'rent-section'},
+                h('div',{className:'rent-section-titre'}, sec.titre),
+                h('div',{className:'rent-champs'},
+                  ...dedans.map(cle=>renderChampDevis(cle, champs[cle])))
+              );
+            }),
+            // Ce que le socle ne prévoit pas : affiché quand même, jamais perdu.
+            (()=>{
+              const connus = new Set(SECTIONS_DEVIS.reduce((a,s)=>a.concat(s.cles),[]));
+              const autres = lignes.filter(([c])=>!connus.has(c));
+              return autres.length
+                ? h('div',{className:'rent-section'},
+                    h('div',{className:'rent-section-titre'},'Autres'),
+                    h('div',{className:'rent-champs'},
+                      ...autres.map(([c,m])=>renderChampDevis(c,m))))
+                : null;
+            })()
           )
         : h('div',{className:'card-empty'},
             'Ce devis a été importé avant le suivi de provenance : aucune source enregistrée.')
@@ -5624,8 +5772,11 @@ function renderRentDevis(){
   return h('div',null, dz, dzInp,
     h('div',{className:'card'},
       h('div',{className:'card-header'},
-        h('h3',null,'Devis importés ('+devisList.length+')'),
-        h('button',{type:'button',className:'btn-sec',onClick:async()=>{await loadDevis();toast('Devis rechargés');}},'Rafraîchir')
+        h('h3',null,'Devis importés ('+listeAffichee.length+')'),
+        h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
+          barre,
+          h('button',{type:'button',className:'btn-sec',onClick:async()=>{await loadDevis();toast('Devis rechargés');}},'Rafraîchir')
+        )
       ),
       table
     ),

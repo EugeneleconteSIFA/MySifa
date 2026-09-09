@@ -25,6 +25,7 @@ Deux pièges corrigés ici, qui rendaient tout import silencieusement vide :
 """
 import io
 import re
+from datetime import datetime, timedelta
 from typing import Any, Optional
 
 import pandas as pd
@@ -256,6 +257,41 @@ def paliers_quantite(df, sheet_name: str) -> list[dict]:
     return paliers
 
 
+# Le modèle maison arrive prérempli « Mon client », et tous les commerciaux ne
+# le remplacent pas. Prendre ce texte pour un nom de client remplit la
+# bibliothèque de devis d'un même client fantôme, sous lequel plus rien ne se
+# retrouve. Ces valeurs valent « non renseigné », pas « client ».
+_CLIENTS_FACTICES = {
+    "mon client", "nom du client", "client", "nom client", "xxx", "x",
+    "à compléter", "a completer", "-", "?", "n/a", "na", "test", "exemple",
+}
+
+
+def _client_factice(valeur) -> bool:
+    txt = str(valeur or "").strip().lower().rstrip(":").strip()
+    return (not txt) or txt in _CLIENTS_FACTICES
+
+
+# Excel compte les dates en jours depuis le 30/12/1899. Quand la cellule n'est
+# pas formatée en date — ce qui arrive d'un classeur à l'autre — pandas rend le
+# nombre brut, et « 46266 » s'affichait tel quel dans la liste des devis. La
+# plage 20 000-60 000 (1954-2064) écarte les nombres qui ne sont pas des dates.
+_EPOQUE_EXCEL = datetime(1899, 12, 30)
+
+
+def _date_lisible(valeur) -> str:
+    """Rend « AAAA-MM-JJ » depuis une date, une série Excel ou un texte."""
+    if hasattr(valeur, "strftime"):
+        return valeur.strftime("%Y-%m-%d")
+    try:
+        serie = float(valeur)
+    except (TypeError, ValueError):
+        return str(valeur or "").strip()[:10]
+    if 20000 <= serie <= 60000:
+        return (_EPOQUE_EXCEL + timedelta(days=int(serie))).strftime("%Y-%m-%d")
+    return str(valeur or "").strip()[:10]
+
+
 def _safe_float(val, default=0.0):
     try:
         return float(val) if val is not None and not pd.isna(val) else default
@@ -332,13 +368,12 @@ def parse_devis(file_bytes: bytes, filename: str) -> dict:
     if df_prix is not None:
         try:
             v, c = chercher(df_prix, nom_prix, r"nom.du.client|client")
-            if v is not None:
+            if v is not None and not _client_factice(v):
                 poser("client", str(v).strip(), c)
 
             v, c = chercher(df_prix, nom_prix, r"^date\s*:")
             if v is not None:
-                d = v.strftime("%Y-%m-%d") if hasattr(v, "strftime") else str(v)[:10]
-                poser("date_devis", d, c)
+                poser("date_devis", _date_lisible(v), c)
 
             v, c = chercher(df_prix, nom_prix, r"format.hauteur|dim.h")
             poser("format_h", v, c, _safe_float)

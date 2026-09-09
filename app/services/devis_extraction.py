@@ -17,10 +17,12 @@ La réponse, en deux temps :
    accompagné de sa source (« Calculs!I2 », « page 2 ») et d'un niveau de
    confiance.
 
-Rien n'entre en base sans validation humaine : ce module ne fait que proposer.
-L'écran de validation de MyProd affiche valeur, provenance et confiance, et
-c'est Eugène qui tranche. C'est le seul moyen honnête de faire lire un devis
-par une machine : on montre d'où vient chaque chiffre.
+Ce module ne fait que LIRE et proposer : il n'écrit jamais en base. Ce qu'il
+rend porte, pour chaque valeur, la cellule d'où elle vient et le niveau de
+confiance de la lecture — c'est le seul moyen honnête de faire lire un devis
+par une machine. Selon le chemin d'entrée, un humain valide cette proposition
+(dépôt depuis MyProd) ou le serveur l'enregistre telle quelle en signalant ce
+qui reste douteux (agent qui ramasse le partage réseau).
 
 CE MODULE NE DEVINE JAMAIS. Un champ absent du fichier reste absent — il ne
 prend ni zéro, ni valeur « raisonnable ». Un zéro inventé dans un devis, c'est
@@ -553,8 +555,31 @@ def controles_coherence(donnees: dict, indicateurs: Optional[list] = None,
 # Point d'entrée
 # ══════════════════════════════════════════════════════════════════
 
+def _client_de_repli(filename: str, chemin_origine: str = "") -> tuple[str, str]:
+    """À défaut de client dans le classeur, celui que le rangement désigne.
+
+    Le modèle maison arrive prérempli « Mon client » et beaucoup de
+    commerciaux ne le remplacent pas. Le vrai nom est ailleurs : dans le
+    dossier où le devis est rangé, ou à défaut dans le nom du document. Ce
+    n'est pas une lecture, c'est une déduction — elle sort donc en confiance
+    « moyenne » et le dit.
+
+    Rend `(valeur, provenance)`.
+    """
+    chemin = (chemin_origine or "").replace("\\", "/").strip("/")
+    # On remonte l'arborescence en sautant les dossiers d'année : rangé dans
+    # « CARREFOUR/2026/devis.xlsx », le client est CARREFOUR, pas 2026.
+    segments = [seg.strip() for seg in chemin.split("/")[:-1] if seg.strip()]
+    for dossier in reversed(segments):
+        if re.fullmatch(r"(devis\s*)?\d{4}", dossier, re.I):
+            continue
+        return dossier, "nom du dossier"
+    base = os.path.basename(filename or "").rsplit(".", 1)[0].strip()
+    return (base, "nom du fichier") if base else ("", "")
+
+
 def extraire_devis(file_bytes: bytes, filename: str, content_type: str = "",
-                   forcer_ia: bool = False) -> dict:
+                   forcer_ia: bool = False, chemin_origine: str = "") -> dict:
     """Lit un devis et rend une proposition à valider.
 
     Sortie :
@@ -689,6 +714,19 @@ def extraire_devis(file_bytes: bytes, filename: str, content_type: str = "",
             methode = "regex"
     elif besoin_ia:
         methode = "echec" if not champs else "regex"
+
+    # Le client, quand ni le classeur ni le modèle ne l'ont donné. Placé ici,
+    # après l'IA : le repli ne prend la main que si personne n'a mieux.
+    if champ_vide(socle.get("client")) and "client" not in champs:
+        valeur, provenance = _client_de_repli(filename, chemin_origine)
+        if valeur:
+            socle["client"] = valeur
+            champs["client"] = {
+                "valeur": valeur, "libelle": CHAMPS_SOCLE["client"][0], "unite": "",
+                "source": provenance, "confiance": "moyenne", "origine": "repli",
+                "commentaire": "Aucun client lu dans le devis : repris du "
+                               + provenance + ", à corriger si besoin.",
+            }
 
     # Le socle reste au format historique : les champs numériques non trouvés
     # valent 0 en base, mais `champs` dit lesquels n'ont jamais été lus.
