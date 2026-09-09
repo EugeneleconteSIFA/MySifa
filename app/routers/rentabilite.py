@@ -2,14 +2,30 @@
 SIFA — Rentabilité v1.0
 Import devis, liaison dossiers, comparaison théorique/réel.
 Accès : direction + administration uniquement.
+
+Lecture d'un devis : `app/services/devis_extraction.py`. Le parser à motifs
+traite le modèle maison, l'IA prend le relais dès qu'un champ clé manque ou
+que le fichier n'est pas un classeur. Rien n'entre en base sans passer par
+l'écran de validation de MyProd : ces routes proposent, elles n'enregistrent
+que ce qu'un humain a confirmé.
 """
+import json
+import os
+import uuid
 from datetime import datetime
+
 from fastapi import APIRouter, Request, UploadFile, File, HTTPException
+
 from database import get_db
 from services.auth_service import get_current_user
-from services.devis_parser import parse_devis
+from app.services.devis_extraction import extraire_devis
 from app.services.dossier_stats import build_dossier_production_stats
-from config import ROLES_ADMIN
+from config import (
+    DEVIS_EXTENSIONS_ACCEPTEES,
+    DEVIS_MAX_FILE_MB,
+    DEVIS_UPLOAD_DIR,
+    ROLES_ADMIN,
+)
 
 router = APIRouter()
 
@@ -295,17 +311,62 @@ def suggest_no_dossiers(request: Request, q: str = "", limit: int = 12):
     return [r["no_dossier"] for r in rows]
 
 # ── Import d'un devis ─────────────────────────────────────────────
+def _extension(filename: str) -> str:
+    return (filename or "").lower().rsplit(".", 1)[-1] if "." in (filename or "") else ""
+
+
+def _conserver_fichier(contents: bytes, filename: str) -> str:
+    """Range le devis d'origine et rend son chemin relatif.
+
+    Le nom est généré ici : rien de ce que l'utilisateur envoie n'entre dans
+    le chemin, sauf l'extension, déjà validée contre une liste blanche.
+    """
+    try:
+        os.makedirs(DEVIS_UPLOAD_DIR, exist_ok=True)
+        ext = _extension(filename) or "bin"
+        nom = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.{ext}"
+        with open(os.path.join(DEVIS_UPLOAD_DIR, nom), "wb") as f:
+            f.write(contents)
+        return nom
+    except Exception:
+        # Conserver le fichier est un confort d'audit, pas une condition de
+        # l'import : un disque plein ne doit pas bloquer une lecture de devis.
+        return ""
+
+
 @router.post("/api/rentabilite/devis/import")
-async def import_devis(request: Request, file: UploadFile = File(...)):
+async def import_devis(request: Request, file: UploadFile = File(...),
+                       forcer_ia: int = 0):
+    """Lit un devis et rend une PROPOSITION — aucun enregistrement ici.
+
+    `forcer_ia=1` redemande une lecture au modèle alors même que le parser a
+    trouvé les champs clés : c'est le bouton « Relire avec l'IA » de l'écran
+    de validation, quand il manque un indicateur secondaire.
+    """
     require_rentabilite(request)
     contents = await file.read()
     filename = file.filename or "devis.xlsx"
 
-    parsed = parse_devis(contents, filename)
-    return {
-        "preview": parsed,
-        "parse_errors": parsed.get("parse_errors", []),
-    }
+    ext = _extension(filename)
+    if ext not in DEVIS_EXTENSIONS_ACCEPTEES:
+        raise HTTPException(
+            400,
+            "Format non accepté — formats lus : "
+            + ", ".join(DEVIS_EXTENSIONS_ACCEPTEES) + ".",
+        )
+    if len(contents) > DEVIS_MAX_FILE_MB * 1024 * 1024:
+        raise HTTPException(
+            400, f"Fichier trop volumineux — {DEVIS_MAX_FILE_MB} Mo maximum."
+        )
+
+    resultat = extraire_devis(
+        contents, filename,
+        content_type=(file.content_type or ""),
+        forcer_ia=bool(forcer_ia),
+    )
+    resultat["fichier_chemin"] = _conserver_fichier(contents, filename)
+    resultat["fichier_mime"] = file.content_type or ""
+    return resultat
 
 
 # ── Valider et sauvegarder un devis ──────────────────────────────
@@ -345,8 +406,99 @@ async def create_devis(request: Request):
             )
         )
         devis_id = cursor.lastrowid
+
+        # Traçabilité de la lecture. `extraction_json` garde, champ par champ,
+        # la source et la confiance affichées au moment de la validation :
+        # c'est ce qui permet, des mois après, de rouvrir la bonne cellule
+        # plutôt que de rejouer une extraction avec un modèle qui a changé.
+        cols_devis = {r[1] for r in conn.execute("PRAGMA table_info(devis)").fetchall()}
+        if "extraction_methode" in cols_devis:
+            conn.execute(
+                """UPDATE devis SET extraction_methode=?, extraction_modele=?,
+                          extraction_json=?, coherence_json=?,
+                          fichier_chemin=?, fichier_mime=?,
+                          valide_par=?, valide_at=?
+                   WHERE id=?""",
+                (
+                    body.get("extraction_methode") or "manuel",
+                    body.get("extraction_modele") or "",
+                    json.dumps(body.get("champs") or {}, ensure_ascii=False),
+                    json.dumps(body.get("coherence") or [], ensure_ascii=False),
+                    body.get("fichier_chemin") or "",
+                    body.get("fichier_mime") or "",
+                    user["email"],
+                    now,
+                    devis_id,
+                ),
+            )
+
+        _remplacer_indicateurs(conn, devis_id, body.get("indicateurs") or [], now)
         conn.commit()
     return {"success": True, "devis_id": devis_id}
+
+
+def _remplacer_indicateurs(conn, devis_id: int, indicateurs: list, now: str) -> int:
+    """Pose les indicateurs hors socle validés pour ce devis.
+
+    Remplacement complet plutôt qu'ajout : rejouer un import corrige les
+    valeurs au lieu d'empiler deux versions du même libellé.
+    """
+    tables = {
+        r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
+    if "devis_indicateurs" not in tables:
+        return 0
+
+    conn.execute("DELETE FROM devis_indicateurs WHERE devis_id=?", (devis_id,))
+    poses = 0
+    for ind in indicateurs:
+        libelle = str((ind or {}).get("libelle") or "").strip()
+        if not libelle:
+            continue
+        valeur_nombre = ind.get("valeur_nombre")
+        try:
+            valeur_nombre = float(valeur_nombre) if valeur_nombre is not None else None
+        except (TypeError, ValueError):
+            valeur_nombre = None
+        conn.execute(
+            """INSERT OR REPLACE INTO devis_indicateurs
+               (devis_id, libelle, valeur_nombre, valeur_texte, unite,
+                source, confiance, origine, cree_at)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (
+                devis_id, libelle, valeur_nombre,
+                str(ind.get("valeur_texte") or ""),
+                str(ind.get("unite") or ""),
+                str(ind.get("source") or ""),
+                str(ind.get("confiance") or ""),
+                str(ind.get("origine") or "ia"),
+                now,
+            ),
+        )
+        poses += 1
+    return poses
+
+
+# ── Indicateurs hors socle d'un devis ─────────────────────────────
+@router.get("/api/rentabilite/devis/{devis_id}/indicateurs")
+def get_indicateurs(devis_id: int, request: Request):
+    """Les indicateurs du devis que le socle comparable ne prévoit pas."""
+    require_rentabilite(request)
+    with get_db() as conn:
+        tables = {
+            r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        if "devis_indicateurs" not in tables:
+            return []
+        rows = conn.execute(
+            "SELECT * FROM devis_indicateurs WHERE devis_id=? ORDER BY libelle",
+            (devis_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 # ── Liste des devis ───────────────────────────────────────────────

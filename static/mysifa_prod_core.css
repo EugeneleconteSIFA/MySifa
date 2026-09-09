@@ -1134,3 +1134,49 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
   .trc-timeline{padding-left:18px}
   .trc-node::before{left:-16px}
 }
+
+/* ── Rentabilité : écran de validation d'un devis lu ──────────────
+   Une valeur lue par une machine ne vaut que si on peut la vérifier : chaque
+   champ porte sa provenance (« Calculs!I2 ») et son niveau de confiance. Ces
+   deux informations sont plus petites que la valeur, jamais plus discrètes
+   que lisibles — c'est ce qu'on regarde quand un chiffre surprend. */
+.devis-entete{display:flex;justify-content:space-between;align-items:flex-start;
+  gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.devis-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:5px}
+.devis-source{font-family:monospace;font-size:10px;color:var(--muted);
+  background:var(--bg);border:1px solid var(--border);padding:1px 6px;border-radius:4px}
+.devis-conf{font-size:10px;font-weight:600;padding:1px 7px;border-radius:12px}
+.devis-conf-haute{color:var(--success);background:rgba(52,211,153,.12)}
+.devis-conf-moyenne{color:var(--warn);background:rgba(251,191,36,.12)}
+.devis-conf-basse{color:var(--danger);background:rgba(248,113,113,.12)}
+.devis-conf-ia{color:var(--accent);background:var(--accent-bg)}
+.devis-conf-ok{color:var(--success);background:rgba(52,211,153,.12)}
+.devis-conf-absent{color:var(--muted);background:rgba(100,116,139,.14)}
+.devis-commentaire{font-size:11px;color:var(--text2);font-style:italic;
+  flex:1 1 100%;line-height:1.4}
+
+.devis-alertes{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.devis-alerte{display:flex;align-items:flex-start;gap:7px;font-size:12px;
+  line-height:1.45;padding:8px 11px;border-radius:8px;border:1px solid var(--border)}
+.devis-alerte svg{flex:0 0 auto;margin-top:2px}
+.devis-alerte-avertissement{color:var(--warn);background:rgba(251,191,36,.08);
+  border-color:rgba(251,191,36,.25)}
+.devis-alerte-manquant{color:var(--danger);background:rgba(248,113,113,.07);
+  border-color:rgba(248,113,113,.22)}
+.devis-alerte-info{color:var(--text2);background:var(--bg)}
+
+.devis-remarques{font-size:12px;color:var(--text2);line-height:1.5;
+  padding:10px 12px;border-left:3px solid var(--accent);background:var(--accent-bg);
+  border-radius:0 8px 8px 0;margin-bottom:16px}
+
+.devis-indicateurs{display:flex;flex-direction:column;gap:2px}
+.devis-indic{display:flex;align-items:center;gap:10px;padding:6px 8px;
+  border-radius:6px;cursor:pointer;font-size:12px}
+.devis-indic:hover{background:var(--bg)}
+.devis-indic input{margin:0;flex:0 0 auto}
+.devis-indic-lib{flex:1 1 auto;color:var(--text2)}
+.devis-indic-val{font-family:monospace;font-weight:600;color:var(--text)}
+
+@media(max-width:640px){
+  .devis-entete{flex-direction:column;gap:10px}
+}

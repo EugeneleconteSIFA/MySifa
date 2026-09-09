@@ -204,6 +204,12 @@
     selDevis: null,
     comparaison: null,
     devisPreview: null,
+    // Le fichier déposé reste en mémoire tant que la validation n'est pas
+    // faite : c'est lui que « Relire avec l'IA » renvoie au serveur.
+    devisFichier: null,
+    // Ce à quoi le devis sera lié une fois validé (dossier, ligne planning).
+    devisRattachement: null,
+    devisLecture: false,
     rentList: null,
     rentSelEntryId: null,
     rentLinksById: {},
@@ -4422,26 +4428,67 @@ async function loadComparaison(devisId){
   if(d)set({comparaison:d});
 }
 
-async function uploadDevis(file){
+/* Formats acceptés au dépôt. Les commerciaux n'envoient pas tous un classeur :
+   certains devis arrivent en PDF sorti de l'ERP, d'autres en photo d'un
+   tirage papier. Le serveur les lit tous — refuser le format ici obligerait
+   à ressaisir à la main ce qu'une machine sait lire. */
+var DEVIS_ACCEPT='.xlsx,.xlsm,.xls,.pdf,.png,.jpg,.jpeg,.webp';
+
+/* Lecture d'un devis — l'import ne fait que PROPOSER.
+   Le serveur lit le fichier (parser à motifs, puis IA si un champ clé manque)
+   et rend valeur + source + confiance pour chacun. Rien n'entre en base :
+   l'écran de validation s'ouvre, et c'est l'utilisateur qui enregistre.
+   `opts.rattachement` mémorise ce à quoi le devis devra être lié une fois
+   validé — la ligne de planning ou le dossier depuis lequel on a déposé le
+   fichier — pour que l'écran de validation ne fasse pas perdre ce contexte.
+   `opts.forcerIa` redemande une lecture au modèle : le bouton « Relire avec
+   l'IA », quand il manque un indicateur que le parser n'a pas su trouver. */
+async function uploadDevis(file, opts){
+  const o = opts || {};
+  if(!file) return;
   try{
+    set({devisLecture:true});
     const fd=new FormData();fd.append('file',file);
-    const r=await api('/api/rentabilite/devis/import',{method:'POST',body:fd});
-    if(!r)return;
-    if(r.parse_errors&&r.parse_errors.length){
-      toast('Parsed avec avertissements : '+r.parse_errors[0],'warn');
-    }
-    set({devisPreview:r.preview,selDevis:null,comparaison:null});
-  }catch(e){toast(e.message,'error');}
+    const url='/api/rentabilite/devis/import'+(o.forcerIa?'?forcer_ia=1':'');
+    const r=await api(url,{method:'POST',body:fd});
+    if(!r||!r.preview){ set({devisLecture:false}); return toast('Devis illisible.','error'); }
+    set({
+      devisPreview:r,
+      devisFichier:file,
+      devisRattachement:(o.rattachement||S.devisRattachement||null),
+      devisLecture:false,
+      selDevis:null,
+      comparaison:null
+    });
+    const manquants=(r.champs_cles_manquants||[]).length;
+    if(manquants) toast(manquants+' indicateur(s) clé(s) non trouvé(s) — à compléter.','warn');
+  }catch(e){ set({devisLecture:false}); toast(e.message,'error'); }
 }
 
+/* Enregistrement après validation humaine.
+   `rattachement` est appliqué ici : lier le devis au dossier ou à la ligne de
+   planning d'où il vient, plutôt que d'obliger à refaire le geste ensuite. */
 async function saveDevis(body){
   try{
     const r=await api('/api/rentabilite/devis',{method:'POST',
       headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(!r)return;
-    toast('Devis enregistré');
-    set({devisPreview:null});
+    if(!r||!r.devis_id)return;
+    const rat=S.devisRattachement||null;
+    if(rat&&rat.type==='dossier'&&rat.reference){
+      await api('/api/rentabilite/devis/'+r.devis_id+'/dossiers',{method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({dossiers:[rat.reference]})}).catch(()=>{});
+    }else if(rat&&rat.type==='planning'&&rat.entryId){
+      // `saveLinks` vit dans le rendu de Rentabilité : on appelle la route
+      // directement plutôt que de dépendre de sa portée.
+      await api('/api/rentabilite/links/'+rat.entryId,{method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({devis_id:Number(r.devis_id),no_dossiers:(rat.dossiers||[])})}).catch(()=>{});
+    }
+    toast('Devis enregistré'+(rat&&rat.libelle?' et lié à '+rat.libelle:'')+'.');
+    set({devisPreview:null,devisFichier:null,devisRattachement:null});
     await loadDevis();
+    if(rat&&rat.type==='dossier'){ set({selDevis:r.devis_id}); await loadComparaison(r.devis_id); }
   }catch(e){toast(e.message,'error');}
 }
 
@@ -4465,56 +4512,201 @@ async function deleteDevis(id){
   }catch(e){toast(e.message,'error');}
 }
 
-function renderDevisForm(preview){
+/* ── Écran de validation d'un devis lu ────────────────────────────
+   Le principe : une valeur lue par une machine ne vaut que si on peut la
+   vérifier. Chaque champ affiche donc D'OÙ il vient — « Calculs!I2 », ou la
+   page du PDF — et à quel point la lecture est sûre. L'utilisateur voit la
+   cellule à ouvrir dans Excel s'il doute, corrige à la main, et c'est SA
+   validation qui écrit en base.
+
+   `resultat` est la réponse complète de /api/rentabilite/devis/import :
+   { preview, champs, indicateurs, coherence, methode, modele, remarques }.
+   L'ancien appel ne recevait que `preview` : ce paramètre reste toléré. */
+function renderDevisForm(resultat){
+  const R = (resultat && resultat.preview) ? resultat : {preview:resultat||{},champs:{},indicateurs:[],coherence:[]};
+  const preview = R.preview || {};
+  const champs = R.champs || {};
+  const coherence = R.coherence || [];
+  const indicateurs = Array.isArray(R.indicateurs) ? R.indicateurs : [];
   const inputs={};
-  const mkField=(label,key,type='text',val)=>{
-    const i=h('input',{type,value:val!=null?String(val):''});
+
+  const LIB_METHODE={
+    regex:'Lecture directe du classeur',
+    ia:'Lecture par IA',
+    mixte:'Classeur lu directement, complété par l\'IA',
+    echec:'Aucune lecture automatique n\'a abouti',
+    manuel:'Saisie manuelle'
+  };
+  const LIB_CONF={haute:'sûr',moyenne:'à vérifier',basse:'incertain'};
+  // `fN2` vit dans le rendu de la comparaison : formateur local, même règle.
+  const fmtNb=v=>v!=null?Number(v).toLocaleString('fr-FR',{maximumFractionDigits:2}):'—';
+
+  /* Un champ = sa valeur éditable, sa provenance, sa confiance. La provenance
+     est en monospace : c'est une référence de cellule, pas une phrase. */
+  const mkField=(label,key,type,unite)=>{
+    const meta=champs[key]||null;
+    const val=preview[key];
+    const i=h('input',{type,value:(val!=null&&val!=='')?String(val):''});
     inputs[key]=i;
-    return h('div',{className:'field-item'},h('label',null,label),i);
+
+    const bas=[];
+    if(meta&&meta.source){
+      bas.push(h('span',{className:'devis-source',title:'Emplacement lu dans le fichier'},meta.source));
+    }
+    if(meta&&meta.confiance){
+      bas.push(h('span',{className:'devis-conf devis-conf-'+meta.confiance,
+        title:'Confiance de lecture'},LIB_CONF[meta.confiance]||meta.confiance));
+    }
+    if(meta&&meta.origine==='ia'){
+      bas.push(h('span',{className:'devis-conf devis-conf-ia',title:'Valeur proposée par le modèle'},'IA'));
+    }
+    if(meta&&meta.confirme_ia){
+      bas.push(h('span',{className:'devis-conf devis-conf-ok',title:'Le modèle lit la même valeur au même endroit'},'confirmé'));
+    }
+    if(!meta){
+      bas.push(h('span',{className:'devis-conf devis-conf-absent',title:'Aucune valeur trouvée dans le fichier'},'non trouvé'));
+    }
+    if(meta&&meta.commentaire){
+      bas.push(h('span',{className:'devis-commentaire'},meta.commentaire));
+    }
+
+    return h('div',{className:'field-item'},
+      h('label',null,label+(unite?' ('+unite+')':'')),
+      i,
+      bas.length?h('div',{className:'devis-meta'},...bas):null
+    );
   };
 
+  // Bandeau : ce qui a lu le fichier, et ce que ça a coûté d'arbitrages.
+  const entete=h('div',{className:'devis-entete'},
+    h('div',null,
+      h('h3',{style:{fontSize:'16px',fontWeight:'700',margin:'0 0 4px'}},'Valider le devis lu'),
+      h('div',{style:{fontSize:'12px',color:'var(--text2)'}},
+        preview.filename||'devis',
+        ' — ',
+        (LIB_METHODE[R.methode]||'Lecture automatique'),
+        (R.modele?' · '+R.modele:'')
+      )
+    ),
+    h('div',{style:{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}},
+      S.devisFichier?h('button',{className:'btn-sec',title:'Redemander une lecture au modèle pour compléter les champs manquants',
+        onClick:()=>uploadDevis(S.devisFichier,{forcerIa:true})},'Relire avec l\'IA'):null
+    )
+  );
+
+  const remarques=(R.remarques||'').trim()
+    ? h('div',{className:'devis-remarques'},h('strong',null,'Arbitrages : '),R.remarques)
+    : null;
+
+  /* Les alertes ne corrigent rien : elles montrent ce qui ne tient pas
+     debout, pour que la valeur soit revue avant d'entrer en base. */
+  const alertes=coherence.length
+    ? h('div',{className:'devis-alertes'},
+        ...coherence.map(a=>h('div',{className:'devis-alerte devis-alerte-'+(a.niveau||'info')},
+          iconEl(a.niveau==='avertissement'?'alert-triangle':'alert-circle',13),
+          h('span',null,' '+a.message)))
+      )
+    : null;
+
+  const avertissements=(preview.parse_errors&&preview.parse_errors.length)
+    ? h('div',{className:'devis-alertes'},
+        ...preview.parse_errors.map(m=>h('div',{className:'devis-alerte devis-alerte-info'},
+          iconEl('alert-circle',13),h('span',null,' '+m))))
+    : null;
+
+  // Les indicateurs hors socle : ce que le devis dit en plus, conservé tel
+  // que le fichier l'écrit. Décochés, ils ne sont pas enregistrés.
+  const indicCases=[];
+  const blocIndicateurs=indicateurs.length
+    ? h('div',{className:'form-section'},
+        h('div',{className:'form-section-title'},'Autres indicateurs du devis ('+indicateurs.length+')'),
+        h('div',{className:'devis-indicateurs'},
+          ...indicateurs.map((ind,idx)=>{
+            const cb=h('input',{type:'checkbox'});
+            cb.checked=true;
+            indicCases.push({cb,ind});
+            const valeur=(ind.valeur_nombre!=null)?fmtNb(ind.valeur_nombre):(ind.valeur_texte||'—');
+            return h('label',{className:'devis-indic'},
+              cb,
+              h('span',{className:'devis-indic-lib'},ind.libelle),
+              h('span',{className:'devis-indic-val'},valeur+(ind.unite?' '+ind.unite:'')),
+              ind.source?h('span',{className:'devis-source'},ind.source):null
+            );
+          })
+        )
+      )
+    : null;
+
   return h('div',{className:'card',style:{padding:'24px'}},
-    h('h3',{style:{fontSize:'16px',fontWeight:'700',marginBottom:'4px'}},'📋 Valider le devis importé'),
-    h('p',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'20px'}},
-      preview.filename+(((preview && preview.parse_errors && preview.parse_errors.length)?preview.parse_errors.length:0)?' — ⚠ '+preview.parse_errors.length+' avertissement(s)':' — Données extraites automatiquement')),
+    entete,
+    alertes,
+    avertissements,
+    remarques,
 
     h('div',{className:'form-section'},
       h('div',{className:'form-section-title'},'Informations générales'),
-      h('div',{className:'field-row'},mkField('Client','client','text',preview.client),mkField('Date devis','date_devis','text',preview.date_devis)),
+      h('div',{className:'field-row'},
+        mkField('Client','client','text',''),
+        mkField('Date du devis','date_devis','text','')),
       h('div',{className:'field-row three'},
-        mkField('Format H (mm)','format_h','number',preview.format_h),
-        mkField('Format V (mm)','format_v','number',preview.format_v),
-        mkField('Laize (mm)','laize','number',preview.laize)
+        mkField('Format hauteur','format_h','number','mm'),
+        mkField('Format laize','format_v','number','mm'),
+        mkField('Laize production','laize','number','mm')
       ),
+      h('div',{className:'field-row'},
+        mkField('Nombre de couleurs','nb_couleurs','number',''),
+        mkField('Gâche','gache','number','0,05 = 5 %')
+      )
     ),
 
     h('div',{className:'form-section'},
-      h('div',{className:'form-section-title'},'Données théoriques de production'),
+      h('div',{className:'form-section-title'},'Ce qui a été devisé'),
       h('div',{className:'field-row'},
-        mkField('Temps calage (mn)','temps_calage_mn','number',preview.temps_calage_mn),
-        mkField('Métrage calage (ml)','metrage_calage_ml','number',preview.metrage_calage_ml)
+        mkField('Temps de calage','temps_calage_mn','number','mn'),
+        mkField('Métrage de calage','metrage_calage_ml','number','ml')
       ),
       h('div',{className:'field-row'},
-        mkField('Temps production (mn)','temps_production_mn','number',preview.temps_production_mn),
-        mkField('Métrage production (ml)','metrage_production_ml','number',preview.metrage_production_ml)
+        mkField('Temps de production','temps_production_mn','number','mn'),
+        mkField('Métrage de production','metrage_production_ml','number','ml')
       ),
-      h('div',{className:'field-row three'},
-        mkField('Vitesse (m/mn)','vitesse_theorique','number',preview.vitesse_theorique),
-        mkField('Qté étiquettes','qte_etiquettes','number',preview.qte_etiquettes),
-        mkField('Gâche (%)','gache','number',preview.gache)
-      ),
+      h('div',{className:'field-row'},
+        mkField('Vitesse devisée','vitesse_theorique','number','m/mn'),
+        mkField('Quantité d\'étiquettes','qte_etiquettes','number','ex')
+      )
     ),
 
+    blocIndicateurs,
+
     h('div',{style:{display:'flex',gap:'10px',justifyContent:'flex-end',marginTop:'8px'}},
-      h('button',{className:'btn-ghost',onClick:()=>set({devisPreview:null})},'Annuler'),
+      h('button',{className:'btn-ghost',onClick:()=>set({devisPreview:null,devisFichier:null,devisRattachement:null})},'Annuler'),
       h('button',{className:'btn-sm',onClick:()=>{
         const body={};
         Object.entries(inputs).forEach(([k,el])=>{
-          body[k]=el.type==='number'?parseFloat(el.value)||0:el.value;
+          body[k]=el.type==='number'?(parseFloat(el.value)||0):el.value;
         });
         body.filename=preview.filename;
+        // La provenance suit la valeur : un champ corrigé à la main est
+        // marqué comme tel, sinon la source affichée mentirait.
+        const champsValides={};
+        Object.keys(inputs).forEach(k=>{
+          const meta=champs[k];
+          const brut=inputs[k].type==='number'?(parseFloat(inputs[k].value)||0):inputs[k].value;
+          const inchange=meta&&String(meta.valeur)===String(brut);
+          champsValides[k]=inchange
+            ? Object.assign({},meta,{valeur:brut})
+            : {valeur:brut,source:'',confiance:'haute',origine:'manuel',
+               libelle:(meta&&meta.libelle)||k,unite:(meta&&meta.unite)||''};
+        });
+        body.champs=champsValides;
+        body.indicateurs=indicCases.filter(x=>x.cb.checked)
+          .map(x=>Object.assign({origine:(R.methode==='regex'?'regex':'ia')},x.ind));
+        body.coherence=coherence;
+        body.extraction_methode=R.methode||'manuel';
+        body.extraction_modele=R.modele||'';
+        body.fichier_chemin=R.fichier_chemin||'';
+        body.fichier_mime=R.fichier_mime||'';
         saveDevis(body);
-      }},'✓ Enregistrer le devis')
+      }},'Enregistrer le devis')
     )
   );
 }
@@ -4610,6 +4802,9 @@ function renderLiaisonDossiers(devisId, dossiersLies, allDossiers){
 }
 
 function renderRentabilite(){
+  // Un devis lu attend d'être validé : l'écran prend toute la place. Laisser
+  // la liste derrière inviterait à cliquer ailleurs et à perdre la lecture.
+  if(S.devisPreview) return renderDevisForm(S.devisPreview);
   const list = S.rentList || [];
   const devisList = S.devisList || [];
 
@@ -4868,29 +5063,24 @@ function renderRentabilite(){
       await loadRentComparaison(entryId);
     }},'Comparer');
 
-    // Import devis: keep existing workflow (creates devis + links via old devis_dossiers)
-    // For v2, we still allow import, then we set rent_links.devis_id to the created devis.
+    /* Dépôt d'un devis. Le fichier part en LECTURE, pas en enregistrement :
+       l'écran de validation s'ouvre avec les valeurs, leur provenance et leur
+       niveau de confiance, et la liaison à cette ligne de planning est
+       appliquée une fois la validation confirmée. Enregistrer sans montrer
+       ce que la machine a lu revient à mettre en base des chiffres que
+       personne n'a vus. */
     const dz=h('div',{className:'drop-zone',style:{padding:'20px',marginTop:'12px'}},
-      h('div',{className:'dz-icon',style:{fontSize:'24px'}},'📄'),
-      h('div',{className:'dz-title',style:{fontSize:'13px'}},'Importer un devis (Excel)'),
-      h('div',{className:'dz-sub'},'Le devis pourra être lié à cette ligne rentabilité')
+      h('div',{className:'dz-title',style:{fontSize:'13px'}},'Déposer un devis'),
+      h('div',{className:'dz-sub'},'Excel, PDF ou photo — lecture puis validation avant enregistrement')
     );
-    const dzInp=h('input',{type:'file',accept:'.xlsx,.xls',style:{display:'none'}});
+    const dzInp=h('input',{type:'file',accept:DEVIS_ACCEPT,style:{display:'none'}});
     dzInp.addEventListener('change',async e=>{
       const f=(e && e.target && e.target.files && e.target.files[0]) ? e.target.files[0] : null;
       if(!f) return;
-      try{
-        const fd=new FormData();fd.append('file',f);
-        const preview=await api('/api/rentabilite/devis/import',{method:'POST',body:fd});
-        if(!preview||!preview.preview) return toast('Erreur import','error');
-        const r=await api('/api/rentabilite/devis',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...preview.preview,filename:f.name})});
-        if(!r||!r.devis_id) return toast('Erreur sauvegarde devis','error');
-        // Link in rent_links
-        await saveLinks(entryId, Number(r.devis_id), curDossiers);
-        toast('Devis importé');
-        await loadDevis();
-        await loadRentComparaison(entryId).catch(()=>{});
-      }catch(err){toast(err.message,'error');}
+      await uploadDevis(f,{rattachement:{
+        type:'planning', entryId:entryId, dossiers:curDossiers,
+        libelle:'cette ligne de planning'
+      }});
     });
     dz.addEventListener('click',()=>dzInp.click());
     dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
@@ -5030,6 +5220,7 @@ function renderRentabilite(){
 }
 
 function renderSuivi(){
+  if(S.devisPreview) return renderDevisForm(S.devisPreview);
   const admin = isAdmin(S.user);
   const dos = S.dossiers || [];
   const devisList = S.devisList || [];
@@ -5104,26 +5295,16 @@ function renderSuivi(){
     // Import devis (admin)
     if(admin){
       const dz=h('div',{className:'drop-zone',style:{padding:'20px',marginBottom:'12px'}},
-        h('div',{className:'dz-icon',style:{fontSize:'24px'}},'📄'),
-        h('div',{className:'dz-title',style:{fontSize:'13px'}},'Importer un devis (Excel)'),
-        h('div',{className:'dz-sub'},'Le devis sera lié au dossier '+d.reference)
+        h('div',{className:'dz-title',style:{fontSize:'13px'}},'Déposer un devis'),
+        h('div',{className:'dz-sub'},'Excel, PDF ou photo — lecture puis validation, avant liaison au dossier '+d.reference)
       );
-      const dzInp=h('input',{type:'file',accept:'.xlsx,.xls',style:{display:'none'}});
+      const dzInp=h('input',{type:'file',accept:DEVIS_ACCEPT,style:{display:'none'}});
       dzInp.addEventListener('change',async e=>{
         const f=(e && e.target && e.target.files && e.target.files[0]) ? e.target.files[0] : null;
         if(!f)return;
-        try{
-          const fd=new FormData();fd.append('file',f);
-          const preview=await api('/api/rentabilite/devis/import',{method:'POST',body:fd});
-          if(!preview||!preview.preview)return toast('Erreur import','error');
-          const r=await api('/api/rentabilite/devis',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...preview.preview,filename:f.name})});
-          if(!r||!r.devis_id)return toast('Erreur sauvegarde devis','error');
-          await api('/api/rentabilite/devis/'+r.devis_id+'/dossiers',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({dossiers:[d.reference]})});
-          toast('Devis importé et lié à '+d.reference);
-          await loadDevis();
-          await loadComparaison(r.devis_id);
-          set({selDevis:r.devis_id});
-        }catch(err){toast(err.message,'error');}
+        await uploadDevis(f,{rattachement:{
+          type:'dossier', reference:d.reference, libelle:d.reference
+        }});
       });
       dz.addEventListener('click',()=>dzInp.click());
       dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
