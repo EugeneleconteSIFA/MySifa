@@ -30,6 +30,14 @@
   --success-bg:rgba(52,211,153,.28);
   --warn-bg:rgba(251,191,36,.28);
   --danger-bg:rgba(248,113,113,.28);
+  /* Les memes teintes, mais OPAQUES. Un bloc translucide laisse passer la
+     colonne alternee et la colonne du jour : le meme etat changeait de
+     couleur selon le jour ou il tombait, ce qui ruine une lecture qui repose
+     entierement sur la couleur. Valeurs = la teinte ci-dessus composee une
+     fois pour toutes sur --bg. */
+  --success-bloc:#16453b;
+  --warn-bloc:#4e401b;
+  --danger-bloc:#4d2a30;
   --pf-entree:#059669;
   --pf-sortie:#dc2626;
   --c1:#22d3ee;--c2:#a78bfa;--c3:#34d399;--c4:#fbbf24;--c5:#f87171;
@@ -51,6 +59,9 @@ body.light{
   --success-bg:rgba(5,150,105,.20);
   --warn-bg:rgba(210,75,0,.20);
   --danger-bg:rgba(220,38,38,.18);
+  --success-bloc:#cdeae1;
+  --warn-bloc:#f6dbcc;
+  --danger-bloc:#f9d8d8;
   --pf-entree:#047857;
   --pf-sortie:#b91c1c;
   --c1:#0891b2;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626;
@@ -1425,8 +1436,8 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
 .rent-tl-barre{flex-wrap:wrap;gap:12px}
 .rent-nav-sem{display:inline-flex;gap:6px;align-items:center}
 
-.rent-legende{display:flex;gap:16px;flex-wrap:wrap;align-items:center;
-  padding:0 18px 12px;font-size:11px;color:var(--text2)}
+.rent-legende{display:flex;gap:18px;flex-wrap:wrap;align-items:center;
+  padding:2px 18px 14px;font-size:11px;color:var(--text2)}
 .rent-legende-i{display:inline-flex;align-items:center;gap:6px}
 .rent-point{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0}
 .rent-point-vert{background:var(--success)}
@@ -1434,13 +1445,13 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
 .rent-point-rouge{background:var(--danger)}
 .rent-point-inconnu{background:var(--muted)}
 
-.rent-tl{padding:0 18px 16px;overflow-x:auto}
-.rent-tl-semaine{margin-bottom:18px;min-width:640px}
+.rent-tl{padding:4px 18px 22px;overflow-x:auto}
+.rent-tl-semaine{margin-bottom:28px;min-width:640px}
 .rent-tl-entete{font-size:12px;font-weight:700;color:var(--accent);
-  margin-bottom:6px;letter-spacing:.02em}
+  margin-bottom:9px;letter-spacing:.02em}
 .rent-tl-jours{display:flex;border:1px solid var(--border);
   border-bottom:none;border-radius:8px 8px 0 0;overflow:hidden}
-.rent-tl-jour{flex:1;padding:5px 6px;text-align:center;min-width:0;
+.rent-tl-jour{flex:1;padding:7px 6px;text-align:center;min-width:0;
   border-right:1px solid var(--border);display:flex;flex-direction:column;gap:1px}
 .rent-tl-jour:last-child{border-right:none}
 .rent-tl-jour.is-auj{background:var(--accent-bg)}
@@ -1449,30 +1460,34 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
 
 .rent-tl-piste{position:relative;border:1px solid var(--border);
   border-radius:0 0 8px 8px;background:var(--bg);overflow:hidden}
-.rent-tl-fond{position:absolute;top:0;bottom:0;
+.rent-tl-fond{position:absolute;top:0;bottom:0;z-index:0;
   border-right:1px solid var(--border)}
 .rent-tl-fond.is-pair{background:var(--card)}
 .rent-tl-fond.is-auj{background:var(--accent-bg)}
-.rent-tl-vide{height:44px;display:flex;align-items:center;justify-content:center}
+.rent-tl-vide{height:56px;display:flex;align-items:center;justify-content:center}
 .rent-tl-vide-txt{position:relative;font-size:11px;color:var(--muted)}
 
 /* Le bloc. Bordure gauche pleine + fond teinté : la couleur reste lisible
    même sur un bloc de quelques pixels, alors qu'un fond plein exigerait de
    recalculer la couleur du texte pour chaque état et chaque thème. */
-.rent-tl-bloc{position:absolute;height:28px;border-radius:5px;cursor:pointer;
-  padding:3px 7px;display:flex;flex-direction:column;justify-content:center;
-  gap:1px;overflow:hidden;border:1px solid var(--border);
-  border-left-width:4px;background:var(--card);min-width:13px;
-  transition:transform .08s ease}
-.rent-tl-bloc:hover{transform:translateY(-1px);border-color:var(--accent)}
-.rent-tl-bloc-vert{background:var(--success-bg);border-left-color:var(--success)}
-.rent-tl-bloc-orange{background:var(--warn-bg);border-left-color:var(--warn)}
-.rent-tl-bloc-rouge{background:var(--danger-bg);border-left-color:var(--danger)}
+/* Hauteur 36 et non 28 : deux lignes a 11 px et 10 px, interligne 1,3, plus
+   les marges internes, demandent 32 px. A 28 le nom du client etait rogne en
+   haut — invisible dans le DOM, evident a l'ecran. */
+.rent-tl-bloc{position:absolute;height:36px;border-radius:6px;cursor:pointer;
+  padding:4px 9px;display:flex;flex-direction:column;justify-content:center;
+  gap:2px;overflow:hidden;border:1px solid var(--border);
+  border-left-width:4px;background:var(--card);min-width:14px;
+  z-index:1;transition:transform .08s ease,box-shadow .08s ease}
+.rent-tl-bloc:hover{transform:translateY(-1px);border-color:var(--accent);
+  box-shadow:0 3px 10px rgba(0,0,0,.18);z-index:2}
+.rent-tl-bloc-vert{background:var(--success-bloc);border-left-color:var(--success)}
+.rent-tl-bloc-orange{background:var(--warn-bloc);border-left-color:var(--warn)}
+.rent-tl-bloc-rouge{background:var(--danger-bloc);border-left-color:var(--danger)}
 .rent-tl-bloc-inconnu{background:var(--card);border-left-color:var(--muted)}
 .rent-tl-bloc-cli{font-size:11px;font-weight:700;color:var(--text);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
 .rent-tl-bloc-ref{font-size:10px;color:var(--text2);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
 .rent-tl-bloc.is-etroit{padding:3px 3px}
 .rent-tl-bloc.is-etroit .rent-tl-bloc-cli{font-size:10px}
 
@@ -1515,3 +1530,16 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
   .rent-lier-pied{justify-content:stretch}
   .rent-lier-pied button{flex:1}
 }
+
+/* ── Recherche dans la timeline ───────────────────────────────────
+   On n'enleve pas les blocs qui ne correspondent pas, on les eteint : la
+   place d'un dossier dans sa semaine fait partie de ce qui permet de le
+   reconnaitre, et une timeline a trous ne se lit plus. */
+.rent-tl-bloc.is-hors{opacity:.28;filter:saturate(.35)}
+.rent-tl-bloc.is-hors:hover{opacity:.6}
+.rent-tl-bloc.is-match{box-shadow:0 0 0 2px var(--accent);z-index:2}
+.rent-tl-recherche{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  padding:10px 18px;font-size:12px;color:var(--text2);
+  background:var(--accent-bg);border-bottom:1px solid var(--border)}
+.rent-tl-champ{display:flex;align-items:center;gap:9px;padding:12px 18px;
+  color:var(--muted);border-bottom:1px solid var(--border)}

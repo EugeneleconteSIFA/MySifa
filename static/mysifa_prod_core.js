@@ -5091,7 +5091,9 @@ function renderRentabilite(){
 // pousse un bloc contre le bord de sa colonne plutôt que dans la suivante.
 var RENT_H_DEB = 5;
 var RENT_H_FIN = 21;
-var RENT_LIGNE_H = 34;
+// Hauteur d'une ligne de blocs : 36 px de bloc + 10 px d'air entre deux
+// lignes empilees. Les blocs se touchaient quand la piste en portait deux.
+var RENT_LIGNE_H = 46;
 
 function rentLundiDe(d){
   const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -5437,6 +5439,32 @@ function renderRentPilotage(){
     onClick:rentLancerRapprochement},
     iconEl('shield-check',13), ' Proposer les rattachements');
 
+  /* Recherche, comme dans le planning : on n'enlève rien de la timeline, on
+     éteint ce qui ne correspond pas. Masquer les autres blocs ferait perdre le
+     contexte — c'est précisément la place d'un dossier dans la semaine qui
+     aide à le reconnaître.
+
+     Une différence avec le planning : la recherche porte sur TOUTES les
+     machines, pas seulement celle affichée. Chercher « ROQUETTE » depuis
+     Cohésio 1 alors que le dossier tourne sur DSI répondrait « rien », ce qui
+     est faux ; ici on le dit et on propose d'y aller. */
+  const q = String(S.rentPilotQuery || '').trim().toLowerCase();
+  const correspond = g => {
+    if(!q) return true;
+    const t = [g.head.client, g.head.reference, g.head.numero_of, g.head.ref_produit,
+               g.head.description, g.head.dos_rvgi]
+      .map(x => String(x || '').toLowerCase()).join(' ');
+    return t.indexOf(q) >= 0;
+  };
+
+  const recherche = h('input',{type:'text', id:'rent-pilot-q', className:'rent-input',
+    placeholder:'Rechercher un dossier (client, OF, référence)…',
+    value:S.rentPilotQuery || '', style:{flex:'1',minWidth:'200px'}});
+  // `render()` vide #root : sans cette garde, le champ perdrait le focus à
+  // chaque caractère (règle de frontend-comportement.md).
+  recherche.addEventListener('input', () =>
+    rentSetGardeFocus({rentPilotQuery:recherche.value}, 'rent-pilot-q'));
+
   const legende = h('div',{className:'rent-legende'},
     ...[['vert','Rattaché et validé'],['orange','Proposé, à confirmer'],['rouge','Sans devis']]
       .map(([k, l]) => h('span',{className:'rent-legende-i'},
@@ -5448,6 +5476,7 @@ function renderRentPilotage(){
 
   const semaines = [];
   let placesTotal = 0;
+  let trouvesVisibles = 0;
   for(let s = 0; s < nbSemaines; s++){
     const debutSem = rentAjouterJours(lundi, 7 * s);
     const finSem = rentAjouterJours(debutSem, 7);
@@ -5500,16 +5529,19 @@ function renderRentPilotage(){
       style:{left:(i / jours.length * 100) + '%', width:(100 / jours.length) + '%'}}));
 
     const piste = h('div',{className:'rent-tl-piste',
-      style:{height:(nbLignes * RENT_LIGNE_H + 8) + 'px'}},
+      style:{height:(nbLignes * RENT_LIGNE_H + 12) + 'px'}},
       ...fonds,
       ...blocs.map(b => {
         const head = b.g.head;
         const etat = rentEtatLien(charges ? (liens[Number(head.id)] || {devis_id:null}) : null);
-        const etroit = b.largeur < 6;
+        const etroit = b.largeur < 7;
+        const vu = correspond(b.g);
+        if(q && vu) trouvesVisibles++;
         return h('div',{
-          className:'rent-tl-bloc rent-tl-bloc-' + etat + (etroit ? ' is-etroit' : ''),
+          className:'rent-tl-bloc rent-tl-bloc-' + etat + (etroit ? ' is-etroit' : '')
+            + (q ? (vu ? ' is-match' : ' is-hors') : ''),
           style:{left:b.gauche + '%', width:b.largeur + '%',
-                 top:(b.ligne * RENT_LIGNE_H + 4) + 'px'},
+                 top:(b.ligne * RENT_LIGNE_H + 6) + 'px'},
           title:(head.client || '(client non renseigné)') + ' — ' + (head.reference || '')
                 + '\n' + RENT_ETAT_LIB[etat],
           onClick:()=>ouvrirRattachementModal(head.id)},
@@ -5530,6 +5562,47 @@ function renderRentPilotage(){
     ));
   }
 
+  /* Ce que la recherche a trouvé AILLEURS. Une recherche qui n'éclaire rien à
+     l'écran doit dire pourquoi : mauvaise semaine, ou mauvaise machine. Sans
+     ça, l'utilisateur conclut que le dossier n'existe pas. */
+  let bandeau = null;
+  if(q){
+    const tous = groupes.filter(correspond);
+    const parMach = {};
+    tous.forEach(g => {
+      const m = g.head.machine_nom || g.head.machine_code || '—';
+      parMach[m] = (parMach[m] || 0) + 1;
+    });
+    const premier = tous
+      .map(g => ({g, d:rentParseDate(g.head.planned_start)}))
+      .filter(x => x.d).sort((a, b) => a.d - b.d)[0];
+    const ailleurs = Object.entries(parMach)
+      .filter(([m]) => m !== machineSel).sort((a, b) => b[1] - a[1]);
+
+    bandeau = h('div',{className:'rent-tl-recherche'},
+      h('span',null, !tous.length
+        ? 'Aucun dossier ne correspond à « ' + q +' ».'
+        : (tous.length + ' dossier' + (tous.length > 1 ? 's' : '')
+           + ' trouvé' + (tous.length > 1 ? 's' : '') + ' — '
+           + trouvesVisibles + ' à l\'écran')),
+      ...ailleurs.slice(0, 3).map(([m, n]) =>
+        h('button',{type:'button',className:'btn-sec',
+          title:'Afficher ' + m,
+          onClick:()=>set({rentPilotMachine:m})}, m + ' (' + n + ')')),
+      (premier && !trouvesVisibles)
+        ? h('button',{type:'button',className:'btn-sm',onClick:()=>set({
+            rentPilotMachine:(premier.g.head.machine_nom || premier.g.head.machine_code || machineSel),
+            rentPilotLundi:rentISOJour(rentLundiDe(premier.d))})},
+            'Aller au premier (' + rentDateFR(premier.d) + ')')
+        : null,
+      h('button',{type:'button',className:'btn-sec',
+        onClick:()=>set({rentPilotQuery:''})}, 'Effacer')
+    );
+  }
+
+  /* Deux rangees voulues plutot qu'un repli subi. Mise dans la meme rangee que
+     le reste, la recherche poussait la navigation a la ligne et la barre se
+     cassait en trois etages selon la largeur de la fenetre. */
   const timeline = h('div',{className:'card'},
     h('div',{className:'card-header rent-tl-barre'},
       h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
@@ -5537,6 +5610,8 @@ function renderRentPilotage(){
       h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
         nav, btnMoteur)
     ),
+    h('div',{className:'rent-tl-champ'}, iconEl('search',14), recherche),
+    bandeau,
     legende,
     h('div',{className:'rent-tl'}, ...semaines),
     (charges && !placesTotal)
