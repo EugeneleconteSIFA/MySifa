@@ -162,16 +162,38 @@ DIFF_COUNT=$(gits rev-list --count origin/main..origin/staging 2>/dev/null || ec
 if [[ "$DIFF_COUNT" -gt 0 ]]; then
     log "    $DIFF_COUNT commit(s) sur staging à intégrer dans main"
 
-    # Aligner main local sur origin/main, puis merger origin/staging
+    # Aligner main local sur origin/main, puis AVANCER sur origin/staging
     gits checkout main --quiet 2>/dev/null || gits checkout -B main origin/main --quiet
     gits reset --hard origin/main --quiet || fail "reset main local KO"
 
-    if ! gits merge origin/staging --no-ff -m "promote: merge staging into main" --quiet; then
-        log "    CONFLIT — git merge --abort"
-        gits merge --abort 2>/dev/null
+    # Fast-forward, et non merge. `--no-ff` fabriquait ici un commit qui n'a
+    # JAMAIS existé sur staging : jamais construit par la CI, donc porteur
+    # d'aucun status check. Depuis l'activation du ruleset `protection-main`,
+    # GitHub le refuse par construction — sa règle dit mot pour mot « commits
+    # must first be pushed to another ref where the checks pass ». Une CI de
+    # staging verte n'y changeait rien, et le message d'erreur envoyait
+    # chercher le problème du mauvais côté.
+    #
+    # Le fast-forward pousse le SHA exact du sommet de staging, celui-là même
+    # que la CI a validé. C'est aussi plus juste : la production est un
+    # pointeur sur un état de staging vérifié, pas une branche qui diverge.
+    #
+    # Effet de bord voulu : main ne peut plus diverger. Un commit posé
+    # directement sur main fait échouer le ff-only — CLAUDE.md l'interdit
+    # déjà, ce garde-fou le rend effectif.
+    if ! gits merge --ff-only origin/staging --quiet; then
         gits reset --hard "$PREV_HEAD" --quiet
-        record_promotion "failed" "Conflit de merge staging -> main"
-        fail "Conflit de merge staging → main. À résoudre en local."
+        record_promotion "failed" "main a diverge de staging"
+        fail "main a divergé de staging : la promotion n'est plus un simple
+       fast-forward.
+
+       Cela veut dire qu'un commit existe sur main sans être sur staging —
+       un push direct, ou un correctif appliqué du mauvais côté.
+
+       À faire : ramener ce commit sur staging (git checkout staging &&
+       git merge origin/main), attendre le vert de la CI, puis relancer.
+       Ne pas rétablir un merge --no-ff : le commit qu'il fabrique n'a
+       aucun status check et la règle de branche le refusera."
     fi
 
     # Le message d'erreur du push est capturé : « droits ? » a coûté vingt
@@ -184,23 +206,35 @@ if [[ "$DIFF_COUNT" -gt 0 ]]; then
         echo "$PUSH_ERR" | sed 's/^/    | /'
 
         if echo "$PUSH_ERR" | grep -q "Required status check"; then
-            # La règle de branche sur main exige un check vert. Elle le lit sur
-            # les commits promus — donc sur le sommet de staging, pas sur le
-            # commit de merge fabriqué ici. Traduction : la CI de staging est
-            # rouge, et la promotion refuse de porter en production du code que
-            # les tests recalent. Ce n'est pas un blocage à contourner, c'est le
-            # garde-fou qui fait son travail.
+            # Le check est lu sur le commit POUSSÉ. Depuis que la promotion est
+            # un fast-forward, ce commit est le sommet de staging : le message
+            # ci-dessus décrit donc bien l'état de la CI de staging, et il faut
+            # le lire tel quel plutôt que de l'interpréter.
+            #
+            # GitHub distingue deux cas, et ils n'appellent pas la même chose :
+            #   « is in progress » — la CI tourne encore (~1 min 40 sur ce
+            #     dépôt). Il n'y a rien à corriger, il faut attendre le vert.
+            #   « is expected » / « failing » — la CI est rouge ou absente.
             #
             # Constaté le 1er septembre 2026 : `test_audit_journal.py` échouait
-            # sur staging (une route d'écriture sans module dans la taxonomie
-            # d'audit). Corrigé sur staging, la promotion est passée sans
+            # sur staging. Corrigé sur staging, la promotion est passée sans
             # toucher à la règle.
-            record_promotion "failed" "CI de staging rouge — promotion refusee"
-            fail "Règle de branche sur main : un check obligatoire n'est pas vert.
+            if echo "$PUSH_ERR" | grep -q "in progress"; then
+                record_promotion "failed" "CI de staging encore en cours"
+                fail "La CI de staging n'a pas fini de tourner.
 
-       Il est lu sur les commits promus, c'est-à-dire sur le sommet de staging.
-       Autrement dit : la CI de staging est en échec, et la promotion refuse de
-       porter en production du code que les tests recalent.
+       Rien n'est cassé : le check obligatoire est encore en cours sur le
+       commit à promouvoir. Elle prend environ 1 min 40 sur ce dépôt.
+
+       À faire : attendre le vert, puis relancer ce script.
+       https://github.com/EugeneleconteSIFA/MySifa/actions?query=branch%3Astaging"
+            fi
+            record_promotion "failed" "CI de staging rouge — promotion refusee"
+            fail "Règle de branche sur main : le check obligatoire n'est pas vert
+       sur le commit à promouvoir, c'est-à-dire sur le sommet de staging.
+
+       La promotion refuse de porter en production du code que les tests
+       recalent. Ce n'est pas un blocage à contourner.
 
        À faire : ouvrir l'onglet Actions sur la branche staging, lire le job
        'verifier', corriger ce qui échoue, pousser sur staging, attendre le vert,
@@ -231,7 +265,8 @@ fi
 NEW_VERSION=$(grep -E '^APP_VERSION\s*=' config.py | head -1 | sed -E 's/.*"([^"]+)".*/\1/' || echo "?")
 
 # Figer la liste des commits réellement embarqués dans cette release.
-# --no-merges : on écarte le commit de merge « promote: merge staging into main »,
+# --no-merges : on écarte les éventuels commits de merge (la promotion elle-même
+# est désormais un fast-forward et n'en produit plus),
 # qui n'apporte aucune information pour un lecteur humain.
 COMMITS_RAW=$(gits log "${PREV_HEAD}..${NEW_HEAD}" --no-merges \
     --pretty=format:'%h|%an|%ad|%s' --date=format:'%Y-%m-%d %H:%M' 2>/dev/null || echo "")
