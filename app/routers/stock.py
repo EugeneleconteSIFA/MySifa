@@ -4889,6 +4889,19 @@ async def packing_list_importer(request: Request):
     except (TypeError, ValueError):
         fournisseur_id_saisi = None
 
+    # La certification n'a pas de valeur par défaut raisonnable. La première
+    # version de cet import créait le lot en `non_fsc` sans jamais poser la
+    # question : 48 bobines certifiées sont entrées en « Non FSC », et comme le
+    # scan de production lit le claim de LA RÉCEPTION, elles ressortaient
+    # « Non certifié » au pied de la machine. Une bobine certifiée déclarée
+    # non certifiée, c'est une perte sèche de matière FSC — la corriger après
+    # coup suppose que quelqu'un s'en aperçoive.
+    fsc_type_claim = _parse_fsc_type_claim(body.get("fsc_type_claim"), "non_fsc")
+    certificat_fsc = (body.get("certificat_fsc") or "").strip() or None
+    if fsc_type_claim != "non_fsc" and not certificat_fsc:
+        raise HTTPException(
+            400, "Certificat FSC requis pour une réception certifiée FSC.")
+
     now_dt = _now_paris()
     now = now_dt.isoformat()
 
@@ -4927,16 +4940,18 @@ async def packing_list_importer(request: Request):
             fournisseur_id, f_row = _resoudre_fournisseur_reception(
                 conn, fournisseur, fournisseur_id_saisi)
             verdict = _verdict_certificat_reception(f_row, now_dt.date())
-            lot_numero = _build_lot_numero(fournisseur, now_dt, "non_fsc")
+            lot_numero = _build_lot_numero(fournisseur, now_dt, fsc_type_claim)
             cur = conn.execute(
                 """INSERT INTO stock_receptions
                    (created_at, created_by, created_by_name, note, nb_bobines,
-                    fournisseur, fournisseur_id, fsc_type_claim, lot_numero,
-                    certificat_valide, certificat_expiration, certificat_note)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    fournisseur, fournisseur_id, fsc_type_claim, certificat_fsc,
+                    lot_numero, certificat_valide, certificat_expiration,
+                    certificat_note)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (now, created_by, created_by_name,
                  ("Packing list %s" % nom_fichier) if nom_fichier else "Packing list",
-                 0, fournisseur, fournisseur_id, "non_fsc", lot_numero,
+                 0, fournisseur, fournisseur_id, fsc_type_claim, certificat_fsc,
+                 lot_numero,
                  verdict.get("statut"), verdict.get("expiration"), verdict.get("libelle")),
             )
             reception_id = cur.lastrowid
@@ -5044,6 +5059,7 @@ async def packing_list_importer(request: Request):
             "bobines_creees": len(creees),
             "bobines_rattachees": len(rattachees),
             "refusees": len(refusees),
+            "fsc_type_claim": fsc_type_claim,
         },
         ip=request.client.host if request.client else None,
     )
