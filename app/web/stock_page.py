@@ -19306,6 +19306,14 @@ function plkEnsure() {
       // Pas de valeur par défaut sur la certification : c'est une question
       // qui se pose, pas une case qu'on préremplit. Voir plkCarteDestination().
       fscTypeClaim: 'non_fsc', certificatFsc: '',
+      // Deux « lots » cohabitent et ne désignent pas la même chose :
+      //   lotFournisseur — le lot du fabricant, porté par chaque bobine.
+      //     La packing list a parfois une colonne pour ça ; quand elle n'en a
+      //     pas, le numéro vaut souvent pour toute la livraison (« PZH260486 »)
+      //     et se saisit une fois.
+      //   lotNumero — le numéro de la réception MySifa, celui qui part sur
+      //     les étiquettes. MySifa en fabrique un, on peut le remplacer.
+      lotFournisseur: '', lotNumero: '',
     };
   }
   return S.plk;
@@ -19352,12 +19360,19 @@ async function plkImporter() {
       method: 'POST',
       body: JSON.stringify({
         matiere_id: S.recepMatiereId,
-        lignes: a.lignes,
+        // Le lot commun ne remplace jamais celui qu'une ligne porte déjà :
+        // un fichier qui donne le lot bobine par bobine est plus précis que
+        // n'importe quelle saisie globale.
+        lignes: a.lignes.map(l => (
+          (l.lot_fournisseur || !(p.lotFournisseur || '').trim())
+            ? l
+            : { ...l, lot_fournisseur: p.lotFournisseur.trim() })),
         reception_id: p.receptionId || null,
         fournisseur: p.fournisseur || a.fournisseur || null,
         fournisseur_id: a.fournisseur_id || null,
         fsc_type_claim: p.fscTypeClaim || 'non_fsc',
         certificat_fsc: (p.certificatFsc || '').trim() || null,
+        lot_numero: (p.lotNumero || '').trim() || null,
         fichier: a.fichier,
         mapping: a.mapping,
         memoriser: !!p.memoriser,
@@ -19460,6 +19475,16 @@ function plkCarteMapping() {
       plkSelectUnite('unite_metrage', 'Unité de métrage', ['m', 'km', 'yd']),
       plkSelectColonne('lot', 'Lot fournisseur', false),
     ),
+    // Le fichier n'a pas de colonne de lot : le numéro vaut alors pour toute
+    // la livraison et se saisit une fois pour toutes les bobines.
+    (a.mapping && a.mapping.lot) ? null : el('div', { style: { marginTop: '12px' } },
+      el('div', { cls: 'plk-field' },
+        el('label', null, 'Lot fournisseur commun (facultatif)'),
+        el('input', {
+          type: 'text', value: S.plk.lotFournisseur || '',
+          placeholder: 'ex. PZH260486 — appliqué à toutes les bobines sans lot',
+          on: { input: (ev) => { S.plk.lotFournisseur = ev.target.value; } },
+        }))),
   );
 }
 
@@ -19551,6 +19576,14 @@ function plkCarteDestination() {
       el('div', { cls: 'plk-field' }, el('label', null, 'Réception'), selRec),
       p.receptionId ? null
         : el('div', { cls: 'plk-field' }, el('label', null, 'Fournisseur (nouveau lot)'), champFourn),
+      p.receptionId ? null
+        : el('div', { cls: 'plk-field' },
+            el('label', null, 'Numéro de lot'),
+            el('input', {
+              type: 'text', value: p.lotNumero || '',
+              placeholder: 'laissé vide : MySifa le fabrique',
+              on: { input: (ev) => { p.lotNumero = ev.target.value; } },
+            })),
       p.receptionId ? null
         : el('div', { cls: 'plk-field' }, el('label', null, 'Certification'), selClaim),
       (p.receptionId || !certRequis) ? null

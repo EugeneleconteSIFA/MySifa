@@ -30,6 +30,10 @@ from fastapi import APIRouter, File, Form, Header, HTTPException, Request, Uploa
 from database import get_db
 from services.auth_service import get_current_user
 from app.services.devis_extraction import extraire_devis
+from app.services.devis_rapprochement import (
+    classer_pour_entree as classer_devis_pour_entree,
+    proposer as proposer_rapprochements,
+)
 from app.services.dossier_stats import build_dossier_production_stats
 from config import (
     DEVIS_EXTENSIONS_ACCEPTEES,
@@ -108,6 +112,15 @@ def _colonne(row, nom: str, defaut: float = 0.0) -> float:
         return float(v) if v is not None else defaut
     except (TypeError, ValueError):
         return defaut
+
+
+def _texte(row, nom: str, defaut: str = "") -> str:
+    """Même prudence que `_colonne`, pour une colonne texte."""
+    try:
+        v = row[nom]
+    except (IndexError, KeyError):
+        return defaut
+    return defaut if v is None else str(v)
 
 
 def _calage_theorique(devis_row) -> float:
@@ -280,6 +293,21 @@ def _avertissements_comparaison(theo: dict, reel: dict) -> list[dict]:
     return avertissements
 
 
+def _colonnes_rent_links(conn) -> bool:
+    """La migration d'origine/validation est-elle passée sur cette base ?
+
+    Le rapprochement écrit dans des colonnes récentes. Sur une base qui n'a pas
+    encore migré — un poste de développement repris d'une sauvegarde, par
+    exemple — mieux vaut retomber sur l'ancien comportement que servir une 500
+    sur l'écran entier.
+    """
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(rent_links)").fetchall()}
+    except Exception:
+        return False
+    return {"origine", "valide_at", "score", "motif", "valide_par"} <= cols
+
+
 # ── Rentabilité v2 (Planning-based) ───────────────────────────────
 @router.get("/api/rentabilite/planning-entries")
 def list_planning_entries(request: Request):
@@ -314,7 +342,7 @@ def list_links(request: Request):
     require_rentabilite(request)
     with get_db() as conn:
         liens = conn.execute(
-            "SELECT planning_entry_id, devis_id FROM rent_links"
+            "SELECT * FROM rent_links"
         ).fetchall()
         prods = conn.execute(
             "SELECT planning_entry_id, no_dossier FROM rent_prod_links "
@@ -326,12 +354,20 @@ def list_links(request: Request):
         par_entree[int(r["planning_entry_id"])] = {
             "planning_entry_id": int(r["planning_entry_id"]),
             "devis_id": r["devis_id"],
+            # `_texte` plutôt qu'un accès direct : sur une base où la migration
+            # n'est pas encore passée, ces colonnes n'existent pas et l'écran
+            # doit rester lisible plutôt que renvoyer une 500.
+            "origine": _texte(r, "origine", "manuel"),
+            "valide_at": _texte(r, "valide_at", "") or None,
+            "motif": _texte(r, "motif", ""),
+            "score": _colonne(r, "score", 0.0),
             "no_dossiers": [],
         }
     for r in prods:
         eid = int(r["planning_entry_id"])
         entree = par_entree.setdefault(
-            eid, {"planning_entry_id": eid, "devis_id": None, "no_dossiers": []}
+            eid, {"planning_entry_id": eid, "devis_id": None, "origine": "manuel",
+                  "valide_at": None, "motif": "", "score": 0.0, "no_dossiers": []}
         )
         entree["no_dossiers"].append(r["no_dossier"])
     return list(par_entree.values())
@@ -362,7 +398,7 @@ def get_links(planning_entry_id: int, request: Request):
 
 @router.put("/api/rentabilite/links/{planning_entry_id}")
 async def put_links(planning_entry_id: int, request: Request):
-    require_rentabilite(request)
+    user = require_rentabilite(request)
     body = await request.json()
     devis_id = body.get("devis_id")
     no_dossiers = body.get("no_dossiers") or []
@@ -378,13 +414,30 @@ async def put_links(planning_entry_id: int, request: Request):
             if not dv:
                 raise HTTPException(404, "Devis introuvable")
 
-        conn.execute(
-            """INSERT INTO rent_links (planning_entry_id, devis_id, updated_at)
-               VALUES (?,?,?)
-               ON CONFLICT(planning_entry_id) DO UPDATE
-                 SET devis_id=excluded.devis_id, updated_at=excluded.updated_at""",
-            (planning_entry_id, int(devis_id) if devis_id is not None else None, now),
-        )
+        # Une liaison posée depuis l'écran est, par construction, une décision
+        # humaine : elle naît validée. C'est ce qui la distingue d'une
+        # proposition du moteur, qui attend d'être confirmée.
+        if _colonnes_rent_links(conn):
+            conn.execute(
+                """INSERT INTO rent_links
+                     (planning_entry_id, devis_id, updated_at, origine, valide_par, valide_at,
+                      score, motif)
+                   VALUES (?,?,?,'manuel',?,?,NULL,'')
+                   ON CONFLICT(planning_entry_id) DO UPDATE
+                     SET devis_id=excluded.devis_id, updated_at=excluded.updated_at,
+                         origine='manuel', valide_par=excluded.valide_par,
+                         valide_at=excluded.valide_at, score=NULL, motif=''""",
+                (planning_entry_id, int(devis_id) if devis_id is not None else None,
+                 now, user.get("email", ""), now),
+            )
+        else:
+            conn.execute(
+                """INSERT INTO rent_links (planning_entry_id, devis_id, updated_at)
+                   VALUES (?,?,?)
+                   ON CONFLICT(planning_entry_id) DO UPDATE
+                     SET devis_id=excluded.devis_id, updated_at=excluded.updated_at""",
+                (planning_entry_id, int(devis_id) if devis_id is not None else None, now),
+            )
         conn.execute("DELETE FROM rent_prod_links WHERE planning_entry_id=?", (planning_entry_id,))
         for dos in no_dossiers:
             conn.execute(
@@ -393,6 +446,142 @@ async def put_links(planning_entry_id: int, request: Request):
             )
         conn.commit()
     return {"success": True}
+
+
+@router.post("/api/rentabilite/rapprochement")
+def lancer_rapprochement(request: Request):
+    """Propose des liaisons devis ↔ dossier, sans jamais en écraser une.
+
+    Le moteur ne décide rien : il pose des propositions en orange, que
+    quelqu'un confirme ou rejette. C'est la raison d'être de l'état
+    intermédiaire — une liaison automatique validée d'office serait
+    indiscernable d'une liaison choisie, et la comparaison devis/réel n'aurait
+    plus de socle vérifiable.
+    """
+    require_rentabilite(request)
+    with get_db() as conn:
+        if not _colonnes_rent_links(conn):
+            raise HTTPException(
+                409,
+                "La base n'a pas encore la migration des liaisons automatiques. "
+                "Redémarre l'application pour qu'elle s'applique.",
+            )
+
+        devis_rows = [dict(r) for r in conn.execute(
+            "SELECT id, filename, client, date_devis, format_h, format_v, laize "
+            "FROM devis"
+        ).fetchall()]
+        entrees = [dict(r) for r in conn.execute(
+            """SELECT e.id, e.client, e.description, e.ref_produit, e.reference,
+                      e.format_l, e.format_h, e.laize, e.planned_start
+                 FROM planning_entries e
+                 JOIN machines m ON m.id = e.machine_id
+                WHERE m.actif = 1"""
+        ).fetchall()]
+        # Toute entrée déjà liée est hors jeu, proposition comprise : relancer
+        # le moteur ne doit pas défaire ce qu'on a commencé à relire.
+        deja = [int(r["planning_entry_id"]) for r in conn.execute(
+            "SELECT planning_entry_id FROM rent_links"
+        ).fetchall()]
+
+        propositions = proposer_rapprochements(devis_rows, entrees, deja)
+
+        now = datetime.now().isoformat()
+        for p in propositions:
+            conn.execute(
+                """INSERT INTO rent_links
+                     (planning_entry_id, devis_id, updated_at, origine, score, motif,
+                      valide_par, valide_at)
+                   VALUES (?,?,?,'auto',?,?,NULL,NULL)
+                   ON CONFLICT(planning_entry_id) DO NOTHING""",
+                (p["planning_entry_id"], p["devis_id"], now, p["score"], p["motif"]),
+            )
+        conn.commit()
+
+    return {
+        "proposees": len(propositions),
+        "devis_examines": len(devis_rows),
+        "entrees_libres": len(entrees) - len(set(deja)),
+        "propositions": propositions[:50],
+    }
+
+
+@router.get("/api/rentabilite/planning/{planning_entry_id}/devis-suggeres")
+def devis_suggeres(planning_entry_id: int, request: Request, limit: int = 8):
+    """Les devis les plus plausibles pour ce dossier, motif à l'appui.
+
+    Complément indispensable du rapprochement automatique. Sur ce planning,
+    format + client + laize laissent encore jusqu'à treize dossiers
+    indiscernables : le même produit refabriqué pour le même client. Le moteur
+    refuse de trancher, et il a raison — mais l'écran doit quand même mettre
+    les bons candidats sous la main plutôt que renvoyer à la liste entière.
+    """
+    require_rentabilite(request)
+    with get_db() as conn:
+        entree = conn.execute(
+            """SELECT id, client, description, ref_produit, reference,
+                      format_l, format_h, laize, planned_start
+                 FROM planning_entries WHERE id=?""",
+            (planning_entry_id,),
+        ).fetchone()
+        if not entree:
+            raise HTTPException(404, "Entrée planning introuvable")
+        devis_rows = [dict(r) for r in conn.execute(
+            "SELECT id, filename, client, date_devis, format_h, format_v, laize, "
+            "qte_etiquettes, vitesse_theorique FROM devis"
+        ).fetchall()]
+
+    classes = classer_devis_pour_entree(devis_rows, dict(entree),
+                                        max(1, min(int(limit or 8), 20)))
+    par_id = {int(d["id"]): d for d in devis_rows}
+    for c in classes:
+        dv = par_id.get(c["devis_id"], {})
+        c["filename"] = dv.get("filename")
+        c["client"] = dv.get("client")
+        c["qte_etiquettes"] = dv.get("qte_etiquettes")
+        c["vitesse_theorique"] = dv.get("vitesse_theorique")
+    return classes
+
+
+@router.post("/api/rentabilite/links/{planning_entry_id}/valider")
+def valider_lien(planning_entry_id: int, request: Request):
+    """Confirme une proposition : orange → vert."""
+    user = require_rentabilite(request)
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        if not _colonnes_rent_links(conn):
+            raise HTTPException(409, "Migration des liaisons automatiques non appliquée.")
+        lien = conn.execute(
+            "SELECT devis_id FROM rent_links WHERE planning_entry_id=?",
+            (planning_entry_id,),
+        ).fetchone()
+        if not lien:
+            raise HTTPException(404, "Aucune liaison à valider sur ce dossier")
+        if not lien["devis_id"]:
+            raise HTTPException(400, "Cette liaison ne porte aucun devis")
+        conn.execute(
+            "UPDATE rent_links SET valide_par=?, valide_at=?, updated_at=? "
+            "WHERE planning_entry_id=?",
+            (user.get("email", ""), now, now, planning_entry_id),
+        )
+        conn.commit()
+    return {"success": True, "valide_at": now}
+
+
+@router.delete("/api/rentabilite/links/{planning_entry_id}")
+def supprimer_lien(planning_entry_id: int, request: Request):
+    """Rejette une proposition, ou défait une liaison.
+
+    Les dossiers de production liés restent : ils ont été saisis à part et ne
+    dépendent pas du devis.
+    """
+    require_rentabilite(request)
+    with get_db() as conn:
+        n = conn.execute(
+            "DELETE FROM rent_links WHERE planning_entry_id=?", (planning_entry_id,)
+        ).rowcount
+        conn.commit()
+    return {"success": True, "supprime": n}
 
 
 @router.get("/api/rentabilite/planning/{planning_entry_id}/comparaison")

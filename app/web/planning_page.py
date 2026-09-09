@@ -2837,7 +2837,7 @@ async function toggleDestockage(entryId){
   if(etat==="done"||etat==="reserve"){ openDestockageModal(entryId); return; }
 
   try{
-    const r=await api(`/api/stock/destockage/${entryId}/auto`,{method:"POST"});
+    const r=await apiAbs(`/api/stock/destockage/${entryId}/auto`,{method:"POST"});
     appliquerEtatDestockage(entryId,r.destockage||r.etat||"done",(r.reserves||[]).join(" ; "));
     const nb=r.mouvements||0;
     if((r.reserves||[]).length){
@@ -2845,18 +2845,17 @@ async function toggleDestockage(entryId){
     }else{
       toast(`${nb} mati\u00e8re(s) sortie(s) du stock.`);
     }
-  }catch(e){ alert(await messageErreurDestockage(e)); }
+  }catch(e){ alert(messageErreurDestockage(e)); }
 }
 
 // Le serveur explique toujours POURQUOI il refuse — « métrage absent », « la
 // fiche ne boucle pas », « matière non rattachée ». Avaler ce message dans un
-// « erreur » générique renverrait l'utilisateur chercher sans indice.
-async function messageErreurDestockage(e){
-  try{
-    const j=await e.json();
-    if(j&&j.detail) return typeof j.detail==="string"?j.detail:JSON.stringify(j.detail);
-  }catch(x){}
-  return "Déstockage impossible.";
+// « erreur » générique renvoie l'utilisateur chercher sans indice, et c'est
+// exactement ce qui est arrivé le 09/09 : `parseApiError` rend une Error dont
+// le detail est DÉJÀ dans `.message`, pas la Response. Appeler `.json()`
+// dessus levait, et le repli masquait le motif réel — un 404, en l'occurrence.
+function messageErreurDestockage(e){
+  return apiErrorMessage(e, "Déstockage impossible.");
 }
 
 function appliquerEtatDestockage(entryId,etat,reserve){
@@ -3020,12 +3019,12 @@ async function openDestockageModal(entryId){
     <div id="dr-body"><div style="padding:24px;text-align:center;color:var(--muted)">Chargement…</div></div>
   </div></div>`;
   try{
-    const d=await api(`/api/stock/destockage/${entryId}/relecture`);
+    const d=await apiAbs(`/api/stock/destockage/${entryId}/relecture`);
     const b=document.getElementById("dr-body");
     if(b) b.innerHTML=renderDestockageBody(d);
   }catch(err){
     const b=document.getElementById("dr-body");
-    if(b) b.innerHTML=`<div style="padding:20px;color:var(--danger)">${escHtml(await messageErreurDestockage(err))}</div>`;
+    if(b) b.innerHTML=`<div style="padding:20px;color:var(--danger)">${escHtml(messageErreurDestockage(err))}</div>`;
   }
 }
 
@@ -3042,24 +3041,24 @@ async function destockageEnregistrer(entryId){
   if(!lignes.length){ alert("Aucune quantité à enregistrer."); return; }
   const lever=document.getElementById("dr-lever");
   try{
-    const r=await api(`/api/stock/destockage/${entryId}/ajuster`,{
+    const r=await apiAbs(`/api/stock/destockage/${entryId}/ajuster`,{
       method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({lignes,lever_reserve:!!(lever&&lever.checked)})});
     const n=(r.ajustements||[]).length;
     appliquerEtatDestockage(entryId,r.destockage||"done",null);
     closeM();
     toast(n?`${n} ajustement(s) enregistré(s).`:"Aucun écart : rien à enregistrer.");
-  }catch(e){ alert(await messageErreurDestockage(e)); }
+  }catch(e){ alert(messageErreurDestockage(e)); }
 }
 
 async function destockageAnnulerTout(entryId){
   if(!confirm("Annuler tout le déstockage de ce dossier ?\n\nChaque sortie sera contre-passée par une entrée de même quantité. Les deux écritures restent à l'historique.")) return;
   try{
-    const r=await api(`/api/stock/destockage/${entryId}/annuler`,{method:"POST"});
+    const r=await apiAbs(`/api/stock/destockage/${entryId}/annuler`,{method:"POST"});
     appliquerEtatDestockage(entryId,"todo",null);
     closeM();
     toast(`Déstockage annulé — ${(r.mouvements||[]).length} mouvement(s) contre-passé(s).`);
-  }catch(e){ alert(await messageErreurDestockage(e)); }
+  }catch(e){ alert(messageErreurDestockage(e)); }
 }
 
 function buildLegend(sl, m1, nw){

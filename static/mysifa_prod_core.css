@@ -23,6 +23,13 @@
   --success:#34d399;
   --warn:#fbbf24;
   --danger:#f87171;
+  /* Fonds teintés des trois états, au même titre que --accent-bg. Sans eux,
+     chaque écran recalait son propre rgba() sur les valeurs du thème sombre —
+     qui vire au fluo dès qu'on passe en clair, puisque le rgba, lui, ne change
+     pas avec le thème. */
+  --success-bg:rgba(52,211,153,.28);
+  --warn-bg:rgba(251,191,36,.28);
+  --danger-bg:rgba(248,113,113,.28);
   --pf-entree:#059669;
   --pf-sortie:#dc2626;
   --c1:#22d3ee;--c2:#a78bfa;--c3:#34d399;--c4:#fbbf24;--c5:#f87171;
@@ -41,6 +48,9 @@ body.light{
   --success:#059669;
   --warn:#d24b00;
   --danger:#dc2626;
+  --success-bg:rgba(5,150,105,.20);
+  --warn-bg:rgba(210,75,0,.20);
+  --danger-bg:rgba(220,38,38,.18);
   --pf-entree:#047857;
   --pf-sortie:#b91c1c;
   --c1:#0891b2;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626;
@@ -1397,4 +1407,111 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
 @media(max-width:640px){
   .devis-modal-actions{justify-content:stretch}
   .devis-modal-actions button{flex:1}
+}
+
+/* ── Pilotage : la timeline de rattachement ──────────────────────────
+   Même grammaire que le planning de production — semaines, colonnes de
+   jours, blocs posés dessus — mais la couleur y dit l'état du rattachement
+   et rien d'autre. Aucune couleur en dur : les trois états passent par
+   --success / --warn / --danger et leurs fonds teintés, donc suivent le
+   thème et les palettes. */
+.rent-kpi.is-vert{border-color:var(--success)}
+.rent-kpi.is-vert .rent-kpi-val{color:var(--success)}
+.rent-kpi.is-orange{border-color:var(--warn)}
+.rent-kpi.is-orange .rent-kpi-val{color:var(--warn)}
+.rent-kpi.is-rouge{border-color:var(--danger)}
+.rent-kpi.is-rouge .rent-kpi-val{color:var(--danger)}
+
+.rent-tl-barre{flex-wrap:wrap;gap:12px}
+.rent-nav-sem{display:inline-flex;gap:6px;align-items:center}
+
+.rent-legende{display:flex;gap:16px;flex-wrap:wrap;align-items:center;
+  padding:0 18px 12px;font-size:11px;color:var(--text2)}
+.rent-legende-i{display:inline-flex;align-items:center;gap:6px}
+.rent-point{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0}
+.rent-point-vert{background:var(--success)}
+.rent-point-orange{background:var(--warn)}
+.rent-point-rouge{background:var(--danger)}
+.rent-point-inconnu{background:var(--muted)}
+
+.rent-tl{padding:0 18px 16px;overflow-x:auto}
+.rent-tl-semaine{margin-bottom:18px;min-width:640px}
+.rent-tl-entete{font-size:12px;font-weight:700;color:var(--accent);
+  margin-bottom:6px;letter-spacing:.02em}
+.rent-tl-jours{display:flex;border:1px solid var(--border);
+  border-bottom:none;border-radius:8px 8px 0 0;overflow:hidden}
+.rent-tl-jour{flex:1;padding:5px 6px;text-align:center;min-width:0;
+  border-right:1px solid var(--border);display:flex;flex-direction:column;gap:1px}
+.rent-tl-jour:last-child{border-right:none}
+.rent-tl-jour.is-auj{background:var(--accent-bg)}
+.rent-tl-jour-nom{font-size:11px;font-weight:600;color:var(--text2)}
+.rent-tl-jour-date{font-size:10px;color:var(--muted);font-family:monospace}
+
+.rent-tl-piste{position:relative;border:1px solid var(--border);
+  border-radius:0 0 8px 8px;background:var(--bg);overflow:hidden}
+.rent-tl-fond{position:absolute;top:0;bottom:0;
+  border-right:1px solid var(--border)}
+.rent-tl-fond.is-pair{background:var(--card)}
+.rent-tl-fond.is-auj{background:var(--accent-bg)}
+.rent-tl-vide{height:44px;display:flex;align-items:center;justify-content:center}
+.rent-tl-vide-txt{position:relative;font-size:11px;color:var(--muted)}
+
+/* Le bloc. Bordure gauche pleine + fond teinté : la couleur reste lisible
+   même sur un bloc de quelques pixels, alors qu'un fond plein exigerait de
+   recalculer la couleur du texte pour chaque état et chaque thème. */
+.rent-tl-bloc{position:absolute;height:28px;border-radius:5px;cursor:pointer;
+  padding:3px 7px;display:flex;flex-direction:column;justify-content:center;
+  gap:1px;overflow:hidden;border:1px solid var(--border);
+  border-left-width:4px;background:var(--card);min-width:13px;
+  transition:transform .08s ease}
+.rent-tl-bloc:hover{transform:translateY(-1px);border-color:var(--accent)}
+.rent-tl-bloc-vert{background:var(--success-bg);border-left-color:var(--success)}
+.rent-tl-bloc-orange{background:var(--warn-bg);border-left-color:var(--warn)}
+.rent-tl-bloc-rouge{background:var(--danger-bg);border-left-color:var(--danger)}
+.rent-tl-bloc-inconnu{background:var(--card);border-left-color:var(--muted)}
+.rent-tl-bloc-cli{font-size:11px;font-weight:700;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}
+.rent-tl-bloc-ref{font-size:10px;color:var(--text2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}
+.rent-tl-bloc.is-etroit{padding:3px 3px}
+.rent-tl-bloc.is-etroit .rent-tl-bloc-cli{font-size:10px}
+
+.rent-machine-ligne.is-active{border-color:var(--accent);background:var(--accent-bg)}
+
+/* ── Fenêtre de rattachement ─────────────────────────────────────── */
+.rent-lier-modal{max-width:640px}
+.rent-lier-etat{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  font-size:12px;font-weight:600;padding:9px 18px;
+  border-bottom:1px solid var(--border)}
+.rent-lier-etat-vert{background:var(--success-bg);color:var(--success)}
+.rent-lier-etat-orange{background:var(--warn-bg);color:var(--warn)}
+.rent-lier-etat-rouge{background:var(--danger-bg);color:var(--danger)}
+.rent-lier-etat-inconnu{color:var(--muted)}
+.rent-lier-motif{font-weight:400;color:var(--text2)}
+.rent-lier-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.rent-lier-attente{font-size:12px;color:var(--muted);padding:14px 0}
+.rent-lier-pied{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;
+  margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
+
+.rent-sug-liste{display:flex;flex-direction:column;gap:8px}
+.rent-sug{text-align:left;width:100%;background:var(--bg);cursor:pointer;
+  border:1px solid var(--border);border-radius:8px;padding:9px 12px;
+  font-family:inherit;display:flex;flex-direction:column;gap:3px}
+.rent-sug:hover{border-color:var(--accent);background:var(--accent-bg)}
+/* « Rattaché » n'est pas « validé ». Le vert est pris ailleurs par l'état
+   validé : le réutiliser ici ferait lire « c'est confirmé » sur un candidat
+   qui ne l'est pas. On marque donc l'accent, et surtout on l'écrit. */
+.rent-sug.is-lie{border-color:var(--accent);background:var(--accent-bg)}
+.rent-sug-lie{font-size:10px;font-weight:700;color:var(--accent);
+  text-transform:uppercase;letter-spacing:.04em;flex-shrink:0}
+.rent-sug-tete{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.rent-sug-nom{font-size:12px;font-weight:700;color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rent-sug-score{font-size:11px;font-family:monospace;color:var(--accent);flex-shrink:0}
+.rent-sug-motif{font-size:11px;color:var(--text2)}
+.rent-sug-chiffres{font-size:10px;color:var(--muted);font-family:monospace}
+
+@media(max-width:640px){
+  .rent-lier-pied{justify-content:stretch}
+  .rent-lier-pied button{flex:1}
 }
