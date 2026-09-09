@@ -1216,6 +1216,20 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
 
 /* Filtres rapides. L'actif est le seul à porter la couleur d'accent : deux
    états colorés côte à côte ne disent plus lequel s'applique. */
+/* MyProd n'a AUCUNE regle globale pour `input` : un champ sans classe garde
+   le style par defaut du navigateur — bord noir carre, police differente. Les
+   champs de Rentabilite portent donc leur classe, aux valeurs du design
+   system (fond `--bg`, bord `--border`, rayon 10, focus accent). */
+.rent-input{
+  width:100%;box-sizing:border-box;
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;
+  outline:none;transition:border-color .15s,box-shadow .15s;
+}
+.rent-input::placeholder{color:var(--muted)}
+.rent-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.rent-panneau .rent-input{background:var(--card)}
+
 .rent-filtres{display:inline-flex;gap:4px;background:var(--bg);
   border:1px solid var(--border);border-radius:10px;padding:3px}
 .rent-filtre{display:inline-flex;align-items:center;gap:7px;background:transparent;
@@ -1261,14 +1275,22 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
 .rent-panneau .form-section-title{font-size:11px;font-weight:700;
   color:var(--text2);letter-spacing:.6px;margin-bottom:10px;
   padding-bottom:8px;border-bottom:1px solid var(--border)}
-.rent-panneau input,.rent-panneau select{background:var(--card)}
+/* `background` en raccourci reinitialise `background-image` : le chevron du
+   menu deroulant de `.form-sel`, qui est une image SVG en data-uri,
+   disparaissait. `background-color` ne touche que la couleur. */
+.rent-panneau select.form-sel{background-color:var(--card)}
 /* Colonne de droite : sans hauteur minimale, elle se vide et le panneau
    penche a gauche des que le dossier n'a aucune production rattachee. */
 .rent-panneau-grille > div{min-height:150px}
 .rent-panneau-grille{display:grid;grid-template-columns:1fr 1fr;gap:22px}
 .rent-panneau-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;
   margin:16px 0 6px}
-.rent-dz{padding:16px !important;margin:12px 0 0 !important;border-radius:10px}
+/* `.drop-zone` porte un padding de 48px et une marge de 20px ; on les reduit
+   ici. Le `!important` sur `margin` ecrasait aussi la marge posee en ligne sur
+   la zone d'import de l'onglet Devis, qui se retrouvait collee au tableau —
+   d'ou une regle de marge par emplacement plutot qu'un `!important` global. */
+.rent-dz{padding:16px !important;border-radius:10px;margin:12px 0 0}
+.rent-dz-import{margin:0 0 18px}
 .rent-dz .dz-title{font-size:13px}
 
 /* Tableaux (écarts, devis) */
@@ -1299,6 +1321,18 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
 .rent-verdict-success{color:var(--success);border-color:var(--success)}
 .rent-verdict-warn{color:var(--warn);border-color:var(--warn)}
 .rent-verdict-danger{color:var(--danger);border-color:var(--danger)}
+/* Actions au bout de la ligne : visibles en permanence plutot qu'au survol —
+   sur un ecran tactile d'atelier, un bouton qui n'apparait qu'au hover
+   n'existe pas. */
+.rent-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.rent-actions button{white-space:nowrap}
+/* `min-width` sur la cellule : sans elle, le tableau lui donne la largeur
+   qu'il veut et les boutons debordent VERS LA GAUCHE (flex-end + nowrap),
+   hors de leur cellule, peints sous la colonne voisine — invisibles alors
+   que le DOM les dit visibles. `flex-wrap:wrap` est le second garde-fou :
+   sur un ecran etroit ils passent a la ligne au lieu de disparaitre. */
+.rent-table td.rent-actions-td{text-align:right;min-width:196px}
+
 .rent-methode{font-size:10px;font-weight:600;color:var(--text2);
   background:var(--bg);border:1px solid var(--border);padding:2px 8px;
   border-radius:999px;white-space:nowrap}
@@ -1352,3 +1386,15 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
   border:1px solid var(--warn);border-radius:10px;padding:11px 14px;
   margin-bottom:14px;cursor:pointer;font-family:inherit;transition:background .15s}
 .rent-rappel:hover{background:var(--bg)}
+
+/* Fenêtre de détail d'un devis. Reprend `.contact-modal`, élargie : quinze
+   cartes de valeurs à 210 px ont besoin de plus que les 560 px par défaut. */
+.devis-modal{max-width:900px}
+.devis-modal .contact-modal-body{margin-top:4px}
+.devis-modal-actions{display:flex;gap:10px;justify-content:flex-end;
+  flex-wrap:wrap;margin-top:18px;padding-top:14px;
+  border-top:1px solid var(--border)}
+@media(max-width:640px){
+  .devis-modal-actions{justify-content:stretch}
+  .devis-modal-actions button{flex:1}
+}

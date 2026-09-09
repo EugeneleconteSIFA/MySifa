@@ -221,8 +221,9 @@
     // Les liaisons sont-elles toutes chargees ? Tant que non, un dossier sans
     // devis est « inconnu », jamais « il en manque un ».
     rentLinksCharges: false,
-    rentDevisSel: null,
     // Onglet Devis : « tous » ou « verifier » (ceux que l'agent a marques).
+    // Le detail d'un devis n'a plus d'etat : il vit dans une modale posee
+    // dans document.body, que render() ne detruit pas.
     rentDevisFiltre: 'tous',
     rentCompById: {},
     rentQuery: '',
@@ -4500,8 +4501,9 @@ async function saveDevis(body){
     if(edition){
       toast('Devis corrigé.');
       set({devisPreview:null,devisFichier:null,devisRattachement:null,
-           rentDevisSel:edition});
+           rentSubTab:'devis'});
       await loadDevis();
+      ouvrirDevisModal(edition);
       return;
     }
     const rat=S.devisRattachement||null;
@@ -4519,8 +4521,9 @@ async function saveDevis(body){
     if(r.doublon){
       toast('Ce fichier était déjà enregistré — le devis existant a été conservé.','warn');
       set({devisPreview:null,devisFichier:null,devisRattachement:null,
-           rentSubTab:'devis',rentDevisSel:r.devis_id});
+           rentSubTab:'devis'});
       await loadDevis();
+      ouvrirDevisModal(r.devis_id);
       return;
     }
     toast('Devis enregistré'+(rat&&rat.libelle?' et lié à '+rat.libelle:'')+'.');
@@ -4646,8 +4649,11 @@ function renderDevisForm(resultat){
         + (dejaLa.client?(' pour « '+dejaLa.client+' »'):'')
         + (dejaLa.date_devis?(' du '+dejaLa.date_devis):'') + '. '),
       h('button',{type:'button',className:'btn-sec',style:{marginLeft:'8px'},
-        onClick:()=>set({devisPreview:null,devisFichier:null,devisRattachement:null,
-                         rentSubTab:'devis',rentDevisSel:dejaLa.id})},
+        onClick:()=>{
+          set({devisPreview:null,devisFichier:null,devisRattachement:null,
+               rentSubTab:'devis'});
+          ouvrirDevisModal(dejaLa.id);
+        }},
         'Ouvrir le devis existant')
     )
   ) : null;
@@ -5082,7 +5088,7 @@ function renderRentPilotage(){
   const devisDouteux = (S.devisList||[]).filter(d=>Number(d.a_verifier)===1);
   const rappelDevis = devisDouteux.length ? h('button',{type:'button',
     className:'rent-rappel',
-    onClick:()=>set({rentSubTab:'devis',rentDevisFiltre:'verifier',rentDevisSel:null})},
+    onClick:()=>set({rentSubTab:'devis',rentDevisFiltre:'verifier'})},
     iconEl('alert-triangle',14),
     h('span',null,' '+devisDouteux.length+' devis importé'+(devisDouteux.length>1?'s':'')
       +' automatiquement demande'+(devisDouteux.length>1?'nt':'')+' une vérification')
@@ -5264,7 +5270,7 @@ function renderRentDossiers(){
   };
   const removeTag=i=>{ const nt=tags.slice(); nt.splice(i,1); set({rentTags:nt,rentOffset:0}); };
 
-  const inp=h('input',{type:'text',id:RENT_SEARCH_ID,
+  const inp=h('input',{type:'text',id:RENT_SEARCH_ID,className:'rent-input',
     placeholder:'Rechercher (machine, dossier, format, client, date, laize)…',
     value:S.rentQuery||'', style:{flex:'1',minWidth:'240px'}});
   inp.addEventListener('input',()=>rentSetGardeFocus({rentQuery:inp.value},RENT_SEARCH_ID));
@@ -5442,7 +5448,9 @@ function renderRentPanneau(g, listeVisible){
     })
   );
 
-  const dosInput=h('input',{type:'text',placeholder:'N° dossier production (ex : 1003/0002)…',style:{minWidth:'220px',flex:'1'}});
+  const dosInput=h('input',{type:'text',className:'rent-input',
+    placeholder:'N° dossier production (ex : 1003/0002)…',
+    style:{minWidth:'220px',flex:'1'}});
   const dosSugWrap=h('div',{style:{display:'none',gap:'8px',flexWrap:'wrap',marginTop:'8px'}});
   const chipsWrap=h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'10px'}});
   const refreshChips=()=>{
@@ -5653,9 +5661,93 @@ function ouvrirCorrectionDevis(dv){
 }
 
 // ── Sous-onglet Devis ────────────────────────────────────────────
+/* Le détail d'un devis s'ouvre en fenêtre, pas sous le tableau. Ouvert
+   au-dessous, il poussait la liste hors de l'écran : on perdait de vue la
+   ligne qu'on venait de cliquer, et refermer demandait de remonter. La
+   fenêtre reprend le motif de modale déjà en place dans MyProd
+   (`.contact-modal-*`), donc le même geste de fermeture partout.
+
+   Elle est posée dans `document.body`, pas dans `#root` : `render()` vide
+   `#root` à chaque changement d'état, et une modale rendue dedans
+   disparaîtrait au premier rafraîchissement. */
+function fermerDevisModal(){
+  document.getElementById('devis-detail-modal')?.remove();
+}
+
+function ouvrirDevisModal(devisId){
+  fermerDevisModal();
+  const dv = (S.devisList||[]).find(d=>Number(d.id)===Number(devisId));
+  if(!dv){ toast('Devis introuvable.','error'); return; }
+
+  let champs={};
+  try{ champs = dv.extraction_json ? JSON.parse(dv.extraction_json) : {}; }catch(_){ champs={}; }
+  const lignes=Object.entries(champs);
+
+  const overlay=h('div',{id:'devis-detail-modal',className:'contact-modal-overlay'});
+  overlay.addEventListener('click',e=>{ if(e.target===overlay) fermerDevisModal(); });
+  // Échap ferme, comme partout ailleurs.
+  const surTouche=e=>{ if(e.key==='Escape'){ fermerDevisModal(); document.removeEventListener('keydown',surTouche); } };
+  document.addEventListener('keydown',surTouche);
+
+  const corps = lignes.length
+    ? h('div',{className:'rent-champs-sections',style:{padding:'0'}},
+        ...SECTIONS_DEVIS.map(sec=>{
+          const dedans = sec.cles.filter(c=>champs[c]);
+          if(!dedans.length) return null;
+          return h('div',{className:'rent-section'},
+            h('div',{className:'rent-section-titre'}, sec.titre),
+            h('div',{className:'rent-champs'},
+              ...dedans.map(cle=>renderChampDevis(cle, champs[cle])))
+          );
+        }),
+        (()=>{
+          const connus = new Set(SECTIONS_DEVIS.reduce((a,x)=>a.concat(x.cles),[]));
+          const autres = lignes.filter(([c])=>!connus.has(c));
+          return autres.length
+            ? h('div',{className:'rent-section'},
+                h('div',{className:'rent-section-titre'},'Autres'),
+                h('div',{className:'rent-champs'},
+                  ...autres.map(([c,m])=>renderChampDevis(c,m))))
+            : null;
+        })()
+      )
+    : h('div',{className:'card-empty'},
+        'Ce devis a été importé avant le suivi de provenance : aucune source enregistrée.');
+
+  const boite=h('div',{className:'contact-modal devis-modal'},
+    h('div',{className:'contact-modal-head'},
+      h('div',null,
+        h('h3',{style:{margin:'0 0 3px'}}, dv.client||'(client non lu)'),
+        h('div',{style:{fontSize:'11px',color:'var(--muted)'}}, dv.filename||'')
+      ),
+      h('button',{className:'contact-close-btn',title:'Fermer',
+        onClick:fermerDevisModal},'✕')
+    ),
+    (Number(dv.a_verifier)===1 && dv.note)
+      ? h('div',{className:'devis-alertes'},
+          h('div',{className:'devis-alerte devis-alerte-avertissement'},
+            iconEl('alert-triangle',13), h('span',null,' '+dv.note)))
+      : null,
+    h('div',{className:'contact-modal-body'}, corps),
+    h('div',{className:'devis-modal-actions'},
+      h('button',{type:'button',className:'btn-sm',onClick:()=>{
+        fermerDevisModal(); ouvrirCorrectionDevis(dv);
+      }},'Modifier'),
+      h('button',{type:'button',className:'btn-danger',onClick:async()=>{
+        // `deleteDevis` pose déjà sa confirmation — une seconde apprendrait
+        // à cliquer sans lire.
+        await deleteDevis(dv.id); fermerDevisModal();
+      }},'Supprimer'),
+      h('button',{type:'button',className:'btn-sec',onClick:fermerDevisModal},'Fermer')
+    )
+  );
+  boite.addEventListener('click',e=>e.stopPropagation());
+  overlay.appendChild(boite);
+  document.body.appendChild(overlay);
+}
+
 function renderRentDevis(){
   const devisList = S.devisList||[];
-  const sel = S.rentDevisSel!=null ? devisList.find(d=>Number(d.id)===Number(S.rentDevisSel)) : null;
 
   const LIB_METHODE={regex:'Lecture directe',ia:'Lecture IA',mixte:'Directe + IA',
                      manuel:'Saisie manuelle',historique:'Import historique',echec:'Lecture en échec'};
@@ -5679,7 +5771,7 @@ function renderRentDevis(){
 
   // Import libre : un devis peut arriver avant qu'on sache à quel dossier il
   // se rattachera. Le lier reste possible depuis l'onglet Dossiers.
-  const dz=h('div',{className:'drop-zone rent-dz',style:{marginBottom:'14px'}},
+  const dz=h('div',{className:'drop-zone rent-dz rent-dz-import'},
     h('div',{className:'dz-title'},'Importer un devis'),
     h('div',{className:'dz-sub'},'Excel, PDF ou photo — il pourra être lié à un dossier ensuite')
   );
@@ -5706,7 +5798,7 @@ function renderRentDevis(){
         {key:'verifier',label:'À vérifier',n:aVerifier.length}].map(f=>
       h('button',{type:'button',
         className:'rent-filtre'+(filtreDevis===f.key?' is-active':''),
-        onClick:()=>set({rentDevisFiltre:f.key,rentDevisSel:null})},
+        onClick:()=>set({rentDevisFiltre:f.key})},
         f.label, h('span',{className:'rent-filtre-nb'}, String(f.n))))
   ) : null;
 
@@ -5717,14 +5809,13 @@ function renderRentDevis(){
             h('th',null,'Client'), h('th',null,'Date'),
             h('th',{className:'num'},'Quantité'), h('th',{className:'num'},'Vitesse'),
             h('th',{className:'num'},'Calage'), h('th',null,'Lecture'),
-            h('th',{className:'num'},'Dossiers')
+            h('th',{className:'num'},'Dossiers'), h('th',{className:'num'},'Actions')
           )),
           h('tbody',null,...listeAffichee.map(dv=>{
             const calage=(Number(dv.temps_calage_mn)||0)+(Number(dv.temps_calage_impression_mn)||0);
-            const ouvert = sel && Number(sel.id)===Number(dv.id);
             const doute = Number(dv.a_verifier)===1;
-            return h('tr',{className:ouvert?'is-open':'',style:{cursor:'pointer'},
-              onClick:()=>set({rentDevisSel:ouvert?null:dv.id})},
+            return h('tr',{style:{cursor:'pointer'},
+              onClick:()=>ouvrirDevisModal(dv.id)},
               h('td',null,
                 h('div',{style:{display:'flex',alignItems:'center',gap:'8px'}},
                   h('span',{style:{fontWeight:'600'}}, dv.client||'(client non lu)'),
@@ -5740,7 +5831,22 @@ function renderRentDevis(){
               h('td',{className:'num'}, fmt(dv.vitesse_theorique,'m/mn')),
               h('td',{className:'num'}, calage?fmt(calage,'mn'):'—'),
               h('td',null, h('span',{className:'rent-methode'}, LIB_METHODE[dv.extraction_methode]||'—')),
-              h('td',{className:'num'}, String(dv.nb_dossiers_lies||0))
+              h('td',{className:'num'}, String(dv.nb_dossiers_lies||0)),
+              /* Les actions vivent sur la ligne. `stopPropagation` est
+                 indispensable : sans lui, cliquer « Supprimer » ouvrirait
+                 aussi la fenêtre de détail du devis qu'on vient d'effacer. */
+              /* Deux actions, pas trois : cliquer la ligne ouvre déjà le
+                 détail, un bouton « Détail » n'aurait fait que le répéter —
+                 et les trois ensemble (257 px) dépassaient la colonne
+                 (200 px), ce qui poussait le premier HORS de sa cellule,
+                 peint sous la colonne voisine donc invisible. */
+              h('td',{className:'num rent-actions-td'},
+                h('div',{className:'rent-actions'},
+                  h('button',{type:'button',className:'btn-sm',title:'Corriger les valeurs lues',
+                    onClick:e=>{e.stopPropagation();ouvrirCorrectionDevis(dv);}},'Modifier'),
+                  h('button',{type:'button',className:'btn-danger',title:'Supprimer ce devis',
+                    onClick:async e=>{e.stopPropagation();await deleteDevis(dv.id);}},'Supprimer')
+                ))
             );
           }))
         )
@@ -5749,54 +5855,6 @@ function renderRentDevis(){
         filtreDevis==='verifier'
           ? 'Aucun devis en attente de vérification.'
           : 'Aucun devis importé. Dépose un fichier ci-dessus.');
-
-  // Détail : ce que la lecture a produit, avec la provenance de chaque valeur.
-  let detail=null;
-  if(sel){
-    let champs={};
-    try{ champs = sel.extraction_json ? JSON.parse(sel.extraction_json) : {}; }catch(_){ champs={}; }
-    const lignes=Object.entries(champs);
-    detail=h('div',{className:'card',style:{marginTop:'14px'}},
-      h('div',{className:'card-header'},
-        h('h3',null,'Devis — '+(sel.client||sel.filename||('#'+sel.id))),
-        h('div',{style:{display:'flex',gap:'8px'}},
-          h('button',{type:'button',className:'btn-sm',
-            onClick:()=>ouvrirCorrectionDevis(sel)},'Modifier'),
-          h('button',{type:'button',className:'btn-sec',onClick:()=>set({rentDevisSel:null})},'Fermer'),
-          h('button',{type:'button',className:'btn-danger',onClick:async()=>{
-            // deleteDevis pose deja la confirmation : en ajouter une seconde
-            // apprend a l'utilisateur a cliquer sans lire.
-            await deleteDevis(sel.id); set({rentDevisSel:null});
-          }},'Supprimer')
-        )
-      ),
-      lignes.length
-        ? h('div',{className:'rent-champs-sections'},
-            ...SECTIONS_DEVIS.map(sec=>{
-              const dedans = sec.cles.filter(c=>champs[c]);
-              if(!dedans.length) return null;
-              return h('div',{className:'rent-section'},
-                h('div',{className:'rent-section-titre'}, sec.titre),
-                h('div',{className:'rent-champs'},
-                  ...dedans.map(cle=>renderChampDevis(cle, champs[cle])))
-              );
-            }),
-            // Ce que le socle ne prévoit pas : affiché quand même, jamais perdu.
-            (()=>{
-              const connus = new Set(SECTIONS_DEVIS.reduce((a,s)=>a.concat(s.cles),[]));
-              const autres = lignes.filter(([c])=>!connus.has(c));
-              return autres.length
-                ? h('div',{className:'rent-section'},
-                    h('div',{className:'rent-section-titre'},'Autres'),
-                    h('div',{className:'rent-champs'},
-                      ...autres.map(([c,m])=>renderChampDevis(c,m))))
-                : null;
-            })()
-          )
-        : h('div',{className:'card-empty'},
-            'Ce devis a été importé avant le suivi de provenance : aucune source enregistrée.')
-    );
-  }
 
   return h('div',null, dz, dzInp,
     h('div',{className:'card'},
@@ -5808,8 +5866,7 @@ function renderRentDevis(){
         )
       ),
       table
-    ),
-    detail
+    )
   );
 }
 
@@ -10781,7 +10838,8 @@ function renderProdKpis(){
     loadComparaison, uploadDevis, saveDevis, linkDossiers, deleteDevis,
     renderDos, renderDevisForm, renderComparaison, renderLiaisonDossiers,
     renderRentabilite, renderRentPilotage, renderRentDossiers, renderRentDevis,
-    renderRentPanneau, loadRentLinks, rentEnsureLinks, rentSaveLinks,
+    renderRentPanneau, ouvrirDevisModal, fermerDevisModal, loadRentLinks,
+    rentEnsureLinks, rentSaveLinks,
     rentLoadComparaison, rentSuggestNoDossiers, rentSetGardeFocus,
     rentFmtFormat, rentEtat, rentGroupes, rentPastille,
     renderSuivi,
