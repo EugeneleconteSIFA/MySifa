@@ -1342,7 +1342,11 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
    de rien. On contraint la colonne, pas le bloc. */
 .rent-motif{font-size:11px;color:var(--warn);margin-top:3px;line-height:1.4;
   white-space:normal;overflow-wrap:anywhere}
+/* Le nom du client peut etre repris du nom du fichier, qui decrit parfois le
+   produit sur quatre-vingts caracteres. Il doit passer a la ligne dans sa
+   cellule au lieu d'etirer le tableau. */
 .rent-table td:first-child{max-width:420px}
+.rent-table td:first-child > div:first-child{overflow-wrap:anywhere}
 .rent-rappel{display:flex;align-items:center;gap:8px;width:100%;text-align:left;
   font-size:12px;font-weight:600;color:var(--warn);background:var(--card);
   border:1px solid var(--warn);border-radius:10px;padding:11px 14px;

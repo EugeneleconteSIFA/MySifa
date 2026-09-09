@@ -12,11 +12,12 @@ from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 import pandas as pd
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 
 from app.services import mystock_prix as _mystock_prix
+from app.services import packing_list as _pl
 from app.services import stock_bobines as _sb
 from app.services.audit_service import log_action
 from app.services.conditionnement_pf import conditionnement_produit
@@ -394,6 +395,46 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
     sous_section = None
     if "sous_section" in r.keys() and r["sous_section"]:
         sous_section = str(r["sous_section"]).strip() or None
+
+    # ── Les deux stocks : celui qu'on compte, celui qu'on consomme ──────────
+    #
+    # Le magasin compte des OBJETS — des bobines, des palettes. La production
+    # consomme de la MATIÈRE — des mètres, des kilos. Les deux chiffres sont
+    # justes en même temps et ne se remplacent pas : « 15 bobines » ne dit pas
+    # s'il y a de quoi tenir la semaine, « 270 000 m » ne dit pas s'il faut de
+    # la place dans l'allée.
+    #
+    # `quantite` ne change pas de sens pour autant : elle reste ce qu'elle a
+    # toujours été, l'unité de gestion de la catégorie. Ces champs s'ajoutent
+    # à côté, et un chiffre qu'on ne sait pas calculer reste None — jamais 0,
+    # qui se lirait « il n'y en a plus ».
+    stock_reel = None
+    unite_reelle = None
+    stock_reel_source = None
+    stock_simplifie = qte
+    unite_simplifiee = _mp_unite_gestion(cat)
+    if laizee:
+        unite_reelle = "m"
+        if metres:
+            stock_reel = round(qte * metres, 1)
+            # « standard » et non « bobines » : c'est le métrage THÉORIQUE d'une
+            # bobine de cette référence, pas la somme de ce qui reste sur
+            # celles qui sont en stock. L'enrichissement à la bobine, quand il
+            # a lieu, remplace ce chiffre et écrit une autre source.
+            stock_reel_source = "standard"
+    elif adhesif:
+        # Le stock adhésif EST déjà en kilos : c'est le simplifié qui se calcule.
+        unite_reelle = "kg"
+        stock_reel = qte
+        stock_reel_source = "stock"
+        if cond["kg_par_palette"]:
+            stock_simplifie = round(qte / cond["kg_par_palette"], 2)
+            unite_simplifiee = "palette"
+    elif unites_par_palette:
+        unite_reelle = _mp_unite_achat(cat) if _mp_a_conditionnement(cat) else "unité"
+        stock_reel = round(qte * unites_par_palette, 1)
+        stock_reel_source = "conditionnement"
+
     return {
         "id": r["id"],
         "categorie": cat,
@@ -434,6 +475,15 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
         "weight_gsm": weight_gsm,
         "unites_saisie": _mp_unites_saisie_disponibles(cat, cond),
         "complete": complete,
+        # Les deux stocks — voir le bloc de calcul plus haut.
+        "stock_simplifie": stock_simplifie,
+        "unite_simplifiee": unite_simplifiee,
+        "stock_reel": stock_reel,
+        "unite_reelle": unite_reelle,
+        "stock_reel_source": stock_reel_source,
+        "stock_reel_complet": stock_reel is not None,
+        "bobines_en_stock": None,
+        "bobines_sans_metrage": None,
     }
 
 
@@ -4711,6 +4761,327 @@ async def bobine_corriger(bobine_id: int, request: Request):
     return {"success": True, "bobine": apres}
 
 
+# ── Packing list : entrer un lot de bobines sans le scanner ───────
+#
+# Le magasin ne scannera pas 48 bobines une par une quand le fournisseur en
+# livre la liste. Cet import EST donc l'entrée de stock, au même titre qu'un
+# scan — et il apporte en plus ce que le scan ne peut pas donner : le métrage
+# réel bobine par bobine (17 700 à 18 200 m sur une même référence, relevé sur
+# PZH260486) et la laize de chacune.
+#
+# Un scan ultérieur d'une de ces bobines RATTACHE et n'ajoute rien : c'est la
+# règle du 04/09, et c'est `stock_bobines.creer()` qui la tient. Seules les
+# bobines réellement CRÉÉES comptent dans le mouvement d'entrée.
+
+
+def _packing_fournisseur_de_la_reception(conn, reception_id):
+    if not reception_id:
+        return None, None
+    r = conn.execute(
+        "SELECT fournisseur_id, fournisseur FROM stock_receptions WHERE id=?",
+        (int(reception_id),),
+    ).fetchone()
+    if not r:
+        raise HTTPException(404, "Réception introuvable.")
+    return r["fournisseur_id"], r["fournisseur"]
+
+
+@router.post("/api/stock/packing-list/analyser")
+async def packing_list_analyser(
+    request: Request,
+    file: UploadFile = File(...),
+    fournisseur_id: Optional[int] = Form(None),
+    fournisseur: Optional[str] = Form(None),
+    reception_id: Optional[int] = Form(None),
+    mapping: Optional[str] = Form(None),
+):
+    """Lit le fichier et PROPOSE une correspondance de colonnes.
+
+    Rien n'est écrit ici. La réponse porte les en-têtes trouvés, un aperçu, la
+    correspondance proposée et le résultat de l'extraction avec cette
+    correspondance — pour que l'écran montre les bobines telles qu'elles
+    entreraient avant que quiconque ait validé.
+
+    `mapping` (JSON) permet de rejouer l'extraction avec une correspondance
+    corrigée à la main, sans rien enregistrer.
+    """
+    require_stock_write(request)
+    contenu = await file.read()
+    nom_fichier = file.filename or "packing-list.xlsx"
+    try:
+        grille = _pl.lire_fichier(contenu, nom_fichier)
+        analyse = _pl.analyser(grille)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+
+    with get_db() as conn:
+        f_id, f_nom = fournisseur_id, (fournisseur or "").strip() or None
+        if reception_id and not (f_id or f_nom):
+            f_id, f_nom = _packing_fournisseur_de_la_reception(conn, reception_id)
+        memorise = _pl.profil(conn, f_id, f_nom)
+
+    choisi = None
+    origine_mapping = "proposition"
+    if mapping:
+        try:
+            choisi = json.loads(mapping)
+            origine_mapping = "saisi"
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Correspondance de colonnes illisible.") from None
+    elif memorise and memorise.get("code") in analyse["entetes"]:
+        # Le profil ne s'applique que si ses colonnes existent encore dans le
+        # fichier. Un fournisseur qui change son format doit rouvrir la
+        # question, pas voir son ancien profil appliqué en silence.
+        choisi = memorise
+        origine_mapping = "profil"
+    if not choisi:
+        choisi = analyse["proposition"]
+
+    try:
+        extraction = _pl.extraire(grille, choisi)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+
+    return {
+        "fichier": nom_fichier,
+        "entetes": analyse["entetes"],
+        "entete_ligne": analyse["entete_ligne"],
+        "nb_lignes_fichier": analyse["nb_lignes"],
+        "apercu": analyse["apercu"],
+        "proposition": analyse["proposition"],
+        "mapping": choisi,
+        "mapping_origine": origine_mapping,
+        "profil_memorise": memorise,
+        "fournisseur_id": f_id,
+        "fournisseur": f_nom,
+        **extraction,
+    }
+
+
+@router.post("/api/stock/packing-list/importer")
+async def packing_list_importer(request: Request):
+    """Fait entrer en stock les bobines de la liste.
+
+    Body : { matiere_id, lignes[], reception_id? | fournisseur?, fichier?,
+             mapping?, memoriser? }
+
+    Les lignes sont celles que l'écran a montrées et que l'utilisateur a
+    validées — pas celles qu'on recalculerait. Même principe que le déstockage
+    de production : ce qu'un humain a vu et confirmé fait foi.
+    """
+    user = require_stock_write(request)
+    body = await request.json()
+
+    try:
+        matiere_id = int(body.get("matiere_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Matière obligatoire pour un import de liste.") from None
+    lignes = body.get("lignes")
+    if not isinstance(lignes, list) or not lignes:
+        raise HTTPException(400, "Aucune bobine à importer.")
+
+    nom_fichier = (body.get("fichier") or "").strip()[:120] or None
+    reception_id = body.get("reception_id")
+    reception_id = int(reception_id) if reception_id not in (None, "", 0) else None
+    fournisseur_saisi = (body.get("fournisseur") or "").strip() or None
+    try:
+        fournisseur_id_saisi = int(body.get("fournisseur_id") or 0) or None
+    except (TypeError, ValueError):
+        fournisseur_id_saisi = None
+
+    now_dt = _now_paris()
+    now = now_dt.isoformat()
+
+    with get_db() as conn:
+        mp = conn.execute(
+            "SELECT id, categorie, reference FROM matieres_premieres WHERE id=? AND actif=1",
+            (matiere_id,),
+        ).fetchone()
+        if not mp:
+            raise HTTPException(404, "Matière introuvable ou inactive.")
+        if not _mp_is_laizee(mp["categorie"]):
+            raise HTTPException(
+                400,
+                "Import de liste réservé aux matières laizées "
+                "(frontal, glassine, complexe).",
+            )
+
+        created_by = user.get("email")
+        created_by_name = _resolve_created_by_name(conn, user)
+
+        # ── Destination : une réception existante, ou un lot créé ici ──
+        if reception_id:
+            rec = conn.execute(
+                "SELECT id, lot_numero, fournisseur, fournisseur_id, "
+                "       nb_bobines, rvgi_qte_attendue "
+                "  FROM stock_receptions WHERE id=?", (reception_id,),
+            ).fetchone()
+            if not rec:
+                raise HTTPException(404, "Réception introuvable.")
+            lot_numero = rec["lot_numero"]
+            fournisseur = rec["fournisseur"] or fournisseur_saisi
+            fournisseur_id = rec["fournisseur_id"] or fournisseur_id_saisi
+            qte_attendue = rec["rvgi_qte_attendue"]
+        else:
+            fournisseur = fournisseur_saisi
+            fournisseur_id, f_row = _resoudre_fournisseur_reception(
+                conn, fournisseur, fournisseur_id_saisi)
+            verdict = _verdict_certificat_reception(f_row, now_dt.date())
+            lot_numero = _build_lot_numero(fournisseur, now_dt, "non_fsc")
+            cur = conn.execute(
+                """INSERT INTO stock_receptions
+                   (created_at, created_by, created_by_name, note, nb_bobines,
+                    fournisseur, fournisseur_id, fsc_type_claim, lot_numero,
+                    certificat_valide, certificat_expiration, certificat_note)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (now, created_by, created_by_name,
+                 ("Packing list %s" % nom_fichier) if nom_fichier else "Packing list",
+                 0, fournisseur, fournisseur_id, "non_fsc", lot_numero,
+                 verdict.get("statut"), verdict.get("expiration"), verdict.get("libelle")),
+            )
+            reception_id = cur.lastrowid
+            qte_attendue = None
+
+        creees, rattachees, refusees = [], [], []
+        par_laize: dict = {}
+
+        for li in lignes:
+            code = _sb.normaliser_code((li or {}).get("code_barre"))
+            if not code:
+                refusees.append({"motif": "code-barres vide"})
+                continue
+            try:
+                laize_mm = float(str(li.get("laize_mm")).replace(",", "."))
+            except (TypeError, ValueError):
+                refusees.append({"code_barre": code,
+                                 "motif": "laize absente — obligatoire pour une matière laizée"})
+                continue
+            try:
+                metrage = float(str(li.get("metrage_m")).replace(",", "."))
+                metrage = metrage if metrage > 0 else None
+            except (TypeError, ValueError):
+                metrage = None
+
+            laize_id = _upsert_laize_valeur_mm(conn, laize_mm)
+            _ensure_matiere_laize_link(conn, matiere_id, laize_id)
+
+            res_b = _sb.creer(
+                conn,
+                code_barre=code,
+                matiere_id=matiere_id,
+                laize_id=laize_id,
+                reception_id=reception_id,
+                lot_fournisseur=(li.get("lot_fournisseur") or None),
+                metrage=metrage,
+                metrage_origine=_pl_origine_metrage(metrage),
+                source=_sb.SOURCE_LISTE,
+                auteur=created_by_name,
+            )
+            if res_b["cree"]:
+                creees.append(code)
+                par_laize[laize_id] = par_laize.get(laize_id, 0) + 1
+                # Le journal de réception reçoit la bobine comme un scan en
+                # reçoit une : c'est lui que lisent le traceur et la chaîne
+                # FSC, et une bobine déclarée par le fournisseur est une
+                # origine au moins aussi démontrée qu'un code douchette.
+                conn.execute(
+                    """INSERT INTO stock_reception_items
+                       (reception_id, code_barre, scanned_at, matiere_id, laize_id,
+                        doublon_note)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (reception_id, code, now, matiere_id, laize_id,
+                     ("Packing list %s" % nom_fichier) if nom_fichier else "Packing list"),
+                )
+            else:
+                rattachees.append(code)
+
+        if not creees and not rattachees:
+            raise HTTPException(400, "Aucune bobine exploitable dans cette liste.")
+
+        note_mvt = "Packing list %s" % (nom_fichier or lot_numero)
+        mouvements = []
+        for laize_id, nb in par_laize.items():
+            mouvements.append({
+                "laize_id": laize_id,
+                **appliquer_mouvement_mp(
+                    conn, user, matiere_id, "entree", nb,
+                    laize_id=laize_id, note=note_mvt,
+                ),
+            })
+
+        conn.execute(
+            "UPDATE stock_receptions SET nb_bobines = "
+            "  (SELECT COUNT(*) FROM stock_reception_items WHERE reception_id=?) "
+            "WHERE id=?",
+            (reception_id, reception_id),
+        )
+
+        if body.get("memoriser") and body.get("mapping"):
+            try:
+                _pl.enregistrer_profil(
+                    conn,
+                    fournisseur_id=fournisseur_id,
+                    fournisseur_nom=fournisseur,
+                    mapping=body["mapping"],
+                    fichier=nom_fichier,
+                    auteur=created_by_name,
+                )
+            except sqlite3.Error:
+                # Mémoriser le format est un confort ; rater cette écriture ne
+                # doit pas annuler une entrée de stock qui, elle, est juste.
+                pass
+
+        conn.commit()
+
+    log_action(
+        user=user, action="CREATE", module="stock",
+        objet="Packing list — réception #%s" % reception_id,
+        detail={
+            "fichier": nom_fichier,
+            "matiere_id": matiere_id,
+            "matiere_ref": mp["reference"],
+            "lot_numero": lot_numero,
+            "bobines_creees": len(creees),
+            "bobines_rattachees": len(rattachees),
+            "refusees": len(refusees),
+        },
+        ip=request.client.host if request.client else None,
+    )
+
+    return {
+        "success": True,
+        "reception_id": reception_id,
+        "lot_numero": lot_numero,
+        "bobines_creees": len(creees),
+        "bobines_rattachees": len(rattachees),
+        "refusees": refusees,
+        "mouvements": mouvements,
+        # Comparaison affichée, jamais bloquante : l'ERP annonce une quantité
+        # dans son unité, la liste compte des bobines. Les deux peuvent
+        # légitimement différer — c'est l'écart qui mérite un coup d'œil.
+        "qte_attendue_erp": qte_attendue,
+    }
+
+
+def _pl_origine_metrage(metrage) -> Optional[str]:
+    """Le métrage d'une liste vient de la liste ; son absence n'invente rien."""
+    return _sb.ORIGINE_LISTE if metrage else None
+
+
+@router.get("/api/stock/packing-list/profils")
+def packing_list_profils(request: Request):
+    """Formats de packing list déjà validés, un par fournisseur."""
+    require_stock(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT p.*, f.nom AS fournisseur_annuaire
+                 FROM stock_packing_profils p
+                 LEFT JOIN fournisseurs_fsc f ON f.id = p.fournisseur_id
+                ORDER BY COALESCE(f.nom, p.fournisseur_nom) COLLATE NOCASE"""
+        ).fetchall()
+    return {"items": [dict(r) for r in rows]}
+
+
 # ── Référentiel produits (référence + unité de vente) ─────────────
 
 _REF_HEADER_KEYS = frozenset({
@@ -5092,6 +5463,33 @@ def list_matieres_premieres(request: Request, all: int = 0):
                 "licence": fr["licence"],
                 "certificat": fr["certificat"],
             })
+        # Stock réel tenu à la bobine — exact là où il existe.
+        #
+        # Il remplace le calcul « nb de bobines × métrage standard » : sur la
+        # packing list PZH260486, 48 bobines d'une même référence vont de
+        # 17 700 à 18 200 m, et une bobine entamée n'a plus son métrage de
+        # départ. Le standard répondrait un chiffre rond et faux.
+        bobines_par_mat: dict[int, dict] = {}
+        try:
+            for br in conn.execute(
+                """SELECT matiere_id,
+                          COUNT(*) AS nb,
+                          COALESCE(SUM(metrage_restant), 0) AS metrage,
+                          SUM(CASE WHEN metrage_restant IS NULL THEN 1 ELSE 0 END) AS sans
+                     FROM stock_bobines
+                    WHERE etat = 'stock' AND matiere_id IS NOT NULL
+                    GROUP BY matiere_id"""
+            ).fetchall():
+                bobines_par_mat[int(br["matiere_id"])] = {
+                    "nb": int(br["nb"] or 0),
+                    "metrage": round(float(br["metrage"] or 0), 1),
+                    "sans": int(br["sans"] or 0),
+                }
+        except sqlite3.Error:
+            # La table peut ne pas exister sur une base qui n'a pas encore joué
+            # la migration : le stock réel retombe alors sur le standard, ce
+            # qu'il faisait de toute façon avant ce chantier.
+            bobines_par_mat = {}
     by_mat: dict[int, list[dict]] = {}
     for r in laize_rows:
         try:
@@ -5112,7 +5510,18 @@ def list_matieres_premieres(request: Request, all: int = 0):
     out = []
     for r in rows:
         spl = by_mat.get(r["id"]) if _mp_is_laizee(r["categorie"]) else None
-        out.append(_mp_row_dict(r, spl))
+        d = _mp_row_dict(r, spl)
+        b = bobines_par_mat.get(int(r["id"]))
+        if b and d.get("laizee"):
+            d["stock_reel"] = b["metrage"]
+            d["stock_reel_source"] = "bobines"
+            d["bobines_en_stock"] = b["nb"]
+            d["bobines_sans_metrage"] = b["sans"]
+            # Une somme qui ignore des bobines sans métrage n'est pas complète,
+            # et l'écran doit pouvoir écrire « + 3 de métrage inconnu » plutôt
+            # qu'un total qui se donne pour exhaustif.
+            d["stock_reel_complet"] = b["sans"] == 0
+        out.append(d)
     return out
 
 
@@ -5912,6 +6321,49 @@ def matiere_inventaire_detail(matiere_id: int, request: Request):
     return {"matiere": mp_d, "lignes": lignes}
 
 
+def _inv_zone(valeur, idx: int, nom: str) -> Optional[float]:
+    """Quantité comptée dans une zone — None quand elle n'a pas été comptée.
+
+    La distinction compte : une zone laissée vide veut dire « pas regardé »,
+    et zéro veut dire « regardé, il n'y a rien ». Écraser l'un par l'autre
+    ferait disparaître du stock à chaque inventaire partiel.
+    """
+    if valeur in (None, ""):
+        return None
+    try:
+        v = float(str(valeur).replace(",", "."))
+    except (TypeError, ValueError):
+        raise HTTPException(400, f"Ligne {idx + 1} : quantité {nom} invalide.") from None
+    if v < 0:
+        raise HTTPException(400, f"Ligne {idx + 1} : quantité {nom} négative.")
+    return v
+
+
+def _inv_ecrire_zones(conn, matiere_id: int, laize_id: Optional[int],
+                      q_magasin: Optional[float], q_production: Optional[float]) -> None:
+    """Reporte le détail par zone sur la ligne de stock. Best-effort.
+
+    `quantite` n'est jamais touchée ici : elle reste la quantité qui fait foi,
+    écrite par le chemin habituel. Ces deux colonnes ne sont qu'un souvenir du
+    dernier comptage — leur échec ne doit pas faire perdre un inventaire.
+    """
+    if q_magasin is None and q_production is None:
+        return
+    try:
+        if laize_id is not None:
+            conn.execute(
+                "UPDATE mp_stock_laize SET quantite_magasin=?, quantite_production=? "
+                " WHERE matiere_id=? AND laize_id=?",
+                (q_magasin, q_production, matiere_id, laize_id))
+        else:
+            conn.execute(
+                "UPDATE mp_stock SET quantite_magasin=?, quantite_production=? "
+                " WHERE matiere_id=?",
+                (q_magasin, q_production, matiere_id))
+    except sqlite3.Error:
+        pass
+
+
 @router.post("/api/stock/matieres/{matiere_id}/inventaire")
 async def matiere_inventaire_valider(matiere_id: int, request: Request):
     """Valide l'inventaire d'une matière.
@@ -5967,10 +6419,19 @@ async def matiere_inventaire_valider(matiere_id: int, request: Request):
                 # Ignorer silencieusement le laize_id sur matière non laizée
                 laize_id = None
 
-            try:
-                q_comptee = float(li.get("quantite_comptee"))
-            except (TypeError, ValueError):
-                raise HTTPException(400, f"Ligne {idx + 1} : quantite_comptee invalide.") from None
+            # Deux zones comptées séparément, ou un seul total : les deux
+            # formes sont acceptées. `quantite_comptee` reste ce qui fait foi ;
+            # quand les zones sont renseignées, c'est leur somme, et l'ancien
+            # écran continue de fonctionner sans rien envoyer de plus.
+            q_magasin = _inv_zone(li.get("quantite_magasin"), idx, "magasin")
+            q_production = _inv_zone(li.get("quantite_production"), idx, "production")
+            if q_magasin is not None or q_production is not None:
+                q_comptee = (q_magasin or 0.0) + (q_production or 0.0)
+            else:
+                try:
+                    q_comptee = float(li.get("quantite_comptee"))
+                except (TypeError, ValueError):
+                    raise HTTPException(400, f"Ligne {idx + 1} : quantite_comptee invalide.") from None
             if q_comptee < 0:
                 raise HTTPException(400, f"Ligne {idx + 1} : quantité négative.")
 
@@ -5980,6 +6441,13 @@ async def matiere_inventaire_valider(matiere_id: int, request: Request):
             q_saisie_li = q_comptee if unite_saisie_li else None
             if facteur_li != 1.0:
                 q_comptee = q_comptee * facteur_li
+                # Les zones se convertissent avec le même facteur : compter
+                # « 2 palettes en magasin » et « 1 en production » doit donner
+                # les mêmes kilos que compter « 3 palettes » tout court.
+                if q_magasin is not None:
+                    q_magasin = q_magasin * facteur_li
+                if q_production is not None:
+                    q_production = q_production * facteur_li
 
             commentaire = (li.get("commentaire") or "").strip() or None
 
@@ -6075,8 +6543,9 @@ async def matiere_inventaire_valider(matiere_id: int, request: Request):
                 """INSERT INTO inventaires_matieres (
                        matiere_id, laize_id, quantite_avant, quantite_comptee,
                        ecart, commentaire, operateur_email, operateur_nom,
-                       date_validation, mouvement_id, unite_saisie, quantite_saisie
-                   ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       date_validation, mouvement_id, unite_saisie, quantite_saisie,
+                       quantite_magasin, quantite_production
+                   ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     matiere_id,
                     laize_id,
@@ -6090,12 +6559,21 @@ async def matiere_inventaire_valider(matiere_id: int, request: Request):
                     mouvement_id,
                     unite_saisie_li,
                     q_saisie_li,
+                    q_magasin,
+                    q_production,
                 ),
             )
+            # Le détail par zone se reporte que l'inventaire ait bougé le
+            # stock ou non : un comptage sans écart est un comptage quand même,
+            # et c'est lui qui dit où se trouve la matière.
+            _inv_ecrire_zones(conn, matiere_id, laize_id if laizee else None,
+                              q_magasin, q_production)
             results.append({
                 "laize_id": laize_id,
                 "quantite_avant": q_avant,
                 "quantite_comptee": q_comptee,
+                "quantite_magasin": q_magasin,
+                "quantite_production": q_production,
                 "ecart": ecart,
                 "mouvement_id": mouvement_id,
             })
