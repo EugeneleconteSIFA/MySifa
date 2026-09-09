@@ -770,10 +770,24 @@ def reperes_reference(conn, ref_produit_norm: Optional[str],
     # ou le metrage est le compteur machine entier (90 351 374 m) et d'autres
     # ou 6 692 m sortent en 1,4 min : une seule suffit a porter la mediane de
     # 62 a 2 421 m/min, et l'ecart affiche a l'atelier ne veut plus rien dire.
-    series = [r for r in rows
-              if _f(r["metrage_m"]) >= METRAGE_MIN_CADENCE
-              and _f(r["temps_prod_min"]) + _f(r["temps_arret_min"]) >= MINUTES_MIN_CADENCE
-              and 0 < _f(r["vitesse_m_min"]) <= VITESSE_MAX_PLAUSIBLE]
+    #
+    # On ne rejette que ce qu'on peut PROUVER trop petit : une colonne vide dit
+    # qu'on ne sait pas, pas que la serie est mauvaise, et jeter les lignes
+    # anterieures au remplissage de `metrage_m` viderait le repere de son
+    # histoire. Le plafond, lui, s'applique toujours : une vitesse est soit
+    # possible, soit pas.
+    def _retenue(r: Any) -> bool:
+        v = _f(r["vitesse_m_min"])
+        if not (0 < v <= VITESSE_MAX_PLAUSIBLE):
+            return False
+        if r["metrage_m"] is not None and _f(r["metrage_m"]) < METRAGE_MIN_CADENCE:
+            return False
+        if r["temps_prod_min"] is not None or r["temps_arret_min"] is not None:
+            if _f(r["temps_prod_min"]) + _f(r["temps_arret_min"]) < MINUTES_MIN_CADENCE:
+                return False
+        return True
+
+    series = [r for r in rows if _retenue(r)]
     if not series:
         return vide
 

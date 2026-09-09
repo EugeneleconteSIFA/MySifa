@@ -23,6 +23,13 @@ NOM = "devis_extraction_ia_indicateurs"
 
 
 _COLONNES_DEVIS = [
+    # Le second poste de calage du devis. Il existait déjà dans les classeurs
+    # mais nulle part en base : la comparaison opposait donc le calage relevé
+    # en atelier — qui inclut les changements de couleur et de cliché — au seul
+    # calage outil. Sur un devis à 150 mn d'outil et 450 mn d'impression,
+    # l'écart affiché était faux d'un facteur 4.
+    ("temps_calage_impression_mn", "REAL DEFAULT 0"),
+    ("metrage_calage_impression_ml", "REAL DEFAULT 0"),
     # Comment la valeur a été obtenue : regex | ia | mixte | manuel
     ("extraction_methode", "TEXT"),
     # Le modèle appelé, quand il l'a été. Un changement de modèle explique un

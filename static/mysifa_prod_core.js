@@ -4661,9 +4661,17 @@ function renderDevisForm(resultat){
 
     h('div',{className:'form-section'},
       h('div',{className:'form-section-title'},'Ce qui a été devisé'),
+      /* Le calage est devisé en deux postes. L'atelier, lui, n'en saisit
+         qu'un : les changements de couleur et de cliché tombent dans la même
+         catégorie « calage » que le montage de l'outil. La comparaison
+         additionne donc les deux lignes ci-dessous. */
       h('div',{className:'field-row'},
-        mkField('Temps de calage','temps_calage_mn','number','mn'),
-        mkField('Métrage de calage','metrage_calage_ml','number','ml')
+        mkField('Temps de calage outil','temps_calage_mn','number','mn'),
+        mkField('Métrage de calage outil','metrage_calage_ml','number','ml')
+      ),
+      h('div',{className:'field-row'},
+        mkField('Temps de calage impression','temps_calage_impression_mn','number','mn'),
+        mkField('Métrage de calage impression','metrage_calage_impression_ml','number','ml')
       ),
       h('div',{className:'field-row'},
         mkField('Temps de production','temps_production_mn','number','mn'),
@@ -4717,14 +4725,29 @@ function renderComparaison(comp){
 
   const {theorique:th,reel:re,ecarts:ec,conclusion:co,devis:dv,dossiers}=comp;
 
+  // Le calage devisé est la somme outil + impression : le libellé le dit,
+  // sinon on cherche 600 mn dans une cellule qui en affiche 150.
+  const calageDetail = (th && th.temps_calage_impression_mn)
+    ? ' (outil + impression)' : '';
   const ROWS=[
-    {label:'⏱ Temps calage',     unit:'mn',  key:'temps_calage_mn', invert:true},
-    {label:'▶ Temps production', unit:'mn',  key:'temps_production_mn', invert:true},
-    {label:'📏 Métrage',         unit:'ml',  key:'metrage_ml'},
-    {label:'🏷 Qté étiquettes',  unit:'ex',  key:'qte_etiquettes'},
-    {label:'⚡ Vitesse',         unit:'m/mn',key:'vitesse'},
-    {label:'⚡ Vitesse + calage',unit:'m/mn',key:'vitesse_avec_calage'},
+    {label:'Temps calage'+calageDetail, unit:'mn',  key:'temps_calage_mn', invert:true},
+    {label:'Temps production', unit:'mn',  key:'temps_production_mn', invert:true},
+    {label:'Métrage',          unit:'ml',  key:'metrage_ml'},
+    {label:'Qté étiquettes',   unit:'ex',  key:'qte_etiquettes'},
+    {label:'Vitesse',          unit:'m/mn',key:'vitesse'},
+    {label:'Vitesse + calage', unit:'m/mn',key:'vitesse_avec_calage'},
   ];
+
+  /* Ce qui rend la comparaison trompeuse, dit AVANT de la lire : une quantité
+     produite très différente de celle devisée ne mesure plus une performance
+     d'atelier mais l'écart entre deux commandes. */
+  const avertissements=(comp.avertissements||[]).length
+    ? h('div',{className:'devis-alertes',style:{marginBottom:'12px'}},
+        ...comp.avertissements.map(a=>h('div',
+          {className:'devis-alerte devis-alerte-'+(a.niveau||'info')},
+          iconEl(a.niveau==='avertissement'?'alert-triangle':'alert-circle',13),
+          h('span',null,' '+a.message))))
+    : null;
 
   const fN2=v=>v!=null?Number(v).toLocaleString('fr-FR',{maximumFractionDigits:1}):'-';
   const ecartEl=(key,invert)=>{
@@ -4764,6 +4787,7 @@ function renderComparaison(comp){
   );
 
   return h('div',null,concl,
+    avertissements,
     h('div',{className:'card'},
       h('div',{className:'card-header'},
         h('h3',null,'Comparaison Devis / Réel'),

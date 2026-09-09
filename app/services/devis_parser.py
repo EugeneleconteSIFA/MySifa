@@ -50,8 +50,31 @@ CHAMPS_CLES = (
 CHAMPS_NUMERIQUES = (
     "format_h", "format_v", "laize", "nb_couleurs",
     "temps_calage_mn", "metrage_calage_ml",
+    "temps_calage_impression_mn", "metrage_calage_impression_ml",
     "temps_production_mn", "metrage_production_ml",
     "vitesse_theorique", "qte_etiquettes", "gache",
+)
+
+
+# Indicateurs hors socle que le modèle maison porte à des libellés stables.
+# Les lire ici évite un appel au modèle pour des chiffres qu'un motif trouve.
+# Format : (feuille, motif, libellé affiché, unité, décalage de colonne).
+# Le décalage vaut 3 quand le classeur pose le temps en J et le métrage en L
+# sur la ligne d'un même libellé (bloc « CALCUL Temps et métrage »).
+INDICATEURS_MAISON = (
+    ("prix", r"nombre\s+front", "Nombre de fronts", "", 1),
+    ("prix", r"nbre\s+total\s+poses", "Nombre total de poses", "", 1),
+    ("prix", r"pas\s+developpe|pas\s+développé", "Pas développé", "mm", 1),
+    ("prix", r"laize\s+mini", "Laize mini", "mm", 1),
+    ("prix", r"nb\s+etiquettes?\s+au\s+rouleau", "Étiquettes par rouleau", "ex", 1),
+    ("prix", r"^prix\s+au\s+mille\s*:", "Prix au mille", "€", 1),
+    ("prix", r"^s/?\s*total$", "Temps total devisé", "mn", 1),
+    ("prix", r"^s/?\s*total$", "Métrage total devisé", "ml", 3),
+    ("prix", r"^conditionnement$", "Temps de conditionnement", "mn", 1),
+    ("prix", r"^g[aâ]che\s*$", "Métrage de gâche", "ml", 3),
+    ("calculs", r"nbre\s+bobine\s+theo", "Bobines théoriques", "", 1),
+    ("calculs", r"nombre\s+outil", "Nombre d'outils", "", 1),
+    ("calculs", r"metrage\s+outil", "Métrage outil", "ml", 1),
 )
 
 
@@ -67,6 +90,12 @@ def gabarit_devis(filename: str = "") -> dict:
         "nb_couleurs":          0,
         "temps_calage_mn":      0.0,
         "metrage_calage_ml":    0.0,
+        # Second poste de calage, distinct dans le devis mais NON distinct dans
+        # la saisie atelier : les changements de couleur (op. 12) et de cliché
+        # (op. 75) tombent dans la catégorie « calage » de MyProd comme le
+        # calage outil. Le devis doit donc être comparé sur la somme des deux.
+        "temps_calage_impression_mn":   0.0,
+        "metrage_calage_impression_ml": 0.0,
         "temps_production_mn":  0.0,
         "metrage_production_ml": 0.0,
         "vitesse_theorique":    0.0,
@@ -122,6 +151,111 @@ def _find_value(df, label_pattern, col_offset=1, sheet_name=""):
     return None, None
 
 
+def _valeur_a_gauche(df, sheet_name: str, label_pattern: str):
+    """Première cellule numérique à GAUCHE d'un libellé, sur sa ligne.
+
+    Repli de position, à n'utiliser qu'après l'échec d'une recherche par
+    libellé : il suppose une disposition, il ne lit pas une intention. Toute
+    valeur qui en sort doit sortir en confiance dégradée.
+    """
+    for row_idx in range(len(df)):
+        for col_idx in range(len(df.columns)):
+            cell = df.iloc[row_idx, col_idx]
+            if pd.isna(cell):
+                continue
+            if not re.search(label_pattern, str(cell), re.IGNORECASE):
+                continue
+            for gauche in range(col_idx - 1, -1, -1):
+                val = df.iloc[row_idx, gauche]
+                if pd.isna(val):
+                    continue
+                try:
+                    float(val)
+                except (TypeError, ValueError):
+                    return None, None  # un texte à gauche : on n'insiste pas
+                return val, _coord(sheet_name, row_idx, gauche)
+            return None, None
+    return None, None
+
+
+def paliers_quantite(df, sheet_name: str) -> list[dict]:
+    """Le bloc « Descriptif de la cde » : les quantités chiffrées et leur prix.
+
+    Pourquoi ce bloc compte. Un devis ne chiffre pas UNE quantité, il en
+    chiffre plusieurs — le client demande le prix à 984 000, à 1 135 000 et à
+    2 111 900, le commercial les met en regard. Les feuilles Calculs et Prix,
+    elles, ne calculent le temps et le métrage QUE pour une seule de ces
+    quantités, et rien dans le classeur ne dit laquelle a été commandée.
+
+    Sur le devis « RONDS », les calculs portent sur 14 400 000 exemplaires
+    alors que le nom du fichier annonce 29 000 000 : comparer la production
+    réelle d'une commande de 29 millions à un devis calculé pour 14,4 millions
+    double l'écart sans qu'aucun chiffre soit faux. On relève donc les paliers,
+    et l'écran de validation pose la question au lieu de trancher tout seul.
+    """
+    ligne_entete = None
+    col_qte = col_prix = None
+    for row_idx in range(len(df)):
+        cols_qte = []
+        cols_prix = []
+        for col_idx in range(len(df.columns)):
+            cell = df.iloc[row_idx, col_idx]
+            if pd.isna(cell):
+                continue
+            txt = str(cell).strip().lower()
+            if re.match(r"^quantit", txt):
+                cols_qte.append(col_idx)
+            elif re.search(r"prix.*(ht.*)?mille", txt):
+                cols_prix.append(col_idx)
+        if cols_qte and cols_prix:
+            ligne_entete, col_qte, col_prix = row_idx, cols_qte[0], cols_prix[0]
+            break
+    if ligne_entete is None:
+        return []
+
+    paliers: list[dict] = []
+    vides = 0
+    for row_idx in range(ligne_entete + 1, min(ligne_entete + 10, len(df))):
+        qte = df.iloc[row_idx, col_qte] if col_qte < len(df.columns) else None
+        try:
+            qte = float(qte) if not pd.isna(qte) else None
+        except (TypeError, ValueError):
+            qte = None
+        if qte is None or qte <= 0:
+            vides += 1
+            if vides >= 2:
+                break
+            continue
+        vides = 0
+        prix = None
+        source_prix = ""
+        if col_prix < len(df.columns):
+            try:
+                v = df.iloc[row_idx, col_prix]
+                if not pd.isna(v):
+                    prix = float(v)
+                    # La coordonnée du PRIX, pas celle de la quantité : chaque
+                    # valeur cite la cellule qui la contient, sans quoi la
+                    # provenance affichée à l'écran est fausse.
+                    source_prix = _coord(sheet_name, row_idx, col_prix)
+            except (TypeError, ValueError):
+                prix = None
+                source_prix = ""
+        note = ""
+        if col_prix + 1 < len(df.columns):
+            v = df.iloc[row_idx, col_prix + 1]
+            if not pd.isna(v) and not isinstance(v, (int, float)):
+                note = str(v).strip()
+        paliers.append({
+            "quantite": qte,
+            "prix_mille": prix,
+            "note": note,
+            "source": _coord(sheet_name, row_idx, col_qte),
+            "source_prix": source_prix,
+        })
+    return paliers
+
+
 def _safe_float(val, default=0.0):
     try:
         return float(val) if val is not None and not pd.isna(val) else default
@@ -171,6 +305,8 @@ def parse_devis(file_bytes: bytes, filename: str) -> dict:
     """
     result = gabarit_devis(filename)
     result["sources"] = {}
+    # Confiance dégradée pour les valeurs obtenues par repli de position.
+    result["confiances"] = {}
 
     if isinstance(file_bytes, (io.BytesIO, io.BufferedReader)):
         file_bytes = file_bytes.read()
@@ -207,8 +343,23 @@ def parse_devis(file_bytes: bytes, filename: str) -> dict:
             v, c = chercher(df_prix, nom_prix, r"format.hauteur|dim.h")
             poser("format_h", v, c, _safe_float)
 
-            v, c = chercher(df_prix, nom_prix, r"format.laize|format.v\b|dim.v")
+            # « FORMAT               LAIZE : » — le classeur maison aligne le
+            # libellé à la colonne avec des espaces. Un motif à un caractère
+            # (`format.laize`) ne les traverse pas et laissait la laize vide.
+            v, c = chercher(df_prix, nom_prix, r"format[\s.:]*laize|dim[\s.:]*v\b")
             poser("format_v", v, c, _safe_float)
+
+            # Repli géométrique. Sur deux des trois devis de référence, le
+            # libellé « FORMAT LAIZE » a disparu de la feuille : il ne reste
+            # que la valeur, seule dans sa cellule à gauche de « FORMAT
+            # HAUTEUR », sur la même ligne. On la prend — mais en confiance
+            # « moyenne », parce que c'est une déduction de position et non un
+            # libellé lu : l'écran de validation doit le signaler.
+            if champ_vide(result["format_v"]):
+                v, c = _valeur_a_gauche(df_prix, nom_prix, r"format.hauteur")
+                if v is not None:
+                    poser("format_v", v, c, _safe_float)
+                    result["confiances"]["format_v"] = "moyenne"
 
             v, c = chercher(df_prix, nom_prix, r"laize.production|laize.prod")
             poser("laize", v, c, _safe_float)
@@ -222,6 +373,16 @@ def parse_devis(file_bytes: bytes, filename: str) -> dict:
             # Calculs — la chercher uniquement sur Calculs la rendait toujours nulle.
             v, c = chercher(df_prix, nom_prix, r"^\s*g[aâ]che\s*$")
             poser("gache", v, c, _safe_float)
+
+            # Calage impression. Le bloc « CALCUL Temps et métrage » de la
+            # feuille Prix porte le temps en colonne J et le métrage en L sur
+            # la même ligne — d'où les décalages 1 et 3. On le prend là plutôt
+            # que sur Calculs, où le métrage s'appelle « METRAGE UTILISE », un
+            # libellé qui apparaît trois fois pour trois choses différentes.
+            v, c = chercher(df_prix, nom_prix, r"^calage\s+impression$")
+            poser("temps_calage_impression_mn", v, c, _safe_float)
+            v, c = chercher(df_prix, nom_prix, r"^calage\s+impression$", offset=3)
+            poser("metrage_calage_impression_ml", v, c, _safe_float)
         except Exception as e:
             result["parse_errors"].append(f"Erreur feuille Prix : {e}")
 
@@ -237,6 +398,11 @@ def parse_devis(file_bytes: bytes, filename: str) -> dict:
 
             v, c = chercher(df_calc, nom_calc, r"metrage.calage|métrage.calage")
             poser("metrage_calage_ml", v, c, _safe_float)
+
+            # Repli si la feuille Prix n'a pas donné le calage impression.
+            if champ_vide(result["temps_calage_impression_mn"]):
+                v, c = chercher(df_calc, nom_calc, r"tps.calage.impression|temps.calage.impression")
+                poser("temps_calage_impression_mn", v, c, _safe_float)
 
             v, c = chercher(df_calc, nom_calc, r"qte.d.etiquettes|quantit..*tiquet|qte.etiquet")
             poser("qte_etiquettes", v, c, _safe_float)
@@ -262,4 +428,54 @@ def parse_devis(file_bytes: bytes, filename: str) -> dict:
     else:
         result["parse_errors"].append("Feuille « Calculs » introuvable")
 
+    # ── Indicateurs hors socle ────────────────────────────────────
+    # « Tous les autres indicateurs du devis » : sur le modèle maison ils se
+    # lisent au motif, sans appel au modèle. Un libellé absent est sauté —
+    # le classeur d'un autre commercial n'en portera qu'une partie.
+    try:
+        result["indicateurs"] = _indicateurs_maison(
+            {"prix": (nom_prix, df_prix), "calculs": (nom_calc, df_calc)}
+        )
+    except Exception as e:
+        result["indicateurs"] = []
+        result["parse_errors"].append(f"Indicateurs annexes : {e}")
+
+    # Les quantités chiffrées par le commercial, qui ne sont pas forcément
+    # celle sur laquelle les temps ont été calculés.
+    try:
+        result["paliers"] = paliers_quantite(df_prix, nom_prix) if df_prix is not None else []
+    except Exception as e:
+        result["paliers"] = []
+        result["parse_errors"].append(f"Paliers de quantité : {e}")
+
     return result
+
+
+def _indicateurs_maison(feuilles_par_role: dict) -> list[dict]:
+    """Relève les indicateurs à libellé stable des feuilles Prix et Calculs."""
+    trouves: list[dict] = []
+    vus: set[str] = set()
+    for role, motif, libelle, unite, offset in INDICATEURS_MAISON:
+        nom, df = feuilles_par_role.get(role, (None, None))
+        if df is None:
+            continue
+        valeur, coord = _find_value(df, motif, col_offset=offset, sheet_name=nom)
+        if valeur is None or coord is None:
+            continue
+        try:
+            nombre = float(valeur)
+        except (TypeError, ValueError):
+            continue
+        if libelle in vus:
+            continue
+        vus.add(libelle)
+        trouves.append({
+            "libelle": libelle,
+            "valeur_nombre": nombre,
+            "valeur_texte": "",
+            "unite": unite,
+            "source": coord,
+            "confiance": "haute",
+            "origine": "regex",
+        })
+    return trouves

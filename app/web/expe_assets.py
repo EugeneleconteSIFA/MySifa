@@ -42,7 +42,7 @@ EXPE_TRANSPORTEURS_CSS = r"""
 .expe-trp-zone{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--accent-bg);
   color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);letter-spacing:.2px;white-space:nowrap}
 .expe-trp-contact-col{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text2);
-  line-height:1.4;min-width:200px;max-width:280px}
+  line-height:1.45;min-width:240px;max-width:340px}
 .expe-trp-contact-line{display:flex;align-items:center;gap:6px;min-width:0;color:var(--text2);
   text-decoration:none}
 .expe-trp-contact-line svg{flex-shrink:0;color:var(--muted)}
@@ -67,7 +67,12 @@ EXPE_TRANSPORTEURS_CSS = r"""
 .expe-trp-portail-chip:hover{background:color-mix(in srgb,var(--accent) 22%,transparent);text-decoration:none}
 .expe-trp-portail-chip svg{flex-shrink:0}
 .expe-trp-portail-chip .lbl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.expe-trp-contact-acts{display:flex;gap:4px;margin-top:2px;flex-wrap:wrap}
+/* Mini-actions : masquées au repos pour laisser lire le contact, révélées au survol de la ligne. */
+.expe-trp-contact-acts{display:flex;gap:4px;margin-top:2px;flex-wrap:nowrap;height:24px;
+  opacity:0;pointer-events:none;transition:opacity .12s}
+tr:hover .expe-trp-contact-acts,
+.expe-trp-contact-acts:focus-within{opacity:1;pointer-events:auto}
+@media (hover:none){.expe-trp-contact-acts{opacity:1;pointer-events:auto}}
 .expe-trp-act{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;
   border:1px solid var(--border);background:var(--card);color:var(--muted);border-radius:6px;
   cursor:pointer;padding:0;text-decoration:none;transition:border-color .12s,color .12s,background .12s}
@@ -456,6 +461,8 @@ function expeTrpReadTels(tr){
         numero=String(item||'').trim();
       }
       if(!numero)return;
+      // Rejette les résidus de sérialisation ("[]", "null", "-") : un vrai numéro a au moins 6 chiffres.
+      if((numero.match(/\d/g)||[]).length<6)return;
       const key=numero+'|'+service.toLowerCase();
       if(seen.has(key))return;
       seen.add(key);

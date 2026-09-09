@@ -82,6 +82,29 @@ def _reel_depuis_saisies(conn, no_dossiers: list[str]) -> dict:
     return total
 
 
+def _colonne(row, nom: str, defaut: float = 0.0) -> float:
+    """Lit une colonne qui peut ne pas exister encore.
+
+    `sqlite3.Row` n'a pas de `.get()` et lève `IndexError` sur une colonne
+    absente : une base où la migration n'est pas encore passée casserait la
+    comparaison au lieu de la rendre approximative.
+    """
+    try:
+        v = row[nom]
+    except (IndexError, KeyError):
+        return defaut
+    try:
+        return float(v) if v is not None else defaut
+    except (TypeError, ValueError):
+        return defaut
+
+
+def _calage_theorique(devis_row) -> float:
+    """Le calage devisé, tous postes confondus — outil + impression."""
+    return (_colonne(devis_row, "temps_calage_mn")
+            + _colonne(devis_row, "temps_calage_impression_mn"))
+
+
 def _comparaison_from_no_dossiers(conn, devis_row, no_dossiers: list[str]) -> dict:
     """Calcule la comparaison devis vs réel pour une liste de no_dossier (production_data)."""
     d = devis_row
@@ -103,7 +126,19 @@ def _comparaison_from_no_dossiers(conn, devis_row, no_dossiers: list[str]) -> di
     tps_total_reel = tps_calage_reel + denom_vitesse
     vitesse_avec_calage = (metrage_reel / tps_total_reel) if tps_total_reel > 0 else 0
 
-    tps_total_theo = (d["temps_calage_mn"] or 0) + (d["temps_production_mn"] or 0)
+    # LE CALAGE DEVISÉ EST LA SOMME DE DEUX POSTES.
+    # Le devis sépare le calage outil (montage de l'outil de découpe) du calage
+    # impression (mises en route couleurs et clichés). MyProd, lui, ne les
+    # sépare pas : `dossier_stats` range dans la catégorie « calage » aussi
+    # bien l'opération 02 que les 12 (changement de couleur) et 75 (changement
+    # de cliché), qui SONT le calage impression. Comparer le calage relevé au
+    # seul poste outil opposait donc deux périmètres différents — sur un devis
+    # à 150 mn d'outil et 450 mn d'impression, l'écart affiché était faux d'un
+    # facteur 4, sans qu'aucun chiffre soit inexact.
+    tps_calage_theo = _calage_theorique(d)
+    metrage_calage_theo = _colonne(d, "metrage_calage_ml") + _colonne(d, "metrage_calage_impression_ml")
+
+    tps_total_theo = tps_calage_theo + (d["temps_production_mn"] or 0)
     vitesse_theo_avec_calage = ((d["metrage_production_ml"] or 0) / tps_total_theo) if tps_total_theo > 0 else 0
 
     def pct_diff(reel, theo):
@@ -127,7 +162,13 @@ def _comparaison_from_no_dossiers(conn, devis_row, no_dossiers: list[str]) -> di
     }
 
     theo = {
-        "temps_calage_mn":      d["temps_calage_mn"],
+        "temps_calage_mn":      round(tps_calage_theo, 1),
+        # Le détail des deux postes reste exposé : l'écran doit pouvoir dire
+        # d'où vient le total, sans quoi un utilisateur qui ouvre le classeur
+        # ne retrouve pas le chiffre affiché.
+        "temps_calage_outil_mn":      _colonne(d, "temps_calage_mn"),
+        "temps_calage_impression_mn": _colonne(d, "temps_calage_impression_mn"),
+        "metrage_calage_ml":    round(metrage_calage_theo, 1),
         "temps_production_mn":  d["temps_production_mn"],
         "metrage_ml":           d["metrage_production_ml"],
         "qte_etiquettes":       d["qte_etiquettes"],
@@ -168,7 +209,64 @@ def _comparaison_from_no_dossiers(conn, devis_row, no_dossiers: list[str]) -> di
         "reel":       reel,
         "ecarts":     ecarts,
         "conclusion": conclusion,
+        "avertissements": _avertissements_comparaison(theo, reel),
     }
+
+
+# Au-delà de cet écart entre la quantité produite et la quantité devisée, les
+# deux ne décrivent plus la même affaire et la comparaison perd son sens.
+ECART_QUANTITE_ALERTE = 0.10
+
+
+def _milliers(n) -> str:
+    """14400000 → « 14 400 000 ».
+
+    Formater d'abord PUIS remplacer sur toute la phrase supprimait aussi les
+    virgules de ponctuation : « 29 000 000 étiquettes  le devis en chiffrait ».
+    Le remplacement doit rester enfermé dans le nombre.
+    """
+    try:
+        return f"{float(n):,.0f}".replace(",", " ")
+    except (TypeError, ValueError):
+        return str(n)
+
+
+def _avertissements_comparaison(theo: dict, reel: dict) -> list[dict]:
+    """Ce qui rend la comparaison trompeuse, dit avant qu'on la lise.
+
+    Un devis chiffre plusieurs quantités mais ne calcule les temps que pour
+    une seule. Si le dossier lié a produit une quantité très différente, les
+    écarts affichés ne mesurent pas une performance d'atelier : ils mesurent
+    l'écart entre deux commandes. Mieux vaut le dire que laisser conclure.
+    """
+    avertissements: list[dict] = []
+    qte_theo = float(theo.get("qte_etiquettes") or 0)
+    qte_reel = float(reel.get("qte_etiquettes") or 0)
+    if qte_theo > 0 and qte_reel > 0:
+        ecart = abs(qte_reel - qte_theo) / qte_theo
+        if ecart > ECART_QUANTITE_ALERTE:
+            avertissements.append({
+                "niveau": "avertissement",
+                "message": (
+                    f"Le dossier a produit {_milliers(qte_reel)} étiquettes, le devis "
+                    f"en chiffrait {_milliers(qte_theo)} — {ecart * 100:.0f} % d'écart. "
+                    "Les temps devisés valent pour la quantité du devis : les "
+                    "écarts ci-dessous comparent deux volumes différents."
+                ),
+            })
+
+    impr = float(theo.get("temps_calage_impression_mn") or 0)
+    if impr > 0:
+        outil = float(theo.get("temps_calage_outil_mn") or 0)
+        avertissements.append({
+            "niveau": "info",
+            "message": (
+                f"Calage devisé = {_milliers(outil)} mn d'outil + {_milliers(impr)} mn "
+                "d'impression. Le calage relevé en atelier couvre les deux "
+                "(changements de couleur et de cliché compris)."
+            ),
+        })
+    return avertissements
 
 
 # ── Rentabilité v2 (Planning-based) ───────────────────────────────
@@ -407,6 +505,21 @@ async def create_devis(request: Request):
         )
         devis_id = cursor.lastrowid
 
+        # Le calage impression vit dans des colonnes ajoutées par migration :
+        # écriture séparée, pour qu'une base pas encore migrée enregistre
+        # quand même le devis au lieu de refuser l'import.
+        cols_avant = {r[1] for r in conn.execute("PRAGMA table_info(devis)").fetchall()}
+        if "temps_calage_impression_mn" in cols_avant:
+            conn.execute(
+                """UPDATE devis SET temps_calage_impression_mn=?,
+                          metrage_calage_impression_ml=? WHERE id=?""",
+                (
+                    body.get("temps_calage_impression_mn", 0) or 0,
+                    body.get("metrage_calage_impression_ml", 0) or 0,
+                    devis_id,
+                ),
+            )
+
         # Traçabilité de la lecture. `extraction_json` garde, champ par champ,
         # la source et la confiance affichées au moment de la validation :
         # c'est ce qui permet, des mois après, de rouvrir la bonne cellule
@@ -563,6 +676,21 @@ async def update_devis(devis_id: int, request: Request):
                 devis_id,
             )
         )
+        # Colonnes ajoutées par migration : modifiées à part, pour ne pas faire
+        # échouer l'édition sur une base qui ne les a pas encore.
+        cols_devis = {r[1] for r in conn.execute("PRAGMA table_info(devis)").fetchall()}
+        if "temps_calage_impression_mn" in cols_devis:
+            conn.execute(
+                """UPDATE devis SET temps_calage_impression_mn=?,
+                          metrage_calage_impression_ml=? WHERE id=?""",
+                (
+                    body.get("temps_calage_impression_mn",
+                             _colonne(ex, "temps_calage_impression_mn")),
+                    body.get("metrage_calage_impression_ml",
+                             _colonne(ex, "metrage_calage_impression_ml")),
+                    devis_id,
+                ),
+            )
         conn.commit()
     return {"success": True}
 
