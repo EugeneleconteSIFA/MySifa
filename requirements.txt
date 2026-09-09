@@ -5,7 +5,9 @@ openpyxl==3.1.2
 python-calamine>=0.2.0
 python-multipart==0.0.9
 bcrypt>=4.0.0
-anthropic>=0.30.0
+# >=0.49 : blocs `document` (PDF envoye tel quel au modele), utilises par
+# la lecture des devis scannes dans app/services/devis_extraction.py.
+anthropic>=0.49.0
 httpx>=0.27.0
 python-dotenv>=1.0.0
 pdfplumber>=0.11.0

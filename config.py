@@ -838,6 +838,33 @@ GIPHY_API_KEY = os.getenv("GIPHY_API_KEY", "")
 # ─── MyExpé — parsing grilles tarifaires (IA) ───────────────────────
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
+# ─── Rentabilité — lecture des devis (parser puis IA) ──────────────
+# Chaque commercial devise à sa façon. Le parser à motifs traite le modèle
+# maison ; l'IA prend le relais dès qu'un champ clé manque, ou que le fichier
+# n'est pas un classeur (PDF, scan, photo d'un tirage).
+DEVIS_IA_ACTIVE = os.getenv("DEVIS_IA_ACTIVE", "1") not in ("0", "false", "False")
+DEVIS_IA_MODELE = os.getenv("DEVIS_IA_MODELE", "claude-sonnet-4-5-20250929")
+DEVIS_IA_MAX_TOKENS = int(os.getenv("DEVIS_IA_MAX_TOKENS", "4000"))
+# Budget de caractères envoyés au modèle. Un classeur de devis embarque ses
+# référentiels (feuille « Matière » : 1 488 lignes) : sans plafond, les vingt
+# cellules qui portent le devis s'y noient et l'appel coûte pour rien.
+DEVIS_IA_MAX_CARACTERES = int(os.getenv("DEVIS_IA_MAX_CARACTERES", "60000"))
+# Feuilles lues en priorité, sans plafond serré : celles qui portent le devis.
+DEVIS_FEUILLES_PRIORITAIRES = (
+    "calcul", "prix", "devis", "demande", "synth", "recap", "récap",
+    "offre", "tarif", "chiffrage", "cotation",
+)
+DEVIS_EXTENSIONS_EXCEL = ("xlsx", "xlsm", "xls")
+DEVIS_EXTENSIONS_IMAGE = ("png", "jpg", "jpeg", "webp", "gif")
+DEVIS_EXTENSIONS_ACCEPTEES = DEVIS_EXTENSIONS_EXCEL + ("pdf",) + DEVIS_EXTENSIONS_IMAGE
+DEVIS_MAX_FILE_MB = int(os.getenv("DEVIS_MAX_FILE_MB", "25"))
+# Écart toléré entre « vitesse × temps » et le métrage devisé avant de lever
+# une alerte de cohérence sur l'écran de validation.
+DEVIS_TOLERANCE_COHERENCE = float(os.getenv("DEVIS_TOLERANCE_COHERENCE", "0.05"))
+# Devis d'origine conservés pour l'audit : on doit pouvoir rouvrir le fichier
+# qui a produit un chiffre, des mois après.
+DEVIS_UPLOAD_DIR = os.path.join(UPLOADS_ROOT, "devis")
+
 # ─── MyTradu
 
 # ─── MyTraduction (DeepL) ─────────────────────────────────────────

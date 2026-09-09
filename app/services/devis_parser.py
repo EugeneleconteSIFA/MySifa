@@ -1,17 +1,107 @@
 """
-SIFA — Parser de devis Excel
-Extrait les données de production des feuilles Calculs et Prix.
-Compatible .xlsx et .xls
+SIFA — Parser de devis Excel (chemin rapide, sans IA).
+
+Ce module lit les classeurs dont la disposition est celle du modèle maison :
+une feuille « Calculs » et une feuille « Prix », des libellés reconnaissables,
+la valeur immédiatement à droite du libellé. Il est gratuit et instantané, et
+il couvre la majorité des devis.
+
+Il ne couvre PAS les classeurs des commerciaux qui devisent autrement. Quand
+un champ clé ressort vide, l'appelant (`app/services/devis_extraction.py`)
+bascule sur l'extraction IA. Ce parser n'a donc pas à deviner : il rend ce
+qu'il reconnaît, et il DIT d'où il l'a tiré (`sources`), pour que l'écran de
+validation puisse afficher « Calculs!I2 » à côté de la valeur.
+
+Deux pièges corrigés ici, qui rendaient tout import silencieusement vide :
+
+1. `pd.ExcelFile(file_bytes)` lève `Expected file path name or file-like
+   object, got <class 'bytes'>`. L'exception était avalée par le `try` et
+   remontait comme un simple avertissement : chaque devis importé arrivait
+   avec des zéros partout, sans que rien ne signale l'échec.
+2. Un même tampon ne se relit pas trois fois sans `seek(0)`. Le classeur est
+   donc ouvert UNE fois et les feuilles utiles sont mises en cache.
+
+`.xls` : lu par python-calamine, pas par xlrd (absent des dépendances).
 """
+import io
 import re
+from typing import Any, Optional
+
 import pandas as pd
-from typing import Optional
+
+try:  # openpyxl est une dépendance dure, mais on ne casse pas l'import pour ça
+    from openpyxl.utils import get_column_letter
+except Exception:  # pragma: no cover
+    def get_column_letter(idx: int) -> str:
+        return str(idx)
 
 
-def _find_value(df, label_pattern, col_offset=1, search_cols=None):
-    """
-    Cherche une valeur dans un DataFrame en cherchant un label par regex.
-    Retourne la valeur dans la colonne col_offset à droite du label trouvé.
+# Champs sans lesquels une comparaison devis/réel n'a aucun sens. Si l'un
+# d'eux manque, l'appelant déclenche l'IA. Volontairement court : la vitesse,
+# les deux temps, les deux métrages et la quantité — le reste est du confort.
+CHAMPS_CLES = (
+    "vitesse_theorique",
+    "temps_production_mn",
+    "metrage_production_ml",
+    "qte_etiquettes",
+    "temps_calage_mn",
+)
+
+CHAMPS_NUMERIQUES = (
+    "format_h", "format_v", "laize", "nb_couleurs",
+    "temps_calage_mn", "metrage_calage_ml",
+    "temps_production_mn", "metrage_production_ml",
+    "vitesse_theorique", "qte_etiquettes", "gache",
+)
+
+
+def gabarit_devis(filename: str = "") -> dict:
+    """Le dictionnaire de sortie, tous champs à vide. Une seule définition."""
+    return {
+        "filename":              filename,
+        "client":               None,
+        "date_devis":           None,
+        "format_h":             None,
+        "format_v":             None,
+        "laize":                None,
+        "nb_couleurs":          0,
+        "temps_calage_mn":      0.0,
+        "metrage_calage_ml":    0.0,
+        "temps_production_mn":  0.0,
+        "metrage_production_ml": 0.0,
+        "vitesse_theorique":    0.0,
+        "qte_etiquettes":       0.0,
+        "gache":                0.0,
+        "parse_errors":         [],
+    }
+
+
+def champ_vide(valeur: Any) -> bool:
+    """Un champ « non trouvé » : None, chaîne vide, ou zéro numérique."""
+    if valeur is None:
+        return True
+    if isinstance(valeur, str):
+        return not valeur.strip()
+    try:
+        return float(valeur) == 0.0
+    except (TypeError, ValueError):
+        return False
+
+
+def champs_cles_manquants(donnees: dict) -> list[str]:
+    return [c for c in CHAMPS_CLES if champ_vide(donnees.get(c))]
+
+
+def _coord(sheet: str, row_idx: int, col_idx: int) -> str:
+    """« Calculs!I2 » — la référence telle qu'un humain la retrouve dans Excel."""
+    return f"{sheet}!{get_column_letter(col_idx + 1)}{row_idx + 1}"
+
+
+def _find_value(df, label_pattern, col_offset=1, sheet_name=""):
+    """Cherche un libellé par regex et retourne la valeur voisine.
+
+    Retourne `(valeur, coordonnée)` — la coordonnée est celle de la VALEUR,
+    pas du libellé : c'est la cellule que l'utilisateur ira vérifier.
     """
     for row_idx in range(len(df)):
         for col_idx in range(len(df.columns)):
@@ -23,13 +113,13 @@ def _find_value(df, label_pattern, col_offset=1, search_cols=None):
                 if target_col < len(df.columns):
                     val = df.iloc[row_idx, target_col]
                     if not pd.isna(val):
-                        return val
-                # Chercher dans la ligne suivante
+                        return val, _coord(sheet_name, row_idx, target_col)
+                # Certains classeurs posent la valeur SOUS le libellé.
                 if row_idx + 1 < len(df):
                     val = df.iloc[row_idx + 1, col_idx]
                     if not pd.isna(val):
-                        return val
-    return None
+                        return val, _coord(sheet_name, row_idx + 1, col_idx)
+    return None, None
 
 
 def _safe_float(val, default=0.0):
@@ -39,130 +129,137 @@ def _safe_float(val, default=0.0):
         return default
 
 
-def parse_devis(file_bytes: bytes, filename: str) -> dict:
-    """
-    Parse un fichier devis Excel (.xlsx ou .xls).
-    Retourne un dict avec toutes les données extraites.
-    """
+def _moteur(filename: str) -> str:
     ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else "xlsx"
-    engine = "xlrd" if ext == "xls" else "openpyxl"
+    # xlrd n'est pas installé : les .xls passent par calamine, qui lit les deux
+    # formats. openpyxl reste le moteur des .xlsx (meilleur support des
+    # formules mises en cache).
+    return "calamine" if ext == "xls" else "openpyxl"
 
-    result = {
-        "filename":             filename,
-        "client":               None,
-        "date_devis":           None,
-        "format_h":             None,
-        "format_v":             None,
-        "laize":                None,
-        "nb_couleurs":          0,
-        "temps_calage_mn":      0.0,
-        "metrage_calage_ml":    0.0,
-        "temps_production_mn":  0.0,
-        "metrage_production_ml":0.0,
-        "vitesse_theorique":    0.0,
-        "qte_etiquettes":       0.0,
-        "gache":                0.0,
-        "parse_errors":         [],
-    }
 
+def charger_feuilles(file_bytes: bytes, filename: str) -> tuple[dict, list[str]]:
+    """Ouvre le classeur UNE fois et rend `{nom_feuille: DataFrame}`.
+
+    Le tampon est rembobiné entre chaque feuille : sans ça, la deuxième
+    lecture rend un DataFrame vide sans lever d'erreur.
+    """
+    erreurs: list[str] = []
+    moteur = _moteur(filename)
     try:
-        xl = pd.ExcelFile(file_bytes, engine=engine)
+        buf = io.BytesIO(file_bytes)
+        xl = pd.ExcelFile(buf, engine=moteur)
+        noms = list(xl.sheet_names)
     except Exception as e:
-        result["parse_errors"].append(f"Impossible d'ouvrir le fichier : {e}")
+        return {}, [f"Impossible d'ouvrir le fichier : {e}"]
+
+    feuilles: dict[str, Any] = {}
+    for nom in noms:
+        try:
+            buf.seek(0)
+            feuilles[nom] = pd.read_excel(buf, sheet_name=nom, header=None,
+                                          engine=moteur)
+        except Exception as e:
+            erreurs.append(f"Feuille « {nom} » illisible : {e}")
+    return feuilles, erreurs
+
+
+def parse_devis(file_bytes: bytes, filename: str) -> dict:
+    """Parse un devis Excel au format maison.
+
+    Rend le gabarit complet, plus `sources` : `{champ: "Feuille!Cellule"}`
+    pour chaque champ effectivement trouvé.
+    """
+    result = gabarit_devis(filename)
+    result["sources"] = {}
+
+    if isinstance(file_bytes, (io.BytesIO, io.BufferedReader)):
+        file_bytes = file_bytes.read()
+
+    feuilles, erreurs = charger_feuilles(file_bytes, filename)
+    result["parse_errors"].extend(erreurs)
+    if not feuilles:
         return result
 
-    sheets = xl.sheet_names
+    def poser(champ: str, valeur, coord, transform=None):
+        if valeur is None:
+            return
+        result[champ] = transform(valeur) if transform else valeur
+        if coord:
+            result["sources"][champ] = coord
+
+    def chercher(df, nom, motif, offset=1):
+        return _find_value(df, motif, col_offset=offset, sheet_name=nom)
 
     # ── Feuille Prix ──────────────────────────────────────────────
-    prix_names = [s for s in sheets if "prix" in s.lower()]
-    if prix_names:
+    nom_prix = next((s for s in feuilles if "prix" in s.lower()), None)
+    df_prix = feuilles.get(nom_prix) if nom_prix else None
+    if df_prix is not None:
         try:
-            df_prix = pd.read_excel(file_bytes, sheet_name=prix_names[0],
-                                    header=None, engine=engine)
+            v, c = chercher(df_prix, nom_prix, r"nom.du.client|client")
+            if v is not None:
+                poser("client", str(v).strip(), c)
 
-            # Client
-            client_val = _find_value(df_prix, r"nom.du.client|client", col_offset=1)
-            if client_val:
-                result["client"] = str(client_val).strip()
+            v, c = chercher(df_prix, nom_prix, r"^date\s*:")
+            if v is not None:
+                d = v.strftime("%Y-%m-%d") if hasattr(v, "strftime") else str(v)[:10]
+                poser("date_devis", d, c)
 
-            # Date
-            date_val = _find_value(df_prix, r"^date\s*:", col_offset=1)
-            if date_val:
-                if hasattr(date_val, 'strftime'):
-                    result["date_devis"] = date_val.strftime("%Y-%m-%d")
-                else:
-                    result["date_devis"] = str(date_val)[:10]
+            v, c = chercher(df_prix, nom_prix, r"format.hauteur|dim.h")
+            poser("format_h", v, c, _safe_float)
 
-            # Format H x V
-            format_h = _find_value(df_prix, r"format.hauteur|dim.h", col_offset=1)
-            format_v = _find_value(df_prix, r"format.v|dim.v", col_offset=1)
-            if format_h is None:
-                # Chercher la valeur numérique après "FORMAT HAUTEUR"
-                for _, row in df_prix.iterrows():
-                    vals = [v for v in row if not pd.isna(v) and str(v).strip()]
-                    for i, v in enumerate(vals):
-                        if re.search(r'format.hauteur', str(v), re.IGNORECASE):
-                            if i + 1 < len(vals):
-                                format_h = vals[i + 1]
-            result["format_h"] = _safe_float(format_h)
-            result["format_v"] = _safe_float(format_v)
+            v, c = chercher(df_prix, nom_prix, r"format.laize|format.v\b|dim.v")
+            poser("format_v", v, c, _safe_float)
 
-            # Laize production
-            laize = _find_value(df_prix, r"laize.production|laize.prod", col_offset=1)
-            result["laize"] = _safe_float(laize)
+            v, c = chercher(df_prix, nom_prix, r"laize.production|laize.prod")
+            poser("laize", v, c, _safe_float)
 
-            # Nombre de couleurs
-            nb_coul = _find_value(df_prix, r"nbre.couleurs|nb.couleurs|nombre.couleurs", col_offset=1)
-            result["nb_couleurs"] = int(_safe_float(nb_coul))
+            # Le nombre de couleurs vaut 1,5 quand un poste tourne en demi-teinte :
+            # `int()` le ramenait à 1 et faussait le calage devisé. On garde le réel.
+            v, c = chercher(df_prix, nom_prix, r"nbre.couleurs|nb.couleurs|nombre.couleurs")
+            poser("nb_couleurs", v, c, _safe_float)
 
+            # La gâche vit sur la feuille Prix dans le modèle maison, pas sur
+            # Calculs — la chercher uniquement sur Calculs la rendait toujours nulle.
+            v, c = chercher(df_prix, nom_prix, r"^\s*g[aâ]che\s*$")
+            poser("gache", v, c, _safe_float)
         except Exception as e:
             result["parse_errors"].append(f"Erreur feuille Prix : {e}")
 
     # ── Feuille Calculs ───────────────────────────────────────────
-    calc_names = [s for s in sheets if "calcul" in s.lower()]
-    if calc_names:
+    nom_calc = next((s for s in feuilles if "calcul" in s.lower()), None)
+    df_calc = feuilles.get(nom_calc) if nom_calc else None
+    if df_calc is not None:
         try:
-            df_calc = pd.read_excel(file_bytes, sheet_name=calc_names[0],
-                                    header=None, engine=engine)
+            v, c = chercher(df_calc, nom_calc, r"temps.calage.outil|temps.calage$")
+            if v is None:
+                v, c = chercher(df_calc, nom_calc, r"calage.outil")
+            poser("temps_calage_mn", v, c, _safe_float)
 
-            # Temps calage outil (mn)
-            tps_calage = _find_value(df_calc, r"temps.calage.outil|temps.calage$", col_offset=1)
-            if tps_calage is None:
-                tps_calage = _find_value(df_calc, r"calage.outil", col_offset=1)
-            result["temps_calage_mn"] = _safe_float(tps_calage)
+            v, c = chercher(df_calc, nom_calc, r"metrage.calage|métrage.calage")
+            poser("metrage_calage_ml", v, c, _safe_float)
 
-            # Métrage calage (ml)
-            met_calage = _find_value(df_calc, r"metrage.calage|métrage.calage", col_offset=1)
-            result["metrage_calage_ml"] = _safe_float(met_calage)
+            v, c = chercher(df_calc, nom_calc, r"qte.d.etiquettes|quantit..*tiquet|qte.etiquet")
+            poser("qte_etiquettes", v, c, _safe_float)
 
-            # Quantité étiquettes
-            qte = _find_value(df_calc, r"qte.d.etiquettes|quantit..*tiquet|qte.etiquet", col_offset=1)
-            result["qte_etiquettes"] = _safe_float(qte)
+            v, c = chercher(df_calc, nom_calc, r"temps.production|tps.production")
+            poser("temps_production_mn", v, c, _safe_float)
 
-            # Temps production (mn)
-            tps_prod = _find_value(df_calc, r"temps.production|tps.production", col_offset=1)
-            result["temps_production_mn"] = _safe_float(tps_prod)
+            v, c = chercher(df_calc, nom_calc, r"metrage.lin|métrage.lin|metrage.utilise.*ml|metrage.production")
+            if v is None:
+                v, c = chercher(df_calc, nom_calc, r"metrage.utilise")
+            poser("metrage_production_ml", v, c, _safe_float)
 
-            # Métrage linéaire production (ml)
-            met_prod = _find_value(df_calc, r"metrage.lin|métrage.lin|metrage.utilise.*ml|metrage.production", col_offset=1)
-            if met_prod is None:
-                met_prod = _find_value(df_calc, r"metrage.utilise", col_offset=1)
-            result["metrage_production_ml"] = _safe_float(met_prod)
+            v, c = chercher(df_calc, nom_calc, r"vitesse.prd|vitesse.prod|vitesse.moy")
+            poser("vitesse_theorique", v, c, _safe_float)
 
-            # Vitesse production (m/mn)
-            vitesse = _find_value(df_calc, r"vitesse.prd|vitesse.prod|vitesse.moy", col_offset=1)
-            result["vitesse_theorique"] = _safe_float(vitesse)
-
-            # Gâche (%)
-            gache = _find_value(df_calc, r"g.che$|gache$|gâche$", col_offset=1)
-            if gache is None:
-                gache = _find_value(df_calc, r"g.che|gache|gâche", col_offset=1)
-            result["gache"] = _safe_float(gache)
-
+            if champ_vide(result["gache"]):
+                v, c = chercher(df_calc, nom_calc, r"g.che$|gache$|gâche$")
+                if v is None:
+                    v, c = chercher(df_calc, nom_calc, r"g.che|gache|gâche")
+                poser("gache", v, c, _safe_float)
         except Exception as e:
             result["parse_errors"].append(f"Erreur feuille Calculs : {e}")
     else:
-        result["parse_errors"].append("Feuille 'Calculs' introuvable")
+        result["parse_errors"].append("Feuille « Calculs » introuvable")
 
     return result
-
