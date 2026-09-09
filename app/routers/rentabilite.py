@@ -5,16 +5,27 @@ Accès : direction + administration uniquement.
 
 Lecture d'un devis : `app/services/devis_extraction.py`. Le parser à motifs
 traite le modèle maison, l'IA prend le relais dès qu'un champ clé manque ou
-que le fichier n'est pas un classeur. Rien n'entre en base sans passer par
-l'écran de validation de MyProd : ces routes proposent, elles n'enregistrent
-que ce qu'un humain a confirmé.
+que le fichier n'est pas un classeur.
+
+DEUX CHEMINS D'ENTRÉE, ET ILS N'ONT PAS LES MÊMES GARANTIES.
+
+- Le dépôt depuis MyProd passe par l'écran de validation : un humain voit
+  chaque valeur, sa cellule d'origine et sa confiance avant d'enregistrer.
+- L'agent qui ramasse le partage réseau (`scripts/devis_import_*.py`)
+  enregistre sans relecture. C'est assumé : la saisie manuelle de centaines
+  de devis n'aurait jamais lieu, et un devis lu automatiquement vaut mieux
+  qu'un devis absent. En contrepartie il pose `source='agent'` et lève
+  `a_verifier` dès que la lecture laisse un doute, pour que la liste dirige
+  l'œil vers les quelques devis à reprendre au lieu de les noyer.
 """
+import hashlib
 import json
 import os
 import uuid
 from datetime import datetime
+from typing import Optional
 
-from fastapi import APIRouter, Request, UploadFile, File, HTTPException
+from fastapi import APIRouter, File, Form, Header, HTTPException, Request, UploadFile
 
 from database import get_db
 from services.auth_service import get_current_user
@@ -683,7 +694,7 @@ def get_devis(devis_id: int, request: Request):
 # ── Modifier un devis ─────────────────────────────────────────────
 @router.put("/api/rentabilite/devis/{devis_id}")
 async def update_devis(devis_id: int, request: Request):
-    require_rentabilite(request)
+    user = require_rentabilite(request)
     body = await request.json()
     with get_db() as conn:
         ex = conn.execute("SELECT * FROM devis WHERE id=?", (devis_id,)).fetchone()
@@ -715,6 +726,19 @@ async def update_devis(devis_id: int, request: Request):
         # Colonnes ajoutées par migration : modifiées à part, pour ne pas faire
         # échouer l'édition sur une base qui ne les a pas encore.
         cols_devis = {r[1] for r in conn.execute("PRAGMA table_info(devis)").fetchall()}
+
+        # Quelqu'un vient de relire ce devis à l'écran : la provenance corrigée
+        # remplace l'ancienne, et le doute levé par l'agent n'a plus lieu
+        # d'être — c'est précisément ce que « Modifier » signifie.
+        if body.get("champs") and "extraction_json" in cols_devis:
+            conn.execute(
+                "UPDATE devis SET extraction_json=?, valide_par=?, valide_at=? WHERE id=?",
+                (json.dumps(body.get("champs") or {}, ensure_ascii=False),
+                 user.get("email", ""), datetime.now().isoformat(), devis_id),
+            )
+        if "a_verifier" in cols_devis:
+            conn.execute("UPDATE devis SET a_verifier=0, note='' WHERE id=?", (devis_id,))
+
         if "temps_calage_impression_mn" in cols_devis:
             conn.execute(
                 """UPDATE devis SET temps_calage_impression_mn=?,
@@ -792,3 +816,168 @@ def comparaison(devis_id: int, request: Request):
                     "message": "Aucun dossier lié à ce devis"}
 
         return _comparaison_from_no_dossiers(conn, d, no_dossiers)
+
+
+# ══════════════════════════════════════════════════════════════════
+# Pont — dépôt automatique des devis depuis le partage réseau
+#
+# Même forme que `/api/bridge/of-scan` : l'agent qui tourne sur un poste du
+# réseau SIFA n'a AUCUNE connaissance métier. Il envoie le fichier, le serveur
+# décide. Toute l'intelligence — lire le classeur, arbitrer entre trois
+# vitesses, détecter un doublon — reste ici, en un seul endroit, où elle se
+# corrige sans redéployer quoi que ce soit sur les postes.
+# ══════════════════════════════════════════════════════════════════
+
+def _devis_a_verifier(resultat: dict) -> tuple[bool, str]:
+    """Ce devis mérite-t-il un coup d'œil, et pourquoi ?
+
+    Sans ce tri, l'import automatique produirait des centaines de lignes
+    indistinctes et personne n'irait vérifier la seule qui compte. On lève le
+    drapeau sur ce qui est objectivement douteux — un champ clé introuvable,
+    une incohérence entre vitesse, temps et métrage — jamais sur une
+    impression.
+    """
+    raisons: list[str] = []
+    manquants = resultat.get("champs_cles_manquants") or []
+    if manquants:
+        from app.services.devis_extraction import CHAMPS_SOCLE
+        noms = [CHAMPS_SOCLE.get(c, (c,))[0] for c in manquants]
+        raisons.append("non lu : " + ", ".join(noms))
+    for alerte in (resultat.get("coherence") or []):
+        if alerte.get("niveau") == "avertissement":
+            raisons.append(alerte.get("message") or "")
+    if resultat.get("methode") == "echec":
+        raisons.append("aucune lecture automatique n'a abouti")
+    return bool(raisons), " · ".join(r for r in raisons if r)[:900]
+
+
+def _colonnes_devis(conn) -> set:
+    return {r[1] for r in conn.execute("PRAGMA table_info(devis)").fetchall()}
+
+
+def _enregistrer_devis_agent(contents: bytes, filename: str, content_type: str,
+                             chemin_origine: str, date_fichier: str) -> dict:
+    """Lit un devis déposé par l'agent et l'enregistre, doublons écartés.
+
+    La déduplication porte sur le CONTENU (sha-256), pas sur le nom ni le
+    chemin : un devis recopié dans le dossier de l'année suivante, ou renommé
+    par son auteur, reste le même document. C'est ce qui rend l'agent
+    rejouable autant de fois qu'on veut sans jamais empiler de doublons — et
+    donc ce qui permet de ne RIEN déplacer dans un dossier qui ne nous
+    appartient pas.
+    """
+    if not contents:
+        raise HTTPException(400, "Fichier vide.")
+    ext = _extension(filename)
+    if ext not in DEVIS_EXTENSIONS_ACCEPTEES:
+        raise HTTPException(400, f"Extension non lue : {ext or '(aucune)'}.")
+
+    empreinte = hashlib.sha256(contents).hexdigest()
+    with get_db() as conn:
+        cols = _colonnes_devis(conn)
+        if "empreinte" in cols:
+            deja = conn.execute(
+                "SELECT id, client, a_verifier FROM devis WHERE empreinte=?",
+                (empreinte,),
+            ).fetchone()
+            if deja:
+                return {"success": True, "doublon": True, "devis_id": deja["id"],
+                        "empreinte": empreinte,
+                        "message": f"déjà importé (devis #{deja['id']})"}
+
+    # Le chemin sur le partage sert de repli pour le client : le modèle maison
+    # arrive prérempli « Mon client » et beaucoup ne le remplacent pas, alors
+    # que le dossier de rangement, lui, porte le vrai nom.
+    resultat = extraire_devis(contents, filename, content_type=content_type,
+                              chemin_origine=chemin_origine)
+    apercu = resultat.get("preview") or {}
+    a_verifier, motif = _devis_a_verifier(resultat)
+
+    # La date du fichier sur le partage vaut mieux que celle de l'import : une
+    # reprise complète daterait sinon tous les devis du jour de la reprise.
+    date_devis = apercu.get("date_devis") or (date_fichier or "")[:10]
+    now = datetime.now().isoformat()
+    chemin = _conserver_fichier(contents, filename)
+
+    with get_db() as conn:
+        cols = _colonnes_devis(conn)
+        cur = conn.execute(
+            """INSERT INTO devis
+               (filename, client, date_devis, format_h, format_v, laize, nb_couleurs,
+                temps_calage_mn, metrage_calage_ml, temps_production_mn,
+                metrage_production_ml, vitesse_theorique, qte_etiquettes, gache,
+                statut, note, imported_at, imported_by)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                filename, apercu.get("client") or "", date_devis,
+                apercu.get("format_h") or 0, apercu.get("format_v") or 0,
+                apercu.get("laize") or 0, apercu.get("nb_couleurs") or 0,
+                apercu.get("temps_calage_mn") or 0, apercu.get("metrage_calage_ml") or 0,
+                apercu.get("temps_production_mn") or 0, apercu.get("metrage_production_ml") or 0,
+                apercu.get("vitesse_theorique") or 0, apercu.get("qte_etiquettes") or 0,
+                apercu.get("gache") or 0,
+                "en_attente", motif, now, "agent:devis",
+            ),
+        )
+        devis_id = cur.lastrowid
+
+        if "temps_calage_impression_mn" in cols:
+            conn.execute(
+                "UPDATE devis SET temps_calage_impression_mn=?, "
+                "metrage_calage_impression_ml=? WHERE id=?",
+                (apercu.get("temps_calage_impression_mn") or 0,
+                 apercu.get("metrage_calage_impression_ml") or 0, devis_id),
+            )
+        if "extraction_methode" in cols:
+            conn.execute(
+                """UPDATE devis SET extraction_methode=?, extraction_modele=?,
+                          extraction_json=?, coherence_json=?,
+                          fichier_chemin=?, fichier_mime=? WHERE id=?""",
+                (
+                    resultat.get("methode") or "", resultat.get("modele") or "",
+                    json.dumps(resultat.get("champs") or {}, ensure_ascii=False),
+                    json.dumps(resultat.get("coherence") or [], ensure_ascii=False),
+                    chemin, content_type or "", devis_id,
+                ),
+            )
+        if "empreinte" in cols:
+            conn.execute(
+                "UPDATE devis SET empreinte=?, source=?, a_verifier=?, chemin_origine=? "
+                "WHERE id=?",
+                (empreinte, "agent", 1 if a_verifier else 0,
+                 (chemin_origine or "")[:400], devis_id),
+            )
+
+        _remplacer_indicateurs(conn, devis_id, resultat.get("indicateurs") or [], now)
+        conn.commit()
+
+    return {
+        "success": True, "doublon": False, "devis_id": devis_id,
+        "empreinte": empreinte, "methode": resultat.get("methode"),
+        "a_verifier": a_verifier,
+        "statut": "a_verifier" if a_verifier else "lu",
+        "message": (motif if a_verifier else "lu sans réserve"),
+    }
+
+
+@router.post("/api/bridge/devis")
+async def bridge_devis(file: UploadFile = File(...),
+                       fichier_origine: str = Form(""),
+                       chemin_origine: str = Form(""),
+                       date_fichier: str = Form(""),
+                       x_api_key: Optional[str] = Header(None, alias="X-Api-Key")):
+    """Dépôt d'un devis par l'agent qui surveille le dossier des commerciaux.
+
+    Scope distinct de celui des scans d'OF : un devis porte les prix de
+    revient, les marges et le prix au mille. Une clé qui ramasse des PDF
+    d'atelier n'a pas à pouvoir écrire ça.
+    """
+    from app.routers.api_bridge import _require_scope
+    _require_scope(x_api_key, "devis:write")
+
+    contents = await file.read()
+    if len(contents) > DEVIS_MAX_FILE_MB * 1024 * 1024:
+        raise HTTPException(400, f"Fichier trop volumineux — {DEVIS_MAX_FILE_MB} Mo maximum.")
+    nom = fichier_origine or file.filename or "devis.xlsx"
+    return _enregistrer_devis_agent(contents, nom, file.content_type or "",
+                                    chemin_origine, date_fichier)

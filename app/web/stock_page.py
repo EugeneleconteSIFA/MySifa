@@ -1496,6 +1496,32 @@ body.light .hist-badge-mvt-inventaire{color:#7c3aed}
 .stat-value.warn{color:var(--warn)}
 .stat-value.danger{color:var(--danger)}
 
+/* ── Bobines : l'inventaire d'objets ── */
+.bob-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+.bob-sub{font-size:11px;color:var(--muted);margin-top:4px}
+.bob-filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.bob-search{flex:1;min-width:220px;display:flex;align-items:center;gap:8px;background:var(--card);
+  border:1px solid var(--border);border-radius:10px;padding:0 12px}
+.bob-search input{flex:1;border:none;background:transparent;padding:11px 0;color:var(--text);font-size:14px;outline:none}
+.bob-search:focus-within{border-color:var(--accent)}
+.bob-select{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 12px;
+  color:var(--text);font-size:14px}
+.bob-code{font-family:ui-monospace,monospace;font-size:12px;font-weight:700;color:var(--text);white-space:nowrap}
+.bob-m{font-variant-numeric:tabular-nums;font-weight:700;color:var(--text);white-space:nowrap}
+.bob-m-inconnu{color:var(--muted);font-weight:600}
+.bob-tag{display:inline-flex;align-items:center;font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.4px;padding:2px 8px;border-radius:20px;white-space:nowrap}
+.bob-tag-liste{background:var(--accent-bg);color:var(--accent)}
+.bob-tag-standard{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+.bob-tag-saisie{background:rgba(251,191,36,.12);color:var(--warn)}
+.bob-etat-stock{background:rgba(52,211,153,.12);color:var(--success)}
+.bob-etat-consommee{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+.bob-etat-rebut{background:rgba(248,113,113,.12);color:var(--danger)}
+.bob-alerte{display:flex;gap:12px;align-items:flex-start;background:var(--card);border:1px solid var(--warn);
+  border-left-width:3px;border-radius:12px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:var(--text);line-height:1.5}
+.bob-alerte b{color:var(--warn)}
+.bob-alerte ul{margin:8px 0 0;padding-left:18px;color:var(--text2)}
+
 /* ── Étiquettes traçabilité ── */
 .traca-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:16px 0 10px;padding:0 2px}
 .traca-postes-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:8px}
@@ -2761,6 +2787,8 @@ function icon(name, size=16){
     'alert-triangle': '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
     'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
     'list-checks': '<path d="M3 5h6"/><path d="M3 12h6"/><path d="M3 19h6"/><polyline points="14 4 16 6 20 2"/><polyline points="14 11 16 13 20 9"/><polyline points="14 18 16 20 20 16"/>',
+    // disc — une bobine vue de bout : le mandrin au centre, la matiere autour
+    'disc': '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['grid']}</svg>`;
 }
@@ -3984,7 +4012,7 @@ function closeSidebar() { S.sidebarOpen = false; document.body.classList.remove(
 function goToTab(tab) {
   // Accès restreints selon le mode
   if (S.tracaOnly && tab !== 'traca') return;
-  if (S.fabStockMode && !['menu','production','matieres','historique','traca','plan-entrepot'].includes(tab)) return;
+  if (S.fabStockMode && !['menu','production','matieres','bobines','historique','traca','plan-entrepot'].includes(tab)) return;
   // Arrêter la caméra si on quitte l'onglet réception
   if (tab !== 'reception' && S.recepScanning) recepStopCamera();
   S.tab = tab; S.selProduit = null; S.selEmpl = null; S.selMatiere = null; S.searchResults = null; S.showAddForm = false;
@@ -4026,6 +4054,7 @@ function goToTab(tab) {
   else if (tab === 'matieres-inventaire') loadInventaireMatieres();
   else if (tab === 'besoins-matieres') loadBesoinsMatieres();
   else if (tab === 'reception') loadRecepHistory();
+  else if (tab === 'bobines') loadBobines();
   else if (tab === 'matieres') loadMatieres();
   else if (tab === 'produits-finis') loadProduitsFinis();
   else if (tab === 'negoce') loadNegoce();
@@ -16133,6 +16162,7 @@ function renderContent() {
   else if (S.tab === 'inventaire') content = buildInventaire();
   else if (S.tab === 'matieres-inventaire') content = buildMatieresInventaire();
   else if (S.tab === 'besoins-matieres') content = buildBesoinsMatieres();
+  else if (S.tab === 'bobines') content = buildBobines();
   else if (S.tab === 'traca') content = buildTraca();
   else if (S.tab === 'reception') content = buildReception();
   else if (S.tab === 'historique') content = buildHistorique();
@@ -16140,6 +16170,259 @@ function renderContent() {
   else content = buildDashboard();
 
   if (content) area.appendChild(content);
+}
+
+// ── Bobines : l'inventaire d'objets ─────────────────────────────
+//
+// Le compteur de stock (`mp_stock_laize`) et cette liste répondent à deux
+// questions différentes : « combien » et « lesquelles ». L'écran affiche les
+// deux et, quand ils se contredisent, le dit en haut plutôt que de trancher —
+// un écart peut venir d'une bobine sortie sans être désignée, d'une entrée
+// comptée deux fois ou d'un ajustement à la main, et seul le magasin sait.
+
+function bobEnsureState() {
+  if (!S.bobines) {
+    S.bobines = {
+      items: [], total: 0, metrageTotal: 0, sansMetrage: 0,
+      q: '', etat: 'stock', page: 0, loading: false, coherence: null,
+    };
+  }
+  return S.bobines;
+}
+
+const BOB_PAGE = 100;
+
+async function loadBobines() {
+  const b = bobEnsureState();
+  b.loading = true;
+  renderContent();
+  try {
+    const sp = new URLSearchParams();
+    if (b.q) sp.set('q', b.q);
+    sp.set('etat', b.etat || 'tous');
+    sp.set('limit', String(BOB_PAGE));
+    sp.set('offset', String((b.page || 0) * BOB_PAGE));
+    const r = await api('/api/stock/bobines?' + sp.toString());
+    b.items = r.items || [];
+    b.total = r.total || 0;
+    b.metrageTotal = r.metrage_total || 0;
+    b.sansMetrage = r.sans_metrage || 0;
+  } catch (e) {
+    b.items = []; b.total = 0;
+    showToast(e.message, 'error');
+  }
+  b.loading = false;
+  renderContent();
+  // Le contrôle de cohérence est secondaire : son échec ne doit pas empêcher
+  // la liste de s'afficher, et il ne bloque pas le premier rendu.
+  try {
+    const c = await api('/api/stock/bobines/coherence');
+    S.bobines.coherence = c;
+    renderContent();
+  } catch (e) {}
+}
+
+let _bobSearchTimer = null;
+function bobSearch(v) {
+  const b = bobEnsureState();
+  b.q = v;
+  b.page = 0;
+  clearTimeout(_bobSearchTimer);
+  _bobSearchTimer = setTimeout(loadBobines, 300);
+}
+
+function bobFmtM(v) {
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  if (!isFinite(n)) return null;
+  return n.toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' m';
+}
+
+const BOB_ORIGINE_LABEL = {
+  packing_list: 'liste', standard: 'standard', saisie: 'saisi',
+};
+const BOB_ETAT_LABEL = {
+  stock: 'En stock', consommee: 'Consommée', rebut: 'Rebut',
+};
+
+function bobCellMetrage(b) {
+  const txt = bobFmtM(b.metrage_restant);
+  if (txt === null) {
+    return el('span', { cls: 'bob-m-inconnu', title: 'Ni packing list, ni métrage standard sur la matière' }, 'inconnu');
+  }
+  const bits = [el('span', { cls: 'bob-m' }, txt)];
+  const org = BOB_ORIGINE_LABEL[b.metrage_origine];
+  if (org) {
+    bits.push(document.createTextNode(' '));
+    bits.push(el('span', { cls: 'bob-tag bob-tag-' + (b.metrage_origine === 'packing_list' ? 'liste' : b.metrage_origine) }, org));
+  }
+  const init = bobFmtM(b.metrage_initial);
+  if (init && init !== txt) {
+    bits.push(el('div', { cls: 'bob-sub' }, 'entamée — ' + init + ' à la réception'));
+  }
+  return el('div', null, ...bits);
+}
+
+function bobRow(b) {
+  const laize = b.laize_mm ? String(Math.round(Number(b.laize_mm))) + ' mm' : '—';
+  return el('tr', null,
+    el('td', null, el('span', { cls: 'bob-code' }, b.code_barre)),
+    el('td', null,
+      b.matiere_ref
+        ? el('div', null,
+            el('span', { cls: 'hist-ref' }, b.matiere_ref),
+            el('div', { cls: 'hist-des' }, b.matiere_designation || ''))
+        : el('span', { cls: 'bob-m-inconnu', title: "Aucune matière : cette bobine n'entre dans aucun compteur" }, 'non rattachée'),
+    ),
+    el('td', null, laize),
+    el('td', null, bobCellMetrage(b)),
+    el('td', null, b.lot_fournisseur || '—'),
+    el('td', null,
+      el('div', null, b.fournisseur || '—'),
+      b.reception_lot ? el('div', { cls: 'bob-sub' }, b.reception_lot) : null,
+    ),
+    el('td', null, el('span', { cls: 'bob-tag bob-etat-' + (b.etat || 'stock') },
+                      BOB_ETAT_LABEL[b.etat] || b.etat)),
+    el('td', null, b.no_dossier || '—'),
+  );
+}
+
+function bobAlerteCoherence(c) {
+  if (!c) return null;
+  const lignes = c.ecarts || [];
+  if (!lignes.length && !c.bobines_sans_matiere) return null;
+  const details = el('ul', null, ...lignes.slice(0, 6).map(e => el('li', null,
+    (e.matiere_ref || '?') + (e.laize_mm ? ' · ' + Math.round(Number(e.laize_mm)) + ' mm' : '')
+    + ' — compteur ' + e.compteur + ', ' + e.bobines + ' bobine(s) identifiée(s)')));
+  if (lignes.length > 6) details.appendChild(el('li', null, '… et ' + (lignes.length - 6) + ' autre(s)'));
+  return el('div', { cls: 'bob-alerte' },
+    iconEl('alert-triangle', 18),
+    el('div', null,
+      el('b', null, lignes.length
+        ? lignes.length + ' écart(s) entre le compteur et les bobines identifiées'
+        : 'Bobines sans matière'),
+      el('div', null, "Le compteur de stock fait foi. L'écart dit seulement que toutes les bobines "
+        + "ne sont pas identifiées — reste à savoir laquelle des trois causes : une sortie non désignée, "
+        + "une entrée comptée deux fois, ou un ajustement à la main."),
+      lignes.length ? details : null,
+      c.bobines_sans_matiere
+        ? el('div', { cls: 'bob-sub' }, c.bobines_sans_matiere
+            + ' bobine(s) en stock sans matière rattachée — invisibles à l\'inventaire tant que personne ne les rattache.')
+        : null,
+    ),
+  );
+}
+
+function buildBobines() {
+  const b = bobEnsureState();
+
+  const head = el('div', { cls: 'hist-head' },
+    el('div', null,
+      el('h2', { cls: 'hist-title' }, 'Bobines'),
+      el('p', { cls: 'hist-subtitle' },
+        "Une ligne par bobine physique — ce que le compteur de stock ne peut pas dire"),
+    ),
+  );
+
+  const stats = el('div', { cls: 'bob-stats' },
+    el('div', { cls: 'stat-card' },
+      el('div', { cls: 'stat-label' }, b.etat === 'stock' ? 'Bobines en stock' : 'Bobines'),
+      el('div', { cls: 'stat-value accent' }, String(b.total)),
+    ),
+    el('div', { cls: 'stat-card' },
+      el('div', { cls: 'stat-label' }, 'Métrage'),
+      el('div', { cls: 'stat-value' }, bobFmtM(b.metrageTotal) || '—'),
+      b.sansMetrage
+        ? el('div', { cls: 'bob-sub' }, '+ ' + b.sansMetrage + ' bobine(s) de métrage inconnu')
+        : null,
+    ),
+    el('div', { cls: 'stat-card' },
+      el('div', { cls: 'stat-label' }, 'Écarts au compteur'),
+      el('div', { cls: 'stat-value' + ((b.coherence && (b.coherence.ecarts || []).length) ? ' warn' : '') },
+         b.coherence ? String((b.coherence.ecarts || []).length) : '…'),
+      b.coherence
+        ? el('div', { cls: 'bob-sub' }, b.coherence.lignes_controlees + ' ligne(s) contrôlée(s)')
+        : null,
+    ),
+  );
+
+  const champRecherche = el('input', {
+    type: 'search', placeholder: 'Code-barres, lot fournisseur, référence matière…',
+    value: b.q || '',
+    on: { input: (ev) => bobSearch(ev.target.value) },
+  });
+  const selEtat = el('select', { cls: 'bob-select', on: { change: (ev) => {
+    b.etat = ev.target.value; b.page = 0; loadBobines();
+  } } });
+  [['stock', 'En stock'], ['consommee', 'Consommées'], ['rebut', 'Rebut'], ['tous', 'Tous les états']]
+    .forEach(([v, lab]) => {
+      const o = el('option', { value: v }, lab);
+      if ((b.etat || 'stock') === v) o.selected = true;
+      selEtat.appendChild(o);
+    });
+
+  const filtres = el('div', { cls: 'bob-filters' },
+    el('div', { cls: 'bob-search' }, iconEl('search', 16), champRecherche),
+    selEtat,
+  );
+
+  const page = el('div', { cls: 'hist-page' }, head, stats,
+                  bobAlerteCoherence(b.coherence), filtres);
+
+  if (b.loading) {
+    page.appendChild(el('div', { cls: 'hist-loading' }, el('div', { cls: 'hist-spinner' }), 'Chargement…'));
+    return el('div', { cls: 'content' }, page);
+  }
+
+  if (!b.items.length) {
+    page.appendChild(el('div', { cls: 'hist-empty' },
+      b.q
+        ? 'Aucune bobine pour cette recherche.'
+        : "Aucune bobine enregistrée. Les bobines apparaissent ici au fur et à mesure des réceptions — "
+          + "il n'y a pas eu de reprise de l'historique, volontairement : les 25 codes scannés avant "
+          + "septembre 2026 n'étaient rattachés à aucune matière."));
+    return el('div', { cls: 'content' }, page);
+  }
+
+  const table = el('table', { cls: 'hist-table' },
+    el('thead', null, el('tr', null,
+      el('th', null, 'Code-barres'),
+      el('th', null, 'Matière'),
+      el('th', null, 'Laize'),
+      el('th', null, 'Métrage restant'),
+      el('th', null, 'Lot fournisseur'),
+      el('th', null, 'Réception'),
+      el('th', null, 'État'),
+      el('th', null, 'Dossier'),
+    )),
+    el('tbody', null, ...b.items.map(bobRow)),
+  );
+
+  const nbPages = Math.max(1, Math.ceil(b.total / BOB_PAGE));
+  const nav = el('div', { cls: 'hist-results-head-nav' },
+    el('button', {
+      cls: 'btn btn-ghost', type: 'button', disabled: (b.page || 0) <= 0,
+      on: { click: () => { b.page = Math.max(0, (b.page || 0) - 1); loadBobines(); } },
+    }, '← Précédent'),
+    el('span', { cls: 'hist-pagination-info' }, ((b.page || 0) + 1) + ' / ' + nbPages),
+    el('button', {
+      cls: 'btn btn-ghost', type: 'button', disabled: ((b.page || 0) + 1) >= nbPages,
+      on: { click: () => { b.page = (b.page || 0) + 1; loadBobines(); } },
+    }, 'Suivant →'),
+  );
+
+  page.appendChild(el('div', { cls: 'hist-results-card' },
+    el('div', { cls: 'hist-results-head' },
+      el('div', { cls: 'hist-results-head-left' },
+        el('span', { cls: 'hist-results-title' }, 'Bobines'),
+        el('span', { cls: 'hist-count' }, String(b.total)),
+      ),
+      nbPages > 1 ? nav : null,
+    ),
+    el('div', { cls: 'hist-table-wrap' }, table),
+  ));
+
+  return el('div', { cls: 'content' }, page);
 }
 
 // ── Monitoring réconciliation ERP ───────────────────────────────
@@ -21414,6 +21697,7 @@ const STOCK_TAB_MOBILE_TITLES = {
   referentiel: 'Référentiel',
   inventaire: 'Inventaire',
   reception: 'Réception matière',
+  bobines: 'Bobines',
   historique: 'Historique',
   traca: 'Étiquettes traça',
   monitoring: 'Monitoring',
@@ -21438,6 +21722,7 @@ function buildSidebarNavStructure() {
       { kind: 'btn', tab: 'production', icon: 'cpu', label: 'Production' },
       { kind: 'sep', label: 'Matières premières' },
       { kind: 'btn', tab: 'matieres', icon: 'layers', label: 'Matières premières' },
+      { kind: 'btn', tab: 'bobines', icon: 'disc', label: 'Bobines' },
       { kind: 'sep', label: 'Outils' },
       { kind: 'btn', tab: 'historique', icon: 'clock', label: 'Historique mouvements' },
       { kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes traça' },
@@ -21449,6 +21734,7 @@ function buildSidebarNavStructure() {
     { kind: 'sep', label: 'Matières premières' },
     { kind: 'btn', tab: 'matieres', icon: 'layers', label: 'Matières premières' },
     { kind: 'btn', tab: 'reception', icon: 'inbox', label: 'Réception matière' },
+    { kind: 'btn', tab: 'bobines', icon: 'disc', label: 'Bobines' },
   ];
   if (isMatieresAdmin() && !S.stockReadOnly) {
     items.push({ kind: 'btn', tab: 'matieres-inventaire', icon: 'clipboard', label: 'Inventaire matière' });
@@ -22151,7 +22437,7 @@ async function init() {
   // Onglet initial via URL param ?tab=...
   const urlParams = new URLSearchParams(window.location.search);
   const urlTab = urlParams.get('tab');
-  if (urlTab && ['dashboard','matieres','produits-finis','negoce','referentiel','stock','inventaire','matieres-inventaire','besoins-matieres','reception','historique','traca','monitoring','valorisation','production','plan-entrepot'].includes(urlTab)) {
+  if (urlTab && ['dashboard','matieres','produits-finis','negoce','referentiel','stock','inventaire','matieres-inventaire','besoins-matieres','reception','bobines','historique','traca','monitoring','valorisation','production','plan-entrepot'].includes(urlTab)) {
     S.tab = urlTab;
   }
   // Sous-vue des besoins matières. Restaurée AVANT le chargement de l'onglet :
@@ -22179,7 +22465,7 @@ async function init() {
   // Forcer onglet initial selon le mode d'accès restreint
   if (S.tracaOnly) S.tab = 'traca';
   if (S.fabStockMode) {
-    if (!['menu','production','matieres','historique','traca','plan-entrepot'].includes(S.tab)) S.tab = 'production';
+    if (!['menu','production','matieres','bobines','historique','traca','plan-entrepot'].includes(S.tab)) S.tab = 'production';
   }
   render();
   if (S.tab === 'traca') {

@@ -1233,9 +1233,13 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
   cursor:pointer;transition:background .15s,border-color .15s}
 .rent-ligne:hover{background:var(--bg)}
 .rent-ligne.is-open{background:var(--accent-bg);border-left-color:var(--accent)}
+/* Le titre porte le client, le format ET la reference : le couper a la
+   premiere ligne cachait la reference, qui est ce qu'on cherche. Deux lignes
+   au plus, coupees proprement au-dela. */
 .rent-ligne-titre{font-size:13px;font-weight:700;color:var(--text);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rent-ligne-sous{font-size:11px;color:var(--muted);margin-top:2px;
+  line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;
+  -webkit-box-orient:vertical;overflow:hidden}
+.rent-ligne-sous{font-size:11px;color:var(--text2);margin-top:3px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rent-chevron{display:inline-flex;color:var(--muted);flex-shrink:0;
   transition:transform .15s}
@@ -1252,6 +1256,15 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
 /* Panneau de liaison — le geste central de la page */
 .rent-panneau{border-left:3px solid var(--accent);background:var(--bg);
   padding:18px 20px;border-bottom:1px solid var(--border)}
+/* Les intitules du panneau reprennent la graisse des titres de section :
+   en muted 11px ils se lisaient comme une legende, pas comme un intitule. */
+.rent-panneau .form-section-title{font-size:11px;font-weight:700;
+  color:var(--text2);letter-spacing:.6px;margin-bottom:10px;
+  padding-bottom:8px;border-bottom:1px solid var(--border)}
+.rent-panneau input,.rent-panneau select{background:var(--card)}
+/* Colonne de droite : sans hauteur minimale, elle se vide et le panneau
+   penche a gauche des que le dossier n'a aucune production rattachee. */
+.rent-panneau-grille > div{min-height:150px}
 .rent-panneau-grille{display:grid;grid-template-columns:1fr 1fr;gap:22px}
 .rent-panneau-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;
   margin:16px 0 6px}
@@ -1268,9 +1281,19 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
 .rent-table th.num,.rent-table td.num{text-align:right;font-family:monospace;
   font-variant-numeric:tabular-nums;white-space:nowrap}
 .rent-table tbody tr:hover{background:var(--bg)}
-.rent-table tbody tr.is-open{background:var(--accent-bg)}
-.rent-bon{color:var(--success);font-weight:700}
-.rent-mauvais{color:var(--danger);font-weight:700}
+/* La ligne ouverte : un liseré, pas un aplat. `--accent-bg` change de teinte
+   avec la palette choisie dans Mon profil (Ambre, Pétrole, Braise...) et
+   donnait un fond fonce sur lequel `--text2` passait mal. Un fond neutre plus
+   un liseré d'accent se comporte pareil dans les six palettes. */
+.rent-table tbody tr.is-open{background:var(--bg);
+  box-shadow:inset 3px 0 0 var(--accent)}
+.rent-table tbody tr.is-open td{color:var(--text)}
+/* `.rent-table td` fixe deja `color:var(--text2)` et l'emporte en specificite
+   sur une classe seule : les ecarts s'affichaient tous en gris, vert et rouge
+   n'apparaissaient jamais. Verifier la classe posee ne suffit pas — c'est la
+   couleur calculee qui compte. */
+.rent-table td.rent-bon,.rent-bon{color:var(--success);font-weight:700}
+.rent-table td.rent-mauvais,.rent-mauvais{color:var(--danger);font-weight:700}
 .rent-verdict{font-size:10px;font-weight:700;padding:3px 9px;border-radius:999px;
   border:1px solid var(--border);color:var(--muted);white-space:nowrap}
 .rent-verdict-success{color:var(--success);border-color:var(--success)}
@@ -1281,15 +1304,26 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
   border-radius:999px;white-space:nowrap}
 
 /* Détail d'un devis : chaque valeur avec sa provenance */
-.rent-champs{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
-  gap:12px;padding:16px 18px}
+.rent-champs-sections{padding:6px 18px 16px}
+.rent-section + .rent-section{margin-top:6px}
+.rent-section-titre{font-size:11px;font-weight:700;color:var(--text2);
+  text-transform:uppercase;letter-spacing:.6px;padding:14px 0 8px;
+  border-bottom:1px solid var(--border);margin-bottom:12px}
+.rent-champs{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
+  gap:10px}
 .rent-champ{background:var(--bg);border:1px solid var(--border);
   border-radius:10px;padding:10px 12px}
-.rent-champ-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;
-  color:var(--muted);font-weight:700}
-.rent-champ-val{font-size:15px;font-weight:700;color:var(--text);margin-top:3px;
+/* Un champ dont la lecture est douteuse se voit sans avoir a lire sa pastille. */
+.rent-champ.is-doute{border-color:var(--warn)}
+/* Le libelle etait en 10px muted : illisible a cote d'une valeur en 15px gras.
+   Meme taille de corps que le reste de l'interface, et la couleur du texte
+   secondaire plutot que celle des mentions eteintes. */
+.rent-champ-lbl{font-size:11px;color:var(--text2);font-weight:600;
+  letter-spacing:.2px;line-height:1.3}
+.rent-champ-val{font-size:17px;font-weight:700;color:var(--text);margin-top:4px;
   font-variant-numeric:tabular-nums}
 .rent-champ-unite{font-size:11px;font-weight:500;color:var(--muted)}
+.rent-champ-note{font-size:10px;color:var(--warn);margin-top:5px;line-height:1.35}
 
 @media(max-width:900px){
   .rent-panneau-grille{grid-template-columns:1fr;gap:16px}
@@ -1300,3 +1334,17 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
   .rent-filtres{width:100%;justify-content:space-between}
   .rent-kpi-val{font-size:20px}
 }
+
+/* Devis ramassés automatiquement : le motif du doute se lit sur la ligne. */
+/* Le motif doit passer a la ligne DANS sa cellule. Avec un `max-width` plus
+   large que la colonne, le bloc debordait et le conteneur `overflow-x` du
+   tableau le coupait en plein mot — un avertissement illisible ne previent
+   de rien. On contraint la colonne, pas le bloc. */
+.rent-motif{font-size:11px;color:var(--warn);margin-top:3px;line-height:1.4;
+  white-space:normal;overflow-wrap:anywhere}
+.rent-table td:first-child{max-width:420px}
+.rent-rappel{display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  font-size:12px;font-weight:600;color:var(--warn);background:var(--card);
+  border:1px solid var(--warn);border-radius:10px;padding:11px 14px;
+  margin-bottom:14px;cursor:pointer;font-family:inherit;transition:background .15s}
+.rent-rappel:hover{background:var(--bg)}
