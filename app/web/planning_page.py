@@ -2813,34 +2813,89 @@ function setupTlDD(){
   });
 }
 
-// ── Déstockage matière : marquage visuel seulement ────────────────────────
-// Le bouton ne bascule qu'un statut : le point gris sur la timeline, et rien
-// d'autre. La modale qui écrivait de vraies sorties de stock est débranchée le
-// temps de revoir la méthode de gestion des stocks — les endpoints
-// /api/stock/destockage/… existent toujours côté serveur, plus rien ne les
-// appelle depuis ici.
+// ── Déstockage matière : le bouton écrit de nouveau du stock ──────────────
+//
+// Il ne bascule plus un drapeau. Relevé du 09/09/2026 : 232 dossiers portaient
+// le marquage « déstocké » sans qu'un seul mouvement de stock ait été écrit, et
+// les 212 sorties de matière existantes étaient toutes tapées à la main, sans
+// lien avec un dossier. Un bouton qui colore une pastille et ne fait rien
+// d'autre est pire qu'un bouton absent : il fait croire que le travail est fait.
+//
+// Le bouton appelle maintenant le déstockage réel. Le serveur contrôle les
+// données (métrage présent, fiche qui boucle, matières rattachées), sort ce
+// qui peut sortir, et rend « déstocké » ou « déstocké avec réserves ». Un
+// dossier déjà déstocké se reprend par l'annulation, qui contre-passe au lieu
+// d'effacer.
 async function toggleDestockage(entryId){
   if(!CAN_EDIT) return;
+  const ent=(S.entries||[]).find(x=>x.id===entryId);
+  const etat=(ent&&ent.destockage)||"todo";
+
+  // Déjà déstocké : on ouvre la relecture. Annuler d'un bloc pour corriger
+  // une seule quantité obligeait à tout refaire — c'est ce qui fait qu'on ne
+  // corrige pas, et qu'un stock faux le reste.
+  if(etat==="done"||etat==="reserve"){ openDestockageModal(entryId); return; }
+
   try{
-    const r=await api(`/machines/${MID}/entries/${entryId}/destockage`,{method:"PUT"});
-    (S.timeline||[]).forEach(s=>{if((s.entry_id||0)===entryId) s.destockage=r.destockage;});
-    const ent=(S.entries||[]).find(x=>x.id===entryId);
-    if(ent) ent.destockage=r.destockage;
-    renderTL();
-    updateDestockBtn(entryId, r.destockage);
-  }catch(e){ console.error("toggleDestockage",e); }
+    const r=await api(`/api/stock/destockage/${entryId}/auto`,{method:"POST"});
+    appliquerEtatDestockage(entryId,r.destockage||r.etat||"done",(r.reserves||[]).join(" ; "));
+    const nb=r.mouvements||0;
+    if((r.reserves||[]).length){
+      alert(`${nb} mati\u00e8re(s) sortie(s) du stock.\n\nRéserves \u00e0 traiter :\n\u2022 `+r.reserves.join("\n\u2022 "));
+    }else{
+      toast(`${nb} mati\u00e8re(s) sortie(s) du stock.`);
+    }
+  }catch(e){ alert(await messageErreurDestockage(e)); }
 }
 
+// Le serveur explique toujours POURQUOI il refuse — « métrage absent », « la
+// fiche ne boucle pas », « matière non rattachée ». Avaler ce message dans un
+// « erreur » générique renverrait l'utilisateur chercher sans indice.
+async function messageErreurDestockage(e){
+  try{
+    const j=await e.json();
+    if(j&&j.detail) return typeof j.detail==="string"?j.detail:JSON.stringify(j.detail);
+  }catch(x){}
+  return "Déstockage impossible.";
+}
+
+function appliquerEtatDestockage(entryId,etat,reserve){
+  (S.timeline||[]).forEach(s=>{if((s.entry_id||0)===entryId) s.destockage=etat;});
+  const ent=(S.entries||[]).find(x=>x.id===entryId);
+  if(ent){ ent.destockage=etat; ent.destockage_reserve=reserve||null; }
+  renderTL();
+  updateDestockBtn(entryId, etat);
+}
+
+function toast(msg){
+  try{ if(typeof showToast==="function"){ showToast(msg); return; } }catch(e){}
+  console.log(msg);
+}
+
+// Trois états et non deux. « Déstocké avec réserves » dit qu'une matière au
+// moins n'est pas sortie faute de rattachement : sans cette couleur, un
+// dossier à moitié sorti ressemble trait pour trait à un dossier propre, et
+// l'écart ne se découvre qu'à l'inventaire.
 function updateDestockBtn(entryId, val){
   const btn=document.getElementById("destock-btn-"+entryId);
   if(!btn) return;
-  const done=val==="done";
-  btn.style.borderColor=done?"#38bdf8":"#fb923c";
-  btn.style.background=done?"rgba(56,189,248,.12)":"rgba(251,146,60,.10)";
-  btn.style.color=done?"#38bdf8":"#fb923c";
-  btn.title=done?"Matières destockées — cliquer pour annuler":"Matières à destocker — cliquer pour valider";
-  const ico=done?'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>':'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>';
-  btn.innerHTML=ico+'<span>'+(done?"Destocké":"À destocker")+'</span>';
+  const etat=val||"todo";
+  const T={
+    done:    {c:"#38bdf8", t:"Destocké",   titre:"Matières sorties du stock — cliquer pour annuler"},
+    reserve: {c:"#fbbf24", t:"Réserves",   titre:"Déstocké en partie : une matière n'est pas rattachée — cliquer pour annuler"},
+    todo:    {c:"#fb923c", t:"À destocker",titre:"Sortir les matières de ce dossier du stock"},
+  };
+  const d=T[etat]||T.todo;
+  const rgb=etat==="done"?"56,189,248":(etat==="reserve"?"251,191,36":"251,146,60");
+  btn.style.borderColor=d.c;
+  btn.style.background="rgba("+rgb+",.12)";
+  btn.style.color=d.c;
+  btn.title=d.titre;
+  const coche='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  const alerte='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+  const carton='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>';
+  const ico=etat==="done"?coche:(etat==="reserve"?alerte:carton);
+  btn.innerHTML=ico+'<span>'+d.t+'</span>';
 }
 
 async function resetSaisieFromModal(entryId){
@@ -2854,6 +2909,157 @@ async function resetSaisieFromModal(entryId){
     try{const j=await e.json();if(j&&j.detail)msg=typeof j.detail==="string"?j.detail:JSON.stringify(j.detail);}catch(x){}
     alert(msg);
   }
+}
+
+// ── Relecture du déstockage ──────────────────────────────────────
+//
+// L'automatisme sort ce qu'il sait calculer à partir de l'OF et de la fiche.
+// Cet écran est celui de la personne qui a vu la production : elle compare ce
+// qui est SORTI à ce qui aurait dû sortir, corrige au réel, et traite les
+// matières restées en réserve.
+//
+// Aucune correction n'écrase un mouvement passé : le serveur écrit la
+// différence, dans un sens ou dans l'autre. L'historique doit pouvoir raconter
+// qu'on s'est trompé, pas donner l'impression qu'on ne s'est jamais trompé.
+
+function drNombre(v){
+  if(v===null||v===undefined||v==="") return "—";
+  const n=Number(v);
+  if(!isFinite(n)) return "—";
+  return n.toLocaleString("fr-FR",{maximumFractionDigits:3});
+}
+
+function renderDestockageBody(d){
+  const dossier=d.dossier||{};
+  const lignes=(d.lignes||[]).filter(l=>l.matiere_id||l.destockable===false);
+  const reserve=(dossier.destockage_reserve||"").trim();
+
+  const bandeau=reserve
+    ? `<div style="margin-bottom:14px;padding:11px 14px;border-radius:9px;
+         background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.45);
+         font-size:12.5px;line-height:1.6;color:var(--text)">
+         <b style="color:#fbbf24">Déstocké avec réserves</b><br>${escHtml(reserve)}
+       </div>` : "";
+
+  const etatTxt=dossier.destockage==="reserve"?"avec réserves"
+              :(dossier.destockage==="done"?"complet":"non déstocké");
+  const quand=(dossier.destockage_at||"").slice(0,16).replace("T"," ");
+
+  const rangs=lignes.map(l=>{
+    const nom=escHtml(l.matiere_ref||l.source_value||l.kind||"—");
+    const des=escHtml(l.matiere_designation||"");
+    const laize=l.laize_id&&Array.isArray(l.laizes)
+      ? (l.laizes.find(x=>x.laize_id===l.laize_id)||{}).valeur_mm : null;
+    const sousTitre=[des,laize?Math.round(Number(laize))+" mm":"",
+                     l.hors_fiche?"ajoutée à la main":""].filter(Boolean).join(" · ");
+    if(!l.destockable&&!l.hors_fiche){
+      const motif=escHtml((l.manque||["non rattachée à une référence MyStock"])[0]);
+      return `<tr>
+        <td style="padding:9px 10px"><div style="font-weight:700">${nom}</div>
+          <div style="font-size:11px;color:var(--muted)">${sousTitre}</div></td>
+        <td style="padding:9px 10px;text-align:right;color:var(--muted)">${drNombre(l.besoin)}</td>
+        <td style="padding:9px 10px;text-align:right;color:var(--muted)">—</td>
+        <td colspan="2" style="padding:9px 10px;color:#fbbf24;font-size:11.5px">${motif}</td>
+      </tr>`;
+    }
+    const cible=l.sorti!=null?l.sorti:(l.quantite||0);
+    return `<tr>
+      <td style="padding:9px 10px"><div style="font-weight:700">${nom}</div>
+        <div style="font-size:11px;color:var(--muted)">${sousTitre}</div></td>
+      <td style="padding:9px 10px;text-align:right;color:var(--muted)">${drNombre(l.quantite)}</td>
+      <td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums">${drNombre(l.sorti)}</td>
+      <td style="padding:9px 10px;text-align:right">
+        <input type="number" step="0.001" min="0" class="dr-q"
+               data-mid="${l.matiere_id}" data-lid="${l.laize_id==null?"":l.laize_id}"
+               value="${cible}"
+               style="width:110px;text-align:right;background:var(--bg);border:1px solid var(--border);
+                      border-radius:7px;padding:7px 9px;color:var(--text);font-family:inherit;font-size:13px"></td>
+      <td style="padding:9px 10px;font-size:11.5px;color:var(--muted)">${escHtml(l.unite||"")}</td>
+    </tr>`;
+  }).join("");
+
+  const leverBloc=dossier.destockage==="reserve"
+    ? `<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);margin-right:auto">
+         <input type="checkbox" id="dr-lever"> Lever la réserve — les manques ont été traités
+       </label>`
+    : `<span style="margin-right:auto"></span>`;
+
+  return `${bandeau}
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+      Déstockage ${escHtml(etatTxt)}${quand?" · "+escHtml(quand):""}. La colonne
+      « ajuster à » est la quantité qui doit AU TOTAL être sortie : le serveur
+      écrit la différence.
+    </div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:var(--bg)">
+        <th style="padding:9px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Matière</th>
+        <th style="padding:9px 10px;text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Calculé</th>
+        <th style="padding:9px 10px;text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Sorti</th>
+        <th style="padding:9px 10px;text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Ajuster à</th>
+        <th style="padding:9px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Unité</th>
+      </tr></thead>
+      <tbody>${rangs||`<tr><td colspan="5" style="padding:18px;text-align:center;color:var(--muted)">Aucune ligne.</td></tr>`}</tbody>
+    </table></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px">
+      ${leverBloc}
+      <button type="button" class="btn-s" onclick="destockageAnnulerTout(${dossier.planning_id})"
+        style="color:var(--danger)">Annuler tout le déstockage</button>
+      <button type="button" class="btn-s" onclick="destockageEnregistrer(${dossier.planning_id})"
+        style="background:var(--accent);border-color:var(--accent);color:#0a0e17;font-weight:700">Enregistrer</button>
+    </div>`;
+}
+
+async function openDestockageModal(entryId){
+  const e=(S.entries||[]).find(x=>x.id===entryId);
+  const ref=(e&&(e.numero_of||e.reference))||"Dossier";
+  document.getElementById("mroot").innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md md--stats">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:12px">
+      <h3 style="margin:0;font-size:18px;font-family:var(--mono);color:var(--text);display:flex;align-items:center;gap:8px">${icon("package",18)} Déstockage — ${escHtml(ref)}</h3>
+      <button type="button" class="btn-s" onclick="closeM()">Fermer</button>
+    </div>
+    <div id="dr-body"><div style="padding:24px;text-align:center;color:var(--muted)">Chargement…</div></div>
+  </div></div>`;
+  try{
+    const d=await api(`/api/stock/destockage/${entryId}/relecture`);
+    const b=document.getElementById("dr-body");
+    if(b) b.innerHTML=renderDestockageBody(d);
+  }catch(err){
+    const b=document.getElementById("dr-body");
+    if(b) b.innerHTML=`<div style="padding:20px;color:var(--danger)">${escHtml(await messageErreurDestockage(err))}</div>`;
+  }
+}
+
+async function destockageEnregistrer(entryId){
+  const lignes=[];
+  document.querySelectorAll("#dr-body .dr-q").forEach(inp=>{
+    const q=parseFloat(String(inp.value).replace(",","."));
+    if(isNaN(q)||q<0) return;
+    const lid=inp.dataset.lid;
+    lignes.push({matiere_id:Number(inp.dataset.mid),
+                 laize_id:lid===""?null:Number(lid),
+                 quantite:q});
+  });
+  if(!lignes.length){ alert("Aucune quantité à enregistrer."); return; }
+  const lever=document.getElementById("dr-lever");
+  try{
+    const r=await api(`/api/stock/destockage/${entryId}/ajuster`,{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({lignes,lever_reserve:!!(lever&&lever.checked)})});
+    const n=(r.ajustements||[]).length;
+    appliquerEtatDestockage(entryId,r.destockage||"done",null);
+    closeM();
+    toast(n?`${n} ajustement(s) enregistré(s).`:"Aucun écart : rien à enregistrer.");
+  }catch(e){ alert(await messageErreurDestockage(e)); }
+}
+
+async function destockageAnnulerTout(entryId){
+  if(!confirm("Annuler tout le déstockage de ce dossier ?\n\nChaque sortie sera contre-passée par une entrée de même quantité. Les deux écritures restent à l'historique.")) return;
+  try{
+    const r=await api(`/api/stock/destockage/${entryId}/annuler`,{method:"POST"});
+    appliquerEtatDestockage(entryId,"todo",null);
+    closeM();
+    toast(`Déstockage annulé — ${(r.mouvements||[]).length} mouvement(s) contre-passé(s).`);
+  }catch(e){ alert(await messageErreurDestockage(e)); }
 }
 
 function buildLegend(sl, m1, nw){
@@ -4633,11 +4839,22 @@ function openEdit(id){
   const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,e.valide??0,e.etiquettes_par_carton??null,e.id??null);
 
   // Bouton déstockage compact en en-tête
-  const destockDone=e.destockage==="done";
-  const destockBg=destockDone?"rgba(56,189,248,.12)":"rgba(251,146,60,.10)";
-  const destockBorder=destockDone?"#38bdf8":"#fb923c";
-  const destockColor=destockDone?"#38bdf8":"#fb923c";
-  const destockIcon=destockDone?`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`:`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>`;
+  const destockEtat=e.destockage||"todo";
+  const destockDone=destockEtat==="done"||destockEtat==="reserve";
+  const destockBg=destockEtat==="done"?"rgba(56,189,248,.12)":(destockEtat==="reserve"?"rgba(251,191,36,.12)":"rgba(251,146,60,.10)");
+  const destockBorder=destockEtat==="done"?"#38bdf8":(destockEtat==="reserve"?"#fbbf24":"#fb923c");
+  const destockColor=destockEtat==="done"?"#38bdf8":(destockEtat==="reserve"?"#fbbf24":"#fb923c");
+  const destockIcon=destockEtat==="done"
+    ?`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`
+    :(destockEtat==="reserve"
+      ?`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
+      :`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>`);
+  const destockLabel=destockEtat==="done"?"Destocké":(destockEtat==="reserve"?"Réserves":"À destocker");
+  const destockTitre=destockEtat==="done"
+    ?"Matières sorties du stock — cliquer pour annuler"
+    :(destockEtat==="reserve"
+      ?"Déstocké en partie : une matière n'est pas rattachée — cliquer pour annuler"
+      :"Sortir les matières de ce dossier du stock");
   const reelNonDefault=hasSaisieReelle() && e.statut_reel && e.statut_reel!=="reellement_en_attente";
   const resetBlock=(hasSaisieReelle() && IS_DIR_OR_SUPER && reelNonDefault)?`<button type="button" class="btn-reset-saisie" data-eid="${id}" onclick="resetSaisieFromModal(${id})" style="margin-top:8px;width:100%;padding:7px;border-radius:6px;border:1px solid rgba(248,113,113,.4);background:rgba(248,113,113,.08);color:var(--danger);font-size:11px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">${icon('repeat',12)} Réinitialiser la saisie réelle</button>`:"";
   const annuleBlock=((e.annule_le||"").toString().trim())?`<div style="margin-bottom:12px;padding:9px 12px;border-radius:8px;
@@ -4673,11 +4890,11 @@ function openEdit(id){
   </button>`;
   // En lecture seule (commercial) : on masque le bouton « À destocker » et on ne garde que l'œil OF.
   const destockActionBtn=RO?"":`<button type="button" id="destock-btn-${id}" onclick="toggleDestockage(${id})"
-    title="${destockDone?"Matières destockées — cliquer pour annuler":"Matières à destocker — cliquer pour valider"}"
+    title="${destockTitre}"
     style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;border:1.5px solid ${destockBorder};background:${destockBg};color:${destockColor};font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;font-family:inherit;white-space:nowrap"
     onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
     ${destockIcon}
-    <span>${destockDone?"Destocké":"À destocker"}</span>
+    <span>${destockLabel}</span>
   </button>`;
   const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${fscHdr}${statsBtn}${ofEyeBtn}${destockActionBtn}</div>`;
 

@@ -2540,24 +2540,28 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
 
 @router.put("/machines/{machine_id}/entries/{entry_id}/destockage")
 def toggle_destockage(machine_id: int, entry_id: int, request: Request):
-    """Bascule le flag destockage (todo ↔ done) d'un dossier."""
+    """N'existe plus que pour refuser — et dire par quoi elle est remplacée.
+
+    Cette route basculait `destockage` entre `todo` et `done` sans écrire le
+    moindre mouvement de stock. Relevé du 09/09/2026 : 232 dossiers portaient
+    le marquage sans qu'un gramme de matière n'ait bougé, et les 212 sorties
+    existantes étaient toutes saisies à la main, sans lien avec un dossier.
+    Un drapeau qui dit « déstocké » sans déstocker rend le stock faux d'une
+    façon que personne ne peut détecter avant l'inventaire.
+
+    Le déstockage réel passe par `POST /api/stock/destockage/{planning_id}/auto`
+    (sortie contrôlée) et `POST /api/stock/destockage/{planning_id}/annuler`
+    (contre-passation). On refuse plutôt que de supprimer la route : un client
+    non déployé qui l'appellerait encore doit voir l'erreur, pas croire que
+    son geste a été pris en compte.
+    """
     require_admin(request)
-    now = datetime.now().isoformat()
-    with get_db() as conn:
-        ex = conn.execute(
-            "SELECT destockage FROM planning_entries WHERE id=? AND machine_id=?",
-            (entry_id, machine_id)
-        ).fetchone()
-        if not ex:
-            raise HTTPException(404, "Entrée non trouvée")
-        cur = ex["destockage"] or "todo"
-        new_val = "todo" if cur == "done" else "done"
-        conn.execute(
-            "UPDATE planning_entries SET destockage=?, updated_at=? WHERE id=? AND machine_id=?",
-            (new_val, now, entry_id, machine_id)
-        )
-        conn.commit()
-    return {"success": True, "destockage": new_val}
+    raise HTTPException(
+        410,
+        "Le marquage seul n'est plus accepté : il laissait le stock intact. "
+        "Utiliser POST /api/stock/destockage/{id}/auto pour sortir les "
+        "matières, ou /annuler pour contre-passer."
+    )
 
 
 @router.get("/machines/{machine_id}/entries/{entry_id}/production-stats")

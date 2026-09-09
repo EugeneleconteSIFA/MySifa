@@ -1502,7 +1502,19 @@ body.light .hist-badge-mvt-inventaire{color:#7c3aed}
 .plk-card h3{margin:0 0 4px;font-size:13px;font-weight:700;color:var(--text)}
 .plk-card p.plk-hint{margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.5}
 .plk-drop{display:flex;flex-direction:column;align-items:center;gap:10px;padding:26px 16px;
-  border:1px dashed var(--border);border-radius:12px;background:var(--bg);color:var(--muted);font-size:13px;text-align:center}
+  border:1px dashed var(--border);border-radius:12px;background:var(--bg);color:var(--muted);
+  font-size:13px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
+.plk-drop:hover{border-color:var(--accent);background:var(--accent-bg)}
+.plk-drop.survol{border-color:var(--accent);background:var(--accent-bg);border-style:solid}
+/* L'input natif rend « Choose File / No file chosen » — libellé anglais et
+   style du navigateur. On le garde dans le DOM (c'est lui qui ouvre la boîte
+   de dialogue et qui porte le fichier) mais hors de vue. */
+.plk-drop input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.plk-drop-btn{display:inline-flex;align-items:center;gap:7px;background:var(--card);
+  border:1px solid var(--border);border-radius:9px;padding:9px 16px;color:var(--text);
+  font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:all .15s}
+.plk-drop-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.plk-drop-nom{font-weight:700;color:var(--text);word-break:break-all}
 .plk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
 .plk-field{display:flex;flex-direction:column;gap:5px}
 .plk-field label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
@@ -18728,6 +18740,68 @@ async function rvgiIntegrer(lifIds) {
   }
 }
 
+// ── Mise en service de l'intégration ERP ────────────────────────
+//
+// La date de bascule n'a pas de valeur par défaut, et ce n'est pas un oubli :
+// sans elle, l'intégration reprendrait d'un coup tout l'historique des
+// réceptions de l'ERP, alors que ce stock est déjà dans MyStock. La poser est
+// donc une décision datée, prise par quelqu'un qui sait ce que contient le
+// stock ce jour-là.
+
+async function rvgiMettreEnService(valeur, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    await api('/api/stock/reception-rvgi/mise-en-service', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: valeur }),
+    });
+    showToast(valeur
+      ? ('Intégration ERP en service depuis le ' + valeur + '.')
+      : 'Intégration ERP arrêtée.', 'success');
+    S.rvgiFile = null;
+    await loadReceptionRvgi();
+    renderContent();
+  } catch (e) {
+    showToast(e.message, 'error');
+    if (btn) btn.disabled = false;
+  }
+}
+
+function rvgiCarteMiseEnService() {
+  if (!isMatieresAdmin() || S.stockReadOnly) {
+    return el('div', { cls: 'muted', style: { fontSize: '12px', padding: '4px 2px' } },
+      'La mise en service est réservée aux administrateurs matières.');
+  }
+  const aujourdhui = new Date().toISOString().slice(0, 10);
+  const champ = el('input', {
+    cls: 'plk-field', type: 'date', value: aujourdhui,
+    style: { background: 'var(--bg)', border: '1px solid var(--border)',
+             borderRadius: '8px', padding: '9px 10px', color: 'var(--text)',
+             fontSize: '13px', fontFamily: 'inherit' },
+  });
+  const btn = el('button', { cls: 'btn btn-accent', type: 'button' },
+    'Mettre en service');
+  btn.addEventListener('click', () => {
+    const v = (champ.value || '').trim();
+    if (!v) { showToast('Choisis une date de bascule.', 'error'); return; }
+    if (!confirm('Mettre l\'intégration ERP en service à partir du ' + v + ' ?\n\n'
+        + 'Les réceptions de l\'ERP postérieures à cette date entreront en stock. '
+        + 'Rien d\'antérieur ne sera repris.')) return;
+    rvgiMettreEnService(v, btn);
+  });
+
+  return el('div', { cls: 'plk-card', style: { marginBottom: '14px' } },
+    el('h3', null, 'Mettre l\'intégration en service'),
+    el('p', { cls: 'plk-hint' },
+      "À partir de cette date, les réceptions de l'ERP alimentent le stock. "
+      + "Rien d'antérieur n'est repris — le stock d'aujourd'hui reste la référence, "
+      + "et une date reculée après coup ferait entrer deux fois ce qui est déjà là."),
+    el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' } },
+      champ, btn),
+  );
+}
+
 function buildReceptionRvgi() {
   const wrap = el('div', { cls: 'recep-rvgi' });
 
@@ -18749,8 +18823,11 @@ function buildReceptionRvgi() {
     wrap.appendChild(el('div', { cls: 'alert alert-info', style: { marginBottom: '14px' } },
       f.message,
       f.depuis ? null : el('div', { style: { marginTop: '8px', fontSize: '12px' } },
-        'Un administrateur matières pose la date de mise en service. ',
         'Aucune réception antérieure ne sera reprise : le stock actuel reste la référence.')));
+    // Le message renvoyait à « un administrateur matières » sans lui donner de
+    // bouton : la mise en service se posait donc à la main en base. Elle se
+    // pose ici, par celui qui a le droit de la poser.
+    if (!f.depuis) wrap.appendChild(rvgiCarteMiseEnService());
     if (!f.lignes || !f.lignes.length) return wrap;
   }
 
@@ -19323,26 +19400,45 @@ function plkSelectUnite(champ, libelle, unites) {
 
 function plkCarteFichier() {
   const p = S.plk;
+  const prendre = (f) => {
+    if (!f) return;
+    p.file = f;
+    p.analyse = null;
+    plkAnalyser(null);
+  };
   const input = el('input', {
     type: 'file', accept: '.xlsx,.xls,.csv',
-    on: { change: (ev) => {
-      const f = ev.target.files && ev.target.files[0];
-      if (!f) return;
-      p.file = f;
-      p.analyse = null;
-      plkAnalyser(null);
-    } },
+    on: { change: (ev) => prendre(ev.target.files && ev.target.files[0]) },
   });
+
+  // Toute la zone ouvre le sélecteur, et accepte aussi qu'on y dépose le
+  // fichier : une packing list arrive par mail, elle se glisse directement
+  // depuis la pièce jointe.
+  const zone = el('div', { cls: 'plk-drop', on: {
+    click: (ev) => { if (ev.target !== input) input.click(); },
+    dragover: (ev) => { ev.preventDefault(); zone.classList.add('survol'); },
+    dragleave: () => zone.classList.remove('survol'),
+    drop: (ev) => {
+      ev.preventDefault();
+      zone.classList.remove('survol');
+      prendre(ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0]);
+    },
+  } },
+    iconEl('upload', 22),
+    p.file
+      ? el('div', { cls: 'plk-drop-nom' }, p.file.name)
+      : el('span', null, 'Glisse le fichier ici, ou choisis-le'),
+    el('span', { cls: 'plk-drop-btn' },
+       iconEl('file-text', 14), p.file ? 'Changer de fichier' : 'Choisir un fichier'),
+    input,
+  );
+
   return el('div', { cls: 'plk-card' },
     el('h3', null, '1 · Le fichier du fournisseur'),
     el('p', { cls: 'plk-hint' },
       "Excel ou CSV, tel qu'il arrive. La première ligne n'a pas besoin d'être l'en-tête, "
       + "et les colonnes peuvent porter n'importe quel nom — c'est l'étape suivante qui tranche."),
-    el('div', { cls: 'plk-drop' },
-      iconEl('upload', 22),
-      p.file ? el('b', null, p.file.name) : el('span', null, 'Aucun fichier'),
-      input,
-    ),
+    zone,
   );
 }
 
