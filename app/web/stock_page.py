@@ -16244,6 +16244,14 @@ function mpSourceReel(m) {
     if (m.bobines_sans_metrage) t += ' · ' + m.bobines_sans_metrage + ' sans métrage';
     return t;
   }
+  if (m.stock_reel_source === 'mixte') {
+    // Un mélange doit se présenter comme un mélange. Le magasin sait alors
+    // que la précision du chiffre dépend de la part encore non suivie.
+    let t = (m.bobines_en_stock || 0) + ' bobine(s) relevée(s) + '
+      + (m.bobines_hors_suivi || 0) + ' au métrage standard';
+    if (m.bobines_sans_metrage) t += ' · ' + m.bobines_sans_metrage + ' sans métrage';
+    return t;
+  }
   if (m.stock_reel_source === 'standard') return 'métrage standard × nb de bobines';
   if (m.stock_reel_source === 'conditionnement') return 'conditionnement × nb de palettes';
   if (m.stock_reel_source === 'stock') return 'quantité tenue en stock';
@@ -18191,6 +18199,7 @@ async function recepReprintBobine(lot, bobine, btn) {
       certificat_fsc: lot.certificat_fsc || '',
       laize: recepFormatLaize(bobine) || '',
       code_barre: bobine.code_barre || lot.lot_numero,
+      lot_fournisseur: bobine.lot_fournisseur || '',
     }, refProduit, 1, claimLabel, true);
   } finally {
     if (btn) btn.disabled = false;
@@ -18239,6 +18248,7 @@ async function _recepEnvoyerParBobine(lot, bobines, claimLabel, isReprint, impId
         certificat_fsc: lot.certificat_fsc || '',
         laize: recepFormatLaize(b) || '',
         code_barre: b.code_barre || lot.lot_numero,
+        lot_fournisseur: b.lot_fournisseur || '',
         silencieux: true,   // un seul récapitulatif en fin de série
       }, b.matiere_reference || '', 1, claimLabel, isReprint, impId);
       envoyees++;
@@ -18260,10 +18270,16 @@ async function _recepEnvoyerParBobine(lot, bobines, claimLabel, isReprint, impId
 // la confirmation nomme explicitement la bobine et son effet.
 async function recepDeleteBobine(lot, bobine, btn) {
   const ref = bobine.matiere_reference ? ' (' + bobine.matiere_reference + ')' : '';
-  const impacteStock = !!(bobine.matiere_id && bobine.laize_id);
+  // `impacte_stock` dit ce que la RÉCEPTION a réellement écrit. Une bobine
+  // entrée par une liste de traçabilité n'a jamais été comptée : annoncer une
+  // défalque ferait croire à une correction de stock qui n'aura pas lieu.
+  const impacteStock = !!(bobine.matiere_id && bobine.laize_id)
+    && bobine.impacte_stock !== 0;
   const effet = impacteStock
     ? '\n\nLe stock sera défalqué d\'une bobine.'
-    : '\n\nCette bobine n\'est rattachée à aucune matière : le stock ne bouge pas.';
+    : (bobine.impacte_stock === 0
+        ? '\n\nBobine entrée par une liste de traçabilité : le compteur de stock ne bouge pas.'
+        : '\n\nCette bobine n\'est rattachée à aucune matière : le stock ne bouge pas.');
   const dernier = (lot.bobines && lot.bobines.length === 1)
     ? '\nC\'est la dernière bobine : le lot sera supprimé de l\'historique.'
     : '';
@@ -18303,7 +18319,12 @@ async function recepPrintLabelsSmart(lot, refProduit, nbEtiquettes, claimLabel, 
     code_barre: lot.code_barre || lot.lot_numero || '',
     operateur_nom: operateurNom,
     date_reception: dateStr,
-  laize: (lot.laize || lot.laize_mm || ''),
+    // Le lot MySifa identifie la RÉCEPTION, le lot fournisseur identifie la
+    // COULÉE chez le fabricant. C'est le second que cite un litige matière —
+    // « votre lot 25H0431 marque au déroulé » — et il ne se retrouve pas
+    // depuis le premier une fois l'étiquette collée sur la bobine.
+    lot_fournisseur: (lot.lot_fournisseur || ''),
+    laize: (lot.laize || lot.laize_mm || ''),
   };
   try {
     const corps = { usage_key: 'reception_matiere', copies: nbEtiquettes, data, variante: isReprint ? 'compact' : 'full' };
@@ -19380,7 +19401,8 @@ async function plkImporter() {
     });
     p.file = null;
     p.analyse = null;
-    showToast(p.resultat.bobines_creees + ' bobine(s) entrée(s) en stock.', 'success');
+    showToast(p.resultat.bobines_creees + ' bobine(s) enregistrée(s) — stock inchangé.',
+      'success');
     loadRecepHistory();
   } catch (e) {
     showToast(e.message, 'error');
@@ -19572,6 +19594,10 @@ function plkCarteDestination() {
     el('p', { cls: 'plk-hint' },
       "La réception, c'est le Br auquel ces bobines se rattachent. La matière et la "
       + "catégorie viennent du sélecteur ci-dessous — les laizes, elles, sont dans le fichier."),
+    el('p', { cls: 'plk-hint' },
+      "Cet import est de la traçabilité : il crée les bobines, leurs métrages et leurs "
+      + "lots fournisseur, et ne touche pas au compteur de stock. Les entrées de stock "
+      + "restent celles des réceptions RVGI — les compter ici aussi les compterait deux fois."),
     el('div', { cls: 'plk-grid' },
       el('div', { cls: 'plk-field' }, el('label', null, 'Réception'), selRec),
       p.receptionId ? null
@@ -19600,11 +19626,21 @@ function plkCarteDestination() {
 
 function plkCarteResultat() {
   const r = S.plk.resultat;
-  const bits = [el('b', null, r.bobines_creees + ' bobine(s) entrée(s) en stock'),
+  const bits = [el('b', null, r.bobines_creees + ' bobine(s) enregistrée(s)'),
                 document.createTextNode(' — lot ' + (r.lot_numero || '') + '.')];
+  // Le dire ici et pas seulement dans l'aide : l'écran qui vient de lire
+  // « 48 bobines » doit lever l'ambiguïté au moment où elle se pose.
+  bits.push(el('div', { cls: 'bob-sub' },
+    'Traçabilité uniquement : le compteur de stock n\'a pas bougé. '
+    + 'Les entrées de stock viennent des réceptions RVGI.'));
+  if (r.repartition && r.repartition.length) {
+    bits.push(el('div', { cls: 'bob-sub' }, 'Réparties sur ' + r.repartition.length
+      + ' laize(s) : ' + r.repartition.map(x =>
+          (x.laize_label || ((x.laize_mm || '?') + ' mm')) + ' × ' + x.nb_bobines).join(' · ')));
+  }
   if (r.bobines_rattachees) {
     bits.push(el('div', null, r.bobines_rattachees
-      + ' bobine(s) déjà connue(s) : rattachées, sans nouvelle entrée de stock.'));
+      + ' bobine(s) déjà connue(s) : rattachées, sans doublon.'));
   }
   if (r.refusees && r.refusees.length) {
     bits.push(el('div', null, r.refusees.length + ' ligne(s) refusée(s) — '
@@ -19652,7 +19688,7 @@ function buildReceptionListe() {
         cls: 'btn btn-accent', type: 'button', disabled: !pret,
         on: { click: plkImporter },
       }, p.importing ? 'Import en cours…'
-                     : ('Faire entrer ' + p.analyse.nb + ' bobine(s) en stock')),
+                     : ('Enregistrer ' + p.analyse.nb + ' bobine(s)')),
     ),
     (!S.recepMatiereId || certManquant)
       ? el('div', { cls: 'plk-hint', style: { marginTop: '8px', textAlign: 'right' } },

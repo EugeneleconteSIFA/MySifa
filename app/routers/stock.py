@@ -3679,14 +3679,18 @@ def list_receptions(request: Request, limit: int = 50):
             rows = conn.execute(
                 f"""SELECT i.id, i.reception_id, i.code_barre, i.scanned_at,
                            i.matiere_id, i.laize_id,
+                           COALESCE(i.impacte_stock, 1) AS impacte_stock,
                            m.reference   AS matiere_reference,
                            m.designation AS matiere_designation,
                            m.categorie   AS matiere_categorie,
                            l.valeur_mm   AS laize_valeur_mm,
-                           l.label       AS laize_label
+                           l.label       AS laize_label,
+                           sb.lot_fournisseur AS lot_fournisseur,
+                           sb.metrage_restant AS metrage_restant
                       FROM stock_reception_items i
                       LEFT JOIN matieres_premieres m ON m.id = i.matiere_id
                       LEFT JOIN mp_laizes l          ON l.id = i.laize_id
+                      LEFT JOIN stock_bobines sb     ON sb.code_barre = i.code_barre
                      WHERE i.reception_id IN ({placeholders})
                      ORDER BY i.id""",
                 lot_ids,
@@ -3703,6 +3707,12 @@ def list_receptions(request: Request, limit: int = 50):
                     "laize_id": b["laize_id"],
                     "laize_valeur_mm": b["laize_valeur_mm"],
                     "laize_label": b["laize_label"],
+                    # Le lot fournisseur vit sur la bobine, pas sur la ligne de
+                    # reception : c'est la coulee du fabricant, et c'est elle
+                    # qu'on cite dans un litige matiere.
+                    "lot_fournisseur": b["lot_fournisseur"],
+                    "metrage_restant": b["metrage_restant"],
+                    "impacte_stock": int(b["impacte_stock"] or 0),
                 })
     result = []
     for lot in lots:
@@ -4380,10 +4390,25 @@ def _defalquer_bobines(conn, bobines, lot_numero, user, motif: str) -> dict:
     """
     from collections import defaultdict
 
+    def _champ(b, nom, defaut=None):
+        try:
+            return b[nom] if nom in b.keys() else defaut
+        except AttributeError:
+            return b.get(nom, defaut)
+
     grouped: dict[tuple[int, int], int] = defaultdict(int)
+    ignorees_traca = 0
     for b in bobines:
-        mid = b["matiere_id"] if "matiere_id" in b.keys() else b.get("matiere_id")
-        lid = b["laize_id"] if "laize_id" in b.keys() else b.get("laize_id")
+        mid = _champ(b, "matiere_id")
+        lid = _champ(b, "laize_id")
+        # Une bobine entree par une liste de tracabilite n'a jamais ete
+        # comptee : la defalquer creuserait un trou dans le compteur pour du
+        # stock qui n'y est jamais entre. `impacte_stock` est le miroir exact
+        # de ce que la reception a ecrit, et c'est lui qui commande ici.
+        impacte = _champ(b, "impacte_stock", 1)
+        if impacte is not None and int(impacte) == 0:
+            ignorees_traca += 1
+            continue
         if mid is not None and lid is not None:
             grouped[(int(mid), int(lid))] += 1
 
@@ -4445,7 +4470,8 @@ def _defalquer_bobines(conn, bobines, lot_numero, user, motif: str) -> dict:
         )
         nb_impact += nb
 
-    return {"nb_bobines_stock": nb_impact, "ecarts": ecarts}
+    return {"nb_bobines_stock": nb_impact, "ecarts": ecarts,
+            "bobines_tracabilite": ignorees_traca}
 
 
 @router.delete("/api/stock/receptions/{reception_id}")
@@ -4468,7 +4494,9 @@ def delete_reception(reception_id: int, request: Request):
             raise HTTPException(status_code=404, detail="Réception introuvable")
         exd = dict(ex)
         bobines = conn.execute(
-            "SELECT id, code_barre, matiere_id, laize_id FROM stock_reception_items WHERE reception_id=?",
+            "SELECT id, code_barre, matiere_id, laize_id, "
+            "       COALESCE(impacte_stock, 1) AS impacte_stock "
+            "  FROM stock_reception_items WHERE reception_id=?",
             (reception_id,),
         ).fetchall()
         recap = _defalquer_bobines(
@@ -4517,7 +4545,8 @@ def delete_reception_item(reception_id: int, item_id: int, request: Request):
         if not lot:
             raise HTTPException(status_code=404, detail="Réception introuvable")
         bob = conn.execute(
-            """SELECT id, code_barre, matiere_id, laize_id
+            """SELECT id, code_barre, matiere_id, laize_id,
+                      COALESCE(impacte_stock, 1) AS impacte_stock
                  FROM stock_reception_items WHERE id=? AND reception_id=?""",
             (item_id, reception_id),
         ).fetchone()
@@ -4860,7 +4889,22 @@ async def packing_list_analyser(
 
 @router.post("/api/stock/packing-list/importer")
 async def packing_list_importer(request: Request):
-    """Fait entrer en stock les bobines de la liste.
+    """Enregistre les bobines de la liste — tracabilite, PAS de mouvement de stock.
+
+    Arbitrage d'Eugene du 09/09/2026, et il corrige une erreur de conception
+    de la premiere version. Une packing list arrive AVANT ou AVEC la
+    marchandise, et le stock, lui, est deja alimente par les receptions RVGI :
+    compter les deux, c'est compter deux fois. L'import de PZH260443 l'a
+    montre le jour meme — le compteur de la glassine 60 g est passe de 394 a
+    442 bobines sans qu'un gramme de matiere de plus soit arrive dans l'allee.
+
+    Ce que fait donc cet import : il cree les OBJETS (une bobine = un
+    code-barres, sa laize, son metrage, son lot fournisseur) et les rattache a
+    un lot de reception. C'est ce qui sert au litige fournisseur, a l'audit FSC
+    et a la designation des bobines consommees. Le COMPTEUR, lui, ne bouge pas.
+
+    Les lignes ecrites portent `impacte_stock = 0` : c'est ce drapeau que lit
+    la suppression, pour ne pas defalquer un stock qui n'a jamais ete ajoute.
 
     Body : { matiere_id, lignes[], reception_id? | fournisseur?, fichier?,
              mapping?, memoriser? }
@@ -5022,8 +5066,8 @@ async def packing_list_importer(request: Request):
                 conn.execute(
                     """INSERT INTO stock_reception_items
                        (reception_id, code_barre, scanned_at, matiere_id, laize_id,
-                        doublon_note)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
+                        doublon_note, impacte_stock)
+                       VALUES (?, ?, ?, ?, ?, ?, 0)""",
                     (reception_id, code, now, matiere_id, laize_id,
                      ("Packing list %s" % nom_fichier) if nom_fichier else "Packing list"),
                 )
@@ -5033,16 +5077,23 @@ async def packing_list_importer(request: Request):
         if not creees and not rattachees:
             raise HTTPException(400, "Aucune bobine exploitable dans cette liste.")
 
-        note_mvt = "Packing list %s" % (nom_fichier or lot_numero)
-        mouvements = []
+        # AUCUN mouvement de stock ici : voir la docstring. On rend quand
+        # meme la repartition par laize, parce qu'un magasinier qui vient de
+        # deposer 48 bobines veut voir ou elles sont tombees — et parce que
+        # c'est exactement ce qu'il faudra retrouver le jour ou le Br RVGI
+        # arrivera, pour verifier que les deux racontent la meme livraison.
+        repartition = []
         for laize_id, nb in par_laize.items():
-            mouvements.append({
+            lz = conn.execute(
+                "SELECT label, valeur_mm FROM mp_laizes WHERE id=?", (laize_id,)
+            ).fetchone()
+            repartition.append({
                 "laize_id": laize_id,
-                **appliquer_mouvement_mp(
-                    conn, user, matiere_id, "entree", nb,
-                    laize_id=laize_id, note=note_mvt,
-                ),
+                "laize_label": (lz["label"] if lz else None),
+                "laize_mm": (lz["valeur_mm"] if lz else None),
+                "nb_bobines": nb,
             })
+        repartition.sort(key=lambda x: (x["laize_mm"] is None, x["laize_mm"] or 0))
 
         conn.execute(
             "UPDATE stock_receptions SET nb_bobines = "
@@ -5080,6 +5131,7 @@ async def packing_list_importer(request: Request):
             "bobines_rattachees": len(rattachees),
             "refusees": len(refusees),
             "fsc_type_claim": fsc_type_claim,
+            "stock": "inchange (tracabilite)",
         },
         ip=request.client.host if request.client else None,
     )
@@ -5091,7 +5143,11 @@ async def packing_list_importer(request: Request):
         "bobines_creees": len(creees),
         "bobines_rattachees": len(rattachees),
         "refusees": refusees,
-        "mouvements": mouvements,
+        # Dit explicitement ce qui n'a PAS eu lieu : l'ecran doit pouvoir
+        # ecrire « stock inchange » plutot que laisser croire a une entree.
+        "stock_modifie": False,
+        "repartition": repartition,
+        "mouvements": [],
         # Comparaison affichée, jamais bloquante : l'ERP annonce une quantité
         # dans son unité, la liste compte des bobines. Les deux peuvent
         # légitimement différer — c'est l'écart qui mérite un coup d'œil.
@@ -5549,14 +5605,46 @@ def list_matieres_premieres(request: Request, all: int = 0):
         d = _mp_row_dict(r, spl)
         b = bobines_par_mat.get(int(r["id"]))
         if b and d.get("laizee"):
-            d["stock_reel"] = b["metrage"]
-            d["stock_reel_source"] = "bobines"
-            d["bobines_en_stock"] = b["nb"]
+            # Le suivi a la bobine ne couvre presque jamais tout le stock, et
+            # il ne le couvrira pas avant des mois : au 09/09, la glassine
+            # 60 g jaune portait 442 bobines au compteur pour 96 suivies.
+            # Remplacer le total par la seule somme des bobines suivies
+            # affichait 1 735 140 m la ou le magasin en a huit millions — un
+            # chiffre faux d'un facteur 4,6, presente comme « le stock reel ».
+            #
+            # On additionne donc les deux moities : le releve exact la ou il
+            # existe, le metrage standard pour le reste du compteur. La source
+            # dit laquelle domine, pour que personne ne prenne un melange pour
+            # un inventaire.
+            suivi = b["nb"]
+            try:
+                compteur = int(round(float(d.get("stock_simplifie") or 0)))
+            except (TypeError, ValueError):
+                compteur = 0
+            reste = max(0, compteur - suivi)
+            try:
+                std = float(d.get("metres_lineaires_par_bobine") or 0)
+            except (TypeError, ValueError):
+                std = 0.0
+            d["bobines_en_stock"] = suivi
             d["bobines_sans_metrage"] = b["sans"]
+            d["bobines_hors_suivi"] = reste
             # Une somme qui ignore des bobines sans métrage n'est pas complète,
             # et l'écran doit pouvoir écrire « + 3 de métrage inconnu » plutôt
             # qu'un total qui se donne pour exhaustif.
-            d["stock_reel_complet"] = b["sans"] == 0
+            complet = b["sans"] == 0
+            if reste and std > 0:
+                d["stock_reel"] = round(b["metrage"] + reste * std, 1)
+                d["stock_reel_source"] = "mixte"
+            else:
+                # Sans metrage standard on ne complete pas au hasard : le
+                # total ne porte alors que sur les bobines suivies, et il le
+                # dit en se declarant incomplet.
+                d["stock_reel"] = b["metrage"]
+                d["stock_reel_source"] = "bobines"
+                if reste:
+                    complet = False
+            d["stock_reel_complet"] = complet
         out.append(d)
     return out
 

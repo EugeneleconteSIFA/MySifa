@@ -79,7 +79,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
      intitules de section de la barre laterale. Sans suffixe, le navigateur
      ressert l'ancienne et la section s'affiche nue. -->
 <link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem13-mob1">
-<link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__-sais1-rent6">
+<link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__-sais1-rent7">
 <link rel="stylesheet" href="/static/mysifa_retour_prod.css?v=__V_LABEL__-reu11">
 <link rel="stylesheet" href="/static/mysifa_reunions.css?v=__V_LABEL__-reu9">
 <link rel="stylesheet" href="/static/mysifa_print_modal.css?v=__V_LABEL__">
@@ -111,7 +111,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
      son selecteur fournisseur, partages avec la saisie de production. -->
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <script src="/static/mysifa_bobine_edit.js?v=1.0"></script>
-<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent6"></script>
+<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent7"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>
 <!-- v2.3.42 : viewer partagé du détail d'un ack d'alerte (identique à Maintenance) -->
