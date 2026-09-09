@@ -19226,6 +19226,9 @@ function plkEnsure() {
     S.plk = {
       file: null, analyse: null, loading: false, resultat: null,
       receptionId: '', fournisseur: '', memoriser: true, importing: false,
+      // Pas de valeur par défaut sur la certification : c'est une question
+      // qui se pose, pas une case qu'on préremplit. Voir plkCarteDestination().
+      fscTypeClaim: 'non_fsc', certificatFsc: '',
     };
   }
   return S.plk;
@@ -19276,6 +19279,8 @@ async function plkImporter() {
         reception_id: p.receptionId || null,
         fournisseur: p.fournisseur || a.fournisseur || null,
         fournisseur_id: a.fournisseur_id || null,
+        fsc_type_claim: p.fscTypeClaim || 'non_fsc',
+        certificat_fsc: (p.certificatFsc || '').trim() || null,
         fichier: a.fichier,
         mapping: a.mapping,
         memoriser: !!p.memoriser,
@@ -19419,6 +19424,28 @@ function plkCarteDestination() {
     on: { input: (ev) => { p.fournisseur = ev.target.value; } },
   });
 
+  // La certification ne se devine pas et n'a pas de défaut raisonnable : le
+  // scan de production lit le claim de LA RÉCEPTION, donc un lot entré en
+  // « Non FSC » fait ressortir « Non certifié » au pied de la machine sur des
+  // bobines qui, elles, sont certifiées.
+  //
+  // Ces deux champs ne s'affichent que pour un NOUVEAU lot : une réception
+  // existante porte déjà son claim, et le récrire ici l'écraserait sans que
+  // personne l'ait demandé.
+  const selClaim = el('select', { on: { change: (ev) => {
+    p.fscTypeClaim = ev.target.value; renderContent();
+  } } });
+  Object.entries(FSC_CLAIM_LABELS).forEach(([v, lbl]) => {
+    const o = el('option', { value: v }, lbl);
+    if ((p.fscTypeClaim || 'non_fsc') === v) o.selected = true;
+    selClaim.appendChild(o);
+  });
+  const champCert = el('input', {
+    type: 'text', placeholder: 'N° de certificat FSC', value: p.certificatFsc || '',
+    on: { input: (ev) => { p.certificatFsc = ev.target.value; } },
+  });
+  const certRequis = (p.fscTypeClaim || 'non_fsc') !== 'non_fsc';
+
   return el('div', { cls: 'plk-card' },
     el('h3', null, '4 · Où ça entre'),
     el('p', { cls: 'plk-hint' },
@@ -19428,7 +19455,16 @@ function plkCarteDestination() {
       el('div', { cls: 'plk-field' }, el('label', null, 'Réception'), selRec),
       p.receptionId ? null
         : el('div', { cls: 'plk-field' }, el('label', null, 'Fournisseur (nouveau lot)'), champFourn),
+      p.receptionId ? null
+        : el('div', { cls: 'plk-field' }, el('label', null, 'Certification'), selClaim),
+      (p.receptionId || !certRequis) ? null
+        : el('div', { cls: 'plk-field' },
+            el('label', null, 'N° de certificat *'), champCert),
     ),
+    (!p.receptionId && certRequis && !(p.certificatFsc || '').trim())
+      ? el('div', { cls: 'plk-refus' },
+          'Un claim FSC sans numéro de certificat ne prouve rien : le certificat est obligatoire.')
+      : null,
     buildReceptionPicker(false),
   );
 }
@@ -19471,7 +19507,10 @@ function buildReceptionListe() {
   wrap.appendChild(plkCarteApercu());
   wrap.appendChild(plkCarteDestination());
 
-  const pret = p.analyse.nb > 0 && !!S.recepMatiereId && !p.importing;
+  const certManquant = !p.receptionId
+    && (p.fscTypeClaim || 'non_fsc') !== 'non_fsc'
+    && !(p.certificatFsc || '').trim();
+  const pret = p.analyse.nb > 0 && !!S.recepMatiereId && !p.importing && !certManquant;
   wrap.appendChild(el('div', { cls: 'plk-card' },
     el('div', { cls: 'plk-actions' },
       el('label', { cls: 'plk-check' },
@@ -19486,9 +19525,11 @@ function buildReceptionListe() {
       }, p.importing ? 'Import en cours…'
                      : ('Faire entrer ' + p.analyse.nb + ' bobine(s) en stock')),
     ),
-    !S.recepMatiereId
+    (!S.recepMatiereId || certManquant)
       ? el('div', { cls: 'plk-hint', style: { marginTop: '8px', textAlign: 'right' } },
-           'Choisir la catégorie et la matière ci-dessus pour activer l\'import.')
+           certManquant
+             ? 'Renseigner le numéro de certificat FSC pour activer l\'import.'
+             : 'Choisir la catégorie et la matière ci-dessus pour activer l\'import.')
       : null,
   ));
 
@@ -19555,9 +19596,12 @@ function buildReceptionHistorique() {
           ? lot.bobines
           // Rétro-compat : un back non encore déployé ne renvoie que `items`.
           : (lot.items || []).map(c => ({ code_barre: c }));
-        if (bobines.length) {
-          detail.appendChild(recepRenderBobines(lot, bobines));
-        }
+        // La liste des bobines est construite tout de suite mais ajoutée EN
+        // DERNIER. Avec 48 bobines — ce qu'une packing list produit d'un coup —
+        // les actions du lot se retrouvaient 48 lignes plus bas : le bouton
+        // d'impression et la correction du claim FSC existaient sans que
+        // personne puisse les voir.
+        const blocBobines = bobines.length ? recepRenderBobines(lot, bobines) : null;
         // Bouton réimprimer les étiquettes pour ce lot
         if (lot.lot_numero) {
           const reprintBtn = el('button', {
@@ -19576,7 +19620,8 @@ function buildReceptionHistorique() {
                 bobines: lot.bobines || [],
               }, true);  // v1.7 - isReprint=true : envoie variante=compact au serveur
             }}
-          }, iconEl('printer', 14), ' Réimprimer étiquettes');
+          }, iconEl('printer', 14),
+             ' Imprimer les ' + (lot.nb_bobines || bobines.length || 1) + ' étiquettes du lot');
           detail.appendChild(reprintBtn);
         }
         if (!S.stockReadOnly) {
@@ -19672,6 +19717,7 @@ function buildReceptionHistorique() {
           }, iconEl('trash', 14), ' Supprimer la réception');
           detail.appendChild(deleteBtn);
         }
+        if (blocBobines) detail.appendChild(blocBobines);
         histScroll.appendChild(detail);
       }
     });
