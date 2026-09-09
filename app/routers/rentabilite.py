@@ -290,6 +290,42 @@ def list_planning_entries(request: Request):
     return [dict(r) for r in rows]
 
 
+@router.get("/api/rentabilite/links")
+def list_links(request: Request):
+    """Toutes les liaisons d'un coup — devis et dossiers de production.
+
+    L'écran chargeait les liaisons ligne à ligne, pour les douze lignes
+    visibles. Conséquence : impossible de compter combien de dossiers ont un
+    devis, et impossible de filtrer sur « il en manque un » — l'information
+    n'était pas là. Sur un planning de quelques centaines d'entrées, ces deux
+    requêtes coûtent moins qu'un aller-retour par ligne.
+    """
+    require_rentabilite(request)
+    with get_db() as conn:
+        liens = conn.execute(
+            "SELECT planning_entry_id, devis_id FROM rent_links"
+        ).fetchall()
+        prods = conn.execute(
+            "SELECT planning_entry_id, no_dossier FROM rent_prod_links "
+            "ORDER BY planning_entry_id, no_dossier"
+        ).fetchall()
+
+    par_entree: dict[int, dict] = {}
+    for r in liens:
+        par_entree[int(r["planning_entry_id"])] = {
+            "planning_entry_id": int(r["planning_entry_id"]),
+            "devis_id": r["devis_id"],
+            "no_dossiers": [],
+        }
+    for r in prods:
+        eid = int(r["planning_entry_id"])
+        entree = par_entree.setdefault(
+            eid, {"planning_entry_id": eid, "devis_id": None, "no_dossiers": []}
+        )
+        entree["no_dossiers"].append(r["no_dossier"])
+    return list(par_entree.values())
+
+
 @router.get("/api/rentabilite/links/{planning_entry_id}")
 def get_links(planning_entry_id: int, request: Request):
     require_rentabilite(request)
