@@ -104,6 +104,19 @@ def statut_saisie(categorie: str) -> str:
 CATEGORIES_COUTEUSES = (CAT_ARRET, "appro", "technique")
 
 
+# En dessous de ces seuils, une cadence est arithmetiquement juste et
+# statistiquement vide : 499 m sortis en 4 min 13 s donnent 118,8 m/min, et la
+# ligne pese autant dans le tableau qu'un dossier de 50 000 m. Le chiffre reste
+# affiche — c'est l'ECART au repere qu'on ne calcule plus.
+METRAGE_MIN_CADENCE = 1000.0
+MINUTES_MIN_CADENCE = 15.0
+
+# Plafond de plausibilite machine. Il ne sert pas a juger une bonne serie mais
+# a jeter les lignes impossibles : `produit_series` porte des metrages qui sont
+# le compteur machine entier (90 351 374 m sur 4 h), soit 365 943 m/min.
+VITESSE_MAX_PLAUSIBLE = 200.0
+
+
 # ─── Utilitaires ─────────────────────────────────────────────────────────────
 
 def machines_demandees(valeur: Any) -> List[str]:
@@ -417,6 +430,44 @@ def _compteur(saisie: Dict[str, Any], *champs: str) -> Optional[float]:
     return None
 
 
+def _part_production(ivs: List[Dict[str, Any]], cycle_deb: Optional[datetime],
+                     cycle_fin: datetime, borne_deb: datetime,
+                     borne_fin: datetime) -> float:
+    """Part des minutes de PRODUCTION d'un cycle qui tombe dans la fenetre.
+
+    Les metres sortent pendant la production : la fraction de production faite
+    dans la periode est donc la fraction de metres qui lui revient. On lit les
+    intervalles NON bornes (`debut_brut` / `fin_brut`) — c'est le cycle entier
+    qu'il faut comme denominateur, pas sa partie visible.
+
+    Un cycle sans production pointee retombe sur la regle d'avant : il compte
+    en entier pour la periode ou il se cloture. Mieux vaut l'ancien defaut que
+    faire disparaitre son metrage.
+    """
+    total = 0.0
+    dedans = 0.0
+    for iv in ivs:
+        if iv["categorie"] != CAT_PRODUCTION:
+            continue
+        if iv["debut_brut"] >= cycle_fin:
+            continue
+        if cycle_deb is not None and iv["fin_brut"] <= cycle_deb:
+            continue
+        d = max(iv["debut_brut"], cycle_deb) if cycle_deb is not None else iv["debut_brut"]
+        f = min(iv["fin_brut"], cycle_fin)
+        minutes = (f - d).total_seconds() / 60.0
+        if minutes <= 0:
+            continue
+        total += minutes
+        d2, f2 = max(d, borne_deb), min(f, borne_fin)
+        if f2 > d2:
+            dedans += (f2 - d2).total_seconds() / 60.0
+
+    if total <= 0:
+        return 1.0 if borne_deb <= cycle_fin <= borne_fin else 0.0
+    return dedans / total
+
+
 def metrage_dossier(saisies: List[Dict[str, Any]], code_fin: str = "89",
                     code_debut: str = "01", code_annul: str = "90",
                     debut: str = "", fin: str = "") -> Dict[str, Any]:
@@ -440,16 +491,19 @@ def metrage_dossier(saisies: List[Dict[str, Any]], code_fin: str = "89",
     4. Le code d'annulation borne un cycle comme le code de fin : le temps et
        la matiere ont ete consommes, seule la livraison n'a pas eu lieu. La
        ligne d'annulation porte elle-meme son compteur de debut.
-    5. `debut`/`fin` bornent la lecture : un cycle compte pour la periode ou il
-       se CLOTURE, puisque c'est la cloture qui releve le compteur de fin. Un
-       dossier qui revient plusieurs fois apportait sinon, sur un point du
-       31/08, le metrage de toutes ses autres passes.
+    5. `debut`/`fin` bornent la lecture AU PRORATA. Un cycle a cheval sur la
+       fenetre ne verse pas la totalite de ses metres a la periode ou il se
+       cloture : il en verse la part correspondant a ses minutes de production
+       tombees dedans. La regle precedente — tout au jour de cloture — donnait
+       100 % des metres pour une fraction des minutes, puisque les temps, eux,
+       sont rognes aux bornes par `temps_par_categorie`. Un dossier demarre a
+       19 h et cloture a 6 h le lendemain sortait ainsi a 150 m/min sur un
+       point du matin.
     """
-    borne_deb, borne_fin = _txt(debut), _txt(fin)
+    borne_deb, borne_fin = _dt(debut), _dt(fin)
     ordonnees = sorted(saisies, key=lambda r: (_txt(r.get("date_operation")), r.get("id") or 0))
     debuts: List[Tuple[str, float]] = []
-    total = 0.0
-    cycles = 0
+    cycles_bruts: List[Tuple[Optional[datetime], datetime, float]] = []
     fins_sans_debut = 0
 
     for r in ordonnees:
@@ -465,23 +519,43 @@ def metrage_dossier(saisies: List[Dict[str, Any]], code_fin: str = "89",
         if code not in (code_fin, code_annul):
             continue
 
-        if borne_deb and borne_fin and not (borne_deb <= quand <= borne_fin):
-            continue
-
         fin_ctr = _compteur(r, "metrage_total_fin", "metrage_reel")
         if fin_ctr is None:
             continue
 
+        depart = None
         debut_ctr = (_compteur(r, "metrage_total_debut", "metrage_prevu")
                      if code == code_annul else None)
         if debut_ctr is None:
-            avant = [c for q, c in debuts if q <= quand]
-            debut_ctr = avant[-1] if avant else None
+            avant = [(q, c) for q, c in debuts if q <= quand]
+            if avant:
+                depart, debut_ctr = _dt(avant[-1][0]), avant[-1][1]
         if debut_ctr is None:
             fins_sans_debut += 1
             continue
 
-        total += max(0.0, fin_ctr - debut_ctr)
+        cloture = _dt(quand)
+        if cloture is None:
+            continue
+        cycles_bruts.append((depart, cloture, max(0.0, fin_ctr - debut_ctr)))
+
+    # Sans fenetre, la fiche du dossier raconte sa vie entiere : rien a prorater.
+    if borne_deb is None or borne_fin is None:
+        return {
+            "reel": round(sum(m for _d, _f, m in cycles_bruts), 1),
+            "fiable": bool(cycles_bruts),
+            "cycles": len(cycles_bruts),
+            "fins_sans_debut": fins_sans_debut,
+        }
+
+    ivs = intervalles(saisies, "", "", tuple(c for c in (code_fin, code_annul) if _txt(c)))
+    total = 0.0
+    cycles = 0
+    for depart, cloture, metres in cycles_bruts:
+        part = _part_production(ivs, depart, cloture, borne_deb, borne_fin)
+        if part <= 0:
+            continue
+        total += metres * part
         cycles += 1
 
     return {
@@ -691,13 +765,25 @@ def reperes_reference(conn, ref_produit_norm: Optional[str],
     if not rows:
         return vide
 
-    cadences = [_f(r["vitesse_m_min"]) for r in rows if _f(r["vitesse_m_min"]) > 0]
-    calages = [_f(r["temps_calage_min"]) for r in rows if _f(r["temps_calage_min"]) > 0]
-    arrets = [_f(r["temps_arret_min"]) for r in rows if _f(r["temps_arret_min"]) > 0]
+    # Une serie ne fait repere que si elle a produit assez de matiere, assez
+    # longtemps, et a une vitesse possible. `produit_series` porte des lignes
+    # ou le metrage est le compteur machine entier (90 351 374 m) et d'autres
+    # ou 6 692 m sortent en 1,4 min : une seule suffit a porter la mediane de
+    # 62 a 2 421 m/min, et l'ecart affiche a l'atelier ne veut plus rien dire.
+    series = [r for r in rows
+              if _f(r["metrage_m"]) >= METRAGE_MIN_CADENCE
+              and _f(r["temps_prod_min"]) + _f(r["temps_arret_min"]) >= MINUTES_MIN_CADENCE
+              and 0 < _f(r["vitesse_m_min"]) <= VITESSE_MAX_PLAUSIBLE]
+    if not series:
+        return vide
+
+    cadences = [_f(r["vitesse_m_min"]) for r in series if _f(r["vitesse_m_min"]) > 0]
+    calages = [_f(r["temps_calage_min"]) for r in series if _f(r["temps_calage_min"]) > 0]
+    arrets = [_f(r["temps_arret_min"]) for r in series if _f(r["temps_arret_min"]) > 0]
 
     return {
         "ref_produit_norm": ref_produit_norm,
-        "series": len(rows),
+        "series": len(series),
         "cadence_mediane_m_min": mediane(cadences),
         "calage_median_min": mediane(calages),
         "arret_median_min": mediane(arrets),
@@ -743,6 +829,11 @@ def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
     # (production + arret), seule base comparable au repere historique.
     minutes_cadence = minutes_prod + _minutes_de(temps, CAT_ARRET)
     cadence = (metrage["reel"] / minutes_cadence) if minutes_cadence > 0 and metrage["reel"] > 0 else None
+    # La cadence reste affichee ; c'est son ECART au repere qu'on ne calcule
+    # pas sur une serie trop courte — un « +74 % » tire de 4 minutes de
+    # production se discute a la machine comme s'il etait vrai.
+    cadence_assez = (metrage["reel"] >= METRAGE_MIN_CADENCE
+                     and minutes_cadence >= MINUTES_MIN_CADENCE)
 
     ref = _ref_produit(conn, no_dossier)
     reperes = reperes_reference(conn, ref, no_dossier)
@@ -823,9 +914,11 @@ def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
         "metrage": metrage,
         "vitesse_m_min": round(vitesse, 1) if vitesse else None,
         "cadence_m_min": round(cadence, 1) if cadence else None,
+        "cadence_assez": cadence_assez,
         "reference": reperes,
         "ecarts": {
-            "cadence_pct": _ecart_pct(cadence, reperes.get("cadence_mediane_m_min")),
+            "cadence_pct": (_ecart_pct(cadence, reperes.get("cadence_mediane_m_min"))
+                            if cadence_assez else None),
             "calage_pct": _ecart_pct(minutes_calage or None, reperes.get("calage_median_min")),
         },
         "ecrits": {
@@ -1016,6 +1109,7 @@ def retour_atelier(conn, machine: Any, debut: str, fin: str,
         if c["cadence_m_min"] is None:
             continue
         refs.append({
+            "cadence_assez": bool(c.get("cadence_assez", True)),
             "no_dossier": c["no_dossier"],
             "client": c["identite"]["client"],
             "ref_produit_norm": c["identite"]["ref_produit_norm"],

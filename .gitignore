@@ -66,3 +66,6 @@ data/rvgi_export.zip
 # Copies mortes en attente de suppression manuelle (device_bash ne peut pas rm).
 _to_delete/
 _tmp_fresh*/
+
+# Sorties de session Claude (brouillons, affiches, exports) — jamais versionnees.
+Claude outputs/
