@@ -53,6 +53,7 @@ Accès : rôles _STOCK_MATIERES_ADMIN_ROLES (voir stock.py).
 """
 import logging
 import re
+import sqlite3
 import statistics
 from datetime import date, datetime, timedelta
 from typing import Optional
@@ -178,6 +179,10 @@ _SQL_PE = """
            pe.ref_produit, pe.ref_produit_norm, pe.numero_of, pe.statut,
            pe.planned_start, pe.planned_end, pe.date_livraison, pe.duree_heures,
            pe.position, pe.of_import_id,
+           -- L'état du déstockage manquait à cette requête : `pe.get(...)`
+           -- rendait donc toujours None, et l'aperçu annonçait « todo » sur
+           -- un dossier déjà sorti du stock.
+           pe.destockage, pe.destockage_at, pe.destockage_reserve,
            m.nom AS machine_nom,
            COALESCE(m.sans_matiere_premiere, 0) AS poste_sans_matiere,
            oi.qte_etiquettes AS qte_etiquettes,
@@ -2775,6 +2780,97 @@ def _etat_documents(pe: dict) -> dict:
     }
 
 
+# Au-delà de ce rapport entre le besoin calculé et celui qu'implique la
+# géométrie de l'outil, la fiche ne fait plus une erreur d'arrondi : elle
+# fausse la commande. 5 % laisse passer les écarts de mesure, et arrête les
+# facteurs 2, 4 ou 18 qu'un nombre de fronts faux produit.
+_FACTEUR_ERREUR_MAX = 1.05
+
+CLE_DESTOCKAGE_DEPUIS = "destockage_auto_depuis"
+
+
+def _config_texte(conn, cle: str) -> str:
+    try:
+        r = conn.execute("SELECT valeur FROM stock_config WHERE cle=?", (cle,)).fetchone()
+    except sqlite3.Error:
+        return ""
+    return (r["valeur"] or "").strip() if r else ""
+
+
+def _controle_donnees(pe: dict, lignes: list) -> dict:
+    """Le déstockage peut-il s'appuyer sur ces documents ?
+
+    Ce contrôle remplace le verrou documentaire du 5 août, qui exigeait que
+    l'OF et la fiche technique aient été relus et cochés « validé ». L'intention
+    était juste — un stock faux ne se voit qu'à l'inventaire suivant — mais le
+    relevé du 09/09/2026 est sans appel : 0 OF validé sur 938, 0 fiche sur 920.
+    Le verrou bloquait donc 100 % des dossiers, et c'est ce qui a fini par faire
+    débrancher la modale du planning. Un verrou que personne ne peut satisfaire
+    n'est pas un garde-fou.
+
+    On contrôle désormais ce qu'une machine sait vérifier à chaque dossier :
+
+      1. Y a-t-il une quantité produite ? Sans elle il n'y a rien à calculer.
+      2. La fiche boucle-t-elle ? `coherence_fiche` compare le nombre de fronts
+         retenu à celui qu'impose la géométrie et chiffre le facteur d'erreur.
+         Un dossier est déjà ressorti à 55 823 km de frontal pour cette raison.
+      3. Les matières pointent-elles des références MyStock ?
+
+    Les deux premiers BLOQUENT : sans quantité ou avec une fiche qui ne boucle
+    pas, tout ce qui sortirait serait faux. Le troisième met en RÉSERVE : les
+    matières rattachées sortent, celle qui manque est nommée. C'est l'arbitrage
+    d'Eugène du 09/09 — le stock avance, et le trou se voit au lieu de se taire.
+
+    `valide` n'est pas oublié pour autant : il reste rendu à l'écran, il ne
+    commande simplement plus le mouvement.
+    """
+    blocages: list = []
+    reserves: list = []
+
+    metrage = _f(pe.get("of_metrage"))
+    etiquettes = _f(pe.get("qte_etiquettes"))
+    if not metrage and not etiquettes:
+        blocages.append("aucune quantité produite : ni métrage sur l'OF, ni "
+                        "nombre d'étiquettes")
+
+    ft_id = pe.get("ft_id")
+    if not ft_id:
+        blocages.append("aucune fiche technique rapprochée du dossier")
+        ctl = None
+    else:
+        ctl = controler_fiche(pe, _f(pe.get("laize")))
+        facteur = ctl.get("facteur_erreur")
+        if ctl.get("verdict") == "incoherent" and (
+                facteur is None or facteur > _FACTEUR_ERREUR_MAX):
+            blocages.append("fiche technique incohérente — %s"
+                            % (ctl.get("message") or "le nombre de fronts ne "
+                               "boucle pas avec la laize"))
+        elif ctl.get("verdict") == "indeterminable":
+            reserves.append("cohérence de la fiche invérifiable : %s"
+                            % (ctl.get("message") or "laize du module absente"))
+
+    non_rattachees = [l for l in lignes if not l.get("destockable")]
+    for l in non_rattachees:
+        quoi = (l.get("source_value") or l.get("kind") or "").strip()
+        motif = (l.get("manque") or ["non rattachée"])[0]
+        reserves.append("%s « %s » : %s" % (l.get("kind"), quoi, motif))
+
+    sortables = [l for l in lignes if l.get("destockable") and (l.get("quantite") or 0) > 0]
+    if not sortables and not blocages:
+        blocages.append("aucune matière déstockable sur ce dossier")
+
+    ok = not blocages
+    return {
+        "ok": ok,
+        "blocage": ("Déstockage impossible — " + " ; ".join(blocages) + ".") if blocages else None,
+        "blocages": blocages,
+        "reserves": reserves,
+        "coherence": ctl,
+        "nb_sortables": len(sortables),
+        "nb_reserves": len(non_rattachees),
+    }
+
+
 def _destockage_lignes(conn, planning_id: int) -> dict:
     """Prépare le déstockage d'un dossier : une ligne par matière consommée."""
     dossiers = _load_dossiers(conn, _SQL_PE_UN, (planning_id,))
@@ -2869,7 +2965,11 @@ def _destockage_lignes(conn, planning_id: int) -> dict:
     ).fetchall()]
 
     docs = _etat_documents(pe)
+    # `docs` reste rendu : l'écran montre l'état de relecture des documents.
+    # Ce n'est simplement plus lui qui décide du mouvement.
+    controle = _controle_donnees(pe, lignes)
     return {
+        "controle": controle,
         "dossier": {
             "planning_id": pe["id"],
             "reference": pe.get("reference"),
@@ -2878,9 +2978,11 @@ def _destockage_lignes(conn, planning_id: int) -> dict:
             "machine": pe.get("machine_nom"),
             "statut": pe.get("statut"),
             "destockage": pe.get("destockage") or "todo",
+            "destockage_at": pe.get("destockage_at"),
+            "destockage_reserve": pe.get("destockage_reserve"),
         },
         "documents": docs,
-        "blocage": docs["blocage"],
+        "blocage": controle["blocage"],
         "source_calcul": reel["source"],
         "reel": {"metrage": reel["metrage"], "etiquettes": reel["etiquettes"]},
         "theorique": {"metrage": _f(pe.get("of_metrage")),
@@ -2927,14 +3029,15 @@ async def destockage_valider(planning_id: int, request: Request):
         if (pe["destockage"] or "todo") == "done":
             raise HTTPException(400, "Ce dossier est déjà déstocké.")
 
-        # Verrou documentaire : on ne bouge pas le stock sur la foi d'un OF ou
-        # d'une fiche que personne n'a relus. Le contrôle est refait ici et pas
-        # seulement à l'affichage — un appel direct à l'API doit buter dessus.
-        etat = _load_dossiers(conn, _SQL_PE_UN, (planning_id,))
-        docs = _etat_documents(etat[0]) if etat else {"complet": False,
-            "blocage": "Dossier introuvable."}
-        if not docs["complet"]:
-            raise HTTPException(400, docs["blocage"])
+        # Contrôle des données — refait ici et pas seulement à l'affichage :
+        # un appel direct à l'API doit buter dessus. Ce n'est plus la relecture
+        # des documents qui est exigée (0 validation sur 1 858 documents au
+        # 09/09/2026, le verrou bloquait tout) mais leur cohérence.
+        apercu = _destockage_lignes(conn, planning_id)
+        controle = apercu["controle"]
+        docs = apercu["documents"]
+        if not controle["ok"]:
+            raise HTTPException(400, controle["blocage"])
 
         no_dossier = (pe["numero_of"] or pe["reference"] or "").strip()
         base_note = f"Déstockage production {no_dossier}".strip()
@@ -2968,14 +3071,184 @@ async def destockage_valider(planning_id: int, request: Request):
         if not faits:
             raise HTTPException(400, "Toutes les lignes sont à zéro : rien à déstocker.")
 
+        # « déstocké » ou « déstocké avec réserves » : un dossier à moitié
+        # sorti ne doit pas ressembler à un dossier propre, sinon l'écart
+        # dort jusqu'à l'inventaire.
+        reserves = controle.get("reserves") or []
+        etat_final = "reserve" if reserves else "done"
+        maintenant = datetime.now().isoformat()
         conn.execute(
-            "UPDATE planning_entries SET destockage='done', updated_at=? WHERE id=?",
-            (datetime.now().isoformat(), planning_id),
+            "UPDATE planning_entries SET destockage=?, destockage_at=?, "
+            "destockage_reserve=?, updated_at=? WHERE id=?",
+            (etat_final, maintenant,
+             (" ; ".join(reserves)[:600] or None), maintenant, planning_id),
         )
         conn.commit()
 
-    return {"success": True, "destockage": "done", "mouvements": faits,
-            "stocks_negatifs": negatifs}
+    return {"success": True, "destockage": etat_final, "mouvements": faits,
+            "reserves": reserves, "stocks_negatifs": negatifs}
+
+
+@router.get("/api/stock/destockage/{planning_id}/relecture")
+def destockage_relecture(planning_id: int, request: Request):
+    """Ce qui EST sorti pour ce dossier, ligne par ligne, avec de quoi corriger.
+
+    L'aperçu (`GET /api/stock/destockage/{id}`) répond « ce qui devrait
+    sortir ». Cet écran-ci répond « ce qui est sorti », ce qui n'est pas la
+    même question dès qu'un ajustement a eu lieu — et c'est celle que se pose
+    la personne qui relit après coup.
+
+    Chaque ligne porte donc les deux chiffres : le calculé et le réellement
+    sorti. Leur écart est la seule façon de voir qu'un ajustement a été fait
+    sans aller lire l'historique des mouvements.
+    """
+    require_stock_write(request)
+    with get_db() as conn:
+        apercu = _destockage_lignes(conn, planning_id)
+
+        # Net réellement sorti par (matière, laize) : les sorties moins les
+        # entrées de contre-passe. Une annulation partielle laisse les deux
+        # écritures, donc seul le net décrit le stock.
+        net: dict = {}
+        for m in conn.execute(
+            """SELECT matiere_id, laize_id, type_mouvement, quantite
+                 FROM mp_mouvements
+                WHERE planning_entry_id = ?""",
+            (planning_id,),
+        ).fetchall():
+            cle = (int(m["matiere_id"]), m["laize_id"])
+            signe = 1.0 if m["type_mouvement"] == "sortie" else -1.0
+            net[cle] = net.get(cle, 0.0) + signe * float(m["quantite"] or 0)
+
+        lignes = []
+        vues = set()
+        for li in apercu["lignes"]:
+            mid = li.get("matiere_id")
+            cle = (int(mid), li.get("laize_id")) if mid else None
+            sorti = round(net.get(cle, 0.0), 4) if cle else 0.0
+            if cle:
+                vues.add(cle)
+            lignes.append({**li, "sorti": sorti,
+                           "ecart_calcul": (round(sorti - float(li.get("quantite") or 0), 4)
+                                            if li.get("quantite") is not None else None)})
+
+        # Une matière sortie sur ce dossier mais absente de la fiche : ajoutée
+        # à la main lors d'une relecture précédente. Elle doit rester visible,
+        # sinon la relecture suivante la ferait disparaître du stock.
+        for (mid, lid), q in net.items():
+            if (mid, lid) in vues or abs(q) < 1e-9:
+                continue
+            mp = conn.execute(
+                "SELECT reference, designation, categorie FROM matieres_premieres WHERE id=?",
+                (mid,)).fetchone()
+            lignes.append({
+                "kind": "ajout", "source_value": None, "matiere_id": mid,
+                "matiere_ref": mp["reference"] if mp else None,
+                "matiere_designation": mp["designation"] if mp else None,
+                "mapped": True, "besoin": None, "quantite": None,
+                "unite": None, "laizee": lid is not None, "laizes": [],
+                "laize_id": lid, "stock_actuel": None, "manque": [],
+                "destockable": True, "sorti": round(q, 4), "ecart_calcul": None,
+                "hors_fiche": True,
+            })
+
+        return {**apercu, "lignes": lignes}
+
+
+@router.post("/api/stock/destockage/{planning_id}/ajuster")
+async def destockage_ajuster(planning_id: int, request: Request):
+    """Corrige ce qui est sorti, sans effacer ce qui a été écrit.
+
+    Body : { lignes: [{ matiere_id, laize_id?, quantite }], lever_reserve?,
+             note? }
+
+    `quantite` est la quantité qui DOIT au total être sortie pour cette
+    matière. Le service écrit la différence : une sortie de plus si l'on monte,
+    une entrée de retour si l'on descend. Jamais un UPDATE sur un mouvement
+    passé — l'historique doit pouvoir raconter qu'on s'est trompé, pas donner
+    l'impression qu'on ne s'est jamais trompé.
+
+    C'est le geste de la relecture : l'automatisme a sorti ce qu'il savait
+    calculer, et la personne qui a vu la production ajuste ce qui a réellement
+    été consommé.
+    """
+    user = require_stock_write(request)
+    body = await request.json()
+    lignes = body.get("lignes")
+    if not isinstance(lignes, list) or not lignes:
+        raise HTTPException(400, "Aucune ligne à ajuster.")
+    note_libre = (body.get("note") or "").strip()
+
+    from app.routers.stock import appliquer_mouvement_mp
+
+    with get_db() as conn:
+        pe = conn.execute(
+            "SELECT id, reference, numero_of, destockage, destockage_reserve "
+            "  FROM planning_entries WHERE id=?", (planning_id,),
+        ).fetchone()
+        if not pe:
+            raise HTTPException(404, "Dossier introuvable.")
+
+        net: dict = {}
+        for m in conn.execute(
+            "SELECT matiere_id, laize_id, type_mouvement, quantite "
+            "  FROM mp_mouvements WHERE planning_entry_id = ?", (planning_id,),
+        ).fetchall():
+            cle = (int(m["matiere_id"]), m["laize_id"])
+            signe = 1.0 if m["type_mouvement"] == "sortie" else -1.0
+            net[cle] = net.get(cle, 0.0) + signe * float(m["quantite"] or 0)
+
+        no_dossier = (pe["numero_of"] or pe["reference"] or "").strip()
+        base_note = ("Ajustement déstockage %s" % no_dossier).strip()
+        if note_libre:
+            base_note += " — %s" % note_libre
+
+        faits = []
+        for li in lignes:
+            try:
+                mid = int(li.get("matiere_id"))
+                cible = float(str(li.get("quantite")).replace(",", "."))
+            except (TypeError, ValueError):
+                raise HTTPException(400, "Ligne invalide (matiere_id / quantité).") from None
+            if cible < 0:
+                raise HTTPException(400, "Quantité négative.")
+            lid = li.get("laize_id")
+            lid = int(lid) if lid not in (None, "") else None
+
+            deja = net.get((mid, lid), 0.0)
+            delta = round(cible - deja, 6)
+            if abs(delta) < 1e-9:
+                continue
+            sens = "sortie" if delta > 0 else "entree"
+            res = appliquer_mouvement_mp(
+                conn, user, mid, sens, abs(delta),
+                laize_id=lid,
+                note="%s (%s → %s)" % (base_note, _n(deja), _n(cible)),
+                planning_entry_id=planning_id, no_dossier=no_dossier,
+                autoriser_negatif=True,
+            )
+            faits.append({"matiere_id": mid, "laize_id": lid, "avant": deja,
+                          "apres": cible, "sens": sens, **res})
+
+        maintenant = datetime.now().isoformat()
+        if body.get("lever_reserve"):
+            # La réserve se lève à la main, jamais toute seule : c'est un
+            # humain qui constate que la matière manquante a été traitée.
+            conn.execute(
+                "UPDATE planning_entries SET destockage='done', "
+                "destockage_reserve=NULL, updated_at=? WHERE id=?",
+                (maintenant, planning_id),
+            )
+        elif faits:
+            conn.execute(
+                "UPDATE planning_entries SET updated_at=? WHERE id=?",
+                (maintenant, planning_id),
+            )
+        conn.commit()
+
+    return {"success": True, "ajustements": faits,
+            "destockage": "done" if body.get("lever_reserve")
+                          else (pe["destockage"] or "todo")}
 
 
 @router.post("/api/stock/destockage/{planning_id}/annuler")
@@ -3023,12 +3296,218 @@ async def destockage_annuler(planning_id: int, request: Request):
             rendus.append({"matiere_id": m["matiere_id"], **res})
 
         conn.execute(
-            "UPDATE planning_entries SET destockage='todo', updated_at=? WHERE id=?",
+            "UPDATE planning_entries SET destockage='todo', destockage_at=NULL, "
+            "destockage_reserve=NULL, updated_at=? WHERE id=?",
             (datetime.now().isoformat(), planning_id),
         )
         conn.commit()
 
     return {"success": True, "destockage": "todo", "mouvements": rendus}
+
+
+# ── Déstockage automatique à la clôture ───────────────────────────
+#
+# Arbitrage d'Eugène du 09/09/2026 : la sortie s'écrit toute seule quand le
+# dossier est terminé, et sa collègue ne repasse que sur les dossiers en
+# réserve — pas sur les 285 autres.
+#
+# Le déclenchement passe par un BALAYAGE plutôt que par un branchement sur le
+# changement de statut. Un dossier passe « terminé » par plusieurs chemins (la
+# saisie de l'opération 89, une correction au planning, un import), et un
+# branchement en oublierait forcément un — silencieusement. Le balayage est
+# idempotent, rattrape ce qui a été manqué, et se déclenche à la consultation
+# d'un écran, comme `carnet_snapshot`.
+
+
+def _destockage_auto_un(conn, pe_id: int, user: dict) -> dict:
+    """Déstocke un dossier si ses données le permettent. Ne commit pas.
+
+    Rend toujours un verdict, y compris quand il ne fait rien : c'est ce qui
+    permet au balayage de dire pourquoi un dossier est resté sur le bord.
+    """
+    from app.routers.stock import appliquer_mouvement_mp
+
+    apercu = _destockage_lignes(conn, pe_id)
+    controle = apercu["controle"]
+    dossier = apercu["dossier"]
+    if not controle["ok"]:
+        return {"planning_id": pe_id, "reference": dossier.get("reference"),
+                "etat": "bloque", "motif": controle["blocage"]}
+
+    no_dossier = (dossier.get("numero_of") or dossier.get("reference") or "").strip()
+    base_note = ("Déstockage automatique %s" % no_dossier).strip()
+    docs = apercu["documents"]
+
+    faits, negatifs = [], []
+    for li in apercu["lignes"]:
+        if not li.get("destockable"):
+            continue
+        qte = _f(li.get("quantite"))
+        if not qte or qte <= 0:
+            continue
+        res = appliquer_mouvement_mp(
+            conn, user, int(li["matiere_id"]), "sortie", qte,
+            laize_id=li.get("laize_id"), note=base_note,
+            planning_entry_id=pe_id, no_dossier=no_dossier,
+            of_import_id=docs.get("of_id"), fiche_id=docs.get("ft_id"),
+            autoriser_negatif=True,
+        )
+        faits.append({"matiere_id": li["matiere_id"], **res})
+        if res["negatif"]:
+            negatifs.append(li["matiere_id"])
+
+    if not faits:
+        return {"planning_id": pe_id, "reference": dossier.get("reference"),
+                "etat": "bloque", "motif": "aucune ligne à sortir"}
+
+    reserves = controle.get("reserves") or []
+    etat_final = "reserve" if reserves else "done"
+    maintenant = datetime.now().isoformat()
+    conn.execute(
+        "UPDATE planning_entries SET destockage=?, destockage_at=?, "
+        "destockage_reserve=?, updated_at=? WHERE id=?",
+        (etat_final, maintenant, (" ; ".join(reserves)[:600] or None),
+         maintenant, pe_id),
+    )
+    return {"planning_id": pe_id, "reference": dossier.get("reference"),
+            "etat": etat_final, "mouvements": len(faits),
+            "reserves": reserves, "stocks_negatifs": negatifs}
+
+
+def balayer_destockage_auto(conn, user: dict, limite: int = 40) -> dict:
+    """Déstocke les dossiers terminés depuis la mise en service.
+
+    Best-effort de bout en bout : l'échec d'un dossier n'arrête pas les autres
+    et ne fait jamais échouer l'écran qui a déclenché le balayage.
+
+    Sans date de mise en service, ce balayage ne prend RIEN. C'est la même
+    précaution que `reception_rvgi_depuis` : 232 dossiers portent déjà le
+    marquage « déstocké » sans qu'aucun mouvement n'ait été écrit, et les
+    rejouer réécrirait un historique de stock que plus personne ne peut
+    vérifier.
+    """
+    depuis = _config_texte(conn, CLE_DESTOCKAGE_DEPUIS)
+    if not depuis:
+        return {"actif": False, "depuis": None, "traites": [],
+                "message": "Déstockage automatique non mis en service."}
+
+    try:
+        candidats = [r["id"] for r in conn.execute(
+            """SELECT id FROM planning_entries
+                WHERE statut = 'termine'
+                  AND COALESCE(destockage, 'todo') = 'todo'
+                  AND COALESCE(updated_at, '') >= ?
+                ORDER BY id
+                LIMIT ?""",
+            (depuis, int(limite)),
+        ).fetchall()]
+    except sqlite3.Error:
+        return {"actif": True, "depuis": depuis, "traites": [],
+                "message": "Lecture des dossiers impossible."}
+
+    traites = []
+    for pe_id in candidats:
+        try:
+            traites.append(_destockage_auto_un(conn, pe_id, user))
+        except HTTPException as e:
+            traites.append({"planning_id": pe_id, "etat": "bloque",
+                            "motif": getattr(e, "detail", str(e))})
+        except Exception as e:  # pragma: no cover
+            logger.warning("destockage auto %s : %s", pe_id, e)
+            traites.append({"planning_id": pe_id, "etat": "erreur",
+                            "motif": str(e)})
+    if traites:
+        conn.commit()
+    return {"actif": True, "depuis": depuis, "candidats": len(candidats),
+            "traites": traites}
+
+
+@router.post("/api/stock/destockage/{planning_id}/auto")
+def destockage_auto_dossier(planning_id: int, request: Request):
+    """Déstocke CE dossier maintenant, sans passer par la modale.
+
+    C'est ce qu'appelle le bouton « À destocker » du planning. Il ne bascule
+    plus un drapeau : il écrit les sorties, ou dit précisément pourquoi il ne
+    peut pas. Le bouton d'avant marquait 232 dossiers « déstocké » sans qu'un
+    gramme de matière ne bouge — c'est ce que ce endpoint corrige.
+    """
+    user = require_stock_write(request)
+    with get_db() as conn:
+        pe = conn.execute(
+            "SELECT id, destockage FROM planning_entries WHERE id=?",
+            (planning_id,),
+        ).fetchone()
+        if not pe:
+            raise HTTPException(404, "Dossier introuvable.")
+        if (pe["destockage"] or "todo") in ("done", "reserve"):
+            raise HTTPException(
+                400, "Ce dossier est déjà déstocké — utiliser « annuler le "
+                     "déstockage » pour le reprendre.")
+        res = _destockage_auto_un(conn, planning_id, user)
+        if res.get("etat") == "bloque":
+            raise HTTPException(400, res.get("motif") or "Déstockage impossible.")
+        conn.commit()
+    return {"success": True, **res}
+
+
+@router.post("/api/stock/destockage/auto/balayer")
+def destockage_auto_balayer(request: Request, limite: int = 40):
+    """Passe les dossiers terminés au déstockage automatique."""
+    user = require_stock_write(request)
+    with get_db() as conn:
+        return balayer_destockage_auto(conn, user, limite=limite)
+
+
+@router.get("/api/stock/destockage/auto/etat")
+def destockage_auto_etat(request: Request):
+    """Où en est l'automatisme : mis en service ou non, et ce qui attend."""
+    require_stock_write(request)
+    with get_db() as conn:
+        depuis = _config_texte(conn, CLE_DESTOCKAGE_DEPUIS)
+        r = conn.execute(
+            """SELECT
+                 SUM(CASE WHEN statut='termine' AND COALESCE(destockage,'todo')='todo'
+                          THEN 1 ELSE 0 END) AS en_attente,
+                 SUM(CASE WHEN destockage='reserve' THEN 1 ELSE 0 END) AS avec_reserve,
+                 SUM(CASE WHEN destockage='done' THEN 1 ELSE 0 END) AS destockes
+               FROM planning_entries"""
+        ).fetchone()
+    return {
+        "actif": bool(depuis),
+        "depuis": depuis or None,
+        "en_attente": int(r["en_attente"] or 0),
+        "avec_reserve": int(r["avec_reserve"] or 0),
+        "destockes": int(r["destockes"] or 0),
+    }
+
+
+@router.put("/api/stock/destockage/auto/mise-en-service")
+async def destockage_auto_mise_en_service(request: Request):
+    """Fixe le jour à partir duquel l'automatisme prend les dossiers.
+
+    Body : { depuis: "AAAA-MM-JJ" } — vide pour l'arrêter.
+
+    Aucune reprise rétroactive : seuls les dossiers dont la dernière
+    modification est postérieure à cette date entrent dans le balayage.
+    """
+    user = require_stock_matieres_admin(request)
+    body = await request.json()
+    valeur = (body.get("depuis") or "").strip()[:10]
+    if valeur and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", valeur):
+        raise HTTPException(400, "Date attendue au format AAAA-MM-JJ.")
+    with get_db() as conn:
+        avant = _config_texte(conn, CLE_DESTOCKAGE_DEPUIS)
+        conn.execute(
+            "INSERT INTO stock_config (cle, valeur, updated_at) VALUES (?,?,?) "
+            "ON CONFLICT(cle) DO UPDATE SET valeur=excluded.valeur, "
+            "updated_at=excluded.updated_at",
+            (CLE_DESTOCKAGE_DEPUIS, valeur,
+             datetime.now().isoformat(timespec="seconds")),
+        )
+        conn.commit()
+    logger.info("destockage auto : mise en service %r -> %r par %s",
+                avant, valeur, user.get("email"))
+    return {"success": True, "depuis": valeur or None, "avant": avant or None}
 
 
 @router.get("/api/stock/besoins-matieres/mapping")
