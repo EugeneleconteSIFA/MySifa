@@ -4917,14 +4917,22 @@ async function loadRentLinks(){
     const d = await api('/api/rentabilite/links');
     if(!Array.isArray(d)) return;
     const map = {};
+    /* `origine` et `valide_at` sont ce qui sépare l'orange du vert. Les
+       laisser tomber ici ferait passer toute proposition du moteur pour une
+       décision humaine — précisément l'erreur que la couleur existe pour
+       éviter. Défaut « manuel » : une base d'avant la migration ne contient
+       que des liaisons posées à la main. */
     d.forEach(l=>{ map[Number(l.planning_entry_id)] = {
-      devis_id: l.devis_id||null, no_dossiers: l.no_dossiers||[] }; });
+      devis_id: l.devis_id||null, no_dossiers: l.no_dossiers||[],
+      origine: l.origine||'manuel', valide_at: l.valide_at||null,
+      motif: l.motif||'', score: l.score||null }; });
     // Les entrées sans aucune liaison ne remontent pas de la base : on les
     // pose vides, sinon elles resteraient éternellement « en cours de
     // chargement » et le filtre les ignorerait.
     (S.rentList||[]).forEach(e=>{
       const id=Number(e.id);
-      if(id && !map[id]) map[id]={devis_id:null,no_dossiers:[]};
+      if(id && !map[id]) map[id]={devis_id:null,no_dossiers:[],
+        origine:'manuel',valide_at:null,motif:'',score:null};
     });
     set({rentLinksById:map, rentLinksCharges:true});
   }catch(e){ toast(e.message,'error'); }
@@ -4934,7 +4942,9 @@ async function rentEnsureLinks(entryId){
   const mp = S.rentLinksById || {};
   if(mp[entryId]) return mp[entryId];
   const d = await api('/api/rentabilite/links/'+entryId);
-  const entry = {devis_id:d.devis_id||null, no_dossiers:d.no_dossiers||[]};
+  const entry = {devis_id:d.devis_id||null, no_dossiers:d.no_dossiers||[],
+    origine:d.origine||'manuel', valide_at:d.valide_at||null,
+    motif:d.motif||'', score:d.score||null};
   S.rentLinksById = {...(S.rentLinksById||{}), [entryId]:entry};
   return entry;
 }
@@ -4944,7 +4954,12 @@ async function rentSaveLinks(entryId, devis_id, no_dossiers){
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({devis_id,no_dossiers})});
   const mp = S.rentLinksById || {};
-  set({rentLinksById:{...mp,[entryId]:{devis_id:devis_id||null,no_dossiers:no_dossiers||[]}}});
+  // Enregistrer depuis l'écran, c'est décider : la liaison devient manuelle et
+  // validée d'office, comme le fait le serveur. Garder l'ancienne origine
+  // laisserait le bloc en orange alors que quelqu'un vient de trancher.
+  set({rentLinksById:{...mp,[entryId]:{devis_id:devis_id||null,
+    no_dossiers:no_dossiers||[], origine:'manuel',
+    valide_at:new Date().toISOString(), motif:'', score:null}}});
   toast('Liaisons enregistrées');
 }
 
@@ -5049,116 +5064,544 @@ function renderRentabilite(){
 }
 
 // ── Sous-onglet Pilotage ─────────────────────────────────────────
-function renderRentPilotage(){
-  const groupes = rentGroupes(S.rentList||[]);
-  const liens = S.rentLinksById||{};
-  const charges = !!S.rentLinksCharges;
+/* UNE TIMELINE, PAS UN TABLEAU DE BORD.
 
-  let termines=0, avecDevis=0, comparables=0, aLier=0;
-  const parMachine = {};
-  groupes.forEach(g=>{
-    const e = rentEtat(g.head, liens[Number(g.head.id)]);
-    if(e.termine) termines++;
-    if(e.aDevis===true) avecDevis++;
-    if(e.comparable) comparables++;
-    if(e.aLier){
-      aLier++;
-      const m = (g.head.machine_nom||g.head.machine_code||'—');
-      parMachine[m] = (parMachine[m]||0)+1;
+   Le travail réel de cet écran n'est pas de lire des indicateurs, c'est de
+   relier chaque dossier fabriqué à son devis. Un tableau de chiffres dit
+   combien il en reste ; il ne dit pas LESQUELS, ni ne donne le geste pour les
+   traiter. La timeline reprend la grammaire du planning de production — que
+   tout le monde ici lit déjà — et remplace la couleur par dossier (un hachage
+   d'identifiant, décoratif) par la seule couleur qui compte ici :
+
+     rouge  = aucun devis rattaché
+     orange = rattachement proposé par le moteur, personne ne l'a encore relu
+     vert   = rattachement décidé ou confirmé par quelqu'un
+
+   L'échelle horizontale n'est PAS celle du planning. Le planning positionne
+   les blocs sur les heures ouvrées cumulées, en tenant compte des horaires de
+   chaque journée, des samedis travaillés et des jours fériés — un calcul qui
+   vit dans `planning_page.py`. Le réimplémenter ici donnerait deux écrans qui
+   se contredisent d'une minute au premier jour férié oublié. On garde donc la
+   lecture (semaines → jours → blocs) sans copier l'arithmétique : chaque jour
+   ouvré occupe une colonne de largeur égale, et un bloc se place à l'heure
+   qu'il occupe dans la journée. Cet écran n'est pas une source de vérité sur
+   les durées, c'est un plan de pointage. */
+
+// Amplitude affichée d'une journée. Bornes larges : au-delà, on écrête, ce qui
+// pousse un bloc contre le bord de sa colonne plutôt que dans la suivante.
+var RENT_H_DEB = 5;
+var RENT_H_FIN = 21;
+var RENT_LIGNE_H = 34;
+
+function rentLundiDe(d){
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  // getDay() : 0 = dimanche. Le lundi de la semaine d'un dimanche est six
+  // jours en arrière, pas le lendemain.
+  const delta = (x.getDay() + 6) % 7;
+  x.setDate(x.getDate() - delta);
+  return x;
+}
+
+function rentAjouterJours(d, n){
+  const x = new Date(d.getTime());
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+function rentISOJour(d){
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+
+function rentDateFR(d){
+  const p = n => String(n).padStart(2, '0');
+  return p(d.getDate()) + '/' + p(d.getMonth() + 1);
+}
+
+/* Numéro de semaine ISO. La règle « jeudi » n'est pas un détail : sans elle,
+   la semaine du 1er janvier porte un numéro faux une année sur deux, et
+   l'entête ne correspond plus à ce que dit le planning. */
+function rentNumSemaine(d){
+  const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  x.setUTCDate(x.getUTCDate() + 4 - (x.getUTCDay() || 7));
+  const jan1 = new Date(Date.UTC(x.getUTCFullYear(), 0, 1));
+  return Math.ceil(((x - jan1) / 86400000 + 1) / 7);
+}
+
+function rentParseDate(v){
+  if(!v) return null;
+  // Les dates arrivent en ISO ('2026-09-07T05:00:00'). Safari refuse la
+  // variante avec espace, d'où la normalisation avant `new Date`.
+  const d = new Date(String(v).replace(' ', 'T'));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/* Position continue d'un instant dans la semaine affichée, en « colonnes ».
+   Un dimanche, ou une heure hors amplitude, se rabat sur la borne la plus
+   proche : mieux vaut un bloc collé au bord du vendredi qu'un bloc invisible. */
+function rentPosition(dt, jours){
+  for(let i = 0; i < jours.length; i++){
+    const debut = jours[i];
+    const fin = rentAjouterJours(debut, 1);
+    if(dt < debut) return i;
+    if(dt < fin){
+      const h = dt.getHours() + dt.getMinutes() / 60;
+      const frac = (h - RENT_H_DEB) / (RENT_H_FIN - RENT_H_DEB);
+      return i + Math.min(1, Math.max(0, frac));
     }
+  }
+  return jours.length;
+}
+
+/* L'état d'un rattachement, tel qu'il se voit. `link` absent (liaisons pas
+   encore chargées) n'est pas « rouge » : afficher « rien n'est lié » pendant
+   le chargement ferait croire à une régression. */
+function rentEtatLien(link){
+  if(!link) return 'inconnu';
+  if(!link.devis_id) return 'rouge';
+  if(String(link.origine || 'manuel') === 'auto' && !link.valide_at) return 'orange';
+  return 'vert';
+}
+
+var RENT_ETAT_LIB = {
+  rouge:   'Aucun devis rattaché',
+  orange:  'Rattachement proposé — à confirmer',
+  vert:    'Rattaché et validé',
+  inconnu: 'Chargement…',
+};
+
+/* Empile les blocs qui se chevauchent. Sur une machine les créneaux se
+   suivent, mais un créneau retouché à la main peut mordre sur le suivant :
+   sans empilement, le second passerait SOUS le premier et un dossier non lié
+   deviendrait invisible — exactement ce que cet écran doit empêcher. */
+function rentEmpiler(blocs){
+  const lignes = [];
+  /* Tolérance de recouvrement. Sans elle, deux créneaux qui se suivent à la
+     minute près partent sur deux lignes : la largeur minimale imposée aux
+     blocs très courts les fait mordre de quelques dixièmes de pour cent sur
+     le suivant. La piste doublait de hauteur pour une collision qui n'existe
+     pas. 0,35 % d'une semaine ≈ vingt minutes. */
+  const TOL = 0.35;
+  blocs.slice().sort((a, b) => a.gauche - b.gauche).forEach(b => {
+    let i = 0;
+    while(i < lignes.length && lignes[i] > b.gauche + TOL) i++;
+    if(i === lignes.length) lignes.push(0);
+    lignes[i] = b.gauche + b.largeur;
+    b.ligne = i;
+  });
+  return Math.max(1, lignes.length);
+}
+
+async function rentLancerRapprochement(){
+  try{
+    const r = await api('/api/rentabilite/rapprochement', {method:'POST'});
+    await loadRentLinks();
+    if(!r.proposees){
+      toast('Aucun rattachement assez sûr pour être proposé.', 'warn');
+    }else{
+      toast(r.proposees + ' rattachement' + (r.proposees > 1 ? 's proposés' : ' proposé')
+            + ' — à confirmer (en orange).');
+    }
+  }catch(e){ toast(e.message, 'error'); }
+}
+
+async function rentValiderLien(entryId){
+  await api('/api/rentabilite/links/' + entryId + '/valider', {method:'POST'});
+  await loadRentLinks();
+  toast('Rattachement confirmé.');
+}
+
+async function rentRejeterLien(entryId){
+  await api('/api/rentabilite/links/' + entryId, {method:'DELETE'});
+  await loadRentLinks();
+  toast('Rattachement retiré.');
+}
+
+// ── Fenêtre de rattachement ──────────────────────────────────────
+function fermerRattachementModal(){
+  document.getElementById('rent-lier-modal')?.remove();
+}
+
+/* Cliquer un bloc ouvre CE dossier, pas la liste filtrée sur lui. Le geste
+   qu'on répète trois cents fois doit tenir en un aller-retour : voir, choisir,
+   fermer. La fenêtre se reconstruit après chaque action plutôt que de tenter
+   une mise à jour partielle — `render()` ne la connaît pas, elle vit dans
+   `document.body` pour survivre au rafraîchissement de `#root`. */
+async function ouvrirRattachementModal(entryId){
+  fermerRattachementModal();
+  const entree = (S.rentList || []).find(e => Number(e.id) === Number(entryId));
+  if(!entree){ toast('Dossier introuvable.', 'error'); return; }
+  const lien = (S.rentLinksById || {})[Number(entryId)] || {devis_id:null, no_dossiers:[]};
+  const etat = rentEtatLien(lien);
+
+  const overlay = h('div',{id:'rent-lier-modal',className:'contact-modal-overlay'});
+  overlay.addEventListener('click', e => { if(e.target === overlay) fermerRattachementModal(); });
+  const surTouche = e => {
+    if(e.key === 'Escape'){ fermerRattachementModal(); document.removeEventListener('keydown', surTouche); }
+  };
+  document.addEventListener('keydown', surTouche);
+
+  const corps = h('div',{className:'contact-modal-body'},
+    h('div',{className:'rent-lier-attente'}, 'Recherche des devis plausibles…'));
+
+  const relancer = async () => { fermerRattachementModal(); await ouvrirRattachementModal(entryId); };
+
+  const boite = h('div',{className:'contact-modal rent-lier-modal'},
+    h('div',{className:'contact-modal-head'},
+      h('div',null,
+        h('h3',{style:{margin:'0 0 3px'}}, entree.client || '(client non renseigné)'),
+        h('div',{style:{fontSize:'11px',color:'var(--muted)'}},
+          [entree.reference, entree.machine_nom, rentFmtFormat(entree) + ' mm']
+            .filter(Boolean).join(' · '))
+      ),
+      h('button',{className:'contact-close-btn',title:'Fermer',onClick:fermerRattachementModal},'✕')
+    ),
+    h('div',{className:'rent-lier-etat rent-lier-etat-' + etat},
+      h('span',{className:'rent-point rent-point-' + etat}),
+      h('span',null, RENT_ETAT_LIB[etat]),
+      (etat === 'orange' && lien.motif)
+        ? h('span',{className:'rent-lier-motif'}, ' — ' + lien.motif) : null
+    ),
+    corps
+  );
+  boite.addEventListener('click', e => e.stopPropagation());
+  overlay.appendChild(boite);
+  document.body.appendChild(overlay);
+
+  // Une proposition se juge sur son motif : la confirmer sans l'avoir lu
+  // reviendrait à valider le moteur, pas le rattachement.
+  const actionsHaut = [];
+  if(etat === 'orange'){
+    actionsHaut.push(h('button',{type:'button',className:'btn-sm',onClick:async()=>{
+      await rentValiderLien(entryId); await relancer();
+    }}, iconEl('check-circle',13), ' Confirmer'));
+    actionsHaut.push(h('button',{type:'button',className:'btn-danger',onClick:async()=>{
+      await rentRejeterLien(entryId); await relancer();
+    }}, 'Rejeter'));
+  }else if(etat === 'vert'){
+    actionsHaut.push(h('button',{type:'button',className:'btn-danger',onClick:async()=>{
+      await rentRejeterLien(entryId); await relancer();
+    }}, 'Détacher'));
+  }
+
+  let suggestions = [];
+  try{
+    suggestions = await api('/api/rentabilite/planning/' + entryId + '/devis-suggeres');
+  }catch(_){ suggestions = []; }
+  if(!document.getElementById('rent-lier-modal')) return; // fermée entre-temps
+
+  const devisList = S.devisList || [];
+  const libelleDevis = dv => (dv.client || dv.filename || ('Devis #' + dv.id))
+    + (dv.qte_etiquettes ? (' — ' + Number(dv.qte_etiquettes).toLocaleString('fr-FR') + ' ex') : '')
+    + (dv.vitesse_theorique ? (' — ' + dv.vitesse_theorique + ' m/mn') : '');
+
+  const choisir = async (devisId) => {
+    await rentSaveLinks(entryId, devisId, (lien.no_dossiers || []));
+    await relancer();
+  };
+
+  /* Les suggestions d'abord, la liste complète ensuite. Le moteur ne tranche
+     que quand il est sûr — et il l'est rarement, parce qu'un même produit est
+     refabriqué des dizaines de fois pour le même client. Ce qu'il sait faire,
+     c'est remonter les bons candidats en tête. Sans cette liste, l'ambiguïté
+     renverrait l'utilisateur à un menu déroulant de plusieurs centaines de
+     devis, et le rattachement ne se ferait pas. */
+  const blocSug = suggestions.length
+    ? h('div',null,
+        h('div',{className:'form-section-title'},'Devis plausibles'),
+        h('div',{className:'rent-sug-liste'},
+          ...suggestions.map(s => h('button',{type:'button',className:'rent-sug'
+              + (Number(lien.devis_id) === Number(s.devis_id) ? ' is-lie' : ''),
+              onClick:()=>choisir(s.devis_id)},
+            h('div',{className:'rent-sug-tete'},
+              h('span',{className:'rent-sug-nom'}, s.client || s.filename || ('Devis #' + s.devis_id)),
+              (Number(lien.devis_id) === Number(s.devis_id))
+                ? h('span',{className:'rent-sug-lie'},'rattaché') : null,
+              h('span',{className:'rent-sug-score',
+                title:'Concordance calculée : format, laize, client, date'},
+                Math.round(s.score) + ' %')
+            ),
+            h('div',{className:'rent-sug-motif'}, s.motif || '—'),
+            (s.qte_etiquettes || s.vitesse_theorique)
+              ? h('div',{className:'rent-sug-chiffres'},
+                  [s.qte_etiquettes ? Number(s.qte_etiquettes).toLocaleString('fr-FR') + ' ex' : null,
+                   s.vitesse_theorique ? s.vitesse_theorique + ' m/mn' : null]
+                    .filter(Boolean).join(' · '))
+              : null
+          ))
+        ))
+    : h('div',{className:'card-empty',style:{padding:'14px'}},
+        devisList.length
+          ? 'Aucun devis ne correspond au format de ce dossier.'
+          : 'Aucun devis importé pour l\'instant.');
+
+  const selecteur = h('select',{className:'form-sel',style:{width:'100%'}},
+    h('option',{value:''},'— choisir dans tous les devis —'),
+    ...devisList.map(dv => h('option',{value:String(dv.id),
+      selected:!!(lien.devis_id && Number(lien.devis_id) === Number(dv.id))}, libelleDevis(dv)))
+  );
+  selecteur.addEventListener('change', () => {
+    if(selecteur.value) choisir(Number(selecteur.value));
   });
 
-  const couverture = termines ? Math.round(avecDevis/termines*100) : 0;
-  const kpi=(val,lbl,accent)=>h('div',{className:'rent-kpi'+(accent?' is-accent':'')},
+  corps.innerHTML = '';
+  if(actionsHaut.length) corps.appendChild(h('div',{className:'rent-lier-actions'}, ...actionsHaut));
+  corps.appendChild(blocSug);
+  corps.appendChild(h('div',{style:{marginTop:'16px'}},
+    h('div',{className:'form-section-title'},'Tous les devis'),
+    selecteur));
+  corps.appendChild(h('div',{className:'rent-lier-pied'},
+    h('button',{type:'button',className:'btn-sec',onClick:()=>{
+      fermerRattachementModal();
+      set({rentSubTab:'dossiers', rentSelEntryId:entree.id, rentFiltre:'tous'});
+    }},'Ouvrir la fiche complète', iconEl('chevron-right',13)),
+    h('button',{type:'button',className:'btn-sec',onClick:fermerRattachementModal},'Fermer')
+  ));
+}
+
+// ── La timeline ──────────────────────────────────────────────────
+function renderRentPilotage(){
+  const groupes = rentGroupes(S.rentList || []);
+  const liens = S.rentLinksById || {};
+  const charges = !!S.rentLinksCharges;
+
+  let termines = 0, avecDevis = 0, aConfirmer = 0, aLier = 0;
+  const parMachine = {};
+  groupes.forEach(g => {
+    const head = g.head;
+    const m = head.machine_nom || head.machine_code || '—';
+    parMachine[m] = parMachine[m] || {nom:m, total:0, rouge:0, orange:0, vert:0};
+    parMachine[m].total++;
+    const etat = rentEtatLien(charges ? (liens[Number(head.id)] || {devis_id:null}) : null);
+    if(etat !== 'inconnu') parMachine[m][etat]++;
+    if(String(head.statut || '') === 'termine') termines++;
+    if(etat === 'vert') avecDevis++;
+    if(etat === 'orange') aConfirmer++;
+    if(etat === 'rouge') aLier++;
+  });
+
+  const machines = Object.values(parMachine).sort((a, b) => b.total - a.total);
+  // Par défaut, la machine qui a le plus à lier : c'est par là qu'on commence.
+  const machineDefaut = (machines.slice().sort((a, b) => b.rouge - a.rouge)[0] || {}).nom || '';
+  const machineSel = S.rentPilotMachine || machineDefaut;
+  const nbSemaines = Number(S.rentPilotSemaines || 2);
+  const lundi = S.rentPilotLundi ? new Date(S.rentPilotLundi + 'T00:00:00')
+                                 : rentLundiDe(new Date());
+
+  const kpi = (val, lbl, cls) => h('div',{className:'rent-kpi' + (cls ? ' ' + cls : '')},
     h('div',{className:'rent-kpi-val'}, String(val)),
-    h('div',{className:'rent-kpi-lbl'}, lbl)
-  );
+    h('div',{className:'rent-kpi-lbl'}, lbl));
 
   const tuiles = h('div',{className:'rent-kpis'},
-    kpi(groupes.length,'Dossiers au planning'),
-    kpi(termines,'Terminés'),
-    kpi(charges?avecDevis:'…','Avec devis lié'),
-    kpi(charges?comparables:'…','Comparables', true),
-    kpi(charges?aLier:'…','À lier')
+    kpi(groupes.length, 'Dossiers au planning'),
+    kpi(charges ? avecDevis : '…', 'Rattachés et validés', 'is-vert'),
+    kpi(charges ? aConfirmer : '…', 'À confirmer', 'is-orange'),
+    kpi(charges ? aLier : '…', 'Sans devis', 'is-rouge'),
+    kpi(termines, 'Terminés')
   );
 
-  /* Les devis ramassés automatiquement dont la lecture laisse un doute. Ce
-     compteur n'a de sens qu'en pilotage : c'est une dette de vérification,
-     pas un état de dossier. */
-  const devisDouteux = (S.devisList||[]).filter(d=>Number(d.a_verifier)===1);
-  const rappelDevis = devisDouteux.length ? h('button',{type:'button',
-    className:'rent-rappel',
-    onClick:()=>set({rentSubTab:'devis',rentDevisFiltre:'verifier'})},
+  const devisDouteux = (S.devisList || []).filter(d => Number(d.a_verifier) === 1);
+  const rappelDevis = devisDouteux.length ? h('button',{type:'button',className:'rent-rappel',
+    onClick:()=>set({rentSubTab:'devis', rentDevisFiltre:'verifier'})},
     iconEl('alert-triangle',14),
-    h('span',null,' '+devisDouteux.length+' devis importé'+(devisDouteux.length>1?'s':'')
-      +' automatiquement demande'+(devisDouteux.length>1?'nt':'')+' une vérification')
+    h('span',null,' ' + devisDouteux.length + ' devis importé' + (devisDouteux.length > 1 ? 's' : '')
+      + ' automatiquement demande' + (devisDouteux.length > 1 ? 'nt' : '') + ' une vérification')
   ) : null;
 
-  /* La couverture dit en une ligne si l'outil sert à quelque chose : sans
-     devis liés, la comparaison devis/réel n'existe sur aucun dossier. */
-  const jauge = charges ? h('div',{className:'card',style:{padding:'16px 18px',marginBottom:'14px'}},
-    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'8px'}},
-      h('div',{style:{fontSize:'13px',fontWeight:'700',color:'var(--text)'}},'Couverture devis des dossiers terminés'),
-      h('div',{style:{fontSize:'13px',fontFamily:'monospace',color:'var(--text2)'}}, couverture+' %')
+  // ── Barre de commande ──
+  const selMachine = h('select',{className:'form-sel',style:{minWidth:'170px'}},
+    ...machines.map(m => h('option',{value:m.nom, selected:m.nom === machineSel},
+      m.nom + ' (' + m.total + ')')));
+  selMachine.addEventListener('change', () => set({rentPilotMachine:selMachine.value}));
+
+  const horizons = h('div',{className:'rent-filtres'},
+    ...[{n:1,l:'Semaine'},{n:2,l:'2 semaines'},{n:4,l:'4 semaines'}].map(o =>
+      h('button',{type:'button',
+        className:'rent-filtre' + (nbSemaines === o.n ? ' is-active' : ''),
+        onClick:()=>set({rentPilotSemaines:o.n})}, o.l)));
+
+  const allerA = d => set({rentPilotLundi: rentISOJour(rentLundiDe(d))});
+  const nav = h('div',{className:'rent-nav-sem'},
+    h('button',{type:'button',className:'btn-sec',title:'Semaines précédentes',
+      onClick:()=>allerA(rentAjouterJours(lundi, -7 * nbSemaines))}, iconEl('arrow-left',13)),
+    h('button',{type:'button',className:'btn-sec',
+      onClick:()=>allerA(new Date())},'actuelle'),
+    h('button',{type:'button',className:'btn-sec',title:'Semaines suivantes',
+      onClick:()=>allerA(rentAjouterJours(lundi, 7 * nbSemaines))}, iconEl('arrow-right',13))
+  );
+
+  const btnMoteur = h('button',{type:'button',className:'btn-sm',
+    disabled:!charges || !(S.devisList || []).length,
+    title:'Cherche, pour chaque dossier sans devis, un devis dont le format, la '
+        + 'laize, le client et la date concordent. Ne propose que les cas nets.',
+    onClick:rentLancerRapprochement},
+    iconEl('shield-check',13), ' Proposer les rattachements');
+
+  const legende = h('div',{className:'rent-legende'},
+    ...[['vert','Rattaché et validé'],['orange','Proposé, à confirmer'],['rouge','Sans devis']]
+      .map(([k, l]) => h('span',{className:'rent-legende-i'},
+        h('span',{className:'rent-point rent-point-' + k}), l)));
+
+  // ── Les blocs, semaine par semaine ──
+  const dansMachine = groupes.filter(g =>
+    (g.head.machine_nom || g.head.machine_code || '—') === machineSel);
+
+  const semaines = [];
+  let placesTotal = 0;
+  for(let s = 0; s < nbSemaines; s++){
+    const debutSem = rentAjouterJours(lundi, 7 * s);
+    const finSem = rentAjouterJours(debutSem, 7);
+
+    // Le samedi n'apparaît que s'il porte quelque chose : une colonne vide
+    // chaque semaine rétrécirait les cinq autres pour rien.
+    const candidats = dansMachine.map(g => {
+      const deb = rentParseDate(g.head.planned_start);
+      const fin = rentParseDate(g.head.planned_end) || (deb ? rentAjouterJours(deb, 0) : null);
+      return {g, deb, fin: (fin && deb && fin > deb) ? fin : (deb ? new Date(deb.getTime() + 3600000) : null)};
+    }).filter(x => x.deb && x.fin && x.fin > debutSem && x.deb < finSem);
+
+    let nbJours = 5;
+    candidats.forEach(x => {
+      [x.deb, x.fin].forEach(d => {
+        if(d >= debutSem && d < finSem){
+          const idx = Math.floor((d - debutSem) / 86400000);
+          if(idx >= 5) nbJours = Math.max(nbJours, Math.min(7, idx + 1));
+        }
+      });
+    });
+    const jours = Array.from({length:nbJours}, (_, i) => rentAjouterJours(debutSem, i));
+
+    const blocs = candidats.map(x => {
+      const deb = x.deb < debutSem ? debutSem : x.deb;
+      const fin = x.fin > finSem ? finSem : x.fin;
+      const g0 = rentPosition(deb, jours);
+      const g1 = rentPosition(fin, jours);
+      const gauche = (g0 / jours.length) * 100;
+      const largeur = Math.max(0.6, ((g1 - g0) / jours.length) * 100);
+      return {g:x.g, gauche, largeur, ligne:0};
+    }).filter(b => b.gauche < 100);
+    placesTotal += blocs.length;
+
+    const nbLignes = rentEmpiler(blocs);
+    const aujourdhui = new Date();
+
+    const entetes = h('div',{className:'rent-tl-jours'},
+      ...jours.map(j => {
+        const estAuj = rentISOJour(j) === rentISOJour(aujourdhui);
+        return h('div',{className:'rent-tl-jour' + (estAuj ? ' is-auj' : '')},
+          h('span',{className:'rent-tl-jour-nom'},
+            ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'][(j.getDay() + 6) % 7]),
+          h('span',{className:'rent-tl-jour-date'}, rentDateFR(j)));
+      }));
+
+    const fonds = jours.map((j, i) => h('div',{
+      className:'rent-tl-fond' + (i % 2 ? ' is-pair' : '')
+        + (rentISOJour(j) === rentISOJour(aujourdhui) ? ' is-auj' : ''),
+      style:{left:(i / jours.length * 100) + '%', width:(100 / jours.length) + '%'}}));
+
+    const piste = h('div',{className:'rent-tl-piste',
+      style:{height:(nbLignes * RENT_LIGNE_H + 8) + 'px'}},
+      ...fonds,
+      ...blocs.map(b => {
+        const head = b.g.head;
+        const etat = rentEtatLien(charges ? (liens[Number(head.id)] || {devis_id:null}) : null);
+        const etroit = b.largeur < 6;
+        return h('div',{
+          className:'rent-tl-bloc rent-tl-bloc-' + etat + (etroit ? ' is-etroit' : ''),
+          style:{left:b.gauche + '%', width:b.largeur + '%',
+                 top:(b.ligne * RENT_LIGNE_H + 4) + 'px'},
+          title:(head.client || '(client non renseigné)') + ' — ' + (head.reference || '')
+                + '\n' + RENT_ETAT_LIB[etat],
+          onClick:()=>ouvrirRattachementModal(head.id)},
+          h('span',{className:'rent-tl-bloc-cli'}, head.client || '(client ?)'),
+          etroit ? null : h('span',{className:'rent-tl-bloc-ref'}, head.reference || '')
+        );
+      })
+    );
+
+    semaines.push(h('div',{className:'rent-tl-semaine'},
+      h('div',{className:'rent-tl-entete'},
+        'S' + rentNumSemaine(debutSem) + ' — ' + rentDateFR(debutSem)
+        + ' au ' + rentDateFR(rentAjouterJours(debutSem, jours.length - 1))),
+      entetes,
+      blocs.length ? piste
+        : h('div',{className:'rent-tl-piste rent-tl-vide'}, ...fonds,
+            h('span',{className:'rent-tl-vide-txt'},'Rien de planifié cette semaine'))
+    ));
+  }
+
+  const timeline = h('div',{className:'card'},
+    h('div',{className:'card-header rent-tl-barre'},
+      h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
+        selMachine, horizons),
+      h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
+        nav, btnMoteur)
     ),
-    h('div',{className:'rent-jauge'}, h('div',{className:'rent-jauge-part',style:{width:Math.max(0,Math.min(100,couverture))+'%'}})),
-    h('div',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'8px'}},
-      avecDevis+' dossier'+(avecDevis>1?'s':'')+' sur '+termines+' terminé'+(termines>1?'s':'')+
-      ' peuvent être comparés au devis.')
-  ) : null;
+    legende,
+    h('div',{className:'rent-tl'}, ...semaines),
+    (charges && !placesTotal)
+      ? h('div',{className:'card-empty'},
+          'Aucun dossier sur ' + (machineSel || 'cette machine') + ' pendant cette période. '
+          + 'Change de semaine ou de machine.')
+      : null
+  );
 
-  // Répartition du reste à faire, machine par machine : c'est là qu'on décide
-  // par quoi commencer.
-  const machines = Object.entries(parMachine).sort((a,b)=>b[1]-a[1]);
+  // Répartition du reste à faire : là on décide par quoi commencer.
   const resteAFaire = (charges && machines.length) ? h('div',{className:'card'},
     h('div',{className:'card-header'}, h('h3',null,'Reste à lier, par machine')),
     h('div',{style:{padding:'4px 18px 14px'}},
-      ...machines.map(([m,n])=>{
-        const pct = aLier ? Math.round(n/aLier*100) : 0;
-        return h('button',{type:'button',className:'rent-machine-ligne',
-          title:'Filtrer les dossiers à lier sur '+m,
-          onClick:()=>set({rentSubTab:'dossiers',rentFiltre:'a_lier',rentTags:[{kind:'machine',value:m,label:m}],rentOffset:0})},
-          h('span',{className:'rent-machine-nom'}, m),
-          h('span',{className:'rent-machine-jauge'}, h('span',{style:{width:pct+'%'}})),
-          h('span',{className:'rent-machine-nb'}, String(n))
+      ...machines.filter(m => m.rouge).sort((a, b) => b.rouge - a.rouge).map(m => {
+        const pct = aLier ? Math.round(m.rouge / aLier * 100) : 0;
+        return h('button',{type:'button',className:'rent-machine-ligne'
+            + (m.nom === machineSel ? ' is-active' : ''),
+          title:'Voir ' + m.nom + ' sur la timeline',
+          onClick:()=>set({rentPilotMachine:m.nom})},
+          h('span',{className:'rent-machine-nom'}, m.nom),
+          h('span',{className:'rent-machine-jauge'}, h('span',{style:{width:pct + '%'}})),
+          h('span',{className:'rent-machine-nb'}, String(m.rouge))
         );
       })
     )
   ) : null;
 
-  // Écarts des dossiers déjà comparables. On ne les calcule que sur demande :
-  // c'est une requête par dossier, et afficher un chiffre faux serait pire
-  // que ne rien afficher.
-  const comps = S.rentCompById||{};
+  /* Les écarts restent sous la timeline. La vue de rattachement répond à
+     « lesquels manquent » ; celle-ci à « qu'est-ce que ça donne quand c'est
+     lié ». Les deux sont du pilotage, et supprimer la seconde en installant la
+     première ferait disparaître sans le dire la seule sortie de tout ce
+     travail. */
+  const comps = S.rentCompById || {};
+  const comparables = groupes.filter(g => {
+    const l = liens[Number(g.head.id)];
+    return l && l.devis_id && (l.no_dossiers || []).length > 0;
+  });
   const lignesEcart = groupes
-    .map(g=>({g, comp:comps[Number(g.head.id)]}))
-    .filter(x=>x.comp && x.comp.reel)
-    .sort((a,b)=>{
-      const ea=Math.abs(parseFloat(String((a.comp.ecarts||{}).vitesse||'0'))||0);
-      const eb=Math.abs(parseFloat(String((b.comp.ecarts||{}).vitesse||'0'))||0);
-      return eb-ea;
+    .map(g => ({g, comp:comps[Number(g.head.id)]}))
+    .filter(x => x.comp && x.comp.reel)
+    .sort((a, b) => {
+      const ea = Math.abs(parseFloat(String((a.comp.ecarts || {}).vitesse || '0')) || 0);
+      const eb = Math.abs(parseFloat(String((b.comp.ecarts || {}).vitesse || '0')) || 0);
+      return eb - ea;
     });
 
   const btnCalcul = h('button',{type:'button',className:'btn-sec',
-    disabled:!charges||!comparables,
+    disabled:!charges || !comparables.length,
     onClick:async()=>{
-      const cibles = groupes.filter(g=>rentEtat(g.head, liens[Number(g.head.id)]).comparable)
-                            .map(g=>Number(g.head.id)).slice(0,40);
-      if(!cibles.length) return toast('Aucun dossier comparable.','warn');
-      toast('Calcul sur '+cibles.length+' dossier'+(cibles.length>1?'s':'')+'…');
-      let i=0;
-      const suivant=async()=>{
-        if(i>=cibles.length) return;
+      const cibles = comparables.map(g => Number(g.head.id)).slice(0, 40);
+      if(!cibles.length) return toast('Aucun dossier comparable.', 'warn');
+      toast('Calcul sur ' + cibles.length + ' dossier' + (cibles.length > 1 ? 's' : '') + '…');
+      let i = 0;
+      const suivant = async () => {
+        if(i >= cibles.length) return;
         await rentLoadComparaison(cibles[i++]).catch(()=>{});
         await suivant();
       };
-      await Promise.allSettled(Array.from({length:Math.min(3,cibles.length)},()=>suivant()));
+      await Promise.allSettled(Array.from({length:Math.min(3, cibles.length)}, () => suivant()));
       toast('Écarts à jour.');
-    }}, 'Calculer les écarts'+(comparables?(' ('+comparables+')'):''));
+    }}, 'Calculer les écarts' + (comparables.length ? (' (' + comparables.length + ')') : ''));
 
   const tableauEcarts = h('div',{className:'card'},
     h('div',{className:'card-header'},
-      h('h3',null,'Écarts devis / réel'+(lignesEcart.length?(' ('+lignesEcart.length+')'):'')),
+      h('h3',null,'Écarts devis / réel' + (lignesEcart.length ? (' (' + lignesEcart.length + ')') : '')),
       btnCalcul
     ),
     lignesEcart.length
@@ -5169,37 +5612,38 @@ function renderRentPilotage(){
               h('th',{className:'num'},'Vitesse'), h('th',{className:'num'},'Calage'),
               h('th',{className:'num'},'Métrage'), h('th',null,'Verdict')
             )),
-            h('tbody',null,...lignesEcart.map(({g,comp})=>{
-              const ec=comp.ecarts||{}; const co=comp.conclusion||{};
-              const cell=(v,invert)=>{
+            h('tbody',null,...lignesEcart.map(({g, comp}) => {
+              const ec = comp.ecarts || {}; const co = comp.conclusion || {};
+              const cell = (v, invert) => {
                 if(!v) return h('td',{className:'num'},'—');
-                const num=parseFloat(v);
-                const bon = invert ? num<0 : num>0;
-                return h('td',{className:'num '+(bon?'rent-bon':'rent-mauvais')}, v);
+                const num = parseFloat(v);
+                const bon = invert ? num < 0 : num > 0;
+                return h('td',{className:'num ' + (bon ? 'rent-bon' : 'rent-mauvais')}, v);
               };
               return h('tr',{style:{cursor:'pointer'},
-                onClick:()=>set({rentSubTab:'dossiers',rentSelEntryId:g.head.id,rentFiltre:'tous'})},
+                onClick:()=>set({rentSubTab:'dossiers', rentSelEntryId:g.head.id, rentFiltre:'tous'})},
                 h('td',null,
-                  h('div',{style:{fontWeight:'600'}}, g.head.reference||'—'),
-                  h('div',{style:{fontSize:'11px',color:'var(--muted)'}}, g.head.client||'')),
-                h('td',null, g.head.machine_nom||'—'),
-                cell(ec.vitesse,false),
-                cell(ec.temps_calage_mn,true),
-                cell(ec.metrage_ml,false),
-                h('td',null,h('span',{className:'rent-verdict rent-verdict-'+(co.color||'muted')}, co.label||'—'))
+                  h('div',{style:{fontWeight:'600'}}, g.head.reference || '—'),
+                  h('div',{style:{fontSize:'11px',color:'var(--muted)'}}, g.head.client || '')),
+                h('td',null, g.head.machine_nom || '—'),
+                cell(ec.vitesse, false),
+                cell(ec.temps_calage_mn, true),
+                cell(ec.metrage_ml, false),
+                h('td',null,h('span',{className:'rent-verdict rent-verdict-' + (co.color || 'muted')},
+                  co.label || '—'))
               );
             }))
           )
         )
       : h('div',{className:'card-empty'},
           charges
-            ? (comparables
+            ? (comparables.length
                 ? 'Aucun écart calculé. Clique sur « Calculer les écarts ».'
                 : 'Aucun dossier n\'a à la fois un devis et une production liés.')
             : 'Chargement des liaisons…')
   );
 
-  return h('div',null, tuiles, rappelDevis, jauge, resteAFaire, tableauEcarts);
+  return h('div',null, tuiles, rappelDevis, timeline, resteAFaire, tableauEcarts);
 }
 
 // ── Sous-onglet Dossiers ─────────────────────────────────────────

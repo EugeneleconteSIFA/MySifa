@@ -4902,6 +4902,12 @@ async def packing_list_importer(request: Request):
         raise HTTPException(
             400, "Certificat FSC requis pour une réception certifiée FSC.")
 
+    # Le numéro de lot se SAISIT quand on veut. MySifa sait en fabriquer un
+    # (LOT-date-heure-FOURN-FSC) et c'est le défaut, mais un magasin qui suit
+    # déjà ses livraisons sous le numéro du fournisseur — « PZH260486 » sur la
+    # première liste reçue — n'a aucune raison d'en apprendre un second.
+    lot_saisi = (body.get("lot_numero") or "").strip()[:60] or None
+
     now_dt = _now_paris()
     now = now_dt.isoformat()
 
@@ -4940,7 +4946,21 @@ async def packing_list_importer(request: Request):
             fournisseur_id, f_row = _resoudre_fournisseur_reception(
                 conn, fournisseur, fournisseur_id_saisi)
             verdict = _verdict_certificat_reception(f_row, now_dt.date())
-            lot_numero = _build_lot_numero(fournisseur, now_dt, fsc_type_claim)
+            lot_numero = lot_saisi or _build_lot_numero(fournisseur, now_dt, fsc_type_claim)
+            if lot_saisi:
+                # Un numéro déjà pris désignerait deux livraisons différentes
+                # sous la même étiquette : refusé plutôt que fusionné en
+                # silence. Pour ajouter à une réception existante, le
+                # sélecteur de réception est là pour ça.
+                deja = conn.execute(
+                    "SELECT id FROM stock_receptions WHERE lot_numero = ?",
+                    (lot_numero,)).fetchone()
+                if deja:
+                    raise HTTPException(
+                        400,
+                        "Le lot « %s » existe déjà (réception #%s). Choisir un "
+                        "autre numéro, ou sélectionner cette réception comme "
+                        "destination." % (lot_numero, deja["id"]))
             cur = conn.execute(
                 """INSERT INTO stock_receptions
                    (created_at, created_by, created_by_name, note, nb_bobines,
