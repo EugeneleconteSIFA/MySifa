@@ -2380,6 +2380,7 @@ def _fetch_matiere_row(conn, matiere_id: int) -> dict | None:
              COALESCE(sr.fournisseur, fmu.fournisseur_manual) AS fournisseur,
              COALESCE(sr.certificat_fsc, fmu.certificat_fsc_manual) AS certificat_fsc,
              ff.licence AS fournisseur_licence,
+             (SELECT h.no_dossier FROM fab_matieres_utilisees h WHERE h.id = fmu.herite_de_id) AS herite_de_dossier,
              CASE
                WHEN sr.id IS NOT NULL THEN 'reception'
                WHEN fmu.fournisseur_manual IS NOT NULL THEN 'manual'
@@ -2434,6 +2435,7 @@ def list_matieres(request: Request, machine_id: int = None, no_dossier: str = No
               sr.fsc_type_claim AS fsc_type_claim,
               ff.id AS fournisseur_id,
               ff.licence AS fournisseur_licence,
+              (SELECT h.no_dossier FROM fab_matieres_utilisees h WHERE h.id = fmu.herite_de_id) AS herite_de_dossier,
               CASE
                 WHEN sr.id IS NOT NULL THEN 'reception'
                 WHEN fmu.fournisseur_manual IS NOT NULL THEN 'manual'
@@ -2511,6 +2513,7 @@ def get_tracabilite_dossier(no_dossier: str, request: Request):
                  fmu.id, fmu.code_barre, fmu.scanned_at, fmu.operateur,
                  fmu.machine_nom, fmu.liaison_mode,
                  fmu.fsc_warning, fmu.fsc_warning_note,
+                 (SELECT h.no_dossier FROM fab_matieres_utilisees h WHERE h.id = fmu.herite_de_id) AS herite_de_dossier,
                  COALESCE(sr.fournisseur, fmu.fournisseur_manual) AS fournisseur,
                  COALESCE(sr.certificat_fsc, fmu.certificat_fsc_manual) AS certificat_fsc,
                  COALESCE(sr.fsc_type_claim, NULL) AS fsc_type_claim,
@@ -2568,6 +2571,8 @@ def get_tracabilite_dossier(no_dossier: str, request: Request):
     except Exception:
         # Colonne absente (base pas encore migrée) : le rapport reste lisible.
         motifs_absence = []
+    with get_db() as conn3:
+        non_rattachees = bobines_montees.non_rattachees(conn3, ref)
 
     if fsc_requis and nb_total > 0:
         statut_global = "conforme" if nb_conformes == nb_total else "non_conforme"
@@ -2644,6 +2649,7 @@ def get_tracabilite_dossier(no_dossier: str, request: Request):
         "bobines": bobines,
         "parcours": parcours,
         "motifs_absence_matiere": motifs_absence,
+        "bobines_non_rattachees": non_rattachees,
         "synthese": {
             "nb_bobines_total": nb_total,
             "motif_absence_matiere": (motifs_absence[0]["motif"] if motifs_absence else None),
@@ -3276,6 +3282,42 @@ def delete_matiere(matiere_id: int, request: Request, tracabilite: bool = False)
     return {"success": True}
 
 
+@router.post("/api/fabrication/dossiers/{no_dossier}/reprendre-bobines")
+async def reprendre_bobines_dossier(no_dossier: str, request: Request):
+    """Rattache au dossier les bobines montées sur la machine — rattrapage à la clôture.
+
+    Le cas visé : un dossier démarré sans la carte « Matières en place » (avant
+    la mise en service, ou poste configuré après le démarrage) et clôturé sans
+    un seul scan, alors que la glassine de la veille est toujours sur la
+    machine. Plutôt que de faire écrire « déjà scannée sur un dossier
+    précédent », l'écran de fin de production propose de reprendre ces
+    bobines. Même règle qu'au démarrage : `retirer` démonte, le reste est
+    rattaché, la glassine d'un frontal complexe reste de côté.
+    """
+    user = get_current_user(request)
+    _check_fab_access(user)
+    body = await request.json()
+    operateur = user.get("operateur_lie") or user.get("nom") or ""
+    ref = (no_dossier or "").strip()
+    if not ref:
+        raise HTTPException(status_code=400, detail="Référence dossier manquante")
+    with get_db() as conn:
+        machine_obj = _resolve_machine(user, body, conn)
+        res = _reprendre_bobines_en_place(
+            conn, machine_obj["id"], machine_obj["nom"], ref, operateur,
+            {"retirer": body.get("retirer") or []})
+    if res is None:
+        raise HTTPException(status_code=500, detail="Reprise des bobines impossible — scannez-les.")
+    log_action(
+        user=user, action="UPDATE", module="fabrication",
+        objet=f"Bobines en place rattachées · {ref}",
+        detail={"rattachees": [b["code_barre"] for b in res["rattachees"]],
+                "retirees": res["retirees"]},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, **res}
+
+
 @router.get("/api/fabrication/dossiers/{no_dossier}/info-prod")
 def get_info_prod_dossier(no_dossier: str, request: Request):
     """L'info prod d'un dossier — le commentaire libre qui lui est attache."""
@@ -3454,8 +3496,9 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
             dossier = dict(pe_row) if pe_row else None
 
             matieres = conn.execute(
-                """SELECT * FROM fab_matieres_utilisees WHERE no_dossier = ?
-                   ORDER BY scanned_at ASC""",
+                """SELECT fmu.*, (SELECT h.no_dossier FROM fab_matieres_utilisees h WHERE h.id = fmu.herite_de_id) AS herite_de_dossier
+                     FROM fab_matieres_utilisees fmu WHERE fmu.no_dossier = ?
+                   ORDER BY fmu.scanned_at ASC""",
                 (no_dossier,),
             ).fetchall()
 
@@ -3501,6 +3544,7 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
                 "info_prod": info,
                 "motifs_absence_matiere": motifs_absence,
                 "contexte_produit": contexte,
+                "bobines_non_rattachees": bobines_montees.non_rattachees(conn, no_dossier),
             }
         else:
             # Liste des dossiers avec au moins une saisie ou matière

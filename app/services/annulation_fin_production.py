@@ -231,6 +231,8 @@ _COLONNES_NON_COPIEES = {
     "group_id", "split_parent_id",
     "annule_count", "annule_motif", "annule_par", "annule_le",
     "destockage", "destockage_at", "destockage_reserve",
+    "destockage_par", "destockage_relu_par", "destockage_relu_at",
+    "destockage_rvgi", "destockage_rvgi_at", "destockage_rvgi_par",
 }
 
 

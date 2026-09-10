@@ -196,6 +196,68 @@ src_annul = src[src.index('def destockage_annuler('):src.index("def _destockage_
 check("l'annulation écrit avec autoriser_negatif", "autoriser_negatif=True" in src_annul, True)
 check("l'annulation part du net", "_net_sorti(conn, planning_id)" in src_annul, True)
 
+print("7. Composition attendue d'un dossier")
+exec(src[src.index("def _motif_reserve("):src.index("def _controle_donnees(")], ns)
+compo = ns["_composition_attendue"]
+
+
+def ligne(kind, cat=None, mid=1):
+    return {"kind": kind, "matiere_id": mid, "matiere_categorie": cat,
+            "destockable": True, "source_value": kind.upper()}
+
+
+lg = [ligne("carton", "carton"), ligne("palette", "palette")]
+ajout, notes = compo({"poste_sans_matiere": 0}, lg)
+kinds = sorted(a["kind"] for a in ajout)
+check("sans frontal ni mandrin : frontal/complexe et mandrin proposés", kinds, ["mandrin", "support"])
+check("le frontal manquant met en réserve", [a["facultative"] for a in ajout if a["kind"] == "support"], [False])
+check("le mandrin manquant ne met pas en réserve", [a["facultative"] for a in ajout if a["kind"] == "mandrin"], [True])
+check("la réserve d'une ligne attendue se lit sans « support « support »",
+      ns["_motif_reserve"](ajout[0]).startswith("Aucun") or ns["_motif_reserve"](ajout[0]).startswith("Pas de"), True)
+
+lg = [ligne("support", "frontal"), ligne("mandrin", "mandrin"), ligne("carton", "carton")]
+ajout, _ = compo({"poste_sans_matiere": 0}, lg)
+check("un frontal appelle glassine, adhésif ; la palette manque",
+      sorted(a["kind"] for a in ajout), ["adhesif", "glassine", "palette"])
+
+lg = [ligne("support", "complexe"), ligne("adhesif", "adhesif"), ligne("glassine", "glassine"),
+      ligne("mandrin", "mandrin"), ligne("carton", "carton"), ligne("palette", "palette")]
+ajout, _ = compo({"poste_sans_matiere": 0}, lg)
+check("un complexe complet : rien à ajouter", ajout, [])
+adh = [l for l in lg if l["kind"] == "adhesif"][0]
+check("l'adhésif d'un complexe ne sort pas d'office", (adh["destockable"], adh["inclus_complexe"]), (False, True))
+check("et ne met pas en réserve", adh["facultative"], True)
+
+lg = [ligne("mandrin", "mandrin"), ligne("carton", "carton"), ligne("palette", "palette")]
+ajout, notes = compo({"poste_sans_matiere": 1, "machine_nom": "Repiquage"}, lg)
+check("repiquage : aucun frontal attendu", ajout, [])
+check("repiquage : l'écran dit pourquoi", "Repiquage" in (notes[0] if notes else ""), True)
+
+lg = [ligne("support", None, mid=None), ligne("carton", "carton"), ligne("palette", "palette"), ligne("mandrin", "mandrin")]
+ajout, _ = compo({"poste_sans_matiere": 0}, lg)
+check("frontal non rattaché : on ne devine pas la glassine", ajout, [])
+
+print("8. Compléter la fiche par l'OF")
+conn.executescript("""
+    CREATE TABLE of_imports (id INTEGER PRIMARY KEY, matiere TEXT, glassine TEXT,
+        adhesif_label TEXT, mandrins_dia TEXT, cartons_type TEXT, qte_au_mille REAL);
+    INSERT INTO of_imports VALUES (3, 'THERMIQUE ECO', 'ITASA KA', NULL, 'Tube 1500x76', 'Carton 385', NULL);
+""")
+pe = {"of_import_id": 3, "ft_support": "VELIN", "ft_glassine": None, "ft_mandrin_dia": "",
+      "ft_cartons": None, "ft_adhesif": None}
+faits = ns["_completer_depuis_of"](conn, pe)
+check("la fiche prime sur l'OF", pe["ft_support"], "VELIN")
+check("les cases vides prennent l'OF", (pe["ft_glassine"], pe["ft_mandrin_dia"], pe["ft_cartons"]),
+      ("ITASA KA", "Tube 1500x76", "Carton 385"))
+check("les natures complétées sont rendues", sorted(faits), ["carton", "glassine", "mandrin"])
+check("une case vide de l'OF ne remplit rien", pe["ft_adhesif"], None)
+
+print("9. Cartons entiers à la relecture")
+r = qad({"kind": "carton", "quantite": 4}, {"unites_par_palette": 260})
+check("4 cartons ÷ 260 écrits à 6 décimales", r["quantite"], 0.015385)
+cv = conv("carton", {"unites_par_palette": 260}, None, 10)
+check("une sortie ancienne à 0,0154 palette relit 4 cartons", ns["_depuis_stock"](cv, 0.0154), 4.0)
+
 print()
 if ko:
     print(f"ÉCHEC — {ko} vérification(s) en erreur.")

@@ -2641,6 +2641,7 @@ function handleOpTrigger(code, label, cat){
     // Une info prod peut déjà exister — saisie en Traçabilité avant le
     // lancement, ou par le conducteur du poste précédent. On la relit pour
     // que l'opérateur complète au lieu d'écraser sans le savoir.
+    S.finMontees = null;
     loadInfoProdDossier();
     loadNbMatieresDossier();
     return;
@@ -4692,6 +4693,37 @@ function tracaOuvrirEditBobine(m){
   });
 }
 
+/* Catégorie de la bobine (frontal, complexe, glassine), modifiable à la main.
+   Corriger ici remonte au poste de déroulement : la bobine change de poste
+   sur la machine et la forme de son code est apprise pour les scans suivants. */
+async function tracaChangerCategorie(m, categorie){
+  if(!categorie || categorie === m.categorie_bobine) return;
+  try{
+    await apiFetch('/api/fabrication/matieres/'+m.id+'/poste',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({categorie}),
+    });
+    showToast('Catégorie enregistrée.','success');
+    await loadMatieres();
+  }catch(e){ showToast(e.message||'Erreur catégorie.','danger'); render(); }
+}
+
+function tracaCategorieSelect(m){
+  const cat = m.categorie_bobine || '';
+  const opts = [['frontal','Frontal'],['complexe','Complexe'],['glassine','Glassine']];
+  const sel = h('select',{
+    title: cat ? 'Modifier la catégorie de la bobine' : 'Catégorie inconnue — à définir',
+    style:{background:'var(--bg)',color:cat?'var(--text)':'var(--muted)',fontFamily:'inherit',
+      fontSize:'13px',fontWeight:'600',padding:'5px 8px',borderRadius:'8px',cursor:'pointer',
+      border:'1px solid '+(cat?'var(--border)':'var(--warn)')},
+    onChange:(e)=>tracaChangerCategorie(m, e.target.value),
+  },
+    cat ? null : h('option',{value:'',selected:true,disabled:true},'À définir'),
+    ...opts.map(([v,l]) => h('option',{value:v,selected:v===cat},l))
+  );
+  return sel;
+}
+
 function renderTracaPanel(){
   const matieres = S.tracaMatieres;
   const machineName = (S.machine&&S.machine.nom)||(S.user&&S.user.machine_nom)||'—';
@@ -4727,10 +4759,13 @@ function renderTracaPanel(){
           }, fournisseur
               ? h('span',{className:'fab-traca-supplier'},fournisseur)
               : h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—'))),
+          h('td',null,tracaCategorieSelect(m)),
           h('td',null,licence ? h('span',{className:'fab-traca-licence',style:{fontFamily:'monospace',fontSize:'12px'}},licence) : h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—')),
           h('td',null,linkBadge),
           h('td',null,m.no_dossier||h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—')),
-          h('td',null,timeStr),
+          h('td',null,m.herite_de_dossier
+            ? h('span',{title:'Restée montée sur la machine, reprise sans rescan'},'Héritée · '+m.herite_de_dossier)
+            : timeStr),
           h('td',{style:{whiteSpace:'nowrap',textAlign:'right'}},
             h('div',{className:'fab-traca-actions'},
               h('button',{className:'fab-traca-print',title:'Réimprimer étiquette (bobine à remettre en stock)',
@@ -4749,7 +4784,7 @@ function renderTracaPanel(){
           )
         );
       })
-    : [h('tr',null,h('td',{colSpan:'7',className:'fab-traca-empty'},
+    : [h('tr',null,h('td',{colSpan:'8',className:'fab-traca-empty'},
         S.tracaLoading ? 'Chargement…' : 'Aucune bobine scannée aujourd\'hui'
       ))];
 
@@ -4844,6 +4879,7 @@ function renderTracaPanel(){
           h('thead',null,h('tr',null,
             h('th',null,'Code barre'),
             h('th',null,'Fournisseur'),
+            h('th',null,'Catégorie'),
             h('th',null,'Licence FSC'),
             h('th',null,'Liaison'),
             h('th',null,'Dossier'),
@@ -5325,7 +5361,9 @@ function renderTracabiliteModal(data, noDossier){
     } else {
       statutCell = h('span',{style:{color:'var(--muted)'}},'—');
     }
-    const scanLbl = (b.scanned_at || '') + (b.operateur ? ' · ' + b.operateur : '');
+    const scanLbl = b.herite_de_dossier
+      ? 'Héritée · ' + b.herite_de_dossier
+      : (b.scanned_at || '') + (b.operateur ? ' · ' + b.operateur : '');
     tbody.appendChild(h('tr',null,
       h('td',{style:{fontFamily:'monospace',fontWeight:'700'}}, b.code_barre || '—'),
       h('td',null, b.fournisseur || '—'),
@@ -5456,6 +5494,21 @@ function renderTracabiliteModal(data, noDossier){
       )
     : null;
 
+  // Glassine restee sur la machine sous un frontal complexe : une decision
+  // d'atelier, pas un oubli — le rapport doit le dire.
+  const nonRatt = (data.bobines_non_rattachees || []).filter(Boolean);
+  const nonRattacheesBloc = nonRatt.length
+    ? h('div',{style:{border:'1px solid var(--border)',background:'var(--bg)',borderRadius:'8px',
+        padding:'10px 13px',margin:'12px 0 0',fontSize:'12.5px',color:'var(--text)'}},
+        h('div',{style:{fontWeight:'800',fontSize:'11px',textTransform:'uppercase',
+          letterSpacing:'.4px',color:'var(--muted)',marginBottom:'6px'}},
+          'Sur la machine, non rattachées au dossier'),
+        ...nonRatt.map(b => h('div',{style:{marginTop:'4px'}},
+          h('span',{style:{fontFamily:'monospace',fontWeight:'700'}}, b.code_barre||''),
+          h('span',{style:{color:'var(--muted)'}}, ' · '+(b.motif_label||b.motif||''))
+        )))
+    : null;
+
   const overlay = h('div',{className:'fab-fsc-traca-overlay fab-modal-overlay',onClick:(e)=>{
     if(e.target===e.currentTarget) closeTracabiliteModal();
   }},
@@ -5481,6 +5534,7 @@ function renderTracabiliteModal(data, noDossier){
         color:statutColor,
       }}, statutText),
       motifsAbsenceBloc,
+      nonRattacheesBloc,
       h('div',{style:{
         fontSize:'12px',fontWeight:'800',textTransform:'uppercase',letterSpacing:'.5px',
         color:'var(--muted)',margin:'14px 0 8px'}}, 'Matière consommée'),
@@ -6460,6 +6514,19 @@ async function loadNbMatieresDossier(){
     const d = await apiFetch('/api/fabrication/matieres?no_dossier='+encodeURIComponent(ref));
     S.finNbMatieres = Array.isArray(d && d.matieres) ? d.matieres.length : -1;
   }catch(e){ S.finNbMatieres = -1; }
+  // Aucune bobine sur le dossier : ce qui est encore monte sur la machine est
+  // presque toujours la reponse (la glassine gardee depuis le dossier
+  // precedent). On le charge pour le proposer avant de demander pourquoi.
+  if(S.finNbMatieres === 0){
+    const mid = (S.user&&S.user.machine_id) || S.adminMachineId;
+    try{
+      const e = mid ? await apiFetch('/api/fabrication/machines/'+mid+'/bobines-montees') : null;
+      const liste = [];
+      ((e && e.postes) || []).forEach(p => (p.bobines||[]).forEach(b => liste.push(Object.assign({posteLabel:p.label}, b))));
+      ((e && e.en_attente) || []).forEach(b => liste.push(Object.assign({posteLabel:'Poste inconnu'}, b)));
+      S.finMontees = liste;
+    }catch(_){ S.finMontees = []; }
+  }
   if(S.showFinModal) fabRenderPreserveUi({});
 }
 
@@ -6576,10 +6643,40 @@ function renderFinModal(){
     onClick:()=>{ S.finMatiereMotif=txt; motifInp.value=txt; motifInp.focus(); }
   }, txt);
 
+  // Rattacher ce qui est encore monte : la vraie reponse, verifiable, a la
+  // place d'une phrase declarative.
+  const finMontees = (aucuneMatiere && Array.isArray(S.finMontees)) ? S.finMontees : [];
+  const repriseBloc = finMontees.length ? h('div',{style:{marginBottom:'10px'}},
+    h('div',{className:'fab-field-hint',style:{marginBottom:'6px'}},
+      'Bobines encore montées sur la machine :'),
+    ...finMontees.map(b => h('div',{style:{fontSize:'13px',padding:'4px 0',color:'var(--text)'}},
+      h('strong',null,(b.posteLabel||'')+' '),
+      h('span',{style:{fontFamily:'monospace'}}, b.code_barre||''),
+      h('span',{style:{color:'var(--muted)'}}, b.dernier_dossier ? ' · dossier '+b.dernier_dossier : ''))),
+    h('button',{type:'button',className:'fab-btn fab-btn-success fab-btn-sm',style:{marginTop:'8px'},
+      onClick: async ()=>{
+        const ref = S.dossier ? (S.dossier.reference||'') : '';
+        if(!ref) return;
+        const body = {};
+        const mid = (S.user&&S.user.machine_id) || S.adminMachineId;
+        if(mid) body.machine_id = mid;
+        try{
+          const r = await apiFetch('/api/fabrication/dossiers/'+encodeURIComponent(ref)+'/reprendre-bobines',{
+            method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+          const n = (r && r.rattachees) ? r.rattachees.length : 0;
+          showToast(n ? n+' bobine'+(n>1?'s':'')+' rattachée'+(n>1?'s':'')+' au dossier.' : 'Aucune bobine à rattacher.', n ? 'success' : 'info');
+          if(r && (r.alertes_fsc||[]).length) setTimeout(()=>debutConfirmerFscHeritees(r), 400);
+          S.finMontees = null;
+          await loadNbMatieresDossier();
+        }catch(e){ showToast(e.message||'Erreur de rattachement.','danger'); }
+      }}, 'Rattacher ces bobines au dossier')
+  ) : null;
+
   const matiereBloc = aucuneMatiere ? h('div',{className:'fab-field',
     style:{padding:'12px 14px',borderRadius:'10px',
            background:'rgba(251,191,36,.10)',border:'1px solid rgba(251,191,36,.4)'}},
     h('label',null,'Aucun code matiere scanne \u2014 pourquoi ? (obligatoire)'),
+    repriseBloc,
     h('div',{className:'fab-field-hint'},
       'Ce dossier n\'a aucune bobine en tracabilite. Dites ce qui s\'est passe : '
       +'la reponse est conservee avec la saisie.'),

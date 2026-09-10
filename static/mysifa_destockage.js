@@ -45,6 +45,11 @@
   const LIBELLES_CATEGORIE = {frontal: 'Frontal', complexe: 'Complexe', glassine: 'Glassine',
     adhesif: 'Adhésif', mandrin: 'Mandrin', carton: 'Carton', palette: 'Palette'};
 
+  function natureLigne(l) {
+    if (l.attendue && l.kind === 'support') return 'Frontal / complexe';
+    return NATURES[l.kind] || l.kind || '';
+  }
+
   function esc(v) {
     return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;')
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -129,6 +134,9 @@
       let val = dejaSorti ? l.sorti_reel
         : ((enApercu || l.destockable === false) ? l.consomme : (l.sorti_reel ?? 0));
       if (val === null || val === undefined) val = 0;
+      // Adhésif ou glassine d'un complexe : déjà dans la bobine. Proposés à
+      // zéro, saisissables si on en a réellement ajouté.
+      if (l.inclus_complexe && !dejaSorti) val = 0;
       if (conv.entier) val = Math.round(Number(val));
       const row = {ligne: l, mid: l.matiere_id || null, lid: l.laize_id ?? null, val: Number(val)};
       // Après une création ou un complément de fiche, la modale se recharge :
@@ -158,6 +166,14 @@
     const c = candidat(r.mid);
     const conv = (c && c.conversion) || {};
     if (!r.mid) {
+      const l0 = r.ligne;
+      // Ligne ajoutée parce que le dossier consomme forcément cette matière
+      // (carton, palette, frontal…) alors que la fiche n'en dit rien.
+      if (l0.attendue) {
+        return '<span style="color:' + (l0.facultative ? 'var(--muted)' : 'var(--warn)') + '">'
+          + esc((l0.manque || [])[0] || 'Matière à choisir') + '</span><br>'
+          + boutonPetit('data-dr-creer', i, 'Créer une référence');
+      }
       return '<span style="color:var(--warn)">Référence manquante — choisir une matière ou la créer</span><br>'
         + boutonPetit('data-dr-creer', i, 'Créer cette référence');
     }
@@ -220,10 +236,13 @@
       corps = (CHAMPS_CONDITIONNEMENT[c.kind] || []).map(([n, lib]) => champ(n, lib, '')).join('');
     }
     const titre = ed.mode === 'creer'
-      ? 'Créer la référence « ' + esc(l.source_value || '') + ' »'
+      ? (l.source_value ? 'Créer la référence « ' + esc(l.source_value) + ' »'
+        : 'Créer une référence — ' + esc(natureLigne(l).toLowerCase()))
       : 'Compléter la fiche de « ' + esc((candidat(r.mid) || {}).reference || '') + ' »';
     const aide = ed.mode === 'creer'
-      ? 'La matière est créée dans MyStock et associée à cette valeur de fiche : les prochains dossiers la trouveront seuls.'
+      ? (l.source_value
+        ? 'La matière est créée dans MyStock et associée à cette valeur de fiche : les prochains dossiers la trouveront seuls.'
+        : 'La matière est créée dans MyStock et retenue pour ce dossier. Pensez à compléter la fiche technique du produit.')
       : 'Les champs laissés vides ne sont pas modifiés. Le reste de la fiche s\'édite dans MyStock.';
     return '<tr data-dr-edition="' + i + '"><td colspan="6" style="padding:10px 12px 14px;border-bottom:1px solid var(--border)">'
       + '<div style="border:1px solid var(--accent);border-radius:10px;padding:12px 14px;background:var(--bg)">'
@@ -281,7 +300,10 @@
       ? 'remplace « ' + esc(l.matiere_ref || l.source_value || '') + ' »'
       : (!l.matiere_id && r.mid && l.source_value ? 'pour « ' + esc(l.source_value) + ' »'
         : (l.remplace && r.mid === l.matiere_id ? 'remplace « ' + esc(l.remplace.matiere_ref || '') + ' »' : ''));
-    const sous = [laizeHtml, remplace, l.hors_fiche ? 'ajoutée à la main' : ''].filter(Boolean)
+    const sous = [laizeHtml, remplace, l.hors_fiche ? 'ajoutée à la main' : '',
+      l.depuis_of ? 'd\'après l\'OF (fiche technique vide)' : '',
+      l.inclus_complexe ? 'déjà dans le complexe — à ne sortir que si on en a ajouté' : '',
+      (l.attendue && r.mid) ? 'absente de la fiche technique' : ''].filter(Boolean)
       .join('<span style="color:var(--muted)"> · </span>');
 
     const bloque = !r.mid || conv.facteur_stock == null;
@@ -289,7 +311,7 @@
     const u = conv.unite_reelle || l.besoin_unite || '';
     // Une ligne à compléter se voit d'un coup d'œil : liseré et fond, pas
     // seulement un texte orange noyé dans la dernière colonne.
-    const aCompleter = bloque || (c && (c.laizes || []).length && r.lid == null);
+    const aCompleter = (bloque && !(l.facultative && !r.mid)) || (c && (c.laizes || []).length && r.lid == null);
     const fond = (i % 2) ? 'background:var(--bg);' : '';
     const td = 'padding:10px 12px;vertical-align:middle;border-bottom:1px solid var(--border);' + fond;
     const lien = r.mid ? '<a href="/stock?matiere=' + encodeURIComponent(r.mid) + '" target="_blank" rel="noopener" '
@@ -304,7 +326,7 @@
     let html = '<tr data-dr-i="' + i + '">'
       + '<td style="' + td + 'border-left:3px solid ' + (aCompleter ? 'var(--warn)' : 'transparent') + ';white-space:nowrap">'
       + '<span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">'
-      + esc(NATURES[l.kind] || l.kind || '') + '</span></td>'
+      + esc(natureLigne(l)) + '</span></td>'
       + '<td style="' + td + '">'
       + '<div style="display:flex;gap:6px;align-items:center">' + select + lien + '</div>'
       + (sous ? '<div style="font-size:11.5px;color:var(--muted);margin-top:5px">' + sous + '</div>' : '') + '</td>'
@@ -452,6 +474,12 @@
       bandeau = '<div style="margin-bottom:14px;padding:11px 14px;border-radius:9px;background:var(--bg);'
         + 'border:1px solid var(--warn);font-size:12.5px;line-height:1.6;color:var(--text)">'
         + '<b style="color:var(--warn)">Déstocké avec réserves</b><br>' + esc(reserve) + '</div>';
+    }
+    const notes = ((d.controle || {}).notes || []);
+    if (notes.length) {
+      bandeau += '<div style="margin-bottom:14px;padding:10px 14px;border-radius:9px;background:var(--bg);'
+        + 'border:1px solid var(--border);font-size:12.5px;line-height:1.6;color:var(--text2)">'
+        + notes.map(esc).join('<br>') + '</div>';
     }
     const etatTxt = dossier.destockage === 'reserve' ? 'avec réserves'
       : (dossier.destockage === 'done' ? 'complet' : 'à faire');

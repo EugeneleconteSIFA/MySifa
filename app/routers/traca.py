@@ -199,6 +199,8 @@ def _matieres_du_dossier(conn, ref: str) -> list[dict]:
     rows = conn.execute(
         """SELECT fmu.code_barre, fmu.scanned_at, fmu.operateur, fmu.machine_nom,
                   COALESCE(fmu.fsc_warning,0) AS fsc_warning, fmu.fsc_warning_note,
+                  (SELECT h.no_dossier FROM fab_matieres_utilisees h
+                    WHERE h.id = fmu.herite_de_id) AS herite_de_dossier,
                   sr.id AS reception_id, sr.lot_numero, sr.created_at AS reception_date,
                   COALESCE(sr.fournisseur, fmu.fournisseur_manual) AS fournisseur,
                   COALESCE(sr.certificat_fsc, fmu.certificat_fsc_manual) AS certificat_fsc,
@@ -565,6 +567,14 @@ def _chaine_dossier(conn, ref: str) -> dict:
 
     matieres = _matieres_du_dossier(conn, ref_canon)
     motifs_absence = motifs_absence_matiere(conn, ref_canon)
+    # Bobines présentes sur la machine et volontairement écartées (glassine
+    # d'un frontal complexe) : sans elles, la chaîne montrerait un trou là où
+    # il y a une décision.
+    try:
+        from app.services.bobines_montees import non_rattachees as _non_rattachees
+        non_rattachees = _non_rattachees(conn, ref_canon)
+    except Exception:
+        non_rattachees = []
     saisies = _saisies_du_dossier(conn, ref_canon)
     lots = _lots_du_dossier(conn, ref_canon)
     mouvements = _mouvements_des_lots(conn, [l["id"] for l in lots], ref_canon)
@@ -621,6 +631,7 @@ def _chaine_dossier(conn, ref: str) -> dict:
         "dossier": dossier,
         "matieres": matieres,
         "motifs_absence": motifs_absence,
+        "non_rattachees": non_rattachees,
         "saisies": saisies,
         "lots": lots,
         "mouvements": mouvements,

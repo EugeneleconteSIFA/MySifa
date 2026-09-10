@@ -974,6 +974,8 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str,
         "a_placer": e.get("a_placer", 0),
         "valide": int(e.get("valide") or 0),
         "destockage": e.get("destockage") or "todo",
+        # Repère de la collègue qui déstocke dans RVGI — disjoint du stock MySifa.
+        "destockage_rvgi": e.get("destockage_rvgi") or "todo",
         "statut_reel": e.get("statut_reel") or "reellement_en_attente",
         # Annulation operateur (MyProd) : le badge n'est affiche que tant que
         # le dossier est reparti en attente ; le motif reste consultable apres.
@@ -2540,28 +2542,44 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
 
 @router.put("/machines/{machine_id}/entries/{entry_id}/destockage")
 def toggle_destockage(machine_id: int, entry_id: int, request: Request):
-    """N'existe plus que pour refuser — et dire par quoi elle est remplacée.
+    """Bascule le repère « déstocké dans RVGI » d'un dossier (point gris du planning).
 
-    Cette route basculait `destockage` entre `todo` et `done` sans écrire le
-    moindre mouvement de stock. Relevé du 09/09/2026 : 232 dossiers portaient
-    le marquage sans qu'un gramme de matière n'ait bougé, et les 212 sorties
-    existantes étaient toutes saisies à la main, sans lien avec un dossier.
-    Un drapeau qui dit « déstocké » sans déstocker rend le stock faux d'une
-    façon que personne ne peut détecter avant l'inventaire.
+    Décision d'Eugène du 10/09/2026 : le déstockage du planning et celui de
+    MyStock sont DISJOINTS. La collègue qui déstocke dans l'ERP garde son
+    repère visuel ; il ne touche pas au stock MySifa et MyStock ne le lit pas.
+    Le stock MySifa sort par MyStock › Déstockage (`destockage`), jamais par
+    ce bouton — c'est ce mélange qui avait laissé 232 dossiers « déstockés »
+    sans un gramme sorti (relevé du 09/09/2026).
 
-    Le déstockage réel passe par `POST /api/stock/destockage/{planning_id}/auto`
-    (sortie contrôlée) et `POST /api/stock/destockage/{planning_id}/annuler`
-    (contre-passation). On refuse plutôt que de supprimer la route : un client
-    non déployé qui l'appellerait encore doit voir l'erreur, pas croire que
-    son geste a été pris en compte.
+    `updated_at` n'est pas touché : le balayage du déstockage automatique
+    s'en sert pour dater la clôture, un clic de repère ne doit pas y ramener
+    un dossier terminé depuis longtemps.
     """
-    require_admin(request)
-    raise HTTPException(
-        410,
-        "Le marquage seul n'est plus accepté : il laissait le stock intact. "
-        "Utiliser POST /api/stock/destockage/{id}/auto pour sortir les "
-        "matières, ou /annuler pour contre-passer."
+    user = require_admin(request)
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT reference, numero_of, destockage_rvgi FROM planning_entries "
+            " WHERE id=? AND machine_id=?", (entry_id, machine_id)
+        ).fetchone()
+        if not ex:
+            raise HTTPException(404, "Entrée non trouvée")
+        new_val = "todo" if (ex["destockage_rvgi"] or "todo") == "done" else "done"
+        par = (user or {}).get("nom") or (user or {}).get("email") or None
+        conn.execute(
+            "UPDATE planning_entries SET destockage_rvgi=?, destockage_rvgi_at=?, "
+            "destockage_rvgi_par=? WHERE id=? AND machine_id=?",
+            (new_val, now if new_val == "done" else None,
+             par if new_val == "done" else None, entry_id, machine_id)
+        )
+        conn.commit()
+    log_action(
+        user=user, action="UPDATE", module="planning",
+        objet="Dossier %s" % ((ex["numero_of"] or ex["reference"] or entry_id)),
+        detail="Repère déstockage RVGI : %s" % ("fait" if new_val == "done" else "retiré"),
+        ip=request.client.host if request.client else None,
     )
+    return {"success": True, "destockage_rvgi": new_val}
 
 
 @router.get("/machines/{machine_id}/entries/{entry_id}/production-stats")

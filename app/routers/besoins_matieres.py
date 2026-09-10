@@ -2719,7 +2719,9 @@ def _quantite_a_destocker(b: dict, mp: dict) -> dict:
                     "manque": ["Longueur tube ou tubes par palette manquants sur la matière"]}
         n_ent = _entier_sup(q)
         pal = pal * n_ent / q if q else pal
-        return {"quantite": round(pal, 4), "unite": "palette",
+        # 6 décimales, comme les bobines : à 4, 4 cartons sur une palette de
+        # 260 relisaient « 4,004 cartons » (10/09/2026).
+        return {"quantite": round(pal, 6), "unite": "palette",
                 "detail": f"{_n(n_ent)} mandrins", "manque": []}
 
     if kind == "carton":
@@ -2728,7 +2730,7 @@ def _quantite_a_destocker(b: dict, mp: dict) -> dict:
             return {"quantite": None, "unite": "palette",
                     "manque": ["Cartons par palette non renseignés sur la matière"]}
         n_ent = _entier_sup(q)
-        return {"quantite": round(n_ent / upp, 4), "unite": "palette",
+        return {"quantite": round(n_ent / upp, 6), "unite": "palette",
                 "detail": f"{_n(n_ent)} cartons ÷ {_n(upp)}/palette", "manque": []}
 
     # Palettes : le besoin est déjà dans l'unité de gestion.
@@ -2852,7 +2854,10 @@ def _depuis_stock(conv: dict, quantite_stock) -> Optional[float]:
     if quantite_stock is None or not fs:
         return None
     v = float(quantite_stock) / fs
-    if conv.get("entier") and abs(v - round(v)) < 1e-3:
+    # Tolérance large sur les entiers : les sorties écrites avant le passage à
+    # 6 décimales (0,0154 palette de 260 cartons) relisaient 4,004 cartons.
+    # Un carton ne se coupe pas : 4,004 ne peut vouloir dire que 4.
+    if conv.get("entier") and abs(v - round(v)) < 0.02:
         return float(round(v))
     if conv.get("unite_reelle") == "ml":
         return float(round(v))
@@ -2892,6 +2897,134 @@ def _candidats_remplacement(conn, categories: set, mod_laize, perte_pct) -> dict
                        if r["categorie"] in _CATEGORIES_BOBINE else []),
         })
     return out
+
+
+# ── Ce qu'un dossier consomme toujours ─────────────────────────────
+#
+# Remarque d'Eugène du 10/09/2026 : « j'ai besoin toujours des cartons, des
+# palettes, souvent des mandrins, et au moins un frontal ou un complexe et
+# s'il y a un frontal, une glassine ». Le calcul ne produisait une ligne que
+# pour une case remplie de la fiche : une case vide faisait disparaître la
+# matière sans bruit, et un dossier sortait deux ou trois matières sans que
+# personne ne le remarque. Ce qui manque devient une ligne à compléter.
+
+_COMPOSITION_MANQUE = {
+    "support": "Aucun frontal ni complexe sur la fiche technique ni sur l'OF — choisir la matière consommée",
+    "glassine": "Frontal sans glassine sur la fiche technique — choisir la glassine consommée",
+    "adhesif": "Frontal sans adhésif sur la fiche technique — choisir l'adhésif consommé",
+    "mandrin": "Pas de mandrin sur la fiche technique — normal pour du paravent, sinon choisir le mandrin",
+    "carton": "Aucun carton sur la fiche technique ni sur l'OF — choisir le carton utilisé",
+    "palette": "Aucune palette sur la fiche technique — choisir la palette utilisée",
+}
+
+# Ce que l'OF sait dire quand la fiche se tait. L'OF est le document produit :
+# `access_sync_of.py` y recopie les matières de la fiche Access à la création.
+_OF_COMPLETE_FICHE = (
+    ("ft_support", "matiere", "support"),
+    ("ft_glassine", "glassine", "glassine"),
+    ("ft_adhesif", "adhesif_label", "adhesif"),
+    ("ft_mandrin_dia", "mandrins_dia", "mandrin"),
+    ("ft_cartons", "cartons_type", "carton"),
+    ("ft_qte_au_mille", "qte_au_mille", None),
+)
+
+
+def _completer_depuis_of(conn, pe: dict) -> set:
+    """Remplit, en place, les cases matière vides de la fiche avec celles de l'OF.
+
+    La fiche PRIME ici (contrairement à l'archive des besoins) : le dossier
+    est récent, la fiche est celle qu'on corrige. L'OF ne sert que là où elle
+    se tait — un dossier sans fiche rapprochée, une case restée vide.
+    Rend les natures de ligne complétées, pour que l'écran dise d'où vient la
+    matière.
+    """
+    oid = pe.get("of_import_id")
+    if not oid:
+        return set()
+    try:
+        r = conn.execute(
+            "SELECT matiere, glassine, adhesif_label, mandrins_dia, cartons_type, "
+            "       qte_au_mille FROM of_imports WHERE id=?", (oid,)).fetchone()
+    except Exception:
+        return set()
+    if not r:
+        return set()
+    r = dict(r)
+    faits = set()
+    for champ_ft, champ_of, kind in _OF_COMPLETE_FICHE:
+        v = r.get(champ_of)
+        if v is None or (isinstance(v, str) and not v.strip()):
+            continue
+        actuel = pe.get(champ_ft)
+        if actuel is None or (isinstance(actuel, str) and not actuel.strip()):
+            pe[champ_ft] = v
+            if kind:
+                faits.add(kind)
+    return faits
+
+
+def _ligne_attendue(kind: str) -> dict:
+    return {
+        "kind": kind, "source_value": None, "matiere_id": None,
+        "matiere_ref": None, "matiere_designation": None, "matiere_categorie": None,
+        "mapped": False, "besoin": None, "besoin_unite": None,
+        "quantite": None, "unite": None, "detail": None,
+        "laizee": kind in ("support", "glassine"), "laizes": [], "laize_id": None,
+        "stock_actuel": None, "manque": [_COMPOSITION_MANQUE[kind]],
+        "destockable": False, "attendue": True,
+        # Le mandrin manque souvent pour une bonne raison (paravent, boîtes) :
+        # la ligne est proposée, elle ne met pas le dossier en réserve.
+        "facultative": kind == "mandrin",
+    }
+
+
+def _composition_attendue(pe: dict, lignes: list) -> tuple:
+    """Complète les lignes d'un dossier avec ce qu'il consomme forcément.
+
+    - toujours un carton et une palette, souvent un mandrin ;
+    - au moins un frontal ou un complexe ;
+    - un frontal appelle une glassine et un adhésif ; un complexe les
+      embarque déjà : les sortir en plus les compterait deux fois.
+
+    Un poste sans matière première (repiquage) n'attend ni frontal, ni
+    glassine, ni adhésif : ils sont sortis sur le dossier qui a imprimé.
+
+    Modifie `lignes` en place ; rend (lignes ajoutées, notes pour l'écran).
+    """
+    kinds = {l.get("kind") for l in lignes}
+    notes: list = []
+    ajout: list = []
+    sans_mp = bool(pe.get("poste_sans_matiere"))
+    if sans_mp:
+        notes.append(
+            "Poste sans matière première (%s) : frontal, glassine et adhésif sont "
+            "sortis sur le dossier qui a imprimé les étiquettes. Seuls mandrins, "
+            "cartons et palettes sortent ici." % (pe.get("machine_nom") or "repiquage"))
+    else:
+        supports = [l for l in lignes if l.get("kind") == "support"]
+        if not supports:
+            ajout.append(_ligne_attendue("support"))
+        cats = {(l.get("matiere_categorie") or "").strip().lower()
+                for l in supports if l.get("matiere_id")}
+        if "complexe" in cats and "frontal" not in cats:
+            for l in lignes:
+                if l.get("kind") not in ("glassine", "adhesif"):
+                    continue
+                l["destockable"] = False
+                l["facultative"] = True
+                l["inclus_complexe"] = True
+                l["manque"] = ["Le complexe embarque déjà %s — à ne sortir que s'il en a "
+                               "réellement été ajouté" % ("la glassine" if l["kind"] == "glassine"
+                                                          else "l'adhésif")]
+        elif "frontal" in cats:
+            for k in ("glassine", "adhesif"):
+                if k not in kinds:
+                    ajout.append(_ligne_attendue(k))
+    for k in ("mandrin", "carton", "palette"):
+        if k not in kinds:
+            ajout.append(_ligne_attendue(k))
+    lignes.extend(ajout)
+    return ajout, notes
 
 
 def _etat_documents(pe: dict) -> dict:
@@ -2965,6 +3098,14 @@ def _config_texte(conn, cle: str) -> str:
     return (r["valeur"] or "").strip() if r else ""
 
 
+def _motif_reserve(l: dict) -> str:
+    motif = (l.get("manque") or ["non rattachée"])[0]
+    if l.get("attendue"):
+        return motif
+    quoi = (l.get("source_value") or l.get("kind") or "").strip()
+    return "%s « %s » : %s" % (l.get("kind"), quoi, motif)
+
+
 def _controle_donnees(pe: dict, lignes: list) -> dict:
     """Le déstockage peut-il s'appuyer sur ces documents ?
 
@@ -3023,11 +3164,10 @@ def _controle_donnees(pe: dict, lignes: list) -> dict:
             reserves.append("cohérence de la fiche invérifiable : %s"
                             % (ctl.get("message") or "laize du module absente"))
 
-    non_rattachees = [l for l in lignes if not l.get("destockable")]
+    non_rattachees = [l for l in lignes
+                      if not l.get("destockable") and not l.get("facultative")]
     for l in non_rattachees:
-        quoi = (l.get("source_value") or l.get("kind") or "").strip()
-        motif = (l.get("manque") or ["non rattachée"])[0]
-        reserves.append("%s « %s » : %s" % (l.get("kind"), quoi, motif))
+        reserves.append(_motif_reserve(l))
 
     sortables = [l for l in lignes if l.get("destockable") and (l.get("quantite") or 0) > 0]
     if not sortables and not blocages:
@@ -3051,6 +3191,7 @@ def _destockage_lignes(conn, planning_id: int) -> dict:
     if not dossiers:
         raise HTTPException(404, "Dossier introuvable.")
     pe = dossiers[0]
+    depuis_of = _completer_depuis_of(conn, pe)
     mapping = _load_mapping(conn)
     perte_pct = stock_config_float(conn, "mandrin_perte_coupe_pct")
 
@@ -3126,7 +3267,10 @@ def _destockage_lignes(conn, planning_id: int) -> dict:
             "manque": manque,
             "destockable": bool(mid) and conv.get("quantite") is not None and (
                 b["kind"] not in _KINDS_BOBINE or laize_suggeree is not None),
+            "depuis_of": b["kind"] in depuis_of,
         })
+
+    _, notes_composition = _composition_attendue(pe_calc, lignes)
 
     deja = [dict(r) for r in conn.execute(
         """SELECT m.id, m.matiere_id, m.type_mouvement, m.quantite, m.quantite_apres,
@@ -3143,6 +3287,7 @@ def _destockage_lignes(conn, planning_id: int) -> dict:
     # `docs` reste rendu : l'écran montre l'état de relecture des documents.
     # Ce n'est simplement plus lui qui décide du mouvement.
     controle = _controle_donnees(pe, lignes)
+    controle["notes"] = notes_composition
     return {
         "controle": controle,
         "dossier": {
@@ -3214,16 +3359,26 @@ def _matieres_sorties(conn, planning_id: int) -> list:
         if lid is not None:
             r = conn.execute("SELECT valeur_mm FROM mp_laizes WHERE id=?", (lid,)).fetchone()
             laize = _f(r["valeur_mm"]) if r else None
+        reelle, unite_reelle = None, None
+        if kind == "mandrin":
+            # Sans la laize module on ne remonte pas aux mandrins, mais les
+            # tubes se lisent directement : « 0,002 palette » ne parlait à
+            # personne (10/09/2026).
+            upp = _f(mp.get("unites_par_palette"))
+            if upp:
+                reelle, unite_reelle = round(q * upp, 2), "tube"
+        elif conv:
+            reelle, unite_reelle = _depuis_stock(conv, q), conv.get("unite_reelle")
         out.append({
             "matiere_id": mid,
             "reference": mp.get("reference"),
             "designation": mp.get("designation"),
             "categorie": mp.get("categorie"),
             "laize_mm": laize,
-            "quantite": round(q, 4),
+            "quantite": round(q, 6),
             "unite": _unite_categorie(mp.get("categorie")),
-            "quantite_reelle": _depuis_stock(conv, q) if conv and kind != "mandrin" else None,
-            "unite_reelle": conv.get("unite_reelle") if conv and kind != "mandrin" else None,
+            "quantite_reelle": reelle,
+            "unite_reelle": unite_reelle,
         })
     out.sort(key=lambda x: (x["categorie"] or "", x["reference"] or ""))
     return out
@@ -3542,11 +3697,12 @@ def _apparier_remplacements(lignes: list, ajouts: list) -> list:
         for a in restants:
             if (a.get("matiere_categorie") or "").strip().lower() not in cats:
                 continue
-            li["remplace"] = {
-                "matiere_id": li.get("matiere_id"),
-                "matiere_ref": li.get("matiere_ref") or li.get("source_value"),
-                "laize_id": li.get("laize_id"),
-            }
+            if li.get("matiere_id") or li.get("source_value"):
+                li["remplace"] = {
+                    "matiere_id": li.get("matiere_id"),
+                    "matiere_ref": li.get("matiere_ref") or li.get("source_value"),
+                    "laize_id": li.get("laize_id"),
+                }
             for k in ("matiere_id", "matiere_ref", "matiere_designation",
                       "matiere_categorie", "laize_id", "laizes", "sorti"):
                 li[k] = a.get(k)
@@ -3746,14 +3902,12 @@ async def destockage_ajuster(planning_id: int, request: Request):
                     mp_c = _matiere_conv(conn, mid) or {}
                     cats_cibles.add((mp_c.get("categorie") or "").strip().lower())
             for li in apercu["lignes"]:
-                if li.get("destockable"):
+                if li.get("destockable") or li.get("facultative"):
                     continue
                 cats = set(_categories_remplacement(li.get("kind"), li.get("matiere_categorie")))
                 if cats & cats_cibles:
                     continue
-                quoi = (li.get("source_value") or li.get("kind") or "").strip()
-                motif = (li.get("manque") or ["non rattachée"])[0]
-                reserves.append("%s « %s » : %s" % (li.get("kind"), quoi, motif))
+                reserves.append(_motif_reserve(li))
 
         base_note = ("%s %s" % ("Déstockage vérifié" if premier else "Ajustement déstockage",
                                 no_dossier)).strip()

@@ -100,6 +100,7 @@ def base():
     migration("app/core/migrations/2026_09_10_bobines_montees.py").appliquer(conn)
     migration("app/core/migrations/2026_09_10_bobines_montees_remplacement.py").appliquer(conn)
     migration("app/core/migrations/2026_09_10_bobines_heritees.py").appliquer(conn)
+    migration("app/core/migrations/2026_09_10_bobines_non_rattachees.py").appliquer(conn)
     return conn
 
 
@@ -193,6 +194,13 @@ check("la nature est ecrite sur le scan",
       ("glassine", "glassine", "saisie"))
 check("resolution suivante : deja montee", pb.resoudre(c, "G-1", machine_id=1)["source"], "montee")
 
+check("correction d'une bobine partie : pas de remontage",
+      (bm.fixer_poste(c, a, "complexe")["action"] if bm.demonter(c, c.execute(
+          "SELECT id FROM bobines_montees WHERE code_barre='F-A' AND demonte_at IS NULL").fetchone()[0]) else None,
+       [x["code_barre"] for x in bm.etat_machine(c, 1)["postes"][0]["bobines"]]),
+      ("corrige", ["F-B"]))
+check("... et la categorie suit sur toutes les lignes du code",
+      c.execute("SELECT categorie_bobine FROM fab_matieres_utilisees WHERE id=?", (a,)).fetchone()[0], "complexe")
 res = bm.monter(c, 3, "G-1", categorie="glassine", no_dossier="D9")
 check("scannee sur une autre machine -> montee la-bas", res["action"], "montee")
 check("... et demontee ici (deplacee)",
@@ -227,6 +235,10 @@ res = bm.reprendre(c, 1, "D4")
 check("frontal = complexe seul -> glassine gardee mais non rattachee",
       ([b["code_barre"] for b in res["rattachees"]], res["glassine_non_rattachee"]), (["CX-1"], ["G-1"]))
 check("... et toujours montee", [b["code_barre"] for b in bm.etat_machine(c, 1)["postes"][1]["bobines"]], ["G-1"])
+check("... et la decision est gardee pour la tracabilite (lot 5)",
+      [(b["code_barre"], b["motif"]) for b in bm.non_rattachees(c, "D4")], [("G-1", "complexe_seul")])
+bm.reprendre(c, 1, "D4")
+check("... sans doublon a la reprise suivante", len(bm.non_rattachees(c, "D4")), 1)
 xx = scan(c, 1, "XX-9", "D4", "2026-09-10T11:00:00")
 bm.monter(c, 1, "XX-9", fab_matiere_id=xx)
 check("poste inconnu -> rattachee par prudence",
