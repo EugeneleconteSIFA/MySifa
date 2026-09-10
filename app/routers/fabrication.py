@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 from app.services.audit_service import log_action
 from app.services import origine_bobine
+from app.services import poste_bobine, bobines_montees
 from database import get_db, parse_datetime
 from config import classify_operation, FSC_CLAIM_LABELS, STOCK_UNITE_VENTE_DEFAUT
 from app.services.auth_service import get_current_user, is_fabrication, is_admin, effective_machine_id
@@ -1580,6 +1581,16 @@ async def create_saisie(request: Request):
             except Exception:
                 logger.exception("[fabrication] fin_dossier non enregistré")
 
+        # ── Début de production : les bobines restées montées ────────────────
+        # Seul l'écran « Démarrer un dossier » envoie `bobines_montees` : une
+        # saisie 01 venue d'ailleurs (reprise après coup, import) ne dit rien
+        # de ce qui est sur la machine MAINTENANT et ne doit rien hériter.
+        bobines_heritees = None
+        if cl["code"] == "01" and no_dossier and isinstance(body.get("bobines_montees"), dict):
+            bobines_heritees = _reprendre_bobines_en_place(
+                conn, machine_id_resolved, machine_name, no_dossier, operateur,
+                body["bobines_montees"])
+
         # ── Mise à jour dernier_metrage machine ───────────────────────────────
         new_metrage = None
         if cl["code"] == "01" and m_debut is not None:
@@ -1840,7 +1851,62 @@ async def create_saisie(request: Request):
     reponse = {"success": True, "id": new_id, "saisie": dict(row)}
     if seuil_franchi and seuil_franchi.get("explication_exigee"):
         reponse["explication_requise"] = seuil_franchi
+    if bobines_heritees is not None:
+        reponse["bobines_heritees"] = bobines_heritees
     return reponse
+
+
+def _reprendre_bobines_en_place(conn, machine_id, machine_nom, no_dossier, operateur, choix):
+    """Rattache au dossier qui démarre les bobines gardées sur la machine.
+
+    `choix` vient de la carte « Matières en place » : `{"retirer": [ids]}`, les
+    montages décochés. Tout le reste est repris (voir
+    `bobines_montees.reprendre`).
+
+    Le contrôle FSC s'applique aux bobines héritées comme à un scan : une
+    glassine non certifiée gardée d'un dossier à l'autre fait baisser la
+    revendication du dossier FSC, qu'on l'ait rescannée ou non. Les alertes
+    sont rendues à l'écran, qui demande la raison comme au scan.
+
+    Sous SAVEPOINT et best-effort : le démarrage du dossier est déjà écrit, un
+    échec ici ne doit pas le défaire.
+    """
+    try:
+        conn.execute("SAVEPOINT reprise_bobines")
+    except Exception:
+        return None
+    try:
+        res = bobines_montees.reprendre(
+            conn, machine_id, no_dossier, retirer=(choix or {}).get("retirer") or [],
+            par=operateur, machine_nom=machine_nom)
+        alertes = []
+        entry = conn.execute(
+            "SELECT fsc_requis, fsc_type_requis FROM planning_entries WHERE reference=? LIMIT 1",
+            (no_dossier,),
+        ).fetchone()
+        dossier_type = (entry["fsc_type_requis"] or "").strip() if entry and entry["fsc_requis"] else ""
+        if dossier_type:
+            label = _fsc_type_label(dossier_type)
+            for b in res["rattachees"]:
+                if not _check_fsc_compatibility(dossier_type, _bobine_fsc_type_for_matiere(conn, b["id"])):
+                    alertes.append({"id": b["id"], "code_barre": b["code_barre"]})
+            if alertes:
+                res["alerte_fsc_message"] = (
+                    "Bobine%s reprise%s sans revendication %s démontrée : %s. Le dossier %s exige %s."
+                    % ("s" if len(alertes) > 1 else "", "s" if len(alertes) > 1 else "", label,
+                       ", ".join(a["code_barre"] for a in alertes), no_dossier, label))
+        res["alertes_fsc"] = alertes
+        conn.execute("RELEASE SAVEPOINT reprise_bobines")
+        conn.commit()
+        return res
+    except Exception:
+        logger.warning("Reprise des bobines en place ignorée", exc_info=True)
+        try:
+            conn.execute("ROLLBACK TO SAVEPOINT reprise_bobines")
+            conn.execute("RELEASE SAVEPOINT reprise_bobines")
+        except Exception:
+            pass
+        return None
 
 
 # ─── Annulation d'un dossier de production ────────────────────────────────────
@@ -2597,7 +2663,8 @@ def get_tracabilite_dossier(no_dossier: str, request: Request):
 
 @router.get("/api/fabrication/receptions/lookup")
 def lookup_reception_for_barcode(
-    request: Request, code_barre: str, no_dossier: str | None = None
+    request: Request, code_barre: str, no_dossier: str | None = None,
+    machine_id: int | None = None,
 ):
     """Ce que l'application sait du fournisseur d'une bobine, avant de le demander.
 
@@ -2627,19 +2694,24 @@ def lookup_reception_for_barcode(
             """,
             (code,),
         ).fetchone()
+    dossier = (no_dossier or "").strip() or None
     if not row:
         with get_db() as conn:
             try:
-                origine = origine_bobine.resoudre(
-                    conn, code, (no_dossier or "").strip() or None
-                )
+                origine = origine_bobine.resoudre(conn, code, dossier)
             except Exception:
                 # Une détection en panne ne doit pas empêcher de scanner : on
                 # retombe simplement sur la saisie manuelle d'avant.
                 logger.warning("Résolution origine bobine échouée", exc_info=True)
                 origine = None
-        return {"found": False, "origine": origine}
+            poste, doublon = _poste_et_doublon(conn, code, machine_id, dossier, origine)
+        return {"found": False, "origine": origine, "poste": poste, "doublon_id": doublon}
     d = dict(row)
+    with get_db() as conn:
+        poste, doublon = _poste_et_doublon(
+            conn, code, machine_id, dossier,
+            {"fournisseur": d.get("fournisseur"), "confiance": "certain"},
+        )
     return {
         "found": True,
         "reception_id": d.get("reception_id"),
@@ -2647,7 +2719,32 @@ def lookup_reception_for_barcode(
         "certificat_fsc": d.get("certificat_fsc"),
         "fsc_type_claim": d.get("fsc_type_claim") or "non_fsc",
         "fournisseur_licence": d.get("fournisseur_licence") or "",
+        "poste": poste,
+        "doublon_id": doublon,
     }
+
+
+def _poste_et_doublon(conn, code, machine_id, no_dossier, fournisseur):
+    """Ce que l'écran de scan doit savoir en plus du fournisseur.
+
+    - `poste` : la nature de la bobine et son poste de déroulement, ou None si
+      la machine n'a pas de poste configuré — l'écran ne pose alors pas la
+      question.
+    - `doublon` : l'id du scan existant quand la bobine est déjà montée sur
+      cette machine ET déjà scannée sur ce dossier. L'écran s'arrête là.
+    """
+    if not machine_id:
+        return None, None
+    try:
+        if not poste_bobine.postes_machine(conn, machine_id):
+            return None, None
+        doublon = bobines_montees.scan_en_double(conn, machine_id, code, no_dossier)
+        rep = poste_bobine.resoudre(conn, code, machine_id=machine_id,
+                                    fournisseur=fournisseur, no_dossier=no_dossier)
+        return rep, doublon
+    except Exception:
+        logger.warning("Résolution du poste de la bobine échouée", exc_info=True)
+        return None, None
 
 
 @router.post("/api/fabrication/matieres")
@@ -2724,6 +2821,25 @@ async def add_matiere(request: Request):
         machine_id_resolved = machine_obj["id"]
         machine_name = machine_obj["nom"]
 
+        # Bobine déjà montée sur ce poste ET déjà scannée sur ce dossier : le
+        # second scan n'apprend rien. Relevé du 07/05/2026 : le même code
+        # enregistré douze fois en une minute sur Cohésio 2.
+        # Un ajout depuis MyProd › Traçabilité complète un dossier APRÈS coup :
+        # il ne dit rien de ce qui est monté sur la machine aujourd'hui.
+        apres_coup = bool(body.get("tracabilite"))
+        try:
+            doublon_id = None if apres_coup else bobines_montees.scan_en_double(
+                conn, machine_id_resolved, code_barre, no_dossier)
+        except Exception:
+            doublon_id = None
+        if doublon_id:
+            return {
+                "success": True, "id": doublon_id,
+                "matiere": _fetch_matiere_row(conn, doublon_id) or {},
+                "warning": False, "warning_message": None,
+                "doublon": True, "poste": None,
+            }
+
         try:
             conn.execute("BEGIN")
             cursor = conn.execute(
@@ -2738,6 +2854,9 @@ async def add_matiere(request: Request):
                 conn, new_id, code_barre, fid, fournisseur_libre,
                 origine=origine_det, confiance=origine_conf,
             )
+            montage = _monter_bobine_scannee(
+                conn, new_id, machine_id_resolved, code_barre, no_dossier, operateur, body,
+                monter=not apres_coup)
 
             fsc_warning = False
             fsc_warning_message = None
@@ -2798,7 +2917,88 @@ async def add_matiere(request: Request):
         "matiere": d,
         "warning": fsc_warning,
         "warning_message": fsc_warning_message,
+        "poste": montage,
     }
+
+
+def _monter_bobine_scannee(conn, fmu_id, machine_id, code_barre, no_dossier, operateur, body,
+                           monter: bool = True):
+    """Arrête la nature de la bobine scannée et la monte sur son poste.
+
+    La nature vient de l'écran quand l'opérateur l'a choisie ou validée
+    (`categorie_bobine`), sinon de la cascade de `poste_bobine`. Tout se passe
+    sous un SAVEPOINT : un échec ici laisse le scan enregistré tel qu'avant ce
+    chantier — perdre une bobine pour une question de poste serait absurde.
+
+    `monter=False` (ajout après coup depuis la traçabilité) arrête la nature
+    sans toucher à l'état de la machine.
+
+    Rend ce que l'écran doit afficher : le poste arrêté, et `a_confirmer` quand
+    la machine a des postes mais que rien n'a permis de trancher.
+    """
+    try:
+        conn.execute("SAVEPOINT montage_bobine")
+    except Exception:
+        return None
+    try:
+        if not poste_bobine.postes_machine(conn, machine_id):
+            conn.execute("RELEASE SAVEPOINT montage_bobine")
+            return None
+        cat = poste_bobine._norm_categorie(body.get("categorie_bobine"))
+        if cat:
+            src = str(body.get("poste_source") or "saisie").strip().lower()
+            src = src if src in poste_bobine.SOURCES else "saisie"
+            conf = _norm_confiance(body.get("poste_confiance"),
+                                   "certain" if src == "saisie" else "probable")
+            rep = {"categorie": cat, "poste": None, "source": src, "confiance": conf}
+        else:
+            f = conn.execute(
+                """SELECT COALESCE(sr.fournisseur, fmu.fournisseur_manual) AS nom,
+                          fmu.liaison_mode
+                     FROM fab_matieres_utilisees fmu
+                LEFT JOIN stock_receptions sr ON sr.id = fmu.reception_id
+                    WHERE fmu.id=?""",
+                (fmu_id,),
+            ).fetchone()
+            fourn = None
+            if f and f["nom"]:
+                fourn = {"fournisseur": f["nom"],
+                         "confiance": "certain" if f["liaison_mode"] == "reception" else "probable"}
+            rep = poste_bobine.resoudre(conn, code_barre, machine_id=machine_id,
+                                        fournisseur=fourn, no_dossier=no_dossier)
+            cat = rep.get("categorie")
+        from config import poste_pour_categorie
+        poste = rep.get("poste") or poste_pour_categorie(cat)
+        conn.execute(
+            """UPDATE fab_matieres_utilisees
+                  SET categorie_bobine=?, poste=?, poste_source=?, poste_confiance=?
+                WHERE id=?""",
+            (cat, poste, rep.get("source") if poste else None,
+             rep.get("confiance") if poste else None, fmu_id),
+        )
+        res = bobines_montees.monter(
+            conn, machine_id, code_barre, categorie=cat, poste=poste,
+            fab_matiere_id=fmu_id, no_dossier=no_dossier, par=operateur,
+            source=rep.get("source"), confiance=rep.get("confiance"),
+        ) if monter else {"action": "apres_coup", "demontees": []}
+        if cat and rep.get("source") in poste_bobine.SOURCES_APPRISES:
+            poste_bobine.apprendre_categorie(conn, code_barre, cat)
+        conn.execute("RELEASE SAVEPOINT montage_bobine")
+        return {
+            "categorie": cat, "poste": poste,
+            "source": rep.get("source") if poste else None,
+            "a_confirmer": not poste,
+            "action": res.get("action"),
+            "demontees": [b.get("code_barre") for b in res.get("demontees") or []],
+        }
+    except Exception:
+        logger.warning("Montage de la bobine scannée ignoré", exc_info=True)
+        try:
+            conn.execute("ROLLBACK TO SAVEPOINT montage_bobine")
+            conn.execute("RELEASE SAVEPOINT montage_bobine")
+        except Exception:
+            pass
+        return None
 
 
 # Chemins de détection acceptés depuis le client. La valeur ne sert qu'à
@@ -3005,6 +3205,10 @@ async def patch_matiere(matiere_id: int, request: Request):
                     "UPDATE fab_matieres_utilisees SET code_barre=? WHERE id=?",
                     (code_barre, matiere_id),
                 )
+                try:
+                    bobines_montees.changer_code(conn, matiere_id, code_barre)
+                except Exception:
+                    logger.warning("Code de la bobine montée non suivi", exc_info=True)
             _link_matiere_to_reception(
                 conn, matiere_id, code_barre, fid,
                 origine=origine_det, confiance=origine_conf,
@@ -3054,6 +3258,10 @@ def delete_matiere(matiere_id: int, request: Request, tracabilite: bool = False)
         ):
             raise HTTPException(status_code=403, detail="Non autorisé")
 
+        try:
+            bobines_montees.annuler_scan(conn, matiere_id)
+        except Exception:
+            logger.warning("Montage du scan supprimé non défait", exc_info=True)
         conn.execute("DELETE FROM fab_matieres_utilisees WHERE id=?", (matiere_id,))
         conn.commit()
 

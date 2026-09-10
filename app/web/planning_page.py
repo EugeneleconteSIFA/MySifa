@@ -2844,18 +2844,9 @@ async function toggleDestockage(entryId){
   // Déjà déstocké : on ouvre la relecture. Annuler d'un bloc pour corriger
   // une seule quantité obligeait à tout refaire — c'est ce qui fait qu'on ne
   // corrige pas, et qu'un stock faux le reste.
-  if(etat==="done"||etat==="reserve"){ openDestockageModal(entryId); return; }
-
-  try{
-    const r=await apiAbs(`/api/stock/destockage/${entryId}/auto`,{method:"POST"});
-    appliquerEtatDestockage(entryId,r.destockage||r.etat||"done",(r.reserves||[]).join(" ; "));
-    const nb=r.mouvements||0;
-    if((r.reserves||[]).length){
-      alert(`${nb} mati\u00e8re(s) sortie(s) du stock.\n\nRéserves \u00e0 traiter :\n\u2022 `+r.reserves.join("\n\u2022 "));
-    }else{
-      toast(`${nb} mati\u00e8re(s) sortie(s) du stock.`);
-    }
-  }catch(e){ alert(messageErreurDestockage(e)); }
+  // À destocker : même modale, en vérification. Rien ne sort du stock avant
+  // « Valider le déstockage » (10/09/2026) — le bouton écrivait directement.
+  openDestockageModal(entryId);
 }
 
 // Le serveur explique toujours POURQUOI il refuse — « métrage absent », « la
@@ -2892,7 +2883,7 @@ function updateDestockBtn(entryId, val){
   const T={
     done:    {c:"#38bdf8", t:"Destocké",   titre:"Matières sorties du stock — cliquer pour relire, ajuster ou annuler"},
     reserve: {c:"#fbbf24", t:"Réserves",   titre:"Déstocké en partie : une matière n'est pas rattachée — cliquer pour relire, ajuster ou annuler"},
-    todo:    {c:"#fb923c", t:"À destocker",titre:"Sortir les matières de ce dossier du stock"},
+    todo:    {c:"#fb923c", t:"À destocker",titre:"Vérifier puis sortir les matières de ce dossier du stock"},
   };
   const d=T[etat]||T.todo;
   const rgb=etat==="done"?"56,189,248":(etat==="reserve"?"251,191,36":"251,146,60");
@@ -4741,7 +4732,7 @@ function openEdit(id){
     ?"Matières sorties du stock — cliquer pour relire, ajuster ou annuler"
     :(destockEtat==="reserve"
       ?"Déstocké en partie : une matière n'est pas rattachée — cliquer pour relire, ajuster ou annuler"
-      :"Sortir les matières de ce dossier du stock");
+      :"Vérifier puis sortir les matières de ce dossier du stock");
   const reelNonDefault=hasSaisieReelle() && e.statut_reel && e.statut_reel!=="reellement_en_attente";
   const resetBlock=(hasSaisieReelle() && IS_DIR_OR_SUPER && reelNonDefault)?`<button type="button" class="btn-reset-saisie" data-eid="${id}" onclick="resetSaisieFromModal(${id})" style="margin-top:8px;width:100%;padding:7px;border-radius:6px;border:1px solid rgba(248,113,113,.4);background:rgba(248,113,113,.08);color:var(--danger);font-size:11px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">${icon('repeat',12)} Réinitialiser la saisie réelle</button>`:"";
   const annuleBlock=((e.annule_le||"").toString().trim())?`<div style="margin-bottom:12px;padding:9px 12px;border-radius:8px;

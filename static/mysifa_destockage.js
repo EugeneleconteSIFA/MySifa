@@ -1,18 +1,22 @@
-/* MySifa — relecture du déstockage d'un dossier.
+/* MySifa — vérification et relecture du déstockage d'un dossier.
  *
- * Une seule modale pour deux écrans : le planning (bouton « Destocké » d'un
- * dossier) et MyStock › Déstockage. Elle vivait dans planning_page.py ; la
- * copier dans stock_page.py aurait donné deux relectures qui divergent au
- * premier correctif — et c'est précisément un écran où le chiffre vu doit
- * être le chiffre écrit.
+ * Une seule modale pour deux écrans : le planning (bouton de déstockage d'un
+ * dossier) et MyStock › Déstockage. Deux copies d'un écran où le chiffre vu
+ * doit être le chiffre écrit auraient divergé au premier correctif.
  *
- * Unités (10/09/2026) : on saisit dans l'unité de l'atelier — mètres
- * linéaires, kilos, mandrins, cartons, palettes — et la colonne « simplifié »
- * montre ce que ça représente en bobines, tubes ou palettes. Les facteurs
- * viennent du serveur, qui s'en sert aussi pour écrire.
+ * Deux moments, la même modale :
+ * - AVANT la sortie (dossier « à destocker ») : on vérifie ce qui va sortir,
+ *   on corrige, puis « Valider le déstockage ». Rien ne sort sans ce clic —
+ *   un bouton qui écrivait directement dans le stock dérangeait (10/09/2026).
+ * - APRÈS : relecture de ce qui est sorti, ajustement, annulation.
  *
- * Aucune correction n'écrase un mouvement passé : le serveur écrit la
- * différence, dans un sens ou dans l'autre.
+ * Unités : on saisit dans l'unité de l'atelier — mètres linéaires, kilos,
+ * mandrins, cartons, palettes — et la colonne « simplifié » montre ce que ça
+ * représente en bobines, tubes ou palettes. Les facteurs viennent du serveur,
+ * qui s'en sert aussi pour écrire.
+ *
+ * Tout se règle depuis la modale : une référence manquante se crée, un
+ * conditionnement manquant se complète, la fiche matière s'ouvre à côté.
  *
  * API : MySifaDestockage.ouvrir(entryId, {
  *   reference, fermer(), toast(msg, type), onChange(etat, reserve), icone
@@ -21,11 +25,23 @@
 (function () {
   'use strict';
 
-  const E = { opts: null, data: null, cand: {}, rows: [], entryId: null };
+  const E = { opts: null, data: null, cand: {}, rows: [], entryId: null, edition: null };
 
   const UNITES = {ml: ['ml', 'ml'], kg: ['kg', 'kg'], bobine: ['bobine', 'bobines'],
     tube: ['tube', 'tubes'], palette: ['palette', 'palettes'], carton: ['carton', 'cartons'],
     mandrin: ['mandrin', 'mandrins'], u: ['u', 'u']};
+
+  // Ce qu'il faut sur une fiche matière pour convertir, par nature de ligne.
+  const CHAMPS_CONDITIONNEMENT = {
+    support: [['metres_lineaires_par_bobine', 'Mètres linéaires par bobine']],
+    glassine: [['metres_lineaires_par_bobine', 'Mètres linéaires par bobine']],
+    carton: [['unites_par_palette', 'Cartons par palette']],
+    mandrin: [['longueur_tube_mm', 'Longueur du tube (mm)'], ['unites_par_palette', 'Tubes par palette']],
+    adhesif: [],
+    palette: [],
+  };
+  const LIBELLES_CATEGORIE = {frontal: 'Frontal', complexe: 'Complexe', glassine: 'Glassine',
+    adhesif: 'Adhésif', mandrin: 'Mandrin', carton: 'Carton', palette: 'Palette'};
 
   function esc(v) {
     return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -64,12 +80,14 @@
         else if (d && d.message) msg = d.message;
         else if (d) msg = JSON.stringify(d);
       } catch (e) {}
+      if (r.status === 403) msg = 'Action réservée aux administrateurs matières.';
       throw new Error(msg);
     }
     const ct = r.headers.get('content-type') || '';
     return ct.includes('application/json') ? r.json() : null;
   }
 
+  function apercu() { return ((E.data && E.data.dossier) || {}).destockage === 'todo'; }
   function candidat(mid) { return E.cand[mid] || null; }
 
   function laizeParDefaut(c) {
@@ -83,10 +101,15 @@
     return laizes.length === 1 ? laizes[0].laize_id : null;
   }
 
-  function preparer(d) {
+  function cleLigne(l) { return (l.kind || '') + '|' + (l.source_value || '') + '|' + (l.hors_fiche ? l.matiere_id : ''); }
+
+  function preparer(d, garder) {
     const cand = {};
     Object.values(d.candidats || {}).forEach(liste => (liste || []).forEach(c => { cand[c.matiere_id] = c; }));
     const lignes = (d.lignes || []).filter(l => l.matiere_id || l.destockable === false);
+    const avant = {};
+    (garder || []).forEach(r => { avant[cleLigne(r.ligne)] = r; });
+    const enApercu = (d.dossier || {}).destockage === 'todo';
     E.rows = lignes.map(l => {
       // La matière de la ligne, même absente des candidats (désactivée
       // depuis) : sinon la liste afficherait une autre matière que celle
@@ -98,31 +121,63 @@
       }
       const conv = l.conversion || {};
       const dejaSorti = Math.abs(Number(l.sorti || 0)) > 1e-9;
-      // Ajusté = ce qui doit AU TOTAL être sorti. Une ligne déjà sortie part
-      // de son sorti ; une ligne restée en réserve part du consommé, pour que
-      // la remplacer par une matière convertible la fasse sortir d'un geste.
-      let val = dejaSorti ? l.sorti_reel : (l.destockable === false ? l.consomme : (l.sorti_reel ?? 0));
+      // Ajusté = ce qui doit AU TOTAL être sorti. Avant la sortie, on part du
+      // consommé calculé ; après, du sorti. Une ligne restée en réserve part
+      // du consommé, pour que la compléter la fasse sortir d'un geste.
+      let val = dejaSorti ? l.sorti_reel
+        : ((enApercu || l.destockable === false) ? l.consomme : (l.sorti_reel ?? 0));
       if (val === null || val === undefined) val = 0;
       if (conv.entier) val = Math.round(Number(val));
-      return {ligne: l, mid: l.matiere_id || null, lid: l.laize_id ?? null, val: Number(val)};
+      const row = {ligne: l, mid: l.matiere_id || null, lid: l.laize_id ?? null, val: Number(val)};
+      // Après une création ou un complément de fiche, la modale se recharge :
+      // ce que l'utilisateur avait déjà saisi ne doit pas disparaître.
+      const p = avant[cleLigne(l)];
+      if (p) {
+        row.val = p.val;
+        if (p.mid && (p.mid !== l.matiere_id || !l.matiere_id)) { row.mid = p.mid; row.lid = p.lid; }
+      }
+      return row;
     });
     E.cand = cand;
     E.data = d;
+    E.rows.forEach(r => {
+      if (r.mid && r.lid == null) r.lid = laizeParDefaut(candidat(r.mid));
+    });
+  }
+
+  function lienFiche(mid) {
+    return '<a href="/stock?matiere=' + encodeURIComponent(mid) + '" target="_blank" rel="noopener" '
+      + 'style="color:var(--accent);text-decoration:none;font-weight:600">Fiche matière ↗</a>';
+  }
+  function boutonPetit(attr, i, libelle) {
+    return '<button type="button" ' + attr + '="' + i + '" style="margin-top:6px;margin-right:6px;padding:5px 10px;'
+      + 'border-radius:7px;border:1px solid var(--accent);background:var(--bg);color:var(--accent);'
+      + 'font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">' + libelle + '</button>';
   }
 
   function simplifieHtml(i) {
     const r = E.rows[i];
     const c = candidat(r.mid);
     const conv = (c && c.conversion) || {};
-    if (!r.mid) return '<span style="color:var(--warn)">Choisir une matière</span>';
-    if (conv.facteur_simplifie == null) {
-      return '<span style="color:var(--warn)">' + esc(conv.manque || 'Conversion impossible') + '</span>';
+    if (!r.mid) {
+      return '<span style="color:var(--warn)">Référence manquante — choisir une matière ou la créer</span><br>'
+        + boutonPetit('data-dr-creer', i, 'Créer cette référence');
+    }
+    if (conv.facteur_simplifie == null || conv.facteur_stock == null) {
+      const peutCompleter = (CHAMPS_CONDITIONNEMENT[c && c.kind] || []).length > 0;
+      let h = '';
+      if (conv.facteur_simplifie != null) {
+        const n0 = Number(r.val || 0) * Number(conv.facteur_simplifie);
+        h += '<span style="font-variant-numeric:tabular-nums">' + nombre(n0) + '</span> '
+          + esc(unite(conv.unite_simplifiee, n0)) + '<br>';
+      }
+      h += '<span style="color:var(--warn)">' + esc(conv.manque || 'Conversion impossible') + '</span><br>'
+        + (peutCompleter ? boutonPetit('data-dr-fiche', i, 'Compléter la fiche') : '')
+        + lienFiche(r.mid);
+      return h;
     }
     const n = Number(r.val || 0) * Number(conv.facteur_simplifie);
     let h = '<span style="font-variant-numeric:tabular-nums">' + nombre(n) + '</span> ' + esc(unite(conv.unite_simplifiee, n));
-    if (conv.facteur_stock == null && conv.manque) {
-      h += '<div style="font-size:11px;color:var(--warn)">' + esc(conv.manque) + '</div>';
-    }
     const l = r.ligne;
     const meme = r.mid === l.matiere_id && (r.lid ?? null) === (l.laize_id ?? null);
     if (l.sorti_reel != null && Math.abs(Number(l.sorti || 0)) > 1e-9
@@ -132,6 +187,59 @@
         + (meme ? '' : ' de ' + esc(l.matiere_ref || '')) + '</div>';
     }
     return h;
+  }
+
+  const STYLE_CHAMP = 'width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);'
+    + 'border-radius:7px;padding:7px 9px;color:var(--text);font-family:inherit;font-size:13px';
+
+  function champ(nom, libelle, valeur, type) {
+    return '<label style="display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:600;'
+      + 'text-transform:uppercase;letter-spacing:.4px;color:var(--muted);min-width:170px;flex:1">'
+      + esc(libelle) + '<input data-dr-champ="' + nom + '" type="' + (type || 'number') + '" '
+      + (type === 'text' ? '' : 'step="any" min="0" ') + 'value="' + esc(valeur == null ? '' : valeur) + '" '
+      + 'style="' + STYLE_CHAMP + ';text-transform:none;letter-spacing:0;font-weight:400"></label>';
+  }
+
+  function editionHtml(i) {
+    const r = E.rows[i];
+    const l = r.ligne;
+    const ed = E.edition;
+    let corps = '';
+    if (ed.mode === 'creer') {
+      const cats = l.categories_remplacement || [];
+      const cat = ed.categorie || cats[0] || '';
+      const selCat = '<label style="display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:600;'
+        + 'text-transform:uppercase;letter-spacing:.4px;color:var(--muted);min-width:150px">Catégorie'
+        + '<select data-dr-champ="categorie" style="' + STYLE_CHAMP + '">'
+        + cats.map(k => '<option value="' + esc(k) + '"' + (k === cat ? ' selected' : '') + '>'
+          + esc(LIBELLES_CATEGORIE[k] || k) + '</option>').join('') + '</select></label>';
+      corps = selCat
+        + champ('reference', 'Référence', ed.reference != null ? ed.reference : l.source_value, 'text')
+        + champ('designation', 'Désignation', ed.designation != null ? ed.designation : l.source_value, 'text')
+        + (CHAMPS_CONDITIONNEMENT[l.kind] || []).map(([n, lib]) => champ(n, lib, '')).join('')
+        + (cat === 'palette' ? champ('palettes_par_pile', 'Palettes par pile', 1) : '');
+    } else {
+      const c = candidat(r.mid) || {};
+      corps = (CHAMPS_CONDITIONNEMENT[c.kind] || []).map(([n, lib]) => champ(n, lib, '')).join('');
+    }
+    const titre = ed.mode === 'creer'
+      ? 'Créer la référence « ' + esc(l.source_value || '') + ' »'
+      : 'Compléter la fiche de « ' + esc((candidat(r.mid) || {}).reference || '') + ' »';
+    const aide = ed.mode === 'creer'
+      ? 'La matière est créée dans MyStock et associée à cette valeur de fiche : les prochains dossiers la trouveront seuls.'
+      : 'Les champs laissés vides ne sont pas modifiés. Le reste de la fiche s\'édite dans MyStock.';
+    return '<tr data-dr-edition="' + i + '"><td colspan="4" style="padding:4px 10px 14px">'
+      + '<div style="border:1px solid var(--accent);border-radius:10px;padding:12px 14px;background:var(--bg)">'
+      + '<div style="font-weight:700;font-size:13px;margin-bottom:4px">' + titre + '</div>'
+      + '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">' + aide + '</div>'
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">' + corps + '</div>'
+      + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">'
+      + '<button type="button" data-dr-edition-annuler style="padding:7px 12px;border-radius:8px;border:1px solid var(--border);'
+      + 'background:var(--card);color:var(--text);font-family:inherit;cursor:pointer">Annuler</button>'
+      + '<button type="button" data-dr-edition-valider style="padding:7px 14px;border-radius:8px;border:1px solid var(--accent);'
+      + 'background:var(--accent);color:white;font-family:inherit;font-weight:700;cursor:pointer">'
+      + (ed.mode === 'creer' ? 'Créer la référence' : 'Enregistrer la fiche') + '</button>'
+      + '</div></div></td></tr>';
   }
 
   function ligneHtml(i) {
@@ -168,17 +276,22 @@
     } else if (r.lid != null) {
       const lz = laizes.find(x => x.laize_id === r.lid);
       if (lz) laizeHtml = '<span>' + Math.round(Number(lz.valeur_mm || 0)) + ' mm</span>';
+    } else if (r.mid && c && ['frontal', 'complexe', 'glassine'].includes(c.categorie)) {
+      laizeHtml = '<span style="color:var(--warn)">aucune laize sur la matière</span> '
+        + boutonPetit('data-dr-lier', i, 'Ajouter la laize du dossier');
     }
     const remplace = (r.mid && l.matiere_id && r.mid !== l.matiere_id)
       ? 'remplace « ' + esc(l.matiere_ref || l.source_value || '') + ' »'
-      : (l.remplace && r.mid === l.matiere_id ? 'remplace « ' + esc(l.remplace.matiere_ref || '') + ' »' : '');
-    const sous = [laizeHtml, remplace, l.hors_fiche ? 'ajoutée à la main' : ''].filter(Boolean)
+      : (!l.matiere_id && r.mid && l.source_value ? 'pour « ' + esc(l.source_value) + ' »'
+        : (l.remplace && r.mid === l.matiere_id ? 'remplace « ' + esc(l.remplace.matiere_ref || '') + ' »' : ''));
+    const sous = [laizeHtml, remplace, l.hors_fiche ? 'ajoutée à la main' : '',
+      (r.mid && conv.facteur_stock != null) ? lienFiche(r.mid) : ''].filter(Boolean)
       .join('<span style="color:var(--muted)"> · </span>');
 
     const bloque = !r.mid || conv.facteur_stock == null;
     const step = conv.entier ? '1' : (conv.unite_reelle === 'ml' ? '1' : '0.001');
     const u = conv.unite_reelle || l.besoin_unite || '';
-    return '<tr data-dr-i="' + i + '">'
+    let html = '<tr data-dr-i="' + i + '">'
       + '<td style="padding:9px 10px;vertical-align:top">' + select
       + '<div style="font-size:11px;color:var(--muted);margin-top:3px">' + sous + '</div></td>'
       + '<td style="padding:9px 10px;text-align:right;vertical-align:top;color:var(--muted);white-space:nowrap">'
@@ -192,6 +305,8 @@
       + esc(unite(u, r.val)) + '</span></td>'
       + '<td data-dr-simpl="' + i + '" style="padding:9px 10px;vertical-align:top;font-size:12.5px">' + simplifieHtml(i) + '</td>'
       + '</tr>';
+    if (E.edition && E.edition.i === i) html += editionHtml(i);
+    return html;
   }
 
   function rendreLignes() {
@@ -214,6 +329,7 @@
     // 18 000 ml, seul le nombre de bobines bouge.
     if (c && c.conversion && c.conversion.entier) r.val = Math.round(Number(r.val || 0));
     if (!avant && c && !r.val && r.ligne.consomme) r.val = Number(r.ligne.consomme);
+    if (E.edition && E.edition.i === i) E.edition = null;
     rendreLignes();
   }
 
@@ -227,31 +343,119 @@
     if (td) td.innerHTML = simplifieHtml(i);
   }
 
+  async function recharger() {
+    const garder = E.rows.map(r => ({ligne: r.ligne, mid: r.mid, lid: r.lid, val: r.val}));
+    const d = await appel('/api/stock/destockage/' + E.entryId + '/relecture');
+    preparer(d, garder);
+    const body = document.getElementById('dr-body');
+    if (body) { body.innerHTML = corpsHtml(d); rendreLignes(); }
+  }
+
+  function lireEdition() {
+    const zone = document.querySelector('[data-dr-edition]');
+    const out = {};
+    if (!zone) return out;
+    zone.querySelectorAll('[data-dr-champ]').forEach(inp => {
+      const v = String(inp.value || '').trim();
+      if (v !== '') out[inp.getAttribute('data-dr-champ')] = v;
+    });
+    return out;
+  }
+
+  async function lier(i, mid) {
+    const l = E.rows[i].ligne;
+    return appel('/api/stock/destockage/' + E.entryId + '/rattacher', {
+      method: 'POST',
+      body: JSON.stringify({matiere_id: mid, kind: l.hors_fiche ? '' : l.kind, source_value: l.hors_fiche ? '' : l.source_value}),
+    });
+  }
+
+  async function validerEdition(bouton) {
+    const ed = E.edition;
+    if (!ed) return;
+    const r = E.rows[ed.i];
+    const v = lireEdition();
+    if (bouton) bouton.disabled = true;
+    try {
+      if (ed.mode === 'creer') {
+        if (!v.reference || !v.designation) throw new Error('Référence et désignation obligatoires.');
+        const categorie = v.categorie || (r.ligne.categories_remplacement || [])[0];
+        const cree = await appel('/api/stock/matieres', {method: 'POST', body: JSON.stringify({
+          categorie: categorie, reference: v.reference, designation: v.designation,
+          unites_par_palette: v.unites_par_palette, longueur_tube_mm: v.longueur_tube_mm,
+          palettes_par_pile: v.palettes_par_pile,
+        })});
+        if (v.metres_lineaires_par_bobine) {
+          await appel('/api/stock/matieres/' + cree.id, {method: 'PUT',
+            body: JSON.stringify({metres_lineaires_par_bobine: v.metres_lineaires_par_bobine})});
+        }
+        const lien = await lier(ed.i, cree.id);
+        r.mid = cree.id;
+        r.lid = lien && lien.laize_id != null ? lien.laize_id : null;
+        if (!r.val && r.ligne.consomme) r.val = Number(r.ligne.consomme);
+        toast('Référence « ' + v.reference + ' » créée et associée.', 'success');
+      } else {
+        const champs = {};
+        ['metres_lineaires_par_bobine', 'unites_par_palette', 'longueur_tube_mm'].forEach(k => {
+          if (v[k] != null) champs[k] = v[k];
+        });
+        if (!Object.keys(champs).length) throw new Error('Aucun champ renseigné.');
+        await appel('/api/stock/matieres/' + r.mid, {method: 'PUT', body: JSON.stringify(champs)});
+        toast('Fiche matière complétée.', 'success');
+      }
+      E.edition = null;
+      await recharger();
+    } catch (e) {
+      toast(e.message || 'Enregistrement impossible.', 'danger');
+      if (bouton) bouton.disabled = false;
+    }
+  }
+
   function corpsHtml(d) {
     const dossier = d.dossier || {};
+    const enApercu = dossier.destockage === 'todo';
     const reserve = (dossier.destockage_reserve || '').trim();
-    const bandeau = reserve
-      ? '<div style="margin-bottom:14px;padding:11px 14px;border-radius:9px;background:var(--bg);'
+    const blocage = ((d.controle || {}).blocage || '').trim();
+    let bandeau = '';
+    if (enApercu) {
+      bandeau = '<div style="margin-bottom:14px;padding:11px 14px;border-radius:9px;background:var(--bg);'
+        + 'border:1px solid var(--accent);font-size:12.5px;line-height:1.6;color:var(--text)">'
+        + '<b style="color:var(--accent)">Vérifier avant de déstocker</b><br>Rien n\'est encore sorti du stock. '
+        + 'Contrôlez les quantités, complétez ce qui manque, puis validez.'
+        + (blocage ? '<br><span style="color:var(--warn)">Le calcul automatique a refusé ce dossier : '
+          + esc(blocage) + ' Saisissez les quantités à la main.</span>' : '')
+        + '</div>';
+    } else if (reserve) {
+      bandeau = '<div style="margin-bottom:14px;padding:11px 14px;border-radius:9px;background:var(--bg);'
         + 'border:1px solid var(--warn);font-size:12.5px;line-height:1.6;color:var(--text)">'
-        + '<b style="color:var(--warn)">Déstocké avec réserves</b><br>' + esc(reserve) + '</div>'
-      : '';
+        + '<b style="color:var(--warn)">Déstocké avec réserves</b><br>' + esc(reserve) + '</div>';
+    }
     const etatTxt = dossier.destockage === 'reserve' ? 'avec réserves'
-      : (dossier.destockage === 'done' ? 'complet' : 'non déstocké');
+      : (dossier.destockage === 'done' ? 'complet' : 'à faire');
     const quand = (dossier.destockage_at || '').slice(0, 16).replace('T', ' ');
     const relu = dossier.destockage_relu_par
       ? ' · relu par ' + esc(dossier.destockage_relu_par)
         + (dossier.destockage_relu_at ? ' le ' + esc(String(dossier.destockage_relu_at).slice(0, 16).replace('T', ' ')) : '')
       : '';
     const th = 'padding:9px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)';
-    const lever = dossier.destockage === 'reserve'
+    const lever = (!enApercu && dossier.destockage === 'reserve')
       ? '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);margin-right:auto">'
         + '<input type="checkbox" id="dr-lever"> Lever la réserve — les manques ont été traités</label>'
       : '<span style="margin-right:auto"></span>';
+    const boutons = enApercu
+      ? '<button type="button" data-dr-action="fermer" style="padding:9px 14px;border-radius:8px;border:1px solid var(--border);'
+        + 'background:var(--bg);color:var(--text);font-family:inherit;font-weight:600;cursor:pointer">Annuler</button>'
+        + '<button type="button" data-dr-action="enregistrer" style="padding:9px 16px;border-radius:8px;border:1px solid var(--accent);'
+        + 'background:var(--accent);color:white;font-family:inherit;font-weight:700;cursor:pointer">Valider le déstockage</button>'
+      : '<button type="button" data-dr-action="annuler" style="padding:9px 14px;border-radius:8px;border:1px solid var(--border);'
+        + 'background:var(--bg);color:var(--danger);font-family:inherit;font-weight:600;cursor:pointer">Annuler tout le déstockage</button>'
+        + '<button type="button" data-dr-action="enregistrer" style="padding:9px 16px;border-radius:8px;border:1px solid var(--accent);'
+        + 'background:var(--accent);color:white;font-family:inherit;font-weight:700;cursor:pointer">Enregistrer</button>';
     return bandeau
       + '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Déstockage ' + esc(etatTxt)
       + (quand ? ' · ' + esc(quand) : '') + (dossier.destockage_par ? ' par ' + esc(dossier.destockage_par) : '') + relu
-      + '. « Ajusté » est la quantité réellement consommée, AU TOTAL, dans l\'unité de l\'atelier ;'
-      + ' le serveur écrit la différence. Une matière peut être remplacée par une autre de la même catégorie.</div>'
+      + '. « Ajusté » est la quantité réellement consommée, AU TOTAL, dans l\'unité de l\'atelier. '
+      + 'Une matière peut être remplacée par une autre de la même catégorie.</div>'
       + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'
       + '<thead><tr style="background:var(--bg)">'
       + '<th style="' + th + ';text-align:left">Matière</th>'
@@ -259,12 +463,7 @@
       + '<th style="' + th + ';text-align:right">Ajusté</th>'
       + '<th style="' + th + ';text-align:left">Simplifié</th>'
       + '</tr></thead><tbody id="dr-tbody"></tbody></table></div>'
-      + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px">' + lever
-      + '<button type="button" data-dr-action="annuler" style="padding:9px 14px;border-radius:8px;border:1px solid var(--border);'
-      + 'background:var(--bg);color:var(--danger);font-family:inherit;font-weight:600;cursor:pointer">Annuler tout le déstockage</button>'
-      + '<button type="button" data-dr-action="enregistrer" style="padding:9px 16px;border-radius:8px;border:1px solid var(--accent);'
-      + 'background:var(--accent);color:white;font-family:inherit;font-weight:700;cursor:pointer">Enregistrer</button>'
-      + '</div>';
+      + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px">' + lever + boutons + '</div>';
   }
 
   function brancher(body) {
@@ -274,34 +473,53 @@
       else if (t.hasAttribute('data-dr-lz')) {
         const r = E.rows[Number(t.getAttribute('data-dr-lz'))];
         if (r) { r.lid = t.value === '' ? null : Number(t.value); rendreLignes(); }
+      } else if (t.getAttribute('data-dr-champ') === 'categorie' && E.edition) {
+        const v = lireEdition();
+        E.edition = Object.assign(E.edition, {categorie: t.value, reference: v.reference, designation: v.designation});
+        rendreLignes();
       }
     });
     body.addEventListener('input', (ev) => {
       const t = ev.target;
       if (t.hasAttribute('data-dr-q')) changerQuantite(Number(t.getAttribute('data-dr-q')), t.value);
     });
-    body.addEventListener('click', (ev) => {
-      const b = ev.target.closest('[data-dr-action]');
-      if (!b) return;
-      if (b.getAttribute('data-dr-action') === 'enregistrer') enregistrer();
-      else annulerTout();
+    body.addEventListener('click', async (ev) => {
+      const t = ev.target.closest('button');
+      if (!t) return;
+      if (t.hasAttribute('data-dr-creer')) { E.edition = {i: Number(t.getAttribute('data-dr-creer')), mode: 'creer'}; rendreLignes(); return; }
+      if (t.hasAttribute('data-dr-fiche')) { E.edition = {i: Number(t.getAttribute('data-dr-fiche')), mode: 'completer'}; rendreLignes(); return; }
+      if (t.hasAttribute('data-dr-edition-annuler')) { E.edition = null; rendreLignes(); return; }
+      if (t.hasAttribute('data-dr-edition-valider')) { validerEdition(t); return; }
+      if (t.hasAttribute('data-dr-lier')) {
+        const i = Number(t.getAttribute('data-dr-lier'));
+        t.disabled = true;
+        try {
+          const res = await lier(i, E.rows[i].mid);
+          if (res && res.laize_id != null) E.rows[i].lid = res.laize_id;
+          await recharger();
+        } catch (e) { toast(e.message || 'Rattachement impossible.', 'danger'); t.disabled = false; }
+        return;
+      }
+      const a = t.getAttribute('data-dr-action');
+      if (a === 'enregistrer') enregistrer(t);
+      else if (a === 'annuler') annulerTout();
+      else if (a === 'fermer') fermer();
     });
   }
 
   async function ouvrir(entryId, opts) {
     E.opts = opts || {};
     E.entryId = entryId;
-    E.data = null; E.rows = []; E.cand = {};
+    E.data = null; E.rows = []; E.cand = {}; E.edition = null;
     const root = document.getElementById('mroot');
     if (!root) return;
     const ref = E.opts.reference || 'Dossier';
     // Styles portés par la modale elle-même : le planning et MyStock n'ont
-    // pas les mêmes classes de modale, et une relecture qui s'affiche sans
-    // fond sur l'un des deux écrans ne se lit pas.
+    // pas les mêmes classes de modale.
     root.innerHTML = '<div data-dr-overlay style="position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.55);'
       + 'display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow-y:auto">'
       + '<div role="dialog" aria-modal="true" style="background:var(--card);color:var(--text);border:1px solid var(--border);'
-      + 'border-radius:14px;width:100%;max-width:1040px;padding:22px 24px;box-shadow:0 20px 60px rgba(0,0,0,.35)">'
+      + 'border-radius:14px;width:100%;max-width:1100px;padding:22px 24px;box-shadow:0 20px 60px rgba(0,0,0,.35)">'
       + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:12px">'
       + '<h3 style="margin:0;font-size:18px;color:var(--text);display:flex;align-items:center;gap:8px">'
       + (E.opts.icone || '') + ' Déstockage — ' + esc(ref) + '</h3>'
@@ -324,9 +542,12 @@
     }
   }
 
-  async function enregistrer() {
+  async function enregistrer(bouton) {
+    const enApercu = apercu();
     const lignes = [];
-    for (const r of E.rows) {
+    const aLier = [];
+    for (let i = 0; i < E.rows.length; i++) {
+      const r = E.rows[i];
       // Les matières qui portaient déjà une sortie sur cette ligne sont
       // renvoyées à zéro ; la matière retenue porte la quantité. Le serveur
       // additionne par matière et laize : garder la même matière revient à
@@ -353,17 +574,35 @@
         return;
       }
       lignes.push({matiere_id: r.mid, laize_id: r.lid ?? null, quantite_reelle: q});
+      // Une valeur de fiche sans correspondance, résolue à l'écran : on la
+      // retient pour les prochains dossiers.
+      if (!r.ligne.matiere_id && r.ligne.source_value && !r.ligne.hors_fiche) aLier.push(i);
     }
     if (!lignes.length) { toast('Aucune quantité à enregistrer.', 'info'); return; }
     const lever = document.getElementById('dr-lever');
+    if (bouton) bouton.disabled = true;
     try {
+      for (const i of aLier) {
+        try { await lier(i, E.rows[i].mid); } catch (e) { /* l'association est un confort, pas une condition */ }
+      }
       const r = await appel('/api/stock/destockage/' + E.entryId + '/ajuster', {
         method: 'POST', body: JSON.stringify({lignes, lever_reserve: !!(lever && lever.checked)})});
       const n = (r.ajustements || []).length;
       fermer();
-      if (E.opts.onChange) E.opts.onChange(r.destockage || 'done', r.destockage === 'reserve' ? (E.data.dossier || {}).destockage_reserve : null);
-      toast(n ? n + ' ajustement(s) enregistré(s).' : 'Relecture enregistrée — aucun écart.', 'success');
-    } catch (e) { toast(e.message || 'Enregistrement impossible.', 'danger'); }
+      if (E.opts.onChange) {
+        E.opts.onChange(r.destockage || 'done',
+          r.destockage === 'reserve' ? ((r.reserves || []).join(' ; ') || (E.data.dossier || {}).destockage_reserve) : null);
+      }
+      if (enApercu) {
+        toast(n + ' matière(s) sortie(s) du stock' + ((r.reserves || []).length ? ' — avec réserves.' : '.'),
+          (r.reserves || []).length ? 'info' : 'success');
+      } else {
+        toast(n ? n + ' ajustement(s) enregistré(s).' : 'Relecture enregistrée — aucun écart.', 'success');
+      }
+    } catch (e) {
+      toast(e.message || 'Enregistrement impossible.', 'danger');
+      if (bouton) bouton.disabled = false;
+    }
   }
 
   async function annulerTout() {

@@ -1264,6 +1264,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
+<script src="/static/mysifa_poste_bobine.js?v=1"></script>
 <script src="/static/mysifa_bobine_edit.js?v=1.0"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
@@ -3681,6 +3682,14 @@ function tracaBuildMatiereBody(codeBarre, extra){
 
 function tracaApplyMatiereSaved(d, clean){
   S.tracaMatieres = [...S.tracaMatieres, d.matiere];
+  // Le poste arrete et, s'il etait plein, la bobine qu'on vient de remplacer :
+  // c'est ce qui permet a l'operateur de voir que l'application a compris.
+  const p = d.poste;
+  let msgPoste = 'Bobine enregistrée.';
+  if(p && p.poste){
+    msgPoste = 'Bobine enregistrée · poste ' + p.poste
+      + ((p.demontees && p.demontees.length) ? ' · remplace ' + p.demontees.join(', ') : '') + '.';
+  }
   S.tracaLastCode = clean;
   S.tracaManual = '';
   render();
@@ -3688,7 +3697,7 @@ function tracaApplyMatiereSaved(d, clean){
   // sans cette invalidation, le bandeau resterait bloqué sur « aucune bobine
   // scannée » alors que l'opérateur vient précisément de régulariser.
   _fscInvalidateStatut();
-  showToast('Bobine enregistrée.','success');
+  showToast(msgPoste,'success');
 }
 
 function closeFscWarningModal(){
@@ -3747,6 +3756,10 @@ async function tracaConfirmFscWarning(matiereId, note){
 
 async function tracaHandleMatiereResponse(d, clean){
   if(!d || !d.success) return false;
+  if(d.doublon){
+    showToast('Bobine déjà enregistrée sur ce dossier.','info');
+    return true;
+  }
   if(d.warning){
     showFscWarningModal(d.warning_message||'Incompatibilité certification FSC.',
       async (note)=>{
@@ -3783,19 +3796,29 @@ async function tracaSaveCode(code){
     // Le dossier part avec la question : les autres bobines de la meme serie
     // sont le dernier indice utile quand le code n'a jamais ete vu.
     const dossierRef = (S.dossier && S.dossier.reference) || '';
+    // La machine part aussi : elle dit quels postes de deroulement existent,
+    // et si la bobine y est deja montee.
+    const macId = (S.user&&S.user.machine_id) || S.adminMachineId;
     const lookup = await apiFetch(
       '/api/fabrication/receptions/lookup?code_barre=' + encodeURIComponent(clean)
       + (dossierRef ? '&no_dossier=' + encodeURIComponent(dossierRef) : '')
+      + (macId ? '&machine_id=' + encodeURIComponent(macId) : '')
     );
+    if(lookup && lookup.doublon_id){
+      showToast('Bobine déjà enregistrée sur ce dossier.','info');
+      return;
+    }
     if(lookup && lookup.found){
       await tracaShowFicheConfirmation(clean, {
         fournisseur: lookup.fournisseur || '—',
         licence: lookup.fournisseur_licence || '—',
         fsc_type_claim: lookup.fsc_type_claim || 'non_fsc',
+        poste: lookup.poste || null,
       });
     }else{
       await loadFournisseursFSC();
-      await tracaShowFicheManuelle(clean, (lookup && lookup.origine) || null);
+      await tracaShowFicheManuelle(clean, (lookup && lookup.origine) || null,
+                                   (lookup && lookup.poste) || null);
     }
   }catch(e){
     showToast(e.message || 'Erreur scan.','danger');
@@ -3840,6 +3863,7 @@ function tracaShowFicheConfirmation(codeBarre, infos){
         </div>
 
         <div style="margin-bottom:16px">${fscBadge}</div>
+        ${window.MysPosteBobine ? window.MysPosteBobine.html(infos.poste) : ''}
 
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button type="button" class="btn btn-ghost" id="fiche-cancel" style="font-size:13px">Annuler</button>
@@ -3848,20 +3872,29 @@ function tracaShowFicheConfirmation(codeBarre, infos){
       </div>`;
 
     document.body.appendChild(overlay);
+    const choixPoste = window.MysPosteBobine
+      ? window.MysPosteBobine.bind(overlay.querySelector('.mpb'), infos.poste) : null;
 
     overlay.querySelector('#fiche-cancel').onclick = () => {
+      if(choixPoste) choixPoste.detach();
       overlay.remove();
       resolve(null);
     };
 
     overlay.querySelector('#fiche-confirm').onclick = async () => {
+      if(choixPoste && choixPoste.manque()){
+        showToast('Indiquez le poste : frontal, complexe ou glassine.','danger');
+        return;
+      }
+      const extraPoste = choixPoste ? choixPoste.get() : {};
+      if(choixPoste) choixPoste.detach();
       overlay.remove();
       set({tracaAutoSaving:true});
       try{
         const d = await apiFetch('/api/fabrication/matieres',{
           method:'POST',
           headers:{'Content-Type':'application/json'},
-          body:JSON.stringify(tracaBuildMatiereBody(codeBarre)),
+          body:JSON.stringify(tracaBuildMatiereBody(codeBarre, extraPoste)),
         });
         await tracaHandleMatiereResponse(d, codeBarre);
       }catch(e){
@@ -3878,7 +3911,7 @@ function tracaShowFicheConfirmation(codeBarre, infos){
 // seul code-barres (cf. app/services/origine_bobine.py). Il n'apporte AUCUN
 // certificat : la modale pre-remplit et explique sur quoi elle se fonde, mais
 // c'est toujours l'operateur qui arrete la reponse.
-function tracaShowFicheManuelle(codeBarre, origine){
+function tracaShowFicheManuelle(codeBarre, origine, poste){
   return new Promise((resolve) => {
     const list = Array.isArray(FOURNISSEURS_FSC) ? FOURNISSEURS_FSC : [];
     const overlay = document.createElement('div');
@@ -3937,6 +3970,7 @@ function tracaShowFicheManuelle(codeBarre, origine){
           Il sera quand même enregistré : indiquez de qui vient la bobine.
         </div>`}
         ${bandeau}
+        ${window.MysPosteBobine ? window.MysPosteBobine.html(poste) : ''}
 
         <label style="font-size:11px;font-weight:800;text-transform:uppercase;
                       letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:8px">
@@ -3997,6 +4031,8 @@ function tracaShowFicheManuelle(codeBarre, origine){
       </div>`;
 
     document.body.appendChild(overlay);
+    const choixPoste = window.MysPosteBobine
+      ? window.MysPosteBobine.bind(overlay.querySelector('.mpb'), poste) : null;
 
     const inp = overlay.querySelector('#fiche-fournisseur-input');
     const nomEl = overlay.querySelector('#fiche-fournisseur-nom');
@@ -4232,6 +4268,7 @@ function tracaShowFicheManuelle(codeBarre, origine){
     if(!focusConfie) requestAnimationFrame(placerFocus);
 
     overlay.querySelector('#fiche-manual-cancel').onclick = () => {
+      if(choixPoste) choixPoste.detach();
       overlay.remove();
       resolve(null);
     };
@@ -4240,6 +4277,10 @@ function tracaShowFicheManuelle(codeBarre, origine){
       const f = findFournisseur();
       const libre = nomLibre();
       if(!f && !libre) return;
+      if(choixPoste && choixPoste.manque()){
+        showToast('Indiquez le poste : frontal, complexe ou glassine.','danger');
+        return;
+      }
       // Le serveur rattache un nom libre a sa fiche s'il en trouve une : la
       // voie manuelle ne fait pas perdre une licence que l'annuaire connait.
       const extra = f
@@ -4247,6 +4288,8 @@ function tracaShowFicheManuelle(codeBarre, origine){
         : {fournisseur_libre: libre};
       extra.origine_detection = origSource;
       extra.origine_confiance = origConf;
+      Object.assign(extra, choixPoste ? choixPoste.get() : {});
+      if(choixPoste) choixPoste.detach();
       overlay.remove();
       set({tracaAutoSaving:true});
       try{
