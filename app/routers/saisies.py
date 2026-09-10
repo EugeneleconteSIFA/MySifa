@@ -1174,3 +1174,80 @@ def export_saisies(
     return StreamingResponse(buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": 'attachment; filename="saisies.xlsx"'})
+
+
+# ─── Fin de production → annulation de dossier ───────────────────────────────
+# L'annulation n'existe qu'au poste, tant que le dossier est en cours. Quand un
+# dossier annulé a été clos par une fin de production, ces deux routes
+# rejouent l'annulation après coup (voir app/services/annulation_fin_production).
+
+def _exiger_admin_saisies(request: Request) -> dict:
+    user = get_current_user(request)
+    if not is_admin(user):
+        raise HTTPException(
+            status_code=403,
+            detail="Conversion réservée à l'administration et à la direction.",
+        )
+    return user
+
+
+@router.get("/api/saisies/{row_id}/annulation-apercu")
+def apercu_conversion_annulation(row_id: int, request: Request):
+    _exiger_admin_saisies(request)
+    from app.services.annulation_fin_production import contexte
+    with get_db() as conn:
+        ctx = contexte(conn, row_id)
+    pe = ctx.get("planning")
+    return {
+        "convertible": ctx["convertible"],
+        "raison": ctx["raison"],
+        "no_dossier": ctx["no_dossier"],
+        "machine": ctx["machine"],
+        "debut": ctx["debut"],
+        "date_fin": ctx["date_fin"],
+        "nb_saisies": ctx["nb_saisies"],
+        "nb_production": ctx["nb_production"],
+        "metrage_debut": ctx["metrage_debut"],
+        "metrage_fin": ctx["metrage_fin"],
+        "quantite_traitee": ctx["quantite_traitee"],
+        "planning": ({
+            "id": pe["id"], "reference": pe["reference"], "statut": pe["statut"],
+        } if pe else None),
+        "doublons": [
+            {"id": d["id"], "reference": d["reference"], "statut": d["statut"]}
+            for d in ctx["doublons"]
+        ],
+    }
+
+
+@router.post("/api/saisies/{row_id}/convertir-annulation")
+async def convertir_fin_en_annulation(row_id: int, request: Request):
+    user = _exiger_admin_saisies(request)
+    body = await request.json()
+    motif = (body.get("motif") or "").strip()
+    if len(motif) < 5:
+        raise HTTPException(status_code=400, detail="Motif d'annulation requis — 5 caractères minimum.")
+    motif = motif[:500]
+    remettre = bool(body.get("remettre_planning", True))
+    auteur = (user.get("nom") or user.get("email") or "").strip()
+
+    from app.services.annulation_fin_production import convertir
+    with get_db() as conn:
+        try:
+            res = convertir(conn, row_id, motif, remettre, auteur, user.get("email") or auteur)
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+
+    try:
+        from app.services.audit_service import log_action
+        log_action(
+            user=user,
+            action="UPDATE",
+            module="saisies",
+            objet=f"Annulation dossier {res['no_dossier']} · {res['machine']} (fin de production convertie)",
+            detail={"saisie_id": row_id, "motif": motif, **res},
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass  # le journal ne fait jamais échouer la correction
+    return {"success": True, **res}

@@ -6897,6 +6897,130 @@ function makeDateTimeFields(existingDateStr) {
 }
  
 // ── Modal générique (add + edit) ───────────────────────────────
+// ── Recherche de dossier (modale de saisie) ─────────────────────
+// Le numéro de dossier ne se tape plus librement : on cherche un dossier
+// existant (planning, puis saisies de production). Une valeur tapée sans
+// choisir dans la liste bloque l'enregistrement — une faute de frappe créait
+// un dossier fantôme que plus rien ne rattachait.
+const DOS_STATUTS = {attente:'En attente', en_cours:'En cours', termine:'Terminé'};
+function creerRechercheDossier(prefill){
+  const initial = String((prefill && prefill.no_dossier) || '').trim();
+  const choix = {
+    valeur: initial,
+    client: String((prefill && prefill.client) || ''),
+    designation: String((prefill && prefill.designation) || ''),
+  };
+  const input = h('input', {type:'text', autocomplete:'off', spellcheck:'false',
+    placeholder:'Rechercher un dossier (n°, client…)', value: initial});
+  const liste = h('div', {className:'dos-recherche-liste', role:'listbox', style:{display:'none'}});
+  const aide = h('div', {className:'dos-recherche-aide'});
+  const el = h('div', {className:'dos-recherche'}, input, liste, aide);
+  let resultats = [], actif = -1, minuteur = null, jeton = 0, dernierTerme = '';
+
+  const tape = () => input.value.trim();
+  const estValide = () => tape() === '' || tape() === choix.valeur;
+  function fermer(){ liste.style.display = 'none'; actif = -1; }
+  function majAide(){
+    if(!estValide()){
+      aide.textContent = 'Choisissez un dossier dans la liste.';
+      aide.classList.add('alerte');
+      return;
+    }
+    aide.classList.remove('alerte');
+    aide.textContent = tape() ? [choix.client, choix.designation].filter(Boolean).join(' · ') : '';
+  }
+  function peindre(){
+    liste.innerHTML = '';
+    if(!resultats.length){
+      liste.appendChild(h('div', {className:'dos-recherche-vide'}, 'Dossier introuvable : « ' + dernierTerme + ' »'));
+    }else{
+      resultats.forEach((r, i) => {
+        const item = h('div', {className:'dos-recherche-item' + (i === actif ? ' actif' : ''), role:'option'},
+          h('span', {className:'dos-recherche-ref'}, r.no_dossier),
+          h('span', {className:'dos-recherche-meta'}, [r.client, r.description].filter(Boolean).join(' · ')),
+          r.statut ? h('span', {className:'dos-recherche-statut'}, DOS_STATUTS[r.statut] || r.statut) : null);
+        // mousedown plutôt que click : le blur du champ ferme la liste avant le click.
+        item.addEventListener('mousedown', e => { e.preventDefault(); choisir(r); });
+        liste.appendChild(item);
+      });
+    }
+    liste.style.display = '';
+    const a = liste.querySelector('.actif');
+    if(a && a.scrollIntoView) a.scrollIntoView({block:'nearest'});
+  }
+  function choisir(r){
+    input.value = r.no_dossier;
+    choix.valeur = r.no_dossier;
+    choix.client = r.client || '';
+    choix.designation = r.description || '';
+    fermer();
+    majAide();
+  }
+  function chercher(){
+    clearTimeout(minuteur);
+    majAide();
+    const terme = tape();
+    if(!terme || terme === choix.valeur){ fermer(); return; }
+    minuteur = setTimeout(async () => {
+      const j = ++jeton;
+      try{
+        const res = await api('/api/saisies/reassign/target-dossiers?q=' + encodeURIComponent(terme) + '&limit=12');
+        if(j !== jeton) return;
+        resultats = Array.isArray(res) ? res : [];
+        dernierTerme = terme;
+        actif = resultats.findIndex(r => r.no_dossier === terme);
+        if(actif < 0 && resultats.length) actif = 0;
+        peindre();
+      }catch(err){
+        if(j !== jeton) return;
+        resultats = []; liste.innerHTML = '';
+        liste.appendChild(h('div', {className:'dos-recherche-vide'}, err.message || 'Recherche impossible.'));
+        liste.style.display = '';
+      }
+    }, 200);
+  }
+  input.addEventListener('input', chercher);
+  input.addEventListener('focus', () => { if(!estValide()) chercher(); });
+  input.addEventListener('keydown', e => {
+    const ouverte = liste.style.display !== 'none';
+    if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      if(!ouverte || !resultats.length) return;
+      e.preventDefault();
+      actif = (e.key === 'ArrowDown')
+        ? Math.min(resultats.length - 1, actif + 1)
+        : Math.max(0, actif - 1);
+      peindre();
+    }else if(e.key === 'Enter'){
+      if(ouverte && actif >= 0 && resultats[actif]){ e.preventDefault(); choisir(resultats[actif]); }
+    }else if(e.key === 'Escape'){
+      e.preventDefault(); e.stopPropagation();
+      if(ouverte){ fermer(); return; }
+      input.value = choix.valeur;
+      majAide();
+    }
+  });
+  input.addEventListener('blur', () => {
+    setTimeout(() => {
+      // Un numéro tapé en entier qui figure dans la liste vaut un choix.
+      const exact = resultats.find(r => r.no_dossier === tape());
+      if(tape() && tape() !== choix.valeur && exact) choisir(exact);
+      fermer();
+      majAide();
+    }, 120);
+  });
+  majAide();
+  return {
+    el, input,
+    etat: () => ({
+      valide: estValide(),
+      no_dossier: tape(),
+      change: tape() !== initial,
+      client: tape() ? choix.client : '',
+      designation: tape() ? choix.designation : '',
+    }),
+  };
+}
+
 function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
   const ops = S.OPS_CONFIG;
   const ops_list = S.filters.operators || [];
@@ -7034,6 +7158,22 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
     } else {
       stockUniteWrap.style.display = 'none';
     }
+    appliquerChampsSelonOperation(formEl, code, isStock);
+  }
+  // Champs qui n'ont de sens que pour certaines opérations. Le métrage ne se
+  // relève qu'au début (01) et à la fin (89) d'un dossier ; l'annulation (90)
+  // porte les deux compteurs du cycle. Arrivée et départ (86/87) n'ont pas de
+  // dossier.
+  function appliquerChampsSelonOperation(formEl, code, isStock){
+    if(!formEl) return;
+    const montrer = (role, oui) => formEl.querySelectorAll('[data-role="'+role+'"]')
+      .forEach(el => { el.style.display = oui ? '' : 'none'; });
+    const debut = !isStock && CODES_CPT_DEBUT.has(code);
+    const fin   = !isStock && CODES_CPT_FIN.has(code);
+    montrer('cpt-debut', debut);
+    montrer('cpt-fin', fin);
+    montrer('metrage-compteurs', debut || fin);
+    montrer('dossier', !CODES_PERSONNEL.has(code));
   }
   opSel.addEventListener('change', updateFormForOp);
   // Init si prefill == stock code
@@ -7068,7 +7208,8 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
   const { wrapper: dateWrapper, getVal: getDateVal } = makeDateTimeFields((prefill && prefill.date_operation) ? prefill.date_operation : '');
  
   const machI  = h('input', { type: 'text', placeholder: 'ex: 1 - COHESIO 1', value: (prefill && prefill.machine) ? prefill.machine : '' });
-  const dosI   = h('input', { type: 'text', placeholder: 'ex: 1060',           value: (prefill && prefill.no_dossier) ? prefill.no_dossier : '' });
+  const dosPicker = creerRechercheDossier(prefill);
+  const dosI   = dosPicker.input;
   const qteTI  = h('input', { type: 'number', placeholder: '0',                value: (prefill && prefill.quantite_traitee!=null)   ? prefill.quantite_traitee   : 0 });
   const noteI  = h('input', { type: 'text', placeholder: 'Raison (optionnel)',  value: '' });
   const commentaireI = h('input', { type: 'text', placeholder: 'Observation, remarque...', value: (prefill && prefill.commentaire) ? prefill.commentaire : '' });
@@ -7113,8 +7254,8 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
         h('div', null, h('label', null, 'Date & heure (JJ/MM/AAAA HH:MM:SS)'), dateWrapper),
         h('div', null, h('label', null, 'Machine'), machI)
       ),
-      h('div', { className: 'form-row' },
-        h('div', null, h('label', null, 'No Dossier'), dosI)
+      h('div', { className: 'form-row', 'data-role':'dossier' },
+        h('div', null, h('label', null, 'No Dossier'), dosPicker.el)
       ),
       h('div', { className: 'form-row', 'data-role':'stock-only', style:{display:'none'} },
         h('div', null,
@@ -7134,18 +7275,14 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
         h('div', null, h('label', null, 'Qté traitée'), qteTI),
         h('div', null, h('label', null, 'Note'), noteI)
       ),
-      h('div', { className: 'form-row', 'data-role':'prod-only' },
-        h('div', null,
-          h('label', null, 'Métrage réel (m)'),
-          metrageReelI
-        )
-      ),
-      h('div', { className: 'form-row', 'data-role':'prod-only' },
-        h('div', null,
+      // « Métrage réel » n'est plus affiché : c'est le compteur de fin, que la
+      // saisie opérateur recopie déjà dans cette colonne (compatibilité).
+      h('div', { className: 'form-row', 'data-role':'metrage-compteurs', style:{display:'none'} },
+        h('div', { 'data-role':'cpt-debut' },
           h('label', null, 'Compteur début (m)'),
           metrageDebutI
         ),
-        h('div', null,
+        h('div', { 'data-role':'cpt-fin' },
           h('label', null, 'Compteur fin (m)'),
           metrageFinI
         )
@@ -7167,6 +7304,13 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
             const code = opVal.split(/\s+/)[0] || '';
             const dtVal = getDateVal();
             if(!dtVal){ toast('Heure invalide (format HH:MM:SS, 24h)', 'error'); return; }
+            const estPers = CODES_PERSONNEL.has(code);
+            const dosEtat = dosPicker.etat();
+            if(!estPers && !dosEtat.valide){
+              toast('Dossier introuvable — choisissez un dossier dans la liste.', 'error');
+              dosI.focus();
+              return;
+            }
             // ── Route stock EP/SP/EM/SM vers /api/fabrication/saisie-stock ──
             if(['EP','SP','EM','SM'].includes(code)){
               const stockRef = (stockRefInput.value||'').trim();
@@ -7204,19 +7348,27 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
               })();
               return;
             }
-            onSubmit({
+            const corps = {
               operation:          opText,
               operateur:          opField.value || '',
               date_operation:     dtVal,
               machine:            machI.value  || '',
-              no_dossier:         dosI.value   || '',
+              no_dossier:         estPers ? '' : dosEtat.no_dossier,
               quantite_traitee:   parseFloat(qteTI.value) || 0,
               note:               noteI.value  || '',
               commentaire:       commentaireI.value || '',
-              metrage_reel:         parseFloat((inputs.metrage_reel         && inputs.metrage_reel.value)         ? inputs.metrage_reel.value         : '') || null,
-              metrage_total_debut:  parseFloat((inputs.metrage_total_debut  && inputs.metrage_total_debut.value)  ? inputs.metrage_total_debut.value  : '') || null,
-              metrage_total_fin:    parseFloat((inputs.metrage_total_fin    && inputs.metrage_total_fin.value)    ? inputs.metrage_total_fin.value    : '') || null,
-            });
+            };
+            // Le client suit le dossier choisi ; sans dossier, plus de client.
+            if(estPers){ corps.client = ''; corps.designation = ''; }
+            else if(dosEtat.change){ corps.client = dosEtat.client; corps.designation = dosEtat.designation; }
+            // Un champ masqué n'est pas envoyé : la valeur en base reste intacte.
+            const nombre = el => { const v = parseFloat(el && el.value ? el.value : ''); return (isFinite(v) && v !== 0) ? v : null; };
+            if(CODES_CPT_DEBUT.has(code)) corps.metrage_total_debut = nombre(metrageDebutI);
+            if(CODES_CPT_FIN.has(code)){
+              corps.metrage_total_fin = nombre(metrageFinI);
+              if(corps.metrage_total_fin != null) corps.metrage_reel = corps.metrage_total_fin;
+            }
+            onSubmit(corps);
           }}, submitLabel)
         )
       )
@@ -7553,6 +7705,16 @@ function openEditModal(row) {
     }
   }, iconEl('trash',13),' Supprimer');
  
+  // Fin de production d'un dossier en réalité annulé : on rejoue l'annulation.
+  const peutConvertir = isAdmin(S.user) && (!row.kind || row.kind==='prod') && String(row.operation_code||'').trim()==='89'
+    && String(row.no_dossier||'').trim() && !Number(row.est_annule||0);
+  const leftBtns = peutConvertir
+    ? h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}},
+        deleteBtn,
+        h('button',{className:'btn-danger',title:'Le dossier a été annulé, pas terminé',
+          onClick:e=>{ e.stopPropagation(); openConvertirAnnulation(row); }},'Convertir en annulation'))
+    : deleteBtn;
+
   const modal = buildSaisieForm(
     row,
     titleNode,
@@ -7569,11 +7731,93 @@ function openEditModal(row) {
         await loadSaisies();
       } catch(e) { toast(e.message, 'error'); }
     },
-    deleteBtn
+    leftBtns
   );
   attachSaisieNav(modal, row.id);
   attachModalDrag(modal);
   document.getElementById('root').appendChild(modal);
+}
+
+// ── Fin de production → annulation de dossier ───────────────────
+// L'opérateur a clos par « Fin de production » un dossier qui a été annulé.
+// L'aperçu vient du serveur (cycle, compteurs, planning, doublon éventuel) ;
+// la conversion rejoue l'annulation opérateur : cycle marqué, 89 → trace 90,
+// dossier remis en attente au planning avec le motif.
+async function openConvertirAnnulation(row){
+  let ap;
+  try{
+    ap = await api('/api/saisies/'+row.id+'/annulation-apercu');
+  }catch(err){ toast(err.message,'error'); return; }
+  if(!ap) return;
+  if(!ap.convertible){ toast(ap.raison||'Conversion impossible.','error'); return; }
+  try{ closeModal(); }catch(_){}
+  const old=document.getElementById('conv-annul-overlay'); if(old) old.remove();
+
+  const consomme = (ap.metrage_fin!=null && ap.metrage_debut!=null)
+    ? Math.max(0, ap.metrage_fin - ap.metrage_debut) : null;
+  const doublons = ap.doublons||[];
+  const motifI = h('textarea',{rows:3,placeholder:'Ex. : manque de matière, dossier reporté par le client…',
+    style:{width:'100%',boxSizing:'border-box',background:'var(--bg)',border:'1px solid var(--border)',
+      borderRadius:'10px',padding:'10px 12px',color:'var(--text)',fontSize:'13px',fontFamily:'inherit',resize:'vertical'}});
+  const remettreI = h('input',{type:'checkbox',style:{width:'auto',margin:'0'}});
+  remettreI.checked = doublons.length===0;
+  const ligne = (k,v)=>h('div',{style:{display:'flex',justifyContent:'space-between',gap:'12px',padding:'4px 0',borderBottom:'1px solid var(--border)'}},
+    h('span',{style:{color:'var(--muted)'}},k), h('span',{style:{fontWeight:'600',textAlign:'right'}},v));
+
+  const close=()=>{ const o=document.getElementById('conv-annul-overlay'); if(o) o.remove(); };
+  const valider=h('button',{className:'btn-sm',onClick:async()=>{
+    const motif=(motifI.value||'').trim();
+    if(motif.length<5){ toast('Motif d\'annulation requis — 5 caractères minimum.','error'); motifI.focus(); return; }
+    valider.disabled=true;
+    try{
+      const r = await api('/api/saisies/'+row.id+'/convertir-annulation',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({motif, remettre_planning: !!remettreI.checked})});
+      if(!r) return;
+      close();
+      toast(r.planning==='remis_en_attente'
+        ? 'Dossier annulé — remis en attente au planning.'
+        : 'Dossier annulé.');
+      await loadSaisies();
+    }catch(err){ valider.disabled=false; toast(err.message,'error'); }
+  }},'Convertir en annulation');
+
+  const planningTxt = !ap.planning ? 'Aucun dossier au planning pour cette référence.'
+    : doublons.length
+      ? 'Un doublon « '+(doublons[0].reference||ap.no_dossier)+' » est déjà en attente au planning. Laisser décoché pour le conserver : le dossier d\'origine sera seulement marqué annulé.'
+      : 'Le dossier repart en attente, juste après le dossier en cours, avec le motif.';
+
+  const overlay=h('div',{id:'conv-annul-overlay',className:'contact-modal-overlay',onClick:e=>{ if(e.target===e.currentTarget) close(); }},
+    h('div',{className:'contact-modal',style:{maxWidth:'560px'}},
+      h('div',{className:'contact-modal-head'},
+        h('h3',null,'Convertir la fin de production en annulation'),
+        h('button',{className:'contact-close-btn',onClick:close},'×')),
+      h('div',{className:'contact-modal-body'},
+        h('div',{style:{marginBottom:'12px'}},
+          ligne('Dossier', ap.no_dossier||'-'),
+          ligne('Machine', ap.machine||'-'),
+          ligne('Cycle', fDSecs(ap.debut)+' → '+fDSecs(ap.date_fin)),
+          ligne('Saisies du cycle', String(ap.nb_saisies)+(ap.nb_production?' dont '+ap.nb_production+' de production':'')),
+          ligne('Métrage consommé', consomme!=null ? fN(consomme)+' m' : '-'),
+          ap.quantite_traitee ? ligne('Quantité déclarée', fN(ap.quantite_traitee)+' (remise à 0, conservée dans l\'historique)') : null
+        ),
+        h('p',{style:{fontSize:'12px',color:'var(--muted)',margin:'0 0 12px'}},
+          'Les temps et le métrage du cycle restent comptés. La fin de production devient la trace « 90 - Annulation dossier », à la même heure et au même compteur.'),
+        h('label',{style:{display:'block',fontWeight:'600',marginBottom:'6px'}},'Motif d\'annulation'),
+        motifI,
+        ap.planning ? h('label',{style:{display:'flex',gap:'8px',alignItems:'flex-start',marginTop:'12px',cursor:'pointer'}},
+          remettreI,
+          h('span',null, h('span',{style:{fontWeight:'600'}},'Remettre le dossier en attente au planning'),
+            h('br'), h('span',{style:{fontSize:'12px',color:'var(--muted)'}},planningTxt))
+        ) : h('p',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'12px'}},planningTxt),
+        h('div',{className:'contact-modal-actions'},
+          h('button',{className:'btn-ghost',onClick:close},'Annuler'),
+          valider)
+      )
+    )
+  );
+  document.body.appendChild(overlay);
+  setTimeout(()=>{ try{ motifI.focus(); }catch(_){} },30);
 }
 
 // ── Saisies ─────────────────────────────────────────────────────
@@ -7610,11 +7854,13 @@ function activerGlisserSaisies(){
     if(!z) return;
     // Un champ, une case à cocher ou un bouton garde son comportement propre
     // (sélection du texte, clic) : on ne lui vole pas la souris.
-    if(e.target.closest('input, button, select, textarea, a')) return;
+    if(e.target.closest('input, button, select, textarea, a, .fill-handle')) return;
     zone=z; botX=z.firstElementChild;   // l'enfant porte le défilement horizontal
     actif=true; bouge=false;
     x0=e.pageX; y0=e.pageY;
-    g0=botX?botX.scrollLeft:0; h0=z.scrollTop;
+    // Les deux défilements sont portés par l'enfant (voir la CSS : c'est ce
+    // qui garde les en-têtes du tableau visibles).
+    g0=botX?botX.scrollLeft:0; h0=botX?botX.scrollTop:0;
   });
 
   document.addEventListener('mousemove',e=>{
@@ -7630,7 +7876,7 @@ function activerGlisserSaisies(){
     }
     e.preventDefault();
     if(botX) botX.scrollLeft = g0-dx;
-    zone.scrollTop = h0-dy;
+    if(botX) botX.scrollTop = h0-dy;
   });
 
   // Un glisser se termine par un clic sur la ligne survolée. On l'avale en
@@ -7685,6 +7931,9 @@ function makeEditableComment(row){
 
 // Codes sans dossier ni quantité
 const CODES_PERSONNEL = new Set(['86','87']);
+// Compteurs métrage : relevés au début (01) et à la fin (89) ; l'annulation (90) porte les deux.
+const CODES_CPT_DEBUT = new Set(['01','90']);
+const CODES_CPT_FIN   = new Set(['89','90']);
 // Seul code avec quantité
 const CODE_FIN_DOS = '89';
  

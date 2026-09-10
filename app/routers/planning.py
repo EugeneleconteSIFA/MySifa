@@ -3000,6 +3000,40 @@ async def import_orphan_dossier(machine_id: int, request: Request):
 # RÉORDONNER (drag & drop)
 # ═══════════════════════════════════════════════════════════════
 
+def _ordre_verrouille_respecte(cur_ids: list, wanted_ids: list, statuts: dict) -> bool:
+    """Le nouvel ordre respecte-t-il l'historique de la machine ?
+
+    Trois règles, et seulement trois :
+    - la tête de liste (dossiers terminés / en cours qui précèdent le premier
+      dossier en attente) ne bouge pas d'un cran ;
+    - un dossier en cours garde exactement sa place ;
+    - les dossiers terminés gardent leur ordre entre eux.
+
+    Jusqu'au 10/09/2026, TOUT dossier terminé devait garder son index exact.
+    Un terminé resté en fin de liste (démarré hors séquence, derrière des
+    dossiers en attente) figeait alors tout ce qui le précède : remonter un
+    dossier en attente au-dessus de lui le faisait descendre d'un cran, et le
+    déplacement était refusé. Cas réel : Reliquat 9932324 (Cohésio 2)
+    impossible à placer après les dossiers Bouvard 83/0005, bloqué par trois
+    terminés en bas de liste. L'ordre relatif suffit à protéger l'historique.
+    """
+    verrouilles = ("en_cours", "termine")
+    tete = 0
+    for eid in cur_ids:
+        if statuts.get(eid) not in verrouilles:
+            break
+        tete += 1
+    if wanted_ids[:tete] != cur_ids[:tete]:
+        return False
+    pos_voulue = {eid: i for i, eid in enumerate(wanted_ids)}
+    for i, eid in enumerate(cur_ids):
+        if statuts.get(eid) == "en_cours" and pos_voulue.get(eid) != i:
+            return False
+    avant = [eid for eid in cur_ids if statuts.get(eid) in verrouilles]
+    apres = [eid for eid in wanted_ids if statuts.get(eid) in verrouilles]
+    return avant == apres
+
+
 @router.post("/machines/{machine_id}/reorder")
 async def reorder_entries(machine_id: int, request: Request):
     """Réordonner les entrées. Body: {"entry_ids": [5, 3, 8, 1, ...]}"""
@@ -3030,16 +3064,9 @@ async def reorder_entries(machine_id: int, request: Request):
         if set(wanted_ids) != set(cur_ids) or len(wanted_ids) != len(cur_ids):
             raise HTTPException(400, "entry_ids doit contenir toutes les entrées de la machine")
 
-        locked_pos = {}
-        for idx, r in enumerate(rows):
-            st = compute_statut(dict(r))
-            if st in ("en_cours", "termine"):
-                locked_pos[int(r["id"])] = idx
-
-        wanted_index = {eid: i for i, eid in enumerate(wanted_ids)}
-        for eid, old_idx in locked_pos.items():
-            if wanted_index.get(eid) != old_idx:
-                raise HTTPException(400, "Impossible de déplacer un dossier en cours/terminé")
+        statuts = {int(r["id"]): compute_statut(dict(r)) for r in rows}
+        if not _ordre_verrouille_respecte(cur_ids, wanted_ids, statuts):
+            raise HTTPException(400, "Impossible de déplacer un dossier en cours/terminé")
 
         _gel_force = _garde_transport_reorder(conn, machine_id, wanted_ids, request, body)
 
