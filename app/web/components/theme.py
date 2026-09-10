@@ -85,11 +85,11 @@ class T(object):
     # Serie categorielle, pour les graphes et les badges de categorie.
     SERIE = ("var(--c1)", "var(--c2)", "var(--c3)", "var(--c4)", "var(--c5)")
 
-    # Texte pose SUR un fond colore. `var(--bg)` bascule avec le theme, donc
-    # il produit automatiquement un texte contraste dans les deux sens.
-    # Ne JAMAIS utiliser T.TEXT ou T.TEXT2 sur un bouton a fond colore :
-    # ils suivent le theme et deviennent invisibles dans l'un des deux.
-    SUR_ACCENT = "var(--bg)"
+    # Texte pose SUR un fond colore : toujours blanc (arbitrage d'Eugene du
+    # 10/09/2026 — pas de texte noir sur un fond colore). L'ancienne valeur
+    # `var(--bg)` donnait #0a0e17 en theme sombre, illisible sur les accents
+    # soutenus. Ne JAMAIS utiliser T.TEXT ou T.TEXT2 sur un fond colore.
+    SUR_ACCENT = "white"
 
 
 def serie(i):

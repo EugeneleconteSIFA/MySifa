@@ -5411,8 +5411,14 @@ def appliquer_mouvement_mp(
             "SELECT quantite FROM mp_stock WHERE matiere_id=?", (matiere_id,)
         ).fetchone()
     avant = float(ligne["quantite"]) if ligne else 0.0
-    apres = avant + quantite if type_mvt == "entree" else avant - quantite
-    if apres < 0 and not autoriser_negatif:
+    # Arrondi à 6 décimales : sans lui, sortir puis rendre 0,672 laisse un
+    # reliquat de 1e-16 qui fait passer un stock nul pour négatif.
+    apres = round(avant + quantite if type_mvt == "entree" else avant - quantite, 6)
+    # Seule une SORTIE peut être refusée pour stock insuffisant. Une entrée
+    # rapproche toujours le stock de zéro : la refuser parce que le stock reste
+    # négatif après elle bloquait l'annulation d'un déstockage de production
+    # (écrit avec autoriser_negatif) — on ne pouvait plus rendre la matière.
+    if type_mvt == "sortie" and apres < 0 and not autoriser_negatif:
         raise HTTPException(400, f"Stock insuffisant — stock actuel : {avant:g} {unite}.")
 
     if laizee:

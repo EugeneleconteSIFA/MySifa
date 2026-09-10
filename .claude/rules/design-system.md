@@ -72,27 +72,27 @@ paths:
    Anti-pattern classique : `mouseleave` qui remet `transparent` alors que le
    repos est `var(--card)` → flash inversé au sortir du bouton.
 
-3. **Boutons à fond coloré (accent, success, danger, warn) — la couleur du
-   texte et de l'icône dépend du thème.** Un bouton `background: var(--accent)`
-   (cyan) affiche du texte lisible en mode dark avec `color: #0a0e17` (le fond
-   dark), mais en mode light il faut du texte foncé pour rester lisible sur
-   le cyan. Pattern à adopter :
+3. **Texte BLANC sur tout fond coloré — jamais de texte noir.** Arbitrage
+   d'Eugène du 10/09/2026, sur le bouton « Enregistrer » de la relecture du
+   déstockage : texte `#0a0e17` sur fond accent, illisible sur la palette
+   Pétrole claire (accent bleu soutenu). Règle sans exception :
    ```css
-   /* Sur fond --accent : texte foncé qui reste lisible dans les 2 thèmes */
-   .btn-accent { background: var(--accent); color: var(--bg); }
+   .btn-accent { background: var(--accent); color: white; }
+   .btn-danger { background: var(--danger); color: white; }
    ```
-   Le principe : `color: var(--bg)` produit **automatiquement** un texte
-   contrasté (foncé sur clair, clair sur foncé) parce que `--bg` bascule
-   avec le thème. Idem pour un bouton `background: var(--danger)` (rouge)
-   qui reste toujours foncé → `color: #ffffff` est acceptable. Le point clé :
-   **jamais** `color: var(--text)` ou `color: var(--text2)` sur un bouton à
-   fond coloré — ces variables suivent le thème et vont produire du texte
-   sombre sur fond sombre en mode dark, invisible.
-
-   Bug historique : une IA a mis `color: var(--text2)` sur un badge cyan
-   `background: var(--accent-bg)` — invisible en mode dark (text2 = clair
-   sur accent-bg qui est déjà clair). Toujours tester dans les deux thèmes
-   à chaque ajout de composant à fond coloré.
+   - S'applique aux boutons, badges pleins, pastilles, bandeaux : tout ce qui
+     a un `background` plein `var(--accent)`, `var(--success)`,
+     `var(--danger)`, `var(--warn)` ou une couleur de série.
+   - Interdit sur fond coloré : `color: #0a0e17`, `color: #000`,
+     `color: var(--bg)` (vaut `#0a0e17` en sombre), `color: var(--text)`,
+     `color: var(--text2)`.
+   - Écrire `white` (mot-clé CSS) ou `T.SUR_ACCENT` côté Python : pas de
+     nouvel hexadécimal, le hook ne se déclenche pas.
+   - Un fond **teinté transparent** (`var(--accent-bg)`, `rgba(…,.12)`) n'est
+     pas un fond coloré : le texte y prend la couleur pleine
+     (`color: var(--accent)`), jamais du blanc.
+   - L'existant (une cinquantaine de `color:#0a0e17` dans `app/web/`) se
+     corrige au passage sur chaque écran, comme les hexadécimaux.
 
 **Inputs / Champs**
 ```css
@@ -131,7 +131,7 @@ html = "<style>%s .carte{background:%s;color:%s}</style>" % (
 
 - `T.CARD`, `T.BG`, `T.TEXT`, `T.TEXT2`, `T.MUTED`, `T.BORDER`, `T.ACCENT`,
   `T.ACCENT_BG`, `T.SUCCESS`, `T.WARN`, `T.DANGER`, `T.SERIE`.
-- Sur un fond colore : `T.SUR_ACCENT` (= `var(--bg)`), jamais `T.TEXT`.
+- Sur un fond colore : `T.SUR_ACCENT` (= `white`), jamais `T.TEXT` ni `var(--bg)`.
 
 **Une nouvelle couleur hexadecimale ecrite en dur dans `app/web/**.py` ou
 `static/**.css` est refusee par le hook** `.claude/hooks/apres_edition.py`.

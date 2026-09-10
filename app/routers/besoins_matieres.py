@@ -52,6 +52,7 @@ sur la durée qui tombe dans la fenêtre.
 Accès : rôles _STOCK_MATIERES_ADMIN_ROLES (voir stock.py).
 """
 import logging
+import math
 import re
 import sqlite3
 import statistics
@@ -2700,30 +2701,196 @@ def _quantite_a_destocker(b: dict, mp: dict) -> dict:
         if not ml:
             return {"quantite": None, "unite": "bobine",
                     "manque": ["Mètres linéaires par bobine non renseignés sur la matière"]}
-        return {"quantite": round(q / ml, 4), "unite": "bobine",
+        # 6 décimales : à 4, 18 000 ml sur des bobines de 7 250 m relisaient
+        # 18 000,3 ml, et chaque enregistrement de la relecture réécrivait l'écart.
+        return {"quantite": round(q / ml, 6), "unite": "bobine",
                 "detail": f"{_n(q, 'm')} ÷ {_n(ml, 'm')}/bobine", "manque": []}
 
     if kind == "adhesif":
         return {"quantite": round(q, 4), "unite": "kg", "manque": []}
 
+    # Mandrins, cartons et palettes ne se fractionnent pas : on sort des
+    # unités entières, arrondies au-dessus (0,672 palette = 1 palette posée).
     if kind == "mandrin":
         pal = _f(b.get("besoin_palettes"))
         if not pal:
             return {"quantite": None, "unite": "palette",
                     "manque": ["Longueur tube ou tubes par palette manquants sur la matière"]}
+        n_ent = _entier_sup(q)
+        pal = pal * n_ent / q if q else pal
         return {"quantite": round(pal, 4), "unite": "palette",
-                "detail": f"{_n(round(q))} mandrins", "manque": []}
+                "detail": f"{_n(n_ent)} mandrins", "manque": []}
 
     if kind == "carton":
         upp = _f(mp.get("unites_par_palette"))
         if not upp:
             return {"quantite": None, "unite": "palette",
                     "manque": ["Cartons par palette non renseignés sur la matière"]}
-        return {"quantite": round(q / upp, 4), "unite": "palette",
-                "detail": f"{_n(round(q))} cartons ÷ {_n(upp)}/palette", "manque": []}
+        n_ent = _entier_sup(q)
+        return {"quantite": round(n_ent / upp, 4), "unite": "palette",
+                "detail": f"{_n(n_ent)} cartons ÷ {_n(upp)}/palette", "manque": []}
 
     # Palettes : le besoin est déjà dans l'unité de gestion.
-    return {"quantite": round(q, 4), "unite": "palette", "manque": []}
+    return {"quantite": float(_entier_sup(q)), "unite": "palette", "manque": []}
+
+
+# ── Unités de la relecture : ce qu'on saisit, ce que le stock tient ─────
+#
+# Relecture du 10/09/2026 : la personne qui ajuste pense dans l'unité de
+# l'atelier — des mètres linéaires, des mandrins, des cartons — pas dans celle
+# du magasin. Lui faire taper « 2.4826 bobine » l'obligeait à refaire la
+# division de tête. On saisit donc dans l'unité RÉELLE, on montre à côté
+# l'unité SIMPLIFIÉE (bobines, tubes, palettes), et le serveur convertit vers
+# l'unité de gestion du stock au moment d'écrire.
+#
+# Toutes ces conversions sont linéaires : un facteur par matière suffit, et le
+# même facteur sert à l'affichage, à la saisie et à l'écriture — c'est ce qui
+# garantit que le chiffre vu est le chiffre écrit.
+
+# Remplacement d'une matière : dans sa propre catégorie (un frontal par
+# n'importe quel frontal). Un complexe n'est pas un frontal : il embarque
+# l'adhésif et la glassine, le remplacer par un frontal fausserait les deux.
+_KIND_CATEGORIES = {
+    "support": ("frontal", "complexe"),
+    "glassine": ("glassine",),
+    "adhesif": ("adhesif",),
+    "mandrin": ("mandrin",),
+    "carton": ("carton",),
+    "palette": ("palette",),
+}
+_CATEGORIES_BOBINE = frozenset({"frontal", "complexe", "glassine"})
+_KINDS_ENTIERS = frozenset({"mandrin", "carton", "palette"})
+
+
+def _entier_sup(q) -> int:
+    """Arrondi à l'unité supérieure, sans transformer 121,0000001 en 122."""
+    return int(math.ceil(float(q) - 1e-6)) if q else 0
+
+
+def _kind_de_categorie(categorie) -> Optional[str]:
+    cat = (categorie or "").strip().lower()
+    for kind, cats in _KIND_CATEGORIES.items():
+        if cat in cats:
+            return kind
+    return None
+
+
+def _categories_remplacement(kind, categorie) -> tuple:
+    """Catégories dans lesquelles on peut choisir un remplaçant."""
+    cat = (categorie or "").strip().lower()
+    if cat:
+        return (cat,)
+    return _KIND_CATEGORIES.get(kind or "", ())
+
+
+def _conversion_matiere(kind: str, mp: dict, mod_laize, perte_pct) -> dict:
+    """Facteurs qui relient l'unité saisie à l'unité du stock pour UNE matière.
+
+    - facteur_stock     : unités de stock par unité réelle
+    - facteur_simplifie : unités simplifiées par unité réelle
+
+    Un facteur à None veut dire « non convertible » et `manque` dit pourquoi.
+    """
+    ml = _f(mp.get("metres_lineaires_par_bobine"))
+    upp = _f(mp.get("unites_par_palette"))
+    out = {"unite_reelle": "u", "entier": kind in _KINDS_ENTIERS,
+           "facteur_stock": None, "unite_stock": "palette",
+           "facteur_simplifie": None, "unite_simplifiee": None, "manque": None}
+
+    if kind in _KINDS_BOBINE:
+        out.update(unite_reelle="ml", unite_stock="bobine", unite_simplifiee="bobine")
+        if ml:
+            out.update(facteur_stock=1.0 / ml, facteur_simplifie=1.0 / ml)
+        else:
+            out["manque"] = "Mètres linéaires par bobine non renseignés sur la matière"
+        return out
+
+    if kind == "adhesif":
+        out.update(unite_reelle="kg", unite_stock="kg", unite_simplifiee="kg",
+                   facteur_stock=1.0, facteur_simplifie=1.0)
+        return out
+
+    if kind == "mandrin":
+        out.update(unite_reelle="mandrin", unite_simplifiee="tube")
+        lg = _f(mp.get("longueur_tube_mm"))
+        laize = _f(mod_laize)
+        utile = lg * (1.0 - float(perte_pct or 0) / 100.0) if lg else None
+        if not laize:
+            out["manque"] = "Laize module absente de la fiche technique"
+        elif not utile or utile <= 0:
+            out["manque"] = "Longueur tube non renseignée sur la matière"
+        else:
+            tubes = laize / utile
+            out["facteur_simplifie"] = tubes
+            if upp:
+                out["facteur_stock"] = tubes / upp
+            else:
+                out["manque"] = "Tubes par palette non renseignés sur la matière"
+        return out
+
+    if kind == "carton":
+        out.update(unite_reelle="carton", unite_simplifiee="palette")
+        if upp:
+            out.update(facteur_stock=1.0 / upp, facteur_simplifie=1.0 / upp)
+        else:
+            out["manque"] = "Cartons par palette non renseignés sur la matière"
+        return out
+
+    # palette
+    out.update(unite_reelle="palette", unite_simplifiee="palette",
+               facteur_stock=1.0, facteur_simplifie=1.0)
+    return out
+
+
+def _vers_stock(conv: dict, quantite_reelle: float) -> float:
+    return round(float(quantite_reelle) * conv["facteur_stock"], 6)
+
+
+def _depuis_stock(conv: dict, quantite_stock) -> Optional[float]:
+    fs = conv.get("facteur_stock")
+    if quantite_stock is None or not fs:
+        return None
+    v = float(quantite_stock) / fs
+    if conv.get("entier") and abs(v - round(v)) < 1e-3:
+        return float(round(v))
+    if conv.get("unite_reelle") == "ml":
+        return float(round(v))
+    return round(v, 3)
+
+
+_SQL_MATIERE_CONV = (
+    "SELECT id, categorie, reference, designation, metres_lineaires_par_bobine, "
+    "       longueur_tube_mm, unites_par_palette "
+    "  FROM matieres_premieres")
+
+
+def _matiere_conv(conn, matiere_id: int) -> Optional[dict]:
+    r = conn.execute(_SQL_MATIERE_CONV + " WHERE id=?", (matiere_id,)).fetchone()
+    return dict(r) if r else None
+
+
+def _candidats_remplacement(conn, categories: set, mod_laize, perte_pct) -> dict:
+    """Matières proposables en remplacement, par catégorie, avec leurs laizes."""
+    cats = sorted(c for c in categories if c)
+    if not cats:
+        return {}
+    marques = ",".join("?" * len(cats))
+    rows = [dict(r) for r in conn.execute(
+        _SQL_MATIERE_CONV + " WHERE categorie IN (%s) "
+        "   AND COALESCE(actif, 1) = 1 AND COALESCE(brouillon, 0) = 0 "
+        " ORDER BY reference" % marques, tuple(cats)).fetchall()]
+    out: dict = {}
+    for r in rows:
+        kind = _kind_de_categorie(r["categorie"])
+        conv = _conversion_matiere(kind, r, mod_laize, perte_pct)
+        out.setdefault(r["categorie"], []).append({
+            "matiere_id": r["id"], "reference": r["reference"],
+            "designation": r["designation"], "categorie": r["categorie"],
+            "kind": kind, "conversion": conv,
+            "laizes": (_laizes_matiere(conn, r["id"])
+                       if r["categorie"] in _CATEGORIES_BOBINE else []),
+        })
+    return out
 
 
 def _etat_documents(pe: dict) -> dict:
@@ -2944,6 +3111,7 @@ def _destockage_lignes(conn, planning_id: int) -> dict:
             "matiere_id": mid,
             "matiere_ref": b.get("matiere_ref"),
             "matiere_designation": b.get("matiere_designation"),
+            "matiere_categorie": b.get("matiere_categorie"),
             "mapped": bool(b.get("mapped")),
             "besoin": b.get("quantite"),
             "besoin_unite": b.get("unite"),
@@ -2994,6 +3162,10 @@ def _destockage_lignes(conn, planning_id: int) -> dict:
         "theorique": {"metrage": _f(pe.get("of_metrage")),
                       "etiquettes": _f(pe.get("qte_etiquettes"))},
         "laize_dossier": lz.get("laize"),
+        # Ce qu'il faut pour convertir mandrins → tubes sur une matière
+        # choisie en remplacement, sans refaire tout le calcul du dossier.
+        "contexte": {"mod_laize": _f(pe_calc.get("ft_mod_laize")),
+                     "perte_pct": perte_pct},
         "lignes": lignes,
         "mouvements": deja,
     }
@@ -3095,6 +3267,66 @@ async def destockage_valider(planning_id: int, request: Request):
             "reserves": reserves, "stocks_negatifs": negatifs}
 
 
+def _net_sorti(conn, planning_id: int) -> tuple:
+    """Net réellement sorti par (matière, laize) pour un dossier.
+
+    Les sorties moins les entrées de retour ou de contre-passe : une
+    annulation ou un ajustement laisse plusieurs écritures, et seul le net
+    décrit le stock. Rend aussi, par clé, la dernière sortie — c'est à elle
+    qu'une contre-passe se rattache.
+    """
+    net: dict = {}
+    derniere_sortie: dict = {}
+    for m in conn.execute(
+        """SELECT id, matiere_id, laize_id, type_mouvement, quantite
+             FROM mp_mouvements
+            WHERE planning_entry_id = ?
+            ORDER BY id""",
+        (planning_id,),
+    ).fetchall():
+        lid = int(m["laize_id"]) if m["laize_id"] is not None else None
+        cle = (int(m["matiere_id"]), lid)
+        if m["type_mouvement"] == "sortie":
+            net[cle] = net.get(cle, 0.0) + float(m["quantite"] or 0)
+            derniere_sortie[cle] = int(m["id"])
+        else:
+            net[cle] = net.get(cle, 0.0) - float(m["quantite"] or 0)
+    return net, derniere_sortie
+
+
+def _apparier_remplacements(lignes: list, ajouts: list) -> list:
+    """Rattache une matière ajoutée à la main à la ligne de fiche qu'elle remplace.
+
+    Remplacer le frontal de la fiche par un autre frontal, c'est rendre le
+    premier (sorti = 0) et sortir le second. Sans cet appariement, la
+    relecture suivante affichait deux lignes — la matière de la fiche à zéro
+    et une « ajoutée à la main » — et le remplacement ne se lisait plus.
+
+    La règle : une ligne de fiche à zéro prend la première matière ajoutée de
+    la même catégorie. Rend les ajouts restés sans ligne.
+    """
+    restants = list(ajouts)
+    for li in lignes:
+        if abs(float(li.get("sorti") or 0)) > 1e-9:
+            continue
+        cats = _categories_remplacement(li.get("kind"), li.get("matiere_categorie"))
+        for a in restants:
+            if (a.get("matiere_categorie") or "").strip().lower() not in cats:
+                continue
+            li["remplace"] = {
+                "matiere_id": li.get("matiere_id"),
+                "matiere_ref": li.get("matiere_ref") or li.get("source_value"),
+                "laize_id": li.get("laize_id"),
+            }
+            for k in ("matiere_id", "matiere_ref", "matiere_designation",
+                      "matiere_categorie", "laize_id", "laizes", "sorti"):
+                li[k] = a.get(k)
+            li["destockable"] = True
+            restants.remove(a)
+            break
+    return restants
+
+
 @router.get("/api/stock/destockage/{planning_id}/relecture")
 def destockage_relecture(planning_id: int, request: Request):
     """Ce qui EST sorti pour ce dossier, ligne par ligne, avec de quoi corriger.
@@ -3104,79 +3336,145 @@ def destockage_relecture(planning_id: int, request: Request):
     même question dès qu'un ajustement a eu lieu — et c'est celle que se pose
     la personne qui relit après coup.
 
-    Chaque ligne porte donc les deux chiffres : le calculé et le réellement
-    sorti. Leur écart est la seule façon de voir qu'un ajustement a été fait
-    sans aller lire l'historique des mouvements.
+    Chaque ligne porte le consommé calculé, le sorti et les facteurs de
+    conversion de sa matière : la saisie se fait dans l'unité de l'atelier
+    (ml, kg, mandrins, cartons, palettes), l'écran montre l'unité simplifiée
+    (bobines, tubes, palettes) et le serveur écrit dans l'unité du stock.
+    `candidats` liste, par catégorie, les matières proposables en
+    remplacement.
     """
     require_stock_write(request)
     with get_db() as conn:
         apercu = _destockage_lignes(conn, planning_id)
-
-        # Net réellement sorti par (matière, laize) : les sorties moins les
-        # entrées de contre-passe. Une annulation partielle laisse les deux
-        # écritures, donc seul le net décrit le stock.
-        net: dict = {}
-        for m in conn.execute(
-            """SELECT matiere_id, laize_id, type_mouvement, quantite
-                 FROM mp_mouvements
-                WHERE planning_entry_id = ?""",
-            (planning_id,),
-        ).fetchall():
-            cle = (int(m["matiere_id"]), m["laize_id"])
-            signe = 1.0 if m["type_mouvement"] == "sortie" else -1.0
-            net[cle] = net.get(cle, 0.0) + signe * float(m["quantite"] or 0)
+        ctx = apercu.get("contexte") or {}
+        net, _ = _net_sorti(conn, planning_id)
 
         lignes = []
         vues = set()
         for li in apercu["lignes"]:
             mid = li.get("matiere_id")
             cle = (int(mid), li.get("laize_id")) if mid else None
-            sorti = round(net.get(cle, 0.0), 4) if cle else 0.0
+            sorti = round(net.get(cle, 0.0), 6) if cle else 0.0
             if cle:
                 vues.add(cle)
-            lignes.append({**li, "sorti": sorti,
-                           "ecart_calcul": (round(sorti - float(li.get("quantite") or 0), 4)
-                                            if li.get("quantite") is not None else None)})
+            lignes.append({**li, "sorti": sorti})
 
-        # Une matière sortie sur ce dossier mais absente de la fiche : ajoutée
-        # à la main lors d'une relecture précédente. Elle doit rester visible,
-        # sinon la relecture suivante la ferait disparaître du stock.
+        # Une matière sortie sur ce dossier mais absente de la fiche : un
+        # remplacement ou un ajout fait lors d'une relecture précédente. Elle
+        # doit rester visible, sinon la relecture suivante la ferait
+        # disparaître du stock.
+        ajouts = []
         for (mid, lid), q in net.items():
             if (mid, lid) in vues or abs(q) < 1e-9:
                 continue
-            mp = conn.execute(
-                "SELECT reference, designation, categorie FROM matieres_premieres WHERE id=?",
-                (mid,)).fetchone()
-            lignes.append({
-                "kind": "ajout", "source_value": None, "matiere_id": mid,
-                "matiere_ref": mp["reference"] if mp else None,
-                "matiere_designation": mp["designation"] if mp else None,
-                "mapped": True, "besoin": None, "quantite": None,
-                "unite": None, "laizee": lid is not None, "laizes": [],
+            mp = _matiere_conv(conn, mid) or {}
+            ajouts.append({
+                "kind": _kind_de_categorie(mp.get("categorie")),
+                "source_value": None, "matiere_id": mid,
+                "matiere_ref": mp.get("reference"),
+                "matiere_designation": mp.get("designation"),
+                "matiere_categorie": mp.get("categorie"),
+                "mapped": True, "besoin": None, "quantite": None, "unite": None,
+                "laizee": lid is not None,
+                "laizes": _laizes_matiere(conn, mid) if lid is not None else [],
                 "laize_id": lid, "stock_actuel": None, "manque": [],
-                "destockable": True, "sorti": round(q, 4), "ecart_calcul": None,
-                "hors_fiche": True,
+                "destockable": True, "sorti": round(q, 6), "hors_fiche": True,
             })
+        for a in _apparier_remplacements(lignes, ajouts):
+            lignes.append(a)
 
-        return {**apercu, "lignes": lignes}
+        categories = set()
+        for li in lignes:
+            kind = li.get("kind")
+            mp = _matiere_conv(conn, li["matiere_id"]) if li.get("matiere_id") else None
+            conv = _conversion_matiere(kind, mp or {}, ctx.get("mod_laize"),
+                                       ctx.get("perte_pct"))
+            besoin = _f(li.get("besoin"))
+            li["conversion"] = conv
+            li["consomme"] = (float(_entier_sup(besoin)) if besoin and conv["entier"]
+                              else (round(besoin, 3) if besoin else None))
+            li["sorti_reel"] = _depuis_stock(conv, li.get("sorti"))
+            li["cles_initiales"] = [
+                [c["matiere_id"], c.get("laize_id")]
+                for c in (li, li.get("remplace") or {}) if c.get("matiere_id")
+            ]
+            li["categories_remplacement"] = list(
+                _categories_remplacement(kind, li.get("matiere_categorie")))
+            categories.update(li["categories_remplacement"])
+
+        candidats = _candidats_remplacement(
+            conn, categories, ctx.get("mod_laize"), ctx.get("perte_pct"))
+
+        return {**apercu, "lignes": lignes, "candidats": candidats}
+
+
+def _cibles_stock(conn, lignes: list, mod_laize, perte_pct) -> dict:
+    """Traduit les lignes d'ajustement en quantité de stock visée par clé.
+
+    Les lignes arrivent dans l'unité de l'atelier (`quantite_reelle`) ou, pour
+    un appel ancien, déjà dans celle du stock (`quantite`). Deux lignes qui
+    visent la même matière et la même laize s'ADDITIONNENT : c'est ce qui
+    rend un remplacement sûr — l'écran envoie l'ancienne matière à 0 et la
+    nouvelle à sa quantité, et si l'une réapparaît ailleurs elle n'est pas
+    écrite deux fois.
+    """
+    cibles: dict = {}
+    for li in lignes:
+        try:
+            mid = int(li.get("matiere_id"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Ligne invalide (matiere_id).") from None
+        lid = li.get("laize_id")
+        lid = int(lid) if lid not in (None, "") else None
+        mp = _matiere_conv(conn, mid)
+        if not mp:
+            raise HTTPException(404, "Matière %s introuvable." % mid)
+        ref = mp.get("reference") or str(mid)
+
+        brut = li.get("quantite_reelle", li.get("quantite"))
+        try:
+            q = float(str(brut).replace(",", "."))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "« %s » : quantité invalide." % ref) from None
+        if q < 0:
+            raise HTTPException(400, "« %s » : quantité négative." % ref)
+
+        if "quantite_reelle" in li:
+            kind = _kind_de_categorie(mp.get("categorie"))
+            if not kind:
+                raise HTTPException(400, "« %s » : catégorie non gérée au déstockage." % ref)
+            conv = _conversion_matiere(kind, mp, mod_laize, perte_pct)
+            if conv["entier"] and abs(q - round(q)) > 1e-9:
+                raise HTTPException(
+                    400, "« %s » : nombre entier de %ss attendu." % (ref, conv["unite_reelle"]))
+            if q > 0 and not conv["facteur_stock"]:
+                raise HTTPException(400, "« %s » : %s." % (ref, conv["manque"]))
+            qs = _vers_stock(conv, q) if q > 0 else 0.0
+        else:
+            qs = q
+
+        if qs > 0 and lid is None and (mp.get("categorie") or "") in _CATEGORIES_BOBINE:
+            raise HTTPException(400, "« %s » : laize à choisir." % ref)
+        cle = (mid, lid)
+        cibles[cle] = round(cibles.get(cle, 0.0) + qs, 6)
+    return cibles
 
 
 @router.post("/api/stock/destockage/{planning_id}/ajuster")
 async def destockage_ajuster(planning_id: int, request: Request):
     """Corrige ce qui est sorti, sans effacer ce qui a été écrit.
 
-    Body : { lignes: [{ matiere_id, laize_id?, quantite }], lever_reserve?,
-             note? }
+    Body : { lignes: [{ matiere_id, laize_id?, quantite_reelle }],
+             lever_reserve?, note? }
 
-    `quantite` est la quantité qui DOIT au total être sortie pour cette
-    matière. Le service écrit la différence : une sortie de plus si l'on monte,
-    une entrée de retour si l'on descend. Jamais un UPDATE sur un mouvement
-    passé — l'historique doit pouvoir raconter qu'on s'est trompé, pas donner
-    l'impression qu'on ne s'est jamais trompé.
+    `quantite_reelle` est la quantité qui DOIT au total être sortie, dans
+    l'unité de l'atelier (ml, kg, mandrins, cartons, palettes). Le serveur la
+    convertit dans l'unité du stock et écrit la différence : une sortie de plus
+    si l'on monte, une entrée de retour si l'on descend. Jamais un UPDATE sur
+    un mouvement passé — l'historique doit pouvoir raconter qu'on s'est trompé,
+    pas donner l'impression qu'on ne s'est jamais trompé.
 
-    C'est le geste de la relecture : l'automatisme a sorti ce qu'il savait
-    calculer, et la personne qui a vu la production ajuste ce qui a réellement
-    été consommé.
+    `quantite` (unité du stock) reste accepté pour les appels antérieurs.
     """
     user = require_stock_write(request)
     body = await request.json()
@@ -3195,14 +3493,11 @@ async def destockage_ajuster(planning_id: int, request: Request):
         if not pe:
             raise HTTPException(404, "Dossier introuvable.")
 
-        net: dict = {}
-        for m in conn.execute(
-            "SELECT matiere_id, laize_id, type_mouvement, quantite "
-            "  FROM mp_mouvements WHERE planning_entry_id = ?", (planning_id,),
-        ).fetchall():
-            cle = (int(m["matiere_id"]), m["laize_id"])
-            signe = 1.0 if m["type_mouvement"] == "sortie" else -1.0
-            net[cle] = net.get(cle, 0.0) + signe * float(m["quantite"] or 0)
+        dossiers = _load_dossiers(conn, _SQL_PE_UN, (planning_id,))
+        mod_laize = _f(dossiers[0].get("ft_mod_laize")) if dossiers else None
+        perte_pct = stock_config_float(conn, "mandrin_perte_coupe_pct")
+        cibles = _cibles_stock(conn, lignes, mod_laize, perte_pct)
+        net, _ = _net_sorti(conn, planning_id)
 
         no_dossier = (pe["numero_of"] or pe["reference"] or "").strip()
         base_note = ("Ajustement déstockage %s" % no_dossier).strip()
@@ -3210,26 +3505,18 @@ async def destockage_ajuster(planning_id: int, request: Request):
             base_note += " — %s" % note_libre
 
         faits = []
-        for li in lignes:
-            try:
-                mid = int(li.get("matiere_id"))
-                cible = float(str(li.get("quantite")).replace(",", "."))
-            except (TypeError, ValueError):
-                raise HTTPException(400, "Ligne invalide (matiere_id / quantité).") from None
-            if cible < 0:
-                raise HTTPException(400, "Quantité négative.")
-            lid = li.get("laize_id")
-            lid = int(lid) if lid not in (None, "") else None
-
+        for (mid, lid), cible in cibles.items():
             deja = net.get((mid, lid), 0.0)
             delta = round(cible - deja, 6)
-            if abs(delta) < 1e-9:
+            # Sous 1e-4 unité de stock (0,7 m de bobine, 0,1 g d'adhésif),
+            # l'écart vient de l'arrondi d'affichage, pas d'une correction.
+            if abs(delta) < 1e-4:
                 continue
             sens = "sortie" if delta > 0 else "entree"
             res = appliquer_mouvement_mp(
                 conn, user, mid, sens, abs(delta),
                 laize_id=lid,
-                note="%s (%s → %s)" % (base_note, _n(deja), _n(cible)),
+                note="%s (%s → %s)" % (base_note, _n(round(deja, 4)), _n(round(cible, 4))),
                 planning_entry_id=planning_id, no_dossier=no_dossier,
                 autoriser_negatif=True,
             )
@@ -3261,9 +3548,17 @@ async def destockage_ajuster(planning_id: int, request: Request):
 async def destockage_annuler(planning_id: int, request: Request):
     """Contre-passe le déstockage d'un dossier.
 
-    On n'efface rien : chaque sortie est annulée par une entrée de même
-    quantité, rattachée à l'originale. Les deux écritures restent à
-    l'historique — c'est la seule façon honnête de raconter qu'on s'est trompé.
+    On n'efface rien : ce qui reste sorti est rendu par une écriture inverse,
+    rattachée à la dernière sortie. Les écritures restent à l'historique —
+    c'est la seule façon honnête de raconter qu'on s'est trompé.
+
+    Deux défauts corrigés le 10/09/2026 :
+    - la contre-passe est une ENTRÉE, écrite sans `autoriser_negatif` ; sur une
+      matière dont le stock restait négatif après elle, `appliquer_mouvement_mp`
+      la refusait (« Stock insuffisant ») et l'annulation échouait en bloc ;
+    - on contre-passait chaque sortie en ignorant les retours déjà écrits par
+      un ajustement : après un ajustement à la baisse, annuler rendait plus
+      que ce qui était parti. On contre-passe désormais le NET par matière.
     """
     user = require_stock_write(request)
     from app.routers.stock import appliquer_mouvement_mp
@@ -3277,29 +3572,22 @@ async def destockage_annuler(planning_id: int, request: Request):
             raise HTTPException(404, "Dossier introuvable.")
 
         no_dossier = (pe["numero_of"] or pe["reference"] or "").strip()
-        # Sorties de ce dossier qui n'ont pas déjà été contre-passées.
-        a_annuler = conn.execute(
-            """SELECT m.id, m.matiere_id, m.quantite, m.laize_id
-               FROM mp_mouvements m
-               WHERE m.planning_entry_id = ?
-                 AND m.type_mouvement = 'sortie'
-                 AND m.annule_mouvement_id IS NULL
-                 AND NOT EXISTS (SELECT 1 FROM mp_mouvements c
-                                 WHERE c.annule_mouvement_id = m.id)
-               ORDER BY m.id""",
-            (planning_id,),
-        ).fetchall()
+        net, derniere_sortie = _net_sorti(conn, planning_id)
 
         rendus = []
-        for m in a_annuler:
+        for (mid, lid), q in net.items():
+            if abs(q) < 1e-6:
+                continue
+            sens = "entree" if q > 0 else "sortie"
             res = appliquer_mouvement_mp(
-                conn, user, int(m["matiere_id"]), "entree", float(m["quantite"]),
-                laize_id=m["laize_id"],
+                conn, user, mid, sens, round(abs(q), 6),
+                laize_id=lid,
                 note=f"Annulation déstockage production {no_dossier}",
                 planning_entry_id=planning_id, no_dossier=no_dossier,
-                annule_mouvement_id=int(m["id"]),
+                annule_mouvement_id=derniere_sortie.get((mid, lid)) if sens == "entree" else None,
+                autoriser_negatif=True,
             )
-            rendus.append({"matiere_id": m["matiere_id"], **res})
+            rendus.append({"matiere_id": mid, **res})
 
         conn.execute(
             "UPDATE planning_entries SET destockage='todo', destockage_at=NULL, "

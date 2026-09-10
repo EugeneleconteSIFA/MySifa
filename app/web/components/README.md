@@ -43,8 +43,8 @@ couleur suit le theme de l'utilisateur : le mode clair n'a plus besoin d'etre
 verifie a la main a chaque ecran.
 
 Sur un bouton a fond colore, la couleur du texte est `T.SUR_ACCENT`
-(= `var(--bg)`), jamais `T.TEXT` ni `T.TEXT2` — ces deux-la suivent le theme
-et deviennent invisibles dans l'un des deux sens. C'est le bug historique
+(= `white`) : jamais de texte noir sur un fond colore (regle du 10/09/2026),
+jamais `T.TEXT`, `T.TEXT2` ni `var(--bg)`. C'est le bug historique
 documente dans `.claude/rules/design-system.md`.
 
 ## Brancher `theme.py` sur les 25 pages
