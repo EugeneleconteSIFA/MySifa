@@ -598,7 +598,12 @@ body.light .prod-dossier-filter .search-bar:focus{box-shadow:0 0 0 3px rgba(8,14
 
 /* ── Table saisies (sticky header) ──────────────────────────────── */
 .saisies-table-wrap{border-radius:10px;border:1px solid var(--border);overflow:hidden}
-.saisies-table-wrap .saisies-bot{max-height:68vh;overflow:auto;cursor:grab}
+/* En-têtes fixes : un seul conteneur défile dans les deux sens. Tant que le
+   vertical était sur .saisies-bot et l'horizontal sur son enfant, le
+   position:sticky des <th> se rattachait à l'enfant, qui ne défile pas en
+   hauteur : les en-têtes partaient avec les lignes. */
+.saisies-table-wrap .saisies-bot{cursor:grab}
+.saisies-table-wrap .saisies-bot > div{max-height:68vh;overflow:auto}
 .saisies-table-wrap .saisies-bot.attrape{cursor:grabbing;user-select:none}
 /* Les lignes portent cursor:pointer en style inline : sans ce forcage la
    main ouverte ne s'affiche jamais pendant le glisser. */
@@ -1563,3 +1568,26 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
   background:var(--card);transition:transform .15s}
 .saisies-bascule.on .saisies-bascule-piste{background:var(--accent)}
 .saisies-bascule.on .saisies-bascule-pastille{transform:translateX(12px)}
+
+/* ── Saisies : poignée de recopie (étirer une valeur) ── */
+.saisies-table-wrap td.td-recopiable .fill-handle{position:absolute;right:2px;bottom:2px;width:8px;height:8px;
+  background:var(--accent);border:1px solid var(--card);border-radius:2px;cursor:ns-resize;opacity:0;z-index:2}
+.saisies-table-wrap td.td-recopiable:hover .fill-handle{opacity:1}
+.saisies-table-wrap td.recopie-source{box-shadow:inset 0 0 0 2px var(--accent)}
+.saisies-table-wrap td.recopie-cible{background:var(--accent-bg) !important;
+  box-shadow:inset 2px 0 0 var(--accent),inset -2px 0 0 var(--accent)}
+body.recopie-en-cours,body.recopie-en-cours *{cursor:ns-resize !important;user-select:none !important}
+
+/* ── Modale de saisie : recherche de dossier ── */
+.dos-recherche{position:relative}
+.dos-recherche-liste{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:20;background:var(--card);
+  border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.25);
+  max-height:260px;overflow-y:auto;padding:4px;min-width:320px}
+.dos-recherche-item{display:flex;align-items:baseline;gap:8px;padding:7px 10px;border-radius:7px;cursor:pointer;font-size:13px}
+.dos-recherche-item:hover,.dos-recherche-item.actif{background:var(--accent-bg)}
+.dos-recherche-ref{font-weight:700;color:var(--text);white-space:nowrap}
+.dos-recherche-meta{color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dos-recherche-statut{font-size:11px;color:var(--text2);white-space:nowrap}
+.dos-recherche-vide{padding:9px 10px;font-size:13px;color:var(--warn)}
+.dos-recherche-aide{font-size:11px;color:var(--muted);margin-top:4px;min-height:14px}
+.dos-recherche-aide.alerte{color:var(--warn)}

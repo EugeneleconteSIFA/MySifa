@@ -19,10 +19,14 @@ au moment de la fin de production :
   même compteur de fin, compteur de début du cycle. La chaîne des compteurs
   machine reste intacte et le métrage consommé reste mesurable. La quantité et
   le commentaire d'origine sont conservés dans `data.converti_depuis` ;
-- le dossier repart en attente au planning avec le motif, placé juste après
-  les dossiers déjà engagés (terminés / en cours de tête de liste). S'il existe
-  déjà un doublon en attente — dossier dupliqué à la main — on peut ne pas le
-  remettre : il est alors seulement marqué annulé ;
+- au planning, le créneau du passage annulé reste en place, terminé et marqué
+  « Annulé » : c'est l'historique de ce qui s'est réellement passé sur la
+  machine. Pour relancer le dossier, un SECOND créneau est créé en attente
+  (copie du dossier), juste après les dossiers déjà engagés. Retour d'usage
+  du 10/09/2026 : remettre le même créneau en attente effaçait le passage
+  annulé du planning et laissait le badge « Annulé » sur le dossier relancé.
+  S'il existe déjà un doublon en attente — dossier recréé à la main — on peut
+  ne pas créer de second créneau ;
 - la série de la mémoire produit est rematérialisée.
 
 Le compteur machine (`machines.dernier_metrage`) n'est pas touché : le relevé
@@ -163,6 +167,27 @@ def contexte(conn, row_id: int) -> dict:
     if entrees:
         out["planning"] = entrees[0]
         out["doublons"] = [e for e in entrees[1:] if e["statut"] != "termine"]
+        # Un dossier recréé à la main ne porte pas forcément la même référence
+        # (« 9932324 » pour « Reliquat 9932324 ») : même référence produit et
+        # même client, en attente sur la machine, c'est un doublon probable.
+        src = conn.execute(
+            "SELECT ref_produit, client FROM planning_entries WHERE id = ?",
+            (entrees[0]["id"],),
+        ).fetchone()
+        rp = (src["ref_produit"] or "").strip() if src else ""
+        if rp:
+            deja = {e["id"] for e in entrees}
+            for r in conn.execute(
+                """SELECT id, reference, numero_of, statut, statut_reel, position, annule_count
+                     FROM planning_entries
+                    WHERE machine_id = ? AND statut <> 'termine'
+                      AND trim(COALESCE(ref_produit,'')) = ?
+                      AND lower(trim(COALESCE(client,''))) = lower(trim(?))
+                    ORDER BY position""",
+                (out["machine_id"], rp, (src["client"] or "")),
+            ).fetchall():
+                if r["id"] not in deja:
+                    out["doublons"].append(dict(r))
 
     out["convertible"] = True
     return out
@@ -197,6 +222,44 @@ def _replacer_apres_tete(conn, machine_id: int, entry_id: int) -> None:
             "UPDATE planning_entries SET position = ? WHERE id = ? AND machine_id = ? AND position IS NOT ?",
             (pos, eid, machine_id, pos),
         )
+
+
+_COLONNES_NON_COPIEES = {
+    "id", "position", "statut", "statut_force", "statut_reel",
+    "planned_start", "planned_end", "planned_end_manual",
+    "created_at", "updated_at", "created_by", "updated_by",
+    "group_id", "split_parent_id",
+    "annule_count", "annule_motif", "annule_par", "annule_le",
+    "destockage", "destockage_at", "destockage_reserve",
+}
+
+
+def _creer_second_creneau(conn, source_id: int, auteur: str, now_iso: str) -> int:
+    """Copie le dossier au planning dans un nouveau créneau en attente.
+
+    Tout ce qui décrit le dossier est repris (client, OF, formats, laize,
+    livraison, FSC, exigences…). Ce qui décrit le passage annulé ne l'est pas :
+    créneau, statuts, marque d'annulation, déstockage déjà fait.
+    """
+    cols = [c for c in _colonnes(conn, "planning_entries") if c not in _COLONNES_NON_COPIEES]
+    row = dict(conn.execute("SELECT * FROM planning_entries WHERE id = ?", (source_id,)).fetchone())
+    valeurs = {c: row.get(c) for c in cols}
+    valeurs.update({"statut": "attente", "statut_force": 0, "position": 0,
+                    "created_at": now_iso, "updated_at": now_iso})
+    toutes = _colonnes(conn, "planning_entries")
+    if "statut_reel" in toutes:
+        valeurs["statut_reel"] = "reellement_en_attente"
+    if "created_by" in toutes:
+        valeurs["created_by"] = auteur
+    noms = list(valeurs)
+    cur = conn.execute(
+        f"INSERT INTO planning_entries ({', '.join(noms)}) VALUES ({', '.join('?' * len(noms))})",
+        [valeurs[n] for n in noms],
+    )
+    new_id = int(cur.lastrowid)
+    if "group_id" in toutes:
+        conn.execute("UPDATE planning_entries SET group_id = CAST(id AS TEXT) WHERE id = ?", (new_id,))
+    return new_id
 
 
 def convertir(conn, row_id: int, motif: str, remettre_planning: bool,
@@ -274,9 +337,29 @@ def convertir(conn, row_id: int, motif: str, remettre_planning: bool,
     # 3. Planning.
     pe = ctx["planning"]
     planning_action = None
+    nouveau_id = None
     if pe:
         pe_id = int(pe["id"])
-        if remettre_planning:
+        if pe["statut"] == "termine":
+            # Le créneau du passage annulé reste : terminé, marqué annulé.
+            conn.execute(
+                """UPDATE planning_entries
+                      SET statut_reel = 'reellement_termine',
+                          annule_count = COALESCE(annule_count, 0) + 1,
+                          annule_motif = ?, annule_par = ?, annule_le = ?,
+                          updated_at = ?
+                    WHERE id = ?""",
+                (motif, auteur, now_iso, now_iso, pe_id),
+            )
+            if remettre_planning:
+                nouveau_id = _creer_second_creneau(conn, pe_id, auteur, now_iso)
+                _replacer_apres_tete(conn, ctx["machine_id"], nouveau_id)
+                planning_action = "second_creneau"
+            else:
+                planning_action = "marque_annule"
+        else:
+            # Créneau jamais clos (fin « à reprendre ») : c'est encore le
+            # dossier à produire, il repart en attente comme au poste.
             conn.execute(
                 """UPDATE planning_entries
                       SET statut = 'attente', statut_force = 0,
@@ -290,16 +373,6 @@ def convertir(conn, row_id: int, motif: str, remettre_planning: bool,
             )
             _replacer_apres_tete(conn, ctx["machine_id"], pe_id)
             planning_action = "remis_en_attente"
-        else:
-            conn.execute(
-                """UPDATE planning_entries
-                      SET annule_count = COALESCE(annule_count, 0) + 1,
-                          annule_motif = ?, annule_par = ?, annule_le = ?,
-                          updated_at = ?
-                    WHERE id = ?""",
-                (motif, auteur, now_iso, now_iso, pe_id),
-            )
-            planning_action = "marque_annule"
     conn.commit()
 
     # 4. Best effort : replanification et mémoire produit ne bloquent jamais.
@@ -325,5 +398,6 @@ def convertir(conn, row_id: int, motif: str, remettre_planning: bool,
         "metrage_consomme": consomme,
         "planning_entry_id": int(pe["id"]) if pe else None,
         "planning": planning_action,
+        "nouveau_creneau_id": nouveau_id,
         "serie_rematerialisee": serie,
     }

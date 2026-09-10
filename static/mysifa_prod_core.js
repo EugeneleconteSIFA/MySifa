@@ -6697,8 +6697,9 @@ function updateUndoRedoBtns() {
 async function doUndo() {
   if (!undoStack.length) return;
   const entry = undoStack.pop();
+  if (entry.action === 'edit_groupe') { await basculerGroupe(entry, true); return; }
   const curRows = (S.saisies && S.saisies.rows) ? S.saisies.rows : [];
-  const current = curRows.find(r => r.id === entry.data.id);
+  const current = curRows.find(r => r.id === entry.data.id && !estLigneAnnexe(r));
 
   // Pour edit : sauvegarder l'état actuel avant restauration
   if (entry.action === 'edit' && current) {
@@ -6716,8 +6717,9 @@ async function doUndo() {
 async function doRedo() {
   if (!redoStack.length) return;
   const entry = redoStack.pop();
+  if (entry.action === 'edit_groupe') { await basculerGroupe(entry, false); return; }
   const curRows2 = (S.saisies && S.saisies.rows) ? S.saisies.rows : [];
-  const current = curRows2.find(r => r.id === entry.data.id);
+  const current = curRows2.find(r => r.id === entry.data.id && !estLigneAnnexe(r));
   if (entry.action === 'edit' && current) {
     undoStack.push({ action: 'edit', data: JSON.parse(JSON.stringify(current)) });
     await api('/api/saisies/' + entry.data.id, {
@@ -7011,6 +7013,9 @@ function creerRechercheDossier(prefill){
   majAide();
   return {
     el, input,
+    // Message sous le champ plutôt qu'un toast : le toast redessine la page et
+    // emporte la fenêtre ouverte, avec tout ce qui y a été saisi.
+    signaler: msg => { aide.textContent = msg; aide.classList.add('alerte'); },
     etat: () => ({
       valide: estValide(),
       no_dossier: tape(),
@@ -7307,7 +7312,7 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
             const estPers = CODES_PERSONNEL.has(code);
             const dosEtat = dosPicker.etat();
             if(!estPers && !dosEtat.valide){
-              toast('Dossier introuvable — choisissez un dossier dans la liste.', 'error');
+              dosPicker.signaler('Dossier introuvable — choisissez un dossier dans la liste.');
               dosI.focus();
               return;
             }
@@ -7775,17 +7780,22 @@ async function openConvertirAnnulation(row){
         body:JSON.stringify({motif, remettre_planning: !!remettreI.checked})});
       if(!r) return;
       close();
-      toast(r.planning==='remis_en_attente'
-        ? 'Dossier annulé — remis en attente au planning.'
-        : 'Dossier annulé.');
+      toast(r.planning==='second_creneau'
+        ? 'Dossier annulé — nouveau créneau en attente au planning.'
+        : r.planning==='remis_en_attente'
+          ? 'Dossier annulé — remis en attente au planning.'
+          : 'Dossier annulé.');
       await loadSaisies();
     }catch(err){ valider.disabled=false; toast(err.message,'error'); }
   }},'Convertir en annulation');
 
+  const creneauTermine = ap.planning && ap.planning.statut==='termine';
   const planningTxt = !ap.planning ? 'Aucun dossier au planning pour cette référence.'
     : doublons.length
-      ? 'Un doublon « '+(doublons[0].reference||ap.no_dossier)+' » est déjà en attente au planning. Laisser décoché pour le conserver : le dossier d\'origine sera seulement marqué annulé.'
-      : 'Le dossier repart en attente, juste après le dossier en cours, avec le motif.';
+      ? 'Déjà en attente au planning : « '+doublons.map(d=>d.reference).join(' », « ')+' ». Laisser décoché pour ne pas créer de doublon — le passage annulé sera seulement marqué « Annulé ».'
+      : creneauTermine
+        ? 'Le créneau du passage annulé reste au planning, marqué « Annulé ». Un second créneau est créé en attente, juste après le dossier en cours.'
+        : 'Le dossier repart en attente, juste après le dossier en cours, avec le motif.';
 
   const overlay=h('div',{id:'conv-annul-overlay',className:'contact-modal-overlay',onClick:e=>{ if(e.target===e.currentTarget) close(); }},
     h('div',{className:'contact-modal',style:{maxWidth:'560px'}},
@@ -7807,7 +7817,7 @@ async function openConvertirAnnulation(row){
         motifI,
         ap.planning ? h('label',{style:{display:'flex',gap:'8px',alignItems:'flex-start',marginTop:'12px',cursor:'pointer'}},
           remettreI,
-          h('span',null, h('span',{style:{fontWeight:'600'}},'Remettre le dossier en attente au planning'),
+          h('span',null, h('span',{style:{fontWeight:'600'}},creneauTermine?'Créer un nouveau créneau en attente':'Remettre le dossier en attente au planning'),
             h('br'), h('span',{style:{fontSize:'12px',color:'var(--muted)'}},planningTxt))
         ) : h('p',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'12px'}},planningTxt),
         h('div',{className:'contact-modal-actions'},
@@ -8031,6 +8041,138 @@ function basculeSaisies(cle, libelle, titre){
       }},
     h('span',{className:'saisies-bascule-piste'},h('span',{className:'saisies-bascule-pastille'})),
     libelle);
+}
+
+// ── Recopie par glisser (poignée de cellule) ────────────────────
+// On attrape le coin d'une cellule et on glisse sur les lignes voisines : la
+// valeur est recopiée sur toutes, après confirmation. Une seule entrée dans
+// la pile Annuler pour l'ensemble.
+const RECOPIE_CHAMPS = ['operation','operateur','machine','no_dossier','commentaire'];
+const RECOPIE_LIBELLES = {operation:'Opération', operateur:'Opérateur', machine:'Machine', no_dossier:'Dossier', commentaire:'Commentaire'};
+let __recopie = null;
+function valeurRecopie(row, champ){ return String(row[champ] == null ? '' : row[champ]); }
+function recopieEligible(row, champ){
+  if(!row || estLigneAnnexe(row) || Number(row.est_annule||0)) return false;
+  // Arrivée / départ personnel : jamais de dossier.
+  if(champ==='no_dossier' && CODES_PERSONNEL.has(String(row.operation_code||''))) return false;
+  return true;
+}
+function demarrerRecopie(e, champ, row, idx, rows, tbody, cols){
+  if(e.button!==0) return;
+  e.preventDefault(); e.stopPropagation();
+  __recopie = {champ, source:row, idx, fin:idx, rows, tbody,
+    colIdx: cols.findIndex(c=>c.key===champ)+1,
+    scroller: tbody.closest('.saisies-bot > div'),
+    x: e.clientX, y: e.clientY, timer: null};
+  document.body.classList.add('recopie-en-cours');
+  majSurlignageRecopie();
+  document.addEventListener('mousemove', bougerRecopie);
+  document.addEventListener('mouseup', finirRecopie, {once:true});
+  __recopie.timer = setInterval(defilerRecopie, 40);
+}
+function bougerRecopie(e){
+  if(!__recopie) return;
+  __recopie.x = e.clientX; __recopie.y = e.clientY;
+  cibleRecopieSous(e.clientX, e.clientY);
+}
+function cibleRecopieSous(x, y){
+  const r = __recopie; if(!r) return;
+  const el = document.elementFromPoint(x, y);
+  const tr = el && el.closest ? el.closest('tr') : null;
+  if(!tr || tr.parentNode !== r.tbody) return;
+  const i = Array.prototype.indexOf.call(r.tbody.children, tr);
+  if(i >= 0 && i !== r.fin){ r.fin = i; majSurlignageRecopie(); }
+}
+// Au bord de la zone qui défile, on fait défiler pour atteindre les lignes cachées.
+function defilerRecopie(){
+  const r = __recopie; if(!r || !r.scroller) return;
+  const b = r.scroller.getBoundingClientRect();
+  let d = 0;
+  if(r.y > b.bottom - 30) d = Math.min(24, (r.y - (b.bottom - 30)) / 2 + 4);
+  else if(r.y < b.top + 50) d = -Math.min(24, ((b.top + 50) - r.y) / 2 + 4);
+  if(!d) return;
+  const avant = r.scroller.scrollTop;
+  r.scroller.scrollTop += d;
+  if(r.scroller.scrollTop === avant) return;
+  cibleRecopieSous(Math.min(Math.max(r.x, b.left + 5), b.right - 5),
+                   Math.min(Math.max(r.y, b.top + 45), b.bottom - 5));
+}
+function majSurlignageRecopie(){
+  const r = __recopie; if(!r) return;
+  const a = Math.min(r.idx, r.fin), b = Math.max(r.idx, r.fin);
+  Array.prototype.forEach.call(r.tbody.children, (tr, i)=>{
+    const td = tr.children[r.colIdx]; if(!td) return;
+    td.classList.toggle('recopie-source', i === r.idx);
+    td.classList.toggle('recopie-cible', i !== r.idx && i >= a && i <= b);
+  });
+}
+async function finirRecopie(){
+  const r = __recopie; __recopie = null;
+  document.removeEventListener('mousemove', bougerRecopie);
+  document.body.classList.remove('recopie-en-cours');
+  if(!r) return;
+  clearInterval(r.timer);
+  // Le relâchement produit un click sur la ligne survolée : on l'avale, sinon
+  // la fenêtre de modification s'ouvrirait.
+  const avaler = ev => { ev.stopPropagation(); ev.preventDefault(); };
+  document.addEventListener('click', avaler, {capture:true, once:true});
+  setTimeout(() => document.removeEventListener('click', avaler, {capture:true}), 300);
+  Array.prototype.forEach.call(r.tbody.children, tr=>{
+    const td = tr.children[r.colIdx];
+    if(td) td.classList.remove('recopie-source', 'recopie-cible');
+  });
+  if(r.fin === r.idx) return;
+  const a = Math.min(r.idx, r.fin), b = Math.max(r.idx, r.fin);
+  const valeur = valeurRecopie(r.source, r.champ);
+  const cibles = r.rows.slice(a, b + 1).filter((row, k) =>
+    (a + k) !== r.idx && recopieEligible(row, r.champ) && valeurRecopie(row, r.champ) !== valeur);
+  if(!cibles.length){ toast('Aucune ligne à modifier : elles ont déjà cette valeur ou ne se modifient pas ici.', 'error'); return; }
+  const affiche = r.champ === 'operateur' ? opName(valeur) : valeur;
+  if(!confirm('Recopier « ' + (affiche || '(vide)') + ' » dans la colonne ' + RECOPIE_LIBELLES[r.champ]
+      + ' sur ' + cibles.length + ' ligne(s) ?')) return;
+  await appliquerRecopie(r.champ, r.source, cibles);
+}
+async function appliquerRecopie(champ, source, cibles){
+  const corps = {[champ]: source[champ] == null ? '' : source[champ], note: 'Recopie depuis la saisie ' + source.id};
+  // Le client suit le dossier.
+  if(champ === 'no_dossier'){ corps.client = source.client || ''; corps.designation = source.designation || ''; }
+  const avant = []; const erreurs = [];
+  for(const row of cibles){
+    try{
+      await api('/api/saisies/' + row.id, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(corps)});
+      avant.push(JSON.parse(JSON.stringify(row)));
+    }catch(e){ erreurs.push(e.message); }
+  }
+  if(avant.length){
+    undoStack.push({action:'edit_groupe', data:{items:avant}});
+    redoStack = [];
+    updateUndoRedoBtns();
+  }
+  if(erreurs.length) toast(avant.length + ' saisie(s) modifiée(s) — ' + erreurs[0], 'error');
+  else toast(avant.length + ' saisie(s) modifiée(s).');
+  await loadSaisies();
+}
+function corpsRestauration(d, note){
+  return {operation:d.operation, date_operation:d.date_operation, operateur:d.operateur,
+    machine:d.machine, no_dossier:d.no_dossier, client:d.client || '', designation:d.designation || '',
+    commentaire:d.commentaire || '', note};
+}
+// Annuler / Rétablir une recopie : toutes les lignes d'un coup.
+async function basculerGroupe(entry, depuisUndo){
+  const cur = (S.saisies && S.saisies.rows) ? S.saisies.rows : [];
+  const actuels = entry.data.items
+    .map(it => cur.find(r => !estLigneAnnexe(r) && r.id === it.id))
+    .filter(Boolean);
+  (depuisUndo ? redoStack : undoStack).push({action:'edit_groupe', data:{items: JSON.parse(JSON.stringify(actuels))}});
+  const note = depuisUndo ? 'Restauration undo' : 'Restauration redo';
+  for(const it of entry.data.items){
+    try{
+      await api('/api/saisies/' + it.id, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(corpsRestauration(it, note))});
+    }catch(e){ toast(e.message, 'error'); }
+  }
+  updateUndoRedoBtns();
+  toast(depuisUndo ? 'Recopie annulée.' : 'Recopie rétablie.');
+  await loadSaisies();
 }
 
 async function bulkDelete(){
@@ -8320,7 +8462,7 @@ function renderSaisies(){
  
   const tbody=h('tbody',null);
  
-  rowsVisibles.forEach(row=>{
+  rowsVisibles.forEach((row, rowIdx)=>{
     const fictifRow = isFictifSaisieRow(row);
     // Saisie neutralisee par une annulation de dossier (MyProd fabrication) :
     // conservee pour l'audit, exclue de toutes les statistiques, non modifiable.
@@ -8528,6 +8670,19 @@ function renderSaisies(){
       },'−');
       const firstTd=tr.querySelector('td:nth-child(2)');
       if(firstTd){firstTd.style.position='relative';firstTd.appendChild(addBtn);firstTd.appendChild(delBtn);}
+    }
+    // Poignée de recopie : coin bas-droit des cellules modifiables, comme dans
+    // un tableur. Saisies de production uniquement.
+    if(!readOnly && !annuleRow && !isAlertAck && !isStockRow){
+      RECOPIE_CHAMPS.forEach(champ=>{
+        const td = tr.children[COLS.findIndex(c=>c.key===champ)+1];
+        if(!td) return;
+        td.classList.add('td-recopiable');
+        const poignee = h('span',{className:'fill-handle',title:'Glisser vers le haut ou le bas pour recopier cette valeur'});
+        poignee.addEventListener('mousedown', e=>demarrerRecopie(e, champ, row, rowIdx, rowsVisibles, tbody, COLS));
+        poignee.addEventListener('click', e=>{ e.stopPropagation(); e.preventDefault(); });
+        td.appendChild(poignee);
+      });
     }
     tbody.appendChild(tr);
   });
