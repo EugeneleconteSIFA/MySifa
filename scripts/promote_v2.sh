@@ -199,8 +199,29 @@ if [[ "$DIFF_COUNT" -gt 0 ]]; then
     # Le message d'erreur du push est capturé : « droits ? » a coûté vingt
     # minutes de recherche le 1er septembre 2026 là où GitHub disait très
     # exactement ce qui bloquait — une règle de branche, pas une permission.
-    PUSH_ERR=$(gits push origin main 2>&1)
-    if [[ $? -ne 0 ]]; then
+    #
+    # CI encore en cours : on ATTEND au lieu d'echouer. Le 10/09/2026, deux
+    # promotions sont tombees parce que le bouton avait ete clique 13 s avant la
+    # fin de la CI (~1 min 40) — il n'y avait rien a corriger, seulement a
+    # patienter, et c'est au script de le faire. On repousse toutes les
+    # CI_ATTENTE_PAS secondes, avec une ligne de log a chaque essai : la
+    # reponse est streamee vers le navigateur, un silence prolonge ferait
+    # couper la connexion par le proxy.
+    CI_ATTENTE_PAS=15
+    CI_ATTENTE_MAX=300
+    attendu=0
+    while :; do
+        PUSH_ERR=$(gits push origin main 2>&1)
+        PUSH_RC=$?
+        if [[ $PUSH_RC -eq 0 ]]; then break; fi
+        if ! echo "$PUSH_ERR" | grep -q "Required status check.*in progress"; then break; fi
+        if [[ $attendu -ge $CI_ATTENTE_MAX ]]; then break; fi
+        [[ $attendu -eq 0 ]] && log "    CI de staging encore en cours — attente du vert (max ${CI_ATTENTE_MAX} s)"
+        sleep "$CI_ATTENTE_PAS"
+        attendu=$((attendu + CI_ATTENTE_PAS))
+        log "    ... ${attendu} s, nouvel essai"
+    done
+    if [[ $PUSH_RC -ne 0 ]]; then
         log "    git push origin main KO — rollback"
         gits reset --hard origin/main --quiet
         echo "$PUSH_ERR" | sed 's/^/    | /'
@@ -223,8 +244,10 @@ if [[ "$DIFF_COUNT" -gt 0 ]]; then
                 record_promotion "failed" "CI de staging encore en cours"
                 fail "La CI de staging n'a pas fini de tourner.
 
-       Rien n'est cassé : le check obligatoire est encore en cours sur le
-       commit à promouvoir. Elle prend environ 1 min 40 sur ce dépôt.
+       Rien n'est cassé : le check obligatoire était encore en cours après
+       ${CI_ATTENTE_MAX} s d'attente. Elle prend d'habitude environ 1 min 40 :
+       un run en file d'attente chez GitHub, ou un nouveau push sur staging
+       pendant l'attente, peut l'allonger.
 
        À faire : attendre le vert, puis relancer ce script.
        https://github.com/EugeneleconteSIFA/MySifa/actions?query=branch%3Astaging"

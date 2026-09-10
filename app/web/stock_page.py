@@ -18834,7 +18834,7 @@ async function rvgiMettreEnService(valeur, btn) {
 
 function rvgiCarteMiseEnService() {
   if (!isMatieresAdmin() || S.stockReadOnly) {
-    return el('div', { cls: 'muted', style: { fontSize: '12px', padding: '4px 2px' } },
+    return el('div', { style: 'font-size:12px;padding:4px 2px;color:var(--muted)' },
       'La mise en service est réservée aux administrateurs matières.');
   }
   const aujourdhui = new Date().toISOString().slice(0, 10);
@@ -18870,7 +18870,7 @@ function buildReceptionRvgi() {
   const wrap = el('div', { cls: 'recep-rvgi' });
 
   if (S.rvgiChargement && !S.rvgiFile) {
-    wrap.appendChild(el('div', { cls: 'muted', style: { padding: '18px 2px' } }, 'Chargement…'));
+    wrap.appendChild(el('div', { cls: 'bes-empty' }, 'Chargement…'));
     return wrap;
   }
   if (S.rvgiErreur) {
@@ -18897,9 +18897,13 @@ function buildReceptionRvgi() {
 
   const lignes = f.lignes || [];
   if (!lignes.length) {
-    wrap.appendChild(el('div', { cls: 'muted', style: { padding: '18px 2px' } },
-      'Rien à intégrer — toutes les réceptions de l\'ERP depuis le '
-      + (f.depuis || '?') + ' sont dans le stock.'));
+    // État vide au format des autres écrans de MyStock (bes-empty) : la
+    // classe `muted` n'existe pas ici, la phrase sortait en gros texte noir.
+    wrap.appendChild(el('div', { cls: 'bes-empty' },
+      el('div', { style: 'color:var(--success);margin-bottom:10px;display:flex;justify-content:center' }, iconEl('inbox', 26)),
+      el('div', { style: 'font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px' }, 'Tout est entré en stock'),
+      el('div', null, 'Aucune réception RVGI en attente'
+        + (f.depuis ? ' depuis le ' + _fmtDate(f.depuis) : '') + '.')));
     return wrap;
   }
 
@@ -18907,8 +18911,8 @@ function buildReceptionRvgi() {
   wrap.appendChild(el('div', {
     style: 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 12px' },
     el('span', { style: 'font-size:13px;color:var(--text2)' },
-      el('b', null, String(lignes.length)), ' ligne' + (lignes.length > 1 ? 's' : '') + ' à intégrer depuis le '
-      + (f.depuis || '?') + ' · ',
+      el('b', null, String(lignes.length)), ' ligne' + (lignes.length > 1 ? 's' : '') + ' à intégrer'
+      + (f.depuis ? ' depuis le ' + _fmtDate(f.depuis) : '') + ' · ',
       el('b', { style: 'color:' + (pretes.length ? 'var(--success)' : 'var(--muted)') }, String(pretes.length)),
       ' prête' + (pretes.length > 1 ? 's' : ''),
       lignes.length > pretes.length
