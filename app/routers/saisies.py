@@ -100,6 +100,78 @@ def normalize_date_operation(val):
     return dt.strftime('%Y-%m-%dT%H:%M:%S') if dt else val
 
 
+def _operateur_affiche(operateur_lie, *repli) -> str:
+    """Libellé opérateur d'une ligne qui ne vient pas de production_data.
+
+    Les saisies de production portent le libellé opérateur (« 907 - DENIS
+    Alan »), les alertes et mouvements de stock le nom du compte (« Alan
+    Denis ») : la même personne apparaissait sous deux noms dans la liste.
+    Le compte lié à un opérateur donne le libellé de production ; sans lien,
+    on garde le nom du compte plutôt que d'inventer un format.
+    """
+    lie = (operateur_lie or "").strip()
+    if lie:
+        return lie
+    for v in repli:
+        s = (v or "").strip()
+        if s:
+            return s
+    return ""
+
+
+def _completer_clients(conn, rows: list) -> None:
+    """Renseigne le client des lignes qui ont un dossier mais pas de client.
+
+    Les acks d'alertes n'en portent jamais, les mouvements matière rarement,
+    et certaines saisies de reprise non plus. Le planning fait foi ; à défaut,
+    la dernière saisie de production du même dossier qui en a un.
+    """
+    manquants = {
+        str(r.get("no_dossier") or "").strip()
+        for r in rows
+        if str(r.get("no_dossier") or "").strip() and not str(r.get("client") or "").strip()
+    }
+    if not manquants:
+        return
+    trouves: dict = {}
+    refs = sorted(manquants)
+    for i in range(0, len(refs), 400):
+        lot = refs[i:i + 400]
+        ph = ",".join("?" * len(lot))
+        for r in conn.execute(
+            f"""SELECT TRIM(COALESCE(reference,'')) AS ref,
+                       TRIM(COALESCE(numero_of,'')) AS nof,
+                       TRIM(client) AS client
+                  FROM planning_entries
+                 WHERE TRIM(COALESCE(client,'')) <> ''
+                   AND (TRIM(COALESCE(reference,'')) IN ({ph})
+                        OR TRIM(COALESCE(numero_of,'')) IN ({ph}))
+                 ORDER BY id DESC""",
+            lot + lot,
+        ).fetchall():
+            for k in (r["ref"], r["nof"]):
+                if k in manquants and k not in trouves:
+                    trouves[k] = r["client"]
+    reste = [k for k in refs if k not in trouves]
+    for i in range(0, len(reste), 400):
+        lot = reste[i:i + 400]
+        ph = ",".join("?" * len(lot))
+        for r in conn.execute(
+            f"""SELECT TRIM(no_dossier) AS nd, TRIM(client) AS client
+                  FROM production_data
+                 WHERE TRIM(COALESCE(client,'')) <> ''
+                   AND TRIM(no_dossier) IN ({ph})
+                 ORDER BY id DESC""",
+            lot,
+        ).fetchall():
+            if r["nd"] not in trouves:
+                trouves[r["nd"]] = r["client"]
+    for r in rows:
+        nd = str(r.get("no_dossier") or "").strip()
+        if nd and not str(r.get("client") or "").strip() and nd in trouves:
+            r["client"] = trouves[nd]
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # v2.3.39 : les alertes de maintenance validées par les opérateurs (via le
 # bouton Valider de MysifaAlerts) apparaissent aussi dans l'historique des
@@ -140,8 +212,12 @@ def _fetch_alert_acks_as_saisies(
     if date_to:
         where.append("a.ack_at <= ?"); params.append(date_to + 'T23:59:59')
     if operateurs:
-        where.append(f"a.user_nom IN ({','.join('?'*len(operateurs))})")
-        params.extend(operateurs)
+        # Le filtre opérateur de l'écran porte le libellé de production_data
+        # (« 907 - DENIS Alan ») ; l'ack stocke le nom du compte (« Alan Denis »).
+        # On accepte les deux pour que filtrer un opérateur ramène aussi ses alertes.
+        ph = ','.join('?' * len(operateurs))
+        where.append(f"(a.user_nom IN ({ph}) OR u.operateur_lie IN ({ph}))")
+        params.extend(operateurs); params.extend(operateurs)
     if dossiers:
         where.append(f"a.no_dossier IN ({','.join('?'*len(dossiers))})")
         params.extend(dossiers)
@@ -161,9 +237,11 @@ def _fetch_alert_acks_as_saisies(
               a.responses,
               a.comment,
               m.nom AS alert_nom,
-              m.params AS alert_params
+              m.params AS alert_params,
+              u.operateur_lie AS user_operateur_lie
             FROM maintenance_alert_acks a
             LEFT JOIN maintenance_alerts m ON m.id = a.alert_id
+            LEFT JOIN users u ON u.id = a.user_id
             WHERE {wc}
             ORDER BY a.ack_at ASC, a.id ASC""",
         params,
@@ -192,6 +270,7 @@ def _fetch_alert_acks_as_saisies(
             base_cmt += f"« {raw_cmt} »"
         # Label opération = "Alerte : <nom>" pour rester factuel dans la colonne Opération
         nom_alerte = (d.get("alert_nom") or "").strip() or "Alerte"
+        operateur_ack = _operateur_affiche(d.get("user_operateur_lie"), d.get("user_nom"))
         out.append({
             "id": f"ack-{d['ack_id']}",
             "ack_id": int(d["ack_id"]),
@@ -202,7 +281,7 @@ def _fetch_alert_acks_as_saisies(
             "operation_code": "",
             "operation_severity": None,
             "operation_category": "alert",
-            "operateur": d.get("user_nom") or "",
+            "operateur": operateur_ack,
             "operateur_nom": d.get("user_nom") or "",
             "machine": d.get("machine") or "",
             "no_dossier": d.get("no_dossier") or "",
@@ -278,7 +357,8 @@ def list_saisies(
                        quantite_a_traiter,quantite_traitee,metrage_prevu,metrage_reel,
                        metrage_total_debut,metrage_total_fin,
                        commentaire,service,est_manuel,modifie_par,modifie_le,modifie_note,
-                       COALESCE(est_annule,0) AS est_annule,annule_le,annule_par,annule_motif
+                       COALESCE(est_annule,0) AS est_annule,annule_le,annule_par,annule_motif,
+                       fin_dossier
                 FROM production_data WHERE {wc}
                 ORDER BY date_operation ASC, id ASC LIMIT ? OFFSET ?""",
             params + [limit, offset]
@@ -322,6 +402,7 @@ def list_saisies(
                 ack_operateurs = [x for x in [
                     (user.get("nom") or "").strip(),
                     (user.get("email") or "").strip(),
+                    (user.get("operateur_lie") or "").strip(),
                 ] if x]
                 if not ack_operateurs:
                     ack_operateurs = ["__none__"]  # force zero result
@@ -339,6 +420,11 @@ def list_saisies(
         # Ne jamais casser /api/saisies si le join alertes échoue.
         alert_acks = []
     rows_out.extend(alert_acks)
+    try:
+        with get_db() as conn4:
+            _completer_clients(conn4, rows_out)
+    except Exception:
+        pass  # le client est un confort de lecture, jamais une raison d'échouer
     # Retri final : date_operation ASC. On ne caste plus id en int car les
     # acks portent un id string ("ack-42").
     def _id_key(v):
@@ -371,7 +457,7 @@ def _normalize_stock_pf_row(r: dict) -> Optional[dict]:
     return {
         "id": r["id"],
         "kind": "stock_pf",
-        "operateur": r.get("created_by_name") or r.get("created_by") or "",
+        "operateur": _operateur_affiche(r.get("created_by_operateur_lie"), r.get("created_by_name"), r.get("created_by")),
         "operateur_nom": r.get("created_by_name") or "",
         "date_operation": r.get("created_at") or "",
         "operation": _STOCK_LABELS_S[code],
@@ -404,7 +490,7 @@ def _normalize_stock_mp_row(r: dict) -> Optional[dict]:
     return {
         "id": r["id"],
         "kind": "stock_mp",
-        "operateur": r.get("created_by_name") or r.get("created_by_email") or "",
+        "operateur": _operateur_affiche(r.get("created_by_operateur_lie"), r.get("created_by_name"), r.get("created_by_email")),
         "operateur_nom": r.get("created_by_name") or "",
         "date_operation": r.get("created_at") or "",
         "operation": _STOCK_LABELS_S[code],
@@ -484,6 +570,7 @@ def _fetch_stock_saisies_saisies(
           ms.quantite_avant, ms.quantite_apres, ms.note, ms.created_at,
           ms.created_by,
           COALESCE(NULLIF(TRIM(ms.created_by_name),''), u.nom) AS created_by_name,
+          u.operateur_lie AS created_by_operateur_lie,
           ms.no_dossier,
           p.reference AS produit_reference,
           p.designation AS produit_designation,
@@ -544,7 +631,8 @@ def _fetch_stock_saisies_saisies(
           mm.no_dossier, mm.machine, mm.client, mm.designation, mm.laize_id,
           mp.reference AS matiere_reference,
           mp.designation AS matiere_designation,
-          u.email AS created_by_email
+          u.email AS created_by_email,
+          u.operateur_lie AS created_by_operateur_lie
         FROM mp_mouvements mm
         LEFT JOIN matieres_premieres mp ON mp.id = mm.matiere_id
         LEFT JOIN users u ON u.id = mm.created_by

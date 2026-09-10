@@ -146,6 +146,11 @@
       + '<div id="reu-vue"></div>'
       + '<div class="reu-modal-ov" id="reu-mov"><div class="reu-modal">'
       +   '<h3>Lancer une r&eacute;union</h3>'
+      +   '<div class="reu-champ"><label>Moment</label>'
+      +     '<div class="reu-moment" role="radiogroup" aria-label="Moment de la r&eacute;union">'
+      +       '<button type="button" class="reu-moment-btn" role="radio" data-r="moment" data-moment="matin">Matin</button>'
+      +       '<button type="button" class="reu-moment-btn" role="radio" data-r="moment" data-moment="apres-midi">Apr&egrave;s-midi</button>'
+      +     '</div></div>'
       +   '<div class="reu-champ"><label for="reu-n-titre">Titre</label>'
       +     '<input id="reu-n-titre"></div>'
       +   '<div class="reu-champ"><label for="reu-n-du">P&eacute;riode analys&eacute;e &mdash; du</label>'
@@ -734,6 +739,7 @@
           return;
         }
         if(act === 'lancer'){ ouvrirModale(rac); return; }
+        if(act === 'moment'){ choisirMoment(rac, el.getAttribute('data-moment')); return; }
         if(act === 'annuler'){ fermerModale(rac); return; }
         if(act === 'creer'){ await creer(rac); return; }
         if(act === 'plein'){ basculerPlein(); return; }
@@ -879,13 +885,52 @@
     }
   }
 
+  /* Moment de la reunion : matin ou apres-midi, repris dans le titre. On se
+     reunit deux fois par jour sur la meme date : sans le moment, les deux
+     points portent le meme nom dans la liste. */
+  var MOMENTS = {'matin': 'Matin', 'apres-midi': 'Apr\u00e8s-midi'};
+  var SEP_MOMENT = ' \u00b7 ';
+  function momentParDefaut(){
+    return (new Date().getHours() < 13) ? 'matin' : 'apres-midi';
+  }
+  function jourLocalIso(d){
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+         + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  // Retire un suffixe de moment deja pose, pour ne jamais en empiler deux.
+  function titreSansMoment(titre){
+    var s = String(titre || '');
+    Object.keys(MOMENTS).forEach(function(k){
+      var suf = SEP_MOMENT + MOMENTS[k];
+      if(s.slice(-suf.length) === suf) s = s.slice(0, -suf.length);
+    });
+    return s;
+  }
+  function choisirMoment(rac, moment){
+    if(!MOMENTS[moment]) return;
+    rac.querySelectorAll('.reu-moment-btn').forEach(function(b){
+      var on = b.getAttribute('data-moment') === moment;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+    var t = rac.querySelector('#reu-n-titre');
+    if(t){
+      var base = titreSansMoment(t.value).trim() || S.titrePropose || '';
+      t.value = base + SEP_MOMENT + MOMENTS[moment];
+    }
+  }
+
   function ouvrirModale(rac){
     var t = rac.querySelector('#reu-n-titre');
     var du = rac.querySelector('#reu-n-du');
     var au = rac.querySelector('#reu-n-au');
     if(t) t.value = S.titrePropose || '';
+    // Periode par defaut : de la veille (le dernier jour saisi, qui saute le
+    // week-end un lundi) jusqu'a aujourd'hui, pour voir aussi la nuit et le
+    // debut de poste en cours.
     if(du) du.value = S.jourPropose || '';
-    if(au) au.value = S.jourPropose || '';
+    if(au) au.value = jourLocalIso(new Date());
+    choisirMoment(rac, momentParDefaut());
     // Les participants s'ajoutent pendant la reunion, pas avant : au moment de
     // lancer, on ne sait pas encore qui sera la.
     var mov = rac.querySelector('#reu-mov');

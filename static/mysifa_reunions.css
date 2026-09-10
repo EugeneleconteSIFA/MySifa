@@ -311,3 +311,11 @@ body.reduce-anim .reu-btn:hover{transform:none !important}
   #reu-doc .card,#reu-doc .rp-feuille{box-shadow:none !important;border:none !important;
     background:none !important;padding:0 !important}
 }
+
+/* Lancer une reunion : choix Matin / Apres-midi */
+.reu-moment{display:inline-flex;border:1px solid var(--border);border-radius:9px;overflow:hidden}
+.reu-moment-btn{background:var(--card);border:0;padding:8px 16px;color:var(--text2);font-size:13.5px;
+  font-weight:600;font-family:inherit;cursor:pointer}
+.reu-moment-btn + .reu-moment-btn{border-left:1px solid var(--border)}
+.reu-moment-btn:hover{color:var(--accent)}
+.reu-moment-btn.on{background:var(--accent-bg);color:var(--accent)}
