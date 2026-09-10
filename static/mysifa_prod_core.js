@@ -257,7 +257,7 @@
   function set(u){
     Object.assign(S, u);
     render();
-    if(u.subPage!==undefined||u.ofSubTab!==undefined)_syncProdHash();
+    if(u.page!==undefined||u.subPage!==undefined||u.ofSubTab!==undefined)_syncProdHash();
   }
 
   var _PROD_SUB_TABS=['kpis','saisies','erreurs','retour','reunions'];
@@ -271,14 +271,21 @@
       return (r.subPage||r.ofSubTab)?r:null;
     }catch(e){return null;}
   }
+  // L'URL porte la page (?page=) ET le sous-onglet (#hash). Ne mettre à jour
+  // que le hash laissait « ?page=production#saisies » affiché sur la
+  // Traçabilité : un rafraîchissement ramenait aux Saisies.
   function _syncProdHash(){
     try{
       var h='';
       if(S.page==='production'&&S.subPage&&S.subPage!=='kpis')h=S.subPage;
       else if(S.page==='of'&&S.ofSubTab&&S.ofSubTab!=='of')h=S.ofSubTab;
-      var target=h?'#'+h:'';
-      if(target){try{history.replaceState(null,'',target);}catch(e){}}
-      else{try{history.replaceState(null,'',location.pathname+location.search);}catch(e){}}
+      var sp=new URLSearchParams(location.search||'');
+      if(S.page)sp.set('page',S.page);else sp.delete('page');
+      var qs=sp.toString();
+      var target=location.pathname+(qs?'?'+qs:'')+(h?'#'+h:'');
+      if(target!==location.pathname+location.search+location.hash){
+        try{history.replaceState(null,'',target);}catch(e){}
+      }
     }catch(e){}
   }
   window.addEventListener('hashchange',function(){
@@ -7714,26 +7721,106 @@ function sortRows(rows, col, asc){
 }
  
 // ── Suppression groupée ─────────────────────────────────────────
-async function bulkDelete(){
-  const ids=[...S.selectedRows];
-  if(!ids.length) return;
-  if(!confirm('Supprimer '+ids.length+' saisie(s) ?')) return;
- 
-  // Sauvegarder pour undo
-  const snaps=(((S.saisies && S.saisies.rows) ? S.saisies.rows : [])).filter(r=>ids.includes(r.id));
-  snaps.forEach(row=>pushUndo('delete',row));
- 
-  try{
-    const r=await api('/api/saisies/bulk',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})});
-    if(!r)return;
-    toast(r.deleted+' saisie(s) supprimée(s)');
-    S.selectedRows=new Set();
-    await loadSaisies();
-  }catch(e){
-    // Annuler les pushUndo si erreur
-    snaps.forEach(()=>undoStack.pop());
-    toast(e.message,'error');
+// La liste des Saisies mélange trois sources qui ont chacune leur propre
+// suite d'identifiants : production_data, mouvements de stock (Z1, matière)
+// et validations d'alertes. Un id seul ne désigne donc pas une ligne — la
+// saisie 812 et l'entrée Z1 812 sont deux choses. La clé de sélection porte
+// la source ; les saisies de production gardent leur id numérique nu.
+function saisieSelKey(row){
+  if(!row) return '';
+  if(row.kind==='alert_ack') return String(row.id);
+  if(row.kind==='stock_pf'||row.kind==='stock_mp') return row.kind+':'+row.id;
+  return row.id;
+}
+function estLigneAnnexe(row){
+  return !!row && (row.kind==='alert_ack'||row.kind==='stock_pf'||row.kind==='stock_mp');
+}
+// Suppression d'une ligne qui n'est pas une saisie de production : chaque
+// source a sa route. Appeler DELETE /api/saisies/{id} avec l'id d'un
+// mouvement de stock effacerait la saisie de production qui porte le même id.
+async function supprimerLigneAnnexe(row){
+  if(row.kind==='alert_ack'){
+    const ackId = row.ack_id!=null ? row.ack_id : String(row.id).replace(/^ack-/,'');
+    return api('/api/maintenance/alert-acks/'+encodeURIComponent(ackId),{method:'DELETE'});
   }
+  if(row.kind==='stock_pf'||row.kind==='stock_mp'){
+    return api('/api/fabrication/saisie-stock/'+row.kind+'/'+encodeURIComponent(row.id),{method:'DELETE'});
+  }
+  throw new Error('Ligne non supprimable.');
+}
+
+// Afficher ou masquer les entrées Z1 et les alertes validées. Préférence
+// propre au poste : elle ne concerne que la lecture de la liste.
+const SAISIES_AFFICHAGE_CLE = 'mysifa_saisies_affichage';
+function saisiesAffichage(){
+  if(!S.saisiesAffichage){
+    let p = {z1:true, alertes:true};
+    try{
+      const brut = JSON.parse(localStorage.getItem(SAISIES_AFFICHAGE_CLE)||'null');
+      if(brut && typeof brut==='object'){
+        if(typeof brut.z1==='boolean') p.z1 = brut.z1;
+        if(typeof brut.alertes==='boolean') p.alertes = brut.alertes;
+      }
+    }catch(e){}
+    S.saisiesAffichage = p;
+  }
+  return S.saisiesAffichage;
+}
+function basculeSaisies(cle, libelle, titre){
+  const on = !!saisiesAffichage()[cle];
+  return h('button',{type:'button',className:'saisies-bascule'+(on?' on':''),
+      title:titre,'aria-pressed':on?'true':'false',
+      onClick:()=>{
+        const p = Object.assign({}, saisiesAffichage());
+        p[cle] = !p[cle];
+        S.saisiesAffichage = p;
+        // Une ligne masquée ne doit pas rester sélectionnée : « Supprimer (3) »
+        // effacerait des lignes que l'on ne voit plus.
+        S.selectedRows = new Set();
+        try{ localStorage.setItem(SAISIES_AFFICHAGE_CLE, JSON.stringify(p)); }catch(e){}
+        render();
+      }},
+    h('span',{className:'saisies-bascule-piste'},h('span',{className:'saisies-bascule-pastille'})),
+    libelle);
+}
+
+async function bulkDelete(){
+  const keys=[...S.selectedRows];
+  if(!keys.length) return;
+  const toutes=(S.saisies && S.saisies.rows) ? S.saisies.rows : [];
+  const parCle=new Map(toutes.map(r=>[saisieSelKey(r),r]));
+  const choisies=keys.map(k=>parCle.get(k)).filter(Boolean);
+  const prod=choisies.filter(r=>!estLigneAnnexe(r));
+  // Stock : du plus récent au plus ancien — la route refuse de supprimer un
+  // mouvement quand un mouvement postérieur existe sur le même emplacement.
+  const annexes=choisies.filter(estLigneAnnexe)
+    .sort((a,b)=>String(b.date_operation||'').localeCompare(String(a.date_operation||'')));
+  if(!choisies.length){ S.selectedRows=new Set(); render(); return; }
+  let msg='Supprimer '+choisies.length+' ligne(s) ?';
+  if(annexes.length) msg+='\n'+annexes.length+' alerte(s) ou mouvement(s) de stock : suppression définitive, sans retour arrière.';
+  if(!confirm(msg)) return;
+
+  let supprimees=0;
+  const erreurs=[];
+  if(prod.length){
+    prod.forEach(row=>pushUndo('delete',row));
+    try{
+      const r=await api('/api/saisies/bulk',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:prod.map(r=>r.id)})});
+      if(r) supprimees+=Number(r.deleted||0);
+    }catch(e){
+      // Annuler les pushUndo si erreur
+      prod.forEach(()=>undoStack.pop());
+      erreurs.push(e.message);
+    }
+  }
+  for(const row of annexes){
+    try{ await supprimerLigneAnnexe(row); supprimees++; }
+    catch(e){ erreurs.push(e.message); }
+  }
+  S.selectedRows=new Set();
+  if(erreurs.length) toast(supprimees+' ligne(s) supprimée(s) — '+erreurs[0],'error');
+  else toast(supprimees+' ligne(s) supprimée(s).');
+  await loadSaisies();
 }
 
 const SAISIE_FICTIF_PREFIX = 'FICTIF:';
@@ -7936,6 +8023,7 @@ function renderSaisies(){
     {key:'operateur',       label:'Opérateur'},
     {key:'machine',         label:'Machine'},
     {key:'no_dossier',      label:'Dossier'},
+    {key:'client',          label:'Client'},
     {key:'quantite_traitee',   label:'Qté traitée'},
     {key:'metrage_reel',    label:'Métrage (m)'},
     {key:'commentaire',     label:'Commentaire'},
@@ -7957,9 +8045,19 @@ function renderSaisies(){
   });
  
   // ── Checkbox "tout sélectionner" ─────────────────────────────
-  // v2.3.43 : les acks d'alertes sont lecture seule — jamais dans le
-  // bulk-select ni dans les actions groupées Annuler / Rétablir.
-  const allIds=rows.filter(r=>r.kind!=='alert_ack').map(r=>r.id);
+  // Bascules Z1 / alertes : on filtre APRÈS les durées et les métrages,
+  // qui se calculent sur la page complète.
+  const affichage = saisiesAffichage();
+  const rowsVisibles = rows.filter(r=>{
+    if(!affichage.alertes && r.kind==='alert_ack') return false;
+    if(!affichage.z1 && (r.kind==='stock_pf' || r.operation_category==='stock_pf')) return false;
+    return true;
+  });
+
+  // Toutes les lignes se sélectionnent, sauf les saisies neutralisées par une
+  // annulation de dossier. Les alertes et mouvements de stock ne passent pas
+  // par Annuler / Rétablir : leur suppression est définitive (voir bulkDelete).
+  const allIds=rowsVisibles.filter(r=>!Number(r.est_annule||0)).map(saisieSelKey);
   const allChecked=allIds.length>0&&allIds.every(id=>S.selectedRows.has(id));
   const chkAll=h('input',{type:'checkbox'});
   chkAll.checked=allChecked;
@@ -7973,7 +8071,7 @@ function renderSaisies(){
  
   const tbody=h('tbody',null);
  
-  rows.forEach(row=>{
+  rowsVisibles.forEach(row=>{
     const fictifRow = isFictifSaisieRow(row);
     // Saisie neutralisee par une annulation de dossier (MyProd fabrication) :
     // conservee pour l'audit, exclue de toutes les statistiques, non modifiable.
@@ -7998,7 +8096,10 @@ function renderSaisies(){
           + (row.annule_le ? ' le '+fD(row.annule_le) : '')
           + '\nLa saisie reste comptée : le temps passé et la matière engagée sont réels.')
       : '';
-    const tr=h('tr',{className:'data-row'+(fictifRow?' saisie-row-fictif':'')+(annuleRow?' saisie-row-annule':''),
+    // Fin de production où l'opérateur a choisi « Dossier terminé » : un trait
+    // sous la ligne ferme visuellement le dossier.
+    const finDossierRow = (row.operation_code||'')==='89' && Number(row.fin_dossier)===1;
+    const tr=h('tr',{className:'data-row'+(fictifRow?' saisie-row-fictif':'')+(annuleRow?' saisie-row-annule':'')+(finDossierRow?' saisie-row-fin-dossier':''),
       style:{cursor:(readOnly||annuleRow)?'default':'pointer'}});
     if(annuleRow) tr.title = annuleTip;
     else if(cycleAnnule) tr.title = cycleTip;
@@ -8008,6 +8109,8 @@ function renderSaisies(){
 
     // v2.3.43 : nouveau kind 'alert_ack' — alertes maintenance validées
     const isAlertAck = row.kind === 'alert_ack';
+    const isStockRow = row.kind === 'stock_pf' || row.kind === 'stock_mp';
+    const selKey = saisieSelKey(row);
 
     let rowBg = '';
     if (isAlertAck) {
@@ -8033,7 +8136,7 @@ function renderSaisies(){
     // <tr> en border-collapse : c'est le fond qui fait le bloc visuel.
     if (cycleAnnule) rowBg = 'rgba(251,191,36,.13)';
     if (rowBg) tr.style.background = rowBg;
-    if (S.selectedRows.has(row.id)) tr.style.background = 'rgba(34,211,238,.12)';
+    if (S.selectedRows.has(selKey)) tr.style.background = 'rgba(34,211,238,.12)';
 
     // v2.3.43 : les acks d'alertes sont TOUJOURS cliquables (même en readOnly)
     // et ouvrent le viewer partagé MysifaAckViewer.open.
@@ -8044,16 +8147,16 @@ function renderSaisies(){
       tr.addEventListener('click',()=>{ if(row.kind==='stock_pf'||row.kind==='stock_mp') openEditStockModal(row); else openEditModal(row); });
     }
  
-    // Checkbox ligne — désactivée pour les acks d'alertes et les saisies annulées
-    if(isAlertAck || annuleRow){
+    // Checkbox ligne — absente seulement pour les saisies annulées
+    if(annuleRow){
       tr.appendChild(h('td',null));
     } else {
       const chk=h('input',{type:'checkbox'});
-      chk.checked=S.selectedRows.has(row.id);
+      chk.checked=S.selectedRows.has(selKey);
       chk.addEventListener('click',e=>e.stopPropagation());
       chk.addEventListener('change',()=>{
-        if(chk.checked) S.selectedRows.add(row.id);
-        else S.selectedRows.delete(row.id);
+        if(chk.checked) S.selectedRows.add(selKey);
+        else S.selectedRows.delete(selKey);
         render();
       });
       const tdChk=h('td',null,chk);
@@ -8079,18 +8182,22 @@ function renderSaisies(){
     // saisie (« + Manuel », « Corrigé ») et ne doit pas être prise.
  
     tr.appendChild(h('td',{style:{fontSize:'11px',color:'var(--muted)',whiteSpace:'nowrap',fontFamily:'monospace'}},fDSecs(row.date_operation)));
-    tr.appendChild(h('td',null,row.operation||'-',
+    tr.appendChild(h('td',finDossierRow?{className:'td-op-cloture'}:null,row.operation||'-',
       cycleAnnule
         ? h('span',{title:cycleTip,
             style:{marginLeft:'6px',padding:'1px 6px',borderRadius:'4px',fontSize:'10px',
                    fontWeight:'700',letterSpacing:'.2px',whiteSpace:'nowrap',
                    background:'rgba(251,191,36,.18)',color:'#fbbf24',
                    border:'1px solid rgba(251,191,36,.45)'}},'cycle annulé')
+        : null,
+      finDossierRow
+        ? h('span',{className:'saisie-pill-cloture',title:'Dossier terminé à cette fin de production'},'Dossier clôturé')
         : null));
     tr.appendChild(h('td',{style:{whiteSpace:'nowrap',color:'var(--muted)'}},fmtDurMin(row.duree_min)));
     tr.appendChild(h('td',null,opName(row.operateur)));
     tr.appendChild(h('td',null,row.machine||'-'));
     tr.appendChild(h('td',null,row.no_dossier||'-'));
+    tr.appendChild(h('td',{className:'td-client',title:row.client||''},row.client||'-'));
     // Sur un mouvement matiere saisi dans une autre unite que l'unite de stock,
     // on rappelle le geste : « 1 200 (1 palette) » plutot qu'un 1 200 nu.
     tr.appendChild(h('td',null,
@@ -8131,7 +8238,10 @@ function renderSaisies(){
         txt ? txt+(motif?' · ':'') : '',
         motif ? h('span',{style:{color:'#f87171',fontStyle:'italic'}},'Motif : '+motif) : null
       ));
-    }else if(readOnly || isAlertAck){
+    }else if(readOnly || isAlertAck || isStockRow){
+      // Stock : la note se modifie dans la fenêtre du mouvement. L'édition en
+      // ligne passe par /api/saisies/{id}, qui viserait la saisie de
+      // production portant le même id.
       tr.appendChild(h('td',{className:'td-commentaire',title:row.commentaire||'',
         style:{maxWidth:'460px',minWidth:'260px',overflow:'hidden',textOverflow:'ellipsis'}},row.commentaire||''));
     }else{
@@ -8139,14 +8249,26 @@ function renderSaisies(){
     }
     tr.appendChild(h('td',null,badge));
 
-    // v2.3.43 : pas de boutons +/- pour un ack — id "ack-<n>" n'est pas
-    // un vrai row de production_data (DELETE /api/saisies/ack-42 renverrait 404).
-    if(!readOnly && !isAlertAck && !annuleRow){
+    // Mêmes boutons +/− sur toutes les lignes. Les alertes et mouvements de
+    // stock se suppriment par leur propre route (supprimerLigneAnnexe).
+    if(!readOnly && !annuleRow){
       const addBtn=h('button',{className:'add-row-btn',title:'Insérer une ligne après',onClick:e=>{e.stopPropagation();openAddModal(row);}},'+');
       const delBtn=h('button',{className:'add-row-btn',title:'Supprimer cette ligne',
         style:{left:'calc(50% + 18px)',background:'var(--danger)',borderColor:'var(--bg)'},
         onClick:async e=>{
           e.stopPropagation();
+          if(isAlertAck || isStockRow){
+            if(!confirm(isAlertAck
+              ? 'Supprimer cette validation d\'alerte ? La suppression est définitive.'
+              : 'Supprimer ce mouvement de stock ? La suppression est définitive.')) return;
+            try{
+              await supprimerLigneAnnexe(row);
+              S.selectedRows.delete(selKey);
+              toast(isAlertAck ? 'Validation d\'alerte supprimée.' : 'Mouvement de stock supprimé.');
+              await loadSaisies();
+            }catch(err){ toast(err.message,'error'); }
+            return;
+          }
           if(!confirm('Supprimer cette saisie ?'))return;
           pushUndo('delete',row);
           try{
@@ -8186,6 +8308,8 @@ function renderSaisies(){
       render();
     }},'›'),
   );
+  headerRight.appendChild(basculeSaisies('z1','Entrées Z1','Afficher ou masquer les entrées en stock Z1'));
+  headerRight.appendChild(basculeSaisies('alertes','Alertes','Afficher ou masquer les alertes validées'));
   headerRight.appendChild(pager);
  
   if(readOnly){
@@ -10431,7 +10555,7 @@ function renderProdKpis(){
         if(p === 'users'){ window.location.href = '/settings'; return; }
         if(p === 'matiere_prix'){ window.location.href = '/pricing'; return; }
         if(p === 'profil'){ window.location.href = '/profil'; return; }
-        const allowed = new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of','scans','fiches']);
+        const allowed = new Set(['menu','production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of','scans','fiches']);
         if(allowed.has(p)) S.page = p;
       }catch(e){}
       try{var _hv=_readProdHash();if(_hv){if(_hv.subPage)S.subPage=_hv.subPage;if(_hv.ofSubTab)S.ofSubTab=_hv.ofSubTab;}}catch(e){}
@@ -10440,9 +10564,14 @@ function renderProdKpis(){
       try{
         await loadFilters();
         if(S.page === 'production'){
-          await loadProd();
-          await loadHist();
-          await loadMachineStatus();
+          // Arrivée directe sur #saisies (rafraîchissement, lien) : sans ce
+          // chargement l'onglet restait bloqué sur « Chargement... ».
+          if(S.subPage === 'saisies') await loadSaisies();
+          else{
+            await loadProd();
+            await loadHist();
+            await loadMachineStatus();
+          }
         }else if(S.page === 'dossiers'){
           await loadDos();
         }else if(S.page === 'suivi'){
@@ -10524,7 +10653,7 @@ function renderProdKpis(){
         if(p === 'users'){ window.location.href = '/settings'; return; }
         if(p === 'matiere_prix'){ window.location.href = '/pricing'; return; }
         if(p === 'profil'){ window.location.href = '/profil'; return; }
-        const allowed = new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of','scans','fiches']);
+        const allowed = new Set(['menu','production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of','scans','fiches']);
         if(allowed.has(p)) S.page = p;
       }catch(e){}
       S.loginError = null;
@@ -10534,9 +10663,14 @@ function renderProdKpis(){
       try{
         await loadFilters();
         if(S.page === 'production'){
-          await loadProd();
-          await loadHist();
-          await loadMachineStatus();
+          // Arrivée directe sur #saisies (rafraîchissement, lien) : sans ce
+          // chargement l'onglet restait bloqué sur « Chargement... ».
+          if(S.subPage === 'saisies') await loadSaisies();
+          else{
+            await loadProd();
+            await loadHist();
+            await loadMachineStatus();
+          }
         }else if(S.page === 'dossiers'){
           await loadDos();
         }else if(S.page === 'suivi'){

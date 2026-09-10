@@ -1566,6 +1566,20 @@ async def create_saisie(request: Request):
                 # production parce qu'une colonne manque ne l'est pas moins.
                 logger.exception("[fabrication] motif d'absence de matière non enregistré")
 
+        # ── Fin de production : le dossier est-il clôturé ? ──────────────────
+        # « Dossier terminé » ou « À reprendre plus tard » : le choix pilote le
+        # planning et la mémoire produit, et doit rester lisible après coup —
+        # la liste des Saisies de MyProd marque les vraies fins de dossier.
+        if cl["code"] == "89":
+            try:
+                conn.execute(
+                    "UPDATE production_data SET fin_dossier=? WHERE id=?",
+                    (1 if fin_dossier_flag else 0, new_id),
+                )
+                conn.commit()
+            except Exception:
+                logger.exception("[fabrication] fin_dossier non enregistré")
+
         # ── Mise à jour dernier_metrage machine ───────────────────────────────
         new_metrage = None
         if cl["code"] == "01" and m_debut is not None:

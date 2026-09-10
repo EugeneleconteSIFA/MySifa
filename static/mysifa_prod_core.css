@@ -1543,3 +1543,23 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
   background:var(--accent-bg);border-bottom:1px solid var(--border)}
 .rent-tl-champ{display:flex;align-items:center;gap:9px;padding:12px 18px;
   color:var(--muted);border-bottom:1px solid var(--border)}
+
+/* ── Saisies : colonne Client, fin de dossier, bascules Z1 / alertes ── */
+.saisies-table-wrap td.td-client{max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* « Dossier terminé » à la fin de production : un trait ferme le dossier. */
+.saisies-table-wrap tr.data-row.saisie-row-fin-dossier > td{border-bottom:2px solid var(--success) !important}
+/* La cellule Opération est bornée à 200px : sans ça la pastille est coupée. */
+.saisies-table-wrap td.td-op-cloture{max-width:none}
+.saisie-pill-cloture{margin-left:6px;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;
+  letter-spacing:.2px;white-space:nowrap;color:var(--success);border:1px solid var(--success)}
+.saisies-bascule{display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border-radius:8px;
+  border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;
+  cursor:pointer;white-space:nowrap;font-family:inherit}
+.saisies-bascule:hover{border-color:var(--accent);color:var(--text)}
+.saisies-bascule.on{color:var(--text)}
+.saisies-bascule-piste{position:relative;flex-shrink:0;width:26px;height:14px;border-radius:7px;
+  background:var(--border);transition:background .15s}
+.saisies-bascule-pastille{position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;
+  background:var(--card);transition:transform .15s}
+.saisies-bascule.on .saisies-bascule-piste{background:var(--accent)}
+.saisies-bascule.on .saisies-bascule-pastille{transform:translateX(12px)}
