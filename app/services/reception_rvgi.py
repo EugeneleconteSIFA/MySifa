@@ -35,9 +35,19 @@ qui lui manque.
 
 Personne ne scanne un carton : il entre directement. Une bobine, si -- et c'est
 ce scan qui relie plus tard la bobine consommee en production a son certificat
-FSC, par `stock_reception_items.code_barre`. Une bobine cree donc une reception
-EN ATTENTE que le magasin valide au scan, et le stock ne bouge qu'a ce
-moment-la. Arbitrage d'Eugene du 04/09/2026.
+FSC, par `stock_reception_items.code_barre`.
+
+Jusqu'au 10/09/2026 une bobine creait une reception EN ATTENTE et le stock ne
+bougeait qu'au scan. Verification faite ce jour-la, ce chemin ne menait nulle
+part : le scan cree son propre lot (`LOT-AAAAMMJJ-HH-...`) et ne rejoint jamais
+la reception RVGI, restee a zero bobine ; et l'import de packing list, depuis le
+09/09, n'ecrit volontairement aucun stock « parce que la reception RVGI
+l'alimente ». Une bobine recue par packing list n'entrait donc jamais en stock.
+
+Regle depuis le 10/09 : la reception RVGI est la SEULE entree de stock, bobines
+comprises. La reception MyStock rattachee reste creee -- c'est elle qui porte
+le lien ERP -- et le scan comme la packing list ne font plus que de la
+tracabilite. `regime` distingue encore les deux familles pour l'affichage.
 """
 
 import re
@@ -363,7 +373,16 @@ _SQL_LIGNES = """
      AND m.type = c.type - 2 AND m.corbeille = 0
     WHERE l.corbeille = 0
       AND c.type IN (%s)
-      AND substr(l.amjl, 1, 10) >= ?
+      -- Filtre sur la SAISIE, pas sur la date de livraison. `amjl` est la date
+      -- portée sur le bon, et le magasin saisit souvent plusieurs jours après :
+      -- relevé du 10/09/2026, 28566 saisie le 07/09 pour une livraison du
+      -- 21/07, 28520 saisie le 02/09 pour le 25/08. Filtrer sur `amjl`
+      -- écartait POUR TOUJOURS une réception livrée avant la mise en service
+      -- mais saisie après. `id` suit l'ordre de création des lignes (`dtem`
+      -- bouge à chaque modification) : une ligne est prise si elle a été
+      -- créée après la dernière ligne dont la saisie est antérieure à la date.
+      AND l.id > (SELECT COALESCE(MAX(x.id), 0) FROM lif_ligne x
+                   WHERE substr(x.dtem, 1, 10) < ?)
     ORDER BY l.amjl DESC, l.numero DESC, l.ligne
 """
 
@@ -600,6 +619,11 @@ def integrer(conn, ligne, user, appliquer_mouvement):
     else:
         if laize_id is None:
             raise ValueError("Laize absente de la ligne de réception — bobine non intégrable.")
+        _lier_laize(conn, matiere_id, laize_id)
+        res = appliquer_mouvement(
+            conn, user, matiere_id, "entree", quantite,
+            laize_id=laize_id, note=origine)
+        mouvement_id = res.get("mouvement_id")
         cur = conn.execute(
             "INSERT INTO stock_receptions "
             "(created_at, created_by, created_by_name, note, nb_bobines, fournisseur, "
@@ -626,4 +650,44 @@ def integrer(conn, ligne, user, appliquer_mouvement):
             "unite": ligne.get("unite"), "mouvement_id": mouvement_id,
             "reception_id": reception_id,
             "message": ("Entrée en stock." if regime == "direct"
-                        else "Réception créée — en attente du scan des bobines.")}
+                        else "Entrée en stock — les codes-barres se rattachent au scan.")}
+
+
+def _lier_laize(conn, matiere_id, laize_id):
+    """Rattache la laize a la matiere si ce n'est pas deja fait.
+
+    Une laize neuve annoncee par l'ERP n'est liee a aucune matiere : sans ce
+    lien, la fiche matiere n'afficherait pas le stock qu'on vient d'entrer.
+    """
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO mp_matiere_laizes (matiere_id, laize_id) VALUES (?, ?)",
+            (int(matiere_id), int(laize_id)))
+    except Exception:
+        pass
+
+
+def integrer_tout(conn, conn_erp, user, appliquer_mouvement, limite=500):
+    """Fait entrer toutes les receptions integrables, sans clic.
+
+    Appele juste apres la reconstruction du miroir. « Integrable » veut dire
+    appariee et convertible : une ligne dont l'article RVGI n'est rattache a
+    aucune matiere reste dans la file, parce que l'appariement, lui, reste une
+    decision humaine (arbitrage du 04/09/2026). Une ligne en echec n'empeche
+    pas les autres.
+
+    Ne committe pas.
+    """
+    file = lignes_a_integrer(conn, conn_erp, limite=limite)
+    faites, refusees, en_attente = [], [], 0
+    for ligne in file["lignes"]:
+        if not ligne.get("integrable"):
+            en_attente += 1
+            continue
+        try:
+            faites.append(integrer(conn, ligne, user, appliquer_mouvement))
+        except Exception as e:  # une ligne ne bloque jamais les autres
+            refusees.append({"lif_id": ligne["lif_id"],
+                             "motif": getattr(e, "detail", None) or str(e)})
+    return {"depuis": file.get("depuis"), "integrees": faites,
+            "refusees": refusees, "non_appariees": en_attente}

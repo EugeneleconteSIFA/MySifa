@@ -176,7 +176,7 @@
   const MP_MVT_TITLES = {
     entree: 'Entrée en stock',
     sortie: 'Sortie de stock',
-    ajustement: 'Ajustement d\'inventaire',
+    ajustement: 'Correction de stock',
     transfert: 'Transfert',
   };
 
@@ -1245,8 +1245,22 @@
       };
     }
 
-    const noteTa = el('textarea', { attrs: { placeholder: 'Commentaire (optionnel)' } });
-    body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Note'), noteTa));
+    // Une correction de stock est le seul geste manuel qui reste sur les
+    // matières (10/09/2026) : elle doit dire pourquoi, sinon l'écart qu'elle
+    // masque ne se retrouve plus.
+    const noteObligatoire = typeMvt === 'ajustement';
+    const noteTa = el('textarea', { attrs: { placeholder: noteObligatoire
+      ? 'Motif de la correction (obligatoire)' : 'Commentaire (optionnel)' } });
+    body.appendChild(el('div', { cls: 'mp-field' },
+      el('label', null, noteObligatoire ? 'Motif' : 'Note'), noteTa));
+    if (noteObligatoire) {
+      const valider = S.mpModal.validate;
+      S.mpModal.validate = () => {
+        const e = valider ? valider() : null;
+        if (e) return e;
+        return (noteTa.value || '').trim() ? null : 'Motif de la correction obligatoire.';
+      };
+    }
     const prevGetBody = S.mpModal.getBody;
     if (prevGetBody) {
       S.mpModal.getBody = () => {

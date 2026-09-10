@@ -679,6 +679,44 @@ def _aligner_les_tiers(journal) -> dict:
     return out
 
 
+def _integrer_les_receptions(journal) -> dict:
+    """Réceptions RVGI appariées → entrées MyStock, juste après le miroir.
+
+    Les entrées de matières sont automatiques (Eugène, 10/09/2026) : sans ce
+    branchement, une réception saisie dans l'ERP n'entrait en stock que si
+    quelqu'un ouvrait Réception › Depuis l'ERP et cliquait « Intégrer ». Les
+    articles non appariés restent dans la file : l'appariement, lui, reste un
+    geste humain.
+
+    Ne fait jamais échouer l'import.
+    """
+    try:
+        from database import get_db
+        from app.services import erp_mirror as miroir
+        from app.services import reception_rvgi as rr
+        from app.routers.stock import appliquer_mouvement_mp
+    except Exception as e:
+        journal.append("Intégration des réceptions impossible : %s" % str(e)[:160])
+        return {}
+    try:
+        with get_db() as conn, miroir.get_erp_db() as erp:
+            if not rr.date_de_mise_en_service(conn):
+                journal.append("Réceptions RVGI : intégration non mise en service.")
+                return {"actif": False}
+            res = rr.integrer_tout(
+                conn, erp, {"id": None, "email": None, "nom": "Synchro RVGI"},
+                appliquer_mouvement_mp)
+            conn.commit()
+        journal.append(
+            "Réceptions RVGI : %d intégrée(s), %d refusée(s), %d article(s) à apparier."
+            % (len(res["integrees"]), len(res["refusees"]), res["non_appariees"]))
+        return {"actif": True, "integrees": len(res["integrees"]),
+                "refusees": res["refusees"][:20], "non_appariees": res["non_appariees"]}
+    except Exception as e:
+        journal.append("Intégration des réceptions en échec : %s" % str(e)[:160])
+        return {"erreur": str(e)[:200]}
+
+
 def _erp_importer_en_fond(dossier_csv: str, dossier_temp: str) -> None:
     global _ERP_ETAT
     debut = datetime.now()
@@ -703,6 +741,9 @@ def _erp_importer_en_fond(dossier_csv: str, dossier_temp: str) -> None:
         # sait que les deux bases sont comparables. On prend l'instantané ici,
         # sinon l'écart de stock resterait une photo prise quand quelqu'un y
         # pense — et on ne saurait jamais depuis quand il existe.
+        # Les réceptions d'abord : la comparaison des stocks qui suit doit
+        # voir le stock après les entrées que l'ERP vient d'annoncer.
+        _ERP_ETAT["receptions"] = _integrer_les_receptions(lignes_journal)
         _ERP_ETAT["comparaisons"] = _comparer_les_stocks(lignes_journal)
         # Même raison, même moment : les fiches clients et fournisseurs
         # reprennent ce que l'ERP en dit, sans intervention.

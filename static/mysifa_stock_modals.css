@@ -309,8 +309,9 @@ body.light .mp-modal-actions .btn.btn-pf-entree{color:#fff}
 /* Validation typee : reprend la couleur de l'en-tete du modal */
 .mp-modal-actions .btn.btn-mvt-entree{background:var(--success);color:#fff}
 .mp-modal-actions .btn.btn-mvt-sortie{background:var(--danger);color:#fff}
-.mp-modal-actions .btn.btn-mvt-ajustement{background:var(--warn);color:#1a1200}
-.mp-modal-actions .btn.btn-mvt-transfert{background:var(--accent);color:var(--bg)}
+/* Texte blanc sur fond coloré, jamais noir (règle du 10/09/2026). */
+.mp-modal-actions .btn.btn-mvt-ajustement{background:var(--warn);color:white}
+.mp-modal-actions .btn.btn-mvt-transfert{background:var(--accent);color:white}
 
 /* ── Entree Z1 : deux colonnes, aucune barre de defilement ───────────────────
    La modale d'entree Z1 porte plus de champs que les autres (dossier, produit,

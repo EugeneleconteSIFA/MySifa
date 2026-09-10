@@ -3930,6 +3930,26 @@ def _verdict_certificat_reception(fournisseur: Optional[dict], date_reception) -
     return evaluer_certificat(fournisseur, date_reception)
 
 
+def _scan_alimente_stock(conn) -> bool:
+    """Un scan de réception ajoute-t-il encore une bobine au stock ?
+
+    Non dès que l'intégration des réceptions RVGI est en service (10/09/2026) :
+    c'est alors la réception de l'ERP qui fait entrer les bobines, et le scan
+    ne fait que rattacher le code-barres — sinon la même bobine compterait
+    deux fois. Avant la mise en service, rien ne change.
+    """
+    try:
+        r = conn.execute(
+            "SELECT valeur FROM stock_config WHERE cle = 'reception_rvgi_depuis'"
+        ).fetchone()
+    except sqlite3.Error:
+        return True
+    depuis = ((r["valeur"] if r else "") or "").strip()[:10]
+    if not depuis:
+        return True
+    return _now_paris().date().isoformat() < depuis
+
+
 @router.post("/api/stock/receptions")
 async def create_reception(request: Request):
     """Enregistre une reception de bobines (lot de codes-barres).
@@ -4032,6 +4052,7 @@ async def create_reception(request: Request):
     nb_bobines_ajoutees = len(normalized_items)
 
     with get_db() as conn:
+        alimente_stock = _scan_alimente_stock(conn)
         # ── Unicité des codes-barres ─────────────────────────────────────
         doublons_confirmes = bool(body.get("codes_doublons_confirmes"))
         doublon_note = (body.get("codes_doublons_note") or "").strip() or None
@@ -4117,10 +4138,11 @@ async def create_reception(request: Request):
                 conn.execute(
                     """INSERT INTO stock_reception_items
                        (reception_id, code_barre, scanned_at, matiere_id, laize_id,
-                        doublon_note)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
+                        doublon_note, impacte_stock)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
                     (reception_id, it["code"], now,
-                     it.get("matiere_id"), it.get("laize_id"), doublon_note),
+                     it.get("matiere_id"), it.get("laize_id"), doublon_note,
+                     1 if alimente_stock else 0),
                 )
             conn.execute(
                 """UPDATE stock_receptions
@@ -4171,10 +4193,11 @@ async def create_reception(request: Request):
                 conn.execute(
                     """INSERT INTO stock_reception_items
                        (reception_id, code_barre, scanned_at, matiere_id, laize_id,
-                        doublon_note)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
+                        doublon_note, impacte_stock)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
                     (reception_id, it["code"], now,
-                     it.get("matiere_id"), it.get("laize_id"), doublon_note),
+                     it.get("matiere_id"), it.get("laize_id"), doublon_note,
+                     1 if alimente_stock else 0),
                 )
             merged = False
             new_total = nb_bobines_ajoutees
@@ -4217,6 +4240,11 @@ async def create_reception(request: Request):
         for it in normalized_items:
             if "matiere_id" in it and "laize_id" in it:
                 grouped[(it["matiere_id"], it["laize_id"])] += 1
+
+        # Intégration RVGI en service : le stock est déjà entré par la
+        # réception de l'ERP, le scan ne rattache que les codes-barres.
+        if not alimente_stock:
+            grouped = {}
 
         for (mid, lid), nb in grouped.items():
             # Etat avant
@@ -4280,6 +4308,7 @@ async def create_reception(request: Request):
         "merged": merged,
         "bobines_creees": bobines_creees,
         "bobines_rattachees": bobines_rattachees,
+        "stock_impacte": alimente_stock,
     }
 
 

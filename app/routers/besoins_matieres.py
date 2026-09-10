@@ -184,6 +184,7 @@ _SQL_PE = """
            -- rendait donc toujours None, et l'aperçu annonçait « todo » sur
            -- un dossier déjà sorti du stock.
            pe.destockage, pe.destockage_at, pe.destockage_reserve,
+           pe.destockage_par, pe.destockage_relu_par, pe.destockage_relu_at,
            m.nom AS machine_nom,
            COALESCE(m.sans_matiere_premiere, 0) AS poste_sans_matiere,
            oi.qte_etiquettes AS qte_etiquettes,
@@ -3154,6 +3155,9 @@ def _destockage_lignes(conn, planning_id: int) -> dict:
             "destockage": pe.get("destockage") or "todo",
             "destockage_at": pe.get("destockage_at"),
             "destockage_reserve": pe.get("destockage_reserve"),
+            "destockage_par": pe.get("destockage_par"),
+            "destockage_relu_par": pe.get("destockage_relu_par"),
+            "destockage_relu_at": pe.get("destockage_relu_at"),
         },
         "documents": docs,
         "blocage": controle["blocage"],
@@ -3169,6 +3173,193 @@ def _destockage_lignes(conn, planning_id: int) -> dict:
         "lignes": lignes,
         "mouvements": deja,
     }
+
+
+# ── Espace Déstockage de MyStock : le suivi ───────────────────────
+#
+# Déclarées AVANT `/api/stock/destockage/{planning_id}` : sinon « suivi » et
+# « mouvements » seraient pris pour un identifiant de dossier (422).
+#
+# Demande d'Eugène du 10/09/2026 : un endroit, dans Matières premières, où
+# voir ce qui reste à déstocker, ce qui l'a été, ce qui a été relu, et les
+# mouvements écrits. Le bouton du planning suffisait pour UN dossier ; il ne
+# disait rien des 40 autres.
+
+
+def _depuis_jours(jours) -> str:
+    try:
+        j = max(1, min(int(jours or 30), 366))
+    except (TypeError, ValueError):
+        j = 30
+    return (datetime.now() - timedelta(days=j)).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _colonnes_pe(conn) -> set:
+    return {r[1] for r in conn.execute("PRAGMA table_info(planning_entries)")}
+
+
+@router.get("/api/stock/destockage/suivi")
+def destockage_suivi(request: Request, vue: str = "a_traiter", jours: int = 30,
+                     limite: int = 80):
+    """Les dossiers terminés, rangés par état de déstockage.
+
+    - `a_traiter` : terminés et pas encore sortis — avec le verdict du contrôle
+      des données (prêt ou bloqué, et pourquoi) — plus ceux sortis avec
+      réserves, qui attendent qu'on traite le manque.
+    - `destockes` : sortis sur la période, avec qui a déstocké et qui a relu.
+
+    Le contrôle se recalcule dossier par dossier (`_destockage_lignes`) : c'est
+    le même que celui qui décide au moment d'écrire, donc l'écran ne peut pas
+    annoncer « prêt » un dossier que le bouton refuserait. D'où la limite.
+    """
+    require_stock_write(request)
+    vue = (vue or "a_traiter").strip()
+    if vue not in ("a_traiter", "destockes"):
+        raise HTTPException(400, "Vue inconnue.")
+    limite = max(1, min(int(limite or 80), 200))
+    depuis = _depuis_jours(jours)
+
+    with get_db() as conn:
+        cols = _colonnes_pe(conn)
+        extra = ", ".join(
+            "pe.%s" % c for c in ("destockage_par", "destockage_relu_par", "destockage_relu_at")
+            if c in cols) or "NULL AS destockage_par"
+        base = (
+            "SELECT pe.id, pe.reference, pe.numero_of, pe.client, pe.statut, "
+            "       pe.destockage, pe.destockage_at, pe.destockage_reserve, "
+            "       pe.planned_end, pe.updated_at, m.nom AS machine, %s "
+            "  FROM planning_entries pe "
+            "  LEFT JOIN machines m ON m.id = pe.machine_id " % extra)
+        if vue == "a_traiter":
+            rows = conn.execute(
+                base + "WHERE pe.statut = 'termine' "
+                "   AND COALESCE(pe.destockage, 'todo') IN ('todo', 'reserve') "
+                "   AND COALESCE(pe.planned_end, pe.updated_at, '') >= ? "
+                " ORDER BY CASE COALESCE(pe.destockage, 'todo') WHEN 'reserve' THEN 0 ELSE 1 END, "
+                "          COALESCE(pe.planned_end, pe.updated_at) DESC "
+                " LIMIT ?", (depuis[:10], limite)).fetchall()
+        else:
+            rows = conn.execute(
+                base + "WHERE COALESCE(pe.destockage, 'todo') IN ('done', 'reserve') "
+                "   AND COALESCE(pe.destockage_at, '') >= ? "
+                " ORDER BY pe.destockage_at DESC LIMIT ?", (depuis, limite)).fetchall()
+
+        # Nombre de mouvements et dernier mouvement, en une requête.
+        ids = [int(r["id"]) for r in rows]
+        mvts: dict = {}
+        if ids:
+            marques = ",".join("?" * len(ids))
+            for m in conn.execute(
+                "SELECT planning_entry_id AS pid, COUNT(*) AS n, MAX(created_at) AS dernier "
+                "  FROM mp_mouvements WHERE planning_entry_id IN (%s) "
+                " GROUP BY planning_entry_id" % marques, ids).fetchall():
+                mvts[int(m["pid"])] = {"n": int(m["n"]), "dernier": m["dernier"]}
+
+        out = []
+        for r in rows:
+            d = dict(r)
+            etat = d.get("destockage") or "todo"
+            item = {
+                "planning_id": d["id"], "reference": d.get("reference"),
+                "numero_of": d.get("numero_of"), "client": d.get("client"),
+                "machine": d.get("machine"), "fin": d.get("planned_end"),
+                "destockage": etat, "destockage_at": d.get("destockage_at"),
+                "destockage_par": d.get("destockage_par"),
+                "reserve": d.get("destockage_reserve"),
+                "relu_par": d.get("destockage_relu_par"),
+                "relu_at": d.get("destockage_relu_at"),
+                "nb_mouvements": (mvts.get(d["id"]) or {}).get("n", 0),
+                "dernier_mouvement": (mvts.get(d["id"]) or {}).get("dernier"),
+            }
+            if vue == "a_traiter" and etat == "todo":
+                try:
+                    ctl = _destockage_lignes(conn, d["id"])["controle"]
+                    item["pret"] = bool(ctl["ok"])
+                    item["blocage"] = ctl.get("blocage")
+                    item["reserves_prevues"] = ctl.get("reserves") or []
+                except HTTPException as e:
+                    item["pret"] = False
+                    item["blocage"] = getattr(e, "detail", str(e))
+                except Exception as e:  # pragma: no cover — un dossier ne casse pas la liste
+                    logger.warning("suivi destockage %s : %s", d["id"], e)
+                    item["pret"] = False
+                    item["blocage"] = "Contrôle impossible : %s" % str(e)[:160]
+            out.append(item)
+
+        compteurs = conn.execute(
+            """SELECT
+                 SUM(CASE WHEN statut='termine' AND COALESCE(destockage,'todo')='todo'
+                          THEN 1 ELSE 0 END) AS a_destocker,
+                 SUM(CASE WHEN destockage='reserve' THEN 1 ELSE 0 END) AS avec_reserve,
+                 SUM(CASE WHEN destockage IN ('done','reserve') AND destockage_at >= ?
+                          THEN 1 ELSE 0 END) AS destockes_periode
+               FROM planning_entries""", (depuis,)).fetchone()
+        relus = None
+        if "destockage_relu_at" in cols:
+            relus = conn.execute(
+                "SELECT COUNT(*) FROM planning_entries "
+                " WHERE destockage IN ('done','reserve') AND destockage_at >= ? "
+                "   AND destockage_relu_at IS NOT NULL", (depuis,)).fetchone()[0]
+
+        return {
+            "vue": vue, "depuis": depuis, "dossiers": out,
+            "automatisme": {"depuis": _config_texte(conn, CLE_DESTOCKAGE_DEPUIS) or None},
+            "compteurs": {
+                "a_destocker": int(compteurs["a_destocker"] or 0),
+                "avec_reserve": int(compteurs["avec_reserve"] or 0),
+                "destockes_periode": int(compteurs["destockes_periode"] or 0),
+                "relus_periode": relus,
+            },
+        }
+
+
+@router.get("/api/stock/destockage/mouvements")
+def destockage_mouvements(request: Request, jours: int = 30, limite: int = 400):
+    """Les mouvements de stock écrits par le déstockage des dossiers."""
+    require_stock_write(request)
+    limite = max(1, min(int(limite or 400), 2000))
+    depuis = _depuis_jours(jours)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT m.id, m.created_at, m.type_mouvement, m.quantite,
+                      m.quantite_avant, m.quantite_apres, m.note, m.created_by_name,
+                      m.planning_entry_id, m.no_dossier, m.annule_mouvement_id,
+                      mp.id AS matiere_id, mp.reference, mp.designation, mp.categorie,
+                      l.valeur_mm AS laize_mm, pe.client
+                 FROM mp_mouvements m
+                 JOIN matieres_premieres mp ON mp.id = m.matiere_id
+                 LEFT JOIN mp_laizes l ON l.id = m.laize_id
+                 LEFT JOIN planning_entries pe ON pe.id = m.planning_entry_id
+                WHERE m.planning_entry_id IS NOT NULL
+                  AND m.created_at >= ?
+                ORDER BY m.id DESC
+                LIMIT ?""", (depuis, limite)).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        note = d.get("note") or ""
+        # Le libellé dit la nature du geste : c'est ce que l'écran filtre.
+        if note.startswith("Annulation"):
+            nature = "annulation"
+        elif note.startswith("Ajustement"):
+            nature = "ajustement"
+        elif note.startswith("Déstockage automatique"):
+            nature = "automatique"
+        else:
+            nature = "manuel"
+        d["nature"] = nature
+        d["unite"] = _unite_categorie(d.get("categorie"))
+        out.append(d)
+    return {"depuis": depuis, "mouvements": out}
+
+
+def _unite_categorie(categorie) -> str:
+    cat = (categorie or "").strip().lower()
+    if cat in _CATEGORIES_BOBINE:
+        return "bobine"
+    if cat == "adhesif":
+        return "kg"
+    return "palette"
 
 
 @router.get("/api/stock/destockage/{planning_id}")
@@ -3257,9 +3448,10 @@ async def destockage_valider(planning_id: int, request: Request):
         maintenant = datetime.now().isoformat()
         conn.execute(
             "UPDATE planning_entries SET destockage=?, destockage_at=?, "
-            "destockage_reserve=?, updated_at=? WHERE id=?",
+            "destockage_reserve=?, destockage_par=?, updated_at=? WHERE id=?",
             (etat_final, maintenant,
-             (" ; ".join(reserves)[:600] or None), maintenant, planning_id),
+             (" ; ".join(reserves)[:600] or None),
+             (user.get("nom") or user.get("email") or None), maintenant, planning_id),
         )
         conn.commit()
 
@@ -3524,18 +3716,24 @@ async def destockage_ajuster(planning_id: int, request: Request):
                           "apres": cible, "sens": sens, **res})
 
         maintenant = datetime.now().isoformat()
+        # Enregistrer la relecture, même sans écart, VAUT validation : la
+        # personne qui a vu la production confirme ce qui est sorti. C'est ce
+        # que l'espace Déstockage de MyStock affiche comme « relu ».
+        relu_par = user.get("nom") or user.get("email") or None
         if body.get("lever_reserve"):
             # La réserve se lève à la main, jamais toute seule : c'est un
             # humain qui constate que la matière manquante a été traitée.
             conn.execute(
                 "UPDATE planning_entries SET destockage='done', "
-                "destockage_reserve=NULL, updated_at=? WHERE id=?",
-                (maintenant, planning_id),
+                "destockage_reserve=NULL, destockage_relu_par=?, "
+                "destockage_relu_at=?, updated_at=? WHERE id=?",
+                (relu_par, maintenant, maintenant, planning_id),
             )
-        elif faits:
+        else:
             conn.execute(
-                "UPDATE planning_entries SET updated_at=? WHERE id=?",
-                (maintenant, planning_id),
+                "UPDATE planning_entries SET destockage_relu_par=?, "
+                "destockage_relu_at=?, updated_at=? WHERE id=?",
+                (relu_par, maintenant, maintenant, planning_id),
             )
         conn.commit()
 
@@ -3591,7 +3789,8 @@ async def destockage_annuler(planning_id: int, request: Request):
 
         conn.execute(
             "UPDATE planning_entries SET destockage='todo', destockage_at=NULL, "
-            "destockage_reserve=NULL, updated_at=? WHERE id=?",
+            "destockage_reserve=NULL, destockage_par=NULL, destockage_relu_par=NULL, "
+            "destockage_relu_at=NULL, updated_at=? WHERE id=?",
             (datetime.now().isoformat(), planning_id),
         )
         conn.commit()
@@ -3659,8 +3858,9 @@ def _destockage_auto_un(conn, pe_id: int, user: dict) -> dict:
     maintenant = datetime.now().isoformat()
     conn.execute(
         "UPDATE planning_entries SET destockage=?, destockage_at=?, "
-        "destockage_reserve=?, updated_at=? WHERE id=?",
+        "destockage_reserve=?, destockage_par=?, updated_at=? WHERE id=?",
         (etat_final, maintenant, (" ; ".join(reserves)[:600] or None),
+         (user or {}).get("nom") or (user or {}).get("email") or "Déstockage automatique",
          maintenant, pe_id),
     )
     return {"planning_id": pe_id, "reference": dossier.get("reference"),
