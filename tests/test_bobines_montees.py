@@ -15,7 +15,11 @@ Chaque bloc protege une regle posee le 10/09/2026 avec l'atelier :
    dossier est un doublon.
 5. **Une bobine de nature inconnue n'occupe aucune place** tant que personne
    n'a tranche.
-6. **La memoire des natures n'apprend que ce qui est arrete** : jamais une
+6. **Au demarrage d'un dossier, ce qui reste monte est repris sans rescan**,
+   origine recopiee ; une bobine decochee est demontee ; la glassine n'est
+   pas rattachee quand le poste frontal ne porte que des complexes (elle reste
+   montee) ; une reprise ne duplique jamais.
+7. **La memoire des natures n'apprend que ce qui est arrete** : jamais une
    categorie de fiche fournisseur (Burgo note « complexe » alors qu'il livre du
    frontal empoisonnerait la memoire).
 
@@ -95,6 +99,7 @@ def base():
     migration("app/core/migrations/2026_09_10_postes_deroulement.py").appliquer(conn)
     migration("app/core/migrations/2026_09_10_bobines_montees.py").appliquer(conn)
     migration("app/core/migrations/2026_09_10_bobines_montees_remplacement.py").appliquer(conn)
+    migration("app/core/migrations/2026_09_10_bobines_heritees.py").appliquer(conn)
     return conn
 
 
@@ -195,7 +200,41 @@ check("... et demontee ici (deplacee)",
       "deplacee")
 check("repiquage : aucun etat", bm.monter(c, 5, "Z-1", categorie="frontal")["action"], "sans_poste")
 
-print("\n5. Diagnostic")
+print("\n5. Reprise au demarrage d'un dossier (lot 4)")
+c = base()
+fa = c.execute("""INSERT INTO fab_matieres_utilisees (machine_id, no_dossier, code_barre, scanned_at,
+                  liaison_mode, fournisseur_manual, certificat_fsc_manual) VALUES
+                  (1,'D1','F-A','2026-09-10T06:00:00','manual','Kanzan','FSC-C000')""").lastrowid
+g1 = scan(c, 1, "G-1", "D1", "2026-09-10T06:01:00")
+bm.monter(c, 1, "F-A", categorie="frontal", fab_matiere_id=fa, no_dossier="D1")
+bm.monter(c, 1, "G-1", categorie="glassine", fab_matiere_id=g1, no_dossier="D1")
+res = bm.reprendre(c, 1, "D2", par="op", machine_nom="Cohésio 1")
+check("D2 herite du frontal et de la glassine", sorted(b["code_barre"] for b in res["rattachees"]), ["F-A", "G-1"])
+ligne = dict(c.execute("SELECT * FROM fab_matieres_utilisees WHERE no_dossier='D2' AND code_barre='F-A'").fetchone())
+check("origine recopiee, heritage trace",
+      (ligne["fournisseur_manual"], ligne["certificat_fsc_manual"], ligne["herite_de_id"], ligne["poste_source"]),
+      ("Kanzan", "FSC-C000", fa, "montee"))
+check("reprise rejouee -> aucun doublon", (len(bm.reprendre(c, 1, "D2")["rattachees"]),
+      c.execute("SELECT COUNT(*) FROM fab_matieres_utilisees WHERE no_dossier='D2'").fetchone()[0]), (0, 2))
+mont_fa = c.execute("SELECT id FROM bobines_montees WHERE code_barre='F-A'").fetchone()[0]
+res = bm.reprendre(c, 1, "D3", retirer=[mont_fa, 99999])
+check("frontal decoche -> demonte, seule la glassine passe",
+      (res["retirees"], [b["code_barre"] for b in res["rattachees"]]), (["F-A"], ["G-1"]))
+check("... heritee de D2, le dernier dossier qui l'a eue", res["rattachees"][0]["dossier_origine"], "D2")
+cx = scan(c, 1, "CX-1", "D3", "2026-09-10T10:00:00")
+bm.monter(c, 1, "CX-1", categorie="complexe", fab_matiere_id=cx, no_dossier="D3")
+res = bm.reprendre(c, 1, "D4")
+check("frontal = complexe seul -> glassine gardee mais non rattachee",
+      ([b["code_barre"] for b in res["rattachees"]], res["glassine_non_rattachee"]), (["CX-1"], ["G-1"]))
+check("... et toujours montee", [b["code_barre"] for b in bm.etat_machine(c, 1)["postes"][1]["bobines"]], ["G-1"])
+xx = scan(c, 1, "XX-9", "D4", "2026-09-10T11:00:00")
+bm.monter(c, 1, "XX-9", fab_matiere_id=xx)
+check("poste inconnu -> rattachee par prudence",
+      [b["code_barre"] for b in bm.reprendre(c, 1, "D5")["rattachees"]], ["G-1", "CX-1", "XX-9"])
+check("etat : dernier dossier de chaque bobine",
+      bm.etat_machine(c, 1)["postes"][0]["bobines"][0]["dernier_dossier"], "D5")
+
+print("\n6. Diagnostic")
 c = base()
 dg = pb.diagnostic(c)
 check("ambigus : Suzhou (Likexin a sa regle)", [f["nom"] for f in dg["ambigus"]], ["Suzhou"])

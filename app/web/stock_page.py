@@ -353,7 +353,7 @@ body.light .field-input.empl-upper::placeholder{
   color:#64748b;
   opacity:.95;
 }
-.btn{background:var(--accent);color:var(--bg);border:none;border-radius:10px;padding:10px 20px;
+.btn{background:var(--accent);color:white;border:none;border-radius:10px;padding:10px 20px;
   font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s,box-shadow .15s,transform .05s;white-space:nowrap}
 .btn:hover{filter:brightness(1.05);box-shadow:0 0 0 4px rgba(34,211,238,.18)}
 .btn:active{transform:translateY(1px)}
@@ -363,7 +363,7 @@ body.light .btn:not(.btn-ghost):not(.btn-soft){color:#fff}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
 body.light .btn.btn-ghost{color:var(--text2)}
 body.light .btn.btn-ghost:hover{color:var(--accent)}
-.btn-sm{background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:7px 14px;
+.btn-sm{background:var(--accent);color:white;border:none;border-radius:8px;padding:7px 14px;
   font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s,box-shadow .15s,transform .05s}
 body.light .btn-sm{color:#fff}
 .btn-sm:hover{filter:brightness(1.05);box-shadow:0 0 0 4px rgba(34,211,238,.18)}
@@ -18831,7 +18831,7 @@ function buildReceptionRvgi() {
     return wrap;
   }
   if (S.rvgiErreur) {
-    wrap.appendChild(el('div', { cls: 'alert alert-danger' },
+    wrap.appendChild(el('div', { style: 'padding:11px 14px;border-radius:9px;background:var(--bg);border:1px solid var(--danger);color:var(--text);font-size:13px' },
       'Lecture impossible : ' + S.rvgiErreur));
     return wrap;
   }
@@ -18841,7 +18841,7 @@ function buildReceptionRvgi() {
   // Tant qu'aucune date de bascule n'est posée, rien n'entre — et l'écran le
   // dit plutôt que d'afficher une liste vide qu'on prendrait pour « à jour ».
   if (f.message) {
-    wrap.appendChild(el('div', { cls: 'alert alert-info', style: { marginBottom: '14px' } },
+    wrap.appendChild(el('div', { style: 'margin-bottom:14px;padding:11px 14px;border-radius:9px;background:var(--bg);border:1px solid var(--accent);color:var(--text);font-size:13px' },
       f.message,
       f.depuis ? null : el('div', { style: { marginTop: '8px', fontSize: '12px' } },
         'Aucune réception antérieure ne sera reprise : le stock actuel reste la référence.')));
@@ -18862,100 +18862,116 @@ function buildReceptionRvgi() {
 
   const pretes = lignes.filter(l => l.integrable);
   wrap.appendChild(el('div', {
-    style: { display: 'flex', alignItems: 'center', gap: '12px',
-             flexWrap: 'wrap', margin: '4px 0 14px' } },
-    el('span', { cls: 'muted', style: { fontSize: '12.5px' } },
-      lignes.length + ' ligne' + (lignes.length > 1 ? 's' : '') + ' à intégrer depuis le '
-      + (f.depuis || '?') + ' · ' + pretes.length + ' prête' + (pretes.length > 1 ? 's' : '')),
+    style: 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 12px' },
+    el('span', { style: 'font-size:13px;color:var(--text2)' },
+      el('b', null, String(lignes.length)), ' ligne' + (lignes.length > 1 ? 's' : '') + ' à intégrer depuis le '
+      + (f.depuis || '?') + ' · ',
+      el('b', { style: 'color:' + (pretes.length ? 'var(--success)' : 'var(--muted)') }, String(pretes.length)),
+      ' prête' + (pretes.length > 1 ? 's' : ''),
+      lignes.length > pretes.length
+        ? el('span', { style: 'color:var(--muted)' }, ' — les autres attendent un appariement')
+        : null),
     pretes.length
-      ? el('button', { cls: 'btn', on: { click: () => rvgiIntegrer(pretes.map(l => l.lif_id)) } },
-          'Intégrer les ' + pretes.length + ' lignes prêtes')
+      ? el('button', { cls: 'btn-sm', on: { click: () => rvgiIntegrer(pretes.map(l => l.lif_id)) } },
+          pretes.length > 1 ? 'Intégrer les ' + pretes.length + ' lignes prêtes' : 'Intégrer la ligne prête')
       : null));
 
   const tbody = el('tbody');
   lignes.forEach(l => tbody.appendChild(rvgiLigne(l)));
-  const table = el('table', { cls: 'tbl', style: { width: '100%' } },
+  const table = el('table', { cls: 'bes-table' },
     el('thead', null, el('tr', null,
-      el('th', { style: { textAlign: 'left' } }, 'Réception'),
-      el('th', { style: { textAlign: 'left' } }, 'Article RVGI'),
-      el('th', { style: { textAlign: 'left' } }, 'Référence MySifa'),
-      el('th', { style: { textAlign: 'right' } }, 'Quantité'),
-      el('th', { style: { textAlign: 'left' } }, ''))),
+      el('th', null, 'Réception'),
+      el('th', null, 'Article RVGI'),
+      el('th', null, 'Référence MySifa'),
+      el('th', { cls: 'num' }, 'Quantité'),
+      el('th', null, 'État'))),
     tbody);
-  wrap.appendChild(el('div', { style: { overflowX: 'auto' } }, table));
+  wrap.appendChild(el('div', { cls: 'bes-card bes-scroll-x' }, table));
   return wrap;
 }
 
 function rvgiLigne(l) {
   const tr = el('tr');
+  const petit = 'font-size:11.5px;color:var(--muted);margin-top:2px';
 
-  tr.appendChild(el('td', null,
-    el('div', null, l.amjl || '—'),
-    el('div', { cls: 'muted', style: { fontSize: '11px' } },
-      'cde ' + l.numero + '/' + l.ligne + (l.fournisseur ? ' · ' + l.fournisseur : ''))));
+  tr.appendChild(el('td', { style: 'white-space:nowrap;vertical-align:top' },
+    el('div', { style: 'font-weight:700' }, l.amjl ? _fmtDate(l.amjl) : '—'),
+    el('div', { style: petit }, 'cde ' + l.numero + '/' + l.ligne),
+    l.fournisseur ? el('div', { style: petit }, l.fournisseur) : null));
 
-  tr.appendChild(el('td', null,
-    el('div', { style: { fontFamily: 'monospace' } }, l.article),
-    el('div', { cls: 'muted', style: { fontSize: '11px', maxWidth: '260px' } },
-      (l.libelle || '').slice(0, 70) + (l.laize_mm ? ' · laize ' + l.laize_mm + ' mm' : ''))));
+  tr.appendChild(el('td', { style: 'vertical-align:top;min-width:260px' },
+    el('div', { style: 'font-family:var(--mono,monospace);font-weight:700' }, l.article),
+    el('div', { style: petit + ';max-width:380px' },
+      (l.libelle || '') + (l.laize_mm ? ' · laize ' + l.laize_mm + ' mm' : ''))));
 
   // Colonne matière : la référence appariée, ou le choix à faire. Les
   // candidates sont déjà restreintes à ce que le type RVGI peut désigner —
   // on ne propose jamais un carton pour une bobine.
-  const tdMat = el('td');
+  const tdMat = el('td', { style: 'vertical-align:top;min-width:260px' });
   if (l.matiere_id) {
-    tdMat.appendChild(el('div', null, l.matiere_ref || ('#' + l.matiere_id)));
-    tdMat.appendChild(el('button', {
-      cls: 'btn-sm btn-ghost', style: { fontSize: '11px', padding: '2px 6px' },
-      on: { click: () => rvgiApparier(l, null) },
-    }, 'délier'));
+    tdMat.appendChild(el('div', { style: 'display:flex;gap:8px;align-items:center' },
+      el('span', { style: 'font-weight:700' }, l.matiere_ref || ('#' + l.matiere_id)),
+      el('button', {
+        type: 'button',
+        style: 'padding:3px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);'
+          + 'color:var(--text2);font-family:inherit;font-size:11px;cursor:pointer',
+        on: { click: () => rvgiApparier(l, null) },
+      }, 'Délier')));
+    if (l.matiere_designation) tdMat.appendChild(el('div', { style: petit }, l.matiere_designation));
   } else if ((l.propositions || []).length) {
-    const sel = el('select', { style: { maxWidth: '260px' } },
+    const sel = el('select', {
+      style: 'flex:1;min-width:0;max-width:260px;padding:6px 8px;border-radius:7px;border:1px solid var(--border);'
+        + 'background:var(--bg);color:var(--text);font-family:inherit;font-size:13px' },
       el('option', { attrs: { value: '' } }, '— choisir —'),
       ...l.propositions.map((p, i) => el('option', {
         attrs: Object.assign({ value: String(p.matiere_id) }, i === 0 ? { selected: 'selected' } : {}),
-      }, p.reference + '  (' + Math.round(p.score * 100) + ' %)')));
-    tdMat.appendChild(sel);
-    tdMat.appendChild(el('button', {
-      cls: 'btn-sm', style: { marginLeft: '6px' },
-      on: { click: () => sel.value && rvgiApparier(l, Number(sel.value)) },
-    }, 'Apparier'));
+      }, p.reference + (p.designation && p.designation !== p.reference ? ' — ' + p.designation : '')
+         + '  (' + Math.round(p.score * 100) + ' %)')));
+    tdMat.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center' },
+      sel,
+      el('button', {
+        cls: 'btn-sm', type: 'button',
+        on: { click: () => sel.value && rvgiApparier(l, Number(sel.value)) },
+      }, 'Apparier')));
   } else {
-    tdMat.appendChild(el('span', { cls: 'muted', style: { fontSize: '12px' } },
-      'Aucune référence proposée'));
+    tdMat.appendChild(el('span', { style: 'font-size:12px;color:var(--muted)' },
+      'Aucune référence proposée — apparier depuis Monitoring › Écarts matières RVGI'));
   }
   tr.appendChild(tdMat);
 
-  const tdQte = el('td', { style: { textAlign: 'right', whiteSpace: 'nowrap' } });
+  const tdQte = el('td', { style: 'text-align:right;white-space:nowrap;vertical-align:top;font-variant-numeric:tabular-nums' });
   if (l.quantite != null) {
-    tdQte.appendChild(el('div', null, String(l.quantite) + ' ' + (l.unite || '')));
-    if (l.detail) tdQte.appendChild(el('div', { cls: 'muted', style: { fontSize: '11px' } }, l.detail));
+    tdQte.appendChild(el('div', { style: 'font-weight:700' }, fN(l.quantite) + ' ' + (l.unite || '')));
+    if (l.detail) tdQte.appendChild(el('div', { style: petit }, l.detail));
   } else {
-    tdQte.appendChild(el('div', { cls: 'muted' }, String(l.qte_rvgi || '—')));
+    tdQte.appendChild(el('div', { style: 'font-weight:700' }, l.qte_rvgi != null ? fN(l.qte_rvgi) : '—'));
+    tdQte.appendChild(el('div', { style: petit }, 'unité RVGI'));
   }
   // Deux sources qui se contredisent sur la longueur de bobine : on le montre
   // sans bloquer. Le stock entre quand même, mais quelqu'un sait qu'il faut
   // corriger le conditionnement de la matière.
   if (l.alerte) {
     tdQte.appendChild(el('div', {
-      style: { fontSize: '11px', color: 'var(--warn, #c98a00)', maxWidth: '260px',
-               whiteSpace: 'normal', textAlign: 'right' } }, l.alerte));
+      style: 'font-size:11px;color:var(--warn);max-width:260px;white-space:normal;text-align:right;margin-top:3px' },
+      l.alerte));
   }
   tr.appendChild(tdQte);
 
-  const tdAct = el('td');
+  const tdAct = el('td', { style: 'vertical-align:top;min-width:200px' });
   if (l.integrable) {
     tdAct.appendChild(el('button', {
-      cls: 'btn-sm', on: { click: () => rvgiIntegrer([l.lif_id]) },
-    }, l.regime === 'attente' ? 'Créer la réception' : 'Entrer en stock'));
+      cls: 'btn-sm', type: 'button', on: { click: () => rvgiIntegrer([l.lif_id]) },
+    }, 'Entrer en stock'));
     if (l.regime === 'attente') {
-      tdAct.appendChild(el('div', { cls: 'muted', style: { fontSize: '10.5px', marginTop: '3px' } },
-        'le stock bougera au scan'));
+      tdAct.appendChild(el('div', { style: petit }, 'bobines : codes-barres à rattacher au scan'));
     }
   } else {
-    tdAct.appendChild(el('div', { cls: 'muted', style: { fontSize: '11px', maxWidth: '240px',
-                                                        whiteSpace: 'normal' } },
-      (l.manque || []).join(' · ')));
+    tdAct.appendChild(el('span', {
+      style: 'display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;'
+        + 'background:var(--bg);border:1px solid var(--warn);color:var(--warn);white-space:nowrap' },
+      l.matiere_id ? 'À compléter' : 'À apparier'));
+    const manque = (l.manque || []).filter(m => !/non apparié/i.test(m));
+    if (manque.length) tdAct.appendChild(el('div', { style: petit + ';white-space:normal;max-width:240px' }, manque.join(' · ')));
   }
   tr.appendChild(tdAct);
   return tr;
@@ -22564,7 +22580,7 @@ function dstTableDossiers(st) {
   const table = el('table', { cls: 'bes-table' });
   const entetes = st.vue === 'a_traiter'
     ? ['Dossier', 'Client', 'Machine', 'Fin', 'État', 'Motif', '']
-    : ['Dossier', 'Client', 'Déstocké', 'Par', 'Relu', 'Mouvements', ''];
+    : ['Dossier', 'Client', 'Déstocké', 'Par', 'Relu', 'Matières sorties', ''];
   table.appendChild(el('thead', {}, el('tr', {}, ...entetes.map(h => el('th', {}, h)))));
   const tbody = el('tbody', {});
   rows.forEach(x => {
@@ -22603,6 +22619,27 @@ function dstTableDossiers(st) {
         act,
       ));
     } else {
+      // Le détail de ce qui est sorti se déplie sous la ligne : références,
+      // laizes et quantités, sans ouvrir la relecture.
+      const mats = x.matieres || [];
+      const ouvert = !!(st.ouverts && st.ouverts[x.planning_id]);
+      const detail = el('tr', { style: ouvert ? '' : 'display:none' },
+        el('td', { attrs: { colspan: '7' }, style: 'padding:0 14px 12px;background:var(--bg)' },
+          mats.length ? dstTableMatieresSorties(mats)
+                      : el('div', { style: 'padding:10px 0;font-size:12px;color:var(--muted)' }, 'Aucune matière sortie.')));
+      const bascule = el('button', {
+        type: 'button',
+        attrs: { title: 'Voir les références et quantités sorties' },
+        style: 'padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);'
+          + 'font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap',
+        on: { click: (e) => {
+          st.ouverts = st.ouverts || {};
+          st.ouverts[x.planning_id] = !st.ouverts[x.planning_id];
+          detail.style.display = st.ouverts[x.planning_id] ? '' : 'none';
+          e.currentTarget.textContent = mats.length + ' matière' + (mats.length > 1 ? 's' : '')
+            + (st.ouverts[x.planning_id] ? ' ▴' : ' ▾');
+        } },
+      }, mats.length + ' matière' + (mats.length > 1 ? 's' : '') + (ouvert ? ' ▴' : ' ▾'));
       tbody.appendChild(el('tr', {},
         ref,
         el('td', { style: 'white-space:nowrap' }, x.client || '—'),
@@ -22613,13 +22650,40 @@ function dstTableDossiers(st) {
           ? el('span', null, el('span', { style: 'color:var(--success);font-weight:700' }, '✓ '), x.relu_par,
               el('div', { cls: 'bes-dossier-meta' }, x.relu_at ? fDateTime(x.relu_at) : ''))
           : el('span', { style: 'color:var(--muted)' }, 'Non relu')),
-        el('td', {}, String(x.nb_mouvements || 0)),
+        el('td', {}, bascule),
         act,
       ));
+      tbody.appendChild(detail);
     }
   });
   table.appendChild(tbody);
   return el('div', { cls: 'bes-card bes-scroll-x' }, table);
+}
+
+function dstTableMatieresSorties(mats) {
+  const unites = { bobine: ['bobine', 'bobines'], palette: ['palette', 'palettes'], kg: ['kg', 'kg'],
+    ml: ['ml', 'ml'], carton: ['carton', 'cartons'] };
+  const u = (code, n) => { const p = unites[code] || [code || '', code || '']; return Math.abs(n) > 1 ? p[1] : p[0]; };
+  const td = 'padding:7px 10px;border-bottom:1px solid var(--border);font-size:12.5px';
+  const t = el('table', { style: 'width:100%;border-collapse:collapse;margin-top:6px;background:var(--card);border:1px solid var(--border);border-radius:8px' });
+  t.appendChild(el('thead', {}, el('tr', {},
+    ...[['Référence', 'left'], ['Désignation', 'left'], ['Laize', 'left'], ['Quantité', 'right'], ['En unité de stock', 'right']]
+      .map(([h, a]) => el('th', { style: 'padding:7px 10px;text-align:' + a + ';font-size:10px;text-transform:uppercase;'
+        + 'letter-spacing:.4px;color:var(--muted);border-bottom:1px solid var(--border)' }, h)))));
+  const tb = el('tbody', {});
+  mats.forEach(m => tb.appendChild(el('tr', {},
+    el('td', { style: td + ';font-weight:700;white-space:nowrap' }, m.reference || '—'),
+    el('td', { style: td + ';color:var(--text2)' }, m.designation || ''),
+    el('td', { style: td + ';white-space:nowrap' }, m.laize_mm ? Math.round(m.laize_mm) + ' mm' : '—'),
+    el('td', { style: td + ';text-align:right;white-space:nowrap;font-weight:700;font-variant-numeric:tabular-nums' },
+      m.quantite_reelle != null && m.unite_reelle !== m.unite
+        ? fN(m.quantite_reelle) + ' ' + u(m.unite_reelle, m.quantite_reelle)
+        : fN(m.quantite) + ' ' + u(m.unite, m.quantite)),
+    el('td', { style: td + ';text-align:right;white-space:nowrap;color:var(--muted);font-variant-numeric:tabular-nums' },
+      fN(m.quantite) + ' ' + u(m.unite, m.quantite)),
+  )));
+  t.appendChild(tb);
+  return t;
 }
 
 const DST_NATURES = { automatique: 'Automatique', ajustement: 'Ajustement', annulation: 'Annulation', manuel: 'Validation' };

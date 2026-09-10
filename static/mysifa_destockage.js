@@ -40,6 +40,8 @@
     adhesif: [],
     palette: [],
   };
+  const NATURES = {support: 'Frontal', glassine: 'Glassine', adhesif: 'Adhésif',
+    mandrin: 'Mandrin', carton: 'Carton', palette: 'Palette', ajout: 'Ajout'};
   const LIBELLES_CATEGORIE = {frontal: 'Frontal', complexe: 'Complexe', glassine: 'Glassine',
     adhesif: 'Adhésif', mandrin: 'Mandrin', carton: 'Carton', palette: 'Palette'};
 
@@ -145,10 +147,6 @@
     });
   }
 
-  function lienFiche(mid) {
-    return '<a href="/stock?matiere=' + encodeURIComponent(mid) + '" target="_blank" rel="noopener" '
-      + 'style="color:var(--accent);text-decoration:none;font-weight:600">Fiche matière ↗</a>';
-  }
   function boutonPetit(attr, i, libelle) {
     return '<button type="button" ' + attr + '="' + i + '" style="margin-top:6px;margin-right:6px;padding:5px 10px;'
       + 'border-radius:7px;border:1px solid var(--accent);background:var(--bg);color:var(--accent);'
@@ -172,8 +170,7 @@
           + esc(unite(conv.unite_simplifiee, n0)) + '<br>';
       }
       h += '<span style="color:var(--warn)">' + esc(conv.manque || 'Conversion impossible') + '</span><br>'
-        + (peutCompleter ? boutonPetit('data-dr-fiche', i, 'Compléter la fiche') : '')
-        + lienFiche(r.mid);
+        + (peutCompleter ? boutonPetit('data-dr-fiche', i, 'Compléter la fiche') : '');
       return h;
     }
     const n = Number(r.val || 0) * Number(conv.facteur_simplifie);
@@ -228,7 +225,7 @@
     const aide = ed.mode === 'creer'
       ? 'La matière est créée dans MyStock et associée à cette valeur de fiche : les prochains dossiers la trouveront seuls.'
       : 'Les champs laissés vides ne sont pas modifiés. Le reste de la fiche s\'édite dans MyStock.';
-    return '<tr data-dr-edition="' + i + '"><td colspan="4" style="padding:4px 10px 14px">'
+    return '<tr data-dr-edition="' + i + '"><td colspan="6" style="padding:10px 12px 14px;border-bottom:1px solid var(--border)">'
       + '<div style="border:1px solid var(--accent);border-radius:10px;padding:12px 14px;background:var(--bg)">'
       + '<div style="font-weight:700;font-size:13px;margin-bottom:4px">' + titre + '</div>'
       + '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">' + aide + '</div>'
@@ -256,7 +253,7 @@
     if (r.mid && !vus.has(r.mid) && c) { options.unshift(c); vus.add(r.mid); }
     if (l.matiere_id && !vus.has(l.matiere_id) && candidat(l.matiere_id)) options.unshift(candidat(l.matiere_id));
 
-    const selStyle = 'width:100%;max-width:280px;background:var(--bg);border:1px solid var(--border);'
+    const selStyle = 'flex:1;min-width:0;width:100%;max-width:340px;background:var(--bg);border:1px solid var(--border);'
       + 'border-radius:7px;padding:6px 8px;color:var(--text);font-family:inherit;font-size:13px;font-weight:700';
     const opts = (r.mid ? '' : '<option value="">' + esc(l.source_value || 'Choisir une matière') + '</option>')
       + options.map(o => '<option value="' + o.matiere_id + '"' + (o.matiere_id === r.mid ? ' selected' : '') + '>'
@@ -284,26 +281,45 @@
       ? 'remplace « ' + esc(l.matiere_ref || l.source_value || '') + ' »'
       : (!l.matiere_id && r.mid && l.source_value ? 'pour « ' + esc(l.source_value) + ' »'
         : (l.remplace && r.mid === l.matiere_id ? 'remplace « ' + esc(l.remplace.matiere_ref || '') + ' »' : ''));
-    const sous = [laizeHtml, remplace, l.hors_fiche ? 'ajoutée à la main' : '',
-      (r.mid && conv.facteur_stock != null) ? lienFiche(r.mid) : ''].filter(Boolean)
+    const sous = [laizeHtml, remplace, l.hors_fiche ? 'ajoutée à la main' : ''].filter(Boolean)
       .join('<span style="color:var(--muted)"> · </span>');
 
     const bloque = !r.mid || conv.facteur_stock == null;
     const step = conv.entier ? '1' : (conv.unite_reelle === 'ml' ? '1' : '0.001');
     const u = conv.unite_reelle || l.besoin_unite || '';
+    // Une ligne à compléter se voit d'un coup d'œil : liseré et fond, pas
+    // seulement un texte orange noyé dans la dernière colonne.
+    const aCompleter = bloque || (c && (c.laizes || []).length && r.lid == null);
+    const fond = (i % 2) ? 'background:var(--bg);' : '';
+    const td = 'padding:10px 12px;vertical-align:middle;border-bottom:1px solid var(--border);' + fond;
+    const lien = r.mid ? '<a href="/stock?matiere=' + encodeURIComponent(r.mid) + '" target="_blank" rel="noopener" '
+      + 'title="Ouvrir la fiche matière" style="flex:none;display:inline-flex;align-items:center;justify-content:center;'
+      + 'width:30px;height:30px;border-radius:7px;border:1px solid var(--border);color:var(--accent);text-decoration:none;'
+      + 'font-weight:700">↗</a>' : '';
+    const ecart = (l.consomme != null && !bloque) ? Number(r.val || 0) - Number(l.consomme) : null;
+    const ecartHtml = ecart == null ? '<span style="color:var(--muted)">—</span>'
+      : (Math.abs(ecart) < 1e-6 ? '<span style="color:var(--muted)">=</span>'
+        : '<span style="font-weight:700;color:var(--warn)">' + (ecart > 0 ? '+' : '−') + nombre(Math.abs(ecart))
+          + ' ' + esc(unite(u, Math.abs(ecart))) + '</span>');
     let html = '<tr data-dr-i="' + i + '">'
-      + '<td style="padding:9px 10px;vertical-align:top">' + select
-      + '<div style="font-size:11px;color:var(--muted);margin-top:3px">' + sous + '</div></td>'
-      + '<td style="padding:9px 10px;text-align:right;vertical-align:top;color:var(--muted);white-space:nowrap">'
-      + (l.consomme != null ? nombre(l.consomme) + ' ' + esc(unite(u, l.consomme)) : '—') + '</td>'
-      + '<td style="padding:9px 10px;text-align:right;vertical-align:top;white-space:nowrap">'
+      + '<td style="' + td + 'border-left:3px solid ' + (aCompleter ? 'var(--warn)' : 'transparent') + ';white-space:nowrap">'
+      + '<span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">'
+      + esc(NATURES[l.kind] || l.kind || '') + '</span></td>'
+      + '<td style="' + td + '">'
+      + '<div style="display:flex;gap:6px;align-items:center">' + select + lien + '</div>'
+      + (sous ? '<div style="font-size:11.5px;color:var(--muted);margin-top:5px">' + sous + '</div>' : '') + '</td>'
+      + '<td style="' + td + 'text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--text2)">'
+      + (l.consomme != null ? nombre(l.consomme) + ' <span style="color:var(--muted)">' + esc(unite(u, l.consomme)) + '</span>' : '—') + '</td>'
+      + '<td style="' + td + 'text-align:right;white-space:nowrap">'
       + '<input type="number" step="' + step + '" min="0" data-dr-q="' + i + '" value="' + Number(r.val || 0) + '"'
       + (bloque ? ' disabled' : '')
-      + ' style="width:110px;text-align:right;background:var(--bg);border:1px solid var(--border);border-radius:7px;'
-      + 'padding:7px 9px;color:var(--text);font-family:inherit;font-size:13px;' + (bloque ? 'opacity:.5' : '') + '">'
-      + '<span style="display:inline-block;min-width:54px;text-align:left;font-size:11.5px;color:var(--muted);padding-left:4px">'
+      + ' style="width:104px;text-align:right;background:var(--card);border:1px solid var(--border);border-radius:7px;'
+      + 'padding:7px 9px;color:var(--text);font-family:inherit;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;'
+      + (bloque ? 'opacity:.45' : '') + '">'
+      + '<span style="display:inline-block;width:62px;text-align:left;font-size:12px;color:var(--muted);padding-left:6px">'
       + esc(unite(u, r.val)) + '</span></td>'
-      + '<td data-dr-simpl="' + i + '" style="padding:9px 10px;vertical-align:top;font-size:12.5px">' + simplifieHtml(i) + '</td>'
+      + '<td data-dr-ecart="' + i + '" style="' + td + 'text-align:right;white-space:nowrap;font-size:12.5px">' + ecartHtml + '</td>'
+      + '<td data-dr-simpl="' + i + '" style="' + td + 'font-size:12.5px">' + simplifieHtml(i) + '</td>'
       + '</tr>';
     if (E.edition && E.edition.i === i) html += editionHtml(i);
     return html;
@@ -314,7 +330,7 @@
     if (!tb) return;
     tb.innerHTML = E.rows.length
       ? E.rows.map((_, i) => ligneHtml(i)).join('')
-      : '<tr><td colspan="4" style="padding:18px;text-align:center;color:var(--muted)">Aucune ligne.</td></tr>';
+      : '<tr><td colspan="6" style="padding:18px;text-align:center;color:var(--muted)">Aucune ligne.</td></tr>';
   }
 
   function changerMatiere(i, valeur) {
@@ -341,6 +357,13 @@
     // Pas de re-rendu de la ligne : il ferait perdre le focus du champ.
     const td = document.querySelector('[data-dr-simpl="' + i + '"]');
     if (td) td.innerHTML = simplifieHtml(i);
+    const te = document.querySelector('[data-dr-ecart="' + i + '"]');
+    if (te && r.ligne.consomme != null) {
+      const u = ((candidat(r.mid) || {}).conversion || r.ligne.conversion || {}).unite_reelle || '';
+      const e = r.val - Number(r.ligne.consomme);
+      te.innerHTML = Math.abs(e) < 1e-6 ? '<span style="color:var(--muted)">=</span>'
+        : '<span style="font-weight:700;color:var(--warn)">' + (e > 0 ? '+' : '−') + nombre(Math.abs(e)) + ' ' + esc(unite(u, Math.abs(e))) + '</span>';
+    }
   }
 
   async function recharger() {
@@ -437,7 +460,7 @@
       ? ' · relu par ' + esc(dossier.destockage_relu_par)
         + (dossier.destockage_relu_at ? ' le ' + esc(String(dossier.destockage_relu_at).slice(0, 16).replace('T', ' ')) : '')
       : '';
-    const th = 'padding:9px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)';
+    const th = 'padding:10px 12px;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border)';
     const lever = (!enApercu && dossier.destockage === 'reserve')
       ? '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);margin-right:auto">'
         + '<input type="checkbox" id="dr-lever"> Lever la réserve — les manques ont été traités</label>'
@@ -456,12 +479,15 @@
       + (quand ? ' · ' + esc(quand) : '') + (dossier.destockage_par ? ' par ' + esc(dossier.destockage_par) : '') + relu
       + '. « Ajusté » est la quantité réellement consommée, AU TOTAL, dans l\'unité de l\'atelier. '
       + 'Une matière peut être remplacée par une autre de la même catégorie.</div>'
-      + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'
+      + '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">'
+      + '<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:900px">'
       + '<thead><tr style="background:var(--bg)">'
+      + '<th style="' + th + ';text-align:left;width:86px">Nature</th>'
       + '<th style="' + th + ';text-align:left">Matière</th>'
-      + '<th style="' + th + ';text-align:right">Consommé</th>'
-      + '<th style="' + th + ';text-align:right">Ajusté</th>'
-      + '<th style="' + th + ';text-align:left">Simplifié</th>'
+      + '<th style="' + th + ';text-align:right;width:120px">Consommé</th>'
+      + '<th style="' + th + ';text-align:right;width:190px">Ajusté</th>'
+      + '<th style="' + th + ';text-align:right;width:110px">Écart</th>'
+      + '<th style="' + th + ';text-align:left;width:250px">Simplifié</th>'
       + '</tr></thead><tbody id="dr-tbody"></tbody></table></div>'
       + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px">' + lever + boutons + '</div>';
   }
@@ -519,7 +545,7 @@
     root.innerHTML = '<div data-dr-overlay style="position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.55);'
       + 'display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow-y:auto">'
       + '<div role="dialog" aria-modal="true" style="background:var(--card);color:var(--text);border:1px solid var(--border);'
-      + 'border-radius:14px;width:100%;max-width:1100px;padding:22px 24px;box-shadow:0 20px 60px rgba(0,0,0,.35)">'
+      + 'border-radius:14px;width:100%;max-width:1240px;padding:22px 24px;box-shadow:0 20px 60px rgba(0,0,0,.35)">'
       + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:12px">'
       + '<h3 style="margin:0;font-size:18px;color:var(--text);display:flex;align-items:center;gap:8px">'
       + (E.opts.icone || '') + ' Déstockage — ' + esc(ref) + '</h3>'

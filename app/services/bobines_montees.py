@@ -281,7 +281,8 @@ def reprendre(conn, machine_id: int, no_dossier: str, *, retirer: Optional[List[
       (motif « retiree ») et ne sont pas rattachés.
     - Tout le reste est rattaché, y compris une bobine de poste inconnu : dans
       le doute, la traçabilité prudente garde la bobine.
-    - Exception : quand le poste frontal ne porte QUE des complexes, la
+    - Exception : quand le poste frontal ne porte QUE des complexes (et
+      qu'aucune bobine n'attend son poste), la
       glassine restée en place ne sert pas (un complexe a déjà son support).
       Elle reste montée — le dossier suivant pourra en hériter — mais n'est
       pas rattachée à celui-ci.
@@ -307,7 +308,10 @@ def reprendre(conn, machine_id: int, no_dossier: str, *, retirer: Optional[List[
         (int(machine_id),),
     ).fetchall()]
     frontaux = [b for b in actives if b["poste"] == "frontal"]
-    complexe_seul = bool(frontaux) and all(b["categorie"] == "complexe" for b in frontaux)
+    # Une bobine de poste inconnu pourrait être un frontal : dans le doute, on
+    # ne conclut pas au complexe seul et la glassine reste rattachée.
+    complexe_seul = (bool(frontaux) and all(b["categorie"] == "complexe" for b in frontaux)
+                     and not any(b["poste"] is None for b in actives))
 
     rattachees, deja, glassine_gardee = [], [], []
     for b in actives:
