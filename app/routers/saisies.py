@@ -913,6 +913,13 @@ async def update_saisie(row_id: int, request: Request):
 
         op_str = body.get("operation", ex["operation"]) or ""
         cl = classify_operation(op_str)
+        # Changer l'opération d'une annulation de dossier laissait toutes les
+        # saisies du cycle marquées « cycle annulé » et le planning annulé.
+        if str(ex["operation_code"] or "").strip() == "90" and str(cl["code"] or "").strip() != "90":
+            raise HTTPException(
+                status_code=409,
+                detail="Annulation de dossier : utiliser « Annuler l'annulation » pour la retirer.",
+            )
         new_data = json.loads(ex["data"]) if ex["data"] else {}
         date_op = normalize_date_operation(body.get("date_operation", ex["date_operation"]))
         new_data.update(body)
@@ -1269,7 +1276,7 @@ def apercu_retablir_annulation(row_id: int, request: Request):
     return {k: ctx.get(k) for k in (
         "retablissable", "raison", "no_dossier", "machine", "date", "motif",
         "conversion", "fin_dossier", "quantite_traitee", "nb_saisies",
-        "planning", "nouveau_creneau",
+        "planning", "nouveau_creneau", "trace_deja_fin",
     )}
 
 

@@ -7754,8 +7754,10 @@ function openEditModal(row) {
   const peutConvertir = isAdmin(S.user) && (!row.kind || row.kind==='prod') && String(row.operation_code||'').trim()==='89'
     && String(row.no_dossier||'').trim() && !Number(row.est_annule||0);
   // Annulation posée par erreur : on la retire, la fin de production revient.
-  const peutRetablir = isAdmin(S.user) && (!row.kind || row.kind==='prod') && String(row.operation_code||'').trim()==='90'
-    && String(row.no_dossier||'').trim();
+  // Sur la trace 90, ou sur toute saisie encore marquée par une annulation
+  // (cycle annulé, trace déjà remise à la main en fin de production).
+  const peutRetablir = isAdmin(S.user) && (!row.kind || row.kind==='prod') && String(row.no_dossier||'').trim()
+    && (String(row.operation_code||'').trim()==='90' || !!String(row.annule_le||'').trim());
   const leftBtns = peutConvertir
     ? h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}},
         deleteBtn,
@@ -7814,14 +7816,15 @@ async function openRetablirFin(row){
 
   const radTerm=h('input',{type:'radio',name:'retab-fin',style:{width:'auto',margin:'0'}});
   const radRep=h('input',{type:'radio',name:'retab-fin',style:{width:'auto',margin:'0'}});
-  const choix = ap.conversion ? null : h('div',{style:{marginTop:'12px'}},
+  const sansChoix = ap.conversion || (ap.trace_deja_fin && ap.fin_dossier!=null);
+  const choix = sansChoix ? null : h('div',{style:{marginTop:'12px'}},
     h('div',{style:{fontWeight:'600',marginBottom:'6px'}},'À la fin de production, le dossier était :'),
     h('label',{style:{display:'flex',gap:'8px',alignItems:'center',cursor:'pointer',marginBottom:'4px'}},radTerm,'Terminé'),
     h('label',{style:{display:'flex',gap:'8px',alignItems:'center',cursor:'pointer'}},radRep,'À reprendre plus tard'));
 
   const valider=h('button',{className:'btn-sm',onClick:async()=>{
     let fin=null;
-    if(!ap.conversion){
+    if(!sansChoix){
       if(!radTerm.checked && !radRep.checked){ toast('Préciser si le dossier était terminé ou à reprendre.','error'); return; }
       fin = radTerm.checked;
     }
