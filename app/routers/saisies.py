@@ -215,8 +215,12 @@ def _fetch_alert_acks_as_saisies(
         # Le filtre opérateur de l'écran porte le libellé de production_data
         # (« 907 - DENIS Alan ») ; l'ack stocke le nom du compte (« Alan Denis »).
         # On accepte les deux pour que filtrer un opérateur ramène aussi ses alertes.
-        ph = ','.join('?' * len(operateurs))
-        where.append(f"(a.user_nom IN ({ph}) OR u.operateur_lie IN ({ph}))")
+        # Placeholders ecrits en ligne (pas via une variable `ph`) : c'est la
+        # forme que tests/test_sql_where_dynamique.py reconnait comme sure.
+        where.append(
+            f"(a.user_nom IN ({','.join('?' * len(operateurs))}) "
+            f"OR u.operateur_lie IN ({','.join('?' * len(operateurs))}))"
+        )
         params.extend(operateurs); params.extend(operateurs)
     if dossiers:
         where.append(f"a.no_dossier IN ({','.join('?'*len(dossiers))})")
