@@ -1549,6 +1549,16 @@ async def create_saisie(request: Request):
         conn.commit()
         new_id = cursor.lastrowid
 
+        # ── Lien saisie → créneau du planning (voir lien_saisie_planning) ─────
+        # Posé AVANT la synchro planning ci-dessous : un « Début de production »
+        # se rattache au créneau en attente qu'il va passer en cours.
+        try:
+            from app.services.lien_saisie_planning import rattacher
+            rattacher(conn, new_id)
+            conn.commit()
+        except Exception:
+            logger.exception("[fabrication] rattachement planning non posé")
+
         # ── Aucun code matière scanné : la raison, attachée à la saisie ───────
         # Écrite après l'INSERT plutôt que dedans : la colonne n'est renseignée
         # que sur une fin de production, et l'ajouter à un INSERT qui sert cinq
@@ -2259,6 +2269,11 @@ async def annuler_dossier(request: Request):
             ),
         )
         trace_id = cur.lastrowid
+        try:
+            from app.services.lien_saisie_planning import rattacher
+            rattacher(conn, trace_id)
+        except Exception:
+            pass
 
         # Compteur machine : l'annulation fait foi comme une fin de production.
         if m_fin is not None and ctx["machine_id"] is not None:
@@ -4062,6 +4077,11 @@ def _rep_get_or_create_saisie_03(conn, operateur: str, no_dossier: str, machine_
         ),
     )
     new_id = cur.lastrowid
+    try:
+        from app.services.lien_saisie_planning import rattacher
+        rattacher(conn, new_id)
+    except Exception:
+        pass
     return {
         "id": new_id,
         "operateur": operateur,
@@ -4585,6 +4605,11 @@ async def ajuster_compteur(request: Request):
                     "Ajustement manuel cumul (admin)",
                 ),
             )
+            try:
+                from app.services.lien_saisie_planning import rattacher
+                rattacher(conn, conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+            except Exception:
+                pass
 
         conn.commit()
         nb_courant = _rep_get_carton_courant(conn, no_dossier, operateur)

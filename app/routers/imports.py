@@ -148,6 +148,15 @@ async def import_file(request: Request, file: UploadFile = File(...)):
 
         conn.execute("UPDATE imports SET row_count=? WHERE id=?", (inserted, import_id))
         conn.commit()
+        try:
+            from app.services.lien_saisie_planning import rattacher
+            for (sid,) in conn.execute(
+                "SELECT id FROM production_data WHERE import_id=? ORDER BY date_operation, id", (import_id,)
+            ).fetchall():
+                rattacher(conn, sid)
+            conn.commit()
+        except Exception:
+            pass  # le rattachement ne fait jamais échouer un import
 
     return {
         "success": True, "import_id": import_id, "filename": filename,

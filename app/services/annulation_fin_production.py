@@ -185,6 +185,17 @@ def contexte(conn, row_id: int) -> dict:
             ORDER BY CASE statut WHEN 'termine' THEN 0 ELSE 1 END, position DESC, id DESC""",
         (out["machine_id"], ref, ref),
     ).fetchall()]
+    # Lien explicite posé à la saisie : il désigne le créneau sans ambiguïté.
+    lie = row.get("planning_entry_id")
+    if lie:
+        e_lie = next((e for e in entrees if int(e["id"]) == int(lie)), None)
+        if e_lie is None:
+            r_lie = conn.execute(
+                """SELECT id, reference, numero_of, statut, statut_reel, position, annule_count
+                     FROM planning_entries WHERE id = ?""", (lie,)).fetchone()
+            e_lie = dict(r_lie) if r_lie else None
+        if e_lie is not None:
+            entrees = [e_lie] + [e for e in entrees if int(e["id"]) != int(e_lie["id"])]
     if entrees:
         out["planning"] = entrees[0]
         out["doublons"] = [e for e in entrees[1:] if e["statut"] != "termine"]
@@ -561,6 +572,9 @@ def contexte_retablir(conn, row_id: int) -> dict:
     if pa and pa.get("id"):
         pe = conn.execute("SELECT id, reference, statut FROM planning_entries WHERE id = ?",
                           (pa["id"],)).fetchone()
+    if pe is None and row.get("planning_entry_id"):
+        pe = conn.execute("SELECT id, reference, statut FROM planning_entries WHERE id = ?",
+                          (row["planning_entry_id"],)).fetchone()
     if pe is None and out["machine_id"] is not None:
         pe = conn.execute(
             """SELECT id, reference, statut FROM planning_entries
@@ -578,9 +592,26 @@ def contexte_retablir(conn, row_id: int) -> dict:
 
 
 def _dossier_en_production_apres(conn, ref: str, machine: str, date_iso: str, row_id: int) -> Optional[str]:
-    """Date de la 1re saisie du dossier sur la machine après la trace, si le
-    dossier tourne encore (aucune fin 89 / annulation 90 depuis cette saisie)."""
+    """Le dossier tourne-t-il encore sur la machine ?
+
+    Oui si la DERNIÈRE saisie de la machine postérieure à la trace (hors
+    pointage) porte sur ce dossier et n'est pas une fin (89) ni une
+    annulation (90). Renvoie alors la date de la première saisie du dossier
+    après la trace. Une fin « à reprendre » suivie d'un redémarrage (cas du
+    M.718/3 cartons, 10/09/2026) reste donc bien « en cours ».
+    """
     ph = ",".join("?" * len(CODES_HORS_CYCLE))
+    der = conn.execute(
+        f"""SELECT no_dossier, operation_code FROM production_data
+             WHERE trim(machine) = trim(?) AND operation_code NOT IN ({ph})
+               AND (date_operation > ? OR (date_operation = ? AND id > ?))
+             ORDER BY date_operation DESC, id DESC LIMIT 1""",
+        (machine, *CODES_HORS_CYCLE, date_iso, date_iso, row_id),
+    ).fetchone()
+    if not der or (der["no_dossier"] or "").strip() != ref:
+        return None
+    if str(der["operation_code"] or "").strip() in ("89", "90"):
+        return None
     r = conn.execute(
         f"""SELECT MIN(date_operation) AS d FROM production_data
              WHERE trim(no_dossier) = ? AND trim(machine) = trim(?)
@@ -588,17 +619,7 @@ def _dossier_en_production_apres(conn, ref: str, machine: str, date_iso: str, ro
                AND (date_operation > ? OR (date_operation = ? AND id > ?))""",
         (ref, machine, *CODES_HORS_CYCLE, date_iso, date_iso, row_id),
     ).fetchone()
-    if not r or not r["d"]:
-        return None
-    fin = conn.execute(
-        """SELECT 1 FROM production_data
-            WHERE trim(no_dossier) = ? AND trim(machine) = trim(?)
-              AND operation_code IN ('89', '90') AND date_operation > ?
-              AND date_operation >= ?
-            LIMIT 1""",
-        (ref, machine, date_iso, r["d"]),
-    ).fetchone()
-    return None if fin else r["d"]
+    return r["d"] if r and r["d"] else None
 
 
 def retablir(conn, row_id: int, fin_dossier: Optional[bool], auteur: str, auteur_email: str) -> dict:
@@ -800,3 +821,59 @@ def retablir(conn, row_id: int, fin_dossier: Optional[bool], auteur: str, auteur
     return {"no_dossier": ref, "machine": ctx["machine"], "planning": planning_action,
             "fin_dossier": cloture, "serie": serie,
             "saisies_retablies": len(ctx["ids_cycle"])}
+
+
+def trace_du_creneau(conn, entry_id: int) -> Optional[int]:
+    """Saisie d'annulation (90) qui a marqué ce créneau du planning.
+
+    Par ordre de fiabilité : la trace rattachée au créneau et datée de la même
+    annulation ; la trace rattachée la plus récente ; à défaut de lien (saisies
+    antérieures au 10/09/2026), la trace de même référence sur la machine et de
+    même date d'annulation, puis la plus récente.
+    """
+    pe = conn.execute(
+        """SELECT pe.id, pe.reference, pe.numero_of, pe.annule_le, m.nom, m.code
+             FROM planning_entries pe JOIN machines m ON m.id = pe.machine_id
+            WHERE pe.id = ?""", (entry_id,)).fetchone()
+    if not pe:
+        return None
+    lien = "planning_entry_id" in _colonnes(conn, "production_data")
+    annule_le = (pe["annule_le"] or "").strip()
+    refs = [x for x in {(pe["reference"] or "").strip(), (pe["numero_of"] or "").strip()} if x]
+    macs = [x for x in {(pe["nom"] or "").strip(), (pe["code"] or "").strip()} if x]
+    essais = []
+    if lien:
+        essais.append(("planning_entry_id = ? AND annule_le = ?", [entry_id, annule_le]))
+        essais.append(("planning_entry_id = ?", [entry_id]))
+    if refs and macs:
+        cond = (f"trim(no_dossier) IN ({','.join('?' * len(refs))}) "
+                f"AND trim(machine) IN ({','.join('?' * len(macs))})")
+        if lien:
+            cond += " AND planning_entry_id IS NULL"
+        essais.append((cond + " AND annule_le = ?", refs + macs + [annule_le]))
+        essais.append((cond, refs + macs))
+    for cond, params in essais:
+        r = conn.execute(
+            f"""SELECT id FROM production_data
+                 WHERE operation_code = '90' AND {cond}
+                 ORDER BY date_operation DESC, id DESC LIMIT 1""",
+            params,
+        ).fetchone()
+        if r:
+            return int(r["id"])
+    return None
+
+
+def retirer_marque_planning(conn, entry_id: int) -> None:
+    """Aucune saisie d'annulation retrouvée : on retire la marque du créneau seul."""
+    conn.execute(
+        """UPDATE planning_entries
+              SET annule_count = MAX(COALESCE(annule_count, 0) - 1, 0),
+                  annule_motif = CASE WHEN COALESCE(annule_count, 0) <= 1 THEN NULL ELSE annule_motif END,
+                  annule_par   = CASE WHEN COALESCE(annule_count, 0) <= 1 THEN NULL ELSE annule_par END,
+                  annule_le    = CASE WHEN COALESCE(annule_count, 0) <= 1 THEN NULL ELSE annule_le END,
+                  updated_at   = ?
+            WHERE id = ?""",
+        (datetime.now().isoformat(), entry_id),
+    )
+    conn.commit()
