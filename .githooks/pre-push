@@ -1,0 +1,59 @@
+#!/bin/sh
+#
+# MySifa — rejoue la CI en local AVANT un push vers staging ou main.
+#
+# Pourquoi. La regle de branche sur main exige que le job `verifier` soit vert
+# sur le sommet de staging. Quand un push rouge part sur staging, on ne le
+# decouvre qu'au moment de promote_v2.sh, parfois plusieurs commits plus tard
+# (10/09/2026 : 8 pushes rouges d'affilee sur test_sql_where_dynamique, vus
+# seulement a la promotion). Ce hook deplace la decouverte au moment du push,
+# la ou la correction coute une minute.
+#
+# Il ne teste que ce qui est dans le dossier : le flux habituel pousse staging
+# depuis staging (git checkout staging && git merge ... && git push origin
+# staging), donc le dossier EST le commit pousse. Sinon, il le dit et laisse
+# passer — la CI GitHub reste le vrai juge.
+#
+# Contourner en cas de besoin exceptionnel :
+#     git push --no-verify origin staging
+
+racine=$(git rev-parse --show-toplevel) || exit 0
+tete=$(git rev-parse HEAD)
+a_verifier=0
+
+while read -r ref_locale sha_local ref_distante sha_distant; do
+    case "$ref_distante" in
+        refs/heads/staging|refs/heads/main) ;;
+        *) continue ;;
+    esac
+    # Suppression de branche : rien a tester.
+    case "$sha_local" in 0000000000000000000000000000000000000000) continue ;; esac
+    if [ "$sha_local" != "$tete" ]; then
+        echo "pre-push : ${ref_distante#refs/heads/} pousse un commit qui n'est pas celui du dossier."
+        echo "           CI locale non rejouee — surveiller l'onglet Actions."
+        continue
+    fi
+    a_verifier=1
+done
+
+[ "$a_verifier" -eq 0 ] && exit 0
+
+if ! command -v bash >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
+    echo "pre-push : bash ou python3 absent, CI locale non rejouee."
+    exit 0
+fi
+
+echo "pre-push : CI locale avant d'envoyer sur staging/main (scripts/ci_local.sh)..."
+if bash "$racine/scripts/ci_local.sh"; then
+    exit 0
+fi
+
+cat <<'MSG'
+
+PUSH REFUSE : la CI locale est rouge. GitHub la recalerait aussi, et la
+promotion vers main (promote_v2.sh) refuserait ensuite ce commit.
+
+Corriger ce qui est KO ci-dessus, recommiter, puis relancer le push.
+Pour relancer un seul test :  PYTHONPATH=. python3 tests/<nom>.py
+MSG
+exit 1

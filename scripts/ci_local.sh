@@ -54,6 +54,11 @@ if [ -n "$QUARANTAINE" ]; then
     echo "  en quarantaine (tests/CI_QUARANTAINE.txt) :"
     echo "$QUARANTAINE" | sed 's/^/    - /'
 fi
+# Journal temporaire propre a ce lancement : un chemin fixe dans /tmp appartient
+# au premier utilisateur qui l'a cree, et les lancements suivants sous un autre
+# compte echouent en "Permission denied" sur TOUS les tests.
+JOURNAL=$(mktemp "${TMPDIR:-/tmp}/mysifa_ci_test.XXXXXX")
+trap 'rm -f "$JOURNAL"' EXIT
 for t in tests/test_*.py; do
     nom=$(basename "$t")
     if echo "$QUARANTAINE" | grep -qx "$nom"; then continue; fi
@@ -67,9 +72,9 @@ for t in tests/test_*.py; do
     # meme apres que `timeout` a tue le parent. Constate sur
     # test_mystock_declinaisons le 27/08/2026 : plus de deux minutes sans rendre
     # la main, timeout compris. Un fichier temporaire n'a pas ce probleme.
-    timeout -k 5 120 python3 "$t" </dev/null >/tmp/mysifa_ci_test.log 2>&1
+    timeout -k 5 120 python3 "$t" </dev/null >"$JOURNAL" 2>&1
     code=$?
-    sortie=$(cat /tmp/mysifa_ci_test.log 2>/dev/null)
+    sortie=$(cat "$JOURNAL" 2>/dev/null)
     if [[ $code -eq 0 ]]; then
         echo "ok"
     elif [[ $DEPS -eq 0 && "$sortie" == *"No module named"* ]]; then
