@@ -4116,7 +4116,10 @@ function annuleTitle(e){
   return t;
 }
 function annuleBadgeHtml(e){
-  if(!isAnnuleEntry(e)) return "";
+  // Passage annulé resté au planning (créneau terminé, marqué annulé) : même
+  // badge, sans le contour des dossiers repartis en attente.
+  const passageAnnule = !!e && e.statut==="termine" && !!(e.annule_le||"").toString().trim();
+  if(!isAnnuleEntry(e) && !passageAnnule) return "";
   const nb=Number(e.annule_count||0);
   const lbl=nb>1?("Annulé ×"+nb):"Annulé";
   return `<span class="badge-annule" title="${escAttr(annuleTitle(e))}">${lbl}</span>`;

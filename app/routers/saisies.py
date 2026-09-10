@@ -760,7 +760,10 @@ def suggest_target_dossiers(request: Request, q: str = "", limit: int = 20):
                         "reference": nd,
                         "numero_of": "",
                         "client": (r["client"] or "").strip(),
-                        "description": (r["description"] or "").strip(),
+                        # La requête lit `designation` : `r["description"]`
+                        # levait une erreur dès qu'un dossier ne venait que
+                        # des saisies (aucune ligne au planning).
+                        "description": (r["designation"] or "").strip(),
                         "statut": None,
                         "source": "production",
                     }
