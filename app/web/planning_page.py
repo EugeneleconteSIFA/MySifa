@@ -2889,8 +2889,8 @@ function updateDestockBtn(entryId, val){
   if(!btn) return;
   const etat=val||"todo";
   const T={
-    done:    {c:"#38bdf8", t:"Destocké",   titre:"Matières sorties du stock — cliquer pour annuler"},
-    reserve: {c:"#fbbf24", t:"Réserves",   titre:"Déstocké en partie : une matière n'est pas rattachée — cliquer pour annuler"},
+    done:    {c:"#38bdf8", t:"Destocké",   titre:"Matières sorties du stock — cliquer pour relire, ajuster ou annuler"},
+    reserve: {c:"#fbbf24", t:"Réserves",   titre:"Déstocké en partie : une matière n'est pas rattachée — cliquer pour relire, ajuster ou annuler"},
     todo:    {c:"#fb923c", t:"À destocker",titre:"Sortir les matières de ce dossier du stock"},
   };
   const d=T[etat]||T.todo;
@@ -2937,54 +2937,196 @@ function drNombre(v){
   return n.toLocaleString("fr-FR",{maximumFractionDigits:3});
 }
 
-function renderDestockageBody(d){
-  const dossier=d.dossier||{};
+// Unités de la relecture (10/09/2026). On saisit dans l'unité de l'atelier
+// — mètres linéaires, kilos, mandrins, cartons, palettes — et la colonne
+// « simplifié » montre ce que ça représente en bobines, tubes ou palettes.
+// Les facteurs viennent du serveur, qui s'en sert aussi pour écrire : le
+// chiffre vu est le chiffre écrit.
+const DR_UNITES={ml:["ml","ml"],kg:["kg","kg"],bobine:["bobine","bobines"],
+  tube:["tube","tubes"],palette:["palette","palettes"],carton:["carton","cartons"],
+  mandrin:["mandrin","mandrins"],u:["u","u"]};
+function drUnite(u,n){
+  const p=DR_UNITES[u]||[u||"",u||""];
+  return (n!==null&&n!==undefined&&Math.abs(Number(n))>1)?p[1]:p[0];
+}
+
+// Une matière proposable : celles du serveur, plus celle de la ligne quand
+// elle n'y figure pas (matière désactivée depuis, par exemple) — sinon la
+// liste déroulante afficherait une autre matière que celle réellement sortie.
+function drCandidat(mid){
+  return (S.dr&&S.dr.cand&&S.dr.cand[mid])||null;
+}
+
+function drLaizeParDefaut(cand){
+  const laizes=(cand&&cand.laizes)||[];
+  if(!laizes.length) return null;
+  const cible=Number((S.dr&&S.dr.data&&S.dr.data.laize_dossier)||0);
+  if(cible){
+    const l=laizes.find(x=>Math.abs(Number(x.valeur_mm||0)-cible)<0.5);
+    if(l) return l.laize_id;
+  }
+  return laizes.length===1?laizes[0].laize_id:null;
+}
+
+function drPreparer(d){
+  const cand={};
+  Object.values(d.candidats||{}).forEach(liste=>(liste||[]).forEach(c=>{cand[c.matiere_id]=c;}));
   const lignes=(d.lignes||[]).filter(l=>l.matiere_id||l.destockable===false);
+  const rows=lignes.map(l=>{
+    if(l.matiere_id&&!cand[l.matiere_id]){
+      cand[l.matiere_id]={matiere_id:l.matiere_id,reference:l.matiere_ref,
+        designation:l.matiere_designation,categorie:l.matiere_categorie,
+        kind:l.kind,conversion:l.conversion||{},laizes:l.laizes||[]};
+    }
+    const conv=l.conversion||{};
+    const dejaSorti=Math.abs(Number(l.sorti||0))>1e-9;
+    // Ajusté = ce qui doit AU TOTAL être sorti. Une ligne déjà sortie part de
+    // son sorti ; une ligne restée en réserve part du consommé, pour que la
+    // remplacer par une matière convertible la fasse sortir d'un seul geste.
+    let val=dejaSorti?l.sorti_reel:(l.destockable===false?l.consomme:(l.sorti_reel??0));
+    if(val===null||val===undefined) val=0;
+    if(conv.entier) val=Math.round(Number(val));
+    return {ligne:l,mid:l.matiere_id||null,lid:l.laize_id??null,val:Number(val)};
+  });
+  S.dr={data:d,cand,rows};
+}
+
+function drSimplifieHtml(i){
+  const r=S.dr.rows[i];
+  const c=drCandidat(r.mid);
+  const conv=(c&&c.conversion)||{};
+  if(!r.mid) return `<span style="color:var(--warn)">Choisir une matière</span>`;
+  if(conv.facteur_simplifie==null){
+    return `<span style="color:var(--warn)">${escHtml(conv.manque||"Conversion impossible")}</span>`;
+  }
+  const n=Number(r.val||0)*Number(conv.facteur_simplifie);
+  let h=`<span style="font-variant-numeric:tabular-nums">${drNombre(n)}</span> ${escHtml(drUnite(conv.unite_simplifiee,n))}`;
+  if(conv.facteur_stock==null&&conv.manque){
+    h+=`<div style="font-size:11px;color:var(--warn)">${escHtml(conv.manque)}</div>`;
+  }
+  const l=r.ligne;
+  const memeMatiere=r.mid===l.matiere_id&&(r.lid??null)===(l.laize_id??null);
+  if(l.sorti_reel!=null&&(!memeMatiere||Math.abs(Number(l.sorti_reel)-Number(r.val||0))>1e-6)
+     &&Math.abs(Number(l.sorti||0))>1e-9){
+    h+=`<div style="font-size:11px;color:var(--muted)">déjà sorti : ${drNombre(l.sorti_reel)} ${escHtml(drUnite((l.conversion||{}).unite_reelle,l.sorti_reel))}${memeMatiere?"":" de "+escHtml(l.matiere_ref||"")}</div>`;
+  }
+  return h;
+}
+
+function drLigneHtml(i){
+  const r=S.dr.rows[i];
+  const l=r.ligne;
+  const c=drCandidat(r.mid);
+  const conv=(c&&c.conversion)||l.conversion||{};
+  const cats=l.categories_remplacement||[];
+  const options=[];
+  const vus=new Set();
+  cats.forEach(cat=>((S.dr.data.candidats||{})[cat]||[]).forEach(o=>{
+    vus.add(o.matiere_id);
+    options.push(o);
+  }));
+  if(r.mid&&!vus.has(r.mid)&&c) options.unshift(c);
+  if(l.matiere_id&&!vus.has(l.matiere_id)&&l.matiere_id!==r.mid&&drCandidat(l.matiere_id)) options.unshift(drCandidat(l.matiere_id));
+
+  const selStyle=`width:100%;max-width:280px;background:var(--bg);border:1px solid var(--border);border-radius:7px;
+    padding:6px 8px;color:var(--text);font-family:inherit;font-size:13px;font-weight:700`;
+  const opts=(r.mid?"":`<option value="">${escHtml(l.source_value||"Choisir une matière")}</option>`)
+    +options.map(o=>`<option value="${o.matiere_id}"${o.matiere_id===r.mid?" selected":""}>${escHtml(o.reference||"")}${o.designation&&o.designation!==o.reference?" — "+escHtml(o.designation):""}</option>`).join("");
+  const select=`<select class="dr-mat" data-i="${i}" onchange="drChangerMatiere(${i},this.value)" style="${selStyle}">${opts}</select>`;
+
+  const laizes=(c&&c.laizes)||[];
+  let laizeHtml="";
+  if(laizes.length&&(laizes.length>1||r.lid==null||!laizes.some(x=>x.laize_id===r.lid))){
+    laizeHtml=`<select class="dr-lz" onchange="drChangerLaize(${i},this.value)"
+      style="margin-top:5px;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--text);font-family:inherit;font-size:12px">
+      ${r.lid==null?`<option value="">Laize à choisir</option>`:""}
+      ${laizes.map(x=>`<option value="${x.laize_id}"${x.laize_id===r.lid?" selected":""}>${escHtml(Math.round(Number(x.valeur_mm||0))+" mm")}</option>`).join("")}
+    </select>`;
+  }else if(r.lid!=null){
+    const lz=laizes.find(x=>x.laize_id===r.lid);
+    if(lz) laizeHtml=`<span>${Math.round(Number(lz.valeur_mm||0))} mm</span>`;
+  }
+  const remplace=(r.mid&&l.matiere_id&&r.mid!==l.matiere_id)
+    ?`remplace « ${escHtml(l.matiere_ref||l.source_value||"")} »`
+    :(l.remplace&&r.mid===l.matiere_id?`remplace « ${escHtml(l.remplace.matiere_ref||"")} »`:"");
+  const sous=[laizeHtml,remplace,l.hors_fiche?"ajoutée à la main":""].filter(Boolean)
+    .join(`<span style="color:var(--muted)"> · </span>`);
+
+  const bloque=!r.mid||conv.facteur_stock==null;
+  const step=conv.entier?"1":(conv.unite_reelle==="ml"?"1":"0.001");
+  const unite=conv.unite_reelle||l.besoin_unite||"";
+  return `<tr data-i="${i}">
+    <td style="padding:9px 10px;vertical-align:top">${select}
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">${sous}</div></td>
+    <td style="padding:9px 10px;text-align:right;vertical-align:top;color:var(--muted);white-space:nowrap">
+      ${l.consomme!=null?`${drNombre(l.consomme)} ${escHtml(drUnite(unite,l.consomme))}`:"—"}</td>
+    <td style="padding:9px 10px;text-align:right;vertical-align:top;white-space:nowrap">
+      <input type="number" step="${step}" min="0" class="dr-q" data-i="${i}"
+             value="${Number(r.val||0)}" ${bloque?"disabled":""}
+             oninput="drChangerQuantite(${i},this.value)"
+             style="width:110px;text-align:right;background:var(--bg);border:1px solid var(--border);
+                    border-radius:7px;padding:7px 9px;color:var(--text);font-family:inherit;font-size:13px;${bloque?"opacity:.5":""}">
+      <span style="display:inline-block;min-width:54px;text-align:left;font-size:11.5px;color:var(--muted)">${escHtml(drUnite(unite,r.val))}</span></td>
+    <td class="dr-simpl" style="padding:9px 10px;vertical-align:top;font-size:12.5px">${drSimplifieHtml(i)}</td>
+  </tr>`;
+}
+
+function drRendreLignes(){
+  const tb=document.getElementById("dr-tbody");
+  if(!tb||!S.dr) return;
+  tb.innerHTML=S.dr.rows.length
+    ? S.dr.rows.map((_,i)=>drLigneHtml(i)).join("")
+    : `<tr><td colspan="4" style="padding:18px;text-align:center;color:var(--muted)">Aucune ligne.</td></tr>`;
+}
+
+function drChangerMatiere(i,valeur){
+  const r=S.dr&&S.dr.rows[i];
+  if(!r) return;
+  const mid=valeur===""?null:Number(valeur);
+  const avant=drCandidat(r.mid);
+  r.mid=mid;
+  const c=drCandidat(mid);
+  r.lid=(mid===r.ligne.matiere_id)?(r.ligne.laize_id??drLaizeParDefaut(c)):drLaizeParDefaut(c);
+  // La quantité réelle ne change pas avec la matière : 18 000 ml restent
+  // 18 000 ml, seul le nombre de bobines bouge.
+  if(c&&c.conversion&&c.conversion.entier) r.val=Math.round(Number(r.val||0));
+  if(!avant&&c&&!r.val&&r.ligne.consomme) r.val=Number(r.ligne.consomme);
+  drRendreLignes();
+}
+
+function drChangerLaize(i,valeur){
+  const r=S.dr&&S.dr.rows[i];
+  if(!r) return;
+  r.lid=valeur===""?null:Number(valeur);
+  drRendreLignes();
+}
+
+function drChangerQuantite(i,valeur){
+  const r=S.dr&&S.dr.rows[i];
+  if(!r) return;
+  const q=parseFloat(String(valeur).replace(",","."));
+  r.val=isNaN(q)?0:q;
+  // Pas de re-rendu de la ligne : il ferait perdre le focus du champ.
+  const td=document.querySelector(`#dr-tbody tr[data-i="${i}"] .dr-simpl`);
+  if(td) td.innerHTML=drSimplifieHtml(i);
+}
+
+function renderDestockageBody(d){
+  drPreparer(d);
+  const dossier=d.dossier||{};
   const reserve=(dossier.destockage_reserve||"").trim();
 
   const bandeau=reserve
     ? `<div style="margin-bottom:14px;padding:11px 14px;border-radius:9px;
          background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.45);
          font-size:12.5px;line-height:1.6;color:var(--text)">
-         <b style="color:#fbbf24">Déstocké avec réserves</b><br>${escHtml(reserve)}
+         <b style="color:var(--warn)">Déstocké avec réserves</b><br>${escHtml(reserve)}
        </div>` : "";
 
   const etatTxt=dossier.destockage==="reserve"?"avec réserves"
               :(dossier.destockage==="done"?"complet":"non déstocké");
   const quand=(dossier.destockage_at||"").slice(0,16).replace("T"," ");
-
-  const rangs=lignes.map(l=>{
-    const nom=escHtml(l.matiere_ref||l.source_value||l.kind||"—");
-    const des=escHtml(l.matiere_designation||"");
-    const laize=l.laize_id&&Array.isArray(l.laizes)
-      ? (l.laizes.find(x=>x.laize_id===l.laize_id)||{}).valeur_mm : null;
-    const sousTitre=[des,laize?Math.round(Number(laize))+" mm":"",
-                     l.hors_fiche?"ajoutée à la main":""].filter(Boolean).join(" · ");
-    if(!l.destockable&&!l.hors_fiche){
-      const motif=(l.manque||["non rattachée à une référence MyStock"])[0];
-      return `<tr>
-        <td style="padding:9px 10px"><div style="font-weight:700">${nom}</div>
-          <div style="font-size:11px;color:var(--muted)">${sousTitre}</div></td>
-        <td style="padding:9px 10px;text-align:right;color:var(--muted)">${drNombre(l.besoin)}</td>
-        <td style="padding:9px 10px;text-align:right;color:var(--muted)">—</td>
-        <td colspan="2" style="padding:9px 10px;color:#fbbf24;font-size:11.5px">${escHtml(motif)}</td>
-      </tr>`;
-    }
-    const cible=l.sorti!=null?l.sorti:(l.quantite||0);
-    return `<tr>
-      <td style="padding:9px 10px"><div style="font-weight:700">${nom}</div>
-        <div style="font-size:11px;color:var(--muted)">${sousTitre}</div></td>
-      <td style="padding:9px 10px;text-align:right;color:var(--muted)">${drNombre(l.quantite)}</td>
-      <td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums">${drNombre(l.sorti)}</td>
-      <td style="padding:9px 10px;text-align:right">
-        <input type="number" step="0.001" min="0" class="dr-q"
-               data-mid="${l.matiere_id}" data-lid="${l.laize_id==null?"":l.laize_id}"
-               value="${cible}"
-               style="width:110px;text-align:right;background:var(--bg);border:1px solid var(--border);
-                      border-radius:7px;padding:7px 9px;color:var(--text);font-family:inherit;font-size:13px"></td>
-      <td style="padding:9px 10px;font-size:11.5px;color:var(--muted)">${escHtml(l.unite||"")}</td>
-    </tr>`;
-  }).join("");
+  const th=`padding:9px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)`;
 
   const leverBloc=dossier.destockage==="reserve"
     ? `<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);margin-right:auto">
@@ -2994,32 +3136,32 @@ function renderDestockageBody(d){
 
   return `${bandeau}
     <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
-      Déstockage ${escHtml(etatTxt)}${quand?" · "+escHtml(quand):""}. La colonne
-      « ajuster à » est la quantité qui doit AU TOTAL être sortie : le serveur
-      écrit la différence.
+      Déstockage ${escHtml(etatTxt)}${quand?" · "+escHtml(quand):""}. « Ajusté » est la quantité
+      réellement consommée, AU TOTAL, dans l'unité de l'atelier ; le serveur écrit la différence.
+      Une matière peut être remplacée par une autre de la même catégorie.
     </div>
     <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="background:var(--bg)">
-        <th style="padding:9px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Matière</th>
-        <th style="padding:9px 10px;text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Calculé</th>
-        <th style="padding:9px 10px;text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Sorti</th>
-        <th style="padding:9px 10px;text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Ajuster à</th>
-        <th style="padding:9px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Unité</th>
+        <th style="${th};text-align:left">Matière</th>
+        <th style="${th};text-align:right">Consommé</th>
+        <th style="${th};text-align:right">Ajusté</th>
+        <th style="${th};text-align:left">Simplifié</th>
       </tr></thead>
-      <tbody>${rangs||`<tr><td colspan="5" style="padding:18px;text-align:center;color:var(--muted)">Aucune ligne.</td></tr>`}</tbody>
+      <tbody id="dr-tbody"></tbody>
     </table></div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px">
       ${leverBloc}
       <button type="button" class="btn-s" onclick="destockageAnnulerTout(${dossier.planning_id})"
         style="color:var(--danger)">Annuler tout le déstockage</button>
       <button type="button" class="btn-s" onclick="destockageEnregistrer(${dossier.planning_id})"
-        style="background:var(--accent);border-color:var(--accent);color:#0a0e17;font-weight:700">Enregistrer</button>
+        style="background:var(--accent);border-color:var(--accent);color:white;font-weight:700">Enregistrer</button>
     </div>`;
 }
 
 async function openDestockageModal(entryId){
   const e=(S.entries||[]).find(x=>x.id===entryId);
   const ref=(e&&(e.numero_of||e.reference))||"Dossier";
+  S.dr=null;
   document.getElementById("mroot").innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md md--stats">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:12px">
       <h3 style="margin:0;font-size:18px;font-family:var(--mono);color:var(--text);display:flex;align-items:center;gap:8px">${icon("package",18)} Déstockage — ${escHtml(ref)}</h3>
@@ -3030,7 +3172,7 @@ async function openDestockageModal(entryId){
   try{
     const d=await apiAbs(`/api/stock/destockage/${entryId}/relecture`);
     const b=document.getElementById("dr-body");
-    if(b) b.innerHTML=renderDestockageBody(d);
+    if(b){ b.innerHTML=renderDestockageBody(d); drRendreLignes(); }
   }catch(err){
     const b=document.getElementById("dr-body");
     if(b) b.innerHTML=`<div style="padding:20px;color:var(--danger)">${escHtml(messageErreurDestockage(err))}</div>`;
@@ -3038,16 +3180,37 @@ async function openDestockageModal(entryId){
 }
 
 async function destockageEnregistrer(entryId){
+  if(!S.dr) return;
   const lignes=[];
-  document.querySelectorAll("#dr-body .dr-q").forEach(inp=>{
-    const q=parseFloat(String(inp.value).replace(",","."));
-    if(isNaN(q)||q<0) return;
-    const lid=inp.dataset.lid;
-    lignes.push({matiere_id:Number(inp.dataset.mid),
-                 laize_id:lid===""?null:Number(lid),
-                 quantite:q});
-  });
-  if(!lignes.length){ alert("Aucune quantité à enregistrer."); return; }
+  for(const r of S.dr.rows){
+    // Les matières qui portaient déjà une sortie sur cette ligne sont
+    // renvoyées à zéro ; la matière retenue porte la quantité. Le serveur
+    // additionne par matière et laize, donc garder la même matière revient
+    // à « 0 + quantité ».
+    (r.ligne.cles_initiales||[]).forEach(([mid,lid])=>
+      lignes.push({matiere_id:mid,laize_id:lid??null,quantite_reelle:0}));
+    if(!r.mid) continue;
+    const c=drCandidat(r.mid);
+    const conv=(c&&c.conversion)||{};
+    const q=Number(r.val||0);
+    if(conv.facteur_stock==null){
+      if(q>0&&r.mid!==r.ligne.matiere_id){
+        showToast(`« ${c?c.reference:""} » : ${conv.manque||"conversion impossible"}.`,"danger");
+        return;
+      }
+      continue;
+    }
+    if(conv.entier&&Math.abs(q-Math.round(q))>1e-9){
+      showToast(`« ${c.reference} » : nombre entier de ${drUnite(conv.unite_reelle,2)} attendu.`,"danger");
+      return;
+    }
+    if(q>0&&(c.laizes||[]).length&&r.lid==null){
+      showToast(`« ${c.reference} » : laize à choisir.`,"danger");
+      return;
+    }
+    lignes.push({matiere_id:r.mid,laize_id:r.lid??null,quantite_reelle:q});
+  }
+  if(!lignes.length){ showToast("Aucune quantité à enregistrer.","info"); return; }
   const lever=document.getElementById("dr-lever");
   try{
     const r=await apiAbs(`/api/stock/destockage/${entryId}/ajuster`,{
@@ -4862,9 +5025,9 @@ function openEdit(id){
       :`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>`);
   const destockLabel=destockEtat==="done"?"Destocké":(destockEtat==="reserve"?"Réserves":"À destocker");
   const destockTitre=destockEtat==="done"
-    ?"Matières sorties du stock — cliquer pour annuler"
+    ?"Matières sorties du stock — cliquer pour relire, ajuster ou annuler"
     :(destockEtat==="reserve"
-      ?"Déstocké en partie : une matière n'est pas rattachée — cliquer pour annuler"
+      ?"Déstocké en partie : une matière n'est pas rattachée — cliquer pour relire, ajuster ou annuler"
       :"Sortir les matières de ce dossier du stock");
   const reelNonDefault=hasSaisieReelle() && e.statut_reel && e.statut_reel!=="reellement_en_attente";
   const resetBlock=(hasSaisieReelle() && IS_DIR_OR_SUPER && reelNonDefault)?`<button type="button" class="btn-reset-saisie" data-eid="${id}" onclick="resetSaisieFromModal(${id})" style="margin-top:8px;width:100%;padding:7px;border-radius:6px;border:1px solid rgba(248,113,113,.4);background:rgba(248,113,113,.08);color:var(--danger);font-size:11px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">${icon('repeat',12)} Réinitialiser la saisie réelle</button>`:"";
