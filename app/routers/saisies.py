@@ -1258,3 +1258,47 @@ async def convertir_fin_en_annulation(row_id: int, request: Request):
     except Exception:
         pass  # le journal ne fait jamais échouer la correction
     return {"success": True, **res}
+
+
+@router.get("/api/saisies/{row_id}/retablir-apercu")
+def apercu_retablir_annulation(row_id: int, request: Request):
+    _exiger_admin_saisies(request)
+    from app.services.annulation_fin_production import contexte_retablir
+    with get_db() as conn:
+        ctx = contexte_retablir(conn, row_id)
+    return {k: ctx.get(k) for k in (
+        "retablissable", "raison", "no_dossier", "machine", "date", "motif",
+        "conversion", "fin_dossier", "quantite_traitee", "nb_saisies",
+        "planning", "nouveau_creneau",
+    )}
+
+
+@router.post("/api/saisies/{row_id}/retablir-fin")
+async def retablir_fin_production(row_id: int, request: Request):
+    """Annule une annulation de dossier : la trace 90 redevient la fin de production."""
+    user = _exiger_admin_saisies(request)
+    body = await request.json()
+    fin = body.get("fin_dossier")
+    fin_dossier = None if fin is None else bool(fin)
+    auteur = (user.get("nom") or user.get("email") or "").strip()
+
+    from app.services.annulation_fin_production import retablir
+    with get_db() as conn:
+        try:
+            res = retablir(conn, row_id, fin_dossier, auteur, user.get("email") or auteur)
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+
+    try:
+        from app.services.audit_service import log_action
+        log_action(
+            user=user,
+            action="UPDATE",
+            module="saisies",
+            objet=f"Annulation retirée · dossier {res['no_dossier']} · {res['machine']}",
+            detail={"saisie_id": row_id, **res},
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return {"success": True, **res}

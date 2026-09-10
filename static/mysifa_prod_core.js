@@ -7753,12 +7753,20 @@ function openEditModal(row) {
   // Fin de production d'un dossier en réalité annulé : on rejoue l'annulation.
   const peutConvertir = isAdmin(S.user) && (!row.kind || row.kind==='prod') && String(row.operation_code||'').trim()==='89'
     && String(row.no_dossier||'').trim() && !Number(row.est_annule||0);
+  // Annulation posée par erreur : on la retire, la fin de production revient.
+  const peutRetablir = isAdmin(S.user) && (!row.kind || row.kind==='prod') && String(row.operation_code||'').trim()==='90'
+    && String(row.no_dossier||'').trim();
   const leftBtns = peutConvertir
     ? h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}},
         deleteBtn,
         h('button',{className:'btn-danger',title:'Le dossier a été annulé, pas terminé',
           onClick:e=>{ e.stopPropagation(); openConvertirAnnulation(row); }},'Convertir en annulation'))
-    : deleteBtn;
+    : peutRetablir
+      ? h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}},
+          deleteBtn,
+          h('button',{className:'btn-ghost',title:'Le dossier n\'a pas été annulé',
+            onClick:e=>{ e.stopPropagation(); openRetablirFin(row); }},'Annuler l\'annulation'))
+      : deleteBtn;
 
   const modal = buildSaisieForm(
     row,
@@ -7788,6 +7796,74 @@ function openEditModal(row) {
 // L'aperçu vient du serveur (cycle, compteurs, planning, doublon éventuel) ;
 // la conversion rejoue l'annulation opérateur : cycle marqué, 89 → trace 90,
 // dossier remis en attente au planning avec le motif.
+// ── Annuler une annulation de dossier ───────────────────────────
+// Issue d'une conversion : tout revient à l'identique (saisie 89, planning,
+// série). Faite au poste : la trace devient une fin de production, et on
+// demande si le dossier était terminé ou à reprendre.
+async function openRetablirFin(row){
+  let ap;
+  try{ ap = await api('/api/saisies/'+row.id+'/retablir-apercu'); }
+  catch(err){ toast(err.message,'error'); return; }
+  if(!ap) return;
+  if(!ap.retablissable){ toast(ap.raison||'Rétablissement impossible.','error'); return; }
+  try{ closeModal(); }catch(_){}
+  const old=document.getElementById('retab-fin-overlay'); if(old) old.remove();
+  const close=()=>{ const o=document.getElementById('retab-fin-overlay'); if(o) o.remove(); };
+  const ligne = (k,v)=>h('div',{style:{display:'flex',justifyContent:'space-between',gap:'12px',padding:'4px 0',borderBottom:'1px solid var(--border)'}},
+    h('span',{style:{color:'var(--muted)'}},k), h('span',{style:{fontWeight:'600',textAlign:'right'}},v));
+
+  const radTerm=h('input',{type:'radio',name:'retab-fin',style:{width:'auto',margin:'0'}});
+  const radRep=h('input',{type:'radio',name:'retab-fin',style:{width:'auto',margin:'0'}});
+  const choix = ap.conversion ? null : h('div',{style:{marginTop:'12px'}},
+    h('div',{style:{fontWeight:'600',marginBottom:'6px'}},'À la fin de production, le dossier était :'),
+    h('label',{style:{display:'flex',gap:'8px',alignItems:'center',cursor:'pointer',marginBottom:'4px'}},radTerm,'Terminé'),
+    h('label',{style:{display:'flex',gap:'8px',alignItems:'center',cursor:'pointer'}},radRep,'À reprendre plus tard'));
+
+  const valider=h('button',{className:'btn-sm',onClick:async()=>{
+    let fin=null;
+    if(!ap.conversion){
+      if(!radTerm.checked && !radRep.checked){ toast('Préciser si le dossier était terminé ou à reprendre.','error'); return; }
+      fin = radTerm.checked;
+    }
+    valider.disabled=true;
+    try{
+      const r = await api('/api/saisies/'+row.id+'/retablir-fin',{method:'POST',
+        headers:{'Content-Type':'application/json'}, body:JSON.stringify({fin_dossier:fin})});
+      if(!r) return;
+      close();
+      toast(r.planning==='en_cours' ? 'Annulation retirée — dossier de nouveau en cours au planning.' : 'Annulation retirée.');
+      await loadSaisies();
+    }catch(err){ valider.disabled=false; toast(err.message,'error'); }
+  }},'Annuler l\'annulation');
+
+  const suite = ap.conversion
+    ? 'La fin de production d\'origine est rétablie à l\'identique'
+      + (ap.quantite_traitee ? ' (quantité '+fN(ap.quantite_traitee)+')' : '')
+      + ', avec l\'état du planning.'
+      + (ap.nouveau_creneau && ap.nouveau_creneau.statut==='attente' ? ' Le créneau créé en attente est supprimé.' : '')
+    : 'La trace devient une « Fin de production ».';
+
+  const overlay=h('div',{id:'retab-fin-overlay',className:'contact-modal-overlay',onClick:e=>{ if(e.target===e.currentTarget) close(); }},
+    h('div',{className:'contact-modal',style:{maxWidth:'520px'}},
+      h('div',{className:'contact-modal-head'},
+        h('h3',null,'Annuler l\'annulation du dossier'),
+        h('button',{className:'contact-close-btn',onClick:close},'×')),
+      h('div',{className:'contact-modal-body'},
+        h('div',{style:{marginBottom:'12px'}},
+          ligne('Dossier', ap.no_dossier||'-'),
+          ligne('Machine', ap.machine||'-'),
+          ligne('Annulation', fDSecs(ap.date)),
+          ligne('Motif', ap.motif||'-'),
+          ligne('Saisies du cycle', String(ap.nb_saisies))),
+        h('p',{style:{fontSize:'12px',color:'var(--muted)',margin:'0'}},
+          suite+' Les saisies du cycle perdent la mention « cycle annulé ». Si la machine tourne encore sur ce dossier, il repasse en cours au planning.'),
+        choix,
+        h('div',{className:'contact-modal-actions'},
+          h('button',{className:'btn-ghost',onClick:close},'Fermer'),
+          valider))));
+  document.body.appendChild(overlay);
+}
+
 async function openConvertirAnnulation(row){
   let ap;
   try{
