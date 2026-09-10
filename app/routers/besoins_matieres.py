@@ -3194,6 +3194,41 @@ def _depuis_jours(jours) -> str:
     return (datetime.now() - timedelta(days=j)).strftime("%Y-%m-%dT%H:%M:%S")
 
 
+def _matieres_sorties(conn, planning_id: int) -> list:
+    """Ce qui est sorti pour un dossier : référence, laize, quantité.
+
+    La quantité est donnée dans l'unité du stock ET, quand la matière le
+    permet, dans celle de l'atelier (mètres linéaires d'une bobine, cartons
+    d'une palette). Le mandrin reste en palettes : sa conversion en mandrins
+    dépend de la laize module du dossier, qu'on ne relit pas ici.
+    """
+    net, _ = _net_sorti(conn, planning_id)
+    out = []
+    for (mid, lid), q in net.items():
+        if abs(q) < 1e-6:
+            continue
+        mp = _matiere_conv(conn, mid) or {}
+        kind = _kind_de_categorie(mp.get("categorie"))
+        conv = _conversion_matiere(kind, mp, None, 0) if kind else {}
+        laize = None
+        if lid is not None:
+            r = conn.execute("SELECT valeur_mm FROM mp_laizes WHERE id=?", (lid,)).fetchone()
+            laize = _f(r["valeur_mm"]) if r else None
+        out.append({
+            "matiere_id": mid,
+            "reference": mp.get("reference"),
+            "designation": mp.get("designation"),
+            "categorie": mp.get("categorie"),
+            "laize_mm": laize,
+            "quantite": round(q, 4),
+            "unite": _unite_categorie(mp.get("categorie")),
+            "quantite_reelle": _depuis_stock(conv, q) if conv and kind != "mandrin" else None,
+            "unite_reelle": conv.get("unite_reelle") if conv and kind != "mandrin" else None,
+        })
+    out.sort(key=lambda x: (x["categorie"] or "", x["reference"] or ""))
+    return out
+
+
 def _colonnes_pe(conn) -> set:
     return {r[1] for r in conn.execute("PRAGMA table_info(planning_entries)")}
 
@@ -3271,6 +3306,8 @@ def destockage_suivi(request: Request, vue: str = "a_traiter", jours: int = 30,
                 "nb_mouvements": (mvts.get(d["id"]) or {}).get("n", 0),
                 "dernier_mouvement": (mvts.get(d["id"]) or {}).get("dernier"),
             }
+            if vue == "destockes":
+                item["matieres"] = _matieres_sorties(conn, d["id"])
             if vue == "a_traiter" and etat == "todo":
                 try:
                     ctl = _destockage_lignes(conn, d["id"])["controle"]

@@ -6234,8 +6234,120 @@ function selectDossier(dossier){
   set({showDossierPicker:false, _selectedDossier:dossier, showDebutModal:true, metrageDebut:''});
 }
 
+/* ── Matières en place au démarrage d'un dossier ─────────────────────────
+   Au changement de dossier, le conducteur garde presque toujours la glassine
+   et parfois le frontal. La carte liste ce qui est monté sur la machine, tout
+   coché (« Réutiliser les dernières matières ») : les bobines cochées sont
+   rattachées au nouveau dossier sans rescan, les décochées sont démontées.
+   Chargée une fois par dossier choisi ; sans poste configuré, rien ne s'affiche. */
+async function loadDebutMontees(ref){
+  const mid = (S.user&&S.user.machine_id) || S.adminMachineId;
+  if(!mid){ S.debutMontees = {postes:[], en_attente:[]}; return; }
+  try{
+    const d = await apiFetch('/api/fabrication/machines/'+mid+'/bobines-montees');
+    if(S.debutMonteesPour !== ref) return;
+    S.debutMontees = d || {postes:[], en_attente:[]};
+  }catch(e){
+    if(S.debutMonteesPour !== ref) return;
+    S.debutMontees = {postes:[], en_attente:[], erreur:true};
+  }
+  S.debutRetirer = {};
+  if(S.showDebutModal) fabRenderPreserveUi({});
+}
+
+function debutMonteesListe(){
+  const m = S.debutMontees;
+  if(!m) return [];
+  const out = [];
+  (m.postes||[]).forEach(p => (p.bobines||[]).forEach(b => out.push(Object.assign({posteLabel:p.label}, b))));
+  (m.en_attente||[]).forEach(b => out.push(Object.assign({posteLabel:'Poste inconnu'}, b)));
+  return out;
+}
+
+function renderDebutMatieres(){
+  const m = S.debutMontees;
+  if(m === null || m === undefined){
+    return h('div',{className:'fab-field',style:{color:'var(--muted)',fontSize:'13px'}},'Matières en place : chargement…');
+  }
+  if(!(m.postes||[]).length) return null;
+  const liste = debutMonteesListe();
+  const retirer = S.debutRetirer || {};
+  const titre = h('label',null,'Matières en place sur la machine');
+  if(!liste.length){
+    return h('div',{className:'fab-field'}, titre,
+      h('div',{style:{fontSize:'13px',color:'var(--text2)',lineHeight:'1.5'}},
+        'Aucune bobine montée connue. Scannez les bobines en place après le démarrage.'));
+  }
+  const toutes = liste.every(b => !retirer[b.id]);
+  const maitre = h('label',{style:{display:'flex',alignItems:'center',gap:'10px',cursor:'pointer',
+      padding:'10px 12px',borderRadius:'10px',border:'1px solid var(--accent)',
+      background:'var(--accent-bg)',color:'var(--accent)',fontWeight:'700',fontSize:'14px',marginBottom:'8px'}},
+    h('input',{type:'checkbox',checked:toutes,style:{width:'18px',height:'18px'},
+      onChange:(e)=>{
+        const r = {};
+        if(!e.target.checked) liste.forEach(b => { r[b.id] = true; });
+        set({debutRetirer:r});
+      }}),
+    'Réutiliser les dernières matières');
+
+  const gardees = liste.filter(b => !retirer[b.id]);
+  const frontaux = gardees.filter(b => b.poste === 'frontal');
+  const complexeSeul = frontaux.length > 0 && frontaux.every(b => b.categorie === 'complexe')
+    && !gardees.some(b => !b.poste);
+  const CAT = {frontal:'Frontal', complexe:'Complexe', glassine:'Glassine'};
+
+  const lignes = liste.map(b => {
+    const garde = !retirer[b.id];
+    const nonRattachee = garde && complexeSeul && b.poste === 'glassine';
+    const quand = b.monte_at ? String(b.monte_at).slice(8,10)+'/'+String(b.monte_at).slice(5,7)+' '+String(b.monte_at).slice(11,16) : '';
+    return h('label',{style:{display:'flex',alignItems:'flex-start',gap:'10px',cursor:'pointer',
+        padding:'8px 12px',borderRadius:'10px',border:'1px solid var(--border)',background:'var(--bg)',
+        marginBottom:'6px',opacity:garde?'1':'.55'}},
+      h('input',{type:'checkbox',checked:garde,style:{width:'18px',height:'18px',marginTop:'2px'},
+        onChange:(e)=>{
+          const r = Object.assign({}, S.debutRetirer||{});
+          if(e.target.checked) delete r[b.id]; else r[b.id] = true;
+          set({debutRetirer:r});
+        }}),
+      h('div',{style:{flex:'1',minWidth:'0'}},
+        h('div',{style:{fontSize:'13px',fontWeight:'700',color:'var(--text)'}},
+          (b.posteLabel||'')+(b.categorie && CAT[b.categorie] && CAT[b.categorie]!==b.posteLabel ? ' · '+CAT[b.categorie] : ''),
+          h('span',{style:{fontFamily:'monospace',fontWeight:'600',color:'var(--text2)',marginLeft:'8px'}}, b.code_barre||'')),
+        h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'2px'}},
+          [b.fournisseur, b.dernier_dossier ? 'dossier '+b.dernier_dossier : '', quand ? 'montée le '+quand : '']
+            .filter(Boolean).join(' · ')),
+        !garde ? h('div',{style:{fontSize:'12px',color:'var(--text2)',marginTop:'2px'}},'Retirée de la machine au démarrage.') : null,
+        nonRattachee ? h('div',{style:{fontSize:'12px',color:'var(--text2)',marginTop:'2px'}},
+          'Reste sur la machine, non rattachée : le frontal est un complexe.') : null
+      )
+    );
+  });
+  return h('div',{className:'fab-field'}, titre, maitre, lignes);
+}
+
+async function debutConfirmerFscHeritees(heritees){
+  const alertes = (heritees && heritees.alertes_fsc) || [];
+  if(!alertes.length) return;
+  showFscWarningModal(heritees.alerte_fsc_message || 'Bobines reprises sans revendication FSC démontrée.',
+    async (note)=>{
+      try{
+        for(const a of alertes){ await tracaConfirmFscWarning(a.id, note); }
+        showToast('Raison enregistrée.','success');
+      }catch(e){ showToast(e.message||'Erreur confirmation FSC.','danger'); }
+    },
+    ()=>{ showToast('Bobines rattachées sans justification FSC — écart visible en traçabilité.','info'); }
+  );
+}
+
 function renderDebutModal(){
   const d = S._selectedDossier;
+  const refChoisie = d ? (d.reference||'') : '';
+  if(d && S.debutMonteesPour !== refChoisie){
+    S.debutMonteesPour = refChoisie;
+    S.debutMontees = null;
+    S.debutRetirer = {};
+    loadDebutMontees(refChoisie);
+  }
   const inp = h('input',{type:'number',placeholder:'Ex: 15000',step:'1',min:'0',
     style:{textAlign:'right'}});
   inp.value = S.metrageDebut||'';
@@ -6272,12 +6384,22 @@ function renderDebutModal(){
       }
       if(mDebut !== null) body.metrage_debut = mDebut;
       if(S.adminMachineId) body.machine_id = S.adminMachineId;
+      // N'est envoyé que si la carte a pu se charger : sans elle, le serveur
+      // ne reprend rien plutôt que de deviner ce que l'opérateur voulait.
+      if(S.debutMontees && (S.debutMontees.postes||[]).length && !S.debutMontees.erreur){
+        const retirer = Object.keys(S.debutRetirer||{}).filter(k => S.debutRetirer[k]).map(Number);
+        body.bobines_montees = {retirer: retirer};
+      }
       const r = await apiFetch('/api/fabrication/saisie',{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify(body),
       });
       if(r&&r.success){
-        showToast('Dossier démarré.');
+        const bh = r.bobines_heritees;
+        const nRep = bh && bh.rattachees ? bh.rattachees.length : 0;
+        showToast(nRep ? 'Dossier démarré · '+nRep+' bobine'+(nRep>1?'s':'')+' reprise'+(nRep>1?'s':'')+'.' : 'Dossier démarré.');
+        S.debutMonteesPour = null;
+        if(bh) setTimeout(()=>debutConfirmerFscHeritees(bh), 400);
         // v2.2.67 : refresh alertes (code 01 = pas d'ack auto, mais on refresh
         // par cohérence avec les autres endpoints — pas de coût)
         try { if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh==='function') window.MysifaAlerts.refresh(); } catch(_){}
@@ -6308,9 +6430,10 @@ function renderDebutModal(){
         })()),
         inp
       ),
+      renderDebutMatieres(),
       h('div',{className:'fab-modal-btns'},
         h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
-          onClick:()=>set({showDebutModal:false, _selectedDossier:null})},
+          onClick:()=>set({showDebutModal:false, _selectedDossier:null, debutMonteesPour:null})},
           'Annuler'),
         h('button',{className:'fab-btn fab-btn-success',
           onClick:submit},
