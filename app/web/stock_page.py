@@ -2059,6 +2059,8 @@ body:not(.light) .plan-pill-tip-jours.plan-pill-c-rouge{color:#f87171}
 .recep-mini-close:hover{color:var(--danger)}
 
 .recep-page{padding:14px 20px 20px;max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+/* File « Depuis l'ERP » : un tableau à cinq colonnes ne tient pas dans 860 px. */
+.recep-page.recep-page-large{max-width:none}
 .recep-head-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;width:100%;margin-bottom:2px}
 .recep-head-row .recep-title{flex:0 0 auto;min-width:0;margin:0}
 .recep-title{font-size:17px;font-weight:800;letter-spacing:.2px}
@@ -4052,6 +4054,7 @@ function goToTab(tab) {
   // Accès restreints selon le mode
   if (S.tracaOnly && tab !== 'traca') return;
   if (S.fabStockMode && !['menu','production','matieres','bobines','historique','traca','plan-entrepot'].includes(tab)) return;
+  if (tab === 'destockage' && !peutVoirDestockage()) return;
   // Arrêter la caméra si on quitte l'onglet réception
   if (tab !== 'reception' && S.recepScanning) recepStopCamera();
   S.tab = tab; S.selProduit = null; S.selEmpl = null; S.selMatiere = null; S.searchResults = null; S.showAddForm = false;
@@ -18615,10 +18618,9 @@ async function openReceptionPrinterPicker() {
 }
 
 function buildReception() {
-  const wrap = el('div', { cls: 'recep-page' });
-
   // ── Header : titre + sous-onglets sur la même ligne ──
   const sub = ['historique', 'rvgi', 'liste'].includes(S.recepSubTab) ? S.recepSubTab : 'nouvelle';
+  const wrap = el('div', { cls: 'recep-page' + (sub === 'rvgi' ? ' recep-page-large' : '') });
   const subtabs = el('div', { cls: 'recep-subtabs' },
     el('button', {
       cls: 'recep-subtab' + (sub === 'nouvelle' ? ' active' : ''),
@@ -18718,7 +18720,48 @@ async function loadReceptionRvgi() {
   } finally {
     S.rvgiChargement = false;
     renderContent();
+    rvgiMajBadgeNav();
   }
+}
+
+function rvgiNbEnAttente() {
+  const f = S.rvgiFile;
+  return f ? Number(f.total != null ? f.total : (f.lignes || []).length) || 0 : 0;
+}
+
+// Met à jour la pastille de la sidebar sans reconstruire la page.
+function rvgiMajBadgeNav() {
+  const btn = document.querySelector('.nav-btn[data-tab="reception"]');
+  if (!btn) return;
+  const n = rvgiNbEnAttente();
+  let b = btn.querySelector('.nav-badge');
+  if (!n) {
+    if (b) b.remove();
+    btn.classList.remove('nav-btn-has-overlay');
+    return;
+  }
+  if (!b) {
+    b = document.createElement('span');
+    b.className = 'nav-badge nav-badge-overlay';
+    btn.appendChild(b);
+    btn.classList.add('nav-btn-has-overlay');
+  }
+  b.textContent = n;
+}
+
+// Au démarrage : la pastille ne doit pas attendre qu'on ouvre l'onglet.
+// Muet en cas d'échec — une pastille absente ne doit pas casser la page.
+async function loadRvgiCountBackground() {
+  if (S.rvgiFile) { rvgiMajBadgeNav(); return; }
+  try {
+    const r = await fetch('/api/stock/reception-rvgi', { credentials: 'include' });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!S.rvgiFile) S.rvgiFile = d;
+    rvgiMajBadgeNav();
+    // Le sous-onglet « Depuis l'ERP » porte aussi le compteur.
+    if (S.tab === 'reception') renderContent();
+  } catch (e) {}
 }
 
 async function rvgiApparier(ligne, matiereId) {
@@ -18899,15 +18942,15 @@ function rvgiLigne(l) {
     el('div', { style: petit }, 'cde ' + l.numero + '/' + l.ligne),
     l.fournisseur ? el('div', { style: petit }, l.fournisseur) : null));
 
-  tr.appendChild(el('td', { style: 'vertical-align:top;min-width:260px' },
+  tr.appendChild(el('td', { style: 'vertical-align:top;min-width:220px' },
     el('div', { style: 'font-family:var(--mono,monospace);font-weight:700' }, l.article),
-    el('div', { style: petit + ';max-width:380px' },
+    el('div', { style: petit + ';max-width:420px' },
       (l.libelle || '') + (l.laize_mm ? ' · laize ' + l.laize_mm + ' mm' : ''))));
 
   // Colonne matière : la référence appariée, ou le choix à faire. Les
   // candidates sont déjà restreintes à ce que le type RVGI peut désigner —
   // on ne propose jamais un carton pour une bobine.
-  const tdMat = el('td', { style: 'vertical-align:top;min-width:260px' });
+  const tdMat = el('td', { style: 'vertical-align:top;min-width:300px' });
   if (l.matiere_id) {
     tdMat.appendChild(el('div', { style: 'display:flex;gap:8px;align-items:center' },
       el('span', { style: 'font-weight:700' }, l.matiere_ref || ('#' + l.matiere_id)),
@@ -18920,7 +18963,7 @@ function rvgiLigne(l) {
     if (l.matiere_designation) tdMat.appendChild(el('div', { style: petit }, l.matiere_designation));
   } else if ((l.propositions || []).length) {
     const sel = el('select', {
-      style: 'flex:1;min-width:0;max-width:260px;padding:6px 8px;border-radius:7px;border:1px solid var(--border);'
+      style: 'flex:1;min-width:0;max-width:380px;padding:6px 8px;border-radius:7px;border:1px solid var(--border);'
         + 'background:var(--bg);color:var(--text);font-family:inherit;font-size:13px' },
       el('option', { attrs: { value: '' } }, '— choisir —'),
       ...l.propositions.map((p, i) => el('option', {
@@ -23103,6 +23146,13 @@ function buildEcartsRvgi(entete) {
   return wrap;
 }
 
+// Espace Déstockage : services administration, direction et super admin
+// seulement (10/09/2026). La production n'y a pas accès.
+const ROLES_DESTOCKAGE = ['superadmin', 'direction', 'administration', 'administration_ventes', 'administration_technique'];
+function peutVoirDestockage() {
+  return !!(S.user && ROLES_DESTOCKAGE.includes(S.user.role) && !S.stockReadOnly);
+}
+
 function buildSidebarNavStructure() {
   if (S.tracaOnly) {
     return [{ kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes traça' }];
@@ -23130,6 +23180,8 @@ function buildSidebarNavStructure() {
   if (isMatieresAdmin() && !S.stockReadOnly) {
     items.push({ kind: 'btn', tab: 'matieres-inventaire', icon: 'clipboard', label: 'Inventaire matière' });
     items.push({ kind: 'btn', tab: 'besoins-matieres', icon: 'list-checks', label: 'Besoins matières' });
+  }
+  if (peutVoirDestockage()) {
     items.push({ kind: 'btn', tab: 'destockage', icon: 'upload', label: 'Déstockage' });
   }
   items.push(
@@ -23163,6 +23215,14 @@ function renderSidebarNavBtn(n) {
     badge = document.createElement('span');
     badge.className = 'nav-badge nav-badge-overlay';
     badge.textContent = S.invAlertCount;
+  }
+  // Réceptions de l'ERP en attente d'intégration : visibles sans ouvrir
+  // l'onglet (10/09/2026) — sinon la file ne se découvre qu'en y allant.
+  const nRecep = rvgiNbEnAttente();
+  if (n.tab === 'reception' && nRecep) {
+    badge = document.createElement('span');
+    badge.className = 'nav-badge nav-badge-overlay';
+    badge.textContent = nRecep;
   }
   if (badge) children.push(badge);
   return el('button', {
@@ -23888,6 +23948,7 @@ async function init() {
   if (urlTab && ['dashboard','matieres','produits-finis','negoce','referentiel','stock','inventaire','matieres-inventaire','besoins-matieres','destockage','reception','bobines','historique','traca','monitoring','valorisation','production','plan-entrepot'].includes(urlTab)) {
     S.tab = urlTab;
   }
+  if (S.tab === 'destockage' && !peutVoirDestockage()) S.tab = 'dashboard';
   // Sous-vue des besoins matières. Restaurée AVANT le chargement de l'onglet :
   // `loadBesoinsMatieres` s'en sert pour décider s'il doit aussi aller chercher
   // la tendance ou les dossiers passés, qui ont leur propre source.
@@ -23953,6 +24014,7 @@ async function init() {
   }
   // Charger le compteur d'alertes inventaire en arrière-plan (badge sidebar)
   if (!S.tracaOnly && !S.fabStockMode) loadInvAlertCountBackground();
+  if (!S.tracaOnly && !S.fabStockMode) loadRvgiCountBackground();
   try{ initStockGuides(); }catch(e){}
 
   // Réception en cours retrouvée dans le navigateur. Restaurée APRÈS le

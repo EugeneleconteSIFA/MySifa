@@ -54,6 +54,22 @@ if [ -n "$QUARANTAINE" ]; then
     echo "  en quarantaine (tests/CI_QUARANTAINE.txt) :"
     echo "$QUARANTAINE" | sed 's/^/    - /'
 fi
+# `timeout` est un outil GNU : il n'existe pas sur macOS (sauf coreutils via
+# Homebrew, sous le nom `gtimeout`). Sans ce repli, chaque test sortait en 127
+# « command not found » et TOUS s'affichaient KO sur le Mac (10/09/2026), ce qui
+# ressemble a une catastrophe et n'est qu'un outil absent. perl est livre avec
+# macOS : `alarm` survit a `exec` et tue le test au bout du delai.
+avec_delai() {
+    delai=$1; shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout -k 5 "$delai" "$@"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        gtimeout -k 5 "$delai" "$@"
+    else
+        perl -e 'alarm shift @ARGV; exec @ARGV or exit 127' "$delai" "$@"
+    fi
+}
+
 # Journal temporaire propre a ce lancement : un chemin fixe dans /tmp appartient
 # au premier utilisateur qui l'a cree, et les lancements suivants sous un autre
 # compte echouent en "Permission denied" sur TOUS les tests.
@@ -72,7 +88,7 @@ for t in tests/test_*.py; do
     # meme apres que `timeout` a tue le parent. Constate sur
     # test_mystock_declinaisons le 27/08/2026 : plus de deux minutes sans rendre
     # la main, timeout compris. Un fichier temporaire n'a pas ce probleme.
-    timeout -k 5 120 python3 "$t" </dev/null >"$JOURNAL" 2>&1
+    avec_delai 120 python3 "$t" </dev/null >"$JOURNAL" 2>&1
     code=$?
     sortie=$(cat "$JOURNAL" 2>/dev/null)
     if [[ $code -eq 0 ]]; then
@@ -81,6 +97,9 @@ for t in tests/test_*.py; do
         echo "ignore (dependance absente)"
     else
         echo "KO"; echec=1
+        # Les dernieres lignes du test : sans elles, un KO local oblige a
+        # relancer le test a la main juste pour savoir de quoi il s'agit.
+        tail -n 4 "$JOURNAL" | sed 's/^/      | /'
     fi
 done
 
