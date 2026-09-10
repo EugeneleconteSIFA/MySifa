@@ -2729,13 +2729,22 @@ function lockedPositionsFromIds(ids){
   locked.forEach(id=>{ const i=ids.indexOf(id); if(i>=0) pos[id]=i; });
   return pos;
 }
+// Même règle que _ordre_verrouille_respecte côté serveur : la tête de liste
+// (terminés / en cours avant le premier dossier en attente) est figée, un
+// dossier en cours garde sa place, les terminés gardent leur ordre entre eux.
+// Un terminé resté en bas de liste ne bloque plus les dossiers en attente.
 function reorderKeepsLocked(idsBefore, idsAfter){
-  const p0=lockedPositionsFromIds(idsBefore);
-  for(const k in p0){
-    const id=+k;
-    if(idsAfter.indexOf(id)!==p0[k]) return false;
+  const st={};
+  (S.entries||[]).forEach(e=>{ st[e.id]=e.statut; });
+  const isLk=id=>st[id]==="en_cours"||st[id]==="termine";
+  let tete=0;
+  while(tete<idsBefore.length&&isLk(idsBefore[tete])) tete++;
+  for(let i=0;i<tete;i++){ if(idsAfter[i]!==idsBefore[i]) return false; }
+  for(let i=0;i<idsBefore.length;i++){
+    if(st[idsBefore[i]]==="en_cours"&&idsAfter.indexOf(idsBefore[i])!==i) return false;
   }
-  return true;
+  const a=idsBefore.filter(isLk), b=idsAfter.filter(isLk);
+  return a.length===b.length&&a.every((id,i)=>id===b[i]);
 }
 function setupTlDD(){
   if(!CAN_EDIT) return;
