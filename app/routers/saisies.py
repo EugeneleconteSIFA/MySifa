@@ -954,6 +954,14 @@ async def update_saisie(row_id: int, request: Request):
              user["email"], datetime.now().isoformat(), body.get("note", ""),
              json.dumps(new_data, default=str), row_id)
         )
+        # Dossier ou machine changés : la saisie change de créneau.
+        if (str(body.get("no_dossier", _ex("no_dossier")) or "").strip() != str(_ex("no_dossier") or "").strip()
+                or str(body.get("machine", _ex("machine")) or "").strip() != str(_ex("machine") or "").strip()):
+            try:
+                from app.services.lien_saisie_planning import rattacher
+                rattacher(conn, row_id, forcer=True)
+            except Exception:
+                pass
         conn.commit()
     return {"success": True}
 
@@ -1015,11 +1023,34 @@ async def add_saisie(request: Request):
                  user["email"], datetime.now().isoformat(),
                  body.get("note", "Ajout manuel"))
             )
+            try:
+                from app.services.lien_saisie_planning import rattacher
+                rattacher(conn, cursor.lastrowid)
+            except Exception:
+                pass
             conn.commit()
     except Exception as e:
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erreur : {str(e)}")
     return {"success": True, "id": cursor.lastrowid}
+
+
+_MSG_SUPPR_ANNULATION = (
+    "Saisie liée à une annulation de dossier — utiliser « Annuler l'annulation » "
+    "plutôt que de la supprimer."
+)
+
+
+def _porte_annulation(ex) -> bool:
+    """Trace 90 ou saisie marquée « cycle annulé ».
+
+    Supprimer puis recréer ces saisies à la main (10/09/2026) perd le lien avec
+    le planning et laisse le dossier annulé : c'est au bouton de le défaire.
+    """
+    keys = ex.keys()
+    if str(ex["operation_code"] or "").strip() == "90":
+        return True
+    return "annule_le" in keys and bool((ex["annule_le"] or "").strip())
 
 
 @router.delete("/api/saisies/bulk")
@@ -1038,6 +1069,8 @@ async def bulk_delete(request: Request):
             if not ex: continue
             if int(ex["est_annule"] or 0):
                 continue
+            if _porte_annulation(ex):
+                raise HTTPException(status_code=409, detail=_MSG_SUPPR_ANNULATION)
             if not is_admin(user) and (not ex["est_manuel"] or ex["modifie_par"] != user["email"]):
                 continue
             conn.execute("DELETE FROM production_data WHERE id=?", (row_id,))
@@ -1059,6 +1092,8 @@ def delete_saisie(row_id: int, request: Request):
                 status_code=409,
                 detail="Saisie annulée avec le dossier — suppression impossible.",
             )
+        if _porte_annulation(ex):
+            raise HTTPException(status_code=409, detail=_MSG_SUPPR_ANNULATION)
         if not is_admin(user) and (not ex["est_manuel"] or ex["modifie_par"] != user["email"]):
             raise HTTPException(status_code=403, detail="Suppression non autorisée")
         conn.execute("DELETE FROM production_data WHERE id=?", (row_id,))
@@ -1309,3 +1344,71 @@ async def retablir_fin_production(row_id: int, request: Request):
     except Exception:
         pass
     return {"success": True, **res}
+
+
+# ─── Annuler l'annulation depuis le planning ─────────────────────────────────
+# Le créneau marqué « Dossier annulé en production » retrouve SA saisie
+# d'annulation (lien planning_entry_id, sinon référence + date d'annulation) et
+# passe par le même rétablissement que MyProd > Saisies : saisies, planning et
+# mémoire produit restent cohérents quel que soit l'écran d'où l'on part.
+
+@router.get("/api/saisies/planning/{entry_id}/annulation")
+def apercu_annulation_creneau(entry_id: int, request: Request):
+    _exiger_admin_saisies(request)
+    from app.services.annulation_fin_production import trace_du_creneau, contexte_retablir
+    with get_db() as conn:
+        pe = conn.execute("SELECT id, annule_le FROM planning_entries WHERE id = ?", (entry_id,)).fetchone()
+        if not pe:
+            raise HTTPException(status_code=404, detail="Dossier introuvable au planning.")
+        if not (pe["annule_le"] or "").strip():
+            return {"retablissable": False, "raison": "Ce dossier n'est pas marqué annulé."}
+        tid = trace_du_creneau(conn, entry_id)
+        if not tid:
+            return {"retablissable": True, "sans_trace": True,
+                    "raison": "Aucune saisie d'annulation retrouvée : seule la marque du planning sera retirée."}
+        ctx = contexte_retablir(conn, tid)
+    out = {k: ctx.get(k) for k in (
+        "retablissable", "raison", "no_dossier", "machine", "date", "motif",
+        "conversion", "fin_dossier", "quantite_traitee", "nb_saisies",
+        "nouveau_creneau", "trace_deja_fin",
+    )}
+    out["trace_id"] = tid
+    return out
+
+
+@router.post("/api/saisies/planning/{entry_id}/annuler-annulation")
+async def annuler_annulation_creneau(entry_id: int, request: Request):
+    user = _exiger_admin_saisies(request)
+    body = await request.json()
+    fin = body.get("fin_dossier")
+    fin_dossier = None if fin is None else bool(fin)
+    auteur = (user.get("nom") or user.get("email") or "").strip()
+    from app.services.annulation_fin_production import (
+        trace_du_creneau, retablir, retirer_marque_planning,
+    )
+    with get_db() as conn:
+        pe = conn.execute("SELECT id, reference, annule_le FROM planning_entries WHERE id = ?",
+                          (entry_id,)).fetchone()
+        if not pe:
+            raise HTTPException(status_code=404, detail="Dossier introuvable au planning.")
+        tid = trace_du_creneau(conn, entry_id)
+        if not tid:
+            retirer_marque_planning(conn, entry_id)
+            res = {"no_dossier": pe["reference"], "machine": None, "planning": "marque_retiree",
+                   "saisies_retablies": 0}
+        else:
+            try:
+                res = retablir(conn, tid, fin_dossier, auteur, user.get("email") or auteur)
+            except ValueError as e:
+                raise HTTPException(status_code=409, detail=str(e))
+    try:
+        from app.services.audit_service import log_action
+        log_action(
+            user=user, action="UPDATE", module="saisies",
+            objet=f"Annulation retirée depuis le planning · dossier {res.get('no_dossier')}",
+            detail={"planning_entry_id": entry_id, "trace_id": tid, **res},
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return {"success": True, "trace_id": tid, **res}

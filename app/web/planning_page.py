@@ -4674,6 +4674,7 @@ function openEdit(id){
     </div>
     <div style="color:var(--text);font-weight:600">${escAttr((e.annule_motif||"").trim()||"Motif non renseigné")}</div>
     <div style="margin-top:3px;font-size:10.5px;color:var(--muted)">${escAttr(e.annule_par||"—")}${(e.annule_le||"")?" · "+escAttr(String(e.annule_le).slice(0,16).replace("T"," ")):""}</div>
+    ${isAdmin(ME)?`<button type="button" onclick="annulerAnnulationPlanning(${id})" style="margin-top:8px;padding:6px 10px;border-radius:6px;border:1px solid rgba(248,113,113,.45);background:transparent;color:var(--danger);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Annuler l'annulation</button>`:""}
   </div>`:"";
   const statsBtn=isTermine?`<button type="button" onclick="openDossierStatsModal(${id})" title="Statistiques de production"
     style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:6px;border:1.5px solid var(--border2);background:var(--accent-bg);color:var(--accent);cursor:pointer;transition:opacity .15s;font-family:inherit;flex-shrink:0"
@@ -5553,6 +5554,59 @@ async function openDossierStatsModal(entryId){
     const msg=err&&err.message?err.message:"Erreur lors du chargement";
     if(el) el.innerHTML=`<div class="ds-empty">${escHtml(msg)}</div>`;
   }
+}
+
+// ── Annuler l'annulation d'un dossier ───────────────────────────
+// Même rétablissement que MyProd > Saisies : la saisie d'annulation du créneau
+// redevient la fin de production, les saisies du cycle perdent la mention
+// « cycle annulé », le créneau retrouve son état (en cours si la machine tourne
+// encore dessus) et la mémoire produit est remise d'aplomb.
+async function annulerAnnulationPlanning(entryId){
+  let ap;
+  try{ ap=await apiAbs(`/api/saisies/planning/${entryId}/annulation`); }
+  catch(e){ showToast(apiErrorMessage(e,"Lecture de l'annulation impossible."),"danger"); return; }
+  if(!ap||!ap.retablissable){ showToast((ap&&ap.raison)||"Rétablissement impossible.","danger"); return; }
+  const old=document.getElementById("annul-retab-ov"); if(old) old.remove();
+  const sansChoix=ap.sans_trace||ap.conversion||(ap.trace_deja_fin&&ap.fin_dossier!=null);
+  const lignes=ap.sans_trace?`<p style="margin:0 0 10px;color:var(--text2)">${escHtml(ap.raison)}</p>`:
+    `<div style="font-size:12px;line-height:1.7;margin-bottom:10px">
+      <div><span style="color:var(--muted)">Dossier</span> · <b>${escHtml(ap.no_dossier||"-")}</b> · ${escHtml(ap.machine||"")}</div>
+      <div><span style="color:var(--muted)">Annulation</span> · ${escHtml(String(ap.date||"").slice(0,16).replace("T"," "))} · ${escHtml(ap.motif||"")}</div>
+      <div><span style="color:var(--muted)">Saisies du cycle</span> · ${Number(ap.nb_saisies||0)}</div>
+    </div>
+    <p style="margin:0 0 10px;font-size:11.5px;color:var(--muted)">La saisie d'annulation redevient la fin de production${ap.conversion?" d'origine":""}, les saisies du cycle perdent la mention « cycle annulé ». Si la machine tourne encore sur ce dossier, il repasse en cours.</p>`;
+  const choix=sansChoix?"":`<div style="margin:6px 0 4px;font-weight:600;font-size:12px">À la fin de production, le dossier était :</div>
+    <label style="display:flex;gap:8px;align-items:center;font-size:12px;cursor:pointer"><input type="radio" name="annul-retab-fin" value="1"> Terminé</label>
+    <label style="display:flex;gap:8px;align-items:center;font-size:12px;cursor:pointer;margin-top:4px"><input type="radio" name="annul-retab-fin" value="0"> À reprendre plus tard</label>`;
+  const ov=document.createElement("div");
+  ov.id="annul-retab-ov";
+  ov.style.cssText="position:fixed;inset:0;z-index:12000;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px";
+  ov.innerHTML=`<div style="width:100%;max-width:460px;background:var(--card,var(--bg));border:1px solid var(--border2);border-radius:12px;padding:16px 18px">
+    <h3 style="margin:0 0 12px;font-size:15px">Annuler l'annulation du dossier</h3>
+    ${lignes}${choix}
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+      <button type="button" class="btn-s" id="annul-retab-no">Fermer</button>
+      <button type="button" class="btn-p" id="annul-retab-ok">Annuler l'annulation</button>
+    </div></div>`;
+  ov.addEventListener("click",ev=>{ if(ev.target===ov) ov.remove(); });
+  document.body.appendChild(ov);
+  ov.querySelector("#annul-retab-no").onclick=()=>ov.remove();
+  ov.querySelector("#annul-retab-ok").onclick=async()=>{
+    let fin=null;
+    if(!sansChoix){
+      const r=ov.querySelector('input[name="annul-retab-fin"]:checked');
+      if(!r){ showToast("Préciser si le dossier était terminé ou à reprendre.","danger"); return; }
+      fin=r.value==="1";
+    }
+    const btn=ov.querySelector("#annul-retab-ok"); btn.disabled=true;
+    try{
+      const res=await apiAbs(`/api/saisies/planning/${entryId}/annuler-annulation`,{method:"POST",body:JSON.stringify({fin_dossier:fin})});
+      ov.remove();
+      closeM();
+      await load();
+      showToast(res&&res.planning==="en_cours"?"Annulation retirée — dossier de nouveau en cours.":"Annulation retirée.","success");
+    }catch(e){ btn.disabled=false; showToast(apiErrorMessage(e,"Rétablissement impossible."),"danger"); }
+  };
 }
 
 function closeM(){
