@@ -141,6 +141,17 @@ check("colonnes de déstockage ajoutées",
 mig_dst.appliquer(conn)  # rejouable
 check("migration déstockage rejouable", True, True)
 
+# Le 10/09 : qui a déstocké, qui a relu — `_SQL_PE` les nomme aussi.
+spec3 = importlib.util.spec_from_file_location(
+    "mig_suivi", "app/core/migrations/2026_09_10_destockage_suivi.py")
+mig_suivi = importlib.util.module_from_spec(spec3)
+spec3.loader.exec_module(mig_suivi)
+mig_suivi.appliquer(conn)
+mig_suivi.appliquer(conn)  # rejouable
+cols_pe = {r["name"] for r in conn.execute("PRAGMA table_info(planning_entries)")}
+check("colonnes de suivi de relecture ajoutées",
+      {"destockage_par", "destockage_relu_par", "destockage_relu_at"} <= cols_pe, True)
+
 # ── Jeu de données ────────────────────────────────────────────────────
 conn.executescript("""
     INSERT INTO machines(id, nom) VALUES (1, 'Cohésio 1');

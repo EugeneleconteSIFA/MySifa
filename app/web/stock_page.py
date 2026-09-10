@@ -2260,6 +2260,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script>window.__MYSIFA_APP__='stock';</script>
 <link rel="stylesheet" href="/static/mysifa_stock_modals.css">
 <script src="/static/mysifa_stock_modals.js"></script>
+<script src="/static/mysifa_destockage.js"></script>
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
@@ -4091,6 +4092,7 @@ function goToTab(tab) {
   else if (tab === 'inventaire') loadInventaireList();
   else if (tab === 'matieres-inventaire') loadInventaireMatieres();
   else if (tab === 'besoins-matieres') loadBesoinsMatieres();
+  else if (tab === 'destockage') loadDestockage();
   else if (tab === 'reception') loadRecepHistory();
   else if (tab === 'bobines') loadBobines();
   else if (tab === 'matieres') loadMatieres();
@@ -6064,13 +6066,10 @@ function buildMatiereDetail() {
 
   const actionBtns = [];
   if (!S.stockReadOnly) {
-    actionBtns.push(
-      el('button', {
-        cls: 'mp-act-btn mp-act-entree',
-        type: 'button',
-        on: { click: () => openModalMouvement('entree', m) },
-      }, '↓ Entrée'),
-    );
+    // Entrées et sorties ne se saisissent plus ici (10/09/2026) : les entrées
+    // viennent des réceptions RVGI, les sorties du déstockage des dossiers.
+    // Reste la correction — un ajustement motivé, réservé aux administrateurs
+    // matières — pour ce que les deux automatismes n'ont pas pu voir.
     // Bouton Réception : réservé aux matières laizées (frontal/glassine/complexe)
     if (m.laizee) {
       actionBtns.push(el('button', {
@@ -6080,14 +6079,14 @@ function buildMatiereDetail() {
         on: { click: () => openReceptionMatiereModal(m) },
       }, iconEl('truck', 14), ' Réception'));
     }
-    actionBtns.push(
-      el('button', {
-        cls: 'mp-act-btn mp-act-sortie',
-        type: 'button',
-        on: { click: () => openModalMouvement('sortie', m) },
-      }, '↑ Sortie'),
-    );
     if (isMatieresAdmin()) {
+      actionBtns.push(el('button', {
+        cls: 'mp-act-btn',
+        type: 'button',
+        style: { background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--border)', fontWeight: '700' },
+        attrs: { title: 'Fixer le stock à sa valeur réelle, avec un motif. Les entrées viennent des réceptions RVGI, les sorties du déstockage des dossiers.' },
+        on: { click: () => openModalMouvement('ajustement', m) },
+      }, iconEl('edit', 14), ' Corriger le stock'));
       actionBtns.push(el('button', {
         cls: 'action-btn inventaire',
         type: 'button',
@@ -8375,28 +8374,9 @@ async function openMatiereCopyFromCard(m) {
 }
 
 function matieresCardActions(m) {
-  if (S.stockReadOnly) return null;
-  return el('div', {
-    cls: 'mp-card-actions-inline',
-    on: { click: (e) => e.stopPropagation() },
-  },
-    el('button', {
-      cls: 'mp-act-btn mp-act-entree',
-      type: 'button',
-      on: { click: (e) => {
-        e.stopPropagation();
-        openModalMouvement('entree', m);
-      } },
-    }, '↓ Entrée'),
-    el('button', {
-      cls: 'mp-act-btn mp-act-sortie',
-      type: 'button',
-      on: { click: (e) => {
-        e.stopPropagation();
-        openModalMouvement('sortie', m);
-      } },
-    }, '↑ Sortie'),
-  );
+  // Plus de boutons Entrée / Sortie sur la liste (10/09/2026) : les
+  // mouvements sont automatiques, la correction se fait depuis la fiche.
+  return null;
 }
 
 async function saveMatiereRef(item, payload) {
@@ -10025,18 +10005,7 @@ function buildMatieresAdminRow(item) {
       actif ? 'Actif' : 'Inactif'),
   ));
   const actions = el('div', { cls: 'mp-admin-actions' });
-  if (!S.stockReadOnly && actif) {
-    actions.appendChild(el('button', {
-      cls: 'mp-act-btn mp-act-entree',
-      type: 'button',
-      on: { click: (e) => { e.stopPropagation(); openModalMouvement('entree', item); } },
-    }, 'Entrée'));
-    actions.appendChild(el('button', {
-      cls: 'mp-act-btn mp-act-sortie',
-      type: 'button',
-      on: { click: (e) => { e.stopPropagation(); openModalMouvement('sortie', item); } },
-    }, 'Sortie'));
-  }
+  // Entrée / Sortie retirés le 10/09/2026 : voir buildMatiereDetail.
   actions.appendChild(el('button', {
     cls: 'btn-ghost',
     type: 'button',
@@ -11324,19 +11293,11 @@ function buildProductionView() {
   wrap.appendChild(el('div', { cls: 'prod-head' },
     el('h2', { cls: 'prod-head-title' }, 'Production'),
     el('div', { cls: 'prod-head-sub' },
-      'Saisie rapide des entrées/sorties matières premières et sortie de production (Z1).'
+      'Sortie de production (Z1). Les matières premières entrent par les réceptions RVGI et sortent au déstockage des dossiers.'
     ),
   ));
 
   const grid = el('div', { cls: 'prod-action-grid' });
-  grid.appendChild(buildProductionActionCard({
-    kind: 'mp-in', icon: 'log-in', title: 'Entrée MP', sub: 'Réception matière',
-    onClick: () => openModalMouvement('entree'),
-  }));
-  grid.appendChild(buildProductionActionCard({
-    kind: 'mp-out', icon: 'log-out', title: 'Sortie MP', sub: 'Consommation production',
-    onClick: () => openModalMouvement('sortie'),
-  }));
   grid.appendChild(buildProductionActionCard({
     kind: 'z1-in', icon: 'plus-circle', title: 'Entrée Z1', sub: 'Sortie de production',
     onClick: () => renderPfMouvementModal('entree', null, STOCK_EMPL_SORTIE_PROD),
@@ -11657,8 +11618,6 @@ function buildDashboardShortcuts() {
       mk('Réception matière', openReceptionQuick, 'warn', 'truck'),
       mk('Entrée PF', () => openModalPfMouvement('entree'), 'pf-entree', 'upload'),
       mk('Sortie PF', () => openModalPfMouvement('sortie'), 'pf-sortie', 'download'),
-      mk('Entrée MP', () => openModalMouvement('entree'), 'success', 'upload'),
-      mk('Sortie MP', () => openModalMouvement('sortie'), 'danger', 'download'),
     ),
   );
 }
@@ -16212,6 +16171,7 @@ function renderContent() {
   else if (S.tab === 'inventaire') content = buildInventaire();
   else if (S.tab === 'matieres-inventaire') content = buildMatieresInventaire();
   else if (S.tab === 'besoins-matieres') content = buildBesoinsMatieres();
+  else if (S.tab === 'destockage') content = buildDestockage();
   else if (S.tab === 'bobines') content = buildBobines();
   else if (S.tab === 'traca') content = buildTraca();
   else if (S.tab === 'reception') content = buildReception();
@@ -16911,8 +16871,42 @@ function renderMonitoringMovements(container) {
   container.appendChild(card);
 }
 
+function buildMonitoringEcartsMp() {
+  const m = monEnsureState();
+  const pills = el('div', { cls: 'mp-pills', id: 'mon-page-pills' },
+    ...[['quantites', 'Quantités'], ['mouvements', 'Mouvements'], ['ecarts-mp', 'Écarts matières RVGI']].map(([id, label]) =>
+      el('button', {
+        cls: 'mp-pill' + (m.monPage === id ? ' active' : ''), type: 'button',
+        on: { click: () => { m.monPage = id; renderMonitoringView(true); } },
+      }, label)));
+  const entete = el('div', { style: 'margin-bottom:14px' },
+    el('div', { cls: 'hist-head' },
+      el('div', null,
+        el('div', { style: 'display:flex;align-items:center;gap:8px' },
+          el('h2', { cls: 'hist-title' }, 'Monitoring — écarts matières'),
+          el('button', {
+            cls: 'bes-help-btn', type: 'button', attrs: { title: 'Guide de l\'écran', 'aria-label': 'Guide' },
+            on: { click: () => { try { window.MySifaGuides && MySifaGuides.open('mystock-flux-matieres'); } catch (e) {} } },
+          }, '?')),
+        el('p', { cls: 'hist-subtitle' },
+          'Entrées et sorties de matières : ce que MySifa a écrit, ce que RVGI a enregistré, sur la même période.'),
+      )),
+    pills);
+  return buildEcartsRvgi(entete);
+}
+
 function renderMonitoringView(fullRebuild) {
   if (S.tab !== 'monitoring') return;
+  if (monEnsureState().monPage === 'ecarts-mp') {
+    // Écran autonome : ni import ERP produits finis, ni instantanés ici.
+    const zone = document.getElementById('scroll-area');
+    if (!zone) return;
+    zone.innerHTML = '';
+    zone.appendChild(buildMonitoringEcartsMp());
+    const st = ervEtat();
+    if (!st.data && !st.loading && !st.erreur) loadEcartsRvgi();
+    return;
+  }
   const ae = document.activeElement;
   const focusId = ae?.id;
   const caretStart = ae?.selectionStart;
@@ -17009,6 +17003,7 @@ function buildMonitoring() {
   const pageDefs = [
     { id: 'quantites', label: 'Quantités' },
     { id: 'mouvements', label: 'Mouvements' },
+    { id: 'ecarts-mp', label: 'Écarts matières RVGI' },
   ];
   const pagePills = el('div', { cls: 'mp-pills', id: 'mon-page-pills' },
     ...pageDefs.map(pd => el('button', {
@@ -17705,7 +17700,12 @@ async function recepValider() {
       const msg = merged
         ? added + ' bobine' + (added > 1 ? 's' : '') + ' ajoutée' + (added > 1 ? 's' : '') + ' au lot existant'
         : added + ' bobine' + (added > 1 ? 's' : '') + ' enregistrée' + (added > 1 ? 's' : '') + ' — lot créé';
-      showToast(msg);
+      // Intégration RVGI en service : le scan trace, la réception ERP fait
+      // entrer le stock. Le dire évite de chercher pourquoi le compteur n'a
+      // pas bougé.
+      showToast(d.stock_impacte === false
+        ? msg + ' (traçabilité — le stock entre par la réception RVGI)'
+        : msg);
       // Snapshot pour la modale d'impression
       S.recepLastLot = {
         lot_numero: d.lot_numero || '',
@@ -18751,8 +18751,8 @@ async function rvgiIntegrer(lifIds) {
     const n = (res.integrees || []).length;
     const bobines = (res.integrees || []).filter(x => x.regime === 'attente').length;
     let msg = n + ' ligne' + (n > 1 ? 's' : '') + ' intégrée' + (n > 1 ? 's' : '');
-    if (bobines) msg += ' — ' + bobines + ' réception' + (bobines > 1 ? 's' : '')
-                      + ' de bobines en attente du scan';
+    if (bobines) msg += ' — dont ' + bobines + ' ligne' + (bobines > 1 ? 's' : '')
+                      + ' de bobines (codes-barres à rattacher au scan)';
     toast(msg + '.');
     (res.refusees || []).forEach(x => toast('Ligne ' + x.lif_id + ' : ' + x.motif, true));
     await loadReceptionRvgi();
@@ -22379,12 +22379,14 @@ const STOCK_TAB_DOC_TITLES = {
   valorisation: 'Valorisation — MyStock — MySifa',
   production: 'Production — MyStock — MySifa',
   'besoins-matieres': 'Besoins matières — MyStock — MySifa',
+  destockage: 'Déstockage — MyStock — MySifa',
 };
 
 const STOCK_TAB_MOBILE_TITLES = {
   dashboard: 'Tableau de bord',
   matieres: 'Matières premières',
   'besoins-matieres': 'Besoins matières',
+  destockage: 'Déstockage',
   'produits-finis': 'Produits finis',
   negoce: 'Produits de négoce',
   referentiel: 'Référentiel',
@@ -22402,6 +22404,634 @@ function stockMobileTabTitle() {
   if (S.selProduit || S.selEmpl) return 'Stock';
   if (S.selMatiere && S.selMatiere.matiere) return S.selMatiere.matiere.reference || 'Matière première';
   return STOCK_TAB_MOBILE_TITLES[S.tab] || 'MyStock';
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Déstockage — l'espace de suivi des sorties de production (10/09/2026)
+// ══════════════════════════════════════════════════════════════════════
+//
+// Les sorties de matières ne se saisissent plus à la main : elles s'écrivent à
+// la clôture du dossier, et la personne qui a vu la production relit et
+// ajuste. Cet écran est celui de cette relecture, pour TOUS les dossiers à la
+// fois — le bouton du planning ne montrait qu'un dossier.
+//
+// La modale de relecture est celle du planning (static/mysifa_destockage.js) :
+// un seul code pour les deux écrans.
+
+const DST_VUES = [
+  ['a_traiter', 'À traiter'],
+  ['destockes', 'Déstockés'],
+  ['mouvements', 'Mouvements'],
+];
+
+function dstEtat() {
+  if (!S.destockage) S.destockage = { vue: 'a_traiter', jours: 30, data: null, loading: false, erreur: null, filtre: '' };
+  return S.destockage;
+}
+
+async function loadDestockage() {
+  const st = dstEtat();
+  st.loading = true; st.erreur = null;
+  if (S.tab === 'destockage') renderContent();
+  try {
+    if (st.vue === 'mouvements') {
+      st.data = await api('/api/stock/destockage/mouvements?jours=' + st.jours);
+    } else {
+      st.data = await api('/api/stock/destockage/suivi?vue=' + st.vue + '&jours=' + st.jours);
+    }
+    if (st.vue !== 'mouvements' || !st.auto) {
+      try { st.auto = await api('/api/stock/destockage/auto/etat'); } catch (e) { st.auto = null; }
+    }
+  } catch (e) {
+    st.erreur = e.message || 'Chargement impossible.';
+  }
+  st.loading = false;
+  if (S.tab === 'destockage') renderContent();
+}
+
+function dstBadge(etat, pret) {
+  const map = {
+    done: ['Déstocké', 'var(--success)'],
+    reserve: ['Réserves', 'var(--warn)'],
+    todo: pret ? ['Prêt', 'var(--accent)'] : ['Bloqué', 'var(--danger)'],
+  };
+  const [txt, c] = map[etat] || map.todo;
+  return el('span', {
+    style: 'display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;'
+      + 'background:var(--bg);border:1px solid ' + c + ';color:' + c,
+  }, txt);
+}
+
+function dstOuvrirRelecture(d) {
+  if (!window.MySifaDestockage) { showToast('Module de relecture indisponible.', 'error'); return; }
+  window.MySifaDestockage.ouvrir(d.planning_id, {
+    reference: d.numero_of || d.reference,
+    icone: icon('package', 18),
+    fermer: closeMroot,
+    toast: (m, t) => showToast(m, t === 'danger' ? 'error' : t),
+    onChange: () => loadDestockage(),
+  });
+}
+
+async function dstDestocker(d, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api('/api/stock/destockage/' + d.planning_id + '/auto', { method: 'POST' });
+    const n = r.mouvements || 0;
+    showToast(n + ' matière(s) sortie(s) du stock' + ((r.reserves || []).length ? ' — avec réserves.' : '.'),
+      (r.reserves || []).length ? 'info' : 'success');
+    await loadDestockage();
+  } catch (e) {
+    showToast(e.message || 'Déstockage impossible.', 'error');
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function dstBalayer(btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api('/api/stock/destockage/auto/balayer', { method: 'POST' });
+    if (!r.actif) { showToast(r.message || 'Déstockage automatique non mis en service.', 'info'); }
+    else {
+      const t = r.traites || [];
+      const ok = t.filter(x => x.etat === 'done' || x.etat === 'reserve').length;
+      showToast(ok + ' dossier(s) déstocké(s), ' + (t.length - ok) + ' resté(s) bloqué(s).', 'success');
+    }
+    await loadDestockage();
+  } catch (e) {
+    showToast(e.message || 'Balayage impossible.', 'error');
+  }
+  if (btn) btn.disabled = false;
+}
+
+async function dstMiseEnService(valeur, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    await api('/api/stock/destockage/auto/mise-en-service', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ depuis: valeur }),
+    });
+    showToast(valeur ? 'Déstockage automatique en service depuis le ' + valeur + '.' : 'Déstockage automatique arrêté.', 'success');
+    const st = dstEtat(); st.auto = null;
+    await loadDestockage();
+  } catch (e) {
+    showToast(e.message || 'Mise en service impossible.', 'error');
+    if (btn) btn.disabled = false;
+  }
+}
+
+function dstCarteAutomatisme(st) {
+  const a = st.auto || {};
+  const actif = !!a.actif;
+  const btnStyle = 'padding:8px 14px;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;';
+  const aujourdHui = new Date().toISOString().slice(0, 10);
+  const actions = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center' });
+  if (!S.stockReadOnly) {
+    actions.appendChild(el('button', {
+      type: 'button',
+      style: btnStyle + 'background:var(--accent);border:1px solid var(--accent);color:white',
+      on: { click: (e) => dstBalayer(e.currentTarget) },
+      attrs: { title: 'Sortir du stock les dossiers terminés depuis la mise en service' },
+    }, 'Déstocker les dossiers terminés'));
+    if (isMatieresAdmin()) {
+      actions.appendChild(el('button', {
+        type: 'button',
+        style: btnStyle + 'background:var(--bg);border:1px solid var(--border);color:var(--text)',
+        on: { click: (e) => dstMiseEnService(actif ? '' : aujourdHui, e.currentTarget) },
+      }, actif ? 'Arrêter l\'automatisme' : 'Mettre en service aujourd\'hui'));
+    }
+  }
+  return el('div', { cls: 'card', style: 'padding:16px 18px;margin-bottom:14px' },
+    el('div', { style: 'display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:center' },
+      el('div', null,
+        el('div', { style: 'font-weight:700;font-size:14px;color:var(--text)' },
+          actif ? 'Déstockage automatique en service depuis le ' + a.depuis
+                : 'Déstockage automatique non mis en service'),
+        el('div', { style: 'font-size:12px;color:var(--muted);margin-top:3px' },
+          (a.en_attente || 0) + ' dossier(s) terminé(s) à déstocker · '
+          + (a.avec_reserve || 0) + ' avec réserves · '
+          + (a.destockes || 0) + ' déstocké(s) au total'),
+      ),
+      actions,
+    ));
+}
+
+function dstTableDossiers(st) {
+  const d = st.data || {};
+  const q = (st.filtre || '').trim().toLowerCase();
+  const rows = (d.dossiers || []).filter(x => !q
+    || [x.reference, x.numero_of, x.client, x.machine].some(v => String(v || '').toLowerCase().includes(q)));
+  if (!rows.length) {
+    return el('div', { cls: 'bes-empty' },
+      st.vue === 'a_traiter' ? 'Aucun dossier terminé à déstocker sur la période.' : 'Aucun dossier déstocké sur la période.');
+  }
+  const table = el('table', { cls: 'bes-table' });
+  const entetes = st.vue === 'a_traiter'
+    ? ['Dossier', 'Client', 'Machine', 'Fin', 'État', 'Motif', '']
+    : ['Dossier', 'Client', 'Déstocké', 'Par', 'Relu', 'Mouvements', ''];
+  table.appendChild(el('thead', {}, el('tr', {}, ...entetes.map(h => el('th', {}, h)))));
+  const tbody = el('tbody', {});
+  rows.forEach(x => {
+    const ref = el('td', {},
+      el('div', { cls: 'bes-dossier-ref' }, x.numero_of || x.reference || '—'),
+      (x.reference && x.numero_of && x.reference !== x.numero_of)
+        ? el('div', { cls: 'bes-dossier-meta' }, x.reference) : null);
+    const act = el('td', { style: 'white-space:nowrap;text-align:right' });
+    const btn = (label, onClick, primaire) => el('button', {
+      type: 'button',
+      style: 'padding:6px 11px;border-radius:7px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;margin-left:6px;'
+        + (primaire ? 'background:var(--accent);border:1px solid var(--accent);color:white'
+                    : 'background:var(--bg);border:1px solid var(--border);color:var(--text)'),
+      on: { click: (e) => onClick(e.currentTarget) },
+    }, label);
+    if (!S.stockReadOnly) {
+      if (x.destockage === 'todo') {
+        if (x.pret) act.appendChild(btn('Déstocker', (b) => dstDestocker(x, b), true));
+      } else {
+        act.appendChild(btn('Relire', () => dstOuvrirRelecture(x), x.destockage === 'reserve' || !x.relu_par));
+      }
+    }
+    if (st.vue === 'a_traiter') {
+      const motif = x.destockage === 'reserve' ? (x.reserve || '')
+        : (x.pret ? ((x.reserves_prevues || []).length ? 'Réserves prévues : ' + x.reserves_prevues.join(' ; ') : 'Données complètes')
+                  : (x.blocage || ''));
+      tbody.appendChild(el('tr', {},
+        ref,
+        el('td', {}, x.client || '—'),
+        el('td', {}, x.machine || '—'),
+        el('td', {}, x.fin ? _fmtDate(x.fin) : '—'),
+        el('td', {}, dstBadge(x.destockage, x.pret)),
+        el('td', { style: 'font-size:12px;color:var(--text2);max-width:360px' }, motif),
+        act,
+      ));
+    } else {
+      tbody.appendChild(el('tr', {},
+        ref,
+        el('td', {}, x.client || '—'),
+        el('td', {}, dstBadge(x.destockage, true),
+          el('div', { cls: 'bes-dossier-meta' }, x.destockage_at ? fDateTime(x.destockage_at) : '')),
+        el('td', {}, x.destockage_par || '—'),
+        el('td', {}, x.relu_par
+          ? el('span', null, el('span', { style: 'color:var(--success);font-weight:700' }, '✓ '), x.relu_par,
+              el('div', { cls: 'bes-dossier-meta' }, x.relu_at ? fDateTime(x.relu_at) : ''))
+          : el('span', { style: 'color:var(--muted)' }, 'Non relu')),
+        el('td', {}, String(x.nb_mouvements || 0)),
+        act,
+      ));
+    }
+  });
+  table.appendChild(tbody);
+  return el('div', { cls: 'bes-card bes-scroll-x' }, table);
+}
+
+const DST_NATURES = { automatique: 'Automatique', ajustement: 'Ajustement', annulation: 'Annulation', manuel: 'Validation' };
+
+function dstTableMouvements(st) {
+  const mv = ((st.data || {}).mouvements || []);
+  const q = (st.filtre || '').trim().toLowerCase();
+  const rows = mv.filter(m => !q
+    || [m.no_dossier, m.reference, m.designation, m.client, m.created_by_name].some(v => String(v || '').toLowerCase().includes(q)));
+  if (!rows.length) return el('div', { cls: 'bes-empty' }, 'Aucun mouvement de déstockage sur la période.');
+  const table = el('table', { cls: 'bes-table' });
+  table.appendChild(el('thead', {}, el('tr', {},
+    ...['Date', 'Dossier', 'Matière', 'Nature', 'Quantité', 'Stock après', 'Par'].map(h => el('th', {}, h)))));
+  const tbody = el('tbody', {});
+  rows.forEach(m => {
+    const sortie = m.type_mouvement === 'sortie';
+    tbody.appendChild(el('tr', {},
+      el('td', { style: 'white-space:nowrap' }, fDateTime(m.created_at)),
+      el('td', {}, el('div', { cls: 'bes-dossier-ref' }, m.no_dossier || '—'),
+        m.client ? el('div', { cls: 'bes-dossier-meta' }, m.client) : null),
+      el('td', {}, el('div', { style: 'font-weight:700' }, m.reference || '—'),
+        el('div', { cls: 'bes-dossier-meta' },
+          [m.designation, m.laize_mm ? Math.round(m.laize_mm) + ' mm' : ''].filter(Boolean).join(' · '))),
+      el('td', {}, DST_NATURES[m.nature] || m.nature),
+      el('td', { style: 'white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:700;color:'
+        + (sortie ? 'var(--danger)' : 'var(--success)') },
+        (sortie ? '−' : '+') + fN(m.quantite) + ' ' + (m.unite || '')),
+      el('td', { style: 'white-space:nowrap;color:var(--muted)' }, m.quantite_apres != null ? fN(m.quantite_apres) : '—'),
+      el('td', {}, m.created_by_name || '—'),
+    ));
+  });
+  table.appendChild(tbody);
+  return el('div', { cls: 'bes-card bes-scroll-x' }, table);
+}
+
+function buildDestockage() {
+  const st = dstEtat();
+  const wrap = el('div', { cls: 'content' });
+  wrap.appendChild(el('div', { style: 'margin-bottom:14px' },
+    el('div', { style: 'display:flex;align-items:center;gap:8px' },
+      el('h2', { style: 'margin:0;font-size:20px;color:var(--text)' }, 'Déstockage'),
+      el('button', {
+        cls: 'bes-help-btn', type: 'button', attrs: { title: 'Guide de l\'écran', 'aria-label': 'Guide' },
+        on: { click: () => { try { window.MySifaGuides && MySifaGuides.open('mystock-flux-matieres'); } catch (e) {} } },
+      }, '?')),
+    el('div', { style: 'font-size:13px;color:var(--muted);margin-top:4px' },
+      'Sorties de matières des dossiers terminés : ce qui reste à sortir, ce qui est sorti, ce qui a été relu.'),
+  ));
+  wrap.appendChild(dstCarteAutomatisme(st));
+
+  const barre = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px' });
+  DST_VUES.forEach(([v, label]) => {
+    const actif = st.vue === v;
+    barre.appendChild(el('button', {
+      type: 'button',
+      style: 'padding:7px 14px;border-radius:999px;font-family:inherit;font-weight:600;cursor:pointer;'
+        + (actif ? 'background:var(--accent-bg);border:1px solid var(--accent);color:var(--accent)'
+                 : 'background:var(--card);border:1px solid var(--border);color:var(--text)'),
+      on: { click: () => { if (st.vue !== v) { st.vue = v; st.data = null; loadDestockage(); } } },
+    }, label));
+  });
+  const periode = el('select', {
+    style: 'margin-left:auto;padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-family:inherit',
+    on: { change: (e) => { st.jours = Number(e.target.value); loadDestockage(); } },
+  }, ...[[7, '7 jours'], [30, '30 jours'], [90, '90 jours'], [365, '1 an']].map(([j, l]) =>
+    el('option', { value: String(j), selected: st.jours === j ? true : null }, l)));
+  const recherche = el('input', {
+    type: 'search',
+    attrs: { placeholder: 'Dossier, client, matière…' },
+    value: st.filtre || '',
+    style: 'padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-family:inherit;min-width:200px',
+    on: { input: (e) => {
+      st.filtre = e.target.value;
+      const cible = document.getElementById('dst-liste');
+      if (cible) { cible.innerHTML = ''; cible.appendChild(st.vue === 'mouvements' ? dstTableMouvements(st) : dstTableDossiers(st)); }
+    } },
+  });
+  barre.appendChild(recherche);
+  barre.appendChild(periode);
+  wrap.appendChild(barre);
+
+  if (st.erreur) {
+    wrap.appendChild(el('div', { cls: 'bes-empty', style: 'color:var(--danger)' }, st.erreur));
+  } else if (st.loading && !st.data) {
+    wrap.appendChild(el('div', { cls: 'bes-empty' }, 'Chargement…'));
+  } else {
+    const c = (st.data && st.data.compteurs) || null;
+    if (c && st.vue === 'destockes') {
+      wrap.appendChild(el('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:8px' },
+        c.destockes_periode + ' dossier(s) déstocké(s) sur la période'
+        + (c.relus_periode != null ? ' · ' + c.relus_periode + ' relu(s)' : '')));
+    }
+    const liste = el('div', { attrs: { id: 'dst-liste' } });
+    liste.appendChild(st.vue === 'mouvements' ? dstTableMouvements(st) : dstTableDossiers(st));
+    wrap.appendChild(liste);
+  }
+  return wrap;
+}
+
+
+// ══════════════════════════════════════════════════════════════════════
+// Écarts RVGI — entrées et sorties de matières des deux côtés (10/09/2026)
+// Section « Écarts matières RVGI » de la page Monitoring, à côté de la
+// réconciliation des produits finis (demande d'Eugène du 10/09).
+// ══════════════════════════════════════════════════════════════════════
+//
+// Les mouvements de MySifa sont automatiques ; ceux de RVGI restent saisis.
+// Cet écran pose les deux journaux côte à côte sur une fenêtre courte, pendant
+// que les faits sont frais. La clé est l'appariement article RVGI → matière,
+// le même que celui des réceptions : apparier ici, c'est aussi faire entrer
+// l'article en stock à sa prochaine réception.
+
+function ervRendre() {
+  if (S.tab === 'monitoring') renderMonitoringView(true);
+}
+
+const ERV_FENETRES = [[24, '24 h'], [48, '48 h'], [72, '72 h'], [168, '7 jours'], [0, 'Période…']];
+
+function ervEtat() {
+  if (!S.ecartsRvgi) S.ecartsRvgi = { heures: 48, debut: '', fin: '', data: null, loading: false, erreur: null, onglet: 'matieres', tout: false };
+  return S.ecartsRvgi;
+}
+
+async function loadEcartsRvgi() {
+  const st = ervEtat();
+  st.loading = true; st.erreur = null;
+  ervRendre();
+  try {
+    // La liste de choix « Autres matières » des non appariés en a besoin.
+    if (!S.matieres) {
+      try { const m = await api('/api/stock/matieres'); S.matieres = Array.isArray(m) ? m : []; } catch (e) {}
+    }
+    const qs = st.heures ? ('heures=' + st.heures)
+      : ('debut=' + encodeURIComponent(st.debut) + '&fin=' + encodeURIComponent(st.fin));
+    st.data = await api('/api/stock/ecarts-rvgi?' + qs);
+  } catch (e) {
+    st.erreur = e.message || 'Comparaison impossible.';
+    st.data = null;
+  }
+  st.loading = false;
+  ervRendre();
+}
+
+const ERV_STATUTS = {
+  ok: ['Concordant', 'var(--success)'],
+  ecart: ['Écart', 'var(--danger)'],
+  rvgi_seul: ['Absent de MySifa', 'var(--warn)'],
+  mysifa_seul: ['Absent de RVGI', 'var(--warn)'],
+  absent_mysifa: ['Absent de MySifa', 'var(--warn)'],
+  absent_rvgi: ['Absent de RVGI', 'var(--warn)'],
+  vide: ['—', 'var(--muted)'],
+};
+
+function ervBadge(statut) {
+  const [t, c] = ERV_STATUTS[statut] || [statut, 'var(--muted)'];
+  if (statut === 'vide') return el('span', { style: 'color:var(--muted)' }, '—');
+  return el('span', {
+    style: 'display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;'
+      + 'background:var(--bg);border:1px solid ' + c + ';color:' + c + ';white-space:nowrap',
+  }, t);
+}
+
+function ervQ(v, unite) {
+  if (v === null || v === undefined) return '—';
+  if (!v) return el('span', { style: 'color:var(--muted)' }, '0');
+  const pluriel = unite && unite !== 'kg' && Math.abs(v) > 1 ? 's' : '';
+  return fN(Math.round(v * 1000) / 1000) + (unite ? ' ' + unite + pluriel : '');
+}
+
+function ervTuile(label, valeur, alerte) {
+  return el('div', { cls: 'card', style: 'padding:12px 14px;min-width:150px;flex:1' },
+    el('div', { style: 'font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600' }, label),
+    el('div', { style: 'font-size:22px;font-weight:800;margin-top:4px;color:' + (alerte ? 'var(--danger)' : 'var(--text)') }, String(valeur)));
+}
+
+function ervDetail(lm) {
+  const box = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;padding:6px 2px 10px' });
+  const bloc = (titre, mvts, rvgi) => el('div', null,
+    el('div', { style: 'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:4px' }, titre),
+    mvts.length ? el('div', null, ...mvts.map(m => el('div', { style: 'font-size:12px;color:var(--text2);padding:3px 0;border-bottom:1px solid var(--border)' },
+      el('span', { style: 'color:var(--muted)' }, m.date + ' · '),
+      el('b', { style: 'color:' + (m.sens === 'entree' ? 'var(--success)' : 'var(--danger)') },
+        (m.sens === 'entree' ? '+' : '−') + (m.quantite == null ? '?' : fN(Math.abs(m.quantite))) + ' ' + (m.unite || '')),
+      ' ',
+      rvgi ? ((m.libelle_mvt || '') + (m.article ? ' · ' + m.article : '') + (m.qte_rvgi != null ? ' (' + fN(m.qte_rvgi) + ' RVGI)' : ''))
+           : ((m.dossier ? 'Dossier ' + m.dossier + ' · ' : '') + (m.note || '') + (m.par ? ' · ' + m.par : '')),
+      (m.manque && m.manque.length) ? el('div', { style: 'color:var(--warn)' }, m.manque.join(' ; ')) : null,
+    ))) : el('div', { style: 'font-size:12px;color:var(--muted)' }, 'Aucun mouvement.'));
+  box.appendChild(bloc('RVGI', lm.mouvements_rvgi || [], true));
+  box.appendChild(bloc('MySifa', lm.mouvements_mysifa || [], false));
+  return box;
+}
+
+function ervTableMatieres(st) {
+  const d = st.data;
+  const rows = (d.matieres || []).filter(x => st.tout || x.a_regarder);
+  if (!rows.length) {
+    return el('div', { cls: 'bes-empty' }, (d.matieres || []).length
+      ? 'Aucun écart sur la période — les deux journaux concordent.'
+      : 'Aucun mouvement de matière apparié sur la période.');
+  }
+  const table = el('table', { cls: 'bes-table' });
+  table.appendChild(el('thead', {}, el('tr', {},
+    ...['Matière', 'Entrées RVGI', 'Entrées MySifa', '', 'Sorties RVGI', 'Sorties MySifa', '', ''].map(h => el('th', {}, h)))));
+  const tbody = el('tbody', {});
+  rows.forEach(lm => {
+    const detailTr = el('tr', { style: 'display:none' }, el('td', { attrs: { colspan: '8' } }, ervDetail(lm)));
+    tbody.appendChild(el('tr', {},
+      el('td', {}, el('div', { style: 'font-weight:700' }, lm.reference || '—'),
+        el('div', { cls: 'bes-dossier-meta' }, [lm.designation, lm.categorie].filter(Boolean).join(' · ')),
+        lm.non_convertibles ? el('div', { style: 'font-size:11px;color:var(--warn)' },
+          lm.non_convertibles + ' mouvement(s) RVGI non convertible(s)') : null),
+      el('td', { style: 'text-align:right' }, ervQ(lm.entrees_rvgi, lm.unite)),
+      el('td', { style: 'text-align:right' }, ervQ(lm.entrees_mysifa, lm.unite)),
+      el('td', {}, ervBadge(lm.statut_entrees)),
+      el('td', { style: 'text-align:right' }, ervQ(lm.sorties_rvgi, lm.unite)),
+      el('td', { style: 'text-align:right' }, ervQ(lm.sorties_mysifa, lm.unite)),
+      el('td', {}, ervBadge(lm.statut_sorties)),
+      el('td', {}, el('button', {
+        type: 'button',
+        style: 'padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:12px;cursor:pointer',
+        on: { click: (e) => {
+          const ouvert = detailTr.style.display !== 'none';
+          detailTr.style.display = ouvert ? 'none' : '';
+          e.currentTarget.textContent = ouvert ? 'Détail' : 'Masquer';
+        } },
+      }, 'Détail')),
+    ));
+    tbody.appendChild(detailTr);
+  });
+  table.appendChild(tbody);
+  return el('div', { cls: 'bes-card bes-scroll-x' }, table);
+}
+
+function ervTableDossiers(st) {
+  const rows = (st.data.dossiers || []).filter(x => st.tout || x.statut !== 'ok');
+  if (!rows.length) {
+    return el('div', { cls: 'bes-empty' }, (st.data.dossiers || []).length
+      ? 'Toutes les sorties par dossier concordent.' : 'Aucune sortie de production sur la période.');
+  }
+  const table = el('table', { cls: 'bes-table' });
+  table.appendChild(el('thead', {}, el('tr', {},
+    ...['Dossier', 'État', 'Matières (RVGI → MySifa)', 'RVGI non apparié'].map(h => el('th', {}, h)))));
+  const tbody = el('tbody', {});
+  rows.forEach(d => {
+    tbody.appendChild(el('tr', {},
+      el('td', {}, el('div', { cls: 'bes-dossier-ref' }, d.dossier),
+        d.dossier.length === 6 ? el('div', { style: 'font-size:11px;color:var(--warn)' }, 'six chiffres — numéro mal saisi dans RVGI ?') : null),
+      el('td', {}, ervBadge(d.statut)),
+      el('td', {}, (d.matieres || []).length
+        ? el('div', null, ...d.matieres.map(m => el('div', { style: 'font-size:12px;padding:2px 0' },
+            el('b', null, (m.reference || '—') + ' '),
+            ervQ(m.rvgi, m.unite), ' → ', ervQ(m.mysifa, m.unite), ' ', ervBadge(m.statut))))
+        : el('span', { style: 'color:var(--muted)' }, '—')),
+      el('td', {}, d.rvgi_non_apparies ? String(d.rvgi_non_apparies) : '—'),
+    ));
+  });
+  table.appendChild(tbody);
+  return el('div', { cls: 'bes-card bes-scroll-x' }, table);
+}
+
+async function ervApparier(na, matiereId, btn) {
+  if (!matiereId) { showToast('Choisir une matière.', 'info'); return; }
+  if (btn) btn.disabled = true;
+  try {
+    await api('/api/stock/reception-rvgi/apparier', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code1: na.code1, code2: na.code2, type_code: na.type_code, matiere_id: Number(matiereId) }),
+    });
+    showToast('Article ' + na.article + ' apparié.', 'success');
+    await loadEcartsRvgi();
+  } catch (e) {
+    showToast(e.message || 'Appariement impossible.', 'error');
+    if (btn) btn.disabled = false;
+  }
+}
+
+function ervTableNonApparies(st) {
+  const rows = st.data.non_apparies || [];
+  if (!rows.length) return el('div', { cls: 'bes-empty' }, 'Tous les articles RVGI mouvementés sur la période sont appariés.');
+  const table = el('table', { cls: 'bes-table' });
+  table.appendChild(el('thead', {}, el('tr', {},
+    ...['Article RVGI', 'Famille', 'Mouvements', 'Entrées (unité RVGI)', 'Sorties (unité RVGI)', 'Matière MySifa'].map(h => el('th', {}, h)))));
+  const tbody = el('tbody', {});
+  const matieres = (S.matieres || []).filter(m => m.actif !== 0);
+  rows.forEach(na => {
+    const sel = el('select', {
+      style: 'width:100%;max-width:240px;padding:6px 8px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit',
+    });
+    sel.appendChild(el('option', { value: '' }, '— Choisir —'));
+    const vus = new Set();
+    (na.propositions || []).forEach(p => {
+      const id = p.id || p.matiere_id;
+      if (!id || vus.has(id)) return;
+      vus.add(id);
+      sel.appendChild(el('option', { value: String(id) },
+        (p.reference || '') + (p.designation ? ' — ' + p.designation : '') + (p.score != null ? ' (' + Math.round(p.score * 100) + ' %)' : '')));
+    });
+    const autres = matieres.filter(m => (m.categorie || '').toLowerCase() === na.famille && !vus.has(m.id));
+    if (autres.length) {
+      const grp = el('optgroup', { attrs: { label: 'Autres ' + na.famille } });
+      autres.forEach(m => grp.appendChild(el('option', { value: String(m.id) }, (m.reference || '') + (m.designation ? ' — ' + m.designation : ''))));
+      sel.appendChild(grp);
+    }
+    if ((na.propositions || []).length) sel.value = String((na.propositions[0].id || na.propositions[0].matiere_id) || '');
+    const btn = el('button', {
+      type: 'button',
+      style: 'padding:6px 11px;border-radius:7px;border:1px solid var(--accent);background:var(--accent);color:white;font-family:inherit;font-weight:700;cursor:pointer',
+      on: { click: (e) => ervApparier(na, sel.value, e.currentTarget) },
+    }, 'Apparier');
+    tbody.appendChild(el('tr', {},
+      el('td', {}, el('div', { style: 'font-weight:700' }, na.article), el('div', { cls: 'bes-dossier-meta' }, na.libelle || '')),
+      el('td', {}, na.famille),
+      el('td', {}, String(na.nb_mouvements)),
+      el('td', { style: 'text-align:right' }, ervQ(na.entrees_rvgi)),
+      el('td', { style: 'text-align:right' }, ervQ(na.sorties_rvgi)),
+      el('td', { style: 'min-width:240px' }, (S.stockReadOnly || !isMatieresAdmin()) ? '—'
+        : el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;align-items:center' }, sel, btn)),
+    ));
+  });
+  table.appendChild(tbody);
+  return el('div', { cls: 'bes-card bes-scroll-x' }, table);
+}
+
+function buildEcartsRvgi(entete) {
+  const st = ervEtat();
+  const wrap = el('div', { cls: 'content' });
+  if (entete) wrap.appendChild(entete);
+  else wrap.appendChild(el('div', { style: 'margin-bottom:14px' },
+    el('div', { style: 'display:flex;align-items:center;gap:8px' },
+      el('h2', { style: 'margin:0;font-size:20px;color:var(--text)' }, 'Écarts RVGI'),
+      el('button', {
+        cls: 'bes-help-btn', type: 'button', attrs: { title: 'Guide de l\'écran', 'aria-label': 'Guide' },
+        on: { click: () => { try { window.MySifaGuides && MySifaGuides.open('mystock-flux-matieres'); } catch (e) {} } },
+      }, '?')),
+    el('div', { style: 'font-size:13px;color:var(--muted);margin-top:4px' },
+      'Entrées et sorties de matières : ce que MySifa a écrit, ce que RVGI a enregistré, sur la même période.'),
+  ));
+
+  const barre = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px' });
+  ERV_FENETRES.forEach(([h, label]) => {
+    const actif = h ? st.heures === h : !st.heures;
+    barre.appendChild(el('button', {
+      type: 'button',
+      style: 'padding:7px 14px;border-radius:999px;font-family:inherit;font-weight:600;cursor:pointer;'
+        + (actif ? 'background:var(--accent-bg);border:1px solid var(--accent);color:var(--accent)'
+                 : 'background:var(--card);border:1px solid var(--border);color:var(--text)'),
+      on: { click: () => {
+        st.heures = h;
+        if (h) loadEcartsRvgi();
+        else {
+          if (!st.debut) { const d = new Date(Date.now() - 48 * 3600e3); st.debut = d.toISOString().slice(0, 10); }
+          if (!st.fin) st.fin = new Date().toISOString().slice(0, 10);
+          ervRendre();
+        }
+      } },
+    }, label));
+  });
+  if (!st.heures) {
+    const inp = (cle) => el('input', {
+      type: 'date', value: st[cle] || '',
+      style: 'padding:6px 9px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-family:inherit',
+      on: { change: (e) => { st[cle] = e.target.value; } },
+    });
+    barre.appendChild(el('span', { style: 'font-size:12px;color:var(--muted)' }, 'du'));
+    barre.appendChild(inp('debut'));
+    barre.appendChild(el('span', { style: 'font-size:12px;color:var(--muted)' }, 'au'));
+    barre.appendChild(inp('fin'));
+  }
+  barre.appendChild(el('button', {
+    type: 'button',
+    style: 'padding:7px 14px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:white;font-family:inherit;font-weight:700;cursor:pointer',
+    on: { click: () => loadEcartsRvgi() },
+  }, 'Comparer'));
+  barre.appendChild(el('label', { style: 'margin-left:auto;display:flex;gap:6px;align-items:center;font-size:12px;color:var(--text2);cursor:pointer' },
+    el('input', { type: 'checkbox', checked: st.tout ? true : null, on: { change: (e) => { st.tout = e.target.checked; ervRendre(); } } }),
+    'Afficher aussi ce qui concorde'));
+  wrap.appendChild(barre);
+
+  if (st.erreur) { wrap.appendChild(el('div', { cls: 'bes-empty', style: 'color:var(--danger)' }, st.erreur)); return wrap; }
+  if (!st.data) { wrap.appendChild(el('div', { cls: 'bes-empty' }, st.loading ? 'Comparaison en cours…' : 'Choisir une période puis « Comparer ».')); return wrap; }
+
+  const d = st.data;
+  const r = d.resume || {};
+  wrap.appendChild(el('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:10px' },
+    'Du ' + fDateTime(d.debut) + ' au ' + fDateTime(d.fin)
+    + (d.miroir_importe_le ? ' · miroir RVGI du ' + fDateTime(d.miroir_importe_le) : '')));
+  if (d.miroir_en_retard) {
+    wrap.appendChild(el('div', { style: 'margin-bottom:12px;padding:10px 14px;border-radius:9px;background:var(--bg);border:1px solid var(--warn);font-size:12.5px;color:var(--text)' },
+      'Le miroir RVGI est antérieur à la fin de la période : un mouvement saisi dans RVGI depuis sa dernière mise à jour n\'y figure pas encore.'));
+  }
+  wrap.appendChild(el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px' },
+    ervTuile('Matières à regarder', r.a_regarder || 0, (r.a_regarder || 0) > 0),
+    ervTuile('Dossiers en écart', (r.dossiers_en_ecart || 0) + ' / ' + (r.dossiers || 0), (r.dossiers_en_ecart || 0) > 0),
+    ervTuile('Articles RVGI non appariés', r.non_apparies || 0, (r.non_apparies || 0) > 0),
+    ervTuile('Ajustements MySifa', r.ajustements_mysifa || 0, false),
+  ));
+
+  const onglets = [['matieres', 'Par matière'], ['dossiers', 'Sorties par dossier'], ['non_apparies', 'Non appariés (' + (r.non_apparies || 0) + ')']];
+  const ob = el('div', { style: 'display:flex;gap:6px;margin-bottom:10px;border-bottom:1px solid var(--border)' });
+  onglets.forEach(([k, l]) => ob.appendChild(el('button', {
+    type: 'button',
+    style: 'padding:8px 12px;border:none;border-bottom:2px solid ' + (st.onglet === k ? 'var(--accent)' : 'transparent')
+      + ';background:var(--card);color:' + (st.onglet === k ? 'var(--accent)' : 'var(--text2)') + ';font-family:inherit;font-weight:600;cursor:pointer',
+    on: { click: () => { st.onglet = k; ervRendre(); } },
+  }, l)));
+  wrap.appendChild(ob);
+  wrap.appendChild(st.onglet === 'dossiers' ? ervTableDossiers(st)
+    : (st.onglet === 'non_apparies' ? ervTableNonApparies(st) : ervTableMatieres(st)));
+  return wrap;
 }
 
 function buildSidebarNavStructure() {
@@ -22431,6 +23061,7 @@ function buildSidebarNavStructure() {
   if (isMatieresAdmin() && !S.stockReadOnly) {
     items.push({ kind: 'btn', tab: 'matieres-inventaire', icon: 'clipboard', label: 'Inventaire matière' });
     items.push({ kind: 'btn', tab: 'besoins-matieres', icon: 'list-checks', label: 'Besoins matières' });
+    items.push({ kind: 'btn', tab: 'destockage', icon: 'upload', label: 'Déstockage' });
   }
   items.push(
     { kind: 'sep', label: 'Produits' },
@@ -22775,6 +23406,7 @@ var STOCK_TAB_GUIDE = {
   menu: 'mystock-overview',
   dashboard: 'mystock-dashboard',
   matieres: 'mystock-matieres', reception: 'mystock-matieres', 'matieres-inventaire': 'mystock-matieres',
+  destockage: 'mystock-flux-matieres',
   'produits-finis': 'mystock-produits', negoce: 'mystock-produits', referentiel: 'mystock-produits', inventaire: 'mystock-produits',
   monitoring: 'mystock-controle', valorisation: 'mystock-controle',
   historique: 'mystock-outils', traca: 'mystock-outils', 'plan-entrepot': 'mystock-outils',
@@ -22782,6 +23414,60 @@ var STOCK_TAB_GUIDE = {
 };
 
 var STOCK_GUIDES = {
+  'mystock-flux-matieres': { steps: [
+    {
+      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`,
+      title: 'Déstockage et écarts RVGI',
+      body: `Les mouvements de matières sont <strong>automatiques</strong> : les entrées viennent des réceptions RVGI, les sorties du déstockage des dossiers terminés. L'onglet <strong>Déstockage</strong> sert à <strong>relire</strong> ce qui a été écrit, la section <strong>Monitoring › Écarts matières RVGI</strong> à <strong>comparer</strong> avec RVGI.`,
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous avez à faire</div><ul class="mguide-svc-list"><li>Traiter les dossiers bloqués ou avec réserves.</li><li>Relire le déstockage d'un dossier et ajuster au réel.</li><li>Regarder chaque jour les écarts sur 48 h et apparier les articles RVGI manquants.</li></ul></div></div>`
+    },
+    {
+      title: 'À traiter',
+      body: `Les dossiers terminés pas encore sortis du stock. <span class="mguide-tag">Prêt</span> se déstocke d'un clic ; <span class="mguide-tag">Bloqué</span> dit ce qui manque (métrage, fiche qui ne boucle pas) ; <span class="mguide-tag">Réserves</span> signale une matière non rattachée.`,
+      illu: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <text x="12" y="20" font-size="12" fill="var(--text)" font-weight="800">Déstockage</text>
+        <rect x="12" y="28" width="62" height="18" rx="9" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="43" y="40" font-size="8" fill="var(--accent)" text-anchor="middle" font-weight="700">À traiter</text>
+        <rect x="80" y="28" width="62" height="18" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="111" y="40" font-size="8" fill="var(--text2)" text-anchor="middle">Déstockés</text>
+        <g font-size="8">
+        <rect x="12" y="54" width="316" height="26" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="22" y="70" fill="var(--text)" font-weight="700">9932366</text><text x="80" y="70" fill="var(--text2)">Client A</text><rect x="170" y="60" width="40" height="14" rx="7" fill="var(--bg)" stroke="var(--accent)"/><text x="190" y="70" fill="var(--accent)" text-anchor="middle">Prêt</text><rect x="262" y="59" width="58" height="16" rx="5" fill="var(--accent)"/><text x="291" y="70" fill="#fff" text-anchor="middle" font-weight="700">Déstocker</text>
+        <rect x="12" y="84" width="316" height="26" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="22" y="100" fill="var(--text)" font-weight="700">9932375</text><text x="80" y="100" fill="var(--text2)">Client B</text><rect x="170" y="90" width="44" height="14" rx="7" fill="var(--bg)" stroke="var(--danger)"/><text x="192" y="100" fill="var(--danger)" text-anchor="middle">Bloqué</text><text x="222" y="100" fill="var(--muted)">métrage absent</text>
+        <rect x="12" y="114" width="316" height="26" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="22" y="130" fill="var(--text)" font-weight="700">9932423</text><text x="80" y="130" fill="var(--text2)">Client C</text><rect x="170" y="120" width="50" height="14" rx="7" fill="var(--bg)" stroke="var(--warn)"/><text x="195" y="130" fill="var(--warn)" text-anchor="middle">Réserves</text><rect x="262" y="119" width="58" height="16" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="291" y="130" fill="var(--text)" text-anchor="middle">Relire</text>
+        </g>
+      </svg>`
+    },
+    {
+      title: 'Relire un déstockage',
+      body: `« Relire » ouvre le détail : <span class="mguide-hl">consommé</span> calculé, <span class="mguide-hl">ajusté</span> à saisir dans l'unité de l'atelier (ml, kg, cartons, mandrins) et l'équivalent <span class="mguide-hl">simplifié</span> en bobines, tubes ou palettes. Une matière peut être remplacée par une autre de sa catégorie. Enregistrer marque le dossier comme relu.`,
+      illu: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="8" y="8" width="324" height="134" rx="10" fill="var(--card)" stroke="var(--border)"/>
+        <g font-size="7" fill="var(--muted)"><text x="18" y="26">MATIÈRE</text><text x="170" y="26">CONSOMMÉ</text><text x="228" y="26">AJUSTÉ</text><text x="284" y="26">SIMPLIFIÉ</text></g>
+        <g font-size="8">
+        <rect x="18" y="34" width="120" height="18" rx="4" fill="var(--bg)" stroke="var(--border)"/><text x="24" y="46" fill="var(--text)" font-weight="700">PP blanc mat 95</text>
+        <text x="214" y="46" fill="var(--muted)" text-anchor="end">18 000 ml</text><rect x="222" y="34" width="52" height="18" rx="4" fill="var(--bg)" stroke="var(--accent)"/><text x="268" y="46" fill="var(--text)" text-anchor="end">17 400</text><text x="284" y="46" fill="var(--text2)">2,4 bob.</text>
+        <rect x="18" y="60" width="120" height="18" rx="4" fill="var(--bg)" stroke="var(--border)"/><text x="24" y="72" fill="var(--text)" font-weight="700">Carton 305</text>
+        <text x="214" y="72" fill="var(--muted)" text-anchor="end">121 cartons</text><rect x="222" y="60" width="52" height="18" rx="4" fill="var(--bg)" stroke="var(--border)"/><text x="268" y="72" fill="var(--text)" text-anchor="end">121</text><text x="284" y="72" fill="var(--text2)">2,4 pal.</text>
+        </g>
+        <rect x="18" y="112" width="120" height="20" rx="6" fill="var(--bg)" stroke="var(--border)"/><text x="78" y="126" font-size="8" fill="var(--danger)" text-anchor="middle">Annuler tout</text>
+        <rect x="250" y="112" width="72" height="20" rx="6" fill="var(--accent)"/><text x="286" y="126" font-size="8" fill="#fff" text-anchor="middle" font-weight="700">Enregistrer</text>
+      </svg>`
+    },
+    {
+      title: 'Monitoring › Écarts matières RVGI',
+      body: `Pose côte à côte les entrées et sorties de MySifa et de RVGI sur <span class="mguide-tag">48 h</span> (ou une autre période), par <strong>matière</strong> et par <strong>dossier</strong>. Un article RVGI <span class="mguide-hl">non apparié</span> s'apparie ici : ses réceptions entreront ensuite en stock automatiquement.`,
+      illu: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <text x="12" y="20" font-size="12" fill="var(--text)" font-weight="800">Écarts matières</text>
+        <rect x="120" y="8" width="40" height="18" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="140" y="20" font-size="8" fill="var(--text2)" text-anchor="middle">24 h</text>
+        <rect x="164" y="8" width="40" height="18" rx="9" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="184" y="20" font-size="8" fill="var(--accent)" text-anchor="middle" font-weight="700">48 h</text>
+        <rect x="208" y="8" width="44" height="18" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="230" y="20" font-size="8" fill="var(--text2)" text-anchor="middle">7 jours</text>
+        <g font-size="7" fill="var(--muted)"><text x="16" y="44">MATIÈRE</text><text x="120" y="44">SORTIES RVGI</text><text x="190" y="44">SORTIES MYSIFA</text></g>
+        <g font-size="8">
+        <rect x="12" y="50" width="316" height="24" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="18" y="65" fill="var(--text)" font-weight="700">Thermique ECO 70</text><text x="160" y="65" fill="var(--text2)" text-anchor="end">6,0 bob.</text><text x="240" y="65" fill="var(--text2)" text-anchor="end">6,0 bob.</text><rect x="262" y="56" width="58" height="13" rx="6" fill="var(--bg)" stroke="var(--ok)"/><text x="291" y="65" fill="var(--ok)" text-anchor="middle">Concordant</text>
+        <rect x="12" y="78" width="316" height="24" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="18" y="93" fill="var(--text)" font-weight="700">Glassine 60 g</text><text x="160" y="93" fill="var(--text2)" text-anchor="end">10,4 bob.</text><text x="240" y="93" fill="var(--text2)" text-anchor="end">8,1 bob.</text><rect x="262" y="84" width="58" height="13" rx="6" fill="var(--bg)" stroke="var(--danger)"/><text x="291" y="93" fill="var(--danger)" text-anchor="middle">Écart</text>
+        <rect x="12" y="106" width="316" height="34" rx="6" fill="var(--card)" stroke="var(--warn)"/><text x="18" y="121" fill="var(--text)" font-weight="700">1152/0001 non apparié</text><text x="18" y="133" fill="var(--muted)">Glassine jaune 60 g</text><rect x="252" y="114" width="68" height="18" rx="5" fill="var(--accent)"/><text x="286" y="126" fill="#fff" text-anchor="middle" font-weight="700">Apparier</text>
+        </g>
+      </svg>`
+    }
+  ]},
   'mystock-overview': { steps: [
     {
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
@@ -22886,7 +23572,7 @@ var STOCK_GUIDES = {
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>`,
       title: 'Matières premières',
       body: `Cette section gère les <strong>matières premières</strong> : leur stock, leur <strong>réception</strong> à l'entrée et leur <strong>inventaire</strong>. Trois onglets : Matières premières, Réception matière, Inventaire matière.`,
-      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sur cette section</div><ul class="mguide-svc-list"><li>Réceptionner les livraisons fournisseurs.</li><li>Enregistrer les entrées et sorties de matière.</li><li>Compter et ajuster l'inventaire matière.</li></ul></div></div>`
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sur cette section</div><ul class="mguide-svc-list"><li>Apparier les articles RVGI : leurs réceptions entrent ensuite en stock toutes seules.</li><li>Relire le déstockage des dossiers terminés.</li><li>Corriger un stock avec un motif, compter l'inventaire matière.</li></ul></div></div>`
     },
     {
       title: 'La fiche matière',
@@ -22905,7 +23591,7 @@ var STOCK_GUIDES = {
     },
     {
       title: 'Réception et inventaire',
-      body: `L'onglet <strong>Réception</strong> enregistre les livraisons fournisseurs (<span class="mguide-hl">scan</span> du code possible) : chaque entrée met à jour le stock. L'onglet <strong>Inventaire matière</strong> compare ensuite le stock <span class="mguide-hl">théorique</span> au <span class="mguide-hl">compté</span> et la validation ajuste l'écart.`,
+      body: `Les entrées viennent des <strong>réceptions RVGI</strong>, intégrées à chaque synchronisation ; le <span class="mguide-hl">scan</span> de la Réception rattache les codes-barres des bobines. L'onglet <strong>Inventaire matière</strong> compare ensuite le stock <span class="mguide-hl">théorique</span> au <span class="mguide-hl">compté</span> et la validation ajuste l'écart.`,
       illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
         <rect x="10" y="12" width="156" height="154" rx="10" fill="var(--card)" stroke="var(--border)"/>
         <text x="20" y="30" font-size="10" fill="var(--text)" font-weight="800">Réception</text>
@@ -23130,7 +23816,7 @@ async function init() {
   // Onglet initial via URL param ?tab=...
   const urlParams = new URLSearchParams(window.location.search);
   const urlTab = urlParams.get('tab');
-  if (urlTab && ['dashboard','matieres','produits-finis','negoce','referentiel','stock','inventaire','matieres-inventaire','besoins-matieres','reception','bobines','historique','traca','monitoring','valorisation','production','plan-entrepot'].includes(urlTab)) {
+  if (urlTab && ['dashboard','matieres','produits-finis','negoce','referentiel','stock','inventaire','matieres-inventaire','besoins-matieres','destockage','reception','bobines','historique','traca','monitoring','valorisation','production','plan-entrepot'].includes(urlTab)) {
     S.tab = urlTab;
   }
   // Sous-vue des besoins matières. Restaurée AVANT le chargement de l'onglet :
@@ -23177,6 +23863,7 @@ async function init() {
   else if (S.tab === 'inventaire') { await loadInventaireList(); }
   else if (S.tab === 'matieres-inventaire') { await loadInventaireMatieres(); }
   else if (S.tab === 'besoins-matieres') { await loadBesoinsMatieres(); }
+  else if (S.tab === 'destockage') { await loadDestockage(); }
   else if (S.tab === 'matieres') { await loadMatieres(); }
   else if (S.tab === 'produits-finis') { await loadProduitsFinis(); }
   else if (S.tab === 'negoce') { await loadNegoce(); }

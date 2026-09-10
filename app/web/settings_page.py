@@ -8009,6 +8009,7 @@ const _FMT_GUIDES = {
   'taches-liste': 'Gestionnaire de tâches — Liste',
   'erp-overview': 'ERP — Lecture de RVGI',
   'expe-devis': 'MyExpé — Devis transporteurs',
+  'mystock-flux-matieres': 'MyStock — Déstockage et écarts RVGI',
 };
 
 function _fmtGuideLabel(key){ return _FMT_GUIDES[key] || key; }

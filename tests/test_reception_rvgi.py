@@ -158,10 +158,12 @@ base.close()
 # ── 7. L'intégration : deux régimes, et une seule fois ──────────────────────
 #
 # `appliquer_mouvement_mp` vit dans le routeur, qui importe FastAPI : on passe
-# un double, ce qui vérifie au passage que le service ne l'appelle QUE pour le
-# régime direct. Une bobine qui produirait un mouvement ici serait le bug que
-# tout ce découpage cherche à éviter — le stock avancerait sans que personne
-# n'ait scanné, et la chaîne FSC resterait muette.
+# un double. Depuis le 10/09/2026 la réception RVGI fait entrer TOUTES les
+# matières, bobines comprises : l'ancien régime « en attente du scan » ne
+# menait nulle part (le scan crée son propre lot et ne rejoint jamais la
+# réception RVGI, la packing list n'écrit aucun stock). La réception MyStock
+# reste créée pour les bobines, à zéro code-barres : c'est elle qui porte le
+# lien ERP, le scan y rattache la traçabilité.
 print("\nIntégration")
 
 base = sqlite3.connect(":memory:")
@@ -216,11 +218,12 @@ vrai("carton : aucune réception en attente",
 
 r = rr.integrer(base, LIGNE_BOBINE, {"nom": "Test"}, faux_mouvement)
 check("bobine : régime attente", r["regime"], "attente")
-vrai("bobine : AUCUN mouvement de stock", len(mouvements) == 1,
-     f"{len(mouvements)} mouvement(s) — le stock a bougé sans scan")
+vrai("bobine : le stock entre à l'intégration", len(mouvements) == 2, str(mouvements))
+check("bobine : 4 bobines, sur la laize de la ligne", mouvements[1][1:3], ("entree", 4.0))
+vrai("bobine : la laize est passée au mouvement", mouvements[1][3] is not None)
 rec = base.execute("SELECT * FROM stock_receptions").fetchone()
 vrai("bobine : une réception est créée", rec is not None)
-check("bobine : zéro bobine tant que rien n'est scanné", rec["nb_bobines"], 0)
+check("bobine : zéro code-barres tant que rien n'est scanné", rec["nb_bobines"], 0)
 check("bobine : la quantité attendue est portée", rec["rvgi_qte_attendue"], 4.0)
 check("bobine : la ligne RVGI est tracée", rec["rvgi_lif_id"], 2)
 laize = base.execute("SELECT * FROM mp_laizes").fetchone()
@@ -235,7 +238,7 @@ for ligne, nom in ((LIGNE_CARTON, "carton"), (LIGNE_BOBINE, "bobine")):
         vrai(f"{nom} : seconde intégration refusée", False, "elle est passée")
     except ValueError:
         vrai(f"{nom} : seconde intégration refusée", True)
-vrai("le stock n'a pas doublé", len(mouvements) == 1)
+vrai("le stock n'a pas doublé", len(mouvements) == 2)
 check("deux lignes tracées, pas quatre",
       base.execute("SELECT COUNT(*) FROM erp_reception_integree").fetchone()[0], 2)
 

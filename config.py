@@ -1065,6 +1065,35 @@ def fournisseur_categorie_label(code: str) -> str:
     return code
 
 
+# ─── Postes de déroulement ────────────────────────────────────────
+# Une machine d'étiquettes déroule deux bandes : le frontal (ce qui sera
+# imprimé) et la glassine (le support siliconé). Un complexe arrive déjà
+# contrecollé et se monte à la place du frontal. Ce petit référentiel dit
+# quelle catégorie de bobine va sur quel poste ; le NOMBRE de postes et de
+# places par machine, lui, est une donnée d'atelier et vit en base
+# (`machine_postes_deroulement`, Paramètres › Machines).
+_POSTES_DEROULEMENT_DEFAUT = (
+    {"code": "frontal",  "label": "Frontal",  "categories": ("frontal", "complexe")},
+    {"code": "glassine", "label": "Glassine", "categories": ("glassine",)},
+)
+
+# Catégories qu'une bobine peut porter au scan, dans l'ordre des boutons.
+CATEGORIES_BOBINE = ("frontal", "complexe", "glassine")
+
+
+def postes_deroulement() -> list[dict]:
+    return [dict(p, categories=list(p["categories"])) for p in _POSTES_DEROULEMENT_DEFAUT]
+
+
+def poste_pour_categorie(categorie: str | None) -> str | None:
+    """Le poste où se monte une bobine de cette catégorie, ou None."""
+    c = (categorie or "").strip().lower()
+    for p in _POSTES_DEROULEMENT_DEFAUT:
+        if c in p["categories"]:
+            return p["code"]
+    return None
+
+
 # ─── Conditions d'achat fournisseur ───────────────────────────────
 # Trois petits référentiels structurants : ils qualifient la relation d'achat,
 # pas l'entreprise. Constantes lues par des fonctions (jamais interpolées en
