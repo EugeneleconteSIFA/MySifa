@@ -1737,6 +1737,10 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
           Renommer
         </button>
+        <button type="button" class="btn btn-sec mac-sub-btn" data-macsub="mac-postes">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="12" r="4"/><circle cx="17" cy="12" r="4"/><line x1="7" y1="12" x2="7" y2="12.01"/><line x1="17" y1="12" x2="17" y2="12.01"/></svg>
+          Postes de déroulement
+        </button>
       </div>
       <div class="card">
         <div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
@@ -1786,6 +1790,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
           </div>
           <button type="button" class="btn" id="mac-metr-save" style="margin-top:14px">Enregistrer le métrage</button>
         </div>
+        <div id="mac-postes-wrap" class="hidden"></div>
         <div id="mac-nom-wrap" class="hidden">
           <p class="sub" style="margin-top:-4px;margin-bottom:14px">Nom affiché dans toutes les applications MySifa (planning, saisie production, planning RH…). Le changement prend effet immédiatement partout.</p>
           <div style="max-width:360px">
@@ -3910,6 +3915,19 @@ function setMacSubTab(id) {
   if (hor) hor.classList.toggle('hidden', id !== 'mac-horaires');
   if (met) met.classList.toggle('hidden', id !== 'mac-metrage');
   if (nom) nom.classList.toggle('hidden', id !== 'mac-nom');
+  const pst = document.getElementById('mac-postes-wrap');
+  if (pst) pst.classList.toggle('hidden', id !== 'mac-postes');
+  renderMacPostes();
+}
+
+// Postes de deroulement et reconnaissance des bobines : ecran porte par
+// static/mysifa_postes_deroulement.js, rendu seulement quand l'onglet est ouvert.
+function renderMacPostes() {
+  if (macSubTab !== 'mac-postes') return;
+  const pst = document.getElementById('mac-postes-wrap');
+  const sel = document.getElementById('mac-select');
+  if (!pst || !sel || !sel.value || !window.MysPostesDeroulement) return;
+  window.MysPostesDeroulement.render(pst, Number(sel.value));
 }
 
 function renderMacHorairesForm() {
@@ -4020,6 +4038,7 @@ async function loadMacMachineDetail() {
     renderMacHorairesForm();
     renderMacMetrageForm();
     renderMacNomForm();
+    renderMacPostes();
   } catch (e) {
     macMachine = null;
     if (hint) hint.textContent = '';
@@ -8529,6 +8548,7 @@ async function unlinkBridge(mp_id) {
 <!-- v2.4.18 : mysifa_maint_form.js — CRUD codes maintenance + interventions libres (module partagé settings ↔ maintenance). -->
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
+<script src="/static/mysifa_postes_deroulement.js?v=1"></script>
 <script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
 <script src="/static/mysifa_maint_form.js?v=2.7.4-usure"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>

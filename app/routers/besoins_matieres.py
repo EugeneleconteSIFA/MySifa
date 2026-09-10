@@ -3692,7 +3692,34 @@ async def destockage_ajuster(planning_id: int, request: Request):
         net, _ = _net_sorti(conn, planning_id)
 
         no_dossier = (pe["numero_of"] or pe["reference"] or "").strip()
-        base_note = ("Ajustement déstockage %s" % no_dossier).strip()
+        # Premier déstockage d'un dossier encore « à destocker » : c'est la
+        # modale de vérification (10/09/2026) qui écrit, pas l'automatisme. Le
+        # dossier change donc d'état ici, et ce qui n'a pas pu sortir devient
+        # une réserve — calculée sur ce qui est RÉELLEMENT envoyé, pas sur le
+        # calcul d'origine : une matière remplacée à l'écran n'est plus un manque.
+        premier = (pe["destockage"] or "todo") == "todo"
+        reserves: list = []
+        if premier:
+            if not any(q > 0 for q in cibles.values()):
+                raise HTTPException(400, "Toutes les quantités sont à zéro : rien à déstocker.")
+            apercu = _destockage_lignes(conn, planning_id)
+            cats_cibles = set()
+            for (mid, _lid), q in cibles.items():
+                if q > 0:
+                    mp_c = _matiere_conv(conn, mid) or {}
+                    cats_cibles.add((mp_c.get("categorie") or "").strip().lower())
+            for li in apercu["lignes"]:
+                if li.get("destockable"):
+                    continue
+                cats = set(_categories_remplacement(li.get("kind"), li.get("matiere_categorie")))
+                if cats & cats_cibles:
+                    continue
+                quoi = (li.get("source_value") or li.get("kind") or "").strip()
+                motif = (li.get("manque") or ["non rattachée"])[0]
+                reserves.append("%s « %s » : %s" % (li.get("kind"), quoi, motif))
+
+        base_note = ("%s %s" % ("Déstockage vérifié" if premier else "Ajustement déstockage",
+                                no_dossier)).strip()
         if note_libre:
             base_note += " — %s" % note_libre
 
@@ -3720,6 +3747,18 @@ async def destockage_ajuster(planning_id: int, request: Request):
         # personne qui a vu la production confirme ce qui est sorti. C'est ce
         # que l'espace Déstockage de MyStock affiche comme « relu ».
         relu_par = user.get("nom") or user.get("email") or None
+        if premier:
+            etat = "reserve" if reserves else "done"
+            conn.execute(
+                "UPDATE planning_entries SET destockage=?, destockage_at=?, "
+                "destockage_reserve=?, destockage_par=?, destockage_relu_par=?, "
+                "destockage_relu_at=?, updated_at=? WHERE id=?",
+                (etat, maintenant, (" ; ".join(reserves)[:600] or None), relu_par,
+                 relu_par, maintenant, maintenant, planning_id),
+            )
+            conn.commit()
+            return {"success": True, "ajustements": faits, "destockage": etat,
+                    "reserves": reserves, "premier_destockage": True}
         if body.get("lever_reserve"):
             # La réserve se lève à la main, jamais toute seule : c'est un
             # humain qui constate que la matière manquante a été traitée.
@@ -3740,6 +3779,70 @@ async def destockage_ajuster(planning_id: int, request: Request):
     return {"success": True, "ajustements": faits,
             "destockage": "done" if body.get("lever_reserve")
                           else (pe["destockage"] or "todo")}
+
+
+@router.post("/api/stock/destockage/{planning_id}/rattacher")
+async def destockage_rattacher(planning_id: int, request: Request):
+    """Relie une matière à la ligne de fiche d'un dossier, depuis la relecture.
+
+    Body : { matiere_id, kind, source_value }
+
+    Deux gestes que la relecture rendait impossibles sans quitter l'écran
+    (demande d'Eugène du 10/09/2026) :
+    - la valeur de fiche (« THERMIQUE ECO FH21 ») est associée à la matière
+      dans `mp_fiche_mapping` : le prochain dossier qui la porte la trouvera
+      sans qu'on la choisisse à nouveau ;
+    - pour une bobine, la laize du dossier est rattachée à la matière si elle
+      ne l'était pas : sinon une référence qu'on vient de créer n'aurait
+      aucune laize où sortir.
+    """
+    user = require_stock_matieres_admin(request)
+    body = await request.json()
+    try:
+        mid = int(body.get("matiere_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "matiere_id numérique requis.") from None
+    kind = (body.get("kind") or "").strip()
+    source_value = (body.get("source_value") or "").strip()
+
+    from app.routers.stock import _ensure_matiere_laize_link, _upsert_laize_valeur_mm
+
+    with get_db() as conn:
+        mp = _matiere_conv(conn, mid)
+        if not mp:
+            raise HTTPException(404, "Matière introuvable.")
+        dossiers = _load_dossiers(conn, _SQL_PE_UN, (planning_id,))
+        if not dossiers:
+            raise HTTPException(404, "Dossier introuvable.")
+
+        mapping = None
+        if kind in _KINDS and source_value:
+            now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            ex = conn.execute(
+                "SELECT id FROM mp_fiche_mapping WHERE kind=? "
+                "   AND LOWER(TRIM(source_value))=LOWER(TRIM(?)) LIMIT 1",
+                (kind, source_value)).fetchone()
+            note = "Relecture du déstockage — %s" % (user.get("nom") or user.get("email") or "")
+            if ex:
+                conn.execute(
+                    "UPDATE mp_fiche_mapping SET matiere_id=?, notes=?, updated_at=? WHERE id=?",
+                    (mid, note, now, ex["id"]))
+                mapping = int(ex["id"])
+            else:
+                cur = conn.execute(
+                    "INSERT INTO mp_fiche_mapping (kind, source_value, matiere_id, notes, "
+                    " created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (kind, source_value, mid, note, now, now))
+                mapping = int(cur.lastrowid)
+
+        laize_id = None
+        if (mp.get("categorie") or "").strip().lower() in _CATEGORIES_BOBINE:
+            lz = _f(_laize_dossier(dossiers[0]).get("laize"))
+            if lz:
+                laize_id = _upsert_laize_valeur_mm(conn, lz)
+                _ensure_matiere_laize_link(conn, mid, laize_id)
+        conn.commit()
+    return {"success": True, "mapping_id": mapping, "laize_id": laize_id}
 
 
 @router.post("/api/stock/destockage/{planning_id}/annuler")

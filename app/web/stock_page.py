@@ -22457,7 +22457,7 @@ function dstBadge(etat, pret) {
   };
   const [txt, c] = map[etat] || map.todo;
   return el('span', {
-    style: 'display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;'
+    style: 'display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;'
       + 'background:var(--bg);border:1px solid ' + c + ';color:' + c,
   }, txt);
 }
@@ -22473,21 +22473,17 @@ function dstOuvrirRelecture(d) {
   });
 }
 
-async function dstDestocker(d, btn) {
-  if (btn) btn.disabled = true;
-  try {
-    const r = await api('/api/stock/destockage/' + d.planning_id + '/auto', { method: 'POST' });
-    const n = r.mouvements || 0;
-    showToast(n + ' matière(s) sortie(s) du stock' + ((r.reserves || []).length ? ' — avec réserves.' : '.'),
-      (r.reserves || []).length ? 'info' : 'success');
-    await loadDestockage();
-  } catch (e) {
-    showToast(e.message || 'Déstockage impossible.', 'error');
-    if (btn) btn.disabled = false;
-  }
+// « Déstocker » n'écrit plus rien directement (10/09/2026) : il ouvre la
+// vérification, où l'on contrôle, corrige et complète avant de valider.
+function dstDestocker(d) {
+  dstOuvrirRelecture(d);
 }
 
 async function dstBalayer(btn) {
+  const a = dstEtat().auto || {};
+  if (!confirm('Déstocker automatiquement les dossiers terminés depuis la mise en service ?\n\n'
+      + (a.en_attente || 0) + ' dossier(s) terminé(s) attendent. Seuls ceux dont les données sont complètes sortiront, '
+      + 'sans vérification dossier par dossier. Pour vérifier un dossier avant sa sortie, utiliser « Déstocker » sur sa ligne.')) return;
   if (btn) btn.disabled = true;
   try {
     const r = await api('/api/stock/destockage/auto/balayer', { method: 'POST' });
@@ -22586,7 +22582,9 @@ function dstTableDossiers(st) {
     }, label);
     if (!S.stockReadOnly) {
       if (x.destockage === 'todo') {
-        if (x.pret) act.appendChild(btn('Déstocker', (b) => dstDestocker(x, b), true));
+        // Bloqué : le calcul refuse, mais la vérification permet de saisir à
+        // la main et de compléter ce qui manque.
+        act.appendChild(btn(x.pret ? 'Déstocker' : 'Vérifier', () => dstDestocker(x), x.pret));
       } else {
         act.appendChild(btn('Relire', () => dstOuvrirRelecture(x), x.destockage === 'reserve' || !x.relu_par));
       }
@@ -22597,18 +22595,18 @@ function dstTableDossiers(st) {
                   : (x.blocage || ''));
       tbody.appendChild(el('tr', {},
         ref,
-        el('td', {}, x.client || '—'),
-        el('td', {}, x.machine || '—'),
-        el('td', {}, x.fin ? _fmtDate(x.fin) : '—'),
+        el('td', { style: 'white-space:nowrap' }, x.client || '—'),
+        el('td', { style: 'white-space:nowrap' }, x.machine || '—'),
+        el('td', { style: 'white-space:nowrap' }, x.fin ? _fmtDate(x.fin) : '—'),
         el('td', {}, dstBadge(x.destockage, x.pret)),
-        el('td', { style: 'font-size:12px;color:var(--text2);max-width:360px' }, motif),
+        el('td', { style: 'font-size:12px;color:var(--text2);min-width:420px;width:100%' }, motif),
         act,
       ));
     } else {
       tbody.appendChild(el('tr', {},
         ref,
-        el('td', {}, x.client || '—'),
-        el('td', {}, dstBadge(x.destockage, true),
+        el('td', { style: 'white-space:nowrap' }, x.client || '—'),
+        el('td', { style: 'white-space:nowrap' }, dstBadge(x.destockage, true),
           el('div', { cls: 'bes-dossier-meta' }, x.destockage_at ? fDateTime(x.destockage_at) : '')),
         el('td', {}, x.destockage_par || '—'),
         el('td', {}, x.relu_par
@@ -22640,7 +22638,7 @@ function dstTableMouvements(st) {
     const sortie = m.type_mouvement === 'sortie';
     tbody.appendChild(el('tr', {},
       el('td', { style: 'white-space:nowrap' }, fDateTime(m.created_at)),
-      el('td', {}, el('div', { cls: 'bes-dossier-ref' }, m.no_dossier || '—'),
+      el('td', { style: 'white-space:nowrap' }, el('div', { cls: 'bes-dossier-ref' }, m.no_dossier || '—'),
         m.client ? el('div', { cls: 'bes-dossier-meta' }, m.client) : null),
       el('td', {}, el('div', { style: 'font-weight:700' }, m.reference || '—'),
         el('div', { cls: 'bes-dossier-meta' },
@@ -22659,7 +22657,9 @@ function dstTableMouvements(st) {
 
 function buildDestockage() {
   const st = dstEtat();
-  const wrap = el('div', { cls: 'content' });
+  // Pleine largeur : un tableau de dossiers à 900 px empilait le client, la
+  // machine et le motif sur quatre lignes.
+  const wrap = el('div', { cls: 'content', style: 'max-width:none' });
   wrap.appendChild(el('div', { style: 'margin-bottom:14px' },
     el('div', { style: 'display:flex;align-items:center;gap:8px' },
       el('h2', { style: 'margin:0;font-size:20px;color:var(--text)' }, 'Déstockage'),
@@ -22948,7 +22948,7 @@ function ervTableNonApparies(st) {
 
 function buildEcartsRvgi(entete) {
   const st = ervEtat();
-  const wrap = el('div', { cls: 'content' });
+  const wrap = el('div', { cls: 'content', style: 'max-width:none' });
   if (entete) wrap.appendChild(entete);
   else wrap.appendChild(el('div', { style: 'margin-bottom:14px' },
     el('div', { style: 'display:flex;align-items:center;gap:8px' },
