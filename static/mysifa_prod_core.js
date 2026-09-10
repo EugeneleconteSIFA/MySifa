@@ -2827,6 +2827,31 @@ function motifAbsenceMatiereBloc(motifs){
   );
 }
 
+// Bobines présentes sur la machine pendant le dossier mais volontairement non
+// rattachées (glassine restée en place sous un frontal complexe). Sans ce
+// bloc, une décision d'atelier aurait l'allure d'un oubli dans le rapport.
+function bobinesNonRattacheesBloc(list){
+  const l = Array.isArray(list) ? list.filter(Boolean) : [];
+  if(!l.length) return null;
+  return h('div',{style:{border:'1px solid var(--border)',background:'var(--bg)',
+    borderRadius:'10px',padding:'10px 14px',margin:'12px 0',fontSize:'12.5px',color:'var(--text)'}},
+    h('div',{style:{fontWeight:'800',fontSize:'11px',textTransform:'uppercase',
+      letterSpacing:'.4px',color:'var(--muted)',marginBottom:'6px'}},
+      'Sur la machine, non rattachées au dossier'),
+    ...l.map(b => h('div',{style:{marginTop:'4px',lineHeight:'1.5'}},
+      h('span',{style:{fontFamily:'ui-monospace,monospace',fontWeight:'700'}}, b.code_barre||''),
+      h('span',{style:{color:'var(--muted)'}}, ' · ' + (b.motif_label || b.motif || ''))
+    ))
+  );
+}
+
+// « Héritée · D2 » plutôt qu'une heure de scan : la bobine n'a pas été vue
+// sur ce dossier, elle y a été reprise parce qu'elle était restée montée.
+function libelleScanBobine(m, dateTxt){
+  if(m && m.herite_de_dossier) return 'Héritée · ' + m.herite_de_dossier;
+  return dateTxt;
+}
+
 function fscRapportSection(titre){
   return h('div',{style:{fontSize:'11px',fontWeight:'800',textTransform:'uppercase',
     letterSpacing:'.5px',color:'var(--muted)',margin:'16px 0 7px'}}, titre);
@@ -2946,6 +2971,7 @@ function openFscRapportModal(data, ref){
         h('div',{style:{padding:'10px 14px',borderRadius:'8px',marginBottom:'14px',fontWeight:'800',fontSize:'13px',
           background:statutBg,border:'1px solid '+statutColor,color:statutColor}}, statutText),
         motifAbsenceMatiereBloc(data && data.motifs_absence_matiere),
+        bobinesNonRattacheesBloc(data && data.bobines_non_rattachees),
         h('div',{className:'table-wrap',style:{border:'1px solid var(--border)',borderRadius:'12px'}},
           h('table',{className:'table-std',style:{fontSize:'13px'}},
             h('thead',null,h('tr',null,
@@ -2964,7 +2990,7 @@ function openFscRapportModal(data, ref){
                   : conf === false
                     ? h('span',{style:{color:'var(--danger)',fontWeight:'800'}},'\u2717'+(b.fsc_warning?' (confirmé)':''))
                     : h('span',{style:{color:'var(--muted)'}},'\u2014');
-                const scan = (b.scanned_at||'').slice(0,16).replace('T',' ');
+                const scan = libelleScanBobine(b, (b.scanned_at||'').slice(0,16).replace('T',' '));
                 return h('tr',null,
                   h('td',null,h('span',{style:{fontFamily:'ui-monospace,monospace',fontWeight:'800'}},b.code_barre||'')),
                   h('td',null,b.fournisseur||'—'),
@@ -3118,8 +3144,11 @@ function traceurBranche(ch, idx){
         m.certificat_fsc ? ('Certificat ' + m.certificat_fsc) : null,
         m.fournisseur_licence ? ('Licence ' + m.fournisseur_licence) : null,
         m.lot_numero ? ('Lot réception ' + m.lot_numero) : null,
-        m.scanned_at ? ('Scannée le ' + traceurFmtDate(m.scanned_at)
-                        + (m.operateur ? ' par ' + m.operateur : '')) : null,
+        m.herite_de_dossier
+          ? ('Héritée du dossier ' + m.herite_de_dossier + ' — restée montée, reprise sans rescan'
+             + (m.scanned_at ? ' le ' + traceurFmtDate(m.scanned_at) : ''))
+          : (m.scanned_at ? ('Scannée le ' + traceurFmtDate(m.scanned_at)
+                        + (m.operateur ? ' par ' + m.operateur : '')) : null),
       ],
       onClick: () => traceurOuvrir('bobine', m.code_barre),
     }));
@@ -3139,6 +3168,16 @@ function traceurBranche(ch, idx){
         m.date_operation ? ('Saisi à la clôture le ' + traceurFmtDate(m.date_operation)) : null,
         'Déclaratif : non vérifiable par la chaîne.',
       ],
+    }));
+  });
+
+  // 1 ter. Bobines sur la machine, volontairement non rattachées.
+  (ch.non_rattachees || []).forEach(b => {
+    etapes.push(traceurNoeud({
+      icone:'package', ton:'matiere',
+      titre: b.code_barre || '—',
+      sousTitre: 'Non rattachée' + (b.machine_nom ? ' · ' + b.machine_nom : ''),
+      lignes: [b.motif_label || b.motif || null],
     }));
   });
 
@@ -4275,7 +4314,7 @@ function renderTracabiliteDossierDetail(){
   const dosRef = (dos.reference||'').trim();
   const matiereRows = matieres.map(m=>{
     const dt = m.scanned_at ? new Date(m.scanned_at) : null;
-    const dateStr = dt&&!isNaN(dt) ? dt.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+    const dateStr = libelleScanBobine(m, dt&&!isNaN(dt) ? dt.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—');
     const claim = m.fsc_type_claim || 'Non FSC';
     const conf = m.fsc_conforme;
     const confCell = conf === true
@@ -4405,6 +4444,7 @@ function renderTracabiliteDossierDetail(){
         ),
         fscBanner,
         motifBloc,
+        bobinesNonRattacheesBloc(d.bobines_non_rattachees),
         h('div',{style:{overflowX:'auto'}}, matiereTable)
       )
     )

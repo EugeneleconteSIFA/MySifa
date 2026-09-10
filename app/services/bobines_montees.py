@@ -22,14 +22,20 @@ Une machine sans poste configuré (repiquage) n'a pas d'état : `monter` rend
 from __future__ import annotations
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional
 
 from config import poste_pour_categorie
 from app.services.poste_bobine import postes_machine, _norm_categorie, _label_poste
 
 
+# Même horloge que les scans (`fab_matieres_utilisees.scanned_at`, heure de
+# Paris sans fuseau) : les montages et les lignes héritées se trient avec eux.
+_PARIS = ZoneInfo("Europe/Paris")
+
+
 def _maintenant() -> str:
-    return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    return datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def _ligne(conn, montee_id: int) -> Optional[Dict[str, Any]]:
@@ -135,14 +141,29 @@ def fixer_poste(conn, fab_matiere_id: int, categorie: str, par: str = "",
     ).fetchone()
     if not fmu:
         raise LookupError("Scan introuvable.")
+    # La catégorie est une propriété de la BOBINE : toutes ses lignes suivent,
+    # héritées comprises, sinon le rapport montrerait deux natures pour un code.
     conn.execute(
         """UPDATE fab_matieres_utilisees
               SET categorie_bobine=?, poste=?, poste_source=?, poste_confiance=?
-            WHERE id=?""",
-        (cat, poste_pour_categorie(cat), source, confiance, int(fab_matiere_id)),
+            WHERE id=? OR trim(code_barre)=trim(?)""",
+        (cat, poste_pour_categorie(cat), source, confiance, int(fab_matiere_id), fmu["code_barre"]),
     )
     if fmu["machine_id"] is None:
         return {"action": "sans_poste", "montee": None, "demontees": []}
+    # Corriger un scan passé ne doit pas remonter sur la machine une bobine
+    # qui en est partie : on ne touche à l'état que si elle y est encore.
+    encore = conn.execute(
+        "SELECT id FROM bobines_montees WHERE machine_id=? AND trim(code_barre)=trim(?) "
+        "AND demonte_at IS NULL LIMIT 1",
+        (int(fmu["machine_id"]), fmu["code_barre"]),
+    ).fetchone()
+    if not encore:
+        conn.execute(
+            "UPDATE bobines_montees SET categorie=?, poste=COALESCE(poste, ?) WHERE trim(code_barre)=trim(?)",
+            (cat, poste_pour_categorie(cat), fmu["code_barre"]),
+        )
+        return {"action": "corrige", "montee": None, "demontees": []}
     return monter(conn, int(fmu["machine_id"]), fmu["code_barre"], categorie=cat,
                   fab_matiere_id=int(fab_matiere_id), no_dossier=fmu["no_dossier"],
                   par=par, source=source, confiance=confiance)
@@ -317,6 +338,15 @@ def reprendre(conn, machine_id: int, no_dossier: str, *, retirer: Optional[List[
     for b in actives:
         if complexe_seul and b["poste"] == "glassine":
             glassine_gardee.append(b["code_barre"])
+            # La décision est gardée : sans elle, une glassine présente sur la
+            # machine et absente du rapport ressemblerait à un oubli.
+            conn.execute(
+                """INSERT OR IGNORE INTO dossier_bobines_non_rattachees
+                       (no_dossier, machine_id, code_barre, poste, fab_matiere_id,
+                        motif, created_at, created_by)
+                   VALUES (?,?,?,?,?,'complexe_seul',?,?)""",
+                (ref, int(machine_id), b["code_barre"], b["poste"], b["fab_matiere_id"], quand, par),
+            )
             continue
         existe = conn.execute(
             """SELECT id FROM fab_matieres_utilisees
@@ -343,3 +373,30 @@ def reprendre(conn, machine_id: int, no_dossier: str, *, retirer: Optional[List[
                            "dossier_origine": prec["no_dossier"] if prec else b["no_dossier"]})
     return {"rattachees": rattachees, "deja_rattachees": deja,
             "retirees": retirees, "glassine_non_rattachee": glassine_gardee}
+
+
+MOTIFS_NON_RATTACHEE = {
+    "complexe_seul": "Restée sur la machine, non rattachée : le frontal était un complexe.",
+}
+
+
+def non_rattachees(conn, no_dossier: str) -> List[Dict[str, Any]]:
+    """Les bobines présentes sur la machine pendant le dossier et volontairement écartées."""
+    try:
+        rows = conn.execute(
+            """SELECT nr.code_barre, nr.poste, nr.motif, nr.created_at, nr.created_by,
+                      m.nom AS machine_nom
+                 FROM dossier_bobines_non_rattachees nr
+            LEFT JOIN machines m ON m.id = nr.machine_id
+                WHERE trim(nr.no_dossier) = trim(?)
+             ORDER BY nr.created_at ASC, nr.id ASC""",
+            (no_dossier,),
+        ).fetchall()
+    except Exception:
+        return []   # base pas encore migrée : le rapport reste lisible
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["motif_label"] = MOTIFS_NON_RATTACHEE.get(d["motif"], d["motif"])
+        out.append(d)
+    return out

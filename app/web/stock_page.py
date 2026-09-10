@@ -22431,8 +22431,8 @@ function stockMobileTabTitle() {
 // ajuste. Cet écran est celui de cette relecture, pour TOUS les dossiers à la
 // fois — le bouton du planning ne montrait qu'un dossier.
 //
-// La modale de relecture est celle du planning (static/mysifa_destockage.js) :
-// un seul code pour les deux écrans.
+// La modale vit dans static/mysifa_destockage.js. Depuis le 10/09/2026 le
+// planning ne l'ouvre plus : son bouton n'est qu'un repère du déstockage RVGI.
 
 const DST_VUES = [
   ['a_traiter', 'À traiter'],
@@ -22626,7 +22626,12 @@ function dstTableDossiers(st) {
       const detail = el('tr', { style: ouvert ? '' : 'display:none' },
         el('td', { attrs: { colspan: '7' }, style: 'padding:0 14px 12px;background:var(--bg)' },
           mats.length ? dstTableMatieresSorties(mats)
-                      : el('div', { style: 'padding:10px 0;font-size:12px;color:var(--muted)' }, 'Aucune matière sortie.')));
+                      : el('div', { style: 'padding:10px 0;font-size:12px;color:var(--muted)' }, 'Aucune matière sortie.'),
+          // Ce qui n'est PAS sorti se lit au même endroit : un dossier à deux
+          // matières doit dire pourquoi il lui manque le reste.
+          x.reserve ? el('div', { style: 'margin-top:8px;padding:8px 10px;border-radius:8px;border:1px solid var(--warn);'
+            + 'font-size:12px;line-height:1.5;color:var(--text)' },
+            el('b', { style: 'color:var(--warn)' }, 'Non sorti : '), x.reserve) : null));
       const bascule = el('button', {
         type: 'button',
         attrs: { title: 'Voir les références et quantités sorties' },
@@ -22662,7 +22667,7 @@ function dstTableDossiers(st) {
 
 function dstTableMatieresSorties(mats) {
   const unites = { bobine: ['bobine', 'bobines'], palette: ['palette', 'palettes'], kg: ['kg', 'kg'],
-    ml: ['ml', 'ml'], carton: ['carton', 'cartons'] };
+    ml: ['ml', 'ml'], carton: ['carton', 'cartons'], tube: ['tube', 'tubes'] };
   const u = (code, n) => { const p = unites[code] || [code || '', code || '']; return Math.abs(n) > 1 ? p[1] : p[0]; };
   const td = 'padding:7px 10px;border-bottom:1px solid var(--border);font-size:12.5px';
   const t = el('table', { style: 'width:100%;border-collapse:collapse;margin-top:6px;background:var(--card);border:1px solid var(--border);border-radius:8px' });
@@ -23482,7 +23487,7 @@ var STOCK_GUIDES = {
     {
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`,
       title: 'Déstockage et écarts RVGI',
-      body: `Les mouvements de matières sont <strong>automatiques</strong> : les entrées viennent des réceptions RVGI, les sorties du déstockage des dossiers terminés. L'onglet <strong>Déstockage</strong> sert à <strong>relire</strong> ce qui a été écrit, la section <strong>Monitoring › Écarts matières RVGI</strong> à <strong>comparer</strong> avec RVGI.`,
+      body: `Les mouvements de matières sont <strong>automatiques</strong> : les entrées viennent des réceptions RVGI, les sorties du déstockage des dossiers terminés. L'onglet <strong>Déstockage</strong> sert à <strong>relire</strong> ce qui a été écrit, la section <strong>Monitoring › Écarts matières RVGI</strong> à <strong>comparer</strong> avec RVGI. Le bouton <strong>À destocker</strong> du planning de prod est un simple repère pour le déstockage fait dans RVGI : il ne touche pas au stock MySifa.`,
       extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous avez à faire</div><ul class="mguide-svc-list"><li>Traiter les dossiers bloqués ou avec réserves.</li><li>Relire le déstockage d'un dossier et ajuster au réel.</li><li>Regarder chaque jour les écarts sur 48 h et apparier les articles RVGI manquants.</li></ul></div></div>`
     },
     {

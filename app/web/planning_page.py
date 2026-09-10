@@ -849,7 +849,6 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/mysifa_rvgi_picker.js"></script>
-<script src="/static/mysifa_destockage.js"></script>
 <script src="/static/motion.js" defer></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div id="app"></div>
@@ -2823,48 +2822,25 @@ function setupTlDD(){
   });
 }
 
-// ── Déstockage matière : le bouton écrit de nouveau du stock ──────────────
+// ── Repère « déstocké dans RVGI » ────────────────────────────────────────
 //
-// Il ne bascule plus un drapeau. Relevé du 09/09/2026 : 232 dossiers portaient
-// le marquage « déstocké » sans qu'un seul mouvement de stock ait été écrit, et
-// les 212 sorties de matière existantes étaient toutes tapées à la main, sans
-// lien avec un dossier. Un bouton qui colore une pastille et ne fait rien
-// d'autre est pire qu'un bouton absent : il fait croire que le travail est fait.
-//
-// Le bouton appelle maintenant le déstockage réel. Le serveur contrôle les
-// données (métrage présent, fiche qui boucle, matières rattachées), sort ce
-// qui peut sortir, et rend « déstocké » ou « déstocké avec réserves ». Un
-// dossier déjà déstocké se reprend par l'annulation, qui contre-passe au lieu
-// d'effacer.
+// Décision d'Eugène du 10/09/2026 : le déstockage du planning et celui de
+// MyStock sont DISJOINTS. Ce bouton reste le repère de la collègue qui
+// déstocke dans l'ERP (point gris sur le créneau) ; il n'écrit aucun
+// mouvement de stock. Le stock MySifa sort par MyStock › Déstockage.
 async function toggleDestockage(entryId){
   if(!CAN_EDIT) return;
-  const ent=(S.entries||[]).find(x=>x.id===entryId);
-  const etat=(ent&&ent.destockage)||"todo";
-
-  // Déjà déstocké : on ouvre la relecture. Annuler d'un bloc pour corriger
-  // une seule quantité obligeait à tout refaire — c'est ce qui fait qu'on ne
-  // corrige pas, et qu'un stock faux le reste.
-  // À destocker : même modale, en vérification. Rien ne sort du stock avant
-  // « Valider le déstockage » (10/09/2026) — le bouton écrivait directement.
-  openDestockageModal(entryId);
-}
-
-// Le serveur explique toujours POURQUOI il refuse — « métrage absent », « la
-// fiche ne boucle pas », « matière non rattachée ». Avaler ce message dans un
-// « erreur » générique renvoie l'utilisateur chercher sans indice, et c'est
-// exactement ce qui est arrivé le 09/09 : `parseApiError` rend une Error dont
-// le detail est DÉJÀ dans `.message`, pas la Response. Appeler `.json()`
-// dessus levait, et le repli masquait le motif réel — un 404, en l'occurrence.
-function messageErreurDestockage(e){
-  return apiErrorMessage(e, "Déstockage impossible.");
-}
-
-function appliquerEtatDestockage(entryId,etat,reserve){
-  (S.timeline||[]).forEach(s=>{if((s.entry_id||0)===entryId) s.destockage=etat;});
-  const ent=(S.entries||[]).find(x=>x.id===entryId);
-  if(ent){ ent.destockage=etat; ent.destockage_reserve=reserve||null; }
-  renderTL();
-  updateDestockBtn(entryId, etat);
+  try{
+    const r=await api(`/machines/${MID}/entries/${entryId}/destockage`,{method:"PUT"});
+    (S.timeline||[]).forEach(s=>{if((s.entry_id||0)===entryId) s.destockage_rvgi=r.destockage_rvgi;});
+    const ent=(S.entries||[]).find(x=>x.id===entryId);
+    if(ent) ent.destockage_rvgi=r.destockage_rvgi;
+    renderTL();
+    updateDestockBtn(entryId, r.destockage_rvgi);
+  }catch(e){
+    console.error("toggleDestockage",e);
+    toast(apiErrorMessage(e, "Repère de déstockage non enregistré."));
+  }
 }
 
 function toast(msg){
@@ -2872,31 +2848,19 @@ function toast(msg){
   console.log(msg);
 }
 
-// Trois états et non deux. « Déstocké avec réserves » dit qu'une matière au
-// moins n'est pas sortie faute de rattachement : sans cette couleur, un
-// dossier à moitié sorti ressemble trait pour trait à un dossier propre, et
-// l'écart ne se découvre qu'à l'inventaire.
 function updateDestockBtn(entryId, val){
   const btn=document.getElementById("destock-btn-"+entryId);
   if(!btn) return;
-  const etat=val||"todo";
-  const T={
-    done:    {c:"#38bdf8", t:"Destocké",   titre:"Matières sorties du stock — cliquer pour relire, ajuster ou annuler"},
-    reserve: {c:"#fbbf24", t:"Réserves",   titre:"Déstocké en partie : une matière n'est pas rattachée — cliquer pour relire, ajuster ou annuler"},
-    todo:    {c:"#fb923c", t:"À destocker",titre:"Vérifier puis sortir les matières de ce dossier du stock"},
-  };
-  const d=T[etat]||T.todo;
-  const rgb=etat==="done"?"56,189,248":(etat==="reserve"?"251,191,36":"251,146,60");
-  btn.style.borderColor=d.c;
-  btn.style.background="rgba("+rgb+",.12)";
-  btn.style.color=d.c;
-  btn.title=d.titre;
-  const coche='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-  const alerte='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
-  const carton='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>';
-  const ico=etat==="done"?coche:(etat==="reserve"?alerte:carton);
-  btn.innerHTML=ico+'<span>'+d.t+'</span>';
+  const done=val==="done";
+  btn.style.borderColor=done?"#38bdf8":"#fb923c";
+  btn.style.background=done?"rgba(56,189,248,.12)":"rgba(251,146,60,.10)";
+  btn.style.color=done?"#38bdf8":"#fb923c";
+  btn.title=done?DESTOCK_TITRE_FAIT:DESTOCK_TITRE_A_FAIRE;
+  const ico=done?'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>':'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>';
+  btn.innerHTML=ico+'<span>'+(done?"Destocké":"À destocker")+'</span>';
 }
+const DESTOCK_TITRE_FAIT="Déstocké dans RVGI — cliquer pour retirer le repère (ne touche pas au stock MySifa)";
+const DESTOCK_TITRE_A_FAIRE="Marquer comme déstocké dans RVGI — repère visuel, ne touche pas au stock MySifa";
 
 async function resetSaisieFromModal(entryId){
   if(!IS_DIR_OR_SUPER) return;
@@ -2909,32 +2873,6 @@ async function resetSaisieFromModal(entryId){
     try{const j=await e.json();if(j&&j.detail)msg=typeof j.detail==="string"?j.detail:JSON.stringify(j.detail);}catch(x){}
     alert(msg);
   }
-}
-
-// ── Relecture du déstockage ──────────────────────────────────────
-//
-// L'automatisme sort ce qu'il sait calculer à partir de l'OF et de la fiche.
-// Cet écran est celui de la personne qui a vu la production : elle compare ce
-// qui est SORTI à ce qui aurait dû sortir, corrige au réel, et traite les
-// matières restées en réserve.
-//
-// Aucune correction n'écrase un mouvement passé : le serveur écrit la
-// différence, dans un sens ou dans l'autre. L'historique doit pouvoir raconter
-// qu'on s'est trompé, pas donner l'impression qu'on ne s'est jamais trompé.
-
-// La modale vit dans /static/mysifa_destockage.js depuis le 10/09/2026 : MyStock
-// en a besoin aussi (espace Déstockage), et deux copies d'un écran où le
-// chiffre vu doit être le chiffre écrit auraient divergé au premier correctif.
-function openDestockageModal(entryId){
-  const e=(S.entries||[]).find(x=>x.id===entryId);
-  if(!window.MySifaDestockage){ alert("Module de relecture du déstockage indisponible."); return; }
-  window.MySifaDestockage.ouvrir(entryId,{
-    reference:(e&&(e.numero_of||e.reference))||"Dossier",
-    icone:icon("package",18),
-    fermer:closeM,
-    toast:(m,t)=>{ try{ showToast(m,t==="danger"?"danger":(t==="info"?"info":"success")); }catch(x){ console.log(m); } },
-    onChange:(etat,reserve)=>appliquerEtatDestockage(entryId,etat,reserve),
-  });
 }
 
 function buildLegend(sl, m1, nw){
@@ -3140,7 +3078,7 @@ function mkTL(mon,slots){
     // Zébré « à placer / non validé » : levé seulement si placé (a_placer=0) ET validé (valide=1)
     const aplacerCls=(Number(s.a_placer||0)===0&&Number(s.valide||0)===1)?"":"slot-aplacer";
     const reelTermineCls=(hasSaisieReelle() && (s.statut_reel==="reellement_termine") && s.statut!=="en_cours")||s.statut==="termine"?"slot-reel-termine":"";
-    const destock=s.destockage==="done";
+    const destock=s.destockage_rvgi==="done";
     const reelForDrag=hasSaisieReelle() ? ((s.statut_reel||"reellement_en_attente")==="reellement_en_attente") : true;
     const canDragSlot=CAN_EDIT&&s.statut!=="en_cours"&&s.statut!=="termine"&&reelForDrag;
     const canResizeSlot=CAN_EDIT&&s.statut!=="termine"&&(s.statut==="en_cours"||(s.statut==="attente"&&reelForDrag));
@@ -4717,22 +4655,16 @@ function openEdit(id){
   const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,e.valide??0,e.etiquettes_par_carton??null,e.id??null);
 
   // Bouton déstockage compact en en-tête
-  const destockEtat=e.destockage||"todo";
-  const destockDone=destockEtat==="done"||destockEtat==="reserve";
-  const destockBg=destockEtat==="done"?"rgba(56,189,248,.12)":(destockEtat==="reserve"?"rgba(251,191,36,.12)":"rgba(251,146,60,.10)");
-  const destockBorder=destockEtat==="done"?"#38bdf8":(destockEtat==="reserve"?"#fbbf24":"#fb923c");
-  const destockColor=destockEtat==="done"?"#38bdf8":(destockEtat==="reserve"?"#fbbf24":"#fb923c");
-  const destockIcon=destockEtat==="done"
+  // Repère RVGI (collègue qui déstocke dans l'ERP) — disjoint du stock MySifa.
+  const destockDone=(e.destockage_rvgi||"todo")==="done";
+  const destockBg=destockDone?"rgba(56,189,248,.12)":"rgba(251,146,60,.10)";
+  const destockBorder=destockDone?"#38bdf8":"#fb923c";
+  const destockColor=destockBorder;
+  const destockIcon=destockDone
     ?`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`
-    :(destockEtat==="reserve"
-      ?`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
-      :`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>`);
-  const destockLabel=destockEtat==="done"?"Destocké":(destockEtat==="reserve"?"Réserves":"À destocker");
-  const destockTitre=destockEtat==="done"
-    ?"Matières sorties du stock — cliquer pour relire, ajuster ou annuler"
-    :(destockEtat==="reserve"
-      ?"Déstocké en partie : une matière n'est pas rattachée — cliquer pour relire, ajuster ou annuler"
-      :"Vérifier puis sortir les matières de ce dossier du stock");
+    :`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>`;
+  const destockLabel=destockDone?"Destocké":"À destocker";
+  const destockTitre=destockDone?DESTOCK_TITRE_FAIT:DESTOCK_TITRE_A_FAIRE;
   const reelNonDefault=hasSaisieReelle() && e.statut_reel && e.statut_reel!=="reellement_en_attente";
   const resetBlock=(hasSaisieReelle() && IS_DIR_OR_SUPER && reelNonDefault)?`<button type="button" class="btn-reset-saisie" data-eid="${id}" onclick="resetSaisieFromModal(${id})" style="margin-top:8px;width:100%;padding:7px;border-radius:6px;border:1px solid rgba(248,113,113,.4);background:rgba(248,113,113,.08);color:var(--danger);font-size:11px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">${icon('repeat',12)} Réinitialiser la saisie réelle</button>`:"";
   const annuleBlock=((e.annule_le||"").toString().trim())?`<div style="margin-bottom:12px;padding:9px 12px;border-radius:8px;
@@ -5651,7 +5583,7 @@ function exportDossiers(){
     "Exigences prod.": e.exigences_production||"",
     "Durée (h)":    e.duree_heures||0,
     "Statut":       statLabel(e.statut),
-    "Déstockage":   e.destockage==="done"?"Oui":"Non",
+    "Déstocké RVGI": e.destockage_rvgi==="done"?"Oui":"Non",
     };
     if(hasSaisieReelle()) base["Saisie réelle"]=reelLabel(e.statut_reel);
     return base;

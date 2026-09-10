@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional
 
 from config import CATEGORIES_BOBINE, poste_pour_categorie, postes_deroulement
@@ -52,8 +53,13 @@ SOURCES = ("montee", "stock", "historique", "regle", "fournisseur", "signature",
 _CONF_RANG = {"aucune": 0, "suggere": 1, "probable": 2, "certain": 3}
 
 
+# Même horloge que les scans (`fab_matieres_utilisees.scanned_at`, heure de
+# Paris sans fuseau) : les montages et les lignes héritées se trient avec eux.
+_PARIS = ZoneInfo("Europe/Paris")
+
+
 def _maintenant() -> str:
-    return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    return datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def _norm_categorie(valeur) -> Optional[str]:
