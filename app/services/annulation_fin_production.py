@@ -497,9 +497,28 @@ def contexte_retablir(conn, row_id: int) -> dict:
         out["raison"] = "Saisie introuvable."
         return out
     row = dict(row)
-    if str(row.get("operation_code") or "").strip() != CODE_ANNULATION:
-        out["raison"] = "Seule une annulation de dossier (90) peut être annulée."
-        return out
+    code = str(row.get("operation_code") or "").strip()
+    if code != CODE_ANNULATION:
+        # Depuis une saisie du cycle, ou depuis une trace déjà remise à la main
+        # en « Fin de production » : l'édition ne retire pas les marques
+        # d'annulation (cas du 10/09/2026, lignes restées « cycle annulé »). On
+        # retrouve la trace par sa date d'annulation, commune à tout le cycle.
+        annule_le = (row.get("annule_le") or "").strip()
+        if not annule_le:
+            out["raison"] = "Cette saisie ne porte aucune annulation."
+            return out
+        trace = conn.execute(
+            """SELECT * FROM production_data
+                WHERE trim(no_dossier) = trim(?) AND trim(machine) = trim(?)
+                  AND annule_le = ? AND operation_code IN ('90', '89')
+                ORDER BY CASE operation_code WHEN '90' THEN 0 ELSE 1 END, date_operation DESC, id DESC
+                LIMIT 1""",
+            (row.get("no_dossier") or "", row.get("machine") or "", annule_le),
+        ).fetchone()
+        if trace:
+            row = dict(trace)
+    out["trace_id"] = int(row["id"])
+    out["trace_deja_fin"] = str(row.get("operation_code") or "").strip() != CODE_ANNULATION
     ref = (row.get("no_dossier") or "").strip()
     if not ref:
         out["raison"] = "Annulation sans dossier."
@@ -507,11 +526,26 @@ def contexte_retablir(conn, row_id: int) -> dict:
     data = _data_trace(row)
     origine = data.get("converti_depuis") if isinstance(data.get("converti_depuis"), dict) else None
     ids = [int(i) for i in (data.get("saisies_annulees") or []) if str(i).isdigit() or isinstance(i, int)]
+    # Toutes les saisies marquées par la même annulation, même absentes de la
+    # liste de la trace : c'est la date d'annulation qui fait foi.
+    if (row.get("annule_le") or "").strip():
+        for r in conn.execute(
+            """SELECT id FROM production_data
+                WHERE trim(no_dossier) = trim(?) AND trim(machine) = trim(?)
+                  AND annule_le = ? AND id <> ?""",
+            (ref, row.get("machine") or "", row["annule_le"], row["id"]),
+        ).fetchall():
+            if int(r["id"]) not in ids:
+                ids.append(int(r["id"]))
+    if out["trace_deja_fin"] and not ids and not (row.get("annule_le") or "").strip():
+        out["raison"] = "Cette saisie ne porte aucune annulation."
+        return out
     out.update({
         "no_dossier": ref, "machine": (row.get("machine") or "").strip(),
         "date": row.get("date_operation"), "motif": row.get("annule_motif") or data.get("motif"),
         "conversion": origine is not None, "nb_saisies": len(ids) + 1,
-        "fin_dossier": (origine or {}).get("fin_dossier"),
+        "fin_dossier": (origine or {}).get("fin_dossier") if origine is not None
+        else (row.get("fin_dossier") if out["trace_deja_fin"] else None),
         "quantite_traitee": (origine or {}).get("quantite_traitee"),
         "ids_cycle": ids, "origine": origine, "row": row,
     })
@@ -572,6 +606,7 @@ def retablir(conn, row_id: int, fin_dossier: Optional[bool], auteur: str, auteur
     ctx = contexte_retablir(conn, row_id)
     if not ctx["retablissable"]:
         raise ValueError(ctx["raison"] or "Rétablissement impossible.")
+    row_id = ctx["trace_id"]
     now_iso = datetime.now().isoformat()
     row, origine, ref = ctx["row"], ctx["origine"], ctx["no_dossier"]
     data = _data_trace(row)
@@ -580,6 +615,8 @@ def retablir(conn, row_id: int, fin_dossier: Optional[bool], auteur: str, auteur
     if origine is not None:
         cloture = origine.get("fin_dossier")
         cloture = int(cloture) if cloture not in (None, "") else None
+    elif fin_dossier is None and ctx["trace_deja_fin"] and ctx["row"].get("fin_dossier") is not None:
+        cloture = int(ctx["row"]["fin_dossier"])
     else:
         if fin_dossier is None:
             raise ValueError("Préciser si le dossier était terminé ou à reprendre.")
@@ -614,6 +651,10 @@ def retablir(conn, row_id: int, fin_dossier: Optional[bool], auteur: str, auteur
             json.dumps(origine.get("data") or {}, default=str),
             origine.get("modifie_par"), origine.get("modifie_le"), origine.get("modifie_note"),
         )
+    elif ctx["trace_deja_fin"]:
+        # Déjà remise à la main en fin de production : on garde ce qui a été
+        # saisi, on retire seulement les marques d'annulation.
+        valeurs = None
     else:
         m_fin = row.get("metrage_total_fin") if row.get("metrage_total_fin") is not None else row.get("metrage_reel")
         historique = dict(data)
@@ -627,17 +668,26 @@ def retablir(conn, row_id: int, fin_dossier: Optional[bool], auteur: str, auteur
             json.dumps(historique, default=str),
             auteur_email, now_iso, "Annulation de dossier retirée",
         )
-    conn.execute(
-        """UPDATE production_data
-              SET operation = ?, operation_code = ?, operation_severity = ?, operation_category = ?,
-                  quantite_traitee = ?, metrage_prevu = ?, metrage_reel = ?,
-                  metrage_total_debut = ?, metrage_total_fin = ?,
-                  commentaire = ?, data = ?,
-                  modifie_par = ?, modifie_le = ?, modifie_note = ?,
-                  est_annule = 0, annule_le = NULL, annule_par = NULL, annule_motif = NULL
-            WHERE id = ?""",
-        (*valeurs, row_id),
-    )
+    if valeurs is not None:
+        conn.execute(
+            """UPDATE production_data
+                  SET operation = ?, operation_code = ?, operation_severity = ?, operation_category = ?,
+                      quantite_traitee = ?, metrage_prevu = ?, metrage_reel = ?,
+                      metrage_total_debut = ?, metrage_total_fin = ?,
+                      commentaire = ?, data = ?,
+                      modifie_par = ?, modifie_le = ?, modifie_note = ?,
+                      est_annule = 0, annule_le = NULL, annule_par = NULL, annule_motif = NULL
+                WHERE id = ?""",
+            (*valeurs, row_id),
+        )
+    else:
+        conn.execute(
+            """UPDATE production_data
+                  SET est_annule = 0, annule_le = NULL, annule_par = NULL, annule_motif = NULL,
+                      modifie_par = ?, modifie_le = ?
+                WHERE id = ?""",
+            (auteur_email, now_iso, row_id),
+        )
     if "fin_dossier" in cols_pd:
         conn.execute("UPDATE production_data SET fin_dossier = ? WHERE id = ?", (cloture, row_id))
 
