@@ -43,7 +43,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "3.2.9"
+APP_VERSION = "3.3.0"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -314,6 +314,49 @@ FSC_WARNING_PROD = os.getenv(
     "(étiquettes vertes impératives) · "
     "traçabilité matière impérative (scanner chaque bobine) · "
     "entrée du produit fini en stock Z1 obligatoire",
+)
+
+# ─── FSC — portée des certificats fournisseurs (MyQualité › Certifications SIFA)
+# Ce qu'un fournisseur a le DROIT de livrer, tel qu'écrit dans la portée de son
+# certificat ou sur la base publique FSC. Distinct de FSC_CLAIM_LABELS, qui
+# décrit le claim d'une réception précise : un certificat peut couvrir
+# « FSC Recycled Credit » ou « FSC Controlled Wood » sans que SIFA n'en ait
+# jamais reçu, et ajouter ces codes au <select> de réception l'aurait encombré
+# pour rien. `famille` rapproche les deux vocabulaires (un certificat « FSC Mix
+# Credit » couvre une réception saisie « FSC Mix Credit » ; « FSC Recycled
+# Credit » couvre « FSC Recycled »).
+FSC_CLAIMS_PORTEE = {
+    "fsc_100":             {"label": "FSC 100%",             "famille": "fsc_100"},
+    "fsc_mix":             {"label": "FSC Mix",              "famille": "fsc_mix"},
+    "fsc_mix_credit":      {"label": "FSC Mix Credit",       "famille": "fsc_mix_credit"},
+    "fsc_recycled":        {"label": "FSC Recycled",         "famille": "fsc_recycled"},
+    "fsc_recycled_credit": {"label": "FSC Recycled Credit",  "famille": "fsc_recycled"},
+    "fsc_controlled_wood": {"label": "FSC Controlled Wood",  "famille": "fsc_controlled_wood"},
+}
+# Statut lu sur la base publique FSC au moment du contrôle. C'est la « preuve
+# de contrôle des certificats fournisseurs » que demande l'auditeur CoC.
+FSC_STATUTS_BASE = {
+    "valide":      "Valide",
+    "suspendu":    "Suspendu",
+    "expire":      "Expiré",
+    "retire":      "Retiré",
+    "introuvable": "Introuvable",
+}
+# Fiche du Référentiel RSE sur laquelle sont tagués les certificats FSC déposés
+# dans Ressources fournisseurs. Identifiée par son slug, jamais par son id.
+FSC_FICHE_SLUG = os.getenv("FSC_FICHE_SLUG", "fsc")
+# Page de recherche publique ouverte depuis le contrôle d'un fournisseur.
+FSC_BASE_RECHERCHE_URL = os.getenv("FSC_BASE_RECHERCHE_URL", "https://search.fsc.org/en/")
+# Un certificat qui expire dans moins de N jours passe en « à renouveler ».
+FSC_ALERTE_JOURS = int(os.getenv("FSC_ALERTE_JOURS", "60"))
+# Un contrôle sur la base FSC plus vieux que N jours est signalé à refaire.
+FSC_CONTROLE_VALIDITE_JOURS = int(os.getenv("FSC_CONTROLE_VALIDITE_JOURS", "365"))
+# Lecture des certificats : les motifs d'abord (gratuits, instantanés) ; l'IA
+# seulement pour un scan ou une photo, où il n'y a aucun texte à lire.
+FSC_LECTURE_IA_ACTIVE = os.getenv("FSC_LECTURE_IA_ACTIVE", "1") not in ("0", "false", "False")
+FSC_LECTURE_IA_MODELE = os.getenv(
+    "FSC_LECTURE_IA_MODELE",
+    os.getenv("DEVIS_IA_MODELE", "claude-sonnet-4-5-20250929"),
 )
 
 # Motifs d'un départ NON rattaché à un dossier de fabrication.

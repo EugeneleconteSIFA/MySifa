@@ -36,28 +36,11 @@ input,select,textarea{font-family:inherit}
   font-family:inherit;margin-bottom:2px;transition:background .15s,color .15s}
 .nav-btn svg{flex-shrink:0}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
-.back-mysifa{font-weight:400!important;color:var(--text2)!important}
-.back-mysifa .wm{font-weight:800;color:var(--text)}
-.back-mysifa .wm span{color:var(--accent)}
-.sidebar-bottom{margin-top:auto;padding:12px 8px;border-top:1px solid var(--border);
-  display:flex;flex-direction:column;gap:6px;flex-shrink:0;background:var(--card)}
-.theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;
-  border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;
-  font-size:12px;width:100%;font-family:inherit;transition:all .15s}
-.theme-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.theme-btn .theme-ico{display:inline-flex;align-items:center;justify-content:center;line-height:1}
-.theme-btn .theme-label{white-space:nowrap}
-.logout-btn{border:none}
-.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1)}
-.version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
+/* Pied de sidebar : static/mysifa_sidebar.css (v3.3.0). */
 .main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
 .content{flex:1;overflow:auto;padding:20px 24px 32px}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
 body.sb-open .sidebar-overlay{display:block}
-@media (display-mode:standalone),(max-width:900px){
-  .theme-btn .theme-label{display:none}
-  .theme-btn{justify-content:center}
-}
 .loading-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:48px;color:var(--muted)}
 .spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:pr-spin .7s linear infinite}
 @keyframes pr-spin{to{transform:rotate(360deg)}}

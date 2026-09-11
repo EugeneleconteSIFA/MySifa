@@ -41,6 +41,7 @@ CALENDRIER_HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <style>
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
 :root{--ok:#34d399;--sur-accent:#0a0e17;}
@@ -58,10 +59,11 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
 .sidebar hr{border:none;border-top:1px solid var(--border);margin:12px 0}
 .cal-cals-section{margin-bottom:4px}
-.cal-cals-head{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:4px 12px 8px;border:none;background:transparent;cursor:pointer;font-family:inherit;transition:color .15s}
-.cal-cals-head:hover .cal-cals-head-label,.cal-cals-head:hover .cal-cals-chevron{color:var(--accent)}
-.cal-cals-head-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted)}
-.cal-cals-chevron{flex-shrink:0;color:var(--muted);transition:transform .15s,color .15s}
+/* Titre « Autres calendriers » : apparence commune (.msb-section, static/mysifa_sidebar.css) ;
+   ici seulement ce qu'un <button> impose (bordures, police). */
+.cal-cals-head{border-left:none;border-right:none;border-bottom:none;font-family:inherit;text-align:left}
+/* « Autres calendriers » dépasse de 2px la largeur utile : sur une ligne, sans césure. */
+.cal-cals-head-label{white-space:nowrap}
 .cal-cals-section.collapsed .cal-cals-chevron{transform:rotate(-90deg)}
 /* Reunions : invites, reponses, evenement annule ou refuse. */
 .cal-pop-reunion{margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
@@ -129,17 +131,9 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
   transition:color .15s,background .15s;
 }
 .cal-gear-btn:hover{color:var(--accent);background:var(--accent-bg)}
-.back-mysifa{border:none!important;background:transparent!important;font-weight:400!important;color:var(--text2)!important;padding:8px 10px!important}
-.back-mysifa:hover{color:var(--text)!important;background:transparent!important}
-.back-mysifa .wm{font-weight:800;color:var(--text)}.back-mysifa .wm span{color:var(--accent)}
-.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
-.user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg);cursor:pointer}
-.user-chip .uc-name{font-size:12px;font-weight:600;color:var(--text)}
-.user-chip .uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
-.theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:background .15s,color .15s,border-color .15s}
-.theme-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.logout-btn{border:none}.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1)}
-.version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
+/* Pied de sidebar : static/mysifa_sidebar.css (v3.3.0). La sidebar a ici 12px de marge
+   latérale : le pied la déborde pour que son filet aille d'un bord à l'autre, comme sur MyStock. */
+.sidebar>.msb-footer{margin-left:-12px;margin-right:-12px;padding-left:12px;padding-right:12px}
 .main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
 .mobile-topbar{flex-shrink:0}
 .cal-mobile-view-sel{margin-left:auto}
@@ -530,6 +524,7 @@ body.cal-dragging{user-select:none}
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_calendar.js"></script>
 <script>window.__MYSIFA_APP__='calendrier';</script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
@@ -545,7 +540,7 @@ body.cal-dragging{user-select:none}
 <script src="/static/mysifa_cal_rappel.js?v=8"></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div class="layout">
-  <aside class="sidebar">
+  <aside class="sidebar msb-nav">
     <div class="logo">
       <div class="logo-brand">My<span>Sifa</span></div>
       <div class="logo-sub">Calendrier</div>
@@ -569,9 +564,9 @@ body.cal-dragging{user-select:none}
     <hr>
     <div class="cal-cals-section" id="cal-cals-section">
       <div id="cal-toggles-mien"></div>
-      <button type="button" class="cal-cals-head" id="cal-cals-head" aria-expanded="false" aria-controls="cal-toggles">
+      <button type="button" class="cal-cals-head msb-section msb-toggle" id="cal-cals-head" aria-expanded="false" aria-controls="cal-toggles">
         <span class="cal-cals-head-label">Autres calendriers</span>
-        <svg class="cal-cals-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        <svg class="cal-cals-chevron msb-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div id="cal-toggles"></div>
       <button type="button" class="cal-extern-btn" id="btn-cal-extern" title="Connecter un calendrier externe">
@@ -584,21 +579,8 @@ body.cal-dragging{user-select:none}
       </button>
     </div>
     <div id="cal-mini-root"></div>
-    <div class="sidebar-bottom">
-      <button type="button" class="nav-btn back-mysifa" onclick="location.href='/'">
-        ← Retour <span class="wm">My<span>Sifa</span></span>
-      </button>
-      <div class="user-chip" id="sb-user-chip" onclick="location.href='/profil'" title="Mon profil"></div>
-      <button type="button" class="theme-btn" id="btn-theme">
-        <span class="theme-ico" id="theme-ico"></span>
-        <span class="theme-label" id="theme-label">Mode clair</span>
-      </button>
-      <button type="button" class="logout-btn" id="btn-logout">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        Déconnexion
-      </button>
-      <div class="version">Calendrier · __V_LABEL__</div>
-    </div>
+    <!-- Pied commun (static/mysifa_sidebar.js), rempli au chargement. -->
+    <div class="sidebar-bottom msb-footer" data-msb-footer data-msb-app="Calendrier" data-msb-version="__V_LABEL__"></div>
   </aside>
   <main class="main">
     <div class="mobile-topbar mobile-topbar--home-end">
@@ -715,7 +697,6 @@ const LS_CAL_LIST='mysifa_cal_autres_open';
 const LS_COLLEGUE='mysifa_cal_collegue';
 const MOIS=['','janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 const JOURS=['lun','mar','mer','jeu','ven','sam','dim'];
-const ROLE_LABELS={direction:'Direction',administration:'Administration',fabrication:'Fabrication',logistique:'Logistique',comptabilite:'Comptabilité',expedition:'Expédition',commercial:'Commercial',superadmin:'Super admin'};
 
 const PX_PER_HOUR=48;
 const CAL_SLOT_PAD_X=3;
@@ -910,14 +891,10 @@ function applyTheme(){
   syncThemeBtn();
 }
 
+// Bouton clair/sombre du pied commun : libellé remis d'aplomb après
+// initFromStorage / mergeFromUser.
 function syncThemeBtn(){
-  const isLight=document.body.classList.contains('light');
-  const ico=document.getElementById('theme-ico');
-  const lbl=document.getElementById('theme-label');
-  if(ico)ico.innerHTML=isLight
-    ?'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>'
-    :'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-  if(lbl)lbl.textContent=isLight?'Mode sombre':'Mode clair';
+  if(window.MySifaSidebar)MySifaSidebar.refreshTheme();
 }
 
 function calDefautVisible(c){
@@ -3065,19 +3042,6 @@ const mobileViewSel=document.getElementById('mobile-view-sel');
 if(mobileViewSel)mobileViewSel.onchange=()=>setView(mobileViewSel.value);
 document.getElementById('sb-burger').onclick=()=>document.body.classList.toggle('sb-open');
 document.getElementById('sb-ov').onclick=()=>document.body.classList.remove('sb-open');
-document.getElementById('btn-theme').onclick=()=>{
-  if(window.MySifaTheme)MySifaTheme.toggleMode();
-  else{
-    const next=document.body.classList.contains('light')?'dark':'light';
-    localStorage.setItem('theme',next);
-    document.body.classList.toggle('light',next==='light');
-  }
-  syncThemeBtn();
-};
-document.getElementById('btn-logout').onclick=async()=>{
-  try{await fetch('/api/auth/logout',{method:'POST',credentials:'include'});}catch(e){}
-  location.href='/';
-};
 
 document.addEventListener('keydown',e=>{
   if(isTypingTarget(document.activeElement))return;
@@ -3437,11 +3401,7 @@ window.addEventListener('resize',()=>{
     else if(window.MySifaCalendar)MySifaCalendar.mergeFromUser(ME);
     renderToggles();
     initSelecteurCollegue().catch(()=>{});
-    const chip=document.getElementById('sb-user-chip');
-    if(chip&&window.MySifaUserChip){
-      const editIco='<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
-      MySifaUserChip.fill(chip,ME,{roleLabels:ROLE_LABELS,editIconHtml:editIco});
-    }
+    if(window.MySifaSidebar)MySifaSidebar.setUser(ME);
     syncThemeBtn();
     bindCalendarBodyClicks();
     await fetchEvents();

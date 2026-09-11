@@ -57,6 +57,8 @@ ERP_HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
+<link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_mobile_topbar.css">
 <style>
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
@@ -79,7 +81,7 @@ body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;backgrou
    a n'importe quel autre sans repasser par l'accueil. */
 .nav-colonnes{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 24px;align-items:start;margin-top:6px}
 .nav-bloc{min-width:0;break-inside:avoid}
-.nav-bloc.parametres{grid-column:1/-1;margin-top:6px;padding-top:10px;border-top:1px solid var(--border)}
+.nav-bloc.parametres{grid-column:1/-1;margin-top:6px}
 .nav-bloc.parametres .nav-domaine{border-left:none;margin:0 0 6px;padding-left:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:2px 10px}
 .nav-bloc.parametres .nav-btn{border-radius:8px;padding-left:11px}
 .nav-bloc.parametres .nav-btn:hover{padding-left:13px}
@@ -108,8 +110,7 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 /* Le tiroir reprend la lecture verticale du menu : chaque domaine est une
    colonne, tenue par un filet, et l'écran courant marque ce filet d'un trait
    plein. On suit la colonne des yeux au lieu de lire une liste plate. */
-.nav-groupe{font-size:13px;font-weight:800;letter-spacing:.2px;color:var(--text);padding:14px 4px 8px;display:flex;align-items:center;gap:8px}
-.nav-groupe::before{content:'';width:3px;height:14px;border-radius:2px;background:var(--accent);flex-shrink:0}
+/* Titres de domaine (.nav-groupe) : format commun, static/mysifa_sidebar.css. */
 .nav-domaine{display:flex;flex-direction:column;margin:0 0 10px 9px;padding-left:12px;border-left:1px solid var(--border)}
 .nav-btn{position:relative;display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:7px 11px;border-radius:0 8px 8px 0;border:none;background:transparent;color:var(--text2);font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,padding-left .12s;margin-bottom:1px}
 .nav-btn:hover{background:var(--accent-bg);color:var(--accent);padding-left:14px}
@@ -134,27 +135,9 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 .nav-tdb-btn.active{font-weight:700}
 .nav-tdb-btn .mk-ico{flex-shrink:0;opacity:.75;color:var(--muted)}
 .nav-tdb-btn:hover .mk-ico,.nav-tdb-btn.active .mk-ico{color:var(--accent);opacity:1}
-.back-mysifa{border:none!important;background:transparent!important;font-weight:400!important;color:var(--text2)!important;padding:8px 10px!important}
-.back-mysifa:hover{color:var(--text)!important;background:transparent!important}
-.back-mysifa .wm{font-weight:800;color:var(--text)}.back-mysifa .wm span{color:var(--accent)}
-/* Pied identique a celui de MyStock et MyProd : meme ordre, memes classes,
-   meme chip utilisateur partage (mysifa_user_chip.js). Un pied qui differe
-   d'une app a l'autre oblige a rechercher la deconnexion a chaque fois. */
-.sidebar-bottom{margin-top:auto;margin-left:-20px;margin-right:-20px;padding:12px 16px;border-top:1px solid var(--border);background:var(--card);display:flex;flex-direction:column;gap:6px;flex-shrink:0;position:sticky;bottom:0}
-.user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg);cursor:pointer}
-.user-chip:hover{background:rgba(34,211,238,.18)}
-.user-chip .uc-top{display:flex;align-items:center;gap:10px;margin-bottom:6px}
-.user-chip .uc-avatar{width:36px;height:36px;min-width:36px;border-radius:50%;object-fit:cover;border:1px solid var(--border);flex-shrink:0;display:block}
-.user-chip .uc-info{flex:1;min-width:0}
-.user-chip .uc-name,.uc-name{font-size:12px;font-weight:600;color:var(--text)}
-.user-chip .uc-role,.uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
-.user-chip .uc-profil{font-size:10px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:4px}
-.support-btn,.theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;width:100%;transition:background .15s,color .15s,border-color .15s}
-.support-btn:hover,.theme-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.support-ico{display:inline-flex;align-items:center}
-.logout-btn{border:none}
-.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1)}
-.version{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;color:var(--muted);padding:4px 12px}
+/* Pied : static/mysifa_sidebar.css (v3.3.0). Ne reste ici que sa place dans le
+   tiroir : bord à bord et collé en bas quand le menu défile. */
+.sidebar>.msb-footer{margin-left:-21px;margin-right:-21px;padding-left:21px;padding-right:21px;position:sticky;bottom:0}
 
 .main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column}
 .page-head{flex-shrink:0;padding:11px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-wrap:nowrap;background:var(--bg);min-width:0}
@@ -696,6 +679,7 @@ body.light .tdb-tip{box-shadow:0 12px 34px rgba(15,23,42,.16)}
 <body class="has-topbar">
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_guides.js"></script>
 <script src="/static/mysifa_cal_rappel.js?v=8"></script>
@@ -726,37 +710,17 @@ body.light .tdb-tip{box-shadow:0 12px 34px rgba(15,23,42,.16)}
         </div>
       </div>
     </div>
-    <div class="nav-tete">
+    <div class="nav-tete msb-nav">
       <button type="button" class="nav-btn" id="nav-menu" onclick="allerAuMenu()">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         Menu
       </button>
       <div class="nav-tdb" id="nav-tdb"></div>
     </div>
-    <div id="nav-ecrans"></div>
+    <div id="nav-ecrans" class="msb-nav"></div>
 
-    <div class="sidebar-bottom">
-      <button type="button" class="nav-btn back-mysifa" onclick="location.href='/'">
-        ← Retour <span class="wm">My<span>Sifa</span></span>
-      </button>
-      <div class="user-chip" id="uc" onclick="location.href='/profil'" title="Modifier mon profil">
-        <div class="uc-name" id="uc-name">—</div>
-        <div class="uc-role" id="uc-role">—</div>
-      </div>
-      <button type="button" class="support-btn" id="btn-support">
-        <span class="support-ico" id="support-ico"></span>
-        Contacter le support
-      </button>
-      <button type="button" class="theme-btn" id="btn-theme">
-        <span class="theme-ico" id="theme-ico"></span>
-        <span class="theme-label" id="theme-label">Mode clair</span>
-      </button>
-      <button type="button" class="logout-btn" id="btn-logout">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        Déconnexion
-      </button>
-      <div class="version">MyERP · __V_LABEL__</div>
-    </div>
+    <!-- Pied commun à toutes les applis (static/mysifa_sidebar.js, v3.3.0). -->
+    <div class="sidebar-bottom msb-footer" data-msb-footer data-msb-app="MyERP" data-msb-version="__V_LABEL__"></div>
   </aside>
 
   <main class="main">
@@ -1241,7 +1205,7 @@ function renderNav(){
     const ecrans=ecransDuDomaine(d.cle);
     if(!ecrans.length)return;
     const kl=(d.type==='parametres')?' parametres':'';
-    h+='<div class="nav-bloc'+kl+'"><div class="nav-groupe">'+esc(d.label)+'</div><div class="nav-domaine">';
+    h+='<div class="nav-bloc'+kl+'"><div class="nav-groupe msb-section"><span>'+esc(d.label)+'</span></div><div class="nav-domaine">';
     ecrans.forEach(e=>{
       h+='<button type="button" class="nav-btn'+(S.ecran===e.cle?' active':'')+'" data-ecran="'+esc(e.cle)+'">'+esc(e.label)+'</button>';
     });
@@ -2516,18 +2480,22 @@ function initRecherche(){
 function basculerSidebar(){document.body.classList.toggle('sb-open');}
 function fermerSidebar(){document.body.classList.remove('sb-open');}
 function majTheme(){
+  // Icône du bouton de l'en-tête ; celui du tiroir est tenu par le pied commun.
   const clair=document.body.classList.contains('light');
-  const i=document.getElementById('theme-ico'),l=document.getElementById('theme-label');
-  if(i)i.innerHTML=clair?ICO_MOON:ICO_SUN;
-  if(l)l.textContent=clair?'Mode sombre':'Mode clair';
-  // Le bouton de l'en-tête montre la même chose que celui du tiroir.
   const h=document.getElementById('hd-theme');
   if(h)h.innerHTML=clair?ICO_MOON:ICO_SUN;
 }
-function basculerTheme(){
-  document.body.classList.toggle('light');
+// Suite commune aux deux boutons : ancienne clé gardée à jour, en-tête et pied alignés.
+function apresBascule(){
   try{localStorage.setItem('mysifa_theme',document.body.classList.contains('light')?'light':'dark');}catch(e){}
   majTheme();
+  if(window.MySifaSidebar)MySifaSidebar.refreshTheme();
+}
+function basculerTheme(){
+  // Même bascule que le pied commun (MySifaTheme : clé « theme » et profil serveur).
+  if(window.MySifaTheme&&MySifaTheme.toggleMode)MySifaTheme.toggleMode();
+  else document.body.classList.toggle('light');
+  apresBascule();
 }
 async function deconnexion(){
   try{await fetch('/api/auth/logout',{method:'POST',credentials:'include'});}catch(e){}
@@ -3351,41 +3319,23 @@ document.addEventListener('keydown',e=>{
 });
 
 async function boot(){
-  try{if(localStorage.getItem('mysifa_theme')==='light')document.body.classList.add('light');}catch(e){}
+  // L'ancienne clé propre à MyERP ne sert plus que sans mysifa_theme.js : avec, le
+  // mode est celui de MySifaTheme, que le pied commun lit et bascule.
+  if(!window.MySifaTheme){
+    try{if(localStorage.getItem('mysifa_theme')==='light')document.body.classList.add('light');}catch(e){}
+  }
   majTheme();
+  // Pied commun (monté au DOMContentLoaded, donc après ce réglage) : profil,
+  // support et déconnexion par défaut ; après bascule, l'en-tête suit.
+  if(window.MySifaSidebar)MySifaSidebar.configure({onTheme:apresBascule});
   const brancher=(id,fn)=>{const el=document.getElementById(id);if(el)el.addEventListener('click',fn);};
-  brancher('btn-theme',basculerTheme);
   brancher('hd-theme',basculerTheme);
-  brancher('btn-logout',deconnexion);
   brancher('hd-logout',deconnexion);
   brancher('hd-profil',()=>{location.href='/profil';});
   // Cliquer le fond referme : le geste attendu d'une modale.
   const fond=document.getElementById('detail-fond');
   if(fond)fond.addEventListener('click',ev=>{if(ev.target===fond)fermerDetail();});
   brancher('hd-retour',()=>{location.href='/';});
-  try{
-    const me=await api('/api/auth/me');
-    const chip=document.getElementById('uc');
-    // Le meme composant que MyStock et MyProd : avatar, nom, role, « Mon profil ».
-    if(chip&&window.MySifaUserChip&&MySifaUserChip.fill){
-      MySifaUserChip.fill(chip,me,{});
-    }else{
-      const n=document.getElementById('uc-name'),ro=document.getElementById('uc-role');
-      if(n)n.textContent=me.nom||me.email||'—';
-      if(ro)ro.textContent=me.role||'—';
-    }
-  }catch(e){}
-
-  const bs=document.getElementById('btn-support');
-  if(bs){
-    const ico=document.getElementById('support-ico');
-    if(ico&&window.MySifaSupport&&MySifaSupport.iconSvg)ico.innerHTML=MySifaSupport.iconSvg();
-    if(window.MySifaSupport&&MySifaSupport.open){
-      bs.addEventListener('click',()=>MySifaSupport.open());
-    }else{
-      bs.style.display='none';   // pas de widget chargé : pas de bouton mort
-    }
-  }
   try{ S.meta=await api('/api/erp/meta'); }
   catch(e){
     document.getElementById('corps').innerHTML='<div class="vide-msg">'+esc(e.message)+'</div>';

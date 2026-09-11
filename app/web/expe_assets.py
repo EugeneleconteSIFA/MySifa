@@ -4204,16 +4204,10 @@ EXPE_MAIN_CSS = r"""
 
 /* MyExpé — sidebar sections collapsibles */
 .expe-sidebar-sections{display:flex;flex-direction:column;gap:2px}
-.expe-sec-header{display:flex;align-items:center;gap:8px;background:transparent;border:none;
-  padding:14px 16px 6px 12px;cursor:pointer;color:var(--muted);
-  font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.7px;
-  width:100%;text-align:left;transition:color .15s}
-.expe-sec-header:hover{color:var(--text2)}
-.expe-sec-header.has-active{color:var(--text2)}
-.expe-sec-header .expe-sec-chev{display:inline-flex;transition:transform .15s;flex-shrink:0;color:var(--muted)}
-.expe-sec-header.collapsed .expe-sec-chev{opacity:.6}
-.expe-sec-header.has-active .expe-sec-chev{color:var(--accent)}
-.expe-sec-label{flex:1}
+/* Apparence des titres : .msb-section (static/mysifa_sidebar.css, v3.3.0). Ici,
+   seulement la remise à zéro du <button> : bordure gauche/droite/basse (le
+   filet du haut vient du composant) et police héritée. */
+.expe-sec-header{border-right:0;border-bottom:0;border-left:0;font-family:inherit;text-align:left}
 .expe-sec-body{display:flex;flex-direction:column;gap:2px;padding-bottom:4px}
 
 /* MyExpé — Palettes Europe */
@@ -7234,7 +7228,6 @@ window.addEventListener('resize',expeTipHide);
 
 function renderExpe(){
   if(!_expeHashRestored){_expeHashRestored=true;var _ht=_readExpeHash();if(_ht){S.expeTab=_ht;}}
-  const isLight=document.body.classList.contains('light');
   if(S.expeTab==='historique_departs'){
     S.expeTab='suivi_departs';
     S.expeDepartSubTab='historique';
@@ -7266,7 +7259,7 @@ function renderExpe(){
     else if(tab==='pilotage'){void loadExpePilotage();if(!T.list.length&&!T.loading)void loadTransporteurs();}
   }
 
-  const sidebar=h('nav',{className:'sidebar'},
+  const sidebar=h('nav',{className:'sidebar msb-nav'},
     h('div',{className:'logo'},
       h('div',{className:'logo-brand'},'My',h('span',null,'Expé')),
       h('div',{className:'logo-sub'},'by __APP_ORG_NAME__')
@@ -7308,14 +7301,16 @@ function renderExpe(){
       SECTIONS.forEach(sec=>{
         const collapsed = isCollapsed(sec.key);
         const hasActive = sec.items.some(it=>it.tab===tab);
+        // Titre au format commun (.msb-section) : libellé en premier pour le
+        // décalage au survol, chevron à droite que ngl-collapsed fait pivoter.
         const header = h('button',{
           type:'button',
-          className:'expe-sec-header'+(collapsed?' collapsed':'')+(hasActive?' has-active':''),
+          className:'expe-sec-header msb-section msb-toggle'+(collapsed?' collapsed ngl-collapsed':'')+(hasActive?' has-active':''),
           onClick:()=>toggleSection(sec.key),
           'aria-expanded': String(!collapsed)
         },
-          h('span',{className:'expe-sec-chev'},iconEl(collapsed?'chevron-right':'chevron-down',12)),
-          h('span',{className:'expe-sec-label'},sec.label)
+          h('span',{className:'expe-sec-label msb-section-txt'},sec.label),
+          h('span',{className:'expe-sec-chev ngl-chevron'},iconEl('chevron-down',12))
         );
         wrap.appendChild(header);
         if(!collapsed){
@@ -7334,23 +7329,17 @@ function renderExpe(){
       return wrap;
     })(),
     renderExpePlanningNav(),
-    h('div',{className:'sidebar-bottom'},
-      h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/'}},
-        '← Retour ',h('span',{className:'wm'},'My',h('span',null,'Sifa'))
-      ),
-      sidebarUserChip(S.user),
-      (()=>{
-        const b=h('button',{className:'support-btn',title:'Contacter le support',onClick:()=>set({contactOpen:true})});
-        const ico=h('span',{className:'support-ico'});
-        try{ico.innerHTML=(window.MySifaSupport&&typeof window.MySifaSupport.iconSvg==='function')?window.MySifaSupport.iconSvg():'';}catch(e){ico.innerHTML='';}
-        b.appendChild(ico);b.appendChild(h('span',null,'Contacter le support'));return b;
-      })(),
-      h('button',{className:'theme-btn',onClick:()=>{MySifaTheme.toggleMode();render();}},
-        h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
-        h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
-      ),
-      h('button',{className:'logout-btn',onClick:doLogout},iconEl('log-out',14),' Déconnexion')
-    )
+    // Pied commun à toutes les applis (static/mysifa_sidebar.js, v3.3.0). Le
+    // support garde la fenêtre de contact de la coquille (S.contactOpen) et la
+    // déconnexion celle de la coquille, qui vide l'état et revient au login.
+    window.MySifaSidebar
+      ? MySifaSidebar.footer({
+          app:'MyExpé', version:'__V_LABEL__', user:S.user,
+          onSupport:()=>set({contactOpen:true}),
+          onTheme:()=>render(),
+          onLogout:doLogout,
+        })
+      : h('div',{className:'sidebar-bottom'})
   );
   const topbar=h('div',{className:'mobile-topbar'},
     h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},iconEl('menu',20)),

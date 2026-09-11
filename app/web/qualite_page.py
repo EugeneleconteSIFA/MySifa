@@ -9,6 +9,7 @@ from app.services.auth_service import get_current_user
 from app.web.access_denied import access_denied_response
 from config import APP_VERSION
 from app.web.qualite_ged_assets import GED_JS
+from app.web.qualite_fsc_assets import FSC_JS
 
 ROLES_QUALITE = {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}
 ROLES_QUALITE_READONLY = {"commercial"}
@@ -40,6 +41,7 @@ def qualite_page(request: Request):
         .replace("__IS_QUALITE_READONLY__", "true" if is_readonly else "false")
         .replace("__USER_ROLE__", user.get("role", ""))
         .replace("__GED_ASSETS__", GED_JS)
+        .replace("__FSC_ASSETS__", FSC_JS)
     )
     return HTMLResponse(
         content=html,
@@ -62,9 +64,11 @@ QUALITE_HTML = r"""<!DOCTYPE html>
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
@@ -77,6 +81,9 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 /* ── Layout ── */
 .app{display:flex;height:100vh;overflow:hidden}
 .sidebar{width:var(--sidebar-w);background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;height:100vh;overflow-y:auto}
+/* Pied de sidebar : static/mysifa_sidebar.css (v3.3.0). La sidebar a ici 12px de marge
+   latérale : le pied la déborde pour que son filet aille d'un bord à l'autre, comme sur MyStock. */
+.sidebar>.msb-footer{margin-left:-12px;margin-right:-12px;padding-left:12px;padding-right:12px}
 .sidebar::-webkit-scrollbar{width:0}.sidebar{scrollbar-width:none}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
 body.sb-open .sidebar-overlay{display:block}
@@ -101,21 +108,7 @@ body.sb-open .sidebar-overlay{display:block}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
 .nav-badge{margin-left:auto;background:var(--accent);color:var(--btn-fg);font-size:10px;font-weight:800;border-radius:999px;padding:1px 7px;min-width:18px;text-align:center}
 .nav-btn.active .nav-badge{background:var(--accent);color:var(--btn-fg)}
-.nav-btn--mysifa-portal{align-items:baseline;flex-wrap:wrap;gap:4px 8px;line-height:1.35}
-.nav-btn--mysifa-portal:hover{background:var(--accent-bg)}
-.mysifa-back-preamble{font-size:13px;font-weight:500;color:var(--text2)}
-.mysifa-back-brand{font-size:14px;font-weight:800;letter-spacing:-.5px;color:var(--text);white-space:nowrap}
-.mysifa-back-accent{color:var(--accent)}
-.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
-.user-chip{padding:10px 12px;border-radius:8px;border:1px solid var(--border);cursor:pointer;transition:.15s;background:transparent}
-.user-chip:hover{border-color:var(--accent)}
-.uc-name{font-size:13px;font-weight:600;color:var(--text)}
-.uc-role{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
-.theme-btn{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;font-family:inherit;transition:.15s;width:100%}
-.theme-btn:hover{border-color:var(--accent);color:var(--accent)}
-.logout-btn{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:12px;font-family:inherit;transition:.15s;width:100%}
-.logout-btn:hover{border-color:var(--danger);color:var(--danger)}
-.version{font-size:10px;color:var(--muted);padding:4px 12px;font-family:ui-monospace,monospace;opacity:.6}
+/* Menu et pied de sidebar : static/mysifa_sidebar.css (v3.3.0). */
 
 /* ── Mobile topbar ── */
 .mobile-topbar{display:none;align-items:center;gap:12px;padding:14px 16px;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
@@ -358,46 +351,34 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
       <div class="logo-brand">My<span>Qualité</span></div>
       <div class="logo-sub">by SIFA</div>
     </div>
-    <button type="button" class="nav-btn active" id="nav-nc" onclick="setView('list')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/></svg>
-      Non-conformités
-      <span class="nav-badge" id="sb-unread" style="display:none">0</span>
-    </button>
-    <button type="button" class="nav-btn" id="nav-audits" onclick="setView('audits-list')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
-      Audits client
-      <span class="nav-badge" id="sb-audits" style="display:none">0</span>
-    </button>
-    <button type="button" class="nav-btn" id="nav-ressources" onclick="setView('ressources-list')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>
-      Ressources fournisseurs
-      <span class="nav-badge" id="sb-ressources" style="display:none">0</span>
-    </button>
-    <button type="button" class="nav-btn" id="nav-sifa-docs" onclick="setView('sifa-docs-list')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><circle cx="12" cy="15" r="3"/><path d="M12 12v-1"/></svg>
-      Certifications SIFA
-    </button>
-    <button type="button" class="nav-btn" id="nav-ref" onclick="setView('ref-list')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-      Référentiel RSE
-    </button>
-
-    <div class="sidebar-bottom">
-      <button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'">
-        <span class="mysifa-back-preamble">← Retour </span>
-        <span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span>
+    <div class="msb-nav">
+      <button type="button" class="nav-btn active" id="nav-nc" onclick="setView('list')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/></svg>
+        Non-conformités
+        <span class="nav-badge" id="sb-unread" style="display:none">0</span>
       </button>
-      <div class="user-chip" id="user-chip" onclick="location.href='/profil'"></div>
-      <button type="button" class="theme-btn" onclick="toggleTheme()">
-        <svg id="theme-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        <span id="theme-label">Mode sombre</span>
+      <button type="button" class="nav-btn" id="nav-audits" onclick="setView('audits-list')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+        Audits client
+        <span class="nav-badge" id="sb-audits" style="display:none">0</span>
       </button>
-      <button type="button" class="logout-btn" onclick="doLogout()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        Déconnexion
+      <button type="button" class="nav-btn" id="nav-ressources" onclick="setView('ressources-list')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>
+        Ressources fournisseurs
+        <span class="nav-badge" id="sb-ressources" style="display:none">0</span>
       </button>
-      <div class="version">__V_LABEL__</div>
+      <button type="button" class="nav-btn" id="nav-sifa-docs" onclick="setView('sifa-docs-list')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><circle cx="12" cy="15" r="3"/><path d="M12 12v-1"/></svg>
+        Certifications SIFA
+      </button>
+      <button type="button" class="nav-btn" id="nav-ref" onclick="setView('ref-list')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        Référentiel RSE
+      </button>
     </div>
+
+    <!-- Pied commun (static/mysifa_sidebar.js), rempli au chargement. -->
+    <div class="sidebar-bottom msb-footer" data-msb-footer data-msb-app="MyQualité" data-msb-version="__V_LABEL__"></div>
   </nav>
 
   <main class="main">
@@ -669,26 +650,12 @@ function showToast(msg, type='info'){
 }
 function toggleSidebar(){document.body.classList.toggle('sb-open');}
 function closeSidebar(){document.body.classList.remove('sb-open');}
-function toggleTheme(){
-  const l=document.body.classList.toggle('light');
+// Le pied commun bascule le thème via MySifaTheme ; on recopie le mode dans
+// l'ancienne clé lue par le script de pré-rendu (light-pre) pour éviter un flash.
+function syncLegacyTheme(){
+  const l=document.body.classList.contains('light');
   document.documentElement.classList.toggle('light-pre', l);
   try{localStorage.setItem('mysifa_theme',l?'light':'dark');}catch(e){}
-  updateThemeBtn();
-}
-function updateThemeBtn(){
-  const l=document.body.classList.contains('light');
-  const ico=document.getElementById('theme-ico');
-  const lbl=document.getElementById('theme-label');
-  if(ico){
-    ico.innerHTML=l
-      ?'<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
-      :'<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
-  }
-  if(lbl) lbl.textContent=l?'Mode clair':'Mode sombre';
-}
-async function doLogout(){
-  try{await fetch('/api/auth/logout',{method:'POST',credentials:'include'});}catch(e){}
-  location.href='/';
 }
 function fmtDate(s){
   if(!s) return '—';
@@ -731,11 +698,8 @@ async function loadMe(){
     if(!r.ok) return;
     const d=await r.json();
     S.me=d.user||d;
-    const chip=document.getElementById('user-chip');
-    if(chip&&S.me){
-      const roles={direction:'Direction',administration:'Administration',superadmin:'Super admin',fabrication:'Fabrication',logistique:'Logistique',comptabilite:'Comptabilité',expedition:'Expédition',commercial:'Commercial'};
-      chip.innerHTML=`<div class="uc-name">${escHtml(S.me.nom||'')}</div><div class="uc-role">${escHtml(roles[S.me.role]||S.me.role||'')}</div>`;
-    }
+    // S.me sert aussi aux droits (meIsAdmin) : on le passe au pied commun.
+    if(S.me&&window.MySifaSidebar)MySifaSidebar.setUser(S.me);
   }catch(e){}
 }
 async function loadUsers(){
@@ -903,9 +867,10 @@ function setView(v, opts){
   } else if(v==='sifa-docs-list'){
     const nav=document.getElementById('nav-sifa-docs'); if(nav) nav.classList.add('active');
     document.getElementById('mobile-sub').textContent='Certifications SIFA';
-    // Deux sous-onglets : « Documents clients » (historique) et « Explorateur » (GED).
-    // L'onglet actif est memorise dans localStorage, on y revient donc directement.
+    // Trois sous-onglets : « Documents clients » (historique), « Explorateur » (GED)
+    // et « FSC ». L'onglet actif est memorise dans localStorage, on y revient donc directement.
     if(typeof gedActiveTab==='function' && gedActiveTab()==='explorer'){ gedEnter(); }
+    else if(typeof gedActiveTab==='function' && gedActiveTab()==='fsc' && typeof fscEnter==='function'){ fscEnter(); }
     else if(typeof loadSifaDocsList==='function') loadSifaDocsList();
   } else if(v==='sifa-docs-detail'){
     const nav=document.getElementById('nav-sifa-docs'); if(nav) nav.classList.add('active');
@@ -2944,6 +2909,7 @@ function renderSifaDocsList(){
   if(!root) return;
   // Si l'utilisateur est sur l'onglet Explorateur, c'est lui qui rend la page.
   if(typeof gedActiveTab==='function' && gedActiveTab()==='explorer'){ gedEnter(); return; }
+  if(typeof gedActiveTab==='function' && gedActiveTab()==='fsc' && typeof fscEnter==='function'){ fscEnter(); return; }
   const templates = S.sifaDocsTemplates || [];
   const cards = templates.map(t => `
     <div class="sd-card" onclick="openSifaDoc('${escAttr(t.code)}')">
@@ -3751,7 +3717,7 @@ async function submitSifaDocMissingCountries(){
 
 // ── Init ───────────────────────────────────────────────────────────
 async function init(){
-  updateThemeBtn();
+  if(window.MySifaSidebar)MySifaSidebar.configure({onTheme:syncLegacyTheme});
   await loadMe();
   // Rôle sans droits Qualite ni lecture seule : on masque NC/Audits et on bascule sur le référentiel
   if(!S.isQualiteAdmin && !S.isQualiteReadonly){
@@ -7701,6 +7667,7 @@ async function saveMatriceCell(fourId, ficheId){
 
 window.addEventListener('hashchange',function(){try{var hv=_readQualiteView();if(hv)setView(hv,{silent:true});}catch(e){}});
 __GED_ASSETS__
+__FSC_ASSETS__
 init();
 </script>
 <script src="/static/mysifa_impersonate.js?v=2"></script>

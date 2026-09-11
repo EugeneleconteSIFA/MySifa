@@ -89,10 +89,11 @@ PLANNING_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/motion.css">
 <!-- Cette feuille n'avait aucun cache-buster : une modification n'arrivait
      jamais sur un poste qui l'avait deja chargee. -->
-<link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem13-mob1">
+<link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem13-mob1-msb1">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
@@ -848,6 +849,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_rvgi_picker.js"></script>
 <script src="/static/motion.js" defer></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
@@ -1731,6 +1733,7 @@ function icon(name,size=16){
     'layers': '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
     'file': '<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>',
     'arrow-up': '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>',
+    'chevrons-up': '<polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/>',
     'arrow-down': '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>',
     'copy': '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 0 2 2v1"/>',
     'scissors': '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/>',
@@ -1989,23 +1992,29 @@ function isAdmin(u){return u&&(u.role==="direction"||u.role==="administration"||
 function canAccessOfTab(){return isAdmin(ME);}
 function isComptaUser(u){return !!(u&&u.role==="comptabilite");}
 function canPlanningNav(u){return !!(u&&u.app_access&&u.app_access.planning);}
-function roleLabel(role){const R={direction:"Direction",administration:"Administration",fabrication:"Fabrication",logistique:"Logistique",comptabilite:"Comptabilité",expedition:"Expédition",commercial:"Commercial",superadmin:"Super admin"};return R[role]||role||"";}
-function planningUserChipHtml(){
-  if(!ME)return "";
-  const editIco=icon("edit",12);
-  const inner=window.MySifaUserChip
-    ? MySifaUserChip.innerHtml(ME,{roleLabels:{direction:"Direction",administration:"Administration",fabrication:"Fabrication",logistique:"Logistique",comptabilite:"Comptabilité",expedition:"Expédition",commercial:"Commercial",superadmin:"Super admin"},editIconHtml:editIco})
-    : '<div class="uc-name">'+escAttr(ME.nom||"")+'</div><div class="uc-role">'+roleLabel(ME.role)+'</div><div class="uc-profil">'+editIco+' Mon profil</div>';
-  return '<div class="user-chip" onclick="location.href=\'/profil\'" title="Mon profil">'+inner+'</div>';
+/* Pied de sidebar commun a toutes les applis (static/mysifa_sidebar.js, v3.3.0).
+ * La barre est reconstruite en innerHTML a chaque render() : on pose un
+ * emplacement que le composant remplit. Les reglages sont repris a chaque
+ * rendu, car le lien « Retour MyExpé » depend de la vue courante. Le support
+ * garde la messagerie interne du Planning (openSupport). */
+let _msbUserPose=null;
+function planningSidebarFooterHtml(){
+  if(!window.MySifaSidebar) return '<div class="sidebar-bottom"></div>';
+  const avecExpe=(S.planningVue==='expe'||S.planningVue==='prod_expe');
+  MySifaSidebar.configure({
+    backs: avecExpe ? [{label:'Retour MyExpé', href:'/expe'}] : [],
+    onSupport: openSupport,
+    onTheme: render,
+  });
+  // L'utilisateur est deja en memoire : evite un second /api/auth/me.
+  if(ME && _msbUserPose!==ME){ _msbUserPose=ME; MySifaSidebar.setUser(ME); }
+  return MySifaSidebar.footerHtml({app:'Planning', version:'__V_LABEL__'});
 }
 function renderSidebar(){
   if(!ME){
     return `<nav class="sidebar"><div class="logo" title="Accueil MyProd" onclick="location.href='/prod?page=menu'"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>
       <div style="padding:10px 12px;color:var(--muted);font-size:12px">Chargement…</div>
-      <div class="sidebar-bottom">
-        <button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'"><span class="mysifa-back-preamble">← Retour </span><span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span></button>
-        <div class="version">__V_LABEL__</div>
-      </div></nav>`;
+      <div class="sidebar-bottom msb-footer"><a class="nav-btn back-mysifa" href="/">← Retour <span class="wm">My<span>Sifa</span></span></a><div class="version">Planning · __V_LABEL__</div></div></nav>`;
   }
   const admin=isAdmin(ME);
   const comptaOnly=isComptaUser(ME);
@@ -2026,8 +2035,7 @@ function renderSidebar(){
       ]:[]),
     ]),
   ];
-  const isLight=document.body.classList.contains("light");
-  return`<nav class="sidebar"><div class="logo" title="Accueil MyProd" onclick="location.href='/prod?page=menu'"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>${
+  return`<nav class="sidebar msb-nav"><div class="logo" title="Accueil MyProd" onclick="location.href='/prod?page=menu'"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>${
     (()=>{ let section=null; return items.map(i=>{
       // Meme intitule repliable que dans MyProd : chevron, bascule au clic,
       // etat conserve dans NAV_REPLIEES.
@@ -2035,7 +2043,8 @@ function renderSidebar(){
         section = i.section;
         const replie = !!NAV_REPLIEES[i.section];
         const chevron = '<span class="ngl-chevron"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></span>';
-        return `<div class="nav-section-label${replie?" ngl-collapsed":""}" data-section="${i.section}" onclick="toggleNavSection(this.dataset.section)"><span>${i.section}</span>${chevron}</div>`;
+        // msb-section : format de titre commun a toutes les applis (v3.3.0).
+        return `<div class="nav-section-label msb-section msb-toggle${replie?" ngl-collapsed":""}" data-section="${i.section}" onclick="toggleNavSection(this.dataset.section)"><span>${i.section}</span>${chevron}</div>`;
       }
       const badge=(i.withPendingBadge && PENDING_OF_COUNT>0)
         ? `<span style="margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;line-height:1.5;flex-shrink:0" title="${PENDING_OF_COUNT} OF à associer manuellement">${PENDING_OF_COUNT}</span>`
@@ -2043,7 +2052,7 @@ function renderSidebar(){
       const cache = (section && NAV_REPLIEES[section]) ? ' style="display:none"' : '';
       return `<button type="button" class="nav-btn${i.key==="_planning"?" active":""}"${cache} onclick="location.href='${i.href}'"><span style="display:inline-flex;align-items:center;gap:10px;width:100%">${icon(i.icon,16)}<span>${i.label}</span>${badge}</span></button>`;
     }).join(""); })()
-  }<div class="sidebar-bottom">${(S.planningVue==='expe'||S.planningVue==='prod_expe')?`<button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/expe'" title="Retour MyExpé"><span class="mysifa-back-preamble">← Retour </span><span class="mysifa-back-brand" style="display:inline-flex;align-items:center;gap:6px">${icon('truck',14)}My<span class="mysifa-back-accent">Expé</span></span></button>`:''}<button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'"><span class="mysifa-back-preamble">← Retour </span><span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span></button>${planningUserChipHtml()}<button type="button" class="support-btn" onclick="openSupport()"><span class="support-ico">${(window.MySifaSupport&&window.MySifaSupport.iconSvg)?window.MySifaSupport.iconSvg():""}</span><span>Contacter le support</span></button><button type="button" class="theme-btn" onclick="toggleTheme()"><span class="theme-ico">${isLight?icon('sun',16):icon('moon',16)}</span><span class="theme-label">${isLight?"Mode clair":"Mode sombre"}</span></button><button type="button" class="logout-btn" onclick="doLogout()">${icon('log-out',14)} Déconnexion</button><div class="version">__V_LABEL__</div></div></nav>`;
+  }${planningSidebarFooterHtml()}</nav>`;
 }
 /* Sections repliees de la barre laterale. L'etat vit ici, hors du rendu :
  * la barre du Planning est reconstruite a chaque render(), mais elle relit
@@ -2079,7 +2088,6 @@ async function loadPendingOfCount(){
     try{render();}catch(e){}
   }catch(e){PENDING_OF_COUNT=0;}
 }
-function toggleTheme(){if(window.MySifaTheme)MySifaTheme.toggleMode();render();}
 function renderPlanningOfPanel(){
   return `<div class="planning-of-panel">
     <div class="planning-of-toolbar">
@@ -2093,7 +2101,6 @@ function renderPlanningOfPanel(){
     </div>
   </div>`;
 }
-async function doLogout(){try{await fetch("/api/auth/logout",{method:"POST",credentials:"include"});}catch(e){}location.href="/";}
 
 function openSupport(){
   if(!ME) return;
@@ -2740,9 +2747,6 @@ function reorderKeepsLocked(idsBefore, idsAfter){
   let tete=0;
   while(tete<idsBefore.length&&isLk(idsBefore[tete])) tete++;
   for(let i=0;i<tete;i++){ if(idsAfter[i]!==idsBefore[i]) return false; }
-  for(let i=0;i<idsBefore.length;i++){
-    if(st[idsBefore[i]]==="en_cours"&&idsAfter.indexOf(idsBefore[i])!==i) return false;
-  }
   const a=idsBefore.filter(isLk), b=idsAfter.filter(isLk);
   return a.length===b.length&&a.every((id,i)=>id===b[i]);
 }
@@ -2794,20 +2798,26 @@ function setupTlDD(){
     _tlDragEid=null;
     if(!target||!fromEid) return;
     const targetStat=(target.dataset&&target.dataset.statut)?String(target.dataset.statut):"";
-    if(targetStat && targetStat!=="attente"){
-      showToast("Déplacement impossible — cible verrouillée (en cours/terminé).","info");
-      return;
-    }
     const eid=+target.dataset.eid;
     if(eid===fromEid) return;
+    const fromE=(S.entries||[]).find(x=>x.id===fromEid);
+    if(fromE&&(fromE.statut==="en_cours"||fromE.statut==="termine")){
+      showToast("Dossier en cours ou terminé — il garde sa place.","info");
+      return;
+    }
     const ids=S.entries.map(e=>e.id);
     const fromIdx=ids.indexOf(fromEid);
     const toIdx=ids.indexOf(eid);
     if(fromIdx<0||toIdx<0) return;
     const [moved]=ids.splice(fromIdx,1);
-    ids.splice(toIdx,0,moved);
+    if(targetStat && targetStat!=="attente"){
+      // Lâché sur un dossier en cours / terminé : « à produire juste après lui ».
+      ids.splice(ids.indexOf(eid)+1,0,moved);
+    }else{
+      ids.splice(toIdx,0,moved);
+    }
     if(!reorderKeepsLocked(S.entries.map(e=>e.id), ids)){
-      showToast("Déplacement impossible — cela déplacerait un dossier en cours/terminé.","danger");
+      showToast("Déplacement impossible — l'ordre des dossiers déjà produits changerait.","danger");
       await load();
       return;
     }
@@ -3161,8 +3171,6 @@ function mkRow(e,i,slots){
   const sc=e.statut==="en_cours"?"run":e.statut==="termine"?"ter":"att";
   const sl={run:"En cours",ter:"Terminé",att:"En attente"}[sc];
   const isLocked=(e.statut==="en_cours"||e.statut==="termine");
-  const next = S.entries && S.entries[i+1] ? S.entries[i+1] : null;
-  const nextLocked = !!(next && (next.statut==="en_cours" || next.statut==="termine"));
   const isAnchor = (S._scrollAnchorIdx!=null) && (i===S._scrollAnchorIdx);
   const co=colorForId(e.id||i+1);
   const cli=(e.client||"").trim()||"—";
@@ -3207,15 +3215,18 @@ function mkRow(e,i,slots){
       ${CAN_EDIT?(()=>{
         const BAN=icon('ban',14);
         const blkSwitch=isLocked;
-        const blkUp=i<=0||isLocked;
-        const blkDown=i>=S.entries.length-1||isLocked;
+        const blkUp=isLocked||attenteVoisine(i,-1)<0;
+        const blkDown=isLocked||attenteVoisine(i,+1)<0;
+        const blkTete=isLocked||estEnTete(i);
         const blkSplit=isLocked;
-        const blkInsert=isLocked||nextLocked;
+        // Insertion refusée seulement au milieu des dossiers déjà produits.
+        const blkInsert=i<longueurTete()-1;
         const blkDel=e.statut==="termine";
         return`
       <button type="button" class="ab" onclick="openEdit(${e.id})" title="Modifier">${icon('edit',14)}</button>
       <button type="button" class="ab" onclick="duplicateEntry(${e.id})" title="Dupliquer">${icon('copy',14)}</button>
       <button type="button" class="ab${blkSwitch?" disabled-btn":""}" ${blkSwitch?`disabled title="Non disponible — dossier verrouillé"`:`onclick="openSwitchMachine(${e.id})" title="Changer de machine"`}>${blkSwitch?BAN:icon('repeat',14)}</button>
+      <button type="button" class="ab${blkTete?" disabled-btn":""}" ${blkTete?`disabled title="${isLocked?"Non disponible — dossier verrouillé":"Déjà le prochain dossier à produire"}"`:`onclick="passerEnTete(${e.id})" title="Passer en tête — prochain dossier à produire"`}>${blkTete?BAN:icon('chevrons-up',14)}</button>
       <button type="button" class="ab mov${blkUp?" disabled-btn":""}" ${blkUp?`disabled title="Non disponible"`:`onclick="moveEntry(${e.id},-1)" title="Monter"`}>${blkUp?BAN:icon('arrow-up',14)}</button>
       <button type="button" class="ab mov${blkDown?" disabled-btn":""}" ${blkDown?`disabled title="Non disponible"`:`onclick="moveEntry(${e.id},+1)" title="Descendre"`}>${blkDown?BAN:icon('arrow-down',14)}</button>
       <button type="button" class="ab${blkSplit?" disabled-btn":""}" ${blkSplit?`disabled title="Non disponible — dossier verrouillé"`:`onclick="splitEntry(${e.id})" title="Diviser en 2"`}>${blkSplit?BAN:icon('scissors',14)}</button>
@@ -3236,14 +3247,20 @@ async function moveEntry(entryId,delta){
   if(idx<0) return;
   const cur = S.entries[idx];
   if(!cur || cur.statut==="en_cours" || cur.statut==="termine") return;
-  const ni = idx + delta;
-  if(ni<0 || ni>=S.entries.length) return;
-  const target = S.entries[ni];
-  if(target && (target.statut==="en_cours" || target.statut==="termine")) return;
+  // La liste affiche les dossiers en attente à la suite : monter / descendre,
+  // c'est échanger avec le dossier EN ATTENTE voisin, en passant par-dessus les
+  // terminés restés en bas de liste et le dossier en cours. Jusqu'au 11/09/2026
+  // la flèche s'arrêtait net sur eux, sans rien dire.
+  const ni = attenteVoisine(idx, delta);
+  if(ni<0){ showToast(delta<0?"Déjà le prochain dossier à produire.":"Déjà le dernier dossier en attente.","info"); return; }
 
   const ids=S.entries.map(e=>e.id);
   const [m]=ids.splice(idx,1);
   ids.splice(ni,0,m);
+  if(!reorderKeepsLocked(S.entries.map(e=>e.id), ids)){
+    showToast("Déplacement impossible — l'ordre des dossiers déjà produits changerait.","danger");
+    return;
+  }
   const savedScroll = document.querySelector(".main")?.scrollTop ?? 0;
   const savedTbodyScroll = document.getElementById("tbody")?.scrollTop ?? 0;
   _suppressAutoScroll = true;
@@ -3262,6 +3279,45 @@ async function moveEntry(entryId,delta){
       const tbody=document.getElementById("tbody");
       if(tbody&&savedTbodyScroll>0) tbody.scrollTop=savedTbodyScroll;
     }));
+  }
+}
+
+// ── Place d'un dossier dans la file ──────────────────────────────────────
+// S.entries est dans l'ordre des positions ; l'écran, lui, montre l'en-cours
+// puis les dossiers en attente à la suite. Ces trois aides font le pont.
+function estVerrouille(e){ return !!e&&(e.statut==="en_cours"||e.statut==="termine"); }
+function longueurTete(){
+  const l=S.entries||[]; let n=0;
+  while(n<l.length&&estVerrouille(l[n])) n++;
+  return n;
+}
+function attenteVoisine(i,delta){
+  const l=S.entries||[];
+  for(let j=i+delta;j>=0&&j<l.length;j+=delta){ if(!estVerrouille(l[j])) return j; }
+  return -1;
+}
+function estEnTete(i){
+  const l=S.entries||[];
+  const e=l[i];
+  return !!e&&!estVerrouille(e)&&attenteVoisine(i,-1)<0&&Number(e.a_placer||0)===0;
+}
+async function passerEnTete(entryId){
+  if(!CAN_EDIT) return;
+  const savedTbodyScroll=document.getElementById("tbody")?.scrollTop??0;
+  _suppressAutoScroll=true;
+  try{
+    await api(`/machines/${MID}/entries/${entryId}/deplacer`,{method:"POST",body:JSON.stringify({en_tete:true})});
+    await load();
+    showToast("Dossier passé en tête.","success");
+  }catch(e){
+    showToast(apiErrorMessage(e,"Déplacement impossible."),"danger");
+    await load();
+  }finally{
+    _suppressAutoScroll=false;
+    requestAnimationFrame(()=>{
+      const tbody=document.getElementById("tbody");
+      if(tbody&&savedTbodyScroll>0) tbody.scrollTop=savedTbodyScroll;
+    });
   }
 }
 
@@ -3730,83 +3786,64 @@ async function showTargetDossiers(){
   if(!targetMachineId) return;
   const e=S.entries.find(x=>x.id===_switchEntryId);
   if(!e) return closeM();
-  document.getElementById("mroot").innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md" style="width:600px;max-width:95vw;"><h3>Inserer apres quel dossier ?</h3>
-    <p style="font-size:12px;color:var(--muted);margin:-12px 0 12px">Cliquez sur un dossier pour inserer <strong>${escAttr(e.client||e.numero_of||'')}</strong> apres celui-ci.</p>
+  const cible=(S.machines||[]).find(m=>m.id===targetMachineId);
+  document.getElementById("mroot").innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md" style="width:600px;max-width:95vw;"><h3>Où placer le dossier sur ${escHtml(cible?.nom||"la machine cible")} ?</h3>
+    <p style="font-size:12px;color:var(--muted);margin:-12px 0 12px">Cliquez sur un dossier pour placer <strong>${escHtml(e.client||e.numero_of||'')}</strong> juste après lui.</p>
     <div id="switch-dossier-list" style="max-height:400px;overflow:auto;border:1px solid var(--border2);border-radius:8px;">
-      <div style="padding:20px;text-align:center;color:var(--muted)">Chargement...</div>
+      <div style="padding:20px;text-align:center;color:var(--muted)">Chargement…</div>
     </div>
     <div class="md-acts"><button class="btn-s" onclick="closeM()">Annuler</button></div></div></div>`;
   try{
     const targetEntries=await api(`/machines/${targetMachineId}/entries`);
     const listEl=document.getElementById("switch-dossier-list");
-    const pendingEntries=(targetEntries||[]).filter(en=>en.statut!=="termine");
+    // Même lecture que la liste du planning : l'en-cours, puis la file d'attente.
+    const all=targetEntries||[];
+    const pendingEntries=[...all.filter(en=>en.statut==="en_cours"),...all.filter(en=>en.statut==="attente")];
+    const ligneTete=`<div style="padding:10px 12px;border-bottom:1px solid var(--border2);background:var(--accent-bg);cursor:pointer;" onclick="confirmSwitch(${targetMachineId},{en_tete:true})">
+        <strong>En tête de production</strong> <span style="color:var(--muted);font-size:12px">— prochain dossier à produire</span>
+      </div>`;
+    const ligneFin=`<div style="padding:10px 12px;cursor:pointer;background:var(--bg);color:var(--muted)" onmouseover="this.style.background='var(--accent-bg)'" onmouseout="this.style.background='var(--bg)'" onclick="confirmSwitch(${targetMachineId},{})">
+        En fin de liste
+      </div>`;
     if(pendingEntries.length===0){
-      listEl.innerHTML=`<div style="padding:20px;text-align:center;color:var(--muted)">Aucun dossier en attente/en cours sur cette machine.<br><br><button class="btn-p" onclick="confirmSwitch(${targetMachineId},null)">Ajouter en premiere position</button></div>`;
-    }else{
-      listEl.innerHTML=`<div style="padding:8px;border-bottom:1px solid var(--border2);background:var(--accent-bg);cursor:pointer;" onclick="confirmSwitch(${targetMachineId},null)">
-        <strong>Ajouter en premiere position</strong> (avant tous les dossiers)
-      </div>`+pendingEntries.map((en,idx)=>{
-        const fm=en.format_l&&en.format_h?`${en.format_l}x${en.format_h}`:"—";
-        const stat=en.statut==="en_cours"?"🔴 En cours":"⚪ Attente";
-        const nextEn=pendingEntries[idx+1];
-        const nextId=nextEn?nextEn.id:null;
-        return`<div style="padding:10px 12px;border-bottom:1px solid var(--border2);cursor:pointer;background:var(--bg);" onmouseover="this.style.background='var(--accent-bg)'" onmouseout="this.style.background='var(--bg)'" onclick="confirmSwitch(${targetMachineId},${en.id})">
+      listEl.innerHTML=ligneTete+`<div style="padding:16px;text-align:center;color:var(--muted)">Aucun dossier en cours ou en attente sur cette machine.</div>`;
+      return;
+    }
+    listEl.innerHTML=ligneTete+pendingEntries.map(en=>{
+      const fm=en.format_l&&en.format_h?`${en.format_l}×${en.format_h}`:"—";
+      const stat=en.statut==="en_cours"?`<span class="st run">En cours</span>`:`<span class="st att">En attente</span>`;
+      return`<div style="padding:10px 12px;border-bottom:1px solid var(--border2);cursor:pointer;background:var(--bg);" onmouseover="this.style.background='var(--accent-bg)'" onmouseout="this.style.background='var(--bg)'" onclick="confirmSwitch(${targetMachineId},{apres_id:${Number(en.id)}})">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <span style="font-weight:600">${escAttr(en.client||"—")}</span>
-            <span style="color:var(--muted);font-size:12px">| OF: ${escAttr(en.numero_of||en.reference||"—")}</span>
-            <span style="color:var(--muted);font-size:12px">| ${escAttr(fm)}</span>
+            <span style="font-weight:600">${escHtml(en.client||"—")}</span>
+            <span style="color:var(--muted);font-size:12px">· OF ${escHtml(en.numero_of||en.reference||"—")}</span>
+            <span style="color:var(--muted);font-size:12px">· ${escHtml(fm)}</span>
             <span style="margin-left:auto;font-size:12px">${stat}</span>
           </div>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px">Cliquez pour inserer apres ce dossier</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Placer juste après ce dossier</div>
         </div>`;
-      }).join("");
-    }
+    }).join("")+ligneFin;
   }catch(err){
     document.getElementById("switch-dossier-list").innerHTML=`<div style="padding:20px;text-align:center;color:var(--danger)">Erreur de chargement</div>`;
   }
 }
-async function confirmSwitch(targetMachineId,afterEntryId){
+async function confirmSwitch(targetMachineId,place){
   if(!_switchEntryId) return;
-  if(!confirm("Confirmer le deplacement de ce dossier vers l'autre machine ?")) return;
+  if(!confirm("Confirmer le déplacement de ce dossier vers l'autre machine ?")) return;
+  // Une seule écriture côté serveur : la ligne change de machine en gardant son
+  // id (commandes RVGI rattachées, départs MyExpé, split, déstockage). Jusqu'au
+  // 11/09/2026 l'écran supprimait puis recréait le dossier en deux appels ; un
+  // refus au second appel faisait disparaître le dossier.
   try{
-    const e=S.entries.find(x=>x.id===_switchEntryId);
-    if(!e) throw new Error("Dossier introuvable");
-    // Report fidèle de tous les attributs du dossier source, sinon la cible
-    // repart sur les défauts (a_placer=1 → relégué en fin de timeline, perte FSC/RDV/etc.).
-    const payload={
-      reference:e.numero_of||e.reference||"",
-      numero_of:e.numero_of||e.reference||"",
-      client:e.client||"",
-      ref_produit:e.ref_produit||"",
-      laize:e.laize||null,
-      date_livraison:e.date_livraison||"",
-      commentaire:e.commentaire||"",
-      exigences_production:e.exigences_production||"",
-      format_l:e.format_l||null,
-      format_h:e.format_h||null,
-      duree_heures:e.duree_heures||8,
-      statut:"attente",
-      dos_rvgi:e.dos_rvgi||"",
-      a_placer:Number(e.a_placer||0),
-      valide:Number(e.valide||0),
-      fsc_requis:Number(e.fsc_requis||0),
-      fsc_type_requis:e.fsc_type_requis||"",
-      departement_livraison:e.departement_livraison||"",
-      prise_rdv:Number(e.prise_rdv||0),
-      date_livraison_imposee:Number(e.date_livraison_imposee||0)
-    };
-    await api(`/machines/${MID}/entries/${_switchEntryId}`,{method:"DELETE"});
-    if(afterEntryId){
-      await api(`/machines/${targetMachineId}/insert-after/${afterEntryId}`,{method:"POST",body:JSON.stringify(payload)});
-    }else{
-      await api(`/machines/${targetMachineId}/entries`,{method:"POST",body:JSON.stringify({...payload,position:1})});
-    }
+    await api(`/machines/${MID}/entries/${_switchEntryId}/changer-machine`,{
+      method:"POST",
+      body:JSON.stringify({machine_cible:targetMachineId,...(place||{})})
+    });
     closeM();
     _switchEntryId=null;
+    showToast("Dossier déplacé.","success");
     load();
   }catch(err){
-    alert("Erreur lors du deplacement: "+(err.message||"Erreur"));
-    closeM();
+    showToast(apiErrorMessage(err,"Déplacement impossible — le dossier n'a pas bougé."),"danger");
   }
 }
 
@@ -5417,19 +5454,11 @@ async function ofPlanningSubmitImport(){
 
 function openInsert(afterId){
   if(!CAN_EDIT) return;
-  try{
-    const idx = S.entries.findIndex(e=>e.id===afterId);
-    if(idx>=0){
-      const nxt = S.entries[idx+1];
-      if(nxt && (nxt.statut==="en_cours" || nxt.statut==="termine")){
-        alert("⦸ Impossible d'insérer une ligne avant un dossier En cours / Terminé.");
-        return;
-      }
-    }
-  }catch(e){}
+  // Inséré à un endroit précis : le dossier est placé, pas « à placer » —
+  // sinon la timeline le renverrait en fin de file.
   document.getElementById("mroot").innerHTML=modalHTML(
     "Insérer un dossier après",
-    dossierFields("","","","","","","","","",8,"attente",false),
+    dossierFields("","","","","","","","","",8,"attente",false,0),
     "Insérer",`submitInsert(${afterId})`
   ,"","",false,"md--dossier");
 }

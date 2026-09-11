@@ -23,7 +23,7 @@ GED_JS = r"""
 // ══════════════════════════════════════════════════════════════════════
 
 S.ged = {
-  tab: 'docs',        // 'docs' = documents clients (existant) | 'explorer'
+  tab: 'docs',        // 'docs' = documents clients (existant) | 'explorer' | 'fsc'
   path: [0],          // chemin courant : [0, id1, id2, ...] - 0 = racine
   cols: [],           // contenu de chaque niveau, aligne sur path
   trashCount: 0,
@@ -51,6 +51,7 @@ function sifaTabsHtml(active){
   return `<div class="sifa-tabs">
     ${tab('docs','Documents clients','Generer les Declarations UE et attestations a envoyer aux clients')}
     ${tab('explorer','Explorateur','Parcourir, deposer et rechercher les documents qualite')}
+    ${tab('fsc','FSC','Fournisseurs certifies FSC, categories FSC et controles sur la base FSC')}
   </div>`;
 }
 
@@ -58,6 +59,7 @@ function setSifaTab(k){
   S.ged.tab = k;
   try{ localStorage.setItem('mysifa_sifa_tab', k); }catch(e){}
   if(k === 'explorer') gedEnter();
+  else if(k === 'fsc' && typeof fscEnter === 'function') fscEnter();
   else if(typeof loadSifaDocsList === 'function') loadSifaDocsList();
 }
 
@@ -923,7 +925,7 @@ async function gedTrashPurge(tid){
   .sifa-tab{padding:8px 18px;border-radius:7px;border:none;background:transparent;color:var(--text2);
     font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:.15s;white-space:nowrap}
   .sifa-tab:hover{color:var(--text)}
-  .sifa-tab.active{background:var(--accent);color:var(--btn-fg)}
+  .sifa-tab.active{background:var(--accent);color:white}
 
   .ged-searchbar{position:relative;margin-bottom:14px}
   .ged-searchbar input{width:100%;padding:11px 38px 11px 38px;background:var(--card);

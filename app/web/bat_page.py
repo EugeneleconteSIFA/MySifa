@@ -54,6 +54,7 @@ BAT_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
@@ -61,6 +62,7 @@ BAT_HTML = r"""<!DOCTYPE html>
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
@@ -73,6 +75,9 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 /* ── Layout ── */
 .app{display:flex;height:100vh;overflow:hidden}
 .sidebar{width:var(--sidebar-w);background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;height:100vh;overflow-y:auto}
+/* Pied de sidebar : static/mysifa_sidebar.css (v3.3.0). La sidebar a ici 12px de marge
+   latérale : le pied la déborde pour que son filet aille d'un bord à l'autre, comme sur MyStock. */
+.sidebar>.msb-footer{margin-left:-12px;margin-right:-12px;padding-left:12px;padding-right:12px}
 .sidebar::-webkit-scrollbar{width:0}.sidebar{scrollbar-width:none}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
 body.sb-open .sidebar-overlay{display:block}
@@ -91,21 +96,7 @@ body.sb-open .sidebar-overlay{display:block}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
 .nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;width:100%;text-align:left;font-family:inherit;transition:all .15s;margin-bottom:2px}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
-.nav-btn--mysifa-portal{align-items:baseline;flex-wrap:wrap;gap:4px 8px;line-height:1.35}
-.nav-btn--mysifa-portal:hover{background:var(--accent-bg)}
-.mysifa-back-preamble{font-size:13px;font-weight:500;color:var(--text2)}
-.mysifa-back-brand{font-size:14px;font-weight:800;letter-spacing:-.5px;color:var(--text);white-space:nowrap}
-.mysifa-back-accent{color:var(--accent)}
-.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
-.user-chip{padding:10px 12px;border-radius:8px;border:1px solid var(--border);cursor:pointer;transition:.15s;background:transparent}
-.user-chip:hover{border-color:var(--accent)}
-.uc-name{font-size:13px;font-weight:600;color:var(--text)}
-.uc-role{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
-.theme-btn{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;font-family:inherit;transition:.15s;width:100%}
-.theme-btn:hover{border-color:var(--accent);color:var(--accent)}
-.logout-btn{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:12px;font-family:inherit;transition:.15s;width:100%}
-.logout-btn:hover{border-color:var(--danger);color:var(--danger)}
-.version{font-size:10px;color:var(--muted);padding:4px 12px;font-family:ui-monospace,monospace;opacity:.6}
+/* Menu et pied de sidebar : static/mysifa_sidebar.css (v3.3.0). */
 
 /* ── Mobile topbar ── */
 .mobile-topbar{display:none;align-items:center;gap:12px;padding:14px 16px;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
@@ -255,26 +246,14 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
       <div class="logo-brand">My<span>BAT</span></div>
       <div class="logo-sub">by SIFA</div>
     </div>
-    <button type="button" class="nav-btn active">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-      BAT
-    </button>
-    <div class="sidebar-bottom">
-      <button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'">
-        <span class="mysifa-back-preamble">← Retour </span>
-        <span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span>
+    <div class="msb-nav">
+      <button type="button" class="nav-btn active">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        BAT
       </button>
-      <div class="user-chip" id="user-chip" onclick="location.href='/profil'"></div>
-      <button type="button" class="theme-btn" onclick="toggleTheme()">
-        <svg id="theme-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        <span id="theme-label">Mode sombre</span>
-      </button>
-      <button type="button" class="logout-btn" onclick="doLogout()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        Déconnexion
-      </button>
-      <div class="version">__V_LABEL__</div>
     </div>
+    <!-- Pied commun (static/mysifa_sidebar.js), rempli au chargement. -->
+    <div class="sidebar-bottom msb-footer" data-msb-footer data-msb-app="MyBAT" data-msb-version="__V_LABEL__"></div>
   </nav>
 
   <!-- Main -->
@@ -506,7 +485,6 @@ const S = {
   statut: 'all',
   search: '',
   sort: DEFAULT_SORT.map(s=>({...s})),
-  me: null,
   uploadBatId: null,
   uploadFile: null,
   editBatId: null,
@@ -537,27 +515,12 @@ function showToast(msg, type='info'){
 function toggleSidebar(){document.body.classList.toggle('sb-open');}
 function closeSidebar(){document.body.classList.remove('sb-open');}
 
-function toggleTheme(){
-  const l=document.body.classList.toggle('light');
+// Le pied commun bascule le thème via MySifaTheme ; on recopie le mode dans
+// l'ancienne clé lue par le script de pré-rendu (light-pre) pour éviter un flash.
+function syncLegacyTheme(){
+  const l=document.body.classList.contains('light');
   document.documentElement.classList.toggle('light-pre', l);
   try{localStorage.setItem('mysifa_theme',l?'light':'dark');}catch(e){}
-  updateThemeBtn();
-}
-function updateThemeBtn(){
-  const l=document.body.classList.contains('light');
-  const ico=document.getElementById('theme-ico');
-  const lbl=document.getElementById('theme-label');
-  if(ico){
-    ico.innerHTML=l
-      ?'<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
-      :'<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
-  }
-  if(lbl) lbl.textContent=l?'Mode clair':'Mode sombre';
-}
-
-async function doLogout(){
-  try{await fetch('/api/auth/logout',{method:'POST',credentials:'include'});}catch(e){}
-  location.href='/';
 }
 
 // ── Badges ────────────────────────────────────────────────────────
@@ -826,20 +789,6 @@ async function loadEntries(){
     S.entries=await r.json();
     render();
   }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
-}
-
-async function loadMe(){
-  try{
-    const r=await fetch('/api/auth/me',{credentials:'include'});
-    if(!r.ok) return;
-    const d=await r.json();
-    S.me=d.user||d;
-    const chip=document.getElementById('user-chip');
-    if(chip&&S.me){
-      const roles={direction:'Direction',administration:'Administration',superadmin:'Super admin',fabrication:'Fabrication',logistique:'Logistique',comptabilite:'Comptabilité',expedition:'Expédition',commercial:'Commercial'};
-      chip.innerHTML=`<div class="uc-name">${escHtml(S.me.nom||'')}</div><div class="uc-role">${escHtml(roles[S.me.role]||S.me.role||'')}</div>`;
-    }
-  }catch(e){}
 }
 
 // ── Modals — Création ──────────────────────────────────────────────
@@ -1176,8 +1125,9 @@ async function submitPdfDelete(){
     const t=localStorage.getItem('mysifa_theme');
     if(t==='light') document.body.classList.add('light');
     else document.body.classList.remove('light');
-    updateThemeBtn();
   }catch(e){}
+  // Pied commun : l'utilisateur est lu par le composant (la page n'en a pas besoin).
+  if(window.MySifaSidebar)MySifaSidebar.configure({onTheme:syncLegacyTheme});
 
   // Rôle lecture seule : masquer les boutons d'écriture définis en HTML statique.
   if(IS_READONLY){
@@ -1188,7 +1138,6 @@ async function submitPdfDelete(){
 
   S.sort=loadSort();
 
-  loadMe();
   loadEntries();
 
   document.addEventListener('keydown', e=>{

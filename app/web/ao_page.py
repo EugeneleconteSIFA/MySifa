@@ -55,6 +55,7 @@ AO_HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/support_widget.css">
 <style>
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
@@ -64,6 +65,9 @@ html,body{height:100%;overflow:hidden}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text)}
 .app{display:flex;height:100vh;width:100%;overflow:hidden}
 .sidebar{width:220px;flex-shrink:0;background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;overflow-y:auto;scrollbar-width:none}
+/* Pied de sidebar : static/mysifa_sidebar.css (v3.3.0). La sidebar a ici 12px de marge
+   latérale : le pied la déborde pour que son filet aille d'un bord à l'autre, comme sur MyStock. */
+.sidebar>.msb-footer{margin-left:-12px;margin-right:-12px;padding-left:12px;padding-right:12px}
 .sidebar::-webkit-scrollbar{width:0}
 .logo{padding:0 8px;margin-bottom:24px}
 .logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
@@ -71,21 +75,12 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .nav-btn{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left;margin-bottom:2px;transition:background .15s,color .15s}
 .nav-btn svg{flex-shrink:0}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
-.nav-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-weight:600;padding:14px 12px 4px;user-select:none;pointer-events:none}
-.nav-btn-sub{padding-left:28px;font-size:12px}
+/* Titres de section et pied : static/mysifa_sidebar.css (v3.3.0). Le retrait
+   des sous-entrées doit passer devant le padding commun de .msb-nav .nav-btn. */
+.msb-nav .nav-btn.nav-btn-sub{padding-left:28px;font-size:12px}
 .sidebar-nav{padding:4px 0;flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .sidebar-nav::-webkit-scrollbar{width:4px}
 .sidebar-nav::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding:12px 8px;border-top:1px solid var(--border);flex-shrink:0;background:var(--card)}
-.support-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:all .15s}
-.support-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.support-ico{display:inline-flex;align-items:center;justify-content:center}
-.back-mysifa{font-weight:400!important;color:var(--text2)!important}
-.back-mysifa .wm{font-weight:800;color:var(--text)}.back-mysifa .wm span{color:var(--accent)}
-.theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;width:100%;cursor:pointer;font-family:inherit}
-.theme-btn:hover,.logout-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.logout-btn{border:none}.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1)}
-.version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
 .main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
 .mobile-topbar{display:none;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--card);flex-shrink:0}
 .mobile-menu-btn,.mobile-home-btn{width:40px;height:40px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center}
@@ -272,6 +267,7 @@ margin-left:6px;cursor:help;vertical-align:middle}
 <div id="toast"></div>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script src="/static/support_widget.js"></script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
@@ -507,24 +503,13 @@ function renderAoSidebarNavHtml() {
   let html = '';
   buildAoSidebarNavStructure().forEach(n => {
     if (n.kind === 'sep') {
-      html += '<div class="nav-section-label">'+escHtml(n.label)+'</div>';
+      html += '<div class="nav-section-label msb-section"><span>'+escHtml(n.label)+'</span></div>';
       return;
     }
     const cls = 'nav-btn'+(n.sub?' nav-btn-sub':'')+(n.active?' active':'');
     html += '<button type="button" class="'+cls+'" data-section="'+escAttr(n.section)+'">'+icon(n.icon,16)+'<span>'+escHtml(n.label)+'</span></button>';
   });
   return html;
-}
-
-function renderUserChipHtml() {
-  if (!S.user) return '';
-  if (window.MySifaUserChip && typeof window.MySifaUserChip.innerHtml === 'function') {
-    return '<div class="user-chip" id="user-chip" style="cursor:pointer" title="Modifier mon profil">'+
-      window.MySifaUserChip.innerHtml(S.user, {roleLabels: ROLE_LABELS})+'</div>';
-  }
-  return '<div class="user-chip" id="user-chip" style="cursor:pointer" title="Modifier mon profil">'+
-    '<div class="uc-name">'+escHtml(S.user.nom)+'</div>'+
-    '<div class="uc-role">'+escHtml(ROLE_LABELS[S.user.role]||S.user.role)+'</div></div>';
 }
 
 function renderSectionPlaceholder(title, hint) {
@@ -3693,21 +3678,15 @@ function render() {
   const scrollTop = scrollEl ? scrollEl.scrollTop : 0;
 
   const root = document.getElementById('root');
-  const isLight = document.body.classList.contains('light');
   const mob = aoMobileTitle();
   const navHtml = renderAoSidebarNavHtml();
 
   root.innerHTML =
     '<div class="sidebar-overlay" id="sb-overlay"></div>'+
     '<nav class="sidebar"><div class="logo"><div class="logo-brand">My<span>AO</span></div><div class="logo-sub">by SIFA</div></div>'+
-    '<div class="sidebar-nav">'+navHtml+'</div>'+
-    '<div class="sidebar-bottom">'+
-    '<button type="button" class="nav-btn back-mysifa" id="btn-home">← Retour <span class="wm">My<span>Sifa</span></span></button>'+
-    renderUserChipHtml()+
-    '<button type="button" class="support-btn" id="btn-support"><span class="support-ico" id="support-ico"></span><span>Contacter le support</span></button>'+
-    '<button type="button" class="theme-btn" id="btn-theme">'+icon(isLight?'sun':'moon',16)+' '+(isLight?'Mode clair':'Mode sombre')+'</button>'+
-    '<button type="button" class="logout-btn" id="btn-logout">'+icon('log-out',14)+' Déconnexion</button>'+
-    '<div class="version">MyAO __V_LABEL__</div></div></nav>'+
+    '<div class="sidebar-nav msb-nav">'+navHtml+'</div>'+
+    // Pied commun (static/mysifa_sidebar.js) : l'emplacement se remplit dès son insertion.
+    '<div class="sidebar-bottom msb-footer" data-msb-footer data-msb-app="MyAO" data-msb-version="__V_LABEL__"></div></nav>'+
     '<div class="main"><div class="mobile-topbar">'+
     '<button type="button" class="mobile-menu-btn" id="btn-menu">'+icon('menu',20)+'</button>'+
     '<div><div class="mobile-topbar-title">'+escHtml(mob.title)+'</div><div class="mobile-topbar-sub">'+escHtml(mob.sub)+'</div></div>'+
@@ -3716,16 +3695,7 @@ function render() {
 
   document.getElementById('sb-overlay').onclick = closeSidebar;
   document.getElementById('btn-menu').onclick = toggleSidebar;
-  document.getElementById('btn-home').onclick = () => location.href = '/';
   document.getElementById('btn-home-m').onclick = () => location.href = '/';
-  document.getElementById('btn-theme').onclick = () => { if (window.MySifaTheme) MySifaTheme.toggleMode(); render(); };
-  document.getElementById('btn-logout').onclick = async () => { await api('/api/auth/logout', {method:'POST'}); location.href = '/'; };
-  document.getElementById('btn-support').onclick = openSupport;
-  const supportIco = document.getElementById('support-ico');
-  if (supportIco && window.MySifaSupport && window.MySifaSupport.iconSvg) {
-    try { supportIco.innerHTML = window.MySifaSupport.iconSvg(); } catch(e) {}
-  }
-  document.getElementById('user-chip')?.addEventListener('click', () => location.href = '/profil');
   document.querySelectorAll('.sidebar .nav-btn[data-section]').forEach(b => {
     b.onclick = () => goToAoSection(b.dataset.section);
   });
@@ -3782,6 +3752,9 @@ function render() {
 """ + AO_PRODUIT_FORM_JS + r"""
 (async function init() {
   const embedded = S.user && S.user.id;
+  // Pied commun : le support garde la fenêtre MyAO (toasts « danger », api de
+  // la page) et la bascule de thème re-rend la page, comme l'ancien bouton.
+  if (window.MySifaSidebar) MySifaSidebar.configure({ onSupport: openSupport, onTheme: render });
   try {
     const me = await api('/api/auth/me');
     if (me && me.id) {
@@ -3797,6 +3770,7 @@ function render() {
     }
   }
   const u = S.user || {};
+  if (u.id && window.MySifaSidebar) MySifaSidebar.setUser(u);
   if (u.id) {
     window.__MYSIFA_UID__ = u.id;
     window.__MYSIFA_NOM__ = u.nom || '';

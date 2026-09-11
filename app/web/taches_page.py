@@ -60,6 +60,7 @@ TACHES_HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_mobile_topbar.css">
 <style>
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
@@ -79,22 +80,13 @@ body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;backgrou
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
 .nav-btn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,box-shadow .2s;margin-bottom:2px}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
-.nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(34,211,238,.25),0 0 18px rgba(34,211,238,.15)}
-body.light .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 16px rgba(8,145,178,.12)}
+.nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(34,211,238,.25),0 0 18px rgba(34,211,238,.15)}
+body.light .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 16px rgba(8,145,178,.12)}
 .nav-badge{margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:700;line-height:1.5}
 .nav-badge.warn{background:rgba(251,191,36,.16);color:var(--warn)}
-.back-mysifa{border:none!important;background:transparent!important;font-weight:400!important;color:var(--text2)!important;padding:8px 10px!important}
-.back-mysifa:hover{color:var(--text)!important;background:transparent!important}
-.back-mysifa .wm{font-weight:800;color:var(--text)}.back-mysifa .wm span{color:var(--accent)}
-.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
-.user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg);cursor:pointer}
-.user-chip .uc-name{font-size:12px;font-weight:600;color:var(--text)}
-.user-chip .uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
-.theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:background .15s,color .15s,border-color .15s}
-.theme-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.logout-btn{border:none}
-.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1)}
-.version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
+/* Pied de sidebar : static/mysifa_sidebar.css (v3.3.0). La sidebar a ici 12px de marge
+   latérale : le pied la déborde pour que son filet aille d'un bord à l'autre, comme sur MyStock. */
+.sidebar>.msb-footer{margin-left:-12px;margin-right:-12px;padding-left:12px;padding-right:12px}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
 body.sb-open .sidebar-overlay{display:block}
 
@@ -406,12 +398,13 @@ tbody tr.row-sous:hover td{background:var(--accent-bg)}
 <body class="has-topbar">
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_guides.js"></script>
 
 <div class="sidebar-overlay" id="sb-ov" onclick="closeSidebar()"></div>
 
 <div class="layout">
-  <aside class="sidebar">
+  <aside class="sidebar msb-nav">
     <div class="logo" onclick="showView('kanban')" title="Vue Kanban">
       <div class="logo-brand">My<span>Tâches</span></div>
       <div class="logo-sub">Gestionnaire</div>
@@ -431,24 +424,8 @@ tbody tr.row-sous:hover td{background:var(--accent-bg)}
       Archives
     </button>
 
-    <div class="sidebar-bottom">
-      <button type="button" class="nav-btn back-mysifa" onclick="location.href='/'">
-        ← Retour <span class="wm">My<span>Sifa</span></span>
-      </button>
-      <div class="user-chip" onclick="location.href='/profil'" title="Mon profil">
-        <div class="uc-name" id="uc-name">—</div>
-        <div class="uc-role" id="uc-role">—</div>
-      </div>
-      <button type="button" class="theme-btn" id="btn-theme">
-        <span class="theme-ico" id="theme-ico"></span>
-        <span class="theme-label" id="theme-label">Mode clair</span>
-      </button>
-      <button type="button" class="logout-btn" id="btn-logout">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        Déconnexion
-      </button>
-      <div class="version">Tâches · __V_LABEL__</div>
-    </div>
+    <!-- Pied commun (static/mysifa_sidebar.js), rempli au chargement. -->
+    <div class="sidebar-bottom msb-footer" data-msb-footer data-msb-app="Tâches" data-msb-version="__V_LABEL__"></div>
   </aside>
 
   <main class="main">
@@ -560,9 +537,6 @@ const S = {
   drag: null,
   me: null,
 };
-
-const ICO_SUN = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
-const ICO_MOON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function toast(msg,type){const t=document.createElement('div');t.className='toast'+(type==='err'?' err':'');t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3400);}
@@ -763,13 +737,6 @@ function champAssignes(hostId, selection, onChange, connus){
 }
 
 // ── Shell ──
-function getPrefs(){return window.MySifaTheme?MySifaTheme.loadPrefs():{mode:'dark'};}
-function syncThemeBtn(){
-  const isLight=getPrefs().mode==='light';
-  const i=document.getElementById('theme-ico');const l=document.getElementById('theme-label');
-  if(i)i.innerHTML=isLight?ICO_SUN:ICO_MOON;
-  if(l)l.textContent=isLight?'Mode sombre':'Mode clair';
-}
 // Hauteur du bandeau staging v1, exposee en variable CSS pour que les elements
 // position:fixed (tiroir, modales) s'en decalent. 0 en prod : aucun bandeau.
 function syncBandeauOffset(){
@@ -2062,32 +2029,14 @@ function initGuides(){
 // ══════════════════════════════════════════════════════════════════
 // Boot
 // ══════════════════════════════════════════════════════════════════
-function updateUserChip(){
-  if(!S.me)return;
-  const chip=document.querySelector('.user-chip');
-  if(chip&&window.MySifaUserChip){MySifaUserChip.fill(chip,S.me,{showProfil:false});return;}
-  const n=document.getElementById('uc-name');if(n)n.textContent=S.me.nom||'—';
-  const r=document.getElementById('uc-role');if(r)r.textContent=S.me.role||'—';
-}
-
-document.getElementById('btn-theme').onclick=()=>{
-  if(window.MySifaTheme)MySifaTheme.toggleMode();
-  syncThemeBtn();
-};
-document.getElementById('btn-logout').onclick=async()=>{
-  try{await fetch('/api/auth/logout',{method:'POST',credentials:'include'});}catch(e){}
-  location.href='/';
-};
-
 (async function init(){
   syncBandeauOffset();
   window.addEventListener('resize',syncBandeauOffset);
-  syncThemeBtn();
   try{
     S.me=await api('/api/auth/me');
     if(S.me&&window.MySifaTheme)MySifaTheme.mergeFromUser(S.me);
-    syncThemeBtn();
-    updateUserChip();
+    // Pied commun : les préférences du compte peuvent changer le mode.
+    if(window.MySifaSidebar){MySifaSidebar.setUser(S.me);MySifaSidebar.refreshTheme();}
   }catch(e){}
   try{
     S.meta=await api('/api/taches/meta');

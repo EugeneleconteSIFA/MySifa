@@ -74,6 +74,7 @@ FABRICATION_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=z1cond1">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -115,8 +116,11 @@ input,select,textarea{font-family:inherit;color:var(--text)}
 .fab-sidebar-sub{font-size:10px;color:var(--muted);letter-spacing:1.2px;text-transform:uppercase;margin-top:2px}
 .fab-sidebar-list{flex:1;overflow-y:auto;padding:6px 6px}
 .fab-ops-group{margin-bottom:2px}
-.fab-ops-label{font-size:9px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;
-  padding:8px 8px 4px;font-weight:700}
+/* Titres de catégorie (.fab-ops-label) : format commun .msb-section de
+   static/mysifa_sidebar.css (v3.3.0). L'ancienne règle (9px, --muted), chargée
+   après le composant, l'écrasait. Seul écart : pas de filet sur le premier
+   titre, l'en-tête de la sidebar en porte déjà un juste au-dessus. */
+.fab-sidebar-list>.fab-ops-group:first-child>.msb-section{border-top-color:transparent;margin-top:0}
 .fab-op-btn{
   display:flex;align-items:center;gap:8px;
   width:100%;padding:7px 8px;border-radius:6px;
@@ -134,21 +138,8 @@ input,select,textarea{font-family:inherit;color:var(--text)}
   min-width:24px;text-align:center;
 }
 .fab-op-label{font-size:12px;line-height:1.3;flex:1}
-.fab-sidebar-bottom{
-  padding:10px 8px;border-top:1px solid var(--border);flex-shrink:0;
-  display:flex;flex-direction:column;gap:6px;
-}
-.fab-back-btn{
-  display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:8px;
-  border:none;background:transparent;color:var(--text2);
-  cursor:pointer;font-size:12px;font-family:inherit;transition:color .15s;width:100%;
-}
-.fab-back-btn:hover{color:var(--text);background:transparent}
-.fab-back-btn .wm{font-weight:800;color:var(--text)}
-.fab-back-btn .wm span{color:var(--accent)}
-.fab-user-chip{padding:8px 10px;border-radius:8px;background:var(--accent-bg)}
-.fab-user-name{font-size:11px;font-weight:700;color:var(--text)}
-.fab-user-machine{font-size:10px;color:var(--accent);font-weight:600;margin-top:1px}
+/* Pied (profil, support, thème, déconnexion, retour, version) : composant
+   commun static/mysifa_sidebar.js depuis la v3.3.0. */
 
 /* ── Main ───────────────────────────────────────────────────── */
 .fab-main{
@@ -1250,6 +1241,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script>window.__STOCK_UNITE_VENTE_DEFAUT__="__STOCK_UNITE_VENTE_DEFAUT__";</script>
 <script src="/static/mysifa_stock_modals.js?v=z1cond1"></script>
 <div id="root"></div>
@@ -2201,13 +2193,31 @@ function renderMachineSwitcher(){
 }
 
 /* ── Sidebar ─────────────────────────────────────────────────── */
+/* Pied commun a toutes les applis (static/mysifa_sidebar.js, v3.3.0).
+   Le profil garde la machine sous le nom (ucSubtext) ; le support garde
+   l'appel propre a la saisie (api:apiFetch, toast 'danger') ; le theme
+   re-rend la page, pour le bouton clair/sombre du pied operateur. */
+function fabSidebarFooter(machineName){
+  if(!window.MySifaSidebar) return null;
+  return MySifaSidebar.footer({
+    app:'Saisie Prod', version:'__V_LABEL__',
+    user: S.user ? Object.assign({}, S.user, { ucSubtext:machineName }) : undefined,
+    onSupport:()=>{
+      if(window.MySifaSupport && typeof window.MySifaSupport.open==='function'){
+        window.MySifaSupport.open({user:S.user, page:'Saisie Production',
+          notify:(m,t)=>showToast(m,t==='error'?'danger':'success'), api:apiFetch});
+      }
+    },
+    onTheme:()=>render(),
+  });
+}
+
 function renderSidebar(){
   // Mode Repiquage : pas de liste de codes opérations (les codes Cohésio sont sans objet
   // dans l'atelier Repiquage). On garde la structure visuelle de la sidebar pour préserver
   // l'harmonie avec la vue standard, et on affiche un message contextuel à la place.
   if(isRepiquageMode()){
     const machineName = S.machine ? S.machine.nom : 'Repiquage';
-    const userName = S.user ? S.user.nom : '';
     const inDossierView = S.repiquageView === 'dossier' && S.repiquageDossierActif;
     const activeRef = S.repiquageDossierActif;
     const allDossiers = S.repiquageDossiers || [];
@@ -2282,22 +2292,9 @@ function renderSidebar(){
         h('div',{className:'fab-sidebar-sub'},'Atelier Repiquage')
       ),
       h('div',{className:'fab-sidebar-list'}, listContent),
-      h('div',{className:'fab-sidebar-bottom'},
-        renderMachineSwitcher(),
-        (window.MySifaUserChip
-          ? MySifaUserChip.element(
-              Object.assign({}, S.user||{}, { nom:userName, ucSubtext:machineName }),
-              h, svgIcon, { chipClass:'fab-user-chip', title:'Mon profil' }
-            )
-          : h('div',{className:'fab-user-chip'},
-              h('div',{className:'fab-user-name'},userName||'—'),
-              h('div',{className:'fab-user-machine'},machineName)
-            )
-        ),
-        h('button',{className:'fab-back-btn',onClick:()=>{window.location.href='/';},title:'Retour au portail'},
-          svgIcon('home',14),' Retour au portail'
-        )
-      )
+      // Sélecteur de machine du jour : au-dessus du pied commun.
+      renderMachineSwitcher(),
+      fabSidebarFooter(machineName)
     );
   }
 
@@ -2347,7 +2344,8 @@ function renderSidebar(){
     if(!items.length) return;
     groups.push(
       h('div',{className:'fab-ops-group'},
-        h('div',{className:'fab-ops-label'},CAT_LABELS[cat]||cat),
+        // msb-section : titre au format commun (texte dans le premier <span>).
+        h('div',{className:'fab-ops-label msb-section'}, h('span',null,CAT_LABELS[cat]||cat)),
         ...items
       )
     );
@@ -2367,7 +2365,6 @@ function renderSidebar(){
   }
 
   const machineName = S.machine ? S.machine.nom : (S.user&&S.user.machine_id?'Machine liée':'Sans machine');
-  const userName = S.user ? S.user.nom : '';
 
   return h('nav',{className:'fab-sidebar'},
     h('div',{className:'fab-sidebar-head'},
@@ -2375,35 +2372,9 @@ function renderSidebar(){
       h('div',{className:'fab-sidebar-sub'},'by __APP_ORG_NAME__')
     ),
     h('div',{className:'fab-sidebar-list'},...groups),
-    h('div',{className:'fab-sidebar-bottom'},
-      renderMachineSwitcher(),
-      (window.MySifaUserChip
-        ? MySifaUserChip.element(
-            Object.assign({}, S.user||{}, { nom:userName, ucSubtext:machineName }),
-            h, svgIcon, { chipClass:'fab-user-chip', title:'Mon profil' }
-          )
-        : h('div',{className:'fab-user-chip',title:'Mon profil',onClick:()=>{window.location.href='/profil';}},
-            h('div',{className:'fab-user-name'},userName),
-            h('div',{className:'fab-user-machine'},machineName),
-            h('div',{className:'uc-profil'},svgIcon('edit',10),' Mon profil')
-          )
-      ),
-      h('button',{className:'support-btn',style:{marginBottom:'8px'},
-        onClick:()=>{
-          if(window.MySifaSupport && typeof window.MySifaSupport.open==='function'){
-            window.MySifaSupport.open({user:S.user, page:'Saisie Production',
-              notify:(m,t)=>showToast(m,t==='error'?'danger':'success'), api:apiFetch});
-          }
-        }
-      },
-        h('span',{className:'support-ico'},icon('headset',18)),
-        h('span',null,'Contacter le support')
-      ),
-      h('button',{className:'fab-back-btn',onClick:()=>{window.location.href='/'}},
-        '← Retour ',
-        h('span',{className:'wm'},'My',h('span',null,'Sifa'))
-      )
-    )
+    // Sélecteur de machine du jour : au-dessus du pied commun.
+    renderMachineSwitcher(),
+    fabSidebarFooter(machineName)
   );
 }
 

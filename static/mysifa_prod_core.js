@@ -11353,7 +11353,8 @@ function renderProdKpis(){
     if(!S.navCollapsed) S.navCollapsed = new Set();
     const replie = S.navCollapsed.has(label);
     const el = document.createElement('div');
-    el.className = 'nav-section-label' + (replie ? ' ngl-collapsed' : '');
+    // msb-section : format de titre commun a toutes les applis (v3.3.0).
+    el.className = 'nav-section-label msb-section msb-toggle' + (replie ? ' ngl-collapsed' : '');
     el.innerHTML = '<span>' + escHtml(label) + '</span>'
       + '<span class="ngl-chevron"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"'
       + ' stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"'
@@ -11406,9 +11407,8 @@ function renderProdKpis(){
             {key: 'scans', label: 'Scans d\'OF', icon: 'scanner'},
           ] : []),
         ];
-    const isLight = document.body.classList.contains('light');
     let sectionCourante = null;
-    return h('nav', {className: 'sidebar'},
+    return h('nav', {className: 'sidebar msb-nav'},
       h('div', {className: 'logo', title: 'Accueil MyProd', onClick: () => { S.sidebarOpen = false; set({page: 'menu'}); nav(); }},
         h('div', {className: 'logo-brand'}, 'My', h('span', null, 'Prod')),
         h('div', {className: 'logo-sub'}, 'by SIFA')
@@ -11444,28 +11444,18 @@ function renderProdKpis(){
         }
         return btn;
       }),
-      h('div', {className: 'sidebar-bottom'},
-        h('button', {
-          className: 'nav-btn back-mysifa',
-          onClick: () => { window.location.href = '/'; }
-        },
-          '\u2190 Retour ',
-          h('span', {className: 'wm'}, 'My', h('span', null, 'Sifa'))
-        ),
-        sidebarUserChip(S.user),
-        h('button', {
-          className: 'theme-btn',
-          onClick: () => {
-            try{ if(window.MySifaTheme) MySifaTheme.toggleMode(); }catch(e){}
-            render();
-          }
-        },
-          h('span', {className: 'theme-ico'}, iconEl(isLight ? 'sun' : 'moon', 16)),
-          h('span', {className: 'theme-label'}, isLight ? 'Mode clair' : 'Mode sombre')
-        ),
-        h('button', {className: 'logout-btn', onClick: doLogout}, iconEl('log-out', 14), ' D\u00e9connexion'),
-        h('div', {className: 'version'}, window.__APP_VERSION__ || '')
-      )
+      // Pied commun a toutes les applis (static/mysifa_sidebar.js, v3.3.0).
+      // La deconnexion garde celle de MyProd (etat vide, ecran de connexion)
+      // et le theme re-rend la page, comme l'ancien bouton. La version est
+      // lue sur window : ce fichier est statique, __V_LABEL__ n'y est pas
+      // remplace.
+      window.MySifaSidebar
+        ? MySifaSidebar.footer({
+            app: 'MyProd', version: window.__APP_VERSION__ || '', user: S.user,
+            onTheme: () => render(),
+            onLogout: doLogout,
+          })
+        : h('div', {className: 'sidebar-bottom'})
     );
   }
 
