@@ -133,10 +133,11 @@ input,select{font-family:inherit}
     0 0 16px 7px color-mix(in srgb,var(--accent-bg) 25%,transparent);
 }
 body.light .nav-badge-overlay{background:#ea580c}
-.nav-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);
-  font-weight:600;padding:10px 14px 4px 14px;user-select:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;border-radius:6px;transition:background .15s,opacity .15s}
+/* Titres de section : --muted sur fond de sidebar était trop clair (11/09/2026). */
+.nav-section-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--text2);
+  font-weight:700;padding:10px 14px 4px 14px;user-select:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;border-radius:6px;transition:background .15s,opacity .15s}
 .nav-section-label:hover{background:rgba(148,163,184,.08);opacity:1}
-.nav-section-label .ngl-chevron{display:inline-flex;flex-shrink:0;transition:transform .2s;opacity:.55}
+.nav-section-label .ngl-chevron{display:inline-flex;flex-shrink:0;transition:transform .2s;opacity:.75}
 .nav-section-label.ngl-collapsed .ngl-chevron{transform:rotate(-90deg)}
 .nav-btn--mysifa-portal{align-items:baseline;flex-wrap:wrap;gap:4px 8px;line-height:1.35}
 .nav-btn--mysifa-portal:hover{background:var(--accent-bg)}
@@ -2262,7 +2263,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script>window.__MYSIFA_APP__='stock';</script>
 <link rel="stylesheet" href="/static/mysifa_stock_modals.css">
 <script src="/static/mysifa_stock_modals.js"></script>
-<script src="/static/mysifa_destockage.js"></script>
+<script src="/static/mysifa_destockage.js?v=2"></script>
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
@@ -18777,12 +18778,17 @@ async function rvgiApparier(ligne, matiereId) {
     // celle-ci : on recharge la file plutôt que de retoucher une ligne.
     await loadReceptionRvgi();
   } catch (e) {
-    toast('Appariement impossible : ' + ((e && e.message) || e), true);
+    showToast('Appariement impossible : ' + ((e && e.message) || e), 'error');
   }
 }
 
-async function rvgiIntegrer(lifIds) {
+// `toast()` n'existe pas dans cette page (11/09/2026) : l'appel levait une
+// ReferenceError APRÈS la réponse du serveur. L'entrée était donc bien écrite,
+// mais la file ne se rechargeait jamais et l'écran restait figé sur la ligne
+// qu'on venait d'intégrer. Le toast de la page est `showToast(message, type)`.
+async function rvgiIntegrer(lifIds, btn) {
   if (!lifIds || !lifIds.length) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Intégration…'; }
   try {
     const r = await fetch('/api/stock/reception-rvgi/integrer', {
       method: 'POST', credentials: 'include',
@@ -18796,11 +18802,20 @@ async function rvgiIntegrer(lifIds) {
     let msg = n + ' ligne' + (n > 1 ? 's' : '') + ' intégrée' + (n > 1 ? 's' : '');
     if (bobines) msg += ' — dont ' + bobines + ' ligne' + (bobines > 1 ? 's' : '')
                       + ' de bobines (codes-barres à rattacher au scan)';
-    toast(msg + '.');
-    (res.refusees || []).forEach(x => toast('Ligne ' + x.lif_id + ' : ' + x.motif, true));
+    const refus = res.refusees || [];
+    // Un seul toast à la fois dans cette page : un refus remplace le succès,
+    // on les regroupe donc dans le même message.
+    if (refus.length) {
+      showToast(msg + ' · ' + refus.map(x => 'ligne ' + x.lif_id + ' : ' + x.motif).join(' · '),
+        n ? 'info' : 'error');
+    } else {
+      showToast(msg + '.', 'success');
+    }
     await loadReceptionRvgi();
   } catch (e) {
-    toast('Intégration impossible : ' + ((e && e.message) || e), true);
+    showToast('Intégration impossible : ' + ((e && e.message) || e), 'error');
+    if (btn) { btn.disabled = false; }
+    await loadReceptionRvgi();
   }
 }
 
@@ -18919,7 +18934,7 @@ function buildReceptionRvgi() {
         ? el('span', { style: 'color:var(--muted)' }, ' — les autres attendent un appariement')
         : null),
     pretes.length
-      ? el('button', { cls: 'btn-sm', on: { click: () => rvgiIntegrer(pretes.map(l => l.lif_id)) } },
+      ? el('button', { cls: 'btn-sm', on: { click: (ev) => rvgiIntegrer(pretes.map(l => l.lif_id), ev.currentTarget) } },
           pretes.length > 1 ? 'Intégrer les ' + pretes.length + ' lignes prêtes' : 'Intégrer la ligne prête')
       : null));
 
@@ -19007,7 +19022,7 @@ function rvgiLigne(l) {
   const tdAct = el('td', { style: 'vertical-align:top;min-width:200px' });
   if (l.integrable) {
     tdAct.appendChild(el('button', {
-      cls: 'btn-sm', type: 'button', on: { click: () => rvgiIntegrer([l.lif_id]) },
+      cls: 'btn-sm', type: 'button', on: { click: (ev) => rvgiIntegrer([l.lif_id], ev.currentTarget) },
     }, 'Entrer en stock'));
     if (l.regime === 'attente') {
       tdAct.appendChild(el('div', { style: petit }, 'bobines : codes-barres à rattacher au scan'));

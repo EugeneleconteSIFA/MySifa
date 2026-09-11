@@ -3283,6 +3283,12 @@ def _destockage_lignes(conn, planning_id: int) -> dict:
         (planning_id,),
     ).fetchall()]
 
+    # Format de l'étiquette : saisi au planning, absent de _SQL_PE. Lu à part
+    # plutôt qu'ajouté à la requête du carnet, qui n'en a pas l'usage.
+    fmt = conn.execute(
+        "SELECT format_l, format_h FROM planning_entries WHERE id=?", (planning_id,)
+    ).fetchone()
+
     docs = _etat_documents(pe)
     # `docs` reste rendu : l'écran montre l'état de relecture des documents.
     # Ce n'est simplement plus lui qui décide du mouvement.
@@ -3297,6 +3303,8 @@ def _destockage_lignes(conn, planning_id: int) -> dict:
             "client": pe.get("client"),
             "machine": pe.get("machine_nom"),
             "statut": pe.get("statut"),
+            "format_l": _f(fmt["format_l"]) if fmt else None,
+            "format_h": _f(fmt["format_h"]) if fmt else None,
             "destockage": pe.get("destockage") or "todo",
             "destockage_at": pe.get("destockage_at"),
             "destockage_reserve": pe.get("destockage_reserve"),
@@ -3787,6 +3795,11 @@ def destockage_relecture(planning_id: int, request: Request):
                 _categories_remplacement(kind, li.get("matiere_categorie")))
             categories.update(li["categories_remplacement"])
 
+        # Toutes les catégories gérées, pas seulement celles des lignes : la
+        # modale permet d'AJOUTER une matière absente du calcul (11/09/2026),
+        # et on ne peut l'ajouter que si on peut la choisir.
+        for cats in _KIND_CATEGORIES.values():
+            categories.update(cats)
         candidats = _candidats_remplacement(
             conn, categories, ctx.get("mod_laize"), ctx.get("perte_pct"))
 
