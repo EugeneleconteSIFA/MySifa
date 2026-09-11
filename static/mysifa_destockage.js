@@ -45,9 +45,45 @@
   const LIBELLES_CATEGORIE = {frontal: 'Frontal', complexe: 'Complexe', glassine: 'Glassine',
     adhesif: 'Adhésif', mandrin: 'Mandrin', carton: 'Carton', palette: 'Palette'};
 
+  // Ordre du sélecteur de nature d'une ligne ajoutée à la main.
+  const CATEGORIES_AJOUT = ['frontal', 'complexe', 'glassine', 'adhesif', 'mandrin', 'carton', 'palette'];
+  const KIND_DE_CATEGORIE = {frontal: 'support', complexe: 'support', glassine: 'glassine',
+    adhesif: 'adhesif', mandrin: 'mandrin', carton: 'carton', palette: 'palette'};
+
   function natureLigne(l) {
+    if (l.ajout) return LIBELLES_CATEGORIE[(l.categories_remplacement || [])[0]] || 'Ajout';
     if (l.attendue && l.kind === 'support') return 'Frontal / complexe';
     return NATURES[l.kind] || l.kind || '';
+  }
+
+  // Les :hover ne s'écrivent pas en style inline : une feuille injectée une
+  // fois, commune au planning et à MyStock.
+  const CSS = ''
+    + '.dr-lien{position:relative;flex:none;display:inline-flex;align-items:center;justify-content:center;'
+    + 'width:32px;height:32px;box-sizing:border-box;border-radius:7px;border:1px solid var(--border);'
+    + 'background:var(--card);color:var(--accent);text-decoration:none;font-weight:700;'
+    + 'transition:background .12s,border-color .12s}'
+    + '.dr-lien:hover,.dr-lien:focus-visible{background:var(--accent-bg);border-color:var(--accent)}'
+    + '.dr-lien::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);right:0;'
+    + 'white-space:nowrap;background:var(--text);color:var(--card);font-size:11px;font-weight:600;'
+    + 'padding:4px 8px;border-radius:6px;opacity:0;pointer-events:none;transition:opacity .12s;z-index:5}'
+    + '.dr-lien:hover::after,.dr-lien:focus-visible::after{opacity:1}'
+    + '.dr-retirer{flex:none;width:32px;height:32px;box-sizing:border-box;border-radius:7px;'
+    + 'border:1px solid var(--border);background:var(--card);color:var(--muted);font-family:inherit;'
+    + 'font-size:16px;line-height:1;cursor:pointer;transition:background .12s,color .12s,border-color .12s}'
+    + '.dr-retirer:hover{background:var(--bg);color:var(--danger);border-color:var(--danger)}'
+    + '.dr-ajout{display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:8px 14px;'
+    + 'border-radius:8px;border:1px dashed var(--accent);background:var(--bg);color:var(--accent);'
+    + 'font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:background .12s}'
+    + '.dr-ajout:hover{background:var(--accent-bg)}'
+    + '.dr-nature{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text)}';
+
+  function injecterStyle() {
+    if (document.getElementById('dr-style')) return;
+    const st = document.createElement('style');
+    st.id = 'dr-style';
+    st.textContent = CSS;
+    document.head.appendChild(st);
   }
 
   function esc(v) {
@@ -167,6 +203,13 @@
     const conv = (c && c.conversion) || {};
     if (!r.mid) {
       const l0 = r.ligne;
+      if (l0.ajout) {
+        if (!(l0.categories_remplacement || []).length) {
+          return '<span style="color:var(--muted)">Choisir la nature puis la matière</span>';
+        }
+        return '<span style="color:var(--muted)">Choisir la matière</span><br>'
+          + boutonPetit('data-dr-creer', i, 'Créer une référence');
+      }
       // Ligne ajoutée parce que le dossier consomme forcément cette matière
       // (carton, palette, frontal…) alors que la fiche n'en dit rien.
       if (l0.attendue) {
@@ -272,35 +315,48 @@
     if (r.mid && !vus.has(r.mid) && c) { options.unshift(c); vus.add(r.mid); }
     if (l.matiere_id && !vus.has(l.matiere_id) && candidat(l.matiere_id)) options.unshift(candidat(l.matiere_id));
 
-    const selStyle = 'flex:1;min-width:0;width:100%;max-width:340px;background:var(--bg);border:1px solid var(--border);'
+    // min-width : sans lui, la laize posée à droite écrasait la matière à
+    // quinze caractères (« 70gsm TOP Ther »).
+    const selStyle = 'flex:1 1 260px;min-width:230px;width:100%;max-width:400px;background:var(--bg);border:1px solid var(--border);'
       + 'border-radius:7px;padding:6px 8px;color:var(--text);font-family:inherit;font-size:13px;font-weight:700';
     const opts = (r.mid ? '' : '<option value="">' + esc(l.source_value || 'Choisir une matière') + '</option>')
       + options.map(o => '<option value="' + o.matiere_id + '"' + (o.matiere_id === r.mid ? ' selected' : '') + '>'
         + esc(o.reference || '') + (o.designation && o.designation !== o.reference ? ' — ' + esc(o.designation) : '')
         + '</option>').join('');
-    const select = '<select data-dr-mat="' + i + '" style="' + selStyle + '">' + opts + '</select>';
+    const catAjout = l.ajout ? ((l.categories_remplacement || [])[0] || '') : '';
+    const select = '<select data-dr-mat="' + i + '" style="' + selStyle + '"'
+      + (l.ajout && !catAjout ? ' disabled' : '') + '>'
+      + (l.ajout && !catAjout ? '<option value="">Nature d\'abord</option>' : opts) + '</select>';
 
+    // La laize se choisit SUR LA MÊME LIGNE que la matière (11/09/2026) :
+    // en dessous, elle doublait la hauteur de chaque ligne de bobine.
     const laizes = (c && c.laizes) || [];
-    let laizeHtml = '';
+    let laizeInline = '';
+    let laizeManque = '';
     if (laizes.length && (laizes.length > 1 || r.lid == null || !laizes.some(x => x.laize_id === r.lid))) {
-      laizeHtml = '<select data-dr-lz="' + i + '" style="margin-top:5px;background:var(--bg);border:1px solid var(--border);'
-        + 'border-radius:7px;padding:4px 7px;color:var(--text);font-family:inherit;font-size:12px">'
-        + (r.lid == null ? '<option value="">Laize à choisir</option>' : '')
+      laizeInline = '<select data-dr-lz="' + i + '" title="Laize" style="flex:none;background:var(--bg);'
+        + 'border:1px solid ' + (r.lid == null ? 'var(--warn)' : 'var(--border)') + ';'
+        + 'border-radius:7px;padding:6px 8px;color:var(--text);font-family:inherit;font-size:13px;font-weight:600">'
+        + (r.lid == null ? '<option value="">Laize…</option>' : '')
         + laizes.map(x => '<option value="' + x.laize_id + '"' + (x.laize_id === r.lid ? ' selected' : '') + '>'
           + esc(Math.round(Number(x.valeur_mm || 0)) + ' mm') + '</option>').join('')
         + '</select>';
     } else if (r.lid != null) {
       const lz = laizes.find(x => x.laize_id === r.lid);
-      if (lz) laizeHtml = '<span>' + Math.round(Number(lz.valeur_mm || 0)) + ' mm</span>';
+      if (lz) {
+        laizeInline = '<span title="Laize" style="flex:none;padding:6px 8px;border:1px solid var(--border);'
+          + 'border-radius:7px;font-size:13px;font-weight:600;color:var(--text2);white-space:nowrap">'
+          + Math.round(Number(lz.valeur_mm || 0)) + ' mm</span>';
+      }
     } else if (r.mid && c && ['frontal', 'complexe', 'glassine'].includes(c.categorie)) {
-      laizeHtml = '<span style="color:var(--warn)">aucune laize sur la matière</span> '
+      laizeManque = '<span style="color:var(--warn)">aucune laize sur la matière</span> '
         + boutonPetit('data-dr-lier', i, 'Ajouter la laize du dossier');
     }
     const remplace = (r.mid && l.matiere_id && r.mid !== l.matiere_id)
       ? 'remplace « ' + esc(l.matiere_ref || l.source_value || '') + ' »'
       : (!l.matiere_id && r.mid && l.source_value ? 'pour « ' + esc(l.source_value) + ' »'
         : (l.remplace && r.mid === l.matiere_id ? 'remplace « ' + esc(l.remplace.matiere_ref || '') + ' »' : ''));
-    const sous = [laizeHtml, remplace, l.hors_fiche ? 'ajoutée à la main' : '',
+    const sous = [laizeManque, remplace, (l.hors_fiche && !l.ajout) ? 'ajoutée à la main' : '',
       l.depuis_of ? 'd\'après l\'OF (fiche technique vide)' : '',
       l.inclus_complexe ? 'déjà dans le complexe — à ne sortir que si on en a ajouté' : '',
       (l.attendue && r.mid) ? 'absente de la fiche technique' : ''].filter(Boolean)
@@ -314,10 +370,20 @@
     const aCompleter = (bloque && !(l.facultative && !r.mid)) || (c && (c.laizes || []).length && r.lid == null);
     const fond = (i % 2) ? 'background:var(--bg);' : '';
     const td = 'padding:10px 12px;vertical-align:middle;border-bottom:1px solid var(--border);' + fond;
-    const lien = r.mid ? '<a href="/stock?matiere=' + encodeURIComponent(r.mid) + '" target="_blank" rel="noopener" '
-      + 'title="Ouvrir la fiche matière" style="flex:none;display:inline-flex;align-items:center;justify-content:center;'
-      + 'width:30px;height:30px;border-radius:7px;border:1px solid var(--border);color:var(--accent);text-decoration:none;'
-      + 'font-weight:700">↗</a>' : '';
+    const lien = r.mid ? '<a class="dr-lien" href="/stock?matiere=' + encodeURIComponent(r.mid) + '" target="_blank" rel="noopener" '
+      + 'data-tip="Ouvrir la fiche matière" aria-label="Ouvrir la fiche matière">↗</a>' : '';
+    const retirer = l.ajout ? '<button type="button" class="dr-retirer" data-dr-retirer="' + i + '" '
+      + 'title="Retirer cette ligne" aria-label="Retirer cette ligne">×</button>' : '';
+    let natureHtml = '<span class="dr-nature">' + esc(natureLigne(l)) + '</span>';
+    if (l.ajout) {
+      natureHtml = '<select data-dr-nat="' + i + '" style="background:var(--bg);border:1px solid '
+        + (catAjout ? 'var(--border)' : 'var(--accent)') + ';border-radius:7px;padding:6px 8px;color:var(--text);'
+        + 'font-family:inherit;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">'
+        + (catAjout ? '' : '<option value="">Nature…</option>')
+        + CATEGORIES_AJOUT.map(k => '<option value="' + k + '"' + (k === catAjout ? ' selected' : '') + '>'
+          + esc(LIBELLES_CATEGORIE[k]) + '</option>').join('')
+        + '</select>';
+    }
     const ecart = (l.consomme != null && !bloque) ? Number(r.val || 0) - Number(l.consomme) : null;
     const ecartHtml = ecart == null ? '<span style="color:var(--muted)">—</span>'
       : (Math.abs(ecart) < 1e-6 ? '<span style="color:var(--muted)">=</span>'
@@ -325,10 +391,9 @@
           + ' ' + esc(unite(u, Math.abs(ecart))) + '</span>');
     let html = '<tr data-dr-i="' + i + '">'
       + '<td style="' + td + 'border-left:3px solid ' + (aCompleter ? 'var(--warn)' : 'transparent') + ';white-space:nowrap">'
-      + '<span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">'
-      + esc(natureLigne(l)) + '</span></td>'
+      + natureHtml + '</td>'
       + '<td style="' + td + '">'
-      + '<div style="display:flex;gap:6px;align-items:center">' + select + lien + '</div>'
+      + '<div style="display:flex;gap:6px;align-items:center">' + select + laizeInline + lien + retirer + '</div>'
       + (sous ? '<div style="font-size:11.5px;color:var(--muted);margin-top:5px">' + sous + '</div>' : '') + '</td>'
       + '<td style="' + td + 'text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--text2)">'
       + (l.consomme != null ? nombre(l.consomme) + ' <span style="color:var(--muted)">' + esc(unite(u, l.consomme)) + '</span>' : '—') + '</td>'
@@ -355,6 +420,42 @@
       : '<tr><td colspan="6" style="padding:18px;text-align:center;color:var(--muted)">Aucune ligne.</td></tr>';
   }
 
+  // Ligne ajoutée à la main (11/09/2026) : une matière que le calcul n'a pas
+  // proposée — typiquement la bobine d'un dossier dont la fiche est vide. Elle
+  // n'existe que dans la modale jusqu'à la validation, qui la sort comme
+  // n'importe quelle autre ligne.
+  function ajouterLigne() {
+    E.rows.push({
+      ligne: {ajout: true, hors_fiche: true, kind: null, source_value: null, matiere_id: null,
+        categories_remplacement: [], consomme: null, cles_initiales: [], conversion: {},
+        destockable: true},
+      mid: null, lid: null, val: 0,
+    });
+    E.edition = null;
+    rendreLignes();
+    const sel = document.querySelector('[data-dr-nat="' + (E.rows.length - 1) + '"]');
+    if (sel) sel.focus();
+  }
+
+  function retirerLigne(i) {
+    if (!E.rows[i] || !E.rows[i].ligne.ajout) return;
+    E.rows.splice(i, 1);
+    E.edition = null;
+    rendreLignes();
+  }
+
+  function changerNature(i, categorie) {
+    const r = E.rows[i];
+    if (!r || !r.ligne.ajout) return;
+    r.ligne.categories_remplacement = categorie ? [categorie] : [];
+    r.ligne.kind = KIND_DE_CATEGORIE[categorie] || null;
+    r.mid = null; r.lid = null; r.val = 0;
+    if (E.edition && E.edition.i === i) E.edition = null;
+    rendreLignes();
+    const sel = document.querySelector('[data-dr-mat="' + i + '"]');
+    if (sel && !sel.disabled) sel.focus();
+  }
+
   function changerMatiere(i, valeur) {
     const r = E.rows[i];
     if (!r) return;
@@ -369,6 +470,10 @@
     if (!avant && c && !r.val && r.ligne.consomme) r.val = Number(r.ligne.consomme);
     if (E.edition && E.edition.i === i) E.edition = null;
     rendreLignes();
+    if (r.ligne.ajout && mid) {
+      const q = document.querySelector('[data-dr-q="' + i + '"]');
+      if (q && !q.disabled) { q.focus(); q.select(); }
+    }
   }
 
   function changerQuantite(i, valeur) {
@@ -389,11 +494,20 @@
   }
 
   async function recharger() {
-    const garder = E.rows.map(r => ({ligne: r.ligne, mid: r.mid, lid: r.lid, val: r.val}));
+    const garder = E.rows.filter(r => !r.ligne.ajout)
+      .map(r => ({ligne: r.ligne, mid: r.mid, lid: r.lid, val: r.val}));
+    // Les lignes ajoutées ne sont pas encore en base : le serveur ne les
+    // rendra pas, il faut les remettre après lui.
+    const ajouts = E.rows.filter(r => r.ligne.ajout);
     const d = await appel('/api/stock/destockage/' + E.entryId + '/relecture');
     preparer(d, garder);
+    ajouts.forEach(r => {
+      if (r.mid && !candidat(r.mid)) { r.mid = null; r.lid = null; }
+      E.rows.push(r);
+    });
     const body = document.getElementById('dr-body');
     if (body) { body.innerHTML = corpsHtml(d); rendreLignes(); }
+    afficherInfos(d);
   }
 
   function lireEdition() {
@@ -462,14 +576,13 @@
     const reserve = (dossier.destockage_reserve || '').trim();
     const blocage = ((d.controle || {}).blocage || '').trim();
     let bandeau = '';
-    if (enApercu) {
+    // Les textes d'explication de la vérification ont été retirés (11/09/2026).
+    // Reste ce qui dit quelque chose de CE dossier : un refus du calcul.
+    if (enApercu && blocage) {
       bandeau = '<div style="margin-bottom:14px;padding:11px 14px;border-radius:9px;background:var(--bg);'
-        + 'border:1px solid var(--accent);font-size:12.5px;line-height:1.6;color:var(--text)">'
-        + '<b style="color:var(--accent)">Vérifier avant de déstocker</b><br>Rien n\'est encore sorti du stock. '
-        + 'Contrôlez les quantités, complétez ce qui manque, puis validez.'
-        + (blocage ? '<br><span style="color:var(--warn)">Le calcul automatique a refusé ce dossier : '
-          + esc(blocage) + ' Saisissez les quantités à la main.</span>' : '')
-        + '</div>';
+        + 'border:1px solid var(--warn);font-size:12.5px;line-height:1.6;color:var(--text)">'
+        + '<b style="color:var(--warn)">Calcul automatique refusé</b><br>' + esc(blocage)
+        + ' Saisissez les quantités à la main.</div>';
     } else if (reserve) {
       bandeau = '<div style="margin-bottom:14px;padding:11px 14px;border-radius:9px;background:var(--bg);'
         + 'border:1px solid var(--warn);font-size:12.5px;line-height:1.6;color:var(--text)">'
@@ -502,28 +615,62 @@
         + 'background:var(--bg);color:var(--danger);font-family:inherit;font-weight:600;cursor:pointer">Annuler tout le déstockage</button>'
         + '<button type="button" data-dr-action="enregistrer" style="padding:9px 16px;border-radius:8px;border:1px solid var(--accent);'
         + 'background:var(--accent);color:white;font-family:inherit;font-weight:700;cursor:pointer">Enregistrer</button>';
-    return bandeau
-      + '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Déstockage ' + esc(etatTxt)
-      + (quand ? ' · ' + esc(quand) : '') + (dossier.destockage_par ? ' par ' + esc(dossier.destockage_par) : '') + relu
-      + '. « Ajusté » est la quantité réellement consommée, AU TOTAL, dans l\'unité de l\'atelier. '
-      + 'Une matière peut être remplacée par une autre de la même catégorie.</div>'
+    const suivi = enApercu ? ''
+      : '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Déstockage ' + esc(etatTxt)
+        + (quand ? ' · ' + esc(quand) : '') + (dossier.destockage_par ? ' par ' + esc(dossier.destockage_par) : '')
+        + relu + '</div>';
+    return bandeau + suivi
       + '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">'
       + '<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:900px">'
       + '<thead><tr style="background:var(--bg)">'
-      + '<th style="' + th + ';text-align:left;width:86px">Nature</th>'
+      + '<th style="' + th + ';text-align:left;width:120px">Nature</th>'
       + '<th style="' + th + ';text-align:left">Matière</th>'
       + '<th style="' + th + ';text-align:right;width:120px">Consommé</th>'
       + '<th style="' + th + ';text-align:right;width:190px">Ajusté</th>'
       + '<th style="' + th + ';text-align:right;width:110px">Écart</th>'
       + '<th style="' + th + ';text-align:left;width:250px">Simplifié</th>'
       + '</tr></thead><tbody id="dr-tbody"></tbody></table></div>'
+      + '<button type="button" class="dr-ajout" data-dr-ajout><span style="font-size:16px;line-height:1">+</span> Ajouter une matière</button>'
       + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px">' + lever + boutons + '</div>';
+  }
+
+  // En-tête : ce qu'il faut avoir sous les yeux pour juger les quantités
+  // (11/09/2026). Le métrage réel vient des saisies d'atelier, calculé par le
+  // même code que la fiche dossier ; le théorique, de l'OF.
+  function infosHtml(d) {
+    const dos = d.dossier || {};
+    const fl = Number(dos.format_l || 0);
+    const fh = Number(dos.format_h || 0);
+    const theo = Number((d.theorique || {}).metrage || 0) || null;
+    const reel = Number((d.reel || {}).metrage || 0) || null;
+    const m = v => v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + ' m';
+    let sousReel = reel == null ? 'aucune saisie' : '';
+    if (reel != null && theo) {
+      const p = Math.round((reel - theo) / theo * 1000) / 10;
+      sousReel = (Math.abs(p) < 0.05 ? '= théorique'
+        : (p > 0 ? '+' : '−') + Math.abs(p).toLocaleString('fr-FR') + ' % / théorique');
+    }
+    const bloc = (lib, val, sous) => '<div style="padding:8px 14px;border-radius:9px;background:var(--bg);'
+      + 'border:1px solid var(--border);min-width:130px">'
+      + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">' + lib + '</div>'
+      + '<div style="font-size:15px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;margin-top:2px">' + val + '</div>'
+      + (sous ? '<div style="font-size:11px;color:var(--muted);margin-top:1px">' + esc(sous) + '</div>' : '')
+      + '</div>';
+    return bloc('Format', fl && fh ? esc(nombre(fl) + ' × ' + nombre(fh) + ' mm') : '—')
+      + bloc('Métrage théorique', m(theo))
+      + bloc('Métrage réel', m(reel), sousReel);
+  }
+
+  function afficherInfos(d) {
+    const z = document.getElementById('dr-infos');
+    if (z) z.innerHTML = infosHtml(d);
   }
 
   function brancher(body) {
     body.addEventListener('change', (ev) => {
       const t = ev.target;
-      if (t.hasAttribute('data-dr-mat')) changerMatiere(Number(t.getAttribute('data-dr-mat')), t.value);
+      if (t.hasAttribute('data-dr-nat')) changerNature(Number(t.getAttribute('data-dr-nat')), t.value);
+      else if (t.hasAttribute('data-dr-mat')) changerMatiere(Number(t.getAttribute('data-dr-mat')), t.value);
       else if (t.hasAttribute('data-dr-lz')) {
         const r = E.rows[Number(t.getAttribute('data-dr-lz'))];
         if (r) { r.lid = t.value === '' ? null : Number(t.value); rendreLignes(); }
@@ -540,6 +687,8 @@
     body.addEventListener('click', async (ev) => {
       const t = ev.target.closest('button');
       if (!t) return;
+      if (t.hasAttribute('data-dr-ajout')) { ajouterLigne(); return; }
+      if (t.hasAttribute('data-dr-retirer')) { retirerLigne(Number(t.getAttribute('data-dr-retirer'))); return; }
       if (t.hasAttribute('data-dr-creer')) { E.edition = {i: Number(t.getAttribute('data-dr-creer')), mode: 'creer'}; rendreLignes(); return; }
       if (t.hasAttribute('data-dr-fiche')) { E.edition = {i: Number(t.getAttribute('data-dr-fiche')), mode: 'completer'}; rendreLignes(); return; }
       if (t.hasAttribute('data-dr-edition-annuler')) { E.edition = null; rendreLignes(); return; }
@@ -567,6 +716,7 @@
     E.data = null; E.rows = []; E.cand = {}; E.edition = null;
     const root = document.getElementById('mroot');
     if (!root) return;
+    injecterStyle();
     const ref = E.opts.reference || 'Dossier';
     // Styles portés par la modale elle-même : le planning et MyStock n'ont
     // pas les mêmes classes de modale.
@@ -574,11 +724,12 @@
       + 'display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow-y:auto">'
       + '<div role="dialog" aria-modal="true" style="background:var(--card);color:var(--text);border:1px solid var(--border);'
       + 'border-radius:14px;width:100%;max-width:1240px;padding:22px 24px;box-shadow:0 20px 60px rgba(0,0,0,.35)">'
-      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:12px">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:12px">'
       + '<h3 style="margin:0;font-size:18px;color:var(--text);display:flex;align-items:center;gap:8px">'
       + (E.opts.icone || '') + ' Déstockage — ' + esc(ref) + '</h3>'
       + '<button type="button" data-dr-fermer style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);'
       + 'background:var(--bg);color:var(--text);font-family:inherit;cursor:pointer">Fermer</button></div>'
+      + '<div id="dr-infos" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"></div>'
       + '<div id="dr-body"><div style="padding:24px;text-align:center;color:var(--muted)">Chargement…</div></div>'
       + '</div></div>';
     const overlay = root.querySelector('[data-dr-overlay]');
@@ -588,6 +739,7 @@
     try {
       const d = await appel('/api/stock/destockage/' + entryId + '/relecture');
       preparer(d);
+      afficherInfos(d);
       body.innerHTML = corpsHtml(d);
       brancher(body);
       rendreLignes();
