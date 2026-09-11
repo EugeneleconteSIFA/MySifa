@@ -2,12 +2,14 @@
 Route  : /db
 Accès  : superadmin + direction
 """
+import json
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.services.auth_service import get_current_user
 from config import ROLE_SUPERADMIN, ROLE_DIRECTION, APP_VERSION
-from app.web.user_chip import role_label_for_user, user_chip_sidebar_html
+from app.web.user_chip import role_label_for_user
 
 router = APIRouter()
 
@@ -27,18 +29,17 @@ def db_viewer_page(request: Request):
         return access_denied_response("Database Viewer")
 
     user_name = user.get("nom") or user.get("display_name") or user.get("email", "—")
-    user_role_label = role_label_for_user(user)
-    user_avatar = user.get("avatar_url") or ""
-    user_chip_html = user_chip_sidebar_html(
-        nom=user_name,
-        role_label=user_role_label,
-        avatar_url=user_avatar,
-        profil_link=True,
-        chip_attrs=(
-            'onclick="window.location.href=\'/profil\'" '
-            'title="Modifier mon profil" role="button" tabindex="0"'
-        ),
-    )
+    # Le pied commun (static/mysifa_sidebar.js) reçoit l'utilisateur déjà connu du
+    # serveur : pas de second /api/auth/me, et le libellé de rôle reste celui du
+    # serveur (ucSubtext). « < » échappé pour qu'un nom ne ferme pas le <script>.
+    sidebar_user_json = json.dumps({
+        "id": user.get("id"),
+        "nom": user_name,
+        "email": user.get("email") or "",
+        "role": user.get("role") or "",
+        "avatar_url": user.get("avatar_url") or "",
+        "ucSubtext": role_label_for_user(user),
+    }, ensure_ascii=False).replace("<", "\\u003c")
     version   = APP_VERSION
 
     html = f"""<!DOCTYPE html>
@@ -51,6 +52,10 @@ def db_viewer_page(request: Request):
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v={version}">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_sidebar.css?v={version}">
+<script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_sidebar.js?v={version}"></script>
+<script>window.MySifaSidebar && MySifaSidebar.configure({{ user: {sidebar_user_json} }});</script>
 <style>
 *,*::before,*::after{{margin:0;padding:0;box-sizing:border-box}}
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
@@ -111,33 +116,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sa
 }}
 body.light .tbl-rows-badge{{background:rgba(8,145,178,.1)}}
 
-/* Sidebar bottom */
-.sidebar-bottom{{margin-top:auto;padding:10px 12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px}}
-.user-chip{{padding:9px 10px;border-radius:8px;background:var(--accent-bg)}}
-.user-chip .uc-name{{font-size:11px;font-weight:600;color:var(--text)}}
-.user-chip .uc-role{{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}}
-.theme-btn,.logout-btn{{
-  display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:8px;
-  border:1px solid var(--border);background:transparent;color:var(--text2);
-  cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:all .12s;
-}}
-.theme-btn:hover{{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}}
-.back-mysifa{{
-  display:flex;align-items:center;gap:4px;padding:9px 10px;border-radius:8px;
-  border:none!important;background:transparent!important;
-  color:var(--text2)!important;font-size:13px;font-weight:500;
-  cursor:pointer;width:100%;font-family:'Segoe UI',system-ui,sans-serif;
-  transition:color .12s,background .12s;
-}}
-.back-mysifa:hover{{color:var(--text)!important;background:var(--accent-bg)!important}}
-.back-mysifa .back-preamble{{font-weight:500;color:var(--text2)}}
-.back-mysifa .wm{{font-weight:800;color:var(--text);letter-spacing:-.3px}}
-.back-mysifa .wm span{{color:var(--accent)}}
-.user-chip{{cursor:pointer;transition:background .12s,border-color .12s}}
-.user-chip:hover{{background:rgba(34,211,238,.16);border:1px solid rgba(34,211,238,.25)}}
-body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
-.user-chip .uc-profil{{font-size:10px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:4px;font-weight:600}}
-.version{{font-size:10px;color:var(--muted);text-align:center;font-family:monospace;padding-top:2px}}
+/* Pied de sidebar : static/mysifa_sidebar.css (v3.3.0). */
 
 /* ── Main ── */
 .main{{display:flex;flex-direction:column;overflow:hidden}}
@@ -408,18 +387,8 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
       </div>
     </div>
 
-    <div class="sidebar-bottom">
-      {user_chip_html}
-      <button class="theme-btn" onclick="toggleTheme()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-        <span id="theme-label">Thème clair</span>
-      </button>
-      <button type="button" class="back-mysifa" onclick="window.location.href='/'" title="Retour MySifa">
-        <span class="back-preamble">← Retour</span>
-        <span class="wm">My<span>Sifa</span></span>
-      </button>
-      <div class="version">v{version}</div>
-    </div>
+    <!-- Pied commun à toutes les applis (static/mysifa_sidebar.js, v3.3.0). -->
+    <div class="sidebar-bottom msb-footer" data-msb-footer data-msb-app="Base de données" data-msb-version="{version}"></div>
   </nav>
 
   <!-- ── Main ── -->
@@ -509,18 +478,9 @@ const S = {{
 }})();
 
 /* ── Theme ── */
-function syncThemeLabel() {{
-  const isLight = window.MySifaTheme ? MySifaTheme.isLight() : document.body.classList.contains('light');
-  const el = document.getElementById('theme-label');
-  if (el) el.textContent = isLight ? 'Thème sombre' : 'Thème clair';
-}}
+// La bascule clair/sombre est dans le pied commun (static/mysifa_sidebar.js).
 function applyStoredTheme() {{
   if (window.MySifaTheme) MySifaTheme.initFromStorage();
-  syncThemeLabel();
-}}
-function toggleTheme() {{
-  if (window.MySifaTheme) MySifaTheme.toggleMode();
-  syncThemeLabel();
 }}
 
 /* ── API ── */

@@ -42,6 +42,7 @@ MESSAGES_HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_chat_nav.css">
 <link rel="stylesheet" href="/static/support_widget.css">
 <style>
@@ -67,19 +68,9 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
   font-family:inherit;transition:background .15s,color .15s;margin-bottom:2px;
 }
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
-.back-mysifa{border:none!important;background:transparent!important;font-weight:400!important;color:var(--text2)!important;padding:8px 10px!important}
-.back-mysifa .wm{font-weight:800;color:var(--text)}.back-mysifa .wm span{color:var(--accent)}
-.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
-.user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg);cursor:pointer}
-.user-chip .uc-name{font-size:12px;font-weight:600;color:var(--text)}
-.user-chip .uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
-.theme-btn,.logout-btn{
-  display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;
-  border:1px solid var(--border);background:transparent;color:var(--text2);
-  cursor:pointer;font-size:12px;width:100%;font-family:inherit;
-}
-.logout-btn{border:none}.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1)}
-.version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
+/* Pied de sidebar : static/mysifa_sidebar.css (v3.3.0). La sidebar a ici 12px de marge
+   latérale : le pied la déborde pour que son filet aille d'un bord à l'autre, comme sur MyStock. */
+.sidebar>.msb-footer{margin-left:-12px;margin-right:-12px;padding-left:12px;padding-right:12px}
 #chat-wrap{flex:1;display:flex;min-width:0;min-height:100vh}
 #chat-left{
   width:280px;flex-shrink:0;background:var(--card);border-right:1px solid var(--border);
@@ -587,9 +578,10 @@ body.sb-open .sidebar-overlay{display:block}
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <div class="sidebar-overlay" id="sb-ov" onclick="document.body.classList.remove('sb-open')"></div>
 <div id="chat-app">
-  <aside class="sidebar">
+  <aside class="sidebar msb-nav">
     <div class="logo">
       <div class="logo-brand">My<span>Sifa</span></div>
       <div class="logo-sub">Messages</div>
@@ -599,21 +591,8 @@ body.sb-open .sidebar-overlay{display:block}
       Messages
       <span class="chat-nav-badge hidden" data-mysifa-chat-badge></span>
     </button>
-    <div class="sidebar-bottom">
-      <button type="button" class="nav-btn back-mysifa" onclick="location.href='/'">
-        ← Retour <span class="wm">My<span>Sifa</span></span>
-      </button>
-      <div class="user-chip" id="sb-user-chip" onclick="location.href='/profil'" title="Mon profil"></div>
-      <button type="button" class="theme-btn" id="btn-theme">
-        <span class="theme-ico" id="theme-ico"></span>
-        <span id="theme-label">Mode clair</span>
-      </button>
-      <button type="button" class="logout-btn" id="btn-logout">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        Déconnexion
-      </button>
-      <div class="version">Messages · __V_LABEL__</div>
-    </div>
+    <!-- Pied commun (static/mysifa_sidebar.js), rempli au chargement. -->
+    <div class="sidebar-bottom msb-footer" data-msb-footer data-msb-app="Messages" data-msb-version="__V_LABEL__"></div>
   </aside>
   <div id="chat-wrap">
     <div id="chat-left">
@@ -2360,42 +2339,26 @@ document.addEventListener('paste',function(e){
   }
 });
 
-const ICO_MOON='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-const ICO_SUN='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>';
-function syncThemeBtn(){
-  const isLight=(window.MySifaTheme?MySifaTheme.loadPrefs():{mode:'dark'}).mode==='light';
-  document.getElementById('theme-ico').innerHTML=isLight?ICO_SUN:ICO_MOON;
-  document.getElementById('theme-label').textContent=isLight?'Mode sombre':'Mode clair';
-}
-document.getElementById('btn-theme').onclick=()=>{
-  if(window.MySifaTheme)MySifaTheme.toggleMode();
-  syncThemeBtn();
-};
-document.getElementById('btn-logout').onclick=async()=>{
-  try{await fetch('/api/auth/logout',{method:'POST',credentials:'include'});}catch(e){}
-  location.href='/';
-};
+// Pied commun (static/mysifa_sidebar.js) : l'utilisateur est déjà connu du
+// serveur, on le passe pour éviter un appel /api/auth/me de plus.
+if(window.MySifaSidebar)MySifaSidebar.configure({user:{
+  id:window.__MYSIFA_UID__,nom:window.__MYSIFA_NOM__||'',
+  role:window.__MYSIFA_ROLE__||'',avatar_url:window.__MYSIFA_AVATAR__||''
+}});
 
 (async function init(){
   syncSoundToggleUI();
   if(ADMIN_ROLES.has(window.__MYSIFA_ROLE__)){
     document.getElementById('btn-new-channel').style.display='';
   }
-  const chip=document.getElementById('sb-user-chip');
-  if(chip&&window.MySifaUserChip){
-    const editIco='<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
-    MySifaUserChip.fill(chip,{
-      nom:window.__MYSIFA_NOM__||'',
-      role:window.__MYSIFA_ROLE__||'',
-      avatar_url:window.__MYSIFA_AVATAR__||''
-    },{roleLabels:ROLE_LABELS,editIconHtml:editIco});
-  }
   if(window.MySifaTheme)MySifaTheme.applyTheme();
-  syncThemeBtn();
+  if(window.MySifaSidebar)MySifaSidebar.refreshTheme();
   // Humeur popup
   try{
     const meData=await fetch('/api/auth/me',{credentials:'include'}).then(r=>r.json()).catch(()=>null);
     if(meData&&window.MySifaHumeur)requestAnimationFrame(()=>MySifaHumeur.maybeShow(meData));
+    // Compte complet (e-mail) pour la fenêtre de support du pied.
+    if(meData&&meData.id&&window.MySifaSidebar)MySifaSidebar.setUser(meData);
   }catch(e){}
   await loadChannels();
   checkNotifPermission();

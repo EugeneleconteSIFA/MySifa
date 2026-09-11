@@ -152,6 +152,7 @@ PRICING_SHELL = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V__">
 <link rel="stylesheet" href="/static/pricing_app.css?v=__ASSETS__">
 <link rel="stylesheet" href="/static/mysifa_perf.css">
 <script src="/static/mysifa_perf.js"></script>
@@ -165,20 +166,9 @@ PRICING_SHELL = r"""<!DOCTYPE html>
       <div class="logo-brand">My<span>Coûts</span></div>
       <div class="logo-sub">by SIFA</div>
     </div>
-    <nav class="sidebar-nav" id="sidebar-nav"></nav>
-    <div class="sidebar-bottom">
-      <button type="button" class="nav-btn back-mysifa" id="btn-portal">← Retour <span class="wm">My<span>Sifa</span></span></button>
-      <div class="user-chip" id="user-chip" title="Mon profil"></div>
-      <button type="button" class="theme-btn" id="theme-btn" aria-label="Basculer le thème">
-        <span class="theme-ico" id="theme-ico"></span>
-        <span class="theme-label" id="theme-label">Mode sombre</span>
-      </button>
-      <button type="button" class="logout-btn" id="logout-btn">
-        <span id="logout-ico"></span>
-        <span>Déconnexion</span>
-      </button>
-      <div class="version">__V__</div>
-    </div>
+    <nav class="sidebar-nav msb-nav" id="sidebar-nav"></nav>
+    <!-- Pied commun à toutes les applis : rempli par static/mysifa_sidebar.js (v3.3.0). -->
+    <div class="sidebar-bottom msb-footer" data-msb-footer data-msb-app="Coûts matières" data-msb-version="__V__"></div>
   </aside>
   <div class="sidebar-overlay" id="sidebar-overlay"></div>
   <main class="main">
@@ -201,6 +191,7 @@ PRICING_SHELL = r"""<!DOCTYPE html>
 <script>window.__PRICING__={canWrite:__CAN_WRITE__,user:__USER__};</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_sidebar.js?v=__V__"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <script src="/static/pricing_app.js?v=__ASSETS__" defer></script>
 <script src="/static/mysifa_impersonate.js?v=2"></script>

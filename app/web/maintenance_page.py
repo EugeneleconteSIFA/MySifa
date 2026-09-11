@@ -103,6 +103,7 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
@@ -111,6 +112,7 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <style>
 /* ── Toggle Colonnes produit dans l'historique des contrôles ── */
 .ctrl-extra-toggle{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .15s;user-select:none}
@@ -151,6 +153,9 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 
 .app{display:flex;height:100vh;overflow:hidden}
 .sidebar{width:var(--sidebar-w);background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;height:100vh;overflow-y:auto}
+/* Pied de sidebar : static/mysifa_sidebar.css (v3.3.0). La sidebar a ici 12px de marge
+   latérale : le pied la déborde pour que son filet aille d'un bord à l'autre, comme sur MyStock. */
+.sidebar>.msb-footer{margin-left:-12px;margin-right:-12px;padding-left:12px;padding-right:12px}
 .sidebar::-webkit-scrollbar{width:0}.sidebar{scrollbar-width:none}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
 body.sb-open .sidebar-overlay{display:block}
@@ -167,22 +172,8 @@ body.sb-open .sidebar-overlay{display:block}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
 .nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;width:100%;text-align:left;font-family:inherit;transition:all .15s;margin-bottom:2px}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
-.nav-btn--mysifa-portal{align-items:baseline;flex-wrap:wrap;gap:4px 8px;line-height:1.35}
-.nav-btn--mysifa-portal:hover{background:var(--accent-bg)}
 .nav-sep{height:1px;background:var(--border);margin:10px 4px 12px}
-.mysifa-back-preamble{font-size:13px;font-weight:500;color:var(--text2)}
-.mysifa-back-brand{font-size:14px;font-weight:800;letter-spacing:-.5px;color:var(--text);white-space:nowrap}
-.mysifa-back-accent{color:var(--accent)}
-.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
-.user-chip{padding:10px 12px;border-radius:8px;border:1px solid var(--border);cursor:pointer;transition:.15s;background:transparent}
-.user-chip:hover{border-color:var(--accent)}
-.uc-name{font-size:13px;font-weight:600;color:var(--text)}
-.uc-role{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
-.theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;font-family:inherit;transition:.15s;width:100%}
-.theme-btn:hover{border-color:var(--accent);color:var(--accent)}
-.logout-btn{color:var(--muted)}
-.logout-btn:hover{border-color:var(--danger);color:var(--danger)}
-.version{font-size:10px;color:var(--muted);padding:4px 12px;font-family:ui-monospace,monospace;opacity:.6}
+/* Menu et pied de sidebar : static/mysifa_sidebar.css (v3.3.0). */
 
 .mobile-topbar{display:none;align-items:center;gap:12px;padding:14px 16px;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
 @media(max-width:768px){.mobile-topbar{display:flex}}
@@ -1943,61 +1934,49 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
       <div class="logo-brand">My<span>Maintenance</span></div>
       <div class="logo-sub">by SIFA</div>
     </div>
-    <button type="button" class="nav-btn adm-only active" data-view="maintenance" onclick="switchView('maintenance')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-      Suivi machine
-      <span class="nav-btn-badge hidden" id="nav-maint-badge" title="Retards toutes machines confondues">0</span>
-    </button>
-    <button type="button" class="nav-btn adm-only" data-view="operations" onclick="switchView('operations')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
-      Opérations de maintenance
-    </button>
-    <button type="button" class="nav-btn adm-only" data-view="planning" onclick="switchView('planning')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-      Planning
-    </button>
-    <!-- v2.2.45 : "Mes tâches" admin est réservée à Manuel Lesaffre. Cachée par défaut,
-         révélée en JS après loadMe() si S.me.nom contient "lesaffre" (case-insensitive). -->
-    <button type="button" id="nav-mes-taches-admin" class="nav-btn adm-only" data-view="op-tasks" onclick="switchView('op-tasks')" style="display:none">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-      Mes tâches
-    </button>
-    <!-- Alertes isolée en bas de la nav admin (séparateur au-dessus). -->
-    <div class="nav-sep adm-only"></div>
-    <button type="button" class="nav-btn adm-only" data-view="controles" onclick="switchView('controles')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-      Alertes
-    </button>
-    <button type="button" class="nav-btn op-only active" data-view="op-tasks" onclick="switchView('op-tasks')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-      Mes tâches
-    </button>
-    <button type="button" class="nav-btn op-only" data-view="op-planning" onclick="switchView('op-planning')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-      Planning
-    </button>
-    <button type="button" class="nav-btn op-only" onclick="opOpenNewModal()" style="border-top:1px solid var(--border);margin-top:6px;padding-top:14px;color:var(--accent)">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-      Enregistrer une opération
-    </button>
-    <!-- v2 : bouton "Intervention libre" fusionné dans "Enregistrer une opération"
-         (mode Inhabituelle accessible via lien dans le modal). -->
-    <div class="sidebar-bottom">
-      <button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'">
-        <span class="mysifa-back-preamble">← Retour </span>
-        <span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span>
+    <div class="msb-nav">
+      <button type="button" class="nav-btn adm-only active" data-view="maintenance" onclick="switchView('maintenance')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        Suivi machine
+        <span class="nav-btn-badge hidden" id="nav-maint-badge" title="Retards toutes machines confondues">0</span>
       </button>
-      <div class="user-chip" id="user-chip" onclick="location.href='/profil'"></div>
-      <button type="button" class="theme-btn" onclick="toggleTheme()">
-        <svg id="theme-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        <span id="theme-label">Mode sombre</span>
+      <button type="button" class="nav-btn adm-only" data-view="operations" onclick="switchView('operations')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+        Opérations de maintenance
       </button>
-      <button type="button" class="logout-btn" onclick="doLogout()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        Déconnexion
+      <button type="button" class="nav-btn adm-only" data-view="planning" onclick="switchView('planning')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Planning
       </button>
-      <div class="version">__V_LABEL__</div>
+      <!-- v2.2.45 : "Mes tâches" admin est réservée à Manuel Lesaffre. Cachée par défaut,
+           révélée en JS après loadMe() si S.me.nom contient "lesaffre" (case-insensitive). -->
+      <button type="button" id="nav-mes-taches-admin" class="nav-btn adm-only" data-view="op-tasks" onclick="switchView('op-tasks')" style="display:none">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        Mes tâches
+      </button>
+      <!-- Alertes isolée en bas de la nav admin (séparateur au-dessus). -->
+      <div class="nav-sep adm-only"></div>
+      <button type="button" class="nav-btn adm-only" data-view="controles" onclick="switchView('controles')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        Alertes
+      </button>
+      <button type="button" class="nav-btn op-only active" data-view="op-tasks" onclick="switchView('op-tasks')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        Mes tâches
+      </button>
+      <button type="button" class="nav-btn op-only" data-view="op-planning" onclick="switchView('op-planning')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Planning
+      </button>
+      <button type="button" class="nav-btn op-only" onclick="opOpenNewModal()" style="border-top:1px solid var(--border);margin-top:6px;padding-top:14px;color:var(--accent)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        Enregistrer une opération
+      </button>
+      <!-- v2 : bouton "Intervention libre" fusionné dans "Enregistrer une opération"
+           (mode Inhabituelle accessible via lien dans le modal). -->
     </div>
+    <!-- Pied commun (static/mysifa_sidebar.js), rempli au chargement. -->
+    <div class="sidebar-bottom msb-footer" data-msb-footer data-msb-app="Maintenance" data-msb-version="__V_LABEL__"></div>
   </nav>
 
   <main class="main">
@@ -10251,27 +10230,12 @@ function closeMaintDocsView(){
   if(el) el.remove();
 }
 
-function toggleTheme(){
-  const l=document.body.classList.toggle('light');
+// Le pied commun bascule le thème via MySifaTheme ; on recopie le mode dans
+// l'ancienne clé lue par le script de pré-rendu (light-pre) pour éviter un flash.
+function syncLegacyTheme(){
+  const l=document.body.classList.contains('light');
   document.documentElement.classList.toggle('light-pre', l);
   try{localStorage.setItem('mysifa_theme',l?'light':'dark');}catch(e){}
-  updateThemeBtn();
-}
-function updateThemeBtn(){
-  const l=document.body.classList.contains('light');
-  const ico=document.getElementById('theme-ico');
-  const lbl=document.getElementById('theme-label');
-  if(ico){
-    ico.innerHTML=l
-      ?'<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
-      :'<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
-  }
-  if(lbl) lbl.textContent=l?'Mode clair':'Mode sombre';
-}
-
-async function doLogout(){
-  try{await fetch('/api/auth/logout',{method:'POST',credentials:'include'});}catch(e){}
-  location.href='/';
 }
 
 async function loadMe(){
@@ -10280,11 +10244,8 @@ async function loadMe(){
     if(!r.ok) return;
     const d=await r.json();
     S.me=d&&d.user?d.user:d;
-    const chip=document.getElementById('user-chip');
-    if(chip&&S.me){
-      const roles={direction:'Direction',administration:'Administration',superadmin:'Super admin',fabrication:'Fabrication',logistique:'Logistique',comptabilite:'Comptabilité',expedition:'Expédition',commercial:'Commercial'};
-      chip.innerHTML='<div class="uc-name">'+escHtml(S.me.nom||'')+'</div><div class="uc-role">'+escHtml(roles[S.me.role]||S.me.role||'')+'</div>';
-    }
+    // S.me sert aussi au filtrage opérateur : on le passe au pied commun.
+    if(S.me&&window.MySifaSidebar)MySifaSidebar.setUser(S.me);
     // v2.2.45 : révèle la nav-btn "Mes tâches" (côté admin) uniquement pour Manuel Lesaffre
     try {
       const nomLower = String((S.me && S.me.nom) || '').toLowerCase();
@@ -10301,8 +10262,8 @@ async function loadMe(){
     const t=localStorage.getItem('mysifa_theme');
     if(t==='light') document.body.classList.add('light');
     else document.body.classList.remove('light');
-    updateThemeBtn();
   }catch(e){}
+  if(window.MySifaSidebar)MySifaSidebar.configure({onTheme:syncLegacyTheme});
   // v2.5.5 : on garde la promise pour l'attendre avant switchView opérateur
   // (opLoadTasks / opLoadPlanning lisent S.me.id — sans ça, filtre vide au boot).
   const _initMePromise = loadMe();

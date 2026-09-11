@@ -94,6 +94,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css">
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
@@ -216,16 +217,6 @@ body.has-staging-bandeau .mobile-topbar{top:24px}
 .sidebar::-webkit-scrollbar{width:0}
 .sidebar{scrollbar-width:none}
 .sidebar-overlay{display:none}
-.back-mysifa{
-  border:none!important;
-  background:transparent!important;
-  font-weight:400!important;
-  color:var(--text2)!important;
-  padding:8px 10px!important;
-}
-.back-mysifa:hover{color:var(--text)!important;background:transparent!important}
-.back-mysifa .wm{font-weight:800;color:var(--text)}
-.back-mysifa .wm span{color:var(--accent)}
 @media (max-width: 900px){
   .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:9000;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 16px 48px rgba(0,0,0,.55)}
   body.sb-open .sidebar{transform:translateX(0)}
@@ -247,10 +238,12 @@ body.palette-foret .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(61,214,
 body.palette-cendre .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(100,150,200,.28),0 0 16px rgba(100,150,200,.14)}
 body.palette-braise .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(240,112,48,.28),0 0 16px rgba(240,112,48,.14)}
 body.light .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 16px rgba(8,145,178,.12)}
+/* Sidebar commune (static/mysifa_sidebar.css, v3.3.0) : pas de halo au survol,
+   comme sur les autres applis. Le « body » donne la même spécificité que les
+   règles de palette ci-dessus, déclarées avant. */
+body .msb-nav .nav-btn:hover:not(.active),body .msb-footer .nav-btn:hover:not(.active){box-shadow:none}
 .nav-scroll{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;margin-bottom:8px;width:100%}
-.nav-group-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;
-  padding:4px 12px 2px;user-select:none;pointer-events:none;line-height:1.3}
-.nav-group-label:not(:first-child){margin-top:10px;padding-top:12px;border-top:1px solid var(--border)}
+/* Titres de section (.nav-group-label de MyCompta) : .msb-section. */
 .sidebar .nav-scroll.tabs{margin:0;flex-wrap:nowrap}
 .nav-badge{margin-left:auto;min-width:22px;height:18px;padding:0 6px;border-radius:999px;
   background:rgba(248,113,113,.14);border:1px solid rgba(248,113,113,.35);color:var(--danger);
@@ -268,26 +261,10 @@ body.light .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(8,145,178,.32),
   .msg-filter-wrap{flex-direction:column;gap:8px!important;align-items:stretch!important}
   .msg-filter-actions{margin-left:0!important;justify-content:flex-end}
 }
-.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
-.user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg)}
-.user-chip .uc-name{font-size:12px;font-weight:600;color:var(--text)}
-.user-chip .uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
-.theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:background .15s,color .15s,border-color .15s,box-shadow .2s}
-.theme-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);box-shadow:0 0 0 1px rgba(34,211,238,.22),0 0 20px rgba(34,211,238,.14)}
-body.palette-ambre .theme-btn:hover,body.palette-forge .theme-btn:hover{box-shadow:0 0 0 1px rgba(240,165,0,.28),0 0 18px rgba(240,165,0,.14)}
-body.palette-pivoine .theme-btn:hover,body.palette-cocon .theme-btn:hover{box-shadow:0 0 0 1px rgba(240,56,136,.24),0 0 18px rgba(240,56,136,.12)}
-body.palette-foret .theme-btn:hover{box-shadow:0 0 0 1px rgba(61,214,126,.24),0 0 18px rgba(61,214,126,.12)}
-body.palette-cendre .theme-btn:hover{box-shadow:0 0 0 1px rgba(100,150,200,.24),0 0 18px rgba(100,150,200,.12)}
-body.palette-braise .theme-btn:hover{box-shadow:0 0 0 1px rgba(240,112,48,.24),0 0 18px rgba(240,112,48,.12)}
-body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rgba(8,145,178,.12)}
-.theme-btn .theme-ico{font-size:14px;line-height:1}
-.theme-btn .theme-label{white-space:nowrap}
-@media (display-mode: standalone), (max-width: 900px){
-  .theme-btn .theme-label{display:none}
-  .theme-btn{justify-content:center}
-}
-.logout-btn{border:none}.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1);box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 18px rgba(248,113,113,.12)}
-.version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
+/* Pied de sidebar : static/mysifa_sidebar.css (v3.3.0). La sidebar de la
+   coquille a un padding de 20px 12px : on le compense pour que le pied
+   touche les bords et le bas, comme sur les applis autonomes. */
+@media (min-width:901px){.sidebar>.msb-footer{margin:auto -12px -20px}}
 .upd-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px}
 .upd-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:28px 28px 22px;width:min(540px,100%);max-height:88vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.55)}
 .upd-card h2{font-size:16px;font-weight:700;margin:0 0 16px;color:var(--text)}
@@ -1795,6 +1772,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script>window.__MYSIFA_ENV__="__ENV_NAME_VALUE__";</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <div id="root"></div>
 <div id="mobile-navbar-root" aria-label="Navigation" role="navigation"></div>
 <div id="msf-sheet-backdrop" class="msf-sheet-backdrop" aria-hidden="true"></div>
@@ -2250,26 +2228,6 @@ function iconEl(name,size=16){
   s.style.cssText='display:inline-flex;align-items:center;flex-shrink:0';
   s.innerHTML=icon(name,size);
   return s;
-}
-function sidebarUserChip(user,opts){
-  if(!user)return null;
-  opts=opts||{};
-  if(window.MySifaUserChip){
-    return MySifaUserChip.element(user,h,iconEl,Object.assign({
-      title:'Mon profil',
-      onClick:()=>{window.location.href='/profil'}
-    },opts));
-  }
-  return h('div',{
-    className:opts.chipClass||'user-chip',
-    style:{cursor:'pointer'},
-    title:'Mon profil',
-    onClick:()=>{window.location.href='/profil'}
-  },
-    h('div',{className:'uc-name'},user.nom||''),
-    h('div',{className:'uc-role'},ROLE_LABELS[user.role]||user.role||''),
-    h('div',{className:'uc-profil'},iconEl('edit',10),' Mon profil')
-  );
 }
 
 const fN=n=>n?Number(n).toLocaleString('fr-FR'):'0';
@@ -3999,9 +3957,8 @@ async function dbOpenAddModal() {
 
 function renderStock(){
   const g=S.stockGlobale;
-  const isLight=document.body.classList.contains('light');
 
-  const sidebar=h('nav',{className:'sidebar'},
+  const sidebar=h('nav',{className:'sidebar msb-nav'},
     h('div',{className:'logo'},
       h('div',{className:'logo-brand'},'My',h('span',null,'Stock')),
       h('div',{className:'logo-sub'},'by __APP_ORG_NAME__')
@@ -4020,37 +3977,22 @@ function renderStock(){
     h('button',{className:'nav-btn'+(S.stockView==='emplacement'?' active':''),
       onClick:()=>set({stockView:'emplacement',stockSelEmpl:null})},
       iconEl('map-pin',15),'  Par emplacement'),
-    h('div',{className:'sidebar-bottom'},
-      (S.user&&['direction','fabrication','logistique','superadmin'].includes(S.user.role))?
-        h('button',{className:'nav-btn',onClick:()=>{window.location.href='/planning-rh'}},
-          iconEl('users',15),'  Planning RH')
-        :null,
-      h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/' }},
-        '← Retour ',
-        h('span',{className:'wm'},'My',h('span',null,'Sifa'))
-      ),
-      sidebarUserChip(S.user),
-      (() => {
-        const b=h('button',{
-          className:'support-btn',
-          title:'Contacter le support',
-          onClick:()=>set({contactOpen:true})
-        });
-        const ico=h('span',{className:'support-ico'});
-        try{
-          ico.innerHTML=(window.MySifaSupport && typeof window.MySifaSupport.iconSvg==='function')?window.MySifaSupport.iconSvg():'';
-        }catch(e){ ico.innerHTML=''; }
-        b.appendChild(ico);
-        b.appendChild(h('span',null,'Contacter le support'));
-        return b;
-      })(),
-      h('button',{className:'theme-btn',onClick:()=>{MySifaTheme.toggleMode();render();}},
-        h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
-        h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
-      ),
-      h('button',{className:'logout-btn',onClick:doLogout},iconEl('log-out',14),' Déconnexion'),
-      h('div',{className:'version'},'MyStock v1.0')
-    )
+    // Entrée Planning RH : elle vivait dans le pied, elle reste juste au-dessus.
+    (S.user&&['direction','fabrication','logistique','superadmin'].includes(S.user.role))?
+      h('button',{className:'nav-btn',onClick:()=>{window.location.href='/planning-rh'}},
+        iconEl('users',15),'  Planning RH')
+      :null,
+    // Pied commun à toutes les applis (static/mysifa_sidebar.js, v3.3.0). Le
+    // support garde la fenêtre de contact de la coquille (S.contactOpen) et la
+    // déconnexion celle de la coquille, qui vide l'état et revient au login.
+    window.MySifaSidebar
+      ? MySifaSidebar.footer({
+          app:'MyStock', version:'__V_LABEL__', user:S.user,
+          onSupport:()=>set({contactOpen:true}),
+          onTheme:()=>render(),
+          onLogout:doLogout,
+        })
+      : h('div',{className:'sidebar-bottom'})
   );
 
   let content;
@@ -4975,8 +4917,7 @@ function renderSidebar(){
     // dans ce monolithe, et les lier ferait deux culs-de-sac.
     ...(canAccessOfTab()?[{key:'of',label:'Fiches et OF',icon:'file',withPendingOfBadge:true}]:[]),
   ];
-  const isLight=document.body.classList.contains('light');
-  return h('nav',{className:'sidebar'},
+  return h('nav',{className:'sidebar msb-nav'},
     h('div',{className:'logo'},h('div',{className:'logo-brand'},'My',h('span',null,'Prod')),h('div',{className:'logo-sub'},'by __APP_ORG_NAME__')),
     ...items.map(i=>{
       const btn=h('button',{className:'nav-btn'+(S.page===i.key?' active':''),onClick:()=>{
@@ -4997,33 +4938,17 @@ function renderSidebar(){
       }
       return btn;
     }),
-    h('div',{className:'sidebar-bottom'},
-      h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/' }},
-        '← Retour ',
-        h('span',{className:'wm'},'My',h('span',null,'Sifa'))
-      ),
-      sidebarUserChip(S.user),
-      (() => {
-        const b=h('button',{
-          className:'support-btn',
-          title:'Contacter le support',
-          onClick:()=>set({contactOpen:true})
-        });
-        const ico=h('span',{className:'support-ico'});
-        try{
-          ico.innerHTML=(window.MySifaSupport && typeof window.MySifaSupport.iconSvg==='function')?window.MySifaSupport.iconSvg():'';
-        }catch(e){ ico.innerHTML=''; }
-        b.appendChild(ico);
-        b.appendChild(h('span',null,'Contacter le support'));
-        return b;
-      })(),
-      h('button',{className:'theme-btn',onClick:()=>{MySifaTheme.toggleMode();render();}},
-        h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
-        h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
-      ),
-      h('button',{className:'logout-btn',onClick:doLogout},iconEl('log-out',14),' Déconnexion'),
-      h('div',{className:'version'},'__V_LABEL__')
-    )
+    // Pied commun à toutes les applis (static/mysifa_sidebar.js, v3.3.0). Le
+    // support garde la fenêtre de contact de la coquille (S.contactOpen) et la
+    // déconnexion celle de la coquille, qui vide l'état et revient au login.
+    window.MySifaSidebar
+      ? MySifaSidebar.footer({
+          app:'MyProd', version:'__V_LABEL__', user:S.user,
+          onSupport:()=>set({contactOpen:true}),
+          onTheme:()=>render(),
+          onLogout:doLogout,
+        })
+      : h('div',{className:'sidebar-bottom'})
   );
 }
 
@@ -5119,21 +5044,20 @@ function renderMessagesApp(){
       )
     );
   }
-  const isLight=document.body.classList.contains('light');
   const sidebar=h('nav',{className:'sidebar'},
     h('div',{className:'logo'},h('div',{className:'logo-brand'},'__APP_NAME_PREFIX__',h('span',null,'__APP_NAME_SUFFIX__')),h('div',{className:'logo-sub'},'by __APP_ORG_NAME__')),
-      h('button',{className:'nav-btn back-mysifa',onClick:()=>{set({app:'portal',sidebarOpen:false});}},
-      '← Retour ',h('span',{className:'wm'},'__APP_NAME_PREFIX__',h('span',null,'__APP_NAME_SUFFIX__'))
-    ),
-    h('div',{className:'sidebar-bottom'},
-      sidebarUserChip(S.user),
-      h('button',{className:'theme-btn',onClick:()=>{MySifaTheme.toggleMode();render();}},
-        h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
-        h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
-      ),
-      h('button',{className:'logout-btn',onClick:doLogout},iconEl('log-out',14),' Déconnexion'),
-      h('div',{className:'version'},'Messagerie · __V_LABEL__')
-    )
+    // Le lien de retour en tête doublait celui du pied commun : il est retiré.
+    // Pied commun à toutes les applis (static/mysifa_sidebar.js, v3.3.0). Le
+    // support garde la fenêtre de contact de la coquille (S.contactOpen) et la
+    // déconnexion celle de la coquille, qui vide l'état et revient au login.
+    window.MySifaSidebar
+      ? MySifaSidebar.footer({
+          app:'Messages', version:'__V_LABEL__', user:S.user,
+          onSupport:()=>set({contactOpen:true}),
+          onTheme:()=>render(),
+          onLogout:doLogout,
+        })
+      : h('div',{className:'sidebar-bottom'})
   );
   const topbar=h('div',{className:'mobile-topbar'},
     h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},iconEl('menu',20)),

@@ -74,6 +74,7 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css">
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
@@ -133,12 +134,7 @@ input,select{font-family:inherit}
     0 0 16px 7px color-mix(in srgb,var(--accent-bg) 25%,transparent);
 }
 body.light .nav-badge-overlay{background:#ea580c}
-/* Titres de section : --muted sur fond de sidebar était trop clair (11/09/2026). */
-.nav-section-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--text2);
-  font-weight:700;padding:10px 14px 4px 14px;user-select:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;border-radius:6px;transition:background .15s,opacity .15s}
-.nav-section-label:hover{background:rgba(148,163,184,.08);opacity:1}
-.nav-section-label .ngl-chevron{display:inline-flex;flex-shrink:0;transition:transform .2s;opacity:.75}
-.nav-section-label.ngl-collapsed .ngl-chevron{transform:rotate(-90deg)}
+/* Titres de section et pied de sidebar : static/mysifa_sidebar.css (v3.3.0). */
 .nav-btn--mysifa-portal{align-items:baseline;flex-wrap:wrap;gap:4px 8px;line-height:1.35}
 .nav-btn--mysifa-portal:hover{background:var(--accent-bg)}
 .nav-btn--mysifa-portal:hover .mysifa-back-preamble{color:var(--text2)}
@@ -150,34 +146,6 @@ body.light .nav-badge-overlay{background:#ea580c}
 .sidebar-nav{padding:8px 8px;flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .sidebar-nav::-webkit-scrollbar{width:4px}
 .sidebar-nav::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-.sidebar-bottom{padding:12px 8px;border-top:1px solid var(--border);display:flex;flex-direction:column;
-  gap:6px;flex-shrink:0;margin-top:auto;background:var(--card)}
-.user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg);cursor:pointer}
-.user-chip:hover{background:rgba(34,211,238,.18)}
-.user-chip .uc-top{display:flex;align-items:center;gap:10px;margin-bottom:6px}
-.user-chip .uc-avatar{width:36px;height:36px;min-width:36px;border-radius:50%;object-fit:cover;border:1px solid var(--border);flex-shrink:0;display:block}
-.user-chip .uc-info{flex:1;min-width:0}
-.user-chip .uc-name,.uc-name{font-size:12px;font-weight:600;color:var(--text)}
-.user-chip .uc-role,.uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
-.user-chip .uc-profil{font-size:10px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:4px}
-.back-mysifa{
-  border:none!important;background:transparent!important;font-weight:400!important;
-  color:var(--text2)!important;padding:8px 10px!important;
-}
-.back-mysifa:hover{color:var(--text)!important;background:transparent!important}
-.back-mysifa .wm{font-weight:800;color:var(--text)}
-.back-mysifa .wm span{color:var(--accent)}
-.theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;
-  border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;
-  font-size:12px;width:100%;font-family:inherit;transition:all .15s}
-.theme-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.theme-btn .theme-ico{font-size:14px;line-height:1}
-.theme-btn .theme-label{white-space:nowrap}
-@media (display-mode:standalone),(max-width:900px){
-  .theme-btn .theme-label{display:none}
-  .theme-btn{justify-content:center}
-}.logout-btn{border:none}.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1)}
-.version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
 
 /* Main area */
 .main-area{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
@@ -1901,10 +1869,6 @@ body:not(.light) .plan-pill-tip-jours.plan-pill-c-rouge{color:#f87171}
 .modal-actions{display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:16px}
 .btn-cancel{background:transparent;border:1.5px solid var(--border);border-radius:12px;
   padding:13px;font-size:14px;font-weight:700;color:var(--text2);cursor:pointer;font-family:inherit}
-.support-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);
-  background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:all .15s}
-.support-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.support-ico{display:inline-flex;align-items:center;justify-content:center}
 
 /* Modal contact support (messagerie interne) */
 .contact-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:650;display:flex;align-items:center;justify-content:center;padding:18px}
@@ -2257,6 +2221,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <div id="root"></div>
 <div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
@@ -23262,7 +23227,7 @@ function renderSidebarItems(items) {
       currentGroup = item.label;
       const collapsed = S.navCollapsed.has(currentGroup);
       const sepEl = document.createElement('div');
-      sepEl.className = 'nav-section-label' + (collapsed ? ' ngl-collapsed' : '');
+      sepEl.className = 'nav-section-label msb-section msb-toggle' + (collapsed ? ' ngl-collapsed' : '');
       sepEl.innerHTML = '<span>' + item.label + '</span><span class="ngl-chevron">' + CHV + '</span>';
       sepEl.addEventListener('click', () => {
         const isNowCollapsed = S.navCollapsed.has(item.label);
@@ -23315,35 +23280,18 @@ function render() {
       el('div', { cls:'logo-brand' }, 'My', el('span',null,'Stock')),
       el('div', { cls:'logo-sub' }, 'by __APP_ORG_NAME__')
     ),
-    el('div', { cls:'sidebar-nav' },
+    el('div', { cls:'sidebar-nav msb-nav' },
       ...renderSidebarItems(buildSidebarNavStructure())
     ),
-    el('div', { cls:'sidebar-bottom' },
-      el('button', { cls:'nav-btn back-mysifa', on:{ click:()=>{ window.location.href='/'; } } },
-        '← Retour ',
-        el('span', { cls:'wm' }, 'My', el('span', null, 'Sifa'))
-      ),
-      S.user ? (window.MySifaUserChip
-        ? MySifaUserChip.element(S.user, el, iconEl, { title:'Modifier mon profil' })
-        : el('div', { cls:'user-chip', style:{ cursor:'pointer' }, attrs:{ title:'Modifier mon profil' }, on:{ click:()=>{ window.location.href='/profil'; } } },
-            el('div', { cls:'uc-name' }, S.user.nom||''),
-            el('div', { cls:'uc-role' }, ROLE_LABELS[S.user.role] || S.user.role || ''),
-            el('div', { cls:'uc-profil' }, iconEl('edit',10), ' Mon profil')
-          )
-      ) : null,
-      (() => {
-        if(!S.user) return null;
-        const b=el('button',{cls:'support-btn',type:'button',on:{click:()=>{S.contactOpen=true; render();}}});
-        const ico=el('span',{cls:'support-ico'}); ico.innerHTML=window.MySifaSupport?.iconSvg?.()||'';
-        b.append(ico, el('span',null,'Contacter le support'));
-        return b;
-      })(),
-      el('button', { cls:'theme-btn', on:{ click:()=>{ if(window.MySifaTheme)MySifaTheme.toggleMode(); render(); } } },
-        el('span', { cls:'theme-ico' }, iconEl(isLight ? 'sun' : 'moon', 16)),
-        el('span', { cls:'theme-label' }, isLight ? 'Mode clair' : 'Mode sombre')
-      ),      el('button', { cls:'logout-btn', on:{ click: async ()=>{ await api('/api/auth/logout',{method:'POST'}); window.location.href='/'; } } }, iconEl('log-out',14), ' Déconnexion'),
-      el('div', { cls:'version' }, 'MyStock v2.1')
-    )
+    // Pied commun à toutes les applis (static/mysifa_sidebar.js, v3.3.0). Le
+    // support garde la messagerie interne de MyStock (S.contactOpen).
+    window.MySifaSidebar
+      ? MySifaSidebar.footer({
+          app: 'MyStock', version: '__V_LABEL__', user: S.user,
+          onSupport: () => { S.contactOpen = true; render(); },
+          onTheme: () => render(),
+        })
+      : el('div', { cls:'sidebar-bottom' })
   );
 
   const main = el('div', { cls:'main-area' },

@@ -53,6 +53,7 @@ SETTINGS_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <style>
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
 :root{--accent-fg:#0a0e17;--ok:#34d399;--danger-fg:#fff;}
@@ -64,27 +65,13 @@ body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;backgrou
 .sidebar::-webkit-scrollbar{width:0}
 .logo{font-size:15px;font-weight:800;margin-bottom:20px;padding:0 8px}.logo span{color:var(--accent)}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
-.nav-scroll{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+/* Pas d'écart entre les entrées : le rythme vient des boutons (.msb-nav .nav-btn), comme sur les autres applis. */
+.nav-scroll{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:0;margin-bottom:8px}
 .nav-btn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,box-shadow .2s;margin-bottom:2px;position:relative;z-index:1}
 .nav-btn:hover,.nav-btn.active{background:rgba(34,211,238,.12);color:var(--accent)}
-.nav-btn:hover:not(.active){box-shadow:inset 0 0 0 1.5px rgba(34,211,238,.45),0 0 12px rgba(34,211,238,.2)}
-body.light .nav-btn:hover:not(.active){box-shadow:inset 0 0 0 1.5px rgba(8,145,178,.5),0 0 10px rgba(8,145,178,.15)}
-.back-mysifa{border:none!important;background:transparent!important;font-weight:400!important;color:var(--text2)!important;padding:8px 10px!important}
-.back-mysifa:hover{color:var(--text)!important;background:transparent!important}
-.back-mysifa .wm{font-weight:800;color:var(--text)}.back-mysifa .wm span{color:var(--accent)}
-.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
-.user-chip{padding:10px 12px;border-radius:8px;background:rgba(34,211,238,.12);cursor:pointer}
-.user-chip .uc-name{font-size:12px;font-weight:600;color:var(--text)}
-.user-chip .uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
-.theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:background .15s,color .15s,border-color .15s,box-shadow .2s}
-.theme-btn:hover{background:rgba(34,211,238,.12);color:var(--accent);border-color:var(--accent);box-shadow:0 0 0 1px rgba(34,211,238,.22),0 0 20px rgba(34,211,238,.14)}
-body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rgba(8,145,178,.12)}
-.theme-btn .theme-ico{font-size:14px;line-height:1;display:inline-flex;align-items:center}
-@media (display-mode:standalone),(max-width:900px){
-  .theme-btn .theme-label{display:none}.theme-btn{justify-content:center}
-}
-.logout-btn{border:none}.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1);box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 18px rgba(248,113,113,.12)}
-.version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
+/* Pied (retour, profil, support, thème, déconnexion, version) et survol du menu :
+   static/mysifa_sidebar.css (v3.3.0). Le halo au survol est retiré : la sidebar
+   commune n'en a pas, et il s'allumait aussi sur « Retour MySifa » du pied. */
 .main{flex:1;padding:24px 28px;overflow:auto}
 /* topbar mobile : mysifa_mobile_topbar.css */
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
@@ -305,13 +292,14 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
 .tabs .btn{display:inline-flex;align-items:center;gap:8px;vertical-align:middle}
 .tabs .btn svg{flex-shrink:0}
-.nav-group-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);padding:6px 10px 4px;opacity:.7;display:flex;align-items:center;justify-content:space-between;cursor:pointer;border-radius:6px;user-select:none;transition:opacity .15s,background .15s}
-.nav-group-label:hover{opacity:1;background:rgba(148,163,184,.08)}
-.nav-group-chevron{display:inline-flex;flex-shrink:0;transition:transform .2s;opacity:.6}
-.nav-group-label.ngl-collapsed .nav-group-chevron{transform:rotate(-90deg)}
-.nav-subgroup-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);padding:4px 10px 2px 14px;opacity:.55;display:flex;align-items:center;justify-content:space-between;cursor:pointer;border-radius:6px;user-select:none;transition:opacity .15s,background .15s;margin-top:2px}
-.nav-subgroup-label:hover{opacity:.85;background:rgba(148,163,184,.06)}
-.nav-subgroup-chevron{display:inline-flex;flex-shrink:0;transition:transform .2s;opacity:.55}
+/* Titres de groupe : format commun (.msb-section, static/mysifa_sidebar.css).
+   Les sous-titres (Fabrication, Logistique, Contacts) en sont une version un cran
+   en dessous : sans filet, plus petits, pour qu'on lise encore la hiérarchie. */
+.msb-section.nav-subgroup-label{font-size:10px;font-weight:600;letter-spacing:.5px;color:var(--text2);
+  margin:2px 0 0;padding:10px 14px 4px 14px;border-top:0}
+.msb-section.nav-subgroup-label:hover{color:var(--accent)}
+.nav-subgroup-chevron{display:inline-flex;flex-shrink:0;transition:transform .2s,opacity .15s;opacity:.55}
+.nav-subgroup-label:hover .nav-subgroup-chevron{opacity:1}
 .nav-subgroup-label.nsl-collapsed .nav-subgroup-chevron{transform:rotate(-90deg)}
 .hidden{display:none}
 .legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
@@ -862,17 +850,18 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div class="layout">
   <aside class="sidebar">
     <div class="logo">My<span>Sifa</span><div class="logo-sub">by SIFA</div></div>
-    <div class="nav-scroll" style="width:100%;margin:0">
+    <div class="nav-scroll msb-nav" style="width:100%;margin:0">
       <button type="button" class="nav-btn nav-menu active" data-tab="menu">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         Menu général
       </button>
-      <div class="nav-group-label"><span>Base</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <div class="nav-subgroup-label" data-req-section="fabrication"><span>Fabrication</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <div class="nav-group-label msb-section msb-toggle"><span>Base</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <div class="nav-subgroup-label msb-section msb-toggle" data-req-section="fabrication"><span>Fabrication</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-req-section="fabrication" data-tab="operations">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Opérations
@@ -889,7 +878,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
         Machines
       </button>
-      <div class="nav-subgroup-label" data-req-section="logistique"><span>Logistique</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <div class="nav-subgroup-label msb-section msb-toggle" data-req-section="logistique"><span>Logistique</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-req-section="logistique" data-tab="emplacements">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
         Emplacements
@@ -918,7 +907,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 3h13v13H1z"/><path d="M14 8h4l3 3v5h-7z"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/></svg>
         Contrainte transport
       </button>
-      <div class="nav-subgroup-label" data-req-section="contacts"><span>Contacts</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <div class="nav-subgroup-label msb-section msb-toggle" data-req-section="contacts"><span>Contacts</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-req-section="contacts" data-tab="users">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Utilisateurs
@@ -931,7 +920,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21V7l9-4 9 4v14"/><path d="M9 21V12h6v9"/><path d="M3 21h18"/></svg>
         Clients
       </button>
-      <div class="nav-group-label" style="margin-top:8px" data-req-section="access"><span>Accès</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <div class="nav-group-label msb-section msb-toggle" data-req-section="access"><span>Accès</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-req-section="access" data-tab="matrix">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Matrice d'accès
@@ -940,12 +929,12 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
         Référentiel rôles
       </button>
-      <div class="nav-group-label" style="margin-top:8px" data-req-section="communication"><span>Communication</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <div class="nav-group-label msb-section msb-toggle" data-req-section="communication"><span>Communication</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-req-section="communication" data-tab="updates">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         Mises à jour
       </button>
-      <div class="nav-group-label" style="margin-top:8px" data-req-section="audit_full"><span>Audit</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <div class="nav-group-label msb-section msb-toggle" data-req-section="audit_full"><span>Audit</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="audit">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -977,22 +966,22 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         Clés API
       </button>
-      <div class="nav-group-label" style="margin-top:8px" data-req-section="print_full"><span>Impression</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <div class="nav-group-label msb-section msb-toggle" data-req-section="print_full"><span>Impression</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-req-section="print_full" data-tab="printers">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
         Imprimantes
       </button>
-      <div class="nav-group-label" style="margin-top:8px" data-req-section="print_full"><span>Déploiement</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <div class="nav-group-label msb-section msb-toggle" data-req-section="print_full"><span>Déploiement</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-req-section="print_full" data-tab="promote">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
         Promouvoir v1 → v2
       </button>
-      <div class="nav-group-label" style="margin-top:8px" data-req-section="diagnostic"><span>Diagnostic</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <div class="nav-group-label msb-section msb-toggle" data-req-section="diagnostic"><span>Diagnostic</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-req-section="diagnostic" data-tab="diagnostic">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>
         Lecture SQL
       </button>
-      <div class="nav-group-label" style="margin-top:8px" data-req-section="tools_only"><span>Outils</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <div class="nav-group-label msb-section msb-toggle" data-req-section="tools_only"><span>Outils</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-req-section="tools_only" data-tab="printers">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
         Imprimantes
@@ -1002,25 +991,8 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         Registre FSC
       </button>
     </div>
-    <div class="sidebar-bottom">
-      <button type="button" class="nav-btn back-mysifa" onclick="location.href='/'">
-        ← Retour <span class="wm">My<span>Sifa</span></span>
-      </button>
-      <div class="user-chip" id="sb-user-chip" title="Modifier mon profil" onclick="location.href='/profil'"></div>
-      <button type="button" class="support-btn" id="sb-support" title="Contacter le support (email)">
-        <span class="support-ico" id="sb-support-ico"></span>
-        <span>Contacter le support</span>
-      </button>
-      <button type="button" class="theme-btn" id="theme-btn">
-        <span class="theme-ico" id="theme-ico-slot"></span>
-        <span class="theme-label" id="theme-label">Mode sombre</span>
-      </button>
-      <button type="button" class="logout-btn" id="logout-btn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        Déconnexion
-      </button>
-      <div class="version">Paramètres · MySifa __V_LABEL__</div>
-    </div>
+    <!-- Pied commun à toutes les applis (static/mysifa_sidebar.js, v3.3.0). -->
+    <div class="sidebar-bottom msb-footer" data-msb-footer data-msb-app="Paramètres" data-msb-version="__V_LABEL__"></div>
   </aside>
   <main class="main">
     <div class="mobile-topbar">
@@ -3694,55 +3666,6 @@ try{
   });
 }catch(e){}
 
-function iconSvg(name, size) {
-  const s = size || 16;
-  const a = 'width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
-  if (name === 'moon') return '<svg ' + a + '><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-  if (name === 'sun') return '<svg ' + a + '><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
-  if (name === 'edit') return '<svg ' + a + '><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
-  return '';
-}
-function syncThemeBtn() {
-  const light = document.body.classList.contains('light');
-  const slot = document.getElementById('theme-ico-slot');
-  if (slot) slot.innerHTML = iconSvg(light ? 'sun' : 'moon', 16);
-  const lb = document.getElementById('theme-label');
-  if (lb) lb.textContent = light ? 'Mode clair' : 'Mode sombre';
-}
-
-document.getElementById('theme-btn').onclick = () => {
-  if (window.MySifaTheme) MySifaTheme.toggleMode();
-  syncThemeBtn();
-};
-document.getElementById('logout-btn').onclick = async () => {
-  try { await api('/api/auth/logout', { method: 'POST' }); } catch (e) {}
-  location.href = '/';
-};
-syncThemeBtn();
-
-document.getElementById('sb-user-chip').onclick = () => { location.href = '/profil'; };
-
-function initSupportSidebar() {
-  const ico = document.getElementById('sb-support-ico');
-  if (ico) {
-    try {
-      ico.innerHTML = (window.MySifaSupport && window.MySifaSupport.iconSvg) ? window.MySifaSupport.iconSvg() : '';
-    } catch (e) { ico.innerHTML = ''; }
-  }
-  document.getElementById('sb-support').onclick = () => {
-    try {
-      if (window.MySifaSupport && typeof window.MySifaSupport.open === 'function') {
-        window.MySifaSupport.open({
-          user: window.__meUser,
-          page: 'Paramètres',
-          notify: (m, t) => toast(m, t === 'error'),
-          api: api,
-        });
-      }
-    } catch (e) {}
-  };
-}
-
 async function refreshSidebarUser() {
   const me = await api('/api/auth/me');
   if (!me || typeof me !== 'object') return;
@@ -3754,12 +3677,10 @@ async function refreshSidebarUser() {
     window.__MYSIFA_ROLE__ = me.role || '';
     window.__MYSIFA_USER__ = { nom: me.nom || '', role: me.role || '' };
   }
-  const chip = document.getElementById('sb-user-chip');
-  if (chip && window.MySifaUserChip) {
-    MySifaUserChip.fill(chip, me, {
-      roleLabels: roleLabels,
-      editIconHtml: iconSvg('edit', 10),
-    });
+  // Le pied commun reçoit l'utilisateur déjà chargé ; ucSubtext garde le libellé
+  // de rôle servi par la matrice d'accès (rôles propres à l'instance compris).
+  if (window.MySifaSidebar) {
+    MySifaSidebar.setUser(Object.assign({}, me, { ucSubtext: (roleLabels && roleLabels[me.role]) || '' }));
   }
 }
 
@@ -6737,7 +6658,6 @@ function openContactSubModal(fournisseurId, contactId, onSaved) {
     if (window.MySifaDock && typeof window.MySifaDock.bootPageWidgets === 'function') {
       window.MySifaDock.bootPageWidgets();
     }
-    initSupportSidebar();
     await loadFilters();
     await loadMachines();
     syncCuRoleUI();

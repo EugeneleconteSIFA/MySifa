@@ -39,6 +39,7 @@ RH_COFFRE_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <style>
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
 :root{--ok:#34d399;}
@@ -54,35 +55,17 @@ body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;backgrou
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
 .nav-btn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,box-shadow .2s;margin-bottom:2px}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
-.nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(34,211,238,.25),0 0 18px rgba(34,211,238,.15)}
-body.palette-ambre .nav-btn:hover:not(.active),body.palette-forge .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(240,165,0,.28),0 0 16px rgba(240,165,0,.14)}
-body.palette-pivoine .nav-btn:hover:not(.active),body.palette-cocon .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(240,56,136,.28),0 0 16px rgba(240,56,136,.14)}
-body.palette-foret .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(61,214,126,.28),0 0 16px rgba(61,214,126,.14)}
-body.palette-cendre .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(100,150,200,.28),0 0 16px rgba(100,150,200,.14)}
-body.palette-braise .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(240,112,48,.28),0 0 16px rgba(240,112,48,.14)}
-body.light .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 16px rgba(8,145,178,.12)}
+.nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(34,211,238,.25),0 0 18px rgba(34,211,238,.15)}
+body.palette-ambre .nav-btn:hover:not(.active):not(.back-mysifa),body.palette-forge .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(240,165,0,.28),0 0 16px rgba(240,165,0,.14)}
+body.palette-pivoine .nav-btn:hover:not(.active):not(.back-mysifa),body.palette-cocon .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(240,56,136,.28),0 0 16px rgba(240,56,136,.14)}
+body.palette-foret .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(61,214,126,.28),0 0 16px rgba(61,214,126,.14)}
+body.palette-cendre .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(100,150,200,.28),0 0 16px rgba(100,150,200,.14)}
+body.palette-braise .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(240,112,48,.28),0 0 16px rgba(240,112,48,.14)}
+body.light .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 16px rgba(8,145,178,.12)}
 .nav-badge{margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--warn);color:#0a0e17;font-size:10px;font-weight:700;line-height:1.5}
-.back-mysifa{border:none!important;background:transparent!important;font-weight:400!important;color:var(--text2)!important;padding:8px 10px!important}
-.back-mysifa:hover{color:var(--text)!important;background:transparent!important}
-.back-mysifa .wm{font-weight:800;color:var(--text)}.back-mysifa .wm span{color:var(--accent)}
-.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
-.user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg);cursor:pointer}
-.user-chip .uc-name{font-size:12px;font-weight:600;color:var(--text)}
-.user-chip .uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
-.theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:background .15s,color .15s,border-color .15s,box-shadow .2s}
-.theme-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);box-shadow:0 0 0 1px rgba(34,211,238,.22),0 0 20px rgba(34,211,238,.14)}
-body.palette-ambre .theme-btn:hover,body.palette-forge .theme-btn:hover{box-shadow:0 0 0 1px rgba(240,165,0,.28),0 0 18px rgba(240,165,0,.14)}
-body.palette-pivoine .theme-btn:hover,body.palette-cocon .theme-btn:hover{box-shadow:0 0 0 1px rgba(240,56,136,.24),0 0 18px rgba(240,56,136,.12)}
-body.palette-foret .theme-btn:hover{box-shadow:0 0 0 1px rgba(61,214,126,.24),0 0 18px rgba(61,214,126,.12)}
-body.palette-cendre .theme-btn:hover{box-shadow:0 0 0 1px rgba(100,150,200,.24),0 0 18px rgba(100,150,200,.12)}
-body.palette-braise .theme-btn:hover{box-shadow:0 0 0 1px rgba(240,112,48,.24),0 0 18px rgba(240,112,48,.12)}
-body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rgba(8,145,178,.12)}
-.theme-btn .theme-ico{display:inline-flex;align-items:center;line-height:1}
-.theme-btn .theme-label{white-space:nowrap}
-@media (display-mode:standalone),(max-width:900px){.theme-btn .theme-label{display:none}.theme-btn{justify-content:center}}
-.logout-btn{border:none}
-.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1);box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 18px rgba(248,113,113,.12)}
-.version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
+/* Pied de sidebar : static/mysifa_sidebar.css (v3.3.0). La sidebar a ici 12px de marge
+   latérale : le pied la déborde pour que son filet aille d'un bord à l'autre, comme sur MyStock. */
+.sidebar>.msb-footer{margin-left:-12px;margin-right:-12px;padding-left:12px;padding-right:12px}
 
 .main{flex:1;padding:28px;overflow:auto}
 .container{max-width:1280px;margin:0 auto}
@@ -178,11 +161,12 @@ tr:hover td{background:var(--accent-bg)}
 <body class="has-topbar">
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 
 <div class="sidebar-overlay" id="sb-ov" onclick="closeSidebar()"></div>
 
 <div class="layout">
-  <aside class="sidebar">
+  <aside class="sidebar msb-nav">
     <div class="logo">
       <div class="logo-brand">My<span>Sifa</span></div>
       <div class="logo-sub">Coffre RH · Compta</div>
@@ -202,24 +186,8 @@ tr:hover td{background:var(--accent-bg)}
       Mon coffre
     </button>
 
-    <div class="sidebar-bottom">
-      <button type="button" class="nav-btn back-mysifa" onclick="location.href='/'">
-        ← Retour <span class="wm">My<span>Sifa</span></span>
-      </button>
-      <div class="user-chip" onclick="location.href='/profil'" title="Mon profil">
-        <div class="uc-name" id="uc-name">—</div>
-        <div class="uc-role" id="uc-role">—</div>
-      </div>
-      <button type="button" class="theme-btn" id="btn-theme">
-        <span class="theme-ico" id="theme-ico"></span>
-        <span class="theme-label" id="theme-label">Mode clair</span>
-      </button>
-      <button type="button" class="logout-btn" id="btn-logout">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        Déconnexion
-      </button>
-      <div class="version">Coffre RH · Compta · __V_LABEL__</div>
-    </div>
+    <!-- Pied commun (static/mysifa_sidebar.js), rempli au chargement. -->
+    <div class="sidebar-bottom msb-footer" data-msb-footer data-msb-app="Coffre RH" data-msb-version="__V_LABEL__"></div>
   </aside>
 
   <main class="main">
@@ -300,10 +268,7 @@ tr:hover td{background:var(--accent-bg)}
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='rh_coffre';</script>
 <script>
-const ROLE_LABELS={direction:'Direction',administration:'Administration',fabrication:'Fabrication',logistique:'Logistique',comptabilite:'Comptabilité',expedition:'Expédition',commercial:'Commercial',superadmin:'Super admin'};
 const MOIS_LABELS=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-const ICO_MOON=`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
-const ICO_SUN=`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
 
 let ME=null;let CURRENT_TAB='bulletins';
 const now=new Date();const curYear=now.getFullYear();const curMonth=now.getMonth()+1;
@@ -354,15 +319,6 @@ document.addEventListener('click',(e)=>{
   previewDocument(el.dataset.previewUrl, el.dataset.previewName||'');
 });
 
-function getPrefs(){return window.MySifaTheme?MySifaTheme.loadPrefs():{palette:'mysifa',style:'defaut',mode:'dark',bgAnim:true};}
-function syncThemeBtn(){
-  const isLight=getPrefs().mode==='light';
-  const ico=document.getElementById('theme-ico');
-  const lbl=document.getElementById('theme-label');
-  if(ico)ico.innerHTML=isLight?ICO_SUN:ICO_MOON;
-  if(lbl)lbl.textContent=isLight?'Mode sombre':'Mode clair';
-}
-
 function toggleSidebar(){document.body.classList.toggle('sb-open');}
 function closeSidebar(){document.body.classList.remove('sb-open');}
 
@@ -394,14 +350,6 @@ function showTab(tab, opts){
   if(tab==='ndf')loadNdf();
   closeSidebar();
   if(!silent){try{var target='#'+tab;if(location.hash!==target)history.replaceState(null,'',target);}catch(e){}}
-}
-
-function updateUserChip(){
-  if(!ME)return;
-  const chip=document.querySelector('.user-chip');
-  if(chip&&window.MySifaUserChip){MySifaUserChip.fill(chip,ME,{roleLabels:ROLE_LABELS,showProfil:false});return;}
-  const n=document.getElementById('uc-name');if(n)n.textContent=ME.nom||'—';
-  const r=document.getElementById('uc-role');if(r)r.textContent=ROLE_LABELS[ME.role]||ME.role||'—';
 }
 
 {
@@ -590,22 +538,12 @@ function exportNdf(){
   window.open(`/api/rh-coffre/ndf/export?statut=${statut}&annee=${annee}`,'_blank');
 }
 
-document.getElementById('btn-theme').onclick=()=>{
-  if(window.MySifaTheme)MySifaTheme.toggleMode();
-  syncThemeBtn();
-};
-document.getElementById('btn-logout').onclick=async()=>{
-  try{await fetch('/api/auth/logout',{method:'POST',credentials:'include'});}catch(e){}
-  location.href='/';
-};
-
 (async function init(){
-  syncThemeBtn();
   try{
     ME=await api('/api/auth/me');
     if(ME&&window.MySifaTheme)MySifaTheme.mergeFromUser(ME);
-    syncThemeBtn();
-    updateUserChip();
+    // Pied commun : les préférences du compte peuvent changer le mode.
+    if(window.MySifaSidebar){MySifaSidebar.setUser(ME);MySifaSidebar.refreshTheme();}
   }catch(e){}
   loadDashboard();
   try{

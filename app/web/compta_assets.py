@@ -445,7 +445,6 @@ function renderComptaCompteModal(){
 }
 
 function renderCompta(){
-  const isLight=document.body.classList.contains('light');
   const tab = S.comptaTab || 'factor';
   const sidebar=h('nav',{className:'sidebar'},
     h('div',{className:'logo'},
@@ -454,8 +453,8 @@ function renderCompta(){
       ),
       h('div',{className:'logo-sub'},'by __APP_ORG_NAME__')
     ),
-    h('div',{className:'nav-scroll tabs',style:{width:'100%',margin:0}},
-      h('div',{className:'nav-group-label'},'Import'),
+    h('div',{className:'nav-scroll tabs msb-nav',style:{width:'100%',margin:0}},
+      h('div',{className:'nav-group-label msb-section'},h('span',null,'Import')),
       h('button',{className:'nav-btn'+(tab==='factor'?' active':''),onClick:()=>{set({comptaTab:'factor'});}},
         iconEl('upload',15),'  Import Factor'),
       h('button',{className:'nav-btn'+(tab==='acheteurs'?' active':''),onClick:()=>{set({comptaTab:'acheteurs'});loadComptaAcheteurs();}},
@@ -464,42 +463,23 @@ function renderCompta(){
         iconEl('file',15),'  Table des comptes'),
       h('button',{className:'nav-btn'+(tab==='banques'?' active':''),onClick:()=>{set({comptaTab:'banques'});loadComptaBanques();}},
         iconEl('credit-card',15),'  Code de banque'),
-      h('div',{className:'nav-group-label'},'Autres modules'),
+      h('div',{className:'nav-group-label msb-section'},h('span',null,'Autres modules')),
       h('button',{className:'nav-btn'+(tab==='cession'?' active':''),onClick:()=>{set({comptaTab:'cession'});}},
         iconEl('clock',15),'  Cession (en cours)'),
       h('button',{className:'nav-btn'+(tab==='paie'?' active':''),onClick:()=>{if(!S.paieEmpLoaded){paieLoadEmployes();}paieLoadVars().then(()=>render());set({comptaTab:'paie'});}},
         iconEl('credit-card',15),'  Paies')
     ),
-    h('div',{className:'sidebar-bottom'},
-      h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/' }},
-        '← Retour ',
-        h('span',{className:'wm'},'My',h('span',null,'Sifa'))
-      ),
-      sidebarUserChip(S.user),
-      (() => {
-        const b=h('button',{
-          className:'support-btn',
-          title:'Contacter le support',
-          onClick:()=>set({contactOpen:true})
-        });
-        const ico=h('span',{className:'support-ico'});
-        try{
-          ico.innerHTML=(window.MySifaSupport && typeof window.MySifaSupport.iconSvg==='function')?window.MySifaSupport.iconSvg():'';
-        }catch(e){ ico.innerHTML=''; }
-        b.appendChild(ico);
-        b.appendChild(h('span',null,'Contacter le support'));
-        return b;
-      })(),
-      h('button',{
-        className:'theme-btn',
-        onClick:()=>{MySifaTheme.toggleMode();render();},
-        title:'Changer le thème'
-      },
-        h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
-        h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
-      ),
-      h('button',{className:'logout-btn',onClick:doLogout},iconEl('log-out',14),' Déconnexion')
-    )
+    // Pied commun à toutes les applis (static/mysifa_sidebar.js, v3.3.0). Le
+    // support garde la fenêtre de contact de la coquille (S.contactOpen) et la
+    // déconnexion celle de la coquille, qui vide l'état et revient au login.
+    window.MySifaSidebar
+      ? MySifaSidebar.footer({
+          app:'MyCompta', version:'__V_LABEL__', user:S.user,
+          onSupport:()=>set({contactOpen:true}),
+          onTheme:()=>render(),
+          onLogout:doLogout,
+        })
+      : h('div',{className:'sidebar-bottom'})
   );
 
   const topbar=h('div',{className:'mobile-topbar'},

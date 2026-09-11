@@ -3021,11 +3021,20 @@ async def import_orphan_dossier(machine_id: int, request: Request):
 def _ordre_verrouille_respecte(cur_ids: list, wanted_ids: list, statuts: dict) -> bool:
     """Le nouvel ordre respecte-t-il l'historique de la machine ?
 
-    Trois règles, et seulement trois :
+    Deux règles, et seulement deux :
     - la tête de liste (dossiers terminés / en cours qui précèdent le premier
       dossier en attente) ne bouge pas d'un cran ;
-    - un dossier en cours garde exactement sa place ;
-    - les dossiers terminés gardent leur ordre entre eux.
+    - les dossiers terminés et en cours gardent leur ordre entre eux.
+
+    Jusqu'au 11/09/2026, un dossier en cours devait aussi garder son RANG
+    exact. Dès qu'un dossier en attente traînait au-dessus de l'en-cours
+    (démarrage hors séquence), plus rien ne pouvait passer devant lui : le
+    remonter faisait descendre l'en-cours d'un cran, refusé. Cas réel :
+    Maître Coq 1068/0002 Reliquat 3 impossible à mettre en début de prod sur
+    Cohésio 2 derrière XEROX 9932478, parce que SOLUROAD Reliquat 9932324
+    était au-dessus ; le planificateur a dû envoyer SOLUROAD sur une autre
+    machine pour s'en sortir. La timeline recale déjà tout dossier en attente
+    après la fin de l'en-cours : son rang dans la liste ne protège rien.
 
     Jusqu'au 10/09/2026, TOUT dossier terminé devait garder son index exact.
     Un terminé resté en fin de liste (démarré hors séquence, derrière des
@@ -3043,13 +3052,67 @@ def _ordre_verrouille_respecte(cur_ids: list, wanted_ids: list, statuts: dict) -
         tete += 1
     if wanted_ids[:tete] != cur_ids[:tete]:
         return False
-    pos_voulue = {eid: i for i, eid in enumerate(wanted_ids)}
-    for i, eid in enumerate(cur_ids):
-        if statuts.get(eid) == "en_cours" and pos_voulue.get(eid) != i:
-            return False
     avant = [eid for eid in cur_ids if statuts.get(eid) in verrouilles]
     apres = [eid for eid in wanted_ids if statuts.get(eid) in verrouilles]
     return avant == apres
+
+
+def _longueur_tete(ids: list, statuts: dict) -> int:
+    """Nombre de dossiers terminés / en cours avant le premier dossier en attente."""
+    n = 0
+    for eid in ids:
+        if statuts.get(eid) not in ("en_cours", "termine"):
+            break
+        n += 1
+    return n
+
+
+def _ordre_machine(conn, machine_id: int) -> Tuple[List[int], Dict[int, str]]:
+    """Ids de la machine dans l'ordre de la liste, et statut calculé de chacun."""
+    rows = conn.execute(
+        """SELECT id, statut, statut_force, planned_start, planned_end
+           FROM planning_entries
+           WHERE machine_id=?
+           ORDER BY position ASC, id ASC""",
+        (machine_id,),
+    ).fetchall()
+    ids = [int(r["id"]) for r in rows]
+    return ids, {int(r["id"]): compute_statut(dict(r)) for r in rows}
+
+
+def _index_placement(ids: List[int], statuts: Dict[int, str], apres_id: Optional[int], en_tete: bool) -> int:
+    """Rang où poser un dossier en attente dans `ids` (liste qui ne le contient pas).
+
+    - en tête : juste après l'historique, c'est-à-dire le prochain dossier produit
+      (la timeline recale de toute façon tout dossier en attente après l'en-cours) ;
+    - après un dossier : juste derrière lui, y compris derrière un dossier en cours ;
+    - ni l'un ni l'autre : en fin de liste.
+
+    Lève 400 si la place demandée tombe au milieu de l'historique.
+    """
+    tete = _longueur_tete(ids, statuts)
+    if en_tete:
+        return tete
+    if apres_id is None:
+        return len(ids)
+    if apres_id not in ids:
+        raise HTTPException(404, "Dossier de référence introuvable sur cette machine.")
+    idx = ids.index(apres_id) + 1
+    if idx < tete:
+        raise HTTPException(
+            400,
+            "Place impossible au milieu des dossiers déjà produits — "
+            "choisissez le dossier en cours ou un dossier en attente.",
+        )
+    return idx
+
+
+def _ecrire_ordre(conn, machine_id: int, ids: List[int], now: str) -> None:
+    for pos, eid in enumerate(ids, start=1):
+        conn.execute(
+            "UPDATE planning_entries SET position=?, updated_at=? WHERE id=? AND machine_id=?",
+            (pos, now, eid, machine_id),
+        )
 
 
 @router.post("/machines/{machine_id}/reorder")
@@ -3124,18 +3187,25 @@ async def reorder_entries(machine_id: int, request: Request):
 
 @router.post("/machines/{machine_id}/insert-after/{after_entry_id}")
 async def insert_after(machine_id: int, after_entry_id: int, request: Request):
-    """Insérer un dossier juste après une entrée existante."""
+    """Insérer un dossier juste après une entrée existante.
+
+    Autorisé derrière un dossier en attente ou en cours, et derrière le dernier
+    dossier produit. Refusé seulement au milieu de l'historique : jusqu'au
+    11/09/2026, insérer derrière le dossier EN COURS était refusé, alors que
+    c'est justement le geste « à produire juste après ».
+    """
     require_admin(request)
     body = await request.json()
 
     with get_db() as conn:
-        _assert_not_locked(conn, machine_id, after_entry_id)
         ref_entry = conn.execute(
             "SELECT position FROM planning_entries WHERE id=? AND machine_id=?",
             (after_entry_id, machine_id)
         ).fetchone()
         if not ref_entry:
             raise HTTPException(404, "Entrée de référence non trouvée")
+        ids, statuts = _ordre_machine(conn, machine_id)
+        _index_placement(ids, statuts, int(after_entry_id), False)
 
         new_position = ref_entry["position"] + 1
 
@@ -3170,7 +3240,7 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
         "date_livraison": date_liv,
         "commentaire": body.get("commentaire", "") or "",
         "exigences_production": (body.get("exigences_production") or "").strip() or None,
-        "a_placer": _parse_a_placer(body.get("a_placer"), default=1),
+        "a_placer": _parse_a_placer(body.get("a_placer"), default=0),
         "valide": _parse_a_placer(body.get("valide"), default=0),
         "fsc_requis": fsc_requis_val,
         "fsc_type_requis": _parse_fsc_type_requis(
@@ -3200,6 +3270,196 @@ async def insert_after(machine_id: int, after_entry_id: int, request: Request):
         conn.commit()
 
     return {"success": True, "position": new_position}
+
+
+# ═══════════════════════════════════════════════════════════════
+# DÉPLACER UN DOSSIER EXISTANT : EN TÊTE / JUSTE APRÈS / AUTRE MACHINE
+# ═══════════════════════════════════════════════════════════════
+
+def _apres_id_body(body: dict) -> Optional[int]:
+    raw = body.get("apres_id")
+    if raw in (None, "", 0, "0"):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "apres_id invalide")
+
+
+def _entree_deplacable(conn, machine_id: int, entry_id: int) -> dict:
+    row = conn.execute(
+        "SELECT * FROM planning_entries WHERE id=? AND machine_id=?",
+        (entry_id, machine_id),
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, "Entrée non trouvée")
+    e = dict(row)
+    if compute_statut(e) in ("en_cours", "termine"):
+        raise HTTPException(400, "Dossier en cours ou terminé — il garde sa place.")
+    return e
+
+
+@router.post("/machines/{machine_id}/entries/{entry_id}/deplacer")
+async def deplacer_entry(machine_id: int, entry_id: int, request: Request):
+    """Place un dossier en attente en tête de production ou juste après un autre.
+
+    Body : {"en_tete": true} ou {"apres_id": 123}.
+
+    Un dossier placé explicitement n'est plus « à placer » : sinon la timeline
+    le renverrait en fin de file et le geste n'aurait aucun effet visible.
+    """
+    user = require_admin(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    en_tete = _body_flag_true(body.get("en_tete"))
+    apres_id = _apres_id_body(body)
+    if not en_tete and apres_id is None:
+        raise HTTPException(400, "Préciser en_tete ou apres_id")
+    if apres_id == int(entry_id):
+        raise HTTPException(400, "Un dossier ne se place pas après lui-même.")
+
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        mac = conn.execute("SELECT nom FROM machines WHERE id=?", (machine_id,)).fetchone()
+        machine_nom = (mac["nom"] or "") if mac else ""
+        e = _entree_deplacable(conn, machine_id, entry_id)
+        cur_ids, statuts = _ordre_machine(conn, machine_id)
+        reste = [i for i in cur_ids if i != int(entry_id)]
+        idx = _index_placement(reste, statuts, apres_id, en_tete)
+        wanted = reste[:idx] + [int(entry_id)] + reste[idx:]
+        if not _ordre_verrouille_respecte(cur_ids, wanted, statuts):
+            raise HTTPException(400, "Déplacement impossible — l'ordre des dossiers déjà produits changerait.")
+
+        avant = _transport_avant(conn, machine_id)
+        pe_cols = _ensure_planning_entry_columns(conn)
+        if "a_placer" in pe_cols:
+            conn.execute(
+                "UPDATE planning_entries SET a_placer=0 WHERE id=? AND machine_id=?",
+                (entry_id, machine_id),
+            )
+        _ecrire_ordre(conn, machine_id, wanted, now)
+        _invalidate_attente_plans(conn, machine_id)
+        gel_force = _garde_transport_apres_ecriture(conn, machine_id, avant, request, body)
+        conn.commit()
+
+    log_action(
+        user=user,
+        action="REORDER",
+        module="planning",
+        objet=f"Dossier {(e.get('reference') or '').strip()} · {machine_nom}",
+        detail={
+            "geste": "en_tete" if en_tete else "apres",
+            "apres_id": apres_id,
+            "rang": idx + 1,
+            **({"gel_force": {
+                "motif": _gel_confirme(request, body)[1],
+                "dossiers": [
+                    {"reference": a["reference"], "date_enlevement": a["date_enlevement"],
+                     "retard_h": a["ecart_h"]}
+                    for a in gel_force
+                ],
+            }} if gel_force else {}),
+        },
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "position": idx + 1}
+
+
+@router.post("/machines/{machine_id}/entries/{entry_id}/changer-machine")
+async def changer_machine_entry(machine_id: int, entry_id: int, request: Request):
+    """Envoie un dossier en attente sur une autre machine, en une seule transaction.
+
+    Body : {"machine_cible": 3, "en_tete": true} ou {"machine_cible": 3, "apres_id": 123}
+    (ni l'un ni l'autre : fin de liste).
+
+    La ligne est DÉPLACÉE, pas recréée : elle garde son id, donc ses liens
+    (commandes RVGI rattachées, départs MyExpé, split, repère de déstockage).
+    Jusqu'au 11/09/2026 l'écran supprimait le dossier puis le recréait en deux
+    appels : quand l'insertion était refusée, le dossier avait déjà disparu
+    (Maître Coq Reliquat 4, supprimé de Cohésio 1 et ressaisi à la main).
+    """
+    user = require_admin(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    try:
+        cible = int(body.get("machine_cible"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "machine_cible requise")
+    if cible == int(machine_id):
+        raise HTTPException(400, "Le dossier est déjà sur cette machine.")
+    en_tete = _body_flag_true(body.get("en_tete"))
+    apres_id = _apres_id_body(body)
+
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        src = conn.execute("SELECT nom FROM machines WHERE id=?", (machine_id,)).fetchone()
+        dst = conn.execute("SELECT nom FROM machines WHERE id=?", (cible,)).fetchone()
+        if not src or not dst:
+            raise HTTPException(404, "Machine non trouvée")
+        e = _entree_deplacable(conn, machine_id, entry_id)
+
+        dst_ids, dst_statuts = _ordre_machine(conn, cible)
+        idx = _index_placement(dst_ids, dst_statuts, apres_id, en_tete)
+        wanted_dst = dst_ids[:idx] + [int(entry_id)] + dst_ids[idx:]
+
+        avant_src = _transport_avant(conn, machine_id)
+        avant_dst = _transport_avant(conn, cible)
+        pe_cols = _ensure_planning_entry_columns(conn)
+
+        sets = ["machine_id=?", "planned_start=NULL", "planned_end=NULL",
+                "planned_end_manual=0", "updated_at=?"]
+        params: List[Any] = [cible, now]
+        if "updated_by" in pe_cols:
+            sets.append("updated_by=?")
+            params.append(user.get("nom") or user.get("email") or "Admin")
+        if "a_placer" in pe_cols and (en_tete or apres_id is not None):
+            sets.append("a_placer=0")
+        conn.execute(
+            f"UPDATE planning_entries SET {', '.join(sets)} WHERE id=? AND machine_id=?",
+            (*params, entry_id, machine_id),
+        )
+        src_ids, _ = _ordre_machine(conn, machine_id)
+        _ecrire_ordre(conn, machine_id, src_ids, now)
+        _ecrire_ordre(conn, cible, wanted_dst, now)
+        _invalidate_attente_plans(conn, machine_id)
+        _invalidate_attente_plans(conn, cible)
+        gel_src = _garde_transport_apres_ecriture(conn, machine_id, avant_src, request, body)
+        gel_dst = _garde_transport_apres_ecriture(conn, cible, avant_dst, request, body)
+        conn.commit()
+
+    gel_force = (gel_src or []) + (gel_dst or [])
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="planning",
+        objet=f"Dossier {(e.get('reference') or '').strip()} · {src['nom'] or ''} → {dst['nom'] or ''}",
+        detail={
+            "geste": "changer_machine",
+            "machine_source": int(machine_id),
+            "machine_cible": cible,
+            "en_tete": en_tete,
+            "apres_id": apres_id,
+            "rang": idx + 1,
+            **({"gel_force": {
+                "motif": _gel_confirme(request, body)[1],
+                "dossiers": [
+                    {"reference": a["reference"], "date_enlevement": a["date_enlevement"],
+                     "retard_h": a["ecart_h"]}
+                    for a in gel_force
+                ],
+            }} if gel_force else {}),
+        },
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "id": int(entry_id), "machine_id": cible, "position": idx + 1}
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -124,17 +124,6 @@
     return escHtml(s).replace(/'/g, "&#39;");
   }
 
-  const ROLE_LABELS = {
-    direction: "Direction",
-    administration: "Administration",
-    fabrication: "Fabrication",
-    logistique: "Logistique",
-    comptabilite: "Comptabilité",
-    expedition: "Expédition",
-    commercial: "Commercial",
-    superadmin: "Super admin",
-  };
-
   function icon(name, size) {
     size = size || 16;
     const a =
@@ -706,37 +695,14 @@
     return `<div class="breakdown-stack"><div class="breakdown-bar">${segs}</div>${cle}<div class="breakdown-legend">${legend}</div></div>`;
   }
 
+  // Le pied de sidebar (retour, profil, thème, déconnexion, version) est
+  // construit par static/mysifa_sidebar.js depuis la v3.3.0 : ici, seulement
+  // les icônes de la barre mobile.
   function updateChromeControls() {
-    const isLight = document.body.classList.contains("light");
-    const themeIco = document.getElementById("theme-ico");
-    const themeLabel = document.getElementById("theme-label");
-    if (themeIco) themeIco.innerHTML = icon(isLight ? "sun" : "moon", 16);
-    if (themeLabel) themeLabel.textContent = isLight ? "Mode clair" : "Mode sombre";
-    const logoutIco = document.getElementById("logout-ico");
-    if (logoutIco) logoutIco.innerHTML = icon("log-out", 14);
     const menuBtn = document.getElementById("mobile-menu-btn");
     if (menuBtn) menuBtn.innerHTML = icon("menu", 20);
     const homeBtn = document.getElementById("mobile-home-btn");
     if (homeBtn) homeBtn.innerHTML = icon("home", 20);
-    const chip = document.getElementById("user-chip");
-    if (chip && S.user) {
-      if (window.MySifaUserChip) {
-        MySifaUserChip.fill(chip, S.user, {
-          roleLabels: ROLE_LABELS,
-          editIconHtml: icon("edit", 10),
-        });
-        chip.onclick = () => {
-          window.location.href = "/profil";
-        };
-      } else {
-        chip.innerHTML =
-          '<div class="uc-name">' +
-          escHtml(S.user.nom || "—") +
-          '</div><div class="uc-role">' +
-          escHtml(ROLE_LABELS[S.user.role] || S.user.role || "") +
-          "</div>";
-      }
-    }
   }
 
   function renderSidebar() {
@@ -4909,20 +4875,6 @@
   }
 
   function initChrome() {
-    document.getElementById("btn-portal").onclick = () => {
-      window.location.href = "/";
-    };
-    document.getElementById("theme-btn").onclick = () => {
-      if (window.MySifaTheme) MySifaTheme.toggleMode();
-      else document.body.classList.toggle("light");
-      updateChromeControls();
-    };
-    document.getElementById("logout-btn").onclick = async () => {
-      try {
-        await api("/api/auth/logout", { method: "POST" });
-      } catch (e) {}
-      window.location.href = "/";
-    };
     document.getElementById("mobile-menu-btn").onclick = () => document.body.classList.toggle("sb-open");
     document.getElementById("sidebar-overlay").onclick = () => document.body.classList.remove("sb-open");
     updateChromeControls();

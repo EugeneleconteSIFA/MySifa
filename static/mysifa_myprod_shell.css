@@ -64,20 +64,13 @@ body.sb-open .sidebar-overlay{display:block}
 /* ── Nav buttons (sidebar) ──────────────────────────────────────── */
 .nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;width:100%;text-align:left;font-family:inherit;transition:background .15s,color .15s,box-shadow .2s;margin-bottom:2px}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
-.nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(34,211,238,.25),0 0 18px rgba(34,211,238,.15)}
-body.light .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 16px rgba(8,145,178,.12)}
+/* Plus de halo au survol (v3.3.0) : la sidebar commune (mysifa_sidebar.css)
+   n'en a pas, et MyProd doit se lire comme MyStock. */
 
-/* ── Retour MySifa (portail) ────────────────────────────────────── */
-.back-mysifa{
-  border:none!important;
-  background:transparent!important;
-  font-weight:400!important;
-  color:var(--text2)!important;
-  padding:8px 10px!important;
-}
-.back-mysifa:hover{color:var(--text)!important;background:transparent!important}
-.back-mysifa .wm{font-weight:800;color:var(--text)}
-.back-mysifa .wm span{color:var(--accent)}
+/* ── Retour MySifa, profil, thème, support, déconnexion, version ─────
+   Pied commun à toutes les applis depuis la v3.3.0 : static/mysifa_sidebar.css.
+   Les anciennes règles (.back-mysifa en !important, halo du thème et de la
+   déconnexion) passaient devant celles du composant ; elles sont retirées. */
 .nav-btn--mysifa-portal{align-items:baseline;flex-wrap:wrap;gap:4px 8px;line-height:1.35}
 .nav-btn--mysifa-portal:hover{background:var(--accent-bg)}
 .nav-btn--mysifa-portal:hover .mysifa-back-preamble{color:var(--text2)}
@@ -86,25 +79,6 @@ body.light .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(8,145,178,.32),
 .mysifa-back-preamble{font-size:13px;font-weight:500;color:var(--text2);letter-spacing:0}
 .mysifa-back-brand{font-size:14px;font-weight:800;letter-spacing:-.5px;color:var(--text);white-space:nowrap}
 .mysifa-back-accent{color:var(--accent)}
-
-/* ── Bas de sidebar (user, thème, support, logout, version) ─────── */
-.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
-.user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg);cursor:pointer}
-.user-chip .uc-name{font-size:12px;font-weight:600;color:var(--text)}
-.user-chip .uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
-.user-chip .uc-profil{font-size:10px;color:var(--muted);margin-top:4px;display:flex;align-items:center;gap:4px}
-
-.theme-btn,.logout-btn,.support-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:background .15s,color .15s,border-color .15s,box-shadow .2s}
-.theme-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);box-shadow:0 0 0 1px rgba(34,211,238,.22),0 0 20px rgba(34,211,238,.14)}
-body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rgba(8,145,178,.12)}
-.theme-btn .theme-ico{font-size:14px;line-height:1}
-.theme-btn .theme-label{white-space:nowrap}
-.support-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.support-btn .support-ico{display:inline-flex;align-items:center;justify-content:center}
-.logout-btn{border:none}
-.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1);box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 18px rgba(248,113,113,.12)}
-
-.version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
 
 /* ── Topbar mobile ──────────────────────────────────────────────── */
 .mobile-topbar{display:none;position:sticky;top:0;z-index:50;background:var(--card);
@@ -221,10 +195,6 @@ body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rg
     padding:10px var(--msf-gr,12px) 10px var(--msf-gl,12px);
   }
 }
-@media (display-mode: standalone), (max-width: 900px){
-  .theme-btn .theme-label{display:none}
-  .theme-btn{justify-content:center}
-}
 
 /* ── Toast ──────────────────────────────────────────────────────── */
 .toast{position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--border);
@@ -232,21 +202,8 @@ body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rg
   z-index:9500;font-size:13px;color:var(--text);max-width:380px}
 
 /* ── Intitulé de section dans la barre latérale ────────────────────────────
-   Repris à l'identique de MyStock (app/web/stock_page.py). Il vit ici, dans
-   la coquille partagée, et non dans le JS d'une seule page : MyProd et le
-   Planning chargent tous les deux ce fichier, et une sidebar qui change de
-   tête d'une page à l'autre se remarque immédiatement.
-   MyProd et le Planning gardent chacun leur implémentation de sidebar, mais
-   se replient de la même façon : état hors du rendu, bascule directe du DOM,
-   arrêt de la boucle sur .sidebar-bottom. */
-.sidebar .nav-section-label{
-  font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);
-  font-weight:600;padding:10px 14px 4px 14px;user-select:none;cursor:pointer;
-  display:flex;align-items:center;justify-content:space-between;border-radius:6px;
-  transition:background .15s,opacity .15s;
-}
-.sidebar .nav-section-label:hover{background:rgba(148,163,184,.08);opacity:1}
-.sidebar .nav-section-label .ngl-chevron{
-  display:inline-flex;flex-shrink:0;transition:transform .2s;opacity:.55;
-}
-.sidebar .nav-section-label.ngl-collapsed .ngl-chevron{transform:rotate(-90deg)}
+   Format commun à toutes les applis depuis la v3.3.0 : classe .msb-section de
+   static/mysifa_sidebar.css, posée par MyProd et le Planning à côté de
+   .nav-section-label (gardée pour la bascule de repli). Les anciennes règles
+   .sidebar .nav-section-label étaient plus spécifiques que le composant et
+   imposaient un titre gris de 10px : elles sont retirées. */

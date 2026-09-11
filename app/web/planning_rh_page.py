@@ -52,6 +52,7 @@ PLANNING_RH_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
@@ -73,18 +74,7 @@ body.sb-open .sidebar-overlay{display:block}
 .logo{padding:0 8px;margin-bottom:32px}
 .logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase}
-.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
-.support-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);
-  background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:all .15s}
-.support-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.support-ico{display:inline-flex;align-items:center;justify-content:center}
-.theme-btn,.logout-btn{
-  display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);
-  background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:all .15s;
-}
-.theme-btn:hover,.logout-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.theme-btn .theme-ico{display:inline-flex;align-items:center;justify-content:center}
-.theme-btn .theme-label{white-space:nowrap}
+/* Menu et pied de sidebar : static/mysifa_sidebar.css (v3.3.0). */
 
 /* ── Sidebar ──────────────────────────────────────────── */
 .sidebar{
@@ -93,6 +83,9 @@ body.sb-open .sidebar-overlay{display:block}
   display:flex;flex-direction:column;overflow:hidden;height:100vh;
   padding:20px 12px;
 }
+/* Pied de sidebar : static/mysifa_sidebar.css (v3.3.0). La sidebar a ici 12px de marge
+   latérale : le pied la déborde pour que son filet aille d'un bord à l'autre, comme sur MyStock. */
+.sidebar>.msb-footer{margin-left:-12px;margin-right:-12px;padding-left:12px;padding-right:12px}
 #rh-sb-nav{flex:1;overflow-y:auto;padding:4px 0;min-height:0}
 .rh-nav-btn{
   display:flex;align-items:center;gap:9px;width:100%;padding:9px 10px;
@@ -111,21 +104,10 @@ body.sb-open .sidebar-overlay{display:block}
 }
 .rh-view-toggle-btn:hover{color:var(--text)}
 .rh-view-toggle-btn.active{background:var(--accent-bg);color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
-.rh-user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg);cursor:pointer}
-.rh-user-chip .ucn{font-size:12px;font-weight:600;color:var(--text)}
-.rh-user-chip .ucr{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
 .nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;
   border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;
   font-weight:500;width:100%;text-align:left;font-family:inherit;transition:all .15s;margin-bottom:2px}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
-.nav-btn--mysifa-portal{align-items:baseline;flex-wrap:wrap;gap:4px 8px;line-height:1.35}
-.nav-btn--mysifa-portal:hover{background:var(--accent-bg)}
-.nav-btn--mysifa-portal:hover .mysifa-back-preamble{color:var(--text2)}
-.nav-btn--mysifa-portal:hover .mysifa-back-brand{color:var(--text)}
-.nav-btn--mysifa-portal:hover .mysifa-back-accent{color:var(--accent)}
-.mysifa-back-preamble{font-size:13px;font-weight:500;color:var(--text2);letter-spacing:0}
-.mysifa-back-brand{font-size:14px;font-weight:800;letter-spacing:-.5px;color:var(--text);white-space:nowrap}
-.mysifa-back-accent{color:var(--accent)}
 /* ── Main ──────────────────────────────────────────── */
 .main.rh-main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;min-height:0}
 .rh-hdr{
@@ -623,10 +605,6 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
   body.sb-open .sidebar{transform:translateX(0)}
   .rh-content{padding:12px 14px}
 }
-@media (display-mode:standalone),(max-width:900px){
-  .theme-btn .theme-label{display:none}
-  .theme-btn{justify-content:center}
-}
 
 /* ── Loading ──────────────────────────────────────────── */
 .rh-loading{display:flex;align-items:center;justify-content:center;padding:60px;color:var(--muted);font-size:13px;gap:10px}
@@ -666,6 +644,7 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='planning_rh';</script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
@@ -687,8 +666,9 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
       <div class="logo-brand">Planning <span>RH</span></div>
       <div class="logo-sub">by SIFA</div>
     </div>
-    <div id="rh-sb-nav"><!-- injecté JS --></div>
-    <div class="sidebar-bottom" id="rh-sb-bot"><!-- injecté JS --></div>
+    <div id="rh-sb-nav" class="msb-nav"><!-- injecté JS --></div>
+    <!-- Pied commun (static/mysifa_sidebar.js), rempli au chargement. -->
+    <div class="sidebar-bottom msb-footer" id="rh-sb-bot" data-msb-footer data-msb-app="Planning RH" data-msb-version="__V_LABEL__"></div>
   </nav>
   <main class="main rh-main">
     <div class="mobile-topbar" id="rh-mobile-topbar"><!-- injecté JS --></div>
@@ -1333,6 +1313,8 @@ async function loadMe(){
   if(d&&d.role){
     S.user=d;
     if(window.MySifaTheme)MySifaTheme.mergeFromUser(d);
+    // Profil du pied commun + libellé du thème (le mode vient d'être relu en base).
+    if(window.MySifaSidebar){MySifaSidebar.setUser(d);MySifaSidebar.refreshTheme();}
     window.__MYSIFA_UID__=d.id;
     window.__MYSIFA_NOM__=d.nom||'';
     window.__MYSIFA_ROLE__=d.role||'';
@@ -1531,20 +1513,10 @@ function icon(name,sz=14){
   return`<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[name]||''}</svg>`;
 }
 
-function rhUserChipHtml(){
-  if(!S.user)return '';
-  const editIco=icon('edit',12);
-  const inner=window.MySifaUserChip
-    ? MySifaUserChip.innerHtml(S.user,{editIconHtml:editIco})
-    : '<div class="uc-name">'+(S.user.nom||'')+'</div><div class="uc-role">'+(S.user.role||'')+'</div><div class="uc-profil">'+editIco+' Mon profil</div>';
-  return '<div class="rh-user-chip" title="Mon profil" onclick="window.location.href=\'/profil\'">'+inner+'</div>';
-}
-
 // ── Sidebar ────────────────────────────────────────────
 function renderSidebar(){
   const nav=document.getElementById('rh-sb-nav');
-  const bot=document.getElementById('rh-sb-bot');
-  if(!nav||!bot)return;
+  if(!nav)return;
   const isOp=S.user&&!S.isEditor;
 
   const showBoth = S.hasAtelier && S.hasRH;
@@ -1566,47 +1538,14 @@ function renderSidebar(){
 
   nav.innerHTML=`
     ${viewToggle}
-    ${showPlanningTab?`<button class="rh-nav-btn${S.tab==='planning'?' active':''}" onclick="setTab('planning')">
+    ${showPlanningTab?`<button class="rh-nav-btn nav-btn${S.tab==='planning'?' active':''}" onclick="setTab('planning')">
       ${icon('calendar',14)} Planning
     </button>`:''}
-    ${showCongesTab?`<button class="rh-nav-btn${S.tab==='conges'?' active':''}" onclick="setTab('conges')">
+    ${showCongesTab?`<button class="rh-nav-btn nav-btn${S.tab==='conges'?' active':''}" onclick="setTab('conges')">
       ${icon('umbrella',14)} Congés${S.view==='rh'?' & soldes':''}
     </button>`:''}
   `;
 
-  const isLight=document.body.classList.contains('light');
-  bot.innerHTML=`
-    <button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="window.location.href='/'">
-      <span class="mysifa-back-preamble">← Retour </span>
-      <span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span>
-    </button>
-    ${rhUserChipHtml()}
-    <button type="button" class="support-btn" onclick="openSupportRH()">
-      <span class="support-ico">${(window.MySifaSupport&&window.MySifaSupport.iconSvg)?window.MySifaSupport.iconSvg():""}</span>
-      <span>Contacter le support</span>
-    </button>
-    <button type="button" class="theme-btn" onclick="toggleTheme()">
-      <span class="theme-ico">${icon(isLight?'sun':'moon',16)}</span>
-      <span class="theme-label">${isLight?'Mode clair':'Mode sombre'}</span>
-    </button>
-    <button type="button" class="logout-btn" onclick="doLogout()">${icon('log-out',14)} Déconnexion</button>
-  `;
-}
-
-function openSupportRH(){
-  try{
-    if(window.MySifaSupport && typeof window.MySifaSupport.open==='function'){
-      window.MySifaSupport.open({
-        user:S.user,
-        page:'Planning RH',
-        notify:(m,t)=>showToast(m,(t==='error')?'danger':(t==='warn')?'info':'success'),
-        api:(p,o)=>fetch(p,{credentials:'include',...(o||{})}).then(async r=>{
-          if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||('Erreur '+r.status));}
-          return await r.json();
-        })
-      });
-    }
-  }catch(e){}
 }
 
 // ── Header ────────────────────────────────────────────
@@ -2837,11 +2776,6 @@ function navWeeks(n){
 }
 function toggleDetail(){S.detailMode=!S.detailMode;render();}
 function changeAnnee(y){S.annee=parseInt(y);loadSoldes();render();}
-function toggleTheme(){if(window.MySifaTheme)MySifaTheme.toggleMode();render();}
-async function doLogout(){
-  try{await fetch('/api/auth/logout',{method:'POST',credentials:'include'});}catch(e){}
-  window.location.href='/';
-}
 function toggleSidebar(){document.body.classList.toggle('sb-open');}
 function openSidebar(){document.body.classList.add('sb-open');}
 function closeSidebar(){document.body.classList.remove('sb-open');}
@@ -3353,6 +3287,9 @@ function initPlanningRhGuides(){
 }
 
 // ── Init ───────────────────────────────────────────────
+// Pied commun : la bascule de thème re-rend la page comme l'ancien bouton ;
+// support et déconnexion gardent le comportement par défaut du composant.
+if(window.MySifaSidebar)MySifaSidebar.configure({onTheme:render});
 (async()=>{
   await loadMe();
   if(S.view==='rh'){ S.tab='conges'; }
