@@ -111,6 +111,8 @@ ACTION_LABELS: dict[str, str] = {
     "INVENTAIRE": "Inventaire",
     "LINK": "Rattachement",
     "LOGIN": "Connexion",
+    "GRANT": "Accès accordé",
+    "REVOKE": "Accès révoqué",
     "LOGOUT": "Déconnexion",
     "MERGE": "Fusion",
     "MOVE": "Déplacement",
@@ -194,6 +196,10 @@ PATH_MODULES: dict[str, str] = {
     # dans le bruit technique aurait été le seul vrai contresens.
     "/api/diagnostic": "diagnostic",
     "/api/dossiers": "dossiers",
+    # Consentement OAuth du serveur MCP. Le POST qui compte est
+    # /oauth/authorize/decision : quelqu'un ouvre la base a un agent. Les
+    # echanges machine (/oauth/token, /oauth/register) sont dans SKIP_PREFIXES.
+    "/oauth": "mcp",
     "/api/erp": "erp",
     "/api/rvgi": "erp",
     "/api/rvgi-tiers": "erp",
@@ -369,6 +375,12 @@ SKIP_PREFIXES: tuple[str, ...] = (
     # l'ecran. Ce qui compte — quel outil, quelle requete SQL — est ecrit
     # explicitement par le routeur via log_action(module="mcp").
     "/mcp",
+    # Echanges machine du protocole OAuth : le corps transporte des codes, des
+    # verificateurs PKCE et des jetons de rafraichissement. L'acte humain
+    # (l'autorisation) est journalise explicitement par log_action.
+    "/oauth/token",
+    "/oauth/register",
+    "/oauth/revoke",
     "/api/filters",
     "/static/",
     "/uploads/",

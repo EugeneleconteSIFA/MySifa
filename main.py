@@ -119,6 +119,7 @@ from app.routers.bobines_montees import router as bobines_montees_router
 from app.routers.rvgi_tiers import router as rvgi_tiers_router
 from app.routers.mcp_server import router as mcp_router
 from app.web.mcp_page import router as mcp_page_router
+from app.routers.mcp_oauth import router as mcp_oauth_router
 from app.web.erp_page import router as erp_page_router
 
 
@@ -593,6 +594,10 @@ app.include_router(rvgi_tiers_router)
 app.include_router(mcp_router)
 # GET /mcp : la page. POST /mcp : le protocole. Deux routeurs, un chemin.
 app.include_router(mcp_page_router)
+# OAuth du serveur MCP : metadonnees .well-known, enregistrement dynamique,
+# consentement et jetons. Sans lui, le 401 de /mcp envoie le connecteur Claude
+# vers des metadonnees inexistantes — c'est tout le sens de ce routeur.
+app.include_router(mcp_oauth_router)
 
 
 @app.get("/healthz", include_in_schema=False)
