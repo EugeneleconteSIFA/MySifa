@@ -259,6 +259,16 @@ SUPERADMIN_EMAIL = "eleconte@sifa.pro"
 # Rôles ayant accès aux fonctions d'administration (imports, dossiers, stats, etc.)
 ROLES_ADMIN = {ROLE_DIRECTION, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
 
+# Rôles autorisés à ouvrir un accès MCP à un agent externe (écran de
+# consentement OAuth). Un jeton accordé ici donne la lecture de la production et
+# du miroir RVGI : c'est une décision de direction, pas une manipulation
+# d'atelier. Surchargeable par MCP_OAUTH_ROLES dans `.env` (liste séparée par
+# des virgules).
+MCP_OAUTH_ROLES = frozenset(
+    r.strip() for r in os.getenv("MCP_OAUTH_ROLES", f"{ROLE_SUPERADMIN},{ROLE_DIRECTION}").split(",")
+    if r.strip()
+)
+
 # MyExpé — onglet Pilotage (tableau de bord amont des expéditions).
 # Restreint volontairement pendant le rodage : l'écran croise le planning et le
 # carnet RVGI, et tant que les dossiers de planning soldés ne sont pas nettoyés,

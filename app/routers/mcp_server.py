@@ -5,8 +5,14 @@ JSON-RPC 2.0 sur `/mcp`, une réponse JSON. Pas de flux SSE, pas de session :
 chaque appel se suffit à lui-même, ce qui évite tout état partagé côté serveur
 et survit à un redémarrage de l'app.
 
-Authentification : clé API existante (table `api_keys`), portée `mcp:read`,
-envoyée en `X-Api-Key` ou `Authorization: Bearer <clé>`.
+Authentification, deux chemins qui aboutissent au même endroit :
+
+- **Jeton OAuth** (`Authorization: Bearer`), émis par `app/routers/mcp_oauth.py`.
+  C'est le seul que sait présenter un connecteur Claude, et le seul qui nomme un
+  utilisateur — le journal des actions y gagne une personne au lieu d'une
+  étiquette de clé.
+- **Clé API** (table `api_keys`, portée `mcp:read`), en `X-Api-Key` ou en
+  `Authorization: Bearer`. Conservée pour les intégrations maison.
 
 Lecture seule de bout en bout : les connexions SQLite sont ouvertes en `mode=ro`
 (cf. `app/services/mcp_data.py`), aucun outil n'écrit quoi que ce soit.
@@ -92,11 +98,53 @@ def _cle_brute(request: Request) -> Optional[str]:
     return None
 
 
-def _verifier_cle(request: Request) -> tuple[Optional[str], Optional[str]]:
-    """Renvoie (motif de refus, nom de la clé). Le motif est None si l'accès passe."""
+def _url_metadonnees(request: Request) -> str:
+    """Import differe : `mcp_oauth` importe SCOPE_MCP d'ici, l'inverse au
+    chargement ferait une boucle."""
+    from app.routers.mcp_oauth import base_publique
+    return f"{base_publique(request)}/.well-known/oauth-protected-resource"
+
+
+def _refus(request: Request, statut: int, code: str, message: str) -> JSONResponse:
+    """Refus normalisé RFC 6750.
+
+    Le `401` porte l'en-tête qui désigne les métadonnées de la ressource : c'est
+    exactement ce signal qui envoie le client vers `/oauth/register` puis vers
+    l'écran de consentement. Il avait été remplacé par un `403` en juin 2026,
+    quand ces métadonnées n'existaient pas encore et que le client partait en
+    découverte pour échouer sur un 404 — « impossible de s'inscrire auprès du
+    service de connexion ». La bonne correction n'était pas de taire le signal
+    mais de servir ce qu'il annonce. Le `403` reste pour le seul cas où il n'y a
+    rien à négocier : un appelant authentifié dont la portée est insuffisante.
+    """
+    entete = (f'Bearer realm="MySifa MCP", error="{code}", '
+              f'resource_metadata="{_url_metadonnees(request)}"')
+    return _json({"error": code, "error_description": message}, statut,
+                 {"WWW-Authenticate": entete})
+
+
+def _authentifier(request: Request) -> tuple[Optional[JSONResponse], Optional[str]]:
+    """Renvoie (refus, nom de l'appelant). Le refus est None si l'accès passe."""
     brute = _cle_brute(request)
     if not brute:
-        return "Clé API manquante (en-tête X-Api-Key ou Authorization: Bearer).", None
+        return _refus(request, 401, "invalid_request",
+                      "Jeton OAuth ou clé API requis."), None
+
+    # 1. Jeton OAuth — le chemin des connecteurs.
+    from app.routers.mcp_oauth import utilisateur_du_jeton
+    try:
+        jeton = utilisateur_du_jeton(brute)
+    except Exception:
+        logger.exception("MCP : résolution du jeton OAuth impossible")
+        jeton = None
+    if jeton:
+        portees = [s.strip() for s in (jeton.get("scope") or "").split(",")]
+        if SCOPE_MCP not in portees:
+            return _refus(request, 403, "insufficient_scope",
+                          f"Ce jeton n'a pas la portée « {SCOPE_MCP} »."), None
+        return None, jeton.get("user_email") or f"utilisateur #{jeton.get('user_id')}"
+
+    # 2. Clé API — les intégrations maison.
     empreinte = hashlib.sha256(brute.encode()).hexdigest()
     with get_db() as conn:
         row = conn.execute(
@@ -104,10 +152,12 @@ def _verifier_cle(request: Request) -> tuple[Optional[str], Optional[str]]:
             (empreinte,),
         ).fetchone()
         if not row or not row["is_active"]:
-            return "Clé API invalide ou révoquée.", None
+            return _refus(request, 401, "invalid_token",
+                          "Jeton ou clé invalide, expiré ou révoqué."), None
         portees = [s.strip() for s in (row["scopes"] or "").split(",")]
         if SCOPE_MCP not in portees:
-            return f"Cette clé n'a pas la portée « {SCOPE_MCP} ».", None
+            return _refus(request, 403, "insufficient_scope",
+                          f"Cette clé n'a pas la portée « {SCOPE_MCP} »."), None
         try:
             conn.execute(
                 "UPDATE api_keys SET last_used_at=? WHERE id=?",
@@ -429,15 +479,9 @@ def _traiter(message: dict[str, Any], nom_cle: Optional[str] = None,
 
 @router.post("/mcp")
 async def mcp_endpoint(request: Request):
-    refus, nom_cle = _verifier_cle(request)
-    if refus:
-        # 403 et pas 401, volontairement. Un 401 est le signal normalise « ce
-        # serveur veut de l'OAuth » : le client MCP part alors en decouverte de
-        # metadonnees puis en enregistrement dynamique de client, echoue, et
-        # affiche « impossible de s'inscrire aupres du service de connexion »
-        # — au lieu d'utiliser simplement l'en-tete de cle API. Ici l'appelant
-        # n'a pas a s'authentifier autrement : il presente une cle ou rien.
-        return _json({"error": refus}, 403)
+    refus, nom_cle = _authentifier(request)
+    if refus is not None:
+        return refus
 
     try:
         corps = await request.json()
