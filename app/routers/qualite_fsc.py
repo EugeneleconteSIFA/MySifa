@@ -43,14 +43,18 @@ from app.services.fsc_dossier import (
     construire_dossier_pdf,
     statut_expiration,
 )
+from app.services import fsc_registre as registre
+from app.services.erp_mirror import get_erp_db, miroir_present
 from app.services.fsc_lecture_certificat import lire_certificat
 from config import (
     APP_ORG_NAME,
     FSC_ALERTE_JOURS,
+    FSC_ALLEGATIONS,
     FSC_BASE_RECHERCHE_URL,
     FSC_CLAIM_LABELS,
     FSC_CLAIMS_PORTEE,
     FSC_CONTROLE_VALIDITE_JOURS,
+    FSC_ETIQUETTES,
     FSC_FICHE_SLUG,
     FSC_LICENCE_SIFA,
     FSC_STATUTS_BASE,
@@ -591,3 +595,176 @@ def fsc_justificatif(ctrl_id: int, request: Request):
     nom = _sanitize_filename(row["justificatif_original"] or row["justificatif_filename"])
     return FileResponse(chemin, media_type=media,
                         headers={"Content-Disposition": f'inline; filename="{nom}"'})
+
+
+# ══════════════════════════════════════════════════════════════════
+# Registre des approvisionnements (FSC-STD-40-004 V3-1)
+#
+# Les lignes viennent du miroir RVGI et se figent à l'import ; quatre champs se
+# saisissent ici (n° de facture fournisseur, allégation du BL, allégation de la
+# facture, présence du code de certificat) et le verdict d'éligibilité se
+# recalcule à chaque saisie. Rien ne se supprime : on corrige, et `fsc_journal`
+# garde l'avant et l'après.
+# ══════════════════════════════════════════════════════════════════
+
+@router.get("/api/qualite/fsc/appro")
+def fsc_appro_liste(
+    request: Request,
+    debut: str = "", fin: str = "", eligible: str = "",
+    fournisseur_id: str = "", certifies: int = 0, q: str = "",
+):
+    _require_qualite_view(request)
+    with get_db() as conn:
+        lignes = registre.lister(
+            conn,
+            debut=_iso(debut), fin=_iso(fin),
+            fournisseur_id=int(fournisseur_id) if str(fournisseur_id).isdigit() else None,
+            eligible=(eligible or "").strip() or None,
+            certifies_seuls=bool(certifies),
+            recherche=(q or "").strip() or None,
+        )
+        depuis = registre.date_entree(conn)
+        fours = [dict(r) for r in conn.execute(
+            "SELECT id, nom, licence, rvgi_numero FROM fournisseurs_fsc "
+            "WHERE COALESCE(has_fsc,1)=1 AND COALESCE(actif,1)=1 ORDER BY nom COLLATE NOCASE"
+        ).fetchall()]
+    return {
+        "lignes": lignes,
+        "stats": registre.stats(lignes),
+        "volumes": registre.volumes_par_allegation(lignes),
+        "date_entree": depuis,
+        "miroir_present": miroir_present(),
+        "allegations": [{"code": k, "libelle": v["libelle"], "pct": v["pct"]}
+                        for k, v in FSC_ALLEGATIONS.items()],
+        "etiquettes": [{"code": k, "libelle": v} for k, v in FSC_ETIQUETTES.items()],
+        "fournisseurs": fours,
+    }
+
+
+@router.put("/api/qualite/fsc/appro/parametres")
+def fsc_appro_parametres(body: dict, request: Request):
+    """La date d'entrée dans la chaîne de contrôle. Tant qu'elle est vide, rien
+    ne s'importe — c'est elle qui borne tout le registre."""
+    user = _require_qualite_access(request)
+    jour = (body or {}).get("date_entree") or ""
+    with get_db() as conn:
+        avant = registre.date_entree(conn)
+        try:
+            jour = registre.definir_date_entree(conn, jour, user.get("nom"))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Date invalide — format AAAA-MM-JJ attendu.")
+    log_action(user=user, action="UPDATE", module="qualite", request=request,
+               objet="Registre FSC · date d'entrée dans la chaîne de contrôle",
+               detail={"avant": avant, "apres": jour})
+    return {"date_entree": jour}
+
+
+@router.get("/api/qualite/fsc/appro/export.xlsx")
+def fsc_appro_export(request: Request, debut: str = "", fin: str = "",
+                     eligible: str = "", certifies: int = 0, q: str = ""):
+    _require_qualite_view(request)
+    with get_db() as conn:
+        lignes = registre.lister(
+            conn, debut=_iso(debut), fin=_iso(fin),
+            eligible=(eligible or "").strip() or None,
+            certifies_seuls=bool(certifies),
+            recherche=(q or "").strip() or None,
+        )
+    contenu = registre.export_xlsx(lignes, _iso(debut), _iso(fin))
+    nom = "Registre_FSC_approvisionnements_%s.xlsx" % date.today().isoformat()
+    return Response(
+        content=contenu,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{nom}"',
+                 "Cache-Control": "no-store"},
+    )
+
+
+@router.post("/api/qualite/fsc/appro/import")
+def fsc_appro_import(request: Request):
+    """Ajoute les réceptions RVGI postérieures à la date d'entrée. N'écrase rien."""
+    user = _require_qualite_access(request)
+    if not miroir_present():
+        raise HTTPException(status_code=503, detail="Miroir RVGI absent — la synchro n'a pas encore tourné.")
+    with get_db() as conn:
+        if not registre.date_entree(conn):
+            raise HTTPException(
+                status_code=400,
+                detail="Renseigner d'abord la date d'entrée dans la chaîne de contrôle.")
+        with get_erp_db() as conn_erp:
+            bilan = registre.importer(conn, conn_erp, user.get("nom"))
+    if bilan.get("erreur"):
+        raise HTTPException(status_code=400, detail=bilan["erreur"])
+    log_action(user=user, action="CREATE", module="qualite", request=request,
+               objet="Import registre FSC · %d réception(s)" % bilan["ajoutees"],
+               detail=bilan)
+    return bilan
+
+
+@router.patch("/api/qualite/fsc/appro/{ligne_id}")
+def fsc_appro_saisie(ligne_id: int, body: dict, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        try:
+            ligne = registre.mettre_a_jour(conn, ligne_id, body or {}, user.get("nom"))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    log_action(user=user, action="UPDATE", module="qualite", request=request,
+               objet="Registre FSC · %s · BL %s" % (ligne.get("fournisseur_rvgi") or "?",
+                                                    ligne.get("num_bl") or "?"),
+               detail={"ligne_id": ligne_id, "eligible": ligne.get("eligible"),
+                       "champs": sorted((body or {}).keys())})
+    return ligne
+
+
+@router.post("/api/qualite/fsc/appro/{ligne_id}/appliquer-bl")
+def fsc_appro_appliquer_bl(ligne_id: int, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        try:
+            n = registre.appliquer_au_bl(conn, ligne_id, user.get("nom"))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    log_action(user=user, action="UPDATE", module="qualite", request=request,
+               objet="Registre FSC · saisie appliquée à %d ligne(s) du même BL" % n,
+               detail={"ligne_id": ligne_id, "lignes": n})
+    return {"appliquees": n}
+
+
+@router.post("/api/qualite/fsc/appro/{ligne_id}/rattacher")
+def fsc_appro_rattacher(ligne_id: int, body: dict, request: Request):
+    """Rattache le tiers RVGI de cette ligne à une fiche de l'annuaire.
+
+    « ARCONVERT S.A » côté ERP et « Fedrigoni Manter » côté MySifa sont le même
+    fournisseur : aucune comparaison de noms ne le devine, seul un humain le sait.
+    Le numéro est mémorisé sur la fiche, et toutes les lignes du même tiers
+    suivent.
+    """
+    user = _require_qualite_access(request)
+    fid = (body or {}).get("fournisseur_id")
+    if not str(fid or "").isdigit():
+        raise HTTPException(status_code=400, detail="Fournisseur à rattacher manquant.")
+    with get_db() as conn:
+        ligne = conn.execute(
+            "SELECT numfou, fournisseur_rvgi FROM fsc_reception WHERE id = ?", (ligne_id,)
+        ).fetchone()
+        if not ligne:
+            raise HTTPException(status_code=404, detail="Ligne de registre introuvable.")
+        if ligne["numfou"] is None:
+            raise HTTPException(status_code=400, detail="Cette ligne n'a pas de tiers RVGI.")
+        try:
+            n = registre.rattacher_fournisseur(
+                conn, int(ligne["numfou"]), int(fid), ligne["fournisseur_rvgi"], user.get("nom"))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    log_action(user=user, action="UPDATE", module="qualite", request=request,
+               objet="Registre FSC · tiers RVGI %s rattaché" % ligne["fournisseur_rvgi"],
+               detail={"numfou": ligne["numfou"], "fournisseur_id": int(fid), "lignes": n})
+    return {"lignes_reprises": n}
+
+
+@router.get("/api/qualite/fsc/appro/{ligne_id}/journal")
+def fsc_appro_journal(ligne_id: int, request: Request):
+    _require_qualite_view(request)
+    with get_db() as conn:
+        return {"journal": registre.journal(conn, ligne_id)}

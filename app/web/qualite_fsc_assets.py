@@ -20,6 +20,10 @@ FSC_JS = r"""
 // ══════════════════════════════════════════════════════════════════════
 
 S.fsc = {
+  sousOnglet: 'fournisseurs',  // fournisseurs | appro
+  appro: null,         // reponse de /api/qualite/fsc/appro
+  approFiltres: {debut:'', fin:'', eligible:'', certifies:1, q:''},
+  approBusy: null,     // id de la ligne en cours d'enregistrement
   data: null,          // reponse de /api/qualite/fsc/synthese
   q: '',               // recherche (fournisseur, licence, certificat)
   filtre: 'tous',      // tous | a_traiter | a_controler | expiration | sans_categorie
@@ -36,11 +40,32 @@ const FSC_STATUT_EXP = {
 
 function fscEstAdmin(){ return !!(S.isQualiteAdmin && !S.isQualiteReadonly); }
 
+// L'onglet FSC porte deux écrans : l'annuaire des fournisseurs certifiés et le
+// registre des approvisionnements. Le sous-onglet actif suit l'utilisateur d'une
+// visite à l'autre, comme celui de Certifications SIFA.
+try{ const _fs = localStorage.getItem('mysifa_fsc_sous_onglet'); if(_fs) S.fsc.sousOnglet = _fs; }catch(e){}
+
+function fscSousTabsHtml(actif){
+  const t = (k, label, hint) =>
+    `<button type="button" class="fsc-stab${actif===k?' active':''}" onclick="fscSetSousOnglet('${k}')" title="${escAttr(hint)}">${escHtml(label)}</button>`;
+  return `<div class="fsc-stabs">
+    ${t('fournisseurs','Fournisseurs','Certificats, licences, expirations et contrôles sur la base FSC')}
+    ${t('appro','Approvisionnements','Registre des entrées de matière : allégation du BL, de la facture, éligibilité')}
+  </div>`;
+}
+
+function fscSetSousOnglet(k){
+  S.fsc.sousOnglet = k;
+  try{ localStorage.setItem('mysifa_fsc_sous_onglet', k); }catch(e){}
+  fscEnter();
+}
+
 async function fscEnter(){
   const root = document.getElementById('content');
   if(!root) return;
+  if(S.fsc.sousOnglet === 'appro'){ await fscApproEnter(); return; }
   if(!S.fsc.data){
-    root.innerHTML = `${sifaTabsHtml('fsc')}
+    root.innerHTML = `${sifaTabsHtml('fsc')}${fscSousTabsHtml('fournisseurs')}
       <div class="fsc-hero"><div class="fsc-hero-txt"><h1>FSC</h1><p>Chargement des fournisseurs certifiés…</p></div></div>`;
   }
   await fscLoad();
@@ -51,7 +76,7 @@ async function fscLoad(){
     const r = await api('/api/qualite/fsc/synthese');
     if(!r.ok){ showToast('Chargement FSC impossible.','danger'); return; }
     S.fsc.data = await r.json();
-    if(gedActiveTab() !== 'fsc') return;
+    if(gedActiveTab() !== 'fsc' || S.fsc.sousOnglet !== 'fournisseurs') return;
     fscRender();
   }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); }
 }
@@ -116,6 +141,7 @@ function fscRender(){
 
   root.innerHTML = `
     ${sifaTabsHtml('fsc')}
+    ${fscSousTabsHtml('fournisseurs')}
     <div class="fsc-hero">
       <div class="fsc-hero-txt">
         <h1>FSC</h1>
@@ -515,6 +541,391 @@ async function fscEnregistrerControle(id){
   }
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// Sous-onglet Approvisionnements : le registre de chaîne de contrôle
+//
+// Les colonnes de gauche viennent de RVGI et ne s'éditent pas. Quatre champs se
+// saisissent : n° de facture fournisseur, allégation du BL, allégation de la
+// facture, présence du code de certificat — plus l'étiquette posée et une
+// observation. Chaque saisie recalcule l'éligibilité côté serveur et passe au
+// journal ; rien ne se supprime.
+// ══════════════════════════════════════════════════════════════════════
+
+const FSC_ELIGIBLE = {
+  oui:              {cls:'ok',   label:'Éligible'},
+  non:              {cls:'exp',  label:'Non éligible'},
+  a_verifier:       {cls:'soon', label:'À vérifier'},
+  ecart_bl_facture: {cls:'exp',  label:'Écart BL / facture'},
+};
+
+async function fscApproEnter(){
+  const root = document.getElementById('content');
+  if(!root) return;
+  if(!S.fsc.appro){
+    root.innerHTML = `${sifaTabsHtml('fsc')}${fscSousTabsHtml('appro')}
+      <div class="fsc-hero"><div class="fsc-hero-txt"><h1>Approvisionnements FSC</h1>
+      <p>Chargement du registre…</p></div></div>`;
+  }
+  await fscApproLoad();
+}
+
+function fscApproQs(){
+  const f = S.fsc.approFiltres;
+  const p = new URLSearchParams();
+  if(f.debut) p.set('debut', f.debut);
+  if(f.fin) p.set('fin', f.fin);
+  if(f.eligible) p.set('eligible', f.eligible);
+  if(f.certifies) p.set('certifies', '1');
+  if(f.q) p.set('q', f.q);
+  return p.toString();
+}
+
+async function fscApproLoad(){
+  try{
+    const r = await api('/api/qualite/fsc/appro?' + fscApproQs());
+    if(!r.ok){ showToast('Chargement du registre impossible.','danger'); return; }
+    S.fsc.appro = await r.json();
+    if(gedActiveTab() !== 'fsc' || S.fsc.sousOnglet !== 'appro') return;
+    fscApproRender();
+  }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); }
+}
+
+function fscApproSetFiltre(cle, valeur, recharger){
+  S.fsc.approFiltres[cle] = valeur;
+  if(recharger) fscApproLoad();
+}
+
+function fscApproRender(){
+  const root = document.getElementById('content');
+  const d = S.fsc.appro;
+  if(!root || !d) return;
+  const st = d.stats || {};
+  const f = S.fsc.approFiltres;
+  const admin = fscEstAdmin();
+
+  const volumes = (d.volumes||[]).map(v => `
+    <div class="fsc-couv-card ok">
+      <div class="fsc-couv-hd"><span class="fsc-claim solid">${escHtml(v.libelle)}</span>
+        <span class="fsc-couv-usage">${v.lignes} ligne${v.lignes>1?'s':''}</span></div>
+      <div class="fsc-couv-n"><b>${fscNb(v.m2)}</b> m² <span class="fsc-muted">· ${fscNb(v.ml)} ml</span></div>
+    </div>`).join('');
+
+  const kpi = (val, label, cls, filtre) => `
+    <button type="button" class="fsc-kpi ${cls||''}" onclick="fscApproSetFiltre('eligible','${filtre}',1)" title="Filtrer le registre">
+      <span class="fsc-kpi-val">${val}</span><span class="fsc-kpi-lbl">${escHtml(label)}</span>
+    </button>`;
+
+  root.innerHTML = `
+    ${sifaTabsHtml('fsc')}
+    ${fscSousTabsHtml('appro')}
+    <div class="fsc-hero">
+      <div class="fsc-hero-txt">
+        <h1>Approvisionnements FSC</h1>
+        <p>Registre des entrées de matière d'origine forestière. Les colonnes grises viennent de RVGI
+        et sont figées à l'import ; la saisie porte sur le n° de facture, les allégations du BL et de la
+        facture, et la présence du code de certificat. Chaque correction est journalisée.</p>
+      </div>
+      <div class="fsc-hero-actions">
+        ${admin ? `<button type="button" class="fsc-btn qual-write" id="fsc-appro-import" onclick="fscApproImporter()"
+           title="Ajoute les réceptions RVGI postérieures à la date d'entrée. N'écrase aucune ligne existante.">Importer les réceptions RVGI</button>` : ''}
+        <a class="btn btn-accent" href="/api/qualite/fsc/appro/export.xlsx?${escAttr(fscApproQs())}"
+           title="Le registre de la période, au format du classeur">Export Excel</a>
+      </div>
+    </div>
+
+    ${d.date_entree ? '' : `<div class="fsc-bandeau">
+      <div><b>Date d'entrée dans la chaîne de contrôle non renseignée.</b>
+      Elle borne tout le registre : tant qu'elle est vide, aucune réception ne s'importe.</div>
+      ${admin ? `<div class="fsc-bandeau-act">
+        <input type="date" id="fsc-date-entree" class="fsc-inline">
+        <button type="button" class="fsc-btn sm primary" onclick="fscApproDefinirDate()">Enregistrer</button>
+      </div>` : ''}
+    </div>`}
+    ${d.miroir_present === false ? `<div class="fsc-bandeau">
+      <div>Miroir RVGI absent sur cette instance : l'import ne peut pas tourner tant que la synchro n'a pas poussé son export.</div></div>` : ''}
+
+    <div class="fsc-kpis">
+      ${kpi(st.lignes||0, 'lignes au registre', '', '')}
+      ${kpi(st.oui||0, 'éligibles FSC', st.oui?'':'', 'oui')}
+      ${kpi(st.a_verifier||0, 'à vérifier', st.a_verifier?'soon':'', 'a_verifier')}
+      ${kpi((st.ecart||0)+(st.non||0), 'écarts et non éligibles', (st.ecart||st.non)?'exp':'', 'ecart_bl_facture')}
+    </div>
+
+    ${volumes ? `<div class="fsc-section-title">Volumes éligibles par allégation${d.date_entree?` · depuis le ${fmtDate(d.date_entree)}`:''}</div>
+      <div class="fsc-couv">${volumes}</div>` : ''}
+
+    <div class="fsc-toolbar">
+      <div class="fsc-search">
+        <svg class="fsc-search-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="search" id="fsc-appro-q" placeholder="Rechercher (BL, fournisseur, matière, n° de facture…)" value="${escAttr(f.q)}"
+          oninput="fscApproSetFiltre('q', this.value, 0); fscApproRenderList()" onkeydown="fscApproSearchKey(event)">
+      </div>
+      <label class="fsc-inline-lbl">Du <input type="date" class="fsc-inline" value="${escAttr(f.debut)}" onchange="fscApproSetFiltre('debut', this.value, 1)"></label>
+      <label class="fsc-inline-lbl">au <input type="date" class="fsc-inline" value="${escAttr(f.fin)}" onchange="fscApproSetFiltre('fin', this.value, 1)"></label>
+      <div class="fsc-filtres">
+        ${[['','Toutes'],['oui','Éligibles'],['a_verifier','À vérifier'],['ecart_bl_facture','Écarts'],['non','Non éligibles']].map(([v,l]) =>
+          `<button type="button" class="fsc-filtre${f.eligible===v?' active':''}" onclick="fscApproSetFiltre('eligible','${v}',1)">${l}</button>`).join('')}
+      </div>
+      <label class="fsc-check compact${f.certifies?' on':''}">
+        <input type="checkbox" ${f.certifies?'checked':''} onchange="fscApproSetFiltre('certifies', this.checked?1:0, 1)">
+        Fournisseurs certifiés seulement
+      </label>
+    </div>
+    <div id="fsc-appro-list"></div>`;
+  fscApproRenderList();
+}
+
+function fscNb(v){
+  if(v === null || v === undefined) return '—';
+  return Number(v).toLocaleString('fr-FR', {maximumFractionDigits: 0});
+}
+
+function fscApproSearchKey(ev){
+  if(ev.key === 'Escape'){ ev.target.value=''; fscApproSetFiltre('q','',0); fscApproRenderList(); }
+}
+
+function fscApproLignesVisibles(){
+  const d = S.fsc.appro; if(!d) return [];
+  const q = (S.fsc.approFiltres.q||'').trim().toLowerCase();
+  if(!q) return d.lignes||[];
+  return (d.lignes||[]).filter(l => [l.num_bl, l.fournisseur_nom, l.fournisseur_rvgi, l.designation,
+    l.code_matiere, l.num_facture_fournisseur].join(' ').toLowerCase().indexOf(q) !== -1);
+}
+
+function fscApproRenderList(){
+  const wrap = document.getElementById('fsc-appro-list');
+  const d = S.fsc.appro;
+  if(!wrap || !d) return;
+  const lignes = fscApproLignesVisibles();
+  const admin = fscEstAdmin();
+  if(!lignes.length){
+    wrap.innerHTML = `<div class="fsc-empty">${(S.fsc.approFiltres.q)
+      ? `Aucun résultat pour « ${escHtml(S.fsc.approFiltres.q)} »`
+      : (d.date_entree ? 'Aucune ligne dans ce filtre. Lancez l\'import des réceptions RVGI.'
+                       : 'Registre vide : renseignez d\'abord la date d\'entrée dans la chaîne de contrôle.')}</div>`;
+    return;
+  }
+  const opts = (sel) => (d.allegations||[]).map(a =>
+    `<option value="${escAttr(a.code)}"${(sel||'')===a.code?' selected':''}>${escHtml(a.libelle)}</option>`).join('');
+  const optsEtiq = (sel) => (d.etiquettes||[]).map(e =>
+    `<option value="${escAttr(e.code)}"${(sel||'')===e.code?' selected':''}>${escHtml(e.libelle)}</option>`).join('');
+
+  const rows = lignes.map(l => {
+    const el = FSC_ELIGIBLE[l.eligible] || FSC_ELIGIBLE.a_verifier;
+    const pct = (d.allegations||[]).find(a => a.code === l.allegation_facture);
+    const four = l.fournisseur_nom
+      ? `<div class="fsc-nom" title="${escAttr(l.fournisseur_rvgi||'')}">${escHtml(l.fournisseur_nom)}</div>`
+      : `<div class="fsc-nom">${escHtml(l.fournisseur_rvgi||'—')}</div>
+         <div class="fsc-sub warn">Tiers RVGI non rattaché${admin?` · <button type="button" class="fsc-lien" onclick="fscApproRattacher(${l.id})">rattacher</button>`:''}</div>`;
+    return `<tr data-id="${l.id}" class="elig-${escAttr(l.eligible||'a_verifier')}">
+      <td class="fsc-rvgi">${fmtDate(l.date_reception)}</td>
+      <td class="fsc-rvgi fsc-mono">${escHtml(l.num_bl||'—')}</td>
+      <td class="fsc-rvgi">${four}</td>
+      <td class="fsc-rvgi fsc-mat">
+        <div class="fsc-mono">${escHtml(l.code_matiere||'')}${l.laize_mm?` · ${fscNb(l.laize_mm)} mm`:''}</div>
+        <div class="fsc-sub" title="${escAttr(l.designation||l.libelle_matiere||'')}">${escHtml(l.designation||l.libelle_matiere||'')}</div>
+      </td>
+      <td class="fsc-rvgi num">${fscNb(l.quantite_ml)} ml<div class="fsc-sub">${fscNb(l.quantite_m2)} m²</div></td>
+      <td class="fsc-rvgi centre">${l.certificat_statut
+          ? `<span class="fsc-pill ${l.certificat_statut==='valide'?'ok':(l.certificat_statut==='expire'?'exp':'nod')}">${escHtml({valide:'Valide',expire:'Expiré',inconnu:'Inconnu',non_certifie:'Non certifié'}[l.certificat_statut]||l.certificat_statut)}</span>`
+          : '<span class="fsc-pill nod">—</span>'}
+        </td>
+      <td><input type="text" class="fsc-in" value="${escAttr(l.num_facture_fournisseur||'')}" placeholder="n° facture"
+            onchange="fscApproSaisir(${l.id}, 'num_facture_fournisseur', this.value)"></td>
+      <td><select class="fsc-in" onchange="fscApproSaisir(${l.id}, 'allegation_bl', this.value)">
+            <option value="">—</option>${opts(l.allegation_bl)}</select></td>
+      <td><select class="fsc-in" onchange="fscApproSaisir(${l.id}, 'allegation_facture', this.value)">
+            <option value="">—</option>${opts(l.allegation_facture)}</select></td>
+      <td><input type="number" class="fsc-in court" min="0" max="100" step="1" value="${l.pourcentage!=null?l.pourcentage:''}"
+            ${pct && pct.pct ? '' : 'disabled title="Seulement pour une allégation en pourcentage"'}
+            onchange="fscApproSaisir(${l.id}, 'pourcentage', this.value)"></td>
+      <td class="centre"><input type="checkbox" ${l.code_certificat_present?'checked':''}
+            title="Le code de certificat du fournisseur figure sur le BL et la facture"
+            onchange="fscApproSaisir(${l.id}, 'code_certificat_present', this.checked?1:0)"></td>
+      <td><select class="fsc-in" onchange="fscApproSaisir(${l.id}, 'etiquette_posee', this.value)">
+            <option value="">—</option>${optsEtiq(l.etiquette_posee)}</select></td>
+      <td><span class="fsc-pill ${el.cls}">${escHtml(el.label)}</span>
+          ${l.controle_par?`<div class="fsc-sub">${escHtml(l.controle_par)}</div>`:''}</td>
+      <td class="fsc-c-act">
+        ${admin?`<button type="button" class="fsc-btn sm" onclick="fscApproAppliquerBl(${l.id})" title="Recopier cette saisie sur toutes les lignes du même BL">BL</button>`:''}
+        <button type="button" class="fsc-btn sm" onclick="fscApproJournal(${l.id})" title="Historique des corrections">Journal</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `<div class="fsc-tablewrap">
+    <table class="fsc-grid">
+      <thead><tr>
+        <th>Réception</th><th>BL</th><th>Fournisseur</th><th>Matière</th><th>Quantité</th><th>Certificat au BL</th>
+        <th>N° facture</th><th>Allégation BL</th><th>Allégation facture</th><th>%</th><th>Code</th><th>Étiquette</th>
+        <th>Éligible</th><th></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <div class="fsc-legende">${lignes.length} ligne(s) affichée(s) · les colonnes grisées viennent de RVGI et ne s'éditent pas</div>`;
+}
+
+async function fscApproSaisir(id, champ, valeur){
+  const tr = document.querySelector(`#fsc-appro-list tr[data-id="${id}"]`);
+  if(tr) tr.classList.add('saving');
+  try{
+    const r = await api('/api/qualite/fsc/appro/' + id, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({[champ]: valeur === '' ? null : valeur}),
+    });
+    if(!r.ok){
+      let msg = 'Enregistrement impossible.';
+      try{ const j = await r.json(); if(j.detail) msg = j.detail; }catch(e){}
+      showToast(msg,'danger');
+      return;
+    }
+    const ligne = await r.json();
+    const lignes = (S.fsc.appro.lignes||[]);
+    const i = lignes.findIndex(x => x.id === id);
+    if(i !== -1) lignes[i] = {...lignes[i], ...ligne};
+    fscApproRafraichirStats();
+    fscApproRenderList();
+  }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); }
+  finally{ if(tr) tr.classList.remove('saving'); }
+}
+
+function fscApproRafraichirStats(){
+  // Les compteurs se recalculent côté client entre deux chargements : une saisie
+  // ne doit pas coûter un aller-retour complet.
+  const lignes = S.fsc.appro.lignes||[];
+  const st = S.fsc.appro.stats || {};
+  st.lignes = lignes.length;
+  st.oui = lignes.filter(l => l.eligible === 'oui').length;
+  st.non = lignes.filter(l => l.eligible === 'non').length;
+  st.a_verifier = lignes.filter(l => l.eligible === 'a_verifier').length;
+  st.ecart = lignes.filter(l => l.eligible === 'ecart_bl_facture').length;
+  document.querySelectorAll('.fsc-kpis .fsc-kpi-val').forEach((el, i) => {
+    el.textContent = [st.lignes, st.oui, st.a_verifier, (st.ecart||0)+(st.non||0)][i];
+  });
+}
+
+async function fscApproAppliquerBl(id){
+  try{
+    const r = await api('/api/qualite/fsc/appro/' + id + '/appliquer-bl', {method:'POST'});
+    if(!r.ok){
+      let msg = 'Application impossible.';
+      try{ const j = await r.json(); if(j.detail) msg = j.detail; }catch(e){}
+      showToast(msg,'danger'); return;
+    }
+    const j = await r.json();
+    showToast(j.appliquees ? `Saisie appliquée à ${j.appliquees} ligne(s) du même BL.`
+                           : 'Ce BL ne porte qu\'une ligne.', j.appliquees?'success':'info');
+    await fscApproLoad();
+  }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); }
+}
+
+async function fscApproImporter(){
+  const b = document.getElementById('fsc-appro-import');
+  if(b){ b.disabled = true; b.textContent = 'Import en cours…'; }
+  try{
+    const r = await api('/api/qualite/fsc/appro/import', {method:'POST'});
+    if(!r.ok){
+      let msg = 'Import impossible.';
+      try{ const j = await r.json(); if(j.detail) msg = j.detail; }catch(e){}
+      showToast(msg,'danger'); return;
+    }
+    const j = await r.json();
+    showToast(`${j.ajoutees} réception(s) ajoutée(s)${j.sans_fournisseur?` · ${j.sans_fournisseur} sans fournisseur rattaché`:''}.`,'success');
+    await fscApproLoad();
+  }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); }
+  finally{ if(b){ b.disabled = false; b.textContent = 'Importer les réceptions RVGI'; } }
+}
+
+async function fscApproDefinirDate(){
+  const el = document.getElementById('fsc-date-entree');
+  if(!el || !el.value){ showToast('Choisir une date.','info'); return; }
+  try{
+    const r = await api('/api/qualite/fsc/appro/parametres', {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({date_entree: el.value}),
+    });
+    if(!r.ok){ showToast('Date refusée.','danger'); return; }
+    showToast('Date d\'entrée enregistrée.','success');
+    await fscApproLoad();
+  }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); }
+}
+
+function fscApproRattacher(id){
+  const d = S.fsc.appro;
+  const l = (d.lignes||[]).find(x => x.id === id); if(!l) return;
+  _refMroot().innerHTML = `
+    <div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
+      <div class="modal fsc-modal">
+        <div class="modal-hd">
+          <h3>Rattacher un tiers RVGI</h3>
+          <button class="modal-x" onclick="closeMroot()">&times;</button>
+        </div>
+        <div class="modal-bd">
+          <p>Le tiers <b>${escHtml(l.fournisseur_rvgi||'')}</b> (n° ${escHtml(String(l.numfou||'—'))}) n'est rattaché à aucune fiche
+          de l'annuaire. Le rattachement est mémorisé sur la fiche : toutes les lignes de ce tiers, passées et à venir,
+          suivront.</p>
+          <label class="fsc-field"><span>Fiche fournisseur</span>
+            <select id="fsc-ratt-four">
+              <option value="">— choisir —</option>
+              ${(d.fournisseurs||[]).map(f => `<option value="${f.id}">${escHtml(f.nom)}${f.licence?' · '+escHtml(f.licence):''}</option>`).join('')}
+            </select></label>
+        </div>
+        <div class="modal-ft">
+          <button type="button" class="fsc-btn" onclick="closeMroot()">Annuler</button>
+          <button type="button" class="btn btn-accent" onclick="fscApproRattacherValider(${id})">Rattacher</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function fscApproRattacherValider(id){
+  const sel = document.getElementById('fsc-ratt-four');
+  if(!sel || !sel.value){ showToast('Choisir une fiche fournisseur.','info'); return; }
+  try{
+    const r = await api('/api/qualite/fsc/appro/' + id + '/rattacher', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({fournisseur_id: Number(sel.value)}),
+    });
+    if(!r.ok){
+      let msg = 'Rattachement impossible.';
+      try{ const j = await r.json(); if(j.detail) msg = j.detail; }catch(e){}
+      showToast(msg,'danger'); return;
+    }
+    const j = await r.json();
+    closeMroot();
+    showToast(`${j.lignes_reprises} ligne(s) rattachée(s).`,'success');
+    await fscApproLoad();
+  }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); }
+}
+
+async function fscApproJournal(id){
+  try{
+    const r = await api('/api/qualite/fsc/appro/' + id + '/journal');
+    if(!r.ok){ showToast('Journal indisponible.','danger'); return; }
+    const j = (await r.json()).journal || [];
+    const l = ((S.fsc.appro||{}).lignes||[]).find(x => x.id === id) || {};
+    _refMroot().innerHTML = `
+      <div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
+        <div class="modal fsc-modal">
+          <div class="modal-hd">
+            <h3>Journal · BL ${escHtml(l.num_bl||'')} · ${escHtml(l.fournisseur_nom||l.fournisseur_rvgi||'')}</h3>
+            <button class="modal-x" onclick="closeMroot()">&times;</button>
+          </div>
+          <div class="modal-bd">
+            ${j.length ? `<div class="fsc-histo">${j.map(e => `<div class="fsc-histo-row">
+                <span class="fsc-mono">${fmtDateTime(e.horodatage)}</span>
+                <span>${escHtml(e.champ)}</span>
+                <span class="fsc-muted">${escHtml(e.ancienne_valeur===null||e.ancienne_valeur===undefined?'—':String(e.ancienne_valeur))} → ${escHtml(e.nouvelle_valeur===null||e.nouvelle_valeur===undefined?'—':String(e.nouvelle_valeur))}</span>
+                <span class="fsc-muted">${escHtml(e.utilisateur||'')}</span>
+              </div>`).join('')}</div>`
+              : '<div class="fsc-muted">Aucune correction : la ligne est telle qu\'elle est entrée.</div>'}
+          </div>
+          <div class="modal-ft"><button type="button" class="fsc-btn" onclick="closeMroot()">Fermer</button></div>
+        </div>
+      </div>`;
+  }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); }
+}
+
 // ─── CSS ─────────────────────────────────────────────────────────────
 (function injectFscCSS(){
   if(document.getElementById('fsc-css')) return;
@@ -527,7 +938,7 @@ async function fscEnregistrerControle(id){
   .fsc-hero h1{margin:0 0 4px;font-size:22px;color:var(--text)}
   .fsc-hero p{margin:0;color:var(--text2);font-size:13px;line-height:1.55;max-width:760px}
   .fsc-hero-actions{display:flex;gap:8px;flex-wrap:wrap}
-  .fsc-hero .btn-accent, .fsc-modal .btn-accent, .fsc-modal-preview .btn-accent{color:white}
+  .fsc-hero .btn-accent, .fsc-modal .btn-accent, .fsc-modal-preview .btn-accent{color:white;text-decoration:none}
   .fsc-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
   .fsc-muted{color:var(--muted)}
 
@@ -643,6 +1054,54 @@ async function fscEnregistrerControle(id){
   .fsc-histo{display:flex;flex-direction:column;gap:2px;font-size:12px}
   .fsc-histo-row{display:grid;grid-template-columns:90px 90px 1fr 120px 80px;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);align-items:center}
   .fsc-histo-row a{color:var(--accent);font-weight:600;text-decoration:none}
+
+  .fsc-stabs{display:flex;gap:4px;margin:0 0 14px}
+  .fsc-stab{padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);
+    color:var(--text2);font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;transition:.15s}
+  .fsc-stab:hover{background:var(--bg);color:var(--text)}
+  .fsc-stab.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+
+  .fsc-bandeau{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+    background:rgba(251,191,36,.12);border:1px solid var(--warn);border-radius:12px;padding:12px 16px;
+    margin-bottom:14px;font-size:13px;color:var(--text2)}
+  .fsc-bandeau-act{display:flex;gap:8px;align-items:center}
+  .fsc-inline{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:7px 9px;
+    color:var(--text);font-family:inherit;font-size:12.5px}
+  .fsc-inline-lbl{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  .fsc-check.compact{padding:6px 10px;font-size:12px}
+  .fsc-lien{background:none;border:none;padding:0;color:var(--accent);font:inherit;font-size:11px;
+    font-weight:700;cursor:pointer;text-decoration:underline}
+
+  .fsc-tablewrap{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow-x:auto}
+  .fsc-grid{border-collapse:collapse;width:100%;min-width:1360px;font-size:12.5px}
+  .fsc-grid th{position:sticky;top:0;background:var(--bg);color:var(--muted);font-size:10.5px;
+    text-transform:uppercase;letter-spacing:.5px;font-weight:700;text-align:left;padding:9px 10px;
+    border-bottom:1px solid var(--border);white-space:nowrap;z-index:1}
+  .fsc-grid td{padding:6px 10px;border-bottom:1px solid var(--border);vertical-align:middle;color:var(--text)}
+  /* La désignation RVGI est longue (« 70gsm Direct Thermal ECO Paper - BARCODE
+     REQUIRED ») : deux lignes au maximum, le reste dans l'infobulle. */
+  .fsc-grid td.fsc-mat{min-width:230px;max-width:280px}
+  .fsc-mat .fsc-sub{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .fsc-grid tr:last-child td{border-bottom:none}
+  .fsc-grid tr:hover td{background:var(--bg)}
+  .fsc-grid td.fsc-rvgi{color:var(--text2);background:linear-gradient(var(--bg),var(--bg))}
+  .fsc-grid tr:hover td.fsc-rvgi{filter:brightness(.98)}
+  .fsc-grid td.num{text-align:right;white-space:nowrap}
+  .fsc-grid td.centre{text-align:center}
+  .fsc-grid tr.saving td{opacity:.6}
+  /* Le verdict se lit au bord gauche de la ligne : la colonne « Éligible » est
+     à droite d'un tableau qui défile, et c'est l'information qu'on cherche en
+     premier. */
+  .fsc-grid tbody td:first-child{border-left:3px solid transparent}
+  .fsc-grid tr.elig-oui td:first-child{border-left-color:var(--success)}
+  .fsc-grid tr.elig-non td:first-child,
+  .fsc-grid tr.elig-ecart_bl_facture td:first-child{border-left-color:var(--danger)}
+  .fsc-grid tr.elig-a_verifier td:first-child{border-left-color:var(--warn)}
+  .fsc-in{background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:6px 8px;
+    color:var(--text);font-family:inherit;font-size:12px;width:100%;min-width:110px}
+  .fsc-in:focus{border-color:var(--accent);outline:none}
+  .fsc-in:disabled{opacity:.45}
+  .fsc-in.court{min-width:62px;width:62px}
 
   @media(max-width:1100px){
     .fsc-row{grid-template-columns:minmax(160px,1.2fr) 130px 120px minmax(170px,1.4fr);}
