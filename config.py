@@ -359,6 +359,35 @@ FSC_LECTURE_IA_MODELE = os.getenv(
     os.getenv("DEVIS_IA_MODELE", "claude-sonnet-4-5-20250929"),
 )
 
+# ─── FSC — registres de chaîne de contrôle (FSC-STD-40-004 V3-1) ───────
+# Allégations portées par un document d'achat ou de vente. Liste FERMÉE :
+# FSC-STD-40-004 n'en connaît pas d'autres, et « aucune » en fait partie —
+# une réception non certifiée s'inscrit au registre, elle ne s'en absente pas.
+# `pct` : l'allégation porte un pourcentage. `label` : ce claim autorise-t-il
+# le label FSC sur le produit vendu (FSC-STD-50-001 V2-1) ; None = ça dépend du
+# pourcentage, comparé à FSC_SEUIL_LABEL_PCT.
+FSC_ALLEGATIONS = {
+    "fsc_100":             {"libelle": "FSC 100 %",           "pct": False, "label": True},
+    "fsc_mix_credit":      {"libelle": "FSC Mix Crédit",      "pct": False, "label": True},
+    "fsc_mix_pct":         {"libelle": "FSC Mix x %",         "pct": True,  "label": None},
+    "fsc_recycled_credit": {"libelle": "FSC Recycled Crédit", "pct": False, "label": True},
+    "fsc_recycled_pct":    {"libelle": "FSC Recycled x %",    "pct": True,  "label": None},
+    "fsc_controlled_wood": {"libelle": "FSC Controlled Wood", "pct": False, "label": False},
+    "aucune":              {"libelle": "Aucune allégation",   "pct": False, "label": False},
+}
+FSC_SEUIL_LABEL_PCT = float(os.getenv("FSC_SEUIL_LABEL_PCT", "70"))
+# Types d'article RVGI (ceux de la ligne d'ACHAT, `cdf_ligne.type`) qui entrent
+# au registre des approvisionnements. Alignés sur reception_rvgi.PERIMETRE :
+# 3 complexe, 4 glassine, 5 vélin, 6 couché, 7 thermique, 8 synthétique.
+FSC_TYPES_REGISTRE = (3, 4, 5, 6, 7, 8)
+# Le synthétique est laizé mais n'est pas d'origine forestière : il entre au
+# registre, avec la mention, parce que l'auditeur veut voir la question tranchée.
+FSC_TYPES_NON_FORESTIERS = (8,)
+# Étiquette posée sur la bobine à la réception (règle d'identification SIFA).
+FSC_ETIQUETTES = {"verte": "Verte — matière FSC", "orange": "Orange — matière non FSC"}
+# Conservation réglementaire des enregistrements de chaîne de contrôle.
+FSC_CONSERVATION_ANNEES = int(os.getenv("FSC_CONSERVATION_ANNEES", "5"))
+
 # Motifs d'un départ NON rattaché à un dossier de fabrication.
 #
 # Toutes les expéditions ne sortent pas d'une production : on expédie du stock
