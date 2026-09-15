@@ -2319,6 +2319,10 @@ let S = {
   recepFournisseurSearch: '', // conservé : encore lu par d'anciens resets
   recepFournisseurOpen: false,
   recepFscTypeClaim: 'fsc_mix', // type certification lot (défaut FSC Mix)
+  // La ligne du registre FSC que cette réception représente. Sous chaîne de
+  // contrôle, c'est elle qui porte l'allégation — `recepFscTypeClaim` n'en est
+  // plus que le reflet, et le serveur reste seul juge.
+  recepLigneRegistreId: null,
   recepLastLot: null,      // dernier lot créé (pour modale impression étiquettes)
   // Réception structurée par matière (v2)
   recepMatieresLaizees: null,  // cache des matières laizées {matieres: [...]}
@@ -17159,6 +17163,127 @@ function recepFscTypeRequiresCert(claim) {
   return (claim || 'non_fsc') !== 'non_fsc';
 }
 
+/* ── Registre FSC : désigner la livraison, pas déclarer l'allégation ──────
+ *
+ * Sous chaîne de contrôle, le magasin ne choisit plus « FSC Mix » dans une
+ * liste : il désigne le bon de livraison qu'il est en train de réceptionner, et
+ * l'allégation vient avec. C'est le même renversement qu'au pied de la machine,
+ * un cran plus tôt — constater au lieu de déclarer.
+ *
+ * Le rattachement se fait par `lif_id`, la ligne de livraison RVGI. Un numéro
+ * de BL retapé se trompe ; une ligne choisie dans une liste, non.
+ *
+ * `verrou` à false (date d'entrée non renseignée, ou pas encore atteinte) :
+ * l'écran garde exactement son comportement d'avant.
+ */
+let REGISTRE_FSC = { verrou: false, depuis: null, lignes: [], charge: false };
+
+async function loadRegistreFSC(force) {
+  if (REGISTRE_FSC.charge && !force) return REGISTRE_FSC;
+  try {
+    const d = await api('/api/stock/receptions/registre');
+    REGISTRE_FSC = {
+      verrou: !!(d && d.verrou),
+      depuis: (d && d.depuis) || null,
+      lignes: (d && d.lignes) || [],
+      charge: true,
+    };
+  } catch (e) {
+    // Registre injoignable : on ne bloque pas une réception pour ça, l'écran
+    // reprend son sélecteur d'avant et le serveur reste seul juge.
+    REGISTRE_FSC = { verrou: false, depuis: null, lignes: [], charge: true };
+  }
+  return REGISTRE_FSC;
+}
+
+function registreLignesVisibles() {
+  const lignes = REGISTRE_FSC.lignes || [];
+  if (!S.recepFournisseurId) return lignes;
+  // Les lignes sans fournisseur rattaché restent proposées : ce sont celles
+  // qu'un humain doit justement relier, les cacher les rendrait invisibles.
+  return lignes.filter(l => !l.fournisseur_id || l.fournisseur_id === S.recepFournisseurId);
+}
+
+function registreLigneChoisie() {
+  if (!S.recepLigneRegistreId) return null;
+  return (REGISTRE_FSC.lignes || []).find(l => l.id === S.recepLigneRegistreId) || null;
+}
+
+/* L'allégation que la réception portera réellement. Le serveur la recalcule et
+ * fait foi — celle-ci n'existe que pour que l'écran montre la même chose. */
+function recepClaimRetenu() {
+  if (!REGISTRE_FSC.verrou) return S.recepFscTypeClaim || 'fsc_mix';
+  const l = registreLigneChoisie();
+  return (l && l.claim) || 'non_fsc';
+}
+
+function registreLigneLibelle(l) {
+  const bits = [];
+  if (l.date_reception) bits.push(String(l.date_reception).slice(0, 10));
+  if (l.num_bl) bits.push('BL ' + l.num_bl);
+  if (l.fournisseur_nom) bits.push(l.fournisseur_nom);
+  const mat = l.libelle_matiere || l.designation || l.code_matiere || '';
+  if (mat) bits.push(mat);
+  if (l.laize_mm) bits.push(Math.round(l.laize_mm) + ' mm');
+  bits.push(l.claim_label || 'Non FSC');
+  return bits.join(' · ');
+}
+
+/* Le sélecteur de livraison, plus le constat de ce qu'elle démontre. */
+function buildRegistreBloc(onChange) {
+  const wrap = document.createElement('div');
+
+  const lbl = el('div', { cls: 'recep-fourn-label', style: { marginTop: '4px' } },
+    iconEl('clipboard', 13), ' Livraison réceptionnée (registre FSC)');
+  wrap.appendChild(lbl);
+
+  const sel = document.createElement('select');
+  sel.className = 'recep-fourn-sel';
+  sel.id = 'fsc-ligne-registre';
+  const vide = document.createElement('option');
+  vide.value = '';
+  vide.textContent = '— Aucune : la réception sera enregistrée non FSC —';
+  sel.appendChild(vide);
+  const lignes = registreLignesVisibles();
+  lignes.forEach(l => {
+    const o = document.createElement('option');
+    o.value = String(l.id);
+    o.textContent = registreLigneLibelle(l);
+    if (S.recepLigneRegistreId === l.id) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.addEventListener('change', (e) => {
+    const v = parseInt(e.target.value, 10);
+    S.recepLigneRegistreId = Number.isFinite(v) ? v : null;
+    const l = registreLigneChoisie();
+    S.recepFscTypeClaim = (l && l.claim) || 'non_fsc';
+    if (typeof onChange === 'function') onChange();
+  });
+  wrap.appendChild(sel);
+
+  if (!lignes.length) {
+    wrap.appendChild(el('div', { cls: 'recep-fourn-fsc' },
+      'Aucune livraison en attente au registre. Importer les réceptions RVGI ' +
+      'dans MyQualité › FSC › Approvisionnements.'));
+  }
+
+  // Ce que la livraison choisie démontre. Affiché, jamais choisi.
+  const l = registreLigneChoisie();
+  const claim = recepClaimRetenu();
+  const constat = el('div', { cls: 'recep-fourn-fsc', style: { marginTop: '6px' } },
+    'Allégation constatée : ',
+    el('strong', null, (l && l.claim_label) || 'Non FSC'));
+  wrap.appendChild(constat);
+  if (l && claim === 'non_fsc' && l.motif_court) {
+    wrap.appendChild(el('div', {
+      cls: 'recep-fourn-fsc',
+      style: { color: 'var(--danger)' },
+    }, 'Cette livraison ne porte pas d\'allégation : ' + l.motif_court +
+       ' — à corriger dans MyQualité › FSC › Approvisionnements.'));
+  }
+  return wrap;
+}
+
 async function loadRecepHistory() {
   S.recepHistLoading = true; renderContent();
   try {
@@ -17631,10 +17756,14 @@ async function recepValider() {
     showToast('Veuillez sélectionner un fournisseur avant de valider la réception', 'error');
     return;
   }
-  const claim = S.recepFscTypeClaim || 'fsc_mix';
+  const claim = recepClaimRetenu();
+  const ligneRegistre = registreLigneChoisie();
   const fsc = FOURNISSEURS_FSC.find(f => f.nom === S.recepFournisseur);
   const cert = fsc ? String(fsc.certificat || '').trim() : '';
-  if (recepFscTypeRequiresCert(claim) && !cert) {
+  // Sous chaîne de contrôle, le code de certificat vient du registre — celui de
+  // la fiche fournisseur n'est plus ce qu'on oppose, et l'exiger ici bloquerait
+  // une réception que le serveur sait pourtant qualifier.
+  if (!REGISTRE_FSC.verrou && recepFscTypeRequiresCert(claim) && !cert) {
     showToast('Certificat FSC requis pour une réception certifiée FSC.', 'error');
     return;
   }
@@ -17661,11 +17790,19 @@ async function recepValider() {
         fournisseur_id: S.recepFournisseurId || null,
         certificat_fsc: recepFscTypeRequiresCert(claim) ? cert : '',
         fsc_type_claim: claim,
+        // La ligne de livraison RVGI désignée à l'écran : c'est la clé exacte
+        // vers le registre, et c'est elle qui décide de l'allégation.
+        rvgi_lif_id: ligneRegistre ? ligneRegistre.lif_id : null,
+        rvgi_bl: ligneRegistre ? (ligneRegistre.num_bl || null) : null,
       }),
     });
     if (d && d.success) {
       const added = d.nb_bobines_ajoutees || d.nb_bobines || codes.length;
       const merged = !!d.merged;
+      // Ce que le SERVEUR a retenu comme allégation, pas ce que l'écran a
+      // demandé. Sous chaîne de contrôle, l'allégation se lit sur le registre
+      // des approvisionnements : l'écran propose, le registre tranche.
+      const claimRetenu = (d.fsc_type_claim || claim);
       const msg = merged
         ? added + ' bobine' + (added > 1 ? 's' : '') + ' ajoutée' + (added > 1 ? 's' : '') + ' au lot existant'
         : added + ' bobine' + (added > 1 ? 's' : '') + ' enregistrée' + (added > 1 ? 's' : '') + ' — lot créé';
@@ -17675,12 +17812,18 @@ async function recepValider() {
       showToast(d.stock_impacte === false
         ? msg + ' (traçabilité — le stock entre par la réception RVGI)'
         : msg);
+      // Pourquoi l'allégation retenue n'est pas celle demandée. Un « Non FSC »
+      // muet n'appelle aucun geste ; celui-ci dit où aller le corriger.
+      if (d.fsc_motif) showToast(d.fsc_motif, 'danger');
       // Snapshot pour la modale d'impression
       S.recepLastLot = {
         lot_numero: d.lot_numero || '',
         fournisseur: S.recepFournisseur,
-        fsc_type_claim: claim,
-        certificat_fsc: recepFscTypeRequiresCert(claim) ? cert : '',
+        // L'étiquette imprimée porte l'allégation RETENUE. Une étiquette verte
+        // sur une bobine enregistrée « non FSC » est précisément l'écart que
+        // l'auditeur cherche, et le magasin n'aurait aucun moyen de le voir.
+        fsc_type_claim: claimRetenu,
+        certificat_fsc: recepFscTypeRequiresCert(claimRetenu) ? cert : '',
         nb_bobines_ajoutees: added,
         nb_bobines_total: d.nb_bobines || added,
         codes: codes.slice(),
@@ -17698,6 +17841,9 @@ async function recepValider() {
         })),
       };
       S.recepItems = []; S.recepNote = ''; S.recepFournisseur = ''; S.recepFournisseurId = null;
+      // La livraison vient d'entrer : elle ne doit plus être proposée.
+      S.recepLigneRegistreId = null;
+      if (REGISTRE_FSC.verrou) loadRegistreFSC(true).then(() => renderContent());
       recepOublierBrouillon();
       S.recepFournisseurSearch = ''; S.recepFournisseurOpen = false;
       S.recepFscTypeClaim = 'fsc_mix';
@@ -17850,6 +17996,10 @@ function renderReceptionMiniModal() {
     });
     fournWrap.appendChild(fournSel);
   }
+  if (!REGISTRE_FSC.charge) loadRegistreFSC().then(() => renderReceptionMiniModal());
+  if (REGISTRE_FSC.verrou) {
+    fournWrap.appendChild(buildRegistreBloc(() => renderReceptionMiniModal()));
+  } else {
   const fscTypeSel = document.createElement('select');
   fscTypeSel.className = 'recep-picker-sel';
   fscTypeSel.style.marginTop = '6px';
@@ -17862,6 +18012,7 @@ function renderReceptionMiniModal() {
   });
   fscTypeSel.addEventListener('change', (e) => { S.recepFscTypeClaim = e.target.value; renderReceptionMiniModal(); });
   fournWrap.appendChild(fscTypeSel);
+  }
   modal.appendChild(fournWrap);
 
   // ── Saisie manuelle (mode principal) + scan optionnel ──
@@ -19260,7 +19411,16 @@ function buildReceptionNouvelle() {
     fourWrap.appendChild(certBlock);
   }
 
-  const fscClaim = S.recepFscTypeClaim || 'fsc_mix';
+  // Le registre dit si la chaîne de contrôle couvre cette réception. Chargé
+  // une fois, puis l'écran se redessine avec la réponse.
+  if (!REGISTRE_FSC.charge) loadRegistreFSC().then(() => renderContent());
+  const fscClaim = recepClaimRetenu();
+  if (REGISTRE_FSC.verrou) {
+    // Chaîne de contrôle en service : on désigne la livraison, l'allégation
+    // suit. Le <select> d'allégation n'a plus lieu d'être — le magasin ne
+    // déclare pas ce que les documents du fournisseur établissent.
+    fourWrap.appendChild(buildRegistreBloc(() => renderContent()));
+  } else {
   const fscTypeLbl = el('div', { cls: 'recep-fourn-label', style: { marginTop: '4px' } }, iconEl('clipboard', 13), ' Type de certification FSC');
   // Construit via createElement direct : le helper el() ne déstructure pas la clé
   // "attrs" — sans ça, les options n'auraient pas leur value posé et
@@ -19289,6 +19449,7 @@ function buildReceptionNouvelle() {
     renderContent();
   });
   fourWrap.append(fscTypeLbl, fscTypeSel);
+  }
 
   // ── Preview du numéro de lot ──
   if (S.recepFournisseur) {

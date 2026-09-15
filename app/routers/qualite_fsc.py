@@ -23,6 +23,7 @@ Lecture : ROLES_QUALITE_VIEW (dont commercial). Écriture : ROLES_QUALITE.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import date, datetime
 from typing import Optional
@@ -45,6 +46,15 @@ from app.services.fsc_dossier import (
 )
 from app.services import fsc_registre as registre
 from app.services.erp_mirror import get_erp_db, miroir_present
+from app.services.fsc_classification import (
+    catalogue_portees,
+    # Aliasée : `couverture` est déjà le nom de la liste de couverture par
+    # catégorie dans _synthese(), et une variable locale du même nom rendrait la
+    # fonction inappelable dans toute la portée de _synthese (UnboundLocalError).
+    couverture as calcul_couverture,
+    libelle_portee,
+    nettoyer_liste,
+)
 from app.services.fsc_lecture_certificat import lire_certificat
 from config import (
     APP_ORG_NAME,
@@ -60,6 +70,8 @@ from config import (
     FSC_STATUTS_BASE,
     UPLOAD_DIR,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -107,6 +119,10 @@ def _claims_labels(codes: list[str]) -> list[str]:
     return [FSC_CLAIMS_PORTEE[c]["label"] for c in FSC_CLAIMS_PORTEE if c in codes]
 
 
+def _portees_labels(codes: list[str]) -> list[str]:
+    return [libelle_portee(c) for c in codes]
+
+
 def _colonnes(conn, table: str) -> set[str]:
     return {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
 
@@ -139,6 +155,15 @@ def _lecture_publique(d: Optional[dict]) -> Optional[dict]:
     claims = _json_list(d.get("fsc_claims_lus"))
     for c in claims:
         c["label"] = FSC_CLAIMS_PORTEE.get(c.get("code"), {}).get("label", c.get("code"))
+    # La portée lue suit la même règle que les claims : proposition, jamais
+    # validation. Elle ne pré-remplit le contrôle que pour épargner une saisie.
+    portees = []
+    for p in _json_list(d.get("fsc_portees_lues")):
+        code = p.get("code") if isinstance(p, dict) else p
+        entree = dict(p) if isinstance(p, dict) else {"code": code}
+        entree["code"] = code
+        entree["label"] = libelle_portee(code)
+        portees.append(entree)
     return {
         "le": d.get("fsc_lecture_le"),
         "methode": d.get("fsc_lecture_methode"),
@@ -146,6 +171,7 @@ def _lecture_publique(d: Optional[dict]) -> Optional[dict]:
         "certificat": d.get("fsc_certificat_lu"),
         "expiration": d.get("fsc_expiration_lue"),
         "claims": claims,
+        "portees": portees,
         "note": d.get("fsc_lecture_note") or "",
     }
 
@@ -172,6 +198,7 @@ def _derniers_controles(conn) -> dict[int, dict]:
             "statut_label": FSC_STATUTS_BASE.get(d["statut_base"], d["statut_base"]),
             "date_expiration_lue": d.get("date_expiration_lue"),
             "claims": _json_list(d.get("claims")),
+            "portees": _json_list(d.get("portees")),
             "note": d.get("note") or "",
             "justificatif": bool(d.get("justificatif_filename")),
             "created_by_nom": d.get("created_by_nom"),
@@ -212,9 +239,46 @@ def _famille(code: str) -> str:
     return FSC_CLAIMS_PORTEE.get(code, {}).get("famille", code)
 
 
+def _sorties(conn) -> list[dict]:
+    """Fournisseurs retirés de la liste FSC, avec la raison et sa date.
+
+    « Ne pas supprimer, désactiver » ne suffit pas pour un audit : une fiche qui
+    disparaît de l'écran ne prouve rien. L'auditeur demande pourquoi tel
+    fournisseur n'est plus dans la liste, et la réponse est le dernier contrôle
+    enregistré avant la sortie — sa date, ce que la base FSC affichait ce
+    jour-là, et la note qui dit ce qu'on en a conclu.
+
+    Une fiche jamais certifiée et jamais contrôlée n'a rien à faire ici : elle
+    n'est pas sortie de la liste, elle n'y est jamais entrée.
+    """
+    controles = _derniers_controles(conn)
+    out = []
+    for r in conn.execute(
+        """SELECT id, nom, licence, certificat, fsc_date_expiration
+             FROM fournisseurs_fsc
+            WHERE COALESCE(has_fsc,1)=0 AND COALESCE(actif,1)=1
+            ORDER BY nom COLLATE NOCASE"""
+    ).fetchall():
+        f = dict(r)
+        ctrl = controles.get(f["id"])
+        if not ctrl and not f.get("licence"):
+            continue
+        out.append({
+            "id": f["id"],
+            "nom": f["nom"],
+            "licence": f.get("licence"),
+            "certificat": f.get("certificat"),
+            "expiration": (f.get("fsc_date_expiration") or "")[:10] or None,
+            "dernier_controle": ctrl,
+            "motif": (ctrl or {}).get("note") or "",
+        })
+    return out
+
+
 def _synthese(conn, ids: Optional[set[int]] = None) -> dict:
     fours = [dict(r) for r in conn.execute(
-        """SELECT id, nom, licence, certificat, groupe, branche, fsc_date_expiration
+        """SELECT id, nom, licence, certificat, groupe, branche, fsc_date_expiration,
+                  fsc_portees_achetees
              FROM fournisseurs_fsc
             WHERE COALESCE(has_fsc,1)=1 AND COALESCE(actif,1)=1
             ORDER BY nom COLLATE NOCASE"""
@@ -243,9 +307,18 @@ def _synthese(conn, ids: Optional[set[int]] = None) -> dict:
 
         if ctrl:
             claims, claims_source = ctrl["claims"], "controle"
+            portees, portees_source = ctrl.get("portees") or [], "controle"
         else:
             claims, claims_source = [], None
+            portees, portees_source = [], None
         proposes = [c["code"] for c in (lecture or {}).get("claims", []) if c["code"] not in claims]
+        portees_proposees = [p["code"] for p in (lecture or {}).get("portees", [])
+                             if p.get("code") and p["code"] not in portees]
+        # Ce que SIFA achète à ce fournisseur, confronté à ce que le certificat
+        # couvre. Seul le contrôle compte comme portée : une portée seulement
+        # « lue » sur le certificat ne doit ni rassurer ni alerter.
+        achats = nettoyer_liste(_json_list(f.get("fsc_portees_achetees")))
+        couv = calcul_couverture(portees, achats)
 
         alertes = []
         if not f.get("licence"):
@@ -257,6 +330,17 @@ def _synthese(conn, ids: Optional[set[int]] = None) -> dict:
         # L'absence de contrôle a sa propre colonne : elle n'est pas répétée ici.
         if ctrl and not ctrl["a_refaire"] and ctrl["statut_base"] != "valide":
             alertes.append(f"Base FSC : {ctrl['statut_label']}")
+        # La portée qui ne couvre pas ce qu'on achète est une alerte : la
+        # matière livrée ne peut pas porter d'allégation FSC. Une portée pas
+        # encore saisie n'en est pas une — l'écran a sa propre colonne pour ça.
+        if couv["alerte"]:
+            alertes.append("Portée du certificat : %s non couvert%s"
+                           % (", ".join(_portees_labels(couv["manquants"])),
+                              "s" if len(couv["manquants"]) > 1 else ""))
+        elif couv["partielle"]:
+            alertes.append("Portée partielle : %s non couvert%s"
+                           % (", ".join(_portees_labels(couv["manquants"])),
+                              "s" if len(couv["manquants"]) > 1 else ""))
 
         lignes.append({
             "id": f["id"],
@@ -285,6 +369,13 @@ def _synthese(conn, ids: Optional[set[int]] = None) -> dict:
             "claims_labels": _claims_labels(claims),
             "claims_source": claims_source,
             "claims_proposes": [c for c in FSC_CLAIMS_PORTEE if c in proposes],
+            "portees": nettoyer_liste(portees),
+            "portees_labels": _portees_labels(nettoyer_liste(portees)),
+            "portees_source": portees_source,
+            "portees_proposees": nettoyer_liste(portees_proposees),
+            "portees_achetees": achats,
+            "portees_achetees_labels": _portees_labels(achats),
+            "couverture": couv,
             "dernier_controle": ctrl,
             "recus": recus.get(f["id"], []),
             "alertes": alertes,
@@ -327,12 +418,15 @@ def _synthese(conn, ids: Optional[set[int]] = None) -> dict:
         "sans_document": sum(1 for l in lignes if not l["document"]),
         "non_controles": sum(1 for l in lignes if not l["dernier_controle"] or l["dernier_controle"]["a_refaire"]),
         "sans_categorie": sum(1 for l in lignes if not l["claims"]),
+        "sans_portee": sum(1 for l in lignes if not l["portees"]),
+        "portee_non_couvrante": sum(1 for l in lignes if l["couverture"]["alerte"]),
     }
     a_lire = sorted({l["document"]["id"] for l in lignes
                      if l["document"] and not l["document"]["lecture"]})
     return {
         "fournisseurs": lignes,
         "couverture": couverture,
+        "sorties": _sorties(conn),
         "stats": stats,
         "documents_a_lire": a_lire,
     }
@@ -352,6 +446,7 @@ def fsc_synthese(request: Request):
             l["document"].pop("filename", None)
     data.update({
         "claims_catalogue": [{"code": k, "label": v["label"]} for k, v in FSC_CLAIMS_PORTEE.items()],
+        "portees_catalogue": catalogue_portees(),
         "statuts_base": [{"code": k, "label": v} for k, v in FSC_STATUTS_BASE.items()],
         "base_recherche_url": FSC_BASE_RECHERCHE_URL,
         "licence_sifa": FSC_LICENCE_SIFA,
@@ -451,7 +546,7 @@ def fsc_liste_controles(four_id: int, request: Request):
     _require_qualite_view(request)
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT id, date_controle, statut_base, licence, date_expiration_lue, claims, source,
+            """SELECT id, date_controle, statut_base, licence, date_expiration_lue, claims, portees, source,
                       certificat_id, note, justificatif_original, fiche_maj, ancienne_expiration,
                       created_at, created_by_nom
                  FROM qualite_fsc_controles
@@ -464,6 +559,8 @@ def fsc_liste_controles(four_id: int, request: Request):
         d = dict(r)
         d["claims"] = _json_list(d.get("claims"))
         d["claims_labels"] = _claims_labels(d["claims"])
+        d["portees"] = _json_list(d.get("portees"))
+        d["portees_labels"] = _portees_labels(d["portees"])
         d["statut_label"] = FSC_STATUTS_BASE.get(d["statut_base"], d["statut_base"])
         d["justificatif"] = bool(d.pop("justificatif_original", None))
         out.append(d)
@@ -478,6 +575,7 @@ async def fsc_enregistrer_controle(
     statut_base: str = Form(...),
     date_expiration: str = Form(""),
     claims: str = Form(""),
+    portees: str = Form(""),
     note: str = Form(""),
     certificat_id: str = Form(""),
     maj_fiche: str = Form("0"),
@@ -485,9 +583,15 @@ async def fsc_enregistrer_controle(
 ):
     """Enregistre un contrôle du certificat sur la base FSC.
 
-    C'est la seule écriture qui fixe les catégories d'un fournisseur. Le contrôle
-    n'écrase jamais le précédent. `maj_fiche=1` reporte la date d'expiration lue
-    sur la fiche fournisseur, celle qui valide les réceptions.
+    C'est la seule écriture qui fixe les allégations ET la portée produit d'un
+    fournisseur. Le contrôle n'écrase jamais le précédent. `maj_fiche=1` reporte
+    la date d'expiration lue sur la fiche fournisseur, celle qui valide les
+    réceptions.
+
+    Deux listes, deux questions : `claims` dit sous quelle allégation le
+    fournisseur peut livrer, `portees` dit ce que son certificat couvre. Un
+    certificat FSC Mix valide qui ne couvre pas P7.8 reste un certificat valide
+    — il ne couvre simplement pas les étiquettes adhésives.
     """
     user = _require_qualite_access(request)
 
@@ -507,6 +611,17 @@ async def fsc_enregistrer_controle(
             raise HTTPException(status_code=400, detail=f"Catégorie FSC inconnue : {tok}.")
         if tok not in codes:
             codes.append(tok)
+    # La portée est normalisée, jamais refusée : un code d'une version du
+    # standard que le référentiel ne connaît pas encore doit pouvoir être saisi,
+    # c'est ce qui est écrit sur le dossier de certification qui fait foi.
+    codes_portee = nettoyer_liste((portees or "").split(","))
+    refuses = [t.strip() for t in (portees or "").split(",")
+               if t.strip() and not nettoyer_liste([t])]
+    if refuses:
+        raise HTTPException(
+            status_code=400,
+            detail="Code de portée invalide : %s — format attendu P7.8." % ", ".join(refuses))
+
     cert_id = int(certificat_id) if (certificat_id or "").strip().isdigit() else None
 
     fichier = None
@@ -541,12 +656,13 @@ async def fsc_enregistrer_controle(
         conn.execute(
             """INSERT INTO qualite_fsc_controles
                  (fournisseur_id, date_controle, statut_base, licence, date_expiration_lue, claims,
-                  source, certificat_id, note, justificatif_filename, justificatif_original,
+                  portees, source, certificat_id, note, justificatif_filename, justificatif_original,
                   justificatif_mime, fiche_maj, ancienne_expiration, created_at, created_by, created_by_nom)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 four_id, jour, statut, four["licence"], expiration,
-                json.dumps(codes), "base_fsc", cert_id, (note or "").strip(),
+                json.dumps(codes), json.dumps(codes_portee),
+                "base_fsc", cert_id, (note or "").strip(),
                 fichier[0] if fichier else None, fichier[1] if fichier else None,
                 fichier[2] if fichier else None,
                 fiche_maj, ancienne if fiche_maj else None,
@@ -560,17 +676,80 @@ async def fsc_enregistrer_controle(
                 (expiration, _now(), four_id),
             )
         conn.commit()
+        # Les lignes de registre importées avant ce contrôle n'avaient aucune
+        # portée à opposer et sortaient en « à vérifier ». Le premier contrôle
+        # d'un fournisseur vient les chercher — sans quoi elles y resteraient.
+        # Ne touche que celles dont la portée est encore nulle : une portée déjà
+        # figée ne se réécrit pas.
+        try:
+            lignes_reprises = registre.reprendre_portee(conn, four_id, user.get("nom"))
+        except Exception:
+            # Le contrôle est enregistré ; une reprise qui échoue ne doit pas le
+            # faire perdre. Les lignes restent « à vérifier », ce qui se voit.
+            logger.warning("Reprise de portée du registre FSC échouée", exc_info=True)
+            lignes_reprises = 0
 
     log_action(
         user=user, action="VALIDATE", module="qualite", request=request,
         objet=f"Contrôle FSC · {four['nom']} · {four['licence'] or 'sans licence'} · {FSC_STATUTS_BASE[statut]}",
         detail={
             "controle_id": ctrl_id, "date_controle": jour, "claims": codes,
+            "portees": codes_portee, "registre_lignes_reprises": lignes_reprises,
             "date_expiration_lue": expiration,
             "fiche_expiration": {"avant": ancienne, "apres": expiration} if fiche_maj else None,
         },
     )
-    return {"ok": True, "controle_id": ctrl_id, "fiche_maj": bool(fiche_maj)}
+    return {"ok": True, "controle_id": ctrl_id, "fiche_maj": bool(fiche_maj),
+            "registre_lignes_reprises": lignes_reprises}
+
+
+@router.put("/api/qualite/fsc/fournisseurs/{four_id}/portees-achetees")
+def fsc_portees_achetees(four_id: int, body: dict, request: Request):
+    """Ce que SIFA achète à ce fournisseur, en codes de FSC-STD-40-004a.
+
+    L'autre moitié de la question « ce certificat couvre-t-il ce que nous
+    achetons ? ». La portée du certificat vient du contrôle et se fige ; ce
+    champ-ci décrit nos achats, il vit avec eux et s'édite librement.
+
+    Amorcé par migration depuis les catégories matière internes (complexe,
+    frontal, glassine…), il reste éditable parce que la correspondance est une
+    approximation : c'est le seul endroit où quelqu'un qui connaît le
+    fournisseur peut trancher.
+    """
+    user = _require_qualite_access(request)
+    brut = (body or {}).get("portees")
+    if isinstance(brut, str):
+        brut = brut.split(",")
+    if not isinstance(brut, list):
+        raise HTTPException(status_code=400, detail="Portées attendues sous forme de liste.")
+
+    codes = nettoyer_liste(brut)
+    refuses = [str(t).strip() for t in brut if str(t).strip() and not nettoyer_liste([t])]
+    if refuses:
+        raise HTTPException(
+            status_code=400,
+            detail="Code de portée invalide : %s — format attendu P7.8." % ", ".join(refuses))
+
+    with get_db() as conn:
+        four = conn.execute(
+            "SELECT id, nom, fsc_portees_achetees FROM fournisseurs_fsc WHERE id=?", (four_id,)
+        ).fetchone()
+        if not four:
+            raise HTTPException(status_code=404, detail="Fournisseur introuvable.")
+        avant = nettoyer_liste(_json_list(four["fsc_portees_achetees"]))
+        conn.execute(
+            "UPDATE fournisseurs_fsc SET fsc_portees_achetees=?, updated_at=? WHERE id=?",
+            (json.dumps(codes), _now(), four_id),
+        )
+        conn.commit()
+
+    if avant != codes:
+        log_action(
+            user=user, action="UPDATE", module="qualite", request=request,
+            objet="Portées achetées FSC · %s" % four["nom"],
+            detail={"fournisseur_id": four_id, "avant": avant, "apres": codes},
+        )
+    return {"portees_achetees": codes, "portees_achetees_labels": _portees_labels(codes)}
 
 
 @router.get("/api/qualite/fsc/controles/{ctrl_id}/justificatif")

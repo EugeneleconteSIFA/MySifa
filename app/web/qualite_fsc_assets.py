@@ -90,10 +90,13 @@ function fscLignesVisibles(){
       const hay = [l.nom, l.groupe, l.branche, l.licence, l.certificat].join(' ').toLowerCase();
       if(hay.indexOf(q) === -1) return false;
     }
-    if(S.fsc.filtre === 'a_traiter') return (l.alertes||[]).length > 0 || !l.dernier_controle || l.dernier_controle.a_refaire || !(l.claims||[]).length;
+    if(S.fsc.filtre === 'a_traiter') return (l.alertes||[]).length > 0 || !l.dernier_controle || l.dernier_controle.a_refaire || !(l.claims||[]).length || !(l.portees||[]).length;
     if(S.fsc.filtre === 'a_controler') return !l.dernier_controle || l.dernier_controle.a_refaire;
     if(S.fsc.filtre === 'expiration') return l.statut === 'expire' || l.statut === 'a_renouveler' || l.statut === 'sans_date';
     if(S.fsc.filtre === 'sans_categorie') return !(l.claims||[]).length;
+    // Portée : deux questions distinctes derrière un même filtre — le certificat
+    // ne couvre pas ce qu'on achète, ou on ne sait pas encore ce qu'il couvre.
+    if(S.fsc.filtre === 'portee') return ((l.couverture||{}).alerte) || !(l.portees||[]).length;
     return true;
   });
 }
@@ -145,7 +148,8 @@ function fscRender(){
     <div class="fsc-hero">
       <div class="fsc-hero-txt">
         <h1>FSC</h1>
-        <p>Fournisseurs certifiés, leurs certificats et les catégories FSC qu'ils peuvent livrer.
+        <p>Fournisseurs certifiés, ce que leur certificat couvre (portée produit FSC-STD-40-004a)
+        et sous quelle allégation ils peuvent livrer.
         Chaque contrôle sur la base FSC est conservé avec sa date et son justificatif.${d.licence_sifa?` Licence SIFA : <span class="fsc-mono">${escHtml(d.licence_sifa)}</span>.`:''}</p>
       </div>
       <div class="fsc-hero-actions">
@@ -164,7 +168,7 @@ function fscRender(){
       ${kpi(st.fournisseurs||0, 'fournisseurs certifiés', '', 'tous')}
       ${kpi((st.expires||0)+(st.a_renouveler||0), `expirés ou à renouveler (${d.alerte_jours} j)`, (st.expires||st.a_renouveler)?'exp':'', 'expiration')}
       ${kpi(st.non_controles||0, 'à contrôler sur la base FSC', st.non_controles?'soon':'', 'a_controler')}
-      ${kpi(st.sans_categorie||0, 'sans catégorie confirmée', st.sans_categorie?'soon':'', 'sans_categorie')}
+      ${kpi((st.portee_non_couvrante||0)+(st.sans_portee||0), 'portée à vérifier ou à saisir', (st.portee_non_couvrante?'exp':(st.sans_portee?'soon':'')), 'portee')}
     </div>
 
     ${couv ? `<div class="fsc-section-title">Catégories dont SIFA a besoin</div><div class="fsc-couv">${couv}</div>` : ''}
@@ -176,7 +180,7 @@ function fscRender(){
           oninput="fscOnSearch(this.value)" onkeydown="fscOnSearchKey(event)">
       </div>
       <div class="fsc-filtres">
-        ${[['tous','Tous'],['a_traiter','À traiter'],['a_controler','À contrôler'],['expiration','Expiration'],['sans_categorie','Sans catégorie']].map(([f,l]) =>
+        ${[['tous','Tous'],['a_traiter','À traiter'],['a_controler','À contrôler'],['expiration','Expiration'],['portee','Portée'],['sans_categorie','Sans allégation']].map(([f,l]) =>
           `<button type="button" class="fsc-filtre${S.fsc.filtre===f?' active':''}" data-f="${f}" onclick="fscSetFiltre('${f}')">${l}</button>`).join('')}
       </div>
     </div>
@@ -218,6 +222,19 @@ function fscRenderList(){
     const chips = (l.claims||[]).map(c => `<span class="fsc-claim solid">${escHtml(libClaim[c]||c)}</span>`).join('')
       + (l.claims_proposes||[]).map(c => `<span class="fsc-claim lu" title="Lu sur le certificat — à confirmer au contrôle">${escHtml(libClaim[c]||c)}</span>`).join('');
     const recus = (l.recus||[]).map(r => `${escHtml(r.label)} ×${r.n}`).join(' · ');
+
+    // Portée produit : ce que le certificat couvre, confronté à ce qu'on achète.
+    // Trois états à ne pas confondre — non couvrant (rouge), non saisi (à faire),
+    // achats non renseignés (à faire aussi, mais l'autre moitié de la question).
+    const cv = l.couverture || {};
+    const pChips = (l.portees||[]).map((c,i) => `<span class="fsc-claim solid" title="${escAttr((l.portees_labels||[])[i]||c)}">${escHtml(c)}</span>`).join('')
+      + (l.portees_proposees||[]).map(c => `<span class="fsc-claim lu" title="Lue sur le certificat — à confirmer au contrôle">${escHtml(c)}</span>`).join('');
+    const achats = (l.portees_achetees||[]).join(' · ');
+    let pEtat = '';
+    if(cv.alerte) pEtat = `<div class="fsc-sub danger">Ne couvre pas ${escHtml((cv.manquants||[]).join(', '))}</div>`;
+    else if(cv.partielle) pEtat = `<div class="fsc-sub warn">Partielle — ${escHtml((cv.manquants||[]).join(', '))} non couvert</div>`;
+    else if(!(l.portees||[]).length) pEtat = `<div class="fsc-sub">À relever sur le dossier FSC</div>`;
+    else if(cv.besoins_inconnus) pEtat = `<div class="fsc-sub">Achats non renseignés</div>`;
     // La note complète de la lecture est dans le contrôle ; la ligne n'en garde
     // que la conclusion.
     const lectureNote = doc && doc.lecture && !(doc.lecture.claims||[]).length && !(l.claims||[]).length
@@ -250,6 +267,14 @@ function fscRenderList(){
         ${l.expiration_fiche && l.expiration && l.expiration_fiche !== l.expiration
           ? `<div class="fsc-sub warn" title="Date utilisée par MySifa pour valider les réceptions">Fiche : ${fmtDate(l.expiration_fiche)}</div>` : ''}
       </div>
+      <div class="fsc-c-portee">
+        <div class="fsc-chips">${pChips || '<span class="fsc-muted">Non renseignée</span>'}</div>
+        ${pEtat}
+        <div class="fsc-sub fsc-achats">
+          <span>Achats : ${achats ? escHtml(achats) : '<span class="fsc-muted">—</span>'}</span>
+          ${admin ? `<button type="button" class="fsc-lien" onclick="fscOuvrirAchats(${l.id})">modifier</button>` : ''}
+        </div>
+      </div>
       <div class="fsc-c-cat">
         <div class="fsc-chips">${chips || '<span class="fsc-muted">Non renseignées</span>'}</div>
         ${recus ? `<div class="fsc-sub">Reçu : ${recus}</div>` : ''}
@@ -266,14 +291,197 @@ function fscRenderList(){
   wrap.innerHTML = `<div class="fsc-table">
     <div class="fsc-row fsc-head">
       <div>Fournisseur</div><div>Licence · certificat</div><div>Expiration</div>
-      <div>Catégories FSC</div><div>Contrôle base FSC</div><div></div>
+      <div>Portée produit</div><div>Allégations de sortie</div><div>Contrôle base FSC</div><div></div>
     </div>
     ${rows}
   </div>
   <div class="fsc-legende">
-    <span class="fsc-claim solid">Catégorie</span> confirmée au contrôle
-    <span class="fsc-claim lu">Catégorie</span> lue sur le certificat, à confirmer
+    <span class="fsc-claim solid">P7.8</span> confirmée au contrôle sur la base FSC
+    <span class="fsc-claim lu">P7.8</span> lue sur le certificat déposé, à confirmer
+    <span class="fsc-legende-sep">·</span>
+    <span>La portée dit ce que le certificat couvre, l'allégation sous quelle mention le fournisseur livre.
+    Le Controlled Wood ne donne droit à aucune allégation sur le produit fini.</span>
+  </div>
+  ${fscSortiesHtml()}`;
+}
+
+// ─── Fiches sorties de la liste FSC ──────────────────────────────────
+// « On désactive, on n'efface pas » ne vaut que si la sortie reste lisible.
+// L'auditeur demande pourquoi tel fournisseur n'est plus dans la liste ; la
+// réponse est le dernier contrôle enregistré avant la sortie, avec sa date.
+function fscSortiesHtml(){
+  const sorties = ((S.fsc.data||{}).sorties)||[];
+  if(!sorties.length) return '';
+  const rows = sorties.map(sx => {
+    const c = sx.dernier_controle;
+    return `<div class="fsc-sortie-row">
+      <div>
+        <div class="fsc-nom">${escHtml(sx.nom)}</div>
+        <div class="fsc-sub fsc-mono">${escHtml(sx.licence||'—')}${sx.certificat?' · '+escHtml(sx.certificat):''}</div>
+      </div>
+      <div class="fsc-sub">${c ? escHtml(c.statut_label)+' · '+fmtDate(c.date_controle) : 'Aucun contrôle enregistré'}</div>
+      <div class="fsc-sub">${sx.motif ? escHtml(sx.motif) : '<span class="fsc-muted">Motif non renseigné</span>'}</div>
+      <div>${c && c.justificatif ? `<a class="fsc-lien" href="/api/qualite/fsc/controles/${c.id}/justificatif" target="_blank">Justificatif</a>` : ''}</div>
+    </div>`;
+  }).join('');
+  return `<div class="fsc-section-title">Sorties de la liste FSC (${sorties.length})</div>
+    <div class="fsc-sorties">
+      <div class="fsc-sortie-row fsc-head"><div>Fournisseur</div><div>Dernier contrôle</div><div>Motif</div><div></div></div>
+      ${rows}
+    </div>
+    <div class="fsc-legende">Ces fiches et leurs documents sont conservés ; elles ne comptent pas dans la liste des fournisseurs certifiés et n'entrent pas dans le dossier PDF.</div>`;
+}
+
+// ─── Ce que SIFA achète à ce fournisseur ─────────────────────────────
+function fscOuvrirAchats(id){
+  const l = fscLigne(id); if(!l) return;
+  S.fsc.achats = {id: id, codes: (l.portees_achetees||[]).slice()};
+  fscRenderAchats();
+}
+
+function fscRenderAchats(){
+  const a = S.fsc.achats; if(!a) return;
+  const l = fscLigne(a.id); if(!l) return;
+  _refMroot().innerHTML = `
+    <div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
+      <div class="modal fsc-modal-achats">
+        <div class="modal-hd">
+          <h3>Catégories achetées · ${escHtml(l.nom)}</h3>
+          <button class="modal-x" onclick="closeMroot()">&times;</button>
+        </div>
+        <div class="modal-bd">
+          <div class="fsc-hint">Les codes de FSC-STD-40-004a correspondant aux matières achetées à ce fournisseur.
+          Ils servent à vérifier que la portée de son certificat les couvre : un certificat qui ne porte que
+          P7.6 Enveloppes ne couvre pas P7.8 Étiquettes adhésives.</div>
+          ${fscSaisiePorteeHtml('achats', a.codes)}
+        </div>
+        <div class="modal-ft">
+          <button type="button" class="fsc-btn" onclick="closeMroot()">Annuler</button>
+          <button type="button" class="btn btn-accent" id="fsc-achats-save" onclick="fscEnregistrerAchats()">Enregistrer</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function fscEnregistrerAchats(){
+  const a = S.fsc.achats; if(!a) return;
+  const btn = document.getElementById('fsc-achats-save');
+  if(btn){ btn.disabled = true; btn.textContent = 'Enregistrement…'; }
+  try{
+    const r = await api('/api/qualite/fsc/fournisseurs/' + a.id + '/portees-achetees',
+      {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({portees: a.codes})});
+    if(!r.ok){
+      let msg = 'Enregistrement impossible.';
+      try{ const j = await r.json(); if(j.detail) msg = j.detail; }catch(e){}
+      showToast(msg,'danger');
+      if(btn){ btn.disabled = false; btn.textContent = 'Enregistrer'; }
+      return;
+    }
+    closeMroot();
+    S.fsc.achats = null;
+    showToast('Catégories achetées enregistrées.','success');
+    await fscLoad();
+  }catch(e){
+    if(e.message === 'unauth') return;
+    showToast('Erreur réseau','danger');
+    if(btn){ btn.disabled = false; btn.textContent = 'Enregistrer'; }
+  }
+}
+
+// ─── Saisie d'une liste de portées ───────────────────────────────────
+// Les dossiers de certification listent la portée en clair (« P2.1, P2.4,
+// P7.8 ») : on colle, on ne coche pas. 115 codes en cases à cocher seraient
+// illisibles, et la saisie se fait dossier ouvert à côté.
+function fscPorteesState(cible){
+  return cible === 'achats' ? (S.fsc.achats||{codes:[]}) : (S.fsc.ctrl||{portees:[]});
+}
+function fscPorteesCodes(cible){
+  const st = fscPorteesState(cible);
+  return cible === 'achats' ? (st.codes||[]) : (st.portees||[]);
+}
+function fscPorteesSet(cible, codes){
+  const st = fscPorteesState(cible);
+  if(cible === 'achats') st.codes = codes; else st.portees = codes;
+}
+
+function fscNormPortee(txt){
+  const c = String(txt||'').trim().toUpperCase().replace(/[\s ]/g,'').replace(/\.+$/,'');
+  if(!/^P\d+(\.\d+)*$/.test(c)) return '';
+  return c;
+}
+
+function fscPorteeLabel(code){
+  const cat = ((S.fsc.data||{}).portees_catalogue)||[];
+  const e = cat.find(x => x.code === code);
+  return e ? e.label : '';
+}
+
+function fscSaisiePorteeHtml(cible, codes){
+  const cat = ((S.fsc.data||{}).portees_catalogue)||[];
+  const chips = (codes||[]).map(c => {
+    const lab = fscPorteeLabel(c);
+    return `<span class="fsc-portee-chip" title="${escAttr(lab||'Code hors référentiel')}">${escHtml(c)}
+      <span class="fsc-portee-lab">${escHtml(lab||'hors référentiel')}</span>
+      <button type="button" class="fsc-portee-x" onclick="fscPorteeRetirer('${escAttr(cible)}','${escAttr(c)}')" title="Retirer">&times;</button></span>`;
+  }).join('');
+  return `<div class="fsc-portee-box">
+    <div class="fsc-portee-chips" id="fsc-portee-chips-${escAttr(cible)}">${chips || '<span class="fsc-muted">Aucun code</span>'}</div>
+    <div class="fsc-portee-saisie">
+      <input type="text" class="fsc-in" id="fsc-portee-in-${escAttr(cible)}" list="fsc-portee-liste"
+        placeholder="P7.8, P2.4 — coller la portée du dossier FSC"
+        onkeydown="fscPorteeKey(event,'${escAttr(cible)}')">
+      <button type="button" class="fsc-btn sm" onclick="fscPorteeAjouter('${escAttr(cible)}')">Ajouter</button>
+    </div>
+    <datalist id="fsc-portee-liste">
+      ${cat.map(x => `<option value="${escAttr(x.code)}">${escAttr(x.code + ' — ' + x.label)}</option>`).join('')}
+    </datalist>
   </div>`;
+}
+
+function fscPorteeKey(ev, cible){
+  if(ev.key === 'Enter' || ev.key === ','){ ev.preventDefault(); fscPorteeAjouter(cible); }
+}
+
+function fscPorteeAjouter(cible){
+  const inp = document.getElementById('fsc-portee-in-' + cible);
+  if(!inp) return;
+  const codes = fscPorteesCodes(cible).slice();
+  const refuses = [];
+  // Une ligne collée depuis un dossier FSC contient des virgules, des
+  // point-virgules et des espaces : on accepte les trois séparateurs.
+  String(inp.value||'').split(/[,;\s]+/).forEach(tok => {
+    if(!tok) return;
+    const c = fscNormPortee(tok);
+    if(!c){ refuses.push(tok); return; }
+    if(codes.indexOf(c) === -1) codes.push(c);
+  });
+  if(refuses.length) showToast('Code ignoré : ' + refuses.join(', ') + ' — format attendu P7.8.','info');
+  const cat = ((S.fsc.data||{}).portees_catalogue)||[];
+  const ordre = {}; cat.forEach((x,i) => ordre[x.code] = i);
+  codes.sort((a,b) => (ordre[a] === undefined ? 9999 : ordre[a]) - (ordre[b] === undefined ? 9999 : ordre[b]));
+  fscPorteesSet(cible, codes);
+  inp.value = '';
+  fscMajChipsPortee(cible);
+  inp.focus();
+}
+
+function fscPorteeRetirer(cible, code){
+  fscPorteesSet(cible, fscPorteesCodes(cible).filter(c => c !== code));
+  fscMajChipsPortee(cible);
+}
+
+// Redessine les seules puces, jamais la modal entière : un re-render complet
+// perdrait la saisie en cours des autres champs du contrôle.
+function fscMajChipsPortee(cible){
+  const wrap = document.getElementById('fsc-portee-chips-' + cible);
+  if(!wrap) return;
+  const codes = fscPorteesCodes(cible);
+  wrap.innerHTML = codes.length ? codes.map(c => {
+    const lab = fscPorteeLabel(c);
+    return `<span class="fsc-portee-chip" title="${escAttr(lab||'Code hors référentiel')}">${escHtml(c)}
+      <span class="fsc-portee-lab">${escHtml(lab||'hors référentiel')}</span>
+      <button type="button" class="fsc-portee-x" onclick="fscPorteeRetirer('${escAttr(cible)}','${escAttr(c)}')" title="Retirer">&times;</button></span>`;
+  }).join('') : '<span class="fsc-muted">Aucun code</span>';
 }
 
 function fscLigne(id){ return ((S.fsc.data||{}).fournisseurs||[]).find(l => l.id === id); }
@@ -344,7 +552,10 @@ async function fscLireTout(){
 // ─── Contrôle sur la base FSC ────────────────────────────────────────
 async function fscOuvrirControle(id){
   const l = fscLigne(id); if(!l) return;
-  S.fsc.ctrl = {id, historique: null};
+  // La portée du dernier contrôle est le point de départ : un contrôle de
+  // renouvellement ne rechange pas une portée qui n'a pas bougé.
+  S.fsc.ctrl = {id, historique: null, portees: (l.portees||[]).slice()};
+  if(!S.fsc.ctrl.portees.length) S.fsc.ctrl.portees = (l.portees_proposees||[]).slice();
   fscRenderControle();
   try{
     const r = await api('/api/qualite/fsc/fournisseurs/' + id + '/controles');
@@ -362,7 +573,8 @@ function fscHistoriqueHtml(liste){
   return liste.map(c => `<div class="fsc-histo-row">
     <span class="fsc-mono">${fmtDate(c.date_controle)}</span>
     <span>${escHtml(c.statut_label)}</span>
-    <span class="fsc-muted">${escHtml((c.claims_labels||[]).join(', ') || 'aucune catégorie')}</span>
+    <span class="fsc-muted">${escHtml((c.portees||[]).join(', ') || 'portée non relevée')}</span>
+    <span class="fsc-muted">${escHtml((c.claims_labels||[]).join(', ') || 'aucune allégation')}</span>
     <span class="fsc-muted">${escHtml(c.created_by_nom||'')}</span>
     ${c.justificatif ? `<a href="/api/qualite/fsc/controles/${c.id}/justificatif" target="_blank">Justificatif</a>` : '<span></span>'}
   </div>`).join('');
@@ -447,7 +659,13 @@ function fscRenderControle(){
                 <input type="checkbox" id="fsc-f-majfiche">
                 <span>Reporter cette date sur la fiche fournisseur <span class="fsc-muted">(actuellement ${l.expiration_fiche?fmtDate(l.expiration_fiche):'vide'}) — c'est elle qui valide les réceptions de matière.</span></span>
               </label>
-              <div class="fsc-field-t">Catégories FSC affichées pour ce fournisseur</div>
+              <div class="fsc-field-t">Portée du certificat <span class="fsc-muted">— codes produit FSC-STD-40-004a lus sur le dossier</span></div>
+              ${fscSaisiePorteeHtml('ctrl', c.portees||[])}
+              ${(l.portees_achetees||[]).length
+                ? `<div class="fsc-hint">Achetés à ce fournisseur : <span class="fsc-mono">${escHtml((l.portees_achetees||[]).join(', '))}</span> — la portée doit les couvrir.</div>`
+                : `<div class="fsc-hint">Catégories achetées à ce fournisseur non renseignées — sans elles, aucune alerte de couverture n'est possible.</div>`}
+
+              <div class="fsc-field-t">Allégations de sortie autorisées par le certificat</div>
               <div class="fsc-checks">${claimsHtml}</div>
               <div class="fsc-form">
                 <label class="fsc-field grow"><span>Justificatif (capture ou PDF de la base FSC)</span>
@@ -513,6 +731,7 @@ async function fscEnregistrerControle(id){
   fd.append('statut_base', (document.getElementById('fsc-f-statut')||{}).value || '');
   fd.append('date_expiration', (document.getElementById('fsc-f-exp')||{}).value || '');
   fd.append('claims', Array.from(document.querySelectorAll('input[name="fsc-claim"]:checked')).map(x => x.value).join(','));
+  fd.append('portees', ((S.fsc.ctrl||{}).portees||[]).join(','));
   fd.append('note', (document.getElementById('fsc-f-note')||{}).value || '');
   fd.append('certificat_id', l.document ? String(l.document.id) : '');
   const maj = document.getElementById('fsc-f-majfiche');
@@ -987,7 +1206,8 @@ async function fscApproJournal(id){
   .fsc-filtre.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 
   .fsc-table{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
-  .fsc-row{display:grid;grid-template-columns:minmax(170px,1.3fr) 140px 130px minmax(190px,1.6fr) 160px 170px;
+  .fsc-row{display:grid;
+    grid-template-columns:minmax(155px,1.2fr) 132px 122px minmax(165px,1.4fr) minmax(150px,1.2fr) 152px 158px;
     gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);align-items:start}
   .fsc-row:last-child{border-bottom:none}
   .fsc-head{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);background:var(--bg);padding:9px 16px}
@@ -1005,6 +1225,30 @@ async function fscApproJournal(id){
   .fsc-claim{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}
   .fsc-claim.solid{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent)}
   .fsc-claim.lu{background:transparent;color:var(--text2);border:1px dashed var(--muted)}
+  .fsc-sub.danger{color:var(--danger)}
+  .fsc-achats{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+  .fsc-lien{background:none;border:none;padding:0;font:inherit;font-size:11px;color:var(--accent);
+    cursor:pointer;text-decoration:underline}
+  .fsc-lien:hover{filter:brightness(1.15)}
+  .fsc-legende-sep{color:var(--border)}
+
+  .fsc-portee-box{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px}
+  .fsc-portee-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;min-height:24px;align-items:center}
+  .fsc-portee-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 6px 3px 9px;border-radius:999px;
+    background:var(--accent-bg);border:1px solid var(--accent);color:var(--accent);font-size:11.5px;font-weight:700}
+  .fsc-portee-lab{color:var(--text2);font-weight:500;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fsc-portee-x{background:none;border:none;color:var(--accent);cursor:pointer;font-size:15px;line-height:1;
+    padding:0 2px;font-family:inherit}
+  .fsc-portee-x:hover{color:var(--danger)}
+  .fsc-portee-saisie{display:flex;gap:8px;align-items:center}
+  .fsc-portee-saisie .fsc-in{flex:1}
+
+  .fsc-sorties{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:6px}
+  .fsc-sortie-row{display:grid;grid-template-columns:minmax(170px,1.2fr) 170px 2fr 90px;gap:12px;
+    padding:10px 16px;border-bottom:1px solid var(--border);align-items:start}
+  .fsc-sortie-row:last-child{border-bottom:none}
+
+  .fsc-modal-achats{max-width:620px}
   .fsc-ctrl{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text2)}
   .fsc-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:0 0 auto}
   .fsc-ctrl.ok .fsc-dot{background:var(--success)}
@@ -1052,7 +1296,7 @@ async function fscApproJournal(id){
   .fsc-check input{margin:0}
   .fsc-tag-lu{font-size:9.5px;font-weight:700;text-transform:uppercase;padding:1px 5px;border-radius:4px;border:1px dashed currentColor;opacity:.8}
   .fsc-histo{display:flex;flex-direction:column;gap:2px;font-size:12px}
-  .fsc-histo-row{display:grid;grid-template-columns:90px 90px 1fr 120px 80px;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);align-items:center}
+  .fsc-histo-row{display:grid;grid-template-columns:84px 84px 1fr 1fr 110px 80px;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);align-items:center}
   .fsc-histo-row a{color:var(--accent);font-weight:600;text-decoration:none}
 
   .fsc-stabs{display:flex;gap:4px;margin:0 0 14px}
@@ -1103,22 +1347,35 @@ async function fscApproJournal(id){
   .fsc-in:disabled{opacity:.45}
   .fsc-in.court{min-width:62px;width:62px}
 
+  @media(max-width:1400px){
+    .fsc-row{grid-template-columns:minmax(150px,1.2fr) 126px 116px minmax(155px,1.3fr) minmax(140px,1.1fr);}
+    .fsc-c-ctrl{grid-column:1 / 3}
+    .fsc-c-act{grid-column:4 / 6}
+    .fsc-head > div:nth-child(6), .fsc-head > div:nth-child(7){display:none}
+  }
   @media(max-width:1100px){
-    .fsc-row{grid-template-columns:minmax(160px,1.2fr) 130px 120px minmax(170px,1.4fr);}
+    .fsc-row{grid-template-columns:minmax(150px,1.2fr) 126px 116px minmax(155px,1.3fr);}
+    .fsc-c-portee{grid-column:1 / 3}
+    .fsc-c-cat{grid-column:3 / 5}
     .fsc-c-ctrl{grid-column:1 / 3}
     .fsc-c-act{grid-column:3 / 5}
-    .fsc-head > div:nth-child(5), .fsc-head > div:nth-child(6){display:none}
+    .fsc-head > div:nth-child(5), .fsc-head > div:nth-child(6), .fsc-head > div:nth-child(7){display:none}
+    .fsc-sortie-row{grid-template-columns:minmax(150px,1fr) 150px 1fr}
+    .fsc-sortie-row > div:nth-child(4){grid-column:1 / 4}
   }
   @media(max-width:720px){
     .fsc-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
     .fsc-head{display:none}
     .fsc-row{grid-template-columns:1fr 1fr;gap:8px 12px}
-    .fsc-c-four, .fsc-c-cat{grid-column:1 / 3}
+    .fsc-c-four, .fsc-c-portee, .fsc-c-cat{grid-column:1 / 3}
     .fsc-c-ctrl{grid-column:1 / 2}
     .fsc-c-act{grid-column:2 / 3}
     .fsc-hero-actions{width:100%}
     .fsc-hero-actions > *{flex:1;justify-content:center}
     .fsc-histo-row{grid-template-columns:80px 1fr;}
+    .fsc-sortie-row{grid-template-columns:1fr}
+    .fsc-sortie-row > div:nth-child(4){grid-column:auto}
+    .fsc-portee-lab{max-width:110px}
   }
   `;
   document.head.appendChild(st);

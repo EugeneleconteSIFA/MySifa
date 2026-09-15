@@ -290,7 +290,7 @@ td.num .saut{justify-content:flex-end}
 /* Expédiée : un départ MyExpé emporte cette ligne. Ce n'est pas un
    rattachement de production — la pastille est donc a cote, jamais a la
    place, et dans une autre couleur que les trois etats de fabrication. */
-.badge.r-expediee{background:rgba(129,140,248,.18);color:var(--accent)}
+.badge.r-expediee{background:var(--accent-bg);color:var(--accent)}
 .pied{display:flex;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid var(--border);background:var(--card);font-size:12px;color:var(--muted)}
 .pied .compte{font-variant-numeric:tabular-nums}
 .pied .pager{margin-left:auto;display:flex;align-items:center;gap:6px}

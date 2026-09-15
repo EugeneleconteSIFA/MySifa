@@ -36,6 +36,8 @@ Trois manques, constatés le 15/09/2026 sur la base de production.
    `fsc_source` le dit : `registre` (dérivée de la ligne de registre, la seule
    valeur admise après l'entrée dans la chaîne de contrôle) ou
    `saisie_historique` (tapée à la main avant, conservée telle quelle).
+   `fsc_motif` porte la raison quand l'allégation attendue n'a pas pu être
+   retenue — sans quoi le magasin voit « Non FSC » sans savoir quoi corriger.
 
 Les 14 réceptions existantes sont toutes en `non_fsc` et antérieures à l'entrée
 dans la chaîne de contrôle : elles sont marquées `saisie_historique` et rien
@@ -60,6 +62,11 @@ _COLONNES_REGISTRE = [
 _COLONNES_RECEPTION = [
     ("fsc_reception_id", "INTEGER"),
     ("fsc_source", "TEXT"),
+    # Pourquoi la réception ne porte pas l'allégation qu'on attendait. C'est ce
+    # que l'écran affiche au magasin : « pas de ligne de registre pour ce BL »
+    # et « contrôle fournisseur manquant » n'appellent pas le même geste, et un
+    # refus muet enseigne à contourner.
+    ("fsc_motif", "TEXT"),
 ]
 
 
