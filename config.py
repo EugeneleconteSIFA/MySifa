@@ -385,6 +385,35 @@ FSC_ALLEGATIONS = {
     "fsc_controlled_wood": {"libelle": "FSC Controlled Wood", "pct": False, "label": False},
     "aucune":              {"libelle": "Aucune allégation",   "pct": False, "label": False},
 }
+
+# Ce qu'une allégation exige du CERTIFICAT du fournisseur, en familles de
+# `FSC_CLAIMS_PORTEE`. Un fournisseur ne revendique sur son BL que ce que la
+# portée de son certificat couvre : « FSC Mix x % » demande une portée FSC Mix,
+# « FSC Mix Crédit » une portée FSC Mix Crédit — ce ne sont pas la même ligne de
+# certificat, et les confondre est exactement ce que l'auditeur cherche.
+# Controlled Wood et « aucune » n'y figurent pas : ce ne sont pas des
+# allégations revendicables, elles sont refusées avant ce contrôle.
+FSC_ALLEGATION_PORTEE = {
+    "fsc_100":             "fsc_100",
+    "fsc_mix_credit":      "fsc_mix_credit",
+    "fsc_mix_pct":         "fsc_mix",
+    "fsc_recycled_credit": "fsc_recycled",
+    "fsc_recycled_pct":    "fsc_recycled",
+}
+# Projection de l'allégation du registre (vocabulaire FSC-STD-40-004, celui des
+# documents d'achat) vers le claim porté par la matière en production
+# (`FSC_CLAIM_LABELS`, celui des dossiers et des bobines). Les deux ne se
+# recouvrent pas : le registre distingue le crédit du pourcentage, la production
+# ne connaît que « FSC Mix ». Le pourcentage reste sur la ligne de registre, qui
+# est la pièce d'origine ; la bobine n'en porte pas.
+# Tout ce qui n'est pas dans cette table vaut `non_fsc`, Controlled Wood compris.
+FSC_ALLEGATION_VERS_CLAIM = {
+    "fsc_100":             "fsc_100",
+    "fsc_mix_credit":      "fsc_mix_credit",
+    "fsc_mix_pct":         "fsc_mix",
+    "fsc_recycled_credit": "fsc_recycled",
+    "fsc_recycled_pct":    "fsc_recycled",
+}
 FSC_SEUIL_LABEL_PCT = float(os.getenv("FSC_SEUIL_LABEL_PCT", "70"))
 # Types d'article RVGI (ceux de la ligne d'ACHAT, `cdf_ligne.type`) qui entrent
 # au registre des approvisionnements. Alignés sur reception_rvgi.PERIMETRE :

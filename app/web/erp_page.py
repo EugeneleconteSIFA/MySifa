@@ -287,6 +287,10 @@ td.num .saut{justify-content:flex-end}
 .badge.r-oui{background:rgba(52,211,153,.16);color:var(--ok)}
 .badge.r-partiel{background:rgba(251,191,36,.16);color:var(--warn)}
 .badge.r-douteux{background:rgba(248,113,113,.16);color:var(--danger)}
+/* Expédiée : un départ MyExpé emporte cette ligne. Ce n'est pas un
+   rattachement de production — la pastille est donc a cote, jamais a la
+   place, et dans une autre couleur que les trois etats de fabrication. */
+.badge.r-expediee{background:rgba(129,140,248,.18);color:var(--accent)}
 .pied{display:flex;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid var(--border);background:var(--card);font-size:12px;color:var(--muted)}
 .pied .compte{font-variant-numeric:tabular-nums}
 .pied .pager{margin-left:auto;display:flex;align-items:center;gap:6px}
@@ -896,14 +900,22 @@ function cellule(col,v){
 const RATT_LIB={oui:'Rattaché',partiel:'Partiel',douteux:'À vérifier',non:'—'};
 function celluleRatt(v){
   const e=(v&&v.etat)||'non';
-  if(e==='non')return {cls:'vide',html:'—'};
+  // Expédiée et rattachée sont deux questions : « qui l'a produite » et « est-ce
+  // parti ». Une ligne peut être partie sans dossier (stock ancien, négoce) et
+  // rattachée sans être partie. Les deux pastilles cohabitent donc, et celle
+  // d'expédition ne remplit jamais la colonne de production.
+  const exp=Number((v&&v.expediee)||0)>0
+    ? '<span class="badge r-expediee" title="Emportée par un départ MyExpé">Expédiée</span>'
+    : '';
+  if(e==='non')return exp?{cls:'',html:exp}:{cls:'vide',html:'—'};
   let txt=RATT_LIB[e]||e;
   if(e==='partiel'&&v.total){
     txt+=' '+fmtNb(v.pris,0)+' / '+fmtNb(v.total,0);
   }else if(v.n>1){
     txt+=' ×'+v.n;
   }
-  return {cls:'',html:'<span class="badge r-'+esc(e)+'">'+esc(txt)+'</span>'};
+  return {cls:'',html:'<span class="badge r-'+esc(e)+'">'+esc(txt)+'</span>'+
+                      (exp?' '+exp:'')};
 }
 
 // ── Disposition des colonnes ─────────────────────────────────────
