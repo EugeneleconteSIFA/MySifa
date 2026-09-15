@@ -4937,6 +4937,10 @@ function expeOpenDepartModal(prefill, mode){
   const isEdit = !!(mode==='edit' && src && src.id);
   const initialTab = (mode==='new' && !prefill) ? 'dossier' : 'manuel';
   S.expeDepartPickerRattachOnly = false;
+  // Un depart qu'on ouvre ne herite pas des cases cochees pour le precedent.
+  S.expeDepartRattachEnAttente = null;
+  S.expeDepartRattachLignes = {};
+  if(isEdit) void expeChargerRattachements(src.id);
   if(initialTab==='dossier'){
     void loadExpeDepartDossiers();
   }
@@ -4976,8 +4980,59 @@ function expeOpenDepartModal(prefill, mode){
   });
 }
 function expeCloseDepartModal(){
+  S.expeDepartRattachEnAttente = null;
+  S.expeDepartRattachLignes = {};
   set({expeDepartModalOpen:false, expeDepartEditId:null, expeDepartFormTab:'dossier',
        expeDepartPickerRattachOnly:false});
+}
+
+// ── Rattachements RVGI d'un depart ──────────────────────────────────────────
+//
+// Deux choses a tenir, et elles ne se confondent pas :
+//
+// 1. Ce qui est rattache MAINTENANT, par nature de piece. Le selecteur
+//    REMPLACE la selection a chaque validation : sans cette memoire, ajouter
+//    un deuxieme ARC effacerait le premier, et le champ afficherait deux
+//    numeros la ou la base n'en porterait plus qu'un.
+// 2. Ce qui attend un id. Un depart en creation n'existe pas encore cote
+//    serveur : le selecteur rend sa selection a l'ecran, qui la pose apres
+//    l'enregistrement. Les BL et les lignes de commande sont deux
+//    enregistrements distincts, donc deux tiroirs — un seul ferait que cocher
+//    un ARC effacerait le BL coche trois secondes plus tot.
+function expeNoterRattach(piece, res){
+  const lignes = (res && res.lignes) || [];
+  const cache = S.expeDepartRattachLignes || {};
+  cache[piece] = lignes.map(l=>({numero:l.numero, ligne:l.ligne, qte:l.qte,
+                                 vu_qte:l.vu_qte, vu_article:l.vu_article,
+                                 vu_client:l.vu_client}));
+  S.expeDepartRattachLignes = cache;
+  if(!(res && res.enregistre)){
+    const att = S.expeDepartRattachEnAttente || {};
+    att[piece] = {lignes:lignes, etat:(res && res.etat) || null};
+    S.expeDepartRattachEnAttente = att;
+  }
+}
+
+function expeRattachInitial(piece){
+  return (S.expeDepartRattachLignes || {})[piece] || [];
+}
+
+// A l'ouverture d'un depart existant : ce que la base porte deja, pour que le
+// selecteur le rende coche. Un echec est silencieux — le resume sous le champ
+// dira ce qui manque, et la saisie ne doit pas s'arreter pour autant.
+async function expeChargerRattachements(departId){
+  S.expeDepartRattachLignes = {};
+  if(!departId) return;
+  try{
+    const r = await api('/api/rvgi/rattachements/depart/'+encodeURIComponent(departId));
+    const out = {};
+    (r.rattachements||[]).forEach(x=>{
+      (out[x.piece] = out[x.piece] || []).push({
+        numero:x.numero, ligne:x.ligne, qte:x.qte,
+        vu_qte:x.vu_qte, vu_article:x.vu_article, vu_client:x.vu_client});
+    });
+    S.expeDepartRattachLignes = out;
+  }catch(e){}
 }
 
 // Charge la liste des dossiers disponibles pour le picker MyExpé
@@ -5194,21 +5249,27 @@ function renderExpeDepartModal(){
       objetId:()=>S.expeDepartEditId?Number(S.expeDepartEditId):null,
       dossierId:()=>S.expeDepartForm&&S.expeDepartForm.planning_entry_id
         ?Number(S.expeDepartForm.planning_entry_id):null,
+      initial:()=>expeRattachInitial('livraison'),
       remplir:false,   // c'est nous qui composons « 9938763 + 9938764 »
       onChange:(res)=>{
-        const nums=(res.lignes||[]).map(l=>l.numero);
+        expeNoterRattach('livraison',res);
+        // Le champ reste la vitrine, dans la forme que l'équipe écrit déjà.
+        // Il REFLÈTE la sélection au lieu de s'y ajouter : décocher un BL doit
+        // se voir ici aussi, sinon le champ affiche un numéro que la base ne
+        // porte plus.
+        const nums=[];
+        (res.lignes||[]).forEach(l=>{
+          const n=String(l.numero||'').trim();
+          if(n&&nums.indexOf(n)<0)nums.push(n);
+        });
         if(nums.length){
-          // Le champ reste la vitrine, dans la forme que l'équipe écrit déjà.
-          const deja=(S.expeDepartForm.no_bl||'').split('+').map(x=>x.trim()).filter(Boolean);
-          const tous=deja.concat(nums.filter(n=>deja.indexOf(String(n))<0));
-          blInput.value=tous.join(' + ');
+          blInput.value=nums.join(' + ');
           S.expeDepartForm.no_bl=blInput.value;
           expeScheduleSaveLocal();
         }
         if(res.enregistre){
-          MysRvgiPicker.resume(blResume,'depart',Number(S.expeDepartEditId));
+          MysRvgiPicker.resume(blResume,'depart',Number(S.expeDepartEditId),'livraison');
         }else{
-          S.expeDepartRattachEnAttente={lignes:res.lignes||[],etat:res.etat||null};
           blResume.className='mrp-res';
           blResume.innerHTML=nums.length
             ? '<span class="e partiel">à enregistrer</span><span>'+nums.length+
@@ -5219,11 +5280,21 @@ function renderExpeDepartModal(){
       onErreur:(e)=>toast(e.message||'Rattachement impossible','error')
     });
     if(S.expeDepartEditId){
-      setTimeout(()=>MysRvgiPicker.resume(blResume,'depart',Number(S.expeDepartEditId)),0);
+      setTimeout(()=>MysRvgiPicker.resume(blResume,'depart',Number(S.expeDepartEditId),'livraison'),0);
     }
   }
 
-  // ── ARC : le numero de commande va chercher le reste dans l'ERP ──────────
+  // ── ARC : les lignes de commande que ce depart emporte ───────────────────
+  //
+  // Un depart couvre rarement une commande entiere et une seule. L'equipe
+  // ecrivait donc « 9932128 + 9932131 » a la main dans ce champ, sans que rien
+  // ne relie ces numeros a quoi que ce soit. Le champ coche desormais les
+  // lignes pour de vrai — meme geste que le N° BL juste au-dessus, meme
+  // sequence que la saisie : les dossiers de prod, puis le BL, puis les ARC.
+  //
+  // Rattacher une ligne de commande a un depart ne dit PAS qu'elle est
+  // produite : ca dit qu'elle part. Le serveur range ces rattachements a part,
+  // et la tuile « lignes sans dossier » de MyERP continue de les compter.
   //
   // La commande sait deja chez qui la marchandise part et quand elle est
   // attendue. Le retaper est une source d'erreur, et une erreur de code postal
@@ -5249,18 +5320,29 @@ function renderExpeDepartModal(){
   }
 
   const arcInput=h('input',{type:'text',name:'arc',
-    placeholder:'N° de commande — le reste se complète',
+    placeholder:'N° de commande — coche les lignes, complète le reste',
     value:(f.arc!=null?String(f.arc):'')});
   const arcResume=h('div',{className:'expe-arc-res'});
+  const arcRatt=h('div',{className:'mrp-res'});
   let _arcTimer=null;
   let _arcDernier=null;
 
+  // Le champ peut porter « 9932128 + 9932131 » : le preremplissage client /
+  // destination se fait sur la PREMIERE commande, la seule dont on soit sur
+  // qu'elle decrive la livraison. Les suivantes ne redemandent rien — deux
+  // commandes d'un meme camion vont au meme endroit, sinon ce ne serait pas
+  // le meme camion.
+  function _arcPremier(){
+    const m=String(S.expeDepartForm.arc||'').match(/[0-9]{3,}/);
+    return m?m[0]:'';
+  }
+
   async function arcChercher(){
-    const num=String(S.expeDepartForm.arc||'').trim();
+    const num=_arcPremier();
     if(num===_arcDernier)return;
     _arcDernier=num;
     arcResume.className='expe-arc-res';
-    if(!/^[0-9]{3,}$/.test(num)){arcResume.textContent='';return;}
+    if(!num){arcResume.textContent='';return;}
     arcResume.textContent='Recherche dans l\'ERP…';
     let d=null;
     try{
@@ -5309,7 +5391,54 @@ function renderExpeDepartModal(){
     void arcChercher();
   });
   const arcField=h('div',{className:'expe-field'},
-    h('label',null,'ARC (n° de commande)'),arcInput,arcResume);
+    h('label',null,'ARC (lignes de commande)'),arcInput,arcResume,arcRatt);
+
+  if(window.MysRvgiPicker){
+    MysRvgiPicker.attacher(arcInput,{
+      mode:'commande', objet:'depart',
+      objetId:()=>S.expeDepartEditId?Number(S.expeDepartEditId):null,
+      // Les dossiers deja rattaches au depart : leurs commandes remontent en
+      // tete du selecteur, sans etre cochees. Ce qui monte reellement dans le
+      // camion, c'est l'expediteur qui le sait.
+      dossiers:()=>(Array.isArray(S.expeDepartForm.dossiers)?S.expeDepartForm.dossiers:[])
+                     .map(x=>Number(x.planning_entry_id)).filter(Boolean),
+      initial:()=>expeRattachInitial('commande'),
+      remplir:false,   // c'est nous qui composons « 9932128 + 9932131 »
+      onChange:(res)=>{
+        expeNoterRattach('commande',res);
+        const nums=[];
+        (res.lignes||[]).forEach(l=>{
+          const n=String(l.numero||'').trim();
+          if(n&&nums.indexOf(n)<0)nums.push(n);
+        });
+        if(nums.length){
+          // Le champ reste la vitrine, dans la forme que l'equipe ecrit deja.
+          // Remplacement et non ajout : le selecteur envoie l'etat voulu, et
+          // decocher une ligne doit se voir ici aussi.
+          arcInput.value=nums.join(' + ');
+          S.expeDepartForm.arc=arcInput.value;
+          expeScheduleSaveLocal();
+          _arcDernier=null;
+          void arcChercher();
+        }
+        if(res.enregistre){
+          MysRvgiPicker.resume(arcRatt,'depart',Number(S.expeDepartEditId),'commande');
+        }else{
+          const n=(res.lignes||[]).length;
+          arcRatt.className='mrp-res';
+          arcRatt.innerHTML=n
+            ? '<span class="e partiel">à enregistrer</span><span>'+n+
+              ' ligne'+(n>1?'s':'')+' de commande — rattachée'+(n>1?'s':'')+
+              ' à l\'enregistrement du départ</span>'
+            : '<span class="e a_rattacher">à rattacher</span><span>commande introuvable dans le miroir</span>';
+        }
+      },
+      onErreur:(e)=>toast(e.message||'Rattachement impossible','error')
+    });
+    if(S.expeDepartEditId){
+      setTimeout(()=>MysRvgiPicker.resume(arcRatt,'depart',Number(S.expeDepartEditId),'commande'),0);
+    }
+  }
 
   const paletteItems=S.expePaletteTypes||[];
   const palSel=h('select',{name:'type_palette_matiere_id'});
@@ -5411,16 +5540,26 @@ function renderExpeDepartModal(){
         const cree=await api('/api/expe/departs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
         // Le rattachement RVGI attendait que le départ ait un id : on le pose
         // maintenant. Un échec ici ne remet pas le départ en cause — il existe.
-        const att=S.expeDepartRattachEnAttente;
+        const att=S.expeDepartRattachEnAttente||{};
         S.expeDepartRattachEnAttente=null;
-        if(att&&cree&&cree.id){
-          try{
-            await api('/api/rvgi/rattachements',{method:'POST',
-              headers:{'Content-Type':'application/json'},
-              body:JSON.stringify({objet:'depart',objet_id:Number(cree.id),
-                                   lignes:att.lignes||[],etat:att.etat||null})});
-          }catch(e){
-            toast("Départ enregistré, mais le rattachement RVGI a échoué — rouvre-le pour le refaire.",'error');
+        if(cree&&cree.id){
+          // Une pièce par requête : le serveur remplace la nature visée et ne
+          // touche pas à l'autre. Un échec sur les ARC ne doit pas emporter
+          // les BL déjà posés, donc chaque envoi a son propre message.
+          for(const piece of ['livraison','commande']){
+            const paquet=att[piece];
+            if(!paquet)continue;
+            try{
+              await api('/api/rvgi/rattachements',{method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({objet:'depart',objet_id:Number(cree.id),
+                                     piece:piece,
+                                     lignes:paquet.lignes||[],etat:paquet.etat||null})});
+            }catch(e){
+              toast("Départ enregistré, mais le rattachement "+
+                    (piece==='commande'?'des lignes de commande':'des BL')+
+                    " a échoué — rouvre-le pour le refaire.",'error');
+            }
           }
         }
         toast('Départ enregistré');

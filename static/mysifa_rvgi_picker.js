@@ -1,16 +1,24 @@
 /* ============================================================
    MySifa — Sélecteur de pièces RVGI  (v1.0)
    ------------------------------------------------------------
-   Un seul composant pour les deux besoins :
+   Un seul composant pour trois besoins :
 
      - le PLANNING rattache un dossier de fabrication à des lignes
        de commande RVGI (« Numéro d'OF ») ;
-     - MyExpé rattache un départ à des bons de livraison.
+     - MyExpé rattache un départ à des bons de livraison ;
+     - MyExpé rattache un départ aux lignes de commande qu'il
+       emporte (« ARC »), depuis le 15/09/2026.
 
-   Pourquoi un composant et pas deux : c'est le même geste. On
+   Pourquoi un composant et pas trois : c'est le même geste. On
    cherche une pièce, on coche ce qu'elle couvre, éventuellement une
    partie seulement d'une ligne, et on valide. Les différences
-   tiennent en deux paramètres.
+   tiennent en deux paramètres — `mode` (la nature de la pièce) et
+   `objet` (ce à quoi on l'accroche), qui ne vont plus par paire.
+
+   Un départ qui prend des lignes de commande ne dit PAS qu'elles
+   sont produites, seulement qu'elles partent : la référence de
+   dossier ne se propose donc que pour un dossier, et le serveur
+   range ces rattachements à part.
 
    Ce que le composant garantit
    ----------------------------
@@ -29,18 +37,29 @@
    MysRvgiPicker.ouvrir(opts) -> void
 
    opts :
-     mode        'commande' (défaut) | 'livraison'
+     mode        'commande' (défaut) | 'livraison' — c'est aussi la
+                 nature de pièce envoyée au serveur
      objet       'dossier' | 'depart'  — déduit du mode si absent
      objetId     id MySifa ; null = sélection sans enregistrement
      dossierId   pour le mode 'livraison' : les BL de ce dossier
                  remontent en tête, RVGI portant déjà le lien
+     dossiers    pour le mode 'commande' : ids des dossiers de
+                 fabrication déjà rattachés au départ. Leurs
+                 commandes remontent en tête et s'affichent avant
+                 toute recherche — rien n'est coché pour autant
      recherche   chaîne pré-remplie (le numéro déjà tapé)
+     initial     lignes déjà rattachées, à re-cocher à l'ouverture.
+                 SANS elles, valider après avoir coché une ligne
+                 EFFACE les précédentes — l'enregistrement est un
+                 remplacement, pas un ajout
      onValider   (res) => void  — res : {lignes, reference, etat}
      onFermer    () => void
 
-   MysRvgiPicker.resume(el, objet, objetId)
+   MysRvgiPicker.resume(el, objet, objetId, piece)
        Peint dans `el` le résumé de ce qui est rattaché, et le tient
-       à jour. Sert sous le champ du formulaire.
+       à jour. Sert sous le champ du formulaire. `piece` le limite à
+       une nature : sous l'ARC d'un départ, ses BL n'ont rien à
+       faire.
    ============================================================ */
 (function (global) {
   'use strict';
@@ -76,6 +95,9 @@
     '.mrp-etiq.sug{background:rgba(37,99,235,.14);color:var(--accent,#2563eb)}',
     '.mrp-etiq.pris{background:rgba(234,179,8,.16);color:#a16207}',
     '.mrp-etiq.plein{background:rgba(22,163,74,.14);color:#15803d}',
+    /* Déjà partie : un autre départ emporte cette ligne. Ce n'est pas un
+       rattachement de production, la couleur est donc la sienne. */
+    '.mrp-etiq.expediee{background:rgba(99,102,241,.16);color:#4338ca}',
     '.mrp-l{display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid var(--border,#dcdfe4);font-size:12.5px}',
     '.mrp-l:last-child{border-bottom:none}',
     '.mrp-l:hover{background:rgba(37,99,235,.05)}',
@@ -233,6 +255,50 @@
     return b.join(' · ');
   }
 
+  // Le titre dit ce qu'on accroche ET à quoi. « Rattacher à une commande »
+  // suffisait tant qu'une commande ne se rattachait qu'à un dossier ; le
+  // départ ayant rejoint la partie, l'écran doit lever l'ambiguïté lui-même.
+  function titrePicker(mode, objet) {
+    if (mode === 'livraison') return 'Rattacher à un bon de livraison';
+    return objet === 'depart'
+      ? 'Lignes de commande emportées par ce départ'
+      : 'Rattacher à une commande RVGI';
+  }
+
+  // Pourquoi cette pièce est remontée en tête — ce n'est pas la même raison
+  // d'un écran à l'autre, et « déjà lié dans RVGI » serait faux pour un départ
+  // dont la commande vient de son propre dossier de fabrication.
+  function libSuggere(mode, objet) {
+    if (mode === 'commande' && objet === 'depart') return 'commande du départ';
+    return 'déjà lié dans RVGI';
+  }
+
+  // Les ids de dossier peuvent arriver en tableau, en fonction, ou pas du tout.
+  function listeDossiers(v) {
+    var brut = typeof v === 'function' ? v() : v;
+    if (!brut) return [];
+    if (!Array.isArray(brut)) brut = [brut];
+    var out = [];
+    brut.forEach(function (x) {
+      var n = Number(x);
+      if (n > 0 && out.indexOf(n) < 0) out.push(n);
+    });
+    return out;
+  }
+
+  // Cette ligne est-elle déjà partie ? La question est distincte de « est-elle
+  // produite » : une ligne peut partir sans dossier (stock ancien, négoce), et
+  // un dossier peut l'avoir prise sans que rien n'ait encore été expédié.
+  function etiqExpedition(l) {
+    var e = l && l.expedition;
+    var objets = (e && e.objets) || [];
+    if (!objets.length) return '';
+    var refs = objets.map(function (x) { return x.ref; }).filter(Boolean).join(', ');
+    return '<span class="mrp-etiq expediee" title="' +
+           esc(refs ? 'Départ : ' + refs : 'Déjà emportée par un départ') +
+           '">partie</span>';
+  }
+
   // Toutes les lignes de toutes les pièces sélectionnées, à plat.
   function lignesDesPieces(pieces) {
     var out = [];
@@ -249,14 +315,33 @@
     var o = opts || {};
     var mode = o.mode === 'livraison' ? 'livraison' : 'commande';
     var objet = o.objet || (mode === 'commande' ? 'dossier' : 'depart');
+    // La référence de dossier ne se propose qu'à un dossier : un départ qui
+    // coche des lignes de commande n'a pas à en porter une.
+    var propose = (mode === 'commande' && objet === 'dossier');
+    var dossiers = listeDossiers(o.dossiers);
     var etat = { pieces: [], choix: {}, jeton: 0, ouvertes: 1, ref: '', reliquat: false };
+
+    // Ce qui est déjà rattaché revient coché. L'enregistrement remplace la
+    // sélection entière : sans cette reprise, ajouter une deuxième commande
+    // effacerait la première, et le champ afficherait deux numéros là où la
+    // base n'en porterait plus qu'un.
+    (o.initial || []).forEach(function (c) {
+      if (!c || !c.numero) return;
+      var lg = (c.ligne === null || c.ligne === undefined || c.ligne === '') ? null : Number(c.ligne);
+      etat.choix[String(c.numero) + ':' + (lg == null ? '' : lg)] = {
+        numero: String(c.numero), ligne: lg,
+        qte: (c.qte === null || c.qte === undefined || c.qte === '') ? null : Number(c.qte),
+        confirme: true,
+        vu_qte: (c.vu_qte === null || c.vu_qte === undefined) ? null : Number(c.vu_qte),
+        vu_article: c.vu_article || null, vu_client: c.vu_client || null
+      };
+    });
 
     var fond = document.createElement('div');
     fond.className = 'mrp-fond';
     fond.innerHTML =
       '<div class="mrp" role="dialog" aria-modal="true">' +
-        '<div class="mrp-tete"><div><h2>' +
-          (mode === 'commande' ? 'Rattacher à une commande RVGI' : 'Rattacher à un bon de livraison') +
+        '<div class="mrp-tete"><div><h2>' + esc(titrePicker(mode, objet)) +
         '</h2><p class="st" id="mrp-st">—</p></div>' +
         '<button type="button" class="mrp-x" title="Fermer">×</button></div>' +
         '<div class="mrp-cherche">' +
@@ -271,7 +356,7 @@
         '<div class="mrp-corps" id="mrp-corps"><div class="mrp-msg">Tape au moins deux caractères.</div></div>' +
         '<div class="mrp-pied">' +
           '<span class="mrp-choix" id="mrp-choix">Aucune ligne cochée</span>' +
-          (mode === 'commande'
+          (propose
             ? '<span class="mrp-ref" id="mrp-refz" style="display:none">Référence proposée <span class="v" id="mrp-ref"></span></span>'
             : '') +
           '<span class="mrp-b">' +
@@ -314,13 +399,15 @@
     async function chercher() {
       var q = champ.value.trim();
       var jeton = ++etat.jeton;
-      if (q.length < 2 && !(mode === 'livraison' && o.dossierId)) {
+      if (q.length < 2 && !(mode === 'livraison' && o.dossierId) &&
+          !(mode === 'commande' && dossiers.length)) {
         corps.innerHTML = '<div class="mrp-msg">Tape au moins deux caractères.</div>';
         return;
       }
       corps.innerHTML = '<div class="mrp-msg">Recherche dans le miroir de RVGI…</div>';
       var url = mode === 'commande'
-        ? '/api/rvgi/commandes?ouvertes=' + etat.ouvertes + '&q=' + encodeURIComponent(q)
+        ? '/api/rvgi/commandes?ouvertes=' + etat.ouvertes + '&q=' + encodeURIComponent(q) +
+          (dossiers.length ? '&dossiers=' + encodeURIComponent(dossiers.join(',')) : '')
         : '/api/rvgi/livraisons?q=' + encodeURIComponent(q) +
           (o.dossierId ? '&dossier_id=' + encodeURIComponent(o.dossierId) : '');
       var r;
@@ -364,8 +451,9 @@
                (pc ? '<span class="mrp-etiq" style="background:rgba(148,163,184,.16);' +
                      'font-family:ui-monospace,Menlo,Consolas,monospace">' + esc(pc.article) + '</span>' +
                      etiqMachine(pc.machine) : '') +
-               (sug ? '<span class="mrp-etiq sug">déjà lié dans RVGI</span>' : '') +
+               (sug ? '<span class="mrp-etiq sug">' + esc(libSuggere(mode, objet)) + '</span>' : '') +
                etiqEtat(p.etat) +
+               (p.expediee ? '<span class="mrp-etiq expediee">déjà expédiée</span>' : '') +
                '<span class="meta">' + nb(p.nb_lignes) + ' ligne' + (p.nb_lignes > 1 ? 's' : '') +
                (p.date ? ' · ' + String(p.date).slice(0, 10).split('-').reverse().join('/') : '') +
                '</span>' +
@@ -387,6 +475,7 @@
                (pris.length
                  ? '<span class="note" title="' + esc(pris.map(function (x) { return x.ref; }).join(', ')) + '">déjà pris</span>'
                  : '<span class="note"></span>') +
+               etiqExpedition(l) +
                '</div>';
         });
         h += '</div>';
@@ -501,7 +590,7 @@
       avert.textContent = partiel
         ? 'Une quantité saisie ne couvre qu\'une partie de la ligne. Laisser vide couvre tout ce qui reste.'
         : '';
-      if (mode !== 'commande') return;
+      if (!propose) return;
       clearTimeout(minuteurRef);
       minuteurRef = setTimeout(majReference, 220);
     }
@@ -530,6 +619,7 @@
     async function valider(force) {
       var lignes = force ? [] : Object.keys(etat.choix).map(function (k) { return etat.choix[k]; });
       var res = { lignes: lignes, reference: force ? '' : etat.ref, etat: force || null,
+                  piece: mode,
                   produit: force || mode !== 'commande' ? null : produitCommun(lignesChoisies()) };
       if (o.objetId) {
         var b = $('mrp-ok'); b.disabled = true;
@@ -537,7 +627,8 @@
           var r = await api('/api/rvgi/rattachements', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ objet: objet, objet_id: o.objetId, lignes: lignes, etat: force })
+            body: JSON.stringify({ objet: objet, objet_id: o.objetId, piece: mode,
+                                   lignes: lignes, etat: force })
           });
           res.etat = r.etat; res.texte = r.texte; res.rattachements = r.rattachements;
         } catch (e) {
@@ -553,19 +644,23 @@
     // Ouverture : on lance la recherche si on a déjà de quoi
     if (o.recherche) champ.value = o.recherche;
     setTimeout(function () { champ.focus(); champ.select(); }, 30);
-    if ((o.recherche && o.recherche.trim().length >= 2) || (mode === 'livraison' && o.dossierId)) {
+    if ((o.recherche && o.recherche.trim().length >= 2) ||
+        (mode === 'livraison' && o.dossierId) ||
+        (mode === 'commande' && dossiers.length)) {
       chercher();
     }
   }
 
   // ── Résumé sous un champ de formulaire ────────────────────────────────────
 
-  async function resume(el, objet, objetId) {
+  async function resume(el, objet, objetId, piece) {
     if (!el) return;
     styles();
     if (!objetId) { el.innerHTML = ''; return; }
     try {
-      var r = await api('/api/rvgi/rattachements/' + encodeURIComponent(objet) + '/' + encodeURIComponent(objetId));
+      var r = await api('/api/rvgi/rattachements/' + encodeURIComponent(objet) + '/' +
+                        encodeURIComponent(objetId) +
+                        (piece ? '?piece=' + encodeURIComponent(piece) : ''));
       var e = r.etat || 'a_rattacher';
       var h = '<span class="e ' + esc(e) + '">' + esc(ETATS[e] || e) + '</span>';
       (r.rattachements || []).slice(0, 8).forEach(function (x) {
@@ -575,7 +670,11 @@
       if ((r.rattachements || []).length > 8) {
         h += '<span>+ ' + ((r.rattachements || []).length - 8) + '</span>';
       }
-      if (!(r.rattachements || []).length) h += '<span>aucune pièce RVGI rattachée</span>';
+      if (!(r.rattachements || []).length) {
+        h += '<span>' + (piece === 'commande' && objet === 'depart'
+          ? 'aucune ligne de commande rattachée'
+          : 'aucune pièce RVGI rattachée') + '</span>';
+      }
       el.className = 'mrp-res';
       el.innerHTML = h;
     } catch (err) { el.innerHTML = ''; }
@@ -597,6 +696,22 @@
 
     function objetId() { return o.objetId ? (typeof o.objetId === 'function' ? o.objetId() : o.objetId) : null; }
     function dossierId() { return typeof o.dossierId === 'function' ? o.dossierId() : o.dossierId; }
+    // Relue à chaque frappe : sur un départ en cours de saisie, la liste des
+    // dossiers change pendant que le formulaire est ouvert.
+    function dossiers() { return listeDossiers(o.dossiers); }
+
+    // Un champ qui porte plusieurs numéros (« 9938763 + 9938764 ») se cherche
+    // sur le DERNIER saisi : chercher la chaîne entière ne trouve jamais rien,
+    // et c'est précisément quand on ajoute une deuxième pièce qu'on a besoin
+    // de la liste. Les champs à valeur unique — le numéro d'OF d'un dossier,
+    // qui peut légitimement s'écrire « 9932128+129 » — gardent leur valeur
+    // telle quelle.
+    function texteRecherche() {
+      var v = input.value.trim();
+      if (o.remplir !== false) return v;
+      var bouts = v.split(/[\s+,;]+/).filter(Boolean);
+      return bouts.length ? bouts[bouts.length - 1] : '';
+    }
 
     function fermer() {
       if (boite) { boite.remove(); boite = null; }
@@ -628,12 +743,14 @@
     }
 
     async function chercher() {
-      var q = input.value.trim();
+      var q = texteRecherche();
       var j = ++jeton;
       if (q.length < 2) { fermer(); return; }
       ouvrirBoite('<div class="mrp-s-vide">Recherche dans RVGI…</div>');
+      var ids = dossiers();
       var url = mode === 'commande'
-        ? '/api/rvgi/commandes?ouvertes=1&limite=8&q=' + encodeURIComponent(q)
+        ? '/api/rvgi/commandes?ouvertes=1&limite=8&q=' + encodeURIComponent(q) +
+          (ids.length ? '&dossiers=' + encodeURIComponent(ids.join(',')) : '')
         : '/api/rvgi/livraisons?limite=8&q=' + encodeURIComponent(q) +
           (dossierId() ? '&dossier_id=' + encodeURIComponent(dossierId()) : '');
       var r;
@@ -685,7 +802,7 @@
                : '') + '</div>';
       }
       h += '<div class="mrp-s-pied">' +
-           (pieces.length
+           (pieces.length || (mode === 'commande' && dossiers().length)
              ? '<span class="lien" data-lignes="1">Choisir des lignes précises…</span>'
              : '') +
            '<button type="button" class="mrp-introuvable" data-introuvable="1">' +
@@ -709,13 +826,33 @@
       });
     }
 
+    // Ce qui est déjà rattaché, pour ne pas l'effacer en ajoutant une pièce.
+    function initial() {
+      var v = typeof o.initial === 'function' ? o.initial() : o.initial;
+      return Array.isArray(v) ? v : [];
+    }
+
     // Choisir une pièce dans la liste la rattache EN ENTIER — c'est le cas
     // courant. Le détail ligne par ligne reste à un clic, sous la liste.
+    //
+    // Elle s'AJOUTE à ce qui est déjà rattaché : un départ porte couramment
+    // deux BL et trois commandes, tapés l'un après l'autre. Comme
+    // l'enregistrement est un remplacement, la requête repart avec l'ensemble,
+    // et une pièce déjà présente n'est pas doublée.
     async function prendre(p) {
       if (!p) return;
       fermer();
-      var lignes = [{ numero: String(p.numero), ligne: null, qte: null, confirme: true,
-                      vu_client: p.client || null }];
+      var lignes = initial().map(function (c) {
+        return { numero: String(c.numero),
+                 ligne: (c.ligne === null || c.ligne === undefined || c.ligne === '') ? null : Number(c.ligne),
+                 qte: (c.qte === null || c.qte === undefined || c.qte === '') ? null : Number(c.qte),
+                 confirme: true, vu_qte: c.vu_qte == null ? null : Number(c.vu_qte),
+                 vu_article: c.vu_article || null, vu_client: c.vu_client || null };
+      });
+      if (!lignes.some(function (l) { return String(l.numero) === String(p.numero); })) {
+        lignes.push({ numero: String(p.numero), ligne: null, qte: null, confirme: true,
+                      vu_client: p.client || null });
+      }
       await poser(lignes, null, String(p.numero),
                   mode === 'commande' ? produitCommun(p.lignes) : null,
                   p.client || null);
@@ -732,10 +869,12 @@
         try {
           var r = await api('/api/rvgi/rattachements', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ objet: objet, objet_id: Number(id), lignes: lignes, etat: force })
+            body: JSON.stringify({ objet: objet, objet_id: Number(id), piece: mode,
+                                   lignes: lignes, etat: force })
           });
           if (o.onChange) o.onChange({ etat: r.etat, texte: r.texte, lignes: lignes,
-                                       enregistre: true, produit: produit || null,
+                                       piece: mode, enregistre: true,
+                                       produit: produit || null,
                                        client: client || null });
         } catch (e) {
           if (o.onErreur) o.onErreur(e); else alert(e.message);
@@ -743,7 +882,7 @@
         }
       } else if (o.onChange) {
         o.onChange({ etat: force || (lignes.length ? 'lie' : 'a_rattacher'),
-                     texte: texte, lignes: lignes, enregistre: false,
+                     texte: texte, lignes: lignes, piece: mode, enregistre: false,
                      produit: produit || null, client: client || null });
       }
       if (texte && o.remplir !== false) input.value = texte;
@@ -752,10 +891,12 @@
     function ouvrirComplet() {
       ouvrir({
         mode: mode, objet: objet, objetId: objetId(), dossierId: dossierId(),
-        recherche: input.value.trim(),
+        dossiers: dossiers(), initial: initial(),
+        recherche: texteRecherche(),
         onValider: function (res) {
           if (res.reference && o.remplir !== false && !input.value.trim()) input.value = res.reference;
           if (o.onChange) o.onChange({ etat: res.etat, texte: res.texte, lignes: res.lignes,
+                                       piece: mode,
                                        enregistre: !!objetId(), reference: res.reference,
                                        produit: res.produit || null,
                                        client: (res.lignes && res.lignes.length
@@ -769,7 +910,7 @@
       clearTimeout(minuteur);
       minuteur = setTimeout(chercher, 300);
     });
-    input.addEventListener('focus', function () { if (input.value.trim().length >= 2) chercher(); });
+    input.addEventListener('focus', function () { if (texteRecherche().length >= 2) chercher(); });
     input.addEventListener('blur', function () { setTimeout(fermer, 160); });
     input.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') { fermer(); return; }

@@ -36,6 +36,7 @@ les lignes nouvelles (`lif_id` est unique).
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import unicodedata
 from datetime import datetime
@@ -44,7 +45,10 @@ from typing import Any, Optional
 from app.services.fsc_certificat import evaluer_certificat
 from app.services.reception_rvgi import PERIMETRE
 from config import (
+    FSC_ALLEGATION_PORTEE,
+    FSC_ALLEGATION_VERS_CLAIM,
     FSC_ALLEGATIONS,
+    FSC_CLAIMS_PORTEE,
     FSC_ETIQUETTES,
     FSC_SEUIL_LABEL_PCT,
     FSC_TYPES_NON_FORESTIERS,
@@ -269,14 +273,23 @@ def rattacher_fournisseur(conn, numfou: int, fournisseur_id: int,
     ).fetchall():
         ligne = dict(r)
         verdict = evaluer_certificat(fiche, ligne["date_reception"])
+        # Le fournisseur arrive, sa portée avec lui : une ligne rattachée après
+        # coup doit être jugée sur les mêmes trois conditions que les autres.
+        portee = portee_fournisseur(conn, fournisseur_id)
+        claims_txt = (None if portee["claims"] is None
+                      else json.dumps(portee["claims"], ensure_ascii=False))
+        apres = {**ligne, "certificat_statut": verdict["statut"],
+                 "claims_autorises": claims_txt}
         conn.execute(
             "UPDATE fsc_reception SET fournisseur_id=?, code_certificat_attendu=?, "
             "licence_attendue=?, certificat_expiration=?, certificat_statut=?, "
+            "claims_autorises=?, claims_controle_id=?, claims_controle_le=?, "
             "eligible=?, modifie_le=? WHERE id=?",
             (
                 fournisseur_id, fiche.get("certificat"), fiche.get("licence"),
                 verdict.get("expiration"), verdict["statut"],
-                evaluer_eligibilite({**ligne, "certificat_statut": verdict["statut"]}),
+                claims_txt, portee["controle_id"], portee["date_controle"],
+                evaluer_eligibilite(apres),
                 _now(), ligne["id"],
             ),
         )
@@ -284,6 +297,166 @@ def rattacher_fournisseur(conn, numfou: int, fournisseur_id: int,
         reprises += 1
     conn.commit()
     return reprises
+
+
+def reprendre_portee(conn, fournisseur_id: int, utilisateur: Optional[str] = None) -> int:
+    """Renseigne la portée des lignes de ce fournisseur qui n'en avaient aucune.
+
+    Appelée quand un contrôle FSC est enregistré. Le cas est celui de l'entrée
+    dans la chaîne de contrôle : les lignes s'importent avant que les contrôles
+    fournisseurs ne soient tous saisis, et elles resteraient « à vérifier »
+    indéfiniment si rien ne revenait les chercher.
+
+    Ne touche QUE les lignes dont `claims_autorises` est nul. Une portée déjà
+    figée ne se réécrit pas — c'est tout l'intérêt de la figer : un contrôle de
+    novembre ne doit pas rendre éligible une livraison de mars, ni la condamner.
+    Un contrôle erroné se corrige ligne par ligne, avec sa trace au journal.
+    """
+    portee = portee_fournisseur(conn, fournisseur_id)
+    if portee["claims"] is None:
+        return 0
+    claims_txt = json.dumps(portee["claims"], ensure_ascii=False)
+    try:
+        lignes = conn.execute(
+            "SELECT * FROM fsc_reception WHERE fournisseur_id = ? AND claims_autorises IS NULL",
+            (int(fournisseur_id),),
+        ).fetchall()
+    except sqlite3.Error:
+        return 0
+    reprises = 0
+    for r in lignes:
+        ligne = dict(r)
+        apres = {**ligne, "claims_autorises": claims_txt}
+        verdict = evaluer_eligibilite(apres)
+        conn.execute(
+            "UPDATE fsc_reception SET claims_autorises=?, claims_controle_id=?, "
+            "claims_controle_le=?, eligible=?, modifie_le=? WHERE id=?",
+            (claims_txt, portee["controle_id"], portee["date_controle"],
+             verdict, _now(), ligne["id"]),
+        )
+        journaliser(conn, ligne["id"], "claims_autorises",
+                    None, claims_txt, utilisateur)
+        if verdict != ligne["eligible"]:
+            journaliser(conn, ligne["id"], "eligible",
+                        ligne["eligible"], verdict, utilisateur)
+        reprises += 1
+    conn.commit()
+    return reprises
+
+
+# ══════════════════════════════════════════════════════════════════
+# Portée du certificat
+# ══════════════════════════════════════════════════════════════════
+#
+# Un certificat FSC ne dit pas seulement « ce fournisseur est certifié », il dit
+# CE QU'IL A LE DROIT DE LIVRER. Un partenaire certifié FSC Mix qui facture du
+# FSC 100 % sort du champ de son certificat, et la livraison n'est pas éligible
+# — même avec un certificat parfaitement valide à la date du BL.
+#
+# Cette portée n'est pas lue sur la fiche fournisseur : elle est lue sur le
+# dernier CONTRÔLE enregistré dans `qualite_fsc_controles`, qui est la seule
+# source validée de ces catégories (cf. la migration qui crée la table). Une
+# fiche se remplit de mémoire ; un contrôle porte une date, un auteur, un
+# justificatif, et c'est ce que l'auditeur demande à voir.
+#
+# Trois états, et ils ne veulent pas dire la même chose :
+#   None  aucun contrôle enregistré — la portée n'a jamais été vérifiée.
+#         On ne conclut pas : `a_verifier`.
+#   []    contrôle fait, mais il ne valide aucune catégorie (base FSC qui
+#         répond « suspendu », « expiré », « retiré », « introuvable », ou
+#         contrôle sans catégorie cochée). Là on conclut : `non`.
+#   [...] les catégories validées.
+#
+# Un contrôle dont la base FSC ne dit pas « valide » ne donne AUCUNE portée,
+# quelles que soient les catégories cochées. C'est plus strict que l'écran de
+# synthèse de MyQualité, qui se contente d'y accrocher une alerte : une alerte
+# se regarde, un verdict d'éligibilité se signe.
+
+
+def _claims_json(brut) -> list:
+    """La liste de claims d'un contrôle, quelle que soit sa forme en base."""
+    if brut is None:
+        return []
+    if isinstance(brut, (list, tuple)):
+        valeurs = list(brut)
+    else:
+        try:
+            valeurs = json.loads(str(brut) or "[]")
+        except (TypeError, ValueError):
+            return []
+    if not isinstance(valeurs, list):
+        return []
+    return [str(v).strip() for v in valeurs if str(v).strip()]
+
+
+def portee_fournisseur(conn, fournisseur_id, cache: Optional[dict] = None) -> dict:
+    """{claims, controle_id, date_controle} du dernier contrôle d'un fournisseur.
+
+    `claims` à None quand il n'y a rien à lire — fournisseur non rattaché, ou
+    aucun contrôle enregistré. Voir l'en-tête de section pour la différence avec
+    une liste vide.
+    """
+    vide = {"claims": None, "controle_id": None, "date_controle": None}
+    if not fournisseur_id:
+        return vide
+    fid = int(fournisseur_id)
+    if cache is not None and fid in cache:
+        return cache[fid]
+    try:
+        r = conn.execute(
+            """SELECT id, date_controle, statut_base, claims
+                 FROM qualite_fsc_controles
+                WHERE fournisseur_id = ?
+             ORDER BY date_controle DESC, id DESC LIMIT 1""",
+            (fid,),
+        ).fetchone()
+    except sqlite3.Error:
+        # Table absente (base pas encore migrée) : on ne sait pas, on le dit.
+        r = None
+    if not r:
+        out = dict(vide)
+    else:
+        valide = (r["statut_base"] or "").strip() == "valide"
+        out = {
+            "claims": _claims_json(r["claims"]) if valide else [],
+            "controle_id": int(r["id"]),
+            "date_controle": r["date_controle"],
+        }
+    if cache is not None:
+        cache[fid] = out
+    return out
+
+
+def famille_portee(code: str) -> str:
+    return FSC_CLAIMS_PORTEE.get((code or "").strip(), {}).get("famille", (code or "").strip())
+
+
+def allegation_couverte(allegation: Optional[str], claims: list) -> bool:
+    """L'allégation du document entre-t-elle dans la portée du certificat ?
+
+    La comparaison se fait par FAMILLE : un certificat « FSC Recycled Crédit »
+    couvre une réception « FSC Recycled x % », les deux portent la famille
+    `fsc_recycled`. C'est le même rapprochement que celui de MyQualité.
+    """
+    besoin = FSC_ALLEGATION_PORTEE.get((allegation or "").strip())
+    if not besoin:
+        # Allégation qui n'exige aucune portée : `aucune` et Controlled Wood,
+        # déjà refusées plus haut. Rien ici ne doit les rattraper.
+        return False
+    return any(famille_portee(c) == besoin for c in (claims or []))
+
+
+def claim_production(ligne: dict) -> str:
+    """Le claim que la MATIÈRE porte en production, d'après sa ligne de registre.
+
+    Une seule porte d'entrée : une ligne qui n'est pas `eligible = oui` donne du
+    `non_fsc`, sans exception et sans nuance. C'est ce que la réception recopie
+    sur ses bobines, et ce que le conducteur constate au scan.
+    """
+    if (ligne.get("eligible") or "").strip() != "oui":
+        return "non_fsc"
+    allegation = (ligne.get("allegation_facture") or "").strip()
+    return FSC_ALLEGATION_VERS_CLAIM.get(allegation, "non_fsc")
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -311,6 +484,12 @@ def evaluer_eligibilite(ligne: dict) -> str:
     if bl != facture:
         return "ecart_bl_facture"
     if facture in ("aucune", "fsc_controlled_wood"):
+        return "non"
+    # La portée du certificat. Une allégation hors du champ de ce que le
+    # fournisseur a le droit de livrer n'est pas un doute, c'est un écart.
+    if "claims_autorises" not in ligne or ligne.get("claims_autorises") is None:
+        return "a_verifier"
+    if not allegation_couverte(facture, _claims_json(ligne.get("claims_autorises"))):
         return "non"
     if not int(code):
         return "non"
@@ -377,6 +556,7 @@ def importer(conn, conn_erp, utilisateur: Optional[str] = None) -> dict:
 
     ajoutees = sans_fournisseur = deja = 0
     maintenant = _now()
+    portees: dict = {}
     for r in lignes_rvgi(conn_erp, depuis):
         lif_id = int(r["lif_id"])
         if lif_id in connues:
@@ -388,6 +568,7 @@ def importer(conn, conn_erp, utilisateur: Optional[str] = None) -> dict:
             sans_fournisseur += 1
         verdict = (evaluer_certificat(fiche, r["date_reception"]) if fiche
                    else {"statut": None, "expiration": None})
+        portee = portee_fournisseur(conn, fiche["id"] if fiche else None, portees)
         laize = _f(r.get("laize_mm"))
         ml = _f(r.get("quantite_ml"))
         type_code = int(r.get("type_code") or 0)
@@ -422,6 +603,14 @@ def importer(conn, conn_erp, utilisateur: Optional[str] = None) -> dict:
             "licence_attendue": (fiche or {}).get("licence"),
             "certificat_expiration": verdict.get("expiration"),
             "certificat_statut": verdict.get("statut"),
+            # Portée figée à l'import, comme le verdict du certificat : un
+            # élargissement de portée en novembre ne rend pas éligible une
+            # livraison de mars. NULL tant qu'aucun contrôle n'existe —
+            # `reprendre_portee()` la renseigne au premier contrôle enregistré.
+            "claims_autorises": (None if portee["claims"] is None
+                                 else json.dumps(portee["claims"], ensure_ascii=False)),
+            "claims_controle_id": portee["controle_id"],
+            "claims_controle_le": portee["date_controle"],
             "num_facture_fournisseur": None,
             "allegation_bl": None,
             "allegation_facture": None,
@@ -725,3 +914,170 @@ def export_xlsx(lignes: list[dict], debut: Optional[str], fin: Optional[str],
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+# ══════════════════════════════════════════════════════════════════
+# Le pont vers la réception physique (MyStock)
+# ══════════════════════════════════════════════════════════════════
+#
+# Jusqu'ici les deux moitiés de la chaîne s'ignoraient. Le registre savait ce
+# que les documents disaient d'une livraison ; `stock_receptions` savait quelles
+# bobines étaient entrées au magasin, avec une allégation TAPÉE À LA MAIN par le
+# magasinier. Rien ne garantissait que les deux disent la même chose, et le
+# scan de production lit la seconde.
+#
+# À partir de l'entrée dans la chaîne de contrôle, l'allégation d'une réception
+# n'est plus saisie : elle est LUE sur la ligne de registre correspondante. Le
+# magasinier constate, il ne déclare pas — exactement ce qu'on demande ensuite
+# au conducteur au pied de la machine.
+#
+# La bascule est portée par la date d'entrée (`fsc_parametre.registre_depuis`),
+# pas par une option : une réception antérieure garde son allégation saisie,
+# une réception postérieure passe par le registre. Tant que la date n'est pas
+# renseignée, rien ne change — ce qui laisse le temps de saisir les contrôles
+# fournisseurs avant d'armer le verrou.
+
+MOTIFS_ELIGIBLE = {
+    "a_verifier": "le contrôle de la ligne de registre n'est pas terminé",
+    "non": "la ligne de registre n'est pas éligible",
+    "ecart_bl_facture": "le bon de livraison et la facture ne portent pas la même allégation",
+}
+
+
+def _numfou_du_fournisseur(conn, fournisseur_id) -> Optional[int]:
+    if not fournisseur_id:
+        return None
+    try:
+        r = conn.execute("SELECT rvgi_numero FROM fournisseurs_fsc WHERE id = ?",
+                         (int(fournisseur_id),)).fetchone()
+    except sqlite3.Error:
+        return None
+    return int(r["rvgi_numero"]) if r and r["rvgi_numero"] else None
+
+
+def lignes_pour_reception(conn, lif_id=None, fournisseur_id=None, num_bl=None) -> list:
+    """Les lignes de registre que cette réception physique représente.
+
+    Deux voies, dans cet ordre. `lif_id` est exact : la réception a été reprise
+    depuis une ligne de livraison RVGI, il n'y a rien à deviner. À défaut, le
+    couple (fournisseur, n° de BL) — un bon de livraison couvre trois à cinq
+    lignes du même bon, et elles doivent toutes dire la même chose.
+
+    Le nom du fournisseur ne sert JAMAIS de clé ici : « ARCONVERT S.A » et
+    « Fedrigoni Manter » sont le même tiers, et c'est le rattachement de fiche
+    qui tranche cette question, une fois, ailleurs.
+    """
+    try:
+        if lif_id:
+            rows = conn.execute("SELECT * FROM fsc_reception WHERE lif_id = ?",
+                                (int(lif_id),)).fetchall()
+            if rows:
+                return [dict(r) for r in rows]
+        bl = (num_bl or "").strip()
+        if not bl:
+            return []
+        numfou = _numfou_du_fournisseur(conn, fournisseur_id)
+        if fournisseur_id:
+            rows = conn.execute(
+                "SELECT * FROM fsc_reception WHERE TRIM(COALESCE(num_bl,'')) = ? "
+                "AND (fournisseur_id = ? OR (? IS NOT NULL AND numfou = ?))",
+                (bl, int(fournisseur_id), numfou, numfou),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM fsc_reception WHERE TRIM(COALESCE(num_bl,'')) = ?", (bl,)
+            ).fetchall()
+        return [dict(r) for r in rows]
+    except sqlite3.Error:
+        # Registre pas encore créé sur cette instance : la réception continue
+        # son chemin, sans allégation.
+        return []
+
+
+def claim_pour_reception(conn, date_reception=None, lif_id=None,
+                         fournisseur_id=None, num_bl=None) -> dict:
+    """Ce que la réception a le droit de porter comme allégation.
+
+    Rend {verrou, claim, certificat, source, lignes, motif}.
+
+    `verrou` à False = la chaîne de contrôle ne couvre pas cette réception (date
+    d'entrée non renseignée, ou réception antérieure) : l'appelant garde le
+    comportement d'avant, et `claim` ne veut rien dire.
+
+    Quand le verrou s'applique, `claim` est toujours rempli — `non_fsc` par
+    défaut — et `motif` dit POURQUOI quand ce n'est pas l'allégation attendue.
+    Une réception n'est jamais refusée pour cette raison : refuser
+    l'enregistrement de bobines physiquement présentes au magasin ferait
+    disparaître de la traçabilité ce qu'on cherche précisément à tracer.
+    """
+    depuis = date_entree(conn)
+    jour = str(date_reception or "")[:10] or datetime.now().strftime("%Y-%m-%d")
+    if not depuis or jour < depuis:
+        return {"verrou": False, "claim": None, "certificat": None,
+                "source": "saisie_historique", "lignes": [], "motif": None}
+
+    lignes = lignes_pour_reception(conn, lif_id=lif_id, fournisseur_id=fournisseur_id,
+                                   num_bl=num_bl)
+    base = {"verrou": True, "source": "registre", "certificat": None,
+            "lignes": [int(l["id"]) for l in lignes]}
+    if not lignes:
+        return dict(base, claim="non_fsc", motif=(
+            "Aucune ligne du registre des approvisionnements ne correspond à ce bon "
+            "de livraison. Importer les réceptions RVGI dans MyQualité › FSC, ou "
+            "vérifier le numéro de BL saisi."))
+
+    claims = {claim_production(l) for l in lignes}
+    if len(claims) > 1:
+        return dict(base, claim="non_fsc", motif=(
+            "Les %d lignes de registre de ce bon de livraison ne portent pas la même "
+            "allégation. Reprendre leur saisie dans MyQualité › FSC avant de "
+            "revendiquer ce lot." % len(lignes)))
+
+    claim = claims.pop()
+    if claim != "non_fsc":
+        # Le code de certificat vient du registre lui aussi : c'est celui qui a
+        # été confronté aux documents, pas celui que quelqu'un retape.
+        certs = {(l.get("code_certificat_attendu") or "").strip() for l in lignes}
+        certs.discard("")
+        return dict(base, claim=claim, motif=None,
+                    certificat=(certs.pop() if len(certs) == 1 else None))
+
+    # Une seule allégation possible, et c'est « aucune ». Dire laquelle des
+    # quatre raisons, sinon le magasin ne sait pas quoi corriger.
+    etats = {(l.get("eligible") or "a_verifier") for l in lignes}
+    raisons = sorted({MOTIFS_ELIGIBLE[e] for e in etats if e in MOTIFS_ELIGIBLE})
+    if raisons:
+        motif = ("Réception enregistrée sans allégation FSC : %s. "
+                 "La saisie se corrige dans MyQualité › FSC › Approvisionnements."
+                 % " ; ".join(raisons))
+    else:
+        motif = ("Le bon de livraison de cette réception ne porte aucune allégation "
+                 "FSC exploitable.")
+    return dict(base, claim="non_fsc", motif=motif)
+
+
+def lier_reception(conn, reception_id: int, lignes_ids, utilisateur=None) -> int:
+    """Pose `fsc_reception.reception_id` sur les lignes de registre concernées.
+
+    C'est la moitié du lien que l'import ne pouvait pas écrire : il ne connaît
+    que les réceptions DÉJÀ intégrées dans MyStock au moment où il tourne. Une
+    réception saisie après l'import restait orpheline pour toujours, et la
+    chaîne RVGI → registre → réception → bobine → scan s'arrêtait là.
+
+    N'écrase jamais un lien existant : une ligne déjà rattachée à une autre
+    réception est un cas à trancher par un humain, pas en silence.
+    """
+    n = 0
+    for lid in (lignes_ids or []):
+        try:
+            r = conn.execute("SELECT reception_id FROM fsc_reception WHERE id = ?",
+                             (int(lid),)).fetchone()
+        except sqlite3.Error:
+            return n
+        if not r or r["reception_id"]:
+            continue
+        conn.execute("UPDATE fsc_reception SET reception_id = ?, modifie_le = ? WHERE id = ?",
+                     (int(reception_id), _now(), int(lid)))
+        journaliser(conn, int(lid), "reception_id", None, int(reception_id), utilisateur)
+        n += 1
+    return n

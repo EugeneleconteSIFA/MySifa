@@ -343,6 +343,150 @@ FSC_CLAIMS_PORTEE = {
     "fsc_recycled_credit": {"label": "FSC Recycled Credit",  "famille": "fsc_recycled"},
     "fsc_controlled_wood": {"label": "FSC Controlled Wood",  "famille": "fsc_controlled_wood"},
 }
+# ─── FSC — classification produit (FSC-STD-40-004a, branche « P ») ────
+# Ce que le certificat d'un fournisseur COUVRE, par opposition à
+# FSC_CLAIMS_PORTEE juste au-dessus, qui dit sous quelle ALLÉGATION il a le
+# droit de livrer. Les deux questions sont indépendantes : un certificat peut
+# couvrir P7.8 Étiquettes adhésives sans autoriser autre chose que du
+# Controlled Wood, qui ne donne droit à aucune allégation sur le produit fini.
+# C'est la portée qui répond à « ce certificat couvre-t-il ce que nous
+# achetons ? », et c'est elle que l'auditeur CoC regarde en premier.
+#
+# Référentiel de la norme, pas de SIFA : il ne s'édite pas dans Paramètres, il
+# ne bouge que quand FSC publie une version du standard. Le libellé anglais est
+# celui qui figure sur les dossiers de certification, donc celui que la lecture
+# automatique retrouve dans le texte du PDF.
+#
+# La hiérarchie des codes EST la règle de couverture : « P2 » couvre P2.4.13,
+# « P7.6 » ne couvre pas « P7.8 ». Voir app/services/fsc_classification.py.
+# Source : FSC-STD-40-004a V3-0, FSC Product Classification.
+FSC_PORTEES_PRODUIT: dict[str, dict[str, str]] = {
+    "P1":       {"fr": "Pâte",                              "en": "Pulp"},
+    "P1.1":     {"fr": "Pâte mécanique blanchie",           "en": "Mechanical pulp, bleached"},
+    "P1.1.1":   {"fr": "Pâte de meule",                     "en": "Groundwood"},
+    "P1.1.2":   {"fr": "Pâte de raffineur",                 "en": "Refiner pulp"},
+    "P1.2":     {"fr": "Pâte mécanique écrue",              "en": "Mechanical pulp, unbleached"},
+    "P1.2.1":   {"fr": "Pâte de meule",                     "en": "Groundwood"},
+    "P1.2.2":   {"fr": "Pâte de raffineur",                 "en": "Refiner pulp"},
+    "P1.3":     {"fr": "Pâte chimique",                     "en": "Chemical pulp"},
+    "P1.3.1":   {"fr": "Pâte chimique blanchie",            "en": "Chemical pulp, bleached"},
+    "P1.3.2":   {"fr": "Pâte chimique écrue",               "en": "Chemical pulp, unbleached"},
+    "P1.4":     {"fr": "Pâte mi-chimique",                  "en": "Semi-chemical pulp"},
+    "P1.4.1":   {"fr": "Pâte mi-chimique blanchie",         "en": "Semi-chemical pulp, bleached"},
+    "P1.4.2":   {"fr": "Pâte mi-chimique écrue",            "en": "Semi-chemical pulp, unbleached"},
+    "P1.5":     {"fr": "Pâte à dissoudre",                  "en": "Dissolving pulp"},
+    "P1.5.1":   {"fr": "Cellulose de spécialité",           "en": "Specialty cellulose"},
+    "P1.5.2":   {"fr": "Film de cellulose régénérée",       "en": "Regenerated cellulose film"},
+    "P1.6":     {"fr": "Pâte de papier récupéré",           "en": "Pulp from recovered paper"},
+    "P1.6.1":   {"fr": "Pâte recyclée désencrée",           "en": "Recovered pulp, deinked"},
+    "P1.6.2":   {"fr": "Pâte recyclée non désencrée",       "en": "Recovered pulp, not deinked"},
+    "P1.7":     {"fr": "Dérivés cellulosiques",             "en": "Cellulose derivatives"},
+    "P1.7.1":   {"fr": "Éther de cellulose",                "en": "Cellulose ether"},
+    "P1.7.2":   {"fr": "Éther mixte de cellulose",          "en": "Cellulose mixed ether"},
+    "P1.7.3":   {"fr": "Ester de cellulose",                "en": "Cellulose ester"},
+    "P1.8":     {"fr": "Nanocellulose",                     "en": "Nanocellulose"},
+    "P1.8.1":   {"fr": "Nanofibrille de cellulose",         "en": "Cellulose nanofibril (CNF)"},
+    "P1.8.2":   {"fr": "Nanocristal de cellulose",          "en": "Cellulose nanocrystal (CNC)"},
+    "P1.8.3":   {"fr": "Cellulose bactérienne",             "en": "Bacterial cellulose (BC)"},
+    "P1.8.4":   {"fr": "Nanofibre de cellulose électrofilée", "en": "Electrospun cellulose nanofiber (ECNF)"},
+
+    "P2":       {"fr": "Papier",                            "en": "Paper"},
+    "P2.1":     {"fr": "Papier d'impression et de communication", "en": "Copying, printing, communication paper"},
+    "P2.1.1":   {"fr": "Papier couché",                     "en": "Coated paper"},
+    "P2.1.2":   {"fr": "Papier non couché",                 "en": "Uncoated paper"},
+    "P2.2":     {"fr": "Papier journal",                    "en": "Newsprint"},
+    "P2.3":     {"fr": "Papier d'emballage et de conditionnement", "en": "Wrapping and packaging paper"},
+    "P2.4":     {"fr": "Papier de spécialité",              "en": "Specialty paper"},
+    "P2.4.1":   {"fr": "Papiers imprégnés",                 "en": "Impregnated papers"},
+    "P2.4.2":   {"fr": "Papiers support photographique",    "en": "Photographic base papers"},
+    "P2.4.3":   {"fr": "Papiers thermographiques",          "en": "Thermographic papers"},
+    "P2.4.4":   {"fr": "Papiers translucides",              "en": "Translucent papers"},
+    "P2.4.5":   {"fr": "Papiers autocopiants et carbone",   "en": "Self-copying and carbon papers"},
+    "P2.4.6":   {"fr": "Papiers à cigarette",               "en": "Cigarette papers"},
+    "P2.4.7":   {"fr": "Papiers filtre",                    "en": "Filter papers"},
+    "P2.4.8":   {"fr": "Papiers crêpés",                    "en": "Crepe papers"},
+    "P2.4.9":   {"fr": "Papiers gaufrés et perforés",       "en": "Embossed paper and perforated paper"},
+    "P2.4.10":  {"fr": "Papiers composites",                "en": "Composite papers"},
+    "P2.4.11":  {"fr": "Support de papier peint",           "en": "Wallpaper base"},
+    "P2.4.12":  {"fr": "Papier de sécurité",                "en": "Security paper"},
+    "P2.4.13":  {"fr": "Papier adhésif",                    "en": "Adhesive paper"},
+    "P2.5":     {"fr": "Papiers faits main",                "en": "Hand-made papers"},
+    "P2.6":     {"fr": "Papier tissue",                     "en": "Tissue paper"},
+
+    "P3":       {"fr": "Carton",                            "en": "Paperboard"},
+    "P3.1":     {"fr": "Carton non couché",                 "en": "Uncoated paperboard"},
+    "P3.2":     {"fr": "Carton couché",                     "en": "Coated paperboard"},
+    "P3.3":     {"fr": "Carton comprimé",                   "en": "Pressboard"},
+    "P3.4":     {"fr": "Stratifiés de carton",              "en": "Paperboard laminates"},
+    "P3.4.1":   {"fr": "Stratifiés haute pression",         "en": "High Pressure Laminates (HPL)"},
+    "P3.4.2":   {"fr": "Stratifiés basse pression",         "en": "Low Pressure Laminates (LPL)"},
+    "P3.4.3":   {"fr": "Stratifiés pression continue",      "en": "Continuous Pressure Laminates (CPL)"},
+    "P3.5":     {"fr": "Carton métallisé",                  "en": "Metalized paperboard"},
+    "P3.6":     {"fr": "Carton crêpé",                      "en": "Crepe paperboard"},
+    "P3.7":     {"fr": "Carton alvéolaire",                 "en": "Honeycomb paperboard"},
+
+    "P4":       {"fr": "Papier et carton ondulés",          "en": "Corrugated paper and paperboard"},
+    "P4.1":     {"fr": "Couverture",                        "en": "Linerboard"},
+    "P4.1.1":   {"fr": "Kraftliner",                        "en": "Kraftliner"},
+    "P4.1.2":   {"fr": "Testliner",                         "en": "Testliner"},
+    "P4.2":     {"fr": "Cannelure",                         "en": "Fluting"},
+    "P4.3":     {"fr": "Carton ondulé",                     "en": "Corrugated fibreboard"},
+
+    "P5":       {"fr": "Emballages de pâte et de papier",   "en": "Packaging and wrappings of pulp and paper"},
+    "P5.1":     {"fr": "Emballage carton",                  "en": "Cardboard packaging"},
+    "P5.2":     {"fr": "Emballage ondulé",                  "en": "Corrugated packaging"},
+    "P5.3":     {"fr": "Sacs et sachets papier",            "en": "Sacks and bags of paper"},
+    "P5.4":     {"fr": "Papier d'emballage alimentaire",    "en": "Food wrapping paper"},
+    "P5.5":     {"fr": "Briques boisson et liquides alimentaires", "en": "Carton pack for beverages and liquid food"},
+    "P5.6":     {"fr": "Pâte et fibres moulées",            "en": "Moulded pulp and fibre materials"},
+    "P5.7":     {"fr": "Boîtiers et pochettes de disques optiques", "en": "Optical disc packaging and covers"},
+    "P5.8":     {"fr": "Autres produits d'emballage",       "en": "Other wrapping related products"},
+
+    "P6":       {"fr": "Produits d'hygiène en pâte et papier", "en": "Household and sanitary pulp and paper products"},
+    "P6.1":     {"fr": "Essuyages et essuie-tout",          "en": "Cleaning tissues and paper towels"},
+    "P6.2":     {"fr": "Mouchoirs et lingettes",            "en": "Facial tissues and refreshing tissues"},
+    "P6.3":     {"fr": "Serviettes de table",               "en": "Napkins / serviettes"},
+    "P6.4":     {"fr": "Papier toilette",                   "en": "Toilet paper / bathroom tissue"},
+    "P6.5":     {"fr": "Produits d'hygiène",                "en": "Sanitary / hygiene products"},
+    "P6.6":     {"fr": "Nappes",                            "en": "Tablecloths"},
+    "P6.7":     {"fr": "Vaisselle",                         "en": "Dinnerware"},
+    "P6.8":     {"fr": "Consommables médicaux en papier",   "en": "Medical supplies made of pulp/paper"},
+
+    "P7":       {"fr": "Articles de papeterie",             "en": "Stationery of paper (printed and unprinted)"},
+    "P7.1":     {"fr": "Cahiers",                           "en": "Notebooks"},
+    "P7.2":     {"fr": "Blocs",                             "en": "Pads"},
+    "P7.3":     {"fr": "Chemises et dossiers",              "en": "File folders"},
+    "P7.4":     {"fr": "Papier thermique en bobine",        "en": "Rolled thermal paper"},
+    "P7.5":     {"fr": "Cartes postales et de vœux",        "en": "Post and greeting cards"},
+    "P7.6":     {"fr": "Enveloppes",                        "en": "Envelopes"},
+    "P7.7":     {"fr": "Papiers gommés",                    "en": "Gummed papers"},
+    "P7.8":     {"fr": "Étiquettes adhésives",              "en": "Adhesive labels"},
+    "P7.9":     {"fr": "Transferts",                        "en": "Transfers"},
+    "P7.10":    {"fr": "Timbres-poste",                     "en": "Postage stamps"},
+
+    "P8":       {"fr": "Imprimés",                          "en": "Printed materials"},
+    "P8.1":     {"fr": "Livres",                            "en": "Books"},
+    "P8.2":     {"fr": "Magazines",                         "en": "Magazines"},
+    "P8.3":     {"fr": "Journaux",                          "en": "Newspaper"},
+    "P8.4":     {"fr": "Supports publicitaires",            "en": "Advertising materials"},
+    "P8.5":     {"fr": "Cartes de visite",                  "en": "Business cards"},
+    "P8.6":     {"fr": "Calendriers, agendas et organiseurs", "en": "Calendars, diaries and organisers"},
+    "P8.7":     {"fr": "Jouets et jeux en papier",          "en": "Toys and games made with paper"},
+    "P8.8":     {"fr": "Papiers peints",                    "en": "Wallpapers"},
+    "P8.9":     {"fr": "Étiquettes volantes",               "en": "Tags"},
+    "P8.10":    {"fr": "Étiquettes non adhésives",          "en": "Non-adhesive labels"},
+
+    "P9":       {"fr": "Mandrins, bobines et rouleaux",     "en": "Bobbins, spools, rolls and similar"},
+    "P9.1":     {"fr": "Mandrins et bobines semi-finis",    "en": "Semi-finished bobbins, spools, rolls and similar"},
+    "P9.2":     {"fr": "Mandrins et bobines imprimés et finis", "en": "Printed and finished bobbins, spools, rolls and similar"},
+
+    "P10":      {"fr": "Autres produits en pâte et papier", "en": "Other manufactured pulp and paper products"},
+    "P10.1":    {"fr": "Plaques de plâtre",                 "en": "Plasterboard"},
+    "P10.2":    {"fr": "Cercueils en carton",               "en": "Cardboard coffins"},
+    "P10.3":    {"fr": "Mobilier en carton",                "en": "Cardboard furniture"},
+    "P10.4":    {"fr": "Éléments de mobilier en carton",    "en": "Cardboard parts of furniture"},
+}
+
 # Statut lu sur la base publique FSC au moment du contrôle. C'est la « preuve
 # de contrôle des certificats fournisseurs » que demande l'auditeur CoC.
 FSC_STATUTS_BASE = {
@@ -384,6 +528,35 @@ FSC_ALLEGATIONS = {
     "fsc_recycled_pct":    {"libelle": "FSC Recycled x %",    "pct": True,  "label": None},
     "fsc_controlled_wood": {"libelle": "FSC Controlled Wood", "pct": False, "label": False},
     "aucune":              {"libelle": "Aucune allégation",   "pct": False, "label": False},
+}
+
+# Ce qu'une allégation exige du CERTIFICAT du fournisseur, en familles de
+# `FSC_CLAIMS_PORTEE`. Un fournisseur ne revendique sur son BL que ce que la
+# portée de son certificat couvre : « FSC Mix x % » demande une portée FSC Mix,
+# « FSC Mix Crédit » une portée FSC Mix Crédit — ce ne sont pas la même ligne de
+# certificat, et les confondre est exactement ce que l'auditeur cherche.
+# Controlled Wood et « aucune » n'y figurent pas : ce ne sont pas des
+# allégations revendicables, elles sont refusées avant ce contrôle.
+FSC_ALLEGATION_PORTEE = {
+    "fsc_100":             "fsc_100",
+    "fsc_mix_credit":      "fsc_mix_credit",
+    "fsc_mix_pct":         "fsc_mix",
+    "fsc_recycled_credit": "fsc_recycled",
+    "fsc_recycled_pct":    "fsc_recycled",
+}
+# Projection de l'allégation du registre (vocabulaire FSC-STD-40-004, celui des
+# documents d'achat) vers le claim porté par la matière en production
+# (`FSC_CLAIM_LABELS`, celui des dossiers et des bobines). Les deux ne se
+# recouvrent pas : le registre distingue le crédit du pourcentage, la production
+# ne connaît que « FSC Mix ». Le pourcentage reste sur la ligne de registre, qui
+# est la pièce d'origine ; la bobine n'en porte pas.
+# Tout ce qui n'est pas dans cette table vaut `non_fsc`, Controlled Wood compris.
+FSC_ALLEGATION_VERS_CLAIM = {
+    "fsc_100":             "fsc_100",
+    "fsc_mix_credit":      "fsc_mix_credit",
+    "fsc_mix_pct":         "fsc_mix",
+    "fsc_recycled_credit": "fsc_recycled",
+    "fsc_recycled_pct":    "fsc_recycled",
 }
 FSC_SEUIL_LABEL_PCT = float(os.getenv("FSC_SEUIL_LABEL_PCT", "70"))
 # Types d'article RVGI (ceux de la ligne d'ACHAT, `cdf_ligne.type`) qui entrent

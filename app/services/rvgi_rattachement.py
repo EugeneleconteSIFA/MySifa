@@ -18,6 +18,13 @@ Trois règles qui expliquent tout le reste
 3. **On ne devine pas une quantité.** Une ligne rattachée sans quantité couvre
    toute la ligne. Une quantité explicite en couvre une partie — et c'est cette
    distinction, pas un drapeau « partiel », qui permet de dire ce qu'il reste.
+
+4. **Produire et expédier ne sont pas la même question.** Un départ rattache
+   ses bons de livraison, et depuis le 15/09/2026 les lignes de commande qu'il
+   emporte. Cette seconde liaison ne dit PAS que la ligne est produite : elle
+   dit qu'elle est partie. Tout ce qui compte la couverture de production —
+   la tuile « lignes sans dossier », le badge « déjà pris » du planning, le
+   « Reliquat » d'une référence — ne regarde donc que `OBJETS_PRODUCTION`.
 """
 
 from __future__ import annotations
@@ -36,14 +43,63 @@ LIMITE_RECHERCHE = 40
 OBJETS = ("dossier", "depart", "of")
 PIECES = ("commande", "livraison")
 
-# Où chaque objet range son état, et quelle nature de pièce il rattache.
+# Où chaque objet range son état, et quelle nature de pièce le porte.
 # `champ_texte` est la vitrine dénormalisée des numéros : tenue à jour,
-# jamais lue comme source.
+# jamais lue comme source. La pièce nommée ici est la pièce NATIVE de l'objet :
+# celle, et la seule, dont l'état remonte dans `rvgi_etat`.
 ACCUEIL = {
     "dossier": ("planning_entries", "dos_rvgi", "commande"),
     "depart":  ("expe_departs",     "no_bl",    "livraison"),
     "of":      ("of_imports",       "cmd_rvgi", "commande"),
 }
+
+# Chaque couple objet × pièce autorisé, et la colonne texte qui l'affiche.
+# Un départ en a deux : ses BL, et les lignes de commande qu'il emporte —
+# lesquelles s'écrivent dans `arc`, exactement là où l'expéditeur les tapait
+# à la main. Un couple absent d'ici n'existe pas : c'est ce qui empêche
+# d'inventer un rattachement dossier → livraison sans y avoir réfléchi.
+VITRINES = {
+    ("dossier", "commande"):  "dos_rvgi",
+    ("depart",  "livraison"): "no_bl",
+    ("depart",  "commande"):  "arc",
+    ("of",      "commande"):  "cmd_rvgi",
+}
+
+# Qui répond à « cette ligne de commande est-elle produite ? » — et qui répond
+# à « est-elle partie ? ». Les deux questions vivent dans la même table et ne
+# se confondent jamais : une ligne expédiée depuis du stock ancien n'a aucun
+# dossier derrière elle, et un dossier lancé ce matin n'a rien expédié.
+OBJETS_PRODUCTION = ("dossier", "of")
+OBJETS_EXPEDITION = ("depart",)
+
+
+def piece_native(objet: str) -> str:
+    """La pièce dont l'état pilote `rvgi_etat` pour cet objet."""
+    if objet not in ACCUEIL:
+        raise ValueError("Objet inconnu : %r" % (objet,))
+    return ACCUEIL[objet][2]
+
+
+def pieces_de(objet: str) -> Tuple[str, ...]:
+    """Les natures de pièce que cet objet a le droit de rattacher."""
+    if objet not in ACCUEIL:
+        raise ValueError("Objet inconnu : %r" % (objet,))
+    native = piece_native(objet)
+    autres = [p for (o, p) in VITRINES if o == objet and p != native]
+    return tuple([native] + sorted(autres))
+
+
+def vitrine_de(objet: str, piece: str) -> Optional[str]:
+    """La colonne texte qui affiche ce couple, ou None s'il n'en a pas."""
+    return VITRINES.get((objet, piece))
+
+
+def _clause_objets(objets: Optional[Iterable[str]]) -> Tuple[str, List[Any]]:
+    """Fragment SQL restreignant les rattachements à certains objets."""
+    liste = [o for o in (objets or ()) if o in OBJETS]
+    if not liste:
+        return "", []
+    return " AND r.objet IN (%s)" % ",".join("?" * len(liste)), list(liste)
 
 
 # ─── Références de dossier ───────────────────────────────────────────────────
@@ -144,7 +200,9 @@ def deja_couvertes(conn: sqlite3.Connection, lignes: List[Dict[str, Any]],
     deuxième passage sur la même ligne de commande ne peut pas porter le même
     numéro de dossier que le premier.
     """
-    etats = etat_des_lignes(conn, piece, lignes)
+    # Un départ posé sur la même ligne ne fait pas reliquat : il dit que la
+    # marchandise est partie, pas qu'elle a déjà été produite une fois.
+    etats = etat_des_lignes(conn, piece, lignes, objets=OBJETS_PRODUCTION)
     for e in etats.values():
         for o in e.get("objets", []):
             # Un OF pointe la même ligne que le dossier qui en sort : le compter
@@ -160,27 +218,37 @@ def deja_couvertes(conn: sqlite3.Connection, lignes: List[Dict[str, Any]],
 
 # ─── Lecture des rattachements ───────────────────────────────────────────────
 
-def lister(conn: sqlite3.Connection, objet: str, objet_id: int) -> List[Dict[str, Any]]:
-    """Les rattachements d'un dossier ou d'un départ, dans l'ordre des pièces."""
+def lister(conn: sqlite3.Connection, objet: str, objet_id: int,
+           piece: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Les rattachements d'un dossier ou d'un départ, dans l'ordre des pièces.
+
+    `piece` restreint à une nature : un départ porte ses BL et ses lignes de
+    commande, et les deux résumés de l'écran n'ont pas à se mélanger.
+    """
     if objet not in OBJETS:
         raise ValueError("Objet inconnu : %r" % (objet,))
-    rows = conn.execute(
-        """SELECT * FROM rvgi_rattachements
-            WHERE objet = ? AND objet_id = ?
-            ORDER BY piece, CAST(numero AS INTEGER), COALESCE(ligne, 0)""",
-        (objet, int(objet_id)),
-    ).fetchall()
-    return [dict(r) for r in rows]
+    sql = "SELECT * FROM rvgi_rattachements WHERE objet = ? AND objet_id = ?"
+    params: List[Any] = [objet, int(objet_id)]
+    if piece:
+        sql += " AND piece = ?"
+        params.append(piece)
+    sql += " ORDER BY piece, CAST(numero AS INTEGER), COALESCE(ligne, 0)"
+    return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
 def rattachements_par_ligne(conn: sqlite3.Connection, piece: str,
-                            cles: Iterable[Tuple[str, Optional[int]]]) -> Dict[Tuple[str, Optional[int]], List[Dict[str, Any]]]:
+                            cles: Iterable[Tuple[str, Optional[int]]],
+                            objets: Optional[Iterable[str]] = None) -> Dict[Tuple[str, Optional[int]], List[Dict[str, Any]]]:
     """Ce qui est rattaché à des lignes RVGI données, pour la colonne de MyERP.
 
     `cles` : [(numero, ligne), …] — au plus une page d'écran. On interroge la
     base de production avec ces seules clés : le moteur du miroir reste étanche.
     Un rattachement posé sur la pièce entière (`ligne IS NULL`) répond pour
     toutes ses lignes.
+
+    `objets` restreint la réponse — `OBJETS_PRODUCTION` pour « cette ligne
+    est-elle produite », `OBJETS_EXPEDITION` pour « est-elle partie ». Sans
+    filtre, tout remonte.
     """
     cles = list(cles)
     if not cles:
@@ -193,10 +261,11 @@ def rattachements_par_ligne(conn: sqlite3.Connection, piece: str,
     # SQLite plafonne le nombre de paramètres liés : on découpe.
     for debut in range(0, len(numeros), 400):
         lot = numeros[debut:debut + 400]
+        clause, p_obj = _clause_objets(objets)
         rows = conn.execute(
-            "SELECT * FROM rvgi_rattachements WHERE piece = ? AND numero IN (%s)"
-            % ",".join("?" * len(lot)),
-            [piece] + lot,
+            "SELECT r.* FROM rvgi_rattachements r WHERE r.piece = ? "
+            "AND r.numero IN (%s)%s" % (",".join("?" * len(lot)), clause),
+            [piece] + lot + p_obj,
         ).fetchall()
         for r in rows:
             d = dict(r)
@@ -238,7 +307,8 @@ def _libelles_objets(conn: sqlite3.Connection,
 
 
 def etat_des_lignes(conn: sqlite3.Connection, piece: str,
-                    lignes: List[Dict[str, Any]]) -> Dict[Tuple[str, Optional[int]], Dict[str, Any]]:
+                    lignes: List[Dict[str, Any]],
+                    objets: Optional[Iterable[str]] = None) -> Dict[Tuple[str, Optional[int]], Dict[str, Any]]:
     """Pour chaque ligne RVGI : rattachée, partiellement, ou pas du tout.
 
     `lignes` : [{numero, ligne, qte}, …] telles que lues dans le miroir. La
@@ -247,7 +317,7 @@ def etat_des_lignes(conn: sqlite3.Connection, piece: str,
     """
     cles = [(str(l.get("numero") or "").strip(),
              None if l.get("ligne") is None else int(l["ligne"])) for l in lignes]
-    ratt = rattachements_par_ligne(conn, piece, cles)
+    ratt = rattachements_par_ligne(conn, piece, cles, objets=objets)
     tous = [r for lot in ratt.values() for r in lot]
     libelles = _libelles_objets(conn, tous)
 
@@ -313,12 +383,18 @@ def enregistrer(conn: sqlite3.Connection, objet: str, objet_id: int, piece: str,
     issue du miroir ; sinon elle est enregistrée en `a_verifier`.
 
     Remplacement complet et non fusion : l'écran envoie l'état voulu, pas un
-    delta. C'est ce qui rend le retrait d'une ligne possible.
+    delta. C'est ce qui rend le retrait d'une ligne possible. Le remplacement
+    ne porte QUE sur la nature de pièce visée : enregistrer les lignes de
+    commande d'un départ ne touche pas à ses bons de livraison.
     """
     if objet not in OBJETS:
         raise ValueError("Objet inconnu : %r" % (objet,))
     if piece not in PIECES:
         raise ValueError("Nature de pièce inconnue : %r" % (piece,))
+    if (objet, piece) not in VITRINES:
+        raise ValueError(
+            "Un %s ne rattache pas de %s." % (objet, piece)
+        )
     if len(lignes) > MAX_LIGNES:
         raise ValueError(
             "Un %s ne peut pas rattacher plus de %d lignes — au-delà, la "
@@ -354,7 +430,7 @@ def enregistrer(conn: sqlite3.Connection, objet: str, objet_id: int, piece: str,
              maintenant if l.get("confirme") else None,
              (l.get("note") or None)),
         )
-    return recalculer_etat(conn, objet, objet_id, force=etat_objet)
+    return recalculer_etat(conn, objet, objet_id, piece=piece, force=etat_objet)
 
 
 def _nombre(v):
@@ -366,35 +442,52 @@ def _nombre(v):
         return None
 
 
+def etat_de_rattachements(rows: List[Dict[str, Any]],
+                          force: Optional[str] = None) -> str:
+    """L'état que décrit un lot de rattachements d'une même nature de pièce.
+
+    « Je ne trouve pas » et « hors commande » ne se posent que sur un lot VIDE :
+    sinon l'état contredirait ce que la table contient, et c'est la table qui
+    a raison.
+    """
+    if force in ("hors_commande", "a_rattacher") and not rows:
+        return force
+    if not rows:
+        return "a_rattacher"
+    if any(r["etat"] == "a_verifier" for r in rows):
+        return "a_verifier"
+    if any(r["qte"] is not None and r["vu_qte"] is not None
+           and float(r["qte"]) + 1e-6 < float(r["vu_qte"]) for r in rows):
+        return "partiel"
+    return "lie"
+
+
 def recalculer_etat(conn: sqlite3.Connection, objet: str, objet_id: int,
+                    piece: Optional[str] = None,
                     force: Optional[str] = None) -> Dict[str, Any]:
-    """Recalcule `rvgi_etat` et le champ texte dénormalisé de l'objet.
+    """Recalcule le champ texte dénormalisé, et `rvgi_etat` si la pièce le porte.
 
     `force` permet de poser « hors_commande » (production sans commande, assumée)
     ou « a_rattacher » (« je ne trouve pas ») sans rattachement à l'appui.
+
+    `rvgi_etat` est une colonne unique par objet : elle ne peut parler que
+    d'UNE nature de pièce, la native. Les lignes de commande d'un départ ont
+    donc leur état rendu à l'appelant, mais ne réécrivent pas la colonne —
+    sinon un départ dont les BL manquent passerait « rattaché » parce que son
+    ARC est renseigné.
     """
     if objet not in ACCUEIL:
         raise ValueError("Objet inconnu : %r" % (objet,))
-    table, champ_texte, piece = ACCUEIL[objet]
+    table = ACCUEIL[objet][0]
+    native = piece_native(objet)
+    piece = piece or native
+    champ_texte = vitrine_de(objet, piece)
     rows = [dict(r) for r in conn.execute(
         "SELECT * FROM rvgi_rattachements WHERE objet=? AND objet_id=? AND piece=?",
         (objet, int(objet_id), piece),
     )]
 
-    # « Je ne trouve pas » et « hors commande » ne se posent que sur un objet
-    # SANS rattachement : sinon l'état contredirait ce que la table contient,
-    # et c'est la table qui a raison.
-    if force in ("hors_commande", "a_rattacher") and not rows:
-        etat = force
-    elif not rows:
-        etat = "a_rattacher"
-    elif any(r["etat"] == "a_verifier" for r in rows):
-        etat = "a_verifier"
-    elif any(r["qte"] is not None and r["vu_qte"] is not None
-             and float(r["qte"]) + 1e-6 < float(r["vu_qte"]) for r in rows):
-        etat = "partiel"
-    else:
-        etat = "lie"
+    etat = etat_de_rattachements(rows, force=force)
 
     # Le champ texte reste la vitrine : les numéros, sans les lignes. Il est
     # tenu à jour, jamais lu comme source — même choix que expe_departs.no_dossier.
@@ -402,17 +495,19 @@ def recalculer_etat(conn: sqlite3.Connection, objet: str, objet_id: int,
     maintenant = _maintenant()
     cols = {r[1] for r in conn.execute('PRAGMA table_info("%s")' % table)}
     sets, params = [], []
-    if "rvgi_etat" in cols:
-        sets.append("rvgi_etat=?"); params.append(etat)
-    if "rvgi_maj_le" in cols:
-        sets.append("rvgi_maj_le=?"); params.append(maintenant)
-    if champ_texte in cols and texte:
+    if piece == native:
+        if "rvgi_etat" in cols:
+            sets.append("rvgi_etat=?"); params.append(etat)
+        if "rvgi_maj_le" in cols:
+            sets.append("rvgi_maj_le=?"); params.append(maintenant)
+    if champ_texte and champ_texte in cols and texte:
         sets.append("%s=?" % champ_texte); params.append(texte)
     if sets:
         params.append(int(objet_id))
         conn.execute("UPDATE %s SET %s WHERE id=?" % (table, ", ".join(sets)), params)
 
-    return {"etat": etat, "texte": texte, "rattachements": len(rows)}
+    return {"etat": etat, "texte": texte, "rattachements": len(rows),
+            "piece": piece, "native": piece == native}
 
 
 # ─── Reprise après une synchro ───────────────────────────────────────────────
@@ -441,10 +536,11 @@ def reprendre_apres_synchro(conn: sqlite3.Connection, limite: int = 5000) -> Dic
             (maintenant, r["id"]),
         )
         confirmes += 1
-        objets.add((r["objet"], r["objet_id"]))
-    for objet, objet_id in objets:
-        recalculer_etat(conn, objet, objet_id)
-    return {"vus": len(en_attente), "confirmes": confirmes, "objets": len(objets)}
+        objets.add((r["objet"], r["objet_id"], r["piece"]))
+    for objet, objet_id, piece in objets:
+        recalculer_etat(conn, objet, objet_id, piece=piece)
+    return {"vus": len(en_attente), "confirmes": confirmes,
+            "objets": len({(o, i) for o, i, _ in objets})}
 
 
 def _numeros_connus_du_miroir(rattachements: List[Dict[str, Any]]) -> set:
@@ -523,17 +619,27 @@ def _filtre_texte(q: str, colonnes: List[str]) -> Tuple[str, List[Any]]:
 
 
 def chercher_commandes(q: str, limite: int = LIMITE_RECHERCHE,
-                       ouvertes_seulement: bool = True) -> List[Dict[str, Any]]:
+                       ouvertes_seulement: bool = True,
+                       numeros_suggeres: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """Commandes candidates, groupées, avec leurs lignes.
 
     `ouvertes_seulement` écarte les commandes soldées : on lance rarement une
     production sur une commande déjà livrée. Le sélecteur permet de rouvrir la
     recherche à tout, pour les reliquats et les rattrapages.
+
+    `numeros_suggeres` : les commandes que l'écran connaît déjà — pour un
+    départ, celles de ses dossiers de fabrication. Elles remontent en tête et
+    s'affichent même sans recherche, mais rien n'est coché à la place de
+    l'expéditeur : ce qui part réellement, c'est lui qui le sait.
     """
     q = str(q or "").strip()
-    if len(q) < 2:
+    suggeres = [str(n).strip() for n in (numeros_suggeres or []) if str(n).strip()]
+    if len(q) < 2 and not suggeres:
         return []
     ou, params = _filtre_texte(q, ["l.numero", "e.rs", "l.des1", "l.code1", "l.code2", "l.vref"])
+    if len(q) < 2:
+        # Pas de recherche : seules les commandes suggérées sont candidates.
+        ou, params = "1=0", []
     sql = _SQL_COMMANDES + " AND " + ou
     if ouvertes_seulement:
         # lpos : 2 = soldée dans RVGI. On garde tout le reste, y compris les
@@ -552,7 +658,9 @@ def chercher_commandes(q: str, limite: int = LIMITE_RECHERCHE,
         # Or on coche des lignes : en montrer une partie sans le dire ferait
         # rattacher une commande incomplète. On retient donc les NUMÉROS
         # trouvés, puis on relit toutes leurs lignes.
-        numeros = []
+        # Les suggérées d'abord : une commande soldée reste visible si un
+        # dossier du départ la porte — c'est le cas courant d'un reliquat.
+        numeros = list(dict.fromkeys(suggeres))[:limite]
         for r in c.execute(sql, params):
             num = str(r["numero"] or "").strip()
             if num and num not in numeros:
@@ -562,7 +670,14 @@ def chercher_commandes(q: str, limite: int = LIMITE_RECHERCHE,
         if not numeros:
             return []
         lignes = _lire_lignes_commandes(c, numeros)
-    return _grouper_par_numero(lignes, limite)
+    vus = set(suggeres)
+    for l in lignes:
+        l["suggere"] = str(l.get("numero") or "").strip() in vus
+    groupes = _grouper_par_numero(lignes, limite)
+    if suggeres:
+        groupes.sort(key=lambda g: (not any(l.get("suggere") for l in g["lignes"]),
+                                    -_entier(g["numero"])))
+    return groupes
 
 
 def _lire_lignes_commandes(c, numeros: List[str]) -> List[Dict[str, Any]]:
@@ -796,15 +911,27 @@ def enrichir_avec_rattachements(conn: sqlite3.Connection, piece: str,
     C'est ce qui empêche de rattacher deux fois la même ligne sans le savoir —
     et ce qui permet de proposer, par défaut, le RESTE d'une ligne déjà
     partiellement couverte plutôt que sa quantité totale.
+
+    Sur une commande, deux lectures cohabitent sans se mélanger :
+    `rattachement` dit ce que la PRODUCTION a pris — c'est lui qui pilote le
+    reste à produire et le badge « déjà pris » — et `expedition` dit ce qui est
+    DÉJÀ PARTI. Un départ ne réduit jamais le reste à produire : il ne produit
+    rien.
     """
     plates = [l for g in groupes for l in g["lignes"]]
-    etats = etat_des_lignes(conn, piece, plates)
+    objets = OBJETS_PRODUCTION if piece == "commande" else None
+    etats = etat_des_lignes(conn, piece, plates, objets=objets)
+    exped = (etat_des_lignes(conn, piece, plates, objets=OBJETS_EXPEDITION)
+             if piece == "commande" else {})
     for g in groupes:
         for l in g["lignes"]:
             cle = (str(l.get("numero") or "").strip(),
                    None if l.get("ligne") is None else int(l["ligne"]))
             e = etats.get(cle) or {}
             l["rattachement"] = e
+            if piece == "commande":
+                x = exped.get(cle) or {}
+                l["expedition"] = x if x.get("objets") else None
             deja = e.get("qte_rattachee")
             qte = l.get("qte")
             if qte is not None and deja is not None:
@@ -812,6 +939,8 @@ def enrichir_avec_rattachements(conn: sqlite3.Connection, piece: str,
             else:
                 l["reste"] = qte
         g["etat"] = _etat_du_groupe(g["lignes"])
+        if piece == "commande":
+            g["expediee"] = any(l.get("expedition") for l in g["lignes"])
     return groupes
 
 

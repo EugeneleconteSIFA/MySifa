@@ -5,6 +5,7 @@ Accès : direction, administration, logistique.
 import csv
 import io
 import json
+import logging
 import re
 import sqlite3
 from datetime import datetime, timedelta
@@ -21,8 +22,10 @@ from app.services import packing_list as _pl
 from app.services import stock_bobines as _sb
 from app.services.audit_service import log_action
 from app.services.conditionnement_pf import conditionnement_produit
+from app.services import fsc_registre as _registre
 from app.services.fsc_certificat import evaluer_certificat
 from config import (
+    FSC_CLAIM_LABELS,
     STOCK_UNITE_VENTE_DEFAUT,
     STOCK_EMPLACEMENT_AU_SOL,
     STOCK_EMPLACEMENT_AU_SOL_LABEL,
@@ -33,6 +36,8 @@ from config import (
 )
 from database import get_db, parse_file
 from services.auth_service import get_current_user, effective_role, user_has_app_access
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -3648,6 +3653,59 @@ def _ensure_matiere_laize_link(conn, matiere_id: int, laize_id: int) -> None:
     )
 
 
+@router.get("/api/stock/receptions/registre")
+def receptions_registre(request: Request, fournisseur_id: int = 0, limite: int = 60):
+    """Les lignes du registre FSC qui attendent leur réception physique.
+
+    Sous chaîne de contrôle, le magasin ne tape plus une allégation : il
+    désigne la LIVRAISON qu'il est en train de réceptionner, et l'allégation
+    vient avec. Le rattachement se fait alors par `lif_id`, qui est exact — un
+    numéro de BL retapé se trompe, une ligne choisie dans une liste non.
+
+    Les lignes déjà rattachées à une réception ne sont pas proposées : elles
+    sont entrées. `verrou` à False dit à l'écran de garder son sélecteur
+    d'avant, tant que la date d'entrée n'est pas renseignée.
+    """
+    require_stock(request)
+    with get_db() as conn:
+        depuis = _registre.date_entree(conn)
+        verrou = bool(depuis) and _now_paris().date().isoformat() >= depuis
+        if not verrou:
+            return {"verrou": False, "depuis": depuis, "lignes": []}
+        where = ["r.reception_id IS NULL"]
+        params: list = []
+        if fournisseur_id:
+            where.append("r.fournisseur_id = ?")
+            params.append(int(fournisseur_id))
+        try:
+            rows = conn.execute(
+                """SELECT r.id, r.lif_id, r.num_bl, r.date_reception, r.designation,
+                          r.libelle_matiere, r.code_matiere, r.laize_mm, r.quantite_ml,
+                          r.allegation_facture, r.eligible, r.fournisseur_id,
+                          COALESCE(f.nom, r.fournisseur_rvgi) AS fournisseur_nom
+                     FROM fsc_reception r
+                LEFT JOIN fournisseurs_fsc f ON f.id = r.fournisseur_id
+                    WHERE %s
+                 ORDER BY r.date_reception DESC, r.num_bl, r.cde_ligne
+                    LIMIT ?""" % " AND ".join(where),
+                [*params, max(1, min(int(limite or 60), 300))],
+            ).fetchall()
+        except sqlite3.Error:
+            rows = []
+    lignes = []
+    for r in rows:
+        d = dict(r)
+        claim = _registre.claim_production(d)
+        d["claim"] = claim
+        d["claim_label"] = FSC_CLAIM_LABELS.get(claim, claim)
+        # Ce qui manque encore sur cette ligne, en trois mots : l'écran le met
+        # à côté du choix, pour qu'on voie avant de scanner ce qui bloquera.
+        d["motif_court"] = (None if claim != "non_fsc"
+                            else _registre.MOTIFS_ELIGIBLE.get(d.get("eligible") or "", None))
+        lignes.append(d)
+    return {"verrou": True, "depuis": depuis, "lignes": lignes}
+
+
 @router.get("/api/stock/receptions")
 def list_receptions(request: Request, limit: int = 50):
     """Historique des réceptions de bobines.
@@ -3930,6 +3988,40 @@ def _verdict_certificat_reception(fournisseur: Optional[dict], date_reception) -
     return evaluer_certificat(fournisseur, date_reception)
 
 
+def _claim_reception(conn, *, date_reception, fournisseur_id, num_bl, lif_id,
+                     claim_demande: str, certificat_demande):
+    """Ce que la réception porte réellement comme allégation FSC.
+
+    Avant l'entrée dans la chaîne de contrôle, rien ne change : ce que le
+    magasin a saisi fait foi. Après, l'allégation n'est plus une saisie mais une
+    LECTURE du registre des approvisionnements — le magasinier constate ce que
+    le bon de livraison et la facture ont établi, il ne le déclare pas. C'est la
+    même règle qu'au pied de la machine, un cran plus tôt.
+
+    Rend toujours de quoi écrire la réception : le verrou ne refuse jamais
+    l'enregistrement de bobines physiquement présentes au magasin. Il refuse
+    l'ALLÉGATION, et `motif` dit ce qu'il faut corriger pour l'obtenir.
+    """
+    try:
+        verdict = _registre.claim_pour_reception(
+            conn, date_reception=date_reception, lif_id=lif_id,
+            fournisseur_id=fournisseur_id, num_bl=num_bl)
+    except Exception:
+        # Le registre indisponible ne doit pas bloquer une réception. On garde
+        # le comportement d'avant, en le disant.
+        return {"claim": claim_demande, "certificat": certificat_demande,
+                "source": "saisie_historique", "motif": None, "lignes": []}
+    if not verdict["verrou"]:
+        return {"claim": claim_demande, "certificat": certificat_demande,
+                "source": "saisie_historique", "motif": None, "lignes": []}
+    motif = verdict["motif"]
+    if (claim_demande or "non_fsc") != "non_fsc" and verdict["claim"] == "non_fsc" and not motif:
+        motif = ("L'allégation demandée n'est pas démontrée par le registre : "
+                 "réception enregistrée sans allégation FSC.")
+    return {"claim": verdict["claim"], "certificat": verdict.get("certificat"),
+            "source": "registre", "motif": motif, "lignes": verdict["lignes"]}
+
+
 def _scan_alimente_stock(conn) -> bool:
     """Un scan de réception ajoute-t-il encore une bobine au stock ?
 
@@ -3984,6 +4076,12 @@ async def create_reception(request: Request):
 
     rvgi_cde = _txt_ou_rien(body.get("rvgi_cde"), 30)
     rvgi_bl = _txt_ou_rien(body.get("rvgi_bl"), 60)
+    # La ligne de livraison RVGI, quand la réception vient de l'ERP. C'est la
+    # clé exacte vers le registre FSC : avec elle il n'y a rien à deviner.
+    try:
+        rvgi_lif_id = int(body.get("rvgi_lif_id") or 0) or None
+    except (TypeError, ValueError):
+        rvgi_lif_id = None
     try:
         rvgi_qte_attendue = (float(body["rvgi_qte_attendue"])
                              if body.get("rvgi_qte_attendue") not in (None, "") else None)
@@ -4045,7 +4143,9 @@ async def create_reception(request: Request):
         )
     now_dt = _now_paris()
     now = now_dt.isoformat()
-    lot_numero = _build_lot_numero(fournisseur, now_dt, fsc_type_claim)
+    # `lot_numero` encode l'allégation : il ne peut donc pas se construire avant
+    # que le registre ait dit laquelle. Il se calcule plus bas, une fois le
+    # fournisseur résolu.
 
     created_by = user.get("email")
     created_by_name = (user.get("nom") or "").strip() or None
@@ -4072,6 +4172,16 @@ async def create_reception(request: Request):
         fournisseur_id, fournisseur_row = _resoudre_fournisseur_reception(
             conn, fournisseur, fournisseur_id_saisi)
         verdict = _verdict_certificat_reception(fournisseur_row, now_dt.date())
+
+        # ── Allégation FSC : constatée sur le registre, plus saisie ────────
+        fsc = _claim_reception(
+            conn, date_reception=now_dt.date().isoformat(),
+            fournisseur_id=fournisseur_id, num_bl=rvgi_bl, lif_id=rvgi_lif_id,
+            claim_demande=fsc_type_claim, certificat_demande=certificat_fsc)
+        fsc_type_claim = fsc["claim"]
+        certificat_fsc = fsc["certificat"] or (
+            certificat_fsc if fsc["source"] != "registre" else None)
+        lot_numero = _build_lot_numero(fournisseur, now_dt, fsc_type_claim)
 
         # ── Precharge des matieres impliquees (verifier existence + laizee) ──
         matiere_ids = {int(it["matiere_id"]) for it in normalized_items if "matiere_id" in it}
@@ -4154,10 +4264,20 @@ async def create_reception(request: Request):
                        -- premiere.
                        rvgi_cde = COALESCE(rvgi_cde, ?),
                        rvgi_bl = COALESCE(rvgi_bl, ?),
-                       rvgi_qte_attendue = COALESCE(rvgi_qte_attendue, ?)
+                       rvgi_lif_id = COALESCE(rvgi_lif_id, ?),
+                       rvgi_qte_attendue = COALESCE(rvgi_qte_attendue, ?),
+                       -- Le lot fusionné porte le même `lot_numero`, donc la
+                       -- même allégation par construction : il ne reste qu'à
+                       -- compléter d'où elle vient si on ne le savait pas.
+                       fsc_source = COALESCE(fsc_source, ?),
+                       fsc_motif = COALESCE(fsc_motif, ?),
+                       fsc_reception_id = COALESCE(fsc_reception_id, ?)
                    WHERE id = ?""",
                 (nb_bobines_ajoutees, merged_note,
-                 rvgi_cde, rvgi_bl, rvgi_qte_attendue, reception_id),
+                 rvgi_cde, rvgi_bl, rvgi_lif_id, rvgi_qte_attendue,
+                 fsc["source"], fsc["motif"],
+                 fsc["lignes"][0] if len(fsc["lignes"]) == 1 else None,
+                 reception_id),
             )
             merged = True
             new_total = (existing["nb_bobines"] or 0) + nb_bobines_ajoutees
@@ -4167,8 +4287,9 @@ async def create_reception(request: Request):
                    (created_at, created_by, created_by_name, note, nb_bobines,
                     fournisseur, fournisseur_id, certificat_fsc, fsc_type_claim,
                     lot_numero, certificat_valide, certificat_expiration,
-                    certificat_note, rvgi_cde, rvgi_bl, rvgi_qte_attendue)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    certificat_note, rvgi_cde, rvgi_bl, rvgi_qte_attendue,
+                    rvgi_lif_id, fsc_source, fsc_motif, fsc_reception_id)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     now,
                     created_by,
@@ -4186,6 +4307,10 @@ async def create_reception(request: Request):
                     rvgi_cde,
                     rvgi_bl,
                     rvgi_qte_attendue,
+                    rvgi_lif_id,
+                    fsc["source"],
+                    fsc["motif"],
+                    fsc["lignes"][0] if len(fsc["lignes"]) == 1 else None,
                 ),
             )
             reception_id = cur.lastrowid
@@ -4201,6 +4326,16 @@ async def create_reception(request: Request):
                 )
             merged = False
             new_total = nb_bobines_ajoutees
+
+        # Le registre apprend quelle réception physique porte ses lignes. Sans
+        # ce retour, une réception saisie après l'import restait orpheline et la
+        # chaîne s'arrêtait au bon de livraison.
+        if fsc["lignes"]:
+            try:
+                _registre.lier_reception(conn, reception_id, fsc["lignes"],
+                                         created_by_name or created_by)
+            except Exception:
+                logger.warning("Lien registre FSC / réception non posé", exc_info=True)
 
         # ── Chaque code scanne devient une bobine dans l'inventaire d'objets ──
         # Strictement additif : le compteur de stock ci-dessous n'est pas touche,
@@ -4309,6 +4444,13 @@ async def create_reception(request: Request):
         "bobines_creees": bobines_creees,
         "bobines_rattachees": bobines_rattachees,
         "stock_impacte": alimente_stock,
+        # Ce que le magasin doit savoir de l'allégation retenue. `fsc_motif` est
+        # rempli quand elle n'est pas celle qu'on attendait : l'écran l'affiche
+        # tel quel, parce qu'un « Non FSC » sans raison n'appelle aucun geste.
+        "fsc_type_claim": fsc_type_claim,
+        "fsc_source": fsc["source"],
+        "fsc_motif": fsc["motif"],
+        "fsc_lignes_registre": fsc["lignes"],
     }
 
 
@@ -4365,6 +4507,22 @@ async def patch_reception(reception_id: int, request: Request):
             raise HTTPException(
                 status_code=400,
                 detail="Certificat FSC requis pour une réception certifiée FSC.",
+            )
+
+        # Une réception entrée sous chaîne de contrôle tient son allégation du
+        # registre. La rouvrir ici rendrait tout le verrou décoratif : il
+        # suffirait de créer la réception puis de la modifier. La correction
+        # existe, elle est simplement au bon endroit — sur la pièce d'origine,
+        # avec son journal.
+        if (exd.get("fsc_source") or "") == "registre" and (
+            fsc_type_claim != (exd.get("fsc_type_claim") or "non_fsc")
+            or certificat_fsc != exd.get("certificat_fsc")
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Allégation FSC issue du registre des approvisionnements — "
+                       "elle se corrige dans MyQualité › FSC › Approvisionnements, "
+                       "sur la ligne du bon de livraison.",
             )
 
         audit_detail: dict = {}
@@ -5002,6 +5160,9 @@ async def packing_list_importer(request: Request):
         created_by_name = _resolve_created_by_name(conn, user)
 
         # ── Destination : une réception existante, ou un lot créé ici ──
+        # Une réception existante garde l'allégation qu'elle porte déjà : elle a
+        # été jugée à sa création, ce n'est pas un import de liste qui la rejuge.
+        fsc_motif = None
         if reception_id:
             rec = conn.execute(
                 "SELECT id, lot_numero, fournisseur, fournisseur_id, "
@@ -5019,6 +5180,18 @@ async def packing_list_importer(request: Request):
             fournisseur_id, f_row = _resoudre_fournisseur_reception(
                 conn, fournisseur, fournisseur_id_saisi)
             verdict = _verdict_certificat_reception(f_row, now_dt.date())
+            # Même verrou qu'à la réception scannée : sous chaîne de contrôle,
+            # l'allégation vient du registre. Une liste de colisage sans bon de
+            # livraison rattaché n'en porte donc aucune — ce qui est exact : il
+            # n'y a rien, dans un packing list seul, qui démontre une allégation.
+            fsc = _claim_reception(
+                conn, date_reception=now_dt.date().isoformat(),
+                fournisseur_id=fournisseur_id, num_bl=None, lif_id=None,
+                claim_demande=fsc_type_claim, certificat_demande=certificat_fsc)
+            fsc_type_claim = fsc["claim"]
+            certificat_fsc = fsc["certificat"] or (
+                certificat_fsc if fsc["source"] != "registre" else None)
+            fsc_motif = fsc["motif"]
             lot_numero = lot_saisi or _build_lot_numero(fournisseur, now_dt, fsc_type_claim)
             if lot_saisi:
                 # Un numéro déjà pris désignerait deux livraisons différentes
@@ -5039,13 +5212,14 @@ async def packing_list_importer(request: Request):
                    (created_at, created_by, created_by_name, note, nb_bobines,
                     fournisseur, fournisseur_id, fsc_type_claim, certificat_fsc,
                     lot_numero, certificat_valide, certificat_expiration,
-                    certificat_note)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    certificat_note, fsc_source, fsc_motif)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (now, created_by, created_by_name,
                  ("Packing list %s" % nom_fichier) if nom_fichier else "Packing list",
                  0, fournisseur, fournisseur_id, fsc_type_claim, certificat_fsc,
                  lot_numero,
-                 verdict.get("statut"), verdict.get("expiration"), verdict.get("libelle")),
+                 verdict.get("statut"), verdict.get("expiration"), verdict.get("libelle"),
+                 fsc["source"], fsc["motif"]),
             )
             reception_id = cur.lastrowid
             qte_attendue = None
@@ -5160,6 +5334,7 @@ async def packing_list_importer(request: Request):
             "bobines_rattachees": len(rattachees),
             "refusees": len(refusees),
             "fsc_type_claim": fsc_type_claim,
+            "fsc_motif": fsc_motif,
             "stock": "inchange (tracabilite)",
         },
         ip=request.client.host if request.client else None,
@@ -5175,6 +5350,8 @@ async def packing_list_importer(request: Request):
         # Dit explicitement ce qui n'a PAS eu lieu : l'ecran doit pouvoir
         # ecrire « stock inchange » plutot que laisser croire a une entree.
         "stock_modifie": False,
+        "fsc_type_claim": fsc_type_claim,
+        "fsc_motif": fsc_motif,
         "repartition": repartition,
         "mouvements": [],
         # Comparaison affichée, jamais bloquante : l'ERP annonce une quantité

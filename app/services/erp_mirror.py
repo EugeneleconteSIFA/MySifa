@@ -493,12 +493,38 @@ _SQL_RATT_OU = (
     " WHERE r.piece = '%s'"
     "   AND TRIM(CAST(r.numero AS TEXT)) = TRIM(CAST(%s AS TEXT))"
     "   AND (r.ligne IS NULL OR r.ligne = %s)"
+    "   AND r.objet IN (%s)"
 )
 
+# Qui répond à « cette ligne est-elle produite », et qui répond à « est-elle
+# partie ». Les deux listes sont celles de `rvgi_rattachement` — recopiées ici
+# et pas importées, parce que c'est ce module-là qui importe celui-ci.
+# Une ligne de commande emportée par un départ n'a pas été produite pour
+# autant : la colonne « Dossier de fab » et ses filtres l'ignorent, et la
+# pastille « Expédiée » le dit à part.
+_OBJETS_PRODUCTION = ("dossier", "of")
+_OBJETS_EXPEDITION = ("depart",)
 
-def _sql_rattachement(piece, col_numero, col_ligne):
+
+def _liste_sql(valeurs):
+    return ",".join("'%s'" % v for v in valeurs)
+
+
+def _objets_de(piece, expedition=False):
+    """Les objets qui comptent pour cette nature de pièce.
+
+    Sur un BL, seul un départ rattache : la distinction n'a pas lieu d'être et
+    tout compte. Sur une commande, elle est la règle.
+    """
+    if piece != "commande":
+        return ("dossier", "depart", "of")
+    return _OBJETS_EXPEDITION if expedition else _OBJETS_PRODUCTION
+
+
+def _sql_rattachement(piece, col_numero, col_ligne, expedition=False):
     """(compte, quantité couverte, quantité non chiffrée) pour une ligne."""
-    ou = _SQL_RATT_OU % (piece, col_numero, col_ligne)
+    ou = _SQL_RATT_OU % (piece, col_numero, col_ligne,
+                         _liste_sql(_objets_de(piece, expedition)))
     return (
         "(SELECT COUNT(*)%s)" % ou,
         "(SELECT COALESCE(SUM(r.qte), 0)%s)" % ou,
@@ -712,6 +738,10 @@ def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
         select.append('%s AS "_ratt_qte"' % somme)
         select.append('%s AS "_ratt_tout"' % sans_qte)
         select.append('%s AS "_ratt_douteux"' % douteux)
+        if ratt["piece"] == "commande":
+            exp_n = _sql_rattachement(
+                ratt["piece"], ratt["numero"], ratt["ligne"], expedition=True)[0]
+            select.append('%s AS "_exp_n"' % exp_n)
 
     ou, params = _ou_et_params(ec, q, filtres, extra, ratt, filtre_ratt, filtres_col)
     depart = _from(ec)
@@ -766,6 +796,8 @@ def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
                 d[c["nom"]] = nettoyer(r[c["nom"]], c.get("type"))
         if ratt:
             d["_ratt"] = _etat_rattachement(r, ratt, d)
+            if ratt["piece"] == "commande":
+                d["_ratt"]["expediee"] = int(r["_exp_n"] or 0)
         lignes.append(d)
 
     return {

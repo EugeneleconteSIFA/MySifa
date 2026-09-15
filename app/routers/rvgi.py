@@ -54,6 +54,10 @@ class LigneChoisie(BaseModel):
 class Rattachement(BaseModel):
     objet: str = Field(..., max_length=12)
     objet_id: int = Field(..., ge=1)
+    # Absente, la nature de pièce est celle que l'objet porte nativement —
+    # commande pour un dossier, BL pour un départ. Un départ peut aussi
+    # rattacher des lignes de commande : il le dit alors explicitement.
+    piece: Optional[str] = Field(None, max_length=12)
     lignes: List[LigneChoisie] = Field(default_factory=list)
     # « Je ne trouve pas ma commande » et « production sans commande » sont des
     # réponses légitimes, pas des échecs. Elles s'enregistrent explicitement.
@@ -84,8 +88,17 @@ COLONNES_LISTE = {
 }
 
 
-def _piece_de(objet: str) -> str:
-    return ratt.ACCUEIL[objet][2]
+def _piece_de(objet: str, demandee: Optional[str] = None) -> str:
+    """La nature de pièce à traiter, vérifiée contre ce que l'objet autorise."""
+    if not demandee:
+        return ratt.piece_native(objet)
+    permises = ratt.pieces_de(objet)
+    if demandee not in permises:
+        raise HTTPException(
+            status_code=400,
+            detail="Un %s ne rattache pas de %s." % (LIBELLES.get(objet, objet), demandee),
+        )
+    return demandee
 
 
 def _table_de(objet: str) -> str:
@@ -110,20 +123,45 @@ def rvgi_commandes(
     q: str = Query("", max_length=120),
     ouvertes: int = Query(1, ge=0, le=1),
     limite: int = Query(ratt.LIMITE_RECHERCHE, ge=1, le=100),
+    dossiers: str = Query("", max_length=400),
 ):
     """Commandes candidates pour un dossier, avec ce qui leur est déjà rattaché.
 
     Cherche sur le numéro, le client, la référence article et la désignation :
     c'est ce qu'un planificateur a sous les yeux quand il ouvre un dossier.
+
+    `dossiers` : « 128,145 », les dossiers de fabrication que l'écran a déjà
+    sous la main — ceux d'un départ en cours de saisie. Leurs commandes
+    remontent en tête et s'affichent avant toute recherche : l'expéditeur
+    n'a pas à retaper un numéro que MySifa connaît déjà. Rien n'est coché pour
+    autant, parce que ce qui monte réellement dans le camion, c'est lui qui le
+    sait.
     """
     require_admin(request)
+    ids: List[int] = []
+    for bout in (dossiers or "").split(","):
+        bout = bout.strip()
+        if bout.isdigit():
+            ids.append(int(bout))
+    suggeres: List[str] = []
+    if ids:
+        with get_db() as conn:
+            suggeres = [r["numero"] for r in conn.execute(
+                "SELECT DISTINCT numero FROM rvgi_rattachements "
+                "WHERE objet='dossier' AND piece='commande' AND objet_id IN (%s) "
+                "ORDER BY CAST(numero AS INTEGER) DESC" % ",".join("?" * len(ids[:40])),
+                ids[:40],
+            )]
     try:
-        groupes = ratt.chercher_commandes(q, limite=limite, ouvertes_seulement=bool(ouvertes))
+        groupes = ratt.chercher_commandes(q, limite=limite,
+                                          ouvertes_seulement=bool(ouvertes),
+                                          numeros_suggeres=suggeres)
     except FileNotFoundError as e:
         raise HTTPException(status_code=503, detail=str(e))
     with get_db() as conn:
         groupes = ratt.enrichir_avec_rattachements(conn, "commande", groupes)
-    return {"pieces": groupes, "miroir": _fraicheur()}
+    return {"pieces": groupes, "commandes_des_dossiers": suggeres,
+            "miroir": _fraicheur()}
 
 
 @router.get("/commande")
@@ -214,20 +252,33 @@ def _fraicheur() -> Dict[str, Any]:
 # ── Lecture et écriture d'un rattachement ────────────────────────────────────
 
 @router.get("/rattachements/{objet}/{objet_id}")
-def rvgi_lire(objet: str, objet_id: int, request: Request):
+def rvgi_lire(objet: str, objet_id: int, request: Request,
+              piece: Optional[str] = Query(None, max_length=12)):
+    """Ce qui est rattaché à un objet, et l'état qui en découle.
+
+    `piece` restreint à une nature. Elle change aussi l'état rendu : pour la
+    pièce native, c'est la colonne `rvgi_etat` de l'objet qui fait foi ; pour
+    une pièce secondaire — les lignes de commande d'un départ — l'état se
+    déduit des rattachements eux-mêmes, puisque aucune colonne ne le porte.
+    """
     require_admin(request)
     if objet not in ratt.OBJETS:
         raise HTTPException(status_code=400, detail="Objet inconnu.")
+    piece = _piece_de(objet, piece) if piece else None
     with get_db() as conn:
         _existe(conn, objet, objet_id)
-        lignes = ratt.lister(conn, objet, objet_id)
+        lignes = ratt.lister(conn, objet, objet_id, piece=piece)
         table = _table_de(objet)
         row = conn.execute(
             'SELECT rvgi_etat, rvgi_maj_le FROM "%s" WHERE id=?' % table, (objet_id,)
         ).fetchone()
+    if piece and piece != ratt.piece_native(objet):
+        etat = ratt.etat_de_rattachements(lignes)
+    else:
+        etat = (row["rvgi_etat"] if row else None)
     return {
-        "objet": objet, "objet_id": objet_id,
-        "etat": (row["rvgi_etat"] if row else None),
+        "objet": objet, "objet_id": objet_id, "piece": piece,
+        "etat": etat,
         "maj_le": (row["rvgi_maj_le"] if row else None),
         "rattachements": lignes,
     }
@@ -240,6 +291,10 @@ def rvgi_enregistrer(corps: Rattachement, request: Request):
     Remplacement complet, pas fusion : l'écran envoie l'état voulu. C'est ce
     qui permet de retirer une ligne, et ce qui évite qu'un aller-retour dans
     l'interface laisse des rattachements fantômes.
+
+    Le remplacement porte sur UNE nature de pièce. Enregistrer les lignes de
+    commande d'un départ ne touche donc pas à ses bons de livraison, et
+    réciproquement : les deux champs de l'écran s'enregistrent séparément.
     """
     user = require_admin(request)
     nom = (user.get("nom") or user.get("email") or "") if isinstance(user, dict) else ""
@@ -247,7 +302,7 @@ def rvgi_enregistrer(corps: Rattachement, request: Request):
         raise HTTPException(status_code=400, detail="Objet inconnu.")
     if corps.etat and corps.etat not in ETATS_FORCABLES:
         raise HTTPException(status_code=400, detail="État inconnu.")
-    piece = _piece_de(corps.objet)
+    piece = _piece_de(corps.objet, corps.piece)
     with get_db() as conn:
         _existe(conn, corps.objet, corps.objet_id)
         try:
@@ -258,7 +313,7 @@ def rvgi_enregistrer(corps: Rattachement, request: Request):
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         conn.commit()
-        lignes = ratt.lister(conn, corps.objet, corps.objet_id)
+        lignes = ratt.lister(conn, corps.objet, corps.objet_id, piece=piece)
     return {**res, "rattachements": lignes}
 
 

@@ -444,6 +444,7 @@ def _sans_dossier(conn, sch, sortie):
            AND NOT EXISTS (
                  SELECT 1 FROM mysifa.rvgi_rattachements r
                   WHERE r.piece = 'commande'
+                    AND r.objet IN ('dossier','of')
                     AND r.numero = CAST(l.numero AS TEXT)
                     AND (r.ligne IS NULL OR r.ligne = l.ligne))
     """ % (produit, _existe_piece(sch), _date_reelle(_jour("l.amje"))),

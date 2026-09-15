@@ -14,7 +14,11 @@ Ce que ce test protège :
 4. **Le rapprochement fournisseur se tait quand il hésite.** « FRIMPEKS LTD »
    peut être Italy, UK ou Turkey : la ligne entre au registre non rattachée
    plutôt que rattachée au hasard.
-5. **Toute correction laisse une trace.**
+5. **Une allégation hors de la portée du certificat est un écart, pas un
+   doute.** Un fournisseur certifié FSC Mix qui facture du FSC 100 % sort du
+   champ de son certificat : « non ». Mais une portée jamais contrôlée donne
+   « à vérifier » — l'absence de contrôle ne condamne pas, elle suspend.
+6. **Toute correction laisse une trace.**
 
 Lancer : python3 tests/test_fsc_registre.py
 """
@@ -54,6 +58,14 @@ CREATE TABLE fournisseurs_fsc (
     has_fsc INTEGER NOT NULL DEFAULT 1, actif INTEGER NOT NULL DEFAULT 1,
     fsc_date_expiration TEXT, rvgi_numero INTEGER, rvgi_rs TEXT, rvgi_lie_le TEXT,
     updated_at TEXT);
+CREATE TABLE qualite_fsc_controles (
+    id INTEGER PRIMARY KEY, fournisseur_id INTEGER NOT NULL, date_controle TEXT NOT NULL,
+    statut_base TEXT NOT NULL, licence TEXT, date_expiration_lue TEXT,
+    claims TEXT NOT NULL DEFAULT '[]', source TEXT NOT NULL DEFAULT 'base_fsc',
+    certificat_id INTEGER, note TEXT NOT NULL DEFAULT '', justificatif_filename TEXT,
+    justificatif_original TEXT, justificatif_mime TEXT,
+    fiche_maj INTEGER NOT NULL DEFAULT 0, ancienne_expiration TEXT,
+    created_at TEXT NOT NULL, created_by INTEGER, created_by_nom TEXT);
 """
 SCHEMA_ERP = """
 CREATE TABLE lif_ligne (id INTEGER PRIMARY KEY, corbeille INTEGER DEFAULT 0, numero INTEGER,
@@ -83,13 +95,26 @@ def base_mysifa():
             (6, "Kanzan", "FSC-C007179", "TUVDC-COC-100605", "2024-01-01", 4242),
         ],
     )
-    spec = importlib.util.spec_from_file_location(
-        "mig_fsc_registre",
-        os.path.join(RACINE, "app", "core", "migrations", "2026_09_14_fsc_registre_appro.py"))
-    mig = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mig)
-    mig.appliquer(c)
-    mig.appliquer(c)  # rejouable
+    # Portée validée des certificats. Frimpeks Italy (3) n'en a PAS : c'est le
+    # fournisseur qui sert à vérifier qu'une portée inconnue suspend le verdict
+    # au lieu de le trancher, puis que `reprendre_portee` vient la chercher.
+    c.executemany(
+        "INSERT INTO qualite_fsc_controles "
+        "(fournisseur_id, date_controle, statut_base, claims, created_at) VALUES (?,?,?,?,?)",
+        [
+            (1, "2026-01-05", "valide", '["fsc_mix", "fsc_mix_credit"]', "2026-01-05T09:00:00"),
+            (2, "2026-01-05", "valide", '["fsc_mix"]', "2026-01-05T09:00:00"),
+            (6, "2026-01-05", "valide", '["fsc_mix"]', "2026-01-05T09:00:00"),
+        ],
+    )
+    for fichier in ("2026_09_14_fsc_registre_appro.py", "2026_09_15_fsc_reception_verrou.py"):
+        spec = importlib.util.spec_from_file_location(
+            "mig_" + fichier[:-3],
+            os.path.join(RACINE, "app", "core", "migrations", fichier))
+        mig = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mig)
+        mig.appliquer(c)
+        mig.appliquer(c)  # rejouable
     return c
 
 
@@ -135,7 +160,7 @@ def base_erp():
 print("\n--- 1. règle d'éligibilité ---")
 BASE = {"certificat_statut": "valide", "allegation_bl": "fsc_mix_credit",
         "allegation_facture": "fsc_mix_credit", "code_certificat_present": 1,
-        "pourcentage": None}
+        "pourcentage": None, "claims_autorises": '["fsc_mix", "fsc_mix_credit"]'}
 egal(R.evaluer_eligibilite(BASE), "oui", "les quatre conditions réunies")
 egal(R.evaluer_eligibilite({**BASE, "certificat_statut": "inconnu"}), "a_verifier",
      "date d'expiration inconnue : à vérifier, pas « non »")
@@ -162,6 +187,36 @@ egal(R.evaluer_eligibilite({**BASE, "allegation_bl": "fsc_mix_pct",
 egal(R.evaluer_eligibilite({**BASE, "allegation_bl": "fsc_mix_pct",
                             "allegation_facture": "fsc_mix_pct", "pourcentage": 70}), "oui",
      "allégation en % avec pourcentage")
+egal(R.evaluer_eligibilite({**BASE, "claims_autorises": None}), "a_verifier",
+     "portée jamais contrôlée : à vérifier, jamais « oui »")
+egal(R.evaluer_eligibilite({k: v for k, v in BASE.items() if k != "claims_autorises"}),
+     "a_verifier", "colonne absente (base pas migrée) : à vérifier")
+egal(R.evaluer_eligibilite({**BASE, "claims_autorises": "[]"}), "non",
+     "contrôle fait sans aucune catégorie validée : écart, pas doute")
+egal(R.evaluer_eligibilite({**BASE, "allegation_bl": "fsc_100",
+                            "allegation_facture": "fsc_100"}), "non",
+     "FSC 100 % facturé par un fournisseur certifié Mix : hors portée")
+egal(R.evaluer_eligibilite({**BASE, "allegation_bl": "fsc_mix_pct",
+                            "allegation_facture": "fsc_mix_pct", "pourcentage": 70}), "oui",
+     "FSC Mix x % entre dans une portée FSC Mix")
+egal(R.evaluer_eligibilite({**BASE, "allegation_bl": "fsc_recycled_pct",
+                            "allegation_facture": "fsc_recycled_pct", "pourcentage": 80,
+                            "claims_autorises": '["fsc_recycled_credit"]'}), "oui",
+     "la portée se compare par famille : Recycled Crédit couvre Recycled x %")
+egal(R.evaluer_eligibilite({**BASE, "certificat_statut": "expire",
+                            "claims_autorises": None}), "non",
+     "un certificat expiré tranche avant la portée")
+
+# Projection vers le claim de production
+egal(R.claim_production({"eligible": "oui", "allegation_facture": "fsc_mix_pct"}), "fsc_mix",
+     "FSC Mix x % devient FSC Mix en production, sans le pourcentage")
+egal(R.claim_production({"eligible": "oui", "allegation_facture": "fsc_recycled_credit"}),
+     "fsc_recycled", "Recycled Crédit devient FSC Recycled")
+egal(R.claim_production({"eligible": "a_verifier", "allegation_facture": "fsc_100"}), "non_fsc",
+     "une ligne non éligible ne donne aucun claim, quelle que soit son allégation")
+egal(R.claim_production({"eligible": "oui", "allegation_facture": "fsc_controlled_wood"}),
+     "non_fsc", "Controlled Wood n'est jamais un claim de production")
+
 verifie(R.label_autorise("fsc_mix_pct", 70) and not R.label_autorise("fsc_mix_pct", 50),
         "label FSC : seuil de 70 % sur les allégations en pourcentage")
 verifie(R.label_autorise("fsc_100") and not R.label_autorise("fsc_controlled_wood"),
@@ -284,6 +339,57 @@ egal(conn.execute("SELECT rvgi_numero FROM fournisseurs_fsc WHERE id=3").fetchon
      "le numéro RVGI est mémorisé sur la fiche")
 verifie(any(e["champ"] == "fournisseur_id" for e in R.journal(conn, reprise["id"])),
         "le rattachement est journalisé")
+
+
+# ── 7. La portée arrive après coup ─────────────────────────────────────────
+# Le cas réel de l'entrée en chaîne de contrôle : les lignes s'importent avant
+# que tous les contrôles fournisseurs ne soient saisis. Sans reprise, elles
+# resteraient « à vérifier » indéfiniment.
+print("\n--- 7. reprise de portée au premier contrôle ---")
+ligne_frimpeks = {l["lif_id"]: l for l in R.lister(conn, limite=100)}[14]
+egal(ligne_frimpeks["claims_autorises"], None, "au départ, aucune portée sur la ligne")
+R.mettre_a_jour(conn, ligne_frimpeks["id"],
+                {"allegation_bl": "fsc_mix_credit", "allegation_facture": "fsc_mix_credit",
+                 "code_certificat_present": 1}, "Fatiha")
+egal({l["lif_id"]: l for l in R.lister(conn, limite=100)}[14]["eligible"], "a_verifier",
+     "saisie complète mais portée inconnue : à vérifier")
+
+conn.execute(
+    "INSERT INTO qualite_fsc_controles "
+    "(fournisseur_id, date_controle, statut_base, claims, created_at) VALUES (?,?,?,?,?)",
+    (3, "2026-09-15", "valide", '["fsc_mix_credit"]', "2026-09-15T09:00:00"),
+)
+conn.commit()
+egal(R.reprendre_portee(conn, 3, "Eugène"), 1, "la ligne du fournisseur est reprise")
+reprise = {l["lif_id"]: l for l in R.lister(conn, limite=100)}[14]
+egal(reprise["eligible"], "oui", "et elle devient éligible")
+egal(reprise["claims_controle_id"] is not None, True, "le contrôle opposable est nommé")
+verifie(any(e["champ"] == "claims_autorises" for e in R.journal(conn, reprise["id"])),
+        "la portée arrivée après coup est journalisée")
+egal(R.reprendre_portee(conn, 3, "Eugène"), 0, "deuxième passage : plus rien à reprendre")
+
+# Une portée élargie plus tard ne réécrit pas une ligne déjà jugée.
+conn.execute(
+    "INSERT INTO qualite_fsc_controles "
+    "(fournisseur_id, date_controle, statut_base, claims, created_at) VALUES (?,?,?,?,?)",
+    (3, "2026-09-16", "valide", '["fsc_mix_credit", "fsc_100"]', "2026-09-16T09:00:00"),
+)
+conn.commit()
+R.reprendre_portee(conn, 3, "Eugène")
+egal({l["lif_id"]: l for l in R.lister(conn, limite=100)}[14]["claims_autorises"],
+     '["fsc_mix_credit"]', "une portée figée ne se réécrit pas quand le certificat s'élargit")
+
+# Un contrôle qui ne dit pas « valide » ne donne aucune portée.
+conn.execute(
+    "INSERT INTO qualite_fsc_controles "
+    "(fournisseur_id, date_controle, statut_base, claims, created_at) VALUES (?,?,?,?,?)",
+    (5, "2026-09-15", "suspendu", '["fsc_mix_credit"]', "2026-09-15T09:00:00"),
+)
+conn.commit()
+egal(R.portee_fournisseur(conn, 5)["claims"], [],
+     "base FSC « suspendu » : portée nulle, pas la portée cochée")
+egal(R.portee_fournisseur(conn, 4)["claims"], None,
+     "fournisseur sans aucun contrôle : portée inconnue")
 
 
 print()
