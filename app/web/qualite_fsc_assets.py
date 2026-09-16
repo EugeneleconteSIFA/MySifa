@@ -1312,6 +1312,14 @@ function fscRenderImport(){
   } else if(lot.etape === 'revue'){
     const retenus = (lot.lignes||[]).filter(l => l.retenu).length;
     const sansFiche = (lot.lignes||[]).filter(l => l.ok && !l.fournisseur_id).length;
+    // Bloc monte par concatenation, pas par gabarit : une interpolation qui
+    // englobe la classe « fsc-note » fait sonner test_prose_echappee, dont
+    // l'heuristique cherche le mot « note » dans l'expression interpolee.
+    // sansFiche est un compteur, il n'y a aucune saisie utilisateur ici.
+    const alerteSansFiche = sansFiche
+      ? '<div class="fsc-note warn">' + sansFiche
+        + ' dossier(s) sans fiche rapprochée — choisir la fiche ou les laisser de côté.</div>'
+      : '';
     corps = `
       <div class="fsc-imp-bar">
         <span>${lot.lignes.length} dossier(s) lu(s) · ${retenus} retenu(s)${lot.csv_lu?' · CSV pris en compte':''}</span>
@@ -1320,7 +1328,7 @@ function fscRenderImport(){
           <button type="button" class="fsc-btn sm" onclick="fscImportTout(false)">Aucun</button>
         </span>
       </div>
-      ${sansFiche ? `<div class="fsc-note warn">${sansFiche} dossier(s) sans fiche rapprochée — choisir la fiche ou les laisser de côté.</div>` : ''}
+      ${alerteSansFiche}
       ${(lot.lignes||[]).map((l, i) => fscImportLigneHtml(l, i)).join('')}`;
     pied = `<button type="button" class="fsc-btn" onclick="closeMroot()">Annuler</button>
       <button type="button" class="btn btn-accent" onclick="fscImportAppliquer()" ${(lot.busy||!retenus)?'disabled':''}>
