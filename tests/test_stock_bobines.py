@@ -67,7 +67,9 @@ def base_de_test():
             metrage_origine TEXT, etat TEXT NOT NULL DEFAULT 'stock',
             planning_entry_id INTEGER, no_dossier TEXT, source TEXT, note TEXT,
             created_at TEXT NOT NULL, created_by_name TEXT,
-            consomme_at TEXT, updated_at TEXT);
+            consomme_at TEXT, updated_at TEXT,
+            -- migration `reception_annulation_tracee` : on desactive, on n'efface pas
+            annulee_le TEXT, annulee_par TEXT, motif_annulation TEXT);
 
         INSERT INTO matieres_premieres (id, categorie, reference, designation,
                                         metres_lineaires_par_bobine)
@@ -188,16 +190,30 @@ check("bobines sans metrage comptees a part", e["sans_metrage"], 1)
 vrai("la somme se declare incomplete", e["metrage_complet"] is False)
 
 
-# ── 6. Annuler une reception n'efface pas ce qui a servi ────────────────────
+# ── 6. Annuler une reception n'efface RIEN ─────────────────────────────────
+# Regle du 15/09/2026 : on desactive, on n'efface pas. Une bobine supprimee
+# emportait la seule trace d'un code-barres qui a pu circuler dans l'atelier ;
+# une bobine consommee detachee de sa reception perdait son origine, ce qu'une
+# chaine de controle FSC interdit.
 print("\nAnnulation d'une reception")
 db.execute("UPDATE stock_bobines SET reception_id=1")
-n = sb.supprimer_de_la_reception(db, 1)
-check("bobines en stock retirees", n, 3)
-restantes = db.execute("SELECT code_barre, reception_id, etat FROM stock_bobines "
-                       "ORDER BY code_barre").fetchall()
-check("les consommees restent", [r["code_barre"] for r in restantes],
+n = sb.annuler_de_la_reception(db, 1, par="Fatiha", motif="Lot refuse")
+check("bobines en stock sorties du stock", n, 3)
+toutes = db.execute("SELECT code_barre, reception_id, etat, annulee_par, motif_annulation "
+                    "FROM stock_bobines ORDER BY code_barre").fetchall()
+check("aucune ligne effacee", len(toutes), 5)
+annulees = [r for r in toutes if r["etat"] == sb.ETAT_ANNULEE]
+check("les trois bobines en stock passent en annulee", len(annulees), 3)
+check("avec qui les a annulees", {r["annulee_par"] for r in annulees}, {"Fatiha"})
+check("et pourquoi", {r["motif_annulation"] for r in annulees}, {"Lot refuse"})
+consommees = [r for r in toutes if r["etat"] != sb.ETAT_ANNULEE]
+check("les consommees restent", sorted(r["code_barre"] for r in consommees),
       ["60226140597", "Y2606000506"])
-check("reception detachee", {r["reception_id"] for r in restantes}, {None})
+check("et GARDENT leur reception", {r["reception_id"] for r in consommees}, {1})
+check("les annulees sortent de la liste par defaut",
+      sb.lister(db, limit=50)["total"], 2)
+check("mais restent consultables si on les demande",
+      sb.lister(db, etat=sb.ETAT_ANNULEE, limit=50)["total"], 3)
 
 
 # ── 7. Coherence : constater, jamais corriger ──────────────────────────────
@@ -241,6 +257,50 @@ try:
     vrai("etat inconnu refuse", False, "accepte")
 except ValueError:
     vrai("etat inconnu refuse", True)
+
+
+# ── 9. Heritage FSC : la bobine ne porte pas son allegation, elle la lit ───
+# Regle de chaine de controle : l'allegation vient de la RECEPTION et n'est pas
+# modifiable bobine par bobine. Elle n'est donc jamais recopiee sur la bobine —
+# une copie, c'est deux verites qui divergent des qu'on en corrige une.
+print("\nHeritage FSC et reliquat")
+db3 = base_de_test()
+db3.execute("UPDATE stock_receptions SET fsc_type_claim='fsc_mix_credit', "
+            "certificat_fsc='TUVDC-COC-100605' WHERE id=1")
+db3.commit()
+sb.creer(db3, code_barre="KZ-0001", matiere_id=1, laize_id=1, reception_id=1,
+         metrage=18000, source=sb.SOURCE_SCAN)
+b = sb.lister(db3, q="KZ-0001")["items"][0]
+check("la bobine lit l'allegation de sa reception", b["fsc_type_claim"], "fsc_mix_credit")
+check("et son certificat", b["certificat_fsc"], "TUVDC-COC-100605")
+cols = {r[1] for r in db3.execute("PRAGMA table_info(stock_bobines)").fetchall()}
+vrai("aucune colonne d'allegation sur la bobine elle-meme",
+     not any(c.startswith("fsc_") for c in cols))
+
+# Le reliquat : il repart en production, revient au magasin, et doit retrouver
+# exactement la meme origine. C'est le cas que l'auditeur teste en premier.
+bid = db3.execute("SELECT id FROM stock_bobines WHERE code_barre='KZ-0001'").fetchone()[0]
+sb.consommer(db3, bid, metres=12000, no_dossier="9932366")
+sb.remettre_en_stock(db3, bid)
+r = sb.lister(db3, q="KZ-0001")["items"][0]
+check("le reliquat garde son code-barre", r["code_barre"], "KZ-0001")
+check("sa reception", r["reception_id"], 1)
+check("son allegation", r["fsc_type_claim"], "fsc_mix_credit")
+check("et son restant, sans le reinventer", r["metrage_restant"], 6000.0)
+
+# Reception annulee : le claim est neutralise a la source, donc toutes les
+# bobines qui le lisaient le perdent d'un coup — y compris celles deja parties
+# en production, qui gardent leur reception.
+db3.execute("ALTER TABLE stock_receptions ADD COLUMN fsc_claim_avant_annulation TEXT")
+db3.execute("UPDATE stock_receptions SET fsc_claim_avant_annulation=fsc_type_claim, "
+            "fsc_type_claim='non_fsc' WHERE id=1")
+db3.commit()
+r = sb.lister(db3, q="KZ-0001")["items"][0]
+check("reception annulee : la bobine ne revendique plus rien", r["fsc_type_claim"], "non_fsc")
+check("mais on sait ce qu'elle revendiquait",
+      db3.execute("SELECT fsc_claim_avant_annulation FROM stock_receptions WHERE id=1")
+         .fetchone()[0], "fsc_mix_credit")
+db3.close()
 
 db.close()
 db2.close()

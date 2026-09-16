@@ -39,6 +39,13 @@ ETAT_STOCK = "stock"
 ETAT_CONSOMMEE = "consommee"
 ETAT_REBUT = "rebut"
 ETATS = (ETAT_STOCK, ETAT_CONSOMMEE, ETAT_REBUT)
+# Bobine retiree d'une reception annulee. Volontairement HORS de `ETATS` :
+# `ETATS` est la liste de ce qu'un humain peut poser depuis l'ecran, et une
+# annulation se trace, elle ne se choisit pas dans un menu. L'etat sort de
+# lui-meme de tous les filtres `etat = 'stock'` deja ecrits — comptage, coherence,
+# listes : c'est exactement ce qu'on veut d'une ligne qui ne compte plus.
+ETAT_ANNULEE = "annulee"
+ETATS_TOUS = ETATS + (ETAT_ANNULEE,)
 
 # D'ou vient le metrage porte par la bobine, du plus sur au moins sur.
 ORIGINE_LISTE = "packing_list"   # la liste du fournisseur, bobine par bobine
@@ -218,43 +225,47 @@ def _marquer_suivi(conn: sqlite3.Connection, matiere_id: int) -> None:
     )
 
 
-def supprimer_de_la_reception(conn: sqlite3.Connection, reception_id: int,
-                              codes: Optional[List[str]] = None) -> int:
-    """Retire les bobines creees par une reception qu'on annule.
+def annuler_de_la_reception(conn: sqlite3.Connection, reception_id: int,
+                            codes: Optional[List[str]] = None,
+                            par: Optional[str] = None,
+                            motif: Optional[str] = None) -> int:
+    """Sort du stock les bobines creees par une reception qu'on annule.
 
-    Seules les bobines ENCORE EN STOCK partent : une bobine deja consommee a
-    servi en production, et effacer sa ligne effacerait la seule trace de ce qui
-    est parti chez un client. Elle reste, avec sa reception detachee.
+    Deux changements par rapport a la version qui SUPPRIMAIT ces lignes.
+
+    1. **La bobine ne disparait plus, elle passe en etat `annulee`.** Une bobine
+       supprimee emportait la seule trace d'un code-barres qui a pu circuler
+       dans l'atelier, et qu'un conducteur peut encore scanner demain. L'etat
+       la sort de tous les comptages sans effacer qu'elle a existe.
+    2. **La bobine deja consommee GARDE sa reception.** L'ancienne version lui
+       mettait `reception_id = NULL` pour ne pas laisser de renvoi vers une
+       ligne supprimee. La ligne n'est plus supprimee, et detacher une bobine
+       partie en production lui ferait perdre son origine — precisement ce
+       qu'une chaine de controle demande de ne jamais faire. C'est la reception
+       qui porte desormais son annulation, et son claim neutralise avec.
+
+    Rend le nombre de bobines sorties du stock.
     """
+    quand = _now()
     if codes is not None:
         codes_norm = [normaliser_code(c) for c in codes if normaliser_code(c)]
         if not codes_norm:
             return 0
         marques = ",".join("?" for _ in codes_norm)
         cur = conn.execute(
-            "DELETE FROM stock_bobines WHERE reception_id=? AND etat=? "
-            "AND code_barre IN (%s)" % marques,
-            [reception_id, ETAT_STOCK] + codes_norm,
+            "UPDATE stock_bobines SET etat=?, annulee_le=?, annulee_par=?, "
+            "motif_annulation=?, updated_at=? "
+            "WHERE reception_id=? AND etat=? AND code_barre IN (%s)" % marques,
+            [ETAT_ANNULEE, quand, par, motif, quand, reception_id, ETAT_STOCK] + codes_norm,
         )
-        n = cur.rowcount or 0
-        conn.execute(
-            "UPDATE stock_bobines SET reception_id=NULL, updated_at=? "
-            "WHERE reception_id=? AND etat<>? AND code_barre IN (%s)" % marques,
-            [_now(), reception_id, ETAT_STOCK] + codes_norm,
-        )
-        return n
+        return cur.rowcount or 0
 
     cur = conn.execute(
-        "DELETE FROM stock_bobines WHERE reception_id=? AND etat=?",
-        (reception_id, ETAT_STOCK),
+        "UPDATE stock_bobines SET etat=?, annulee_le=?, annulee_par=?, "
+        "motif_annulation=?, updated_at=? WHERE reception_id=? AND etat=?",
+        (ETAT_ANNULEE, quand, par, motif, quand, reception_id, ETAT_STOCK),
     )
-    n = cur.rowcount or 0
-    conn.execute(
-        "UPDATE stock_bobines SET reception_id=NULL, updated_at=? "
-        "WHERE reception_id=? AND etat<>?",
-        (_now(), reception_id, ETAT_STOCK),
-    )
-    return n
+    return cur.rowcount or 0
 
 
 # ── Consommation ─────────────────────────────────────────────────────────────
@@ -396,10 +407,17 @@ def lister(
         where.append("b.laize_id = ?")
         args.append(int(laize_id))
     if etat:
-        if etat not in ETATS:
+        if etat not in ETATS_TOUS:
             raise ValueError("Etat inconnu : %r" % etat)
         where.append("b.etat = ?")
         args.append(etat)
+    else:
+        # Une bobine annulee n'est pas un etat qu'on parcourt : elle sort de la
+        # liste par defaut, et ne revient que si on la demande nommement. Sans
+        # ce filtre, l'annulation d'une reception laisserait ses bobines au
+        # milieu des autres, a l'identique.
+        where.append("b.etat <> ?")
+        args.append(ETAT_ANNULEE)
     if reception_id:
         where.append("b.reception_id = ?")
         args.append(int(reception_id))

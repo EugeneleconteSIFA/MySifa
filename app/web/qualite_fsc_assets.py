@@ -29,6 +29,7 @@ S.fsc = {
   filtre: 'tous',      // tous | a_traiter | a_controler | expiration | sans_categorie
   lecture: null,       // {done, total} pendant la lecture des certificats
   ctrl: null,          // controle en cours de saisie {id, historique}
+  lot: null,           // lot de controles en cours d'import {etape, jeton, lignes}
 };
 
 const FSC_STATUT_EXP = {
@@ -157,6 +158,10 @@ function fscRender(){
             title="Lit la licence, l'expiration et les catégories écrites sur chaque certificat. Rien n'est validé sans contrôle.">
             ${lecture ? `Lecture ${lecture.done}/${lecture.total}…` : `Lire les certificats (${aLire})`}
           </button>` : ''}
+        <button type="button" class="fsc-btn qual-write" onclick="fscOuvrirImport()"
+          title="Déposer les dossiers téléchargés sur la base publique FSC et enregistrer les contrôles en une fois">
+          Importer un contrôle
+        </button>
         <button type="button" class="btn btn-accent" onclick="fscOuvrirDossier()" title="Page de garde + tous les certificats retenus, un signet par fournisseur">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
           <span id="fsc-dossier-lbl">Dossier PDF fusionné</span>
@@ -1146,11 +1151,230 @@ async function fscApproJournal(id){
 }
 
 // ─── CSS ─────────────────────────────────────────────────────────────
+
+// ─── Import d'un lot de contrôles ─────────────────────────────────────
+//
+// Le contrôle unitaire reste la référence. Cet écran sert la campagne : les
+// dossiers d'une tournée complète, relevés le même jour sur la base FSC, entrent
+// en une fois. Rien n'est écrit avant que quelqu'un ait relu la proposition.
+
+function fscOuvrirImport(){
+  S.fsc.lot = {etape:'depot', jeton:null, lignes:[], fournisseurs:[], csv_lu:false, busy:false, resultats:null};
+  fscRenderImport();
+}
+
+async function fscAnalyserLot(){
+  const inp = document.getElementById('fsc-imp-files');
+  const fichiers = (inp && inp.files) ? Array.from(inp.files) : [];
+  if(!fichiers.length){ showToast('Aucun fichier sélectionné.', 'error'); return; }
+  const fd = new FormData();
+  fichiers.forEach(f => fd.append('fichiers', f));
+  S.fsc.lot.busy = true; fscRenderImport();
+  try{
+    const r = await api('/api/qualite/fsc/controles/import', {method:'POST', body: fd});
+    const j = await r.json().catch(() => ({}));
+    if(!r.ok){ showToast(j.detail || 'Lot refusé.', 'error'); S.fsc.lot.busy = false; fscRenderImport(); return; }
+    (j.lignes||[]).forEach(l => {
+      l.retenu = !!(l.ok && l.fournisseur_id && !l.deja_importe);
+      l.maj_fiche = true;
+      l.maj_codes = (l.ecarts||[]).some(e => e.champ !== 'fsc_date_expiration');
+    });
+    S.fsc.lot = {etape:'revue', jeton:j.jeton, lignes:j.lignes||[], fournisseurs:j.fournisseurs||[],
+                 csv_lu:!!j.csv_lu, busy:false, resultats:null};
+  }catch(e){
+    showToast('Lecture du lot impossible.', 'error');
+    S.fsc.lot.busy = false;
+  }
+  fscRenderImport();
+}
+
+function fscImportLigne(i){ return (S.fsc.lot && S.fsc.lot.lignes[i]) || null; }
+
+function fscImportSetFour(i, val){
+  const l = fscImportLigne(i); if(!l) return;
+  l.fournisseur_id = val ? parseInt(val, 10) : null;
+  l.fournisseur_nom = null;
+  l.rapprochement = val ? 'manuel' : 'aucun';
+  if(!val) l.retenu = false;
+  fscRenderImport();
+}
+
+function fscImportToggle(i, champ, on){
+  const l = fscImportLigne(i); if(!l) return;
+  l[champ] = !!on;
+  if(champ === 'retenu' && on && !l.fournisseur_id){ l.retenu = false; showToast('Choisir une fiche fournisseur d\'abord.', 'error'); }
+  fscRenderImport();
+}
+
+function fscImportTout(on){
+  (S.fsc.lot.lignes||[]).forEach(l => { l.retenu = !!(on && l.ok && l.fournisseur_id); });
+  fscRenderImport();
+}
+
+async function fscImportAppliquer(){
+  const lot = S.fsc.lot; if(!lot || !lot.jeton) return;
+  const lignes = (lot.lignes||[]).filter(l => l.retenu && l.fournisseur_id).map(l => ({
+    disque: l.disque, fournisseur_id: l.fournisseur_id,
+    maj_fiche: !!l.maj_fiche, maj_codes: !!l.maj_codes, deposer_certificat: true,
+  }));
+  if(!lignes.length){ showToast('Aucune ligne retenue.', 'error'); return; }
+  lot.busy = true; fscRenderImport();
+  try{
+    const r = await api('/api/qualite/fsc/controles/import/' + encodeURIComponent(lot.jeton) + '/appliquer',
+                        {method:'POST', headers:{'Content-Type':'application/json'},
+                         body: JSON.stringify({lignes})});
+    const j = await r.json().catch(() => ({}));
+    if(!r.ok){ showToast(j.detail || 'Import refusé.', 'error'); lot.busy = false; fscRenderImport(); return; }
+    lot.etape = 'fait'; lot.busy = false; lot.resultats = j.resultats || []; lot.importes = j.importes || 0;
+    showToast(j.importes + ' contrôle(s) enregistré(s).', 'success');
+    fscRenderImport();
+    fscLoad();
+  }catch(e){
+    showToast('Import impossible.', 'error');
+    lot.busy = false; fscRenderImport();
+  }
+}
+
+function fscImportChips(l){
+  const p = (l.portees_labels||[]).length
+    ? (l.lu.portees||[]).map(c => `<span class="fsc-claim lu">${escHtml(c)}</span>`).join(' ')
+    : '<span class="fsc-muted">portée absente du dossier</span>';
+  const c = (l.claims_labels||[]).length
+    ? (l.claims_labels||[]).map(x => `<span class="fsc-claim solid">${escHtml(x)}</span>`).join(' ')
+    : '<span class="fsc-muted">aucune allégation lue</span>';
+  return `<div class="fsc-imp-chips">${p}</div><div class="fsc-imp-chips">${c}</div>`;
+}
+
+function fscImportLigneHtml(l, i){
+  if(!l.ok){
+    return `<div class="fsc-imp-row ko">
+      <div class="fsc-imp-f">${escHtml(l.fichier)}</div>
+      <div class="fsc-imp-err">${escHtml(l.erreur||'Dossier illisible.')}</div></div>`;
+  }
+  const lu = l.lu || {};
+  const options = (S.fsc.lot.fournisseurs||[]).map(f =>
+    `<option value="${f.id}"${l.fournisseur_id===f.id?' selected':''}>${escHtml(f.nom)}${f.certificat?' · '+escHtml(f.certificat):''}</option>`).join('');
+  const cible = l.fournisseur_id && l.rapprochement !== 'manuel'
+    ? `<div class="fsc-imp-four">${escHtml(l.fournisseur_nom||'')}
+         <span class="fsc-tag-lu">par ${escHtml(l.rapprochement)}</span></div>`
+    : '';
+  const select = `<select class="fsc-in" onchange="fscImportSetFour(${i}, this.value)">
+      <option value="">— choisir une fiche —</option>${options}</select>`;
+  const ecarts = (l.ecarts||[]).map(e =>
+    `<div class="fsc-imp-ec"><span class="fsc-muted">${escHtml(e.champ)}</span>
+       <span class="fsc-mono">${escHtml(e.avant||'vide')}</span> → <span class="fsc-mono">${escHtml(e.apres)}</span></div>`).join('');
+  const avert = (l.avertissements||[]).map(a => `<div class="fsc-imp-av">${escHtml(a)}</div>`).join('');
+  return `<div class="fsc-imp-row${l.retenu?' on':''}">
+    <label class="fsc-imp-cb"><input type="checkbox" ${l.retenu?'checked':''}
+      onchange="fscImportToggle(${i}, 'retenu', this.checked)"></label>
+    <div class="fsc-imp-bd">
+      <div class="fsc-imp-hd">
+        <span class="fsc-mono">${escHtml(lu.certificat||'')}</span>
+        <span class="fsc-muted">${escHtml(lu.licence||'')}</span>
+        <span class="fsc-claim ${lu.statut_base==='valide'?'solid':'lu'}">${escHtml(lu.statut_texte||lu.statut_base||'')}</span>
+        ${l.deja_importe?'<span class="fsc-tag-lu">déjà importé</span>':''}
+      </div>
+      <div class="fsc-imp-tit">${escHtml(lu.titulaire||'')}</div>
+      <div class="fsc-imp-meta">
+        <span>Expiration <b>${lu.date_expiration_lue?fmtDate(lu.date_expiration_lue):'—'}</b></span>
+        <span>Contrôle <b>${lu.signe_le?fmtDate(lu.signe_le):'date absente'}</b></span>
+        <span class="fsc-muted">${escHtml(l.fichier)}</span>
+      </div>
+      ${fscImportChips(l)}
+      ${cible}${select}
+      ${ecarts ? `<div class="fsc-imp-ecs"><div class="fsc-field-t">Ce que l'import corrigerait</div>${ecarts}
+        <label class="fsc-check${l.maj_fiche?' on':''}"><input type="checkbox" ${l.maj_fiche?'checked':''}
+          onchange="fscImportToggle(${i}, 'maj_fiche', this.checked)">Reporter l'expiration sur la fiche</label>
+        <label class="fsc-check${l.maj_codes?' on':''}"><input type="checkbox" ${l.maj_codes?'checked':''}
+          onchange="fscImportToggle(${i}, 'maj_codes', this.checked)">Corriger licence et code de certificat</label></div>` : ''}
+      ${avert ? `<div class="fsc-imp-avs">${avert}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+function fscRenderImport(){
+  const lot = S.fsc.lot; if(!lot){ return; }
+  let corps = '';
+  let pied = `<button type="button" class="fsc-btn" onclick="closeMroot()">Fermer</button>`;
+
+  if(lot.etape === 'depot'){
+    corps = `<div class="fsc-etape"><div class="fsc-etape-num">1</div><div class="fsc-etape-bd">
+        <div class="fsc-etape-t">Déposer les dossiers téléchargés sur la base FSC</div>
+        <div class="fsc-hint">Les FSC Certification Records en PDF, et si vous l'avez le CSV du lot.
+          Tout est lu dans les dossiers : la date du contrôle est l'horodatage de la signature FSC, pas la date du jour.
+          Le CSV ne sert qu'à nommer les fournisseurs.</div>
+        <div class="fsc-form"><label class="fsc-field grow"><span>Fichiers du lot</span>
+          <input type="file" id="fsc-imp-files" multiple accept=".pdf,.csv"></label></div>
+      </div></div>`;
+    pied = `<button type="button" class="fsc-btn" onclick="closeMroot()">Annuler</button>
+      <button type="button" class="btn btn-accent" onclick="fscAnalyserLot()" ${lot.busy?'disabled':''}>
+        ${lot.busy?'Lecture…':'Lire le lot'}</button>`;
+  } else if(lot.etape === 'revue'){
+    const retenus = (lot.lignes||[]).filter(l => l.retenu).length;
+    const sansFiche = (lot.lignes||[]).filter(l => l.ok && !l.fournisseur_id).length;
+    corps = `
+      <div class="fsc-imp-bar">
+        <span>${lot.lignes.length} dossier(s) lu(s) · ${retenus} retenu(s)${lot.csv_lu?' · CSV pris en compte':''}</span>
+        <span>
+          <button type="button" class="fsc-btn sm" onclick="fscImportTout(true)">Tout retenir</button>
+          <button type="button" class="fsc-btn sm" onclick="fscImportTout(false)">Aucun</button>
+        </span>
+      </div>
+      ${sansFiche ? `<div class="fsc-note warn">${sansFiche} dossier(s) sans fiche rapprochée — choisir la fiche ou les laisser de côté.</div>` : ''}
+      ${(lot.lignes||[]).map((l, i) => fscImportLigneHtml(l, i)).join('')}`;
+    pied = `<button type="button" class="fsc-btn" onclick="closeMroot()">Annuler</button>
+      <button type="button" class="btn btn-accent" onclick="fscImportAppliquer()" ${(lot.busy||!retenus)?'disabled':''}>
+        ${lot.busy?'Import…':'Importer '+retenus+' contrôle(s)'}</button>`;
+  } else {
+    corps = `<div class="fsc-note">${lot.importes} contrôle(s) enregistré(s).</div>` +
+      (lot.resultats||[]).map(r => r.ok
+        ? `<div class="fsc-imp-res">${escHtml(r.fournisseur_nom||'')}
+             ${r.fiche_maj?'<span class="fsc-tag-lu">expiration mise à jour</span>':''}
+             ${r.codes_corriges?'<span class="fsc-tag-lu">codes corrigés</span>':''}
+             ${r.registre_lignes_reprises?`<span class="fsc-muted">${r.registre_lignes_reprises} ligne(s) de registre reprise(s)</span>`:''}</div>`
+        : `<div class="fsc-imp-res ko">${escHtml(r.erreur||'')}</div>`).join('');
+  }
+
+  _refMroot().innerHTML = `
+    <div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
+      <div class="modal fsc-modal fsc-modal-import">
+        <div class="modal-hd">
+          <h3>Importer un contrôle</h3>
+          <button class="modal-x" onclick="closeMroot()">&times;</button>
+        </div>
+        <div class="modal-bd">${corps}</div>
+        <div class="modal-ft">${pied}</div>
+      </div>
+    </div>`;
+}
+
 (function injectFscCSS(){
   if(document.getElementById('fsc-css')) return;
   const st = document.createElement('style');
   st.id = 'fsc-css';
   st.textContent = `
+  .fsc-modal-import{max-width:900px}
+  .fsc-imp-bar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
+    padding:8px 0 12px;font-size:12px;color:var(--text2);font-weight:600}
+  .fsc-imp-row{display:grid;grid-template-columns:28px 1fr;gap:10px;padding:12px;border:1px solid var(--border);
+    border-radius:10px;background:var(--card);margin-bottom:8px}
+  .fsc-imp-row.on{border-color:var(--accent);background:var(--accent-bg)}
+  .fsc-imp-row.ko{grid-template-columns:1fr;border-color:var(--danger)}
+  .fsc-imp-cb{display:flex;align-items:flex-start;justify-content:center;padding-top:2px}
+  .fsc-imp-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}
+  .fsc-imp-tit{font-size:13px;font-weight:700;color:var(--text);margin:2px 0}
+  .fsc-imp-meta{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--text2);margin-bottom:6px}
+  .fsc-imp-chips{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:5px}
+  .fsc-imp-four{font-size:12px;font-weight:700;color:var(--text);margin:4px 0}
+  .fsc-imp-ecs{margin-top:8px;padding:8px;border:1px dashed var(--border);border-radius:8px}
+  .fsc-imp-ec{font-size:11.5px;color:var(--text2);margin-bottom:3px}
+  .fsc-imp-avs{margin-top:8px;display:flex;flex-direction:column;gap:4px}
+  .fsc-imp-av{font-size:11.5px;color:var(--warn);font-weight:600}
+  .fsc-imp-err{font-size:12px;color:var(--danger);font-weight:600}
+  .fsc-imp-f{font-size:12px;font-weight:700;margin-bottom:3px}
+  .fsc-imp-res{font-size:12px;padding:6px 0;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .fsc-imp-res.ko{color:var(--danger)}
+
   .fsc-hero{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px;margin-bottom:14px;
     display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
   .fsc-hero-txt{flex:1;min-width:240px}

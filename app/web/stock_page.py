@@ -17163,6 +17163,41 @@ function recepFscTypeRequiresCert(claim) {
   return (claim || 'non_fsc') !== 'non_fsc';
 }
 
+/* Une réception ne se supprime plus : elle s'annule, et la ligne reste.
+ * Les bobines d'une réception peuvent être déjà montées en production — effacer
+ * la réception effaçait leur origine. Le stock est défalqué comme avant, mais
+ * la trace subsiste, avec qui a annulé et pourquoi. Le motif est obligatoire :
+ * une annulation sans raison ne vaut rien six mois plus tard, devant un
+ * auditeur qui demande ce qu'est devenu ce lot. */
+async function annulerReceptionLot(lot, apres) {
+  const nb = lot.nb_bobines || 0;
+  const label = lot.lot_numero || ('réception #' + lot.id);
+  if (!confirm('Annuler ' + label + ' (' + nb + ' bobine' + (nb !== 1 ? 's' : '') + ') ?'
+      + '\n\nLe stock sera défalqué et l\'allégation FSC ne vaudra plus.'
+      + '\nLa réception reste dans l\'historique, marquée annulée.')) return false;
+  const motif = (prompt('Motif de l\'annulation (obligatoire) :', '') || '').trim();
+  if (!motif) {
+    showToast('Motif obligatoire — annulation abandonnée.', 'error');
+    return false;
+  }
+  try {
+    await api('/api/stock/receptions/' + lot.id + '?motif=' + encodeURIComponent(motif),
+              { method: 'DELETE' });
+    showToast('Réception annulée.', 'success');
+    if (S.recepExpandedId === lot.id) S.recepExpandedId = null;
+    await loadRecepHistory();
+    if (typeof apres === 'function') apres();
+    return true;
+  } catch (err) {
+    showToast('Erreur : ' + (err.message || 'annulation impossible'), 'error');
+    return false;
+  }
+}
+
+function receptionAnnulee(lot) {
+  return !!(lot && lot.annulee_le);
+}
+
 /* ── Registre FSC : désigner la livraison, pas déclarer l'allégation ──────
  *
  * Sous chaîne de contrôle, le magasin ne choisit plus « FSC Mix » dans une
@@ -18401,22 +18436,24 @@ async function recepDeleteBobine(lot, bobine, btn) {
         ? '\n\nBobine entrée par une liste de traçabilité : le compteur de stock ne bouge pas.'
         : '\n\nCette bobine n\'est rattachée à aucune matière : le stock ne bouge pas.');
   const dernier = (lot.bobines && lot.bobines.length === 1)
-    ? '\nC\'est la dernière bobine : le lot sera supprimé de l\'historique.'
+    ? '\nC\'est la dernière bobine : le lot sera annulé.'
     : '';
-  if (!confirm('Supprimer la bobine ' + bobine.code_barre + ref + ' ?' + effet + dernier
-      + '\n\nCette action est irréversible.')) return;
+  if (!confirm('Retirer la bobine ' + bobine.code_barre + ref + ' de cette réception ?'
+      + effet + dernier
+      + '\n\nLa ligne est conservée, marquée retirée — rien n\'est effacé.')) return;
   if (btn) btn.disabled = true;
   try {
-    const r = await api('/api/stock/receptions/' + lot.id + '/items/' + bobine.id, { method: 'DELETE' });
+    const r = await api('/api/stock/receptions/' + lot.id + '/items/' + bobine.id,
+                        { method: 'DELETE' });
     if (r && r.ecarts && r.ecarts.length) {
-      showToast('Bobine supprimée — stock déjà consommé, quantité plafonnée à 0.', 'error');
+      showToast('Bobine retirée — stock déjà consommé, quantité plafonnée à 0.', 'error');
     } else {
-      showToast('Bobine supprimée.', 'success');
+      showToast('Bobine retirée de la réception.', 'success');
     }
     if (r && r.lot_supprime && S.recepExpandedId === lot.id) S.recepExpandedId = null;
     await loadRecepHistory();
   } catch (err) {
-    showToast('Erreur : ' + ((err && err.message) || 'suppression impossible'), 'error');
+    showToast('Erreur : ' + ((err && err.message) || 'retrait impossible'), 'error');
     if (btn) btn.disabled = false;
   }
 }
@@ -19931,24 +19968,22 @@ function buildReceptionHistorique() {
         el('span', { cls: 'recep-hist-four' }, lot.fournisseur || ''),
         el('span', { cls: 'recep-hist-user' }, lot.created_by_name || '')
       );
-      if (!S.stockReadOnly) {
+      if (receptionAnnulee(lot)) {
+        // Marquée, pas cachée : c'est ce qu'un auditeur veut pouvoir lire.
+        rowChildren.push(el('span', {
+          cls: 'recep-hist-note',
+          style: { color: 'var(--danger)', fontWeight: '700' },
+          attrs: { title: lot.motif_annulation || 'Réception annulée' },
+        }, 'Annulée le ' + String(lot.annulee_le).slice(0, 10)
+           + (lot.annulee_par ? ' par ' + lot.annulee_par : '')));
+      } else if (!S.stockReadOnly) {
         const delBtn = el('button', {
           cls: 'recep-hist-del',
-          attrs: { title: 'Supprimer la réception', 'aria-label': 'Supprimer la réception' },
+          attrs: { title: 'Annuler la réception', 'aria-label': 'Annuler la réception' },
           on: {
             click: async (e) => {
               e.stopPropagation();
-              const nb = lot.nb_bobines || 0;
-              const label = lot.lot_numero || ('réception #' + lot.id);
-              if (!confirm('Supprimer définitivement ' + label + ' (' + nb + ' bobine' + (nb !== 1 ? 's' : '') + ') ?\n\nCette action est irréversible.')) return;
-              try {
-                await api('/api/stock/receptions/' + lot.id, { method: 'DELETE' });
-                showToast('Réception supprimée.', 'success');
-                if (S.recepExpandedId === lot.id) S.recepExpandedId = null;
-                await loadRecepHistory();
-              } catch (err) {
-                showToast('Erreur : ' + (err.message || 'suppression impossible'), 'error');
-              }
+              await annulerReceptionLot(lot);
             },
           },
         }, iconEl('trash', 15));
@@ -19993,12 +20028,33 @@ function buildReceptionHistorique() {
              ' Imprimer les ' + (lot.nb_bobines || bobines.length || 1) + ' étiquettes du lot');
           detail.appendChild(reprintBtn);
         }
-        if (!S.stockReadOnly) {
+        if (receptionAnnulee(lot)) {
+          // Rien à corriger sur une réception annulée : on montre ce qui s'est
+          // passé. L'allégation qu'elle portait est rappelée — c'est la
+          // question qu'un auditeur pose devant une ligne annulée.
+          const avant = lot.fsc_claim_avant_annulation;
+          detail.appendChild(el('div', {
+            style: { fontSize: '12px', color: 'var(--danger)', fontWeight: '600', lineHeight: '1.5' },
+          }, 'Réception annulée le ' + String(lot.annulee_le).slice(0, 10)
+             + (lot.annulee_par ? ' par ' + lot.annulee_par : '')
+             + (lot.motif_annulation ? ' — ' + lot.motif_annulation : '')
+             + (avant && avant !== 'non_fsc'
+                 ? ' · allégation avant annulation : ' + (FSC_CLAIM_LABELS[avant] || avant)
+                 : '')));
+        } else if (!S.stockReadOnly) {
+          const claimVerrouille = (lot.fsc_source === 'registre');
           const editClaim = el('select', { cls: 'form-sel', style: { maxWidth: '280px' } },
             ...Object.entries(FSC_CLAIM_LABELS).map(([v, lbl]) =>
               el('option', { attrs: { value: v, selected: (lot.fsc_type_claim || 'non_fsc') === v } }, lbl)
             )
           );
+          if (claimVerrouille) {
+            // Allégation constatée sur le registre : elle se corrige sur la
+            // pièce d'origine, avec son journal. Le serveur refuse de toute
+            // façon — mieux vaut que l'écran le dise avant le clic.
+            editClaim.disabled = true;
+            editClaim.title = 'Allégation issue du registre des approvisionnements';
+          }
           // Correction d'une réception passée. Saisie libre jusqu'ici : rien
           // n'empêchait « Aveery » ou « avery dennison » de rentrer, et la
           // fiche fournisseur joignait ensuite l'historique sur ce nom.
@@ -20059,31 +20115,26 @@ function buildReceptionHistorique() {
           }, 'Enregistrer les modifications');
           detail.appendChild(el('div', { style: { fontSize: '11px', color: 'var(--muted)', fontWeight: '700', textTransform: 'uppercase' } }, 'Corriger la réception'));
           detail.appendChild(editClaim);
+          if (claimVerrouille) {
+            detail.appendChild(el('div', { style: { fontSize: '12px', color: 'var(--muted)' } },
+              'Allégation constatée sur le registre des approvisionnements — '
+              + 'elle se corrige dans MyQualité › FSC, sur la ligne du bon de livraison.'));
+          }
           detail.appendChild(editFourNode);
           detail.appendChild(editCert);
           detail.appendChild(editNote);
           detail.appendChild(saveBtn);
-          // Bouton suppression (irréversible, en bas du bloc)
+          // Annulation tracée, en bas du bloc. Rien n'est effacé.
           const deleteBtn = el('button', {
             cls: 'btn-recep btn-recep-danger',
             style: { alignSelf: 'flex-start', marginTop: '8px' },
             on: {
               click: async (e) => {
                 e.stopPropagation();
-                const nb = lot.nb_bobines || 0;
-                const label = lot.lot_numero ? lot.lot_numero : ('réception #' + lot.id);
-                if (!confirm('Supprimer définitivement ' + label + ' (' + nb + ' bobine' + (nb !== 1 ? 's' : '') + ') ?\n\nCette action est irréversible.')) return;
-                try {
-                  await api('/api/stock/receptions/' + lot.id, { method: 'DELETE' });
-                  showToast('Réception supprimée.', 'success');
-                  S.recepExpandedId = null;
-                  await loadRecepHistory();
-                } catch (err) {
-                  showToast('Erreur : ' + (err.message || 'suppression impossible'), 'error');
-                }
+                await annulerReceptionLot(lot);
               },
             },
-          }, iconEl('trash', 14), ' Supprimer la réception');
+          }, iconEl('trash', 14), ' Annuler la réception');
           detail.appendChild(deleteBtn);
         }
         if (blocBobines) detail.appendChild(blocBobines);

@@ -25,6 +25,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
+import shutil
+import uuid
 from datetime import date, datetime
 from typing import Optional
 
@@ -56,6 +59,7 @@ from app.services.fsc_classification import (
     nettoyer_liste,
 )
 from app.services.fsc_lecture_certificat import lire_certificat
+from app.services import fsc_import_controles as importlot
 from config import (
     APP_ORG_NAME,
     FSC_ALERTE_JOURS,
@@ -77,6 +81,14 @@ router = APIRouter()
 
 FSC_CONTROLES_DIR = os.path.join(UPLOAD_DIR, "qualite", "fsc-controles")
 os.makedirs(FSC_CONTROLES_DIR, exist_ok=True)
+
+# Lot déposé en attente de validation. Rien n'est écrit en base tant que
+# quelqu'un n'a pas relu la proposition ; les fichiers patientent ici.
+FSC_IMPORTS_DIR = os.path.join(UPLOAD_DIR, "qualite", "fsc-imports")
+os.makedirs(FSC_IMPORTS_DIR, exist_ok=True)
+_IMPORT_MAX_FICHIERS = 60
+_IMPORT_MAX_OCTETS = 20 * 1024 * 1024
+_IMPORT_RETENTION_H = 24
 
 # Justificatif d'un contrôle : capture ou export de la page de la base FSC.
 # Liste fermée : ces fichiers sont servis en ligne, rien d'exécutable ne passe.
@@ -947,3 +959,382 @@ def fsc_appro_journal(ligne_id: int, request: Request):
     _require_qualite_view(request)
     with get_db() as conn:
         return {"journal": registre.journal(conn, ligne_id)}
+
+
+# ══════════════════════════════════════════════════════════════════
+# Import d'un lot de contrôles
+# ══════════════════════════════════════════════════════════════════
+#
+# Le contrôle unitaire au-dessus reste la référence : une fiche, un humain, une
+# décision. Mais une campagne semestrielle, c'est dix-huit dossiers relevés le
+# même jour sur la base FSC, et les redéposer un par un revient à recopier
+# dix-huit dates d'expiration à la main. On sait ce que ça donne : sept fiches
+# sur dix-sept portaient une date fausse avant le premier import.
+#
+# Deux temps, jamais un seul : `analyse` lit le lot et propose, `appliquer`
+# écrit ce qu'un humain a validé. Entre les deux, les fichiers patientent dans
+# FSC_IMPORTS_DIR sous un jeton, avec le propriétaire du lot.
+
+
+def _import_purge() -> None:
+    """Oublie les lots qu'on n'a jamais validés. Best effort."""
+    limite = datetime.now().timestamp() - _IMPORT_RETENTION_H * 3600
+    try:
+        for nom in os.listdir(FSC_IMPORTS_DIR):
+            chemin = os.path.join(FSC_IMPORTS_DIR, nom)
+            if os.path.isdir(chemin) and os.path.getmtime(chemin) < limite:
+                shutil.rmtree(chemin, ignore_errors=True)
+    except OSError:
+        pass
+
+
+def _import_dossier(jeton: str) -> str:
+    """Dossier du lot. Le jeton est validé — il vient de l'URL."""
+    if not re.fullmatch(r"[0-9a-f]{32}", jeton or ""):
+        raise HTTPException(status_code=404, detail="Lot introuvable.")
+    chemin = os.path.join(FSC_IMPORTS_DIR, jeton)
+    if not os.path.isdir(chemin):
+        raise HTTPException(status_code=404, detail="Lot expiré ou déjà appliqué.")
+    return chemin
+
+
+def _import_lot(jeton: str, user: dict) -> tuple[str, dict]:
+    chemin = _import_dossier(jeton)
+    try:
+        with open(os.path.join(chemin, "_lot.json"), encoding="utf-8") as fh:
+            lot = json.load(fh)
+    except OSError:
+        raise HTTPException(status_code=404, detail="Lot illisible — le redéposer.")
+    if lot.get("user_id") and user.get("id") and lot["user_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Ce lot a été déposé par quelqu'un d'autre.")
+    # Le nettoyage du dossier ne suffit pas à fermer un lot : sur un poste de
+    # développement monté depuis Windows, `unlink` est refusé et le dossier
+    # survit à la purge. C'est le marqueur en JSON qui fait foi, pas le disque.
+    if lot.get("applique_le"):
+        raise HTTPException(status_code=409,
+                            detail="Ce lot a déjà été importé le %s." % lot["applique_le"])
+    return chemin, lot
+
+
+def _avertissements(lu: dict, fiche: Optional[dict]) -> list[str]:
+    out: list[str] = []
+    statut = lu.get("statut_base")
+    if statut != "valide":
+        out.append("Certificat %s sur la base FSC." % FSC_STATUTS_BASE.get(statut, statut))
+    exp = lu.get("date_expiration_lue")
+    if exp:
+        try:
+            reste = (datetime.strptime(exp, "%Y-%m-%d").date() - date.today()).days
+            if reste < 0:
+                out.append("Certificat expiré depuis le %s." % exp)
+            elif reste <= FSC_ALERTE_JOURS:
+                out.append("Expire dans %s jours (%s)." % (reste, exp))
+        except ValueError:
+            pass
+    if "fsc_controlled_wood" in (lu.get("claims") or []):
+        out.append("FSC Controlled Wood autorisé — aucune allégation possible sur le produit fini.")
+    if fiche:
+        achetees = _json_list(fiche.get("fsc_portees_achetees"))
+        manquantes = [c for c in achetees if not importlot.couvre_portee(lu.get("portees") or [], c)]
+        if achetees and manquantes:
+            out.append("Portée non couverte pour ce que SIFA achète : %s." % ", ".join(manquantes))
+        nom = (fiche.get("nom") or "").strip().lower()
+        titulaire = (lu.get("titulaire") or "").strip().lower()
+        if nom and titulaire and nom not in titulaire:
+            out.append("Titulaire du certificat : %s" % (lu.get("titulaire") or "").rstrip("."))
+    if lu.get("sites_expires"):
+        out.append("%s site(s) expiré(s) au certificat — vérifier l'entité qui facture SIFA."
+                   % lu["sites_expires"])
+    for a in lu.get("avertissements") or []:
+        out.append(a)
+    return out
+
+
+@router.post("/api/qualite/fsc/controles/import")
+async def fsc_import_analyser(request: Request, fichiers: list[UploadFile] = File(...)):
+    """Dépose un lot de dossiers FSC et rend la proposition, sans rien écrire.
+
+    Les PDF sont les FSC Certification Records signés ; le CSV qui les
+    accompagne est facultatif et n'apporte que le libellé du fournisseur et la
+    décision de le garder ou non dans la liste. Aucune valeur du CSV ne
+    remplace une valeur lue dans un dossier.
+    """
+    user = _require_qualite_access(request)
+    _import_purge()
+    if len(fichiers) > _IMPORT_MAX_FICHIERS:
+        raise HTTPException(status_code=400,
+                            detail="Lot trop gros — %s fichiers maximum." % _IMPORT_MAX_FICHIERS)
+
+    jeton = uuid.uuid4().hex
+    chemin = os.path.join(FSC_IMPORTS_DIR, jeton)
+    os.makedirs(chemin, exist_ok=True)
+
+    meta_csv: dict[str, dict] = {}
+    pdfs: list[tuple[str, str]] = []  # (nom d'origine, nom sur disque)
+    for i, f in enumerate(fichiers):
+        if not f or not f.filename:
+            continue
+        original = _sanitize_filename(f.filename)
+        contenu = await f.read()
+        if len(contenu) > _IMPORT_MAX_OCTETS:
+            shutil.rmtree(chemin, ignore_errors=True)
+            raise HTTPException(status_code=400, detail="%s dépasse 20 Mo." % original)
+        ext = original.rsplit(".", 1)[-1].lower() if "." in original else ""
+        if ext == "csv":
+            meta_csv.update(importlot.lire_csv(contenu))
+            continue
+        if ext != "pdf":
+            continue
+        disque = "%03d.pdf" % i
+        with open(os.path.join(chemin, disque), "wb") as fh:
+            fh.write(contenu)
+        pdfs.append((original, disque))
+
+    if not pdfs:
+        shutil.rmtree(chemin, ignore_errors=True)
+        raise HTTPException(status_code=400, detail="Aucun dossier PDF dans le lot.")
+
+    with get_db() as conn:
+        fiches = [dict(r) for r in conn.execute(
+            """SELECT id, nom, licence, certificat, fsc_date_expiration, fsc_portees_achetees, has_fsc
+                 FROM fournisseurs_fsc WHERE actif=1 ORDER BY has_fsc DESC, nom"""
+        ).fetchall()]
+        deja = {(r["fournisseur_id"], r["date_controle"][:10])
+                for r in conn.execute(
+                    "SELECT fournisseur_id, date_controle FROM qualite_fsc_controles").fetchall()}
+
+    lignes = []
+    for original, disque in pdfs:
+        with open(os.path.join(chemin, disque), "rb") as fh:
+            lu = importlot.lire_record(fh.read())
+        if not lu.get("ok"):
+            lignes.append({"fichier": original, "disque": disque, "ok": False,
+                           "erreur": lu.get("erreur"), "avertissements": []})
+            continue
+        info = meta_csv.get((lu.get("certificat") or "").upper(), {})
+        fiche, methode = importlot.rapprocher(fiches, lu, info.get("fournisseur"))
+        lignes.append({
+            "fichier": original,
+            "disque": disque,
+            "ok": True,
+            "erreur": None,
+            "lu": lu,
+            "claims_labels": _claims_labels(lu.get("claims") or []),
+            "portees_labels": _portees_labels(lu.get("portees") or []),
+            "fournisseur_id": fiche["id"] if fiche else None,
+            "fournisseur_nom": fiche["nom"] if fiche else None,
+            "rapprochement": methode,
+            "csv": info or None,
+            "ecarts": importlot.ecarts(fiche, lu),
+            "avertissements": _avertissements(lu, fiche),
+            "deja_importe": bool(fiche and (fiche["id"], lu.get("signe_le")) in deja),
+        })
+
+    lot = {"user_id": user.get("id"), "cree_le": _now(), "lignes": lignes}
+    with open(os.path.join(chemin, "_lot.json"), "w", encoding="utf-8") as fh:
+        json.dump(lot, fh, ensure_ascii=False)
+
+    return {
+        "jeton": jeton,
+        "lignes": lignes,
+        "fournisseurs": [{"id": f["id"], "nom": f["nom"], "certificat": f["certificat"]}
+                         for f in fiches],
+        "csv_lu": bool(meta_csv),
+    }
+
+
+@router.post("/api/qualite/fsc/controles/import/{jeton}/appliquer")
+def fsc_import_appliquer(jeton: str, body: dict, request: Request):
+    """Écrit les contrôles validés du lot.
+
+    Une ligne validée produit trois choses : le dossier déposé en pièce sur la
+    fiche fournisseur, un contrôle daté de la signature FSC et jamais écrasé,
+    et — si on le demande — la correction de la fiche elle-même.
+
+    La correction des codes est le seul ajout par rapport au contrôle unitaire,
+    et c'est la raison d'être de l'écran : une fiche dont le code de certificat
+    est faux ne se répare pas en relisant son certificat, puisque c'est par ce
+    code qu'on croit l'avoir contrôlée.
+    """
+    user = _require_qualite_access(request)
+    chemin, lot = _import_lot(jeton, user)
+    par_fichier = {l["disque"]: l for l in lot.get("lignes") or []}
+
+    demandes = (body or {}).get("lignes")
+    if not isinstance(demandes, list) or not demandes:
+        raise HTTPException(status_code=400, detail="Aucune ligne à importer.")
+
+    fiche_fsc = None
+    resultats, ecrits = [], 0
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM qualite_ref_fiches WHERE slug=?", (FSC_FICHE_SLUG,)).fetchone()
+        fiche_fsc = row["id"] if row else None
+
+        for d in demandes:
+            disque = (d or {}).get("disque")
+            ligne = par_fichier.get(disque)
+            if not ligne or not ligne.get("ok"):
+                resultats.append({"disque": disque, "ok": False, "erreur": "Ligne inconnue dans ce lot."})
+                continue
+            four_id = d.get("fournisseur_id") or ligne.get("fournisseur_id")
+            if not four_id:
+                resultats.append({"disque": disque, "ok": False,
+                                  "erreur": "Aucune fiche fournisseur rapprochée."})
+                continue
+            four = conn.execute(
+                "SELECT id, nom, licence, certificat, fsc_date_expiration FROM fournisseurs_fsc WHERE id=?",
+                (int(four_id),),
+            ).fetchone()
+            if not four:
+                resultats.append({"disque": disque, "ok": False, "erreur": "Fournisseur introuvable."})
+                continue
+
+            lu = ligne["lu"]
+            jour = lu.get("signe_le") or _iso(d.get("date_controle")) or date.today().isoformat()
+            if not d.get("forcer") and conn.execute(
+                """SELECT 1 FROM qualite_fsc_controles
+                    WHERE fournisseur_id=? AND date_controle=? AND COALESCE(licence,'')=?""",
+                (four["id"], jour, lu.get("licence") or four["licence"] or ""),
+            ).fetchone():
+                resultats.append({"disque": disque, "ok": False, "fournisseur_nom": four["nom"],
+                                  "erreur": "Un contrôle du %s existe déjà pour ce certificat." % jour})
+                continue
+            if jour > date.today().isoformat():
+                resultats.append({"disque": disque, "ok": False,
+                                  "erreur": "Date de contrôle dans le futur."})
+                continue
+            source = os.path.join(chemin, disque)
+            if not os.path.isfile(source):
+                resultats.append({"disque": disque, "ok": False, "erreur": "Fichier absent du lot."})
+                continue
+            with open(source, "rb") as fh:
+                contenu = fh.read()
+
+            claims = [c for c in (lu.get("claims") or []) if c in FSC_CLAIMS_PORTEE]
+            portees = nettoyer_liste(lu.get("portees") or [])
+            horo = datetime.now().strftime("%Y%m%d%H%M%S%f")
+
+            # 1. Le dossier entre en pièce sur la fiche, avec sa lecture.
+            cert_id = None
+            if d.get("deposer_certificat", True):
+                nom_disque = "fsc_record_%s_%s.pdf" % (four["id"], horo)
+                with open(os.path.join(RESSOURCES_UPLOAD_DIR, nom_disque), "wb") as fh:
+                    fh.write(contenu)
+                conn.execute(
+                    """INSERT INTO qualite_fournisseur_certificats
+                         (fournisseur_id, filename, original_name, mime_type, size_bytes,
+                          titre, date_emission, date_expiration, commentaire, uploaded_at, uploaded_by,
+                          fsc_lecture_le, fsc_lecture_methode, fsc_licence_lue, fsc_certificat_lu,
+                          fsc_expiration_lue, fsc_claims_lus, fsc_portees_lues, fsc_lecture_note)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        four["id"], nom_disque, ligne["fichier"], "application/pdf", len(contenu),
+                        "FSC Certification Record · %s" % (lu.get("certificat") or ""),
+                        lu.get("date_premiere_emission"), lu.get("date_expiration_lue"),
+                        "Dossier officiel téléchargé sur la base publique FSC le %s." % jour,
+                        _now(), user.get("id"),
+                        _now(), "dossier_fsc", lu.get("licence"), lu.get("certificat"),
+                        lu.get("date_expiration_lue"),
+                        json.dumps([{"code": c} for c in claims], ensure_ascii=False),
+                        json.dumps([{"code": p} for p in portees], ensure_ascii=False),
+                        "Lu dans le FSC Certification Record signé le %s." % (lu.get("signe_horodatage") or jour),
+                    ),
+                )
+                cert_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+                if fiche_fsc:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO qualite_fournisseur_certificat_fiches (certificat_id, fiche_id) VALUES (?,?)",
+                        (cert_id, fiche_fsc),
+                    )
+
+            # 2. Le même dossier sert de justificatif au contrôle : la preuve
+            #    doit rester attachée même si la pièce est retirée un jour.
+            justif = "fsc_ctrl_%s_%s.pdf" % (four["id"], horo)
+            with open(os.path.join(FSC_CONTROLES_DIR, justif), "wb") as fh:
+                fh.write(contenu)
+
+            ancienne = (four["fsc_date_expiration"] or "")[:10] or None
+            expiration = lu.get("date_expiration_lue")
+            maj = bool(d.get("maj_fiche", True))
+            fiche_maj = 1 if (maj and expiration and expiration != ancienne) else 0
+
+            conn.execute(
+                """INSERT INTO qualite_fsc_controles
+                     (fournisseur_id, date_controle, statut_base, licence, date_expiration_lue, claims,
+                      portees, source, certificat_id, note, justificatif_filename, justificatif_original,
+                      justificatif_mime, fiche_maj, ancienne_expiration, created_at, created_by, created_by_nom)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    four["id"], jour, lu.get("statut_base") or "introuvable",
+                    lu.get("licence") or four["licence"], expiration,
+                    json.dumps(claims), json.dumps(portees),
+                    "base_fsc", cert_id,
+                    (d.get("note") or "").strip()
+                    or "Import de lot · dossier signé FSC le %s." % (lu.get("signe_horodatage") or jour),
+                    justif, ligne["fichier"], "application/pdf",
+                    fiche_maj, ancienne if fiche_maj else None,
+                    _now(), user.get("id"), user.get("nom"),
+                ),
+            )
+            ctrl_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+
+            # 3. La fiche. L'expiration suit le contrôle unitaire ; les codes ne
+            #    bougent que si on l'a demandé, et l'avant/après part au journal.
+            champs, valeurs, codes_avant = [], [], {}
+            if fiche_maj:
+                champs.append("fsc_date_expiration=?")
+                valeurs.append(expiration)
+            if d.get("maj_codes") and lu.get("licence") and lu["licence"] != (four["licence"] or None):
+                codes_avant["licence"] = four["licence"]
+                champs.append("licence=?")
+                valeurs.append(lu["licence"])
+            if d.get("maj_codes") and lu.get("certificat") and lu["certificat"] != (four["certificat"] or None):
+                codes_avant["certificat"] = four["certificat"]
+                champs.append("certificat=?")
+                valeurs.append(lu["certificat"])
+            if champs:
+                champs.append("updated_at=?")
+                valeurs.append(_now())
+                valeurs.append(four["id"])
+                conn.execute("UPDATE fournisseurs_fsc SET %s WHERE id=?" % ", ".join(champs), valeurs)
+            conn.commit()
+
+            try:
+                reprises = registre.reprendre_portee(conn, four["id"], user.get("nom"))
+            except Exception:
+                logger.warning("Reprise de portée du registre FSC échouée", exc_info=True)
+                reprises = 0
+
+            log_action(
+                user=user, action="VALIDATE", module="qualite", request=request,
+                objet="Contrôle FSC importé · %s · %s" % (four["nom"], lu.get("certificat") or ""),
+                detail={
+                    "controle_id": ctrl_id, "certificat_id": cert_id, "lot": jeton,
+                    "fichier": ligne["fichier"], "date_controle": jour,
+                    "signature_fsc": lu.get("signe_horodatage"),
+                    "statut_base": lu.get("statut_base"),
+                    "claims": claims, "portees": portees,
+                    "fiche_expiration": {"avant": ancienne, "apres": expiration} if fiche_maj else None,
+                    "fiche_codes": codes_avant or None,
+                    "registre_lignes_reprises": reprises,
+                },
+            )
+            ecrits += 1
+            resultats.append({
+                "disque": disque, "ok": True, "controle_id": ctrl_id, "certificat_id": cert_id,
+                "fournisseur_id": four["id"], "fournisseur_nom": four["nom"],
+                "fiche_maj": bool(fiche_maj), "codes_corriges": codes_avant or None,
+                "registre_lignes_reprises": reprises,
+            })
+
+    if ecrits:
+        lot["applique_le"] = _now()
+        lot["resultats"] = resultats
+        try:
+            with open(os.path.join(chemin, "_lot.json"), "w", encoding="utf-8") as fh:
+                json.dump(lot, fh, ensure_ascii=False)
+        except OSError:
+            logger.warning("Marquage du lot FSC %s impossible", jeton, exc_info=True)
+    if ecrits and all(r.get("ok") for r in resultats):
+        shutil.rmtree(chemin, ignore_errors=True)
+    return {"importes": ecrits, "resultats": resultats}

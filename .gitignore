@@ -26,6 +26,10 @@ app/data/*.db-*
 *.db-shm
 *.db-wal
 mysifa.db
+
+# Fichiers deposes par les utilisateurs a l'execution (certificats fournisseurs,
+# justificatifs de controle, lots d'import). Donnee d'exploitation, jamais du code.
+data/uploads/
 production.db
 
 # Widget Electron (build local — upload via deploy.sh --widget)
