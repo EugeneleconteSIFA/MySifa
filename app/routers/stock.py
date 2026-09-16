@@ -4661,25 +4661,82 @@ def _defalquer_bobines(conn, bobines, lot_numero, user, motif: str) -> dict:
             "bobines_tracabilite": ignorees_traca}
 
 
-@router.delete("/api/stock/receptions/{reception_id}")
-def delete_reception(reception_id: int, request: Request):
-    """Supprime une réception + ses items, et défalque le stock (irréversible).
+def _archiver_items_reception(conn, reception_id: int, quand: str,
+                              qui: Optional[str], motif: Optional[str],
+                              item_id: Optional[int] = None) -> int:
+    """Déplace les items d'une réception annulée vers leur archive.
 
-    Jusqu'ici cette route supprimait les lignes sans jamais reprendre les
-    entrées de stock créées à la réception : chaque suppression laissait du
-    stock fantôme. Elle passe désormais par `_defalquer_bobines`, comme la
-    suppression bobine par bobine — les deux boutons ne peuvent plus se
-    contredire.
+    Pourquoi changer de table plutôt que poser un drapeau sur place : une
+    vingtaine de requêtes, dans six fichiers, résolvent un code-barres en
+    remontant `stock_reception_items`. Un drapeau supposerait qu'elles le lisent
+    toutes — en oublier une, c'est laisser un code-barres annulé revendiquer
+    l'origine d'une réception qui ne vaut plus. La ligne quitte donc réellement
+    le journal des événements, et reste intégralement lisible à côté.
+
+    Rend le nombre de lignes archivées.
+    """
+    where, params = "reception_id=?", [int(reception_id)]
+    if item_id is not None:
+        where += " AND id=?"
+        params.append(int(item_id))
+    conn.execute(
+        """INSERT OR REPLACE INTO stock_reception_items_annules
+             (id, reception_id, code_barre, scanned_at, matiere_id, laize_id,
+              doublon_note, impacte_stock, annule_le, annule_par, motif)
+           SELECT id, reception_id, code_barre, scanned_at, matiere_id, laize_id,
+                  doublon_note, impacte_stock, ?, ?, ?
+             FROM stock_reception_items WHERE """ + where,
+        [quand, qui, motif, *params],
+    )
+    cur = conn.execute("DELETE FROM stock_reception_items WHERE " + where, params)
+    return cur.rowcount or 0
+
+
+@router.delete("/api/stock/receptions/{reception_id}")
+def delete_reception(reception_id: int, request: Request, motif: str = ""):
+    """Annule une réception : le stock est défalqué, la ligne reste.
+
+    Deux corrections successives sur cette route. La première : elle supprimait
+    les lignes sans reprendre les entrées de stock créées à la réception, et
+    laissait du stock fantôme — c'est `_defalquer_bobines` qui règle ça, comme
+    la suppression bobine par bobine.
+
+    La seconde, celle-ci : elle EFFAÇAIT. Or `stock_reception_items` est le
+    journal qui fait preuve d'origine pour la chaîne FSC, et les bobines d'une
+    réception supprimée peuvent être déjà montées en production — leur origine
+    partait avec. La réception reste donc en base, marquée annulée, et son
+    allégation est neutralisée : une vingtaine de requêtes, dans six fichiers,
+    remontent d'un code-barres à sa réception pour en lire le claim, et les
+    neutraliser à la source vaut mieux que d'espérer les avoir toutes filtrées.
+    Les items partent dans leur archive, où ils restent relisibles.
     """
     user = require_stock_write(request)
+    qui = (user.get("nom") or user.get("email") or "").strip() or None
+    motif = (motif or "").strip()[:200]
+    # Une annulation sans raison ne vaut rien en audit : six mois plus tard,
+    # personne ne sait si le lot a été refusé, ressaisi ailleurs, ou effacé par
+    # erreur. Obligatoire ici, et seulement ici — retirer UNE bobine mal scannée
+    # est un geste courant qui a son motif par défaut.
+    if not motif:
+        raise HTTPException(
+            status_code=400,
+            detail="Motif d'annulation obligatoire — indiquer pourquoi le lot est annulé.",
+        )
+    quand = _now_paris().isoformat()
     with get_db() as conn:
         ex = conn.execute(
-            "SELECT id, lot_numero, nb_bobines, fournisseur, fsc_type_claim FROM stock_receptions WHERE id=?",
+            "SELECT id, lot_numero, nb_bobines, fournisseur, fsc_type_claim, annulee_le "
+            "  FROM stock_receptions WHERE id=?",
             (reception_id,),
         ).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Réception introuvable")
         exd = dict(ex)
+        if exd.get("annulee_le"):
+            raise HTTPException(
+                status_code=409,
+                detail="Réception déjà annulée le %s." % str(exd["annulee_le"])[:10],
+            )
         bobines = conn.execute(
             "SELECT id, code_barre, matiere_id, laize_id, "
             "       COALESCE(impacte_stock, 1) AS impacte_stock "
@@ -4689,11 +4746,26 @@ def delete_reception(reception_id: int, request: Request):
         recap = _defalquer_bobines(
             conn, bobines, exd.get("lot_numero"), user, "Suppression reception"
         )
-        # Miroir de la defalque : les bobines encore en stock disparaissent,
-        # celles deja consommees restent et perdent seulement leur reception.
-        bobines_retirees = _sb.supprimer_de_la_reception(conn, reception_id)
-        conn.execute("DELETE FROM stock_reception_items WHERE reception_id=?", (reception_id,))
-        conn.execute("DELETE FROM stock_receptions WHERE id=?", (reception_id,))
+        # Miroir de la defalque : les bobines encore en stock passent en etat
+        # `annulee`, celles deja consommees GARDENT leur reception — c'est elle
+        # qui porte l'annulation, et une bobine partie en production ne doit
+        # jamais perdre son origine.
+        bobines_retirees = _sb.annuler_de_la_reception(
+            conn, reception_id, par=qui, motif=motif)
+        _archiver_items_reception(conn, reception_id, quand, qui, motif)
+        conn.execute(
+            """UPDATE stock_receptions
+                  SET annulee_le=?, annulee_par=?, motif_annulation=?,
+                      fsc_claim_avant_annulation =
+                          COALESCE(fsc_claim_avant_annulation, fsc_type_claim),
+                      fsc_type_claim='non_fsc',
+                      fsc_motif=?
+                WHERE id=?""",
+            (quand, qui, motif,
+             "Réception annulée le %s — l'allégation qu'elle portait ne vaut plus."
+             % quand[:10],
+             reception_id),
+        )
         conn.commit()
     log_action(
         user=user,
@@ -4716,14 +4788,23 @@ def delete_reception(reception_id: int, request: Request):
 
 
 @router.delete("/api/stock/receptions/{reception_id}/items/{item_id}")
-def delete_reception_item(reception_id: int, item_id: int, request: Request):
-    """Supprime UNE bobine d'une réception et défalque le stock correspondant.
+def delete_reception_item(reception_id: int, item_id: int, request: Request,
+                          motif: str = ""):
+    """Retire UNE bobine d'une réception et défalque le stock correspondant.
 
-    Sert à corriger une bobine scannée par erreur sans avoir à supprimer —
-    puis ressaisir — tout le lot. Si c'était la dernière bobine, le lot est
-    supprimé aussi : un lot à 0 bobine n'a plus d'objet dans l'historique.
+    Sert à corriger une bobine scannée par erreur sans avoir à reprendre — puis
+    ressaisir — tout le lot. Si c'était la dernière, le lot est annulé : un lot
+    à zéro bobine n'a plus d'objet, mais il a existé et sa trace reste.
+
+    Retirer n'efface pas. L'item part dans `stock_reception_items_annules` avec
+    qui l'a retiré et pourquoi, et la bobine passe en état `annulee`. Un
+    code-barres a pu circuler dans l'atelier avant qu'on s'aperçoive de
+    l'erreur ; effacer sa ligne, c'est se priver de l'expliquer.
     """
     user = require_stock_write(request)
+    qui = (user.get("nom") or user.get("email") or "").strip() or None
+    motif = (motif or "").strip()[:200] or "Bobine scannée par erreur"
+    quand = _now_paris().isoformat()
     with get_db() as conn:
         lot = conn.execute(
             "SELECT id, lot_numero, nb_bobines, fournisseur FROM stock_receptions WHERE id=?",
@@ -4743,8 +4824,9 @@ def delete_reception_item(reception_id: int, item_id: int, request: Request):
         recap = _defalquer_bobines(
             conn, [bob], lot["lot_numero"], user, "Suppression bobine"
         )
-        _sb.supprimer_de_la_reception(conn, reception_id, codes=[bob["code_barre"]])
-        conn.execute("DELETE FROM stock_reception_items WHERE id=?", (item_id,))
+        _sb.annuler_de_la_reception(conn, reception_id, codes=[bob["code_barre"]],
+                                    par=qui, motif=motif)
+        _archiver_items_reception(conn, reception_id, quand, qui, motif, item_id=item_id)
 
         # `nb_bobines` est un compteur dénormalisé : on le recale sur le compte
         # réel plutôt que de faire -1, pour qu'un éventuel décalage se corrige.
@@ -4754,7 +4836,21 @@ def delete_reception_item(reception_id: int, item_id: int, request: Request):
         ).fetchone()["c"]
         lot_supprime = restant == 0
         if lot_supprime:
-            conn.execute("DELETE FROM stock_receptions WHERE id=?", (reception_id,))
+            # Plus aucune bobine : le lot n'a plus d'objet, mais il a existé.
+            # Il est annulé, pas effacé — et son allégation avec.
+            conn.execute(
+                """UPDATE stock_receptions
+                      SET nb_bobines=0, annulee_le=?, annulee_par=?, motif_annulation=?,
+                          fsc_claim_avant_annulation =
+                              COALESCE(fsc_claim_avant_annulation, fsc_type_claim),
+                          fsc_type_claim='non_fsc',
+                          fsc_motif=?
+                    WHERE id=?""",
+                (quand, qui, motif or "Dernière bobine retirée",
+                 "Réception vidée de ses bobines le %s — l'allégation ne vaut plus."
+                 % quand[:10],
+                 reception_id),
+            )
         else:
             conn.execute(
                 "UPDATE stock_receptions SET nb_bobines=? WHERE id=?",
@@ -4904,6 +5000,24 @@ async def bobine_corriger(bobine_id: int, request: Request):
         b = conn.execute("SELECT * FROM stock_bobines WHERE id=?", (bobine_id,)).fetchone()
         if not b:
             raise HTTPException(404, "Bobine introuvable.")
+
+        # L'allegation FSC n'est pas une propriete de la bobine : elle vient de
+        # sa RECEPTION, et se corrige la. La liste des champs acceptes plus bas
+        # l'excluait deja, mais en silence — un appel ignore fait croire qu'il a
+        # marche, et c'est comme ca qu'on decouvre six mois plus tard qu'un
+        # script "corrigeait" des claims sans rien ecrire. On refuse, en disant
+        # ou aller.
+        interdits = [c for c in ("reception_id", "fsc_type_claim", "certificat_fsc",
+                                 "fsc_source", "fsc_reception_id", "code_barre",
+                                 "annulee_le", "annulee_par")
+                     if c in body]
+        if interdits:
+            raise HTTPException(
+                409,
+                "Champ non modifiable sur une bobine : %s. L'allégation FSC et la "
+                "réception d'origine se corrigent sur la réception, jamais bobine "
+                "par bobine." % ", ".join(interdits),
+            )
 
         maj, args, detail = [], [], {}
 
