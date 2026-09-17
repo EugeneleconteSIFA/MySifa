@@ -310,6 +310,22 @@ def resoudre(conn, code: str, no_dossier: Optional[str] = None) -> Dict[str, Any
             fsc_type_claim=rec["fsc_type_claim"] or "non_fsc",
         )
 
+    # 1 bis ── La famille du code, déclarée en Paramètres. Elle passe devant
+    # l'historique : les déclarations d'atelier se contredisent (une même
+    # famille déclarée sous cinq fournisseurs), la famille, elle, a été
+    # vérifiée. Elle reste déclarative — `demontre` reste faux.
+    try:
+        from app.services import familles_code as _fc
+        fam = _fc.reconnaitre(conn, brut)
+    except Exception:
+        fam = None
+    if fam:
+        return _resultat(
+            "famille", "probable", fam["fournisseur"],
+            "La forme de ce code est celle des bobines %s." % fam["fournisseur"],
+            conn, laize_mm=fam.get("laize_mm"), famille=fam["masque"],
+        )
+
     # 2 ── Ce code exact, déjà identifié en production. Une bobine sert souvent
     # sur plusieurs dossiers : le deuxième scan n'a pas à reposer la question.
     lignes = conn.execute(

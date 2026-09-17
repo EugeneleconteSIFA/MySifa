@@ -396,6 +396,7 @@ def build_bat_spec(
     date_bat: str = "",
     lang: str = "fr",
     overrides: Optional[Dict[str, Any]] = None,
+    encres: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """Normalise fiche produit MyAO (+ fiche technique optionnelle) en spec de dessin.
  
@@ -434,7 +435,7 @@ def build_bat_spec(
     support = str(ft.get("support") or mp_label(((fiche.get("matiere") or {}).get("frontal_id"))) or "").strip()
     adhesif = mp_label(((fiche.get("matiere") or {}).get("adhesif_id")))
  
-    couleurs = _collect_colors(imp, ft)
+    couleurs = _collect_colors(imp, ft, encres)
     imprime = bool(fiche.get("impressions")) or bool(couleurs)
  
     spec: Dict[str, Any] = {
@@ -533,7 +534,8 @@ _BASIC_INKS = {
 }
  
  
-def _collect_colors(imp: Dict[str, Any], ft: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _collect_colors(imp: Dict[str, Any], ft: Dict[str, Any],
+                    encres: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
     """Couleurs de la fiche technique (pantones par tete) sinon fiche produit."""
     colors: List[Dict[str, Any]] = []
     for n in (1, 2, 3):
@@ -542,7 +544,7 @@ def _collect_colors(imp: Dict[str, Any], ft: Dict[str, Any]) -> List[Dict[str, A
         if pantone or nom:
             colors.append({
                 "label": " ".join(x for x in (pantone, nom) if x).strip(),
-                "hex": _guess_hex(nom or pantone),
+                "hex": _guess_hex(pantone, encres, fallback=nom),
                 "face": "recto",
                 "area": format_printing_area(ft.get(f"tete{n}_zone")),
             })
@@ -555,20 +557,40 @@ def _collect_colors(imp: Dict[str, Any], ft: Dict[str, Any]) -> List[Dict[str, A
                 continue
             colors.append({
                 "label": label,
-                "hex": _guess_hex(label),
+                "hex": _guess_hex(label, encres),
                 "face": face,
                 "area": format_printing_area((row or {}).get("printing_area")),
             })
     return colors
  
  
-def _guess_hex(label: str) -> str:
-    text = (label or "").strip().lower()
-    if text.startswith("#") and len(text) in (4, 7):
-        return text.upper()
-    for key, value in _BASIC_INKS.items():
-        if key in text:
-            return value
+def _guess_hex(label: str, encres: Optional[Dict[str, str]] = None,
+               fallback: str = "") -> str:
+    """Teinte ecran d'une encre.
+
+    Ordre : code hex saisi tel quel, referentiel des encres (Parametres ›
+    Fabrication › Impression, charge par l'appelant), puis noms simples.
+    ``fallback`` est une seconde designation (le nom de couleur d'une tete
+    quand la reference Pantone n'est pas connue).
+    """
+    from app.services.encres_couleurs import normaliser_hex, resoudre
+
+    for cand in (label, fallback):
+        text = (cand or "").strip()
+        if not text:
+            continue
+        if text.startswith("#"):
+            hx = normaliser_hex(text)
+            if hx:
+                return hx
+        hx = resoudre(text, encres or {})
+        if hx:
+            return hx
+    for cand in (fallback, label):
+        text = (cand or "").strip().lower()
+        for key, value in _BASIC_INKS.items():
+            if text and key in text:
+                return value
     return _PANTONE_FALLBACK
  
  
@@ -994,10 +1016,50 @@ def _print_zone_geom(spec: Dict[str, Any], g: Dict[str, Any],
     return zx, zy, zw, zh, tx_w, tx_h
 
 
-def _print_zone_rect(zx: float, zy: float, zw: float, zh: float) -> Dict[str, Any]:
+def _shade(hex_col: str, ratio: float) -> str:
+    """Assombrit une couleur #RRGGBB (ratio 0 = inchangee, 1 = noir)."""
+    h = hex_col.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    k = 1.0 - ratio
+    return "#{:02X}{:02X}{:02X}".format(int(r * k), int(g * k), int(b * k))
+
+
+def _print_palette(spec: Dict[str, Any]) -> Dict[str, Any]:
+    """Couleurs de la zone imprimee : celles de l'encre quand elle est connue.
+
+    Une seule encre au recto, identifiee (hex reconnu) : la zone prend cette
+    teinte, sinon un BAT « Yellow » montrait une zone violette. Plusieurs
+    encres, encre inconnue ou recto vierge : on garde le violet neutre, qui
+    signifie « zone imprimee » sans pretendre a une couleur. Le texte passe
+    en encre neutre sur une teinte d'encre : du jaune sur du jaune ne se lit pas.
+    """
+    recto = [c for c in (spec.get("couleurs") or []) if (c or {}).get("face") != "verso"]
+    hexes = {str(c.get("hex") or "").upper() for c in recto}
+    hexes.discard("")
+    if len(hexes) == 1:
+        hx = next(iter(hexes))
+        if hx != _PANTONE_FALLBACK and re.fullmatch(r"#[0-9A-F]{3}([0-9A-F]{3})?", hx):
+            h = hx.lstrip("#")
+            if len(h) == 3:
+                h = "".join(c * 2 for c in h)
+            r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+            luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+            # Encre sombre (noir, bleu) : teinte plus legere, sinon le texte
+            # neutre ne se lirait plus dessus.
+            opacity = 0.45 if luma > 0.5 else 0.25
+            return {"fill": hx, "opacity": opacity, "stroke": _shade(hx, 0.45),
+                    "text": COLOR_INK}
+    return {"fill": COLOR_PRINT_BG, "opacity": 0.75, "stroke": COLOR_PRINT,
+            "text": COLOR_PRINT}
+
+
+def _print_zone_rect(zx: float, zy: float, zw: float, zh: float,
+                     pal: Dict[str, Any]) -> Dict[str, Any]:
     return _rect(zx, zy, zw, zh, rx=min(1.2, zh * 0.15),
-                 fill=COLOR_PRINT_BG, fill_opacity=0.75,
-                 stroke=COLOR_PRINT, sw=0.25, dash=(1.2, 1.0))
+                 fill=pal["fill"], fill_opacity=pal["opacity"],
+                 stroke=pal["stroke"], sw=0.25, dash=(1.2, 1.0))
 
 
 def _build_neighbour_print_zones(ops: List[Dict[str, Any]], spec: Dict[str, Any],
@@ -1010,10 +1072,11 @@ def _build_neighbour_print_zones(ops: List[Dict[str, Any]], spec: Dict[str, Any]
     rouleau sont imprimees de la meme facon.
     """
     lh = g["label_h"]
+    pal = _print_palette(spec)
     for y_top in (g["y_prev_bottom"] - lh, g["y_next_top"]):
         geom = _print_zone_geom(spec, g, y_top)
         if geom:
-            ops.append(_print_zone_rect(*geom[:4]))
+            ops.append(_print_zone_rect(*geom[:4], pal))
 
 
 def _build_print_overlay(ops: List[Dict[str, Any]], spec: Dict[str, Any],
@@ -1032,7 +1095,8 @@ def _build_print_overlay(ops: List[Dict[str, Any]], spec: Dict[str, Any],
     if not geom:
         return
     zx, zy, zw, zh, tx_w, tx_h = geom
-    ops.append(_print_zone_rect(zx, zy, zw, zh))
+    pal = _print_palette(spec)
+    ops.append(_print_zone_rect(zx, zy, zw, zh, pal))
 
     lx, lw, lh = g["label_x"], g["label_w"], g["label_h"]
     lines = _print_overlay_lines(spec, t)
@@ -1046,7 +1110,7 @@ def _build_print_overlay(ops: List[Dict[str, Any]], spec: Dict[str, Any],
     for idx, line in enumerate(lines):
         bold = idx == 0
         ops.append(_text(cx, y, _clip_text(line, size, tx_w - 1.6, bold=bold),
-                         size=size, anchor="middle", bold=bold, fill=COLOR_PRINT))
+                         size=size, anchor="middle", bold=bold, fill=pal["text"]))
         y += step
 
 

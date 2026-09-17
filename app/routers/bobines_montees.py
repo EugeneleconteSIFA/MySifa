@@ -24,6 +24,7 @@ from config import CATEGORIES_BOBINE, postes_deroulement
 from database import get_db
 from app.services import bobines_montees as bm
 from app.services import poste_bobine as pb
+from app.services import familles_code as fc
 from app.services.audit_service import log_action
 from app.services.auth_service import (
     get_current_user, is_admin, is_fabrication, require_admin, require_settings,
@@ -84,6 +85,7 @@ def lire_referentiel(request: Request):
             "places_max": pb.PLACES_MAX,
             "machines": machines,
             "regles": pb.regles_code(conn),
+            "familles": fc.familles(conn),
             "fournisseurs": fournisseurs,
             "diagnostic": pb.diagnostic(conn),
         }
@@ -151,6 +153,54 @@ def supprimer_regle(regle_id: int, request: Request):
     return {"success": True}
 
 
+async def _ecrire_famille(request: Request, famille_id=None):
+    user = require_admin(request)
+    body = await request.json()
+    with get_db() as conn:
+        try:
+            f = fc.enregistrer(conn, body, _qui(user), famille_id=famille_id)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except LookupError as e:
+            raise HTTPException(404, str(e))
+        conn.commit()
+    log_action(user=user, action="UPDATE" if famille_id else "CREATE", module="settings",
+               objet=f"Famille de code bobine · {f['fournisseur']} « {f['masque']} »",
+               detail={"laize_segment": f["laize_segment"], "actif": f["actif"]}, ip=_ip(request))
+    return {"success": True, "famille": f}
+
+
+@router.post("/api/settings/familles-code")
+async def creer_famille(request: Request):
+    return await _ecrire_famille(request)
+
+
+@router.put("/api/settings/familles-code/{famille_id}")
+async def modifier_famille(famille_id: int, request: Request):
+    return await _ecrire_famille(request, famille_id)
+
+
+@router.delete("/api/settings/familles-code/{famille_id}")
+def supprimer_famille(famille_id: int, request: Request):
+    user = require_admin(request)
+    with get_db() as conn:
+        if not fc.supprimer(conn, famille_id):
+            raise HTTPException(404, "Famille introuvable.")
+        conn.commit()
+    log_action(user=user, action="DELETE", module="settings",
+               objet=f"Famille de code bobine #{famille_id}", detail={}, ip=_ip(request))
+    return {"success": True}
+
+
+@router.get("/api/settings/familles-code/tester")
+def tester_famille(request: Request, code: str = ""):
+    """Ce que l'application ferait d'un code : correction, fournisseur, laize."""
+    require_settings(request)
+    with get_db() as conn:
+        neuf, notes = fc.normaliser(code, conn=conn)
+        return {"code": neuf, "notes": notes, "famille": fc.reconnaitre(conn, neuf)}
+
+
 @router.post("/api/settings/postes-deroulement/reconstruire")
 def reconstruire(request: Request):
     """Réapprend les natures depuis les scans passés — après correction d'une fiche fournisseur."""
@@ -176,11 +226,35 @@ def poste_d_une_bobine(request: Request, code_barre: str, machine_id: int | None
 
 
 @router.get("/api/fabrication/machines/{machine_id}/bobines-montees")
-def bobines_montees(machine_id: int, request: Request):
+def bobines_montees(machine_id: int, request: Request, no_dossier: str = ""):
+    """État des postes ; avec `no_dossier`, la laize du dossier qui démarre."""
     user = get_current_user(request)
     _check_fab_access(user)
     with get_db() as conn:
-        return bm.etat_machine(conn, machine_id)
+        etat = bm.etat_machine(conn, machine_id)
+        etat["dossier_laize_mm"] = _laize_du_dossier(conn, no_dossier)
+        return etat
+
+
+def _laize_du_dossier(conn, ref: str):
+    """Laize du dossier (OF, puis fiche technique) — même règle que Besoins matières."""
+    ref = (ref or "").strip()
+    if not ref:
+        return None
+    try:
+        from app.routers.besoins_matieres import _SQL_PE_UN, _laize_dossier, _load_dossiers
+        pe = conn.execute(
+            "SELECT id FROM planning_entries WHERE trim(reference)=? ORDER BY id DESC LIMIT 1",
+            (ref,),
+        ).fetchone()
+        if not pe:
+            return None
+        rows = _load_dossiers(conn, _SQL_PE_UN, (pe["id"],))
+        laize = _laize_dossier(rows[0]).get("laize") if rows else None
+        return float(laize) if laize else None
+    except Exception:
+        logger.warning("Laize du dossier illisible", exc_info=True)
+        return None
 
 
 @router.post("/api/fabrication/matieres/{matiere_id}/poste")

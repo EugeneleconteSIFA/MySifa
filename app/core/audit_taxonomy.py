@@ -200,6 +200,7 @@ PATH_MODULES: dict[str, str] = {
     # /oauth/authorize/decision : quelqu'un ouvre la base a un agent. Les
     # echanges machine (/oauth/token, /oauth/register) sont dans SKIP_PREFIXES.
     "/oauth": "mcp",
+    "/api/encres": "settings",
     "/api/erp": "erp",
     "/api/rvgi": "erp",
     "/api/rvgi-tiers": "erp",

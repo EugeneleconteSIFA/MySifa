@@ -254,6 +254,19 @@ def etat_machine(conn, machine_id: int) -> Dict[str, Any]:
          ORDER BY bm.monte_at ASC, bm.id ASC""",
         (int(machine_id),),
     ).fetchall()]
+    # La laize lue dans le code (familles déclarées en Paramètres) : c'est ce
+    # qui permet d'avertir, au démarrage d'un dossier, qu'une bobine gardée
+    # n'a pas la laize du nouveau dossier.
+    try:
+        from app.services import familles_code as _fc
+        liste = _fc.familles(conn, actives_seulement=True)
+        for b in actives:
+            f = _fc._correspond((b.get("code_barre") or "").strip(), liste)
+            b["laize_mm"] = _fc.laize_mm(b.get("code_barre") or "", f)
+            if not b.get("fournisseur") and f:
+                b["fournisseur"] = f.get("fournisseur")
+    except Exception:
+        pass
     postes = []
     for p in postes_machine(conn, machine_id):
         bobines = [b for b in actives if b["poste"] == p["poste"]]

@@ -1592,13 +1592,14 @@ body.recopie-en-cours,body.recopie-en-cours *{cursor:ns-resize !important;user-s
 .dos-recherche-aide{font-size:11px;color:var(--muted);margin-top:4px;min-height:14px}
 .dos-recherche-aide.alerte{color:var(--warn)}
 
-/* Sanity score : lien et modale « Comment c'est calculé » */
+/* Sanity score : lien et fiche « Comment c'est calculé » */
 .sanity-howto{display:inline-block;font-size:11px;color:var(--accent);text-decoration:underline;cursor:pointer}
 .sanity-howto:hover{opacity:.8}
-.sanity-howto-p{font-size:12px;color:var(--text2);margin:0 0 8px;line-height:1.5}
+.sanity-howto-p{font-size:12px;color:var(--text2);margin:0 0 4px;line-height:1.45}
 .sanity-howto-groupe{margin-top:14px}
-.sanity-howto-titre{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:6px}
-.sanity-howto-ligne{display:flex;gap:10px;align-items:baseline;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px;line-height:1.45}
-.sanity-howto-pts{flex:0 0 44px;font-family:monospace;font-weight:800;color:var(--danger);text-align:right}
-.sanity-howto-pts.is-bonus{color:var(--success)}
-.sanity-howto-pts.is-zero{color:var(--muted)}
+.sanity-howto-titre{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:4px}
+.sanity-howto-ligne{display:flex;gap:10px;align-items:center;padding:3px 0;font-size:13px;line-height:1.35}
+.sanity-howto-pts{flex:0 0 34px;text-align:center;font-family:monospace;font-size:12px;font-weight:800;padding:1px 0;border-radius:6px;color:var(--danger);background:var(--danger-bg)}
+.sanity-howto-pts.is-bonus{color:var(--success);background:var(--success-bg,var(--accent-bg))}
+.sanity-howto-note{font-size:12px;color:var(--muted);margin:0 0 4px}
+.sanity-howto-releve{padding:8px 10px;border:1px solid var(--border);border-radius:10px}

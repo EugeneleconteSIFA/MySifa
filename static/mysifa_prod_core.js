@@ -9454,11 +9454,12 @@ function openSanityExplication(sanity, title){
   const old=document.getElementById('sanity-howto-overlay'); if(old) old.remove();
   const def=(S.historique&&S.historique.sanity_regles)||{regles:[],calcul:[]};
   const close=()=>{ const o=document.getElementById('sanity-howto-overlay'); if(o) o.remove(); };
-  const pts=v=>(v>0?'+':'')+v;
+  const fmt=v=>(v>0?'+':v<0?'\u2212':'')+Math.abs(v);
+  const pill=v=>h('span',{className:'sanity-howto-pts'+(v>0?' is-bonus':'')},fmt(v));
   const groupes=[
-    ['journee','Par journée opérateur'],
+    ['journee','Par journée'],
     ['dossier','Par dossier terminé'],
-    ['traca','Traçabilité matière (par dossier terminé)'],
+    ['traca','Traçabilité matière'],
     ['bonus','Bonus'],
   ];
   const blocs=groupes.map(([g,lbl])=>{
@@ -9466,29 +9467,27 @@ function openSanityExplication(sanity, title){
     if(!rs.length) return null;
     return h('div',{className:'sanity-howto-groupe'},
       h('div',{className:'sanity-howto-titre'},lbl),
-      ...rs.map(r=>h('div',{className:'sanity-howto-ligne'},
-        h('span',{className:'sanity-howto-pts'+(r.pts>0?' is-bonus':'')+(r.pts===0?' is-zero':'')},r.pts===0?'0':pts(r.pts)),
-        h('span',null,r.label))));
+      ...rs.map(r=> r.pts===null||r.pts===undefined
+        ? h('div',{className:'sanity-howto-note'},r.label)
+        : h('div',{className:'sanity-howto-ligne'},pill(r.pts),h('span',null,r.label))));
   }).filter(Boolean);
   const pens=(sanity&&sanity.penalites)||[];
   const periode=pens.length
-    ? h('div',{className:'sanity-howto-groupe'},
-        h('div',{className:'sanity-howto-titre'},'Relevé sur la période'+(title?(' — '+title):'')),
+    ? h('div',{className:'sanity-howto-groupe sanity-howto-releve'},
+        h('div',{className:'sanity-howto-titre'},'Sur la période'+(title?(' · '+title):'')),
         ...pens.map(p=>h('div',{className:'sanity-howto-ligne'},
-          h('span',{className:'sanity-howto-pts'+(p.pts_unitaire>0?' is-bonus':'')},'× '+p.count),
-          h('span',null,p.label+' ('+pts(p.pts_unitaire)+' chacun)'))))
+          pill(p.total),
+          h('span',null,p.label+(p.count>1?' \u00d7 '+p.count:'')))))
     : null;
   const overlay=h('div',{id:'sanity-howto-overlay',className:'contact-modal-overlay',onClick:e=>{ if(e.target===e.currentTarget) close(); }},
-    h('div',{className:'contact-modal',style:{maxWidth:'620px'}},
+    h('div',{className:'contact-modal',style:{maxWidth:'480px'}},
       h('div',{className:'contact-modal-head'},
-        h('h3',null,'Comment le Sanity Score est calculé'),
-        h('button',{className:'contact-close-btn',onClick:close},'×')),
+        h('h3',null,'Calcul du Sanity Score'),
+        h('button',{className:'contact-close-btn',onClick:close},'\u00d7')),
       h('div',{className:'contact-modal-body'},
         ...(def.calcul||[]).map(t=>h('p',{className:'sanity-howto-p'},t)),
-        ...blocs,
         periode,
-        h('div',{className:'contact-modal-actions'},
-          h('button',{className:'btn-ghost',onClick:close},'Fermer')))));
+        ...blocs)));
   document.body.appendChild(overlay);
 }
 

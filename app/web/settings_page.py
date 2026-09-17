@@ -878,6 +878,10 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
         Machines
       </button>
+      <button type="button" class="nav-btn" data-req-section="fabrication" data-tab="encres">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.7c3.5 4 6 7.3 6 10.3a6 6 0 0 1-12 0c0-3 2.5-6.3 6-10.3z"/></svg>
+        Impression
+      </button>
       <div class="nav-subgroup-label msb-section msb-toggle" data-req-section="logistique"><span>Logistique</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-req-section="logistique" data-tab="emplacements">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
@@ -1026,7 +1030,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <div class="menu-group" data-req-section="fabrication">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
-            <div><span class="mg-lbl">Fabrication</span><span class="mg-desc">Codes opérations, maintenance et parc machines.</span></div>
+            <div><span class="mg-lbl">Fabrication</span><span class="mg-desc">Codes opérations, maintenance, parc machines et encres.</span></div>
           </div>
           <div class="menu-items">
             <button type="button" class="menu-item" data-goto="operations">
@@ -1047,6 +1051,11 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <button type="button" class="menu-item" data-goto="machines">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Machines</span><span class="mi-desc">Horaires, capacité et rentabilité par machine.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button type="button" class="menu-item" data-goto="encres">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.7c3.5 4 6 7.3 6 10.3a6 6 0 0 1-12 0c0-3 2.5-6.3 6-10.3z"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Impression</span><span class="mi-desc">Couleurs d'encre : teinte affichée sur les BAT.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
           </div>
@@ -2078,6 +2087,54 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         </div>
 
         <div id="seuil-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+      </div>
+    </section>
+
+    <!-- Impression : referentiel des couleurs d'encre. Logique dans
+         static/mysifa_encres.js, la page n'y accroche que initEncresPanel(). -->
+    <section id="panel-encres" class="hidden">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+          <h2 style="margin:0">Couleurs d'encre</h2>
+          <button type="button" class="btn" onclick="encOpenForm()">+ Ajouter une couleur</button>
+        </div>
+        <p class="sub" style="margin-top:-4px;margin-bottom:14px">
+          Teinte affichée sur la zone imprimée des BAT et dans l'encart Impressions. Le code est rapproché
+          quelle que soit la saisie : « P.485 C », « P 485C » et « 485 C » désignent la même encre. Sans suffixe,
+          C puis U sont essayés ; une référence U absente reprend la teinte C. Teinte écran indicative, jamais une
+          référence d'impression.
+        </p>
+
+        <div id="enc-form-wrap" class="hidden op-form-panel">
+          <h3 id="enc-form-title">Nouvelle couleur</h3>
+          <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr));align-items:center">
+            <input type="text" id="enc-code" placeholder="Code (ex. 485 C)" maxlength="40">
+            <input type="text" id="enc-libelle" placeholder="Libellé (facultatif)" maxlength="80">
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="color" id="enc-picker" style="width:44px;height:36px;padding:2px;border-radius:8px;border:1px solid var(--border);background:var(--card)">
+              <input type="text" id="enc-hex" placeholder="#RRGGBB" maxlength="7" style="flex:1;font-family:monospace">
+            </div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)"><input type="checkbox" id="enc-actif" checked> Active</label>
+          </div>
+          <div id="enc-cle" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+            <button type="button" class="btn" onclick="encSaveForm()">Enregistrer</button>
+            <button type="button" class="btn btn-sec" onclick="encCloseForm()">Annuler</button>
+          </div>
+        </div>
+
+        <div class="op-form-panel" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <label for="enc-test" style="font-size:12px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--text2)">Tester une désignation</label>
+          <input type="text" id="enc-test" placeholder="ex. BLEU P.647 U" maxlength="80" style="flex:1;min-width:180px">
+          <div id="enc-test-out" style="font-size:13px;color:var(--muted)"></div>
+        </div>
+
+        <div class="tabs" style="margin-bottom:12px">
+          <button type="button" class="btn btn-sec sub-tab-btn active" data-encsub="ref" onclick="encSetSub('ref')">Référentiel</button>
+          <button type="button" class="btn btn-sec sub-tab-btn" data-encsub="saisies" onclick="encSetSub('saisies')">Désignations saisies <span id="enc-sans-teinte"></span></button>
+        </div>
+        <div id="enc-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+        <div id="enc-saisies" class="hidden"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
       </div>
     </section>
 
@@ -3384,6 +3441,7 @@ function syncSettingsPageHead(tabId) {
     seuils:       { title: "Seuils d'arrêt", sub: "Quand la répétition demande une explication" },
     maintenance:  { title: 'Maintenance',     sub: 'Codes opérations et alertes opérateurs' },
     machines:     { title: 'Machines',        sub: 'Horaires, capacité, rentabilité' },
+    encres:       { title: 'Impression',      sub: "Couleurs d'encre des BAT" },
     emplacements: { title: 'Emplacements',    sub: 'Plan du magasin' },
     laizes:       { title: 'Laizes matières', sub: 'Formats standards' },
     mandrins:     { title: 'Mandrins',        sub: 'Perte de coupe sur les tubes' },
@@ -3547,7 +3605,7 @@ document.addEventListener('keydown', function (ev) {
   }
 });
 
-const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','emplacements','laizes','mandrins','importations','bridge','transport','typesarticle','updates','audit','fsc','dashboards','api','promote','printers','formations','diagnostic'];
+const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','encres','emplacements','laizes','mandrins','importations','bridge','transport','typesarticle','updates','audit','fsc','dashboards','api','promote','printers','formations','diagnostic'];
 
 function setTab(id, opts) {
   if (!VALID_TABS.includes(id)) id = 'menu';
@@ -3569,7 +3627,7 @@ function setTab(id, opts) {
       }
     } catch(e){}
   }
-  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'transport', 'typesarticle', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations', 'diagnostic'].forEach(p => {
+  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'encres', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'transport', 'typesarticle', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations', 'diagnostic'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -3582,6 +3640,7 @@ function setTab(id, opts) {
   if (id === 'seuils') loadSeuils();
   if (id === 'maintenance') { loadMaintCodes(); loadAlerts(); }
   if (id === 'machines') initMachinesPanel();
+  if (id === 'encres' && typeof initEncresPanel === 'function') initEncresPanel();
   if (id === 'emplacements') initEmplacementsPanel();
   if (id === 'laizes') initLaizesPanel();
   if (id === 'mandrins') initMandrinsPanel();
@@ -8468,7 +8527,7 @@ async function unlinkBridge(mp_id) {
 <!-- v2.4.18 : mysifa_maint_form.js — CRUD codes maintenance + interventions libres (module partagé settings ↔ maintenance). -->
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
-<script src="/static/mysifa_postes_deroulement.js?v=1"></script>
+<script src="/static/mysifa_postes_deroulement.js?v=2"></script>
 <script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
 <script src="/static/mysifa_maint_form.js?v=2.7.4-usure"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
@@ -8476,6 +8535,8 @@ async function unlinkBridge(mp_id) {
 <!-- Panneau Déploiement (Promouvoir v1→v2 + Sync DB) — fonctions en fichier externe
      autonome pour éviter qu'un refacto du script inline ne les supprime à nouveau. -->
 <script src="/static/mysifa_promote.js?v=5"></script>
+<!-- Parametres > Fabrication > Impression : couleurs d'encre des BAT. -->
+<script src="/static/mysifa_encres.js?v=__V_LABEL__"></script>
 <!-- Fonctions imprimantes/templates/agents restaurees : bloc inline autonome.
      NE PAS fusionner avec le <script src> ci-dessus (contenu ignore par le navigateur). -->
 <script>
