@@ -28,7 +28,12 @@ import unicodedata
 from typing import Dict, Iterable, List, Optional
 
 _HEX = re.compile(r"^#[0-9A-F]{6}$")
-_NUM = re.compile(r"(?<![0-9])(\d{3,4})\s*[-.]?\s*([CU])?(?![0-9A-Z])")
+# Une reference Pantone : 3 ou 4 chiffres, suffixe C/U facultatif. Un nombre
+# suivi de « % » est un taux (« APLAT 100% »), pas une encre.
+_NUM = re.compile(r"(?<![0-9])(\d{3,4})(?!\s*%)\s*[-.]?\s*([CU])?(?![0-9A-Z])")
+# Abreviations relevees dans les fiches : « P PROC. BLUE C », « P. RUB.RED C ».
+_ABREV = {"PROC": "PROCESS", "RUB": "RUBINE", "RHOD": "RHODAMINE",
+          "REFL": "REFLEX", "GREY": "GRAY"}
 _PREFIXE = re.compile(r"^(?:PANTONE|PMS|P)(?:\s+|[.\-]\s*|(?=\d))")
 
 
@@ -36,8 +41,10 @@ def _norm(texte: str) -> str:
     """Majuscules, sans accents, espaces et ponctuation réduits."""
     s = unicodedata.normalize("NFKD", str(texte or ""))
     s = "".join(c for c in s if not unicodedata.combining(c)).upper()
-    s = re.sub(r"[()]", " ", s)
-    s = re.sub(r"\bPANTONE\b|\bPMS\b", " ", s)
+    s = re.sub(r"[().,/]", " ", s)
+    # « APLAT ROSE » : l'aplat est une facon d'imprimer, pas une couleur.
+    s = re.sub(r"\bPANTONE\b|\bPMS\b|\bAPLAT\b", " ", s)
+    s = re.sub(r"\b(%s)\b" % "|".join(_ABREV), lambda m: _ABREV[m.group(1)], s)
     return re.sub(r"\s+", " ", s).strip()
 
 
@@ -52,9 +59,9 @@ def normaliser_hex(valeur: str) -> Optional[str]:
 
 
 def _num(n: str) -> str:
-    # « P.0631 C » est un 631 : un zéro de tête n'a de sens que sur les
-    # références à trois chiffres (032, 021, 072).
-    return n[1:] if len(n) == 4 and n.startswith("0") else n
+    # Les zeros de tete sont garde tels quels : 032, 012, 0631 sont des
+    # references distinctes chez Pantone (0631 = Violet 0631, pas 631).
+    return n
 
 
 def cle(code: str) -> str:
@@ -112,6 +119,12 @@ def candidats(designation: str, noms: Iterable[str] = ()) -> List[str]:
         add(base)
         add(f"{base} C")
         add(f"{base} U")
+    # Dernier recours : le premier mot (« ROSE FUSHIA » → « ROSE »,
+    # « NOIR VERSO » → « NOIR »).
+    mots = base.split()
+    if len(mots) > 1:
+        add(mots[0])
+        add(f"{mots[0]} C")
     return out
 
 

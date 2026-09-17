@@ -11,7 +11,30 @@
 (function () {
   'use strict';
 
-  var S = { encres: [], saisies: [], editId: null, pret: false, sub: 'ref', testTimer: null };
+  var S = { encres: [], saisies: [], editId: null, pret: false, sub: 'ref', testTimer: null,
+            filtre: '', filtreTimer: null };
+
+  function correspond(champs) {
+    if (!S.filtre) return true;
+    var f = S.filtre;
+    return champs.some(function (v) { return String(v == null ? '' : v).toLowerCase().indexOf(f) >= 0; });
+  }
+  function encresVisibles() {
+    return S.encres.filter(function (r) { return correspond([r.cle, r.code, r.libelle, r.hex]); });
+  }
+  function saisiesVisibles() {
+    return S.saisies.filter(function (r) {
+      var src = r.source === 'referentiel' ? 'référentiel' : (r.source === 'nom' ? 'nom simple' : 'sans teinte');
+      return correspond([r.designation, r.cle_proposee, r.hex, src]);
+    });
+  }
+  function majCompte() {
+    var out = el('enc-compte');
+    if (!out) return;
+    var tot = S.sub === 'ref' ? S.encres.length : S.saisies.length;
+    var vis = S.sub === 'ref' ? encresVisibles().length : saisiesVisibles().length;
+    out.textContent = (vis === tot ? tot : vis + ' / ' + tot) + (S.sub === 'ref' ? ' couleur(s)' : ' désignation(s)');
+  }
 
   function esc(v) {
     return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
@@ -73,11 +96,17 @@
   function rendreListe() {
     var box = el('enc-list');
     if (!box) return;
+    majCompte();
     if (!S.encres.length) {
       box.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucune couleur. Le BAT ne reconnaît que les noms simples (noir, jaune…).</p>';
       return;
     }
-    var rows = S.encres.map(function (r) {
+    var liste = encresVisibles();
+    if (!liste.length) {
+      box.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucune couleur ne correspond au filtre.</p>';
+      return;
+    }
+    var rows = liste.map(function (r) {
       return '<tr' + (r.actif ? '' : ' style="opacity:.5"') + '>'
         + '<td>' + pastille(r.hex) + '</td>'
         + '<td><b>' + esc(r.cle) + '</b>'
@@ -99,11 +128,18 @@
   function rendreSaisies() {
     var box = el('enc-saisies');
     if (!box) return;
+    majCompte();
     if (!S.saisies.length) {
       box.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucune désignation d\'encre dans les fiches.</p>';
       return;
     }
-    var rows = S.saisies.map(function (r, i) {
+    var liste = saisiesVisibles();
+    if (!liste.length) {
+      box.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucune désignation ne correspond au filtre.</p>';
+      return;
+    }
+    var rows = liste.map(function (r) {
+      var i = S.saisies.indexOf(r);
       var action = r.source === 'referentiel' ? ''
         : '<button type="button" class="btn-sm btn-ghost" onclick="encAddFrom(' + i + ')">Ajouter</button>';
       return '<tr>'
@@ -218,6 +254,48 @@
     });
     el('enc-list').classList.toggle('hidden', S.sub !== 'ref');
     el('enc-saisies').classList.toggle('hidden', S.sub !== 'saisies');
+    majCompte();
+  }
+
+  /* ── Export CSV de la vue affichee ─────────────────────── */
+  // Point-virgule et BOM UTF-8 : Excel en francais ouvre le fichier sans
+  // assistant d'import et garde les accents.
+  function cellule(v) {
+    var t = String(v == null ? '' : v);
+    return /[";\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+  }
+  function exporter() {
+    var entetes, lignes, nom;
+    if (S.sub === 'ref') {
+      entetes = ['Cle', 'Code saisi', 'Libelle', 'Teinte', 'Etat', 'Modifie le', 'Par'];
+      lignes = encresVisibles().map(function (r) {
+        return [r.cle, r.code, r.libelle || '', r.hex, r.actif ? 'Active' : 'Inactive',
+                (r.updated_at || '').replace('T', ' ').slice(0, 16), r.updated_by || ''];
+      });
+      nom = 'encres_referentiel';
+    } else {
+      entetes = ['Designation', 'Cle', 'Fiches', 'Teinte', 'Origine de la teinte'];
+      lignes = saisiesVisibles().map(function (r) {
+        var src = r.source === 'referentiel' ? 'Referentiel' : (r.source === 'nom' ? 'Nom simple' : 'Sans teinte');
+        return [r.designation, r.cle_proposee, r.occurrences, r.hex || '', src];
+      });
+      nom = 'encres_designations_saisies';
+    }
+    if (!lignes.length) { notifier('Rien à exporter.', true); return; }
+    var csv = '\ufeff' + [entetes].concat(lignes).map(function (l) {
+      return l.map(cellule).join(';');
+    }).join('\r\n');
+    var d = new Date();
+    var jour = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    var url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = nom + '_' + jour + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    notifier(lignes.length + ' ligne(s) exportée(s).');
   }
 
   /* ── Points d'entree ────────────────────────────────────── */
@@ -228,6 +306,14 @@
       el('enc-hex').addEventListener('input', function () { syncHex('texte'); });
       el('enc-code').addEventListener('input', apercuCle);
       el('enc-test').addEventListener('input', tester);
+      el('enc-filtre').addEventListener('input', function () {
+        clearTimeout(S.filtreTimer);
+        S.filtreTimer = setTimeout(function () {
+          S.filtre = el('enc-filtre').value.trim().toLowerCase();
+          rendreListe();
+          rendreSaisies();
+        }, 150);
+      });
     }
     charger();
   };
@@ -236,6 +322,7 @@
   window.encSaveForm = enregistrer;
   window.encDelete = supprimer;
   window.encSetSub = setSub;
+  window.encExport = exporter;
   window.encAddFrom = function (i) {
     var r = S.saisies[i];
     if (!r) return;
