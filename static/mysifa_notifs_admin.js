@@ -6,6 +6,7 @@
  * Chaque changement est enregistré immédiatement (PUT) et tracé au Journal.
  *
  * Construit en DOM (textContent), aucune couleur en dur.
+ * Le script est servi avec ?v=2 (settings_page.py).
  */
 (function () {
   'use strict';
@@ -138,7 +139,7 @@
     rPush.appendChild(interrupteur(d.push, function (v) { enregistrer(d, { push: v }); }));
     rPush.appendChild(el('span', 'nadm-sw-txt', d.push
       ? 'Envoyé aux appareils abonnés quand un nouvel élément apparaît (contrôle toutes les 5 min).'
-      : 'Bulle dans MySifa uniquement.'));
+      : 'Pastille sur l’écran d’accueil uniquement.'));
     var ouvrir = el('a', 'nadm-open', 'Ouvrir l’écran →');
     ouvrir.href = d.lien;
     rPush.appendChild(ouvrir);
@@ -155,9 +156,9 @@
     if (!root) return;
     root.textContent = '';
     root.appendChild(el('div', 'nadm-intro',
-      'Chaque notification compte en direct ce qui attend un service et s’affiche dans la cloche en haut à droite ' +
-      'de toutes les applis. Elle disparaît d’elle-même quand le travail est fait. Un utilisateur ne la voit que ' +
-      's’il a accès à l’application concernée.'));
+      'Chaque notification compte en direct ce qui attend un service et s’affiche en pastille rouge en haut à ' +
+      'droite de l’appli concernée, sur l’écran d’accueil. Elle disparaît d’elle-même quand le travail ' +
+      'est fait. Un utilisateur ne la voit que s’il a accès à l’application concernée.'));
     if (!data) { root.appendChild(el('div', 'nadm-desc', 'Chargement…')); return; }
     var parApp = {}, ordre = [];
     data.detecteurs.forEach(function (d) {

@@ -1,7 +1,7 @@
-"""MySifa — Notifications par service (API de la cloche + réglages).
+"""MySifa — Notifications par service (API des pastilles du portail + réglages).
 
 Endpoints :
-    GET  /api/notifications                 — ce qui attend l'utilisateur courant
+    GET  /api/notifications                 — ce qui attend l'utilisateur courant (pastilles du portail)
     POST /api/notifications/vu              — marque les notifications comme vues
     GET  /api/notifications/regles          — catalogue + réglages (Paramètres)
     PUT  /api/notifications/regles/{code}   — active / rôles / push d'un détecteur

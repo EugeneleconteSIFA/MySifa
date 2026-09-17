@@ -460,10 +460,6 @@ async def inject_staging_bandeau(request: Request, call_next):
 # appel réseau tant que le raccourci n'a pas servi (le script résout le rôle
 # paresseusement). html2canvas n'est chargé qu'à la première capture.
 _TACHE_QUICK_TAG = b'<script src="/static/mysifa_tache_quick.js?v=2" defer></script>'
-# Cloche des notifications par service (même point d'injection, même raison :
-# aucune page oubliée). Le script ne fait rien tant que l'utilisateur n'a
-# aucune notification configurée pour son rôle.
-_NOTIFS_TAG = b'<script src="/static/mysifa_notifs.js?v=1" defer></script>'
 _BODY_CLOSE_RE = re.compile(rb"</body>", re.IGNORECASE)
 
 
@@ -501,8 +497,7 @@ async def inject_tache_quick(request: Request, call_next):
         _closes = list(_BODY_CLOSE_RE.finditer(body))
         if _closes:
             _pos = _closes[-1].start()
-            _tags = _TACHE_QUICK_TAG + (b"" if _NOTIFS_TAG in body else _NOTIFS_TAG)
-            new_body = body[:_pos] + _tags + body[_pos:]
+            new_body = body[:_pos] + _TACHE_QUICK_TAG + body[_pos:]
         else:
             new_body = body
     headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}

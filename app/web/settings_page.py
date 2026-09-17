@@ -1160,7 +1160,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             </button>
             <button type="button" class="menu-item" data-goto="notifications">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
-              <span class="mi-body"><span class="mi-lbl">Notifications</span><span class="mi-desc">Qui reçoit quelle bulle, par service.</span></span>
+              <span class="mi-body"><span class="mi-lbl">Notifications</span><span class="mi-desc">Qui voit quelle pastille, par service.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
           </div>
@@ -3370,7 +3370,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=8"></script>
-<script src="/static/mysifa_notifs_admin.js?v=1"></script>
+<script src="/static/mysifa_notifs_admin.js?v=2"></script>
 <script>
 /*__TRACA_GUIDE__*/
 const API = window.location.origin;
@@ -3468,7 +3468,7 @@ function syncSettingsPageHead(tabId) {
     mandrins:     { title: 'Mandrins',        sub: 'Perte de coupe sur les tubes' },
     importations: { title: 'Importations',    sub: 'Grilles tarifaires transporteurs' },
     updates:      { title: 'Mises à jour',    sub: 'Annonces de release' },
-    notifications: { title: 'Notifications',  sub: 'Bulles par service, en haut à droite des applis' },
+    notifications: { title: 'Notifications',  sub: "Pastilles rouges par service, sur les applis de l'écran d'accueil" },
     audit:        { title: 'Audit',           sub: 'Log d\'activité' },
     fsc:          { title: 'Registre FSC',    sub: '' },
     dashboards:   { title: 'Tableaux de bord', sub: 'Widgets consolidés' },

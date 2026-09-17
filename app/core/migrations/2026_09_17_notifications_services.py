@@ -1,5 +1,5 @@
 """
-Notifications par service — la cloche en haut à droite de chaque page.
+Notifications par service — pastilles rouges sur les applis du portail.
 
 Trois tables :
 
