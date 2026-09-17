@@ -1478,6 +1478,59 @@ function attachPortalReorder(appsWrap){
   });
 }
 
+// ── Notifications par service ────────────────────────────────────────────
+// Pastille rouge en haut à droite de l'icône de l'appli concernée (réceptions à
+// intégrer sur MyStock, départs à valider sur MyExpé…). Qui voit quoi se règle
+// dans Paramètres › Notifications ; le comptage est fait par le serveur
+// (app/services/notifications.py) et disparaît quand le travail est fait.
+// Le résultat est gardé entre deux rendus du portail pour que la pastille ne
+// clignote pas à chaque re-render.
+let _portalNotifs=null, _portalNotifsAt=0, _portalNotifsTimer=null;
+function _portalNotifsPoser(){
+  const parApp={};
+  ((_portalNotifs&&_portalNotifs.items)||[]).forEach(i=>{
+    const g=parApp[i.app]||(parApp[i.app]={n:0,lignes:[]});
+    g.n+=Number(i.n||0);
+    g.lignes.push(i.libelle);
+  });
+  document.querySelectorAll('.portal-app[data-portal-id]').forEach(tuile=>{
+    const ico=tuile.querySelector('.portal-app-icon');
+    if(!ico)return;
+    const g=parApp[tuile.getAttribute('data-portal-id')];
+    // MyExpé a déjà son emplacement de pastille ; les autres pastilles à id
+    // (MyQualité, coffre RH) ont leur propre compteur et ne sont pas touchées.
+    let b=ico.querySelector('#portal-expe-badge, .portal-notif-badge');
+    if(!b){
+      if(!g||ico.querySelector('.portal-app-badge'))return;
+      b=h('span',{className:'portal-app-badge portal-notif-badge'},'0');
+      ico.appendChild(b);
+    }
+    if(g&&g.n>0){
+      b.style.display='inline-flex';
+      b.textContent=g.n>99?'99+':String(g.n);
+      tuile.title=g.lignes.join('\n');
+    }else{
+      b.style.display='none';
+      tuile.removeAttribute('title');
+    }
+  });
+}
+function portalNotifsCharger(force){
+  _portalNotifsPoser();
+  if(!_portalNotifsTimer){
+    _portalNotifsTimer=setInterval(()=>{
+      if(document.hidden||!document.querySelector('.portal-app'))return;
+      portalNotifsCharger(true);
+    },60000);
+  }
+  if(!force&&Date.now()-_portalNotifsAt<30000)return;
+  _portalNotifsAt=Date.now();
+  fetch('/api/notifications',{credentials:'include'})
+    .then(r=>r.ok?r.json():null)
+    .then(d=>{if(d){_portalNotifs=d;_portalNotifsPoser();}})
+    .catch(()=>{});
+}
+
 function renderPortal(){
   const aa = S.user && S.user.app_access ? S.user.app_access : null;
   const urole = S.user && S.user.role ? S.user.role : '';
@@ -1594,8 +1647,8 @@ function renderPortal(){
 
   if(isExpe){
     const id='expe';
-    // Compteur de departs en attente de validation : la tuile la plus
-    // consultee au telephone est aussi celle qui portait le moins d'info.
+    // Pastille des departs a valider : alimentee par les notifications par
+    // service (portalNotifsCharger), visible du seul service destinataire.
     const eIcoEl=h('div',{className:'portal-app-icon'},iconEl('truck',28));
     eIcoEl.appendChild(h('span',{className:'portal-app-badge',id:'portal-expe-badge',style:{display:'none'}},'0'));
     tileSpecs.push({id,el:h('div',{
@@ -1759,6 +1812,8 @@ function renderPortal(){
   }
 
   const orderedTiles=portalOrderTileSpecs(tileSpecs,order);
+  // Pastilles de notifications : posées une fois les tuiles dans le DOM.
+  setTimeout(()=>portalNotifsCharger(false),0);
   const apps=orderedTiles.map(s=>s.el);
   // Favoris : une tuile épinglée quitte la grille complète. Elle n'existe qu'à
   // un seul endroit — sinon on la voit deux fois, et on ne sait plus laquelle
@@ -2009,13 +2064,8 @@ function renderPortal(){
         if(!d)return;
         const e=d.expe||{}, q=d.qualite||{}, rh=d.rh_coffre||{}, tk=d.taches||{};
 
-        // Le compteur de départs alimente aussi la pastille de la tuile.
-        const eb=document.getElementById('portal-expe-badge');
-        if(eb){
-          const n=Number(e.en_attente||0);
-          if(n>0){eb.style.display='inline-flex';eb.textContent=n>99?'99+':String(n);}
-          else eb.style.display='none';
-        }
+        // La pastille de la tuile MyExpé suit les notifications par service
+        // (portalNotifsCharger) : seul le service destinataire la voit.
 
         const rows=[];
         const nExpe=Number(e.en_attente||0);

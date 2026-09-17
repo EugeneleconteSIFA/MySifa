@@ -1,4 +1,4 @@
-"""MySifa — Notifications par service (la cloche en haut à droite).
+"""MySifa — Notifications par service (pastilles rouges sur les applis du portail).
 
 Principe
 --------
@@ -50,7 +50,7 @@ _PARIS = ZoneInfo("Europe/Paris")
 class Detecteur:
     code: str                 # clé stable, jamais renommée (référencée en base)
     app: str                  # clé d'application (contrôle d'accès user_has_app_access)
-    app_label: str            # libellé affiché dans la cloche
+    app_label: str            # libellé (infobulle de la tuile, push)
     titre: str                # ex. « Réceptions à intégrer »
     description: str          # affichée dans Paramètres
     lien: str                 # où cliquer pour traiter
@@ -167,7 +167,7 @@ def compter(conn, code: str, *, frais: bool = False) -> tuple[int, Optional[str]
             return hit[1], hit[2]
     try:
         n, sig = det.compter(conn)
-    except Exception as exc:  # un détecteur cassé ne doit pas casser la cloche
+    except Exception as exc:  # un détecteur cassé ne doit pas casser les pastilles
         log.warning("détecteur %s en échec : %s", code, exc)
         n, sig = 0, None
     with _cache_lock:
@@ -307,7 +307,7 @@ def tour_de_push(get_db, send_push, a_acces) -> int:
                 continue
             # Premier passage pour ce détecteur (boot, push tout juste activé) :
             # on note l'existant sans le pousser — le push annonce du nouveau,
-            # pas un stock de travail déjà visible dans la cloche.
+            # pas un stock de travail déjà visible sur le portail.
             (a_faire if code in etat else a_noter).append((code, r, n, sig))
         if not a_faire and not a_noter:
             return 0
