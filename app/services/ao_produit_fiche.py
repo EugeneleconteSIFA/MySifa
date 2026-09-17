@@ -206,7 +206,9 @@ def render_fiche_html(
 
     imp_rows = ""
     if fiche.get("impressions"):
-        imp_rows += _row_html("Aplat", f"Oui ({imp.get('aplat_pourcent')} %)" if imp.get("aplat") else "Non")
+        if imp.get("aplat"):
+            pct = imp.get("aplat_pourcent")
+            imp_rows += _row_html("Aplat", f"{pct} %" if pct not in (None, "") else "Oui")
         imp_rows += _row_html("Recto", imp.get("recto"))
         imp_rows += _row_html("Verso", imp.get("verso"))
         for i, d in enumerate(imp.get("recto_details") or [], 1):

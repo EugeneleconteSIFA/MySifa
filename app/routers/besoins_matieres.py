@@ -277,6 +277,9 @@ def _load_dossiers(conn, sql: Optional[str] = None, params: tuple = (),
     return attacher_fiches(conn, pes)
 
 
+from app.services.fiche_choix import meilleure_fiche  # noqa: E402
+
+
 def attacher_fiches(conn, pes: list) -> list:
     """Rapproche une fiche technique de chaque dossier et pose les champs ft_*.
 
@@ -297,21 +300,12 @@ def attacher_fiches(conn, pes: list) -> list:
 
     for pe in pes:
         cands = by_key.get(_ft_key(pe.get("ref_produit_norm"), pe.get("ref_produit"))) or []
-        best = None
-        if cands:
-            mach = (pe.get("machine_nom") or "").strip().lower()
-
-            def _rank(ft):
-                fm = (ft.get("machine") or "").strip().lower()
-                if fm and fm == mach:
-                    r = 0
-                elif not fm:
-                    r = 1
-                else:
-                    r = 2
-                return (r, ft["id"])
-
-            best = min(cands, key=_rank)
+        # Départage par machine SANS accent (« Cohésio 2 » = « COHESIO 2 »),
+        # puis par laize de l'OF : cf. app/services/fiche_choix.py. L'ancien
+        # `.lower()` ne reconnaissait jamais la machine du planning et
+        # retombait sur la fiche de plus petite id — souvent celle de l'autre
+        # Cohésio, avec un autre nombre de fronts.
+        best = meilleure_fiche(cands, pe.get("machine_nom"), pe.get("of_laize"))
         pe["ft_id"] = best["id"] if best else None
         for f in _FT_FIELDS:
             pe[f"ft_{f}"] = best.get(f) if best else None

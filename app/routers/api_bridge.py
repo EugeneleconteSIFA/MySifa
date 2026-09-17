@@ -313,8 +313,8 @@ def push_of(
                 metrage, qte_au_mille, glassine, adhesif_label,
                 ref_adhesif, qte_adhesif_g, qte_adhesif_kg,
                 nb_mandrins, nb_cartons, nb_tubes,
-                date_import, imported_by, statut)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                date_import, imported_by, statut, source)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'access')""",
             (
                 numero,
                 body.date_creation,
@@ -350,25 +350,34 @@ def push_of(
     # d'un PDF. L'OF poussé par Access n'a pas de pdf_filename — son aperçu est
     # un rendu sur template vierge — et il écrasait sinon l'aperçu réel importé
     # à la main par la production.
+    #
+    # Le lien passe par `_promote_of_link` et plus par un UPDATE direct de
+    # `planning_entries.of_import_id` : le panneau OF du dossier lit
+    # `planning_of_links`, pas la colonne. L'UPDATE direct laissait les deux
+    # diverger — 102 dossiers au 17/09/2026, dont 9931675+996 dont le slot
+    # pointait l'OF « 9931675+996 » pendant que l'œil ouvrait l'OF « 9931675 ».
     with get_db() as conn2:
-        conn2.execute(
-            """UPDATE planning_entries
-               SET of_import_id = ?
-               WHERE LOWER(TRIM(numero_of)) = LOWER(TRIM(?))
-                 AND (of_import_id IS NULL OR of_import_id != ?)
+        cibles = conn2.execute(
+            """SELECT pe.id FROM planning_entries pe
+               WHERE LOWER(TRIM(pe.numero_of)) = LOWER(TRIM(?))
+                 AND (pe.of_import_id IS NULL OR pe.of_import_id != ?)
                  AND NOT EXISTS (
                        SELECT 1 FROM of_imports o
-                       WHERE o.id = planning_entries.of_import_id
+                       WHERE o.id = pe.of_import_id
                          AND TRIM(COALESCE(o.pdf_filename,'')) != ''
                  )
                  AND NOT EXISTS (
                        SELECT 1 FROM planning_of_links pl
                        JOIN of_imports o2 ON o2.id = pl.of_import_id
-                       WHERE pl.planning_entry_id = planning_entries.id
+                       WHERE pl.planning_entry_id = pe.id
                          AND TRIM(COALESCE(o2.pdf_filename,'')) != ''
                  )""",
-            (new_id, numero, new_id),
-        )
+            (numero, new_id),
+        ).fetchall()
+        if cibles:
+            from app.routers.of_import import _promote_of_link
+            for r in cibles:
+                _promote_of_link(conn2, int(r["id"]), new_id, "access_bridge")
         conn2.commit()
 
     # Le push Access peut faire sortir des dossiers de la liste « sans OF ».

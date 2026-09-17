@@ -168,7 +168,17 @@ _DEPARTS_SELECT = """
                 FROM expe_depart_dossiers dd
                 LEFT JOIN planning_entries pe2 ON pe2.id = dd.planning_entry_id
                WHERE dd.depart_id = d.id
-               ORDER BY dd.id ASC) x) AS dossiers_raw
+               ORDER BY dd.id ASC) x) AS dossiers_raw,
+           -- Détail du colisage multi-types : id|nb|europe|référence (RS).
+           -- La référence est en dernier : elle seule peut contenir un « | ».
+           (SELECT GROUP_CONCAT(x.bloc, CHAR(30)) FROM (
+              SELECT dp.type_palette_matiere_id || '|' || COALESCE(dp.nb_palette, '')
+                     || '|' || COALESCE(mp2.is_europe, 0)
+                     || '|' || COALESCE(mp2.reference, '') AS bloc
+                FROM expe_depart_palettes dp
+                LEFT JOIN matieres_premieres mp2 ON mp2.id = dp.type_palette_matiere_id
+               WHERE dp.depart_id = d.id
+               ORDER BY dp.ordre ASC, dp.id ASC) x) AS palettes_raw
     FROM expe_departs d
     LEFT JOIN matieres_premieres mp ON mp.id = d.type_palette_matiere_id
     LEFT JOIN expe_transporteurs t ON t.id = d.transporteur_id
@@ -235,6 +245,35 @@ def _depart_dict(row) -> dict:
         # tableau et chaque option du select sans jamais servir à décider.
         d["type_palette_label"] = (d.get("type_palette_reference") or "").strip() or None
 
+    palettes = []
+    for bloc in (d.pop("palettes_raw", None) or "").split("\x1e"):
+        parts = bloc.split("|", 3) if bloc else []
+        if len(parts) < 4:
+            continue
+        try:
+            mid = int(parts[0])
+        except ValueError:
+            continue
+        try:
+            nb = float(parts[1]) if parts[1] != "" else None
+        except ValueError:
+            nb = None
+        palettes.append({
+            "type_palette_matiere_id": mid,
+            "nb_palette": nb,
+            "is_europe": int(parts[2] or 0),
+            "reference": parts[3] or "",
+        })
+    d["palettes"] = palettes
+    if len(palettes) > 1:
+        # « 3 EUR + 2 PERDUE » : le tableau dit d'un coup d'œil ce qu'il y a
+        # sur le camion, sans ouvrir le départ.
+        d["type_palette_label"] = " + ".join(
+            (f"{p['nb_palette']:g} " if p["nb_palette"] is not None else "")
+            + (p["reference"] or f"#{p['type_palette_matiere_id']}")
+            for p in palettes
+        )
+
     dossiers = []
     for bloc in (d.pop("dossiers_raw", None) or "").split("\x1e"):
         if not bloc:
@@ -282,6 +321,95 @@ def _validate_type_palette_matiere_id(conn, matiere_id: Any) -> Optional[int]:
             detail="Type de palette introuvable ou inactif (réf. MyStock).",
         )
     return mid
+
+
+def _palettes_du_body(conn, body: dict) -> Optional[list[dict]]:
+    """Lignes de colisage du body, validées.
+
+    None : le body ne parle pas du détail (on n'y touche pas).
+    Liste : le détail voulu — vide ou d'une ligne, le départ redevient
+    mono-type et ses colonnes historiques suffisent.
+    """
+    if "palettes" not in body:
+        return None
+    raw = body.get("palettes") or []
+    if not isinstance(raw, list):
+        raise HTTPException(status_code=400, detail="Colisage invalide.")
+    if (str(body.get("type_colis") or "").strip().lower()) == "vrac":
+        return []
+    lignes: list[dict] = []
+    par_type: dict[int, dict] = {}
+    for x in raw:
+        if not isinstance(x, dict):
+            continue
+        nb_raw = x.get("nb_palette")
+        nb = None
+        if nb_raw not in (None, ""):
+            try:
+                nb = float(str(nb_raw).replace(",", ".").replace(" ", ""))
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Nombre de palettes invalide.")
+            if nb < 0:
+                raise HTTPException(status_code=400, detail="Nombre de palettes négatif.")
+        mid = _validate_type_palette_matiere_id(conn, x.get("type_palette_matiere_id"))
+        if mid is None:
+            if nb is None:
+                continue  # ligne laissée vide
+            raise HTTPException(
+                status_code=400,
+                detail="Type de palette manquant sur une ligne de colisage.",
+            )
+        # Même type saisi deux fois : on additionne plutôt que de refuser.
+        if mid in par_type:
+            ex = par_type[mid]
+            if nb is not None:
+                ex["nb_palette"] = (ex["nb_palette"] or 0) + nb
+            continue
+        ligne = {"type_palette_matiere_id": mid, "nb_palette": nb}
+        par_type[mid] = ligne
+        lignes.append(ligne)
+    return lignes
+
+
+def _set_palettes(conn, depart_id: int, lignes: list[dict]) -> None:
+    """Enregistre le détail du colisage et aligne les colonnes du départ.
+
+    Multi-types : `nb_palette` devient le total, `type_palette_matiere_id` le
+    premier type, `nb_palette_europe` la part Europe (NULL si aucune ligne
+    Europe : le suivi retombe alors sur le total, comme un départ mono-type).
+    """
+    conn.execute("DELETE FROM expe_depart_palettes WHERE depart_id=?", (depart_id,))
+    if len(lignes) < 2:
+        conn.execute(
+            "UPDATE expe_departs SET nb_palette_europe=NULL WHERE id=?", (depart_id,)
+        )
+        return
+    europe_ids = {
+        int(r["id"])
+        for r in conn.execute(
+            "SELECT id FROM matieres_premieres WHERE COALESCE(is_europe,0)=1"
+        ).fetchall()
+    }
+    for i, l in enumerate(lignes):
+        conn.execute(
+            """INSERT INTO expe_depart_palettes
+                 (depart_id, ordre, type_palette_matiere_id, nb_palette)
+               VALUES (?,?,?,?)""",
+            (depart_id, i, l["type_palette_matiere_id"], l["nb_palette"]),
+        )
+    nbs = [l["nb_palette"] for l in lignes if l["nb_palette"] is not None]
+    total = sum(nbs) if nbs else None
+    lignes_eur = [l for l in lignes if l["type_palette_matiere_id"] in europe_ids]
+    nb_europe = (
+        sum(l["nb_palette"] or 0 for l in lignes_eur) if lignes_eur else None
+    )
+    conn.execute(
+        """UPDATE expe_departs
+              SET type_palette_matiere_id=?, type_colis=NULL,
+                  nb_palette=?, nb_palette_europe=?
+            WHERE id=?""",
+        (lignes[0]["type_palette_matiere_id"], total, nb_europe, depart_id),
+    )
 
 
 def _date_prefix(raw: str) -> str:
@@ -1016,6 +1144,7 @@ def create_depart(request: Request, body: dict = Body(...)):
             _check_no_bl_unique(conn, body.get("no_bl"))
         rattachement = _resoudre_rattachement(conn, body, user)
         dossiers_demandes = _dossiers_du_body(conn, body)
+        palettes_demandees = _palettes_du_body(conn, body)
         cur = conn.execute(
             """INSERT INTO expe_departs (
                 date_enlevement, affreteurs, transporteur, transporteur_id, client,
@@ -1054,6 +1183,8 @@ def create_depart(request: Request, body: dict = Body(...)):
         rid = cur.lastrowid
         if dossiers_demandes:
             _set_dossiers(conn, rid, dossiers_demandes, user)
+        if palettes_demandees and len(palettes_demandees) > 1:
+            _set_palettes(conn, rid, palettes_demandees)
         # Avant le commit : le départ, sa référence de dossier et, à défaut, sa
         # déclaration entrent en base dans la même transaction. Un départ
         # enregistré sans l'un des deux, même une fraction de seconde, est un
@@ -1247,7 +1378,7 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
     # colonnes correspondantes sont ajoutées à `sets` plus bas, une fois la
     # connexion ouverte (la validation du motif a besoin de la base).
     if not sets and "sans_dossier" not in body and "dossiers" not in body \
-            and "planning_entry_id" not in body:
+            and "planning_entry_id" not in body and "palettes" not in body:
         raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour")
 
     with get_db() as conn:
@@ -1285,6 +1416,9 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
         dossiers_demandes = _dossiers_du_body(conn, body)
         if dossiers_demandes is not None:
             _set_dossiers(conn, depart_id, dossiers_demandes, user)
+        palettes_demandees = _palettes_du_body(conn, body)
+        if palettes_demandees is not None:
+            _set_palettes(conn, depart_id, palettes_demandees)
         if dossiers_demandes is not None or "planning_entry_id" in body:
             # Le dossier rattaché a changé (ou a été retiré) : la copie
             # textuelle doit suivre, sinon la chaîne FSC continue de pointer
@@ -1412,10 +1546,10 @@ def list_palettes_europe(
         recap_rows = conn.execute(
             """SELECT COALESCE(NULLIF(TRIM(client), ''), '— Sans client —') AS client,
                       COUNT(*) AS nb_departs,
-                      COALESCE(SUM(CASE WHEN nb_palette IS NOT NULL THEN nb_palette ELSE 0 END), 0) AS nb_pal_envoyees,
-                      COALESCE(SUM(CASE WHEN palette_europe_statut='retournee' AND nb_palette IS NOT NULL THEN nb_palette ELSE 0 END), 0) AS nb_pal_retournees,
-                      COALESCE(SUM(CASE WHEN palette_europe_statut='perdue' AND nb_palette IS NOT NULL THEN nb_palette ELSE 0 END), 0) AS nb_pal_perdues,
-                      COALESCE(SUM(CASE WHEN palette_europe_statut='en_attente' AND nb_palette IS NOT NULL THEN nb_palette ELSE 0 END), 0) AS nb_pal_en_attente
+                      COALESCE(SUM(COALESCE(nb_palette_europe, nb_palette, 0)), 0) AS nb_pal_envoyees,
+                      COALESCE(SUM(CASE WHEN palette_europe_statut='retournee' THEN COALESCE(nb_palette_europe, nb_palette, 0) ELSE 0 END), 0) AS nb_pal_retournees,
+                      COALESCE(SUM(CASE WHEN palette_europe_statut='perdue' THEN COALESCE(nb_palette_europe, nb_palette, 0) ELSE 0 END), 0) AS nb_pal_perdues,
+                      COALESCE(SUM(CASE WHEN palette_europe_statut='en_attente' THEN COALESCE(nb_palette_europe, nb_palette, 0) ELSE 0 END), 0) AS nb_pal_en_attente
                FROM expe_departs
                WHERE palette_europe = 1
                GROUP BY client
@@ -1425,6 +1559,12 @@ def list_palettes_europe(
         recap_trp = _recap_palettes_transporteurs(conn)
 
     departs = [_depart_dict(r) for r in rows]
+    # Dans le suivi Europe, « Pal. » est la part Europe du départ : sur un lot
+    # mixte, les palettes perdues n'ont rien à réclamer.
+    for d in departs:
+        if d.get("nb_palette_europe") is not None:
+            d["nb_palette_total"] = d.get("nb_palette")
+            d["nb_palette"] = d["nb_palette_europe"]
     recap = [dict(r) for r in recap_rows]
     # Les totaux restent calculés sur le récap CLIENT et non transporteur :
     # les deux populations donnent le même total de palettes envoyées, mais le
@@ -1544,11 +1684,11 @@ def _recap_palettes_transporteurs(conn) -> list[dict]:
     for r in conn.execute(
         """SELECT transporteur_id, transporteur,
                   COUNT(*) AS nb_departs,
-                  COALESCE(SUM(COALESCE(nb_palette,0)), 0) AS donnees,
+                  COALESCE(SUM(COALESCE(nb_palette_europe, nb_palette, 0)), 0) AS donnees,
                   COALESCE(SUM(CASE WHEN palette_europe_statut='retournee'
-                                    THEN COALESCE(nb_palette,0) ELSE 0 END), 0) AS rendues,
+                                    THEN COALESCE(nb_palette_europe, nb_palette, 0) ELSE 0 END), 0) AS rendues,
                   COALESCE(SUM(CASE WHEN palette_europe_statut='perdue'
-                                    THEN COALESCE(nb_palette,0) ELSE 0 END), 0) AS perdues,
+                                    THEN COALESCE(nb_palette_europe, nb_palette, 0) ELSE 0 END), 0) AS perdues,
                   MAX(date_enlevement) AS dernier
            FROM expe_departs
            WHERE palette_europe = 1
@@ -1671,7 +1811,9 @@ def journal_palettes_transporteur(
         lignes: list[dict] = []
         for r in conn.execute(
             """SELECT id, date_enlevement, transporteur_id, transporteur, client,
-                      arc, no_bl, nb_palette, palette_europe_statut,
+                      arc, no_bl,
+                      COALESCE(nb_palette_europe, nb_palette) AS nb_palette,
+                      palette_europe_statut,
                       palette_europe_date_retour, palette_europe_note
                FROM expe_departs WHERE palette_europe = 1"""
         ).fetchall():
@@ -2040,6 +2182,7 @@ def delete_depart(request: Request, depart_id: int):
             )
 
         client_nom = (ex["client"] or "").strip() or "—"
+        conn.execute("DELETE FROM expe_depart_palettes WHERE depart_id=?", (depart_id,))
         conn.execute("DELETE FROM expe_departs WHERE id=?", (depart_id,))
         conn.commit()
     log_action(

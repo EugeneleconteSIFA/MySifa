@@ -1591,3 +1591,13 @@ body.recopie-en-cours,body.recopie-en-cours *{cursor:ns-resize !important;user-s
 .dos-recherche-vide{padding:9px 10px;font-size:13px;color:var(--warn)}
 .dos-recherche-aide{font-size:11px;color:var(--muted);margin-top:4px;min-height:14px}
 .dos-recherche-aide.alerte{color:var(--warn)}
+
+/* Sanity score : lien et modale « Comment c'est calculé » */
+.sanity-howto{display:inline-block;font-size:11px;color:var(--accent);text-decoration:underline;cursor:pointer}
+.sanity-howto:hover{opacity:.8}
+.sanity-howto-p{font-size:12px;color:var(--text2);margin:0 0 8px;line-height:1.5}
+.sanity-howto-groupe{margin-top:14px}
+.sanity-howto-titre{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:6px}
+.sanity-howto-ligne{display:flex;gap:10px;align-items:baseline;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px;line-height:1.45}
+.sanity-howto-pts{flex:0 0 44px;font-family:monospace;font-weight:800;color:var(--danger);text-align:right}
+.sanity-howto-pts.is-bonus{color:var(--success)}

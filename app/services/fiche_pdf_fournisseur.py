@@ -688,13 +688,21 @@ def _build_blocks(c: canvas.Canvas, produit: dict, matieres_map: dict) -> list[d
             rows_1.append(_kv("Format étiquette", "Label format", fmt_eti))
         except (TypeError, ValueError):
             pass
-    if fiche.get("impressions"):
-        if imp.get("aplat"):
-            pct = imp.get("aplat_pourcent")
-            rows_1.append(_kv("Aplat", "Solid ink coverage",
-                              f"Oui — {_num(pct)} %", f"Yes — {_num(pct)}%"))
+    # Aplat : la ligne n'existe que s'il y a un aplat. Sans aplat, la surface
+    # imprimee se lit couleur par couleur dans le bloc Recto / Verso ; une
+    # ligne « Printed area : No » se lirait comme « rien n'est imprime ».
+    # Libelle anglais aligne sur le BAT : « Printed area ».
+    if fiche.get("impressions") and imp.get("aplat"):
+        pct = imp.get("aplat_pourcent")
+        try:
+            has_pct = float(str(pct).replace(",", ".")) > 0
+        except (TypeError, ValueError):
+            has_pct = False
+        if has_pct:
+            rows_1.append(_kv("Aplat", "Printed area",
+                              f"{_num(pct)} %", f"{_num(pct)}%"))
         else:
-            rows_1.append(_kv("Aplat", "Solid ink coverage", "Non", "No"))
+            rows_1.append(_kv("Aplat", "Printed area", "Oui", "Yes"))
     blocks.append({"t": "full", "title": ("Infos générales", "General information"),
                    "rows": _keep(rows_1)})
 

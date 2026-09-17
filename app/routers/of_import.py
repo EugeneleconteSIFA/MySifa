@@ -651,7 +651,7 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
     with get_db() as conn:
         entry = conn.execute(
             """SELECT pe.of_import_id, pe.numero_of, pe.ref_produit,
-                      pe.machine_id, m.nom AS machine_nom
+                      pe.machine_id, pe.laize, m.nom AS machine_nom
                FROM planning_entries pe
                LEFT JOIN machines m ON m.id = pe.machine_id
                WHERE pe.id = ?""",
@@ -726,40 +726,23 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
     # dont la machine correspond à la machine du planning. Fallback sur la
     # référence textuelle complète pour les fiches non encore re-parsées.
     fiche_id = None
-    if ref_produit:
+    # Le départage (machine sans accent, laize, référence exacte de l'OF) vit
+    # dans app/services/fiche_choix.py : comparer « Cohésio 2 » à « COHESIO 2 »
+    # en LOWER(TRIM()) échouait toujours et donnait la fiche de l'autre machine.
+    ref_of = (row["reference"] if row else None) or None
+    if ref_produit or ref_of:
         try:
-            from app.services.fiche_ref_parser import normalize_ref_produit
-            norm = normalize_ref_produit(ref_produit)
+            from app.services.fiche_choix import choisir_fiche
+            with get_db() as conn3:
+                fiche = choisir_fiche(
+                    conn3, ref_produit or ref_of, machine=machine_nom,
+                    laize=entry["laize"], reference=ref_of,
+                    colonnes="id",
+                )
+            if fiche:
+                fiche_id = fiche["id"]
         except Exception:
-            norm = None
-        with get_db() as conn3:
-            if norm:
-                # ORDER BY : la fiche dont la machine matche la machine du
-                # dossier au planning passe en premier ; en cas d'absence
-                # de machine sur la fiche, on garde quand même un candidat ;
-                # en dernier recours, fiche dont la machine ne matche pas.
-                fiche = conn3.execute(
-                    """SELECT id FROM fiches_techniques
-                       WHERE ref_produit_norm = ?
-                       ORDER BY
-                         CASE
-                           WHEN LOWER(TRIM(COALESCE(machine,''))) = LOWER(TRIM(COALESCE(?,''))) AND TRIM(COALESCE(machine,'')) != '' THEN 0
-                           WHEN TRIM(COALESCE(machine,'')) = '' THEN 1
-                           ELSE 2
-                         END,
-                         id
-                       LIMIT 1""",
-                    (norm, machine_nom or ""),
-                ).fetchone()
-                if fiche:
-                    fiche_id = fiche["id"]
-            if fiche_id is None:
-                fiche = conn3.execute(
-                    "SELECT id FROM fiches_techniques WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
-                    (ref_produit,),
-                ).fetchone()
-                if fiche:
-                    fiche_id = fiche["id"]
+            fiche_id = None
 
     # Récupère la liste complète des OF liés (multi via planning_of_links).
     # `of` (singular) reste = premier lien (rétrocompat panneau planning).
@@ -788,92 +771,19 @@ def get_of_for_planning_entry(entry_id: int, request: Request):
 
 
 def _enrich_of_row_from_fiche(of_row: dict) -> dict:
-    """Enrichit un OF row (dict) à partir de la fiche technique liée.
+    """Complète un OF sans PDF depuis la fiche technique de son produit.
 
-    Politique :
-      - `reference` est TOUJOURS remplacée par le ref_produit_norm (option B),
-        extrait via le parser. Si l'extraction échoue, on garde la valeur
-        d'origine.
-      - Les autres champs (matiere, adhesif_label, ref_adhesif, glassine,
-        qte_au_mille) ne sont remplis QUE s'ils sont vides côté OF (option α).
-      - Désambiguïsation par machine : si plusieurs fiches partagent le
-        même ref_produit_norm, on prend celle dont la machine correspond à
-        l'OF (ou la première sans machine, sinon la première par id).
-
-    Lecture seule. Retourne un nouveau dict, ne modifie pas l'original.
+    Toute la règle vit dans app/services/of_depuis_fiche.py : produit retrouvé
+    par l'OF, puis par le dossier relié, puis par la commande RVGI ; fiche
+    départagée par machine (sans accent) et laize ; cases VIDES seulement,
+    outillage et conditionnement compris. Lecture seule.
     """
-    enriched = dict(of_row) if of_row else {}
-
     try:
-        from app.services.fiche_ref_parser import normalize_ref_produit
-    except Exception:
-        return enriched
-
-    # 1. Extraire ref_produit_norm depuis reference originale
-    ref_norm = normalize_ref_produit(enriched.get("reference") or "")
-    if ref_norm:
-        enriched["reference"] = ref_norm
-
-    if not ref_norm:
-        # Pas de ref normalisée → on ne peut pas chercher la fiche
-        return enriched
-
-    # 2. Chercher la fiche technique correspondante
-    machine_of = (enriched.get("machine") or "").strip()
-    try:
+        from app.services.of_depuis_fiche import completer_of
         with get_db() as conn:
-            fiche = conn.execute(
-                """SELECT support, matiere, adhesif, glassine, qte_au_mille
-                   FROM fiches_techniques
-                   WHERE ref_produit_norm = ?
-                   ORDER BY
-                     CASE
-                       WHEN LOWER(TRIM(COALESCE(machine,''))) = LOWER(TRIM(?))
-                            AND TRIM(COALESCE(machine,'')) != '' THEN 0
-                       WHEN TRIM(COALESCE(machine,'')) = '' THEN 1
-                       ELSE 2
-                     END,
-                     id
-                   LIMIT 1""",
-                (ref_norm, machine_of),
-            ).fetchone()
+            return completer_of(conn, of_row)
     except Exception:
-        fiche = None
-
-    if not fiche:
-        return enriched
-
-    f = dict(fiche)
-
-    def _empty(v):
-        return v is None or (isinstance(v, str) and not v.strip())
-
-    # 3. Mapping fiche → OF (uniquement si OF vide)
-    if _empty(enriched.get("matiere")):
-        ft_mat = (f.get("support") or "").strip() or (f.get("matiere") or "").strip()
-        if ft_mat:
-            enriched["matiere"] = ft_mat
-
-    ft_adh = (f.get("adhesif") or "").strip()
-    if _empty(enriched.get("adhesif_label")) and ft_adh:
-        enriched["adhesif_label"] = ft_adh
-    if _empty(enriched.get("ref_adhesif")) and ft_adh:
-        # Tente d'extraire un numéro propre (ex: "Permanent 2028Y - 19" → "2028")
-        m_ref = re.search(r"\b(\d{3,5})\b", ft_adh)
-        if m_ref:
-            enriched["ref_adhesif"] = m_ref.group(1)
-
-    if _empty(enriched.get("glassine")):
-        ft_gl = (f.get("glassine") or "").strip()
-        if ft_gl:
-            enriched["glassine"] = ft_gl
-
-    if enriched.get("qte_au_mille") in (None, "", 0, 0.0):
-        ft_qam = f.get("qte_au_mille")
-        if ft_qam is not None:
-            enriched["qte_au_mille"] = ft_qam
-
-    return enriched
+        return dict(of_row) if of_row else {}
 
 
 @router.get("/api/of/{of_id}/pdf-preview")

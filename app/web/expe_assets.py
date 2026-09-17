@@ -3992,6 +3992,14 @@ EXPE_MAIN_CSS = r"""
 /* Rattachement production — occupe toute la largeur : c'est la première
    décision du formulaire, pas un champ parmi douze. */
 .expe-field--wide{grid-column:1/-1}
+/* Colisage multi-types : nombre + bouton de retrait sur une ligne. */
+.expe-pal-nb-row{display:flex;gap:6px;align-items:center}
+.expe-pal-nb-row input{flex:1;min-width:0}
+.expe-pal-del{flex:0 0 auto;width:34px;height:38px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg);color:var(--muted);font-size:18px;line-height:1;cursor:pointer}
+.expe-pal-del:hover{color:var(--danger);border-color:var(--danger)}
+.expe-pal-add{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.expe-pal-total{font-size:12px;font-weight:600;color:var(--muted)}
 .expe-field--wide select,.expe-field--wide .expe-field-note{max-width:440px;margin-top:6px}
 /* Cases à cocher — `.expe-field label` est un intitulé de champ (bloc, majuscules,
    10px) et `.expe-field input` fait 100 % de large : appliqués tels quels à une
@@ -4936,6 +4944,10 @@ function expeOpenDepartModal(prefill, mode){
   // En édition ou duplication : onglet manuel direct ; nouveau départ : onglet picker dossier
   const isEdit = !!(mode==='edit' && src && src.id);
   const initialTab = (mode==='new' && !prefill) ? 'dossier' : 'manuel';
+  // Départ multi-types : la première ligne alimente les champs habituels, les
+  // suivantes les lignes « type de palette » ajoutées sous le colisage.
+  const palLignes = (Array.isArray(src.palettes) && src.palettes.length>1) ? src.palettes : null;
+  const _nbStr = v => (v!=null && v!=='') ? String(v) : '';
   S.expeDepartPickerRattachOnly = false;
   if(initialTab==='dossier'){
     void loadExpeDepartDossiers();
@@ -4956,11 +4968,17 @@ function expeOpenDepartModal(prefill, mode){
       arc: src.arc||'',
       no_cde_transport: src.no_cde_transport||'',
       no_bl: src.no_bl||'',
-      type_palette_matiere_id: (src.type_colis||'').trim().toLowerCase()==='vrac'
+      type_palette_matiere_id: palLignes ? String(palLignes[0].type_palette_matiere_id)
+        : (src.type_colis||'').trim().toLowerCase()==='vrac'
         ? '__vrac__'
         : (src.type_palette_matiere_id!=null && src.type_palette_matiere_id!=='')
           ? String(src.type_palette_matiere_id) : '',
-      nb_palette: (src.nb_palette!=null && src.nb_palette!=='') ? String(src.nb_palette) : '',
+      nb_palette: palLignes ? _nbStr(palLignes[0].nb_palette) : _nbStr(src.nb_palette),
+      palettes_extra: palLignes ? palLignes.slice(1).map(l=>({
+        type_palette_matiere_id:String(l.type_palette_matiere_id),
+        nb_palette:_nbStr(l.nb_palette)})) : [],
+      // Un départ lu sans son détail de colisage ne doit pas l'effacer.
+      palettes_charges: (!isEdit || Array.isArray(src.palettes)) ? 1 : 0,
       poids_total_kg: (src.poids_total_kg!=null && src.poids_total_kg!=='') ? String(src.poids_total_kg) : '',
       date_livraison: (src.date_livraison||'') ? String(src.date_livraison).slice(0,10) : '',
       planning_entry_id: (src.planning_entry_id!=null && src.planning_entry_id!=='') ? String(src.planning_entry_id) : '',
@@ -5332,13 +5350,22 @@ function renderExpeDepartModal(){
     const m=(S.expePaletteTypes||[]).find(x=>String(x.id)===String(idVal||''));
     return !!(m && Number(m.is_europe));
   }
+  // Lot mixte (Europe + perdues…) : une seule ligne Europe suffit à suivre
+  // le retour — le serveur ne comptera que la part Europe.
+  function _palAucuneEurope(){
+    const fm=S.expeDepartForm||{};
+    const ids=[fm.type_palette_matiere_id]
+      .concat((fm.palettes_extra||[]).map(l=>l.type_palette_matiere_id));
+    return !ids.some(_palEstEurope);
+  }
   palSel.addEventListener('change',e=>{
     S.expeDepartForm.type_palette_matiere_id=e.target.value;
-    S.expeDepartForm.palette_europe = _palEstEurope(e.target.value) ? 1 : 0;
+    if(e.target.value==='__vrac__') S.expeDepartForm.palettes_extra=[];
+    S.expeDepartForm.palette_europe = _palAucuneEurope() ? 0 : 1;
     expeScheduleSaveLocal();
     render();
   });
-  const estEurope = _palEstEurope(f.type_palette_matiere_id);
+  const estEurope = !_palAucuneEurope();
   const palField=h('div',{className:'expe-field'},
     h('label',null,'Type de palette'),
     palSel
@@ -5349,6 +5376,70 @@ function renderExpeDepartModal(){
     palField.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'4px'}},
       'Aucune référence palette active (MyStock > Matières premières).'));
   }
+
+  // ── Colisage multi-types ─────────────────────────────────────
+  // Un lot part souvent sur des palettes Europe ET des palettes perdues. Chaque
+  // type ajouté est une ligne « type + nombre » ; le nombre total du départ est
+  // la somme des lignes.
+  const extras = Array.isArray(f.palettes_extra) ? f.palettes_extra : [];
+  const estVrac = String(f.type_palette_matiere_id||'')==='__vrac__';
+  const _palNum = v => { const n=parseFloat(String(v==null?'':v).replace(',','.')); return isNaN(n)?0:n; };
+  const _palFmt = n => String(Math.round(n*100)/100).replace('.',',');
+  const palTotalNote = h('span',{className:'expe-pal-total'});
+  function majPalTotal(){
+    const fm=S.expeDepartForm||{};
+    const tot=_palNum(fm.nb_palette)+(fm.palettes_extra||[]).reduce((a,l)=>a+_palNum(l.nb_palette),0);
+    palTotalNote.textContent = (fm.palettes_extra||[]).length
+      ? 'Total : '+_palFmt(tot)+' palette'+(tot>1?'s':'') : '';
+  }
+  const extraFields = [];
+  extras.forEach((l,idx)=>{
+    const sel=h('select',{name:'type_palette_extra_'+idx});
+    sel.appendChild(h('option',{value:''},'— Sélectionner —'));
+    paletteItems.forEach(m=>{
+      const opt=h('option',{value:String(m.id)},(m.reference||'').trim()||('Réf. #'+m.id));
+      if(String(l.type_palette_matiere_id||'')===String(m.id)) opt.selected=true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change',e=>{
+      S.expeDepartForm.palettes_extra[idx].type_palette_matiere_id=e.target.value;
+      S.expeDepartForm.palette_europe = _palAucuneEurope() ? 0 : 1;
+      expeScheduleSaveLocal();
+      render();
+    });
+    const nb=h('input',{type:'number',min:'0',step:'1',placeholder:'ex: 2',
+      value:(l.nb_palette!=null?String(l.nb_palette):''),name:'nb_palette_extra_'+idx});
+    nb.addEventListener('input',e=>{
+      S.expeDepartForm.palettes_extra[idx].nb_palette=e.target.value;
+      majPalTotal();
+      expeScheduleSaveLocal();
+    });
+    const del=h('button',{type:'button',className:'expe-pal-del',
+      title:'Retirer ce type de palette','aria-label':'Retirer ce type de palette',
+      onClick:()=>{
+        S.expeDepartForm.palettes_extra.splice(idx,1);
+        S.expeDepartForm.palette_europe = _palAucuneEurope() ? 0 : 1;
+        expeScheduleSaveLocal();
+        render();
+      }},'×');
+    extraFields.push(
+      h('div',{className:'expe-field'},h('label',null,'Type de palette '+(idx+2)),sel),
+      h('div',{className:'expe-field'},h('label',null,'Nombre de palettes'),
+        h('div',{className:'expe-pal-nb-row'},nb,del))
+    );
+  });
+  const addPalField = estVrac ? null : h('div',{className:'expe-field expe-field--wide expe-pal-add'},
+    h('button',{type:'button',className:'btn-ghost',
+      style:{fontSize:'12px',padding:'6px 12px'},
+      onClick:()=>{
+        if(!Array.isArray(S.expeDepartForm.palettes_extra)) S.expeDepartForm.palettes_extra=[];
+        S.expeDepartForm.palettes_extra.push({type_palette_matiere_id:'',nb_palette:''});
+        expeScheduleSaveLocal();
+        render();
+      }},'+ Ajouter un type de palette'),
+    palTotalNote
+  );
+  majPalTotal();
 
   const overlay=h('div',{className:'add-row-modal',style:{zIndex:12000}});
   overlay.addEventListener('click',e=>{if(e.target===overlay)expeCloseDepartModal();});
@@ -5387,6 +5478,21 @@ function renderExpeDepartModal(){
       palette_europe: S.expeDepartForm.palette_europe ? 1 : 0
     };
     if(!body.date_enlevement){toast("Date d'enlèvement obligatoire",'error');return;}
+    // Colisage multi-types : les lignes ajoutées + la ligne principale.
+    // Toujours envoyé : une liste vide ramène un départ à un seul type.
+    const _fm=S.expeDepartForm;
+    const _extras=(Array.isArray(_fm.palettes_extra)?_fm.palettes_extra:[])
+      .filter(l=>String(l.type_palette_matiere_id||'')||String(l.nb_palette||'').trim());
+    if(_fm.palettes_charges || _extras.length) body.palettes=[];
+    if(_extras.length && body.type_colis!=='vrac'){
+      if(!body.type_palette_matiere_id){toast('Choisissez le premier type de palette','error');return;}
+      if(_extras.some(l=>!String(l.type_palette_matiere_id||''))){
+        toast('Type de palette manquant sur une ligne de colisage','error');return;
+      }
+      body.palettes=[{type_palette_matiere_id:body.type_palette_matiere_id,nb_palette:body.nb_palette}]
+        .concat(_extras.map(l=>({type_palette_matiere_id:String(l.type_palette_matiere_id),
+                                 nb_palette:String(l.nb_palette||'').trim()||null})));
+    }
     // Contrôle côté écran : l'API refuse de toute façon, mais autant le dire
     // avant d'avoir tout ressaisi.
     if(!(body.dossiers||[]).length && !body.sans_dossier){
@@ -5559,6 +5665,10 @@ function renderExpeDepartModal(){
     h('div',null,...rattachKids)
   );
 
+  // Nombre de la première ligne : met aussi le total à jour.
+  const mkNbPal = mk('Nombre de palettes','nb_palette','number','ex: 2');
+  mkNbPal.querySelector('input').addEventListener('input',()=>majPalTotal());
+
   // Quatre questions, dans l'ordre où on les pose vraiment : d'où ça vient,
   // qui l'emporte et quand, chez qui ça va, et ce qu'il y a dessus. Les mêmes
   // champs qu'avant — c'est le regroupement qui rend la saisie lisible.
@@ -5595,7 +5705,9 @@ function renderExpeDepartModal(){
     ),
     sec('Colisage',
       palField,
-      mk('Nombre de palettes','nb_palette','number','ex: 2'),
+      mkNbPal,
+      ...extraFields,
+      addPalField,
       mk('Poids total (kg)','poids_total_kg','number','ex: 1325'),
       europeField
     )
