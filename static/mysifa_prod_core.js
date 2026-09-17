@@ -9438,9 +9438,57 @@ function renderSanity(sanity, title){
     h('div',{className:'sanity-circle'},svg,h('div',{className:'sanity-num',style:{color:col}},String(score))),
     h('div',null,
       h('div',{className:'si-mention',style:{color:col}},(title?title+' — ':'')+(sanity.mention||'')),
-      h('div',{className:'si-label'},sanity.weighted?'Qualité de saisie — moyenne pondérée (temps d\'activité)':'Qualité de saisie — Sanity Score')
+      h('div',{className:'si-label'},'Qualité de saisie — Sanity Score'
+        +(sanity.journees?(' · '+sanity.journees+' journée'+(sanity.journees>1?'s':'')):'')),
+      h('a',{href:'#',className:'sanity-howto',onClick:e=>{
+        e.preventDefault(); e.stopPropagation();
+        openSanityExplication(sanity, title);
+      }},'Comment c\'est calculé ?')
     )
   );
+}
+
+// Modale « Comment c'est calculé » : les règles viennent du serveur
+// (sanity_regles), la même source que le calcul.
+function openSanityExplication(sanity, title){
+  const old=document.getElementById('sanity-howto-overlay'); if(old) old.remove();
+  const def=(S.historique&&S.historique.sanity_regles)||{regles:[],calcul:[]};
+  const close=()=>{ const o=document.getElementById('sanity-howto-overlay'); if(o) o.remove(); };
+  const pts=v=>(v>0?'+':'')+v;
+  const groupes=[
+    ['journee','Par journée opérateur'],
+    ['dossier','Par dossier terminé'],
+    ['bonus','Bonus'],
+  ];
+  const blocs=groupes.map(([g,lbl])=>{
+    const rs=(def.regles||[]).filter(r=>r.groupe===g);
+    if(!rs.length) return null;
+    return h('div',{className:'sanity-howto-groupe'},
+      h('div',{className:'sanity-howto-titre'},lbl),
+      ...rs.map(r=>h('div',{className:'sanity-howto-ligne'},
+        h('span',{className:'sanity-howto-pts'+(r.pts>0?' is-bonus':'')},pts(r.pts)),
+        h('span',null,r.label))));
+  }).filter(Boolean);
+  const pens=(sanity&&sanity.penalites)||[];
+  const periode=pens.length
+    ? h('div',{className:'sanity-howto-groupe'},
+        h('div',{className:'sanity-howto-titre'},'Relevé sur la période'+(title?(' — '+title):'')),
+        ...pens.map(p=>h('div',{className:'sanity-howto-ligne'},
+          h('span',{className:'sanity-howto-pts'+(p.pts_unitaire>0?' is-bonus':'')},'× '+p.count),
+          h('span',null,p.label+' ('+pts(p.pts_unitaire)+' chacun)'))))
+    : null;
+  const overlay=h('div',{id:'sanity-howto-overlay',className:'contact-modal-overlay',onClick:e=>{ if(e.target===e.currentTarget) close(); }},
+    h('div',{className:'contact-modal',style:{maxWidth:'620px'}},
+      h('div',{className:'contact-modal-head'},
+        h('h3',null,'Comment le Sanity Score est calculé'),
+        h('button',{className:'contact-close-btn',onClick:close},'×')),
+      h('div',{className:'contact-modal-body'},
+        ...(def.calcul||[]).map(t=>h('p',{className:'sanity-howto-p'},t)),
+        ...blocs,
+        periode,
+        h('div',{className:'contact-modal-actions'},
+          h('button',{className:'btn-ghost',onClick:close},'Fermer')))));
+  document.body.appendChild(overlay);
 }
 
 // ── Détails sanity (liste par type) ──────────────────────────────
@@ -9448,15 +9496,21 @@ const SANITY_LABELS={
   jour_first_last:{label:"Arrivée personnel / Départ personnel"},
   jour_second_penult:{label:"Début de dossier / Fin de dossier"},
   jour_need_prod_cal_tech:{label:"Saisie vide"},
-  jour_short_shift:{label:"Arrivée → Départ < 5h"},
-  jour_arret_50:{label:"Arrêt machine (code 50)"},
+  jour_short_shift:{label:"Journée courte sans motif"},
+  jour_short_shift_justifie:{label:"Journée courte, motif donné (sans pénalité)",info:true},
+  jour_arret_50:{label:"Arrêt machine (code 50) sans explication"},
+  dossier_fin_sans_z1:{label:"Fin de production sans entrée Z1"},
+  dossier_fin_z1_en_attente:{label:"Entrée Z1 en attente (délai non écoulé, sans pénalité)",info:true},
+  z1_sans_palettes:{label:"Entrée Z1 sans palettes déclarées"},
+  dossier_fin_sans_mp_scan:{label:"Fin de production sans scan matière"},
   jour_missing_metrage:{label:"Métrage manquant (fin dossier)"},
   jour_missing_etiquettes:{label:"Nombre d’étiquettes manquant (fin dossier)"},
   jour_empty_dossier:{label:"Dossier vide (début → fin sans saisie)"},
 };
 function renderSanityEventsBlock(sanity){
   const events=sanity&&sanity.events?sanity.events:{};
-  const keys=Object.keys(events||{}).filter(k=>(events[k]||[]).length>0);
+  const keys=Object.keys(events||{}).filter(k=>(events[k]||[]).length>0)
+    .sort((a,b)=>((SANITY_LABELS[a]||{}).info?1:0)-((SANITY_LABELS[b]||{}).info?1:0));
   if(!keys.length){
     return h('div',{className:'card-empty',style:{display:'flex',alignItems:'center',gap:'8px',justifyContent:'center'}},iconEl('check-circle',18),'Aucune anomalie détectée');
   }
@@ -9472,7 +9526,7 @@ function renderSanityEventsBlock(sanity){
       );
     });
     return h('div',{style:{padding:'14px 20px',borderBottom:'1px solid var(--border)'}},
-      h('div',{style:{fontSize:'12px',fontWeight:'800',color:'var(--danger)',marginBottom:'8px'}},lbl+' ('+rows.length+')'),
+      h('div',{style:{fontSize:'12px',fontWeight:'800',color:(SANITY_LABELS[k]&&SANITY_LABELS[k].info)?'var(--muted)':'var(--danger)',marginBottom:'8px'}},lbl+' ('+rows.length+')'),
       h('div',null,...items)
     );
   });
@@ -11994,7 +12048,7 @@ function renderProdKpis(){
     applyF, makeDateSelect, makeDateInput, renderFilters,
     renderDossierFilterChipsRow, makeMultiSelect, syncDossierFilterSuggest,
     pickDossierFilter, removeDossierFilter, makeDossierFilterSearch,
-    renderSanity, renderSanityEventsBlock,
+    renderSanity, renderSanityEventsBlock, openSanityExplication,
     saveSaisie, addSaisie, upload, deleteImport, exportBlob,
     renderHist, renderSaisies, renderSaisiesWithImport, renderImport,
     pushUndo, doUndo, doRedo, applyUndo,

@@ -1,8 +1,32 @@
 """
 Synchronisation Access → MySifa : fiches techniques
 ----------------------------------------------------
-Lit les fiches modifiées après le dernier sync depuis sifa_fiches_techniques.mdb
-et les pousse vers MySifa via l'API bridge (upsert par référence).
+Lit TOUTES les fiches de sifa_fiches_techniques.mdb et pousse vers MySifa
+(upsert par référence) celles dont le CONTENU a changé depuis le dernier
+passage.
+
+Pourquoi plus de filtre sur `modif` (17/09/2026)
+-----------------------------------------------
+La fiche 1341/0012 est restée dans MySifa en « VELIN H400 » alors qu'Access
+dit « PP synthétique ». Elle avait été créée le 11/09 en dupliquant la
+1341/0008, poussée telle quelle au passage de 12h00, puis corrigée dans
+l'après-midi (matière, format, outil). Le passage suivant ne l'a jamais
+revue : il filtrait sur `modif > date du dernier passage`, or `modif` est une
+DATE sans heure et le fichier de dernier passage contenait déjà
+« 2026-09-11 ». Toute correction faite le jour même d'un passage — et toute
+modification qui ne met pas `modif` à jour — était perdue pour de bon.
+
+Le script compare désormais une empreinte du contenu de chaque fiche à celle
+du dernier envoi réussi (`SYNC_STATE_FILE`). Lire ~900 lignes d'Access prend
+une seconde ; seules les fiches réellement modifiées partent vers MySifa.
+Au premier passage (fichier d'empreintes absent), toutes les fiches sont
+envoyées : celles qui n'ont pas changé répondent « identique » et ne
+bougent pas, les autres sont rattrapées.
+
+Usage :
+    python scripts/access_sync_fiches.py
+    python scripts/access_sync_fiches.py --tout        renvoyer toutes les fiches
+    python scripts/access_sync_fiches.py --ref 1341/0012
 
 Dépendances :
     pip install pyodbc requests
@@ -11,6 +35,9 @@ Configuration :
     ACCESS_DB_PATH et TABLE_NAME ci-dessous, et la clé API dans la variable
     d'environnement MYSIFA_API_KEY (jamais en clair dans le fichier).
 """
+import argparse
+import hashlib
+import json
 import os
 import pyodbc
 import requests
@@ -19,11 +46,12 @@ from datetime import datetime
 # ── Configuration ────────────────────────────────────────────────────
 ACCESS_DB_PATH  = r"\\IDEFIX\sifa_pub\Fiches techniques Access\sifa_fiches_techniques.mdb"
 LAST_RUN_FILE   = r"\\IDEFIX\sifa_pub\Fiches techniques Access\last_sync_fiches.txt"
+# Empreinte du contenu de chaque fiche au dernier envoi réussi.
+SYNC_STATE_FILE = r"\\IDEFIX\sifa_pub\Fiches techniques Access\sync_fiches_empreintes.json"
 TABLE_NAME      = "fiches_techniques"
 MYSIFA_BASE_URL = "https://mysifa.com"
 # Clé API : setx MYSIFA_API_KEY "msk_..." puis rouvrir le terminal.
 MYSIFA_API_KEY  = os.environ.get("MYSIFA_API_KEY", "")
-DATE_FALLBACK   = "2025-01-01"     # première sync : fiches depuis 2025
 
 HEADERS = {
     "X-Api-Key":    MYSIFA_API_KEY,
@@ -37,16 +65,34 @@ CONN_STR = (
 
 # ── Helpers date ─────────────────────────────────────────────────────
 
-def get_date_depuis() -> str:
-    try:
-        with open(LAST_RUN_FILE) as f:
-            return f.read().strip()
-    except FileNotFoundError:
-        return DATE_FALLBACK
-
 def save_date_depuis():
+    """Trace humaine du dernier passage. Plus lue par le script."""
     with open(LAST_RUN_FILE, "w") as f:
-        f.write(datetime.now().strftime("%Y-%m-%d"))
+        f.write(datetime.now().strftime("%Y-%m-%d %H:%M"))
+
+
+def lire_empreintes() -> dict:
+    try:
+        with open(SYNC_STATE_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, ValueError):
+        return {}
+
+
+def ecrire_empreintes(empreintes: dict) -> None:
+    tmp = SYNC_STATE_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(empreintes, f, ensure_ascii=False, indent=0, sort_keys=True)
+    os.replace(tmp, SYNC_STATE_FILE)
+
+
+def cle_ref(ref: str) -> str:
+    return " ".join(str(ref or "").split()).lower()
+
+
+def empreinte(payload: dict) -> str:
+    brut = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha1(brut.encode("utf-8")).hexdigest()
 
 def fmt_date(val) -> str | None:
     if val is None:
@@ -80,11 +126,10 @@ def i(val) -> int | None:
 
 # ── Lecture Access ────────────────────────────────────────────────────
 
-def get_access_fiches(date_depuis: str) -> list:
+def get_access_fiches() -> list:
+    """Toutes les fiches. Pas de filtre sur `modif` : voir l'en-tête."""
     conn = pyodbc.connect(CONN_STR)
     cur  = conn.cursor()
-    # Filtre sur `modif` (date de dernière modification)
-    # Si ta table n'a pas de champ modif, remplace par date_creation
     cur.execute(
         f"""
         SELECT [reference], [date_creation], [modif],
@@ -113,10 +158,8 @@ def get_access_fiches(date_depuis: str) -> list:
                [palettisation_nb_hauteur], [palettisation_hauteur_max],
                [particularites]
         FROM   [{TABLE_NAME}]
-        WHERE  [modif] > ?
         ORDER  BY [modif] ASC
-        """,
-        (date_depuis,)
+        """
     )
     rows = cur.fetchall()
     conn.close()
@@ -226,32 +269,42 @@ def push_fiche(payload: dict) -> dict:
 # ── Main ─────────────────────────────────────────────────────────────
 
 def main():
+    ap = argparse.ArgumentParser(description="Synchronisation Access → MySifa (fiches techniques).")
+    ap.add_argument("--tout", action="store_true",
+                    help="Renvoyer toutes les fiches, même celles dont l'empreinte n'a pas changé.")
+    ap.add_argument("--ref", metavar="REFERENCE",
+                    help="Ne traiter que les fiches dont la référence contient ce texte.")
+    args = ap.parse_args()
 
     if not MYSIFA_API_KEY:
         print("Clé API absente. Définir la variable d'environnement MYSIFA_API_KEY :")
         print('  setx MYSIFA_API_KEY "msk_..."   puis rouvrir le terminal.')
         return
-    date_depuis = get_date_depuis()
+    empreintes = lire_empreintes()
     print(f"Connexion à Access : {ACCESS_DB_PATH}")
     print(f"Table             : {TABLE_NAME}")
-    print(f"Fiches depuis le  : {date_depuis}\n")
+    if not empreintes:
+        print("Aucune empreinte enregistrée : toutes les fiches seront envoyées.")
 
-    rows = get_access_fiches(date_depuis)
-    print(f"{len(rows)} fiche(s) trouvée(s).\n")
+    rows = get_access_fiches()
+    print(f"{len(rows)} fiche(s) lue(s) dans Access.\n")
 
-    created = 0
-    updated = 0
-    errors  = 0
-    conflits = 0
-    devalides = 0
+    created = updated = errors = conflits = devalides = identiques = 0
+    a_envoyer = 0
 
     for row in rows:
         ref = s(row.reference) or "???"
         try:
             payload = build_payload(row)
             if not payload.get("reference"):
-                print(f"  [IGNORÉ]  fiche sans référence — ignorée")
                 continue
+            if args.ref and args.ref.lower() not in payload["reference"].lower():
+                continue
+            cle = cle_ref(payload["reference"])
+            emp = empreinte(payload)
+            if not args.tout and empreintes.get(cle) == emp:
+                continue
+            a_envoyer += 1
             result = push_fiche(payload)
             action = result.get("action", "?")
             fid    = result.get("id", "?")
@@ -259,7 +312,7 @@ def main():
                 print(f"  [CRÉÉ]    {ref} → id MySifa : {fid}")
                 created += 1
             elif action == "unchanged":
-                print(f"  [IDENTIQUE] {ref} → rien à mettre à jour")
+                identiques += 1
             else:
                 champs = ", ".join(result.get("fields") or [])
                 print(f"  [MIS À JOUR] {ref} → {champs or 'aucun champ'} (id : {fid})")
@@ -276,6 +329,9 @@ def main():
                 print(f"            ↳ {result.get('motif_validation')} "
                       f"Fiche à revalider dans MyStock avant tout déstockage.")
                 devalides += 1
+            # L'empreinte n'est retenue qu'après un envoi réussi : une erreur
+            # réseau fait simplement repartir la fiche au passage suivant.
+            empreintes[cle] = emp
         except requests.HTTPError as e:
             print(f"  [ERREUR]  {ref} → HTTP {e.response.status_code} : {e.response.text[:120]}")
             errors += 1
@@ -283,13 +339,13 @@ def main():
             print(f"  [ERREUR]  {ref} → {e}")
             errors += 1
 
-    print(f"\nRésultat — Créées : {created}  |  Mises à jour : {updated}  "
-          f"|  Conflits : {conflits}  |  Validations retirées : {devalides}  "
-          f"|  Erreurs : {errors}")
+    print(f"\nRésultat — Envoyées : {a_envoyer}  |  Créées : {created}  |  "
+          f"Mises à jour : {updated}  |  Déjà identiques : {identiques}  |  "
+          f"Conflits : {conflits}  |  Validations retirées : {devalides}  |  "
+          f"Erreurs : {errors}")
 
-    if created + updated > 0:
-        save_date_depuis()
-        print(f"Date de dernier sync mise à jour : {datetime.now().strftime('%Y-%m-%d')}")
+    ecrire_empreintes(empreintes)
+    save_date_depuis()
 
 
 if __name__ == "__main__":

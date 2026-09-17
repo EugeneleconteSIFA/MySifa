@@ -228,7 +228,7 @@ def contexte_dossier(conn, no_dossier: str) -> Dict[str, Any]:
                FROM fiches_techniques
                WHERE ref_produit_norm = ?
                ORDER BY CASE
-                   WHEN LOWER(TRIM(COALESCE(machine,''))) = LOWER(TRIM(COALESCE(?,'')))
+                   WHEN LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(machine, ''), 'É', 'e'), 'é', 'e'), 'è', 'e'), 'È', 'e'), ' ', ''), '-', ''), '_', ''), '.', '')) = LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(?, ''), 'É', 'e'), 'é', 'e'), 'è', 'e'), 'È', 'e'), ' ', ''), '-', ''), '_', ''), '.', ''))
                         AND TRIM(COALESCE(machine,'')) != '' THEN 0
                    WHEN TRIM(COALESCE(machine,'')) = '' THEN 1
                    ELSE 2 END, id

@@ -954,6 +954,17 @@ CODES_CALAGE: frozenset[str] = frozenset({
     "02", "10", "11", "12", "58", "59", "60", "74", "75"
 })
 
+# ─── Sanity score (qualité de saisie MyProd) ─────────────────────
+# Journée opérateur (86 → 87) plus courte que ce seuil : le départ demande un
+# motif, et la journée n'est pénalisée que si le motif n'a pas été donné.
+SANITY_JOURNEE_MIN_H = float(os.getenv("SANITY_JOURNEE_MIN_H", "5"))
+# Délai laissé après une fin de dossier (89) pour faire l'entrée Z1 avant de
+# pénaliser son absence : l'entrée se fait souvent après la clôture.
+SANITY_DELAI_Z1_H = float(os.getenv("SANITY_DELAI_Z1_H", "24"))
+# Poids minimal d'une journée dans la moyenne pondérée (minutes) : une journée
+# réduite à une ou deux saisies ne doit pas disparaître de la moyenne.
+SANITY_POIDS_MIN_MIN = float(os.getenv("SANITY_POIDS_MIN_MIN", "60"))
+
 # ─── Classification opérations ────────────────────────────────────
 _ALLOWED_SEVERITY = frozenset({"info", "attention", "critique"})
 

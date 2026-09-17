@@ -1846,6 +1846,55 @@ async def create_saisie(request: Request):
         except Exception:
             seuil_franchi = None
 
+        # ── Journée courte : le départ demande un motif ──────────────────
+        # Une journée plus courte que SANITY_JOURNEE_MIN_H n'est pas une
+        # erreur en soi (rendez-vous, demi-journée, renfort). Le score de
+        # qualité de saisie ne la pénalise que si le motif manque : on le
+        # demande ici, au moment où l'opérateur est encore devant l'écran.
+        # Jamais bloquant, et l'arrêt en attente d'explication passe avant.
+        if (
+            cl["code"] == "87"
+            and not commentaire
+            and not (seuil_franchi and seuil_franchi.get("explication_exigee"))
+        ):
+            try:
+                from config import SANITY_JOURNEE_MIN_H
+                dt_dep = parse_datetime(date_op)
+                arr = conn.execute(
+                    """SELECT date_operation FROM production_data
+                       WHERE operateur = ? AND operation_code = '86'
+                         AND date_operation <= ? AND id <> ?
+                       ORDER BY date_operation DESC, id DESC LIMIT 1""",
+                    (operateur, date_op, new_id),
+                ).fetchone()
+                dt_arr = parse_datetime(arr["date_operation"]) if arr else None
+                if dt_arr and dt_dep:
+                    # un 87 entre ce 86 et maintenant : ce 86 appartient à une
+                    # journée déjà fermée, on ne mesure rien
+                    deja_ferme = conn.execute(
+                        """SELECT 1 FROM production_data
+                           WHERE operateur = ? AND operation_code = '87'
+                             AND date_operation > ? AND date_operation <= ?
+                             AND id <> ? LIMIT 1""",
+                        (operateur, arr["date_operation"], date_op, new_id),
+                    ).fetchone()
+                    duree_h = (dt_dep - dt_arr).total_seconds() / 3600.0
+                    if not deja_ferme and 0 <= duree_h < min(SANITY_JOURNEE_MIN_H, 16):
+                        m = int(round(duree_h * 60))
+                        seuil_franchi = {
+                            "saisie_id": new_id,
+                            "regle": "journee_courte",
+                            "operation": op_str,
+                            "operation_code": "87",
+                            "explication_exigee": True,
+                            "message": (
+                                f"Journée de {m // 60} h {m % 60:02d}, moins de "
+                                f"{SANITY_JOURNEE_MIN_H:g} h. Indiquez le motif du départ."
+                            ),
+                        }
+            except Exception:
+                pass
+
         row = conn.execute(
             "SELECT * FROM production_data WHERE id=?", (new_id,)
         ).fetchone()

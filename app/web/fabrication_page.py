@@ -6912,9 +6912,9 @@ function renderCommentModal(){
     h('div',{className:'fab-modal'},
       h('div',{className:'fab-modal-title'},
         svgIcon('message-square',18),
-        seuil ? " Que s'est-il passé ?" : ' Commenter la saisie'),
-      seuil ? null : h('div',{className:'fab-modal-sub'},
-        'Ce commentaire sera visible dans la fiche de production MyProd.'),
+        seuil ? (seuil.regle==='journee_courte' ? ' Motif du départ' : " Que s'est-il passé ?") : ' Commenter la saisie'),
+      h('div',{className:'fab-modal-sub'},
+        seuil ? (seuil.message||'') : 'Ce commentaire sera visible dans la fiche de production MyProd.'),
       h('div',{className:'fab-field'},
         seuil ? null : h('label',null,'Commentaire'),
         ta

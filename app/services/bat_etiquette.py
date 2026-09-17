@@ -260,7 +260,7 @@ TEXTS: Dict[str, Dict[str, Any]] = {
         "front": "Front",
         "back": "Back",
         "colour": "colour",
-        "solid": "Solid ink",
+        "solid": "Printed area",
         "area": "Area",
         "face_none": "no printing",
         "print_zone": "Printed area",
@@ -801,6 +801,7 @@ def build_bat_ops(spec: Dict[str, Any], lang: Optional[str] = None,
     ops.append(_rect(lx, g["y_prev_bottom"] - lh, lw, lh, **label_kwargs))
     ops.append(_rect(lx, g["y_main"], lw, lh, **label_kwargs))
     ops.append(_rect(lx, g["y_next_top"], lw, lh, **label_kwargs))
+    _build_neighbour_print_zones(ops, spec, g)
  
     # perforations
     perf_on = bool(spec.get("perfo_active")) and avance > 0
@@ -920,14 +921,99 @@ def _print_overlay_lines(spec: Dict[str, Any], t: Dict[str, Any]) -> List[str]:
     nb_r = _i(spec.get("nb_recto")) or len(recto)
     nb_v = _i(spec.get("nb_verso")) or len(verso)
 
-    lines = [str(t["print_zone"])]
+    title = str(t["print_zone"])
+    solid = None
+    if spec.get("aplat"):
+        pct = _f(spec.get("aplat_pourcent"))
+        solid = f"{t['solid']} {fmt_mm(pct)} %" if pct > 0 else str(t["solid"])
+        # En anglais l'aplat et la zone portent le meme libelle ("Printed
+        # area") : on fusionne plutot que d'ecrire deux fois le meme mot.
+        if str(t["solid"]) == title:
+            title, solid = solid, None
+
+    lines = [title]
     lines.append(f"{t['front']} - " + (_nb_colors(nb_r, t) if nb_r > 0 else t["face_none"]))
     if nb_v > 0:
         lines.append(f"{t['back']} - {_nb_colors(nb_v, t)}")
-    if spec.get("aplat"):
-        pct = _f(spec.get("aplat_pourcent"))
-        lines.append(f"{t['solid']} {fmt_mm(pct)} %" if pct > 0 else str(t["solid"]))
+    if solid:
+        lines.append(solid)
     return lines
+
+
+def _has_ink(spec: Dict[str, Any]) -> bool:
+    """Vrai s'il y a reellement de l'encre a poser sur l'etiquette.
+
+    ``imprime`` vaut vrai des que la fiche porte un bloc impressions, meme
+    rempli a zero recto / zero verso : dessiner une zone imprimee qui annonce
+    « sans impression » se lit comme une contradiction sur le plan.
+    """
+    if not spec.get("imprime"):
+        return False
+    if spec.get("aplat"):
+        return True
+    couleurs = spec.get("couleurs") or []
+    return (_i(spec.get("nb_recto")) + _i(spec.get("nb_verso")) > 0) or bool(couleurs)
+
+
+def _print_zone_geom(spec: Dict[str, Any], g: Dict[str, Any],
+                     y_top: float) -> Optional[Tuple[float, float, float, float, float, float]]:
+    """Rectangle de la zone imprimee d'une etiquette dont le haut est a ``y_top``.
+
+    Renvoie (x, y, w, h, largeur texte, hauteur texte), ou None quand il n'y a
+    rien a dessiner (pas d'encre, etiquette trop petite a l'echelle).
+    """
+    if not _has_ink(spec):
+        return None
+
+    lx, lw, lh = g["label_x"], g["label_w"], g["label_h"]
+    # Sous cette taille l'encart ne serait plus lisible et masquerait les
+    # cotes : le cartouche et l'encart Impressions portent seuls l'info.
+    if lw < 14.0 or lh < 8.0:
+        return None
+
+    pad_x = min(max(lw * 0.10, 1.2), 5.0)
+    pad_y = min(max(lh * 0.10, 1.2), 5.0)
+    zx, zy = lx + pad_x, y_top + pad_y
+    zw, zh = lw - 2 * pad_x, lh - 2 * pad_y
+    # Zone de texte : l'encart par defaut. Elle reste la meme quand l'aplat
+    # retrecit la zone dessinee, sinon un aplat a 5 % n'aurait plus de libelle.
+    tx_w, tx_h = zw, zh
+
+    # Aplat renseigne : la surface dessinee est proportionnelle au pourcentage
+    # (meme rapport largeur/hauteur que l'etiquette, centree). A 100 % elle
+    # couvre toute l'etiquette, avec un retrait minimal pour laisser lire la
+    # decoupe.
+    pct = _f(spec.get("aplat_pourcent")) if spec.get("aplat") else 0.0
+    if pct > 0:
+        inset = 0.4
+        k = math.sqrt(min(pct, 100.0) / 100.0)
+        zw = max((lw - 2 * inset) * k, 1.0)
+        zh = max((lh - 2 * inset) * k, 1.0)
+        zx = lx + (lw - zw) / 2
+        zy = y_top + (lh - zh) / 2
+    return zx, zy, zw, zh, tx_w, tx_h
+
+
+def _print_zone_rect(zx: float, zy: float, zw: float, zh: float) -> Dict[str, Any]:
+    return _rect(zx, zy, zw, zh, rx=min(1.2, zh * 0.15),
+                 fill=COLOR_PRINT_BG, fill_opacity=0.75,
+                 stroke=COLOR_PRINT, sw=0.25, dash=(1.2, 1.0))
+
+
+def _build_neighbour_print_zones(ops: List[Dict[str, Any]], spec: Dict[str, Any],
+                                 g: Dict[str, Any]) -> None:
+    """Zone imprimee des etiquettes voisines (debut et fin du plan).
+
+    Appelee a l'interieur du clip de la zone de dessin : seule la portion
+    visible des voisines apparait. Sans libelle, celui de l'etiquette de
+    reference suffit ; la teinte montre que toutes les etiquettes du
+    rouleau sont imprimees de la meme facon.
+    """
+    lh = g["label_h"]
+    for y_top in (g["y_prev_bottom"] - lh, g["y_next_top"]):
+        geom = _print_zone_geom(spec, g, y_top)
+        if geom:
+            ops.append(_print_zone_rect(*geom[:4]))
 
 
 def _build_print_overlay(ops: List[Dict[str, Any]], spec: Dict[str, Any],
@@ -942,35 +1028,24 @@ def _build_print_overlay(ops: List[Dict[str, Any]], spec: Dict[str, Any],
     Elle reste en aplat translucide : la perforation verticale, la decoupe et
     le rayon d'angle doivent continuer de se lire au travers.
     """
-    if not spec.get("imprime"):
+    geom = _print_zone_geom(spec, g, g["y_main"])
+    if not geom:
         return
+    zx, zy, zw, zh, tx_w, tx_h = geom
+    ops.append(_print_zone_rect(zx, zy, zw, zh))
 
     lx, lw, lh = g["label_x"], g["label_w"], g["label_h"]
-    # Sous cette taille l'encart ne serait plus lisible et masquerait les
-    # cotes : le cartouche et l'encart Impressions portent seuls l'info.
-    if lw < 14.0 or lh < 8.0:
-        return
-
-    pad_x = min(max(lw * 0.10, 1.2), 5.0)
-    pad_y = min(max(lh * 0.10, 1.2), 5.0)
-    zx, zy = lx + pad_x, g["y_main"] + pad_y
-    zw, zh = lw - 2 * pad_x, lh - 2 * pad_y
-
-    ops.append(_rect(zx, zy, zw, zh, rx=min(1.2, zh * 0.15),
-                     fill=COLOR_PRINT_BG, fill_opacity=0.75,
-                     stroke=COLOR_PRINT, sw=0.25, dash=(1.2, 1.0)))
-
     lines = _print_overlay_lines(spec, t)
-    size = min(max(zw / 13.0, 2.0), 3.2)
+    size = min(max(tx_w / 13.0, 2.0), 3.2)
     step = size * 1.5
-    room = max(int((zh - 1.0) // step), 1)
+    room = max(int((tx_h - 1.0) // step), 1)
     lines = lines[:room]
 
-    cx = zx + zw / 2
-    y = zy + zh / 2 - (len(lines) - 1) * step / 2 + size * 0.35
+    cx = lx + lw / 2
+    y = g["y_main"] + lh / 2 - (len(lines) - 1) * step / 2 + size * 0.35
     for idx, line in enumerate(lines):
         bold = idx == 0
-        ops.append(_text(cx, y, _clip_text(line, size, zw - 1.6, bold=bold),
+        ops.append(_text(cx, y, _clip_text(line, size, tx_w - 1.6, bold=bold),
                          size=size, anchor="middle", bold=bold, fill=COLOR_PRINT))
         y += step
 

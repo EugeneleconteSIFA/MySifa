@@ -3,6 +3,9 @@ paths:
   - "app/routers/of_import.py"
   - "app/services/of_pdf_generator.py"
   - "app/services/rvgi_article_fiche.py"
+  - "app/services/fiche_choix.py"
+  - "app/services/of_depuis_fiche.py"
+  - "scripts/access_sync_fiches.py"
   - "app/routers/fabrication.py"
   - "app/routers/produits_memoire.py"
   - "app/routers/ao.py"
@@ -292,3 +295,46 @@ Test : `python3 tests/test_coherence_fiche.py` (fiches réelles relevées en
 production).
 
 ---
+
+---
+
+## Choisir LA fiche d'un produit — `app/services/fiche_choix.py`
+
+Un produit a souvent une fiche par machine (« 1220/0001 - COHESIO1 - Laize
+470 » / « … COHESIO2 - Laize 570 »). Le planning écrit « Cohésio 2 », Access
+« COHESIO 2 » ou « COHESIO2 » : comparées en `LOWER(TRIM())`, elles ne sont
+JAMAIS égales, et le repli prenait la plus petite id — la fiche de l'autre
+machine, avec un autre outil et un autre nombre de fronts (constat du
+17/09/2026, dossier 9931675+996).
+
+- Python : `choisir_fiche(conn, ref, machine, laize, reference)` ou
+  `meilleure_fiche(candidates, …)`. Ordre : référence complète identique, puis
+  machine + laize, machine, laize, fiche sans machine / « COHESIO » générique.
+- SQL : `sql_cle_machine("ft.machine")` produit l'expression équivalente, en
+  SQL pur (pas de fonction Python enregistrée — elle manquerait hors `get_db()`).
+
+❌ `LOWER(TRIM(machine)) = LOWER(TRIM(?))` pour départager des fiches.
+Restent à convertir : `expe_departs.py` et `expe_pilotage.py` (jointure `km.mk`).
+
+## Un OF sans PDF se complète depuis sa fiche — `app/services/of_depuis_fiche.py`
+
+L'aperçu d'un OF Access ou MySifa (`/api/of/{id}/pdf-preview`) passe par
+`completer_of()` : produit retrouvé par l'OF, sinon par le dossier relié,
+sinon par la commande RVGI (un seul article, sinon rien) ; cases VIDES
+complétées — machine, laize, matière, outils 1 et 2, mandrin, conditionnement,
+cartons, palette, particularités. Lecture seule : rien n'est écrit en base.
+La case Réf. porte la clé produit, jamais le numéro d'OF ni le libellé
+complet de la fiche (qu'Access envoie aussi dans `format`).
+
+## Relier un OF à un dossier : `_promote_of_link`, jamais un UPDATE direct
+
+Le slot lit `planning_entries.of_import_id`, l'œil « Voir l'OF relié » lit
+`planning_of_links`. Le pont Access écrivait la colonne seule : 102 dossiers
+divergeaient. Migration `realigner_liens_of_planning` pour l'existant.
+
+## Sync des fiches : par empreinte, plus par `modif`
+
+`modif` est une date sans heure : une fiche corrigée le jour même d'un
+passage n'était jamais renvoyée (1341/0012, dupliquée de 1341/0008 puis
+corrigée l'après-midi). `access_sync_fiches.py` compare désormais une
+empreinte du contenu (`sync_fiches_empreintes.json` à côté de la base).

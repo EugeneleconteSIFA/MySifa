@@ -1074,7 +1074,8 @@ _SQL_ENTRIES_ENRICHIES = """
                                LOWER(TRIM(pe.ref_produit)))
                 ORDER BY
                   CASE
-                    WHEN LOWER(TRIM(COALESCE(ft2.machine,''))) = LOWER(TRIM(?))
+                    -- sans accent ni espace : « Cohésio 2 » = « COHESIO 2 » (fiche_choix.py)
+                    WHEN LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(ft2.machine, ''), 'É', 'e'), 'é', 'e'), 'è', 'e'), 'È', 'e'), ' ', ''), '-', ''), '_', ''), '.', '')) = LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(?, ''), 'É', 'e'), 'é', 'e'), 'è', 'e'), 'È', 'e'), ' ', ''), '-', ''), '_', ''), '.', ''))
                          AND TRIM(COALESCE(ft2.machine,'')) != '' THEN 0
                     WHEN TRIM(COALESCE(ft2.machine,'')) = '' THEN 1
                     ELSE 2
@@ -2029,7 +2030,7 @@ def list_entries(machine_id: int, request: Request):
                       AND ft.ref_produit_norm = pe.ref_produit_norm
                     ORDER BY
                       CASE
-                        WHEN LOWER(TRIM(COALESCE(ft.machine,''))) = LOWER(TRIM(COALESCE(?,''))) AND TRIM(COALESCE(ft.machine,'')) != '' THEN 0
+                        WHEN LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(ft.machine, ''), 'É', 'e'), 'é', 'e'), 'è', 'e'), 'È', 'e'), ' ', ''), '-', ''), '_', ''), '.', '')) = LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(?, ''), 'É', 'e'), 'é', 'e'), 'è', 'e'), 'È', 'e'), ' ', ''), '-', ''), '_', ''), '.', '')) AND TRIM(COALESCE(ft.machine,'')) != '' THEN 0
                         WHEN TRIM(COALESCE(ft.machine,'')) = '' THEN 1
                         ELSE 2
                       END,
@@ -2040,7 +2041,7 @@ def list_entries(machine_id: int, request: Request):
                       AND ft.ref_produit_norm = pe.ref_produit_norm
                     ORDER BY
                       CASE
-                        WHEN LOWER(TRIM(COALESCE(ft.machine,''))) = LOWER(TRIM(COALESCE(?,''))) AND TRIM(COALESCE(ft.machine,'')) != '' THEN 0
+                        WHEN LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(ft.machine, ''), 'É', 'e'), 'é', 'e'), 'è', 'e'), 'È', 'e'), ' ', ''), '-', ''), '_', ''), '.', '')) = LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(?, ''), 'É', 'e'), 'é', 'e'), 'è', 'e'), 'È', 'e'), ' ', ''), '-', ''), '_', ''), '.', '')) AND TRIM(COALESCE(ft.machine,'')) != '' THEN 0
                         WHEN TRIM(COALESCE(ft.machine,'')) = '' THEN 1
                         ELSE 2
                       END,
