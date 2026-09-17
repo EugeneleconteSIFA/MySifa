@@ -194,6 +194,7 @@ PATH_MODULES: dict[str, str] = {
     # dans le bruit technique aurait été le seul vrai contresens.
     "/api/diagnostic": "diagnostic",
     "/api/dossiers": "dossiers",
+    "/api/encres": "settings",
     "/api/erp": "erp",
     "/api/rvgi": "erp",
     "/api/rvgi-tiers": "erp",

@@ -36,40 +36,38 @@ def _clamp_score(v: float) -> int:
 
 
 def sanity_regles() -> List[Dict[str, Any]]:
-    """Règles du score, pour la modale « Comment c'est calculé » de MyProd.
+    """Règles du score, pour la fiche « Comment c'est calculé » de MyProd.
 
-    Une seule définition : le calcul et l'explication lisent les mêmes
-    seuils, l'écran ne peut pas décrire une règle que le code n'applique plus.
+    Même source que le calcul : la fiche ne peut pas décrire une règle que le
+    code n'applique plus. Libellés courts — la fiche se lit d'un coup d'œil.
+    ``pts`` à None : ligne de note, sans points.
     """
     h_min = f"{SANITY_JOURNEE_MIN_H:g} h"
     d_z1 = f"{SANITY_DELAI_Z1_H:g} h"
+    m_bob = f"{SANITY_METRES_PAR_BOBINE:,.0f}".replace(",", " ")
     return [
-        {"groupe": "journee", "pts": -5, "label": "L'arrivée (86) n'est pas la première saisie, ou le départ (87) n'est pas la dernière"},
-        {"groupe": "journee", "pts": -5, "label": "Le début de production (01) n'est pas la 2e saisie, ou la fin de production (89) n'est pas l'avant-dernière"},
-        {"groupe": "journee", "pts": -5, "label": "Aucune saisie de production, calage ou intervention technique"},
-        {"groupe": "journee", "pts": -5, "label": f"Journée de moins de {h_min} sans motif. Le motif est demandé au départ ; une fois donné, pas de pénalité"},
-        {"groupe": "journee", "pts": -2, "label": "Arrêt machine (code 50) sans explication. Une fois expliqué, pas de pénalité"},
-        {"groupe": "journee", "pts": -7, "label": "Fin de production sans métrage réel"},
-        {"groupe": "dossier", "pts": -7, "label": "Début de production suivi directement d'une fin, sans saisie entre les deux (par dossier)"},
-        {"groupe": "dossier", "pts": -7, "label": f"Fin de production sans entrée Z1, {d_z1} après la clôture. Avant ce délai, le dossier est « en attente », sans pénalité"},
-        {"groupe": "dossier", "pts": -3, "label": "Entrée Z1 sans palette déclarée (par entrée)"},
-        {"groupe": "traca", "pts": 0, "label": f"Bobines frontal/complexe attendues = métrage du dossier / {SANITY_METRES_PAR_BOBINE:,.0f} m, arrondi au supérieur. Les glassines ne comptent pas ; les bobines reprises d'un dossier précédent comptent".replace(",", " ")},
-        {"groupe": "traca", "pts": 0, "label": "Toutes les bobines attendues sont scannées"},
-        {"groupe": "traca", "pts": -2, "label": "Au moins la moitié des bobines attendues sont scannées"},
-        {"groupe": "traca", "pts": -5, "label": "Moins de la moitié des bobines attendues sont scannées"},
-        {"groupe": "traca", "pts": 0, "label": "Aucune bobine scannée, motif donné à la clôture"},
-        {"groupe": "traca", "pts": -3, "label": "Aucune bobine scannée, motif donné, mais dossier FSC"},
-        {"groupe": "traca", "pts": -5, "label": "Aucune bobine scannée et aucun motif"},
-        {"groupe": "bonus", "pts": 1, "label": "Alerte maintenance ou qualité validée dans la journée (par alerte)"},
+        {"groupe": "journee", "pts": -5, "label": "Arrivée pas en premier ou départ pas en dernier"},
+        {"groupe": "journee", "pts": -5, "label": "Début de production pas en 2e ou fin pas en avant-dernier"},
+        {"groupe": "journee", "pts": -5, "label": "Ni production, ni calage, ni technique"},
+        {"groupe": "journee", "pts": -5, "label": f"Journée de moins de {h_min} sans motif"},
+        {"groupe": "journee", "pts": -2, "label": "Arrêt 50 sans explication"},
+        {"groupe": "journee", "pts": -7, "label": "Fin de production sans métrage"},
+        {"groupe": "dossier", "pts": -7, "label": "Dossier vide (début puis fin directe)"},
+        {"groupe": "dossier", "pts": -7, "label": f"Pas d'entrée Z1 {d_z1} après la fin"},
+        {"groupe": "dossier", "pts": -3, "label": "Entrée Z1 sans palette"},
+        {"groupe": "traca", "pts": None, "label": f"Bobines attendues = métrage ÷ {m_bob} m, arrondi au-dessus. Glassines exclues."},
+        {"groupe": "traca", "pts": -2, "label": "Au moins la moitié scannées"},
+        {"groupe": "traca", "pts": -5, "label": "Moins de la moitié scannées"},
+        {"groupe": "traca", "pts": -5, "label": "Aucune, sans motif"},
+        {"groupe": "traca", "pts": -3, "label": "Aucune, motif donné, dossier FSC"},
+        {"groupe": "bonus", "pts": 1, "label": "Alerte maintenance ou qualité validée"},
     ]
 
 
 def sanity_calcul_texte() -> List[str]:
     return [
-        "Chaque journée opérateur (de l'arrivée au départ) part de 100 points. Les pénalités et bonus de la journée s'appliquent, puis la note est bornée entre 0 et 100.",
-        "Le score affiché est la moyenne des journées, pondérée par leur durée : une journée de 8 h compte deux fois plus qu'une journée de 4 h.",
-        "Sur plusieurs opérateurs, la même moyenne s'applique à toutes leurs journées : chacun pèse selon son temps de présence, les erreurs ne s'additionnent pas.",
-        "Mentions : 90 et plus Excellent, 70 à 89 Bon, 50 à 69 À améliorer, moins de 50 Critique.",
+        "Chaque journée part de 100. Le score est la moyenne des journées, pondérée par leur durée.",
+        "90 et plus : Excellent · 70 à 89 : Bon · 50 à 69 : À améliorer · moins de 50 : Critique",
     ]
 
 
@@ -310,20 +308,20 @@ def compute_sanity_score_v2(
                 "penalites": [], "events": {}, "weighted": True, "journees": 0}
 
     LABELS = {
-        "jour_first_last": "Journée : arrivée 1re étape / départ dernière étape",
-        "jour_second_penult": "Journée : début de production 2e étape / fin de production avant-dernière",
-        "jour_need_prod_cal_tech": "Journée : aucune production, calage ou intervention technique",
-        "jour_short_shift": f"Journée de moins de {SANITY_JOURNEE_MIN_H:g} h sans motif",
-        "jour_arret_50": "Arrêt machine (code 50) sans explication",
-        "jour_missing_metrage": "Fin de production : métrage manquant",
-        "jour_empty_dossier": "Dossier vide : début → fin sans saisie intermédiaire",
-        "dossier_fin_sans_z1": "Fin de production sans entrée Z1",
-        "z1_sans_palettes": "Entrée Z1 sans palettes déclarées",
-        "traca_partielle": "Traçabilité : au moins la moitié des bobines scannées",
-        "traca_insuffisante": "Traçabilité : moins de la moitié des bobines scannées",
-        "traca_absente": "Traçabilité : aucune bobine scannée, aucun motif",
-        "traca_motif_fsc": "Traçabilité : aucune bobine scannée sur un dossier FSC (motif donné)",
-        "bonus_alertes_validees": "Alertes maintenance/qualité validées",
+        "jour_first_last": "Arrivée / départ mal placés",
+        "jour_second_penult": "Début / fin de production mal placés",
+        "jour_need_prod_cal_tech": "Ni production, ni calage, ni technique",
+        "jour_short_shift": f"Journée < {SANITY_JOURNEE_MIN_H:g} h sans motif",
+        "jour_arret_50": "Arrêt 50 sans explication",
+        "jour_missing_metrage": "Fin de production sans métrage",
+        "jour_empty_dossier": "Dossier vide",
+        "dossier_fin_sans_z1": "Pas d'entrée Z1",
+        "z1_sans_palettes": "Entrée Z1 sans palette",
+        "traca_partielle": "Traçabilité partielle",
+        "traca_insuffisante": "Traçabilité insuffisante",
+        "traca_absente": "Aucune bobine, sans motif",
+        "traca_motif_fsc": "Aucune bobine, dossier FSC",
+        "bonus_alertes_validees": "Alertes validées",
     }
     penalites = [
         {"type": k, "label": LABELS[k], "count": n, "pts_unitaire": PTS[k], "total": PTS[k] * n}

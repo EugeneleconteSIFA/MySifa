@@ -2647,7 +2647,8 @@ async function switchFabTab(tab){
   set({fabTab:tab});
   if(tab==='traca'){
     await loadFournisseursFSC();
-    if(S.tracaMatieres.length===0) await loadMatieres();
+    const refCourante = S.dossier && S.dossier.reference ? String(S.dossier.reference) : '';
+    if(S.tracaMatieres.length===0 || S.tracaMatieresPour !== refCourante) await loadMatieres();
   }
   if(tab==='of'){
     await loadOfImports();
@@ -3636,10 +3637,17 @@ function renderFscBanner(){
 async function loadMatieres(){
   set({tracaLoading:true});
   try{
+    // Dossier en cours : on ne montre que ses bobines (scans et reprises).
+    // Sans dossier : les scans du jour sur la machine, comme avant. Afficher
+    // les scans du jour pendant un dossier mélangeait ceux du dossier
+    // précédent avec les bobines reprises.
+    const ref = S.dossier && S.dossier.reference ? String(S.dossier.reference) : '';
     const mid = (S.user&&S.user.machine_id) || S.adminMachineId;
-    const url = '/api/fabrication/matieres'+(mid?'?machine_id='+mid:'');
+    const url = ref
+      ? '/api/fabrication/matieres?no_dossier='+encodeURIComponent(ref)+(mid?'&machine_id='+mid:'')
+      : '/api/fabrication/matieres'+(mid?'?machine_id='+mid:'');
     const d = await apiFetch(url);
-    set({tracaMatieres: d.matieres||[]});
+    set({tracaMatieres: d.matieres||[], tracaMatieresPour: ref});
   }catch(e){ showToast(e.message,'danger'); }
   finally{ set({tracaLoading:false}); }
 }
@@ -3762,7 +3770,7 @@ async function tracaHandleMatiereResponse(d, clean){
 
 async function tracaSaveCode(code){
   if(!code||!code.trim()) return;
-  const clean = code.trim();
+  let clean = code.trim();
   set({tracaAutoSaving:true});
   try{
     // Le dossier part avec la question : les autres bobines de la meme serie
@@ -3776,6 +3784,13 @@ async function tracaSaveCode(code){
       + (dossierRef ? '&no_dossier=' + encodeURIComponent(dossierRef) : '')
       + (macId ? '&machine_id=' + encodeURIComponent(macId) : '')
     );
+    // Le serveur corrige les artefacts de lecture (chiffre parasite, points,
+    // double lecture) et signale un code suspect : on poursuit avec le code
+    // corrigé et on le dit.
+    if(lookup && lookup.code_barre) clean = lookup.code_barre;
+    if(lookup && (lookup.code_notes||[]).length){
+      showToast((lookup.code_notes||[]).join(' ')+(clean!==code.trim()?' Code retenu : '+clean:''),'info');
+    }
     if(lookup && lookup.doublon_id){
       showToast('Bobine déjà enregistrée sur ce dossier.','info');
       return;
@@ -6260,24 +6275,43 @@ function selectDossier(dossier){
 }
 
 /* ── Matières en place au démarrage d'un dossier ─────────────────────────
-   Au changement de dossier, le conducteur garde presque toujours la glassine
-   et parfois le frontal. La carte liste ce qui est monté sur la machine, tout
-   coché (« Réutiliser les dernières matières ») : les bobines cochées sont
-   rattachées au nouveau dossier sans rescan, les décochées sont démontées.
+   Au changement de dossier, la carte liste ce qui est monté sur la machine,
+   TOUT DÉCOCHÉ par défaut : sans action, la matière change et les bobines
+   sont démontées. Cocher « Même laize, même matière » ne reprend que la
+   dernière bobine montée de chaque poste — celle qui roule — et non les
+   bobines déjà finies du dossier précédent. Les autres restent cochables une
+   à une. Les bobines cochées sont rattachées sans rescan, les décochées
+   démontées.
    Chargée une fois par dossier choisi ; sans poste configuré, rien ne s'affiche. */
 async function loadDebutMontees(ref){
   const mid = (S.user&&S.user.machine_id) || S.adminMachineId;
   if(!mid){ S.debutMontees = {postes:[], en_attente:[]}; return; }
   try{
-    const d = await apiFetch('/api/fabrication/machines/'+mid+'/bobines-montees');
+    const d = await apiFetch('/api/fabrication/machines/'+mid+'/bobines-montees'
+      +(ref?'?no_dossier='+encodeURIComponent(ref):''));
     if(S.debutMonteesPour !== ref) return;
     S.debutMontees = d || {postes:[], en_attente:[]};
   }catch(e){
     if(S.debutMonteesPour !== ref) return;
     S.debutMontees = {postes:[], en_attente:[], erreur:true};
   }
-  S.debutRetirer = {};
+  // Par défaut : rien n'est repris (changement de matière).
+  const r = {};
+  debutMonteesListe().forEach(b => { r[b.id] = true; });
+  S.debutRetirer = r;
   if(S.showDebutModal) fabRenderPreserveUi({});
+}
+
+// La dernière bobine montée de chaque poste : celle qui roule.
+function debutDernieresParPoste(liste){
+  const par = {};
+  liste.forEach(b => {
+    const k = b.poste || '_attente';
+    const cur = par[k];
+    if(!cur || String(b.monte_at||'') > String(cur.monte_at||'')
+       || (String(b.monte_at||'') === String(cur.monte_at||'') && b.id > cur.id)) par[k] = b;
+  });
+  return new Set(Object.values(par).map(b => b.id));
 }
 
 function debutMonteesListe(){
@@ -6287,6 +6321,14 @@ function debutMonteesListe(){
   (m.postes||[]).forEach(p => (p.bobines||[]).forEach(b => out.push(Object.assign({posteLabel:p.label}, b))));
   (m.en_attente||[]).forEach(b => out.push(Object.assign({posteLabel:'Poste inconnu'}, b)));
   return out;
+}
+
+// Laize lue dans le code de la bobine ≠ laize du dossier qui démarre.
+function debutLaizeEcart(b){
+  const m = S.debutMontees || {};
+  const ld = parseFloat(m.dossier_laize_mm), lb = parseFloat(b && b.laize_mm);
+  if(!(ld > 0) || !(lb > 0)) return null;
+  return Math.abs(ld - lb) >= 1 ? {bobine: lb, dossier: ld} : null;
 }
 
 function renderDebutMatieres(){
@@ -6303,17 +6345,24 @@ function renderDebutMatieres(){
       h('div',{style:{fontSize:'13px',color:'var(--text2)',lineHeight:'1.5'}},
         'Aucune bobine montée connue. Scannez les bobines en place après le démarrage.'));
   }
-  const toutes = liste.every(b => !retirer[b.id]);
+  const dernieres = debutDernieresParPoste(liste);
+  const toutes = liste.some(b => !retirer[b.id]) && liste.every(b => dernieres.has(b.id) ? !retirer[b.id] : true);
   const maitre = h('label',{style:{display:'flex',alignItems:'center',gap:'10px',cursor:'pointer',
       padding:'10px 12px',borderRadius:'10px',border:'1px solid var(--accent)',
       background:'var(--accent-bg)',color:'var(--accent)',fontWeight:'700',fontSize:'14px',marginBottom:'8px'}},
     h('input',{type:'checkbox',checked:toutes,style:{width:'18px',height:'18px'},
       onChange:(e)=>{
         const r = {};
-        if(!e.target.checked) liste.forEach(b => { r[b.id] = true; });
+        liste.forEach(b => {
+          // Une bobine d'une autre laize n'est pas reprise d'office :
+          // l'opérateur peut la cocher lui-même.
+          if(!e.target.checked || !dernieres.has(b.id) || debutLaizeEcart(b)) r[b.id] = true;
+        });
         set({debutRetirer:r});
       }}),
-    'Réutiliser les dernières matières');
+    h('span',null,'Même laize, même matière',
+      h('span',{style:{display:'block',fontSize:'12px',fontWeight:'500',color:'var(--text2)',marginTop:'2px'}},
+        'Reprend la bobine en cours sur chaque poste. Laisser décoché si la matière ou la laize change.')));
 
   const gardees = liste.filter(b => !retirer[b.id]);
   const frontaux = gardees.filter(b => b.poste === 'frontal');
@@ -6339,9 +6388,11 @@ function renderDebutMatieres(){
           (b.posteLabel||'')+(b.categorie && CAT[b.categorie] && CAT[b.categorie]!==b.posteLabel ? ' · '+CAT[b.categorie] : ''),
           h('span',{style:{fontFamily:'monospace',fontWeight:'600',color:'var(--text2)',marginLeft:'8px'}}, b.code_barre||'')),
         h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'2px'}},
-          [b.fournisseur, b.dernier_dossier ? 'dossier '+b.dernier_dossier : '', quand ? 'montée le '+quand : '']
+          [b.fournisseur, b.laize_mm ? 'laize '+b.laize_mm+' mm' : '', b.dernier_dossier ? 'dossier '+b.dernier_dossier : '', quand ? 'montée le '+quand : '']
             .filter(Boolean).join(' · ')),
         !garde ? h('div',{style:{fontSize:'12px',color:'var(--text2)',marginTop:'2px'}},'Retirée de la machine au démarrage.') : null,
+        debutLaizeEcart(b) ? h('div',{style:{fontSize:'12px',color:'var(--warn)',fontWeight:'700',marginTop:'2px'}},
+          'Laize '+Math.round(debutLaizeEcart(b).bobine)+' mm, le dossier est en '+Math.round(debutLaizeEcart(b).dossier)+' mm.') : null,
         nonRattachee ? h('div',{style:{fontSize:'12px',color:'var(--text2)',marginTop:'2px'}},
           'Reste sur la machine, non rattachée : le frontal est un complexe.') : null
       )
@@ -6430,6 +6481,7 @@ function renderDebutModal(){
         try { if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh==='function') window.MysifaAlerts.refresh(); } catch(_){}
         fabPauseAutoRefresh(10000);
         await loadSession({noRender:true, silent:true});
+        try{ await loadMatieres(); }catch(_){}
       }
     }catch(e){
       showToast('Erreur : '+e.message,'danger');

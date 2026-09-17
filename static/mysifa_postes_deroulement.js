@@ -157,10 +157,54 @@
       '</div>';
   }
 
+  function blocFamilles() {
+    var d = etat.data;
+    var fam = d.familles || [];
+    var lignes = fam.map(function (f) {
+      return '<tr style="border-top:1px solid var(--border)">' +
+        '<td style="padding:8px 10px;font-weight:700">' + esc(f.fournisseur || ('#' + f.fournisseur_id)) + '</td>' +
+        '<td style="padding:8px 10px;font-family:ui-monospace,monospace">' + esc(f.masque) + '</td>' +
+        '<td style="padding:8px 10px">' + (f.laize_segment ? 'bloc ' + esc(f.laize_segment) : '<span style="color:var(--muted)">—</span>') + '</td>' +
+        '<td style="padding:8px 10px;color:var(--muted)">' + esc(f.note || '') + '</td>' +
+        '<td style="padding:8px 10px;text-align:right;white-space:nowrap">' +
+        '<button type="button" class="mpd-f-toggle" data-id="' + f.id + '" style="' + S_BTN2 + '">' +
+        (f.actif ? 'Désactiver' : 'Activer') + '</button> ' +
+        '<button type="button" class="mpd-f-suppr" data-id="' + f.id + '" style="' + S_BTN2 + ';color:var(--danger)">Supprimer</button>' +
+        '</td></tr>';
+    }).join('');
+    var opts = d.fournisseurs.map(function (f) {
+      return '<option value="' + f.id + '">' + esc(f.nom) + '</option>';
+    }).join('');
+    var L = 'display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px';
+    return '<div style="' + S_CARTE + '">' +
+      '<h4 style="' + S_TITRE + '">Familles de codes-barres</h4>' +
+      '<p class="sub" style="font-size:12px;margin:0 0 10px"># = un chiffre · ? = un caractère · * = la suite. ' +
+      'Une famille désigne le fournisseur d’un code, avant l’historique des scans. Le masque le plus précis gagne.</p>' +
+      (lignes
+        ? '<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:13px;width:100%;min-width:560px">' +
+          '<thead><tr style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px">' +
+          '<th style="text-align:left;padding:4px 10px">Fournisseur</th><th style="text-align:left;padding:4px 10px">Masque</th>' +
+          '<th style="text-align:left;padding:4px 10px">Laize</th><th style="text-align:left;padding:4px 10px">Note</th><th></th></tr></thead>' +
+          '<tbody>' + lignes + '</tbody></table></div>'
+        : '<p class="sub" style="font-size:12px">Aucune famille.</p>') +
+      '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:12px">' +
+      '<label style="' + L + '">Fournisseur<select id="mpd-f-fourn" style="' + S_CHAMP + ';min-width:180px">' + opts + '</select></label>' +
+      '<label style="' + L + '">Masque<input id="mpd-f-masque" maxlength="40" placeholder="Ex. 60#########" style="' + S_CHAMP + ';width:200px;font-family:ui-monospace,monospace"></label>' +
+      '<label style="' + L + '">Bloc laize<input id="mpd-f-laize" type="number" min="0" max="10" placeholder="—" style="' + S_CHAMP + ';width:90px"></label>' +
+      '<label style="' + L + ';flex:1;min-width:160px">Note<input id="mpd-f-note" maxlength="200" style="' + S_CHAMP + '"></label>' +
+      '<button type="button" class="btn" id="mpd-f-add">Ajouter la famille</button>' +
+      '</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px">' +
+      '<input id="mpd-f-test" placeholder="Tester un code scanné" style="' + S_CHAMP + ';width:240px;font-family:ui-monospace,monospace">' +
+      '<button type="button" id="mpd-f-test-btn" style="' + S_BTN2 + '">Tester</button>' +
+      '<span id="mpd-f-test-res" style="font-size:12px;color:var(--text2)"></span>' +
+      '</div></div>';
+  }
+
   function peindre() {
     if (!etat.el) return;
     if (!etat.data) { etat.el.innerHTML = '<p class="sub">Chargement…</p>'; return; }
-    etat.el.innerHTML = blocPostes() + blocDiagnostic() + blocRegles();
+    etat.el.innerHTML = blocPostes() + blocDiagnostic() + blocFamilles() + blocRegles();
     brancher();
   }
 
@@ -212,6 +256,52 @@
           await charger();
         } catch (e) { notifier(e.message, true); }
       });
+    });
+    var fadd = el.querySelector('#mpd-f-add');
+    if (fadd) fadd.addEventListener('click', async function () {
+      try {
+        await appel('/api/settings/familles-code', json('POST', {
+          fournisseur_id: parseInt(el.querySelector('#mpd-f-fourn').value, 10),
+          masque: el.querySelector('#mpd-f-masque').value,
+          laize_segment: el.querySelector('#mpd-f-laize').value,
+          note: el.querySelector('#mpd-f-note').value,
+        }));
+        notifier('Famille ajoutée.');
+        await charger();
+      } catch (e) { notifier(e.message, true); }
+    });
+    [].forEach.call(el.querySelectorAll('.mpd-f-suppr'), function (b) {
+      b.addEventListener('click', async function () {
+        try {
+          await appel('/api/settings/familles-code/' + b.getAttribute('data-id'), { method: 'DELETE' });
+          notifier('Famille supprimée.');
+          await charger();
+        } catch (e) { notifier(e.message, true); }
+      });
+    });
+    [].forEach.call(el.querySelectorAll('.mpd-f-toggle'), function (b) {
+      b.addEventListener('click', async function () {
+        var f = (etat.data.familles || []).filter(function (x) { return String(x.id) === b.getAttribute('data-id'); })[0];
+        if (!f) return;
+        try {
+          await appel('/api/settings/familles-code/' + f.id, json('PUT', {
+            fournisseur_id: f.fournisseur_id, masque: f.masque, laize_segment: f.laize_segment,
+            laize_blocs_min: f.laize_blocs_min, note: f.note, actif: f.actif ? 0 : 1,
+          }));
+          await charger();
+        } catch (e) { notifier(e.message, true); }
+      });
+    });
+    var ftest = el.querySelector('#mpd-f-test-btn');
+    if (ftest) ftest.addEventListener('click', async function () {
+      var out = el.querySelector('#mpd-f-test-res');
+      try {
+        var r = await appel('/api/settings/familles-code/tester?code=' + encodeURIComponent(el.querySelector('#mpd-f-test').value));
+        var f = r.famille;
+        out.textContent = (r.notes || []).join(' ') + ' ' +
+          (f ? (f.fournisseur + ' (' + f.masque + ')' + (f.laize_mm ? ' · laize ' + f.laize_mm + ' mm' : '')) : 'Aucune famille.') +
+          (r.code ? ' · code retenu : ' + r.code : '');
+      } catch (e) { out.textContent = e.message; }
     });
     var rec = el.querySelector('#mpd-reconstruire');
     if (rec) rec.addEventListener('click', async function () {

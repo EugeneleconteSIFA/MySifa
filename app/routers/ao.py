@@ -1505,6 +1505,9 @@ def export_produit_bat(
             except Exception:
                 ft = None
 
+        from app.services.encres_couleurs import charger as charger_encres
+        encres = charger_encres(conn)
+
     spec = build_bat_spec(
         produit, fiche,
         matieres_map=matieres_map,
@@ -1514,6 +1517,7 @@ def export_produit_bat(
         ref_client=ref_client,
         date_bat="/".join(reversed(_now_paris_iso()[:10].split("-"))),
         lang=lang,
+        encres=encres,
     )
 
     # Champs libres (support, adhesif, couleurs) : saisis en francais en base,
@@ -3162,6 +3166,8 @@ def _build_bat_bytes(conn, prod_full, mp_map, ao_reference):
         except Exception:
             ft = None
 
+    from app.services.encres_couleurs import charger as charger_encres
+
     spec = build_bat_spec(
         prod_full, fiche,
         matieres_map=mp_map,
@@ -3170,6 +3176,7 @@ def _build_bat_bytes(conn, prod_full, mp_map, ao_reference):
         ref_interne=prod_full.get("ref") or "",
         date_bat="/".join(reversed(_now_paris_iso()[:10].split("-"))),
         lang="fr",
+        encres=charger_encres(conn),
     )
     # Sans laize ni longueur il n'y a pas de plan à dessiner : mieux vaut aucune
     # PJ qu'un croquis d'une étiquette de 0,1 mm que le fournisseur croirait réel.

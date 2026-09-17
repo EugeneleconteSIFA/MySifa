@@ -2750,6 +2750,13 @@ def lookup_reception_for_barcode(
     code = (code_barre or "").strip()
     if not code:
         raise HTTPException(status_code=400, detail="Code barre manquant")
+    code_notes: list = []
+    try:
+        from app.services import familles_code as _fc
+        with get_db() as _c:
+            code, code_notes = _fc.normaliser(code, conn=_c)
+    except Exception:
+        code_notes = []
     with get_db() as conn:
         row = conn.execute(
             """
@@ -2775,7 +2782,8 @@ def lookup_reception_for_barcode(
                 logger.warning("Résolution origine bobine échouée", exc_info=True)
                 origine = None
             poste, doublon = _poste_et_doublon(conn, code, machine_id, dossier, origine)
-        return {"found": False, "origine": origine, "poste": poste, "doublon_id": doublon}
+        return {"found": False, "origine": origine, "poste": poste, "doublon_id": doublon,
+                "code_barre": code, "code_notes": code_notes}
     d = dict(row)
     with get_db() as conn:
         poste, doublon = _poste_et_doublon(
@@ -2791,6 +2799,8 @@ def lookup_reception_for_barcode(
         "fournisseur_licence": d.get("fournisseur_licence") or "",
         "poste": poste,
         "doublon_id": doublon,
+        "code_barre": code,
+        "code_notes": code_notes,
     }
 
 
@@ -2863,6 +2873,19 @@ async def add_matiere(request: Request):
     code_barre = (body.get("code_barre") or "").strip()
     if not code_barre:
         raise HTTPException(status_code=400, detail="Code barre manquant")
+    # Artefacts de scan (chiffre parasite, points, double lecture) corrigés
+    # quand le code corrigé tombe dans une famille connue. Le code lu est
+    # gardé : un audit doit pouvoir retrouver ce que le lecteur a rendu.
+    code_barre_brut = None
+    code_notes: list = []
+    try:
+        from app.services import familles_code as _fc
+        with get_db() as _c:
+            _neuf, code_notes = _fc.normaliser(code_barre, conn=_c)
+        if _neuf != code_barre:
+            code_barre_brut, code_barre = code_barre, _neuf
+    except Exception:
+        code_notes = []
 
     fournisseur_fsc_id = body.get("fournisseur_fsc_id")
     try:
@@ -2919,6 +2942,13 @@ async def add_matiere(request: Request):
                 (machine_id_resolved, machine_name, operateur, no_dossier, code_barre, scanned_at),
             )
             new_id = cursor.lastrowid
+            if code_barre_brut:
+                try:
+                    conn.execute(
+                        "UPDATE fab_matieres_utilisees SET code_barre_brut=? WHERE id=?",
+                        (code_barre_brut, new_id))
+                except Exception:
+                    pass  # base sans la colonne : le code corrigé suffit
             fid = _resolve_fournisseur_fsc_id(conn, fournisseur_fsc_id, None)
             _link_matiere_to_reception(
                 conn, new_id, code_barre, fid, fournisseur_libre,
@@ -2988,6 +3018,7 @@ async def add_matiere(request: Request):
         "warning": fsc_warning,
         "warning_message": fsc_warning_message,
         "poste": montage,
+        "code_notes": code_notes,
     }
 
 
@@ -3075,7 +3106,7 @@ def _monter_bobine_scannee(conn, fmu_id, machine_id, code_barre, no_dossier, ope
 # décrire COMMENT le fournisseur a été trouvé : elle n'ouvre aucun droit et ne
 # change aucun calcul. On la filtre quand même — une colonne d'audit qui accepte
 # n'importe quelle chaîne ne vaut plus rien comme colonne d'audit.
-_ORIGINES = ("reception", "historique", "signature", "dossier", "saisie")
+_ORIGINES = ("reception", "famille", "historique", "signature", "dossier", "saisie")
 _CONFIANCES = ("certain", "probable", "suggere", "aucune")
 
 
