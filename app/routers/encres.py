@@ -107,7 +107,7 @@ def a_rapprocher(request: Request):
     compte: Dict[str, int] = {}
 
     def ajouter(val: Any) -> None:
-        s = " ".join(str(val or "").split())
+        s = " ".join(str(val or "").split()).upper()
         if s:
             compte[s] = compte.get(s, 0) + 1
 
@@ -115,7 +115,8 @@ def a_rapprocher(request: Request):
         encres = svc.charger(conn)
         try:
             for r in conn.execute(
-                "SELECT tete1_pantone, tete2_pantone, tete3_pantone FROM fiches_techniques"
+                "SELECT tete1_pantone, tete2_pantone, tete3_pantone,"
+                " tete1_couleur, tete2_couleur, tete3_couleur FROM fiches_techniques"
             ):
                 for v in r:
                     ajouter(v)

@@ -28,6 +28,7 @@ def _charger(nom: str, chemin: Path):
 
 svc = _charger("encres_couleurs", RACINE / "app" / "services" / "encres_couleurs.py")
 mig = _charger("mig_encres", RACINE / "app" / "core" / "migrations" / "2026_09_17_encres_couleurs.py")
+mig2 = _charger("mig_encres2", RACINE / "app" / "core" / "migrations" / "2026_09_17_encres_pantone_complet.py")
 
 FAIL = []
 
@@ -40,17 +41,32 @@ def verifier(cas, obtenu, attendu):
         print(f"  ok     {cas}")
 
 
-def base():
+def base(complet=True):
     conn = sqlite3.connect(":memory:")
     mig.appliquer(conn)
+    if complet:
+        mig2.appliquer(conn)
     return conn
 
 
 def test_seed():
-    conn = base()
+    conn = base(complet=False)
     mig.appliquer(conn)  # rejouable
     n = conn.execute("SELECT COUNT(*) FROM encres_couleurs").fetchone()[0]
     verifier("seed rejouable sans doublon", n, len(mig.SEED))
+    # Base passee par l'ancien seed (teinte fausse), puis la gamme complete.
+    conn.execute("UPDATE encres_couleurs SET hex='#FFC845' WHERE cle='135 C'")
+    conn.execute("UPDATE encres_couleurs SET hex='#123456', updated_by='x' WHERE cle='206 C'")
+    mig2.appliquer(conn)
+    mig2.appliquer(conn)
+    verifier("gamme complete chargee",
+             conn.execute("SELECT COUNT(*) FROM encres_couleurs").fetchone()[0] > 3000, True)
+    verifier("teinte fausse corrigee",
+             conn.execute("SELECT hex FROM encres_couleurs WHERE cle='135 C'").fetchone()[0], "#FFC658")
+    verifier("teinte modifiee a la main conservee",
+             conn.execute("SELECT hex FROM encres_couleurs WHERE cle='206 C'").fetchone()[0], "#123456")
+    verifier("cles de la gamme coherentes avec cle()",
+             [k for code, k in conn.execute("SELECT code, cle FROM encres_couleurs") if svc.cle(code) != k], [])
     verifier("chaque code du seed est deja sous sa forme canonique",
              [c for c, _, _ in mig.SEED if svc.cle(c) != c], [])
 
@@ -59,7 +75,10 @@ def test_cles():
     for saisie in ("P.485 C", "P 485C", "485 C", "P. 485 C", "P.485 C ROUGE", "P-485C"):
         verifier(f"cle({saisie!r})", svc.cle(saisie), "485 C")
     verifier("sans suffixe → C par defaut", svc.cle("P485"), "485 C")
-    verifier("zero de tete sur 4 chiffres", svc.cle("P.0631 C"), "631 C")
+    verifier("zero de tete garde (Violet 0631)", svc.cle("P.0631 C"), "0631 C")
+    verifier("pourcentage n'est pas une reference", svc.cle("APLAT 100%"), "100%")
+    verifier("abreviation PROC.", svc.cle("P PROC. BLUE C"), "PROCESS BLUE C")
+    verifier("abreviation RUB.", svc.cle("P. RUB.RED C"), "RUBINE RED C")
     verifier("zero de tete garde sur 3 chiffres", svc.cle("RED 032"), "032 C")
     verifier("nom avec prefixe", svc.cle("P. BLACK C"), "BLACK C")
     verifier("nom libre", svc.cle("bleu clair"), "BLEU CLAIR")
@@ -70,11 +89,15 @@ def test_resolution():
     E = svc.charger(base())
     cas = {
         "P.485 C": "#DA291C",
-        "JAUNE P 135U": "#FFC845",   # U absent → teinte C
-        "P.BLACKU": "#2D2926",       # suffixe colle
+        "JAUNE P 135U": E["135 U"],
+        "P 2012 C": None,            # absent de la gamme : a saisir
+        "P.YELLOW 012 C": E["012 C"],
+        "ROSE FUSHIA": E["ROSE"],    # premier mot
+        "APLAT ROSE": E["ROSE"],
+        "P.BLACKU": E["BLACK U"],    # suffixe colle
         "P. BLACK": "#2D2926",
-        "BLEU P.647 U": "#236192",
-        "P. 072U": "#10069F",
+        "BLEU P.647 U": E["647 U"],
+        "P. 072U": E["072 U"],
         "Process Blue": "#0085CA",
         "#fd0": "#FFDD00",
         "ROUGE": None,               # nom simple : pas dans le referentiel
@@ -87,7 +110,11 @@ def test_resolution():
 def test_inactive_ignoree():
     conn = base()
     conn.execute("UPDATE encres_couleurs SET actif=0 WHERE cle='485 C'")
+    conn.execute("UPDATE encres_couleurs SET actif=0 WHERE cle='485 U'")
     verifier("encre inactive ignoree", svc.resoudre("P485", svc.charger(conn)), None)
+    conn2 = base()
+    conn2.execute("DELETE FROM encres_couleurs WHERE cle='647 U'")
+    verifier("U absent → teinte C", svc.resoudre("P 647 U", svc.charger(conn2)), "#236192")
 
 
 def test_bat():
