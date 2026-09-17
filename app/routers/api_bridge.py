@@ -584,11 +584,13 @@ def preview_fiche_pdf(
             "SELECT * FROM fiches_techniques WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
             (reference,)
         ).fetchone()
+        from app.services.encres_couleurs import charger as charger_encres
+        encres = charger_encres(conn)
 
     if not row:
         raise HTTPException(status_code=404, detail=f"Fiche '{reference}' introuvable.")
 
-    pdf_bytes = generate_fiche_pdf(dict(row))
+    pdf_bytes = generate_fiche_pdf(dict(row), encres=encres)
     safe_ref = reference.replace("/", "-").replace(" ", "_")
     return Response(
         content=pdf_bytes,

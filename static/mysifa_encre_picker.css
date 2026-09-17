@@ -1,0 +1,64 @@
+/* ============================================================
+   MySifa — Recherche d'encre à la saisie (mysifa_encre_picker.js)
+   Aucune couleur en dur : variables du design system uniquement.
+   La pastille de teinte est posée en background du champ par le JS
+   (seule couleur « en dur » : celle de l'encre, qui vient de la base).
+   ============================================================ */
+
+.mys-enc-list {
+  position: fixed;
+  z-index: 10050;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .28);
+  padding: 4px;
+  font-size: 13px;
+}
+
+.mys-enc-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.mys-enc-item.is-active,
+.mys-enc-item:hover { background: var(--accent-bg); }
+
+.mys-enc-sw {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.mys-enc-cle { font-weight: 700; white-space: nowrap; }
+
+.mys-enc-lib {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mys-enc-vide {
+  padding: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.mys-enc-pied {
+  padding: 6px 10px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}

@@ -11,9 +11,9 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from database import get_db
@@ -76,6 +76,40 @@ def lister(request: Request):
         except sqlite3.Error:
             rows = []
     return {"encres": [_row(r) for r in rows]}
+
+
+@router.get("/api/encres/palette")
+def palette(request: Request):
+    """Liste compacte pour la recherche à la saisie : [clé, libellé, teinte].
+
+    Chargée une fois par page par static/mysifa_encre_picker.js. Format en
+    tableaux plutôt qu'en objets : ~3 200 lignes, le poids compte."""
+    get_current_user(request)
+    with get_db() as conn:
+        try:
+            rows = conn.execute(
+                "SELECT cle, libelle, hex FROM encres_couleurs WHERE actif=1 ORDER BY cle"
+            ).fetchall()
+        except sqlite3.Error:
+            rows = []
+    return {"encres": [[r[0], r[1] or "", r[2]] for r in rows]}
+
+
+@router.get("/api/encres/resoudre")
+def resoudre_lot(request: Request, d: List[str] = Query(default=[])):
+    """Teinte de plusieurs désignations, exactement comme le BAT la calcule.
+
+    GET et non POST : c'est une lecture, elle n'a rien à faire au journal.
+    Une désignation sans teinte connue renvoie null (pas le gris neutre)."""
+    get_current_user(request)
+    from app.services.bat_etiquette import _guess_hex, _PANTONE_FALLBACK
+    with get_db() as conn:
+        encres = svc.charger(conn)
+    out: Dict[str, Optional[str]] = {}
+    for des in d[:200]:
+        hx = _guess_hex(des, encres) if (des or "").strip() else _PANTONE_FALLBACK
+        out[des] = None if hx == _PANTONE_FALLBACK else hx
+    return {"teintes": out}
 
 
 @router.get("/api/encres/tester")

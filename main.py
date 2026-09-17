@@ -1,6 +1,7 @@
 """
 MyProd by SIFA — v0.5.0
 """
+import asyncio
 import logging
 import os
 import time
@@ -93,6 +94,7 @@ from app.routers.qualite_fsc import router as qualite_fsc_router
 from app.web.qualite_page import router as qualite_page_router
 from app.routers.pwa import router as pwa_router
 from app.routers.push import router as push_router
+from app.routers.notifications import router as notifications_router
 from app.web.maintenance_page import router as maintenance_page_router
 from app.routers.maintenance_events import router as maintenance_events_router
 from app.routers.rapports_prod import router as rapports_prod_api_router
@@ -163,7 +165,35 @@ async def lifespan(app: FastAPI):
         seed_default_channels_on_startup()
     except Exception as e:
         print(f"[MySifa] chat seed ignoré ({e})")
-    yield
+    # Push des notifications par service : prod uniquement (le return staging
+    # ci-dessus garantit qu'un même événement ne part pas deux fois).
+    _notif_task = asyncio.create_task(_boucle_push_notifications())
+    try:
+        yield
+    finally:
+        _notif_task.cancel()
+
+
+async def _boucle_push_notifications():
+    """Toutes les 5 minutes, pousse les nouveautés des notifications dont
+    le push est activé dans Paramètres › Notifications."""
+    from app.core.database import get_db as _get_db
+    from app.routers.push import send_push_safe
+    from app.services import notifications as _notifs
+    from services.auth_service import user_has_app_access
+
+    await asyncio.sleep(60)
+    while True:
+        try:
+            n = await asyncio.to_thread(
+                _notifs.tour_de_push, _get_db, send_push_safe, user_has_app_access)
+            if n:
+                print(f"[MySifa] notifications : {n} push envoyé(s)")
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[MySifa] notifications : tour de push en échec ({e})")
+        await asyncio.sleep(300)
 
 
 app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=lifespan)
@@ -431,6 +461,10 @@ async def inject_staging_bandeau(request: Request, call_next):
 # appel réseau tant que le raccourci n'a pas servi (le script résout le rôle
 # paresseusement). html2canvas n'est chargé qu'à la première capture.
 _TACHE_QUICK_TAG = b'<script src="/static/mysifa_tache_quick.js?v=2" defer></script>'
+# Cloche des notifications par service (même point d'injection, même raison :
+# aucune page oubliée). Le script ne fait rien tant que l'utilisateur n'a
+# aucune notification configurée pour son rôle.
+_NOTIFS_TAG = b'<script src="/static/mysifa_notifs.js?v=1" defer></script>'
 _BODY_CLOSE_RE = re.compile(rb"</body>", re.IGNORECASE)
 
 
@@ -468,7 +502,8 @@ async def inject_tache_quick(request: Request, call_next):
         _closes = list(_BODY_CLOSE_RE.finditer(body))
         if _closes:
             _pos = _closes[-1].start()
-            new_body = body[:_pos] + _TACHE_QUICK_TAG + body[_pos:]
+            _tags = _TACHE_QUICK_TAG + (b"" if _NOTIFS_TAG in body else _NOTIFS_TAG)
+            new_body = body[:_pos] + _tags + body[_pos:]
         else:
             new_body = body
     headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
@@ -568,6 +603,7 @@ app.include_router(qualite_fsc_router)
 app.include_router(qualite_page_router)
 app.include_router(pwa_router)
 app.include_router(push_router)
+app.include_router(notifications_router)
 app.include_router(maintenance_page_router)
 app.include_router(maintenance_events_router)
 app.include_router(rapports_prod_api_router)

@@ -87,10 +87,24 @@ def _section_header(c: canvas.Canvas, x: float, y: float, w: float, h: float, te
     c.setFillColor(_BLACK)
 
 
-def generate_fiche_pdf(fiche: dict) -> bytes:
+def _teinte(fiche: dict, pref: str, cref: str, encres: Optional[dict]) -> Optional[str]:
+    """Teinte de la tête, calculée comme sur le BAT (Pantone, puis couleur)."""
+    pantone = str(fiche.get(pref) or "").strip()
+    nom = str(fiche.get(cref) or "").strip()
+    if not (pantone or nom):
+        return None
+    from app.services.bat_etiquette import _guess_hex, _PANTONE_FALLBACK
+    hx = _guess_hex(pantone, encres or {}, fallback=nom)
+    return None if hx == _PANTONE_FALLBACK else hx
+
+
+def generate_fiche_pdf(fiche: dict, encres: Optional[dict] = None) -> bytes:
     """
     Génère le PDF d'une fiche technique à partir d'un dict de données.
     Retourne les bytes du PDF.
+
+    ``encres`` : référentiel {clé: hex} (app.services.encres_couleurs.charger).
+    Fourni, chaque tête porte une pastille à la teinte de son encre.
     """
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
@@ -286,6 +300,18 @@ def generate_fiche_pdf(fiche: dict) -> bytes:
     ], start=1):
         _draw_cell(c, ml, y - tete_row_h, col_p, tete_row_h, value=_f(pref), font_size=7)
         _draw_cell(c, ml + col_p, y - tete_row_h, col_coul, tete_row_h, value=_f(cref), font_size=7)
+        hx = _teinte(fiche, pref, cref, encres)
+        if hx:
+            sw = 3.2 * mm
+            try:
+                c.setFillColor(colors.HexColor(hx))
+                c.setStrokeColor(_BLACK)
+                c.setLineWidth(0.3)
+                c.rect(ml + col_p + col_coul - sw - 1.2 * mm, y - tete_row_h / 2 - sw / 2,
+                       sw, sw, fill=1, stroke=1)
+                c.setFillColor(_BLACK)
+            except ValueError:
+                pass
         _draw_cell(c, ml + col_p + col_coul, y - tete_row_h, col_ani, tete_row_h, value=_f(aref), font_size=7)
         _draw_cell(c, ml + col_p + col_coul + col_ani, y - tete_row_h, col_comp, tete_row_h, value=_f(compref), font_size=7)
         # Label Tête N sur le côté gauche

@@ -938,6 +938,10 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         Mises à jour
       </button>
+      <button type="button" class="nav-btn" data-req-section="communication" data-tab="notifications">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        Notifications
+      </button>
       <div class="nav-group-label msb-section msb-toggle" data-req-section="audit_full"><span>Audit</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="audit">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1146,12 +1150,17 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <div class="menu-group" data-req-section="communication">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
-            <div><span class="mg-lbl">Communication</span><span class="mg-desc">Annonces MAJ diffusées aux utilisateurs.</span></div>
+            <div><span class="mg-lbl">Communication</span><span class="mg-desc">Annonces MAJ et notifications par service.</span></div>
           </div>
           <div class="menu-items">
             <button type="button" class="menu-item" data-goto="updates">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Mises à jour</span><span class="mi-desc">Rédiger et publier une annonce de release.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button type="button" class="menu-item" data-goto="notifications">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Notifications</span><span class="mi-desc">Qui reçoit quelle bulle, par service.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
           </div>
@@ -2615,6 +2624,12 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
     </section>
 
 
+    <!-- ── Notifications par service ─────────────────────────────────────────
+         Le contenu est construit par static/mysifa_notifs_admin.js. -->
+    <section id="panel-notifications" class="hidden" data-req-section="communication">
+      <div id="notifs-admin-root" style="max-width:1100px"></div>
+    </section>
+
     <!-- ── Diagnostic SQL ────────────────────────────────────────────────────
          Le panneau ne décide rien : tout l'encadrement est dans
          app/services/diagnostic_sql.py, appliqué par l'autoriseur SQLite.
@@ -3355,6 +3370,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_notifs_admin.js?v=1"></script>
 <script>
 /*__TRACA_GUIDE__*/
 const API = window.location.origin;
@@ -3452,6 +3468,7 @@ function syncSettingsPageHead(tabId) {
     mandrins:     { title: 'Mandrins',        sub: 'Perte de coupe sur les tubes' },
     importations: { title: 'Importations',    sub: 'Grilles tarifaires transporteurs' },
     updates:      { title: 'Mises à jour',    sub: 'Annonces de release' },
+    notifications: { title: 'Notifications',  sub: 'Bulles par service, en haut à droite des applis' },
     audit:        { title: 'Audit',           sub: 'Log d\'activité' },
     fsc:          { title: 'Registre FSC',    sub: '' },
     dashboards:   { title: 'Tableaux de bord', sub: 'Widgets consolidés' },
@@ -3610,7 +3627,7 @@ document.addEventListener('keydown', function (ev) {
   }
 });
 
-const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','encres','emplacements','laizes','mandrins','importations','bridge','transport','typesarticle','updates','audit','fsc','dashboards','api','promote','printers','formations','diagnostic'];
+const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','encres','emplacements','laizes','mandrins','importations','bridge','transport','typesarticle','updates','notifications','audit','fsc','dashboards','api','promote','printers','formations','diagnostic'];
 
 function setTab(id, opts) {
   if (!VALID_TABS.includes(id)) id = 'menu';
@@ -3632,7 +3649,7 @@ function setTab(id, opts) {
       }
     } catch(e){}
   }
-  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'encres', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'transport', 'typesarticle', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations', 'diagnostic'].forEach(p => {
+  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'encres', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'transport', 'typesarticle', 'updates', 'notifications', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations', 'diagnostic'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -3654,6 +3671,7 @@ function setTab(id, opts) {
   if (id === 'transport') initTransportPanel();
   if (id === 'typesarticle') initTypesArticlePanel();
   if (id === 'updates') loadUpdates();
+  if (id === 'notifications' && window.MySifaNotifsAdmin) window.MySifaNotifsAdmin.init(document.getElementById('notifs-admin-root'));
   if (id === 'audit') loadAuditLogs();
   if (id === 'fsc') initFscPanel();
   if (id === 'printers') initPrintersPanel();
