@@ -781,6 +781,9 @@ SANITY_DELAI_Z1_H = float(os.getenv("SANITY_DELAI_Z1_H", "24"))
 # Poids minimal d'une journée dans la moyenne pondérée (minutes) : une journée
 # réduite à une ou deux saisies ne doit pas disparaître de la moyenne.
 SANITY_POIDS_MIN_MIN = float(os.getenv("SANITY_POIDS_MIN_MIN", "60"))
+# Métrage d'une bobine frontal/complexe pour estimer le nombre de bobines
+# attendues sur un dossier (arrondi supérieur). Les glassines ne comptent pas.
+SANITY_METRES_PAR_BOBINE = float(os.getenv("SANITY_METRES_PAR_BOBINE", "12000"))
 
 # ─── Classification opérations ────────────────────────────────────
 _ALLOWED_SEVERITY = frozenset({"info", "attention", "critique"})

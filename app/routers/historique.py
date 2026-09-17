@@ -1,6 +1,7 @@
 """SIFA — Historique v0.10
 Sanity Score : une note par journée opérateur, puis moyenne pondérée par la durée.
 """
+import math
 from datetime import datetime, timedelta
 from typing import Optional, List, Any, Dict
 from fastapi import APIRouter, Request, Query
@@ -9,7 +10,7 @@ from services.analyse import analyse_saisie_errors, assign_shift_keys
 from services.auth_service import get_current_user, is_admin, can_view_all_prod
 from services.prod_machine_filter import append_machine_filter, norm_machine_canonical
 from config import CODE_ARRIVEE, CODE_DEPART, CODE_DEBUT_DOS, CODE_FIN_DOS, CODE_CALAGE, CODES_CALAGE, CODE_PRODUCTION, CODE_REPRISE
-from config import SANITY_JOURNEE_MIN_H, SANITY_DELAI_Z1_H, SANITY_POIDS_MIN_MIN
+from config import SANITY_JOURNEE_MIN_H, SANITY_DELAI_Z1_H, SANITY_POIDS_MIN_MIN, SANITY_METRES_PAR_BOBINE
 
 router = APIRouter()
 
@@ -52,7 +53,13 @@ def sanity_regles() -> List[Dict[str, Any]]:
         {"groupe": "dossier", "pts": -7, "label": "Début de production suivi directement d'une fin, sans saisie entre les deux (par dossier)"},
         {"groupe": "dossier", "pts": -7, "label": f"Fin de production sans entrée Z1, {d_z1} après la clôture. Avant ce délai, le dossier est « en attente », sans pénalité"},
         {"groupe": "dossier", "pts": -3, "label": "Entrée Z1 sans palette déclarée (par entrée)"},
-        {"groupe": "dossier", "pts": -3, "label": "Fin de production avec quantité traitée mais aucun scan matière"},
+        {"groupe": "traca", "pts": 0, "label": f"Bobines frontal/complexe attendues = métrage du dossier / {SANITY_METRES_PAR_BOBINE:,.0f} m, arrondi au supérieur. Les glassines ne comptent pas ; les bobines reprises d'un dossier précédent comptent".replace(",", " ")},
+        {"groupe": "traca", "pts": 0, "label": "Toutes les bobines attendues sont scannées"},
+        {"groupe": "traca", "pts": -2, "label": "Au moins la moitié des bobines attendues sont scannées"},
+        {"groupe": "traca", "pts": -5, "label": "Moins de la moitié des bobines attendues sont scannées"},
+        {"groupe": "traca", "pts": 0, "label": "Aucune bobine scannée, motif donné à la clôture"},
+        {"groupe": "traca", "pts": -3, "label": "Aucune bobine scannée, motif donné, mais dossier FSC"},
+        {"groupe": "traca", "pts": -5, "label": "Aucune bobine scannée et aucun motif"},
         {"groupe": "bonus", "pts": 1, "label": "Alerte maintenance ou qualité validée dans la journée (par alerte)"},
     ]
 
@@ -88,7 +95,8 @@ def compute_sanity_score_v2(
     ctx (tous optionnels, sans ctx les règles Z1 / MP / bonus sont ignorées) :
         z1_by_dossier      : {no_dossier: {"count": int, "mouvement_ids": [int]}}
         palettes_by_mvt_id : {mouvement_id: nb_palettes_declarees}
-        mp_scans_by_dossier: {no_dossier: nb_scans}
+        traca_by_dossier   : {no_dossier: {"attendu": int, "scans": int,
+                                "motif": bool, "fsc": bool}}
         acks_by_op_day     : {(operateur, "YYYY-MM-DD"): nb_acks}
         arrets_justifies   : {saisie_id, ...}
         now                : datetime de référence pour le délai Z1
@@ -100,7 +108,7 @@ def compute_sanity_score_v2(
     ctx = ctx or {}
     z1_by_dossier       = ctx.get("z1_by_dossier") or {}
     palettes_by_mvt_id  = ctx.get("palettes_by_mvt_id") or {}
-    mp_scans_by_dossier = ctx.get("mp_scans_by_dossier") or {}
+    traca_by_dossier    = ctx.get("traca_by_dossier") or {}
     acks_by_op_day      = ctx.get("acks_by_op_day") or {}
     arrets_justifies    = set(ctx.get("arrets_justifies") or ())
     now_ref: datetime   = ctx.get("now") or datetime.now()
@@ -127,7 +135,9 @@ def compute_sanity_score_v2(
         "jour_need_prod_cal_tech": -5, "jour_short_shift": -5,
         "jour_arret_50": -2, "jour_missing_metrage": -7,
         "jour_empty_dossier": -7, "dossier_fin_sans_z1": -7,
-        "z1_sans_palettes": -3, "dossier_fin_sans_mp_scan": -3,
+        "z1_sans_palettes": -3,
+        "traca_partielle": -2, "traca_insuffisante": -5,
+        "traca_absente": -5, "traca_motif_fsc": -3,
         "bonus_alertes_validees": 1,
     }
     counts: Dict[str, int] = {k: 0 for k in PTS}
@@ -230,13 +240,27 @@ def compute_sanity_score_v2(
                         jc["z1_sans_palettes"] += 1
                         add_event("z1_sans_palettes", op, jour, dos)
 
-            try:
-                q_tr_f = float(x.get("quantite_traitee") or 0)
-            except (TypeError, ValueError):
-                q_tr_f = 0.0
-            if q_tr_f > 0 and int(mp_scans_by_dossier.get(dos, 0) or 0) == 0:
-                jc["dossier_fin_sans_mp_scan"] += 1
-                add_event("dossier_fin_sans_mp_scan", op, jour, dos)
+            # Traçabilité matière : bobines frontal/complexe scannées
+            # (ou reprises) rapportées aux bobines attendues par le métrage.
+            tr = traca_by_dossier.get(dos) or {}
+            attendu = int(tr.get("attendu") or 0)
+            if attendu > 0:
+                scans = int(tr.get("scans") or 0)
+                if scans >= attendu:
+                    pass
+                elif scans > 0:
+                    t = "traca_partielle" if scans * 2 >= attendu else "traca_insuffisante"
+                    jc[t] += 1
+                    add_event(t, op, jour, dos)
+                elif tr.get("motif"):
+                    if tr.get("fsc"):
+                        jc["traca_motif_fsc"] += 1
+                        add_event("traca_motif_fsc", op, jour, dos)
+                    else:
+                        add_event("traca_motif", op, jour, dos)
+                else:
+                    jc["traca_absente"] += 1
+                    add_event("traca_absente", op, jour, dos)
         if miss_m:
             jc["jour_missing_metrage"] += 1
 
@@ -295,7 +319,10 @@ def compute_sanity_score_v2(
         "jour_empty_dossier": "Dossier vide : début → fin sans saisie intermédiaire",
         "dossier_fin_sans_z1": "Fin de production sans entrée Z1",
         "z1_sans_palettes": "Entrée Z1 sans palettes déclarées",
-        "dossier_fin_sans_mp_scan": "Fin de production avec quantité traitée mais aucun scan matière",
+        "traca_partielle": "Traçabilité : au moins la moitié des bobines scannées",
+        "traca_insuffisante": "Traçabilité : moins de la moitié des bobines scannées",
+        "traca_absente": "Traçabilité : aucune bobine scannée, aucun motif",
+        "traca_motif_fsc": "Traçabilité : aucune bobine scannée sur un dossier FSC (motif donné)",
         "bonus_alertes_validees": "Alertes maintenance/qualité validées",
     }
     penalites = [
@@ -474,7 +501,7 @@ def dashboard_historique(
         sanity_ctx: Dict[str, Any] = {
             "z1_by_dossier": {},
             "palettes_by_mvt_id": {},
-            "mp_scans_by_dossier": {},
+            "traca_by_dossier": {},
             "acks_by_op_day": {},
             "arrets_justifies": set(),
         }
@@ -535,17 +562,72 @@ def dashboard_historique(
                     int(r["mouvement_id"]): int(r["n"]) for r in pal_rows
                 }
 
-            # Scans matière première par dossier
-            mp_rows_s = conn.execute(
-                f"""SELECT TRIM(no_dossier) AS no_dossier, COUNT(*) AS n
+            # Traçabilité matière : bobines frontal/complexe (glassines
+            # exclues, bobines reprises incluses) et bobines attendues
+            # d'après le métrage du dossier, calculé par la même règle que
+            # les écrans (rapport_dossier.metrage_dossier).
+            scans_rows = conn.execute(
+                f"""SELECT TRIM(no_dossier) AS no_dossier,
+                           COUNT(DISTINCT TRIM(code_barre)) AS n
                     FROM fab_matieres_utilisees
                     WHERE TRIM(COALESCE(no_dossier,'')) IN ({ph_d})
+                      AND LOWER(COALESCE(categorie_bobine,'')) <> 'glassine'
                     GROUP BY TRIM(no_dossier)""",
                 san_dossiers,
             ).fetchall()
-            sanity_ctx["mp_scans_by_dossier"] = {
-                str(r["no_dossier"]).strip(): int(r["n"]) for r in mp_rows_s
-            }
+            scans_by_d = {str(r["no_dossier"]).strip(): int(r["n"]) for r in scans_rows}
+            motif_rows = conn.execute(
+                f"""SELECT DISTINCT TRIM(no_dossier) AS no_dossier
+                    FROM production_data
+                    WHERE TRIM(COALESCE(no_dossier,'')) IN ({ph_d})
+                      AND operation_code = ?
+                      AND COALESCE(TRIM(matiere_absente_motif),'') <> ''""",
+                san_dossiers + [CODE_FIN_DOS],
+            ).fetchall()
+            motif_d = {str(r["no_dossier"]).strip() for r in motif_rows}
+            fsc_rows = conn.execute(
+                f"""SELECT TRIM(reference) AS ref FROM planning_entries
+                    WHERE TRIM(COALESCE(reference,'')) IN ({ph_d})
+                      AND COALESCE(fsc_requis,0) = 1""",
+                san_dossiers,
+            ).fetchall()
+            fsc_d = {str(r["ref"]).strip() for r in fsc_rows}
+            dossiers_fin = sorted({
+                str(r["no_dossier"]).strip() for r in san_rows
+                if str(r["operation_code"] or "") == CODE_FIN_DOS
+                and r["no_dossier"] and str(r["no_dossier"]).strip()
+            })
+            try:
+                from app.services.rapport_dossier import _saisies, metrage_dossier
+            except Exception:
+                _saisies = metrage_dossier = None
+            traca: Dict[str, Dict[str, Any]] = {}
+            for d in dossiers_fin:
+                attendu = 0
+                if metrage_dossier is not None:
+                    try:
+                        met = metrage_dossier(_saisies(conn, d), CODE_FIN_DOS, CODE_DEBUT_DOS)
+                        metres = float(met.get("reel") or 0)
+                        if met.get("fiable") and metres > 0 and SANITY_METRES_PAR_BOBINE > 0:
+                            attendu = int(math.ceil(metres / SANITY_METRES_PAR_BOBINE))
+                    except Exception:
+                        attendu = 0
+                if attendu == 0:
+                    # métrage inconnu : au moins une bobine si le dossier a produit
+                    produit = any(
+                        str(r["no_dossier"] or "").strip() == d
+                        and str(r["operation_code"] or "") == CODE_FIN_DOS
+                        and float(r["quantite_traitee"] or 0) > 0
+                        for r in san_rows
+                    )
+                    attendu = 1 if produit else 0
+                traca[d] = {
+                    "attendu": attendu,
+                    "scans": scans_by_d.get(d, 0),
+                    "motif": d in motif_d,
+                    "fsc": d in fsc_d,
+                }
+            sanity_ctx["traca_by_dossier"] = traca
 
         # Alertes maintenance/qualité ackées, groupées par (opérateur, jour)
         # Clé opérateur en lower/strip pour matcher production_data.operateur

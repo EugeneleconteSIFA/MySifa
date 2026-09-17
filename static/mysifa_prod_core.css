@@ -1601,3 +1601,4 @@ body.recopie-en-cours,body.recopie-en-cours *{cursor:ns-resize !important;user-s
 .sanity-howto-ligne{display:flex;gap:10px;align-items:baseline;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px;line-height:1.45}
 .sanity-howto-pts{flex:0 0 44px;font-family:monospace;font-weight:800;color:var(--danger);text-align:right}
 .sanity-howto-pts.is-bonus{color:var(--success)}
+.sanity-howto-pts.is-zero{color:var(--muted)}

@@ -9458,6 +9458,7 @@ function openSanityExplication(sanity, title){
   const groupes=[
     ['journee','Par journée opérateur'],
     ['dossier','Par dossier terminé'],
+    ['traca','Traçabilité matière (par dossier terminé)'],
     ['bonus','Bonus'],
   ];
   const blocs=groupes.map(([g,lbl])=>{
@@ -9466,7 +9467,7 @@ function openSanityExplication(sanity, title){
     return h('div',{className:'sanity-howto-groupe'},
       h('div',{className:'sanity-howto-titre'},lbl),
       ...rs.map(r=>h('div',{className:'sanity-howto-ligne'},
-        h('span',{className:'sanity-howto-pts'+(r.pts>0?' is-bonus':'')},pts(r.pts)),
+        h('span',{className:'sanity-howto-pts'+(r.pts>0?' is-bonus':'')+(r.pts===0?' is-zero':'')},r.pts===0?'0':pts(r.pts)),
         h('span',null,r.label))));
   }).filter(Boolean);
   const pens=(sanity&&sanity.penalites)||[];
@@ -9502,7 +9503,11 @@ const SANITY_LABELS={
   dossier_fin_sans_z1:{label:"Fin de production sans entrée Z1"},
   dossier_fin_z1_en_attente:{label:"Entrée Z1 en attente (délai non écoulé, sans pénalité)",info:true},
   z1_sans_palettes:{label:"Entrée Z1 sans palettes déclarées"},
-  dossier_fin_sans_mp_scan:{label:"Fin de production sans scan matière"},
+  traca_partielle:{label:"Traçabilité : au moins la moitié des bobines scannées"},
+  traca_insuffisante:{label:"Traçabilité : moins de la moitié des bobines scannées"},
+  traca_absente:{label:"Traçabilité : aucune bobine scannée, aucun motif"},
+  traca_motif_fsc:{label:"Traçabilité : aucune bobine sur un dossier FSC (motif donné)"},
+  traca_motif:{label:"Aucune bobine scannée, motif donné (sans pénalité)",info:true},
   jour_missing_metrage:{label:"Métrage manquant (fin dossier)"},
   jour_missing_etiquettes:{label:"Nombre d’étiquettes manquant (fin dossier)"},
   jour_empty_dossier:{label:"Dossier vide (début → fin sans saisie)"},
