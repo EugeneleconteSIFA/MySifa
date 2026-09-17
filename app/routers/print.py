@@ -833,7 +833,8 @@ def _fetch_pdf_bytes(entity_type: str, entity_id: int) -> tuple[bytes, str]:
             raise HTTPException(status_code=404, detail="Fiche technique introuvable.")
         try:
             from app.services.fiche_pdf import generate_fiche_pdf
-            pdf_bytes = generate_fiche_pdf(dict(row))
+            from app.services.encres_couleurs import charger as charger_encres
+            pdf_bytes = generate_fiche_pdf(dict(row), encres=charger_encres(conn))
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Erreur generation PDF fiche : {e}")
         ref = row["reference"] if "reference" in row.keys() else f"fiche-{entity_id}"

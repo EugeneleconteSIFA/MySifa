@@ -1789,6 +1789,10 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
+<!-- Recherche d'encre a la saisie + pastille de teinte (referentiel
+     Parametres > Fabrication > Impression). Autonome : aucun appel a faire. -->
+<link rel="stylesheet" href="/static/mysifa_encre_picker.css?v=__V_LABEL__">
+<script src="/static/mysifa_encre_picker.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_bobine_edit.js?v=1.0"></script>
 <script src="/static/mysifa_expe_carte.js"></script>
 <script src="/static/mysifa_rvgi_picker.js"></script>

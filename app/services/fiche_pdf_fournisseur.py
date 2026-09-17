@@ -405,7 +405,8 @@ def _draw_row(c: canvas.Canvas, x: float, y: float, width: float, m: dict,
 
 
 def _draw_color_row(c: canvas.Canvas, x: float, y: float, width: float, m: dict,
-                    num: int, couleur: str, area: str, striped: bool = False) -> float:
+                    num: int, couleur: str, area: str, striped: bool = False,
+                    hex_col: str | None = None) -> float:
     """Ligne « couleur d'impression » : pastille numérotée + encre + zone.
 
     La zone d'impression est écrite sur toute la largeur du bloc (et non dans
@@ -429,9 +430,29 @@ def _draw_color_row(c: canvas.Canvas, x: float, y: float, width: float, m: dict,
     chip_h = min(row_h * 0.30, 3.6 * mm)
     chip_w = max(chip_h * 1.35, 4.0 * mm)
     chip_y = y_name - chip_h * 0.24
-    c.setFillColor(_ACCENT)
-    c.roundRect(x + pad, chip_y, chip_w, chip_h, 0.9 * mm, fill=1, stroke=0)
-    c.setFillColor(_WHITE)
+    # Pastille à la teinte de l'encre quand le référentiel la connaît
+    # (Paramètres › Fabrication › Impression). Encre inconnue : pastille
+    # blanche cerclée, pour ne pas faire passer la couleur d'accent pour
+    # une encre. Le numéro passe en noir sur une encre claire.
+    num_col = _WHITE
+    if hex_col:
+        try:
+            ink = colors.HexColor(hex_col)
+            c.setFillColor(ink)
+            c.setStrokeColor(_BORDER)
+            c.setLineWidth(0.4)
+            c.roundRect(x + pad, chip_y, chip_w, chip_h, 0.9 * mm, fill=1, stroke=1)
+            luma = 0.299 * ink.red + 0.587 * ink.green + 0.114 * ink.blue
+            num_col = _BLACK if luma > 0.6 else _WHITE
+        except (ValueError, AttributeError):
+            hex_col = None
+    if not hex_col:
+        c.setFillColor(_WHITE)
+        c.setStrokeColor(_MUTED)
+        c.setLineWidth(0.5)
+        c.roundRect(x + pad, chip_y, chip_w, chip_h, 0.9 * mm, fill=1, stroke=1)
+        num_col = _BLACK
+    c.setFillColor(num_col)
     fs = min(m["f_val_en"], chip_h * 0.62)
     c.setFont("Helvetica-Bold", fs)
     c.drawCentredString(x + pad + chip_w / 2, chip_y + chip_h * 0.5 - fs * 0.35, str(num))
@@ -493,8 +514,17 @@ def _kv(label_fr: str, label_en: str, value_fr: Any, value_en: Any = None) -> tu
     return ("kv", label_fr, label_en, str(value_fr), str(value_en if value_en is not None else value_fr))
 
 
-def _color(num: int, couleur: str, area: str) -> tuple:
-    return ("color", num, couleur, area)
+def _color(num: int, couleur: str, area: str, hex_col: str | None = None) -> tuple:
+    return ("color", num, couleur, area, hex_col)
+
+
+def _teinte(couleur: str, encres: dict | None) -> str | None:
+    """Teinte de l'encre, calculée comme sur le BAT ; None si inconnue."""
+    if not (couleur or "").strip():
+        return None
+    from app.services.bat_etiquette import _guess_hex, _PANTONE_FALLBACK
+    hx = _guess_hex(couleur, encres or {})
+    return None if hx == _PANTONE_FALLBACK else hx
 
 
 def _note(fr: str, en: str) -> tuple:
@@ -525,7 +555,8 @@ def _draw_rows(c: canvas.Canvas, x: float, y: float, width: float, m: dict,
     for i, r in enumerate(rows):
         striped = (i % 2 == 0)
         if r[0] == "color":
-            y = _draw_color_row(c, x, y, width, m, r[1], r[2], r[3], striped)
+            y = _draw_color_row(c, x, y, width, m, r[1], r[2], r[3], striped,
+                                hex_col=r[4] if len(r) > 4 else None)
         elif r[0] == "note":
             y = _draw_note_row(c, x, y, width, m, r[1], r[2], striped)
         else:
@@ -641,13 +672,15 @@ def _plural(n: int, fr: str, en: str) -> tuple[str, str]:
     return (f"{n} {fr}{s}", f"{n} {en}{s}")
 
 
-def _face_rows(details: list[dict], nb: int, face: str) -> list[tuple]:
+def _face_rows(details: list[dict], nb: int, face: str,
+               encres: dict | None = None) -> list[tuple]:
     """Lignes d'un bloc recto ou verso : une pastille par couleur."""
     rows: list[tuple] = []
     details = [d for d in (details or []) if isinstance(d, dict)]
     for i, d in enumerate(details, 1):
-        rows.append(_color(i, str(d.get("couleur") or "").strip(),
-                           format_printing_area(d.get("printing_area"))))
+        coul = str(d.get("couleur") or "").strip()
+        rows.append(_color(i, coul, format_printing_area(d.get("printing_area")),
+                           _teinte(coul, encres)))
     if not rows:
         if nb > 0:
             fr, en = _plural(nb, "couleur annoncée", "colour declared")
@@ -660,7 +693,8 @@ def _face_rows(details: list[dict], nb: int, face: str) -> list[tuple]:
     return rows
 
 
-def _build_blocks(c: canvas.Canvas, produit: dict, matieres_map: dict) -> list[dict]:
+def _build_blocks(c: canvas.Canvas, produit: dict, matieres_map: dict,
+                  encres: dict | None = None) -> list[dict]:
     """Décrit tous les blocs de la fiche, sans rien dessiner."""
     fiche = produit.get("fiche") or {}
     et   = fiche.get("etiquette") or {}
@@ -767,9 +801,9 @@ def _build_blocks(c: canvas.Canvas, produit: dict, matieres_map: dict) -> list[d
         blocks.append({
             "t": "two",
             "left": ((f"Recto — {t_r_fr}", f"Front — {t_r_en}"),
-                     _face_rows(d_recto, nb_recto, "recto")),
+                     _face_rows(d_recto, nb_recto, "recto", encres)),
             "right": ((f"Verso — {t_v_fr}", f"Back — {t_v_en}"),
-                      _face_rows(d_verso, nb_verso, "verso")),
+                      _face_rows(d_verso, nb_verso, "verso", encres)),
         })
 
     # ── Cartons + Palettes ─────────────────────────────────────────
@@ -809,6 +843,7 @@ def generate_fiche_fournisseur_pdf(
     *,
     matieres_map: dict[int, dict] | None = None,
     ao_reference: str | None = None,
+    encres: dict | None = None,
 ) -> bytes:
     """
     Génère le PDF fournisseur bilingue d'une fiche produit MyAO.
@@ -836,7 +871,7 @@ def generate_fiche_fournisseur_pdf(
     y = _draw_title(c, y)
     y = _draw_ref_block(c, ml, mr, y - 3 * mm, produit)
 
-    blocks = _build_blocks(c, produit, matieres_map)
+    blocks = _build_blocks(c, produit, matieres_map, encres)
 
     # Facteur de compression : hauteur disponible / hauteur naturelle.
     m1 = _metrics(1.0)

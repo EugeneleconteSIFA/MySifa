@@ -269,6 +269,10 @@ margin-left:6px;cursor:help;vertical-align:middle}
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script src="/static/support_widget.js"></script>
+<!-- Recherche d'encre a la saisie + pastille de teinte (referentiel
+     Parametres > Fabrication > Impression). Autonome : aucun appel a faire. -->
+<link rel="stylesheet" href="/static/mysifa_encre_picker.css?v=__V_LABEL__">
+<script src="/static/mysifa_encre_picker.js?v=__V_LABEL__"></script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">

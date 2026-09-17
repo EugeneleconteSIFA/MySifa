@@ -981,11 +981,13 @@ def preview_fiche_pdf(fiche_id: int, request: Request):
         row = conn.execute(
             "SELECT * FROM fiches_techniques WHERE id=?", (fiche_id,)
         ).fetchone()
+        from app.services.encres_couleurs import charger as charger_encres
+        encres = charger_encres(conn)
     if not row:
         raise HTTPException(status_code=404, detail="Fiche introuvable.")
     try:
         from app.services.fiche_pdf import generate_fiche_pdf
-        pdf_bytes = generate_fiche_pdf(dict(row))
+        pdf_bytes = generate_fiche_pdf(dict(row), encres=encres)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {exc}") from exc
     ref = re.sub(r"[^\w\-]+", "_", str(row["reference"] or fiche_id))

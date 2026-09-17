@@ -1420,6 +1420,8 @@ def export_produit_fiche_pdf_fournisseur(
             if block.get("matiere_id"):
                 ids.add(int(block["matiere_id"]))
         mp_map = _load_matieres_map(conn, ids) if ids else {}
+        from app.services.encres_couleurs import charger as charger_encres
+        encres = charger_encres(conn)
         ao_reference: str | None = None
         if ao_id:
             ao_row = conn.execute(
@@ -1432,6 +1434,7 @@ def export_produit_fiche_pdf_fournisseur(
         from app.services.fiche_pdf_fournisseur import generate_fiche_fournisseur_pdf
         pdf_bytes = generate_fiche_fournisseur_pdf(
             produit, matieres_map=mp_map, ao_reference=ao_reference,
+            encres=encres,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {exc}") from exc
@@ -3132,9 +3135,11 @@ def _auto_doc_ref_slug(ref: str) -> str:
 
 def _build_fiche_fournisseur_bytes(conn, prod_full, mp_map, ao_reference):
     from app.services.fiche_pdf_fournisseur import generate_fiche_fournisseur_pdf
+    from app.services.encres_couleurs import charger as charger_encres
 
     return generate_fiche_fournisseur_pdf(
         prod_full, matieres_map=mp_map, ao_reference=ao_reference,
+        encres=charger_encres(conn),
     )
 
 

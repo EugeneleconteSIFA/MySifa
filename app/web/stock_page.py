@@ -23916,6 +23916,10 @@ async function init() {
     S.tab = urlTab;
   }
   if (S.tab === 'destockage' && !peutVoirDestockage()) S.tab = 'dashboard';
+  // Sous-onglet des réceptions (?tab=reception&sous=rvgi) : lien direct de la
+  // notification « Réceptions à intégrer ». Le rendu de l'onglet lance le chargement.
+  const urlSous = (urlParams.get('sous') || '').trim();
+  if (S.tab === 'reception' && ['nouvelle', 'liste', 'historique', 'rvgi'].includes(urlSous)) S.recepSubTab = urlSous;
   // Sous-vue des besoins matières. Restaurée AVANT le chargement de l'onglet :
   // `loadBesoinsMatieres` s'en sert pour décider s'il doit aussi aller chercher
   // la tendance ou les dossiers passés, qui ont leur propre source.
