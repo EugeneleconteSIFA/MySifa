@@ -6,7 +6,8 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, Request
 
-from config import CODE_ANNUL_DOS, CODE_DEBUT_DOS, CODE_FIN_DOS, ROLES_PROD
+from config import (CODE_ANNUL_DOS, CODE_ARRIVEE, CODE_DEBUT_DOS,
+                    CODE_DEPART, CODE_FIN_DOS, ROLES_PROD)
 from database import get_db
 from services.auth_service import effective_role, get_current_user
 from app.services import rapport_dossier as rd
@@ -54,8 +55,15 @@ def _detail_prod(conn, r: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "atelier": rd.retour_atelier(conn, machine, b["debut"], b["fin"],
                                      code_fin=CODE_FIN_DOS),
+        # `presence=True` : le point de production lit les pointages 86/87.
+        # C'est ce qui empeche un dossier ouvert le vendredi et repris le lundi
+        # de se dessiner en un seul rectangle qui traverse un samedi ou la
+        # machine n'a vu personne. La frise de /prod#retour, elle, ne le
+        # demande pas et garde son trace.
         "frise": rd.frise(conn, b["debut"], b["fin"], machine, code_fin=CODE_FIN_DOS,
-                          code_debut=CODE_DEBUT_DOS, code_annul=CODE_ANNUL_DOS),
+                          code_debut=CODE_DEBUT_DOS, code_annul=CODE_ANNUL_DOS,
+                          presence=True, code_arrivee=CODE_ARRIVEE,
+                          code_depart=CODE_DEPART),
         "comptes_rendus": rd.comptes_rendus_periode(conn, b["debut"], b["fin"],
                                                     machine=machine,
                                                     code_fin=CODE_FIN_DOS),

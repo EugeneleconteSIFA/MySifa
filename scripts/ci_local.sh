@@ -37,6 +37,15 @@ if [ -z "${PY_CMD:-}" ]; then
 fi
 export PY_CMD PY_ARG
 
+# UTF-8 partout. Sous Windows, Python prend l'encodage de la console (cp1252)
+# pour stdout ET pour open() sans encoding explicite. Resultat le 21/09/2026 :
+# une vingtaine de tests « KO » sur un UnicodeEncodeError en imprimant une
+# fleche, et deux autres rouges parce qu'ils relisaient des sources UTF-8 en
+# cp1252 et n'y retrouvaient plus leur compte. Aucun n'etait un vrai echec.
+# PYTHONUTF8 aligne le poste sur la CI GitHub, qui tourne en UTF-8.
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+
 # Parallelisme. En serie, la suite prenait plus de deux minutes a chaque push
 # sur staging (10/09/2026 : « c'est un peu trop long ») — le genre de delai qui
 # fait sortir `--no-verify`. Les tests sont independants (base :memory: ou
@@ -146,8 +155,12 @@ for t in tests/test_*.py; do
     sortie=$(cat "$DOSSIER/$nom.log" 2>/dev/null)
     if [[ $code -eq 0 ]]; then
         echo "ok"
-    elif [[ $DEPS -eq 0 && "$sortie" == *"No module named"* ]]; then
-        echo "ignore (dependance absente)"
+    elif [[ "$sortie" == *"No module named"* ]] \
+         && [[ ! "$sortie" =~ No\ module\ named\ \'(app|database|config|tools|scripts)([.\']) ]]; then
+        # Paquet tiers pas installe sur ce poste : la CI GitHub, elle, installe
+        # requirements.txt et reste juge. Un module DU PROJET introuvable reste
+        # un echec : c'est en general un renommage a moitie fait.
+        echo "ignore (dependance absente de ce poste)"
     else
         echo "KO"; echec=1
         # Les dernieres lignes du test : sans elles, un KO local oblige a

@@ -153,6 +153,7 @@ PRICING_SHELL = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V__">
+<link rel="stylesheet" href="/static/mysifa_mobile.css?v=2">
 <link rel="stylesheet" href="/static/pricing_app.css?v=__ASSETS__">
 <link rel="stylesheet" href="/static/mysifa_perf.css">
 <script src="/static/mysifa_perf.js"></script>

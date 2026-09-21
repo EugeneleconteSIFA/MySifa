@@ -166,6 +166,7 @@
       // Bascule d'affichage : « layers » = référence + déclinaisons empilées,
       // « list » = une ligne par déclinaison.
       truck: '<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
+      lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
       list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>',
     };
     return "<svg " + a + ">" + (p[name] || p.grid) + "</svg>";
@@ -202,6 +203,32 @@
   function fmtPct(n) {
     const s = fmtNum(n, 2, 2);
     return s === "—" ? s : s + "\u00a0%";
+  }
+
+  /* ── Rendu en cartes : le portrait telephone ──────────────────────────
+     Vrai en dessous de 700 px. Le module ne retire rien au mobile : il
+     redistribue. Une ligne de tableau devient une carte, les colonnes
+     deviennent une hierarchie, et les crochets d'evenement ne bougent pas —
+     les fonctions de liaison ignorent laquelle des deux mises en page est a
+     l'ecran.
+
+     Le choix se fait au moment du render, donc une rotation du telephone ne
+     changerait rien sans cet ecouteur : c'est le defaut de tous les rendus
+     conditionnels du depot, corrige ici comme dans expeEnCartes()
+     (app/web/expe_assets.py). */
+  let _mqCartes = null;
+  function prCartes() {
+    try {
+      if (!_mqCartes) {
+        _mqCartes = window.matchMedia("(max-width:700px)");
+        const maj = () => { bootRoute(); };
+        if (_mqCartes.addEventListener) _mqCartes.addEventListener("change", maj);
+        else if (_mqCartes.addListener) _mqCartes.addListener(maj);
+      }
+      return !!_mqCartes.matches;
+    } catch (e) {
+      return false;
+    }
   }
 
   const CUR_SYM = { EUR: "€", USD: "$" };
@@ -1229,6 +1256,89 @@
       </tr>`;
   }
 
+  /* La meme matiere, en carte.
+
+     Sept colonnes redistribuees sans rien perdre : identite en haut, prix au
+     milieu — la seule zone ouverte de la carte —, age du prix et actions en
+     bas. Les crochets sont rigoureusement ceux de la ligne (`data-ms-prix`,
+     `data-ms-prix-etat`, `data-ms-tarif`, `data-ms-maj`, `.msl-prix-edit`),
+     donc bindMsPrixInline() et bindMsListeActions() fonctionnent sans savoir
+     ce qui est a l'ecran. Deux jeux de liaisons pour deux mises en page,
+     c'est un correctif applique d'un cote seulement. */
+  function mystockMatiereCardHtml(m) {
+    const decls = m.declinaisons || [];
+    const fourns = msFournisseursPrincipaux(m);
+    const nomsF = fourns.map((f) => f.nom).filter(Boolean);
+    const fournTxt = nomsF.length === 1
+      ? escHtml(nomsF[0])
+      : (nomsF.length > 1
+          ? escHtml(nomsF.length + " fournisseurs")
+          : '<span class="muted">sans fournisseur</span>');
+
+    const memePrix = m.prix_min != null
+      && Math.abs((m.prix_max || 0) - (m.prix_min || 0)) < 1e-9;
+    const editable = S.canWrite && decls.length > 0 && fourns.length <= 1;
+
+    let prixBloc;
+    if (editable) {
+      const val = memePrix ? String(m.prix_min) : "";
+      const ph = memePrix ? "0" : (m.prix_min != null
+        ? `${fmtNum(m.prix_min, 3, 3)} à ${fmtNum(m.prix_max, 3, 3)}`
+        : "à compléter");
+      const titre = memePrix
+        ? `Prix d'achat de ${m.reference} — modifiable ici, Entrée pour enregistrer`
+        : `Prix d'achat de ${m.reference} — plusieurs valeurs en base, saisir ici les aligne`;
+      prixBloc = `<div class="msl-prix-edit msf-prix${memePrix ? "" : " msl-prix-diverge"}">
+          <i aria-hidden="true">${icon("edit", 14)}</i>
+          <input type="number" class="msl-prix-inp" step="0.001" min="0"
+                 inputmode="decimal" data-ms-prix="${m.id}"
+                 value="${escAttr(val)}" placeholder="${escAttr(ph)}"
+                 title="${escAttr(titre)}" aria-label="${escAttr(titre)}"/>
+          <span class="msf-prix-unite">${escHtml(m.unite || "")}</span>
+          <span class="msl-prix-etat" data-ms-prix-etat="${m.id}"></span>
+        </div>`;
+    } else {
+      // Un champ ferme sans phrase fait croire a un bug : la carte dit
+      // pourquoi, et ou le regler.
+      const raison = !decls.length
+        ? "Matière sans ligne de prix — à compléter dans MyStock"
+        : (fourns.length > 1
+            ? "Plusieurs fournisseurs sur cette matière — à régler sur la fiche"
+            : "Lecture seule");
+      prixBloc = `<div class="msf-prix-lock">${icon("lock", 15)}
+          <span><strong>${mystockPrixResume(m)}</strong> · ${escHtml(raison)}</span></div>`;
+    }
+
+    const principale = decls.length
+      ? ((decls[0].lignes || []).find((l) => l.principal) || (decls[0].lignes || [])[0])
+      : null;
+    const fid = principale && principale.fournisseur_id != null ? principale.fournisseur_id : null;
+    const tarifBtn = fid
+      ? `<button type="button" class="ms-tarif-btn msf-icon-btn msl-card-tarif" data-ms-tarif="${fid}|${m.id}"
+           title="Tarif de ${escAttr(principale.fournisseur_nom || "ce fournisseur")} pour ${escAttr(m.reference)} : transport, taxes, base de prix${principale.a_tarif === false ? " — aucun tarif propre, réglages hérités" : ""}"
+           aria-label="Tarif fournisseur">${icon("truck", 17)}${principale.a_tarif === false ? '<span class="ms-tarif-manquant" aria-hidden="true"></span>' : ""}</button>`
+      : "";
+    const fiche = decls.length
+      ? `<a class="btn btn-soft btn-sm" href="/pricing/mystock/${decls[0].id}" title="Ouvrir le paramétrage détaillé">Fiche</a>`
+      : "";
+
+    return `<article class="msf-card msl-card" data-ms-mat="${m.id}">
+        <div class="msf-card-head">
+          <span class="msf-card-title">${escHtml(m.reference)}</span>
+          ${categorieBadge(m.categorie)}
+        </div>
+        <div class="msf-card-sub"><span>${escHtml(m.designation || "")}</span></div>
+        <div class="msf-card-sub"><span>${fournTxt}</span></div>
+        <div class="msl-card-prix">${prixBloc}</div>
+        <div class="msl-card-maj">${dernierPrixCellHtml(m)}</div>
+        <div class="msl-card-act">
+          ${tarifBtn}${fiche}
+          <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${m.id}"
+             target="_blank" rel="noopener" title="Ouvrir la fiche dans MyStock">MyStock ↗</a>
+        </div>
+      </article>`;
+  }
+
   function renderMystockList() {
     const catOpts =
       '<option value="">Toutes catégories</option>' +
@@ -1261,8 +1371,26 @@
 
     const filtrees = filtresAppliquer("matieres", S.mystock, COLS);
     const triees = triAppliquer("matieres", filtrees, COLS);
-    const lignes = triees.map(mystockMatiereRowHtml).join("");
-    const sousTitre = `${S.mystock.length} matière(s) · cliquez sur un prix d'achat pour le modifier`;
+    const cartes = prCartes();
+    const lignes = triees.map(cartes ? mystockMatiereCardHtml : mystockMatiereRowHtml).join("");
+    const sousTitre = cartes
+      ? `${S.mystock.length} matière(s) · touchez un prix pour le corriger`
+      : `${S.mystock.length} matière(s) · cliquez sur un prix d'achat pour le modifier`;
+    // En cartes, les en-tetes triables n'existent pas : le tri et les filtres
+    // passent par la barre au-dessus de la liste.
+    const corps = cartes
+      ? `<div class="msl-cartes">${lignes || '<div class="msf-empty">Aucune matière pour ce filtre</div>'}</div>`
+      : `<div class="table-wrap">
+          <table class="pr-table msl-table">
+            <colgroup>
+              <col style="width:92px"><col style="width:150px"><col>
+              <col style="width:180px"><col style="width:215px">
+              <col style="width:120px"><col style="width:172px">
+            </colgroup>
+            ${enTetesTriables("matieres", COLS, S.mystock)}
+            <tbody>${lignes || '<tr><td colspan="7" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
+          </table>
+        </div>`;
 
     setContent(`
       <div class="pr-narrow">
@@ -1276,17 +1404,7 @@
             <option value="all" ${S.filters.msActive==="all"?"selected":""}>Toutes</option>
           </select>
         </div>
-        <div class="table-wrap">
-          <table class="pr-table msl-table">
-            <colgroup>
-              <col style="width:92px"><col style="width:150px"><col>
-              <col style="width:180px"><col style="width:215px">
-              <col style="width:120px"><col style="width:172px">
-            </colgroup>
-            ${enTetesTriables("matieres", COLS, S.mystock)}
-            <tbody>${lignes || '<tr><td colspan="7" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
-          </table>
-        </div>
+        ${corps}
         ${filtresActifsHtml("matieres", COLS, S.mystock.length, triees.length)}
       </div>
     `);
@@ -1489,6 +1607,36 @@
       })
       .join("");
 
+    // En portrait, une ligne par fournisseur : le nom, ce qu'on lui achete,
+    // et l'etat de son tarif. Le meme crochet `data-tarif-open` ouvre la
+    // fiche dans les deux mises en page.
+    const cartesTarif = liste
+      .map((f) => {
+        const manque = Math.max(0, (f.nb_matieres || 0) - (f.nb_tarifs || 0));
+        const etat = !f.nb_matieres
+          ? '<span class="muted">aucun achat</span>'
+          : (manque
+              ? `<span class="badge badge-silicone">${manque} sans tarif</span>`
+              : `<span class="badge badge-frontal">${f.nb_tarifs} tarif${f.nb_tarifs > 1 ? "s" : ""}</span>`);
+        return `<button type="button" class="msf-row" data-tarif-open="${f.id}">
+            <span class="msf-row-ico${manque ? " msf-row-ico--warn" : ""}">${icon("truck", 16)}</span>
+            <span class="msf-row-txt">
+              <b>${escHtml(f.nom)}${f.actif ? "" : " · inactif"}</b>
+              <span>${f.nb_matieres || 0} matière(s) · ${f.nb_declinaisons || 0} déclinaison(s)</span>
+            </span>
+            <span class="msf-tarif-etat">${currencyBadge(f.price_currency)}${etat}</span>
+          </button>`;
+      })
+      .join("");
+    const corpsTarif = prCartes()
+      ? `<div class="msf-rows">${cartesTarif || '<div class="msf-empty">Aucun fournisseur</div>'}</div>`
+      : `<div class="table-wrap">
+          <table class="pr-table">
+            <thead><tr><th>Fournisseur</th><th>Devise</th><th>Matières</th><th>Déclinaisons</th><th>Tarifs</th><th class="ms-actions"></th></tr></thead>
+            <tbody>${lignes || '<tr><td colspan="6" class="empty">Aucun fournisseur</td></tr>'}</tbody>
+          </table>
+        </div>`;
+
     setContent(`
       <div class="pr-narrow">
         ${pageHead("Fournisseurs", `${liste.length} fournisseur(s) · tarifs d'achat`)}
@@ -1499,12 +1647,7 @@
         <div class="filters">
           <input type="search" class="search-input" id="tarif-q" placeholder="Rechercher un fournisseur…" value="${escAttr(S.filters.tarifQ)}"/>
         </div>
-        <div class="table-wrap">
-          <table class="pr-table">
-            <thead><tr><th>Fournisseur</th><th>Devise</th><th>Matières</th><th>Déclinaisons</th><th>Tarifs</th><th class="ms-actions"></th></tr></thead>
-            <tbody>${lignes || '<tr><td colspan="6" class="empty">Aucun fournisseur</td></tr>'}</tbody>
-          </table>
-        </div>
+        ${corpsTarif}
       </div>
     `);
 
@@ -4633,6 +4776,116 @@
     </div>`;
   }
 
+  /* Le detail deplie d'un produit, en portrait.
+
+     Le tableau a cinq colonnes (role, matiere, cout, dont transport, part) se
+     relit de haut en bas : une ligne par composant, sa part en jauge, et la
+     chaine qui finit par le prix de revient. Le crochet `data-msp-mat` est
+     conserve, donc le saut vers le parametrage de la matiere fonctionne
+     a l'identique. */
+  function msProductDetailCartesHtml(p) {
+    const c = p.cost;
+    if (!c || !c.components || !c.components.length) {
+      return `<div class="msf-empty">Aucun coût calculable : les matières de ce produit
+        n'ont pas encore de prix.</div>`;
+    }
+    const total = parseFloat(c.total_eur_per_m2 || 0);
+    const transportTotal = (c.components || []).reduce(
+      (a, x) => a + parseFloat((x.breakdown && x.breakdown.transport_eur_m2) || 0), 0);
+    const jauge = c.components
+      .map((x, i) => {
+        const part = Math.max(0, Math.min(100, parseFloat(x.share_pct || 0)));
+        return `<i style="width:${part}%;background:var(--c${(i % 5) + 1})"></i>`;
+      })
+      .join("");
+    const legende = c.components
+      .map((x, i) => `<span><i style="background:var(--c${(i % 5) + 1})"></i>${escHtml(
+        MSP_ROLE_LABEL[x.role] || x.role)} ${escHtml(fmtPct(x.share_pct))}</span>`)
+      .join("");
+    const lignes = c.components
+      .map((x) => {
+        const prix = parseFloat(x.price_eur_per_m2 || 0);
+        const transp = parseFloat((x.breakdown && x.breakdown.transport_eur_m2) || 0);
+        return `<div class="msf-kv msp-carte-comp">
+            <dt>
+              <button type="button" class="msp-lien" data-msp-mat="${x.material_id}"
+                title="Ouvrir le paramétrage de cette matière">${escHtml(x.name)}</button>
+              <span class="msp-carte-role">${escHtml(MSP_ROLE_LABEL[x.role] || x.role)}</span>
+            </dt>
+            <dd>${prix > 0 ? escHtml(fmtEurM2(prix)) : '<span class="muted">sans prix</span>'}
+              ${transp ? `<span class="msp-carte-transp">dont transport ${escHtml(fmtEurM2(transp))}</span>` : ""}
+            </dd>
+          </div>`;
+      })
+      .join("");
+    const manquants = c.components.filter((x) => !(parseFloat(x.price_eur_per_m2) > 0)).length;
+    return `<div class="msp-carte-detail">
+        <div class="msf-parts">${jauge}</div>
+        <div class="msf-leg">${legende}</div>
+        <dl class="msp-carte-dl">${lignes}
+          <div class="msf-kv msf-kv--tot msf-kv--fort"><dt>Prix de revient</dt>
+            <dd>${escHtml(fmtEurM2(total))}</dd></div>
+          ${transportTotal ? `<div class="msf-kv"><dt>dont transport</dt>
+            <dd>${escHtml(fmtEurM2(transportTotal))}</dd></div>` : ""}
+          <div class="msf-kv"><dt>Marge ${escHtml(fmtPct(c.margin_pct))}</dt>
+            <dd>${escHtml(fmtEurM2(c.margin_eur_m2))}</dd></div>
+          <div class="msf-kv msf-kv--fort"><dt>Prix de vente</dt>
+            <dd>${escHtml(fmtEurM2(c.sell_price_eur_m2))}</dd></div>
+        </dl>
+        ${manquants ? `<div class="msp-alerte">${manquants} matière(s) sans prix — le coût est sous-évalué</div>` : ""}
+      </div>`;
+  }
+
+  /* Un produit, en carte.
+
+     Le produit EST sa composition : elle reste en titre. Le cout sort a
+     droite, seul chiffre en gros — c'est la question qu'on pose a cet ecran.
+     Code et designation restent cherchables par la barre du haut. */
+  function msProductCarteHtml(p) {
+    const c = p.cost;
+    const open = !!S.expandedProd[p.id];
+    const gram = msProductGrammage(p);
+    const frontal = msProductComp(p, "FRONTAL");
+    const adhesif = msProductComp(p, "ADHESIF");
+    const glassine = msProductComp(p, "GLASSINE");
+    const autres = (p.composants || []).filter((x) => x.role === "AUTRE").length;
+    const compo = [
+      frontal ? escHtml(frontal.reference) : '<span class="muted">sans frontal</span>',
+      adhesif
+        ? escHtml(adhesif.reference) + (gram != null
+            ? ` <span class="msp-carte-gram">${escHtml(fmtNum(gram, 0, 1))} g/m²</span>`
+            : ' <span class="muted" title="Adhésif au kilo sans grammage : ce composant compte pour 0">sans grammage</span>')
+        : '<span class="muted">sans adhésif</span>',
+    ].join(" · ");
+    const bas = [
+      glassine ? escHtml(glassine.reference) : "sans glassine",
+      autres ? autres + " autre(s)" : "",
+    ].filter(Boolean).join(" · ");
+
+    return `<article class="msf-offre msp-carte${open ? " open" : ""}">
+        <button type="button" class="msf-offre-h" data-msp-row="${p.id}"
+          title="${escAttr((p.code || "") + " — " + (p.designation || ""))}">
+          <span class="msf-offre-id">
+            <span class="msp-carte-tete">${msProductSupport(p)}
+              <span class="msp-carte-code">${escHtml(p.code || "")}</span></span>
+            <b class="msp-carte-compo">${compo}</b>
+            <span>${bas}</span>
+          </span>
+          <span class="msf-offre-prix">
+            <b>${c ? escHtml(fmtNum(c.total_eur_per_m2, 4, 4)) : "—"}</b>
+            <span>€/m² revient</span>
+          </span>
+        </button>
+        ${open ? `<div class="msf-offre-b">
+          ${msProductDetailCartesHtml(p)}
+          ${S.canWrite ? `<div class="msp-carte-act">
+            <button type="button" class="btn btn-soft btn-sm" data-msp-edit="${p.id}">Modifier</button>
+            <button type="button" class="btn btn-soft btn-sm" data-msp-dup="${p.id}">Dupliquer</button>
+          </div>` : ""}
+        </div>` : ""}
+      </article>`;
+  }
+
   function renderMsProductsList() {
     /* Code et désignation ont quitté le tableau (31 août 2026).
 
@@ -4705,6 +4958,18 @@
       })
       .join("");
 
+    const cartes = prCartes();
+    const corps = cartes
+      ? `<div class="msp-cartes">${
+          triees.map(msProductCarteHtml).join("")
+          || '<div class="msf-empty">Aucun produit pour ce filtre.</div>'}</div>`
+      : `<div class="table-wrap">
+          <table class="pr-table msp-table">
+            ${enTetesTriables("produits", COLS, S.msProducts)}
+            <tbody>${rows || '<tr><td colspan="11" class="empty">Aucun produit pour ce filtre.</td></tr>'}</tbody>
+          </table>
+        </div>`;
+
     setContent(`
       <div class="pr-narrow">
         ${pageHead("Produits", `${S.msProducts.length} produit(s) MyStock`, productsTabsHtml())}
@@ -4712,12 +4977,7 @@
           <input type="search" class="search-input" id="msp-q" placeholder="Rechercher (code, désignation…)" title="Le code et la désignation ont quitté les colonnes : ils se cherchent ici, et se lisent au survol d'une ligne." value="${escAttr(S.filters.msProdQ)}"/>
           ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-msprod">+ Nouveau produit</button>' : ""}
         </div>
-        <div class="table-wrap">
-          <table class="pr-table msp-table">
-            ${enTetesTriables("produits", COLS, S.msProducts)}
-            <tbody>${rows || '<tr><td colspan="11" class="empty">Aucun produit pour ce filtre.</td></tr>'}</tbody>
-          </table>
-        </div>
+        ${corps}
         ${filtresActifsHtml("produits", COLS, S.msProducts.length, triees.length)}
       </div>
     `);
@@ -4746,7 +5006,7 @@
     // La ligne déplie le détail ; l'édition passe par son bouton. Comme dans
     // la liste des matières MyStock, pour ne pas avoir deux gestes différents
     // d'un onglet à l'autre.
-    document.querySelectorAll("tr[data-msp-row]").forEach((tr) => {
+    document.querySelectorAll("[data-msp-row]").forEach((tr) => {
       tr.onclick = () => {
         const id = tr.getAttribute("data-msp-row");
         S.expandedProd[id] = !S.expandedProd[id];

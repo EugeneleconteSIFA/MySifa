@@ -423,6 +423,17 @@ th.rp-sa-tri .rp-sa-fl{display:inline-block;width:12px;text-align:center;
 .rp-fr-slot.etroit:hover .rp-fr-lbl i,
 .rp-fr-slot.etroit:hover .rp-fr-lbl u{display:block}
 
+/* Un dossier coupe par une absence de personnel : les morceaux restent relies
+   par un liseré, sinon on lit deux dossiers la ou il n'y en a qu'un. */
+.rp-fr-lien{position:absolute;top:calc(50% - 1px);height:0;
+  border-top:1px dashed var(--border)}
+/* Le fragment qui ne porte pas le libelle n'est pas muet pour autant : il
+   rappelle le numero, en retrait. Un cadre blanc et vide se lirait comme un
+   dossier qu'on n'a pas su nommer. */
+.rp-fr-slot .rp-fr-lbl.rappel{justify-content:center;align-items:flex-start}
+.rp-fr-slot .rp-fr-lbl.rappel b{font-size:12px;font-weight:700;color:var(--muted)}
+.rp-fr-slot.etroit .rp-fr-lbl.rappel b{font-size:11px}
+
 /* Palette des etats de Saisieprod, reprise a l'identique. */
 .rp-fr-seg.mst-production,.rp-fr-leg i.mst-production{background:#22c55e}
 .rp-fr-seg.mst-calage,.rp-fr-leg i.mst-calage{background:#f97316}

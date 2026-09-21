@@ -856,7 +856,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <div id="app"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='planning';</script>
-<link rel="stylesheet" href="/static/mysifa_mobile.css?v=1">
+<link rel="stylesheet" href="/static/mysifa_mobile.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">

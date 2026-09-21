@@ -251,3 +251,272 @@
 @media (prefers-reduced-motion:reduce){
   .msf-fab,.msf-btn,.msf-chip,.msf-row{transition:none!important}
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   Socle portrait — deuxieme vague (21 septembre 2026)
+   Ajoutee pour MyAO et Couts matieres, ecrite pour tout le monde.
+
+   Meme regle que plus haut : aucune media query ici. Un composant est
+   disponible en permanence ; c'est la page qui decide quand elle l'affiche,
+   en portrait, en paysage ou jamais.
+
+   Les elements collants se calent sur --msf-sticky-top, que la page pose si
+   son conteneur de defilement n'est pas colle sous la topbar fixe. Defaut 0 :
+   le cas de .content (overflow:auto) dans les coquilles MyAO et Couts
+   matieres, ou la topbar est en position fixed au-dessus.
+   ══════════════════════════════════════════════════════════════════════ */
+
+:root{--msf-sticky-top:0px}
+
+/* ── Barre de recherche collante ─────────────────────────────────────── */
+/* La recherche est le premier geste sur une liste de quarante lignes ;
+   elle ne doit pas partir au defilement. Son conteneur n'est jamais
+   reconstruit par un render : seule la liste en dessous l'est (regle des
+   searchbars, .claude/rules/frontend-comportement.md). */
+
+.msf-searchbar{
+  position:sticky;top:var(--msf-sticky-top);z-index:19;
+  display:flex;gap:8px;align-items:center;
+  padding:9px 0 10px;margin:0 0 4px;background:var(--bg);
+}
+.msf-searchbar input[type="search"],
+.msf-searchbar input[type="text"]{
+  flex:1;min-width:0;height:44px;padding:0 13px;
+  border-radius:11px;border:1px solid var(--border);
+  background:var(--filter-input-bg);color:var(--text);
+  font:500 15px/1 inherit; /* 15px minimum : en dessous, iOS zoome au focus */
+}
+.msf-searchbar input:focus{outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-bg)}
+/* Pastille du bouton de filtres : un filtre actif mais invisible est la
+   premiere cause de « la liste est vide ». */
+.msf-pastille{
+  position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;
+  background:var(--accent);box-shadow:0 0 0 2px var(--card);
+}
+
+/* ── Bandeau de contexte collant ─────────────────────────────────────── */
+/* Sur une fiche, ce qu'on regarde ne doit jamais sortir de l'ecran : sans les
+   colonnes voisines pour se reperer, un champ isole ne dit pas de quoi il
+   parle. */
+
+.msf-ctx{
+  position:sticky;top:var(--msf-sticky-top);z-index:18;
+  padding:10px 0;margin-bottom:6px;background:var(--bg);
+  border-bottom:1px solid var(--border);
+}
+.msf-ctx-l1{display:flex;align-items:center;gap:8px;margin-bottom:4px;min-width:0}
+.msf-ctx-l1 b{font-size:15px;font-weight:800;letter-spacing:-.3px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msf-ctx-l2{font-size:11.5px;color:var(--muted);line-height:1.45}
+
+/* ── Onglets defilants ───────────────────────────────────────────────── */
+/* Cinq libelles et deux compteurs ne tiennent pas sur 390 px : les onglets
+   bureau passent a la ligne et se chevauchent. Ici ils defilent. */
+
+.msf-tabs{
+  position:sticky;top:var(--msf-sticky-top);z-index:18;
+  display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;
+  background:var(--bg);border-bottom:1px solid var(--border);
+  margin:0 0 12px;
+}
+.msf-tabs::-webkit-scrollbar{display:none}
+.msf-tabs button{
+  flex:0 0 auto;height:46px;padding:0 13px;border:0;background:transparent;
+  color:var(--muted);font:600 13px/1 inherit;cursor:pointer;position:relative;
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+}
+.msf-tabs button.msf-tab-on{color:var(--accent);font-weight:800}
+.msf-tabs button.msf-tab-on::after{
+  content:'';position:absolute;left:10px;right:10px;bottom:0;height:2.5px;
+  background:var(--accent);border-radius:2px 2px 0 0;
+}
+.msf-tab-n{
+  min-width:19px;height:18px;padding:0 5px;border-radius:9px;
+  background:var(--bg);border:1px solid var(--border);color:var(--muted);
+  font:700 10px/16px ui-monospace,'Cascadia Code',monospace;text-align:center;
+}
+/* Rouge reserve a ce qui appelle une action — les messages non lus. */
+.msf-tab-n--alert{background:var(--danger);border-color:transparent;color:#ffffff} /* hex-ok : texte sur fond rouge */
+
+/* ── Paire libelle / valeur en pleine largeur ────────────────────────── */
+/* Une ligne de tableau se relit ici de haut en bas : libelle a gauche,
+   valeur a droite, en chiffres tabulaires pour que les nombres s'alignent. */
+
+.msf-kv{
+  display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;margin:0;
+}
+.msf-kv:last-child{border-bottom:0}
+.msf-kv dt{color:var(--muted);font-size:12px;flex:0 1 auto;min-width:0}
+.msf-kv dd{margin:0;font-weight:700;text-align:right;min-width:0;
+  font-variant-numeric:tabular-nums}
+.msf-kv--fort dd{font-size:16px;font-weight:800}
+.msf-kv--tot{border-top:1px solid var(--border);border-bottom:0;margin-top:4px;padding-top:11px}
+
+/* ── Champ de formulaire pleine largeur ──────────────────────────────── */
+/* 48 px de haut, un champ par ligne, et 16 px de police : en dessous, iOS
+   zoome sur le champ au focus et ne revient jamais tout seul. */
+
+.msf-field{margin-bottom:12px}
+.msf-field>label{
+  display:block;font-size:10.5px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:5px;
+}
+.msf-field input,.msf-field select,.msf-field textarea{
+  width:100%;min-height:48px;padding:11px 13px;
+  border-radius:11px;border:1px solid var(--border);
+  background:var(--bg);color:var(--text);font:600 16px/1.2 inherit;
+}
+.msf-field textarea{min-height:88px;font-weight:500;resize:vertical}
+.msf-field input:focus,.msf-field select:focus,.msf-field textarea:focus{
+  outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.msf-card .msf-field input,.msf-card .msf-field select,
+.msf-card .msf-field textarea{background:var(--bg)}
+.msf-field-hint{margin:5px 2px 0;font-size:11px;line-height:1.5;color:var(--muted)}
+
+/* ── Barre d'action collante ─────────────────────────────────────────── */
+/* Sur un formulaire de huit ecrans, un bouton en fin de page oblige a
+   defiler pour valider une correction faite en haut. */
+
+.msf-actionbar{
+  position:sticky;bottom:0;z-index:25;display:flex;gap:8px;align-items:center;
+  padding:10px 0 calc(10px + env(safe-area-inset-bottom));
+  background:var(--card);border-top:1px solid var(--border);
+  margin:14px -12px 0;padding-left:12px;padding-right:12px;
+}
+.msf-actionbar .msf-btn{flex:1}
+.msf-actionbar .msf-btn--ghost{flex:0 0 auto}
+
+/* ── Accordeon de section ────────────────────────────────────────────── */
+/* Une fiche de cinquante champs deroulee d'un bloc fait huit ecrans de
+   defilement et on ne sait jamais ou l'on est. Ferme, chaque section porte
+   son resume : le plus souvent, il suffit a verifier sans ouvrir. */
+
+.msf-acc{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.msf-acc + .msf-acc{margin-top:9px}
+.msf-acc-h{
+  display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:10px 13px;
+  border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;
+}
+.msf-acc-h>b{flex:1;min-width:0;font-size:13.5px;font-weight:800;letter-spacing:-.15px}
+.msf-acc-sum{
+  font-size:11.5px;color:var(--muted);font-weight:600;max-width:150px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.msf-acc-b{padding:2px 13px 14px;border-top:1px solid var(--border)}
+.msf-acc-sous{
+  font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--text2);margin:14px 0 8px;
+}
+.msf-acc-b>.msf-acc-sous:first-child{margin-top:12px}
+
+/* ── Carte d'offre comparee ──────────────────────────────────────────── */
+/* Vingt colonnes ne tiennent pas sur un telephone, et n'ont pas a y tenir :
+   une carte par offre, classee, avec l'ecart au meilleur prix ecrit plutot
+   qu'a deduire en suivant une ligne des yeux. */
+
+.msf-offre{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.msf-offre + .msf-offre{margin-top:9px}
+.msf-offre--best{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.msf-offre-h{
+  display:flex;align-items:center;gap:11px;width:100%;padding:11px 12px;
+  border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;
+}
+.msf-offre-rang{
+  width:26px;height:26px;flex:0 0 26px;border-radius:8px;background:var(--bg);
+  color:var(--muted);font:800 12px/26px ui-monospace,'Cascadia Code',monospace;text-align:center;
+}
+.msf-offre--best .msf-offre-rang{background:var(--accent);color:#ffffff} /* hex-ok : texte sur fond accent */
+.msf-offre-id{flex:1;min-width:0}
+.msf-offre-id b{display:block;font-size:13.5px;font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msf-offre-id span{display:block;font-size:11px;color:var(--muted);margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msf-offre-prix{text-align:right;flex:0 0 auto}
+.msf-offre-prix b{display:block;font:800 17px/1.1 ui-monospace,'Cascadia Code',monospace;
+  font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+.msf-offre--best .msf-offre-prix b{color:var(--accent)}
+.msf-offre-prix span{display:block;font-size:10px;color:var(--muted);margin-top:3px;
+  text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+.msf-offre-b{padding:0 12px 12px;border-top:1px solid var(--border)}
+
+/* ── Chaine de calcul ────────────────────────────────────────────────── */
+/* Un chiffre qu'on ne peut pas refaire de tete passe pour un chiffre faux :
+   chaque terme a sa ligne, chaque bloc finit par son total. */
+
+.msf-calc{margin:10px 0 0;padding:10px 12px;border-radius:10px;
+  background:var(--bg);border:1px solid var(--border)}
+.msf-calc-t{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:6px}
+.msf-calc .msf-kv{font-size:12.5px;
+  border-bottom-color:color-mix(in srgb,var(--border) 60%,transparent)}
+
+/* ── Jauge de composition ────────────────────────────────────────────── */
+
+.msf-parts{display:flex;height:9px;border-radius:5px;overflow:hidden;
+  background:var(--border);margin:10px 0 8px}
+.msf-parts i{display:block;height:100%}
+.msf-leg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11.5px;color:var(--text2)}
+.msf-leg span{display:inline-flex;align-items:center;gap:6px}
+.msf-leg i{width:9px;height:9px;border-radius:3px;flex:0 0 9px}
+
+/* ── Saisie de prix en place ─────────────────────────────────────────── */
+/* Le champ est la seule zone ouverte de la carte : borde et repere au repos,
+   46 px de haut, clavier decimal. L'etat s'ecrit dans le champ lui-meme, et
+   la liste n'est pas reconstruite — sinon on perd sa place dans quarante
+   lignes et le focus avec. */
+
+.msf-prix{display:flex;align-items:center;gap:8px;height:46px;padding:0 10px 0 12px;
+  border-radius:11px;border:1px solid var(--border);background:var(--bg)}
+.msf-prix:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.msf-prix.msf-prix--ok{border-color:var(--success)}
+.msf-prix>i{flex:0 0 auto;color:var(--muted);display:inline-flex}
+.msf-prix input{
+  flex:1;min-width:0;border:0;background:transparent;padding:0;color:var(--text);
+  font:800 18px/1 ui-monospace,'Cascadia Code',monospace;
+  font-variant-numeric:tabular-nums;letter-spacing:-.4px;
+}
+.msf-prix input:focus{outline:none}
+.msf-prix input::placeholder{font-weight:600;font-size:13px;color:var(--muted);letter-spacing:0}
+.msf-prix .msf-prix-unite{flex:0 0 auto;font-size:11.5px;color:var(--muted);font-weight:600}
+.msf-prix-etat{font-size:11px;font-weight:700;color:var(--success);
+  display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.msf-prix-etat.ko{color:var(--danger)}
+/* Champ ferme : la carte dit pourquoi. Un champ grise sans phrase fait
+   croire a un bug. */
+.msf-prix-lock{display:flex;align-items:center;gap:8px;min-height:46px;padding:8px 12px;
+  border-radius:11px;border:1px dashed var(--border);background:transparent;
+  color:var(--muted);font-size:12.5px;line-height:1.4}
+
+/* ── Pas a pas ───────────────────────────────────────────────────────── */
+
+.msf-steps{display:flex;align-items:center;gap:6px;padding:10px 0;background:var(--bg)}
+.msf-step{flex:1;height:4px;border-radius:2px;background:var(--border)}
+.msf-step.msf-step-on{background:var(--accent)}
+.msf-step-lbl{font-size:11px;color:var(--muted);font-weight:700;flex:0 0 auto}
+
+/* ── Fil de messagerie ───────────────────────────────────────────────── */
+
+.msf-msg{max-width:84%;padding:9px 12px;border-radius:13px;font-size:13px;line-height:1.5}
+.msf-msg--eux{background:var(--card);border:1px solid var(--border);border-bottom-left-radius:4px}
+.msf-msg--nous{background:var(--accent-bg);border:1px solid var(--accent);color:var(--text);
+  margin-left:auto;border-bottom-right-radius:4px}
+.msf-msg-meta{font-size:10px;color:var(--muted);margin-top:4px;font-weight:600}
+.msf-composer{
+  position:sticky;bottom:0;z-index:25;display:flex;gap:8px;align-items:center;
+  padding:10px 0 calc(10px + env(safe-area-inset-bottom));
+  background:var(--card);border-top:1px solid var(--border);
+  margin:12px -12px 0;padding-left:12px;padding-right:12px;
+}
+.msf-composer input,.msf-composer textarea{
+  flex:1;min-width:0;min-height:44px;padding:11px 13px;border-radius:11px;
+  border:1px solid var(--border);background:var(--bg);color:var(--text);
+  font:500 16px/1.2 inherit;resize:none;
+}
+
+/* ── Utilitaires ─────────────────────────────────────────────────────── */
+
+.msf-num{font-family:ui-monospace,'Cascadia Code',monospace;font-variant-numeric:tabular-nums}
+.msf-muted{color:var(--muted)}
+.msf-titre-lg{font-size:15px;font-weight:800;letter-spacing:-.3px}

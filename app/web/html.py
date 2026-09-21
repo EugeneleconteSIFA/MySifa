@@ -100,7 +100,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_resize.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
-<link rel="stylesheet" href="/static/mysifa_mobile.css?v=1">
+<link rel="stylesheet" href="/static/mysifa_mobile.css?v=2">
 <link rel="stylesheet" href="/static/motion.css">
 <link rel="stylesheet" href="/static/mysifa_perf.css">
 <link rel="stylesheet" href="/static/mysifa_portail_tour.css?v=__V_LABEL__">
