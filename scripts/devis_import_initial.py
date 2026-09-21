@@ -21,7 +21,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from devis_import_commun import arguments_communs, importer, log, verifier_cle  # noqa: E402
+from devis_import_commun import (arguments_communs, dossiers_exclus,  # noqa: E402
+                                 importer, log, verifier_cle)
 
 
 def main() -> int:
@@ -41,7 +42,9 @@ def main() -> int:
     log("Reprise complete dans %s" % args.dossier)
     bilan = importer(
         args.dossier, args.url, args.cle, args.index,
-        age_min=120, annee_min=args.annee_min, simulation=args.simulation,
+        age_min=120, annee_min=args.annee_min,
+        exclure=dossiers_exclus(args.exclure),
+        annee_devis_min=args.depuis_annee, simulation=args.simulation,
         pause=args.pause, max_fichiers=args.max,
     )
     return 1 if bilan["echecs"] else 0

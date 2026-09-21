@@ -33,7 +33,8 @@ import time
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from devis_import_commun import arguments_communs, importer, log, verifier_cle  # noqa: E402
+from devis_import_commun import (arguments_communs, dossiers_exclus,  # noqa: E402
+                                 importer, log, verifier_cle)
 
 
 def main() -> int:
@@ -69,6 +70,8 @@ def main() -> int:
     bilan = importer(
         args.dossier, args.url, args.cle, args.index,
         age_min=args.age_min, modifie_depuis=depuis, annee_min=annee_min,
+        exclure=dossiers_exclus(args.exclure),
+        annee_devis_min=args.depuis_annee,
         simulation=args.simulation,
     )
     # Code de sortie non nul en cas d'echec : le planificateur Windows le
