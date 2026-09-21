@@ -30,6 +30,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 from datetime import datetime
 
 try:
@@ -49,6 +50,44 @@ INDEX_DEFAUT = os.path.join(
 # Ce que le serveur sait lire. Les .xlsm sont acceptes : le modele maison est
 # un classeur a macros chez certains commerciaux.
 EXTENSIONS = (".xlsx", ".xlsm", ".xls", ".pdf", ".png", ".jpg", ".jpeg")
+
+# Dossiers du partage qui ne contiennent pas de devis client : modeles vierges,
+# referentiels de prix matiere, et la base de travail « marge brute » qui
+# reprend en seconde copie des devis deja ranges par client. Laisses entrer,
+# ils peupleraient la vue Rentabilite de lignes qui ne sont pas des affaires.
+# La comparaison porte sur le nom d'un segment de chemin, casse et espaces
+# indifferents ; `--exclure` remplace cette liste.
+DOSSIERS_IGNORES = ("_modele", "2 parametres devis", "1111 - base marge brute")
+
+
+def _pliable(nom: str) -> str:
+    """Nom de dossier comparable : sans accent, sans casse, espaces reduits."""
+    sans_accent = unicodedata.normalize("NFKD", str(nom or ""))
+    sans_accent = "".join(c for c in sans_accent if not unicodedata.combining(c))
+    return " ".join(sans_accent.casefold().split())
+
+
+# Date du devis lue dans le nom du fichier. Surtout pas « quatre chiffres
+# quelque part » : les noms sont pleins de references matiere qui y
+# ressembleraient (« 1408-22 », « 2021-40 », « 2288-50g », « 2030-28 »). Seule
+# une date complete jj-mm-aaaa compte, et elle ne doit pas etre collee a
+# d'autres chiffres.
+_DATE_NOM_RE = re.compile(r"(?<!\d)(\d{2})[-. _](\d{2})[-. _](\d{4}|\d{2})(?!\d)")
+
+
+def annee_du_nom(nom: str):
+    """Annee de la derniere date complete lisible dans le nom, sinon None."""
+    annee = None
+    for m in _DATE_NOM_RE.finditer(str(nom or "")):
+        jour, mois, an = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if not (1 <= jour <= 31 and 1 <= mois <= 12):
+            continue
+        if an < 100:
+            an += 2000
+        if 2000 <= an <= 2099:
+            annee = an
+    return annee
+
 
 # Fichiers de travail d'Excel : « ~$devis.xlsx » est un verrou de 165 octets
 # ecrit pendant qu'un classeur est ouvert, pas un devis.
@@ -110,7 +149,8 @@ def _annee_du_dossier(nom: str):
 
 
 def parcourir(racine: str, age_min: int = 0, modifie_depuis: float = 0.0,
-              annee_min: int = 0) -> list:
+              annee_min: int = 0, exclure=DOSSIERS_IGNORES,
+              annee_devis_min: int = 0) -> list:
     """Devis du dossier et de ses sous-dossiers, tries du plus ancien au plus recent.
 
     `age_min` ecarte les fichiers encore en cours d'ecriture — un classeur
@@ -121,11 +161,27 @@ def parcourir(racine: str, age_min: int = 0, modifie_depuis: float = 0.0,
     du dossier, pas a la date des fichiers, parce qu'une archive recopiee porte
     la date de la copie et non celle du devis. Les fichiers poses a la racine
     sont toujours pris.
+    `exclure` ecarte des dossiers par leur nom, a n'importe quelle profondeur.
+    `annee_devis_min` ecarte les devis anterieurs a cette annee. Le partage
+    n'est pas range par millesime mais par client : l'annee se lit donc dans le
+    nom du fichier, ou l'usage maison est de terminer par la date du devis. A
+    defaut de date lisible, on se rabat sur la date du fichier.
     """
     trouves = []
     maintenant = time.time()
     racine_abs = os.path.abspath(racine)
+    exclus = {_pliable(x) for x in (exclure or ())}
+    # Seuil de repli : le 1er janvier de l'annee demandee.
+    seuil_mtime = (time.mktime((annee_devis_min, 1, 1, 0, 0, 0, 0, 1, -1))
+                   if annee_devis_min else 0.0)
     for dossier, sous_dossiers, fichiers in os.walk(racine):
+        if exclus:
+            # Elaguer avant de descendre : os.walk ne visitera pas ce qui sort
+            # de `sous_dossiers`, donc un dossier ecarte ne coute meme pas la
+            # lecture de son contenu sur le reseau.
+            sous_dossiers[:] = [d for d in sous_dossiers if _pliable(d) not in exclus]
+            if _pliable(os.path.basename(dossier)) in exclus:
+                continue
         if annee_min and os.path.abspath(dossier) == racine_abs:
             gardes = []
             for d in sous_dossiers:
@@ -150,6 +206,13 @@ def parcourir(racine: str, age_min: int = 0, modifie_depuis: float = 0.0,
                 continue
             if modifie_depuis and st.st_mtime < modifie_depuis:
                 continue
+            if annee_devis_min:
+                annee = annee_du_nom(nom)
+                if annee is not None:
+                    if annee < annee_devis_min:
+                        continue
+                elif st.st_mtime < seuil_mtime:
+                    continue
             trouves.append((chemin, st.st_mtime, st.st_size))
     trouves.sort(key=lambda t: (t[1], t[0]))
     return trouves
@@ -209,14 +272,16 @@ def envoyer(chemin: str, racine: str, url: str, cle: str, timeout: int = 180) ->
 def importer(racine: str, url: str, cle: str, index_path: str, *,
              age_min: int = 0, modifie_depuis: float = 0.0, annee_min: int = 0,
              simulation: bool = False, pause: float = 0.0,
-             max_fichiers: int = 0) -> dict:
+             max_fichiers: int = 0, exclure=DOSSIERS_IGNORES,
+             annee_devis_min: int = 0) -> dict:
     """Balaie `racine` et envoie ce qui n'est pas deja parti."""
     if not os.path.isdir(racine):
         raise SystemExit("Dossier introuvable : %s" % racine)
 
     index = charger_index(index_path)
     fichiers = parcourir(racine, age_min=age_min, modifie_depuis=modifie_depuis,
-                         annee_min=annee_min)
+                         annee_min=annee_min, exclure=exclure,
+                         annee_devis_min=annee_devis_min)
     log("%d devis vus dans %s" % (len(fichiers), racine))
 
     bilan = {"vus": len(fichiers), "envoyes": 0, "doublons": 0,
@@ -305,7 +370,28 @@ def arguments_communs(parser):
                         help="Index local des fichiers deja envoyes")
     parser.add_argument("--simulation", action="store_true",
                         help="Liste ce qui serait envoye, sans rien envoyer")
+    parser.add_argument("--exclure", default=",".join(DOSSIERS_IGNORES),
+                        help="Dossiers a ne pas lire, separes par des virgules "
+                             "(defaut : %s). « aucun » pour tout lire — "
+                             "PowerShell n'accepte pas une chaine vide en "
+                             "argument." % ", ".join(DOSSIERS_IGNORES))
+    parser.add_argument("--depuis-annee", type=int, default=0, dest="depuis_annee",
+                        help="Ignorer les devis anterieurs a cette annee "
+                             "(0 = tout). L'annee est lue dans le nom du "
+                             "fichier, a defaut dans sa date.")
     return parser
+
+
+def dossiers_exclus(valeur: str) -> tuple:
+    """Liste passee en ligne de commande -> tuple de noms de dossiers.
+
+    « aucun » vide la liste : PowerShell avale les chaines vides passees en
+    argument (`--exclure ""` fait echouer argparse), il faut donc un mot.
+    """
+    texte = str(valeur or "").strip()
+    if _pliable(texte) in ("", "aucun", "rien"):
+        return ()
+    return tuple(x.strip() for x in texte.split(",") if x.strip())
 
 
 def verifier_cle(cle: str) -> None:
