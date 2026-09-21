@@ -28,6 +28,23 @@ BLOQUE=0
 FICHIERS=$(git diff --cached --name-only --diff-filter=ACM)
 [ -z "$FICHIERS" ] && exit 0
 
+# ─── 0. Quel Python ? ────────────────────────────────────────────────
+# `command -v python3` ne suffit pas sous Windows : l'alias d'execution du
+# Microsoft Store repond a `command -v` puis echoue a l'execution en affichant
+# « Python est introuvable ». Le hook concluait « syntaxe invalide » sur un
+# fichier parfaitement sain et bloquait tous les commits du poste. On teste
+# donc l'execution, pas la presence, et on essaie les trois noms possibles.
+PY_CMD=""
+PY_ARG=""
+if python3 -c "import sys" >/dev/null 2>&1; then
+    PY_CMD=python3
+elif python -c "import sys" >/dev/null 2>&1; then
+    PY_CMD=python
+elif py -3 -c "import sys" >/dev/null 2>&1; then
+    PY_CMD=py
+    PY_ARG=-3
+fi
+
 IFS='
 '
 
@@ -51,12 +68,12 @@ done
 # coupe au milieu et bourre de zeros. Invisible a la relecture.
 # `grep` ne sait pas chercher un octet nul de facon portable (BSD vs GNU) :
 # on passe par python, deja requis plus bas.
-if command -v python3 >/dev/null 2>&1; then
+if [ -n "$PY_CMD" ]; then
     for f in $FICHIERS; do
         case "$f" in
             *.png|*.jpg|*.jpeg|*.gif|*.pdf|*.docx|*.xlsx|*.pptx|*.db|*.ico|*.woff*|*.zip|*.mp4|*.svg) continue ;;
         esac
-        n=$(git show ":$f" 2>/dev/null | python3 -c "import sys;print(sys.stdin.buffer.read().count(b'\x00'))" 2>/dev/null)
+        n=$(git show ":$f" 2>/dev/null | $PY_CMD $PY_ARG -c "import sys;print(sys.stdin.buffer.read().count(b'\x00'))" 2>/dev/null)
         if [ -n "$n" ] && [ "$n" != "0" ]; then
             echo "BLOQUE  $n octet(s) nul(s) dans $f — ecriture tronquee, reecrire le fichier."
             BLOQUE=1
@@ -69,9 +86,9 @@ TMP=$(mktemp -d 2>/dev/null || echo /tmp)
 for f in $FICHIERS; do
     case "$f" in
         *.py)
-            if command -v python3 >/dev/null 2>&1; then
+            if [ -n "$PY_CMD" ]; then
                 git show ":$f" > "$TMP/verif.py" 2>/dev/null
-                if ! python3 -c "import ast,sys;ast.parse(open(sys.argv[1],encoding='utf-8').read())" "$TMP/verif.py" 2>"$TMP/err"; then
+                if ! $PY_CMD $PY_ARG -c "import ast,sys;ast.parse(open(sys.argv[1],encoding='utf-8').read())" "$TMP/verif.py" 2>"$TMP/err"; then
                     echo "BLOQUE  Syntaxe Python invalide : $f"
                     tail -2 "$TMP/err" | sed 's/^/          /'
                     BLOQUE=1
@@ -93,7 +110,7 @@ for f in $FICHIERS; do
 done
 
 # ─── 4. AVERTISSEMENT — couleurs en dur, taille, innerHTML ───────────
-if command -v python3 >/dev/null 2>&1; then
+if [ -n "$PY_CMD" ]; then
     for f in $FICHIERS; do
         case "$f" in
             app/web/*.py|static/*.css) ;;
@@ -105,7 +122,7 @@ if command -v python3 >/dev/null 2>&1; then
         # traine des couleurs depuis des mois n'a pas besoin d'etre rappele a
         # chaque commit : ce qui compte, c'est qu'on n'en ajoute pas.
         git show "HEAD:$f" > "$TMP/avant.txt" 2>/dev/null || : > "$TMP/avant.txt"
-        python3 - "$TMP/verif.txt" "$TMP/avant.txt" "$f" <<'PYEOF'
+        $PY_CMD $PY_ARG - "$TMP/verif.txt" "$TMP/avant.txt" "$f" <<'PYEOF'
 import re, sys
 
 def lire(chemin):
@@ -133,6 +150,11 @@ if n_apres > 1200 and n_apres > n_avant:
     print("          -> extraire dans app/web/components/ plutot que rallonger")
 PYEOF
     done
+fi
+
+if [ -z "$PY_CMD" ]; then
+    echo "AVERTISSEMENT  Aucun Python utilisable : controles de syntaxe Python,"
+    echo "               d'octets nuls et de couleurs non joues sur ce commit."
 fi
 
 rm -rf "$TMP" 2>/dev/null

@@ -2460,6 +2460,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
                 style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;outline:none;font-family:inherit">
                 <option value="of:read,of:write">Pont Access — lecture et écriture des OF</option>
                 <option value="scan:write">Agent de scans — dépôt des OF terminés</option>
+                <option value="devis:write">Agent de devis — dépôt des devis commerciaux</option>
                 <option value="of:read">Lecture seule des OF</option>
                 <option value="erp:read,erp:write">Synchro ERP RVGI — dépôt du miroir</option>
                 <option value="mcp:read">Serveur MCP — lecture seule (Claude)</option>
