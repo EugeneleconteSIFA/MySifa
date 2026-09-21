@@ -19,6 +19,24 @@ SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 cd "$(dirname "$0")/.."
 export PYTHONPATH=.
 
+# Quel Python ? `command -v python3` ne suffit pas sous Windows : l'alias
+# d'execution du Microsoft Store repond present puis echoue a l'execution en
+# affichant « Python est introuvable ». Toute la CI locale sortait alors KO sur
+# un depot parfaitement sain, et le pre-push refusait chaque push (21/09/2026).
+# On teste donc l'execution, pas la presence. PY_CMD est exporte : les
+# travailleurs relances par xargs l'heritent au lieu de refaire la detection.
+if [ -z "${PY_CMD:-}" ]; then
+    PY_CMD=""; PY_ARG=""
+    if python3 -c "import sys" >/dev/null 2>&1; then
+        PY_CMD=python3
+    elif python -c "import sys" >/dev/null 2>&1; then
+        PY_CMD=python
+    elif py -3 -c "import sys" >/dev/null 2>&1; then
+        PY_CMD=py; PY_ARG=-3
+    fi
+fi
+export PY_CMD PY_ARG
+
 # Parallelisme. En serie, la suite prenait plus de deux minutes a chaque push
 # sur staging (10/09/2026 : « c'est un peu trop long ») — le genre de delai qui
 # fait sortir `--no-verify`. Les tests sont independants (base :memory: ou
@@ -53,7 +71,7 @@ avec_delai() {
 # boucle meme apres le timeout (test_mystock_declinaisons, 27/08/2026).
 if [ "${1:-}" = "--un" ]; then
     t=$2; dossier=$3; nom=$(basename "$t")
-    avec_delai 120 python3 "$t" </dev/null >"$dossier/$nom.log" 2>&1
+    avec_delai 120 $PY_CMD $PY_ARG "$t" </dev/null >"$dossier/$nom.log" 2>&1
     echo $? >"$dossier/$nom.code"
     exit 0
 fi
@@ -66,7 +84,9 @@ echec=0
 titre() { printf '\n\033[1m== %s\033[0m\n' "$1"; }
 
 titre "Syntaxe Python"
-if python3 -m compileall -q -j 0 app config.py main.py database.py tests scripts tools; then
+if [ -z "$PY_CMD" ]; then
+    echo "  ignore (aucun Python utilisable sur ce poste)"
+elif $PY_CMD $PY_ARG -m compileall -q -j 0 app config.py main.py database.py tests scripts tools; then
     echo "  ok"
 else
     echo "  KO"; echec=1
@@ -88,10 +108,17 @@ else
 fi
 
 titre "Tests"
+if [ -z "$PY_CMD" ]; then
+    echo "  ignore (aucun Python utilisable — GitHub reste le juge)"
+    printf '\n'
+    if [[ $echec -ne 0 ]]; then echo "CI LOCALE : ECHEC"; exit 1; fi
+    echo "CI LOCALE : VERT (etapes Python non jouees)"
+    exit 0
+fi
 # En local, FastAPI n'est pas toujours installe dans le python courant. Un test
 # qui ne peut pas importer ses dependances n'est pas un test rouge : le signaler
 # comme tel ferait ignorer les vrais echecs.
-if python3 -c "import fastapi" 2>/dev/null; then DEPS=1; else DEPS=0
+if [ -n "$PY_CMD" ] && $PY_CMD $PY_ARG -c "import fastapi" 2>/dev/null; then DEPS=1; else DEPS=0
     echo "  (FastAPI absent de ce python : les tests qui en dependent sont ignores)"
 fi
 QUARANTAINE=$(grep -oE '^test_[a-z0-9_]+\.py' tests/CI_QUARANTAINE.txt 2>/dev/null || true)
