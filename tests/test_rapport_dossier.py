@@ -719,6 +719,110 @@ def test_frise_debordements():
              svc.frise(conn2, "2026-09-10T00:00:00", "2026-09-10T23:59:59")["vide"], True)
 
 
+def test_frise_presence():
+    print("\n12 novies. Frise : les pointages 86/87 decoupent les slots")
+    # Le cas reel du 18 au 21/09/2026, reduit a son os. Cohesio 1 tourne le
+    # vendredi puis le lundi ; Cohesio 2 tourne aussi le samedi. Sans les
+    # pointages, le dossier de Cohesio 1 se dessinait en UN rectangle du
+    # vendredi matin au lundi midi : il traversait un samedi ou personne
+    # n'etait a la machine.
+    conn = base()
+    # Cohesio 1 — vendredi : Tony arrive, passe la main a Alan, Alan part.
+    _s(conn, "2026-09-18T06:35:00", "86", "personnel", None, "Cohesio 1", "Tony")
+    _s(conn, "2026-09-18T06:35:00", "01", "personnel", "D-467", "Cohesio 1", "Tony")
+    _s(conn, "2026-09-18T07:12:00", "03", "production", "D-467", "Cohesio 1", "Tony")
+    _s(conn, "2026-09-18T12:52:00", "89", "personnel", "D-467", "Cohesio 1", "Tony")
+    _s(conn, "2026-09-18T12:53:00", "87", "personnel", None, "Cohesio 1", "Tony")
+    _s(conn, "2026-09-18T12:53:00", "86", "personnel", None, "Cohesio 1", "Alan")
+    _s(conn, "2026-09-18T12:54:00", "01", "personnel", "D-467", "Cohesio 1", "Alan")
+    _s(conn, "2026-09-18T12:55:00", "03", "production", "D-467", "Cohesio 1", "Alan")
+    _s(conn, "2026-09-18T19:01:00", "89", "personnel", "D-467", "Cohesio 1", "Alan")
+    _s(conn, "2026-09-18T19:02:00", "87", "personnel", None, "Cohesio 1", "Alan")
+    # Cohesio 1 — lundi : Alan revient sur le meme dossier, et ne pointe pas
+    # sa sortie (il est encore a la machine).
+    _s(conn, "2026-09-21T05:51:00", "86", "personnel", None, "Cohesio 1", "Alan")
+    _s(conn, "2026-09-21T05:52:00", "01", "personnel", "D-467", "Cohesio 1", "Alan")
+    _s(conn, "2026-09-21T07:50:00", "03", "production", "D-467", "Cohesio 1", "Alan")
+    _s(conn, "2026-09-21T10:00:00", "64", "technique", "D-467", "Cohesio 1", "Alan")
+    # Cohesio 2 — vendredi ET samedi.
+    _s(conn, "2026-09-18T13:03:00", "86", "personnel", None, "Cohesio 2", "Jo")
+    _s(conn, "2026-09-18T13:04:00", "03", "production", "D-354", "Cohesio 2", "Jo")
+    _s(conn, "2026-09-18T14:57:00", "89", "personnel", "D-354", "Cohesio 2", "Jo")
+    _s(conn, "2026-09-18T14:58:00", "87", "personnel", None, "Cohesio 2", "Jo")
+    _s(conn, "2026-09-19T05:12:00", "86", "personnel", None, "Cohesio 2", "Jo")
+    _s(conn, "2026-09-19T06:10:00", "03", "production", "D-354", "Cohesio 2", "Jo")
+    _s(conn, "2026-09-19T09:49:00", "89", "personnel", "D-354", "Cohesio 2", "Jo")
+    _s(conn, "2026-09-19T09:50:00", "87", "personnel", None, "Cohesio 2", "Jo")
+    conn.commit()
+
+    DEB, FIN = "2026-09-18T00:00:00", "2026-09-21T23:59:59"
+    pres = svc.presences_machines(conn, DEB, FIN, ["Cohesio 1", "Cohesio 2"])
+    verifier("Cohesio 1 : trois plages de presence", len(pres["Cohesio 1"]), 3)
+    verifier("Cohesio 1 : aucune presence le samedi",
+             [p for p in pres["Cohesio 1"] if p["debut"].day == 19], [])
+    verifier("Cohesio 2 : present le samedi",
+             len([p for p in pres["Cohesio 2"] if p["debut"].day == 19]), 1)
+    # L'arrivee du lundi n'a pas de depart : elle se ferme sur la derniere
+    # trace, pas sur maintenant.
+    lundi = [p for p in pres["Cohesio 1"] if p["debut"].day == 21][0]
+    verifier("arrivee sans depart : marquee ouverte", lundi["ouverte"], True)
+    verifier("et fermee sur la derniere trace",
+             lundi["fin"].strftime("%H:%M"), "10:00")
+    # Le relais Tony -> Alan (une minute) ne fait qu'une seule plage.
+    union1 = svc._plages_presence(pres["Cohesio 1"])
+    verifier("le relais d'une minute ne coupe pas la presence", len(union1), 2)
+    verifier("vendredi d'un bloc : 06:35 -> 19:02",
+             (union1[0][0].strftime("%d %H:%M"), union1[0][1].strftime("%d %H:%M")),
+             ("18 06:35", "18 19:02"))
+
+    f = svc.frise(conn, DEB, FIN, ["Cohesio 1", "Cohesio 2"], presence=True)
+    c1 = [l for l in f["lignes"] if l["machine"] == "Cohesio 1"][0]
+    c2 = [l for l in f["lignes"] if l["machine"] == "Cohesio 2"][0]
+    sl = c1["slots"][0]
+    verifier("le dossier de Cohesio 1 rend deux fragments", len(sl["fragments"]), 2)
+    verifier("un lien entre les deux", len(sl["liens"]), 1)
+    verifier("le libelle ne s'ecrit qu'une fois",
+             sum(1 for fr in sl["fragments"] if fr["libelle"]), 1)
+    verifier("premier fragment : le vendredi",
+             (sl["fragments"][0]["debut"][:10], sl["fragments"][0]["fin"][:10]),
+             ("2026-09-18", "2026-09-18"))
+    verifier("second fragment : le lundi",
+             (sl["fragments"][1]["debut"][:10], sl["fragments"][1]["fin"][:10]),
+             ("2026-09-21", "2026-09-21"))
+
+    # Le point qui motive tout : rien de Cohesio 1 ne se dessine le samedi.
+    samedi = [a for a in f["axe"] if a["jour"] == "2026-09-19"][0]
+    deb_s, fin_s = samedi["x"], samedi["x"] + samedi["largeur"]
+    chevauche = [fr for fr in sl["fragments"]
+                 if fr["x"] < fin_s - 0.01 and fr["x"] + fr["largeur"] > deb_s + 0.01]
+    verifier("aucun fragment de Cohesio 1 sur la plage du samedi", chevauche, [])
+    verifier("Cohesio 2, lui, occupe bien le samedi",
+             any(fr["x"] < fin_s - 0.01 and fr["x"] + fr["largeur"] > deb_s + 0.01
+                 for s in c2["slots"] for fr in s["fragments"]), True)
+
+    # Les phases restent dans leur fragment et le remplissent sans deborder.
+    for fr in sl["fragments"]:
+        verifier_proche("fragment %s : phases dans le cadre" % fr["debut"][8:10],
+                        max([g["x"] + g["largeur"] for g in fr["segments"]] or [0]),
+                        100.0, 1.0)
+
+    # Sans le drapeau, rien ne change : /prod#retour garde son trace.
+    f0 = svc.frise(conn, DEB, FIN, ["Cohesio 1", "Cohesio 2"])
+    verifier("sans presence : pas de fragments",
+             "fragments" in f0["lignes"][0]["slots"][0], False)
+    verifier("les pointages ne se dessinent pas pour eux-memes",
+             "presences" in c1, False)
+
+    # Un atelier qui ne pointe pas ses arrivees garde la barre entiere.
+    conn2 = base()
+    _s(conn2, "2026-09-18T06:00:00", "03", "production", "D-1", "Cohesio 1", "Marc")
+    _s(conn2, "2026-09-18T14:00:00", "89", "personnel", "D-1", "Cohesio 1", "Marc")
+    conn2.commit()
+    f2 = svc.frise(conn2, DEB, FIN, ["Cohesio 1"], presence=True)
+    verifier("sans pointage 86/87 : le slot reste d'un seul tenant",
+             f2["lignes"][0]["slots"][0].get("fragments"), None)
+
+
 def test_statut_saisieprod():
     print("\n12 octies. Les phases parlent la langue de Saisieprod")
     # Cinq etats, pas plus : la frise reprend les couleurs de Saisieprod, donc
@@ -1136,6 +1240,7 @@ if __name__ == "__main__":
     test_dernier_jour_saisi()
     test_frise()
     test_frise_debordements()
+    test_frise_presence()
     test_statut_saisieprod()
     test_frise_dossier()
     test_minutes_txt()

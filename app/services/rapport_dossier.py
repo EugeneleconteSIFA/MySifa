@@ -1615,6 +1615,127 @@ def dernier_jour_saisi(conn, avant: str = "") -> Optional[str]:
     return _txt(row["jour"]) if row and _txt(row["jour"]) else None
 
 
+# ─── Presence aux machines (pointages 86/87) ────────────────────
+#
+# Les saisies d'arrivee et de depart ne portent PAS de numero de dossier. Toute
+# lecture par dossier les rate, et c'est exactement pour cela que la frise
+# pouvait tracer un rectangle continu du vendredi soir au lundi matin : rien
+# dans les saisies du dossier ne disait que la machine etait restee seule.
+
+CODE_ARRIVEE_DEFAUT = "86"
+CODE_DEPART_DEFAUT = "87"
+
+# Un trou de presence plus court que ce seuil ne coupe pas un slot. Entre deux
+# conducteurs qui se relaient il s'ecoule une poignee de secondes, et une pause
+# ne veut pas dire que le dossier a quitte la machine. Au-dela — une nuit, un
+# week-end — la machine est vraiment restee seule : un rectangle continu y
+# ferait croire qu'elle a tourne. Le detail des relais reste visible dans la
+# bande de presence, qui elle ne recolle rien.
+TROU_PRESENCE_MIN = 60.0
+
+
+def _ajout_presence(out: Dict[str, List[Dict[str, Any]]], machine: str,
+                    operateur: str, debut: datetime, fin: datetime,
+                    ouverte: bool, d_deb: datetime, d_fin: datetime) -> None:
+    """Range une plage de presence, ramenee a la periode regardee."""
+    d0, f0 = max(debut, d_deb), min(fin, d_fin)
+    if f0 <= d0:
+        return
+    out.setdefault(machine, []).append({
+        "operateur": operateur, "debut": d0, "fin": f0,
+        "ouverte": bool(ouverte), "bornee": (d0 > debut or f0 < fin),
+    })
+
+
+def presences_machines(conn, debut: str, fin: str, machine: Any = "",
+                       code_arrivee: str = CODE_ARRIVEE_DEFAUT,
+                       code_depart: str = CODE_DEPART_DEFAUT
+                       ) -> Dict[str, List[Dict[str, Any]]]:
+    """Qui etait a quelle machine, et de quand a quand, d'apres les 86/87.
+
+    Une arrivee sans depart ne court pas jusqu'a maintenant : elle se ferme sur
+    la DERNIERE trace de l'operateur sur cette machine. Un conducteur qui
+    oublie de pointer sa sortie le vendredi ne doit pas occuper le week-end —
+    c'est le defaut qu'on vient corriger, pas un defaut a reintroduire par
+    l'autre bout. Ces plages-la sortent marquees `ouverte`.
+    """
+    d_deb, d_fin = _dt(debut), _dt(fin)
+    if d_deb is None or d_fin is None or d_fin <= d_deb:
+        return {}
+    cols = _colonnes(conn, "production_data")
+    if not cols:
+        return {}
+    filtre_annule = " AND COALESCE(est_annule, 0) = 0" if "est_annule" in cols else ""
+    # Une equipe qui embauche avant minuit pointe son arrivee la veille : sans
+    # ce recul d'une journee, sa presence commencerait au premier tic de la
+    # periode et la nuit passerait pour un trou.
+    depuis = (d_deb - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S")
+    params: List[Any] = [depuis, fin]
+    filtre_machine = _filtre_machines(machines_demandees(machine), params)
+    rows = conn.execute(
+        f"""SELECT TRIM(COALESCE(machine, '')) AS machine,
+                   TRIM(COALESCE(operateur, '')) AS operateur,
+                   date_operation, operation_code, id
+              FROM production_data
+             WHERE date_operation >= ? AND date_operation <= ?
+               AND TRIM(COALESCE(machine, '')) <> ''{filtre_annule}{filtre_machine}
+             ORDER BY machine, operateur, date_operation, id""",
+        params,
+    ).fetchall()
+
+    arrivee, depart = _txt(code_arrivee), _txt(code_depart)
+    par_cle: Dict[Tuple[str, str], List[Any]] = {}
+    for r in rows:
+        par_cle.setdefault((r["machine"], _txt(r["operateur"])), []).append(r)
+
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for (mach, op), lignes in par_cle.items():
+        ouverture: Optional[datetime] = None
+        derniere: Optional[datetime] = None
+        for r in lignes:
+            quand = _dt(r["date_operation"])
+            if quand is None:
+                continue
+            code = _txt(r["operation_code"])
+            if code == depart:
+                if ouverture is not None:
+                    _ajout_presence(out, mach, op, ouverture, quand, False, d_deb, d_fin)
+                    ouverture = None
+            elif code == arrivee:
+                if ouverture is not None:
+                    # Arrivee sur arrivee : la precedente n'a jamais ete fermee.
+                    _ajout_presence(out, mach, op, ouverture, derniere or ouverture,
+                                    True, d_deb, d_fin)
+                ouverture = quand
+            derniere = quand
+        if ouverture is not None:
+            _ajout_presence(out, mach, op, ouverture, derniere or ouverture,
+                            True, d_deb, d_fin)
+
+    for m in out:
+        out[m].sort(key=lambda p: (p["debut"], p["fin"]))
+    return out
+
+
+def _plages_presence(presences: List[Dict[str, Any]],
+                     tolerance_min: float = TROU_PRESENCE_MIN
+                     ) -> List[Tuple[datetime, datetime]]:
+    """Les plages ou QUELQU'UN etait la, les trous courts recolles.
+
+    C'est l'union des presences individuelles : deux conducteurs qui se
+    relaient font une seule plage, et c'est bien ce qu'on veut — la machine
+    n'est pas restee seule entre les deux.
+    """
+    plages: List[List[datetime]] = []
+    for p in sorted(presences, key=lambda x: x["debut"]):
+        if plages and (p["debut"] - plages[-1][1]).total_seconds() / 60.0 <= tolerance_min:
+            if p["fin"] > plages[-1][1]:
+                plages[-1][1] = p["fin"]
+        else:
+            plages.append([p["debut"], p["fin"]])
+    return [(a, b) for a, b in plages if b > a]
+
+
 # ─── Frise de production ─────────────────────────────────────────────────────
 #
 # Meme allure que le planning, mais posee sur de VRAIES dates : le planning
@@ -1750,12 +1871,22 @@ def _identite_slot(conn, no_dossier: str, saisies: List[Dict[str, Any]],
 
 
 def frise(conn, debut: str, fin: str, machine: Any = "", code_fin: str = "89",
-          code_debut: str = "01", code_annul: str = "90") -> Dict[str, Any]:
+          code_debut: str = "01", code_annul: str = "90",
+          presence: bool = False,
+          code_arrivee: str = CODE_ARRIVEE_DEFAUT,
+          code_depart: str = CODE_DEPART_DEFAUT) -> Dict[str, Any]:
     """Ce qui est passe sur les machines pendant la periode, pose sur un axe.
 
     Un dossier commence souvent avant la periode et finit apres : son slot est
     alors coupe, et porte un marqueur de debordement de chaque cote. Le tronquer
     sans le dire ferait croire a une production plus courte qu'elle ne fut.
+
+    `presence` lit les pointages 86/87 et DECOUPE les slots sur les plages ou
+    quelqu'un etait a la machine. Sans lui, un dossier ouvert le vendredi et
+    repris le lundi se dessine en un seul rectangle qui traverse un samedi ou
+    la machine n'a pas tourne — on lit une production qui n'a pas eu lieu.
+    Les pointages ne sont pas dessines pour eux-memes : ils ne servent qu'a
+    savoir ou la barre doit s'interrompre.
     """
     d_deb, d_fin = _dt(debut), _dt(fin)
     if d_deb is None or d_fin is None or d_fin <= d_deb:
@@ -1776,7 +1907,12 @@ def frise(conn, debut: str, fin: str, machine: Any = "", code_fin: str = "89",
                AND TRIM(COALESCE(no_dossier, '')) <> ''{filtre_annule}{filtre_machine}""",
         params,
     ).fetchall()
-    if not couples:
+
+    presences = (presences_machines(conn, debut, fin, machine,
+                                    code_arrivee=code_arrivee,
+                                    code_depart=code_depart)
+                 if presence else {})
+    if not couples and not presences:
         return {"vide": True, "axe": [], "lignes": []}
 
     # Toutes les saisies du dossier, pas seulement celles de la periode : sinon
@@ -1794,7 +1930,12 @@ def frise(conn, debut: str, fin: str, machine: Any = "", code_fin: str = "89",
             if iv["fin"] > d_deb and iv["debut"] < d_fin:
                 if _est_demandee(iv["machine"], demandees):
                     dans_periode.append(iv)
-    axe = _axe_ouvre(dans_periode, d_deb, d_fin)
+    # Les presences entrent dans l'axe au meme titre que les saisies : un
+    # conducteur arrive a 5 h qui ouvre son premier dossier a 6 h a bien fait
+    # partie de la journee, et son heure ne doit pas se replier.
+    pour_axe = dans_periode + [{"debut": p["debut"], "fin": p["fin"], "douteuse": False}
+                               for plages in presences.values() for p in plages]
+    axe = _axe_ouvre(pour_axe, d_deb, d_fin)
     if not axe:
         return {"vide": True, "axe": [], "lignes": []}
 
@@ -1810,15 +1951,17 @@ def frise(conn, debut: str, fin: str, machine: Any = "", code_fin: str = "89",
                 continue
             etendue = (min(iv["debut_brut"] for iv in propres),
                        max(iv["fin_brut"] for iv in propres))
-            slot = _slot(propres, visibles, axe, d_deb, d_fin, no_d, etendue)
+            slot = _slot(propres, visibles, axe, d_deb, d_fin, no_d, etendue,
+                         presences=(_plages_presence(presences[m])
+                                    if presence and presences.get(m) else None))
             if slot:
                 slot.update(_identite_slot(conn, no_d, _saisies(conn, no_d), code_fin))
                 par_machine.setdefault(m, []).append(slot)
 
     lignes = []
     for m in sorted(par_machine):
-        slots = sorted(par_machine[m], key=lambda s: s["x"])
-        lignes.append({"machine": m, "slots": slots})
+        lignes.append({"machine": m,
+                       "slots": sorted(par_machine[m], key=lambda s: s["x"])})
 
     for plage in axe:
         plage.pop("_d", None)
@@ -1831,13 +1974,22 @@ def frise(conn, debut: str, fin: str, machine: Any = "", code_fin: str = "89",
 def _slot(tous: List[Dict[str, Any]], visibles: List[Dict[str, Any]],
           axe: List[Dict[str, Any]], d_deb: datetime, d_fin: datetime,
           no_dossier: str,
-          etendue: Optional[Tuple[datetime, datetime]] = None) -> Optional[Dict[str, Any]]:
+          etendue: Optional[Tuple[datetime, datetime]] = None,
+          presences: Optional[List[Tuple[datetime, datetime]]] = None
+          ) -> Optional[Dict[str, Any]]:
     """Un dossier sur une machine : sa barre, ses phases, ses debordements.
 
     `etendue` est l'etendue REELLE du dossier, hors fenetre. Les intervalles
     arrivent deja bornes a la periode ; s'y fier pour situer le dossier ferait
     croire qu'il a commence et fini dedans, et les marqueurs de debordement ne
     se leveraient jamais.
+
+    `presences` decoupe la barre. Sans lui, un dossier ouvert le vendredi et
+    repris le lundi occupe tout l'intervalle, samedi compris : le rectangle
+    raconte une machine qui tourne alors que personne n'etait la. Avec lui, le
+    dossier rend un fragment par plage de presence traversee, et les trous
+    restent des trous. Les fragments portent la geometrie ; `x` et `largeur`
+    gardent l'enveloppe, qui sert a ordonner les slots et a l'infobulle.
     """
     debut_reel = etendue[0] if etendue else min(iv["debut"] for iv in tous)
     fin_reelle = etendue[1] if etendue else max(iv["fin"] for iv in tous)
@@ -1849,8 +2001,10 @@ def _slot(tous: List[Dict[str, Any]], visibles: List[Dict[str, Any]],
 
     # Les phases, dans l'ordre, sans chevauchement : deux conducteurs sur le
     # meme dossier se relaient, mais leurs saisies peuvent se croiser d'une
-    # minute. On rabote plutot que de superposer deux rectangles.
-    segments: List[Dict[str, Any]] = []
+    # minute. On rabote plutot que de superposer deux rectangles. Elles sont
+    # gardees en DATES : les fragments ont ensuite besoin de les redecouper,
+    # et un pourcentage deja calcule ne se redecoupe pas.
+    phases: List[Tuple[datetime, datetime, Dict[str, Any]]] = []
     borne = None
     for iv in sorted(visibles, key=lambda i: i["debut"]):
         s_deb = max(iv["debut"], d0)
@@ -1860,24 +2014,35 @@ def _slot(tous: List[Dict[str, Any]], visibles: List[Dict[str, Any]],
         if s_fin <= s_deb:
             continue
         borne = s_fin
-        sx = _position(axe, s_deb)
-        sf = _position(axe, s_fin)
-        if largeur <= 0:
-            continue
-        segments.append({
-            "categorie": iv["categorie"],
-            "statut": statut_saisie(iv["categorie"]),
-            "label": LIBELLES_CATEGORIES.get(iv["categorie"],
-                                             iv["categorie"].capitalize() or "Autre"),
-            "operation": iv["operation"],
-            "code": iv["code"],
-            "minutes": round(iv["minutes"], 1),
-            "x": round(max(0.0, (sx - x) / largeur * 100.0), 3),
-            "largeur": round(max(0.0, (sf - sx) / largeur * 100.0), 3),
-        })
+        phases.append((s_deb, s_fin, iv))
+
+    def _segments(cadre_deb: datetime, cadre_fin: datetime,
+                  cadre_x: float, cadre_largeur: float) -> List[Dict[str, Any]]:
+        out: List[Dict[str, Any]] = []
+        if cadre_largeur <= 0:
+            return out
+        for s_deb, s_fin, iv in phases:
+            g_deb = max(s_deb, cadre_deb)
+            g_fin = min(s_fin, cadre_fin)
+            if g_fin <= g_deb:
+                continue
+            sx = _position(axe, g_deb)
+            sf = _position(axe, g_fin)
+            out.append({
+                "categorie": iv["categorie"],
+                "statut": statut_saisie(iv["categorie"]),
+                "label": LIBELLES_CATEGORIES.get(iv["categorie"],
+                                                 iv["categorie"].capitalize() or "Autre"),
+                "operation": iv["operation"],
+                "code": iv["code"],
+                "minutes": round((g_fin - g_deb).total_seconds() / 60.0, 1),
+                "x": round(max(0.0, (sx - cadre_x) / cadre_largeur * 100.0), 3),
+                "largeur": round(max(0.0, (sf - sx) / cadre_largeur * 100.0), 3),
+            })
+        return out
 
     derniere = max(tous, key=lambda i: i["debut"])
-    return {
+    slot: Dict[str, Any] = {
         "no_dossier": no_dossier,
         "client": _txt(derniere.get("client")),
         "designation": _txt(derniere.get("designation")),
@@ -1889,8 +2054,53 @@ def _slot(tous: List[Dict[str, Any]], visibles: List[Dict[str, Any]],
         "largeur": round(largeur, 3),
         "deborde_avant": debut_reel < d_deb,
         "deborde_apres": fin_reelle > d_fin,
-        "segments": segments,
+        "segments": _segments(d0, f0, x, largeur),
     }
+    if presences is None:
+        return slot
+
+    # Aucune plage connue qui morde sur le dossier : on ne cache rien. Un
+    # atelier qui ne pointe pas encore ses arrivees garde la barre entiere,
+    # c'est un trace moins fin, pas un trace faux.
+    fenetres = [(max(a, d0), min(b, f0)) for a, b in presences
+                if min(b, f0) > max(a, d0)]
+    if not fenetres:
+        return slot
+
+    fragments: List[Dict[str, Any]] = []
+    for k, (a, b) in enumerate(fenetres):
+        fx = _position(axe, a)
+        ff = _position(axe, b)
+        f_largeur = max(ff - fx, 0.35)
+        fragments.append({
+            "x": round(fx, 3),
+            "largeur": round(f_largeur, 3),
+            "debut": a.strftime("%Y-%m-%dT%H:%M:%S"),
+            "fin": b.strftime("%Y-%m-%dT%H:%M:%S"),
+            "deborde_avant": debut_reel < d_deb and k == 0,
+            "deborde_apres": fin_reelle > d_fin and k == len(fenetres) - 1,
+            "segments": _segments(a, b, fx, f_largeur),
+        })
+
+    # Le libelle tient sur le fragment le plus large : ecrit sur chacun, il se
+    # lirait comme autant de dossiers differents.
+    porteur = max(range(len(fragments)), key=lambda k: fragments[k]["largeur"])
+    for k, frag in enumerate(fragments):
+        frag["libelle"] = (k == porteur)
+
+    # Entre deux fragments, un liseré : le dossier n'est pas fini, il attend.
+    slot["liens"] = [
+        {"x": round(fragments[k]["x"] + fragments[k]["largeur"], 3),
+         "largeur": round(max(fragments[k + 1]["x"]
+                              - (fragments[k]["x"] + fragments[k]["largeur"]), 0.0), 3)}
+        for k in range(len(fragments) - 1)
+    ]
+    slot["liens"] = [l for l in slot["liens"] if l["largeur"] > 0.05]
+    slot["fragments"] = fragments
+    slot["x"] = fragments[0]["x"]
+    slot["largeur"] = round(fragments[-1]["x"] + fragments[-1]["largeur"]
+                            - fragments[0]["x"], 3)
+    return slot
 
 
 def frise_dossier(conn, no_dossier: str) -> Dict[str, Any]:

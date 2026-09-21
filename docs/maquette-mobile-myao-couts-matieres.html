@@ -1,0 +1,1391 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MySifa — Maquette mobile portrait : MyAO et Coûts matières</title>
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   Tokens MySifa — copiés de static/mysifa_theme.css (source unique).
+   Aucune couleur en dur ailleurs dans ce fichier.
+   ══════════════════════════════════════════════════════════════════════ */
+:root{
+  --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
+  --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,0.12);
+  --filter-input-bg:#1c2838;
+  --success:#34d399;--warn:#fbbf24;--danger:#f87171;
+  --c1:#22d3ee;--c2:#a78bfa;--c3:#34d399;--c4:#fbbf24;--c5:#f87171;
+}
+body.light{
+  --bg:#f1f5f9;--card:#ffffff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
+  --muted:#94a3b8;--accent:#0891b2;--accent-bg:rgba(8,145,178,0.10);
+  --filter-input-bg:#ffffff;
+  --success:#059669;--warn:#d24b00;--danger:#dc2626;
+  --c1:#0891b2;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── Chrome de la maquette (hors application) ───────────────────────── */
+.mq-top{
+  position:sticky;top:0;z-index:60;
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:12px 20px;background:var(--card);border-bottom:1px solid var(--border);
+}
+.mq-brand{font-size:15px;font-weight:800;letter-spacing:-.3px}
+.mq-brand span{color:var(--accent)}
+.mq-top-sub{font-size:11.5px;color:var(--muted);flex:1;min-width:160px}
+.mq-tgl{
+  display:inline-flex;gap:4px;background:var(--bg);border:1px solid var(--border);
+  border-radius:10px;padding:3px;
+}
+.mq-tgl button{
+  min-height:32px;padding:0 12px;border:0;border-radius:8px;background:transparent;
+  color:var(--muted);font:600 12px/1 inherit;cursor:pointer;
+}
+.mq-tgl button.on{background:var(--accent-bg);color:var(--accent);font-weight:700}
+
+.mq-wrap{display:flex;gap:26px;align-items:flex-start;padding:22px 20px 60px;max-width:1500px;margin:0 auto}
+
+/* Sommaire */
+.mq-toc{
+  position:sticky;top:78px;width:264px;flex:0 0 264px;
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:14px;max-height:calc(100dvh - 110px);overflow-y:auto;
+}
+.mq-toc h3{
+  margin:12px 0 7px;font-size:10.5px;font-weight:800;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);
+}
+.mq-toc h3:first-child{margin-top:0}
+.mq-toc button{
+  display:block;width:100%;text-align:left;margin-bottom:3px;
+  min-height:36px;padding:7px 11px;border-radius:9px;
+  border:1px solid transparent;background:var(--bg);color:var(--text2);
+  font:600 12.5px/1.35 inherit;cursor:pointer;
+}
+.mq-toc button:hover{border-color:var(--border);color:var(--text)}
+.mq-toc button.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:700}
+.mq-toc em{display:block;font-style:normal;font-size:10.5px;color:var(--muted);font-weight:500;margin-top:2px}
+.mq-toc button.on em{color:var(--accent)}
+
+/* Scène */
+.mq-scene{flex:1;min-width:0;display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap}
+
+/* Téléphone : 390 × 844 (iPhone 14 / Pixel 7, le format de référence). */
+.mq-phone{
+  flex:0 0 auto;width:390px;height:844px;position:relative;
+  background:var(--bg);border:10px solid var(--border);border-radius:44px;
+  box-shadow:0 26px 60px rgba(0,0,0,.34);overflow:hidden;
+}
+.mq-notch{
+  position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:132px;height:26px;background:var(--border);
+  border-radius:0 0 16px 16px;z-index:50;
+}
+.mq-status{
+  height:34px;display:flex;align-items:flex-end;justify-content:space-between;
+  padding:0 20px 3px;font:700 11.5px/1 inherit;color:var(--text2);
+  background:var(--bg);position:relative;z-index:40;
+}
+.mq-screen{
+  position:absolute;inset:34px 0 0 0;overflow-y:auto;overflow-x:hidden;
+  background:var(--bg);scrollbar-width:thin;
+}
+.mq-screen::-webkit-scrollbar{width:5px}
+.mq-screen::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* Notes de conception à droite du téléphone */
+.mq-notes{flex:1;min-width:280px;max-width:520px}
+.mq-notes h2{margin:0 0 4px;font-size:19px;font-weight:800;letter-spacing:-.4px}
+.mq-notes .mq-route{
+  display:inline-block;margin-bottom:14px;padding:3px 9px;border-radius:6px;
+  background:var(--accent-bg);color:var(--accent);
+  font:700 11px/1.5 ui-monospace,'Cascadia Code',monospace;
+}
+.mq-note{
+  background:var(--card);border:1px solid var(--border);border-left:3px solid var(--accent);
+  border-radius:0 12px 12px 0;padding:12px 14px;margin-bottom:10px;
+}
+.mq-note b{display:block;font-size:13px;margin-bottom:4px}
+.mq-note p{margin:0;font-size:12.5px;line-height:1.6;color:var(--text2)}
+.mq-note--pb{border-left-color:var(--warn)}
+.mq-note--pb b{color:var(--warn)}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Socle mobile .msf- — repris de static/mysifa_mobile.css
+   ══════════════════════════════════════════════════════════════════════ */
+.msf-tap{min-width:44px;min-height:44px}
+.msf-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 13px}
+.msf-card + .msf-card{margin-top:9px}
+.msf-card-head{display:flex;align-items:center;gap:8px;margin-bottom:7px;min-width:0}
+.msf-card-title{flex:1;min-width:0;font-size:14.5px;font-weight:700;letter-spacing:-.2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msf-card-sub{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;font-size:11.5px;color:var(--muted)}
+.msf-card-sub + .msf-card-sub{margin-top:5px}
+.msf-chevron{flex:0 0 auto;color:var(--muted);display:inline-flex}
+
+.msf-rows{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.msf-row{display:flex;align-items:center;gap:11px;min-height:52px;padding:8px 12px;
+  border-bottom:1px solid var(--border);background:none;border-left:0;border-right:0;border-top:0;
+  width:100%;text-align:left;color:inherit;font:inherit;cursor:pointer}
+.msf-row:last-child{border-bottom:0}
+.msf-row-ico{width:32px;height:32px;flex:0 0 32px;border-radius:9px;
+  background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center}
+.msf-row-ico--warn{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+.msf-row-ico--danger{background:color-mix(in srgb,var(--danger) 16%,transparent);color:var(--danger)}
+.msf-row-ico--ok{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success)}
+.msf-row-ico--muted{background:var(--bg);color:var(--text2)}
+.msf-row-txt{flex:1;min-width:0}
+.msf-row-txt b{display:block;font-size:13.5px;font-weight:700;letter-spacing:-.15px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msf-row-txt span{display:block;font-size:11px;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msf-row-n{font-size:17px;font-weight:800;font-family:ui-monospace,'Cascadia Code',monospace;
+  font-variant-numeric:tabular-nums}
+
+.msf-sect{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:2px 2px 8px}
+.msf-sect b{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.msf-sect button{background:none;border:0;padding:0;cursor:pointer;font:600 11.5px/1 inherit;color:var(--accent)}
+
+.msf-chips{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none}
+.msf-chips::-webkit-scrollbar{display:none}
+.msf-chip{flex:0 0 auto;height:34px;display:inline-flex;align-items:center;gap:6px;padding:0 13px;
+  border-radius:17px;border:1px solid var(--border);background:var(--card);color:var(--text2);
+  font:600 12.5px/1 inherit;white-space:nowrap;cursor:pointer}
+.msf-chip--on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:700}
+
+.msf-seg{display:flex;gap:4px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:4px}
+.msf-seg button{flex:1;height:38px;border:0;border-radius:9px;background:transparent;color:var(--muted);
+  font:600 13px/1 inherit;display:flex;align-items:center;justify-content:center;gap:6px;
+  white-space:nowrap;cursor:pointer}
+.msf-seg button.msf-seg-on{background:var(--accent-bg);color:var(--accent);font-weight:700}
+
+.msf-badge{display:inline-flex;align-items:center;font-size:10px;font-weight:800;letter-spacing:.04em;
+  text-transform:uppercase;border-radius:5px;padding:2px 6px;white-space:nowrap;
+  border:1px solid var(--border);color:var(--muted);background:transparent}
+.msf-badge--accent{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.msf-badge--ok{background:color-mix(in srgb,var(--success) 16%,transparent);
+  border-color:color-mix(in srgb,var(--success) 45%,transparent);color:var(--success)}
+.msf-badge--warn{background:color-mix(in srgb,var(--warn) 16%,transparent);
+  border-color:color-mix(in srgb,var(--warn) 45%,transparent);color:var(--warn)}
+.msf-badge--danger{background:color-mix(in srgb,var(--danger) 16%,transparent);
+  border-color:color-mix(in srgb,var(--danger) 45%,transparent);color:var(--danger)}
+
+.msf-btn{height:50px;padding:0 20px;border-radius:10px;border:0;cursor:pointer;
+  background:var(--accent);color:#ffffff;font:800 14.5px/1 inherit;letter-spacing:-.1px;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.msf-btn--sm{height:44px;font-size:13.5px}
+.msf-btn--block{width:100%}
+.msf-btn--ghost{background:var(--card);border:1px solid var(--border);color:var(--text2);font-weight:700}
+.msf-btn--danger{background:var(--danger);color:#ffffff}
+.msf-icon-btn{width:44px;height:44px;flex:0 0 44px;border-radius:10px;border:1px solid var(--border);
+  background:var(--card);color:var(--text2);display:inline-flex;align-items:center;
+  justify-content:center;cursor:pointer;position:relative}
+.msf-icon-btn--on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.msf-card .msf-btn--ghost,.msf-card .msf-icon-btn,
+.msf-bs .msf-btn--ghost,.msf-bs .msf-icon-btn,
+.msf-rows .msf-btn--ghost,.msf-rows .msf-icon-btn{background:var(--bg)}
+
+.msf-fab{position:absolute;right:16px;bottom:22px;z-index:30;
+  width:54px;height:54px;border-radius:50%;border:0;cursor:pointer;
+  background:var(--accent);color:#ffffff;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 8px 22px color-mix(in srgb,var(--accent) 34%,transparent)}
+
+.msf-gauge{height:5px;border-radius:3px;background:var(--border);overflow:hidden;width:74px;flex:0 0 74px}
+.msf-gauge i{display:block;height:100%;background:var(--accent);border-radius:3px}
+
+.msf-dl{display:grid;grid-template-columns:1fr 1fr;gap:11px 14px;margin:0}
+.msf-dl>div{min-width:0}
+.msf-dl dt{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:2px}
+.msf-dl dd{margin:0;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.msf-dl .msf-dl-full{grid-column:1/-1}
+
+.msf-empty{padding:26px 12px;text-align:center;color:var(--muted);font-size:12.5px}
+
+/* Feuille remontante, contrainte au cadre du téléphone. */
+.msf-bs-backdrop{position:absolute;inset:0;z-index:70;background:color-mix(in srgb,var(--bg) 62%,transparent)}
+.msf-bs{position:absolute;left:0;right:0;bottom:0;z-index:80;background:var(--card);
+  border-top:1px solid var(--border);border-radius:16px 16px 0 0;
+  display:flex;flex-direction:column;max-height:78%;
+  box-shadow:0 -18px 50px color-mix(in srgb,var(--bg) 55%,transparent)}
+.msf-bs-grab{width:40px;height:4px;border-radius:2px;background:var(--border);margin:9px auto 4px;flex:0 0 auto}
+.msf-bs-head{padding:6px 16px 12px;border-bottom:1px solid var(--border);flex:0 0 auto;
+  font-size:14.5px;font-weight:800}
+.msf-bs-body{padding:14px 16px;overflow-y:auto;flex:1;min-height:0}
+.msf-bs-foot{flex:0 0 auto;display:flex;gap:8px;align-items:center;padding:11px 14px;
+  border-top:1px solid var(--border)}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Composants mobiles nouveaux — proposés par cette maquette
+   Préfixe .msf- pour rejoindre le socle partagé.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Topbar mobile existante (.mobile-topbar) */
+.msf-topbar{
+  position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:8px;
+  height:54px;padding:0 8px 0 6px;background:var(--card);border-bottom:1px solid var(--border);
+}
+.msf-topbar-t{flex:1;min-width:0}
+.msf-topbar-t b{display:block;font-size:15px;font-weight:800;letter-spacing:-.3px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msf-topbar-t span{display:block;font-size:11px;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msf-tb-btn{width:40px;height:40px;flex:0 0 40px;border-radius:10px;border:0;background:transparent;
+  color:var(--text2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+
+/* Barre de recherche collante sous la topbar */
+.msf-searchbar{position:sticky;top:54px;z-index:19;display:flex;gap:8px;align-items:center;
+  padding:9px 12px;background:var(--bg);border-bottom:1px solid var(--border)}
+.msf-search{flex:1;min-width:0;height:44px;display:flex;align-items:center;gap:8px;
+  padding:0 12px;border-radius:11px;border:1px solid var(--border);background:var(--filter-input-bg);
+  color:var(--muted);font-size:13.5px}
+.msf-filtres-btn{position:relative}
+.msf-filtres-btn .msf-pastille{position:absolute;top:6px;right:6px;width:8px;height:8px;
+  border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--card)}
+
+/* Bandeau de contexte collant (fiche : ce qu'on regarde ne doit pas sortir de l'écran) */
+.msf-ctx{position:sticky;top:54px;z-index:18;padding:10px 12px;background:var(--bg);
+  border-bottom:1px solid var(--border)}
+.msf-ctx-l1{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.msf-ctx-l1 b{font-size:15px;font-weight:800;letter-spacing:-.3px}
+.msf-ctx-l2{font-size:11.5px;color:var(--muted);line-height:1.45}
+
+/* Onglets défilants (remplace les onglets bureau qui se chevauchent) */
+.msf-tabs{position:sticky;top:54px;z-index:18;display:flex;gap:2px;overflow-x:auto;
+  scrollbar-width:none;background:var(--bg);border-bottom:1px solid var(--border);padding:0 8px}
+.msf-tabs::-webkit-scrollbar{display:none}
+.msf-tabs button{flex:0 0 auto;height:46px;padding:0 13px;border:0;background:transparent;
+  color:var(--muted);font:600 13px/1 inherit;cursor:pointer;position:relative;
+  display:inline-flex;align-items:center;gap:6px}
+.msf-tabs button.on{color:var(--accent);font-weight:800}
+.msf-tabs button.on::after{content:'';position:absolute;left:10px;right:10px;bottom:0;height:2.5px;
+  background:var(--accent);border-radius:2px 2px 0 0}
+.msf-tab-n{min-width:19px;height:18px;padding:0 5px;border-radius:9px;background:var(--bg);
+  border:1px solid var(--border);color:var(--muted);font:700 10px/16px ui-monospace,monospace;text-align:center}
+.msf-tab-n--alert{background:var(--danger);border-color:transparent;color:#ffffff}
+
+/* Corps de page */
+.msf-body{padding:12px}
+.msf-body--pad{padding-bottom:96px}
+
+/* Ligne libellé / valeur, pleine largeur (remplace une ligne de tableau) */
+.msf-kv{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  padding:9px 0;border-bottom:1px solid var(--border);font-size:13px}
+.msf-kv:last-child{border-bottom:0}
+.msf-kv dt{color:var(--muted);font-size:12px;flex:0 0 auto}
+.msf-kv dd{margin:0;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;min-width:0}
+.msf-kv--fort dd{font-size:16px;font-weight:800}
+.msf-kv--tot{border-top:1px solid var(--border);border-bottom:0;margin-top:4px;padding-top:11px}
+
+/* Champ de saisie mobile plein format */
+.msf-field{margin-bottom:12px}
+.msf-field label{display:block;font-size:10.5px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.msf-input{width:100%;height:48px;padding:0 13px;border-radius:11px;border:1px solid var(--border);
+  background:var(--bg);color:var(--text);font:600 15px/1 inherit;display:flex;align-items:center;
+  justify-content:space-between;gap:8px}
+.msf-input--txt{font-weight:500;color:var(--text2)}
+.msf-input em{font-style:normal;font-size:12px;color:var(--muted);font-weight:600}
+.msf-field-hint{margin:5px 2px 0;font-size:11px;line-height:1.5;color:var(--muted)}
+.msf-card .msf-input{background:var(--bg)}
+
+/* Saisie de prix en place : le geste central de Coûts matières */
+.msf-prix{display:flex;align-items:center;gap:8px;height:46px;padding:0 10px 0 12px;
+  border-radius:11px;border:1px solid var(--border);background:var(--bg)}
+.msf-prix--focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.msf-prix--ok{border-color:var(--success)}
+.msf-prix i{flex:0 0 auto;color:var(--muted);display:inline-flex}
+.msf-prix b{flex:1;font:800 18px/1 ui-monospace,'Cascadia Code',monospace;
+  font-variant-numeric:tabular-nums;letter-spacing:-.4px}
+.msf-prix span{flex:0 0 auto;font-size:11.5px;color:var(--muted);font-weight:600}
+.msf-prix-etat{font-size:11px;font-weight:700;color:var(--success);display:inline-flex;align-items:center;gap:4px}
+.msf-prix-lock{display:flex;align-items:center;gap:8px;height:46px;padding:0 12px;border-radius:11px;
+  border:1px dashed var(--border);background:transparent;color:var(--muted);font-size:12.5px}
+
+/* Barre d'action collante en bas (le geste principal reste sous le pouce) */
+.msf-actionbar{position:sticky;bottom:0;z-index:25;display:flex;gap:8px;align-items:center;
+  padding:10px 12px;background:var(--card);border-top:1px solid var(--border)}
+.msf-actionbar .msf-btn{flex:1}
+
+/* Accordéon de section pour les formulaires longs */
+.msf-acc{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.msf-acc + .msf-acc{margin-top:9px}
+.msf-acc-h{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:10px 13px;
+  border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.msf-acc-h b{flex:1;min-width:0;font-size:13.5px;font-weight:800;letter-spacing:-.15px}
+.msf-acc-h .msf-acc-sum{font-size:11.5px;color:var(--muted);font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+.msf-acc-b{padding:2px 13px 14px;border-top:1px solid var(--border)}
+.msf-acc-sous{font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--text2);margin:14px 0 8px}
+.msf-acc-sous:first-child{margin-top:12px}
+
+/* Carte de comparaison d'offre (Demandes de prix) */
+.msf-offre{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.msf-offre + .msf-offre{margin-top:9px}
+.msf-offre--best{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.msf-offre-h{display:flex;align-items:center;gap:11px;width:100%;padding:11px 12px;
+  border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.msf-offre-rang{width:26px;height:26px;flex:0 0 26px;border-radius:8px;background:var(--bg);
+  color:var(--muted);font:800 12px/26px ui-monospace,monospace;text-align:center}
+.msf-offre--best .msf-offre-rang{background:var(--accent);color:#ffffff}
+.msf-offre-id{flex:1;min-width:0}
+.msf-offre-id b{display:block;font-size:13.5px;font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msf-offre-id span{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+.msf-offre-prix{text-align:right;flex:0 0 auto}
+.msf-offre-prix b{display:block;font:800 17px/1.1 ui-monospace,'Cascadia Code',monospace;
+  font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+.msf-offre--best .msf-offre-prix b{color:var(--accent)}
+.msf-offre-prix span{display:block;font-size:10px;color:var(--muted);margin-top:3px;
+  text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+.msf-offre-b{padding:0 12px 12px;border-top:1px solid var(--border)}
+.msf-ecart{font-size:11px;font-weight:700;color:var(--warn)}
+.msf-ecart--ok{color:var(--success)}
+
+/* Chaîne de calcul : la suite d'opérations, une ligne par terme */
+.msf-calc{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:var(--bg);
+  border:1px solid var(--border)}
+.msf-calc-t{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:6px}
+.msf-calc .msf-kv{border-bottom-color:color-mix(in srgb,var(--border) 60%,transparent);font-size:12.5px}
+
+/* Jauge de composition (coût produit) */
+.msf-parts{display:flex;height:9px;border-radius:5px;overflow:hidden;background:var(--border);margin:10px 0 8px}
+.msf-parts i{display:block;height:100%}
+.msf-leg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11.5px;color:var(--text2)}
+.msf-leg span{display:inline-flex;align-items:center;gap:6px}
+.msf-leg i{width:9px;height:9px;border-radius:3px;flex:0 0 9px}
+
+/* Fil de messagerie */
+.msf-msg{max-width:84%;padding:9px 12px;border-radius:13px;font-size:13px;line-height:1.5}
+.msf-msg--eux{background:var(--card);border:1px solid var(--border);border-bottom-left-radius:4px}
+.msf-msg--nous{background:var(--accent-bg);border:1px solid var(--accent);color:var(--text);
+  margin-left:auto;border-bottom-right-radius:4px}
+.msf-msg-meta{font-size:10px;color:var(--muted);margin-top:4px;font-weight:600}
+.msf-composer{position:sticky;bottom:0;display:flex;gap:8px;align-items:center;padding:10px 12px;
+  background:var(--card);border-top:1px solid var(--border)}
+.msf-composer .msf-input{flex:1;height:44px}
+
+/* Pas à pas (création) */
+.msf-steps{display:flex;align-items:center;gap:6px;padding:10px 12px;background:var(--bg);
+  border-bottom:1px solid var(--border);position:sticky;top:54px;z-index:18}
+.msf-step{flex:1;height:4px;border-radius:2px;background:var(--border)}
+.msf-step.on{background:var(--accent)}
+.msf-step-lbl{font-size:11px;color:var(--muted);font-weight:700;flex:0 0 auto}
+
+.msf-muted{color:var(--muted)}
+.msf-num{font-family:ui-monospace,'Cascadia Code',monospace;font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body class="light">
+
+<header class="mq-top">
+  <div class="mq-brand">MySifa · <span>Maquette mobile portrait</span></div>
+  <div class="mq-top-sub">MyAO et Coûts matières — socle <code>.msf-</code>, 390 × 844 px. Les écrans sont cliquables.</div>
+  <div class="mq-tgl" id="tgl-theme">
+    <button data-theme="light" class="on">Clair</button>
+    <button data-theme="dark">Sombre</button>
+  </div>
+</header>
+
+<div class="mq-wrap">
+  <nav class="mq-toc" id="toc"></nav>
+  <div class="mq-scene">
+    <div class="mq-phone">
+      <div class="mq-notch"></div>
+      <div class="mq-status"><span>9:41</span><span>5G&nbsp;&nbsp;&nbsp;100 %</span></div>
+      <div class="mq-screen" id="screen"></div>
+    </div>
+    <div class="mq-notes" id="notes"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ── Icônes : SVG inline, jamais d'emoji (règle éditoriale MySifa) ───── */
+var P = {
+  menu:'M3 6h18M3 12h18M3 18h18', home:'M3 10l9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',
+  back:'M15 18l-6-6 6-6', chevron:'M9 18l6-6-6-6', down:'M6 9l6 6 6-6', up:'M18 15l-6-6-6 6',
+  search:'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3',
+  filter:'M3 5h18M6 12h12M10 19h4', plus:'M12 5v14M5 12h14',
+  edit:'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
+  truck:'M1 3h15v13H1zM16 8h4l3 3v5h-7zM5.5 18.5a1.5 1.5 0 1 0 0 .01M18.5 18.5a1.5 1.5 0 1 0 0 .01',
+  check:'M20 6L9 17l-5-5', mail:'M2 5h20v14H2zM2 5l10 7 10-7',
+  msg:'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
+  doc:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6',
+  pkg:'M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8', layers:'M12 2L2 7l10 5 10-5zM2 12l10 5 10-5M2 17l10 5 10-5',
+  clock:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2',
+  alert:'M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
+  copy:'M9 9h11v11H9zM5 15H4V4h11v1', trash:'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6',
+  settings:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 15H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 4.6V4a2 2 0 1 1 4 0v.1A1.6 1.6 0 0 0 17 5.6l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.4 1.8V11a2 2 0 1 1 0 4z',
+  send:'M22 2L11 13M22 2l-7 20-4-9-9-4z', paper:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
+  eye:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+  star:'M12 2l3 6.5 7 1-5 4.9 1.2 7L12 18l-6.2 3.4L7 14.4 2 9.5l7-1z',
+  lock:'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4', activity:'M22 12h-4l-3 9L9 3l-3 9H2'
+};
+function ic(n,s){ s=s||16;
+  return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" '+
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+(P[n]||'')+'"/></svg>';
+}
+function esc(t){ return String(t==null?'':t).replace(/[&<>"]/g,function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function nb(n){ return Number(n).toLocaleString('fr-FR'); }
+
+/* ══════════════════════════════════════════════════════════════════════
+   Données — extraites de la base MySifa du 21/09/2026 (lecture MCP).
+   Les chiffres de calcul (prix/mille, marges) sont recomposés pour la
+   démonstration : la maquette montre la mise en page, pas le moteur.
+   ══════════════════════════════════════════════════════════════════════ */
+
+var AOS = [
+  {ref:'AO-2026-012', statut:'envoyee', lim:null, cree:'31/08/2026', transport:0,
+   lignes:[{ref:'110 x 150 mm Thermal Eco Permanent, 1 Color, M40 mm, B235', qte:9000000, u:'étiquettes'}],
+   client:'—', nf:3, nr:3, msg:2},
+  {ref:'AO-2026-011', statut:'envoyee', lim:'01/08/2026', cree:'31/07/2026', transport:0,
+   lignes:[{ref:'101,6x152,4 mm', qte:1234567, u:'étiquettes'},{ref:'101,6x152,4 mm', qte:9876543, u:'étiquettes'}],
+   client:'GLS LOGISTIQUE', nf:3, nr:1, msg:0},
+  {ref:'AO-2026-008', statut:'envoyee', lim:'31/07/2026', cree:'27/07/2026', transport:14,
+   lignes:[{ref:'15 x 10 mm couché 5 coul. B1500', qte:45000000, u:'unité'}],
+   client:'ALTAVIA Paris', nf:6, nr:2, msg:1},
+  {ref:'AO-2026-004', statut:'envoyee', lim:'31/07/2026', cree:'23/07/2026', transport:10,
+   lignes:[{ref:'15 x 10 mm couché 2 coul. B1500', qte:45000000, u:'étiquettes'}],
+   client:'ALTAVIA Paris', nf:7, nr:2, msg:0},
+  {ref:'AO-2026-003', statut:'envoyee', lim:'30/06/2026', cree:'21/07/2026', transport:14,
+   lignes:[{ref:'15x10 mm Couché permanent — Rouge', qte:130000000, u:'étiquettes'},
+           {ref:'15x10 mm Couché permanent — Vert', qte:69000000, u:'étiquettes'}],
+   client:'—', nf:7, nr:2, msg:0},
+  {ref:'AO-2026-009', statut:'envoyee', lim:null, cree:'17/07/2026', transport:14,
+   lignes:[{ref:'101,6x152,4 mm', qte:17360, u:'rolls'}], client:'—', nf:4, nr:4, msg:0},
+  {ref:'AO-2026-006', statut:'envoyee', lim:null, cree:'16/07/2026', transport:0,
+   lignes:[{ref:'85 x 55 mm Thermal Eco Permanent, M25 mm', qte:8000000, u:'unité'}],
+   client:'E&P CONSULT', nf:2, nr:1, msg:0}
+];
+
+var FOURNIS_012 = [
+  {nom:'Xinzhu — Jessie', mail:'jessie@xinzhu-label.com', statut:'repondu', langue:'en',
+   envoi:'31/08 17:05', reponse:'04/09 11:31', ouv:2, portail:1, dernier:'il y a 17 j', msg:0},
+  {nom:'Likexin — cynthia@likexin.com', mail:'cynthia@likexin.com', statut:'repondu', langue:'en',
+   envoi:'31/08 17:05', reponse:'01/09 15:47', ouv:1, portail:3, dernier:'il y a 20 j', msg:2},
+  {nom:'Szxdpospaper — Orin Wang', mail:'orin@szxdpospaper.com', statut:'repondu', langue:'fr',
+   envoi:'31/08 17:05', reponse:'13/09 09:50', ouv:0, portail:1, dernier:'il y a 8 j', msg:0}
+];
+
+/* Comparateur AO-2026-012 — 9 000 000 étiq., 1 000 étiq./bobine → 9 000 bobines. */
+var OFFRES_012 = [
+  {four:'Xinzhu — Jessie', quot:1.28, dev:'EUR', unite:'bobine', delai:20, taux:1,
+   calc:1.28, transport:0, mille:1.280, coef:1.00, achat:1.280, condi:'Au mille',
+   marge:25, vente:1.707, brute:64.1, pv:2.10},
+  {four:'Likexin', quot:1.43, dev:'USD', unite:'bobine', delai:null, taux:0.92,
+   calc:1.3156, transport:0, mille:1.316, coef:1.00, achat:1.316, condi:'Au mille',
+   marge:25, vente:1.754, brute:59.6, pv:2.10},
+  {four:'Szxdpospaper — Orin Wang', quot:1.56, dev:'USD', unite:'bobine', delai:25, taux:0.92,
+   calc:1.4352, transport:0, mille:1.435, coef:1.00, achat:1.435, condi:'Au mille',
+   marge:25, vente:1.913, brute:46.3, pv:2.10}
+];
+
+var MATIERES = [
+  {ref:'70g Eco Thermal', des:'Thermique Eco', cat:'frontal', sous:'Thermiques',
+   four:'Likexin', prix:0.108, u:'€/kg', maj:'03/09/2026', age:'il y a 18 j', vieux:0, decl:1},
+  {ref:'70gsm TOP Thermal', des:'thermique pro', cat:'frontal', sous:'Thermiques',
+   four:null, prix:0.110, u:'€/kg', maj:'03/08/2026', age:'il y a 1 mois', vieux:0, decl:1},
+  {ref:'1408', des:'Adhésif enlevable fort 1408 (MELTAVIS)', cat:'adhesif', sous:null,
+   four:'Meltavis', prix:4.200, u:'€/kg', maj:'05/08/2026', age:'il y a 1 mois', vieux:0, decl:1},
+  {ref:'2028Y', des:'Adhésif permanent 2028Y (JAOUR)', cat:'adhesif', sous:null,
+   four:'Jaour', prix:2.740, u:'€/kg', maj:'05/08/2026', age:'il y a 1 mois', vieux:0, decl:1},
+  {ref:'2030', des:'Adhésif congélation (JAOUR)', cat:'adhesif', sous:null,
+   four:'Jaour', prix:2.970, u:'€/kg', maj:'05/08/2026', age:'il y a 1 mois', vieux:0, decl:1},
+  {ref:'2288M', des:'Adhésif pneu (JAOUR)', cat:'adhesif', sous:null,
+   four:null, prix:null, u:'€/kg', maj:'04/08/2026', age:'il y a 1 mois', vieux:0, decl:2, lock:'multi'},
+  {ref:'60gsm glassine jaune siliconné', des:'Glassine jaune siliconnée', cat:'glassine', sous:null,
+   four:null, prix:0.084, u:'€/kg', maj:'03/08/2025', age:'il y a 1 an', vieux:1, decl:1},
+  {ref:'60gsm KAM20', des:'60gsm KAM20 glassine jaune siliconné', cat:'glassine', sous:null,
+   four:'Itasa', prix:0.1586, u:'€/kg', maj:'03/06/2024', age:'il y a 2 ans', vieux:2, decl:1},
+  {ref:'62gsm Vellum', des:'62gsm Vellum', cat:'frontal', sous:'Velin',
+   four:'Burgo / Mosaico', prix:0.040, u:'€/kg', maj:'05/08/2026', age:'il y a 1 mois', vieux:0, decl:1},
+  {ref:'PP blanc mat 95µm', des:'PP blanc mat 95µm', cat:'frontal', sous:'Synthétique',
+   four:null, prix:0.2179, u:'€/kg', maj:'03/08/2026', age:'il y a 1 mois', vieux:0, decl:1}
+];
+
+var PRODUITS = [
+  {code:'886-0002', des:'Thermique Pro 70g · Permanent 19g, Jaune 60g Standard', support:'Thermique',
+   frontal:'70gsm TOP Thermal', adhesif:'2028Y', gram:19, glassine:'60gsm glassine jaune siliconné',
+   cout:0.0731, vente:0.0975, marge:25,
+   comp:[{r:'Frontal', m:'70gsm TOP Thermal', c:0.0317, t:0, p:43},
+         {r:'Adhésif', m:'2028Y · 19 g/m² + 9 % perte', c:0.0284, t:0.0024, p:39},
+         {r:'Glassine', m:'60gsm glassine jaune siliconné', c:0.0130, t:0, p:18}]},
+  {code:'886-0003', des:'Thermique Pro 70g · Permanent 22g, Jaune 60g Standard', support:'Thermique',
+   frontal:'70gsm TOP Thermal', adhesif:'2028Y', gram:22, glassine:'60gsm glassine jaune siliconné',
+   cout:0.0776, vente:0.1035, marge:25, comp:[]},
+  {code:'886-0001', des:'Thermique Pro 70g · Enlevable 22g, Jaune 60g standard', support:'Thermique',
+   frontal:'70gsm TOP Thermal', adhesif:'1408', gram:22, glassine:'60gsm glassine jaune siliconné',
+   cout:0.1452, vente:0.1936, marge:25, comp:[]},
+  {code:'886-0019', des:'Thermique Eco 70g · Enlevable 19g, Jaune 60g standard', support:'Thermique',
+   frontal:'70g Eco Thermal', adhesif:'1408', gram:19, glassine:'60gsm glassine jaune siliconné',
+   cout:0.1301, vente:0.1735, marge:25, comp:[]},
+  {code:'886-0022', des:'Thermique Eco 70g · Permanent 22g, Jaune 60g Standard', support:'Thermique',
+   frontal:'70g Eco Thermal', adhesif:'2028Y', gram:22, glassine:'60gsm glassine jaune siliconné',
+   cout:0.0768, vente:0.1024, marge:25, comp:[]}
+];
+
+var CAT_COL = {frontal:'--c1', adhesif:'--c2', glassine:'--c3', complexe:'--c4', carton:'--c5'};
+
+/* ── État de la maquette ────────────────────────────────────────────── */
+var S = {ecran:'ao-liste', onglet:'lignes', ouvert:{}, sheet:null, theme:'light'};
+
+/* ── Fragments partagés ─────────────────────────────────────────────── */
+function topbar(titre, sous, opts){
+  opts = opts || {};
+  var g = opts.retour
+    ? '<button class="msf-tb-btn" data-go="'+esc(opts.retour)+'">'+ic('back',20)+'</button>'
+    : '<button class="msf-tb-btn">'+ic('menu',20)+'</button>';
+  var d = opts.actions || '<button class="msf-tb-btn">'+ic('home',19)+'</button>';
+  return '<header class="msf-topbar">'+g+
+    '<div class="msf-topbar-t"><b>'+esc(titre)+'</b><span>'+esc(sous||'')+'</span></div>'+d+'</header>';
+}
+function searchbar(ph, nFiltres){
+  return '<div class="msf-searchbar">'+
+    '<div class="msf-search">'+ic('search',16)+'<span>'+esc(ph)+'</span></div>'+
+    '<button class="msf-icon-btn msf-filtres-btn'+(nFiltres?' msf-icon-btn--on':'')+'" data-sheet="filtres">'+
+      ic('filter',18)+(nFiltres?'<span class="msf-pastille"></span>':'')+'</button></div>';
+}
+function statutBadge(s){
+  var m = {brouillon:['Brouillon',''], envoyee:['Envoyée','msf-badge--accent'],
+           cloturee:['Clôturée','msf-badge--ok'], repondu:['Répondu','msf-badge--ok'],
+           invite:['Invité',''], relance:['Relancé','msf-badge--warn']};
+  var v = m[s] || [s,''];
+  return '<span class="msf-badge '+v[1]+'">'+esc(v[0])+'</span>';
+}
+function catBadge(c){
+  return '<span class="msf-badge" style="border-color:var('+CAT_COL[c]+');color:var('+CAT_COL[c]+')">'+esc(c)+'</span>';
+}
+function eur(v, d){ d = d==null?3:d;
+  return Number(v).toLocaleString('fr-FR',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+
+/* ══════════════════════════════════════════════════════════════════════
+   MyAO
+   ══════════════════════════════════════════════════════════════════════ */
+
+function ecranAoListe(){
+  var chips = ['Tous','Brouillon','Envoyée','Clôturée','Corbeille'].map(function(f,i){
+    return '<button class="msf-chip'+(i===0?' msf-chip--on':'')+'">'+f+'</button>'; }).join('');
+  var cards = AOS.map(function(a){
+    var pct = Math.round(a.nr / a.nf * 100);
+    var lignes = a.lignes.map(function(l){
+      return '<div style="display:flex;gap:8px;align-items:baseline;margin-top:5px">'+
+        '<span style="flex:1;min-width:0;font-size:12.5px;color:var(--text2);line-height:1.4">'+esc(l.ref)+'</span>'+
+        '<b class="msf-num" style="font-size:12.5px;white-space:nowrap">'+nb(l.qte)+'</b></div>';
+    }).join('');
+    var retard = a.lim && a.nr < a.nf;
+    return '<article class="msf-card" data-go="ao-detail">'+
+      '<div class="msf-card-head">'+
+        '<span class="msf-card-title msf-num" style="flex:0 0 auto;font-size:14px">'+esc(a.ref)+'</span>'+
+        statutBadge(a.statut)+
+        '<span style="flex:1"></span>'+
+        '<span class="msf-chevron">'+ic('chevron',16)+'</span></div>'+
+      lignes+
+      '<div class="msf-card-sub" style="margin-top:9px">'+
+        '<span>'+esc(a.client)+'</span>'+
+        (a.lim?'<span'+(retard?' style="color:var(--warn);font-weight:700"':'')+'>'+
+          ic('clock',11)+' '+esc(a.lim)+'</span>':'')+
+        (a.transport?'<span>transport '+a.transport+' %</span>':'')+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:9px;margin-top:9px">'+
+        '<div class="msf-gauge" style="flex:1;width:auto"><i style="width:'+pct+'%'+
+          (a.nr===a.nf?';background:var(--success)':'')+'"></i></div>'+
+        '<span style="font-size:11.5px;font-weight:700;color:'+(a.nr===a.nf?'var(--success)':'var(--muted)')+'">'+
+          a.nr+'/'+a.nf+' réponses</span>'+
+        (a.msg?'<span class="msf-badge msf-badge--danger">'+a.msg+' msg</span>':'')+
+      '</div></article>';
+  }).join('');
+
+  return topbar('Appels d\'offres','7 en cours')+
+    searchbar('Référence, produit, client…',0)+
+    '<div style="padding:10px 12px 0"><div class="msf-chips">'+chips+'</div></div>'+
+    '<div class="msf-body msf-body--pad">'+cards+'</div>'+
+    '<button class="msf-fab" data-go="ao-nouveau">'+ic('plus',24)+'</button>';
+}
+
+function ecranAoDetail(){
+  var a = AOS[0];
+  var onglets = [['lignes','Lignes',1],['fournisseurs','Fournisseurs',3],
+                 ['prix','Demandes de prix',3],['messages','Messagerie',2],['documents','Documents',4]];
+  var tabs = '<nav class="msf-tabs">'+onglets.map(function(t){
+    var alerte = t[0]==='messages';
+    return '<button class="'+(S.onglet===t[0]?'on':'')+'" data-tab="'+t[0]+'">'+esc(t[1])+
+      '<span class="msf-tab-n'+(alerte?' msf-tab-n--alert':'')+'">'+t[2]+'</span></button>';
+  }).join('')+'</nav>';
+
+  var corps = {lignes:ongletLignes, fournisseurs:ongletFournisseurs,
+               prix:ongletPrix, messages:ongletMessages, documents:ongletDocuments}[S.onglet]();
+
+  return topbar(a.ref,'Appel d\'offres', {retour:'ao-liste',
+      actions:'<button class="msf-tb-btn" data-sheet="ao-params">'+ic('settings',19)+'</button>'})+
+    tabs+corps;
+}
+
+function ongletLignes(){
+  var a = AOS[0];
+  var cards = a.lignes.map(function(l,i){
+    return '<article class="msf-card">'+
+      '<div class="msf-card-head">'+
+        '<span class="msf-badge">Ligne '+(i+1)+'</span>'+
+        '<span style="flex:1"></span>'+
+        '<button class="msf-icon-btn" style="width:36px;height:36px;flex:0 0 36px">'+ic('edit',15)+'</button></div>'+
+      '<div style="font-size:13.5px;font-weight:700;line-height:1.45;margin-bottom:10px">'+esc(l.ref)+'</div>'+
+      '<dl style="margin:0">'+
+        '<div class="msf-kv msf-kv--fort"><dt>Quantité</dt><dd>'+nb(l.qte)+' <em style="font-style:normal;font-size:11px;color:var(--muted)">'+esc(l.u)+'</em></dd></div>'+
+        '<div class="msf-kv"><dt>Client</dt><dd>—</dd></div>'+
+        '<div class="msf-kv"><dt>Étiq. / bobine</dt><dd class="msf-num">1 000</dd></div>'+
+        '<div class="msf-kv"><dt>Notes</dt><dd class="msf-muted" style="font-weight:500">Aucune</dd></div>'+
+      '</dl>'+
+      '<button class="msf-btn msf-btn--ghost msf-btn--sm msf-btn--block" style="margin-top:11px" data-go="ao-produit">'+
+        ic('doc',15)+' Ouvrir la fiche produit</button>'+
+      '</article>';
+  }).join('');
+  return '<div class="msf-body msf-body--pad">'+cards+
+    '<button class="msf-btn msf-btn--ghost msf-btn--block" style="margin-top:9px">'+
+      ic('plus',16)+' Ajouter une ligne</button></div>';
+}
+
+function ongletFournisseurs(){
+  var cards = FOURNIS_012.map(function(f){
+    var eng = '';
+    if (f.ouv>0) eng += '<span class="msf-badge msf-badge--ok">Email ouvert'+(f.ouv>1?' ×'+f.ouv:'')+'</span> ';
+    else eng += '<span class="msf-badge">Pas d\'ouverture</span> ';
+    if (f.portail>0) eng += '<span class="msf-badge msf-badge--accent">Portail'+(f.portail>1?' ×'+f.portail:'')+'</span>';
+    return '<article class="msf-card">'+
+      '<div class="msf-card-head">'+
+        '<span class="msf-card-title">'+esc(f.nom.split(' — ')[0])+'</span>'+
+        statutBadge(f.statut)+
+        (f.msg?'<span class="msf-badge msf-badge--danger">'+f.msg+'</span>':'')+'</div>'+
+      '<div class="msf-card-sub"><span>'+esc(f.mail)+'</span></div>'+
+      '<div style="margin-top:9px;display:flex;flex-wrap:wrap;gap:5px">'+eng+'</div>'+
+      '<div class="msf-card-sub" style="margin-top:8px">'+
+        '<span>Envoi '+esc(f.envoi)+'</span><span>Réponse '+esc(f.reponse)+'</span>'+
+        '<span>Dernier signal '+esc(f.dernier)+'</span></div>'+
+      '<div style="display:flex;gap:7px;margin-top:11px">'+
+        '<button class="msf-btn msf-btn--ghost msf-btn--sm" style="flex:1" data-tab="messages">'+ic('msg',15)+' Message</button>'+
+        '<button class="msf-icon-btn">'+ic('copy',17)+'</button>'+
+        '<button class="msf-icon-btn">'+ic('activity',17)+'</button>'+
+      '</div></article>';
+  }).join('');
+  return '<div class="msf-body msf-body--pad">'+cards+
+    '<button class="msf-btn msf-btn--ghost msf-btn--block" style="margin-top:9px">'+
+      ic('plus',16)+' Ajouter un fournisseur</button></div>';
+}
+
+function ongletPrix(){
+  var best = OFFRES_012[0].mille;
+  var cards = OFFRES_012.map(function(o,i){
+    var ouvert = !!S.ouvert['o'+i];
+    var ecart = ((o.mille - best) / best * 100);
+    var det = ouvert ? ('<div class="msf-offre-b">'+
+      '<div class="msf-calc"><div class="msf-calc-t">Du devis au prix au mille</div><dl style="margin:0">'+
+        '<div class="msf-kv"><dt>Quotation</dt><dd>'+eur(o.quot,2)+' '+o.dev+' / '+o.unite+'</dd></div>'+
+        (o.dev!=='EUR'?'<div class="msf-kv"><dt>Change</dt><dd>× '+eur(o.taux,2)+'</dd></div>':'')+
+        '<div class="msf-kv"><dt>Prix calculé</dt><dd>'+eur(o.calc,4)+' €</dd></div>'+
+        '<div class="msf-kv"><dt>Transport</dt><dd>'+(o.transport?'+ '+o.transport+' %':'—')+'</dd></div>'+
+        '<div class="msf-kv msf-kv--tot msf-kv--fort"><dt>Prix / mille</dt><dd>'+eur(o.mille,3)+' €</dd></div>'+
+      '</dl></div>'+
+      '<div class="msf-calc"><div class="msf-calc-t">Du prix d\'achat au prix de vente</div><dl style="margin:0">'+
+        '<div class="msf-kv"><dt>Coefficient</dt><dd>× '+eur(o.coef,2)+'</dd></div>'+
+        '<div class="msf-kv"><dt>Prix d\'achat</dt><dd>'+eur(o.achat,3)+' €</dd></div>'+
+        '<div class="msf-kv"><dt>Conditionnement</dt><dd>'+esc(o.condi)+'</dd></div>'+
+        '<div class="msf-kv"><dt>Marge appliquée</dt><dd>'+o.marge+' %</dd></div>'+
+        '<div class="msf-kv msf-kv--tot msf-kv--fort"><dt>Prix de vente</dt><dd>'+eur(o.vente,3)+' €</dd></div>'+
+      '</dl></div>'+
+      '<div class="msf-calc"><div class="msf-calc-t">Marge brute face au dernier prix de vente</div><dl style="margin:0">'+
+        '<div class="msf-kv"><dt>Dernier prix de vente</dt><dd>'+eur(o.pv,2)+' €</dd></div>'+
+        '<div class="msf-kv msf-kv--fort"><dt>Marge brute</dt>'+
+          '<dd style="color:var(--success)">+'+eur(o.brute,1)+' %</dd></div>'+
+      '</dl></div>'+
+      '<div style="display:flex;gap:7px;margin-top:11px">'+
+        '<button class="msf-btn msf-btn--ghost msf-btn--sm" style="flex:1">'+ic('edit',15)+' Corriger la saisie</button>'+
+        '<button class="msf-btn msf-btn--sm" style="flex:1">'+ic('star',15)+' Retenir</button></div>'+
+      '</div>') : '';
+    return '<article class="msf-offre'+(i===0?' msf-offre--best':'')+'">'+
+      '<button class="msf-offre-h" data-toggle="o'+i+'">'+
+        '<span class="msf-offre-rang">'+(i+1)+'</span>'+
+        '<span class="msf-offre-id"><b>'+esc(o.four.split(' — ')[0])+'</b>'+
+          '<span>'+eur(o.quot,2)+' '+o.dev+' / '+o.unite+
+          (o.delai?' · '+o.delai+' j':' · délai non donné')+'</span></span>'+
+        '<span class="msf-offre-prix"><b>'+eur(o.mille,3)+' €</b>'+
+          '<span>'+(i===0?'meilleure':'+'+eur(ecart,1)+' %')+'</span></span>'+
+        '<span class="msf-chevron">'+ic(ouvert?'up':'down',16)+'</span>'+
+      '</button>'+det+'</article>';
+  }).join('');
+
+  return '<div class="msf-body msf-body--pad">'+
+    '<div class="msf-card" style="border-color:var(--accent)">'+
+      '<div class="msf-card-sub" style="margin-bottom:6px"><span>Ligne 1 sur 1</span></div>'+
+      '<div style="font-size:13px;font-weight:700;line-height:1.45">110 x 150 mm Thermal Eco Permanent, 1 Color, M40 mm</div>'+
+      '<div class="msf-card-sub" style="margin-top:7px">'+
+        '<span>9 000 000 étiquettes</span><span>1 000 étiq./bob.</span><span>transport 0 %</span></div>'+
+    '</div>'+
+    '<div class="msf-sect" style="margin-top:14px"><b>3 offres · classées par prix au mille</b>'+
+      '<button data-sheet="tri-offres">Trier</button></div>'+
+    cards+
+    '<div class="msf-note-inline" style="margin-top:12px;font-size:11.5px;color:var(--muted);line-height:1.6">'+
+      'Les fournisseurs sans réponse n\'apparaissent pas ici : ils se relancent depuis l\'onglet Fournisseurs.</div>'+
+    '</div>';
+}
+
+function ongletMessages(){
+  var fil = [
+    {q:'eux', t:'Hello, please find our updated quotation for the 110×150 thermal eco. 1.43 USD per roll, MOQ 200 rolls.', m:'Likexin · 01/09 15:47'},
+    {q:'nous', t:'Merci. Pouvez-vous confirmer le délai de production et le conditionnement par carton ?', m:'Eugène · 02/09 08:12'},
+    {q:'eux', t:'Production 22 days after artwork approval. 4 rolls per carton.', m:'Likexin · 03/09 02:40'},
+    {q:'eux', t:'Do you need FSC certified liner for this order?', m:'Likexin · 03/09 02:41'}
+  ].map(function(m){
+    return '<div class="msf-msg msf-msg--'+m.q+'" style="margin-bottom:10px">'+esc(m.t)+
+      '<div class="msf-msg-meta">'+esc(m.m)+'</div></div>';
+  }).join('');
+  return '<div class="msf-body" style="padding-bottom:6px">'+
+    '<div class="msf-seg" style="margin-bottom:12px">'+
+      '<button class="msf-seg-on">Likexin</button><button>Xinzhu</button><button>Szxd…</button></div>'+
+    fil+'</div>'+
+    '<div class="msf-composer">'+
+      '<button class="msf-icon-btn">'+ic('paper',18)+'</button>'+
+      '<div class="msf-input msf-input--txt"><span class="msf-muted">Écrire un message…</span></div>'+
+      '<button class="msf-icon-btn msf-icon-btn--on">'+ic('send',18)+'</button></div>';
+}
+
+function ongletDocuments(){
+  var docs = [
+    {n:'Cahier des charges 110x150.pdf', t:'482 Ko', d:'31/08/2026', vu:1},
+    {n:'Plan étiquette B235.pdf', t:'1,2 Mo', d:'31/08/2026', vu:1},
+    {n:'Quotation Likexin 01-09.xlsx', t:'38 Ko', d:'01/09/2026', vu:0},
+    {n:'Xinzhu specification sheet.pdf', t:'760 Ko', d:'04/09/2026', vu:0}
+  ].map(function(d){
+    return '<button class="msf-row">'+
+      '<span class="msf-row-ico'+(d.vu?'':' msf-row-ico--muted')+'">'+ic('doc',16)+'</span>'+
+      '<span class="msf-row-txt"><b>'+esc(d.n)+'</b><span>'+esc(d.t)+' · '+esc(d.d)+
+        (d.vu?' · vu par le fournisseur':'')+'</span></span>'+
+      '<span class="msf-chevron">'+ic('chevron',16)+'</span></button>';
+  }).join('');
+  return '<div class="msf-body msf-body--pad">'+
+    '<div class="msf-rows">'+docs+'</div>'+
+    '<button class="msf-btn msf-btn--ghost msf-btn--block" style="margin-top:12px">'+
+      ic('plus',16)+' Ajouter un document</button></div>';
+}
+
+function ecranAoProduit(){
+  function champ(l, v, hint, type){
+    return '<div class="msf-field"><label>'+esc(l)+'</label>'+
+      '<div class="msf-input'+(type==='txt'?' msf-input--txt':'')+'"><span>'+esc(v)+'</span>'+
+      (type==='select'?'<em>'+ic('down',15)+'</em>':'')+'</div>'+
+      (hint?'<p class="msf-field-hint">'+esc(hint)+'</p>':'')+'</div>';
+  }
+  function acc(id, titre, resume, corps){
+    var o = !!S.ouvert[id];
+    return '<section class="msf-acc">'+
+      '<button class="msf-acc-h" data-toggle="'+id+'">'+
+        '<b>'+esc(titre)+'</b><span class="msf-acc-sum">'+esc(resume)+'</span>'+
+        '<span class="msf-chevron">'+ic(o?'up':'down',16)+'</span></button>'+
+      (o?'<div class="msf-acc-b">'+corps+'</div>':'')+'</section>';
+  }
+  var technique =
+    '<div class="msf-acc-sous">Étiquette</div>'+
+    '<div class="msf-card" style="padding:11px;margin-bottom:4px;text-align:center">'+
+      '<div style="font:800 19px/1.2 ui-monospace,monospace;letter-spacing:-.5px">110 × 150 mm</div>'+
+      '<div style="font-size:11px;color:var(--muted);margin-top:3px">laize × longueur</div></div>'+
+    champ('Laize mm','110')+champ('Longueur mm','150')+champ('Rayon mm','2')+
+    champ('Perforation','inter-label 2/1 mm','','txt')+
+    '<div class="msf-acc-sous">Échenillage</div>'+
+    champ('À droite mm','3')+champ('À gauche mm','3')+champ('En avance mm','0')+
+    '<div class="msf-acc-sous">Matière</div>'+
+    champ('Frontal','70g Eco Thermal','','select')+
+    champ('Adhésif','2028Y — permanent','','select')+
+    champ('Grammage gsm','19')+
+    champ('Glassine','60gsm glassine jaune siliconné','','select')+
+    '<div class="msf-acc-sous">Bobines</div>'+
+    champ('Mandrin mm','40','','select')+
+    champ('Sens de sortie','Extérieur — 4','','select')+
+    champ('Ø bobine mm','200')+
+    champ('Étiquettes / bobine','1 000','Sert au calcul du prix au mille dans les demandes de prix.');
+
+  return topbar('Fiche produit','110 x 150 mm Thermal Eco…',{retour:'ao-detail'})+
+    '<div class="msf-ctx"><div class="msf-ctx-l1">'+
+      '<b class="msf-num" style="font-size:13px">110 x 150 mm Thermal Eco Permanent</b></div>'+
+      '<div class="msf-ctx-l2">Rouleau · 1 impression · utilisée dans 2 appels d\'offres</div></div>'+
+    '<div class="msf-body" style="padding-bottom:12px">'+
+      acc('a1','Infos générales','Rouleau · 1 coul.',
+        champ('Référence produit','110 x 150 mm Thermal Eco Permanent, 1 Color, M40 mm, B235',
+              'Se recompose depuis la fiche. Bouton Régénérer si la matière change.','txt')+
+        champ('Type','Rouleau','','select')+champ('Impressions','Oui','','select')+
+        champ('Client','—','','select')+champ('Réf. SIFA','B235','','select'))+
+      acc('a2','Fiche technique','110 × 150 mm', technique)+
+      acc('a3','Conditionnement','4 bob./carton',
+        '<div class="msf-acc-sous">Cartons</div>'+
+        champ('Bobines au sol','2')+champ('Étages','2')+champ('Bobines / carton','4')+
+        '<div class="msf-acc-sous">Palettes</div>'+
+        champ('Type','Palette Europe 1200×800','','select')+
+        champ('Cartons au sol','8')+champ('Étages','5')+champ('Cartons / palette','40'))+
+      acc('a4','Particularités','—', champ('Notes','Aucune note','','txt'))+
+      acc('a5','Unité de vente','Au mille · 2,10 €',
+        '<div class="msf-card" style="padding:11px;margin-bottom:12px">'+
+          '<div class="msf-card-sub"><span>1 000 étiq./bobine · 4 bobines/carton · 40 cartons/palette</span></div></div>'+
+        champ('Vendu par','1 × Mille (1000 étiq.)','','select')+
+        champ('Dernier prix de vente','2,10 € par unité de vente',
+              'Pilote la colonne Condi. et la marge brute dans les demandes de prix.'))+
+    '</div>'+
+    '<div class="msf-actionbar">'+
+      '<button class="msf-btn msf-btn--ghost msf-btn--sm" style="flex:0 0 auto">Annuler</button>'+
+      '<button class="msf-btn">'+ic('check',17)+' Enregistrer</button></div>';
+}
+
+function ecranAoNouveau(){
+  function champ(l,v,type){
+    return '<div class="msf-field"><label>'+esc(l)+'</label>'+
+      '<div class="msf-input'+(type==='txt'?' msf-input--txt':'')+'"><span>'+esc(v)+'</span>'+
+      (type==='select'?'<em>'+ic('down',15)+'</em>':'')+'</div></div>';
+  }
+  return topbar('Nouvel appel d\'offres','Étape 1 sur 3',{retour:'ao-liste'})+
+    '<div class="msf-steps"><span class="msf-step-lbl">Identité</span>'+
+      '<span class="msf-step on"></span><span class="msf-step"></span><span class="msf-step"></span></div>'+
+    '<div class="msf-body" style="padding-bottom:12px">'+
+      '<div class="msf-card">'+
+        champ('Référence','AO-2026-013','txt')+
+        champ('Titre','Se compose depuis les lignes','txt')+
+        champ('Date limite de réponse','Choisir une date','select')+
+        champ('Responsable','Eugène Leconte','select')+
+        champ('Prix transport','0 %')+
+      '</div>'+
+      '<p class="msf-field-hint" style="margin:12px 4px">Étape 2 : les lignes produit. Étape 3 : les fournisseurs invités. '+
+        'L\'appel d\'offres reste en brouillon tant qu\'il n\'est pas envoyé.</p>'+
+    '</div>'+
+    '<div class="msf-actionbar">'+
+      '<button class="msf-btn msf-btn--ghost msf-btn--sm" style="flex:0 0 auto">Annuler</button>'+
+      '<button class="msf-btn">Suivant '+ic('chevron',17)+'</button></div>';
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Coûts matières
+   ══════════════════════════════════════════════════════════════════════ */
+
+function ecranCmMatieres(){
+  var chips = ['Toutes','frontal','adhesif','glassine','complexe','carton'].map(function(c,i){
+    return '<button class="msf-chip'+(i===0?' msf-chip--on':'')+'">'+esc(c)+'</button>'; }).join('');
+  var cards = MATIERES.map(function(m,i){
+    var prix;
+    if (m.lock === 'multi'){
+      prix = '<div class="msf-prix-lock">'+ic('lock',15)+
+        '<span>Plusieurs fournisseurs — à régler sur la fiche</span></div>';
+    } else {
+      var etat = S.ouvert['saisi'+i];
+      prix = '<div class="msf-prix'+(etat?' msf-prix--ok':'')+'" data-toggle="saisi'+i+'">'+
+        ic('edit',14)+'<b>'+eur(m.prix,3)+'</b><span>'+esc(m.u)+'</span>'+
+        (etat?'<span class="msf-prix-etat">'+ic('check',13)+' enregistré</span>':'')+'</div>';
+    }
+    var ageCls = m.vieux>=2 ? 'color:var(--danger);font-weight:700'
+               : (m.vieux===1 ? 'color:var(--warn);font-weight:700' : 'color:var(--muted)');
+    return '<article class="msf-card">'+
+      '<div class="msf-card-head">'+
+        '<span class="msf-card-title">'+esc(m.ref)+'</span>'+catBadge(m.cat)+'</div>'+
+      '<div class="msf-card-sub"><span>'+esc(m.des)+'</span></div>'+
+      '<div class="msf-card-sub"><span>'+(m.four?esc(m.four):'<em style="font-style:normal">sans fournisseur</em>')+
+        (m.sous?'</span><span>'+esc(m.sous):'')+'</span></div>'+
+      '<div style="margin-top:10px">'+prix+'</div>'+
+      '<div style="margin-top:8px;font-size:11px;line-height:1.4;'+ageCls+'">'+
+        'Dernier prix '+esc(m.maj)+' · '+esc(m.age)+'</div>'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-top:9px;justify-content:flex-end">'+
+        (m.four?'<button class="msf-icon-btn" style="width:40px;height:40px;flex:0 0 40px" data-go="cm-tarif">'+
+          ic('truck',16)+'</button>':'')+
+        '<button class="msf-btn msf-btn--ghost msf-btn--sm" style="height:40px;padding:0 16px" data-go="cm-fiche">Fiche</button>'+
+      '</div></article>';
+  }).join('');
+
+  return topbar('Matières','Coûts matières')+
+    searchbar('Référence, désignation…',0)+
+    '<div style="padding:10px 12px 0"><div class="msf-chips">'+chips+'</div></div>'+
+    '<div class="msf-body msf-body--pad">'+
+      '<div class="msf-sect"><b>10 matières actives</b><button data-sheet="tri-matieres">Trier</button></div>'+
+      cards+'</div>';
+}
+
+function ecranCmFiche(){
+  var importee = !!S.ouvert['imp'];
+  function champ(l,v,unit,hint){
+    return '<div class="msf-field"><label>'+esc(l)+'</label>'+
+      '<div class="msf-input"><span>'+esc(v)+'</span>'+(unit?'<em>'+esc(unit)+'</em>':'')+'</div>'+
+      (hint?'<p class="msf-field-hint">'+esc(hint)+'</p>':'')+'</div>';
+  }
+  var histo = [
+    {d:'03/09/2026', q:'Likexin', a:'0,104', b:'0,108', o:'Coûts matières — liste'},
+    {d:'12/05/2026', q:'Likexin', a:'0,099', b:'0,104', o:'Coûts matières — paramétrage'},
+    {d:'04/08/2025', q:'Likexin', a:null, b:'0,099', o:'reprise'}
+  ].map(function(h){
+    return '<button class="msf-row" style="min-height:58px">'+
+      '<span class="msf-row-ico msf-row-ico--muted">'+ic('clock',15)+'</span>'+
+      '<span class="msf-row-txt"><b>'+esc(h.d)+' · '+esc(h.q)+'</b>'+
+        '<span>'+(h.a?esc(h.a)+' → '+esc(h.b):'valeur initiale '+esc(h.b))+' €/kg · '+esc(h.o)+'</span></span>'+
+      '</button>';
+  }).join('');
+
+  return topbar('70g Eco Thermal','Thermique Eco',{retour:'cm-matieres'})+
+    '<div class="msf-ctx">'+
+      '<div class="msf-ctx-l1"><b>70g Eco Thermal</b>'+catBadge('frontal')+'</div>'+
+      '<div class="msf-ctx-l2">Likexin · base au kilo · EUR · Thermiques</div></div>'+
+    '<div class="msf-body" style="padding-bottom:12px">'+
+
+      '<div class="msf-card" style="border-color:var(--accent)">'+
+        '<div class="msf-sect" style="padding:0 0 8px"><b>Sous-total d\'achat</b></div>'+
+        '<div style="display:flex;align-items:baseline;gap:8px">'+
+          '<span class="msf-num" style="font-size:30px;font-weight:800;letter-spacing:-1px;color:var(--accent)">0,1177</span>'+
+          '<span style="font-size:13px;color:var(--muted);font-weight:700">€/kg</span></div>'+
+        '<p class="msf-field-hint" style="margin-top:8px">C\'est la valeur rendue — prix + transport + taxes — '+
+          'et c\'est elle qui circule vers la valorisation MyStock. Le prix nu reste à 0,108.</p>'+
+      '</div>'+
+
+      '<div class="msf-sect" style="margin-top:16px"><b>Prix d\'achat</b></div>'+
+      '<div class="msf-card">'+
+        champ('Prix fournisseur principal','0,108','€/kg')+
+        champ('Devise achat','EUR','')+
+        champ('Base de prix','Au kilo','')+
+        '<p class="msf-field-hint">La devise vaut pour tout ce que vend Likexin.</p>'+
+      '</div>'+
+
+      '<div class="msf-sect" style="margin-top:16px"><b>Tarif du fournisseur</b>'+
+        '<button data-go="cm-tarif">Ouvrir</button></div>'+
+      '<div class="msf-card">'+
+        '<button class="msf-row" style="padding:0;min-height:44px;border:0" data-toggle="imp">'+
+          '<span class="msf-row-ico'+(importee?'':' msf-row-ico--muted')+'">'+ic('truck',16)+'</span>'+
+          '<span class="msf-row-txt"><b>Matière importée</b>'+
+            '<span>'+(importee?'transport et taxes comptés':'transport et taxes ignorés')+'</span></span>'+
+          '<span class="msf-badge'+(importee?' msf-badge--accent':'')+'">'+(importee?'Oui':'Non')+'</span>'+
+        '</button>'+
+        (importee?'<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">'+
+          champ('Méthode de transport','Pourcentage du prix','')+
+          champ('Transport','9','%')+
+          champ('Taxes','0','% du sous-total',
+                'Les taxes ne comptent que si la matière est importée.')+
+        '</div>':'')+
+        '<p class="msf-field-hint" style="margin-top:10px">Ce qui se saisit ici vaut pour '+
+          '<strong>toutes les matières achetées chez Likexin</strong>.</p>'+
+      '</div>'+
+
+      '<div class="msf-sect" style="margin-top:16px"><b>Paramétrage</b></div>'+
+      '<div class="msf-card">'+
+        '<button class="msf-row" style="padding:0;min-height:44px;border:0">'+
+          '<span class="msf-row-ico msf-row-ico--ok">'+ic('check',16)+'</span>'+
+          '<span class="msf-row-txt"><b>Appliquer la marge</b>'+
+            '<span>la matière entre dans l\'assiette de marge</span></span></button>'+
+        '<p class="msf-field-hint" style="margin-top:10px">Le grammage et la perte appartiennent au produit, '+
+          'pas à la matière : ils se règlent sur la fiche produit.</p>'+
+      '</div>'+
+
+      '<div class="msf-sect" style="margin-top:16px"><b>Historique du prix</b>'+
+        '<button>Tout voir</button></div>'+
+      '<div class="msf-rows">'+histo+'</div>'+
+    '</div>'+
+    '<div class="msf-actionbar">'+
+      '<button class="msf-btn msf-btn--ghost msf-btn--sm" style="flex:0 0 auto" data-go="cm-matieres">Retour</button>'+
+      '<button class="msf-btn">'+ic('check',17)+' Enregistrer</button></div>';
+}
+
+function ecranCmProduits(){
+  var cards = PRODUITS.map(function(p,i){
+    var ouvert = !!S.ouvert['p'+i];
+    var det = '';
+    if (ouvert && p.comp.length){
+      var parts = p.comp.map(function(c,j){
+        return '<i style="width:'+c.p+'%;background:var(--c'+(j+1)+')"></i>'; }).join('');
+      var leg = p.comp.map(function(c,j){
+        return '<span><i style="background:var(--c'+(j+1)+')"></i>'+esc(c.r)+' '+c.p+' %</span>'; }).join('');
+      var lignes = p.comp.map(function(c){
+        return '<div class="msf-kv"><dt style="flex:1;min-width:0">'+esc(c.r)+
+          '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+esc(c.m)+'</div></dt>'+
+          '<dd>'+eur(c.c,4)+' €'+(c.t?'<div style="font-size:10.5px;color:var(--muted);font-weight:600;margin-top:2px">dont transport '+eur(c.t,4)+'</div>':'')+'</dd></div>';
+      }).join('');
+      det = '<div style="padding:0 13px 13px;border-top:1px solid var(--border)">'+
+        '<div class="msf-parts">'+parts+'</div><div class="msf-leg">'+leg+'</div>'+
+        '<dl style="margin:12px 0 0">'+lignes+
+          '<div class="msf-kv msf-kv--tot msf-kv--fort"><dt>Prix de revient</dt><dd>'+eur(p.cout,4)+' €/m²</dd></div>'+
+        '</dl>'+
+        '<button class="msf-btn msf-btn--ghost msf-btn--sm msf-btn--block" style="margin-top:11px" data-go="cm-produit">'+
+          ic('edit',15)+' Ouvrir la fiche</button></div>';
+    }
+    return '<article class="msf-card" style="padding:0">'+
+      '<button class="msf-offre-h" data-toggle="p'+i+'" style="align-items:flex-start">'+
+        '<span class="msf-offre-id">'+
+          '<span style="display:flex;gap:7px;align-items:center;margin-bottom:5px">'+
+            '<span class="msf-badge" style="border-color:var(--c1);color:var(--c1)">'+esc(p.support)+'</span>'+
+            '<span class="msf-num" style="font-size:11px;color:var(--muted)">'+esc(p.code)+'</span></span>'+
+          '<b style="white-space:normal;line-height:1.4;font-size:13px">'+esc(p.frontal)+' · '+esc(p.adhesif)+
+            ' <span class="msf-num">'+p.gram+' g/m²</span></b>'+
+          '<span style="margin-top:3px">'+esc(p.glassine)+'</span></span>'+
+        '<span class="msf-offre-prix"><b>'+eur(p.cout,4)+'</b><span>€/m² revient</span></span>'+
+        '<span class="msf-chevron">'+ic(ouvert?'up':'down',16)+'</span></button>'+
+      det+'</article>';
+  }).join('');
+  return topbar('Produits','Coûts matières')+
+    searchbar('Code, désignation…',1)+
+    '<div class="msf-body msf-body--pad">'+
+      '<div class="msf-seg" style="margin-bottom:12px">'+
+        '<button class="msf-seg-on">Produits MyStock</button><button>Base historique</button></div>'+
+      '<div class="msf-sect"><b>5 produits · triés par coût</b><button data-sheet="tri-produits">Trier</button></div>'+
+      cards+'</div>'+
+    '<button class="msf-fab">'+ic('plus',24)+'</button>';
+}
+
+function ecranCmProduit(){
+  var p = PRODUITS[0];
+  var parts = p.comp.map(function(c,j){
+    return '<i style="width:'+c.p+'%;background:var(--c'+(j+1)+')"></i>'; }).join('');
+  var comp = p.comp.map(function(c,j){
+    return '<article class="msf-card">'+
+      '<div class="msf-card-head">'+
+        '<span class="msf-badge" style="border-color:var(--c'+(j+1)+');color:var(--c'+(j+1)+')">'+esc(c.r)+'</span>'+
+        '<span style="flex:1"></span>'+
+        '<span class="msf-num" style="font-weight:800;font-size:15px">'+eur(c.c,4)+' €</span></div>'+
+      '<div style="font-size:13px;font-weight:600;line-height:1.4">'+esc(c.m)+'</div>'+
+      (c.t?'<div class="msf-card-sub" style="margin-top:6px"><span>dont transport '+eur(c.t,4)+' €/m²</span>'+
+        '<span style="color:var(--accent)">Voir le tarif</span></div>':'')+
+      '</article>';
+  }).join('');
+  return topbar('886-0002','Produit MyStock',{retour:'cm-produits'})+
+    '<div class="msf-ctx">'+
+      '<div class="msf-ctx-l1"><b class="msf-num">886-0002</b>'+
+        '<span class="msf-badge" style="border-color:var(--c1);color:var(--c1)">Thermique</span></div>'+
+      '<div class="msf-ctx-l2">Thermique Pro 70g · Permanent 19g, Jaune 60g Standard</div></div>'+
+    '<div class="msf-body" style="padding-bottom:12px">'+
+      '<div class="msf-card" style="border-color:var(--accent)">'+
+        '<dl style="margin:0">'+
+          '<div class="msf-kv msf-kv--fort"><dt>Prix de revient</dt>'+
+            '<dd style="color:var(--accent)">'+eur(p.cout,4)+' €/m²</dd></div>'+
+          '<div class="msf-kv"><dt>dont transport</dt><dd>0,0024 €/m²</dd></div>'+
+          '<div class="msf-kv"><dt>Marge</dt><dd>'+p.marge+' %</dd></div>'+
+          '<div class="msf-kv msf-kv--tot msf-kv--fort"><dt>Prix de vente</dt><dd>'+eur(p.vente,4)+' €/m²</dd></div>'+
+        '</dl>'+
+        '<div class="msf-parts">'+parts+'</div>'+
+        '<div class="msf-leg">'+p.comp.map(function(c,j){
+          return '<span><i style="background:var(--c'+(j+1)+')"></i>'+esc(c.r)+' '+c.p+' %</span>'; }).join('')+'</div>'+
+      '</div>'+
+      '<div class="msf-sect" style="margin-top:16px"><b>Composition</b><button>Modifier</button></div>'+
+      comp+
+      '<div class="msf-sect" style="margin-top:16px"><b>Ce qui fait bouger ce coût</b></div>'+
+      '<div class="msf-rows">'+
+        '<button class="msf-row" data-go="cm-fiche"><span class="msf-row-ico">'+ic('pkg',16)+'</span>'+
+          '<span class="msf-row-txt"><b>Prix du frontal</b><span>70gsm TOP Thermal · 0,110 €/kg</span></span>'+
+          '<span class="msf-chevron">'+ic('chevron',16)+'</span></button>'+
+        '<button class="msf-row"><span class="msf-row-ico">'+ic('edit',16)+'</span>'+
+          '<span class="msf-row-txt"><b>Grammage de l\'adhésif</b><span>19 g/m² + 9 % de perte</span></span>'+
+          '<span class="msf-chevron">'+ic('chevron',16)+'</span></button>'+
+        '<button class="msf-row" data-go="cm-tarif"><span class="msf-row-ico">'+ic('truck',16)+'</span>'+
+          '<span class="msf-row-txt"><b>Tarif Jaour</b><span>transport 9 % sur l\'adhésif</span></span>'+
+          '<span class="msf-chevron">'+ic('chevron',16)+'</span></button>'+
+      '</div>'+
+    '</div>'+
+    '<div class="msf-actionbar">'+
+      '<button class="msf-btn msf-btn--ghost msf-btn--sm" style="flex:0 0 auto">Dupliquer</button>'+
+      '<button class="msf-btn">'+ic('check',17)+' Enregistrer</button></div>';
+}
+
+function ecranCmTarif(){
+  function champ(l,v,unit,hint){
+    return '<div class="msf-field"><label>'+esc(l)+'</label>'+
+      '<div class="msf-input"><span>'+esc(v)+'</span>'+(unit?'<em>'+esc(unit)+'</em>':'')+'</div>'+
+      (hint?'<p class="msf-field-hint">'+esc(hint)+'</p>':'')+'</div>';
+  }
+  var mats = [
+    {r:'70g Eco Thermal', p:'0,108', t:'9 %'},
+    {r:'70gsm TOP Thermal', p:'0,110', t:'9 %'},
+    {r:'Thermique Bicolore', p:'0,720', t:'aucun tarif propre'}
+  ].map(function(m){
+    var manque = m.t === 'aucun tarif propre';
+    return '<button class="msf-row">'+
+      '<span class="msf-row-ico'+(manque?' msf-row-ico--warn':'')+'">'+ic(manque?'alert':'pkg',16)+'</span>'+
+      '<span class="msf-row-txt"><b>'+esc(m.r)+'</b><span>'+esc(m.p)+' €/kg · transport '+esc(m.t)+'</span></span>'+
+      '<span class="msf-chevron">'+ic('chevron',16)+'</span></button>';
+  }).join('');
+  return topbar('Likexin','Tarif fournisseur',{retour:'cm-matieres'})+
+    '<div class="msf-ctx"><div class="msf-ctx-l1"><b>Likexin</b>'+
+      '<span class="msf-badge msf-badge--accent">EUR</span></div>'+
+      '<div class="msf-ctx-l2">3 matières · tarif du 03/09/2026</div></div>'+
+    '<div class="msf-body" style="padding-bottom:12px">'+
+      '<div class="msf-sect"><b>Réglages du tarif</b></div>'+
+      '<div class="msf-card">'+
+        champ('Devise','EUR','','La devise vit sur le fournisseur : elle vaut pour tout ce qu\'il vend.')+
+        champ('Méthode de transport','Pourcentage du prix','')+
+        champ('Transport','9','%')+
+        champ('Taxes','0','% du sous-total')+
+        champ('Base d\'achat','Au kilo','')+
+      '</div>'+
+      '<div class="msf-sect" style="margin-top:16px"><b>Matières concernées</b></div>'+
+      '<div class="msf-rows">'+mats+'</div>'+
+      '<p class="msf-field-hint" style="margin:12px 4px">Une matière signalée en ambre n\'a pas de tarif propre : '+
+        'ses coûts sortent d\'un repli.</p>'+
+    '</div>'+
+    '<div class="msf-actionbar">'+
+      '<button class="msf-btn msf-btn--ghost msf-btn--sm" style="flex:0 0 auto">Annuler</button>'+
+      '<button class="msf-btn">'+ic('check',17)+' Appliquer</button></div>';
+}
+
+/* ── Feuilles remontantes ───────────────────────────────────────────── */
+var SHEETS = {
+  'filtres': {t:'Filtrer et trier', b:
+    '<div class="msf-field"><label>Trier par</label></div>'+
+    '<div class="msf-rows" style="margin-bottom:14px">'+
+      '<button class="msf-row"><span class="msf-row-txt"><b>Référence</b></span>'+
+        '<span class="msf-badge">A → Z</span></button>'+
+      '<button class="msf-row"><span class="msf-row-txt"><b>Dernier prix</b>'+
+        '<span>le plus ancien d\'abord</span></span>'+
+        '<span class="msf-badge msf-badge--accent">actif</span></button>'+
+      '<button class="msf-row"><span class="msf-row-txt"><b>Prix d\'achat</b></span>'+
+        '<span class="msf-badge">ordre naturel</span></button>'+
+    '</div>'+
+    '<div class="msf-field"><label>Fournisseur</label>'+
+      '<div class="msf-input msf-input--txt"><span>Tous</span><em>'+ic('down',15)+'</em></div></div>'+
+    '<div class="msf-field"><label>État</label>'+
+      '<div class="msf-chips"><button class="msf-chip msf-chip--on">Actives</button>'+
+      '<button class="msf-chip">Inactives</button><button class="msf-chip">Toutes</button></div></div>',
+    f:'<button class="msf-btn msf-btn--ghost msf-btn--sm" style="flex:0 0 auto" data-close>Tout relâcher</button>'+
+      '<button class="msf-btn" style="flex:1" data-close>Appliquer</button>'},
+  'tri-matieres': {t:'Trier les matières', b:
+    '<div class="msf-rows">'+
+      '<button class="msf-row"><span class="msf-row-txt"><b>Catégorie puis référence</b></span>'+
+        '<span class="msf-badge msf-badge--accent">actif</span></button>'+
+      '<button class="msf-row"><span class="msf-row-txt"><b>Prix le plus élevé</b></span></button>'+
+      '<button class="msf-row"><span class="msf-row-txt"><b>Prix le plus ancien</b>'+
+        '<span>pour la revue annuelle</span></span></button>'+
+    '</div>', f:'<button class="msf-btn" style="flex:1" data-close>Appliquer</button>'},
+  'tri-produits': {t:'Trier les produits', b:
+    '<div class="msf-rows">'+
+      '<button class="msf-row"><span class="msf-row-txt"><b>Coût croissant</b></span>'+
+        '<span class="msf-badge msf-badge--accent">actif</span></button>'+
+      '<button class="msf-row"><span class="msf-row-txt"><b>Marge décroissante</b></span></button>'+
+      '<button class="msf-row"><span class="msf-row-txt"><b>Grammage d\'adhésif</b></span></button>'+
+    '</div>', f:'<button class="msf-btn" style="flex:1" data-close>Appliquer</button>'},
+  'tri-offres': {t:'Classer les offres', b:
+    '<div class="msf-rows">'+
+      '<button class="msf-row"><span class="msf-row-txt"><b>Prix au mille</b></span>'+
+        '<span class="msf-badge msf-badge--accent">actif</span></button>'+
+      '<button class="msf-row"><span class="msf-row-txt"><b>Marge brute</b></span></button>'+
+      '<button class="msf-row"><span class="msf-row-txt"><b>Délai annoncé</b></span></button>'+
+    '</div>', f:'<button class="msf-btn" style="flex:1" data-close>Appliquer</button>'},
+  'ao-params': {t:'Paramètres de l\'appel d\'offres', b:
+    '<div class="msf-field"><label>Prix transport</label>'+
+      '<div class="msf-input"><span>0</span><em>%</em></div>'+
+      '<p class="msf-field-hint">Appliqué au prix calculé de chaque offre, avant le prix au mille.</p></div>'+
+    '<div class="msf-field"><label>Marge appliquée</label>'+
+      '<div class="msf-input"><span>25</span><em>%</em></div></div>'+
+    '<div class="msf-field"><label>Coefficient</label>'+
+      '<div class="msf-input"><span>1,00</span><em>×</em></div></div>'+
+    '<div class="msf-rows" style="margin-top:14px">'+
+      '<button class="msf-row"><span class="msf-row-ico msf-row-ico--ok">'+ic('check',16)+'</span>'+
+        '<span class="msf-row-txt"><b>Clôturer l\'appel d\'offres</b>'+
+          '<span>retenir un fournisseur et archiver</span></span></button>'+
+      '<button class="msf-row"><span class="msf-row-ico msf-row-ico--muted">'+ic('copy',16)+'</span>'+
+        '<span class="msf-row-txt"><b>Dupliquer</b></span></button>'+
+      '<button class="msf-row"><span class="msf-row-ico msf-row-ico--danger">'+ic('trash',16)+'</span>'+
+        '<span class="msf-row-txt"><b>Mettre à la corbeille</b></span></button>'+
+    '</div>', f:'<button class="msf-btn msf-btn--ghost" style="flex:1" data-close>Fermer</button>'}
+};
+
+/* ── Écrans et notes ────────────────────────────────────────────────── */
+var ECRANS = {
+  'ao-liste': {app:'MyAO', t:'Liste des appels d\'offres', r:'/ao', f:ecranAoListe, notes:[
+    ['La ligne de tableau devient une carte à trois étages',
+     'Le tableau bureau porte huit colonnes : référence, titre, client, statut, date limite, fournisseurs, réponses, actions. '+
+     'La carte les redistribue : l\'identité en haut (référence + statut), le contenu au milieu (une ligne par produit avec sa quantité, '+
+     'alignée à droite en chiffres tabulaires), le contexte en bas (client, échéance, transport).'],
+    ['L\'avancement remplace deux colonnes de chiffres',
+     '« 6 fournisseurs / 2 réponses » ne se lit pas au téléphone. La jauge se lit d\'un coup d\'œil et passe au vert quand tout le monde a répondu — '+
+     'c\'est l\'information qu\'on vient chercher en déplacement.'],
+    ['Une échéance dépassée sans réponse complète s\'ambre',
+     'Pas de règle de gestion derrière : un rappel visuel, comme l\'âge du prix dans Coûts matières.'],
+    ['Le bouton de création descend en bas à droite',
+     'Le « + Nouvel appel d\'offres » du bureau est en haut de page, hors de portée du pouce. Le bouton flottant le remplace.']]},
+
+  'ao-detail': {app:'MyAO', t:'Détail — les cinq onglets', r:'/ao#detail', f:ecranAoDetail, notes:[
+    ['Onglets défilants au lieu d\'onglets qui se chevauchent',
+     'Cinq libellés plus deux compteurs ne tiennent pas sur 390 px. La barre défile horizontalement, l\'onglet actif est souligné en accent, '+
+     'et le compteur de messages non lus reste rouge — c\'est le seul qui appelle une action.'],
+    ['Le panneau de paramètres passe en feuille remontante',
+     'Le bloc « prix transport / marge / coefficient » posé à droite des onglets sur le bureau devient l\'engrenage de la topbar. '+
+     'On y range aussi clôturer, dupliquer et corbeille : des gestes rares qui n\'ont pas à occuper l\'écran en permanence.'],
+    ['Chaque onglet garde exactement les mêmes données',
+     'Rien n\'est retiré au mobile. Ce qui change est la mise en page, pas le périmètre — même principe que la refonte MyExpé.']]},
+
+  'ao-prix': {app:'MyAO', t:'Demandes de prix — le comparateur vertical', r:'/ao#comparaison',
+    f:function(){ S.onglet='prix'; return ecranAoDetail(); }, notes:[
+    ['Vingt colonnes ne tiennent pas sur un téléphone — et n\'ont pas à y tenir',
+     'Le tableau de comparaison porte vingt colonnes : réf, frontal, adhésif, étiq./bob., quantité, fournisseur, quotation, devise, unité, '+
+     'prix calculé, transport, prix/mille, coef, devise devis, prix d\'achat, condi., prix achat condi., marge, prix de vente, marge brute. '+
+     'Une carte par offre, classée par prix au mille, met en tête ce qu\'on vient chercher : qui est le moins cher, et de combien.'],
+    ['L\'écart au meilleur prix remplace la lecture croisée',
+     'Sur le bureau, comparer deux fournisseurs veut dire suivre une ligne des yeux. Ici, chaque offre porte son écart en pourcentage '+
+     'face à la meilleure. La meilleure est cerclée d\'accent, rang 1.'],
+    ['La chaîne de calcul se déplie, terme par terme',
+     'Les dix-sept colonnes restantes ne disparaissent pas : elles deviennent trois blocs de calcul, chacun se terminant par son total. '+
+     'Quotation → change → prix calculé → transport → prix au mille. Puis coefficient → prix d\'achat → conditionnement → marge → prix de vente. '+
+     'Puis la marge brute face au dernier prix de vente. Un chiffre qu\'on ne peut pas refaire de tête passe pour un chiffre faux.'],
+    ['Le contexte de la ligne reste en haut',
+     'Quantité, étiquettes par bobine et transport de l\'appel d\'offres conditionnent tous les calculs en dessous. '+
+     'Ils restent visibles au lieu d\'être trois colonnes répétées à chaque ligne.']]},
+
+  'ao-produit': {app:'MyAO', t:'Fiche produit — formulaire long', r:'/ao#produit', f:ecranAoProduit, notes:[
+    ['Cinq sections repliées : on voit la structure avant le détail',
+     'La fiche produit compte une cinquantaine de champs sur cinq sections. Déroulée d\'un bloc, elle fait huit écrans de défilement '+
+     'et on ne sait jamais où l\'on est. Chaque section porte son résumé fermé — « 110 × 150 mm », « 4 bob./carton » — '+
+     'ce qui suffit le plus souvent à vérifier sans ouvrir.'],
+    ['Une colonne, un champ par ligne, cibles de 48 px',
+     'Les blocs à deux colonnes du bureau (Étiquette / Échenillage, Matière / Bobines) deviennent des sous-titres qui se suivent. '+
+     'Le format de l\'étiquette garde sa carte de rappel, en gros, parce que c\'est le repère qu\'on cherche en premier.'],
+    ['Enregistrer reste collé en bas',
+     'Sur un formulaire de huit écrans, un bouton en fin de page oblige à défiler pour valider une correction faite en haut.']]},
+
+  'ao-nouveau': {app:'MyAO', t:'Nouvel appel d\'offres', r:'/ao#new', f:ecranAoNouveau, notes:[
+    ['Trois étapes plutôt qu\'un formulaire unique',
+     'Identité, puis lignes, puis fournisseurs. Chaque étape tient dans un écran sans défilement, et l\'appel d\'offres reste en brouillon '+
+     'tant qu\'il n\'est pas envoyé — donc rien n\'est perdu si l\'on s\'interrompt.'],
+    ['La barre de progression sert de fil',
+     'Trois segments, le libellé de l\'étape à gauche. Suffisant, et ça ne coûte pas une ligne de titre.']]},
+
+  'cm-matieres': {app:'Coûts matières', t:'Liste des matières — écran de saisie', r:'/pricing', f:ecranCmMatieres, notes:[
+    ['La liste des matières est un écran de SAISIE, pas de lecture',
+     'C\'est la règle du module, et elle décide de toute la mise en page mobile : le champ de prix est la seule zone ouverte de la carte, '+
+     'bordé et repérable au repos, sur 46 px de haut, avec clavier décimal. On l\'atteint au pouce sans zoomer.'],
+    ['Enregistrement en place, confirmation dans la carte',
+     'La saisie part au blur ; « enregistré » s\'affiche dans le champ lui-même et la bordure passe au vert une seconde. '+
+     'Aucun rechargement de liste — on garde sa place dans quarante lignes. Touchez un prix pour voir l\'état.'],
+    ['L\'âge du prix garde son code couleur',
+     'Date de dernière saisie, âge en clair dessous, ambre au-delà d\'un an, rouge au-delà de deux ans. '+
+     'C\'est la vraie raison de venir ici au téléphone : repérer un prix qui n\'a pas été revu.'],
+    ['Le cas verrouillé se dit sur la carte',
+     'Plusieurs fournisseurs sur une matière : le champ reste fermé et la carte explique pourquoi, avec un cadenas. '+
+     'Un champ grisé sans phrase fait croire à un bug.'],
+    ['Tri et filtres en feuille remontante',
+     'Les en-têtes de colonnes triables et filtrables n\'existent pas sans tableau. Le bouton de filtre porte une pastille quand un filtre '+
+     'est actif — un filtre invisible est la première cause de « la liste est vide ».']]},
+
+  'cm-fiche': {app:'Coûts matières', t:'Fiche matière', r:'/pricing/mystock/:id', f:ecranCmFiche, notes:[
+    ['Le sous-total d\'achat ouvre la page',
+     'C\'est la valeur qui circule vers la valorisation MyStock, et celle que les deux écrans doivent montrer identique. '+
+     'Elle est en haut, en gros, avec la phrase qui la distingue du prix nu.'],
+    ['La portée de chaque réglage est écrite sous le champ',
+     'Le transport et les taxes s\'écrivent sur le tarif du fournisseur, la devise sur le fournisseur. '+
+     'Sur un petit écran, sans les colonnes voisines pour le deviner, la phrase de portée devient indispensable : '+
+     'ce qu\'on saisit ici vaut pour toutes les matières de ce fournisseur.'],
+    ['Matière importée : un interrupteur qui déplie ses champs',
+     'Transport et taxes n\'ont de sens que si la matière est importée. Fermé, l\'encadré ne prend que 44 px. '+
+     'Touchez-le pour voir les champs apparaître.'],
+    ['L\'historique en lignes, pas en tableau',
+     'Date, fournisseur, prix avant → après, écran d\'origine. Quatre colonnes deviennent deux lignes de texte.']]},
+
+  'cm-produits': {app:'Coûts matières', t:'Liste des produits', r:'/pricing/products', f:ecranCmProduits, notes:[
+    ['Onze colonnes → une carte qui répond à « combien, et pourquoi »',
+     'Support, frontal, adhésif, grammage, glassine, autres, coût, vente, marge. La carte garde la composition en titre '+
+     '(c\'est ce qu\'EST le produit) et sort le coût à droite, seul chiffre en gros.'],
+    ['Le dépliant porte la décomposition et sa jauge',
+     'Une ligne par composant avec son coût, le transport nommé quand il y en a, et la jauge de parts en couleurs de série. '+
+     'Touchez une carte pour la déplier.'],
+    ['Le code et la désignation restent cherchables',
+     'Comme sur le bureau, ils ont quitté l\'affichage principal mais pas la recherche — le code reste en petit au-dessus du titre.']]},
+
+  'cm-produit': {app:'Coûts matières', t:'Fiche produit MyStock', r:'/pricing/mystock/produit/:id', f:ecranCmProduit, notes:[
+    ['Le récapitulatif d\'abord, la composition ensuite',
+     'Prix de revient, dont transport, marge, prix de vente : quatre lignes et la jauge. C\'est la réponse ; le reste est l\'explication.'],
+    ['« Ce qui fait bouger ce coût » devient une liste d\'actions',
+     'Nommer un coût sans donner le chemin pour le corriger n\'avance personne. Chaque ligne ouvre l\'écran où la correction se fait : '+
+     'la fiche matière, le grammage du composant, le tarif du fournisseur.']]},
+
+  'cm-tarif': {app:'Coûts matières', t:'Tarif fournisseur', r:'/pricing/fournisseurs/:id', f:ecranCmTarif, notes:[
+    ['Un écran court, atteint depuis le camion de la liste',
+     'C\'est la porte la plus directe depuis l\'écart de coût qu\'on cherche à expliquer. Il doit rester court : '+
+     'cinq réglages, puis les matières concernées.'],
+    ['Les matières sans tarif propre se signalent en ambre',
+     'Leurs coûts sortent d\'un repli. Sans ce repère, personne n\'irait les régler.']]}
+};
+
+/* ── Rendu ──────────────────────────────────────────────────────────── */
+function rendreToc(){
+  var groupes = {}, ordre = [];
+  Object.keys(ECRANS).forEach(function(k){
+    var g = ECRANS[k].app;
+    if (!groupes[g]) { groupes[g] = []; ordre.push(g); }
+    groupes[g].push(k);
+  });
+  document.getElementById('toc').innerHTML = ordre.map(function(g){
+    return '<h3>'+esc(g)+'</h3>'+groupes[g].map(function(k){
+      var e = ECRANS[k];
+      return '<button data-go="'+k+'" class="'+(S.ecran===k?'on':'')+'">'+esc(e.t)+
+        '<em>'+esc(e.r)+'</em></button>';
+    }).join('');
+  }).join('');
+}
+
+function rendre(){
+  var e = ECRANS[S.ecran];
+  var html = e.f();
+  if (S.sheet && SHEETS[S.sheet]){
+    var s = SHEETS[S.sheet];
+    html += '<div class="msf-bs-backdrop" data-close></div>'+
+      '<div class="msf-bs"><div class="msf-bs-grab"></div>'+
+      '<div class="msf-bs-head">'+esc(s.t)+'</div>'+
+      '<div class="msf-bs-body">'+s.b+'</div>'+
+      '<div class="msf-bs-foot">'+s.f+'</div></div>';
+  }
+  document.getElementById('screen').innerHTML = html;
+  document.getElementById('notes').innerHTML =
+    '<h2>'+esc(e.t)+'</h2><div class="mq-route">'+esc(e.r)+'</div>'+
+    e.notes.map(function(n){
+      return '<div class="mq-note"><b>'+esc(n[0])+'</b><p>'+n[1]+'</p></div>'; }).join('');
+  rendreToc();
+}
+
+document.addEventListener('click', function(ev){
+  var t = ev.target.closest('[data-theme]');
+  if (t){
+    S.theme = t.getAttribute('data-theme');
+    document.body.classList.toggle('light', S.theme === 'light');
+    Array.prototype.forEach.call(document.querySelectorAll('#tgl-theme button'), function(b){
+      b.classList.toggle('on', b === t); });
+    return;
+  }
+  if (ev.target.closest('[data-close]')){ S.sheet = null; rendre(); return; }
+  var sh = ev.target.closest('[data-sheet]');
+  if (sh){ S.sheet = sh.getAttribute('data-sheet'); rendre(); return; }
+  var go = ev.target.closest('[data-go]');
+  if (go){
+    var k = go.getAttribute('data-go');
+    if (ECRANS[k]){ S.ecran = k; S.sheet = null;
+      if (k === 'ao-detail') S.onglet = 'lignes';
+      document.getElementById('screen').scrollTop = 0; rendre(); }
+    return;
+  }
+  var tab = ev.target.closest('[data-tab]');
+  if (tab){
+    S.onglet = tab.getAttribute('data-tab');
+    S.ecran = (S.onglet === 'prix') ? 'ao-prix' : 'ao-detail';
+    document.getElementById('screen').scrollTop = 0; rendre(); return;
+  }
+  var tg = ev.target.closest('[data-toggle]');
+  if (tg){
+    var id = tg.getAttribute('data-toggle');
+    S.ouvert[id] = !S.ouvert[id];
+    var pos = document.getElementById('screen').scrollTop;
+    rendre();
+    document.getElementById('screen').scrollTop = pos;
+  }
+});
+
+S.ouvert['o0'] = true;   // une offre dépliée d'emblée : la chaîne de calcul est le sujet
+S.ouvert['a2'] = true;   // la fiche technique ouverte : c'est la section la plus dense
+S.ouvert['p0'] = true;   // un produit déplié : la jauge de composition est le sujet
+rendre();
+})();
+</script>
+</body>
+</html>

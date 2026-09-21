@@ -257,7 +257,121 @@ margin-left:6px;cursor:help;vertical-align:middle}
 .prod-list-table .prod-info-cell strong{color:var(--text);font-weight:700}
 .prod-list-table .prod-actions-cell{text-align:right;white-space:nowrap}
 """ + AO_PRODUIT_FORM_CSS + r"""
+/* ══════════════════════════════════════════════════════════════════
+   Portrait telephone — MyAO (21 septembre 2026)
+
+   Les composants viennent du socle partage (static/mysifa_mobile.css,
+   prefixe .msf-), charge dans le <head> de cette page. Ici, seulement ce
+   qui appartient a MyAO : la mise en page des cartes et les ecrans de
+   saisie ramenes a une colonne.
+
+   Le conteneur de defilement est .scroll-area et la topbar mobile de cette
+   page est dans le flux : les elements collants se calent donc a 0.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Carte d'un appel d'offres dans la liste */
+.ao-carte-lignes{margin-top:2px}
+.ao-carte-ligne{display:flex;gap:8px;align-items:baseline;margin-top:5px}
+.ao-carte-ligne .ao-carte-ref{flex:1;min-width:0;font-size:12.5px;color:var(--text2);line-height:1.4}
+.ao-carte-ligne .ao-carte-qte{font-size:12.5px;font-weight:700;white-space:nowrap;
+  font-family:ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.ao-carte-av{display:flex;align-items:center;gap:9px;margin-top:10px}
+.ao-carte-av .msf-gauge{flex:1;width:auto}
+.ao-carte-av .msf-gauge i.complet{background:var(--success)}
+.ao-carte-reponses{font-size:11.5px;font-weight:700;color:var(--muted);white-space:nowrap}
+.ao-carte-reponses.complet{color:var(--success)}
+.ao-carte-echeance.tard{color:var(--warn);font-weight:700}
+.ao-carte-act{display:flex;gap:8px;margin-top:11px;justify-content:flex-end;flex-wrap:wrap}
+.ao-carte-act .btn{min-height:40px;display:inline-flex;align-items:center}
+.ao-carte-act .btn-icon{width:40px;height:40px}
+
+/* Carte d'une ligne produit */
+.ao-lcarte-titre{font-size:13.5px;font-weight:700;line-height:1.45;margin:2px 0 10px}
+.ao-lcarte-act{display:flex;gap:8px;margin-top:11px}
+.ao-lcarte-act .btn{flex:1;min-height:44px}
+.ao-lcarte-series{margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)}
+.ao-lcarte-serie{display:flex;gap:8px;align-items:baseline;padding:6px 0;font-size:12.5px}
+.ao-lcarte-serie b{flex:1;min-width:0}
+
+/* Carte d'un fournisseur invite */
+.ao-fcarte-eng{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+.ao-fcarte-act{display:flex;gap:7px;margin-top:11px;align-items:center}
+.ao-fcarte-act .btn{flex:1;min-height:44px}
+.ao-fcarte-act .btn-icon{width:44px;height:44px;flex:0 0 44px}
+
+/* Comparateur en cartes : le contexte de la ligne, puis les offres classees */
+.ao-comp-ligne{margin:0 0 12px;border-color:var(--accent)}
+.ao-comp-ligne .ao-comp-ligne-ref{font-size:13px;font-weight:700;line-height:1.45}
+.ao-comp-vide{margin-bottom:14px}
+.ao-offre-act{display:flex;gap:8px;margin-top:11px}
+.ao-offre-act .btn{flex:1;min-height:44px}
+.ao-offre-reglage{display:flex;align-items:center;gap:8px;padding:7px 0;
+  border-bottom:1px solid var(--border);font-size:12.5px}
+.ao-offre-reglage:last-child{border-bottom:0}
+.ao-offre-reglage label{flex:1;min-width:0;margin:0;font-size:12px;font-weight:600;
+  color:var(--muted);text-transform:none;letter-spacing:0}
+.ao-offre-reglage input,.ao-offre-reglage select{
+  width:auto;max-width:120px;min-height:40px;padding:8px 10px;font-size:15px;text-align:right}
+.ao-offre-serie{font-size:11.5px;color:var(--muted);line-height:1.5;
+  padding:6px 0;border-top:1px dashed var(--border)}
+
+@media(max-width:700px){
+  /* La page respire moins : sur 390 px, 24 px de marge de chaque cote
+     mangent un huitieme de la largeur utile. */
+  .scroll-area{padding:10px 12px 24px}
+  .page-hdr{margin-bottom:10px;gap:10px}
+  .page-hdr h1{font-size:18px}
+  .page-hdr .btn{width:100%;min-height:44px}
+
+  /* Filtres de liste et onglets de detail : defilants, jamais a la ligne.
+     Cinq onglets plus deux compteurs ne tiennent pas sur 390 px. */
+  .filter-tabs,.detail-tabs{
+    flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;
+    gap:6px;margin:10px 0 12px;padding-bottom:2px;
+  }
+  .filter-tabs::-webkit-scrollbar,.detail-tabs::-webkit-scrollbar{display:none}
+  .filter-tab,.detail-tab{flex:0 0 auto;min-height:40px;white-space:nowrap}
+  .detail-tabs{position:sticky;top:0;z-index:18;background:var(--bg);padding-top:8px}
+
+  /* En-tete de detail compact : la reference est deja dans la topbar. */
+  .breadcrumb{display:none}
+  .detail-hdr{gap:8px;margin-bottom:6px}
+  .detail-hdr h2{font-size:17px}
+  .detail-hdr .nav-pager{margin-left:auto}
+  .detail-meta{font-size:12px}
+  .detail-actions{gap:8px}
+  .detail-actions .btn{flex:1 1 calc(50% - 4px);min-height:44px;justify-content:center;
+    display:inline-flex;align-items:center;gap:6px}
+
+  /* Parametres de l'AO : sous les onglets, pleine largeur, champs a la
+     taille du pouce. Ils ne sont consultes qu'a la marge — ils ferment la
+     liste des onglets plutot que de la couper en deux. */
+  .ao-params-panel{order:99;width:100%;margin:4px 0 0;padding:10px 12px;
+    flex-direction:column;align-items:stretch;gap:10px}
+  .ao-params-panel .app-group .app-row{gap:10px}
+  .ao-params-panel .app-group .app-row label{flex:1;font-size:12px}
+  .ao-params-panel .app-group .app-row input[type=number]{
+    width:110px;min-height:44px;font-size:16px;text-align:right}
+
+  /* Formulaires et modales : une colonne, cibles a 44 px, plein ecran. */
+  .form-row{grid-template-columns:1fr}
+  input,select,textarea{font-size:16px;min-height:46px}
+  textarea{min-height:88px}
+  .modal-overlay{padding:0;align-items:flex-end}
+  .modal{max-width:none;width:100%;max-height:92dvh;border-radius:16px 16px 0 0;padding:18px 16px}
+  .modal.modal-wide{max-width:none}
+  .modal-actions{flex-direction:column-reverse;gap:8px}
+  .modal-actions .btn{width:100%;min-height:46px}
+  .card{padding:14px 13px;margin-bottom:12px}
+
+  /* Les tableaux qui restent (timeline, historiques) defilent plutot que de
+     compresser leurs colonnes a l'illisible. */
+  .data-table{font-size:12px}
+  .data-table th,.data-table td{padding:9px 7px}
+}
+
 </style>
+<link rel="stylesheet" href="/static/mysifa_mobile.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_perf.css">
 <script src="/static/mysifa_perf.js"></script>
 </head>
@@ -337,6 +451,7 @@ function icon(name, size) {
     truck: '<path d="M3 7h11v10H3z"/><path d="M14 10h4l3 3v4h-7z"/><circle cx="7.5" cy="17" r="2"/><circle cx="17.5" cy="17" r="2"/>',
     users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>',
     'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+    'download': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
     edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
     menu: '<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>',
     home: '<path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/>',
@@ -1822,6 +1937,103 @@ function renderModal() {
   }
 }
 
+/* Rendu en cartes : le portrait telephone.
+
+   Vrai en dessous de 700 px. MyAO ne retire rien au mobile — il
+   redistribue : une ligne de tableau devient une carte, les colonnes
+   deviennent une hierarchie. Les crochets d'evenement sont rigoureusement
+   ceux du tableau (.btn-view, .btn-dup-ao, .btn-edit-ligne, .inp-coef...),
+   donc bindListEvents() et bindDetailEvents() n'ont pas a savoir laquelle
+   des deux mises en page est a l'ecran. Deux jeux de liaisons pour deux
+   mises en page, c'est un correctif applique d'un cote seulement.
+
+   Le choix se fait au moment du render : sans cet ecouteur, une rotation du
+   telephone ne changerait rien. Meme mecanique que expeEnCartes()
+   (app/web/expe_assets.py) et prCartes() (static/pricing_app.js). */
+let _aoMqCartes = null;
+function aoCartes() {
+  try {
+    if (!_aoMqCartes) {
+      _aoMqCartes = window.matchMedia('(max-width:700px)');
+      const maj = () => { try { render(); } catch(e) {} };
+      if (_aoMqCartes.addEventListener) _aoMqCartes.addEventListener('change', maj);
+      else if (_aoMqCartes.addListener) _aoMqCartes.addListener(maj);
+    }
+    return !!_aoMqCartes.matches;
+  } catch(e) { return false; }
+}
+
+/* Un appel d'offres, en carte.
+
+   Huit colonnes redistribuees : l'identite en haut (reference + statut), le
+   contenu au milieu (une ligne par produit, sa quantite alignee a droite en
+   chiffres tabulaires), le contexte en bas (client, echeance, transport), et
+   l'avancement en jauge. « 6 fournisseurs / 2 reponses » ne se lit pas au
+   telephone ; une jauge, si — et elle passe au vert quand tout le monde a
+   repondu. */
+function aoCarteHtml(a) {
+  const ref = escAttr(a.reference||'');
+  const titre = escAttr(a.titre||'');
+  const inCorbeille = S.filtre === 'corbeille';
+  const nf = Number(a.nb_fournisseurs||0);
+  const nr = Number(a.nb_reponses||0);
+  const pct = nf > 0 ? Math.round(nr / nf * 100) : 0;
+  const complet = nf > 0 && nr >= nf;
+  // Une echeance passee sans reponse complete s'ambre. Aucune regle de
+  // gestion derriere : un rappel, comme l'age du prix dans Couts matieres.
+  const tard = a.date_limite && !complet
+    && String(a.date_limite) < new Date().toISOString().slice(0,10);
+
+  const lignes = a.lignes_summary || [];
+  const corps = lignes.length
+    ? '<div class="ao-carte-lignes">'+lignes.map(l =>
+        '<div class="ao-carte-ligne"><span class="ao-carte-ref">'+
+          (l.ref ? escHtml(l.ref) : '—')+'</span>'+
+          (l.qte != null ? '<span class="ao-carte-qte">'+formatInt(l.qte)+'</span>' : '')+
+        '</div>').join('')+'</div>'
+    : '<div class="ao-carte-lignes"><div class="ao-carte-ligne"><span class="ao-carte-ref">'+
+        escHtml(a.titre||'—')+'</span></div></div>';
+
+  const bouts = [];
+  if (a.clients) bouts.push('<span>'+escHtml(a.clients)+'</span>');
+  const contexte = '<div class="msf-card-sub" style="margin-top:9px">'+
+    bouts.join('')+
+    (a.date_limite ? '<span class="ao-carte-echeance'+(tard?' tard':'')+'">'+
+      escHtml(a.date_limite)+'</span>' : '')+
+    (a.prix_transport_pct ? '<span>transport '+escHtml(a.prix_transport_pct)+' %</span>' : '')+
+    '</div>';
+
+  const avancement = '<div class="ao-carte-av">'+
+    '<span class="msf-gauge"><i class="'+(complet?'complet':'')+'" style="width:'+pct+'%"></i></span>'+
+    '<span class="ao-carte-reponses'+(complet?' complet':'')+'">'+nr+'/'+nf+' réponses</span>'+
+    '</div>';
+
+  const actions = inCorbeille
+    ? '<button class="btn btn-ghost btn-sm btn-restore-ao" data-id="'+a.id+'">Restaurer</button>'+
+      '<button class="btn-icon btn-del-ao-def" data-id="'+a.id+'" data-ref="'+ref+'" title="Supprimer definitivement" style="color:var(--danger)">'+icon('trash',16)+'</button>'
+    : (a.statut === 'envoyee'
+        ? '<button class="btn btn-ghost btn-sm btn-cloturer-ao" data-id="'+a.id+'" data-ref="'+ref+'" title="Clôturer cet appel d\'offres">Clôturer</button>'
+        : '')+
+      '<button class="btn-icon btn-dup-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-titre="'+titre+'" title="Dupliquer">'+icon('copy',16)+'</button>'+
+      '<button class="btn-icon btn-del-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-statut="'+escAttr(a.statut||'')+'" title="Supprimer">'+icon('trash',16)+'</button>';
+
+  // La zone d'identite ouvre le detail ; les actions sont hors de ce bouton,
+  // pour qu'un « Supprimer » ne se transforme jamais en « Ouvrir ».
+  return '<article class="msf-card ao-carte">'+
+    '<button type="button" class="btn-view" data-id="'+a.id+'" '+
+      'style="display:block;width:100%;text-align:left;background:none;border:0;padding:0;'+
+      'color:inherit;font:inherit;cursor:pointer">'+
+      '<div class="msf-card-head">'+
+        '<span class="msf-card-title msf-num" style="flex:0 0 auto">'+escHtml(a.reference)+'</span>'+
+        statutBadge(a.statut)+
+        '<span style="flex:1"></span>'+
+        '<span class="msf-chevron">'+icon('chevron-right',16)+'</span>'+
+      '</div>'+corps+contexte+avancement+
+    '</button>'+
+    '<div class="ao-carte-act">'+actions+'</div>'+
+    '</article>';
+}
+
 function renderList() {
   const list = filteredAos();
   let rows = '';
@@ -1865,8 +2077,11 @@ function renderList() {
     '<div class="filter-tabs">'+
     ['tous','brouillon','envoyee','cloturee','corbeille'].map(f=>'<button class="filter-tab'+(S.filtre===f?' active':'')+'" data-f="'+f+'">'+escHtml(f==='tous'?'Tous':f==='brouillon'?'Brouillon':f==='envoyee'?'Envoyée':f==='cloturee'?'Clôturée':'Corbeille')+'</button>').join('')+
     '</div>'+
-    (list.length ? '<div class="card"><table class="data-table"><thead><tr><th>Référence</th><th>Titre</th><th>Client</th><th>Statut</th><th>Date limite</th><th>Fournisseurs</th><th>Réponses</th><th style="text-align:right">Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>' :
-    '<div class="card empty-state"><strong>Aucun appel d\'offres</strong>Créez un premier appel d\'offres pour inviter vos fournisseurs.</div>');
+    (list.length
+      ? (aoCartes()
+          ? '<div class="ao-cartes">'+list.map(aoCarteHtml).join('')+'</div>'
+          : '<div class="card"><table class="data-table"><thead><tr><th>Référence</th><th>Titre</th><th>Client</th><th>Statut</th><th>Date limite</th><th>Fournisseurs</th><th>Réponses</th><th style="text-align:right">Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>')
+      : '<div class="card empty-state"><strong>Aucun appel d\'offres</strong>Créez un premier appel d\'offres pour inviter vos fournisseurs.</div>');
 }
 
 function buildNavPagerHtml(list, currentId, labelSingular) {
@@ -1991,6 +2206,77 @@ function renderDetailHeader() {
     '</div>'+'</div>';
 }
 
+/* Une ligne produit, en carte.
+
+   Sept colonnes qui se relisent de haut en bas. La quantite est le chiffre
+   qu'on vient chercher : elle est en gros. Les series restent sous leur
+   ligne, comme sur le tableau, parce qu'une serie n'existe pas seule. */
+function aoLigneCarteHtml(l, canEditSeries) {
+  const series = Array.isArray(l.series) ? l.series : [];
+  const nbS = series.length;
+  const isOpen = S.openSeriesLignes && S.openSeriesLignes.has(l.id);
+  const orphan = l.produit_introuvable
+    ? '<span class="ao-orphan-badge" title="Aucun produit du catalogue ne porte cette référence.'
+      + ' Le fournisseur ne recevra ni fiche technique ni BAT, et l\'envoi de l\'AO sera refusé.'
+      + ' Créez le produit ou corrigez la ligne.">'+icon('alert-triangle',11)+' Produit introuvable</span>'
+    : '';
+  let badgeSeries = '';
+  if (nbS > 0) {
+    const sum = Number(l.series_qty_sum||0), q = Number(l.quantite||0);
+    const ok = Math.abs(sum - q) < 0.5;
+    badgeSeries = ' <span class="ao-series-badge'+(ok?'':' warn')+'" title="'+
+      (ok?'Séries cohérentes':'Somme séries ≠ quantité ligne')+'">'+nbS+' série'+(nbS>1?'s':'')+
+      (ok?'':' · Δ '+formatInt(sum-q))+'</span>';
+  }
+
+  let bloc = '';
+  if (nbS > 0 || canEditSeries) {
+    const chev = '<button class="ao-series-toggle btn-icon" data-id="'+l.id+'" '+
+      'title="'+(isOpen?'Masquer les séries':(nbS?'Afficher les séries':'Ajouter une série'))+'" '+
+      'aria-expanded="'+(isOpen?'true':'false')+'">'+icon(isOpen?'chevron-down':'chevron-right',16)+'</button>';
+    bloc = '<div class="ao-lcarte-series">'+
+      '<div style="display:flex;align-items:center;gap:8px">'+chev+
+        '<span style="flex:1;font-size:12px;color:var(--muted)">'+
+          (nbS ? nbS+' série'+(nbS>1?'s':'') : 'Aucune série')+'</span></div>';
+    if (isOpen) {
+      series.forEach(s => {
+        bloc += '<div class="ao-lcarte-serie"><b>'+escHtml(s.libelle||'—')+
+          (s.notes?' <span style="color:var(--muted);font-weight:400">· '+escHtml(s.notes)+'</span>':'')+'</b>'+
+          '<span class="msf-num">'+escHtml(formatInt(s.quantite))+'</span>'+
+          (canEditSeries
+            ? '<button class="btn btn-ghost btn-sm btn-edit-serie" data-lid="'+l.id+'" data-sid="'+s.id+'">Modifier</button>'
+            : '')+
+          '</div>';
+      });
+      if (canEditSeries) {
+        bloc += '<button class="btn btn-ghost btn-sm btn-add-serie" data-lid="'+l.id+'" '+
+          'style="width:100%;min-height:44px;margin-top:6px">'+icon('plus',14)+' Ajouter une série</button>';
+      }
+    }
+    bloc += '</div>';
+  }
+
+  const acts = canEditSeries
+    ? '<div class="ao-lcarte-act">'+
+        '<button class="btn btn-ghost btn-sm btn-edit-ligne" data-id="'+l.id+'">Modifier</button>'+
+        '<button class="btn btn-ghost btn-sm btn-del-ligne" data-id="'+l.id+'">Supprimer</button></div>'
+    : '';
+
+  return '<article class="msf-card'+(l.produit_introuvable?' ao-ligne-orpheline':'')+'" data-lid="'+l.id+'">'+
+    '<div class="msf-card-head">'+
+      '<span class="msf-badge">Ligne '+escHtml(l.position)+'</span>'+orphan+badgeSeries+'</div>'+
+    '<div class="ao-lcarte-titre">'+
+      '<a href="#" class="ao-ligne-ref-link" data-ref="'+escAttr(l.ref_produit||'')+'">'+
+      escHtml(l.ref_produit)+'</a></div>'+
+    '<dl style="margin:0">'+
+      '<div class="msf-kv msf-kv--fort"><dt>Quantité</dt><dd>'+escHtml(formatInt(l.quantite))+
+        ' <span style="font-size:11px;color:var(--muted);font-weight:600">'+escHtml(l.unite||'')+'</span></dd></div>'+
+      '<div class="msf-kv"><dt>Client</dt><dd>'+escHtml(l.client_nom||'—')+'</dd></div>'+
+      '<div class="msf-kv"><dt>Étiq. / bobine</dt><dd>'+formatInt(l.etiquettes_par_bobine)+'</dd></div>'+
+      (l.notes ? '<div class="msf-kv"><dt>Notes</dt><dd style="font-weight:500">'+escHtml(l.notes)+'</dd></div>' : '')+
+    '</dl>'+bloc+acts+'</article>';
+}
+
 function renderLignes() {
   const st = S.ao.statut;
   const canEditSeries = (st === 'brouillon' || st === 'envoyee');
@@ -2046,6 +2332,11 @@ function renderLignes() {
   const addBtn = (st==='brouillon')
     ? '<button class="btn btn-accent btn-sm" type="button" id="btn-add-ligne" style="margin-bottom:12px">'+icon('plus',14)+' Ajouter une ligne</button>'
     : '';
+  if (aoCartes()) {
+    const cartes = lignes.map(l => aoLigneCarteHtml(l, canEditSeries)).join('');
+    return (addBtn ? '<div style="margin-bottom:12px">'+addBtn+'</div>' : '')+
+      (cartes || '<div class="msf-empty">Aucune ligne</div>');
+  }
   return '<div class="card">'+addBtn+
     '<table class="data-table ao-lignes-table"><thead><tr><th>#</th><th>Réf.</th><th>Client</th><th>Étiq. / bobine</th><th>Qté</th><th>Notes</th><th></th></tr></thead><tbody>'+
     (rows||'<tr><td colspan="7" style="color:var(--muted)">Aucune ligne</td></tr>')+'</tbody></table></div>';
@@ -2123,7 +2414,59 @@ function renderFournisseurs() {
       '<td>'+engagementCell(f)+'</td>'+
       '<td>'+escHtml(f.date_envoi||'—')+'</td><td>'+escHtml(f.date_reponse||'—')+'</td><td>'+act+'</td></tr>';
   }).join('');
-  return '<div class="card">'+(ao.statut!=='cloturee'?'<button class="btn btn-accent btn-sm" id="btn-add-f" style="margin-bottom:12px">'+icon('plus',14)+' Ajouter un fournisseur</button>':'')+
+  const ajouter = ao.statut !== 'cloturee'
+    ? '<button class="btn btn-accent btn-sm" id="btn-add-f" style="margin-bottom:12px">'+icon('plus',14)+' Ajouter un fournisseur</button>'
+    : '';
+
+  if (aoCartes()) {
+    /* Les deux signaux d'engagement restent distincts : le portail est
+       certain, l'ouverture d'email n'est qu'un indice. Les fondre en
+       « vu / pas vu » donnerait une certitude qu'on n'a pas. */
+    const cartes = fournis.map(f => {
+      const nb = S.nonLus[String(f.id)] || 0;
+      const e = f.engagement || {};
+      let eng = '';
+      if (f.date_envoi) {
+        const nbMail = e.nb_ouvertures_email || 0;
+        if (nbMail > 0) {
+          eng += '<span class="eng-chip eng-on" title="Dernière ouverture : '+escAttr(e.email_ouvert_dernier||'')+'">Email ouvert'+(nbMail>1?' ×'+nbMail:'')+'</span>';
+        } else if (e.ouvertures_ecartees > 0) {
+          const pourquoi = e.motif_ecarte ? ' — ' + e.motif_ecarte : '';
+          eng += '<span class="eng-chip eng-doubt" title="'+escAttr(e.ouvertures_ecartees+
+            ' chargement(s) du pixel écarté(s)'+pourquoi)+'">Ouverture non confirmée</span>';
+        } else {
+          eng += '<span class="eng-chip eng-off">Pas d\'ouverture détectée</span>';
+        }
+        const nbP = e.nb_visites_portail || 0;
+        if (nbP > 0) eng += '<span class="eng-chip eng-strong">Portail'+(nbP>1?' ×'+nbP:'')+'</span>';
+        if (e.dernier_signal) eng += '<span class="eng-chip eng-off">'+escHtml(depuisDate(e.dernier_signal))+'</span>';
+      }
+      let act = '<button class="btn btn-ghost btn-sm btn-msg" data-id="'+f.id+'">'+icon('message-square',15)+' Messagerie'+
+        (nb>0?' ('+nb+')':'')+'</button>'+
+        '<button class="btn-icon btn-copy" data-token="'+escAttr(f.token)+'" title="Copier le lien portail" aria-label="Copier le lien portail">'+icon('copy',16)+'</button>';
+      if (f.date_envoi) act += '<button class="btn-icon btn-tl" data-id="'+f.id+'" title="Suivi d\'engagement" aria-label="Suivi d\'engagement">'+icon('activity',16)+'</button>';
+      if (f.statut !== 'repondu') {
+        act += '<button class="btn-icon btn-edit-f" data-id="'+f.id+'" title="Modifier" aria-label="Modifier">'+icon('edit',16)+'</button>'+
+               '<button class="btn-icon btn-del-f" data-id="'+f.id+'" title="Supprimer" aria-label="Supprimer">'+icon('trash',16)+'</button>';
+      }
+      return '<article class="msf-card">'+
+        '<div class="msf-card-head">'+
+          '<span class="msf-card-title">'+escHtml(f.nom_fournisseur)+'</span>'+
+          fourniBadge(f.statut)+
+          (nb>0?'<span class="msf-badge msf-badge--danger">'+escHtml(nb)+' msg</span>':'')+'</div>'+
+        '<div class="msf-card-sub"><span>'+escHtml(f.email_contact)+'</span></div>'+
+        (eng ? '<div class="ao-fcarte-eng">'+eng+'</div>' : '')+
+        '<div class="msf-card-sub" style="margin-top:8px">'+
+          '<span>Envoi '+escHtml(f.date_envoi||'—')+'</span>'+
+          '<span>Réponse '+escHtml(f.date_reponse||'—')+'</span></div>'+
+        '<div class="ao-fcarte-act">'+act+'</div>'+
+        '</article>';
+    }).join('');
+    return (ajouter ? '<div>'+ajouter+'</div>' : '')+
+      (cartes || '<div class="msf-empty">Aucun fournisseur</div>');
+  }
+
+  return '<div class="card">'+ajouter+
     '<table class="data-table"><thead><tr><th>Nom</th><th>Email</th><th>Statut</th><th>Engagement</th><th>Envoi</th><th>Réponse</th><th></th></tr></thead><tbody>'+
     (rows||'<tr><td colspan="7" style="color:var(--muted)">Aucun fournisseur</td></tr>')+'</tbody></table></div>';
 }
@@ -3201,6 +3544,195 @@ async function saveReponsePricing(reponseId, patch) {
   return updated;
 }
 
+/* Le comparateur, en portrait.
+
+   Le tableau porte vingt colonnes : reference, frontal, adhesif,
+   etiq./bobine, quantite, fournisseur, quotation, devise, unite, prix
+   calcule, transport, prix au mille, coef, devise devis, prix d'achat,
+   conditionnement, prix d'achat conditionne, marge, prix de vente, marge
+   brute. Elles ne tiennent pas sur 390 px, et n'ont pas a y tenir.
+
+   Une carte par offre, classees par prix au mille, avec l'ecart au meilleur
+   ECRIT plutot qu'a deduire en suivant une ligne des yeux. Les dix-sept
+   colonnes restantes ne disparaissent pas : elles deviennent des blocs de
+   calcul qui se finissent chacun par leur total — un chiffre qu'on ne peut
+   pas refaire de tete passe pour un chiffre faux.
+
+   Le contexte de la ligne (quantite, etiq./bobine, transport de l'AO)
+   conditionne tous les calculs en dessous : il reste en haut au lieu d'etre
+   trois colonnes recopiees a chaque offre. */
+function renderComparaisonCartes() {
+  const c = S.comparaison;
+  const rows = c.rows || [];
+  if (!S.openOffres) S.openOffres = {};
+
+  const UV_LABELS = {mille:'Au mille', etiquette:'Étiquette', bobine:'Bobine', carton:'Carton', palette:'Palette'};
+  function condiLabel(r) {
+    const t = r.unite_vente_type || 'mille';
+    const q = Number(r.unite_vente_qte || 1) || 1;
+    const base = UV_LABELS[t] || t;
+    if (t === 'mille') return base;
+    return (q > 1 ? (q + ' · ') : '') + base;
+  }
+
+  const parLigne = new Map();
+  rows.forEach(r => {
+    const k = String(r.ligne_id);
+    if (!parLigne.has(k)) parLigne.set(k, []);
+    parLigne.get(k).push(r);
+  });
+
+  let out = '';
+  let noLigne = 0;
+  const nbLignes = parLigne.size;
+  parLigne.forEach(offres => {
+    noLigne += 1;
+    const r0 = offres[0];
+    // Les offres sans reponse ferment la liste : on ne classe pas un prix
+    // qui n'existe pas.
+    const triees = offres.slice().sort((a, b) => {
+      const av = a.prix_au_mille, bv = b.prix_au_mille;
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      return av - bv;
+    });
+    const meilleur = triees.find(x => x.prix_au_mille != null);
+    const best = meilleur ? meilleur.prix_au_mille : null;
+
+    out += '<div class="msf-card ao-comp-ligne">'+
+      (nbLignes > 1 ? '<div class="msf-card-sub" style="margin-bottom:6px"><span>Ligne '+
+        noLigne+' sur '+nbLignes+'</span></div>' : '')+
+      '<div class="ao-comp-ligne-ref">'+escHtml(r0.ref_produit||'—')+'</div>'+
+      '<div class="msf-card-sub" style="margin-top:7px">'+
+        '<span>'+formatInt(r0.quantite_etiquettes)+' étiq.</span>'+
+        '<span>'+formatInt(r0.etiquettes_par_bobine)+' étiq./bob.</span>'+
+        (S.ao && S.ao.prix_transport_pct ? '<span>transport '+escHtml(S.ao.prix_transport_pct)+' %</span>' : '')+
+      '</div>'+
+      ((r0.frontal || r0.adhesif) ? '<div class="msf-card-sub"><span>'+
+        escHtml(r0.frontal||'—')+' · '+escHtml(r0.adhesif||'—')+'</span></div>' : '')+
+      '</div>';
+
+    out += '<div class="msf-sect"><b>'+triees.length+' offre'+(triees.length>1?'s':'')+
+      ' · classées par prix au mille</b></div>';
+
+    triees.forEach((r, i) => {
+      const rid = r.reponse_id;
+      const noRep = rid == null || rid === '';
+      const devF = (r.devise || 'EUR').toUpperCase();
+      const devD = (r.devise_prix_devis || 'EUR').toUpperCase();
+      const cle = String(rid || ('x' + r.ligne_id + '-' + r.fourni_id));
+      const ouvert = !!S.openOffres[cle];
+      const estBest = !noRep && best != null && r.prix_au_mille === best;
+      const ecart = (!noRep && best && r.prix_au_mille != null && best > 0)
+        ? ((r.prix_au_mille - best) / best * 100) : null;
+
+      const resume = noRep
+        ? 'pas encore de prix'
+        : formatMoney(r.quotation, devF)+' / '+escHtml(r.unite_quotation||'mille')+
+          (r.delai_jours ? ' · '+escHtml(r.delai_jours)+' j' : ' · délai non donné');
+
+      let tete = '<button type="button" class="msf-offre-h ao-offre-toggle" data-offre="'+escAttr(cle)+'">'+
+        '<span class="msf-offre-rang">'+(noRep ? '—' : (i+1))+'</span>'+
+        '<span class="msf-offre-id"><b>'+escHtml(r.nom_fournisseur||'')+'</b><span>'+resume+'</span></span>'+
+        '<span class="msf-offre-prix"><b>'+(noRep ? '—' : formatMoney(r.prix_au_mille, devF))+'</b>'+
+          '<span>'+(noRep ? 'sans réponse' : (estBest ? 'meilleure'
+            : (ecart != null ? '+'+ecart.toLocaleString('fr-FR',{maximumFractionDigits:1})+' %' : 'prix/mille')))+'</span></span>'+
+        '<span class="msf-chevron">'+icon(ouvert?'chevron-down':'chevron-right',16)+'</span>'+
+        '</button>';
+
+      let corps = '';
+      if (ouvert) {
+        if (noRep) {
+          corps = '<div class="msf-offre-b"><div class="ao-offre-act">'+
+            '<button type="button" class="btn btn-accent btn-sm btn-saisir-prix" '+
+              'data-lid="'+escAttr(r.ligne_id||'')+'" data-fid="'+escAttr(r.fourni_id||'')+'" '+
+              'data-fournisseur="'+escAttr(r.nom_fournisseur||'')+'" data-ref="'+escAttr(r.ref_produit||'')+'">'+
+              icon('edit',15)+' Saisir le prix reçu</button></div></div>';
+        } else {
+          const uvType = r.unite_vente_type || 'mille';
+          const besoinFiche = (uvType !== 'mille' && uvType !== 'etiquette') && (r.etiq_par_condi == null);
+          const condiCorps = besoinFiche
+            ? '<span class="btn-fiche-alerte" data-ref="'+escAttr(r.ref_produit||'')+'" '+
+              'style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--warn);'+
+              'background:color-mix(in srgb,var(--warn) 14%,transparent);'+
+              'border:1px solid color-mix(in srgb,var(--warn) 45%,transparent);padding:3px 8px;'+
+              'border-radius:6px;cursor:pointer" title="Conditionnement manquant dans la fiche produit — touchez pour compléter">'+
+              icon('wrench',11)+' Compléter la fiche</span>'
+            : escHtml(condiLabel(r));
+
+          let brute;
+          if (!r.has_produit) {
+            brute = '<div class="msf-kv"><dt>Marge brute</dt><dd style="color:var(--warn);font-size:11.5px;font-weight:600">Produit non existant</dd></div>';
+          } else if (r.dernier_prix_vente == null) {
+            brute = '<div class="msf-kv"><dt>Marge brute</dt><dd class="msf-muted" style="font-size:11.5px;font-weight:600">Dernier prix de vente à renseigner</dd></div>';
+          } else {
+            const pct = r.marge_brute_pct;
+            brute = '<div class="msf-kv"><dt>Dernier prix de vente</dt><dd>'+formatMoney(r.dernier_prix_vente, devD)+'</dd></div>'+
+              '<div class="msf-kv msf-kv--fort"><dt>Marge brute</dt><dd style="color:'+
+                (pct == null ? 'var(--muted)' : (pct >= 0 ? 'var(--success)' : 'var(--danger)'))+'">'+
+                (pct == null ? '—' : (pct>=0?'+':'')+pct.toLocaleString('fr-FR',{maximumFractionDigits:1})+' %')+
+              '</dd></div>';
+          }
+
+          const sb = Array.isArray(r.series_breakdown) ? r.series_breakdown : [];
+          const series = sb.map(s => '<div class="ao-offre-serie">'+icon('corner-down-right',11)+
+            ' <strong style="color:var(--text2)">'+escHtml(s.libelle||'—')+'</strong> — '+
+            formatInt(s.quantite)+' étiq. · calculé '+formatMoney(s.prix_calcule, devF)+
+            ' · vente/mille '+formatMoney(s.prix_vente, devD)+'</div>').join('');
+
+          corps = '<div class="msf-offre-b">'+
+            '<div class="msf-calc"><div class="msf-calc-t">Du devis au prix au mille</div><dl style="margin:0">'+
+              '<div class="msf-kv"><dt>Quotation</dt><dd>'+formatMoney(r.quotation, devF)+' / '+escHtml(r.unite_quotation||'mille')+'</dd></div>'+
+              '<div class="msf-kv"><dt>Prix calculé</dt><dd>'+formatMoney(r.prix_calcule, devF)+'</dd></div>'+
+              '<div class="msf-kv"><dt>Transport</dt><dd data-tr="'+escAttr(rid||'')+'">'+formatMoney(r.transport_amount, devF)+'</dd></div>'+
+              '<div class="msf-kv msf-kv--tot msf-kv--fort"><dt>Prix / mille</dt><dd>'+formatMoney(r.prix_au_mille, devF)+'</dd></div>'+
+            '</dl></div>'+
+            '<div class="msf-calc"><div class="msf-calc-t">Du prix d\'achat au prix de vente</div><dl style="margin:0">'+
+              '<div class="msf-kv"><dt>Prix d\'achat</dt><dd data-pv="'+escAttr(rid)+'">'+
+                formatMoney(r.prix_achat_mille_dd != null ? r.prix_achat_mille_dd : r.prix_au_mille, devD)+'</dd></div>'+
+              '<div class="msf-kv"><dt>Conditionnement</dt><dd>'+condiCorps+'</dd></div>'+
+              '<div class="msf-kv"><dt>Prix d\'achat conditionné</dt><dd>'+
+                (r.prix_achat_conditionne != null ? formatMoney(r.prix_achat_conditionne, devD) : '—')+'</dd></div>'+
+              '<div class="msf-kv msf-kv--tot msf-kv--fort"><dt>Prix de vente</dt><dd>'+
+                (r.prix_vente_final != null ? formatMoney(r.prix_vente_final, devD) : '—')+'</dd></div>'+
+            '</dl></div>'+
+            '<div class="msf-calc"><div class="msf-calc-t">Marge brute</div><dl style="margin:0">'+brute+'</dl></div>'+
+            '<div class="msf-calc"><div class="msf-calc-t">Réglages de cette offre</div>'+
+              '<div class="ao-offre-reglage"><label>Unité de quotation</label>'+
+                '<select class="inp-unite-quot" data-rep="'+escAttr(rid||'')+'">'+
+                  '<option value="mille"'+(r.unite_quotation==='mille'?' selected':'')+'>Mille</option>'+
+                  '<option value="bobine"'+(r.unite_quotation==='bobine'?' selected':'')+'>Bobine</option>'+
+                '</select></div>'+
+              '<div class="ao-offre-reglage"><label>Coefficient</label>'+
+                '<input type="number" step="0.01" min="0.01" class="inp-coef" inputmode="decimal" '+
+                  'data-rep="'+escAttr(rid||'')+'" value="'+escAttr(r.coef != null ? r.coef : 1)+'"></div>'+
+              '<div class="ao-offre-reglage"><label>Devise du devis</label>'+
+                '<select class="inp-dev-devis" data-rep="'+escAttr(rid||'')+'">'+
+                  '<option value="EUR"'+(devD==='EUR'?' selected':'')+'>EUR</option>'+
+                  '<option value="USD"'+(devD==='USD'?' selected':'')+'>USD</option>'+
+                '</select></div>'+
+              '<div class="ao-offre-reglage"><label>Marge</label>'+
+                '<input type="number" step="0.01" min="0.01" class="inp-marge" inputmode="decimal" '+
+                  'data-rep="'+escAttr(rid||'')+'" value="'+escAttr(r.marge != null ? r.marge : 1)+'"></div>'+
+            '</div>'+
+            series+
+            '</div>';
+        }
+      }
+
+      out += '<article class="msf-offre'+(estBest && !noRep ? ' msf-offre--best' : '')+'">'+tete+corps+'</article>';
+    });
+  });
+
+  const fxNote = c.eur_usd_rate
+    ? '<p style="font-size:11px;color:var(--muted);margin-top:14px;line-height:1.6">Taux EUR/USD : '+
+      Number(c.eur_usd_rate).toLocaleString('fr-FR', {maximumFractionDigits:4})+
+      ' — conversion appliquée sur le <strong>prix d\'achat</strong> si les devises diffèrent.</p>'
+    : '<p style="font-size:11px;color:var(--muted);margin-top:14px;line-height:1.6">Prix de vente = prix d\'achat conditionné × coef × marge. Unité de vente définie dans la fiche produit.</p>';
+  return out + fxNote;
+}
+
 function renderComparaison() {
   const c = S.comparaison;
   if (!c) return '<div class="card" style="color:var(--muted)">Chargement…</div>';
@@ -3213,6 +3745,7 @@ function renderComparaison() {
     else if (!nFournis) msg = 'Ajoutez des fournisseurs invités.';
     return '<div class="card empty-state"><strong>Demandes de prix</strong>'+escHtml(msg)+'</div>';
   }
+  if (aoCartes()) return renderComparaisonCartes();
   let bestMille = null;
   rows.forEach(r => {
     if (r.prix_au_mille != null && (bestMille == null || r.prix_au_mille < bestMille)) bestMille = r.prix_au_mille;
@@ -3351,6 +3884,25 @@ function renderDocuments() {
     let rows = (pjs||[]).map(pj => '<tr><td>'+escHtml(pj.filename)+'</td><td>'+Math.round((pj.taille_octets||0)/1024)+' Ko</td><td>'+escHtml(pj.date)+'</td>'+
       '<td><a class="btn btn-ghost btn-sm" href="/api/ao/'+aoId+'/pieces-jointes/'+pj.id+'/download">Télécharger</a> '+
       '<button class="btn btn-ghost btn-sm btn-del-pj" data-id="'+pj.id+'">Supprimer</button></td></tr>').join('');
+    if (aoCartes()) {
+      const lignes = (pjs||[]).map(pj =>
+        '<div class="msf-row" style="cursor:default">'+
+          '<span class="msf-row-ico'+(pj.vu_par_fournisseur?'':' msf-row-ico--muted')+'">'+icon('file-text',16)+'</span>'+
+          '<span class="msf-row-txt"><b>'+escHtml(pj.filename)+'</b>'+
+            '<span>'+Math.round((pj.taille_octets||0)/1024)+' Ko · '+escHtml(pj.date)+
+            (pj.vu_par_fournisseur?' · vu par le fournisseur':'')+'</span></span>'+
+          '<a class="btn-icon" href="/api/ao/'+aoId+'/pieces-jointes/'+pj.id+'/download" '+
+            'title="Télécharger" aria-label="Télécharger" style="width:40px;height:40px">'+icon('download',16)+'</a>'+
+          '<button class="btn-icon btn-del-pj" data-id="'+pj.id+'" title="Supprimer" '+
+            'aria-label="Supprimer" style="width:40px;height:40px">'+icon('trash',16)+'</button>'+
+        '</div>').join('');
+      return '<input type="file" id="pj-file" style="display:none">'+
+        '<button class="btn btn-accent" id="btn-pj-upload" style="width:100%;min-height:46px;margin-bottom:12px">'+
+          icon('plus',15)+' <span id="btn-pj-upload-label">Choisir un document</span></button>'+
+        '<div id="pj-file-name" style="font-size:12px;color:var(--muted);margin-bottom:12px"></div>'+
+        '<div class="msf-rows">'+(lignes||'<div class="msf-empty">Aucun document</div>')+'</div>'+
+        '<p style="font-size:11px;color:var(--muted);margin-top:12px">Taille max. 10 Mo par fichier.</p>';
+    }
     return '<div class="card"><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Taille max. 10 Mo par fichier.</p>'+
       '<input type="file" id="pj-file" style="display:none">'+
       '<button class="btn btn-accent btn-sm" id="btn-pj-upload">'+icon('plus',14)+' <span id="btn-pj-upload-label">Choisir un document</span></button>'+
@@ -3604,6 +4156,16 @@ function bindDetailEvents() {
       render();
     } catch(e) { showToast(e.message, 'danger'); }
   }));
+  // Depliant d'une offre : on garde sa place dans la liste, donc on ne
+  // recharge rien — seul l'etat local change et la vue se redessine.
+  document.querySelectorAll('.ao-offre-toggle').forEach(b => {
+    b.addEventListener('click', () => {
+      if (!S.openOffres) S.openOffres = {};
+      const k = b.dataset.offre;
+      if (S.openOffres[k]) delete S.openOffres[k]; else S.openOffres[k] = 1;
+      render();
+    });
+  });
   document.querySelectorAll('.inp-unite-quot').forEach(sel => {
     sel.addEventListener('change', async () => {
       const rid = sel.dataset.rep;

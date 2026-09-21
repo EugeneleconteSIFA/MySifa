@@ -96,6 +96,49 @@
   // Meme allure que le planning, mais posee sur de vraies dates. Les positions
   // arrivent en pourcentage, calculees et testees cote serveur : l'ecran ne
   // fait que poser des rectangles.
+  // Un cadre de slot : la barre entiere quand le dossier n'a pas ete coupe,
+  // sinon un fragment. `fr` porte la geometrie (calculee et testee cote
+  // serveur), `sl` l'identite du dossier.
+  function _cadreSlot(sl, fr, avecLibelle, i) {
+    var segs = (fr.segments || []).map(function (g) {
+      return '<div class="rp-fr-seg mst-' + escAttr(g.statut || "autre") + '"'
+           + ' style="left:' + g.x + '%;width:' + g.largeur + '%"></div>';
+    }).join("");
+    var fmt = sl.format || (sl.laize_mm ? sl.laize_mm + " mm" : "");
+    // Densite du libelle. Quatre lignes dans un cadre etroit, ce sont quatre
+    // « … » : on en retire plutot que de tout tronquer. Le seuil est en
+    // pourcentage de la piste, comme la geometrie qui arrive du serveur.
+    var large = Number(fr.largeur) || 0;
+    var densite = large >= 16 ? '' : (large >= 9 ? ' moyen' : ' etroit');
+    // L'infobulle parle du DOSSIER, pas du fragment : on lui epargne la
+    // geometrie, qui ne dit rien a personne et pese lourd dans l'attribut.
+    var tip = {};
+    Object.keys(sl).forEach(function (k) {
+      if (k !== "fragments" && k !== "liens") tip[k] = sl[k];
+    });
+    return '<div class="rp-fr-slot' + densite
+         + (avecLibelle ? '' : ' muet')
+         + (fr.deborde_avant ? ' deborde-avant' : '')
+         + (fr.deborde_apres ? ' deborde-apres' : '')
+         + '" data-dossier="' + escAttr(sl.no_dossier) + '"'
+         + ' data-tip="' + escAttr(JSON.stringify(tip)) + '"'
+         + ' style="left:' + fr.x + '%;width:' + fr.largeur + '%">'
+         + '<div class="rp-fr-fond">' + segs + '</div>'
+         + (avecLibelle
+             ? '<div class="rp-fr-lbl">'
+               + '<b>' + escHtml(sl.no_dossier) + '</b>'
+               + (sl.client ? '<span>' + escHtml(sl.client) + '</span>' : '')
+               + (sl.ref_produit_norm || fmt
+                   ? '<i>' + escHtml([sl.ref_produit_norm, fmt].filter(Boolean).join(" · ")) + '</i>'
+                   : '')
+               + (sl.quantite ? '<u>' + fnum(sl.quantite) + ' ét.</u>' : '')
+               + '</div>'
+             // Un fragment muet reste un cadre blanc : sans rien dedans, il se
+             // lit comme un dossier inconnu. Le numero suffit à le rattacher.
+             : '<div class="rp-fr-lbl rappel"><b>' + escHtml(sl.no_dossier) + '</b></div>')
+         + '</div>';
+  }
+
   function renderFrise(f, opts) {
     opts = opts || {};
     if (!f || f.vide || !(f.lignes || []).length) return "";
@@ -115,31 +158,16 @@
 
     var lignes = f.lignes.map(function (l) {
       var slots = (l.slots || []).map(function (sl) {
-        var segs = (sl.segments || []).map(function (g) {
-          return '<div class="rp-fr-seg mst-' + escAttr(g.statut || "autre") + '"'
-               + ' style="left:' + g.x + '%;width:' + g.largeur + '%"></div>';
+        // Un dossier qui traverse une periode sans personne rend plusieurs
+        // cadres : la machine n'a pas tourne entre les deux, et un rectangle
+        // continu le dirait a tort. Les liens rappellent que c'est le meme.
+        var cadres = (sl.fragments && sl.fragments.length) ? sl.fragments : [sl];
+        var liens = (sl.liens || []).map(function (n) {
+          return '<div class="rp-fr-lien" style="left:' + n.x + '%;width:' + n.largeur + '%"></div>';
         }).join("");
-        var fmt = sl.format || (sl.laize_mm ? sl.laize_mm + " mm" : "");
-        // Densite du libelle. Quatre lignes dans un slot etroit, ce sont quatre
-        // « … » : on en retire plutot que de tout tronquer. Le seuil est en
-        // pourcentage de la piste, comme la geometrie qui arrive du serveur.
-        var large = Number(sl.largeur) || 0;
-        var densite = large >= 16 ? '' : (large >= 9 ? ' moyen' : ' etroit');
-        return '<div class="rp-fr-slot' + densite
-             + (sl.deborde_avant ? ' deborde-avant' : '')
-             + (sl.deborde_apres ? ' deborde-apres' : '')
-             + '" data-dossier="' + escAttr(sl.no_dossier) + '"'
-             + ' data-tip="' + escAttr(JSON.stringify(sl)) + '"'
-             + ' style="left:' + sl.x + '%;width:' + sl.largeur + '%">'
-             + '<div class="rp-fr-fond">' + segs + '</div>'
-             + '<div class="rp-fr-lbl">'
-             + '<b>' + escHtml(sl.no_dossier) + '</b>'
-             + (sl.client ? '<span>' + escHtml(sl.client) + '</span>' : '')
-             + (sl.ref_produit_norm || fmt
-                 ? '<i>' + escHtml([sl.ref_produit_norm, fmt].filter(Boolean).join(" · ")) + '</i>'
-                 : '')
-             + (sl.quantite ? '<u>' + fnum(sl.quantite) + ' ét.</u>' : '')
-             + '</div></div>';
+        return liens + cadres.map(function (fr, i) {
+          return _cadreSlot(sl, fr, cadres.length > 1 ? (fr.libelle !== false) : true, i);
+        }).join("");
       }).join("");
       return '<div class="rp-fr-ligne"><div class="rp-fr-machine">' + escHtml(l.machine) + '</div>'
            + '<div class="rp-fr-piste">' + separateurs + slots + '</div></div>';
@@ -161,7 +189,8 @@
       + lignes + '</div>'
       + '<div class="rp-fr-legende">' + legende
       + '<span class="rp-fr-note">Journées sans saisie repliées (trait pointillé). '
-      + 'Un dossier commencé avant ou non terminé déborde de la frise.</span></div>'
+      + 'Un dossier commencé avant ou non terminé déborde de la frise. '
+      + 'Un dossier repris après une absence de personnel est coupé en deux.</span></div>'
       + '</div>';
   }
 
