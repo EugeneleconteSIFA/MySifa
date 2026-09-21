@@ -555,6 +555,22 @@ def controles_coherence(donnees: dict, indicateurs: Optional[list] = None,
 # Point d'entrée
 # ══════════════════════════════════════════════════════════════════
 
+# Sous-dossiers que les commerciaux intercalent et qui ne nomment jamais un
+# client : le millésime, le format de l'étiquette, le dossier fourre-tout.
+_DOSSIER_SANS_CLIENT = (
+    re.compile(r"(devis\s*)?\d{4}", re.I),                    # 2026, Devis 2026
+    re.compile(r"\d+(?:[.,]\d+)?\s*[x×]\s*\d.*", re.I),      # 80x40 mm, 45 x 25 couché
+    re.compile(r"\d+(?:[.,]\d+)?\s*(mm|cm|µ|microns?)\b.*", re.I),  # 35 mm Rondes
+    re.compile(r"(nouveau dossier|divers|a trier|à trier)", re.I),
+)
+
+
+def _dossier_sans_client(nom: str) -> bool:
+    """Ce segment de chemin decrit-il autre chose qu'un client ?"""
+    nom = (nom or "").strip()
+    return any(motif.fullmatch(nom) for motif in _DOSSIER_SANS_CLIENT)
+
+
 def _client_de_repli(filename: str, chemin_origine: str = "") -> tuple[str, str]:
     """À défaut de client dans le classeur, celui que le rangement désigne.
 
@@ -567,11 +583,13 @@ def _client_de_repli(filename: str, chemin_origine: str = "") -> tuple[str, str]
     Rend `(valeur, provenance)`.
     """
     chemin = (chemin_origine or "").replace("\\", "/").strip("/")
-    # On remonte l'arborescence en sautant les dossiers d'année : rangé dans
-    # « CARREFOUR/2026/devis.xlsx », le client est CARREFOUR, pas 2026.
+    # On remonte l'arborescence en sautant ce qui n'est pas un nom de client :
+    # rangé dans « CARREFOUR/2026/devis.xlsx », le client est CARREFOUR, pas
+    # 2026 ; rangé dans « PHT/Boulanger/Solvarea/80x40 mm/devis.xlsx », c'est
+    # Solvarea, pas le format de l'étiquette.
     segments = [seg.strip() for seg in chemin.split("/")[:-1] if seg.strip()]
     for dossier in reversed(segments):
-        if re.fullmatch(r"(devis\s*)?\d{4}", dossier, re.I):
+        if _dossier_sans_client(dossier):
             continue
         return dossier, "nom du dossier"
     base = os.path.basename(filename or "").rsplit(".", 1)[0].strip()
