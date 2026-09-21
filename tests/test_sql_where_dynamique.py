@@ -225,11 +225,17 @@ for f in CIBLES:
     arbre = ast.parse(f.read_text(encoding="utf-8"), str(f))
     for ligne, code in analyser(f):
         fonc = fonction_englobante(arbre, ligne)
-        cle = (str(f), fonc)
+        # `as_posix()` et pas `str()` : sous Windows, `str(Path)` rend
+        # `app\routers\pricing.py`, aucune des cles de SITES_REVUS ne
+        # correspond, et le test sort doublement rouge — les sites relus
+        # passent pour « hors liste » ET les entrees pour « devenues
+        # inutiles ». Le depot etant travaille sur Mac et sur Windows, la cle
+        # ne peut pas dependre du separateur de l'OS.
+        cle = (f.as_posix(), fonc)
         if cle in SITES_REVUS:
             non_prouves.append((cle, ligne))
         else:
-            hors_liste.append("%s:%d  (%s)  %s" % (f, ligne, fonc, code[:90]))
+            hors_liste.append("%s:%d  (%s)  %s" % (f.as_posix(), ligne, fonc, code[:90]))
 
 check("aucun morceau de clause hors preuve ou hors liste revue (%d fichiers)" % len(CIBLES),
       not hors_liste)
