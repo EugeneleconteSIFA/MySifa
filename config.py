@@ -503,6 +503,13 @@ FSC_FICHE_SLUG = os.getenv("FSC_FICHE_SLUG", "fsc")
 FSC_BASE_RECHERCHE_URL = os.getenv("FSC_BASE_RECHERCHE_URL", "https://search.fsc.org/en/")
 # Un certificat qui expire dans moins de N jours passe en « à renouveler ».
 FSC_ALERTE_JOURS = int(os.getenv("FSC_ALERTE_JOURS", "60"))
+# Qui porte la chaîne de contrôle : nom(s) figurant au visa des pièces d'audit
+# (déclaration de contrôle des certificats fournisseurs). Jamais en dur dans un
+# template : c'est une donnée d'entreprise, elle vit ici.
+FSC_RESPONSABLES_COC = os.getenv(
+    "FSC_RESPONSABLES_COC",
+    "Fatiha Mehdi et Eugène Leconte, responsables de la chaîne de contrôle",
+)
 # Un contrôle sur la base FSC plus vieux que N jours est signalé à refaire.
 FSC_CONTROLE_VALIDITE_JOURS = int(os.getenv("FSC_CONTROLE_VALIDITE_JOURS", "365"))
 # Lecture des certificats : les motifs d'abord (gratuits, instantanés) ; l'IA

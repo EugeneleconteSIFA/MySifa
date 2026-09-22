@@ -1,0 +1,386 @@
+/* ────────────────────────────────────────────────────────────────────
+ * MySifa — MyProd > Production en portrait telephone.
+ *
+ * Source d'inspiration : l'accueil de l'application mobile du tableau de
+ * bord Stripe. Trois principes repris tels quels, parce qu'ils repondent
+ * exactement au probleme de cet ecran :
+ *   1. UNE barre de periode collante en haut, et rien d'autre. La periode
+ *      est le seul filtre qu'on change en permanence ; le reste (machines,
+ *      operateurs, dossiers) vit dans une feuille qu'on ouvre a la demande.
+ *   2. Un FIL VERTICAL de cartes autonomes, une par sujet, jamais deux
+ *      colonnes et jamais de defilement horizontal. Chaque carte se lit
+ *      seule, sans ses voisines pour se reperer.
+ *   3. Le detail se prend en PLEIN ECRAN au tap, il ne se deplie pas dans
+ *      la liste. La liste reste courte, le detail reste lisible.
+ *
+ * Le socle msf- (static/mysifa_mobile.css) fournit les briques communes :
+ * carte, feuille remontante, champ, chip, rangee, paire libelle/valeur.
+ * Ce fichier ne contient que ce qui appartient a MyProd — prefixe .mpm-
+ * (MyProd Mobile) — plus les quelques reprises des classes bureau que le
+ * portrait ne peut pas garder telles quelles.
+ *
+ * Regle du design system : aucune couleur en dur, tout passe par les
+ * tokens de app/web/components/theme.py.
+ * ──────────────────────────────────────────────────────────────────── */
+
+/* ══════════════════════════════════════════════════════════════════════
+   1. Composants — sans media query, comme le socle msf-.
+      C'est le JS qui decide quand il les rend (voir _mpmPortrait()).
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Barre de periode collante ───────────────────────────────────────── */
+/* Le seul element permanent de l'ecran. Elle annonce la periode lue et
+   ouvre la feuille de filtres ; elle ne part jamais au defilement, sinon
+   un chiffre isole ne dit plus de quelle periode il parle. */
+
+/* --mpm-top : hauteur reelle de .mobile-topbar, posee par renderMpmBar()
+   au rendu. La topbar est collante elle aussi ; sans ce decalage la barre
+   de periode glisse DERRIERE elle et disparait au premier defilement. */
+.mpm-bar{
+  position:sticky;top:var(--mpm-top,56px);z-index:22;
+  display:flex;gap:7px;align-items:center;
+  padding:6px 0 7px;margin:0;
+  background:var(--bg);
+}
+/* Une seule ligne : « Dernier jour · 18/09/2026 ». Sur deux, la pastille
+   faisait 48 px et l'en-tete colle depassait le quart de l'ecran. */
+.mpm-per{
+  flex:1;min-width:0;display:flex;align-items:center;gap:9px;
+  height:42px;padding:0 12px;border-radius:11px;
+  border:1px solid var(--border);background:var(--card);color:var(--text);
+  font:inherit;text-align:left;cursor:pointer;
+}
+.mpm-per:active{background:var(--bg)}
+.mpm-per>i{flex:0 0 auto;color:var(--accent);display:inline-flex}
+.mpm-per-txt{flex:1;min-width:0;display:flex;align-items:baseline;gap:7px}
+.mpm-per-txt b{
+  flex:0 1 auto;font-size:13.5px;font-weight:800;letter-spacing:-.2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+/* La date cede la place la premiere : le libelle de periode porte le sens,
+   les bornes ne font que le confirmer. */
+.mpm-per-txt span{
+  flex:1 1 auto;min-width:0;font-size:10.5px;color:var(--muted);
+  font-family:ui-monospace,'Cascadia Code',monospace;font-variant-numeric:tabular-nums;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.mpm-bar .msf-icon-btn{width:42px;height:42px;flex:0 0 42px;border-radius:11px}
+/* Combien de filtres sont actifs, en clair. Accent et pas rouge : ce n'est
+   pas une alerte, c'est un etat — le rouge reste a ce qui appelle un geste. */
+.mpm-n{
+  position:absolute;top:-6px;right:-7px;
+  min-width:19px;height:19px;padding:0 5px;border-radius:10px;
+  background:var(--accent);color:white;
+  font:800 11px/19px ui-monospace,'Cascadia Code',monospace;text-align:center;
+  box-shadow:0 0 0 2px var(--bg);
+}
+
+/* ── Etat machines ───────────────────────────────────────────────────── */
+/* Une tuile pleine largeur par machine, coloree par son etat sur le bord
+   gauche : de loin, debout dans l'atelier, c'est la couleur qu'on lit en
+   premier, pas le libelle. */
+
+.mpm-machs{display:flex;flex-direction:column;gap:8px}
+.mpm-mach{
+  background:var(--card);border:1px solid var(--border);
+  border-left:3px solid var(--border);border-radius:12px;padding:11px 13px 12px;
+}
+.mpm-mach--production{border-left-color:var(--success)}
+.mpm-mach--calage{border-left-color:var(--warn)}
+.mpm-mach--arret{border-left-color:var(--danger)}
+.mpm-mach--changement,.mpm-mach--nettoyage{border-left-color:var(--accent)}
+.mpm-mach--eteinte,.mpm-mach--en_dev,.mpm-mach--autre{opacity:.66}
+.mpm-mach-h{display:flex;align-items:center;gap:8px;min-width:0}
+.mpm-mach-h b{
+  flex:1;min-width:0;font-size:14.5px;font-weight:800;letter-spacing:-.25px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.mpm-live{
+  flex:0 0 9px;width:9px;height:9px;border-radius:50%;
+  background:var(--success);animation:mpmPulse 2.2s ease-in-out infinite;
+}
+.mpm-mach-etat{display:flex;align-items:baseline;gap:10px;margin-top:7px;min-width:0}
+.mpm-mach-etat b{
+  flex:1;min-width:0;font-size:13px;font-weight:700;color:var(--text2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.mpm-mach--production .mpm-mach-etat b{color:var(--success)}
+.mpm-mach--calage .mpm-mach-etat b{color:var(--warn)}
+.mpm-mach--arret .mpm-mach-etat b{color:var(--danger)}
+.mpm-mach-depuis{
+  flex:0 0 auto;font:800 15px/1 ui-monospace,'Cascadia Code',monospace;
+  font-variant-numeric:tabular-nums;letter-spacing:-.4px;color:var(--text);
+}
+.mpm-mach-op{margin-top:5px;font-size:11.5px;color:var(--muted)}
+.mpm-mach-dos{
+  margin-top:9px;padding-top:9px;border-top:1px solid var(--border);
+  display:flex;align-items:baseline;gap:9px;min-width:0;
+}
+.mpm-mach-dos-ref{
+  flex:0 0 auto;font:800 12.5px/1 ui-monospace,'Cascadia Code',monospace;color:var(--accent);
+}
+.mpm-mach-dos-txt{
+  flex:1;min-width:0;font-size:11.5px;color:var(--text2);line-height:1.4;
+  overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+}
+.mpm-mach-vide{margin-top:7px;font-size:11.5px;color:var(--muted);font-style:italic}
+/* Repiquage : une ligne par dossier du jour, cartons a droite. */
+.mpm-rep-l{
+  display:flex;align-items:baseline;gap:10px;min-width:0;
+  padding:7px 0;border-top:1px solid var(--border);
+}
+.mpm-rep-l:first-of-type{margin-top:8px}
+.mpm-rep-l-id{flex:1;min-width:0}
+.mpm-rep-l-id b{
+  display:block;font:800 12.5px/1.2 ui-monospace,'Cascadia Code',monospace;color:var(--text);
+}
+.mpm-rep-l-id span{
+  display:block;margin-top:2px;font-size:11px;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.mpm-rep-l-n{
+  flex:0 0 auto;font:800 13px/1 ui-monospace,'Cascadia Code',monospace;
+  font-variant-numeric:tabular-nums;color:var(--accent);
+}
+
+@keyframes mpmPulse{0%,100%{opacity:1}50%{opacity:.25}}
+/* Mode eco / mouvement reduit : la pastille reste, elle cesse de battre. */
+html.perf-eco .mpm-live,html.reduce-anim .mpm-live{animation:none}
+@media (prefers-reduced-motion:reduce){.mpm-live{animation:none}}
+
+/* ── Les deux chiffres de tete ───────────────────────────────────────── */
+/* Metrage et vitesse : ce qu'on vient verifier. Le reste descend en paires
+   libelle / valeur dans la carte suivante. */
+
+.mpm-hero{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:9px}
+.mpm-hero-t{
+  margin:0;min-width:0;padding:12px 13px 13px;
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+}
+.mpm-hero-t dt{
+  font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:5px;
+}
+.mpm-hero-t dd{
+  margin:0;font:800 23px/1.05 ui-monospace,'Cascadia Code',monospace;
+  font-variant-numeric:tabular-nums;letter-spacing:-.9px;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.mpm-hero-t dd small{font-size:11.5px;font-weight:700;color:var(--muted);letter-spacing:0;margin-left:6px}
+.mpm-hero-t--accent dd{color:var(--accent)}
+
+/* ── Synthese : un seul regroupement a la fois ───────────────────────── */
+/* Quatre tableaux de sept colonnes empiles, c'est douze ecrans de
+   defilement. Ici on choisit l'axe, et on lit une liste. */
+
+.mpm-axes{
+  display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;
+  margin:0 0 10px;padding-bottom:1px;
+}
+.mpm-axes::-webkit-scrollbar{display:none}
+.mpm-lig{
+  display:flex;align-items:center;gap:11px;width:100%;
+  min-height:58px;padding:9px 12px;text-align:left;
+  background:none;border:0;border-bottom:1px solid var(--border);
+  color:inherit;font:inherit;cursor:pointer;
+}
+.mpm-lig:last-child{border-bottom:0}
+.mpm-lig:active{background:var(--bg)}
+.mpm-lig-id{flex:1;min-width:0}
+.mpm-lig-id b{
+  display:block;font-size:13.5px;font-weight:700;letter-spacing:-.15px;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.mpm-lig-id span{
+  display:block;margin-top:2px;font-size:11px;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.mpm-lig-n{flex:0 0 auto;text-align:right}
+.mpm-lig-n b{
+  display:block;font:800 15px/1.1 ui-monospace,'Cascadia Code',monospace;
+  font-variant-numeric:tabular-nums;letter-spacing:-.4px;color:var(--text);
+}
+.mpm-lig-n span{
+  display:block;margin-top:2px;font:700 10.5px/1 ui-monospace,'Cascadia Code',monospace;
+  color:var(--warn);white-space:nowrap;
+}
+.mpm-lig-chev{flex:0 0 auto;color:var(--muted);display:inline-flex}
+
+/* ── Saisies : une carte par saisie, groupees par jour ───────────────── */
+/* Onze colonnes ne rentrent pas sur 390 px. La ligne se relit de haut en
+   bas : heure et operation, puis le dossier, puis qui et sur quoi. La
+   couleur du bord gauche reprend exactement celle du fond de ligne du
+   tableau bureau — meme code, meme sens. */
+
+.mpm-sais{display:flex;flex-direction:column;gap:7px}
+.mpm-sais .msf-daybar{top:var(--mpm-sticky,160px);z-index:4;margin:6px 0 2px}
+.mpm-sais .msf-daybar:first-child{margin-top:0}
+.mpm-sai{
+  display:block;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer;
+  background:var(--card);border:1px solid var(--border);
+  border-left:3px solid var(--border);border-radius:11px;padding:10px 12px 11px;
+}
+.mpm-sai:active{background:var(--bg)}
+.mpm-sai--production{border-left-color:var(--success)}
+.mpm-sai--calage{border-left-color:var(--warn)}
+.mpm-sai--attention{border-left-color:var(--warn)}
+.mpm-sai--critique{border-left-color:var(--danger)}
+.mpm-sai--stock,.mpm-sai--personnel{border-left-color:var(--c4,var(--accent))}
+.mpm-sai--alerte{border-left-color:var(--accent);background:var(--accent-bg)}
+.mpm-sai--annule{opacity:.55}
+.mpm-sai--annule .mpm-sai-op{text-decoration:line-through}
+.mpm-sai--fin{border-bottom:2px solid var(--accent)}
+.mpm-sai-h{display:flex;align-items:baseline;gap:9px;min-width:0}
+.mpm-sai-heure{
+  flex:0 0 auto;font:700 12.5px/1 ui-monospace,'Cascadia Code',monospace;
+  font-variant-numeric:tabular-nums;color:var(--muted);
+}
+.mpm-sai-op{
+  flex:1;min-width:0;font-size:13.5px;font-weight:700;letter-spacing:-.15px;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.mpm-sai-dur{
+  flex:0 0 auto;font:700 12px/1 ui-monospace,'Cascadia Code',monospace;
+  font-variant-numeric:tabular-nums;color:var(--text2);
+}
+.mpm-sai-l{
+  display:flex;flex-wrap:wrap;align-items:baseline;gap:3px 9px;
+  margin-top:5px;font-size:11.5px;color:var(--muted);min-width:0;
+}
+.mpm-sai-dos{font-weight:800;color:var(--text2);font-family:ui-monospace,'Cascadia Code',monospace}
+.mpm-sai-cli{
+  flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text2);
+}
+.mpm-sai-num{font-family:ui-monospace,'Cascadia Code',monospace;font-variant-numeric:tabular-nums;color:var(--c3,var(--text2))}
+.mpm-sai-com{
+  margin-top:7px;font-size:12px;line-height:1.45;color:var(--text2);
+  overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+}
+.mpm-sai-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+
+/* Barre d'outils de l'onglet Saisies : bascules a gauche, pagination a
+   droite, sur une seule ligne qui ne deborde pas. */
+.mpm-outils{
+  display:flex;align-items:center;gap:8px;margin:0 0 11px;min-width:0;
+}
+.mpm-outils-g{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;flex:1;min-width:0}
+.mpm-outils-g::-webkit-scrollbar{display:none}
+.mpm-outils-g .saisies-bascule{
+  flex:0 0 auto;height:38px;padding:0 12px;border-radius:10px;background:var(--card);
+}
+.mpm-outils-g .msf-chip{flex:0 0 auto;height:38px}
+.mpm-compte{
+  flex:0 0 auto;font:700 11px/1 ui-monospace,'Cascadia Code',monospace;
+  color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+/* Pagination sous la liste, deux cibles pleine largeur. */
+.mpm-pager{display:flex;gap:8px;margin:14px 0 4px}
+.mpm-pager .msf-btn{flex:1}
+.mpm-pager .msf-btn[disabled]{opacity:.38;cursor:default}
+
+/* ── Feuille de filtres ──────────────────────────────────────────────── */
+/* Elle porte tout ce qui n'est pas la periode. Les gestes a l'interieur ne
+   declenchent AUCUN rendu : on ne reconstruit pas une feuille ouverte sous
+   les doigts. Rien ne part au serveur avant « Appliquer ». */
+
+.mpm-f-sect{
+  font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--muted);margin:16px 0 8px;
+}
+.mpm-f-sect:first-child{margin-top:2px}
+.mpm-f-chips{display:flex;flex-wrap:wrap;gap:7px}
+.mpm-f-dates{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mpm-f-dates .msf-field{margin-bottom:0}
+.mpm-f-dos{position:relative}
+.mpm-f-dos-sug{
+  margin-top:7px;border:1px solid var(--border);border-radius:11px;
+  background:var(--bg);max-height:190px;overflow-y:auto;
+}
+.mpm-f-dos-sug button{
+  display:block;width:100%;text-align:left;padding:11px 13px;min-height:44px;
+  border:0;border-bottom:1px solid var(--border);background:none;color:var(--text);
+  font:600 13px/1.2 ui-monospace,'Cascadia Code',monospace;cursor:pointer;
+}
+.mpm-f-dos-sug button:last-child{border-bottom:0}
+.mpm-f-dos-sug button:active{background:var(--card)}
+.mpm-f-dos-sel{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.mpm-f-dos-sel button{
+  display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 6px 0 11px;
+  border-radius:16px;border:1px solid var(--accent);background:var(--accent-bg);
+  color:var(--accent);font:700 12px/1 ui-monospace,'Cascadia Code',monospace;cursor:pointer;
+}
+.mpm-f-dos-sel button i{font-style:normal;font-size:15px;line-height:1;opacity:.8}
+
+/* ── Bouton flottant ────────────────────────────────────────────────── */
+/* Le socle cale son bouton au-dessus d'une barre de navigation basse ;
+   MyProd n'en a pas. Il redescend donc au bord de l'ecran. */
+
+.mpm-fab{bottom:calc(18px + env(safe-area-inset-bottom))}
+
+/* ── Vide / chargement ───────────────────────────────────────────────── */
+.mpm-vide{
+  padding:30px 14px;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.5;
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   2. Reprises du bureau — uniquement en portrait telephone.
+      Meme seuil que Couts matieres : 700 px.
+   ══════════════════════════════════════════════════════════════════════ */
+
+@media (max-width:700px) and (orientation:portrait){
+
+  /* Titre et sous-titre de page ne sont pas rendus en portrait (voir
+     render()) : la topbar porte le titre. Filet de securite si un autre
+     ecran de MyProd en pose un. */
+  .main .container>h1,.main .container>.subtitle{display:none}
+
+  /* La topbar se resserre : deux lignes de 14 et 11 px suffisent a dire ou
+     l'on est, et chaque pixel gagne en haut est un pixel de contenu. */
+  .mobile-topbar{padding-top:7px;padding-bottom:7px}
+  .mobile-topbar-title{font-size:15px;letter-spacing:-.3px}
+  .mobile-topbar-sub{font-size:10px;letter-spacing:.04em;text-transform:uppercase}
+
+  /* Sous-onglets : cinq libelles ne tiennent pas sur 390 px. Ils defilent,
+     et la barre reste collee sous la barre de periode. */
+  .nav-tabs{
+    position:sticky;top:calc(var(--mpm-top,56px) + var(--mpm-bar-h,56px));z-index:21;
+    margin:0 0 12px;padding:0;gap:0;
+    background:var(--bg);border-bottom:1px solid var(--border);
+  }
+  .nav-tab{
+    padding:0 13px;height:46px;font-size:13px;gap:6px;border-radius:0;margin-bottom:-1px;
+  }
+  .nav-tab.active{background:transparent;font-weight:800}
+  .nav-tab.active::after{left:8px;right:8px;height:2.5px}
+  .nav-tab-badge{min-width:18px;height:18px;font-size:10px;padding:0 5px}
+
+  /* Sections repliables : la poignee doit faire une vraie cible tactile. */
+  .prod-section-wrap{margin-bottom:16px!important}
+  .prod-section-header{min-height:38px;padding:4px 0!important}
+  .section-title{font-size:11px;letter-spacing:.07em}
+
+  /* Sanity score : en ligne, le cercle de 80 px plus le texte debordent. */
+  .sanity-banner{gap:14px;padding:13px 14px;border-radius:12px;margin-bottom:0}
+  .sanity-circle{width:62px;height:62px}
+  .sanity-circle svg{width:62px;height:62px}
+  .sanity-num{font-size:17px}
+  .si-mention{font-size:13px}
+  .si-label{font-size:10.5px;line-height:1.4}
+
+  /* Modale de detail d'une cle de synthese : plein ecran, pas une boite
+     centree de 540 px dans un ecran de 390. */
+  .prod-synth-modal--compact .add-row-form{
+    max-width:none;width:100%;border-radius:0;padding:18px 14px calc(18px + env(safe-area-inset-bottom));
+    max-height:100dvh;overflow-y:auto;
+  }
+
+  /* Le bouton d'ajout d'une saisie est flottant en portrait : il ne doit
+     pas etre cache par la derniere carte de la liste. */
+  .mpm-sais{padding-bottom:78px}
+}
+
+/* En paysage telephone, la mise en page bureau reste la bonne : rien ici.
+   Voir .claude/rules/frontend-comportement.md et le chantier de refonte
+   mobile — le portrait a ses propres composants, le paysage garde la vue
+   dense. */
