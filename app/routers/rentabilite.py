@@ -123,6 +123,59 @@ def _texte(row, nom: str, defaut: str = "") -> str:
     return defaut if v is None else str(v)
 
 
+def _palier_du_lien(conn, planning_entry_id: int, devis_row, qte_of: float) -> dict:
+    """Ce que l'écran doit savoir du palier, pour une liaison donnée.
+
+    Rend le devis à utiliser pour comparer — recalé si un recalage a été
+    CONFIRMÉ, intact sinon — et la proposition en attente s'il y en a une.
+    Tant que personne n'a tranché, les chiffres affichés restent ceux du
+    classeur : une machine qui recalerait toute seule changerait le verdict de
+    rentabilité d'un dossier sans que personne l'ait décidé.
+    """
+    from app.services import devis_paliers
+
+    lien = conn.execute(
+        "SELECT * FROM rent_links WHERE planning_entry_id=?",
+        (planning_entry_id,),
+    ).fetchone()
+    paliers = devis_paliers.paliers_du_devis(conn, int(devis_row["id"]))
+
+    qte_retenue = _colonne(lien, "qte_retenue") if lien else 0.0
+    valide = _texte(lien, "palier_valide_at") if lien else ""
+
+    if qte_retenue > 0 and valide:
+        return {
+            "devis": devis_paliers.recaler(devis_row, qte_retenue),
+            "palier": {
+                "qte_retenue": qte_retenue,
+                "rang": (int(_colonne(lien, "palier_rang")) or None),
+                "valide_at": valide,
+                "valide_par": _texte(lien, "palier_valide_par"),
+                "paliers": paliers,
+            },
+            "proposition": None,
+        }
+
+    return {
+        "devis": dict(devis_row),
+        "palier": {"qte_retenue": None, "rang": None, "valide_at": None,
+                   "paliers": paliers},
+        "proposition": devis_paliers.proposition(devis_row, paliers, qte_of),
+    }
+
+
+def _qte_of(conn, planning_entry_id: int) -> float:
+    """La quantité lancée en fabrication, lue sur l'OF du dossier."""
+    row = conn.execute(
+        """SELECT o.qte_etiquettes AS q
+           FROM planning_entries e
+           LEFT JOIN of_imports o ON o.id = e.of_import_id
+           WHERE e.id=?""",
+        (planning_entry_id,),
+    ).fetchone()
+    return _colonne(row, "q") if row else 0.0
+
+
 def _calage_theorique(devis_row) -> float:
     """Le calage devisé, tous postes confondus — outil + impression."""
     return (_colonne(devis_row, "temps_calage_mn")
@@ -311,7 +364,17 @@ def _colonnes_rent_links(conn) -> bool:
 # ── Rentabilité v2 (Planning-based) ───────────────────────────────
 @router.get("/api/rentabilite/planning-entries")
 def list_planning_entries(request: Request):
-    """Liste toutes les entrées planning (toutes machines) pour la vue Rentabilité."""
+    """Liste toutes les entrées planning (toutes machines) pour la vue Rentabilité.
+
+    L'OF est joint en LEFT : la quantité d'étiquettes, le conditionnement et la
+    matière n'existent que là, et l'écran les affiche sur le bloc et au survol.
+    LEFT et non INNER, parce qu'un dossier posé au planning avant son OF doit
+    rester visible — c'est même celui-là qu'on veut voir.
+
+    Les colonnes de l'OF sont préfixées `of_` : `planning_entries` a déjà ses
+    propres `laize` et `reference`, et un `SELECT o.*` les écraserait
+    silencieusement dans le dict final.
+    """
     require_rentabilite(request)
     with get_db() as conn:
         rows = conn.execute(
@@ -319,9 +382,21 @@ def list_planning_entries(request: Request):
             SELECT
               e.*,
               m.nom AS machine_nom,
-              m.code AS machine_code
+              m.code AS machine_code,
+              o.qte_etiquettes   AS of_qte_etiquettes,
+              o.qte_bobines      AS of_qte_bobines,
+              o.metrage          AS of_metrage,
+              o.nb_levees        AS of_nb_levees,
+              o.format           AS of_format,
+              o.laize            AS of_laize,
+              o.matiere          AS of_matiere,
+              o.adhesif_label    AS of_adhesif,
+              o.conditionnement  AS of_conditionnement,
+              o.nb_cartons       AS of_nb_cartons,
+              o.of_numero        AS of_numero_of
             FROM planning_entries e
             JOIN machines m ON m.id = e.machine_id
+            LEFT JOIN of_imports o ON o.id = e.of_import_id
             WHERE m.actif = 1
             ORDER BY m.nom ASC, e.position ASC
             """
@@ -344,6 +419,13 @@ def list_links(request: Request):
         liens = conn.execute(
             "SELECT * FROM rent_links"
         ).fetchall()
+        # Les chiffres du devis rattaché, pour le survol : sans eux, comparer
+        # une vitesse devisée à la réalité demandait d'ouvrir la modale dossier
+        # par dossier. Une seule requête pour tout le planning.
+        devis_lies = conn.execute(
+            """SELECT d.* FROM devis d
+               JOIN rent_links l ON l.devis_id = d.id"""
+        ).fetchall()
         prods = conn.execute(
             "SELECT planning_entry_id, no_dossier FROM rent_prod_links "
             "ORDER BY planning_entry_id, no_dossier"
@@ -363,6 +445,23 @@ def list_links(request: Request):
             "score": _colonne(r, "score", 0.0),
             "no_dossiers": [],
         }
+    par_devis = {}
+    for d in devis_lies:
+        par_devis[int(d["id"])] = {
+            "client": _texte(d, "client", ""),
+            "vitesse": _colonne(d, "vitesse_theorique"),
+            # Même règle que partout ailleurs dans cet écran : le calage
+            # devisé additionne outil et impression, parce que le calage saisi
+            # en atelier couvre les deux.
+            "calage_mn": _calage_theorique(d),
+            "qte": _colonne(d, "qte_etiquettes"),
+            "fichier": _texte(d, "filename", ""),
+        }
+    for r in liens:
+        e = par_entree.get(int(r["planning_entry_id"]))
+        if e and e["devis_id"]:
+            e["devis"] = par_devis.get(int(e["devis_id"]))
+
     for r in prods:
         eid = int(r["planning_entry_id"])
         entree = par_entree.setdefault(
@@ -568,6 +667,68 @@ def valider_lien(planning_entry_id: int, request: Request):
     return {"success": True, "valide_at": now}
 
 
+def _colonnes_palier(conn) -> bool:
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(rent_links)").fetchall()}
+    return "qte_retenue" in cols
+
+
+@router.post("/api/rentabilite/links/{planning_entry_id}/palier")
+async def retenir_palier(planning_entry_id: int, request: Request):
+    """Confirme la quantité sur laquelle comparer ce dossier à son devis.
+
+    Le corps porte `qte_retenue` — la quantité visée, pas forcément un palier —
+    et `palier_rang` quand elle correspond à l'un d'eux. Tant que cette route
+    n'a pas été appelée, la comparaison garde les temps du classeur.
+    """
+    user = require_rentabilite(request)
+    body = await request.json()
+    try:
+        qte = float(body.get("qte_retenue") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Quantité invalide.")
+    if qte <= 0:
+        raise HTTPException(400, "Quantité invalide — valeur strictement positive attendue.")
+
+    rang = body.get("palier_rang")
+    rang = int(rang) if str(rang or "").strip().isdigit() else None
+    now = datetime.now().isoformat()
+
+    with get_db() as conn:
+        if not _colonnes_palier(conn):
+            raise HTTPException(409, "Migration du palier retenu non appliquée.")
+        lien = conn.execute(
+            "SELECT devis_id FROM rent_links WHERE planning_entry_id=?",
+            (planning_entry_id,),
+        ).fetchone()
+        if not lien or not lien["devis_id"]:
+            raise HTTPException(404, "Aucun devis rattaché à ce dossier")
+        conn.execute(
+            "UPDATE rent_links SET qte_retenue=?, palier_rang=?, palier_valide_at=?, "
+            "palier_valide_par=?, updated_at=? WHERE planning_entry_id=?",
+            (qte, rang, now, user.get("email", ""), now, planning_entry_id),
+        )
+        conn.commit()
+    return {"success": True, "qte_retenue": qte, "palier_rang": rang, "valide_at": now}
+
+
+@router.delete("/api/rentabilite/links/{planning_entry_id}/palier")
+def annuler_palier(planning_entry_id: int, request: Request):
+    """Revient aux temps du classeur, tels que le devis les porte."""
+    require_rentabilite(request)
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        if not _colonnes_palier(conn):
+            raise HTTPException(409, "Migration du palier retenu non appliquée.")
+        conn.execute(
+            "UPDATE rent_links SET qte_retenue=NULL, palier_rang=NULL, "
+            "palier_valide_at=NULL, palier_valide_par=NULL, updated_at=? "
+            "WHERE planning_entry_id=?",
+            (now, planning_entry_id),
+        )
+        conn.commit()
+    return {"success": True}
+
+
 @router.delete("/api/rentabilite/links/{planning_entry_id}")
 def supprimer_lien(planning_entry_id: int, request: Request):
     """Rejette une proposition, ou défait une liaison.
@@ -606,7 +767,14 @@ def comparaison_for_planning(planning_entry_id: int, request: Request):
             (planning_entry_id,),
         ).fetchall()
         no_dossiers = [r["no_dossier"] for r in prod]
-        return _comparaison_from_no_dossiers(conn, d, no_dossiers)
+        etat = _palier_du_lien(conn, planning_entry_id, d, _qte_of(conn, planning_entry_id))
+        res = _comparaison_from_no_dossiers(conn, etat["devis"], no_dossiers)
+        # Le devis d'origine reste exposé tel quel : l'écran doit pouvoir dire
+        # « le classeur chiffrait 500 000, on compare sur 1 000 000 ».
+        res["palier"] = etat["palier"]
+        res["proposition_palier"] = etat["proposition"]
+        res["devis_origine"] = dict(d)
+        return res
 
 
 @router.get("/api/rentabilite/no-dossiers")
