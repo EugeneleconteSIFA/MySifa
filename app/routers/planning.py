@@ -2145,6 +2145,17 @@ async def force_statut(machine_id: int, entry_id: int, request: Request):
             _invalidate_attente_plans(conn, machine_id)
         conn.commit()
 
+        # Clôture forcée depuis la liste : c'est une clôture comme une autre,
+        # elle sort le dossier du stock au même titre que le code 89. Une
+        # erreur de stock ne fait pas échouer le changement de statut.
+        if statut == "termine":
+            try:
+                from app.routers.besoins_matieres import destocker_a_la_cloture
+                if destocker_a_la_cloture(conn, entry_id, user) is not None:
+                    conn.commit()
+            except Exception as e:
+                _log.warning("destockage cloture forcee %s : %s", entry_id, e)
+
     log_action(
         user=user,
         action="CLOSE" if statut == "termine" else "UPDATE",

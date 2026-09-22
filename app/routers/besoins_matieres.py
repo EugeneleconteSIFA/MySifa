@@ -4217,6 +4217,39 @@ def balayer_destockage_auto(conn, user: dict, limite: int = 40) -> dict:
             "traites": traites}
 
 
+def destocker_a_la_cloture(conn, pe_id: int, user: dict | None = None) -> dict | None:
+    """Déstocke un dossier au moment précis où la production le clôt.
+
+    C'est l'arbitrage du 09/09/2026 : le déstockage suit la fin de production,
+    il n'attend pas qu'on pense à cliquer. Appelé depuis la saisie du code 89
+    et depuis la clôture forcée du planning.
+
+    Rend None quand il n'y a rien à faire — automatisme non mis en service,
+    dossier antérieur à la mise en service, ou dossier déjà sorti du stock.
+    L'appelant commite : ce module ne maîtrise pas sa transaction.
+
+    Le nom porté par le mouvement est celui de l'automatisme, pas celui de
+    l'opérateur qui a tapé le code 89 : il n'a rien décidé, et lire son nom
+    dans la colonne « déstocké par » enverrait la collègue lui demander des
+    comptes sur une sortie qu'il n'a pas faite. L'identifiant, lui, reste.
+    """
+    depuis = _config_texte(conn, CLE_DESTOCKAGE_DEPUIS)
+    if not depuis:
+        return None
+    if datetime.now().strftime("%Y-%m-%d") < depuis:
+        return None
+    row = conn.execute(
+        "SELECT COALESCE(destockage, 'todo') AS etat FROM planning_entries WHERE id=?",
+        (pe_id,),
+    ).fetchone()
+    if not row or row["etat"] != "todo":
+        return None
+    return _destockage_auto_un(
+        conn, pe_id,
+        {"id": (user or {}).get("id"), "nom": "Déstockage automatique"},
+    )
+
+
 @router.post("/api/stock/destockage/{planning_id}/auto")
 def destockage_auto_dossier(planning_id: int, request: Request):
     """Déstocke CE dossier maintenant, sans passer par la modale.

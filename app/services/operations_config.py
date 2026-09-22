@@ -57,12 +57,35 @@ def read_operations_json_file() -> Dict[str, Dict[str, Any]]:
     return data
 
 
+def _colonnes(conn) -> set:
+    try:
+        return {r[1] for r in conn.execute(f'PRAGMA table_info("{TABLE}")')}
+    except Exception:
+        return set()
+
+
+def _outil_type(row) -> Optional[str]:
+    """`outil_type` n'existe qu'a partir de la migration
+    `changement_outil_referentiel` : une base plus ancienne rend None sans
+    que rien n'ait a le savoir."""
+    try:
+        val = row["outil_type"]
+    except (IndexError, KeyError):
+        return None
+    val = str(val or "").strip()
+    return val or None
+
+
 def _row_to_entry(row) -> Dict[str, Any]:
     return {
         "severity": row["severity"],
         "label": row["label"],
         "category": row["category"],
         "required": bool(row["required"]),
+        # Nature d'outil montee/demontee par ce code (plaque, cliche...).
+        # None = code ordinaire. C'est ce champ, et lui seul, qui fait
+        # apparaitre la saisie « metrage + outil avant/apres » au poste.
+        "outil_type": _outil_type(row),
     }
 
 
@@ -80,8 +103,9 @@ def load_operations_dict(conn=None) -> Dict[str, Dict[str, Any]]:
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", (TABLE,)
         ).fetchone()
         if exists:
+            col_outil = "outil_type" if "outil_type" in _colonnes(conn) else "NULL AS outil_type"
             rows = conn.execute(
-                f"""SELECT code, severity, label, category, required
+                f"""SELECT code, severity, label, category, required, {col_outil}
                     FROM {TABLE} ORDER BY CAST(code AS INTEGER), code"""
             ).fetchall()
             if rows:
@@ -180,18 +204,24 @@ def validate_operation_payload(body: dict, *, for_create: bool = True) -> dict:
     if category not in _ALLOWED_CATEGORIES:
         raise ValueError(f"Catégorie invalide. Valeurs : {', '.join(sorted(_ALLOWED_CATEGORIES))}")
     validate_operations_config({code: {"severity": severity, "label": label, "category": category}})
+    outil_type = str(body.get("outil_type") or "").strip()
+    if outil_type and not re.match(r"^[a-z0-9_]{2,40}$", outil_type):
+        raise ValueError("Nature d'outil invalide.")
     return {
         "code": code,
         "label": label,
         "severity": severity,
         "category": category,
         "required": required,
+        # Chaine vide = ce code ne declenche aucune saisie d'outil.
+        "outil_type": outil_type or None,
     }
 
 
 def list_operation_codes(conn) -> list:
+    col_outil = "outil_type" if "outil_type" in _colonnes(conn) else "NULL AS outil_type"
     rows = conn.execute(
-        f"""SELECT code, severity, label, category, required, updated_at
+        f"""SELECT code, severity, label, category, required, updated_at, {col_outil}
             FROM {TABLE} ORDER BY CAST(code AS INTEGER), code"""
     ).fetchall()
     return [
@@ -201,6 +231,7 @@ def list_operation_codes(conn) -> list:
             "label": r["label"],
             "category": r["category"],
             "required": bool(r["required"]),
+            "outil_type": _outil_type(r),
             "updated_at": r["updated_at"],
         }
         for r in rows

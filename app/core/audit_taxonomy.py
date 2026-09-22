@@ -66,6 +66,7 @@ MODULE_LABELS: dict[str, str] = {
     "matieres_prix": "Coûts matières",
     "messages": "Messagerie",
     "of": "OF & fiches techniques",
+    "outils": "Outils de production",
     "paie": "Paie",
     "planning": "Planning",
     "portal": "Portail public",
