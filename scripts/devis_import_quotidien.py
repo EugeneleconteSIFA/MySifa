@@ -63,15 +63,21 @@ def main() -> int:
     else:
         annee_min = args.annee_min
 
+    # Meme precaution pour le millesime du devis : sans valeur, on prend
+    # l'annee en cours, recalculee a chaque execution. Le partage n'etant pas
+    # range par annee, c'est ce filtre-la qui fait le travail — un devis de
+    # 2023 rouvert par un commercial repartirait sinon chaque soir.
+    depuis_annee = args.depuis_annee or datetime.now().year
+
     depuis = time.time() - max(1, args.jours) * 86400
-    log("Passe quotidienne — %d dernier(s) jour(s), annee >= %s, dans %s"
-        % (args.jours, annee_min or "toutes", args.dossier))
+    log("Passe quotidienne — %d dernier(s) jour(s), devis de %d et apres, dans %s"
+        % (args.jours, depuis_annee, args.dossier))
 
     bilan = importer(
         args.dossier, args.url, args.cle, args.index,
         age_min=args.age_min, modifie_depuis=depuis, annee_min=annee_min,
         exclure=dossiers_exclus(args.exclure),
-        annee_devis_min=args.depuis_annee,
+        annee_devis_min=depuis_annee,
         simulation=args.simulation,
     )
     # Code de sortie non nul en cas d'echec : le planificateur Windows le

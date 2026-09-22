@@ -4972,7 +4972,11 @@ async function loadRentLinks(){
     d.forEach(l=>{ map[Number(l.planning_entry_id)] = {
       devis_id: l.devis_id||null, no_dossiers: l.no_dossiers||[],
       origine: l.origine||'manuel', valide_at: l.valide_at||null,
-      motif: l.motif||'', score: l.score||null }; });
+      motif: l.motif||'', score: l.score||null,
+      // Les chiffres du devis rattaché, pour le survol d'un bloc. Repris tels
+      // quels : ce sont ceux de la fiche devis, et les recalculer ici
+      // produirait un troisième chiffre pour le même dossier.
+      devis: l.devis||null }; });
     // Les entrées sans aucune liaison ne remontent pas de la base : on les
     // pose vides, sinon elles resteraient éternellement « en cours de
     // chargement » et le filtre les ignorerait.
@@ -5008,6 +5012,71 @@ async function rentSaveLinks(entryId, devis_id, no_dossiers){
     no_dossiers:no_dossiers||[], origine:'manuel',
     valide_at:new Date().toISOString(), motif:'', score:null}}});
   toast('Liaisons enregistrées');
+}
+
+/* Le palier de quantite retenu pour comparer.
+
+   Un devis chiffre souvent deux series — 500 000 et 1 000 000 — et le
+   classeur ne calcule les temps que pour l'une d'elles. Si le dossier porte
+   l'autre, l'ecart affiche est faux d'un facteur deux sans qu'aucun chiffre
+   soit inexact. On propose, on ne tranche pas : recaler tout seul changerait
+   le verdict de rentabilite d'un dossier sans decision humaine. */
+async function rentRetenirPalier(entryId, qte, rang){
+  await api('/api/rentabilite/links/' + entryId + '/palier', {method:'POST',
+    body: JSON.stringify({qte_retenue:qte, palier_rang:rang||null})});
+  await rentLoadComparaison(entryId);
+  toast('Comparaison recalée sur ' + Number(qte).toLocaleString('fr-FR') + ' ex.');
+}
+
+async function rentAnnulerPalier(entryId){
+  await api('/api/rentabilite/links/' + entryId + '/palier', {method:'DELETE'});
+  await rentLoadComparaison(entryId);
+  toast('Retour aux temps du classeur.');
+}
+
+function rentBlocPalier(entryId, comp){
+  if(!comp) return null;
+  const nb = v => Number(v||0).toLocaleString('fr-FR');
+  const retenu = comp.palier && comp.palier.valide_at ? comp.palier : null;
+
+  if(retenu){
+    const origine = (comp.devis_origine || {}).qte_etiquettes;
+    return h('div',{className:'rent-palier is-retenu'},
+      h('div',{className:'rent-palier-txt'},
+        h('strong',null,'Comparé sur ' + nb(retenu.qte_retenue) + ' ex'),
+        h('span',null, retenu.rang ? (' — palier ' + retenu.rang + ' du devis') : ' — quantité du dossier'),
+        origine ? h('div',{className:'rent-palier-sous'},
+          'Le classeur calculait ses temps pour ' + nb(origine) + ' ex. '
+          + 'Production et métrage ont été ramenés à la série du dossier ; '
+          + 'le calage, lui, ne dépend pas de la quantité.') : null),
+      h('button',{type:'button',className:'btn-sec btn-sm',
+        onClick:()=>rentAnnulerPalier(entryId)},'Revenir au classeur'));
+  }
+
+  const p = comp.proposition_palier;
+  if(!p) return null;
+  const signe = p.ecart_pct > 0 ? '+' : '';
+  const autres = (p.paliers || []).filter(x => Math.abs(x.quantite - p.qte_of) > 0.5);
+
+  return h('div',{className:'rent-palier'},
+    h('div',{className:'rent-palier-txt'},
+      h('strong',null,'La série du dossier ne correspond pas au devis'),
+      h('div',{className:'rent-palier-sous'},
+        'Le classeur calcule ses temps pour ' + nb(p.qte_devisee) + ' ex, '
+        + "l'OF en lance " + nb(p.qte_of) + ' ex (' + signe + p.ecart_pct + ' %). '
+        + (p.palier_exact
+            ? ('Le devis chiffre justement ce palier' + (p.palier_rang ? ' (n° ' + p.palier_rang + ')' : '') + '.')
+            : (p.palier_quantite
+                ? ('Palier le plus proche : ' + nb(p.palier_quantite) + ' ex.')
+                : 'Le devis ne propose pas d\'autre palier.'))
+        + ' Tant que rien n\'est confirmé, la comparaison garde les temps du classeur.')),
+    h('div',{className:'rent-palier-actions'},
+      h('button',{type:'button',className:'btn-sm',
+        onClick:()=>rentRetenirPalier(entryId, p.qte_of, p.palier_exact ? p.palier_rang : null)},
+        'Comparer sur ' + nb(p.qte_of) + ' ex'),
+      ...autres.slice(0, 3).map(x => h('button',{type:'button',className:'btn-sec btn-sm',
+        onClick:()=>rentRetenirPalier(entryId, x.quantite, x.rang)},
+        'Palier ' + x.rang + ' · ' + nb(x.quantite)))));
 }
 
 async function rentLoadComparaison(entryId){
@@ -5138,9 +5207,12 @@ function renderRentabilite(){
 // pousse un bloc contre le bord de sa colonne plutôt que dans la suivante.
 var RENT_H_DEB = 5;
 var RENT_H_FIN = 21;
-// Hauteur d'une ligne de blocs : 36 px de bloc + 10 px d'air entre deux
+// Hauteur d'une ligne de blocs : 52 px de bloc + 10 px d'air entre deux
 // lignes empilees. Les blocs se touchaient quand la piste en portait deux.
-var RENT_LIGNE_H = 46;
+// 52 et non 36 depuis que le bloc porte une troisieme ligne (quantite et
+// format) : le planning tient moins de semaines a l'ecran, mais l'essentiel
+// se lit sans survol.
+var RENT_LIGNE_H = 62;
 
 function rentLundiDe(d){
   const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -5201,6 +5273,166 @@ function rentPosition(dt, jours){
   }
   return jours.length;
 }
+
+/* Quantité, format, durée : mises en forme une fois pour toutes, parce que
+   le bloc et le survol affichent les mêmes valeurs et ne doivent pas les
+   écrire différemment. Une valeur absente rend '' et non « 0 » : sur un
+   dossier sans OF, « 0 ex » serait un chiffre faux, pas une case vide. */
+function rentQte(v){
+  const n = Number(v);
+  return (!v || !isFinite(n) || n <= 0) ? '' : n.toLocaleString('fr-FR') + ' ex';
+}
+function rentFormat(head){
+  // Le format de l'OF est déjà écrit pour être lu (« 104 x 159.5 mm ») ;
+  // celui du planning est numérique et sert de repli.
+  const ofFmt = String(head.of_format || '').trim();
+  if(ofFmt) return ofFmt;
+  const l = Number(head.format_l), ht = Number(head.format_h);
+  if(l > 0 && ht > 0){
+    const net = x => String(Math.round(x * 100) / 100).replace('.', ',');
+    return net(l) + ' x ' + net(ht) + ' mm';
+  }
+  return '';
+}
+function rentDuree(head){
+  const d = Number(head.duree_heures);
+  if(!isFinite(d) || d <= 0) return '';
+  const heures = Math.floor(d);
+  const min = Math.round((d - heures) * 60);
+  return heures + ' h' + (min ? String(min).padStart(2, '0') : '');
+}
+function rentDateCourte(iso){
+  const d = rentParseDate(iso);
+  return d ? rentDateFR(d) : '';
+}
+
+/* ── Le survol d'un bloc ──────────────────────────────────────────────
+   Un panneau, et non le `title` natif : celui-ci n'accepte que du texte
+   brut, met une seconde à sortir et se fait couper par le navigateur au-delà
+   de quelques lignes. Ici on veut quatre sections lisibles d'un coup d'œil.
+
+   Un seul élément pour toute la page, réutilisé : un panneau par bloc, sur un
+   planning de quelques centaines d'entrées, ferait autant de nœuds morts
+   attachés au body. Il est construit avec `h()`, donc en nœuds texte — aucune
+   donnée utilisateur n'est interpolée dans du HTML. */
+var RENT_TIP = null;
+
+function rentTipEl(){
+  if(RENT_TIP && RENT_TIP.isConnected) return RENT_TIP;
+  RENT_TIP = h('div',{className:'rent-tip'});
+  document.body.appendChild(RENT_TIP);
+  return RENT_TIP;
+}
+
+function rentTipSection(titre, paires){
+  const lignes = paires.filter(p => p && p[1] !== '' && p[1] != null);
+  if(!lignes.length) return null;
+  return h('div',{className:'rent-tip-sec'},
+    h('div',{className:'rent-tip-sec-t'}, titre),
+    ...lignes.map(([k, v]) => h('div',{className:'rent-tip-l'},
+      h('span',{className:'rent-tip-k'}, k),
+      h('span',{className:'rent-tip-v'}, String(v)))));
+}
+
+/* L'écart de quantité entre le devis et ce qui est planifié. Le garde-fou
+   retenu pour la rentabilité : au-delà de 10 %, les temps devisés ne valent
+   plus comme référence, et le dire ici évite de conclure à une dérive
+   d'atelier qui n'existe pas. */
+function rentEcartQte(qteOf, qteDevis){
+  const a = Number(qteOf), b = Number(qteDevis);
+  if(!(a > 0) || !(b > 0)) return null;
+  const pc = (a - b) / b * 100;
+  if(Math.abs(pc) < 0.5) return {texte:'identique au devis', alerte:false};
+  return {texte:(pc > 0 ? '+' : '') + pc.toFixed(0) + ' % vs devis',
+          alerte:Math.abs(pc) > 10};
+}
+
+function rentTipContenu(head, lien, etat){
+  const devis = (lien && lien.devis) || null;
+  const ecart = devis ? rentEcartQte(head.of_qte_etiquettes, devis.qte) : null;
+  // Libelles repris de la terminologie metier. Ecrits ici plutot que pris a
+  // DOS_STATUTS, declare plus bas dans le fichier : `typeof` sur un `const`
+  // pas encore evalue leve une ReferenceError au lieu de rendre 'undefined'.
+  const STATUTS = {attente:'En attente', en_cours:'En cours', termine:'Terminé'};
+  const statut = STATUTS[head.statut] || head.statut || '';
+  const saisie = head.statut_reel === 'reellement_termine' ? 'saisie terminé'
+    : (head.statut_reel === 'reellement_en_saisie' ? 'en saisie' : '');
+
+  return h('div',{className:'rent-tip-in'},
+    h('div',{className:'rent-tip-tete'},
+      h('div',{className:'rent-tip-cli'}, head.client || '(client non renseigné)'),
+      h('div',{className:'rent-tip-ref'}, head.reference || ''),
+      h('div',{className:'rent-tip-etat rent-tip-etat-' + etat}, RENT_ETAT_LIB[etat])),
+    rentTipSection('Produit', [
+      ['Référence produit', head.ref_produit || ''],
+      ['Format', rentFormat(head)],
+      ['Laize', (Number(head.laize || head.of_laize) > 0
+        ? Number(head.laize || head.of_laize) + ' mm' : '')],
+      ['Matière', head.of_matiere || ''],
+      ['Adhésif', head.of_adhesif || ''],
+    ]),
+    rentTipSection('Quantités', [
+      ['Étiquettes', rentQte(head.of_qte_etiquettes)],
+      ['Bobines', head.of_qte_bobines || ''],
+      ['Métrage', (Number(head.of_metrage) > 0
+        ? Number(head.of_metrage).toLocaleString('fr-FR') + ' m' : '')],
+      ['Levées', head.of_nb_levees || ''],
+      ['Conditionnement', head.of_conditionnement || ''],
+      ['Cartons', head.of_nb_cartons || ''],
+    ]),
+    rentTipSection('Planning', [
+      ['Début', rentDateCourte(head.planned_start)],
+      ['Fin', rentDateCourte(head.planned_end)],
+      ['Durée', rentDuree(head)],
+      ['Statut', [statut, saisie].filter(Boolean).join(' · ')],
+      ['Livraison', rentDateCourte(head.date_livraison)],
+      ['Département', head.departement_livraison || ''],
+      ['OF', head.numero_of || head.of_numero_of || ''],
+    ]),
+    devis ? rentTipSection('Devis', [
+      ['Fichier', devis.fichier || ''],
+      ['Vitesse devisée', (Number(devis.vitesse) > 0 ? devis.vitesse + ' m/min' : '')],
+      ['Calage devisé', (Number(devis.calage_mn) > 0
+        ? Math.round(devis.calage_mn) + ' mn (outil + impression)' : '')],
+      ['Quantité devisée', rentQte(devis.qte)],
+    ]) : null,
+    ecart ? h('div',{className:'rent-tip-ecart' + (ecart.alerte ? ' is-alerte' : '')},
+      'Quantité planifiée : ' + ecart.texte
+      + (ecart.alerte ? ' — au-delà de 10 %, les temps devisés ne sont plus une référence.' : ''))
+      : null,
+    h('div',{className:'rent-tip-pied'}, 'Cliquer pour ouvrir le rattachement'));
+}
+
+/* Placement : près du curseur, mais jamais hors de l'écran. Un panneau qui
+   déborde à droite du dernier jour de la semaine serait illisible là même où
+   il sert le plus. */
+function rentTipPlacer(ev){
+  const el = rentTipEl();
+  const marge = 14;
+  const r = el.getBoundingClientRect();
+  let x = ev.clientX + marge;
+  let y = ev.clientY + marge;
+  if(x + r.width > window.innerWidth - 8) x = ev.clientX - r.width - marge;
+  if(y + r.height > window.innerHeight - 8) y = Math.max(8, ev.clientY - r.height - marge);
+  el.style.left = Math.max(8, x) + 'px';
+  el.style.top = y + 'px';
+}
+
+function rentTipMontrer(ev, head, lien, etat){
+  const el = rentTipEl();
+  el.textContent = '';
+  el.appendChild(rentTipContenu(head, lien, etat));
+  el.classList.add('is-on');
+  rentTipPlacer(ev);
+}
+
+function rentTipCacher(){
+  if(RENT_TIP) RENT_TIP.classList.remove('is-on');
+}
+
+// Un re-render de la page laisserait sinon le panneau ouvert sur un bloc qui
+// n'existe plus, et un scroll le ferait flotter loin de son bloc.
+window.addEventListener('scroll', rentTipCacher, true);
 
 /* L'état d'un rattachement, tel qu'il se voit. `link` absent (liaisons pas
    encore chargées) n'est pas « rouge » : afficher « rien n'est lié » pendant
@@ -5589,11 +5821,14 @@ function renderRentPilotage(){
             + (q ? (vu ? ' is-match' : ' is-hors') : ''),
           style:{left:b.gauche + '%', width:b.largeur + '%',
                  top:(b.ligne * RENT_LIGNE_H + 6) + 'px'},
-          title:(head.client || '(client non renseigné)') + ' — ' + (head.reference || '')
-                + '\n' + RENT_ETAT_LIB[etat],
-          onClick:()=>ouvrirRattachementModal(head.id)},
+          onMouseEnter:(ev)=>rentTipMontrer(ev, head, (charges ? liens[Number(head.id)] : null), etat),
+          onMouseMove:rentTipPlacer,
+          onMouseLeave:rentTipCacher,
+          onClick:()=>{ rentTipCacher(); ouvrirRattachementModal(head.id); }},
           h('span',{className:'rent-tl-bloc-cli'}, head.client || '(client ?)'),
-          etroit ? null : h('span',{className:'rent-tl-bloc-ref'}, head.reference || '')
+          etroit ? null : h('span',{className:'rent-tl-bloc-ref'}, head.reference || ''),
+          etroit ? null : h('span',{className:'rent-tl-bloc-meta'},
+            [rentQte(head.of_qte_etiquettes), rentFormat(head)].filter(Boolean).join(' · '))
         );
       })
     );
@@ -6147,6 +6382,7 @@ function renderRentPanneau(g, listeVisible){
         await rentLoadComparaison(entryId);
       }},'Comparer')
     ),
+    rentBlocPalier(entryId, comp),
     blocComparaison
   );
 }
