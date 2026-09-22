@@ -2030,6 +2030,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <input type="text" id="op-label" placeholder="Libellé">
             <select id="op-severity"><option value="info">info</option><option value="attention">attention</option><option value="critique">critique</option></select>
             <select id="op-category"></select>
+            <select id="op-outil-type" title="Ce code fait-il changer un outil ?"><option value="">Aucun outil</option></select>
             <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)"><input type="checkbox" id="op-required"> Obligatoire</label>
           </div>
           <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
@@ -2041,6 +2042,33 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
           <input type="search" id="op-filter" class="op-filter" placeholder="Filtrer (code, libellé, catégorie…)" oninput="renderOpList()">
         </div>
         <div id="op-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+          <h2 style="margin:0">Outils montés (plaques, contre-parties, clichés…)</h2>
+          <span id="outil-badge" class="sub"></span>
+        </div>
+        <p class="sub" style="margin-top:-4px;margin-bottom:14px">
+          Un code opération rattaché à une nature d'outil demande au conducteur, au moment de la saisie,
+          le compteur machine et les deux numéros — celui qui sort, celui qui entre. C'est cette liste
+          qu'il voit. Un numéro qu'il ne trouve pas, il l'ajoute depuis son poste : il ressort ici
+          signalé « à valider ». Un outil ne se supprime pas, il se retire de la liste — les saisies
+          passées pointent dessus.
+        </p>
+        <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr));margin-bottom:12px">
+          <select id="outil-type"></select>
+          <input type="text" id="outil-numero" placeholder="Numéro (ex. 2867)" maxlength="40">
+          <input type="text" id="outil-label" placeholder="Précision (forme, laize…)" maxlength="80">
+          <button type="button" class="btn" onclick="saveOutilForm()">Ajouter</button>
+        </div>
+        <div class="op-toolbar">
+          <input type="search" id="outil-filter" class="op-filter" placeholder="Filtrer (numéro, précision…)" oninput="renderOutilList()">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)">
+            <input type="checkbox" id="outil-inactifs" onchange="loadOutils()"> Voir les outils retirés
+          </label>
+        </div>
+        <div id="outil-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
       </div>
     </section>
 
@@ -3659,7 +3687,7 @@ function setTab(id, opts) {
   // chaque changement d'onglet, y compris sur des panneaux sans rapport.
   if (id === 'fournisseurs') { loadFournisseurs(); loadFournisseursGroupes(); }
   if (id === 'clients') initClientsPanel();
-  if (id === 'operations') loadOperationCodes();
+  if (id === 'operations') { loadOperationCodes(); loadOutils(); }
   if (id === 'seuils') loadSeuils();
   if (id === 'maintenance') { loadMaintCodes(); loadAlerts(); }
   if (id === 'machines') initMachinesPanel();
@@ -7226,7 +7254,7 @@ function renderOpList() {
   }
   let body = '';
   cats.forEach(cat => {
-    body += '<tr class="op-cat-row"><td colspan="6">' + esc(cat) + '</td></tr>';
+    body += '<tr class="op-cat-row"><td colspan="7">' + esc(cat) + '</td></tr>';
     byCat[cat].forEach(o => {
       const c = esc(o.code);
       const sev = esc(o.severity || 'info');
@@ -7237,6 +7265,7 @@ function renderOpList() {
         + '<td><span class="op-pill ' + sev + '">' + sev + '</span></td>'
         + '<td><span class="op-pill ' + esc(cat) + '">' + esc(cat) + '</span></td>'
         + '<td><span class="' + reqCls + '">' + (o.required ? 'Oui' : '—') + '</span></td>'
+        + '<td>' + (o.outil_type ? '<span class="op-pill calage">' + esc(outilTypeLabel(o.outil_type)) + '</span>' : '<span class="op-req">—</span>') + '</td>'
         + '<td><div class="op-act">'
         + '<button type="button" class="btn-sm btn-ghost" data-op-edit="' + c + '">Modifier</button>'
         + '<button type="button" class="btn-sm btn-ghost danger" data-op-del="' + c + '">Supprimer</button>'
@@ -7244,7 +7273,7 @@ function renderOpList() {
     });
   });
   el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
-    + '<th>Code</th><th>Libellé</th><th>Sévérité</th><th>Catégorie</th><th>Obligatoire</th><th>Actions</th>'
+    + '<th>Code</th><th>Libellé</th><th>Sévérité</th><th>Catégorie</th><th>Obligatoire</th><th>Outil changé</th><th>Actions</th>'
     + '</tr></thead><tbody>' + body + '</tbody></table></div>';
   el.querySelectorAll('[data-op-edit]').forEach(btn => {
     btn.addEventListener('click', () => openOpForm(btn.getAttribute('data-op-edit')));
@@ -7270,6 +7299,8 @@ function openOpForm(code) {
     document.getElementById('op-label').value = o.label || '';
     document.getElementById('op-severity').value = o.severity || 'info';
     document.getElementById('op-category').value = o.category || 'autre';
+    const selOt = document.getElementById('op-outil-type');
+    if (selOt) selOt.value = o.outil_type || '';
     document.getElementById('op-required').checked = !!o.required;
   } else {
     title.textContent = 'Nouveau code';
@@ -7278,6 +7309,8 @@ function openOpForm(code) {
     document.getElementById('op-label').value = '';
     document.getElementById('op-severity').value = 'info';
     document.getElementById('op-category').value = _opCategories[0] || 'autre';
+    const selOtNew = document.getElementById('op-outil-type');
+    if (selOtNew) selOtNew.value = '';
     document.getElementById('op-required').checked = false;
   }
 }
@@ -7294,6 +7327,7 @@ async function saveOpForm() {
     label: document.getElementById('op-label').value.trim(),
     severity: document.getElementById('op-severity').value,
     category: document.getElementById('op-category').value,
+    outil_type: document.getElementById('op-outil-type')?.value || '',
     required: document.getElementById('op-required').checked,
   };
   try {
@@ -7338,6 +7372,173 @@ async function importOpsJson() {
     const r = await api('/api/settings/operation-codes/import-json', { method: 'POST' });
     toast('Sync. OK (' + (r.upserted || 0) + ' codes)');
     await loadOperationCodes();
+  } catch (e) { toast(e.message, true); }
+}
+
+
+// ── Référentiel des outils montés (plaques, contre-parties, clichés…) ─
+// Rattaché au panneau Opérations : c'est le même sujet vu des deux bouts —
+// le code opération dit QUELLE nature se change, cette liste dit AVEC QUOI.
+let _outilTypes = [];
+let _outilItems = [];
+
+function outilTypeLabel(cle) {
+  const t = _outilTypes.find(x => x.cle === cle);
+  return t ? t.label : (cle || '');
+}
+
+function remplirSelectsOutilType() {
+  const sel = document.getElementById('outil-type');
+  if (sel) {
+    const garde = sel.value;
+    sel.innerHTML = _outilTypes
+      .map(t => '<option value="' + esc(t.cle) + '">' + esc(t.label) + '</option>')
+      .join('');
+    if (garde) sel.value = garde;
+  }
+  const selOp = document.getElementById('op-outil-type');
+  if (selOp) {
+    const gardeOp = selOp.value;
+    selOp.innerHTML = '<option value="">Aucun outil</option>'
+      + _outilTypes.map(t => '<option value="' + esc(t.cle) + '">' + esc(t.label) + '</option>').join('');
+    if (gardeOp) selOp.value = gardeOp;
+  }
+}
+
+async function loadOutils() {
+  const el = document.getElementById('outil-list');
+  if (!el) return;
+  const inactifs = document.getElementById('outil-inactifs')?.checked ? '1' : '';
+  try {
+    const d = await api('/api/settings/outils' + (inactifs ? '?inactifs=1' : ''));
+    _outilTypes = (d && d.types) ? d.types : [];
+    _outilItems = (d && d.outils) ? d.outils : [];
+    remplirSelectsOutilType();
+    const badge = document.getElementById('outil-badge');
+    if (badge) {
+      const n = (d && d.nb_a_valider) || 0;
+      badge.textContent = n
+        ? (n + ' numéro' + (n > 1 ? 'x ajoutés' : ' ajouté') + ' au poste, à relire')
+        : '';
+      badge.style.color = n ? 'var(--warn)' : 'var(--muted)';
+    }
+    renderOutilList();
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--danger)">' + esc(e.message) + '</p>';
+  }
+}
+
+function renderOutilList() {
+  const el = document.getElementById('outil-list');
+  if (!el) return;
+  const q = (document.getElementById('outil-filter')?.value || '').trim().toLowerCase();
+  let items = [..._outilItems];
+  if (q) {
+    items = items.filter(o =>
+      String(o.numero).toLowerCase().includes(q) ||
+      (o.label || '').toLowerCase().includes(q)
+    );
+  }
+  if (!items.length) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucun outil'
+      + (q ? ' pour ce filtre' : '') + '.</p>';
+    return;
+  }
+  const parType = {};
+  items.forEach(o => {
+    if (!parType[o.type_cle]) parType[o.type_cle] = [];
+    parType[o.type_cle].push(o);
+  });
+  const cles = _outilTypes.map(t => t.cle).filter(c => parType[c]);
+  Object.keys(parType).forEach(c => { if (!cles.includes(c)) cles.push(c); });
+
+  let body = '';
+  cles.forEach(cle => {
+    body += '<tr class="op-cat-row"><td colspan="4">' + esc(outilTypeLabel(cle))
+      + ' · ' + parType[cle].length + '</td></tr>';
+    parType[cle].forEach(o => {
+      const etat = !o.actif
+        ? '<span class="op-pill">retiré</span>'
+        : (o.a_valider ? '<span class="op-pill attention">à valider</span>' : '<span class="op-pill info">en service</span>');
+      const origine = o.cree_par ? ' <span class="sub">· ' + esc(o.cree_par) + '</span>' : '';
+      let actions = '';
+      if (o.a_valider && o.actif) {
+        actions += '<button type="button" class="btn-sm btn-ghost" data-outil-ok="' + o.id + '">Valider</button>';
+      }
+      actions += '<button type="button" class="btn-sm btn-ghost" data-outil-edit="' + o.id + '">Renommer</button>';
+      actions += o.actif
+        ? '<button type="button" class="btn-sm btn-ghost danger" data-outil-off="' + o.id + '">Retirer</button>'
+        : '<button type="button" class="btn-sm btn-ghost" data-outil-on="' + o.id + '">Remettre</button>';
+      body += '<tr>'
+        + '<td class="op-code-cell">' + esc(o.numero) + '</td>'
+        + '<td class="op-lbl-cell">' + esc(o.label || '—') + origine + '</td>'
+        + '<td>' + etat + '</td>'
+        + '<td><div class="op-act">' + actions + '</div></td></tr>';
+    });
+  });
+  el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
+    + '<th>Numéro</th><th>Précision</th><th>État</th><th>Actions</th>'
+    + '</tr></thead><tbody>' + body + '</tbody></table></div>';
+
+  el.querySelectorAll('[data-outil-ok]').forEach(b =>
+    b.addEventListener('click', () => majOutil(b.getAttribute('data-outil-ok'), { a_valider: false }, 'Numéro validé')));
+  el.querySelectorAll('[data-outil-off]').forEach(b =>
+    b.addEventListener('click', () => retirerOutil(b.getAttribute('data-outil-off'))));
+  el.querySelectorAll('[data-outil-on]').forEach(b =>
+    b.addEventListener('click', () => majOutil(b.getAttribute('data-outil-on'), { actif: true }, 'Outil remis dans la liste')));
+  el.querySelectorAll('[data-outil-edit]').forEach(b =>
+    b.addEventListener('click', () => renommerOutil(b.getAttribute('data-outil-edit'))));
+}
+
+async function saveOutilForm() {
+  const type = document.getElementById('outil-type')?.value || '';
+  const numero = (document.getElementById('outil-numero')?.value || '').trim();
+  const label = (document.getElementById('outil-label')?.value || '').trim();
+  if (!type) { toast('Choisissez une nature d\'outil.', true); return; }
+  if (!numero) { toast('Indiquez le numéro.', true); return; }
+  try {
+    await api('/api/settings/outils', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: type, numero: numero, label: label }),
+    });
+    document.getElementById('outil-numero').value = '';
+    document.getElementById('outil-label').value = '';
+    toast('Outil ajouté');
+    await loadOutils();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function majOutil(id, patch, message) {
+  try {
+    await api('/api/settings/outils/' + encodeURIComponent(id), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    toast(message || 'Outil mis à jour');
+    await loadOutils();
+  } catch (e) { toast(e.message, true); }
+}
+
+function renommerOutil(id) {
+  const o = _outilItems.find(x => String(x.id) === String(id));
+  if (!o) return;
+  const numero = prompt('Numéro de l\'outil', o.numero);
+  if (numero === null) return;
+  const label = prompt('Précision (forme, laize…) — laisser vide si aucune', o.label || '');
+  if (label === null) return;
+  majOutil(id, { numero: numero, label: label }, 'Outil mis à jour');
+}
+
+async function retirerOutil(id) {
+  const o = _outilItems.find(x => String(x.id) === String(id));
+  const num = o ? o.numero : id;
+  if (!confirm('Retirer ' + num + ' de la liste proposée aux conducteurs ?\n\nLes saisies passées le gardent.')) return;
+  try {
+    await api('/api/settings/outils/' + encodeURIComponent(id), { method: 'DELETE' });
+    toast('Outil retiré de la liste');
+    await loadOutils();
   } catch (e) { toast(e.message, true); }
 }
 

@@ -115,6 +115,35 @@ def _enrich_saisies_client(conn, saisies: list) -> None:
             s["client"] = client_map[ref]
 
 
+def _enrich_saisies_outils(conn, saisies: list) -> None:
+    """Ajoute le numéro des outils démonté / monté sur les saisies qui en
+    portent. Les colonnes stockent des identifiants : renommer une plaque dans
+    Paramètres ne doit pas réécrire l'historique, mais l'écran doit afficher le
+    numéro et non un entier."""
+    ids = {
+        int(s[cle])
+        for s in saisies
+        for cle in ("outil_avant_id", "outil_apres_id")
+        if s.get(cle) not in (None, "")
+    }
+    if not ids:
+        return
+    placeholders = ",".join("?" * len(ids))
+    try:
+        rows = conn.execute(
+            f"SELECT id, numero FROM outils WHERE id IN ({placeholders})", list(ids)
+        ).fetchall()
+    except Exception:
+        return  # référentiel absent (base non migrée) : on n'affiche rien
+    numeros = {r["id"]: r["numero"] for r in rows}
+    for s in saisies:
+        for cle, sortie in (("outil_avant_id", "outil_avant_numero"),
+                            ("outil_apres_id", "outil_apres_numero")):
+            val = s.get(cle)
+            if val not in (None, ""):
+                s[sortie] = numeros.get(int(val))
+
+
 # ─── Timeline unifiee : mouvements MyStock (EP/SP/EM/SM) ─────────────────────
 # Regle metier : seuls les mouvements rattaches a un dossier de production
 # apparaissent dans la timeline MyProd. Les inventaires / ajustements /
@@ -700,6 +729,44 @@ def get_fabrication_operations(request: Request):
     return {"operations": ops, "categories": categories_for_ui()}
 
 
+@router.get("/api/fabrication/outils-contexte")
+def get_outils_contexte(request: Request, code: str = "", machine_id: int = None):
+    """Ce qu'il faut pour ouvrir la saisie d'un changement d'outil : la nature
+    attendue par ce code, le compteur machine tel qu'il a été relevé la
+    dernière fois, l'outil actuellement en place et la liste où puiser.
+
+    L'outil en place se lit sur la MACHINE, pas sur le dossier : un outil
+    reste monté d'un dossier au suivant, et le dossier courant ne dit rien de
+    ce qui tourne réellement."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    from app.services import outils as ref_outils
+
+    code_key = str(code or "").strip()
+    with get_db() as conn:
+        outil_type = ref_outils.codes_par_type(conn).get(code_key)
+        if not outil_type:
+            return {"outil_type": None}
+        machine_obj = _resolve_machine(user, {"machine_id": machine_id}, conn)
+        actuel = ref_outils.dernier_outil_monte(
+            conn,
+            machine_nom=machine_obj.get("nom") or "",
+            machine_code=machine_obj.get("code") or "",
+            type_cle=outil_type,
+        )
+        return {
+            "outil_type": outil_type,
+            "type_label": ref_outils.label_type(conn, outil_type),
+            "machine": machine_obj.get("nom"),
+            "dernier_metrage": (
+                float(machine_obj["dernier_metrage"])
+                if machine_obj.get("dernier_metrage") is not None else None
+            ),
+            "outil_actuel": actuel,
+            "outils": ref_outils.list_outils(conn, type_cle=outil_type),
+        }
+
+
 @router.get("/api/fabrication/machines")
 def list_machines(request: Request):
     """Liste toutes les machines actives (pour le sélecteur admin)."""
@@ -871,6 +938,7 @@ def get_session(request: Request, machine_id: int = None):
         for s in saisies:
             s["kind"] = "prod"
         _enrich_saisies_client(conn, saisies)
+        _enrich_saisies_outils(conn, saisies)
         # Etat et dossier actif : uniquement sur les saisies production_data
         # NON annulees. Les saisies annulees restent dans la timeline (barrees
         # cote UI) mais ne pilotent plus la machine a etats du footer.
@@ -1422,15 +1490,33 @@ async def create_saisie(request: Request):
     metrage_fin    = body.get("metrage_fin")
     qte_etiquettes = body.get("qte_etiquettes")
 
+    # Changement d'outil (plaque, contre-partie, magnétique, cliché…) : relevé
+    # du compteur au moment de la pose, outil démonté et outil monté. Le
+    # compteur a sa propre colonne — metrage_prevu / metrage_reel veulent dire
+    # « compteur au début / à la fin du dossier » partout ailleurs, et la
+    # rentabilité les lit sans filtrer sur le code.
+    metrage_compteur = body.get("metrage_compteur")
+    outil_avant_id   = body.get("outil_avant_id")
+    outil_apres_id   = body.get("outil_apres_id")
+
     def to_float(v):
         try:
             return float(str(v).replace(",", ".")) if v not in (None, "", "null") else None
         except Exception:
             return None
 
+    def to_int(v):
+        try:
+            return int(v) if v not in (None, "", "null") else None
+        except (TypeError, ValueError):
+            return None
+
     m_debut = to_float(metrage_debut)
     m_fin   = to_float(metrage_fin)
     m_etiq  = to_float(qte_etiquettes)
+    m_ctr   = to_float(metrage_compteur)
+    o_avant = to_int(outil_avant_id)
+    o_apres = to_int(outil_apres_id)
 
     with get_db() as conn:
         # ── Résolution machine (obligatoire pour toute saisie) ────────────────
@@ -1512,6 +1598,68 @@ async def create_saisie(request: Request):
                             ).replace(",", " "),
                         )
 
+        # ── Changement d'outil ────────────────────────────────────────────────
+        # Le code porte-t-il une nature d'outil ? La réponse vit dans le
+        # référentiel (Paramètres › Opérations), jamais dans une liste de codes
+        # écrite ici : ajouter « 91 - Changement Anilox » ne doit pas demander
+        # une release.
+        from app.services import outils as ref_outils
+
+        outil_type = ref_outils.codes_par_type(conn).get(cl["code"])
+        if outil_type:
+            nature = ref_outils.label_type(conn, outil_type).lower()
+            if m_ctr is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Relevez le compteur machine au moment du changement.",
+                )
+            if o_avant is None or o_apres is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Indiquez la {nature} démontée et la {nature} montée.",
+                )
+            if o_avant == o_apres:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"La {nature} montée est la même que la {nature} démontée.",
+                )
+            outils_saisis = {}
+            for oid, role in ((o_avant, "démontée"), (o_apres, "montée")):
+                ou = ref_outils.get_outil(conn, oid)
+                if not ou or ou["type_cle"] != outil_type:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"La {nature} {role} n'est pas dans le référentiel.",
+                    )
+                outils_saisis[role] = ou
+            if dernier_metrage is not None and m_ctr < dernier_metrage:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Métrage invalide : le compteur machine était à {int(dernier_metrage):,} m "
+                        f"lors de la dernière saisie. "
+                        f"La valeur saisie ({int(m_ctr):,} m) ne peut pas être inférieure."
+                    ).replace(",", " "),
+                )
+            # Le changement s'écrit AUSSI dans le commentaire de la saisie.
+            # Les identifiants en colonne sont le dossier de référence ; le
+            # commentaire est ce que tout le monde lit — retour de prod, point
+            # de production, export. Sans lui, l'information n'existerait que
+            # pour qui sait ouvrir la bonne colonne.
+            compteur_txt = f"{int(m_ctr):,}".replace(",", " ")
+            trace = (
+                f"{ref_outils.label_type(conn, outil_type)} "
+                f"{outils_saisis['démontée']['numero']} → {outils_saisis['montée']['numero']}"
+                f" · compteur {compteur_txt} m"
+            )
+            commentaire = f"{trace} — {commentaire}" if commentaire else trace
+        else:
+            # Un code sans nature d'outil ne porte ni compteur ni outil : une
+            # valeur qui traîne dans le corps de requête ne doit pas s'écrire.
+            m_ctr = None
+            o_avant = None
+            o_apres = None
+
         # ── Insertion ─────────────────────────────────────────────────────────
         row_dict = {
             "operateur": operateur,
@@ -1528,8 +1676,9 @@ async def create_saisie(request: Request):
                 designation, quantite_a_traiter, quantite_traitee, service,
                 metrage_prevu, metrage_reel,
                 metrage_total_debut, metrage_total_fin,
+                metrage_compteur, outil_avant_id, outil_apres_id,
                 commentaire, data, est_manuel, modifie_par, modifie_le, modifie_note)
-               VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,NULL,NULL,?)""",
+               VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,NULL,NULL,?)""",
             (
                 operateur, date_op,
                 op_str, cl["code"], cl["severity"], cl["category"],
@@ -1541,6 +1690,9 @@ async def create_saisie(request: Request):
                 m_fin,            # metrage_reel   (backward compat)
                 m_debut,          # metrage_total_debut
                 m_fin,            # metrage_total_fin
+                m_ctr,            # metrage_compteur (changement d'outil)
+                o_avant,          # outil_avant_id
+                o_apres,          # outil_apres_id
                 commentaire,
                 json.dumps(row_dict, default=str),
                 "Saisie opérateur fabrication",
@@ -1607,6 +1759,11 @@ async def create_saisie(request: Request):
             new_metrage = m_debut
         elif cl["code"] == "89" and m_fin is not None:
             new_metrage = m_fin
+        elif m_ctr is not None:
+            # Changement d'outil : le relevé est un compteur machine au même
+            # titre que les deux autres. Le laisser de côté ferait redescendre
+            # le compteur au prochain début de dossier.
+            new_metrage = m_ctr
 
         if new_metrage is not None:
             conn.execute(
@@ -1722,6 +1879,24 @@ async def create_saisie(request: Request):
                                     (date_op, now_iso, pe_id),
                                 )
                             conn.commit()
+
+                            # Fin de production = fin de consommation : le
+                            # dossier sort du stock maintenant, pas le jour où
+                            # quelqu'un y repense. Best-effort de bout en bout
+                            # — une saisie de production ne tombe jamais parce
+                            # que le stock n'a pas pu suivre.
+                            try:
+                                from app.routers.besoins_matieres import destocker_a_la_cloture
+                                verdict = destocker_a_la_cloture(conn, pe_id, user)
+                                if verdict is not None:
+                                    conn.commit()
+                                    if verdict.get("etat") == "bloque":
+                                        logger.info(
+                                            "destockage cloture %s : non fait — %s",
+                                            pe_id, verdict.get("motif"),
+                                        )
+                            except Exception as e:
+                                logger.warning("destockage cloture %s : %s", pe_id, e)
 
                         else:
                             if current_reel == "reellement_en_attente":

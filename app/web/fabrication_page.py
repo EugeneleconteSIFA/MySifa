@@ -1387,6 +1387,17 @@ let S = {
   showOpCommentModal: false,
   opCommentOp: null,        // {code, label} de l'operation en attente
   opCommentTxt: '',
+  // Changement d'outil : declenche par la nature portee par le code
+  // (operation_codes.outil_type), jamais par une liste de codes ecrite ici.
+  showOutilModal: false,
+  outilOp: null,            // {code, label} de l'operation en attente
+  outilCtx: null,           // {outil_type, type_label, dernier_metrage, outil_actuel, outils}
+  outilLoading: false,
+  outilMetrage: '',
+  outilAvantId: null,
+  outilApresId: null,
+  outilQuery: '',
+  outilNouveauNum: '',
   // Annulation de dossier (marche arriere avant production reelle)
   showAnnulModal: false,
   annulMotif: '',
@@ -1574,7 +1585,7 @@ function fscTypeRequisLabel(t){
 }
 
 function fabIsModalOpen(){
-  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showAnnulModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showOpCommentModal || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
+  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showAnnulModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showOpCommentModal || S.showOutilModal || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
   try{
     const mr = document.getElementById('mroot');
     if(mr && mr.firstElementChild) return true;
@@ -2622,6 +2633,12 @@ function handleOpTrigger(code, label, cat){
   // rien sans une phrase — c'est a ceux-la, et a eux seuls, qu'on demande un
   // commentaire. Exiger un texte partout ferait taper « RAS » partout, et on
   // aurait perdu la seule chose que ce champ apporte.
+  // Changement d'outil : le code porte la nature montee/demontee. Le metrage
+  // et les deux numeros se saisissent avant l'enregistrement, pas apres.
+  if(opOutilType(code)){
+    openOutilModal(code, label);
+    return;
+  }
   if(CODES_COMMENTAIRE_OBLIGATOIRE[code]){
     set({showOpCommentModal:true, opCommentOp:{code:code, label:label}, opCommentTxt:''});
     return;
@@ -5086,6 +5103,16 @@ function _renderStockZ1List(){
   return h('div',{className:'fab-prod-z1-card'}, head, body);
 }
 
+// Entrée et sortie de matière première : réservées depuis que le stock MP
+// s'alimente et se défalque tout seul. Le serveur refuse de toute façon
+// (_STOCK_MP_MOUVEMENT_ROLES) — ici on ne montre pas un bouton qui ne peut
+// que renvoyer une erreur. La sortie de tête d'impression du repiquage, elle,
+// reste ouverte : c'est une consommation au poste, pas un mouvement décidé.
+function _peutMouvementMp(){
+  const r = S.user && S.user.role;
+  return r === 'superadmin' || r === 'direction' || r === 'administration_technique';
+}
+
 function renderStatsPanel(){
   // Vue Stock native — miroir visuel de MyStock (buildProductionView),
   // sans iframe, alimentée par /api/stock/sortie-prod.  Les clics sur
@@ -5096,19 +5123,23 @@ function renderStatsPanel(){
     h('div',{className:'fab-prod-head'},
       h('h2',{className:'fab-prod-head-title'}, 'Production'),
       h('div',{className:'fab-prod-head-sub'},
-        'Saisie rapide des entrées/sorties matières premières et sortie de production (Z1).'),
+        _peutMouvementMp()
+          ? 'Saisie rapide des entrées/sorties matières premières et sortie de production (Z1).'
+          : 'Sortie de production (Z1). Les matières premières entrent par les réceptions et sortent au déstockage des dossiers.'),
     ),
     h('div',{className:'fab-prod-grid'},
-      _buildStockActionCard({
-        kind:'mp-in',  icon:'log-in',      title:'Entrée MP',
-        sub:'Réception matière',
-        onClick:()=>_stockGoTo('entree-mp'),
-      }),
-      _buildStockActionCard({
-        kind:'mp-out', icon:'log-out',     title:'Sortie MP',
-        sub:'Consommation production',
-        onClick:()=>_stockGoTo('sortie-mp'),
-      }),
+      ...(_peutMouvementMp() ? [
+        _buildStockActionCard({
+          kind:'mp-in',  icon:'log-in',      title:'Entrée MP',
+          sub:'Réception matière',
+          onClick:()=>_stockGoTo('entree-mp'),
+        }),
+        _buildStockActionCard({
+          kind:'mp-out', icon:'log-out',     title:'Sortie MP',
+          sub:'Consommation production',
+          onClick:()=>_stockGoTo('sortie-mp'),
+        }),
+      ] : []),
       _buildStockActionCard({
         kind:'z1-in',  icon:'plus-circle', title:'Entrée Z1',
         sub:'Sortie de production',
@@ -5204,6 +5235,10 @@ function renderMain(){
         if(code==='90' && mDeb!=null && mFin!=null)
           metrageText += (metrageText?' | ':'')+'⇒ '+fN(Math.max(0,mFin-mDeb))+' m consommés';
         if(s.quantite_traitee&&Number(s.quantite_traitee)>0) metrageText += (metrageText?' | ':'')+fN(s.quantite_traitee)+' étiq.';
+        // Changement d'outil : le compteur releve. Les deux numeros, eux, sont
+        // dans le commentaire de la saisie — c'est la colonne que tout le monde
+        // lit, ici comme en retour de prod.
+        if(s.metrage_compteur!=null) metrageText += (metrageText?' | ':'')+'Compteur '+fN(s.metrage_compteur)+' m';
 
         const commentBtn = isAdminView ? null : h('button',{
           className:'fab-comment-btn',
@@ -6865,6 +6900,237 @@ function renderFinModal(){
             S.finDossierOui===false ? 'Arrêter pour aujourd\'hui' :
                                       'Enregistrer')
         )
+      )
+    )
+  );
+}
+
+/* ── Changement d'outil (plaque, contre-partie, magnétique, cliché…) ───────── */
+/* Aucun code n'est écrit en dur ici : c'est le référentiel qui dit si un code
+   monte un outil (operation_codes.outil_type, édité dans Paramètres). Ajouter
+   « 91 - Changement Anilox » se fait donc sans toucher au front. */
+
+function opOutilType(code){
+  const o = OPS && OPS[code];
+  return (o && o.outil_type) ? String(o.outil_type) : '';
+}
+
+function mkOption(value, label){
+  const o = document.createElement('option');
+  o.value = (value===null || value===undefined) ? '' : String(value);
+  o.textContent = label;
+  return o;
+}
+
+async function openOutilModal(code, label){
+  set({showOutilModal:true, outilOp:{code:code, label:label}, outilCtx:null,
+       outilLoading:true, outilMetrage:'', outilAvantId:null, outilApresId:null,
+       outilQuery:'', outilNouveauNum:''});
+  fabPauseAutoRefresh(120000);
+  try{
+    let url = '/api/fabrication/outils-contexte?code='+encodeURIComponent(code);
+    const mid = S.adminMachineId || S.wantedMachineId;
+    if(mid) url += '&machine_id='+encodeURIComponent(mid);
+    const ctx = await apiFetch(url);
+    if(!ctx || !ctx.outil_type){
+      // Le code ne porte plus de nature d'outil (référentiel modifié entre
+      // deux chargements) : on n'invente pas une saisie, on enregistre.
+      set({showOutilModal:false, outilLoading:false, outilOp:null});
+      await triggerOp(code, label);
+      return;
+    }
+    set({outilCtx:ctx, outilLoading:false,
+         outilAvantId: ctx.outil_actuel ? ctx.outil_actuel.id : null});
+  }catch(err){
+    showToast('Erreur : '+err.message,'danger');
+    set({showOutilModal:false, outilLoading:false, outilOp:null});
+  }
+}
+
+function fermerOutilModal(){
+  set({showOutilModal:false, outilOp:null, outilCtx:null, outilLoading:false,
+       outilMetrage:'', outilAvantId:null, outilApresId:null,
+       outilQuery:'', outilNouveauNum:''});
+}
+
+async function submitChangementOutil(){
+  const ctx = S.outilCtx;
+  const op  = S.outilOp || {};
+  if(!ctx) return;
+  const nature = String(ctx.type_label||'outil').toLowerCase();
+
+  const raw = String(S.outilMetrage||'').trim().replace(',','.');
+  const m = raw ? parseFloat(raw) : NaN;
+  if(isNaN(m)){
+    showToast('Relevez le compteur machine au moment du changement.','danger');
+    return;
+  }
+  if(ctx.dernier_metrage!=null && m < ctx.dernier_metrage){
+    showToast('Métrage invalide : le compteur était à '
+      +Math.round(ctx.dernier_metrage).toLocaleString('fr-FR')
+      +' m — valeur saisie trop petite','danger');
+    return;
+  }
+  const av = S.outilAvantId, ap = S.outilApresId;
+  if(!av || !ap){
+    showToast('Indiquez la '+nature+' démontée et la '+nature+' montée.','danger');
+    return;
+  }
+  if(String(av)===String(ap)){
+    showToast('La '+nature+' montée est la même que la '+nature+' démontée.','danger');
+    return;
+  }
+  const extra = {metrage_compteur:m, outil_avant_id:Number(av), outil_apres_id:Number(ap)};
+  set({showOutilModal:false, outilCtx:null, outilOp:null, outilMetrage:'',
+       outilAvantId:null, outilApresId:null, outilQuery:'', outilNouveauNum:''});
+  await triggerOp(op.code, op.label, extra);
+}
+
+function renderOutilModal(){
+  const op  = S.outilOp || {code:'', label:''};
+  const ctx = S.outilCtx;
+  const titre = h('div',{className:'fab-modal-title'},
+    svgIcon('tool',18),' '+op.code+' — '+op.label);
+
+  if(S.outilLoading || !ctx){
+    return h('div',{className:'fab-modal-overlay'},
+      h('div',{className:'fab-modal'}, titre,
+        h('div',{className:'fab-modal-sub'},'Lecture du référentiel…')
+      )
+    );
+  }
+
+  const nature  = String(ctx.type_label||'Outil');
+  const natureB = nature.toLowerCase();
+  const liste   = Array.isArray(ctx.outils) ? ctx.outils : [];
+
+  // ── Compteur machine ────────────────────────────────────────────────────
+  const metInp = h('input',{type:'number',placeholder:'Ex: 14200',step:'1',min:'0',
+    style:{textAlign:'right'}});
+  metInp.value = S.outilMetrage||'';
+  metInp.addEventListener('input',e=>{ S.outilMetrage=e.target.value; });
+
+  const dernier = ctx.dernier_metrage;
+  const metBloc = h('div',{className:'fab-field'},
+    h('label',null,'Compteur machine au changement (m)'),
+    h('div',{className:'fab-field-hint'},
+      dernier!=null
+        ? 'Dernier relevé sur '+(ctx.machine||'cette machine')+' : '
+          +Math.round(dernier).toLocaleString('fr-FR')+' m.'
+        : 'Aucun relevé antérieur sur cette machine.'),
+    metInp
+  );
+
+  // ── Sélecteurs avant / après ────────────────────────────────────────────
+  const selAvant = h('select',null);
+  const selApres = h('select',null);
+
+  function remplir(sel, selectedId, placeholder){
+    const terme = String(S.outilQuery||'').trim().toLowerCase();
+    const gardes = liste.filter(o=>{
+      if(selectedId!=null && String(o.id)===String(selectedId)) return true;
+      if(!terme) return true;
+      return (o.numero+' '+(o.label||'')).toLowerCase().indexOf(terme)!==-1;
+    });
+    sel.innerHTML='';
+    sel.appendChild(mkOption('', '— choisir —'));
+    gardes.forEach(o=>{
+      sel.appendChild(mkOption(o.id,
+        o.numero + (o.label ? ' — '+o.label : '') + (o.a_valider ? '  (à valider)' : '')));
+    });
+    sel.value = (selectedId===null || selectedId===undefined) ? '' : String(selectedId);
+  }
+
+  function rafraichirSelects(){
+    remplir(selAvant, S.outilAvantId);
+    remplir(selApres, S.outilApresId);
+  }
+
+  selAvant.addEventListener('change',e=>{ S.outilAvantId = e.target.value||null; });
+  selApres.addEventListener('change',e=>{ S.outilApresId = e.target.value||null; });
+
+  const filtreInp = h('input',{type:'search',placeholder:'Filtrer par numéro…'});
+  filtreInp.value = S.outilQuery||'';
+  filtreInp.addEventListener('input',e=>{ S.outilQuery=e.target.value; rafraichirSelects(); });
+
+  const vide = !liste.length;
+
+  const avantBloc = h('div',{className:'fab-field'},
+    h('label',null, nature+' démontée'),
+    ctx.outil_actuel
+      ? h('div',{className:'fab-field-hint'},
+          'Pré-remplie avec la dernière '+natureB+' posée sur cette machine ('
+          +ctx.outil_actuel.numero+'). Corrigez si ce n\'est pas celle-là.')
+      : h('div',{className:'fab-field-hint'},
+          'Aucun changement de '+natureB+' n\'a encore été saisi sur cette machine.'),
+    selAvant
+  );
+
+  const apresBloc = h('div',{className:'fab-field'},
+    h('label',null, nature+' montée'),
+    selApres
+  );
+
+  // ── Numéro absent du référentiel ────────────────────────────────────────
+  // L'atelier n'attend pas une mise à jour de Paramètres pour produire : le
+  // numéro manquant se crée au poste et ressort marqué « à valider ».
+  const nouveauInp = h('input',{type:'text',placeholder:'Ex: 2867'});
+  nouveauInp.value = S.outilNouveauNum||'';
+  nouveauInp.addEventListener('input',e=>{ S.outilNouveauNum=e.target.value; });
+
+  const ajouterBtn = h('button',{
+    type:'button', className:'fab-btn fab-btn-muted fab-btn-sm',
+    onClick: async()=>{
+      const num = String(S.outilNouveauNum||'').trim();
+      if(!num){ showToast('Indiquez le numéro à ajouter.','danger'); return; }
+      try{
+        const cree = await apiFetch('/api/fabrication/outils',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({type: ctx.outil_type, numero: num}),
+        });
+        if(!liste.some(o=>o.id===cree.id)) liste.push(cree);
+        S.outilNouveauNum='';
+        nouveauInp.value='';
+        S.outilApresId = cree.id;
+        S.outilQuery='';
+        filtreInp.value='';
+        rafraichirSelects();
+        showToast(nature+' '+cree.numero+' ajoutée au référentiel.');
+      }catch(e){
+        showToast('Erreur : '+e.message,'danger');
+      }
+    }
+  },'Ajouter au référentiel');
+
+  const nouveauBloc = h('div',{className:'fab-field'},
+    h('label',null, vide ? 'Premier numéro de '+natureB : 'Numéro absent de la liste'),
+    h('div',{className:'fab-field-hint'},
+      'Ajoute le numéro pour tout le monde. Il ressort signalé dans Paramètres '
+      +'pour relecture.'),
+    h('div',{style:{display:'flex',gap:'8px',alignItems:'center'}},
+      nouveauInp, ajouterBtn)
+  );
+
+  rafraichirSelects();
+
+  return h('div',{className:'fab-modal-overlay',
+      onClick:(e)=>{ if(e.target===e.currentTarget) fermerOutilModal(); }},
+    h('div',{className:'fab-modal'},
+      titre,
+      h('div',{className:'fab-modal-sub'},
+        'Sans le compteur et les deux numéros, cette saisie ne dit que l\'heure : '
+        +'impossible ensuite de savoir combien de mètres une '+natureB+' a faits, '
+        +'ni de rattacher une casse à celle qui tournait.'),
+      metBloc,
+      liste.length > 12 ? h('div',{className:'fab-field'},
+        h('label',null,'Recherche'), filtreInp) : null,
+      avantBloc,
+      apresBloc,
+      nouveauBloc,
+      h('div',{className:'fab-modal-btns'},
+        h('button',{className:'fab-btn fab-btn-muted',onClick:fermerOutilModal},'Annuler'),
+        h('button',{className:'fab-btn fab-btn-primary',onClick:submitChangementOutil},
+          svgIcon('check',15),' Enregistrer le changement')
       )
     )
   );
@@ -8766,6 +9032,8 @@ function render(){
     const m = renderRepiquageTeteSortieModal();
     if(m) root.appendChild(m);
   }
+
+  if(S.showOutilModal) root.appendChild(renderOutilModal());
 
   renderOfImportModal();
   renderOpCommentModal();

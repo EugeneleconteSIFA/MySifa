@@ -3067,6 +3067,29 @@ def delete_update(announcement_id: int, request: Request):
 # ── Référentiel codes opération (table operation_codes) ─────────────────────
 
 
+def _valider_outil_type(conn, outil_type):
+    """Une nature d'outil sur un code opération doit exister dans le
+    référentiel des natures : sans ça, le poste afficherait un sélecteur vide
+    sans que personne ne comprenne pourquoi."""
+    if not outil_type:
+        return None
+    from app.services import outils as ref_outils
+    if not ref_outils.type_existe(conn, outil_type):
+        raise HTTPException(
+            status_code=422,
+            detail="Nature d'outil inconnue — créez-la d'abord dans Paramètres › Outils.",
+        )
+    return outil_type
+
+
+def _colonne_outil_type(conn, table) -> bool:
+    try:
+        return "outil_type" in {r[1] for r in conn.execute(f'PRAGMA table_info("{table}")')}
+    except Exception:
+        return False
+
+
+
 @router.get("/api/settings/operation-codes")
 def list_operation_codes(request: Request):
     require_settings(request)
@@ -3096,18 +3119,36 @@ async def create_operation_code(request: Request):
         ex = conn.execute(f"SELECT 1 FROM {TABLE} WHERE code=?", (payload["code"],)).fetchone()
         if ex:
             raise HTTPException(status_code=409, detail=f"Le code {payload['code']} existe déjà.")
-        conn.execute(
-            f"""INSERT INTO {TABLE} (code, severity, label, category, required, updated_at)
-                VALUES (?,?,?,?,?,?)""",
-            (
-                payload["code"],
-                payload["severity"],
-                payload["label"],
-                payload["category"],
-                1 if payload["required"] else 0,
-                now,
-            ),
-        )
+        avec_outil = _colonne_outil_type(conn, TABLE)
+        outil_type = _valider_outil_type(conn, payload.get("outil_type")) if avec_outil else None
+        if avec_outil:
+            conn.execute(
+                f"""INSERT INTO {TABLE}
+                    (code, severity, label, category, required, updated_at, outil_type)
+                    VALUES (?,?,?,?,?,?,?)""",
+                (
+                    payload["code"],
+                    payload["severity"],
+                    payload["label"],
+                    payload["category"],
+                    1 if payload["required"] else 0,
+                    now,
+                    outil_type,
+                ),
+            )
+        else:
+            conn.execute(
+                f"""INSERT INTO {TABLE} (code, severity, label, category, required, updated_at)
+                    VALUES (?,?,?,?,?,?)""",
+                (
+                    payload["code"],
+                    payload["severity"],
+                    payload["label"],
+                    payload["category"],
+                    1 if payload["required"] else 0,
+                    now,
+                ),
+            )
         conn.commit()
     refresh_operations_cache()
     return {"success": True, "code": payload["code"]}
@@ -3138,19 +3179,38 @@ async def update_operation_code(code: str, request: Request):
         ex = conn.execute(f"SELECT 1 FROM {TABLE} WHERE code=?", (code_key,)).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Code introuvable.")
-        conn.execute(
-            f"""UPDATE {TABLE}
-                SET severity=?, label=?, category=?, required=?, updated_at=?
-                WHERE code=?""",
-            (
-                payload["severity"],
-                payload["label"],
-                payload["category"],
-                1 if payload["required"] else 0,
-                now,
-                code_key,
-            ),
-        )
+        avec_outil = _colonne_outil_type(conn, TABLE)
+        if avec_outil:
+            outil_type = _valider_outil_type(conn, payload.get("outil_type"))
+            conn.execute(
+                f"""UPDATE {TABLE}
+                    SET severity=?, label=?, category=?, required=?, updated_at=?,
+                        outil_type=?
+                    WHERE code=?""",
+                (
+                    payload["severity"],
+                    payload["label"],
+                    payload["category"],
+                    1 if payload["required"] else 0,
+                    now,
+                    outil_type,
+                    code_key,
+                ),
+            )
+        else:
+            conn.execute(
+                f"""UPDATE {TABLE}
+                    SET severity=?, label=?, category=?, required=?, updated_at=?
+                    WHERE code=?""",
+                (
+                    payload["severity"],
+                    payload["label"],
+                    payload["category"],
+                    1 if payload["required"] else 0,
+                    now,
+                    code_key,
+                ),
+            )
 
         # Le referentiel fait foi, y compris sur l'historique.
         #

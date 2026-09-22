@@ -8,6 +8,7 @@ import json
 import logging
 import re
 import sqlite3
+import unicodedata
 from datetime import datetime, timedelta
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
@@ -147,8 +148,46 @@ def _mp_is_laizee(categorie: str) -> bool:
     return (categorie or "").strip().lower() in _MP_CATEGORIES_LAIZEES
 
 
+def _mp_est_consommable_atelier(mp) -> bool:
+    """Consommable que l'atelier sort lui-même, hors dossier.
+
+    Les têtes d'impression du repiquage sont sorties du stock par le
+    conducteur depuis MyProd. Ce n'est pas une correction de stock décidée à
+    la main, c'est une consommation constatée au poste — elle reste ouverte
+    quand les entrées et sorties manuelles se ferment.
+
+    Même règle que `_repTeteIsImpression` côté MyProd, et comme elle, lue sur
+    des attributs du référentiel (catégorie, sous-section) : aucune référence
+    matière n'est écrite en dur.
+    """
+    try:
+        categorie = mp["categorie"]
+    except (IndexError, KeyError, TypeError):
+        return False
+    if (categorie or "").strip().lower() != "autre":
+        return False
+    try:
+        brut = mp["sous_section"]
+    except (IndexError, KeyError, TypeError):
+        return False
+    sans_accent = "".join(
+        c for c in unicodedata.normalize("NFKD", str(brut or "").lower())
+        if not unicodedata.combining(c)
+    )
+    return any(mot in sans_accent for mot in ("tete", "impression", "head"))
+
+
 _MP_TYPES_MVT = frozenset({"entree", "sortie", "ajustement", "transfert"})
 _STOCK_MATIERES_ADMIN_ROLES = frozenset({"superadmin", "direction", "administration", "administration_ventes", "administration_technique"})
+
+# Entrées et sorties de matières premières : depuis la mise en service du
+# déstockage automatique, le stock MP ne se remplit ni ne se vide à la main.
+# Les entrées viennent des réceptions (intégration ERP ou scan magasin), les
+# sorties du déstockage des dossiers. Ce qui reste ouvert à tous, c'est la
+# CORRECTION — ajustement et inventaire : elle constate un réel mesuré au
+# lieu de décider un mouvement, et c'est précisément ce dont on a besoin
+# quand un automatisme se trompe.
+_STOCK_MP_MOUVEMENT_ROLES = frozenset({"superadmin", "direction", "administration_technique"})
 _STOCK_VALORISATION_USD_ROLES = frozenset({"superadmin", "direction"})
 
 
@@ -6419,7 +6458,8 @@ async def mouvement_matiere_premiere(request: Request):
 
     with get_db() as conn:
         mp = conn.execute(
-            """SELECT id, categorie, COALESCE(prix_par_laize, 0) AS prix_par_laize,
+            """SELECT id, categorie, sous_section,
+                      COALESCE(prix_par_laize, 0) AS prix_par_laize,
                       COALESCE(prix_eur_m2, 0) AS prix_matiere_eur_m2,
                       unites_par_palette, cartons_par_palette, kg_par_carton
                FROM matieres_premieres WHERE id=? AND actif=1""",
@@ -6427,6 +6467,22 @@ async def mouvement_matiere_premiere(request: Request):
         ).fetchone()
         if not mp:
             raise HTTPException(404, "Matière non trouvée.")
+
+        # Le stock MP s'alimente et se défalque tout seul : une entrée ou une
+        # sortie saisie ici entrerait en concurrence avec les automatismes et
+        # personne ne saurait plus lequel des deux a raison. Reste ouverte la
+        # correction (ajustement, inventaire), et la consommation d'atelier.
+        if type_mvt in ("entree", "sortie") and not _mp_est_consommable_atelier(mp):
+            if user.get("role") not in _STOCK_MP_MOUVEMENT_ROLES:
+                raise HTTPException(
+                    403,
+                    "Entrée et sortie de matière première réservées à "
+                    "l'administration technique et à la direction. Les entrées "
+                    "viennent des réceptions, les sorties du déstockage des "
+                    "dossiers — pour corriger un écart, utiliser « Corriger le "
+                    "stock » ou l'inventaire.",
+                )
+
         unite_mp = _mp_unite_gestion(mp["categorie"])
         laizee = _mp_is_laizee(mp["categorie"])
         prix_par_laize_mode = bool(int(mp["prix_par_laize"] or 0))
