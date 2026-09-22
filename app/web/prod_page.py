@@ -85,6 +85,11 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
      ressert l'ancienne et la section s'affiche nue. -->
 <link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem13-mob1-msb1">
 <link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__-sais3-rent7-san3">
+<!-- Portrait telephone de MyProd > Production. Le socle mobile partage
+     (prefixe .msf-) fournit les briques ; la feuille qui suit ne porte que
+     ce qui appartient a MyProd (.mpm-) et quelques reprises du bureau. -->
+<link rel="stylesheet" href="/static/mysifa_mobile.css?v=2">
+<link rel="stylesheet" href="/static/mysifa_prod_mobile.css?v=__V_LABEL__-mpm1">
 <link rel="stylesheet" href="/static/mysifa_retour_prod.css?v=__V_LABEL__-reu12">
 <link rel="stylesheet" href="/static/mysifa_reunions.css?v=__V_LABEL__-reu10">
 <link rel="stylesheet" href="/static/mysifa_print_modal.css?v=__V_LABEL__">
@@ -121,7 +126,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_encre_picker.css?v=__V_LABEL__">
 <script src="/static/mysifa_encre_picker.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_bobine_edit.js?v=1.0"></script>
-<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent7-sais3-bob5-msb1-san3"></script>
+<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent7-sais3-bob5-msb1-san3-mpm1"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>
 <!-- v2.3.42 : viewer partagé du détail d'un ack d'alerte (identique à Maintenance) -->

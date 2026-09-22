@@ -371,6 +371,9 @@ body.has-staging-bandeau .pr-savebar{top:44px}
 .page-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 
 /* Bouton "posé sur la page" — fond explicite, jamais transparent au repos. */
+/* Un bouton n'est pas un lien : « Fiche » et « MyStock ↗ » sont des <a>
+   habilles en .btn, ils sortaient soulignes. */
+a.btn,a.btn:hover{text-decoration:none}
 .btn-soft{background:var(--card);border:1px solid var(--border);color:var(--text2)}
 .btn-soft:hover{background:var(--bg);color:var(--text)}
 .modal .btn-soft,.form-card .btn-soft,.recap-card .btn-soft{background:var(--bg)}
@@ -895,6 +898,23 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 .msl-card{padding:12px 13px}
 .msl-card .msf-card-head{gap:8px}
 .msl-card .msf-card-title{font-size:14.5px}
+/* Le prix et sa date sur la meme ligne : un champ pleine largeur pour trois
+   caracteres donnait a la carte une zone de saisie plus grande que la matiere
+   qu'elle decrit. 150 px suffisent a « 1234,567 », et la date recupere la
+   place — c'est elle qu'on balaie du regard pour reperer un prix a revoir. */
+.msl-card-bas{display:flex;align-items:center;gap:10px;margin-top:10px}
+/* `min-width:0` partout sur la chaine : sans lui, un champ de saisie garde sa
+   largeur intrinseque (une vingtaine de caracteres) et le `flex-basis` ne
+   sert a rien — la boite repoussait la date hors de la carte. */
+.msl-card-bas .msl-card-prix{flex:0 0 156px;min-width:0;margin:0}
+.msl-card-bas .msf-prix{min-width:0;padding-right:9px;gap:6px}
+.msl-card-bas .msf-prix input{min-width:0;width:100%;font-size:16px}
+.msl-card-bas .msl-card-maj{flex:1;min-width:0;margin:0;text-align:right}
+.msl-card-bas .msl-maj{justify-content:flex-end}
+/* L'etat « enregistre » ne tient pas a cote du prix dans 156 px : il se pose
+   sous le champ, la ou l'oeil revient apres la saisie. */
+.msl-card-bas .msl-prix-etat{position:absolute;left:0;top:calc(100% + 3px);font-size:10.5px}
+.msl-card-bas .msl-card-prix{position:relative}
 .msl-card-prix{margin-top:10px}
 /* Le champ herite du socle (.msf-prix) ; on neutralise ce que la cellule de
    tableau lui imposait, sinon deux bordures se superposent. */
@@ -995,7 +1015,12 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
      plusieurs ecrans, un bouton en fin de page oblige a defiler pour valider
      une correction faite en haut. Il est deja en `fixed` (.pr-savebar) ;
      ici on l'elargit et on grossit ses cibles. */
-  .pr-savebar{left:10px;right:10px}
+  /* La topbar mobile est `fixed` et haute de 74px : le bandeau d'actions,
+     fixe lui aussi, se posait par-dessus et mangeait le titre de la fiche.
+     Il se cale sous elle, et l'espaceur (hauteur reelle posee par
+     syncSavebarSpacer) fait le reste. */
+  .pr-savebar{left:10px;right:10px;top:74px}
+  body.has-staging-bandeau .pr-savebar{top:98px}
   .pr-savebar .btn{min-height:44px}
 
   /* Les tableaux qui restent (detail de fiche, historique) defilent

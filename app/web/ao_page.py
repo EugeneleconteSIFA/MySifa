@@ -93,11 +93,16 @@ body.sb-open .sidebar-overlay{display:block}
   .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:300;transform:translateX(-105%);transition:transform .18s ease;height:100vh}
   body.sb-open .sidebar{transform:translateX(0)}
   .mobile-topbar{display:flex}
+  /* Le bandeau rouge de staging est fixe et haut de 24px : la topbar, fixe
+     elle aussi, se pose dessous au lieu de passer derriere. */
+  body.has-staging-bandeau .mobile-topbar{top:24px}
+  body.has-staging-bandeau.has-topbar .main{padding-top:98px}
 }
 .page-hdr{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}
 .page-hdr h1{font-size:20px;font-weight:800}
 .btn{padding:10px 18px;border-radius:10px;border:none;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s}
 .btn:hover{filter:brightness(1.05)}
+a.btn,a.btn:hover{text-decoration:none}
 .btn-accent{background:var(--accent);color:var(--bg)}
 .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
 .btn-danger{background:var(--danger);color:#fff}
@@ -285,6 +290,34 @@ margin-left:6px;cursor:help;vertical-align:middle}
 .ao-carte-act .btn{min-height:40px;display:inline-flex;align-items:center}
 .ao-carte-act .btn-icon{width:40px;height:40px}
 
+/* En-tete compact d'un appel d'offres en portrait */
+.ao-det-m{padding:2px 0 10px}
+.ao-det-m-titre{font-size:14px;font-weight:700;line-height:1.45;margin-bottom:8px}
+.ao-det-m-chips{display:flex;flex-wrap:wrap;gap:6px}
+.ao-det-m-resp{font-size:11.5px;color:var(--muted);margin-top:7px}
+.ao-det-m-pager{margin-top:9px;display:flex;justify-content:flex-end}
+
+/* Devises melangees dans un comparatif : le classement ne veut plus rien dire */
+.ao-comp-alerte{
+  display:flex;gap:7px;align-items:flex-start;margin:0 0 10px;padding:9px 11px;
+  border-radius:10px;font-size:11.5px;line-height:1.5;
+  background:color-mix(in srgb,var(--warn) 14%,transparent);
+  border:1px solid color-mix(in srgb,var(--warn) 45%,transparent);color:var(--warn);
+}
+.ao-comp-alerte svg{flex:0 0 auto;margin-top:1px}
+
+/* Carte d'un produit du catalogue */
+.prod-carte{padding:0}
+.prod-carte-tete{
+  display:block;width:100%;text-align:left;background:none;border:0;
+  padding:12px 13px 2px;color:inherit;font:inherit;cursor:pointer;
+}
+.prod-carte-tete .msf-card-title{color:var(--accent);white-space:normal;line-height:1.35}
+.prod-carte-tete .msf-kv dd{font-weight:600;font-size:12.5px;text-align:right}
+.prod-carte-act{display:flex;gap:7px;align-items:center;padding:10px 13px 12px}
+.prod-carte-act .btn{flex:1;min-height:42px}
+.prod-carte-act .btn-icon{width:42px;height:42px;flex:0 0 42px}
+
 /* Carte d'une ligne produit */
 .ao-lcarte-titre{font-size:13.5px;font-weight:700;line-height:1.45;margin:2px 0 10px}
 .ao-lcarte-act{display:flex;gap:8px;margin-top:11px}
@@ -339,14 +372,26 @@ margin-left:6px;cursor:help;vertical-align:middle}
   .detail-hdr h2{font-size:17px}
   .detail-hdr .nav-pager{margin-left:auto}
   .detail-meta{font-size:12px}
-  .detail-actions{gap:8px}
-  .detail-actions .btn{flex:1 1 calc(50% - 4px);min-height:44px;justify-content:center;
-    display:inline-flex;align-items:center;gap:6px}
+  /* Deux boutons secondaires par ligne, l'action principale seule et pleine
+     largeur : « Clôturer l'AO » n'a pas a occuper un ecran a lui tout seul,
+     mais il doit rester le seul bouton plein. */
+  .detail-actions{gap:8px;margin:12px 0}
+  .detail-actions .btn{flex:1 1 calc(50% - 4px);min-height:42px;justify-content:center;
+    display:inline-flex;align-items:center;gap:6px;font-size:12.5px}
+  .detail-actions .btn-accent{flex:1 1 100%;min-height:46px;font-size:13.5px}
 
   /* Parametres de l'AO : sous les onglets, pleine largeur, champs a la
      taille du pouce. Ils ne sont consultes qu'a la marge — ils ferment la
      liste des onglets plutot que de la couper en deux. */
-  .ao-params-panel{order:99;width:100%;margin:4px 0 0;padding:10px 12px;
+  .ao-params-m{margin:0 0 12px;border:1px solid var(--border);border-radius:10px;
+    background:var(--card);overflow:hidden}
+  .ao-params-m>summary{
+    display:flex;align-items:center;gap:8px;min-height:44px;padding:0 12px;
+    font-size:12.5px;font-weight:700;color:var(--text2);cursor:pointer;list-style:none}
+  .ao-params-m>summary::-webkit-details-marker{display:none}
+  .ao-params-m[open]>summary{border-bottom:1px solid var(--border)}
+  .ao-params-panel{width:100%;margin:0;padding:10px 12px;border:0;border-radius:0;
+    box-shadow:none;background:transparent;
     flex-direction:column;align-items:stretch;gap:10px}
   .ao-params-panel .app-group .app-row{gap:10px}
   .ao-params-panel .app-group .app-row label{flex:1;font-size:12px}
@@ -375,7 +420,7 @@ margin-left:6px;cursor:help;vertical-align:middle}
 <link rel="stylesheet" href="/static/mysifa_perf.css">
 <script src="/static/mysifa_perf.js"></script>
 </head>
-<body>
+<body class="has-topbar">
 <div class="app" id="root"></div>
 <div id="mroot"></div>
 <div id="toast"></div>
@@ -744,6 +789,37 @@ function renderProduitsRows() {
       ? '<div class="empty-state" style="padding:32px 16px"><strong>Aucun résultat pour « '+escHtml(q)+' »</strong></div>'
       : '<div class="empty-state" style="padding:32px 16px"><strong>Aucun produit dans le catalogue.</strong></div>';
   } else {
+    if (aoCartes()) {
+    /* Sept colonnes de reference, client, matieres, impressions et
+       conditionnement : au telephone, le tableau se lit a la loupe. La carte
+       garde la reference en titre — c'est par elle qu'on cherche un produit —
+       et range le reste en paires libelle / valeur. */
+    el.innerHTML = list.map(p => {
+      const mat = (p.fiche && p.fiche.matiere) || {};
+      const frontalTxt = matiereNameById('frontal', mat.frontal_id);
+      const adhesifTxt = matiereNameById('adhesif', mat.adhesif_id);
+      return '<article class="msf-card prod-carte">'+
+        '<button type="button" class="prod-ref-link prod-carte-tete" data-id="'+p.id+'">'+
+          '<div class="msf-card-head">'+
+            '<span class="msf-card-title">'+escHtml(p.ref)+'</span>'+
+            '<span class="msf-chevron">'+icon('chevron-right',16)+'</span></div>'+
+          (p.client_nom ? '<div class="msf-card-sub"><span>'+escHtml(p.client_nom)+'</span></div>' : '')+
+          '<dl style="margin:8px 0 0">'+
+            '<div class="msf-kv"><dt>Frontal</dt><dd>'+frontalTxt+'</dd></div>'+
+            '<div class="msf-kv"><dt>Adhésif</dt><dd>'+adhesifTxt+'</dd></div>'+
+            '<div class="msf-kv"><dt>Impressions</dt><dd>'+formatProduitImpressions(p)+'</dd></div>'+
+            '<div class="msf-kv"><dt>Bobine</dt><dd>'+formatProduitConditionnement(p)+'</dd></div>'+
+          '</dl>'+
+        '</button>'+
+        '<div class="prod-carte-act">'+
+          '<button class="btn btn-ghost btn-sm btn-edit-produit" data-id="'+p.id+'">Modifier</button>'+
+          '<button class="btn btn-ghost btn-sm btn-dup-produit" data-id="'+p.id+'" data-ref="'+escAttr(p.ref||'')+'">Dupliquer</button>'+
+          '<button class="btn btn-ghost btn-sm btn-export-produit" data-id="'+p.id+'">PDF</button>'+
+          '<button class="btn-icon btn-del-produit" data-id="'+p.id+'" title="Supprimer" aria-label="Supprimer">'+icon('trash',16)+'</button>'+
+        '</div>'+
+      '</article>';
+    }).join('');
+    } else {
     let rows = '';
     list.forEach(p => {
       const mat = (p.fiche && p.fiche.matiere) || {};
@@ -773,6 +849,7 @@ function renderProduitsRows() {
       '<th>Conditionnement bobine</th>'+
       '<th></th>'+
       '</tr></thead><tbody>'+rows+'</tbody></table>';
+    }
     el.querySelectorAll('.btn-edit-produit, .prod-ref-link').forEach(b => {
       b.addEventListener('click', (e) => {
         e.preventDefault();
@@ -2145,31 +2222,11 @@ async function saveEurUsdRate(rate) {
   } catch(e) { showToast(e.message || 'Erreur EUR/USD.', 'danger'); }
 }
 
-function renderDetailHeader() {
-  const ao = S.ao;
-  const d = S.detail;
-  const st = ao.statut;
-  const lignes = (d.lignes||[]).length;
-  const fournis = (d.fournisseurs||[]).length;
-  let actions = '<button class="btn ao-hdr-btn" type="button" id="btn-back">'+icon('arrow-left',14)+' Retour liste</button>' +
-    ' <a class="btn ao-hdr-btn" href="/api/ao/'+ao.id+'/export.pdf" target="_blank" title="Exporter en PDF">'+icon('file-text',14)+' Export PDF</a>';
-  if (st === 'brouillon') {
-    const dis = (lignes < 1 || fournis < 1) ? ' disabled' : '';
-    actions += '<button class="btn btn-accent" type="button" id="btn-envoyer"'+dis+'>Envoyer aux fournisseurs</button>';
-  } else if (st === 'envoyee') {
-    // Fournisseurs ajoutés après le premier envoi (date_envoi IS NULL, statut='invite')
-    const nonenvoyes = (d.fournisseurs||[]).filter(f => !f.date_envoi && f.statut === 'invite').length;
-    if (nonenvoyes > 0) {
-      actions += '<button class="btn btn-accent" type="button" id="btn-envoyer">Envoyer aux nouveaux ('+nonenvoyes+')</button>';
-    }
-  }
-  if (st === 'envoyee') actions += '<button class="btn btn-accent" type="button" id="btn-cloturer">Clôturer l\'AO</button>';
-  const navPager = buildNavPagerHtml(filteredAos(), ao.id, 'appel d\'offres');
-  return '<div class="breadcrumb"><a href="#" id="bc-list">Appels d\'offres</a> &gt; '+escHtml(ao.reference)+' — '+escHtml(ao.titre)+'</div>'+
-    '<div class="detail-hdr"><h2>'+escHtml(ao.reference)+'</h2>'+statutBadge(st)+navPager+'</div>'+
-    '<div class="detail-meta">'+escHtml(ao.titre)+'<br>Date limite : '+escHtml(ao.date_limite||'—')+' · Responsable : '+escHtml(ao.responsable_email||'—')+' · Réponses : '+escHtml(d.nb_reponses)+'</div>'+
-    '<div class="detail-actions">'+actions+'</div>'+
-    '<div class="detail-tabs">'+
+/* Les onglets et le panneau de parametres : identiques en bureau et en
+   portrait, seule leur place change. Une seule definition — deux copies,
+   c'est un onglet ajoute d'un cote seulement. */
+function aoTabsEtParamsHtml(ao, d) {
+  return '<div class="detail-tabs">'+
     (() => {
       const totalNonLus = Object.values(S.nonLus || {}).reduce((a, b) => a + b, 0);
       // Totaux : messages tous fournisseurs + documents (PJ AO)
@@ -2191,7 +2248,10 @@ function renderDetailHeader() {
       return ['lignes','fournisseurs','comparaison','messages','documents'].map(t =>
         '<button class="detail-tab'+(S.tab===t?' active':'')+'" data-tab="'+t+'">'+labels[t]+'</button>'
       ).join('');
-    })()+'<div class="ao-params-panel">'+
+    })()+(aoCartes()
+      ? '</div><details class="ao-params-m"><summary>'+icon('settings',14)+
+        ' Transport et taux de change</summary>'
+      : '')+'<div class="ao-params-panel">'+
       '<div class="app-group">'+
         '<div class="app-row"><label for="app-transport">Prix transport</label>'+
           '<input type="number" id="app-transport" step="0.1" min="0" max="100" value="'+escAttr(ao.prix_transport_pct||0)+'">'+
@@ -2203,7 +2263,55 @@ function renderDetailHeader() {
           '<input type="number" id="app-eur-usd" step="0.0001" min="0" placeholder="1.0850">'+
           '<span class="app-suffix"></span></div>'+
       '</div>'+
-    '</div>'+'</div>';
+    '</div>'+(aoCartes() ? '</details>' : '</div>');
+}
+
+function renderDetailHeader() {
+  const ao = S.ao;
+  const d = S.detail;
+  const st = ao.statut;
+  const lignes = (d.lignes||[]).length;
+  const fournis = (d.fournisseurs||[]).length;
+  let actions = '<button class="btn ao-hdr-btn" type="button" id="btn-back">'+icon('arrow-left',14)+' Retour liste</button>' +
+    ' <a class="btn ao-hdr-btn" href="/api/ao/'+ao.id+'/export.pdf" target="_blank" title="Exporter en PDF">'+icon('file-text',14)+' Export PDF</a>';
+  if (st === 'brouillon') {
+    const dis = (lignes < 1 || fournis < 1) ? ' disabled' : '';
+    actions += '<button class="btn btn-accent" type="button" id="btn-envoyer"'+dis+'>Envoyer aux fournisseurs</button>';
+  } else if (st === 'envoyee') {
+    // Fournisseurs ajoutés après le premier envoi (date_envoi IS NULL, statut='invite')
+    const nonenvoyes = (d.fournisseurs||[]).filter(f => !f.date_envoi && f.statut === 'invite').length;
+    if (nonenvoyes > 0) {
+      actions += '<button class="btn btn-accent" type="button" id="btn-envoyer">Envoyer aux nouveaux ('+nonenvoyes+')</button>';
+    }
+  }
+  if (st === 'envoyee') actions += '<button class="btn btn-accent" type="button" id="btn-cloturer">Clôturer l\'AO</button>';
+  const navPager = buildNavPagerHtml(filteredAos(), ao.id, 'appel d\'offres');
+
+  /* En portrait, la reference est deja dans la topbar : la repeter en gros
+     titre coutait un ecran avant d'arriver aux onglets. Ne restent que le
+     titre de l'AO et ce qui se lit en un coup d'oeil, en pastilles. */
+  if (aoCartes()) {
+    const chips = [
+      statutBadge(st),
+      ao.date_limite ? '<span class="msf-badge">Limite ' + escHtml(ao.date_limite) + '</span>' : '',
+      '<span class="msf-badge">' + escHtml(d.nb_reponses) + '/' + fournis + ' réponses</span>',
+      lignes ? '<span class="msf-badge">' + lignes + ' ligne' + (lignes > 1 ? 's' : '') + '</span>' : ''
+    ].filter(Boolean).join('');
+    return '<div class="ao-det-m">'+
+        '<div class="ao-det-m-titre">'+escHtml(ao.titre||'')+'</div>'+
+        '<div class="ao-det-m-chips">'+chips+'</div>'+
+        (ao.responsable_email ? '<div class="ao-det-m-resp">'+escHtml(ao.responsable_email)+'</div>' : '')+
+        (navPager ? '<div class="ao-det-m-pager">'+navPager+'</div>' : '')+
+      '</div>'+
+      '<div class="detail-actions">'+actions+'</div>'+
+      aoTabsEtParamsHtml(ao, d);
+  }
+
+  return '<div class="breadcrumb"><a href="#" id="bc-list">Appels d\'offres</a> &gt; '+escHtml(ao.reference)+' — '+escHtml(ao.titre)+'</div>'+
+    '<div class="detail-hdr"><h2>'+escHtml(ao.reference)+'</h2>'+statutBadge(st)+navPager+'</div>'+
+    '<div class="detail-meta">'+escHtml(ao.titre)+'<br>Date limite : '+escHtml(ao.date_limite||'—')+' · Responsable : '+escHtml(ao.responsable_email||'—')+' · Réponses : '+escHtml(d.nb_reponses)+'</div>'+
+    '<div class="detail-actions">'+actions+'</div>'+
+    aoTabsEtParamsHtml(ao, d);
 }
 
 /* Une ligne produit, en carte.
@@ -2211,7 +2319,10 @@ function renderDetailHeader() {
    Sept colonnes qui se relisent de haut en bas. La quantite est le chiffre
    qu'on vient chercher : elle est en gros. Les series restent sous leur
    ligne, comme sur le tableau, parce qu'une serie n'existe pas seule. */
-function aoLigneCarteHtml(l, canEditSeries) {
+function aoLigneCarteHtml(l, canEditSeries, rang) {
+  // La position vient de la base et commence a 0 sur les AO anciens :
+  // « Ligne 0 » se lit comme un bug. Le rang d'affichage prend le relais.
+  rang = (l.position != null && Number(l.position) > 0) ? l.position : rang;
   const series = Array.isArray(l.series) ? l.series : [];
   const nbS = series.length;
   const isOpen = S.openSeriesLignes && S.openSeriesLignes.has(l.id);
@@ -2264,7 +2375,7 @@ function aoLigneCarteHtml(l, canEditSeries) {
 
   return '<article class="msf-card'+(l.produit_introuvable?' ao-ligne-orpheline':'')+'" data-lid="'+l.id+'">'+
     '<div class="msf-card-head">'+
-      '<span class="msf-badge">Ligne '+escHtml(l.position)+'</span>'+orphan+badgeSeries+'</div>'+
+      '<span class="msf-badge">Ligne '+escHtml(rang)+'</span>'+orphan+badgeSeries+'</div>'+
     '<div class="ao-lcarte-titre">'+
       '<a href="#" class="ao-ligne-ref-link" data-ref="'+escAttr(l.ref_produit||'')+'">'+
       escHtml(l.ref_produit)+'</a></div>'+
@@ -2333,7 +2444,7 @@ function renderLignes() {
     ? '<button class="btn btn-accent btn-sm" type="button" id="btn-add-ligne" style="margin-bottom:12px">'+icon('plus',14)+' Ajouter une ligne</button>'
     : '';
   if (aoCartes()) {
-    const cartes = lignes.map(l => aoLigneCarteHtml(l, canEditSeries)).join('');
+    const cartes = lignes.map((l, i) => aoLigneCarteHtml(l, canEditSeries, i + 1)).join('');
     return (addBtn ? '<div style="margin-bottom:12px">'+addBtn+'</div>' : '')+
       (cartes || '<div class="msf-empty">Aucune ligne</div>');
   }
@@ -3588,17 +3699,30 @@ function renderComparaisonCartes() {
   parLigne.forEach(offres => {
     noLigne += 1;
     const r0 = offres[0];
+
+    /* On ne classe pas 1,28 € contre 1,43 $ : le moins-disant sort faux.
+       `prix_achat_mille_dd` est le prix d'achat au mille DEJA converti dans la
+       devise du devis par le serveur (transport inclus, sans coef ni marge) —
+       c'est la seule valeur comparable d'une offre a l'autre. Le prix dans la
+       devise du fournisseur reste lisible en sous-titre : c'est ce qu'il
+       facturera, et il n'a pas a disparaitre. */
+    const cmp = (r) => (r.prix_achat_mille_dd != null ? r.prix_achat_mille_dd : r.prix_au_mille);
+    const devCmp = (r) => ((r.prix_achat_mille_dd != null
+      ? (r.devise_prix_devis || 'EUR') : (r.devise || 'EUR')).toUpperCase());
+    const devises = [...new Set(offres.filter(x => cmp(x) != null).map(devCmp))];
+    const devUnique = devises.length === 1 ? devises[0] : null;
+
     // Les offres sans reponse ferment la liste : on ne classe pas un prix
     // qui n'existe pas.
     const triees = offres.slice().sort((a, b) => {
-      const av = a.prix_au_mille, bv = b.prix_au_mille;
+      const av = cmp(a), bv = cmp(b);
       if (av == null && bv == null) return 0;
       if (av == null) return 1;
       if (bv == null) return -1;
       return av - bv;
     });
-    const meilleur = triees.find(x => x.prix_au_mille != null);
-    const best = meilleur ? meilleur.prix_au_mille : null;
+    const meilleur = triees.find(x => cmp(x) != null);
+    const best = meilleur ? cmp(meilleur) : null;
 
     out += '<div class="msf-card ao-comp-ligne">'+
       (nbLignes > 1 ? '<div class="msf-card-sub" style="margin-bottom:6px"><span>Ligne '+
@@ -3614,7 +3738,15 @@ function renderComparaisonCartes() {
       '</div>';
 
     out += '<div class="msf-sect"><b>'+triees.length+' offre'+(triees.length>1?'s':'')+
-      ' · classées par prix au mille</b></div>';
+      ' · classées par prix d\'achat au mille'+
+      (devUnique ? ', en '+escHtml(devUnique) : '')+'</b></div>';
+    if (!devUnique && devises.length > 1) {
+      // Deux devises de devis sur la meme ligne : le classement melange des
+      // unites. On le dit plutot que de laisser croire au moins-disant.
+      out += '<div class="ao-comp-alerte">'+icon('alert-triangle',13)+
+        ' Devises de devis différentes ('+escHtml(devises.join(' / '))+') : '+
+        'le classement n\'est pas comparable. Alignez la devise du devis sur chaque offre.</div>';
+    }
 
     triees.forEach((r, i) => {
       const rid = r.reponse_id;
@@ -3623,21 +3755,23 @@ function renderComparaisonCartes() {
       const devD = (r.devise_prix_devis || 'EUR').toUpperCase();
       const cle = String(rid || ('x' + r.ligne_id + '-' + r.fourni_id));
       const ouvert = !!S.openOffres[cle];
-      const estBest = !noRep && best != null && r.prix_au_mille === best;
-      const ecart = (!noRep && best && r.prix_au_mille != null && best > 0)
-        ? ((r.prix_au_mille - best) / best * 100) : null;
+      const valeur = cmp(r);
+      const estBest = !noRep && best != null && valeur === best && !!devUnique;
+      const ecart = (!noRep && best && valeur != null && best > 0 && devUnique)
+        ? ((valeur - best) / best * 100) : null;
 
       const resume = noRep
         ? 'pas encore de prix'
-        : formatMoney(r.quotation, devF)+' / '+escHtml(r.unite_quotation||'mille')+
-          (r.delai_jours ? ' · '+escHtml(r.delai_jours)+' j' : ' · délai non donné');
+        : 'devis '+formatMoney(r.quotation, devF)+' / '+escHtml(r.unite_quotation||'mille')+
+          (r.delai_jours ? ' · '+escHtml(r.delai_jours)+' j' : ' · sans délai');
 
       let tete = '<button type="button" class="msf-offre-h ao-offre-toggle" data-offre="'+escAttr(cle)+'">'+
         '<span class="msf-offre-rang">'+(noRep ? '—' : (i+1))+'</span>'+
         '<span class="msf-offre-id"><b>'+escHtml(r.nom_fournisseur||'')+'</b><span>'+resume+'</span></span>'+
-        '<span class="msf-offre-prix"><b>'+(noRep ? '—' : formatMoney(r.prix_au_mille, devF))+'</b>'+
+        '<span class="msf-offre-prix"><b>'+(noRep ? '—' : formatMoney(valeur, devCmp(r)))+'</b>'+
           '<span>'+(noRep ? 'sans réponse' : (estBest ? 'meilleure'
-            : (ecart != null ? '+'+ecart.toLocaleString('fr-FR',{maximumFractionDigits:1})+' %' : 'prix/mille')))+'</span></span>'+
+            : (ecart != null ? '+'+ecart.toLocaleString('fr-FR',{maximumFractionDigits:1})+' %'
+               : 'achat / mille')))+'</span></span>'+
         '<span class="msf-chevron">'+icon(ouvert?'chevron-down':'chevron-right',16)+'</span>'+
         '</button>';
 

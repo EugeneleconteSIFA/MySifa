@@ -162,6 +162,10 @@ function fscRender(){
           title="Déposer les dossiers téléchargés sur la base publique FSC et enregistrer les contrôles en une fois">
           Importer un contrôle
         </button>
+        <button type="button" class="fsc-btn" onclick="fscOuvrirDeclaration()"
+          title="Pièce d'audit : ce qui a été contrôlé sur la base FSC, quand, et les écarts relevés. À faire viser par les responsables de la chaîne de contrôle.">
+          Déclaration de contrôle
+        </button>
         <button type="button" class="btn btn-accent" onclick="fscOuvrirDossier()" title="Page de garde + tous les certificats retenus, un signet par fournisseur">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
           <span id="fsc-dossier-lbl">Dossier PDF fusionné</span>
@@ -498,6 +502,20 @@ function fscOuvrirDossier(){
   if(filtreActif){
     const ids = fscLignesVisibles().map(l => l.id);
     if(!ids.length){ showToast('Aucun fournisseur à inclure.','info'); return; }
+    url += '&ids=' + ids.join(',');
+  }
+  window.open(url, '_blank');
+}
+
+// ─── Déclaration de contrôle (pièce d'audit) ─────────────────────────
+// Même périmètre que le dossier fusionné : si un filtre est actif, la
+// déclaration ne porte que sur les fournisseurs affichés — et le dit.
+function fscOuvrirDeclaration(){
+  const filtreActif = S.fsc.q || S.fsc.filtre !== 'tous';
+  let url = '/api/qualite/fsc/declaration-controle.pdf?inline=1';
+  if(filtreActif){
+    const ids = fscLignesVisibles().map(l => l.id);
+    if(!ids.length){ showToast('Aucun fournisseur à déclarer.','info'); return; }
     url += '&ids=' + ids.join(',');
   }
   window.open(url, '_blank');

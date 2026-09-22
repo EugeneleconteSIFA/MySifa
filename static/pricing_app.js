@@ -1329,8 +1329,13 @@
         </div>
         <div class="msf-card-sub"><span>${escHtml(m.designation || "")}</span></div>
         <div class="msf-card-sub"><span>${fournTxt}</span></div>
-        <div class="msl-card-prix">${prixBloc}</div>
-        <div class="msl-card-maj">${dernierPrixCellHtml(m)}</div>
+        ${editable
+          ? `<div class="msl-card-bas">
+               <div class="msl-card-prix">${prixBloc}</div>
+               <div class="msl-card-maj">${dernierPrixCellHtml(m)}</div>
+             </div>`
+          : `<div class="msl-card-prix">${prixBloc}</div>
+             <div class="msl-card-maj">${dernierPrixCellHtml(m)}</div>`}
         <div class="msl-card-act">
           ${tarifBtn}${fiche}
           <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${m.id}"

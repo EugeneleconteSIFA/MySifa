@@ -8762,6 +8762,21 @@ function renderSaisies(){
     });
   })();
 
+  // Bascules Z1 / alertes : on filtre APRÈS les durées et les métrages,
+  // qui se calculent sur la page complète. Remonté au-dessus de COLS pour
+  // servir les deux rendus, le tableau et le fil de cartes.
+  const affichage = saisiesAffichage();
+  const rowsVisibles = rows.filter(r=>{
+    if(!affichage.alertes && r.kind==='alert_ack') return false;
+    if(!affichage.z1 && (r.kind==='stock_pf' || r.operation_category==='stock_pf')) return false;
+    return true;
+  });
+
+  // Portrait telephone : onze colonnes ne rentrent pas sur 390 px et la
+  // scrollbar miroir ne se manipule pas au doigt. Meme donnee, meme
+  // fenetre d'edition au tap — seule la presentation change.
+  if(_mpmPortrait()) return renderMpmSaisies(d, rowsVisibles, readOnly);
+
   const COLS=[
     {key:'date_operation',  label:'Date'},
     {key:'operation',       label:'Opération'},
@@ -8791,14 +8806,6 @@ function renderSaisies(){
   });
  
   // ── Checkbox "tout sélectionner" ─────────────────────────────
-  // Bascules Z1 / alertes : on filtre APRÈS les durées et les métrages,
-  // qui se calculent sur la page complète.
-  const affichage = saisiesAffichage();
-  const rowsVisibles = rows.filter(r=>{
-    if(!affichage.alertes && r.kind==='alert_ack') return false;
-    if(!affichage.z1 && (r.kind==='stock_pf' || r.operation_category==='stock_pf')) return false;
-    return true;
-  });
 
   // Toutes les lignes se sélectionnent, sauf les saisies neutralisées par une
   // annulation de dossier. Les alertes et mouvements de stock ne passent pas
@@ -10206,6 +10213,22 @@ async function loadMachineStatus(){
 }
 function updateMachineStatusDOM(){
   const ms=S.machineStatus;
+  // Portrait telephone : les tuiles ne sont pas des .mst-card, et sans cette
+  // branche le rafraichissement toutes les 15 s mettrait S.machineStatus a
+  // jour sans que rien ne bouge a l'ecran. On rejoue leur construction dans
+  // le meme conteneur — ciblage DOM et pas render() global, donc le repli de
+  // section et la position de defilement tiennent.
+  const hoteMpm = document.querySelector('.mpm-machs');
+  if(hoteMpm){
+    hoteMpm.innerHTML = '';
+    hoteMpm.appendChild(_mpmTuileMachine('C1','Cohésio 1'));
+    hoteMpm.appendChild(_mpmTuileMachine('C2','Cohésio 2'));
+    hoteMpm.appendChild(_mpmTuileDsi());
+    hoteMpm.appendChild(_mpmTuileRepiquage());
+    const bMpm = document.getElementById('mpm-mst-maj');
+    if(bMpm){ bMpm.textContent = '↺ Actualiser'; bMpm.disabled = false; }
+    return;
+  }
   const ICONS={production:'▶',calage:'⚙',arret:'⛔',changement:'↻',nettoyage:'🧹',eteinte:'○',autre:'·'};
   const DUREE_LABEL={production:'En production depuis',calage:'En calage depuis',arret:'En arrêt depuis',changement:'En changement depuis',nettoyage:'En nettoyage depuis',eteinte:'Éteinte depuis',autre:'Depuis'};
   function fmtDuree(min){
@@ -10279,6 +10302,795 @@ async function loadSaisies(opts){
   else set({saisies:d});
 }
 async function loadDevis(){const d=await api('/api/rentabilite/devis');if(d)set({devisList:d});}
+
+// ══════════════════════════════════════════════════════════════════════
+// MyProd > Production — portrait telephone
+//
+// Source d'inspiration : l'accueil de l'application mobile du tableau de
+// bord Stripe. Une barre de periode collante, un fil vertical de cartes
+// autonomes, et le detail qui se prend en plein ecran au tap. Rien d'autre.
+//
+// Ce bloc ne REMPLACE rien en paysage ni au bureau : chaque point de
+// branchement teste _mpmPortrait() et repart sur le rendu d'origine sinon.
+// Styles : static/mysifa_prod_mobile.css (prefixe .mpm-), pose sur le
+// socle mobile partage static/mysifa_mobile.css (prefixe .msf-).
+// ══════════════════════════════════════════════════════════════════════
+
+// Meme seuil que Couts matieres : 700 px. Au-dela, un telephone est en
+// paysage ou c'est une tablette, et la vue dense reste la bonne.
+const MPM_MQ = '(max-width:700px) and (orientation:portrait)';
+function _mpmPortrait(){
+  try{ return window.matchMedia(MPM_MQ).matches; }catch(e){ return false; }
+}
+
+// ── Periode ───────────────────────────────────────────────────────────
+
+function _mpmJourCourt(iso){
+  try{
+    const d = new Date(String(iso)+'T12:00:00');
+    if(isNaN(d.getTime())) return formatJourLabel(iso);
+    return d.toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
+  }catch(e){ return formatJourLabel(iso); }
+}
+function _mpmPeriodeLabel(){
+  // Declenche la resolution de la derniere journee travaillee, comme le
+  // fait la barre de presets du bureau : sans elle, « Hier » retombe sur
+  // la veille calendaire et le raccourci ne se reconnait plus.
+  if(S.dernierJourSaisi === undefined) chargerDernierJourSaisi();
+  const f = S.fv.date_from || '', t = S.fv.date_to || '';
+  if(!f && !t) return 'Toute la période';
+  const p = _datePresets().find(x => x.from === f && x.to === t);
+  if(p) return p.label;
+  if(f && f === t) return _mpmJourCourt(f);
+  return 'Période personnalisée';
+}
+function _mpmPeriodeDates(){
+  const f = S.fv.date_from || '', t = S.fv.date_to || '';
+  if(!f && !t) return 'sans borne de date';
+  if(f && f === t) return formatJourLabel(f);
+  return (f ? formatJourLabel(f) : '…') + '  →  ' + (t ? formatJourLabel(t) : '…');
+}
+function _mpmNbFiltres(){
+  const fv = S.fv || {};
+  return (fv.operateurs||[]).length + (fv.machines||[]).length + (fv.dossiers||[]).length;
+}
+
+// Barre collante — remplace .filters-panel en portrait.
+function renderMpmBar(){
+  const n = _mpmNbFiltres();
+  // La topbar mobile est collante (z-index 50) : sans ce relevé, la barre
+  // de periode se cale a top:0 et passe DERRIERE elle au defilement. On
+  // mesure au lieu de coder une hauteur en dur — elle change avec le
+  // bandeau staging et avec la longueur du sous-titre.
+  requestAnimationFrame(function(){
+    try{
+      const r  = document.documentElement;
+      const tb = document.querySelector('.mobile-topbar');
+      const ba = document.querySelector('.mpm-bar');
+      const on = document.querySelector('.nav-tabs');
+      const hTb = (tb && tb.offsetHeight) || 0;
+      const hBa = (ba && ba.offsetHeight) || 0;
+      const hOn = (on && on.offsetHeight) || 0;
+      if(hTb) r.style.setProperty('--mpm-top', hTb+'px');
+      if(hBa) r.style.setProperty('--mpm-bar-h', hBa+'px');
+      // Hauteur totale de l'en-tete colle : les en-tetes de jour de la liste
+      // des saisies s'y calent, sinon ils glissent dessous et disparaissent.
+      if(hTb) r.style.setProperty('--mpm-sticky', (hTb+hBa+hOn)+'px');
+    }catch(e){}
+  });
+  return h('div',{className:'mpm-bar'},
+    h('button',{type:'button',className:'mpm-per','aria-label':'Changer la période',
+      onClick:()=>openMpmFiltres()},
+      iconEl('calendar',17),
+      h('span',{className:'mpm-per-txt'},
+        h('b',null,_mpmPeriodeLabel()),
+        h('span',null,_mpmPeriodeDates())
+      ),
+      iconEl('chevron-down',14)
+    ),
+    h('button',{type:'button',
+      className:'msf-icon-btn'+(n?' msf-icon-btn--on':''),
+      'aria-label': n ? ('Filtres ('+n+' actif'+(n>1?'s':'')+')') : 'Filtres',
+      onClick:()=>openMpmFiltres()},
+      iconEl('sliders',18),
+      // Le nombre, pas un simple point : un filtre actif mais illisible est
+      // la premiere cause de « la liste est vide ». Il tient dans la pastille
+      // sans rien coûter en hauteur d'en-tete.
+      n ? h('span',{className:'mpm-n'}, String(n)) : null
+    )
+  );
+}
+
+// ── Feuille de filtres ────────────────────────────────────────────────
+// Rien ne part au serveur avant « Appliquer », et AUCUN geste a
+// l'interieur ne declenche render() : on ne reconstruit pas une feuille
+// ouverte sous les doigts (regle des searchbars, frontend-comportement.md).
+
+function closeMpmFiltres(){
+  ['mpm-f-bd','mpm-f-bs'].forEach(function(id){
+    const e = document.getElementById(id);
+    if(e) e.remove();
+  });
+}
+
+function openMpmFiltres(){
+  closeMpmFiltres();
+  const root = document.getElementById('root');
+  if(!root) return;
+  const viewAll = canViewAllProd(S.user);
+
+  // Brouillon : fermer sans appliquer ne doit rien laisser derriere soi.
+  const br = {
+    date_from: S.fv.date_from || '',
+    date_to:   S.fv.date_to   || '',
+    operateurs:(S.fv.operateurs||[]).slice(),
+    machines:  (S.fv.machines  ||[]).slice(),
+    dossiers:  (S.fv.dossiers  ||[]).slice(),
+  };
+
+  const body = h('div',{className:'msf-bs-body'});
+
+  // Presets + dates ----------------------------------------------------
+  const inFrom = h('input',{type:'date',value:br.date_from,'aria-label':'Du'});
+  const inTo   = h('input',{type:'date',value:br.date_to,  'aria-label':'Au'});
+  const chips  = [];
+  const majDates = function(){
+    inFrom.value = br.date_from;
+    inTo.value   = br.date_to;
+    chips.forEach(function(c){
+      c.el.classList.toggle('msf-chip--on',
+        c.p.from === br.date_from && c.p.to === br.date_to);
+    });
+  };
+  inFrom.addEventListener('change',function(){ br.date_from = inFrom.value; majDates(); });
+  inTo.addEventListener('change',  function(){ br.date_to   = inTo.value;   majDates(); });
+
+  const rangPresets = h('div',{className:'mpm-f-chips'});
+  _datePresets().forEach(function(p){
+    const el = h('button',{type:'button',className:'msf-chip',onClick:function(){
+      br.date_from = p.from; br.date_to = p.to; majDates();
+    }}, p.label);
+    chips.push({el:el,p:p});
+    rangPresets.appendChild(el);
+  });
+
+  body.appendChild(h('div',{className:'mpm-f-sect'},'Période'));
+  body.appendChild(rangPresets);
+  body.appendChild(h('div',{className:'mpm-f-dates',style:{marginTop:'12px'}},
+    h('div',{className:'msf-field'}, h('label',null,'Du'), inFrom),
+    h('div',{className:'msf-field'}, h('label',null,'Au'),  inTo)
+  ));
+  majDates();
+
+  // Machines -----------------------------------------------------------
+  const MACHINE_ORDRE = ['Cohésio 1','Cohésio 2','DSI','Repiquage'];
+  const machs = (S.filters.machines && S.filters.machines.length)
+    ? S.filters.machines : MACHINE_ORDRE;
+  if(machs.length){
+    const rang = h('div',{className:'mpm-f-chips'});
+    machs.forEach(function(m){
+      const on = br.machines.indexOf(m) !== -1;
+      const el = h('button',{type:'button',className:'msf-chip'+(on?' msf-chip--on':'')}, m);
+      el.addEventListener('click',function(){
+        const i = br.machines.indexOf(m);
+        if(i >= 0) br.machines.splice(i,1); else br.machines.push(m);
+        el.classList.toggle('msf-chip--on', br.machines.indexOf(m) !== -1);
+      });
+      rang.appendChild(el);
+    });
+    body.appendChild(h('div',{className:'mpm-f-sect'},'Machines'));
+    body.appendChild(rang);
+  }
+
+  // Operateurs ---------------------------------------------------------
+  if(viewAll && (S.filters.operators||[]).length){
+    const rang = h('div',{className:'mpm-f-chips'});
+    (S.filters.operators||[]).forEach(function(o){
+      const on = br.operateurs.indexOf(o) !== -1;
+      const el = h('button',{type:'button',className:'msf-chip'+(on?' msf-chip--on':'')}, opName(o));
+      el.addEventListener('click',function(){
+        const i = br.operateurs.indexOf(o);
+        if(i >= 0) br.operateurs.splice(i,1); else br.operateurs.push(o);
+        el.classList.toggle('msf-chip--on', br.operateurs.indexOf(o) !== -1);
+      });
+      rang.appendChild(el);
+    });
+    body.appendChild(h('div',{className:'mpm-f-sect'},'Opérateurs'));
+    body.appendChild(rang);
+  }
+
+  // Dossiers -----------------------------------------------------------
+  if(viewAll){
+    const tousDos = (S.filters.dossiers||[]).map(String);
+    const sel = h('div',{className:'mpm-f-dos-sel'});
+    const sug = h('div',{className:'mpm-f-dos-sug',style:{display:'none'}});
+    const inDos = h('input',{type:'search',placeholder:'Rechercher (n° dossier…)',
+      autocomplete:'off','aria-label':'Dossier'});
+
+    const majSel = function(){
+      sel.innerHTML = '';
+      br.dossiers.forEach(function(ref){
+        const b = h('button',{type:'button',title:'Retirer '+ref}, ref, h('i',null,'×'));
+        b.addEventListener('click',function(){
+          br.dossiers = br.dossiers.filter(function(d){ return d !== ref; });
+          majSel();
+        });
+        sel.appendChild(b);
+      });
+    };
+    const majSug = function(){
+      const q = String(inDos.value||'').trim().toLowerCase();
+      sug.innerHTML = '';
+      if(!q){ sug.style.display = 'none'; return; }
+      const res = tousDos.filter(function(d){
+        return d.toLowerCase().indexOf(q) !== -1 && br.dossiers.indexOf(d) === -1;
+      }).slice(0,8);
+      sug.style.display = '';
+      if(!res.length){
+        sug.appendChild(h('button',{type:'button',disabled:true,
+          style:{color:'var(--muted)',fontStyle:'italic'}},
+          'Aucun résultat pour « '+inDos.value+' »'));
+        return;
+      }
+      res.forEach(function(d){
+        const b = h('button',{type:'button'}, d);
+        b.addEventListener('click',function(){
+          if(br.dossiers.indexOf(d) === -1) br.dossiers.push(d);
+          inDos.value = '';
+          majSel(); majSug();
+        });
+        sug.appendChild(b);
+      });
+    };
+    inDos.addEventListener('input', majSug);
+    inDos.addEventListener('keydown', function(e){
+      if(e.key === 'Escape'){ e.preventDefault(); inDos.value = ''; majSug(); }
+    });
+
+    body.appendChild(h('div',{className:'mpm-f-sect'},'Dossiers'));
+    body.appendChild(h('div',{className:'mpm-f-dos'},
+      h('div',{className:'msf-field',style:{marginBottom:'0'}}, inDos),
+      sug, sel));
+    majSel();
+  }
+
+  // Feuille ------------------------------------------------------------
+  const bd = h('div',{className:'msf-bs-backdrop',id:'mpm-f-bd',onClick:closeMpmFiltres});
+  const bs = h('div',{className:'msf-bs',id:'mpm-f-bs',role:'dialog','aria-label':'Filtres'},
+    h('div',{className:'msf-bs-grab'}),
+    h('div',{className:'msf-bs-head'},
+      h('div',{className:'msf-titre-lg'},'Période et filtres')),
+    body,
+    h('div',{className:'msf-bs-foot'},
+      h('button',{type:'button',className:'msf-btn msf-btn--ghost msf-btn--sm',
+        onClick:function(){
+          closeMpmFiltres();
+          S.fv.machines = []; S.fv.operateurs = []; S.fv.dossiers = [];
+          applyF();
+        }},'Réinitialiser'),
+      h('button',{type:'button',className:'msf-btn msf-btn--sm',style:{flex:'1'},
+        onClick:function(){
+          S.fv.date_from  = br.date_from;
+          S.fv.date_to    = br.date_to;
+          S.fv.machines   = br.machines;
+          S.fv.operateurs = br.operateurs;
+          S.fv.dossiers   = br.dossiers;
+          closeMpmFiltres();
+          applyF();
+        }},'Appliquer')
+    )
+  );
+  root.appendChild(bd);
+  root.appendChild(bs);
+}
+
+// ── Vue d'ensemble ────────────────────────────────────────────────────
+
+function _mpmTitre(ico, texte, extra){
+  return h('span',{className:'section-title',
+    style:{display:'inline-flex',alignItems:'center',gap:'5px',margin:0,padding:0,
+           border:'none',flex:'1',minWidth:'0'}},
+    iconEl(ico,13), ' '+texte, extra||null);
+}
+function _mpmDuree(min){
+  if(min == null || min < 0) return null;
+  const m = Math.round(Number(min));
+  if(m < 1) return "à l'instant";
+  const hh = Math.floor(m/60), mm = m%60;
+  if(hh === 0) return mm+' min';
+  return mm === 0 ? hh+' h' : hh+' h '+String(mm).padStart(2,'0');
+}
+
+// Tuile d'une machine Cohesio. Le bord gauche porte l'etat : debout dans
+// l'atelier, c'est la couleur qui se lit, pas le libelle.
+function _mpmTuileMachine(mkey, defautNom){
+  const ms = S.machineStatus;
+  const m  = ms && ms[mkey];
+  const sk = m ? (m.statut_key||'eteinte') : 'eteinte';
+  const dos = m ? m.dossier : null;
+  const duree = m ? _mpmDuree(m.duree_min) : null;
+  const cli = dos ? prodSynthCleanClient(dos.client) : '';
+  const des = dos ? String(dos.designation||'').replace(/^,\s*/,'').trim() : '';
+  return h('div',{className:'mpm-mach mpm-mach--'+sk},
+    h('div',{className:'mpm-mach-h'},
+      h('b',null, m ? m.nom : defautNom),
+      sk !== 'eteinte' ? h('span',{className:'mpm-live'}) : null
+    ),
+    h('div',{className:'mpm-mach-etat'},
+      h('b',null, m ? (m.statut_label||'Éteinte') : 'Éteinte'),
+      duree ? h('span',{className:'mpm-mach-depuis'}, duree) : null
+    ),
+    (m && m.operateur) ? h('div',{className:'mpm-mach-op'}, m.operateur) : null,
+    dos ? h('div',{className:'mpm-mach-dos'},
+      h('span',{className:'mpm-mach-dos-ref'},
+        (sk === 'changement' ? 'préc. #' : '#') + (dos.no_dossier||'—')),
+      h('span',{className:'mpm-mach-dos-txt'},
+        [cli, des].filter(Boolean).join(' — ') || '—')
+    ) : (ms ? h('div',{className:'mpm-mach-vide'},'Aucun dossier en cours') : null),
+    !ms ? h('div',{className:'mpm-mach-vide'},'Chargement…') : null
+  );
+}
+
+function _mpmTuileDsi(){
+  const m = S.machineStatus && S.machineStatus.DSI;
+  return h('div',{className:'mpm-mach mpm-mach--en_dev'},
+    h('div',{className:'mpm-mach-h'}, h('b',null,'DSI')),
+    h('div',{className:'mpm-mach-etat'},
+      h('b',{style:{fontStyle:'italic',color:'var(--muted)'}},
+        (m && m.statut_label) || 'En cours de développement'))
+  );
+}
+
+function _mpmTuileRepiquage(){
+  const m = S.machineStatus && S.machineStatus.REP;
+  const dossiers = (m && m.dossiers_du_jour) || [];
+  const total = m ? Number(m.total_cartons||0) : 0;
+  const isOn = dossiers.length > 0;
+  const lignes = dossiers.slice(0,8).map(function(d){
+    return h('div',{className:'mpm-rep-l'},
+      h('span',{className:'mpm-rep-l-id'},
+        h('b',null,'#'+(d.no_dossier||'—')),
+        h('span',null, [prodSynthCleanClient(d.client), d.designation]
+          .filter(Boolean).join(' — ') || '—')
+      ),
+      h('span',{className:'mpm-rep-l-n'}, fN(d.cartons)+' ct')
+    );
+  });
+  const reste = Math.max(0, dossiers.length - 8);
+  return h('div',{className:'mpm-mach mpm-mach--'+(isOn?'production':'eteinte')},
+    h('div',{className:'mpm-mach-h'},
+      h('b',null,'Repiquage — aujourd’hui'),
+      isOn ? h('span',{className:'mpm-live'}) : null
+    ),
+    h('div',{className:'mpm-mach-etat'},
+      h('b',null, isOn ? (dossiers.length+' dossier'+(dossiers.length>1?'s':'')) : 'Aucune saisie'),
+      isOn ? h('span',{className:'mpm-mach-depuis'}, fN(total)+' ct') : null
+    ),
+    ...lignes,
+    reste ? h('div',{className:'mpm-mach-vide'}, '+ '+reste+' autre'+(reste>1?'s':'')) : null
+  );
+}
+
+// Axe de regroupement de la synthese. Un seul a la fois : quatre tableaux
+// empiles, c'est douze ecrans de defilement pour retrouver une ligne.
+const MPM_AXES = [
+  {key:'dossier',  label:'Dossier',   type:'dossier'},
+  {key:'operateur',label:'Opérateur', type:'operator'},
+  {key:'machine',  label:'Machine',   type:'machine'},
+  {key:'jour',     label:'Jour',      type:'day'},
+];
+function _mpmAxeGet(){
+  try{
+    const v = localStorage.getItem('mysifa.prod.mpm.axe');
+    if(MPM_AXES.some(function(a){ return a.key === v; })) return v;
+  }catch(e){}
+  return 'dossier';
+}
+function _mpmAxeSet(v){
+  try{ localStorage.setItem('mysifa.prod.mpm.axe', v); }catch(e){}
+}
+
+function _mpmListeSynthese(byDosNoRep){
+  const axe = _mpmAxeGet();
+  const def = MPM_AXES.filter(function(a){ return a.key === axe; })[0] || MPM_AXES[0];
+  let items;
+  if(axe === 'dossier'){
+    items = _prodAggDossier(byDosNoRep).map(function(r){
+      const den = Math.round(Number(r.temps_prod_min||0)) + Math.round(Number(r.temps_arret_min||0));
+      return {
+        key: String(r.no_dossier),
+        titre: '#'+r.no_dossier,
+        sous: prodSynthCleanClient(r.client) || '—',
+        n: fN(r.metrage_m||0)+' m',
+        vit: (den>0 ? (Number(r.metrage_m||0)/den).toFixed(2) : '0.00')+' m/min',
+      };
+    });
+  }else{
+    const champ = axe === 'operateur' ? 'operateur' : (axe === 'machine' ? 'machine' : 'jour');
+    let rows = _prodAggBy(byDosNoRep, champ);
+    rows = (axe === 'jour')
+      ? rows.sort(function(a,b){ return String(b.key).localeCompare(String(a.key)); })
+      : rows.sort(function(a,b){ return (b.metrage_m||0)-(a.metrage_m||0); });
+    items = rows.map(function(r){
+      return {
+        key: String(r.key),
+        titre: axe === 'operateur' ? opName(r.key)
+             : (axe === 'jour' ? formatJourLabel(r.key) : String(r.key)),
+        sous: fN(r.dossiers||0)+' dossier'+((r.dossiers||0)>1?'s':'')
+              + ' · ' + fMin(r.prod_min) + ' de prod',
+        n: fN(r.metrage_m||0)+' m',
+        vit: (Number(r.vitesse_m_min)||0).toFixed(2)+' m/min',
+      };
+    });
+  }
+
+  const barre = h('div',{className:'mpm-axes'},
+    ...MPM_AXES.map(function(a){
+      return h('button',{type:'button',
+        className:'msf-chip'+(a.key === axe?' msf-chip--on':''),
+        onClick:function(){ _mpmAxeSet(a.key); render(); }}, a.label);
+    })
+  );
+
+  if(!items.length){
+    return h('div',null, barre, h('div',{className:'mpm-vide'},
+      'Aucune production sur la période filtrée.'));
+  }
+
+  const cles = items.map(function(i){ return i.key; });
+  const liste = h('div',{className:'msf-rows'},
+    ...items.map(function(it,i){
+      return h('button',{type:'button',className:'mpm-lig',
+        onClick:function(){ openProdSynthDetail(def.type, cles, i); }},
+        h('span',{className:'mpm-lig-id'},
+          h('b',null,it.titre),
+          h('span',null,it.sous)
+        ),
+        h('span',{className:'mpm-lig-n'},
+          h('b',null,it.n),
+          h('span',null,it.vit)
+        ),
+        h('span',{className:'mpm-lig-chev'}, iconEl('chevron-right',16))
+      );
+    })
+  );
+  return h('div',null, barre, liste);
+}
+
+function _mpmListeRepiquage(byDosRep){
+  if(!byDosRep.length){
+    return h('div',{className:'mpm-vide'},'Pas de repiquage sur la période filtrée.');
+  }
+  const par = {};
+  byDosRep.forEach(function(r){
+    const k = String(r.no_dossier||'').trim();
+    if(!k) return;
+    const x = par[k] = par[k] || {key:k, client:'', cartons:0, etiquettes:0};
+    if(!x.client && r.client) x.client = r.client;
+    x.cartons    += Number(r.cartons||0);
+    x.etiquettes += Number(r.etiquettes||0);
+  });
+  const items = Object.values(par).sort(function(a,b){
+    return String(a.key).localeCompare(String(b.key),'fr',{numeric:true,sensitivity:'base'});
+  });
+  const cles = items.map(function(i){ return i.key; });
+  const filtre = function(k){
+    return byDosRep
+      .filter(function(s){ return String(s.no_dossier||'').trim() === String(k||'').trim(); })
+      .sort(function(a,b){ return String(b.jour||'').localeCompare(String(a.jour||'')); });
+  };
+  return h('div',{className:'msf-rows'},
+    ...items.map(function(it,i){
+      return h('button',{type:'button',className:'mpm-lig',
+        onClick:function(){
+          openProdSynthDetail('dossier', cles, i, {isRep:true, customSessionsFn:filtre});
+        }},
+        h('span',{className:'mpm-lig-id'},
+          h('b',null,'#'+it.key),
+          h('span',null, prodSynthCleanClient(it.client) || '—')
+        ),
+        h('span',{className:'mpm-lig-n'},
+          h('b',null, fN(it.cartons)+' ct'),
+          h('span',{style:{color:'var(--muted)'}}, fN(it.etiquettes)+' étiq.')
+        ),
+        h('span',{className:'mpm-lig-chev'}, iconEl('chevron-right',16))
+      );
+    })
+  );
+}
+
+function renderMpmKpis(){
+  const d = S.production;
+  if(!d) return h('div',{className:'mpm-vide'},'Chargement des données de production…');
+  if(d.blocked) return h('div',{className:'mpm-vide'}, d.message);
+
+  const prod = d.produit || {};
+  const tt   = d.temps_totaux || {};
+  const byDosAll   = d.by_dossier || d.dossier_times || [];
+  const byDosRep   = byDosAll.filter(function(r){ return _isRepMachine(r.machine); });
+  const byDosNoRep = byDosAll.filter(function(r){ return !_isRepMachine(r.machine); });
+  const hasRep  = byDosRep.length > 0;
+  const onlyRep = hasRep && byDosNoRep.length === 0;
+  const parts = [];
+
+  // 1. Statut machines -------------------------------------------------
+  if(canViewAllProd(S.user)){
+    const btnMaj = h('button',{type:'button',id:'mpm-mst-maj',
+      style:{marginLeft:'auto',flex:'0 0 auto',fontSize:'11px',color:'var(--accent)',
+             background:'none',border:'none',padding:'4px 2px',fontFamily:'inherit',
+             cursor:'pointer'},
+      onClick:async function(e){
+        e.stopPropagation();
+        const b = document.getElementById('mpm-mst-maj');
+        if(b){ b.textContent = '↺ …'; b.disabled = true; }
+        // loadMachineStatus() avale ses erreurs : sans ce rattrapage, un
+        // reseau coupe laisserait le bouton sur « … » et desactive.
+        try{ await loadMachineStatus(); }finally{
+          const b2 = document.getElementById('mpm-mst-maj');
+          if(b2){ b2.textContent = '↺ Actualiser'; b2.disabled = false; }
+        }
+      }},'↺ Actualiser');
+    parts.push(makeCollapsibleSection(
+      _mpmTitre('cpu','Statut machines', btnMaj),
+      h('div',{className:'mpm-machs'},
+        _mpmTuileMachine('C1','Cohésio 1'),
+        _mpmTuileMachine('C2','Cohésio 2'),
+        _mpmTuileDsi(),
+        _mpmTuileRepiquage()
+      ),
+      'machines', true));
+  }
+
+  // 2. Les chiffres de la periode --------------------------------------
+  if(!onlyRep){
+    const prodInclArrets = Number(tt.production_min||0) + Number(tt.arret_min||0);
+    const vitesse = (d.vitesse_m_min != null) ? Number(d.vitesse_m_min).toFixed(2) : '0.00';
+    const kv = function(lbl, val){
+      return h('div',{className:'msf-kv'}, h('dt',null,lbl), h('dd',null,val));
+    };
+    parts.push(makeCollapsibleSection(
+      _mpmTitre('bar-chart-2','La période',
+        (hasRep && !onlyRep)
+          ? h('span',{style:{fontStyle:'italic',color:'var(--muted)',fontSize:'10px',
+                             fontWeight:'400',marginLeft:'6px'}},'(hors repiquage)')
+          : null),
+      h('div',null,
+        h('div',{className:'mpm-hero'},
+          h('dl',{className:'mpm-hero-t'},
+            h('dt',null,'Métrage'),
+            h('dd',null, fN(prod.metrage_m||0), h('small',null,'m'))),
+          h('dl',{className:'mpm-hero-t mpm-hero-t--accent'},
+            h('dt',null,'Vitesse'),
+            h('dd',null, vitesse, h('small',null,'m/min')))
+        ),
+        h('div',{className:'msf-card'},
+          kv('Dossiers produits', fN(prod.dossiers||0)),
+          kv('Calage',     fMin(tt.calage_min)),
+          kv('Production', fMin(prodInclArrets)),
+          kv('Arrêts',     fMin(tt.arret_min))
+        )
+      ),
+      'quantites'));
+  }
+
+  // 3. Qualite de saisie -----------------------------------------------
+  if(S.historique && S.historique.sanity && !isCommercial(S.user)){
+    const sc = renderSanity(S.historique.sanity);
+    if(sc){
+      sc.style.cursor = 'pointer';
+      sc.addEventListener('click', async function(){
+        S.subPage = 'erreurs';
+        try{ _syncProdHash(); }catch(e){}
+        if(!S.historique) await loadHist();
+        render();
+      });
+      parts.push(h('div',{style:{marginBottom:'14px'}}, sc));
+    }
+  }
+
+  // 4. Synthese ---------------------------------------------------------
+  const ongletSynth = _prodSynthTabGet(hasRep, onlyRep);
+  const corpsSynth = [];
+  if(hasRep && !onlyRep){
+    corpsSynth.push(h('div',{className:'msf-seg',style:{marginBottom:'11px'}},
+      h('button',{type:'button',
+        className: ongletSynth === 'machines' ? 'msf-seg-on' : '',
+        onClick:function(){ _prodSynthTabSet('machines'); render(); }},'Machines'),
+      h('button',{type:'button',
+        className: ongletSynth === 'repiquage' ? 'msf-seg-on' : '',
+        onClick:function(){ _prodSynthTabSet('repiquage'); render(); }},'Repiquage')
+    ));
+  }
+  corpsSynth.push(ongletSynth === 'repiquage'
+    ? _mpmListeRepiquage(byDosRep)
+    : _mpmListeSynthese(byDosNoRep));
+  parts.push(makeCollapsibleSection(
+    _mpmTitre('layers','Synthèse'),
+    h('div',null, ...corpsSynth),
+    'synthese'));
+
+  return h('div',null, ...parts);
+}
+
+// ── Saisies ───────────────────────────────────────────────────────────
+
+function _mpmSaiClasse(row){
+  const cat = row.operation_category || '';
+  const code = row.operation_code || '';
+  let c = '';
+  if(row.kind === 'alert_ack') c = 'mpm-sai--alerte';
+  else if(isFictifSaisieRow(row)) c = 'mpm-sai--personnel';
+  else if(row.operation_severity === 'critique') c = 'mpm-sai--critique';
+  else if(row.operation_severity === 'attention') c = 'mpm-sai--attention';
+  else if(row.kind === 'stock_pf' || row.kind === 'stock_mp'
+          || cat === 'stock_pf' || cat === 'stock_mp') c = 'mpm-sai--stock';
+  else if(cat === 'production' || code === '03' || code === '88') c = 'mpm-sai--production';
+  else if(cat === 'personnel' || code === '86' || code === '87') c = 'mpm-sai--personnel';
+  else if(cat === 'calage' || code === '02') c = 'mpm-sai--calage';
+  if(Number(row.est_annule||0)) c += ' mpm-sai--annule';
+  if(code === '89' && Number(row.fin_dossier) === 1) c += ' mpm-sai--fin';
+  return c;
+}
+function _mpmSaiDuree(m){
+  if(m == null || !isFinite(m) || m <= 0) return null;
+  const mm = Math.round(Number(m));
+  if(mm < 60) return mm+' min';
+  return Math.floor(mm/60)+' h '+String(mm%60).padStart(2,'0');
+}
+function _mpmSaiMetrage(row){
+  if(row._metrage_dossier != null)    return '⇒ '+fN(row._metrage_dossier)+' m';
+  if(row.metrage_total_fin != null)   return fN(row.metrage_total_fin)+' m (cpt fin)';
+  if(row.metrage_reel != null)        return fN(row.metrage_reel)+' m';
+  if(row.metrage_total_debut != null) return fN(row.metrage_total_debut)+' m (déb.)';
+  if(row.metrage_prevu != null)       return fN(row.metrage_prevu)+' m (déb.)';
+  return '';
+}
+
+// Remplace le tableau de onze colonnes. Les gestes de tableur (selection
+// multiple, annuler/retablir, poignee de recopie, insertion de ligne) ne
+// sont pas portes : ils n'existent pas au doigt. Le tap ouvre la MEME
+// fenetre d'edition que le bureau, et c'est elle qui corrige.
+function renderMpmSaisies(d, rows, readOnly){
+  const total = Number(d.total||0);
+  const off   = Number(S.saisiesOffset||0);
+  const lim   = Number(S.saisiesLimit||200);
+  const de    = total ? Math.min(total, off+1) : 0;
+  const a     = total ? Math.min(total, off + (rows||[]).length) : 0;
+
+  const groupeG = h('div',{className:'mpm-outils-g'},
+    basculeSaisies('z1','Z1','Afficher ou masquer les entrées en stock Z1'),
+    basculeSaisies('alertes','Alertes','Afficher ou masquer les alertes validées')
+  );
+  if(!readOnly){
+    groupeG.appendChild(h('button',{type:'button',className:'msf-chip',
+      title:'Exporter la vue en xlsx',
+      onClick:function(){ exportBlob('/api/saisies/export?'+buildParams(),'saisies.xlsx'); }},
+      iconEl('download',14),' Export'));
+  }
+  const outils = h('div',{className:'mpm-outils'}, groupeG,
+    h('span',{className:'mpm-compte'}, total ? (de+'-'+a+' sur '+total) : '0'));
+
+  // La pagination va SOUS la liste : c'est la qu'on en a besoin, une fois la
+  // page lue. En haut, coincee entre les bascules et le compteur, elle
+  // rognait le bouton Export et offrait deux cibles de 36 px.
+  const pager = (total > lim) ? h('div',{className:'mpm-pager'},
+    h('button',{type:'button',className:'msf-btn msf-btn--ghost msf-btn--sm',
+      disabled:off<=0,
+      onClick:async function(){
+        await loadSaisies({offset:Math.max(0,off-lim),limit:lim});
+        __skipScrollRestore = true; render();
+      }},'‹ Précédent'),
+    h('button',{type:'button',className:'msf-btn msf-btn--ghost msf-btn--sm',
+      disabled:(off+lim)>=total,
+      onClick:async function(){
+        await loadSaisies({offset:Math.min(Math.max(0,total-lim),off+lim),limit:lim});
+        __skipScrollRestore = true; render();
+      }},'Suivant ›')
+  ) : null;
+
+  // Ordre du fil : la plus recente en tete. Le tri par colonne du bureau
+  // n'a pas d'equivalent ici — et sans ordre chronologique strict, le
+  // groupement par jour se casserait en paquets repetes.
+  const triees = (rows||[]).slice().sort(function(x,y){
+    return String(y.date_operation||'').localeCompare(String(x.date_operation||''));
+  });
+  const parJour = {};
+  triees.forEach(function(r){
+    const j = String(r.date_operation||'').slice(0,10);
+    parJour[j] = (parJour[j]||0) + 1;
+  });
+
+  const corps = [];
+  let jourCourant = null;
+  triees.forEach(function(row){
+    const jour = String(row.date_operation||'').slice(0,10);
+    if(jour !== jourCourant){
+      jourCourant = jour;
+      corps.push(h('div',{className:'msf-daybar'},
+        h('b',null, jour ? _mpmJourCourt(jour) : '—'),
+        h('span',null, parJour[jour]+' saisie'+(parJour[jour]>1?'s':''))
+      ));
+    }
+
+    const isAlertAck = row.kind === 'alert_ack';
+    const isStock    = row.kind === 'stock_pf' || row.kind === 'stock_mp';
+    const annule     = !!Number(row.est_annule||0);
+    const cycleAnnule = !annule && !!String(row.annule_motif||'').trim()
+                        && (row.operation_code||'') !== '90';
+
+    const tags = [];
+    if(!annule && (row.operation_code||'') === '90')
+      tags.push(h('span',{className:'msf-badge msf-badge--warn'},'Annulation'));
+    else if(annule) tags.push(h('span',{className:'msf-badge msf-badge--danger'},'Annulé'));
+    else if(isAlertAck) tags.push(h('span',{className:'msf-badge msf-badge--accent'},'Alerte'));
+    if(cycleAnnule) tags.push(h('span',{className:'msf-badge msf-badge--warn'},'Cycle annulé'));
+    if(row.est_manuel) tags.push(h('span',{className:'msf-badge'},'Manuel'));
+    if(row.modifie_par) tags.push(h('span',{className:'msf-badge'},'Corrigé'));
+    if((row.operation_code||'') === '89' && Number(row.fin_dossier) === 1)
+      tags.push(h('span',{className:'msf-badge msf-badge--ok'},'Dossier clôturé'));
+
+    const dur = _mpmSaiDuree(row.duree_min);
+    const met = _mpmSaiMetrage(row);
+    let qte = (row.quantite_traitee != null && Number(row.quantite_traitee) !== 0)
+      ? fN(row.quantite_traitee) : '';
+    if(qte){
+      const u = String(row.unite_saisie||'').toLowerCase();
+      const qs = row.quantite_saisie;
+      const nom = (u === 'palette' ? 'palette' : (u === 'carton' ? 'carton' : ''));
+      if(nom && qs != null){
+        qte += ' (' + fN(Number(qs)) + ' ' + nom + (Math.abs(Number(qs)) > 1 ? 's' : '') + ')';
+      }
+    }
+    const com = String(row.commentaire||'').trim();
+    const motif = String(row.annule_motif||'').trim();
+    const cli = prodSynthCleanClient(row.client);
+
+    corps.push(h('button',{type:'button',
+      className:'mpm-sai '+_mpmSaiClasse(row),
+      onClick:function(){
+        if(isAlertAck){ _openAlertAckViewer(row); return; }
+        if(readOnly || annule) return;
+        if(isStock) openEditStockModal(row); else openEditModal(row);
+      }},
+      h('span',{className:'mpm-sai-h'},
+        h('span',{className:'mpm-sai-heure'},
+          String(row.date_operation||'').slice(11,16) || '--:--'),
+        h('span',{className:'mpm-sai-op'}, row.operation || '—'),
+        dur ? h('span',{className:'mpm-sai-dur'}, dur) : null
+      ),
+      (row.no_dossier || cli) ? h('span',{className:'mpm-sai-l'},
+        row.no_dossier ? h('span',{className:'mpm-sai-dos'},'#'+row.no_dossier) : null,
+        cli ? h('span',{className:'mpm-sai-cli'}, cli) : null
+      ) : null,
+      h('span',{className:'mpm-sai-l'},
+        h('span',null, opName(row.operateur) || '—'),
+        row.machine ? h('span',null, row.machine) : null,
+        qte ? h('span',{className:'mpm-sai-num'}, qte) : null,
+        met ? h('span',{className:'mpm-sai-num'}, met) : null
+      ),
+      (com || motif) ? h('span',{className:'mpm-sai-com'},
+        com + (com && motif ? ' · ' : '') + (motif ? 'Motif : '+motif : '')) : null,
+      tags.length ? h('span',{className:'mpm-sai-tags'}, ...tags) : null
+    ));
+  });
+
+  const kids = [outils, corps.length
+    ? h('div',{className:'mpm-sais'}, ...corps)
+    : h('div',{className:'mpm-vide'},'Aucune saisie sur la période et les filtres actifs.')];
+  if(pager) kids.push(pager);
+
+  if(readOnly){
+    kids.push(h('div',{className:'msf-sect',style:{paddingTop:'10px'}},
+      h('b',null,'Lecture seule')));
+  }else{
+    // Ajouter : action principale, donc bouton flottant — en bas a droite,
+    // la ou le pouce arrive sans changer la prise du telephone.
+    kids.push(h('button',{type:'button',className:'msf-fab mpm-fab',
+      'aria-label':'Ajouter une saisie',
+      onClick:function(){ openAddModal(triees[0] || null); }}, iconEl('plus',24)));
+  }
+  return h('div',null, ...kids);
+}
 
 function renderProdPage(){
   let subPage = S.subPage || 'kpis';
@@ -10749,6 +11561,9 @@ function makeCollapsibleSection(titleNode, contentNode, storageKey, defaultOpen)
 }
 
 function renderProdKpis(){
+  // Portrait telephone : fil vertical de cartes, un seul axe de synthese
+  // a la fois. Voir le bloc « MyProd > Production — portrait telephone ».
+  if(_mpmPortrait()) return renderMpmKpis();
   const d=S.production;
   if(!d)return h('div',{className:'card-empty'},'Chargement des données de production…');
   if(d.blocked)return h('div',{className:'card'},h('div',{className:'card-blocked'},h('div',{className:'cb-icon'},iconEl('lock',32)),h('div',{className:'cb-msg'},d.message)));
@@ -11872,21 +12687,6 @@ function renderProdKpis(){
       return;
     }
     // Layout app + sidebar + main (container vide pour l'instant)
-    const topbar = h('div', {className: 'mobile-topbar'},
-      h('button', {
-        type: 'button', className: 'mobile-menu-btn',
-        onClick: toggleSidebar, 'aria-label': 'Menu',
-      }, iconEl('menu', 20)),
-      h('div', null,
-        h('div', {className: 'mobile-topbar-title'}, 'MyProd'),
-        h('div', {className: 'mobile-topbar-sub'}, S.page || '')
-      ),
-      h('button', {
-        type: 'button', className: 'mobile-home-btn',
-        onClick: () => { window.location.href = '/'; },
-        'aria-label': 'Accueil',
-      }, iconEl('home', 20))
-    );
     // Page Production = sous-onglets KPIs/Saisies/Erreurs via renderProdPage()
     let pageContent;
     let pageTitle = 'MyProd';
@@ -11959,24 +12759,57 @@ function renderProdKpis(){
         )
       );
     }
-    const containerKids = [
-      topbar,
-      (function(){
-        // La page Traçabilité manquait à cette table : son bouton d'aide ne
-        // s'affichait jamais, alors même que PROD_VIEW_GUIDE la référençait.
-        var _gk = ({menu:'myprod-overview', production:'myprod-production',
-                    traceabilite:'myprod-tracabilite'})[S.page] || '';
-        var _t = h('h1', null, pageTitle);
-        try{ if(window.MySifaGuides && _gk){ var _b = MySifaGuides.bookBtn(_gk); if(_b){ var _sp = document.createElement('span'); _sp.style.marginLeft='10px'; _sp.innerHTML=_b; _t.appendChild(_sp); } } }catch(e){}
-        return _t;
-      })(),
-      h('div', {className: 'subtitle'}, pageSubtitle),
-    ];
+    // La page Traçabilité manquait à cette table : son bouton d'aide ne
+    // s'affichait jamais, alors même que PROD_VIEW_GUIDE la référençait.
+    const _gk = ({menu:'myprod-overview', production:'myprod-production',
+                  traceabilite:'myprod-tracabilite'})[S.page] || '';
+    const _mkGuide = function(){
+      try{
+        if(!window.MySifaGuides || !_gk) return null;
+        const _b = MySifaGuides.bookBtn(_gk);
+        if(!_b) return null;
+        const _sp = document.createElement('span');
+        _sp.style.marginLeft = '10px';
+        _sp.innerHTML = _b;
+        return _sp;
+      }catch(e){ return null; }
+    };
+    const _mob = _mpmPortrait();
+    // La topbar porte le titre de la page, pas le nom du module : c'est ce
+    // qui permet de retirer le h1 en portrait sans rien perdre.
+    const _tbTitre = h('div', {className: 'mobile-topbar-title'}, pageTitle);
+    if(_mob){ const g = _mkGuide(); if(g) _tbTitre.appendChild(g); }
+    const topbar = h('div', {className: 'mobile-topbar'},
+      h('button', {
+        type: 'button', className: 'mobile-menu-btn',
+        onClick: toggleSidebar, 'aria-label': 'Menu',
+      }, iconEl('menu', 20)),
+      h('div', {style: {minWidth: '0'}},
+        _tbTitre,
+        h('div', {className: 'mobile-topbar-sub'}, 'MyProd')
+      ),
+      h('button', {
+        type: 'button', className: 'mobile-home-btn',
+        onClick: () => { window.location.href = '/'; },
+        'aria-label': 'Accueil',
+      }, iconEl('home', 20))
+    );
+    const containerKids = [topbar];
+    if(!_mob){
+      const _t = h('h1', null, pageTitle);
+      const g = _mkGuide(); if(g) _t.appendChild(g);
+      containerKids.push(_t);
+      containerKids.push(h('div', {className: 'subtitle'}, pageSubtitle));
+    }
     // Filtres haut de page pour les sous-onglets Production qui consomment fv.*
     // Reunions exceptee : une reunion porte sa propre periode analysee, celle
     // qu'elle a enregistree. Une barre de filtres au-dessus la contredirait.
     if(S.page === 'production' && S.subPage !== 'reunions'){
-      containerKids.push(renderFilters());
+      // Portrait telephone : la barre de filtres du bureau (deux
+      // multi-selects, deux champs date, six chips de periode et les chips
+      // de dossier) occupe trois ecrans avant le premier chiffre. Elle
+      // devient une barre de periode collante qui ouvre une feuille.
+      containerKids.push(_mpmPortrait() ? renderMpmBar() : renderFilters());
     }
     containerKids.push(pageContent);
     // Le conteneur est a 1200px pour toute l'application. Les Points de
@@ -12326,6 +13159,22 @@ function renderProdKpis(){
     helpers: Object.keys(window.__prodCore).length,
     stateFields: Object.keys(S).length,
   });
+
+  // ── Bascule portrait <-> bureau ────────────────────────────────────
+  // Le portrait n'est pas une largeur, c'est une autre mise en page : la
+  // barre de filtres, les tableaux et le statut machines changent de
+  // nature. On redessine une fois, au franchissement du seuil.
+  (function(){
+    try{
+      const mq = window.matchMedia(MPM_MQ);
+      const onChange = function(){
+        try{ closeMpmFiltres(); }catch(e){}
+        if(S.user) render();
+      };
+      if(mq.addEventListener) mq.addEventListener('change', onChange);
+      else if(mq.addListener) mq.addListener(onChange);
+    }catch(e){}
+  })();
 
   // ── Bootstrap : declenche checkAuth au chargement ──────────────────
   if(document.readyState === 'loading'){

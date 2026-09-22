@@ -42,6 +42,7 @@ from app.routers.qualite import (
     _sanitize_filename,
 )
 from app.services.audit_service import log_action
+from app.services.fsc_declaration import construire_declaration_pdf
 from app.services.fsc_dossier import (
     choisir_document,
     construire_dossier_pdf,
@@ -62,6 +63,7 @@ from app.services.fsc_lecture_certificat import lire_certificat
 from app.services import fsc_import_controles as importlot
 from config import (
     APP_ORG_NAME,
+    FSC_RESPONSABLES_COC,
     FSC_ALERTE_JOURS,
     FSC_ALLEGATIONS,
     FSC_BASE_RECHERCHE_URL,
@@ -494,6 +496,44 @@ def fsc_dossier_pdf(request: Request, ids: str = "", inline: int = 1):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Fusion des certificats impossible : {e}")
     nom = f"Dossier_FSC_fournisseurs_{aujourdhui.isoformat()}.pdf"
+    dispo = "inline" if inline else "attachment"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'{dispo}; filename="{nom}"', "Cache-Control": "no-store"},
+    )
+
+
+@router.get("/api/qualite/fsc/declaration-controle.pdf")
+def fsc_declaration_controle_pdf(request: Request, ids: str = "", inline: int = 1):
+    """La pièce d'audit « preuves de contrôle des certificats fournisseurs ».
+
+    Le document est reconstruit à chaque appel depuis le dernier contrôle
+    enregistré pour chaque fournisseur : il dit ce que la base contient
+    aujourd'hui, pas ce qu'elle contenait le jour où quelqu'un a pensé à
+    l'exporter. Les écarts y figurent — ils font partie de la preuve.
+    """
+    user = _require_qualite_view(request)
+    wanted = {int(t) for t in (ids or "").split(",") if t.strip().isdigit()}
+    with get_db() as conn:
+        data = _synthese(conn, wanted or None)
+    lignes = data["fournisseurs"]
+    if not lignes:
+        raise HTTPException(status_code=404, detail="Aucun fournisseur certifié FSC à déclarer.")
+    aujourdhui = date.today()
+    try:
+        pdf = construire_declaration_pdf(
+            lignes,
+            organisation=APP_ORG_NAME,
+            licence_sifa=FSC_LICENCE_SIFA,
+            responsables=FSC_RESPONSABLES_COC,
+            edite_par=user.get("nom") or "",
+            validite_jours=FSC_CONTROLE_VALIDITE_JOURS,
+            aujourdhui=aujourdhui,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Génération de la déclaration impossible : {e}")
+    nom = f"Declaration_controle_certificats_FSC_{aujourdhui.isoformat()}.pdf"
     dispo = "inline" if inline else "attachment"
     return Response(
         content=pdf,
