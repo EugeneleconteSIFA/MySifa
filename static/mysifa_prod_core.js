@@ -9130,7 +9130,10 @@ function renderSaisies(){
 }
 
 function renderSaisiesWithImport(){
-  const admin = isAdmin(S.user);
+  // Portrait telephone : l'import est un bouton de la barre d'outils du fil
+  // de cartes (voir renderMpmSaisies). La carte de glisser-deposer, elle,
+  // ne sert a rien au doigt et repoussait la liste d'un tiers d'ecran.
+  const admin = isAdmin(S.user) && !_mpmPortrait();
   const parts = [];
 
   if(admin){
@@ -10371,11 +10374,17 @@ function renderMpmBar(){
       const hTb = (tb && tb.offsetHeight) || 0;
       const hBa = (ba && ba.offsetHeight) || 0;
       const hOn = (on && on.offsetHeight) || 0;
-      if(hTb) r.style.setProperty('--mpm-top', hTb+'px');
+      // Decalage colle de la topbar elle-meme : 0 en prod, 24 px sur v1 ou
+      // le bandeau rouge la pousse (body.has-staging-bandeau). On le LIT au
+      // lieu de le supposer — sinon tout l'en-tete se cale 24 px trop haut
+      // et glisse sous la topbar au defilement.
+      let decTb = 0;
+      try{ decTb = parseFloat(window.getComputedStyle(tb).top) || 0; }catch(e){}
+      if(hTb) r.style.setProperty('--mpm-top', (decTb + hTb)+'px');
       if(hBa) r.style.setProperty('--mpm-bar-h', hBa+'px');
       // Hauteur totale de l'en-tete colle : les en-tetes de jour de la liste
       // des saisies s'y calent, sinon ils glissent dessous et disparaissent.
-      if(hTb) r.style.setProperty('--mpm-sticky', (hTb+hBa+hOn)+'px');
+      if(hTb) r.style.setProperty('--mpm-sticky', (decTb+hTb+hBa+hOn)+'px');
     }catch(e){}
   });
   return h('div',{className:'mpm-bar'},
@@ -10967,6 +10976,23 @@ function renderMpmSaisies(d, rows, readOnly){
       onClick:function(){ exportBlob('/api/saisies/export?'+buildParams(),'saisies.xlsx'); }},
       iconEl('download',14),' Export'));
   }
+  if(isAdmin(S.user)){
+    // La carte « Importer des saisies » du bureau est une zone de
+    // glisser-deposer : ce geste n'existe pas au doigt, et elle coutait
+    // 64 px en haut de liste. Ici, un bouton et le selecteur de fichier du
+    // telephone (voir renderSaisiesWithImport, qui retire la carte).
+    const champ = h('input',{type:'file',accept:'.csv,.xlsx,.xls,.xlsm',
+      style:{display:'none'}});
+    champ.addEventListener('change',function(e){
+      const f = e.target.files && e.target.files[0];
+      if(f) upload(f);
+    });
+    groupeG.appendChild(h('button',{type:'button',className:'msf-chip',
+      title:'Importer des saisies (CSV / Excel)',
+      onClick:function(){ champ.click(); }},
+      iconEl('upload',14),' Importer'));
+    groupeG.appendChild(champ);
+  }
   const outils = h('div',{className:'mpm-outils'}, groupeG,
     h('span',{className:'mpm-compte'}, total ? (de+'-'+a+' sur '+total) : '0'));
 
@@ -11022,7 +11048,9 @@ function renderMpmSaisies(d, rows, readOnly){
     if(!annule && (row.operation_code||'') === '90')
       tags.push(h('span',{className:'msf-badge msf-badge--warn'},'Annulation'));
     else if(annule) tags.push(h('span',{className:'msf-badge msf-badge--danger'},'Annulé'));
-    else if(isAlertAck) tags.push(h('span',{className:'msf-badge msf-badge--accent'},'Alerte'));
+    // Pas de badge « Alerte » : le libelle de l'operation commence deja par
+    // « Alerte : » et le bord gauche accent le dit. Le badge coutait une
+    // ligne de plus a une ligne qui n'est pas une saisie de production.
     if(cycleAnnule) tags.push(h('span',{className:'msf-badge msf-badge--warn'},'Cycle annulé'));
     if(row.est_manuel) tags.push(h('span',{className:'msf-badge'},'Manuel'));
     if(row.modifie_par) tags.push(h('span',{className:'msf-badge'},'Corrigé'));

@@ -226,7 +226,15 @@ html.perf-eco .mpm-live,html.reduce-anim .mpm-live{animation:none}
 .mpm-sai--attention{border-left-color:var(--warn)}
 .mpm-sai--critique{border-left-color:var(--danger)}
 .mpm-sai--stock,.mpm-sai--personnel{border-left-color:var(--c4,var(--accent))}
-.mpm-sai--alerte{border-left-color:var(--accent);background:var(--accent-bg)}
+/* Alerte de maintenance validee : un evenement qu'on lit, pas une saisie
+   qu'on corrige. Elle garde sa place chronologique et son bord accent, mais
+   sur une ligne de moins et en typographie secondaire — sinon elle pese
+   autant qu'une fin de production dans la liste. Le fond plein est retire :
+   il la faisait ressortir plus que ce qu'on est venu voir. */
+.mpm-sai--alerte{border-left-color:var(--accent);padding:7px 12px 8px}
+.mpm-sai--alerte .mpm-sai-op{font-size:12.5px;font-weight:600;color:var(--text2)}
+.mpm-sai--alerte .mpm-sai-l{margin-top:3px;font-size:11px}
+.mpm-sai--alerte .mpm-sai-com{margin-top:4px;font-size:11.5px;-webkit-line-clamp:1}
 .mpm-sai--annule{opacity:.55}
 .mpm-sai--annule .mpm-sai-op{text-decoration:line-through}
 .mpm-sai--fin{border-bottom:2px solid var(--accent)}
@@ -330,6 +338,29 @@ html.perf-eco .mpm-live,html.reduce-anim .mpm-live{animation:none}
 
 @media (max-width:700px) and (orientation:portrait){
 
+  /* ── Le defilement appartient a la page, pas a .main ─────────────────
+     .main porte overflow-y:auto pour la mise en page bureau (sidebar fixe a
+     gauche, zone de travail qui defile a droite). En mobile la sidebar est
+     un tiroir en position:fixed : .main n'a plus rien a faire defiler, il
+     grandit avec son contenu et c'est le document qui defile.
+
+     Mais overflow:auto suffit a faire de .main le conteneur de defilement
+     de reference pour tout position:sticky a l'interieur. Comme il ne defile
+     jamais, AUCUN element colle ne collait — la topbar comprise, et depuis
+     toujours. On defilait, tout l'en-tete partait, et on ne savait plus ni
+     sur quelle page ni sur quelle periode on etait.
+
+     overflow:visible rend le document conteneur de defilement : topbar,
+     barre de periode, onglets et en-tetes de jour collent enfin.
+
+     min-width:0 est indissociable : sur un enfant de conteneur flex,
+     min-width:auto se resout a 0 tant que l'element a un overflow, et
+     reprend la largeur du CONTENU des qu'on le retire. Sans lui, les barres
+     a defilement horizontal (onglets, chips, outils) etirent .main a 584 px
+     et toute la page deborde a droite — le bouton de filtres sort de
+     l'ecran. */
+  .main{overflow:visible;min-width:0}
+
   /* Titre et sous-titre de page ne sont pas rendus en portrait (voir
      render()) : la topbar porte le titre. Filet de securite si un autre
      ecran de MyProd en pose un. */
@@ -374,6 +405,12 @@ html.perf-eco .mpm-live,html.reduce-anim .mpm-live{animation:none}
     max-width:none;width:100%;border-radius:0;padding:18px 14px calc(18px + env(safe-area-inset-bottom));
     max-height:100dvh;overflow-y:auto;
   }
+
+  /* Import CSV / Excel : personne ne glisse un tableur depuis un telephone.
+     On garde l'acces — il sert quand on revient au bureau sans changer
+     d'ecran — mais reduit a une ligne, pas a une carte de 56 px. */
+  .card-saisies .card-header h3{font-size:12.5px;font-weight:700}
+  .card-saisies .card-header{padding:9px 12px}
 
   /* Le bouton d'ajout d'une saisie est flottant en portrait : il ne doit
      pas etre cache par la derniere carte de la liste. */
