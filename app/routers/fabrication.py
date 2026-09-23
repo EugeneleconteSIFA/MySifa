@@ -715,6 +715,86 @@ def _first_01_date_iso_for_dossier_on_machine(
     return s or None
 
 
+def _valider_changement_outil(
+    conn, *, outil_type, m_ctr, o_avant, o_apres, dernier_metrage, commentaire
+):
+    """Les trois informations d'un changement d'outil, contrôlées ensemble.
+
+    Partagée par la saisie (quand l'appelant les fournit d'emblée) et par la
+    complétion depuis le poste. Rend le commentaire augmenté de la trace
+    lisible — parce que c'est la colonne que tout le monde lit : retour de
+    prod, point de production, export. Les identifiants en colonne sont le
+    dossier de référence, pas ce qu'on consulte.
+    """
+    from app.services import outils as ref_outils
+
+    nature = ref_outils.label_type(conn, outil_type).lower()
+    if m_ctr is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Relevez le compteur machine au moment du changement.",
+        )
+    if o_avant is None or o_apres is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Indiquez la {nature} démontée et la {nature} montée.",
+        )
+    if o_avant == o_apres:
+        raise HTTPException(
+            status_code=400,
+            detail=f"La {nature} montée est la même que la {nature} démontée.",
+        )
+    outils_saisis = {}
+    for oid, role in ((o_avant, "démontée"), (o_apres, "montée")):
+        ou = ref_outils.get_outil(conn, oid)
+        if not ou or ou["type_cle"] != outil_type:
+            raise HTTPException(
+                status_code=422,
+                detail=f"La {nature} {role} n'est pas dans le référentiel.",
+            )
+        outils_saisis[role] = ou
+    if dernier_metrage is not None and m_ctr < dernier_metrage:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Métrage invalide : le compteur machine était à {int(dernier_metrage):,} m "
+                f"lors de la dernière saisie. "
+                f"La valeur saisie ({int(m_ctr):,} m) ne peut pas être inférieure."
+            ).replace(",", " "),
+        )
+    compteur_txt = f"{int(m_ctr):,}".replace(",", " ")
+    trace = (
+        f"{ref_outils.label_type(conn, outil_type)} "
+        f"{outils_saisis['démontée']['numero']} → {outils_saisis['montée']['numero']}"
+        f" · compteur {compteur_txt} m"
+    )
+    reste = (commentaire or "").strip()
+    return f"{trace} — {reste}" if reste else trace
+
+
+def _contexte_changement_outil(conn, outil_type, machine_obj):
+    """Ce qu'il faut au poste pour compléter : la nature, le compteur machine
+    et l'outil actuellement en place sur CETTE machine."""
+    from app.services import outils as ref_outils
+
+    actuel = ref_outils.dernier_outil_monte(
+        conn,
+        machine_nom=machine_obj.get("nom") or "",
+        machine_code=machine_obj.get("code") or "",
+        type_cle=outil_type,
+    )
+    return {
+        "outil_type": outil_type,
+        "type_label": ref_outils.label_type(conn, outil_type),
+        "machine": machine_obj.get("nom"),
+        "dernier_metrage": (
+            float(machine_obj["dernier_metrage"])
+            if machine_obj.get("dernier_metrage") is not None else None
+        ),
+        "outil_actuel": actuel,
+    }
+
+
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
 @router.get("/api/fabrication/operations")
@@ -727,44 +807,6 @@ def get_fabrication_operations(request: Request):
     with get_db() as conn:
         ops = load_operations_dict(conn)
     return {"operations": ops, "categories": categories_for_ui()}
-
-
-@router.get("/api/fabrication/outils-contexte")
-def get_outils_contexte(request: Request, code: str = "", machine_id: int = None):
-    """Ce qu'il faut pour ouvrir la saisie d'un changement d'outil : la nature
-    attendue par ce code, le compteur machine tel qu'il a été relevé la
-    dernière fois, l'outil actuellement en place et la liste où puiser.
-
-    L'outil en place se lit sur la MACHINE, pas sur le dossier : un outil
-    reste monté d'un dossier au suivant, et le dossier courant ne dit rien de
-    ce qui tourne réellement."""
-    user = get_current_user(request)
-    _check_fab_access(user)
-    from app.services import outils as ref_outils
-
-    code_key = str(code or "").strip()
-    with get_db() as conn:
-        outil_type = ref_outils.codes_par_type(conn).get(code_key)
-        if not outil_type:
-            return {"outil_type": None}
-        machine_obj = _resolve_machine(user, {"machine_id": machine_id}, conn)
-        actuel = ref_outils.dernier_outil_monte(
-            conn,
-            machine_nom=machine_obj.get("nom") or "",
-            machine_code=machine_obj.get("code") or "",
-            type_cle=outil_type,
-        )
-        return {
-            "outil_type": outil_type,
-            "type_label": ref_outils.label_type(conn, outil_type),
-            "machine": machine_obj.get("nom"),
-            "dernier_metrage": (
-                float(machine_obj["dernier_metrage"])
-                if machine_obj.get("dernier_metrage") is not None else None
-            ),
-            "outil_actuel": actuel,
-            "outils": ref_outils.list_outils(conn, type_cle=outil_type),
-        }
 
 
 @router.get("/api/fabrication/machines")
@@ -1603,56 +1645,28 @@ async def create_saisie(request: Request):
         # référentiel (Paramètres › Opérations), jamais dans une liste de codes
         # écrite ici : ajouter « 91 - Changement Anilox » ne doit pas demander
         # une release.
+        #
+        # La saisie N'ATTEND PAS le formulaire. Un changement d'outil dure
+        # plusieurs minutes et le conducteur cherche ses numéros pendant ce
+        # temps-là : si l'heure ne partait qu'à la validation, elle serait
+        # fausse de tout le temps de la recherche. On enregistre donc au clic,
+        # on renvoie de quoi ouvrir le formulaire, et « Annuler » supprime la
+        # ligne (DELETE .../changement-outil).
         from app.services import outils as ref_outils
 
         outil_type = ref_outils.codes_par_type(conn).get(cl["code"])
+        outil_a_completer = bool(outil_type)
         if outil_type:
-            nature = ref_outils.label_type(conn, outil_type).lower()
-            if m_ctr is None:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Relevez le compteur machine au moment du changement.",
+            fourni = (m_ctr is not None or o_avant is not None or o_apres is not None)
+            if fourni:
+                # Un appelant qui donne une des trois informations les donne
+                # toutes : une saisie à moitié renseignée serait pire que rien.
+                commentaire = _valider_changement_outil(
+                    conn, outil_type=outil_type, m_ctr=m_ctr,
+                    o_avant=o_avant, o_apres=o_apres,
+                    dernier_metrage=dernier_metrage, commentaire=commentaire,
                 )
-            if o_avant is None or o_apres is None:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Indiquez la {nature} démontée et la {nature} montée.",
-                )
-            if o_avant == o_apres:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"La {nature} montée est la même que la {nature} démontée.",
-                )
-            outils_saisis = {}
-            for oid, role in ((o_avant, "démontée"), (o_apres, "montée")):
-                ou = ref_outils.get_outil(conn, oid)
-                if not ou or ou["type_cle"] != outil_type:
-                    raise HTTPException(
-                        status_code=422,
-                        detail=f"La {nature} {role} n'est pas dans le référentiel.",
-                    )
-                outils_saisis[role] = ou
-            if dernier_metrage is not None and m_ctr < dernier_metrage:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"Métrage invalide : le compteur machine était à {int(dernier_metrage):,} m "
-                        f"lors de la dernière saisie. "
-                        f"La valeur saisie ({int(m_ctr):,} m) ne peut pas être inférieure."
-                    ).replace(",", " "),
-                )
-            # Le changement s'écrit AUSSI dans le commentaire de la saisie.
-            # Les identifiants en colonne sont le dossier de référence ; le
-            # commentaire est ce que tout le monde lit — retour de prod, point
-            # de production, export. Sans lui, l'information n'existerait que
-            # pour qui sait ouvrir la bonne colonne.
-            compteur_txt = f"{int(m_ctr):,}".replace(",", " ")
-            trace = (
-                f"{ref_outils.label_type(conn, outil_type)} "
-                f"{outils_saisis['démontée']['numero']} → {outils_saisis['montée']['numero']}"
-                f" · compteur {compteur_txt} m"
-            )
-            commentaire = f"{trace} — {commentaire}" if commentaire else trace
+                outil_a_completer = False
         else:
             # Un code sans nature d'outil ne porte ni compteur ni outil : une
             # valeur qui traîne dans le corps de requête ne doit pas s'écrire.
@@ -2074,6 +2088,20 @@ async def create_saisie(request: Request):
             "SELECT * FROM production_data WHERE id=?", (new_id,)
         ).fetchone()
 
+        # Changement d'outil non renseigné : le poste doit ouvrir le formulaire
+        # sur la ligne qui vient de partir. On lui donne tout d'un coup —
+        # nature, compteur machine, outil en place — pour qu'il n'ait pas à
+        # rappeler un second endpoint avant d'afficher quoi que ce soit.
+        contexte_outil = None
+        if outil_a_completer:
+            try:
+                contexte_outil = _contexte_changement_outil(
+                    conn, outil_type, machine_obj
+                )
+                contexte_outil["saisie_id"] = new_id
+            except Exception:
+                logger.exception("[fabrication] contexte de changement d'outil indisponible")
+
     log_action(
         user=user,
         action="CREATE",
@@ -2087,6 +2115,8 @@ async def create_saisie(request: Request):
         reponse["explication_requise"] = seuil_franchi
     if bobines_heritees is not None:
         reponse["bobines_heritees"] = bobines_heritees
+    if contexte_outil:
+        reponse["outil_requis"] = contexte_outil
     return reponse
 
 
@@ -3949,6 +3979,178 @@ async def update_matiere_commentaire(matiere_id: int, request: Request):
         module="fabrication",
         objet=f"Commentaire bobine #{matiere_id}",
         detail={"no_dossier": ex["no_dossier"], "code_barre": ex["code_barre"]},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True}
+
+
+def _saisie_changement_outil(conn, saisie_id, user):
+    """Charge une saisie de changement d'outil et vérifie qu'elle est bien à
+    cet utilisateur. Rend (ligne, nature, machine)."""
+    from app.services import outils as ref_outils
+
+    row = conn.execute(
+        "SELECT * FROM production_data WHERE id=?", (saisie_id,)
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Saisie non trouvée")
+    user_operateur = user.get("operateur_lie") or user.get("nom") or ""
+    if not is_admin(user) and row["operateur"] != user_operateur:
+        raise HTTPException(status_code=403, detail="Non autorisé")
+    outil_type = ref_outils.codes_par_type(conn).get(str(row["operation_code"] or "").strip())
+    if not outil_type:
+        raise HTTPException(
+            status_code=409,
+            detail="Cette saisie ne porte pas de changement d'outil.",
+        )
+    machine = conn.execute(
+        "SELECT * FROM machines WHERE trim(nom) = trim(?) OR trim(code) = trim(?) LIMIT 1",
+        (row["machine"] or "", row["machine"] or ""),
+    ).fetchone()
+    if not machine:
+        raise HTTPException(status_code=409, detail="Machine de la saisie introuvable.")
+    return row, outil_type, dict(machine)
+
+
+@router.get("/api/fabrication/saisie/{saisie_id}/changement-outil")
+def get_changement_outil(saisie_id: int, request: Request):
+    """Rouvrir le formulaire sur une saisie déjà partie (rafraîchissement de
+    page, ou reprise d'un changement resté incomplet)."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    with get_db() as conn:
+        row, outil_type, machine = _saisie_changement_outil(conn, saisie_id, user)
+        ctx = _contexte_changement_outil(conn, outil_type, machine)
+        ctx["saisie_id"] = saisie_id
+        ctx["deja_complete"] = row["outil_apres_id"] is not None
+        return ctx
+
+
+@router.put("/api/fabrication/saisie/{saisie_id}/changement-outil")
+async def completer_changement_outil(saisie_id: int, request: Request):
+    """Complète la saisie partie au clic : compteur relevé, outil démonté,
+    outil monté. C'est ici, et pas à la création, que le compteur machine
+    avance — tant que le conducteur n'a pas validé, rien n'est acquis."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    body = await request.json()
+
+    def to_float(v):
+        try:
+            return float(str(v).replace(",", ".")) if v not in (None, "", "null") else None
+        except Exception:
+            return None
+
+    def to_int(v):
+        try:
+            return int(v) if v not in (None, "", "null") else None
+        except (TypeError, ValueError):
+            return None
+
+    m_ctr = to_float(body.get("metrage_compteur"))
+    o_avant = to_int(body.get("outil_avant_id"))
+    o_apres = to_int(body.get("outil_apres_id"))
+
+    with get_db() as conn:
+        row, outil_type, machine = _saisie_changement_outil(conn, saisie_id, user)
+
+        # Correction d'un changement déjà saisi : la trace précédente est
+        # reconstruite, pas empilée. Ce que le conducteur avait écrit à la
+        # main, lui, est conservé — c'est la seule partie qu'on ne sait pas
+        # régénérer.
+        commentaire = (row["commentaire"] or "").strip()
+        if row["outil_apres_id"] is not None and " — " in commentaire:
+            commentaire = commentaire.split(" — ", 1)[1].strip()
+        elif row["outil_apres_id"] is not None:
+            commentaire = ""
+
+        # Le compteur ne se compare pas à `machines.dernier_metrage` quand une
+        # saisie plus récente l'a déjà fait avancer : on compare au dernier
+        # relevé ANTÉRIEUR à cette saisie, sinon corriger un changement de la
+        # veille deviendrait impossible.
+        dernier = conn.execute(
+            """SELECT MAX(ctr) FROM (
+                   SELECT COALESCE(metrage_total_debut, metrage_prevu) AS ctr
+                     FROM production_data
+                    WHERE id <> ? AND date_operation <= ?
+                      AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
+                   UNION ALL
+                   SELECT COALESCE(metrage_total_fin, metrage_reel)
+                     FROM production_data
+                    WHERE id <> ? AND date_operation <= ?
+                      AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
+                   UNION ALL
+                   SELECT metrage_compteur
+                     FROM production_data
+                    WHERE id <> ? AND date_operation <= ?
+                      AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
+               )""",
+            (saisie_id, row["date_operation"], row["machine"]) * 3,
+        ).fetchone()[0]
+
+        commentaire = _valider_changement_outil(
+            conn, outil_type=outil_type, m_ctr=m_ctr,
+            o_avant=o_avant, o_apres=o_apres,
+            dernier_metrage=dernier, commentaire=commentaire,
+        )
+        conn.execute(
+            """UPDATE production_data
+                  SET metrage_compteur=?, outil_avant_id=?, outil_apres_id=?,
+                      commentaire=?
+                WHERE id=?""",
+            (m_ctr, o_avant, o_apres, commentaire, saisie_id),
+        )
+        # Le compteur machine n'avance que s'il monte : corriger une saisie
+        # ancienne ne doit pas faire reculer le compteur d'aujourd'hui.
+        actuel = machine.get("dernier_metrage")
+        if actuel is None or m_ctr > float(actuel):
+            conn.execute(
+                "UPDATE machines SET dernier_metrage=? WHERE id=?",
+                (m_ctr, machine["id"]),
+            )
+        conn.commit()
+        maj = conn.execute(
+            "SELECT * FROM production_data WHERE id=?", (saisie_id,)
+        ).fetchone()
+        saisie = dict(maj)
+        _enrich_saisies_outils(conn, [saisie])
+
+    log_action(
+        user=user, action="SAISIE", module="fabrication",
+        objet=f"Changement d'outil · saisie {saisie_id} · {row['machine']}",
+        detail={"commentaire": commentaire},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "saisie": saisie}
+
+
+@router.delete("/api/fabrication/saisie/{saisie_id}/changement-outil")
+def annuler_changement_outil(saisie_id: int, request: Request):
+    """« Annuler » sur le formulaire : la saisie partie au clic n'aurait pas dû
+    partir, on la retire. Strictement bornée — une saisie déjà complétée, ou
+    d'un autre jour, ne se supprime pas par ce chemin : elle se corrige dans
+    MyProd › Saisies, où la modification laisse une trace."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    with get_db() as conn:
+        row, _outil_type, _machine = _saisie_changement_outil(conn, saisie_id, user)
+        if row["outil_apres_id"] is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Ce changement est déjà enregistré — corrigez-le dans Saisies.",
+            )
+        if str(row["date_operation"] or "")[:10] != _today_prefix()[:10]:
+            raise HTTPException(
+                status_code=409,
+                detail="Cette saisie n'est pas du jour — corrigez-la dans Saisies.",
+            )
+        conn.execute("DELETE FROM production_data WHERE id=?", (saisie_id,))
+        conn.commit()
+
+    log_action(
+        user=user, action="DELETE", module="fabrication",
+        objet=f"Changement d'outil abandonné · saisie {saisie_id} · {row['machine']}",
+        detail={"operation": row["operation"], "date_operation": row["date_operation"]},
         ip=request.client.host if request.client else None,
     )
     return {"success": True}

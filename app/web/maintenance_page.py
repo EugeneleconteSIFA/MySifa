@@ -9599,54 +9599,14 @@ function openAckDetail(prefixedId){
   const responses = ack._responses || {};
 
   // Rendu de la checklist en mode lecture seule (cases pré-cochées / valeur saisie)
+  // Points de controle : rendu partage avec MyProd
+  // (static/mysifa_ack_viewer.js). Ils etaient ecrits deux fois — ici et
+  // dans le viewer — pour la meme donnee, et les deux rendus divergeaient a
+  // chaque retouche. Le commentaire obligatoire (reponse COM), qui
+  // n'existait que dans cette version, est passe dans le rendu commun.
   let checklistHtml = '';
-  if(items.length){
-    checklistHtml = '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Points de contrôle</label>'
-      + '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px">'
-      +   items.map((it, idx) => {
-            const r = responses[String(idx)];
-            if(it.type === 'value'){
-              const val = (r != null && r !== '') ? String(r) : '';
-              const unit = it.unit ? '<span style="font-size:12px;color:var(--text2);font-weight:500;min-width:24px">' + escHtml(it.unit) + '</span>' : '';
-              return '<div class="ta-cl-item" data-type="value">'
-                + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + escHtml(it.label || '') + '</div>'
-                + '<div style="display:flex;align-items:center;gap:8px">'
-                +   '<input type="text" disabled value="' + escAttr(val) + '" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box;opacity:.85">'
-                +   unit
-                + '</div>'
-                + '</div>';
-            }
-            // choice : cases à cocher pré-remplies selon les réponses stockées
-            const selected = Array.isArray(r) ? r : (r != null ? [String(r)] : []);
-            // On n'a pas la liste complète des réponses possibles dans l'ack ;
-            // on n'affiche donc que les réponses réellement cochées (comme des
-            // pills sélectionnées). C'est fidèle à la donnée enregistrée.
-            const respHtml = selected.length
-              ? selected.map(s => '<label class="ta-chip"><input type="checkbox" disabled checked><span>' + escHtml(s) + '</span></label>').join('')
-              : '<span style="font-size:12px;color:var(--muted);font-style:italic">Aucune réponse cochée</span>';
-            // Si "Autre" est coché et qu'une précision a été saisie, on l'affiche.
-            const otherTxt = responses[String(idx) + '_other'];
-            const otherHtml = (otherTxt != null && String(otherTxt).trim() !== '')
-              ? '<div style="margin-top:6px;padding:6px 10px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;font-size:12px;color:var(--text2);white-space:pre-wrap">' + escHtml(String(otherTxt)) + '</div>'
-              : '';
-            // v2.5.21 : commentaire obligatoire déclenché par une réponse COM.
-            // Liseré rouge et libellé explicite pour le distinguer d'une simple
-            // précision « Autre » — c'est la justification d'un cas signalé.
-            const comTxt = responses[String(idx) + '_comment'];
-            const comHtml = (comTxt != null && String(comTxt).trim() !== '')
-              ? '<div style="margin-top:6px;padding:6px 10px;border-left:3px solid var(--danger);background:rgba(220,38,38,.07);border-radius:0 6px 6px 0">'
-                + '<div style="font-size:10px;font-weight:700;color:var(--danger);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Commentaire obligatoire</div>'
-                + '<div style="font-size:12px;color:var(--text2);white-space:pre-wrap">' + escHtml(String(comTxt)) + '</div>'
-                + '</div>'
-              : '';
-            return '<div class="ta-cl-item" data-type="choice">'
-              + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + escHtml(it.label || '') + '</div>'
-              + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + '</div>'
-              + otherHtml
-              + comHtml
-              + '</div>';
-          }).join('')
-      + '</div>';
+  if(items.length && window.MysifaAckViewer){
+    checklistHtml = window.MysifaAckViewer.checklist(items, responses);
   }
 
   // Contexte : date, machine, opérateur
@@ -9736,26 +9696,25 @@ function openAckDetail(prefixedId){
     }
   }
 
-  const overlay = document.createElement('div');
-  overlay.className = 'ta-sim ta-pl-center ta-blocking';
-  overlay.id = 'ack-detail-overlay';
-  // v2.3.44 : hauteur limitée + scroll interne pour ne pas déborder de l'écran
-  // quand la fiche technique est développée. Largeur ramenée à 480 pour rester
-  // cohérent avec le viewer partagé (mysifa_ack_viewer.js).
-  overlay.innerHTML = '<div class="ta-sim-alert" style="max-width:480px;width:480px;max-height:85vh;overflow-y:auto">'
-    + '<div class="ta-sim-title">' + escHtml(ack.type || 'Contrôle') + '</div>'
-    + '<div class="ta-sim-sub">' + contextLine + '</div>'
-    + checklistHtml
+  // Chassis commun avec MyProd (static/mysifa_ack_viewer.js) : bordure et
+  // bouton de fermeture d'une fenetre de saisie, pas d'une alerte qui se
+  // declenche. Le CORPS reste propre a Maintenance — c'est lui qui porte la
+  // fiche technique du dossier, que MyProd n'affiche pas.
+  const corps = checklistHtml
     + dossierHtml
-    + '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px 0">Commentaire</label>'
-    + '<textarea disabled rows="2" placeholder="(aucun commentaire)" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit;opacity:.85">' + escHtml(commentText) + '</textarea>'
-    + '<div class="ta-sim-actions">'
-    +   '<button type="button" class="ta-sim-btn" onclick="closeAckDetail()">Fermer</button>'
-    + '</div>'
-    + '</div>';
-  document.body.appendChild(overlay);
-  overlay.addEventListener('click', (e) => {
-    if(e.target === overlay) closeAckDetail();
+    + '<span class="mav-lbl" style="margin-top:16px">Commentaire</span>'
+    + '<textarea class="mav-txt" disabled rows="2" placeholder="(aucun commentaire)">'
+    +   escHtml(commentText)
+    + '</textarea>';
+  if(!window.MysifaAckViewer){
+    if(window.console) window.console.warn('[openAckDetail] mysifa_ack_viewer.js non chargé.');
+    return;
+  }
+  window.MysifaAckViewer.coquille({
+    id: 'ack-detail-overlay',
+    titre: ack.type || 'Contrôle',
+    sousTitre: contextLine,
+    corps: corps,
   });
 }
 
@@ -10974,6 +10933,11 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
 <script src="/static/mysifa_maint_form.js?v=2.7.4-usure"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
+<!-- Chassis partage de la fenetre de detail d'un ack (openAckDetail). Le
+     meme que dans MyProd : une alerte validee se relit comme une saisie.
+     Ne touche pas au runtime des alertes ci-dessus, qui garde son style
+     d'alerte — c'est une interruption, pas une consultation. -->
+<script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__-ack2"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js?v=2"></script>
 

@@ -226,15 +226,13 @@ html.perf-eco .mpm-live,html.reduce-anim .mpm-live{animation:none}
 .mpm-sai--attention{border-left-color:var(--warn)}
 .mpm-sai--critique{border-left-color:var(--danger)}
 .mpm-sai--stock,.mpm-sai--personnel{border-left-color:var(--c4,var(--accent))}
-/* Alerte de maintenance validee : un evenement qu'on lit, pas une saisie
-   qu'on corrige. Elle garde sa place chronologique et son bord accent, mais
-   sur une ligne de moins et en typographie secondaire — sinon elle pese
-   autant qu'une fin de production dans la liste. Le fond plein est retire :
-   il la faisait ressortir plus que ce qu'on est venu voir. */
-.mpm-sai--alerte{border-left-color:var(--accent);padding:7px 12px 8px}
-.mpm-sai--alerte .mpm-sai-op{font-size:12.5px;font-weight:600;color:var(--text2)}
-.mpm-sai--alerte .mpm-sai-l{margin-top:3px;font-size:11px}
-.mpm-sai--alerte .mpm-sai-com{margin-top:4px;font-size:11.5px;-webkit-line-clamp:1}
+/* Alerte de maintenance validee : une carte comme les autres, au bord
+   accent — la couleur du bord est deja le code de categorie de la liste.
+   Le fond plein a ete retire : il la faisait ressortir plus que ce qu'on
+   est venu voir, et rien d'autre dans la liste n'en porte. Elle n'est pas
+   plus haute qu'une saisie ordinaire parce qu'elle a perdu son badge
+   « ALERTE » — le libelle commence deja par « Alerte : ». */
+.mpm-sai--alerte{border-left-color:var(--accent)}
 .mpm-sai--annule{opacity:.55}
 .mpm-sai--annule .mpm-sai-op{text-decoration:line-through}
 .mpm-sai--fin{border-bottom:2px solid var(--accent)}
