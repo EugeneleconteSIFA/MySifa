@@ -12,6 +12,23 @@ Deux tables, posées par la migration `changement_outil_referentiel` :
 `a_valider` marque un numéro créé au poste par un conducteur qui ne trouvait
 pas le sien dans la liste. Bloquer la saisie aurait garanti qu'on saisisse un
 numéro faux ou rien du tout ; on encaisse, et Paramètres montre la file.
+
+La recherche, elle, ne s'arrête pas au référentiel local. Les listes d'outils
+existent déjà dans RVGI depuis toujours — les recopier serait les condamner à
+diverger. `rechercher()` interroge donc TROIS sources d'un coup :
+
+1. `outils`             — ce qui a déjà été monté, ou saisi à la main ;
+2. le miroir RVGI       — la table et les types sont lus sur la nature
+                          (`outil_types.source_table` / `source_types`), pas
+                          écrits ici : ajouter une nature est une ligne de
+                          référentiel, pas une release ;
+3. `fiches_techniques`  — les numéros SIFA déjà vus en production, pour les
+                          natures dont la source est la table des outils de
+                          découpe.
+
+Un résultat RVGI n'a pas d'identifiant local tant que personne ne l'a choisi.
+`resoudre()` le matérialise au moment de la sélection : les saisies pointent
+toujours un `outils.id` stable, même si RVGI renomme sa ligne plus tard.
 """
 
 from __future__ import annotations
@@ -51,22 +68,54 @@ def normalize_label(label: Any) -> Optional[str]:
 
 # ── Natures d'outil ──────────────────────────────────────────────────────
 
+def _colonnes(conn, table: str) -> set:
+    try:
+        return {r[1] for r in conn.execute('PRAGMA table_info("%s")' % table)}
+    except sqlite3.Error:
+        return set()
+
+
+def _row_to_type(r) -> Dict[str, Any]:
+    def champ(nom):
+        try:
+            return r[nom]
+        except (IndexError, KeyError):
+            return None
+
+    return {
+        "cle": r["cle"],
+        "label": r["label"],
+        "label_pluriel": r["label_pluriel"] or r["label"],
+        "ordre": r["ordre"],
+        "actif": bool(r["actif"]),
+        # Source RVGI : posée par la migration `changement_outil_sources_rvgi`.
+        # Absente sur une base plus ancienne — la recherche se rabat alors sur
+        # le seul référentiel local.
+        "source_table": (champ("source_table") or "").strip() or None,
+        "source_types": (champ("source_types") or "").strip() or None,
+    }
+
+
 def list_types(conn, *, inclure_inactifs: bool = False) -> List[Dict[str, Any]]:
     where = "" if inclure_inactifs else "WHERE actif = 1"
+    cols = _colonnes(conn, TABLE_TYPES)
+    src = ", source_table, source_types" if "source_table" in cols else ""
     rows = conn.execute(
-        f"""SELECT cle, label, label_pluriel, ordre, actif
+        f"""SELECT cle, label, label_pluriel, ordre, actif{src}
             FROM {TABLE_TYPES} {where} ORDER BY ordre, label"""
     ).fetchall()
-    return [
-        {
-            "cle": r["cle"],
-            "label": r["label"],
-            "label_pluriel": r["label_pluriel"] or r["label"],
-            "ordre": r["ordre"],
-            "actif": bool(r["actif"]),
-        }
-        for r in rows
-    ]
+    return [_row_to_type(r) for r in rows]
+
+
+def get_type(conn, type_cle: str) -> Optional[Dict[str, Any]]:
+    cols = _colonnes(conn, TABLE_TYPES)
+    src = ", source_table, source_types" if "source_table" in cols else ""
+    r = conn.execute(
+        f"""SELECT cle, label, label_pluriel, ordre, actif{src}
+            FROM {TABLE_TYPES} WHERE cle = ?""",
+        (type_cle,),
+    ).fetchone()
+    return _row_to_type(r) if r else None
 
 
 def type_existe(conn, type_cle: str) -> bool:
@@ -290,3 +339,228 @@ def dernier_outil_monte(
     if not row or row["oid"] is None:
         return None
     return get_outil(conn, row["oid"])
+
+
+# ── Recherche multi-sources ──────────────────────────────────────────────
+# Comment lire une table du miroir RVGI comme une liste d'outils. Ce n'est pas
+# de la configuration SIFA — c'est la connaissance du schéma RVGI, au même
+# titre que `app/services/rvgi_article_fiche.py`. QUELLE table sert à quelle
+# nature, en revanche, vit en base (`outil_types.source_table`).
+_LECTEURS_RVGI = {
+    # Outils de découpe : le numéro d'outil EST le numéro de plaque.
+    "out_dec": {
+        "select": "CAST(numero AS TEXT) AS numero, code, nbl, nba",
+        "recherche": ["CAST(numero AS TEXT)", "COALESCE(code,'')"],
+        "tri": "numero DESC",
+        "label": lambda r: " · ".join(
+            p for p in (
+                (r["code"] or "").strip() or None,
+                f"{r['nbl']}×{r['nba']} poses" if r["nbl"] and r["nba"] else None,
+            ) if p
+        ) or None,
+    },
+    # Cylindres : magnétiques et contre-parties. Un magnétique n'a pas de code,
+    # il se nomme par son nombre de dents — c'est ce que dit l'atelier.
+    "out_cyl": {
+        "select": (
+            "COALESCE(NULLIF(TRIM(code),''), CAST(nbd AS TEXT)) AS numero, "
+            "code, nbd, qte"
+        ),
+        "recherche": ["COALESCE(code,'')", "CAST(nbd AS TEXT)"],
+        "tri": "nbd ASC",
+        "label": lambda r: " · ".join(
+            p for p in (
+                f"{r['nbd']} dents" if r["nbd"] else None,
+                f"{r['qte']} en parc" if r["qte"] and r["qte"] > 1 else None,
+            ) if p
+        ) or None,
+    },
+    # Matières : la famille des clichés. La référence est le couple code1/code2.
+    "mat_mat": {
+        "select": (
+            "TRIM(COALESCE(code1,'')) || '/' || TRIM(COALESCE(code2,'')) AS numero, "
+            "libc1, ref"
+        ),
+        "recherche": [
+            "COALESCE(code1,'')", "COALESCE(code2,'')",
+            "TRIM(COALESCE(code1,'')) || '/' || TRIM(COALESCE(code2,''))",
+            "COALESCE(libc1,'')", "COALESCE(ref,'')",
+        ],
+        "tri": "id DESC",
+        "label": lambda r: (r["libc1"] or "").strip() or None,
+    },
+}
+
+ORIGINE_REFERENTIEL = "referentiel"
+ORIGINE_RVGI = "rvgi"
+ORIGINE_FICHE = "fiche"
+
+
+def _types_autorises(source_types: Optional[str]) -> List[str]:
+    return [t.strip() for t in str(source_types or "").split(",") if t.strip()]
+
+
+def _chercher_rvgi(type_info: Dict[str, Any], terme: str, limite: int) -> List[Dict[str, Any]]:
+    """Interroge le miroir RVGI. Ne lève jamais : miroir absent, table absente
+    ou base illisible rendent une liste vide — le conducteur garde le
+    référentiel local et la possibilité de créer son numéro."""
+    table = (type_info.get("source_table") or "").strip()
+    lecteur = _LECTEURS_RVGI.get(table)
+    if not lecteur:
+        return []
+    try:
+        from app.services import erp_mirror as miroir
+    except Exception:
+        return []
+    if not miroir.miroir_present():
+        return []
+    where = ["corbeille = 0"]
+    params: List[Any] = []
+    types = _types_autorises(type_info.get("source_types"))
+    if types:
+        where.append("type IN (" + ",".join("?" for _ in types) + ")")
+        params.extend(types)
+    if terme:
+        ors = " OR ".join(f"{c} LIKE ?" for c in lecteur["recherche"])
+        where.append("(" + ors + ")")
+        params.extend([f"%{terme}%"] * len(lecteur["recherche"]))
+    sql = (
+        f"SELECT {lecteur['select']} FROM {table} "
+        f"WHERE {' AND '.join(where)} ORDER BY {lecteur['tri']} LIMIT ?"
+    )
+    params.append(limite)
+    try:
+        with miroir.get_erp_db() as conn_erp:
+            if table not in miroir.tables_presentes(conn_erp):
+                return []
+            rows = conn_erp.execute(sql, params).fetchall()
+    except Exception:
+        return []
+    sortie = []
+    for r in rows:
+        numero = str(r["numero"] or "").strip()
+        if not numero or numero == "/":
+            continue
+        sortie.append({
+            "id": None,
+            "numero": numero,
+            "label": lecteur["label"](r),
+            "origine": ORIGINE_RVGI,
+        })
+    return sortie
+
+
+def _chercher_fiches(conn, type_info: Dict[str, Any], terme: str, limite: int) -> List[Dict[str, Any]]:
+    """Numéros SIFA déjà vus sur une fiche technique. N'a de sens que pour la
+    nature dont la source est la table des outils de découpe : c'est le même
+    numéro des deux côtés."""
+    if (type_info.get("source_table") or "") != "out_dec":
+        return []
+    cols = _colonnes(conn, "fiches_techniques")
+    paires = [
+        (f"outil{i}_forme", f"outil{i}_numero_sifa")
+        for i in (1, 2, 3)
+        if f"outil{i}_numero_sifa" in cols
+    ]
+    if not paires:
+        return []
+    morceaux = []
+    params: List[Any] = []
+    for col_forme, col_num in paires:
+        cond = f"COALESCE(TRIM({col_num}),'') <> ''"
+        if terme:
+            cond += f" AND {col_num} LIKE ?"
+            params.append(f"%{terme}%")
+        forme = col_forme if col_forme in cols else "NULL"
+        morceaux.append(
+            f"SELECT TRIM({col_num}) AS numero, {forme} AS forme "
+            f"FROM fiches_techniques WHERE {cond}"
+        )
+    params.append(limite)
+    try:
+        rows = conn.execute(
+            "SELECT numero, MIN(forme) AS forme FROM (" + " UNION ALL ".join(morceaux) + ") "
+            "GROUP BY numero ORDER BY LENGTH(numero), numero LIMIT ?",
+            params,
+        ).fetchall()
+    except sqlite3.Error:
+        return []
+    return [
+        {
+            "id": None,
+            "numero": str(r["numero"]).strip(),
+            "label": (r["forme"] or "").strip() or None,
+            "origine": ORIGINE_FICHE,
+        }
+        for r in rows
+        if str(r["numero"] or "").strip()
+    ]
+
+
+def rechercher(
+    conn, *, type_cle: str, q: str = "", limite: int = 25
+) -> Dict[str, Any]:
+    """Les trois sources, fusionnées par numéro. Le référentiel local gagne —
+    c'est lui qui porte l'identifiant que les saisies référencent."""
+    type_info = get_type(conn, type_cle)
+    if not type_info:
+        raise ValueError("Nature d'outil inconnue.")
+    terme = re.sub(r"\s+", " ", str(q or "").strip())
+    plafond = max(5, min(int(limite or 25), 100))
+
+    resultats: List[Dict[str, Any]] = []
+    vus = set()
+
+    def ajouter(entrees):
+        for e in entrees:
+            cle = e["numero"].lower()
+            if cle in vus:
+                continue
+            vus.add(cle)
+            resultats.append(e)
+
+    locaux = list_outils(conn, type_cle=type_cle, q=terme, limite=plafond)
+    ajouter({
+        "id": o["id"], "numero": o["numero"], "label": o["label"],
+        "origine": ORIGINE_REFERENTIEL, "a_valider": o["a_valider"],
+    } for o in locaux)
+    ajouter(_chercher_rvgi(type_info, terme, plafond))
+    ajouter(_chercher_fiches(conn, type_info, terme, plafond))
+
+    # « Créer cet outil » n'a de sens que si le terme saisi n'est pas déjà là.
+    creation = None
+    if terme and terme.lower() not in vus:
+        try:
+            creation = normalize_numero(terme)
+        except ValueError:
+            creation = None
+
+    return {
+        "type": type_info,
+        "q": terme,
+        "creation": creation,
+        "resultats": resultats[:plafond],
+    }
+
+
+def resoudre(
+    conn, *, type_cle: str, numero: str, label: Any = None,
+    origine: str = "", cree_par: str = "",
+) -> Dict[str, Any]:
+    """Rend l'outil local correspondant à un résultat de recherche, en le
+    créant au besoin. Un numéro venu de RVGI ou d'une fiche technique n'est
+    pas « à valider » : il existe déjà quelque part, il n'a pas été inventé au
+    poste. Tout autre numéro, si."""
+    existant = trouver_par_numero(conn, type_cle, numero)
+    if existant:
+        if not existant["actif"]:
+            return maj_outil(conn, existant["id"], actif=True)
+        return existant
+    return creer_outil(
+        conn,
+        type_cle=type_cle,
+        numero=numero,
+        label=label,
+        cree_par=cree_par,
+        a_valider=origine not in (ORIGINE_RVGI, ORIGINE_FICHE),
+    )

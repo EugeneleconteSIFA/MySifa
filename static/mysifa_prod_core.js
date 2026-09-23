@@ -8925,9 +8925,6 @@ function renderSaisies(){
     else if(annuleRow) badge=h('span',{className:'badge-annule-saisie',title:annuleTip,
       style:{background:'rgba(248,113,113,.16)',color:'#f87171',border:'1px solid rgba(248,113,113,.45)',padding:'2px 8px',borderRadius:'6px',fontSize:'10px',fontWeight:'700',letterSpacing:'.3px',whiteSpace:'nowrap'}
     },'ANNULÉ');
-    else if(isAlertAck) badge=h('span',{className:'badge-alert-ack',title:"Alerte validée par un opérateur — lecture seule",
-      style:{background:'var(--accent-bg)',color:'var(--accent)',border:'1px solid var(--accent)',padding:'2px 8px',borderRadius:'6px',fontSize:'10px',fontWeight:'700',letterSpacing:'.3px',whiteSpace:'nowrap'}
-    },'ALERTE');
     else if(row.est_manuel) badge=h('span',{className:'badge-manuel'},'+ Manuel');
     else if(row.modifie_par) badge=h('span',{className:'badge-modif',title:'Modifié par '+row.modifie_par+' le '+fD(row.modifie_le)},'✏ Corrigé');
     // Pas de badge « cycle annulé » ici : le marqueur est dans la colonne

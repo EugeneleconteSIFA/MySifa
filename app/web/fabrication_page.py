@@ -562,6 +562,27 @@ body.light table.fab-table tr.fab-row-last td{
   border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)
 }
 .fab-field textarea{resize:vertical;min-height:70px}
+/* Moteur de saisie d'outil : resultats sous le champ de recherche. La liste
+   reste dans le flux (pas en absolu) — sur un ecran d'atelier, un calque qui
+   recouvre le champ suivant se ferme par accident au premier effleurement. */
+.fab-outil-res{margin-top:6px;display:flex;flex-direction:column;gap:2px;
+  max-height:190px;overflow-y:auto}
+.fab-outil-res:empty{margin-top:0}
+.fab-outil-item{display:flex;align-items:center;gap:8px;width:100%;
+  background:var(--bg);border:1px solid var(--border);border-radius:7px;
+  padding:8px 10px;font-family:inherit;font-size:13px;color:var(--text);
+  text-align:left;cursor:pointer;transition:border-color .12s,background .12s}
+.fab-outil-item:hover{border-color:var(--accent);background:var(--accent-bg)}
+.fab-outil-item--creer{border-style:dashed;color:var(--accent)}
+.fab-outil-num{font-weight:700;white-space:nowrap}
+.fab-outil-lbl{color:var(--muted);font-size:12px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.fab-outil-badge{margin-left:auto;font-size:10px;text-transform:uppercase;
+  letter-spacing:.4px;color:var(--muted);border:1px solid var(--border);
+  border-radius:20px;padding:2px 7px;white-space:nowrap}
+.fab-outil-vide{font-size:12px;color:var(--muted);padding:6px 2px}
+.fab-outil-choisi{display:flex;align-items:center;gap:5px;margin-top:6px;
+  font-size:12px;font-weight:700;color:var(--success)}
 .fab-modal-btns{
   display:flex;gap:8px;justify-content:flex-end;align-items:center;
   flex-wrap:wrap;margin-top:18px;
@@ -1390,14 +1411,16 @@ let S = {
   // Changement d'outil : declenche par la nature portee par le code
   // (operation_codes.outil_type), jamais par une liste de codes ecrite ici.
   showOutilModal: false,
-  outilOp: null,            // {code, label} de l'operation en attente
-  outilCtx: null,           // {outil_type, type_label, dernier_metrage, outil_actuel, outils}
-  outilLoading: false,
+  outilOp: null,            // {code, label} de l'operation deja enregistree
+  outilCtx: null,           // {saisie_id, outil_type, type_label, dernier_metrage, outil_actuel}
   outilMetrage: '',
-  outilAvantId: null,
-  outilApresId: null,
-  outilQuery: '',
-  outilNouveauNum: '',
+  outilAvant: null,         // outil choisi cote demonte  {id, numero, label}
+  outilApres: null,         // outil choisi cote monte
+  outilQAvant: '',          // ce qui est tape dans le champ de recherche
+  outilQApres: '',
+  outilResAvant: null,      // derniere reponse du moteur de recherche
+  outilResApres: null,
+  outilBusy: false,
   // Annulation de dossier (marche arriere avant production reelle)
   showAnnulModal: false,
   annulMotif: '',
@@ -2088,6 +2111,10 @@ async function triggerOp(opCode, opLabel, extra={}){
       showToast('Saisie enregistrée : '+opStr);
       // Seuil d'arrêt franchi sans commentaire : la saisie est enregistrée,
       // on demande l'explication juste après. Jamais bloquant.
+      // Changement d'outil : la ligne est partie, il reste a dire avec quoi.
+      if(d.outil_requis){
+        ouvrirFormulaireOutil({code:opCode, label:opLabel}, d.outil_requis);
+      }
       if(d.explication_requise){
         const ex = d.explication_requise;
         Object.assign(S, {
@@ -2633,10 +2660,10 @@ function handleOpTrigger(code, label, cat){
   // rien sans une phrase — c'est a ceux-la, et a eux seuls, qu'on demande un
   // commentaire. Exiger un texte partout ferait taper « RAS » partout, et on
   // aurait perdu la seule chose que ce champ apporte.
-  // Changement d'outil : le code porte la nature montee/demontee. Le metrage
-  // et les deux numeros se saisissent avant l'enregistrement, pas apres.
+  // Changement d'outil : la saisie part tout de suite (l'heure du clic est la
+  // bonne), et triggerOp ouvre le formulaire sur la reponse du serveur.
   if(opOutilType(code)){
-    openOutilModal(code, label);
+    triggerOp(code, label);
     return;
   }
   if(CODES_COMMENTAIRE_OBLIGATOIRE[code]){
@@ -6908,57 +6935,68 @@ function renderFinModal(){
 /* ── Changement d'outil (plaque, contre-partie, magnétique, cliché…) ───────── */
 /* Aucun code n'est écrit en dur ici : c'est le référentiel qui dit si un code
    monte un outil (operation_codes.outil_type, édité dans Paramètres). Ajouter
-   « 91 - Changement Anilox » se fait donc sans toucher au front. */
+   « 91 - Changement Anilox » se fait donc sans toucher au front.
+
+   La saisie part au CLIC, pas à la validation. Un changement d'outil dure
+   plusieurs minutes et le conducteur cherche ses numéros pendant ce temps :
+   si l'heure n'était écrite qu'à la fin, elle serait fausse de toute la durée
+   de la recherche. Le formulaire s'ouvre donc derrière une saisie déjà
+   enregistrée, et « Annuler » la supprime. */
 
 function opOutilType(code){
   const o = OPS && OPS[code];
   return (o && o.outil_type) ? String(o.outil_type) : '';
 }
 
-function mkOption(value, label){
-  const o = document.createElement('option');
-  o.value = (value===null || value===undefined) ? '' : String(value);
-  o.textContent = label;
-  return o;
+const OUTIL_ORIGINE_LABEL = {referentiel:'Déjà monté', rvgi:'RVGI', fiche:'Fiche technique'};
+const _outilTimers = {avant:null, apres:null};
+
+function ouvrirFormulaireOutil(op, ctx){
+  Object.assign(S, {
+    showOutilModal:true,
+    outilOp:{code:(op&&op.code)||'', label:(op&&op.label)||''},
+    outilCtx:ctx,
+    outilMetrage:'',
+    outilAvant: ctx && ctx.outil_actuel ? ctx.outil_actuel : null,
+    outilApres: null,
+    outilQAvant: ctx && ctx.outil_actuel ? ctx.outil_actuel.numero : '',
+    outilQApres: '',
+    outilResAvant: null,
+    outilResApres: null,
+    outilBusy:false,
+  });
+  fabPauseAutoRefresh(180000);
+  render();
 }
 
-async function openOutilModal(code, label){
-  set({showOutilModal:true, outilOp:{code:code, label:label}, outilCtx:null,
-       outilLoading:true, outilMetrage:'', outilAvantId:null, outilApresId:null,
-       outilQuery:'', outilNouveauNum:''});
-  fabPauseAutoRefresh(120000);
-  try{
-    let url = '/api/fabrication/outils-contexte?code='+encodeURIComponent(code);
-    const mid = S.adminMachineId || S.wantedMachineId;
-    if(mid) url += '&machine_id='+encodeURIComponent(mid);
-    const ctx = await apiFetch(url);
-    if(!ctx || !ctx.outil_type){
-      // Le code ne porte plus de nature d'outil (référentiel modifié entre
-      // deux chargements) : on n'invente pas une saisie, on enregistre.
-      set({showOutilModal:false, outilLoading:false, outilOp:null});
-      await triggerOp(code, label);
-      return;
-    }
-    set({outilCtx:ctx, outilLoading:false,
-         outilAvantId: ctx.outil_actuel ? ctx.outil_actuel.id : null});
-  }catch(err){
-    showToast('Erreur : '+err.message,'danger');
-    set({showOutilModal:false, outilLoading:false, outilOp:null});
-  }
+function fermerFormulaireOutil(){
+  Object.assign(S, {
+    showOutilModal:false, outilOp:null, outilCtx:null, outilMetrage:'',
+    outilAvant:null, outilApres:null, outilQAvant:'', outilQApres:'',
+    outilResAvant:null, outilResApres:null, outilBusy:false,
+  });
 }
 
-function fermerOutilModal(){
-  set({showOutilModal:false, outilOp:null, outilCtx:null, outilLoading:false,
-       outilMetrage:'', outilAvantId:null, outilApresId:null,
-       outilQuery:'', outilNouveauNum:''});
-}
-
-async function submitChangementOutil(){
+async function annulerChangementOutil(){
   const ctx = S.outilCtx;
-  const op  = S.outilOp || {};
+  if(!ctx || !ctx.saisie_id){ fermerFormulaireOutil(); render(); return; }
+  set({outilBusy:true});
+  try{
+    await apiFetch('/api/fabrication/saisie/'+ctx.saisie_id+'/changement-outil',
+                   {method:'DELETE'});
+    showToast('Saisie annulée.');
+  }catch(e){
+    showToast('Erreur : '+e.message,'danger');
+  }
+  fermerFormulaireOutil();
+  await loadSession({noRender:true, silent:true});
+  render();
+}
+
+async function enregistrerChangementOutil(){
+  const ctx = S.outilCtx;
   if(!ctx) return;
   const nature = String(ctx.type_label||'outil').toLowerCase();
-
   const raw = String(S.outilMetrage||'').trim().replace(',','.');
   const m = raw ? parseFloat(raw) : NaN;
   if(isNaN(m)){
@@ -6971,19 +7009,150 @@ async function submitChangementOutil(){
       +' m — valeur saisie trop petite','danger');
     return;
   }
-  const av = S.outilAvantId, ap = S.outilApresId;
-  if(!av || !ap){
+  if(!S.outilAvant || !S.outilApres){
     showToast('Indiquez la '+nature+' démontée et la '+nature+' montée.','danger');
     return;
   }
-  if(String(av)===String(ap)){
+  if(S.outilAvant.id === S.outilApres.id){
     showToast('La '+nature+' montée est la même que la '+nature+' démontée.','danger');
     return;
   }
-  const extra = {metrage_compteur:m, outil_avant_id:Number(av), outil_apres_id:Number(ap)};
-  set({showOutilModal:false, outilCtx:null, outilOp:null, outilMetrage:'',
-       outilAvantId:null, outilApresId:null, outilQuery:'', outilNouveauNum:''});
-  await triggerOp(op.code, op.label, extra);
+  set({outilBusy:true});
+  try{
+    await apiFetch('/api/fabrication/saisie/'+ctx.saisie_id+'/changement-outil',{
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        metrage_compteur: m,
+        outil_avant_id: S.outilAvant.id,
+        outil_apres_id: S.outilApres.id,
+      }),
+    });
+    showToast('Changement enregistré.');
+    fermerFormulaireOutil();
+  }catch(e){
+    showToast('Erreur : '+e.message,'danger');
+    set({outilBusy:false});
+    return;
+  }
+  await loadSession({noRender:true, silent:true});
+  render();
+}
+
+/* Moteur de saisie : la recherche part vers le serveur, qui interroge d'un
+   coup le référentiel local, le miroir RVGI et les fiches techniques. */
+async function chercherOutil(role, terme){
+  const ctx = S.outilCtx;
+  if(!ctx) return;
+  const cle = role==='avant' ? 'outilResAvant' : 'outilResApres';
+  try{
+    const d = await apiFetch('/api/fabrication/outils/recherche'
+      +'?type='+encodeURIComponent(ctx.outil_type)
+      +'&q='+encodeURIComponent(terme||''));
+    S[cle] = d;
+  }catch(e){
+    S[cle] = {resultats:[], creation:null, _err:e.message};
+  }
+  peuplerResultatsOutil(role);
+}
+
+async function choisirOutil(role, entree){
+  const ctx = S.outilCtx;
+  if(!ctx) return;
+  try{
+    const outil = await apiFetch('/api/fabrication/outils',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        type: ctx.outil_type, numero: entree.numero,
+        label: entree.label, origine: entree.origine,
+      }),
+    });
+    if(role==='avant'){ S.outilAvant = outil; S.outilQAvant = outil.numero; S.outilResAvant = null; }
+    else              { S.outilApres = outil; S.outilQApres = outil.numero; S.outilResApres = null; }
+    render();
+  }catch(e){
+    showToast('Erreur : '+e.message,'danger');
+  }
+}
+
+function peuplerResultatsOutil(role){
+  const hote = document.getElementById('outil-res-'+role);
+  if(!hote) return;
+  const d = role==='avant' ? S.outilResAvant : S.outilResApres;
+  hote.innerHTML = '';
+  if(!d) return;
+  if(d._err){
+    hote.appendChild(h('div',{className:'fab-outil-vide'}, d._err));
+    return;
+  }
+  const lignes = [];
+  if(d.creation){
+    lignes.push(h('button',{
+      type:'button', className:'fab-outil-item fab-outil-item--creer',
+      onClick:()=>choisirOutil(role, {numero:d.creation, label:null, origine:'poste'}),
+    },
+      svgIcon('plus-circle',14),
+      h('span',{className:'fab-outil-num'},'Créer l\'outil '+d.creation),
+      h('span',{className:'fab-outil-badge'},'nouveau')
+    ));
+  }
+  (d.resultats||[]).forEach(o=>{
+    lignes.push(h('button',{
+      type:'button', className:'fab-outil-item',
+      onClick:()=>choisirOutil(role, o),
+    },
+      h('span',{className:'fab-outil-num'}, o.numero),
+      o.label ? h('span',{className:'fab-outil-lbl'}, o.label) : null,
+      h('span',{className:'fab-outil-badge'},
+        OUTIL_ORIGINE_LABEL[o.origine] || o.origine)
+    ));
+  });
+  if(!lignes.length){
+    hote.appendChild(h('div',{className:'fab-outil-vide'},
+      'Aucun outil ne correspond. Tapez le numéro pour le créer.'));
+    return;
+  }
+  lignes.forEach(l=>hote.appendChild(l));
+}
+
+function champOutil(role, ctx){
+  const nature = String(ctx.type_label||'Outil');
+  const choisi = role==='avant' ? S.outilAvant : S.outilApres;
+  const cleQ = role==='avant' ? 'outilQAvant' : 'outilQApres';
+
+  const inp = h('input',{
+    type:'search', autocomplete:'off',
+    placeholder:'Numéro, référence, libellé…',
+  });
+  inp.value = S[cleQ] || '';
+  inp.addEventListener('input', e=>{
+    S[cleQ] = e.target.value;
+    if(role==='avant') S.outilAvant = null; else S.outilApres = null;
+    if(_outilTimers[role]) clearTimeout(_outilTimers[role]);
+    _outilTimers[role] = setTimeout(()=>chercherOutil(role, S[cleQ]), 250);
+  });
+  inp.addEventListener('focus', ()=>{
+    const d = role==='avant' ? S.outilResAvant : S.outilResApres;
+    if(!d) chercherOutil(role, S[cleQ]);
+  });
+
+  const hint = role==='avant'
+    ? (ctx.outil_actuel
+        ? 'Pré-remplie avec la dernière '+nature.toLowerCase()
+          +' posée sur cette machine. Corrigez si ce n\'est pas celle-là.'
+        : 'Aucun changement de '+nature.toLowerCase()
+          +' n\'a encore été saisi sur cette machine — cherchez le numéro.')
+    : 'La recherche interroge le référentiel, RVGI et les fiches techniques.';
+
+  return h('div',{className:'fab-field'},
+    h('label',null, nature+(role==='avant'?' démontée':' montée')),
+    h('div',{className:'fab-field-hint'}, hint),
+    inp,
+    choisi ? h('div',{className:'fab-outil-choisi'},
+      svgIcon('check',13),' ', choisi.numero,
+      choisi.label ? h('span',{className:'fab-outil-lbl'},' — '+choisi.label) : null
+    ) : null,
+    h('div',{className:'fab-outil-res', id:'outil-res-'+role})
+  );
 }
 
 function renderOutilModal(){
@@ -6992,7 +7161,7 @@ function renderOutilModal(){
   const titre = h('div',{className:'fab-modal-title'},
     svgIcon('tool',18),' '+op.code+' — '+op.label);
 
-  if(S.outilLoading || !ctx){
+  if(!ctx){
     return h('div',{className:'fab-modal-overlay'},
       h('div',{className:'fab-modal'}, titre,
         h('div',{className:'fab-modal-sub'},'Lecture du référentiel…')
@@ -7000,11 +7169,7 @@ function renderOutilModal(){
     );
   }
 
-  const nature  = String(ctx.type_label||'Outil');
-  const natureB = nature.toLowerCase();
-  const liste   = Array.isArray(ctx.outils) ? ctx.outils : [];
-
-  // ── Compteur machine ────────────────────────────────────────────────────
+  const nature = String(ctx.type_label||'Outil');
   const metInp = h('input',{type:'number',placeholder:'Ex: 14200',step:'1',min:'0',
     style:{textAlign:'right'}});
   metInp.value = S.outilMetrage||'';
@@ -7021,119 +7186,27 @@ function renderOutilModal(){
     metInp
   );
 
-  // ── Sélecteurs avant / après ────────────────────────────────────────────
-  const selAvant = h('select',null);
-  const selApres = h('select',null);
-
-  function remplir(sel, selectedId, placeholder){
-    const terme = String(S.outilQuery||'').trim().toLowerCase();
-    const gardes = liste.filter(o=>{
-      if(selectedId!=null && String(o.id)===String(selectedId)) return true;
-      if(!terme) return true;
-      return (o.numero+' '+(o.label||'')).toLowerCase().indexOf(terme)!==-1;
-    });
-    sel.innerHTML='';
-    sel.appendChild(mkOption('', '— choisir —'));
-    gardes.forEach(o=>{
-      sel.appendChild(mkOption(o.id,
-        o.numero + (o.label ? ' — '+o.label : '') + (o.a_valider ? '  (à valider)' : '')));
-    });
-    sel.value = (selectedId===null || selectedId===undefined) ? '' : String(selectedId);
-  }
-
-  function rafraichirSelects(){
-    remplir(selAvant, S.outilAvantId);
-    remplir(selApres, S.outilApresId);
-  }
-
-  selAvant.addEventListener('change',e=>{ S.outilAvantId = e.target.value||null; });
-  selApres.addEventListener('change',e=>{ S.outilApresId = e.target.value||null; });
-
-  const filtreInp = h('input',{type:'search',placeholder:'Filtrer par numéro…'});
-  filtreInp.value = S.outilQuery||'';
-  filtreInp.addEventListener('input',e=>{ S.outilQuery=e.target.value; rafraichirSelects(); });
-
-  const vide = !liste.length;
-
-  const avantBloc = h('div',{className:'fab-field'},
-    h('label',null, nature+' démontée'),
-    ctx.outil_actuel
-      ? h('div',{className:'fab-field-hint'},
-          'Pré-remplie avec la dernière '+natureB+' posée sur cette machine ('
-          +ctx.outil_actuel.numero+'). Corrigez si ce n\'est pas celle-là.')
-      : h('div',{className:'fab-field-hint'},
-          'Aucun changement de '+natureB+' n\'a encore été saisi sur cette machine.'),
-    selAvant
-  );
-
-  const apresBloc = h('div',{className:'fab-field'},
-    h('label',null, nature+' montée'),
-    selApres
-  );
-
-  // ── Numéro absent du référentiel ────────────────────────────────────────
-  // L'atelier n'attend pas une mise à jour de Paramètres pour produire : le
-  // numéro manquant se crée au poste et ressort marqué « à valider ».
-  const nouveauInp = h('input',{type:'text',placeholder:'Ex: 2867'});
-  nouveauInp.value = S.outilNouveauNum||'';
-  nouveauInp.addEventListener('input',e=>{ S.outilNouveauNum=e.target.value; });
-
-  const ajouterBtn = h('button',{
-    type:'button', className:'fab-btn fab-btn-muted fab-btn-sm',
-    onClick: async()=>{
-      const num = String(S.outilNouveauNum||'').trim();
-      if(!num){ showToast('Indiquez le numéro à ajouter.','danger'); return; }
-      try{
-        const cree = await apiFetch('/api/fabrication/outils',{
-          method:'POST',headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({type: ctx.outil_type, numero: num}),
-        });
-        if(!liste.some(o=>o.id===cree.id)) liste.push(cree);
-        S.outilNouveauNum='';
-        nouveauInp.value='';
-        S.outilApresId = cree.id;
-        S.outilQuery='';
-        filtreInp.value='';
-        rafraichirSelects();
-        showToast(nature+' '+cree.numero+' ajoutée au référentiel.');
-      }catch(e){
-        showToast('Erreur : '+e.message,'danger');
-      }
-    }
-  },'Ajouter au référentiel');
-
-  const nouveauBloc = h('div',{className:'fab-field'},
-    h('label',null, vide ? 'Premier numéro de '+natureB : 'Numéro absent de la liste'),
-    h('div',{className:'fab-field-hint'},
-      'Ajoute le numéro pour tout le monde. Il ressort signalé dans Paramètres '
-      +'pour relecture.'),
-    h('div',{style:{display:'flex',gap:'8px',alignItems:'center'}},
-      nouveauInp, ajouterBtn)
-  );
-
-  rafraichirSelects();
-
-  return h('div',{className:'fab-modal-overlay',
-      onClick:(e)=>{ if(e.target===e.currentTarget) fermerOutilModal(); }},
+  const modal = h('div',{className:'fab-modal-overlay'},
     h('div',{className:'fab-modal'},
       titre,
       h('div',{className:'fab-modal-sub'},
-        'Sans le compteur et les deux numéros, cette saisie ne dit que l\'heure : '
-        +'impossible ensuite de savoir combien de mètres une '+natureB+' a faits, '
-        +'ni de rattacher une casse à celle qui tournait.'),
+        'La saisie est déjà enregistrée à l\'heure du clic. Complétez-la : sans '
+        +'le compteur et les deux numéros, elle ne dit que l\'heure. « Annuler » '
+        +'la retire.'),
       metBloc,
-      liste.length > 12 ? h('div',{className:'fab-field'},
-        h('label',null,'Recherche'), filtreInp) : null,
-      avantBloc,
-      apresBloc,
-      nouveauBloc,
+      champOutil('avant', ctx),
+      champOutil('apres', ctx),
       h('div',{className:'fab-modal-btns'},
-        h('button',{className:'fab-btn fab-btn-muted',onClick:fermerOutilModal},'Annuler'),
-        h('button',{className:'fab-btn fab-btn-primary',onClick:submitChangementOutil},
+        h('button',{className:'fab-btn fab-btn-muted', disabled:!!S.outilBusy,
+          onClick:annulerChangementOutil},'Annuler la saisie'),
+        h('button',{className:'fab-btn fab-btn-primary', disabled:!!S.outilBusy,
+          onClick:enregistrerChangementOutil},
           svgIcon('check',15),' Enregistrer le changement')
       )
     )
   );
+  setTimeout(()=>{ peuplerResultatsOutil('avant'); peuplerResultatsOutil('apres'); },0);
+  return modal;
 }
 
 function renderOpCommentModal(){
