@@ -316,16 +316,14 @@
       +       rendreParticipants(r.participants, etat.personnes, etat.recherche)
       +     '</div>'
       +     '<div class="reu-bloc">'
-      +       '<h3>Notes</h3>'
-      +       '<div class="reu-hint">Ce qui est abord&eacute; pendant le point.</div>'
-      +       '<textarea class="reu-notes" id="reu-notes" '
-      +         'placeholder="Ce qu\'on se dit, ce qu\'on constate&hellip;"></textarea>'
-      +       '<div class="reu-sauve" id="reu-notes-etat">' + esc(etat.notes || '') + '</div>'
-      +       '<button type="button" class="reu-veille-btn' + (etat.veilleOuverte ? ' actif' : '') + '" '
-      +         'data-r="veille" id="reu-veille-btn" aria-expanded="'
-      +         (etat.veilleOuverte ? 'true' : 'false') + '" aria-controls="reu-veille">'
-      +         libelleVeille(etat.veilleOuverte) + '</button>'
-      +       '<div id="reu-veille">' + rendreVeille() + '</div>'
+      +       '<div class="reu-bloc-hdr"><h3>Notes</h3>'
+      +         '<button type="button" class="reu-veille-btn'
+      +           (etat.veilleOuverte ? ' actif' : '') + '" data-r="veille" id="reu-veille-btn" '
+      +           'aria-pressed="' + (etat.veilleOuverte ? 'true' : 'false') + '" '
+      +           'aria-controls="reu-notes-zone">'
+      +           libelleVeille(etat.veilleOuverte) + '</button>'
+      +       '</div>'
+      +       '<div id="reu-notes-zone">' + rendreZoneNotes(etat.notes, etat.veilleOuverte) + '</div>'
       +     '</div>'
       +     '<div class="reu-bloc">'
       +       '<h3>Actions</h3>'
@@ -343,48 +341,70 @@
   }
 
   function libelleVeille(ouverte){
-    return ouverte ? 'Masquer le point pr&eacute;c&eacute;dent'
-                   : 'Notes du point pr&eacute;c&eacute;dent';
+    return ouverte ? 'Notes du jour' : 'Point pr&eacute;c&eacute;dent';
   }
 
-  /* Les notes du point precedent, dans le meme encadre que celles du jour :
-     meme police, meme interligne, meme cadre. En lecture seule — on relit ce
-     qui a ete dit hier, on ne le reecrit pas depuis le point d'aujourd'hui. */
-  function rendreVeille(){
-    if(!S.veilleOuverte) return '';
-    if(!S.veilleChargee) return '<div class="reu-sauve">Chargement&hellip;</div>';
+  /* Un seul encadre, deux contenus. Les notes du point precedent se lisent a
+     l'endroit meme des notes du jour, dans le meme cadre : cote a cote, la
+     colonne doublait de hauteur et il fallait comparer de haut en bas.
+     Le contenu precedent est en lecture seule et sans enregistrement — un
+     point deja tenu ne se corrige pas depuis celui d'aujourd'hui, et une
+     frappe distraite ne doit surtout pas partir dans les notes du jour. */
+  function rendreZoneNotes(etatNotes, ouverte){
+    if(!ouverte){
+      return '<div class="reu-hint">Ce qui est abord&eacute; pendant le point.</div>'
+        + '<textarea class="reu-notes" id="reu-notes" '
+        + 'placeholder="Ce qu\'on se dit, ce qu\'on constate&hellip;"></textarea>'
+        + '<div class="reu-sauve" id="reu-notes-etat">' + esc(etatNotes || '') + '</div>';
+    }
+    if(!S.veilleChargee){
+      return '<div class="reu-hint">Point pr&eacute;c&eacute;dent.</div>'
+        + '<div class="reu-sauve">Chargement&hellip;</div>';
+    }
     var v = S.veille;
-    if(!v) return '<div class="reu-sauve">Aucun point de production avant celui-ci.</div>';
+    if(!v){
+      return '<div class="reu-hint">Point pr&eacute;c&eacute;dent.</div>'
+        + '<div class="reu-sauve">Aucun point de production avant celui-ci.</div>';
+    }
     var quand = dateFr(v.date_debut);
     if(v.date_fin && v.date_fin !== v.date_debut) quand += ' au ' + dateFr(v.date_fin);
-    return '<div class="reu-veille">'
-      + '<div class="reu-veille-hdr">Point du ' + esc(quand)
-      + (v.titre && v.titre !== v.date_debut ? ' &middot; ' + esc(v.titre) : '') + '</div>'
-      + '<textarea class="reu-notes" readonly aria-label="Notes du point pr&eacute;c&eacute;dent" '
+    return '<div class="reu-hint">Point du ' + esc(quand)
+      + (v.titre && v.titre !== v.date_debut ? ' &middot; ' + esc(v.titre) : '')
+      + ' &mdash; lecture seule.</div>'
+      + '<textarea class="reu-notes lecture" readonly '
+      + 'aria-label="Notes du point pr&eacute;c&eacute;dent" '
       + 'placeholder="Ce point n\'a pas de notes.">' + esc(v.notes || '') + '</textarea>'
-      + '</div>';
+      + '<div class="reu-sauve">Notes fig&eacute;es &mdash; repasse aux notes du jour pour &eacute;crire.</div>';
   }
 
-  /* Comme les participants : seul l'encadre se repeint. Repeindre la colonne
+  /* Comme les participants : seule la zone se repeint. Repeindre la colonne
      entiere ferait perdre le curseur dans les notes en cours de frappe. */
-  function peindreVeille(rac){
-    var box = rac.querySelector('#reu-veille');
-    if(box) box.innerHTML = rendreVeille();
+  function peindreNotes(rac){
+    var zone = rac.querySelector('#reu-notes-zone');
+    if(zone){
+      zone.innerHTML = rendreZoneNotes(S.notesEtat, S.veilleOuverte);
+      var ta = zone.querySelector('#reu-notes');
+      if(ta){
+        ta.value = (S.notesLocal !== null ? S.notesLocal
+                                          : ((S.reunion && S.reunion.notes) || ''));
+        ta.focus();
+      }
+    }
     var btn = rac.querySelector('#reu-veille-btn');
     if(btn){
       btn.innerHTML = libelleVeille(S.veilleOuverte);
-      btn.setAttribute('aria-expanded', S.veilleOuverte ? 'true' : 'false');
+      btn.setAttribute('aria-pressed', S.veilleOuverte ? 'true' : 'false');
       btn.classList.toggle('actif', !!S.veilleOuverte);
     }
   }
 
   async function basculerVeille(rac){
     S.veilleOuverte = !S.veilleOuverte;
-    peindreVeille(rac);
+    peindreNotes(rac);
     if(!S.veilleOuverte || S.veilleChargee) return;
     try{ await chargerVeille(); }
     catch(e){ S.veilleChargee = true; S.veille = null; toast(e.message, 'danger'); }
-    peindreVeille(rac);
+    peindreNotes(rac);
   }
 
   /* Participants : les presents en pastilles, et une recherche pour en ajouter.

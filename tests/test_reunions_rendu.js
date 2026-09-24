@@ -182,16 +182,22 @@ verifier("reunion : contenant des chiffres", ecran.includes('id="reu-prod"'));
 verifier("reunion : colonne de notes", ecran.includes('id="reu-notes"'));
 verifier("reunion : etat d'enregistrement", ecran.includes("Enregistre a 09:12"));
 verifier("reunion : formulaire d'action", ecran.includes('data-r="ajout-action"'));
-// Les notes de la veille : le bouton et son encadre sont rendus a chaque
-// passe, replies par defaut. Un point s'ouvre sur les notes du jour.
-verifier("reunion : bouton des notes du point precedent",
-         ecran.includes('data-r="veille"')
-         && ecran.includes("Notes du point pr&eacute;c&eacute;dent")
-         && ecran.includes('aria-expanded="false"'));
-verifier("reunion : contenant des notes precedentes", ecran.includes('id="reu-veille"'));
-verifier("reunion : le bouton s'inverse une fois ouvert",
-         M.rendreReunion(REUNION, null, { veilleOuverte: true })
-          .includes("Masquer le point pr&eacute;c&eacute;dent"));
+// Les notes du point precedent : une bascule a cote du titre, et UN SEUL
+// encadre. Un point s'ouvre sur les notes du jour.
+const veille = M.rendreReunion(REUNION, null, { veilleOuverte: true });
+verifier("reunion : bascule a cote du titre",
+         ecran.includes('class="reu-bloc-hdr"')
+         && ecran.includes('data-r="veille"')
+         && ecran.includes("Point pr&eacute;c&eacute;dent")
+         && ecran.includes('aria-pressed="false"'));
+verifier("reunion : une seule zone de notes", ecran.includes('id="reu-notes-zone"'));
+verifier("reunion : le bouton s'inverse une fois bascule",
+         veille.includes("Notes du jour") && veille.includes('aria-pressed="true"'));
+// Et surtout : la zone ne porte plus le champ de saisie du jour. Deux
+// <textarea id="reu-notes"> dans la page, et la frappe serait allee dans le
+// mauvais — ou pire, les notes du point precedent seraient parties au serveur.
+verifier("reunion : pas de champ du jour quand on lit le precedent",
+         !veille.includes('id="reu-notes"'));
 verifier("reunion : bloc ferme", ecran.trim().endsWith("</div>"));
 verifier("reunion : machines absentes ne cassent rien",
          M.rendreReunion(REUNION, null, {}).includes("data-mach-tout"));

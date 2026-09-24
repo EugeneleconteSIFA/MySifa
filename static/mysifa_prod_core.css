@@ -1320,6 +1320,14 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
 .rent-dz .dz-title{font-size:13px}
 
 /* Tableaux (écarts, devis) */
+/* La page Rentabilité est plus large que le reste de l'application : le
+   tableau des devis porte huit colonnes et deux boutons par ligne, et à
+   1200 px la colonne Actions tombait hors du cadre. `min()` garde la marge de
+   la fenêtre — sur un écran étroit, la page reste une page. */
+.container.rent-large{max-width:min(1680px,100%)}
+.rent-devis-hdr{gap:12px;flex-wrap:wrap}
+.rent-devis-outils{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  flex:1;justify-content:flex-end;min-width:260px}
 .rent-table{width:100%;border-collapse:collapse;font-size:12px}
 .rent-table th{text-align:left;font-size:10px;text-transform:uppercase;
   letter-spacing:.5px;color:var(--muted);font-weight:700;padding:10px 14px;
@@ -1405,7 +1413,7 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
 /* Le nom du client peut etre repris du nom du fichier, qui decrit parfois le
    produit sur quatre-vingts caracteres. Il doit passer a la ligne dans sa
    cellule au lieu d'etirer le tableau. */
-.rent-table td:first-child{max-width:420px}
+.rent-table td:first-child{max-width:560px}
 .rent-table td:first-child > div:first-child{overflow-wrap:anywhere}
 .rent-rappel{display:flex;align-items:center;gap:8px;width:100%;text-align:left;
   font-size:12px;font-weight:600;color:var(--warn);background:var(--card);

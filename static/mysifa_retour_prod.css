@@ -414,14 +414,11 @@ th.rp-sa-tri .rp-sa-fl{display:inline-block;width:12px;text-align:center;
 .rp-fr-pied u{flex:0 0 auto}
 .rp-fr-pied em{flex:1 1 auto;min-width:0;text-align:right;font-style:normal;
   font-size:11.5px;font-weight:700;color:var(--accent)}
-/* Le relais : la machine change de main. Une encoche dans le ruban (couleur du
-   slot, donc une vraie coupure) et un petit trait juste au-dessus. Il ne monte
-   pas plus haut : la derniere ligne du libelle passe a six pixels du ruban, un
-   trait pleine hauteur la barrerait. */
-.rp-fr-relais{position:absolute;bottom:0;height:9px;width:0;z-index:3;
-  border-left:3px solid var(--card);pointer-events:none}
-.rp-fr-relais::before{content:"";position:absolute;left:-1px;bottom:9px;
-  width:0;height:4px;border-left:1px solid var(--text2);opacity:.6}
+/* Le cadre de rappel porte lui aussi son conducteur : c'est ce qui le
+   distingue du cadre voisin, meme dossier, autre main. */
+.rp-fr-lbl.rappel em{display:block;font-style:normal;font-size:11.5px;
+  font-weight:700;color:var(--accent);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
 
 /* Un slot etroit ne peut pas porter quatre lignes : elles sortent toutes en
    « … », ce qui n'apprend rien. On retire les moins utiles plutot que de
@@ -504,7 +501,7 @@ th.rp-sa-tri .rp-sa-fl{display:inline-block;width:12px;text-align:center;
 
 @media print{
   .rp-fr-slot:hover{top:6px;bottom:6px;box-shadow:none;border-color:var(--border)}
-  .rp-fr-seg,.rp-fr-relais{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .rp-fr-seg{print-color-adjust:exact;-webkit-print-color-adjust:exact}
   .rp-tip{display:none !important}
   #rp-masques{display:none !important}
   .rp-sa-plus,.rp-sa-barre{display:none !important}
