@@ -218,6 +218,10 @@
     rentSubTab: 'dossiers',
     // Filtre de la file de travail : a_lier | comparables | tous.
     rentFiltre: 'a_lier',
+    // Tri de la liste des dossiers : colonne + sens, poses par l'en-tete.
+    // Par defaut le debut de production le plus recent — l'ordre dans lequel
+    // on rattache les devis.
+    rentTri: {champ:'debut', sens:'desc'},
     // Les liaisons sont-elles toutes chargees ? Tant que non, un dossier sans
     // devis est « inconnu », jamais « il en manque un ».
     rentLinksCharges: false,
@@ -5241,6 +5245,43 @@ function rentDateFR(d){
   return p(d.getDate()) + '/' + p(d.getMonth() + 1);
 }
 
+/* Trois écritures de date cohabitaient sur la liste des dossiers : le début
+   de prod en 02/09/2026, la livraison tantôt en 2026-09-03 tantôt en texte
+   libre (« A livrer le 03/04 »), saisi tel quel dans l'OF. Trois formats sur
+   une même ligne, l'œil ne compare plus rien. Tout ce qui EST une date sort
+   en JJ/MM/AA ; le reste est rendu tel quel, parce qu'inventer une date à
+   partir d'une phrase serait pire que de la recopier. */
+function rentJourCourt(v){
+  const s = String(v == null ? '' : v).trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return m[3] + '/' + m[2] + '/' + m[1].slice(2);
+  const f = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if(f) return f[1] + '/' + f[2] + '/' + f[3].slice(2);
+  return s.replace(/^[AÀ]\s*livrer\s+le\s+/i, '');
+}
+/* La clé de tri d'une date : l'ISO quand c'en est une, vide sinon. Un texte
+   libre ne se range pas dans un ordre chronologique — il part en fin de
+   liste comme une date absente, au lieu de se glisser entre deux vraies. */
+function rentCleJour(v){
+  const s = String(v == null ? '' : v).trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return m[1] + m[2] + m[3];
+  m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if(m) return m[3] + m[2] + m[1];
+  return '';
+}
+/* 6.75 h n'est pas une durée d'atelier : personne ne dit « six virgule
+   soixante-quinze heures ». */
+function rentDureeTxt(v){
+  const n = Number(v);
+  if(!isFinite(n) || n <= 0) return '';
+  const heures = Math.floor(n);
+  const mn = Math.round((n - heures) * 60);
+  if(mn === 0) return heures + ' h';
+  if(heures === 0) return mn + ' mn';
+  return heures + ' h ' + String(mn).padStart(2, '0');
+}
+
 /* Numéro de semaine ISO. La règle « jeudi » n'est pas un détail : sans elle,
    la semaine du 1er janvier porte un numéro faux une année sur deux, et
    l'entête ne correspond plus à ce que dit le planning. */
@@ -6114,11 +6155,40 @@ function renderRentDossiers(){
      filtre. Sans ça, lier un devis depuis « À lier » fait disparaître la
      ligne sous le curseur au moment même où on l'enregistre : le panneau se
      referme tout seul et on ne voit pas le résultat de son geste. */
-  const shown = groupes.filter(g=>{
+  let shown = groupes.filter(g=>{
     if(!matchesTags(g)) return false;
     if(selId && String(g.head.id)===selId) return true;
     return testFiltre(rentEtat(g.head, liens[Number(g.head.id)]));
   });
+  /* ── Le tri. Une liste de 278 dossiers sans tri, c'est un tas : on ne
+     cherche pas une ligne, on tombe dessus. Les en-têtes de colonne sont les
+     boutons — pas un menu à part, qui obligerait à quitter le tableau pour
+     dire ce qu'on veut en lire. Le défaut est le début de production le plus
+     récent : c'est l'ordre dans lequel on rattache les devis. */
+  const TRIS = {
+    planning:  {sens:'asc',  cle:null},
+    dossier:   {sens:'asc',  cle:g=>norm((g.head.client||'')+' '+(g.head.reference||''))},
+    machine:   {sens:'asc',  cle:g=>norm(g.head.machine_nom||g.head.machine_code)},
+    debut:     {sens:'desc', cle:g=>rentCleJour(g.head.debut_production)},
+    duree:     {sens:'desc', cle:g=>Number(g.head.duree_heures)||0},
+    livraison: {sens:'asc',  cle:g=>rentCleJour(g.head.date_livraison)},
+  };
+  const tri = (S.rentTri && TRIS[S.rentTri.champ]) ? S.rentTri : {champ:'debut', sens:'desc'};
+  const regleTri = TRIS[tri.champ];
+  if(regleTri && regleTri.cle){
+    const sens = tri.sens === 'asc' ? 1 : -1;
+    const vide = v => v === '' || v == null || v === 0;
+    // Tri stable, et les valeurs absentes TOUJOURS en fin — dans les deux
+    // sens. Un dossier sans date de début n'est pas « le plus ancien ».
+    shown = shown.map((g, i) => ({g, i})).sort((a, b) => {
+      const va = regleTri.cle(a.g), vb = regleTri.cle(b.g);
+      if(vide(va) !== vide(vb)) return vide(va) ? 1 : -1;
+      if(va < vb) return -sens;
+      if(va > vb) return sens;
+      return a.i - b.i;
+    }).map(x => x.g);
+  }
+
   const total = shown.length;
   const lim = Number(S.rentLimit||12)||12;
   const offBrut = Math.max(0, Number(S.rentOffset||0)||0);
@@ -6140,20 +6210,20 @@ function renderRentDossiers(){
     const ouvert = String(S.rentSelEntryId||'')===String(head.id);
     const etat = rentEtat(head, liens[entryId]);
 
+    /* Le client et le format d'abord : c'est par là qu'on reconnaît un
+       dossier. La référence dessous, sur sa propre ligne — c'est ce qu'on
+       recopie, elle doit pouvoir se lire sans être noyée dans une phrase. */
     const titre = [ (head.client||'').trim(),
-                    (rentFmtFormat(head)?rentFmtFormat(head)+' mm':''),
-                    (head.reference||'').trim() ].filter(Boolean).join(' · ')
-                  || (head.reference||'(sans référence)');
+                    (rentFmtFormat(head)?rentFmtFormat(head)+' mm':'') ]
+                  .filter(Boolean).join(' · ');
+    const reference = (head.reference||'').trim() || '(sans référence)';
     /* La date de DEBUT de production, pas celle du planning : c'est le jour
        ou la machine a demarre, et c'est elle qui situe le dossier face a son
        devis. Vide tant que rien n'a tourne — un dossier au planning n'a pas
        encore de debut, et afficher sa date de creation le ferait croire. */
-    const debutProd = String(head.debut_production||'').slice(0,10);
-    const sousTitre = [ (head.machine_nom||'').trim(),
-                        debutProd?('début '+debutProd.split('-').reverse().join('/')):'',
-                        head.duree_heures!=null?('durée '+head.duree_heures+' h'):'',
-                        head.laize!=null?('laize '+head.laize):'',
-                        head.date_livraison?('livraison '+head.date_livraison):'' ].filter(Boolean);
+    const debutTxt = rentJourCourt(head.debut_production);
+    const dureeTxt = rentDureeTxt(head.duree_heures);
+    const livTxt = rentJourCourt(head.date_livraison);
 
     /* N'afficher que ce qui apprend quelque chose.
        Sur un dossier pas encore produit, « pas de devis » n'est pas un manque
@@ -6182,16 +6252,24 @@ function renderRentDossiers(){
     }
     const pastilles = h('div',{className:'rent-etats'}, ...etats);
 
+    const cellule = (cls, txt, titreAttr) => h('div',
+      {className:'rd-cell'+(cls?' '+cls:''), title: titreAttr || ''},
+      txt || '—');
+
     const ligne = h('div',{className:'rent-ligne'+(ouvert?' is-open':''),
       onClick:async()=>{
         const suivant = ouvert ? null : head.id;
         set({rentSelEntryId:suivant});
         if(suivant) await rentEnsureLinks(Number(suivant)).catch(()=>{});
       }},
-      h('div',{style:{flex:'1',minWidth:0}},
-        h('div',{className:'rent-ligne-titre'}, titre),
-        h('div',{className:'rent-ligne-sous'}, sousTitre.length?sousTitre.join(' — '):'—')
+      h('div',{className:'rd-dossier'},
+        h('div',{className:'rent-ligne-titre'}, titre || reference),
+        h('div',{className:'rd-ref'}, titre ? reference : '')
       ),
+      cellule('rd-machine', (head.machine_nom||'').trim()),
+      cellule('rd-date', debutTxt, head.debut_production ? 'Première saisie 01 le '+String(head.debut_production).slice(0,10) : 'Aucune saisie de début de production'),
+      cellule('rd-duree', dureeTxt),
+      cellule('rd-date', livTxt, String(head.date_livraison||'')),
       pastilles,
       h('span',{className:'rent-chevron'+(ouvert?' is-open':'')}, iconEl('chevron-down',16))
     );
@@ -6217,19 +6295,55 @@ function renderRentDossiers(){
             ? 'Aucun dossier terminé n\'attend son devis. Bascule sur « Tous » pour voir le planning.'
             : 'Aucun dossier.'));
 
+  /* L'en-tête EST le tri. Un clic range sur la colonne, un second inverse le
+     sens ; la flèche dit lequel des deux est actif. « Planning » ramène
+     l'ordre des machines, celui du planning mural — c'est un ordre comme un
+     autre, pas une absence de tri. */
+  const enTete = (champ, label, cls) => {
+    const actif = tri.champ === champ;
+    return h('button',{type:'button',
+      className:'rd-th'+(cls?' '+cls:'')+(actif?' is-tri':''),
+      title:'Trier par '+label.toLowerCase(),
+      onClick:()=>set({
+        rentTri:{champ:champ,
+                 sens: actif ? (tri.sens==='asc'?'desc':'asc') : TRIS[champ].sens},
+        rentOffset:0, rentSelEntryId:null})},
+      label,
+      actif ? h('span',{className:'rd-fleche'}, tri.sens==='asc'?'▲':'▼') : null);
+  };
+  const entetes = h('div',{className:'rent-tete'},
+    enTete('dossier','Dossier','rd-dossier'),
+    enTete('machine','Machine','rd-machine'),
+    enTete('debut','Début','rd-date'),
+    enTete('duree','Durée','rd-duree'),
+    enTete('livraison','Livraison','rd-date'),
+    h('span',{className:'rd-th rd-th-etat rd-th-fixe'},'État'),
+    h('span',{className:'rd-th-vide'})
+  );
+
   return h('div',null,
     barreRecherche,
-    h('div',{className:'card'},
+    h('div',{className:'card rent-dossiers'},
       h('div',{className:'card-header'},
         h('h3',null, (FILTRES.find(f=>f.key===filtreActif)||{}).label+' — '+total+' dossier'+(total>1?'s':'')),
         h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
+          // L'ordre des machines est un tri comme un autre, mais il n'a pas
+          // de colonne a lui : son bouton vit donc ici, a cote de la
+          // pagination, et s'allume quand c'est lui qui range la liste.
+          h('button',{type:'button',
+            className:'btn-sec'+(tri.champ==='planning'?' is-active':''),
+            title:'Ranger la liste comme le planning : par machine, puis par position',
+            onClick:()=>set({rentTri:{champ:'planning',sens:'asc'},
+                             rentOffset:0, rentSelEntryId:null})},
+            'Ordre du planning'),
           pager,
           h('button',{type:'button',className:'btn-sec',onClick:async()=>{
             await loadRentPlanning(); await loadRentLinks(); toast('Planning rechargé');
           }},'Rafraîchir')
         )
       ),
-      rows.length ? h('div',null,...rows) : h('div',{className:'card-empty'}, vide)
+      rows.length ? h('div',null, entetes, ...rows)
+                  : h('div',{className:'card-empty'}, vide)
     )
   );
 }
@@ -6648,10 +6762,13 @@ function renderRentDevis(){
                   doute?rentPastille('à vérifier','manque',dv.note||''):null,
                   dv.source==='agent'?h('span',{className:'rent-methode',
                     title:'Ramassé automatiquement sur le partage réseau'},'auto'):null),
-                h('div',{style:{fontSize:'11px',color:'var(--muted)'}}, dv.filename||''),
+                h('div',{className:'rent-fichier',title:dv.filename||''}, dv.filename||''),
                 // Le motif du doute, sur la ligne : aller le chercher ailleurs
-                // reviendrait à ne jamais le lire.
-                (doute&&dv.note)?h('div',{className:'rent-motif'}, dv.note):null),
+                // reviendrait à ne jamais le lire. Sur UNE ligne : en trois
+                // lignes de phrase, chaque devis douteux poussait les suivants
+                // hors de l'écran et on ne lisait plus la liste du tout. Le
+                // texte entier reste au survol et dans la fenêtre de détail.
+                (doute&&dv.note)?h('div',{className:'rent-motif',title:dv.note}, dv.note):null),
               h('td',null, dv.date_devis||'—'),
               h('td',{className:'num'}, fmt(dv.qte_etiquettes)),
               h('td',{className:'num'}, fmt(dv.vitesse_theorique,'m/mn')),

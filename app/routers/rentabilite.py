@@ -1254,7 +1254,11 @@ def _devis_a_verifier(resultat: dict) -> tuple[bool, str]:
         raisons.append("non lu : " + ", ".join(noms))
     for alerte in (resultat.get("coherence") or []):
         if alerte.get("niveau") == "avertissement":
-            raisons.append(alerte.get("message") or "")
+            # La forme COURTE quand elle existe. Cette note s'affiche sur une
+            # ligne de liste, sous le nom du client : les trois lignes de
+            # phrase du message long y noyaient les six cents autres devis.
+            # L'explication entiere reste a l'import et au survol.
+            raisons.append(alerte.get("court") or alerte.get("message") or "")
     if resultat.get("methode") == "echec":
         raisons.append("aucune lecture automatique n'a abouti")
     return bool(raisons), " · ".join(r for r in raisons if r)[:900]
