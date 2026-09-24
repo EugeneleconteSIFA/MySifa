@@ -393,10 +393,25 @@ def list_planning_entries(request: Request):
               o.adhesif_label    AS of_adhesif,
               o.conditionnement  AS of_conditionnement,
               o.nb_cartons       AS of_nb_cartons,
-              o.of_numero        AS of_numero_of
+              o.of_numero        AS of_numero_of,
+              pd.debut           AS debut_production
             FROM planning_entries e
             JOIN machines m ON m.id = e.machine_id
             LEFT JOIN of_imports o ON o.id = e.of_import_id
+            -- Quand l'atelier a REELLEMENT commence le dossier : la premiere
+            -- saisie « 01 - Debut de production ». Le planning ne porte qu'une
+            -- date prevue, et `created_at` la date de saisie administrative :
+            -- ni l'une ni l'autre ne dit quand la machine a demarre. En
+            -- sous-requete groupee plutot qu'en correlee par ligne — un seul
+            -- parcours de l'index no_dossier pour toute la liste.
+            LEFT JOIN (
+              SELECT TRIM(no_dossier) AS ref, MIN(date_operation) AS debut
+                FROM production_data
+               WHERE operation_code = '01'
+                 AND COALESCE(est_annule, 0) = 0
+                 AND TRIM(COALESCE(no_dossier, '')) <> ''
+               GROUP BY TRIM(no_dossier)
+            ) pd ON pd.ref = TRIM(e.reference)
             WHERE m.actif = 1
             ORDER BY m.nom ASC, e.position ASC
             """

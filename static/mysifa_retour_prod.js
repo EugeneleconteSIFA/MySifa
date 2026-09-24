@@ -111,18 +111,13 @@
       return '<div class="rp-fr-seg mst-' + escAttr(g.statut || "autre") + '"'
            + ' style="left:' + g.x + '%;width:' + g.largeur + '%"></div>';
     }).join("");
-    // Le relais : un trait la ou la machine change de main. Sans lui, un
-    // dossier tenu par deux conducteurs se lit comme un bloc d'un seul tenant,
-    // et le point de production l'attribue a un seul nom. Il se calcule sur le
-    // fragment : entre deux fragments il n'y a personne, donc pas de relais.
-    var relais = (fr.segments || []).map(function (g, k) {
-      if (!k) return "";
-      var avant = (fr.segments[k - 1] || {}).operateur || "";
-      var apres = g.operateur || "";
-      if (!avant || !apres || avant === apres) return "";
-      return '<i class="rp-fr-relais" style="left:' + g.x + '%"></i>';
-    }).join("");
-    var qui = (sl.operateurs || []).map(nomCourt).filter(Boolean).join(" · ");
+    // Le cadre appartient a UN conducteur : le serveur coupe la barre au
+    // relais. Un trait dans un rectangle unique ne suffisait pas — on voyait
+    // qu'il y avait eu passage de main, pas qui avait fait quoi. La liste du
+    // slot ne sert plus qu'a une barre restee d'un seul tenant.
+    var qui = fr.operateur
+      ? nomCourt(fr.operateur)
+      : (sl.operateurs || []).map(nomCourt).filter(Boolean).join(" · ");
     var fmt = sl.format || (sl.laize_mm ? sl.laize_mm + " mm" : "");
     // Densite du libelle. Quatre lignes dans un cadre etroit, ce sont quatre
     // « … » : on en retire plutot que de tout tronquer. Le seuil est en
@@ -142,7 +137,7 @@
          + '" data-dossier="' + escAttr(sl.no_dossier) + '"'
          + ' data-tip="' + escAttr(JSON.stringify(tip)) + '"'
          + ' style="left:' + fr.x + '%;width:' + fr.largeur + '%">'
-         + '<div class="rp-fr-fond">' + segs + '</div>' + relais
+         + '<div class="rp-fr-fond">' + segs + '</div>'
          + (avecLibelle
              ? '<div class="rp-fr-lbl">'
                + '<b>' + escHtml(sl.no_dossier) + '</b>'
@@ -160,8 +155,10 @@
                    : '')
                + '</div>'
              // Un fragment muet reste un cadre blanc : sans rien dedans, il se
-             // lit comme un dossier inconnu. Le numero suffit à le rattacher.
-             : '<div class="rp-fr-lbl rappel"><b>' + escHtml(sl.no_dossier) + '</b></div>')
+             // lit comme un dossier inconnu. Le numero suffit à le rattacher —
+             // et son conducteur, qui est la raison d'etre de ce cadre-la.
+             : '<div class="rp-fr-lbl rappel"><b>' + escHtml(sl.no_dossier) + '</b>'
+               + (qui ? '<em>' + escHtml(qui) + '</em>' : '') + '</div>')
          + '</div>';
   }
 

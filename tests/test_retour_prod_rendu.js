@@ -252,38 +252,42 @@ verifier("frise : la densite ne remplace pas le debordement",
 verifier("frise : donnee echappee",
          !M.renderFrise({ vide:false, axe:[], lignes:[{ machine:'<b>x', slots:[] }] }).includes("<b>x"));
 
-// Qui a produit. Le slot porte les conducteurs dans l'ordre de passage, et un
-// trait la ou la machine change de main : deux conducteurs sur un dossier se
-// lisaient comme un bloc d'un seul tenant.
+// Qui a produit. Le serveur coupe la barre au relais : chaque cadre porte SON
+// conducteur, et le cadre de rappel le porte aussi — c'est ce qui le distingue
+// de son voisin, meme dossier, autre main.
 const SLOT_DEUX = Object.assign({}, SLOT, {
   operateurs: ["913 - VERNISSE Bastien", "Jonathan Celisse"],
-  segments: [{ statut: "calage", operateur: "913 - VERNISSE Bastien", minutes: 60, x: 0, largeur: 20 },
-             { statut: "production", operateur: "913 - VERNISSE Bastien", minutes: 180, x: 20, largeur: 30 },
-             { statut: "production", operateur: "Jonathan Celisse", minutes: 240, x: 50, largeur: 50 }]
+  x: 0, largeur: 60,
+  fragments: [
+    { x: 0, largeur: 30, libelle: true, operateur: "913 - VERNISSE Bastien",
+      segments: [{ statut: "calage", minutes: 60, x: 0, largeur: 20 },
+                 { statut: "production", minutes: 180, x: 20, largeur: 80 }] },
+    { x: 30, largeur: 30, libelle: false, operateur: "Jonathan Celisse",
+      segments: [{ statut: "production", minutes: 240, x: 0, largeur: 100 }] }
+  ],
+  liens: []
 });
 const friseDeux = M.renderFrise({ vide: false, axe: [],
   lignes: [{ machine: "C1", slots: [SLOT_DEUX] }] });
-verifier("frise : les conducteurs sur le slot",
-         friseDeux.includes("VERNISSE Bastien · Jonathan Celisse"));
+verifier("frise : deux cadres pour deux conducteurs",
+         friseDeux.split("rp-fr-slot").length - 1 === 2);
+verifier("frise : le cadre porteur nomme son conducteur",
+         friseDeux.includes('<em>VERNISSE Bastien</em>'));
 verifier("frise : le matricule ne mange pas la place",
          !friseDeux.includes("913 - VERNISSE Bastien</em>"));
-verifier("frise : un trait au relais, un seul",
-         friseDeux.split("rp-fr-relais").length - 1 === 1);
-verifier("frise : le relais tombe au changement de main",
-         friseDeux.includes('class="rp-fr-relais" style="left:50%"'));
-verifier("frise : quantite et conducteurs sur la meme ligne",
+verifier("frise : le cadre de rappel nomme le sien",
+         friseDeux.includes('rappel"><b>D-1</b><em>Jonathan Celisse</em>'));
+verifier("frise : un cadre ne porte pas les deux noms",
+         !friseDeux.includes("VERNISSE Bastien · Jonathan Celisse"));
+verifier("frise : quantite et conducteur sur la meme ligne",
          friseDeux.includes('<div class="rp-fr-pied"><u>42 000 ét.</u><em>'));
-verifier("frise : un seul conducteur, aucun relais",
-         !M.renderFrise({ vide: false, axe: [], lignes: [{ machine: "C1", slots: [
-           Object.assign({}, SLOT, { operateurs: ["Marc"], segments: [
-             { statut: "calage", operateur: "Marc", minutes: 60, x: 0, largeur: 50 },
-             { statut: "production", operateur: "Marc", minutes: 60, x: 50, largeur: 50 }] })
-         ] }] }).includes("rp-fr-relais"));
-verifier("frise : sans conducteur, ni relais ni ligne vide",
-         !M.renderFrise({ vide: false, axe: [], lignes: [{ machine: "C1", slots: [
-           { no_dossier: "D-9", largeur: 40, x: 0, segments: [
-             { statut: "production", minutes: 60, x: 0, largeur: 100 }] }
-         ] }] }).includes("rp-fr-relais"));
+verifier("frise : plus de trait de relais, la coupe le dit",
+         !friseDeux.includes("rp-fr-relais"));
+// Barre non decoupee : le slot garde sa liste de conducteurs.
+verifier("frise : un seul cadre, la liste du slot sert de repli",
+         M.renderFrise({ vide: false, axe: [], lignes: [{ machine: "C1", slots: [
+           Object.assign({}, SLOT, { operateurs: ["Marc", "Sophie"] })
+         ] }] }).includes("Marc · Sophie"));
 verifier("frise : conducteur echappe",
          !M.renderFrise({ vide: false, axe: [], lignes: [{ machine: "C1", slots: [
            Object.assign({}, SLOT, { operateurs: ['<img src=x onerror="alert(1)">'] })

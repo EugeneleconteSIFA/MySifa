@@ -1971,6 +1971,75 @@ def frise(conn, debut: str, fin: str, machine: Any = "", code_fin: str = "89",
             "periode": {"debut": debut, "fin": fin}}
 
 
+# En dessous de ce seuil, un passage ne coupe pas la barre. Un collegue qui
+# saisit un code en passant — deux minutes entre deux heures de production —
+# n'a pas « tenu la machine » : lui donner son cadre hacherait une journee
+# normale en six rectangles illisibles, et le relais qu'on cherche a voir se
+# perdrait dans le bruit. Son temps reste compte dans l'infobulle.
+RELAIS_MIN_MIN = 10.0
+
+
+def _cadres_par_conducteur(fenetres: List[Tuple[datetime, datetime]],
+                           phases: List[Tuple[datetime, datetime, Dict[str, Any]]]
+                           ) -> List[Tuple[datetime, datetime, str]]:
+    """Chaque fenetre recoupee la ou la machine change de main.
+
+    Un dossier tenu par deux conducteurs rendait un seul rectangle : le point
+    de production l'attribuait a un nom, et on ne voyait ni ou finissait l'un
+    ni ou commencait l'autre. Un cadre par conducteur le dit sans legende.
+
+    La coupe tombe au debut de la premiere phase du nouveau conducteur, pas au
+    milieu du trou qui precede : c'est l'heure a laquelle il a pris la machine.
+    """
+    out: List[Tuple[datetime, datetime, str]] = []
+    for a, b in fenetres:
+        dedans = [(s, e, iv) for (s, e, iv) in phases
+                  if min(e, b) > max(s, a)]
+        if not dedans:
+            out.append((a, b, ""))
+            continue
+        # Les phases groupees par conducteur : [operateur, debut, fin, minutes]
+        groupes: List[List[Any]] = []
+        for s, e, iv in dedans:
+            s, e = max(s, a), min(e, b)
+            nom = _txt(iv.get("operateur"))
+            minutes = (e - s).total_seconds() / 60.0
+            if groupes and groupes[-1][0] == nom:
+                groupes[-1][2] = max(groupes[-1][2], e)
+                groupes[-1][3] += minutes
+            else:
+                groupes.append([nom, s, e, minutes])
+        # Les passages trop courts sont absorbes par le groupe voisin, et deux
+        # groupes du meme conducteur qui se retrouvent colles fusionnent.
+        i = 0
+        while len(groupes) > 1 and i < len(groupes):
+            if groupes[i][3] >= RELAIS_MIN_MIN:
+                i += 1
+                continue
+            cible = i - 1 if i > 0 else i + 1
+            groupes[cible][1] = min(groupes[cible][1], groupes[i][1])
+            groupes[cible][2] = max(groupes[cible][2], groupes[i][2])
+            groupes[cible][3] += groupes[i][3]
+            del groupes[i]
+            i = max(0, i - 1)
+            j = 1
+            while j < len(groupes):
+                if groupes[j][0] == groupes[j - 1][0]:
+                    groupes[j - 1][2] = max(groupes[j - 1][2], groupes[j][2])
+                    groupes[j - 1][3] += groupes[j][3]
+                    del groupes[j]
+                else:
+                    j += 1
+        # La fenetre est couverte de bout en bout : les bords vont aux extremes
+        # et chaque coupe tombe la ou le conducteur suivant a pris la machine.
+        for k, g in enumerate(groupes):
+            deb = a if k == 0 else groupes[k][1]
+            fin = b if k == len(groupes) - 1 else groupes[k + 1][1]
+            if fin > deb:
+                out.append((deb, fin, g[0]))
+    return out
+
+
 def _slot(tous: List[Dict[str, Any]], visibles: List[Dict[str, Any]],
           axe: List[Dict[str, Any]], d_deb: datetime, d_fin: datetime,
           no_dossier: str,
@@ -2070,19 +2139,26 @@ def _slot(tous: List[Dict[str, Any]], visibles: List[Dict[str, Any]],
         "deborde_apres": fin_reelle > d_fin,
         "segments": _segments(d0, f0, x, largeur),
     }
-    if presences is None:
-        return slot
-
     # Aucune plage connue qui morde sur le dossier : on ne cache rien. Un
     # atelier qui ne pointe pas encore ses arrivees garde la barre entiere,
     # c'est un trace moins fin, pas un trace faux.
-    fenetres = [(max(a, d0), min(b, f0)) for a, b in presences
-                if min(b, f0) > max(a, d0)]
-    if not fenetres:
+    if presences is None:
+        fenetres = [(d0, f0)]
+    else:
+        fenetres = [(max(a, d0), min(b, f0)) for a, b in presences
+                    if min(b, f0) > max(a, d0)]
+        if not fenetres:
+            return slot
+
+    # Puis la coupe au relais : chaque fenetre rend un cadre par conducteur.
+    cadres = _cadres_par_conducteur(fenetres, phases)
+    if len(cadres) <= 1 and presences is None:
+        # Un seul conducteur et aucune absence a montrer : la barre entiere
+        # dit deja tout, la decouper n'ajouterait qu'un cadre autour d'elle.
         return slot
 
     fragments: List[Dict[str, Any]] = []
-    for k, (a, b) in enumerate(fenetres):
+    for k, (a, b, nom) in enumerate(cadres):
         fx = _position(axe, a)
         ff = _position(axe, b)
         f_largeur = max(ff - fx, 0.35)
@@ -2091,8 +2167,9 @@ def _slot(tous: List[Dict[str, Any]], visibles: List[Dict[str, Any]],
             "largeur": round(f_largeur, 3),
             "debut": a.strftime("%Y-%m-%dT%H:%M:%S"),
             "fin": b.strftime("%Y-%m-%dT%H:%M:%S"),
+            "operateur": nom,
             "deborde_avant": debut_reel < d_deb and k == 0,
-            "deborde_apres": fin_reelle > d_fin and k == len(fenetres) - 1,
+            "deborde_apres": fin_reelle > d_fin and k == len(cadres) - 1,
             "segments": _segments(a, b, fx, f_largeur),
         })
 

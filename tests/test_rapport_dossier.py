@@ -819,15 +819,26 @@ def test_frise_presence():
     c1 = [l for l in f["lignes"] if l["machine"] == "Cohesio 1"][0]
     c2 = [l for l in f["lignes"] if l["machine"] == "Cohesio 2"][0]
     sl = c1["slots"][0]
-    verifier("le dossier de Cohesio 1 rend deux fragments", len(sl["fragments"]), 2)
-    verifier("un lien entre les deux", len(sl["liens"]), 1)
+    # Trois cadres et non deux : aux deux plages de presence s'ajoute le relais
+    # Tony -> Alan du vendredi midi. Un dossier tenu par deux conducteurs
+    # rendait un seul rectangle, et le point de production l'attribuait a un
+    # seul nom — c'est la coupe que demande la frise depuis le 24/09.
+    verifier("le dossier de Cohesio 1 rend trois cadres", len(sl["fragments"]), 3)
+    verifier("un cadre par conducteur, dans l'ordre",
+             [fr["operateur"] for fr in sl["fragments"]], ["Tony", "Alan", "Alan"])
+    # Un seul lien : entre vendredi et lundi. Le relais du vendredi midi ne
+    # laisse pas de trou — les deux cadres se touchent.
+    verifier("un lien, entre le vendredi et le lundi", len(sl["liens"]), 1)
     verifier("le libelle ne s'ecrit qu'une fois",
              sum(1 for fr in sl["fragments"] if fr["libelle"]), 1)
-    verifier("premier fragment : le vendredi",
-             (sl["fragments"][0]["debut"][:10], sl["fragments"][0]["fin"][:10]),
-             ("2026-09-18", "2026-09-18"))
-    verifier("second fragment : le lundi",
-             (sl["fragments"][1]["debut"][:10], sl["fragments"][1]["fin"][:10]),
+    verifier("premier cadre : Tony, le vendredi matin",
+             (sl["fragments"][0]["debut"][:10], sl["fragments"][0]["fin"][11:16]),
+             ("2026-09-18", "12:54"))
+    verifier("deuxieme cadre : Alan prend la main a 12:54",
+             (sl["fragments"][1]["debut"][11:16], sl["fragments"][1]["fin"][:10]),
+             ("12:54", "2026-09-18"))
+    verifier("troisieme cadre : le lundi",
+             (sl["fragments"][2]["debut"][:10], sl["fragments"][2]["fin"][:10]),
              ("2026-09-21", "2026-09-21"))
 
     # Le point qui motive tout : rien de Cohesio 1 ne se dessine le samedi.
@@ -846,10 +857,17 @@ def test_frise_presence():
                         max([g["x"] + g["largeur"] for g in fr["segments"]] or [0]),
                         100.0, 1.0)
 
-    # Sans le drapeau, rien ne change : /prod#retour garde son trace.
+    # Sans le drapeau, les ABSENCES ne coupent plus — le samedi redevient
+    # couvert — mais le relais, lui, coupe toujours : savoir qui tenait la
+    # machine ne depend pas des pointages 86/87.
     f0 = svc.frise(conn, DEB, FIN, ["Cohesio 1", "Cohesio 2"])
-    verifier("sans presence : pas de fragments",
-             "fragments" in f0["lignes"][0]["slots"][0], False)
+    sl0 = [l for l in f0["lignes"] if l["machine"] == "Cohesio 1"][0]["slots"][0]
+    verifier("sans presence : deux cadres, un par conducteur",
+             [fr["operateur"] for fr in sl0["fragments"]], ["Tony", "Alan"])
+    verifier("sans presence : plus aucun trou", sl0["liens"], [])
+    verifier("sans presence : le samedi reste couvert",
+             any(fr["debut"][:10] <= "2026-09-19" <= fr["fin"][:10]
+                 for fr in sl0["fragments"]), True)
     verifier("les pointages ne se dessinent pas pour eux-memes",
              "presences" in c1, False)
 
@@ -861,6 +879,30 @@ def test_frise_presence():
     f2 = svc.frise(conn2, DEB, FIN, ["Cohesio 1"], presence=True)
     verifier("sans pointage 86/87 : le slot reste d'un seul tenant",
              f2["lignes"][0]["slots"][0].get("fragments"), None)
+
+    # Un seul conducteur du debut a la fin : rien a couper non plus, meme sans
+    # pointage. Un cadre unique autour de la barre n'apprendrait rien.
+    f3 = svc.frise(conn2, DEB, FIN, ["Cohesio 1"])
+    verifier("un seul conducteur : pas de decoupe",
+             f3["lignes"][0]["slots"][0].get("fragments"), None)
+
+    # Le passage eclair ne coupe pas la barre : cinq minutes entre deux longues
+    # plages de Marc, c'est un collegue qui depanne, pas un relais. Sans ce
+    # seuil, une journee normale se hacherait en cadres de deux pixels.
+    conn3 = base()
+    _s(conn3, "2026-09-18T06:00:00", "03", "production", "D-2", "Cohesio 1", "Marc")
+    _s(conn3, "2026-09-18T09:00:00", "89", "personnel", "D-2", "Cohesio 1", "Marc")
+    _s(conn3, "2026-09-18T09:00:00", "03", "production", "D-2", "Cohesio 1", "Paul")
+    _s(conn3, "2026-09-18T09:05:00", "89", "personnel", "D-2", "Cohesio 1", "Paul")
+    _s(conn3, "2026-09-18T09:05:00", "01", "personnel", "D-2", "Cohesio 1", "Marc")
+    _s(conn3, "2026-09-18T09:06:00", "03", "production", "D-2", "Cohesio 1", "Marc")
+    _s(conn3, "2026-09-18T14:00:00", "89", "personnel", "D-2", "Cohesio 1", "Marc")
+    conn3.commit()
+    sl3 = svc.frise(conn3, DEB, FIN, ["Cohesio 1"])["lignes"][0]["slots"][0]
+    verifier("un passage de cinq minutes ne coupe pas la barre",
+             sl3.get("fragments"), None)
+    verifier("mais il reste dans les conducteurs du dossier",
+             sl3["operateurs"], ["Marc", "Paul"])
 
 
 def test_statut_saisieprod():

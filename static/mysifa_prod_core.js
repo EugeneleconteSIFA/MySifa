@@ -225,6 +225,8 @@
     // Le detail d'un devis n'a plus d'etat : il vit dans une modale posee
     // dans document.body, que render() ne detruit pas.
     rentDevisFiltre: 'tous',
+    // Recherche dans les devis importes : client, nom de fichier, date.
+    rentDevisQuery: '',
     rentCompById: {},
     rentQuery: '',
     rentTags: [],
@@ -6142,7 +6144,13 @@ function renderRentDossiers(){
                     (rentFmtFormat(head)?rentFmtFormat(head)+' mm':''),
                     (head.reference||'').trim() ].filter(Boolean).join(' · ')
                   || (head.reference||'(sans référence)');
+    /* La date de DEBUT de production, pas celle du planning : c'est le jour
+       ou la machine a demarre, et c'est elle qui situe le dossier face a son
+       devis. Vide tant que rien n'a tourne — un dossier au planning n'a pas
+       encore de debut, et afficher sa date de creation le ferait croire. */
+    const debutProd = String(head.debut_production||'').slice(0,10);
     const sousTitre = [ (head.machine_nom||'').trim(),
+                        debutProd?('début '+debutProd.split('-').reverse().join('/')):'',
                         head.duree_heures!=null?('durée '+head.duree_heures+' h'):'',
                         head.laize!=null?('laize '+head.laize):'',
                         head.date_livraison?('livraison '+head.date_livraison):'' ].filter(Boolean);
@@ -6563,7 +6571,15 @@ function renderRentDevis(){
      n'existerait que dans la base. */
   const aVerifier = devisList.filter(d=>Number(d.a_verifier)===1);
   const filtreDevis = S.rentDevisFiltre || 'tous';
+  /* Six cents devis importés : retrouver celui de Bridor en faisant défiler
+     n'est pas une recherche, c'est une fouille. On cherche sur ce qui est
+     affiché — client, nom de fichier, date — plus le motif du doute, qui est
+     souvent la seule chose dont on se souvienne. */
+  const qDevis = String(S.rentDevisQuery || '').trim().toLowerCase();
+  const correspond = dv => !qDevis || [dv.client, dv.filename, dv.date_devis, dv.note]
+    .map(x => String(x == null ? '' : x).toLowerCase()).join(' ').indexOf(qDevis) >= 0;
   const listeAffichee = (filtreDevis==='verifier' ? aVerifier : devisList)
+    .filter(correspond)
     .slice()
     .sort((a,b)=>{
       const va=Number(a.a_verifier)===1?0:1, vb=Number(b.a_verifier)===1?0:1;
@@ -6594,6 +6610,14 @@ function renderRentDevis(){
 
   const fmt=(v,u)=>v!=null&&v!==''&&Number(v)!==0
     ? Number(v).toLocaleString('fr-FR',{maximumFractionDigits:2})+(u?' '+u:'') : '—';
+
+  const chercheDevis = h('input',{type:'text', id:'rent-devis-q', className:'rent-input',
+    placeholder:'Rechercher un devis (client, fichier, date)…',
+    value:S.rentDevisQuery || '', style:{flex:'1',minWidth:'220px'}});
+  // `render()` vide #root : sans cette garde, le champ perdrait le focus a
+  // chaque caractere (regle de frontend-comportement.md).
+  chercheDevis.addEventListener('input', () =>
+    rentSetGardeFocus({rentDevisQuery:chercheDevis.value}, 'rent-devis-q'));
 
   const barre = aVerifier.length ? h('div',{className:'rent-filtres',style:{marginBottom:'0'}},
     ...[{key:'tous',label:'Tous',n:devisList.length},
@@ -6654,15 +6678,22 @@ function renderRentDevis(){
         )
       )
     : h('div',{className:'card-empty'},
-        filtreDevis==='verifier'
-          ? 'Aucun devis en attente de vérification.'
-          : 'Aucun devis importé. Dépose un fichier ci-dessus.');
+        qDevis
+          ? 'Aucun devis ne correspond à « ' + qDevis + ' ».'
+          : (filtreDevis==='verifier'
+              ? 'Aucun devis en attente de vérification.'
+              : 'Aucun devis importé. Dépose un fichier ci-dessus.'));
 
   return h('div',null, dz, dzInp,
     h('div',{className:'card'},
-      h('div',{className:'card-header'},
-        h('h3',null,'Devis importés ('+listeAffichee.length+')'),
-        h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
+      h('div',{className:'card-header rent-devis-hdr'},
+        h('h3',null,'Devis importés ('+listeAffichee.length
+          + (qDevis ? ' sur ' + (filtreDevis==='verifier' ? aVerifier : devisList).length : '')
+          + ')'),
+        h('div',{className:'rent-devis-outils'},
+          chercheDevis,
+          qDevis ? h('button',{type:'button',className:'btn-sec',
+            onClick:()=>set({rentDevisQuery:''})},'Effacer') : null,
           barre,
           h('button',{type:'button',className:'btn-sec',onClick:async()=>{await loadDevis();toast('Devis rechargés');}},'Rafraîchir')
         )
@@ -12840,8 +12871,13 @@ function renderProdKpis(){
     // Le conteneur est a 1200px pour toute l'application. Les Points de
     // production posent une frise et une colonne de notes cote a cote : c'est
     // le seul ecran ou 1200px laissent la moitie de l'ecran vide.
+    // Rentabilité : huit colonnes plus deux boutons par ligne. À 1200 px, la
+    // colonne Actions sortait du cadre et le motif du doute s'empilait sur
+    // trois lignes sous chaque client — le tableau se lisait au scroll
+    // horizontal, ce qui revient à ne pas le lire.
     const classeConteneur = (S.page === 'production' && S.subPage === 'reunions')
-      ? 'container reu-large' : 'container';
+      ? 'container reu-large'
+      : (S.page === 'rentabilite' ? 'container rent-large' : 'container');
     root.appendChild(h('div', null,
       S.sidebarOpen ? h('div', {className: 'sidebar-overlay', onClick: closeSidebar}) : null,
       h('div', {className: 'app'},
