@@ -69,6 +69,13 @@
     return d.length === 3 ? d[2] + "/" + d[1] + "/" + d[0] : String(iso);
   }
 
+  // « 913 - VERNISSE Bastien » -> « VERNISSE Bastien ». Le matricule est utile
+  // dans une liste de saisies, ou il leve une homonymie ; dans un slot de
+  // frise large de deux centimetres, il mange la place du nom.
+  function nomCourt(nom) {
+    return String(nom == null ? "" : nom).replace(/^\s*\d+\s*[-\u2013]\s*/, "").trim();
+  }
+
   var LIB_VIGILANCE = {
     info_prod_absente:       "clôturé sans info prod",
     seuils_sans_explication: "seuil d'arrêt non expliqué",
@@ -119,6 +126,17 @@
           return '<div class="rp-fr-seg mst-' + escAttr(g.statut || "autre") + '"'
                + ' style="left:' + g.x + '%;width:' + g.largeur + '%"></div>';
         }).join("");
+        // Le relais : un trait la ou la machine change de main. Sans lui, un
+        // dossier tenu par deux conducteurs se lit comme un bloc d'un seul
+        // tenant, et le point de production l'attribue a un seul nom.
+        var relais = (sl.segments || []).map(function (g, i) {
+          if (!i) return "";
+          var avant = (sl.segments[i - 1] || {}).operateur || "";
+          var apres = g.operateur || "";
+          if (!avant || !apres || avant === apres) return "";
+          return '<i class="rp-fr-relais" style="left:' + g.x + '%"></i>';
+        }).join("");
+        var qui = (sl.operateurs || []).map(nomCourt).filter(Boolean).join(" · ");
         var fmt = sl.format || (sl.laize_mm ? sl.laize_mm + " mm" : "");
         // Densite du libelle. Quatre lignes dans un slot etroit, ce sont quatre
         // « … » : on en retire plutot que de tout tronquer. Le seuil est en
@@ -131,14 +149,21 @@
              + '" data-dossier="' + escAttr(sl.no_dossier) + '"'
              + ' data-tip="' + escAttr(JSON.stringify(sl)) + '"'
              + ' style="left:' + sl.x + '%;width:' + sl.largeur + '%">'
-             + '<div class="rp-fr-fond">' + segs + '</div>'
+             + '<div class="rp-fr-fond">' + segs + '</div>' + relais
              + '<div class="rp-fr-lbl">'
              + '<b>' + escHtml(sl.no_dossier) + '</b>'
              + (sl.client ? '<span>' + escHtml(sl.client) + '</span>' : '')
              + (sl.ref_produit_norm || fmt
                  ? '<i>' + escHtml([sl.ref_produit_norm, fmt].filter(Boolean).join(" · ")) + '</i>'
                  : '')
-             + (sl.quantite ? '<u>' + fnum(sl.quantite) + ' ét.</u>' : '')
+             // Quantite et conducteurs partagent la derniere ligne : une
+             // cinquieme ligne ne tient pas dans la hauteur du slot.
+             + (sl.quantite || qui
+                 ? '<div class="rp-fr-pied">'
+                   + (sl.quantite ? '<u>' + fnum(sl.quantite) + ' ét.</u>' : '')
+                   + (qui ? '<em>' + escHtml(qui) + '</em>' : '')
+                   + '</div>'
+                 : '')
              + '</div></div>';
       }).join("");
       return '<div class="rp-fr-ligne"><div class="rp-fr-machine">' + escHtml(l.machine) + '</div>'
@@ -180,7 +205,6 @@
       ["Référence", sl.ref_produit_norm],
       ["Format", fmt],
       ["Quantité", sl.quantite ? fnum(sl.quantite) + " étiquettes" : ""],
-      ["Conducteurs", (sl.operateurs || []).join(", ")],
       ["Début", sl.debut ? dateFr(sl.debut) + " " + String(sl.debut).slice(11, 16) : ""],
       ["Fin", sl.fin ? dateFr(sl.fin) + " " + String(sl.fin).slice(11, 16) : ""],
       ["Temps passé", minutesTxt(sl.minutes)]
@@ -201,12 +225,33 @@
            + '<b>' + escHtml(minutesTxt(phases[k])) + '</b></div>';
     }).join("");
 
+    // Qui a tenu la machine, et combien de temps chacun. La liste des noms
+    // seule ne disait pas qui avait fait la production et qui etait passe
+    // dix minutes : sur un dossier a deux conducteurs, c'est la question.
+    var parOp = {}, ordreOp = [];
+    (sl.segments || []).forEach(function (g) {
+      var n = g.operateur || "";
+      if (!n) return;
+      if (!(n in parOp)) { parOp[n] = 0; ordreOp.push(n); }
+      parOp[n] += (g.minutes || 0);
+    });
+    if (!ordreOp.length) {
+      (sl.operateurs || []).forEach(function (n) { if (n) { parOp[n] = 0; ordreOp.push(n); } });
+    }
+    var qui = ordreOp.map(function (n) {
+      return '<div class="rp-tip-ph rp-tip-qui"><span>' + escHtml(nomCourt(n)) + '</span>'
+           + (parOp[n] ? '<b>' + escHtml(minutesTxt(parOp[n])) + '</b>' : '') + '</div>';
+    }).join("");
+
     return '<div class="rp-tip-hdr"><div class="rp-tip-bar"></div>'
       + '<div><div class="rp-tip-ref">' + escHtml(sl.no_dossier) + '</div>'
       + (sl.deborde_avant || sl.deborde_apres
           ? '<div class="rp-tip-sub">déborde de la période affichée</div>' : '')
       + '</div></div>'
-      + lignes + (detail ? '<div class="rp-tip-sep"></div>' + detail : '');
+      + lignes
+      + (qui ? '<div class="rp-tip-sep"></div>'
+             + '<div class="rp-tip-titre">Conducteurs</div>' + qui : '')
+      + (detail ? '<div class="rp-tip-sep"></div>' + detail : '');
   }
 
   function brancherFrise(racine, opts) {

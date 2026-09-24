@@ -687,6 +687,46 @@ def test_frise():
                  for i in range(len(d1["segments"]) - 1)), True)
 
 
+def test_frise_conducteurs():
+    print("\n12 quinquies bis. Frise : qui a produit, et ou se fait le relais")
+    conn = base()
+    # Bastien demarre et produit, Jonathan reprend a midi et finit sur un arret.
+    _s(conn, "2026-08-27T08:00:00", "01", "personnel", "D-7", operateur="913 - VERNISSE Bastien")
+    _s(conn, "2026-08-27T08:30:00", "03", "production", "D-7", operateur="913 - VERNISSE Bastien")
+    _s(conn, "2026-08-27T12:00:00", "89", "personnel", "D-7", operateur="913 - VERNISSE Bastien")
+    _s(conn, "2026-08-27T12:00:00", "88", "production", "D-7", operateur="Jonathan Celisse")
+    _s(conn, "2026-08-27T16:00:00", "53", "arret", "D-7", operateur="Jonathan Celisse")
+    _s(conn, "2026-08-27T17:00:00", "89", "personnel", "D-7", operateur="Jonathan Celisse")
+    conn.commit()
+
+    sl = svc.frise(conn, "2026-08-27T00:00:00", "2026-08-27T23:59:59",
+                   "Cohesio 1")["lignes"][0]["slots"][0]
+    # L'ordre est celui de la machine, pas l'alphabet : « Jonathan » d'abord
+    # ferait passer le releveur pour le demarreur.
+    verifier("les conducteurs dans l'ordre de passage",
+             sl["operateurs"], ["913 - VERNISSE Bastien", "Jonathan Celisse"])
+    verifier("chaque phase porte son conducteur",
+             all(g.get("operateur") for g in sl["segments"]), True)
+    # Un seul relais, et il tombe la ou la machine change de main.
+    changements = [i for i in range(1, len(sl["segments"]))
+                   if sl["segments"][i]["operateur"] != sl["segments"][i - 1]["operateur"]]
+    verifier("un seul relais", len(changements), 1)
+    verifier("le relais separe les deux conducteurs",
+             (sl["segments"][changements[0] - 1]["operateur"],
+              sl["segments"][changements[0]]["operateur"]),
+             ("913 - VERNISSE Bastien", "Jonathan Celisse"))
+
+    # Hors fenetre, on ne compte pas : un point de production du 28 ne doit pas
+    # afficher Bastien, qui n'a pas touche la machine ce jour-la.
+    _s(conn, "2026-08-28T08:00:00", "88", "production", "D-7", operateur="Jonathan Celisse")
+    _s(conn, "2026-08-28T10:00:00", "89", "personnel", "D-7", operateur="Jonathan Celisse")
+    conn.commit()
+    sl2 = svc.frise(conn, "2026-08-28T00:00:00", "2026-08-28T23:59:59",
+                    "Cohesio 1")["lignes"][0]["slots"][0]
+    verifier("la fenetre borne aussi les conducteurs",
+             sl2["operateurs"], ["Jonathan Celisse"])
+
+
 def test_frise_debordements():
     print("\n12 sexies. Frise : ce qui deborde de la periode")
     conn = base()
@@ -1135,6 +1175,7 @@ if __name__ == "__main__":
     test_suivi_des_remontees()
     test_dernier_jour_saisi()
     test_frise()
+    test_frise_conducteurs()
     test_frise_debordements()
     test_statut_saisieprod()
     test_frise_dossier()

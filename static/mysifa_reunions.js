@@ -31,6 +31,9 @@
     ouverteId: null,                   // reunion laissee ouverte au demarrage
     notesLocal: null,                  // frappe non encore enregistree
     notesEtat: '',
+    veille: null,                      // notes du point precedent, si demandees
+    veilleOuverte: false,
+    veilleChargee: false,
     plein: false,                      // reunion affichee seule, sans la coquille
     aSupprimer: null,                  // reunion dont la suppression est demandee
     erreur: null,
@@ -103,6 +106,16 @@
     S.prod = d.prod;
     S.notesLocal = null;
     S.notesEtat = '';
+    // Le point precedent est celui de la reunion qu'on vient d'ouvrir : garder
+    // celui de la precedente afficherait les notes d'un autre jour.
+    S.veille = null; S.veilleOuverte = false; S.veilleChargee = false;
+  }
+
+  async function chargerVeille(){
+    if(!S.reunion) return;
+    var d = await appel('/api/reunions/' + encodeURIComponent(S.reunion.id) + '/precedente');
+    S.veille = d.precedente || null;
+    S.veilleChargee = true;
   }
 
   /* Premier montage : contexte + liste, et reprise de la reunion laissee
@@ -308,6 +321,11 @@
       +       '<textarea class="reu-notes" id="reu-notes" '
       +         'placeholder="Ce qu\'on se dit, ce qu\'on constate&hellip;"></textarea>'
       +       '<div class="reu-sauve" id="reu-notes-etat">' + esc(etat.notes || '') + '</div>'
+      +       '<button type="button" class="reu-veille-btn' + (etat.veilleOuverte ? ' actif' : '') + '" '
+      +         'data-r="veille" id="reu-veille-btn" aria-expanded="'
+      +         (etat.veilleOuverte ? 'true' : 'false') + '" aria-controls="reu-veille">'
+      +         libelleVeille(etat.veilleOuverte) + '</button>'
+      +       '<div id="reu-veille">' + rendreVeille() + '</div>'
       +     '</div>'
       +     '<div class="reu-bloc">'
       +       '<h3>Actions</h3>'
@@ -322,6 +340,51 @@
       +     '</div>'
       +   '</aside>'
       + '</div>';
+  }
+
+  function libelleVeille(ouverte){
+    return ouverte ? 'Masquer le point pr&eacute;c&eacute;dent'
+                   : 'Notes du point pr&eacute;c&eacute;dent';
+  }
+
+  /* Les notes du point precedent, dans le meme encadre que celles du jour :
+     meme police, meme interligne, meme cadre. En lecture seule — on relit ce
+     qui a ete dit hier, on ne le reecrit pas depuis le point d'aujourd'hui. */
+  function rendreVeille(){
+    if(!S.veilleOuverte) return '';
+    if(!S.veilleChargee) return '<div class="reu-sauve">Chargement&hellip;</div>';
+    var v = S.veille;
+    if(!v) return '<div class="reu-sauve">Aucun point de production avant celui-ci.</div>';
+    var quand = dateFr(v.date_debut);
+    if(v.date_fin && v.date_fin !== v.date_debut) quand += ' au ' + dateFr(v.date_fin);
+    return '<div class="reu-veille">'
+      + '<div class="reu-veille-hdr">Point du ' + esc(quand)
+      + (v.titre && v.titre !== v.date_debut ? ' &middot; ' + esc(v.titre) : '') + '</div>'
+      + '<textarea class="reu-notes" readonly aria-label="Notes du point pr&eacute;c&eacute;dent" '
+      + 'placeholder="Ce point n\'a pas de notes.">' + esc(v.notes || '') + '</textarea>'
+      + '</div>';
+  }
+
+  /* Comme les participants : seul l'encadre se repeint. Repeindre la colonne
+     entiere ferait perdre le curseur dans les notes en cours de frappe. */
+  function peindreVeille(rac){
+    var box = rac.querySelector('#reu-veille');
+    if(box) box.innerHTML = rendreVeille();
+    var btn = rac.querySelector('#reu-veille-btn');
+    if(btn){
+      btn.innerHTML = libelleVeille(S.veilleOuverte);
+      btn.setAttribute('aria-expanded', S.veilleOuverte ? 'true' : 'false');
+      btn.classList.toggle('actif', !!S.veilleOuverte);
+    }
+  }
+
+  async function basculerVeille(rac){
+    S.veilleOuverte = !S.veilleOuverte;
+    peindreVeille(rac);
+    if(!S.veilleOuverte || S.veilleChargee) return;
+    try{ await chargerVeille(); }
+    catch(e){ S.veilleChargee = true; S.veille = null; toast(e.message, 'danger'); }
+    peindreVeille(rac);
   }
 
   /* Participants : les presents en pastilles, et une recherche pour en ajouter.
@@ -508,7 +571,7 @@
     if(S.vue === 'reunion'){
       vue.innerHTML = rendreReunion(S.reunion, S.prod, {
         notes: S.notesEtat, personnes: S.personnes, recherche: S.rechercheP,
-        plein: S.plein,
+        plein: S.plein, veilleOuverte: S.veilleOuverte,
         horsProd: (S.prod && S.prod.machines_hors_production) || []
       });
       var ta = vue.querySelector('#reu-notes');
@@ -746,6 +809,7 @@
         if(act === 'imprimer'){ imprimer(); return; }
         if(act === 'clore'){ await clore(); return; }
         if(act === 'ajout-action'){ await ajouterAction(rac); return; }
+        if(act === 'veille'){ await basculerVeille(rac); return; }
         if(act === 'suppr-non'){ fermerSuppression(rac); return; }
         if(el.getAttribute('data-mach-tout') !== null){
           await majMachines([]);
@@ -1000,6 +1064,7 @@
     S.plein = false; appliquerPlein();
     S.vue = 'liste'; S.reunion = null; S.prod = null;
     S.reunions = null; S.notesLocal = null; S.notesEtat = ''; S.erreur = null;
+    S.veille = null; S.veilleOuverte = false; S.veilleChargee = false;
     S.personnes = []; S.rechercheP = '';
     S.contexteCharge = false;
   }

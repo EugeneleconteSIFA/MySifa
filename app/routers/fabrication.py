@@ -1463,7 +1463,26 @@ async def create_saisie(request: Request):
             pass  # ne jamais bloquer la saisie sur une erreur du check
 
         # ── Validations métrages ──────────────────────────────────────────────
-        if cl["code"] == "01" and m_debut is not None:
+        if cl["code"] == "01":
+            # Le compteur de depart n'est pas un champ de confort : la matiere
+            # consommee et la vitesse du dossier se calculent par difference
+            # avec le releve de fin. Le serveur ne validait ce metrage que s'il
+            # arrivait, et l'ecran laissait passer un champ vide : un dossier
+            # demarre sans releve sortait sans longueur, sans vitesse, et ne
+            # pesait rien dans Besoins matieres. Aucune sortie de secours ici —
+            # un compteur illisible se traite avec la maintenance, pas en
+            # demarrant un dossier aveugle.
+            if m_debut is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Relevé du compteur machine requis pour démarrer — sans "
+                        "métrage de début, ni la vitesse ni la matière consommée "
+                        "du dossier ne peuvent être calculées."
+                    ),
+                )
+            if m_debut < 0:
+                raise HTTPException(status_code=400, detail="Métrage invalide.")
             # Début dossier : métrage début >= dernier_metrage machine
             if dernier_metrage is not None and m_debut < dernier_metrage:
                 raise HTTPException(

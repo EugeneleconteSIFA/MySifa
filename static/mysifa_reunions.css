@@ -160,6 +160,24 @@ table.reu-tbl td.reu-td-sup{white-space:nowrap;text-align:right}
   font-family:inherit;line-height:1.6;resize:vertical}
 .reu-notes:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-bg)}
 .reu-sauve{font-size:11.5px;color:var(--muted);margin-top:6px;min-height:16px}
+/* Notes du point precedent : le bouton est pose DANS la colonne (fond --card),
+   son fond est donc --bg — transparent, il serait invisible au repos. */
+.reu-veille-btn{display:inline-flex;align-items:center;margin-top:8px;
+  background:var(--bg);border:1px solid var(--border);border-radius:9px;
+  padding:7px 12px;color:var(--text2);font-size:12.5px;font-weight:700;
+  font-family:inherit;cursor:pointer;
+  transition:border-color var(--mo-fast,.15s) var(--ease-out,ease),
+             color var(--mo-fast,.15s) var(--ease-out,ease),
+             background var(--mo-fast,.15s) var(--ease-out,ease)}
+.reu-veille-btn:hover{border-color:var(--accent);color:var(--accent)}
+.reu-veille-btn.actif{background:var(--accent-bg);border-color:var(--accent);
+  color:var(--accent)}
+.reu-veille{margin-top:10px}
+.reu-veille-hdr{font-size:11.5px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.5px;color:var(--muted);margin-bottom:6px}
+/* Meme encadre que les notes du jour, a la lecture seule pres. */
+.reu-veille .reu-notes{cursor:default}
+.reu-veille .reu-notes:focus{border-color:var(--border);box-shadow:none}
 .reu-bloc{margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
 
 /* ── Participants ────────────────────────────────────────────── */

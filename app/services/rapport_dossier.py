@@ -1871,17 +1871,31 @@ def _slot(tous: List[Dict[str, Any]], visibles: List[Dict[str, Any]],
                                              iv["categorie"].capitalize() or "Autre"),
             "operation": iv["operation"],
             "code": iv["code"],
+            # Qui tenait la machine sur cette phase. Deux conducteurs se
+            # relaient sur un meme dossier : sans ce nom, le ruban montre le
+            # temps produit mais pas par qui, et le point de production
+            # attribue la journee entiere au dernier passe.
+            "operateur": iv["operateur"],
             "minutes": round(iv["minutes"], 1),
             "x": round(max(0.0, (sx - x) / largeur * 100.0), 3),
             "largeur": round(max(0.0, (sf - sx) / largeur * 100.0), 3),
         })
 
     derniere = max(tous, key=lambda i: i["debut"])
+    # Les conducteurs dans l'ordre ou ils ont pris la machine, et seulement
+    # ceux de la fenetre affichee : un point de production demande qui a
+    # produit CE jour-la, pas qui a touche le dossier depuis son lancement.
+    # L'ordre alphabetique, lui, faisait passer le releveur pour le demarreur.
+    ordre: List[str] = []
+    for iv in sorted(visibles or tous, key=lambda i: i["debut"]):
+        nom = iv["operateur"]
+        if nom and nom not in ordre:
+            ordre.append(nom)
     return {
         "no_dossier": no_dossier,
         "client": _txt(derniere.get("client")),
         "designation": _txt(derniere.get("designation")),
-        "operateurs": sorted({iv["operateur"] for iv in tous if iv["operateur"]}),
+        "operateurs": ordre,
         "debut": debut_reel.strftime("%Y-%m-%dT%H:%M:%S"),
         "fin": fin_reelle.strftime("%Y-%m-%dT%H:%M:%S"),
         "minutes": round(sum(iv["minutes"] for iv in tous), 1),

@@ -252,6 +252,43 @@ verifier("frise : la densite ne remplace pas le debordement",
 verifier("frise : donnee echappee",
          !M.renderFrise({ vide:false, axe:[], lignes:[{ machine:'<b>x', slots:[] }] }).includes("<b>x"));
 
+// Qui a produit. Le slot porte les conducteurs dans l'ordre de passage, et un
+// trait la ou la machine change de main : deux conducteurs sur un dossier se
+// lisaient comme un bloc d'un seul tenant.
+const SLOT_DEUX = Object.assign({}, SLOT, {
+  operateurs: ["913 - VERNISSE Bastien", "Jonathan Celisse"],
+  segments: [{ statut: "calage", operateur: "913 - VERNISSE Bastien", minutes: 60, x: 0, largeur: 20 },
+             { statut: "production", operateur: "913 - VERNISSE Bastien", minutes: 180, x: 20, largeur: 30 },
+             { statut: "production", operateur: "Jonathan Celisse", minutes: 240, x: 50, largeur: 50 }]
+});
+const friseDeux = M.renderFrise({ vide: false, axe: [],
+  lignes: [{ machine: "C1", slots: [SLOT_DEUX] }] });
+verifier("frise : les conducteurs sur le slot",
+         friseDeux.includes("VERNISSE Bastien · Jonathan Celisse"));
+verifier("frise : le matricule ne mange pas la place",
+         !friseDeux.includes("913 - VERNISSE Bastien</em>"));
+verifier("frise : un trait au relais, un seul",
+         friseDeux.split("rp-fr-relais").length - 1 === 1);
+verifier("frise : le relais tombe au changement de main",
+         friseDeux.includes('class="rp-fr-relais" style="left:50%"'));
+verifier("frise : quantite et conducteurs sur la meme ligne",
+         friseDeux.includes('<div class="rp-fr-pied"><u>42 000 ét.</u><em>'));
+verifier("frise : un seul conducteur, aucun relais",
+         !M.renderFrise({ vide: false, axe: [], lignes: [{ machine: "C1", slots: [
+           Object.assign({}, SLOT, { operateurs: ["Marc"], segments: [
+             { statut: "calage", operateur: "Marc", minutes: 60, x: 0, largeur: 50 },
+             { statut: "production", operateur: "Marc", minutes: 60, x: 50, largeur: 50 }] })
+         ] }] }).includes("rp-fr-relais"));
+verifier("frise : sans conducteur, ni relais ni ligne vide",
+         !M.renderFrise({ vide: false, axe: [], lignes: [{ machine: "C1", slots: [
+           { no_dossier: "D-9", largeur: 40, x: 0, segments: [
+             { statut: "production", minutes: 60, x: 0, largeur: 100 }] }
+         ] }] }).includes("rp-fr-relais"));
+verifier("frise : conducteur echappe",
+         !M.renderFrise({ vide: false, axe: [], lignes: [{ machine: "C1", slots: [
+           Object.assign({}, SLOT, { operateurs: ['<img src=x onerror="alert(1)">'] })
+         ] }] }).includes("<img src=x"));
+
 console.log("\n3 ter. Citations, masquage");
 const avecReponse = M.renderEcrit({
   cle: "saisie:12", origine: "commentaire", reference: 12, no_dossier: "D-1",

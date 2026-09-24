@@ -163,6 +163,38 @@ def liste(conn, limite: int = 100) -> List[Dict[str, Any]]:
     return out
 
 
+def precedente(conn, reunion_id: int) -> Optional[Dict[str, Any]]:
+    """Le point de production qui precede celui-ci, avec ses notes.
+
+    « La veille » n'est pas J-1 dans un atelier : le lundi, le point precedent
+    est celui du vendredi, et une semaine sans point ne doit pas renvoyer une
+    boite vide. On prend donc le plus recent qui passe AVANT, sur le meme ordre
+    que la liste — la plage analysee d'abord, l'id pour departager deux points
+    tenus sur la meme journee.
+    """
+    if not _table_existe(conn, "reunions"):
+        return None
+    ici = conn.execute(
+        "SELECT id, date_debut FROM reunions WHERE id=?", (int(reunion_id),)
+    ).fetchone()
+    if not ici:
+        return None
+    row = conn.execute(
+        """SELECT id, titre, date_debut, date_fin, notes, statut, ouverte_le, ouverte_par
+             FROM reunions
+            WHERE (COALESCE(date_debut,'') < ?)
+               OR (COALESCE(date_debut,'') = ? AND id < ?)
+            ORDER BY date_debut DESC, id DESC LIMIT 1""",
+        (_txt(ici["date_debut"]), _txt(ici["date_debut"]), int(reunion_id)),
+    ).fetchone()
+    if not row:
+        return None
+    d = dict(row)
+    d["notes"] = _txt(d.get("notes"))
+    d["ouverte"] = d.get("statut") == STATUT_OUVERTE
+    return d
+
+
 def ouverte_de(conn, auteur: str) -> Optional[Dict[str, Any]]:
     """La reunion encore ouverte de cette personne, s'il y en a une."""
     if not _table_existe(conn, "reunions"):
