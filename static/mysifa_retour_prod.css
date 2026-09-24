@@ -402,12 +402,26 @@ th.rp-sa-tri .rp-sa-fl{display:inline-block;width:12px;text-align:center;
 /* Hauteur de ligne fixee et non heritee : c'est elle qui decide si les quatre
    lignes tiennent. Heritee du theme, elle les faisait deborder et le texte
    sortait coupe en deux au ras du ruban. */
-.rp-fr-lbl b,.rp-fr-lbl span,.rp-fr-lbl i,.rp-fr-lbl u{
+.rp-fr-lbl b,.rp-fr-lbl span,.rp-fr-lbl i,.rp-fr-lbl u,.rp-fr-lbl em{
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.25}
 .rp-fr-lbl b{font-size:13px;font-weight:800;color:var(--text)}
 .rp-fr-lbl span{font-size:12px;color:var(--text2)}
 .rp-fr-lbl i{font-size:11.5px;font-style:normal;color:var(--muted)}
 .rp-fr-lbl u{font-size:11.5px;text-decoration:none;font-weight:700;color:var(--text2)}
+/* Derniere ligne : quantite a gauche, conducteurs a droite. Les deux sur la
+   meme ligne parce qu'une cinquieme ne tient pas dans la hauteur du slot. */
+.rp-fr-pied{display:flex;align-items:baseline;gap:8px;min-width:0}
+.rp-fr-pied u{flex:0 0 auto}
+.rp-fr-pied em{flex:1 1 auto;min-width:0;text-align:right;font-style:normal;
+  font-size:11.5px;font-weight:700;color:var(--accent)}
+/* Le relais : la machine change de main. Une encoche dans le ruban (couleur du
+   slot, donc une vraie coupure) et un petit trait juste au-dessus. Il ne monte
+   pas plus haut : la derniere ligne du libelle passe a six pixels du ruban, un
+   trait pleine hauteur la barrerait. */
+.rp-fr-relais{position:absolute;bottom:0;height:9px;width:0;z-index:3;
+  border-left:3px solid var(--card);pointer-events:none}
+.rp-fr-relais::before{content:"";position:absolute;left:-1px;bottom:9px;
+  width:0;height:4px;border-left:1px solid var(--text2);opacity:.6}
 
 /* Un slot etroit ne peut pas porter quatre lignes : elles sortent toutes en
    « … », ce qui n'apprend rien. On retire les moins utiles plutot que de
@@ -415,13 +429,16 @@ th.rp-sa-tri .rp-sa-fl{display:inline-block;width:12px;text-align:center;
 .rp-fr-slot.moyen .rp-fr-lbl u{display:none}
 .rp-fr-slot.etroit .rp-fr-lbl span,
 .rp-fr-slot.etroit .rp-fr-lbl i,
-.rp-fr-slot.etroit .rp-fr-lbl u{display:none}
+.rp-fr-slot.etroit .rp-fr-lbl u,
+.rp-fr-slot.etroit .rp-fr-lbl em{display:none}
+.rp-fr-slot.etroit .rp-fr-pied:empty{display:none}
 .rp-fr-slot.etroit .rp-fr-lbl{padding:4px 6px}
 /* Au survol le slot s'ouvre : tout revient, il y a la place. */
 .rp-fr-slot.moyen:hover .rp-fr-lbl u,
 .rp-fr-slot.etroit:hover .rp-fr-lbl span,
 .rp-fr-slot.etroit:hover .rp-fr-lbl i,
 .rp-fr-slot.etroit:hover .rp-fr-lbl u{display:block}
+.rp-fr-slot.etroit:hover .rp-fr-lbl em{display:block}
 
 /* Un dossier coupe par une absence de personnel : les morceaux restent relies
    par un liseré, sinon on lit deux dossiers la ou il n'y en a qu'un. */
@@ -471,6 +488,9 @@ th.rp-sa-tri .rp-sa-fl{display:inline-block;width:12px;text-align:center;
 .rp-tip-ph i{width:10px;height:10px;border-radius:2px;flex-shrink:0}
 .rp-tip-ph span{flex:1;color:var(--text2)}
 .rp-tip-ph b{color:var(--text);font-variant-numeric:tabular-nums}
+.rp-tip-titre{font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.5px;color:var(--muted);margin-bottom:3px}
+.rp-tip-qui span{color:var(--text)}
 @media (prefers-reduced-motion: reduce){ .rp-tip{animation:none} }
 
 /* ── Remontees : citations et masquage ───────────────────────── */
@@ -484,7 +504,7 @@ th.rp-sa-tri .rp-sa-fl{display:inline-block;width:12px;text-align:center;
 
 @media print{
   .rp-fr-slot:hover{top:6px;bottom:6px;box-shadow:none;border-color:var(--border)}
-  .rp-fr-seg{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .rp-fr-seg,.rp-fr-relais{print-color-adjust:exact;-webkit-print-color-adjust:exact}
   .rp-tip{display:none !important}
   #rp-masques{display:none !important}
   .rp-sa-plus,.rp-sa-barre{display:none !important}

@@ -131,6 +131,15 @@ def detail_reunion(reunion_id: int, request: Request, avec_prod: bool = True):
     return {"reunion": r, "prod": prod}
 
 
+@router.get("/api/reunions/{reunion_id}/precedente")
+def precedente_reunion(reunion_id: int, request: Request):
+    """Les notes du point precedent — relues pendant celui-ci, jamais modifiees."""
+    _autorise(request)
+    with get_db() as conn:
+        p = rn.precedente(conn, reunion_id)
+    return {"precedente": p}
+
+
 @router.post("/api/reunions/{reunion_id}")
 async def enregistrer_reunion(reunion_id: int, request: Request):
     """Met a jour titre, notes, plage, machine ou participants."""

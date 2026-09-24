@@ -182,6 +182,16 @@ verifier("reunion : contenant des chiffres", ecran.includes('id="reu-prod"'));
 verifier("reunion : colonne de notes", ecran.includes('id="reu-notes"'));
 verifier("reunion : etat d'enregistrement", ecran.includes("Enregistre a 09:12"));
 verifier("reunion : formulaire d'action", ecran.includes('data-r="ajout-action"'));
+// Les notes de la veille : le bouton et son encadre sont rendus a chaque
+// passe, replies par defaut. Un point s'ouvre sur les notes du jour.
+verifier("reunion : bouton des notes du point precedent",
+         ecran.includes('data-r="veille"')
+         && ecran.includes("Notes du point pr&eacute;c&eacute;dent")
+         && ecran.includes('aria-expanded="false"'));
+verifier("reunion : contenant des notes precedentes", ecran.includes('id="reu-veille"'));
+verifier("reunion : le bouton s'inverse une fois ouvert",
+         M.rendreReunion(REUNION, null, { veilleOuverte: true })
+          .includes("Masquer le point pr&eacute;c&eacute;dent"));
 verifier("reunion : bloc ferme", ecran.trim().endsWith("</div>"));
 verifier("reunion : machines absentes ne cassent rien",
          M.rendreReunion(REUNION, null, {}).includes("data-mach-tout"));

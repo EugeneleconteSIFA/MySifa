@@ -6499,7 +6499,16 @@ function renderDebutModal(){
     // Validation locale : métrage < dernier_metrage machine
     const machine = S.machine || (S.adminMachineId && S.machines.find(m=>m.id===S.adminMachineId));
     const dernierM = machine ? machine.dernier_metrage : null;
-    const mDebut = S.metrageDebut ? parseFloat(String(S.metrageDebut).replace(',','.')) : null;
+    let mDebut = S.metrageDebut ? parseFloat(String(S.metrageDebut).replace(',','.')) : null;
+    if(mDebut !== null && isNaN(mDebut)) mDebut = null;
+    // Meme regle qu'en fin de production : sans compteur de depart, la matiere
+    // consommee et la vitesse du dossier ne se calculent pas. La modale
+    // laissait demarrer sur un champ vide, et le dossier sortait sans metrage.
+    if(mDebut === null){
+      showToast('Relevez le compteur machine — sans métrage de début, ni la vitesse '
+               +'ni le besoin matière de ce dossier ne peuvent être calculés.','danger');
+      return;
+    }
     if(mDebut !== null && dernierM !== null && mDebut < dernierM){
       showToast('Métrage invalide : le compteur était à '+Math.round(dernierM).toLocaleString('fr-FR')+' m — valeur saisie trop petite','danger');
       return;
@@ -6520,7 +6529,7 @@ function renderDebutModal(){
         body.numero_of_fictif = fictifOfDisplay(dos.reference||dos.numero_of||'');
         body.designation = 'Dossier hors planning';
       }
-      if(mDebut !== null) body.metrage_debut = mDebut;
+      body.metrage_debut = mDebut;
       if(S.adminMachineId) body.machine_id = S.adminMachineId;
       // N'est envoyé que si la carte a pu se charger : sans elle, le serveur
       // ne reprend rien plutôt que de deviner ce que l'opérateur voulait.
@@ -6565,7 +6574,7 @@ function renderDebutModal(){
         h('label',null,(()=>{
           const m = S.machine||(S.adminMachineId&&S.machines.find(x=>x.id===S.adminMachineId));
           const dm = m&&m.dernier_metrage!=null?'  (dernier enregistré : '+Math.round(m.dernier_metrage).toLocaleString('fr-FR')+' m)':'';
-          return 'Métrage total de la machine — compteur au début, en mètres'+dm;
+          return 'Métrage total de la machine — compteur au début, en mètres — obligatoire'+dm;
         })()),
         inp
       ),

@@ -243,6 +243,40 @@ def test_perimetre_machines():
     verifier("supprimer emporte le perimetre", reste, 0)
 
 
+def test_precedente():
+    print("\n8. Le point precedent, celui dont on relit les notes")
+    conn = base()
+    verifier("reunion inconnue : rien", svc.precedente(conn, 999), None)
+
+    vendredi = svc.lancer(conn, "Eugene", "2026-09-18", titre="Vendredi")
+    svc.enregistrer(conn, vendredi["id"], "Eugene", notes="Casse bande sur C1.")
+    svc.clore(conn, vendredi["id"], "Eugene")
+    verifier("le premier point n'a pas de precedent",
+             svc.precedente(conn, vendredi["id"]), None)
+
+    # Lundi : le point precedent est celui de vendredi, pas « hier ». Un atelier
+    # ne tient pas de point le dimanche.
+    lundi = svc.lancer(conn, "Eugene", "2026-09-21", titre="Lundi")
+    p = svc.precedente(conn, lundi["id"])
+    verifier("lundi renvoie le point de vendredi", p["titre"], "Vendredi")
+    verifier("avec ses notes", p["notes"], "Casse bande sur C1.")
+    svc.clore(conn, lundi["id"], "Eugene")
+
+    # Deux points sur la meme journee : l'id departage, comme dans la liste.
+    matin = svc.lancer(conn, "Marc", "2026-09-22", titre="Matin")
+    svc.clore(conn, matin["id"], "Marc")
+    apresmidi = svc.lancer(conn, "Marc", "2026-09-22", titre="Apres-midi")
+    verifier("meme journee : le plus ancien passe avant",
+             svc.precedente(conn, apresmidi["id"])["titre"], "Matin")
+    verifier("et le matin remonte au lundi",
+             svc.precedente(conn, matin["id"])["titre"], "Lundi")
+
+    # Un point sans notes reste un point : c'est l'ecran qui le dit, pas le
+    # service qui le cache.
+    verifier("notes vides : chaine vide, pas None",
+             svc.precedente(conn, apresmidi["id"])["notes"], "")
+
+
 if __name__ == "__main__":
     test_lancer()
     test_notes_et_cloture()
@@ -251,6 +285,7 @@ if __name__ == "__main__":
     test_participants()
     test_inconnu()
     test_perimetre_machines()
+    test_precedente()
 
     print("\n" + "=" * 60)
     if FAIL:
