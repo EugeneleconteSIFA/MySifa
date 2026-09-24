@@ -461,6 +461,7 @@ def _controles_paliers(donnees: dict, paliers: list) -> list[dict]:
             alertes.append({
                 "niveau": "avertissement",
                 "champs": ["qte_etiquettes"],
+                "court": (f"Fichier : {_fmt(val)} ex · calculs : {_fmt(qte_calc)} ex"),
                 "message": (
                     f"Le nom du fichier annonce {_fmt(val)} ex, qui est bien un palier "
                     f"du devis — mais les temps sont calculés pour {_fmt(qte_calc)} ex. "
@@ -493,6 +494,7 @@ def controles_coherence(donnees: dict, indicateurs: Optional[list] = None,
             alertes.append({
                 "niveau": "avertissement",
                 "champs": ["vitesse_theorique", "temps_production_mn", "metrage_production_ml"],
+                "court": f"Vitesse × temps ≠ métrage devisé ({ecart * 100:.0f} % d'écart)",
                 "message": (
                     f"Vitesse × temps = {_fmt(attendu)} ml, mais le métrage devisé est "
                     f"{_fmt(m)} ml — {ecart * 100:.0f} % d'écart. L'un des trois est mal lu."
@@ -537,6 +539,7 @@ def controles_coherence(donnees: dict, indicateurs: Optional[list] = None,
         alertes.append({
             "niveau": "avertissement",
             "champs": ["gache"],
+            "court": f"Gâche à {g:.2f}, attendue en fraction",
             "message": f"Gâche à {g:.2f} — la valeur attendue est une fraction (0,05 pour 5 %).",
         })
 

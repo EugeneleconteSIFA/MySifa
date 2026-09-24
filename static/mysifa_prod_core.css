@@ -1268,19 +1268,47 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
 .rent-filtre.is-active .rent-filtre-nb{color:var(--accent)}
 
 /* Ligne de dossier */
-.rent-ligne{display:flex;align-items:center;gap:14px;padding:13px 18px;
+/* ── Liste des dossiers : des colonnes, pas des phrases ──────────────
+   Chaque ligne disait « Cohésio 2 — début 02/09/2026 — durée 6.75 h — laize
+   530 — livraison 2026-09-03 » : une phrase differente a chaque ligne, que
+   l'oeil doit relire en entier pour y trouver la durée. En colonnes, on
+   descend la colonne. La grille est partagee par l'en-tete et les lignes,
+   sinon rien ne s'aligne. */
+.rent-dossiers .rent-tete,
+.rent-dossiers .rent-ligne{
+  display:grid;align-items:center;gap:14px;
+  grid-template-columns:minmax(200px,2.4fr) minmax(90px,.9fr) 92px 82px 92px
+                        minmax(96px,auto) 18px}
+.rent-tete{padding:8px 18px;border-bottom:1px solid var(--border);
+  background:var(--bg)}
+.rd-th{display:inline-flex;align-items:center;gap:4px;background:none;border:0;
+  padding:0;font-family:inherit;font-size:10px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
+  cursor:pointer;text-align:left;transition:color .15s}
+.rd-th:hover{color:var(--accent)}
+.rd-th.is-tri{color:var(--accent)}
+.rd-fleche{font-size:8px;line-height:1}
+.rd-th-etat{justify-content:flex-end}
+.rd-th-fixe{cursor:default}
+.rd-th-fixe:hover{color:var(--muted)}
+.rd-th-vide{display:block}
+
+.rent-ligne{padding:11px 18px;
   border-bottom:1px solid var(--border);border-left:3px solid transparent;
   cursor:pointer;transition:background .15s,border-color .15s}
 .rent-ligne:hover{background:var(--bg)}
 .rent-ligne.is-open{background:var(--accent-bg);border-left-color:var(--accent)}
-/* Le titre porte le client, le format ET la reference : le couper a la
-   premiere ligne cachait la reference, qui est ce qu'on cherche. Deux lignes
-   au plus, coupees proprement au-dela. */
+.rd-dossier{min-width:0}
 .rent-ligne-titre{font-size:13px;font-weight:700;color:var(--text);
-  line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;
-  -webkit-box-orient:vertical;overflow:hidden}
-.rent-ligne-sous{font-size:11px;color:var(--text2);margin-top:3px;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* La reference sur sa propre ligne, en chasse fixe : c'est ce qu'on recopie
+   dans RVGI, et un 9931612 se relit mieux qu'il ne se lit. */
+.rd-ref{font-size:11px;color:var(--text2);font-family:ui-monospace,monospace;
+  margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rd-cell{font-size:12px;color:var(--text2);min-width:0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rd-date,.rd-duree{font-variant-numeric:tabular-nums}
+.rd-machine{font-weight:600}
 .rent-chevron{display:inline-flex;color:var(--muted);flex-shrink:0;
   transition:transform .15s}
 .rent-chevron.is-open{transform:rotate(180deg);color:var(--accent)}
@@ -1397,19 +1425,27 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
   .rent-panneau-grille{grid-template-columns:1fr;gap:16px}
 }
 @media(max-width:640px){
-  .rent-ligne{flex-wrap:wrap;gap:8px}
+  /* Sous 900 px, sept colonnes ne tiennent pas : la ligne redevient une
+     pile, et l'en-tete de tri disparait avec elles. Le tri reste celui qui
+     etait choisi sur grand ecran. */
+  .rent-dossiers .rent-tete{display:none}
+  .rent-dossiers .rent-ligne{display:flex;flex-wrap:wrap;gap:8px}
+  .rent-dossiers .rd-dossier{flex:1 1 100%}
   .rent-etats{width:100%;justify-content:flex-start}
   .rent-filtres{width:100%;justify-content:space-between}
   .rent-kpi-val{font-size:20px}
 }
 
-/* Devis ramassés automatiquement : le motif du doute se lit sur la ligne. */
-/* Le motif doit passer a la ligne DANS sa cellule. Avec un `max-width` plus
-   large que la colonne, le bloc debordait et le conteneur `overflow-x` du
-   tableau le coupait en plein mot — un avertissement illisible ne previent
-   de rien. On contraint la colonne, pas le bloc. */
+/* Devis ramassés automatiquement : le motif du doute se lit sur la ligne, et
+   sur UNE ligne. En texte libre sur trois lignes, chaque devis douteux
+   mesurait trois fois la hauteur des autres et la liste devenait illisible.
+   Le motif enregistré est désormais court (cf. `devis_extraction.py`), et ce
+   qui dépasse encore — les devis importés avant ce changement — se coupe
+   proprement : le texte entier reste dans l'infobulle. */
 .rent-motif{font-size:11px;color:var(--warn);margin-top:3px;line-height:1.4;
-  white-space:normal;overflow-wrap:anywhere}
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rent-fichier{font-size:11px;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* Le nom du client peut etre repris du nom du fichier, qui decrit parfois le
    produit sur quatre-vingts caracteres. Il doit passer a la ligne dans sa
    cellule au lieu d'etirer le tableau. */
