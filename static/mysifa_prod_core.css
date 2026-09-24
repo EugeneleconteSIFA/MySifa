@@ -1364,6 +1364,12 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
   color:var(--text2);vertical-align:top}
 .rent-table th.num,.rent-table td.num{text-align:right;font-family:monospace;
   font-variant-numeric:tabular-nums;white-space:nowrap}
+/* En-tete cliquable : c'est le tri du tableau. */
+.rent-table th.rent-th-tri{cursor:pointer;user-select:none;white-space:nowrap;
+  transition:color .15s}
+.rent-table th.rent-th-tri:hover{color:var(--accent)}
+.rent-table th.rent-th-tri.is-tri{color:var(--accent)}
+.rent-table th .rd-fleche{font-size:8px;line-height:1;margin-left:4px}
 .rent-table tbody tr:hover{background:var(--bg)}
 /* La ligne ouverte : un liseré, pas un aplat. `--accent-bg` change de teinte
    avec la palette choisie dans Mon profil (Ambre, Pétrole, Braise...) et

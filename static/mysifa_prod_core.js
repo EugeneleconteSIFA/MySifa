@@ -231,6 +231,11 @@
     rentDevisFiltre: 'tous',
     // Recherche dans les devis importes : client, nom de fichier, date.
     rentDevisQuery: '',
+    // Tri du tableau des devis. `defaut` = les douteux en tete, puis les plus
+    // recents ; un clic sur un en-tete range sur cette colonne-la, et rien
+    // d'autre. Un tri par quantite qui remonterait quand meme les douteux ne
+    // serait pas un tri par quantite.
+    rentDevisTri: {champ:'defaut', sens:'desc'},
     rentCompById: {},
     rentQuery: '',
     rentTags: [],
@@ -6692,14 +6697,48 @@ function renderRentDevis(){
   const qDevis = String(S.rentDevisQuery || '').trim().toLowerCase();
   const correspond = dv => !qDevis || [dv.client, dv.filename, dv.date_devis, dv.note]
     .map(x => String(x == null ? '' : x).toLowerCase()).join(' ').indexOf(qDevis) >= 0;
+  /* Le tri du tableau. Les en-tetes sont les boutons : c'est la ou on regarde
+     quand on cherche « le plus gros » ou « le plus lent ». Le mode `defaut`
+     garde la regle d'origine — les devis douteux en tete, puis les plus
+     recents — et reste celui qui s'applique tant qu'aucune colonne n'a ete
+     demandee. */
+  const calageDe = dv => (Number(dv.temps_calage_mn)||0)
+                       + (Number(dv.temps_calage_impression_mn)||0);
+  const TRIS_DEVIS = {
+    defaut:    {sens:'desc', cle:null},
+    client:    {sens:'asc',  cle:dv=>String(dv.client||dv.filename||'').toLowerCase()},
+    date:      {sens:'desc', cle:dv=>String(dv.date_devis||'')},
+    quantite:  {sens:'desc', cle:dv=>Number(dv.qte_etiquettes)||0},
+    vitesse:   {sens:'desc', cle:dv=>Number(dv.vitesse_theorique)||0},
+    calage:    {sens:'desc', cle:dv=>calageDe(dv)},
+    lecture:   {sens:'asc',  cle:dv=>String(LIB_METHODE[dv.extraction_methode]||'').toLowerCase()},
+    dossiers:  {sens:'desc', cle:dv=>Number(dv.nb_dossiers_lies)||0},
+  };
+  const triD = (S.rentDevisTri && TRIS_DEVIS[S.rentDevisTri.champ])
+    ? S.rentDevisTri : {champ:'defaut', sens:'desc'};
+  const regleD = TRIS_DEVIS[triD.champ];
   const listeAffichee = (filtreDevis==='verifier' ? aVerifier : devisList)
     .filter(correspond)
     .slice()
-    .sort((a,b)=>{
-      const va=Number(a.a_verifier)===1?0:1, vb=Number(b.a_verifier)===1?0:1;
-      if(va!==vb) return va-vb;
-      return String(b.date_devis||'').localeCompare(String(a.date_devis||''));
-    });
+    .map((dv, i) => ({dv, i}))
+    .sort((a, b) => {
+      if(!regleD.cle){
+        const va=Number(a.dv.a_verifier)===1?0:1, vb=Number(b.dv.a_verifier)===1?0:1;
+        if(va!==vb) return va-vb;
+        const d = String(b.dv.date_devis||'').localeCompare(String(a.dv.date_devis||''));
+        return d || (a.i - b.i);
+      }
+      const sens = triD.sens === 'asc' ? 1 : -1;
+      const va = regleD.cle(a.dv), vb = regleD.cle(b.dv);
+      const vide = v => v === '' || v == null || v === 0;
+      // Valeurs absentes toujours en fin, dans les deux sens : un devis sans
+      // vitesse lue n'est pas « le plus lent ».
+      if(vide(va) !== vide(vb)) return vide(va) ? 1 : -1;
+      if(va < vb) return -sens;
+      if(va > vb) return sens;
+      return a.i - b.i;
+    })
+    .map(x => x.dv);
 
   // Import libre : un devis peut arriver avant qu'on sache à quel dossier il
   // se rattachera. Le lier reste possible depuis l'onglet Dossiers.
@@ -6725,6 +6764,20 @@ function renderRentDevis(){
   const fmt=(v,u)=>v!=null&&v!==''&&Number(v)!==0
     ? Number(v).toLocaleString('fr-FR',{maximumFractionDigits:2})+(u?' '+u:'') : '—';
 
+  /* Un en-tete = un tri. C'est la qu'on regarde quand on cherche « le plus
+     gros » ou « le devis le plus ancien » ; un menu separe obligerait a
+     quitter le tableau pour lui dire ce qu'on veut y lire. Un second clic
+     inverse le sens, la fleche dit lequel est actif. */
+  const thTri = (champ, label, cls) => {
+    const actif = triD.champ === champ;
+    return h('th',{className:(cls?cls+' ':'')+'rent-th-tri'+(actif?' is-tri':''),
+      title:'Trier par '+label.toLowerCase(),
+      onClick:()=>set({rentDevisTri:{champ:champ,
+        sens: actif ? (triD.sens==='asc'?'desc':'asc') : TRIS_DEVIS[champ].sens}})},
+      label,
+      actif ? h('span',{className:'rd-fleche'}, triD.sens==='asc'?'▲':'▼') : null);
+  };
+
   const chercheDevis = h('input',{type:'text', id:'rent-devis-q', className:'rent-input',
     placeholder:'Rechercher un devis (client, fichier, date)…',
     value:S.rentDevisQuery || '', style:{flex:'1',minWidth:'220px'}});
@@ -6746,10 +6799,11 @@ function renderRentDevis(){
     ? h('div',{style:{overflowX:'auto'}},
         h('table',{className:'rent-table'},
           h('thead',null,h('tr',null,
-            h('th',null,'Client'), h('th',null,'Date'),
-            h('th',{className:'num'},'Quantité'), h('th',{className:'num'},'Vitesse'),
-            h('th',{className:'num'},'Calage'), h('th',null,'Lecture'),
-            h('th',{className:'num'},'Dossiers'), h('th',{className:'num'},'Actions')
+            thTri('client','Client'), thTri('date','Date'),
+            thTri('quantite','Quantité','num'), thTri('vitesse','Vitesse','num'),
+            thTri('calage','Calage','num'), thTri('lecture','Lecture'),
+            thTri('dossiers','Dossiers','num'),
+            h('th',{className:'num'},'Actions')
           )),
           h('tbody',null,...listeAffichee.map(dv=>{
             const calage=(Number(dv.temps_calage_mn)||0)+(Number(dv.temps_calage_impression_mn)||0);
@@ -6811,6 +6865,12 @@ function renderRentDevis(){
           chercheDevis,
           qDevis ? h('button',{type:'button',className:'btn-sec',
             onClick:()=>set({rentDevisQuery:''})},'Effacer') : null,
+          // Le retour au tri d'origine. Il n'apparait que lorsqu'une colonne
+          // range la liste : sans tri de colonne, il ne ferait rien.
+          triD.champ!=='defaut' ? h('button',{type:'button',className:'btn-sec',
+            title:'Les devis à vérifier en tête, puis les plus récents',
+            onClick:()=>set({rentDevisTri:{champ:'defaut',sens:'desc'}})},
+            'Tri par défaut') : null,
           barre,
           h('button',{type:'button',className:'btn-sec',onClick:async()=>{await loadDevis();toast('Devis rechargés');}},'Rafraîchir')
         )
