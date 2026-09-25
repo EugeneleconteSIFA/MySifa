@@ -7873,10 +7873,8 @@ function getVisibleSaisiesRowsForNav(){
   const d = S.saisies;
   if(!d) return [];
   let rows = (d.rows || []).slice();
-  // Reprend la logique UI (durées) si la fonction existe (ajoutée dans renderSaisies).
-  try{
-    if(typeof addDurations === 'function') rows = addDurations(rows);
-  }catch(e){}
+  // Même calcul de durées que le tableau.
+  try{ rows = saisiesAvecDurees(rows); }catch(e){}
   if(S.sortState && S.sortState.col) rows = sortRows(rows, S.sortState.col, S.sortState.asc);
   return rows;
 }
@@ -8606,6 +8604,103 @@ function basculeSaisies(cle, libelle, titre){
     libelle);
 }
 
+// ── Export des saisies : Excel ou PDF ───────────────────────────
+// Un seul bouton « Export » dans la barre, qui déplie les deux formats.
+// Excel reprend la vue telle quelle ; le PDF est un document de contrôle
+// par opérateur et par session (static/mysifa_saisies_pdf.js).
+function boutonExportSaisies(className){
+  const menu = h('div',{className:'saisies-export-menu',role:'menu',
+    // position:fixed : la carte des saisies est en overflow:hidden et
+    // rognerait un menu absolu quand la liste est courte.
+    style:{display:'none',position:'fixed',zIndex:'1000',
+           minWidth:'240px',background:'var(--card)',border:'1px solid var(--border)',
+           borderRadius:'8px',padding:'4px',boxShadow:'0 8px 24px rgba(0,0,0,.18)'}});
+  const fermer = ()=>{ menu.style.display='none'; document.removeEventListener('click', horsMenu, true); };
+  function horsMenu(e){ if(!wrap.contains(e.target)) fermer(); }
+  const item = (icone, titre, detail, action)=>h('button',{type:'button',role:'menuitem',
+      style:{display:'flex',gap:'10px',alignItems:'flex-start',width:'100%',textAlign:'left',
+             background:'none',border:'none',borderRadius:'6px',padding:'8px 10px',cursor:'pointer',color:'var(--text)'},
+      onMouseenter:e=>{e.currentTarget.style.background='var(--accent-bg)';},
+      onMouseleave:e=>{e.currentTarget.style.background='none';},
+      onClick:e=>{e.stopPropagation(); fermer(); action();}},
+    iconEl(icone,14),
+    h('span',null,
+      h('div',{style:{fontWeight:'600',fontSize:'12px'}},titre),
+      h('div',{style:{fontSize:'11px',color:'var(--muted)'}},detail)));
+  menu.appendChild(item('download','Excel (.xlsx)','La liste des saisies filtrées',
+    ()=>exportBlob('/api/saisies/export?'+buildParams(),'saisies.xlsx')));
+  menu.appendChild(item('printer','PDF — sessions opérateurs','Métrage par session et points à vérifier',
+    exportSaisiesPdf));
+  const wrap = h('span',{style:{position:'relative',display:'inline-flex'}},
+    h('button',{type:'button',className:className||'btn-ghost','aria-haspopup':'menu',
+      title:'Exporter les saisies filtrées',
+      onClick:e=>{
+        e.stopPropagation();
+        if(menu.style.display==='none'){
+          const r = e.currentTarget.getBoundingClientRect();
+          menu.style.top = (r.bottom+4)+'px';
+          menu.style.right = Math.max(8, window.innerWidth - r.right)+'px';
+          menu.style.display='block';
+          document.addEventListener('click', horsMenu, true);
+          window.addEventListener('scroll', fermer, {capture:true, once:true});
+        }
+        else fermer();
+      }},iconEl('download',13),' Export'),
+    menu);
+  return wrap;
+}
+
+// Plafond de lignes chargées pour le PDF : au-delà, le document devient
+// illisible et le navigateur peine à l'imprimer. On le dit dans le PDF.
+const SAISIES_PDF_MAX = 10000;
+
+async function exportSaisiesPdf(){
+  if(!window.MySifaSaisiesPdf){ toast('Module PDF non chargé — recharger la page.','error'); return; }
+  // La fenêtre s'ouvre dans le geste du clic : ouverte après un await, le
+  // bloqueur de fenêtres surgissantes du navigateur la refuserait.
+  const win = window.open('', '_blank');
+  if(!win){ toast('Fenêtre bloquée par le navigateur — autoriser les fenêtres surgissantes pour MySifa.','error'); return; }
+  win.document.write('<!doctype html><meta charset="utf-8"><title>Export PDF</title>'
+    +'<p style="font:14px sans-serif;padding:24px">Préparation du document…</p>');
+  try{
+    const d = await api('/api/saisies?'+buildParams()+'&limit='+SAISIES_PDF_MAX+'&offset=0');
+    if(!d){ win.close(); return; }
+    // Mêmes calculs et mêmes bascules Z1 / alertes que le tableau.
+    let rows = saisiesAvecDurees(d.rows||[]);
+    saisiesCalculerMetrages(rows);
+    const aff = saisiesAffichage();
+    rows = rows.filter(r=>{
+      if(!aff.alertes && r.kind==='alert_ack') return false;
+      if(!aff.z1 && (r.kind==='stock_pf' || r.operation_category==='stock_pf')) return false;
+      return true;
+    });
+    const nbProd = (d.rows||[]).filter(r=>!r.kind || r.kind==='prod').length;
+    const nbProdTotal = Number(d.total||0) - ((d.rows||[]).length - nbProd);
+    const fv = S.fv||{};
+    const jj = s => s ? s.split('-').reverse().join('/') : '';
+    const filtres = [
+      (fv.date_from||fv.date_to) ? ('Période : '+(fv.date_from?'du '+jj(fv.date_from):'')+(fv.date_to?' au '+jj(fv.date_to):'')) : 'Toutes dates',
+      (fv.machines||[]).length ? 'Machines : '+fv.machines.join(', ') : 'Toutes machines',
+      (fv.operateurs||[]).length ? 'Opérateurs : '+fv.operateurs.map(opName).join(', ') : null,
+      (fv.dossiers||[]).length ? 'Dossiers : '+fv.dossiers.join(', ') : null,
+    ].filter(Boolean).join(' · ');
+    const now = new Date();
+    MySifaSaisiesPdf.ecrire(win, rows, {
+      filtres,
+      editeLe: now.toLocaleDateString('fr-FR')+' à '+now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),
+      editePar: (S.user && S.user.nom) || '',
+      nomFichier: 'Saisies '+(fv.date_from?jj(fv.date_from):'')+(fv.date_to?' - '+jj(fv.date_to):''),
+      tronque: nbProdTotal > nbProd
+        ? 'Document partiel : '+fN(nbProd)+' saisies sur '+fN(nbProdTotal)+'. Réduire la période ou filtrer par machine ou opérateur.'
+        : '',
+      fmt: { fN, opName, fmtDurMin },
+    });
+  }catch(e){
+    try{ win.close(); }catch(_){}
+    toast(e.message,'error');
+  }
+}
+
 // ── Recopie par glisser (poignée de cellule) ────────────────────
 // On attrape le coin d'une cellule et on glisse sur les lignes voisines : la
 // valeur est recopiée sur toutes, après confirmation. Une seule entrée dans
@@ -8862,6 +8957,102 @@ async function openFictifReassignModal(){
   if(sources.length===1) fromSel.value=sources[0].no_dossier;
 }
 
+// ── Saisies : durées et métrages ─────────────────────────────────
+// Partagés par le tableau, le fil mobile et l'export PDF : deux rendus de la
+// même page ne doivent jamais donner deux chiffres pour le même dossier.
+function fmtDurMin(m){
+  if(m==null||!isFinite(m)||m<=0) return '-';
+  const mm = Math.round(Number(m));
+  if(mm < 60) return mm+' min';
+  const hh = Math.floor(mm/60);
+  const rm = mm%60;
+  return hh+' h '+String(rm).padStart(2,'0')+' min';
+}
+
+function saisiesAvecDurees(baseRows){
+  const rows = (baseRows||[]).slice();
+  // Durée = écart avec la saisie suivante du même opérateur (en minutes)
+  // v2.3.43 : les acks d'alertes n'ont pas de durée et ne rentrent pas
+  // dans le calcul de la saisie précédente/suivante.
+  // 01/09/2026 : les mouvements de stock non plus. Une entrée Z1, une sortie
+  // matière, c'est un événement instantané — l'opérateur déclare ce qui sort
+  // de la machine, il ne s'arrête pas de produire pour le faire. Les compter
+  // coupait la production en deux : « 03 Production 1 h 08 » là où la machine
+  // avait tourné 1 h 18, les 10 minutes manquantes étant attribuées à
+  // l'entrée Z1. L'écran donnait donc un temps de production différent de
+  // celui du point de production, qui lit `production_data` seul.
+  // `kind` ou `operation_category` : la timeline unifiee remplit tantot l'un,
+  // tantot l'autre selon la route qui l'a servie. Le rendu teste deja les
+  // deux, le calcul de duree doit faire pareil.
+  const SANS_DUREE = new Set(['alert_ack', 'stock_pf', 'stock_mp']);
+  const sansDuree = r => SANS_DUREE.has(r.kind) || SANS_DUREE.has(r.operation_category);
+  const byOp = new Map();
+  rows.forEach(r=>{
+    if(sansDuree(r)) return;
+    const k = String(r.operateur||'').trim();
+    if(!byOp.has(k)) byOp.set(k, []);
+    byOp.get(k).push(r);
+  });
+  byOp.forEach(list=>{
+    list.sort((a,b)=>{
+      const da = Date.parse(String(a.date_operation||'')) || 0;
+      const db = Date.parse(String(b.date_operation||'')) || 0;
+      if(da !== db) return da - db;
+      return (Number(a.id)||0) - (Number(b.id)||0);
+    });
+    for(let i=0;i<list.length;i++){
+      const cur = list[i];
+      const nxt = list[i+1];
+      let dur = null;
+      if(nxt){
+        const t1 = Date.parse(String(cur.date_operation||'')) || NaN;
+        const t2 = Date.parse(String(nxt.date_operation||'')) || NaN;
+        if(isFinite(t1) && isFinite(t2) && t2 >= t1){
+          const m = Math.round((t2 - t1)/60000);
+          // Filtre anti-absurde (ex: oubli badgeage) : > 12h => on masque
+          dur = (m > 0 && m <= 12*60) ? m : null;
+        }
+      }
+      cur.duree_min = dur;
+    }
+  });
+  return rows;
+}
+
+// Métrage dossier (Fin dossier = compteur fin - compteur début), posé en
+// r._metrage_dossier sur les lignes 89 et 90. Modifie les lignes en place.
+function saisiesCalculerMetrages(rows){
+  const debutByDossier = {}; // no_dossier → compteur début (metrage_total_debut ?? metrage_prevu)
+  const chrono = [...rows].sort((a,b)=>(a.date_operation||'').localeCompare(b.date_operation||''));
+  chrono.forEach(r=>{
+    if(r.operation_code==='01' && r.no_dossier){
+      const ctr = r.metrage_total_debut ?? r.metrage_prevu;
+      if(ctr!=null) debutByDossier[r.no_dossier] = parseFloat(ctr);
+    }
+    if(r.operation_code==='89' && r.no_dossier){
+      const finCtr  = r.metrage_total_fin ?? null;   // compteur fin uniquement
+      const debutCtr = debutByDossier[r.no_dossier] ?? null;
+      if(finCtr!=null && debutCtr!=null){
+        r._metrage_dossier = parseFloat(finCtr) - debutCtr;  // fin_counter − debut_counter
+      } else if(r.metrage_reel!=null && debutCtr!=null && !r.metrage_total_fin){
+        // Ancien format : metrage_reel était le compteur fin (avant introduction des nouvelles colonnes)
+        r._metrage_dossier = parseFloat(r.metrage_reel) - debutCtr;
+      }
+      // Si metrage_total_fin absent et metrage_reel = valeur directe produite : pas de calcul
+    }
+    if(r.operation_code==='90' && r.no_dossier){
+      // Annulation de dossier : la trace porte elle-meme le compteur de
+      // debut du cycle annule et celui releve a l'annulation. Le metrage
+      // consomme avant l'annulation reste donc mesurable.
+      const finCtr   = r.metrage_total_fin ?? r.metrage_reel ?? null;
+      const debutCtr = r.metrage_total_debut ?? r.metrage_prevu ?? debutByDossier[r.no_dossier] ?? null;
+      if(finCtr!=null && debutCtr!=null){
+        r._metrage_dossier = parseFloat(finCtr) - parseFloat(debutCtr);
+      }
+    }
+  });
+}
+
 function renderSaisies(){
   const d=S.saisies;
   if(!d) return h('div',{className:'card-empty'},'Chargement...');
@@ -8872,103 +9063,15 @@ function renderSaisies(){
  
   const readOnly=isFab(S.user);
  
-  function fmtDurMin(m){
-    if(m==null||!isFinite(m)||m<=0) return '-';
-    const mm = Math.round(Number(m));
-    if(mm < 60) return mm+' min';
-    const hh = Math.floor(mm/60);
-    const rm = mm%60;
-    return hh+' h '+String(rm).padStart(2,'0')+' min';
-  }
-
-  function addDurations(baseRows){
-    const rows = (baseRows||[]).slice();
-    // Durée = écart avec la saisie suivante du même opérateur (en minutes)
-    // v2.3.43 : les acks d'alertes n'ont pas de durée et ne rentrent pas
-    // dans le calcul de la saisie précédente/suivante.
-    // 01/09/2026 : les mouvements de stock non plus. Une entrée Z1, une sortie
-    // matière, c'est un événement instantané — l'opérateur déclare ce qui sort
-    // de la machine, il ne s'arrête pas de produire pour le faire. Les compter
-    // coupait la production en deux : « 03 Production 1 h 08 » là où la machine
-    // avait tourné 1 h 18, les 10 minutes manquantes étant attribuées à
-    // l'entrée Z1. L'écran donnait donc un temps de production différent de
-    // celui du point de production, qui lit `production_data` seul.
-    // `kind` ou `operation_category` : la timeline unifiee remplit tantot l'un,
-    // tantot l'autre selon la route qui l'a servie. Le rendu teste deja les
-    // deux, le calcul de duree doit faire pareil.
-    const SANS_DUREE = new Set(['alert_ack', 'stock_pf', 'stock_mp']);
-    const sansDuree = r => SANS_DUREE.has(r.kind) || SANS_DUREE.has(r.operation_category);
-    const byOp = new Map();
-    rows.forEach(r=>{
-      if(sansDuree(r)) return;
-      const k = String(r.operateur||'').trim();
-      if(!byOp.has(k)) byOp.set(k, []);
-      byOp.get(k).push(r);
-    });
-    byOp.forEach(list=>{
-      list.sort((a,b)=>{
-        const da = Date.parse(String(a.date_operation||'')) || 0;
-        const db = Date.parse(String(b.date_operation||'')) || 0;
-        if(da !== db) return da - db;
-        return (Number(a.id)||0) - (Number(b.id)||0);
-      });
-      for(let i=0;i<list.length;i++){
-        const cur = list[i];
-        const nxt = list[i+1];
-        let dur = null;
-        if(nxt){
-          const t1 = Date.parse(String(cur.date_operation||'')) || NaN;
-          const t2 = Date.parse(String(nxt.date_operation||'')) || NaN;
-          if(isFinite(t1) && isFinite(t2) && t2 >= t1){
-            const m = Math.round((t2 - t1)/60000);
-            // Filtre anti-absurde (ex: oubli badgeage) : > 12h => on masque
-            dur = (m > 0 && m <= 12*60) ? m : null;
-          }
-        }
-        cur.duree_min = dur;
-      }
-    });
-    return rows;
-  }
  
   // ── Tri ──────────────────────────────────────────────────────
-  let rows=addDurations(d.rows||[]);
+  let rows=saisiesAvecDurees(d.rows||[]);
   if(S.sortState.col) rows=sortRows(rows,S.sortState.col,S.sortState.asc);
 
   // ── Calcul métrage dossier (Fin dossier = compteur fin - compteur début) ──
   // Priorité aux colonnes dédiées metrage_total_debut / metrage_total_fin.
   // Fallback sur metrage_prevu / metrage_reel pour les anciennes lignes sans compteurs.
-  (function(){
-    const debutByDossier = {}; // no_dossier → compteur début (metrage_total_debut ?? metrage_prevu)
-    const chrono = [...rows].sort((a,b)=>(a.date_operation||'').localeCompare(b.date_operation||''));
-    chrono.forEach(r=>{
-      if(r.operation_code==='01' && r.no_dossier){
-        const ctr = r.metrage_total_debut ?? r.metrage_prevu;
-        if(ctr!=null) debutByDossier[r.no_dossier] = parseFloat(ctr);
-      }
-      if(r.operation_code==='89' && r.no_dossier){
-        const finCtr  = r.metrage_total_fin ?? null;   // compteur fin uniquement
-        const debutCtr = debutByDossier[r.no_dossier] ?? null;
-        if(finCtr!=null && debutCtr!=null){
-          r._metrage_dossier = parseFloat(finCtr) - debutCtr;  // fin_counter − debut_counter
-        } else if(r.metrage_reel!=null && debutCtr!=null && !r.metrage_total_fin){
-          // Ancien format : metrage_reel était le compteur fin (avant introduction des nouvelles colonnes)
-          r._metrage_dossier = parseFloat(r.metrage_reel) - debutCtr;
-        }
-        // Si metrage_total_fin absent et metrage_reel = valeur directe produite : pas de calcul
-      }
-      if(r.operation_code==='90' && r.no_dossier){
-        // Annulation de dossier : la trace porte elle-meme le compteur de
-        // debut du cycle annule et celui releve a l'annulation. Le metrage
-        // consomme avant l'annulation reste donc mesurable.
-        const finCtr   = r.metrage_total_fin ?? r.metrage_reel ?? null;
-        const debutCtr = r.metrage_total_debut ?? r.metrage_prevu ?? debutByDossier[r.no_dossier] ?? null;
-        if(finCtr!=null && debutCtr!=null){
-          r._metrage_dossier = parseFloat(finCtr) - parseFloat(debutCtr);
-        }
-      }
-    });
-  })();
+  saisiesCalculerMetrages(rows);
 
   // Bascules Z1 / alertes : on filtre APRÈS les durées et les métrages,
   // qui se calculent sur la page complète. Remonté au-dessus de COLS pour
@@ -9299,7 +9402,7 @@ function renderSaisies(){
     }
     headerRight.appendChild(h('button',{className:'btn-sm',onClick:()=>openAddModal(rows[rows.length-1]||null)},iconEl('plus',13),' Ajouter'));
     headerRight.appendChild(h('button',{className:'btn-fictif-sm',onClick:()=>openFictifReassignModal()},iconEl('file-text',13),' Dossier fictif'));
-    headerRight.appendChild(h('button',{className:'btn-ghost',onClick:()=>exportBlob('/api/saisies/export?'+buildParams(),'saisies.xlsx')},iconEl('download',13),' Export'));
+    headerRight.appendChild(boutonExportSaisies('btn-ghost'));
   }
  
   return h('div',null,
@@ -11176,10 +11279,7 @@ function renderMpmSaisies(d, rows, readOnly){
     basculeSaisies('alertes','Alertes','Afficher ou masquer les alertes validées')
   );
   if(!readOnly){
-    groupeG.appendChild(h('button',{type:'button',className:'msf-chip',
-      title:'Exporter la vue en xlsx',
-      onClick:function(){ exportBlob('/api/saisies/export?'+buildParams(),'saisies.xlsx'); }},
-      iconEl('download',14),' Export'));
+    groupeG.appendChild(boutonExportSaisies('msf-chip'));
   }
   if(isAdmin(S.user)){
     // La carte « Importer des saisies » du bureau est une zone de
