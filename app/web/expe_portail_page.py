@@ -121,6 +121,17 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     .banner p{font-size:13px;color:var(--text2);line-height:1.65;margin:0}
     .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 16px 14px}
     .muted{color:var(--muted)}
+    /* Une section par etat : ce qui attend une reponse d'abord, puis ce qui
+       est deja envoye, puis l'archive. Melanger les trois obligeait le
+       transporteur a lire chaque carte pour trouver celles a traiter. */
+    .grp{margin-bottom:16px}
+    .grp-h{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+    .grp-h h2{font-size:15px;font-weight:800;color:var(--text)}
+    .grp-n{font-size:12px;font-weight:800;padding:1px 9px;border-radius:20px;
+      background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent)}
+    .grp-closed .grp-n{background:var(--bg);color:var(--muted);border-color:var(--border)}
+    .grp-hint{font-size:12px;color:var(--muted)}
+    .grp-empty{font-size:13px;color:var(--muted);margin-top:10px}
     .list{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;margin-top:12px}
     /* Carte demande — une hiérarchie explicite plutôt qu'un empilement de
        lignes grises : en-tête, faits chiffrés, contrainte, échéance, offre,
@@ -180,6 +191,7 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     .offer-sep{color:var(--muted)}
     .offer-c{font-size:12px;color:var(--text2);margin-top:6px;line-height:1.5}
     .btn-sm{padding:6px 12px;font-size:12px;margin-top:10px}
+    .offer .btn-ghost{background:var(--card)}
     .sect{padding:12px 16px;border-bottom:1px solid var(--border)}
     .sect-t{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
       color:var(--muted);margin-bottom:7px}
@@ -258,9 +270,7 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
       </p>
     </div>
 
-    <div class="card">
-      <div class="list" id="list"></div>
-    </div>
+    <div id="list"></div>
 """ + _PORTAIL_FOOTER + """
   </div>
 
@@ -448,104 +458,146 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     list.innerHTML='';
     const rows=(d&&d.demandes)||[];
     if(!rows.length){
-      list.innerHTML = '<div class="d"><h3>'+esc(t('noRequests'))+'</h3><div class="meta">'+esc(t('noRequestsDesc'))+'</div></div>';
+      list.innerHTML = '<div class="card"><h3>'+esc(t('noRequests'))+'</h3><div class="meta">'+esc(t('noRequestsDesc'))+'</div></div>';
       return;
     }
-    rows.forEach(it=>{
-      const paletteKey = it.type_palette ? String(it.type_palette).trim().toLowerCase() : '';
-      const paletteLabelKey = paletteKey ? ('pallet_'+paletteKey) : '';
-      const paletteLabel = paletteLabelKey && t(paletteLabelKey)!==paletteLabelKey ? t(paletteLabelKey) : paletteKey;
-      const isClosed = it.demande_statut==='cloturee';
-      const aRepondu = it.prix!=null;
-      const canReply = !isClosed;
-
-      // ── En-tête : référence + code postal en évidence ──
-      // Le CP est LA donnée sur laquelle un transporteur décide s'il chiffre
-      // ou non. Il était noyé dans le titre, il devient le point d'ancrage.
-      const ref = it.reference ? (t('request')+' '+it.reference) : (t('request')+' #'+it.demande_id);
-      const closedBadge = isClosed ? '<span class="badge badge-closed">'+esc(t('closedBadge'))+'</span>' : '';
-      const head = '<div class="d-head">'
-        +'<div class="d-ref">'+esc(ref)+closedBadge+'</div>'
-        +'<div class="d-cp"><span class="d-cp-lbl">'+esc(t('destination'))+'</span>'
-        +'<span class="d-cp-val">'+esc(it.code_postal_destination||t('dash'))+'</span></div>'
-        +'</div>';
-
-      // ── Faits : une tuile par donnée, plutôt qu'une ligne grise unique ──
-      // Les cinq informations étaient concaténées avec des points médians :
-      // rien ne distinguait le poids d'une contrainte de livraison.
-      const fait=function(lbl,val){
-        return val ? '<div class="fact"><span class="fact-l">'+esc(lbl)+'</span>'
-          +'<span class="fact-v">'+esc(val)+'</span></div>' : '';
-      };
-      const facts = '<div class="facts">'
-        + fait(t('weight'), it.poids_total_kg!=null ? (it.poids_total_kg+' kg') : '')
-        + fait(t('pallets'), it.nb_palette!=null ? String(it.nb_palette) : '')
-        + fait(t('shipmentType'), it.type_envoi ? typeLabel(it.type_envoi) : '')
-        + fait(t('palletType'), paletteLabel)
-        + '</div>';
-
-      // ── Contraintes : encadré à part, jamais fondu dans les faits ──
-      const note = it.contraintes
-        ? '<div class="note"><span class="note-l">'+esc(t('constraints'))+'</span>'
-          +'<span class="note-v">'+esc(it.contraintes)+'</span></div>'
-        : '';
-
-      // ── Échéance : un seul bandeau, une seule couleur à la fois ──
-      let dlNote='';
-      const dl=(it.date_limite||'').slice(0,10);
-      if(dl && !isClosed){
-        const auj=new Date().toISOString().slice(0,10);
-        const tard = dl<auj;
-        dlNote = '<div class="dl'+(tard?' dl-late':'')+'">'
-          +'<span class="dl-l">'+esc(tard?t('deadlineLate'):t('deadline'))+'</span>'
-          +'<span class="dl-v">'+esc(dl)+'</span></div>';
-      }
-
-      // ── Votre offre : le bloc qui appelle à l'action ──
-      let offre;
-      if(aRepondu){
-        offre = '<div class="offer offer-done">'
-          +'<div class="offer-t">'+esc(t('yourOffer'))+'</div>'
-          +'<div class="offer-vals"><span class="offer-v">'+Number(it.prix).toFixed(2)+' €</span>'
-          +'<span class="offer-sep">·</span><span class="offer-v">J+'+esc(it.delai_jours)+'</span></div>'
-          + (it.commentaire ? '<div class="offer-c">'+esc(it.commentaire)+'</div>' : '')
-          + (canReply ? '<button class="btn btn-ghost btn-sm" data-id="'+it.demande_id+'">'+esc(t('editReply'))+'</button>' : '')
-          +'</div>';
-      }else if(canReply){
-        offre = '<div class="offer offer-todo">'
-          +'<div class="offer-t">'+esc(t('yourOffer'))+'</div>'
-          +'<div class="offer-ask">'+esc(t('awaitingOffer'))+'</div>'
-          +'<button class="btn btn-accent" data-id="'+it.demande_id+'">'+esc(t('reply'))+'</button>'
-          +'</div>';
-      }else{
-        offre = '';
-      }
-
-      // ── Documents ──
-      const docs=(it.pieces_jointes||[]);
-      const mine=(it.mes_fichiers||[]);
-      const lien=function(p){
-        return '<a class="fl" href="/portail/expe/'+encodeURIComponent(TOKEN)+'/pj/'+p.id
-          +'" target="_blank" rel="noopener">'+CLIP+'<span>'+esc(p.filename||'')+'</span></a>';
-      };
-      const sect=function(titre,contenu){
-        return '<div class="sect"><div class="sect-t">'+esc(titre)+'</div>'+contenu+'</div>';
-      };
-      const docsHtml = docs.length ? sect(t('docs'), docs.map(lien).join('')) : '';
-      const mineHtml = mine.length ? sect(t('myFiles'), mine.map(lien).join('')) : '';
-
-      const closedNote = isClosed ? '<div class="closed-note">'+esc(t('closedNote'))+'</div>' : '';
-      const cree = '<div class="d-foot">'+esc(t('created'))+' '+esc((it.created_at||'').slice(0,10))+'</div>';
-
-      const wrap=document.createElement('div');
-      wrap.innerHTML = '<div class="d'+(isClosed?' closed':'')+'">'
-        +head+facts+note+dlNote+offre+docsHtml+mineHtml+closedNote+cree+'</div>';
-      const node=wrap.firstElementChild;
-      node.querySelectorAll('button[data-id]').forEach(function(b){
-        b.addEventListener('click',()=>openModal(it));
+    const estClose=function(it){ return it.demande_statut==='cloturee'; };
+    // A repondre : l'echeance la plus proche en tete, les demandes sans
+    // echeance ensuite, par date de creation. Le reste garde l'ordre serveur
+    // (plus recente d'abord).
+    const aFaire=rows.filter(function(it){ return !estClose(it) && it.prix==null; })
+      .sort(function(a,b){
+        const da=(a.date_limite||'').slice(0,10), db=(b.date_limite||'').slice(0,10);
+        if(da && db && da!==db) return da<db?-1:1;
+        if(da && !db) return -1;
+        if(db && !da) return 1;
+        return (a.created_at||'')<(b.created_at||'')?-1:1;
       });
-      list.appendChild(node);
+    const envoyees=rows.filter(function(it){ return !estClose(it) && it.prix!=null; });
+    const closes=rows.filter(estClose);
+
+    const section=function(titre, items, opts){
+      const sec=document.createElement('section');
+      sec.className='card grp'+(opts.cls?(' '+opts.cls):'');
+      const h=document.createElement('div');
+      h.className='grp-h';
+      h.innerHTML='<h2>'+esc(titre)+'</h2><span class="grp-n">'+items.length+'</span>'
+        +(opts.hint?'<span class="grp-hint">'+esc(opts.hint)+'</span>':'');
+      sec.appendChild(h);
+      if(!items.length){
+        const e=document.createElement('div');
+        e.className='grp-empty';
+        e.textContent=opts.empty||'';
+        sec.appendChild(e);
+      }else{
+        const g=document.createElement('div');
+        g.className='list';
+        items.forEach(function(it){ g.appendChild(carte(it)); });
+        sec.appendChild(g);
+      }
+      list.appendChild(sec);
+    };
+    // « A repondre » reste affichee meme vide : c'est elle qui dit au
+    // transporteur qu'il n'a plus rien a faire.
+    section(t('secTodo'), aFaire, {empty:t('secTodoEmpty')});
+    if(envoyees.length) section(t('secSent'), envoyees, {hint:t('secSentHint')});
+    if(closes.length) section(t('secClosed'), closes, {cls:'grp-closed'});
+  }
+
+  function carte(it){
+    const paletteKey = it.type_palette ? String(it.type_palette).trim().toLowerCase() : '';
+    const paletteLabelKey = paletteKey ? ('pallet_'+paletteKey) : '';
+    const paletteLabel = paletteLabelKey && t(paletteLabelKey)!==paletteLabelKey ? t(paletteLabelKey) : paletteKey;
+    const isClosed = it.demande_statut==='cloturee';
+    const aRepondu = it.prix!=null;
+    const canReply = !isClosed;
+
+    // ── En-tête : référence + code postal en évidence ──
+    // Le CP est LA donnée sur laquelle un transporteur décide s'il chiffre
+    // ou non. Il était noyé dans le titre, il devient le point d'ancrage.
+    const ref = it.reference ? (t('request')+' '+it.reference) : (t('request')+' #'+it.demande_id);
+    const closedBadge = isClosed ? '<span class="badge badge-closed">'+esc(t('closedBadge'))+'</span>' : '';
+    const head = '<div class="d-head">'
+      +'<div class="d-ref">'+esc(ref)+closedBadge+'</div>'
+      +'<div class="d-cp"><span class="d-cp-lbl">'+esc(t('destination'))+'</span>'
+      +'<span class="d-cp-val">'+esc(it.code_postal_destination||t('dash'))+'</span></div>'
+      +'</div>';
+
+    // ── Faits : une tuile par donnée, plutôt qu'une ligne grise unique ──
+    // Les cinq informations étaient concaténées avec des points médians :
+    // rien ne distinguait le poids d'une contrainte de livraison.
+    const fait=function(lbl,val){
+      return val ? '<div class="fact"><span class="fact-l">'+esc(lbl)+'</span>'
+        +'<span class="fact-v">'+esc(val)+'</span></div>' : '';
+    };
+    const facts = '<div class="facts">'
+      + fait(t('weight'), it.poids_total_kg!=null ? (it.poids_total_kg+' kg') : '')
+      + fait(t('pallets'), it.nb_palette!=null ? String(it.nb_palette) : '')
+      + fait(t('shipmentType'), it.type_envoi ? typeLabel(it.type_envoi) : '')
+      + fait(t('palletType'), paletteLabel)
+      + '</div>';
+
+    // ── Contraintes : encadré à part, jamais fondu dans les faits ──
+    const note = it.contraintes
+      ? '<div class="note"><span class="note-l">'+esc(t('constraints'))+'</span>'
+        +'<span class="note-v">'+esc(it.contraintes)+'</span></div>'
+      : '';
+
+    // ── Échéance : un seul bandeau, une seule couleur à la fois ──
+    let dlNote='';
+    const dl=(it.date_limite||'').slice(0,10);
+    if(dl && !isClosed){
+      const auj=new Date().toISOString().slice(0,10);
+      const tard = dl<auj;
+      dlNote = '<div class="dl'+(tard?' dl-late':'')+'">'
+        +'<span class="dl-l">'+esc(tard?t('deadlineLate'):t('deadline'))+'</span>'
+        +'<span class="dl-v">'+esc(dl)+'</span></div>';
+    }
+
+    // ── Votre offre : le bloc qui appelle à l'action ──
+    let offre;
+    if(aRepondu){
+      offre = '<div class="offer offer-done">'
+        +'<div class="offer-t">'+esc(t('yourOffer'))+'</div>'
+        +'<div class="offer-vals"><span class="offer-v">'+Number(it.prix).toFixed(2)+' €</span>'
+        +'<span class="offer-sep">·</span><span class="offer-v">J+'+esc(it.delai_jours)+'</span></div>'
+        + (it.commentaire ? '<div class="offer-c">'+esc(it.commentaire)+'</div>' : '')
+        + (canReply ? '<button class="btn btn-ghost btn-sm" data-id="'+it.demande_id+'">'+esc(t('editReply'))+'</button>' : '')
+        +'</div>';
+    }else if(canReply){
+      offre = '<div class="offer offer-todo">'
+        +'<div class="offer-t">'+esc(t('yourOffer'))+'</div>'
+        +'<div class="offer-ask">'+esc(t('awaitingOffer'))+'</div>'
+        +'<button class="btn btn-accent" data-id="'+it.demande_id+'">'+esc(t('reply'))+'</button>'
+        +'</div>';
+    }else{
+      offre = '';
+    }
+
+    // ── Documents ──
+    const docs=(it.pieces_jointes||[]);
+    const mine=(it.mes_fichiers||[]);
+    const lien=function(p){
+      return '<a class="fl" href="/portail/expe/'+encodeURIComponent(TOKEN)+'/pj/'+p.id
+        +'" target="_blank" rel="noopener">'+CLIP+'<span>'+esc(p.filename||'')+'</span></a>';
+    };
+    const sect=function(titre,contenu){
+      return '<div class="sect"><div class="sect-t">'+esc(titre)+'</div>'+contenu+'</div>';
+    };
+    const docsHtml = docs.length ? sect(t('docs'), docs.map(lien).join('')) : '';
+    const mineHtml = mine.length ? sect(t('myFiles'), mine.map(lien).join('')) : '';
+
+    const closedNote = isClosed ? '<div class="closed-note">'+esc(t('closedNote'))+'</div>' : '';
+    const cree = '<div class="d-foot">'+esc(t('created'))+' '+esc((it.created_at||'').slice(0,10))+'</div>';
+
+    const wrap=document.createElement('div');
+    wrap.innerHTML = '<div class="d'+(isClosed?' closed':'')+'">'
+      +head+facts+note+dlNote+offre+docsHtml+mineHtml+closedNote+cree+'</div>';
+    const node=wrap.firstElementChild;
+    node.querySelectorAll('button[data-id]').forEach(function(b){
+      b.addEventListener('click',()=>openModal(it));
     });
+    return node;
   }
 
   async function load(){

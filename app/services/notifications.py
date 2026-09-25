@@ -34,7 +34,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Callable, Optional
 from zoneinfo import ZoneInfo
 
@@ -44,6 +44,7 @@ log = logging.getLogger("mysifa.notifications")
 
 CACHE_TTL = 60  # secondes
 _PARIS = ZoneInfo("Europe/Paris")
+DESTOCKAGE_JOURS = 15  # fenêtre de la notification « Dossiers à déstocker »
 
 
 @dataclass(frozen=True)
@@ -106,6 +107,33 @@ def _compter_seuil_alerte(conn):
     return len(ids), emp
 
 
+def _compter_a_destocker(conn):
+    """Dossiers terminés sur les `DESTOCKAGE_JOURS` derniers jours et pas encore
+    sortis du stock. Même règle que MyStock › Déstockage › à traiter (fin
+    planifiée, sinon dernière mise à jour), réserves exclues : un dossier
+    sorti avec réserve est déjà déstocké, il attend une relecture."""
+    if "planning_entries" not in _tables(conn):
+        return 0, None
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(planning_entries)")}
+    if "destockage" not in cols:
+        return 0, None
+    depuis = (datetime.now(_PARIS) - timedelta(days=DESTOCKAGE_JOURS)).date().isoformat()
+    ids = [int(r[0]) for r in conn.execute(
+        """SELECT id FROM planning_entries
+           WHERE statut = 'termine'
+             AND COALESCE(destockage, 'todo') = 'todo'
+             AND COALESCE(planned_end, updated_at, '') >= ?
+           ORDER BY id""",
+        (depuis,),
+    ).fetchall()]
+    if not ids:
+        return 0, None
+    # Empreinte plutôt que max(id) : un dossier ancien qui se termine
+    # aujourd'hui doit rallumer la pastille.
+    emp = hashlib.sha1(",".join(map(str, ids)).encode()).hexdigest()[:16]
+    return len(ids), emp
+
+
 def _compter_departs_a_valider(conn):
     """Départs dont l'enlèvement est aujourd'hui ou passé, encore en attente."""
     if "expe_departs" not in _tables(conn):
@@ -137,6 +165,15 @@ DETECTEURS: dict[str, Detecteur] = {d.code: d for d in (
         description="Matières actives dont la quantité en stock est inférieure ou égale au seuil d'alerte.",
         lien="/stock?tab=matieres",
         compter=_compter_seuil_alerte,
+        roles_suggeres=("administration_technique",),
+    ),
+    Detecteur(
+        code="stock.a_destocker",
+        app="stock", app_label="MyStock",
+        titre="Dossiers à déstocker",
+        description=f"Dossiers terminés depuis moins de {DESTOCKAGE_JOURS} jours et pas encore sortis du stock.",
+        lien="/stock?tab=destockage",
+        compter=_compter_a_destocker,
         roles_suggeres=("administration_technique",),
     ),
     Detecteur(
