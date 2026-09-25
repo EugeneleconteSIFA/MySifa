@@ -3064,6 +3064,176 @@ def _inv_v2_empl_label(empl: str) -> str:
     return empl
 
 
+# ── Export d'inventaire (PF et MP) ─────────────────────────────────────
+#
+# Une feuille de comptage autant qu'un état : chaque ligne porte le stock
+# théorique, une colonne « Quantité comptée » laissée vide et l'écart, calculé
+# par Excel dès qu'on saisit le compté. Rien n'est réimporté : la saisie de
+# l'inventaire reste celle de MyStock, qui trace l'opérateur et le motif.
+
+def _inv_date(v):
+    """Date ISO de la base -> datetime Excel, ou None."""
+    if not v:
+        return None
+    try:
+        return datetime.fromisoformat(str(v).split(".")[0][:19])
+    except (TypeError, ValueError):
+        return None
+
+
+def _inv_export_xlsx(titre: str, headers: list, lignes: list, largeurs: list,
+                     col_theorique: int, nom_fichier: str,
+                     formats: Optional[dict] = None):
+    """Classeur d'une feuille. `lignes` n'inclut pas les deux dernières colonnes
+    (compté, écart) : elles sont ajoutées ici, l'écart par formule."""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
+        from openpyxl.utils import get_column_letter
+    except ImportError as e:
+        raise HTTPException(500, f"openpyxl indisponible : {e}") from None
+    formats = formats or {}
+    wb = Workbook()
+    ws = wb.active
+    ws.title = titre[:31]
+    entetes = list(headers) + ["Quantité comptée", "Écart"]
+    ws.append(entetes)
+    head_fill = PatternFill("solid", fgColor="1E293B")
+    head_font = Font(bold=True, color="FFFFFF")
+    for i in range(1, len(entetes) + 1):
+        c = ws.cell(row=1, column=i)
+        c.fill = head_fill
+        c.font = head_font
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    n = len(headers)
+    lt = get_column_letter(col_theorique)
+    lc = get_column_letter(n + 1)
+    saisie_fill = PatternFill("solid", fgColor="FEF9C3")
+    for ligne in lignes:
+        ws.append(list(ligne) + [None, None])
+        r = ws.max_row
+        ws.cell(row=r, column=n + 1).fill = saisie_fill
+        ws.cell(row=r, column=n + 2).value = f'=IF({lc}{r}="","",{lc}{r}-{lt}{r})'
+        for col, fmt in formats.items():
+            ws.cell(row=r, column=col).number_format = fmt
+    for i, w in enumerate(list(largeurs) + [16, 12], start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{nom_fichier}"'},
+    )
+
+
+@router.get("/api/stock/inventaire-v2/export")
+def inventaire_v2_export(request: Request, par: str = "emplacement"):
+    """Export de l'inventaire produits finis.
+
+    `par=emplacement` : une ligne par (emplacement, référence).
+    `par=reference`   : une ligne par référence, emplacements détaillés.
+    Le stock est celui des lots FIFO, comme l'écran d'inventaire.
+    """
+    require_stock(request)
+    par = (par or "").strip().lower()
+    if par not in ("emplacement", "reference"):
+        raise HTTPException(400, "Paramètre par : emplacement ou reference.")
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT l.emplacement, p.id AS produit_id, p.reference, p.designation, p.unite,
+                      SUM(l.quantite_restante) AS quantite,
+                      COUNT(*) AS nb_lots,
+                      MIN(l.date_entree) AS date_fifo
+                 FROM lots_stock l
+                 JOIN produits p ON p.id = l.produit_id
+                WHERE l.quantite_restante > 0
+                GROUP BY l.emplacement, p.id
+                ORDER BY l.emplacement, p.reference COLLATE NOCASE"""
+        ).fetchall()
+        try:
+            derniers = {
+                r["emplacement"]: r
+                for r in conn.execute(
+                    """SELECT s.emplacement, s.date_validation, s.operateur_nom
+                         FROM inventaires_sessions s
+                         JOIN (SELECT emplacement, MAX(date_validation) AS d
+                                 FROM inventaires_sessions GROUP BY emplacement) m
+                           ON m.emplacement = s.emplacement AND m.d = s.date_validation"""
+                ).fetchall()
+            }
+        except sqlite3.Error:
+            derniers = {}
+    date_str = _now_paris().strftime("%Y-%m-%d")
+    fmt_date = "dd/mm/yyyy"
+    fmt_dt = "dd/mm/yyyy hh:mm"
+
+    if par == "emplacement":
+        lignes = []
+        for r in rows:
+            inv = derniers.get(r["emplacement"])
+            zone = _inv_v2_empl_label(r["emplacement"])
+            lignes.append([
+                r["emplacement"],
+                zone if zone != r["emplacement"] else "",
+                r["reference"] or "",
+                r["designation"] or "",
+                round(float(r["quantite"] or 0), 3),
+                r["unite"] or "",
+                int(r["nb_lots"] or 0),
+                _inv_date(r["date_fifo"]),
+                _inv_date(inv["date_validation"]) if inv else "Jamais",
+                (inv["operateur_nom"] or "") if inv else "",
+            ])
+        return _inv_export_xlsx(
+            "Inventaire PF par emplacement",
+            ["Emplacement", "Zone", "Référence", "Désignation", "Quantité", "Unité",
+             "Nb lots", "Plus ancienne entrée", "Dernier inventaire", "Inventorié par"],
+            lignes, [13, 22, 20, 40, 12, 12, 9, 16, 18, 20], 5,
+            f"inventaire-pf-par-emplacement-{date_str}.xlsx",
+            {8: fmt_date, 9: fmt_dt},
+        )
+
+    par_ref: dict[int, dict] = {}
+    for r in rows:
+        d = par_ref.setdefault(int(r["produit_id"]), {
+            "reference": r["reference"] or "", "designation": r["designation"] or "",
+            "unite": r["unite"] or "", "quantite": 0.0, "empl": [], "fifo": None,
+            "invs": [],
+        })
+        q = float(r["quantite"] or 0)
+        d["quantite"] += q
+        d["empl"].append(f"{r['emplacement']} : {q:g}")
+        fifo = _inv_date(r["date_fifo"])
+        if fifo and (d["fifo"] is None or fifo < d["fifo"]):
+            d["fifo"] = fifo
+        inv = derniers.get(r["emplacement"])
+        d["invs"].append(_inv_date(inv["date_validation"]) if inv else None)
+    lignes = []
+    for d in sorted(par_ref.values(), key=lambda x: x["reference"].lower()):
+        # Le plus ANCIEN inventaire parmi les emplacements de la référence :
+        # c'est lui qui dit depuis quand une partie du stock n'a pas été comptée.
+        plus_ancien = "Jamais" if None in d["invs"] else min(d["invs"])
+        lignes.append([
+            d["reference"], d["designation"],
+            round(d["quantite"], 3), d["unite"],
+            len(d["empl"]), " · ".join(d["empl"]),
+            d["fifo"],
+            plus_ancien,
+        ])
+    return _inv_export_xlsx(
+        "Inventaire PF par référence",
+        ["Référence", "Désignation", "Quantité totale", "Unité", "Nb emplacements",
+         "Emplacements", "Plus ancienne entrée", "Inventaire le plus ancien"],
+        lignes, [20, 40, 14, 12, 14, 40, 16, 18], 3,
+        f"inventaire-pf-par-reference-{date_str}.xlsx",
+        {7: fmt_date, 8: fmt_dt},
+    )
+
+
 @router.get("/api/stock/inventaire-v2/emplacements")
 def inventaire_v2_emplacements(request: Request):
     """Liste des emplacements avec stock + jours depuis dernier inventaire complet.
@@ -5947,6 +6117,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
             # la migration : le stock réel retombe alors sur le standard, ce
             # qu'il faisait de toute façon avant ce chantier.
             bobines_par_mat = {}
+        empl_par_mat = _mp_emplacements_par_matiere(conn)
     by_mat: dict[int, list[dict]] = {}
     for r in laize_rows:
         try:
@@ -6010,6 +6181,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
                 if reste:
                     complet = False
             d["stock_reel_complet"] = complet
+        d["emplacements"] = empl_par_mat.get(int(r["id"]), [])
         out.append(d)
     return out
 
@@ -6052,6 +6224,165 @@ def list_sous_sections(request: Request, categorie: Optional[str] = None):
     with get_db() as conn:
         rows = conn.execute(sql, params).fetchall()
     return [r["sous_section"] for r in rows]
+
+
+@router.get("/api/stock/matieres/rvgi-recherche")
+def recherche_articles_rvgi(request: Request, q: str = "", limite: int = 20):
+    """Articles RVGI correspondant à une recherche, pour créer la référence.
+
+    Sert la ligne « Créer la référence » quand la recherche de matières ne
+    trouve rien dans MyStock. Sans miroir ERP, la liste est vide : la création
+    manuelle reste possible.
+    """
+    require_stock(request)
+    q = (q or "").strip()
+    if len(q) < 2:
+        return {"articles": []}
+    from app.services import erp_mirror as _miroir
+    from app.services import reception_rvgi as _rr
+
+    if not _miroir.miroir_present():
+        return {"articles": []}
+    limite = max(1, min(int(limite or 20), 50))
+    try:
+        with get_db() as conn, _miroir.get_erp_db() as erp:
+            articles = _rr.rechercher_articles(conn, erp, q, limite=limite)
+    except (FileNotFoundError, sqlite3.Error):
+        return {"articles": []}
+    return {"articles": articles}
+
+
+# ── Emplacements des matières premières ─────────────────────────────────
+#
+# Facultatifs. Ils disent où se trouve une partie du stock, ils ne le tiennent
+# pas : le total reste dans mp_stock / mp_stock_laize, alimenté par les
+# réceptions et le déstockage. Ajouter un emplacement ne fait donc bouger le
+# stock que si l'écran le demande explicitement (création de la référence).
+
+_MP_EMPL_RE = re.compile(r"^[A-Z][0-9]+$")
+
+
+def _mp_emplacements_par_matiere(conn) -> dict[int, list[dict]]:
+    try:
+        rows = conn.execute(
+            """SELECT e.id, e.matiere_id, e.laize_id, e.emplacement, e.quantite,
+                      e.updated_at, e.updated_by_name, l.label AS laize_label
+                 FROM mp_emplacements e
+                 LEFT JOIN mp_laizes l ON l.id = e.laize_id
+                WHERE e.quantite > 0
+                ORDER BY e.emplacement, l.valeur_mm"""
+        ).fetchall()
+    except sqlite3.Error:
+        # Base qui n'a pas encore joué la migration mp_emplacements.
+        return {}
+    out: dict[int, list[dict]] = {}
+    for r in rows:
+        out.setdefault(int(r["matiere_id"]), []).append({
+            "id": int(r["id"]),
+            "emplacement": r["emplacement"],
+            "laize_id": int(r["laize_id"] or 0) or None,
+            "laize_label": r["laize_label"],
+            "quantite": float(r["quantite"] or 0),
+            "updated_at": r["updated_at"],
+            "updated_by_name": r["updated_by_name"],
+        })
+    return out
+
+
+@router.get("/api/stock/matieres/{matiere_id}/emplacements")
+def list_matiere_emplacements(matiere_id: int, request: Request):
+    require_stock(request)
+    with get_db() as conn:
+        return _mp_emplacements_par_matiere(conn).get(int(matiere_id), [])
+
+
+@router.post("/api/stock/matieres/{matiere_id}/emplacements")
+async def set_matiere_emplacement(matiere_id: int, request: Request):
+    """Pose (ou remplace) la quantité d'une matière à un emplacement.
+
+    Body : { emplacement, quantite, laize_id? }. Une quantité à 0 retire
+    l'emplacement. Le stock total n'est pas modifié.
+    """
+    user = require_stock_write(request)
+    body = await request.json() or {}
+    code = str(body.get("emplacement") or "").strip().upper()
+    if not code:
+        raise HTTPException(400, "Emplacement obligatoire.")
+    if len(code) > 20 or not _MP_EMPL_RE.match(code):
+        raise HTTPException(400, "Emplacement invalide — une lettre suivie de chiffres (ex. A121, Z0).")
+    try:
+        quantite = float(str(body.get("quantite", "")).replace(",", "."))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Quantité invalide.") from None
+    if quantite < 0:
+        raise HTTPException(400, "Quantité invalide — valeur positive attendue.")
+    laize_raw = body.get("laize_id")
+    try:
+        laize_id = int(laize_raw) if laize_raw not in (None, "") else 0
+    except (TypeError, ValueError):
+        raise HTTPException(400, "laize_id invalide.") from None
+    auteur = (user.get("nom") or "").strip() or None
+
+    with get_db() as conn:
+        mp = conn.execute(
+            "SELECT id, categorie, reference FROM matieres_premieres WHERE id=? AND actif=1",
+            (matiere_id,),
+        ).fetchone()
+        if not mp:
+            raise HTTPException(404, "Matière non trouvée.")
+        if _mp_is_laizee(mp["categorie"]):
+            if not laize_id:
+                raise HTTPException(400, "Laize obligatoire pour cette catégorie.")
+            if not conn.execute(
+                "SELECT 1 FROM mp_matiere_laizes WHERE matiere_id=? AND laize_id=?",
+                (matiere_id, laize_id),
+            ).fetchone():
+                raise HTTPException(400, "Cette laize n'est pas associée à cette matière.")
+        else:
+            laize_id = 0
+        if quantite == 0:
+            conn.execute(
+                "DELETE FROM mp_emplacements WHERE matiere_id=? AND laize_id=? AND emplacement=?",
+                (matiere_id, laize_id, code),
+            )
+        else:
+            conn.execute(
+                """INSERT INTO mp_emplacements
+                       (matiere_id, laize_id, emplacement, quantite, updated_at, updated_by_name)
+                   VALUES (?,?,?,?,?,?)
+                   ON CONFLICT(matiere_id, laize_id, emplacement) DO UPDATE SET
+                       quantite=excluded.quantite,
+                       updated_at=excluded.updated_at,
+                       updated_by_name=excluded.updated_by_name""",
+                (matiere_id, laize_id, code, quantite,
+                 _now_paris().strftime("%Y-%m-%dT%H:%M:%S"), auteur),
+            )
+        conn.commit()
+        emplacements = _mp_emplacements_par_matiere(conn).get(int(matiere_id), [])
+    log_action(user=user, request=request, module="stock", action="UPDATE",
+               objet=f"matiere:{matiere_id}:emplacement:{code}",
+               detail=f"{mp['reference']} · {code} = {quantite:g}"
+                      + (f" (laize {laize_id})" if laize_id else ""))
+    return {"ok": True, "emplacements": emplacements}
+
+
+@router.delete("/api/stock/matieres/{matiere_id}/emplacements/{empl_id}")
+def delete_matiere_emplacement(matiere_id: int, empl_id: int, request: Request):
+    user = require_stock_write(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT emplacement FROM mp_emplacements WHERE id=? AND matiere_id=?",
+            (empl_id, matiere_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Emplacement non trouvé.")
+        conn.execute("DELETE FROM mp_emplacements WHERE id=?", (empl_id,))
+        conn.commit()
+        emplacements = _mp_emplacements_par_matiere(conn).get(int(matiere_id), [])
+    log_action(user=user, request=request, module="stock", action="DELETE",
+               objet=f"matiere:{matiere_id}:emplacement:{row['emplacement']}",
+               detail="Emplacement retiré")
+    return {"ok": True, "emplacements": emplacements}
 
 
 @router.post("/api/stock/matieres")
@@ -6706,6 +7037,83 @@ def _invmat_status(jours_depuis: Optional[float], intervalle: int) -> str:
     if ratio < 1.0:
         return "orange"
     return "rouge"
+
+
+_INVMAT_STATUT_LABELS = {"rouge": "À faire", "orange": "Bientôt", "vert": "À jour"}
+
+
+@router.get("/api/stock/matieres/inventaire/export")
+def matieres_inventaire_export(request: Request):
+    """Export de l'inventaire matières : une ligne par référence active.
+
+    Le stock par laize et les emplacements sont détaillés dans une colonne
+    chacun, pour garder une ligne par référence.
+    """
+    require_stock(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT mp.id, mp.reference, mp.designation, mp.categorie, mp.sous_section,
+                   COALESCE(mp.intervalle_inventaire_jours, ?) AS intervalle_jours,
+                   COALESCE(s.quantite, 0) AS stock_actuel,
+                   (SELECT MAX(date_validation) FROM inventaires_matieres
+                     WHERE matiere_id = mp.id) AS derniere_date,
+                   (SELECT operateur_nom FROM inventaires_matieres
+                     WHERE matiere_id = mp.id
+                     ORDER BY date_validation DESC, id DESC LIMIT 1) AS dernier_operateur
+              FROM matieres_premieres mp
+              LEFT JOIN mp_stock s ON s.matiere_id = mp.id
+             WHERE mp.actif = 1
+             ORDER BY mp.categorie, mp.sous_section, mp.reference COLLATE NOCASE
+            """,
+            (_INVMAT_DEFAULT_INTERVAL_DAYS,),
+        ).fetchall()
+        laizes: dict[int, list[str]] = {}
+        for r in conn.execute(
+            """SELECT ml.matiere_id, l.valeur_mm, l.label, COALESCE(sl.quantite, 0) AS quantite
+                 FROM mp_matiere_laizes ml
+                 JOIN mp_laizes l ON l.id = ml.laize_id
+                 LEFT JOIN mp_stock_laize sl
+                   ON sl.matiere_id = ml.matiere_id AND sl.laize_id = ml.laize_id
+                ORDER BY COALESCE(l.ordre, 999), l.valeur_mm"""
+        ).fetchall():
+            lbl = r["label"] or (f"{r['valeur_mm']:g} mm" if r["valeur_mm"] else "—")
+            laizes.setdefault(int(r["matiere_id"]), []).append(
+                f"{lbl} : {float(r['quantite'] or 0):g}")
+        empl_par_mat = _mp_emplacements_par_matiere(conn)
+
+    now = _now_paris()
+    lignes = []
+    for r in rows:
+        derniere = _inv_date(r["derniere_date"])
+        jours = (now.replace(tzinfo=None) - derniere).total_seconds() / 86400.0 if derniere else None
+        statut = _invmat_status(jours, r["intervalle_jours"])
+        empls = [
+            f"{e['emplacement']}" + (f" ({e['laize_label']})" if e.get("laize_label") else "")
+            + f" : {e['quantite']:g}"
+            for e in empl_par_mat.get(int(r["id"]), [])
+        ]
+        lignes.append([
+            _MP_CATEGORIE_LABELS.get((r["categorie"] or "").lower(), r["categorie"] or ""),
+            r["sous_section"] or "",
+            r["reference"] or "",
+            r["designation"] or "",
+            round(float(r["stock_actuel"] or 0), 3),
+            _mp_unite_gestion(r["categorie"]),
+            " · ".join(laizes.get(int(r["id"]), [])) if _mp_is_laizee(r["categorie"]) else "",
+            " · ".join(empls),
+            derniere or "Jamais",
+            r["dernier_operateur"] or "",
+            _INVMAT_STATUT_LABELS.get(statut, statut or ""),
+        ])
+    return _inv_export_xlsx(
+        "Inventaire matières",
+        ["Catégorie", "Sous-section", "Référence", "Désignation", "Stock", "Unité",
+         "Stock par laize", "Emplacements", "Dernier inventaire", "Inventorié par", "Statut"],
+        lignes, [13, 16, 22, 40, 11, 10, 36, 30, 18, 20, 11], 5,
+        f"inventaire-matieres-{now.strftime('%Y-%m-%d')}.xlsx",
+        {9: "dd/mm/yyyy hh:mm"},
+    )
 
 
 @router.get("/api/stock/matieres/inventaire")

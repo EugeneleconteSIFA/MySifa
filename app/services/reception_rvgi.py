@@ -691,3 +691,55 @@ def integrer_tout(conn, conn_erp, user, appliquer_mouvement, limite=500):
                              "motif": getattr(e, "detail", None) or str(e)})
     return {"depuis": file.get("depuis"), "integrees": faites,
             "refusees": refusees, "non_appariees": en_attente}
+
+
+# ── Recherche : un article RVGI a referencer ────────────────────────────────
+#
+# Quand une recherche dans MyStock ne trouve rien, l'article existe souvent
+# deja dans l'ERP : on le propose pour creer la reference MySifa a partir de
+# lui, et l'appariement se fait dans la foulee. Le perimetre est celui des
+# receptions -- un article hors perimetre ne pourrait jamais entrer en stock.
+#
+# Le filtre se fait en Python, sans accent ni casse : LIKE de SQLite ne plie
+# que l'ASCII, et « velin » doit trouver « Vélin ». Le perimetre fait quelques
+# centaines de fiches, la lecture complete ne coute rien.
+
+def rechercher_articles(conn, conn_erp, q, limite=20):
+    """Articles RVGI du perimetre dont le code ou le libelle contient `q`.
+
+    Chaque article dit la categorie MyStock qu'il donnerait et, s'il est deja
+    apparie, la matiere qui le porte.
+    """
+    termes = _sans_accent(q).lower().split()
+    if not termes:
+        return []
+    types_mat = {t - 2: t for t in PERIMETRE}
+    place = ",".join("?" * len(types_mat))
+    rows = conn_erp.execute(
+        "SELECT code1, code2, type, libc1, libt2, ref FROM mat_mat "
+        "WHERE corbeille = 0 AND type IN (%s) "
+        "ORDER BY CAST(code1 AS INTEGER), code2, type" % place,
+        tuple(types_mat),
+    ).fetchall()
+    apparies = _appariements(conn)
+    out = []
+    for r in rows:
+        code1 = str(r["code1"] or "").strip()
+        code2 = str(r["code2"] or "").strip()
+        foin = _sans_accent(" ".join(str(x or "") for x in (
+            "%s/%s" % (code1, code2), r["libc1"], r["libt2"], r["ref"]))).lower()
+        if not all(t in foin for t in termes):
+            continue
+        type_code = types_mat[int(r["type"])]
+        cat, sous, _ = PERIMETRE[type_code]
+        out.append({
+            "code1": code1, "code2": code2, "type_code": type_code,
+            "libelle": (r["libc1"] or "").strip(),
+            "conditionnement": (r["libt2"] or "").strip() or None,
+            "ref_fournisseur": (r["ref"] or "").strip() or None,
+            "categorie": cat, "sous_section": sous,
+            "matiere_id": apparies.get((code1, code2, type_code)),
+        })
+        if len(out) >= limite:
+            break
+    return out
