@@ -1337,6 +1337,47 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .hist-subtitle{font-size:12px;color:var(--muted);margin:0}
 .hist-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}
 .hist-head-actions{display:flex;gap:8px;flex-shrink:0}
+/* Matières premières : bouton de création, résultats RVGI, emplacements */
+.mp-head-title{display:flex;align-items:flex-start;gap:12px;min-width:0}
+.mp-add-btn{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;padding:0;flex-shrink:0;margin-top:2px}
+.mp-create-row{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;max-width:480px;margin:0 auto 8px;padding:12px 16px;border:1.5px dashed var(--accent);border-radius:12px;background:var(--accent-bg);color:var(--accent);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.mp-create-row:hover{border-style:solid}
+.mp-rvgi{margin-top:18px;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.mp-rvgi-head{padding:10px 14px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+.mp-rvgi-empty{padding:12px 14px;font-size:13px;color:var(--muted)}
+.mp-rvgi-row{display:flex;align-items:center;gap:12px;width:100%;padding:10px 14px;border:none;border-bottom:1px solid var(--border);background:transparent;color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.mp-rvgi-row:last-child{border-bottom:none}
+.mp-rvgi-row:hover{background:var(--accent-bg)}
+.mp-rvgi-code{flex-shrink:0;min-width:84px;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text2)}
+.mp-rvgi-lib{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.mp-rvgi-des{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mp-rvgi-meta{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mp-rvgi-action{display:inline-flex;align-items:center;gap:4px;flex-shrink:0;font-size:12px;font-weight:700;color:var(--accent)}
+.mp-rvgi-tag{flex-shrink:0;font-size:12px;color:var(--muted)}
+.mp-empl-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:14px}
+.mp-empl-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.mp-empl-card-title{font-size:13px;font-weight:700;color:var(--text)}
+.mp-empl-add-link{display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border:1px solid var(--accent);border-radius:8px;background:var(--accent-bg);color:var(--accent);font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.mp-empl-line{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)}
+.mp-empl-line:last-of-type{border-bottom:none}
+.mp-empl-code{font-size:13px;font-weight:700;color:var(--text);min-width:56px}
+.mp-empl-lbl{flex:1;min-width:0;font-size:12px;color:var(--muted)}
+.mp-empl-qty{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text)}
+.mp-empl-ico{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text2);cursor:pointer}
+.mp-empl-ico:hover{border-color:var(--accent);color:var(--accent)}
+.mp-empl-rows{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
+.mp-empl-rows:empty{display:none}
+.mp-empl-row{display:flex;align-items:flex-start;gap:6px}
+.mp-empl-row .empl-field-wrap{flex:1;min-width:0;margin:0}
+.mp-empl-create .mp-empl-row select{width:auto;max-width:130px;flex-shrink:0}
+.mp-empl-create .mp-empl-row input[type=number]:not([type=checkbox]){width:110px;flex-shrink:0}
+.mp-empl-create .mp-empl-add-link{align-self:flex-start}
+.mp-card-empl{display:flex;align-items:center;gap:4px}
+@media (max-width:600px){
+  .mp-rvgi-code{min-width:0}
+  .mp-rvgi-action span+span{display:none}
+  .mp-empl-row{flex-wrap:wrap}
+}
 .hist-export-btn{
   display:inline-flex;align-items:center;gap:8px;flex-shrink:0;
   background:rgba(52,211,153,.1);border:1.5px solid rgba(52,211,153,.45);color:var(--success);
@@ -1646,6 +1687,13 @@ body.light{
 }
 
 .invv2-page-header{margin-bottom:12px}
+.invv2-head{margin-bottom:12px}
+.invv2-head .invv2-page-header{margin-bottom:0}
+.inv-export-choix{display:flex;flex-direction:column;gap:8px}
+.inv-export-opt{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.inv-export-opt:hover{border-color:var(--accent);background:var(--accent-bg)}
+.inv-export-opt strong{font-size:13px}
+.inv-export-opt span{font-size:12px;color:var(--muted)}
 .invv2-page-title{font-size:22px;font-weight:800;color:var(--inv-v);letter-spacing:.3px}
 .invv2-page-sub{font-size:12px;color:var(--text2);margin-top:4px;font-weight:500}
 .invv2-legend{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-left:4px solid var(--inv-v);border-radius:10px}
@@ -2785,6 +2833,8 @@ function icon(name, size=16){
     'copy': '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
     'trash-2': '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>',
     'search': '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+    'plus': '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+    'map-pin': '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
     'plus-circle': '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>',
     'zap': '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
     'mail': '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
@@ -5771,7 +5821,9 @@ function filterMatieresList() {
     if (!q) return true;
     const ref = (m.reference || '').toLowerCase();
     const des = (m.designation || '').toLowerCase();
-    return ref.includes(q) || des.includes(q);
+    const empl = (Array.isArray(m.emplacements) ? m.emplacements : [])
+      .map(e => String(e.emplacement || '')).join(' ').toLowerCase();
+    return ref.includes(q) || des.includes(q) || empl.includes(q);
   });
 }
 
@@ -6216,6 +6268,7 @@ function buildMatiereDetail() {
     actions,
     adhesifTodo,
     laizeDetail,
+    buildMpEmplacementsCard(m),
     buildMpMvtHistory(mouvements, m),
   );
 }
@@ -9160,10 +9213,20 @@ function buildMatieres() {
   const filtered = filterMatieresList();
   const q = (S.matieresQ || '').trim();
   const head = el('div', { cls: 'hist-head' },
-    el('div', null,
-      el('h2', { cls: 'hist-title' }, 'Matières premières'),
-      el('p', { cls: 'hist-subtitle' },
-        'Mandrins (pal.), frontaux et glassines (bob.), adhésifs (pal.), palettes (piles), cartons (pal.)'),
+    el('div', { cls: 'mp-head-title' },
+      (isMatieresAdmin() && !S.stockReadOnly)
+        ? el('button', {
+            cls: 'btn mp-add-btn',
+            type: 'button',
+            attrs: { title: 'Créer une référence', 'aria-label': 'Créer une référence' },
+            on: { click: (e) => { e.stopPropagation(); openMatiereCreateModal(mpSeedDepuisFiltre('')); } },
+          }, iconEl('plus', 20))
+        : null,
+      el('div', null,
+        el('h2', { cls: 'hist-title' }, 'Matières premières'),
+        el('p', { cls: 'hist-subtitle' },
+          'Mandrins (pal.), frontaux et glassines (bob.), adhésifs (pal.), palettes (piles), cartons (pal.)'),
+      ),
     ),
     el('div', { cls: 'hist-head-actions' },
       // Le bouton montre l'icone du mode VERS lequel on bascule, pas du mode
@@ -9319,6 +9382,13 @@ function buildMatieres() {
           style: 'color:#fb923c;font-weight:600' }, 'Aucune laize configurée'));
       }
     }
+    const empls = Array.isArray(m.emplacements) ? m.emplacements : [];
+    if (empls.length) {
+      const codes = [...new Set(empls.map(e => e.emplacement))];
+      infoChildren.push(el('div', { cls: 'mp-card-meta mp-card-empl' },
+        iconEl('map-pin', 12),
+        codes.slice(0, 4).join(' · ') + (codes.length > 4 ? ' +' + (codes.length - 4) : '')));
+    }
     if (m.en_alerte) {
       infoChildren.push(el('div', { cls: 'mp-card-warn' },
         'Sous le seuil (min. ' + mpStockLine(seuil, m) + ')'));
@@ -9357,6 +9427,13 @@ function buildMatieres() {
         ? 'Aucune matière correspondant à « ' + q + ' ».'
         : 'Aucune matière dans cette catégorie.',
     ));
+    if (q && isMatieresAdmin() && !S.stockReadOnly) {
+      list.appendChild(el('button', {
+        cls: 'mp-create-row',
+        type: 'button',
+        on: { click: () => openMatiereCreateModal(mpSeedDepuisFiltre(q)) },
+      }, iconEl('plus', 16), el('span', null, 'Créer la référence « ', el('strong', null, q), ' »')));
+    }
   } else {
     // Plus de bandeau sous-section : les sous-sections frontal sont promues au niveau pill.
     // Cas 1 : pill spécifique (Couché, Mandrins, etc.) → rendu plat, pas de header.
@@ -9413,8 +9490,356 @@ function buildMatieres() {
         ),
       )
     : null;
+  const rvgiBloc = buildMpRvgiResults(q, filtered);
   return el('div', { cls: 'content' },
-    el('div', { cls: 'hist-page' }, head, banner, searchWrap, pills, subPills, list));
+    el('div', { cls: 'hist-page' }, head, banner, searchWrap, pills, subPills, list, rvgiBloc));
+}
+
+// ── Recherche RVGI sous la recherche de matières ────────────────────────────
+// La recherche locale filtre S.matieres ; l'ERP est interrogé en plus, avec un
+// délai, pour ne pas lancer une requête par frappe. Un article déjà apparié
+// ouvre sa matière (utile pour chercher par code RVGI) ; un article non
+// apparié propose de créer la référence, appariement compris.
+let _mpRvgiTimer = null;
+function mpRvgiPlanifier(q) {
+  const qq = String(q || '').trim();
+  if (qq.length < 2) {
+    if (_mpRvgiTimer) { clearTimeout(_mpRvgiTimer); _mpRvgiTimer = null; }
+    S.mpRvgi = null;
+    return;
+  }
+  if (S.mpRvgi && S.mpRvgi.q === qq) return;
+  if (_mpRvgiTimer) clearTimeout(_mpRvgiTimer);
+  S.mpRvgi = { q: qq, articles: [], loading: true };
+  _mpRvgiTimer = setTimeout(async () => {
+    _mpRvgiTimer = null;
+    let articles = [];
+    try {
+      const r = await api('/api/stock/matieres/rvgi-recherche?q=' + encodeURIComponent(qq));
+      articles = (r && Array.isArray(r.articles)) ? r.articles : [];
+    } catch (e) { articles = []; }
+    if (!S.mpRvgi || S.mpRvgi.q !== qq) return;
+    S.mpRvgi = { q: qq, articles, loading: false };
+    if (S.tab === 'matieres' && !S.selMatiere) renderMatieresView();
+  }, 250);
+}
+
+function buildMpRvgiResults(q, filtered) {
+  mpRvgiPlanifier(q);
+  const st = S.mpRvgi;
+  if (!st || st.q !== String(q || '').trim()) return null;
+  const admin = isMatieresAdmin() && !S.stockReadOnly;
+  const dejaAffiches = new Set((filtered || []).map(m => m.id));
+  const parId = new Map((S.matieres || []).map(m => [m.id, m]));
+  const arts = (st.articles || []).filter(a => a.matiere_id
+    ? (parId.has(a.matiere_id) && !dejaAffiches.has(a.matiere_id))
+    : admin);
+  if (st.loading) {
+    return (filtered && filtered.length) ? null : el('div', { cls: 'mp-rvgi' },
+      el('div', { cls: 'mp-rvgi-empty' }, 'Recherche dans RVGI…'));
+  }
+  if (!arts.length) return null;
+  const wrap = el('div', { cls: 'mp-rvgi' },
+    el('div', { cls: 'mp-rvgi-head' }, 'Articles RVGI · ' + arts.length));
+  arts.forEach(a => {
+    const m = a.matiere_id ? parId.get(a.matiere_id) : null;
+    const meta = [
+      (MP_CAT_LABELS[a.categorie] || a.categorie) + (a.sous_section ? ' · ' + a.sous_section : ''),
+      a.conditionnement,
+    ].filter(Boolean).join(' · ');
+    wrap.appendChild(el('button', {
+      cls: 'mp-rvgi-row',
+      type: 'button',
+      on: { click: () => (m ? loadMatiere(m.id) : openMatiereCreateModal(mpSeedDepuisRvgi(a))) },
+    },
+      el('span', { cls: 'mp-rvgi-code' }, a.code1 + '/' + a.code2),
+      el('span', { cls: 'mp-rvgi-lib' },
+        el('span', { cls: 'mp-rvgi-des' }, a.libelle || '—'),
+        el('span', { cls: 'mp-rvgi-meta' }, meta)),
+      m
+        ? el('span', { cls: 'mp-rvgi-tag' }, '→ ' + (m.reference || ''))
+        : el('span', { cls: 'mp-rvgi-action' }, iconEl('plus', 14), el('span', null, 'Créer la référence')),
+    ));
+  });
+  return wrap;
+}
+
+// Graine du formulaire de création depuis la recherche : la catégorie de la
+// pill active, et le texte cherché comme référence.
+function mpSeedDepuisFiltre(q) {
+  const cat = S.matieresCat && S.matieresCat !== 'tout' ? S.matieresCat : null;
+  const ss = S.matieresSousSection && S.matieresSousSection !== MP_SOUS_SECTION_NONE
+    ? S.matieresSousSection : '';
+  if (!cat && !q) return null;
+  return {
+    categorie: cat || undefined,
+    sous_section: cat === 'frontal' ? ss : '',
+    reference: q || '',
+    designation: '',
+  };
+}
+
+function mpSeedDepuisRvgi(a) {
+  return {
+    categorie: a.categorie,
+    sous_section: a.sous_section || '',
+    reference: a.ref_fournisseur || a.libelle || '',
+    designation: a.libelle || '',
+    rvgi: { code1: a.code1, code2: a.code2, type_code: a.type_code, libelle: a.libelle || '' },
+  };
+}
+
+// Création d'une référence dans une modale — bouton « + », ligne « Créer la
+// référence » et articles RVGI. Même formulaire que le tiroir des références.
+async function openMatiereCreateModal(seed) {
+  if (!isMatieresAdmin()) return;
+  closeMroot();
+  S.matieresAdminAddError = '';
+  S.matieresAdminAddSeed = seed || null;
+  const chargements = [loadMpSousSections()];
+  if (!Array.isArray(S.laizes) || !S.laizes.length) chargements.push(loadLaizesReferentiel());
+  if (!_emplListFromDB.length) chargements.push(fetchEmplacementsFromDB());
+  await Promise.all(chargements);
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  const overlay = el('div', {
+    cls: 'mp-modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
+  });
+  const box = el('div', { cls: 'mp-modal mp-modal-fiche', on: { click: (e) => e.stopPropagation() } });
+  box.appendChild(el('div', { cls: 'mp-modal-head' },
+    el('h3', null, 'Nouvelle référence'),
+    el('button', {
+      cls: 'mp-modal-close',
+      type: 'button',
+      attrs: { title: 'Fermer', 'aria-label': 'Fermer' },
+      on: { click: closeMroot },
+    }, '×'),
+  ));
+  if (seed && seed.rvgi) {
+    box.appendChild(el('div', { cls: 'mp-modal-sub' },
+      'Article RVGI ' + seed.rvgi.code1 + '/' + seed.rvgi.code2
+      + (seed.rvgi.libelle ? ' — ' + seed.rvgi.libelle : '')
+      + '. Il sera apparié à la référence créée.'));
+  }
+  box.appendChild(buildMatieresAdminAddForm({
+    inModal: true,
+    onCreated: async (created) => {
+      closeMroot();
+      S.mpRvgi = null;
+      await loadMatieres();
+      if (created && created.id) await loadMatiere(created.id);
+    },
+  }));
+  overlay.appendChild(box);
+  mroot.appendChild(overlay);
+  requestAnimationFrame(() => {
+    const inp = box.querySelector('input[type=text]');
+    if (inp) inp.focus();
+  });
+}
+
+// ── Emplacements d'une matière ──────────────────────────────────────────────
+// Facultatifs : ils disent où la matière est rangée. Le stock total reste
+// celui des réceptions et du déstockage ; seule la création d'une référence
+// transforme les quantités saisies en stock initial.
+
+// Pose les emplacements saisis à la création, puis fixe le stock initial à
+// leur somme (par laize pour une matière laizée) par un ajustement.
+async function mpPoserEmplacementsInitiaux(matiereId, emplats) {
+  const fusion = new Map();
+  emplats.forEach(e => {
+    const k = e.emplacement + '|' + (e.laize_id || 0);
+    const prev = fusion.get(k);
+    fusion.set(k, prev ? { ...prev, quantite: prev.quantite + e.quantite } : { ...e });
+  });
+  const parLaize = new Map();
+  for (const e of fusion.values()) {
+    await api('/api/stock/matieres/' + matiereId + '/emplacements', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(e),
+    });
+    const k = e.laize_id || 0;
+    parLaize.set(k, (parLaize.get(k) || 0) + e.quantite);
+  }
+  for (const [laizeId, total] of parLaize) {
+    await api('/api/stock/matieres/mouvement', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        matiere_id: matiereId,
+        type_mouvement: 'ajustement',
+        quantite: total,
+        laize_id: laizeId || null,
+        note: 'Stock initial — création de la référence',
+      }),
+    });
+  }
+}
+
+function buildMpEmplacementsCard(m) {
+  const rows = Array.isArray(m.emplacements) ? m.emplacements : [];
+  const canEdit = !S.stockReadOnly;
+  if (!rows.length && !canEdit) return null;
+  const card = el('div', { cls: 'mp-empl-card' });
+  card.appendChild(el('div', { cls: 'mp-empl-card-head' },
+    el('div', { cls: 'mp-empl-card-title' }, 'Emplacements'),
+    canEdit
+      ? el('button', {
+          cls: 'mp-empl-add-link',
+          type: 'button',
+          on: { click: () => openMpEmplacementModal(m, null) },
+        }, iconEl('plus', 14), 'Ajouter un emplacement')
+      : null,
+  ));
+  if (!rows.length) {
+    card.appendChild(el('div', { cls: 'mp-hint' },
+      'Aucun emplacement renseigné. Facultatif : indique où la matière est rangée.'));
+    return card;
+  }
+  rows.forEach(e => {
+    const lbl = [
+      isStockZoneSpeciale(e.emplacement) ? stockEmplLabel(e.emplacement) : '',
+      e.laize_label || '',
+    ].filter(Boolean).join(' · ');
+    card.appendChild(el('div', { cls: 'mp-empl-line' },
+      el('span', { cls: 'mp-empl-code' }, e.emplacement),
+      el('span', { cls: 'mp-empl-lbl' }, lbl),
+      el('span', { cls: 'mp-empl-qty' }, mpStockLine(e.quantite, m)),
+      canEdit
+        ? el('button', {
+            cls: 'mp-empl-ico',
+            type: 'button',
+            attrs: { title: 'Modifier la quantité', 'aria-label': 'Modifier la quantité' },
+            on: { click: () => openMpEmplacementModal(m, e) },
+          }, iconEl('edit', 14))
+        : null,
+      canEdit
+        ? el('button', {
+            cls: 'mp-empl-ico',
+            type: 'button',
+            attrs: { title: 'Retirer l\'emplacement', 'aria-label': 'Retirer l\'emplacement' },
+            on: { click: () => deleteMpEmplacement(m, e) },
+          }, iconEl('trash-2', 14))
+        : null,
+    ));
+  });
+  const total = rows.reduce((s, e) => s + (parseFloat(e.quantite) || 0), 0);
+  card.appendChild(el('div', { cls: 'mp-hint', style: 'margin-top:8px' },
+    'Localisé : ' + mpStockLine(total, m) + ' sur ' + mpStockLine(m.quantite, m) + ' en stock.'));
+  return card;
+}
+
+async function deleteMpEmplacement(m, e) {
+  if (!confirm('Retirer l\'emplacement ' + e.emplacement + ' ?')) return;
+  try {
+    await api('/api/stock/matieres/' + m.id + '/emplacements/' + e.id, { method: 'DELETE' });
+    showToast('Emplacement retiré.', 'success');
+    await loadMatieres();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function openMpEmplacementModal(m, existing) {
+  if (!m || S.stockReadOnly) return;
+  if (!_emplListFromDB.length) await fetchEmplacementsFromDB();
+  closeMroot();
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  const overlay = el('div', {
+    cls: 'mp-modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
+  });
+  const box = el('div', { cls: 'mp-modal', on: { click: (e) => e.stopPropagation() } });
+  box.appendChild(el('div', { cls: 'mp-modal-head' },
+    el('h3', null, existing ? 'Modifier l\'emplacement' : 'Ajouter un emplacement'),
+    el('button', {
+      cls: 'mp-modal-close',
+      type: 'button',
+      attrs: { title: 'Fermer', 'aria-label': 'Fermer' },
+      on: { click: closeMroot },
+    }, '×'),
+  ));
+  box.appendChild(el('div', { cls: 'mp-modal-sub' },
+    (m.reference || '') + (m.designation ? ' — ' + m.designation : '')));
+
+  const f = buildMpEmplacementField();
+  if (existing) {
+    f.emplInp.value = existing.emplacement;
+    f.emplInp.readOnly = true;
+  }
+  box.appendChild(f.wrap);
+
+  let laizeSel = null;
+  const laizes = (m.laizee && Array.isArray(m.stock_par_laize)) ? m.stock_par_laize : [];
+  if (m.laizee) {
+    laizeSel = el('select');
+    laizeSel.appendChild(el('option', { value: '' }, laizes.length ? 'Choisir une laize…' : 'Aucune laize associée'));
+    laizes.forEach(l => laizeSel.appendChild(el('option', { value: String(l.laize_id) },
+      l.label || (l.valeur_mm + ' mm'))));
+    if (existing && existing.laize_id) {
+      laizeSel.value = String(existing.laize_id);
+      laizeSel.disabled = true;
+    } else if (laizes.length === 1) {
+      laizeSel.value = String(laizes[0].laize_id);
+    }
+    box.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Laize'), laizeSel));
+  }
+
+  const qtyInp = el('input', {
+    cls: 'field-input',
+    attrs: { type: 'number', min: '0', step: 'any', inputmode: 'decimal' },
+  });
+  if (existing) qtyInp.value = String(existing.quantite);
+  box.appendChild(el('div', { cls: 'mp-field' },
+    el('label', null, mpQuantiteFieldLabel(m)), qtyInp));
+  box.appendChild(el('div', { cls: 'mp-hint' },
+    'Le stock total n\'est pas modifié : l\'emplacement indique où se trouve la matière.'));
+  const errEl = el('div', { cls: 'mp-admin-err' });
+  box.appendChild(errEl);
+
+  const submit = async (btn) => {
+    errEl.textContent = '';
+    const code = mpEmplacementValue(f.emplInp);
+    if (!code) { errEl.textContent = 'Emplacement obligatoire.'; return; }
+    const errCode = validateMpEmplacement(code);
+    if (errCode) { errEl.textContent = errCode; return; }
+    const qv = parseFloat(String(qtyInp.value || '').replace(',', '.'));
+    if (!(qv > 0)) { errEl.textContent = 'Quantité invalide — valeur positive attendue.'; return; }
+    let laizeId = null;
+    if (laizeSel) {
+      laizeId = parseInt(laizeSel.value, 10) || null;
+      if (!laizeId) { errEl.textContent = 'Laize obligatoire pour cette matière.'; return; }
+    }
+    btn.disabled = true;
+    try {
+      await api('/api/stock/matieres/' + m.id + '/emplacements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emplacement: code, quantite: qv, laize_id: laizeId }),
+      });
+      closeMroot();
+      showToast('Emplacement enregistré.', 'success');
+      await loadMatieres();
+    } catch (err) {
+      errEl.textContent = err.message || 'Erreur.';
+      btn.disabled = false;
+    }
+  };
+  const saveBtn = el('button', { cls: 'btn', type: 'button' }, 'Enregistrer');
+  saveBtn.addEventListener('click', () => submit(saveBtn));
+  if (m.laizee && !laizes.length) saveBtn.disabled = true;
+  box.appendChild(el('div', { cls: 'mp-modal-actions' },
+    el('div', { cls: 'mp-modal-actions-right' },
+      el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMroot } }, 'Annuler'),
+      saveBtn,
+    ),
+  ));
+  overlay.appendChild(box);
+  mroot.appendChild(overlay);
+  requestAnimationFrame(() => (existing ? qtyInp : f.emplInp).focus());
 }
 
 
@@ -10238,9 +10663,14 @@ function buildMpSousSectionSelector(initialValue, categorie) {
   };
 }
 
-function buildMatieresAdminAddForm() {
-  const foot = el('div', { cls: 'mp-drawer-foot' });
-  foot.appendChild(el('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '12px', color: 'var(--text)' } }, 'Ajouter une référence'));
+// opts.inModal : rendu dans une modale (pas de titre de tiroir).
+// opts.onCreated(created) : appelé après création, à la place du rafraîchissement du tiroir.
+function buildMatieresAdminAddForm(opts) {
+  opts = opts || {};
+  const foot = el('div', { cls: opts.inModal ? 'mp-create-form' : 'mp-drawer-foot' });
+  if (!opts.inModal) {
+    foot.appendChild(el('div', { style: { fontSize: '12px', fontWeight: '600', marginBottom: '12px', color: 'var(--text)' } }, 'Ajouter une référence'));
+  }
   const catSel = el('select');
   [['mandrin', 'Mandrin'], ['palette', 'Palette'], ['adhesif', 'Adhésif'], ['carton', 'Carton'], ['frontal', 'Frontal'], ['glassine', 'Glassine'], ['complexe', 'Complexe'], ['autre', 'Autre']].forEach(([v, l]) => {
     catSel.appendChild(el('option', { value: v }, l));
@@ -10325,6 +10755,83 @@ function buildMatieresAdminAddForm() {
   );
   // Sous-section (visible pour "autre" et "frontal") — cloisonnée par catégorie
   const seed = S.matieresAdminAddSeed || null;
+  // Article RVGI d'origine : apparié à la référence dès sa création.
+  const rvgiSeed = (seed && seed.rvgi) ? seed.rvgi : null;
+  // Emplacements (facultatifs) : où la matière est rangée et combien. La somme
+  // des quantités devient le stock initial de la référence.
+  const emplRows = [];
+  const emplList = el('div', { cls: 'mp-empl-rows' });
+  function laizesCochees() {
+    const ids = new Set(Array.from(laizeChecks.querySelectorAll('input[type=checkbox]:checked'))
+      .map(i => parseInt(i.value, 10)));
+    return (S.laizes || []).filter(l => ids.has(l.id));
+  }
+  function syncEmplRows() {
+    const cat = catSel.value;
+    const laizee = mpIsLaizeeCategory(cat);
+    const cochees = laizee ? laizesCochees() : [];
+    emplRows.forEach(r => {
+      r.qtyInp.placeholder = mpQuantiteFieldLabel(cat).replace(/^Quantité \((.*)\)$/, '$1');
+      r.laizeSel.style.display = laizee ? '' : 'none';
+      const prev = r.laizeSel.value;
+      r.laizeSel.innerHTML = '';
+      r.laizeSel.appendChild(el('option', { value: '' }, cochees.length ? 'Laize…' : 'Coche une laize'));
+      cochees.forEach(l => r.laizeSel.appendChild(el('option', { value: String(l.id) }, l.label)));
+      if (prev && cochees.some(l => String(l.id) === prev)) r.laizeSel.value = prev;
+      else if (cochees.length === 1) r.laizeSel.value = String(cochees[0].id);
+    });
+  }
+  function addEmplRow() {
+    const f = buildMpEmplacementField();
+    const lbl = f.wrap.querySelector('label');
+    if (lbl) lbl.remove();
+    const qtyInp = el('input', { attrs: { type: 'number', min: '0', step: 'any', inputmode: 'decimal' } });
+    const laizeSel = el('select');
+    const row = { f, qtyInp, laizeSel };
+    const rowEl = el('div', { cls: 'mp-empl-row' }, f.wrap, laizeSel, qtyInp,
+      el('button', {
+        cls: 'mp-empl-ico',
+        type: 'button',
+        attrs: { title: 'Retirer', 'aria-label': 'Retirer' },
+        on: { click: () => { emplRows.splice(emplRows.indexOf(row), 1); rowEl.remove(); } },
+      }, '×'));
+    emplRows.push(row);
+    emplList.appendChild(rowEl);
+    syncEmplRows();
+    requestAnimationFrame(() => f.emplInp.focus());
+  }
+  // Lit les lignes saisies. Renvoie { emplats } ou { error }.
+  function lireEmplRows(cat) {
+    const emplats = [];
+    for (const r of emplRows) {
+      const code = mpEmplacementValue(r.f.emplInp);
+      const qRaw = String(r.qtyInp.value || '').replace(',', '.').trim();
+      if (!code && !qRaw) continue;
+      if (!code) return { error: 'Emplacement manquant sur une ligne.' };
+      const errCode = validateMpEmplacement(code);
+      if (errCode) return { error: errCode };
+      const qv = parseFloat(qRaw);
+      if (!(qv > 0)) return { error: 'Quantité invalide pour ' + code + ' — valeur positive attendue.' };
+      let laizeId = null;
+      if (mpIsLaizeeCategory(cat)) {
+        laizeId = parseInt(r.laizeSel.value, 10) || null;
+        if (!laizeId) return { error: 'Laize manquante pour ' + code + '.' };
+      }
+      emplats.push({ emplacement: code, quantite: qv, laize_id: laizeId });
+    }
+    return { emplats };
+  }
+  laizeChecks.addEventListener('change', syncEmplRows);
+  const emplWrap = el('div', { cls: 'mp-field mp-empl-create' },
+    el('label', null, 'Emplacements (facultatif)'),
+    emplList,
+    el('button', {
+      cls: 'mp-empl-add-link',
+      type: 'button',
+      on: { click: addEmplRow },
+    }, iconEl('plus', 14), 'Ajouter un emplacement'),
+    el('div', { cls: 'mp-hint' }, 'La somme des quantités devient le stock initial de la référence.'),
+  );
   const initialCat = (seed && seed.categorie) || catSel.value || 'mandrin';
   const sousSectionSel = buildMpSousSectionSelector((seed && seed.sous_section) || '', initialCat);
   // Sous-categorie : presente sur toutes les categories, donc jamais masquee.
@@ -10357,6 +10864,7 @@ function buildMatieresAdminAddForm() {
     // Idem pour la sous-catégorie : les familles d'un frontal n'ont rien à voir
     // avec celles d'un adhésif.
     if (sousCategorieSel) sousCategorieSel.setCategorie(cat);
+    syncEmplRows();
   }
   catSel.addEventListener('change', syncAdminAddFields);
   pppWrap.append(pppLbl, pppInp);
@@ -10402,6 +10910,7 @@ function buildMatieresAdminAddForm() {
     sousSectionWrap,
     el('div', { cls: 'mp-field' }, seuilLbl, seuilInp),
     laizeWrap,
+    emplWrap,
     hintEl,
     errEl,
     el('button', {
@@ -10426,6 +10935,12 @@ function buildMatieresAdminAddForm() {
             errEl.textContent = S.matieresAdminAddError;
             return;
           }
+        }
+        const lecture = lireEmplRows(cat);
+        if (lecture.error) {
+          S.matieresAdminAddError = lecture.error;
+          errEl.textContent = lecture.error;
+          return;
         }
         try {
           const payload = {
@@ -10498,6 +11013,29 @@ function buildMatieresAdminAddForm() {
             }
             await loadMatieresIncompleteCount();
           }
+          if (lecture.emplats.length && created && created.id) {
+            try {
+              await mpPoserEmplacementsInitiaux(created.id, lecture.emplats);
+            } catch (e) {
+              showToast('Référence créée mais erreur sur les emplacements : ' + e.message, 'danger');
+            }
+          }
+          if (rvgiSeed && created && created.id) {
+            try {
+              await api('/api/stock/reception-rvgi/apparier', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  code1: rvgiSeed.code1,
+                  code2: rvgiSeed.code2,
+                  type_code: rvgiSeed.type_code,
+                  matiere_id: created.id,
+                }),
+              });
+            } catch (e) {
+              showToast('Référence créée mais appariement RVGI impossible : ' + e.message, 'danger');
+            }
+          }
           showToast('Référence ajoutée.', 'success');
           // Créée DEPUIS l'écran Besoins matières pour une valeur de fiche non
           // associée : on enchaîne l'association sans la redemander. Créer une
@@ -10507,6 +11045,12 @@ function buildMatieresAdminAddForm() {
           if (S.besoinAssocEnAttente && created && created.id) {
             await _besAssocierApresCreation(created);
           }
+          if (opts.onCreated) {
+            await opts.onCreated(created);
+            return;
+          }
+          emplRows.length = 0;
+          emplList.innerHTML = '';
           refInp.value = '';
           desInp.value = '';
           pppInp.value = '';
@@ -10528,7 +11072,7 @@ function buildMatieresAdminAddForm() {
           errEl.textContent = S.matieresAdminAddError;
         }
       } },
-    }, 'Ajouter'),
+    }, opts.inModal ? 'Créer la référence' : 'Ajouter'),
   );
   return foot;
 }
@@ -12950,9 +13494,15 @@ function buildInventaireList() {
   invV2BuildListItems(listContainer, filtered);
 
   return el('div', { cls:'content' },
-    el('div', { cls:'invv2-page-header' },
-      el('div', { cls:'invv2-page-title' }, 'Inventaire'),
-      el('div', { cls:'invv2-page-sub' }, 'Emplacements triés du plus ancien au plus récent inventaire')
+    el('div', { cls:'hist-head invv2-head' },
+      el('div', { cls:'invv2-page-header' },
+        el('div', { cls:'invv2-page-title' }, 'Inventaire'),
+        el('div', { cls:'invv2-page-sub' }, 'Emplacements triés du plus ancien au plus récent inventaire')
+      ),
+      el('div', { cls:'hist-head-actions' },
+        el('button', { cls:'hist-export-btn', type:'button', on:{ click: openInvPfExportModal } },
+          iconEl('download', 16), ' Exporter l\'inventaire')
+      )
     ),
     el('div', { cls:'invv2-legend' },
       el('div', { cls:'invv2-legend-item invv2-c-vert' }, el('span', { cls:'invv2-dot' }), '< 15 j'),
@@ -12963,6 +13513,46 @@ function buildInventaireList() {
     searchWrap,
     listContainer
   );
+}
+
+// Export Excel de l'inventaire produits finis : le choix du découpage se fait
+// au clic, les deux vues servent des usages différents (comptage par allée,
+// contrôle par référence).
+function openInvPfExportModal() {
+  closeMroot();
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  const lancer = (par) => {
+    closeMroot();
+    window.location.href = API + '/api/stock/inventaire-v2/export?par=' + par;
+  };
+  const opt = (par, titre, detail) => el('button', {
+    cls: 'inv-export-opt', type: 'button', on: { click: () => lancer(par) },
+  }, el('strong', null, titre), el('span', null, detail));
+  const overlay = el('div', {
+    cls: 'mp-modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
+  });
+  const box = el('div', { cls: 'mp-modal', on: { click: (e) => e.stopPropagation() } },
+    el('div', { cls: 'mp-modal-head' },
+      el('h3', null, 'Exporter l\'inventaire'),
+      el('button', {
+        cls: 'mp-modal-close', type: 'button',
+        attrs: { title: 'Fermer', 'aria-label': 'Fermer' },
+        on: { click: closeMroot },
+      }, '×'),
+    ),
+    el('div', { cls: 'inv-export-choix' },
+      opt('emplacement', 'Une ligne par emplacement',
+        'Chaque référence présente à chaque emplacement — pour compter allée par allée.'),
+      opt('reference', 'Une ligne par référence',
+        'Quantité totale par référence, emplacements détaillés dans une colonne.'),
+    ),
+    el('div', { cls: 'mp-hint', style: 'margin-top:10px' },
+      'Fichier Excel. La colonne « Quantité comptée » est à remplir, l\'écart se calcule seul.'),
+  );
+  overlay.appendChild(box);
+  mroot.appendChild(overlay);
 }
 
 function invV2RenderListItems() {
@@ -15789,9 +16379,18 @@ function buildMatieresInventaire() {
   buildMatInvItems(listContainer, filtered);
 
   return el('div', { cls: 'content' },
-    el('div', { cls: 'invv2-page-header' },
-      el('div', { cls: 'invv2-page-title' }, 'Inventaire matière'),
-      el('div', { cls: 'invv2-page-sub' }, 'Matières triées de la plus ancienne inventaire à la plus récente — cadence configurable par matière'),
+    el('div', { cls: 'hist-head invv2-head' },
+      el('div', { cls: 'invv2-page-header' },
+        el('div', { cls: 'invv2-page-title' }, 'Inventaire matière'),
+        el('div', { cls: 'invv2-page-sub' }, 'Matières triées de la plus ancienne inventaire à la plus récente — cadence configurable par matière'),
+      ),
+      el('div', { cls: 'hist-head-actions' },
+        el('button', {
+          cls: 'hist-export-btn', type: 'button',
+          attrs: { title: 'Fichier Excel, une ligne par référence matière' },
+          on: { click: () => { window.location.href = API + '/api/stock/matieres/inventaire/export'; } },
+        }, iconEl('download', 16), ' Exporter l\'inventaire'),
+      ),
     ),
     el('div', {
       style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px', alignItems: 'center' },
