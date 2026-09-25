@@ -65,6 +65,11 @@ PORTAIL_I18N = {
         "labelFiles": "Pièces jointes (optionnel)",
         "pendingFiles": "à envoyer",
         "remove": "Retirer",
+        "secTodo": "À répondre",
+        "secSent": "Offres envoyées",
+        "secSentHint": "Modifiables tant que la demande est ouverte.",
+        "secClosed": "Clôturées",
+        "secTodoEmpty": "Aucune demande en attente de votre réponse.",
     },
     "en": {
         "pageTitle": "Carrier portal — SIFA",
@@ -130,5 +135,10 @@ PORTAIL_I18N = {
         "labelFiles": "Attachments (optional)",
         "pendingFiles": "to upload",
         "remove": "Remove",
+        "secTodo": "Awaiting your reply",
+        "secSent": "Quotes submitted",
+        "secSentHint": "You can edit them while the request is open.",
+        "secClosed": "Closed",
+        "secTodoEmpty": "No request is waiting for your reply.",
     },
 }
