@@ -97,16 +97,7 @@ def email_mysifa_layout(
     """
     cta_block = ""
     if cta_href and cta_label:
-        cta_block = f"""
-    <div style="margin:26px 0 8px;text-align:center">
-      <a href="{_esc(cta_href)}" style="background:#22d3ee;color:#0a0e17;font-weight:800;font-size:14px;padding:14px 28px;border-radius:10px;text-decoration:none;display:inline-block">
-        {_esc(cta_label)}
-      </a>
-    </div>
-    <p style="margin:12px 0 0;font-size:11px;color:#94a3b8;line-height:1.6;text-align:center;word-break:break-all">
-      Si le bouton ne fonctionne pas, copier ce lien :<br>
-      <a href="{_esc(cta_href)}" style="font-family:ui-monospace,monospace;font-size:11px;color:#0891b2;text-decoration:none">{_esc(cta_href)}</a>
-    </p>"""
+        cta_block = _email_bouton(cta_href, cta_label, "Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :")
     contact_block = ""
     if footer_contact:
         contact_block = """
@@ -118,22 +109,63 @@ def email_mysifa_layout(
     </p>"""
     foot = footer_note or f"Notification automatique {_esc(marque)} — {_esc(public_base_url())}"
     suivi_note, suivi_pixel = _suivi_blocs(pixel_url, lang)
-    return f"""<div style="font-family:'Segoe UI',system-ui,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
-  <div style="background:#0a0e17;padding:24px 32px">
-    <div style="font-size:20px;font-weight:800;color:#22d3ee;letter-spacing:-.3px">{_esc(marque)}</div>
-    <div style="font-size:12px;color:#94a3b8;margin-top:6px;text-transform:uppercase;letter-spacing:.5px;font-weight:600">{_esc(subtitle)}</div>
-  </div>
-  <div style="padding:32px;font-size:14px;color:#334155;line-height:1.65">
-    {body_html}
-    {cta_block}
-    {contact_block}
-    <p style="margin:20px 0 0;font-size:11px;color:#94a3b8;line-height:1.6;border-top:1px solid #e2e8f0;padding-top:14px;text-align:center">
-      {foot}
+    # Tables et non <div> : Outlook bureau rend le HTML avec le moteur de Word,
+    # qui ignore le padding et le fond d'un <div> — le mail sortait en bandes
+    # grises decoupees ligne par ligne. Un fond et un padding poses sur un <td>
+    # tiennent partout. border-radius reste pour les clients qui le lisent ;
+    # Outlook l'ignore et affiche des angles droits, sans rien casser.
+    return f"""<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#f1f5f9" style="background:#f1f5f9">
+  <tr>
+    <td align="center" style="padding:24px 12px">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" bgcolor="#fffffe" style="width:600px;max-width:600px;background:#fffffe;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif">
+        <tr>
+          <td bgcolor="#0a0e17" style="background:#0a0e17;padding:24px 32px;font-family:'Segoe UI',Arial,sans-serif">
+            <div style="font-size:20px;font-weight:800;color:#22d3ee;letter-spacing:-.3px">{_esc(marque)}</div>
+            <div style="font-size:12px;color:#94a3b8;margin-top:6px;text-transform:uppercase;letter-spacing:.5px;font-weight:600">{_esc(subtitle)}</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px;font-size:14px;color:#334155;line-height:1.65;font-family:'Segoe UI',Arial,sans-serif">
+            {body_html}
+            {cta_block}
+            {contact_block}
+            <p style="margin:20px 0 0;font-size:11px;color:#94a3b8;line-height:1.6;border-top:1px solid #e2e8f0;padding-top:14px;text-align:center">
+              {foot}
+            </p>
+            {suivi_note}
+          </td>
+        </tr>
+      </table>
+      {suivi_pixel}
+    </td>
+  </tr>
+</table>"""
+
+
+def _email_bouton(href: str, label: str, copy_label: str) -> str:
+    """Bouton d'action robuste Outlook + lien complet en clair dessous.
+
+    Le fond est porte par un <td bgcolor> : un <a> en inline-block avec padding
+    n'est qu'un texte surligne dans Outlook bureau. Le lien en clair sert aussi
+    quand une passerelle de securite (Proofpoint, Mimecast…) reecrit ou bloque
+    le lien cliquable : l'URL affichee, elle, n'est pas modifiee et peut etre
+    copiee dans le navigateur.
+    """
+    h = _esc(href)
+    return f"""
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:26px auto 8px">
+      <tr>
+        <td align="center" bgcolor="#0891b2" style="background:#0891b2;border-radius:10px;padding:14px 30px;mso-padding-alt:14px 30px">
+          <a href="{h}" style="color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;font-family:'Segoe UI',Arial,sans-serif;line-height:1;display:inline-block">{_esc(label)}</a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:14px 0 0;font-size:11px;color:#64748b;line-height:1.6;text-align:center">
+      {_esc(copy_label)}
     </p>
-    {suivi_note}
-  </div>
-  {suivi_pixel}
-</div>"""
+    <p style="margin:4px 0 0;font-size:11px;line-height:1.6;text-align:center;word-break:break-all">
+      <a href="{h}" style="font-family:Consolas,'Courier New',monospace;font-size:11px;color:#0891b2;text-decoration:underline">{h}</a>
+    </p>"""
 
 
 def _email_detail_table(rows: list[tuple[str, str]]) -> str:
@@ -229,55 +261,55 @@ def _rfq_email_body_block(
         detail_rows.append((s["constraints_label"], _esc(contraintes)))
 
     detail_table = _email_detail_table(detail_rows)
+    # Couleurs pleines et non rgba() : Outlook bureau ignore rgba et laissait
+    # le bloc sans fond ni bordure.
     cp_highlight = f"""
-    <div style="background:rgba(34,211,238,.10);border:1px solid rgba(34,211,238,.28);border-radius:12px;
-                padding:16px 20px;margin:0 0 22px;text-align:center">
-      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.55px;color:#0891b2;font-weight:800">
-        {_esc(s["cp_label"])}
-      </div>
-      <div style="font-size:26px;font-weight:800;color:#0f172a;margin-top:6px;letter-spacing:-.5px">{_esc(cp)}</div>
-    </div>"""
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;margin:0 0 22px">
+      <tr>
+        <td align="center" bgcolor="#ecfeff" style="background:#ecfeff;border:1px solid #a5f3fc;border-radius:12px;padding:16px 20px;text-align:center">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.55px;color:#0891b2;font-weight:800">
+            {_esc(s["cp_label"])}
+          </div>
+          <div style="font-size:26px;font-weight:800;color:#0f172a;margin-top:6px;letter-spacing:-.5px">{_esc(cp)}</div>
+        </td>
+      </tr>
+    </table>"""
 
     cta = ""
     lien = (portail_lien or "").strip()
     if lien:
         lang_q = f"{lien}{'&' if '?' in lien else '?'}lang={lang}"
-        cta = f"""
-    <div style="margin:24px 0 8px;text-align:center">
-      <a href="{_esc(lang_q)}" style="background:#22d3ee;color:#0a0e17;font-weight:800;font-size:14px;padding:14px 28px;border-radius:10px;text-decoration:none;display:inline-block">
-        {_esc(s["cta"])}
-      </a>
-    </div>"""
+        cta = _email_bouton(lang_q, s["cta"], s["copy_link"])
 
     # Les trois etapes en table et non en <ol> : Outlook rend les listes avec
-    # des marges qu'il decide lui-meme, et la puce numerotee disparait sur
-    # certains clients. Une table avec pastille dessinee tient partout.
+    # des marges qu'il decide lui-meme. Le numero est un chiffre colore et non
+    # une pastille : Outlook ignore border-radius et dessinait des carres.
     def _etape(num: str, texte: str) -> str:
         return (
             "<tr>"
-            "<td style=\"padding:0 12px 12px 0;vertical-align:top;width:26px\">"
-            "<div style=\"width:24px;height:24px;border-radius:12px;background:#0891b2;"
-            "color:#ffffff;font-size:12px;font-weight:800;text-align:center;line-height:24px\">"
-            f"{num}</div></td>"
-            "<td style=\"padding:0 0 12px;vertical-align:top;font-size:14px;color:#475569;"
+            "<td style=\"padding:0 10px 10px 0;vertical-align:top;width:22px;font-size:15px;"
+            f"font-weight:800;color:#0891b2;line-height:1.5\">{num}.</td>"
+            "<td style=\"padding:0 0 10px;vertical-align:top;font-size:14px;color:#475569;"
             f"line-height:1.6\">{texte}</td>"
             "</tr>"
         )
 
     how_block = f"""
-    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:18px 20px;margin:0 0 4px">
-      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.55px;color:#0891b2;font-weight:800;margin-bottom:14px">
-        {_esc(s["how_title"])}
-      </div>
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse">
-        <tbody>
-          {_etape("1", s["step1"])}
-          {_etape("2", s["step2"])}
-          {_etape("3", s["step3"])}
-        </tbody>
-      </table>
-      <p style="margin:2px 0 0;font-size:12px;color:#94a3b8;line-height:1.6">{_esc(s["hint"])}</p>
-    </div>"""
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;margin:0 0 4px">
+      <tr>
+        <td bgcolor="#f8fafc" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:18px 20px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.55px;color:#0891b2;font-weight:800;margin-bottom:12px">
+            {_esc(s["how_title"])}
+          </div>
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:collapse">
+            {_etape("1", s["step1"])}
+            {_etape("2", s["step2"])}
+            {_etape("3", s["step3"])}
+          </table>
+          <div style="font-size:12px;color:#94a3b8;line-height:1.6">{_esc(s["hint"])}</div>
+        </td>
+      </tr>
+    </table>"""
 
     return f"""
     <p style="margin:0 0 14px;font-size:15px;color:#0f172a;font-weight:600">{_esc(s["hello"])}</p>
@@ -334,13 +366,13 @@ def email_expe_rfq_transport(
             else "Rappel — nous n'avons pas encore reçu votre tarif."
         )
         entete += (
-            '<div style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.35);'
+            '<div style="background:#fef9e7;border:1px solid #fcd34d;'
             'border-radius:10px;padding:12px 16px;margin:0 0 20px;font-size:13px;'
             f'font-weight:700;color:#92400e;text-align:center">{_esc(txt)}</div>'
         )
     if message_perso:
         entete += (
-            '<div style="background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.28);'
+            '<div style="background:#ecfeff;border:1px solid #a5f3fc;'
             'border-radius:10px;padding:14px 16px;margin:0 0 20px;font-size:14px;color:#0f172a;'
             f'line-height:1.6;white-space:pre-wrap">{_esc(message_perso)}</div>'
         )
