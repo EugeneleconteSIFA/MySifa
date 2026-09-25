@@ -126,7 +126,9 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_encre_picker.css?v=__V_LABEL__">
 <script src="/static/mysifa_encre_picker.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_bobine_edit.js?v=1.0"></script>
-<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent10-sais3-bob5-msb1-san3-mpm2"></script>
+<!-- Export PDF des saisies par operateur et par session (appele par le core) -->
+<script src="/static/mysifa_saisies_pdf.js?v=1"></script>
+<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent10-sais4-bob5-msb1-san3-mpm2"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>
 <!-- v2.3.42 : viewer partagé du détail d'un ack d'alerte (identique à Maintenance) -->
