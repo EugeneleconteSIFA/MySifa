@@ -80,6 +80,7 @@ def expe_rfq_email_strings(lang: str, *, cp: str, user_nom: str) -> dict[str, st
             ),
             "step3": "Submit. Your quote reaches our shipping department instantly.",
             "cta": "Submit my quote on the portal",
+            "copy_link": "If the button does not work, copy this link into your browser:",
             "ask": (
                 "Please submit your <strong style=\"color:#0f172a\">best net price (excl. tax)</strong> "
                 "and <strong style=\"color:#0f172a\">estimated delivery time</strong> on the portal."
@@ -115,6 +116,7 @@ def expe_rfq_email_strings(lang: str, *, cp: str, user_nom: str) -> dict[str, st
         ),
         "step3": "Validez. Votre tarif arrive immédiatement au service expéditions.",
         "cta": "Saisir mon tarif sur le portail",
+        "copy_link": "Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :",
         "ask": (
             "Merci de nous transmettre votre <strong style=\"color:#0f172a\">meilleur tarif HT</strong> "
             "et le <strong style=\"color:#0f172a\">délai de livraison estimé</strong> sur le portail."
