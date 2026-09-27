@@ -1117,6 +1117,9 @@ def update_checklist(item_id: int, payload: ChecklistPatch, request: Request):
             params.extend([fait, _now() if fait else None, _nom(user) if fait else None])
         params.append(item_id)
         conn.execute(f"UPDATE taches_checklist SET {', '.join(sets)} WHERE id=?", params)
+        if "libelle" in data and libelle[:300] != row["libelle"]:
+            _log(conn, row["tache_id"], user, "checklist_modif", "Checklist",
+                 row["libelle"], libelle[:300])
         if "fait" in data:
             _log(conn, row["tache_id"], user,
                  "checklist_coche" if data["fait"] else "checklist_decoche",
