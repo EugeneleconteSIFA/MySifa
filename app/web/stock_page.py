@@ -1373,6 +1373,7 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-empl-create .mp-empl-row input[type=number]:not([type=checkbox]){width:110px;flex-shrink:0}
 .mp-empl-create .mp-empl-add-link{align-self:flex-start}
 .mp-card-empl{display:flex;align-items:center;gap:4px}
+.empl-combo-wrap .empl-suggestions.empl-suggestions-flottante{position:fixed;right:auto;margin-top:0;z-index:9000}
 @media (max-width:600px){
   .mp-rvgi-code{min-width:0}
   .mp-rvgi-action span+span{display:none}
@@ -9876,6 +9877,51 @@ async function openMatiereCreateModal(seed) {
 // celui des réceptions et du déstockage ; seule la création d'une référence
 // transforme les quantités saisies en stock initial.
 
+// Champ emplacement avec sa recherche, dont la liste flotte au-dessus de la
+// modale. En position absolue, elle restait prisonnière de la modale qui
+// défile : en bas du formulaire de création, elle s'ouvrait sous le bord et
+// personne ne la voyait. Ici elle suit le champ en position fixe, et s'ouvre
+// vers le haut quand la place manque en dessous.
+function mpEmplacementFieldFlottant() {
+  const f = buildMpEmplacementField();
+  const inp = f.emplInp;
+  const dd = f.wrap.querySelector('.empl-suggestions');
+  if (!dd) return f;
+  dd.classList.add('empl-suggestions-flottante');
+  const placer = () => {
+    if (!inp.isConnected && f.wrap.dataset.monte) {
+      window.removeEventListener('scroll', placer, true);
+      window.removeEventListener('resize', placer);
+      return;
+    }
+    if (inp.isConnected) f.wrap.dataset.monte = '1';
+    if (dd.style.display === 'none' || !inp.isConnected) return;
+    const r = inp.getBoundingClientRect();
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const hMax = 220;
+    const dessous = vh - r.bottom - 8;
+    const haut = dessous < Math.min(hMax, 140) && r.top > dessous;
+    dd.style.left = Math.round(r.left) + 'px';
+    dd.style.width = Math.round(r.width) + 'px';
+    dd.style.maxHeight = Math.max(120, Math.min(hMax, haut ? r.top - 8 : dessous)) + 'px';
+    if (haut) {
+      dd.style.top = 'auto';
+      dd.style.bottom = Math.round(vh - r.top + 4) + 'px';
+    } else {
+      dd.style.bottom = 'auto';
+      dd.style.top = Math.round(r.bottom + 4) + 'px';
+    }
+  };
+  // La liste se remplit de façon asynchrone (recherche API), et chaque rendu
+  // remplace son contenu : on se recale à chaque changement de contenu, et au
+  // défilement de la modale. Pas d'observation de l'attribut style : placer()
+  // l'écrit, ce serait une boucle.
+  new MutationObserver(placer).observe(dd, { childList: true });
+  window.addEventListener('scroll', placer, true);
+  window.addEventListener('resize', placer);
+  return f;
+}
+
 // Pose les emplacements saisis à la création, puis fixe le stock initial à
 // leur somme (par laize pour une matière laizée) par un ajustement.
 async function mpPoserEmplacementsInitiaux(matiereId, emplats) {
@@ -9997,7 +10043,7 @@ async function openMpEmplacementModal(m, existing) {
   box.appendChild(el('div', { cls: 'mp-modal-sub' },
     (m.reference || '') + (m.designation ? ' — ' + m.designation : '')));
 
-  const f = buildMpEmplacementField();
+  const f = mpEmplacementFieldFlottant();
   if (existing) {
     f.emplInp.value = existing.emplacement;
     f.emplInp.readOnly = true;
@@ -11014,7 +11060,7 @@ function buildMatieresAdminAddForm(opts) {
     });
   }
   function addEmplRow() {
-    const f = buildMpEmplacementField();
+    const f = mpEmplacementFieldFlottant();
     const lbl = f.wrap.querySelector('label');
     if (lbl) lbl.remove();
     const qtyInp = el('input', { attrs: { type: 'number', min: '0', step: 'any', inputmode: 'decimal' } });
