@@ -10100,6 +10100,7 @@ async function openMpEmplacementModal(m, existing) {
       });
       closeMroot();
       showToast('Emplacement enregistré.', 'success');
+      await fetchEmplacementsFromDB();
       await loadMatieres();
     } catch (err) {
       errEl.textContent = err.message || 'Erreur.';
@@ -11294,6 +11295,7 @@ function buildMatieresAdminAddForm(opts) {
           if (lecture.emplats.length && created && created.id) {
             try {
               await mpPoserEmplacementsInitiaux(created.id, lecture.emplats);
+              await fetchEmplacementsFromDB();
             } catch (e) {
               showToast('Référence créée mais erreur sur les emplacements : ' + e.message, 'danger');
             }

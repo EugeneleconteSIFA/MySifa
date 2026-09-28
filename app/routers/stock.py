@@ -2242,8 +2242,16 @@ def list_emplacements(request: Request):
         reels = conn.execute(
             "SELECT DISTINCT emplacement FROM stock_emplacements ORDER BY emplacement"
         ).fetchall()
+        # Emplacements des matières premières : comme pour les produits finis,
+        # un code saisi une fois devient connu et se propose ensuite.
+        try:
+            reels_mp = conn.execute(
+                "SELECT DISTINCT emplacement FROM mp_emplacements WHERE quantite > 0"
+            ).fetchall()
+        except sqlite3.Error:
+            reels_mp = []
     codes_plan = {r["code"] for r in plan}
-    codes_reels = {r["emplacement"] for r in reels}
+    codes_reels = {r["emplacement"] for r in reels} | {r["emplacement"] for r in reels_mp}
     zones_speciales = {STOCK_EMPLACEMENT_AU_SOL, STOCK_EMPLACEMENT_SORTIE_PROD}
     tous = sorted(codes_plan | codes_reels | zones_speciales)
     ordered = (
