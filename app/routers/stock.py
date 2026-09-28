@@ -6226,6 +6226,73 @@ def list_sous_sections(request: Request, categorie: Optional[str] = None):
     return [r["sous_section"] for r in rows]
 
 
+# ── Métrage bobine : épaisseurs types ──────────────────────────────────
+#
+# Référentiel du widget « Métrage bobine ». Le calcul lui-même se fait côté
+# navigateur (π × (R² − r²) / épaisseur) : il n'y a rien à stocker, seulement
+# les épaisseurs proposées.
+
+def _metrage_epaisseurs(conn) -> list[dict]:
+    try:
+        rows = conn.execute(
+            "SELECT id, libelle, microns, ordre FROM mp_metrage_epaisseurs "
+            "ORDER BY ordre, libelle COLLATE NOCASE"
+        ).fetchall()
+    except sqlite3.Error:
+        return []
+    return [{"id": int(r["id"]), "libelle": r["libelle"],
+             "microns": float(r["microns"]), "ordre": int(r["ordre"] or 0)} for r in rows]
+
+
+@router.get("/api/stock/metrage-epaisseurs")
+def list_metrage_epaisseurs(request: Request):
+    require_stock(request)
+    with get_db() as conn:
+        return _metrage_epaisseurs(conn)
+
+
+@router.put("/api/stock/metrage-epaisseurs")
+async def save_metrage_epaisseurs(request: Request):
+    """Remplace la liste. Body : { items: [{ libelle, microns }] }, dans l'ordre voulu."""
+    user = require_stock_matieres_admin(request)
+    body = await request.json() or {}
+    items = body.get("items")
+    if not isinstance(items, list):
+        raise HTTPException(400, "Liste attendue.")
+    propres, vus = [], set()
+    for it in items:
+        libelle = str((it or {}).get("libelle") or "").strip()
+        if not libelle:
+            raise HTTPException(400, "Libellé manquant sur une ligne.")
+        if len(libelle) > 80:
+            raise HTTPException(400, f"Libellé trop long : {libelle[:30]}…")
+        try:
+            microns = float(str((it or {}).get("microns", "")).replace(",", "."))
+        except (TypeError, ValueError):
+            raise HTTPException(400, f"Épaisseur invalide pour {libelle}.") from None
+        if not (1 <= microns <= 5000):
+            raise HTTPException(400, f"Épaisseur invalide pour {libelle} — valeur entre 1 et 5000 µm.")
+        if libelle.lower() in vus:
+            raise HTTPException(400, f"Libellé en double : {libelle}.")
+        vus.add(libelle.lower())
+        propres.append((libelle, microns))
+    now = _now_paris().strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        conn.execute("DELETE FROM mp_metrage_epaisseurs")
+        for i, (libelle, microns) in enumerate(propres):
+            conn.execute(
+                "INSERT INTO mp_metrage_epaisseurs (libelle, microns, ordre, updated_at) "
+                "VALUES (?,?,?,?)",
+                (libelle, microns, (i + 1) * 10, now),
+            )
+        conn.commit()
+        out = _metrage_epaisseurs(conn)
+    log_action(user=user, request=request, module="stock", action="UPDATE",
+               objet="metrage_epaisseurs",
+               detail=" · ".join(f"{l} {m:g} µm" for l, m in propres))
+    return out
+
+
 @router.get("/api/stock/matieres/rvgi-recherche")
 def recherche_articles_rvgi(request: Request, q: str = "", limite: int = 20):
     """Articles RVGI correspondant à une recherche, pour créer la référence.
