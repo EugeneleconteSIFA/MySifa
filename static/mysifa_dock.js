@@ -89,6 +89,21 @@
     return !!(p && getComputedStyle(p).display !== 'none');
   }
 
+  /**
+   * Widgets propres à une page : un bouton `.mysifa-dock-fab.mysifa-dock-extra`
+   * dont `data-dock-panel` donne l'id du panneau. Le dock les range à la suite
+   * des widgets communs, sans avoir à connaître chacun d'eux.
+   */
+  function dockExtras() {
+    return Array.prototype.filter.call(document.querySelectorAll('.mysifa-dock-extra'), isDockFab);
+  }
+
+  function extraPanelOpen(fab) {
+    var id = fab && fab.getAttribute('data-dock-panel');
+    var p = id ? document.getElementById(id) : null;
+    return p && getComputedStyle(p).display !== 'none' ? p : null;
+  }
+
   function raiseFabIfOpen(fab, open) {
     if (!fab) return;
     fab.style.zIndex = open ? String(Z_FAB_ACTIVE) : String(Z_FAB);
@@ -104,6 +119,7 @@
     );
     raiseFabIfOpen(document.getElementById('ai-chat-btn'), aiPanelOpen());
     raiseFabIfOpen(document.getElementById('postit-dock-btn'), postitDockMenuOpen());
+    dockExtras().forEach(function (f) { raiseFabIfOpen(f, !!extraPanelOpen(f)); });
   }
 
   function layoutPostitDockMenu(btn, menu) {
@@ -336,8 +352,8 @@
     var widgetLeft = vw;
     var widgetTop = vh;
 
-    DOCK_WIDGET_FAB_IDS.forEach(function (id) {
-      var el = document.getElementById(id);
+    DOCK_WIDGET_FAB_IDS.map(function (id) { return document.getElementById(id); })
+      .concat(dockExtras()).forEach(function (el) {
       if (!isDockFab(el)) return;
       var r = el.getBoundingClientRect();
       if (r.left < widgetLeft) widgetLeft = r.left;
@@ -434,6 +450,8 @@
         layoutLandscapePanel(cartePanel, 8017);
       }
     }
+    const extras = dockExtras();
+    extras.forEach(placeFabRow);
     if (chatFab) placeFabRow(chatFab);
     if (hasAi) placeFabRow(aiBtn);
 
@@ -462,6 +480,10 @@
     if (chatPanel && !chatPanel.classList.contains('cw-hidden')) {
       layoutChatLandscapePanel(chatPanel);
     }
+    extras.forEach(function (f) {
+      var p = extraPanelOpen(f);
+      if (p) layoutLandscapePanel(p, 8017);
+    });
 
     if (hasAi && aiPanel) {
       if (aiPanel.classList.contains('open')) {
@@ -521,6 +543,8 @@
         cartePanel.style.maxHeight = 'calc(100dvh - ' + (stackBottom + FAB_SIZE + 20) + 'px)';
       }
     }
+    const extras = dockExtras();
+    extras.forEach(placeFab);
     if (chatFab) placeFab(chatFab);
     if (hasAi) placeFab(aiBtn);
 
@@ -549,6 +573,10 @@
     if (chatPanel && !chatPanel.classList.contains('cw-hidden')) {
       layoutFloaterPanel(chatPanel, 8015);
     }
+    extras.forEach(function (f) {
+      var p = extraPanelOpen(f);
+      if (p) layoutFloaterPanel(p, 8017);
+    });
 
     if (hasCarte && cartePanel && getComputedStyle(cartePanel).display !== 'none') {
       layoutFloaterPanel(cartePanel, 8017);
@@ -673,6 +701,22 @@
       offsetRight += FAB_SIZE + GAP;
       bottomRowH = Math.max(bottomRowH, FAB_SIZE); // postit occupe la rangée basse → messagerie monte au-dessus
     }
+
+    dockExtras().forEach(function (fab) {
+      applyFab(fab, safeRight(offsetRight), safeBottom(0));
+      fab.style.boxShadow = SHADOW_FAB;
+      var p = extraPanelOpen(fab);
+      if (p) {
+        p.style.left = 'auto';
+        p.style.top = 'auto';
+        p.style.right = safeRight(offsetRight);
+        p.style.bottom = safeBottom(FAB_SIZE + 14);
+        p.style.zIndex = String(Z_PANEL);
+        p.style.boxShadow = SHADOW_PANEL;
+      }
+      offsetRight += FAB_SIZE + GAP;
+      bottomRowH = Math.max(bottomRowH, FAB_SIZE);
+    });
 
     function chatColumnOffset() {
       let chatCol = 0;

@@ -286,5 +286,53 @@ class TestExportInventaire(unittest.TestCase):
         self.assertEqual(len(refs), len(set(refs)), "une ligne par référence")
 
 
+class TestMetrageEpaisseurs(unittest.TestCase):
+    """Référentiel du widget « Métrage bobine »."""
+
+    @classmethod
+    def setUpClass(cls):
+        import database  # noqa: F401
+        cls.client = _client()
+
+    def _patch(self, role):
+        u = dict(USER, role=role)
+        ps = [patch("app.routers.stock.get_current_user", return_value=u),
+              patch("app.routers.stock.user_has_app_access", return_value=True)]
+        for p in ps:
+            p.start()
+        self.addCleanup(lambda: [p.stop() for p in ps])
+
+    def test_seed_puis_remplacement(self):
+        self._patch("direction")
+        seed = self.client.get("/api/stock/metrage-epaisseurs").json()
+        self.assertEqual(seed[0]["libelle"], "Matière enduite (frontal + colle + glassine)")
+        self.assertEqual(seed[0]["microns"], 145)
+        self.assertEqual(len(seed), 6)
+
+        r = self.client.put("/api/stock/metrage-epaisseurs", json={"items": [
+            {"libelle": "PP blanc", "microns": "60,5"}, {"libelle": "Vélin", "microns": 66}]})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual([(x["libelle"], x["microns"]) for x in r.json()],
+                         [("PP blanc", 60.5), ("Vélin", 66.0)])
+        # Restaure la liste d'origine pour les autres tests.
+        self.client.put("/api/stock/metrage-epaisseurs", json={"items": [
+            {"libelle": s["libelle"], "microns": s["microns"]} for s in seed]})
+
+    def test_validation(self):
+        self._patch("direction")
+        for items in ([{"libelle": "", "microns": 50}],
+                      [{"libelle": "X", "microns": 0}],
+                      [{"libelle": "X", "microns": "abc"}],
+                      [{"libelle": "X", "microns": 50}, {"libelle": "x", "microns": 60}]):
+            r = self.client.put("/api/stock/metrage-epaisseurs", json={"items": items})
+            self.assertEqual(r.status_code, 400, items)
+
+    def test_reserve_aux_admins_matieres(self):
+        self._patch("fabrication")
+        self.assertEqual(self.client.get("/api/stock/metrage-epaisseurs").status_code, 200)
+        r = self.client.put("/api/stock/metrage-epaisseurs", json={"items": []})
+        self.assertEqual(r.status_code, 403)
+
+
 if __name__ == "__main__":
     unittest.main()

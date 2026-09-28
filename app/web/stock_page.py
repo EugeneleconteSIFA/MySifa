@@ -1690,6 +1690,30 @@ body.light{
 .invv2-head{margin-bottom:12px}
 .invv2-head .invv2-page-header{margin-bottom:0}
 .inv-export-choix{display:flex;flex-direction:column;gap:8px}
+/* Widget « Métrage bobine » (dock) */
+.mtr-panel{width:320px;max-height:calc(100dvh - 120px)}
+.mtr-body{padding:12px 14px 14px;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
+.mtr-field{display:flex;flex-direction:column;gap:4px}
+.mtr-field label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+.mtr-field input,.mtr-field select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:8px 10px;color:var(--text);font:inherit;font-size:14px}
+.mtr-field input:focus,.mtr-field select:focus{outline:none;border-color:var(--accent)}
+.mtr-row{display:flex;gap:8px}
+.mtr-row .mtr-field{flex:1;min-width:0}
+.mtr-result{background:var(--accent-bg);border:1px solid var(--accent);border-radius:10px;padding:10px 12px;text-align:center}
+.mtr-result-val{font-size:24px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums}
+.mtr-result-lbl{font-size:11px;color:var(--text2);margin-top:2px}
+.mtr-result.mtr-vide .mtr-result-val{color:var(--muted)}
+.mtr-err{font-size:12px;color:var(--danger)}
+.mtr-hint{font-size:11px;color:var(--muted);line-height:1.45}
+.mtr-link{align-self:flex-start;background:none;border:none;padding:0;color:var(--accent);font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.mtr-edit{display:flex;flex-direction:column;gap:6px;border-top:1px dashed var(--border);padding-top:10px}
+.mtr-edit-row{display:flex;gap:6px;align-items:center}
+.mtr-edit-row input{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text);font:inherit;font-size:13px;min-width:0}
+.mtr-edit-row input.mtr-lib{flex:1}
+.mtr-edit-row input.mtr-um{width:70px;flex-shrink:0}
+.mtr-edit-row button{flex-shrink:0;width:28px;height:28px;border:1px solid var(--border);border-radius:7px;background:transparent;color:var(--text2);cursor:pointer}
+.mtr-edit-actions{display:flex;gap:8px;justify-content:flex-end}
+body.mysifa-dock-hidden #mtr-panel{display:none!important}
 .inv-export-opt{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font:inherit;text-align:left;cursor:pointer}
 .inv-export-opt:hover{border-color:var(--accent);background:var(--accent-bg)}
 .inv-export-opt strong{font-size:13px}
@@ -2277,7 +2301,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <link rel="stylesheet" href="/static/mysifa_stock_modals.css">
 <script src="/static/mysifa_stock_modals.js"></script>
 <script src="/static/mysifa_destockage.js?v=2"></script>
-<script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_dock.js?v=2"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
@@ -9493,6 +9517,214 @@ function buildMatieres() {
   const rvgiBloc = buildMpRvgiResults(q, filtered);
   return el('div', { cls: 'content' },
     el('div', { cls: 'hist-page' }, head, banner, searchWrap, pills, subPills, list, rvgiBloc));
+}
+
+// ── Widget « Métrage bobine » ───────────────────────────────────────────────
+// Longueur approximative enroulée sur une bobine, d'après l'épaisseur de la
+// matière et les diamètres extérieurs du mandrin et de la bobine :
+//   métrage (m) = π × ((Øbobine/2)² − (Ømandrin/2)²) / épaisseur
+// avec les diamètres en mm et l'épaisseur en µm (mm² / µm = m). Même calcul
+// que le classeur « Calcul métrage bobine » de l'atelier. Les épaisseurs types
+// viennent de la base (mp_metrage_epaisseurs), éditables par les
+// administrateurs matières.
+const MTR_ICO = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><line x1="4" y1="20" x2="20" y2="4"/></svg>';
+const LS_MTR = 'mysifa_mtr_saisie_v1';
+const MTR = { open: false, epaisseurs: null, edit: false };
+
+function mtrCalcul(micronsV, dMandrin, dBobine) {
+  const e = parseFloat(micronsV), d = parseFloat(dMandrin), D = parseFloat(dBobine);
+  if (!(e > 0) || !(d > 0) || !(D > 0)) return { vide: true };
+  if (D <= d) return { erreur: 'Le diamètre de la bobine doit dépasser celui du mandrin.' };
+  return { metres: Math.PI * ((D / 2) * (D / 2) - (d / 2) * (d / 2)) / e };
+}
+
+function mtrLireSaisie() {
+  try { return JSON.parse(localStorage.getItem(LS_MTR) || '{}') || {}; } catch (e) { return {}; }
+}
+function mtrEcrireSaisie(v) {
+  try { localStorage.setItem(LS_MTR, JSON.stringify(v)); } catch (e) {}
+}
+
+function mtrSetOpen(v) {
+  MTR.open = !!v;
+  const panel = document.getElementById('mtr-panel');
+  if (panel) panel.style.display = MTR.open ? '' : 'none';
+  if (MTR.open) {
+    if (MTR.epaisseurs === null) mtrChargerEpaisseurs();
+    else mtrRender();
+  }
+  if (window.MySifaDock && typeof window.MySifaDock.layout === 'function') window.MySifaDock.layout();
+}
+
+async function mtrChargerEpaisseurs() {
+  try {
+    const d = await api('/api/stock/metrage-epaisseurs');
+    MTR.epaisseurs = Array.isArray(d) ? d : [];
+  } catch (e) {
+    MTR.epaisseurs = [];
+  }
+  mtrRender();
+}
+
+function mtrMount() {
+  if (document.getElementById('mtr-fab')) return;
+  const fab = document.createElement('button');
+  fab.id = 'mtr-fab';
+  fab.type = 'button';
+  fab.className = 'mysifa-dock-fab mysifa-dock-extra';
+  fab.setAttribute('data-dock-panel', 'mtr-panel');
+  fab.title = 'Métrage bobine';
+  fab.setAttribute('aria-label', 'Métrage bobine');
+  fab.innerHTML = MTR_ICO;
+  fab.addEventListener('click', () => mtrSetOpen(!MTR.open));
+  document.body.appendChild(fab);
+
+  const panel = el('div', { id: 'mtr-panel', cls: 'mysifa-dock-panel mtr-panel', style: 'display:none' });
+  document.body.appendChild(panel);
+  document.addEventListener('keydown', (e) => {
+    if (MTR.open && e.key === 'Escape' && !document.getElementById('mroot')?.firstElementChild) mtrSetOpen(false);
+  });
+  if (window.MySifaDock && typeof window.MySifaDock.layout === 'function') window.MySifaDock.layout();
+}
+
+function mtrRender() {
+  const panel = document.getElementById('mtr-panel');
+  if (!panel) return;
+  panel.innerHTML = '';
+  panel.appendChild(el('div', { cls: 'mysifa-dock-panel-head' },
+    el('span', { cls: 'mysifa-dock-panel-title' }, 'Métrage bobine'),
+    el('button', {
+      cls: 'mysifa-dock-panel-close', type: 'button',
+      attrs: { 'aria-label': 'Fermer' },
+      on: { click: () => mtrSetOpen(false) },
+    }, '×'),
+  ));
+  const body = el('div', { cls: 'mtr-body' });
+  panel.appendChild(body);
+  if (MTR.epaisseurs === null) {
+    body.appendChild(el('div', { cls: 'mtr-hint' }, 'Chargement…'));
+    return;
+  }
+  if (MTR.edit) { mtrRenderEdition(body); return; }
+
+  const saisie = mtrLireSaisie();
+  const types = MTR.epaisseurs;
+  const sel = el('select', { id: 'mtr-type' });
+  sel.appendChild(el('option', { value: '' }, 'Saisie libre'));
+  types.forEach(t => sel.appendChild(el('option', { value: String(t.id) }, t.libelle + ' — ' + fN(t.microns) + ' µm')));
+  const epInp = el('input', { id: 'mtr-ep', attrs: { type: 'number', min: '0', step: 'any', inputmode: 'decimal', placeholder: 'Ex. 145' } });
+  const dmInp = el('input', { id: 'mtr-dm', attrs: { type: 'number', min: '0', step: 'any', inputmode: 'decimal', placeholder: 'Ex. 96' } });
+  const dbInp = el('input', { id: 'mtr-db', attrs: { type: 'number', min: '0', step: 'any', inputmode: 'decimal', placeholder: 'Ex. 1000' } });
+  if (saisie.type && types.some(t => String(t.id) === String(saisie.type))) sel.value = String(saisie.type);
+  epInp.value = saisie.ep != null ? saisie.ep : '';
+  dmInp.value = saisie.dm != null ? saisie.dm : '';
+  dbInp.value = saisie.db != null ? saisie.db : '';
+
+  const resVal = el('div', { cls: 'mtr-result-val' }, '—');
+  const resLbl = el('div', { cls: 'mtr-result-lbl' }, 'mètres (approximatif)');
+  const res = el('div', { cls: 'mtr-result mtr-vide' }, resVal, resLbl);
+  const errEl = el('div', { cls: 'mtr-err' });
+
+  const maj = () => {
+    mtrEcrireSaisie({ type: sel.value, ep: epInp.value, dm: dmInp.value, db: dbInp.value });
+    const r = mtrCalcul(epInp.value, dmInp.value, dbInp.value);
+    errEl.textContent = r.erreur || '';
+    if (r.metres != null) {
+      resVal.textContent = '≈ ' + Math.round(r.metres).toLocaleString('fr-FR') + ' m';
+      res.classList.remove('mtr-vide');
+    } else {
+      resVal.textContent = '—';
+      res.classList.add('mtr-vide');
+    }
+  };
+  sel.addEventListener('change', () => {
+    const t = types.find(x => String(x.id) === sel.value);
+    if (t) epInp.value = String(t.microns);
+    maj();
+  });
+  epInp.addEventListener('input', () => {
+    const t = types.find(x => String(x.id) === sel.value);
+    if (t && parseFloat(epInp.value) !== t.microns) sel.value = '';
+    maj();
+  });
+  dmInp.addEventListener('input', maj);
+  dbInp.addEventListener('input', maj);
+
+  body.append(
+    el('div', { cls: 'mtr-field' }, el('label', { for: 'mtr-type' }, 'Matière'), sel),
+    el('div', { cls: 'mtr-field' }, el('label', { for: 'mtr-ep' }, 'Épaisseur (µm)'), epInp),
+    el('div', { cls: 'mtr-row' },
+      el('div', { cls: 'mtr-field' }, el('label', { for: 'mtr-dm' }, 'Ø ext. mandrin (mm)'), dmInp),
+      el('div', { cls: 'mtr-field' }, el('label', { for: 'mtr-db' }, 'Ø ext. bobine (mm)'), dbInp),
+    ),
+    res,
+    errEl,
+    el('div', { cls: 'mtr-hint' }, 'π × (R² bobine − R² mandrin) ÷ épaisseur. Estimation : le serrage de l\'enroulement fait varier le métrage réel.'),
+  );
+  if (isMatieresAdmin()) {
+    body.appendChild(el('button', {
+      cls: 'mtr-link', type: 'button',
+      on: { click: () => { MTR.edit = true; mtrRender(); } },
+    }, 'Gérer les épaisseurs'));
+  }
+  maj();
+}
+
+function mtrRenderEdition(body) {
+  const lignes = (MTR.epaisseurs || []).map(t => ({ libelle: t.libelle, microns: t.microns }));
+  const liste = el('div', { cls: 'mtr-edit' });
+  const errEl = el('div', { cls: 'mtr-err' });
+  const dessiner = () => {
+    liste.innerHTML = '';
+    lignes.forEach((l, i) => {
+      const lib = el('input', { cls: 'mtr-lib', attrs: { type: 'text', placeholder: 'Matière', maxlength: '80' } });
+      lib.value = l.libelle;
+      lib.addEventListener('input', () => { l.libelle = lib.value; });
+      const um = el('input', { cls: 'mtr-um', attrs: { type: 'number', min: '1', step: 'any', placeholder: 'µm' } });
+      um.value = l.microns != null ? String(l.microns) : '';
+      um.addEventListener('input', () => { l.microns = um.value; });
+      liste.appendChild(el('div', { cls: 'mtr-edit-row' }, lib, um,
+        el('button', {
+          type: 'button', attrs: { title: 'Retirer', 'aria-label': 'Retirer' },
+          on: { click: () => { lignes.splice(i, 1); dessiner(); } },
+        }, '×')));
+    });
+  };
+  dessiner();
+  const enregistrer = el('button', { cls: 'btn btn-sm', type: 'button' }, 'Enregistrer');
+  enregistrer.addEventListener('click', async () => {
+    errEl.textContent = '';
+    const items = lignes
+      .map(l => ({ libelle: String(l.libelle || '').trim(), microns: String(l.microns || '').replace(',', '.') }))
+      .filter(l => l.libelle || l.microns);
+    enregistrer.disabled = true;
+    try {
+      MTR.epaisseurs = await api('/api/stock/metrage-epaisseurs', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+      MTR.edit = false;
+      showToast('Épaisseurs enregistrées.', 'success');
+      mtrRender();
+    } catch (e) {
+      errEl.textContent = e.message || 'Erreur.';
+      enregistrer.disabled = false;
+    }
+  });
+  body.append(
+    el('div', { cls: 'mtr-hint' }, 'Épaisseurs types proposées dans le calcul, en microns.'),
+    liste,
+    el('button', {
+      cls: 'mtr-link', type: 'button',
+      on: { click: () => { lignes.push({ libelle: '', microns: '' }); dessiner(); } },
+    }, '+ Ajouter une matière'),
+    errEl,
+    el('div', { cls: 'mtr-edit-actions' },
+      el('button', { cls: 'btn-cancel', type: 'button', on: { click: () => { MTR.edit = false; mtrRender(); } } }, 'Annuler'),
+      enregistrer,
+    ),
+  );
 }
 
 // ── Recherche RVGI sous la recherche de matières ────────────────────────────
@@ -24708,6 +24940,7 @@ async function init() {
   // Mode embed : /stock est chargé dans une iframe depuis /fabrication
   try { S.embedMode = (new URLSearchParams(window.location.search).get('embed') === '1'); }
   catch(e){ S.embedMode = false; }
+  if (!S.embedMode) mtrMount();
   if (S.embedMode) { document.body.classList.add('stock-embed'); }
   // Charger les fournisseurs FSC
   await loadFournisseursFSC();
