@@ -138,6 +138,17 @@ class TestMpEmplacements(unittest.TestCase):
         r = self.client.delete(f"/api/stock/matieres/{self.mandrin_id}/emplacements/{eid}")
         self.assertEqual(r.json()["emplacements"], [])
 
+    def test_emplacement_nouveau_devient_connu(self):
+        # Comme une entrée de produit fini : un code hors plan est accepté, et
+        # se propose ensuite dans la liste des emplacements.
+        r = self._poser(self.mandrin_id, emplacement="K987", quantite=1)
+        self.assertEqual(r.status_code, 200, r.text)
+        codes = self.client.get("/api/stock/emplacements-list").json()["emplacements"]
+        self.assertIn("K987", codes)
+        self._poser(self.mandrin_id, emplacement="K987", quantite=0)
+        codes = self.client.get("/api/stock/emplacements-list").json()["emplacements"]
+        self.assertNotIn("K987", codes)
+
     def test_quantite_zero_retire(self):
         self._poser(self.mandrin_id, emplacement="Z0", quantite=2)
         r = self._poser(self.mandrin_id, emplacement="Z0", quantite=0)
