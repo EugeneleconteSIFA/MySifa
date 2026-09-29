@@ -1,5 +1,4 @@
 import functools as _functools
-import json as _json
 from config import (
     APP_VERSION,
     APP_META_DESCRIPTION,
@@ -12,7 +11,6 @@ from config import (
     APP_NAME_PREFIX,
     APP_NAME_SUFFIX,
     APP_ORG_NAME,
-    ROLES_RH_OUTIL,
     APP_TAGLINE,
     APP_LOGIN_HINT,
     APP_WELCOME_TITLE,
@@ -11655,7 +11653,6 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__APP_WELCOME_SUB__", _js_escape(APP_WELCOME_SUB))
         .replace("__APP_TAGLINE_RICH__", _js_escape(APP_TAGLINE_RICH))
         .replace("__APP_STATUS_TEXT__", _js_escape(APP_STATUS_TEXT))
-        .replace("__RH_OUTIL_ROLES__", _json.dumps(sorted(ROLES_RH_OUTIL)))
         # Theme Kernse : link injecté seulement si KERNSE_THEME=1.
         .replace("__KERNSE_THEME_CSS__", _KERNSE_THEME_LINK)
         .replace("__KERNSE_THEME_CLASS__", "kernse-theme" if KERNSE_THEME else "")

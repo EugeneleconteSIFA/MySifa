@@ -2,7 +2,7 @@
 
 Liste partagée des employés suivis dans l'onglet « Outil RH ». On y ajoute un
 employé choisi parmi tous les comptes (actifs ou non), on peut le retirer.
-Accès : rôles de ROLES_RH_OUTIL (comptabilité, direction, superadmin).
+Accès : quiconque a accès à MyCompta (rôle ou exception réglée dans Paramètres).
 """
 
 from datetime import datetime
@@ -10,9 +10,8 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from config import ROLES_RH_OUTIL
 from database import get_db
-from services.auth_service import get_current_user
+from services.auth_service import get_current_user, user_has_app_access
 from services.audit_service import log_action
 
 router = APIRouter(prefix="/api/rh-outil", tags=["rh_outil"])
@@ -24,8 +23,8 @@ class MembreIn(BaseModel):
 
 def _require(request: Request) -> dict:
     u = get_current_user(request)
-    if u.get("role") not in ROLES_RH_OUTIL:
-        raise HTTPException(status_code=403, detail="Accès réservé à la comptabilité et à la direction.")
+    if not user_has_app_access(u, "compta"):
+        raise HTTPException(status_code=403, detail="Accès réservé à MyCompta")
     return u
 
 
