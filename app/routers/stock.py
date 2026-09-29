@@ -2230,6 +2230,16 @@ def add_emplacement_plan(payload: _EmplacementPlanAdd, request: Request):
     return {"code": code}
 
 
+# ── Plan du site (référentiel plan_site_elements) ─────────────────
+@router.get("/api/stock/plan-site")
+def get_plan_site(request: Request):
+    """Éléments dessinés du plan du site. Lecture pour tous les rôles stock."""
+    require_stock(request)
+    from app.services import plan_site as _plan_site
+    with get_db() as conn:
+        return {"elements": _plan_site.lister(conn)}
+
+
 # ── Emplacements ──────────────────────────────────────────────────
 @router.get("/api/stock/emplacements-list")
 def list_emplacements(request: Request):
@@ -10813,6 +10823,26 @@ def reception_rvgi_file(request: Request, limite: int = 300):
         raise HTTPException(503, str(e)) from None
     res["familles"] = {str(t): v[0] for t, v in _rr.PERIMETRE.items()}
     return res
+
+
+@router.get("/api/stock/reception-rvgi/historique")
+def reception_rvgi_historique(request: Request, limite: int = 300):
+    """Les réceptions RVGI déjà entrées en stock : saisie ERP et entrée MySifa."""
+    require_stock(request)
+    from app.services import erp_mirror as _miroir
+    from app.services import reception_rvgi as _rr
+
+    limite = max(1, min(int(limite or 300), 2000))
+    with get_db() as conn:
+        if _miroir.miroir_present():
+            try:
+                with _miroir.get_erp_db() as erp:
+                    lignes = _rr.historique(conn, erp, limite=limite)
+            except FileNotFoundError:
+                lignes = _rr.historique(conn, None, limite=limite)
+        else:
+            lignes = _rr.historique(conn, None, limite=limite)
+    return {"lignes": lignes, "total": len(lignes)}
 
 
 @router.put("/api/stock/reception-rvgi/mise-en-service")

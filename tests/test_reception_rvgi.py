@@ -277,5 +277,107 @@ for c1, c2, t, mid, quoi in [("", "0005", 4, 53, "code1 vide"),
 base.close()
 
 
+# ── 9. Cartons et emballages (réception LGP du 17/09/2026) ──────────────────
+#
+# Deux lignes livrées ensemble : un carton (type d'achat 19) et un intercalaire
+# (type 16 « Emballage »). Seule la ligne carton apparaissait, et on ne lui
+# proposait que l'intercalaire : une référence faite de ses seules cotes
+# (« 385 x 385 x 208 mm ») n'a aucun mot une fois « x » et « mm » écartés, et
+# le rapprochement la notait 0.
+print("\nCartons et emballages")
+check("une référence de cotes se rapproche par ses nombres",
+      rr.score("Carton 385 x 385 x 208 mm Qualité FEFCO201 C140", "385 x 385 x 208 mm"), 1.0)
+vrai("et départage deux cartons de même base",
+     rr.score("Carton 385 x 385 x 208 mm", "385 x 385 x 120 mm")
+     < rr.score("Carton 385 x 385 x 208 mm", "385 x 385 x 208 mm"))
+check("deux libellés sans mot ni nombre : 0", rr.score("x mm", "x mm"), 0.0)
+
+base = sqlite3.connect(":memory:")
+base.row_factory = sqlite3.Row
+base.executescript("""
+    CREATE TABLE stock_config (cle TEXT PRIMARY KEY, valeur TEXT, updated_at TEXT);
+    INSERT INTO stock_config (cle, valeur) VALUES ('reception_rvgi_depuis', '2026-09-09');
+    CREATE TABLE matieres_premieres (id INTEGER PRIMARY KEY, categorie TEXT,
+        sous_section TEXT, reference TEXT, designation TEXT, actif INTEGER DEFAULT 1,
+        metres_lineaires_par_bobine REAL, unites_par_palette REAL);
+    INSERT INTO matieres_premieres (id, categorie, reference, designation, unites_par_palette)
+      VALUES (18, 'carton', '385 x 385 x 208 mm', '385 x 385 x 208 mm', 280),
+             (77, 'carton', 'Intercalaire Grand Box/Palette', 'Format 1175X775 mm - PC20T', NULL);
+    CREATE TABLE erp_article_matiere (code1 TEXT, code2 TEXT, type_code INTEGER,
+        matiere_id INTEGER, origine TEXT, created_at TEXT, created_by_name TEXT,
+        PRIMARY KEY (code1, code2, type_code));
+    CREATE TABLE erp_reception_integree (lif_id INTEGER PRIMARY KEY);
+""")
+erp = sqlite3.connect(":memory:")
+erp.row_factory = sqlite3.Row
+erp.executescript("""
+    CREATE TABLE lif_ligne (id INTEGER, corbeille INTEGER, dtem TEXT, numero INTEGER,
+        ligne INTEGER, amjl TEXT, qte REAL, ref TEXT);
+    CREATE TABLE cdf_ligne (numero INTEGER, ligne INTEGER, corbeille INTEGER, code1 TEXT,
+        code2 TEXT, code3 TEXT, type INTEGER, des1 TEXT, cua TEXT);
+    CREATE TABLE cdf_entete (numero INTEGER, corbeille INTEGER, rs TEXT, numfou INTEGER);
+    CREATE TABLE mat_mat (code1 TEXT, code2 TEXT, type INTEGER, corbeille INTEGER,
+        libc1 TEXT, libt2 TEXT);
+    INSERT INTO lif_ligne VALUES
+        (28691, 0, '2026-09-17 10:55', 6037, 1, '2026-09-14', 4160, 'BL1'),
+        (28693, 0, '2026-09-17 10:55', 6041, 1, '2026-09-14', 2072, 'BL1'),
+        (28755, 0, '2026-09-22 10:23', 6065, 1, '2026-09-22', 7, NULL);
+    INSERT INTO cdf_ligne VALUES
+        (6037, 1, 0, '1162', '0008', '', 19, 'Carton 385 x 385 x 208 mm', '11'),
+        (6041, 1, 0, '1162', '0002', '', 16, 'INTERCALAIRE PC20T', 'U'),
+        (6065, 1, 0, '1165', '0001', '', 16, 'Film Etirable Machine 30µ', 'U');
+    INSERT INTO cdf_entete VALUES (6037, 0, 'LGP PACKAGING', 1), (6041, 0, 'LGP PACKAGING', 1),
+        (6065, 0, 'Antalis', 2);
+    INSERT INTO mat_mat VALUES
+        ('1162', '0008', 17, 0, 'Carton 385 x 385 x 208 mm', 'Qualité FEFCO201 C140; 280 cartons par palette'),
+        ('1162', '0002', 14, 0, 'Intercalaire Grand Box/Palette', 'FT 1175X775 MM'),
+        ('1165', '0001', 14, 0, 'Film Etirable Machine 30µ', 'Laize 450 mm x 230 ml');
+""")
+res = rr.lignes_a_integrer(base, erp)
+par_lif = {l["lif_id"]: l for l in res["lignes"]}
+vrai("la ligne carton est dans la file", 28691 in par_lif)
+check("…et on lui propose le carton, pas l'intercalaire",
+      par_lif[28691]["propositions"][0]["matiere_id"], 18)
+vrai("la ligne intercalaire (type 16) est dans la file", 28693 in par_lif)
+check("…proposée sur l'intercalaire",
+      par_lif[28693]["propositions"][0]["matiere_id"], 77)
+check("…en entrée directe", par_lif[28693]["regime"], "direct")
+vrai("le film étirable (type 16, sans référence) reste dehors", 28755 not in par_lif)
+
+rr.apparier(base, "1165", "0001", 16, 77, auteur="Test")
+res = rr.lignes_a_integrer(base, erp)
+vrai("un article de type 16 apparié entre, quel que soit son libellé",
+     28755 in {l["lif_id"] for l in res["lignes"]})
+
+
+# ── 10. Historique : qui a saisi, qui a fait entrer, et quand ───────────────
+print("\nHistorique des réceptions ERP")
+erp.execute("ALTER TABLE lif_ligne ADD COLUMN operateur INTEGER")
+erp.execute("UPDATE lif_ligne SET operateur = 57 WHERE id = 28691")
+base.executescript("""
+    DROP TABLE erp_reception_integree;
+    CREATE TABLE erp_reception_integree (lif_id INTEGER PRIMARY KEY, numero INTEGER,
+        ligne INTEGER, amjl TEXT, qte_rvgi REAL, matiere_id INTEGER, laize_id INTEGER,
+        quantite REAL, unite TEXT, regime TEXT, mouvement_id INTEGER,
+        reception_id INTEGER, integre_at TEXT, integre_par TEXT);
+    CREATE TABLE mp_laizes (id INTEGER PRIMARY KEY, label TEXT);
+    INSERT INTO erp_reception_integree (lif_id, numero, ligne, amjl, qte_rvgi, matiere_id,
+        quantite, unite, regime, integre_at, integre_par)
+      VALUES (28691, 6037, 1, '2026-09-14', 4160, 18, 14.857, 'palette', 'direct',
+              '2026-09-18T08:02:11', 'Eugene Leconte');
+""")
+h = rr.historique(base, erp)
+check("une ligne", len(h), 1)
+check("saisie RVGI : la date", h[0]["saisie_erp"], "2026-09-17 10:55")
+check("saisie RVGI : l'opérateur", h[0]["operateur_erp"], 57)
+check("entrée MySifa : qui", h[0]["integre_par"], "Eugene Leconte")
+check("fournisseur et article relus dans l'ERP",
+      (h[0]["fournisseur"], h[0]["article"]), ("LGP PACKAGING", "1162/0008"))
+check("référence MySifa", h[0]["matiere_ref"], "385 x 385 x 208 mm")
+check("sans miroir, l'historique reste lisible", rr.historique(base, None)[0]["saisie_erp"], None)
+base.close()
+erp.close()
+
+
 print("\n%s" % ("Tout est vert." if not ko else f"{ko} contrôle(s) en échec."))
 sys.exit(1 if ko else 0)

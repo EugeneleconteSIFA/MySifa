@@ -1,0 +1,155 @@
+/* Plan du site — voir static/plan_site.js. Couleurs : tokens du thème
+   uniquement, mélangés à la carte pour rester lisibles en clair et en sombre. */
+
+.ps-wrap{position:relative;width:100%;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:8px;box-sizing:border-box}
+.ps-svg{display:block;width:100%;height:auto;max-height:78vh;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+.ps-edition .ps-svg{touch-action:none}
+
+.ps-svg text{font-family:'Segoe UI',system-ui,sans-serif;pointer-events:none}
+
+/* Contour et limites */
+.ps-contour{fill:var(--bg);stroke:var(--text);stroke-width:2.6;stroke-linejoin:miter;pointer-events:stroke}
+.ps-limite{fill:none;stroke:var(--muted);stroke-width:.9;stroke-dasharray:4 3;pointer-events:none}
+.ps-limite-clic{fill:none;stroke:transparent;stroke-width:8}
+.ps-entree{fill:none;stroke:var(--muted);stroke-width:1.1;pointer-events:none}
+.ps-fleche{fill:var(--muted)}
+
+/* Surfaces */
+.ps-forme{stroke-width:.9}
+.ps-t-rack .ps-forme{fill:var(--text);stroke:var(--text)}
+.ps-t-rack .ps-lib{fill:var(--bg);font-weight:800}
+.ps-t-sol .ps-forme,.ps-t-allee .ps-forme{fill:color-mix(in srgb,var(--success) 20%,var(--card));stroke:color-mix(in srgb,var(--success) 70%,var(--card))}
+.ps-t-allee .ps-forme{fill:transparent;stroke:transparent}
+.ps-t-allee .ps-lib{fill:var(--success);font-weight:800}
+.ps-t-zone .ps-forme{fill:color-mix(in srgb,var(--accent) 14%,var(--card));stroke:var(--accent);stroke-dasharray:3 2}
+.ps-t-zone .ps-lib{font-weight:800}
+.ps-t-machine .ps-forme{fill:color-mix(in srgb,var(--warn) 24%,var(--card));stroke:color-mix(in srgb,var(--warn) 80%,var(--text))}
+.ps-t-machine .ps-lib{font-weight:800}
+.ps-croix{stroke:color-mix(in srgb,var(--warn) 80%,var(--text));stroke-width:.6}
+.ps-t-divers .ps-forme{fill:color-mix(in srgb,var(--warn) 9%,var(--card));stroke:color-mix(in srgb,var(--warn) 45%,var(--muted))}
+.ps-t-locaux .ps-forme{fill:color-mix(in srgb,var(--muted) 16%,var(--card));stroke:var(--muted)}
+.ps-t-locaux .ps-lib{fill:var(--muted)}
+.ps-lib{fill:var(--text);font-weight:600}
+.ps-sous{fill:var(--text2);font-weight:600}
+.ps-titre{fill:var(--text);font-weight:800;letter-spacing:.02em}
+.ps-titre-sous{fill:var(--muted);font-weight:500}
+.ps-zone-clic{fill:transparent}
+
+/* Barre d'inventaire */
+.ps-inv{pointer-events:none}
+.ps-inv-vert{fill:var(--success)}
+.ps-inv-jaune{fill:var(--warn)}
+.ps-inv-orange{fill:color-mix(in srgb,var(--warn) 50%,var(--danger))}
+.ps-inv-rouge{fill:var(--danger)}
+
+/* Interaction */
+.ps-lie{cursor:pointer}
+.ps-lie:hover .ps-forme,.ps-lie:focus-visible .ps-forme{stroke:var(--accent);stroke-width:1.8}
+.ps-lie:focus{outline:none}
+.ps-sel .ps-forme{stroke:var(--accent);stroke-width:2.2}
+.ps-t-rack.ps-sel .ps-forme{fill:var(--accent);stroke:var(--accent)}
+.ps-t-rack.ps-sel .ps-lib{fill:white}
+.ps-edition .ps-el{cursor:pointer}
+.ps-edition .ps-sel{cursor:move}
+.ps-edition .ps-t-titre:hover .ps-zone-clic{fill:var(--accent-bg)}
+.ps-sel.ps-t-titre .ps-zone-clic{fill:var(--accent-bg);stroke:var(--accent);stroke-width:.8;stroke-dasharray:3 2}
+.ps-sel.ps-t-contour .ps-contour,.ps-sel .ps-limite,.ps-sel .ps-entree{stroke:var(--accent)}
+.ps-poignee{fill:var(--card);stroke:var(--accent);stroke-width:1.2;cursor:nwse-resize}
+circle.ps-poignee{cursor:grab}
+
+/* Bâtiments : zone cliquable en vue site, cadre en vue bâtiment */
+.ps-bat{fill:transparent;stroke:none}
+.ps-vue-site .ps-el:not(.ps-t-batiment){pointer-events:none}
+.ps-vue-site .ps-t-batiment{cursor:pointer}
+.ps-vue-site .ps-t-batiment:hover .ps-bat,.ps-vue-site .ps-t-batiment:focus-visible .ps-bat{fill:var(--accent-bg);stroke:var(--accent);stroke-width:2}
+.ps-vue-site .ps-t-batiment:focus{outline:none}
+.ps-edition .ps-bat{fill:none;stroke:var(--accent);stroke-width:1;stroke-dasharray:5 3;opacity:.7;pointer-events:stroke}
+.ps-edition .ps-t-batiment{stroke-width:6}
+.ps-edition .ps-sel .ps-bat{opacity:1;stroke-width:1.6;fill:var(--accent-bg)}
+.ps-bat-lib{fill:var(--accent);font-weight:700;pointer-events:none}
+.ps-bat-focus{pointer-events:none}
+
+/* Vue bâtiment : rangées d'un rack */
+.ps-cel{stroke:none;pointer-events:all}
+.ps-cel-vert{fill:color-mix(in srgb,var(--success) 75%,var(--card))}
+.ps-cel-jaune{fill:color-mix(in srgb,var(--warn) 75%,var(--card))}
+.ps-cel-orange{fill:color-mix(in srgb,color-mix(in srgb,var(--warn) 50%,var(--danger)) 75%,var(--card))}
+.ps-cel-rouge{fill:color-mix(in srgb,var(--danger) 75%,var(--card))}
+.ps-cel-vide{fill:color-mix(in srgb,var(--muted) 30%,var(--card))}
+.ps-t-rack .ps-lib.ps-lib-halo{fill:var(--text);stroke:var(--card);stroke-width:1.6px;paint-order:stroke;stroke-linejoin:round}
+
+/* Détail bâtiment : fil d'Ariane, liste des bâtiments, grilles rangée × niveau */
+.ps-ariane{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:13px}
+.ps-ariane button{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 12px;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;transition:background .15s,border-color .15s}
+.ps-ariane button:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
+.ps-ariane-sep{color:var(--muted)}
+.ps-ariane-cur{font-weight:800;color:var(--text)}
+.ps-bat-liste{display:flex;flex-direction:column;gap:8px}
+.ps-bat-carte{display:block;width:100%;text-align:left;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;font-family:inherit;color:var(--text);transition:border-color .15s,background .15s}
+.ps-bat-carte:hover,.ps-bat-carte:focus-visible{border-color:var(--accent);background:var(--accent-bg);outline:none}
+.ps-bat-carte.ps-bat-carte-sel{border-color:var(--accent);background:var(--accent-bg)}
+.ps-bat-carte-nom{font-size:14px;font-weight:800;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ps-bat-carte-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.ps-jauge{display:flex;height:6px;border-radius:3px;overflow:hidden;margin-top:8px;background:var(--border)}
+.ps-jauge span{display:block;height:100%}
+.ps-j-vert{background:var(--success)}
+.ps-j-jaune{background:var(--warn)}
+.ps-j-orange{background:color-mix(in srgb,var(--warn) 50%,var(--danger))}
+.ps-j-rouge{background:var(--danger)}
+.ps-grilles{display:flex;flex-direction:column;gap:14px;margin-top:16px}
+.ps-grille{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;transition:border-color .2s,box-shadow .2s}
+.ps-grille.ps-grille-sel{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.ps-grille-hd{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;cursor:pointer}
+.ps-grille-nom{font-size:15px;font-weight:800;color:var(--text)}
+.ps-grille-sub{font-size:12px;color:var(--muted)}
+.ps-grille-scroll{overflow-x:auto;padding-bottom:4px}
+.ps-grille table{border-collapse:separate;border-spacing:3px;font-family:ui-monospace,monospace}
+.ps-grille th{font-size:10px;font-weight:700;color:var(--muted);text-align:center;padding:0 2px;white-space:nowrap}
+.ps-grille th.ps-niv{text-align:right;padding-right:6px;font-family:'Segoe UI',system-ui,sans-serif;text-transform:uppercase;letter-spacing:.5px}
+.ps-grille td{padding:0}
+.ps-case{display:block;min-width:44px;padding:5px 4px;border-radius:6px;border:1px solid transparent;font-family:ui-monospace,monospace;font-size:11px;font-weight:700;text-align:center;cursor:pointer;color:var(--text);transition:filter .15s,border-color .15s}
+.ps-case:hover,.ps-case:focus-visible{border-color:var(--text);outline:none;filter:brightness(1.05)}
+.ps-case-vert{background:color-mix(in srgb,var(--success) 22%,var(--card));border-color:color-mix(in srgb,var(--success) 45%,var(--card))}
+.ps-case-jaune{background:color-mix(in srgb,var(--warn) 22%,var(--card));border-color:color-mix(in srgb,var(--warn) 45%,var(--card))}
+.ps-case-orange{background:color-mix(in srgb,color-mix(in srgb,var(--warn) 50%,var(--danger)) 22%,var(--card));border-color:color-mix(in srgb,color-mix(in srgb,var(--warn) 50%,var(--danger)) 45%,var(--card))}
+.ps-case-rouge{background:color-mix(in srgb,var(--danger) 18%,var(--card));border-color:color-mix(in srgb,var(--danger) 40%,var(--card))}
+.ps-case-absent{display:block;min-width:44px;height:26px;border-radius:6px;background:repeating-linear-gradient(45deg,transparent 0 4px,var(--border) 4px 5px)}
+
+/* Légende */
+.ps-legende{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11px;color:var(--muted);margin-top:10px}
+.ps-legende-item{display:inline-flex;align-items:center;gap:6px;font-weight:600}
+.ps-legende-sw{display:inline-block;width:18px;height:10px;border-radius:2px;border:1px solid var(--border);box-sizing:border-box}
+.ps-sw-rack{background:var(--text);border-color:var(--text)}
+.ps-sw-sol{background:color-mix(in srgb,var(--success) 20%,var(--card));border-color:color-mix(in srgb,var(--success) 70%,var(--card))}
+.ps-sw-zone{background:color-mix(in srgb,var(--accent) 14%,var(--card));border:1px dashed var(--accent)}
+.ps-sw-machine{background:color-mix(in srgb,var(--warn) 24%,var(--card));border-color:color-mix(in srgb,var(--warn) 80%,var(--text))}
+.ps-sw-divers{background:color-mix(in srgb,var(--warn) 9%,var(--card));border-color:color-mix(in srgb,var(--warn) 45%,var(--muted))}
+.ps-sw-locaux{background:color-mix(in srgb,var(--muted) 16%,var(--card));border-color:var(--muted)}
+.ps-sw-entree{border:none;height:2px;background:var(--muted)}
+.ps-sw-limite{border:none;height:0;border-top:1px dashed var(--muted)}
+
+/* Mise en page plan + panneau latéral (MyStock et Paramètres) */
+.ps-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
+.ps-panneau{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;position:sticky;top:12px;max-height:80vh;overflow:auto}
+.ps-panneau-titre{font-size:15px;font-weight:800;color:var(--text);margin:0 0 2px}
+.ps-panneau-sub{font-size:12px;color:var(--muted);margin:0 0 12px}
+.ps-panneau-vide{font-size:13px;color:var(--muted);line-height:1.5}
+.ps-pills{display:flex;flex-wrap:wrap;gap:4px}
+.ps-champ{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.ps-champ label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.ps-champ input,.ps-champ select{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s}
+.ps-champ input:focus,.ps-champ select:focus{border-color:var(--accent)}
+.ps-grille2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ps-grille4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.ps-grille4 input{padding:6px 7px;font-family:ui-monospace,monospace;font-size:12px}
+.ps-coche{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin-bottom:10px;cursor:pointer}
+.ps-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.ps-barre{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.ps-barre select{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;font-family:inherit}
+.ps-aide{font-size:12px;color:var(--muted)}
+.ps-hors-plan{margin-top:16px}
+
+@media (max-width:900px){
+  .ps-layout{grid-template-columns:1fr}
+  .ps-panneau{position:static;max-height:none}
+}

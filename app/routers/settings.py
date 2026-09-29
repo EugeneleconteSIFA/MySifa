@@ -3534,6 +3534,77 @@ def delete_emplacement(code: str, request: Request):
     return {"deleted": True, "code": code.upper()}
 
 
+# ── Plan du site (dessin de l'entrepôt) ───────────────────────────
+@router.get("/api/settings/plan-site")
+def get_plan_site_settings(request: Request):
+    require_settings(request)
+    from database import get_db
+    from app.services import plan_site as _plan_site
+    with get_db() as conn:
+        return {"elements": _plan_site.lister(conn), "types": list(_plan_site.TYPES)}
+
+
+def _plan_site_ecrire(request: Request, payload: dict, element_id: Optional[int] = None):
+    user = require_settings(request)
+    from database import get_db
+    from app.services import plan_site as _plan_site
+    try:
+        d = _plan_site.nettoyer(payload)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    auteur = (user or {}).get("nom") or (user or {}).get("email") or ""
+    with get_db() as conn:
+        if element_id is None:
+            ordre = conn.execute(
+                "SELECT COALESCE(MAX(ordre),0)+10 FROM plan_site_elements"
+            ).fetchone()[0]
+            cur = conn.execute(
+                """INSERT INTO plan_site_elements
+                   (type, libelle, sous_titre, x, y, w, h, vertical, prefixe, points,
+                    ordre, updated_at, updated_by)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (d["type"], d["libelle"], d["sous_titre"], d["x"], d["y"], d["w"], d["h"],
+                 d["vertical"], d["prefixe"], d["points"], ordre, now, auteur),
+            )
+            element_id = cur.lastrowid
+        else:
+            cur = conn.execute(
+                """UPDATE plan_site_elements SET type=?, libelle=?, sous_titre=?, x=?, y=?,
+                   w=?, h=?, vertical=?, prefixe=?, points=?, updated_at=?, updated_by=?
+                   WHERE id=?""",
+                (d["type"], d["libelle"], d["sous_titre"], d["x"], d["y"], d["w"], d["h"],
+                 d["vertical"], d["prefixe"], d["points"], now, auteur, element_id),
+            )
+            if cur.rowcount == 0:
+                raise HTTPException(404, "Élément introuvable.")
+        conn.commit()
+        row = [e for e in _plan_site.lister(conn) if e["id"] == element_id]
+    return row[0] if row else {"id": element_id}
+
+
+@router.post("/api/settings/plan-site")
+def create_plan_site_element(payload: dict, request: Request):
+    return _plan_site_ecrire(request, payload)
+
+
+@router.put("/api/settings/plan-site/{element_id}")
+def update_plan_site_element(element_id: int, payload: dict, request: Request):
+    return _plan_site_ecrire(request, payload, element_id)
+
+
+@router.delete("/api/settings/plan-site/{element_id}")
+def delete_plan_site_element(element_id: int, request: Request):
+    require_settings(request)
+    from database import get_db
+    with get_db() as conn:
+        cur = conn.execute("DELETE FROM plan_site_elements WHERE id=?", (element_id,))
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(404, "Élément introuvable.")
+    return {"deleted": True, "id": element_id}
+
+
 @router.post("/api/settings/emplacements/reload-csv")
 def reload_emplacements_csv(request: Request):
     require_settings(request)

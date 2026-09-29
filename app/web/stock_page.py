@@ -2300,6 +2300,8 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='stock';</script>
 <link rel="stylesheet" href="/static/mysifa_stock_modals.css">
+<link rel="stylesheet" href="/static/plan_site.css?v=2">
+<script src="/static/plan_site.js?v=2"></script>
 <script src="/static/mysifa_stock_modals.js"></script>
 <script src="/static/mysifa_destockage.js?v=2"></script>
 <script src="/static/mysifa_dock.js?v=2"></script>
@@ -2343,6 +2345,10 @@ let S = {
   invV2Submitting: false,
   invAlertCount: null,       // nb d'emplacements rouge/orange (inventaire en retard)
   planEntrepot: null,        // codes emplacements_plan
+  planSite: null,            // éléments du plan du site (plan_site_elements)
+  planSel: null,             // id de l'élément sélectionné sur le plan
+  planBat: null,             // id du bâtiment affiché en détail (null = vue site)
+  planZoomAnim: false,       // anime le zoom à l'entrée dans un bâtiment
   modalMvt: null,
   modalType: 'entree',
   toast: null,
@@ -2366,7 +2372,9 @@ let S = {
   tracaPoste: null,
   tracaPrintModal: null,
   // Réception matière
-  recepSubTab: 'nouvelle', // 'nouvelle' | 'liste' | 'historique' | 'rvgi'
+  recepSubTab: 'nouvelle', // 'nouvelle' | 'liste' | 'historique' | 'rvgi' | 'rvgi-historique'
+  rvgiHisto: null,
+  rvgiHistoQ: '',
   plk: null,               // import d'une packing list — voir buildReceptionListe()
   // File des réceptions venues de l'ERP. `null` tant qu'on n'a pas chargé :
   // c'est ce qui distingue « pas encore lu » de « rien à intégrer », et évite
@@ -11462,14 +11470,19 @@ function exportHistoriqueCSV() {
 }
 
 // ── Plan entrepôt ──────────────────────────────────────────────────
+// Le plan du site (plan_site_elements) sert de carte ; chaque rack ou zone
+// rattaché par préfixe ouvre ses emplacements dans le panneau latéral. Les
+// codes qu'aucun élément ne porte restent listés sous le plan : un
+// emplacement ne disparaît jamais de l'écran faute d'être dessiné.
 async function loadPlanEntrepot() {
   S.planEntrepot = null;
   S.planEntrepotInv = {};
   buildPlanEntrepot();
   try {
-    const [rPlan, rInv] = await Promise.all([
+    const [rPlan, rInv, rSite] = await Promise.all([
       fetch('/api/stock/emplacements-plan', { credentials: 'include' }),
       fetch('/api/stock/inventaire-v2/emplacements', { credentials: 'include' }),
+      fetch('/api/stock/plan-site', { credentials: 'include' }),
     ]);
     S.planEntrepot = rPlan.ok ? await rPlan.json() : [];
     if (rInv.ok) {
@@ -11478,7 +11491,8 @@ async function loadPlanEntrepot() {
       (invList || []).forEach(e => { if (e && e.emplacement) map[e.emplacement] = e; });
       S.planEntrepotInv = map;
     }
-  } catch(e) { S.planEntrepot = S.planEntrepot || []; }
+    S.planSite = rSite.ok ? ((await rSite.json()).elements || []) : [];
+  } catch(e) { S.planEntrepot = S.planEntrepot || []; S.planSite = S.planSite || []; }
   buildPlanEntrepot();
 }
 
@@ -11519,23 +11533,508 @@ function hidePlanPillTip() {
   if (t) t.classList.remove('show');
 }
 
+function planCouleurCode(code) {
+  const inv = (S.planEntrepotInv || {})[code];
+  return inv ? (inv.couleur || 'rouge') : 'rouge';
+}
+
+function makePlanPill(code) {
+  const inv = (S.planEntrepotInv || {})[code];
+  const couleur = planCouleurCode(code);
+  const j = inv ? inv.jours_depuis : null;
+  const nbRefs = inv ? (inv.nb_refs || 0) : 0;
+  const totalQte = inv ? (inv.total_qte || 0) : 0;
+  const dDate = inv ? inv.derniere_date : null;
+  const op = inv ? (inv.dernier_operateur || '') : '';
+
+  const pill = document.createElement('button');
+  pill.type = 'button';
+  pill.className = 'plan-pill plan-pill-c-' + couleur;
+  pill.style.cursor = 'pointer';
+  pill.addEventListener('click', () => loadEmplacement(code));
+
+  const dot = document.createElement('span');
+  dot.className = 'plan-pill-dot';
+  pill.appendChild(dot);
+  const lbl = document.createElement('span');
+  lbl.className = 'plan-pill-code';
+  lbl.textContent = code;
+  pill.appendChild(lbl);
+
+  // Hover : tooltip global positionné en JS (évite le clipping du scroll-area)
+  const joursTxt = (j == null)
+    ? 'Jamais inventorié'
+    : (j + ' j depuis le dernier inventaire');
+  const dateTxt = dDate ? ('le ' + fD(dDate) + (op ? ' · ' + op : '')) : '';
+  const refsTxt = nbRefs + ' réf' + (nbRefs > 1 ? 's' : '')
+    + ' · ' + fN(totalQte) + ' u.';
+  const tipHTML =
+    '<div class="plan-pill-tip-code">' + escHtml(code) + '</div>'
+    + '<div class="plan-pill-tip-row plan-pill-tip-jours plan-pill-c-' + couleur + '">'
+    +   '<span class="plan-pill-dot"></span>' + escHtml(joursTxt)
+    + '</div>'
+    + (dateTxt ? '<div class="plan-pill-tip-row plan-pill-tip-sub">' + escHtml(dateTxt) + '</div>' : '')
+    + '<div class="plan-pill-tip-row plan-pill-tip-refs">' + escHtml(refsTxt) + '</div>';
+
+  pill.addEventListener('mouseenter', () => showPlanPillTip(pill, tipHTML));
+  pill.addEventListener('mouseleave', hidePlanPillTip);
+  pill.addEventListener('focus', () => showPlanPillTip(pill, tipHTML));
+  pill.addEventListener('blur', hidePlanPillTip);
+  return pill;
+}
+
+// Grille allée / rangée — pour les codes qu'aucun élément du plan ne porte.
+function buildPlanAlleesGrid(codes) {
+  const byAllee = {};
+  codes.forEach(code => {
+    const m = code.match(/^([A-Z]+)(\d{1,2})/i);
+    const allee = m ? m[1].toUpperCase() : code[0].toUpperCase();
+    const rangee = m ? m[2].padStart(2,'0') : '??';
+    if (!byAllee[allee]) byAllee[allee] = {};
+    if (!byAllee[allee][rangee]) byAllee[allee][rangee] = [];
+    byAllee[allee][rangee].push(code);
+  });
+  const grid = document.createElement('div');
+  grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start';
+  Object.keys(byAllee).sort().forEach(allee => {
+    const card = document.createElement('div');
+    card.className = 'plan-allee';
+    const hdr = document.createElement('div');
+    hdr.className = 'plan-allee-hd';
+    hdr.innerHTML = '<span class="plan-allee-letter">' + escHtml(allee) + '</span>'
+      + '<span class="plan-allee-label">Allée ' + escHtml(allee) + '</span>';
+    card.appendChild(hdr);
+    const body = document.createElement('div');
+    body.className = 'plan-allee-body';
+    Object.keys(byAllee[allee]).sort().forEach(rangee => {
+      const row = document.createElement('div');
+      row.className = 'plan-rangee';
+      byAllee[allee][rangee].slice().sort().forEach(code => row.appendChild(makePlanPill(code)));
+      body.appendChild(row);
+    });
+    card.appendChild(body);
+    grid.appendChild(card);
+  });
+  return grid;
+}
+
+function planStatutElement(el, codes) {
+  const lies = MysPlanSite.codesDe(el, codes);
+  if (!lies.length) return null;
+  const st = { vert: 0, jaune: 0, orange: 0, rouge: 0 };
+  lies.forEach(c => { const k = planCouleurCode(c); st[k in st ? k : 'rouge']++; });
+  return st;
+}
+
+// La couleur d'un groupe d'emplacements est celle du moins récemment inventorié.
+const PLAN_GRAVITE = { vert: 0, jaune: 1, orange: 2, rouge: 3 };
+function planPireCouleur(codes) {
+  let pire = 'vert';
+  codes.forEach(c => { const k = planCouleurCode(c); if ((PLAN_GRAVITE[k] ?? 3) > PLAN_GRAVITE[pire]) pire = k in PLAN_GRAVITE ? k : 'rouge'; });
+  return pire;
+}
+
+// Rangées d'un rack, dans l'ordre : [{rangee, couleur, codes}]. null si les
+// codes ne suivent pas le format rack + rangée + niveau.
+function planRangees(el, codes) {
+  const lies = MysPlanSite.codesDe(el, codes);
+  const parR = {};
+  let ok = 0;
+  lies.forEach(c => {
+    const d = MysPlanSite.decouperCode(c, el.prefixe);
+    if (!d) return;
+    ok++;
+    (parR[d.rangee] = parR[d.rangee] || []).push(c);
+  });
+  if (!ok) return null;
+  return Object.keys(parR).sort().map(r => ({ rangee: r, couleur: planPireCouleur(parR[r]), codes: parR[r].sort() }));
+}
+
+function planJauge(st) {
+  const total = MysPlanSite.COULEURS.reduce((a, c) => a + (st[c] || 0), 0);
+  const j = document.createElement('div');
+  j.className = 'ps-jauge';
+  if (!total) return j;
+  MysPlanSite.COULEURS.forEach(c => {
+    if (!st[c]) return;
+    const s = document.createElement('span');
+    s.className = 'ps-j-' + c;
+    s.style.width = (st[c] / total * 100).toFixed(2) + '%';
+    j.appendChild(s);
+  });
+  return j;
+}
+
+function planStatutCodes(codes) {
+  const st = { vert: 0, jaune: 0, orange: 0, rouge: 0 };
+  codes.forEach(c => { const k = planCouleurCode(c); st[k in st ? k : 'rouge']++; });
+  return st;
+}
+
+// Codes portés par les éléments d'un bâtiment.
+function planCodesBatiment(bat, site, codes) {
+  const set = new Set();
+  MysPlanSite.elementsDuBatiment(bat, site)
+    .filter(e => MysPlanSite.TYPES_LIENS.includes(e.type) && e.prefixe)
+    .forEach(e => MysPlanSite.codesDe(e, codes).forEach(c => set.add(c)));
+  return [...set];
+}
+
+function renderPlanPanneau(panneau, el) {
+  hidePlanPillTip();
+  panneau.innerHTML = '';
+  const codes = S.planEntrepot || [];
+  const titre = document.createElement('div');
+  titre.className = 'ps-panneau-titre';
+  panneau.appendChild(titre);
+  if (!el) {
+    titre.textContent = 'Emplacements';
+    const v = document.createElement('div');
+    v.className = 'ps-panneau-vide';
+    v.textContent = 'Cliquez un rack, une zone ou une allée sur le plan pour voir ses emplacements et leur dernier inventaire.';
+    panneau.appendChild(v);
+    return;
+  }
+  const lies = MysPlanSite.codesDe(el, codes).slice().sort();
+  titre.textContent = el.libelle || el.prefixe;
+  const st = planStatutElement(el, codes) || { vert: 0, jaune: 0, orange: 0, rouge: 0 };
+  const sub = document.createElement('div');
+  sub.className = 'ps-panneau-sub';
+  sub.textContent = lies.length + ' emplacement' + (lies.length > 1 ? 's' : '')
+    + (lies.length ? ' · ' + st.vert + ' à jour · ' + (st.orange + st.rouge) + ' à inventorier' : '');
+  panneau.appendChild(sub);
+  if (!lies.length) {
+    const v = document.createElement('div');
+    v.className = 'ps-panneau-vide';
+    v.textContent = 'Aucun code ' + el.prefixe + '… dans le référentiel des emplacements.';
+    panneau.appendChild(v);
+    return;
+  }
+  const row = document.createElement('div');
+  row.className = 'ps-pills';
+  lies.forEach(c => row.appendChild(makePlanPill(c)));
+  panneau.appendChild(row);
+}
+
+// ── Vue site : un clic sur un bâtiment ouvre son détail ────────────
+function ouvrirPlanBatiment(id) {
+  S.planBat = id;
+  S.planSel = null;
+  S.planZoomAnim = true;
+  const area = document.getElementById('scroll-area');
+  if (area) area.scrollTop = 0;
+  buildPlanEntrepot();
+}
+
+function buildPlanVueSite(wrap, site, bats, codes) {
+  const layout = document.createElement('div');
+  layout.className = 'ps-layout';
+  const col = document.createElement('div');
+  const carte = document.createElement('div');
+  col.appendChild(carte);
+  col.appendChild(MysPlanSite.legende(site));
+  const panneau = document.createElement('div');
+  panneau.className = 'ps-panneau';
+  layout.appendChild(col);
+  layout.appendChild(panneau);
+  wrap.appendChild(layout);
+
+  if (!bats.length) {
+    // Aucun bâtiment dessiné : on clique directement les racks.
+    const selInit = site.find(e => e.id === S.planSel) || null;
+    const plan = MysPlanSite.monter(carte, site, {
+      mode: 'lecture',
+      statut: el => planStatutElement(el, codes),
+      onSelect: el => { S.planSel = el ? el.id : null; renderPlanPanneau(panneau, el); },
+    });
+    if (selInit) plan.selectionner(selInit.id);
+    renderPlanPanneau(panneau, selInit);
+    return;
+  }
+
+  MysPlanSite.monter(carte, site, {
+    mode: 'lecture',
+    statut: el => planStatutElement(el, codes),
+    onBatiment: bat => ouvrirPlanBatiment(bat.id),
+  });
+
+  const t = document.createElement('div');
+  t.className = 'ps-panneau-titre';
+  t.textContent = 'Bâtiments';
+  panneau.appendChild(t);
+  const sub = document.createElement('div');
+  sub.className = 'ps-panneau-sub';
+  sub.textContent = 'Cliquez un bâtiment sur le plan ou ci-dessous pour voir le détail de ses emplacements.';
+  panneau.appendChild(sub);
+  const liste = document.createElement('div');
+  liste.className = 'ps-bat-liste';
+  bats.forEach(b => {
+    const cs = planCodesBatiment(b, site, codes);
+    const st = planStatutCodes(cs);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ps-bat-carte';
+    const nom = document.createElement('div');
+    nom.className = 'ps-bat-carte-nom';
+    const n1 = document.createElement('span');
+    n1.textContent = b.libelle || 'Bâtiment';
+    const n2 = document.createElement('span');
+    n2.style.cssText = 'color:var(--muted);font-weight:400';
+    n2.textContent = '→';
+    nom.appendChild(n1); nom.appendChild(n2);
+    btn.appendChild(nom);
+    const s2 = document.createElement('div');
+    s2.className = 'ps-bat-carte-sub';
+    s2.textContent = cs.length
+      ? cs.length + ' emplacement' + (cs.length > 1 ? 's' : '') + ' · ' + st.vert + ' à jour · ' + (st.orange + st.rouge) + ' à inventorier'
+      : (b.sous_titre || 'Aucun emplacement rattaché');
+    btn.appendChild(s2);
+    if (cs.length) btn.appendChild(planJauge(st));
+    btn.addEventListener('click', () => ouvrirPlanBatiment(b.id));
+    liste.appendChild(btn);
+  });
+  panneau.appendChild(liste);
+}
+
+// ── Vue bâtiment : plan zoomé + grille rangée × niveau par rack ────
+function buildPlanGrille(el, codes) {
+  const lies = MysPlanSite.codesDe(el, codes).slice().sort();
+  const st = planStatutCodes(lies);
+  const box = document.createElement('div');
+  box.className = 'ps-grille';
+  box.id = 'ps-grille-' + el.id;
+  if (el.id === S.planSel) box.classList.add('ps-grille-sel');
+
+  const hd = document.createElement('div');
+  hd.className = 'ps-grille-hd';
+  const nom = document.createElement('div');
+  nom.className = 'ps-grille-nom';
+  nom.textContent = el.libelle || el.prefixe;
+  const sub = document.createElement('div');
+  sub.className = 'ps-grille-sub';
+  sub.textContent = lies.length + ' emplacement' + (lies.length > 1 ? 's' : '')
+    + (lies.length ? ' · ' + st.vert + ' à jour · ' + (st.orange + st.rouge) + ' à inventorier' : '');
+  hd.appendChild(nom); hd.appendChild(sub);
+  hd.addEventListener('click', () => selectionnerPlanElement(el.id, false));
+  box.appendChild(hd);
+
+  if (!lies.length) {
+    const v = document.createElement('div');
+    v.className = 'ps-panneau-vide';
+    v.textContent = 'Aucun code ' + el.prefixe + '… dans le référentiel des emplacements.';
+    box.appendChild(v);
+    return box;
+  }
+
+  const rangees = {}, niveaux = new Set(), autres = [];
+  lies.forEach(c => {
+    const d = MysPlanSite.decouperCode(c, el.prefixe);
+    if (!d) { autres.push(c); return; }
+    (rangees[d.rangee] = rangees[d.rangee] || {})[d.niveau] = c;
+    niveaux.add(d.niveau);
+  });
+  const rs = Object.keys(rangees).sort();
+  if (rs.length) {
+    // Vue de face : niveau le plus haut en haut, rangées de gauche à droite.
+    const scroll = document.createElement('div');
+    scroll.className = 'ps-grille-scroll';
+    const table = document.createElement('table');
+    const thead = document.createElement('tr');
+    const coin = document.createElement('th');
+    coin.className = 'ps-niv';
+    coin.textContent = 'Rangée';
+    thead.appendChild(coin);
+    rs.forEach(r => { const th = document.createElement('th'); th.textContent = r; thead.appendChild(th); });
+    table.appendChild(thead);
+    [...niveaux].sort().reverse().forEach(n => {
+      const tr = document.createElement('tr');
+      const th = document.createElement('th');
+      th.className = 'ps-niv';
+      th.textContent = 'Niv. ' + n;
+      tr.appendChild(th);
+      rs.forEach(r => {
+        const td = document.createElement('td');
+        const code = rangees[r][n];
+        if (code) {
+          const b = makePlanPill(code);
+          b.className = 'ps-case ps-case-' + planCouleurCode(code);
+          b.textContent = code;
+          td.appendChild(b);
+        } else {
+          const vide = document.createElement('span');
+          vide.className = 'ps-case-absent';
+          vide.title = 'Pas d\'emplacement ' + el.prefixe + r + n;
+          td.appendChild(vide);
+        }
+        tr.appendChild(td);
+      });
+      table.appendChild(tr);
+    });
+    scroll.appendChild(table);
+    box.appendChild(scroll);
+  }
+  if (autres.length) {
+    const row = document.createElement('div');
+    row.className = 'ps-pills';
+    if (rs.length) row.style.marginTop = '10px';
+    autres.forEach(c => row.appendChild(makePlanPill(c)));
+    box.appendChild(row);
+  }
+  return box;
+}
+
+function selectionnerPlanElement(id, defiler) {
+  S.planSel = id;
+  if (S._planVue) S._planVue.selectionner(id);
+  document.querySelectorAll('.ps-grille').forEach(g => g.classList.toggle('ps-grille-sel', g.id === 'ps-grille-' + id));
+  document.querySelectorAll('.ps-bat-carte[data-el]').forEach(b => b.classList.toggle('ps-bat-carte-sel', b.getAttribute('data-el') === String(id)));
+  if (defiler && id != null) {
+    const g = document.getElementById('ps-grille-' + id);
+    if (g) g.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function buildPlanVueBatiment(wrap, site, bat, bats, codes) {
+  // Fil d'Ariane + accès direct aux autres bâtiments.
+  const ariane = document.createElement('div');
+  ariane.className = 'ps-ariane';
+  const retour = document.createElement('button');
+  retour.type = 'button';
+  retour.textContent = '← Plan du site';
+  retour.addEventListener('click', () => {
+    S.planBat = null; S.planSel = null;
+    const a = document.getElementById('scroll-area');
+    if (a) a.scrollTop = 0;
+    buildPlanEntrepot();
+  });
+  ariane.appendChild(retour);
+  const sep = document.createElement('span');
+  sep.className = 'ps-ariane-sep';
+  sep.textContent = '›';
+  ariane.appendChild(sep);
+  const cur = document.createElement('span');
+  cur.className = 'ps-ariane-cur';
+  cur.textContent = bat.libelle || 'Bâtiment';
+  ariane.appendChild(cur);
+  const autres = bats.filter(b => b.id !== bat.id);
+  if (autres.length) {
+    const esp = document.createElement('span');
+    esp.style.flex = '1';
+    ariane.appendChild(esp);
+    autres.forEach(b => {
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.textContent = b.libelle || 'Bâtiment';
+      x.addEventListener('click', () => ouvrirPlanBatiment(b.id));
+      ariane.appendChild(x);
+    });
+  }
+  wrap.appendChild(ariane);
+
+  const layout = document.createElement('div');
+  layout.className = 'ps-layout';
+  const col = document.createElement('div');
+  const carte = document.createElement('div');
+  col.appendChild(carte);
+  const panneau = document.createElement('div');
+  panneau.className = 'ps-panneau';
+  layout.appendChild(col);
+  layout.appendChild(panneau);
+  wrap.appendChild(layout);
+
+  const dedans = MysPlanSite.elementsDuBatiment(bat, site);
+  const porteurs = dedans
+    .filter(e => MysPlanSite.TYPES_LIENS.includes(e.type) && e.prefixe)
+    .sort((a, b) => (a.libelle || a.prefixe).localeCompare(b.libelle || b.prefixe, 'fr', { numeric: true }));
+  if (!porteurs.some(e => e.id === S.planSel)) S.planSel = null;
+
+  S._planVue = MysPlanSite.monter(carte, site, {
+    mode: 'lecture',
+    batiment: bat,
+    zoomDepuisSite: !!S.planZoomAnim,
+    statut: el => planStatutElement(el, codes),
+    cellules: el => el.type === 'rack' ? planRangees(el, codes) : null,
+    onSelect: el => selectionnerPlanElement(el ? el.id : null, true),
+  });
+  S.planZoomAnim = false;
+  if (S.planSel != null) S._planVue.selectionner(S.planSel);
+
+  // Panneau : bilan du bâtiment et ses racks / zones.
+  const cs = planCodesBatiment(bat, site, codes);
+  const st = planStatutCodes(cs);
+  const t = document.createElement('div');
+  t.className = 'ps-panneau-titre';
+  t.textContent = bat.libelle || 'Bâtiment';
+  panneau.appendChild(t);
+  const sub = document.createElement('div');
+  sub.className = 'ps-panneau-sub';
+  sub.textContent = cs.length
+    ? cs.length + ' emplacement' + (cs.length > 1 ? 's' : '') + ' · ' + st.vert + ' à jour · ' + (st.orange + st.rouge) + ' à inventorier'
+    : (bat.sous_titre || 'Aucun emplacement rattaché');
+  panneau.appendChild(sub);
+  if (cs.length) {
+    const j = planJauge(st);
+    j.style.margin = '-4px 0 14px';
+    panneau.appendChild(j);
+  }
+  if (!porteurs.length) {
+    const v = document.createElement('div');
+    v.className = 'ps-panneau-vide';
+    v.textContent = 'Aucun rack ni zone de stockage rattaché à des emplacements dans ce bâtiment.';
+    panneau.appendChild(v);
+    return;
+  }
+  const liste = document.createElement('div');
+  liste.className = 'ps-bat-liste';
+  porteurs.forEach(e => {
+    const lies = MysPlanSite.codesDe(e, codes);
+    const s2 = planStatutCodes(lies);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ps-bat-carte' + (e.id === S.planSel ? ' ps-bat-carte-sel' : '');
+    btn.setAttribute('data-el', e.id);
+    const nom = document.createElement('div');
+    nom.className = 'ps-bat-carte-nom';
+    const n1 = document.createElement('span');
+    n1.textContent = e.libelle || e.prefixe;
+    const n2 = document.createElement('span');
+    n2.style.cssText = 'color:var(--muted);font-weight:600;font-size:12px';
+    n2.textContent = lies.length + ' empl.';
+    nom.appendChild(n1); nom.appendChild(n2);
+    btn.appendChild(nom);
+    if (lies.length) btn.appendChild(planJauge(s2));
+    btn.addEventListener('click', () => selectionnerPlanElement(e.id, true));
+    liste.appendChild(btn);
+  });
+  panneau.appendChild(liste);
+
+  // Grilles de détail, une par rack / zone.
+  const grilles = document.createElement('div');
+  grilles.className = 'ps-grilles';
+  porteurs.forEach(e => grilles.appendChild(buildPlanGrille(e, codes)));
+  wrap.appendChild(grilles);
+}
+
 function buildPlanEntrepot() {
   hidePlanPillTip();
   const area = document.getElementById('scroll-area');
   if (!area) return;
+  // Un rafraîchissement ne doit pas renvoyer l'utilisateur en haut de page.
+  const scrollAvant = area.scrollTop;
   area.innerHTML = '';
 
   const codes = S.planEntrepot; // null = loading, [] = empty, [...] = data
+  const site = S.planSite || [];
   const canAdd = S.user && ['superadmin','direction','administration','administration_ventes','administration_technique'].includes(S.user.role);
 
   const wrap = document.createElement('div');
-  wrap.style.cssText = 'padding:20px;max-width:1200px';
+  wrap.style.cssText = 'padding:20px;max-width:1500px';
 
   // Header
   const hd = document.createElement('div');
-  hd.style.cssText = 'display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px';
+  hd.style.cssText = 'display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px';
   hd.innerHTML = '<div><div style="font-size:20px;font-weight:800;color:var(--text);margin-bottom:4px">Plan entrepôt</div>'
-    + '<div style="font-size:13px;color:var(--muted)">Référentiel des emplacements magasin'
+    + '<div style="font-size:13px;color:var(--muted)">Bâtiments, racks et zones de stockage'
     + (codes ? ' · <span style="color:var(--accent);font-weight:700">' + codes.length + ' emplacement' + (codes.length>1?'s':'') + '</span>' : '')
     + '</div>'
     + '<div class="plan-legend">'
@@ -11551,7 +12050,7 @@ function buildPlanEntrepot() {
     form.style.cssText = 'display:flex;gap:6px;align-items:center;flex-shrink:0';
     form.innerHTML = '<input id="plan-new-code" type="text" placeholder="Nouveau code (ex. A141)" maxlength="20" autocomplete="off"'
       + ' style="width:180px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:ui-monospace,monospace;outline:none;text-transform:uppercase">'
-      + '<button type="submit" class="btn" style="padding:9px 16px;font-size:13px;color:var(--bg)">Ajouter</button>';
+      + '<button type="submit" class="btn" style="padding:9px 16px;font-size:13px;color:white">Ajouter</button>';
     form.addEventListener('submit', async e => {
       e.preventDefault();
       const inp = document.getElementById('plan-new-code');
@@ -11580,98 +12079,46 @@ function buildPlanEntrepot() {
     area.appendChild(wrap);
     return;
   }
-  if (!codes.length) {
-    const empty = document.createElement('div');
-    empty.style.cssText = 'color:var(--muted);font-size:13px;padding:20px 0';
-    empty.textContent = 'Aucun emplacement dans le référentiel.';
-    wrap.appendChild(empty);
+
+  if (!site.length || !window.MysPlanSite) {
+    // Pas de plan dessiné : on retombe sur la grille par allée.
+    if (!codes.length) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'color:var(--muted);font-size:13px;padding:20px 0';
+      empty.textContent = 'Aucun emplacement dans le référentiel.';
+      wrap.appendChild(empty);
+    } else {
+      wrap.appendChild(buildPlanAlleesGrid(codes));
+    }
     area.appendChild(wrap);
     return;
   }
 
-  // Grouper allée / rangée (2 premiers chiffres)
-  const byAllee = {};
-  codes.forEach(code => {
-    const m = code.match(/^([A-Z]+)(\d{1,2})/i);
-    const allee = m ? m[1].toUpperCase() : code[0].toUpperCase();
-    const rangee = m ? m[2].padStart(2,'0') : '??';
-    if (!byAllee[allee]) byAllee[allee] = {};
-    if (!byAllee[allee][rangee]) byAllee[allee][rangee] = [];
-    byAllee[allee][rangee].push(code);
-  });
-
-  const grid = document.createElement('div');
-  grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start';
-
-  Object.keys(byAllee).sort().forEach(allee => {
-    const card = document.createElement('div');
-    card.className = 'plan-allee';
-
-    const hdr = document.createElement('div');
-    hdr.className = 'plan-allee-hd';
-    hdr.innerHTML = '<span class="plan-allee-letter">' + escHtml(allee) + '</span>'
-      + '<span class="plan-allee-label">Allée ' + escHtml(allee) + '</span>';
-    card.appendChild(hdr);
-
-    const body = document.createElement('div');
-    body.className = 'plan-allee-body';
-
-    Object.keys(byAllee[allee]).sort().forEach(rangee => {
-      const row = document.createElement('div');
-      row.className = 'plan-rangee';
-      byAllee[allee][rangee].slice().sort().forEach(code => {
-        const inv = (S.planEntrepotInv || {})[code];
-        const couleur = inv ? (inv.couleur || 'rouge') : 'rouge';
-        const j = inv ? inv.jours_depuis : null;
-        const nbRefs = inv ? (inv.nb_refs || 0) : 0;
-        const totalQte = inv ? (inv.total_qte || 0) : 0;
-        const dDate = inv ? inv.derniere_date : null;
-        const op = inv ? (inv.dernier_operateur || '') : '';
-
-        const pill = document.createElement('button');
-        pill.type = 'button';
-        pill.className = 'plan-pill plan-pill-c-' + couleur;
-        pill.style.cursor = 'pointer';
-        pill.addEventListener('click', () => loadEmplacement(code));
-
-        const dot = document.createElement('span');
-        dot.className = 'plan-pill-dot';
-        pill.appendChild(dot);
-        const lbl = document.createElement('span');
-        lbl.className = 'plan-pill-code';
-        lbl.textContent = code;
-        pill.appendChild(lbl);
-
-        // Hover : tooltip global positionné en JS (évite le clipping du scroll-area)
-        const joursTxt = (j == null)
-          ? 'Jamais inventorié'
-          : (j + ' j depuis le dernier inventaire');
-        const dateTxt = dDate ? ('le ' + fD(dDate) + (op ? ' · ' + op : '')) : '';
-        const refsTxt = nbRefs + ' réf' + (nbRefs > 1 ? 's' : '')
-          + ' · ' + fN(totalQte) + ' u.';
-        const tipHTML =
-          '<div class="plan-pill-tip-code">' + escHtml(code) + '</div>'
-          + '<div class="plan-pill-tip-row plan-pill-tip-jours plan-pill-c-' + couleur + '">'
-          +   '<span class="plan-pill-dot"></span>' + escHtml(joursTxt)
-          + '</div>'
-          + (dateTxt ? '<div class="plan-pill-tip-row plan-pill-tip-sub">' + escHtml(dateTxt) + '</div>' : '')
-          + '<div class="plan-pill-tip-row plan-pill-tip-refs">' + escHtml(refsTxt) + '</div>';
-
-        pill.addEventListener('mouseenter', () => showPlanPillTip(pill, tipHTML));
-        pill.addEventListener('mouseleave', hidePlanPillTip);
-        pill.addEventListener('focus', () => showPlanPillTip(pill, tipHTML));
-        pill.addEventListener('blur', hidePlanPillTip);
-
-        row.appendChild(pill);
-      });
-      body.appendChild(row);
-    });
-    card.appendChild(body);
-    grid.appendChild(card);
-  });
-
-  wrap.appendChild(grid);
+  // Le SVG doit être dans le document pour que les gestes se calculent.
   area.appendChild(wrap);
+  const bats = site.filter(e => e.type === 'batiment' && (e.points || []).length >= 3);
+  const bat = bats.find(b => b.id === S.planBat) || null;
+  S._planVue = null;
+  if (bat) {
+    buildPlanVueBatiment(wrap, site, bat, bats, codes);
+  } else {
+    S.planBat = null;
+    buildPlanVueSite(wrap, site, bats, codes);
+
+    // Codes que le plan ne porte pas : toujours visibles.
+    const porteurs = site.filter(e => MysPlanSite.TYPES_LIENS.includes(e.type) && e.prefixe);
+    const horsPlan = codes.filter(c => !porteurs.some(e => MysPlanSite.codesDe(e, [c]).length));
+    if (horsPlan.length) {
+      const sec = document.createElement('div');
+      sec.className = 'ps-hors-plan';
+      sec.innerHTML = '<div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:2px">Hors plan</div>'
+        + '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">' + horsPlan.length
+        + ' emplacement' + (horsPlan.length > 1 ? 's' : '') + ' sans rack ni zone sur le plan — à rattacher dans Paramètres › Emplacements.</div>';
+      sec.appendChild(buildPlanAlleesGrid(horsPlan));
+      wrap.appendChild(sec);
+    }
+  }
+  area.scrollTop = scrollAvant;
 }
 
 async function loadHistorique(resetPage) {
@@ -19652,8 +20099,8 @@ async function openReceptionPrinterPicker() {
 
 function buildReception() {
   // ── Header : titre + sous-onglets sur la même ligne ──
-  const sub = ['historique', 'rvgi', 'liste'].includes(S.recepSubTab) ? S.recepSubTab : 'nouvelle';
-  const wrap = el('div', { cls: 'recep-page' + (sub === 'rvgi' ? ' recep-page-large' : '') });
+  const sub = ['historique', 'rvgi', 'rvgi-historique', 'liste'].includes(S.recepSubTab) ? S.recepSubTab : 'nouvelle';
+  const wrap = el('div', { cls: 'recep-page' + ((sub === 'rvgi' || sub === 'rvgi-historique') ? ' recep-page-large' : '') });
   const subtabs = el('div', { cls: 'recep-subtabs' },
     el('button', {
       cls: 'recep-subtab' + (sub === 'nouvelle' ? ' active' : ''),
@@ -19687,6 +20134,15 @@ function buildReception() {
        (S.rvgiFile && S.rvgiFile.total
         ? el('span', { cls: 'recep-hist-lot' }, String(S.rvgiFile.total)) : null)),
     el('button', {
+      cls: 'recep-subtab' + (sub === 'rvgi-historique' ? ' active' : ''),
+      on: { click: () => {
+        S.recepSubTab = 'rvgi-historique';
+        recepStopCamera();
+        renderContent();
+        loadRvgiHistorique();
+      }}
+    }, iconEl('clock', 13), ' Historique réception ERP'),
+    el('button', {
       cls: 'recep-subtab' + (sub === 'historique' ? ' active' : ''),
       on: { click: () => {
         S.recepSubTab = 'historique';
@@ -19717,6 +20173,8 @@ function buildReception() {
     wrap.appendChild(buildReceptionNouvelle());
   } else if (sub === 'rvgi') {
     wrap.appendChild(buildReceptionRvgi());
+  } else if (sub === 'rvgi-historique') {
+    wrap.appendChild(buildRvgiHistorique());
   } else if (sub === 'liste') {
     wrap.appendChild(buildReceptionListe());
   } else {
@@ -19830,6 +20288,8 @@ async function rvgiIntegrer(lifIds, btn) {
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || ('HTTP ' + r.status));
     const res = await r.json();
     const n = (res.integrees || []).length;
+    // L'historique ERP est à relire au prochain affichage.
+    if (n) S.rvgiHisto = null;
     const bobines = (res.integrees || []).filter(x => x.regime === 'attente').length;
     let msg = n + ' ligne' + (n > 1 ? 's' : '') + ' intégrée' + (n > 1 ? 's' : '');
     if (bobines) msg += ' — dont ' + bobines + ' ligne' + (bobines > 1 ? 's' : '')
@@ -19979,6 +20439,109 @@ function buildReceptionRvgi() {
       el('th', null, 'Référence MySifa'),
       el('th', { cls: 'num' }, 'Quantité'),
       el('th', null, 'État'))),
+    tbody);
+  wrap.appendChild(el('div', { cls: 'bes-card bes-scroll-x' }, table));
+  return wrap;
+}
+
+// ── Sous-onglet : historique des réceptions ERP ───────────────────
+// Ce qui est déjà entré en stock depuis RVGI. Trois dates, et elles ne se
+// confondent pas : la livraison portée sur le bon, la saisie dans RVGI (et par
+// qui), l'entrée dans MySifa (et par qui).
+async function loadRvgiHistorique() {
+  S.rvgiHisto = S.rvgiHisto && S.rvgiHisto.lignes ? { ...S.rvgiHisto, chargement: true } : { chargement: true };
+  try {
+    const d = await api('/api/stock/reception-rvgi/historique?limite=500');
+    S.rvgiHisto = { lignes: (d && Array.isArray(d.lignes)) ? d.lignes : [], chargement: false };
+  } catch (e) {
+    S.rvgiHisto = { lignes: [], chargement: false, erreur: e.message || 'Erreur' };
+  }
+  if (S.tab === 'reception' && S.recepSubTab === 'rvgi-historique') renderContent();
+}
+
+function _rvgiFmtDateHeure(v) {
+  if (!v) return '—';
+  const s = String(v).replace(' ', 'T');
+  const d = s.slice(0, 10).split('-');
+  const hm = s.length >= 16 ? s.slice(11, 16) : '';
+  return d.length === 3 ? (d[2] + '/' + d[1] + '/' + d[0] + (hm ? ' ' + hm : '')) : s;
+}
+
+function buildRvgiHistorique() {
+  const wrap = el('div', { cls: 'recep-rvgi' });
+  const h = S.rvgiHisto;
+  if (!h) { loadRvgiHistorique(); wrap.appendChild(el('div', { cls: 'bes-empty' }, 'Chargement…')); return wrap; }
+  if (h.chargement && !h.lignes) { wrap.appendChild(el('div', { cls: 'bes-empty' }, 'Chargement…')); return wrap; }
+  if (h.erreur) {
+    wrap.appendChild(el('div', { cls: 'bes-empty' }, 'Lecture impossible : ' + h.erreur));
+    return wrap;
+  }
+  const q = (S.rvgiHistoQ || '').trim().toLowerCase();
+  const toutes = h.lignes || [];
+  const lignes = q ? toutes.filter(l => [
+      l.fournisseur, l.article, l.libelle, l.matiere_ref, l.matiere_designation,
+      l.integre_par, l.ref_br, l.numero, l.operateur_erp,
+    ].map(x => String(x == null ? '' : x).toLowerCase()).join(' ').includes(q)) : toutes;
+
+  const search = el('input', {
+    cls: 'field-input', id: 'rvgi-histo-search',
+    attrs: { type: 'search', placeholder: 'Rechercher (fournisseur, article, référence, personne…)', autocomplete: 'off' },
+    style: 'max-width:420px',
+  });
+  search.value = S.rvgiHistoQ || '';
+  search.addEventListener('input', (e) => {
+    S.rvgiHistoQ = e.target.value;
+    renderContent();
+    const s = document.getElementById('rvgi-histo-search');
+    if (s) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
+  });
+  wrap.appendChild(el('div', { style: 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 12px' },
+    search,
+    el('span', { style: 'font-size:13px;color:var(--text2)' },
+      el('b', null, String(lignes.length)),
+      ' réception' + (lignes.length > 1 ? 's' : '') + ' entrée' + (lignes.length > 1 ? 's' : '') + ' en stock'
+      + (q ? ' (sur ' + toutes.length + ')' : ''))));
+
+  if (!lignes.length) {
+    wrap.appendChild(el('div', { cls: 'bes-empty' },
+      q ? 'Aucune réception pour « ' + S.rvgiHistoQ.trim() + ' ».' : 'Aucune réception RVGI entrée en stock pour le moment.'));
+    return wrap;
+  }
+  const petit = 'font-size:11.5px;color:var(--muted);margin-top:2px';
+  const tbody = el('tbody');
+  lignes.forEach(l => {
+    tbody.appendChild(el('tr', null,
+      el('td', { style: 'white-space:nowrap;vertical-align:top' },
+        el('div', { style: 'font-weight:700' }, l.amjl ? _fmtDate(l.amjl) : '—'),
+        el('div', { style: petit }, 'cde ' + (l.numero || '?') + '/' + (l.ligne || '?') + (l.ref_br ? ' · BL ' + l.ref_br : '')),
+        l.fournisseur ? el('div', { style: petit }, l.fournisseur) : null),
+      el('td', { style: 'vertical-align:top;min-width:200px' },
+        el('div', { style: 'font-family:var(--mono,monospace);font-weight:700' }, l.article || '—'),
+        l.libelle ? el('div', { style: petit + ';max-width:360px' }, l.libelle) : null),
+      el('td', { style: 'vertical-align:top;min-width:180px' },
+        el('div', { style: 'font-weight:700' }, l.matiere_ref || ('#' + (l.matiere_id || '?'))),
+        el('div', { style: petit },
+          [l.matiere_designation && l.matiere_designation !== l.matiere_ref ? l.matiere_designation : '',
+           l.laize_label ? 'laize ' + l.laize_label : ''].filter(Boolean).join(' · '))),
+      el('td', { style: 'text-align:right;white-space:nowrap;vertical-align:top;font-variant-numeric:tabular-nums' },
+        el('div', { style: 'font-weight:700' }, l.quantite != null ? fN(l.quantite) + ' ' + (l.unite || '') : '—'),
+        l.qte_rvgi != null ? el('div', { style: petit }, fN(l.qte_rvgi) + ' unité RVGI') : null),
+      el('td', { style: 'white-space:nowrap;vertical-align:top' },
+        el('div', null, _rvgiFmtDateHeure(l.saisie_erp)),
+        el('div', { style: petit }, l.operateur_erp != null ? 'opérateur RVGI n° ' + l.operateur_erp : '—')),
+      el('td', { style: 'white-space:nowrap;vertical-align:top' },
+        el('div', null, _rvgiFmtDateHeure(l.integre_at)),
+        el('div', { style: petit }, l.integre_par ? 'par ' + l.integre_par : '—')),
+    ));
+  });
+  const table = el('table', { cls: 'bes-table' },
+    el('thead', null, el('tr', null,
+      el('th', null, 'Livraison'),
+      el('th', null, 'Article RVGI'),
+      el('th', null, 'Référence MySifa'),
+      el('th', { cls: 'num' }, 'Quantité'),
+      el('th', null, 'Saisie RVGI'),
+      el('th', null, 'Entrée MySifa'))),
     tbody);
   wrap.appendChild(el('div', { cls: 'bes-card bes-scroll-x' }, table));
   return wrap;
@@ -25011,7 +25574,7 @@ async function init() {
   // Sous-onglet des réceptions (?tab=reception&sous=rvgi) : lien direct de la
   // notification « Réceptions à intégrer ». Le rendu de l'onglet lance le chargement.
   const urlSous = (urlParams.get('sous') || '').trim();
-  if (S.tab === 'reception' && ['nouvelle', 'liste', 'historique', 'rvgi'].includes(urlSous)) S.recepSubTab = urlSous;
+  if (S.tab === 'reception' && ['nouvelle', 'liste', 'historique', 'rvgi', 'rvgi-historique'].includes(urlSous)) S.recepSubTab = urlSous;
   // Sous-vue des besoins matières. Restaurée AVANT le chargement de l'onglet :
   // `loadBesoinsMatieres` s'en sert pour décider s'il doit aussi aller chercher
   // la tendance ou les dossiers passés, qui ont leur propre source.

@@ -72,6 +72,30 @@ PERIMETRE = {
     20: ("palette",  None,           "direct"),
 }
 
+# Types d'achat qui melangent matieres suivies et consommables. « Emballage »
+# (16) porte les intercalaires et les conteneurs -- references carton de
+# MyStock -- mais aussi le film etirable, le ruban adhesif, les pochettes, que
+# personne ne suit en stock. Tout prendre remplirait la file de lignes a jamais
+# inappariables ; ne rien prendre faisait disparaitre la reception
+# d'intercalaires du 17/09/2026 (LGP, cde 6041), livree avec les cartons.
+#
+# Une ligne de ces types entre donc dans la file a une condition : son article
+# est deja apparie, ou son libelle designe nettement une reference MyStock de
+# la categorie (score >= SEUIL_SOUS_CONDITION). Le seuil est pose sur les
+# donnees du 28/09/2026 : intercalaire 0,75, conteneur 1,00 ; film etirable,
+# corniere, coiffe, pochettes restent a 0,50 ou moins.
+PERIMETRE_SOUS_CONDITION = {
+    16: ("carton", None, "direct"),
+}
+SEUIL_SOUS_CONDITION = 0.6
+
+
+def perimetre_de(type_code):
+    """(categorie, sous-section, regime) d'un type d'achat, ou None."""
+    t = int(type_code)
+    return PERIMETRE.get(t) or PERIMETRE_SOUS_CONDITION.get(t)
+
+
 # Unite de gestion du stock, par categorie. Doit rester aligne sur
 # `stock._mp_unite_gestion` : deux reponses differentes pour la meme matiere
 # rendraient le stock incomparable a lui-meme.
@@ -191,12 +215,18 @@ def score(texte_rvgi, texte_mysifa):
     recoupent pas : ce n'est pas une nuance de score, c'est une autre matiere.
     """
     a, b = mots(texte_rvgi), mots(texte_mysifa)
-    if not b:
+    na, nb = _nombres(texte_rvgi), _nombres(texte_mysifa)
+    # Une reference faite de ses seules cotes (« 385 x 385 x 208 mm ») n'a
+    # aucun mot une fois « x » et « mm » ecartes : ses nombres sont alors tout
+    # ce qui la designe. Rendre 0 faute de mots, comme avant le 28/09/2026,
+    # empechait tout carton de retrouver sa reception -- la ligne RVGI
+    # « Carton 385 x 385 x 208 mm » ne se voyait proposer que l'intercalaire,
+    # seul carton MySifa a porter un mot.
+    if not b and not nb:
         return 0.0
     na_sup, nb_sup = natures(texte_rvgi), natures(texte_mysifa)
     if na_sup and nb_sup and not (na_sup & nb_sup):
         return 0.0
-    na, nb = _nombres(texte_rvgi), _nombres(texte_mysifa)
     # Les nombres de la reference MyStock ne comptent au denominateur QUE si le
     # libelle RVGI en porte lui-meme. Sans cette condition, `2030` -- une
     # reference d'adhesif qui EST un nombre -- serait puni face a « Adhesif
@@ -427,7 +457,7 @@ def _deja_integrees(conn):
 
 def _candidates(matieres, type_code):
     """Les matieres qu'un type RVGI peut designer, et elles seules."""
-    cat, sous, _ = PERIMETRE[type_code]
+    cat, sous, _ = perimetre_de(type_code)
     return [m for m in matieres
             if (m.get("categorie") or "").strip().lower() == cat
             and (sous is None or (m.get("sous_section") or "").strip() == sous)]
@@ -447,7 +477,7 @@ def lignes_a_integrer(conn, conn_erp, limite=300):
         return {"depuis": None, "lignes": [], "total": 0,
                 "message": "Aucune date de mise en service : l'intégration est à l'arrêt."}
 
-    types = ",".join(str(t) for t in sorted(PERIMETRE))
+    types = ",".join(str(t) for t in sorted(set(PERIMETRE) | set(PERIMETRE_SOUS_CONDITION)))
     brut = conn_erp.execute(_SQL_LIGNES % types, (depuis,)).fetchall()
 
     appar = _appariements(conn)
@@ -464,6 +494,11 @@ def lignes_a_integrer(conn, conn_erp, limite=300):
         mid = appar.get(cle)
         matiere = par_id.get(mid) if mid else None
         libelle = ((r["lib_erp"] or r["des1"] or "") + " " + (r["cond_erp"] or "")).strip()
+        propositions = ([] if matiere else
+                        proposer(libelle, _candidates(matieres, type_code)))
+        if type_code in PERIMETRE_SOUS_CONDITION and not matiere:
+            if not propositions or propositions[0]["score"] < SEUIL_SOUS_CONDITION:
+                continue
 
         conv = (convertir(type_code, r["qte"], matiere, r["cond_erp"])
                 if matiere else
@@ -486,13 +521,12 @@ def lignes_a_integrer(conn, conn_erp, limite=300):
             "matiere_id": mid,
             "matiere_ref": (matiere or {}).get("reference"),
             "matiere_designation": (matiere or {}).get("designation"),
-            "propositions": ([] if matiere else
-                             proposer(libelle, _candidates(matieres, type_code))),
+            "propositions": propositions,
             "quantite": conv.get("quantite"),
             "unite": conv.get("unite"),
             "detail": conv.get("detail"),
             "alerte": conv.get("alerte"),
-            "regime": PERIMETRE[type_code][2],
+            "regime": perimetre_de(type_code)[2],
             "manque": manque,
             "integrable": bool(matiere) and conv.get("quantite") is not None,
         })
@@ -500,6 +534,66 @@ def lignes_a_integrer(conn, conn_erp, limite=300):
             break
 
     return {"depuis": depuis, "lignes": lignes, "total": len(lignes), "message": None}
+
+
+# ── Historique : ce qui est deja entre ──────────────────────────────────────
+#
+# Une ligne par reception RVGI integree. Deux moments et deux personnes : la
+# saisie dans l'ERP (`lif_ligne.dtem`, `lif_ligne.operateur` -- un numero, le
+# miroir ne porte pas la table du personnel) et l'entree dans MySifa
+# (`erp_reception_integree.integre_at` / `integre_par`). La date de livraison
+# du bon (`amjl`) est une troisieme date, souvent anterieure de plusieurs jours.
+
+_SQL_HISTO_ERP = """
+    SELECT l.id AS lif_id, l.dtem, l.operateur, l.ref AS ref_br,
+           c.code1, c.code2, c.type AS type_code, c.des1,
+           e.rs AS fournisseur, m.libc1 AS lib_erp
+    FROM lif_ligne l
+    LEFT JOIN cdf_ligne c
+      ON c.numero = l.numero AND c.ligne = l.ligne AND c.corbeille = 0
+    LEFT JOIN cdf_entete e
+      ON e.numero = l.numero AND e.corbeille = 0
+    LEFT JOIN mat_mat m
+      ON m.code1 = c.code1 AND m.code2 = c.code2
+     AND m.type = c.type - 2 AND m.corbeille = 0
+    WHERE l.id IN (%s)
+"""
+
+
+def historique(conn, conn_erp=None, limite=300):
+    """Les receptions RVGI deja entrees en stock, la plus recente en tete."""
+    try:
+        rows = conn.execute(
+            "SELECT i.lif_id, i.numero, i.ligne, i.amjl, i.qte_rvgi, i.matiere_id, "
+            "       i.laize_id, i.quantite, i.unite, i.regime, i.integre_at, i.integre_par, "
+            "       mp.reference AS matiere_ref, mp.designation AS matiere_designation, "
+            "       lz.label AS laize_label "
+            "FROM erp_reception_integree i "
+            "LEFT JOIN matieres_premieres mp ON mp.id = i.matiere_id "
+            "LEFT JOIN mp_laizes lz ON lz.id = i.laize_id "
+            "ORDER BY i.integre_at DESC, i.lif_id DESC LIMIT ?",
+            (int(limite),),
+        ).fetchall()
+    except Exception:
+        return []
+    lignes = [dict(r) for r in rows]
+    erp = {}
+    if conn_erp is not None and lignes:
+        ids = [int(l["lif_id"]) for l in lignes]
+        try:
+            for r in conn_erp.execute(_SQL_HISTO_ERP % ",".join("?" * len(ids)), ids).fetchall():
+                erp[int(r["lif_id"])] = r
+        except Exception:
+            erp = {}
+    for l in lignes:
+        r = erp.get(int(l["lif_id"]))
+        l["saisie_erp"] = (r["dtem"] or "")[:16] if r else None
+        l["operateur_erp"] = r["operateur"] if r else None
+        l["fournisseur"] = r["fournisseur"] if r else None
+        l["ref_br"] = r["ref_br"] if r else None
+        l["article"] = ("%s/%s" % (r["code1"], r["code2"])) if r and r["code1"] else None
+        l["libelle"] = ((r["lib_erp"] or r["des1"] or "").strip() or None) if r else None
+    return lignes
 
 
 # ── Ecriture : apparier, puis integrer ──────────────────────────────────────
@@ -602,7 +696,7 @@ def integrer(conn, ligne, user, appliquer_mouvement):
 
     matiere_id = int(ligne["matiere_id"])
     quantite = float(ligne["quantite"])
-    regime = ligne.get("regime") or PERIMETRE[int(ligne["type_code"])][2]
+    regime = ligne.get("regime") or perimetre_de(ligne["type_code"])[2]
     laize_id = _laize_id(conn, ligne.get("laize_mm")) if regime == "attente" else None
     maintenant = datetime.now().isoformat(timespec="seconds")
     auteur = (user or {}).get("nom") or (user or {}).get("email") or ""
