@@ -325,6 +325,11 @@ tbody tr.row-sous:hover td{background:var(--accent-bg)}
 .chk input[type=checkbox]{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
 .chk .lbl{flex:1;font-size:12.5px;color:var(--text2);word-break:break-word}
 .chk.done .lbl{text-decoration:line-through;color:var(--muted)}
+.chk .lbl{cursor:text;border-radius:5px;padding:1px 3px;margin:-1px -3px}
+.chk .lbl:hover{background:var(--card)}
+.chk .lbl-edit{flex:1;font-size:12.5px;color:var(--text);background:var(--card);border:1px solid var(--accent);border-radius:6px;padding:3px 6px;font-family:inherit;min-width:0}
+.chk .ed{border:none;background:transparent;color:var(--muted);cursor:pointer;line-height:1;padding:2px 4px;border-radius:5px;display:inline-flex;align-items:center}
+.chk .ed:hover{color:var(--accent);background:var(--accent-bg)}
 .chk .x{border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px;border-radius:5px}
 .chk .x:hover{color:var(--danger);background:rgba(248,113,113,.12)}
 .inline-add{display:flex;gap:7px;margin-top:8px}
@@ -1381,8 +1386,9 @@ function paneDetail(d){
     (chk.length?chk.map(c=>
       '<div class="chk'+(c.fait?' done':'')+'" data-chk="'+c.id+'">'+
         '<input type="checkbox"'+(c.fait?' checked':'')+'>'+
-        '<span class="lbl">'+esc(c.libelle)+'</span>'+
+        '<span class="lbl" title="Cliquer pour modifier">'+esc(c.libelle)+'</span>'+
         (c.fait&&c.fait_par_nom?'<span style="font-size:10px;color:var(--muted)">'+esc(c.fait_par_nom)+'</span>':'')+
+        '<button type="button" class="ed" title="Modifier"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>'+
         '<button type="button" class="x" title="Supprimer">×</button>'+
       '</div>').join(''):'<div style="font-size:12px;color:var(--muted);padding:2px 0 4px">Aucun point de contrôle.</div>')+
     '<div class="inline-add"><input type="text" id="chk-new" placeholder="Ajouter un point de contrôle…"><button type="button" class="btn ghost small" id="chk-add">Ajouter</button></div>'+
@@ -1464,6 +1470,7 @@ function paneActivite(d){
     else if(a.action==='temps')txt='<b>'+esc(a.auteur_nom||'—')+'</b> a pointé du temps ('+esc(a.apres||'')+' h)';
     else if(a.action==='assignation')txt='<b>'+esc(a.auteur_nom||'—')+'</b> a assigné '+esc(a.apres||'');
     else if(a.action==='desassignation')txt='<b>'+esc(a.auteur_nom||'—')+'</b> a retiré '+esc(a.avant||'');
+    else if(a.action==='checklist_modif')txt='<b>'+esc(a.auteur_nom||'—')+'</b> · checklist : <span style="color:var(--muted)">'+esc(a.avant||'')+'</span> → '+esc(a.apres||'');
     else if(a.action&&a.action.indexOf('checklist')===0)txt='<b>'+esc(a.auteur_nom||'—')+'</b> · checklist : '+esc(a.avant||a.apres||'');
     else txt='<b>'+esc(a.auteur_nom||'—')+'</b> a modifié '+esc(a.champ||'')+
       (a.avant?' — <span style="color:var(--muted)">'+esc(a.avant)+'</span> →':' →')+' '+esc(a.apres||'vide');
@@ -1573,6 +1580,34 @@ function brancherDetail(){
         await Promise.all([chargerTaches(),openDetail(t.id,{silent:true})]);
       }catch(e){toast(e.message,'err');box.checked=!box.checked;}
     };
+    const lbl=el.querySelector('.lbl');
+    const editer=()=>{
+      if(el.querySelector('.lbl-edit'))return;
+      const ancien=lbl.textContent;
+      const inp=document.createElement('input');
+      inp.type='text';inp.className='lbl-edit';inp.value=ancien;inp.maxLength=300;
+      lbl.replaceWith(inp);
+      inp.focus();inp.select();
+      let fini=false;
+      const annuler=()=>{if(fini)return;fini=true;inp.replaceWith(lbl);};
+      const valider=async()=>{
+        if(fini)return;
+        const v=(inp.value||'').trim();
+        if(!v||v===ancien){annuler();return;}
+        fini=true;
+        try{
+          await api('/api/taches/checklist/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({libelle:v})});
+          await Promise.all([chargerTaches(),openDetail(t.id,{silent:true})]);
+        }catch(e){toast(e.message,'err');inp.replaceWith(lbl);}
+      };
+      inp.addEventListener('keydown',e=>{
+        if(e.key==='Enter'){e.preventDefault();valider();}
+        else if(e.key==='Escape'){e.preventDefault();e.stopPropagation();annuler();}
+      });
+      inp.addEventListener('blur',valider);
+    };
+    lbl.onclick=editer;
+    el.querySelector('.ed').onclick=editer;
     el.querySelector('.x').onclick=async()=>{
       try{
         await api('/api/taches/checklist/'+id,{method:'DELETE'});
