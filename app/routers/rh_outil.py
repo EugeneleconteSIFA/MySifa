@@ -346,7 +346,7 @@ def set_obligatoire(liste: str, element_id: int, payload: CataloguePatch, reques
         conn.commit()
     suite = f" · attribué à {n} employé(s)" if payload.obligatoire else ""
     log_action(user=user, action="UPDATE", module="rh_outil",
-               objet=f"Outil RH · {cfg['catalogue_nom']} · « {row['libelle']} » obligatoire : "
+               objet=f"Outil RH · {cfg['catalogue_nom']} · « {row['libelle']} » obligatoire pour tous : "
                      f"{'oui' if payload.obligatoire else 'non'}{suite}",
                request=request)
     return {"success": True, "attribues": n}
