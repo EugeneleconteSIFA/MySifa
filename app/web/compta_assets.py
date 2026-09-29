@@ -29,11 +29,8 @@ COMPTA_MAIN_JS = r"""
 // ══════════════════════════════════════════════════════════════════
 // ── OUTIL RH (onglet MyCompta) ────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════
-// Rôles autorisés : ROLES_RH_OUTIL dans config.py, injecté au rendu. Le
-// serveur refuse de toute façon les autres rôles (app/routers/rh_outil.py).
-const RH_OUTIL_ROLES=__RH_OUTIL_ROLES__;
-function rhOutilAllowed(){return !!(S.user&&RH_OUTIL_ROLES.includes(S.user.role));}
-
+// Même droit que MyCompta : qui voit MyCompta voit l'onglet. Le serveur
+// vérifie le même accès (app/routers/rh_outil.py).
 async function rhOutilLoad(){
   try{
     const d=await api('/api/rh-outil/membres');
@@ -570,8 +567,8 @@ function renderCompta(){
         iconEl('clock',15),'  Cession (en cours)'),
       h('button',{className:'nav-btn'+(tab==='paie'?' active':''),onClick:()=>{if(!S.paieEmpLoaded){paieLoadEmployes();}paieLoadVars().then(()=>render());set({comptaTab:'paie'});}},
         iconEl('credit-card',15),'  Paies'),
-      rhOutilAllowed()?h('button',{className:'nav-btn'+(tab==='rhoutil'?' active':''),onClick:()=>{set({comptaTab:'rhoutil'});rhOutilLoad();}},
-        iconEl('users',15),'  Outil RH'):null
+      h('button',{className:'nav-btn'+(tab==='rhoutil'?' active':''),onClick:()=>{set({comptaTab:'rhoutil'});rhOutilLoad();}},
+        iconEl('users',15),'  Outil RH')
     ),
     // Pied commun à toutes les applis (static/mysifa_sidebar.js, v3.3.0). Le
     // support garde la fenêtre de contact de la coquille (S.contactOpen) et la
@@ -860,7 +857,7 @@ function renderCompta(){
   }else if(tab==='paie'){
     content=renderPaieTab();
   }else if(tab==='rhoutil'){
-    content=rhOutilAllowed()?renderRhOutilTab():h('div',{className:'card-empty'},'Accès réservé à la comptabilité et à la direction.');
+    content=renderRhOutilTab();
   }
 
   const body=h('div',{className:'app'},
