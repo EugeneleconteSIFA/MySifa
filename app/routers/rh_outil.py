@@ -40,6 +40,10 @@ class AttributionIn(BaseModel):
     element_id: int
 
 
+class CataloguePatch(BaseModel):
+    obligatoire: bool
+
+
 class AttributionPatch(BaseModel):
     fait: bool
 
@@ -116,6 +120,32 @@ def _membre(conn, membre_id: int):
     return row
 
 
+def _attribuer_obligatoires(conn, membre_id: Optional[int] = None,
+                            liste: Optional[str] = None, element_id: Optional[int] = None) -> int:
+    """Attribue les éléments obligatoires qui manquent (case « fait » décochée).
+
+    Filtrable par employé, par liste et par élément ; sans filtre, rattrape
+    tout. Ne retire jamais rien. Renvoie le nombre d'attributions créées.
+    """
+    n = 0
+    for cle, cfg in LISTES.items():
+        if liste and cle != liste:
+            continue
+        where, params = ["e.obligatoire = 1"], [_now()]
+        if membre_id is not None:
+            where.append("m.id = ?"); params.append(membre_id)
+        if element_id is not None:
+            where.append("e.id = ?"); params.append(element_id)
+        n += conn.execute(
+            f"""INSERT OR IGNORE INTO {cfg['liaison']} (membre_id, {cfg['fk']}, fait, ajoute_le)
+                SELECT m.id, e.id, 0, ?
+                  FROM rh_outil_membres m CROSS JOIN {cfg['catalogue']} e
+                 WHERE {' AND '.join(where)}""",
+            params,
+        ).rowcount
+    return n
+
+
 def _doublon(conn, cfg: dict, libelle: str, sauf_id: Optional[int] = None) -> bool:
     row = conn.execute(
         f"SELECT id FROM {cfg['catalogue']} WHERE libelle = ? COLLATE NOCASE AND id != ?",
@@ -162,14 +192,15 @@ def list_membres(request: Request):
         for liste, cfg in LISTES.items():
             par_membre = par_liste.setdefault(liste, {})
             for a in conn.execute(
-                f"""SELECT a.id, a.membre_id, a.{cfg['fk']} AS element_id, a.fait, e.libelle
+                f"""SELECT a.id, a.membre_id, a.{cfg['fk']} AS element_id, a.fait, e.libelle, e.obligatoire
                       FROM {cfg['liaison']} a
                       JOIN {cfg['catalogue']} e ON e.id = a.{cfg['fk']}
                      ORDER BY e.libelle COLLATE NOCASE"""
             ).fetchall():
                 par_membre.setdefault(a["membre_id"], []).append(
                     {"id": a["id"], "element_id": a["element_id"],
-                     "libelle": a["libelle"], "fait": bool(a["fait"])}
+                     "libelle": a["libelle"], "fait": bool(a["fait"]),
+                     "obligatoire": bool(a["obligatoire"])}
                 )
     membres = []
     for r in rows:
@@ -194,9 +225,10 @@ def add_membre(payload: MembreIn, request: Request):
             "INSERT OR IGNORE INTO rh_outil_membres (user_id, ajoute_le, ajoute_par) VALUES (?,?,?)",
             (emp["id"], _now(), user.get("nom")),
         )
-        conn.commit()
         if not cur.rowcount:
             raise HTTPException(409, "Employé déjà dans la liste.")
+        _attribuer_obligatoires(conn, membre_id=cur.lastrowid)
+        conn.commit()
     log_action(user=user, action="CREATE", module="rh_outil",
                objet=f"Outil RH · ajout de {emp['nom']}", request=request)
     return {"success": True}
@@ -244,14 +276,15 @@ def list_catalogue(liste: str, request: Request):
     cfg = _liste(liste)
     with get_db() as conn:
         rows = conn.execute(
-            f"""SELECT e.id, e.libelle,
+            f"""SELECT e.id, e.libelle, e.obligatoire,
                        (SELECT COUNT(*) FROM {cfg['liaison']} a
                          WHERE a.{cfg['fk']} = e.id) AS nb_employes
                   FROM {cfg['catalogue']} e
                  ORDER BY e.libelle COLLATE NOCASE"""
         ).fetchall()
     return {"elements": [
-        {"id": r["id"], "libelle": r["libelle"], "nb_employes": r["nb_employes"]}
+        {"id": r["id"], "libelle": r["libelle"], "nb_employes": r["nb_employes"],
+         "obligatoire": bool(r["obligatoire"])}
         for r in rows
     ]}
 
@@ -294,6 +327,29 @@ def rename_catalogue(liste: str, element_id: int, payload: LibelleIn, request: R
                objet=f"Outil RH · {cfg['catalogue_nom']} · « {row['libelle']} » → « {libelle} »",
                request=request)
     return {"success": True}
+
+
+@router.patch("/{liste}/catalogue/{element_id}")
+def set_obligatoire(liste: str, element_id: int, payload: CataloguePatch, request: Request):
+    """Coché : attribué tout de suite aux employés qui ne l'ont pas. Décoché :
+    rien n'est retiré, seuls les prochains employés ne le reçoivent plus."""
+    user = _require(request)
+    cfg = _liste(liste)
+    with get_db() as conn:
+        row = conn.execute(f"SELECT libelle FROM {cfg['catalogue']} WHERE id=?",
+                           (element_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, cfg["introuvable"])
+        conn.execute(f"UPDATE {cfg['catalogue']} SET obligatoire=? WHERE id=?",
+                     (1 if payload.obligatoire else 0, element_id))
+        n = _attribuer_obligatoires(conn, liste=liste, element_id=element_id) if payload.obligatoire else 0
+        conn.commit()
+    suite = f" · attribué à {n} employé(s)" if payload.obligatoire else ""
+    log_action(user=user, action="UPDATE", module="rh_outil",
+               objet=f"Outil RH · {cfg['catalogue_nom']} · « {row['libelle']} » obligatoire : "
+                     f"{'oui' if payload.obligatoire else 'non'}{suite}",
+               request=request)
+    return {"success": True, "attribues": n}
 
 
 @router.delete("/{liste}/catalogue/{element_id}")
