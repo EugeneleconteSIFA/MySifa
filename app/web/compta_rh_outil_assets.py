@@ -55,6 +55,16 @@ RH_OUTIL_CSS = r"""
 .rho-count{font-size:11px;font-weight:600;color:var(--muted)}
 .rho-count.full{color:var(--accent)}
 
+/* Colonne Dossier : statut calculé, filtre au clic sur le titre */
+.rho-statut{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;border-radius:20px;padding:3px 10px;white-space:nowrap}
+.rho-statut.ok{color:var(--success);background:color-mix(in srgb,var(--success) 13%,transparent)}
+.rho-statut.ko{color:var(--warn);background:color-mix(in srgb,var(--warn) 13%,transparent)}
+.rho-th-btn{display:inline-flex;align-items:center;gap:6px;background:none;border:none;padding:0;margin:0;font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit;cursor:pointer}
+.rho-th-btn:hover{color:var(--accent)}
+.rho-th-btn:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-bg);border-radius:4px}
+.rho-th-filtre{font-size:10px;font-weight:700;text-transform:none;letter-spacing:0;border-radius:20px;padding:1px 8px;background:var(--bg);border:1px solid var(--border);color:var(--muted)}
+.rho-th-filtre.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+
 /* Fenêtres : même dessin que les modales de suppression de Maintenance */
 .rho-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center}
 .rho-dlg{position:relative;max-width:520px;width:calc(100% - 40px);max-height:calc(100vh - 40px);overflow-y:auto;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,.4)}
@@ -109,6 +119,32 @@ const RH_OUTIL_LISTES=[
 const RH_OUTIL_COLONNES=[
   {cle:'reglement_signe',label:'Règlement signé'},
 ];
+
+// Filtre de la colonne Dossier : chaque clic sur le titre passe au suivant.
+const RHO_FILTRES=[
+  {cle:'tous',label:'Tous les employés',court:'Tous'},
+  {cle:'complet',label:'Complet',court:'Complet'},
+  {cle:'incomplet',label:'Incomplet',court:'Incomplet'},
+];
+
+// Dossier complet : toutes les cases fixes cochées, et chaque liste a au
+// moins un élément, tous cochés. Un employé dont on n'a encore rien
+// renseigné est donc Incomplet.
+function rhOutilComplet(m){
+  return RH_OUTIL_COLONNES.every(c=>!!m[c.cle])
+    && RH_OUTIL_LISTES.every(L=>{const it=m[L.cle]||[];return it.length>0&&it.every(x=>x.fait);});
+}
+function rhOutilBadge(m){
+  const ok=rhOutilComplet(m);
+  return h('span',{className:'rho-statut '+(ok?'ok':'ko')},iconEl(ok?'check-circle':'alert-circle',12),ok?'Complet':'Incomplet');
+}
+// Après une coche, seul le badge de la ligne est redessiné : le tableau ne
+// bouge pas, même si l'employé ne correspond plus au filtre actif (il en
+// sortira au prochain rechargement).
+function rhOutilMajStatut(m){
+  const cell=document.querySelector('td[data-rho-statut="'+m.id+'"]');
+  if(cell)cell.replaceChildren(rhOutilBadge(m));
+}
 
 // Attributs qui empêchent Safari et les gestionnaires de mots de passe de
 // prendre un champ pour un identifiant.
@@ -249,6 +285,7 @@ async function rhOutilCocher(m,cle,box){
   try{
     await api('/api/rh-outil/membres/'+m.id,rhOutilJson('PATCH',{[cle]:v}));
     m[cle]=v;
+    rhOutilMajStatut(m);
   }catch(e){box.checked=!v;toast(e.message,'error');}
 }
 
@@ -271,7 +308,7 @@ async function rhOutilAttribuer(L,m){
     },
   });
 }
-async function rhOutilCocherElement(L,x,box,ligne){
+async function rhOutilCocherElement(L,m,x,box,ligne){
   const v=box.checked;
   try{
     await api('/api/rh-outil/'+L.cle+'/attributions/'+x.id,rhOutilJson('PATCH',{fait:v}));
@@ -279,6 +316,7 @@ async function rhOutilCocherElement(L,x,box,ligne){
     // Le compteur de la cellule suit sans redessiner le tableau.
     const cell=ligne.closest('.rho-items');
     if(cell)rhOutilMajCompteur(cell);
+    rhOutilMajStatut(m);
   }catch(e){box.checked=!v;toast(e.message,'error');}
 }
 function rhOutilMajCompteur(cell){
@@ -379,8 +417,8 @@ function rhOutilCelluleListe(L,m){
         box,lbl,
         h('button',{type:'button',className:'rho-item-x',title:'Retirer',onClick:()=>rhOutilRetirerElement(L,m,x)},'×')
       );
-      box.addEventListener('change',()=>rhOutilCocherElement(L,x,box,ligne));
-      lbl.addEventListener('click',()=>{box.checked=!box.checked;rhOutilCocherElement(L,x,box,ligne);});
+      box.addEventListener('change',()=>rhOutilCocherElement(L,m,x,box,ligne));
+      lbl.addEventListener('click',()=>{box.checked=!box.checked;rhOutilCocherElement(L,m,x,box,ligne);});
       return ligne;
     }):[h('div',{className:'rho-item-none'},L.aucun)]),
     h('div',{className:'rho-items-foot'},
@@ -398,16 +436,29 @@ function renderRhOutilTab(){
   );
   if(!S.rhOutilLoaded)return h('div',null,bar,h('div',{className:'card-empty'},'Chargement…'));
   if(!list.length)return h('div',null,bar,h('div',{className:'card-empty'},'Aucun employé — utilisez « Ajouter un utilisateur ».'));
+  const iF=Math.max(0,RHO_FILTRES.findIndex(f=>f.cle===(S.rhOutilFiltre||'tous')));
+  const filtre=RHO_FILTRES[iF],suivant=RHO_FILTRES[(iF+1)%RHO_FILTRES.length];
+  const vis=filtre.cle==='tous'?list:list.filter(m=>rhOutilComplet(m)===(filtre.cle==='complet'));
+  const nbCol=1+RH_OUTIL_LISTES.length+RH_OUTIL_COLONNES.length+2;
+  const thDossier=h('th',{className:'rho-c'},
+    h('button',{type:'button',className:'rho-th-btn',title:'Filtre : '+filtre.label+' — cliquer pour afficher « '+suivant.label+' »',
+      'aria-label':'Dossier, filtre '+filtre.label+'. Cliquer pour afficher '+suivant.label,
+      onClick:()=>set({rhOutilFiltre:suivant.cle})},
+      'Dossier',h('span',{className:'rho-th-filtre'+(filtre.cle==='tous'?'':' on')},filtre.court)
+    )
+  );
   return h('div',null,bar,h('div',{className:'card'},
-    h('div',{className:'card-header'},h('h3',null,'Employés ('+list.length+')')),
+    h('div',{className:'card-header'},h('h3',null,'Employés ('+(filtre.cle==='tous'?list.length:vis.length+' sur '+list.length)+')')),
     h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std rho-table'},
       h('thead',null,h('tr',null,
         h('th',null,'Employé'),
         ...RH_OUTIL_LISTES.map(L=>h('th',null,L.titre)),
         ...RH_OUTIL_COLONNES.map(c=>h('th',{className:'rho-c'},c.label)),
+        thDossier,
         h('th',{className:'rho-c'},'')
       )),
-      h('tbody',null,...list.map(m=>h('tr',null,
+      h('tbody',null,...(vis.length?[]:[h('tr',null,h('td',{colspan:String(nbCol),className:'rho-empty'},
+        filtre.cle==='complet'?'Aucun dossier complet.':'Aucun dossier incomplet.'))]),...vis.map(m=>h('tr',null,
         h('td',null,h('div',{className:'rho-emp-cell'},
           h('div',{className:'rho-avatar','aria-hidden':'true'},rhOutilInitiales(m.nom)),
           h('div',null,
@@ -422,6 +473,7 @@ function renderRhOutilTab(){
           box.addEventListener('change',()=>rhOutilCocher(m,c.cle,box));
           return h('td',{className:'rho-c'},box);
         }),
+        h('td',{className:'rho-c','data-rho-statut':String(m.id)},rhOutilBadge(m)),
         h('td',{className:'rho-c'},h('button',{type:'button',className:'rho-del',title:'Retirer de la liste',onClick:()=>rhOutilRetirerEmploye(m)},iconEl('trash',13)))
       )))
     ))
