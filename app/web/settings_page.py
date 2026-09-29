@@ -1073,7 +1073,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
           <div class="menu-items">
             <button type="button" class="menu-item" data-goto="emplacements">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span>
-              <span class="mi-body"><span class="mi-lbl">Emplacements</span><span class="mi-desc">Plan d'allées et rangées du magasin.</span></span>
+              <span class="mi-body"><span class="mi-lbl">Emplacements</span><span class="mi-desc">Plan du site, racks et codes d'emplacement.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
             <button type="button" class="menu-item" data-goto="laizes">
@@ -1795,10 +1795,30 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
     </section>
 
     <section id="panel-emplacements" class="hidden">
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px">
+          <div>
+            <h2 style="margin:0 0 4px">Plan du site</h2>
+            <p class="sub" style="margin:0;font-size:12px">Bâtiments, racks et zones de stockage, tels qu'affichés dans MyStock › Plan entrepôt.</p>
+          </div>
+          <div class="ps-barre" style="margin:0">
+            <select id="plan-site-type" aria-label="Type d'élément"></select>
+            <button type="button" class="btn btn-sm" id="plan-site-ajouter" style="color:white">Ajouter au plan</button>
+            <button type="button" class="btn btn-sec btn-sm" id="plan-site-recadrer" style="background:var(--bg)">Recadrer</button>
+          </div>
+        </div>
+        <div class="ps-layout">
+          <div>
+            <div id="plan-site-carte"></div>
+            <div id="plan-site-legende"></div>
+          </div>
+          <div class="ps-panneau" id="plan-site-panneau" style="background:var(--bg)"></div>
+        </div>
+      </div>
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
           <div>
-            <h2 style="margin:0 0 4px">Emplacements magasin</h2>
+            <h2 style="margin:0 0 4px">Codes d'emplacement</h2>
             <p class="sub" style="margin:0;font-size:12px">Référentiel des emplacements utilisé dans MyStock. <span id="empl-count" style="color:var(--accent);font-weight:700"></span></p>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -3395,6 +3415,8 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
      pastille d'origine, bloc « fiche RVGI ». Tout est dans ce fichier,
      la page n'y accroche que trois appels. -->
 <script src="/static/mysifa_rvgi_tiers.js?v=__V_LABEL__"></script>
+<link rel="stylesheet" href="/static/plan_site.css?v=2">
+<script src="/static/plan_site.js?v=2"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
@@ -3492,7 +3514,7 @@ function syncSettingsPageHead(tabId) {
     maintenance:  { title: 'Maintenance',     sub: 'Codes opérations et alertes opérateurs' },
     machines:     { title: 'Machines',        sub: 'Horaires, capacité, rentabilité' },
     encres:       { title: 'Impression',      sub: "Couleurs d'encre des BAT" },
-    emplacements: { title: 'Emplacements',    sub: 'Plan du magasin' },
+    emplacements: { title: 'Emplacements',    sub: 'Plan du site' },
     laizes:       { title: 'Laizes matières', sub: 'Formats standards' },
     mandrins:     { title: 'Mandrins',        sub: 'Perte de coupe sur les tubes' },
     importations: { title: 'Importations',    sub: 'Grilles tarifaires transporteurs' },
@@ -9488,6 +9510,274 @@ async function initClientsPanel() {
   await loadClients();
 }
 
+// ── Plan du site (éditeur) ─────────────────────────────────────────
+// Même rendu que MyStock › Plan entrepôt (static/plan_site.js), en mode
+// édition : clic pour sélectionner, glisser pour déplacer, poignée pour
+// redimensionner. Chaque geste s'enregistre tout seul.
+let _planSite = [];
+let _planSiteVue = null;
+let _planSiteSel = null;
+
+const _PLAN_DEFAUTS = {
+  rack: { libelle: 'Rack', w: 90, h: 14 },
+  sol: { libelle: 'Matière première · sol', w: 120, h: 14 },
+  zone: { libelle: 'Zone', w: 70, h: 30 },
+  allee: { libelle: 'Allée', w: 90, h: 12 },
+  machine: { libelle: 'Machine', w: 40, h: 30 },
+  divers: { libelle: 'Rangement', w: 50, h: 16 },
+  locaux: { libelle: 'Bureaux', w: 80, h: 30 },
+  titre: { libelle: 'BÂTIMENT', w: 100, h: 18 },
+  batiment: { libelle: 'Bâtiment' },
+};
+
+async function initPlanSiteEditor() {
+  const carte = document.getElementById('plan-site-carte');
+  if (!carte || !window.MysPlanSite) return;
+  const sel = document.getElementById('plan-site-type');
+  if (sel && !sel.options.length) {
+    ['rack', 'sol', 'zone', 'allee', 'machine', 'divers', 'locaux', 'titre', 'batiment', 'entree', 'limite', 'contour'].forEach(t => {
+      const o = document.createElement('option');
+      o.value = t; o.textContent = MysPlanSite.LIBELLES_TYPES[t];
+      sel.appendChild(o);
+    });
+    document.getElementById('plan-site-ajouter')?.addEventListener('click', ajouterPlanSiteElement);
+    document.getElementById('plan-site-recadrer')?.addEventListener('click', () => _planSiteVue && _planSiteVue.recadrer());
+  }
+  try {
+    const r = await fetch('/api/settings/plan-site', { credentials: 'include' });
+    if (!r.ok) throw new Error('err');
+    _planSite = (await r.json()).elements || [];
+  } catch (e) {
+    _planSite = [];
+    toast('Erreur lors du chargement du plan.', true);
+  }
+  _planSiteVue = MysPlanSite.monter(carte, _planSite, {
+    mode: 'edition',
+    compte: el => (MysPlanSite.TYPES_LIENS.includes(el.type) && el.prefixe)
+      ? MysPlanSite.codesDe(el, _emplData.map(e => e.code)).length : null,
+    onSelect: el => { _planSiteSel = el; renderPlanSitePanneau(); },
+    onChange: el => enregistrerPlanSiteElement(el),
+  });
+  const leg = document.getElementById('plan-site-legende');
+  if (leg) { leg.innerHTML = ''; leg.appendChild(MysPlanSite.legende(_planSite)); }
+  if (_planSiteSel) _planSiteVue.selectionner(_planSiteSel.id);
+  renderPlanSitePanneau();
+}
+
+function _planSiteRemplacer(el) {
+  const i = _planSite.findIndex(e => e.id === el.id);
+  if (i >= 0) _planSite[i] = el; else _planSite.push(el);
+}
+
+async function enregistrerPlanSiteElement(el, silencieux) {
+  const r = await fetch('/api/settings/plan-site/' + el.id, {
+    method: 'PUT', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(el),
+  });
+  if (!r.ok) {
+    let msg = 'Enregistrement impossible.';
+    try { msg = (await r.json()).detail || msg; } catch (e) {}
+    toast(msg, true);
+    _planSiteVue.redessiner(_planSite, true);
+    return;
+  }
+  const maj = await r.json();
+  _planSiteRemplacer(maj);
+  _planSiteSel = maj;
+  _planSiteVue.redessiner(_planSite, true);
+  _planSiteVue.selectionner(maj.id);
+  renderPlanSitePanneau();
+  if (!silencieux) toast('Plan enregistré.', false);
+}
+
+async function ajouterPlanSiteElement() {
+  const type = document.getElementById('plan-site-type')?.value || 'rack';
+  const c = _planSiteVue ? _planSiteVue.centre() : { x: 0, y: 0 };
+  const d = _PLAN_DEFAUTS[type] || { libelle: '', w: 40, h: 20 };
+  const el = { type, libelle: d.libelle || '', sous_titre: '', prefixe: '', vertical: false,
+    x: c.x - Math.round((d.w || 0) / 2), y: c.y - Math.round((d.h || 0) / 2), w: d.w || 0, h: d.h || 0 };
+  if (type === 'contour' || type === 'batiment') el.points = [[c.x - 60, c.y - 40], [c.x + 60, c.y - 40], [c.x + 60, c.y + 40], [c.x - 60, c.y + 40]];
+  else if (type === 'limite') el.points = [[c.x - 40, c.y], [c.x + 40, c.y]];
+  else if (type === 'entree') el.points = [[c.x - 10, c.y], [c.x + 6, c.y]];
+  const r = await fetch('/api/settings/plan-site', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(el),
+  });
+  if (!r.ok) {
+    let msg = 'Ajout impossible.';
+    try { msg = (await r.json()).detail || msg; } catch (e) {}
+    toast(msg, true);
+    return;
+  }
+  const cree = await r.json();
+  _planSite.push(cree);
+  _planSiteSel = cree;
+  _planSiteVue.redessiner(_planSite, true);
+  _planSiteVue.selectionner(cree.id);
+  renderPlanSitePanneau();
+  toast('Élément ajouté au centre du plan.', false);
+}
+
+async function supprimerPlanSiteElement(el) {
+  const nom = el.libelle || MysPlanSite.LIBELLES_TYPES[el.type];
+  if (!confirm('Retirer « ' + nom + ' » du plan ? Les codes d\'emplacement ne sont pas supprimés.')) return;
+  const r = await fetch('/api/settings/plan-site/' + el.id, { method: 'DELETE', credentials: 'include' });
+  if (!r.ok) { toast('Suppression impossible.', true); return; }
+  _planSite = _planSite.filter(e => e.id !== el.id);
+  _planSiteSel = null;
+  _planSiteVue.redessiner(_planSite, true);
+  renderPlanSitePanneau();
+  toast('Élément retiré du plan.', false);
+}
+
+function _planChamp(parent, label, input) {
+  const w = document.createElement('div');
+  w.className = 'ps-champ';
+  const l = document.createElement('label');
+  l.textContent = label;
+  w.appendChild(l);
+  w.appendChild(input);
+  parent.appendChild(w);
+  return input;
+}
+
+function renderPlanSitePanneau() {
+  const p = document.getElementById('plan-site-panneau');
+  if (!p) return;
+  p.innerHTML = '';
+  const el = _planSiteSel ? _planSite.find(e => e.id === _planSiteSel.id) : null;
+  const titre = document.createElement('div');
+  titre.className = 'ps-panneau-titre';
+  p.appendChild(titre);
+  if (!el) {
+    titre.textContent = 'Aucun élément sélectionné';
+    const v = document.createElement('div');
+    v.className = 'ps-panneau-vide';
+    v.textContent = 'Cliquez un élément du plan pour le modifier. Glissez-le pour le déplacer, '
+      + 'tirez la poignée en bas à droite pour le redimensionner. '
+      + 'Un rack ou une zone se rattache aux emplacements par son préfixe : « A » porte A111, A112…';
+    p.appendChild(v);
+    return;
+  }
+  titre.textContent = el.libelle || MysPlanSite.LIBELLES_TYPES[el.type];
+  const sub = document.createElement('div');
+  sub.className = 'ps-panneau-sub';
+  sub.textContent = MysPlanSite.LIBELLES_TYPES[el.type];
+  p.appendChild(sub);
+
+  const aPoints = MysPlanSite.TYPES_POINTS.includes(el.type);
+  const lie = MysPlanSite.TYPES_LIENS.includes(el.type);
+  const copie = () => JSON.parse(JSON.stringify(el));
+
+  const typeSel = document.createElement('select');
+  Object.keys(MysPlanSite.LIBELLES_TYPES)
+    .filter(t => MysPlanSite.TYPES_POINTS.includes(t) === aPoints)
+    .forEach(t => {
+      const o = document.createElement('option');
+      o.value = t; o.textContent = MysPlanSite.LIBELLES_TYPES[t];
+      if (t === el.type) o.selected = true;
+      typeSel.appendChild(o);
+    });
+  _planChamp(p, 'Type', typeSel).addEventListener('change', () => {
+    const e = copie(); e.type = typeSel.value; enregistrerPlanSiteElement(e);
+  });
+
+  if (!aPoints || el.type === 'batiment') {
+    const lib = document.createElement('input');
+    lib.type = 'text'; lib.maxLength = 80; lib.value = el.libelle || '';
+    _planChamp(p, 'Libellé', lib).addEventListener('change', () => {
+      const e = copie(); e.libelle = lib.value; enregistrerPlanSiteElement(e);
+    });
+    const st = document.createElement('input');
+    st.type = 'text'; st.maxLength = 80; st.value = el.sous_titre || '';
+    _planChamp(p, 'Sous-titre', st).addEventListener('change', () => {
+      const e = copie(); e.sous_titre = st.value; enregistrerPlanSiteElement(e);
+    });
+  }
+
+  if (lie) {
+    const pre = document.createElement('input');
+    pre.type = 'text'; pre.maxLength = 10; pre.value = el.prefixe || '';
+    pre.placeholder = 'ex. A, Z0';
+    pre.style.fontFamily = 'ui-monospace,monospace';
+    pre.style.textTransform = 'uppercase';
+    _planChamp(p, 'Préfixe des emplacements', pre).addEventListener('change', () => {
+      const e = copie(); e.prefixe = pre.value.trim().toUpperCase(); enregistrerPlanSiteElement(e);
+    });
+    const codes = MysPlanSite.codesDe(el, _emplData.map(e => e.code)).sort();
+    const info = document.createElement('div');
+    info.className = 'ps-aide';
+    info.style.margin = '-4px 0 12px';
+    info.textContent = el.prefixe
+      ? (codes.length + ' code' + (codes.length > 1 ? 's' : '') + ' rattaché' + (codes.length > 1 ? 's' : '')
+         + (codes.length ? ' : ' + codes.slice(0, 8).join(', ') + (codes.length > 8 ? '…' : '') : ''))
+      : 'Sans préfixe, l\'élément est dessiné mais ne porte aucun emplacement.';
+    p.appendChild(info);
+  }
+
+  if (!aPoints && el.type !== 'titre') {
+    const lab = document.createElement('label');
+    lab.className = 'ps-coche';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = !!el.vertical;
+    lab.appendChild(cb);
+    lab.appendChild(document.createTextNode('Texte vertical'));
+    cb.addEventListener('change', () => { const e = copie(); e.vertical = cb.checked; enregistrerPlanSiteElement(e); });
+    p.appendChild(lab);
+  }
+
+  if (!aPoints) {
+    const grille = document.createElement('div');
+    grille.className = 'ps-grille4';
+    [['x', 'X'], ['y', 'Y'], ['w', 'Largeur'], ['h', 'Hauteur']].forEach(([k, l]) => {
+      const inp = document.createElement('input');
+      inp.type = 'number'; inp.step = '1'; inp.value = Math.round(el[k]);
+      inp.title = l; inp.setAttribute('aria-label', l);
+      inp.addEventListener('change', () => {
+        const e = copie(); e[k] = parseFloat(inp.value) || 0; enregistrerPlanSiteElement(e, true);
+      });
+      grille.appendChild(inp);
+    });
+    _planChamp(p, 'Position · X  Y  L  H', grille);
+  } else {
+    const info = document.createElement('div');
+    info.className = 'ps-aide';
+    info.style.marginBottom = '10px';
+    info.textContent = el.points.length + ' points — glissez les poignées pour les déplacer, le trait pour tout déplacer.';
+    p.appendChild(info);
+    if (el.type !== 'entree') {
+      const acts = document.createElement('div');
+      acts.className = 'ps-actions';
+      const plus = document.createElement('button');
+      plus.type = 'button'; plus.className = 'btn btn-sec btn-sm'; plus.textContent = 'Ajouter un point';
+      plus.addEventListener('click', () => {
+        const e = copie(); const d = e.points[e.points.length - 1];
+        e.points.push([d[0] + 20, d[1] + 20]); enregistrerPlanSiteElement(e, true);
+      });
+      const moins = document.createElement('button');
+      moins.type = 'button'; moins.className = 'btn btn-sec btn-sm'; moins.textContent = 'Retirer le dernier';
+      moins.disabled = el.points.length <= (['contour', 'batiment'].includes(el.type) ? 3 : 2);
+      moins.addEventListener('click', () => {
+        const e = copie(); e.points.pop(); enregistrerPlanSiteElement(e, true);
+      });
+      acts.appendChild(plus); acts.appendChild(moins);
+      p.appendChild(acts);
+    }
+  }
+
+  const acts = document.createElement('div');
+  acts.className = 'ps-actions';
+  acts.style.marginTop = '14px';
+  const del = document.createElement('button');
+  del.type = 'button'; del.className = 'btn btn-danger btn-sm'; del.textContent = 'Retirer du plan';
+  del.style.color = 'white';
+  del.addEventListener('click', () => supprimerPlanSiteElement(el));
+  acts.appendChild(del);
+  p.appendChild(acts);
+}
+
 async function initEmplacementsPanel() {
   if (!_emplReady) {
     _emplReady = true;
@@ -9519,6 +9809,7 @@ async function initEmplacementsPanel() {
     if (codeInp) codeInp.addEventListener('input', () => { codeInp.value = codeInp.value.toUpperCase(); });
   }
   await loadEmplacements();
+  await initPlanSiteEditor();
 }
 
 function initFscPanel() {
@@ -11113,6 +11404,8 @@ function renderEmplGrid() {
     html += `</div></div>`;
   }
   grid.innerHTML = html;
+  // Les comptes affichés sur le plan suivent le référentiel.
+  if (_planSiteVue) { _planSiteVue.redessiner(_planSite, true); if (_planSiteSel) _planSiteVue.selectionner(_planSiteSel.id); }
 }
 
 function renderFscDossiers(rows) {
