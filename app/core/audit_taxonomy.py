@@ -397,7 +397,7 @@ SKIP_PREFIXES: tuple[str, ...] = (
 # la requête y transporte des messages personnels, des documents RH ou des
 # éléments de paie. Tracer qui a fait quoi, sans recopier quoi que ce soit.
 BODY_BLIND_MODULES: frozenset[str] = frozenset(
-    {"chat", "messages", "coffre", "rh_coffre", "paie", "ai"}
+    {"chat", "messages", "coffre", "rh_coffre", "rh_outil", "paie", "ai"}
 )
 
 # Clés dont la valeur ne doit jamais atterrir dans le journal.

@@ -56,6 +56,20 @@ RH_OUTIL_CSS = r"""
 .rho-item-x:hover{color:var(--danger);background:rgba(248,113,113,.12)}
 @media (hover:none){.rho-item-x{opacity:1}}
 .rho-item-none{font-size:12px;color:var(--muted)}
+.rho-pj{display:inline-flex;align-items:center;gap:3px;border:1px solid transparent;background:transparent;color:var(--muted);font-family:inherit;font-size:11px;font-weight:700;padding:1px 5px;border-radius:6px;cursor:pointer;opacity:.45;transition:opacity .15s,color .15s,border-color .15s,background-color .15s}
+.rho-pj.has{opacity:1;color:var(--accent);background:var(--accent-bg)}
+.rho-item:hover .rho-pj,.rho-pj:focus-visible{opacity:1}
+.rho-pj:hover{border-color:var(--accent);color:var(--accent)}
+@media (hover:none){.rho-pj{opacity:1}}
+.rho-drop{border:1.5px dashed var(--border);border-radius:10px;background:var(--bg);padding:18px 14px;text-align:center;cursor:pointer;color:var(--muted);font-size:12px;transition:border-color .15s,background-color .15s,color .15s;margin-top:12px}
+.rho-drop:hover,.rho-drop.drag{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.rho-drop b{display:block;font-size:13px;color:var(--text);margin-bottom:3px}
+.rho-drop.busy{opacity:.6;pointer-events:none}
+.rho-pj-row{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:8px 10px}
+.rho-pj-ico{width:30px;height:30px;border-radius:7px;background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.rho-pj-nom{font-size:13px;font-weight:600;color:var(--text);word-break:break-all;text-decoration:none}
+.rho-pj-nom:hover{color:var(--accent);text-decoration:underline}
+.rho-pj-row .rho-del{background:var(--card)}
 .rho-items-foot{display:flex;align-items:center;gap:8px;margin-top:2px}
 .rho-add{border:1px dashed var(--border);background:var(--bg);color:var(--muted);border-radius:7px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:4px;transition:border-color .15s,color .15s}
 .rho-add:hover{border-color:var(--accent);color:var(--accent)}
@@ -125,9 +139,10 @@ const RH_OUTIL_LISTES=[
    aucun:'Aucun document',rechercher:'Rechercher un document…',nouveau:'Nouveau document…',pour:'Document pour ',
    deja:'Déjà attribué',vide:'Catalogue vide — ajoutez des documents avec « Gérer les documents ».',catVide:'Aucun document au catalogue.',
    retirerTitre:'Retirer ce document ?',retirerTxt:'Le document est coché comme vérifié : ce suivi sera perdu pour cet employé. Le catalogue n’est pas modifié.',
-   supprTitre:'Supprimer ce document ?',supprTxtN:'Il disparaît du catalogue et de la liste de chaque employé qui l’a, avec son suivi.',supprTxt0:'Il disparaît du catalogue.',
+   supprTitre:'Supprimer ce document ?',supprTxtN:'Il disparaît du catalogue et de la liste de chaque employé qui l’a, avec son suivi et ses pièces jointes.',supprTxt0:'Il disparaît du catalogue.',
    renomme:'Document renommé.',supprime:'Document supprimé.',etat:'vérifié',
-   obligTitre:'Rendre ce document obligatoire pour tous ?',il:'Il',ajoute:'ajouté',obligOk:'Document obligatoire pour tous'},
+   obligTitre:'Rendre ce document obligatoire pour tous ?',il:'Il',ajoute:'ajouté',obligOk:'Document obligatoire pour tous',
+   pieces:true},
 ];
 // Champs Oui / Non, après les listes. `cle` = CHECKLIST côté API.
 const RH_OUTIL_COLONNES=[
@@ -288,7 +303,7 @@ async function rhOutilAjouterEmploye(){
 function rhOutilRetirerEmploye(m){
   rhOutilConfirmer({
     titre:'Retirer cet employé ?',nom:m.nom,sous:m.email,label:'Retirer',
-    texte:'L’employé sort de la liste de l’Outil RH, avec toute sa checklist. Son compte MySifa n’est pas touché.',
+    texte:'L’employé sort de la liste de l’Outil RH, avec toute sa checklist et les pièces jointes de ses documents. Son compte MySifa n’est pas touché.',
     onConfirm:async()=>{
       try{await api('/api/rh-outil/membres/'+m.id,{method:'DELETE'});}
       catch(e){toast(e.message,'error');throw e;}
@@ -368,9 +383,93 @@ async function rhOutilRetirerElement(L,m,x){
     catch(e){toast(e.message,'error');throw e;}
     await rhOutilLoad();
   };
-  // Un élément pas encore coché se retire sans confirmation : rien n'est perdu.
-  if(!x.fait){try{await retirer();}catch(_){}return;}
-  rhOutilConfirmer({titre:L.retirerTitre,nom:x.libelle,sous:m.nom,label:'Retirer',texte:L.retirerTxt,onConfirm:retirer});
+  // Rien à perdre (pas coché, pas de pièce jointe) : retrait sans confirmation.
+  const nbP=(x.pieces||[]).length;
+  if(!x.fait&&!nbP){try{await retirer();}catch(_){}return;}
+  const txtP=nbP?' '+nbP+' pièce'+(nbP>1?'s jointes seront supprimées':' jointe sera supprimée')+'.':'';
+  rhOutilConfirmer({titre:L.retirerTitre,nom:x.libelle,sous:m.nom,label:'Retirer',
+    texte:(x.fait?L.retirerTxt:'Le catalogue n’est pas modifié.')+txtP,onConfirm:retirer});
+}
+
+// ── Pièces jointes d'un document ──────────────────────────────────
+const RHO_PJ_ACCEPT='.pdf,.jpg,.jpeg,.png,.webp,.heic,application/pdf,image/jpeg,image/png,image/webp,image/heic';
+function rhOutilTaille(o){
+  o=Number(o)||0;
+  return o<1024?o+' o':o<1048576?Math.round(o/1024)+' Ko':(o/1048576).toFixed(1).replace('.',',')+' Mo';
+}
+// « 2026-09-29T10:12:00 » (heure Paris, sans fuseau) → « 29/09/2026 10:12 »
+function rhOutilDate(iso){
+  const r=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+  return r?r[3]+'/'+r[2]+'/'+r[1]+' '+r[4]+':'+r[5]:'—';
+}
+function rhOutilBoutonPieces(L,m,x){
+  const n=(x.pieces||[]).length;
+  return h('button',{type:'button',className:'rho-pj'+(n?' has':''),
+    title:n?(n+' pièce'+(n>1?'s jointes':' jointe')):'Ajouter une pièce jointe',
+    'aria-label':'Pièces jointes · '+x.libelle+' · '+n,
+    onClick:()=>rhOutilPieces(L,m,x)},iconEl('paperclip',12),n?String(n):null);
+}
+function rhOutilPieces(L,m,x){
+  const {ov,fermer}=rhOutilFenetre();
+  const base='/api/rh-outil/documents/attributions/'+x.id+'/pieces';
+  const listEl=h('div',{className:'rho-list'},h('div',{className:'rho-empty'},'Chargement…'));
+  const rafraichir=async()=>{
+    let d;
+    try{d=await api(base);}catch(e){toast(e.message,'error');return;}
+    if(!d)return;
+    const pcs=d.pieces||[];
+    x.pieces=pcs;
+    listEl.replaceChildren(...(pcs.length?pcs.map(p=>{
+      const url=API+'/api/rh-outil/pieces/'+p.id;
+      return h('div',{className:'rho-pj-row'},
+        h('div',{className:'rho-pj-ico','aria-hidden':'true'},iconEl(p.mime==='application/pdf'?'file-text':'file',15)),
+        h('div',{style:{flex:1,minWidth:0}},
+          h('a',{className:'rho-pj-nom',href:url+'?apercu=1',target:'_blank',rel:'noopener',title:'Ouvrir dans un nouvel onglet'},p.nom),
+          h('div',{className:'rho-sub'},rhOutilTaille(p.taille)+' · '+(p.ajoute_par||'—')+' · '+rhOutilDate(p.ajoute_le))
+        ),
+        h('a',{className:'rho-del',href:url,title:'Télécharger','aria-label':'Télécharger '+p.nom},iconEl('download',13)),
+        h('button',{type:'button',className:'rho-del',title:'Supprimer',onClick:()=>rhOutilConfirmer({
+          titre:'Supprimer cette pièce jointe ?',nom:p.nom,sous:x.libelle+' · '+(m.nom||''),label:'Supprimer',
+          texte:'Le fichier est effacé du serveur. Cette action ne peut pas être annulée.',
+          onConfirm:async()=>{
+            try{await api('/api/rh-outil/pieces/'+p.id,{method:'DELETE'});}
+            catch(e){toast(e.message,'error');throw e;}
+            await rafraichir();rhOutilLoad();
+            toast('Pièce jointe supprimée.');
+          },
+        })},iconEl('trash',13))
+      );
+    }):[h('div',{className:'rho-empty'},'Aucune pièce jointe.')]));
+  };
+  const input=h('input',{type:'file',multiple:'',accept:RHO_PJ_ACCEPT,style:{display:'none'}});
+  const drop=h('div',{className:'rho-drop',role:'button',tabindex:'0'},
+    h('b',null,'Déposer des fichiers ici'),'ou cliquer pour choisir · PDF, JPG, PNG, WEBP, HEIC');
+  // Envoi un par un : un fichier refusé n'empêche pas les suivants.
+  const envoyer=async fichiers=>{
+    const liste=[...fichiers];if(!liste.length)return;
+    drop.classList.add('busy');
+    let ok=0;
+    for(const f of liste){
+      const fd=new FormData();fd.append('fichier',f);
+      try{await api(base,{method:'POST',body:fd});ok++;}
+      catch(e){toast(f.name+' : '+e.message,'error');}
+    }
+    drop.classList.remove('busy');input.value='';
+    await rafraichir();rhOutilLoad();
+    if(ok)toast(ok>1?ok+' pièces jointes ajoutées.':'Pièce jointe ajoutée.');
+  };
+  input.addEventListener('change',()=>envoyer(input.files));
+  drop.addEventListener('click',()=>input.click());
+  drop.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();input.click();}});
+  drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('drag');});
+  drop.addEventListener('dragleave',()=>drop.classList.remove('drag'));
+  drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('drag');envoyer(e.dataTransfer.files);});
+  ov.appendChild(rhOutilDialogue('Pièces jointes',fermer,
+    h('div',{className:'rho-cat-legend'},x.libelle+' · '+(m.nom||'')),
+    listEl,drop,input
+  ));
+  document.body.appendChild(ov);
+  rafraichir();
 }
 
 // ── Catalogues ────────────────────────────────────────────────────
@@ -479,6 +578,7 @@ function rhOutilCelluleListe(L,m){
       const lbl=h('span',{className:'rho-item-lbl'},x.libelle);
       const ligne=h('div',{className:'rho-item'+(x.fait?' done':'')},
         box,lbl,
+        L.pieces?rhOutilBoutonPieces(L,m,x):null,
         h('button',{type:'button',className:'rho-item-x',title:'Retirer',onClick:()=>rhOutilRetirerElement(L,m,x)},'×')
       );
       box.addEventListener('change',()=>rhOutilCocherElement(L,m,x,box,ligne));

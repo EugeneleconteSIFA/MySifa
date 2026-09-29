@@ -1186,6 +1186,10 @@ GED_BLOCKED_EXTENSIONS = {
 
 TACHES_MAX_FILE_MB = int(os.getenv("TACHES_MAX_FILE_MB", "25"))
 
+# Pièces jointes des documents de l'Outil RH (MyCompta) : taille maximale d'un
+# fichier. Formats acceptés (PDF, JPG, PNG, WEBP, HEIC) : app/routers/rh_outil.py.
+RH_OUTIL_MAX_FILE_MB = int(os.getenv("RH_OUTIL_MAX_FILE_MB", "10"))
+
 # Colonnes du Kanban. `final=True` marque les statuts qui clôturent une tâche
 # (horodatage done_at, exclusion des compteurs « ouvert »).
 TACHES_STATUTS = (
