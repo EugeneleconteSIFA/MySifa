@@ -6,15 +6,21 @@ Chaque employé suivi porte une checklist :
 - des cases fixes, une colonne de rh_outil_membres chacune (CHECKLIST) ;
 - des listes qui varient d'un employé à l'autre (LISTES : formations,
   documents), piochées chacune dans un catalogue commun géré depuis l'onglet.
+Les documents d'un employé peuvent porter des pièces jointes (rh_outil_pieces),
+rangées hors de /static sous data/uploads/rh_outil/.
 Accès : quiconque a accès à MyCompta (rôle ou exception réglée dans Paramètres).
 """
 
+import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from config import BASE_DIR, RH_OUTIL_MAX_FILE_MB
 from database import get_db
 from services.auth_service import get_current_user, user_has_app_access
 from services.audit_service import log_action
@@ -22,6 +28,53 @@ from services.audit_service import log_action
 router = APIRouter(prefix="/api/rh-outil", tags=["rh_outil"])
 
 LIBELLE_MAX = 120
+
+PIECES_ROOT = Path(BASE_DIR) / "data" / "uploads" / "rh_outil"
+PIECE_MAX_OCTETS = RH_OUTIL_MAX_FILE_MB * 1024 * 1024
+PIECE_NOM_MAX = 180
+
+
+def _type_fichier(debut: bytes) -> Optional[tuple]:
+    """(mime, extension) d'après les premiers octets du fichier, jamais d'après
+    son nom ni le Content-Type annoncé par le navigateur. None si refusé."""
+    if debut.startswith(b"%PDF-"):
+        return ("application/pdf", "pdf")
+    if debut.startswith(b"\xff\xd8\xff"):
+        return ("image/jpeg", "jpg")
+    if debut.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ("image/png", "png")
+    if debut[:4] == b"RIFF" and debut[8:12] == b"WEBP":
+        return ("image/webp", "webp")
+    if debut[4:8] == b"ftyp" and debut[8:12] in (b"heic", b"heix", b"mif1", b"msf1", b"hevc"):
+        return ("image/heic", "heic")
+    return None
+
+
+def _supprimer_fichiers(chemins: list) -> None:
+    """Efface les fichiers après le commit ; un fichier déjà absent n'est pas une erreur."""
+    for c in chemins:
+        try:
+            (PIECES_ROOT / c).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _retirer_pieces(conn, where: str, params: tuple) -> list:
+    """Supprime les lignes rh_outil_pieces des attributions de documents qui
+    vérifient `where` (sur l'alias a = rh_outil_membre_documents). Renvoie les
+    fichiers à effacer une fois la transaction validée."""
+    rows = conn.execute(
+        f"""SELECT p.id, p.fichier FROM rh_outil_pieces p
+              JOIN rh_outil_membre_documents a ON a.id = p.attribution_id
+             WHERE {where}""",
+        params,
+    ).fetchall()
+    if rows:
+        conn.execute(
+            f"DELETE FROM rh_outil_pieces WHERE id IN ({','.join('?' * len(rows))})",
+            [r["id"] for r in rows],
+        )
+    return [r["fichier"] for r in rows]
 
 
 class MembreIn(BaseModel):
@@ -87,6 +140,11 @@ def _liste(liste: str) -> dict:
 # Points fixes de la checklist : champ de MembrePatch → libellé du journal.
 # Chaque point est une colonne de rh_outil_membres (migration fichier).
 CHECKLIST = {"reglement_signe": "Règlement signé"}
+
+
+def _piece_json(pc) -> dict:
+    return {"id": pc["id"], "nom": pc["nom"], "mime": pc["mime"], "taille": pc["taille"],
+            "ajoute_le": pc["ajoute_le"], "ajoute_par": pc["ajoute_par"]}
 
 
 def _require(request: Request) -> dict:
@@ -202,6 +260,15 @@ def list_membres(request: Request):
                      "libelle": a["libelle"], "fait": bool(a["fait"]),
                      "obligatoire": bool(a["obligatoire"])}
                 )
+        pieces: dict = {}
+        for pc in conn.execute(
+            """SELECT id, attribution_id, nom, mime, taille, ajoute_le, ajoute_par
+                 FROM rh_outil_pieces ORDER BY ajoute_le, id"""
+        ).fetchall():
+            pieces.setdefault(pc["attribution_id"], []).append(_piece_json(pc))
+    for x in par_liste.get("documents", {}).values():
+        for el in x:
+            el["pieces"] = pieces.get(el["id"], [])
     membres = []
     for r in rows:
         m = {"id": r["id"], "user_id": r["user_id"], "nom": r["nom"], "email": r["email"],
@@ -259,10 +326,12 @@ def delete_membre(membre_id: int, request: Request):
     user = _require(request)
     with get_db() as conn:
         row = _membre(conn, membre_id)
+        fichiers = _retirer_pieces(conn, "a.membre_id = ?", (membre_id,))
         for cfg in LISTES.values():
             conn.execute(f"DELETE FROM {cfg['liaison']} WHERE membre_id=?", (membre_id,))
         conn.execute("DELETE FROM rh_outil_membres WHERE id=?", (membre_id,))
         conn.commit()
+    _supprimer_fichiers(fichiers)
     log_action(user=user, action="DELETE", module="rh_outil",
                objet=f"Outil RH · retrait de {row['nom']}", request=request)
     return {"success": True}
@@ -362,10 +431,13 @@ def delete_catalogue(liste: str, element_id: int, request: Request):
                            (element_id,)).fetchone()
         if not row:
             raise HTTPException(404, cfg["introuvable"])
+        fichiers = (_retirer_pieces(conn, "a.document_id = ?", (element_id,))
+                    if liste == "documents" else [])
         n = conn.execute(f"DELETE FROM {cfg['liaison']} WHERE {cfg['fk']}=?",
                          (element_id,)).rowcount
         conn.execute(f"DELETE FROM {cfg['catalogue']} WHERE id=?", (element_id,))
         conn.commit()
+    _supprimer_fichiers(fichiers)
     log_action(user=user, action="DELETE", module="rh_outil",
                objet=f"Outil RH · {cfg['catalogue_nom']} · suppression de « {row['libelle']} » ({n} employé(s))",
                request=request)
@@ -436,9 +508,120 @@ def delete_attribution(liste: str, attribution_id: int, request: Request):
     cfg = _liste(liste)
     with get_db() as conn:
         row = _attribution(conn, cfg, attribution_id)
+        fichiers = (_retirer_pieces(conn, "a.id = ?", (attribution_id,))
+                    if liste == "documents" else [])
         conn.execute(f"DELETE FROM {cfg['liaison']} WHERE id=?", (attribution_id,))
         conn.commit()
+    _supprimer_fichiers(fichiers)
     log_action(user=user, action="DELETE", module="rh_outil",
                objet=f"Outil RH · {row['nom']} · {cfg['nom']} « {row['libelle']} » : retrait",
+               request=request)
+    return {"success": True}
+
+
+# ─── Pièces jointes des documents ─────────────────────────────────────────
+
+def _piece(conn, piece_id: int):
+    row = conn.execute(
+        """SELECT p.id, p.attribution_id, p.nom, p.fichier, p.mime, e.libelle, u.nom AS employe
+             FROM rh_outil_pieces p
+             JOIN rh_outil_membre_documents a ON a.id = p.attribution_id
+             JOIN rh_outil_documents e ON e.id = a.document_id
+             JOIN rh_outil_membres m ON m.id = a.membre_id
+             JOIN users u ON u.id = m.user_id
+            WHERE p.id=?""",
+        (piece_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, "Pièce jointe introuvable.")
+    return row
+
+
+@router.get("/documents/attributions/{attribution_id}/pieces")
+def list_pieces(attribution_id: int, request: Request):
+    _require(request)
+    with get_db() as conn:
+        _attribution(conn, LISTES["documents"], attribution_id)
+        rows = conn.execute(
+            """SELECT id, attribution_id, nom, mime, taille, ajoute_le, ajoute_par
+                 FROM rh_outil_pieces WHERE attribution_id=? ORDER BY ajoute_le, id""",
+            (attribution_id,),
+        ).fetchall()
+    return {"pieces": [_piece_json(r) for r in rows]}
+
+
+@router.post("/documents/attributions/{attribution_id}/pieces")
+async def add_piece(attribution_id: int, request: Request, fichier: UploadFile = File(...)):
+    user = _require(request)
+    # Lecture bornée : on ne charge jamais plus que la taille autorisée + 1 octet.
+    contenu = await fichier.read(PIECE_MAX_OCTETS + 1)
+    if not contenu:
+        raise HTTPException(400, "Fichier vide.")
+    if len(contenu) > PIECE_MAX_OCTETS:
+        raise HTTPException(400, f"Fichier trop lourd — {RH_OUTIL_MAX_FILE_MB} Mo maximum.")
+    detecte = _type_fichier(contenu[:16])
+    if not detecte:
+        raise HTTPException(400, "Format refusé — PDF, JPG, PNG, WEBP ou HEIC uniquement.")
+    mime, ext = detecte
+    nom = " ".join(Path(fichier.filename or "").name.split())[:PIECE_NOM_MAX] or f"piece.{ext}"
+    with get_db() as conn:
+        row = _attribution(conn, LISTES["documents"], attribution_id)
+        dossier = PIECES_ROOT / str(attribution_id)
+        dossier.mkdir(parents=True, exist_ok=True)
+        # Nom sur disque généré : rien du nom fourni par le navigateur n'y entre.
+        relatif = f"{attribution_id}/{uuid.uuid4().hex}.{ext}"
+        (PIECES_ROOT / relatif).write_bytes(contenu)
+        try:
+            cur = conn.execute(
+                """INSERT INTO rh_outil_pieces
+                       (attribution_id, nom, fichier, mime, taille, ajoute_le, ajoute_par)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (attribution_id, nom, relatif, mime, len(contenu), _now(), user.get("nom")),
+            )
+            conn.commit()
+        except Exception:
+            _supprimer_fichiers([relatif])
+            raise
+    log_action(user=user, action="UPLOAD", module="rh_outil",
+               objet=f"Outil RH · {row['nom']} · document « {row['libelle']} » : pièce jointe ajoutée",
+               request=request)
+    return {"success": True, "id": cur.lastrowid}
+
+
+@router.get("/pieces/{piece_id}")
+def get_piece(piece_id: int, request: Request, apercu: bool = False):
+    """Téléchargement (par défaut) ou aperçu dans le navigateur (?apercu=1).
+
+    Seuls des PDF et des images vérifiés au dépôt sont servis. L'aperçu est
+    isolé (CSP sandbox) et nosniff : le navigateur n'exécute rien et ne
+    réinterprète pas le type."""
+    user = _require(request)
+    with get_db() as conn:
+        row = _piece(conn, piece_id)
+    chemin = PIECES_ROOT / row["fichier"]
+    if not chemin.is_file():
+        raise HTTPException(410, "Fichier absent du serveur.")
+    log_action(user=user, action="EXPORT", module="rh_outil",
+               objet=f"Outil RH · {row['employe']} · document « {row['libelle']} » : pièce jointe consultée",
+               request=request)
+    return FileResponse(
+        str(chemin), media_type=row["mime"], filename=row["nom"],
+        content_disposition_type="inline" if apercu else "attachment",
+        headers={"X-Content-Type-Options": "nosniff",
+                 "Content-Security-Policy": "sandbox",
+                 "Cache-Control": "private, no-store"},
+    )
+
+
+@router.delete("/pieces/{piece_id}")
+def delete_piece(piece_id: int, request: Request):
+    user = _require(request)
+    with get_db() as conn:
+        row = _piece(conn, piece_id)
+        conn.execute("DELETE FROM rh_outil_pieces WHERE id=?", (piece_id,))
+        conn.commit()
+    _supprimer_fichiers([row["fichier"]])
+    log_action(user=user, action="DELETE", module="rh_outil",
+               objet=f"Outil RH · {row['employe']} · document « {row['libelle']} » : pièce jointe supprimée",
                request=request)
     return {"success": True}
