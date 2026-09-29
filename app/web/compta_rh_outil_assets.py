@@ -84,6 +84,12 @@ RH_OUTIL_CSS = r"""
 .rho-cat-row .rho-input{padding:8px 12px;font-size:13px}
 .rho-cat-row .rho-sub{white-space:nowrap;min-width:78px;text-align:right}
 .rho-cat-add{display:flex;gap:8px;margin-top:12px}
+.rho-oblig{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap;user-select:none}
+.rho-oblig:has(.rho-chk:checked){color:var(--accent)}
+.rho-cat-legend{font-size:11px;color:var(--muted);margin:-6px 0 12px;line-height:1.4}
+.rho-tag-oblig{font-size:9px;margin-left:6px;padding:0 5px;color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
+.rho-dlg-title.info{display:flex;align-items:center;gap:8px}
+.rho-confirm-act .rho-ok.accent{background:var(--accent)}
 .rho-confirm-sum{padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:14px}
 .rho-confirm-txt{font-size:13px;color:var(--text);line-height:1.5;margin-bottom:16px}
 .rho-confirm-act{display:flex;justify-content:flex-end;gap:10px}
@@ -107,13 +113,15 @@ const RH_OUTIL_LISTES=[
    deja:'Déjà attribuée',vide:'Catalogue vide — ajoutez des formations avec « Gérer les formations ».',catVide:'Aucune formation au catalogue.',
    retirerTitre:'Retirer cette formation ?',retirerTxt:'La formation est cochée comme faite : ce suivi sera perdu pour cet employé. Le catalogue n’est pas modifié.',
    supprTitre:'Supprimer cette formation ?',supprTxtN:'Elle disparaît du catalogue et de la liste de chaque employé qui l’a, avec son suivi.',supprTxt0:'Elle disparaît du catalogue.',
-   renomme:'Formation renommée.',supprime:'Formation supprimée.',etat:'faite'},
+   renomme:'Formation renommée.',supprime:'Formation supprimée.',etat:'faite',
+   obligTitre:'Rendre cette formation obligatoire ?',il:'Elle',ajoute:'ajoutée',obligOk:'Formation obligatoire'},
   {cle:'documents',titre:'Documents',bouton:'Document',gerer:'Gérer les documents',catalogue:'Catalogue des documents',
    aucun:'Aucun document',rechercher:'Rechercher un document…',nouveau:'Nouveau document…',pour:'Document pour ',
    deja:'Déjà attribué',vide:'Catalogue vide — ajoutez des documents avec « Gérer les documents ».',catVide:'Aucun document au catalogue.',
    retirerTitre:'Retirer ce document ?',retirerTxt:'Le document est coché comme vérifié : ce suivi sera perdu pour cet employé. Le catalogue n’est pas modifié.',
    supprTitre:'Supprimer ce document ?',supprTxtN:'Il disparaît du catalogue et de la liste de chaque employé qui l’a, avec son suivi.',supprTxt0:'Il disparaît du catalogue.',
-   renomme:'Document renommé.',supprime:'Document supprimé.',etat:'vérifié'},
+   renomme:'Document renommé.',supprime:'Document supprimé.',etat:'vérifié',
+   obligTitre:'Rendre ce document obligatoire ?',il:'Il',ajoute:'ajouté',obligOk:'Document obligatoire'},
 ];
 // Cases fixes, après les listes. `cle` = CHECKLIST côté API.
 const RH_OUTIL_COLONNES=[
@@ -194,19 +202,22 @@ function rhOutilDialogue(titre,fermer,...enfants){
   );
 }
 
-// Confirmation de suppression. opts : {titre, nom, sous, texte, label, onConfirm}
+// Confirmation. opts : {titre, nom, sous, texte, label, ton, onConfirm}
+// ton : 'danger' (défaut, suppression) ou 'info' (action de masse non destructive).
 // onConfirm lève une erreur pour garder la fenêtre ouverte.
 function rhOutilConfirmer(opts){
   const {ov,fermer}=rhOutilFenetre();
   const cancel=h('button',{type:'button',className:'rho-cancel',onClick:fermer},'Annuler');
-  const ok=h('button',{type:'button',className:'rho-ok'},opts.label||'Supprimer');
+  const info=opts.ton==='info';
+  const ok=h('button',{type:'button',className:'rho-ok'+(info?' accent':'')},opts.label||'Supprimer');
   ok.addEventListener('click',async()=>{
     ok.disabled=true;cancel.disabled=true;
     try{await opts.onConfirm();fermer();}
     catch(_){ok.disabled=false;cancel.disabled=false;}
   });
   ov.appendChild(h('div',{className:'rho-dlg',role:'dialog','aria-modal':'true'},
-    h('div',{className:'rho-dlg-title danger'},iconEl('trash',18),opts.titre),
+    info?h('div',{className:'rho-dlg-title info'},iconEl('check-circle',18),opts.titre)
+        :h('div',{className:'rho-dlg-title danger'},iconEl('trash',18),opts.titre),
     h('div',{className:'rho-confirm-sum'},
       h('div',{style:{fontSize:'13px',fontWeight:'600',color:'var(--text)'}},opts.nom||'—'),
       opts.sous?h('div',{className:'rho-sub'},opts.sous):null
@@ -367,8 +378,35 @@ function rhOutilCatalogue(L){
       });
       inp.addEventListener('blur',enregistrer);
       const nb=x.nb_employes;
+      const obl=rhOutilCase(x.obligatoire,'Obligatoire · '+x.libelle);
+      const basculer=async v=>{
+        try{
+          const r=await api(base+'/'+x.id,rhOutilJson('PATCH',{obligatoire:v}));
+          x.obligatoire=v;
+          if(v){
+            const n=(r&&r.attribues)||0;
+            toast(L.obligOk+(n?' — '+L.ajoute+' à '+n+' employé'+(n>1?'s':'')+'.':'.'));
+            await rafraichir();rhOutilLoad();
+          }else rhOutilLoad();
+        }catch(e){obl.checked=!v;toast(e.message,'error');throw e;}
+      };
+      obl.addEventListener('change',()=>{
+        const v=obl.checked;
+        // Décocher ne retire rien : pas de confirmation. Cocher touche tous
+        // les employés qui ne l'ont pas : on annonce combien avant.
+        const manquants=Math.max(0,(S.rhOutilMembres||[]).length-nb);
+        if(!v||!manquants){basculer(v).catch(()=>{});return;}
+        obl.checked=false;
+        rhOutilConfirmer({
+          ton:'info',titre:L.obligTitre,nom:x.libelle,label:'Rendre obligatoire',
+          sous:manquants+' employé'+(manquants>1?'s ne l’ont':' ne l’a')+' pas encore',
+          texte:L.il+' sera '+L.ajoute+' tout de suite à '+(manquants>1?'ces employés':'cet employé')+', puis à chaque employé ajouté ensuite. Décocher la case plus tard ne retirera rien.',
+          onConfirm:async()=>{obl.checked=true;await basculer(true);},
+        });
+      });
       return h('div',{className:'rho-cat-row'},
         inp,
+        h('label',{className:'rho-oblig',title:'Attribué d’office à chaque employé'},obl,'Obligatoire'),
         h('span',{className:'rho-sub'},nb+' employé'+(nb>1?'s':'')),
         h('button',{type:'button',className:'rho-del',title:'Supprimer du catalogue',onClick:()=>rhOutilConfirmer({
           titre:L.supprTitre,nom:x.libelle,label:'Supprimer',
@@ -397,6 +435,7 @@ function rhOutilCatalogue(L){
   };
   nouv.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();ajouter();}});
   ov.appendChild(rhOutilDialogue(L.catalogue,fermer,
+    h('div',{className:'rho-cat-legend'},'« Obligatoire » : attribué d’office à chaque employé, présent et à venir. Retirable ensuite employé par employé.'),
     listEl,
     h('div',{className:'rho-cat-add'},nouv,h('button',{type:'button',className:'rho-btn accent',onClick:ajouter},iconEl('plus',13),'Ajouter'))
   ));
@@ -412,7 +451,7 @@ function rhOutilCelluleListe(L,m){
   return h('div',{className:'rho-items'},
     ...(items.length?items.map(x=>{
       const box=rhOutilCase(x.fait,x.libelle+' · '+L.etat);
-      const lbl=h('span',{className:'rho-item-lbl'},x.libelle);
+      const lbl=h('span',{className:'rho-item-lbl'},x.libelle,x.obligatoire?h('span',{className:'rho-tag rho-tag-oblig',title:'Obligatoire pour chaque employé'},'Obligatoire'):null);
       const ligne=h('div',{className:'rho-item'+(x.fait?' done':'')},
         box,lbl,
         h('button',{type:'button',className:'rho-item-x',title:'Retirer',onClick:()=>rhOutilRetirerElement(L,m,x)},'×')
