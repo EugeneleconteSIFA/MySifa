@@ -6,6 +6,7 @@ Accès : quiconque a accès à MyCompta (rôle ou exception réglée dans Param�
 """
 
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -19,6 +20,15 @@ router = APIRouter(prefix="/api/rh-outil", tags=["rh_outil"])
 
 class MembreIn(BaseModel):
     user_id: int
+
+
+class MembrePatch(BaseModel):
+    reglement_signe: Optional[bool] = None
+
+
+# Points de la checklist : champ de MembrePatch → libellé du journal.
+# Chaque point est une colonne de rh_outil_membres (migration fichier).
+CHECKLIST = {"reglement_signe": "Règlement signé"}
 
 
 def _require(request: Request) -> dict:
@@ -53,7 +63,7 @@ def list_membres(request: Request):
     _require(request)
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT m.id, m.user_id, m.ajoute_le, m.ajoute_par,
+            """SELECT m.id, m.user_id, m.ajoute_le, m.ajoute_par, m.reglement_signe,
                       u.nom, u.email, u.role, u.actif
                  FROM rh_outil_membres m
                  JOIN users u ON u.id = m.user_id
@@ -62,7 +72,8 @@ def list_membres(request: Request):
     return {"membres": [
         {"id": r["id"], "user_id": r["user_id"], "nom": r["nom"], "email": r["email"],
          "role": r["role"], "actif": bool(r["actif"]),
-         "ajoute_le": r["ajoute_le"], "ajoute_par": r["ajoute_par"]}
+         "ajoute_le": r["ajoute_le"], "ajoute_par": r["ajoute_par"],
+         "reglement_signe": bool(r["reglement_signe"])}
         for r in rows
     ]}
 
@@ -83,6 +94,32 @@ def add_membre(payload: MembreIn, request: Request):
             raise HTTPException(409, "Employé déjà dans la liste.")
     log_action(user=user, action="CREATE", module="rh_outil",
                objet=f"Outil RH · ajout de {emp['nom']}", request=request)
+    return {"success": True}
+
+
+@router.patch("/membres/{membre_id}")
+def update_membre(membre_id: int, payload: MembrePatch, request: Request):
+    user = _require(request)
+    data = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if k in CHECKLIST}
+    if not data:
+        return {"success": True}
+    with get_db() as conn:
+        row = conn.execute(
+            """SELECT m.id, u.nom FROM rh_outil_membres m
+                 JOIN users u ON u.id = m.user_id WHERE m.id=?""",
+            (membre_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Employé introuvable dans la liste.")
+        # Les clés viennent de CHECKLIST, jamais de la requête : pas d'injection.
+        sets = ", ".join(f"{k}=?" for k in data)
+        conn.execute(f"UPDATE rh_outil_membres SET {sets} WHERE id=?",
+                     [1 if v else 0 for v in data.values()] + [membre_id])
+        conn.commit()
+    for k, v in data.items():
+        log_action(user=user, action="UPDATE", module="rh_outil",
+                   objet=f"Outil RH · {row['nom']} · {CHECKLIST[k]} : {'oui' if v else 'non'}",
+                   request=request)
     return {"success": True}
 
 

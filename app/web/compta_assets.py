@@ -23,6 +23,25 @@ body.light .compta-add-bar-fields input:focus{box-shadow:0 0 0 3px rgba(8,145,17
 .rho-emp[disabled]{cursor:default;opacity:.55}
 .rho-emp[disabled]:hover{border-color:var(--border)}
 .rho-emp .rho-sub{font-size:11px;color:var(--muted)}
+.rho-table{width:100%;border-collapse:collapse;font-size:13px}
+.rho-table th{text-align:left;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:10px 16px;border-bottom:1px solid var(--border)}
+.rho-table td{padding:10px 16px;border-bottom:1px solid var(--border);vertical-align:middle}
+.rho-table tr:last-child td{border-bottom:none}
+.rho-table .rho-c{text-align:center;width:1%;white-space:nowrap}
+.rho-table input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+.rho-del{padding:5px 8px;border-radius:6px;border:1px solid rgba(248,113,113,.3);background:transparent;cursor:pointer;color:var(--danger);display:inline-flex;align-items:center}
+.rho-del:hover{background:rgba(248,113,113,.12)}
+/* Confirmation : même dessin que les modales de suppression de Maintenance */
+.rho-confirm-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:13000;display:flex;align-items:center;justify-content:center}
+.rho-confirm{max-width:520px;width:calc(100% - 40px);background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,.4)}
+.rho-confirm-title{color:var(--danger);font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.rho-confirm-sum{padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:14px}
+.rho-confirm-txt{font-size:13px;color:var(--text);line-height:1.5;margin-bottom:16px}
+.rho-confirm-act{display:flex;justify-content:flex-end;gap:10px}
+.rho-confirm-act button{border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px}
+.rho-confirm-act .rho-cancel{background:var(--card);color:var(--text);border:1px solid var(--border)}
+.rho-confirm-act .rho-ok{background:var(--danger);color:#fff;border:none}
+.rho-confirm-act button[disabled]{opacity:.6;cursor:default}
 """
 
 COMPTA_MAIN_JS = r"""
@@ -55,13 +74,55 @@ async function rhOutilAdd(userId){
   }catch(e){toast(e.message,'error');}
 }
 async function rhOutilRemove(m){
-  if(!confirm('Retirer '+(m.nom||'cet employé')+' de la liste ?'))return;
   try{
     await api('/api/rh-outil/membres/'+m.id,{method:'DELETE'});
     await rhOutilLoad();
     toast('Employé retiré.');
-  }catch(e){toast(e.message,'error');}
+  }catch(e){toast(e.message,'error');throw e;}
 }
+async function rhOutilToggle(m,cle,box){
+  const v=box.checked;
+  try{
+    await api('/api/rh-outil/membres/'+m.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({[cle]:v})});
+    m[cle]=v;
+  }catch(e){box.checked=!v;toast(e.message,'error');}
+}
+
+// Confirmation de retrait, construite hors de render() (comme dans
+// Maintenance) : un re-render de MyCompta ne la ferme pas.
+function rhOutilConfirmRemove(m){
+  const old=document.getElementById('rho-confirm-ov');if(old)old.remove();
+  const ov=h('div',{className:'rho-confirm-ov',id:'rho-confirm-ov'});
+  const fermer=()=>{document.removeEventListener('keydown',onKey,true);ov.remove();};
+  const onKey=e=>{if(e.key==='Escape'){e.preventDefault();fermer();}};
+  document.addEventListener('keydown',onKey,true);
+  ov.addEventListener('click',e=>{if(e.target===ov)fermer();});
+  const cancel=h('button',{type:'button',className:'rho-cancel',onClick:fermer},'Annuler');
+  const ok=h('button',{type:'button',className:'rho-ok'},'Retirer');
+  ok.addEventListener('click',async()=>{
+    ok.disabled=true;cancel.disabled=true;
+    try{await rhOutilRemove(m);fermer();}
+    catch(_){ok.disabled=false;cancel.disabled=false;}
+  });
+  const titre=h('div',{className:'rho-confirm-title'},iconEl('trash',18),'Retirer cet employé ?');
+  ov.appendChild(h('div',{className:'rho-confirm',role:'dialog','aria-modal':'true'},
+    titre,
+    h('div',{className:'rho-confirm-sum'},
+      h('div',{style:{fontSize:'13px',fontWeight:'600',color:'var(--text)'}},m.nom||'—'),
+      h('div',{style:{fontSize:'11px',color:'var(--muted)'}},m.email||'')
+    ),
+    h('div',{className:'rho-confirm-txt'},'L’employé sort de la liste de l’Outil RH, avec les cases cochées de sa checklist. Son compte MySifa n’est pas touché.'),
+    h('div',{className:'rho-confirm-act'},cancel,ok)
+  ));
+  document.body.appendChild(ov);
+  requestAnimationFrame(()=>cancel.focus());
+}
+
+// Colonnes de la checklist, dans l'ordre d'affichage. Chaque clé est un
+// champ de l'API (CHECKLIST dans app/routers/rh_outil.py).
+const RH_OUTIL_COLONNES=[
+  {cle:'reglement_signe',label:'Règlement signé'},
+];
 
 function renderRhOutilTab(){
   const list=S.rhOutilMembres||[];
@@ -71,13 +132,25 @@ function renderRhOutilTab(){
   if(!S.rhOutilLoaded)return h('div',null,bar,h('div',{className:'card-empty'},'Chargement…'));
   const rows=list.length? h('div',{className:'card'},
     h('div',{className:'card-header'},h('h3',null,'Employés ('+list.length+')')),
-    h('div',{style:{padding:'10px 16px'}},...list.map(m=>h('div',{className:'import-row'},
-      h('div',{style:{flex:1}},
-        h('div',{style:{fontSize:'13px',fontWeight:'600'}},m.nom||'—',m.actif?null:h('span',{className:'rho-tag'},'Désactivé')),
-        h('div',{style:{fontSize:'11px',color:'var(--muted)'}},m.email||'')
-      ),
-      h('button',{className:'btn-danger',onClick:()=>rhOutilRemove(m)},iconEl('trash',13),' Retirer')
-    )))
+    h('div',{style:{overflowX:'auto'}},h('table',{className:'rho-table'},
+      h('thead',null,h('tr',null,
+        h('th',null,'Employé'),
+        ...RH_OUTIL_COLONNES.map(c=>h('th',{className:'rho-c'},c.label)),
+        h('th',{className:'rho-c'},'')
+      )),
+      h('tbody',null,...list.map(m=>h('tr',null,
+        h('td',null,
+          h('div',{style:{fontWeight:'600'}},m.nom||'—',m.actif?null:h('span',{className:'rho-tag'},'Désactivé')),
+          h('div',{style:{fontSize:'11px',color:'var(--muted)'}},m.email||'')
+        ),
+        ...RH_OUTIL_COLONNES.map(c=>{
+          const box=h('input',{type:'checkbox',checked:!!m[c.cle],title:c.label,'aria-label':c.label+' · '+(m.nom||'')});
+          box.addEventListener('change',()=>rhOutilToggle(m,c.cle,box));
+          return h('td',{className:'rho-c'},box);
+        }),
+        h('td',{className:'rho-c'},h('button',{type:'button',className:'rho-del',title:'Retirer de la liste',onClick:()=>rhOutilConfirmRemove(m)},iconEl('trash',13)))
+      )))
+    ))
   ) : h('div',{className:'card-empty'},'Aucun employé — utilisez « Ajouter un utilisateur ».');
   return h('div',null,bar,rows);
 }
@@ -98,14 +171,17 @@ function renderRhOutilPicker(){
       )
     )):[h('div',{className:'card-empty'},'Aucun employé ne correspond.')]));
   };
-  const search=h('input',{type:'text',className:'rho-search',placeholder:'Rechercher un nom ou un email…'});
+  // type=search + pas de « email » / « utilisateur » autour du champ : sinon
+  // Safari le prend pour un identifiant et propose les mots de passe.
+  const search=h('input',{type:'search',name:'rho-recherche',className:'rho-search',placeholder:'Rechercher un employé…',
+    autocomplete:'off',autocorrect:'off',autocapitalize:'off',spellcheck:'false','data-1p-ignore':'','data-lpignore':'true','data-form-type':'other'});
   search.addEventListener('input',()=>remplir(search.value));
   remplir('');
   const overlay=h('div',{className:'add-row-modal',style:{zIndex:12000}});
   overlay.addEventListener('click',e=>{if(e.target===overlay)rhOutilClosePicker();});
   const form=h('div',{className:'add-row-form',style:{maxWidth:'520px'},onClick:e=>e.stopPropagation()},
     h('button',{type:'button',className:'add-row-close',onClick:rhOutilClosePicker},'×'),
-    h('h3',null,'Ajouter un utilisateur'),
+    h('h3',null,'Ajouter un employé'),
     search,
     listEl
   );
