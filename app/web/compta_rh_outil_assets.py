@@ -36,6 +36,13 @@ RH_OUTIL_CSS = r"""
 .rho-emp-cell{display:flex;align-items:center;gap:10px;min-width:180px}
 .rho-avatar{width:32px;height:32px;border-radius:50%;background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
 .rho-emp-nom{font-weight:600;font-size:13px;color:var(--text)}
+.rho-seg{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}
+.rho-seg button{border:none;background:transparent;color:var(--muted);font-family:inherit;font-size:11px;font-weight:700;padding:4px 11px;border-radius:6px;cursor:pointer;transition:background-color .15s,color .15s}
+.rho-seg button:hover{color:var(--text)}
+.rho-seg button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-bg)}
+.rho-seg button.on.oui{background:var(--accent);color:white}
+.rho-seg button.on.non{background:var(--card);color:var(--text);box-shadow:0 0 0 1px var(--border)}
+.rho-seg[aria-busy=true]{opacity:.6;pointer-events:none}
 .rho-del{padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);cursor:pointer;color:var(--muted);display:inline-flex;align-items:center;transition:background .15s,border-color .15s,color .15s}
 .rho-del:hover{color:var(--danger);border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.12)}
 
@@ -87,7 +94,6 @@ RH_OUTIL_CSS = r"""
 .rho-oblig{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap;user-select:none}
 .rho-oblig:has(.rho-chk:checked){color:var(--accent)}
 .rho-cat-legend{font-size:11px;color:var(--muted);margin:-6px 0 12px;line-height:1.4}
-.rho-tag-oblig{font-size:9px;margin-left:6px;padding:0 5px;color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
 .rho-dlg-title.info{display:flex;align-items:center;gap:8px}
 .rho-confirm-act .rho-ok.accent{background:var(--accent)}
 .rho-confirm-sum{padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:14px}
@@ -114,16 +120,16 @@ const RH_OUTIL_LISTES=[
    retirerTitre:'Retirer cette formation ?',retirerTxt:'La formation est cochée comme faite : ce suivi sera perdu pour cet employé. Le catalogue n’est pas modifié.',
    supprTitre:'Supprimer cette formation ?',supprTxtN:'Elle disparaît du catalogue et de la liste de chaque employé qui l’a, avec son suivi.',supprTxt0:'Elle disparaît du catalogue.',
    renomme:'Formation renommée.',supprime:'Formation supprimée.',etat:'faite',
-   obligTitre:'Rendre cette formation obligatoire ?',il:'Elle',ajoute:'ajoutée',obligOk:'Formation obligatoire'},
+   obligTitre:'Rendre cette formation obligatoire pour tous ?',il:'Elle',ajoute:'ajoutée',obligOk:'Formation obligatoire pour tous'},
   {cle:'documents',titre:'Documents',bouton:'Document',gerer:'Gérer les documents',catalogue:'Catalogue des documents',
    aucun:'Aucun document',rechercher:'Rechercher un document…',nouveau:'Nouveau document…',pour:'Document pour ',
    deja:'Déjà attribué',vide:'Catalogue vide — ajoutez des documents avec « Gérer les documents ».',catVide:'Aucun document au catalogue.',
    retirerTitre:'Retirer ce document ?',retirerTxt:'Le document est coché comme vérifié : ce suivi sera perdu pour cet employé. Le catalogue n’est pas modifié.',
    supprTitre:'Supprimer ce document ?',supprTxtN:'Il disparaît du catalogue et de la liste de chaque employé qui l’a, avec son suivi.',supprTxt0:'Il disparaît du catalogue.',
    renomme:'Document renommé.',supprime:'Document supprimé.',etat:'vérifié',
-   obligTitre:'Rendre ce document obligatoire ?',il:'Il',ajoute:'ajouté',obligOk:'Document obligatoire'},
+   obligTitre:'Rendre ce document obligatoire pour tous ?',il:'Il',ajoute:'ajouté',obligOk:'Document obligatoire pour tous'},
 ];
-// Cases fixes, après les listes. `cle` = CHECKLIST côté API.
+// Champs Oui / Non, après les listes. `cle` = CHECKLIST côté API.
 const RH_OUTIL_COLONNES=[
   {cle:'reglement_signe',label:'Règlement signé'},
 ];
@@ -291,13 +297,32 @@ function rhOutilRetirerEmploye(m){
     },
   });
 }
-async function rhOutilCocher(m,cle,box){
-  const v=box.checked;
-  try{
-    await api('/api/rh-outil/membres/'+m.id,rhOutilJson('PATCH',{[cle]:v}));
-    m[cle]=v;
-    rhOutilMajStatut(m);
-  }catch(e){box.checked=!v;toast(e.message,'error');}
+// Sélecteur Oui | Non d'une case fixe (Règlement signé). Le choix s'affiche
+// tout de suite ; en cas d'erreur, il revient à la valeur enregistrée.
+function rhOutilOuiNon(m,c){
+  const seg=h('div',{className:'rho-seg',role:'radiogroup','aria-label':c.label+' · '+(m.nom||'')});
+  const peindre=v=>{
+    seg.querySelectorAll('button').forEach(b=>{
+      const on=(b.dataset.v==='1')===v;
+      b.classList.toggle('on',on);b.setAttribute('aria-checked',on?'true':'false');
+    });
+  };
+  const choisir=async v=>{
+    if(!!m[c.cle]===v)return;
+    peindre(v);seg.setAttribute('aria-busy','true');
+    try{
+      await api('/api/rh-outil/membres/'+m.id,rhOutilJson('PATCH',{[c.cle]:v}));
+      m[c.cle]=v;
+      rhOutilMajStatut(m);
+    }catch(e){peindre(!!m[c.cle]);toast(e.message,'error');}
+    finally{seg.removeAttribute('aria-busy');}
+  };
+  seg.append(
+    h('button',{type:'button',className:'oui',role:'radio','data-v':'1',onClick:()=>choisir(true)},'Oui'),
+    h('button',{type:'button',className:'non',role:'radio','data-v':'0',onClick:()=>choisir(false)},'Non')
+  );
+  peindre(!!m[c.cle]);
+  return seg;
 }
 
 // ── Listes d'un employé (formations, documents) ───────────────────
@@ -378,7 +403,7 @@ function rhOutilCatalogue(L){
       });
       inp.addEventListener('blur',enregistrer);
       const nb=x.nb_employes;
-      const obl=rhOutilCase(x.obligatoire,'Obligatoire · '+x.libelle);
+      const obl=rhOutilCase(x.obligatoire,'Obligatoire pour tous · '+x.libelle);
       const basculer=async v=>{
         try{
           const r=await api(base+'/'+x.id,rhOutilJson('PATCH',{obligatoire:v}));
@@ -398,7 +423,7 @@ function rhOutilCatalogue(L){
         if(!v||!manquants){basculer(v).catch(()=>{});return;}
         obl.checked=false;
         rhOutilConfirmer({
-          ton:'info',titre:L.obligTitre,nom:x.libelle,label:'Rendre obligatoire',
+          ton:'info',titre:L.obligTitre,nom:x.libelle,label:'Rendre obligatoire pour tous',
           sous:manquants+' employé'+(manquants>1?'s ne l’ont':' ne l’a')+' pas encore',
           texte:L.il+' sera '+L.ajoute+' tout de suite à '+(manquants>1?'ces employés':'cet employé')+', puis à chaque employé ajouté ensuite. Décocher la case plus tard ne retirera rien.',
           onConfirm:async()=>{obl.checked=true;await basculer(true);},
@@ -406,7 +431,7 @@ function rhOutilCatalogue(L){
       });
       return h('div',{className:'rho-cat-row'},
         inp,
-        h('label',{className:'rho-oblig',title:'Attribué d’office à chaque employé'},obl,'Obligatoire'),
+        h('label',{className:'rho-oblig',title:'Attribué d’office à chaque employé'},obl,'Obligatoire pour tous'),
         h('span',{className:'rho-sub'},nb+' employé'+(nb>1?'s':'')),
         h('button',{type:'button',className:'rho-del',title:'Supprimer du catalogue',onClick:()=>rhOutilConfirmer({
           titre:L.supprTitre,nom:x.libelle,label:'Supprimer',
@@ -435,7 +460,7 @@ function rhOutilCatalogue(L){
   };
   nouv.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();ajouter();}});
   ov.appendChild(rhOutilDialogue(L.catalogue,fermer,
-    h('div',{className:'rho-cat-legend'},'« Obligatoire » : attribué d’office à chaque employé, présent et à venir. Retirable ensuite employé par employé.'),
+    h('div',{className:'rho-cat-legend'},'« Obligatoire pour tous » : attribué d’office à chaque employé, présent et à venir. Retirable ensuite employé par employé.'),
     listEl,
     h('div',{className:'rho-cat-add'},nouv,h('button',{type:'button',className:'rho-btn accent',onClick:ajouter},iconEl('plus',13),'Ajouter'))
   ));
@@ -451,7 +476,7 @@ function rhOutilCelluleListe(L,m){
   return h('div',{className:'rho-items'},
     ...(items.length?items.map(x=>{
       const box=rhOutilCase(x.fait,x.libelle+' · '+L.etat);
-      const lbl=h('span',{className:'rho-item-lbl'},x.libelle,x.obligatoire?h('span',{className:'rho-tag rho-tag-oblig',title:'Obligatoire pour chaque employé'},'Obligatoire'):null);
+      const lbl=h('span',{className:'rho-item-lbl'},x.libelle);
       const ligne=h('div',{className:'rho-item'+(x.fait?' done':'')},
         box,lbl,
         h('button',{type:'button',className:'rho-item-x',title:'Retirer',onClick:()=>rhOutilRetirerElement(L,m,x)},'×')
@@ -506,12 +531,7 @@ function renderRhOutilTab(){
           )
         )),
         ...RH_OUTIL_LISTES.map(L=>h('td',null,rhOutilCelluleListe(L,m))),
-        ...RH_OUTIL_COLONNES.map(c=>{
-          const box=rhOutilCase(m[c.cle],c.label+' · '+(m.nom||''));
-          box.title=c.label;
-          box.addEventListener('change',()=>rhOutilCocher(m,c.cle,box));
-          return h('td',{className:'rho-c'},box);
-        }),
+        ...RH_OUTIL_COLONNES.map(c=>h('td',{className:'rho-c'},rhOutilOuiNon(m,c))),
         h('td',{className:'rho-c','data-rho-statut':String(m.id)},rhOutilBadge(m)),
         h('td',{className:'rho-c'},h('button',{type:'button',className:'rho-del',title:'Retirer de la liste',onClick:()=>rhOutilRetirerEmploye(m)},iconEl('trash',13)))
       )))
