@@ -4,8 +4,8 @@ Liste partagée des employés suivis dans l'onglet « Outil RH ». On y ajoute u
 employé choisi parmi tous les comptes (actifs ou non), on peut le retirer.
 Chaque employé suivi porte une checklist :
 - des cases fixes, une colonne de rh_outil_membres chacune (CHECKLIST) ;
-- ses formations, piochées dans un catalogue commun géré depuis l'onglet
-  (rh_outil_formations / rh_outil_membre_formations).
+- des listes qui varient d'un employé à l'autre (LISTES : formations,
+  documents), piochées chacune dans un catalogue commun géré depuis l'onglet.
 Accès : quiconque a accès à MyCompta (rôle ou exception réglée dans Paramètres).
 """
 
@@ -32,16 +32,52 @@ class MembrePatch(BaseModel):
     reglement_signe: Optional[bool] = None
 
 
-class FormationIn(BaseModel):
+class LibelleIn(BaseModel):
     libelle: str
 
 
 class AttributionIn(BaseModel):
-    formation_id: int
+    element_id: int
 
 
 class AttributionPatch(BaseModel):
     fait: bool
+
+
+# Listes par employé. Chaque liste = un catalogue + une table de liaison
+# employé ↔ élément avec une case « fait ». Les noms de tables et de colonnes
+# viennent d'ici, jamais de la requête : les f-strings SQL sont sûres.
+LISTES = {
+    "formations": {
+        "catalogue": "rh_outil_formations",
+        "liaison": "rh_outil_membre_formations",
+        "fk": "formation_id",
+        "nom": "formation",
+        "catalogue_nom": "catalogue des formations",
+        "doublon": "Cette formation existe déjà au catalogue.",
+        "introuvable": "Formation introuvable.",
+        "deja": "Cet employé a déjà cette formation.",
+        "fait": ("faite", "à faire"),
+    },
+    "documents": {
+        "catalogue": "rh_outil_documents",
+        "liaison": "rh_outil_membre_documents",
+        "fk": "document_id",
+        "nom": "document",
+        "catalogue_nom": "catalogue des documents",
+        "doublon": "Ce document existe déjà au catalogue.",
+        "introuvable": "Document introuvable.",
+        "deja": "Cet employé a déjà ce document.",
+        "fait": ("vérifié", "à vérifier"),
+    },
+}
+
+
+def _liste(liste: str) -> dict:
+    cfg = LISTES.get(liste)
+    if not cfg:
+        raise HTTPException(404, "Liste inconnue.")
+    return cfg
 
 
 # Points fixes de la checklist : champ de MembrePatch → libellé du journal.
@@ -80,9 +116,9 @@ def _membre(conn, membre_id: int):
     return row
 
 
-def _doublon(conn, libelle: str, sauf_id: Optional[int] = None) -> bool:
+def _doublon(conn, cfg: dict, libelle: str, sauf_id: Optional[int] = None) -> bool:
     row = conn.execute(
-        "SELECT id FROM rh_outil_formations WHERE libelle = ? COLLATE NOCASE AND id != ?",
+        f"SELECT id FROM {cfg['catalogue']} WHERE libelle = ? COLLATE NOCASE AND id != ?",
         (libelle, sauf_id or 0),
     ).fetchone()
     return row is not None
@@ -121,26 +157,30 @@ def list_membres(request: Request):
                  JOIN users u ON u.id = m.user_id
                 ORDER BY u.nom COLLATE NOCASE"""
         ).fetchall()
-        attributions = conn.execute(
-            """SELECT a.id, a.membre_id, a.formation_id, a.fait, f.libelle
-                 FROM rh_outil_membre_formations a
-                 JOIN rh_outil_formations f ON f.id = a.formation_id
-                ORDER BY f.libelle COLLATE NOCASE"""
-        ).fetchall()
-    par_membre: dict = {}
-    for a in attributions:
-        par_membre.setdefault(a["membre_id"], []).append(
-            {"id": a["id"], "formation_id": a["formation_id"],
-             "libelle": a["libelle"], "fait": bool(a["fait"])}
-        )
-    return {"membres": [
-        {"id": r["id"], "user_id": r["user_id"], "nom": r["nom"], "email": r["email"],
-         "role": r["role"], "actif": bool(r["actif"]),
-         "ajoute_le": r["ajoute_le"], "ajoute_par": r["ajoute_par"],
-         "reglement_signe": bool(r["reglement_signe"]),
-         "formations": par_membre.get(r["id"], [])}
-        for r in rows
-    ]}
+        # {liste: {membre_id: [éléments]}}
+        par_liste: dict = {}
+        for liste, cfg in LISTES.items():
+            par_membre = par_liste.setdefault(liste, {})
+            for a in conn.execute(
+                f"""SELECT a.id, a.membre_id, a.{cfg['fk']} AS element_id, a.fait, e.libelle
+                      FROM {cfg['liaison']} a
+                      JOIN {cfg['catalogue']} e ON e.id = a.{cfg['fk']}
+                     ORDER BY e.libelle COLLATE NOCASE"""
+            ).fetchall():
+                par_membre.setdefault(a["membre_id"], []).append(
+                    {"id": a["id"], "element_id": a["element_id"],
+                     "libelle": a["libelle"], "fait": bool(a["fait"])}
+                )
+    membres = []
+    for r in rows:
+        m = {"id": r["id"], "user_id": r["user_id"], "nom": r["nom"], "email": r["email"],
+             "role": r["role"], "actif": bool(r["actif"]),
+             "ajoute_le": r["ajoute_le"], "ajoute_par": r["ajoute_par"],
+             "reglement_signe": bool(r["reglement_signe"])}
+        for liste in LISTES:
+            m[liste] = par_liste[liste].get(r["id"], [])
+        membres.append(m)
+    return {"membres": membres}
 
 
 @router.post("/membres")
@@ -187,7 +227,8 @@ def delete_membre(membre_id: int, request: Request):
     user = _require(request)
     with get_db() as conn:
         row = _membre(conn, membre_id)
-        conn.execute("DELETE FROM rh_outil_membre_formations WHERE membre_id=?", (membre_id,))
+        for cfg in LISTES.values():
+            conn.execute(f"DELETE FROM {cfg['liaison']} WHERE membre_id=?", (membre_id,))
         conn.execute("DELETE FROM rh_outil_membres WHERE id=?", (membre_id,))
         conn.commit()
     log_action(user=user, action="DELETE", module="rh_outil",
@@ -195,145 +236,153 @@ def delete_membre(membre_id: int, request: Request):
     return {"success": True}
 
 
-# ─── Catalogue des formations ─────────────────────────────────────────────
+# ─── Catalogues (formations, documents) ───────────────────────────────────
 
-@router.get("/formations")
-def list_formations(request: Request):
+@router.get("/{liste}/catalogue")
+def list_catalogue(liste: str, request: Request):
     _require(request)
+    cfg = _liste(liste)
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT f.id, f.libelle,
-                      (SELECT COUNT(*) FROM rh_outil_membre_formations a
-                        WHERE a.formation_id = f.id) AS nb_employes
-                 FROM rh_outil_formations f
-                ORDER BY f.libelle COLLATE NOCASE"""
+            f"""SELECT e.id, e.libelle,
+                       (SELECT COUNT(*) FROM {cfg['liaison']} a
+                         WHERE a.{cfg['fk']} = e.id) AS nb_employes
+                  FROM {cfg['catalogue']} e
+                 ORDER BY e.libelle COLLATE NOCASE"""
         ).fetchall()
-    return {"formations": [
+    return {"elements": [
         {"id": r["id"], "libelle": r["libelle"], "nb_employes": r["nb_employes"]}
         for r in rows
     ]}
 
 
-@router.post("/formations")
-def add_formation(payload: FormationIn, request: Request):
+@router.post("/{liste}/catalogue")
+def add_catalogue(liste: str, payload: LibelleIn, request: Request):
     user = _require(request)
+    cfg = _liste(liste)
     libelle = _libelle(payload.libelle)
     with get_db() as conn:
-        if _doublon(conn, libelle):
-            raise HTTPException(409, "Cette formation existe déjà au catalogue.")
+        if _doublon(conn, cfg, libelle):
+            raise HTTPException(409, cfg["doublon"])
         cur = conn.execute(
-            "INSERT INTO rh_outil_formations (libelle, cree_le, cree_par) VALUES (?,?,?)",
+            f"INSERT INTO {cfg['catalogue']} (libelle, cree_le, cree_par) VALUES (?,?,?)",
             (libelle, _now(), user.get("nom")),
         )
         conn.commit()
     log_action(user=user, action="CREATE", module="rh_outil",
-               objet=f"Outil RH · formation « {libelle} » ajoutée au catalogue", request=request)
+               objet=f"Outil RH · {cfg['catalogue_nom']} · ajout de « {libelle} »", request=request)
     return {"success": True, "id": cur.lastrowid}
 
 
-@router.put("/formations/{formation_id}")
-def rename_formation(formation_id: int, payload: FormationIn, request: Request):
+@router.put("/{liste}/catalogue/{element_id}")
+def rename_catalogue(liste: str, element_id: int, payload: LibelleIn, request: Request):
     user = _require(request)
+    cfg = _liste(liste)
     libelle = _libelle(payload.libelle)
     with get_db() as conn:
-        row = conn.execute("SELECT libelle FROM rh_outil_formations WHERE id=?",
-                           (formation_id,)).fetchone()
+        row = conn.execute(f"SELECT libelle FROM {cfg['catalogue']} WHERE id=?",
+                           (element_id,)).fetchone()
         if not row:
-            raise HTTPException(404, "Formation introuvable.")
+            raise HTTPException(404, cfg["introuvable"])
         if row["libelle"] == libelle:
             return {"success": True}
-        if _doublon(conn, libelle, formation_id):
-            raise HTTPException(409, "Cette formation existe déjà au catalogue.")
-        conn.execute("UPDATE rh_outil_formations SET libelle=? WHERE id=?", (libelle, formation_id))
+        if _doublon(conn, cfg, libelle, element_id):
+            raise HTTPException(409, cfg["doublon"])
+        conn.execute(f"UPDATE {cfg['catalogue']} SET libelle=? WHERE id=?", (libelle, element_id))
         conn.commit()
     log_action(user=user, action="UPDATE", module="rh_outil",
-               objet=f"Outil RH · formation « {row['libelle']} » renommée « {libelle} »",
+               objet=f"Outil RH · {cfg['catalogue_nom']} · « {row['libelle']} » → « {libelle} »",
                request=request)
     return {"success": True}
 
 
-@router.delete("/formations/{formation_id}")
-def delete_formation(formation_id: int, request: Request):
-    """Supprime la formation du catalogue ET de tous les employés qui l'ont."""
+@router.delete("/{liste}/catalogue/{element_id}")
+def delete_catalogue(liste: str, element_id: int, request: Request):
+    """Supprime l'élément du catalogue ET de tous les employés qui l'ont."""
     user = _require(request)
+    cfg = _liste(liste)
     with get_db() as conn:
-        row = conn.execute("SELECT libelle FROM rh_outil_formations WHERE id=?",
-                           (formation_id,)).fetchone()
+        row = conn.execute(f"SELECT libelle FROM {cfg['catalogue']} WHERE id=?",
+                           (element_id,)).fetchone()
         if not row:
-            raise HTTPException(404, "Formation introuvable.")
-        n = conn.execute("DELETE FROM rh_outil_membre_formations WHERE formation_id=?",
-                         (formation_id,)).rowcount
-        conn.execute("DELETE FROM rh_outil_formations WHERE id=?", (formation_id,))
+            raise HTTPException(404, cfg["introuvable"])
+        n = conn.execute(f"DELETE FROM {cfg['liaison']} WHERE {cfg['fk']}=?",
+                         (element_id,)).rowcount
+        conn.execute(f"DELETE FROM {cfg['catalogue']} WHERE id=?", (element_id,))
         conn.commit()
     log_action(user=user, action="DELETE", module="rh_outil",
-               objet=f"Outil RH · formation « {row['libelle']} » supprimée ({n} employé(s))",
+               objet=f"Outil RH · {cfg['catalogue_nom']} · suppression de « {row['libelle']} » ({n} employé(s))",
                request=request)
     return {"success": True}
 
 
-# ─── Formations d'un employé ──────────────────────────────────────────────
+# ─── Listes d'un employé ──────────────────────────────────────────────────
 
-@router.post("/membres/{membre_id}/formations")
-def add_attribution(membre_id: int, payload: AttributionIn, request: Request):
+@router.post("/membres/{membre_id}/{liste}")
+def add_attribution(membre_id: int, liste: str, payload: AttributionIn, request: Request):
     user = _require(request)
+    cfg = _liste(liste)
     with get_db() as conn:
         m = _membre(conn, membre_id)
-        f = conn.execute("SELECT libelle FROM rh_outil_formations WHERE id=?",
-                         (payload.formation_id,)).fetchone()
-        if not f:
-            raise HTTPException(404, "Formation introuvable.")
+        e = conn.execute(f"SELECT libelle FROM {cfg['catalogue']} WHERE id=?",
+                         (payload.element_id,)).fetchone()
+        if not e:
+            raise HTTPException(404, cfg["introuvable"])
         cur = conn.execute(
-            """INSERT OR IGNORE INTO rh_outil_membre_formations
-                   (membre_id, formation_id, fait, ajoute_le) VALUES (?,?,0,?)""",
-            (membre_id, payload.formation_id, _now()),
+            f"""INSERT OR IGNORE INTO {cfg['liaison']}
+                    (membre_id, {cfg['fk']}, fait, ajoute_le) VALUES (?,?,0,?)""",
+            (membre_id, payload.element_id, _now()),
         )
         conn.commit()
         if not cur.rowcount:
-            raise HTTPException(409, "Cet employé a déjà cette formation.")
+            raise HTTPException(409, cfg["deja"])
     log_action(user=user, action="ASSIGN", module="rh_outil",
-               objet=f"Outil RH · {m['nom']} · formation « {f['libelle']} » attribuée",
+               objet=f"Outil RH · {m['nom']} · {cfg['nom']} « {e['libelle']} » : attribution",
                request=request)
     return {"success": True}
 
 
-def _attribution(conn, attribution_id: int):
+def _attribution(conn, cfg: dict, attribution_id: int):
     row = conn.execute(
-        """SELECT a.id, f.libelle, u.nom
-             FROM rh_outil_membre_formations a
-             JOIN rh_outil_formations f ON f.id = a.formation_id
-             JOIN rh_outil_membres m ON m.id = a.membre_id
-             JOIN users u ON u.id = m.user_id
-            WHERE a.id=?""",
+        f"""SELECT a.id, e.libelle, u.nom
+              FROM {cfg['liaison']} a
+              JOIN {cfg['catalogue']} e ON e.id = a.{cfg['fk']}
+              JOIN rh_outil_membres m ON m.id = a.membre_id
+              JOIN users u ON u.id = m.user_id
+             WHERE a.id=?""",
         (attribution_id,),
     ).fetchone()
     if not row:
-        raise HTTPException(404, "Formation introuvable pour cet employé.")
+        raise HTTPException(404, cfg["introuvable"])
     return row
 
 
-@router.patch("/membre-formations/{attribution_id}")
-def update_attribution(attribution_id: int, payload: AttributionPatch, request: Request):
+@router.patch("/{liste}/attributions/{attribution_id}")
+def update_attribution(liste: str, attribution_id: int, payload: AttributionPatch,
+                       request: Request):
     user = _require(request)
+    cfg = _liste(liste)
     with get_db() as conn:
-        row = _attribution(conn, attribution_id)
-        conn.execute("UPDATE rh_outil_membre_formations SET fait=? WHERE id=?",
+        row = _attribution(conn, cfg, attribution_id)
+        conn.execute(f"UPDATE {cfg['liaison']} SET fait=? WHERE id=?",
                      (1 if payload.fait else 0, attribution_id))
         conn.commit()
+    etat = cfg["fait"][0] if payload.fait else cfg["fait"][1]
     log_action(user=user, action="UPDATE", module="rh_outil",
-               objet=f"Outil RH · {row['nom']} · formation « {row['libelle']} » : "
-                     f"{'faite' if payload.fait else 'à faire'}",
+               objet=f"Outil RH · {row['nom']} · {cfg['nom']} « {row['libelle']} » : {etat}",
                request=request)
     return {"success": True}
 
 
-@router.delete("/membre-formations/{attribution_id}")
-def delete_attribution(attribution_id: int, request: Request):
+@router.delete("/{liste}/attributions/{attribution_id}")
+def delete_attribution(liste: str, attribution_id: int, request: Request):
     user = _require(request)
+    cfg = _liste(liste)
     with get_db() as conn:
-        row = _attribution(conn, attribution_id)
-        conn.execute("DELETE FROM rh_outil_membre_formations WHERE id=?", (attribution_id,))
+        row = _attribution(conn, cfg, attribution_id)
+        conn.execute(f"DELETE FROM {cfg['liaison']} WHERE id=?", (attribution_id,))
         conn.commit()
     log_action(user=user, action="DELETE", module="rh_outil",
-               objet=f"Outil RH · {row['nom']} · formation « {row['libelle']} » retirée",
+               objet=f"Outil RH · {row['nom']} · {cfg['nom']} « {row['libelle']} » : retrait",
                request=request)
     return {"success": True}
