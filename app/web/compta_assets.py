@@ -12,9 +12,111 @@ COMPTA_MAIN_CSS = r"""
 .compta-add-bar-fields input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
 body.light .compta-add-bar-fields input:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .compta-add-bar-actions{display:flex;gap:10px;margin-top:14px;align-items:center}
+
+/* MyCompta — Outil RH */
+.rho-tag{display:inline-block;font-size:10px;font-weight:600;color:var(--muted);border:1px solid var(--border);border-radius:5px;padding:1px 6px;margin-left:8px;vertical-align:middle}
+.rho-search{width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px;font-family:inherit;outline:none;margin-bottom:10px}
+.rho-search:focus{border-color:var(--accent)}
+.rho-list{max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:4px}
+.rho-emp{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:9px 12px;color:var(--text);font-family:inherit;font-size:13px;cursor:pointer}
+.rho-emp:hover{border-color:var(--accent)}
+.rho-emp[disabled]{cursor:default;opacity:.55}
+.rho-emp[disabled]:hover{border-color:var(--border)}
+.rho-emp .rho-sub{font-size:11px;color:var(--muted)}
 """
 
 COMPTA_MAIN_JS = r"""
+// ══════════════════════════════════════════════════════════════════
+// ── OUTIL RH (onglet MyCompta) ────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+// Rôles autorisés : ROLES_RH_OUTIL dans config.py, injecté au rendu. Le
+// serveur refuse de toute façon les autres rôles (app/routers/rh_outil.py).
+const RH_OUTIL_ROLES=__RH_OUTIL_ROLES__;
+function rhOutilAllowed(){return !!(S.user&&RH_OUTIL_ROLES.includes(S.user.role));}
+
+async function rhOutilLoad(){
+  try{
+    const d=await api('/api/rh-outil/membres');
+    if(!d)return;
+    set({rhOutilMembres:d.membres||[],rhOutilLoaded:true});
+  }catch(e){toast(e.message,'error');}
+}
+async function rhOutilOpenPicker(){
+  try{
+    const d=await api('/api/rh-outil/employes');
+    if(!d)return;
+    set({rhOutilEmployes:d.employes||[],rhOutilPickerOpen:true});
+  }catch(e){toast(e.message,'error');}
+}
+function rhOutilClosePicker(){set({rhOutilPickerOpen:false});}
+async function rhOutilAdd(userId){
+  try{
+    await api('/api/rh-outil/membres',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:userId})});
+    set({rhOutilPickerOpen:false});
+    await rhOutilLoad();
+    toast('Employé ajouté.');
+  }catch(e){toast(e.message,'error');}
+}
+async function rhOutilRemove(m){
+  if(!confirm('Retirer '+(m.nom||'cet employé')+' de la liste ?'))return;
+  try{
+    await api('/api/rh-outil/membres/'+m.id,{method:'DELETE'});
+    await rhOutilLoad();
+    toast('Employé retiré.');
+  }catch(e){toast(e.message,'error');}
+}
+
+function renderRhOutilTab(){
+  const list=S.rhOutilMembres||[];
+  const bar=h('div',{style:{display:'flex',justifyContent:'flex-end',marginBottom:'12px'}},
+    h('button',{type:'button',className:'btn-sm',onClick:rhOutilOpenPicker},iconEl('plus',13),' Ajouter un utilisateur')
+  );
+  if(!S.rhOutilLoaded)return h('div',null,bar,h('div',{className:'card-empty'},'Chargement…'));
+  const rows=list.length? h('div',{className:'card'},
+    h('div',{className:'card-header'},h('h3',null,'Employés ('+list.length+')')),
+    h('div',{style:{padding:'10px 16px'}},...list.map(m=>h('div',{className:'import-row'},
+      h('div',{style:{flex:1}},
+        h('div',{style:{fontSize:'13px',fontWeight:'600'}},m.nom||'—',m.actif?null:h('span',{className:'rho-tag'},'Désactivé')),
+        h('div',{style:{fontSize:'11px',color:'var(--muted)'}},m.email||'')
+      ),
+      h('button',{className:'btn-danger',onClick:()=>rhOutilRemove(m)},iconEl('trash',13),' Retirer')
+    )))
+  ) : h('div',{className:'card-empty'},'Aucun employé — utilisez « Ajouter un utilisateur ».');
+  return h('div',null,bar,rows);
+}
+
+function renderRhOutilPicker(){
+  if(!S.rhOutilPickerOpen)return null;
+  const emps=S.rhOutilEmployes||[];
+  const listEl=h('div',{className:'rho-list'});
+  // Filtrage en place, sans render() : un re-render ferait perdre le focus
+  // du champ de recherche à chaque frappe.
+  const remplir=q=>{
+    const n=String(q||'').trim().toLowerCase();
+    const vis=emps.filter(e=>!n||String(e.nom||'').toLowerCase().includes(n)||String(e.email||'').toLowerCase().includes(n));
+    listEl.replaceChildren(...(vis.length?vis.map(e=>h('button',{type:'button',className:'rho-emp',disabled:e.deja_ajoute,onClick:()=>{if(!e.deja_ajoute)rhOutilAdd(e.user_id);}},
+      h('div',{style:{flex:1}},
+        h('div',null,e.nom||'—',e.actif?null:h('span',{className:'rho-tag'},'Désactivé'),e.deja_ajoute?h('span',{className:'rho-tag'},'Déjà ajouté'):null),
+        h('div',{className:'rho-sub'},e.email||'')
+      )
+    )):[h('div',{className:'card-empty'},'Aucun employé ne correspond.')]));
+  };
+  const search=h('input',{type:'text',className:'rho-search',placeholder:'Rechercher un nom ou un email…'});
+  search.addEventListener('input',()=>remplir(search.value));
+  remplir('');
+  const overlay=h('div',{className:'add-row-modal',style:{zIndex:12000}});
+  overlay.addEventListener('click',e=>{if(e.target===overlay)rhOutilClosePicker();});
+  const form=h('div',{className:'add-row-form',style:{maxWidth:'520px'},onClick:e=>e.stopPropagation()},
+    h('button',{type:'button',className:'add-row-close',onClick:rhOutilClosePicker},'×'),
+    h('h3',null,'Ajouter un utilisateur'),
+    search,
+    listEl
+  );
+  overlay.appendChild(form);
+  requestAnimationFrame(()=>search.focus());
+  return overlay;
+}
+
 // ── MyCompta (placeholder v0) ─────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════
 // ── PAIE (onglet MyCompta) ────────────────────────────────────────
@@ -467,7 +569,9 @@ function renderCompta(){
       h('button',{className:'nav-btn'+(tab==='cession'?' active':''),onClick:()=>{set({comptaTab:'cession'});}},
         iconEl('clock',15),'  Cession (en cours)'),
       h('button',{className:'nav-btn'+(tab==='paie'?' active':''),onClick:()=>{if(!S.paieEmpLoaded){paieLoadEmployes();}paieLoadVars().then(()=>render());set({comptaTab:'paie'});}},
-        iconEl('credit-card',15),'  Paies')
+        iconEl('credit-card',15),'  Paies'),
+      rhOutilAllowed()?h('button',{className:'nav-btn'+(tab==='rhoutil'?' active':''),onClick:()=>{set({comptaTab:'rhoutil'});rhOutilLoad();}},
+        iconEl('users',15),'  Outil RH'):null
     ),
     // Pied commun à toutes les applis (static/mysifa_sidebar.js, v3.3.0). Le
     // support garde la fenêtre de contact de la coquille (S.contactOpen) et la
@@ -755,6 +859,8 @@ function renderCompta(){
     );
   }else if(tab==='paie'){
     content=renderPaieTab();
+  }else if(tab==='rhoutil'){
+    content=rhOutilAllowed()?renderRhOutilTab():h('div',{className:'card-empty'},'Accès réservé à la comptabilité et à la direction.');
   }
 
   const body=h('div',{className:'app'},
@@ -762,8 +868,8 @@ function renderCompta(){
     h('main',{className:'main'},
       h('div',{className:'container'},
         topbar,
-          h('h1',null,S.comptaTab==='paie'?'Gestion des Paies':'MyCompta'),
-        h('div',{className:'subtitle'},S.comptaTab==='paie'?'Saisie mensuelle · Export xlsx':'Import Factor → mise en forme → copier vers CW'),
+          h('h1',null,S.comptaTab==='paie'?'Gestion des Paies':S.comptaTab==='rhoutil'?'Outil RH':'MyCompta'),
+        h('div',{className:'subtitle'},S.comptaTab==='paie'?'Saisie mensuelle · Export xlsx':S.comptaTab==='rhoutil'?'Employés suivis':'Import Factor → mise en forme → copier vers CW'),
         content
       )
     )
@@ -774,7 +880,8 @@ function renderCompta(){
     body,
     renderComptaAcheteurModal(),
     renderComptaCompteModal(),
-    renderComptaBanqueModal()
+    renderComptaBanqueModal(),
+    renderRhOutilPicker()
   );
 }
 """
