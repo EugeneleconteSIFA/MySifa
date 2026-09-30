@@ -1,6 +1,7 @@
 """MyCompta — assets CSS/JS (injectés dans app/web/html.py). Pas de route FastAPI ici."""
 
 from app.web.compta_rh_outil_assets import RH_OUTIL_CSS, RH_OUTIL_JS
+from app.web.compta_rh_outil_catalogues_assets import RH_OUTIL_CATALOGUES_JS
 
 COMPTA_MAIN_CSS = RH_OUTIL_CSS + r"""
 /* MyCompta — barre d'ajout (acheteurs / comptes) */
@@ -16,7 +17,7 @@ body.light .compta-add-bar-fields input:focus{box-shadow:0 0 0 3px rgba(8,145,17
 .compta-add-bar-actions{display:flex;gap:10px;margin-top:14px;align-items:center}
 """
 
-COMPTA_MAIN_JS = RH_OUTIL_JS + r"""
+COMPTA_MAIN_JS = RH_OUTIL_JS + RH_OUTIL_CATALOGUES_JS + r"""
 // ── MyCompta (placeholder v0) ─────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════
 // ── PAIE (onglet MyCompta) ────────────────────────────────────────
