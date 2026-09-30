@@ -12,11 +12,16 @@ Un élément du catalogue est « exigé pour » personne, tous les employés
 deux à la fois. Il est alors attribué d'office aux employés concernés.
 Les documents d'un employé peuvent porter des pièces jointes (rh_outil_pieces),
 rangées hors de /static sous data/uploads/rh_outil/.
+L'onglet sert au suivi des nouveaux employés : « Nouvel employé » crée le compte
+MySifa (mêmes règles que Paramètres › Comptes, fonctions partagées avec
+app/routers/auth.py) et l'inscrit au suivi avec sa date d'arrivée.
 Accès : quiconque a accès à MyCompta (rôle ou exception réglée dans Paramètres).
+Créer un compte demande en plus le droit de gérer les comptes (Paramètres).
 """
 
+import re
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
@@ -24,9 +29,22 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from config import BASE_DIR, RH_OUTIL_MAX_FILE_MB, role_label, taches_services
+from config import (
+    ASSIGNABLE_ROLES,
+    BASE_DIR,
+    RH_OUTIL_MAX_FILE_MB,
+    SUPERADMIN_EMAIL,
+    role_label,
+    taches_services,
+)
 from database import get_db
-from services.auth_service import get_current_user, user_has_app_access
+from services.auth_service import (
+    can_access_settings_contacts,
+    get_current_user,
+    hash_password,
+    is_real_superadmin,
+    user_has_app_access,
+)
 from services.audit_service import log_action
 
 router = APIRouter(prefix="/api/rh-outil", tags=["rh_outil"])
@@ -87,6 +105,16 @@ class MembreIn(BaseModel):
 
 class MembrePatch(BaseModel):
     reglement_signe: Optional[bool] = None
+    date_arrivee: Optional[str] = None
+
+
+class NouvelEmployeIn(BaseModel):
+    prenom: str
+    nom: str
+    email: str
+    service: str
+    password: str
+    date_arrivee: str
 
 
 class LibelleIn(BaseModel):
@@ -251,6 +279,32 @@ def _services() -> list:
     return taches_services()
 
 
+def _date(brut: Optional[str]) -> Optional[str]:
+    """AAAA-MM-JJ valide, ou None si vide. Erreur 400 sinon."""
+    brut = (brut or "").strip()
+    if not brut:
+        return None
+    try:
+        return date.fromisoformat(brut).isoformat()
+    except ValueError:
+        raise HTTPException(400, "Date d'arrivée invalide — format AAAA-MM-JJ.")
+
+
+def _jour_fr(iso: Optional[str]) -> str:
+    """« 2026-10-06 » → « 06/10/2026 » pour le Journal."""
+    return date.fromisoformat(iso).strftime("%d/%m/%Y") if iso else "non renseignée"
+
+
+def _services_creables(user: dict) -> list:
+    """Services qu'un compte créé ici peut recevoir : les rôles attribuables,
+    moins Direction si l'auteur n'est pas le vrai super admin (même garde que
+    Paramètres › Comptes)."""
+    from app.routers.auth import _ROLES_COMPTES_PROTEGES
+    return [s for s in _services()
+            if s["code"] in ASSIGNABLE_ROLES
+            and (is_real_superadmin(user) or s["code"] not in _ROLES_COMPTES_PROTEGES)]
+
+
 def _doublon(conn, cfg: dict, libelle: str, sauf_id: Optional[int] = None) -> bool:
     row = conn.execute(
         f"SELECT id FROM {cfg['catalogue']} WHERE libelle = ? COLLATE NOCASE AND id != ?",
@@ -281,12 +335,76 @@ def list_employes(request: Request):
     ]}
 
 
+@router.post("/employes")
+def create_employe(payload: NouvelEmployeIn, request: Request):
+    """Crée le compte MySifa d'un nouvel employé et l'inscrit au suivi.
+
+    Mêmes règles que Paramètres › Comptes (POST /api/users) : email obligatoire
+    et unique, mot de passe de 8 caractères minimum saisi par l'auteur, rôle
+    attribuable, Direction réservée au vrai super admin, identifiant généré et
+    dédoublonné. Le mot de passe n'est ni journalisé ni renvoyé."""
+    from app.routers.auth import (
+        _default_identifiant_from_nom, _ensure_unique_identifiant,
+        _guard_role_attribuable, _norm_email,
+    )
+    user = _require(request)
+    if not can_access_settings_contacts(user):
+        raise HTTPException(403, "Créer un compte demande le droit de gérer les comptes (Paramètres).")
+    prenom = " ".join((payload.prenom or "").split())
+    nom_famille = " ".join((payload.nom or "").split())
+    if not prenom or not nom_famille:
+        raise HTTPException(400, "Prénom et nom obligatoires.")
+    nom = f"{prenom} {nom_famille}"[:120]
+    email = _norm_email(payload.email)
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        raise HTTPException(400, "Email invalide.")
+    if email == _norm_email(SUPERADMIN_EMAIL):
+        raise HTTPException(400, "Cet email est réservé au compte super administrateur.")
+    if payload.service not in ASSIGNABLE_ROLES:
+        raise HTTPException(400, "Service invalide.")
+    _guard_role_attribuable(user, payload.service)
+    if len(payload.password or "") < 8:
+        raise HTTPException(400, "Mot de passe trop court — 8 caractères minimum.")
+    arrivee = _date(payload.date_arrivee)
+    if not arrivee:
+        raise HTTPException(400, "Date d'arrivée obligatoire.")
+    with get_db() as conn:
+        if conn.execute("SELECT 1 FROM users WHERE lower(email)=?", (email,)).fetchone():
+            raise HTTPException(409, "Un compte existe déjà avec cet email.")
+        ident = _ensure_unique_identifiant(conn, _default_identifiant_from_nom(nom)) or None
+        cur = conn.execute(
+            """INSERT INTO users (email, identifiant, nom, password_hash, role, actif, created_at)
+               VALUES (?,?,?,?,?,1,?)""",
+            (email, ident, nom, hash_password(payload.password), payload.service,
+             datetime.now().isoformat()),
+        )
+        user_id = cur.lastrowid
+        cur = conn.execute(
+            """INSERT INTO rh_outil_membres (user_id, ajoute_le, ajoute_par, date_arrivee)
+               VALUES (?,?,?,?)""",
+            (user_id, _now(), user.get("nom"), arrivee),
+        )
+        membre_id = cur.lastrowid
+        n = _attribuer_obligatoires(conn, membre_id=membre_id)
+        n += _attribuer_par_service(conn, membre_id=membre_id)
+        conn.commit()
+    # Même trace que Paramètres pour la création du compte, puis celle du suivi.
+    log_action(user=user, action="CREATE", module="settings",
+               objet=f"Utilisateur {nom} [{payload.service}]", detail={"email": email},
+               request=request)
+    log_action(user=user, action="CREATE", module="rh_outil",
+               objet=f"Outil RH · nouvel employé {nom} ({role_label(payload.service)}), "
+                     f"arrivée le {_jour_fr(arrivee)}" + (f" · {n} élément(s) attribué(s)" if n else ""),
+               request=request)
+    return {"success": True, "membre_id": membre_id, "identifiant": ident, "attribues": n}
+
+
 @router.get("/membres")
 def list_membres(request: Request):
     _require(request)
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT m.id, m.user_id, m.ajoute_le, m.ajoute_par, m.reglement_signe,
+            """SELECT m.id, m.user_id, m.ajoute_le, m.ajoute_par, m.reglement_signe, m.date_arrivee,
                       u.nom, u.email, u.role, u.actif
                  FROM rh_outil_membres m
                  JOIN users u ON u.id = m.user_id
@@ -322,7 +440,8 @@ def list_membres(request: Request):
              "role": r["role"], "actif": bool(r["actif"]),
              "service": r["role"] or "", "service_label": role_label(r["role"] or ""),
              "ajoute_le": r["ajoute_le"], "ajoute_par": r["ajoute_par"],
-             "reglement_signe": bool(r["reglement_signe"])}
+             "reglement_signe": bool(r["reglement_signe"]),
+             "date_arrivee": r["date_arrivee"]}
         for liste in LISTES:
             m[liste] = par_liste[liste].get(r["id"], [])
         membres.append(m)
@@ -353,7 +472,17 @@ def add_membre(payload: MembreIn, request: Request):
 @router.patch("/membres/{membre_id}")
 def update_membre(membre_id: int, payload: MembrePatch, request: Request):
     user = _require(request)
-    data = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if k in CHECKLIST}
+    brut = payload.model_dump(exclude_unset=True)
+    data = {k: v for k, v in brut.items() if k in CHECKLIST}
+    if "date_arrivee" in brut:
+        arrivee = _date(brut["date_arrivee"])
+        with get_db() as conn:
+            row = _membre(conn, membre_id)
+            conn.execute("UPDATE rh_outil_membres SET date_arrivee=? WHERE id=?", (arrivee, membre_id))
+            conn.commit()
+        log_action(user=user, action="UPDATE", module="rh_outil",
+                   objet=f"Outil RH · {row['nom']} · date d'arrivée : {_jour_fr(arrivee)}",
+                   request=request)
     if not data:
         return {"success": True}
     with get_db() as conn:
@@ -392,9 +521,12 @@ def delete_membre(membre_id: int, request: Request):
 
 @router.get("/services")
 def list_services(request: Request):
-    """Services existants de MySifa (un service est un rôle). Lecture seule."""
-    _require(request)
-    return {"services": _services()}
+    """Services existants de MySifa (un service est un rôle). Lecture seule.
+    Indique aussi si l'utilisateur peut créer un compte, et avec quels services."""
+    user = _require(request)
+    peut = can_access_settings_contacts(user)
+    return {"services": _services(), "peut_creer": peut,
+            "services_creables": _services_creables(user) if peut else []}
 
 
 @router.put("/{liste}/catalogue/{element_id}/exige")
