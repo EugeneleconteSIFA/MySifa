@@ -102,6 +102,23 @@ RH_OUTIL_CSS = r"""
 .rho-scroll{max-height:min(420px,calc(100vh - 260px));overflow-y:auto;padding-right:2px}
 .rho-dlg-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 
+/* Formulaire « Nouvel employé » */
+.rho-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.rho-field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.rho-field.plein{grid-column:1 / -1}
+.rho-field label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.rho-field .rho-input,.rho-field .rho-select{max-width:none;width:100%;box-sizing:border-box;padding:10px 12px;font-size:13px;font-weight:500;background:var(--bg)}
+.rho-pwd{position:relative}
+.rho-pwd .rho-input{padding-right:40px}
+.rho-pwd button{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:transparent;color:var(--muted);cursor:pointer;padding:5px;border-radius:6px;display:inline-flex}
+.rho-pwd button:hover{color:var(--accent)}
+.rho-note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:14px;padding:10px 12px;border-radius:9px;background:var(--bg);border:1px solid var(--border)}
+.rho-err{font-size:12px;color:var(--danger);margin-top:10px;min-height:16px}
+@media (max-width:560px){.rho-form-grid{grid-template-columns:1fr}}
+.rho-arrivee{display:inline-flex;align-items:center;gap:4px;margin-top:3px;border:none;background:transparent;padding:0;font-family:inherit;font-size:11px;color:var(--muted);cursor:pointer}
+.rho-arrivee:hover{color:var(--accent)}
+.rho-arrivee-input{margin-top:3px;font-size:11px;padding:3px 6px;border:1px solid var(--accent);border-radius:6px;background:var(--card);color:var(--text);font-family:inherit}
+
 /* Fenêtres : même dessin que les modales de suppression de Maintenance */
 .rho-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center}
 .rho-dlg{position:relative;max-width:520px;width:calc(100% - 40px);max-height:calc(100vh - 40px);overflow-y:auto;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,.4)}
@@ -213,7 +230,8 @@ async function rhOutilLoad(){
   try{
     const [d,sv]=await Promise.all([api('/api/rh-outil/membres'),api('/api/rh-outil/services')]);
     if(!d||!sv)return;
-    set({rhOutilMembres:d.membres||[],rhOutilServices:sv.services||[],rhOutilLoaded:true});
+    set({rhOutilMembres:d.membres||[],rhOutilServices:sv.services||[],
+         rhOutilPeutCreer:!!sv.peut_creer,rhOutilServicesCreables:sv.services_creables||[],rhOutilLoaded:true});
   }catch(e){toast(e.message,'error');}
 }
 
@@ -301,25 +319,90 @@ function rhOutilChoisir(opts){
 }
 
 // ── Employés ──────────────────────────────────────────────────────
-async function rhOutilAjouterEmploye(){
-  let d;
-  try{d=await api('/api/rh-outil/employes');}catch(e){toast(e.message,'error');return;}
-  if(!d)return;
-  rhOutilChoisir({
-    titre:'Ajouter un employé',
-    placeholder:'Rechercher un employé…',
-    vide:'Aucun compte.',
-    items:(d.employes||[]).map(e=>({
-      valeur:e.user_id,label:e.nom,sub:e.email,disabled:e.deja_ajoute,
-      tags:[e.actif?null:'Désactivé',e.deja_ajoute?'Déjà ajouté':null].filter(Boolean),
-    })),
-    onPick:async userId=>{
-      try{await api('/api/rh-outil/membres',rhOutilJson('POST',{user_id:userId}));}
-      catch(e){toast(e.message,'error');throw e;}
-      await rhOutilLoad();
-      toast('Employé ajouté.');
-    },
+// Création du compte MySifa d'un nouvel employé, avec les mêmes règles que
+// Paramètres › Comptes (contrôlées par le serveur). Le mot de passe est saisi
+// par l'auteur : il n'est ni stocké en clair, ni renvoyé, ni journalisé.
+function rhOutilJourFr(iso){
+  const r=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return r?r[3]+'/'+r[2]+'/'+r[1]:'';
+}
+function rhOutilAujourdhui(){
+  const d=new Date(),z=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate());
+}
+function rhOutilNouvelEmploye(){
+  const services=S.rhOutilServicesCreables||[];
+  if(!services.length){toast('Aucun service disponible pour créer un compte.','error');return;}
+  const {ov,fermer}=rhOutilFenetre();
+  const champ=(label,input,plein)=>h('div',{className:'rho-field'+(plein?' plein':'')},h('label',null,label),input);
+  const prenom=h('input',{type:'text',className:'rho-input',maxlength:'60',...RHO_NO_AUTOFILL});
+  const nom=h('input',{type:'text',className:'rho-input',maxlength:'60',...RHO_NO_AUTOFILL});
+  const email=h('input',{type:'email',className:'rho-input',maxlength:'120',placeholder:'prenom.nom@…',...RHO_NO_AUTOFILL});
+  const service=h('select',{className:'rho-select'},
+    h('option',{value:''},'Choisir…'),...services.map(sv=>h('option',{value:sv.code},sv.label)));
+  const arrivee=h('input',{type:'date',className:'rho-input',value:rhOutilAujourdhui()});
+  const mdp=h('input',{type:'password',className:'rho-input',minlength:'8',autocomplete:'new-password','aria-label':'Mot de passe'});
+  const oeil=h('button',{type:'button',title:'Afficher le mot de passe','aria-label':'Afficher le mot de passe',onClick:()=>{
+    const vis=mdp.type==='password';mdp.type=vis?'text':'password';
+    oeil.replaceChildren(iconEl(vis?'eye-off':'eye',15));
+  }},iconEl('eye',15));
+  const err=h('div',{className:'rho-err',role:'alert'});
+  const creer=h('button',{type:'button',className:'rho-btn accent'},iconEl('plus',13),'Créer le compte');
+  const valider=async()=>{
+    const v={prenom:prenom.value.trim(),nom:nom.value.trim(),email:email.value.trim(),service:service.value,
+             password:mdp.value,date_arrivee:arrivee.value};
+    const manque=!v.prenom?'Prénom':!v.nom?'Nom':!v.email?'Email':!v.service?'Service':!v.date_arrivee?'Date d’arrivée':!v.password?'Mot de passe':'';
+    if(manque){err.textContent=manque+' obligatoire.';return;}
+    if(v.password.length<8){err.textContent='Mot de passe trop court — 8 caractères minimum.';mdp.focus();return;}
+    err.textContent='';creer.disabled=true;
+    let r;
+    try{r=await api('/api/rh-outil/employes',rhOutilJson('POST',v));}
+    catch(e){err.textContent=e.message;creer.disabled=false;return;}
+    mdp.value='';
+    fermer();
+    await rhOutilLoad();
+    const n=(r&&r.attribues)||0;
+    toast('Compte créé'+(r&&r.identifiant?' — identifiant : '+r.identifiant:'')+(n?' · '+n+' élément'+(n>1?'s':'')+' attribué'+(n>1?'s':''):'')+'.');
+  };
+  creer.addEventListener('click',valider);
+  [prenom,nom,email,mdp].forEach(x=>x.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();valider();}}));
+  ov.appendChild(rhOutilDialogue('Nouvel employé',fermer,
+    h('div',{className:'rho-form-grid'},
+      champ('Prénom',prenom),champ('Nom',nom),
+      champ('Email',email,true),
+      champ('Service',service),champ('Date d’arrivée',arrivee),
+      champ('Mot de passe (8 caractères minimum)',h('div',{className:'rho-pwd'},mdp,oeil),true)
+    ),
+    h('div',{className:'rho-note'},'Le compte MySifa est créé comme dans Paramètres › Comptes, avec le service choisi. Remettez le mot de passe à l’employé en main propre. Téléphone, matricule et machine se règlent ensuite dans Paramètres.'),
+    err,
+    h('div',{className:'rho-dlg-foot'},h('button',{type:'button',className:'rho-btn',onClick:fermer},'Annuler'),creer)
+  ));
+  document.body.appendChild(ov);
+  requestAnimationFrame(()=>prenom.focus());
+}
+// Date d'arrivée : cliquable dans la cellule Employé, modifiable sur place.
+function rhOutilArrivee(m){
+  const libelle=m.date_arrivee?'Arrivée le '+rhOutilJourFr(m.date_arrivee):'Date d’arrivée à renseigner';
+  const btn=h('button',{type:'button',className:'rho-arrivee',title:'Modifier la date d’arrivée'},iconEl('calendar',11),libelle);
+  btn.addEventListener('click',()=>{
+    const inp=h('input',{type:'date',className:'rho-arrivee-input',value:m.date_arrivee||'','aria-label':'Date d’arrivée'});
+    let fini=false;
+    const finir=async()=>{
+      if(fini)return;fini=true;
+      const v=inp.value||'';
+      if(v===(m.date_arrivee||'')){inp.replaceWith(btn);return;}
+      try{
+        await api('/api/rh-outil/membres/'+m.id,rhOutilJson('PATCH',{date_arrivee:v}));
+        m.date_arrivee=v||null;
+        inp.replaceWith(rhOutilArrivee(m));
+      }catch(e){toast(e.message,'error');inp.replaceWith(btn);}
+    };
+    inp.addEventListener('change',finir);
+    inp.addEventListener('blur',finir);
+    inp.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();fini=true;inp.replaceWith(btn);}});
+    btn.replaceWith(inp);inp.focus();
   });
+  return btn;
 }
 function rhOutilRetirerEmploye(m){
   rhOutilConfirmer({
@@ -673,10 +756,10 @@ function renderRhOutilTab(){
     list.length?selFiltre:null,
     h('div',{className:'rho-bar-spacer'}),
     ...RH_OUTIL_LISTES.map(L=>h('button',{type:'button',className:'rho-btn',onClick:()=>rhOutilCatalogue(L)},iconEl('sliders',13),L.gerer)),
-    h('button',{type:'button',className:'rho-btn accent',onClick:rhOutilAjouterEmploye},iconEl('plus',13),'Ajouter un utilisateur')
+    S.rhOutilPeutCreer?h('button',{type:'button',className:'rho-btn accent',onClick:rhOutilNouvelEmploye},iconEl('plus',13),'Nouvel employé'):null
   );
   if(!S.rhOutilLoaded)return h('div',null,bar,h('div',{className:'card-empty'},'Chargement…'));
-  if(!list.length)return h('div',null,bar,h('div',{className:'card-empty'},'Aucun employé — utilisez « Ajouter un utilisateur ».'));
+  if(!list.length)return h('div',null,bar,h('div',{className:'card-empty'},S.rhOutilPeutCreer?'Aucun employé — utilisez « Nouvel employé ».':'Aucun employé suivi.'));
   const iF=Math.max(0,RHO_FILTRES.findIndex(f=>f.cle===(S.rhOutilFiltre||'tous')));
   const filtre=RHO_FILTRES[iF],suivant=RHO_FILTRES[(iF+1)%RHO_FILTRES.length];
   const fsVal=selFiltre.value;
@@ -707,7 +790,8 @@ function renderRhOutilTab(){
           h('div',{className:'rho-avatar','aria-hidden':'true'},rhOutilInitiales(m.nom)),
           h('div',null,
             h('div',{className:'rho-emp-nom'},m.nom||'—',m.actif?null:h('span',{className:'rho-tag'},'Désactivé')),
-            h('div',{className:'rho-sub'},m.email||'')
+            h('div',{className:'rho-sub'},m.email||''),
+            rhOutilArrivee(m)
           )
         )),
         h('td',null,h('span',{className:'rho-svc'+(m.service_label?'':' vide')},m.service_label||'Non renseigné')),
