@@ -102,6 +102,23 @@ RH_OUTIL_CSS = r"""
 .rho-scroll{max-height:min(420px,calc(100vh - 260px));overflow-y:auto;padding-right:2px}
 .rho-dlg-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 
+/* Catégories de formations */
+.rho-grp-t{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 2px;display:flex;gap:6px;align-items:baseline}
+.rho-items>.rho-grp-t:first-child{margin-top:0}
+.rho-grp-t .n{font-weight:600;letter-spacing:0}
+.rho-grp-t .n.full{color:var(--accent)}
+.rho-sect{margin-top:14px}
+.rho-sect:first-child{margin-top:0}
+.rho-sect-t{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:0 0 6px}
+.rho-fbloc{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px}
+.rho-fbloc .rho-cat-row .rho-input{background:var(--card)}
+.rho-fctl{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center}
+.rho-fctl .rho-select{padding:4px 8px;font-size:11px;background:var(--card);max-width:190px}
+.rho-fctl .rho-mini{background:var(--card)}
+.rho-cat-row.f{grid-template-columns:minmax(0,1fr) 78px auto}
+.rho-dlg.xl{max-width:740px}
+.rho-dlg-tools{display:flex;justify-content:flex-end;margin:-6px 0 10px}
+
 /* Formulaire « Nouvel employé » */
 .rho-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .rho-field{display:flex;flex-direction:column;gap:5px;min-width:0}
@@ -164,7 +181,7 @@ RH_OUTIL_JS = r"""
 
 // Listes par employé, dans l'ordre des colonnes. `cle` = LISTES côté API.
 const RH_OUTIL_LISTES=[
-  {cle:'formations',titre:'Formations',bouton:'Formation',gerer:'Gérer les formations',catalogue:'Catalogue des formations',
+  {cle:'formations',categories:true,titre:'Formations',bouton:'Formation',gerer:'Gérer les formations',catalogue:'Catalogue des formations',
    aucun:'Aucune formation',rechercher:'Rechercher une formation…',nouveau:'Nouvelle formation…',pour:'Formation pour ',
    deja:'Déjà attribuée',vide:'Catalogue vide — ajoutez des formations avec « Gérer les formations ».',catVide:'Aucune formation au catalogue.',
    retirerTitre:'Retirer cette formation ?',retirerTxt:'La formation est cochée comme faite : ce suivi sera perdu pour cet employé. Le catalogue n’est pas modifié.',
@@ -228,10 +245,10 @@ function rhOutilCase(checked,label){
 
 async function rhOutilLoad(){
   try{
-    const [d,sv]=await Promise.all([api('/api/rh-outil/membres'),api('/api/rh-outil/services')]);
-    if(!d||!sv)return;
+    const [d,sv,ca]=await Promise.all([api('/api/rh-outil/membres'),api('/api/rh-outil/services'),api('/api/rh-outil/formations/categories')]);
+    if(!d||!sv||!ca)return;
     set({rhOutilMembres:d.membres||[],rhOutilServices:sv.services||[],
-         rhOutilPeutCreer:!!sv.peut_creer,rhOutilServicesCreables:sv.services_creables||[],rhOutilLoaded:true});
+         rhOutilCategories:ca.categories||[],rhOutilPeutCreer:!!sv.peut_creer,rhOutilServicesCreables:sv.services_creables||[],rhOutilLoaded:true});
   }catch(e){toast(e.message,'error');}
 }
 
@@ -455,11 +472,15 @@ async function rhOutilAttribuer(L,m){
   rhOutilChoisir({
     titre:L.pour+(m.nom||'cet employé'),
     placeholder:L.rechercher,
-    items:cat.map(x=>({valeur:x.id,label:x.libelle,disabled:deja.has(x.id),tags:deja.has(x.id)?[L.deja]:[]})),
+    items:cat.map(x=>({valeur:x.id,label:x.libelle,sub:L.categories?rhOutilNomCategorie(x.categorie_id):'',
+      disabled:deja.has(x.id),tags:deja.has(x.id)?[L.deja]:[]})),
     onPick:async elementId=>{
-      try{await api('/api/rh-outil/membres/'+m.id+'/'+L.cle,rhOutilJson('POST',{element_id:elementId}));}
+      let r;
+      try{r=await api('/api/rh-outil/membres/'+m.id+'/'+L.cle,rhOutilJson('POST',{element_id:elementId}));}
       catch(e){toast(e.message,'error');throw e;}
       await rhOutilLoad();
+      const n=(r&&r.documents_lies)||0;
+      if(n)toast(n+' document'+(n>1?'s liés ajoutés':' lié ajouté')+' à sa liste.');
     },
   });
 }
@@ -475,6 +496,12 @@ async function rhOutilCocherElement(L,m,x,box,ligne){
   }catch(e){box.checked=!v;toast(e.message,'error');}
 }
 function rhOutilMajCompteur(cell){
+  // Compteurs par catégorie (formations), puis compteur général.
+  cell.querySelectorAll('.rho-grp-t .n[data-grp]').forEach(n=>{
+    const lignes=cell.querySelectorAll('.rho-item[data-grp="'+n.dataset.grp+'"]');
+    const ok=[...lignes].filter(l=>l.classList.contains('done')).length;
+    n.textContent=ok+'/'+lignes.length;n.classList.toggle('full',lignes.length>0&&ok===lignes.length);
+  });
   const cnt=cell.querySelector('.rho-count');if(!cnt)return;
   const all=cell.querySelectorAll('.rho-item').length;
   const ok=cell.querySelectorAll('.rho-item.done').length;
@@ -644,6 +671,123 @@ function rhOutilExigePour(L,x,apres){
   document.body.appendChild(ov);
 }
 
+// ── Catégories de formations ──────────────────────────────────────
+function rhOutilNomCategorie(id){
+  const c=(S.rhOutilCategories||[]).find(x=>x.id===id);
+  return c?c.libelle:'Sans catégorie';
+}
+// Regroupe des éléments par catégorie, dans l'ordre du référentiel, les
+// éléments sans catégorie en dernier. Renvoie [{id, libelle, items}].
+function rhOutilParCategorie(items){
+  const groupes=(S.rhOutilCategories||[]).map(c=>({id:c.id,libelle:c.libelle,items:[]}));
+  const autres={id:null,libelle:'Sans catégorie',items:[]};
+  items.forEach(x=>{(groupes.find(g=>g.id===x.categorie_id)||autres).items.push(x);});
+  return groupes.concat([autres]).filter(g=>g.items.length);
+}
+function rhOutilGererCategories(apres){
+  const {ov,fermer}=rhOutilFenetre();
+  const base='/api/rh-outil/formations/categories';
+  const listEl=h('div',{className:'rho-list'},h('div',{className:'rho-empty'},'Chargement…'));
+  const rafraichir=async()=>{
+    let d;
+    try{d=await api(base);}catch(e){toast(e.message,'error');return;}
+    if(!d)return;
+    S.rhOutilCategories=d.categories||[];
+    listEl.replaceChildren(...(S.rhOutilCategories.length?S.rhOutilCategories.map(c=>{
+      const inp=h('input',{type:'text',className:'rho-input',value:c.libelle,maxlength:'120','aria-label':'Intitulé de la catégorie','data-rho-esc':'',...RHO_NO_AUTOFILL});
+      const enregistrer=async()=>{
+        const v=inp.value.trim();
+        if(!v||v===c.libelle){inp.value=c.libelle;return;}
+        try{await api(base+'/'+c.id,rhOutilJson('PUT',{libelle:v}));c.libelle=v;toast('Catégorie renommée.');if(apres)apres();rhOutilLoad();}
+        catch(e){inp.value=c.libelle;toast(e.message,'error');}
+      };
+      inp.addEventListener('keydown',e=>{
+        if(e.key==='Enter'){e.preventDefault();inp.blur();}
+        else if(e.key==='Escape'){e.preventDefault();inp.value=c.libelle;inp.blur();}
+      });
+      inp.addEventListener('blur',enregistrer);
+      const nb=c.nb_formations;
+      return h('div',{className:'rho-cat-row f'},inp,
+        h('span',{className:'rho-sub'},nb+' formation'+(nb>1?'s':'')),
+        h('button',{type:'button',className:'rho-del',title:'Supprimer la catégorie',onClick:()=>rhOutilConfirmer({
+          titre:'Supprimer cette catégorie ?',nom:c.libelle,label:'Supprimer',
+          sous:nb?nb+' formation'+(nb>1?'s':'')+' rangée'+(nb>1?'s':'')+' dedans':'Aucune formation dedans',
+          texte:'Les formations ne sont pas supprimées : elles passent « Sans catégorie ».',
+          onConfirm:async()=>{
+            try{await api(base+'/'+c.id,{method:'DELETE'});}
+            catch(e){toast(e.message,'error');throw e;}
+            await rafraichir();if(apres)apres();rhOutilLoad();toast('Catégorie supprimée.');
+          },
+        })},iconEl('trash',13)));
+    }):[h('div',{className:'rho-empty'},'Aucune catégorie.')]));
+  };
+  const nouv=h('input',{type:'text',className:'rho-input',placeholder:'Nouvelle catégorie…',maxlength:'120',...RHO_NO_AUTOFILL});
+  const ajouter=async()=>{
+    const v=nouv.value.trim();if(!v)return;
+    try{await api(base,rhOutilJson('POST',{libelle:v}));nouv.value='';await rafraichir();if(apres)apres();rhOutilLoad();nouv.focus();}
+    catch(e){toast(e.message,'error');}
+  };
+  nouv.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();ajouter();}});
+  ov.appendChild(rhOutilDialogue('Catégories de formations',fermer,
+    h('div',{className:'rho-cat-legend'},'Supprimer une catégorie ne supprime pas ses formations : elles passent « Sans catégorie ».'),
+    listEl,
+    h('div',{className:'rho-cat-add'},nouv,h('button',{type:'button',className:'rho-btn accent',onClick:ajouter},iconEl('plus',13),'Ajouter'))
+  ));
+  document.body.appendChild(ov);
+  rafraichir();
+}
+
+// ── Documents liés à une formation ────────────────────────────────
+async function rhOutilDocumentsLies(x,apres){
+  let d;
+  try{d=await api('/api/rh-outil/documents/catalogue');}catch(e){toast(e.message,'error');return;}
+  if(!d)return;
+  const docs=d.elements||[];
+  if(!docs.length){toast('Catalogue des documents vide — ajoutez des documents avec « Gérer les documents ».','error');return;}
+  const {ov,fermer}=rhOutilFenetre();
+  const avant=new Set(x.documents||[]);
+  const cases=new Map();
+  const liste=h('div',{className:'rho-list'},...docs.map(doc=>{
+    const box=rhOutilCase(avant.has(doc.id),doc.libelle);
+    cases.set(doc.id,box);
+    return h('label',{className:'rho-check-row'},box,doc.libelle);
+  }));
+  const enregistrer=async()=>{
+    const voulus=[...cases].filter(([,b])=>b.checked).map(([id])=>id);
+    const nouveaux=voulus.filter(id=>!avant.has(id));
+    // Employés qui ont la formation et à qui il manque au moins un document ajouté.
+    const manquants=(S.rhOutilMembres||[]).filter(m=>
+      (m.formations||[]).some(f=>f.element_id===x.id)&&
+      nouveaux.some(id=>!(m.documents||[]).some(e=>e.element_id===id))).length;
+    const envoyer=async()=>{
+      let r;
+      try{r=await api('/api/rh-outil/formations/catalogue/'+x.id+'/documents',rhOutilJson('PUT',{documents:voulus}));}
+      catch(e){toast(e.message,'error');throw e;}
+      x.documents=voulus;
+      const n=(r&&r.attribues)||0;
+      toast('Documents liés enregistrés'+(n?' — '+n+' ajout'+(n>1?'s':'')+' dans les listes des employés':'')+'.');
+      fermer();
+      if(apres)await apres();
+      rhOutilLoad();
+    };
+    if(!manquants){try{await envoyer();}catch(_){}return;}
+    rhOutilConfirmer({
+      ton:'info',titre:'Lier ces documents ?',nom:x.libelle,label:'Enregistrer',
+      sous:manquants+' employé'+(manquants>1?'s ont':' a')+' déjà cette formation',
+      texte:'Les documents ajoutés entrent tout de suite dans '+(manquants>1?'leur liste':'sa liste')+', puis dans celle de chaque employé qui recevra la formation. Délier un document plus tard ne retirera rien.',
+      onConfirm:envoyer,
+    });
+  };
+  ov.appendChild(rhOutilDialogue('Documents liés',fermer,
+    h('div',{className:'rho-cat-legend'},x.libelle+' · ces documents sont demandés à chaque employé qui reçoit la formation.'),
+    h('div',{className:'rho-scroll'},liste),
+    h('div',{className:'rho-dlg-foot'},
+      h('button',{type:'button',className:'rho-btn',onClick:fermer},'Annuler'),
+      h('button',{type:'button',className:'rho-btn accent',onClick:enregistrer},'Enregistrer'))
+  ));
+  document.body.appendChild(ov);
+}
+
 // ── Catalogues ────────────────────────────────────────────────────
 function rhOutilCatalogue(L){
   const {ov,fermer}=rhOutilFenetre();
@@ -656,7 +800,7 @@ function rhOutilCatalogue(L){
     try{d=await api(base);}catch(e){toast(e.message,'error');return;}
     if(!d)return;
     const cat=d.elements||[];
-    listEl.replaceChildren(...(cat.length?cat.map(x=>{
+    const ligne=x=>{
       const inp=h('input',{type:'text',className:'rho-input',value:x.libelle,maxlength:'120','aria-label':'Intitulé','data-rho-esc':'',...RHO_NO_AUTOFILL});
       const enregistrer=async()=>{
         const v=inp.value.trim();
@@ -674,12 +818,10 @@ function rhOutilCatalogue(L){
       });
       inp.addEventListener('blur',enregistrer);
       const nb=x.nb_employes;
-      return h('div',{className:'rho-cat-row'},
-        inp,
-        h('button',{type:'button',className:'rho-mini'+(x.obligatoire||(x.services||[]).length?' on':''),
+      const exige=h('button',{type:'button',className:'rho-mini'+(x.obligatoire||(x.services||[]).length?' on':''),
           title:'Exigé pour : '+rhOutilLibelleExige(x)+' — cliquer pour modifier',
-          onClick:()=>rhOutilExigePour(L,x,rafraichir)},iconEl('users',11),rhOutilLibelleExige(x)),
-        h('span',{className:'rho-sub'},nb+' employé'+(nb>1?'s':'')),
+          onClick:()=>rhOutilExigePour(L,x,rafraichir)},iconEl('users',11),rhOutilLibelleExige(x));
+      const suppr=
         h('button',{type:'button',className:'rho-del',title:'Supprimer du catalogue',onClick:()=>rhOutilConfirmer({
           titre:L.supprTitre,nom:x.libelle,label:'Supprimer',
           sous:nb?(nb+' employé'+(nb>1?'s l’ont':' l’a')+' dans sa liste'):'Attribué à aucun employé',
@@ -690,27 +832,55 @@ function rhOutilCatalogue(L){
             await rafraichir();rhOutilLoad();
             toast(L.supprime);
           },
-        })},iconEl('trash',13))
-      );
-    }):[h('div',{className:'rho-empty'},L.catVide)]));
+        })},iconEl('trash',13));
+      const compte=h('span',{className:'rho-sub'},nb+' employé'+(nb>1?'s':''));
+      if(!L.categories)return h('div',{className:'rho-cat-row'},inp,exige,compte,suppr);
+      // Formations : intitulé en haut, réglages (catégorie, exigé pour,
+      // documents liés) dessous, pour garder un intitulé lisible.
+      const selCat=h('select',{className:'rho-select','aria-label':'Catégorie de '+x.libelle},
+        h('option',{value:''},'Sans catégorie'),
+        ...(S.rhOutilCategories||[]).map(c=>h('option',{value:String(c.id)},c.libelle)));
+      selCat.value=x.categorie_id?String(x.categorie_id):'';
+      selCat.addEventListener('change',async()=>{
+        const v=selCat.value?Number(selCat.value):null;
+        try{await api(base+'/'+x.id+'/categorie',rhOutilJson('PUT',{categorie_id:v}));x.categorie_id=v;await rafraichir();rhOutilLoad();}
+        catch(e){selCat.value=x.categorie_id?String(x.categorie_id):'';toast(e.message,'error');}
+      });
+      const nd=(x.documents||[]).length;
+      const docs=h('button',{type:'button',className:'rho-mini'+(nd?' on':''),title:'Documents demandés avec cette formation',
+        onClick:()=>rhOutilDocumentsLies(x,rafraichir)},iconEl('file-text',11),nd?nd+' document'+(nd>1?'s':'')+' lié'+(nd>1?'s':''):'Documents liés');
+      return h('div',{className:'rho-fbloc'},
+        h('div',{className:'rho-cat-row f'},inp,compte,suppr),
+        h('div',{className:'rho-fctl'},selCat,exige,docs));
+    };
+    if(!cat.length){listEl.replaceChildren(h('div',{className:'rho-empty'},L.catVide));return;}
+    if(!L.categories){listEl.replaceChildren(...cat.map(ligne));return;}
+    listEl.replaceChildren(...rhOutilParCategorie(cat).map(g=>h('div',{className:'rho-sect'},
+      h('div',{className:'rho-sect-t'},g.libelle+' · '+g.items.length),
+      h('div',{className:'rho-list'},...g.items.map(ligne)))));
   };
   const nouv=h('input',{type:'text',className:'rho-input',placeholder:L.nouveau,maxlength:'120',...RHO_NO_AUTOFILL});
+  const nouvCat=L.categories?h('select',{className:'rho-select','aria-label':'Catégorie de la nouvelle formation'},
+    ...(S.rhOutilCategories||[]).map(c=>h('option',{value:String(c.id)},c.libelle)),h('option',{value:''},'Sans catégorie')):null;
   const ajouter=async()=>{
     const v=nouv.value.trim();
     if(!v)return;
     try{
-      await api(base,rhOutilJson('POST',{libelle:v}));
+      await api(base,rhOutilJson('POST',{libelle:v,categorie_id:nouvCat&&nouvCat.value?Number(nouvCat.value):null}));
       nouv.value='';
       await rafraichir();
       nouv.focus();
     }catch(e){toast(e.message,'error');}
   };
   nouv.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();ajouter();}});
-  ov.appendChild(rhOutilDialogueLarge(L.catalogue,fermer,
-    h('div',{className:'rho-cat-legend'},'« Exigé pour » : attribué d’office aux employés concernés, présents et à venir. Retirable ensuite employé par employé.'),
-    listEl,
-    h('div',{className:'rho-cat-add'},nouv,h('button',{type:'button',className:'rho-btn accent',onClick:ajouter},iconEl('plus',13),'Ajouter'))
-  ));
+  const dlg=rhOutilDialogueLarge(L.catalogue,fermer,
+    L.categories?h('div',{className:'rho-dlg-tools'},h('button',{type:'button',className:'rho-mini',onClick:()=>rhOutilGererCategories(rafraichir)},iconEl('sliders',11),'Gérer les catégories')):null,
+    h('div',{className:'rho-cat-legend'},'« Exigé pour » : attribué d’office aux employés concernés, présents et à venir.'+(L.categories?' Les documents liés sont demandés avec la formation.':'')+' Retirable ensuite employé par employé.'),
+    h('div',{className:'rho-scroll'},listEl),
+    h('div',{className:'rho-cat-add'},nouv,nouvCat,h('button',{type:'button',className:'rho-btn accent',onClick:ajouter},iconEl('plus',13),'Ajouter'))
+  );
+  if(L.categories)dlg.classList.add('xl');
+  ov.appendChild(dlg);
   document.body.appendChild(ov);
   rafraichir();
   requestAnimationFrame(()=>nouv.focus());
@@ -720,8 +890,7 @@ function rhOutilCatalogue(L){
 function rhOutilCelluleListe(L,m){
   const items=m[L.cle]||[];
   const nbOk=items.filter(x=>x.fait).length;
-  return h('div',{className:'rho-items'},
-    ...(items.length?items.map(x=>{
+  const ligneItem=x=>{
       const box=rhOutilCase(x.fait,x.libelle+' · '+L.etat);
       const lbl=h('span',{className:'rho-item-lbl'},x.libelle);
       const ligne=h('div',{className:'rho-item'+(x.fait?' done':'')},
@@ -732,7 +901,18 @@ function rhOutilCelluleListe(L,m){
       box.addEventListener('change',()=>rhOutilCocherElement(L,m,x,box,ligne));
       lbl.addEventListener('click',()=>{box.checked=!box.checked;rhOutilCocherElement(L,m,x,box,ligne);});
       return ligne;
-    }):[h('div',{className:'rho-item-none'},L.aucun)]),
+    };
+  // Formations : un petit titre par catégorie, avec son avancement.
+  const contenu=!items.length?[h('div',{className:'rho-item-none'},L.aucun)]
+    :!L.categories?items.map(ligneItem)
+    :rhOutilParCategorie(items).flatMap(g=>{
+      const ok=g.items.filter(x=>x.fait).length;
+      const cle=String(g.id||0);
+      return [h('div',{className:'rho-grp-t'},g.libelle,h('span',{className:'n'+(ok===g.items.length?' full':''),'data-grp':cle},ok+'/'+g.items.length)),
+        ...g.items.map(x=>{const l=ligneItem(x);l.dataset.grp=cle;return l;})];
+    });
+  return h('div',{className:'rho-items'},
+    ...contenu,
     h('div',{className:'rho-items-foot'},
       h('button',{type:'button',className:'rho-add',onClick:()=>rhOutilAttribuer(L,m)},iconEl('plus',11),L.bouton),
       items.length?h('span',{className:'rho-count'+(nbOk===items.length?' full':'')},nbOk+'/'+items.length):null
