@@ -6,10 +6,9 @@ Chaque employé suivi porte une checklist :
 - des cases fixes, une colonne de rh_outil_membres chacune (CHECKLIST) ;
 - des listes qui varient d'un employé à l'autre (LISTES : formations,
   documents), piochées chacune dans un catalogue commun géré depuis l'onglet.
-Chaque employé a le service de son compte (users.role, jamais modifié ici) et
-des postes de ce service, piochés dans un catalogue géré depuis l'onglet
-(rh_outil_postes). Un élément peut être exigé pour des postes : il est attribué
-aux employés qui les ont.
+Chaque employé a le service de son compte (users.role, jamais modifié ici).
+Un élément peut être exigé pour des services : il est attribué aux employés
+de ces services.
 Les documents d'un employé peuvent porter des pièces jointes (rh_outil_pieces),
 rangées hors de /static sous data/uploads/rh_outil/.
 Accès : quiconque a accès à MyCompta (rôle ou exception réglée dans Paramètres).
@@ -97,17 +96,8 @@ class AttributionIn(BaseModel):
     element_id: int
 
 
-class PosteIn(BaseModel):
-    libelle: str
-    service: str
-
-
-class PosteRef(BaseModel):
-    poste_id: int
-
-
-class PostesExiges(BaseModel):
-    postes: list[int]
+class ServicesExiges(BaseModel):
+    services: list[str]
 
 
 class CataloguePatch(BaseModel):
@@ -126,7 +116,7 @@ LISTES = {
         "catalogue": "rh_outil_formations",
         "liaison": "rh_outil_membre_formations",
         "fk": "formation_id",
-        "exigences": "rh_outil_formation_postes",
+        "exigences": "rh_outil_formation_services",
         "nom": "formation",
         "catalogue_nom": "catalogue des formations",
         "doublon": "Cette formation existe déjà au catalogue.",
@@ -138,7 +128,7 @@ LISTES = {
         "catalogue": "rh_outil_documents",
         "liaison": "rh_outil_membre_documents",
         "fk": "document_id",
-        "exigences": "rh_outil_document_postes",
+        "exigences": "rh_outil_document_services",
         "nom": "document",
         "catalogue_nom": "catalogue des documents",
         "doublon": "Ce document existe déjà au catalogue.",
@@ -223,27 +213,29 @@ def _attribuer_obligatoires(conn, membre_id: Optional[int] = None,
     return n
 
 
-def _attribuer_par_poste(conn, membre_id: Optional[int] = None, poste_id: Optional[int] = None,
-                        liste: Optional[str] = None, element_id: Optional[int] = None) -> int:
-    """Attribue les éléments exigés pour des postes aux employés qui ont ces
-    postes et ne les ont pas encore. Filtrable par employé, poste, liste et
-    élément. Ne retire jamais rien. Renvoie le nombre d'attributions créées."""
+def _attribuer_par_service(conn, membre_id: Optional[int] = None, liste: Optional[str] = None,
+                          element_id: Optional[int] = None, service: Optional[str] = None) -> int:
+    """Attribue les éléments exigés pour un service aux employés de ce service
+    (service = rôle du compte) qui ne les ont pas encore. Filtrable par
+    employé, liste, élément et service. Ne retire jamais rien. Renvoie le
+    nombre d'attributions créées."""
     n = 0
     for cle, cfg in LISTES.items():
         if liste and cle != liste:
             continue
         where, params = ["1=1"], [_now()]
         if membre_id is not None:
-            where.append("mp.membre_id = ?"); params.append(membre_id)
-        if poste_id is not None:
-            where.append("x.poste_id = ?"); params.append(poste_id)
+            where.append("m.id = ?"); params.append(membre_id)
         if element_id is not None:
             where.append(f"x.{cfg['fk']} = ?"); params.append(element_id)
+        if service is not None:
+            where.append("x.service = ?"); params.append(service)
         n += conn.execute(
             f"""INSERT OR IGNORE INTO {cfg['liaison']} (membre_id, {cfg['fk']}, fait, ajoute_le)
-                SELECT DISTINCT mp.membre_id, x.{cfg['fk']}, 0, ?
+                SELECT DISTINCT m.id, x.{cfg['fk']}, 0, ?
                   FROM {cfg['exigences']} x
-                  JOIN rh_outil_membre_postes mp ON mp.poste_id = x.poste_id
+                  JOIN users u ON u.role = x.service
+                  JOIN rh_outil_membres m ON m.user_id = u.id
                  WHERE {' AND '.join(where)}""",
             params,
         ).rowcount
@@ -312,14 +304,6 @@ def list_membres(request: Request):
                      "libelle": a["libelle"], "fait": bool(a["fait"]),
                      "obligatoire": bool(a["obligatoire"])}
                 )
-        postes: dict = {}
-        for pp in conn.execute(
-            """SELECT mp.membre_id, p.id, p.libelle
-                 FROM rh_outil_membre_postes mp
-                 JOIN rh_outil_postes p ON p.id = mp.poste_id
-                ORDER BY p.libelle COLLATE NOCASE"""
-        ).fetchall():
-            postes.setdefault(pp["membre_id"], []).append({"id": pp["id"], "libelle": pp["libelle"]})
         pieces: dict = {}
         for pc in conn.execute(
             """SELECT id, attribution_id, nom, mime, taille, ajoute_le, ajoute_par
@@ -334,7 +318,6 @@ def list_membres(request: Request):
         m = {"id": r["id"], "user_id": r["user_id"], "nom": r["nom"], "email": r["email"],
              "role": r["role"], "actif": bool(r["actif"]),
              "service": r["role"] or "", "service_label": role_label(r["role"] or ""),
-             "postes": postes.get(r["id"], []),
              "ajoute_le": r["ajoute_le"], "ajoute_par": r["ajoute_par"],
              "reglement_signe": bool(r["reglement_signe"])}
         for liste in LISTES:
@@ -357,6 +340,7 @@ def add_membre(payload: MembreIn, request: Request):
         if not cur.rowcount:
             raise HTTPException(409, "Employé déjà dans la liste.")
         _attribuer_obligatoires(conn, membre_id=cur.lastrowid)
+        _attribuer_par_service(conn, membre_id=cur.lastrowid)
         conn.commit()
     log_action(user=user, action="CREATE", module="rh_outil",
                objet=f"Outil RH · ajout de {emp['nom']}", request=request)
@@ -389,7 +373,6 @@ def delete_membre(membre_id: int, request: Request):
     with get_db() as conn:
         row = _membre(conn, membre_id)
         fichiers = _retirer_pieces(conn, "a.membre_id = ?", (membre_id,))
-        conn.execute("DELETE FROM rh_outil_membre_postes WHERE membre_id=?", (membre_id,))
         for cfg in LISTES.values():
             conn.execute(f"DELETE FROM {cfg['liaison']} WHERE membre_id=?", (membre_id,))
         conn.execute("DELETE FROM rh_outil_membres WHERE id=?", (membre_id,))
@@ -400,192 +383,49 @@ def delete_membre(membre_id: int, request: Request):
     return {"success": True}
 
 
-# ─── Postes (catalogue par service, postes d'un employé) ──────────────────
-# Déclarées avant les routes génériques « /membres/{membre_id}/{liste} » et
-# « /{liste}/catalogue/... » : FastAPI prend la première route qui correspond.
+# ─── Services (lecture) et exigences par service ──────────────────────────
+# Déclarées avant les routes génériques « /{liste}/catalogue/... » : FastAPI
+# prend la première route qui correspond.
 
-def _poste(conn, poste_id: int):
-    row = conn.execute("SELECT id, libelle, service FROM rh_outil_postes WHERE id=?",
-                       (poste_id,)).fetchone()
-    if not row:
-        raise HTTPException(404, "Poste introuvable.")
-    return row
-
-
-@router.get("/postes")
-def list_postes(request: Request):
-    """Catalogue des postes regroupé par service existant."""
+@router.get("/services")
+def list_services(request: Request):
+    """Services existants de MySifa (un service est un rôle). Lecture seule."""
     _require(request)
-    with get_db() as conn:
-        rows = conn.execute(
-            """SELECT p.id, p.libelle, p.service,
-                      (SELECT COUNT(*) FROM rh_outil_membre_postes mp
-                        WHERE mp.poste_id = p.id) AS nb_employes
-                 FROM rh_outil_postes p
-                ORDER BY p.libelle COLLATE NOCASE"""
-        ).fetchall()
-    services = _services()
-    codes = {s["code"] for s in services}
-    # Un poste rangé sous un service qui n'est plus proposé reste visible.
-    for r in rows:
-        if r["service"] not in codes:
-            services.append({"code": r["service"], "label": role_label(r["service"])})
-            codes.add(r["service"])
-    par_service: dict = {}
-    for r in rows:
-        par_service.setdefault(r["service"], []).append(
-            {"id": r["id"], "libelle": r["libelle"], "nb_employes": r["nb_employes"]})
-    return {"services": [dict(s, postes=par_service.get(s["code"], [])) for s in services]}
+    return {"services": _services()}
 
 
-@router.post("/postes")
-def add_poste(payload: PosteIn, request: Request):
-    user = _require(request)
-    libelle = _libelle(payload.libelle)
-    if payload.service not in {s["code"] for s in _services()}:
-        raise HTTPException(400, "Service inconnu.")
-    with get_db() as conn:
-        if conn.execute(
-            "SELECT 1 FROM rh_outil_postes WHERE service=? AND libelle=? COLLATE NOCASE",
-            (payload.service, libelle),
-        ).fetchone():
-            raise HTTPException(409, "Ce poste existe déjà dans ce service.")
-        cur = conn.execute(
-            "INSERT INTO rh_outil_postes (libelle, service, cree_le, cree_par) VALUES (?,?,?,?)",
-            (libelle, payload.service, _now(), user.get("nom")),
-        )
-        conn.commit()
-    log_action(user=user, action="CREATE", module="rh_outil",
-               objet=f"Outil RH · postes · {role_label(payload.service)} · ajout de « {libelle} »",
-               request=request)
-    return {"success": True, "id": cur.lastrowid}
-
-
-@router.put("/postes/{poste_id}")
-def rename_poste(poste_id: int, payload: LibelleIn, request: Request):
-    user = _require(request)
-    libelle = _libelle(payload.libelle)
-    with get_db() as conn:
-        row = _poste(conn, poste_id)
-        if row["libelle"] == libelle:
-            return {"success": True}
-        if conn.execute(
-            "SELECT 1 FROM rh_outil_postes WHERE service=? AND libelle=? COLLATE NOCASE AND id!=?",
-            (row["service"], libelle, poste_id),
-        ).fetchone():
-            raise HTTPException(409, "Ce poste existe déjà dans ce service.")
-        conn.execute("UPDATE rh_outil_postes SET libelle=? WHERE id=?", (libelle, poste_id))
-        conn.commit()
-    log_action(user=user, action="UPDATE", module="rh_outil",
-               objet=f"Outil RH · postes · {role_label(row['service'])} · « {row['libelle']} » → « {libelle} »",
-               request=request)
-    return {"success": True}
-
-
-@router.delete("/postes/{poste_id}")
-def delete_poste(poste_id: int, request: Request):
-    """Supprime le poste du catalogue, des employés qui l'ont et des exigences.
-    Les formations et documents déjà attribués restent aux employés."""
-    user = _require(request)
-    with get_db() as conn:
-        row = _poste(conn, poste_id)
-        n = conn.execute("DELETE FROM rh_outil_membre_postes WHERE poste_id=?", (poste_id,)).rowcount
-        for cfg in LISTES.values():
-            conn.execute(f"DELETE FROM {cfg['exigences']} WHERE poste_id=?", (poste_id,))
-        conn.execute("DELETE FROM rh_outil_postes WHERE id=?", (poste_id,))
-        conn.commit()
-    log_action(user=user, action="DELETE", module="rh_outil",
-               objet=f"Outil RH · postes · {role_label(row['service'])} · suppression de « {row['libelle']} » ({n} employé(s))",
-               request=request)
-    return {"success": True}
-
-
-@router.post("/membres/{membre_id}/postes")
-def add_poste_membre(membre_id: int, payload: PosteRef, request: Request):
-    user = _require(request)
-    with get_db() as conn:
-        m = conn.execute(
-            """SELECT m.id, u.nom, u.role FROM rh_outil_membres m
-                 JOIN users u ON u.id = m.user_id WHERE m.id=?""",
-            (membre_id,),
-        ).fetchone()
-        if not m:
-            raise HTTPException(404, "Employé introuvable dans la liste.")
-        p = _poste(conn, payload.poste_id)
-        # Un employé ne prend que des postes de son propre service.
-        if p["service"] != (m["role"] or ""):
-            raise HTTPException(
-                400, f"Ce poste appartient au service {role_label(p['service'])} — "
-                     f"l'employé est du service {role_label(m['role'] or '') or 'non renseigné'}.")
-        cur = conn.execute(
-            "INSERT OR IGNORE INTO rh_outil_membre_postes (membre_id, poste_id, ajoute_le) VALUES (?,?,?)",
-            (membre_id, p["id"], _now()),
-        )
-        if not cur.rowcount:
-            raise HTTPException(409, "L'employé a déjà ce poste.")
-        n = _attribuer_par_poste(conn, membre_id=membre_id, poste_id=p["id"])
-        conn.commit()
-    suite = f" · {n} élément(s) attribué(s)" if n else ""
-    log_action(user=user, action="ASSIGN", module="rh_outil",
-               objet=f"Outil RH · {m['nom']} · poste « {p['libelle']} » : attribution{suite}",
-               request=request)
-    return {"success": True, "attribues": n}
-
-
-@router.delete("/membres/{membre_id}/postes/{poste_id}")
-def delete_poste_membre(membre_id: int, poste_id: int, request: Request):
-    """Retire le poste ; les formations et documents reçus avec lui restent."""
-    user = _require(request)
-    with get_db() as conn:
-        m = _membre(conn, membre_id)
-        p = _poste(conn, poste_id)
-        if not conn.execute(
-            "DELETE FROM rh_outil_membre_postes WHERE membre_id=? AND poste_id=?",
-            (membre_id, poste_id),
-        ).rowcount:
-            raise HTTPException(404, "L'employé n'a pas ce poste.")
-        conn.commit()
-    log_action(user=user, action="DELETE", module="rh_outil",
-               objet=f"Outil RH · {m['nom']} · poste « {p['libelle']} » : retrait",
-               request=request)
-    return {"success": True}
-
-
-@router.put("/{liste}/catalogue/{element_id}/postes")
-def set_postes_exiges(liste: str, element_id: int, payload: PostesExiges, request: Request):
-    """Remplace la liste des postes pour lesquels l'élément est exigé. Les
-    postes ajoutés l'attribuent tout de suite à leurs employés ; les postes
-    retirés ne retirent rien."""
+@router.put("/{liste}/catalogue/{element_id}/services")
+def set_services_exiges(liste: str, element_id: int, payload: ServicesExiges, request: Request):
+    """Remplace la liste des services pour lesquels l'élément est exigé. Les
+    services ajoutés l'attribuent tout de suite à leurs employés ; les
+    services retirés ne retirent rien."""
     user = _require(request)
     cfg = _liste(liste)
-    voulus = set(payload.postes)
+    voulus = set(payload.services)
+    connus = {s["code"] for s in _services()}
+    if not voulus <= connus:
+        raise HTTPException(400, "Service inconnu.")
     with get_db() as conn:
         row = conn.execute(f"SELECT libelle FROM {cfg['catalogue']} WHERE id=?",
                            (element_id,)).fetchone()
         if not row:
             raise HTTPException(404, cfg["introuvable"])
-        if voulus:
-            connus = {r["id"] for r in conn.execute(
-                f"SELECT id FROM rh_outil_postes WHERE id IN ({','.join('?' * len(voulus))})",
-                list(voulus)).fetchall()}
-            if connus != voulus:
-                raise HTTPException(404, "Poste introuvable.")
-        avant = {r["poste_id"] for r in conn.execute(
-            f"SELECT poste_id FROM {cfg['exigences']} WHERE {cfg['fk']}=?", (element_id,)).fetchall()}
-        for pid in avant - voulus:
-            conn.execute(f"DELETE FROM {cfg['exigences']} WHERE {cfg['fk']}=? AND poste_id=?",
-                         (element_id, pid))
+        avant = {r["service"] for r in conn.execute(
+            f"SELECT service FROM {cfg['exigences']} WHERE {cfg['fk']}=?", (element_id,)).fetchall()}
+        for sv in avant - voulus:
+            conn.execute(f"DELETE FROM {cfg['exigences']} WHERE {cfg['fk']}=? AND service=?",
+                         (element_id, sv))
         n = 0
-        for pid in voulus - avant:
-            conn.execute(f"INSERT OR IGNORE INTO {cfg['exigences']} ({cfg['fk']}, poste_id) VALUES (?,?)",
-                         (element_id, pid))
-            n += _attribuer_par_poste(conn, poste_id=pid, liste=liste, element_id=element_id)
+        for sv in voulus - avant:
+            conn.execute(f"INSERT OR IGNORE INTO {cfg['exigences']} ({cfg['fk']}, service) VALUES (?,?)",
+                         (element_id, sv))
+            n += _attribuer_par_service(conn, liste=liste, element_id=element_id, service=sv)
         conn.commit()
     if avant != voulus:
+        noms = ", ".join(sorted(role_label(v) for v in voulus)) or "aucun service"
         suite = f" · attribué à {n} employé(s)" if n else ""
         log_action(user=user, action="UPDATE", module="rh_outil",
-                   objet=f"Outil RH · {cfg['catalogue_nom']} · « {row['libelle']} » exigé pour "
-                         f"{len(voulus)} poste(s){suite}",
+                   objet=f"Outil RH · {cfg['catalogue_nom']} · « {row['libelle']} » exigé pour : {noms}{suite}",
                    request=request)
     return {"success": True, "attribues": n}
 
@@ -605,11 +445,11 @@ def list_catalogue(liste: str, request: Request):
                  ORDER BY e.libelle COLLATE NOCASE"""
         ).fetchall()
         exiges: dict = {}
-        for x in conn.execute(f"SELECT {cfg['fk']} AS el, poste_id FROM {cfg['exigences']}").fetchall():
-            exiges.setdefault(x["el"], []).append(x["poste_id"])
+        for x in conn.execute(f"SELECT {cfg['fk']} AS el, service FROM {cfg['exigences']}").fetchall():
+            exiges.setdefault(x["el"], []).append(x["service"])
     return {"elements": [
         {"id": r["id"], "libelle": r["libelle"], "nb_employes": r["nb_employes"],
-         "obligatoire": bool(r["obligatoire"]), "postes": exiges.get(r["id"], [])}
+         "obligatoire": bool(r["obligatoire"]), "services": exiges.get(r["id"], [])}
         for r in rows
     ]}
 

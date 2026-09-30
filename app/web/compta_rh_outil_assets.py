@@ -86,13 +86,9 @@ RH_OUTIL_CSS = r"""
 .rho-th-filtre{font-size:10px;font-weight:700;text-transform:none;letter-spacing:0;border-radius:20px;padding:1px 8px;background:var(--bg);border:1px solid var(--border);color:var(--muted)}
 .rho-th-filtre.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 
-/* Service et postes */
-.rho-svc{display:flex;flex-direction:column;gap:6px;min-width:150px}
-.rho-svc-lbl{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
-.rho-chips{display:flex;flex-wrap:wrap;gap:4px}
-.rho-chip{display:inline-flex;align-items:center;gap:2px;font-size:11.5px;font-weight:600;color:var(--text);background:var(--accent-bg);border-radius:20px;padding:2px 4px 2px 9px;line-height:1.4}
-.rho-chip button{border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:13px;line-height:1;padding:0 4px;border-radius:10px}
-.rho-chip button:hover{color:var(--danger)}
+/* Service (celui du compte, lecture seule) et filtre */
+.rho-svc{font-size:12.5px;font-weight:600;color:var(--text2);white-space:nowrap}
+.rho-svc.vide{color:var(--muted);font-weight:500}
 .rho-select{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:7px 12px;color:var(--text);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;outline:none;max-width:260px}
 .rho-select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 .rho-select.on{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
@@ -101,10 +97,6 @@ RH_OUTIL_CSS = r"""
 .rho-mini:hover{border-color:var(--accent);color:var(--accent)}
 .rho-mini.on{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
 .rho-dlg.large{max-width:680px}
-.rho-grp{margin-top:14px}
-.rho-grp:first-child{margin-top:0}
-.rho-grp-t{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:0 0 6px}
-.rho-grp .rho-list{max-height:none}
 .rho-check-row{display:flex;align-items:center;gap:9px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:9px;font-size:13px;color:var(--text);cursor:pointer}
 .rho-check-row:hover{border-color:var(--accent)}
 .rho-scroll{max-height:min(420px,calc(100vh - 260px));overflow-y:auto;padding-right:2px}
@@ -216,9 +208,9 @@ function rhOutilCase(checked,label){
 
 async function rhOutilLoad(){
   try{
-    const [d,p]=await Promise.all([api('/api/rh-outil/membres'),api('/api/rh-outil/postes')]);
-    if(!d||!p)return;
-    set({rhOutilMembres:d.membres||[],rhOutilServices:p.services||[],rhOutilLoaded:true});
+    const [d,sv]=await Promise.all([api('/api/rh-outil/membres'),api('/api/rh-outil/services')]);
+    if(!d||!sv)return;
+    set({rhOutilMembres:d.membres||[],rhOutilServices:sv.services||[],rhOutilLoaded:true});
   }catch(e){toast(e.message,'error');}
 }
 
@@ -498,162 +490,54 @@ function rhOutilPieces(L,m,x){
   rafraichir();
 }
 
-// ── Service et postes d'un employé ────────────────────────────────
-// Le service est celui du compte (lecture seule). Les postes proposés sont
-// ceux de ce service uniquement.
-function rhOutilPostesDuService(code){
-  const sv=(S.rhOutilServices||[]).find(x=>x.code===code);
-  return sv?sv.postes:[];
-}
-async function rhOutilAjouterPoste(m){
-  const postes=rhOutilPostesDuService(m.service);
-  if(!postes.length){
-    toast('Aucun poste dans le service '+(m.service_label||'de cet employé')+' — ajoutez-en avec « Gérer les postes ».','error');return;
-  }
-  const deja=new Set((m.postes||[]).map(p=>p.id));
-  rhOutilChoisir({
-    titre:'Poste pour '+(m.nom||'cet employé'),
-    placeholder:'Rechercher un poste…',
-    items:postes.map(p=>({valeur:p.id,label:p.libelle,sub:m.service_label,disabled:deja.has(p.id),tags:deja.has(p.id)?['Déjà attribué']:[]})),
-    onPick:async posteId=>{
-      let r;
-      try{r=await api('/api/rh-outil/membres/'+m.id+'/postes',rhOutilJson('POST',{poste_id:posteId}));}
-      catch(e){toast(e.message,'error');throw e;}
-      await rhOutilLoad();
-      const n=(r&&r.attribues)||0;
-      toast('Poste ajouté'+(n?' — '+n+' formation'+(n>1?'s ou documents attribués':' ou document attribué'):'')+'.');
-    },
-  });
-}
-async function rhOutilRetirerPoste(m,p){
-  // Rien n'est perdu : les formations et documents reçus avec le poste restent.
-  try{await api('/api/rh-outil/membres/'+m.id+'/postes/'+p.id,{method:'DELETE'});}
-  catch(e){toast(e.message,'error');return;}
-  await rhOutilLoad();
-}
-function rhOutilCelluleService(m){
-  return h('div',{className:'rho-svc'},
-    h('div',{className:'rho-svc-lbl'},m.service_label||'Sans service'),
-    (m.postes||[]).length?h('div',{className:'rho-chips'},...m.postes.map(p=>h('span',{className:'rho-chip'},p.libelle,
-      h('button',{type:'button',title:'Retirer ce poste','aria-label':'Retirer le poste '+p.libelle,onClick:()=>rhOutilRetirerPoste(m,p)},'×')))):null,
-    h('div',null,h('button',{type:'button',className:'rho-add',onClick:()=>rhOutilAjouterPoste(m)},iconEl('plus',11),'Poste'))
-  );
-}
-
-// ── Catalogue des postes (par service) ────────────────────────────
-function rhOutilCataloguePostes(){
+// ── Services pour lesquels un élément du catalogue est exigé ──────
+// Le service d'un employé est celui de son compte (Paramètres › Comptes),
+// jamais modifié ici.
+function rhOutilServicesExiges(L,x,apres){
+  const services=S.rhOutilServices||[];
   const {ov,fermer}=rhOutilFenetre();
-  const zone=h('div',{className:'rho-scroll'},h('div',{className:'rho-empty'},'Chargement…'));
-  const selSvc=h('select',{className:'rho-select','aria-label':'Service du nouveau poste'});
-  const rafraichir=async()=>{
-    let d;
-    try{d=await api('/api/rh-outil/postes');}catch(e){toast(e.message,'error');return;}
-    if(!d)return;
-    const services=d.services||[];
-    const garde=selSvc.value;
-    selSvc.replaceChildren(...services.map(sv=>h('option',{value:sv.code},sv.label)));
-    if(garde)selSvc.value=garde;
-    zone.replaceChildren(...services.map(sv=>h('div',{className:'rho-grp'},
-      h('div',{className:'rho-grp-t'},sv.label+(sv.postes.length?' · '+sv.postes.length:'')),
-      sv.postes.length?h('div',{className:'rho-list'},...sv.postes.map(p=>{
-        const inp=h('input',{type:'text',className:'rho-input',value:p.libelle,maxlength:'120','aria-label':'Intitulé du poste','data-rho-esc':'',...RHO_NO_AUTOFILL});
-        const enregistrer=async()=>{
-          const v=inp.value.trim();
-          if(!v||v===p.libelle){inp.value=p.libelle;return;}
-          try{await api('/api/rh-outil/postes/'+p.id,rhOutilJson('PUT',{libelle:v}));p.libelle=v;rhOutilLoad();toast('Poste renommé.');}
-          catch(e){inp.value=p.libelle;toast(e.message,'error');}
-        };
-        inp.addEventListener('keydown',e=>{
-          if(e.key==='Enter'){e.preventDefault();inp.blur();}
-          else if(e.key==='Escape'){e.preventDefault();inp.value=p.libelle;inp.blur();}
-        });
-        inp.addEventListener('blur',enregistrer);
-        const nb=p.nb_employes;
-        return h('div',{className:'rho-cat-row'},inp,
-          h('span',{className:'rho-sub'},nb+' employé'+(nb>1?'s':'')),
-          h('button',{type:'button',className:'rho-del',title:'Supprimer le poste',onClick:()=>rhOutilConfirmer({
-            titre:'Supprimer ce poste ?',nom:p.libelle,sous:sv.label+' · '+(nb?nb+' employé'+(nb>1?'s l’ont':' l’a'):'aucun employé'),label:'Supprimer',
-            texte:'Il est retiré des employés qui l’ont et des exigences des formations et documents. Les formations et documents déjà attribués restent aux employés.',
-            onConfirm:async()=>{
-              try{await api('/api/rh-outil/postes/'+p.id,{method:'DELETE'});}
-              catch(e){toast(e.message,'error');throw e;}
-              await rafraichir();rhOutilLoad();toast('Poste supprimé.');
-            },
-          })},iconEl('trash',13)));
-      })):h('div',{className:'rho-item-none'},'Aucun poste.')
-    )));
-  };
-  const nouv=h('input',{type:'text',className:'rho-input',placeholder:'Nouveau poste…',maxlength:'120',...RHO_NO_AUTOFILL});
-  const ajouter=async()=>{
-    const v=nouv.value.trim();
-    if(!v||!selSvc.value)return;
-    try{
-      await api('/api/rh-outil/postes',rhOutilJson('POST',{libelle:v,service:selSvc.value}));
-      nouv.value='';await rafraichir();rhOutilLoad();nouv.focus();
-    }catch(e){toast(e.message,'error');}
-  };
-  nouv.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();ajouter();}});
-  const dlg=rhOutilDialogue('Postes par service',fermer,
-    h('div',{className:'rho-cat-legend'},'Le service vient du compte de l’employé (Paramètres › Comptes) ; les postes le précisent. Un employé ne prend que des postes de son service.'),
-    zone,
-    h('div',{className:'rho-cat-add'},nouv,selSvc,h('button',{type:'button',className:'rho-btn accent',onClick:ajouter},iconEl('plus',13),'Ajouter'))
-  );
-  dlg.classList.add('large');
-  ov.appendChild(dlg);
-  document.body.appendChild(ov);
-  rafraichir();
-  requestAnimationFrame(()=>nouv.focus());
-}
-
-// ── Postes pour lesquels un élément du catalogue est exigé ────────
-function rhOutilPostesExiges(L,x,apres){
-  const services=(S.rhOutilServices||[]).filter(sv=>sv.postes.length);
-  if(!services.length){toast('Aucun poste — créez-en avec « Gérer les postes ».','error');return;}
-  const {ov,fermer}=rhOutilFenetre();
-  const avant=new Set(x.postes||[]);
+  const avant=new Set(x.services||[]);
   const cases=new Map();
-  const zone=h('div',{className:'rho-scroll'},...services.map(sv=>h('div',{className:'rho-grp'},
-    h('div',{className:'rho-grp-t'},sv.label),
-    h('div',{className:'rho-list'},...sv.postes.map(p=>{
-      const box=rhOutilCase(avant.has(p.id),p.libelle+' · '+sv.label);
-      cases.set(p.id,box);
-      return h('label',{className:'rho-check-row'},box,p.libelle);
-    }))
-  )));
+  const zone=h('div',{className:'rho-scroll'},h('div',{className:'rho-list'},...services.map(sv=>{
+    const box=rhOutilCase(avant.has(sv.code),sv.label);
+    cases.set(sv.code,box);
+    const nb=(S.rhOutilMembres||[]).filter(m=>m.service===sv.code).length;
+    return h('label',{className:'rho-check-row'},box,h('span',{style:{flex:1}},sv.label),
+      h('span',{className:'rho-sub'},nb?nb+' employé'+(nb>1?'s':'')+' suivi'+(nb>1?'s':''):''));
+  })));
   const enregistrer=async()=>{
-    const voulus=[...cases].filter(([,b])=>b.checked).map(([id])=>id);
-    const nouveaux=new Set(voulus.filter(id=>!avant.has(id)));
-    // Combien d'employés vont le recevoir : ceux qui ont un poste nouvellement
-    // exigé et ne l'ont pas encore.
+    const voulus=[...cases].filter(([,b])=>b.checked).map(([c])=>c);
+    const nouveaux=new Set(voulus.filter(c=>!avant.has(c)));
+    // Combien d'employés vont le recevoir : ceux d'un service nouvellement
+    // coché qui ne l'ont pas encore.
     const manquants=(S.rhOutilMembres||[]).filter(m=>
-      (m.postes||[]).some(p=>nouveaux.has(p.id))&&!(m[L.cle]||[]).some(e=>e.element_id===x.id)).length;
+      nouveaux.has(m.service)&&!(m[L.cle]||[]).some(e=>e.element_id===x.id)).length;
     const envoyer=async()=>{
       let r;
-      try{r=await api('/api/rh-outil/'+L.cle+'/catalogue/'+x.id+'/postes',rhOutilJson('PUT',{postes:voulus}));}
+      try{r=await api('/api/rh-outil/'+L.cle+'/catalogue/'+x.id+'/services',rhOutilJson('PUT',{services:voulus}));}
       catch(e){toast(e.message,'error');throw e;}
-      x.postes=voulus;
+      x.services=voulus;
       const n=(r&&r.attribues)||0;
-      toast('Postes enregistrés'+(n?' — '+L.ajoute+' à '+n+' employé'+(n>1?'s':''):'')+'.');
+      toast('Services enregistrés'+(n?' — '+L.ajoute+' à '+n+' employé'+(n>1?'s':''):'')+'.');
       fermer();
       if(apres)await apres();
       rhOutilLoad();
     };
     if(!manquants){try{await envoyer();}catch(_){}return;}
     rhOutilConfirmer({
-      ton:'info',titre:'Exiger pour ces postes ?',nom:x.libelle,label:'Enregistrer',
+      ton:'info',titre:'Exiger pour ces services ?',nom:x.libelle,label:'Enregistrer',
       sous:manquants+' employé'+(manquants>1?'s':'')+' concerné'+(manquants>1?'s ne l’ont':' ne l’a')+' pas encore',
-      texte:L.il+' sera '+L.ajoute+' tout de suite à '+(manquants>1?'ces employés':'cet employé')+', puis à chaque employé qui recevra l’un de ces postes. Retirer un poste plus tard ne retirera rien.',
+      texte:L.il+' sera '+L.ajoute+' tout de suite à '+(manquants>1?'ces employés':'cet employé')+', puis à chaque employé de ces services ajouté ensuite. Décocher un service plus tard ne retirera rien.',
       onConfirm:envoyer,
     });
   };
-  const dlg=rhOutilDialogue('Exigé pour les postes',fermer,
-    h('div',{className:'rho-cat-legend'},x.libelle),
+  ov.appendChild(rhOutilDialogue('Exigé pour les services',fermer,
+    h('div',{className:'rho-cat-legend'},x.libelle+' · le service est celui du compte de l’employé (Paramètres › Comptes).'),
     zone,
     h('div',{className:'rho-dlg-foot'},
       h('button',{type:'button',className:'rho-btn',onClick:fermer},'Annuler'),
       h('button',{type:'button',className:'rho-btn accent',onClick:enregistrer},'Enregistrer'))
-  );
-  ov.appendChild(dlg);
+  ));
   document.body.appendChild(ov);
 }
 
@@ -716,9 +600,9 @@ function rhOutilCatalogue(L){
       return h('div',{className:'rho-cat-row'},
         inp,
         h('label',{className:'rho-oblig',title:'Attribué d’office à chaque employé'},obl,'Obligatoire pour tous'),
-        h('button',{type:'button',className:'rho-mini'+((x.postes||[]).length?' on':''),title:'Postes pour lesquels il est exigé',
-          onClick:()=>rhOutilPostesExiges(L,x,rafraichir)},iconEl('users',11),
-          (x.postes||[]).length?x.postes.length+' poste'+(x.postes.length>1?'s':''):'Postes'),
+        h('button',{type:'button',className:'rho-mini'+((x.services||[]).length?' on':''),title:'Services pour lesquels il est exigé',
+          onClick:()=>rhOutilServicesExiges(L,x,rafraichir)},iconEl('users',11),
+          (x.services||[]).length?x.services.length+' service'+(x.services.length>1?'s':''):'Services'),
         h('span',{className:'rho-sub'},nb+' employé'+(nb>1?'s':'')),
         h('button',{type:'button',className:'rho-del',title:'Supprimer du catalogue',onClick:()=>rhOutilConfirmer({
           titre:L.supprTitre,nom:x.libelle,label:'Supprimer',
@@ -782,23 +666,19 @@ function rhOutilCelluleListe(L,m){
 
 function renderRhOutilTab(){
   const list=S.rhOutilMembres||[];
-  // Filtre service / poste : seulement les services présents dans la liste.
-  const fp=S.rhOutilFiltrePoste||'';
+  // Filtre par service : seulement les services présents dans la liste.
+  const fs=S.rhOutilFiltreService||'';
   const presents=new Set(list.map(m=>m.service));
-  const selFiltre=h('select',{className:'rho-select'+(fp?' on':''),'aria-label':'Filtrer par service ou poste'},
+  const selFiltre=h('select',{className:'rho-select'+(fs?' on':''),'aria-label':'Filtrer par service'},
     h('option',{value:''},'Tous les services'),
-    ...(S.rhOutilServices||[]).filter(sv=>presents.has(sv.code)).map(sv=>h('optgroup',{label:sv.label},
-      h('option',{value:'s:'+sv.code},sv.label+' · tout le service'),
-      ...sv.postes.map(p=>h('option',{value:'p:'+p.id},p.libelle))
-    ))
+    ...(S.rhOutilServices||[]).filter(sv=>presents.has(sv.code)).map(sv=>h('option',{value:sv.code},sv.label))
   );
-  selFiltre.value=fp;
-  if(selFiltre.value!==fp)selFiltre.value='';
-  selFiltre.addEventListener('change',()=>set({rhOutilFiltrePoste:selFiltre.value}));
+  selFiltre.value=fs;
+  if(selFiltre.value!==fs)selFiltre.value='';
+  selFiltre.addEventListener('change',()=>set({rhOutilFiltreService:selFiltre.value}));
   const bar=h('div',{className:'rho-bar'},
     list.length?selFiltre:null,
     h('div',{className:'rho-bar-spacer'}),
-    h('button',{type:'button',className:'rho-btn',onClick:rhOutilCataloguePostes},iconEl('users',13),'Gérer les postes'),
     ...RH_OUTIL_LISTES.map(L=>h('button',{type:'button',className:'rho-btn',onClick:()=>rhOutilCatalogue(L)},iconEl('sliders',13),L.gerer)),
     h('button',{type:'button',className:'rho-btn accent',onClick:rhOutilAjouterEmploye},iconEl('plus',13),'Ajouter un utilisateur')
   );
@@ -806,10 +686,9 @@ function renderRhOutilTab(){
   if(!list.length)return h('div',null,bar,h('div',{className:'card-empty'},'Aucun employé — utilisez « Ajouter un utilisateur ».'));
   const iF=Math.max(0,RHO_FILTRES.findIndex(f=>f.cle===(S.rhOutilFiltre||'tous')));
   const filtre=RHO_FILTRES[iF],suivant=RHO_FILTRES[(iF+1)%RHO_FILTRES.length];
-  const fpVal=selFiltre.value;
-  const okPoste=m=>!fpVal||(fpVal.startsWith('s:')?m.service===fpVal.slice(2):(m.postes||[]).some(p=>'p:'+p.id===fpVal));
-  const vis=list.filter(m=>okPoste(m)&&(filtre.cle==='tous'||rhOutilComplet(m)===(filtre.cle==='complet')));
-  const filtre_actif=filtre.cle!=='tous'||!!fpVal;
+  const fsVal=selFiltre.value;
+  const vis=list.filter(m=>(!fsVal||m.service===fsVal)&&(filtre.cle==='tous'||rhOutilComplet(m)===(filtre.cle==='complet')));
+  const filtre_actif=filtre.cle!=='tous'||!!fsVal;
   const nbCol=2+RH_OUTIL_LISTES.length+RH_OUTIL_COLONNES.length+2;
   const thDossier=h('th',{className:'rho-c'},
     h('button',{type:'button',className:'rho-th-btn',title:'Filtre : '+filtre.label+' — cliquer pour afficher « '+suivant.label+' »',
@@ -823,14 +702,14 @@ function renderRhOutilTab(){
     h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std rho-table'},
       h('thead',null,h('tr',null,
         h('th',null,'Employé'),
-        h('th',null,'Service et poste'),
+        h('th',null,'Service'),
         ...RH_OUTIL_LISTES.map(L=>h('th',null,L.titre)),
         ...RH_OUTIL_COLONNES.map(c=>h('th',{className:'rho-c'},c.label)),
         thDossier,
         h('th',{className:'rho-c'},'')
       )),
       h('tbody',null,...(vis.length?[]:[h('tr',null,h('td',{colspan:String(nbCol),className:'rho-empty'},
-        fpVal?'Aucun employé ne correspond aux filtres.':filtre.cle==='complet'?'Aucun dossier complet.':'Aucun dossier incomplet.'))]),...vis.map(m=>h('tr',null,
+        fsVal?'Aucun employé ne correspond aux filtres.':filtre.cle==='complet'?'Aucun dossier complet.':'Aucun dossier incomplet.'))]),...vis.map(m=>h('tr',null,
         h('td',null,h('div',{className:'rho-emp-cell'},
           h('div',{className:'rho-avatar','aria-hidden':'true'},rhOutilInitiales(m.nom)),
           h('div',null,
@@ -838,7 +717,7 @@ function renderRhOutilTab(){
             h('div',{className:'rho-sub'},m.email||'')
           )
         )),
-        h('td',null,rhOutilCelluleService(m)),
+        h('td',null,h('span',{className:'rho-svc'+(m.service_label?'':' vide')},m.service_label||'Non renseigné')),
         ...RH_OUTIL_LISTES.map(L=>h('td',null,rhOutilCelluleListe(L,m))),
         ...RH_OUTIL_COLONNES.map(c=>h('td',{className:'rho-c'},rhOutilOuiNon(m,c))),
         h('td',{className:'rho-c','data-rho-statut':String(m.id)},rhOutilBadge(m)),
