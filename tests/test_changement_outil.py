@@ -37,6 +37,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -156,6 +157,14 @@ class TestChangementOutil(unittest.TestCase):
                 "UPDATE machines SET dernier_metrage=? WHERE id=?", (compteur, MACHINE_ID)
             )
             conn.execute("DELETE FROM production_data WHERE machine = ?", (MACHINE_NOM,))
+            # Un changement d'outil se saisit dans un dossier démarré : le
+            # serveur refuse tout code hors 86/87/01 sans « 01 » du jour.
+            conn.execute(
+                "INSERT INTO production_data (operateur, date_operation, operation, "
+                "operation_code, machine, no_dossier, data) VALUES (?,?,?,?,?,?,?)",
+                (USER["nom"], datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                 "01 - Démarrer un dossier", "01", MACHINE_NOM, "D-TEST", "{}"),
+            )
             conn.commit()
 
     @staticmethod
@@ -457,6 +466,28 @@ class TestChangementOutil(unittest.TestCase):
         self.assertEqual(ctx["outil_actuel"]["id"], c["id"])
         self.assertEqual(ctx["dernier_metrage"], 200)
         self.assertFalse(ctx["deja_complete"])
+
+    # ── 10. Pas d'opération sans dossier démarré ─────────────────────────
+    def test_10_operation_sans_dossier_demarre_refusee(self):
+        """Arrivée puis calage tapé dans la recherche : refusé côté serveur,
+        et la saisie hérite du dossier ouvert quand le client ne l'envoie pas."""
+        from database import get_db
+
+        self._reset(None)
+        with get_db() as conn:
+            conn.execute("DELETE FROM production_data WHERE machine = ?", (MACHINE_NOM,))
+            conn.commit()
+        r = self._clic(operation="02 - Calage")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Aucun dossier démarré", r.json()["detail"])
+        self.assertIsNone(self._derniere()[0])
+        # Le pointage personnel reste libre.
+        self.assertEqual(self._clic(operation="86 - Arrivée personnel").status_code, 200)
+
+        self._reset(None)
+        r = self._clic(operation="02 - Calage")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self._derniere()[0]["no_dossier"], "D-TEST")
 
 
 if __name__ == "__main__":

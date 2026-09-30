@@ -6056,6 +6056,18 @@ function handleSearchSubmit(query){
       showToast('Sélectionnez une machine avant de saisir une opération','warn');
       return;
     }
+    // La recherche suit la même machine à états que le footer et la grille :
+    // sans elle, taper « 02 » juste après l'arrivée saisissait un calage
+    // sans dossier démarré.
+    const enDossier = S.etat==='en_calage' || S.etat==='en_cours_production' || S.etat==='en_arret';
+    if(found.code==='01' && enDossier){
+      showToast('Un dossier est déjà en cours — clôturez-le (Fin de production) avant d\'en démarrer un autre.','warn');
+      return;
+    }
+    if(found.code!=='86' && found.code!=='87' && found.code!=='01' && !enDossier){
+      showToast('Aucun dossier démarré — utilisez « '+opLabel('01','Démarrer un dossier')+' » avant de saisir cette opération.','warn');
+      return;
+    }
     set({searchQuery:''});
     handleOpTrigger(found.code, found.label, found.category);
   } else {

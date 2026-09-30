@@ -430,6 +430,35 @@ def _compute_etat(saisies: list, ops: Optional[dict] = None) -> str:
     return "en_calage"
 
 
+# Codes qui se saisissent hors dossier : pointage personnel et ouverture du
+# dossier lui-même. Tout le reste décrit du travail SUR un dossier.
+_CODES_HORS_DOSSIER = ("86", "87", "01")
+
+
+def _dossier_actif_operateur(conn, noms: list) -> Optional[str]:
+    """Dossier en cours de l'opérateur, lu comme le fait GET /session.
+
+    Même périmètre que l'écran : saisies du jour de l'opérateur, non annulées.
+    Le serveur et le footer doivent tomber d'accord sur « il y a un dossier
+    ouvert », sinon l'un des deux laisse passer ce que l'autre interdit.
+    """
+    noms = [n for n in dict.fromkeys(noms) if n]
+    if not noms:
+        return None
+    today = _today_prefix()
+    today_fr = date.today().strftime("%d/%m/%Y")
+    ph = ",".join("?" * len(noms))
+    rows = conn.execute(
+        f"""SELECT * FROM production_data
+            WHERE operateur IN ({ph}) AND (
+              date_operation LIKE ? OR date_operation LIKE ?
+            )
+            ORDER BY date_operation ASC, id ASC""",
+        (*noms, today + "%", today_fr + "%"),
+    ).fetchall()
+    return _get_active_dossier(_saisies_non_annulees([dict(r) for r in rows]))
+
+
 def _get_active_dossier(saisies: list):
     """Retourne la ref du dossier actif (dernier Début sans Fin dossier correspondant).
 
@@ -1493,7 +1522,8 @@ async def create_saisie(request: Request):
     mid = effective_machine_id(user)
     
     operateur = user.get("operateur_lie") or ""
-    if is_admin(user) and body.get("operateur"):
+    operateur_force = bool(is_admin(user) and body.get("operateur"))
+    if operateur_force:
         operateur = str(body["operateur"]).strip()
     # Si pas d'opérateur_lié, utiliser le nom de l'utilisateur
     if not operateur:
@@ -1566,6 +1596,27 @@ async def create_saisie(request: Request):
         machine_name = machine_obj["nom"]
         machine_id_resolved = machine_obj["id"]
         dernier_metrage = machine_obj.get("dernier_metrage")  # peut être None
+
+        # ── Dossier démarré obligatoire ──────────────────────────────────────
+        # Une opération (calage, production, arrêt, fin de production…) se
+        # rattache à un dossier ouvert par « Démarrer un dossier ». L'écran ne
+        # propose ces codes qu'en cours de dossier, mais la recherche par code
+        # les déclenchait sans condition : on a vu un « 02 - Calage » puis un
+        # « 89 - Fin de production » saisis juste après l'arrivée, sans dossier.
+        # Le contrôle vit donc ici, pas seulement dans le footer.
+        if cl["code"] not in _CODES_HORS_DOSSIER:
+            _noms = [operateur] if operateur_force else [operateur, user.get("nom") or ""]
+            dossier_actif = _dossier_actif_operateur(conn, _noms)
+            if not dossier_actif:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Aucun dossier démarré — enregistrez « Démarrer un dossier » "
+                        "avant de saisir cette opération."
+                    ),
+                )
+            if not no_dossier:
+                no_dossier = dossier_actif
 
         # v2.2.89 — Garde-fou : refuser UNIQUEMENT la saisie 03 (Production) ou
         # 88 (Reprise) si une alerte maintenance bloquante est due. Les autres
