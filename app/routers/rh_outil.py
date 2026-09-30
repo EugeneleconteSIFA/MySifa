@@ -226,14 +226,17 @@ def _attribuer_par_service(conn, membre_id: Optional[int] = None, liste: Optiona
         where, params = ["1=1"], [_now()]
         if membre_id is not None:
             where.append("m.id = ?"); params.append(membre_id)
+        # La colonne de l'élément est renommée `element_id` dans la sous-requête :
+        # chaque morceau de la clause reste une chaîne littérale (garde-fou
+        # tests/test_sql_where_dynamique.py).
         if element_id is not None:
-            where.append(f"x.{cfg['fk']} = ?"); params.append(element_id)
+            where.append("x.element_id = ?"); params.append(element_id)
         if service is not None:
             where.append("x.service = ?"); params.append(service)
         n += conn.execute(
             f"""INSERT OR IGNORE INTO {cfg['liaison']} (membre_id, {cfg['fk']}, fait, ajoute_le)
-                SELECT DISTINCT m.id, x.{cfg['fk']}, 0, ?
-                  FROM {cfg['exigences']} x
+                SELECT DISTINCT m.id, x.element_id, 0, ?
+                  FROM (SELECT {cfg['fk']} AS element_id, service FROM {cfg['exigences']}) x
                   JOIN users u ON u.role = x.service
                   JOIN rh_outil_membres m ON m.user_id = u.id
                  WHERE {' AND '.join(where)}""",
