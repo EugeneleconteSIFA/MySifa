@@ -15,6 +15,9 @@ Un élément du catalogue est « exigé pour » personne, tous les employés
 deux à la fois. Il est alors attribué d'office aux employés concernés.
 Les documents d'un employé peuvent porter des pièces jointes (rh_outil_pieces),
 rangées hors de /static sous data/uploads/rh_outil/.
+Le contrat (type, début, fin) vit dans la fiche Paie (paie_employes) : l'Outil
+RH le crée avec le compte et le modifie (app/routers/rh_outil_contrat.py), sans
+jamais toucher aux éléments de salaire.
 L'onglet sert au suivi des nouveaux employés : « Nouvel employé » crée le compte
 MySifa (mêmes règles que Paramètres › Comptes, fonctions partagées avec
 app/routers/auth.py) et l'inscrit au suivi avec sa date d'arrivée.
@@ -35,6 +38,9 @@ from pydantic import BaseModel
 from config import (
     ASSIGNABLE_ROLES,
     BASE_DIR,
+    CONTRATS_DUREE_INDETERMINEE,
+    CONTRATS_TYPES,
+    RH_OUTIL_ALERTE_FIN_CONTRAT_JOURS,
     RH_OUTIL_MAX_FILE_MB,
     SUPERADMIN_EMAIL,
     role_label,
@@ -118,6 +124,8 @@ class NouvelEmployeIn(BaseModel):
     service: str
     password: str
     date_arrivee: str
+    contrat_type: str
+    contrat_fin: Optional[str] = None
 
 
 class LibelleIn(BaseModel):
@@ -417,6 +425,11 @@ def create_employe(payload: NouvelEmployeIn, request: Request):
     arrivee = _date(payload.date_arrivee)
     if not arrivee:
         raise HTTPException(400, "Date d'arrivée obligatoire.")
+    if payload.contrat_type not in CONTRATS_TYPES:
+        raise HTTPException(400, "Type de contrat invalide.")
+    fin = None if payload.contrat_type in CONTRATS_DUREE_INDETERMINEE else _date(payload.contrat_fin)
+    if fin and fin < arrivee:
+        raise HTTPException(400, "La fin de contrat précède la date d'arrivée.")
     with get_db() as conn:
         if conn.execute("SELECT 1 FROM users WHERE lower(email)=?", (email,)).fetchone():
             raise HTTPException(409, "Un compte existe déjà avec cet email.")
@@ -434,6 +447,13 @@ def create_employe(payload: NouvelEmployeIn, request: Request):
             (user_id, _now(), user.get("nom"), arrivee),
         )
         membre_id = cur.lastrowid
+        # Fiche Paie : seulement le contrat. Salaire, taux, primes restent à
+        # la comptabilité, dans la Paie.
+        conn.execute(
+            """INSERT INTO paie_employes (user_id, contrat_type, date_debut, date_fin, updated_at, updated_by)
+               VALUES (?,?,?,?,?,?)""",
+            (user_id, payload.contrat_type, arrivee, fin, datetime.now().isoformat(), user.get("email")),
+        )
         n = _attribuer_obligatoires(conn, membre_id=membre_id)
         n += _attribuer_par_service(conn, membre_id=membre_id)
         n += _documents_lies(conn, _formations_du_membre(conn, membre_id))
@@ -443,8 +463,8 @@ def create_employe(payload: NouvelEmployeIn, request: Request):
                objet=f"Utilisateur {nom} [{payload.service}]", detail={"email": email},
                request=request)
     log_action(user=user, action="CREATE", module="rh_outil",
-               objet=f"Outil RH · nouvel employé {nom} ({role_label(payload.service)}), "
-                     f"arrivée le {_jour_fr(arrivee)}" + (f" · {n} élément(s) attribué(s)" if n else ""),
+               objet=f"Outil RH · nouvel employé {nom} ({role_label(payload.service)}, "
+                     f"{payload.contrat_type}), arrivée le {_jour_fr(arrivee)}" + (f" · {n} élément(s) attribué(s)" if n else ""),
                request=request)
     return {"success": True, "membre_id": membre_id, "identifiant": ident, "attribues": n}
 
@@ -455,9 +475,11 @@ def list_membres(request: Request):
     with get_db() as conn:
         rows = conn.execute(
             """SELECT m.id, m.user_id, m.ajoute_le, m.ajoute_par, m.reglement_signe, m.date_arrivee,
-                      u.nom, u.email, u.role, u.actif
+                      u.nom, u.email, u.role, u.actif,
+                      pe.contrat_type, pe.date_debut AS contrat_debut, pe.date_fin AS contrat_fin
                  FROM rh_outil_membres m
                  JOIN users u ON u.id = m.user_id
+                 LEFT JOIN paie_employes pe ON pe.user_id = u.id
                 ORDER BY u.nom COLLATE NOCASE"""
         ).fetchall()
         # {liste: {membre_id: [éléments]}}
@@ -492,7 +514,10 @@ def list_membres(request: Request):
              "service": r["role"] or "", "service_label": role_label(r["role"] or ""),
              "ajoute_le": r["ajoute_le"], "ajoute_par": r["ajoute_par"],
              "reglement_signe": bool(r["reglement_signe"]),
-             "date_arrivee": r["date_arrivee"]}
+             "date_arrivee": r["date_arrivee"],
+             # Pas de fiche Paie ou type vide : « à renseigner », jamais « CDI » supposé.
+             "contrat_type": r["contrat_type"] or None,
+             "contrat_debut": r["contrat_debut"], "contrat_fin": r["contrat_fin"]}
         for liste in LISTES:
             m[liste] = par_liste[liste].get(r["id"], [])
         membres.append(m)
@@ -578,7 +603,10 @@ def list_services(request: Request):
     user = _require(request)
     peut = can_access_settings_contacts(user)
     return {"services": _services(), "peut_creer": peut,
-            "services_creables": _services_creables(user) if peut else []}
+            "services_creables": _services_creables(user) if peut else [],
+            "contrats": list(CONTRATS_TYPES),
+            "contrats_sans_fin": sorted(CONTRATS_DUREE_INDETERMINEE),
+            "alerte_fin_contrat_jours": RH_OUTIL_ALERTE_FIN_CONTRAT_JOURS}
 
 
 # ─── Catégories de formations et documents liés ──────────────────────────

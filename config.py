@@ -1190,6 +1190,14 @@ TACHES_MAX_FILE_MB = int(os.getenv("TACHES_MAX_FILE_MB", "25"))
 # fichier. Formats acceptés (PDF, JPG, PNG, WEBP, HEIC) : app/routers/rh_outil.py.
 RH_OUTIL_MAX_FILE_MB = int(os.getenv("RH_OUTIL_MAX_FILE_MB", "10"))
 
+# Types de contrat d'un employé. Source unique pour la Paie (fiche employé) et
+# l'Outil RH, qui écrivent tous deux dans paie_employes.contrat_type.
+CONTRATS_TYPES = ("CDI", "CDD", "Intérim", "Stage", "Apprentissage")
+# Contrats sans date de fin : la date de fin n'est ni demandée ni affichée.
+CONTRATS_DUREE_INDETERMINEE = frozenset({"CDI"})
+# Outil RH : la fin d'un contrat est signalée ce nombre de jours avant l'échéance.
+RH_OUTIL_ALERTE_FIN_CONTRAT_JOURS = int(os.getenv("RH_OUTIL_ALERTE_FIN_CONTRAT_JOURS", "15"))
+
 # Colonnes du Kanban. `final=True` marque les statuts qui clôturent une tâche
 # (horodatage done_at, exclusion des compteurs « ouvert »).
 TACHES_STATUTS = (
