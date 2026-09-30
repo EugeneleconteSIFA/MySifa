@@ -22,6 +22,7 @@ from database import get_db
 from app.web.expe_portail_page import get_portail_404_html, get_portail_html
 from app.services.email_service import email_expe_reponse_recue, send_email
 from app.services import expe_evenements as expe_ev
+from app.services import expe_carburant as carb
 from app.services.auth_service import get_optional_user
 
 logger = logging.getLogger(__name__)
@@ -386,7 +387,69 @@ def portail_expe_data(request: Request, token: str):
                     (int(dem["demande_id"]), int(dem["reponse_id"] or 0)),
                 ).fetchall()
             ]
-        return {"email": email, "demandes": demandes}
+        carburant = carb.etat_portail(conn, int(tid)) if tid else None
+        return {"email": email, "demandes": demandes, "carburant": carburant}
+
+
+@router_api.post("/{token}/carburant")
+def portail_expe_carburant(request: Request, token: str, body: dict = Body(...)):
+    """Le transporteur renseigne lui-même sa taxe carburant.
+
+    Elle s'écrit directement sur sa fiche : pas de validation intermédiaire,
+    c'est lui qui fixe sa surcharge et le comparateur doit l'appliquer tout de
+    suite. L'email de confirmation part vers la personne qui a envoyé la
+    dernière demande, la boîte du service en copie.
+    """
+    ip = _client_ip(request)
+    with get_db() as conn:
+        acc = _get_account_or_404(conn, token, ip=ip)
+        tid = acc.get("transporteur_id")
+        etat = carb.etat_portail(conn, int(tid)) if tid else None
+        if not etat:
+            raise HTTPException(
+                status_code=403,
+                detail="Ce lien n'est rattaché à aucun transporteur référencé.",
+            )
+        try:
+            pct = carb.valider_pct(body.get("pct"))
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=400,
+                detail="Taux invalide — valeur entre 0 et 100 %.",
+            )
+        email = _account_email(acc)
+        trp = conn.execute(
+            "SELECT taxe_carburant_demande_par FROM expe_transporteurs WHERE id=?",
+            (int(tid),),
+        ).fetchone()
+        res = carb.enregistrer_saisie(
+            conn,
+            transporteur_id=int(tid),
+            pct=pct,
+            source=carb.SOURCE_PORTAIL,
+            auteur=email or None,
+        )
+        conn.commit()
+        etat = carb.etat_portail(conn, int(tid))
+
+    try:
+        to, cc = carb.destinataires_confirmation(
+            trp["taxe_carburant_demande_par"] if trp else None
+        )
+        if to:
+            sujet, corps = carb.email_taxe_recue(
+                nom_transporteur=etat["transporteur"],
+                email_saisie=email or None,
+                pct_avant=res["pct_avant"],
+                pct=pct,
+            )
+            send_email(to=to, subject=sujet, html_body=corps, cc=cc or None)
+    except Exception:
+        # La saisie est enregistrée : une notification ratée ne doit pas la
+        # faire passer pour un échec aux yeux du transporteur.
+        logger.exception("Taxe carburant : notification interne non envoyée")
+
+    return {"success": True, "carburant": etat}
 
 
 @router_api.post("/{token}/demandes/{demande_id}/repondre")

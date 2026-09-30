@@ -239,6 +239,24 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     .toast{position:fixed;right:16px;bottom:16px;z-index:10000;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;max-width:min(520px,calc(100vw - 32px));display:none}
     .toast.ok{border-color:rgba(52,211,153,.35)}
     .toast.bad{border-color:rgba(248,113,113,.35)}
+    /* Bloc taxe carburant : en tete de page, avant les demandes de tarif.
+       Il ne s'affiche que pour un lien rattache a une fiche transporteur. */
+    .fuel{background:var(--card);border:1px solid var(--border);border-radius:12px;
+      padding:16px 20px;margin-bottom:16px;display:flex;gap:20px;align-items:flex-end;
+      justify-content:space-between;flex-wrap:wrap;transition:box-shadow .3s,border-color .3s}
+    .fuel[hidden]{display:none}
+    .fuel.ask{border-color:var(--warn);box-shadow:inset 3px 0 0 var(--warn)}
+    .fuel.flash{box-shadow:0 0 0 3px var(--accent-bg);border-color:var(--accent)}
+    .fuel-t{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+    .fuel-v{font-size:28px;font-weight:800;color:var(--accent);letter-spacing:-.5px;line-height:1.15;
+      margin-top:4px;font-variant-numeric:tabular-nums}
+    .fuel-m{font-size:12px;color:var(--text2);margin-top:2px}
+    .fuel-m.ask{color:var(--warn);font-weight:700}
+    .fuel-f{min-width:240px}
+    .fuel-row{display:flex;gap:8px}
+    .fuel-row input{width:120px;flex:none}
+    .fuel-h{font-size:11px;color:var(--muted);margin-top:6px;max-width:320px;line-height:1.5}
+    @media (max-width:520px){.fuel-f{min-width:0;width:100%}.fuel-row input{flex:1;width:auto}}
     .foot{margin-top:28px;padding-top:16px;border-top:1px solid var(--border);text-align:center;font-size:11px;color:var(--muted);line-height:1.7}
     .foot-brand{font-weight:600;color:var(--text2);margin-bottom:4px}
     .foot-contact{font-size:12px}
@@ -261,6 +279,22 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
         <button type="button" class="theme-btn" id="themeBtn">Thème</button>
       </div>
     </header>
+
+    <section class="fuel" id="carburant" hidden>
+      <div>
+        <div class="fuel-t" id="i18n-fuel-title">Taxe carburant</div>
+        <div class="fuel-v" id="fuelVal">—</div>
+        <div class="fuel-m" id="fuelMeta"></div>
+      </div>
+      <form class="fuel-f" id="fuelForm" novalidate>
+        <label for="fuelIn" id="i18n-fuel-label">Taux en vigueur (%)</label>
+        <div class="fuel-row">
+          <input type="number" step="0.01" min="0" max="100" inputmode="decimal" id="fuelIn">
+          <button class="btn btn-accent" type="submit" id="fuelBtn">Mettre à jour</button>
+        </div>
+        <div class="fuel-h" id="i18n-fuel-hint"></div>
+      </form>
+    </section>
 
     <div class="banner">
       <h1 id="i18n-banner-title">Vos demandes de tarif</h1>
@@ -364,6 +398,10 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     const ca=document.getElementById('cancel'); if(ca) ca.textContent=t('cancel');
     const sa=document.getElementById('save'); if(sa) sa.textContent=t('save');
     const fn=document.getElementById('i18n-foot-note'); if(fn) fn.textContent=t('footNote');
+    const ft=document.getElementById('i18n-fuel-title'); if(ft) ft.textContent=t('fuelTitle');
+    const fl=document.getElementById('i18n-fuel-label'); if(fl) fl.textContent=t('fuelLabel');
+    const fhh=document.getElementById('i18n-fuel-hint'); if(fhh) fhh.textContent=t('fuelHint');
+    const fb=document.getElementById('fuelBtn'); if(fb) fb.textContent=t('fuelSave');
     updateLangBtn();
   }
   function setLang(lang){
@@ -455,6 +493,7 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     const list=document.getElementById('list');
     const d=S.data;
     who.textContent = d ? (t('account')+': '+(d.email||t('dash'))) : t('loading');
+    renderFuel();
     list.innerHTML='';
     const rows=(d&&d.demandes)||[];
     if(!rows.length){
@@ -502,6 +541,37 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     section(t('secTodo'), aFaire, {empty:t('secTodoEmpty')});
     if(envoyees.length) section(t('secSent'), envoyees, {hint:t('secSentHint')});
     if(closes.length) section(t('secClosed'), closes, {cls:'grp-closed'});
+  }
+
+  function fmtPct(v){
+    if(v==null||!isFinite(Number(v))) return t('dash');
+    let s=Number(v).toFixed(2).replace(/0+$/,'').replace(/\\.$/,'');
+    if(S.lang==='fr') s=s.replace('.',',');
+    return s+' %';
+  }
+  function fmtDate(iso){
+    const s=String(iso||'').slice(0,10);
+    const m=/^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(s);
+    if(!m) return s;
+    return S.lang==='fr' ? (m[3]+'/'+m[2]+'/'+m[1]) : s;
+  }
+  // Taxe carburant : visible seulement si le lien est rattache a une fiche
+  // transporteur (un prospect n'a pas de taux a declarer).
+  function renderFuel(){
+    const box=document.getElementById('carburant');
+    const c=S.data&&S.data.carburant;
+    if(!box) return;
+    if(!c){ box.hidden=true; return; }
+    box.hidden=false;
+    box.classList.toggle('ask', !!c.en_attente);
+    document.getElementById('fuelVal').textContent = (c.maj_le||c.pct) ? fmtPct(c.pct) : t('dash');
+    const meta=document.getElementById('fuelMeta');
+    meta.classList.toggle('ask', !!c.en_attente);
+    if(c.en_attente) meta.textContent=t('fuelAsked')+' '+fmtDate(c.demande_le);
+    else if(c.maj_le) meta.textContent=t('fuelUpdated')+' '+fmtDate(c.maj_le);
+    else meta.textContent=t('fuelNever');
+    const inp=document.getElementById('fuelIn');
+    if(inp && document.activeElement!==inp && !inp.value && (c.maj_le||c.pct)) inp.value=String(c.pct);
   }
 
   function carte(it){
@@ -600,10 +670,42 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     return node;
   }
 
+  let _fuelFocused=false;
   async function load(){
     S.data = await api('/api/portail/expe/'+encodeURIComponent(TOKEN));
     render();
+    // Arrivee depuis l'email de demande (#carburant) : on amene le bloc a
+    // l'ecran et le curseur dans le champ, une seule fois.
+    if(!_fuelFocused && location.hash==='#carburant' && S.data && S.data.carburant){
+      _fuelFocused=true;
+      const box=document.getElementById('carburant');
+      box.scrollIntoView({block:'center'});
+      box.classList.add('flash');
+      setTimeout(()=>box.classList.remove('flash'),1600);
+      const inp=document.getElementById('fuelIn');
+      if(inp){ inp.focus(); inp.select(); }
+    }
   }
+
+  document.getElementById('fuelForm').addEventListener('submit', async (ev)=>{
+    ev.preventDefault();
+    const raw=String(document.getElementById('fuelIn').value||'').replace(',','.').trim();
+    const pct=parseFloat(raw);
+    if(raw==='' || !isFinite(pct) || pct<0 || pct>100){ showToast(t('fuelInvalid'),'bad'); return; }
+    const btn=document.getElementById('fuelBtn');
+    btn.disabled=true;
+    try{
+      const j=await api('/api/portail/expe/'+encodeURIComponent(TOKEN)+'/carburant', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({pct})
+      });
+      if(S.data) S.data.carburant=j.carburant;
+      renderFuel();
+      showToast(t('fuelSaved'),'ok');
+    }catch(e){ showToast(e.message||t('error'),'bad'); }
+    finally{ btn.disabled=false; }
+  });
 
   // Dépôt d'un fichier joint à l'offre. Sans cela, la cotation PDF partait par
   // mail à côté du portail et n'entrait jamais dans le comparatif.

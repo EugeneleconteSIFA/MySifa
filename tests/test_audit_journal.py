@@ -67,7 +67,8 @@ def _routes_ecriture():
     main_src = (RACINE / "main.py").read_text(encoding="utf-8", errors="replace")
     for fichier, variable in (("matiere_prix.py", "router_matiere_prix"),
                               ("expe_departs.py", "expe_departs_router"),
-                              ("expe_pilotage.py", "expe_pilotage_router")):
+                              ("expe_pilotage.py", "expe_pilotage_router"),
+                              ("expe_carburant.py", "expe_carburant_router")):
         m = re.search(
             rf'include_router\({variable},\s*prefix="([^"]*)"', main_src
         )
