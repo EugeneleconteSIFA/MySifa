@@ -1,18 +1,17 @@
 """MySifa — Outil RH (onglet de MyCompta).
 
-Liste partagée des employés suivis dans l'onglet « Outil RH ». On y ajoute un
-employé choisi parmi tous les comptes (actifs ou non), on peut le retirer.
-Chaque employé suivi porte une checklist :
-- des cases fixes, une colonne de rh_outil_membres chacune (CHECKLIST) ;
-- des listes qui varient d'un employé à l'autre (LISTES : formations,
-  documents), piochées chacune dans un catalogue commun géré depuis l'onglet.
-Les formations se rangent par catégorie (rh_outil_formation_categories,
-modifiable) et peuvent entraîner des documents : attribuer une formation à un
-employé lui attribue aussi ses documents liés (rh_outil_formation_documents).
-Chaque employé a le service de son compte (users.role, jamais modifié ici).
+Liste partagée des employés suivis dans l'onglet « Outil RH » (suivi des
+nouveaux employés). Deux listes par employé, piochées dans des catalogues
+communs gérés depuis l'onglet :
+- les formations, rangées par catégorie, chacune avec ses justificatifs
+  attendus (attestation, certificat…), affichés sous la formation ;
+- les documents administratifs (pièce d'identité, RIB, règlement signé…).
 Un élément du catalogue est « exigé pour » personne, tous les employés
-(colonne obligatoire) ou certains services (tables *_services) — jamais les
-deux à la fois. Il est alors attribué d'office aux employés concernés.
+(colonne obligatoire) ou une cible — des SERVICES pour les formations (rôle du
+compte), des CONTRATS pour les documents (fiche Paie) —, jamais les deux à la
+fois. Il est alors attribué d'office aux employés concernés.
+Modules voisins : rh_outil_formations.py (catégories, justificatifs),
+rh_outil_pieces.py (pièces jointes), rh_outil_contrat.py (contrat).
 Les documents d'un employé peuvent porter des pièces jointes (rh_outil_pieces),
 rangées hors de /static sous data/uploads/rh_outil/.
 Le contrat (type, début, fin) vit dans la fiche Paie (paie_employes) : l'Outil
@@ -91,15 +90,40 @@ def _supprimer_fichiers(chemins: list) -> None:
 
 
 def _retirer_pieces(conn, where: str, params: tuple) -> list:
-    """Supprime les lignes rh_outil_pieces des attributions de documents qui
-    vérifient `where` (sur l'alias a = rh_outil_membre_documents). Renvoie les
-    fichiers à effacer une fois la transaction validée."""
+    """Supprime les pièces jointes des documents d'employés qui vérifient
+    `where` (alias a = rh_outil_membre_documents). `where` est toujours une
+    chaîne écrite dans ce module. Renvoie les fichiers à effacer une fois la
+    transaction validée."""
     rows = conn.execute(
         f"""SELECT p.id, p.fichier FROM rh_outil_pieces p
               JOIN rh_outil_membre_documents a ON a.id = p.attribution_id
-             WHERE {where}""",
+             WHERE p.cible = 'document' AND {where}""",
         params,
     ).fetchall()
+    return _effacer_lignes_pieces(conn, rows)
+
+
+def _retirer_justificatifs(conn, where: str, params: tuple) -> list:
+    """Supprime les justificatifs d'employés (et leurs pièces jointes) des
+    formations d'employés qui vérifient `where` (alias a =
+    rh_outil_membre_formations). Renvoie les fichiers à effacer."""
+    rows = conn.execute(
+        f"""SELECT p.id, p.fichier FROM rh_outil_pieces p
+              JOIN rh_outil_membre_justificatifs mj ON mj.id = p.attribution_id
+              JOIN rh_outil_membre_formations a ON a.id = mj.attribution_id
+             WHERE p.cible = 'justificatif' AND {where}""",
+        params,
+    ).fetchall()
+    fichiers = _effacer_lignes_pieces(conn, rows)
+    conn.execute(
+        f"""DELETE FROM rh_outil_membre_justificatifs WHERE attribution_id IN
+                (SELECT a.id FROM rh_outil_membre_formations a WHERE {where})""",
+        params,
+    )
+    return fichiers
+
+
+def _effacer_lignes_pieces(conn, rows) -> list:
     if rows:
         conn.execute(
             f"DELETE FROM rh_outil_pieces WHERE id IN ({','.join('?' * len(rows))})",
@@ -113,7 +137,6 @@ class MembreIn(BaseModel):
 
 
 class MembrePatch(BaseModel):
-    reglement_signe: Optional[bool] = None
     date_arrivee: Optional[str] = None
 
 
@@ -133,23 +156,16 @@ class LibelleIn(BaseModel):
     categorie_id: Optional[int] = None   # formations seulement, à la création
 
 
-class CategorieRef(BaseModel):
-    categorie_id: Optional[int] = None
-
-
-class DocumentsLies(BaseModel):
-    documents: list[int]
-
-
 class AttributionIn(BaseModel):
     element_id: int
 
 
 class ExigeIn(BaseModel):
-    """« Exigé pour » : tous les employés, ou la liste de services (vide =
-    personne). Les deux sont exclusifs : `tous` l'emporte et vide les services."""
+    """« Exigé pour » : tous les employés, ou une liste de cibles — services
+    pour les formations, contrats pour les documents (vide = personne). Les
+    deux sont exclusifs : `tous` l'emporte et vide les cibles."""
     tous: bool = False
-    services: list[str] = []
+    cibles: list[str] = []
 
 
 class AttributionPatch(BaseModel):
@@ -165,6 +181,9 @@ LISTES = {
         "liaison": "rh_outil_membre_formations",
         "fk": "formation_id",
         "exigences": "rh_outil_formation_services",
+        "cible": "service",
+        # Un employé est dans la cible si le rôle de son compte y est.
+        "jointure": "JOIN users u ON u.role = x.cible JOIN rh_outil_membres m ON m.user_id = u.id",
         "categories": True,
         "nom": "formation",
         "catalogue_nom": "catalogue des formations",
@@ -177,9 +196,13 @@ LISTES = {
         "catalogue": "rh_outil_documents",
         "liaison": "rh_outil_membre_documents",
         "fk": "document_id",
-        "exigences": "rh_outil_document_services",
+        "exigences": "rh_outil_document_contrats",
+        "cible": "contrat",
+        # Un employé est dans la cible si le contrat de sa fiche Paie y est.
+        "jointure": ("JOIN paie_employes pe ON pe.contrat_type = x.cible "
+                     "JOIN rh_outil_membres m ON m.user_id = pe.user_id"),
         "nom": "document",
-        "catalogue_nom": "catalogue des documents",
+        "catalogue_nom": "catalogue des documents administratifs",
         "doublon": "Ce document existe déjà au catalogue.",
         "introuvable": "Document introuvable.",
         "deja": "Cet employé a déjà ce document.",
@@ -194,10 +217,6 @@ def _liste(liste: str) -> dict:
         raise HTTPException(404, "Liste inconnue.")
     return cfg
 
-
-# Points fixes de la checklist : champ de MembrePatch → libellé du journal.
-# Chaque point est une colonne de rh_outil_membres (migration fichier).
-CHECKLIST = {"reglement_signe": "Règlement signé"}
 
 
 def _piece_json(pc) -> dict:
@@ -262,12 +281,12 @@ def _attribuer_obligatoires(conn, membre_id: Optional[int] = None,
     return n
 
 
-def _attribuer_par_service(conn, membre_id: Optional[int] = None, liste: Optional[str] = None,
-                          element_id: Optional[int] = None, service: Optional[str] = None) -> int:
-    """Attribue les éléments exigés pour un service aux employés de ce service
-    (service = rôle du compte) qui ne les ont pas encore. Filtrable par
-    employé, liste, élément et service. Ne retire jamais rien. Renvoie le
-    nombre d'attributions créées."""
+def _attribuer_par_cible(conn, membre_id: Optional[int] = None, liste: Optional[str] = None,
+                        element_id: Optional[int] = None, cible: Optional[str] = None) -> int:
+    """Attribue les éléments exigés pour une cible (service pour les
+    formations, contrat pour les documents) aux employés de cette cible qui
+    ne les ont pas encore. Filtrable par employé, liste, élément et cible. Ne
+    retire jamais rien. Renvoie le nombre d'attributions créées."""
     n = 0
     for cle, cfg in LISTES.items():
         if liste and cle != liste:
@@ -275,37 +294,36 @@ def _attribuer_par_service(conn, membre_id: Optional[int] = None, liste: Optiona
         where, params = ["1=1"], [_now()]
         if membre_id is not None:
             where.append("m.id = ?"); params.append(membre_id)
-        # La colonne de l'élément est renommée `element_id` dans la sous-requête :
+        # Colonnes renommées `element_id` / `cible` dans la sous-requête :
         # chaque morceau de la clause reste une chaîne littérale (garde-fou
         # tests/test_sql_where_dynamique.py).
         if element_id is not None:
             where.append("x.element_id = ?"); params.append(element_id)
-        if service is not None:
-            where.append("x.service = ?"); params.append(service)
+        if cible is not None:
+            where.append("x.cible = ?"); params.append(cible)
         n += conn.execute(
             f"""INSERT OR IGNORE INTO {cfg['liaison']} (membre_id, {cfg['fk']}, fait, ajoute_le)
                 SELECT DISTINCT m.id, x.element_id, 0, ?
-                  FROM (SELECT {cfg['fk']} AS element_id, service FROM {cfg['exigences']}) x
-                  JOIN users u ON u.role = x.service
-                  JOIN rh_outil_membres m ON m.user_id = u.id
+                  FROM (SELECT {cfg['fk']} AS element_id, {cfg['cible']} AS cible
+                          FROM {cfg['exigences']}) x
+                  {cfg['jointure']}
                  WHERE {' AND '.join(where)}""",
             params,
         ).rowcount
     return n
 
 
-def _documents_lies(conn, paires) -> int:
-    """Attribue les documents liés aux formations pour chaque paire
-    (membre_id, formation_id) donnée. On ne passe que des attributions de
-    formation qui viennent d'être créées : une exception posée à la main sur
-    un document n'est jamais annulée par un rattrapage global."""
+def _justificatifs_lies(conn, paires) -> int:
+    """Crée les cases de justificatifs pour chaque paire (membre_id,
+    formation_id) dont l'attribution de formation vient d'être créée."""
     n = 0
     for membre_id, formation_id in paires:
         n += conn.execute(
-            """INSERT OR IGNORE INTO rh_outil_membre_documents (membre_id, document_id, fait, ajoute_le)
-               SELECT ?, fd.document_id, 0, ? FROM rh_outil_formation_documents fd
-                WHERE fd.formation_id = ?""",
-            (membre_id, _now(), formation_id),
+            """INSERT OR IGNORE INTO rh_outil_membre_justificatifs (attribution_id, justificatif_id, fait, ajoute_le)
+               SELECT a.id, j.id, 0, ? FROM rh_outil_membre_formations a
+                 JOIN rh_outil_formation_justificatifs j ON j.formation_id = a.formation_id
+                WHERE a.membre_id = ? AND a.formation_id = ?""",
+            (_now(), membre_id, formation_id),
         ).rowcount
     return n
 
@@ -455,8 +473,8 @@ def create_employe(payload: NouvelEmployeIn, request: Request):
             (user_id, payload.contrat_type, arrivee, fin, datetime.now().isoformat(), user.get("email")),
         )
         n = _attribuer_obligatoires(conn, membre_id=membre_id)
-        n += _attribuer_par_service(conn, membre_id=membre_id)
-        n += _documents_lies(conn, _formations_du_membre(conn, membre_id))
+        n += _attribuer_par_cible(conn, membre_id=membre_id)
+        n += _justificatifs_lies(conn, _formations_du_membre(conn, membre_id))
         conn.commit()
     # Même trace que Paramètres pour la création du compte, puis celle du suivi.
     log_action(user=user, action="CREATE", module="settings",
@@ -474,7 +492,7 @@ def list_membres(request: Request):
     _require(request)
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT m.id, m.user_id, m.ajoute_le, m.ajoute_par, m.reglement_signe, m.date_arrivee,
+            """SELECT m.id, m.user_id, m.ajoute_le, m.ajoute_par, m.date_arrivee,
                       u.nom, u.email, u.role, u.actif,
                       pe.contrat_type, pe.date_debut AS contrat_debut, pe.date_fin AS contrat_fin
                  FROM rh_outil_membres m
@@ -500,20 +518,34 @@ def list_membres(request: Request):
                 )
         pieces: dict = {}
         for pc in conn.execute(
-            """SELECT id, attribution_id, nom, mime, taille, ajoute_le, ajoute_par
+            """SELECT id, attribution_id, cible, nom, mime, taille, ajoute_le, ajoute_par
                  FROM rh_outil_pieces ORDER BY ajoute_le, id"""
         ).fetchall():
-            pieces.setdefault(pc["attribution_id"], []).append(_piece_json(pc))
+            pieces.setdefault((pc["cible"], pc["attribution_id"]), []).append(_piece_json(pc))
+        justifs: dict = {}
+        for jj in conn.execute(
+            """SELECT mj.id, mj.attribution_id, mj.justificatif_id, mj.fait, j.libelle
+                 FROM rh_outil_membre_justificatifs mj
+                 JOIN rh_outil_formation_justificatifs j ON j.id = mj.justificatif_id
+                ORDER BY j.libelle COLLATE NOCASE"""
+        ).fetchall():
+            justifs.setdefault(jj["attribution_id"], []).append(
+                {"id": jj["id"], "justificatif_id": jj["justificatif_id"], "libelle": jj["libelle"],
+                 "fait": bool(jj["fait"])})
     for x in par_liste.get("documents", {}).values():
         for el in x:
-            el["pieces"] = pieces.get(el["id"], [])
+            el["pieces"] = pieces.get(("document", el["id"]), [])
+    for x in par_liste.get("formations", {}).values():
+        for el in x:
+            el["justificatifs"] = justifs.get(el["id"], [])
+            for jj in el["justificatifs"]:
+                jj["pieces"] = pieces.get(("justificatif", jj["id"]), [])
     membres = []
     for r in rows:
         m = {"id": r["id"], "user_id": r["user_id"], "nom": r["nom"], "email": r["email"],
              "role": r["role"], "actif": bool(r["actif"]),
              "service": r["role"] or "", "service_label": role_label(r["role"] or ""),
              "ajoute_le": r["ajoute_le"], "ajoute_par": r["ajoute_par"],
-             "reglement_signe": bool(r["reglement_signe"]),
              "date_arrivee": r["date_arrivee"],
              # Pas de fiche Paie ou type vide : « à renseigner », jamais « CDI » supposé.
              "contrat_type": r["contrat_type"] or None,
@@ -538,8 +570,8 @@ def add_membre(payload: MembreIn, request: Request):
         if not cur.rowcount:
             raise HTTPException(409, "Employé déjà dans la liste.")
         _attribuer_obligatoires(conn, membre_id=cur.lastrowid)
-        _attribuer_par_service(conn, membre_id=cur.lastrowid)
-        _documents_lies(conn, _formations_du_membre(conn, cur.lastrowid))
+        _attribuer_par_cible(conn, membre_id=cur.lastrowid)
+        _justificatifs_lies(conn, _formations_du_membre(conn, cur.lastrowid))
         conn.commit()
     log_action(user=user, action="CREATE", module="rh_outil",
                objet=f"Outil RH · ajout de {emp['nom']}", request=request)
@@ -550,29 +582,16 @@ def add_membre(payload: MembreIn, request: Request):
 def update_membre(membre_id: int, payload: MembrePatch, request: Request):
     user = _require(request)
     brut = payload.model_dump(exclude_unset=True)
-    data = {k: v for k, v in brut.items() if k in CHECKLIST}
-    if "date_arrivee" in brut:
-        arrivee = _date(brut["date_arrivee"])
-        with get_db() as conn:
-            row = _membre(conn, membre_id)
-            conn.execute("UPDATE rh_outil_membres SET date_arrivee=? WHERE id=?", (arrivee, membre_id))
-            conn.commit()
-        log_action(user=user, action="UPDATE", module="rh_outil",
-                   objet=f"Outil RH · {row['nom']} · date d'arrivée : {_jour_fr(arrivee)}",
-                   request=request)
-    if not data:
+    if "date_arrivee" not in brut:
         return {"success": True}
+    arrivee = _date(brut["date_arrivee"])
     with get_db() as conn:
         row = _membre(conn, membre_id)
-        # Les clés viennent de CHECKLIST, jamais de la requête : pas d'injection.
-        sets = ", ".join(f"{k}=?" for k in data)
-        conn.execute(f"UPDATE rh_outil_membres SET {sets} WHERE id=?",
-                     [1 if v else 0 for v in data.values()] + [membre_id])
+        conn.execute("UPDATE rh_outil_membres SET date_arrivee=? WHERE id=?", (arrivee, membre_id))
         conn.commit()
-    for k, v in data.items():
-        log_action(user=user, action="UPDATE", module="rh_outil",
-                   objet=f"Outil RH · {row['nom']} · {CHECKLIST[k]} : {'oui' if v else 'non'}",
-                   request=request)
+    log_action(user=user, action="UPDATE", module="rh_outil",
+               objet=f"Outil RH · {row['nom']} · date d'arrivée : {_jour_fr(arrivee)}",
+               request=request)
     return {"success": True}
 
 
@@ -582,6 +601,7 @@ def delete_membre(membre_id: int, request: Request):
     with get_db() as conn:
         row = _membre(conn, membre_id)
         fichiers = _retirer_pieces(conn, "a.membre_id = ?", (membre_id,))
+        fichiers += _retirer_justificatifs(conn, "a.membre_id = ?", (membre_id,))
         for cfg in LISTES.values():
             conn.execute(f"DELETE FROM {cfg['liaison']} WHERE membre_id=?", (membre_id,))
         conn.execute("DELETE FROM rh_outil_membres WHERE id=?", (membre_id,))
@@ -609,134 +629,6 @@ def list_services(request: Request):
             "alerte_fin_contrat_jours": RH_OUTIL_ALERTE_FIN_CONTRAT_JOURS}
 
 
-# ─── Catégories de formations et documents liés ──────────────────────────
-
-@router.get("/formations/categories")
-def list_categories(request: Request):
-    _require(request)
-    with get_db() as conn:
-        rows = conn.execute(
-            """SELECT c.id, c.libelle, c.ordre,
-                      (SELECT COUNT(*) FROM rh_outil_formations f WHERE f.categorie_id = c.id) AS nb
-                 FROM rh_outil_formation_categories c
-                ORDER BY c.ordre, c.libelle COLLATE NOCASE"""
-        ).fetchall()
-    return {"categories": [{"id": r["id"], "libelle": r["libelle"], "nb_formations": r["nb"]} for r in rows]}
-
-
-@router.post("/formations/categories")
-def add_categorie(payload: LibelleIn, request: Request):
-    user = _require(request)
-    libelle = _libelle(payload.libelle)
-    with get_db() as conn:
-        if conn.execute("SELECT 1 FROM rh_outil_formation_categories WHERE libelle=? COLLATE NOCASE",
-                        (libelle,)).fetchone():
-            raise HTTPException(409, "Cette catégorie existe déjà.")
-        ordre = conn.execute("SELECT COALESCE(MAX(ordre),0)+10 FROM rh_outil_formation_categories").fetchone()[0]
-        cur = conn.execute(
-            "INSERT INTO rh_outil_formation_categories (libelle, ordre, cree_le) VALUES (?,?,?)",
-            (libelle, ordre, _now()))
-        conn.commit()
-    log_action(user=user, action="CREATE", module="rh_outil",
-               objet=f"Outil RH · catégories de formations · ajout de « {libelle} »", request=request)
-    return {"success": True, "id": cur.lastrowid}
-
-
-@router.put("/formations/categories/{categorie_id}")
-def rename_categorie(categorie_id: int, payload: LibelleIn, request: Request):
-    user = _require(request)
-    libelle = _libelle(payload.libelle)
-    with get_db() as conn:
-        row = _categorie(conn, categorie_id)
-        if row["libelle"] == libelle:
-            return {"success": True}
-        if conn.execute("SELECT 1 FROM rh_outil_formation_categories WHERE libelle=? COLLATE NOCASE AND id!=?",
-                        (libelle, categorie_id)).fetchone():
-            raise HTTPException(409, "Cette catégorie existe déjà.")
-        conn.execute("UPDATE rh_outil_formation_categories SET libelle=? WHERE id=?", (libelle, categorie_id))
-        conn.commit()
-    log_action(user=user, action="UPDATE", module="rh_outil",
-               objet=f"Outil RH · catégories de formations · « {row['libelle']} » → « {libelle} »",
-               request=request)
-    return {"success": True}
-
-
-@router.delete("/formations/categories/{categorie_id}")
-def delete_categorie(categorie_id: int, request: Request):
-    """Supprime la catégorie ; ses formations restent, sans catégorie."""
-    user = _require(request)
-    with get_db() as conn:
-        row = _categorie(conn, categorie_id)
-        n = conn.execute("UPDATE rh_outil_formations SET categorie_id=NULL WHERE categorie_id=?",
-                         (categorie_id,)).rowcount
-        conn.execute("DELETE FROM rh_outil_formation_categories WHERE id=?", (categorie_id,))
-        conn.commit()
-    log_action(user=user, action="DELETE", module="rh_outil",
-               objet=f"Outil RH · catégories de formations · suppression de « {row['libelle']} » "
-                     f"({n} formation(s) sans catégorie)", request=request)
-    return {"success": True}
-
-
-@router.put("/formations/catalogue/{element_id}/categorie")
-def set_categorie(element_id: int, payload: CategorieRef, request: Request):
-    user = _require(request)
-    with get_db() as conn:
-        f = conn.execute("SELECT libelle, categorie_id FROM rh_outil_formations WHERE id=?",
-                         (element_id,)).fetchone()
-        if not f:
-            raise HTTPException(404, "Formation introuvable.")
-        cat = _categorie(conn, payload.categorie_id)
-        if f["categorie_id"] == payload.categorie_id:
-            return {"success": True}
-        conn.execute("UPDATE rh_outil_formations SET categorie_id=? WHERE id=?",
-                     (payload.categorie_id, element_id))
-        conn.commit()
-    log_action(user=user, action="UPDATE", module="rh_outil",
-               objet=f"Outil RH · catalogue des formations · « {f['libelle']} » → catégorie "
-                     f"« {cat['libelle'] if cat else 'Sans catégorie'} »", request=request)
-    return {"success": True}
-
-
-@router.put("/formations/catalogue/{element_id}/documents")
-def set_documents_lies(element_id: int, payload: DocumentsLies, request: Request):
-    """Remplace les documents liés à la formation. Un document nouvellement lié
-    est attribué tout de suite aux employés qui ont la formation ; délier ne
-    retire rien."""
-    user = _require(request)
-    voulus = set(payload.documents)
-    with get_db() as conn:
-        f = conn.execute("SELECT libelle FROM rh_outil_formations WHERE id=?", (element_id,)).fetchone()
-        if not f:
-            raise HTTPException(404, "Formation introuvable.")
-        if voulus:
-            connus = {r["id"] for r in conn.execute(
-                f"SELECT id FROM rh_outil_documents WHERE id IN ({','.join('?' * len(voulus))})",
-                list(voulus)).fetchall()}
-            if connus != voulus:
-                raise HTTPException(404, "Document introuvable.")
-        avant = {r["document_id"] for r in conn.execute(
-            "SELECT document_id FROM rh_outil_formation_documents WHERE formation_id=?",
-            (element_id,)).fetchall()}
-        for d in avant - voulus:
-            conn.execute("DELETE FROM rh_outil_formation_documents WHERE formation_id=? AND document_id=?",
-                         (element_id, d))
-        n = 0
-        for d in voulus - avant:
-            conn.execute("INSERT OR IGNORE INTO rh_outil_formation_documents (formation_id, document_id) VALUES (?,?)",
-                         (element_id, d))
-            n += conn.execute(
-                """INSERT OR IGNORE INTO rh_outil_membre_documents (membre_id, document_id, fait, ajoute_le)
-                   SELECT a.membre_id, ?, 0, ? FROM rh_outil_membre_formations a WHERE a.formation_id = ?""",
-                (d, _now(), element_id)).rowcount
-        conn.commit()
-    if avant != voulus:
-        suite = f" · {n} attribution(s)" if n else ""
-        log_action(user=user, action="UPDATE", module="rh_outil",
-                   objet=f"Outil RH · catalogue des formations · « {f['libelle']} » : "
-                         f"{len(voulus)} document(s) lié(s){suite}", request=request)
-    return {"success": True, "attribues": n}
-
-
 @router.put("/{liste}/catalogue/{element_id}/exige")
 def set_exige(liste: str, element_id: int, payload: ExigeIn, request: Request):
     """Règle « Exigé pour ». Ce qui devient exigé est attribué tout de suite
@@ -744,9 +636,10 @@ def set_exige(liste: str, element_id: int, payload: ExigeIn, request: Request):
     rien."""
     user = _require(request)
     cfg = _liste(liste)
-    voulus = set() if payload.tous else set(payload.services)
-    if not voulus <= {s["code"] for s in _services()}:
-        raise HTTPException(400, "Service inconnu.")
+    voulus = set() if payload.tous else set(payload.cibles)
+    connues = ({s["code"] for s in _services()} if cfg["cible"] == "service" else set(CONTRATS_TYPES))
+    if not voulus <= connues:
+        raise HTTPException(400, "Service inconnu." if cfg["cible"] == "service" else "Contrat inconnu.")
     with get_db() as conn:
         row = conn.execute(f"SELECT libelle, obligatoire FROM {cfg['catalogue']} WHERE id=?",
                            (element_id,)).fetchone()
@@ -754,27 +647,29 @@ def set_exige(liste: str, element_id: int, payload: ExigeIn, request: Request):
             raise HTTPException(404, cfg["introuvable"])
         tous_avant = bool(row["obligatoire"])
         deja = _membres_de_formation(conn, element_id) if liste == "formations" else set()
-        avant = {r["service"] for r in conn.execute(
-            f"SELECT service FROM {cfg['exigences']} WHERE {cfg['fk']}=?", (element_id,)).fetchall()}
+        avant = {r["cible"] for r in conn.execute(
+            f"SELECT {cfg['cible']} AS cible FROM {cfg['exigences']} WHERE {cfg['fk']}=?",
+            (element_id,)).fetchall()}
         conn.execute(f"UPDATE {cfg['catalogue']} SET obligatoire=? WHERE id=?",
                      (1 if payload.tous else 0, element_id))
-        for sv in avant - voulus:
-            conn.execute(f"DELETE FROM {cfg['exigences']} WHERE {cfg['fk']}=? AND service=?",
-                         (element_id, sv))
+        for cb in avant - voulus:
+            conn.execute(f"DELETE FROM {cfg['exigences']} WHERE {cfg['fk']}=? AND {cfg['cible']}=?",
+                         (element_id, cb))
         n = 0
-        for sv in voulus - avant:
-            conn.execute(f"INSERT OR IGNORE INTO {cfg['exigences']} ({cfg['fk']}, service) VALUES (?,?)",
-                         (element_id, sv))
-            n += _attribuer_par_service(conn, liste=liste, element_id=element_id, service=sv)
+        for cb in voulus - avant:
+            conn.execute(f"INSERT OR IGNORE INTO {cfg['exigences']} ({cfg['fk']}, {cfg['cible']}) VALUES (?,?)",
+                         (element_id, cb))
+            n += _attribuer_par_cible(conn, liste=liste, element_id=element_id, cible=cb)
         if payload.tous and not tous_avant:
             n += _attribuer_obligatoires(conn, liste=liste, element_id=element_id)
         if liste == "formations":
             nouveaux = _membres_de_formation(conn, element_id) - deja
-            _documents_lies(conn, [(mid, element_id) for mid in nouveaux])
+            _justificatifs_lies(conn, [(mid, element_id) for mid in nouveaux])
         conn.commit()
     if payload.tous != tous_avant or voulus != avant:
         cible = ("tous les employés" if payload.tous
-                 else ", ".join(sorted(role_label(v) for v in voulus)) or "personne")
+                 else ", ".join(sorted(role_label(v) if cfg["cible"] == "service" else v
+                                       for v in voulus)) or "personne")
         suite = f" · attribué à {n} employé(s)" if n else ""
         log_action(user=user, action="UPDATE", module="rh_outil",
                    objet=f"Outil RH · {cfg['catalogue_nom']} · « {row['libelle']} » exigé pour : {cible}{suite}",
@@ -797,19 +692,23 @@ def list_catalogue(liste: str, request: Request):
                  ORDER BY e.libelle COLLATE NOCASE"""
         ).fetchall()
         exiges: dict = {}
-        for x in conn.execute(f"SELECT {cfg['fk']} AS el, service FROM {cfg['exigences']}").fetchall():
-            exiges.setdefault(x["el"], []).append(x["service"])
+        for x in conn.execute(
+                f"SELECT {cfg['fk']} AS el, {cfg['cible']} AS cible FROM {cfg['exigences']}").fetchall():
+            exiges.setdefault(x["el"], []).append(x["cible"])
         lies: dict = {}
         cats: dict = {}
         if cfg.get("categories"):
-            for x in conn.execute("SELECT formation_id, document_id FROM rh_outil_formation_documents").fetchall():
-                lies.setdefault(x["formation_id"], []).append(x["document_id"])
+            for x in conn.execute(
+                """SELECT id, formation_id, libelle FROM rh_outil_formation_justificatifs
+                    ORDER BY libelle COLLATE NOCASE"""
+            ).fetchall():
+                lies.setdefault(x["formation_id"], []).append({"id": x["id"], "libelle": x["libelle"]})
             cats = {x["id"]: x["categorie_id"] for x in conn.execute(
                 "SELECT id, categorie_id FROM rh_outil_formations").fetchall()}
     return {"elements": [
         {"id": r["id"], "libelle": r["libelle"], "nb_employes": r["nb_employes"],
-         "obligatoire": bool(r["obligatoire"]), "services": exiges.get(r["id"], []),
-         "categorie_id": cats.get(r["id"]), "documents": lies.get(r["id"], [])}
+         "obligatoire": bool(r["obligatoire"]), "cibles": exiges.get(r["id"], []),
+         "categorie_id": cats.get(r["id"]), "justificatifs": lies.get(r["id"], [])}
         for r in rows
     ]}
 
@@ -870,11 +769,13 @@ def delete_catalogue(liste: str, element_id: int, request: Request):
             raise HTTPException(404, cfg["introuvable"])
         fichiers = (_retirer_pieces(conn, "a.document_id = ?", (element_id,))
                     if liste == "documents" else [])
+        if liste == "formations":
+            fichiers += _retirer_justificatifs(conn, "a.formation_id = ?", (element_id,))
         n = conn.execute(f"DELETE FROM {cfg['liaison']} WHERE {cfg['fk']}=?",
                          (element_id,)).rowcount
         conn.execute(f"DELETE FROM {cfg['exigences']} WHERE {cfg['fk']}=?", (element_id,))
-        # Liens formation ↔ document : la colonne vaut formation_id ou document_id.
-        conn.execute(f"DELETE FROM rh_outil_formation_documents WHERE {cfg['fk']}=?", (element_id,))
+        if liste == "formations":
+            conn.execute("DELETE FROM rh_outil_formation_justificatifs WHERE formation_id=?", (element_id,))
         conn.execute(f"DELETE FROM {cfg['catalogue']} WHERE id=?", (element_id,))
         conn.commit()
     _supprimer_fichiers(fichiers)
@@ -903,13 +804,13 @@ def add_attribution(membre_id: int, liste: str, payload: AttributionIn, request:
         )
         if not cur.rowcount:
             raise HTTPException(409, cfg["deja"])
-        docs = _documents_lies(conn, [(membre_id, payload.element_id)]) if liste == "formations" else 0
+        docs = _justificatifs_lies(conn, [(membre_id, payload.element_id)]) if liste == "formations" else 0
         conn.commit()
-    suite = f" · {docs} document(s) lié(s) attribué(s)" if docs else ""
+    suite = f" · {docs} justificatif(s) attendu(s)" if docs else ""
     log_action(user=user, action="ASSIGN", module="rh_outil",
                objet=f"Outil RH · {m['nom']} · {cfg['nom']} « {e['libelle']} » : attribution{suite}",
                request=request)
-    return {"success": True, "documents_lies": docs}
+    return {"success": True, "justificatifs": docs}
 
 
 def _attribution(conn, cfg: dict, attribution_id: int):
@@ -950,120 +851,12 @@ def delete_attribution(liste: str, attribution_id: int, request: Request):
     cfg = _liste(liste)
     with get_db() as conn:
         row = _attribution(conn, cfg, attribution_id)
-        fichiers = (_retirer_pieces(conn, "a.id = ?", (attribution_id,))
-                    if liste == "documents" else [])
+        fichiers = (_retirer_pieces(conn, "a.id = ?", (attribution_id,)) if liste == "documents"
+                    else _retirer_justificatifs(conn, "a.id = ?", (attribution_id,)))
         conn.execute(f"DELETE FROM {cfg['liaison']} WHERE id=?", (attribution_id,))
         conn.commit()
     _supprimer_fichiers(fichiers)
     log_action(user=user, action="DELETE", module="rh_outil",
                objet=f"Outil RH · {row['nom']} · {cfg['nom']} « {row['libelle']} » : retrait",
-               request=request)
-    return {"success": True}
-
-
-# ─── Pièces jointes des documents ─────────────────────────────────────────
-
-def _piece(conn, piece_id: int):
-    row = conn.execute(
-        """SELECT p.id, p.attribution_id, p.nom, p.fichier, p.mime, e.libelle, u.nom AS employe
-             FROM rh_outil_pieces p
-             JOIN rh_outil_membre_documents a ON a.id = p.attribution_id
-             JOIN rh_outil_documents e ON e.id = a.document_id
-             JOIN rh_outil_membres m ON m.id = a.membre_id
-             JOIN users u ON u.id = m.user_id
-            WHERE p.id=?""",
-        (piece_id,),
-    ).fetchone()
-    if not row:
-        raise HTTPException(404, "Pièce jointe introuvable.")
-    return row
-
-
-@router.get("/documents/attributions/{attribution_id}/pieces")
-def list_pieces(attribution_id: int, request: Request):
-    _require(request)
-    with get_db() as conn:
-        _attribution(conn, LISTES["documents"], attribution_id)
-        rows = conn.execute(
-            """SELECT id, attribution_id, nom, mime, taille, ajoute_le, ajoute_par
-                 FROM rh_outil_pieces WHERE attribution_id=? ORDER BY ajoute_le, id""",
-            (attribution_id,),
-        ).fetchall()
-    return {"pieces": [_piece_json(r) for r in rows]}
-
-
-@router.post("/documents/attributions/{attribution_id}/pieces")
-async def add_piece(attribution_id: int, request: Request, fichier: UploadFile = File(...)):
-    user = _require(request)
-    # Lecture bornée : on ne charge jamais plus que la taille autorisée + 1 octet.
-    contenu = await fichier.read(PIECE_MAX_OCTETS + 1)
-    if not contenu:
-        raise HTTPException(400, "Fichier vide.")
-    if len(contenu) > PIECE_MAX_OCTETS:
-        raise HTTPException(400, f"Fichier trop lourd — {RH_OUTIL_MAX_FILE_MB} Mo maximum.")
-    detecte = _type_fichier(contenu[:16])
-    if not detecte:
-        raise HTTPException(400, "Format refusé — PDF, JPG, PNG, WEBP ou HEIC uniquement.")
-    mime, ext = detecte
-    nom = " ".join(Path(fichier.filename or "").name.split())[:PIECE_NOM_MAX] or f"piece.{ext}"
-    with get_db() as conn:
-        row = _attribution(conn, LISTES["documents"], attribution_id)
-        dossier = PIECES_ROOT / str(attribution_id)
-        dossier.mkdir(parents=True, exist_ok=True)
-        # Nom sur disque généré : rien du nom fourni par le navigateur n'y entre.
-        relatif = f"{attribution_id}/{uuid.uuid4().hex}.{ext}"
-        (PIECES_ROOT / relatif).write_bytes(contenu)
-        try:
-            cur = conn.execute(
-                """INSERT INTO rh_outil_pieces
-                       (attribution_id, nom, fichier, mime, taille, ajoute_le, ajoute_par)
-                   VALUES (?,?,?,?,?,?,?)""",
-                (attribution_id, nom, relatif, mime, len(contenu), _now(), user.get("nom")),
-            )
-            conn.commit()
-        except Exception:
-            _supprimer_fichiers([relatif])
-            raise
-    log_action(user=user, action="UPLOAD", module="rh_outil",
-               objet=f"Outil RH · {row['nom']} · document « {row['libelle']} » : pièce jointe ajoutée",
-               request=request)
-    return {"success": True, "id": cur.lastrowid}
-
-
-@router.get("/pieces/{piece_id}")
-def get_piece(piece_id: int, request: Request, apercu: bool = False):
-    """Téléchargement (par défaut) ou aperçu dans le navigateur (?apercu=1).
-
-    Seuls des PDF et des images vérifiés au dépôt sont servis. L'aperçu est
-    isolé (CSP sandbox) et nosniff : le navigateur n'exécute rien et ne
-    réinterprète pas le type."""
-    user = _require(request)
-    with get_db() as conn:
-        row = _piece(conn, piece_id)
-    chemin = PIECES_ROOT / row["fichier"]
-    if not chemin.is_file():
-        raise HTTPException(410, "Fichier absent du serveur.")
-    log_action(user=user, action="EXPORT", module="rh_outil",
-               objet=f"Outil RH · {row['employe']} · document « {row['libelle']} » : pièce jointe consultée",
-               request=request)
-    return FileResponse(
-        str(chemin), media_type=row["mime"], filename=row["nom"],
-        content_disposition_type="inline" if apercu else "attachment",
-        headers={"X-Content-Type-Options": "nosniff",
-                 "Content-Security-Policy": "sandbox",
-                 "Cache-Control": "private, no-store"},
-    )
-
-
-@router.delete("/pieces/{piece_id}")
-def delete_piece(piece_id: int, request: Request):
-    user = _require(request)
-    with get_db() as conn:
-        row = _piece(conn, piece_id)
-        conn.execute("DELETE FROM rh_outil_pieces WHERE id=?", (piece_id,))
-        conn.commit()
-    _supprimer_fichiers([row["fichier"]])
-    log_action(user=user, action="DELETE", module="rh_outil",
-               objet=f"Outil RH · {row['employe']} · document « {row['libelle']} » : pièce jointe supprimée",
                request=request)
     return {"success": True}
