@@ -1,4 +1,6 @@
-from config import APP_VERSION
+import json
+
+from config import APP_VERSION, CONTRATS_TYPES
 """MySifa — Page Gestion des Paies
 Route : /paie
 Accès : superadmin + direction + administration
@@ -390,7 +392,7 @@ const SECTIONS = [
     icon:'📋',
     fields:[
       {key:'matricule',         label:'Matricule',           type:'text',   fixed:true},
-      {key:'contrat_type',      label:'Type de contrat',     type:'select', fixed:true, opts:['CDI','CDD','Intérim','Stage','Apprentissage']},
+      {key:'contrat_type',      label:'Type de contrat',     type:'select', fixed:true, opts:__CONTRATS_TYPES__},
       {key:'date_debut',        label:'Date de début',       type:'date',   fixed:true},
       {key:'date_fin',          label:'Date de fin',         type:'date',   fixed:true},
       {key:'nb_heures_base',    label:'Nb heures de base',   type:'number', fixed:true},
@@ -933,4 +935,5 @@ if (sessionStorage.getItem(PW_KEY) === '1') {
 # d'URL à chaque version, sinon un navigateur qui a le fichier en cache
 # depuis l'ancien régime (max-age=86400) continue de servir une feuille
 # de style sans les tokens de couleur — la page s'affiche en noir et blanc.
-PAIE_HTML = PAIE_HTML.replace("__V_LABEL__", "v" + APP_VERSION)
+PAIE_HTML = (PAIE_HTML.replace("__V_LABEL__", "v" + APP_VERSION)
+             .replace("__CONTRATS_TYPES__", json.dumps(list(CONTRATS_TYPES))))

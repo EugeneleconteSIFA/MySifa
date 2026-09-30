@@ -26,7 +26,7 @@ const PAIE_MOIS_FR=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet
 const PAIE_SECTIONS=[
   {title:'📋 Contrat & Salaire',fields:[
     {key:'matricule',       label:'Matricule',          type:'text',   fixed:true},
-    {key:'contrat_type',    label:'Type de contrat',    type:'select', fixed:true, opts:['CDI','CDD','Intérim','Stage','Apprentissage']},
+    {key:'contrat_type',    label:'Type de contrat',    type:'select', fixed:true, opts:__CONTRATS_TYPES__},
     {key:'date_debut',      label:'Date de début',      type:'date',   fixed:true},
     {key:'date_fin',        label:'Date de fin',        type:'date',   fixed:true},
     {key:'nb_heures_base',  label:'Heures de base',     type:'number', fixed:true, step:'0.01'},

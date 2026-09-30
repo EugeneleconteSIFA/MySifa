@@ -119,6 +119,15 @@ RH_OUTIL_CSS = r"""
 .rho-dlg.xl{max-width:740px}
 .rho-dlg-tools{display:flex;justify-content:flex-end;margin:-6px 0 10px}
 
+/* Contrat (fiche Paie) */
+.rho-contrat{display:inline-flex;align-items:center;gap:4px;margin-top:5px;border:1px solid var(--border);background:var(--bg);color:var(--text2);border-radius:20px;padding:2px 9px;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;transition:border-color .15s,color .15s}
+.rho-contrat:hover{border-color:var(--accent);color:var(--accent)}
+.rho-contrat.vide{border-style:dashed;color:var(--muted)}
+.rho-contrat.proche{color:var(--warn);border-color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.rho-contrat.fini{color:var(--danger);border-color:var(--danger);background:color-mix(in srgb,var(--danger) 12%,transparent)}
+.rho-svc-cell{display:flex;flex-direction:column;align-items:flex-start;min-width:130px}
+.rho-field.cache{visibility:hidden}
+
 /* Formulaire « Nouvel employé » */
 .rho-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .rho-field{display:flex;flex-direction:column;gap:5px;min-width:0}
@@ -248,7 +257,8 @@ async function rhOutilLoad(){
     const [d,sv,ca]=await Promise.all([api('/api/rh-outil/membres'),api('/api/rh-outil/services'),api('/api/rh-outil/formations/categories')]);
     if(!d||!sv||!ca)return;
     set({rhOutilMembres:d.membres||[],rhOutilServices:sv.services||[],
-         rhOutilCategories:ca.categories||[],rhOutilPeutCreer:!!sv.peut_creer,rhOutilServicesCreables:sv.services_creables||[],rhOutilLoaded:true});
+         rhOutilCategories:ca.categories||[],rhOutilContrats:sv.contrats||[],rhOutilContratsSansFin:sv.contrats_sans_fin||[],
+         rhOutilAlerteJours:Number(sv.alerte_fin_contrat_jours)||15,rhOutilPeutCreer:!!sv.peut_creer,rhOutilServicesCreables:sv.services_creables||[],rhOutilLoaded:true});
   }catch(e){toast(e.message,'error');}
 }
 
@@ -358,6 +368,7 @@ function rhOutilNouvelEmploye(){
   const service=h('select',{className:'rho-select'},
     h('option',{value:''},'Choisir…'),...services.map(sv=>h('option',{value:sv.code},sv.label)));
   const arrivee=h('input',{type:'date',className:'rho-input',value:rhOutilAujourdhui()});
+  const contrat=rhOutilChampsContrat('','','');
   const mdp=h('input',{type:'password',className:'rho-input',minlength:'8',autocomplete:'new-password','aria-label':'Mot de passe'});
   const oeil=h('button',{type:'button',title:'Afficher le mot de passe','aria-label':'Afficher le mot de passe',onClick:()=>{
     const vis=mdp.type==='password';mdp.type=vis?'text':'password';
@@ -367,9 +378,10 @@ function rhOutilNouvelEmploye(){
   const creer=h('button',{type:'button',className:'rho-btn accent'},iconEl('plus',13),'Créer le compte');
   const valider=async()=>{
     const v={prenom:prenom.value.trim(),nom:nom.value.trim(),email:email.value.trim(),service:service.value,
-             password:mdp.value,date_arrivee:arrivee.value};
-    const manque=!v.prenom?'Prénom':!v.nom?'Nom':!v.email?'Email':!v.service?'Service':!v.date_arrivee?'Date d’arrivée':!v.password?'Mot de passe':'';
+             password:mdp.value,date_arrivee:arrivee.value,contrat_type:contrat.type.value,contrat_fin:contrat.finValeur()};
+    const manque=!v.prenom?'Prénom':!v.nom?'Nom':!v.email?'Email':!v.service?'Service':!v.date_arrivee?'Date d’arrivée':!v.contrat_type?'Type de contrat':!v.password?'Mot de passe':'';
     if(manque){err.textContent=manque+' obligatoire.';return;}
+    if(v.contrat_fin&&v.contrat_fin<v.date_arrivee){err.textContent='La fin de contrat précède la date d’arrivée.';return;}
     if(v.password.length<8){err.textContent='Mot de passe trop court — 8 caractères minimum.';mdp.focus();return;}
     err.textContent='';creer.disabled=true;
     let r;
@@ -388,15 +400,78 @@ function rhOutilNouvelEmploye(){
       champ('Prénom',prenom),champ('Nom',nom),
       champ('Email',email,true),
       champ('Service',service),champ('Date d’arrivée',arrivee),
+      champ('Type de contrat',contrat.type),contrat.champFin,
       champ('Mot de passe (8 caractères minimum)',h('div',{className:'rho-pwd'},mdp,oeil),true)
     ),
-    h('div',{className:'rho-note'},'Le compte MySifa est créé comme dans Paramètres › Comptes, avec le service choisi. Remettez le mot de passe à l’employé en main propre. Téléphone, matricule et machine se règlent ensuite dans Paramètres.'),
+    h('div',{className:'rho-note'},'Le compte MySifa est créé comme dans Paramètres › Comptes, avec le service choisi ; le contrat est enregistré dans sa fiche Paie (début = date d’arrivée), que la comptabilité complète. Remettez le mot de passe à l’employé en main propre. Téléphone, matricule et machine se règlent ensuite dans Paramètres.'),
     err,
     h('div',{className:'rho-dlg-foot'},h('button',{type:'button',className:'rho-btn',onClick:fermer},'Annuler'),creer)
   ));
   document.body.appendChild(ov);
   requestAnimationFrame(()=>prenom.focus());
 }
+// ── Contrat (stocké dans la fiche Paie, lu et écrit aussi par la Paie) ──
+function rhOutilSansFin(type){return (S.rhOutilContratsSansFin||[]).includes(type);}
+// « 2027-03-31 » → nombre de jours depuis aujourd'hui (négatif si passé).
+function rhOutilJoursAvant(iso){
+  const r=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!r)return null;
+  const fin=new Date(+r[1],+r[2]-1,+r[3]),auj=new Date();auj.setHours(0,0,0,0);
+  return Math.round((fin-auj)/86400000);
+}
+// État affiché : {cls, texte}. Aucune supposition : pas de contrat = à renseigner.
+function rhOutilEtatContrat(m){
+  const t=m.contrat_type;
+  if(!t)return {cls:'vide',texte:'Statut à renseigner',cle:'_vide'};
+  if(rhOutilSansFin(t))return {cls:'',texte:t,cle:''};
+  if(!m.contrat_fin)return {cls:'vide',texte:t+' · fin à renseigner',cle:''};
+  const j=rhOutilJoursAvant(m.contrat_fin);
+  if(j<0)return {cls:'fini',texte:t+' · terminé le '+rhOutilJourFr(m.contrat_fin),cle:'_proche'};
+  if(j<=S.rhOutilAlerteJours)return {cls:'proche',texte:t+' · '+(j===0?'fin aujourd’hui':'fin dans '+j+' jour'+(j>1?'s':'')),cle:'_proche'};
+  return {cls:'',texte:t+' · jusqu’au '+rhOutilJourFr(m.contrat_fin),cle:''};
+}
+function rhOutilChampsContrat(type0,debut0,fin0){
+  const type=h('select',{className:'rho-select','aria-label':'Type de contrat'},
+    h('option',{value:''},'Choisir…'),...(S.rhOutilContrats||[]).map(c=>h('option',{value:c},c)));
+  type.value=type0||'';
+  const debut=h('input',{type:'date',className:'rho-input',value:debut0||'','aria-label':'Début du contrat'});
+  const fin=h('input',{type:'date',className:'rho-input',value:fin0||'','aria-label':'Fin du contrat'});
+  const champFin=h('div',{className:'rho-field'},h('label',null,'Fin de contrat (facultative)'),fin);
+  const peindre=()=>champFin.classList.toggle('cache',!type.value||rhOutilSansFin(type.value));
+  type.addEventListener('change',peindre);peindre();
+  return {type,debut,fin,champFin,finValeur:()=>(!type.value||rhOutilSansFin(type.value))?null:(fin.value||null)};
+}
+function rhOutilModifierContrat(m){
+  const {ov,fermer}=rhOutilFenetre();
+  const c=rhOutilChampsContrat(m.contrat_type,m.contrat_debut||m.date_arrivee,m.contrat_fin);
+  const err=h('div',{className:'rho-err',role:'alert'});
+  const ok=h('button',{type:'button',className:'rho-btn accent'},'Enregistrer');
+  ok.addEventListener('click',async()=>{
+    if(!c.type.value){err.textContent='Type de contrat obligatoire.';return;}
+    const f=c.finValeur();
+    if(f&&c.debut.value&&f<c.debut.value){err.textContent='La fin de contrat précède son début.';return;}
+    ok.disabled=true;
+    try{await api('/api/rh-outil/membres/'+m.id+'/contrat',rhOutilJson('PUT',{contrat_type:c.type.value,debut:c.debut.value||null,fin:f}));}
+    catch(e){err.textContent=e.message;ok.disabled=false;return;}
+    fermer();await rhOutilLoad();toast('Contrat enregistré.');
+  });
+  ov.appendChild(rhOutilDialogue('Contrat',fermer,
+    h('div',{className:'rho-cat-legend'},(m.nom||'')+' · enregistré dans sa fiche Paie (type, début et fin uniquement).'),
+    h('div',{className:'rho-form-grid'},
+      h('div',{className:'rho-field plein'},h('label',null,'Type de contrat'),c.type),
+      h('div',{className:'rho-field'},h('label',null,'Début'),c.debut),
+      c.champFin),
+    err,
+    h('div',{className:'rho-dlg-foot'},h('button',{type:'button',className:'rho-btn',onClick:fermer},'Annuler'),ok)
+  ));
+  document.body.appendChild(ov);
+  requestAnimationFrame(()=>c.type.focus());
+}
+function rhOutilPastilleContrat(m){
+  const e=rhOutilEtatContrat(m);
+  return h('button',{type:'button',className:'rho-contrat '+e.cls,title:'Contrat — cliquer pour modifier',
+    onClick:()=>rhOutilModifierContrat(m)},iconEl('file-text',11),e.texte);
+}
+
 // Date d'arrivée : cliquable dans la cellule Employé, modifiable sur place.
 function rhOutilArrivee(m){
   const libelle=m.date_arrivee?'Arrivée le '+rhOutilJourFr(m.date_arrivee):'Date d’arrivée à renseigner';
@@ -932,8 +1007,18 @@ function renderRhOutilTab(){
   selFiltre.value=fs;
   if(selFiltre.value!==fs)selFiltre.value='';
   selFiltre.addEventListener('change',()=>set({rhOutilFiltreService:selFiltre.value}));
+  const fc=S.rhOutilFiltreContrat||'';
+  const selContrat=h('select',{className:'rho-select'+(fc?' on':''),'aria-label':'Filtrer par contrat'},
+    h('option',{value:''},'Tous les contrats'),
+    ...(S.rhOutilContrats||[]).map(c=>h('option',{value:c},c)),
+    h('option',{value:'_proche'},'Fin proche ou dépassée'),
+    h('option',{value:'_vide'},'Statut à renseigner'));
+  selContrat.value=fc;
+  if(selContrat.value!==fc)selContrat.value='';
+  selContrat.addEventListener('change',()=>set({rhOutilFiltreContrat:selContrat.value}));
   const bar=h('div',{className:'rho-bar'},
     list.length?selFiltre:null,
+    list.length?selContrat:null,
     h('div',{className:'rho-bar-spacer'}),
     ...RH_OUTIL_LISTES.map(L=>h('button',{type:'button',className:'rho-btn',onClick:()=>rhOutilCatalogue(L)},iconEl('sliders',13),L.gerer)),
     S.rhOutilPeutCreer?h('button',{type:'button',className:'rho-btn accent',onClick:rhOutilNouvelEmploye},iconEl('plus',13),'Nouvel employé'):null
@@ -942,9 +1027,10 @@ function renderRhOutilTab(){
   if(!list.length)return h('div',null,bar,h('div',{className:'card-empty'},S.rhOutilPeutCreer?'Aucun employé — utilisez « Nouvel employé ».':'Aucun employé suivi.'));
   const iF=Math.max(0,RHO_FILTRES.findIndex(f=>f.cle===(S.rhOutilFiltre||'tous')));
   const filtre=RHO_FILTRES[iF],suivant=RHO_FILTRES[(iF+1)%RHO_FILTRES.length];
-  const fsVal=selFiltre.value;
-  const vis=list.filter(m=>(!fsVal||m.service===fsVal)&&(filtre.cle==='tous'||rhOutilComplet(m)===(filtre.cle==='complet')));
-  const filtre_actif=filtre.cle!=='tous'||!!fsVal;
+  const fsVal=selFiltre.value,fcVal=selContrat.value;
+  const okContrat=m=>!fcVal||(fcVal.startsWith('_')?rhOutilEtatContrat(m).cle===fcVal:m.contrat_type===fcVal);
+  const vis=list.filter(m=>(!fsVal||m.service===fsVal)&&okContrat(m)&&(filtre.cle==='tous'||rhOutilComplet(m)===(filtre.cle==='complet')));
+  const filtre_actif=filtre.cle!=='tous'||!!fsVal||!!fcVal;
   const nbCol=2+RH_OUTIL_LISTES.length+RH_OUTIL_COLONNES.length+2;
   const thDossier=h('th',{className:'rho-c'},
     h('button',{type:'button',className:'rho-th-btn',title:'Filtre : '+filtre.label+' — cliquer pour afficher « '+suivant.label+' »',
@@ -958,14 +1044,14 @@ function renderRhOutilTab(){
     h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std rho-table'},
       h('thead',null,h('tr',null,
         h('th',null,'Employé'),
-        h('th',null,'Service'),
+        h('th',null,'Service et contrat'),
         ...RH_OUTIL_LISTES.map(L=>h('th',null,L.titre)),
         ...RH_OUTIL_COLONNES.map(c=>h('th',{className:'rho-c'},c.label)),
         thDossier,
         h('th',{className:'rho-c'},'')
       )),
       h('tbody',null,...(vis.length?[]:[h('tr',null,h('td',{colspan:String(nbCol),className:'rho-empty'},
-        fsVal?'Aucun employé ne correspond aux filtres.':filtre.cle==='complet'?'Aucun dossier complet.':'Aucun dossier incomplet.'))]),...vis.map(m=>h('tr',null,
+        (fsVal||fcVal)?'Aucun employé ne correspond aux filtres.':filtre.cle==='complet'?'Aucun dossier complet.':'Aucun dossier incomplet.'))]),...vis.map(m=>h('tr',null,
         h('td',null,h('div',{className:'rho-emp-cell'},
           h('div',{className:'rho-avatar','aria-hidden':'true'},rhOutilInitiales(m.nom)),
           h('div',null,
@@ -974,7 +1060,9 @@ function renderRhOutilTab(){
             rhOutilArrivee(m)
           )
         )),
-        h('td',null,h('span',{className:'rho-svc'+(m.service_label?'':' vide')},m.service_label||'Non renseigné')),
+        h('td',null,h('div',{className:'rho-svc-cell'},
+          h('span',{className:'rho-svc'+(m.service_label?'':' vide')},m.service_label||'Non renseigné'),
+          rhOutilPastilleContrat(m))),
         ...RH_OUTIL_LISTES.map(L=>h('td',null,rhOutilCelluleListe(L,m))),
         ...RH_OUTIL_COLONNES.map(c=>h('td',{className:'rho-c'},rhOutilOuiNon(m,c))),
         h('td',{className:'rho-c','data-rho-statut':String(m.id)},rhOutilBadge(m)),
