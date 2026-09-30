@@ -117,12 +117,15 @@ RH_OUTIL_CSS = r"""
 .rho-opt:hover{border-color:var(--accent)}
 .rho-opt[disabled]{cursor:default;opacity:.55}
 .rho-opt[disabled]:hover{border-color:var(--border)}
-.rho-cat-row{display:flex;align-items:center;gap:8px}
+.rho-cat-row{display:grid;grid-template-columns:minmax(0,1fr) 170px 78px auto;align-items:center;gap:8px}
 .rho-cat-row .rho-input{padding:8px 12px;font-size:13px}
-.rho-cat-row .rho-sub{white-space:nowrap;min-width:78px;text-align:right}
+.rho-cat-row .rho-sub{white-space:nowrap;text-align:right}
+.rho-cat-row .rho-mini{justify-content:center;overflow:hidden;text-overflow:ellipsis}
 .rho-cat-add{display:flex;gap:8px;margin-top:12px}
-.rho-oblig{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap;user-select:none}
-.rho-oblig:has(.rho-chk:checked){color:var(--accent)}
+/* Fenêtre « Exigé pour » : tous les employés, ou des services — exclusifs */
+.rho-check-row.tous{border-color:var(--accent);background:var(--accent-bg);font-weight:600}
+.rho-sep{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px}
+.rho-list.off{opacity:.45;pointer-events:none}
 .rho-cat-legend{font-size:11px;color:var(--muted);margin:-6px 0 12px;line-height:1.4}
 .rho-dlg-title.info{display:flex;align-items:center;gap:8px}
 .rho-confirm-act .rho-ok.accent{background:var(--accent)}
@@ -150,14 +153,14 @@ const RH_OUTIL_LISTES=[
    retirerTitre:'Retirer cette formation ?',retirerTxt:'La formation est cochée comme faite : ce suivi sera perdu pour cet employé. Le catalogue n’est pas modifié.',
    supprTitre:'Supprimer cette formation ?',supprTxtN:'Elle disparaît du catalogue et de la liste de chaque employé qui l’a, avec son suivi.',supprTxt0:'Elle disparaît du catalogue.',
    renomme:'Formation renommée.',supprime:'Formation supprimée.',etat:'faite',
-   obligTitre:'Rendre cette formation obligatoire pour tous ?',il:'Elle',ajoute:'ajoutée',obligOk:'Formation obligatoire pour tous'},
+   il:'Elle',ajoute:'ajoutée'},
   {cle:'documents',titre:'Documents',bouton:'Document',gerer:'Gérer les documents',catalogue:'Catalogue des documents',
    aucun:'Aucun document',rechercher:'Rechercher un document…',nouveau:'Nouveau document…',pour:'Document pour ',
    deja:'Déjà attribué',vide:'Catalogue vide — ajoutez des documents avec « Gérer les documents ».',catVide:'Aucun document au catalogue.',
    retirerTitre:'Retirer ce document ?',retirerTxt:'Le document est coché comme vérifié : ce suivi sera perdu pour cet employé. Le catalogue n’est pas modifié.',
    supprTitre:'Supprimer ce document ?',supprTxtN:'Il disparaît du catalogue et de la liste de chaque employé qui l’a, avec son suivi et ses pièces jointes.',supprTxt0:'Il disparaît du catalogue.',
    renomme:'Document renommé.',supprime:'Document supprimé.',etat:'vérifié',
-   obligTitre:'Rendre ce document obligatoire pour tous ?',il:'Il',ajoute:'ajouté',obligOk:'Document obligatoire pour tous',
+   il:'Il',ajoute:'ajouté',
    pieces:true},
 ];
 // Champs Oui / Non, après les listes. `cle` = CHECKLIST côté API.
@@ -490,50 +493,67 @@ function rhOutilPieces(L,m,x){
   rafraichir();
 }
 
-// ── Services pour lesquels un élément du catalogue est exigé ──────
-// Le service d'un employé est celui de son compte (Paramètres › Comptes),
-// jamais modifié ici.
-function rhOutilServicesExiges(L,x,apres){
+// ── « Exigé pour » d'un élément du catalogue ──────────────────────
+// Un seul réglage, trois états exclusifs : personne, tous les employés, ou
+// certains services (celui du compte de l'employé, Paramètres › Comptes).
+function rhOutilLibelleExige(x){
+  if(x.obligatoire)return 'Tous les employés';
+  const n=(x.services||[]).length;
+  return n?n+' service'+(n>1?'s':''):'Personne';
+}
+function rhOutilExigePour(L,x,apres){
   const services=S.rhOutilServices||[];
+  const membres=S.rhOutilMembres||[];
   const {ov,fermer}=rhOutilFenetre();
   const avant=new Set(x.services||[]);
+  const tousBox=rhOutilCase(!!x.obligatoire,'Tous les employés');
   const cases=new Map();
-  const zone=h('div',{className:'rho-scroll'},h('div',{className:'rho-list'},...services.map(sv=>{
-    const box=rhOutilCase(avant.has(sv.code),sv.label);
+  const liste=h('div',{className:'rho-list'},...services.map(sv=>{
+    const box=rhOutilCase(!x.obligatoire&&avant.has(sv.code),sv.label);
     cases.set(sv.code,box);
-    const nb=(S.rhOutilMembres||[]).filter(m=>m.service===sv.code).length;
+    const nb=membres.filter(m=>m.service===sv.code).length;
     return h('label',{className:'rho-check-row'},box,h('span',{style:{flex:1}},sv.label),
       h('span',{className:'rho-sub'},nb?nb+' employé'+(nb>1?'s':'')+' suivi'+(nb>1?'s':''):''));
-  })));
+  }));
+  // « Tous les employés » coché : les services sont grisés et ne comptent pas.
+  const peindre=()=>{
+    liste.classList.toggle('off',tousBox.checked);
+    cases.forEach(b=>{b.disabled=tousBox.checked;});
+  };
+  tousBox.addEventListener('change',peindre);
+  peindre();
   const enregistrer=async()=>{
-    const voulus=[...cases].filter(([,b])=>b.checked).map(([c])=>c);
+    const tous=tousBox.checked;
+    const voulus=tous?[]:[...cases].filter(([,b])=>b.checked).map(([c])=>c);
     const nouveaux=new Set(voulus.filter(c=>!avant.has(c)));
-    // Combien d'employés vont le recevoir : ceux d'un service nouvellement
-    // coché qui ne l'ont pas encore.
-    const manquants=(S.rhOutilMembres||[]).filter(m=>
-      nouveaux.has(m.service)&&!(m[L.cle]||[]).some(e=>e.element_id===x.id)).length;
+    // Combien d'employés vont le recevoir maintenant.
+    const aDeja=m=>(m[L.cle]||[]).some(e=>e.element_id===x.id);
+    const manquants=membres.filter(m=>!aDeja(m)&&(tous?!x.obligatoire:nouveaux.has(m.service))).length;
     const envoyer=async()=>{
       let r;
-      try{r=await api('/api/rh-outil/'+L.cle+'/catalogue/'+x.id+'/services',rhOutilJson('PUT',{services:voulus}));}
+      try{r=await api('/api/rh-outil/'+L.cle+'/catalogue/'+x.id+'/exige',rhOutilJson('PUT',{tous,services:voulus}));}
       catch(e){toast(e.message,'error');throw e;}
-      x.services=voulus;
+      x.obligatoire=tous;x.services=voulus;
       const n=(r&&r.attribues)||0;
-      toast('Services enregistrés'+(n?' — '+L.ajoute+' à '+n+' employé'+(n>1?'s':''):'')+'.');
+      toast('Enregistré'+(n?' — '+L.ajoute+' à '+n+' employé'+(n>1?'s':''):'')+'.');
       fermer();
       if(apres)await apres();
       rhOutilLoad();
     };
     if(!manquants){try{await envoyer();}catch(_){}return;}
     rhOutilConfirmer({
-      ton:'info',titre:'Exiger pour ces services ?',nom:x.libelle,label:'Enregistrer',
+      ton:'info',titre:tous?'Exiger pour tous les employés ?':'Exiger pour ces services ?',nom:x.libelle,label:'Enregistrer',
       sous:manquants+' employé'+(manquants>1?'s':'')+' concerné'+(manquants>1?'s ne l’ont':' ne l’a')+' pas encore',
-      texte:L.il+' sera '+L.ajoute+' tout de suite à '+(manquants>1?'ces employés':'cet employé')+', puis à chaque employé de ces services ajouté ensuite. Décocher un service plus tard ne retirera rien.',
+      texte:L.il+' sera '+L.ajoute+' tout de suite à '+(manquants>1?'ces employés':'cet employé')+', puis à chaque employé '+(tous?'':'de ces services ')+'ajouté ensuite. Le retirer de « Exigé pour » plus tard ne retirera rien.',
       onConfirm:envoyer,
     });
   };
-  ov.appendChild(rhOutilDialogue('Exigé pour les services',fermer,
-    h('div',{className:'rho-cat-legend'},x.libelle+' · le service est celui du compte de l’employé (Paramètres › Comptes).'),
-    zone,
+  ov.appendChild(rhOutilDialogue('Exigé pour',fermer,
+    h('div',{className:'rho-cat-legend'},x.libelle),
+    h('label',{className:'rho-check-row tous'},tousBox,h('span',{style:{flex:1}},'Tous les employés'),
+      h('span',{className:'rho-sub'},membres.length+' employé'+(membres.length>1?'s':'')+' suivi'+(membres.length>1?'s':''))),
+    h('div',{className:'rho-sep'},'Ou seulement certains services'),
+    h('div',{className:'rho-scroll'},liste),
     h('div',{className:'rho-dlg-foot'},
       h('button',{type:'button',className:'rho-btn',onClick:fermer},'Annuler'),
       h('button',{type:'button',className:'rho-btn accent',onClick:enregistrer},'Enregistrer'))
@@ -571,38 +591,11 @@ function rhOutilCatalogue(L){
       });
       inp.addEventListener('blur',enregistrer);
       const nb=x.nb_employes;
-      const obl=rhOutilCase(x.obligatoire,'Obligatoire pour tous · '+x.libelle);
-      const basculer=async v=>{
-        try{
-          const r=await api(base+'/'+x.id,rhOutilJson('PATCH',{obligatoire:v}));
-          x.obligatoire=v;
-          if(v){
-            const n=(r&&r.attribues)||0;
-            toast(L.obligOk+(n?' — '+L.ajoute+' à '+n+' employé'+(n>1?'s':'')+'.':'.'));
-            await rafraichir();rhOutilLoad();
-          }else rhOutilLoad();
-        }catch(e){obl.checked=!v;toast(e.message,'error');throw e;}
-      };
-      obl.addEventListener('change',()=>{
-        const v=obl.checked;
-        // Décocher ne retire rien : pas de confirmation. Cocher touche tous
-        // les employés qui ne l'ont pas : on annonce combien avant.
-        const manquants=Math.max(0,(S.rhOutilMembres||[]).length-nb);
-        if(!v||!manquants){basculer(v).catch(()=>{});return;}
-        obl.checked=false;
-        rhOutilConfirmer({
-          ton:'info',titre:L.obligTitre,nom:x.libelle,label:'Rendre obligatoire pour tous',
-          sous:manquants+' employé'+(manquants>1?'s ne l’ont':' ne l’a')+' pas encore',
-          texte:L.il+' sera '+L.ajoute+' tout de suite à '+(manquants>1?'ces employés':'cet employé')+', puis à chaque employé ajouté ensuite. Décocher la case plus tard ne retirera rien.',
-          onConfirm:async()=>{obl.checked=true;await basculer(true);},
-        });
-      });
       return h('div',{className:'rho-cat-row'},
         inp,
-        h('label',{className:'rho-oblig',title:'Attribué d’office à chaque employé'},obl,'Obligatoire pour tous'),
-        h('button',{type:'button',className:'rho-mini'+((x.services||[]).length?' on':''),title:'Services pour lesquels il est exigé',
-          onClick:()=>rhOutilServicesExiges(L,x,rafraichir)},iconEl('users',11),
-          (x.services||[]).length?x.services.length+' service'+(x.services.length>1?'s':''):'Services'),
+        h('button',{type:'button',className:'rho-mini'+(x.obligatoire||(x.services||[]).length?' on':''),
+          title:'Exigé pour : '+rhOutilLibelleExige(x)+' — cliquer pour modifier',
+          onClick:()=>rhOutilExigePour(L,x,rafraichir)},iconEl('users',11),rhOutilLibelleExige(x)),
         h('span',{className:'rho-sub'},nb+' employé'+(nb>1?'s':'')),
         h('button',{type:'button',className:'rho-del',title:'Supprimer du catalogue',onClick:()=>rhOutilConfirmer({
           titre:L.supprTitre,nom:x.libelle,label:'Supprimer',
@@ -631,7 +624,7 @@ function rhOutilCatalogue(L){
   };
   nouv.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();ajouter();}});
   ov.appendChild(rhOutilDialogueLarge(L.catalogue,fermer,
-    h('div',{className:'rho-cat-legend'},'« Obligatoire pour tous » : attribué d’office à chaque employé, présent et à venir. Retirable ensuite employé par employé.'),
+    h('div',{className:'rho-cat-legend'},'« Exigé pour » : attribué d’office aux employés concernés, présents et à venir. Retirable ensuite employé par employé.'),
     listEl,
     h('div',{className:'rho-cat-add'},nouv,h('button',{type:'button',className:'rho-btn accent',onClick:ajouter},iconEl('plus',13),'Ajouter'))
   ));

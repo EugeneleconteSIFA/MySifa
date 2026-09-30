@@ -7,8 +7,9 @@ Chaque employé suivi porte une checklist :
 - des listes qui varient d'un employé à l'autre (LISTES : formations,
   documents), piochées chacune dans un catalogue commun géré depuis l'onglet.
 Chaque employé a le service de son compte (users.role, jamais modifié ici).
-Un élément peut être exigé pour des services : il est attribué aux employés
-de ces services.
+Un élément du catalogue est « exigé pour » personne, tous les employés
+(colonne obligatoire) ou certains services (tables *_services) — jamais les
+deux à la fois. Il est alors attribué d'office aux employés concernés.
 Les documents d'un employé peuvent porter des pièces jointes (rh_outil_pieces),
 rangées hors de /static sous data/uploads/rh_outil/.
 Accès : quiconque a accès à MyCompta (rôle ou exception réglée dans Paramètres).
@@ -96,12 +97,11 @@ class AttributionIn(BaseModel):
     element_id: int
 
 
-class ServicesExiges(BaseModel):
-    services: list[str]
-
-
-class CataloguePatch(BaseModel):
-    obligatoire: bool
+class ExigeIn(BaseModel):
+    """« Exigé pour » : tous les employés, ou la liste de services (vide =
+    personne). Les deux sont exclusifs : `tous` l'emporte et vide les services."""
+    tous: bool = False
+    services: list[str] = []
 
 
 class AttributionPatch(BaseModel):
@@ -394,24 +394,26 @@ def list_services(request: Request):
     return {"services": _services()}
 
 
-@router.put("/{liste}/catalogue/{element_id}/services")
-def set_services_exiges(liste: str, element_id: int, payload: ServicesExiges, request: Request):
-    """Remplace la liste des services pour lesquels l'élément est exigé. Les
-    services ajoutés l'attribuent tout de suite à leurs employés ; les
-    services retirés ne retirent rien."""
+@router.put("/{liste}/catalogue/{element_id}/exige")
+def set_exige(liste: str, element_id: int, payload: ExigeIn, request: Request):
+    """Règle « Exigé pour ». Ce qui devient exigé est attribué tout de suite
+    aux employés concernés qui ne l'ont pas ; ce qui cesse de l'être ne retire
+    rien."""
     user = _require(request)
     cfg = _liste(liste)
-    voulus = set(payload.services)
-    connus = {s["code"] for s in _services()}
-    if not voulus <= connus:
+    voulus = set() if payload.tous else set(payload.services)
+    if not voulus <= {s["code"] for s in _services()}:
         raise HTTPException(400, "Service inconnu.")
     with get_db() as conn:
-        row = conn.execute(f"SELECT libelle FROM {cfg['catalogue']} WHERE id=?",
+        row = conn.execute(f"SELECT libelle, obligatoire FROM {cfg['catalogue']} WHERE id=?",
                            (element_id,)).fetchone()
         if not row:
             raise HTTPException(404, cfg["introuvable"])
+        tous_avant = bool(row["obligatoire"])
         avant = {r["service"] for r in conn.execute(
             f"SELECT service FROM {cfg['exigences']} WHERE {cfg['fk']}=?", (element_id,)).fetchall()}
+        conn.execute(f"UPDATE {cfg['catalogue']} SET obligatoire=? WHERE id=?",
+                     (1 if payload.tous else 0, element_id))
         for sv in avant - voulus:
             conn.execute(f"DELETE FROM {cfg['exigences']} WHERE {cfg['fk']}=? AND service=?",
                          (element_id, sv))
@@ -420,12 +422,15 @@ def set_services_exiges(liste: str, element_id: int, payload: ServicesExiges, re
             conn.execute(f"INSERT OR IGNORE INTO {cfg['exigences']} ({cfg['fk']}, service) VALUES (?,?)",
                          (element_id, sv))
             n += _attribuer_par_service(conn, liste=liste, element_id=element_id, service=sv)
+        if payload.tous and not tous_avant:
+            n += _attribuer_obligatoires(conn, liste=liste, element_id=element_id)
         conn.commit()
-    if avant != voulus:
-        noms = ", ".join(sorted(role_label(v) for v in voulus)) or "aucun service"
+    if payload.tous != tous_avant or voulus != avant:
+        cible = ("tous les employés" if payload.tous
+                 else ", ".join(sorted(role_label(v) for v in voulus)) or "personne")
         suite = f" · attribué à {n} employé(s)" if n else ""
         log_action(user=user, action="UPDATE", module="rh_outil",
-                   objet=f"Outil RH · {cfg['catalogue_nom']} · « {row['libelle']} » exigé pour : {noms}{suite}",
+                   objet=f"Outil RH · {cfg['catalogue_nom']} · « {row['libelle']} » exigé pour : {cible}{suite}",
                    request=request)
     return {"success": True, "attribues": n}
 
@@ -492,29 +497,6 @@ def rename_catalogue(liste: str, element_id: int, payload: LibelleIn, request: R
                objet=f"Outil RH · {cfg['catalogue_nom']} · « {row['libelle']} » → « {libelle} »",
                request=request)
     return {"success": True}
-
-
-@router.patch("/{liste}/catalogue/{element_id}")
-def set_obligatoire(liste: str, element_id: int, payload: CataloguePatch, request: Request):
-    """Coché : attribué tout de suite aux employés qui ne l'ont pas. Décoché :
-    rien n'est retiré, seuls les prochains employés ne le reçoivent plus."""
-    user = _require(request)
-    cfg = _liste(liste)
-    with get_db() as conn:
-        row = conn.execute(f"SELECT libelle FROM {cfg['catalogue']} WHERE id=?",
-                           (element_id,)).fetchone()
-        if not row:
-            raise HTTPException(404, cfg["introuvable"])
-        conn.execute(f"UPDATE {cfg['catalogue']} SET obligatoire=? WHERE id=?",
-                     (1 if payload.obligatoire else 0, element_id))
-        n = _attribuer_obligatoires(conn, liste=liste, element_id=element_id) if payload.obligatoire else 0
-        conn.commit()
-    suite = f" · attribué à {n} employé(s)" if payload.obligatoire else ""
-    log_action(user=user, action="UPDATE", module="rh_outil",
-               objet=f"Outil RH · {cfg['catalogue_nom']} · « {row['libelle']} » obligatoire pour tous : "
-                     f"{'oui' if payload.obligatoire else 'non'}{suite}",
-               request=request)
-    return {"success": True, "attribues": n}
 
 
 @router.delete("/{liste}/catalogue/{element_id}")
