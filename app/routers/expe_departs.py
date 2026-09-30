@@ -35,7 +35,7 @@ from config import (
 )
 from app.services import expe_evenements as expe_ev
 from app.services import transport_planning as tp
-from app.services import expe_notes, expe_regions
+from app.services import expe_carburant, expe_notes, expe_regions
 from app.services.expe_transporteurs_seed import seed_expe_transporteurs_if_empty
 from database import get_db
 from services.auth_service import get_current_user, user_can_write_expe, user_has_app_access
@@ -2417,7 +2417,7 @@ def update_transporteur(
 
     with get_db() as conn:
         ex = conn.execute(
-            "SELECT id, nom FROM expe_transporteurs WHERE id=?",
+            "SELECT id, nom, taxe_carburant_pct FROM expe_transporteurs WHERE id=?",
             (transporteur_id,),
         ).fetchone()
         if not ex:
@@ -2426,6 +2426,22 @@ def update_transporteur(
             f"UPDATE expe_transporteurs SET {', '.join(sets)} WHERE id=?",
             (*args, transporteur_id),
         )
+        # La fiche renvoie la taxe à chaque enregistrement : seul un
+        # changement de valeur entre dans l'historique de l'onglet Taxe
+        # carburant, sinon corriger un téléphone daterait la taxe du jour.
+        if "taxe_carburant_pct" in body:
+            avant = float(ex["taxe_carburant_pct"] or 0)
+            apres = float(_float_opt(body, "taxe_carburant_pct") or 0)
+            if abs(avant - apres) >= 0.005:
+                expe_carburant.enregistrer_saisie(
+                    conn,
+                    transporteur_id=transporteur_id,
+                    pct=apres,
+                    source=expe_carburant.SOURCE_MANUEL,
+                    auteur=(user.get("email") or user.get("identifiant") or None),
+                    pct_avant=avant,
+                    maj_valeur=False,
+                )
         conn.commit()
         row = conn.execute(
             "SELECT * FROM expe_transporteurs WHERE id=?", (transporteur_id,)

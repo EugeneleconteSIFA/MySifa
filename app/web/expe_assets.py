@@ -4408,7 +4408,7 @@ EXPE_MAIN_CSS = r"""
 """
 
 EXPE_MAIN_JS = r"""
-var EXPE_VALID_TABS=['pilotage','suivi_departs','palettes_europe','comparateur','devis','poids','transporteurs','zones','prospects'];
+var EXPE_VALID_TABS=['pilotage','suivi_departs','palettes_europe','comparateur','devis','poids','transporteurs','carburant','zones','prospects'];
 var _expeHashRestored=false;
 function _readExpeHash(){
   try{var h=(location.hash||'').replace(/^#/,'').trim();
@@ -4634,6 +4634,7 @@ __EXPE_NOTES_JS__
 __EXPE_THEMATIQUES_JS__
 __EXPE_ZONES_JS__
 __EXPE_PILOTAGE_JS__
+__EXPE_CARBURANT_JS__
 function renderExpePoids(){
   const rows=S.expePoidsRows||[];
   const fKg=v=>v.toFixed(3)+'\u00a0kg';
@@ -7502,6 +7503,8 @@ function renderExpe(){
     // tant qu'on n'était pas passé par l'onglet Prospects dans la session.
     else if(tab==='devis'){void chargerDemandes();if(!T.list.length&&!T.loading)void loadTransporteurs();if(!S.prospects)void chargerProspects();}
     else if(tab==='prospects'){void chargerProspects();}
+    // Rechargée à chaque entrée : une saisie peut arriver du portail à tout moment.
+    else if(tab==='carburant'){void loadExpeCarburant();}
     else if(tab==='transporteurs'&&!T.pageLoaded){T.pageLoaded=true;void loadTransporteurs();}
     else if(tab==='palettes_europe'){void loadExpePalettesEurope();}
     // Le pilotage recharge a chaque entree dans l'onglet : les jalons bougent
@@ -7533,6 +7536,7 @@ function renderExpe(){
         ]},
         { key:'ref', label:'Référentiel', items:[
           {tab:'transporteurs',ico:'truck',label:'Transporteurs'},
+          {tab:'carburant',    ico:'trending-up',label:'Taxe carburant'},
           {tab:'zones',        ico:'map-pin',label:'Zone géographique'},
           {tab:'prospects',    ico:'users',label:'Prospects'},
         ]},
@@ -7600,7 +7604,7 @@ function renderExpe(){
         tab==='pilotage'?'Pilotage des expéditions':
         tab==='suivi_departs'?(sub==='historique'?'Historique départs':'Départs programmés'):
         tab==='palettes_europe'?'Suivi des palettes Europe consignées':
-        tab==='transporteurs'?'Transporteurs':tab==='zones'?'Zone géographique':tab==='devis'?'Demandes de devis':tab==='prospects'?'Prospects transporteurs':tab==='poids'?'Calcul poids':'Comparateur tarifs')
+        tab==='transporteurs'?'Transporteurs':tab==='carburant'?'Taxe carburant':tab==='zones'?'Zone géographique':tab==='devis'?'Demandes de devis':tab==='prospects'?'Prospects transporteurs':tab==='poids'?'Calcul poids':'Comparateur tarifs')
     ),
     h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
   );
@@ -7610,6 +7614,7 @@ function renderExpe(){
     tab==='palettes_europe'?renderExpePalettesEurope():
     tab==='transporteurs'?renderExpeTransporteurs():tab==='poids'?renderExpePoids():
     tab==='zones'?renderExpeZones():
+    tab==='carburant'?renderExpeCarburant():
     tab==='devis'?renderExpeDevisSection():tab==='prospects'?renderExpeProspectsSection():
     renderExpeComparateur();
   // Motion : cascade d'entree au changement d'onglet uniquement. On pose
@@ -7643,6 +7648,7 @@ function renderExpe(){
             :tab==='devis'?'Prospection parallèle — demandes de tarif aux transporteurs'
             :tab==='prospects'?'Transporteurs hors référentiel — suivi de démarchage'
             :tab==='poids'?'Estimation du poids d\'un envoi d\'étiquettes'
+            :tab==='carburant'?'Taxe carburant de chaque transporteur — saisie sur le portail transporteur ou à la main'
             :tab==='zones'?'Transporteurs à prioriser par destination, selon l\'historique et la note de confiance'
             :'Référentiel transporteurs, zones et tarifs'),
           contentWrap
@@ -7653,6 +7659,7 @@ function renderExpe(){
     renderExpeTransporteurModal(),
     renderExpeDevisModal(),
     renderExpeAvisModal(),
+    renderExpeCarburantModal(),
     S.expeShowContacts?renderExpeContactModal():null
   );
 }
