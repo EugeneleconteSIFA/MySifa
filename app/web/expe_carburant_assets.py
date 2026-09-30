@@ -137,6 +137,9 @@ function _expeCarbStatut(t){
   if(t.statut==='en_attente')return h('span',{className:'expe-carb-pill expe-carb-pill--attente',
     title:'Demande envoyée le '+_expeCarbJour(t.demande_le)+', pas de saisie depuis'},'En attente');
   if(t.statut==='a_jour')return h('span',{className:'expe-carb-pill expe-carb-pill--ok'},'À jour');
+  // Un taux présent sans date vient d'avant le suivi : il existe, on ne sait
+  // juste pas de quand il date.
+  if(t.pct)return h('span',{className:'expe-carb-pill',title:'Taux saisi avant la mise en place du suivi'},'Non datée');
   return h('span',{className:'expe-carb-pill'},'Jamais renseignée');
 }
 
@@ -220,7 +223,7 @@ function _expeCarbTuiles(list){
     {lbl:'Transporteurs actifs',val:String(list.length)},
     {lbl:'À jour',val:String(n('a_jour'))},
     {lbl:'En attente de réponse',val:String(n('en_attente')),cls:n('en_attente')?'expe-carb-tuile--warn':''},
-    {lbl:'Jamais renseignée',val:String(n('jamais'))},
+    {lbl:'Jamais mise à jour',val:String(n('jamais'))},
     {lbl:'Taux moyen',val:moy==null?'—':_expeCarbPct(moy)}
   ];
   return h('div',{className:'expe-carb-tuiles'},

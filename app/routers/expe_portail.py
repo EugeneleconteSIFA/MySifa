@@ -387,8 +387,11 @@ def portail_expe_data(request: Request, token: str):
                     (int(dem["demande_id"]), int(dem["reponse_id"] or 0)),
                 ).fetchall()
             ]
-        carburant = carb.etat_portail(conn, int(tid)) if tid else None
-        return {"email": email, "demandes": demandes, "carburant": carburant}
+        return {
+            "email": email,
+            "demandes": demandes,
+            "carburants": carb.etats_portail(conn, email),
+        }
 
 
 @router_api.post("/{token}/carburant")
@@ -399,17 +402,27 @@ def portail_expe_carburant(request: Request, token: str, body: dict = Body(...))
     c'est lui qui fixe sa surcharge et le comparateur doit l'appliquer tout de
     suite. L'email de confirmation part vers la personne qui a envoyé la
     dernière demande, la boîte du service en copie.
+
+    Le transporteur visé est désigné par le corps de la requête, et il doit
+    figurer parmi les fiches dont les contacts portent l'adresse du compte :
+    un compte ne peut écrire que sur ses propres fiches.
     """
     ip = _client_ip(request)
     with get_db() as conn:
         acc = _get_account_or_404(conn, token, ip=ip)
-        tid = acc.get("transporteur_id")
-        etat = carb.etat_portail(conn, int(tid)) if tid else None
-        if not etat:
+        email = _account_email(acc)
+        autorises = {e["transporteur_id"]: e for e in carb.etats_portail(conn, email)}
+        if not autorises:
             raise HTTPException(
                 status_code=403,
                 detail="Ce lien n'est rattaché à aucun transporteur référencé.",
             )
+        try:
+            tid = int(body.get("transporteur_id"))
+        except (TypeError, ValueError):
+            tid = next(iter(autorises)) if len(autorises) == 1 else None
+        if tid not in autorises:
+            raise HTTPException(status_code=403, detail="Transporteur non rattaché à ce lien.")
         try:
             pct = carb.valider_pct(body.get("pct"))
         except (TypeError, ValueError):
@@ -417,7 +430,6 @@ def portail_expe_carburant(request: Request, token: str, body: dict = Body(...))
                 status_code=400,
                 detail="Taux invalide — valeur entre 0 et 100 %.",
             )
-        email = _account_email(acc)
         trp = conn.execute(
             "SELECT taxe_carburant_demande_par FROM expe_transporteurs WHERE id=?",
             (int(tid),),
@@ -430,7 +442,8 @@ def portail_expe_carburant(request: Request, token: str, body: dict = Body(...))
             auteur=email or None,
         )
         conn.commit()
-        etat = carb.etat_portail(conn, int(tid))
+        etats = carb.etats_portail(conn, email)
+        etat = next(e for e in etats if e["transporteur_id"] == tid)
 
     try:
         to, cc = carb.destinataires_confirmation(
@@ -449,7 +462,7 @@ def portail_expe_carburant(request: Request, token: str, body: dict = Body(...))
         # faire passer pour un échec aux yeux du transporteur.
         logger.exception("Taxe carburant : notification interne non envoyée")
 
-    return {"success": True, "carburant": etat}
+    return {"success": True, "carburants": etats}
 
 
 @router_api.post("/{token}/demandes/{demande_id}/repondre")

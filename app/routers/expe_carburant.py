@@ -81,6 +81,7 @@ def demander_mise_a_jour(request: Request, body: dict = Body(...)):
                     pct_actuel=float(d.get("taxe_carburant_pct") or 0),
                     maj_le=d.get("taxe_carburant_maj_le"),
                     user_nom=user_nom,
+                    transporteur_id=int(d["id"]),
                 )
                 if send_email(
                     to=email,

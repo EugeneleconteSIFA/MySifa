@@ -138,24 +138,46 @@ def historique(conn, transporteur_id: int, limite: int = 50) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def etat_portail(conn, transporteur_id: int) -> dict | None:
-    """Ce que le bloc « Taxe carburant » du portail affiche."""
-    r = conn.execute(
-        """SELECT nom, taxe_carburant_pct, taxe_carburant_maj_le,
-                  taxe_carburant_demande_le
-           FROM expe_transporteurs WHERE id=? AND actif=1""",
-        (int(transporteur_id),),
-    ).fetchone()
-    if not r:
-        return None
-    d = dict(r)
-    return {
-        "transporteur": d["nom"],
-        "pct": float(d["taxe_carburant_pct"] or 0),
-        "maj_le": d.get("taxe_carburant_maj_le"),
-        "demande_le": d.get("taxe_carburant_demande_le"),
-        "en_attente": _statut(d) == "en_attente",
-    }
+def etats_portail(conn, email: str) -> list[dict]:
+    """Les blocs « Taxe carburant » d'un compte portail, un par fiche.
+
+    La fiche transporteur fait foi : on retient les fiches actives dont les
+    contacts contiennent l'adresse du compte. Le `transporteur_id` porté par
+    le compte portail n'est PAS utilisé — il est posé à la création du compte
+    (souvent par une demande de devis) et ne suit pas les fiches : une
+    adresse passée d'un transporteur à un autre, ou saisie à la main sur une
+    demande, restait attachée au premier. Le 30/09/2026, un compte rattaché à
+    Coquelle depuis un ancien devis a ainsi affiché ET modifié la taxe de
+    Coquelle alors que la demande visait une autre fiche.
+
+    Une même adresse peut figurer sur plusieurs fiches (un commissionnaire
+    qui gère deux enseignes) : un bloc par fiche, jamais un choix implicite.
+    """
+    mail = (email or "").strip().lower()
+    if not mail:
+        return []
+    rows = conn.execute(
+        """SELECT id, nom, contact_email, contact_emails, taxe_carburant_pct,
+                  taxe_carburant_maj_le, taxe_carburant_demande_le
+           FROM expe_transporteurs WHERE actif=1
+           ORDER BY nom COLLATE NOCASE"""
+    ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        if mail not in emails_transporteur(d):
+            continue
+        out.append(
+            {
+                "transporteur_id": int(d["id"]),
+                "transporteur": d["nom"],
+                "pct": float(d["taxe_carburant_pct"] or 0),
+                "maj_le": d.get("taxe_carburant_maj_le"),
+                "demande_le": d.get("taxe_carburant_demande_le"),
+                "en_attente": _statut(d) == "en_attente",
+            }
+        )
+    return out
 
 
 # ── Écriture ─────────────────────────────────────────────────────────────
@@ -222,22 +244,17 @@ def noter_demande(conn, *, transporteur_id: int, auteur: str | None) -> str:
 def token_portail(conn, *, email: str, transporteur_id: int) -> str:
     """Jeton portail de cette adresse, créé s'il n'existe pas.
 
-    Un compte portail créé depuis un destinataire saisi à la main n'a pas de
-    `transporteur_id` : on le rattache ici, sans quoi le bloc taxe carburant
-    ne saurait pas à quelle fiche écrire.
+    Le rattachement d'un compte existant n'est pas touché : le bloc taxe
+    carburant retrouve ses fiches par l'adresse (`etats_portail`), et les
+    devis ont leurs propres usages de `transporteur_id`.
     """
     email_norm = (email or "").strip().lower()
     row = conn.execute(
-        """SELECT id, token, transporteur_id FROM expe_portal_transporteurs
+        """SELECT id, token FROM expe_portal_transporteurs
            WHERE LOWER(email)=? AND actif=1 LIMIT 1""",
         (email_norm,),
     ).fetchone()
     if row and row["token"]:
-        if row["transporteur_id"] is None:
-            conn.execute(
-                "UPDATE expe_portal_transporteurs SET transporteur_id=? WHERE id=?",
-                (int(transporteur_id), int(row["id"])),
-            )
         return str(row["token"])
     token = str(uuid.uuid4())
     conn.execute(
@@ -342,6 +359,7 @@ def email_demande_taxe(
     pct_actuel: float | None,
     maj_le: str | None,
     user_nom: str,
+    transporteur_id: int | None = None,
 ) -> tuple[str, str]:
     """Sujet et corps HTML — demande de mise à jour au transporteur.
 
@@ -405,7 +423,8 @@ def email_demande_taxe(
     lien = (portail_lien or "").strip()
     cta = ""
     if lien:
-        cta = _email_bouton(f"{lien}?lang={lang}#carburant", s["cta"], s["copy_link"])
+        ancre = f"carburant-{int(transporteur_id)}" if transporteur_id else "carburant"
+        cta = _email_bouton(f"{lien}?lang={lang}#{ancre}", s["cta"], s["copy_link"])
 
     inner = f"""
     <p style="margin:0 0 14px;font-size:15px;color:#0f172a;font-weight:600">{_esc(s["hello"])}</p>
