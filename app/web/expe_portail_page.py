@@ -244,9 +244,9 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     .fuel{background:var(--card);border:1px solid var(--border);border-radius:12px;
       padding:16px 20px;margin-bottom:16px;display:flex;gap:20px;align-items:flex-end;
       justify-content:space-between;flex-wrap:wrap;transition:box-shadow .3s,border-color .3s}
-    .fuel[hidden]{display:none}
     .fuel.ask{border-color:var(--warn);box-shadow:inset 3px 0 0 var(--warn)}
     .fuel.flash{box-shadow:0 0 0 3px var(--accent-bg);border-color:var(--accent)}
+    .fuel-t b{color:var(--text);font-weight:800}
     .fuel-t{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
     .fuel-v{font-size:28px;font-weight:800;color:var(--accent);letter-spacing:-.5px;line-height:1.15;
       margin-top:4px;font-variant-numeric:tabular-nums}
@@ -280,21 +280,7 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
       </div>
     </header>
 
-    <section class="fuel" id="carburant" hidden>
-      <div>
-        <div class="fuel-t" id="i18n-fuel-title">Taxe carburant</div>
-        <div class="fuel-v" id="fuelVal">—</div>
-        <div class="fuel-m" id="fuelMeta"></div>
-      </div>
-      <form class="fuel-f" id="fuelForm" novalidate>
-        <label for="fuelIn" id="i18n-fuel-label">Taux en vigueur (%)</label>
-        <div class="fuel-row">
-          <input type="number" step="0.01" min="0" max="100" inputmode="decimal" id="fuelIn">
-          <button class="btn btn-accent" type="submit" id="fuelBtn">Mettre à jour</button>
-        </div>
-        <div class="fuel-h" id="i18n-fuel-hint"></div>
-      </form>
-    </section>
+    <div id="carburants"></div>
 
     <div class="banner">
       <h1 id="i18n-banner-title">Vos demandes de tarif</h1>
@@ -398,10 +384,6 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     const ca=document.getElementById('cancel'); if(ca) ca.textContent=t('cancel');
     const sa=document.getElementById('save'); if(sa) sa.textContent=t('save');
     const fn=document.getElementById('i18n-foot-note'); if(fn) fn.textContent=t('footNote');
-    const ft=document.getElementById('i18n-fuel-title'); if(ft) ft.textContent=t('fuelTitle');
-    const fl=document.getElementById('i18n-fuel-label'); if(fl) fl.textContent=t('fuelLabel');
-    const fhh=document.getElementById('i18n-fuel-hint'); if(fhh) fhh.textContent=t('fuelHint');
-    const fb=document.getElementById('fuelBtn'); if(fb) fb.textContent=t('fuelSave');
     updateLangBtn();
   }
   function setLang(lang){
@@ -555,23 +537,82 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     if(!m) return s;
     return S.lang==='fr' ? (m[3]+'/'+m[2]+'/'+m[1]) : s;
   }
-  // Taxe carburant : visible seulement si le lien est rattache a une fiche
-  // transporteur (un prospect n'a pas de taux a declarer).
+  // Taxe carburant : un bloc par fiche transporteur dont les contacts portent
+  // l'adresse de ce lien (le serveur en decide). Aucune fiche : aucun bloc —
+  // un prospect n'a pas de taux a declarer. Le nom du transporteur est
+  // toujours affiche : c'est lui qui dit sur quelle fiche on ecrit.
   function renderFuel(){
-    const box=document.getElementById('carburant');
-    const c=S.data&&S.data.carburant;
-    if(!box) return;
-    if(!c){ box.hidden=true; return; }
-    box.hidden=false;
-    box.classList.toggle('ask', !!c.en_attente);
-    document.getElementById('fuelVal').textContent = (c.maj_le||c.pct) ? fmtPct(c.pct) : t('dash');
-    const meta=document.getElementById('fuelMeta');
-    meta.classList.toggle('ask', !!c.en_attente);
-    if(c.en_attente) meta.textContent=t('fuelAsked')+' '+fmtDate(c.demande_le);
-    else if(c.maj_le) meta.textContent=t('fuelUpdated')+' '+fmtDate(c.maj_le);
-    else meta.textContent=t('fuelNever');
-    const inp=document.getElementById('fuelIn');
-    if(inp && document.activeElement!==inp && !inp.value && (c.maj_le||c.pct)) inp.value=String(c.pct);
+    const zone=document.getElementById('carburants');
+    if(!zone) return;
+    const liste=(S.data&&S.data.carburants)||[];
+    // La reconstruction ne doit pas perdre une saisie en cours.
+    const saisies={};
+    zone.querySelectorAll('input[data-tid]').forEach(function(i){ saisies[i.dataset.tid]=i.value; });
+    const focusTid=document.activeElement&&document.activeElement.dataset
+      ? document.activeElement.dataset.tid : null;
+    zone.innerHTML='';
+    liste.forEach(function(c){
+      const tid=String(c.transporteur_id);
+      const sec=document.createElement('section');
+      sec.className='fuel'+(c.en_attente?' ask':'');
+      sec.id='carburant-'+tid;
+      const g=document.createElement('div');
+      const titre=document.createElement('div');
+      titre.className='fuel-t';
+      titre.textContent=t('fuelTitle')+' — ';
+      const nom=document.createElement('b');
+      nom.textContent=c.transporteur||'';
+      titre.appendChild(nom);
+      const val=document.createElement('div');
+      val.className='fuel-v';
+      val.textContent=(c.maj_le||c.pct) ? fmtPct(c.pct) : t('dash');
+      const meta=document.createElement('div');
+      meta.className='fuel-m'+(c.en_attente?' ask':'');
+      if(c.en_attente) meta.textContent=t('fuelAsked')+' '+fmtDate(c.demande_le);
+      else if(c.maj_le) meta.textContent=t('fuelUpdated')+' '+fmtDate(c.maj_le);
+      else meta.textContent=c.pct ? t('fuelUndated') : t('fuelNever');
+      g.appendChild(titre); g.appendChild(val); g.appendChild(meta);
+      const f=document.createElement('form');
+      f.className='fuel-f'; f.noValidate=true;
+      const lbl=document.createElement('label');
+      lbl.htmlFor='fuelIn-'+tid; lbl.textContent=t('fuelLabel');
+      const row=document.createElement('div'); row.className='fuel-row';
+      const inp=document.createElement('input');
+      inp.type='number'; inp.step='0.01'; inp.min='0'; inp.max='100';
+      inp.inputMode='decimal'; inp.id='fuelIn-'+tid; inp.dataset.tid=tid;
+      inp.value = saisies[tid]!=null ? saisies[tid] : ((c.maj_le||c.pct) ? String(c.pct) : '');
+      const btn=document.createElement('button');
+      btn.type='submit'; btn.className='btn btn-accent'; btn.textContent=t('fuelSave');
+      row.appendChild(inp); row.appendChild(btn);
+      const hint=document.createElement('div');
+      hint.className='fuel-h'; hint.textContent=t('fuelHint');
+      f.appendChild(lbl); f.appendChild(row); f.appendChild(hint);
+      f.addEventListener('submit', function(ev){ ev.preventDefault(); envoyerTaux(c.transporteur_id, inp, btn); });
+      sec.appendChild(g); sec.appendChild(f);
+      zone.appendChild(sec);
+      if(focusTid===tid) inp.focus();
+    });
+  }
+
+  async function envoyerTaux(tid, inp, btn){
+    const raw=String(inp.value||'').replace(',','.').trim();
+    const pct=parseFloat(raw);
+    if(raw==='' || !isFinite(pct) || pct<0 || pct>100){ showToast(t('fuelInvalid'),'bad'); return; }
+    btn.disabled=true;
+    try{
+      const j=await api('/api/portail/expe/'+encodeURIComponent(TOKEN)+'/carburant', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({transporteur_id: tid, pct})
+      });
+      if(S.data) S.data.carburants=j.carburants||[];
+      // Saisie enregistree : le champ reprend la valeur du serveur, il ne
+      // doit pas etre conserve comme saisie en cours par renderFuel().
+      inp.removeAttribute('data-tid');
+      renderFuel();
+      showToast(t('fuelSaved'),'ok');
+    }catch(e){ showToast(e.message||t('error'),'bad'); }
+    finally{ btn.disabled=false; }
   }
 
   function carte(it){
@@ -674,38 +715,23 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
   async function load(){
     S.data = await api('/api/portail/expe/'+encodeURIComponent(TOKEN));
     render();
-    // Arrivee depuis l'email de demande (#carburant) : on amene le bloc a
-    // l'ecran et le curseur dans le champ, une seule fois.
-    if(!_fuelFocused && location.hash==='#carburant' && S.data && S.data.carburant){
+    // Arrivee depuis l'email de demande (#carburant-<id>) : on amene le bloc
+    // de CE transporteur a l'ecran, curseur dans le champ, une seule fois.
+    // `#carburant` seul (ancien lien) vise le premier bloc.
+    const h=location.hash||'';
+    if(!_fuelFocused && h.indexOf('#carburant')===0){
       _fuelFocused=true;
-      const box=document.getElementById('carburant');
-      box.scrollIntoView({block:'center'});
-      box.classList.add('flash');
-      setTimeout(()=>box.classList.remove('flash'),1600);
-      const inp=document.getElementById('fuelIn');
-      if(inp){ inp.focus(); inp.select(); }
+      const box=document.getElementById(h.slice(1))
+        || document.querySelector('#carburants .fuel');
+      if(box){
+        box.scrollIntoView({block:'center'});
+        box.classList.add('flash');
+        setTimeout(()=>box.classList.remove('flash'),1600);
+        const inp=box.querySelector('input');
+        if(inp){ inp.focus(); inp.select(); }
+      }
     }
   }
-
-  document.getElementById('fuelForm').addEventListener('submit', async (ev)=>{
-    ev.preventDefault();
-    const raw=String(document.getElementById('fuelIn').value||'').replace(',','.').trim();
-    const pct=parseFloat(raw);
-    if(raw==='' || !isFinite(pct) || pct<0 || pct>100){ showToast(t('fuelInvalid'),'bad'); return; }
-    const btn=document.getElementById('fuelBtn');
-    btn.disabled=true;
-    try{
-      const j=await api('/api/portail/expe/'+encodeURIComponent(TOKEN)+'/carburant', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({pct})
-      });
-      if(S.data) S.data.carburant=j.carburant;
-      renderFuel();
-      showToast(t('fuelSaved'),'ok');
-    }catch(e){ showToast(e.message||t('error'),'bad'); }
-    finally{ btn.disabled=false; }
-  });
 
   // Dépôt d'un fichier joint à l'offre. Sans cela, la cotation PDF partait par
   // mail à côté du portail et n'entrait jamais dans le comparatif.

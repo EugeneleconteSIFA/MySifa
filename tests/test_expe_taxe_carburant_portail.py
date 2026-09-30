@@ -14,6 +14,11 @@ Ce que ce test verrouille :
   jour » — et la valeur est celle qu'applique le comparateur ;
 - la saisie accepte la virgule, refuse hors [0, 100] ;
 - un lien portail sans fiche transporteur ne peut rien ecrire ;
+- la fiche fait foi, pas le rattachement du compte portail : un compte
+  rattache a Coquelle par un ancien devis, dont l'adresse figure sur une
+  autre fiche, ne voit ni ne modifie la taxe de Coquelle (bug du 30/09/2026) ;
+- une adresse presente sur deux fiches voit deux blocs et doit designer
+  celui qu'elle modifie ;
 - la confirmation va a l'auteur de la demande, le service en copie ;
 - la fiche transporteur n'historise la taxe QUE si elle change : corriger un
   telephone ne doit pas dater la taxe du jour.
@@ -97,6 +102,24 @@ with get_db() as conn:
         """INSERT INTO expe_portal_transporteurs (email, token, transporteur_id, created_at, actif)
            VALUES ('prospect@x.test', 'tok-prospect', NULL, '2026-09-01T08:00:00', 1)"""
     )
+    # Cas du 30/09/2026 : « Coquelle » (25,6 %) et une fiche « Eugene » dont
+    # le seul contact est une adresse dont le compte portail est rattache a
+    # Coquelle depuis un ancien devis.
+    COQ = int(conn.execute(
+        """INSERT INTO expe_transporteurs (nom, taxe_carburant_pct, contact_emails, langue, actif, created_at)
+           VALUES ('Coquelle', 25.6, ?, 'fr', 1, '2026-09-01T08:00:00')""",
+        (json.dumps(["orlane@coquelle.test"]),),
+    ).lastrowid)
+    EUG = int(conn.execute(
+        """INSERT INTO expe_transporteurs (nom, taxe_carburant_pct, contact_emails, langue, actif, created_at)
+           VALUES ('Eugene', 0, ?, 'fr', 1, '2026-09-01T08:00:00')""",
+        (json.dumps(["eugene@perso.test"]),),
+    ).lastrowid)
+    conn.execute(
+        """INSERT INTO expe_portal_transporteurs (email, token, transporteur_id, created_at, actif)
+           VALUES ('eugene@perso.test', 'tok-eugene', ?, '2026-05-28T16:05:03', 1)""",
+        (COQ,),
+    )
     conn.commit()
 
 # ── Liste initiale ──
@@ -119,8 +142,9 @@ with get_db() as conn:
     tok = conn.execute(
         "SELECT token, transporteur_id FROM expe_portal_transporteurs WHERE email='resa@trp.test'"
     ).fetchone()
-check("demande : compte portail cree et rattache", tok["transporteur_id"], TID)
-check("demande : lien vers le bloc taxe", f"/portail/expe/{tok['token']}?lang=en#carburant" in ENVOIS[0]["html"])
+check("demande : compte portail cree", tok is not None)
+check("demande : lien vers le bloc de CE transporteur",
+      f"/portail/expe/{tok['token']}?lang=en#carburant-{TID}" in ENVOIS[0]["html"])
 t = next(x for x in r["transporteurs"] if x["id"] == TID)
 check("demande : statut en attente", t["statut"], "en_attente")
 check("demande : auteur memorise", t["demande_par"], USER["email"])
@@ -128,10 +152,10 @@ TOKEN = tok["token"]
 
 # ── Portail : lecture ──
 d = client.get(f"/api/portail/expe/{TOKEN}").json()
-check("portail : bloc carburant present", d["carburant"]["transporteur"], "Transports Test")
-check("portail : bloc en attente", d["carburant"]["en_attente"], True)
+check("portail : un bloc, le bon transporteur", [c["transporteur"] for c in d["carburants"]], ["Transports Test"])
+check("portail : bloc en attente", d["carburants"][0]["en_attente"], True)
 d2 = client.get("/api/portail/expe/tok-prospect").json()
-check("portail : pas de bloc sans fiche transporteur", d2["carburant"], None)
+check("portail : pas de bloc sans fiche transporteur", d2["carburants"], [])
 
 # ── Portail : saisie ──
 ENVOIS.clear()
@@ -141,7 +165,7 @@ check("saisie : lien sans fiche refuse", client.post("/api/portail/expe/tok-pros
 check("saisie : aucune notification sur un refus", len(ENVOIS), 0)
 rs = client.post(f"/api/portail/expe/{TOKEN}/carburant", json={"pct": "13,5"})
 check("saisie : acceptee avec virgule", rs.status_code, 200)
-check("saisie : bloc a jour", rs.json()["carburant"]["en_attente"], False)
+check("saisie : bloc a jour", rs.json()["carburants"][0]["en_attente"], False)
 with get_db() as conn:
     row = conn.execute(
         "SELECT taxe_carburant_pct, taxe_carburant_maj_source, taxe_carburant_maj_par FROM expe_transporteurs WHERE id=?",
@@ -156,6 +180,34 @@ check("confirmation : service en copie", ENVOIS[0]["cc"], ["service@exemple.test
 check("confirmation : taux dans le sujet", "13,5 %" in ENVOIS[0]["subject"])
 t = next(x for x in client.get("/api/expe/carburant").json()["transporteurs"] if x["id"] == TID)
 check("liste : a jour apres saisie", t["statut"], "a_jour")
+
+# ── La fiche fait foi, pas le rattachement du compte portail ──
+de = client.get("/api/portail/expe/tok-eugene").json()
+check("rattachement perime : seul le bloc de la fiche", [c["transporteur"] for c in de["carburants"]], ["Eugene"])
+check("rattachement perime : Coquelle refuse",
+      client.post("/api/portail/expe/tok-eugene/carburant", json={"transporteur_id": COQ, "pct": 19}).status_code, 403)
+check("rattachement perime : saisie sans id -> sa seule fiche",
+      client.post("/api/portail/expe/tok-eugene/carburant", json={"pct": 19}).status_code, 200)
+with get_db() as conn:
+    pcts = {r["id"]: r["taxe_carburant_pct"] for r in conn.execute(
+        "SELECT id, taxe_carburant_pct FROM expe_transporteurs WHERE id IN (?,?)", (COQ, EUG))}
+check("rattachement perime : Coquelle intacte", pcts[COQ], 25.6)
+check("rattachement perime : Eugene mise a jour", pcts[EUG], 19.0)
+
+# ── Une adresse sur deux fiches ──
+with get_db() as conn:
+    conn.execute("UPDATE expe_transporteurs SET contact_emails=? WHERE id=?",
+                 (json.dumps(["orlane@coquelle.test", "eugene@perso.test"]), COQ))
+    conn.commit()
+dd = client.get("/api/portail/expe/tok-eugene").json()
+check("deux fiches : deux blocs", sorted(c["transporteur"] for c in dd["carburants"]), ["Coquelle", "Eugene"])
+check("deux fiches : saisie sans id refusee",
+      client.post("/api/portail/expe/tok-eugene/carburant", json={"pct": 20}).status_code, 403)
+rr = client.post("/api/portail/expe/tok-eugene/carburant", json={"transporteur_id": EUG, "pct": 20})
+check("deux fiches : saisie designee acceptee", rr.status_code, 200)
+with get_db() as conn:
+    check("deux fiches : l'autre fiche intacte",
+          conn.execute("SELECT taxe_carburant_pct FROM expe_transporteurs WHERE id=?", (COQ,)).fetchone()[0], 25.6)
 
 # ── Fiche transporteur : seul un changement s'historise ──
 def nb_saisies():
