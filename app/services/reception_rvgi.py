@@ -621,6 +621,7 @@ def apparier(conn, code1, code2, type_code, matiere_id, auteur=None, origine="ma
         conn.execute(
             "DELETE FROM erp_article_matiere WHERE code1=? AND code2=? AND type_code=?",
             (code1, code2, type_code))
+        _rattacher_variante(conn, code1, code2, type_code, None, auteur)
         return {"code1": code1, "code2": code2, "type_code": type_code, "matiere_id": None}
 
     mid = int(matiere_id)
@@ -635,7 +636,18 @@ def apparier(conn, code1, code2, type_code, matiere_id, auteur=None, origine="ma
         "  created_at = excluded.created_at, created_by_name = excluded.created_by_name",
         (code1, code2, type_code, mid, origine,
          datetime.now().isoformat(timespec="seconds"), auteur or ""))
+    _rattacher_variante(conn, code1, code2, type_code, mid, auteur)
     return {"code1": code1, "code2": code2, "type_code": type_code, "matiere_id": mid}
+
+
+def _rattacher_variante(conn, code1, code2, type_code, matiere_id, auteur):
+    """L'article apparié est une variante fournisseur de la matière (page matière)."""
+    import sqlite3
+    try:
+        from app.services import mp_variantes
+        mp_variantes.rattacher_article(conn, code1, code2, type_code, matiere_id, auteur)
+    except sqlite3.OperationalError:
+        pass  # table mp_variantes absente : migration pas encore passée
 
 
 def _laize_id(conn, valeur_mm):

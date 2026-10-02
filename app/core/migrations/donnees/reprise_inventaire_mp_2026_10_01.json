@@ -1,0 +1,7782 @@
+{
+ "source": "Inventaire master table v7.xlsx - inventaire physique du 01/10/2026",
+ "date_inventaire": "2026-10-01",
+ "fiches": [
+  {
+   "cle": "N:pp_therm_transp",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Thermiques",
+   "designation": "PP thermique transparent 65 µm",
+   "designation_avant": null,
+   "ml_std": 6000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "32",
+   "id": 32,
+   "action": "Reprendre",
+   "categorie": "frontal",
+   "sous_section": "Thermiques",
+   "designation": "Thermique Eco 70 g/m²",
+   "designation_avant": "Thermique Eco",
+   "ml_std": 12000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "31",
+   "id": 31,
+   "action": "Reprendre",
+   "categorie": "frontal",
+   "sous_section": "Thermiques",
+   "designation": "Thermique Pro 70 g/m²",
+   "designation_avant": "thermique pro",
+   "ml_std": 12000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:therm_eco_135",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Thermiques",
+   "designation": "Thermique Eco 135 g/m²",
+   "designation_avant": null,
+   "ml_std": 2500.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "79",
+   "id": 79,
+   "action": "Reprendre",
+   "categorie": "frontal",
+   "sous_section": "Thermiques",
+   "designation": "Thermique Pro 78 g/m²",
+   "designation_avant": "Mitsubishi",
+   "ml_std": 9500.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "50",
+   "id": 50,
+   "action": "Reprendre",
+   "categorie": "frontal",
+   "sous_section": "Thermiques",
+   "designation": "Thermique Pro 105-108 g/m²",
+   "designation_avant": "thermique pro 105gsm",
+   "ml_std": 6000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "89",
+   "id": 89,
+   "action": "Reprendre",
+   "categorie": "frontal",
+   "sous_section": "Thermiques",
+   "designation": "Thermique Protégé 130 g/m²",
+   "designation_avant": "RICOH - Laize 350 (laize a changer)",
+   "ml_std": 5000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "34",
+   "id": 34,
+   "action": "Reprendre",
+   "categorie": "frontal",
+   "sous_section": "Thermiques",
+   "designation": "Thermique Pro 95 g/m²",
+   "designation_avant": "thermique pro",
+   "ml_std": 5000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:therm_prot_105",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Thermiques",
+   "designation": "Thermique Protégé 105 g/m²",
+   "designation_avant": null,
+   "ml_std": 6000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:therm_prot_57",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Thermiques",
+   "designation": "Thermique Protégé 45-57 g/m²",
+   "designation_avant": null,
+   "ml_std": 10000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "47",
+   "id": 47,
+   "action": "Reprendre",
+   "categorie": "frontal",
+   "sous_section": "Velin",
+   "designation": "Vélin 62 g/m²",
+   "designation_avant": "62gsm Vellum",
+   "ml_std": 12600.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "33",
+   "id": 33,
+   "action": "Reprendre",
+   "categorie": "frontal",
+   "sous_section": "Velin",
+   "designation": "Vélin 68 g/m²",
+   "designation_avant": "68gsm Vellum",
+   "ml_std": 12000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:velin_80",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Velin",
+   "designation": "Vélin 80 g/m²",
+   "designation_avant": null,
+   "ml_std": 5989.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "48",
+   "id": 48,
+   "action": "Reprendre",
+   "categorie": "frontal",
+   "sous_section": "Velin",
+   "designation": "Vélin fluo jaune 70 g/m²",
+   "designation_avant": "70gsm Vellum fluo jaune",
+   "ml_std": 12000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "36",
+   "id": 36,
+   "action": "Reprendre",
+   "categorie": "frontal",
+   "sous_section": "Couché",
+   "designation": "Couché 80 g/m²",
+   "designation_avant": "80gsm Coated Paper",
+   "ml_std": 15400.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:couche_105",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Couché",
+   "designation": "Couché 105 g/m²",
+   "designation_avant": null,
+   "ml_std": 8000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:couche_170",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Couché",
+   "designation": "Couché 170 g/m²",
+   "designation_avant": null,
+   "ml_std": 4632.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "45",
+   "id": 45,
+   "action": "Reprendre",
+   "categorie": "frontal",
+   "sous_section": "Couché",
+   "designation": "Couché 70 g/m²",
+   "designation_avant": "couché 70gsm satiné",
+   "ml_std": 8587.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:couche_115",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Couché",
+   "designation": "Couché 115 g/m²",
+   "designation_avant": null,
+   "ml_std": 8000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:couche_150",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Couché",
+   "designation": "Couché 150 g/m²",
+   "designation_avant": null,
+   "ml_std": 5600.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:couche_90",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Couché",
+   "designation": "Couché brillant 90 g/m²",
+   "designation_avant": null,
+   "ml_std": 9090.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "46",
+   "id": 46,
+   "action": "Reprendre",
+   "categorie": "frontal",
+   "sous_section": "Couché",
+   "designation": "Couché fluo jaune 90 g/m²",
+   "designation_avant": "couché 90gsm fluo jaune",
+   "ml_std": 12000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:couche_fluo_orange",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Couché",
+   "designation": "Couché fluo orange",
+   "designation_avant": null,
+   "ml_std": 12250.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:couche_fluo_rouge",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Couché",
+   "designation": "Couché fluo rouge",
+   "designation_avant": null,
+   "ml_std": 12250.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:papier_mineral_80",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Couché",
+   "designation": "Papier minéral 80 g/m²",
+   "designation_avant": null,
+   "ml_std": 7809.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:papier_inconnu",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Couché",
+   "designation": "Papier (à identifier)",
+   "designation_avant": null,
+   "ml_std": 10000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:papier_50",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Couché",
+   "designation": "Papier 50 g/m²",
+   "designation_avant": null,
+   "ml_std": 10300.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:film_pp_30",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Synthétique",
+   "designation": "Film PP 30 µm",
+   "designation_avant": null,
+   "ml_std": 12000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:foliplast",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Synthétique",
+   "designation": "Foliplast",
+   "designation_avant": null,
+   "ml_std": 4000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:foliset_100",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Synthétique",
+   "designation": "Foliset 100 µm",
+   "designation_avant": null,
+   "ml_std": 1600.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:foliset_120",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Synthétique",
+   "designation": "Foliset 120 µm",
+   "designation_avant": null,
+   "ml_std": 2200.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:foliset_80",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Synthétique",
+   "designation": "Foliset 80 µm",
+   "designation_avant": null,
+   "ml_std": 1200.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:polyart",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Synthétique",
+   "designation": "Papier synthétique Polyart",
+   "designation_avant": null,
+   "ml_std": 1350.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:pet_120",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Synthétique",
+   "designation": "PET 120 µm",
+   "designation_avant": null,
+   "ml_std": 9053.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:pet_36",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Synthétique",
+   "designation": "PET blanc opaque 36 µm",
+   "designation_avant": null,
+   "ml_std": 7350.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:pp_60",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Synthétique",
+   "designation": "PP 60 µm",
+   "designation_avant": null,
+   "ml_std": 3017.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:pp_65",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Synthétique",
+   "designation": "PP blanc 65 µm",
+   "designation_avant": null,
+   "ml_std": 4000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "51",
+   "id": 51,
+   "action": "Reprendre",
+   "categorie": "frontal",
+   "sous_section": "Synthétique",
+   "designation": "PP blanc mat 120 µm",
+   "designation_avant": "PP blanc mat 120µm",
+   "ml_std": 2400.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "52",
+   "id": 52,
+   "action": "Reprendre",
+   "categorie": "frontal",
+   "sous_section": "Synthétique",
+   "designation": "PP blanc mat 200 µm",
+   "designation_avant": "PP blanc mat 200µm",
+   "ml_std": 2100.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:pp_75",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Synthétique",
+   "designation": "PP blanc mat 75 µm",
+   "designation_avant": null,
+   "ml_std": 5500.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "30",
+   "id": 30,
+   "action": "Reprendre",
+   "categorie": "frontal",
+   "sous_section": "Synthétique",
+   "designation": "PP blanc mat 95 µm",
+   "designation_avant": "PP blanc mat 95µm",
+   "ml_std": 4090.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:pp_brill_100",
+   "id": null,
+   "action": "Créer",
+   "categorie": "frontal",
+   "sous_section": "Synthétique",
+   "designation": "PP blanc brillant 100 µm",
+   "designation_avant": null,
+   "ml_std": 3200.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "93",
+   "id": 93,
+   "action": "Reprendre",
+   "categorie": "frontal",
+   "sous_section": "Synthétique",
+   "designation": "Synthétique (à identifier)",
+   "designation_avant": "Pas de fournisseur",
+   "ml_std": 3000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "87",
+   "id": 87,
+   "action": "Reprendre",
+   "categorie": "glassine",
+   "sous_section": null,
+   "designation": "Glassine blanche non siliconée",
+   "designation_avant": "Mondi",
+   "ml_std": 4500.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:gl_blanche_sil_58",
+   "id": null,
+   "action": "Créer",
+   "categorie": "glassine",
+   "sous_section": null,
+   "designation": "Glassine blanche siliconée 58 g/m²",
+   "designation_avant": null,
+   "ml_std": 12000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:gl_blanche_sil_80",
+   "id": null,
+   "action": "Créer",
+   "categorie": "glassine",
+   "sous_section": null,
+   "designation": "Glassine blanche siliconée 80 g/m²",
+   "designation_avant": null,
+   "ml_std": 10000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:gl_jaune_double",
+   "id": null,
+   "action": "Créer",
+   "categorie": "glassine",
+   "sous_section": null,
+   "designation": "Glassine jaune double siliconée",
+   "designation_avant": null,
+   "ml_std": 12000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "53",
+   "id": 53,
+   "action": "Reprendre",
+   "categorie": "glassine",
+   "sous_section": null,
+   "designation": "Glassine jaune siliconée 58-60 g/m²",
+   "designation_avant": "60gsm glassine jaune siliconné",
+   "ml_std": 18100.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:gl_jaune_45",
+   "id": null,
+   "action": "Créer",
+   "categorie": "glassine",
+   "sous_section": null,
+   "designation": "Glassine jaune siliconée 45 g/m²",
+   "designation_avant": null,
+   "ml_std": 18000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "55",
+   "id": 55,
+   "action": "Reprendre",
+   "categorie": "glassine",
+   "sous_section": null,
+   "designation": "Glassine jaune siliconée 58 g/m², release forte",
+   "designation_avant": "60gsm KAM20 glassine jaune siliconné",
+   "ml_std": 10000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "56",
+   "id": 56,
+   "action": "Reprendre",
+   "categorie": "glassine",
+   "sous_section": null,
+   "designation": "Glassine jaune siliconée 58 g/m², release très faible (pneu)",
+   "designation_avant": "60gsm KAS2 glassine jaune siliconné ITASA",
+   "ml_std": 10000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:gl_non_sil_55",
+   "id": null,
+   "action": "Créer",
+   "categorie": "glassine",
+   "sous_section": null,
+   "designation": "Glassine non siliconée 55 g/m²",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "81",
+   "id": 81,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Complexe adhésif (à identifier)",
+   "designation_avant": "A identifier",
+   "ml_std": 7000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:couche_congel",
+   "id": null,
+   "action": "Créer",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Couché adhésif congélation",
+   "designation_avant": null,
+   "ml_std": 2000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "64",
+   "id": 64,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Couché adhésif enlevable",
+   "designation_avant": "Couché adhésif enlevable",
+   "ml_std": 3000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "61",
+   "id": 61,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Couché adhésif permanent acrylique",
+   "designation_avant": "Couché adhésif permanent acrylique",
+   "ml_std": 11760.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:couche_perm_opaque",
+   "id": null,
+   "action": "Créer",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Couché adhésif permanent opaque",
+   "designation_avant": null,
+   "ml_std": 2000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "60",
+   "id": 60,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Couché adhésif permanent",
+   "designation_avant": "Couché adhésif permanent",
+   "ml_std": 2000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "80",
+   "id": 80,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Couché brillant jet d'encre adhésif enlevable",
+   "designation_avant": "Jet Gloss - Avery BG40BR - R5050",
+   "ml_std": 3000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:couche_fluo_perm",
+   "id": null,
+   "action": "Créer",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Couché fluo adhésif permanent",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:couche_jet_mat_perm",
+   "id": null,
+   "action": "Créer",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Couché jet d'encre mat adhésif permanent",
+   "designation_avant": null,
+   "ml_std": 1100.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "63",
+   "id": 63,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Couché pharma adhésif permanent",
+   "designation_avant": "Couché Pharma adhésif permanent acrylique",
+   "ml_std": 1800.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:papier_jet_enlev",
+   "id": null,
+   "action": "Créer",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Papier jet d'encre mat adhésif enlevable",
+   "designation_avant": null,
+   "ml_std": 3000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "84",
+   "id": 84,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "PE blanc adhésif permanent",
+   "designation_avant": "Frimpeks",
+   "ml_std": 3000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:pe_enlev",
+   "id": null,
+   "action": "Créer",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "PE blanc adhésif enlevable",
+   "designation_avant": null,
+   "ml_std": 2010.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "58",
+   "id": 58,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "PET blanc adhésif permanent",
+   "designation_avant": "PET blanc adhésif permanent",
+   "ml_std": 2000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "62",
+   "id": 62,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "PET argenté adhésif permanent",
+   "designation_avant": "PET argenté adhésif permanent",
+   "ml_std": 3500.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "82",
+   "id": 82,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "PLA transparent adhésif permanent",
+   "designation_avant": "Avery",
+   "ml_std": 1000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:pp_blanc_perm",
+   "id": null,
+   "action": "Créer",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "PP blanc adhésif permanent",
+   "designation_avant": null,
+   "ml_std": 2000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:pp_ultra_enlev",
+   "id": null,
+   "action": "Créer",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "PP blanc adhésif ultra-enlevable",
+   "designation_avant": null,
+   "ml_std": 1060.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:pp_blanc_enlev",
+   "id": null,
+   "action": "Créer",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "PP blanc adhésif enlevable",
+   "designation_avant": null,
+   "ml_std": 4000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "59",
+   "id": 59,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "PP blanc adhésif pneu",
+   "designation_avant": "PP blanc 90µm adhésif pneu",
+   "ml_std": 6090.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "73",
+   "id": 73,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "PP blanc thermique 95 µm adhésif permanent acrylique",
+   "designation_avant": "PP blanc thermique 95µ adhésif permanent acrylique",
+   "ml_std": 8000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "65",
+   "id": 65,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "PP transparent adhésif permanent acrylique",
+   "designation_avant": "PP transparent permanent acrylique",
+   "ml_std": 3500.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "66",
+   "id": 66,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Thermique Eco adhésif congélation",
+   "designation_avant": "Thermique Eco adhésif congélation",
+   "ml_std": 6000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "67",
+   "id": 67,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Thermique Eco adhésif enlevable",
+   "designation_avant": "Thermique Eco adhésif enlevable",
+   "ml_std": 3000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:therm_hydro",
+   "id": null,
+   "action": "Créer",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Thermique Eco adhésif hydrosoluble",
+   "designation_avant": null,
+   "ml_std": 4000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "71",
+   "id": 71,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Thermique Eco adhésif permanent",
+   "designation_avant": "Thermique Eco adhésif permanent",
+   "ml_std": 10000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:therm_pro_congel",
+   "id": null,
+   "action": "Créer",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Thermique Pro adhésif congélation",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "68",
+   "id": 68,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Thermique Pro adhésif permanent acrylique",
+   "designation_avant": "Thermique pro adhésif permanent acrylique",
+   "ml_std": 2300.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "72",
+   "id": 72,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Thermique Pro adhésif permanent",
+   "designation_avant": "Thermique Pro adhésif permanent",
+   "ml_std": 5000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:therm_prot_enlev",
+   "id": null,
+   "action": "Créer",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Thermique Protégé adhésif enlevable",
+   "designation_avant": null,
+   "ml_std": 1000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:therm_prot_pneu",
+   "id": null,
+   "action": "Créer",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Thermique Protégé adhésif pneu",
+   "designation_avant": null,
+   "ml_std": 2000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "69",
+   "id": 69,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Vélin adhésif enlevable",
+   "designation_avant": "Velin adhésif enlevable",
+   "ml_std": 4000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "70",
+   "id": 70,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Vélin adhésif permanent",
+   "designation_avant": "Velin adhésif permanent",
+   "ml_std": 4000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "57",
+   "id": 57,
+   "action": "Reprendre",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Vélin Extra adhésif permanent",
+   "designation_avant": "Velin adhésif permanent P1000",
+   "ml_std": 9800.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:velin_congel",
+   "id": null,
+   "action": "Créer",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Vélin adhésif congélation",
+   "designation_avant": null,
+   "ml_std": 2000.0,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:b213128",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton F&C",
+   "designation": "Couvercle 213 x 128 x 80 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "8",
+   "id": 8,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Boîte 305 x 210 x 80 mm fond & couvercle",
+   "designation_avant": "305 x 210 x 80 F&C",
+   "ml_std": null,
+   "unites_par_palette": 400.0
+  },
+  {
+   "cle": "N:b310100",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton F&C",
+   "designation": "Couvercle 310 x 100 x 135 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:b205108",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton F&C",
+   "designation": "Boîte 205 x 108 x 270 mm fond",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": 400.0
+  },
+  {
+   "cle": "N:b223f",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton F&C",
+   "designation": "Boîte 223 x 308 x 191 mm fond",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:b223fc",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton F&C",
+   "designation": "Boîte 223 x 308 x 191 mm fond & couvercle",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "9",
+   "id": 9,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Boîte 305 x 215 x 150 mm fond & couvercle",
+   "designation_avant": "305 x 215 x 150 F&C",
+   "ml_std": null,
+   "unites_par_palette": 400.0
+  },
+  {
+   "cle": "N:b305230",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton F&C",
+   "designation": "Boîte 305 x 215 x 230 mm fond",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": 400.0
+  },
+  {
+   "cle": "75",
+   "id": 75,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Boîte 305 x 215 x 80 mm fond & couvercle",
+   "designation_avant": "305 x 215 x 80 mm",
+   "ml_std": null,
+   "unites_par_palette": 500.0
+  },
+  {
+   "cle": "N:b305270",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton F&C",
+   "designation": "Boîte 305 x 270 x 80 mm fond",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": 400.0
+  },
+  {
+   "cle": "N:b310170",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton F&C",
+   "designation": "Couvercle 310 x 170 x 135 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "10",
+   "id": 10,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Boîte 315 x 235 x 80 mm fond & couvercle",
+   "designation_avant": "315 x 235 x 80 F&C",
+   "ml_std": null,
+   "unites_par_palette": 400.0
+  },
+  {
+   "cle": "N:c200160",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 200 x 200 x 160 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:c211210",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 211 x 210 x 120 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "74",
+   "id": 74,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Carton 385 x 385 x 111 mm",
+   "designation_avant": "385 x 385 x 111 mm",
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:c200115",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 200 x 160 x 115 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "76",
+   "id": 76,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Carton 200 x 200 x 57 mm",
+   "designation_avant": "200 x 200 x 57 mm",
+   "ml_std": null,
+   "unites_par_palette": 1150.0
+  },
+  {
+   "cle": "N:c230",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 230 x 220 x 190 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:c245",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 245 x 235 x 305 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": 500.0
+  },
+  {
+   "cle": "N:c250130",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 250 x 130 x 130 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:c250150",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 250 x 150 x 150 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:c270",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 270 x 255 x 300 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "7",
+   "id": 7,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Carton 275 x 255 x 300 mm",
+   "designation_avant": "275 x 255 x 300 mm",
+   "ml_std": null,
+   "unites_par_palette": 260.0
+  },
+  {
+   "cle": "N:c290",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 290 x 385 x 200 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:c300120",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 300 x 300 x 120 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:c300170",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 300 x 300 x 170 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": 500.0
+  },
+  {
+   "cle": "N:c30087",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 300 x 300 x 87 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": 450.0
+  },
+  {
+   "cle": "N:c310168",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 310 x 168 x 90 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:c310215",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 310 x 215 x 110 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:c310220",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 310 x 220 x 250 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "11",
+   "id": 11,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Carton 320 x 130 x 190 mm",
+   "designation_avant": "320 x 130 x 190 mm",
+   "ml_std": null,
+   "unites_par_palette": 260.0
+  },
+  {
+   "cle": "N:c350220",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 350 x 220 x 200 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "41",
+   "id": 41,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Carton 350 x 320 x 111 mm",
+   "designation_avant": "350 x 320 x 111 mm",
+   "ml_std": null,
+   "unites_par_palette": 260.0
+  },
+  {
+   "cle": "N:c360",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 360 x 170 x 150 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "12",
+   "id": 12,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Carton 385 x 320 x 79 mm",
+   "designation_avant": "385 x 320 x 79 mm",
+   "ml_std": null,
+   "unites_par_palette": 260.0
+  },
+  {
+   "cle": "13",
+   "id": 13,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Carton 385 x 385 x 105 mm",
+   "designation_avant": "385 X 385 X 105 mm",
+   "ml_std": null,
+   "unites_par_palette": 260.0
+  },
+  {
+   "cle": "14",
+   "id": 14,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Carton 385 x 385 x 120 mm",
+   "designation_avant": "385 x 385 x 120 mm",
+   "ml_std": null,
+   "unites_par_palette": 260.0
+  },
+  {
+   "cle": "15",
+   "id": 15,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Carton 385 x 385 x 135 mm",
+   "designation_avant": "385 x 385 x 135 mm",
+   "ml_std": null,
+   "unites_par_palette": 260.0
+  },
+  {
+   "cle": "16",
+   "id": 16,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Carton 385 x 385 x 152 mm",
+   "designation_avant": "385 x 385 x 152 mm",
+   "ml_std": null,
+   "unites_par_palette": 260.0
+  },
+  {
+   "cle": "17",
+   "id": 17,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Carton 385 x 385 x 170 mm",
+   "designation_avant": "385 x 385 x 170 mm",
+   "ml_std": null,
+   "unites_par_palette": 260.0
+  },
+  {
+   "cle": "42",
+   "id": 42,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Carton 385 x 385 x 180 mm",
+   "designation_avant": "385 x 385 x 180 mm",
+   "ml_std": null,
+   "unites_par_palette": 260.0
+  },
+  {
+   "cle": "18",
+   "id": 18,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Carton 385 x 385 x 208 mm",
+   "designation_avant": "385 x 385 x 208 mm",
+   "ml_std": null,
+   "unites_par_palette": 260.0
+  },
+  {
+   "cle": "19",
+   "id": 19,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Carton 385 x 385 x 260 mm",
+   "designation_avant": "385 x 385 x 260 mm",
+   "ml_std": null,
+   "unites_par_palette": 260.0
+  },
+  {
+   "cle": "20",
+   "id": 20,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Carton 385 x 385 x 311 mm",
+   "designation_avant": "385 x 385 x 311 mm",
+   "ml_std": null,
+   "unites_par_palette": 260.0
+  },
+  {
+   "cle": "21",
+   "id": 21,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Carton 385 x 385 x 54 mm",
+   "designation_avant": "385 x 385 x 54 mm",
+   "ml_std": null,
+   "unites_par_palette": 260.0
+  },
+  {
+   "cle": "22",
+   "id": 22,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Carton 385 x 385 x 83 mm",
+   "designation_avant": "385 x 385 x 83 mm",
+   "ml_std": null,
+   "unites_par_palette": 260.0
+  },
+  {
+   "cle": "23",
+   "id": 23,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Carton 385 x 385 x 90 mm",
+   "designation_avant": "385 x 385 x 90 mm",
+   "ml_std": null,
+   "unites_par_palette": 260.0
+  },
+  {
+   "cle": "N:c400170",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 400 x 300 x 170 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": 360.0
+  },
+  {
+   "cle": "N:c400200",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 400 x 300 x 200 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": 500.0
+  },
+  {
+   "cle": "N:c421",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Carton 421 x 154 x 140 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": 150.0
+  },
+  {
+   "cle": "N:raja",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Carton standard",
+   "designation": "Rajaposte brun 31 x 21,5 x 10 cm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "6",
+   "id": 6,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Conteneur grand box 1180 x 780 x 1070 mm",
+   "designation_avant": "1180 x 780 x 1070 mm",
+   "ml_std": null,
+   "unites_par_palette": 100.0
+  },
+  {
+   "cle": "77",
+   "id": 77,
+   "action": "Reprendre",
+   "categorie": "carton",
+   "sous_section": null,
+   "designation": "Intercalaire grand box 1175 x 775 mm",
+   "designation_avant": "Format 1175X775 mm - PC20T",
+   "ml_std": null,
+   "unites_par_palette": 500.0
+  },
+  {
+   "cle": "N:cale_a4",
+   "id": null,
+   "action": "Créer",
+   "categorie": "carton",
+   "sous_section": "Intercalaire",
+   "designation": "Intercalaire boîte A4 150 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "2",
+   "id": 2,
+   "action": "Reprendre",
+   "categorie": "mandrin",
+   "sous_section": null,
+   "designation": "Tube carton Ø 25 mm, Lg 1 500 mm, ép. 2,5 mm",
+   "designation_avant": "Tube Ø 25 mm, Lg 1 500 mm, épaisseur 2,5 mm, Palette de 1 505 tubes",
+   "ml_std": null,
+   "unites_par_palette": 1505.0
+  },
+  {
+   "cle": "3",
+   "id": 3,
+   "action": "Reprendre",
+   "categorie": "mandrin",
+   "sous_section": null,
+   "designation": "Tube carton Ø 40 mm, Lg 1 500 mm, ép. 4 mm",
+   "designation_avant": "Tube Ø 40 mm, Lg 1 500 mm, épaisseur 4 mm, Palette de 990 tubes",
+   "ml_std": null,
+   "unites_par_palette": 990.0
+  },
+  {
+   "cle": "4",
+   "id": 4,
+   "action": "Reprendre",
+   "categorie": "mandrin",
+   "sous_section": null,
+   "designation": "Tube carton Ø 76 mm, Lg 1 500 mm, ép. 4 mm",
+   "designation_avant": "Tube de 76 mm, Lg 1 500 mm, épaisseur 4 mm, Palette de 338 tubes",
+   "ml_std": null,
+   "unites_par_palette": 325.0
+  },
+  {
+   "cle": "5",
+   "id": 5,
+   "action": "Reprendre",
+   "categorie": "mandrin",
+   "sous_section": null,
+   "designation": "Tube carton Ø 76 mm, Lg 1 500 mm, ép. 7 mm",
+   "designation_avant": "Tube Ø 76 mm, Lg 1 500 mm, épaisseur 7 mm, Palette de 231 tubes",
+   "ml_std": null,
+   "unites_par_palette": 231.0
+  },
+  {
+   "cle": "N:bg152",
+   "id": null,
+   "action": "Créer",
+   "categorie": "mandrin",
+   "sous_section": "Bague",
+   "designation": "Bague Ø 152,4 mm, Lg 151,7 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "78",
+   "id": 78,
+   "action": "Reprendre",
+   "categorie": "mandrin",
+   "sous_section": null,
+   "designation": "Bague Ø 19 mm",
+   "designation_avant": "Bague Ø 19 mm, en vrac",
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:bg19_108",
+   "id": null,
+   "action": "Créer",
+   "categorie": "mandrin",
+   "sous_section": "Bague",
+   "designation": "Bague Ø 19 mm, Lg 108,7 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:bg195_106",
+   "id": null,
+   "action": "Créer",
+   "categorie": "mandrin",
+   "sous_section": "Bague",
+   "designation": "Bague Ø 19,5 mm, Lg 106,2 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:bg195_53",
+   "id": null,
+   "action": "Créer",
+   "categorie": "mandrin",
+   "sous_section": "Bague",
+   "designation": "Bague Ø 19,5 mm, Lg 53,7 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:bg195_57",
+   "id": null,
+   "action": "Créer",
+   "categorie": "mandrin",
+   "sous_section": "Bague",
+   "designation": "Bague Ø 19,5 mm, Lg 57,2 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:bg40_106",
+   "id": null,
+   "action": "Créer",
+   "categorie": "mandrin",
+   "sous_section": "Bague",
+   "designation": "Bague Ø 40 mm, Lg 106,75 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": 365.0
+  },
+  {
+   "cle": "N:bg40_18",
+   "id": null,
+   "action": "Créer",
+   "categorie": "mandrin",
+   "sous_section": "Bague",
+   "designation": "Bague Ø 40 mm, Lg 18,6 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:bg40_56",
+   "id": null,
+   "action": "Créer",
+   "categorie": "mandrin",
+   "sous_section": "Bague",
+   "designation": "Bague Ø 40 mm, Lg 56,7 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "N:bg40_70",
+   "id": null,
+   "action": "Créer",
+   "categorie": "mandrin",
+   "sous_section": "Bague",
+   "designation": "Bague Ø 40 mm, Lg 70,92 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": 500.0
+  },
+  {
+   "cle": "N:bg76_28",
+   "id": null,
+   "action": "Créer",
+   "categorie": "mandrin",
+   "sous_section": "Bague",
+   "designation": "Bague Ø 76 mm, Lg 28,7 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": 380.0
+  },
+  {
+   "cle": "N:bg76_79",
+   "id": null,
+   "action": "Créer",
+   "categorie": "mandrin",
+   "sous_section": "Bague",
+   "designation": "Bague Ø 76 mm, Lg 79,8 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": 155.0
+  },
+  {
+   "cle": "N:bg76_91",
+   "id": null,
+   "action": "Créer",
+   "categorie": "mandrin",
+   "sous_section": "Bague",
+   "designation": "Bague Ø 76 mm, Lg 91,5 mm",
+   "designation_avant": null,
+   "ml_std": null,
+   "unites_par_palette": 125.0
+  },
+  {
+   "cle": "24",
+   "id": 24,
+   "action": "Reprendre",
+   "categorie": "adhesif",
+   "sous_section": null,
+   "designation": "Adhésif thermofusible permanent",
+   "designation_avant": "Adhésif permanent 2028Y (JAOUR)",
+   "ml_std": null,
+   "unites_par_palette": 1200.0
+  },
+  {
+   "cle": "26",
+   "id": 26,
+   "action": "Reprendre",
+   "categorie": "adhesif",
+   "sous_section": null,
+   "designation": "Adhésif thermofusible congélation",
+   "designation_avant": "Adhésif congélation (JAOUR)",
+   "ml_std": null,
+   "unites_par_palette": 1200.0
+  },
+  {
+   "cle": "29",
+   "id": 29,
+   "action": "Reprendre",
+   "categorie": "adhesif",
+   "sous_section": null,
+   "designation": "Adhésif thermofusible permanent, pains de 1 kg",
+   "designation_avant": "Adhésif permanent 1225 (MELTAVIS)",
+   "ml_std": null,
+   "unites_par_palette": 1200.0
+  },
+  {
+   "cle": "25",
+   "id": 25,
+   "action": "Reprendre",
+   "categorie": "adhesif",
+   "sous_section": null,
+   "designation": "Adhésif thermofusible spécial pneu",
+   "designation_avant": "Adhésif pneu (JAOUR)",
+   "ml_std": null,
+   "unites_par_palette": 1200.0
+  },
+  {
+   "cle": "27",
+   "id": 27,
+   "action": "Reprendre",
+   "categorie": "adhesif",
+   "sous_section": null,
+   "designation": "Adhésif thermofusible enlevable fort",
+   "designation_avant": "Adhésif enlevable fort 1408 (MELTAVIS)",
+   "ml_std": null,
+   "unites_par_palette": 1300.0
+  },
+  {
+   "cle": "28",
+   "id": 28,
+   "action": "Reprendre",
+   "categorie": "adhesif",
+   "sous_section": null,
+   "designation": "Adhésif thermofusible enlevable léger",
+   "designation_avant": "Adhésif enlevable léger (BOSTIK)",
+   "ml_std": null,
+   "unites_par_palette": 420.0
+  },
+  {
+   "cle": "39",
+   "id": 39,
+   "action": "Reprendre",
+   "categorie": "palette",
+   "sous_section": null,
+   "designation": "Palette Europe 800 x 1200 mm",
+   "designation_avant": "800 mm x 1200 mm",
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "40",
+   "id": 40,
+   "action": "Reprendre",
+   "categorie": "palette",
+   "sous_section": null,
+   "designation": "Palette perdue 800 x 1200 mm",
+   "designation_avant": "800 mm x 1200 mm",
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "35",
+   "id": 35,
+   "action": "Stock à zéro",
+   "categorie": "frontal",
+   "sous_section": "Thermiques",
+   "designation": "Thermique bicolore",
+   "designation_avant": "Thermique Bicolore",
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "49",
+   "id": 49,
+   "action": "Désactiver",
+   "categorie": "frontal",
+   "sous_section": "Thermiques",
+   "designation": "Thermique Eco Torraspapel",
+   "designation_avant": "Thermique Eco Torraspapel",
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "54",
+   "id": 54,
+   "action": "Désactiver",
+   "categorie": "glassine",
+   "sous_section": null,
+   "designation": "60gsm glassine jaune siliconné ITASA",
+   "designation_avant": "60gsm glassine jaune siliconné ITASA",
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "83",
+   "id": 83,
+   "action": "Désactiver",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Avery",
+   "designation_avant": "Avery",
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "85",
+   "id": 85,
+   "action": "Désactiver",
+   "categorie": "glassine",
+   "sous_section": null,
+   "designation": "Pasaca",
+   "designation_avant": "Pasaca",
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "86",
+   "id": 86,
+   "action": "Désactiver",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "SIFA 232",
+   "designation_avant": "SIFA 232",
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "88",
+   "id": 88,
+   "action": "Désactiver",
+   "categorie": "frontal",
+   "sous_section": "Thermiques",
+   "designation": "L420 - Fournisseur a trouver (Jujo?)",
+   "designation_avant": "L420 - Fournisseur a trouver (Jujo?)",
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "90",
+   "id": 90,
+   "action": "Désactiver",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "19gsm",
+   "designation_avant": "19gsm",
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "92",
+   "id": 92,
+   "action": "Désactiver",
+   "categorie": "complexe",
+   "sous_section": null,
+   "designation": "Sifa Production - Laize a modifier 220",
+   "designation_avant": "Sifa Production - Laize a modifier 220",
+   "ml_std": null,
+   "unites_par_palette": null
+  },
+  {
+   "cle": "94",
+   "id": 94,
+   "action": "Désactiver",
+   "categorie": "frontal",
+   "sous_section": "Velin",
+   "designation": "Fournisseur a indentifier avec code article",
+   "designation_avant": "Fournisseur a indentifier avec code article",
+   "ml_std": null,
+   "unites_par_palette": null
+  }
+ ],
+ "variantes": [
+  {
+   "cle": "N:pp_therm_transp",
+   "fournisseur_id": null,
+   "libelle_technique": "PP thermique transparent A-65T (Durico)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 6000.0,
+   "principal": true
+  },
+  {
+   "cle": "32",
+   "fournisseur_id": null,
+   "libelle_technique": "Thermique (non identifié)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 11397.0,
+   "principal": false
+  },
+  {
+   "cle": "32",
+   "fournisseur_id": 77,
+   "libelle_technique": "Thermique 75 g/m² (Jujo)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 4000.0,
+   "principal": false
+  },
+  {
+   "cle": "31",
+   "fournisseur_id": 77,
+   "libelle_technique": "Thermique AL60KT-LH (Jujo)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 2000.0,
+   "principal": false
+  },
+  {
+   "cle": "32",
+   "fournisseur_id": 227,
+   "libelle_technique": "Thermique Eco 70 g/m² (R1101), FSC — SHENZHEN LIKEXIN INDUSTRIAL Co.",
+   "ref_fournisseur": "R1101",
+   "rvgi_code1": "1183",
+   "rvgi_code2": "0004",
+   "rvgi_type_code": 7,
+   "ml_bobine": 12000.0,
+   "principal": true
+  },
+  {
+   "cle": "32",
+   "fournisseur_id": 12,
+   "libelle_technique": "Thermique Eco 70 g/m² KP460 BPA free, FSC — Kanzan",
+   "ref_fournisseur": "KP460 BPA free",
+   "rvgi_code1": "574",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 7,
+   "ml_bobine": 8150.0,
+   "principal": false
+  },
+  {
+   "cle": "32",
+   "fournisseur_id": 220,
+   "libelle_technique": "Thermique Eco 70 g/m² Termax TFS, FSC — réf. fournisseur TERMAX TFS 70g FSC — TORRASPAPEL ESPAGNE",
+   "ref_fournisseur": "TERMAX TFS 70g FSC",
+   "rvgi_code1": "1216",
+   "rvgi_code2": "0003",
+   "rvgi_type_code": 7,
+   "ml_bobine": 10000.0,
+   "principal": false
+  },
+  {
+   "cle": "32",
+   "fournisseur_id": null,
+   "libelle_technique": "Thermique Eco 70 g/m², FSC",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 7,
+   "ml_bobine": 7650.0,
+   "principal": false
+  },
+  {
+   "cle": "32",
+   "fournisseur_id": 77,
+   "libelle_technique": "Thermique Eco blanc AP58KM, FSC — réf. fournisseur AP58KMAS — Jujo Thermal Ltd",
+   "ref_fournisseur": "AP58KMAS",
+   "rvgi_code1": "1064",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 7,
+   "ml_bobine": 8000.0,
+   "principal": false
+  },
+  {
+   "cle": "N:therm_eco_135",
+   "fournisseur_id": 12,
+   "libelle_technique": "Thermique Eco KPR-412 135 g/m², FSC — Kanzan",
+   "ref_fournisseur": "KPR-412",
+   "rvgi_code1": "574",
+   "rvgi_code2": "0004",
+   "rvgi_type_code": 7,
+   "ml_bobine": 2500.0,
+   "principal": true
+  },
+  {
+   "cle": "32",
+   "fournisseur_id": 15,
+   "libelle_technique": "Thermique Eco T1234, FSC — Mitsubishi",
+   "ref_fournisseur": "T1234",
+   "rvgi_code1": "1203",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 7,
+   "ml_bobine": 4000.0,
+   "principal": false
+  },
+  {
+   "cle": "79",
+   "fournisseur_id": 15,
+   "libelle_technique": "Thermique LF6056 (Mitsubishi)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 9500.0,
+   "principal": true
+  },
+  {
+   "cle": "50",
+   "fournisseur_id": null,
+   "libelle_technique": "Thermique Pro 108 g/m², FSC",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1",
+   "rvgi_code2": "0007",
+   "rvgi_type_code": 7,
+   "ml_bobine": 2368.0,
+   "principal": true
+  },
+  {
+   "cle": "31",
+   "fournisseur_id": null,
+   "libelle_technique": "Thermique Pro 70 g/m², FSC",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 7,
+   "ml_bobine": 12000.0,
+   "principal": false
+  },
+  {
+   "cle": "89",
+   "fournisseur_id": 17,
+   "libelle_technique": "Thermique Pro blanc 130 LE+, FSC — Ricoh",
+   "ref_fournisseur": "130 LE+",
+   "rvgi_code1": "1065",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 7,
+   "ml_bobine": 8250.0,
+   "principal": true
+  },
+  {
+   "cle": "31",
+   "fournisseur_id": 12,
+   "libelle_technique": "Thermique Pro blanc 72 g/m² KLS 46, FSC — Kanzan",
+   "ref_fournisseur": "KLS 46",
+   "rvgi_code1": "574",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 7,
+   "ml_bobine": 3000.0,
+   "principal": false
+  },
+  {
+   "cle": "31",
+   "fournisseur_id": 227,
+   "libelle_technique": "Thermique Pro TOP 70 g/m² (R1001), FSC — SHENZHEN LIKEXIN INDUSTRIAL Co.",
+   "ref_fournisseur": "R1001",
+   "rvgi_code1": "1183",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 7,
+   "ml_bobine": 12000.0,
+   "principal": true
+  },
+  {
+   "cle": "34",
+   "fournisseur_id": 227,
+   "libelle_technique": "Thermique Pro TOP 95 g/m² (R9501), FSC — SHENZHEN LIKEXIN INDUSTRIAL Co.",
+   "ref_fournisseur": "R9501",
+   "rvgi_code1": "1183",
+   "rvgi_code2": "0005",
+   "rvgi_type_code": 7,
+   "ml_bobine": 5000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:therm_prot_105",
+   "fournisseur_id": 220,
+   "libelle_technique": "Thermique Protégé 105 g/m² Termax TC30X, FSC — réf. fournisseur Termax TC30X 105 FSC — TORRASPAPEL ESPAGNE",
+   "ref_fournisseur": "Termax TC30X 105 FSC",
+   "rvgi_code1": "1216",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 7,
+   "ml_bobine": 6000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:therm_prot_57",
+   "fournisseur_id": 12,
+   "libelle_technique": "Thermique Protégé 57 g/m² KLS 44B, FSC — Kanzan",
+   "ref_fournisseur": "KLS 44B",
+   "rvgi_code1": "574",
+   "rvgi_code2": "0005",
+   "rvgi_type_code": 7,
+   "ml_bobine": 10000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:therm_prot_57",
+   "fournisseur_id": 12,
+   "libelle_technique": "Thermique Protégé KL-LI 45 (Kanzan)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 4500.0,
+   "principal": false
+  },
+  {
+   "cle": "47",
+   "fournisseur_id": null,
+   "libelle_technique": "Vélin 60 g/m²",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 3629.0,
+   "principal": false
+  },
+  {
+   "cle": "33",
+   "fournisseur_id": null,
+   "libelle_technique": "Vélin 70 g/m²",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 6000.0,
+   "principal": false
+  },
+  {
+   "cle": "33",
+   "fournisseur_id": 4,
+   "libelle_technique": "Vélin mat blanc 68 g/m² Etiwell, FSC — réf. fournisseur ETIWELL 068 — Burgo / Mosaico",
+   "ref_fournisseur": "ETIWELL 068",
+   "rvgi_code1": "1091",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 5,
+   "ml_bobine": 12600.0,
+   "principal": true
+  },
+  {
+   "cle": "47",
+   "fournisseur_id": 4,
+   "libelle_technique": "Vélin mat blanc Etimatt 62 g/m², FSC — réf. fournisseur ETI-MATT TT 062 — Burgo / Mosaico",
+   "ref_fournisseur": "ETI-MATT TT 062",
+   "rvgi_code1": "1091",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 5,
+   "ml_bobine": 12600.0,
+   "principal": true
+  },
+  {
+   "cle": "N:velin_80",
+   "fournisseur_id": 4,
+   "libelle_technique": "Vélin mat blanc Etimatt 80 g/m², FSC — réf. fournisseur ETI Matt TT 80g — Burgo / Mosaico",
+   "ref_fournisseur": "ETI Matt TT 80g",
+   "rvgi_code1": "1091",
+   "rvgi_code2": "0004",
+   "rvgi_type_code": 5,
+   "ml_bobine": 5989.0,
+   "principal": true
+  },
+  {
+   "cle": "48",
+   "fournisseur_id": 227,
+   "libelle_technique": "Vélin teinté jaune fluo 70 g/m², FSC — réf. fournisseur S7012 — SHENZHEN LIKEXIN INDUSTRIAL Co.",
+   "ref_fournisseur": "S7012",
+   "rvgi_code1": "1183",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 5,
+   "ml_bobine": 12000.0,
+   "principal": true
+  },
+  {
+   "cle": "36",
+   "fournisseur_id": null,
+   "libelle_technique": "Couché (grammage non noté)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 15238.0,
+   "principal": false
+  },
+  {
+   "cle": "36",
+   "fournisseur_id": 172,
+   "libelle_technique": "Couché (UPM)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 8000.0,
+   "principal": false
+  },
+  {
+   "cle": "N:couche_105",
+   "fournisseur_id": 172,
+   "libelle_technique": "Couché 105 g/m² (UPM)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 8000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:couche_170",
+   "fournisseur_id": 3,
+   "libelle_technique": "Couché 170 g/m² Royal Roto (Feys)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 4632.0,
+   "principal": false
+  },
+  {
+   "cle": "45",
+   "fournisseur_id": 3,
+   "libelle_technique": "Couché 70 g/m² Galerie Brite Plus (Feys)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 8587.0,
+   "principal": false
+  },
+  {
+   "cle": "36",
+   "fournisseur_id": null,
+   "libelle_technique": "Couché 80 g/m²",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 10000.0,
+   "principal": false
+  },
+  {
+   "cle": "N:couche_115",
+   "fournisseur_id": 63,
+   "libelle_technique": "Couché blanc 115 g/m², FSC — TORRASPAPEL FRANCE",
+   "ref_fournisseur": null,
+   "rvgi_code1": "982",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 6,
+   "ml_bobine": 8000.0,
+   "principal": true
+  },
+  {
+   "cle": "36",
+   "fournisseur_id": 4,
+   "libelle_technique": "Couché blanc brillant Etilux 80 g/m², FSC — réf. fournisseur ETILUX 080 — Burgo / Mosaico",
+   "ref_fournisseur": "ETILUX 080",
+   "rvgi_code1": "1091",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 6,
+   "ml_bobine": 15500.0,
+   "principal": true
+  },
+  {
+   "cle": "N:couche_150",
+   "fournisseur_id": 63,
+   "libelle_technique": "Couché blanc mat 150 g/m² G-Print Silk, FSC — TORRASPAPEL FRANCE",
+   "ref_fournisseur": null,
+   "rvgi_code1": "982",
+   "rvgi_code2": "0003",
+   "rvgi_type_code": 6,
+   "ml_bobine": 2000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:couche_170",
+   "fournisseur_id": 63,
+   "libelle_technique": "Couché blanc mat 170 g/m² G-Print Silk, FSC — TORRASPAPEL FRANCE",
+   "ref_fournisseur": null,
+   "rvgi_code1": "982",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 6,
+   "ml_bobine": 4000.0,
+   "principal": true
+  },
+  {
+   "cle": "36",
+   "fournisseur_id": null,
+   "libelle_technique": "Couché brillant",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 3000.0,
+   "principal": false
+  },
+  {
+   "cle": "N:couche_90",
+   "fournisseur_id": 3,
+   "libelle_technique": "Couché brillant 90 g/m² Royal Roto (Feys)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 9090.0,
+   "principal": true
+  },
+  {
+   "cle": "46",
+   "fournisseur_id": 10,
+   "libelle_technique": "Couché jaune fluo 90 g/m², FSC — réf. fournisseur SuniFluo-Fluo 90g-Jonquille — Guyenne",
+   "ref_fournisseur": "SuniFluo-Fluo 90g-Jonquille",
+   "rvgi_code1": "1192",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 6,
+   "ml_bobine": 9000.0,
+   "principal": true
+  },
+  {
+   "cle": "45",
+   "fournisseur_id": 4,
+   "libelle_technique": "Couché LabelCoat 70 g/m² (UPM) — Burgo / Mosaico",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1091",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 6,
+   "ml_bobine": 8000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:couche_150",
+   "fournisseur_id": null,
+   "libelle_technique": "Couché satiné 150 g/m² G-Silk (Arctic Paper)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 5600.0,
+   "principal": false
+  },
+  {
+   "cle": "N:couche_fluo_orange",
+   "fournisseur_id": 77,
+   "libelle_technique": "Papier couché orange fluo, FSC — Jujo Thermal Ltd",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1064",
+   "rvgi_code2": "0003",
+   "rvgi_type_code": 6,
+   "ml_bobine": 12250.0,
+   "principal": true
+  },
+  {
+   "cle": "N:couche_fluo_rouge",
+   "fournisseur_id": 77,
+   "libelle_technique": "Papier couché rouge fluo, FSC — Jujo Thermal Ltd",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1064",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 6,
+   "ml_bobine": 12250.0,
+   "principal": true
+  },
+  {
+   "cle": "N:papier_mineral_80",
+   "fournisseur_id": null,
+   "libelle_technique": "Papier Niklaconcept Rock 80 g/m²",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 7809.0,
+   "principal": true
+  },
+  {
+   "cle": "N:papier_inconnu",
+   "fournisseur_id": null,
+   "libelle_technique": "Papier non conforme",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 10000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:papier_50",
+   "fournisseur_id": 3,
+   "libelle_technique": "Papier Ricco Holmen 50 g/m² (Feys)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 10300.0,
+   "principal": true
+  },
+  {
+   "cle": "N:film_pp_30",
+   "fournisseur_id": null,
+   "libelle_technique": "Film 30 µm type 525 (Polinas)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 12000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:foliplast",
+   "fournisseur_id": null,
+   "libelle_technique": "Foliplast",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 4000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:foliset_100",
+   "fournisseur_id": 61,
+   "libelle_technique": "Foliset 100 µm — SODINOR",
+   "ref_fournisseur": null,
+   "rvgi_code1": "910",
+   "rvgi_code2": "0003",
+   "rvgi_type_code": 8,
+   "ml_bobine": 1600.0,
+   "principal": true
+  },
+  {
+   "cle": "N:foliset_120",
+   "fournisseur_id": 61,
+   "libelle_technique": "Foliset 120 µm — SODINOR",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 2200.0,
+   "principal": true
+  },
+  {
+   "cle": "N:foliset_80",
+   "fournisseur_id": 61,
+   "libelle_technique": "Foliset 80 µm — SODINOR",
+   "ref_fournisseur": null,
+   "rvgi_code1": "910",
+   "rvgi_code2": "0004",
+   "rvgi_type_code": 8,
+   "ml_bobine": 1200.0,
+   "principal": true
+  },
+  {
+   "cle": "N:polyart",
+   "fournisseur_id": 183,
+   "libelle_technique": "Polyart (papier synthétique) — ARJOBEX Synthetic Papers",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1178",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": null,
+   "ml_bobine": 1350.0,
+   "principal": true
+  },
+  {
+   "cle": "N:pet_120",
+   "fournisseur_id": null,
+   "libelle_technique": "Polyester 120 µm A470 (JBF Rak)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 9053.0,
+   "principal": true
+  },
+  {
+   "cle": "N:pet_36",
+   "fournisseur_id": 163,
+   "libelle_technique": "Polyester 36 µm blanc opaque",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1156",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": null,
+   "ml_bobine": 7350.0,
+   "principal": true
+  },
+  {
+   "cle": "N:pp_60",
+   "fournisseur_id": null,
+   "libelle_technique": "PP 60 µm LH344 (Jindal)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 3017.0,
+   "principal": true
+  },
+  {
+   "cle": "N:pp_65",
+   "fournisseur_id": 61,
+   "libelle_technique": "PP 65 µm LT500 (Jindal) — SODINOR",
+   "ref_fournisseur": null,
+   "rvgi_code1": "910",
+   "rvgi_code2": "0005",
+   "rvgi_type_code": 8,
+   "ml_bobine": 4000.0,
+   "principal": true
+  },
+  {
+   "cle": "51",
+   "fournisseur_id": 61,
+   "libelle_technique": "PP blanc 120 µm mat 2 faces — SODINOR",
+   "ref_fournisseur": null,
+   "rvgi_code1": "910",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 8,
+   "ml_bobine": 5000.0,
+   "principal": true
+  },
+  {
+   "cle": "52",
+   "fournisseur_id": 179,
+   "libelle_technique": "PP blanc 200 µm mat 2 faces — réf. fournisseur RPH-200 — RIFO PACKAGE MATERIAL",
+   "ref_fournisseur": "RPH-200",
+   "rvgi_code1": "1174",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 8,
+   "ml_bobine": 1500.0,
+   "principal": true
+  },
+  {
+   "cle": "N:pp_75",
+   "fournisseur_id": 179,
+   "libelle_technique": "PP blanc 75 µm mat 1 face (RPG-75) — RIFO PACKAGE MATERIAL",
+   "ref_fournisseur": "RPG-75",
+   "rvgi_code1": "1174",
+   "rvgi_code2": "0003",
+   "rvgi_type_code": 8,
+   "ml_bobine": 5500.0,
+   "principal": true
+  },
+  {
+   "cle": "30",
+   "fournisseur_id": 179,
+   "libelle_technique": "PP blanc 95 µm mat 1 face (RPG-95) — RIFO PACKAGE MATERIAL",
+   "ref_fournisseur": "RPG-95",
+   "rvgi_code1": "1174",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 8,
+   "ml_bobine": 4000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:pp_brill_100",
+   "fournisseur_id": null,
+   "libelle_technique": "PP blanc brillant 100 µm (Jindal 100 LH 243)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 3200.0,
+   "principal": true
+  },
+  {
+   "cle": "93",
+   "fournisseur_id": null,
+   "libelle_technique": "Synthétique (non identifié)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 2588.0,
+   "principal": true
+  },
+  {
+   "cle": "87",
+   "fournisseur_id": null,
+   "libelle_technique": "Glassine blanche non siliconée",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 4500.0,
+   "principal": false
+  },
+  {
+   "cle": "87",
+   "fournisseur_id": 71,
+   "libelle_technique": "Glassine blanche non siliconée (« Sifa 232 ») — MONDI JULICH",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 16000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:gl_blanche_sil_58",
+   "fournisseur_id": null,
+   "libelle_technique": "Glassine blanche siliconée",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 3576.0,
+   "principal": false
+  },
+  {
+   "cle": "N:gl_blanche_sil_58",
+   "fournisseur_id": 71,
+   "libelle_technique": "Glassine blanche siliconée 58 g/m² une face — MONDI JULICH",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1057",
+   "rvgi_code2": "0006",
+   "rvgi_type_code": 4,
+   "ml_bobine": 12000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:gl_blanche_sil_80",
+   "fournisseur_id": 11,
+   "libelle_technique": "Glassine blanche siliconée 80 g/m² KB-M10 (semi-forte), FSC — réf. fournisseur 080/KB - M10 — Itasa",
+   "ref_fournisseur": "080/KB - M10",
+   "rvgi_code1": "552",
+   "rvgi_code2": "0007",
+   "rvgi_type_code": 4,
+   "ml_bobine": 10000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:gl_jaune_double",
+   "fournisseur_id": null,
+   "libelle_technique": "Glassine jaune double siliconée",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 12000.0,
+   "principal": true
+  },
+  {
+   "cle": "53",
+   "fournisseur_id": null,
+   "libelle_technique": "Glassine jaune siliconée (Pasaco)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 13000.0,
+   "principal": false
+  },
+  {
+   "cle": "N:gl_jaune_45",
+   "fournisseur_id": 71,
+   "libelle_technique": "Glassine jaune siliconée 45 g/m² (Label 45), FSC — réf. fournisseur LABEL45 — MONDI JULICH",
+   "ref_fournisseur": "LABEL45",
+   "rvgi_code1": "1057",
+   "rvgi_code2": "0004",
+   "rvgi_type_code": 4,
+   "ml_bobine": 18000.0,
+   "principal": true
+  },
+  {
+   "cle": "53",
+   "fournisseur_id": 71,
+   "libelle_technique": "Glassine jaune siliconée 58 g/m² — MONDI JULICH",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1057",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 4,
+   "ml_bobine": 5000.0,
+   "principal": false
+  },
+  {
+   "cle": "53",
+   "fournisseur_id": 11,
+   "libelle_technique": "Glassine jaune siliconée 58 g/m² KA (release standard), FSC — réf. fournisseur 058/KA — Itasa",
+   "ref_fournisseur": "058/KA",
+   "rvgi_code1": "552",
+   "rvgi_code2": "0008",
+   "rvgi_type_code": 4,
+   "ml_bobine": 16000.0,
+   "principal": false
+  },
+  {
+   "cle": "55",
+   "fournisseur_id": 11,
+   "libelle_technique": "Glassine jaune siliconée 58 g/m² KA-M20 (forte, petit diamètre), FSC — réf. fournisseur 058/KA - M20 — Itasa",
+   "ref_fournisseur": "058/KA - M20",
+   "rvgi_code1": "552",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 4,
+   "ml_bobine": 16000.0,
+   "principal": true
+  },
+  {
+   "cle": "56",
+   "fournisseur_id": 11,
+   "libelle_technique": "Glassine jaune siliconée 58 g/m² KA-S2 (super faible, pneu), FSC — réf. fournisseur 058/KA-S2(E) — Itasa",
+   "ref_fournisseur": "058/KA-S2(E)",
+   "rvgi_code1": "552",
+   "rvgi_code2": "0005",
+   "rvgi_type_code": 4,
+   "ml_bobine": 16000.0,
+   "principal": true
+  },
+  {
+   "cle": "53",
+   "fournisseur_id": null,
+   "libelle_technique": "Glassine jaune siliconée 60 g/m², FSC (fournisseur non identifié)",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 4,
+   "ml_bobine": 18000.0,
+   "principal": false
+  },
+  {
+   "cle": "53",
+   "fournisseur_id": 227,
+   "libelle_technique": "Glassine jaune siliconée 60 g/m², FSC (réf. 1183/0001) — réf. fournisseur G1101 — SHENZHEN LIKEXIN INDUSTRIAL Co.",
+   "ref_fournisseur": "G1101",
+   "rvgi_code1": "1183",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 4,
+   "ml_bobine": 18000.0,
+   "principal": false
+  },
+  {
+   "cle": "53",
+   "fournisseur_id": 160,
+   "libelle_technique": "Glassine jaune siliconée 60 g/m², release 10/15 g (hotmelt), FSC — réf. fournisseur HS CODE: 4811590090 — SUZHOU PIAOZHIHUA",
+   "ref_fournisseur": "HS CODE: 4811590090",
+   "rvgi_code1": "1152",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 4,
+   "ml_bobine": 18000.0,
+   "principal": true
+  },
+  {
+   "cle": "53",
+   "fournisseur_id": 172,
+   "libelle_technique": "Glassine jaune siliconée Golden 58 g/m² (UPM)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 17818.0,
+   "principal": false
+  },
+  {
+   "cle": "N:gl_non_sil_55",
+   "fournisseur_id": 4,
+   "libelle_technique": "Glassine non siliconée 55 g/m² Sigma Silk, FSC — réf. fournisseur SIGMA_SILK_55 — Burgo / Mosaico",
+   "ref_fournisseur": "SIGMA_SILK_55",
+   "rvgi_code1": "1091",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 4,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "81",
+   "fournisseur_id": null,
+   "libelle_technique": "Complexe adhésif (non identifié)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 5143.0,
+   "principal": true
+  },
+  {
+   "cle": "N:couche_congel",
+   "fournisseur_id": 30,
+   "libelle_technique": "Couché 80 g/m² adhésif congélation TT8 / YG60, FSC — réf. fournisseur 8425462363012 — Fedrigoni Manter",
+   "ref_fournisseur": "8425462363012",
+   "rvgi_code1": "629",
+   "rvgi_code2": "0003",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": true
+  },
+  {
+   "cle": "64",
+   "fournisseur_id": 6,
+   "libelle_technique": "Couché adhésif enlevable R400, FSC — réf. fournisseur 652063600 — Frimpeks UK",
+   "ref_fournisseur": "652063600",
+   "rvgi_code1": "1109",
+   "rvgi_code2": "0008",
+   "rvgi_type_code": 3,
+   "ml_bobine": 3800.0,
+   "principal": true
+  },
+  {
+   "cle": "61",
+   "fournisseur_id": 63,
+   "libelle_technique": "Couché adhésif permanent acrylique (A-251), FSC — TORRASPAPEL FRANCE",
+   "ref_fournisseur": null,
+   "rvgi_code1": "982",
+   "rvgi_code2": "0003",
+   "rvgi_type_code": 3,
+   "ml_bobine": 3510.0,
+   "principal": false
+  },
+  {
+   "cle": "61",
+   "fournisseur_id": 6,
+   "libelle_technique": "Couché adhésif permanent acrylique P100, FSC — réf. fournisseur 652061200 — Frimpeks UK",
+   "ref_fournisseur": "652061200",
+   "rvgi_code1": "1109",
+   "rvgi_code2": "0017",
+   "rvgi_type_code": 3,
+   "ml_bobine": 3910.0,
+   "principal": true
+  },
+  {
+   "cle": "N:couche_perm_opaque",
+   "fournisseur_id": 6,
+   "libelle_technique": "Couché adhésif permanent opaque noir (PE141), FSC — réf. fournisseur 651502800 — Frimpeks UK",
+   "ref_fournisseur": "651502800",
+   "rvgi_code1": "1109",
+   "rvgi_code2": "0007",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": true
+  },
+  {
+   "cle": "60",
+   "fournisseur_id": 6,
+   "libelle_technique": "Couché adhésif permanent renforcé H400, FSC — réf. fournisseur 651505700 — Frimpeks UK",
+   "ref_fournisseur": "651505700",
+   "rvgi_code1": "1109",
+   "rvgi_code2": "0009",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": true
+  },
+  {
+   "cle": "80",
+   "fournisseur_id": 1,
+   "libelle_technique": "Couché brillant jet d'encre adhésif enlevable (Jetgloss R5000), FSC — Avery",
+   "ref_fournisseur": null,
+   "rvgi_code1": "107",
+   "rvgi_code2": "0004",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2200.0,
+   "principal": false
+  },
+  {
+   "cle": "80",
+   "fournisseur_id": 1,
+   "libelle_technique": "Couché brillant jet d'encre adhésif enlevable (Jetgloss R5050), FSC — Avery",
+   "ref_fournisseur": null,
+   "rvgi_code1": "107",
+   "rvgi_code2": "0003",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": true
+  },
+  {
+   "cle": "64",
+   "fournisseur_id": null,
+   "libelle_technique": "Couché enlevable teinté argent",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": null,
+   "principal": false
+  },
+  {
+   "cle": "N:couche_fluo_perm",
+   "fournisseur_id": 63,
+   "libelle_technique": "Couché fluo rouge adhésif permanent acrylique (A251), FSC — TORRASPAPEL FRANCE",
+   "ref_fournisseur": null,
+   "rvgi_code1": "982",
+   "rvgi_code2": "0004",
+   "rvgi_type_code": 3,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:couche_jet_mat_perm",
+   "fournisseur_id": 1,
+   "libelle_technique": "Couché jet d'encre mat adhésif permanent renforcé S2045 — Avery",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 1100.0,
+   "principal": true
+  },
+  {
+   "cle": "64",
+   "fournisseur_id": 1,
+   "libelle_technique": "Couché MC Primecoat adhésif enlevable R5000 — Avery",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 4050.0,
+   "principal": false
+  },
+  {
+   "cle": "63",
+   "fournisseur_id": 6,
+   "libelle_technique": "Couché pharma adhésif permanent renforcé (PE300), FSC — réf. fournisseur 651701505 — Frimpeks UK",
+   "ref_fournisseur": "651701505",
+   "rvgi_code1": "1109",
+   "rvgi_code2": "0013",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": true
+  },
+  {
+   "cle": "60",
+   "fournisseur_id": 1,
+   "libelle_technique": "Couché Primax S4700 BG40WH — Avery",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": null,
+   "principal": false
+  },
+  {
+   "cle": "60",
+   "fournisseur_id": 6,
+   "libelle_technique": "Couché Primax2 BG40WH — Frimpeks UK",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 1030.0,
+   "principal": false
+  },
+  {
+   "cle": "N:papier_jet_enlev",
+   "fournisseur_id": 16,
+   "libelle_technique": "Papier jet d'encre mat 70 g/m² adhésif enlevable 908, FSC — réf. fournisseur VPF 1393299 908 B700-476 — Rheno",
+   "ref_fournisseur": "VPF 1393299 908 B700-476",
+   "rvgi_code1": "1153",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 3,
+   "ml_bobine": 3000.0,
+   "principal": true
+  },
+  {
+   "cle": "64",
+   "fournisseur_id": null,
+   "libelle_technique": "Papier semi-gloss adhésif enlevable, glassine blanche",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 220.0,
+   "principal": false
+  },
+  {
+   "cle": "84",
+   "fournisseur_id": 1,
+   "libelle_technique": "PE 100 µm Top white adhésif permanent (S692N BG40WH), FSC — réf. fournisseur AG745 — Avery",
+   "ref_fournisseur": "AG745",
+   "rvgi_code1": "107",
+   "rvgi_code2": "0024",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2179.0,
+   "principal": true
+  },
+  {
+   "cle": "84",
+   "fournisseur_id": 172,
+   "libelle_technique": "PE adhésif permanent (RP77 / RP37) — UPM RAFLATAC",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 2000.0,
+   "principal": false
+  },
+  {
+   "cle": "N:pe_enlev",
+   "fournisseur_id": 23,
+   "libelle_technique": "PE blanc brillant 100 µm adhésif enlevable (TC100 RR28), FSC — réf. fournisseur 6415788282731 — UPM",
+   "ref_fournisseur": "6415788282731",
+   "rvgi_code1": "1151",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2010.0,
+   "principal": true
+  },
+  {
+   "cle": "84",
+   "fournisseur_id": 1,
+   "libelle_technique": "PE blanc mat 85 µm adhésif permanent (S692 BG40WH), FSC — réf. fournisseur BF341 — Avery",
+   "ref_fournisseur": "BF341",
+   "rvgi_code1": "107",
+   "rvgi_code2": "0007",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": false
+  },
+  {
+   "cle": "84",
+   "fournisseur_id": 6,
+   "libelle_technique": "PE blanc opaque 85 µm adhésif permanent (TC2 WS800 WG), FSC — réf. fournisseur 655002600 — Frimpeks UK",
+   "ref_fournisseur": "655002600",
+   "rvgi_code1": "1109",
+   "rvgi_code2": "0020",
+   "rvgi_type_code": 3,
+   "ml_bobine": 1000.0,
+   "principal": false
+  },
+  {
+   "cle": "58",
+   "fournisseur_id": 23,
+   "libelle_technique": "PET blanc brillant adhésif permanent renforcé (TC50 RC18 HD70), FSC — réf. fournisseur 8061930 — UPM",
+   "ref_fournisseur": "8061930",
+   "rvgi_code1": "1151",
+   "rvgi_code2": "0004",
+   "rvgi_type_code": 3,
+   "ml_bobine": 1000.0,
+   "principal": true
+  },
+  {
+   "cle": "58",
+   "fournisseur_id": 172,
+   "libelle_technique": "PET blanc TC50 adhésif permanent RP37 — UPM RAFLATAC",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 1000.0,
+   "principal": false
+  },
+  {
+   "cle": "58",
+   "fournisseur_id": 1,
+   "libelle_technique": "PET blanc Transfert TOP BG42WH — Avery",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 1000.0,
+   "principal": false
+  },
+  {
+   "cle": "62",
+   "fournisseur_id": 23,
+   "libelle_technique": "PET métallisé argent mat adhésif permanent renforcé (TC50 RC18), FSC — réf. fournisseur 8053867 — UPM",
+   "ref_fournisseur": "8053867",
+   "rvgi_code1": "1151",
+   "rvgi_code2": "0007",
+   "rvgi_type_code": 3,
+   "ml_bobine": 1000.0,
+   "principal": true
+  },
+  {
+   "cle": "82",
+   "fournisseur_id": 1,
+   "libelle_technique": "PLA Clear S9500 BG40WH (biosourcé) — Avery",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 1000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:pp_blanc_perm",
+   "fournisseur_id": 1,
+   "libelle_technique": "PP 100 µm blanc mat jet d'encre adhésif permanent (WBIJ S692N BG40WH), FSC — réf. fournisseur AY812 — Avery",
+   "ref_fournisseur": "AY812",
+   "rvgi_code1": "107",
+   "rvgi_code2": "0010",
+   "rvgi_type_code": 3,
+   "ml_bobine": 1600.0,
+   "principal": true
+  },
+  {
+   "cle": "N:pp_ultra_enlev",
+   "fournisseur_id": 1,
+   "libelle_technique": "PP 50 µm blanc brillant adhésif ultra-enlevable UVR145 BG40WH — Avery",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 1060.0,
+   "principal": true
+  },
+  {
+   "cle": "N:pp_blanc_perm",
+   "fournisseur_id": 1,
+   "libelle_technique": "PP 60 µm blanc mat adhésif permanent (S692N BG40WH), FSC — réf. fournisseur BJ310 — Avery",
+   "ref_fournisseur": "BJ310",
+   "rvgi_code1": "107",
+   "rvgi_code2": "0022",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": false
+  },
+  {
+   "cle": "N:pp_blanc_enlev",
+   "fournisseur_id": 23,
+   "libelle_technique": "PP blanc 60 µm adhésif enlevable (TC60 RR524U HD70), FSC — réf. fournisseur 6415788160497 — UPM",
+   "ref_fournisseur": "6415788160497",
+   "rvgi_code1": "1151",
+   "rvgi_code2": "0003",
+   "rvgi_type_code": 3,
+   "ml_bobine": 4000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:pp_blanc_enlev",
+   "fournisseur_id": 16,
+   "libelle_technique": "PP blanc brillant 60 µm adhésif enlevable RF20 / WG62 — réf. fournisseur VPF 60659 987-16G NSA850 — Rheno",
+   "ref_fournisseur": "VPF 60659 987-16G NSA850",
+   "rvgi_code1": "1153",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 3,
+   "ml_bobine": 1681.0,
+   "principal": false
+  },
+  {
+   "cle": "59",
+   "fournisseur_id": 23,
+   "libelle_technique": "PP blanc brillant 92 µm adhésif spécial pneu (Syntyre TC90 RHT), FSC — réf. fournisseur 0184262 — UPM",
+   "ref_fournisseur": "0184262",
+   "rvgi_code1": "1151",
+   "rvgi_code2": "0013",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": true
+  },
+  {
+   "cle": "73",
+   "fournisseur_id": 227,
+   "libelle_technique": "PP blanc thermique 95 µm adhésif permanent acrylique (R2441), FSC — SHENZHEN LIKEXIN INDUSTRIAL Co.",
+   "ref_fournisseur": "R2441",
+   "rvgi_code1": "1183",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": true
+  },
+  {
+   "cle": "65",
+   "fournisseur_id": 30,
+   "libelle_technique": "PP TCX Gloss Clear 50 / AP901 / WG62, FSC — réf. fournisseur FLM1171 — Fedrigoni Manter",
+   "ref_fournisseur": "FLM1171",
+   "rvgi_code1": "629",
+   "rvgi_code2": "0008",
+   "rvgi_type_code": 3,
+   "ml_bobine": 4000.0,
+   "principal": true
+  },
+  {
+   "cle": "73",
+   "fournisseur_id": null,
+   "libelle_technique": "PP thermique 100 µm adhésif permanent (réf. 1283/0010)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": null,
+   "principal": false
+  },
+  {
+   "cle": "73",
+   "fournisseur_id": null,
+   "libelle_technique": "PP thermique 75 µm adhésif permanent 55 g, glassine jaune",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 1120.0,
+   "principal": false
+  },
+  {
+   "cle": "65",
+   "fournisseur_id": 6,
+   "libelle_technique": "PP transparent Clear 50 adhésif permanent acrylique (WS820), FSC — réf. fournisseur 654702415 — Frimpeks UK",
+   "ref_fournisseur": "654702415",
+   "rvgi_code1": "1109",
+   "rvgi_code2": "0003",
+   "rvgi_type_code": 3,
+   "ml_bobine": 35000.0,
+   "principal": false
+  },
+  {
+   "cle": "N:pp_blanc_perm",
+   "fournisseur_id": 1,
+   "libelle_technique": "PVC blanc adhésif permanent BG45WH glassine blanche, FSC — réf. fournisseur ALG794 — Avery",
+   "ref_fournisseur": "ALG794",
+   "rvgi_code1": "107",
+   "rvgi_code2": "0013",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": false
+  },
+  {
+   "cle": "59",
+   "fournisseur_id": 1,
+   "libelle_technique": "Raflatyre RHT Honey Glassine 65, pattern gumming (adhésif pneu), FSC — réf. fournisseur AA875 — Avery",
+   "ref_fournisseur": "AA875",
+   "rvgi_code1": "107",
+   "rvgi_code2": "0009",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": false
+  },
+  {
+   "cle": "66",
+   "fournisseur_id": 228,
+   "libelle_technique": "Thermique Eco adhésif congélation glassine jaune, FSC — réf. fournisseur 653007501 — XINZHU SELF-ADHESIVE MATERIALS",
+   "ref_fournisseur": "653007501",
+   "rvgi_code1": "1191",
+   "rvgi_code2": "0005",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": false
+  },
+  {
+   "cle": "66",
+   "fournisseur_id": 228,
+   "libelle_technique": "Thermique Eco adhésif congélation, FSC — XINZHU SELF-ADHESIVE MATERIALS",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1172",
+   "rvgi_code2": "0003",
+   "rvgi_type_code": 3,
+   "ml_bobine": 620.0,
+   "principal": true
+  },
+  {
+   "cle": "67",
+   "fournisseur_id": 6,
+   "libelle_technique": "Thermique Eco adhésif enlevable R400, FSC — réf. fournisseur 653037806 — Frimpeks UK",
+   "ref_fournisseur": "653037806",
+   "rvgi_code1": "1109",
+   "rvgi_code2": "0011",
+   "rvgi_type_code": 3,
+   "ml_bobine": 4000.0,
+   "principal": false
+  },
+  {
+   "cle": "N:therm_hydro",
+   "fournisseur_id": null,
+   "libelle_technique": "Thermique Eco adhésif hydrosoluble (wash-off), glassine blanche",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 200.0,
+   "principal": false
+  },
+  {
+   "cle": "71",
+   "fournisseur_id": 227,
+   "libelle_technique": "Thermique Eco adhésif permanent renforcé hotmelt (R1241P), FSC — SHENZHEN LIKEXIN INDUSTRIAL Co.",
+   "ref_fournisseur": "R1241P",
+   "rvgi_code1": "1183",
+   "rvgi_code2": "0006",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": true
+  },
+  {
+   "cle": "71",
+   "fournisseur_id": 6,
+   "libelle_technique": "Thermique Eco BPA free adhésif DF710 — Frimpeks UK",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 2000.0,
+   "principal": false
+  },
+  {
+   "cle": "67",
+   "fournisseur_id": 30,
+   "libelle_technique": "Thermique Eco BPA free adhésif enlevable RF20, FSC — réf. fournisseur PDT0018 — Fedrigoni Manter",
+   "ref_fournisseur": "PDT0018",
+   "rvgi_code1": "629",
+   "rvgi_code2": "0015",
+   "rvgi_type_code": 3,
+   "ml_bobine": 4000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:therm_hydro",
+   "fournisseur_id": 63,
+   "libelle_technique": "Thermique Eco BPA free adhésif hydrosoluble SA234, FSC — TORRASPAPEL FRANCE",
+   "ref_fournisseur": null,
+   "rvgi_code1": "982",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 3,
+   "ml_bobine": 4000.0,
+   "principal": true
+  },
+  {
+   "cle": "71",
+   "fournisseur_id": 1,
+   "libelle_technique": "Thermique Eco S445N BG40BR — Avery",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": null,
+   "principal": false
+  },
+  {
+   "cle": "N:therm_pro_congel",
+   "fournisseur_id": null,
+   "libelle_technique": "Thermique Pro adhésif congélation 22 g/m² (colle 9888)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "68",
+   "fournisseur_id": 6,
+   "libelle_technique": "Thermique Pro adhésif permanent acrylique P100, FSC — Frimpeks UK",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1109",
+   "rvgi_code2": "0019",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": true
+  },
+  {
+   "cle": "72",
+   "fournisseur_id": 6,
+   "libelle_technique": "Thermique Pro adhésif permanent renforcé H400, FSC — réf. fournisseur 653133600 — Frimpeks UK",
+   "ref_fournisseur": "653133600",
+   "rvgi_code1": "1109",
+   "rvgi_code2": "0005",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": false
+  },
+  {
+   "cle": "72",
+   "fournisseur_id": 227,
+   "libelle_technique": "Thermique Pro adhésif permanent renforcé hotmelt (R1641), FSC — SHENZHEN LIKEXIN INDUSTRIAL Co.",
+   "ref_fournisseur": "R1641",
+   "rvgi_code1": "1183",
+   "rvgi_code2": "0007",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2100.0,
+   "principal": false
+  },
+  {
+   "cle": "68",
+   "fournisseur_id": 6,
+   "libelle_technique": "Thermique Pro TOP adhésif permanent acrylique (A-251) — Frimpeks UK",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 1500.0,
+   "principal": false
+  },
+  {
+   "cle": "72",
+   "fournisseur_id": 30,
+   "libelle_technique": "Thermique Pro TOP double enduction hotmelt (PGB FH21 / WG62), FSC — réf. fournisseur PDT4015 — Fedrigoni Manter",
+   "ref_fournisseur": "PDT4015",
+   "rvgi_code1": "629",
+   "rvgi_code2": "0006",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:therm_prot_enlev",
+   "fournisseur_id": 1,
+   "libelle_technique": "Thermique Protégé 200HD adhésif enlevable R5000, FSC — réf. fournisseur BU296 — Avery",
+   "ref_fournisseur": "BU296",
+   "rvgi_code1": "107",
+   "rvgi_code2": "0015",
+   "rvgi_type_code": 3,
+   "ml_bobine": 1000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:therm_prot_pneu",
+   "fournisseur_id": 23,
+   "libelle_technique": "Thermique Protégé adhésif pneu RHT, FSC — réf. fournisseur AI837 — UPM",
+   "ref_fournisseur": "AI837",
+   "rvgi_code1": "1151",
+   "rvgi_code2": "0005",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": true
+  },
+  {
+   "cle": "69",
+   "fournisseur_id": 30,
+   "libelle_technique": "Vélin 68 g/m² adhésif enlevable RF20, FSC — réf. fournisseur PUN0101 — Fedrigoni Manter",
+   "ref_fournisseur": "PUN0101",
+   "rvgi_code1": "629",
+   "rvgi_code2": "0013",
+   "rvgi_type_code": 3,
+   "ml_bobine": 4000.0,
+   "principal": false
+  },
+  {
+   "cle": "70",
+   "fournisseur_id": 6,
+   "libelle_technique": "Vélin adhésif DF710, FSC — Frimpeks UK",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 2000.0,
+   "principal": false
+  },
+  {
+   "cle": "69",
+   "fournisseur_id": null,
+   "libelle_technique": "Vélin adhésif enlevable",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 1700.0,
+   "principal": false
+  },
+  {
+   "cle": "69",
+   "fournisseur_id": null,
+   "libelle_technique": "Vélin adhésif enlevable MR101 (Mactac)",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 3000.0,
+   "principal": false
+  },
+  {
+   "cle": "70",
+   "fournisseur_id": 6,
+   "libelle_technique": "Vélin adhésif permanent renforcé H400, FSC — réf. fournisseur 652443600 — Frimpeks UK",
+   "ref_fournisseur": "652443600",
+   "rvgi_code1": "1109",
+   "rvgi_code2": "0006",
+   "rvgi_type_code": 3,
+   "ml_bobine": 3650.0,
+   "principal": true
+  },
+  {
+   "cle": "70",
+   "fournisseur_id": 227,
+   "libelle_technique": "Vélin adhésif permanent renforcé hotmelt (X1471), FSC — SHENZHEN LIKEXIN INDUSTRIAL Co.",
+   "ref_fournisseur": "X1471",
+   "rvgi_code1": "1183",
+   "rvgi_code2": "0008",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": false
+  },
+  {
+   "cle": "69",
+   "fournisseur_id": 6,
+   "libelle_technique": "Vélin Extra adhésif enlevable R400, FSC — Frimpeks UK",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1109",
+   "rvgi_code2": "0014",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": true
+  },
+  {
+   "cle": "69",
+   "fournisseur_id": 1,
+   "libelle_technique": "Vélin Extra double enlevable S697 / BG40BR, FSC — Avery",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": 1073.0,
+   "principal": false
+  },
+  {
+   "cle": "57",
+   "fournisseur_id": 30,
+   "libelle_technique": "Vélin Extra P1000 / CC62, FSC — réf. fournisseur PUN0038 — Fedrigoni Manter",
+   "ref_fournisseur": "PUN0038",
+   "rvgi_code1": "629",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:velin_congel",
+   "fournisseur_id": 6,
+   "libelle_technique": "Vélin Thermal Transfer adhésif congélation, FSC — Frimpeks UK",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1109",
+   "rvgi_code2": "0016",
+   "rvgi_type_code": 3,
+   "ml_bobine": 2000.0,
+   "principal": true
+  },
+  {
+   "cle": "N:b213128",
+   "fournisseur_id": null,
+   "libelle_technique": "213 x 128 x 80 F&C couvercle",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "8",
+   "fournisseur_id": null,
+   "libelle_technique": "305 x 210 x 80 F&C",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:b310100",
+   "fournisseur_id": null,
+   "libelle_technique": "310 x 100 x 135 couvercle",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:b205108",
+   "fournisseur_id": 168,
+   "libelle_technique": "Boîte 205 x 108 x 270 mm Fond — LGP PACKAGING",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1162",
+   "rvgi_code2": "0003",
+   "rvgi_type_code": 18,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:b223f",
+   "fournisseur_id": 73,
+   "libelle_technique": "Boîte 223 x 308 x 191 mm Fond — réf. fournisseur 17070155-1 / 10-20 — MULLIEZ RICHEBE",
+   "ref_fournisseur": "17070155-1 / 10-20",
+   "rvgi_code1": "1059",
+   "rvgi_code2": "0025",
+   "rvgi_type_code": 18,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:b223fc",
+   "fournisseur_id": 73,
+   "libelle_technique": "Boîte 223 x 308 x 191 mm Fond & Couvercle — réf. fournisseur 17070155-1 / 10-20 — MULLIEZ RICHEBE",
+   "ref_fournisseur": "17070155-1 / 10-20",
+   "rvgi_code1": "1059",
+   "rvgi_code2": "0017",
+   "rvgi_type_code": 18,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "9",
+   "fournisseur_id": 168,
+   "libelle_technique": "Boîte 305 x 215 x 150 mm Fond & Couvercle — réf. fournisseur 3BP42 — LGP PACKAGING",
+   "ref_fournisseur": "3BP42",
+   "rvgi_code1": "1162",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 18,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:b305230",
+   "fournisseur_id": 74,
+   "libelle_technique": "Boîte 305 x 215 x 230 mm Fond — ONDULYS GHEYSENS",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1060",
+   "rvgi_code2": "0009",
+   "rvgi_type_code": 18,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "75",
+   "fournisseur_id": 168,
+   "libelle_technique": "Boîte 305 x 215 x 80 mm Fond & Couvercle — réf. fournisseur 3CA44 — LGP PACKAGING",
+   "ref_fournisseur": "3CA44",
+   "rvgi_code1": "1162",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 18,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:b305270",
+   "fournisseur_id": 74,
+   "libelle_technique": "Boîte 305 x 270 x 80 mm Fond — ONDULYS GHEYSENS",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1060",
+   "rvgi_code2": "0010",
+   "rvgi_type_code": 18,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:b310170",
+   "fournisseur_id": 73,
+   "libelle_technique": "Boîte 310 x 170 x 135 mm couvercle — MULLIEZ RICHEBE",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1059",
+   "rvgi_code2": "0022",
+   "rvgi_type_code": 18,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "10",
+   "fournisseur_id": 73,
+   "libelle_technique": "Boîte 315 x 235 x 80 mm Fond & Couvercle — réf. fournisseur SIFA31523580 — MULLIEZ RICHEBE",
+   "ref_fournisseur": "SIFA31523580",
+   "rvgi_code1": "1059",
+   "rvgi_code2": "0016",
+   "rvgi_type_code": 18,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c200160",
+   "fournisseur_id": null,
+   "libelle_technique": "200 x 200 x 160 mm",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c211210",
+   "fournisseur_id": null,
+   "libelle_technique": "211 x 210 x 120",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "74",
+   "fournisseur_id": null,
+   "libelle_technique": "385 x 385 x 111 mm",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c200115",
+   "fournisseur_id": 168,
+   "libelle_technique": "Caisse à rabat recouvrant Ft 200 x 160 x 115 mm — réf. fournisseur 3DC82 — LGP PACKAGING",
+   "ref_fournisseur": "3DC82",
+   "rvgi_code1": "1162",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "76",
+   "fournisseur_id": 168,
+   "libelle_technique": "Carton 200 x 200 x 57 mm — LGP PACKAGING",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1162",
+   "rvgi_code2": "0021",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c230",
+   "fournisseur_id": 72,
+   "libelle_technique": "Carton 230 x 220 x 190 — Cartonnages du Nord",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1058",
+   "rvgi_code2": "0027",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c245",
+   "fournisseur_id": 72,
+   "libelle_technique": "Carton 245 x 235 x 305 mm — Cartonnages du Nord",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1058",
+   "rvgi_code2": "0018",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c250130",
+   "fournisseur_id": 72,
+   "libelle_technique": "Carton 250 x 130 x 130 mm — réf. fournisseur 250X130X130 — Cartonnages du Nord",
+   "ref_fournisseur": "250X130X130",
+   "rvgi_code1": "1058",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c250150",
+   "fournisseur_id": 72,
+   "libelle_technique": "Carton 250 x 150 x 150 — Cartonnages du Nord",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1058",
+   "rvgi_code2": "0028",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c270",
+   "fournisseur_id": 72,
+   "libelle_technique": "Carton 270 x 255 x 300 — Cartonnages du Nord",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1058",
+   "rvgi_code2": "0023",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "7",
+   "fournisseur_id": 73,
+   "libelle_technique": "Carton 275 x 255 x 300 mm — réf. fournisseur SIFA275255300 — MULLIEZ RICHEBE",
+   "ref_fournisseur": "SIFA275255300",
+   "rvgi_code1": "1059",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c290",
+   "fournisseur_id": 72,
+   "libelle_technique": "Carton 290 x 385 x 200 — Cartonnages du Nord",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1058",
+   "rvgi_code2": "0025",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c300120",
+   "fournisseur_id": 73,
+   "libelle_technique": "Carton 300 x 300 x 120 mm — réf. fournisseur SIFA300300120 — MULLIEZ RICHEBE",
+   "ref_fournisseur": "SIFA300300120",
+   "rvgi_code1": "1059",
+   "rvgi_code2": "0006",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c300170",
+   "fournisseur_id": 74,
+   "libelle_technique": "Carton 300 x 300 x 170 mm — réf. fournisseur 3EQ40 — ONDULYS GHEYSENS",
+   "ref_fournisseur": "3EQ40",
+   "rvgi_code1": "1060",
+   "rvgi_code2": "0005",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c30087",
+   "fournisseur_id": 74,
+   "libelle_technique": "Carton 300 x 300 x 87 mm — ONDULYS GHEYSENS",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1060",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c310168",
+   "fournisseur_id": 73,
+   "libelle_technique": "Carton 310 x 168 x 90 mm — réf. fournisseur SIFA31016890 — MULLIEZ RICHEBE",
+   "ref_fournisseur": "SIFA31016890",
+   "rvgi_code1": "1059",
+   "rvgi_code2": "0007",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c310215",
+   "fournisseur_id": 73,
+   "libelle_technique": "Carton 310 x 215 x 110 mm — réf. fournisseur 21090043-4 — MULLIEZ RICHEBE",
+   "ref_fournisseur": "21090043-4",
+   "rvgi_code1": "1059",
+   "rvgi_code2": "0008",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c310220",
+   "fournisseur_id": 72,
+   "libelle_technique": "Carton 310 x 220 x 250 — Cartonnages du Nord",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1058",
+   "rvgi_code2": "0029",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "11",
+   "fournisseur_id": 168,
+   "libelle_technique": "Carton 320 x 130 x 190 mm — LGP PACKAGING",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1162",
+   "rvgi_code2": "0014",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c350220",
+   "fournisseur_id": 73,
+   "libelle_technique": "Carton 350 x 220 x 200 mm — MULLIEZ RICHEBE",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1059",
+   "rvgi_code2": "0010",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "41",
+   "fournisseur_id": 72,
+   "libelle_technique": "Carton 350 x 320 x 111 mm — réf. fournisseur 3EQ41 — Cartonnages du Nord",
+   "ref_fournisseur": "3EQ41",
+   "rvgi_code1": "1058",
+   "rvgi_code2": "0003",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c360",
+   "fournisseur_id": 73,
+   "libelle_technique": "Carton 360 x 170 x 150 mm — réf. fournisseur SIFA360170150 — MULLIEZ RICHEBE",
+   "ref_fournisseur": "SIFA360170150",
+   "rvgi_code1": "1059",
+   "rvgi_code2": "0011",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "12",
+   "fournisseur_id": 168,
+   "libelle_technique": "Carton 385 x 320 x 79 mm — LGP PACKAGING",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1162",
+   "rvgi_code2": "0004",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "13",
+   "fournisseur_id": 168,
+   "libelle_technique": "Carton 385 x 385 x 105 mm — réf. fournisseur 3BR51 — LGP PACKAGING",
+   "ref_fournisseur": "3BR51",
+   "rvgi_code1": "1162",
+   "rvgi_code2": "0016",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "14",
+   "fournisseur_id": 168,
+   "libelle_technique": "Carton 385 x 385 x 120 mm — réf. fournisseur 3BX03 — LGP PACKAGING",
+   "ref_fournisseur": "3BX03",
+   "rvgi_code1": "1162",
+   "rvgi_code2": "0015",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "15",
+   "fournisseur_id": 168,
+   "libelle_technique": "Carton 385 x 385 x 135 mm — réf. fournisseur 3BR52 — LGP PACKAGING",
+   "ref_fournisseur": "3BR52",
+   "rvgi_code1": "1162",
+   "rvgi_code2": "0013",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "16",
+   "fournisseur_id": 168,
+   "libelle_technique": "Carton 385 x 385 x 151 mm — réf. fournisseur 3BX04 — LGP PACKAGING",
+   "ref_fournisseur": "3BX04",
+   "rvgi_code1": "1162",
+   "rvgi_code2": "0007",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "17",
+   "fournisseur_id": 72,
+   "libelle_technique": "Carton 385 x 385 x 170 mm — réf. fournisseur 3BR50 — Cartonnages du Nord",
+   "ref_fournisseur": "3BR50",
+   "rvgi_code1": "1058",
+   "rvgi_code2": "0008",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "42",
+   "fournisseur_id": 168,
+   "libelle_technique": "Carton 385 x 385 x 180 mm — LGP PACKAGING",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1162",
+   "rvgi_code2": "0005",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "18",
+   "fournisseur_id": 168,
+   "libelle_technique": "Carton 385 x 385 x 208 mm — réf. fournisseur 3BR49 — LGP PACKAGING",
+   "ref_fournisseur": "3BR49",
+   "rvgi_code1": "1162",
+   "rvgi_code2": "0008",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "19",
+   "fournisseur_id": 73,
+   "libelle_technique": "Carton 385 x 385 x 260 mm — MULLIEZ RICHEBE",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1059",
+   "rvgi_code2": "0013",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "20",
+   "fournisseur_id": 219,
+   "libelle_technique": "Carton 385 x 385 x 311 mm — VPK CONVERTING SAS",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1215",
+   "rvgi_code2": "0007",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "21",
+   "fournisseur_id": 168,
+   "libelle_technique": "Carton 385 x 385 x 54 mm — réf. fournisseur 3BP41 — LGP PACKAGING",
+   "ref_fournisseur": "3BP41",
+   "rvgi_code1": "1162",
+   "rvgi_code2": "0012",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "22",
+   "fournisseur_id": 168,
+   "libelle_technique": "Carton 385 x 385 x 83 mm — réf. fournisseur 3BP40 — LGP PACKAGING",
+   "ref_fournisseur": "3BP40",
+   "rvgi_code1": "1162",
+   "rvgi_code2": "0010",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "23",
+   "fournisseur_id": 168,
+   "libelle_technique": "Carton 385 x 385 x 90 mm — LGP PACKAGING",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1162",
+   "rvgi_code2": "0003",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c400170",
+   "fournisseur_id": 73,
+   "libelle_technique": "Carton 400 x 300 x 170 mm — réf. fournisseur SIFA 400300170 — MULLIEZ RICHEBE",
+   "ref_fournisseur": "SIFA 400300170",
+   "rvgi_code1": "1059",
+   "rvgi_code2": "0014",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c400200",
+   "fournisseur_id": 153,
+   "libelle_technique": "Carton 400 x 300 x 200 mm — KARTONNAGE LEFEVERE BEEL",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1144",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:c421",
+   "fournisseur_id": 153,
+   "libelle_technique": "Carton 421 x 154 x 140 mm — KARTONNAGE LEFEVERE BEEL",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1144",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:raja",
+   "fournisseur_id": 75,
+   "libelle_technique": "RAJAPOSTE BRUN 31 x 21,5 x 10 cm — réf. fournisseur CAD05B",
+   "ref_fournisseur": "CAD05B",
+   "rvgi_code1": "1062",
+   "rvgi_code2": "0014",
+   "rvgi_type_code": 19,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "6",
+   "fournisseur_id": 73,
+   "libelle_technique": "Conteneur 1180 x 780 x 1070 mm (dim. int.) — réf. fournisseur 3CW25 — MULLIEZ RICHEBE",
+   "ref_fournisseur": "3CW25",
+   "rvgi_code1": "1059",
+   "rvgi_code2": "0004",
+   "rvgi_type_code": 16,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "77",
+   "fournisseur_id": 168,
+   "libelle_technique": "Intercalaire Grand Box/Palette — réf. fournisseur 3DT31 — LGP PACKAGING",
+   "ref_fournisseur": "3DT31",
+   "rvgi_code1": "1162",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 16,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:cale_a4",
+   "fournisseur_id": 72,
+   "libelle_technique": "Intercalaire Boîte A4 - 150 mm - 12\" — réf. fournisseur CALE_12P/2800U — Cartonnages du Nord",
+   "ref_fournisseur": "CALE_12P/2800U",
+   "rvgi_code1": "1058",
+   "rvgi_code2": "0015",
+   "rvgi_type_code": 16,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "2",
+   "fournisseur_id": 212,
+   "libelle_technique": "Tube Ø 25 mm, Lg 1.500 mm, 2.5 mm, Palette 1.505 t — Mandriladora Alpesa S.L.",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1208",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 15,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "3",
+   "fournisseur_id": 190,
+   "libelle_technique": "Tube Ø 40 mm, Lg 1.500 mm, 4 mm, Palette 990 t — JOYE KARTONNAGE NV",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1185",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 15,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "4",
+   "fournisseur_id": 114,
+   "libelle_technique": "Tube Ø 76 mm, Lg 1.500 mm, 4 mm, Palette 260 t — ALLPACK TUPACK",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1101",
+   "rvgi_code2": "0003",
+   "rvgi_type_code": 15,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "5",
+   "fournisseur_id": 190,
+   "libelle_technique": "Tube Ø 76 mm, Lg 1.500 mm, 7 mm, Palette 231 t — JOYE KARTONNAGE NV",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1185",
+   "rvgi_code2": "0004",
+   "rvgi_type_code": 15,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:bg152",
+   "fournisseur_id": null,
+   "libelle_technique": "Bague Ø 152,4 , Lg 151,7",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "78",
+   "fournisseur_id": null,
+   "libelle_technique": "Bague Ø 19 mm",
+   "ref_fournisseur": null,
+   "rvgi_code1": null,
+   "rvgi_code2": null,
+   "rvgi_type_code": null,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:bg19_108",
+   "fournisseur_id": 114,
+   "libelle_technique": "Bague Ø 19 mm, Lg 108,7 mm, 2 mm — ALLPACK TUPACK",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1101",
+   "rvgi_code2": "0062",
+   "rvgi_type_code": 15,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:bg195_106",
+   "fournisseur_id": 170,
+   "libelle_technique": "Bague Ø 19.5 mm, Lg 106,2 mm, 3 mm — Cartonnages Auguste PAULET",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1164",
+   "rvgi_code2": "0012",
+   "rvgi_type_code": 15,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:bg195_53",
+   "fournisseur_id": 170,
+   "libelle_technique": "Bague Ø 19.5 mm, Lg 53,7 mm, 3 mm — Cartonnages Auguste PAULET",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1164",
+   "rvgi_code2": "0013",
+   "rvgi_type_code": 15,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:bg195_57",
+   "fournisseur_id": 170,
+   "libelle_technique": "Bague Ø 19.5 mm, Lg 57.2 mm, 2 mm — Cartonnages Auguste PAULET",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1164",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 15,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:bg40_106",
+   "fournisseur_id": 114,
+   "libelle_technique": "Bague Ø 40 mm, Lg 106.75 mm, 3 mm, Pal. 365 bagues — ALLPACK TUPACK",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1101",
+   "rvgi_code2": "0019",
+   "rvgi_type_code": 15,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:bg40_18",
+   "fournisseur_id": 114,
+   "libelle_technique": "Bague Ø 40 mm, Lg 18.6 mm, 4 mm, Pal.  XXX bagues — ALLPACK TUPACK",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1101",
+   "rvgi_code2": "0024",
+   "rvgi_type_code": 15,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:bg40_56",
+   "fournisseur_id": 114,
+   "libelle_technique": "Bague Ø 40 mm, Lg 56.7 mm, 4 mm, Pal.  XXX bagues — réf. fournisseur 122/0021 — ALLPACK TUPACK",
+   "ref_fournisseur": "122/0021",
+   "rvgi_code1": "1101",
+   "rvgi_code2": "0059",
+   "rvgi_type_code": 15,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:bg40_70",
+   "fournisseur_id": 114,
+   "libelle_technique": "Bague Ø 40 mm, Lg 70,92 mm, 3 mm, Pal. 500 bagues — ALLPACK TUPACK",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1101",
+   "rvgi_code2": "0015",
+   "rvgi_type_code": 15,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:bg76_28",
+   "fournisseur_id": 114,
+   "libelle_technique": "Bague Ø 76 mm, Lg 28,7 mm, 4 mm, Car. 380 bagues — ALLPACK TUPACK",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1101",
+   "rvgi_code2": "0045",
+   "rvgi_type_code": 15,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:bg76_79",
+   "fournisseur_id": 114,
+   "libelle_technique": "Bague Ø 76 mm, Lg 79.8 mm, 3 mm, Pal. 155 bagues — ALLPACK TUPACK",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1101",
+   "rvgi_code2": "0021",
+   "rvgi_type_code": 15,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "N:bg76_91",
+   "fournisseur_id": 114,
+   "libelle_technique": "Bague Ø 76 mm, Lg 91.5 mm, 4 mm, Pal. 125 bagues — ALLPACK TUPACK",
+   "ref_fournisseur": null,
+   "rvgi_code1": "1101",
+   "rvgi_code2": "0017",
+   "rvgi_type_code": 15,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "24",
+   "fournisseur_id": 27,
+   "libelle_technique": "Adh Permanent — JT-2028Y — Jaour",
+   "ref_fournisseur": "JT-2028Y",
+   "rvgi_code1": "1055",
+   "rvgi_code2": "0005",
+   "rvgi_type_code": 9,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "26",
+   "fournisseur_id": 27,
+   "libelle_technique": "Adhésif Congélation — JT-2030 — Jaour",
+   "ref_fournisseur": "JT-2030",
+   "rvgi_code1": "1055",
+   "rvgi_code2": "0007",
+   "rvgi_type_code": 9,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "29",
+   "fournisseur_id": 28,
+   "libelle_technique": "Adhésif permanent, Hotmelt, Pain de 1 Kg, Tg -10°C — PS 1225 — Meltavis",
+   "ref_fournisseur": "PS 1225",
+   "rvgi_code1": "1139",
+   "rvgi_code2": "0003",
+   "rvgi_type_code": 9,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "25",
+   "fournisseur_id": 27,
+   "libelle_technique": "Adhésif Pneumatique — JT-2288M — Jaour",
+   "ref_fournisseur": "JT-2288M",
+   "rvgi_code1": "1055",
+   "rvgi_code2": "0006",
+   "rvgi_type_code": 9,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "27",
+   "fournisseur_id": 28,
+   "libelle_technique": "Adhésif PS-1408 Enlevable, — PS-1408 — réf. fournisseur Brightmelt PS 1408 — Meltavis",
+   "ref_fournisseur": "Brightmelt PS 1408",
+   "rvgi_code1": "1139",
+   "rvgi_code2": "0008",
+   "rvgi_type_code": 9,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "28",
+   "fournisseur_id": 31,
+   "libelle_technique": "Adhésif Thermofusible enlevable TLH-2355E — TLH-2355E — Bostik",
+   "ref_fournisseur": null,
+   "rvgi_code1": "ENLEV",
+   "rvgi_code2": "ADTLH2355",
+   "rvgi_type_code": null,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "39",
+   "fournisseur_id": 199,
+   "libelle_technique": "Europe — BURBAN PALETTES",
+   "ref_fournisseur": null,
+   "rvgi_code1": "505",
+   "rvgi_code2": "0001",
+   "rvgi_type_code": 20,
+   "ml_bobine": null,
+   "principal": true
+  },
+  {
+   "cle": "40",
+   "fournisseur_id": 199,
+   "libelle_technique": "Perdue — BURBAN PALETTES",
+   "ref_fournisseur": null,
+   "rvgi_code1": "505",
+   "rvgi_code2": "0002",
+   "rvgi_type_code": 20,
+   "ml_bobine": null,
+   "principal": true
+  }
+ ],
+ "stock": [
+  {
+   "cle": "N:pp_therm_transp",
+   "laize_mm": 500.0,
+   "emplacement": "E205",
+   "zone": "magasin",
+   "quantite": 1.956667
+  },
+  {
+   "cle": "N:pp_therm_transp",
+   "laize_mm": 500.0,
+   "emplacement": "F133",
+   "zone": "magasin",
+   "quantite": 0.975
+  },
+  {
+   "cle": "N:pp_therm_transp",
+   "laize_mm": 500.0,
+   "emplacement": "F133",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "32",
+   "laize_mm": 333.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 0.94975
+  },
+  {
+   "cle": "32",
+   "laize_mm": 570.0,
+   "emplacement": "NC GH",
+   "zone": "non_conforme",
+   "quantite": 0.94975
+  },
+  {
+   "cle": "32",
+   "laize_mm": 350.0,
+   "emplacement": "E262",
+   "zone": "magasin",
+   "quantite": 0.25
+  },
+  {
+   "cle": "32",
+   "laize_mm": 470.0,
+   "emplacement": "A14",
+   "zone": "magasin",
+   "quantite": 10.0
+  },
+  {
+   "cle": "32",
+   "laize_mm": 470.0,
+   "emplacement": "A20",
+   "zone": "magasin",
+   "quantite": 9.0
+  },
+  {
+   "cle": "32",
+   "laize_mm": 510.0,
+   "emplacement": "DROITE 1",
+   "zone": "magasin",
+   "quantite": 16.0
+  },
+  {
+   "cle": "32",
+   "laize_mm": 510.0,
+   "emplacement": "DROITE 2",
+   "zone": "magasin",
+   "quantite": 16.0
+  },
+  {
+   "cle": "32",
+   "laize_mm": 510.0,
+   "emplacement": "DROITE 3",
+   "zone": "magasin",
+   "quantite": 16.0
+  },
+  {
+   "cle": "32",
+   "laize_mm": 530.0,
+   "emplacement": "A8",
+   "zone": "magasin",
+   "quantite": 9.0
+  },
+  {
+   "cle": "32",
+   "laize_mm": 570.0,
+   "emplacement": "A11",
+   "zone": "magasin",
+   "quantite": 9.0
+  },
+  {
+   "cle": "32",
+   "laize_mm": 570.0,
+   "emplacement": "A13",
+   "zone": "magasin",
+   "quantite": 22.0
+  },
+  {
+   "cle": "32",
+   "laize_mm": 250.0,
+   "emplacement": "F113",
+   "zone": "magasin",
+   "quantite": 0.416667
+  },
+  {
+   "cle": "32",
+   "laize_mm": 440.0,
+   "emplacement": "E292",
+   "zone": "magasin",
+   "quantite": 0.679167
+  },
+  {
+   "cle": "32",
+   "laize_mm": 440.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 5.0
+  },
+  {
+   "cle": "32",
+   "laize_mm": 530.0,
+   "emplacement": "A19",
+   "zone": "magasin",
+   "quantite": 19.166667
+  },
+  {
+   "cle": "32",
+   "laize_mm": 570.0,
+   "emplacement": "A11",
+   "zone": "magasin",
+   "quantite": 2.5
+  },
+  {
+   "cle": "32",
+   "laize_mm": 570.0,
+   "emplacement": "A12",
+   "zone": "magasin",
+   "quantite": 11.666667
+  },
+  {
+   "cle": "32",
+   "laize_mm": 333.0,
+   "emplacement": "E203",
+   "zone": "magasin",
+   "quantite": 0.166667
+  },
+  {
+   "cle": "32",
+   "laize_mm": 340.0,
+   "emplacement": "E251",
+   "zone": "magasin",
+   "quantite": 0.125
+  },
+  {
+   "cle": "32",
+   "laize_mm": 470.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.064333
+  },
+  {
+   "cle": "32",
+   "laize_mm": 510.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.120833
+  },
+  {
+   "cle": "32",
+   "laize_mm": 570.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.6375
+  },
+  {
+   "cle": "32",
+   "laize_mm": 436.0,
+   "emplacement": "E124",
+   "zone": "magasin",
+   "quantite": 0.333333
+  },
+  {
+   "cle": "32",
+   "laize_mm": 520.0,
+   "emplacement": "E124",
+   "zone": "magasin",
+   "quantite": 0.333333
+  },
+  {
+   "cle": "32",
+   "laize_mm": 420.0,
+   "emplacement": "E283",
+   "zone": "magasin",
+   "quantite": 0.666667
+  },
+  {
+   "cle": "32",
+   "laize_mm": 360.0,
+   "emplacement": "E203",
+   "zone": "magasin",
+   "quantite": 0.166667
+  },
+  {
+   "cle": "32",
+   "laize_mm": 410.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.145417
+  },
+  {
+   "cle": "32",
+   "laize_mm": 440.0,
+   "emplacement": "E174",
+   "zone": "magasin",
+   "quantite": 0.333333
+  },
+  {
+   "cle": "31",
+   "laize_mm": 530.0,
+   "emplacement": "E313",
+   "zone": "magasin",
+   "quantite": 0.166667
+  },
+  {
+   "cle": "31",
+   "laize_mm": 350.0,
+   "emplacement": "E231",
+   "zone": "magasin",
+   "quantite": 0.666667
+  },
+  {
+   "cle": "31",
+   "laize_mm": 350.0,
+   "emplacement": "N122",
+   "zone": "magasin",
+   "quantite": 0.189833
+  },
+  {
+   "cle": "31",
+   "laize_mm": 430.0,
+   "emplacement": "N122",
+   "zone": "magasin",
+   "quantite": 0.156667
+  },
+  {
+   "cle": "31",
+   "laize_mm": 440.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.141667
+  },
+  {
+   "cle": "31",
+   "laize_mm": 480.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.269
+  },
+  {
+   "cle": "31",
+   "laize_mm": 510.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.370917
+  },
+  {
+   "cle": "31",
+   "laize_mm": 530.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.085
+  },
+  {
+   "cle": "31",
+   "laize_mm": 570.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 4.0
+  },
+  {
+   "cle": "31",
+   "laize_mm": 430.0,
+   "emplacement": "F133",
+   "zone": "magasin",
+   "quantite": 0.25
+  },
+  {
+   "cle": "31",
+   "laize_mm": 500.0,
+   "emplacement": "E223",
+   "zone": "magasin",
+   "quantite": 0.208333
+  },
+  {
+   "cle": "31",
+   "laize_mm": 440.0,
+   "emplacement": "A1",
+   "zone": "magasin",
+   "quantite": 4.0
+  },
+  {
+   "cle": "31",
+   "laize_mm": 470.0,
+   "emplacement": "A10",
+   "zone": "magasin",
+   "quantite": 17.0
+  },
+  {
+   "cle": "31",
+   "laize_mm": 470.0,
+   "emplacement": "A6",
+   "zone": "magasin",
+   "quantite": 24.0
+  },
+  {
+   "cle": "31",
+   "laize_mm": 510.0,
+   "emplacement": "A3",
+   "zone": "magasin",
+   "quantite": 17.0
+  },
+  {
+   "cle": "31",
+   "laize_mm": 510.0,
+   "emplacement": "A7",
+   "zone": "magasin",
+   "quantite": 23.0
+  },
+  {
+   "cle": "31",
+   "laize_mm": 530.0,
+   "emplacement": "A16",
+   "zone": "magasin",
+   "quantite": 11.0
+  },
+  {
+   "cle": "31",
+   "laize_mm": 530.0,
+   "emplacement": "A4",
+   "zone": "magasin",
+   "quantite": 19.0
+  },
+  {
+   "cle": "31",
+   "laize_mm": 570.0,
+   "emplacement": "A2",
+   "zone": "magasin",
+   "quantite": 6.0
+  },
+  {
+   "cle": "31",
+   "laize_mm": 570.0,
+   "emplacement": "A9",
+   "zone": "magasin",
+   "quantite": 18.0
+  },
+  {
+   "cle": "N:therm_eco_135",
+   "laize_mm": 347.0,
+   "emplacement": "E225",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "79",
+   "laize_mm": 440.0,
+   "emplacement": "F113",
+   "zone": "magasin",
+   "quantite": 0.610526
+  },
+  {
+   "cle": "79",
+   "laize_mm": 510.0,
+   "emplacement": "E292",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "50",
+   "laize_mm": 510.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.394667
+  },
+  {
+   "cle": "89",
+   "laize_mm": 350.0,
+   "emplacement": "E283",
+   "zone": "magasin",
+   "quantite": 1.65
+  },
+  {
+   "cle": "34",
+   "laize_mm": 470.0,
+   "emplacement": "N8",
+   "zone": "magasin",
+   "quantite": 24.0
+  },
+  {
+   "cle": "34",
+   "laize_mm": 470.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.1712
+  },
+  {
+   "cle": "N:therm_prot_105",
+   "laize_mm": 480.0,
+   "emplacement": "A1",
+   "zone": "magasin",
+   "quantite": 5.0
+  },
+  {
+   "cle": "N:therm_prot_57",
+   "laize_mm": 510.0,
+   "emplacement": "E213",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:therm_prot_57",
+   "laize_mm": 316.0,
+   "emplacement": "E232",
+   "zone": "magasin",
+   "quantite": 0.45
+  },
+  {
+   "cle": "N:therm_prot_57",
+   "laize_mm": 316.0,
+   "emplacement": "E232",
+   "zone": "magasin",
+   "quantite": 0.2
+  },
+  {
+   "cle": "47",
+   "laize_mm": 440.0,
+   "emplacement": "F122",
+   "zone": "magasin",
+   "quantite": 0.288016
+  },
+  {
+   "cle": "47",
+   "laize_mm": 440.0,
+   "emplacement": "GAUCHE 13",
+   "zone": "magasin",
+   "quantite": 3.0
+  },
+  {
+   "cle": "47",
+   "laize_mm": 440.0,
+   "emplacement": "GAUCHE 13",
+   "zone": "magasin",
+   "quantite": 2.0
+  },
+  {
+   "cle": "33",
+   "laize_mm": 470.0,
+   "emplacement": "F123",
+   "zone": "magasin",
+   "quantite": 0.5
+  },
+  {
+   "cle": "33",
+   "laize_mm": 470.0,
+   "emplacement": "DROITE 9",
+   "zone": "magasin",
+   "quantite": 10.5
+  },
+  {
+   "cle": "33",
+   "laize_mm": 510.0,
+   "emplacement": "DROITE 5",
+   "zone": "magasin",
+   "quantite": 8.4
+  },
+  {
+   "cle": "33",
+   "laize_mm": 510.0,
+   "emplacement": "DROITE 7",
+   "zone": "magasin",
+   "quantite": 14.7
+  },
+  {
+   "cle": "33",
+   "laize_mm": 520.0,
+   "emplacement": "DROITE 8",
+   "zone": "magasin",
+   "quantite": 1.575
+  },
+  {
+   "cle": "33",
+   "laize_mm": 530.0,
+   "emplacement": "DROITE 13",
+   "zone": "magasin",
+   "quantite": 3.15
+  },
+  {
+   "cle": "33",
+   "laize_mm": 530.0,
+   "emplacement": "DROITE 8",
+   "zone": "magasin",
+   "quantite": 10.5
+  },
+  {
+   "cle": "33",
+   "laize_mm": 570.0,
+   "emplacement": "DROITE 13",
+   "zone": "magasin",
+   "quantite": 5.25
+  },
+  {
+   "cle": "33",
+   "laize_mm": 570.0,
+   "emplacement": "DROITE 6",
+   "zone": "magasin",
+   "quantite": 14.7
+  },
+  {
+   "cle": "33",
+   "laize_mm": 570.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.093333
+  },
+  {
+   "cle": "N:velin_80",
+   "laize_mm": 330.0,
+   "emplacement": "E231",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "48",
+   "laize_mm": 510.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 8.0
+  },
+  {
+   "cle": "36",
+   "laize_mm": 440.0,
+   "emplacement": "E145",
+   "zone": "magasin",
+   "quantite": 0.038961
+  },
+  {
+   "cle": "36",
+   "laize_mm": 465.0,
+   "emplacement": "E155",
+   "zone": "magasin",
+   "quantite": 0.079351
+  },
+  {
+   "cle": "36",
+   "laize_mm": 470.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 0.49474
+  },
+  {
+   "cle": "36",
+   "laize_mm": 530.0,
+   "emplacement": "E145",
+   "zone": "magasin",
+   "quantite": 0.051948
+  },
+  {
+   "cle": "36",
+   "laize_mm": 530.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 0.989481
+  },
+  {
+   "cle": "36",
+   "laize_mm": 520.0,
+   "emplacement": "E293",
+   "zone": "magasin",
+   "quantite": 0.519481
+  },
+  {
+   "cle": "36",
+   "laize_mm": 333.0,
+   "emplacement": "E145",
+   "zone": "magasin",
+   "quantite": 0.019481
+  },
+  {
+   "cle": "36",
+   "laize_mm": 333.0,
+   "emplacement": "FOND ALLÉE E",
+   "zone": "magasin",
+   "quantite": 3.246753
+  },
+  {
+   "cle": "36",
+   "laize_mm": 333.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.092273
+  },
+  {
+   "cle": "36",
+   "laize_mm": 520.0,
+   "emplacement": "FOND ALLÉE E",
+   "zone": "magasin",
+   "quantite": 0.649351
+  },
+  {
+   "cle": "36",
+   "laize_mm": 333.0,
+   "emplacement": "DROITE 12",
+   "zone": "magasin",
+   "quantite": 1.006494
+  },
+  {
+   "cle": "36",
+   "laize_mm": 333.0,
+   "emplacement": "DROITE 12",
+   "zone": "magasin",
+   "quantite": 2.516234
+  },
+  {
+   "cle": "36",
+   "laize_mm": 440.0,
+   "emplacement": "DROITE 15",
+   "zone": "magasin",
+   "quantite": 5.032468
+  },
+  {
+   "cle": "36",
+   "laize_mm": 470.0,
+   "emplacement": "DROITE 14",
+   "zone": "magasin",
+   "quantite": 9.058442
+  },
+  {
+   "cle": "36",
+   "laize_mm": 470.0,
+   "emplacement": "DROITE 14",
+   "zone": "magasin",
+   "quantite": 2.012987
+  },
+  {
+   "cle": "36",
+   "laize_mm": 510.0,
+   "emplacement": "DROITE 12",
+   "zone": "magasin",
+   "quantite": 4.025974
+  },
+  {
+   "cle": "36",
+   "laize_mm": 510.0,
+   "emplacement": "DROITE 12",
+   "zone": "magasin",
+   "quantite": 2.012987
+  },
+  {
+   "cle": "36",
+   "laize_mm": 530.0,
+   "emplacement": "DROITE 11",
+   "zone": "magasin",
+   "quantite": 8.051948
+  },
+  {
+   "cle": "36",
+   "laize_mm": 530.0,
+   "emplacement": "DROITE 11",
+   "zone": "magasin",
+   "quantite": 2.516234
+  },
+  {
+   "cle": "36",
+   "laize_mm": 333.0,
+   "emplacement": "F112",
+   "zone": "magasin",
+   "quantite": 0.194805
+  },
+  {
+   "cle": "N:couche_105",
+   "laize_mm": 520.0,
+   "emplacement": "FOND ALLÉE E",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:couche_170",
+   "laize_mm": 480.0,
+   "emplacement": "E312",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:couche_170",
+   "laize_mm": 460.0,
+   "emplacement": "F133",
+   "zone": "magasin",
+   "quantite": 0.863558
+  },
+  {
+   "cle": "N:couche_170",
+   "laize_mm": 460.0,
+   "emplacement": "E155",
+   "zone": "magasin",
+   "quantite": 0.647668
+  },
+  {
+   "cle": "N:couche_170",
+   "laize_mm": 460.0,
+   "emplacement": "FOND ALLÉE E",
+   "zone": "magasin",
+   "quantite": 0.863558
+  },
+  {
+   "cle": "N:couche_170",
+   "laize_mm": 480.0,
+   "emplacement": "FOND ALLÉE E",
+   "zone": "magasin",
+   "quantite": 0.863558
+  },
+  {
+   "cle": "45",
+   "laize_mm": 450.0,
+   "emplacement": "E233",
+   "zone": "magasin",
+   "quantite": 0.931641
+  },
+  {
+   "cle": "45",
+   "laize_mm": 450.0,
+   "emplacement": "E312",
+   "zone": "magasin",
+   "quantite": 2.0
+  },
+  {
+   "cle": "45",
+   "laize_mm": 570.0,
+   "emplacement": "FOND ALLÉE E",
+   "zone": "magasin",
+   "quantite": 0.931641
+  },
+  {
+   "cle": "N:couche_115",
+   "laize_mm": 440.0,
+   "emplacement": "E145",
+   "zone": "magasin",
+   "quantite": 0.25
+  },
+  {
+   "cle": "N:couche_115",
+   "laize_mm": 440.0,
+   "emplacement": "FOND ALLÉE E",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:couche_150",
+   "laize_mm": 440.0,
+   "emplacement": "E145",
+   "zone": "magasin",
+   "quantite": 0.357143
+  },
+  {
+   "cle": "N:couche_150",
+   "laize_mm": 460.0,
+   "emplacement": "FOND ALLÉE E",
+   "zone": "magasin",
+   "quantite": 4.0
+  },
+  {
+   "cle": "N:couche_150",
+   "laize_mm": 460.0,
+   "emplacement": "FOND ALLÉE E",
+   "zone": "magasin",
+   "quantite": 0.875
+  },
+  {
+   "cle": "N:couche_90",
+   "laize_mm": 330.0,
+   "emplacement": "E313",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:couche_90",
+   "laize_mm": 333.0,
+   "emplacement": "E165",
+   "zone": "magasin",
+   "quantite": 0.110011
+  },
+  {
+   "cle": "N:couche_90",
+   "laize_mm": 333.0,
+   "emplacement": "E233",
+   "zone": "magasin",
+   "quantite": 0.660066
+  },
+  {
+   "cle": "46",
+   "laize_mm": null,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 0.225
+  },
+  {
+   "cle": "46",
+   "laize_mm": 440.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 0.75
+  },
+  {
+   "cle": "46",
+   "laize_mm": 300.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 0.75
+  },
+  {
+   "cle": "46",
+   "laize_mm": 510.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 1.5
+  },
+  {
+   "cle": "N:couche_fluo_orange",
+   "laize_mm": 470.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 2.5
+  },
+  {
+   "cle": "N:couche_fluo_rouge",
+   "laize_mm": 470.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 0.5
+  },
+  {
+   "cle": "N:papier_mineral_80",
+   "laize_mm": 509.0,
+   "emplacement": "F122",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:papier_inconnu",
+   "laize_mm": 530.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:papier_50",
+   "laize_mm": 520.0,
+   "emplacement": "E173",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:papier_50",
+   "laize_mm": 520.0,
+   "emplacement": "F122",
+   "zone": "magasin",
+   "quantite": 0.970874
+  },
+  {
+   "cle": "N:film_pp_30",
+   "laize_mm": 440.0,
+   "emplacement": "F123",
+   "zone": "magasin",
+   "quantite": 0.041667
+  },
+  {
+   "cle": "N:film_pp_30",
+   "laize_mm": 470.0,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 4.0
+  },
+  {
+   "cle": "N:foliplast",
+   "laize_mm": 333.0,
+   "emplacement": "E142",
+   "zone": "magasin",
+   "quantite": 3.0
+  },
+  {
+   "cle": "N:foliplast",
+   "laize_mm": 333.0,
+   "emplacement": "M142",
+   "zone": "magasin",
+   "quantite": 0.5
+  },
+  {
+   "cle": "N:foliset_100",
+   "laize_mm": 333.0,
+   "emplacement": "E242",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:foliset_100",
+   "laize_mm": 333.0,
+   "emplacement": "E242",
+   "zone": "magasin",
+   "quantite": 0.1875
+  },
+  {
+   "cle": "N:foliset_100",
+   "laize_mm": 335.0,
+   "emplacement": "M161",
+   "zone": "magasin",
+   "quantite": 0.3125
+  },
+  {
+   "cle": "N:foliset_120",
+   "laize_mm": 400.0,
+   "emplacement": "E242",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:foliset_80",
+   "laize_mm": 333.0,
+   "emplacement": "E283",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:polyart",
+   "laize_mm": 312.0,
+   "emplacement": "E261",
+   "zone": "magasin",
+   "quantite": 12.0
+  },
+  {
+   "cle": "N:pet_120",
+   "laize_mm": 508.0,
+   "emplacement": "E225",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:pet_36",
+   "laize_mm": 470.0,
+   "emplacement": "E113",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:pp_60",
+   "laize_mm": 510.0,
+   "emplacement": "E163",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:pp_65",
+   "laize_mm": 333.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 0.5
+  },
+  {
+   "cle": "N:pp_65",
+   "laize_mm": 470.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 0.5
+  },
+  {
+   "cle": "N:pp_65",
+   "laize_mm": 470.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 0.3
+  },
+  {
+   "cle": "51",
+   "laize_mm": 470.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 16.666667
+  },
+  {
+   "cle": "52",
+   "laize_mm": 166.0,
+   "emplacement": "M151",
+   "zone": "magasin",
+   "quantite": 2.857143
+  },
+  {
+   "cle": "52",
+   "laize_mm": 333.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 0.214286
+  },
+  {
+   "cle": "52",
+   "laize_mm": 333.0,
+   "emplacement": "M151",
+   "zone": "magasin",
+   "quantite": 0.142857
+  },
+  {
+   "cle": "52",
+   "laize_mm": 333.0,
+   "emplacement": "M162",
+   "zone": "magasin",
+   "quantite": 1.071429
+  },
+  {
+   "cle": "N:pp_75",
+   "laize_mm": 470.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 0.5
+  },
+  {
+   "cle": "30",
+   "laize_mm": 470.0,
+   "emplacement": "A18",
+   "zone": "magasin",
+   "quantite": 15.647922
+  },
+  {
+   "cle": "30",
+   "laize_mm": 470.0,
+   "emplacement": "N11",
+   "zone": "magasin",
+   "quantite": 16.625917
+  },
+  {
+   "cle": "30",
+   "laize_mm": 470.0,
+   "emplacement": "A19",
+   "zone": "magasin",
+   "quantite": 1.95599
+  },
+  {
+   "cle": "N:pp_brill_100",
+   "laize_mm": 470.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 0.3
+  },
+  {
+   "cle": "N:pp_brill_100",
+   "laize_mm": 470.0,
+   "emplacement": "E291",
+   "zone": "magasin",
+   "quantite": 2.0
+  },
+  {
+   "cle": "93",
+   "laize_mm": 470.0,
+   "emplacement": "NC GH",
+   "zone": "non_conforme",
+   "quantite": 0.862667
+  },
+  {
+   "cle": "87",
+   "laize_mm": 440.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "87",
+   "laize_mm": 333.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 1.5
+  },
+  {
+   "cle": "87",
+   "laize_mm": 333.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 6.0
+  },
+  {
+   "cle": "87",
+   "laize_mm": 436.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "87",
+   "laize_mm": 440.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 1.0
+  },
+  {
+   "cle": "87",
+   "laize_mm": 510.0,
+   "emplacement": "E262",
+   "zone": "magasin",
+   "quantite": 0.888889
+  },
+  {
+   "cle": "87",
+   "laize_mm": 510.0,
+   "emplacement": "E311",
+   "zone": "magasin",
+   "quantite": 7.111111
+  },
+  {
+   "cle": "87",
+   "laize_mm": 510.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 1.0
+  },
+  {
+   "cle": "87",
+   "laize_mm": 530.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "87",
+   "laize_mm": 570.0,
+   "emplacement": "E293",
+   "zone": "magasin",
+   "quantite": 2.222222
+  },
+  {
+   "cle": "N:gl_blanche_sil_58",
+   "laize_mm": 440.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.2175
+  },
+  {
+   "cle": "N:gl_blanche_sil_58",
+   "laize_mm": 470.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.298
+  },
+  {
+   "cle": "N:gl_blanche_sil_58",
+   "laize_mm": 520.0,
+   "emplacement": "M131",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:gl_blanche_sil_58",
+   "laize_mm": 470.0,
+   "emplacement": "E263",
+   "zone": "magasin",
+   "quantite": 0.5
+  },
+  {
+   "cle": "N:gl_blanche_sil_58",
+   "laize_mm": 470.0,
+   "emplacement": "E263",
+   "zone": "magasin",
+   "quantite": 0.583333
+  },
+  {
+   "cle": "N:gl_blanche_sil_58",
+   "laize_mm": 530.0,
+   "emplacement": "E293",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:gl_blanche_sil_80",
+   "laize_mm": 333.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 5.0
+  },
+  {
+   "cle": "N:gl_blanche_sil_80",
+   "laize_mm": 333.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:gl_blanche_sil_80",
+   "laize_mm": 470.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:gl_blanche_sil_80",
+   "laize_mm": 510.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 3.0
+  },
+  {
+   "cle": "N:gl_jaune_double",
+   "laize_mm": 333.0,
+   "emplacement": "E201",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:gl_jaune_double",
+   "laize_mm": 333.0,
+   "emplacement": "E223",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "53",
+   "laize_mm": 440.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 0.883978
+  },
+  {
+   "cle": "53",
+   "laize_mm": 470.0,
+   "emplacement": "E263",
+   "zone": "magasin",
+   "quantite": 0.718232
+  },
+  {
+   "cle": "53",
+   "laize_mm": 470.0,
+   "emplacement": "F113",
+   "zone": "magasin",
+   "quantite": 0.276243
+  },
+  {
+   "cle": "53",
+   "laize_mm": 530.0,
+   "emplacement": "E233",
+   "zone": "magasin",
+   "quantite": 0.552486
+  },
+  {
+   "cle": "53",
+   "laize_mm": 333.0,
+   "emplacement": "E201",
+   "zone": "magasin",
+   "quantite": 0.441989
+  },
+  {
+   "cle": "53",
+   "laize_mm": 333.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.845304
+  },
+  {
+   "cle": "53",
+   "laize_mm": 333.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.410552
+  },
+  {
+   "cle": "53",
+   "laize_mm": 570.0,
+   "emplacement": "GAUCHE 3",
+   "zone": "magasin",
+   "quantite": 6.187845
+  },
+  {
+   "cle": "53",
+   "laize_mm": 570.0,
+   "emplacement": "GAUCHE 6",
+   "zone": "magasin",
+   "quantite": 4.41989
+  },
+  {
+   "cle": "53",
+   "laize_mm": 440.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.354144
+  },
+  {
+   "cle": "53",
+   "laize_mm": 470.0,
+   "emplacement": "N2",
+   "zone": "magasin",
+   "quantite": 0.27337
+  },
+  {
+   "cle": "53",
+   "laize_mm": 470.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.092818
+  },
+  {
+   "cle": "53",
+   "laize_mm": 510.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.098785
+  },
+  {
+   "cle": "53",
+   "laize_mm": 510.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.233978
+  },
+  {
+   "cle": "53",
+   "laize_mm": 540.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.070829
+  },
+  {
+   "cle": "53",
+   "laize_mm": 570.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 1.98895
+  },
+  {
+   "cle": "53",
+   "laize_mm": 570.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.054641
+  },
+  {
+   "cle": "53",
+   "laize_mm": 570.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.61326
+  },
+  {
+   "cle": "53",
+   "laize_mm": 440.0,
+   "emplacement": "GAUCHE 2",
+   "zone": "magasin",
+   "quantite": 23.867403
+  },
+  {
+   "cle": "53",
+   "laize_mm": 470.0,
+   "emplacement": "GAUCHE 8",
+   "zone": "magasin",
+   "quantite": 11.933702
+  },
+  {
+   "cle": "53",
+   "laize_mm": 510.0,
+   "emplacement": "GAUCHE 12",
+   "zone": "magasin",
+   "quantite": 13.922652
+  },
+  {
+   "cle": "53",
+   "laize_mm": 570.0,
+   "emplacement": "GAUCHE 4",
+   "zone": "magasin",
+   "quantite": 16.906077
+  },
+  {
+   "cle": "53",
+   "laize_mm": 333.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 1.98895
+  },
+  {
+   "cle": "53",
+   "laize_mm": 440.0,
+   "emplacement": "GAUCHE 5",
+   "zone": "magasin",
+   "quantite": 19.889503
+  },
+  {
+   "cle": "53",
+   "laize_mm": 440.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 2.983425
+  },
+  {
+   "cle": "53",
+   "laize_mm": 470.0,
+   "emplacement": "DROITE 10",
+   "zone": "magasin",
+   "quantite": 14.917127
+  },
+  {
+   "cle": "53",
+   "laize_mm": 470.0,
+   "emplacement": "GAUCHE 9",
+   "zone": "magasin",
+   "quantite": 21.878453
+  },
+  {
+   "cle": "53",
+   "laize_mm": 470.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 1.292818
+  },
+  {
+   "cle": "53",
+   "laize_mm": 510.0,
+   "emplacement": "A17",
+   "zone": "magasin",
+   "quantite": 21.878453
+  },
+  {
+   "cle": "53",
+   "laize_mm": 510.0,
+   "emplacement": "A5",
+   "zone": "magasin",
+   "quantite": 23.867403
+  },
+  {
+   "cle": "53",
+   "laize_mm": 510.0,
+   "emplacement": "GAUCHE 1",
+   "zone": "magasin",
+   "quantite": 15.911602
+  },
+  {
+   "cle": "53",
+   "laize_mm": 510.0,
+   "emplacement": "NC GH",
+   "zone": "non_conforme",
+   "quantite": 0.994475
+  },
+  {
+   "cle": "53",
+   "laize_mm": 530.0,
+   "emplacement": "GAUCHE 10",
+   "zone": "magasin",
+   "quantite": 15.911602
+  },
+  {
+   "cle": "53",
+   "laize_mm": 530.0,
+   "emplacement": "GAUCHE 11",
+   "zone": "magasin",
+   "quantite": 17.900552
+  },
+  {
+   "cle": "53",
+   "laize_mm": 530.0,
+   "emplacement": "NC GH",
+   "zone": "non_conforme",
+   "quantite": 0.994475
+  },
+  {
+   "cle": "53",
+   "laize_mm": 570.0,
+   "emplacement": "GAUCHE 3",
+   "zone": "magasin",
+   "quantite": 3.977901
+  },
+  {
+   "cle": "53",
+   "laize_mm": 570.0,
+   "emplacement": "GAUCHE 6",
+   "zone": "magasin",
+   "quantite": 8.950276
+  },
+  {
+   "cle": "53",
+   "laize_mm": 570.0,
+   "emplacement": "GAUCHE 7",
+   "zone": "magasin",
+   "quantite": 20.883978
+  },
+  {
+   "cle": "53",
+   "laize_mm": 570.0,
+   "emplacement": "NC GH",
+   "zone": "non_conforme",
+   "quantite": 0.994475
+  },
+  {
+   "cle": "53",
+   "laize_mm": 570.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 0.994475
+  },
+  {
+   "cle": "53",
+   "laize_mm": 470.0,
+   "emplacement": "NC GH",
+   "zone": "non_conforme",
+   "quantite": 1.96884
+  },
+  {
+   "cle": "53",
+   "laize_mm": 510.0,
+   "emplacement": "NC GH",
+   "zone": "non_conforme",
+   "quantite": 2.95326
+  },
+  {
+   "cle": "N:gl_jaune_45",
+   "laize_mm": 333.0,
+   "emplacement": "NC GH",
+   "zone": "non_conforme",
+   "quantite": 2.0
+  },
+  {
+   "cle": "N:gl_jaune_45",
+   "laize_mm": 333.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:gl_jaune_45",
+   "laize_mm": 470.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 3.0
+  },
+  {
+   "cle": "N:gl_jaune_45",
+   "laize_mm": 510.0,
+   "emplacement": "NC GH",
+   "zone": "non_conforme",
+   "quantite": 2.0
+  },
+  {
+   "cle": "N:gl_jaune_45",
+   "laize_mm": 510.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:gl_jaune_45",
+   "laize_mm": 530.0,
+   "emplacement": "NC GH",
+   "zone": "non_conforme",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:gl_jaune_45",
+   "laize_mm": 530.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 3.0
+  },
+  {
+   "cle": "N:gl_jaune_45",
+   "laize_mm": 570.0,
+   "emplacement": "NC GH",
+   "zone": "non_conforme",
+   "quantite": 7.0
+  },
+  {
+   "cle": "55",
+   "laize_mm": 333.0,
+   "emplacement": "GAUCHE 15",
+   "zone": "magasin",
+   "quantite": 4.8
+  },
+  {
+   "cle": "55",
+   "laize_mm": 440.0,
+   "emplacement": "GAUCHE 15",
+   "zone": "magasin",
+   "quantite": 9.6
+  },
+  {
+   "cle": "55",
+   "laize_mm": 440.0,
+   "emplacement": "NC GH",
+   "zone": "non_conforme",
+   "quantite": 3.2
+  },
+  {
+   "cle": "55",
+   "laize_mm": 570.0,
+   "emplacement": "NC GH",
+   "zone": "non_conforme",
+   "quantite": 1.6
+  },
+  {
+   "cle": "56",
+   "laize_mm": 470.0,
+   "emplacement": "GAUCHE 15",
+   "zone": "magasin",
+   "quantite": 6.4
+  },
+  {
+   "cle": "56",
+   "laize_mm": 470.0,
+   "emplacement": "GAUCHE 15",
+   "zone": "magasin",
+   "quantite": 6.4
+  },
+  {
+   "cle": "N:gl_non_sil_55",
+   "laize_mm": 333.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 10.0
+  },
+  {
+   "cle": "N:gl_non_sil_55",
+   "laize_mm": 530.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 2.0
+  },
+  {
+   "cle": "N:gl_non_sil_55",
+   "laize_mm": 570.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 4.0
+  },
+  {
+   "cle": "81",
+   "laize_mm": 333.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 3.0
+  },
+  {
+   "cle": "81",
+   "laize_mm": 333.0,
+   "emplacement": "NC GH",
+   "zone": "non_conforme",
+   "quantite": 0.734714
+  },
+  {
+   "cle": "81",
+   "laize_mm": 333.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 0.367357
+  },
+  {
+   "cle": "81",
+   "laize_mm": 480.0,
+   "emplacement": "NC KL",
+   "zone": "non_conforme",
+   "quantite": 2.204143
+  },
+  {
+   "cle": "N:couche_congel",
+   "laize_mm": 168.0,
+   "emplacement": "E204",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:couche_congel",
+   "laize_mm": 333.0,
+   "emplacement": "E204",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "64",
+   "laize_mm": 333.0,
+   "emplacement": "M132",
+   "zone": "magasin",
+   "quantite": 0.666667
+  },
+  {
+   "cle": "64",
+   "laize_mm": 500.0,
+   "emplacement": "E171",
+   "zone": "magasin",
+   "quantite": 2.533333
+  },
+  {
+   "cle": "64",
+   "laize_mm": 500.0,
+   "emplacement": "E181",
+   "zone": "magasin",
+   "quantite": 1.266667
+  },
+  {
+   "cle": "64",
+   "laize_mm": 500.0,
+   "emplacement": "M152",
+   "zone": "magasin",
+   "quantite": 0.666667
+  },
+  {
+   "cle": "64",
+   "laize_mm": 200.0,
+   "emplacement": "M121",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "64",
+   "laize_mm": 425.0,
+   "emplacement": "E165",
+   "zone": "magasin",
+   "quantite": 1.35
+  },
+  {
+   "cle": "64",
+   "laize_mm": 333.0,
+   "emplacement": "M141",
+   "zone": "magasin",
+   "quantite": 0.073333
+  },
+  {
+   "cle": "61",
+   "laize_mm": 333.0,
+   "emplacement": "E231",
+   "zone": "magasin",
+   "quantite": 0.298469
+  },
+  {
+   "cle": "61",
+   "laize_mm": 440.0,
+   "emplacement": "E111",
+   "zone": "magasin",
+   "quantite": 0.327381
+  },
+  {
+   "cle": "61",
+   "laize_mm": 440.0,
+   "emplacement": "E111",
+   "zone": "magasin",
+   "quantite": 0.332483
+  },
+  {
+   "cle": "61",
+   "laize_mm": 440.0,
+   "emplacement": "E121",
+   "zone": "magasin",
+   "quantite": 0.326531
+  },
+  {
+   "cle": "N:couche_perm_opaque",
+   "laize_mm": 333.0,
+   "emplacement": "M163",
+   "zone": "magasin",
+   "quantite": 2.0
+  },
+  {
+   "cle": "60",
+   "laize_mm": 333.0,
+   "emplacement": "M121",
+   "zone": "magasin",
+   "quantite": 0.5
+  },
+  {
+   "cle": "60",
+   "laize_mm": 333.0,
+   "emplacement": "N1",
+   "zone": "magasin",
+   "quantite": 3.0
+  },
+  {
+   "cle": "60",
+   "laize_mm": 333.0,
+   "emplacement": "M121",
+   "zone": "magasin",
+   "quantite": 0.0
+  },
+  {
+   "cle": "60",
+   "laize_mm": 333.0,
+   "emplacement": "N132",
+   "zone": "magasin",
+   "quantite": 0.515
+  },
+  {
+   "cle": "80",
+   "laize_mm": 333.0,
+   "emplacement": "E152",
+   "zone": "magasin",
+   "quantite": 1.333333
+  },
+  {
+   "cle": "80",
+   "laize_mm": 333.0,
+   "emplacement": "E155",
+   "zone": "magasin",
+   "quantite": 1.466667
+  },
+  {
+   "cle": "80",
+   "laize_mm": 333.0,
+   "emplacement": "E165",
+   "zone": "magasin",
+   "quantite": 0.733333
+  },
+  {
+   "cle": "80",
+   "laize_mm": 333.0,
+   "emplacement": "E134",
+   "zone": "magasin",
+   "quantite": 2.0
+  },
+  {
+   "cle": "80",
+   "laize_mm": 333.0,
+   "emplacement": "E243",
+   "zone": "magasin",
+   "quantite": 0.666667
+  },
+  {
+   "cle": "80",
+   "laize_mm": 333.0,
+   "emplacement": "E243",
+   "zone": "magasin",
+   "quantite": 0.6
+  },
+  {
+   "cle": "80",
+   "laize_mm": 333.0,
+   "emplacement": "GAUCHE 13",
+   "zone": "magasin",
+   "quantite": 16.0
+  },
+  {
+   "cle": "80",
+   "laize_mm": 333.0,
+   "emplacement": "F111",
+   "zone": "magasin",
+   "quantite": 2.0
+  },
+  {
+   "cle": "N:couche_fluo_perm",
+   "laize_mm": 333.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:couche_jet_mat_perm",
+   "laize_mm": 333.0,
+   "emplacement": "E153",
+   "zone": "magasin",
+   "quantite": 3.0
+  },
+  {
+   "cle": "N:couche_jet_mat_perm",
+   "laize_mm": 333.0,
+   "emplacement": "E153",
+   "zone": "magasin",
+   "quantite": 0.727273
+  },
+  {
+   "cle": "63",
+   "laize_mm": 333.0,
+   "emplacement": "M141",
+   "zone": "magasin",
+   "quantite": 1.111111
+  },
+  {
+   "cle": "63",
+   "laize_mm": 333.0,
+   "emplacement": "M161",
+   "zone": "magasin",
+   "quantite": 1.111111
+  },
+  {
+   "cle": "N:papier_jet_enlev",
+   "laize_mm": 333.0,
+   "emplacement": "N5",
+   "zone": "magasin",
+   "quantite": 0.7
+  },
+  {
+   "cle": "N:papier_jet_enlev",
+   "laize_mm": 333.0,
+   "emplacement": "N5",
+   "zone": "magasin",
+   "quantite": 0.512
+  },
+  {
+   "cle": "N:papier_jet_enlev",
+   "laize_mm": 333.0,
+   "emplacement": "N6",
+   "zone": "magasin",
+   "quantite": 4.0
+  },
+  {
+   "cle": "N:papier_jet_enlev",
+   "laize_mm": 333.0,
+   "emplacement": "N7",
+   "zone": "magasin",
+   "quantite": 8.0
+  },
+  {
+   "cle": "N:papier_jet_enlev",
+   "laize_mm": 500.0,
+   "emplacement": "N5",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:papier_jet_enlev",
+   "laize_mm": 500.0,
+   "emplacement": "N5",
+   "zone": "magasin",
+   "quantite": 0.455
+  },
+  {
+   "cle": "84",
+   "laize_mm": 485.0,
+   "emplacement": "E132",
+   "zone": "magasin",
+   "quantite": 0.726333
+  },
+  {
+   "cle": "84",
+   "laize_mm": 333.0,
+   "emplacement": "F112",
+   "zone": "magasin",
+   "quantite": 0.666667
+  },
+  {
+   "cle": "84",
+   "laize_mm": 333.0,
+   "emplacement": "F112",
+   "zone": "magasin",
+   "quantite": 0.666667
+  },
+  {
+   "cle": "84",
+   "laize_mm": 333.0,
+   "emplacement": "E202",
+   "zone": "magasin",
+   "quantite": 0.333333
+  },
+  {
+   "cle": "N:pe_enlev",
+   "laize_mm": 333.0,
+   "emplacement": "F113",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "58",
+   "laize_mm": 250.0,
+   "emplacement": "M111",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "58",
+   "laize_mm": 250.0,
+   "emplacement": "M121",
+   "zone": "magasin",
+   "quantite": 0.05
+  },
+  {
+   "cle": "58",
+   "laize_mm": 166.0,
+   "emplacement": "E202",
+   "zone": "magasin",
+   "quantite": 0.5
+  },
+  {
+   "cle": "58",
+   "laize_mm": 100.0,
+   "emplacement": "M121",
+   "zone": "magasin",
+   "quantite": 0.5
+  },
+  {
+   "cle": "58",
+   "laize_mm": 333.0,
+   "emplacement": "M121",
+   "zone": "magasin",
+   "quantite": 0.05
+  },
+  {
+   "cle": "62",
+   "laize_mm": 200.0,
+   "emplacement": "ENTRE N5 ET N6",
+   "zone": "magasin",
+   "quantite": 0.857143
+  },
+  {
+   "cle": "62",
+   "laize_mm": 200.0,
+   "emplacement": "M121",
+   "zone": "magasin",
+   "quantite": 0.028571
+  },
+  {
+   "cle": "82",
+   "laize_mm": 333.0,
+   "emplacement": "E114",
+   "zone": "magasin",
+   "quantite": 2.0
+  },
+  {
+   "cle": "N:pp_blanc_perm",
+   "laize_mm": 172.0,
+   "emplacement": "ENTRE N5 ET N6",
+   "zone": "magasin",
+   "quantite": 0.8
+  },
+  {
+   "cle": "N:pp_blanc_perm",
+   "laize_mm": 333.0,
+   "emplacement": "ENTRE N5 ET N6",
+   "zone": "magasin",
+   "quantite": 0.7285
+  },
+  {
+   "cle": "N:pp_blanc_perm",
+   "laize_mm": 333.0,
+   "emplacement": "M141",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:pp_blanc_perm",
+   "laize_mm": 333.0,
+   "emplacement": "M142",
+   "zone": "magasin",
+   "quantite": 3.0
+  },
+  {
+   "cle": "N:pp_ultra_enlev",
+   "laize_mm": 333.0,
+   "emplacement": "E162",
+   "zone": "magasin",
+   "quantite": 3.0
+  },
+  {
+   "cle": "N:pp_blanc_enlev",
+   "laize_mm": 333.0,
+   "emplacement": "M112",
+   "zone": "magasin",
+   "quantite": 1.5
+  },
+  {
+   "cle": "N:pp_blanc_enlev",
+   "laize_mm": 500.0,
+   "emplacement": "E131",
+   "zone": "magasin",
+   "quantite": 0.5
+  },
+  {
+   "cle": "N:pp_blanc_enlev",
+   "laize_mm": 333.0,
+   "emplacement": "M111",
+   "zone": "magasin",
+   "quantite": 0.08405
+  },
+  {
+   "cle": "59",
+   "laize_mm": 333.0,
+   "emplacement": "M153",
+   "zone": "magasin",
+   "quantite": 0.985222
+  },
+  {
+   "cle": "59",
+   "laize_mm": 333.0,
+   "emplacement": "N132",
+   "zone": "magasin",
+   "quantite": 0.082102
+  },
+  {
+   "cle": "59",
+   "laize_mm": 333.0,
+   "emplacement": "M151",
+   "zone": "magasin",
+   "quantite": 0.098522
+  },
+  {
+   "cle": "73",
+   "laize_mm": 306.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 0.375
+  },
+  {
+   "cle": "73",
+   "laize_mm": 333.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.425
+  },
+  {
+   "cle": "73",
+   "laize_mm": 333.0,
+   "emplacement": "M151",
+   "zone": "magasin",
+   "quantite": 0.0
+  },
+  {
+   "cle": "73",
+   "laize_mm": 470.0,
+   "emplacement": "E313",
+   "zone": "magasin",
+   "quantite": 0.56
+  },
+  {
+   "cle": "65",
+   "laize_mm": 333.0,
+   "emplacement": "E191",
+   "zone": "magasin",
+   "quantite": 3.428571
+  },
+  {
+   "cle": "65",
+   "laize_mm": 430.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 1.142857
+  },
+  {
+   "cle": "65",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 10.0
+  },
+  {
+   "cle": "65",
+   "laize_mm": 500.0,
+   "emplacement": "E112",
+   "zone": "magasin",
+   "quantite": 1.142857
+  },
+  {
+   "cle": "65",
+   "laize_mm": 375.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 0.342857
+  },
+  {
+   "cle": "65",
+   "laize_mm": 500.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 0.342857
+  },
+  {
+   "cle": "66",
+   "laize_mm": 333.0,
+   "emplacement": "M111",
+   "zone": "magasin",
+   "quantite": 0.333333
+  },
+  {
+   "cle": "66",
+   "laize_mm": 530.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.103333
+  },
+  {
+   "cle": "67",
+   "laize_mm": 333.0,
+   "emplacement": "M151",
+   "zone": "magasin",
+   "quantite": 1.333333
+  },
+  {
+   "cle": "67",
+   "laize_mm": 333.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 2.07
+  },
+  {
+   "cle": "67",
+   "laize_mm": 470.0,
+   "emplacement": "N4",
+   "zone": "magasin",
+   "quantite": 2.666667
+  },
+  {
+   "cle": "67",
+   "laize_mm": 470.0,
+   "emplacement": "F112",
+   "zone": "magasin",
+   "quantite": 1.266667
+  },
+  {
+   "cle": "67",
+   "laize_mm": 333.0,
+   "emplacement": "E213",
+   "zone": "magasin",
+   "quantite": 0.666667
+  },
+  {
+   "cle": "67",
+   "laize_mm": 333.0,
+   "emplacement": "E213",
+   "zone": "magasin",
+   "quantite": 0.533333
+  },
+  {
+   "cle": "67",
+   "laize_mm": 470.0,
+   "emplacement": "A FOND",
+   "zone": "magasin",
+   "quantite": 10.666667
+  },
+  {
+   "cle": "N:therm_hydro",
+   "laize_mm": 333.0,
+   "emplacement": "M141",
+   "zone": "magasin",
+   "quantite": 0.05
+  },
+  {
+   "cle": "N:therm_hydro",
+   "laize_mm": 150.0,
+   "emplacement": "E291",
+   "zone": "magasin",
+   "quantite": 3.0
+  },
+  {
+   "cle": "N:therm_hydro",
+   "laize_mm": 440.0,
+   "emplacement": "E202",
+   "zone": "magasin",
+   "quantite": 0.1
+  },
+  {
+   "cle": "N:therm_hydro",
+   "laize_mm": 440.0,
+   "emplacement": "E215",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:therm_hydro",
+   "laize_mm": 440.0,
+   "emplacement": "E232",
+   "zone": "magasin",
+   "quantite": 0.5
+  },
+  {
+   "cle": "N:therm_hydro",
+   "laize_mm": 440.0,
+   "emplacement": "E243",
+   "zone": "magasin",
+   "quantite": 0.5
+  },
+  {
+   "cle": "71",
+   "laize_mm": 198.0,
+   "emplacement": "E141",
+   "zone": "magasin",
+   "quantite": 2.8
+  },
+  {
+   "cle": "71",
+   "laize_mm": 198.0,
+   "emplacement": "N2",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "71",
+   "laize_mm": 333.0,
+   "emplacement": "N10",
+   "zone": "magasin",
+   "quantite": 7.2
+  },
+  {
+   "cle": "71",
+   "laize_mm": 333.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.6
+  },
+  {
+   "cle": "71",
+   "laize_mm": 530.0,
+   "emplacement": "N9",
+   "zone": "magasin",
+   "quantite": 7.2
+  },
+  {
+   "cle": "71",
+   "laize_mm": 333.0,
+   "emplacement": "M132",
+   "zone": "magasin",
+   "quantite": 0.64
+  },
+  {
+   "cle": "71",
+   "laize_mm": 333.0,
+   "emplacement": "M121",
+   "zone": "magasin",
+   "quantite": 0.3
+  },
+  {
+   "cle": "N:therm_pro_congel",
+   "laize_mm": 333.0,
+   "emplacement": "M141",
+   "zone": "magasin",
+   "quantite": 0.666
+  },
+  {
+   "cle": "68",
+   "laize_mm": 333.0,
+   "emplacement": "M171",
+   "zone": "magasin",
+   "quantite": 1.304348
+  },
+  {
+   "cle": "68",
+   "laize_mm": 470.0,
+   "emplacement": "E253",
+   "zone": "magasin",
+   "quantite": 0.652174
+  },
+  {
+   "cle": "72",
+   "laize_mm": 333.0,
+   "emplacement": "M191",
+   "zone": "magasin",
+   "quantite": 0.4
+  },
+  {
+   "cle": "72",
+   "laize_mm": 198.0,
+   "emplacement": "E133",
+   "zone": "magasin",
+   "quantite": 0.4
+  },
+  {
+   "cle": "72",
+   "laize_mm": 198.0,
+   "emplacement": "E133",
+   "zone": "magasin",
+   "quantite": 0.38
+  },
+  {
+   "cle": "72",
+   "laize_mm": 198.0,
+   "emplacement": "E143",
+   "zone": "magasin",
+   "quantite": 0.8
+  },
+  {
+   "cle": "72",
+   "laize_mm": 198.0,
+   "emplacement": "N6",
+   "zone": "magasin",
+   "quantite": 2.52
+  },
+  {
+   "cle": "72",
+   "laize_mm": 198.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.4
+  },
+  {
+   "cle": "72",
+   "laize_mm": 333.0,
+   "emplacement": "E143",
+   "zone": "magasin",
+   "quantite": 1.6
+  },
+  {
+   "cle": "72",
+   "laize_mm": 333.0,
+   "emplacement": "E194",
+   "zone": "magasin",
+   "quantite": 0.4
+  },
+  {
+   "cle": "72",
+   "laize_mm": 333.0,
+   "emplacement": "N10",
+   "zone": "magasin",
+   "quantite": 4.8
+  },
+  {
+   "cle": "72",
+   "laize_mm": 333.0,
+   "emplacement": "N132",
+   "zone": "magasin",
+   "quantite": 0.14
+  },
+  {
+   "cle": "72",
+   "laize_mm": 333.0,
+   "emplacement": "N6",
+   "zone": "magasin",
+   "quantite": 1.2
+  },
+  {
+   "cle": "72",
+   "laize_mm": 333.0,
+   "emplacement": "N6",
+   "zone": "magasin",
+   "quantite": 0.24
+  },
+  {
+   "cle": "72",
+   "laize_mm": 333.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 2.0
+  },
+  {
+   "cle": "72",
+   "laize_mm": 530.0,
+   "emplacement": "N10",
+   "zone": "magasin",
+   "quantite": 3.2
+  },
+  {
+   "cle": "72",
+   "laize_mm": 333.0,
+   "emplacement": "ENTRE N5 ET N6",
+   "zone": "magasin",
+   "quantite": 1.2
+  },
+  {
+   "cle": "72",
+   "laize_mm": 333.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 2.4
+  },
+  {
+   "cle": "N:therm_prot_enlev",
+   "laize_mm": 510.0,
+   "emplacement": "E123",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:therm_prot_pneu",
+   "laize_mm": 333.0,
+   "emplacement": "M123",
+   "zone": "magasin",
+   "quantite": 2.0
+  },
+  {
+   "cle": "N:therm_prot_pneu",
+   "laize_mm": 333.0,
+   "emplacement": "M161",
+   "zone": "magasin",
+   "quantite": 0.15
+  },
+  {
+   "cle": "69",
+   "laize_mm": 333.0,
+   "emplacement": "M151",
+   "zone": "magasin",
+   "quantite": 0.2
+  },
+  {
+   "cle": "69",
+   "laize_mm": 515.0,
+   "emplacement": "E253",
+   "zone": "magasin",
+   "quantite": 0.5
+  },
+  {
+   "cle": "69",
+   "laize_mm": 515.0,
+   "emplacement": "F123",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "69",
+   "laize_mm": 333.0,
+   "emplacement": "F113",
+   "zone": "magasin",
+   "quantite": 0.425
+  },
+  {
+   "cle": "69",
+   "laize_mm": 333.0,
+   "emplacement": "E184",
+   "zone": "magasin",
+   "quantite": 0.75
+  },
+  {
+   "cle": "69",
+   "laize_mm": 168.0,
+   "emplacement": "M141",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "69",
+   "laize_mm": 333.0,
+   "emplacement": "M122",
+   "zone": "magasin",
+   "quantite": 1.25
+  },
+  {
+   "cle": "69",
+   "laize_mm": 333.0,
+   "emplacement": "F123",
+   "zone": "magasin",
+   "quantite": 0.26825
+  },
+  {
+   "cle": "70",
+   "laize_mm": 333.0,
+   "emplacement": "M133",
+   "zone": "magasin",
+   "quantite": 1.25
+  },
+  {
+   "cle": "70",
+   "laize_mm": 333.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 1.5
+  },
+  {
+   "cle": "70",
+   "laize_mm": 333.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 2.97
+  },
+  {
+   "cle": "70",
+   "laize_mm": 440.0,
+   "emplacement": "E252",
+   "zone": "magasin",
+   "quantite": 1.825
+  },
+  {
+   "cle": "70",
+   "laize_mm": 333.0,
+   "emplacement": "D·M·N·E",
+   "zone": "magasin",
+   "quantite": 6.0
+  },
+  {
+   "cle": "70",
+   "laize_mm": 333.0,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.5
+  },
+  {
+   "cle": "70",
+   "laize_mm": 530.0,
+   "emplacement": "N9",
+   "zone": "magasin",
+   "quantite": 4.0
+  },
+  {
+   "cle": "70",
+   "laize_mm": 340.0,
+   "emplacement": "E224",
+   "zone": "magasin",
+   "quantite": 0.5
+  },
+  {
+   "cle": "57",
+   "laize_mm": 315.0,
+   "emplacement": "M151",
+   "zone": "magasin",
+   "quantite": 0.102041
+  },
+  {
+   "cle": "57",
+   "laize_mm": 333.0,
+   "emplacement": "M113",
+   "zone": "magasin",
+   "quantite": 0.408163
+  },
+  {
+   "cle": "57",
+   "laize_mm": 333.0,
+   "emplacement": "M181",
+   "zone": "magasin",
+   "quantite": 0.387755
+  },
+  {
+   "cle": "N:velin_congel",
+   "laize_mm": 137.0,
+   "emplacement": "M141",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:velin_congel",
+   "laize_mm": 333.0,
+   "emplacement": "M161",
+   "zone": "magasin",
+   "quantite": 2.0
+  },
+  {
+   "cle": "N:b213128",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "8",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 9.625
+  },
+  {
+   "cle": "N:b310100",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "N:b205108",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:b223f",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "N:b223fc",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": null
+  },
+  {
+   "cle": "N:b223fc",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "9",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.075
+  },
+  {
+   "cle": "9",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 9.75
+  },
+  {
+   "cle": "N:b305230",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 2.0
+  },
+  {
+   "cle": "75",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 1.0
+  },
+  {
+   "cle": "N:b305270",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 4.0
+  },
+  {
+   "cle": "N:b310170",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "10",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 2.7
+  },
+  {
+   "cle": "N:c200160",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": null
+  },
+  {
+   "cle": "N:c211210",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "74",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": null
+  },
+  {
+   "cle": "N:c200115",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "76",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 1.0
+  },
+  {
+   "cle": "76",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 0.0
+  },
+  {
+   "cle": "N:c230",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "N:c245",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 3.0
+  },
+  {
+   "cle": "N:c250130",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "N:c250150",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "N:c270",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "7",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 0.0
+  },
+  {
+   "cle": "N:c290",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "N:c300120",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "N:c300170",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 3.0
+  },
+  {
+   "cle": "N:c30087",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.444444
+  },
+  {
+   "cle": "N:c30087",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 2.0
+  },
+  {
+   "cle": "N:c310168",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "N:c310215",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "N:c310220",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "11",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 11.269231
+  },
+  {
+   "cle": "N:c350220",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "41",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 7.692308
+  },
+  {
+   "cle": "N:c360",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "N:c360",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "12",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 0.0
+  },
+  {
+   "cle": "13",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 9.230769
+  },
+  {
+   "cle": "14",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 1.076923
+  },
+  {
+   "cle": "14",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 6.153846
+  },
+  {
+   "cle": "15",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.769231
+  },
+  {
+   "cle": "15",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 3.0
+  },
+  {
+   "cle": "16",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 16.153846
+  },
+  {
+   "cle": "17",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 6.153846
+  },
+  {
+   "cle": "42",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 4.615385
+  },
+  {
+   "cle": "18",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 18.461538
+  },
+  {
+   "cle": "18",
+   "laize_mm": null,
+   "emplacement": "COHÉSIO 1 (SORTI AVANT COMPTAGE)",
+   "zone": "production",
+   "quantite": 0.25
+  },
+  {
+   "cle": "19",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 1.538462
+  },
+  {
+   "cle": "19",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 1.0
+  },
+  {
+   "cle": "20",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.961538
+  },
+  {
+   "cle": "20",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 1.538462
+  },
+  {
+   "cle": "21",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 2.307692
+  },
+  {
+   "cle": "21",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 6.461538
+  },
+  {
+   "cle": "22",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 3.730769
+  },
+  {
+   "cle": "22",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 0.0
+  },
+  {
+   "cle": "23",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 1.076923
+  },
+  {
+   "cle": "N:c400170",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 6.0
+  },
+  {
+   "cle": "N:c400200",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 3.18
+  },
+  {
+   "cle": "N:c421",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 2.0
+  },
+  {
+   "cle": "N:raja",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "6",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.73
+  },
+  {
+   "cle": "6",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 0.0
+  },
+  {
+   "cle": "77",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 1.5
+  },
+  {
+   "cle": "N:cale_a4",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": null
+  },
+  {
+   "cle": "N:cale_a4",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": null
+  },
+  {
+   "cle": "2",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.700332
+  },
+  {
+   "cle": "2",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 0.664452
+  },
+  {
+   "cle": "2",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 0.498339
+  },
+  {
+   "cle": "3",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 0.8
+  },
+  {
+   "cle": "3",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 9.0
+  },
+  {
+   "cle": "3",
+   "laize_mm": null,
+   "emplacement": "COHÉSIO 1 (SORTI AVANT COMPTAGE)",
+   "zone": "production",
+   "quantite": 0.141414
+  },
+  {
+   "cle": "4",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 3.0
+  },
+  {
+   "cle": "4",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 6.0
+  },
+  {
+   "cle": "5",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 2.800866
+  },
+  {
+   "cle": "5",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 5.0
+  },
+  {
+   "cle": "N:bg152",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "78",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "N:bg19_108",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "N:bg195_106",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": null
+  },
+  {
+   "cle": "N:bg195_53",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": null
+  },
+  {
+   "cle": "N:bg195_57",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": null
+  },
+  {
+   "cle": "N:bg40_106",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 4.60274
+  },
+  {
+   "cle": "N:bg40_18",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "N:bg40_56",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": null
+  },
+  {
+   "cle": "N:bg40_70",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 4.0
+  },
+  {
+   "cle": "N:bg76_28",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 12.0
+  },
+  {
+   "cle": "N:bg76_79",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 6.451613
+  },
+  {
+   "cle": "N:bg76_91",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 12.0
+  },
+  {
+   "cle": "24",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 2125.0
+  },
+  {
+   "cle": "24",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 15600.0
+  },
+  {
+   "cle": "26",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 600.0
+  },
+  {
+   "cle": "26",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 5775.0
+  },
+  {
+   "cle": "29",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 400.0
+  },
+  {
+   "cle": "25",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 4800.0
+  },
+  {
+   "cle": "27",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 1275.0
+  },
+  {
+   "cle": "28",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 963.0
+  },
+  {
+   "cle": "39",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 13.0
+  },
+  {
+   "cle": "39",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 81.0
+  },
+  {
+   "cle": "40",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 10.0
+  },
+  {
+   "cle": "40",
+   "laize_mm": null,
+   "emplacement": "ATELIER",
+   "zone": "production",
+   "quantite": 8.0
+  },
+  {
+   "cle": "40",
+   "laize_mm": null,
+   "emplacement": "BÂTIMENT 3",
+   "zone": "magasin",
+   "quantite": 8.0
+  }
+ ]
+}

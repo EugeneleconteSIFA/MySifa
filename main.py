@@ -123,6 +123,7 @@ from app.routers.rvgi import router as rvgi_api_router
 # Comparaison des stocks : RVGI face a MySifa, avec historique des ecarts.
 from app.routers.stock_compare import router as stock_compare_router
 from app.routers.stock_ecarts_rvgi import router as stock_ecarts_rvgi_router
+from app.routers.mp_variantes import router as mp_variantes_router
 from app.routers.bobines_montees import router as bobines_montees_router
 from app.routers.outils import router as outils_router
 from app.routers.rvgi_tiers import router as rvgi_tiers_router
@@ -631,6 +632,7 @@ app.include_router(erp_page_router)
 app.include_router(rvgi_api_router)
 app.include_router(stock_compare_router)
 app.include_router(stock_ecarts_rvgi_router)
+app.include_router(mp_variantes_router)
 app.include_router(bobines_montees_router)
 app.include_router(outils_router)
 app.include_router(rvgi_tiers_router)

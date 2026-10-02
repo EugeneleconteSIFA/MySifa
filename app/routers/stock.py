@@ -6344,7 +6344,14 @@ def recherche_articles_rvgi(request: Request, q: str = "", limite: int = 20):
 # réceptions et le déstockage. Ajouter un emplacement ne fait donc bouger le
 # stock que si l'écran le demande explicitement (création de la référence).
 
-_MP_EMPL_RE = re.compile(r"^[A-Z][0-9]+$")
+# Code de grille (A121, Z0), ou nom du terrain repris à l'inventaire du
+# 01/10/2026 (« DROITE 3 », « NC KL », « BÂTIMENT 3 ») : un premier mot fait de
+# lettres, puis des mots séparés par une espace. 20 caractères au plus (contrôlé
+# à part). « 121 », « AB12 » ou « A-12 » restent refusés.
+_MP_EMPL_RE = re.compile(
+    r"^(?:[A-Z][0-9]+|[A-ZÀÂÄÇÉÈÊËÎÏÔÖÙÛÜ](?:[A-ZÀÂÄÇÉÈÊËÎÏÔÖÙÛÜ·]*[A-ZÀÂÄÇÉÈÊËÎÏÔÖÙÛÜ])?"
+    r"(?: [A-ZÀÂÄÇÉÈÊËÎÏÔÖÙÛÜ0-9·]+)*)$"
+)
 
 
 def _mp_emplacements_par_matiere(conn) -> dict[int, list[dict]]:
@@ -6394,7 +6401,7 @@ async def set_matiere_emplacement(matiere_id: int, request: Request):
     if not code:
         raise HTTPException(400, "Emplacement obligatoire.")
     if len(code) > 20 or not _MP_EMPL_RE.match(code):
-        raise HTTPException(400, "Emplacement invalide — une lettre suivie de chiffres (ex. A121, Z0).")
+        raise HTTPException(400, "Emplacement invalide — code de grille (ex. A121) ou nom du terrain, 20 caractères au plus.")
     try:
         quantite = float(str(body.get("quantite", "")).replace(",", "."))
     except (TypeError, ValueError):
