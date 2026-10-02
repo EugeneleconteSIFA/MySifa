@@ -10452,7 +10452,8 @@ function mpLignesLaize(m, lignes, filtreLaize, filtreFourn) {
       .filter(x => Number(x.quantite || 0) !== 0).forEach(x => laizes.add(Math.round(x.valeur_mm || 0)));
   }
   lignes.forEach(l => laizes.add(Math.round(l.laize_mm || 0)));
-  [...laizes].filter(v => !filtreLaize || String(v) === String(filtreLaize)).sort((x, y) => x - y)
+  // Les plus grandes laizes d'abord : ce sont elles qu'on découpe.
+  [...laizes].filter(v => !filtreLaize || String(v) === String(filtreLaize)).sort((x, y) => y - x)
     .forEach(lz => {
       const ici = lignes.filter(l => Math.round(l.laize_mm || 0) === lz);
       const ms = lz ? mpMySifaLaize(m, lz) : { quantite: 0, metres: null };
