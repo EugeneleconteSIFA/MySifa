@@ -102,7 +102,9 @@ conn.executescript("""
         adhesif_label TEXT, ref_adhesif TEXT, qte_adhesif_g REAL, qte_adhesif_kg REAL,
         qte_au_mille REAL, date_creation TEXT, delai_client TEXT,
         pdf_filename TEXT, date_import TEXT, imported_by TEXT, statut TEXT,
-        valide INTEGER NOT NULL DEFAULT 0, valide_par TEXT, valide_at TEXT);
+        valide INTEGER NOT NULL DEFAULT 0, valide_par TEXT, valide_at TEXT,
+        matiere_ref_id INTEGER, glassine_ref_id INTEGER, adhesif_ref_id INTEGER,
+        carton_ref_id INTEGER, mandrin_ref_id INTEGER, palette_ref_id INTEGER);
     CREATE TABLE fiches_techniques(
         id INTEGER PRIMARY KEY, reference TEXT, ref_produit_norm TEXT, machine TEXT,
         support TEXT, matiere TEXT, glassine TEXT, adhesif TEXT, qte_au_mille REAL,
@@ -112,7 +114,9 @@ conn.executescript("""
         nb_etiq_bobin INTEGER, nb_bobines_carton INTEGER, cartons TEXT,
         conditionnement TEXT, palette_type TEXT, palette_nb_cartons_sol INTEGER,
         palette_nb_cartons_hauteur INTEGER, source TEXT, date_import TEXT,
-        valide INTEGER NOT NULL DEFAULT 0, valide_par TEXT, valide_at TEXT);
+        valide INTEGER NOT NULL DEFAULT 0, valide_par TEXT, valide_at TEXT,
+        support_ref_id INTEGER, glassine_ref_id INTEGER, adhesif_ref_id INTEGER,
+        carton_ref_id INTEGER, mandrin_ref_id INTEGER, palette_ref_id INTEGER);
     CREATE TABLE mp_mouvements(
         id INTEGER PRIMARY KEY, matiere_id INTEGER, type_mouvement TEXT,
         quantite REAL, planning_entry_id INTEGER, no_dossier TEXT,

@@ -76,10 +76,8 @@ def _fournisseur_par_numero_rvgi(conn: sqlite3.Connection, code1: Optional[str])
     """Le code1 d'un article RVGI est le numéro du fournisseur (1 = article générique)."""
     if not code1 or not str(code1).isdigit() or str(code1) == "1":
         return None
-    r = conn.execute(
-        "SELECT id FROM fournisseurs_fsc WHERE rvgi_numero=? ORDER BY id LIMIT 1", (int(code1),)
-    ).fetchone()
-    return int(r["id"]) if r else None
+    from app.services.fournisseurs_fusion import par_numero_rvgi
+    return par_numero_rvgi(conn, code1)
 
 
 def _dernier_achat(refs: list[tuple[str, str, int]]) -> dict:
@@ -579,3 +577,55 @@ def fermer_matiere(conn: sqlite3.Connection, matiere_id: int) -> int:
     return int(conn.execute(
         "SELECT COUNT(*) FROM erp_article_matiere WHERE matiere_id=?", (matiere_id,)
     ).fetchone()[0])
+
+
+# Une variante provisoire : créée depuis un prix ou par la reprise, sans
+# article ni référence, reconnue à sa note d'origine.
+_PROVISOIRE = """(v.rvgi_code1 IS NULL AND v.ref_fournisseur IS NULL
+                  AND (v.note LIKE 'Reprise des prix fournisseur%'
+                       OR v.note LIKE 'Créée depuis un prix%'
+                       OR v.note LIKE 'Créée au choix%'))"""
+
+
+def fusionner_provisoires(conn: sqlite3.Connection, matiere_ids=None) -> int:
+    """Fond chaque variante provisoire dans la variante complète du même fournisseur.
+
+    Une provisoire qui a une sœur complète chez le même fournisseur lui passe
+    son statut principal s'il le porte, puis est désactivée. Le fournisseur ne
+    change pas, donc le prix en vigueur non plus. Ne committe pas.
+
+    Les jumelles naissent de deux façons : la reprise d'inventaire qui renomme
+    la fiche avant de créer les variantes (la provisoire n'est plus reconnue
+    par son libellé), et la fusion de deux fiches fournisseur (le prix de l'une,
+    l'article de l'autre).
+    """
+    sql = f"""SELECT v.id, v.matiere_id, v.fournisseur_id, v.principal FROM mp_variantes v
+               WHERE v.actif = 1 AND v.fournisseur_id IS NOT NULL AND {_PROVISOIRE}"""
+    params: list = []
+    if matiere_ids is not None:
+        ids = [int(m) for m in matiere_ids]
+        if not ids:
+            return 0
+        sql += " AND v.matiere_id IN (%s)" % ",".join("?" * len(ids))
+        params = ids
+    n = 0
+    for pid, mid, fid, principal in conn.execute(sql, params).fetchall():
+        soeur = conn.execute(
+            f"""SELECT v.id FROM mp_variantes v
+                 WHERE v.matiere_id = ? AND v.fournisseur_id = ? AND v.actif = 1 AND v.id <> ?
+                   AND NOT {_PROVISOIRE}
+                 ORDER BY (v.rvgi_code1 IS NULL), v.id LIMIT 1""",
+            (mid, fid, pid),
+        ).fetchone()
+        if not soeur:
+            continue
+        if principal:
+            conn.execute("UPDATE mp_variantes SET principal = 0 WHERE id = ?", (pid,))
+            conn.execute("UPDATE mp_variantes SET principal = 1 WHERE id = ?", (soeur[0],))
+        conn.execute(
+            """UPDATE mp_variantes SET actif = 0, note = COALESCE(note,'') || ' Fusionnée dans la variante ' || ?
+                WHERE id = ?""",
+            (soeur[0], pid),
+        )
+        n += 1
+    return n

@@ -1775,13 +1775,18 @@ def fournisseurs_doublons(request: Request):
     require_settings(request)
     from database import get_db
     with get_db() as conn:
+        # Une fiche déjà fusionnée (gardée pour son lien RVGI) n'est plus un
+        # doublon à traiter : elle renvoie vers la fiche qui l'a absorbée.
+        fusion = any(c[1] == "fusionne_dans"
+                     for c in conn.execute("PRAGMA table_info(fournisseurs_fsc)"))
         rows = conn.execute(
             """SELECT ff.id, ff.nom, ff.siret, ff.tva_intracom, ff.ville,
                       ff.has_fsc, ff.actif, ff.groupe,
                       (SELECT COUNT(*) FROM fournisseur_contacts fc
                         WHERE fc.fournisseur_id = ff.id AND fc.actif = 1) AS nb_contacts
                  FROM fournisseurs_fsc ff
-                ORDER BY ff.nom COLLATE NOCASE ASC"""
+                %s
+                ORDER BY ff.nom COLLATE NOCASE ASC""" % ("WHERE ff.fusionne_dans IS NULL" if fusion else "")
         ).fetchall()
 
     fiches = [dict(r) for r in rows]
@@ -1865,217 +1870,37 @@ def fournisseurs_doublons(request: Request):
 
 
 def _four_refs_fournisseur(conn):
-    """Introspecte le schéma : où l'id d'un fournisseur est-il référencé ?
-
-    Volontairement générique. Une quinzaine de tables portent aujourd'hui un
-    `fournisseur_id` et le nombre grandit à chaque chantier ; une liste écrite
-    à la main serait périmée au prochain merge, et une fusion qui oublie une
-    table laisse des lignes pointant vers un id supprimé — donc des écrans
-    vides sans message d'erreur.
-
-    Renvoie (refs_id, refs_nom, refs_json) :
-      refs_id   [(table, colonne, cles_unicite)]  colonnes d'id
-      refs_nom  [(table, colonne)]                colonnes portant le NOM
-      refs_json [(table, colonne)]                listes d'ids en JSON
-    """
-    refs_id, refs_nom, refs_json = [], [], []
-    tables = [
-        r["name"] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' "
-            "AND name NOT LIKE 'sqlite_%'"
-        ).fetchall()
-    ]
-    for t in tables:
-        if t == "fournisseurs_fsc":
-            continue
-        try:
-            cols = conn.execute(f"PRAGMA table_info({t})").fetchall()
-        except Exception:
-            continue
-        noms = [c["name"] for c in cols]
-        pk = [c["name"] for c in cols if c["pk"]]
-        uniques = set(pk)
-        try:
-            for idx in conn.execute(f"PRAGMA index_list({t})").fetchall():
-                if not idx["unique"]:
-                    continue
-                for ic in conn.execute(f"PRAGMA index_info({idx['name']})").fetchall():
-                    if ic["name"]:
-                        uniques.add(ic["name"])
-        except Exception:
-            pass
-        for c in noms:
-            if c in ("fournisseur_id", "fournisseur_fsc_id", "source_fournisseur_id"):
-                refs_id.append((t, c, uniques))
-            elif c == "fournisseur":
-                refs_nom.append((t, c))
-            elif "fournisseur" in c and (c.endswith("_json") or c.endswith("_ids")):
-                refs_json.append((t, c))
-    return refs_id, refs_nom, refs_json
+    """Où l'id (ou le nom) d'un fournisseur est-il référencé ? Voir
+    `app.services.fournisseurs_fusion.references` — introspection générique,
+    pour qu'une table ajoutée demain soit reprise par la fusion sans y penser."""
+    from app.services.fournisseurs_fusion import references
+    return references(conn)
 
 
 def fusionner_fournisseurs(conn, source_id: int, target_id: int) -> dict:
-    """Le cœur de la fusion, sans HTTP : réassigne tout ce qui pend à
-    `source_id` vers `target_id`, puis supprime la source.
+    """Fusionne `source_id` dans `target_id`, en UNE transaction.
 
-    Extrait de l'endpoint pour qu'un script de reprise en lot
-    (`scripts/fusion_fournisseurs_doublons.py`) passe par le MÊME code que le
-    bouton de l'interface. Deux implémentations dériveraient, et c'est le lot
-    de 15 fusions qui découvrirait la table oubliée.
+    La mécanique vit dans `app.services.fournisseurs_fusion.fusionner` : le
+    bouton de l'interface, l'écran des tiers RVGI, le script
+    `scripts/fusion_fournisseurs_doublons.py` et les migrations de reprise
+    passent par le même code. Deux implémentations dériveraient, et c'est un
+    lot de fusions qui découvrirait la table oubliée.
 
-    Tout tient dans UNE transaction : une fusion à moitié faite laisserait des
-    contacts orphelins et un fournisseur fantôme, état dont on ne sort pas
-    sans SQL à la main.
+    Tout tient dans une transaction : une fusion à moitié faite laisserait des
+    contacts orphelins et un fournisseur fantôme, état dont on ne sort pas sans
+    SQL à la main.
 
     Lève `ValueError` (demande absurde), `LookupError` (fiche absente) ou
     `RuntimeError` (transaction annulée) — jamais une HTTPException : c'est
     l'appelant qui sait s'il parle en HTTP.
     """
-    import json as _json
+    from app.services.fournisseurs_fusion import fusionner
 
     if source_id == target_id:
         raise ValueError("Source et cible identiques — rien à fusionner.")
-
-    src = conn.execute("SELECT * FROM fournisseurs_fsc WHERE id=?", (source_id,)).fetchone()
-    tgt = conn.execute("SELECT * FROM fournisseurs_fsc WHERE id=?", (target_id,)).fetchone()
-    if not src:
-        raise LookupError("Fournisseur source non trouvé")
-    if not tgt:
-        raise LookupError("Fournisseur cible non trouvé")
-
-    refs_id, refs_nom, refs_json = _four_refs_fournisseur(conn)
-    moved, renamed = {}, {}
-    json_rewrites = 0
-
     try:
         conn.execute("BEGIN")
-
-        for table, col, uniques in refs_id:
-            # UPDATE OR IGNORE : quand la table impose l'unicité du couple
-            # (fournisseur, autre chose) — mc_tarif_fournisseur,
-            # matiere_laize_fournisseurs — la cible peut déjà porter la
-            # ligne équivalente. On la garde, elle : c'est la fiche qui
-            # survit, ses réglages sont ceux que l'utilisateur voit.
-            if col in uniques or (uniques & {col}):
-                cur = conn.execute(
-                    f"UPDATE OR IGNORE {table} SET {col}=? WHERE {col}=?",
-                    (target_id, source_id))
-                deplacees = cur.rowcount
-                reste = conn.execute(
-                    f"DELETE FROM {table} WHERE {col}=?", (source_id,)).rowcount
-                if deplacees or reste:
-                    moved[table] = deplacees
-                    if reste:
-                        moved[f"{table} (doublons écartés)"] = reste
-            else:
-                cur = conn.execute(
-                    f"UPDATE {table} SET {col}=? WHERE {col}=?",
-                    (target_id, source_id))
-                if cur.rowcount:
-                    moved[table] = cur.rowcount
-
-        for table, col in refs_nom:
-            # Historique stocké par NOM (stock_receptions.fournisseur,
-            # matiere_params.fournisseur). On renomme : effacer couperait
-            # la traçabilité d'une réception déjà partie en production.
-            cur = conn.execute(
-                f"UPDATE {table} SET {col}=? WHERE {col}=?", (tgt["nom"], src["nom"]))
-            if cur.rowcount:
-                renamed[table] = cur.rowcount
-
-        for table, col in refs_json:
-            lignes = conn.execute(
-                f"SELECT rowid AS rid, {col} AS v FROM {table} "
-                f"WHERE {col} IS NOT NULL AND {col} LIKE ?",
-                (f"%{source_id}%",)).fetchall()
-            for l in lignes:
-                try:
-                    val = _json.loads(l["v"])
-                except (ValueError, TypeError):
-                    continue
-                if not isinstance(val, list):
-                    continue
-                neuf, change = [], False
-                for x in val:
-                    y = target_id if (isinstance(x, int) and x == source_id) else x
-                    if y != x:
-                        change = True
-                    if y not in neuf:
-                        neuf.append(y)
-                if change:
-                    conn.execute(
-                        f"UPDATE {table} SET {col}=? WHERE rowid=?",
-                        (_json.dumps(neuf), l["rid"]))
-                    json_rewrites += 1
-
-        # Ce que la cible n'a pas et que la source portait : on le récupère
-        # plutôt que de le perdre avec la fiche. Les champs déjà remplis sur
-        # la cible ne bougent pas — c'est elle qui survit.
-        recuperables = [
-            "licence", "certificat", "groupe", "branche", "adresse",
-            "code_postal", "ville", "siret", "tva_intracom", "rcs",
-            "telephone", "email", "fax", "mode_reglement", "mode_livraison",
-            "delai_expedition_jours", "regime_tva", "notes",
-            "traca_photo_url", "traca_explication", "traca_exemple_code",
-            "fsc_date_expiration",
-        ]
-        tgt_cols = tgt.keys()
-        sets, vals, recup = [], [], []
-        for champ in recuperables:
-            if champ not in tgt_cols:
-                continue
-            a, b = tgt[champ], src[champ]
-            if (a is None or str(a).strip() == "") and b not in (None, ""):
-                sets.append(f"{champ}=?")
-                vals.append(b)
-                recup.append(champ)
-        # Catégories : union. Deux fiches du même fournisseur peuvent avoir
-        # été rangées différemment, les deux rangements sont justes.
-        if "categories" in tgt_cols:
-            def _liste(v):
-                try:
-                    p = _json.loads(v) if v else []
-                    return p if isinstance(p, list) else []
-                except (ValueError, TypeError):
-                    return []
-            union = _liste(tgt["categories"])
-            for c in _liste(src["categories"]):
-                if c not in union:
-                    union.append(c)
-            if union != _liste(tgt["categories"]):
-                sets.append("categories=?")
-                vals.append(_json.dumps(union, ensure_ascii=False))
-                recup.append("categories")
-                if "sous_traitant" in tgt_cols and "sous_traitant" in union:
-                    sets.append("sous_traitant=?")
-                    vals.append(1)
-        if "has_fsc" in tgt_cols and not tgt["has_fsc"] and src["has_fsc"]:
-            sets.append("has_fsc=?")
-            vals.append(1)
-            recup.append("has_fsc")
-        # Le lien ERP n'est pas un champ vide qu'on complète, c'est une clé —
-        # il ne figure donc pas dans `recuperables`. Sans cette reprise, la
-        # fiche survivante repasse en « manuel » : la synchro RVGI ne
-        # l'alimente plus et « importer les manquants » recrée une fiche pour
-        # le tiers laissé libre — le doublon revient au prochain import. On ne
-        # la pose que si la cible n'a aucun lien ; quand les deux fiches en
-        # portent un, c'est un arbitrage, pas une reprise.
-        if ("rvgi_numero" in tgt_cols and not tgt["rvgi_numero"]
-                and src["rvgi_numero"]):
-            for champ in ("rvgi_numero", "rvgi_code", "rvgi_etat",
-                          "rvgi_motif", "rvgi_score", "rvgi_lie_le"):
-                if champ in tgt_cols:
-                    sets.append(f"{champ}=?")
-                    vals.append(src[champ])
-                    recup.append(champ)
-        if sets:
-            sets.append("updated_at=?")
-            vals.append(datetime.now().isoformat())
-            vals.append(target_id)
-            conn.execute(
-                f"UPDATE fournisseurs_fsc SET {', '.join(sets)} WHERE id=?", vals)
-
-        conn.execute("DELETE FROM fournisseurs_fsc WHERE id=?", (source_id,))
+        res = fusionner(conn, source_id, target_id)
         conn.commit()
     except (LookupError, ValueError):
         conn.rollback()
@@ -2084,11 +1909,7 @@ def fusionner_fournisseurs(conn, source_id: int, target_id: int) -> dict:
         conn.rollback()
         raise RuntimeError(
             f"Fusion interrompue et annulée — aucune donnée modifiée. ({e})") from e
-
-    return {"source": {"id": source_id, "nom": src["nom"]},
-            "target": {"id": target_id, "nom": tgt["nom"]},
-            "moved": moved, "renamed": renamed,
-            "json_rewrites": json_rewrites, "champs_recuperes": recup}
+    return res
 
 
 @router.post("/api/fournisseurs/{source_id}/merge/{target_id}")

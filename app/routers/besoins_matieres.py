@@ -202,6 +202,12 @@ _SQL_PE = """
            -- Pourquoi la validation est tombée. Une pastille qui repasse au
            -- rouge sans dire pourquoi sera recochée sans être relue.
            oi.invalide_at         AS of_invalide_at,
+           oi.matiere_ref_id  AS of_support_ref_id,
+           oi.glassine_ref_id AS of_glassine_ref_id,
+           oi.adhesif_ref_id  AS of_adhesif_ref_id,
+           oi.mandrin_ref_id  AS of_mandrin_ref_id,
+           oi.carton_ref_id   AS of_carton_ref_id,
+           oi.palette_ref_id  AS of_palette_ref_id,
            oi.invalide_motif      AS of_invalide_motif
     FROM planning_entries pe
     LEFT JOIN machines m ON m.id = pe.machine_id
@@ -223,7 +229,11 @@ _SQL_FT = """
            outil1_nb_front,
            mandrin_dia, nb_etiq_bobin, nb_bobines_carton, cartons,
            conditionnement,
-           palette_type, palette_nb_cartons_sol, palette_nb_cartons_hauteur
+           palette_type, palette_nb_cartons_sol, palette_nb_cartons_hauteur,
+           -- Les références MyStock choisies sur la fiche : c'est l'id qui fait
+           -- foi, le texte n'en est que la copie (of_import._appliquer_references).
+           support_ref_id, glassine_ref_id, adhesif_ref_id,
+           mandrin_ref_id, carton_ref_id, palette_ref_id
     FROM fiches_techniques
 """
 
@@ -235,6 +245,8 @@ _FT_FIELDS = (
     "mandrin_dia", "nb_etiq_bobin", "nb_bobines_carton", "cartons",
     "conditionnement",
     "palette_type", "palette_nb_cartons_sol", "palette_nb_cartons_hauteur",
+    "support_ref_id", "glassine_ref_id", "adhesif_ref_id",
+    "mandrin_ref_id", "carton_ref_id", "palette_ref_id",
 )
 
 
@@ -359,8 +371,20 @@ def _load_mapping(conn) -> dict:
         SELECT id, reference, designation, categorie, metres_lineaires_par_bobine, weight_gsm,
                weight_per_m2, longueur_tube_mm, unites_par_palette
           FROM matieres_premieres
-         WHERE COALESCE(actif, 1) = 1 AND TRIM(COALESCE(designation, '')) <> ''
+         WHERE COALESCE(actif, 1) = 1
     """).fetchall():
+        # Clé ("id", matiere_id) : la référence MyStock portée par la fiche ou
+        # l'OF (`*_ref_id`) se résout sans passer par le texte. Matières actives
+        # seulement : une référence vers une fiche désactivée retombe sur le
+        # texte, comme une correspondance.
+        out[("id", r["id"])] = {
+            "matiere_id": r["id"], "reference": r["reference"], "designation": r["designation"],
+            "categorie": r["categorie"], "metres_lineaires_par_bobine": r["metres_lineaires_par_bobine"],
+            "weight_gsm": r["weight_gsm"], "weight_per_m2": r["weight_per_m2"],
+            "longueur_tube_mm": r["longueur_tube_mm"], "unites_par_palette": r["unites_par_palette"],
+        }
+        if not (r["designation"] or "").strip():
+            continue
         cat = (r["categorie"] or "").strip().lower()
         for kind, cats in _KIND_CATEGORIES.items():
             if cat in cats:
@@ -377,6 +401,45 @@ def _load_mapping(conn) -> dict:
             "longueur_tube_mm": r["longueur_tube_mm"], "unites_par_palette": r["unites_par_palette"],
         }
     return out
+
+
+# Le champ texte de la fiche qui porte chaque nature de matière.
+_TEXTE_KIND = {
+    "support": "ft_support", "glassine": "ft_glassine", "adhesif": "ft_adhesif",
+    "mandrin": "ft_mandrin_dia", "carton": "ft_cartons", "palette": "ft_palette_type",
+}
+
+
+def _matiere_du_dossier(pe: dict, mapping: dict, kind: str, source_value=None) -> Optional[dict]:
+    """La matière d'une ligne du dossier : la référence MyStock d'abord, le texte ensuite.
+
+    La fiche et l'OF portent l'id choisi dans MyStock (`support_ref_id`…, recopié
+    ici en `ft_<kind>_ref_id`) : c'est lui qui fait foi. Le texte ne sert qu'aux
+    documents qui n'ont pas encore de référence — OF venus d'Access, fiches
+    anciennes —, par `mp_fiche_mapping` puis par la désignation. Résoudre par
+    l'id rend le déstockage insensible à un renommage ou à une faute de frappe.
+    """
+    rid = pe.get(f"ft_{kind}_ref_id")
+    if rid:
+        try:
+            m = mapping.get(("id", int(rid)))
+        except (TypeError, ValueError):
+            m = None
+        if m:
+            return m
+    if source_value is None:
+        source_value = pe.get(_TEXTE_KIND.get(kind, ""))
+    return mapping.get((kind, str(source_value or "").strip().lower()))
+
+
+def _matiere_de_ligne(mapping: dict, b: dict) -> dict:
+    """La matière d'une ligne de besoin déjà résolue (par id), sinon par son texte."""
+    mid = b.get("matiere_id")
+    if mid:
+        m = mapping.get(("id", int(mid)))
+        if m:
+            return m
+    return mapping.get((b.get("kind"), (b.get("source_value") or "").strip().lower())) or {}
 
 
 def _n(v, unite: str = "") -> str:
@@ -477,12 +540,6 @@ def _laize_dossier(pe: dict) -> dict:
         return {"laize": ft_laize, "source": "fiche",
                 "champ": champ, "origine": "Fiche technique"}
     return {"laize": None, "source": None, "champ": None, "origine": None}
-
-
-def _matiere_ml_par_bobine(mapping: dict, kind: str, source_value: str):
-    """Métrage par bobine de la matière associée à (kind, source_value)."""
-    m = mapping.get((kind, (source_value or "").strip().lower()))
-    return m.get("metres_lineaires_par_bobine") if m else None
 
 
 # « Bobine de 1.000 étiquettes », « Bobines de 1 000 etiq. » : la phrase de
@@ -592,7 +649,7 @@ def _mandrin_tubes(pe: dict, mapping: dict, nb_mandrins: float,
     """
     vide = {"tubes": None, "palettes": None, "mandrins_par_tube": None,
             "detail_tubes": None, "manque_tubes": []}
-    m = mapping.get(("mandrin", str(pe.get("ft_mandrin_dia") or "").strip().lower()))
+    m = _matiere_du_dossier(pe, mapping, "mandrin")
     laize_mod = _f(pe.get("ft_mod_laize"))
     lg_tube = _f(m.get("longueur_tube_mm")) if m else None
     upp = _f(m.get("unites_par_palette")) if m else None
@@ -653,8 +710,7 @@ def _compute_besoins_dossier(pe: dict, mapping: dict,
         sv = (source_value or "").strip() if source_value else ""
         if not sv:
             return
-        key = (kind, sv.lower())
-        m = mapping.get(key)
+        m = _matiere_du_dossier(pe, mapping, kind, sv)
         calculable = quantite is not None and quantite > 0
         besoins.append({
             "kind": kind,
@@ -706,7 +762,7 @@ def _compute_besoins_dossier(pe: dict, mapping: dict,
         # Grammage : porté par la référence adhésif (weight_gsm, g/m²). Le champ
         # « Grammage » de la fiche technique sert de repli tant que la matière
         # n'est pas renseignée.
-        mp_adh = mapping.get(("adhesif", str(pe["ft_adhesif"]).strip().lower()))
+        mp_adh = _matiere_du_dossier(pe, mapping, "adhesif")
         grammage = _f(mp_adh.get("weight_gsm")) if mp_adh else None
         gram_champ = "matieres_premieres.weight_gsm"
         gram_origine = "Matière première"
@@ -760,8 +816,7 @@ def _compute_besoins_dossier(pe: dict, mapping: dict,
             if tub["tubes"] is not None:
                 # La conversion en tubes n'est pas le besoin : c'est ce qu'il faut
                 # commander pour le couvrir. On l'expose à côté, jamais à la place.
-                mp_man = mapping.get(
-                    ("mandrin", str(pe.get("ft_mandrin_dia") or "").strip().lower())) or {}
+                mp_man = _matiere_du_dossier(pe, mapping, "mandrin") or {}
                 variables += [
                     {"label": "Laize module", "champ": "fiches_techniques.mod_laize",
                      "origine": "Fiche technique", "valeur": _f(pe.get("ft_mod_laize")),
@@ -982,7 +1037,13 @@ _SQL_OF_ORPHELINS = """
            oi.adhesif_label  AS of_adhesif_label,
            oi.mandrins_dia   AS of_mandrins_dia,
            oi.cartons_type   AS of_cartons_type,
-           oi.qte_au_mille   AS of_qte_au_mille
+           oi.qte_au_mille   AS of_qte_au_mille,
+           oi.matiere_ref_id  AS of_support_ref_id,
+           oi.glassine_ref_id AS of_glassine_ref_id,
+           oi.adhesif_ref_id  AS of_adhesif_ref_id,
+           oi.mandrin_ref_id  AS of_mandrin_ref_id,
+           oi.carton_ref_id   AS of_carton_ref_id,
+           oi.palette_ref_id  AS of_palette_ref_id
     FROM of_imports oi
     LEFT JOIN machines m ON LOWER(TRIM(m.nom)) = LOWER(TRIM(oi.machine))
     LEFT JOIN planning_entries pe ON pe.of_import_id = oi.id
@@ -1037,6 +1098,11 @@ _OF_VERS_FT = (
     ("ft_qte_au_mille", "of_qte_au_mille"),
 )
 
+# Champ texte de fiche -> nature : la référence MyStock voyage avec le texte.
+# Remplacer le texte de la fiche par celui de l'OF sans remplacer la
+# référence ferait résoudre la ligne sur la matière de la fiche.
+_KIND_DU_CHAMP = {v: k for k, v in _TEXTE_KIND.items()}
+
 
 def _matieres_depuis_of(pe: dict) -> None:
     """Fait dire à l'OF quelles matières il engage, en place.
@@ -1065,6 +1131,9 @@ def _matieres_depuis_of(pe: dict) -> None:
         if isinstance(v, str) and not v.strip():
             continue
         pe[champ_ft] = v
+        kind = _KIND_DU_CHAMP.get(champ_ft)
+        if kind:
+            pe[f"ft_{kind}_ref_id"] = pe.get(f"of_{kind}_ref_id")
 
 
 def _mois_of(pe: dict, axe: str = "livraison") -> Optional[str]:
@@ -1313,7 +1382,7 @@ def besoins_par_echeance(request: Request):
         if mid:
             if a["kind"] in _KINDS_BOBINE:
                 bobines = stock_bobines.get(mid, 0.0) + stock_map.get(mid, 0.0)
-                ml_bobine = _f(_matiere_ml_par_bobine(mapping, a["kind"], a["source_value"]))
+                ml_bobine = _f(_matiere_de_ligne(mapping, a).get("metres_lineaires_par_bobine"))
                 a["ml_par_bobine"] = ml_bobine
                 if ml_bobine:
                     stock = round(bobines * ml_bobine, 3)
@@ -1327,7 +1396,7 @@ def besoins_par_echeance(request: Request):
                 # palette, les deux ne sont pas comparables : on le dit plutôt que
                 # d'afficher des palettes en face de mandrins.
                 palettes_stock = stock_map.get(mid, 0.0) + stock_bobines.get(mid, 0.0)
-                mp_man = mapping.get((a["kind"], (a["source_value"] or "").strip().lower())) or {}
+                mp_man = _matiere_de_ligne(mapping, a)
                 upp = _f(mp_man.get("unites_par_palette"))
                 tubes_besoin = a["besoin_total_tubes"] or 0
                 ratio = (a["besoin_total"] / tubes_besoin) if tubes_besoin > 0 else None
@@ -1352,7 +1421,7 @@ def besoins_par_echeance(request: Request):
                 # sans la conversion, une palette de 672 cartons s'affichait
                 # « 1 u » en face d'un besoin de 672, et tout ressortait en manque.
                 palettes_stock = stock_map.get(mid, 0.0) + stock_bobines.get(mid, 0.0)
-                mp_cart = mapping.get((a["kind"], (a["source_value"] or "").strip().lower())) or {}
+                mp_cart = _matiere_de_ligne(mapping, a)
                 cpp = _f(mp_cart.get("unites_par_palette"))
                 a["stock_palettes"] = round(palettes_stock, 3)
                 if cpp:
@@ -2972,9 +3041,18 @@ def _completer_depuis_of(conn, pe: dict) -> set:
     try:
         r = conn.execute(
             "SELECT matiere, glassine, adhesif_label, mandrins_dia, cartons_type, "
-            "       qte_au_mille FROM of_imports WHERE id=?", (oid,)).fetchone()
+            "       qte_au_mille, matiere_ref_id AS support_ref_id, glassine_ref_id, "
+            "       adhesif_ref_id, mandrin_ref_id, carton_ref_id "
+            "FROM of_imports WHERE id=?", (oid,)).fetchone()
     except Exception:
-        return set()
+        # Base sans les références (migration `of_fiche_references_matiere`
+        # pas encore passée) : le texte seul, comme avant.
+        try:
+            r = conn.execute(
+                "SELECT matiere, glassine, adhesif_label, mandrins_dia, cartons_type, "
+                "       qte_au_mille FROM of_imports WHERE id=?", (oid,)).fetchone()
+        except Exception:
+            return set()
     if not r:
         return set()
     r = dict(r)
@@ -2987,6 +3065,7 @@ def _completer_depuis_of(conn, pe: dict) -> set:
         if actuel is None or (isinstance(actuel, str) and not actuel.strip()):
             pe[champ_ft] = v
             if kind:
+                pe[f"ft_{kind}_ref_id"] = r.get(f"{kind}_ref_id")
                 faits.add(kind)
     return faits
 
@@ -3244,7 +3323,7 @@ def _destockage_lignes(conn, planning_id: int) -> dict:
 
     lignes = []
     for b in besoins:
-        mp = mapping.get((b["kind"], (b["source_value"] or "").strip().lower())) or {}
+        mp = _matiere_de_ligne(mapping, b)
         conv = _quantite_a_destocker(b, mp)
         mid = b.get("matiere_id")
         laizes, laize_suggeree = [], None

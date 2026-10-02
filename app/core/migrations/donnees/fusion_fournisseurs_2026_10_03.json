@@ -1,0 +1,88 @@
+{
+  "source": "Revue des doublons fournisseurs du 02/10/2026, validée par Eugène (« Vrais doublons, à fusionner ») ; reprend les cas laissés « à trancher » par scripts/fusion_fournisseurs_doublons.py (08/09/2026).",
+  "fusions": [
+    {
+      "survivant": {
+        "id": 14,
+        "nom": "Likexin"
+      },
+      "doublon": {
+        "id": 227,
+        "nom": "SHENZHEN LIKEXIN INDUSTRIAL Co."
+      }
+    },
+    {
+      "survivant": {
+        "id": 24,
+        "nom": "Xinzhu"
+      },
+      "doublon": {
+        "id": 228,
+        "nom": "XINZHU SELF-ADHESIVE MATERIALS"
+      }
+    },
+    {
+      "survivant": {
+        "id": 20,
+        "nom": "Suzhou"
+      },
+      "doublon": {
+        "id": 160,
+        "nom": "SUZHOU PIAOZHIHUA COMPOSITE MATERIALS TECHNOLOGY C"
+      },
+      "motif": "La fiche 20 porte le certificat FSC « Suzhou Piaozhihua RR-COC-000252 » : c'est bien ce tiers."
+    },
+    {
+      "survivant": {
+        "id": 220,
+        "nom": "TORRASPAPEL ESPAGNE"
+      },
+      "doublon": {
+        "id": 22,
+        "nom": "Torrespapel"
+      },
+      "motif": "Fiche manuelle à l'orthographe fautive ; les commandes 2026 passent par l'entité espagnole."
+    },
+    {
+      "survivant": {
+        "id": 195,
+        "nom": "BURBAN Palettes"
+      },
+      "doublon": {
+        "id": 199,
+        "nom": "BURBAN PALETTES (BURBAN PALETTES)"
+      },
+      "motif": "Même SIREN 382 931 418, deux tiers RVGI actifs (1190, 1195) : la fiche absorbée reste, désactivée, avec son numéro — sans quoi l'import la recréerait."
+    },
+    {
+      "survivant": {
+        "id": 186,
+        "nom": "KPM Analytics North America Corporation"
+      },
+      "doublon": {
+        "id": 185,
+        "nom": "KPN ANALYTICS"
+      }
+    }
+  ],
+  "groupes": [
+    {
+      "groupe": "Torraspapel",
+      "fournisseurs": [
+        {
+          "id": 220,
+          "nom": "TORRASPAPEL ESPAGNE"
+        },
+        {
+          "id": 63,
+          "nom": "TORRASPAPEL FRANCE"
+        }
+      ],
+      "certificats_de": {
+        "id": 220,
+        "nom": "TORRASPAPEL ESPAGNE"
+      },
+      "motif": "Licence FSC-C011032 (certificat SGSCH-COC-003753, groupe Lecta) : elle va sur l'entité qui facture les bobines (Espagne, commandes 2026) et couvre la France par le groupe — décision notée le 08/09/2026."
+    }
+  ]
+}

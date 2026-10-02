@@ -315,6 +315,10 @@ def rapprocher(conn: sqlite3.Connection, perimetre: str,
         if f.get("rvgi_etat") == "lie" and f.get("rvgi_numero"):
             res["deja"] += 1
             continue
+        # Une fiche fusionnée dans une autre ne se relie plus : son lien RVGI
+        # est porté par la fiche qui l'a absorbée (`fournisseurs_fusion`).
+        if f.get("fusionne_dans"):
+            continue
 
         candidat, motif, score = None, None, None
 
@@ -698,7 +702,10 @@ def doublons(conn: sqlite3.Connection, perimetre: str, limite: int = 80,
     et ses catégories — c'est ce que fait `/api/fournisseurs/{src}/merge/{tgt}`.
     """
     p = PLAN[perimetre]
-    fiches = [dict(r) for r in conn.execute('SELECT * FROM "%s"' % p["table"])]
+    # Une fiche déjà fusionnée (gardée pour son lien RVGI) n'est ni un doublon
+    # ni une cible : elle renvoie vers la fiche qui l'a absorbée.
+    fiches = [dict(r) for r in conn.execute('SELECT * FROM "%s"' % p["table"])
+              if not dict(r).get("fusionne_dans")]
     pilotees = [(f, normaliser(f.get(p["cle_nom"])), _siret(f.get(p["cle_siret"])))
                 for f in fiches if f.get("rvgi_etat") == "lie"]
     orphelines = [f for f in fiches

@@ -59,3 +59,21 @@ métrage (théorique d'un côté, utilisé de l'autre, plus une colonne
 Test : `python3 tests/test_carnet_snapshot.py`.
 
 ---
+
+## La matière d'une ligne : la référence MyStock d'abord (2 octobre 2026)
+
+La fiche technique et l'OF portent l'id de la matière choisie dans MyStock
+(`support_ref_id`, `matiere_ref_id`…). Besoins et déstockage résolvent chaque
+ligne par cet id (`_matiere_du_dossier`), et ne passent par le texte
+(`mp_fiche_mapping`, puis désignation) que pour un document sans référence.
+Aucune saisie à faire : l'id est posé au choix de la référence dans l'OF ou la
+fiche, et le texte reste le repli.
+
+- La référence voyage AVEC son texte : quand l'OF remplace le texte de la fiche
+  (`_matieres_depuis_of`, `_completer_depuis_of`), il remplace aussi sa
+  référence. Sinon la ligne afficherait la matière de l'OF et déstockerait
+  celle de la fiche.
+- Une référence vers une matière désactivée retombe sur le texte, comme une
+  correspondance.
+
+Test : `python3 tests/test_besoins_ref_id.py`.
