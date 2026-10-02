@@ -40,6 +40,15 @@ def lister_variantes(matiere_id: int, request: Request, inactives: int = 0):
     return out
 
 
+@router.get("/api/stock/mp-stock-fournisseurs")
+def stock_fournisseurs(request: Request, matiere_id: int | None = None):
+    """Stock RVGI par fournisseur, article et laize (toutes matières, ou une)."""
+    require_stock(request)
+    from app.services.stock_fournisseurs import stock_par_fournisseur
+    with get_db() as conn:
+        return stock_par_fournisseur(conn, matiere_id)
+
+
 @router.post("/api/stock/matieres/{matiere_id}/variantes")
 async def creer_variante(matiere_id: int, request: Request):
     user = require_stock_matieres_admin(request)
