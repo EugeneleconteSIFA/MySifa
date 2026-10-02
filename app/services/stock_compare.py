@@ -166,12 +166,21 @@ def _compter(lignes: List[Dict[str, Any]], rvgi: Dict, mysifa: Dict) -> Dict[str
 # Le stock restant de chaque laize de chaque article : le `qte2` de son dernier
 # mouvement. Les types >= 100 sont les doublons de variante que RVGI écrit à
 # chaque réception (cf. ecarts_mouvements_rvgi) : les compter doublerait tout.
+#
+# Le mouvement 0 n'en est pas un : c'est la ligne d'initialisation de la fiche
+# article, datée du 30/12/1899, sans laize, et dont le `qte2` vaut
+# 99 999 999 999,99 (plafond de saisie RVGI, pas un stock). Relevé du
+# 02/10/2026 : 174 lignes en type 1, 500 en type 9, d'autres en 8, 13, 14, 17.
+# Pour un article bobine, elle formait à elle seule la « laize vide » et
+# affichait cent milliards de mètres chez chaque fournisseur.
+_FILTRE_MOUVEMENTS = "type < 100 AND mvt <> 0 AND amjh >= '1900' AND ABS(COALESCE(qte2, 0)) < 1e10"
+
 _SQL_STOCK_RVGI = """
     SELECT h.code1, h.code2, h.type, h.code3, h.qte2, h.qte1, h.amjh, h.des1
       FROM stm_hist h
       JOIN (SELECT code1, code2, type, COALESCE(code3, '') AS c3,
                    MAX(amjh || '#' || printf('%012d', id)) AS mx
-              FROM stm_hist WHERE type < 100
+              FROM stm_hist WHERE """ + _FILTRE_MOUVEMENTS + """
              GROUP BY code1, code2, type, COALESCE(code3, '')) d
         ON d.code1 IS h.code1 AND d.code2 IS h.code2 AND d.type = h.type
        AND d.c3 = COALESCE(h.code3, '')

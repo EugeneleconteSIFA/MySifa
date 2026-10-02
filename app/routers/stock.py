@@ -7165,77 +7165,146 @@ def _invmat_status(jours_depuis: Optional[float], intervalle: int) -> str:
 _INVMAT_STATUT_LABELS = {"rouge": "À faire", "orange": "Bientôt", "vert": "À jour"}
 
 
-@router.get("/api/stock/matieres/inventaire/export")
-def matieres_inventaire_export(request: Request):
-    """Export de l'inventaire matières : une ligne par référence active.
+def matieres_inventaire_donnees(conn, categorie: str = "", statut: str = "", q: str = "") -> list[dict]:
+    """Les lignes de l'export de l'inventaire matières, communes à l'Excel et au PDF.
 
-    Le stock par laize et les emplacements sont détaillés dans une colonne
-    chacun, pour garder une ligne par référence.
+    Une entrée par référence active, avec son stock par laize (laizes en stock
+    ou portant un emplacement) et ses emplacements. Le métrage d'une bobine est
+    le nombre de bobines × le métrage standard de la fiche. Les emplacements
+    « NC … » (non-conformités) sont hors stock disponible.
+    Les filtres sont ceux de l'écran : catégorie, statut, recherche.
     """
-    require_stock(request)
-    with get_db() as conn:
-        rows = conn.execute(
-            """
-            SELECT mp.id, mp.reference, mp.designation, mp.categorie, mp.sous_section,
-                   COALESCE(mp.intervalle_inventaire_jours, ?) AS intervalle_jours,
-                   COALESCE(s.quantite, 0) AS stock_actuel,
-                   (SELECT MAX(date_validation) FROM inventaires_matieres
-                     WHERE matiere_id = mp.id) AS derniere_date,
-                   (SELECT operateur_nom FROM inventaires_matieres
-                     WHERE matiere_id = mp.id
-                     ORDER BY date_validation DESC, id DESC LIMIT 1) AS dernier_operateur
-              FROM matieres_premieres mp
-              LEFT JOIN mp_stock s ON s.matiere_id = mp.id
-             WHERE mp.actif = 1
-             ORDER BY mp.categorie, mp.sous_section, mp.reference COLLATE NOCASE
-            """,
-            (_INVMAT_DEFAULT_INTERVAL_DAYS,),
-        ).fetchall()
-        laizes: dict[int, list[str]] = {}
-        for r in conn.execute(
-            """SELECT ml.matiere_id, l.valeur_mm, l.label, COALESCE(sl.quantite, 0) AS quantite
-                 FROM mp_matiere_laizes ml
-                 JOIN mp_laizes l ON l.id = ml.laize_id
-                 LEFT JOIN mp_stock_laize sl
-                   ON sl.matiere_id = ml.matiere_id AND sl.laize_id = ml.laize_id
-                ORDER BY COALESCE(l.ordre, 999), l.valeur_mm"""
-        ).fetchall():
-            lbl = r["label"] or (f"{r['valeur_mm']:g} mm" if r["valeur_mm"] else "—")
-            laizes.setdefault(int(r["matiere_id"]), []).append(
-                f"{lbl} : {float(r['quantite'] or 0):g}")
-        empl_par_mat = _mp_emplacements_par_matiere(conn)
+    from app.services.inventaire_matieres_export import est_nc
 
-    now = _now_paris()
-    lignes = []
+    rows = conn.execute(
+        """
+        SELECT mp.id, mp.reference, mp.designation, mp.categorie, mp.sous_section,
+               mp.metres_lineaires_par_bobine AS ml,
+               COALESCE(mp.intervalle_inventaire_jours, ?) AS intervalle_jours,
+               COALESCE(s.quantite, 0) AS stock_actuel,
+               (SELECT MAX(date_validation) FROM inventaires_matieres
+                 WHERE matiere_id = mp.id) AS derniere_date,
+               (SELECT operateur_nom FROM inventaires_matieres
+                 WHERE matiere_id = mp.id
+                 ORDER BY date_validation DESC, id DESC LIMIT 1) AS dernier_operateur
+          FROM matieres_premieres mp
+          LEFT JOIN mp_stock s ON s.matiere_id = mp.id
+         WHERE mp.actif = 1
+         ORDER BY mp.categorie, mp.sous_section, COALESCE(NULLIF(mp.designation, ''), mp.reference) COLLATE NOCASE
+        """,
+        (_INVMAT_DEFAULT_INTERVAL_DAYS,),
+    ).fetchall()
+    laizes: dict[int, list[dict]] = {}
+    for r in conn.execute(
+        """SELECT ml.matiere_id, ml.laize_id, l.valeur_mm, COALESCE(sl.quantite, 0) AS quantite
+             FROM mp_matiere_laizes ml
+             JOIN mp_laizes l ON l.id = ml.laize_id
+             LEFT JOIN mp_stock_laize sl
+               ON sl.matiere_id = ml.matiere_id AND sl.laize_id = ml.laize_id
+            ORDER BY l.valeur_mm"""
+    ).fetchall():
+        laizes.setdefault(int(r["matiere_id"]), []).append(
+            {"laize_id": int(r["laize_id"]), "laize_mm": float(r["valeur_mm"] or 0),
+             "stock": float(r["quantite"] or 0)})
+    empl_par_mat = _mp_emplacements_par_matiere(conn)
+    valeur_laize = {int(r["id"]): float(r["valeur_mm"] or 0)
+                    for r in conn.execute("SELECT id, valeur_mm FROM mp_laizes")}
+
+    now = _now_paris().replace(tzinfo=None)
+    cat_f, statut_f = (categorie or "").strip().lower(), (statut or "").strip().lower()
+    q_f = (q or "").strip().lower()
+    out = []
     for r in rows:
+        cat = (r["categorie"] or "").lower()
+        if cat_f and cat != cat_f:
+            continue
+        if q_f and q_f not in ((r["reference"] or "") + " " + (r["designation"] or "")).lower():
+            continue
         derniere = _inv_date(r["derniere_date"])
-        jours = (now.replace(tzinfo=None) - derniere).total_seconds() / 86400.0 if derniere else None
-        statut = _invmat_status(jours, r["intervalle_jours"])
-        empls = [
-            f"{e['emplacement']}" + (f" ({e['laize_label']})" if e.get("laize_label") else "")
-            + f" : {e['quantite']:g}"
-            for e in empl_par_mat.get(int(r["id"]), [])
-        ]
-        lignes.append([
-            _MP_CATEGORIE_LABELS.get((r["categorie"] or "").lower(), r["categorie"] or ""),
-            r["sous_section"] or "",
-            r["reference"] or "",
-            r["designation"] or "",
-            round(float(r["stock_actuel"] or 0), 3),
-            _mp_unite_gestion(r["categorie"]),
-            " · ".join(laizes.get(int(r["id"]), [])) if _mp_is_laizee(r["categorie"]) else "",
-            " · ".join(empls),
-            derniere or "Jamais",
-            r["dernier_operateur"] or "",
-            _INVMAT_STATUT_LABELS.get(statut, statut or ""),
-        ])
-    return _inv_export_xlsx(
-        "Inventaire matières",
-        ["Catégorie", "Sous-section", "Référence", "Désignation", "Stock", "Unité",
-         "Stock par laize", "Emplacements", "Dernier inventaire", "Inventorié par", "Statut"],
-        lignes, [13, 16, 22, 40, 11, 10, 36, 30, 18, 20, 11], 5,
-        f"inventaire-matieres-{now.strftime('%Y-%m-%d')}.xlsx",
-        {9: "dd/mm/yyyy hh:mm"},
+        jours = (now - derniere).total_seconds() / 86400.0 if derniere else None
+        st = _invmat_status(jours, r["intervalle_jours"])
+        if statut_f and st != statut_f:
+            continue
+        laizee = _mp_is_laizee(cat)
+        try:
+            ml = float(r["ml"] or 0)
+        except (TypeError, ValueError):
+            ml = 0.0
+        empls = []
+        for e in empl_par_mat.get(int(r["id"]), []):
+            empls.append({"emplacement": e["emplacement"], "laize_id": e["laize_id"],
+                          "laize_mm": valeur_laize.get(e["laize_id"]) if e["laize_id"] else None,
+                          "quantite": e["quantite"], "nc": est_nc(e["emplacement"]),
+                          "maj_le": _inv_date(e["updated_at"]), "maj_par": e["updated_by_name"]})
+        lz = []
+        if laizee:
+            for l in laizes.get(int(r["id"]), []):
+                le = [e for e in empls if e["laize_id"] == l["laize_id"]]
+                if not l["stock"] and not le:
+                    continue
+                lz.append({**l, "metres": round(l["stock"] * ml) if ml > 0 else None, "emplacements": le})
+        stock = float(r["stock_actuel"] or 0)
+        designation = (r["designation"] or "").strip() or (r["reference"] or "")
+        ref = (r["reference"] or "").strip()
+        out.append({
+            "id": int(r["id"]),
+            "categorie": cat,
+            "categorie_label": _MP_CATEGORIE_LABELS.get(cat, (r["categorie"] or "").capitalize()),
+            "sous_section": (r["sous_section"] or "").strip(),
+            "designation": designation,
+            "reference_si_diff": ref if ref and ref != designation else "",
+            "stock": stock,
+            "unite": _mp_unite_gestion(cat),
+            "laizee": laizee,
+            "metres": round(stock * ml) if laizee and ml > 0 else None,
+            "laizes": lz,
+            "emplacements": empls,
+            "nc": sum(e["quantite"] for e in empls if e["nc"]),
+            "derniere": derniere,
+            "operateur": r["dernier_operateur"],
+            "statut": st,
+        })
+    return out
+
+
+@router.get("/api/stock/matieres/inventaire/export")
+def matieres_inventaire_export(request: Request, format: str = "xlsx", categorie: str = "",
+                               statut: str = "", q: str = ""):
+    """Export de l'inventaire matières, en Excel (4 feuilles) ou en PDF (feuille de comptage).
+
+    Les filtres de l'écran (catégorie, statut, recherche) s'appliquent.
+    Mise en forme : `app/services/inventaire_matieres_export.py`.
+    """
+    user = require_stock(request)
+    fmt = (format or "xlsx").strip().lower()
+    if fmt not in ("xlsx", "pdf"):
+        raise HTTPException(400, "Format : xlsx ou pdf.")
+    from app.services import inventaire_matieres_export as ime
+    with get_db() as conn:
+        matieres = matieres_inventaire_donnees(conn, categorie, statut, q)
+    etiquettes = []
+    if categorie:
+        etiquettes.append(_MP_CATEGORIE_LABELS.get(categorie.strip().lower(), categorie))
+    if statut:
+        etiquettes.append(ime.STATUTS.get(statut.strip().lower(), statut))
+    if q:
+        etiquettes.append(f"« {q.strip()} »")
+    titre_filtre = " · ".join(etiquettes)
+    now = _now_paris().replace(tzinfo=None)
+    nom = f"inventaire-matieres-{now.strftime('%Y-%m-%d')}"
+    if fmt == "pdf":
+        par = (user.get("nom") or user.get("email") or "") if isinstance(user, dict) else ""
+        contenu = ime.pdf(matieres, titre_filtre, now, par)
+        return StreamingResponse(io.BytesIO(contenu), media_type="application/pdf",
+                                 headers={"Content-Disposition": f'attachment; filename="{nom}.pdf"'})
+    try:
+        contenu = ime.classeur(matieres, titre_filtre, now)
+    except ImportError as e:
+        raise HTTPException(500, f"openpyxl indisponible : {e}") from None
+    return StreamingResponse(
+        io.BytesIO(contenu),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{nom}.xlsx"'},
     )
 
 

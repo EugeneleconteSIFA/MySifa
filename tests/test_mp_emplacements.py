@@ -285,16 +285,28 @@ class TestExportInventaire(unittest.TestCase):
             conn.commit()
         r = self.client.get("/api/stock/matieres/inventaire/export")
         self.assertEqual(r.status_code, 200, r.text)
-        entetes, lignes = _lire_xlsx(r.content)
-        self.assertEqual(entetes[2], "Référence")
-        mien = [l for l in lignes if l[2] == "T-EXP-CART"]
+        # Classeur à quatre feuilles ; l'en-tête est en ligne 3 (titre, date).
+        import io
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(r.content))
+        ws = wb["Par référence"]
+        entetes = [c.value for c in ws[3]]
+        self.assertEqual(entetes[3], "Référence")
+        lignes = [list(x) for x in ws.iter_rows(min_row=4, values_only=True)]
+        mien = [l for l in lignes if l[2] == "Carton export"]
         self.assertEqual(len(mien), 1)
+        self.assertEqual(mien[0][3], "T-EXP-CART")
         self.assertEqual(mien[0][4], 12)
-        self.assertEqual(mien[0][7], "F4 : 5")
-        self.assertEqual(mien[0][8], "Jamais")
-        self.assertEqual(mien[0][10], "À faire")
-        refs = [l[2] for l in lignes]
-        self.assertEqual(len(refs), len(set(refs)), "une ligne par référence")
+        self.assertEqual(mien[0][9], "Jamais")
+        self.assertEqual(mien[0][11], "À faire")
+        libelles = [l[2] for l in lignes]
+        self.assertEqual(len(libelles), len(set(libelles)), "une ligne par référence")
+        empl = [list(x) for x in wb["Par emplacement"].iter_rows(min_row=4, values_only=True)
+                if x[2] == "Carton export"]
+        self.assertEqual([(e[0], e[4]) for e in empl], [("F4", 5)])
+        r = self.client.get("/api/stock/matieres/inventaire/export", params={"format": "pdf"})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.content[:4], b"%PDF")
 
 
 class TestMetrageEpaisseurs(unittest.TestCase):
