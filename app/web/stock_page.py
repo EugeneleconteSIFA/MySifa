@@ -1357,6 +1357,8 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-empl-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:14px}
 .mp-empl-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
 .content.mp-detail{max-width:1440px}
+.mp-titre{font-family:inherit!important;letter-spacing:0!important}
+.mp-sous-titre{font-size:12px!important;color:var(--muted)!important;font-weight:500!important}
 .mp-sc{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:20px}
 .mp-sc>*{grid-column:1}
 .mp-sc>.mp-actions{grid-column:2;grid-row:1 / span 3;align-self:start}
@@ -5906,6 +5908,14 @@ function mpCompareSousCategorie(a, b) {
                    { sensitivity: 'base', numeric: true });
 }
 
+// Titre d'une matière : son libellé commercial (la désignation). La référence
+// passe en second, seulement quand elle dit autre chose.
+function mpTitre(m) { return String((m && (m.designation || m.reference)) || ''); }
+function mpSousTitre(m) {
+  const ref = String((m && m.reference) || '').trim();
+  return ref && ref !== mpTitre(m).trim() ? ref : '';
+}
+
 // Texte comparable : minuscules, sans accents.
 function mpNorm(v) {
   return String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -5942,7 +5952,7 @@ const MP_TRIS = [
   { id: 'stock_asc', label: 'Stock (le plus faible)' },
 ];
 function mpCompareTri(a, b) {
-  const nom = (x) => String((x && (x.reference || x.designation)) || '');
+  const nom = mpTitre;
   const alpha = nom(a).localeCompare(nom(b), 'fr', { sensitivity: 'base', numeric: true });
   const qa = parseFloat(a && a.quantite) || 0, qb = parseFloat(b && b.quantite) || 0;
   switch (S.mpTri) {
@@ -6279,7 +6289,7 @@ function buildMatiereNav(m) {
   const prev = idx > 0 ? list[idx - 1] : null;
   const next = idx < list.length - 1 ? list[idx + 1] : null;
   const mk = (target, label, dir) => {
-    const cible = target ? (target.reference || target.designation || '') : '';
+    const cible = target ? mpTitre(target) : '';
     const b = el('button', {
       cls: 'mp-nav-btn',
       type: 'button',
@@ -6442,8 +6452,8 @@ function buildMatiereDetail() {
       ...[dashMpCatBadge(m.categorie, m.sous_section), dashMpSousCatBadge(m)].filter(Boolean),
       m.en_alerte ? el('span', { style: { fontSize: '12px', color: 'var(--warn)', fontWeight: '600' } }, 'Sous le seuil') : null,
     ),
-    el('div', { cls: 'sc-ref' }, m.reference || ''),
-    el('div', { cls: 'sc-des' }, m.designation || '—'),
+    el('div', { cls: 'sc-ref mp-titre' }, mpTitre(m)),
+    mpSousTitre(m) ? el('div', { cls: 'sc-des mp-sous-titre' }, 'Réf. ' + mpSousTitre(m)) : null,
     meta.length
       ? el('div', { style: { fontSize: '12px', color: 'var(--muted)', marginTop: '6px' } }, meta.join(' · '))
       : null,
@@ -9569,7 +9579,7 @@ function buildMatieres() {
     const seuil = parseFloat(m.seuil_alerte) || 0;
     const alertCls = m.en_alerte ? ' alert' : '';
     const infoChildren = [
-      el('div', { cls: 'mp-card-des' }, m.designation || '—'),
+      mpSousTitre(m) ? el('div', { cls: 'mp-card-des mp-sous-titre' }, 'Réf. ' + mpSousTitre(m)) : null,
       el('span', { cls: 'mp-card-stock-mini' + alertCls }, mpStockMini(m.quantite, m)),
     ];
     if (mpIsPaletteCategory(m) && m.palettes_par_pile > 0) {
@@ -9607,7 +9617,7 @@ function buildMatieres() {
       el('div', { cls: 'mp-card-top' },
         el('div', { cls: 'mp-card-badges' },
           ...[dashMpCatBadge(m.categorie, m.sous_section), dashMpSousCatBadge(m)].filter(Boolean)),
-        el('span', { cls: 'mp-card-ref' }, m.reference || ''),
+        el('span', { cls: 'mp-card-ref mp-titre' }, mpTitre(m)),
         el('div', { cls: 'mp-card-top-end' }, ...topEnd),
       ),
       el('div', { cls: 'mp-card-mid' },
