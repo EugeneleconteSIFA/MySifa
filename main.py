@@ -71,6 +71,7 @@ from app.routers.db_viewer import router as db_viewer_api_router
 from app.web.db_viewer_page import router as db_viewer_page_router
 from app.routers.diagnostic import router as diagnostic_api_router
 from app.web.profil_page import router as profil_page_router
+from app.web.website_page import router as website_page_router
 from app.web.messages_page import router as messages_page_router
 from app.routers.calendrier import router as calendrier_api_router
 from app.web.calendrier_page import router as calendrier_page_router
@@ -582,6 +583,7 @@ app.include_router(db_viewer_api_router)
 app.include_router(db_viewer_page_router)
 app.include_router(diagnostic_api_router)
 app.include_router(profil_page_router)
+app.include_router(website_page_router)
 app.include_router(messages_page_router)
 app.include_router(calendrier_api_router)
 app.include_router(calendrier_page_router)
