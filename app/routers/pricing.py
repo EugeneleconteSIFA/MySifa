@@ -39,8 +39,10 @@ from app.services.pricing.repository import (
     product_row_to_pricing_product,
     row_to_pricing_material,
     set_product_extras,
+    update_marges_categorie,
     update_settings,
 )
+from app.services.pricing.engine import marge_pct_matiere
 from app.services.pricing.schemas import (
     MaterialBreakdownOut,
     MaterialComputedOut,
@@ -167,7 +169,7 @@ def _material_computed(pm, settings) -> MaterialComputedOut:
         raise _pricing_error(e) from e
     # Une matière exclue de l'assiette de marge n'affiche pas de marge : sinon la
     # fiche annoncerait un prix de vente que le produit n'appliquera jamais.
-    margin_pct = getattr(settings, "default_margin_pct", Decimal("0")) or Decimal("0")
+    margin_pct = marge_pct_matiere(pm, settings)
     if not getattr(pm, "applique_marge", True):
         margin_pct = Decimal("0")
     margin = (res.price_eur_per_m2 * margin_pct / Decimal("100")).quantize(Decimal("0.0001"))
@@ -372,6 +374,7 @@ def preview_material_price(request: Request, body: MaterialPreviewIn):
         taxe_pct=body.taxe_pct,
         is_imported=body.is_imported,
         applique_marge=body.applique_marge,
+        categorie=(body.categorie or "").strip().lower() or None,
         transport_mode=body.transport_mode,
         transport_unit_price=body.transport_unit_price,
         transport_pct=body.transport_pct,
@@ -386,24 +389,45 @@ def preview_material_price(request: Request, body: MaterialPreviewIn):
 # ─── Settings ────────────────────────────────────────────────────────────────
 
 
+def _categories_marge() -> list[dict]:
+    """Catégories MyStock visibles, dans l'ordre et avec le libellé du référentiel."""
+    from config import fournisseur_categories
+
+    return [
+        {"code": c["code"], "label": c["label"]}
+        for c in fournisseur_categories()
+        if c["code"] in mystock_prix.CATEGORIES_VISIBLES
+    ]
+
+
 @router.get("/api/pricing/settings", response_model=PricingSettingsOut)
 def get_pricing_settings(request: Request):
     _require_param_logistique_read(request)
     with get_db() as conn:
         data = load_settings_response(conn)
-    return PricingSettingsOut(**data)
+    return PricingSettingsOut(**data, categories_marge=_categories_marge())
 
 
 @router.patch("/api/pricing/settings", response_model=PricingSettingsOut)
 def patch_pricing_settings(request: Request, body: PricingSettingsPatch):
     user = _require_param_logistique_write(request)
     patch = body.model_dump(exclude_unset=True)
-    if not patch:
+    marges = patch.pop("marges_categorie", None)
+    if not patch and marges is None:
         raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour.")
-    dec_patch = {k: Decimal(str(v)) for k, v in patch.items()}
+    dec_patch = {k: Decimal(str(v)) for k, v in patch.items() if v is not None}
     with get_db() as conn:
+        if marges:
+            try:
+                update_marges_categorie(
+                    conn,
+                    {k: (Decimal(str(v)) if v is not None else None) for k, v in marges.items()},
+                    updated_by=user.get("id"),
+                )
+            except PricingError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
         data = update_settings(conn, patch=dec_patch, updated_by=user.get("id"))
-    return PricingSettingsOut(**data)
+    return PricingSettingsOut(**data, categories_marge=_categories_marge())
 
 
 @router.post("/api/pricing/settings/refresh-fx", response_model=PricingFxRefreshOut)

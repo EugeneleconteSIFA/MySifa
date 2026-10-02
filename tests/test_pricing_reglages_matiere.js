@@ -84,9 +84,12 @@ for (const m of ['AMOUNT', 'PCT', 'CONTENEUR', 'FORFAIT']) {
   check('exemple chiffré : ' + m, /exemple:\s*"[^"]*\d/.test(bloc), true);
 }
 check('l\'aide est rendue sous le sélecteur', src.includes('function transportAideHtml('), true);
+// L'encadré import est rendu par importChampsHtml, commun aux fiches.
+check('sélecteur de méthode suivi de son aide',
+  /id="\$\{o\.modeId\}">\$\{transportModeOptions[^]{0,80}transportAideHtml/.test(src), true);
 for (const prefixe of ['f', 'd']) {
-  check('sélecteur ' + prefixe + '-tmode suivi de son aide',
-    new RegExp('id="' + prefixe + '-tmode">\\$\\{transportModeOptions[^]{0,80}transportAideHtml').test(src), true);
+  check('la fiche ' + prefixe + ' monte l\'encadré import commun',
+    src.includes('modeId: "' + prefixe + '-tmode"'), true);
 }
 // L'aide dépend de la méthode : le formulaire doit se re-rendre au changement.
 check('changer de méthode redessine la fiche', /"f-cur", "f-basis", "f-imp", "f-tmode"/.test(src), true);
@@ -97,7 +100,7 @@ check('caractéristiques avant prix d\'achat',
   form.indexOf('<h3>Caractéristiques</h3>') < form.indexOf("<h3>Prix d'achat</h3>"), true);
 const importBloc = form.slice(form.indexOf('id="import-block"'), form.indexOf('id="carac-section"') > form.indexOf('id="import-block"')
   ? form.indexOf('id="carac-section"') : form.length);
-check('la taxe est dans l\'encadré import', importBloc.includes('id="f-tax"'), true);
+check('la taxe est dans l\'encadré import', importBloc.includes('taxId: "f-tax"'), true);
 // La case « Appliquer la marge » a quitté le bloc Prix d'achat : elle vit
 // maintenant dans le panneau latéral Paramètres, bloc « Cette matière ».
 const panneau = src.slice(src.indexOf('function inlineSettingsHtml('), src.indexOf('function bindInlineSettings('));
@@ -106,7 +109,8 @@ check('le formulaire monte le panneau Paramètres', form.includes('inlineSetting
 check('la fiche MyStock monte le même panneau', src.includes('inlineSettingsHtml("d", f)'), true);
 check('la case marge est dans le panneau Paramètres', panneau.includes('${prefixe}-marge'), true);
 check('le panneau distingue les deux portées',
-  panneau.includes('Cette matière') && panneau.includes('Toutes les matières'), true);
+  panneau.includes('<h3>Marge</h3>') && panneau.includes('Paramètres communs à toutes les matières'), true);
+check('une marge par catégorie se saisit', panneau.includes('data-si-marge-cat'), true);
 check('le panneau ne s\'appelle plus « Paramètres globaux »',
   panneau.includes('Paramètres globaux'), false);
 check('plus de champ poids kg/m²', form.includes('id="f-wm2"'), false);

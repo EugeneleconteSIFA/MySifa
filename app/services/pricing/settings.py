@@ -87,6 +87,11 @@ def validate_pricing_settings(
             default_half_container_cost_eur=_to_decimal(half_raw, "default_half_container_cost_eur") if half_raw is not None else Decimal("0"),
             logistique_qte_m2_container_complet=_to_decimal(qte_full_raw, "logistique_qte_m2_container_complet") if qte_full_raw is not None else Decimal("0"),
             logistique_qte_m2_demi_container=_to_decimal(qte_half_raw, "logistique_qte_m2_demi_container") if qte_half_raw is not None else Decimal("0"),
+            marges_categorie={
+                str(k).strip().lower(): _to_decimal(v, "marges_categorie")
+                for k, v in (settings.get("marges_categorie") or {}).items()
+                if v is not None
+            },
         )
     else:
         raise PricingError("Paramètres de calcul : type non supporté.")

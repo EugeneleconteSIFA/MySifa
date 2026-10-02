@@ -40,7 +40,7 @@ vm.runInContext(
     extraire('msFournisseursPrincipaux'),
     'const PRIX_VIEUX_JOURS = 365, PRIX_TRES_VIEUX_JOURS = 730;',
     extraire('joursDepuis'), extraire('ageTexte'), extraire('fmtJour'),
-    extraire('dernierPrixCellHtml'),
+    extraire('dernierPrixCellHtml'), extraire('msLibelleLienHtml'),
     extraire('mystockMatiereRowHtml'),
   ].join('\n'),
   ctx
@@ -247,7 +247,7 @@ check('et branches', rendu.includes('bindEnTetes("matieres"'), true);
 check('le prix se trie sur sa valeur, pas sur son texte',
   decl.includes('m.prix_min'), true);
 check('la categorie se filtre par choix', /cle: "cat"[^]{0,120}filtre: "choix"/.test(decl), true);
-check('la reference se filtre au texte', /cle: "ref"[^]{0,120}filtre: "texte"/.test(decl), true);
+check('le libelle commercial se filtre au texte', /cle: "lib"[^]{0,120}filtre: "texte"/.test(decl), true);
 // Trois etats : croissant, decroissant, puis retour a l'ordre naturel. Sans le
 // troisieme, un tri pose par erreur ne se retire plus.
 check('le tri revient a l\'ordre naturel',

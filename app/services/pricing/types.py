@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Literal, Optional
+from typing import Literal, Mapping, Optional
 
 PriceCurrency = Literal["EUR", "USD"]
 PriceBasis = Literal["PER_KG", "PER_M2"]
@@ -45,6 +45,9 @@ class PricingSettings:
     logistique_qte_m2_demi_container: Decimal = Decimal("0")
     # Legacy — conservé pour compatibilité de lecture, plus utilisé par le moteur.
     default_margin_eur_m2: Decimal = Decimal("0")
+    # Marge propre à une catégorie de matière (clé en minuscules : « frontal »,
+    # « adhesif »…). Une catégorie absente garde default_margin_pct.
+    marges_categorie: Mapping[str, Decimal] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -65,6 +68,8 @@ class PricingMaterial:
     # prix de revient mais on ne cherche pas à marger dessus (refacturation
     # à l'euro près, matière fournie par le client…).
     applique_marge: bool = True
+    # Catégorie de la matière, en minuscules : elle choisit la marge appliquée.
+    categorie: Optional[str] = None
     # Mode de saisie du transport (ignoré si is_imported est faux).
     transport_mode: TransportMode = "AMOUNT"
     # Mode AMOUNT : transport dans la DEVISE et la BASE d'achat (USD/kg si l'achat

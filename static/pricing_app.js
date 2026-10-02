@@ -351,18 +351,40 @@
   function transportPropagerHtml(id, fournisseurNom, categorie) {
     if (!fournisseurNom || !S.canWrite) return "";
     const cat = String(categorie || "").trim();
-    // Une cellule de `.field-row` comme les autres : la grille est en deux
-    // colonnes et celle d'à côté des taxes restait vide. L'action se pose là
-    // plutôt qu'en pied de bloc, où elle allongeait la fiche pour rien.
-    return `<div class="field transport-propage">
-      <label>Même transport ailleurs</label>
+    // Un groupe titré comme Transport et Taxes, sous eux : la fiche se lit de
+    // haut en bas, une question par bloc.
+    return `<div class="imp-groupe"><h4 class="imp-titre">Même transport ailleurs</h4>
+      <div class="field transport-propage">
       <button type="button" class="btn btn-sm btn-propage" id="${escAttr(id)}">
         ${icon("truck", 14)} Appliquer aux autres matières
       </button>
       <div class="field-hint">Recopie « matière importée », la méthode de transport et les taxes
         sur les matières ${cat ? escHtml(cat) : "de la même catégorie"} achetées à
         ${escHtml(fournisseurNom)}. La base de prix et la devise, elles, ne bougent pas.</div>
-    </div>`;
+    </div></div>`;
+  }
+
+  /* Le contenu de l'encadré « Matière importée », en liste verticale :
+     Transport (méthode, puis ses champs), Taxes, puis la propagation. Une
+     seule mise en page pour les trois fiches qui l'affichent. */
+  function importChampsHtml(o) {
+    return `<div class="imp-groupe"><h4 class="imp-titre">Transport</h4>
+        <div class="imp-liste">
+          <div class="field f-mid"><label>Méthode de transport</label>
+            <select id="${o.modeId}">${transportModeOptions(o.mode)}</select>
+            ${transportAideHtml(o.mode)}</div>
+          ${o.champs}
+        </div>
+      </div>
+      <div class="imp-groupe"><h4 class="imp-titre">Taxes</h4>
+        <div class="imp-liste">
+          <div class="field f-num"><label>Taxes <span class="lbl-unit">% du sous-total</span></label>
+            <input type="number" step="0.01" id="${o.taxId}" value="${escAttr(o.tax)}"/>
+            <div class="field-hint">6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
+          </div>
+        </div>
+      </div>
+      ${o.propager || ""}`;
   }
 
   /** Le fournisseur qui fait foi sur une déclinaison, ou null. */
@@ -1839,18 +1861,11 @@
                 </span>
               </label>
               <div class="import-fields" style="${t.is_imported ? "" : "display:none"}">
-                <div class="field-row">
-                  <div class="field f-mid"><label>Méthode de transport</label>
-                    <select id="tf-mode">${transportModeOptions(mode)}</select>
-                    ${transportAideHtml(mode)}
-                  </div>
-                  ${champs(mode)}
-                  <div class="field f-num"><label>Taxes <span class="lbl-unit">% du sous-total</span></label>
-                    <input type="number" step="0.01" id="tf-taxe" value="${escAttr(t.taxe_pct)}"/>
-                    <div class="field-hint">6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
-                  </div>
-                  ${transportPropagerHtml("tf-prop", t.nom, data.categorie)}
-                </div>
+                ${importChampsHtml({
+                  modeId: "tf-mode", mode, champs: champs(mode),
+                  taxId: "tf-taxe", tax: t.taxe_pct,
+                  propager: transportPropagerHtml("tf-prop", t.nom, data.categorie),
+                })}
               </div>
             </div>
 
@@ -2310,10 +2325,10 @@
     const taxesSrc = parseFloat(b.taxes_src || 0);
 
     const cells = [
-      { label: "Prix d'achat", value: fmtCur(b.unit_price_src, cur), unit: unit },
+      { label: "Prix d'achat", value: fmtNum(b.unit_price_src, 4, 4), unit: unit },
       {
         label: "Transport",
-        value: hasTransport ? fmtCur(b.transport_src, cur) : "—",
+        value: hasTransport ? fmtNum(b.transport_src, 4, 4) : "—",
         unit: hasTransport
           ? `${unit} · ${fmtPct(b.transport_pct_effective || 0)} du prix`
           : "non imputé",
@@ -2321,15 +2336,15 @@
       },
       {
         label: "Taxes",
-        value: taxePct ? fmtCur(taxesSrc, cur) : "—",
+        value: taxePct ? fmtNum(taxesSrc, 4, 4) : "—",
         unit: taxePct ? `${unit} · ${fmtPct(taxePct)} du sous-total` : "non imputées",
         muted: !taxePct,
       },
       {
         label: "Sous-total achat",
-        value: fmtCur(
+        value: fmtNum(
           parseFloat(b.unit_price_src || 0) + parseFloat(b.transport_src || 0) + taxesSrc,
-          cur
+          4, 4
         ),
         unit: unit,
       },
@@ -2419,56 +2434,107 @@
     return "MAJ " + d + " · " + ((s && s.eur_usd_rate_source) || "—");
   }
 
+  /** Catégorie de la fiche ouverte, en minuscules (« frontal », « adhesif »…). */
+  function categorieFiche(f) {
+    if (!f) return "";
+    const c = f.categorie || (f.mystock && f.mystock.categorie) || f.category_code || "";
+    return String(c).trim().toLowerCase();
+  }
+
+  /** Libellé d'une catégorie d'après le référentiel servi avec les réglages. */
+  function categorieLabel(code) {
+    const c = ((S.settings && S.settings.categories_marge) || []).find((x) => x.code === code);
+    return c ? c.label : code;
+  }
+
+  /** Marge qui s'applique à une catégorie : la sienne, à défaut celle par défaut. */
+  function margeCategorie(code) {
+    const s = S.settings || {};
+    const propre = (s.marges_categorie || {})[code];
+    return propre != null
+      ? { pct: propre, propre: true }
+      : { pct: s.default_margin_pct, propre: false };
+  }
+
+  /** « Taux appliqué : 8,00 % · marge de la catégorie Frontal. » */
+  function margeTauxHtml(cat) {
+    const m = margeCategorie(cat);
+    const origine = !cat
+      ? "marge par défaut"
+      : (m.propre
+          ? `marge de la catégorie ${escHtml(categorieLabel(cat))}`
+          : `marge par défaut — la catégorie ${escHtml(categorieLabel(cat))} n'a pas de marge propre`);
+    return `Taux appliqué : <strong>${escHtml(fmtNum(m.pct, 2, 2))} %</strong> · ${origine}.
+      Un produit qui porte sa propre marge garde la sienne.`;
+  }
+
   function inlineSettingsHtml(prefixe, f) {
     const s = S.settings;
     const ro = S.canWrite ? "" : " disabled";
+    const cat = categorieFiche(f);
     const blocMatiere = `
-      <div class="si-block">
-        <div class="si-sub">Cette matière</div>
-        <label class="check-row check-side">
+      <div class="form-section"><h3>Marge</h3>
+        <label class="check-row">
           <input type="checkbox" id="${prefixe}-marge" ${f && f.applique_marge !== false ? "checked" : ""}${ro}/>
           <span>
             <span class="check-title">Appliquer la marge</span>
             <span class="check-sub">Décoché, la matière entre dans le prix de revient mais on ne marge pas dessus.</span>
           </span>
         </label>
-        <div class="si-meta">Enregistré avec la matière — voir la pastille du bandeau.</div>
+        ${s ? `<div class="field-hint marge-taux" id="si-marge-taux" data-cat="${escAttr(cat)}">${margeTauxHtml(cat)}</div>` : ""}
       </div>`;
 
-    if (!s || !S.canWrite) {
-      return `<aside class="settings-side"><div class="si-head">Paramètres</div>${blocMatiere}</aside>`;
-    }
+    if (!s || !S.canWrite) return blocMatiere;
 
     const stale = isFxStale(s.eur_usd_rate_updated_at);
     // Un taux en essai ne porte ni date ni source : il n'est pas enregistré.
     const essaiFx =
       fxEssai() !== undefined &&
       Math.abs(fxEssai() - parseFloat(s.eur_usd_rate || 0)) > 1e-9;
-    return `
-      <aside class="settings-side">
-        <div class="si-head">Paramètres</div>
-        ${blocMatiere}
-        <div class="si-block">
-          <div class="si-sub">Toutes les matières</div>
-          <div class="field"><label>Taux USD → EUR ${stale ? fxStaleBadgeHtml() : ""}</label>
-            <input type="number" step="0.0001" id="si-rate" value="${escAttr(S.fxDraft != null ? S.fxDraft : s.eur_usd_rate)}"/>
-            <div class="si-meta" id="si-rate-meta">${
-              essaiFx
-                ? "Taux d'essai — le calcul en tient compte, l'enregistrement suit dans la seconde."
-                : escHtml(fxMetaText(s))
-            }</div>
-          </div>
-          <div class="field"><label>Marge par défaut <span class="lbl-unit">%</span></label>
-            <input type="number" step="0.01" id="si-margin" value="${escAttr(s.default_margin_pct)}"/>
-          </div>
-          <div class="savebar-state savebar-state-${S.settingsSaveStatus} si-state" id="si-save-status">${
-            saveStatusHtml(S.settingsSaveStatus, S.settingsSavedAt)
-          }</div>
-          <div class="si-actions">
-            <button type="button" class="btn btn-soft btn-sm" id="si-fx">Rafraîchir le taux</button>
+    const marges = s.marges_categorie || {};
+    const lignesCat = (s.categories_marge || [])
+      .map((c) => `<div class="marge-cat${c.code === cat ? " courante" : ""}">
+          <label for="si-mcat-${escAttr(c.code)}">${escHtml(c.label)}</label>
+          <input type="number" step="0.01" min="0" id="si-mcat-${escAttr(c.code)}"
+                 data-si-marge-cat="${escAttr(c.code)}"
+                 value="${escAttr(marges[c.code] != null ? marges[c.code] : "")}"
+                 placeholder="${escAttr(fmtNum(s.default_margin_pct, 2, 2))}"/>
+          <span class="lbl-unit">%</span>
+        </div>`)
+      .join("");
+    return `${blocMatiere}
+      <div class="form-section si-commun">
+        <h3>Paramètres communs à toutes les matières</h3>
+        <div class="field-hint si-commun-aide">Ces réglages valent pour tout le module, pas seulement pour cette fiche.</div>
+        <div class="imp-groupe"><h4 class="imp-titre">Change</h4>
+          <div class="imp-liste">
+            <div class="field f-num"><label>Taux USD → EUR ${stale ? fxStaleBadgeHtml() : ""}</label>
+              <input type="number" step="0.0001" id="si-rate" value="${escAttr(S.fxDraft != null ? S.fxDraft : s.eur_usd_rate)}"/>
+              <div class="si-meta" id="si-rate-meta">${
+                essaiFx
+                  ? "Taux d'essai — le calcul en tient compte, l'enregistrement suit dans la seconde."
+                  : escHtml(fxMetaText(s))
+              }</div>
+              <button type="button" class="btn btn-soft btn-sm si-fx-btn" id="si-fx">Rafraîchir le taux</button>
+            </div>
           </div>
         </div>
-      </aside>`;
+        <div class="imp-groupe"><h4 class="imp-titre">Marges</h4>
+          <div class="imp-liste">
+            <div class="field f-num"><label>Marge par défaut <span class="lbl-unit">%</span></label>
+              <input type="number" step="0.01" id="si-margin" value="${escAttr(s.default_margin_pct)}"/>
+              <div class="field-hint">S'applique à toute catégorie sans marge propre.</div>
+            </div>
+            <div class="field"><label>Marge par catégorie</label>
+              <div class="marge-cats">${lignesCat}</div>
+              <div class="field-hint">Vide = marge par défaut.</div>
+            </div>
+          </div>
+        </div>
+        <div class="savebar-state savebar-state-${S.settingsSaveStatus} si-state" id="si-save-status">${
+          saveStatusHtml(S.settingsSaveStatus, S.settingsSavedAt)
+        }</div>
+      </div>`;
   }
 
   /**
@@ -2501,6 +2567,9 @@
     if (champMarge) {
       champMarge.oninput = () => autoEnregistrerSettings(recalculerApercu);
     }
+    document.querySelectorAll("[data-si-marge-cat]").forEach((el) => {
+      el.oninput = () => autoEnregistrerSettings(recalculerApercu);
+    });
     const fx = document.getElementById("si-fx");
     if (fx) {
       fx.onclick = async () => {
@@ -2540,11 +2609,11 @@
     return `
       <div class="ms-item ms-main">
         <div class="ms-label">Sous-total d'achat</div>
-        <div class="ms-value">${escHtml(fmtCur(st, cur))} <span class="ms-unit">${escHtml(unit)}</span></div>
+        <div class="ms-value">${escHtml(fmtNum(st, 4, 4))} <span class="ms-unit">${escHtml(unit)}</span></div>
       </div>
       <div class="ms-item">
         <div class="ms-label">Prix d'achat</div>
-        <div class="ms-value">${escHtml(fmtCur(b.unit_price_src, cur))} <span class="ms-unit">${escHtml(unit)}</span></div>
+        <div class="ms-value">${escHtml(fmtNum(b.unit_price_src, 4, 4))} <span class="ms-unit">${escHtml(unit)}</span></div>
       </div>
       <div class="ms-item">
         <div class="ms-label">Change</div>
@@ -2766,12 +2835,25 @@
       // Champ vidé le temps de retaper : rien ne part, et la pastille reste
       // sur « attente » pour que l'écart se voie. Un taux nul diviserait.
       if (!(taux > 0) || !Number.isFinite(marge)) return;
+      // Marge par catégorie : vide = retour à la marge par défaut (null).
+      const margesCat = {};
+      let margeCatInvalide = false;
+      document.querySelectorAll("[data-si-marge-cat]").forEach((el) => {
+        const v = String(el.value || "").trim();
+        const n = parseFloat(v);
+        if (v === "") margesCat[el.getAttribute("data-si-marge-cat")] = null;
+        else if (Number.isFinite(n) && n >= 0) margesCat[el.getAttribute("data-si-marge-cat")] = n;
+        else margeCatInvalide = true;
+      });
+      if (margeCatInvalide) return;
       setSettingsSaveStatus("cours");
       try {
         S.settings = await api("/api/pricing/settings", {
           method: "PATCH",
-          body: { eur_usd_rate: taux, default_margin_pct: marge },
+          body: { eur_usd_rate: taux, default_margin_pct: marge, marges_categorie: margesCat },
         });
+        const tauxEl = document.getElementById("si-marge-taux");
+        if (tauxEl) tauxEl.innerHTML = margeTauxHtml(tauxEl.getAttribute("data-cat") || "");
         // Le taux tapé EST le taux enregistré : ce n'est plus un essai.
         S.fxDraft = null;
         const meta = document.getElementById("si-rate-meta");
@@ -2885,7 +2967,7 @@
           isNew ? "" : escHtml(f.name)
         )}
         <div class="mat-summary" id="mat-summary">${matSummaryHtml(S.matPreview)}</div>
-        <div class="form-layout">
+        <div class="form-layout form-layout-1">
         <div class="form-card">
           <div class="form-section"><h3>Identification</h3>
             <div class="field"><label>Nom</label><input id="f-name" value="${escAttr(f.name)}"/></div>
@@ -2941,23 +3023,17 @@
                 </span>
               </label>
               <div id="import-fields" class="import-fields" style="${f.is_imported?"":"display:none"}">
-                <div class="field-row">
-                  <div class="field f-mid"><label>Méthode de transport</label>
-                    <select id="f-tmode">${transportModeOptions(f.transport_mode || "AMOUNT")}</select>
-                    ${transportAideHtml(f.transport_mode || "AMOUNT")}</div>
-                  ${transportChampsHtml("f", f, unit, S.matPreview)}
-                  <div class="field f-num"><label>Taxes <span class="lbl-unit">% du sous-total</span></label>
-                    <input type="number" step="0.01" id="f-tax" value="${escAttr(f.taxe_pct)}"/>
-                    <div class="field-hint">6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
-                  </div>
-                </div>
+                ${importChampsHtml({
+                  modeId: "f-tmode", mode: f.transport_mode || "AMOUNT",
+                  champs: transportChampsHtml("f", f, unit, S.matPreview),
+                  taxId: "f-tax", tax: f.taxe_pct,
+                })}
               </div>
             </div>
           </div>
 
-        </div>
-
         ${inlineSettingsHtml("f", f)}
+        </div>
         </div>
 
         <div id="mat-recap">${recapTableHtml(S.matPreview)}</div>
@@ -3989,7 +4065,7 @@
           `${escHtml(f.reference)} — ${escHtml(f.libelle)}`
         )}
         <div class="mat-summary" id="decl-summary">${matSummaryHtml(S.declPreview)}</div>
-        <div class="form-layout">
+        <div class="form-layout form-layout-1">
         <div class="form-card">
 
           <div class="form-section"><h3>Identification</h3>
@@ -4013,7 +4089,7 @@
                fiche produit MyStock. -->
 
           <div class="form-section"><h3>Prix d'achat</h3>
-            <div class="field-row">
+            <div class="imp-liste">
               <div class="field f-mid"><label>Devise achat</label><select id="d-cur">
                 <option value="EUR" ${f.price_currency==="EUR"?"selected":""}>EUR — euro (€)</option>
                 <option value="USD" ${f.price_currency==="USD"?"selected":""}>USD — dollar américain ($)</option>
@@ -4040,28 +4116,22 @@
                 </span>
               </label>
               <div id="d-import-fields" class="import-fields" style="${f.is_imported?"":"display:none"}">
-                <div class="field-row">
-                  <div class="field f-mid"><label>Méthode de transport</label>
-                    <select id="d-tmode">${transportModeOptions(f.transport_mode || "AMOUNT")}</select>
-                    ${transportAideHtml(f.transport_mode || "AMOUNT")}</div>
-                  ${transportChampsHtml("d", f, unit, S.declPreview)}
-                  <div class="field f-num"><label>Taxes <span class="lbl-unit">% du sous-total</span></label>
-                    <input type="number" step="0.01" id="d-tax" value="${escAttr(f.taxe_pct)}"/>
-                    <div class="field-hint">6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
-                  </div>
-                  ${transportPropagerHtml(
+                ${importChampsHtml({
+                  modeId: "d-tmode", mode: f.transport_mode || "AMOUNT",
+                  champs: transportChampsHtml("d", f, unit, S.declPreview),
+                  taxId: "d-tax", tax: f.taxe_pct,
+                  propager: transportPropagerHtml(
                     "d-tprop",
                     declPrincipal ? declPrincipal.fournisseur_nom : null,
                     f.categorie
-                  )}
-                </div>
+                  ),
+                })}
               </div>
             </div>
           </div>
 
-        </div>
-
         ${inlineSettingsHtml("d", f)}
+        </div>
         </div>
 
         <div id="decl-recap">${recapTableHtml(S.declPreview)}</div>

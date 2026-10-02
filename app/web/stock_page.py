@@ -2389,7 +2389,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
 <script src="/static/mysifa_stock_modals.js?v=empl-terrain1"></script>
-<script src="/static/mysifa_destockage.js?v=2"></script>
+<script src="/static/mysifa_destockage.js?v=3"></script>
 <script src="/static/mysifa_dock.js?v=2"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
@@ -9632,8 +9632,15 @@ function buildMatieres() {
     // Bobines, frontaux, glassines : le stock se lit en mètres (ce qu'on
     // consomme), le nombre de bobines reste à côté (ce qu'on compte).
     const enMetres = mpIsLaizeeCategory(m.categorie) && m.stock_reel != null;
+    const enTubes = mpTubesParPalette(m) > 0;
     const topEnd = [
-      enMetres
+      enTubes
+        ? el('span', {
+            cls: 'mp-card-stock-total' + alertCls,
+            attrs: { title: fN(mpTubesParPalette(m)) + ' tubes par palette' },
+          }, mpFmtTubes(m.quantite, m),
+          el('span', { cls: 'mp-card-stock-sub' }, mpStockLine(m.quantite, m)))
+      : enMetres
         ? el('span', {
             cls: 'mp-card-stock-total' + alertCls,
             attrs: { title: mpSourceReel(m) },
@@ -10339,13 +10346,14 @@ function mpGrouperFourn(lignes, parLaize) {
     if (!a) {
       a = { fournisseur_id: l.fournisseur_id || 0, fournisseur: l.fournisseur || 'Fournisseur non identifié',
             laize_mm: parLaize ? l.laize_mm : null, laizes: new Set(), articles: new Set(),
-            metres: null, quantite: null, unite: l.unite, nonConv: 0 };
+            metres: null, quantite: null, tubes: null, unite: l.unite, nonConv: 0 };
       out.set(k, a);
     }
     a.articles.add(l.article);
     if (l.laize_mm) a.laizes.add(Math.round(l.laize_mm));
     if (l.metres != null) a.metres = (a.metres || 0) + l.metres;
     if (l.quantite != null) a.quantite = (a.quantite || 0) + l.quantite; else a.nonConv++;
+    if (l.tubes != null) a.tubes = (a.tubes || 0) + l.tubes;
   });
   return [...out.values()].sort((x, y) =>
     (!x.fournisseur_id - !y.fournisseur_id) || x.fournisseur.localeCompare(y.fournisseur, 'fr')
@@ -10355,6 +10363,7 @@ function mpGrouperFourn(lignes, parLaize) {
 function mpFmtStockRvgi(a) {
   if (!a) return '—';
   if (a.metres != null) return fN(Math.round(a.metres)) + ' m';
+  if (a.tubes != null) return fN(Math.round(a.tubes)) + ' tubes';
   if (a.quantite != null) {
     const u = { kg: 'kg', palette: 'pal.', bobine: 'bob.' }[a.unite] || (a.unite || '');
     return fN(Math.round(a.quantite * 100) / 100) + ' ' + u;
@@ -10374,7 +10383,17 @@ function mpStockMySifa(m, laizeMm) {
     const ml = Number(m.metres_lineaires_par_bobine || 0);
     return ml > 0 ? fN(Math.round(q * ml)) + ' m' : mpStockLine(q, m);
   }
+  if (mpTubesParPalette(m) > 0) return mpFmtTubes(m.quantite, m);
   return (mpIsLaizeeCategory(m.categorie) && m.stock_reel != null) ? mpFmtReel(m) : mpStockLine(m.quantite, m);
+}
+
+// Un mandrin se stocke à la palette mais se compte en tubes : la palette n'est
+// qu'un conditionnement. Sans tubes par palette sur la fiche, on reste en palettes.
+function mpTubesParPalette(m) {
+  return (m && String(m.categorie || '').toLowerCase() === 'mandrin') ? Number(m.unites_par_palette || 0) : 0;
+}
+function mpFmtTubes(qPalettes, m) {
+  return fN(Math.round(Number(qPalettes || 0) * mpTubesParPalette(m))) + ' tubes';
 }
 
 // Options de filtre tirées des lignes visibles : on ne propose que ce qui existe.
