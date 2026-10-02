@@ -1032,3 +1032,8 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
   .modal{max-width:none;width:100%;max-height:92dvh;border-radius:14px}
   .modal-actions .btn{min-height:44px}
 }
+
+/* Libellé commercial de la liste matières : lien vers la fiche. */
+.msl-libcell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msl-lib{color:var(--text);font-weight:600;text-decoration:none}
+.msl-lib:hover{color:var(--accent);text-decoration:underline}

@@ -190,6 +190,14 @@ body.light .mp-search-wrap:focus-within{
   font-family:inherit;font-size:11px;font-weight:700;color:var(--accent);text-align:left}
 .mp-link-toggle:hover{text-decoration:underline}
 .mp-advanced{margin-top:2px}
+/* Respiration dans la fiche : un texte d'aide ne colle plus au libellé du
+   champ suivant, et une grille de laizes reste lisible à quarante laizes. */
+.mp-modal-fiche .mp-field{margin-bottom:14px}
+.mp-modal-fiche .mp-hint{margin:6px 0 14px;line-height:1.45}
+.mp-modal-fiche .mp-field .mp-hint{margin-bottom:0}
+.mp-modal-fiche .mp-form-section{padding:16px 18px}
+.mp-laize-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px;margin-top:6px}
+.mp-laize-grid label{justify-content:center;text-transform:none!important;letter-spacing:0!important}
 @media (max-width:860px){
   .mp-form-grid{column-count:1}
   .mp-modal.mp-modal-fiche{max-width:520px}
