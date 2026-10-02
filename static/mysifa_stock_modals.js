@@ -830,12 +830,17 @@
     return String(emplInp?.value || '').trim().toUpperCase();
   }
 
+  // Nom d'emplacement du terrain, repris à l'inventaire du 01/10/2026 :
+  // « DROITE 3 », « NC KL », « BÂTIMENT 3 ». Même règle que _MP_EMPL_RE côté serveur.
+  // Un premier mot fait de lettres, puis des mots séparés par une espace.
+  const MP_EMPL_TERRAIN_RE = /^[A-ZÀÂÄÇÉÈÊËÎÏÔÖÙÛÜ](?:[A-ZÀÂÄÇÉÈÊËÎÏÔÖÙÛÜ·]*[A-ZÀÂÄÇÉÈÊËÎÏÔÖÙÛÜ])?(?: [A-ZÀÂÄÇÉÈÊËÎÏÔÖÙÛÜ0-9·]+)*$/;
+
   function validateMpEmplacement(empl) {
     // Emplacement optionnel pour toutes les matières premières : vide = OK.
-    // Si présent, on vérifie le format (grille A121, zone au sol ou sortie prod).
+    // Si présent : grille (A121), zone au sol ou sortie prod, ou nom du terrain.
     if (!empl) return null;
-    if (!isStockEmplacementCode(empl)) {
-      return 'Format invalide — grille (ex. A123), « ' + STOCK_EMPL_AU_SOL_LABEL + ' » (' + STOCK_EMPL_AU_SOL + ') ou « ' + STOCK_EMPL_SORTIE_PROD_LABEL + ' » (' + STOCK_EMPL_SORTIE_PROD + ').';
+    if (!isStockEmplacementCode(empl) && !(empl.length <= 20 && MP_EMPL_TERRAIN_RE.test(empl))) {
+      return 'Format invalide — grille (ex. A123), nom du terrain (ex. DROITE 3, 20 caractères au plus), « ' + STOCK_EMPL_AU_SOL_LABEL + ' » (' + STOCK_EMPL_AU_SOL + ') ou « ' + STOCK_EMPL_SORTIE_PROD_LABEL + ' » (' + STOCK_EMPL_SORTIE_PROD + ').';
     }
     return null;
   }

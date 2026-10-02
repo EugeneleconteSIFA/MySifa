@@ -94,6 +94,30 @@ pour les écrans MyStock.
 
 Un prix à 0 côté MyStock veut dire « pas renseigné » : il n'écrase jamais un tarif.
 
+### Un seul fournisseur principal, partagé avec la fiche matière (2 octobre 2026)
+
+La fiche matière de MyStock liste ses **variantes fournisseur** (`mp_variantes`) :
+la matière porte le libellé COMMERCIAL (support, grammage, type de colle,
+protecteur, FSC — aucune référence), chaque variante le libellé TECHNIQUE (les
+références de colle, de glassine, d'article fournisseur), sa référence RVGI et sa
+longueur de bobine. `erp_article_matiere.variante_id` dit quelle variante un
+article RVGI désigne.
+
+Le principal de la page et `mp_matiere_prix.principal` sont **la même vérité** :
+
+- choisir le principal sur la fiche (`mp_variantes.definir_principal`) appelle
+  `set_principal` sur chaque déclinaison où ce fournisseur a un prix — miroir de
+  valorisation et historique compris — et rend la liste des déclinaisons sans
+  prix chez lui, que la fiche affiche ;
+- `set_principal` (choix explicite dans Coûts matières) fait suivre la variante
+  principale. `set_prix` et `set_fournisseur` ne font que créer la variante du
+  fournisseur si elle manque : saisir un prix sur une laize que le principal ne
+  livre pas ne doit pas faire basculer toute la matière.
+
+Toute écriture de prix passe par `_sync_variantes` ; une écriture directe en base
+contourne la synchronisation, comme elle contourne déjà le miroir.
+Test : `python3 tests/test_mp_variantes.py`.
+
 ### La liste des matières est un écran de SAISIE, pas de lecture
 
 `/pricing` ouvre une ligne par matière, et le seul geste qu'on y fait est de

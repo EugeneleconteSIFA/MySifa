@@ -2135,6 +2135,7 @@ def set_prix(
             note=f"Prix modifié depuis {origine}",
         )
     _sync_laize_fournisseurs(conn, declinaison_id)
+    _sync_variantes(conn, declinaison_id, user_name)
     return result
 
 
@@ -2238,6 +2239,7 @@ def set_fournisseur(
         (nouveau_fournisseur_id, _now(), row["id"]),
     )
     _sync_laize_fournisseurs(conn, declinaison_id)
+    _sync_variantes(conn, declinaison_id, None)
     return {"ok": True}
 
 
@@ -2266,6 +2268,7 @@ def set_principal(
         note=f"Fournisseur principal changé depuis {origine}",
     )
     _sync_laize_fournisseurs(conn, declinaison_id)
+    _sync_variantes(conn, declinaison_id, user_name, principal_explicite=True)
     return {"ok": True, "miroir": miroir}
 
 
@@ -2295,6 +2298,19 @@ def delete_ligne(
         return {"ok": True, "declinaison_supprimee": True}
     _sync_laize_fournisseurs(conn, declinaison_id)
     return {"ok": True}
+
+
+def _sync_variantes(conn: sqlite3.Connection, declinaison_id: int, user_name: Optional[str],
+                    principal_explicite: bool = False) -> None:
+    """Page matière : chaque fournisseur qui a un prix y a sa variante. Un choix
+    explicite du principal (set_principal) déplace aussi la variante principale :
+    un seul fournisseur principal."""
+    try:
+        from app.services import mp_variantes
+        mp_variantes.suivre_prix_declinaison(conn, declinaison_id, user_name,
+                                             principal_explicite=principal_explicite)
+    except sqlite3.OperationalError:
+        pass  # table mp_variantes absente : migration pas encore passée
 
 
 def _sync_laize_fournisseurs(conn: sqlite3.Connection, declinaison_id: int) -> None:
