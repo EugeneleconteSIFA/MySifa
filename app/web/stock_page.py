@@ -10441,6 +10441,7 @@ function mpLignesLaize(m, lignes, filtreLaize, filtreFourn) {
     const rv = mpTotalRvgi(lignes);
     out.push(el('tr', null, el('td', null, '—'),
       el('td', { cls: 'num' }, el('strong', null, mpStockMySifa(m))),
+      el('td', { cls: 'num' }, '—'),
       el('td', { cls: 'num' }, mpFmtStockRvgi(rv)),
       el('td', { cls: 'num' }, '—'),
       el('td', null, fmtFourn(lignes))));
@@ -10461,23 +10462,28 @@ function mpLignesLaize(m, lignes, filtreLaize, filtreFourn) {
       out.push(el('tr', null,
         el('td', null, el('strong', null, lz ? fN(lz) + ' mm' : 'Sans laize')),
         el('td', { cls: 'num' }, el('strong', null, !lz ? '—'
-          : (ms.metres != null ? fN(ms.metres) + ' m' : mpStockLine(ms.quantite, m))),
-          lz && ms.quantite ? el('div', { cls: 'mp-var-meta' }, mpStockLine(ms.quantite, m)) : null),
+          : (ms.metres != null ? fN(ms.metres) + ' m' : '—'))),
+        el('td', { cls: 'num' }, lz ? mpFmtBob(ms.quantite) : '—'),
         el('td', { cls: 'num' }, mpFmtStockRvgi(rv)),
         ecartCell(lz ? ms.metres : null, rv),
         el('td', null, fmtFourn(ici))));
     });
   if (!out.length) {
-    out.push(el('tr', { cls: 'mp-grain-vide' }, el('td', { attrs: { colspan: '5' } }, 'Aucun stock sur cette sélection.')));
+    out.push(el('tr', { cls: 'mp-grain-vide' }, el('td', { attrs: { colspan: '6' } }, 'Aucun stock sur cette sélection.')));
   }
   return out;
 }
 
-const MP_COLS_LAIZE = ['Laize', 'Stock MySifa', 'Stock RVGI', 'Écart', 'Fournisseurs (stock RVGI)'];
+const MP_COLS_LAIZE = ['Laize', 'Stock MySifa', 'Bobines MySifa', 'Stock RVGI', 'Écart', 'Fournisseurs (stock RVGI)'];
 
 function mpTheadLaize() {
   return el('thead', null, el('tr', null,
-    ...MP_COLS_LAIZE.map((c, i) => el('th', { cls: i >= 1 && i <= 3 ? 'num' : '' }, c))));
+    ...MP_COLS_LAIZE.map((c, i) => el('th', { cls: i >= 1 && i <= 4 ? 'num' : '' }, c))));
+}
+
+// Bobines équivalentes : une décimale suffit à l'atelier.
+function mpFmtBob(q) {
+  return Number(q || 0).toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' bob.';
 }
 
 // Liste des matières, une ligne par fournisseur ou par laize.
@@ -10507,7 +10513,7 @@ function buildMpGrainTable(items, grain) {
       dashMpCatBadge(m.categorie, m.sous_section));
     if (parLaize) {
       tb.appendChild(el('tr', { cls: 'mp-grain-mat', on: { click: () => loadMatiere(m.id) } },
-        el('td', { attrs: { colspan: '5' } },
+        el('td', { attrs: { colspan: '6' } },
           el('span', { cls: 'mp-grain-titre' }, mpTitre(m)),
           dashMpCatBadge(m.categorie, m.sous_section),
           el('span', { cls: 'mp-grain-tot' }, 'MySifa ', el('strong', null, mpStockMySifa(m)),
@@ -10762,6 +10768,7 @@ function buildMpVarParLaize(m, lignes) {
   tb.appendChild(el('tr', { cls: 'mp-var-grp' },
     el('td', null, el('strong', null, 'Total')),
     el('td', { cls: 'num' }, el('strong', null, mpStockMySifa(m))),
+    el('td', { cls: 'num' }, el('strong', null, mpIsLaizeeCategory(m.categorie) ? mpFmtBob(m.quantite) : '—')),
     el('td', { cls: 'num' }, el('strong', null, tot ? mpFmtStockRvgi(tot) : '—')),
     el('td', { cls: 'num' }, ''), el('td', null, '')));
   tbl.appendChild(tb);
