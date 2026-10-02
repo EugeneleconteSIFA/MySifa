@@ -75,7 +75,7 @@ FABRICATION_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
-<link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=z1cond1">
+<link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=fiche-mp2">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */

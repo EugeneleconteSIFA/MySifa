@@ -1179,6 +1179,17 @@
       </div>`;
   }
 
+  /* Le libellé commercial de la matière (désignation, à défaut la référence),
+     en lien vers sa fiche de paramétrage — ou vers MyStock tant qu'aucune
+     déclinaison n'existe. */
+  function msLibelleLienHtml(m) {
+    const lib = m.designation || m.reference || "";
+    const decls = m.declinaisons || [];
+    return decls.length
+      ? `<a class="msl-lib" href="/pricing/mystock/${decls[0].id}" title="${escAttr(lib + " — ouvrir la fiche")}">${escHtml(lib)}</a>`
+      : `<a class="msl-lib" href="/stock?tab=matieres&matiere=${m.id}" target="_blank" rel="noopener" title="${escAttr(lib + " — ouvrir dans MyStock")}">${escHtml(lib)}</a>`;
+  }
+
   function mystockMatiereRowHtml(m) {
     const decls = m.declinaisons || [];
     const fourns = msFournisseursPrincipaux(m);
@@ -1244,8 +1255,7 @@
 
     return `<tr class="msl-row" data-ms-mat="${m.id}">
         <td>${categorieBadge(m.categorie)}</td>
-        <td class="msl-ref"><strong>${escHtml(m.reference)}</strong></td>
-        <td class="msl-des" title="${escAttr(m.designation || "")}">${escHtml(m.designation || "")}</td>
+        <td class="msl-libcell">${msLibelleLienHtml(m)}</td>
         <td class="msl-fourn">${fournCell} ${tarifBtn}</td>
         <td class="msl-prix">${prixCell}</td>
         <td class="msl-majcell">${dernierPrixCellHtml(m)}</td>
@@ -1324,10 +1334,9 @@
 
     return `<article class="msf-card msl-card" data-ms-mat="${m.id}">
         <div class="msf-card-head">
-          <span class="msf-card-title">${escHtml(m.reference)}</span>
+          <span class="msf-card-title">${msLibelleLienHtml(m)}</span>
           ${categorieBadge(m.categorie)}
         </div>
-        <div class="msf-card-sub"><span>${escHtml(m.designation || "")}</span></div>
         <div class="msf-card-sub"><span>${fournTxt}</span></div>
         ${editable
           ? `<div class="msl-card-bas">
@@ -1360,8 +1369,8 @@
     const COLS = [
       { cle: "cat", titre: "Cat.", style: "width:92px", filtre: "choix",
         val: (m) => m.categorie },
-      { cle: "ref", titre: "Référence", filtre: "texte", val: (m) => m.reference },
-      { cle: "des", titre: "Désignation", filtre: "texte", val: (m) => m.designation || "" },
+      { cle: "lib", titre: "Libellé commercial", filtre: "texte",
+        val: (m) => m.designation || m.reference || "" },
       { cle: "fourn", titre: "Fournisseur principal", filtre: "choix",
         val: (m) => {
           const f = msFournisseursPrincipaux(m).map((x) => x.nom).filter(Boolean);
@@ -1388,12 +1397,12 @@
       : `<div class="table-wrap">
           <table class="pr-table msl-table">
             <colgroup>
-              <col style="width:92px"><col style="width:150px"><col>
+              <col style="width:92px"><col>
               <col style="width:180px"><col style="width:215px">
               <col style="width:120px"><col style="width:172px">
             </colgroup>
             ${enTetesTriables("matieres", COLS, S.mystock)}
-            <tbody>${lignes || '<tr><td colspan="7" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
+            <tbody>${lignes || '<tr><td colspan="6" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
           </table>
         </div>`;
 

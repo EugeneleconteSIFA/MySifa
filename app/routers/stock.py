@@ -6136,6 +6136,23 @@ def list_matieres_premieres(request: Request, all: int = 0):
             # qu'il faisait de toute façon avant ce chantier.
             bobines_par_mat = {}
         empl_par_mat = _mp_emplacements_par_matiere(conn)
+        # Ce que la recherche des matières doit aussi trouver : fournisseurs,
+        # libellés techniques, références fournisseur et articles RVGI des
+        # variantes. Une chaîne par matière, assemblée ici une fois.
+        try:
+            recherche_par_mat = {
+                int(r[0]): r[1] or ""
+                for r in conn.execute(
+                    """SELECT v.matiere_id,
+                              GROUP_CONCAT(COALESCE(f.nom,'') || ' ' || v.libelle_technique || ' '
+                                           || COALESCE(v.ref_fournisseur,'') || ' '
+                                           || COALESCE(v.rvgi_code1 || '/' || v.rvgi_code2, ''), ' | ')
+                         FROM mp_variantes v LEFT JOIN fournisseurs_fsc f ON f.id = v.fournisseur_id
+                        WHERE v.actif = 1 GROUP BY v.matiere_id"""
+                ).fetchall()
+            }
+        except sqlite3.OperationalError:
+            recherche_par_mat = {}
     by_mat: dict[int, list[dict]] = {}
     for r in laize_rows:
         try:
@@ -6200,6 +6217,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
                     complet = False
             d["stock_reel_complet"] = complet
         d["emplacements"] = empl_par_mat.get(int(r["id"]), [])
+        d["recherche"] = recherche_par_mat.get(int(r["id"]), "")
         out.append(d)
     return out
 

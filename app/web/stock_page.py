@@ -1357,6 +1357,35 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-empl-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:14px}
 .mp-empl-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
 .content.mp-detail{max-width:1440px}
+.mp-sc{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:20px}
+.mp-sc>*{grid-column:1}
+.mp-sc>.mp-actions{grid-column:2;grid-row:1 / span 3;align-self:start}
+.mp-sc>.sc-stats{grid-column:1 / -1;margin-top:14px}
+.mp-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.mp-act{display:inline-flex;align-items:center;gap:7px;padding:8px 13px;background:var(--bg);border:1px solid var(--border);border-radius:10px;font:inherit;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;white-space:nowrap;transition:border-color .15s,color .15s}
+.mp-act:hover{border-color:var(--accent);color:var(--accent)}
+.mp-act svg{color:var(--accent)}
+@media(max-width:900px){.mp-sc{grid-template-columns:minmax(0,1fr)}.mp-sc>.mp-actions{grid-column:1;grid-row:auto;order:9;justify-content:flex-start;margin-top:14px}.mp-sc>.sc-stats{order:8}}
+.mp-tuiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:4px}
+.mp-tuile{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;padding:18px;background:var(--card);border:1px solid var(--border);border-radius:14px;font:inherit;color:var(--text);cursor:pointer;transition:border-color .15s,background .15s}
+.mp-tuile:hover{border-color:var(--accent);background:var(--accent-bg)}
+.mp-tuile-nom{font-size:15px;font-weight:700}
+.mp-tuile-n{font-size:12px;color:var(--muted)}
+.mp-tuile-alerte{font-size:12px;font-weight:600;color:var(--warn)}
+.mp-tuile-tout{border-style:dashed}
+.mp-tuiles-titre{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:14px 2px 8px}
+.mp-flyout-item.sep{border-top:1px solid var(--border);border-radius:0;margin-top:4px;padding-top:10px}
+.mp-liste-barre{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 10px}
+.mp-retour-cat{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;background:var(--card);border:1px solid var(--border);border-radius:10px;font:inherit;font-size:13px;font-weight:600;color:var(--text);cursor:pointer}
+.mp-retour-cat:hover{background:var(--bg);color:var(--accent)}
+.mp-liste-n{font-size:12px;color:var(--muted)}
+.mp-tri-wrap{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.mp-tri{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:7px 10px;font:inherit;font-size:13px;color:var(--text)}
+.mp-flyout{position:fixed;z-index:9000;min-width:230px;padding:6px;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 32px rgba(15,23,42,.18);display:flex;flex-direction:column;gap:2px}
+.mp-flyout-item{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:8px 10px;background:var(--card);border:none;border-radius:8px;font:inherit;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;text-align:left}
+.mp-flyout-item:hover{background:var(--bg);color:var(--accent)}
+.mp-flyout-item.tout{border-top:1px solid var(--border);border-radius:0 0 8px 8px;margin-top:4px;padding-top:10px}
+.mp-flyout-n{font-size:11px;font-weight:600;color:var(--muted)}
 .mp-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin:0 0 16px;overflow-x:auto}
 .mp-tab{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);border-bottom:none;border-radius:10px 10px 0 0;padding:9px 16px;font:inherit;font-size:13px;font-weight:700;color:var(--text2);cursor:pointer;white-space:nowrap}
 .mp-tab:hover{background:var(--bg);color:var(--text)}
@@ -2334,7 +2363,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='stock';</script>
-<link rel="stylesheet" href="/static/mysifa_stock_modals.css">
+<link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=fiche-mp2">
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
 <script src="/static/mysifa_stock_modals.js?v=empl-terrain1"></script>
@@ -2471,6 +2500,10 @@ let S = {
   // Matières premières
   matieres: null,
   matieresCat: 'tout',
+  // Matières premières : on arrive sur l'accueil (une tuile par catégorie),
+  // pas sur la liste complète.
+  matieresAccueil: true,
+  mpTri: (() => { try { return localStorage.getItem('mp_tri') || 'alpha'; } catch (e) { return 'alpha'; } })(),
   matieresQ: '',
   matieresCardMenuId: null,
   selMatiere: null,
@@ -5873,11 +5906,101 @@ function mpCompareSousCategorie(a, b) {
                    { sensitivity: 'base', numeric: true });
 }
 
+// Texte comparable : minuscules, sans accents.
+function mpNorm(v) {
+  return String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+// Tout ce qu'une recherche peut viser sur une matière : référence, libellé,
+// catégorie, laizes, emplacements, fournisseurs et libellés techniques.
+function mpHaystack(m) {
+  if (m._hay) return m._hay;
+  const laizes = (Array.isArray(m.stock_par_laize) ? m.stock_par_laize : [])
+    .map(l => (l.valeur_mm != null ? Math.round(l.valeur_mm) + ' ' + Math.round(l.valeur_mm) + 'mm' : '') + ' ' + (l.label || ''));
+  const empls = (Array.isArray(m.emplacements) ? m.emplacements : []).map(e => e.emplacement || '');
+  m._hay = mpNorm([
+    m.reference, m.designation, m.categorie, MP_CAT_LABELS[mpCategorieKey(m.categorie)],
+    m.sous_section, m.sous_categorie, m.abbreviation, m.recherche, ...laizes, ...empls,
+  ].join(' | '));
+  return m._hay;
+}
+
+// Recherche « intelligente » : chaque mot doit se retrouver quelque part,
+// accents et majuscules ignorés (« therm eco 470 », « likexin », « R1101 »).
+function mpMatchRecherche(m, q) {
+  const mots = mpNorm(q).split(/\s+/).filter(Boolean);
+  if (!mots.length) return true;
+  const hay = mpHaystack(m);
+  return mots.every(t => hay.includes(t));
+}
+
+// Ordre de la liste, au choix ; alphabétique par défaut.
+const MP_TRIS = [
+  { id: 'alpha', label: 'Nom (A → Z)' },
+  { id: 'alpha_desc', label: 'Nom (Z → A)' },
+  { id: 'stock_desc', label: 'Stock (le plus élevé)' },
+  { id: 'stock_asc', label: 'Stock (le plus faible)' },
+];
+function mpCompareTri(a, b) {
+  const nom = (x) => String((x && (x.reference || x.designation)) || '');
+  const alpha = nom(a).localeCompare(nom(b), 'fr', { sensitivity: 'base', numeric: true });
+  const qa = parseFloat(a && a.quantite) || 0, qb = parseFloat(b && b.quantite) || 0;
+  switch (S.mpTri) {
+    case 'alpha_desc': return -alpha;
+    case 'stock_desc': return (qb - qa) || alpha;
+    case 'stock_asc': return (qa - qb) || alpha;
+    default: return alpha;
+  }
+}
+
+// Les catégories telles que l'écran les présente : les frontaux éclatés par
+// sous-section (Thermiques, Couché, Vélin…), comme la barre de pills.
+function mpPillDefs() {
+  const frontalSousSections = mpFrontalSousSections(S.matieres);
+  const defs = [];
+  MP_PILL_CATS.forEach(p => {
+    if (p.id === 'frontal' && frontalSousSections.length > 0) {
+      frontalSousSections.forEach(ss => defs.push({
+        id: MP_FRONTAL_SS_PREFIX + ss.slug, label: ss.label, cat: 'frontal',
+        sousSection: ss.slug ? ss.label : null, isFrontalSs: true, ssSlug: ss.slug,
+      }));
+    } else {
+      defs.push({ id: p.id, label: p.label, cat: p.id, sousSection: null });
+    }
+  });
+  return defs;
+}
+
+// Les matières d'abord (frontaux, glassines, complexes), les consommables ensuite.
+const MP_CATS_MATIERE = new Set(['frontal', 'glassine', 'complexe']);
+function mpEstMatiere(d) { return MP_CATS_MATIERE.has(d.cat); }
+
+function mpPillMatch(d, m) {
+  if (d.cat === 'tout') return true;
+  if (m.categorie !== d.cat) return false;
+  if (!d.isFrontalSs) return true;
+  const ss = (m.sous_section || '').trim();
+  return d.sousSection ? ss.toLowerCase() === d.sousSection.toLowerCase() : !ss;
+}
+
+// Ouvre la liste d'une catégorie (tuile d'accueil, sous-menu de la barre latérale).
+function mpOuvrirCategorie(d) {
+  S.matieresQ = '';
+  S.matieresAccueil = false;
+  if (d.isFrontalSs) {
+    S.matieresCat = 'frontal';
+    S.matieresSousSection = d.sousSection ? d.sousSection : MP_SOUS_SECTION_NONE;
+  } else {
+    S.matieresCat = d.cat;
+    S.matieresSousSection = null;
+  }
+}
+
 function filterMatieresList() {
   const list = S.matieres || [];
   const cat = S.matieresCat || 'tout';
   const ss = S.matieresSousSection || null;
-  const q = (S.matieresQ || '').trim().toLowerCase();
+  const q = (S.matieresQ || '').trim();
   return list.filter(m => {
     if (cat !== 'tout' && m.categorie !== cat) return false;
     // Filtre sous-section (uniquement quand la catégorie courante en supporte une)
@@ -5889,13 +6012,41 @@ function filterMatieresList() {
         if (matSs.toLowerCase() !== ss.toLowerCase()) return false;
       }
     }
-    if (!q) return true;
-    const ref = (m.reference || '').toLowerCase();
-    const des = (m.designation || '').toLowerCase();
-    const empl = (Array.isArray(m.emplacements) ? m.emplacements : [])
-      .map(e => String(e.emplacement || '')).join(' ').toLowerCase();
-    return ref.includes(q) || des.includes(q) || empl.includes(q);
+    return mpMatchRecherche(m, q);
   });
+}
+
+// Accueil « Matières premières » : une tuile par catégorie, plus « Toutes
+// catégories », et la recherche. Arriver sur six cents lignes ne sert à rien.
+function buildMatieresAccueil(head, banner, searchWrap) {
+  const list = S.matieres || [];
+  const defs = mpPillDefs();
+  const tuile = (d, extraCls) => {
+    const items = list.filter(m => mpPillMatch(d, m));
+    const alertes = items.filter(m => m.en_alerte).length;
+    return el('button', {
+      cls: 'mp-tuile' + (extraCls ? ' ' + extraCls : ''),
+      type: 'button',
+      on: { click: () => { mpOuvrirCategorie(d); if (typeof stockSyncUrl === 'function') stockSyncUrl(); renderMatieresView(); } },
+    },
+      el('span', { cls: 'mp-tuile-nom' }, d.cat === 'tout' ? 'Toutes catégories' : d.label),
+      el('span', { cls: 'mp-tuile-n' }, items.length + ' référence' + (items.length > 1 ? 's' : '')),
+      alertes ? el('span', { cls: 'mp-tuile-alerte' }, alertes + ' sous le seuil') : null,
+    );
+  };
+  const tout = defs.find(d => d.cat === 'tout');
+  const presentes = defs.filter(d => d.cat !== 'tout' && list.some(m => mpPillMatch(d, m)));
+  const matieres = presentes.filter(mpEstMatiere);
+  const consommables = presentes.filter(d => !mpEstMatiere(d));
+  return el('div', { cls: 'content mp-accueil' },
+    el('div', { cls: 'hist-page' },
+      head, banner, searchWrap,
+      matieres.length ? el('div', { cls: 'mp-tuiles-titre' }, 'Matières') : null,
+      matieres.length ? el('div', { cls: 'mp-tuiles' }, ...matieres.map(d => tuile(d))) : null,
+      consommables.length ? el('div', { cls: 'mp-tuiles-titre' }, 'Consommables') : null,
+      consommables.length ? el('div', { cls: 'mp-tuiles' }, ...consommables.map(d => tuile(d))) : null,
+      tout ? el('div', { cls: 'mp-tuiles', style: 'margin-top:12px' }, tuile(tout, 'mp-tuile-tout')) : null,
+    ));
 }
 
 async function loadMatieres() {
@@ -6169,48 +6320,26 @@ function buildMatiereDetail() {
   }, '← Retour aux matières premières');
   const topbar = el('div', { cls: 'mp-detail-topbar' }, back, buildMatiereNav(m));
 
+  // Actions de la fiche, dans son en-tête : même style pour toutes, l'accent
+  // seulement au survol. Entrées et sorties ne se saisissent plus ici
+  // (10/09/2026) : elles viennent des réceptions RVGI et du déstockage ; reste
+  // la correction, réservée aux administrateurs matières.
   const actionBtns = [];
+  const act = (icone, label, onClick, titre) => el('button', {
+    cls: 'mp-act', type: 'button', attrs: titre ? { title: titre } : {}, on: { click: onClick },
+  }, iconEl(icone, 15), el('span', null, label));
   if (!S.stockReadOnly) {
-    // Entrées et sorties ne se saisissent plus ici (10/09/2026) : les entrées
-    // viennent des réceptions RVGI, les sorties du déstockage des dossiers.
-    // Reste la correction — un ajustement motivé, réservé aux administrateurs
-    // matières — pour ce que les deux automatismes n'ont pas pu voir.
-    // Bouton Réception : réservé aux matières laizées (frontal/glassine/complexe)
-    if (m.laizee) {
-      actionBtns.push(el('button', {
-        cls: 'mp-act-btn',
-        type: 'button',
-        style: { background: 'var(--accent-bg)', color: 'var(--accent)', border: '1px solid var(--accent)', fontWeight: '700' },
-        on: { click: () => openReceptionMatiereModal(m) },
-      }, iconEl('truck', 14), ' Réception'));
-    }
+    if (m.laizee) actionBtns.push(act('truck', 'Réception', () => openReceptionMatiereModal(m)));
     if (isMatieresAdmin()) {
-      actionBtns.push(el('button', {
-        cls: 'mp-act-btn',
-        type: 'button',
-        style: { background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--border)', fontWeight: '700' },
-        attrs: { title: 'Fixer le stock à sa valeur réelle, avec un motif. Les entrées viennent des réceptions RVGI, les sorties du déstockage des dossiers.' },
-        on: { click: () => openModalMouvement('ajustement', m) },
-      }, iconEl('edit', 14), ' Corriger le stock'));
-      actionBtns.push(el('button', {
-        cls: 'action-btn inventaire',
-        type: 'button',
-        on: { click: () => openModalInventaireMatiere(m) },
-      }, '≡ Inventaire'));
+      actionBtns.push(act('clipboard', 'Inventaire', () => openModalInventaireMatiere(m)));
+      actionBtns.push(act('edit', 'Corriger le stock', () => openModalMouvement('ajustement', m),
+        'Fixer le stock à sa valeur réelle, avec un motif. Les entrées viennent des réceptions RVGI, les sorties du déstockage des dossiers.'));
     }
   }
   if (isMatieresAdmin()) {
-    actionBtns.push(el('button', {
-      cls: 'mp-act-icon mp-act-icon--neutral',
-      type: 'button',
-      style: { flex: '0 0 auto', minWidth: '44px' },
-      attrs: { title: 'Modifier la référence', 'aria-label': 'Modifier la référence' },
-      on: { click: () => openMatiereRefEditModal(m) },
-    }, iconEl('edit', 16)));
+    actionBtns.push(act('settings', 'Modifier la référence', () => openMatiereRefEditModal(m)));
   }
-  const actions = actionBtns.length
-    ? el('div', { cls: 'action-bar', style: { marginTop: '14px' } }, ...actionBtns)
-    : null;
+  const actions = actionBtns.length ? el('div', { cls: 'mp-actions' }, ...actionBtns) : null;
 
   const meta = [];
   if (mpIsGlassineCategory(m) && m.couleur) {
@@ -6307,41 +6436,40 @@ function buildMatiereDetail() {
   // valeur en kilos seule ne se traduit pas mentalement.
   const equiv = mpIsAdhesifCategory(m) ? mpAdhesifEquivalent(m.quantite, m) : '';
 
-  const scorecard = el('div', { cls: 'scorecard' },
-    el('div', { cls: 'scorecard' },
-      el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' } },
-        ...[dashMpCatBadge(m.categorie, m.sous_section), dashMpSousCatBadge(m)].filter(Boolean),
-        m.en_alerte ? el('span', { style: { fontSize: '12px', color: 'var(--warn)', fontWeight: '600' } }, 'Sous le seuil') : null,
-      ),
-      el('div', { cls: 'sc-ref' }, m.reference || ''),
-      el('div', { cls: 'sc-des' }, m.designation || '—'),
-      meta.length
-        ? el('div', { style: { fontSize: '12px', color: 'var(--muted)', marginTop: '6px' } }, meta.join(' · '))
-        : null,
-      el('div', { cls: 'sc-stats' },
-        el('div', { cls: 'sc-stat' },
-          el('div', { cls: 'sc-stat-label' }, 'Stock actuel'),
-          el('div', { cls: 'sc-stat-value' }, mpStockLine(m.quantite, m)),
-          equiv
-            ? el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } }, equiv)
-            : null,
-        ),
-        // Le stock réel, à côté du stock compté. Les deux sont justes en même
-        // temps : le magasin compte des objets, la production consomme de la
-        // matière. Affiché seulement quand on sait le calculer — un « 0 m »
-        // faute de métrage se lirait « il n'y en a plus ».
-        (m.stock_reel != null)
-          ? el('div', { cls: 'sc-stat' },
-              el('div', { cls: 'sc-stat-label' }, 'Stock réel'),
-              el('div', { cls: 'sc-stat-value' }, mpFmtReel(m)),
-              el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } },
-                 mpSourceReel(m)),
-            )
+  const scorecard = el('div', { cls: 'scorecard mp-sc' },
+    actions,
+    el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' } },
+      ...[dashMpCatBadge(m.categorie, m.sous_section), dashMpSousCatBadge(m)].filter(Boolean),
+      m.en_alerte ? el('span', { style: { fontSize: '12px', color: 'var(--warn)', fontWeight: '600' } }, 'Sous le seuil') : null,
+    ),
+    el('div', { cls: 'sc-ref' }, m.reference || ''),
+    el('div', { cls: 'sc-des' }, m.designation || '—'),
+    meta.length
+      ? el('div', { style: { fontSize: '12px', color: 'var(--muted)', marginTop: '6px' } }, meta.join(' · '))
+      : null,
+    el('div', { cls: 'sc-stats' },
+      el('div', { cls: 'sc-stat' },
+        el('div', { cls: 'sc-stat-label' }, 'Stock actuel'),
+        el('div', { cls: 'sc-stat-value' }, mpStockLine(m.quantite, m)),
+        equiv
+          ? el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } }, equiv)
           : null,
-        el('div', { cls: 'sc-stat' },
-          el('div', { cls: 'sc-stat-label' }, 'Mouvements'),
-          el('div', { cls: 'sc-stat-value' }, String(mouvements.length)),
-        ),
+      ),
+      // Le stock réel, à côté du stock compté. Les deux sont justes en même
+      // temps : le magasin compte des objets, la production consomme de la
+      // matière. Affiché seulement quand on sait le calculer — un « 0 m »
+      // faute de métrage se lirait « il n'y en a plus ».
+      (m.stock_reel != null)
+        ? el('div', { cls: 'sc-stat' },
+            el('div', { cls: 'sc-stat-label' }, 'Stock réel'),
+            el('div', { cls: 'sc-stat-value' }, mpFmtReel(m)),
+            el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } },
+               mpSourceReel(m)),
+          )
+        : null,
+      el('div', { cls: 'sc-stat' },
+        el('div', { cls: 'sc-stat-label' }, 'Mouvements'),
+        el('div', { cls: 'sc-stat-value' }, String(mouvements.length)),
       ),
     ),
   );
@@ -6360,7 +6488,6 @@ function buildMatiereDetail() {
   return el('div', { cls: 'content mp-detail' },
     topbar,
     scorecard,
-    actions,
     buildMpDetailTabs(m, mouvements),
     ...corps,
   );
@@ -8768,11 +8895,11 @@ function appendMatiereRefEditFields(parent, item) {
   // Cache local des fournisseurs disponibles (chargé async)
   let _fournisseursCache = Array.isArray(S.mpFournisseurs) ? S.mpFournisseurs : null;
   // Vue laize (compact, comme avant : flex-wrap horizontal)
-  const laizeChecks = el('div', { cls: 'mp-laize-grid',
-    style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px' });
+  const laizeChecks = el('div', { cls: 'mp-laize-grid' });
   const currentLaizeIds = new Set((item.stock_par_laize || []).map(s => s.laize_id));
   const laizeMetaById = {};
-  (S.laizes || []).filter(l => l.actif || currentLaizeIds.has(l.id)).forEach(l => {
+  (S.laizes || []).filter(l => l.actif || currentLaizeIds.has(l.id))
+    .slice().sort((a, b) => (parseFloat(a.valeur_mm) || 0) - (parseFloat(b.valeur_mm) || 0)).forEach(l => {
     const lid = 'editmat-laize-' + item.id + '-' + l.id;
     const inp = el('input', { type: 'checkbox', id: lid, value: String(l.id) });
     if (currentLaizeIds.has(l.id)) inp.checked = true;
@@ -9008,14 +9135,15 @@ function appendMatiereRefEditFields(parent, item) {
   prixModeLaiInp.addEventListener('change', applyPrixMode);
   laizeWrap.append(
     el('div', { cls: 'mp-field' }, el('label', null, 'Mètres linéaires par bobine'), metresInp),
-    prixModeField,
-    prixM2Field,
-    laizePricesField,
-    laizeFournisseursField,
     el('div', { cls: 'mp-field' },
       el('label', null, 'Laizes disponibles'),
       laizeChecks,
     ),
+    prixModeField,
+    prixM2Field,
+    laizePricesField,
+    el('div', { cls: 'mp-hint' },
+      'Les fournisseurs et les laizes qu\'ils livrent se gèrent dans la sous-page Fournisseurs de la fiche.'),
   );
   applyPrixMode();
   renderLaizeFournisseurs();
@@ -9155,7 +9283,7 @@ function appendMatiereRefEditFields(parent, item) {
     ? mpFormSection('Laizes & tarification', laizeWrap)
     : null;
   parent.append(...[grille, sectionLaizes].filter(Boolean));
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, ltInp, isMandrin, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, abbrevInp, hasAbbrev, sousCategorieSel };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, ltInp, isMandrin, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds: null, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, abbrevInp, hasAbbrev, sousCategorieSel };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -9365,30 +9493,10 @@ function buildMatieres() {
         : null,
     ),
   );
-  // Construit la liste réelle des pills : on remplace la pill "frontal" par
-  // une pill par sous-section frontale présente. La sélection actuelle est
-  // matérialisée par S.matieresCat + S.matieresSousSection.
+  // Les pills : les frontaux éclatés par sous-section (voir mpPillDefs).
   const frontalSousSections = mpFrontalSousSections(S.matieres);
   const expandFrontal = frontalSousSections.length > 0;
-  const pillDefs = [];
-  MP_PILL_CATS.forEach(p => {
-    if (p.id === 'frontal' && expandFrontal) {
-      // Une pill par sous-section (chaque pill = un (categorie, sous_section))
-      frontalSousSections.forEach(ss => {
-        pillDefs.push({
-          id: MP_FRONTAL_SS_PREFIX + ss.slug,
-          label: ss.label,
-          cat: 'frontal',
-          // Pour la sentinelle "sans sous-section", on conserve slug='' qui sert d'indicateur
-          sousSection: ss.slug ? ss.label : null,
-          isFrontalSs: true,
-          ssSlug: ss.slug,
-        });
-      });
-    } else {
-      pillDefs.push({ id: p.id, label: p.label, cat: p.id, sousSection: null });
-    }
-  });
+  const pillDefs = mpPillDefs();
 
   // Détermine la pill active à partir de l'état
   const activePillId = (() => {
@@ -9412,6 +9520,7 @@ function buildMatieres() {
         + (activePillId === d.id ? ' active' : ''),
       type: 'button',
       on: { click: () => {
+        S.matieresAccueil = false;
         if (d.isFrontalSs) {
           S.matieresCat = 'frontal';
           // Pas de label de sous-section → sentinelle "sans sous-section"
@@ -9439,7 +9548,9 @@ function buildMatieres() {
     },
   });
   searchInp.value = S.matieresQ || '';
+  searchInp.placeholder = 'Rechercher : nom, laize, fournisseur, référence RVGI, emplacement…';
   searchInp.addEventListener('input', (e) => {
+    if (S.matieresAccueil) { S.matieresCat = 'tout'; S.matieresSousSection = null; }
     S.matieresQ = e.target.value;
     renderMatieresView();
   });
@@ -9468,42 +9579,12 @@ function buildMatieres() {
     if (mpIsGlassineCategory(m) && m.couleur) {
       infoChildren.push(el('div', { cls: 'mp-card-meta' }, 'Couleur : ' + m.couleur));
     }
-    // Laizes disponibles (frontal / glassine / complexe)
-    if (mpIsLaizeeCategory(m.categorie)) {
-      const spl = Array.isArray(m.stock_par_laize) ? m.stock_par_laize : [];
-      if (spl.length > 0) {
-        // Trie par valeur_mm croissant pour un affichage stable
-        const sorted = spl.slice().sort((a, b) => (a.valeur_mm || 0) - (b.valeur_mm || 0));
-        const chips = sorted.map(s => {
-          const label = s.label || ((s.valeur_mm || 0) + ' mm');
-          const qty = Number(s.quantite || 0);
-          const isEmpty = qty <= 0;
-          return el('span', {
-            style: 'display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;'
-              + (isEmpty
-                  ? 'background:transparent;color:var(--muted);border:1px solid var(--border)'
-                  : 'background:var(--accent-bg);color:var(--accent);border:1px solid transparent')
-              + ';font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.4',
-            title: label + ' — ' + fN(qty) + ' bob.',
-          },
-            el('span', null, label),
-            el('span', { style: 'opacity:.7;font-weight:500' }, fN(qty) + ' bob.'),
-          );
-        });
-        infoChildren.push(el('div', {
-          style: 'display:flex;flex-wrap:wrap;gap:4px;margin-top:4px',
-        }, ...chips));
-      } else {
-        infoChildren.push(el('div', { cls: 'mp-card-meta',
-          style: 'color:#fb923c;font-weight:600' }, 'Aucune laize configurée'));
-      }
-    }
-    const empls = Array.isArray(m.emplacements) ? m.emplacements : [];
-    if (empls.length) {
-      const codes = [...new Set(empls.map(e => e.emplacement))];
-      infoChildren.push(el('div', { cls: 'mp-card-meta mp-card-empl' },
-        iconEl('map-pin', 12),
-        codes.slice(0, 4).join(' · ') + (codes.length > 4 ? ' +' + (codes.length - 4) : '')));
+    // Le détail par laize vit sur la fiche ; la liste ne garde que l'alerte
+    // d'une matière laizée sans aucune laize, qui est une fiche à compléter.
+    if (mpIsLaizeeCategory(m.categorie)
+        && !(Array.isArray(m.stock_par_laize) && m.stock_par_laize.length)) {
+      infoChildren.push(el('div', { cls: 'mp-card-meta',
+        style: 'color:var(--warn);font-weight:600' }, 'Aucune laize configurée'));
     }
     if (m.en_alerte) {
       infoChildren.push(el('div', { cls: 'mp-card-warn' },
@@ -9557,7 +9638,7 @@ function buildMatieres() {
     //         sont éclatés par sous_section, exactement comme dans la barre de pills.
     const curCat = S.matieresCat || 'tout';
     if (curCat !== 'tout') {
-      filtered.slice().sort(mpCompareSousCategorie).forEach(renderMpCard);
+      filtered.slice().sort(mpCompareTri).forEach(renderMpCard);
     } else {
       // Construit des buckets par catégorie virtuelle
       const buckets = new Map();
@@ -9590,7 +9671,7 @@ function buildMatieres() {
         const b = buckets.get(k);
         list.appendChild(el('div', { cls: 'mp-section-head', style: mpSectionHeadStyle },
           b.label + ' · ' + b.items.length));
-        b.items.slice().sort(mpCompareSousCategorie).forEach(renderMpCard);
+        b.items.slice().sort(mpCompareTri).forEach(renderMpCard);
       });
     }
   }
@@ -9607,8 +9688,29 @@ function buildMatieres() {
       )
     : null;
   const rvgiBloc = buildMpRvgiResults(q, filtered);
+  if (S.matieresAccueil && !q) return buildMatieresAccueil(head, banner, searchWrap);
+  const triSel = el('select', { cls: 'mp-tri', attrs: { 'aria-label': 'Ordre de la liste' } },
+    ...MP_TRIS.map(t => el('option', { value: t.id }, t.label)));
+  triSel.value = S.mpTri || 'alpha';
+  triSel.addEventListener('change', () => {
+    S.mpTri = triSel.value;
+    try { localStorage.setItem('mp_tri', S.mpTri); } catch (e) {}
+    renderMatieresView();
+  });
+  const barre = el('div', { cls: 'mp-liste-barre' },
+    el('button', {
+      cls: 'mp-retour-cat', type: 'button',
+      on: { click: () => {
+        S.matieresAccueil = true; S.matieresQ = ''; S.matieresCat = 'tout'; S.matieresSousSection = null;
+        if (typeof stockSyncUrl === 'function') stockSyncUrl();
+        renderMatieresView();
+      } },
+    }, iconEl('arrow-left', 14), 'Catégories'),
+    el('span', { cls: 'mp-liste-n' }, filtered.length + ' référence' + (filtered.length > 1 ? 's' : '')),
+    el('label', { cls: 'mp-tri-wrap' }, el('span', null, 'Trier'), triSel),
+  );
   return el('div', { cls: 'content' },
-    el('div', { cls: 'hist-page' }, head, banner, searchWrap, pills, subPills, list, rvgiBloc));
+    el('div', { cls: 'hist-page' }, head, banner, searchWrap, pills, subPills, barre, list, rvgiBloc));
 }
 
 // ── Widget « Métrage bobine » ───────────────────────────────────────────────
@@ -25240,11 +25342,56 @@ function renderSidebarNavBtn(n) {
     badge.textContent = nRecep;
   }
   if (badge) children.push(badge);
-  return el('button', {
+  const btn = el('button', {
     cls: 'nav-btn' + (badge ? ' nav-btn-has-overlay' : '') + (S.tab === n.tab ? ' active' : ''),
     'data-tab': n.tab,
-    on: { click: () => goToTab(n.tab) },
+    on: { click: () => {
+      if (n.tab === 'matieres') { S.matieresAccueil = true; S.matieresQ = ''; mpFlyoutFermer(); }
+      goToTab(n.tab);
+    } },
   }, ...children);
+  if (n.tab === 'matieres') mpFlyoutBrancher(btn);
+  return btn;
+}
+
+// Sous-menu des catégories au survol de « Matières premières ». Uniquement sur
+// un écran qui survole (souris) : au doigt, le clic ouvre l'accueil, qui porte
+// les mêmes catégories en tuiles.
+let _mpFlyout = null, _mpFlyoutTimer = null;
+function mpFlyoutFermer() {
+  clearTimeout(_mpFlyoutTimer);
+  if (_mpFlyout) { _mpFlyout.remove(); _mpFlyout = null; }
+}
+function mpFlyoutBrancher(btn) {
+  if (!window.matchMedia || !window.matchMedia('(hover: hover)').matches) return;
+  const planifierFermeture = () => { clearTimeout(_mpFlyoutTimer); _mpFlyoutTimer = setTimeout(mpFlyoutFermer, 180); };
+  btn.addEventListener('mouseenter', async () => {
+    clearTimeout(_mpFlyoutTimer);
+    if (!S.matieres) {
+      try { const d = await api('/api/stock/matieres'); S.matieres = Array.isArray(d) ? d : []; } catch (e) { return; }
+    }
+    mpFlyoutFermer();
+    const list = S.matieres || [];
+    const rang = (d) => (d.cat === 'tout' ? 2 : (mpEstMatiere(d) ? 0 : 1));
+    const defs = mpPillDefs().filter(d => d.cat === 'tout' || list.some(m => mpPillMatch(d, m)))
+      .sort((a, b) => rang(a) - rang(b));
+    const r = btn.getBoundingClientRect();
+    _mpFlyout = el('div', { cls: 'mp-flyout', attrs: { role: 'menu' } },
+      ...defs.map(d => el('button', {
+        cls: 'mp-flyout-item' + (d.cat === 'tout' ? ' tout' : '')
+          + (!mpEstMatiere(d) && d.cat !== 'tout' && defs.find(x => !mpEstMatiere(x) && x.cat !== 'tout') === d ? ' sep' : ''),
+        type: 'button', attrs: { role: 'menuitem' },
+        on: { click: () => { mpFlyoutFermer(); mpOuvrirCategorie(d); goToTab('matieres'); } },
+      },
+        el('span', null, d.cat === 'tout' ? 'Toutes catégories' : d.label),
+        el('span', { cls: 'mp-flyout-n' }, String(list.filter(m => mpPillMatch(d, m)).length)))));
+    _mpFlyout.style.left = Math.round(r.right + 6) + 'px';
+    _mpFlyout.style.top = Math.round(Math.max(8, Math.min(r.top - 6, window.innerHeight - 40 * defs.length - 20))) + 'px';
+    _mpFlyout.addEventListener('mouseenter', () => clearTimeout(_mpFlyoutTimer));
+    _mpFlyout.addEventListener('mouseleave', planifierFermeture);
+    document.body.appendChild(_mpFlyout);
+  });
+  btn.addEventListener('mouseleave', planifierFermeture);
 }
 
 function renderSidebarItems(items) {
