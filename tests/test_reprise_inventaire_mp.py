@@ -143,6 +143,21 @@ with get_db() as c:
     check("article RVGI apparié à la fiche",
           c.execute("SELECT matiere_id FROM erp_article_matiere WHERE code1='7777'").fetchone()[0], m1)
     check("rapport sans erreur", r.get("erreurs", []), [])
+
+    # État de v1 au 03/10 : une variante provisoire (prix) restée à côté de la
+    # variante complète du même fournisseur, et portant le principal.
+    c.execute("UPDATE mp_variantes SET principal=0 WHERE matiere_id=?", (m1,))
+    prov = c.execute(
+        """INSERT INTO mp_variantes (matiere_id, fournisseur_id, libelle_technique, principal, actif, note)
+           VALUES (?, ?, 'thermique eco', 1, 1, 'Reprise des prix fournisseur : libellé technique à compléter.')""",
+        (m1, fa)).lastrowid
+    fusion = importlib.import_module("app.core.migrations.2026_10_03_mp_variantes_fusion_provisoires")
+    fusion.appliquer(c)
+    check("fusion : la provisoire est désactivée",
+          c.execute("SELECT actif FROM mp_variantes WHERE id=?", (prov,)).fetchone()[0], 0)
+    check("fusion : le principal passe à la variante complète du même fournisseur",
+          tuple(c.execute("SELECT fournisseur_id, rvgi_code1 FROM mp_variantes WHERE matiere_id=? AND principal=1 AND actif=1",
+                          (m1,)).fetchone()), (fa, "7777"))
     c.rollback()
 
 print()

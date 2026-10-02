@@ -1356,17 +1356,36 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-rvgi-tag{flex-shrink:0;font-size:12px;color:var(--muted)}
 .mp-empl-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:14px}
 .mp-empl-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
-.mp-var-line{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
-.mp-var-line:last-of-type{border-bottom:none}
-.mp-var-line.inactive{opacity:.55}
+.content.mp-detail{max-width:1440px}
+.mp-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin:0 0 16px;overflow-x:auto}
+.mp-tab{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);border-bottom:none;border-radius:10px 10px 0 0;padding:9px 16px;font:inherit;font-size:13px;font-weight:700;color:var(--text2);cursor:pointer;white-space:nowrap}
+.mp-tab:hover{background:var(--bg);color:var(--text)}
+.mp-tab.active{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.mp-tab-n{font-size:11px;font-weight:700;color:var(--muted);background:var(--bg);border-radius:6px;padding:1px 6px}
+.mp-tab.active .mp-tab-n{color:var(--accent)}
+.mp-detail-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}
+.mp-detail-grid>*{margin-top:0!important}
+@media(min-width:1200px){.mp-detail-grid{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}}
+.mp-var-card{margin-top:0}
+.mp-var-scroll{overflow-x:auto;margin:4px -4px 0}
+.mp-var-table{width:100%;border-collapse:collapse;font-size:13px}
+.mp-var-table th{text-align:left;padding:8px 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap}
+.mp-var-table td{padding:9px 10px;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:top}
+.mp-var-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mp-var-table .c-radio{width:28px}
+.mp-var-table .c-type{min-width:260px}
+.mp-var-table .c-act{width:76px}
+.mp-var-grp td{background:var(--bg);padding:8px 10px;border-bottom:1px solid var(--border)}
+.mp-var-grp-nom{font-size:13px;font-weight:700;color:var(--text);margin-right:8px}
+.mp-var-grp-n{font-size:11px;color:var(--muted);margin-left:8px}
+.mp-var-type{font-weight:600;color:var(--text);line-height:1.4}
+.mp-var-row.inactive td{opacity:.55}
+.mp-var-ok{color:var(--success);font-weight:700}
 .mp-var-radio{flex-shrink:0;width:18px;height:18px;margin-top:2px;border:2px solid var(--border);border-radius:50%;background:var(--bg);padding:0;cursor:pointer}
 .mp-var-radio:hover{border-color:var(--accent)}
 .mp-var-radio.on{border-color:var(--accent);background:radial-gradient(circle,var(--accent) 0 45%,var(--bg) 50%)}
 .mp-var-radio:disabled{cursor:default}
-.mp-var-body{flex:1;min-width:0}
-.mp-var-fou{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;font-weight:700;color:var(--text)}
 .mp-var-badge{font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-bg);border-radius:6px;padding:2px 7px}
-.mp-var-tech{font-size:12px;color:var(--text2);margin-top:3px;line-height:1.45;overflow-wrap:anywhere}
 .mp-var-meta{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5}
 .mp-var-actions{display:flex;gap:6px;flex-shrink:0}
 .mp-var-ecart{margin-top:10px;padding:10px 12px;border:1px solid var(--warn);border-radius:10px;font-size:12px;color:var(--text)}
@@ -4200,6 +4219,7 @@ function stockSyncUrl() {
     }
     if (S.selMatiere && S.selMatiere.matiere && S.selMatiere.matiere.id) {
       sp.set('matiere', String(S.selMatiere.matiere.id));
+      if (S.selMatiere.vue && S.selMatiere.vue !== 'stock') sp.set('fiche', S.selMatiere.vue);
     } else if (S.selProduit && S.selProduit.id) {
       sp.set('produit', String(S.selProduit.id));
     } else if (S.selEmpl && S.selEmpl.code) {
@@ -5916,7 +5936,10 @@ async function loadMatiere(id) {
       mouvements: Array.isArray(mouvements) ? mouvements : [],
       variantes: await mpFetchVariantes(id, false),
       varInactives: false,
+      // Précédent / suivant garde la sous-page ; un lien direct l'impose.
+      vue: S.mpVueInit || (S.selMatiere && S.selMatiere.vue) || 'stock',
     };
+    S.mpVueInit = null;
     S.selProduit = null;
     S.selEmpl = null;
     S.searchResults = null;
@@ -5944,6 +5967,7 @@ async function refreshSelMatiere() {
       mouvements: Array.isArray(mouvements) ? mouvements : [],
       variantes: await mpFetchVariantes(id, varInactives),
       varInactives,
+      vue: (S.selMatiere && S.selMatiere.vue) || 'stock',
     };
     renderContent();
     updateNavActive();
@@ -6283,8 +6307,7 @@ function buildMatiereDetail() {
   // valeur en kilos seule ne se traduit pas mentalement.
   const equiv = mpIsAdhesifCategory(m) ? mpAdhesifEquivalent(m.quantite, m) : '';
 
-  return el('div', { cls: 'content' },
-    topbar,
+  const scorecard = el('div', { cls: 'scorecard' },
     el('div', { cls: 'scorecard' },
       el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' } },
         ...[dashMpCatBadge(m.categorie, m.sous_section), dashMpSousCatBadge(m)].filter(Boolean),
@@ -6321,12 +6344,48 @@ function buildMatiereDetail() {
         ),
       ),
     ),
+  );
+
+  // Trois sous-pages : stock et emplacements, fournisseurs, mouvements. L'en-tête
+  // et les actions restent en haut des trois.
+  const vue = (S.selMatiere && S.selMatiere.vue) || 'stock';
+  let corps;
+  if (vue === 'fournisseurs') {
+    corps = [buildMpVariantesTable(m)];
+  } else if (vue === 'mouvements') {
+    corps = [buildMpMvtHistory(mouvements, m)];
+  } else {
+    corps = [adhesifTodo, el('div', { cls: 'mp-detail-grid' }, laizeDetail, buildMpEmplacementsCard(m))];
+  }
+  return el('div', { cls: 'content mp-detail' },
+    topbar,
+    scorecard,
     actions,
-    adhesifTodo,
-    laizeDetail,
-    buildMpVariantesCard(m),
-    buildMpEmplacementsCard(m),
-    buildMpMvtHistory(mouvements, m),
+    buildMpDetailTabs(m, mouvements),
+    ...corps,
+  );
+}
+
+function buildMpDetailTabs(m, mouvements) {
+  const vue = (S.selMatiere && S.selMatiere.vue) || 'stock';
+  const data = S.selMatiere && S.selMatiere.variantes;
+  const nbFou = data && Array.isArray(data.variantes)
+    ? new Set(data.variantes.filter(v => v.actif).map(v => v.fournisseur_id || 0)).size : null;
+  const mk = (cle, label, n) => el('button', {
+    cls: 'mp-tab' + (vue === cle ? ' active' : ''),
+    type: 'button',
+    attrs: { role: 'tab', 'aria-selected': vue === cle ? 'true' : 'false' },
+    on: { click: () => {
+      if (!S.selMatiere || vue === cle) return;
+      S.selMatiere.vue = cle;
+      if (typeof stockSyncUrl === 'function') stockSyncUrl();
+      renderMatieresView();
+    } },
+  }, label, n != null ? el('span', { cls: 'mp-tab-n' }, String(n)) : null);
+  return el('div', { cls: 'mp-tabs', attrs: { role: 'tablist' } },
+    mk('stock', 'Stock et emplacements', null),
+    mk('fournisseurs', 'Fournisseurs', nbFou),
+    mk('mouvements', 'Mouvements', (mouvements || []).length),
   );
 }
 
@@ -10066,20 +10125,31 @@ function mpVarDate(iso) {
   return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : String(iso);
 }
 
-function buildMpVariantesCard(m) {
+// Libellé technique sans ce que les colonnes disent déjà : le fournisseur
+// (titre du groupe) et la référence fournisseur (colonne).
+function mpVarLibelle(v) {
+  let t = String(v.libelle_technique || '');
+  const nom = v.fournisseur_nom || '';
+  if (nom && t.endsWith(' — ' + nom)) t = t.slice(0, -(' — ' + nom).length);
+  if (v.ref_fournisseur) t = t.replace(' — réf. fournisseur ' + v.ref_fournisseur, '');
+  return t;
+}
+
+function buildMpVariantesTable(m) {
   const data = S.selMatiere && S.selMatiere.variantes;
-  if (!data) return null;
+  if (!data) return el('div', { cls: 'card-empty' }, 'Fournisseurs indisponibles pour le moment.');
   const rows = Array.isArray(data.variantes) ? data.variantes : [];
   const canEdit = !S.stockReadOnly && isMatieresAdmin();
-  const actives = rows.filter(v => v.actif);
-  const card = el('div', { cls: 'mp-empl-card' });
+  const card = el('div', { cls: 'mp-empl-card mp-var-card' });
   card.appendChild(el('div', { cls: 'mp-empl-card-head' },
-    el('div', { cls: 'mp-empl-card-title' },
-      'Fournisseurs' + (actives.length ? ' (' + actives.length + ')' : '')),
+    el('div', null,
+      el('div', { cls: 'mp-empl-card-title' }, 'Fournisseurs'),
+      el('div', { cls: 'mp-hint', style: 'margin-top:2px' },
+        'Ce que chaque fournisseur livre pour « ' + (m.designation || m.reference || '') + ' ». '
+        + 'Le fournisseur principal fixe le prix en vigueur dans Coûts matières.')),
     canEdit
       ? el('button', {
-          cls: 'mp-empl-add-link',
-          type: 'button',
+          cls: 'mp-empl-add-link', type: 'button',
           on: { click: () => openMpVarianteModal(m, null) },
         }, iconEl('plus', 14), 'Ajouter un fournisseur')
       : null,
@@ -10089,60 +10159,89 @@ function buildMpVariantesCard(m) {
       'Aucun fournisseur renseigné. Chaque fournisseur porte le libellé technique de la matière chez lui.'));
     return card;
   }
+  // Un groupe par fournisseur : le principal d'abord, puis l'ordre alphabétique,
+  // le fournisseur non identifié en dernier.
+  const groupes = new Map();
   rows.forEach(v => {
-    const meta = [];
-    if (v.ref_fournisseur) meta.push('Réf. fournisseur ' + v.ref_fournisseur);
-    if (v.ref_rvgi) meta.push('RVGI ' + v.ref_rvgi);
-    if (v.laizes && v.laizes.length) meta.push('Laizes ' + v.laizes.join(', '));
-    if (v.ml_bobine) meta.push(fN(v.ml_bobine) + ' m par bobine');
-    if (v.dernier_achat) meta.push('Dernier achat ' + mpVarDate(v.dernier_achat)
-      + (v.commandes_rvgi ? ' · ' + v.commandes_rvgi + ' commande' + (v.commandes_rvgi > 1 ? 's' : '') : ''));
-    if (!v.declinaisons_avec_prix && v.fournisseur_id) meta.push('Aucun prix dans Coûts matières');
-    if (!v.actif) meta.push('Désactivée');
-    const radio = el('button', {
-      cls: 'mp-var-radio' + (v.principal ? ' on' : ''),
-      type: 'button',
-      attrs: {
-        title: v.principal ? 'Fournisseur principal' : (canEdit && v.actif ? 'Choisir comme fournisseur principal' : ''),
-        'aria-label': v.principal ? 'Fournisseur principal' : 'Choisir comme fournisseur principal',
-        'aria-pressed': v.principal ? 'true' : 'false',
-      },
-      on: { click: () => { if (canEdit && v.actif && !v.principal) setMpVariantePrincipal(m, v); } },
-    });
-    if (!canEdit || !v.actif || v.principal) radio.disabled = true;
-    card.appendChild(el('div', { cls: 'mp-var-line' + (v.actif ? '' : ' inactive') },
-      radio,
-      el('div', { cls: 'mp-var-body' },
-        el('div', { cls: 'mp-var-fou' },
-          el('span', null, v.fournisseur_nom || 'Fournisseur non identifié'),
-          v.principal ? el('span', { cls: 'mp-var-badge' }, 'Principal') : null),
-        el('div', { cls: 'mp-var-tech' }, v.libelle_technique || ''),
-        meta.length ? el('div', { cls: 'mp-var-meta' }, meta.join(' · ')) : null,
-        v.note ? el('div', { cls: 'mp-var-meta' }, v.note) : null,
-      ),
-      canEdit
-        ? el('div', { cls: 'mp-var-actions' },
-            v.actif
-              ? el('button', {
-                  cls: 'mp-empl-ico', type: 'button',
-                  attrs: { title: 'Modifier', 'aria-label': 'Modifier le fournisseur' },
-                  on: { click: () => openMpVarianteModal(m, v) },
-                }, iconEl('edit', 14))
-              : null,
-            el('button', {
-              cls: 'mp-empl-ico', type: 'button',
-              attrs: v.actif
-                ? { title: 'Désactiver', 'aria-label': 'Désactiver ce fournisseur' }
-                : { title: 'Réactiver', 'aria-label': 'Réactiver ce fournisseur' },
-              on: { click: () => toggleMpVariante(m, v) },
-            }, iconEl(v.actif ? 'archive' : 'rotate-ccw', 14)),
-          )
-        : null,
-    ));
+    const k = v.fournisseur_id || 0;
+    if (!groupes.has(k)) groupes.set(k, { nom: v.fournisseur_nom || 'Fournisseur non identifié', id: k, rows: [] });
+    groupes.get(k).rows.push(v);
   });
+  const ordre = [...groupes.values()].sort((a, b) => {
+    const pa = a.rows.some(v => v.principal && v.actif) ? 0 : 1;
+    const pb = b.rows.some(v => v.principal && v.actif) ? 0 : 1;
+    if (pa !== pb) return pa - pb;
+    if (!a.id !== !b.id) return a.id ? -1 : 1;
+    return a.nom.localeCompare(b.nom, 'fr');
+  });
+  const cols = ['', 'Type de matière', 'Réf. fournisseur', 'Article RVGI', 'Laizes', 'm / bobine', 'Dernier achat', 'Prix', ''];
+  const tbl = el('table', { cls: 'mp-var-table' });
+  tbl.appendChild(el('thead', null, el('tr', null, ...cols.map((c, i) =>
+    el('th', { cls: i >= 5 && i <= 7 ? 'num' : '' }, c)))));
+  const tb = el('tbody');
+  ordre.forEach(g => {
+    const principal = g.rows.some(v => v.principal && v.actif);
+    tb.appendChild(el('tr', { cls: 'mp-var-grp' },
+      el('td', { attrs: { colspan: String(cols.length) } },
+        el('span', { cls: 'mp-var-grp-nom' }, g.nom),
+        principal ? el('span', { cls: 'mp-var-badge' }, 'Principal') : null,
+        el('span', { cls: 'mp-var-grp-n' }, g.rows.length + ' article' + (g.rows.length > 1 ? 's' : '')),
+      )));
+    g.rows.sort((a, b) => (b.principal - a.principal) || (b.actif - a.actif));
+    g.rows.forEach(v => {
+      const radio = el('button', {
+        cls: 'mp-var-radio' + (v.principal ? ' on' : ''),
+        type: 'button',
+        attrs: {
+          title: v.principal ? 'Fournisseur principal' : (canEdit && v.actif ? 'Choisir comme fournisseur principal' : ''),
+          'aria-label': v.principal ? 'Fournisseur principal' : 'Choisir comme fournisseur principal',
+          'aria-pressed': v.principal ? 'true' : 'false',
+        },
+        on: { click: () => { if (canEdit && v.actif && !v.principal) setMpVariantePrincipal(m, v); } },
+      });
+      if (!canEdit || !v.actif || v.principal) radio.disabled = true;
+      const note = (v.note && !/^Reprise de l'inventaire/.test(v.note)) ? v.note : '';
+      tb.appendChild(el('tr', { cls: 'mp-var-row' + (v.actif ? '' : ' inactive') },
+        el('td', { cls: 'c-radio' }, radio),
+        el('td', { cls: 'c-type' },
+          el('div', { cls: 'mp-var-type' }, mpVarLibelle(v) || '—'),
+          note ? el('div', { cls: 'mp-var-meta' }, note) : null,
+          v.actif ? null : el('div', { cls: 'mp-var-meta' }, 'Désactivé')),
+        el('td', null, v.ref_fournisseur || '—'),
+        el('td', null, v.ref_rvgi || '—'),
+        el('td', null, (v.laizes && v.laizes.length) ? v.laizes.join(', ') : '—'),
+        el('td', { cls: 'num' }, v.ml_bobine ? fN(v.ml_bobine) : '—'),
+        el('td', { cls: 'num' },
+          v.dernier_achat ? mpVarDate(v.dernier_achat) : '—',
+          v.commandes_rvgi ? el('div', { cls: 'mp-var-meta' },
+            v.commandes_rvgi + ' commande' + (v.commandes_rvgi > 1 ? 's' : '')) : null),
+        el('td', { cls: 'num', attrs: { title: v.declinaisons_avec_prix
+          ? 'Prix renseigné dans Coûts matières' : 'Aucun prix dans Coûts matières' } },
+          v.declinaisons_avec_prix ? el('span', { cls: 'mp-var-ok' }, '✓') : el('span', { cls: 'mp-var-meta' }, '—')),
+        el('td', { cls: 'c-act' }, canEdit
+          ? el('div', { cls: 'mp-var-actions' },
+              v.actif ? el('button', {
+                cls: 'mp-empl-ico', type: 'button',
+                attrs: { title: 'Modifier', 'aria-label': 'Modifier le fournisseur' },
+                on: { click: () => openMpVarianteModal(m, v) },
+              }, iconEl('edit', 14)) : null,
+              el('button', {
+                cls: 'mp-empl-ico', type: 'button',
+                attrs: v.actif
+                  ? { title: 'Désactiver', 'aria-label': 'Désactiver cet article' }
+                  : { title: 'Réactiver', 'aria-label': 'Réactiver cet article' },
+                on: { click: () => toggleMpVariante(m, v) },
+              }, iconEl(v.actif ? 'archive' : 'rotate-ccw', 14)))
+          : null),
+      ));
+    });
+  });
+  tbl.appendChild(tb);
+  card.appendChild(el('div', { cls: 'mp-var-scroll' }, tbl));
+
   const ecarts = Array.isArray(data.ecarts_prix) ? data.ecarts_prix : [];
   if (ecarts.length) {
-    const princ = actives.find(v => v.principal);
+    const princ = rows.find(v => v.principal && v.actif);
     const sans = ecarts.filter(e => e.etat === 'sans_prix').map(e => e.libelle);
     const autres = ecarts.filter(e => e.etat === 'autre_principal').map(e => e.libelle);
     const msg = [];
@@ -10154,7 +10253,7 @@ function buildMpVariantesCard(m) {
   }
   card.appendChild(el('div', { cls: 'mp-var-foot' },
     el('span', { cls: 'mp-hint', style: 'margin-top:0' },
-      'Le fournisseur principal fixe le prix en vigueur dans Coûts matières.'),
+      'Un même fournisseur peut livrer plusieurs articles : ils sont regroupés sous son nom.'),
     el('button', {
       cls: 'mp-var-link', type: 'button',
       on: { click: async () => {
@@ -25860,6 +25959,8 @@ async function init() {
   if (urlVue && BESOINS_VUES.includes(urlVue)) S.besoinsView = urlVue;
   // Deep-link sur une matière ou un produit (ouvre directement le détail)
   const urlMatiereId = parseInt(urlParams.get('matiere') || '', 10);
+  const urlFiche = (urlParams.get('fiche') || '').trim();
+  if (['fournisseurs', 'mouvements'].includes(urlFiche)) S.mpVueInit = urlFiche;
   const urlProduitId = parseInt(urlParams.get('produit') || '', 10);
   const urlProduitRef = (urlParams.get('ref') || '').trim();
   if (urlMatiereId > 0 && !S.tracaOnly) {

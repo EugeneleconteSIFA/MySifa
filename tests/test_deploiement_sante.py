@@ -122,17 +122,36 @@ def charger(depot, conn):
     return ns
 
 
+# Le test, et le code qu'il vérifie (qui lance git lui-même), ne doivent viser
+# que le dépôt jouet : on retire les variables GIT_* dès le chargement.
+for _k in [k for k in os.environ if k.startswith("GIT_")]:
+    del os.environ[_k]
+
+
+def _env_isole():
+    """L'environnement sans aucune variable GIT_*.
+
+    Lancé depuis un hook (pre-push), le test hérite de GIT_DIR : `git -C <tmp>`
+    écrit alors dans le VRAI dépôt, pas dans le dépôt jouet. Le 02/10/2026, ce
+    test a posé core.bare=true sur MySifa, empilé « initial / travail fini /
+    merge » sur staging et basculé le worktree site-vitrine sur feature/vivante.
+    """
+    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
+
 def depot_de_test(base):
     """Petit dépôt git jouet : staging, une branche fusionnée, une branche vivante."""
+    isole = _env_isole()
+
     def g(*args, **kw):
         return subprocess.run(
             ["git", "-C", str(base), *args], check=True,
-            capture_output=True, text=True, env=kw.get("env"),
+            capture_output=True, text=True, env=kw.get("env") or isole,
         )
 
-    env = dict(os.environ, GIT_AUTHOR_NAME="Test", GIT_AUTHOR_EMAIL="t@t",
+    env = dict(isole, GIT_AUTHOR_NAME="Test", GIT_AUTHOR_EMAIL="t@t",
                GIT_COMMITTER_NAME="Test", GIT_COMMITTER_EMAIL="t@t")
-    subprocess.run(["git", "init", "-q", "-b", "staging", str(base)], check=True, capture_output=True)
+    subprocess.run(["git", "init", "-q", "-b", "staging", str(base)], check=True, capture_output=True, env=isole)
     for cle, val in (("user.name", "Test"), ("user.email", "t@t")):
         g("config", cle, val)
     (base / "a.txt").write_text("un\n", encoding="utf-8")

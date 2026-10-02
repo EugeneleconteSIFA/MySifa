@@ -47,7 +47,14 @@ if ! command -v bash >/dev/null 2>&1; then
 fi
 
 echo "pre-push : CI locale avant d'envoyer sur staging/main (scripts/ci_local.sh)..."
-if bash "$racine/scripts/ci_local.sh"; then
+# Un hook herite des variables GIT_* du push (GIT_DIR en tete, surtout depuis un
+# worktree). Un test qui cree son propre depot jouet avec `git -C <tmp>` ecrit
+# alors dans le VRAI depot : le 02/10/2026, test_deploiement_sante a pose
+# core.bare=true, empile trois commits « Test » sur staging et bascule le
+# worktree site-vitrine sur une branche jouet. La CI n'a besoin d'aucune d'elles.
+if env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR -u GIT_PREFIX \
+       -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES -u GIT_QUARANTINE_PATH \
+       bash "$racine/scripts/ci_local.sh"; then
     exit 0
 fi
 

@@ -287,14 +287,18 @@ def creer(conn: sqlite3.Connection, matiere_id: int, data: dict, auteur: Optiona
         v["fournisseur_id"] = _fournisseur_par_numero_rvgi(conn, v.get("rvgi_code1"))
     _rvgi_libre(conn, v.get("rvgi_code1"), v.get("rvgi_code2"), v.get("rvgi_type_code"), matiere_id=matiere_id)
     # Une variante provisoire de ce fournisseur (créée depuis un prix ou par la
-    # reprise, libellé = désignation, sans référence) se complète au lieu
-    # d'être doublée.
+    # reprise, sans référence) se complète au lieu d'être doublée. Reconnue à
+    # sa note d'origine : son libellé est l'ancienne désignation, qui ne
+    # correspond plus une fois la fiche renommée.
     if v.get("fournisseur_id"):
         prov = conn.execute(
             """SELECT v.id FROM mp_variantes v JOIN matieres_premieres m ON m.id = v.matiere_id
                 WHERE v.matiere_id=? AND v.fournisseur_id=? AND v.actif=1
                   AND v.rvgi_code1 IS NULL AND v.ref_fournisseur IS NULL
-                  AND v.libelle_technique IN (COALESCE(m.designation,''), COALESCE(m.reference,''), 'À compléter')
+                  AND (v.libelle_technique IN (COALESCE(m.designation,''), COALESCE(m.reference,''), 'À compléter')
+                       OR v.note LIKE 'Reprise des prix fournisseur%'
+                       OR v.note LIKE 'Créée depuis un prix%'
+                       OR v.note LIKE 'Créée au choix%')
                 ORDER BY v.principal DESC, v.id LIMIT 1""",
             (matiere_id, v["fournisseur_id"]),
         ).fetchone()
