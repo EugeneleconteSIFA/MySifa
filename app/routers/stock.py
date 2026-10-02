@@ -2261,7 +2261,12 @@ def list_emplacements(request: Request):
         except sqlite3.Error:
             reels_mp = []
     codes_plan = {r["code"] for r in plan}
-    codes_reels = {r["emplacement"] for r in reels} | {r["emplacement"] for r in reels_mp}
+    # Seuls les codes de grille des matières se proposent partout : les noms du
+    # terrain (« DROITE 3 », « NC KL ») ne sont pas des emplacements de produit
+    # fini, et les y proposer menait droit à « Format invalide ».
+    codes_reels = ({r["emplacement"] for r in reels}
+                   | {r["emplacement"] for r in reels_mp
+                      if re.match(r"^[A-Z][0-9]+$", r["emplacement"] or "")})
     zones_speciales = {STOCK_EMPLACEMENT_AU_SOL, STOCK_EMPLACEMENT_SORTIE_PROD}
     tous = sorted(codes_plan | codes_reels | zones_speciales)
     ordered = (
@@ -6833,8 +6838,16 @@ def delete_matiere_premiere(matiere_id: int, request: Request):
             """,
             (matiere_id,),
         )
+        # Ses variantes fournisseur se ferment avec elle : les articles RVGI
+        # qu'elles portaient redeviennent disponibles pour une autre matière.
+        appariements = 0
+        try:
+            from app.services import mp_variantes as _mv
+            appariements = _mv.fermer_matiere(conn, matiere_id)
+        except sqlite3.OperationalError:
+            pass
         conn.commit()
-    return {"ok": True}
+    return {"ok": True, "appariements_rvgi_restants": appariements}
 
 
 @router.post("/api/stock/matieres/mouvement")

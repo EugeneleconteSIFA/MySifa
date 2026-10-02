@@ -415,8 +415,11 @@ def definir_principal(
     ).fetchall():
         lib = d["label"] or (("%g mm" % d["valeur_mm"]) if d["valeur_mm"] else None) \
             or d["g_label"] or (("%g g/m²" % d["valeur_gsm"]) if d["valeur_gsm"] else "sans déclinaison")
+        # Un prix à 0 veut dire « non renseigné » : il ne devient pas le prix
+        # en vigueur (il pousserait 0 dans la valorisation).
         a_prix = fid is not None and conn.execute(
-            "SELECT 1 FROM mp_matiere_prix WHERE declinaison_id=? AND fournisseur_id=?", (d["id"], fid)
+            "SELECT 1 FROM mp_matiere_prix WHERE declinaison_id=? AND fournisseur_id=? AND prix > 0",
+            (d["id"], fid),
         ).fetchone()
         if not a_prix:
             sans_prix.append(lib)
@@ -524,6 +527,23 @@ def rattacher_article(conn: sqlite3.Connection, code1: str, code2: str, type_cod
         vid = None
     if vid is None:
         fid = _fournisseur_par_numero_rvgi(conn, code1)
+        # Variante de ce fournisseur déjà présente sans article (provisoire,
+        # créée depuis un prix) : elle reçoit l'article au lieu d'être doublée.
+        if fid is not None:
+            prov = conn.execute(
+                """SELECT id FROM mp_variantes WHERE matiere_id=? AND fournisseur_id=? AND actif=1
+                      AND rvgi_code1 IS NULL ORDER BY principal DESC, id LIMIT 1""",
+                (mid, fid),
+            ).fetchone()
+            if prov:
+                vid = int(prov["id"])
+                conn.execute(
+                    "UPDATE mp_variantes SET rvgi_code1=?, rvgi_code2=?, rvgi_type_code=?, updated_at=?, "
+                    "updated_by_name=? WHERE id=?",
+                    (code1, code2, int(type_code), _now(), auteur, vid),
+                )
+    if vid is None:
+        fid = _fournisseur_par_numero_rvgi(conn, code1)
         m = conn.execute("SELECT designation, reference FROM matieres_premieres WHERE id=?", (mid,)).fetchone()
         premiere = not conn.execute(
             "SELECT 1 FROM mp_variantes WHERE matiere_id=? AND actif=1", (mid,)
@@ -542,3 +562,20 @@ def rattacher_article(conn: sqlite3.Connection, code1: str, code2: str, type_cod
         (vid, code1, code2, int(type_code)),
     )
     return int(vid)
+
+
+def fermer_matiere(conn: sqlite3.Connection, matiere_id: int) -> int:
+    """Une matière désactivée ne garde aucune variante active : ses articles RVGI
+    sont libérés (une autre matière peut les reprendre) et les appariements ne
+    pointent plus sa variante. Renvoie le nombre d'appariements RVGI qui restent
+    sur la matière, à signaler : la file de réception les montre « à apparier »."""
+    conn.execute(
+        "UPDATE mp_variantes SET actif=0, principal=0, updated_at=? WHERE matiere_id=? AND actif=1",
+        (_now(), matiere_id),
+    )
+    conn.execute(
+        "UPDATE erp_article_matiere SET variante_id=NULL WHERE matiere_id=?", (matiere_id,)
+    )
+    return int(conn.execute(
+        "SELECT COUNT(*) FROM erp_article_matiere WHERE matiere_id=?", (matiere_id,)
+    ).fetchone()[0])

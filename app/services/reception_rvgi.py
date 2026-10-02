@@ -86,6 +86,10 @@ PERIMETRE = {
 # corniere, coiffe, pochettes restent a 0,50 ou moins.
 PERIMETRE_SOUS_CONDITION = {
     16: ("carton", None, "direct"),
+    # Boites (fonds, couvercles, F&C) : la reprise d'inventaire du 01/10/2026
+    # en a apparie neuf a des references MyStock. Elles entrent dans la file
+    # quand leur article est apparie, comme l'emballage -- pas toutes d'office.
+    18: ("carton", None, "direct"),
 }
 SEUIL_SOUS_CONDITION = 0.6
 
@@ -286,7 +290,7 @@ def metrage_bobine_erp(libt2):
 
 # ── Conversion vers l'unite de gestion ──────────────────────────────────────
 
-def convertir(type_rvgi, qte_rvgi, matiere, libt2=None):
+def convertir(type_rvgi, qte_rvgi, matiere, libt2=None, ml_variante=None):
     """Traduit une quantite de reception dans l'unite du magasin.
 
     Renvoie { quantite, unite, detail, manque[] }. Une quantite non convertible
@@ -321,9 +325,14 @@ def convertir(type_rvgi, qte_rvgi, matiere, libt2=None):
         # de 143 900, 168 180, 120 300 et 72 180 m tombent exactement sur 12,
         # 14, 10 et 6 bobines de 12 000. Le metrage MyStock, lui, ne peut pas
         # etre juste pour les deux fournisseurs a la fois.
-        ml_ms = _f(matiere.get("metres_lineaires_par_bobine"))
+        # Repli quand le libelle ERP ne dit pas la longueur : celle de la
+        # VARIANTE fournisseur (fiche fournisseur de la matiere, mp_variantes),
+        # puis seulement la longueur standard de la fiche.
+        ml_var = _f(ml_variante)
+        ml_ms = ml_var or _f(matiere.get("metres_lineaires_par_bobine"))
         ml_erp = metrage_bobine_erp(libt2)
-        ml, origine = (ml_erp, "conditionnement ERP") if ml_erp else (ml_ms, "MyStock")
+        ml, origine = ((ml_erp, "conditionnement ERP") if ml_erp else
+                       (ml_ms, "fiche fournisseur" if ml_var else "MyStock"))
         if not ml:
             return {"quantite": None, "unite": "bobine", "detail": None, "alerte": None,
                     "manque": ["Mètres linéaires par bobine inconnus — "
@@ -442,6 +451,20 @@ def _appariements(conn):
     }
 
 
+def ml_variantes(conn):
+    """Longueur de bobine de chaque article RVGI porte par une variante active."""
+    try:
+        return {
+            (r["rvgi_code1"], r["rvgi_code2"], int(r["rvgi_type_code"])): r["ml_bobine"]
+            for r in conn.execute(
+                """SELECT rvgi_code1, rvgi_code2, rvgi_type_code, ml_bobine FROM mp_variantes
+                    WHERE actif = 1 AND rvgi_code1 IS NOT NULL AND ml_bobine > 0"""
+            ).fetchall()
+        }
+    except Exception:
+        return {}
+
+
 def _matieres(conn):
     return [dict(r) for r in conn.execute(
         "SELECT id, categorie, sous_section, reference, designation,"
@@ -483,6 +506,7 @@ def lignes_a_integrer(conn, conn_erp, limite=300):
     appar = _appariements(conn)
     matieres = _matieres(conn)
     par_id = {m["id"]: m for m in matieres}
+    ml_var = ml_variantes(conn)
     faites = _deja_integrees(conn)
 
     lignes = []
@@ -493,6 +517,11 @@ def lignes_a_integrer(conn, conn_erp, limite=300):
         cle = (r["code1"], r["code2"], type_code)
         mid = appar.get(cle)
         matiere = par_id.get(mid) if mid else None
+        if mid and matiere is None:
+            # Apparie a une matiere desactivee (doublon fusionne) : la ligne
+            # redevient a apparier, avec des propositions, au lieu d'afficher
+            # une matiere morte qu'on ne peut que delier.
+            mid = None
         libelle = ((r["lib_erp"] or r["des1"] or "") + " " + (r["cond_erp"] or "")).strip()
         propositions = ([] if matiere else
                         proposer(libelle, _candidates(matieres, type_code)))
@@ -500,7 +529,7 @@ def lignes_a_integrer(conn, conn_erp, limite=300):
             if not propositions or propositions[0]["score"] < SEUIL_SOUS_CONDITION:
                 continue
 
-        conv = (convertir(type_code, r["qte"], matiere, r["cond_erp"])
+        conv = (convertir(type_code, r["qte"], matiere, r["cond_erp"], ml_var.get(cle))
                 if matiere else
                 {"quantite": None, "unite": None, "detail": None,
                  "alerte": None, "manque": []})

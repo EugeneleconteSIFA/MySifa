@@ -321,6 +321,10 @@ def _load_mapping(conn) -> dict:
                mp.longueur_tube_mm, mp.unites_par_palette
         FROM mp_fiche_mapping m
         JOIN matieres_premieres mp ON mp.id = m.matiere_id
+        -- Une matière désactivée (doublon fusionné) ne se déstocke plus : le
+        -- document sort « non associé », visible, au lieu de faire tomber en
+        -- négatif une fiche à zéro pendant que la vraie ne bouge pas.
+        WHERE COALESCE(mp.actif, 1) = 1
     """).fetchall()
     out = {}
     for r in rows:
@@ -341,6 +345,36 @@ def _load_mapping(conn) -> dict:
             # en une commande de tubes, puis de palettes.
             "longueur_tube_mm": r["longueur_tube_mm"] if "longueur_tube_mm" in keys else None,
             "unites_par_palette": r["unites_par_palette"] if "unites_par_palette" in keys else None,
+        }
+    # Repli : la DÉSIGNATION actuelle d'une matière active vaut correspondance.
+    # `_appliquer_references` réécrit le texte d'un OF / d'une fiche saisi dans
+    # MySifa depuis `matieres_premieres.designation` ; sans ce repli, renommer
+    # une matière (reprise d'inventaire du 01/10/2026 : « thermique pro » ->
+    # « Thermique Pro 70 g/m² ») ou en créer une rendait ses documents
+    # « non associés » et perdait besoins et déstockage. Les correspondances
+    # écrites gardent la main ; une désignation portée par deux matières
+    # actives de la même famille n'est pas devinée.
+    vues: dict = {}
+    for r in conn.execute("""
+        SELECT id, reference, designation, categorie, metres_lineaires_par_bobine, weight_gsm,
+               weight_per_m2, longueur_tube_mm, unites_par_palette
+          FROM matieres_premieres
+         WHERE COALESCE(actif, 1) = 1 AND TRIM(COALESCE(designation, '')) <> ''
+    """).fetchall():
+        cat = (r["categorie"] or "").strip().lower()
+        for kind, cats in _KIND_CATEGORIES.items():
+            if cat in cats:
+                cle = (kind, r["designation"].strip().lower())
+                vues.setdefault(cle, []).append(r)
+    for cle, lignes in vues.items():
+        if cle in out or len(lignes) != 1:
+            continue
+        r = lignes[0]
+        out[cle] = {
+            "matiere_id": r["id"], "reference": r["reference"], "designation": r["designation"],
+            "categorie": r["categorie"], "metres_lineaires_par_bobine": r["metres_lineaires_par_bobine"],
+            "weight_gsm": r["weight_gsm"], "weight_per_m2": r["weight_per_m2"],
+            "longueur_tube_mm": r["longueur_tube_mm"], "unites_par_palette": r["unites_par_palette"],
         }
     return out
 
