@@ -72,7 +72,8 @@ erp.executescript("""
         (3, '2026-09-28 10:00:00', 2, 5,    '1183', '0004', '570', 12000,  24000,  '9932561'),
         (4, '2026-09-29 10:00:00', 3, 1105, '1183', '0004', '510', 0,      999999, 'doublon de variante'),
         (5, '2026-09-26 10:00:00', 2, 7,    '1055', '0005', NULL,  200,    18000,  'Sortie'),
-        (6, '2026-09-27 10:00:00', 3, 2,    '1152', '0001', '570', 46600,  46600,  'Réception');
+        (6, '2026-09-27 10:00:00', 3, 2,    '1152', '0001', '570', 46600,  46600,  'Réception'),
+        (7, '1899-12-30 00:00:00', 0, 5,    '1183', '0004', NULL,  0,      99999999999.99, NULL);
 """)
 
 res = sc._comparer_matiere(ms, erp)
@@ -84,6 +85,8 @@ check("570 : laize lue à part (24 000 ml = 2 bobines)", par["ECO70 · 570 mm"][
 check("570 : écart signalé (+1 bobine)", (par["ECO70 · 570 mm"]["statut"], par["ECO70 · 570 mm"]["ecart"]), ("ecart", 1.0))
 check("440 : stock MySifa sans laize RVGI", par["ECO70 · 440 mm"]["statut"], "mysifa_seul")
 check("le doublon de variante (type 1105) est ignoré", "999999" in str(res), False)
+check("la ligne d'initialisation de fiche (mvt 0, 1899) n'est pas un stock",
+      [l["reference"] for l in res["lignes"] if l["reference"] == "ECO70"], [])
 check("adhésif : clé par appariement, au kilo, sans laize", (par["2028Y"]["stock_rvgi"], par["2028Y"]["statut"]), (18000.0, "ok"))
 check("article non apparié porteur de stock", par["1152/0001 · 570 mm"]["statut"], "rvgi_seul")
 check("l'article RVGI est nommé sur la ligne", "1183/0004" in par["ECO70 · 510 mm"]["designation"], True)
@@ -108,6 +111,8 @@ check("fournisseur par numéro RVGI (code1), laize 510 en mètres",
 check("même fournisseur, laize 570 à part", par_cle[(2, "Likexin", 570.0)]["metres"], 24000.0)
 check("fournisseur par la variante, adhésif au kilo",
       (par_cle[(1, "Bostik", None)]["quantite"], par_cle[(1, "Bostik", None)]["metres"]), (18000.0, None))
+check("fournisseur : pas de « laize vide » à cent milliards de mètres",
+      any((l["metres"] or 0) > 1e9 for l in sf["lignes"]), False)
 check("article non apparié ignoré", any(l["article"] == "1152/0001" for l in sf["lignes"]), False)
 check("une seule matière demandée", {l["matiere_id"] for l in stock_par_fournisseur(ms, 2, conn_erp=erp)["lignes"]}, {2})
 

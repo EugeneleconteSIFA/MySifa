@@ -17912,9 +17912,14 @@ function buildMatieresInventaire() {
       el('div', { cls: 'hist-head-actions' },
         el('button', {
           cls: 'hist-export-btn', type: 'button',
-          attrs: { title: 'Fichier Excel, une ligne par référence matière' },
-          on: { click: () => { window.location.href = API + '/api/stock/matieres/inventaire/export'; } },
-        }, iconEl('download', 16), ' Exporter l\'inventaire'),
+          attrs: { title: 'Classeur Excel : synthèse, par référence, par laize, par emplacement — filtres de l\'écran appliqués' },
+          on: { click: () => matInvExporter('xlsx') },
+        }, iconEl('download', 16), ' Excel'),
+        el('button', {
+          cls: 'hist-export-btn', type: 'button',
+          attrs: { title: 'Feuille de comptage PDF, par catégorie — filtres de l\'écran appliqués' },
+          on: { click: () => matInvExporter('pdf') },
+        }, iconEl('download', 16), ' PDF'),
       ),
     ),
     el('div', {
@@ -17934,6 +17939,15 @@ function buildMatieresInventaire() {
       ? el('div', { cls: 'card-empty' }, 'Chargement…')
       : listContainer),
   );
+}
+
+// L'export reprend les filtres affichés : ce qu'on télécharge est ce qu'on voit.
+function matInvExporter(format) {
+  const p = new URLSearchParams({ format });
+  if (S.matInvCategorie) p.set('categorie', S.matInvCategorie);
+  if (S.matInvStatut) p.set('statut', S.matInvStatut);
+  if ((S.matInvQuery || '').trim()) p.set('q', S.matInvQuery.trim());
+  window.location.href = API + '/api/stock/matieres/inventaire/export?' + p.toString();
 }
 
 function renderMatInvItems() {
