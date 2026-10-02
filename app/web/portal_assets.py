@@ -2342,6 +2342,12 @@ function renderPortal(){
         h('span',{className:'portal-tour-pastille'},'Nouveau'),
         document.createTextNode('Découvrir le portail')
       ),
+      // Maquette du futur site vitrine (/website), pour la montrer en interne.
+      h('button',{className:'portal-logout',type:'button',title:'Voir la maquette du site vitrine',
+        onClick:()=>{window.location.href='/website';}},
+        h('span',{className:'theme-ico'},iconEl('globe',16)),
+        h('span',{className:'theme-label'},'Site')
+      ),
       h('button',{className:'portal-logout',onClick:()=>{MySifaTheme.toggleMode();render();}},
         h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
         h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
