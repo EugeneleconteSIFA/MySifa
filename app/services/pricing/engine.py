@@ -190,6 +190,13 @@ def compute_material_price_per_m2(
     return MaterialPriceResult(price_eur_per_m2=price, breakdown=breakdown)
 
 
+def marge_pct_matiere(mat: PricingMaterial, s: PricingSettings) -> Decimal:
+    """Marge de la catégorie de la matière, à défaut la marge par défaut."""
+    cat = (mat.categorie or "").strip().lower()
+    pct = (s.marges_categorie or {}).get(cat) if cat else None
+    return pct if pct is not None else (s.default_margin_pct or _ZERO)
+
+
 def compute_product_cost(
     product: PricingProduct,
     materials_map: Mapping[int, PricingMaterial],
@@ -207,6 +214,10 @@ def compute_product_cost(
     # Assiette de marge : seules les matières marquées « marge appliquée » y
     # entrent. Le prix de revient, lui, reste la somme de tout.
     base_marge = _ZERO
+    # Marge par catégorie : chaque matière apporte sa part, au taux de SA
+    # catégorie. Ignorée si le produit porte sa propre marge.
+    marge_cat = _ZERO
+    taux_vus: set[Decimal] = set()
 
     for field_name, role in _COMPONENT_ROLES:
         mat_id = getattr(product, field_name)
@@ -221,6 +232,9 @@ def compute_product_cost(
         total += result.price_eur_per_m2
         if mat.applique_marge:
             base_marge += result.price_eur_per_m2
+            taux = marge_pct_matiere(mat, s)
+            taux_vus.add(taux)
+            marge_cat += result.price_eur_per_m2 * taux / _HUNDRED
         components.append(
             ProductComponentCost(
                 material_id=mat.id,
@@ -241,6 +255,9 @@ def compute_product_cost(
         total += result.price_eur_per_m2
         if mat.applique_marge:
             base_marge += result.price_eur_per_m2
+            taux = marge_pct_matiere(mat, s)
+            taux_vus.add(taux)
+            marge_cat += result.price_eur_per_m2 * taux / _HUNDRED
         role = f"extra_{idx + 1}"
         components.append(
             ProductComponentCost(
@@ -253,17 +270,23 @@ def compute_product_cost(
         )
 
     total_q = _q4(total)
-    margin_pct = (
-        product.custom_margin_pct
-        if product.custom_margin_pct is not None
-        else s.default_margin_pct
-    )
-    if margin_pct is None:
-        margin_pct = _ZERO
-    if margin_pct < 0:
-        raise PricingError(f"Marge négative pour le produit « {product.code} ».")
-    margin_pct_q = _q4(margin_pct)
-    margin_q = _q4(_q4(base_marge) * margin_pct_q / _HUNDRED)
+    if product.custom_margin_pct is not None:
+        # Marge propre au produit : un taux unique sur toute l'assiette.
+        margin_pct = product.custom_margin_pct
+        if margin_pct < 0:
+            raise PricingError(f"Marge négative pour le produit « {product.code} ».")
+        margin_pct_q = _q4(margin_pct)
+        margin_q = _q4(_q4(base_marge) * margin_pct_q / _HUNDRED)
+    else:
+        # Marge par catégorie. Un seul taux en jeu : on l'applique tel quel
+        # (même arrondi qu'avant). Plusieurs : le taux affiché est la moyenne
+        # obtenue sur l'assiette.
+        if len(taux_vus) <= 1:
+            margin_pct_q = _q4(next(iter(taux_vus)) if taux_vus else (s.default_margin_pct or _ZERO))
+            margin_q = _q4(_q4(base_marge) * margin_pct_q / _HUNDRED)
+        else:
+            margin_q = _q4(marge_cat)
+            margin_pct_q = _q4(margin_q / _q4(base_marge) * _HUNDRED)
     sell = _q4(total_q + margin_q)
 
     if total_q > 0:

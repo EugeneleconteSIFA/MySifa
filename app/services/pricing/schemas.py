@@ -34,6 +34,10 @@ class PricingSettingsOut(BaseModel):
     logistique_qte_m2_demi_container: Decimal = Decimal("0")
     eur_usd_rate_updated_at: Optional[str] = None
     eur_usd_rate_source: Optional[str] = None
+    # Marge par catégorie de matière (clé en minuscules). Absente = défaut.
+    marges_categorie: dict[str, float] = Field(default_factory=dict)
+    # Catégories qui peuvent porter une marge : [{code, label}].
+    categories_marge: list[dict] = Field(default_factory=list)
 
 
 class PricingSettingsPatch(BaseModel):
@@ -49,6 +53,8 @@ class PricingSettingsPatch(BaseModel):
     default_half_container_cost_eur: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     logistique_qte_m2_container_complet: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     logistique_qte_m2_demi_container: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
+    # { "frontal": 8, "adhesif": null } — null retire la marge propre.
+    marges_categorie: Optional[dict[str, Optional[Decimal]]] = None
 
 
 class PricingFxRefreshOut(BaseModel):
@@ -311,6 +317,8 @@ class MaterialPreviewIn(BaseModel):
     taxe_pct: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
     is_imported: bool = False
     applique_marge: bool = True
+    # Catégorie de la matière : elle choisit la marge affichée.
+    categorie: Optional[str] = None
     transport_mode: TransportMode = "AMOUNT"
     transport_unit_price: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
     transport_pct: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)

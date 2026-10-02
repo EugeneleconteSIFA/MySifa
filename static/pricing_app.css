@@ -1037,3 +1037,22 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 .msl-libcell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .msl-lib{color:var(--text);font-weight:600;text-decoration:none}
 .msl-lib:hover{color:var(--accent);text-decoration:underline}
+
+/* ─── Fiche matière en une colonne (oct. 2026) ───
+   Les paramètres ont quitté la colonne de droite pour la fiche elle-même :
+   on lit de haut en bas, une question par bloc, chaque bloc titré. */
+.form-layout.form-layout-1{grid-template-columns:minmax(0,1fr)}
+.imp-liste{display:flex;flex-direction:column;gap:14px}
+.imp-liste > .field{margin:0}
+.imp-groupe + .imp-groupe{margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
+.imp-titre{font-size:13px;font-weight:700;color:var(--text);margin:0 0 10px}
+.transport-propage{max-width:420px}
+.marge-taux{margin-top:10px}
+.si-commun-aide{margin:-6px 0 14px}
+.si-fx-btn{margin-top:8px}
+.si-commun .si-state{margin-top:16px}
+.marge-cats{display:flex;flex-direction:column;gap:8px;max-width:340px}
+.marge-cat{display:grid;grid-template-columns:120px 1fr auto;align-items:center;gap:10px}
+.marge-cat label{margin:0;font-size:13px;font-weight:600;color:var(--text);text-transform:none;letter-spacing:0}
+.marge-cat input{max-width:none}
+.marge-cat.courante label{color:var(--accent)}

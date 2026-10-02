@@ -73,6 +73,7 @@ def load_pricing_settings(conn: sqlite3.Connection) -> PricingSettings:
     if missing:
         raise PricingError(f"Paramètres incomplets en base : {', '.join(missing)}.")
     return PricingSettings(
+        marges_categorie=load_marges_categorie(conn),
         eur_usd_rate=data["eur_usd_rate"],
         default_container_cost_usd=data["default_container_cost_usd"],
         default_container_kg=data["default_container_kg"],
@@ -86,6 +87,49 @@ def load_pricing_settings(conn: sqlite3.Connection) -> PricingSettings:
         logistique_qte_m2_container_complet=data.get("logistique_qte_m2_container_complet", Decimal("0")),
         logistique_qte_m2_demi_container=data.get("logistique_qte_m2_demi_container", Decimal("0")),
     )
+
+
+def load_marges_categorie(conn: sqlite3.Connection) -> dict[str, Decimal]:
+    """Marges par catégorie (clé en minuscules). Table absente = aucune."""
+    try:
+        rows = conn.execute(
+            "SELECT categorie, marge_pct FROM mc_marge_categorie"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    return {
+        str(r["categorie"]).strip().lower(): _dec(r["marge_pct"])
+        for r in rows
+        if r["marge_pct"] is not None
+    }
+
+
+def update_marges_categorie(
+    conn: sqlite3.Connection,
+    marges: dict[str, Optional[Decimal]],
+    *,
+    updated_by: Optional[int] = None,
+) -> None:
+    """Pose ou retire (None) la marge d'une catégorie."""
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    for cat, val in marges.items():
+        cle = str(cat or "").strip().lower()
+        if not cle:
+            continue
+        if val is None:
+            conn.execute("DELETE FROM mc_marge_categorie WHERE categorie=?", (cle,))
+            continue
+        if val < 0 or val > 1000:
+            raise PricingError("Marge de catégorie invalide — valeur entre 0 et 1000 %.")
+        conn.execute(
+            """INSERT INTO mc_marge_categorie (categorie, marge_pct, updated_at, updated_by)
+               VALUES (?,?,?,?)
+               ON CONFLICT(categorie) DO UPDATE SET
+                 marge_pct=excluded.marge_pct, updated_at=excluded.updated_at,
+                 updated_by=excluded.updated_by""",
+            (cle, float(val), now, updated_by),
+        )
+    conn.commit()
 
 
 def load_settings_response(conn: sqlite3.Connection) -> dict[str, Any]:
@@ -102,6 +146,9 @@ def load_settings_response(conn: sqlite3.Connection) -> dict[str, Any]:
     fx = by_key.get("eur_usd_rate")
     out["eur_usd_rate_updated_at"] = fx["updated_at"] if fx else None
     out["eur_usd_rate_source"] = fx["source"] if fx else None
+    out["marges_categorie"] = {
+        k: float(v) for k, v in load_marges_categorie(conn).items()
+    }
     return out
 
 
@@ -144,6 +191,11 @@ def row_to_pricing_material(
         taxe_pct=_dec(_col(row, "taxe_pct")),
         is_imported=_bool(row["is_imported"]),
         applique_marge=_bool_defaut_vrai(_col(row, "applique_marge")),
+        categorie=(
+            (mystock.get("categorie") if mystock else None)
+            or _col(row, "category_code")
+            or ""
+        ).strip().lower() or None,
         transport_mode=(_col(row, "transport_mode") or "AMOUNT"),
         transport_unit_price=_dec(_col(row, "transport_unit_price")),
         transport_pct=_dec(_col(row, "transport_pct")),
@@ -306,6 +358,7 @@ def declinaison_to_pricing_material(param: dict) -> PricingMaterial:
         taxe_pct=_dec(param.get("taxe_pct")),
         is_imported=bool(param.get("is_imported")),
         applique_marge=_bool_defaut_vrai(param.get("applique_marge")),
+        categorie=(param.get("categorie") or "").strip().lower() or None,
         transport_mode=param.get("transport_mode") or "AMOUNT",
         transport_unit_price=_dec(param.get("transport_unit_price")),
         transport_pct=_dec(param.get("transport_pct")),
@@ -334,7 +387,9 @@ def fetch_materials_map(
     if not ids:
         return {}
     placeholders = ",".join("?" * len(ids))
-    sql = f"""SELECT m.*, {MYSTOCK_COLS}
+    sql = f"""SELECT m.*, {MYSTOCK_COLS},
+                     (SELECT c.code FROM mc_material_category c
+                       WHERE c.id = m.category_id) AS category_code
                 FROM mc_material m {MYSTOCK_JOIN}
                WHERE m.id IN ({placeholders})"""
     if require_active:

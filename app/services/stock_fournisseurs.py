@@ -86,6 +86,16 @@ def stock_par_fournisseur(conn: sqlite3.Connection, matiere_id: Optional[int] = 
         quantite = conv.get("quantite")
         if quantite is not None and q < 0:
             quantite = -quantite
+        # Un mandrin se stocke à la palette mais se compte en tubes : la
+        # palette n'est qu'un conditionnement (tubes par palette de la fiche).
+        tubes = None
+        if (m.get("categorie") or "").strip().lower() == "mandrin" and quantite is not None:
+            try:
+                upp = float(m.get("unites_par_palette") or 0)
+            except (TypeError, ValueError):
+                upp = 0.0
+            if upp > 0:
+                tubes = round(quantite * upp)
         lignes.append({
             "matiere_id": mid,
             "fournisseur_id": fid,
@@ -99,6 +109,7 @@ def stock_par_fournisseur(conn: sqlite3.Connection, matiere_id: Optional[int] = 
             "metres": round(q, 1) if unite == "bobine" else None,
             "quantite": round(quantite, 3) if quantite is not None else None,
             "unite": unite,
+            "tubes": tubes,
             "maj_le": r["amjh"],
         })
     lignes.sort(key=lambda l: (l["matiere_id"], (l["fournisseur"] or "~").lower(), l["laize_mm"] or 0, l["article"]))

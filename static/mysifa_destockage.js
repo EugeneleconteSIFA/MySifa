@@ -25,7 +25,7 @@
 (function () {
   'use strict';
 
-  const E = { opts: null, data: null, cand: {}, rows: [], entryId: null, edition: null };
+  const E = { opts: null, data: null, cand: {}, rows: [], entryId: null, edition: null, paravent: false };
 
   const UNITES = {ml: ['ml', 'ml'], kg: ['kg', 'kg'], bobine: ['bobine', 'bobines'],
     tube: ['tube', 'tubes'], palette: ['palette', 'palettes'], carton: ['carton', 'cartons'],
@@ -144,6 +144,10 @@
     return laizes.length === 1 ? laizes[0].laize_id : null;
   }
 
+  // Conditionnement paravent (02/10/2026) : l'étiquette est pliée, pas
+  // enroulée — aucun mandrin ne sort, quoi que dise le calcul.
+  function sansMandrin(r) { return E.paravent && r.ligne.kind === 'mandrin'; }
+
   function cleLigne(l) { return (l.kind || '') + '|' + (l.source_value || '') + '|' + (l.hors_fiche ? l.matiere_id : ''); }
 
   function preparer(d, garder) {
@@ -261,6 +265,9 @@
     const l = r.ligne;
     const ed = E.edition;
     let corps = '';
+    // Ligne déjà résolue : la valeur de fiche nomme la matière actuelle, pas
+    // celle qu'on crée.
+    const source = l.matiere_id ? '' : (l.source_value || '');
     if (ed.mode === 'creer') {
       const cats = l.categories_remplacement || [];
       const cat = ed.categorie || cats[0] || '';
@@ -270,8 +277,8 @@
         + cats.map(k => '<option value="' + esc(k) + '"' + (k === cat ? ' selected' : '') + '>'
           + esc(LIBELLES_CATEGORIE[k] || k) + '</option>').join('') + '</select></label>';
       corps = selCat
-        + champ('reference', 'Référence', ed.reference != null ? ed.reference : l.source_value, 'text')
-        + champ('designation', 'Désignation', ed.designation != null ? ed.designation : l.source_value, 'text')
+        + champ('reference', 'Référence', ed.reference != null ? ed.reference : source, 'text')
+        + champ('designation', 'Désignation', ed.designation != null ? ed.designation : source, 'text')
         + (CHAMPS_CONDITIONNEMENT[l.kind] || []).map(([n, lib]) => champ(n, lib, '')).join('')
         + (cat === 'palette' ? champ('palettes_par_pile', 'Palettes par pile', 1) : '');
     } else {
@@ -279,11 +286,11 @@
       corps = (CHAMPS_CONDITIONNEMENT[c.kind] || []).map(([n, lib]) => champ(n, lib, '')).join('');
     }
     const titre = ed.mode === 'creer'
-      ? (l.source_value ? 'Créer la référence « ' + esc(l.source_value) + ' »'
+      ? (source ? 'Créer la référence « ' + esc(source) + ' »'
         : 'Créer une référence — ' + esc(natureLigne(l).toLowerCase()))
       : 'Compléter la fiche de « ' + esc((candidat(r.mid) || {}).reference || '') + ' »';
     const aide = ed.mode === 'creer'
-      ? (l.source_value
+      ? (source
         ? 'La matière est créée dans MyStock et associée à cette valeur de fiche : les prochains dossiers la trouveront seuls.'
         : 'La matière est créée dans MyStock et retenue pour ce dossier. Pensez à compléter la fiche technique du produit.')
       : 'Les champs laissés vides ne sont pas modifiés. Le reste de la fiche s\'édite dans MyStock.';
@@ -322,7 +329,11 @@
     const opts = (r.mid ? '' : '<option value="">' + esc(l.source_value || 'Choisir une matière') + '</option>')
       + options.map(o => '<option value="' + o.matiere_id + '"' + (o.matiere_id === r.mid ? ' selected' : '') + '>'
         + esc(o.reference || '') + (o.designation && o.designation !== o.reference ? ' — ' + esc(o.designation) : '')
-        + '</option>').join('');
+        + '</option>').join('')
+      // Créer une référence depuis n'importe quelle ligne (02/10/2026) : la
+      // bonne matière manque souvent alors qu'une autre a été proposée.
+      + ((l.categories_remplacement || []).length
+        ? '<option value="__creer__">+ Créer une référence…</option>' : '');
     const catAjout = l.ajout ? ((l.categories_remplacement || [])[0] || '') : '';
     const select = '<select data-dr-mat="' + i + '" style="' + selStyle + '"'
       + (l.ajout && !catAjout ? ' disabled' : '') + '>'
@@ -359,15 +370,17 @@
     const sous = [laizeManque, remplace, (l.hors_fiche && !l.ajout) ? 'ajoutée à la main' : '',
       l.depuis_of ? 'd\'après l\'OF (fiche technique vide)' : '',
       l.inclus_complexe ? 'déjà dans le complexe — à ne sortir que si on en a ajouté' : '',
-      (l.attendue && r.mid) ? 'absente de la fiche technique' : ''].filter(Boolean)
+      (l.attendue && r.mid) ? 'absente de la fiche technique' : '',
+      sansMandrin(r) ? 'conditionnement paravent — pas de mandrin' : ''].filter(Boolean)
       .join('<span style="color:var(--muted)"> · </span>');
 
-    const bloque = !r.mid || conv.facteur_stock == null;
+    const paravent = sansMandrin(r);
+    const bloque = paravent || !r.mid || conv.facteur_stock == null;
     const step = conv.entier ? '1' : (conv.unite_reelle === 'ml' ? '1' : '0.001');
     const u = conv.unite_reelle || l.besoin_unite || '';
     // Une ligne à compléter se voit d'un coup d'œil : liseré et fond, pas
     // seulement un texte orange noyé dans la dernière colonne.
-    const aCompleter = (bloque && !(l.facultative && !r.mid)) || (c && (c.laizes || []).length && r.lid == null);
+    const aCompleter = (bloque && !paravent && !(l.facultative && !r.mid)) || (c && (c.laizes || []).length && r.lid == null);
     const fond = (i % 2) ? 'background:var(--bg);' : '';
     const td = 'padding:10px 12px;vertical-align:middle;border-bottom:1px solid var(--border);' + fond;
     const lien = r.mid ? '<a class="dr-lien" href="/stock?matiere=' + encodeURIComponent(r.mid) + '" target="_blank" rel="noopener" '
@@ -384,7 +397,7 @@
           + esc(LIBELLES_CATEGORIE[k]) + '</option>').join('')
         + '</select>';
     }
-    const ecart = (l.consomme != null && !bloque) ? Number(r.val || 0) - Number(l.consomme) : null;
+    const ecart = (l.consomme != null && !bloque && !paravent) ? Number(r.val || 0) - Number(l.consomme) : null;
     const ecartHtml = ecart == null ? '<span style="color:var(--muted)">—</span>'
       : (Math.abs(ecart) < 1e-6 ? '<span style="color:var(--muted)">=</span>'
         : '<span style="font-weight:700;color:var(--warn)">' + (ecart > 0 ? '+' : '−') + nombre(Math.abs(ecart))
@@ -398,7 +411,7 @@
       + '<td style="' + td + 'text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--text2)">'
       + (l.consomme != null ? nombre(l.consomme) + ' <span style="color:var(--muted)">' + esc(unite(u, l.consomme)) + '</span>' : '—') + '</td>'
       + '<td style="' + td + 'text-align:right;white-space:nowrap">'
-      + '<input type="number" step="' + step + '" min="0" data-dr-q="' + i + '" value="' + Number(r.val || 0) + '"'
+      + '<input type="number" step="' + step + '" min="0" data-dr-q="' + i + '" value="' + (paravent ? 0 : Number(r.val || 0)) + '"'
       + (bloque ? ' disabled' : '')
       + ' style="width:104px;text-align:right;background:var(--card);border:1px solid var(--border);border-radius:7px;'
       + 'padding:7px 9px;color:var(--text);font-family:inherit;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;'
@@ -406,7 +419,8 @@
       + '<span style="display:inline-block;width:62px;text-align:left;font-size:12px;color:var(--muted);padding-left:6px">'
       + esc(unite(u, r.val)) + '</span></td>'
       + '<td data-dr-ecart="' + i + '" style="' + td + 'text-align:right;white-space:nowrap;font-size:12.5px">' + ecartHtml + '</td>'
-      + '<td data-dr-simpl="' + i + '" style="' + td + 'font-size:12.5px">' + simplifieHtml(i) + '</td>'
+      + '<td data-dr-simpl="' + i + '" style="' + td + 'font-size:12.5px">'
+      + (paravent ? '<span style="color:var(--muted)">—</span>' : simplifieHtml(i)) + '</td>'
       + '</tr>';
     if (E.edition && E.edition.i === i) html += editionHtml(i);
     return html;
@@ -459,6 +473,13 @@
   function changerMatiere(i, valeur) {
     const r = E.rows[i];
     if (!r) return;
+    if (valeur === '__creer__') {
+      E.edition = {i: i, mode: 'creer'};
+      rendreLignes();
+      const ref = document.querySelector('[data-dr-edition] [data-dr-champ="reference"]');
+      if (ref) ref.focus();
+      return;
+    }
     const mid = valeur === '' ? null : Number(valeur);
     const avant = candidat(r.mid);
     r.mid = mid;
@@ -521,11 +542,14 @@
     return out;
   }
 
-  async function lier(i, mid) {
+  // `laizeSeule` : rattache la laize du dossier sans toucher à l'association
+  // valeur de fiche → matière (les autres dossiers gardent leur matière).
+  async function lier(i, mid, laizeSeule) {
     const l = E.rows[i].ligne;
+    const sans = l.hors_fiche || laizeSeule;
     return appel('/api/stock/destockage/' + E.entryId + '/rattacher', {
       method: 'POST',
-      body: JSON.stringify({matiere_id: mid, kind: l.hors_fiche ? '' : l.kind, source_value: l.hors_fiche ? '' : l.source_value}),
+      body: JSON.stringify({matiere_id: mid, kind: sans ? '' : l.kind, source_value: sans ? '' : l.source_value}),
     });
   }
 
@@ -548,7 +572,7 @@
           await appel('/api/stock/matieres/' + cree.id, {method: 'PUT',
             body: JSON.stringify({metres_lineaires_par_bobine: v.metres_lineaires_par_bobine})});
         }
-        const lien = await lier(ed.i, cree.id);
+        const lien = await lier(ed.i, cree.id, !!r.ligne.matiere_id);
         r.mid = cree.id;
         r.lid = lien && lien.laize_id != null ? lien.laize_id : null;
         if (!r.val && r.ligne.consomme) r.val = Number(r.ligne.consomme);
@@ -630,7 +654,11 @@
       + '<th style="' + th + ';text-align:right;width:110px">Écart</th>'
       + '<th style="' + th + ';text-align:left;width:250px">Simplifié</th>'
       + '</tr></thead><tbody id="dr-tbody"></tbody></table></div>'
+      + '<div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">'
       + '<button type="button" class="dr-ajout" data-dr-ajout><span style="font-size:16px;line-height:1">+</span> Ajouter une matière</button>'
+      + '<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer">'
+      + '<input type="checkbox" id="dr-paravent"' + (E.paravent ? ' checked' : '') + '> Conditionnement paravent'
+      + '<span style="font-weight:400;color:var(--muted)">— pas de mandrin</span></label></div>'
       + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px">' + lever + boutons + '</div>';
   }
 
@@ -639,8 +667,6 @@
   // même code que la fiche dossier ; le théorique, de l'OF.
   function infosHtml(d) {
     const dos = d.dossier || {};
-    const fl = Number(dos.format_l || 0);
-    const fh = Number(dos.format_h || 0);
     const theo = Number((d.theorique || {}).metrage || 0) || null;
     const reel = Number((d.reel || {}).metrage || 0) || null;
     const m = v => v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + ' m';
@@ -656,19 +682,27 @@
       + '<div style="font-size:15px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;margin-top:2px">' + val + '</div>'
       + (sous ? '<div style="font-size:11px;color:var(--muted);margin-top:1px">' + esc(sous) + '</div>' : '')
       + '</div>';
-    return bloc('Format', fl && fh ? esc(nombre(fl) + ' × ' + nombre(fh) + ' mm') : '—')
-      + bloc('Métrage théorique', m(theo))
+    return bloc('Métrage théorique', m(theo))
       + bloc('Métrage réel', m(reel), sousReel);
   }
 
   function afficherInfos(d) {
     const z = document.getElementById('dr-infos');
     if (z) z.innerHTML = infosHtml(d);
+    const t = document.getElementById('dr-titre-detail');
+    if (t) {
+      const dos = d.dossier || {};
+      const fl = Number(dos.format_l || 0);
+      const fh = Number(dos.format_h || 0);
+      t.textContent = [(dos.client || '').trim(), fl && fh ? nombre(fl) + ' × ' + nombre(fh) + ' mm' : '']
+        .filter(Boolean).map(x => ' · ' + x).join('');
+    }
   }
 
   function brancher(body) {
     body.addEventListener('change', (ev) => {
       const t = ev.target;
+      if (t.id === 'dr-paravent') { E.paravent = t.checked; rendreLignes(); return; }
       if (t.hasAttribute('data-dr-nat')) changerNature(Number(t.getAttribute('data-dr-nat')), t.value);
       else if (t.hasAttribute('data-dr-mat')) changerMatiere(Number(t.getAttribute('data-dr-mat')), t.value);
       else if (t.hasAttribute('data-dr-lz')) {
@@ -713,7 +747,7 @@
   async function ouvrir(entryId, opts) {
     E.opts = opts || {};
     E.entryId = entryId;
-    E.data = null; E.rows = []; E.cand = {}; E.edition = null;
+    E.data = null; E.rows = []; E.cand = {}; E.edition = null; E.paravent = false;
     const root = document.getElementById('mroot');
     if (!root) return;
     injecterStyle();
@@ -726,7 +760,8 @@
       + 'border-radius:14px;width:100%;max-width:1240px;padding:22px 24px;box-shadow:0 20px 60px rgba(0,0,0,.35)">'
       + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:12px">'
       + '<h3 style="margin:0;font-size:18px;color:var(--text);display:flex;align-items:center;gap:8px">'
-      + (E.opts.icone || '') + ' Déstockage — ' + esc(ref) + '</h3>'
+      + (E.opts.icone || '') + '<span>Déstockage — ' + esc(ref)
+      + '<span id="dr-titre-detail" style="font-weight:600;color:var(--text2)"></span></span></h3>'
       + '<button type="button" data-dr-fermer style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);'
       + 'background:var(--bg);color:var(--text);font-family:inherit;cursor:pointer">Fermer</button></div>'
       + '<div id="dr-infos" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"></div>'
@@ -760,7 +795,7 @@
       // « 0 + quantité ».
       (r.ligne.cles_initiales || []).forEach(([mid, lid]) =>
         lignes.push({matiere_id: mid, laize_id: lid ?? null, quantite_reelle: 0}));
-      if (!r.mid) continue;
+      if (!r.mid || sansMandrin(r)) continue;
       const c = candidat(r.mid);
       const conv = (c && c.conversion) || {};
       const q = Number(r.val || 0);
