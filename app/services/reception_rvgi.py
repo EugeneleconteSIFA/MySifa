@@ -541,7 +541,7 @@ def lignes_a_integrer(conn, conn_erp, limite=300):
             "lif_id": int(r["lif_id"]),
             "numero": r["numero"], "ligne": r["ligne"],
             "amjl": (r["amjl"] or "")[:10],
-            "ref_br": r["ref_br"], "fournisseur": r["fournisseur"],
+            "ref_br": r["ref_br"], "fournisseur": r["fournisseur"], "numfou": r["numfou"],
             "article": "%s/%s" % (r["code1"], r["code2"]),
             "code1": r["code1"], "code2": r["code2"], "type_code": type_code,
             "libelle": libelle or None,
@@ -759,6 +759,15 @@ def integrer(conn, ligne, user, appliquer_mouvement):
             conn, user, matiere_id, "entree", quantite,
             laize_id=laize_id, note=origine)
         mouvement_id = res.get("mouvement_id")
+        # Le fournisseur par son numéro RVGI, pas par la raison sociale : MyProd
+        # rejoint la fiche (et son certificat FSC) sur le nom MySifa, qui n'est
+        # pas toujours celui de RVGI (« Likexin » / « SHENZHEN LIKEXIN… »).
+        from app.services.fournisseurs_fusion import par_numero_rvgi
+        fournisseur_id = par_numero_rvgi(conn, ligne.get("numfou"))
+        fournisseur_nom = ligne.get("fournisseur")
+        if fournisseur_id is not None:
+            r_f = conn.execute("SELECT nom FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
+            fournisseur_nom = (r_f[0] if r_f else None) or fournisseur_nom
         cur = conn.execute(
             "INSERT INTO stock_receptions "
             "(created_at, created_by, created_by_name, note, nb_bobines, fournisseur, "
@@ -766,11 +775,15 @@ def integrer(conn, ligne, user, appliquer_mouvement):
             " rvgi_lif_id, rvgi_matiere_id, rvgi_laize_id) "
             "VALUES (?,?,?,?,0,?,?,?,?,?,?,?,?,?)",
             (maintenant, (user or {}).get("email"), auteur, origine,
-             ligne.get("fournisseur"), "non_fsc",
+             fournisseur_nom, "non_fsc",
              "RVGI-%s-%s" % (ligne.get("numero"), ligne.get("ligne")),
              str(ligne.get("numero") or "")[:30], str(ligne.get("ref_br") or "")[:60],
              quantite, lif_id, matiere_id, laize_id))
         reception_id = int(cur.lastrowid)
+        if fournisseur_id is not None and "fournisseur_id" in {
+                c[1] for c in conn.execute("PRAGMA table_info(stock_receptions)")}:
+            conn.execute("UPDATE stock_receptions SET fournisseur_id=? WHERE id=?",
+                         (fournisseur_id, reception_id))
 
     conn.execute(
         "INSERT INTO erp_reception_integree "

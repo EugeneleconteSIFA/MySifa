@@ -114,14 +114,21 @@ PLAN = [
 A_TRANCHER = [
     ("Suzhou (20) ⇄ SUZHOU PIAOZHIHUA (160)",
      "« Suzhou » est un nom de ville et le tiers est à Taicang. La fiche 20 "
-     "porte un contact : une question suffit à trancher."),
+     "porte un contact : une question suffit à trancher. — Tranché le "
+     "02/10/2026 (la fiche 20 porte le certificat FSC Piaozhihua) : fusionné "
+     "par la migration fournisseurs_fusion_doublons_2026_10."),
     ("Torrespapel (22) ⇄ TORRASPAPEL FRANCE (63) / ESPAGNE (220)",
      "Deux tiers ERP réels. La licence FSC-C011032 va sur celui qui facture "
-     "les bobines ; l'autre reste, avec groupe = Torraspapel."),
+     "les bobines ; l'autre reste, avec groupe = Torraspapel. — Tranché le "
+     "02/10/2026 : 22 fondue dans ESPAGNE (220), migration "
+     "fournisseurs_fusion_doublons_2026_10."),
     ("BURBAN Palettes (195) ⇄ BURBAN PALETTES (199)",
      "Vrai doublon, mais né côté ERP : deux tiers ACTIFS (1190 et 1195), même "
      "code, SIRET d'établissements différents. Fusionner ici libère un tiers "
-     "vivant, que le prochain import recréera. À corbeiller dans RVGI d'abord."),
+     "vivant, que le prochain import recréera. À corbeiller dans RVGI d'abord. "
+     "— Tranché le 02/10/2026 : 199 fondue dans 195 ; la fusion garde "
+     "désormais la fiche absorbée, désactivée, avec son numéro RVGI, quand "
+     "les deux sont liées — l'import ne la recrée plus."),
     ("UPM (23) ⇄ UPM RAFLATAC (172)",
      "NE PAS fusionner : 1151 = UPM Tampere (FI), 1166 = Raflatac Pompey (FR), "
      "deux entités. Confirmer le lien de la 23 et poser groupe = UPM."),
