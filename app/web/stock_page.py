@@ -10206,9 +10206,14 @@ function buildMpEmplacementsCard(m) {
         : null,
     ));
   });
-  const total = rows.reduce((s, e) => s + (parseFloat(e.quantite) || 0), 0);
+  // Les non-conformités (emplacements « NC … ») sont hors stock disponible :
+  // les compter dans le localisé donnait « 12 sur 10 ».
+  const estNc = (e) => /^NC\b/.test(String(e.emplacement || ''));
+  const total = rows.filter(e => !estNc(e)).reduce((s, e) => s + (parseFloat(e.quantite) || 0), 0);
+  const nc = rows.filter(estNc).reduce((s, e) => s + (parseFloat(e.quantite) || 0), 0);
   card.appendChild(el('div', { cls: 'mp-hint', style: 'margin-top:8px' },
-    'Localisé : ' + mpStockLine(total, m) + ' sur ' + mpStockLine(m.quantite, m) + ' en stock.'));
+    'Localisé : ' + mpStockLine(total, m) + ' sur ' + mpStockLine(m.quantite, m) + ' en stock.'
+    + (nc > 0 ? ' Hors stock : ' + mpStockLine(nc, m) + ' en non-conformité.' : '')));
   return card;
 }
 

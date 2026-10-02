@@ -33,6 +33,7 @@ from __future__ import annotations
 import sqlite3
 from collections import defaultdict
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Any, Optional
 
 AUTEUR = "Reprise inventaire 01/10/2026"
@@ -45,7 +46,8 @@ _UNITE = {"frontal": "bobines", "glassine": "bobines", "complexe": "bobines", "a
 
 
 def _now() -> str:
-    return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    # Heure de Paris, sans fuseau dans la chaîne : convention de MyStock.
+    return datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def _code_emplacement(code: str) -> str:
@@ -65,14 +67,52 @@ def _laize_id(conn: sqlite3.Connection, valeur_mm: float, rapport: dict) -> int:
         return int(r["id"])
     rapport["laizes_creees"].append(valeur_mm)
     return int(conn.execute(
-        "INSERT INTO mp_laizes (valeur_mm, label, ordre, actif, created_at) VALUES (?,?,?,1,?)",
-        (valeur_mm, "%g mm" % valeur_mm, int(valeur_mm), _now()),
+        "INSERT INTO mp_laizes (valeur_mm, label, ordre, actif, created_at) VALUES (?,?,999,1,?)",
+        (valeur_mm, "%g mm" % valeur_mm, _now()),
     ).lastrowid)
+
+
+def _garder_ancienne_designation(conn, mid: int, ancienne: str, ambigues: frozenset = frozenset()) -> bool:
+    """L'ancienne désignation ne vaut d'être gardée au mapping que si un document
+    a pu la recopier — un OF ou une fiche technique pointe la fiche — et qu'elle
+    désignait cette fiche seule. Deux palettes s'appelaient toutes deux
+    « 800 mm x 1200 mm », trois fiches du 28/09 portaient un nom de fournisseur
+    (« Avery », « Mondi ») : les garder ferait router n'importe quel texte vers
+    une matière au hasard."""
+    # Partagée par plusieurs fiches AVANT la reprise (calculé sur les données,
+    # pas sur la table qu'on est en train de renommer), ou par une fiche que la
+    # reprise ne touche pas.
+    if ancienne.strip().lower() in ambigues:
+        return False
+    autre = conn.execute(
+        "SELECT 1 FROM matieres_premieres WHERE id<>? AND LOWER(TRIM(designation))=LOWER(?) LIMIT 1",
+        (mid, ancienne),
+    ).fetchone()
+    if autre:
+        return False
+    try:
+        doc = conn.execute(
+            """SELECT 1 FROM of_imports WHERE ? IN (matiere_ref_id, glassine_ref_id, adhesif_ref_id,
+                                                    carton_ref_id, mandrin_ref_id, palette_ref_id)
+               UNION ALL
+               SELECT 1 FROM fiches_techniques WHERE ? IN (support_ref_id, glassine_ref_id, adhesif_ref_id,
+                                                         carton_ref_id, mandrin_ref_id, palette_ref_id)
+               LIMIT 1""",
+            (mid, mid),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return True  # schéma inattendu : on garde, comme avant
+    return bool(doc)
 
 
 def _resoudre_fiches(conn, data, rapport) -> dict[str, dict]:
     """cle -> {id, categorie, laizee, action}. Crée les fiches neuves, met à jour les reprises."""
     out: dict[str, dict] = {}
+    comptes: dict[str, int] = defaultdict(int)
+    for f in data["fiches"]:
+        if f.get("id") and f.get("designation_avant"):
+            comptes[f["designation_avant"].strip().lower()] += 1
+    ambigues = frozenset(k for k, n in comptes.items() if n > 1)
     for f in data["fiches"]:
         cle, cat = f["cle"], f["categorie"]
         if f["id"]:
@@ -84,12 +124,20 @@ def _resoudre_fiches(conn, data, rapport) -> dict[str, dict]:
             sets, vals = [], []
             if f["action"] in ("Reprendre", "Stock à zéro") and f["designation"] and f["designation"] != row["designation"]:
                 ancienne = (row["designation"] or "").strip()
-                if ancienne:
+                deja = conn.execute(
+                    "SELECT matiere_id FROM mp_fiche_mapping WHERE kind=? AND source_value=? COLLATE NOCASE",
+                    (_KIND.get(cat, "support"), ancienne),
+                ).fetchone() if ancienne else None
+                if deja and int(deja[0]) != mid:
+                    rapport["mapping_conflit"].append((mid, ancienne, int(deja[0])))
+                elif ancienne and _garder_ancienne_designation(conn, mid, ancienne, ambigues):
                     conn.execute(
                         """INSERT OR IGNORE INTO mp_fiche_mapping (kind, source_value, matiere_id, notes)
                            VALUES (?,?,?,?)""",
                         (_KIND.get(cat, "support"), ancienne, mid, "Ancienne désignation — " + AUTEUR),
                     )
+                elif ancienne:
+                    rapport["designation_non_gardee"].append((mid, ancienne))
                 sets.append("designation=?"); vals.append(f["designation"])
                 rapport["fiches_renommees"].append((mid, ancienne, f["designation"]))
             if f["action"] == "Reprendre" and (row["categorie"] != cat or (row["sous_section"] or None) != (f["sous_section"] or None)):
@@ -277,6 +325,18 @@ def appliquer(conn: sqlite3.Connection, data: dict) -> dict:
                                        " · ".join(comm))
         rapport["lignes_stock"].append((mid, lid, q_avant, q_new, ecart))
 
+    # --- cohérence des compteurs : fiche à laizes = somme de ses laizes ;
+    # fiche sans laize (reclassée) : plus de stock par laize résiduel.
+    for cle, fi in fiches.items():
+        if fi["laizee"]:
+            conn.execute(
+                """UPDATE mp_stock SET quantite = (SELECT COALESCE(SUM(quantite),0) FROM mp_stock_laize
+                                                   WHERE matiere_id=?) WHERE matiere_id=?""",
+                (fi["id"], fi["id"]),
+            )
+        else:
+            conn.execute("UPDATE mp_stock_laize SET quantite=0 WHERE matiere_id=?", (fi["id"],))
+
     # --- emplacements : ceux du terrain remplacent les précédents
     for cle, fi in fiches.items():
         conn.execute("DELETE FROM mp_emplacements WHERE matiere_id=?", (fi["id"],))
@@ -295,7 +355,9 @@ def appliquer(conn: sqlite3.Connection, data: dict) -> dict:
     for cle, fi in fiches.items():
         if fi["action"] == "Désactiver":
             conn.execute("UPDATE matieres_premieres SET actif=0, updated_at=? WHERE id=?", (_now(), fi["id"]))
-            conn.execute("UPDATE mp_variantes SET actif=0, principal=0 WHERE matiere_id=?", (fi["id"],))
+            restants = mv.fermer_matiere(conn, fi["id"])
+            if restants:
+                rapport["appariements_sur_desactivee"].append((fi["id"], restants))
             rapport["fiches_desactivees"].append(fi["id"])
 
     # --- variantes fournisseur
@@ -342,6 +404,28 @@ def appliquer(conn: sqlite3.Connection, data: dict) -> dict:
             rapport["variantes_creees"].append(vid)
         if v["principal"]:
             principaux.append((mid, vid))
+    from app.services import mystock_prix as prix
+    for mid, vid in principaux:
+        fid = conn.execute("SELECT fournisseur_id FROM mp_variantes WHERE id=?", (vid,)).fetchone()[0]
+        if fid is not None:
+            for d in conn.execute("SELECT id FROM mp_matiere_declinaison WHERE matiere_id=?", (mid,)).fetchall():
+                lignes = conn.execute(
+                    "SELECT fournisseur_id, principal, prix FROM mp_matiere_prix WHERE declinaison_id=?", (d[0],)
+                ).fetchall()
+                if any(l[0] == fid for l in lignes):
+                    continue
+                princ = next((l for l in lignes if l[1]), None)
+                if princ is None:
+                    continue
+                if princ[0] is None:
+                    # Le prix en vigueur n'avait pas de fournisseur : c'est celui
+                    # du fournisseur principal choisi à l'inventaire.
+                    res = prix.set_fournisseur(conn, declinaison_id=d[0], fournisseur_id=None,
+                                               nouveau_fournisseur_id=fid)
+                    if res.get("ok"):
+                        rapport["prix_attribue_au_principal"].append((mid, d[0], fid))
+                else:
+                    rapport["prix_chez_autre_fournisseur"].append((mid, d[0], princ[0], fid))
     for mid, vid in principaux:
         actuel = conn.execute(
             "SELECT id FROM mp_variantes WHERE matiere_id=? AND principal=1 AND actif=1", (mid,)
@@ -358,7 +442,9 @@ def resume(rapport: dict) -> str:
     n = lambda k: len(rapport.get(k, []))
     return ("%d fiche(s) créée(s), %d renommée(s), %d désactivée(s) ; %d ligne(s) de stock "
             "(%d négative(s), %d non appliquée(s)) ; %d emplacement(s) ; %d variante(s) ; "
-            "%d prix en vigueur déplacé(s) ; %d article(s) RVGI non rattaché(s) ; %d erreur(s)."
+            "%d prix en vigueur déplacé(s), %d prix attribué(s) au principal, %d chez un autre fournisseur ; "
+            "%d article(s) RVGI non rattaché(s) ; %d conflit(s) de correspondance ; %d erreur(s)."
             % (n("fiches_creees"), n("fiches_renommees"), n("fiches_desactivees"), n("lignes_stock"),
                n("stocks_negatifs"), n("stock_non_applique"), n("emplacements"), n("variantes_creees"),
-               n("prix_principal_change"), n("rvgi_non_rattache"), n("erreurs")))
+               n("prix_principal_change"), n("prix_attribue_au_principal"), n("prix_chez_autre_fournisseur"),
+               n("rvgi_non_rattache"), n("mapping_conflit"), n("erreurs")))

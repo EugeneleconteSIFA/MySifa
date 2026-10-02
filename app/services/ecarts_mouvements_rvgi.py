@@ -182,6 +182,7 @@ def comparer(conn, conn_erp, debut, fin):
     """Les deux journaux de mouvements, rapprochés par matière et par dossier."""
     matieres = _matieres(conn)
     actives = [m for m in matieres.values()]
+    _ml_var = rr.ml_variantes(conn)
     appar = rr._appariements(conn)
 
     par_matiere: dict = {}
@@ -255,7 +256,8 @@ def comparer(conn, conn_erp, debut, fin):
             continue
 
         lm = _ligne_matiere(mid)
-        conv = rr.convertir(type_achat, qte, matieres[mid], r["cond_erp"])
+        conv = rr.convertir(type_achat, qte, matieres[mid], r["cond_erp"],
+                            _ml_var.get((str(r["code1"]), str(r["code2"]), type_achat)))
         q = conv.get("quantite")
         mv = {**base, "matiere_id": mid, "quantite": q, "unite": conv.get("unite"),
               "detail": conv.get("detail"),

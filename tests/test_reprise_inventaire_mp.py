@@ -66,6 +66,9 @@ with get_db() as c:
 
     m1 = fiche("TEST-ECO", "thermique eco")
     m2 = fiche("TEST-DOUBLON", "Thermique Eco fournisseur B")
+    m3 = fiche("TEST-SANS-DOC", "Avery")
+    # Un OF pointe m1 : son ancienne désignation a pu être recopiée dans un document.
+    c.execute("INSERT INTO of_imports (matiere_ref_id) VALUES (?)", (m1,))
     l1, l2 = laize(471.0), laize(531.0)
     for mid, lid, q in ((m1, l1, 30), (m1, l2, 12), (m2, l1, 5)):
         c.execute("INSERT INTO mp_matiere_laizes (matiere_id, laize_id) VALUES (?,?)", (mid, lid))
@@ -85,6 +88,9 @@ with get_db() as c:
         "fiches": [
             {"cle": str(m1), "id": m1, "action": "Reprendre", "categorie": "frontal", "sous_section": "Thermiques",
              "designation": "Thermique Eco 70 g/m²", "designation_avant": "thermique eco", "ml_std": 12000,
+             "unites_par_palette": None},
+            {"cle": str(m3), "id": m3, "action": "Reprendre", "categorie": "frontal", "sous_section": None,
+             "designation": "PLA transparent adhésif permanent", "designation_avant": "Avery", "ml_std": None,
              "unites_par_palette": None},
             {"cle": "N:neuve", "id": None, "action": "Créer", "categorie": "glassine", "sous_section": None,
              "designation": "Glassine test 45 g/m²", "designation_avant": None, "ml_std": 18000,
@@ -130,6 +136,8 @@ with get_db() as c:
           c.execute("SELECT designation FROM matieres_premieres WHERE id=?", (m1,)).fetchone()[0], "Thermique Eco 70 g/m²")
     check("ancienne désignation gardée au mapping",
           c.execute("SELECT matiere_id FROM mp_fiche_mapping WHERE source_value='thermique eco'").fetchone()[0], m1)
+    check("ancienne désignation sans document : pas gardée (« Avery »)",
+          c.execute("SELECT COUNT(*) FROM mp_fiche_mapping WHERE source_value='Avery'").fetchone()[0], 0)
     check("doublon : stock à zéro et désactivé",
           tuple(c.execute("SELECT m.actif, s.quantite FROM matieres_premieres m JOIN mp_stock s ON s.matiere_id=m.id WHERE m.id=?",
                           (m2,)).fetchone()), (0, 0.0))
