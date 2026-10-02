@@ -90,6 +90,27 @@ check("l'article RVGI est nommé sur la ligne", "1183/0004" in par["ECO70 · 510
 check("taux de correspondance = lignes RVGI qui trouvent leur matière",
       res["compte"]["taux_correspondance"], round(100 * 3 / 4, 1))
 
+# ── Stock par fournisseur (app/services/stock_fournisseurs.py) ──────────────
+from app.services.stock_fournisseurs import stock_par_fournisseur  # noqa: E402
+
+ms.executescript("""
+    CREATE TABLE fournisseurs_fsc (id INTEGER PRIMARY KEY, nom TEXT, rvgi_numero INTEGER, actif INTEGER DEFAULT 1);
+    CREATE TABLE mp_variantes (id INTEGER PRIMARY KEY, matiere_id INTEGER, fournisseur_id INTEGER,
+        libelle_technique TEXT, rvgi_code1 TEXT, rvgi_code2 TEXT, rvgi_type_code INTEGER,
+        ml_bobine REAL, actif INTEGER DEFAULT 1);
+    INSERT INTO fournisseurs_fsc VALUES (7, 'Likexin', 1183, 1), (8, 'Bostik', NULL, 1);
+    INSERT INTO mp_variantes VALUES (70, 1, 8, 'Hotmelt 2028Y', '1055', '0005', 9, NULL, 1);
+""")
+sf = stock_par_fournisseur(ms, conn_erp=erp)
+par_cle = {(l["matiere_id"], l["fournisseur"], l["laize_mm"]): l for l in sf["lignes"]}
+check("fournisseur par numéro RVGI (code1), laize 510 en mètres",
+      par_cle[(2, "Likexin", 510.0)]["metres"], 120000.0)
+check("même fournisseur, laize 570 à part", par_cle[(2, "Likexin", 570.0)]["metres"], 24000.0)
+check("fournisseur par la variante, adhésif au kilo",
+      (par_cle[(1, "Bostik", None)]["quantite"], par_cle[(1, "Bostik", None)]["metres"]), (18000.0, None))
+check("article non apparié ignoré", any(l["article"] == "1152/0001" for l in sf["lignes"]), False)
+check("une seule matière demandée", {l["matiere_id"] for l in stock_par_fournisseur(ms, 2, conn_erp=erp)["lignes"]}, {2})
+
 print()
 if FAIL:
     print("ÉCHEC : %d contrôle(s) en erreur" % len(FAIL))

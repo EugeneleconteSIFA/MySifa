@@ -1383,6 +1383,22 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-liste-n{font-size:12px;color:var(--muted)}
 .mp-tri-wrap{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
 .mp-tri{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:7px 10px;font:inherit;font-size:13px;color:var(--text)}
+.mp-seg{display:inline-flex;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:2px;gap:2px}
+.mp-seg-btn{border:none;background:transparent;border-radius:8px;padding:6px 11px;font:inherit;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;white-space:nowrap}
+.mp-seg-btn:hover{color:var(--text)}
+.mp-seg-btn.on{background:var(--accent-bg);color:var(--accent)}
+.mp-filtres{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mp-filtres .mp-tri{padding:6px 9px;font-size:12px}
+.mp-card-stock-sub{display:block;font-size:11px;font-weight:600;color:var(--muted);text-align:right}
+.mp-grain{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:6px 8px;overflow-x:auto}
+.mp-grain-mat td{background:var(--bg);cursor:pointer}
+.mp-grain-mat td:hover .mp-grain-titre{color:var(--accent)}
+.mp-grain-titre{font-size:13px;font-weight:700;color:var(--text);margin-right:10px}
+.mp-grain-tot{float:right;font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums}
+.mp-grain-tot strong{color:var(--text)}
+.mp-grain-vide td{color:var(--muted);font-size:12px;font-style:italic}
+.mp-var-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0 2px}
+.mp-var-source{font-size:11px;color:var(--muted);margin-left:auto}
 .mp-flyout{position:fixed;z-index:9000;min-width:230px;padding:6px;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 32px rgba(15,23,42,.18);display:flex;flex-direction:column;gap:2px}
 .mp-flyout-item{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:8px 10px;background:var(--card);border:none;border-radius:8px;font:inherit;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;text-align:left}
 .mp-flyout-item:hover{background:var(--bg);color:var(--accent)}
@@ -2506,6 +2522,15 @@ let S = {
   // pas sur la liste complète.
   matieresAccueil: true,
   mpTri: (() => { try { return localStorage.getItem('mp_tri') || 'alpha'; } catch (e) { return 'alpha'; } })(),
+  // Grain de la liste des matières : une ligne par matière, par fournisseur,
+  // ou par fournisseur et par laize (stock RVGI par article).
+  mpGrain: (() => { try { return localStorage.getItem('mp_grain') || 'matiere'; } catch (e) { return 'matiere'; } })(),
+  mpVarGrain: (() => { try { return localStorage.getItem('mp_var_grain') || 'fournisseur'; } catch (e) { return 'fournisseur'; } })(),
+  mpFiltreFourn: '',
+  mpFiltreLaize: '',
+  mpVarFiltreFourn: '',
+  mpVarFiltreLaize: '',
+  mpStockFourn: null,
   matieresQ: '',
   matieresCardMenuId: null,
   selMatiere: null,
@@ -9600,11 +9625,20 @@ function buildMatieres() {
       infoChildren.push(el('div', { cls: 'mp-card-warn' },
         'Sous le seuil (min. ' + mpStockLine(seuil, m) + ')'));
     }
+    // Bobines, frontaux, glassines : le stock se lit en mètres (ce qu'on
+    // consomme), le nombre de bobines reste à côté (ce qu'on compte).
+    const enMetres = mpIsLaizeeCategory(m.categorie) && m.stock_reel != null;
     const topEnd = [
-      el('span', {
-        cls: 'mp-card-stock-total' + alertCls,
-        attrs: { title: mpStockTotalLabel(m) },
-      }, mpStockLine(m.quantite, m)),
+      enMetres
+        ? el('span', {
+            cls: 'mp-card-stock-total' + alertCls,
+            attrs: { title: mpSourceReel(m) },
+          }, mpFmtReel(m),
+          el('span', { cls: 'mp-card-stock-sub' }, mpStockLine(m.quantite, m)))
+        : el('span', {
+            cls: 'mp-card-stock-total' + alertCls,
+            attrs: { title: mpStockTotalLabel(m) },
+          }, mpStockLine(m.quantite, m)),
     ];
     const copyBtn = mpCardCopyBtn(m);
     if (copyBtn) topEnd.push(copyBtn);
@@ -9707,6 +9741,17 @@ function buildMatieres() {
     try { localStorage.setItem('mp_tri', S.mpTri); } catch (e) {}
     renderMatieresView();
   });
+  const grain = MP_GRAINS.some(g => g.id === S.mpGrain) ? S.mpGrain : 'matiere';
+  let corps = list;
+  let filtres = null;
+  if (grain !== 'matiere') {
+    const tries = filtered.slice().sort(mpCompareTri);
+    corps = buildMpGrainTable(tries, grain);
+    if (S.mpStockFourn && S.mpStockFourn.disponible) {
+      const ids = new Set(tries.map(m => m.id));
+      filtres = mpFiltresFourn(S.mpStockFourn.lignes.filter(l => ids.has(l.matiere_id)), true);
+    }
+  }
   const barre = el('div', { cls: 'mp-liste-barre' },
     el('button', {
       cls: 'mp-retour-cat', type: 'button',
@@ -9717,10 +9762,16 @@ function buildMatieres() {
       } },
     }, iconEl('arrow-left', 14), 'Catégories'),
     el('span', { cls: 'mp-liste-n' }, filtered.length + ' référence' + (filtered.length > 1 ? 's' : '')),
+    mpSeg(MP_GRAINS, grain, (id) => {
+      S.mpGrain = id;
+      try { localStorage.setItem('mp_grain', id); } catch (e) {}
+      renderMatieresView();
+    }, 'Une ligne par'),
+    filtres,
     el('label', { cls: 'mp-tri-wrap' }, el('span', null, 'Trier'), triSel),
   );
   return el('div', { cls: 'content' },
-    el('div', { cls: 'hist-page' }, head, banner, searchWrap, pills, subPills, barre, list, rvgiBloc));
+    el('div', { cls: 'hist-page' }, head, banner, searchWrap, pills, subPills, barre, corps, rvgiBloc));
 }
 
 // ── Widget « Métrage bobine » ───────────────────────────────────────────────
@@ -10217,6 +10268,189 @@ function buildMpEmplacementsCard(m) {
   return card;
 }
 
+// ── Stock par fournisseur (RVGI) ───────────────────────────────────
+// MySifa tient son stock par matière et par laize : une bobine au magasin ne
+// dit pas de quel fournisseur elle vient. RVGI le tient par article
+// (fournisseur × référence) et par laize. Les vues « par fournisseur » montrent
+// donc le stock RVGI des articles, à côté du total MySifa, jamais à sa place.
+const MP_GRAINS = [
+  { id: 'matiere', label: 'Matière' },
+  { id: 'fournisseur', label: 'Fournisseur' },
+  { id: 'laize', label: 'Fournisseur × laize' },
+];
+const MP_VAR_GRAINS = [
+  { id: 'fournisseur', label: 'Par fournisseur' },
+  { id: 'laize', label: 'Fournisseur × laize' },
+];
+
+function mpSeg(options, value, onPick, aria) {
+  return el('div', { cls: 'mp-seg', attrs: { role: 'group', 'aria-label': aria } },
+    ...options.map(o => el('button', {
+      cls: 'mp-seg-btn' + (o.id === value ? ' on' : ''), type: 'button',
+      attrs: { 'aria-pressed': o.id === value ? 'true' : 'false' },
+      on: { click: () => { if (o.id !== value) onPick(o.id); } },
+    }, o.label)));
+}
+
+// Chargé une fois, à la demande : toutes les matières d'un coup (quelques
+// centaines de lignes), partagé par la liste et la fiche.
+function mpStockFournData() {
+  if (S.mpStockFourn) return S.mpStockFourn;
+  if (!S.mpStockFournLoading) {
+    S.mpStockFournLoading = true;
+    api('/api/stock/mp-stock-fournisseurs')
+      .then(d => { S.mpStockFourn = d || { disponible: false, motif: 'Réponse vide.', lignes: [] }; })
+      .catch(e => { S.mpStockFourn = { disponible: false, motif: e.message, lignes: [] }; })
+      .finally(() => {
+        S.mpStockFournLoading = false;
+        // Pas de reconstruction sous une modale ouverte.
+        const root = document.getElementById('mroot');
+        if (!(root && root.firstElementChild)) renderMatieresView();
+      });
+  }
+  return null;
+}
+
+function mpLignesFourn(matiereId) {
+  const d = S.mpStockFourn;
+  if (!d || !Array.isArray(d.lignes)) return [];
+  return d.lignes.filter(l => l.matiere_id === matiereId);
+}
+
+// `cle` : 'mpFiltre' pour la liste, 'mpVarFiltre' pour la fiche — deux écrans,
+// deux filtres, pour qu'un filtre posé sur la liste ne vide pas une fiche.
+function mpFiltreLigne(l, cle) {
+  const f = S[(cle || 'mpFiltre') + 'Fourn'], lz = S[(cle || 'mpFiltre') + 'Laize'];
+  if (f && String(l.fournisseur_id || 0) !== f) return false;
+  if (lz && String(Math.round(l.laize_mm || 0)) !== lz) return false;
+  return true;
+}
+
+// Additionne des lignes RVGI par fournisseur (et par laize si demandé).
+function mpGrouperFourn(lignes, parLaize) {
+  const out = new Map();
+  lignes.forEach(l => {
+    const k = (l.fournisseur_id || 0) + (parLaize ? '|' + Math.round(l.laize_mm || 0) : '');
+    let a = out.get(k);
+    if (!a) {
+      a = { fournisseur_id: l.fournisseur_id || 0, fournisseur: l.fournisseur || 'Fournisseur non identifié',
+            laize_mm: parLaize ? l.laize_mm : null, laizes: new Set(), articles: new Set(),
+            metres: null, quantite: null, unite: l.unite, nonConv: 0 };
+      out.set(k, a);
+    }
+    a.articles.add(l.article);
+    if (l.laize_mm) a.laizes.add(Math.round(l.laize_mm));
+    if (l.metres != null) a.metres = (a.metres || 0) + l.metres;
+    if (l.quantite != null) a.quantite = (a.quantite || 0) + l.quantite; else a.nonConv++;
+  });
+  return [...out.values()].sort((x, y) =>
+    (!x.fournisseur_id - !y.fournisseur_id) || x.fournisseur.localeCompare(y.fournisseur, 'fr')
+    || (x.laize_mm || 0) - (y.laize_mm || 0));
+}
+
+function mpFmtStockRvgi(a) {
+  if (!a) return '—';
+  if (a.metres != null) return fN(Math.round(a.metres)) + ' m';
+  if (a.quantite != null) {
+    const u = { kg: 'kg', palette: 'pal.', bobine: 'bob.' }[a.unite] || (a.unite || '');
+    return fN(Math.round(a.quantite * 100) / 100) + ' ' + u;
+  }
+  return '—';
+}
+
+function mpTotalRvgi(lignes) {
+  return mpGrouperFourn(lignes.map(l => Object.assign({}, l, { fournisseur_id: 0, fournisseur: '' })), false)[0] || null;
+}
+
+// Stock MySifa d'une matière, sur une laize ou en entier, en mètres pour les bobines.
+function mpStockMySifa(m, laizeMm) {
+  if (laizeMm && Array.isArray(m.stock_par_laize)) {
+    const spl = m.stock_par_laize.find(x => Math.round(x.valeur_mm || 0) === Number(laizeMm));
+    const q = spl ? Number(spl.quantite || 0) : 0;
+    const ml = Number(m.metres_lineaires_par_bobine || 0);
+    return ml > 0 ? fN(Math.round(q * ml)) + ' m' : mpStockLine(q, m);
+  }
+  return (mpIsLaizeeCategory(m.categorie) && m.stock_reel != null) ? mpFmtReel(m) : mpStockLine(m.quantite, m);
+}
+
+// Options de filtre tirées des lignes visibles : on ne propose que ce qui existe.
+function mpFiltresFourn(lignes, avecLaize, cle, laizesEnPlus) {
+  cle = cle || 'mpFiltre';
+  const kF = cle + 'Fourn', kL = cle + 'Laize';
+  const fours = new Map(), laizes = new Set(laizesEnPlus || []);
+  lignes.forEach(l => {
+    fours.set(String(l.fournisseur_id || 0), l.fournisseur || 'Fournisseur non identifié');
+    if (l.laize_mm) laizes.add(Math.round(l.laize_mm));
+  });
+  if (S[kF] && !fours.has(S[kF])) S[kF] = '';
+  if (S[kL] && !laizes.has(Number(S[kL]))) S[kL] = '';
+  const selF = el('select', { cls: 'mp-tri', attrs: { 'aria-label': 'Filtrer par fournisseur' } },
+    el('option', { value: '' }, 'Tous les fournisseurs'),
+    ...[...fours.entries()].sort((a, b) => a[1].localeCompare(b[1], 'fr'))
+      .map(([id, nom]) => el('option', { value: id }, nom)));
+  selF.value = S[kF] || '';
+  selF.addEventListener('change', () => { S[kF] = selF.value; renderMatieresView(); });
+  const out = [selF];
+  if (avecLaize && laizes.size) {
+    const selL = el('select', { cls: 'mp-tri', attrs: { 'aria-label': 'Filtrer par laize' } },
+      el('option', { value: '' }, 'Toutes les laizes'),
+      ...[...laizes].sort((a, b) => a - b).map(v => el('option', { value: String(v) }, fN(v) + ' mm')));
+    selL.value = S[kL] || '';
+    selL.addEventListener('change', () => { S[kL] = selL.value; renderMatieresView(); });
+    out.push(selL);
+  }
+  return el('div', { cls: 'mp-filtres' }, ...out);
+}
+
+// Liste des matières, une ligne par fournisseur (ou par fournisseur et laize).
+function buildMpGrainTable(items, grain) {
+  const data = mpStockFournData();
+  if (!data) return el('div', { cls: 'mp-empty' }, 'Chargement du stock par fournisseur…');
+  if (!data.disponible) {
+    return el('div', { cls: 'mp-empty' },
+      'Stock par fournisseur indisponible : ' + (data.motif || 'miroir RVGI absent') + '.');
+  }
+  const parLaize = grain === 'laize';
+  const cols = ['Fournisseur', parLaize ? 'Laize' : 'Laizes', 'Articles RVGI', 'Stock RVGI'];
+  const tbl = el('table', { cls: 'mp-var-table' });
+  tbl.appendChild(el('thead', null, el('tr', null,
+    ...cols.map((c, i) => el('th', { cls: i === 3 ? 'num' : '' }, c)))));
+  const tb = el('tbody');
+  let n = 0;
+  items.forEach(m => {
+    const toutes = mpLignesFourn(m.id);
+    const lignes = toutes.filter(l => mpFiltreLigne(l, 'mpFiltre'));
+    if ((S.mpFiltreFourn || S.mpFiltreLaize) && !lignes.length) return;
+    n++;
+    const tot = mpTotalRvgi(lignes);
+    tb.appendChild(el('tr', { cls: 'mp-grain-mat', on: { click: () => loadMatiere(m.id) } },
+      el('td', { attrs: { colspan: '4' } },
+        el('span', { cls: 'mp-grain-titre' }, mpTitre(m)),
+        dashMpCatBadge(m.categorie, m.sous_section),
+        el('span', { cls: 'mp-grain-tot' },
+          'MySifa' + (S.mpFiltreLaize ? ' (' + S.mpFiltreLaize + ' mm)' : '') + ' ',
+          el('strong', null, mpStockMySifa(m, S.mpFiltreLaize)),
+          tot ? ' · RVGI ' : null, tot ? el('strong', null, mpFmtStockRvgi(tot)) : null))));
+    const groupes = mpGrouperFourn(lignes, parLaize);
+    if (!groupes.length) {
+      tb.appendChild(el('tr', { cls: 'mp-grain-vide' }, el('td', { attrs: { colspan: '4' } },
+        toutes.length ? 'Aucune ligne pour ce filtre.' : 'Aucun stock RVGI sur les articles de cette matière.')));
+      return;
+    }
+    groupes.forEach(a => tb.appendChild(el('tr', null,
+      el('td', null, el('span', { style: 'font-weight:600;color:var(--text)' }, a.fournisseur)),
+      el('td', null, parLaize
+        ? (a.laize_mm ? fN(Math.round(a.laize_mm)) + ' mm' : '—')
+        : ([...a.laizes].sort((x, y) => x - y).map(v => fN(v)).join(', ') || '—')),
+      el('td', null, [...a.articles].sort().join(', ')),
+      el('td', { cls: 'num' }, mpFmtStockRvgi(a),
+        a.nonConv ? el('div', { cls: 'mp-var-meta' }, a.nonConv + ' non convertible(s)') : null))));
+  });
+  if (!n) return el('div', { cls: 'mp-empty' }, 'Aucun stock RVGI pour ce filtre.');
+  tbl.appendChild(tb);
+  return el('div', { cls: 'mp-grain' }, tbl);
+}
+
 // ── Fournisseurs (variantes) d'une matière ─────────────────────────
 // La matière porte le libellé commercial ; chaque variante est une façon de
 // l'acheter (fournisseur × article) avec son libellé technique. Un seul
@@ -10276,6 +10510,32 @@ function buildMpVariantesTable(m) {
       'Aucun fournisseur renseigné. Chaque fournisseur porte le libellé technique de la matière chez lui.'));
     return card;
   }
+  // Stock RVGI des articles : une ligne par fournisseur, ou par fournisseur et laize.
+  const stockData = mpStockFournData();
+  const lignesRvgi = stockData && stockData.disponible ? mpLignesFourn(m.id) : [];
+  const laizesMySifa = (Array.isArray(m.stock_par_laize) ? m.stock_par_laize : [])
+    .filter(x => Number(x.quantite || 0) !== 0).map(x => Math.round(x.valeur_mm || 0));
+  const varGrain = MP_VAR_GRAINS.some(g => g.id === S.mpVarGrain) ? S.mpVarGrain : 'fournisseur';
+  card.appendChild(el('div', { cls: 'mp-var-tools' },
+    mpSeg(MP_VAR_GRAINS, varGrain, (id) => {
+      S.mpVarGrain = id;
+      try { localStorage.setItem('mp_var_grain', id); } catch (e) {}
+      renderMatieresView();
+    }, 'Une ligne par'),
+    mpFiltresFourn(rows.map(v => ({ fournisseur_id: v.fournisseur_id, fournisseur: v.fournisseur_nom }))
+      .concat(lignesRvgi), true, 'mpVarFiltre', laizesMySifa),
+    el('span', { cls: 'mp-var-source' }, !stockData
+      ? 'Chargement du stock RVGI…'
+      : (stockData.disponible ? 'Stock : RVGI, par article fournisseur'
+        : 'Stock RVGI indisponible (' + (stockData.motif || 'miroir absent') + ')')),
+  ));
+  const lignesVues = lignesRvgi.filter(l => mpFiltreLigne(l, 'mpVarFiltre'));
+  if (varGrain === 'laize') {
+    card.appendChild(buildMpVarParLaize(m, lignesVues, laizesMySifa));
+    return card;
+  }
+  const stockArticle = (v) => mpTotalRvgi(lignesVues.filter(l =>
+    (l.variante_id && l.variante_id === v.id) || (!l.variante_id && v.ref_rvgi && l.article === v.ref_rvgi)));
   // Un groupe par fournisseur : le principal d'abord, puis l'ordre alphabétique,
   // le fournisseur non identifié en dernier.
   const groupes = new Map();
@@ -10291,18 +10551,25 @@ function buildMpVariantesTable(m) {
     if (!a.id !== !b.id) return a.id ? -1 : 1;
     return a.nom.localeCompare(b.nom, 'fr');
   });
-  const cols = ['', 'Type de matière', 'Réf. fournisseur', 'Article RVGI', 'Laizes', 'm / bobine', 'Dernier achat', 'Prix', ''];
+  const cols = ['', 'Type de matière', 'Réf. fournisseur', 'Article RVGI', 'Laizes', 'm / bobine', 'Dernier achat', 'Stock RVGI', 'Prix', ''];
   const tbl = el('table', { cls: 'mp-var-table' });
   tbl.appendChild(el('thead', null, el('tr', null, ...cols.map((c, i) =>
-    el('th', { cls: i >= 5 && i <= 7 ? 'num' : '' }, c)))));
+    el('th', { cls: i >= 5 && i <= 8 ? 'num' : '' }, c)))));
   const tb = el('tbody');
+  let nGroupes = 0;
   ordre.forEach(g => {
+    if (S.mpVarFiltreFourn && String(g.id || 0) !== S.mpVarFiltreFourn) return;
+    nGroupes++;
     const principal = g.rows.some(v => v.principal && v.actif);
+    const totG = mpTotalRvgi(lignesVues.filter(l => (l.fournisseur_id || 0) === (g.id || 0)));
     tb.appendChild(el('tr', { cls: 'mp-var-grp' },
       el('td', { attrs: { colspan: String(cols.length) } },
         el('span', { cls: 'mp-var-grp-nom' }, g.nom),
         principal ? el('span', { cls: 'mp-var-badge' }, 'Principal') : null,
         el('span', { cls: 'mp-var-grp-n' }, g.rows.length + ' article' + (g.rows.length > 1 ? 's' : '')),
+        totG ? el('span', { cls: 'mp-grain-tot' }, 'Stock RVGI'
+          + (S.mpVarFiltreLaize ? ' (' + S.mpVarFiltreLaize + ' mm)' : '') + ' ',
+          el('strong', null, mpFmtStockRvgi(totG))) : null,
       )));
     g.rows.sort((a, b) => (b.principal - a.principal) || (b.actif - a.actif));
     g.rows.forEach(v => {
@@ -10326,12 +10593,15 @@ function buildMpVariantesTable(m) {
           v.actif ? null : el('div', { cls: 'mp-var-meta' }, 'Désactivé')),
         el('td', null, v.ref_fournisseur || '—'),
         el('td', null, v.ref_rvgi || '—'),
-        el('td', null, (v.laizes && v.laizes.length) ? v.laizes.join(', ') : '—'),
+        el('td', null, (v.laizes && v.laizes.length) ? v.laizes.join(', ')
+          : (stockArticle(v) && stockArticle(v).laizes.size
+            ? [...stockArticle(v).laizes].sort((x, y) => x - y).map(x => fN(x)).join(', ') : '—')),
         el('td', { cls: 'num' }, v.ml_bobine ? fN(v.ml_bobine) : '—'),
         el('td', { cls: 'num' },
           v.dernier_achat ? mpVarDate(v.dernier_achat) : '—',
           v.commandes_rvgi ? el('div', { cls: 'mp-var-meta' },
             v.commandes_rvgi + ' commande' + (v.commandes_rvgi > 1 ? 's' : '')) : null),
+        el('td', { cls: 'num' }, mpFmtStockRvgi(stockArticle(v))),
         el('td', { cls: 'num', attrs: { title: v.declinaisons_avec_prix
           ? 'Prix renseigné dans Coûts matières' : 'Aucun prix dans Coûts matières' } },
           v.declinaisons_avec_prix ? el('span', { cls: 'mp-var-ok' }, '✓') : el('span', { cls: 'mp-var-meta' }, '—')),
@@ -10354,7 +10624,8 @@ function buildMpVariantesTable(m) {
     });
   });
   tbl.appendChild(tb);
-  card.appendChild(el('div', { cls: 'mp-var-scroll' }, tbl));
+  card.appendChild(nGroupes ? el('div', { cls: 'mp-var-scroll' }, tbl)
+    : el('div', { cls: 'mp-hint' }, 'Aucun fournisseur pour ce filtre.'));
 
   const ecarts = Array.isArray(data.ecarts_prix) ? data.ecarts_prix : [];
   if (ecarts.length) {
@@ -10380,6 +10651,39 @@ function buildMpVariantesTable(m) {
     }, S.selMatiere.varInactives ? 'Masquer les désactivés' : 'Voir les désactivés'),
   ));
   return card;
+}
+
+// Une section par laize : le stock MySifa de la laize en tête, puis une ligne
+// par fournisseur avec le stock RVGI de ses articles sur cette laize.
+function buildMpVarParLaize(m, lignes, laizesMySifa) {
+  const laizes = new Set(laizesMySifa.filter(v => !S.mpVarFiltreLaize || String(v) === S.mpVarFiltreLaize));
+  lignes.forEach(l => laizes.add(Math.round(l.laize_mm || 0)));
+  if (!laizes.size) return el('div', { cls: 'mp-hint' }, 'Aucun stock sur cette sélection.');
+  const tbl = el('table', { cls: 'mp-var-table' });
+  tbl.appendChild(el('thead', null, el('tr', null,
+    el('th', null, 'Fournisseur'), el('th', null, 'Articles RVGI'), el('th', { cls: 'num' }, 'Stock RVGI'))));
+  const tb = el('tbody');
+  [...laizes].sort((a, b) => a - b).forEach(lz => {
+    const ici = lignes.filter(l => Math.round(l.laize_mm || 0) === lz);
+    const tot = mpTotalRvgi(ici);
+    tb.appendChild(el('tr', { cls: 'mp-var-grp' }, el('td', { attrs: { colspan: '3' } },
+      el('span', { cls: 'mp-var-grp-nom' }, lz ? fN(lz) + ' mm' : 'Sans laize'),
+      el('span', { cls: 'mp-grain-tot' },
+        lz ? 'MySifa ' : null, lz ? el('strong', null, mpStockMySifa(m, lz)) : null,
+        tot ? (lz ? ' · RVGI ' : 'RVGI ') : null, tot ? el('strong', null, mpFmtStockRvgi(tot)) : null))));
+    const groupes = mpGrouperFourn(ici, false);
+    if (!groupes.length) {
+      tb.appendChild(el('tr', { cls: 'mp-grain-vide' }, el('td', { attrs: { colspan: '3' } },
+        'Aucun stock RVGI sur cette laize.')));
+      return;
+    }
+    groupes.forEach(a => tb.appendChild(el('tr', null,
+      el('td', null, el('span', { style: 'font-weight:600;color:var(--text)' }, a.fournisseur)),
+      el('td', null, [...a.articles].sort().join(', ')),
+      el('td', { cls: 'num' }, mpFmtStockRvgi(a)))));
+  });
+  tbl.appendChild(tb);
+  return el('div', { cls: 'mp-var-scroll' }, tbl);
 }
 
 async function setMpVariantePrincipal(m, v) {
