@@ -438,8 +438,16 @@ p{margin:0}
   .stk .ls{font-size:14px}
   .stk .lcut{font-size:13px}
 }
+/* Titre du hero : la fin de phrase défile vers le bas (marchés servis) */
+.rot{position:relative;display:block;overflow:hidden}
+.rot-i{display:block}
+.js .rot-i{position:absolute;left:0;top:0;width:100%;opacity:0;transform:translateY(-70%);
+  transition:transform .7s cubic-bezier(.2,.7,.2,1),opacity .5s ease}
+.js .rot-i.is-on{opacity:1;transform:none}
+.js .rot-i.is-out{opacity:0;transform:translateY(70%)}
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
+  .js .rot-i{transition:none}
   .stk .waste{animation:none}
   .js .reveal{opacity:1;translate:none;transition:none}
   .card,.btn,.prod .ph-img img{transition:none}
@@ -492,7 +500,7 @@ p{margin:0}
   <div class="wrap">
     <div class="reveal">
       <span class="eyebrow">Fabricant et enducteur · Roubaix · depuis 1987</span>
-      <h1 id="h-hero">L'enduction au service de l'<em>étiquette adhésive</em>.</h1>
+      <h1 id="h-hero" aria-label="L'enduction au service de l'étiquette adhésive.">L'enduction au service <span class="rot" aria-hidden="true"><span class="rot-i is-on">de l'<em>étiquette adhésive</em>.</span><span class="rot-i">de l'<em>agroalimentaire</em>.</span><span class="rot-i">de la <em>grande distribution</em>.</span><span class="rot-i">de la <em>logistique</em>.</span><span class="rot-i">de l'<em>industrie</em>.</span><span class="rot-i">du <em>médical</em>.</span></span></h1>
       <p class="lead">Nous produisons nos propres complexes adhésifs et maîtrisons toute la fabrication, de la création des supports jusqu'à la livraison. En un seul passage machine : enduire, imprimer, découper, conditionner.</p>
       <div class="hero-cta">
         <a class="btn btn-primary" href="#contact">Demander un devis
@@ -985,6 +993,33 @@ p{margin:0}
   var root=document.documentElement;
   root.classList.add('js');
   var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* Titre du hero : la fin de phrase change toutes les 2,8 s et descend.
+     La hauteur suit la variante la plus longue pour que la page ne saute pas. */
+  (function(){
+    var rot=document.querySelector('.rot');
+    if(!rot)return;
+    var items=rot.querySelectorAll('.rot-i');
+    function fit(){
+      var h=0;
+      for(var i=0;i<items.length;i++){h=Math.max(h,items[i].offsetHeight);}
+      rot.style.height=h+'px';
+    }
+    fit();
+    window.addEventListener('resize',fit);
+    if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fit);
+    if(reduce||items.length<2)return;
+    var cur=0;
+    setInterval(function(){
+      if(document.hidden)return;
+      var prev=items[cur];
+      cur=(cur+1)%items.length;
+      var next=items[cur];
+      prev.classList.remove('is-on');prev.classList.add('is-out');
+      next.classList.remove('is-out');next.classList.add('is-on');
+      setTimeout(function(){prev.classList.remove('is-out');},750);
+    },2800);
+  })();
 
   /* Thème */
   var btn=document.getElementById('themeBtn');
