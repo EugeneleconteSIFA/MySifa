@@ -1397,6 +1397,10 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-grain-tot{float:right;font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums}
 .mp-grain-tot strong{color:var(--text)}
 .mp-grain-vide td{color:var(--muted);font-size:12px;font-style:italic}
+.mp-var-stock{font-size:13px;color:var(--text2);margin:8px 0 2px}
+.mp-var-stock strong{color:var(--text)}
+.mp-lz-fourn{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--text2)}
+.mp-lz-fourn strong{color:var(--text);font-weight:600}
 .mp-var-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0 2px}
 .mp-var-source{font-size:11px;color:var(--muted);margin-left:auto}
 .mp-flyout{position:fixed;z-index:9000;min-width:230px;padding:6px;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 32px rgba(15,23,42,.18);display:flex;flex-direction:column;gap:2px}
@@ -10403,6 +10407,79 @@ function mpFiltresFourn(lignes, avecLaize, cle, laizesEnPlus) {
 }
 
 // Liste des matières, une ligne par fournisseur (ou par fournisseur et laize).
+// Stock MySifa d'une laize, en chiffre : mètres pour une bobine dont la fiche
+// porte un métrage, sinon la quantité dans l'unité de gestion.
+function mpMySifaLaize(m, lz) {
+  const spl = (Array.isArray(m.stock_par_laize) ? m.stock_par_laize : [])
+    .find(x => Math.round(x.valeur_mm || 0) === Number(lz));
+  const q = spl ? Number(spl.quantite || 0) : 0;
+  const ml = Number(m.metres_lineaires_par_bobine || 0);
+  return { quantite: q, metres: ml > 0 ? Math.round(q * ml) : null };
+}
+
+// Lignes « une par laize » : stock MySifa, stock RVGI, écart, et le détail RVGI
+// par fournisseur. MySifa ne sait pas de quel fournisseur vient une bobine :
+// le fournisseur se lit dans la dernière colonne, le stock MySifa par laize.
+function mpLignesLaize(m, lignes, filtreLaize, filtreFourn) {
+  const out = [];
+  const laizee = mpIsLaizeeCategory(m.categorie);
+  const fmtFourn = (ici) => {
+    const g = mpGrouperFourn(ici, false);
+    return g.length
+      ? el('div', { cls: 'mp-lz-fourn' }, ...g.map(a => el('span', null,
+          el('strong', null, a.fournisseur), ' ' + mpFmtStockRvgi(a))))
+      : el('span', { cls: 'mp-var-meta' }, 'Aucun article RVGI en stock');
+  };
+  const ecartCell = (msM, rv) => {
+    if (msM == null || !rv || rv.metres == null) return el('td', { cls: 'num' }, '—');
+    const e = Math.round(msM - rv.metres);
+    const fort = Math.abs(e) > 0.02 * Math.max(Math.abs(msM), Math.abs(rv.metres), 1);
+    return el('td', { cls: 'num', style: fort ? 'color:var(--warn);font-weight:700' : '' },
+      (e > 0 ? '+' : '') + fN(e) + ' m');
+  };
+  if (!laizee) {
+    const rv = mpTotalRvgi(lignes);
+    out.push(el('tr', null, el('td', null, '—'),
+      el('td', { cls: 'num' }, el('strong', null, mpStockMySifa(m))),
+      el('td', { cls: 'num' }, mpFmtStockRvgi(rv)),
+      el('td', { cls: 'num' }, '—'),
+      el('td', null, fmtFourn(lignes))));
+    return out;
+  }
+  const laizes = new Set();
+  if (!filtreFourn) {
+    (Array.isArray(m.stock_par_laize) ? m.stock_par_laize : [])
+      .filter(x => Number(x.quantite || 0) !== 0).forEach(x => laizes.add(Math.round(x.valeur_mm || 0)));
+  }
+  lignes.forEach(l => laizes.add(Math.round(l.laize_mm || 0)));
+  [...laizes].filter(v => !filtreLaize || String(v) === String(filtreLaize)).sort((x, y) => x - y)
+    .forEach(lz => {
+      const ici = lignes.filter(l => Math.round(l.laize_mm || 0) === lz);
+      const ms = lz ? mpMySifaLaize(m, lz) : { quantite: 0, metres: null };
+      const rv = mpTotalRvgi(ici);
+      out.push(el('tr', null,
+        el('td', null, el('strong', null, lz ? fN(lz) + ' mm' : 'Sans laize')),
+        el('td', { cls: 'num' }, el('strong', null, !lz ? '—'
+          : (ms.metres != null ? fN(ms.metres) + ' m' : mpStockLine(ms.quantite, m))),
+          lz && ms.quantite ? el('div', { cls: 'mp-var-meta' }, mpStockLine(ms.quantite, m)) : null),
+        el('td', { cls: 'num' }, mpFmtStockRvgi(rv)),
+        ecartCell(lz ? ms.metres : null, rv),
+        el('td', null, fmtFourn(ici))));
+    });
+  if (!out.length) {
+    out.push(el('tr', { cls: 'mp-grain-vide' }, el('td', { attrs: { colspan: '5' } }, 'Aucun stock sur cette sélection.')));
+  }
+  return out;
+}
+
+const MP_COLS_LAIZE = ['Laize', 'Stock MySifa', 'Stock RVGI', 'Écart', 'Fournisseurs (stock RVGI)'];
+
+function mpTheadLaize() {
+  return el('thead', null, el('tr', null,
+    ...MP_COLS_LAIZE.map((c, i) => el('th', { cls: i >= 1 && i <= 3 ? 'num' : '' }, c))));
+}
+
+// Liste des matières, une ligne par fournisseur ou par laize.
 function buildMpGrainTable(items, grain) {
   const data = mpStockFournData();
   if (!data) return el('div', { cls: 'mp-empty' }, 'Chargement du stock par fournisseur…');
@@ -10411,42 +10488,51 @@ function buildMpGrainTable(items, grain) {
       'Stock par fournisseur indisponible : ' + (data.motif || 'miroir RVGI absent') + '.');
   }
   const parLaize = grain === 'laize';
-  const cols = ['Fournisseur', parLaize ? 'Laize' : 'Laizes', 'Articles RVGI', 'Stock RVGI'];
   const tbl = el('table', { cls: 'mp-var-table' });
-  tbl.appendChild(el('thead', null, el('tr', null,
-    ...cols.map((c, i) => el('th', { cls: i === 3 ? 'num' : '' }, c)))));
+  const colsF = ['Fournisseur', 'Laizes', 'Articles RVGI', 'Stock MySifa', 'Stock RVGI'];
+  tbl.appendChild(parLaize ? mpTheadLaize() : el('thead', null, el('tr', null,
+    ...colsF.map((c, i) => el('th', { cls: i >= 3 ? 'num' : '' }, c)))));
   const tb = el('tbody');
   let n = 0;
   items.forEach(m => {
     const toutes = mpLignesFourn(m.id);
     const lignes = toutes.filter(l => mpFiltreLigne(l, 'mpFiltre'));
-    if ((S.mpFiltreFourn || S.mpFiltreLaize) && !lignes.length) return;
+    if (S.mpFiltreFourn && !lignes.length) return;
+    if (S.mpFiltreLaize && !lignes.length && !(mpMySifaLaize(m, S.mpFiltreLaize).quantite)) return;
     n++;
     const tot = mpTotalRvgi(lignes);
+    const titre = el('td', { attrs: { colspan: '3' } },
+      el('span', { cls: 'mp-grain-titre' }, mpTitre(m)),
+      dashMpCatBadge(m.categorie, m.sous_section));
+    if (parLaize) {
+      tb.appendChild(el('tr', { cls: 'mp-grain-mat', on: { click: () => loadMatiere(m.id) } },
+        el('td', { attrs: { colspan: '5' } },
+          el('span', { cls: 'mp-grain-titre' }, mpTitre(m)),
+          dashMpCatBadge(m.categorie, m.sous_section),
+          el('span', { cls: 'mp-grain-tot' }, 'MySifa ', el('strong', null, mpStockMySifa(m)),
+            tot ? ' · RVGI ' : null, tot ? el('strong', null, mpFmtStockRvgi(tot)) : null))));
+      mpLignesLaize(m, lignes, S.mpFiltreLaize, S.mpFiltreFourn).forEach(tr => tb.appendChild(tr));
+      return;
+    }
     tb.appendChild(el('tr', { cls: 'mp-grain-mat', on: { click: () => loadMatiere(m.id) } },
-      el('td', { attrs: { colspan: '4' } },
-        el('span', { cls: 'mp-grain-titre' }, mpTitre(m)),
-        dashMpCatBadge(m.categorie, m.sous_section),
-        el('span', { cls: 'mp-grain-tot' },
-          'MySifa' + (S.mpFiltreLaize ? ' (' + S.mpFiltreLaize + ' mm)' : '') + ' ',
-          el('strong', null, mpStockMySifa(m, S.mpFiltreLaize)),
-          tot ? ' · RVGI ' : null, tot ? el('strong', null, mpFmtStockRvgi(tot)) : null))));
-    const groupes = mpGrouperFourn(lignes, parLaize);
+      titre,
+      el('td', { cls: 'num' }, el('strong', null, mpStockMySifa(m, S.mpFiltreLaize))),
+      el('td', { cls: 'num' }, el('strong', null, tot ? mpFmtStockRvgi(tot) : '—'))));
+    const groupes = mpGrouperFourn(lignes, false);
     if (!groupes.length) {
-      tb.appendChild(el('tr', { cls: 'mp-grain-vide' }, el('td', { attrs: { colspan: '4' } },
+      tb.appendChild(el('tr', { cls: 'mp-grain-vide' }, el('td', { attrs: { colspan: '5' } },
         toutes.length ? 'Aucune ligne pour ce filtre.' : 'Aucun stock RVGI sur les articles de cette matière.')));
       return;
     }
     groupes.forEach(a => tb.appendChild(el('tr', null,
       el('td', null, el('span', { style: 'font-weight:600;color:var(--text)' }, a.fournisseur)),
-      el('td', null, parLaize
-        ? (a.laize_mm ? fN(Math.round(a.laize_mm)) + ' mm' : '—')
-        : ([...a.laizes].sort((x, y) => x - y).map(v => fN(v)).join(', ') || '—')),
+      el('td', null, [...a.laizes].sort((x, y) => x - y).map(v => fN(v)).join(', ') || '—'),
       el('td', null, [...a.articles].sort().join(', ')),
+      el('td', { cls: 'num mp-var-meta' }, '—'),
       el('td', { cls: 'num' }, mpFmtStockRvgi(a),
         a.nonConv ? el('div', { cls: 'mp-var-meta' }, a.nonConv + ' non convertible(s)') : null))));
   });
-  if (!n) return el('div', { cls: 'mp-empty' }, 'Aucun stock RVGI pour ce filtre.');
+  if (!n) return el('div', { cls: 'mp-empty' }, 'Aucun stock pour ce filtre.');
   tbl.appendChild(tb);
   return el('div', { cls: 'mp-grain' }, tbl);
 }
@@ -10531,9 +10617,20 @@ function buildMpVariantesTable(m) {
   ));
   const lignesVues = lignesRvgi.filter(l => mpFiltreLigne(l, 'mpVarFiltre'));
   if (varGrain === 'laize') {
-    card.appendChild(buildMpVarParLaize(m, lignesVues, laizesMySifa));
+    card.appendChild(buildMpVarParLaize(m, lignesVues));
     return card;
   }
+  const totVar = mpTotalRvgi(lignesVues);
+  card.appendChild(el('div', { cls: 'mp-var-stock' },
+    'Stock MySifa' + (S.mpVarFiltreLaize ? ' (' + S.mpVarFiltreLaize + ' mm)' : '') + ' ',
+    el('strong', null, S.mpVarFiltreLaize
+      ? (mpMySifaLaize(m, S.mpVarFiltreLaize).metres != null
+        ? fN(mpMySifaLaize(m, S.mpVarFiltreLaize).metres) + ' m'
+        : mpStockLine(mpMySifaLaize(m, S.mpVarFiltreLaize).quantite, m))
+      : mpStockMySifa(m)),
+    ' · Stock RVGI des articles ', el('strong', null, totVar ? mpFmtStockRvgi(totVar) : '—'),
+    el('span', { cls: 'mp-var-meta', style: 'margin-left:8px' },
+      'MySifa ne sait pas de quel fournisseur vient une bobine : son stock se lit par laize (vue Fournisseur × laize).')));
   const stockArticle = (v) => mpTotalRvgi(lignesVues.filter(l =>
     (l.variante_id && l.variante_id === v.id) || (!l.variante_id && v.ref_rvgi && l.article === v.ref_rvgi)));
   // Un groupe par fournisseur : le principal d'abord, puis l'ordre alphabétique,
@@ -10655,33 +10752,17 @@ function buildMpVariantesTable(m) {
 
 // Une section par laize : le stock MySifa de la laize en tête, puis une ligne
 // par fournisseur avec le stock RVGI de ses articles sur cette laize.
-function buildMpVarParLaize(m, lignes, laizesMySifa) {
-  const laizes = new Set(laizesMySifa.filter(v => !S.mpVarFiltreLaize || String(v) === S.mpVarFiltreLaize));
-  lignes.forEach(l => laizes.add(Math.round(l.laize_mm || 0)));
-  if (!laizes.size) return el('div', { cls: 'mp-hint' }, 'Aucun stock sur cette sélection.');
+function buildMpVarParLaize(m, lignes) {
   const tbl = el('table', { cls: 'mp-var-table' });
-  tbl.appendChild(el('thead', null, el('tr', null,
-    el('th', null, 'Fournisseur'), el('th', null, 'Articles RVGI'), el('th', { cls: 'num' }, 'Stock RVGI'))));
+  tbl.appendChild(mpTheadLaize());
   const tb = el('tbody');
-  [...laizes].sort((a, b) => a - b).forEach(lz => {
-    const ici = lignes.filter(l => Math.round(l.laize_mm || 0) === lz);
-    const tot = mpTotalRvgi(ici);
-    tb.appendChild(el('tr', { cls: 'mp-var-grp' }, el('td', { attrs: { colspan: '3' } },
-      el('span', { cls: 'mp-var-grp-nom' }, lz ? fN(lz) + ' mm' : 'Sans laize'),
-      el('span', { cls: 'mp-grain-tot' },
-        lz ? 'MySifa ' : null, lz ? el('strong', null, mpStockMySifa(m, lz)) : null,
-        tot ? (lz ? ' · RVGI ' : 'RVGI ') : null, tot ? el('strong', null, mpFmtStockRvgi(tot)) : null))));
-    const groupes = mpGrouperFourn(ici, false);
-    if (!groupes.length) {
-      tb.appendChild(el('tr', { cls: 'mp-grain-vide' }, el('td', { attrs: { colspan: '3' } },
-        'Aucun stock RVGI sur cette laize.')));
-      return;
-    }
-    groupes.forEach(a => tb.appendChild(el('tr', null,
-      el('td', null, el('span', { style: 'font-weight:600;color:var(--text)' }, a.fournisseur)),
-      el('td', null, [...a.articles].sort().join(', ')),
-      el('td', { cls: 'num' }, mpFmtStockRvgi(a)))));
-  });
+  mpLignesLaize(m, lignes, S.mpVarFiltreLaize, S.mpVarFiltreFourn).forEach(tr => tb.appendChild(tr));
+  const tot = mpTotalRvgi(lignes);
+  tb.appendChild(el('tr', { cls: 'mp-var-grp' },
+    el('td', null, el('strong', null, 'Total')),
+    el('td', { cls: 'num' }, el('strong', null, mpStockMySifa(m))),
+    el('td', { cls: 'num' }, el('strong', null, tot ? mpFmtStockRvgi(tot) : '—')),
+    el('td', { cls: 'num' }, ''), el('td', null, '')));
   tbl.appendChild(tb);
   return el('div', { cls: 'mp-var-scroll' }, tbl);
 }
