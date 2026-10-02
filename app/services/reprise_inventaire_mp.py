@@ -319,15 +319,26 @@ def appliquer(conn: sqlite3.Connection, data: dict) -> dict:
         if deja:
             vid = int(deja["id"])
         else:
+            # Une variante qui ne passe pas ne doit pas arrêter la reprise :
+            # fournisseur absent de la base -> variante sans fournisseur ;
+            # article RVGI refusé -> variante sans article ; sinon, consignée.
+            if corps["fournisseur_id"] and not conn.execute(
+                    "SELECT 1 FROM fournisseurs_fsc WHERE id=?", (corps["fournisseur_id"],)).fetchone():
+                rapport["fournisseur_absent"].append((mid, corps["fournisseur_id"]))
+                corps["fournisseur_id"] = None
             try:
                 vid = mv.creer(conn, mid, corps, AUTEUR)
-            except ValueError as e:
+            except (ValueError, LookupError) as e:
                 if "ref_rvgi" not in corps:
                     rapport["erreurs"].append("Fiche %d : variante non créée (%s)." % (mid, e))
                     continue
                 rapport["rvgi_non_rattache"].append((mid, corps["ref_rvgi"], str(e)))
                 corps.pop("ref_rvgi"); corps.pop("rvgi_type_code")
-                vid = mv.creer(conn, mid, corps, AUTEUR)
+                try:
+                    vid = mv.creer(conn, mid, corps, AUTEUR)
+                except (ValueError, LookupError) as e2:
+                    rapport["erreurs"].append("Fiche %d : variante non créée (%s)." % (mid, e2))
+                    continue
             rapport["variantes_creees"].append(vid)
         if v["principal"]:
             principaux.append((mid, vid))
