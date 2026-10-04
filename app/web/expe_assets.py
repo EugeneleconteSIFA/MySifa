@@ -6789,7 +6789,7 @@ function renderExpeSuiviDeparts(){
     gap:'8px',
     lineHeight:1
   };
-  const topBar=h('div',{className:'card',style:{marginBottom:'12px'}},
+  const topBar=h('div',{className:'card',style:{marginBottom:'12px'},'data-bloc-entete':''},
     h('div',{className:'card-header',style:{display:'flex',justifyContent:'flex-start',alignItems:'center',gap:'12px',flexWrap:'wrap'}},
       h('h3',{className:'expe-mobile-hide-head'},'Départs programmés'),
       expeCanWrite()?h('div',{style:btnBarStyle},
@@ -6858,7 +6858,7 @@ function renderExpeSuiviDeparts(){
   ];
   const colgroup=h('colgroup',null,...departsCols.map(([c,w])=>h('col',{className:'expe-col-'+c,style:{width:w}})));
   const listCard=h('div',{className:'card'},
-    h('div',{className:'card-header'},h('h3',{className:'expe-mobile-hide-head'},'Départs programmés (en attente de validation)')),
+    h('div',{className:'card-header','data-bloc-entete':''},h('h3',{className:'expe-mobile-hide-head'},'Départs programmés (en attente de validation)')),
     h('div',{className:'expe-departs-tbl-wrap'},h('table',{className:'table-std expe-departs-table'},colgroup,h('thead',null,head),h('tbody',null,...body)))
   );
   return h('div',blocAttrs,topBar,listCard);

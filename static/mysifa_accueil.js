@@ -105,7 +105,7 @@
       ".mac-point{width:8px;height:8px;border-radius:50%;background:var(--danger,#f87171);display:none;flex-shrink:0}",
       ".mac-carte.alerte .mac-point{display:block}",
       ".mac-cadre{position:relative;border-top:1px solid var(--border,#1e293b)}",
-      ".mac-cadre iframe{display:block;width:100%;border:0;background:var(--bg,#0a0e17)}",
+      ".mac-cadre iframe{display:block;width:100%;border:0;background:transparent}",
       // Le voile ne sert qu'en mode Personnaliser : il rend la carte saisissable
       // pour le glisser-déposer. Hors édition, l'iframe défile librement.
       ".mac-cadre .mac-voile{position:absolute;inset:0;display:none}",

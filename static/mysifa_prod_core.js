@@ -11881,6 +11881,7 @@ function makeCollapsibleSection(titleNode, contentNode, storageKey, defaultOpen,
   return h('div',Object.assign({className:'prod-section-wrap',style:{marginBottom:'14px'}},bloc||{}),
     h('div',{
       className:'prod-section-header',
+      'data-bloc-entete':'',
       style:{display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',userSelect:'none',padding:'2px 0'},
       onClick:(ev)=>{
         const root = ev.currentTarget.parentNode;
@@ -11899,7 +11900,7 @@ function makeCollapsibleSection(titleNode, contentNode, storageKey, defaultOpen,
       },'\u25B6'),
       titleNode,
     ),
-    h('div',{className:'prod-section-content',style:{display: isOpen ? '' : 'none', marginTop:'6px'}}, contentNode),
+    h('div',{className:'prod-section-content','data-bloc-contenu':'',style:{display: isOpen ? '' : 'none', marginTop:'6px'}}, contentNode),
   );
 }
 
@@ -12004,7 +12005,7 @@ function renderProdKpis(){
       const dossierKeys = rowsAgg.map(r=>String(r.no_dossier));
       synthParts.push(h('div',{className:'card','data-bloc':'prod.ensemble.par-dossier',
           'data-bloc-valeur-lignes':String(rowsAgg.length)},
-        h('div',{className:'card-header'},h('h3',null,'Par numéro de dossier'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},rowsAgg.length+' dossiers')),
+        h('div',{className:'card-header','data-bloc-entete':''},h('h3',null,'Par numéro de dossier'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},rowsAgg.length+' dossiers')),
         h('div',{style:{overflowX:'auto'}},h('table',null,
           h('thead',null,h('tr',null,
             h('th',null,'Dossier'),
@@ -12038,7 +12039,7 @@ function renderProdKpis(){
         :keyLabel==='Jour'?'prod.ensemble.par-jour':null;
       return h('div',Object.assign({className:'card'},
           bloc?{'data-bloc':bloc,'data-bloc-valeur-lignes':String(rows.length)}:{}),
-        h('div',{className:'card-header'},h('h3',null,title),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},rows.length+' items')),
+        h('div',{className:'card-header','data-bloc-entete':''},h('h3',null,title),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},rows.length+' items')),
         h('div',{style:{overflowX:'auto'}},h('table',null,
           h('thead',null,h('tr',null,
             h('th',null,keyLabel),h('th',null,'Dossiers'),

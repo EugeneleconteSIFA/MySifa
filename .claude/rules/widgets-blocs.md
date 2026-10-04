@@ -38,6 +38,16 @@ un tableau déclare au minimum `lignes`. Une carte d'état déclare son état en
 texte lisible (`En production`), jamais le code technique. Un graphique, une
 frise ou une fiche n'ont pas de valeur clé : le bloc s'affiche en entier.
 
+**Nombre distinct du texte** : quand la valeur affichée n'est pas un nombre
+(« 1h 57min »), poser aussi `data-bloc-nombre-<cle>` (`117`) : c'est lui que
+l'alerte compare.
+
+**En-tête et contenu** : le widget porte déjà le nom du bloc. Marquer
+`data-bloc-entete` sur le titre du bloc et ses commandes (« Masquer »,
+« + Ajouter », filtres) : il est masqué dans le widget. Marquer
+`data-bloc-contenu` sur une partie que l'utilisateur peut replier dans la
+page : elle reste affichée dans le widget.
+
 **Objet suivi** (une machine, un dossier, un article) : `data-bloc-objet` avec
 l'id en base, `data-bloc-objet-libelle` avec le nom lisible, et `objet="…"`
 dans le registre. Jamais un nom de machine en dur.
