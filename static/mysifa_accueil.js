@@ -87,10 +87,11 @@
       "#mysifa-accueil{--mac-w:300px;font:13px 'Segoe UI',system-ui,sans-serif;color:var(--text,#f1f5f9);box-sizing:border-box}",
       "#mysifa-accueil *{box-sizing:border-box}",
       "@media (min-width:900px){",
-      // z-index 1, comme .portal-page : la page vient après la colonne dans le
-      // document, donc ses voiles (guide, modales) passent devant elle. Les deux
-      // ne se chevauchent pas — la page est décalée de la largeur de la colonne.
-      "  #mysifa-accueil{position:fixed;left:0;top:var(--mac-top,0px);bottom:96px;width:var(--mac-w);z-index:1;padding:16px 0 0 16px;display:flex;flex-direction:column}",
+      // z-index 110 : au-dessus de .portal-page (z-index 1), dont la boîte
+      // déborde sous la colonne. À 1, la page passait devant et captait tous
+      // les clics de la colonne (régression du 04/10/2026). Les voiles des
+      // visites guidées (9500, 20000) restent au-dessus.
+      "  #mysifa-accueil{position:fixed;left:0;top:var(--mac-top,0px);bottom:96px;width:var(--mac-w);z-index:110;padding:16px 0 0 16px;display:flex;flex-direction:column}",
       "  body.mysifa-accueil-on #root{margin-left:var(--mac-w)}",
       "  #mysifa-accueil.repliee{width:56px}",
       "  body.mysifa-accueil-on.mysifa-accueil-repliee #root{margin-left:56px}",
