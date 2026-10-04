@@ -3331,6 +3331,13 @@ async function loadDashboard() {
   } catch (e) {}
 }
 
+// Widget d'accueil (mysifa_blocs.js) : rafraîchir les données du tableau de
+// bord sans recharger toute la page MyStock chaque minute.
+window.mysifaBlocsRafraichir = function () {
+  if (S.tab === 'dashboard') return loadDashboard();
+  location.reload();
+};
+
 async function loadInventaireList() {
   // Inventaire v2 : liste des emplacements avec jours depuis dernier inventaire complet.
   S.invV2Detail = null;
@@ -13798,7 +13805,9 @@ function buildDashboardAlertes(d) {
     contentAlertes.style.display = hidden ? '' : 'none';
     toggleAlertes.textContent = hidden ? 'Masquer' : 'Afficher';
   };
-  return el('div', { cls: 'dash-section' },
+  // Bloc capturable en widget d'accueil (app/services/blocs_registre.py).
+  return el('div', { cls: 'dash-section', 'data-bloc': 'stock.dashboard.reappro',
+                     'data-bloc-valeur-lignes': String(alertesMp.length) },
     el('div', { cls: 'dash-section-title' },
       el('span', null, 'Stocks à réapprovisionner'),
       toggleAlertes,

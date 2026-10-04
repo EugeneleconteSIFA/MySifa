@@ -260,6 +260,7 @@ un fichier de leur périmètre. Dans les deux cas, n'ouvre que celles qui serven
 | `api-versioning.md` | `app/routers/**`, `main.py` |
 | `emails-transactionnels.md` | services mail, `weekly_report.py` |
 | `git-conflits.md` | scripts shell, `.githooks/**` |
+| `widgets-blocs.md` | `app/web/**`, `static/**.js` — blocs capturables en widget d'accueil |
 | `ecriture-fichiers.md` | chargée à chaque session (concerne l'acte d'écrire) |
 
 **Skills** — à invoquer explicitement :

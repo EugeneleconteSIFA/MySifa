@@ -4851,6 +4851,13 @@ function _expeOuvrirDepartDepuisUrl(){
   expeOpenDepartModal(row,'edit');
 }
 
+// Widget d'accueil (mysifa_blocs.js) : rafraîchir les départs programmés
+// sans recharger toute la page MyExpé chaque minute.
+window.mysifaBlocsRafraichir=function(){
+  if(S.expeTab==='suivi_departs'&&(S.expeDepartSubTab||'jour')==='jour')return loadExpeDepartJour();
+  location.reload();
+};
+
 async function loadExpeDepartJour(){
   if(S.app!=='expe')return;
   void loadExpePaletteTypes();
@@ -6792,7 +6799,9 @@ function renderExpeSuiviDeparts(){
   );
   // Sous 700 px, le tableau n'est pas construit du tout : un tableau caché
   // en display:none reste assemblé à chaque rendu, pour rien.
-  if(expeEnCartes()) return h('div',null,topBar,expeCartesDeparts('jour'));
+  // Bloc capturable en widget d'accueil (app/services/blocs_registre.py).
+  const blocAttrs={'data-bloc':'expe.departs.programmes','data-bloc-valeur-lignes':String((S.expeDepartList||[]).length)};
+  if(expeEnCartes()) return h('div',blocAttrs,topBar,expeCartesDeparts('jour'));
   const rows=S.expeDepartList||[];
   // Sept colonnes au lieu de quatorze. Le reste n'a pas disparu : il est dans
   // le dépliant. Quatorze colonnes dont la moitié est tronquée par une ellipse
@@ -6852,7 +6861,7 @@ function renderExpeSuiviDeparts(){
     h('div',{className:'card-header'},h('h3',{className:'expe-mobile-hide-head'},'Départs programmés (en attente de validation)')),
     h('div',{className:'expe-departs-tbl-wrap'},h('table',{className:'table-std expe-departs-table'},colgroup,h('thead',null,head),h('tbody',null,...body)))
   );
-  return h('div',null,topBar,listCard);
+  return h('div',blocAttrs,topBar,listCard);
 }
 
 // Libellés des claims — copie locale du référentiel de config.py. MyExpé ne

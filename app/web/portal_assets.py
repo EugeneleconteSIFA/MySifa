@@ -2166,9 +2166,17 @@ function renderPortal(){
               quiEl.appendChild(document.createTextNode(' · '+_hFmt(m.duree_heures)));
             }
           }
+          // Bloc capturable en widget d'accueil (app/services/blocs_registre.py) :
+          // une machine précise, suivie par son id.
+          const _etatLib={prod:'En production',planifie:'Planifié, sans saisie',libre:'Libre'};
           _atelierBody.appendChild(h('button',{
             type:'button',
             className:'portal-mach',
+            'data-bloc':'portail.atelier.machine',
+            'data-bloc-objet':String(m.id),
+            'data-bloc-objet-libelle':String(m.nom||''),
+            'data-bloc-valeur-etat':_etatLib[m.etat]||String(m.etat||''),
+            'data-bloc-valeur-avancement':(m.avancement_pct!==null&&m.avancement_pct!==undefined)?String(m.avancement_pct):'',
             onClick:()=>{window.location.href='/planning?machine='+encodeURIComponent(m.id);}
           },
             h('span',{className:'portal-mach-dot'+(m.etat&&m.etat!=='libre'?' portal-mach-dot--'+m.etat:'')}),

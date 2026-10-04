@@ -82,6 +82,7 @@ from app.routers.alerts import router as alerts_router
 from app.routers.perf import router as perf_router
 from app.routers.portail import router as portail_router
 from app.routers.postit import router as postit_router
+from app.routers.accueil_widgets import router as accueil_widgets_router
 from app.routers.ao import router as ao_router
 from app.routers.ao_portail import router_api as ao_portail_api_router
 from app.routers.ao_portail import router_html as ao_portail_html_router
@@ -469,6 +470,9 @@ async def inject_staging_bandeau(request: Request, call_next):
 # appel réseau tant que le raccourci n'a pas servi (le script résout le rôle
 # paresseusement). html2canvas n'est chargé qu'à la première capture.
 _TACHE_QUICK_TAG = b'<script src="/static/mysifa_tache_quick.js?v=2" defer></script>'
+# Même logique pour la capture de blocs en widget d'accueil (mysifa_blocs.js) :
+# un bloc capturable doit l'être sur toutes les pages, sans liste à tenir.
+_BLOCS_TAG = b'<script src="/static/mysifa_blocs.js?v=1" defer></script>'
 _BODY_CLOSE_RE = re.compile(rb"</body>", re.IGNORECASE)
 
 
@@ -492,7 +496,8 @@ async def inject_tache_quick(request: Request, call_next):
     # Les portails fournisseur/expédition sont publics : pas de session MySifa,
     # donc rien à y injecter.
     p = request.url.path
-    if p.startswith("/portail/") or _TACHE_QUICK_TAG in body:
+    _tags = b"".join(t for t in (_TACHE_QUICK_TAG, _BLOCS_TAG) if t not in body)
+    if p.startswith("/portail/") or not _tags:
         new_body = body
     else:
         # Insertion avant le DERNIER </body>, jamais le premier. Plusieurs pages
@@ -506,7 +511,7 @@ async def inject_tache_quick(request: Request, call_next):
         _closes = list(_BODY_CLOSE_RE.finditer(body))
         if _closes:
             _pos = _closes[-1].start()
-            new_body = body[:_pos] + _TACHE_QUICK_TAG + body[_pos:]
+            new_body = body[:_pos] + _tags + body[_pos:]
         else:
             new_body = body
     headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
@@ -594,6 +599,7 @@ app.include_router(alerts_router)
 app.include_router(perf_router)
 app.include_router(portail_router)
 app.include_router(postit_router)
+app.include_router(accueil_widgets_router)
 app.include_router(ao_router)
 app.include_router(ao_portail_html_router)
 app.include_router(ao_portail_api_router)
