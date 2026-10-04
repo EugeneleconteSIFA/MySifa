@@ -249,42 +249,6 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 }
 .toggle-switch.on .toggle-knob{transform:translateX(22px);background:var(--bg)}
 
-/* ── Mes dashboards ── */
-.dash-list{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
-.dash-row{
-  display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:10px;
-  border:1px solid var(--border);background:var(--bg);
-}
-.dash-row-info{flex:1;min-width:0}
-.dash-row-title{font-size:13px;font-weight:700;color:var(--text)}
-.dash-row-desc{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4}
-.dash-row-type{font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
-.dash-row-actions{display:flex;gap:6px;flex-shrink:0}
-.dash-add-panel{
-  margin-top:4px;padding:14px 16px;border-radius:12px;border:1px dashed var(--border);
-  background:var(--bg);
-}
-.dash-add-panel h3{margin:0 0 10px;font-size:12px;font-weight:700;text-transform:uppercase;
-  letter-spacing:.5px;color:var(--muted)}
-.dash-pick{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
-.dash-pick select{
-  flex:1;min-width:200px;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);
-  background:var(--card);color:var(--text);font-size:13px;font-family:inherit;
-}
-.dash-pick .btn-add{
-  padding:10px 16px;border-radius:10px;border:none;background:var(--accent);color:#0a0e17;
-  font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;
-}
-.dash-pick .btn-add:hover{filter:brightness(1.06)}
-.dash-pick .btn-add:disabled{opacity:.5;cursor:not-allowed}
-.btn-dash-ghost{
-  padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;
-  color:var(--text2);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;
-}
-.btn-dash-ghost:hover{border-color:var(--accent);color:var(--accent)}
-.btn-dash-ghost.danger:hover{border-color:var(--danger);color:var(--danger)}
-.dash-empty{font-size:13px;color:var(--muted);line-height:1.5;padding:8px 0}
-
 /* ── Humeur ── */
 .humeur-row{display:flex;align-items:center;justify-content:space-between;gap:16px;
   padding:14px 16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;margin-bottom:14px}
@@ -340,10 +304,6 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
       Notifications
     </button>
-    <button type="button" class="nav-btn" id="nav-dashboards" onclick="showTab('dashboards')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-      Mes dashboards
-    </button>
 
     <!-- Pied commun (static/mysifa_sidebar.js), rempli au chargement. -->
     <div class="sidebar-bottom msb-footer" data-msb-footer data-msb-app="Mon profil" data-msb-version="__V_LABEL__"></div>
@@ -379,7 +339,6 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
       <div class="pane-tab" id="pane-prefs"></div>
       <div class="pane-tab" id="pane-calendrier"></div>
       <div class="pane-tab" id="pane-notifs"></div>
-      <div class="pane-tab" id="pane-dashboards"></div>
 
     </div>
   </main>
@@ -493,7 +452,7 @@ function refreshAvatarPreview(){
 }
 
 // ── Onglets ───────────────────────────────────────────────────────
-var PROFIL_VALID_TABS=['info','prefs','calendrier','notifs','dashboards'];
+var PROFIL_VALID_TABS=['info','prefs','calendrier','notifs'];
 function _readProfilTab(){
   try{var h=(location.hash||'').replace(/^#/,'').trim();
     if(PROFIL_VALID_TABS.indexOf(h)!==-1)return h;}catch(e){}
@@ -504,7 +463,7 @@ function _readProfilTab(){
 function showTab(tab, opts){
   var silent=!!(opts&&opts.silent);
   CURRENT_TAB=tab;
-  ['info','prefs','calendrier','notifs','dashboards'].forEach(id=>{
+  ['info','prefs','calendrier','notifs'].forEach(id=>{
     const pane=document.getElementById('pane-'+id);
     const nav=document.getElementById('nav-'+id);
     if(pane)pane.classList.toggle('active',id===tab);
@@ -514,8 +473,7 @@ function showTab(tab, opts){
     info:'Informations personnelles',
     prefs:'Thème et apparence',
     calendrier:'Couleurs MyCalendrier',
-    notifs:'Notifications push',
-    dashboards:'Mes dashboards'
+    notifs:'Notifications push'
   };
   const sub=document.getElementById('mobile-sub');
   if(sub)sub.textContent=subLabels[tab]||'';
@@ -524,102 +482,13 @@ function showTab(tab, opts){
     if(tab==='info')pageSub.textContent='Vos informations personnelles et mot de passe.';
     else if(tab==='calendrier')pageSub.textContent='Couleurs des calendriers affichés dans MyCalendrier.';
     else if(tab==='notifs')pageSub.textContent='Notifications de messagerie sur cet appareil.';
-    else if(tab==='dashboards')pageSub.textContent='Tableaux de bord affichés sur votre portail d\'accueil.';
     else pageSub.textContent='Personnalisez l\'apparence de MySifa.';
   }
   if(tab==='prefs')renderPrefs();
   if(tab==='calendrier')renderCalendrier();
   if(tab==='notifs')renderNotifs();
-  if(tab==='dashboards')loadDashboardsTab();
   closeSidebar();
   if(!silent){try{var target='#'+tab;if(location.hash!==target)history.replaceState(null,'',target);}catch(e){}}
-}
-
-// ── Onglet Mes dashboards ─────────────────────────────────────────
-async function loadDashboardsTab(){
-  const pane=document.getElementById('pane-dashboards');
-  if(!pane)return;
-  pane.innerHTML='<div class="loading">Chargement…</div>';
-  try{
-    const [mine,available]=await Promise.all([
-      api('/api/dashboards/me'),
-      api('/api/dashboards/available')
-    ]);
-    DASH_MINE=Array.isArray(mine)?mine:[];
-    DASH_AVAILABLE=Array.isArray(available)?available:[];
-    renderDashboardsTab();
-  }catch(e){
-    pane.innerHTML='<div class="card"><p style="color:var(--danger);font-size:13px">'+esc(e.message||'Erreur chargement')+'</p></div>';
-  }
-}
-
-function renderDashboardsTab(){
-  const pane=document.getElementById('pane-dashboards');
-  if(!pane)return;
-  const enabledRows=DASH_MINE.map(d=>{
-    const typeLabel=DASH_WIDGET_LABELS[d.widget_type]||d.widget_type||'';
-    return '<div class="dash-row" data-dash-id="'+esc(String(d.id))+'">'+
-      '<div class="dash-row-info">'+
-      '<div class="dash-row-title">'+esc(d.titre||'')+'</div>'+
-      (d.description?'<div class="dash-row-desc">'+esc(d.description)+'</div>':'')+
-      (typeLabel?'<div class="dash-row-type">'+esc(typeLabel)+'</div>':'')+
-      '</div>'+
-      '<div class="dash-row-actions">'+
-      '<button type="button" class="btn-dash-ghost danger" data-dash-rm="'+esc(String(d.id))+'">Retirer</button>'+
-      '</div></div>';
-  }).join('');
-
-  const pickOpts=DASH_AVAILABLE.length
-    ? DASH_AVAILABLE.map(d=>'<option value="'+esc(String(d.id))+'">'+esc(d.titre||'')+'</option>').join('')
-    : '<option value="">— Aucun tableau disponible —</option>';
-
-  pane.innerHTML=
-    '<div class="card">'+
-    '<h2>Tableaux de bord sur le portail</h2>'+
-    '<p class="subtitle" style="margin:-6px 0 16px">Choisissez les indicateurs affichés sur votre page d\'accueil MySifa (post-its flottants).</p>'+
-    (enabledRows
-      ? '<div class="dash-list">'+enabledRows+'</div>'
-      : '<p class="dash-empty">Aucun tableau de bord actif. Ajoutez-en un ci-dessous.</p>')+
-    '<div class="dash-add-panel">'+
-    '<h3>Ajouter un tableau de bord</h3>'+
-    '<div class="dash-pick">'+
-    '<select id="dash-pick-select"'+(!DASH_AVAILABLE.length?' disabled':'')+'>'+pickOpts+'</select>'+
-    '<button type="button" class="btn-add" id="dash-pick-add"'+(DASH_AVAILABLE.length?'':' disabled')+'>Ajouter le tableau de bord</button>'+
-    '</div></div></div>';
-
-  const addBtn=document.getElementById('dash-pick-add');
-  if(addBtn)addBtn.onclick=addDashboardFromPick;
-  pane.querySelectorAll('[data-dash-rm]').forEach(btn=>{
-    btn.onclick=()=>removeDashboard(btn.getAttribute('data-dash-rm'));
-  });
-}
-
-async function addDashboardFromPick(){
-  const sel=document.getElementById('dash-pick-select');
-  const id=sel&&sel.value?parseInt(sel.value,10):0;
-  if(!id){toast('Sélectionnez un tableau de bord',false);return;}
-  const addBtn=document.getElementById('dash-pick-add');
-  if(addBtn)addBtn.disabled=true;
-  try{
-    await api('/api/dashboards/me/'+id+'/add',{method:'POST'});
-    toast('Tableau de bord ajouté.',true);
-    await loadDashboardsTab();
-  }catch(e){
-    toast(e.message||'Ajout impossible',false);
-    if(addBtn)addBtn.disabled=false;
-  }
-}
-
-async function removeDashboard(id){
-  const num=parseInt(id,10);
-  if(!num)return;
-  try{
-    await api('/api/dashboards/me/'+num,{method:'DELETE'});
-    toast('Tableau de bord retiré.',true);
-    await loadDashboardsTab();
-  }catch(e){
-    toast(e.message||'Suppression impossible',false);
-  }
 }
 
 // ── Complétion profil ─────────────────────────────────────────────

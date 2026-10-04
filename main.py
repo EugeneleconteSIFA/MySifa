@@ -91,7 +91,6 @@ from app.routers.expe_portail import router_html as expe_portail_html_router
 from app.web.ao_page import router as ao_page_router
 from app.routers.pricing import router as pricing_router
 from app.web.pricing_page import router as pricing_page_router
-from app.routers.dashboards import router as dashboards_router
 from app.routers.api_bridge import router as bridge_router
 from app.routers.bat import router as bat_api_router
 from app.web.bat_page import router as bat_page_router
@@ -608,7 +607,6 @@ app.include_router(expe_portail_api_router)
 app.include_router(ao_page_router)
 app.include_router(pricing_router)
 app.include_router(pricing_page_router)
-app.include_router(dashboards_router)
 app.include_router(bridge_router)
 app.include_router(bat_api_router)
 app.include_router(bat_page_router)

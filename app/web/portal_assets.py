@@ -1868,8 +1868,6 @@ function renderPortal(){
     if(favTiles.length)attachPortalReorder(favWrap);
     portalAttacherVolets();
   },0);
-  // Initialiser les dashboards flottants (post-its)
-  setTimeout(() => { if (typeof dbInit === 'function') dbInit(); }, 100);
 
   function logPortalGoogleSearch(query){
     if(!S.user||!query) return;
