@@ -82,6 +82,17 @@
     return out;
   }
 
+  /* Nombre à comparer pour une alerte, quand le texte affiché n'en est pas un
+     (« 1h 57min » → data-bloc-nombre-calage="117"). */
+  function lireNombres(el) {
+    var out = {};
+    for (var i = 0; i < el.attributes.length; i++) {
+      var a = el.attributes[i];
+      if (a.name.indexOf("data-bloc-nombre-") === 0) out[a.name.slice(17)] = a.value;
+    }
+    return out;
+  }
+
   /* Contexte embarqué : posé par l'accueil dans le nom de l'iframe (il survit
      aux rechargements et aux réécritures d'URL), ou en paramètre d'URL pour
      tester une page à la main. */
@@ -107,7 +118,8 @@
        sans recharger le document). Sans crochet, le widget recharge la page.
        Équivalent posable avant le chargement : window.mysifaBlocsRafraichir. */
     surRafraichir: function (fn) { crochetRafraichir = typeof fn === "function" ? fn : null; },
-    lireValeurs: lireValeurs
+    lireValeurs: lireValeurs,
+    lireNombres: lireNombres
   };
 
   if (EMBARQUE && EMBARQUE.nom) { modeEmbarque(EMBARQUE); return; }
@@ -175,7 +187,13 @@
     function surveillerAbsence() {
       clearTimeout(minuteurAbsence);
       minuteurAbsence = setTimeout(function () {
-        if (!document.querySelector(selecteurBloc(ctx.nom, ctx.objet))) envoyer("introuvable", {});
+        if (document.querySelector(selecteurBloc(ctx.nom, ctx.objet))) return;
+        // Les autres objets du même bloc sont là, pas celui-ci : il a disparu
+        // (dossier clôturé…). Sinon c'est le bloc entier qui manque — page qui
+        // change de mise en page selon la taille, onglet replié : on ne
+        // supprime rien.
+        var famille = ctx.objet && document.querySelector(selecteurBloc(ctx.nom, null));
+        envoyer(famille ? "introuvable" : "absent", {});
       }, 20000);
     }
 
@@ -194,6 +212,7 @@
       masquerHorsChemin(cible);
       var etat = {
         valeurs: lireValeurs(cible),
+        nombres: lireNombres(cible),
         objetLibelle: cible.getAttribute("data-bloc-objet-libelle") || null,
         hauteur: Math.ceil(cible.getBoundingClientRect().height)
       };
