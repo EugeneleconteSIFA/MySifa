@@ -8,9 +8,10 @@ paths:
 
 Décision du 03/10/2026 : l'accueil a une colonne « Mes widgets », et
 l'utilisateur y épingle **n'importe quel bloc** qu'il voit dans une appli
-(compteur, liste, tableau, carte machine…). Le widget charge la vraie page
-dans une iframe, n'en garde que le bloc, et le rafraîchit chaque minute. Rien
-n'est recalculé : droits, filtres et chiffres sont ceux de la page.
+(compteur, liste, tableau, carte machine…). Depuis le 04/10/2026, un widget
+n'affiche que des **valeurs** (1 à 4) : la page est chargée hors écran, seules
+ses valeurs clés remontent. Rien n'est recalculé : droits, filtres et chiffres
+sont ceux de la page.
 
 Pièces : `app/services/blocs_registre.py` (registre),
 `app/routers/accueil_widgets.py` (API), `static/mysifa_blocs.js` (mode
@@ -35,8 +36,9 @@ Le nom suit `appli.onglet.bloc`, en minuscules, et **ne change jamais**.
 **Valeurs clés** — un attribut par valeur sur l'élément racine, recalculé à
 chaque rendu : `'data-bloc-valeur-lignes': String(rows.length)`. Une liste ou
 un tableau déclare au minimum `lignes`. Une carte d'état déclare son état en
-texte lisible (`En production`), jamais le code technique. Un graphique, une
-frise ou une fiche n'ont pas de valeur clé : le bloc s'affiche en entier.
+texte lisible (`En production`), jamais le code technique. **Un bloc sans
+valeur clé n'est pas capturable** (le registre le refuse) : pour un graphique
+ou une frise, déclarer au moins un chiffre qui le résume.
 
 **Nombre distinct du texte** : quand la valeur affichée n'est pas un nombre
 (« 1h 57min »), poser aussi `data-bloc-nombre-<cle>` (`117`) : c'est lui que

@@ -553,7 +553,7 @@
       var etat = {
         coches: bloc.valeurs.length ? [bloc.valeurs[0].cle] : [],
         alertes: {},
-        affichage: "bloc",
+        affichage: "valeurs",
         hauteur: "m"
       };
 
@@ -587,15 +587,7 @@
             }
             h += "</div>";
           });
-          h += '<div class="cap-lbl">Affichage</div><div class="cap-choix">' +
-            '<button type="button" data-aff="bloc" class="' + (etat.affichage === "bloc" ? "on" : "") + '">Bloc complet</button>' +
-            '<button type="button" data-aff="valeurs" class="' + (etat.affichage === "valeurs" ? "on" : "") + '">Valeurs seules</button></div>';
         }
-        h += '<div class="cap-lbl">Taille</div><div class="cap-choix">' +
-          ["s", "m", "l"].map(function (k) {
-            return '<button type="button" data-h="' + k + '" class="' + (etat.hauteur === k ? "on" : "") + '">' +
-              ({ s: "Petit", m: "Moyen", l: "Grand" })[k] + "</button>";
-          }).join("") + "</div>";
         var nomActuel = panneau.querySelector("input.cap-nom");
         // Un objet suivi se nomme par lui-même (« Cohésio 2 »), sinon le bloc.
         var nomVal = nomActuel ? nomActuel.value : (objetLib || bloc.libelle);
@@ -638,8 +630,6 @@
       panneau.addEventListener("click", function (e) {
         var b = e.target.closest("button");
         if (!b) return;
-        if (b.hasAttribute("data-aff")) { etat.affichage = b.getAttribute("data-aff"); dessiner(); return; }
-        if (b.hasAttribute("data-h")) { etat.hauteur = b.getAttribute("data-h"); dessiner(); return; }
         if (b.getAttribute("data-act") === "annuler") { fermerPanneau(); return; }
         if (b.getAttribute("data-act") === "ok") envoyer(b);
       });
@@ -647,7 +637,7 @@
       function envoyer(b) {
         var nomW = (panneau.querySelector("input.cap-nom").value || "").trim();
         if (!nomW) { erreur("Nom du widget obligatoire."); return; }
-        if (etat.affichage === "valeurs" && !etat.coches.length) { erreur("Cochez au moins une valeur pour un affichage en valeurs."); return; }
+        if (!etat.coches.length) { erreur("Cochez au moins une valeur."); return; }
         var valeurs = [];
         for (var i = 0; i < etat.coches.length; i++) {
           var cle = etat.coches[i];
