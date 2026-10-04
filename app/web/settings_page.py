@@ -953,9 +953,9 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         </svg>
         Log
       </button>
-      <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="dashboards">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-        Tableaux de bord
+      <button type="button" class="nav-btn" data-req-section="blocs" data-tab="blocs">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>
+        Blocs capturables
       </button>
       <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="fsc">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1177,9 +1177,9 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
               <span class="mi-body"><span class="mi-lbl">Log d'activité</span><span class="mi-desc">Historique complet des actions superadmin.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
-            <button type="button" class="menu-item" data-goto="dashboards">
-              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>
-              <span class="mi-body"><span class="mi-lbl">Tableaux de bord</span><span class="mi-desc">Widgets consolidés par périmètre.</span></span>
+            <button type="button" class="menu-item" data-goto="blocs" data-req-section="blocs">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Blocs capturables</span><span class="mi-desc">Ce que les widgets d'accueil peuvent épingler, et leur usage.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
             <button type="button" class="menu-item" data-goto="fsc">
@@ -2545,8 +2545,8 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
       </div>
     </section>
 
-    <section id="panel-dashboards" class="hidden">
-      <div id="settings-tab-content"></div>
+    <section id="panel-blocs" class="hidden" data-req-section="blocs">
+      <div id="blocs-admin"></div>
     </section>
 
     <section id="panel-promote" class="hidden">
@@ -3522,7 +3522,7 @@ function syncSettingsPageHead(tabId) {
     notifications: { title: 'Notifications',  sub: "Pastilles rouges par service, sur les applis de l'écran d'accueil" },
     audit:        { title: 'Audit',           sub: 'Log d\'activité' },
     fsc:          { title: 'Registre FSC',    sub: '' },
-    dashboards:   { title: 'Tableaux de bord', sub: 'Widgets consolidés' },
+    blocs:        { title: 'Blocs capturables', sub: "Widgets d'accueil" },
     api:          { title: 'Clés API',        sub: 'Tokens d\'intégration' },
     printers:     { title: 'Imprimantes',     sub: 'Configuration et templates' },
     promote:      { title: 'Déploiement',     sub: 'Promouvoir v1 → v2' },
@@ -3678,7 +3678,7 @@ document.addEventListener('keydown', function (ev) {
   }
 });
 
-const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','encres','emplacements','laizes','mandrins','importations','bridge','transport','typesarticle','updates','notifications','audit','fsc','dashboards','api','promote','printers','formations','diagnostic'];
+const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','encres','emplacements','laizes','mandrins','importations','bridge','transport','typesarticle','updates','notifications','audit','fsc','blocs','api','promote','printers','formations','diagnostic'];
 
 function setTab(id, opts) {
   if (!VALID_TABS.includes(id)) id = 'menu';
@@ -3686,6 +3686,7 @@ function setTab(id, opts) {
   // est déjà masqué par data-req-section, mais sans ce garde il resterait sur
   // un écran vide sans comprendre pourquoi.
   if (id === 'diagnostic' && !((window.__SETTINGS_VISIBILITY__ || {}).diagnostic)) id = 'menu';
+  if (id === 'blocs' && !((window.__SETTINGS_VISIBILITY__ || {}).blocs)) id = 'menu';
   const silent = !!(opts && opts.silent);
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
@@ -3700,7 +3701,7 @@ function setTab(id, opts) {
       }
     } catch(e){}
   }
-  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'encres', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'transport', 'typesarticle', 'updates', 'notifications', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations', 'diagnostic'].forEach(p => {
+  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'encres', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'transport', 'typesarticle', 'updates', 'notifications', 'audit', 'fsc', 'blocs', 'api', 'promote', 'printers', 'formations', 'diagnostic'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -3727,7 +3728,7 @@ function setTab(id, opts) {
   if (id === 'fsc') initFscPanel();
   if (id === 'printers') initPrintersPanel();
   if (id === 'formations') loadFormationsAdmin();
-  if (id === 'dashboards') renderSettingsDashboards();
+  if (id === 'blocs') renderSettingsBlocs();
   if (id === 'api') loadApiKeys();
   if (id === 'promote') loadPromoteStatus();
   if (id === 'diagnostic') initDiagnosticPanel();
@@ -8255,6 +8256,7 @@ const _FMT_GUIDES = {
   'erp-overview': 'ERP — Lecture de RVGI',
   'expe-devis': 'MyExpé — Devis transporteurs',
   'mystock-flux-matieres': 'MyStock — Déstockage et écarts RVGI',
+  'accueil-widgets': 'Accueil — Mes widgets',
 };
 
 function _fmtGuideLabel(key){ return _FMT_GUIDES[key] || key; }
@@ -10691,259 +10693,107 @@ function prWizToggleAgentMode() {
   document.getElementById('pr-wiz-next-btn').style.display = 'none';
 }
 
-async function renderSettingsDashboards() {
-  const root = document.getElementById('settings-tab-content');
+// ── Blocs capturables (widgets d'accueil) ─────────────────────────────
+// Superadmin uniquement. Le registre des blocs vit dans le code
+// (app/services/blocs_registre.py) : on ne crée ni ne renomme rien ici. On voit
+// ce qui existe, ce qui sert (nombre de widgets), ce qui est nouveau, et on
+// peut couper la capture d'un bloc — ses widgets sont alors masqués, pas
+// supprimés.
+async function renderSettingsBlocs() {
+  const root = document.getElementById('blocs-admin');
   if (!root) return;
   root.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:13px">Chargement…</div>';
-
-  let dashboards = [];
+  let blocs = [];
   try {
-    const r = await fetch('/api/dashboards/admin', { credentials: 'include' });
-    if (r.ok) dashboards = await r.json();
-  } catch(e) {}
+    const r = await fetch('/api/accueil/blocs/admin', { credentials: 'include' });
+    if (!r.ok) throw new Error('Chargement impossible (' + r.status + ').');
+    blocs = (await r.json()).blocs || [];
+  } catch (e) {
+    root.innerHTML = '<div style="padding:20px;color:var(--danger);font-size:13px">' + escHtml(e.message) + '</div>';
+    return;
+  }
 
-  const WIDGET_TYPES = [
-    { value: 'stock_alerts',     label: 'Alertes stock matières premières' },
-    { value: 'planning_summary', label: 'Résumé planning production' },
-    { value: 'expe_today',       label: 'Départs expédition du jour' },
-  ];
-  const CATEGORIES_MP = ['mandrin','palette','adhesif','carton'];
+  async function regler(nom, capturable) {
+    const r = await fetch('/api/accueil/blocs/admin/' + encodeURIComponent(nom), {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ capturable: capturable })
+    });
+    if (!r.ok) { toast('Réglage impossible.', true); return false; }
+    return true;
+  }
 
-  function renderList() {
-    const listEl = document.createElement('div');
-    listEl.style.cssText = 'display:flex;flex-direction:column;gap:10px;margin-top:16px';
+  function dessiner() {
+    const nouveaux = blocs.filter(b => b.nouveau).length;
+    const actifs = blocs.filter(b => b.capturable).length;
+    const widgets = blocs.reduce((t, b) => t + (b.nb_widgets || 0), 0);
+    // Noms d'applis affichés : ceux des tuiles du portail.
+    const NOMS_APPLIS = { portail: 'Accueil', prod: 'MyProd', planning: 'Planning machine', stock: 'MyStock',
+      expe: 'MyExpé', qualite: 'MyQualité', bat: 'MyBAT', ao: 'MyAO', taches: 'Tâches', messages: 'Messagerie',
+      calendrier: 'Calendrier', planning_rh: 'Planning RH', rh_coffre: 'Coffre RH', compta: 'MyCompta',
+      maintenance: 'Maintenance' };
+    const nomAppli = a => NOMS_APPLIS[a] || a;
+    const parAppli = {};
+    blocs.forEach(b => { (parAppli[b.appli] = parAppli[b.appli] || []).push(b); });
+    const applis = Object.keys(parAppli).sort((x, y) => nomAppli(x).localeCompare(nomAppli(y), 'fr'));
 
-    if (!dashboards.length) {
-      listEl.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:24px 0">Aucun tableau de bord créé.</div>';
-    } else {
-      dashboards.forEach(d => {
-        const card = document.createElement('div');
-        card.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px';
+    let html = '<div style="max-width:900px;margin:0 auto;padding:0 0 40px">' +
+      '<p style="font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.5">' +
+      'Les blocs sont déclarés dans le code. Ici, on suit leur usage et on peut couper la capture d\'un bloc : ' +
+      'ses widgets existants sont masqués, et réapparaissent si on le réactive.</p>' +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">' +
+      [['Blocs', blocs.length], ['Capturables', actifs], ['Widgets créés', widgets], ['Nouveaux', nouveaux]].map(k =>
+        '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;min-width:120px">' +
+        '<div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">' + escHtml(k[0]) + '</div>' +
+        '<div style="font-size:20px;font-weight:700;color:var(--text)">' + k[1] + '</div></div>').join('') +
+      (nouveaux ? '<button type="button" class="btn" id="blocs-vus" style="align-self:center;background:var(--card);border:1px solid var(--border);color:var(--text)">Marquer les nouveaux comme vus</button>' : '') +
+      '</div>';
 
-        const typeInfo = WIDGET_TYPES.find(t => t.value === d.widget_type) || { label: d.widget_type };
-        const statusBadge = d.actif
-          ? '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:rgba(52,211,153,.15);color:var(--success)">Actif</span>'
-          : '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:var(--accent-bg);color:var(--muted)">Inactif</span>';
+    applis.forEach(app => {
+      html += '<div class="card" style="margin-bottom:14px;padding:0;overflow:hidden">' +
+        '<div style="padding:10px 14px;font-weight:700;font-size:13px;border-bottom:1px solid var(--border)">' + escHtml(nomAppli(app)) + '</div>' +
+        '<table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed">' +
+        '<colgroup><col style="width:38%"><col style="width:38%"><col style="width:10%"><col style="width:14%"></colgroup>' +
+        '<thead><tr style="color:var(--muted);font-size:12px;text-align:left">' +
+        '<th style="padding:8px 14px">Bloc</th><th style="padding:8px">Valeurs clés</th>' +
+        '<th style="padding:8px;text-align:right">Widgets</th><th style="padding:8px 14px;text-align:right">Capture</th></tr></thead><tbody>' +
+        parAppli[app].map(b =>
+          '<tr style="border-top:1px solid var(--border)">' +
+          '<td style="padding:8px 14px"><div style="font-weight:600">' + escHtml(b.libelle) +
+            (b.nouveau ? ' <span style="font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-bg);border-radius:6px;padding:1px 6px;margin-left:4px">Nouveau</span>' : '') +
+            '</div><div style="font-family:ui-monospace,monospace;font-size:11px;color:var(--muted)">' + escHtml(b.nom) + '</div></td>' +
+          '<td style="padding:8px;color:var(--text2)">' + (b.valeurs || []).map(v => escHtml(v.libelle)).join(' · ') + '</td>' +
+          '<td style="padding:8px;text-align:right;font-variant-numeric:tabular-nums">' + (b.nb_widgets || 0) + '</td>' +
+          '<td style="padding:8px 14px;text-align:right"><label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">' +
+            '<input type="checkbox" data-bloc-capturable="' + escAttr(b.nom) + '"' + (b.capturable ? ' checked' : '') + '>' +
+            '<span style="font-size:12px;color:var(--muted)">' + (b.capturable ? 'Active' : 'Coupée') + '</span></label></td>' +
+          '</tr>').join('') +
+        '</tbody></table></div>';
+    });
+    html += '</div>';
+    root.innerHTML = html;
 
-        card.innerHTML = `
-          <div style="flex:1;min-width:0">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              <span style="font-size:14px;font-weight:700;color:var(--text)">${escHtml(d.titre)}</span>
-              ${statusBadge}
-            </div>
-            <div style="font-size:12px;color:var(--muted);margin-top:4px">${escHtml(typeInfo.label)}</div>
-            ${d.description ? `<div style="font-size:12px;color:var(--text2);margin-top:2px">${escHtml(d.description)}</div>` : ''}
-          </div>
-          <div style="display:flex;gap:8px;flex-shrink:0">
-            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px" data-edit="${d.id}">Modifier</button>
-            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;color:var(--danger)" data-del="${d.id}">Supprimer</button>
-          </div>`;
-
-        card.querySelector('[data-edit]').addEventListener('click', () => openDashboardModal(d));
-        card.querySelector('[data-del]').addEventListener('click', () => deleteDashboard(d.id, d.titre));
-        listEl.appendChild(card);
+    root.querySelectorAll('input[data-bloc-capturable]').forEach(inp => {
+      inp.addEventListener('change', async () => {
+        const nom = inp.getAttribute('data-bloc-capturable');
+        inp.disabled = true;
+        const ok = await regler(nom, inp.checked);
+        const b = blocs.find(x => x.nom === nom);
+        if (ok && b) { b.capturable = inp.checked; b.nouveau = false; toast(inp.checked ? 'Capture activée.' : 'Capture coupée.'); }
+        else inp.checked = !inp.checked;
+        dessiner();
       });
-    }
-    return listEl;
-  }
-
-  async function deleteDashboard(id, titre) {
-    if (!confirm(`Supprimer le tableau de bord "${titre}" ? Il sera retiré du portail de tous les utilisateurs.`)) return;
-    try {
-      const r = await fetch(`/api/dashboards/admin/${id}`, { method: 'DELETE', credentials: 'include' });
-      if (r.ok) {
-        dashboards = dashboards.filter(d => d.id !== id);
-        rebuildPage();
-        toast('Tableau de bord supprimé.', false);
-      } else {
-        toast('Erreur lors de la suppression.', true);
-      }
-    } catch(e) { toast('Erreur réseau.', true); }
-  }
-
-  function openDashboardModal(existing) {
-    const isEdit = !!existing;
-    const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center';
-    overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
-
-    const modal = document.createElement('div');
-    modal.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:16px;width:420px;max-width:92vw;box-shadow:0 16px 48px rgba(0,0,0,.4);display:flex;flex-direction:column;overflow:hidden';
-
-    const head = document.createElement('div');
-    head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)';
-    head.innerHTML = `<span style="font-size:15px;font-weight:700;color:var(--text)">${isEdit ? 'Modifier' : 'Nouveau tableau de bord'}</span>`;
-    const btnX = document.createElement('button');
-    btnX.className = 'db-panel-btn';
-    btnX.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-    btnX.addEventListener('click', () => overlay.remove());
-    head.appendChild(btnX);
-
-    const body = document.createElement('div');
-    body.style.cssText = 'padding:20px;display:flex;flex-direction:column;gap:14px';
-
-    // Champ titre
-    const fTitre = document.createElement('div');
-    fTitre.innerHTML = `<label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Titre</label>
-      <input id="db-f-titre" type="text" placeholder="Ex: Stocks à réapprovisionner" value="${escAttr(existing?.titre||'')}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px">`;
-
-    // Champ description
-    const fDesc = document.createElement('div');
-    fDesc.innerHTML = `<label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Description <span style="color:var(--muted);font-weight:400">(optionnel)</span></label>
-      <input id="db-f-desc" type="text" placeholder="Ex: Mandrins, cartons, palettes et adhésif" value="${escAttr(existing?.description||'')}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px">`;
-
-    // Champ type (désactivé en édition)
-    const fType = document.createElement('div');
-    const typeOpts = WIDGET_TYPES.map(t =>
-      `<option value="${t.value}" ${(existing?.widget_type===t.value||(!existing&&t.value==='stock_alerts'))?'selected':''}>${t.label}</option>` 
-    ).join('');
-    fType.innerHTML = `<label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Type de widget</label>
-      <select id="db-f-type" ${isEdit?'disabled':''} style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px">${typeOpts}</select>
-      ${isEdit?'<div style="font-size:11px;color:var(--muted);margin-top:4px">Le type ne peut pas être modifié après création.</div>':''}`;
-
-    // Config dynamique selon le type (stock_alerts → catégories)
-    const fConfig = document.createElement('div');
-    fConfig.id = 'db-f-config';
-
-    function renderConfigFields(type, currentConfig) {
-      fConfig.innerHTML = '';
-      if (type === 'stock_alerts') {
-        const cats = currentConfig?.categories || [];
-        fConfig.innerHTML = `<div>
-          <label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:8px">Catégories affichées</label>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            ${CATEGORIES_MP.map(c => `
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg)">
-                <input type="checkbox" value="${c}" ${cats.includes(c)||!cats.length?'checked':''} style="accent-color:var(--accent)">
-                ${c.charAt(0).toUpperCase()+c.slice(1)}
-              </label>`).join('')}
-          </div>
-          <div style="font-size:11px;color:var(--muted);margin-top:6px">Si aucune sélectionnée, toutes les catégories sont affichées.</div>
-        </div>`;
-      }
-      // Pour planning_summary et expe_today : pas de config supplémentaire pour l'instant
-    }
-
-    const initType = existing?.widget_type || 'stock_alerts';
-    renderConfigFields(initType, existing?.config_json || {});
-
-    fType.querySelector('select')?.addEventListener('change', (e) => {
-      renderConfigFields(e.target.value, {});
     });
-
-    // Champ actif
-    const fActif = document.createElement('div');
-    fActif.innerHTML = `<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text2)">
-      <input id="db-f-actif" type="checkbox" ${(existing?.actif!==false)?'checked':''} style="accent-color:var(--accent);width:16px;height:16px">
-      Dashboard actif (visible par les utilisateurs)
-    </label>`;
-
-    // Bouton soumettre
-    const footer = document.createElement('div');
-    footer.style.cssText = 'padding:0 20px 20px;display:flex;justify-content:flex-end;gap:10px';
-    const btnCancel = document.createElement('button');
-    btnCancel.className = 'btn btn-ghost';
-    btnCancel.textContent = 'Annuler';
-    btnCancel.addEventListener('click', () => overlay.remove());
-
-    const btnSave = document.createElement('button');
-    btnSave.className = 'btn btn-accent';
-    btnSave.textContent = isEdit ? 'Enregistrer' : 'Créer';
-    btnSave.addEventListener('click', async () => {
-      const titre = document.getElementById('db-f-titre')?.value?.trim();
-      if (!titre) { toast('Le titre est requis.', true); return; }
-      const widget_type = document.getElementById('db-f-type')?.value || initType;
-      const desc = document.getElementById('db-f-desc')?.value?.trim() || '';
-      const actif = document.getElementById('db-f-actif')?.checked !== false;
-
-      // Collecter config
-      let config_json = {};
-      if (widget_type === 'stock_alerts') {
-        const checked = [...document.querySelectorAll('#db-f-config input[type=checkbox]:checked')].map(el => el.value);
-        if (checked.length && checked.length < CATEGORIES_MP.length) {
-          config_json.categories = checked;
-        }
+    const vus = document.getElementById('blocs-vus');
+    if (vus) vus.addEventListener('click', async () => {
+      vus.disabled = true;
+      for (const b of blocs.filter(x => x.nouveau)) {
+        if (await regler(b.nom, b.capturable)) b.nouveau = false;
       }
-
-      btnSave.disabled = true;
-      btnSave.textContent = isEdit ? 'Enregistrement…' : 'Création…';
-
-      try {
-        let r;
-        if (isEdit) {
-          r = await fetch(`/api/dashboards/admin/${existing.id}`, {
-            method: 'PATCH', credentials: 'include',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ titre, description: desc, config_json, actif }),
-          });
-        } else {
-          r = await fetch('/api/dashboards/admin', {
-            method: 'POST', credentials: 'include',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ titre, description: desc, widget_type, config_json, actif }),
-          });
-        }
-        if (r.ok) {
-          overlay.remove();
-          // Recharger la liste
-          const r2 = await fetch('/api/dashboards/admin', { credentials: 'include' });
-          if (r2.ok) dashboards = await r2.json();
-          rebuildPage();
-          toast(isEdit ? 'Tableau de bord modifié.' : 'Tableau de bord créé.', false);
-        } else {
-          const err = await r.json().catch(() => ({}));
-          toast(err.detail || 'Erreur lors de la sauvegarde.', true);
-          btnSave.disabled = false;
-          btnSave.textContent = isEdit ? 'Enregistrer' : 'Créer';
-        }
-      } catch(e) {
-        toast('Erreur réseau.', true);
-        btnSave.disabled = false;
-        btnSave.textContent = isEdit ? 'Enregistrer' : 'Créer';
-      }
+      dessiner();
     });
-
-    body.appendChild(fTitre);
-    body.appendChild(fDesc);
-    body.appendChild(fType);
-    body.appendChild(fConfig);
-    body.appendChild(fActif);
-    footer.appendChild(btnCancel);
-    footer.appendChild(btnSave);
-    modal.appendChild(head);
-    modal.appendChild(body);
-    modal.appendChild(footer);
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => document.getElementById('db-f-titre')?.focus());
   }
-
-  function rebuildPage() {
-    root.innerHTML = '';
-    buildPage();
-  }
-
-  function buildPage() {
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'max-width:760px;margin:0 auto;padding:0 0 40px';
-
-    const topRow = document.createElement('div');
-    topRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:4px';
-    const h = document.createElement('div');
-    h.innerHTML = '<div style="font-size:16px;font-weight:700;color:var(--text)">Tableaux de bord</div><div style="font-size:13px;color:var(--muted);margin-top:4px">Créez des tableaux de bord que les utilisateurs peuvent ajouter à leur portail.</div>';
-    const btnNew = document.createElement('button');
-    btnNew.className = 'btn btn-accent';
-    btnNew.innerHTML = '+ Nouveau';
-    btnNew.style.cssText = 'flex-shrink:0;padding:8px 16px;font-size:13px';
-    btnNew.addEventListener('click', () => openDashboardModal(null));
-    topRow.appendChild(h);
-    topRow.appendChild(btnNew);
-    wrap.appendChild(topRow);
-    wrap.appendChild(renderList());
-    root.appendChild(wrap);
-  }
-
-  buildPage();
+  dessiner();
 }
 
 async function saveCliModal() {

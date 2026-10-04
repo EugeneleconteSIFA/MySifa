@@ -102,6 +102,23 @@ window.mysifaBlocsRafraichir = function () {
 };
 ```
 
+### Pilotage (superadmin)
+
+Paramètres › Audit › **Blocs capturables** (`renderSettingsBlocs` dans
+`settings_page.py`, visibilité `blocs` = superadmin réel) liste les blocs du
+registre, le nombre de widgets créés sur chacun, l'étiquette « Nouveau », et
+un interrupteur de capture (`blocs_reglages`). Couper un bloc masque ses
+widgets sans les supprimer. On n'y crée ni ne renomme aucun bloc.
+
+Les anciens tableaux de bord flottants (router `dashboards.py`, onglet profil
+« Mes dashboards ») ont été retirés le 04/10/2026. Leurs tables `dashboards`
+et `user_dashboards` restent en base jusqu'à la migration de suppression du
+lot suivant.
+
+Guide in-app : `accueil-widgets`, défini dans `mysifa_accueil.js`
+(moteur partagé `mysifa_guides.js`), bouton « ? » dans l'en-tête de la
+colonne.
+
 ### Pièges
 
 - Une page en mode embarqué (`window.MySifaBlocs.embarque`) ne doit pas ouvrir

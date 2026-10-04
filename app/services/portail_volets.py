@@ -75,7 +75,6 @@ VOLETS_RAIL = [
             ]),
             _groupe("Mes vues", [
                 _entree("profil_cal", "Mes agendas & couleurs", "/profil#calendrier", "calendar"),
-                _entree("profil_dash", "Mes dashboards", "/profil#dashboards", "trending-up"),
             ]),
         ],
         "pied": {"label": "Ouvrir mon profil", "url": "/profil"},

@@ -432,6 +432,9 @@ def settings_sections_visibility(user: dict) -> dict:
         # comme l'accès à /settings lui-même, pour rester le chemin de sortie
         # d'une impersonation.
         "diagnostic":    is_real_superadmin(user),
+        # Blocs capturables (widgets d'accueil) : même règle que l'API
+        # /api/accueil/blocs/admin (require_superadmin, rôle réel).
+        "blocs":         is_real_superadmin(user),
     }
 
 
