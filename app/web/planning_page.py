@@ -1646,9 +1646,25 @@ function filterEntries(entries, query){
   });
 }
 
+// Widget d'accueil (app/services/blocs_registre.py) : valeurs clés de la liste
+// des dossiers de la machine, recalculées à chaque rendu. Même calcul dans
+// static/mysifa_blocs_sources.js (planning.dossiers).
+function majBlocDossiers(){
+  const sec=document.getElementById("sec-dossiers");
+  if(!sec) return;
+  const all=S.entries||[];
+  const cours=all.find(e=>e.statut==="en_cours");
+  const att=all.filter(e=>e.statut==="attente");
+  const h=att.reduce((t,e)=>t+(parseFloat(e.duree_heures)||0),0);
+  sec.setAttribute("data-bloc-valeur-en-cours",cours?String(cours.reference||""):"");
+  sec.setAttribute("data-bloc-valeur-attente",String(att.length));
+  sec.setAttribute("data-bloc-valeur-charge",h.toFixed(1).replace(".",",")+" h");
+  sec.setAttribute("data-bloc-nombre-charge",String(Math.round(h*10)/10));
+}
 function renderEntries(){
   const tbody=document.getElementById("tbody");
   if(!tbody) return;
+  majBlocDossiers();
   const sl=S.timeline;
   const filtered=filterEntries(S.entries,S.searchQuery);
   // Recherche active : on retire l'attenuation des lignes terminees (CSS)
@@ -2515,8 +2531,8 @@ function render(){
       <div id="tl-blocks-container">${tlBlocks}</div>
       <div class="legend" id="tl-legend"></div>
     </section>
-    ${SHOW_DOSSIERS?`<section class="sec"${_moPlanAttr}>
-      <div class="sec-hdr">
+    ${SHOW_DOSSIERS?`<section class="sec"${_moPlanAttr} id="sec-dossiers" data-bloc="planning.dossiers" data-bloc-objet="${MID}" data-bloc-objet-libelle="${escAttr((S.machine&&S.machine.nom)||'')}">
+      <div class="sec-hdr" data-bloc-entete>
         <div class="sec-title">Dossiers de production</div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <div style="position:relative;max-width:360px;flex:1;min-width:160px">

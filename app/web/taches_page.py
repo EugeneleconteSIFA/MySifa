@@ -461,7 +461,7 @@ tbody tr.row-sous:hover td{background:var(--accent-bg)}
       </button>
     </div>
 
-    <div class="stats-row" id="stats-row"></div>
+    <div class="stats-row" id="stats-row" data-bloc="taches.compteurs"></div>
 
     <div class="toolbar" id="toolbar">
       <div class="search-wrap">
@@ -889,6 +889,11 @@ async function chargerBadgeMes(){
     const b=document.getElementById('cnt-moi');
     if(!b)return;
     const n=Number(j.count||0),r=Number(j.en_retard||0);
+    const row=document.getElementById('stats-row');
+    if(row){
+      row.setAttribute('data-bloc-valeur-mes-taches',String(n));
+      row.setAttribute('data-bloc-valeur-mes-retards',String(r));
+    }
     b.textContent=String(n);
     b.style.display=n?'':'none';
     b.classList.toggle('warn',r>0);
@@ -935,6 +940,11 @@ function renderStats(){
     parts.push('<div class="stat'+(on?' active':'')+'" data-rapide="non_assignees">Non assignées <b>'+S.stats.non_assignees+'</b></div>');
   }
   row.innerHTML=parts.join('');
+  // Widget d'accueil (app/services/blocs_registre.py) : totaux de l'équipe,
+  // jamais la vue filtrée « Mes tâches ». Même lecture dans
+  // static/mysifa_blocs_sources.js (taches.compteurs).
+  row.setAttribute('data-bloc-valeur-en-retard',String(S.stats.en_retard||0));
+  row.setAttribute('data-bloc-valeur-non-assignees',String(S.stats.non_assignees||0));
   row.querySelectorAll('.stat').forEach(el=>{
     el.onclick=()=>{
       const v=el.getAttribute('data-rapide');

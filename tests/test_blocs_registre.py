@@ -12,7 +12,8 @@ Ce que ce test protège :
    la capture — le plus souvent une faute de frappe.
 4. **La validation serveur tient ses promesses** : 4 valeurs au maximum, URL
    interne uniquement, clés et alertes contrôlées.
-5. **Un bloc déplacé garde ses widgets** : l'URL suit l'emplacement actuel et
+5. **Une source lit un bloc qui existe** (static/mysifa_blocs_sources.js).
+6. **Un bloc déplacé garde ses widgets** : l'URL suit l'emplacement actuel et
    conserve les filtres capturés.
 
 Lancer : python3 tests/test_blocs_registre.py
@@ -42,7 +43,7 @@ _spec.loader.exec_module(reg)
 # un « = » ou un « : »).
 MOTIF = re.compile(r"""['"]?data-bloc['"]?\s*[:=]\s*['"]([a-z0-9][a-z0-9.\-]*)['"]""")
 # Le moteur et sa documentation citent des exemples de noms : hors périmètre.
-EXCLUS = {"static/mysifa_blocs.js", "static/mysifa_accueil.js"}
+EXCLUS = {"static/mysifa_blocs.js", "static/mysifa_accueil.js", "static/mysifa_blocs_sources.js"}
 
 echecs = []
 
@@ -98,6 +99,11 @@ for nom, fichiers in code.items():
              f"{nom} : data-bloc présent dans {sorted(fichiers)} mais absent du registre")
     verifier(nom not in reg._index_alias(),
              f"{nom} : le code utilise un ancien nom (alias) — utiliser le nom actuel")
+
+# ── 3bis. Sources : chaque source lit un bloc déclaré ───────────────────
+SOURCES = Path("static/mysifa_blocs_sources.js").read_text(encoding="utf-8")
+for nom in re.findall(r'^    "([a-z0-9.\-]+)": function', SOURCES, flags=re.M):
+    verifier(nom in reg.BLOCS, f"source {nom} : aucun bloc de ce nom au registre")
 
 # ── 4. Validation ───────────────────────────────────────────────────────
 NOM_TEST = "test.onglet.bloc"

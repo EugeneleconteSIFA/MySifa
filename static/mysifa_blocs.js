@@ -534,10 +534,26 @@
       if (panneau) { panneau.remove(); panneau = null; }
     }
 
+    /* Une page dont les filtres ne vivent pas dans l'URL (période de MyProd…)
+       les déclare par window.mysifaBlocsContexte() : { bloc_periode: "last7",
+       bloc_machine: ["C1"] }. Ils rejoignent l'adresse capturée, où la source
+       du widget les relit. */
     function urlCapture() {
       var u = new URL(location.href);
       u.searchParams.delete("widget");
       u.searchParams.delete("widget_objet");
+      if (typeof window.mysifaBlocsContexte === "function") {
+        try {
+          var ctx = window.mysifaBlocsContexte() || {};
+          Object.keys(ctx).forEach(function (k) {
+            if (k.indexOf("bloc_") !== 0) return;
+            u.searchParams.delete(k);
+            [].concat(ctx[k]).forEach(function (v) {
+              if (v !== null && v !== undefined && v !== "") u.searchParams.append(k, String(v));
+            });
+          });
+        } catch (e) { /* contexte indisponible : l'adresse seule suffit */ }
+      }
       return u.pathname + u.search + u.hash;
     }
 

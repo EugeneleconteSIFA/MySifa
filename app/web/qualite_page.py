@@ -1014,7 +1014,12 @@ function renderList(){
         </button>
       </div>
     </div>
-    <div class="stat-tabs">${tabsHtml}</div>
+    <div class="stat-tabs" data-bloc="qualite.nc.statuts"
+      data-bloc-valeur-ouvertes="${counts.all-(counts.cloturee||0)}"
+      data-bloc-valeur-en-analyse="${counts.en_analyse||0}"
+      data-bloc-valeur-action-corrective="${counts.action_corrective||0}"
+      data-bloc-valeur-en-verification="${counts.en_verification||0}"
+      data-bloc-valeur-non-lues="${S.unread||0}">${tabsHtml}</div>
     <div class="toolbar">
       <div class="search-wrap">
         <span class="search-ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>

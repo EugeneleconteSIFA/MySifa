@@ -68,6 +68,15 @@ BLOCS: dict[str, Bloc] = {
         valeurs=(("lignes", "Matières sous seuil"),),
         acces="stock",
     ),
+    "stock.dashboard.kpis": Bloc(
+        appli="stock",
+        libelle="Chiffres du stock",
+        url="/stock?tab=dashboard",
+        type="chiffre",
+        valeurs=(("mp", "MP à approvisionner"), ("a-expedier", "Références à expédier"),
+                 ("departs", "Expéditions aujourd'hui"), ("refs", "Références en stock")),
+        acces="stock",
+    ),
     "expe.departs.programmes": Bloc(
         appli="expe",
         libelle="Départs programmés",
@@ -120,6 +129,43 @@ BLOCS: dict[str, Bloc] = {
     "prod.ensemble.par-jour": Bloc(
         appli="prod", libelle="Synthèse par jour", url="/prod?page=production",
         type="tableau", valeurs=(("lignes", "Jours"),), acces="prod",
+    ),
+    # ── MyExpé › Pilotage (app/web/expe_pilotage_assets.py) ──
+    "expe.pilotage.resume": Bloc(
+        appli="expe", libelle="Pilotage des expéditions", url="/expe#pilotage",
+        type="chiffre",
+        valeurs=(("retard", "En retard"), ("a-programmer", "À programmer"),
+                 ("palettes", "Palettes à réserver"), ("programme", "Transport programmé"),
+                 ("sans-bl", "Sans BL")),
+        acces="expe",
+    ),
+    "expe.pilotage.envois": Bloc(
+        appli="expe", libelle="Envois à piloter", url="/expe#pilotage",
+        type="tableau", valeurs=(("lignes", "Envois"),), acces="expe",
+    ),
+    # ── Planning machine (app/web/planning_page.py) ──
+    "planning.dossiers": Bloc(
+        appli="planning", libelle="Dossiers au planning", url="/planning",
+        type="objet",
+        valeurs=(("en-cours", "Dossier en cours"), ("attente", "Dossiers en attente"),
+                 ("charge", "Charge en attente (h)")),
+        acces="planning", objet="machine",
+    ),
+    # ── Gestionnaire de tâches (app/web/taches_page.py) ──
+    "taches.compteurs": Bloc(
+        appli="taches", libelle="Tâches", url="/taches",
+        type="chiffre",
+        valeurs=(("mes-taches", "Mes tâches ouvertes"), ("mes-retards", "Mes tâches en retard"),
+                 ("en-retard", "En retard (équipe)"), ("non-assignees", "Non assignées")),
+    ),
+    # ── MyQualité (app/web/qualite_page.py) ──
+    "qualite.nc.statuts": Bloc(
+        appli="qualite", libelle="Non-conformités", url="/qualite#list",
+        type="chiffre",
+        valeurs=(("ouvertes", "NC non clôturées"), ("en-analyse", "En analyse"),
+                 ("action-corrective", "Action corrective"), ("en-verification", "En vérification"),
+                 ("non-lues", "Messages non lus")),
+        acces="qualite",
     ),
     "portail.atelier.machine": Bloc(
         appli="portail",

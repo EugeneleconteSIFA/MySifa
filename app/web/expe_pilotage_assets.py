@@ -196,6 +196,12 @@ var EXPE_PIL_FILTRES=[
 
 var _expePilSearchTimer=null;
 
+// Widget d'accueil (mysifa_blocs.js) : le filtre de la liste n'est pas dans
+// l'URL, on le déclare à la capture. Relu par static/mysifa_blocs_sources.js.
+window.mysifaBlocsContexte=function(){
+  return S.expeTab==='pilotage'?{bloc_filtre:S.expePilFiltre||'a_faire'}:{};
+};
+
 async function loadExpePilotage(){
   set({expePilotageLoading:true});
   try{
@@ -368,7 +374,14 @@ function _expePilTuiles(r){
     {lbl:'Transport programmé',val:r.transport_commande,  cls:''},
     {lbl:'Sans BL',            val:r.bl_manquant,         cls:''}
   ];
-  return h('div',{className:'expe-pil-tuiles'},
+  // Bloc capturable en widget d'accueil (app/services/blocs_registre.py) ;
+  // source des valeurs : static/mysifa_blocs_sources.js.
+  return h('div',{className:'expe-pil-tuiles','data-bloc':'expe.pilotage.resume',
+      'data-bloc-valeur-retard':String(r.retard||0),
+      'data-bloc-valeur-a-programmer':String(r.a_commander||0),
+      'data-bloc-valeur-palettes':String(r.palettes_a_reserver||0),
+      'data-bloc-valeur-programme':String(r.transport_commande||0),
+      'data-bloc-valeur-sans-bl':String(r.bl_manquant||0)},
     ...t.map(function(x){
       return h('div',{className:'expe-pil-tuile '+x.cls},
         h('div',{className:'expe-pil-tuile-lbl'},x.lbl),
@@ -808,6 +821,10 @@ function renderExpePilotage(){
                       q?'Aucun envoi ne correspond à cette recherche.'
                        :'Rien à traiter ici — voir « Tout » pour l’ensemble des envois.')))])))));
 
+  // Liste des envois : capturable avec son filtre (« À traiter », « En
+  // retard »…), que la source rejoue sur /api/expe/pilotage.
+  corps.setAttribute('data-bloc','expe.pilotage.envois');
+  corps.setAttribute('data-bloc-valeur-lignes',String(envois.length));
   return h('div',null,
     _expePilTuiles(data.resume||{}),
     ...avert,

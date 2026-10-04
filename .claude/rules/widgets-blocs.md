@@ -16,7 +16,8 @@ sont ceux de la page.
 Pièces : `app/services/blocs_registre.py` (registre),
 `app/routers/accueil_widgets.py` (API), `static/mysifa_blocs.js` (mode
 embarqué + capture, injecté dans toutes les pages par `main.py`),
-`static/mysifa_accueil.js` (colonne de l'accueil).
+`static/mysifa_accueil.js` (colonne de l'accueil),
+`static/mysifa_blocs_sources.js` (lecture des valeurs par API).
 
 ### Créer un bloc = le nommer
 
@@ -70,7 +71,26 @@ le pre-commit avertit quand un titre de section apparaît sans `data-bloc`.
 `tests/test_blocs_registre.py` (CI) bloque : un bloc du registre absent du
 code, un `data-bloc` absent du registre, un nom porté par deux fichiers.
 
-### Rafraîchissement léger
+### Source des valeurs (à écrire pour chaque bloc)
+
+Un widget ne charge plus la page s'il existe une **source** pour son bloc dans
+`static/mysifa_blocs_sources.js` : il appelle directement l'API que la page
+utilise déjà et en extrait les valeurs. C'est 1 petite requête au lieu
+d'environ 400 Ko et 50 requêtes. Sans source, le widget retombe sur le
+chargement de la page hors écran.
+
+Règle d'or : la source **reprend** le calcul et la mise en forme de la page
+(même API, mêmes champs, même `fN` / `fMin`). Modifier ce calcul dans la page
+impose de le reporter dans la source — sinon le widget et la page affichent
+deux chiffres différents. Les regroupements calculés côté page (synthèses par
+opérateur…) restent sans source plutôt que d'être réécrits à moitié.
+
+Une page dont les filtres ne vivent pas dans l'URL les déclare à la capture :
+`window.mysifaBlocsContexte = () => ({bloc_periode: 'last7', bloc_machine: [...]})`.
+Ils rejoignent l'URL capturée et la source les relit (`ctx.params`). Une
+période se déclare en raccourci (`last7`, `thisMonth`…) pour rester glissante.
+
+### Rafraîchissement léger (blocs sans source)
 
 Sans rien faire, le widget recharge la page chaque minute. Une page lourde
 peut fournir un crochet qui recharge seulement ses données :
