@@ -24,6 +24,12 @@
   window.MySifaAccueil = {};
 
   var ORIGINE = location.origin;
+  // Même version que ce script (posée par mysifa_blocs.js depuis APP_VERSION).
+  var VERSION = (function () {
+    var src = (document.currentScript && document.currentScript.src) || "";
+    var m = src.match(/[?&]v=([^&]+)/);
+    return m ? m[1] : "";
+  })();
   var RAFRAICHISSEMENT_MS = 60000;
   var CONFIRMATIONS_ABSENCE = 2;   // un objet n'est déclaré disparu qu'après 2 constats
   var HAUTEURS_PX = { s: 150, m: 250, l: 400 };
@@ -263,6 +269,15 @@
     });
 
     var cadre = el.querySelector(".mac-cadre");
+    W.cartes[w.id] = c;
+    // Bloc avec source : les valeurs viennent de l'API, aucune page chargée.
+    if (sourceDe(w)) {
+      c.iframe = null;
+      cadre.remove();
+      dessinerOutils(c);
+      afficherValeurs(c);
+      return c;
+    }
     var iframe = document.createElement("iframe");
     iframe.name = "mysifa-bloc|" + encodeURIComponent(w.bloc) + "|" + encodeURIComponent(w.objet || "");
     iframe.title = w.nom;
@@ -283,6 +298,7 @@
   /* La taille choisie (petit, moyen, grand) est un plafond : un bloc plus
      court que son cadre ne laisse pas de vide sous lui. */
   function ajusterHauteur(c) {
+    if (!c.iframe) return;
     if (c.el.classList.contains("aff-valeurs")) { c.iframe.style.height = ""; return; }
     // Jamais plus haut que large : beaucoup de pages passent en vue téléphone
     // quand l'écran est en portrait étroit, et le bloc n'y existe pas toujours.
@@ -297,7 +313,7 @@
     var ids = Object.keys(W.cartes);
     ids.forEach(function (id, i) {
       var c = W.cartes[id];
-      if (c.iframe.getAttribute("src")) return;
+      if (!c.iframe || c.iframe.getAttribute("src")) return;
       setTimeout(function () { c.iframe.src = srcIframe(c.w); }, i * 350);
     });
   }
@@ -360,7 +376,7 @@
       .then(function (w) {
         for (var k in champs) c.w[k] = w[k];
         c.el.querySelector(".mac-nom").textContent = c.w.nom;
-        c.iframe.title = c.w.nom;
+        if (c.iframe) c.iframe.title = c.w.nom;
         afficherValeurs(c);
       })
       .catch(function (e) { avis(e.message); throw e; });
@@ -508,7 +524,8 @@
     if (d.source !== "mysifa-blocs") return;
     var c = null;
     Object.keys(W.cartes).some(function (id) {
-      if (W.cartes[id].iframe.contentWindow === e.source) { c = W.cartes[id]; return true; }
+      var f = W.cartes[id].iframe;
+      if (f && f.contentWindow === e.source) { c = W.cartes[id]; return true; }
       return false;
     });
     if (!c) return;
@@ -545,10 +562,65 @@
     }
   });
 
+  /* ── Sources (static/mysifa_blocs_sources.js) ──────────────────────── */
+  function sourceDe(w) {
+    var S = window.MySifaBlocsSources;
+    return (S && typeof S[w.bloc] === "function") ? S[w.bloc] : null;
+  }
+
+  function lireSources() {
+    // Cache d'un tour : dix widgets sur la même API = un seul appel.
+    var cache = {};
+    function json(url) {
+      if (!cache[url]) cache[url] = api(url);
+      return cache[url];
+    }
+    Object.keys(W.cartes).forEach(function (id) {
+      var c = W.cartes[id];
+      var src = sourceDe(c.w);
+      if (!src || c.iframe) return;
+      var params;
+      try { params = new URL(c.w.url_capture, ORIGINE).searchParams; } catch (e) { params = new URLSearchParams(); }
+      Promise.resolve()
+        .then(function () { return src({ json: json, objet: c.w.objet, params: params }); })
+        .then(function (res) {
+          if (!W.cartes[c.w.id]) return;
+          if (res && res.introuvable) {
+            c.absences += 1;
+            if (c.absences >= CONFIRMATIONS_ABSENCE) {
+              supprimer(c, "Widget retiré : « " + c.w.nom + " » — l'élément suivi n'existe plus.");
+            }
+            return;
+          }
+          c.absences = 0;
+          c.valeurs = (res && res.valeurs) || {};
+          c.nombres = (res && res.nombres) || {};
+          c.el.classList.add("prete");
+          afficherValeurs(c);
+        })
+        .catch(function () {
+          // API momentanément indisponible : on garde les dernières valeurs.
+          c.el.classList.add("prete");
+        });
+    });
+  }
+
+  function chargerSources() {
+    if (window.MySifaBlocsSources) return Promise.resolve();
+    return new Promise(function (ok) {
+      var s = document.createElement("script");
+      s.src = "/static/mysifa_blocs_sources.js" + (VERSION ? "?v=" + VERSION : "");
+      s.onload = s.onerror = function () { ok(); };
+      document.head.appendChild(s);
+    });
+  }
+
   function rafraichir() {
     if (document.hidden) return;
+    lireSources();
     Object.keys(W.cartes).forEach(function (id) {
       var f = W.cartes[id].iframe;
+      if (!f) return;
       try { f.contentWindow.postMessage({ source: "mysifa-blocs", type: "rafraichir" }, ORIGINE); } catch (e) { /* pas encore chargée */ }
     });
   }
@@ -581,6 +653,7 @@
     brancherGlisser(racine.querySelector(".mac-liste"));
     basculerRepli(false);
     dessinerListe();
+    lireSources();
     W.disparus.forEach(function (w) {
       api("/api/accueil/widgets/" + w.id, { method: "DELETE" }).catch(function () {});
       avis("Widget retiré : « " + w.nom + " » — ce bloc n'existe plus dans MySifa.");
@@ -600,7 +673,7 @@
       W.widgets = tous.filter(function (w) { return w.etat === "ok"; });
       W.disparus = tous.filter(function (w) { return w.etat === "disparu"; });
       W.repliee = !!r[1].colonne_repliee;
-      monter();
+      return chargerSources().then(monter);
     }).catch(function () { /* non connecté ou API indisponible : pas de colonne */ });
   }
 

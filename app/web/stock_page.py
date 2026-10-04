@@ -13675,7 +13675,13 @@ function buildDashboardKpis(s) {
       mod: 'accent',
     },
   ];
-  return el('div', { cls: 'dash-kpi-grid' },
+  // Bloc capturable en widget d'accueil (app/services/blocs_registre.py) ;
+  // source des valeurs : static/mysifa_blocs_sources.js.
+  return el('div', { cls: 'dash-kpi-grid', 'data-bloc': 'stock.dashboard.kpis',
+                     'data-bloc-valeur-mp': String(kpis[0].value),
+                     'data-bloc-valeur-a-expedier': String(kpis[1].value),
+                     'data-bloc-valeur-departs': String(kpis[2].value),
+                     'data-bloc-valeur-refs': String(kpis[3].value) },
     ...kpis.map(k => el('div', { cls: 'stat-card' },
       el('div', { cls: 'stat-label' }, k.label),
       el('div', { cls: 'stat-value ' + k.mod }, fN(k.value)),

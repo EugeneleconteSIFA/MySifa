@@ -9635,6 +9635,18 @@ function _datePresets(){
 }
 
 
+// Widget d'accueil (mysifa_blocs.js) : la période et les machines filtrées ne
+// sont pas dans l'URL. On les déclare à la capture, sous forme de raccourci
+// (« 7 derniers jours ») pour que le widget reste glissant ; des dates
+// choisies à la main restent fixes. Relu par static/mysifa_blocs_sources.js.
+window.mysifaBlocsContexte = function(){
+  const ctx = {bloc_machine: (S.fv.machines||[]).slice()};
+  const p = _datePresets().filter(x => x.from === S.fv.date_from && x.to === S.fv.date_to)[0];
+  if(p){ ctx.bloc_periode = p.key; }
+  else { ctx.bloc_periode = 'dates'; ctx.bloc_du = S.fv.date_from; ctx.bloc_au = S.fv.date_to; }
+  return ctx;
+};
+
 // Derniere journee travaillee : resolue une fois, puis gardee en etat. Sans
 // elle, le raccourci « Hier » retombe sur la veille calendaire.
 async function chargerDernierJourSaisi(){
