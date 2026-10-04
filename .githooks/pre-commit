@@ -152,6 +152,40 @@ PYEOF
     done
 fi
 
+# ─── 5. AVERTISSEMENT — nouveau bloc d'écran sans nom de widget ──────
+# Tout bloc visible doit pouvoir devenir un widget d'accueil : il porte un
+# data-bloc déclaré dans app/services/blocs_registre.py. On ne sait pas lire
+# un écran, donc on compte : plus de titres de section qu'avant, et pas un
+# data-bloc de plus, c'est très probablement un oubli. Voir
+# .claude/rules/widgets-blocs.md.
+if [ -n "$PY_CMD" ]; then
+    for f in $FICHIERS; do
+        case "$f" in
+            app/web/*.py|static/*.js) ;;
+            *) continue ;;
+        esac
+        git show ":$f" > "$TMP/verif.txt" 2>/dev/null || continue
+        git show "HEAD:$f" > "$TMP/avant.txt" 2>/dev/null || : > "$TMP/avant.txt"
+        $PY_CMD $PY_ARG - "$TMP/verif.txt" "$TMP/avant.txt" "$f" <<'PYEOF'
+import re, sys
+TITRES = re.compile(r"(dash-section-title|section-title|sec-title|card-header|rp-titre|msf-sect)")
+BLOCS = re.compile(r"""['"]?data-bloc['"]?\s*[:=]""")
+def compter(chemin):
+    try:
+        t = open(chemin, encoding="utf-8", errors="replace").read()
+    except Exception:
+        return 0, 0
+    return len(TITRES.findall(t)), len(BLOCS.findall(t))
+t1, b1 = compter(sys.argv[1])
+t0, b0 = compter(sys.argv[2])
+if t1 > t0 and b1 <= b0:
+    print("        %s : %d nouveau(x) titre(s) de section, aucun data-bloc ajouté"
+          % (sys.argv[3], t1 - t0))
+    print("          -> rendre le bloc capturable : .claude/rules/widgets-blocs.md")
+PYEOF
+    done
+fi
+
 if [ -z "$PY_CMD" ]; then
     echo "AVERTISSEMENT  Aucun Python utilisable : controles de syntaxe Python,"
     echo "               d'octets nuls et de couleurs non joues sur ce commit."
