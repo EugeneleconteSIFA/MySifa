@@ -123,7 +123,12 @@
       // Avant que le script embarqué n'ait isolé le bloc, l'iframe montre la
       // page entière : on ne la dévoile qu'au premier état reçu.
       ".mac-carte:not(.prete) .mac-cadre iframe{visibility:hidden}",
-      ".mac-hors{position:absolute!important;left:-10000px!important;top:0!important;width:340px!important;height:420px!important;visibility:hidden!important}",
+      // Rendu caché à taille d'ordinateur : même mise en page qu'à la capture.
+      ".mac-hors{position:absolute!important;left:-10000px!important;top:0!important;width:1100px!important;height:700px!important;visibility:hidden!important}",
+      ".mac-hors iframe{width:1100px!important;height:700px!important}",
+      ".mac-indispo{display:none;padding:10px;color:var(--muted,#94a3b8);font-size:12px;line-height:1.4}",
+      ".mac-carte.absent .mac-indispo{display:block}",
+      ".mac-carte.absent .mac-cadre{position:absolute!important;left:-10000px!important;visibility:hidden!important}",
       ".mac-vals{display:flex;flex-direction:column;gap:2px;padding:4px 10px 10px}",
       ".mac-val{display:flex;align-items:baseline;gap:8px}",
       ".mac-val .lib{color:var(--muted,#94a3b8);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
@@ -132,7 +137,8 @@
       ".mac-h-s .mac-val:nth-child(n+3){display:none}",
       ".mac-carte.aff-bloc .mac-vals{display:none}",
       "@media (min-width:900px) and (max-width:1199px){",
-      "  .mac-carte .mac-cadre{position:absolute!important;left:-10000px!important;width:340px!important;visibility:hidden!important}",
+      "  .mac-carte .mac-cadre{position:absolute!important;left:-10000px!important;width:1100px!important;visibility:hidden!important}",
+      "  .mac-carte .mac-cadre iframe{width:1100px!important;height:700px!important}",
       "  .mac-carte.aff-bloc .mac-vals{display:flex}",
       "  .mac-val:nth-child(n+2){display:none}",
       "  .mac-val .lib{display:none}",
@@ -189,6 +195,7 @@
     var enAlerte = [];
     (w.valeurs || []).forEach(function (v) {
       var val = c.valeurs ? c.valeurs[v.cle] : undefined;
+      var nb_ = c.nombres && c.nombres[v.cle] != null ? c.nombres[v.cle] : val;
       var ligne = document.createElement("div");
       ligne.className = "mac-val";
       var lib = document.createElement("span");
@@ -197,7 +204,7 @@
       var nb = document.createElement("span");
       nb.className = "v";
       nb.textContent = val == null || val === "" ? "—" : val;
-      if (alerteDeclenchee(v.alerte, val)) { ligne.classList.add("alerte"); enAlerte.push(libs[v.cle] || v.cle); }
+      if (alerteDeclenchee(v.alerte, nb_)) { ligne.classList.add("alerte"); enAlerte.push(libs[v.cle] || v.cle); }
       ligne.appendChild(nb);
       ligne.appendChild(lib);
       zone.appendChild(ligne);
@@ -228,6 +235,7 @@
       '<div class="mac-ctete" title="Ouvrir la page"><span class="mac-nom"></span><span class="mac-point"></span>' +
       '<button type="button" class="mac-corb" title="Supprimer ce widget" aria-label="Supprimer ce widget">' + icone("corbeille") + "</button></div>" +
       '<div class="mac-vals"></div>' +
+      '<div class="mac-indispo">Bloc indisponible à cette taille. Cliquez sur le titre pour ouvrir la page.</div>' +
       '<div class="mac-cadre"><div class="mac-attente">Chargement…</div><div class="mac-voile"></div></div>' +
       '<div class="mac-outils"></div>';
     var c = { el: el, iframe: null, valeurs: null, absences: 0, w: w };
@@ -261,7 +269,7 @@
     iframe.setAttribute("tabindex", "-1");
     iframe.setAttribute("aria-hidden", "true");
     if (w.affichage === "valeurs") cadre.classList.add("mac-hors");
-    else iframe.style.height = HAUTEURS_PX[w.hauteur] + "px";
+    else iframe.style.height = Math.min(HAUTEURS_PX[w.hauteur], 299) + "px";
     cadre.insertBefore(iframe, cadre.firstChild);
 
     c.iframe = iframe;
@@ -275,7 +283,10 @@
      court que son cadre ne laisse pas de vide sous lui. */
   function ajusterHauteur(c) {
     if (c.w.affichage === "valeurs") { c.iframe.style.height = ""; return; }
-    var max = HAUTEURS_PX[c.w.hauteur];
+    // Jamais plus haut que large : beaucoup de pages passent en vue téléphone
+    // quand l'écran est en portrait étroit, et le bloc n'y existe pas toujours.
+    var larg = c.iframe.clientWidth || 300;
+    var max = Math.min(HAUTEURS_PX[c.w.hauteur], larg - 1);
     var h = c.hauteurBloc ? Math.min(max, Math.max(60, c.hauteurBloc + 4)) : max;
     c.iframe.style.height = h + "px";
   }
@@ -501,6 +512,8 @@
     if (d.type === "etat") {
       c.absences = 0;
       c.valeurs = d.valeurs || {};
+      c.nombres = d.nombres || {};
+      c.el.classList.remove("absent");
       c.hauteurBloc = d.hauteur || 0;
       ajusterHauteur(c);
       c.el.classList.add("prete");
@@ -510,6 +523,8 @@
         if (d.nouvelOnglet) window.open(c.w.url, "_blank", "noopener");
         else location.href = c.w.url;
       }
+    } else if (d.type === "absent") {
+      c.el.classList.add("absent", "prete");
     } else if (d.type === "rechargement") {
       c.el.classList.remove("prete");
     } else if (d.type === "introuvable") {

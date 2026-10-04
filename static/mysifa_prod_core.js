@@ -10242,7 +10242,14 @@ function renderMachineStatusCards(){
     const isOn  = sk!=='eteinte';
     const dureeStr = m ? fmtDuree(m.duree_min) : null;
     const dureeLabel = DUREE_LABEL[sk]||'Depuis';
-    return h('div',{className:`mst-card mst-${sk}`},
+    return h('div',{className:`mst-card mst-${sk}`,
+        'data-bloc':'prod.ensemble.machine','data-bloc-objet':String(mkey),
+        'data-bloc-objet-libelle':String(nom||''),
+        'data-bloc-valeur-etat':String(label||''),
+        'data-bloc-valeur-operateur':String(op||''),
+        'data-bloc-valeur-dossier':dos&&dos.no_dossier?String(dos.no_dossier):'',
+        'data-bloc-valeur-depuis':dureeStr||'',
+        'data-bloc-nombre-depuis':(m&&m.duree_min!=null)?String(m.duree_min):''},
       h('div',{className:'mst-head'},
         h('span',{className:'mst-nom'},nom),
         h('div',{style:{display:'flex',alignItems:'center',gap:'6px'}},
@@ -10365,7 +10372,9 @@ function renderMachineStatusCards(){
       mkCardRepiquage()
     )
   );
-  return makeCollapsibleSection(titleNode, contentNode, 'machines', true);
+  const _enMarche=['C1','C2'].filter(k=>ms&&ms[k]&&(ms[k].statut_key||'eteinte')!=='eteinte').length;
+  return makeCollapsibleSection(titleNode, contentNode, 'machines', true,
+    {'data-bloc':'prod.ensemble.machines','data-bloc-valeur-en-marche':String(_enMarche)});
 }
 
   // ────────────────────────────────────────────────────────────────────
@@ -11866,9 +11875,10 @@ function _prodSectionState(key, defOpen){
 function _prodSetSectionState(key, open){
   try{ localStorage.setItem('mysifa.prod.section.'+key, open?'1':'0'); }catch(e){}
 }
-function makeCollapsibleSection(titleNode, contentNode, storageKey, defaultOpen){
+// `bloc` : attributs data-bloc du widget d'accueil (voir blocs_registre.py).
+function makeCollapsibleSection(titleNode, contentNode, storageKey, defaultOpen, bloc){
   const isOpen = _prodSectionState(storageKey, defaultOpen!==false);
-  return h('div',{className:'prod-section-wrap',style:{marginBottom:'14px'}},
+  return h('div',Object.assign({className:'prod-section-wrap',style:{marginBottom:'14px'}},bloc||{}),
     h('div',{
       className:'prod-section-header',
       style:{display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',userSelect:'none',padding:'2px 0'},
@@ -11921,6 +11931,8 @@ function renderProdKpis(){
   if(S.historique&&S.historique.sanity && !isCommercial(S.user)){
     const sc=renderSanity(S.historique.sanity);
     if(sc){
+      sc.setAttribute('data-bloc','prod.ensemble.sanity');
+      sc.setAttribute('data-bloc-valeur-score',String(S.historique.sanity.score||0));
       sc.style.cursor='pointer';
       sc.title='Voir le détail des erreurs → Historique & Erreurs';
       sc.addEventListener('click',async()=>{
@@ -11950,7 +11962,14 @@ function renderProdKpis(){
         h('div',{className:'stat'},h('div',{className:'stat-label'},'Métrage'),h('div',{className:'stat-value'},fN(prod.metrage_m||0)+' m')),
         h('div',{className:'stat'},h('div',{className:'stat-label'},'Vitesse'),h('div',{className:'stat-value'},((d.vitesse_m_min!=null)?Number(d.vitesse_m_min).toFixed(2):'0.00')+' m/min')),
       ),
-      'quantites'
+      'quantites', true,
+      {'data-bloc':'prod.ensemble.quantites',
+       'data-bloc-valeur-dossiers':fN(prod.dossiers||0),
+       'data-bloc-nombre-dossiers':String(prod.dossiers||0),
+       'data-bloc-valeur-metrage':fN(prod.metrage_m||0)+' m',
+       'data-bloc-nombre-metrage':String(prod.metrage_m||0),
+       'data-bloc-valeur-vitesse':((d.vitesse_m_min!=null)?Number(d.vitesse_m_min).toFixed(2):'0.00')+' m/min',
+       'data-bloc-nombre-vitesse':String(d.vitesse_m_min||0)}
     ));
   }
 
@@ -11966,7 +11985,11 @@ function renderProdKpis(){
         h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('play',12),' Production'),h('div',{className:'tc-value'},fMin(prodInclArrets))),
         h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('alert-triangle',12),' Arrêts'),h('div',{className:'tc-value'},fMin(tt.arret_min))),
       ),
-      'temps'
+      'temps', true,
+      {'data-bloc':'prod.ensemble.temps',
+       'data-bloc-valeur-calage':fMin(tt.calage_min),'data-bloc-nombre-calage':String(Math.round(Number(tt.calage_min||0))),
+       'data-bloc-valeur-production':fMin(prodInclArrets),'data-bloc-nombre-production':String(Math.round(prodInclArrets)),
+       'data-bloc-valeur-arrets':fMin(tt.arret_min),'data-bloc-nombre-arrets':String(Math.round(Number(tt.arret_min||0)))}
     ));
   }
 
@@ -11979,7 +12002,8 @@ function renderProdKpis(){
     const rowsAgg = _prodAggDossier(byDosNoRep);
     if(rowsAgg.length){
       const dossierKeys = rowsAgg.map(r=>String(r.no_dossier));
-      synthParts.push(h('div',{className:'card'},
+      synthParts.push(h('div',{className:'card','data-bloc':'prod.ensemble.par-dossier',
+          'data-bloc-valeur-lignes':String(rowsAgg.length)},
         h('div',{className:'card-header'},h('h3',null,'Par numéro de dossier'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},rowsAgg.length+' dossiers')),
         h('div',{style:{overflowX:'auto'}},h('table',null,
           h('thead',null,h('tr',null,
@@ -12009,7 +12033,11 @@ function renderProdKpis(){
       const keys=rows.map(r=>String(r.key));
       const typeMap={'Opérateur':'operator','Machine':'machine','Jour':'day'};
       const st=synthType||(typeMap[keyLabel]||'');
-      return h('div',{className:'card'},
+      const bloc=keyLabel==='Opérateur'?'prod.ensemble.par-operateur'
+        :keyLabel==='Machine'?'prod.ensemble.par-machine'
+        :keyLabel==='Jour'?'prod.ensemble.par-jour':null;
+      return h('div',Object.assign({className:'card'},
+          bloc?{'data-bloc':bloc,'data-bloc-valeur-lignes':String(rows.length)}:{}),
         h('div',{className:'card-header'},h('h3',null,title),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},rows.length+' items')),
         h('div',{style:{overflowX:'auto'}},h('table',null,
           h('thead',null,h('tr',null,

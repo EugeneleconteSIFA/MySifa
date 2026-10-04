@@ -76,6 +76,51 @@ BLOCS: dict[str, Bloc] = {
         valeurs=(("lignes", "Départs en attente"),),
         acces="expe",
     ),
+    # ── MyProd › Production › Vue d'ensemble (static/mysifa_prod_core.js) ──
+    "prod.ensemble.machines": Bloc(
+        appli="prod", libelle="Statut des machines", url="/prod?page=production",
+        type="etat", valeurs=(("en-marche", "Machines en marche"),), acces="prod",
+    ),
+    "prod.ensemble.machine": Bloc(
+        appli="prod", libelle="Machine", url="/prod?page=production", type="objet",
+        valeurs=(("etat", "État"), ("depuis", "Depuis (min)"), ("operateur", "Opérateur"),
+                 ("dossier", "Dossier")),
+        acces="prod", objet="machine",
+    ),
+    "prod.ensemble.sanity": Bloc(
+        appli="prod", libelle="Qualité de saisie", url="/prod?page=production",
+        type="chiffre", valeurs=(("score", "Score"),), acces="prod",
+    ),
+    "prod.ensemble.quantites": Bloc(
+        appli="prod", libelle="Quantités produites", url="/prod?page=production",
+        type="chiffre",
+        valeurs=(("metrage", "Métrage (m)"), ("dossiers", "Dossiers produits"),
+                 ("vitesse", "Vitesse (m/min)")),
+        acces="prod",
+    ),
+    "prod.ensemble.temps": Bloc(
+        appli="prod", libelle="Temps de production", url="/prod?page=production",
+        type="chiffre",
+        valeurs=(("production", "Production (min)"), ("calage", "Calage (min)"),
+                 ("arrets", "Arrêts (min)")),
+        acces="prod",
+    ),
+    "prod.ensemble.par-dossier": Bloc(
+        appli="prod", libelle="Synthèse par dossier", url="/prod?page=production",
+        type="tableau", valeurs=(("lignes", "Dossiers"),), acces="prod",
+    ),
+    "prod.ensemble.par-operateur": Bloc(
+        appli="prod", libelle="Synthèse par opérateur", url="/prod?page=production",
+        type="tableau", valeurs=(("lignes", "Opérateurs"),), acces="prod",
+    ),
+    "prod.ensemble.par-machine": Bloc(
+        appli="prod", libelle="Synthèse par machine", url="/prod?page=production",
+        type="tableau", valeurs=(("lignes", "Machines"),), acces="prod",
+    ),
+    "prod.ensemble.par-jour": Bloc(
+        appli="prod", libelle="Synthèse par jour", url="/prod?page=production",
+        type="tableau", valeurs=(("lignes", "Jours"),), acces="prod",
+    ),
     "portail.atelier.machine": Bloc(
         appli="portail",
         libelle="Machine de l'atelier",

@@ -52,20 +52,35 @@ def verifier(cond, msg):
         echecs.append(msg)
 
 
-def noms_dans_le_code() -> dict[str, set[str]]:
-    trouves: dict[str, set[str]] = {}
-    fichiers = list(Path("app/web").rglob("*.py")) + list(Path("static").rglob("*.js"))
-    for f in fichiers:
+def _fichiers():
+    for f in list(Path("app/web").rglob("*.py")) + list(Path("static").rglob("*.js")):
         rel = f.as_posix()
         if rel in EXCLUS or "/__pycache__/" in rel:
             continue
         try:
-            texte = f.read_text(encoding="utf-8")
+            yield rel, f.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
+
+
+TEXTES = dict(_fichiers())
+
+
+def noms_dans_le_code() -> dict[str, set[str]]:
+    """Noms posés directement en data-bloc (le cas courant)."""
+    trouves: dict[str, set[str]] = {}
+    for rel, texte in TEXTES.items():
         for m in MOTIF.finditer(texte):
             trouves.setdefault(m.group(1), set()).add(rel)
     return trouves
+
+
+def fichiers_citant(nom: str) -> set[str]:
+    """Fichiers où le nom apparaît en chaîne littérale. Un bloc peut recevoir
+    son nom selon le cas (`bloc = cle === 'a' ? 'x.y.a' : 'x.y.b'`) : le
+    registre est alors cité sans être collé à « data-bloc »."""
+    motif = re.compile(r"""['"]""" + re.escape(nom) + r"""['"]""")
+    return {rel for rel, texte in TEXTES.items() if motif.search(texte)}
 
 
 # ── 1-3. Registre ↔ code ────────────────────────────────────────────────
@@ -74,12 +89,13 @@ for e in reg.erreurs_registre():
 
 code = noms_dans_le_code()
 for nom in reg.BLOCS:
-    verifier(nom in code, f"{nom} : déclaré au registre mais absent du code "
-                          "(bloc retiré ? poser son nom en alias du bloc qui le remplace)")
+    cites = fichiers_citant(nom)
+    verifier(cites, f"{nom} : déclaré au registre mais absent du code "
+                    "(bloc retiré ? poser son nom en alias du bloc qui le remplace)")
+    verifier(len(cites) <= 1, f"{nom} : porté par plusieurs fichiers {sorted(cites)}")
 for nom, fichiers in code.items():
     verifier(reg.resoudre(nom) is not None,
              f"{nom} : data-bloc présent dans {sorted(fichiers)} mais absent du registre")
-    verifier(len(fichiers) == 1, f"{nom} : porté par plusieurs fichiers {sorted(fichiers)}")
     verifier(nom not in reg._index_alias(),
              f"{nom} : le code utilise un ancien nom (alias) — utiliser le nom actuel")
 
