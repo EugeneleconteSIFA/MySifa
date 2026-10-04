@@ -77,6 +77,13 @@ BLOCS: dict[str, Bloc] = {
                  ("departs", "Expéditions aujourd'hui"), ("refs", "Références en stock")),
         acces="stock",
     ),
+    "stock.besoins.kpis": Bloc(
+        appli="stock", libelle="Besoins matières", url="/stock?tab=besoins-matieres",
+        type="chiffre",
+        valeurs=(("a-associer", "Références à associer"), ("dossiers", "Dossiers"),
+                 ("mappees", "Références associées")),
+        acces="stock",
+    ),
     "expe.departs.programmes": Bloc(
         appli="expe",
         libelle="Départs programmés",
@@ -166,6 +173,69 @@ BLOCS: dict[str, Bloc] = {
                  ("action-corrective", "Action corrective"), ("en-verification", "En vérification"),
                  ("non-lues", "Messages non lus")),
         acces="qualite",
+    ),
+    # ── Coffre RH (app/web/rh_coffre_page.py) ──
+    "rh-coffre.ndf": Bloc(
+        appli="rh_coffre", libelle="Notes de frais à valider", url="/rh/coffre#ndf",
+        type="chiffre",
+        valeurs=(("a-valider", "Notes à valider"), ("montant", "Montant à valider (€)")),
+    ),
+    # ── Messagerie (app/web/messages_page.py) ──
+    "messages.non-lus": Bloc(
+        appli="messages", libelle="Messagerie", url="/messages",
+        type="chiffre",
+        valeurs=(("non-lus", "Messages non lus"), ("directs", "Messages directs non lus"),
+                 ("mentions", "Canaux où je suis mentionné")),
+    ),
+    # ── MyBAT (app/web/bat_page.py) ──
+    "bat.statuts": Bloc(
+        appli="bat", libelle="Bons à tirer", url="/bat",
+        type="chiffre",
+        valeurs=(("en-attente", "En attente de validation"), ("a-faire", "À faire"),
+                 ("valides", "Validés")),
+    ),
+    # ── Maintenance (app/web/maintenance_page.py) — sans source API ──
+    "maintenance.statuts": Bloc(
+        appli="maintenance", libelle="Maintenance périodique", url="/maintenance#maintenance",
+        type="chiffre",
+        valeurs=(("en-retard", "Opérations en retard"), ("bientot", "Dues bientôt"),
+                 ("jamais", "Jamais saisies"), ("a-jour", "À jour")),
+    ),
+    # ── MyAO (app/web/ao_page.py) ──
+    "ao.appels": Bloc(
+        appli="ao", libelle="Appels d'offres", url="/ao",
+        type="chiffre",
+        valeurs=(("envoyees", "Appels en cours"), ("reponses", "Réponses reçues"),
+                 ("brouillons", "Brouillons")),
+    ),
+    "prod.of.a-traiter": Bloc(
+        appli="prod", libelle="OF à traiter", url="/prod?page=of",
+        type="chiffre",
+        valeurs=(("total", "OF à traiter"), ("mappings", "Mappings à valider"),
+                 ("sans-of", "Dossiers sans OF")),
+        acces="prod",
+    ),
+    # ── Calendrier (app/web/calendrier_page.py) ──
+    "calendrier.agenda": Bloc(
+        appli="calendrier", libelle="Mon agenda", url="/calendrier",
+        type="liste",
+        valeurs=(("aujourdhui", "Événements aujourd'hui"), ("demain", "Événements demain")),
+    ),
+    # ── Planning RH (app/web/planning_rh_page.py) ──
+    "planning-rh.conges": Bloc(
+        appli="planning_rh", libelle="Congés", url="/planning-rh#conges",
+        type="liste",
+        valeurs=(("absents", "Absents aujourd'hui"), ("a-valider", "Congés posés à valider")),
+        acces="planning_rh",
+    ),
+    # ── MyCompta › Outil RH (app/web/compta_rh_outil_assets.py) ──
+    "compta.rh.contrats": Bloc(
+        appli="compta", libelle="Suivi RH des employés", url="/compta#rhoutil",
+        type="chiffre",
+        valeurs=(("fin-proche", "Fins de contrat proches ou dépassées"),
+                 ("a-renseigner", "Statuts de contrat à renseigner"),
+                 ("incomplets", "Dossiers incomplets")),
+        acces="compta",
     ),
     "portail.atelier.machine": Bloc(
         appli="portail",

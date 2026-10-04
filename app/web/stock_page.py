@@ -15355,7 +15355,12 @@ function buildBesoinsMatieres() {
         'Calculés à partir des fiches techniques associées aux dossiers de production en cours ou en attente.',
       ),
     ),
-    el('div', { cls: 'bes-kpis' },
+    // Bloc capturable en widget d'accueil (app/services/blocs_registre.py) ;
+    // même lecture dans static/mysifa_blocs_sources.js (stock.besoins.kpis).
+    el('div', { cls: 'bes-kpis', 'data-bloc': 'stock.besoins.kpis',
+                'data-bloc-valeur-dossiers': String(nbDossiers),
+                'data-bloc-valeur-mappees': String(nbMapped),
+                'data-bloc-valeur-a-associer': String(nbNonMappes) },
       el('div', { cls: 'bes-kpi' },
         el('span', { cls: 'bes-kpi-lbl' }, 'Dossiers'),
         el('span', { cls: 'bes-kpi-val' }, String(nbDossiers)),

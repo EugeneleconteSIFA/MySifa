@@ -95,6 +95,24 @@
       });
     },
 
+    "stock.besoins.kpis": function (ctx) {
+      return Promise.all([
+        ctx.json("/api/stock/besoins-matieres/par-echeance"),
+        ctx.json("/api/stock/besoins-matieres/par-dossier")
+      ]).then(function (x) {
+        var lignes = (x[0] && x[0].lignes) || [];
+        var nonMappes = lignes.filter(function (l) { return !l.mapped; }).length;
+        var v = {
+          dossiers: ((x[1] && x[1].dossiers) || []).length,
+          mappees: lignes.length - nonMappes,
+          "a-associer": nonMappes
+        };
+        var t = {};
+        Object.keys(v).forEach(function (k) { t[k] = String(v[k]); });
+        return r(t, v);
+      });
+    },
+
     /* ── MyExpé › Départs programmés ───────────────────────────────────── */
     "expe.departs.programmes": function (ctx) {
       return ctx.json("/api/expe/departs/jour").then(function (rows) {
@@ -184,6 +202,135 @@
       });
     },
 
+    /* ── Coffre RH › Notes de frais (app/web/rh_coffre_page.py) ──────── */
+    "rh-coffre.ndf": function (ctx) {
+      return ctx.json("/api/rh-coffre/ndf?statut=soumise").then(function (d) {
+        var notes = (d && d.notes) || [];
+        var tot = notes.reduce(function (t, n) { return t + (Number(n.montant_ttc) || 0); }, 0);
+        return r({
+          "a-valider": String(notes.length),
+          montant: tot.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €"
+        }, { "a-valider": notes.length, montant: Math.round(tot * 100) / 100 });
+      });
+    },
+
+    /* ── Messagerie (app/web/messages_page.py) ─────────────────────────── */
+    "messages.non-lus": function (ctx) {
+      return ctx.json("/api/chat/channels").then(function (ch) {
+        ch = Array.isArray(ch) ? ch : [];
+        function nl(l) { return l.reduce(function (t, c) { return t + (Number(c.unread_count) || 0); }, 0); }
+        var v = {
+          "non-lus": nl(ch),
+          directs: nl(ch.filter(function (c) { return c.type === "direct"; })),
+          mentions: ch.filter(function (c) { return Number(c.mention_count) > 0; }).length
+        };
+        var t = {};
+        Object.keys(v).forEach(function (k) { t[k] = String(v[k]); });
+        return r(t, v);
+      });
+    },
+
+    /* ── MyBAT (app/web/bat_page.py) ───────────────────────────────────── */
+    "bat.statuts": function (ctx) {
+      return ctx.json("/api/bat").then(function (rows) {
+        rows = Array.isArray(rows) ? rows : [];
+        function n(st) { return rows.filter(function (e) { return e.statut === st; }).length; }
+        var v = { "a-faire": n("a_faire"), "en-attente": n("en_attente"), valides: n("valide") };
+        var t = {};
+        Object.keys(v).forEach(function (k) { t[k] = String(v[k]); });
+        return r(t, v);
+      });
+    },
+
+    /* ── MyAO (app/web/ao_page.py) ─────────────────────────────────────── */
+    "ao.appels": function (ctx) {
+      return ctx.json("/api/ao").then(function (all) {
+        all = Array.isArray(all) ? all : [];
+        var env = all.filter(function (a) { return a.statut === "envoyee"; });
+        var v = {
+          envoyees: env.length,
+          brouillons: all.filter(function (a) { return a.statut === "brouillon"; }).length,
+          reponses: env.reduce(function (t, a) { return t + (Number(a.nb_reponses) || 0); }, 0)
+        };
+        var t = {};
+        Object.keys(v).forEach(function (k) { t[k] = String(v[k]); });
+        return r(t, v);
+      });
+    },
+
+    /* ── Calendrier (app/web/calendrier_page.py) ─────────────────────────
+       Même comptage que majBlocAgenda() : un événement compte pour chaque
+       jour qu'il couvre. Le filtre « par collègue » de la page n'est pas
+       repris : tous les événements des calendriers capturés comptent. */
+    "calendrier.agenda": function (ctx) {
+      var cals = ctx.params.getAll("bloc_calendriers");
+      var auj = new Date(), dem = new Date(); dem.setDate(auj.getDate() + 1);
+      var j0 = iso(auj), j1 = iso(dem);
+      if (!cals.length) return r({ aujourdhui: "0", demain: "0" }, { aujourdhui: 0, demain: 0 });
+      var q = new URLSearchParams({ date_debut: j0, date_fin: j1, calendriers: cals.join(",") });
+      return ctx.json("/api/calendrier/events?" + q.toString()).then(function (res) {
+        var evs = Array.isArray(res) ? res : ((res && res.events) || []);
+        function compte(j) {
+          return evs.filter(function (ev) {
+            var a = String(ev.debut || "").slice(0, 10), b = String(ev.fin || ev.debut || "").slice(0, 10);
+            return a <= j && b >= j;
+          }).length;
+        }
+        var v = { aujourdhui: compte(j0), demain: compte(j1) };
+        return r({ aujourdhui: String(v.aujourdhui), demain: String(v.demain) }, v);
+      });
+    },
+
+    /* ── Planning RH › Congés (app/web/planning_rh_page.py) ──────────── */
+    "planning-rh.conges": function (ctx) {
+      var scope = ctx.params.get("bloc_scope") === "rh" ? "rh" : "atelier";
+      return ctx.json("/api/rh/conges" + (scope === "rh" ? "?scope=rh" : "")).then(function (d) {
+        var cs = (d && d.conges) || [];
+        var auj = iso(new Date());
+        var v = {
+          absents: cs.filter(function (c) { return c.statut !== "refuse" && c.date_debut <= auj && c.date_fin >= auj; }).length,
+          "a-valider": cs.filter(function (c) { return c.statut === "pose"; }).length
+        };
+        return r({ absents: String(v.absents), "a-valider": String(v["a-valider"]) }, v);
+      });
+    },
+
+    /* ── MyCompta › Outil RH (app/web/compta_rh_outil_assets.py) ──────────
+       Mêmes règles que rhOutilEtatContrat() et rhOutilComplet() ; les listes
+       suivies sont celles de RH_OUTIL_LISTES (formations, documents). */
+    "compta.rh.contrats": function (ctx) {
+      return Promise.all([ctx.json("/api/rh-outil/membres"), ctx.json("/api/rh-outil/services")]).then(function (x) {
+        var list = (x[0] && x[0].membres) || [];
+        var sv = x[1] || {};
+        var sansFin = sv.contrats_sans_fin || [];
+        var alerte = Number(sv.alerte_fin_contrat_jours) || 15;
+        var auj = new Date(); auj.setHours(0, 0, 0, 0);
+        function proche(m) {
+          if (!m.contrat_type || sansFin.indexOf(m.contrat_type) !== -1 || !m.contrat_fin) return false;
+          var r_ = String(m.contrat_fin).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          if (!r_) return false;
+          var j = Math.round((new Date(+r_[1], +r_[2] - 1, +r_[3]) - auj) / 86400000);
+          return j <= alerte;
+        }
+        function complet(m) {
+          return ["formations", "documents"].every(function (cle) {
+            var it = m[cle] || [];
+            return it.length > 0 && it.every(function (e) {
+              return e.fait && (e.justificatifs || []).every(function (j) { return j.fait; });
+            });
+          });
+        }
+        var v = {
+          "fin-proche": list.filter(proche).length,
+          "a-renseigner": list.filter(function (m) { return !m.contrat_type; }).length,
+          incomplets: list.filter(function (m) { return !complet(m); }).length
+        };
+        var t = {};
+        Object.keys(v).forEach(function (k) { t[k] = String(v[k]); });
+        return r(t, v);
+      });
+    },
+
     /* ── Accueil › Atelier maintenant ──────────────────────────────────── */
     "portail.atelier.machine": function (ctx) {
       return ctx.json("/api/portail/atelier").then(function (d) {
@@ -255,7 +402,15 @@
           arrets: Math.round(Number(tt.arret_min || 0))
         });
       });
-    }
+    },
+    "prod.of.a-traiter": function (ctx) {
+      return ctx.json("/api/admin/of-link-pending/count").then(function (d) {
+        var v = { total: Number(d && d.count || 0), mappings: Number(d && d.ambigus || 0), "sans-of": Number(d && d.sans_of || 0) };
+        var t = {};
+        Object.keys(v).forEach(function (k) { t[k] = String(v[k]); });
+        return r(t, v);
+      });
+    },
     // prod.ensemble.par-* : regroupements calculés dans la page
     // (_prodAggBy, hors repiquage) — chargement de page en attendant.
   };

@@ -2031,7 +2031,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </div>
           <span class="maint-toolbar-sep" aria-hidden="true"></span>
           <label class="maint-toolbar-label">Statut</label>
-          <div class="maint-chip-group" id="maint-status-chips" role="tablist">
+          <div class="maint-chip-group" id="maint-status-chips" role="tablist" data-bloc="maintenance.statuts">
             <button type="button" class="maint-chip active" data-status-filter="all" onclick="setMaintStatusFilter('all')">Tous<span class="maint-chip-count" data-status-count="all">0</span></button>
             <button type="button" class="maint-chip" data-status-filter="overdue" onclick="setMaintStatusFilter('overdue')">En retard<span class="maint-chip-count" data-status-count="overdue">0</span></button>
             <button type="button" class="maint-chip" data-status-filter="soon" onclick="setMaintStatusFilter('soon')">Dû bientôt<span class="maint-chip-count" data-status-count="soon">0</span></button>
@@ -8699,6 +8699,17 @@ function renderMaintCards(){
   const neverAndUnknown = statusCounts.never + statusCounts.unknown;
   // Le compteur "Tous" reflète ce qui sera VU (donc sans never/unknown).
   statusCounts.all = statusCounts.overdue + statusCounts.soon + statusCounts.ok;
+  // Widget d'accueil (app/services/blocs_registre.py). Pas de source API : le
+  // statut se calcule ici, en partie depuis des saisies gardées dans le
+  // navigateur ; le widget lit donc la page elle-même.
+  const _blocMaint = document.getElementById('maint-status-chips');
+  if(_blocMaint){
+    _blocMaint.setAttribute('data-bloc-objet-libelle', machine || '');
+    _blocMaint.setAttribute('data-bloc-valeur-en-retard', String(statusCounts.overdue || 0));
+    _blocMaint.setAttribute('data-bloc-valeur-bientot', String(statusCounts.soon || 0));
+    _blocMaint.setAttribute('data-bloc-valeur-jamais', String(neverAndUnknown || 0));
+    _blocMaint.setAttribute('data-bloc-valeur-a-jour', String(statusCounts.ok || 0));
+  }
   document.querySelectorAll('[data-status-count]').forEach(el => {
     const key = el.getAttribute('data-status-count');
     if(key === 'never'){

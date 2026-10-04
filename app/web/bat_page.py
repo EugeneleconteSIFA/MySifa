@@ -284,7 +284,7 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
       </div>
 
       <!-- Onglets statut -->
-      <div class="stat-tabs" id="stat-tabs"></div>
+      <div class="stat-tabs" id="stat-tabs" data-bloc="bat.statuts"></div>
 
       <!-- Barre de recherche -->
       <div class="toolbar">
@@ -664,6 +664,11 @@ function renderTabs(){
     {key:'valide',label:'Validé',count:counts.valide},
   ];
   const wrap=document.getElementById('stat-tabs');
+  // Widget d'accueil (app/services/blocs_registre.py) : même lecture dans
+  // static/mysifa_blocs_sources.js (bat.statuts).
+  wrap.setAttribute('data-bloc-valeur-a-faire',String(counts.a_faire));
+  wrap.setAttribute('data-bloc-valeur-en-attente',String(counts.en_attente));
+  wrap.setAttribute('data-bloc-valeur-valides',String(counts.valide));
   wrap.innerHTML=tabs.map(t=>`
     <button type="button" class="stat-tab${S.statut===t.key?' active':''}" onclick="setStatut('${t.key}')">
       ${escHtml(t.label)}<span class="stat-count">${t.count}</span>
