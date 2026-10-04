@@ -68,6 +68,7 @@
       replier: '<path d="m15 18-6-6 6-6"/>',
       deplier: '<path d="m9 18 6-6-6-6"/>',
       fermer: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+      corbeille: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
       poignee: '<circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/>'
     }[nom] || "";
     return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + "</svg>";
@@ -104,8 +105,19 @@
       ".mac-point{width:8px;height:8px;border-radius:50%;background:var(--danger,#f87171);display:none;flex-shrink:0}",
       ".mac-carte.alerte .mac-point{display:block}",
       ".mac-cadre{position:relative;border-top:1px solid var(--border,#1e293b)}",
-      ".mac-cadre iframe{display:block;width:100%;border:0;pointer-events:none;background:var(--bg,#0a0e17)}",
-      ".mac-cadre .mac-voile{position:absolute;inset:0;cursor:pointer}",
+      ".mac-cadre iframe{display:block;width:100%;border:0;background:var(--bg,#0a0e17)}",
+      // Le voile ne sert qu'en mode Personnaliser : il rend la carte saisissable
+      // pour le glisser-déposer. Hors édition, l'iframe défile librement.
+      ".mac-cadre .mac-voile{position:absolute;inset:0;display:none}",
+      "#mysifa-accueil.edition .mac-cadre .mac-voile{display:block;cursor:grab}",
+      ".mac-corb{display:none;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;cursor:pointer;flex-shrink:0;",
+      "  background:var(--bg,#0a0e17);color:var(--muted,#94a3b8);border:1px solid var(--border,#1e293b)}",
+      ".mac-ctete:hover .mac-corb,.mac-corb:focus-visible,.mac-corb.confirmer{display:inline-flex}",
+      ".mac-corb:hover,.mac-corb.confirmer{color:#fff;background:var(--danger,#f87171);border-color:var(--danger,#f87171)}",
+      ".mac-corb.confirmer{width:auto;padding:0 8px;font:600 11px 'Segoe UI',system-ui,sans-serif}",
+      "#mysifa-accueil.edition .mac-corb{display:none!important}",
+      // Écran tactile : pas de survol, la corbeille reste visible.
+      "@media (hover:none){.mac-corb{display:inline-flex}}",
       ".mac-attente{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted,#94a3b8);pointer-events:none}",
       ".mac-carte.prete .mac-attente{display:none}",
       // Avant que le script embarqué n'ait isolé le bloc, l'iframe montre la
@@ -131,6 +143,7 @@
       "#mysifa-accueil.edition .mac-carte{cursor:grab}",
       ".mac-outils .mac-btn{height:26px;min-width:26px;padding:0 6px;font-size:11px}",
       ".mac-outils .mac-esp{flex:1}",
+      ".mac-outils .mac-sup-ok,.mac-outils [data-act=sup]:hover{background:var(--danger,#f87171);border-color:var(--danger,#f87171);color:#fff}",
       ".mac-outils input{flex:1;min-width:0;font:13px 'Segoe UI',system-ui,sans-serif;background:var(--card,#111827);color:var(--text,#f1f5f9);border:1px solid var(--border,#1e293b);border-radius:8px;padding:4px 6px}",
       ".mac-carte.glisse{opacity:.5}",
       ".mac-vide{border:1px dashed var(--border,#1e293b);border-radius:12px;padding:14px;color:var(--muted,#94a3b8);line-height:1.5}",
@@ -212,13 +225,34 @@
     el.className = "mac-carte mac-h-" + w.hauteur + " aff-" + w.affichage;
     el.setAttribute("data-id", w.id);
     el.innerHTML =
-      '<div class="mac-ctete" title="Ouvrir la page"><span class="mac-nom"></span><span class="mac-point"></span></div>' +
+      '<div class="mac-ctete" title="Ouvrir la page"><span class="mac-nom"></span><span class="mac-point"></span>' +
+      '<button type="button" class="mac-corb" title="Supprimer ce widget" aria-label="Supprimer ce widget">' + icone("corbeille") + "</button></div>" +
       '<div class="mac-vals"></div>' +
       '<div class="mac-cadre"><div class="mac-attente">Chargement…</div><div class="mac-voile"></div></div>' +
       '<div class="mac-outils"></div>';
+    var c = { el: el, iframe: null, valeurs: null, absences: 0, w: w };
     el.querySelector(".mac-nom").textContent = w.nom;
-    el.querySelector(".mac-ctete").addEventListener("click", function (e) { ouvrir(w, e); });
-    el.querySelector(".mac-voile").addEventListener("click", function (e) { ouvrir(w, e); });
+    el.querySelector(".mac-ctete").addEventListener("click", function (e) {
+      if (e.target.closest(".mac-corb")) return;
+      ouvrir(w, e);
+    });
+    var corb = el.querySelector(".mac-corb");
+    corb.addEventListener("click", function (e) {
+      e.stopPropagation();
+      // Deux temps : un clic arme, le second supprime. Un widget mal visé ne
+      // disparaît pas sur un geste involontaire.
+      if (!corb.classList.contains("confirmer")) {
+        corb.classList.add("confirmer");
+        corb.textContent = "Supprimer ?";
+        setTimeout(function () {
+          if (!corb.isConnected || !corb.classList.contains("confirmer")) return;
+          corb.classList.remove("confirmer");
+          corb.innerHTML = icone("corbeille");
+        }, 4000);
+        return;
+      }
+      supprimer(c, null);
+    });
 
     var cadre = el.querySelector(".mac-cadre");
     var iframe = document.createElement("iframe");
@@ -230,7 +264,7 @@
     else iframe.style.height = HAUTEURS_PX[w.hauteur] + "px";
     cadre.insertBefore(iframe, cadre.firstChild);
 
-    var c = { el: el, iframe: iframe, valeurs: null, absences: 0, w: w };
+    c.iframe = iframe;
     W.cartes[w.id] = c;
     dessinerOutils(c);
     afficherValeurs(c);
@@ -296,7 +330,8 @@
         : "") +
       '<span class="mac-esp"></span>' +
       '<button type="button" class="mac-btn" data-act="nom" title="Renommer">' + icone("reglages") + "</button>" +
-      '<button type="button" class="mac-btn" data-act="sup" title="Supprimer">' + (c.confirmer ? "Confirmer" : icone("fermer")) + "</button>";
+      '<button type="button" class="mac-btn' + (c.confirmer ? " mac-sup-ok" : "") + '" data-act="sup" title="Supprimer">' +
+      (c.confirmer ? "Supprimer ?" : icone("corbeille")) + "</button>";
     o.onclick = function (e) {
       var b = e.target.closest("button");
       if (!b) return;
@@ -470,6 +505,11 @@
       ajusterHauteur(c);
       c.el.classList.add("prete");
       afficherValeurs(c);
+    } else if (d.type === "ouvrir") {
+      if (!W.edition && c.w.url) {
+        if (d.nouvelOnglet) window.open(c.w.url, "_blank", "noopener");
+        else location.href = c.w.url;
+      }
     } else if (d.type === "rechargement") {
       c.el.classList.remove("prete");
     } else if (d.type === "introuvable") {

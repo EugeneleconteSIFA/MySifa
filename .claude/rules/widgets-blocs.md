@@ -75,6 +75,10 @@ window.mysifaBlocsRafraichir = function () {
 - Une page en mode embarqué (`window.MySifaBlocs.embarque`) ne doit pas ouvrir
   de modale, de visite guidée ni d'annonce : elles seraient masquées mais
   pourraient marquer « vu » côté serveur.
-- `mysifa_blocs.js` et `mysifa_accueil.js` ont un `?v=` figé : l'incrémenter à
-  chaque modification (dans `main.py` pour le premier, dans
-  `VERSION_ACCUEIL` de `mysifa_blocs.js` pour le second).
+- Versions : `main.py` injecte `mysifa_blocs.js?v=APP_VERSION`, qui charge
+  `mysifa_accueil.js` avec la même version. Aucun compteur manuel à tenir.
+- Le bouton de capture est un bouton « extra » du dock
+  (`.mysifa-dock-fab.mysifa-dock-extra`, rangé par `mysifa_dock.js`). Sur une
+  page sans dock, il prend le même aspect et se place seul.
+- Dans un widget, la page embarquée défile mais ne réagit pas aux clics : un
+  clic demande à l'accueil d'ouvrir la page d'origine.

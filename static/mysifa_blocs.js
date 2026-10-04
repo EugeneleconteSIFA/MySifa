@@ -27,7 +27,12 @@
   if (window.MySifaBlocs) return;
 
   var ORIGINE = location.origin;
-  var VERSION_ACCUEIL = "1";
+  // Même version que ce script : main.py l'injecte avec ?v=APP_VERSION.
+  var VERSION = (function () {
+    var src = (document.currentScript && document.currentScript.src) || "";
+    var m = src.match(/[?&]v=([^&]+)/);
+    return m ? m[1] : "";
+  })();
   var PREFIXE_VALEUR = "data-bloc-valeur-";
 
   function esc(s) {
@@ -110,7 +115,7 @@
 
   if (location.pathname === "/") {
     var s = document.createElement("script");
-    s.src = "/static/mysifa_accueil.js?v=" + VERSION_ACCUEIL;
+    s.src = "/static/mysifa_accueil.js" + (VERSION ? "?v=" + VERSION : "");
     s.defer = true;
     document.head.appendChild(s);
   }
@@ -124,7 +129,11 @@
     html.classList.add("mysifa-bloc-embed");
     var style = document.createElement("style");
     style.textContent = [
-      "html.mysifa-bloc-embed,html.mysifa-bloc-embed body{margin:0!important;padding:0!important;min-height:0!important;height:auto!important;overflow:hidden!important}",
+      "html.mysifa-bloc-embed,html.mysifa-bloc-embed body{margin:0!important;padding:0!important;min-height:0!important;height:auto!important}",
+      // Un tableau plus haut ou plus large que le cadre défile dans le widget.
+      "html.mysifa-bloc-embed{overflow:auto!important;scrollbar-width:thin}",
+      "html.mysifa-bloc-embed body{overflow:visible!important}",
+      "html.mysifa-bloc-embed .mysifa-bloc-cible{cursor:pointer}",
       "html.mysifa-bloc-embed body *:not(.mysifa-bloc-chemin):not(.mysifa-bloc-cible):not(.mysifa-bloc-cible *){display:none!important}",
       "html.mysifa-bloc-embed .mysifa-bloc-chemin{display:block!important;margin:0!important;padding:0!important;border:0!important;max-width:none!important;width:auto!important;min-width:0!important;min-height:0!important;height:auto!important;position:static!important;transform:none!important;overflow:visible!important;box-shadow:none!important;background:transparent!important;animation:none!important}",
       "html.mysifa-bloc-embed .mysifa-bloc-cible{display:block!important;position:static!important;margin:0!important;max-width:none!important;width:auto!important;animation:none!important}"
@@ -203,6 +212,19 @@
       minuteurMaj = setTimeout(maj, 150);
     }
 
+    /* Le widget défile mais ne s'utilise pas : un clic n'agit jamais dans la
+       page embarquée (bouton « Masquer », lien de fiche…). Il demande à
+       l'accueil d'ouvrir la page d'origine, où l'on peut agir. */
+    function verrouiller(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+      if (e.type === "click") envoyer("ouvrir", { nouvelOnglet: !!(e.metaKey || e.ctrlKey) });
+    }
+    ["click", "dblclick", "auxclick", "submit"].forEach(function (t) {
+      document.addEventListener(t, verrouiller, true);
+    });
+
     new MutationObserver(planifier).observe(html, {
       childList: true, subtree: true, characterData: true, attributes: true
     });
@@ -231,6 +253,7 @@
      ════════════════════════════════════════════════════════════════════ */
   function modeCapture() {
     var registre = null;          // { nom: bloc } capturables pour cet utilisateur
+    var registreOk = false;       // faux hors connexion (écran de login, site public)
     var valeursMax = 4;
     var chargement = null;
     var actif = false;
@@ -240,6 +263,7 @@
     function chargerRegistre() {
       if (chargement) return chargement;
       chargement = api("/api/accueil/blocs").then(function (d) {
+        registreOk = true;
         registre = {};
         (d.blocs || []).forEach(function (b) { registre[b.nom] = b; });
         valeursMax = d.valeurs_max || 4;
@@ -266,11 +290,12 @@
       styleOk = true;
       var st = document.createElement("style");
       st.textContent = [
-        ".mysifa-cap-btn{position:fixed;right:20px;bottom:20px;z-index:2147482000;width:44px;height:44px;border-radius:50%;",
-        "  display:flex;align-items:center;justify-content:center;cursor:pointer;background:var(--card,#111827);color:var(--accent,#22d3ee);",
-        "  border:1px solid var(--border,#1e293b);box-shadow:0 4px 14px rgba(0,0,0,.18);transition:filter .15s}",
-        ".mysifa-cap-btn:hover{background:var(--bg,#0a0e17)}",
-        ".mysifa-cap-btn.on{background:var(--accent-bg,rgba(34,211,238,.12));border-color:var(--accent,#22d3ee)}",
+        ".mysifa-cap-btn{position:fixed;right:24px;bottom:24px;z-index:8003;width:48px;height:48px;border-radius:50%;border:none;cursor:pointer;",
+        "  display:flex;align-items:center;justify-content:center;background:var(--accent,#22d3ee);color:var(--bg,#0a0e17);",
+        "  box-shadow:0 4px 16px rgba(34,211,238,.35);transition:transform .18s,box-shadow .18s}",
+        ".mysifa-cap-btn:hover{transform:scale(1.08)}",
+        ".mysifa-cap-btn svg{display:block;color:var(--bg,#0a0e17)}",
+        ".mysifa-cap-btn.on{box-shadow:0 0 0 3px var(--accent-bg,rgba(34,211,238,.35)),0 6px 24px rgba(34,211,238,.5)}",
         "html.mysifa-capture .mysifa-capturable{outline:2px dashed var(--accent,#22d3ee)!important;outline-offset:3px;cursor:copy!important}",
         "html.mysifa-capture .mysifa-capturable.survol{outline-style:solid!important;background-color:var(--accent-bg,rgba(34,211,238,.12))!important}",
         ".mysifa-cap-bandeau{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147482001;display:flex;gap:12px;align-items:center;",
@@ -318,12 +343,18 @@
       setTimeout(function () { t.remove(); }, 2600);
     }
 
-    /* Chaque page a ses propres boutons flottants en bas à droite (messagerie,
-       post-it, tâches…), à des places différentes : le bouton se pose
-       au-dessus du plus haut d'entre eux plutôt qu'à une place fixe. */
-    function placerBouton() {
-      if (!bouton) return;
-      var bas = 20, l = window.innerWidth, h = window.innerHeight;
+    /* Le bouton vit dans le dock commun des boutons flottants (mysifa_dock.js :
+       messagerie, assistant, post-it…) comme bouton « extra » : le dock le
+       range avec les autres et le masque avec eux. Les pages sans dock
+       (MyQualité, Tâches, Coffre…) reçoivent le même aspect, et le bouton se
+       pose seul au-dessus de ce qui flotte déjà en bas à droite. */
+    function avecDock() {
+      return !!(window.MySifaDock && typeof window.MySifaDock.layout === "function");
+    }
+
+    function placerSeul() {
+      if (!bouton || avecDock()) return;
+      var bas = 24, l = window.innerWidth, h = window.innerHeight;
       var els = document.body.querySelectorAll("body > *, body > * > *");
       for (var i = 0; i < els.length; i++) {
         var el = els[i];
@@ -333,38 +364,44 @@
         var r = el.getBoundingClientRect();
         if (!r.width || !r.height || r.height > h / 2) continue;
         if (r.right < l - 90 || r.bottom < h - 260) continue;
-        bas = Math.max(bas, Math.round(h - r.top + 10));
+        bas = Math.max(bas, Math.round(h - r.top + 12));
       }
+      bouton.style.right = "24px";
       bouton.style.bottom = Math.min(bas, h - 60) + "px";
     }
 
-    function majBouton() {
-      var present = blocsDeLaPage().length > 0;
-      if (present && !bouton) {
-        poserStyle();
-        bouton = document.createElement("button");
-        bouton.type = "button";
-        bouton.className = "mysifa-cap-btn";
-        bouton.title = "Capturer un bloc pour l'accueil (Alt+C)";
-        bouton.setAttribute("aria-label", "Capturer un bloc pour l'accueil");
-        bouton.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>';
-        bouton.addEventListener("click", function () { actif ? quitter() : entrer(); });
-        document.body.appendChild(bouton);
-        placerBouton();
-        window.addEventListener("resize", placerBouton);
-        setTimeout(placerBouton, 1500);
-      } else if (!present && bouton && !actif) {
-        bouton.remove();
-        bouton = null;
+    function ranger() {
+      if (!bouton) return;
+      if (avecDock()) {
+        try { window.MySifaDock.layout(); } catch (e) { /* dock indisponible */ }
+      } else {
+        placerSeul();
       }
-      if (actif) marquer();
+    }
+
+    function creerBouton() {
+      if (bouton) return;
+      poserStyle();
+      bouton = document.createElement("button");
+      bouton.type = "button";
+      bouton.id = "mysifa-cap-fab";
+      bouton.className = "mysifa-dock-fab mysifa-dock-extra mysifa-cap-btn";
+      bouton.title = "Capturer un bloc pour l'accueil (Alt+C)";
+      bouton.setAttribute("aria-label", "Capturer un bloc pour l'accueil");
+      bouton.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>';
+      bouton.addEventListener("click", function () { actif ? quitter() : entrer(); });
+      document.body.appendChild(bouton);
+      ranger();
+      window.addEventListener("resize", ranger);
+      // Les autres boutons du dock arrivent souvent après nous.
+      setTimeout(ranger, 800);
+      setTimeout(ranger, 2500);
     }
 
     function scanner() {
       clearTimeout(minuteurScan);
       minuteurScan = setTimeout(function () {
-        if (!document.querySelector("[data-bloc]")) { if (bouton && !actif) { bouton.remove(); bouton = null; } return; }
-        chargerRegistre().then(majBouton);
+        if (actif) marquer();
       }, 400);
     }
 
@@ -385,7 +422,7 @@
 
     function entrer() {
       chargerRegistre().then(function () {
-        if (!blocsDeLaPage().length) { toast("Aucun bloc capturable sur cette page."); return; }
+        if (!blocsDeLaPage().length) { toast("Aucun bloc capturable sur cette page pour l'instant."); return; }
         poserStyle();
         actif = true;
         document.documentElement.classList.add("mysifa-capture");
@@ -614,6 +651,6 @@
     }
 
     new MutationObserver(scanner).observe(document.documentElement, { childList: true, subtree: true });
-    scanner();
+    chargerRegistre().then(function () { if (registreOk) creerBouton(); });
   }
 })();
