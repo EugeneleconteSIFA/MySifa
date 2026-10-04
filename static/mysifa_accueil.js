@@ -134,12 +134,9 @@
       ".mac-val .lib{color:var(--muted,#94a3b8);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
       ".mac-val .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text,#f1f5f9)}",
       ".mac-val.alerte .v{color:var(--danger,#f87171)}",
-      ".mac-h-s .mac-val:nth-child(n+3){display:none}",
-      ".mac-carte.aff-bloc .mac-vals{display:none}",
       "@media (min-width:900px) and (max-width:1199px){",
       "  .mac-carte .mac-cadre{position:absolute!important;left:-10000px!important;width:1100px!important;visibility:hidden!important}",
       "  .mac-carte .mac-cadre iframe{width:1100px!important;height:700px!important}",
-      "  .mac-carte.aff-bloc .mac-vals{display:flex}",
       "  .mac-val:nth-child(n+2){display:none}",
       "  .mac-val .lib{display:none}",
       "  .mac-perso,.mac-outils{display:none!important}",
@@ -151,7 +148,10 @@
       ".mac-outils .mac-esp{flex:1}",
       ".mac-outils .mac-sup-ok,.mac-outils [data-act=sup]:hover{background:var(--danger,#f87171);border-color:var(--danger,#f87171);color:#fff}",
       ".mac-outils input{flex:1;min-width:0;font:13px 'Segoe UI',system-ui,sans-serif;background:var(--card,#111827);color:var(--text,#f1f5f9);border:1px solid var(--border,#1e293b);border-radius:8px;padding:4px 6px}",
-      ".mac-carte.glisse{opacity:.5}",
+      ".mac-carte.glisse{position:fixed;z-index:200;opacity:.92;box-shadow:0 12px 32px rgba(0,0,0,.25);pointer-events:none}",
+      ".mac-place{border:2px dashed var(--accent,#22d3ee);border-radius:12px;background:var(--accent-bg,rgba(34,211,238,.12));flex-shrink:0}",
+      "#mysifa-accueil.edition .mac-carte{touch-action:none;user-select:none}",
+      ".mac-poignee{cursor:grab}",
       ".mac-vide{border:1px dashed var(--border,#1e293b);border-radius:12px;padding:14px;color:var(--muted,#94a3b8);line-height:1.5}",
       ".mac-vide b{color:var(--text,#f1f5f9)}",
       ".mac-avis{display:flex;flex-direction:column;gap:6px;margin:0 8px 10px 0}",
@@ -229,7 +229,7 @@
 
   function creerCarte(w) {
     var el = document.createElement("div");
-    el.className = "mac-carte mac-h-" + w.hauteur + " aff-" + w.affichage;
+    el.className = "mac-carte aff-valeurs";
     el.setAttribute("data-id", w.id);
     el.innerHTML =
       '<div class="mac-ctete" title="Ouvrir la page"><span class="mac-nom"></span><span class="mac-point"></span>' +
@@ -268,8 +268,9 @@
     iframe.title = w.nom;
     iframe.setAttribute("tabindex", "-1");
     iframe.setAttribute("aria-hidden", "true");
-    if (w.affichage === "valeurs") cadre.classList.add("mac-hors");
-    else iframe.style.height = Math.min(HAUTEURS_PX[w.hauteur], 299) + "px";
+    // Widgets « valeurs » uniquement (décision du 04/10/2026) : la page est
+    // chargée hors écran, seul son chiffre remonte.
+    cadre.classList.add("mac-hors");
     cadre.insertBefore(iframe, cadre.firstChild);
 
     c.iframe = iframe;
@@ -282,7 +283,7 @@
   /* La taille choisie (petit, moyen, grand) est un plafond : un bloc plus
      court que son cadre ne laisse pas de vide sous lui. */
   function ajusterHauteur(c) {
-    if (c.w.affichage === "valeurs") { c.iframe.style.height = ""; return; }
+    if (c.el.classList.contains("aff-valeurs")) { c.iframe.style.height = ""; return; }
     // Jamais plus haut que large : beaucoup de pages passent en vue téléphone
     // quand l'écran est en portrait étroit, et le bloc n'y existe pas toujours.
     var larg = c.iframe.clientWidth || 300;
@@ -330,15 +331,7 @@
       return;
     }
     o.innerHTML =
-      '<span class="mac-btn" title="Glisser pour déplacer">' + icone("poignee") + "</span>" +
-      ["s", "m", "l"].map(function (k) {
-        return '<button type="button" class="mac-btn' + (w.hauteur === k ? " on" : "") + '" data-h="' + k + '" title="' +
-          ({ s: "Petit", m: "Moyen", l: "Grand" })[k] + '">' + k.toUpperCase() + "</button>";
-      }).join("") +
-      (w.valeurs && w.valeurs.length
-        ? '<button type="button" class="mac-btn" data-act="aff" title="Basculer bloc complet / valeurs seules">' +
-          (w.affichage === "bloc" ? "Valeurs" : "Bloc") + "</button>"
-        : "") +
+      '<span class="mac-btn mac-poignee" title="Glisser pour déplacer">' + icone("poignee") + "</span>" +
       '<span class="mac-esp"></span>' +
       '<button type="button" class="mac-btn" data-act="nom" title="Renommer">' + icone("reglages") + "</button>" +
       '<button type="button" class="mac-btn' + (c.confirmer ? " mac-sup-ok" : "") + '" data-act="sup" title="Supprimer">' +
@@ -347,24 +340,7 @@
       var b = e.target.closest("button");
       if (!b) return;
       e.stopPropagation();
-      if (b.hasAttribute("data-h")) {
-        var h = b.getAttribute("data-h");
-        patcher(c, { hauteur: h }).then(function () {
-          c.el.className = c.el.className.replace(/mac-h-[sml]/, "mac-h-" + h);
-          ajusterHauteur(c);
-          dessinerOutils(c);
-        });
-      } else if (b.getAttribute("data-act") === "aff") {
-        var aff = c.w.affichage === "bloc" ? "valeurs" : "bloc";
-        patcher(c, { affichage: aff }).then(function () {
-          c.el.classList.remove("aff-bloc", "aff-valeurs");
-          c.el.classList.add("aff-" + aff);
-          var cadre = c.el.querySelector(".mac-cadre");
-          cadre.classList.toggle("mac-hors", aff === "valeurs");
-          ajusterHauteur(c);
-          dessinerOutils(c);
-        });
-      } else if (b.getAttribute("data-act") === "nom") {
+      if (b.getAttribute("data-act") === "nom") {
         c.renommage = true;
         dessinerOutils(c);
       } else if (b.getAttribute("data-act") === "sup") {
@@ -442,28 +418,54 @@
     demarrerIframes();
   }
 
-  var glisse = null;
+  /* Glisser-déposer au pointeur plutôt qu'en glisser natif HTML5 : ce
+     dernier est capricieux sous Safari et n'existe pas au doigt. La carte
+     attrapée suit le pointeur ; une place vide montre où elle tombera. */
   function brancherGlisser(liste) {
-    liste.addEventListener("dragstart", function (e) {
-      if (!W.edition) { e.preventDefault(); return; }
-      glisse = e.target.closest(".mac-carte");
-      if (!glisse) return;
-      glisse.classList.add("glisse");
-      e.dataTransfer.effectAllowed = "move";
-      try { e.dataTransfer.setData("text/plain", glisse.getAttribute("data-id")); } catch (err) { /* IE */ }
+    var g = null;
+
+    liste.addEventListener("pointerdown", function (e) {
+      if (!W.edition || e.button > 0) return;
+      var carte = e.target.closest(".mac-carte");
+      if (!carte || e.target.closest("button,input")) return;
+      var r = carte.getBoundingClientRect();
+      g = { carte: carte, dy: e.clientY - r.top, x0: e.clientX, y0: e.clientY, actif: false, r: r, id: e.pointerId };
+      try { carte.setPointerCapture(e.pointerId); } catch (err) { /* navigateur ancien */ }
     });
-    liste.addEventListener("dragover", function (e) {
-      if (!glisse) return;
+
+    liste.addEventListener("pointermove", function (e) {
+      if (!g || e.pointerId !== g.id) return;
+      if (!g.actif) {
+        if (Math.abs(e.clientY - g.y0) < 5 && Math.abs(e.clientX - g.x0) < 5) return;
+        g.actif = true;
+        g.place = document.createElement("div");
+        g.place.className = "mac-place";
+        g.place.style.height = g.r.height + "px";
+        liste.insertBefore(g.place, g.carte);
+        g.carte.classList.add("glisse");
+        g.carte.style.width = g.r.width + "px";
+        g.carte.style.left = g.r.left + "px";
+      }
       e.preventDefault();
-      var cible = e.target.closest(".mac-carte");
-      if (!cible || cible === glisse) return;
-      var r = cible.getBoundingClientRect();
-      liste.insertBefore(glisse, e.clientY < r.top + r.height / 2 ? cible : cible.nextSibling);
+      g.carte.style.top = (e.clientY - g.dy) + "px";
+      var autres = liste.querySelectorAll(".mac-carte:not(.glisse)");
+      var avant = null;
+      for (var i = 0; i < autres.length; i++) {
+        var ra = autres[i].getBoundingClientRect();
+        if (e.clientY < ra.top + ra.height / 2) { avant = autres[i]; break; }
+      }
+      liste.insertBefore(g.place, avant);
     });
-    liste.addEventListener("dragend", function () {
-      if (!glisse) return;
-      glisse.classList.remove("glisse");
-      glisse = null;
+
+    function lacher(e) {
+      if (!g || (e && e.pointerId !== g.id)) return;
+      var fini = g;
+      g = null;
+      if (!fini.actif) return;
+      liste.insertBefore(fini.carte, fini.place);
+      fini.place.remove();
+      fini.carte.classList.remove("glisse");
+      fini.carte.style.width = fini.carte.style.left = fini.carte.style.top = "";
       var ids = Array.prototype.map.call(liste.querySelectorAll(".mac-carte"), function (el) {
         return parseInt(el.getAttribute("data-id"), 10);
       });
@@ -471,8 +473,10 @@
       W.widgets.forEach(function (w) { parId[w.id] = w; });
       W.widgets = ids.map(function (id) { return parId[id]; }).filter(Boolean);
       api("/api/accueil/widgets-ordre", { method: "PUT", body: { ids: ids } })
-        .catch(function (e) { avis(e.message); });
-    });
+        .catch(function (err) { avis(err.message); });
+    }
+    liste.addEventListener("pointerup", lacher);
+    liste.addEventListener("pointercancel", lacher);
   }
 
   function basculerEdition() {
@@ -482,7 +486,6 @@
     racine.querySelector(".mac-perso").lastChild.textContent = W.edition ? "Terminer" : "Personnaliser";
     Object.keys(W.cartes).forEach(function (id) {
       var c = W.cartes[id];
-      c.el.draggable = W.edition;
       c.renommage = false;
       c.confirmer = false;
       dessinerOutils(c);
@@ -589,20 +592,28 @@
 
   /* Le portail n'est monté que pour un utilisateur connecté : on attend sa
      page, et un 401 sur l'API suffit à ne rien afficher (écran de connexion). */
-  function attendrePortail(essais) {
-    if (document.querySelector(".portal-page")) {
-      Promise.all([api("/api/accueil/widgets"), api("/api/accueil/prefs")]).then(function (r) {
-        var tous = r[0].widgets || [];
-        // « desactive » (bloc coupé par le superadmin) et « inaccessible »
-        // (droits retirés) : masqués, pas supprimés — ils reviennent avec l'accès.
-        W.widgets = tous.filter(function (w) { return w.etat === "ok"; });
-        W.disparus = tous.filter(function (w) { return w.etat === "disparu"; });
-        W.repliee = !!r[1].colonne_repliee;
-        monter();
-      }).catch(function () { /* non connecté ou API indisponible : pas de colonne */ });
-      return;
-    }
-    if (essais > 0) setTimeout(function () { attendrePortail(essais - 1); }, 300);
+  function demarrer() {
+    Promise.all([api("/api/accueil/widgets"), api("/api/accueil/prefs")]).then(function (r) {
+      var tous = r[0].widgets || [];
+      // « desactive » (bloc coupé par le superadmin) et « inaccessible »
+      // (droits retirés) : masqués, pas supprimés — ils reviennent avec l'accès.
+      W.widgets = tous.filter(function (w) { return w.etat === "ok"; });
+      W.disparus = tous.filter(function (w) { return w.etat === "disparu"; });
+      W.repliee = !!r[1].colonne_repliee;
+      monter();
+    }).catch(function () { /* non connecté ou API indisponible : pas de colonne */ });
   }
-  attendrePortail(40);
+
+  // On attend la page du portail, aussi lente soit-elle : un poste chargé ne
+  // doit pas perdre sa colonne parce que le portail a mis 15 s à s'afficher.
+  if (document.querySelector(".portal-page")) {
+    demarrer();
+  } else {
+    var guet = new MutationObserver(function () {
+      if (!document.querySelector(".portal-page")) return;
+      guet.disconnect();
+      demarrer();
+    });
+    guet.observe(document.documentElement, { childList: true, subtree: true });
+  }
 })();

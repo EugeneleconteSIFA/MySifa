@@ -113,7 +113,7 @@ class WidgetCreate(BaseModel):
     objet: Optional[str] = None
     nom: str
     valeurs: list = []
-    affichage: str = "bloc"
+    affichage: str = "valeurs"
     hauteur: str = "m"
 
 
@@ -210,10 +210,8 @@ def modifier_widget(widget_id: int, body: WidgetUpdate, request: Request):
             w = reg.valider_widget(data, creation=False)
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
-        affichage = w.get("affichage", actuel["affichage"])
-        valeurs = w["valeurs"] if "valeurs" in w else json.loads(actuel["valeurs"] or "[]")
-        if affichage == "valeurs" and not valeurs:
-            raise HTTPException(400, "Cochez au moins une valeur pour un affichage en valeurs.")
+        if "valeurs" in w and not w["valeurs"]:
+            raise HTTPException(400, "Cochez au moins une valeur.")
         if "valeurs" in w:
             w["valeurs"] = json.dumps(w["valeurs"], ensure_ascii=False)
         sets, params = [], []

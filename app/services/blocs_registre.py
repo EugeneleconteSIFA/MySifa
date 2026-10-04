@@ -51,7 +51,7 @@ class Bloc:
     libelle: str
     url: str                      # emplacement actuel : chemin + requête + ancre
     type: str
-    valeurs: tuple = ()           # ((cle, libelle), …) — vide : bloc sans valeur clé
+    valeurs: tuple = ()           # ((cle, libelle), …) — au moins une : le widget n'affiche qu'elles
     acces: str | None = None      # app_id passé à user_has_app_access ; None = tout connecté
     objet: str | None = None      # nature de l'objet suivi (« machine »), sinon None
     alias: tuple = field(default=())  # anciens noms, pour les widgets créés avant un renommage
@@ -242,7 +242,9 @@ def valider_widget(data: dict, *, creation: bool) -> dict:
         out["valeurs"] = propres
 
     if creation or "affichage" in data:
-        aff = data.get("affichage") or "bloc"
+        # Depuis le 04/10/2026, un widget n'affiche que des valeurs. « bloc »
+        # reste accepté pour les widgets créés avant.
+        aff = data.get("affichage") or "valeurs"
         if aff not in AFFICHAGES:
             raise ValueError("Affichage invalide — bloc ou valeurs.")
         out["affichage"] = aff
@@ -253,8 +255,8 @@ def valider_widget(data: dict, *, creation: bool) -> dict:
             raise ValueError("Hauteur invalide — s, m ou l.")
         out["hauteur"] = hauteur
 
-    if out.get("affichage") == "valeurs" and creation and not out.get("valeurs"):
-        raise ValueError("Cochez au moins une valeur pour un affichage en valeurs.")
+    if creation and not out.get("valeurs"):
+        raise ValueError("Cochez au moins une valeur.")
     return out
 
 
@@ -288,6 +290,8 @@ def erreurs_registre() -> list[str]:
             errs.append(f"{nom} : type {b.type!r} inconnu")
         if not url_capture_valide(b.url):
             errs.append(f"{nom} : url invalide")
+        if not b.valeurs:
+            errs.append(f"{nom} : aucune valeur clé — un widget n'affiche que des valeurs")
         cles = [c for c, _ in b.valeurs]
         if len(set(cles)) != len(cles) or any(not _CLE_RE.match(c) for c in cles):
             errs.append(f"{nom} : clés de valeurs invalides ou en double")
