@@ -202,6 +202,8 @@
     }
     if (chatFab) placeFab(chatFab, 0, 1);
     if (hasAi) placeFab(aiBtn, 1, 1);
+    // Boutons propres à une page (capture de bloc…) : à gauche de la grille.
+    dockExtras().forEach(function (f, i) { placeFab(f, 2 + i, 0); });
 
     const panelAboveGrid = base + gridH + 14;
 

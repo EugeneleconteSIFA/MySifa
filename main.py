@@ -472,7 +472,7 @@ async def inject_staging_bandeau(request: Request, call_next):
 _TACHE_QUICK_TAG = b'<script src="/static/mysifa_tache_quick.js?v=2" defer></script>'
 # Même logique pour la capture de blocs en widget d'accueil (mysifa_blocs.js) :
 # un bloc capturable doit l'être sur toutes les pages, sans liste à tenir.
-_BLOCS_TAG = b'<script src="/static/mysifa_blocs.js?v=1" defer></script>'
+_BLOCS_TAG = f'<script src="/static/mysifa_blocs.js?v={APP_VERSION}" defer></script>'.encode()
 _BODY_CLOSE_RE = re.compile(rb"</body>", re.IGNORECASE)
 
 
