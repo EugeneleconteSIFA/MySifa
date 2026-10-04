@@ -13798,7 +13798,7 @@ function buildDashboardAlertes(d) {
           ),
         )))
       : el('div', { cls: 'dash-alert-ok' }, 'Toutes les matières sont au-dessus des seuils.');
-  const contentAlertes = el('div', { cls: 'dash-alert-block' }, mpRows);
+  const contentAlertes = el('div', { cls: 'dash-alert-block', 'data-bloc-contenu': '' }, mpRows);
   const toggleAlertes = el('button', { cls: 'dash-section-toggle' }, 'Masquer');
   toggleAlertes.onclick = () => {
     const hidden = contentAlertes.style.display === 'none';
@@ -13808,7 +13808,7 @@ function buildDashboardAlertes(d) {
   // Bloc capturable en widget d'accueil (app/services/blocs_registre.py).
   return el('div', { cls: 'dash-section', 'data-bloc': 'stock.dashboard.reappro',
                      'data-bloc-valeur-lignes': String(alertesMp.length) },
-    el('div', { cls: 'dash-section-title' },
+    el('div', { cls: 'dash-section-title', 'data-bloc-entete': '' },
       el('span', null, 'Stocks à réapprovisionner'),
       toggleAlertes,
     ),

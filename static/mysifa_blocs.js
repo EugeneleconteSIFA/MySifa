@@ -148,7 +148,18 @@
       "html.mysifa-bloc-embed .mysifa-bloc-cible{cursor:pointer}",
       "html.mysifa-bloc-embed body *:not(.mysifa-bloc-chemin):not(.mysifa-bloc-cible):not(.mysifa-bloc-cible *){display:none!important}",
       "html.mysifa-bloc-embed .mysifa-bloc-chemin{display:block!important;margin:0!important;padding:0!important;border:0!important;max-width:none!important;width:auto!important;min-width:0!important;min-height:0!important;height:auto!important;position:static!important;transform:none!important;overflow:visible!important;box-shadow:none!important;background:transparent!important;animation:none!important}",
-      "html.mysifa-bloc-embed .mysifa-bloc-cible{display:block!important;position:static!important;margin:0!important;max-width:none!important;width:auto!important;animation:none!important}"
+      "html.mysifa-bloc-embed .mysifa-bloc-cible{display:block!important;position:static!important;margin:0!important;max-width:none!important;width:auto!important;",
+      "  border:0!important;border-radius:0!important;box-shadow:none!important;background:transparent!important}",
+      // Une animation d'entrée figée laisse le contenu à demi transparent.
+      "html.mysifa-bloc-embed *,html.mysifa-bloc-embed *::before,html.mysifa-bloc-embed *::after{animation:none!important;transition:none!important}",
+      // Le cadre se fond dans la carte du widget.
+      "html.mysifa-bloc-embed{background:transparent!important}",
+      "html.mysifa-bloc-embed body{background:var(--card,transparent)!important}",
+      // Le widget porte déjà le nom : l'en-tête du bloc (titre, « Masquer »,
+      // « + Ajouter », filtres) disparaît. Un contenu replié par l'utilisateur
+      // dans la page s'affiche quand même dans le widget.
+      "html.mysifa-bloc-embed .mysifa-bloc-cible [data-bloc-entete]{display:none!important}",
+      "html.mysifa-bloc-embed .mysifa-bloc-cible [data-bloc-contenu]{display:block!important}"
     ].join("\n");
     (document.head || html).appendChild(style);
 
