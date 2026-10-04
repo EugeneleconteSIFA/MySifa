@@ -242,8 +242,8 @@ tr:hover td{background:var(--accent-bg)}
       </div>
 
       <div class="pane-tab" id="pane-ndf">
-        <div class="card">
-          <div class="toolbar">
+        <div class="card" id="ndf-bloc" data-bloc="rh-coffre.ndf">
+          <div class="toolbar" data-bloc-entete>
             <label style="font-size:12px;color:var(--muted)">Statut :</label>
             <select id="ndf-statut">
               <option value="">Tous</option>
@@ -487,6 +487,15 @@ async function loadNdf(){
     const j=await api(`/api/rh-coffre/ndf?statut=${statut}&annee=${annee}`);
     try{
       const all=await api('/api/rh-coffre/ndf?statut=soumise');
+      // Widget d'accueil (app/services/blocs_registre.py) : notes à valider,
+      // même lecture dans static/mysifa_blocs_sources.js (rh-coffre.ndf).
+      const bloc=document.getElementById('ndf-bloc');
+      if(bloc){
+        const tot=all.notes.reduce((t,n)=>t+(Number(n.montant_ttc)||0),0);
+        bloc.setAttribute('data-bloc-valeur-a-valider',String(all.notes.length));
+        bloc.setAttribute('data-bloc-valeur-montant',fmtMontant(tot));
+        bloc.setAttribute('data-bloc-nombre-montant',String(Math.round(tot*100)/100));
+      }
       const badge=document.getElementById('ndf-badge');
       if(badge){if(all.notes.length>0){badge.style.display='';badge.textContent=String(all.notes.length);}else{badge.style.display='none';}}
     }catch(e){}

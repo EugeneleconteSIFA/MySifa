@@ -2115,8 +2115,20 @@ async function saveDayDetail(assignments){
 }
 
 // ── Congés tab ─────────────────────────────────────────
+// Widget d'accueil (app/services/blocs_registre.py) : la vue (atelier / RH)
+// rejoint l'adresse capturée ; static/mysifa_blocs_sources.js
+// (planning-rh.conges) refait le même comptage.
+window.mysifaBlocsContexte=function(){return {bloc_scope:S.view==='rh'?'rh':'atelier'};};
 function buildCongesTab(){
   const wrap=document.createElement('div'); wrap.className='rh-conges-wrap';
+  {
+    const _d=new Date();
+    const auj=_d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
+    const actifs=(S.conges||[]).filter(c=>c.statut!=='refuse');
+    wrap.setAttribute('data-bloc','planning-rh.conges');
+    wrap.setAttribute('data-bloc-valeur-absents',String(actifs.filter(c=>c.date_debut<=auj&&c.date_fin>=auj).length));
+    wrap.setAttribute('data-bloc-valeur-a-valider',String((S.conges||[]).filter(c=>c.statut==='pose').length));
+  }
 
   // === Section 1: Soldes ===
   const soldesSection=document.createElement('div'); soldesSection.className='rh-section print-target';

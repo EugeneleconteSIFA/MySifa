@@ -2651,7 +2651,13 @@ function renderOfPage(){
     {key:'pending', label:'Mappings à valider',    icon:'alert-triangle', badge:mkBadge(ambigusN), load:async()=>{await loadPendingOfMappings();}},
     {key:'sansof',  label:'Dossiers sans OF',      icon:'folder',         badge:mkBadge(sansOfN),  load:async()=>{await loadDossiersSansOf();}},
   ];
-  const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Ordres de fabrication'},
+  // Widget d'accueil (app/services/blocs_registre.py) : même lecture dans
+  // static/mysifa_blocs_sources.js (prod.of.a-traiter).
+  const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Ordres de fabrication',
+      'data-bloc':'prod.of.a-traiter',
+      'data-bloc-valeur-total':String(Number(S.pendingOfCount||0)),
+      'data-bloc-valeur-mappings':String(ambigusN),
+      'data-bloc-valeur-sans-of':String(sansOfN)},
     ...tabs.map(t=>h('button',{
       type:'button',
       role:'tab',

@@ -735,6 +735,9 @@ function renderRhOutilTab(){
     ...RH_OUTIL_LISTES.map(L=>h('button',{type:'button',className:'rho-btn',onClick:()=>rhOutilCatalogue(L)},iconEl('sliders',13),L.gerer)),
     S.rhOutilPeutCreer?h('button',{type:'button',className:'rho-btn accent',onClick:rhOutilNouvelEmploye},iconEl('plus',13),'Nouvel employé'):null
   );
+  // Ouverture directe sur l'onglet (/compta#rhoutil) : personne n'a cliqué
+  // sur le bouton qui charge les données, on les charge une fois ici.
+  if(!S.rhOutilLoaded&&!S._rhOutilAutoLoad){S._rhOutilAutoLoad=true;rhOutilLoad();}
   if(!S.rhOutilLoaded)return h('div',null,bar,h('div',{className:'card-empty'},'Chargement…'));
   if(!list.length)return h('div',null,bar,h('div',{className:'card-empty'},S.rhOutilPeutCreer?'Aucun employé — utilisez « Nouvel employé ».':'Aucun employé suivi.'));
   const iF=Math.max(0,RHO_FILTRES.findIndex(f=>f.cle===(S.rhOutilFiltre||'tous')));
@@ -751,8 +754,14 @@ function renderRhOutilTab(){
       'Dossier',h('span',{className:'rho-th-filtre'+(filtre.cle==='tous'?'':' on')},filtre.court)
     )
   );
-  return h('div',null,bar,h('div',{className:'card'},
-    h('div',{className:'card-header'},h('h3',null,'Employés ('+(filtre_actif?vis.length+' sur '+list.length:list.length)+')')),
+  // Widget d'accueil (app/services/blocs_registre.py) : totaux sur toute la
+  // liste, jamais sur la vue filtrée. Même calcul dans
+  // static/mysifa_blocs_sources.js (compta.rh.contrats).
+  return h('div',null,bar,h('div',{className:'card','data-bloc':'compta.rh.contrats',
+      'data-bloc-valeur-fin-proche':String(list.filter(m=>rhOutilEtatContrat(m).cle==='_proche').length),
+      'data-bloc-valeur-a-renseigner':String(list.filter(m=>!m.contrat_type).length),
+      'data-bloc-valeur-incomplets':String(list.filter(m=>!rhOutilComplet(m)).length)},
+    h('div',{className:'card-header','data-bloc-entete':''},h('h3',null,'Employés ('+(filtre_actif?vis.length+' sur '+list.length:list.length)+')')),
     h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std rho-table'},
       h('thead',null,h('tr',null,
         h('th',null,'Employé'),

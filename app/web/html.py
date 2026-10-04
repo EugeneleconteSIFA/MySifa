@@ -1979,7 +1979,10 @@ let S={
     planning_entry_id:'',                 // lien dossier source
     palette_europe:0,                     // 0 ou 1
   },
-  comptaTab:'factor',
+  // « /compta#rhoutil » ouvre directement l'Outil RH (lien d'un widget
+  // d'accueil). Les autres onglets restent sur Factor : ils chargent leurs
+  // données au clic, pas à l'ouverture.
+  comptaTab:(function(){try{return location.pathname==='/compta'&&location.hash==='#rhoutil'?'rhoutil':'factor';}catch(e){return 'factor';}})(),
   comptaFactorMode:'file',
   comptaPasteText:'',
   comptaAcheteurs:[],

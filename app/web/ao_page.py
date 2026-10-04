@@ -2151,7 +2151,18 @@ function renderList() {
       '<td class="ao-actions-cell">'+actions+'</td></tr>';
   });
   return '<div class="page-hdr"><h1>Appels d\'offres</h1><button class="btn btn-accent" type="button" id="btn-new-ao">'+icon('plus',14)+' Nouvel appel d\'offres</button></div>'+
-    '<div class="filter-tabs">'+
+    // Widget d'accueil (app/services/blocs_registre.py) : même lecture dans
+    // static/mysifa_blocs_sources.js (ao.appels). Hors corbeille seulement.
+    (function(){
+      if(S.filtre==='corbeille') return '<div class="filter-tabs">';
+      const all=S.aos||[];
+      const env=all.filter(a=>a.statut==='envoyee');
+      const rep=env.reduce((t,a)=>t+(Number(a.nb_reponses)||0),0);
+      return '<div class="filter-tabs" data-bloc="ao.appels"'+
+        ' data-bloc-valeur-envoyees="'+env.length+'"'+
+        ' data-bloc-valeur-brouillons="'+all.filter(a=>a.statut==='brouillon').length+'"'+
+        ' data-bloc-valeur-reponses="'+rep+'">';
+    })()+
     ['tous','brouillon','envoyee','cloturee','corbeille'].map(f=>'<button class="filter-tab'+(S.filtre===f?' active':'')+'" data-f="'+f+'">'+escHtml(f==='tous'?'Tous':f==='brouillon'?'Brouillon':f==='envoyee'?'Envoyée':f==='cloturee'?'Clôturée':'Corbeille')+'</button>').join('')+
     '</div>'+
     (list.length

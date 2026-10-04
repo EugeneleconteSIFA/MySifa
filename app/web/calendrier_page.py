@@ -635,7 +635,7 @@ body.cal-dragging{user-select:none}
       </div>
     </div>
     <h1 class="cal-print-title" id="cal-print-title"></h1>
-    <div class="cal-body" id="cal-body">
+    <div class="cal-body" id="cal-body" data-bloc="calendrier.agenda">
       <div class="cal-loading" id="cal-loading">Chargement…</div>
     </div>
   </main>
@@ -1068,6 +1068,21 @@ function renderToggles(){
 function activeCalList(){
   return accessibleCalDefs().filter(c=>S.visible[c.id]).map(c=>c.id);
 }
+// Widget d'accueil (app/services/blocs_registre.py) : les calendriers
+// affichés rejoignent l'adresse capturée ; static/mysifa_blocs_sources.js
+// (calendrier.agenda) les relit et compte les événements du jour.
+window.mysifaBlocsContexte=function(){return {bloc_calendriers:activeCalList()};};
+function majBlocAgenda(){
+  const el=document.getElementById('cal-body');
+  if(!el)return;
+  const jour=(d)=>{const x=new Date();x.setDate(x.getDate()+d);return ymd(x);};
+  const compte=(j)=>(S.events||[]).filter(ev=>{
+    const a=String(ev.debut||'').slice(0,10),b=String(ev.fin||ev.debut||'').slice(0,10);
+    return a<=j&&b>=j;
+  }).length;
+  el.setAttribute('data-bloc-valeur-aujourdhui',String(compte(jour(0))));
+  el.setAttribute('data-bloc-valeur-demain',String(compte(jour(1))));
+}
 function exportIcsUrl(dateStart,dateEnd,calIds){
   const q=new URLSearchParams({
     date_debut:ymd(dateStart),
@@ -1363,6 +1378,7 @@ async function fetchEvents(){
     }
     if(loading)loading.style.display='none';
     renderCalendar();
+    majBlocAgenda();
     consommerLienDirect();
   }catch(e){
     if(e.message!=='auth')showToast(e.message||'Chargement impossible','danger');

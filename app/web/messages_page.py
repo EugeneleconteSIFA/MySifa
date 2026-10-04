@@ -595,7 +595,7 @@ body.sb-open .sidebar-overlay{display:block}
     <div class="sidebar-bottom msb-footer" data-msb-footer data-msb-app="Messages" data-msb-version="__V_LABEL__"></div>
   </aside>
   <div id="chat-wrap">
-    <div id="chat-left">
+    <div id="chat-left" data-bloc="messages.non-lus">
       <div class="chat-list-section chat-list-section-channels">
         <div id="chat-left-head">
           <div class="chat-section-title">Canaux</div>
@@ -980,6 +980,15 @@ function updateChatHeaderIcon(ch){
 function renderChannelLists(){
   const chans=channels.filter(c=>c.type==='channel');
   const dms=channels.filter(c=>c.type==='direct');
+  // Widget d'accueil (app/services/blocs_registre.py) : même lecture dans
+  // static/mysifa_blocs_sources.js (messages.non-lus).
+  const blocEl=document.getElementById('chat-left');
+  if(blocEl){
+    const nl=(l)=>l.reduce((t,c)=>t+(Number(c.unread_count)||0),0);
+    blocEl.setAttribute('data-bloc-valeur-non-lus',String(nl(channels)));
+    blocEl.setAttribute('data-bloc-valeur-directs',String(nl(dms)));
+    blocEl.setAttribute('data-bloc-valeur-mentions',String(channels.filter(c=>Number(c.mention_count)>0).length));
+  }
   const mkItem=(c)=>{
     const unread=Number(c.unread_count)||0;
     const badge=unread>0?'<span class="chat-unread-badge">'+esc(unread>99?'99+':String(unread))+'</span>':'';
