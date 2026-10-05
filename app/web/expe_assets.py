@@ -4993,6 +4993,7 @@ function expeOpenDepartModal(prefill, mode){
       palettes_charges: (!isEdit || Array.isArray(src.palettes)) ? 1 : 0,
       poids_total_kg: (src.poids_total_kg!=null && src.poids_total_kg!=='') ? String(src.poids_total_kg) : '',
       date_livraison: (src.date_livraison||'') ? String(src.date_livraison).slice(0,10) : '',
+      date_chargement: (src.date_chargement||'') ? String(src.date_chargement).slice(0,10) : '',
       planning_entry_id: (src.planning_entry_id!=null && src.planning_entry_id!=='') ? String(src.planning_entry_id) : '',
       dossiers: Array.isArray(src.dossiers) ? src.dossiers.slice() : [],
       dossier_ref: src.planning_dossier_ref || src.planning_numero_of || '',
@@ -5330,6 +5331,7 @@ function renderExpeDepartModal(){
   const clientField=mk('Client','client');
   const cpField=mk('Code postal / destination','code_postal_destination');
   const livField=mk('Date livraison (prévue)','date_livraison','date');
+  const chargField=mk('Date de chargement','date_chargement','date');
 
   function _arcRemplir(champ,cle,valeur){
     const inp=champ.querySelector('input');
@@ -5607,6 +5609,7 @@ function renderExpeDepartModal(){
       nb_palette:(S.expeDepartForm.nb_palette||'').trim()||null,
       poids_total_kg:(S.expeDepartForm.poids_total_kg||'').trim()||null,
       date_livraison:(S.expeDepartForm.date_livraison||'').trim()||null,
+      date_chargement:(S.expeDepartForm.date_chargement||'').trim()||null,
       dossiers:(Array.isArray(S.expeDepartForm.dossiers)?S.expeDepartForm.dossiers:[])
                  .map(x=>x.planning_entry_id),
       sans_dossier: S.expeDepartForm.sans_dossier ? 1 : 0,
@@ -5848,7 +5851,8 @@ function renderExpeDepartModal(){
     sec('Client et livraison',
       clientField,
       cpField,
-      livField
+      livField,
+      chargField
     ),
     sec('Colisage',
       palField,
@@ -7003,6 +7007,7 @@ function expeDetailPaires(r){
     ['Type de palette', expePaletteTypeLabel(r)],
     ['Poids total', r.poids_total_kg!=null?(r.poids_total_kg+' kg'):null],
     ['Livraison prévue', (r.date_livraison||'').slice(0,10)],
+    ['Chargement', (r.date_chargement||'').slice(0,10)],
     ['Palette Europe', Number(r.palette_europe)?'Suivie au retour':'—']
   ];
 }
