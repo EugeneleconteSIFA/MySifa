@@ -2473,9 +2473,6 @@
     const ro = S.canWrite ? "" : " disabled";
     const cat = categorieFiche(f);
     const editable = !!(s && S.canWrite);
-    const etat = (id) => `<div class="savebar-state savebar-state-${S.settingsSaveStatus} si-state"${id ? ` id="${id}"` : ""}>${
-      saveStatusHtml(S.settingsSaveStatus, S.settingsSavedAt)
-    }</div>`;
 
     // Un seul champ de marge : celui qui s'applique à cette matière. Une
     // matière de catégorie connue lit la marge de sa catégorie (vide = marge
@@ -2488,32 +2485,30 @@
       const propre = (s.marges_categorie || {})[cat];
       const libelle = escHtml(categorieLabel(cat));
       const defaut = escHtml(fmtNum(s.default_margin_pct, 2, 2));
-      champMarge = `<div class="field f-num"><label for="si-mcat-${escAttr(cat)}">Marge ${libelle} <span class="lbl-unit">%</span></label>
+      champMarge = `<div class="field f-num"><label for="si-mcat-${escAttr(cat)}">${libelle} <span class="lbl-unit">%</span></label>
           <input type="number" step="0.01" min="0" id="si-mcat-${escAttr(cat)}"
                  data-si-marge-cat="${escAttr(cat)}"
                  value="${escAttr(propre != null ? propre : "")}"
                  placeholder="${escAttr(fmtNum(s.default_margin_pct, 2, 2))}"/>
-          <div class="field-hint">Commune à toutes les matières ${libelle}. Vide = marge par défaut (${defaut} %).</div>
+          <div class="field-hint">Commune aux matières ${libelle} · vide = marge par défaut (${defaut} %)</div>
         </div>`;
     } else if (editable) {
-      champMarge = `<div class="field f-num"><label for="si-margin">Marge par défaut <span class="lbl-unit">%</span></label>
+      champMarge = `<div class="field f-num"><label for="si-margin">Par défaut <span class="lbl-unit">%</span></label>
           <input type="number" step="0.01" id="si-margin" value="${escAttr(s.default_margin_pct)}"/>
-          <div class="field-hint">Cette matière n'a pas de catégorie : la marge par défaut s'applique. Elle vaut pour toutes les matières sans marge de catégorie.</div>
+          <div class="field-hint">Matière sans catégorie · vaut pour toutes celles qui n'en ont pas</div>
         </div>`;
     }
 
+    // Le titre de section dit déjà « Marge » : la case ne le répète pas, et
+    // son explication passe en infobulle.
     const blocMatiere = `
       <div class="form-section si-marge"><h3>Marge</h3>
-        <label class="check-row">
+        ${champMarge}
+        <label class="check-row" title="Décoché, la matière entre dans le prix de revient mais on ne marge pas dessus.">
           <input type="checkbox" id="${prefixe}-marge" ${f && f.applique_marge !== false ? "checked" : ""}${ro}/>
-          <span>
-            <span class="check-title">Appliquer la marge</span>
-            <span class="check-sub">Décoché, la matière entre dans le prix de revient mais on ne marge pas dessus.</span>
-          </span>
+          <span class="check-title">Appliquer à cette matière</span>
         </label>
-        ${champMarge
-          ? `<div class="si-marge-champ">${champMarge}${etat("")}</div>`
-          : (s ? `<div class="field-hint marge-taux" id="si-marge-taux" data-cat="${escAttr(cat)}">${margeTauxHtml(cat)}</div>` : "")}
+        ${!champMarge && s ? `<div class="field-hint marge-taux" id="si-marge-taux" data-cat="${escAttr(cat)}">${margeTauxHtml(cat)}</div>` : ""}
       </div>`;
 
     if (!editable) return blocMatiere;
@@ -2526,7 +2521,6 @@
     return `${blocMatiere}
       <div class="form-section si-commun">
         <h3>Taux de change</h3>
-        <div class="field-hint si-commun-aide">Commun à toutes les matières : le modifier ici le change pour tout le module.</div>
         <div class="field f-num"><label for="si-rate">USD → EUR ${stale ? fxStaleBadgeHtml() : ""}</label>
           <input type="number" step="0.0001" id="si-rate" value="${escAttr(S.fxDraft != null ? S.fxDraft : s.eur_usd_rate)}"/>
           <div class="si-meta" id="si-rate-meta">${
@@ -2534,9 +2528,12 @@
               ? "Taux d'essai — le calcul en tient compte, l'enregistrement suit dans la seconde."
               : escHtml(fxMetaText(s))
           }</div>
+          <div class="field-hint">Commun à toutes les matières : le modifier ici le change pour tout le module.</div>
           <button type="button" class="btn btn-soft btn-sm si-fx-btn" id="si-fx">Rafraîchir le taux</button>
+          <div class="savebar-state savebar-state-${S.settingsSaveStatus} si-state" id="si-save-status">${
+            saveStatusHtml(S.settingsSaveStatus, S.settingsSavedAt)
+          }</div>
         </div>
-        ${etat("si-save-status")}
       </div>`;
   }
 
@@ -2810,12 +2807,11 @@
   function setSettingsSaveStatus(statut) {
     S.settingsSaveStatus = statut;
     if (statut === "ok") S.settingsSavedAt = new Date();
-    // Deux pastilles : sous la marge et sous le taux de change. Les deux
-    // partent par le même enregistrement, elles disent la même chose.
-    document.querySelectorAll(".si-state").forEach((el) => {
+    const el = document.getElementById("si-save-status");
+    if (el) {
       el.className = "savebar-state savebar-state-" + statut + " si-state";
       el.innerHTML = saveStatusHtml(statut, S.settingsSavedAt);
-    });
+    }
   }
 
   /**
