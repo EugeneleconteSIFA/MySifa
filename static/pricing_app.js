@@ -376,9 +376,9 @@
           ${o.champs}
         </div>
       </div>
-      <div class="imp-groupe"><h4 class="imp-titre">Taxes</h4>
+      <div class="imp-groupe"><h4 class="imp-titre">Taxe d'importation</h4>
         <div class="imp-liste">
-          <div class="field f-num"><label>Taxes <span class="lbl-unit">% du sous-total</span></label>
+          <div class="field f-num"><label>Taux <span class="lbl-unit">% du sous-total</span></label>
             <input type="number" step="0.01" id="${o.taxId}" value="${escAttr(o.tax)}"/>
             <div class="field-hint">6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
           </div>
@@ -2335,7 +2335,7 @@
         muted: !hasTransport,
       },
       {
-        label: "Taxes",
+        label: "Taxe d'importation",
         value: taxePct ? fmtNum(taxesSrc, 4, 4) : "—",
         unit: taxePct ? `${unit} · ${fmtPct(taxePct)} du sous-total` : "non imputées",
         muted: !taxePct,
@@ -2491,9 +2491,12 @@
     const essaiFx =
       fxEssai() !== undefined &&
       Math.abs(fxEssai() - parseFloat(s.eur_usd_rate || 0)) > 1e-9;
+    // Seule la catégorie de la fiche ouverte : les autres ne la concernent
+    // pas, et se règlent depuis une fiche de leur catégorie.
     const marges = s.marges_categorie || {};
     const lignesCat = (s.categories_marge || [])
-      .map((c) => `<div class="marge-cat${c.code === cat ? " courante" : ""}">
+      .filter((c) => c.code === cat)
+      .map((c) => `<div class="marge-cat courante">
           <label for="si-mcat-${escAttr(c.code)}">${escHtml(c.label)}</label>
           <input type="number" step="0.01" min="0" id="si-mcat-${escAttr(c.code)}"
                  data-si-marge-cat="${escAttr(c.code)}"
@@ -2525,10 +2528,10 @@
               <input type="number" step="0.01" id="si-margin" value="${escAttr(s.default_margin_pct)}"/>
               <div class="field-hint">S'applique à toute catégorie sans marge propre.</div>
             </div>
-            <div class="field"><label>Marge par catégorie</label>
+            ${lignesCat ? `<div class="field"><label>Marge de la catégorie</label>
               <div class="marge-cats">${lignesCat}</div>
               <div class="field-hint">Vide = marge par défaut.</div>
-            </div>
+            </div>` : ""}
           </div>
         </div>
         <div class="savebar-state savebar-state-${S.settingsSaveStatus} si-state" id="si-save-status">${

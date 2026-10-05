@@ -129,7 +129,7 @@ check('la grille du grammage a disparu avec elle',
 // ─── Tableau récapitulatif ──────────────────────────────────────────────────
 const recap = extraire('recapTableHtml');
 check('les taxes précèdent le sous-total',
-  recap.indexOf('label: "Taxes"') < recap.indexOf('label: "Sous-total achat"'), true);
+  recap.indexOf(`label: "Taxe d'importation"`) < recap.indexOf('label: "Sous-total achat"'), true);
 check('plus de ligne « incidence taxes »', recap.includes('Incidence taxes'), false);
 check('formule mise à jour',
   src.includes("(prix d'achat + transport + taxes) × change"), true);
