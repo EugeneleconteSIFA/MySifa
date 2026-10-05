@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from app.services.audit_service import log_action
 from app.services.email_service import (
     email_expe_devis_confirmation,
+    email_expe_devis_issue,
     email_expe_rfq_transport,
     send_email,
 )
@@ -5224,6 +5225,7 @@ async def retenir_reponse_devis(
     reponse_id: int,
     commentaire: Optional[str] = Form(None),
     fichier: Optional[UploadFile] = File(None),
+    prevenir_autres: Optional[str] = Form("1"),
 ):
     """Retient une proposition de devis :
       1. Marque la réponse `retenue` et les autres `refusee`, clôture la demande.
@@ -5234,9 +5236,15 @@ async def retenir_reponse_devis(
       4. Optionnel : joint un commentaire libre et une pièce jointe (bon de
          commande, instructions particulières…) à cet email et les archive en DB.
 
-    Multipart/form-data attendu (les 2 champs sont facultatifs) :
-      - commentaire : texte libre
-      - fichier     : pièce jointe (max 20 Mo)
+      5. Prévient les autres transporteurs sollicités (sauf `prevenir_autres=0`) :
+         « offre non retenue » à ceux qui ont chiffré, « plus d'actualité » à
+         ceux qui n'ont pas encore répondu. Ceux qui ont décliné (sans suite)
+         ou dont la demande n'est jamais partie (échec) ne reçoivent rien.
+
+    Multipart/form-data attendu (les champs sont facultatifs) :
+      - commentaire     : texte libre
+      - fichier         : pièce jointe (max 20 Mo)
+      - prevenir_autres : « 0 » pour ne pas écrire aux autres transporteurs
     """
     user = _require_expe_write(request)
     now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
@@ -5278,6 +5286,25 @@ async def retenir_reponse_devis(
                 out.write(retention_file_bytes)
             retention_file_rel = f"{_DEVIS_UPLOAD_SUBDIR}/retention/{unique}"
             retention_file_name = orig
+
+        # Lus AVANT le passage en « refusee » : c'est le statut d'origine qui
+        # dit quel message envoyer. « recue » a chiffré → offre non retenue ;
+        # « envoyee » / « ouvert » n'a pas répondu → plus d'actualité.
+        autres_a_prevenir: list[dict] = []
+        if str(prevenir_autres or "1").strip().lower() not in ("0", "false", "non"):
+            for r in conn.execute(
+                """SELECT * FROM expe_devis_reponses
+                    WHERE demande_id=? AND id!=?
+                      AND statut IN ('recue','envoyee','ouvert')
+                    ORDER BY CASE statut WHEN 'recue' THEN 0 ELSE 1 END, id""",
+                (demande_id, reponse_id),
+            ).fetchall():
+                rd = dict(r)
+                rd["_issue"] = (
+                    "non_retenue" if rd.get("statut") == "recue" else "plus_actualite"
+                )
+                rd["_langue"] = _devis_langue_destinataire(conn, rd)
+                autres_a_prevenir.append(rd)
 
         conn.execute(
             """
@@ -5335,23 +5362,7 @@ async def retenir_reponse_devis(
     # "Saisir reponse" ou reponse portail sans email persiste), on retombe
     # sur les contact_emails du transporteur pour ne pas silencieusement
     # sauter la confirmation.
-    dest_email = (rep_d.get("destinataire_email") or "").strip()
-    if not (dest_email and "@" in dest_email):
-        trp_id = rep_d.get("transporteur_id")
-        if trp_id:
-            with get_db() as conn:
-                trow = conn.execute(
-                    "SELECT contact_email, contact_emails FROM expe_transporteurs WHERE id=?",
-                    (trp_id,),
-                ).fetchone()
-            if trow:
-                addrs = _normalize_emails(trow["contact_emails"])
-                if not addrs:
-                    fb = (trow["contact_email"] or "").strip()
-                    if fb and "@" in fb:
-                        addrs = [fb]
-                if addrs:
-                    dest_email = addrs[0]
+    dest_email = _devis_dest_email(rep_d)
     email_sent = False
     email_error: str | None = None
     px_attr = None
@@ -5425,6 +5436,16 @@ async def retenir_reponse_devis(
     except Exception:
         pass
 
+    autres_prevenus, autres_echecs = _devis_prevenir_autres(
+        autres_a_prevenir,
+        demande=demande,
+        demande_id=demande_id,
+        user=user,
+        email_user=email_user,
+        deja=dest_email if email_sent else None,
+        now=now,
+    )
+
     try:
         log_action(
             user=user,
@@ -5434,6 +5455,11 @@ async def retenir_reponse_devis(
                 f"Départ #{depart_id} créé depuis devis #{demande_id} "
                 f"(réponse #{reponse_id}) · email transporteur "
                 f"{'OK' if email_sent else 'KO'}"
+                + (
+                    f" · autres prévenus {autres_prevenus}/"
+                    f"{autres_prevenus + len(autres_echecs)}"
+                    if autres_a_prevenir else ""
+                )
             ),
             ip=request.client.host if request.client else None,
         )
@@ -5448,7 +5474,107 @@ async def retenir_reponse_devis(
         "email_envoye": email_sent,
         "email_destinataire": dest_email or None,
         "email_error": email_error,
+        "autres_prevenus": autres_prevenus,
+        "autres_echecs": autres_echecs,
     }
+
+
+def _devis_dest_email(rep_d: dict) -> str:
+    """Adresse d'un transporteur pour une ligne de réponse.
+
+    Destinataire principal = adresse à laquelle la demande a été envoyée.
+    Fallback : si le champ est vide (réponse créée manuellement via « Saisir
+    réponse » ou réponse portail sans email persisté), on retombe sur les
+    contact_emails du transporteur pour ne pas sauter silencieusement l'envoi.
+    """
+    dest_email = (rep_d.get("destinataire_email") or "").strip()
+    if dest_email and "@" in dest_email:
+        return dest_email
+    trp_id = rep_d.get("transporteur_id")
+    if not trp_id:
+        return ""
+    with get_db() as conn:
+        trow = conn.execute(
+            "SELECT contact_email, contact_emails FROM expe_transporteurs WHERE id=?",
+            (trp_id,),
+        ).fetchone()
+    if not trow:
+        return ""
+    addrs = _normalize_emails(trow["contact_emails"])
+    if not addrs:
+        fb = (trow["contact_email"] or "").strip()
+        if fb and "@" in fb:
+            addrs = [fb]
+    return addrs[0] if addrs else ""
+
+
+def _devis_prevenir_autres(
+    autres: list[dict],
+    *,
+    demande: dict,
+    demande_id: int,
+    user: dict,
+    email_user: str | None,
+    deja: str | None,
+    now: str,
+) -> tuple[int, list[str]]:
+    """Envoie l'issue de la demande aux transporteurs non retenus.
+
+    Une adresse ne reçoit qu'un seul message : le transporteur retenu peut
+    avoir été sollicité deux fois, et une confirmation suivie d'un « offre non
+    retenue » serait pire que rien. Un échec d'envoi ne bloque ni les autres
+    ni la retenue, qui est déjà en base.
+
+    Renvoie (nombre d'envois réussis, libellés des échecs).
+    """
+    vus = {deja.lower()} if deja else set()
+    prevenus = 0
+    echecs: list[str] = []
+    for rd in autres:
+        nom = (rd.get("nom_transporteur") or "").strip() or f"réponse #{rd['id']}"
+        dest = _devis_dest_email(rd)
+        if not (dest and "@" in dest):
+            echecs.append(f"{nom} (adresse absente)")
+            continue
+        if dest.lower() in vus:
+            continue
+        vus.add(dest.lower())
+        try:
+            subject, body_html = email_expe_devis_issue(
+                demande=demande,
+                reponse=rd,
+                user=user,
+                issue=rd["_issue"],
+                langue=rd.get("_langue") or "fr",
+            )
+            ok = bool(send_email(
+                to=dest,
+                subject=subject,
+                html_body=body_html,
+                reply_to=(EXPE_DEVIS_FROM or "").strip() or email_user,
+                from_upn=EXPE_DEVIS_FROM,
+            ))
+        except Exception:  # noqa: BLE001
+            ok = False
+        if not ok:
+            echecs.append(nom)
+            continue
+        prevenus += 1
+        try:
+            with get_db() as conn:
+                expe_ev.log_evenement(
+                    conn,
+                    reponse_id=rd["id"],
+                    demande_id=demande_id,
+                    canal=expe_ev.CANAL_EMAIL,
+                    type_evenement=expe_ev.EV_EMAIL_ISSUE,
+                    date=now,
+                    meta={"destinataire": dest, "issue": rd["_issue"]},
+                )
+                conn.commit()
+        except Exception:
+            pass
+    return prevenus, echecs
 
 
 @router.post("/devis/demandes/{demande_id}/cloturer")
