@@ -242,6 +242,16 @@ margin-left:6px;cursor:help;vertical-align:middle}
 .comp-table tr.comp-serie-sub td{background:var(--bg);font-size:11px;padding:6px 8px;color:var(--text2)}
 .comp-table tr.comp-serie-sub td.serie-label{text-align:left;padding-left:24px}
 .comp-table tr.comp-total-serie td{background:var(--accent-bg);font-weight:700;color:var(--accent)}
+/* Comparatif : un bloc par produit, separe du suivant par une bande vide ;
+   les cinq dernieres colonnes (cote SIFA, vente) sont teintees et ouvertes
+   par une bordure epaisse pour ne pas les confondre avec l'achat. */
+.comp-table tr.comp-head-grp th{font-size:10px;letter-spacing:.05em;padding:6px 8px;color:var(--text2)}
+.comp-table th.comp-grp-sifa,.comp-table th.comp-sifa{background:var(--accent-bg);color:var(--accent)}
+.comp-table th.comp-sifa-start,.comp-table tr.comp-offre td:nth-last-child(5){border-left:3px solid var(--accent)}
+.comp-table tr.comp-offre td:nth-last-child(-n+5){background:color-mix(in srgb,var(--accent-bg) 50%,transparent)}
+.comp-table tr.comp-offre td.comp-cell-best{background:var(--accent-bg)}
+.comp-table td.comp-prod{vertical-align:top;background:var(--card)}
+.comp-table tr.comp-grp-sep td{height:14px;padding:0;background:var(--bg);border-left:0;border-right:0}
 .msg-list{display:flex;flex-direction:column;gap:10px;max-height:360px;overflow-y:auto;margin-bottom:16px}
 .bubble{max-width:85%;padding:12px 14px;border-radius:12px;font-size:13px;line-height:1.5}
 .bubble.interne{align-self:flex-end;margin-left:auto;background:var(--accent-bg);border:1px solid var(--accent)}
@@ -450,7 +460,7 @@ const BASE_URL = __BASE_URL__;
 const S = {
   section: 'ao',
   view: 'list',
-  tab: 'lignes',
+  tab: 'comparaison',
   aos: [],
   filtre: 'tous',
   ao: null,
@@ -1191,10 +1201,15 @@ function filteredAos() {
 function openDetail(id) {
   S.section = 'ao';
   S.view = 'detail';
-  S.tab = 'lignes';
+  // On arrive sur les demandes de prix : c'est l'onglet qu'on consulte. Un AO
+  // sans ligne produit n'a rien a comparer — on ouvre alors les lignes.
+  S.tab = 'comparaison';
   S.messages_fourni = null;
   S.comparaison = null;
-  loadDetail(id).then(() => render());
+  return loadDetail(id).then(() => {
+    if (!((S.detail && S.detail.lignes) || []).length) S.tab = 'lignes';
+    render();
+  });
 }
 
 function backToList() {
@@ -3891,19 +3906,34 @@ function renderComparaison() {
     return '<div class="card empty-state"><strong>Demandes de prix</strong>'+escHtml(msg)+'</div>';
   }
   if (aoCartes()) return renderComparaisonCartes();
-  let bestMille = null;
+  // Les offres arrivent triees par ligne produit puis par fournisseur : on
+  // les regroupe par produit pour que chaque comparatif forme un bloc, et le
+  // meilleur prix au mille est cherche DANS le bloc — comparer le prix d'une
+  // etiquette 44 x 44 a celui d'une 75 x 80 n'a pas de sens.
+  const groupes = [];
   rows.forEach(r => {
-    if (r.prix_au_mille != null && (bestMille == null || r.prix_au_mille < bestMille)) bestMille = r.prix_au_mille;
+    const k = r.ligne_id != null && r.ligne_id !== '' ? 'l'+r.ligne_id : 'r'+(r.ref_produit||'');
+    const g = groupes[groupes.length-1];
+    if (g && g.k === k) g.rows.push(r); else groupes.push({k: k, rows: [r]});
   });
-  const head = '<tr>'+
+  // Trois familles de colonnes : le produit, ce que le fournisseur facture
+  // (achat), ce que SIFA en fait (vente). Le bandeau du haut les nomme, une
+  // bordure epaisse marque la frontiere achat / vente.
+  const head = '<tr class="comp-head-grp">'+
+    '<th colspan="5" class="comp-grp-produit">Produit</th>'+
+    '<th colspan="10" class="comp-grp-fourn">Côté fournisseur · achat</th>'+
+    '<th colspan="5" class="comp-grp-sifa comp-sifa-start">Côté SIFA · vente</th></tr>'+
+    '<tr>'+
     '<th>Réf. produit</th><th class="comp-col-fa">Frontal</th><th class="comp-col-fa">Adhésif</th>'+
     '<th class="comp-col-etiqbob">Étiq. / bob.</th><th>Quantité</th><th class="comp-col-fourn">Fournisseur</th>'+
     '<th>Quotation</th><th>Devise</th><th class="comp-col-uquot">Unité</th>'+
-    '<th>Prix calculé</th><th>Transport</th><th>Prix / mille</th><th class="comp-th-coef">Coef</th>'+
-    '<th>Devise devis</th><th>Prix d\'achat</th>'+
-    '<th>Condi.</th><th>Prix achat condi.</th><th class="comp-th-marge">Marge</th><th>Prix de vente</th>'+
-    '<th class="comp-col-margeb">Marge brute</th></tr>';
+    '<th>Prix calculé</th><th>Transport</th><th>Prix / mille</th>'+
+    '<th>Prix d\'achat</th><th>Condi.</th><th>Prix achat condi.</th>'+
+    '<th class="comp-sifa comp-sifa-start">Devise devis</th><th class="comp-sifa comp-th-coef">Coef</th>'+
+    '<th class="comp-sifa comp-th-marge">Marge</th><th class="comp-sifa">Prix de vente</th>'+
+    '<th class="comp-sifa comp-col-margeb">Marge brute</th></tr>';
   const NB_COLS = 20;
+  const NB_COLS_PRODUIT = 5;
   // Libellé lisible de l'unité de vente (définie dans la fiche produit).
   const UV_LABELS = {mille:'Au mille', etiquette:'Étiquette', bobine:'Bobine', carton:'Carton', palette:'Palette'};
   function condiLabel(r) {
@@ -3914,86 +3944,99 @@ function renderComparaison() {
     return (q > 1 ? (q + ' · ') : '') + base;   // "100 · Bobine" ou "Carton"
   }
   let body = '';
-  rows.forEach(r => {
-    const best = bestMille != null && r.prix_au_mille === bestMille;
-    const cls = best ? ' comp-cell-best' : '';
-    const devF = (r.devise || 'EUR').toUpperCase();
-    const devD = (r.devise_prix_devis || 'EUR').toUpperCase();
-    const rid = r.reponse_id;
-    const noRep = rid == null || rid === '';
-    const dis = noRep ? ' disabled' : '';
-    // Quotation cell : bouton "Saisir prix" si pas de réponse enregistrée
-    const quotationCell = noRep
-      ? '<td><button type="button" class="btn btn-ghost btn-sm btn-saisir-prix" data-lid="'+escAttr(r.ligne_id||'')+'" data-fid="'+escAttr(r.fourni_id||'')+'" data-fournisseur="'+escAttr(r.nom_fournisseur||'')+'" data-ref="'+escAttr(r.ref_produit||'')+'" style="font-size:11px;padding:4px 8px;color:var(--accent);border:1px dashed var(--accent);background:var(--accent-bg)">'+icon('edit',12)+' Saisir</button></td>'
-      : '<td class="'+cls.trim()+'">'+formatMoney(r.quotation, devF)+'</td>';
-    // Condi. : lecture seule, unité de vente issue de la fiche produit.
-    // Si l'unité exige des données de conditionnement absentes (etiq_par_condi
-    // null pour un type carton/palette/bobine), on invite à compléter la fiche.
-    const uvType = r.unite_vente_type || 'mille';
-    const needsFiche = (uvType !== 'mille' && uvType !== 'etiquette') && (r.etiq_par_condi == null);
-    const condiCell = needsFiche
-      ? '<td><span class="btn-fiche-alerte" data-ref="'+escAttr(r.ref_produit||'')+'" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--warn,#a16207);background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.4);padding:3px 8px;border-radius:6px;cursor:pointer" title="Conditionnement manquant dans la fiche produit — clique pour compléter">'+icon('wrench',11)+' Compléter</span></td>'
-      : '<td><span class="comp-condi-label">'+escHtml(condiLabel(r))+'</span></td>';
-    // Prix d'achat conditionné (devise devis, par unité de vente). Calculé serveur.
-    const condiPrixCell = (r.prix_achat_conditionne != null)
-      ? '<td>'+formatMoney(r.prix_achat_conditionne, devD)+'</td>'
-      : '<td style="color:var(--muted)">—</td>';
-    // Prix de vente final = prix d'achat conditionné × coef × marge. Calculé serveur.
-    const prixVenteCell = (r.prix_vente_final != null)
-      ? '<td class="'+cls.trim()+'" style="font-weight:700">'+formatMoney(r.prix_vente_final, devD)+'</td>'
-      : '<td style="color:var(--muted)">—</td>';
-    // Marge brute (%) = (dernier prix de vente − prix d'achat condi.) / prix d'achat condi.
-    // Colonne étroite : texte sur plusieurs lignes. Dernier prix de vente en sous-titre.
-    let margeBruteCell;
-    if (!r.has_produit) {
-      margeBruteCell = '<td class="comp-col-margeb"><span style="font-size:10px;color:var(--warn,#a16207);line-height:1.25;display:inline-block">Produit non existant</span></td>';
-    } else if (r.dernier_prix_vente == null) {
-      margeBruteCell = '<td class="comp-col-margeb"><span style="font-size:10px;color:var(--muted);line-height:1.25;display:inline-block">Dernier prix de vente à renseigner</span></td>';
-    } else if (r.marge_brute_pct == null) {
-      margeBruteCell = '<td class="comp-col-margeb"><span style="color:var(--muted)">—</span><div style="font-size:10px;color:var(--accent);line-height:1.2;margin-top:2px">PV '+formatMoney(r.dernier_prix_vente, devD)+'</div></td>';
-    } else {
-      const pct = r.marge_brute_pct;
-      const col = pct >= 0 ? 'var(--success,#16a34a)' : 'var(--danger)';
-      margeBruteCell = '<td class="comp-col-margeb">'+
-        '<div style="font-size:14px;font-weight:700;color:'+col+';line-height:1.1">'+(pct>=0?'+':'')+pct.toLocaleString('fr-FR',{maximumFractionDigits:1})+'&nbsp;%</div>'+
-        '<div style="font-size:10px;color:var(--accent);margin-top:2px;line-height:1.2">PV '+formatMoney(r.dernier_prix_vente, devD)+'</div>'+
-        '</td>';
-    }
-    body += '<tr data-reponse-id="'+escAttr(rid||'')+'">'+
-      '<td class="ref">'+escHtml(r.ref_produit)+'</td>'+
-      '<td class="txt-left comp-col-fa" style="font-size:11px;color:var(--text2)">'+escHtml(r.frontal||'—')+'</td>'+
-      '<td class="txt-left comp-col-fa" style="font-size:11px;color:var(--text2)">'+escHtml(r.adhesif||'—')+'</td>'+
-      '<td class="comp-col-etiqbob">'+formatInt(r.etiquettes_par_bobine)+'</td>'+
-      '<td>'+formatInt(r.quantite_etiquettes)+'</td>'+
-      '<td class="txt-left comp-col-fourn">'+escHtml(r.nom_fournisseur||'')+'</td>'+
-      quotationCell+
-      '<td>'+escHtml(devF)+'</td>'+
-      '<td class="comp-col-uquot">'+'<select class="inp-unite-quot" data-rep="'+escAttr(rid||'')+'"'+dis+'>'+'<option value="mille"'+(r.unite_quotation==='mille'?' selected':'')+'>Mille</option>'+'<option value="bobine"'+(r.unite_quotation==='bobine'?' selected':'')+'>Bobine</option>'+'</select>'+((r.unite_quotation_original && r.unite_quotation !== r.unite_quotation_original) ? ' <span style="font-size:9px;padding:1px 4px;background:var(--warning-bg,rgba(234,179,8,.15));color:var(--warning,#a16207);border-radius:4px;font-weight:600">m</span>' : '')+'</td>'+
-      '<td>'+formatMoney(r.prix_calcule, devF)+'</td>'+
-      '<td style="color:var(--text2);font-size:11px" data-tr="'+escAttr(rid||'')+'">'+formatMoney(r.transport_amount, devF)+'</td>'+
-      '<td class="'+cls.trim()+'">'+formatMoney(r.prix_au_mille, devF)+'</td>'+
-      '<td class="comp-td-coef"><input type="number" step="0.01" min="0.01" class="inp-coef" data-rep="'+escAttr(rid||'')+'" value="'+escAttr(r.coef != null ? r.coef : 1)+'"'+dis+'></td>'+
-      '<td><select class="inp-dev-devis" data-rep="'+escAttr(rid||'')+'"'+dis+'>'+
-        '<option value="EUR"'+(devD==='EUR'?' selected':'')+'>EUR</option>'+
-        '<option value="USD"'+(devD==='USD'?' selected':'')+'>USD</option>'+
-      '</select></td>'+
-      '<td class="'+cls.trim()+'" data-pv="'+escAttr(rid)+'">'+formatMoney(r.prix_achat_mille_dd != null ? r.prix_achat_mille_dd : r.prix_au_mille, devD)+'</td>'+
-      condiCell+
-      condiPrixCell+
-      '<td class="comp-td-marge"><input type="number" step="0.01" min="0.01" class="inp-marge" data-rep="'+escAttr(rid||'')+'" value="'+escAttr(r.marge != null ? r.marge : 1)+'"'+dis+'></td>'+
-      prixVenteCell+
-      margeBruteCell+
-      '</tr>';
-    // Détail par série sous la ligne — ligne d'info pleine largeur (robuste au
-    // nombre de colonnes) : libellé + qté + prix calculé + prix de vente/mille.
-    const sb = Array.isArray(r.series_breakdown) ? r.series_breakdown : [];
-    if (sb.length > 0) {
-      sb.forEach(s => {
-        body += '<tr class="comp-serie-sub">'+
-          '<td class="serie-label" colspan="'+NB_COLS+'">'+icon('corner-down-right',11)+' <strong style="color:var(--text2)">'+escHtml(s.libelle||'—')+'</strong>'+(s.notes?' <span style="color:var(--muted)">· '+escHtml(s.notes)+'</span>':'')+' — '+formatInt(s.quantite)+' étiq. · Prix calculé '+formatMoney(s.prix_calcule, devF)+' · Prix vente/mille '+formatMoney(s.prix_vente, devD)+'</td>'+
-          '</tr>';
-      });
-    }
+  groupes.forEach((g, gi) => {
+    let bestMille = null;
+    g.rows.forEach(r => {
+      if (r.prix_au_mille != null && (bestMille == null || r.prix_au_mille < bestMille)) bestMille = r.prix_au_mille;
+    });
+    // Les cellules produit couvrent toutes les lignes du bloc, sous-lignes de
+    // series comprises.
+    const span = g.rows.reduce((n, r) => n + 1 + (Array.isArray(r.series_breakdown) ? r.series_breakdown.length : 0), 0);
+    if (gi > 0) body += '<tr class="comp-grp-sep" aria-hidden="true"><td colspan="'+NB_COLS+'"></td></tr>';
+    g.rows.forEach((r, ri) => {
+      const best = bestMille != null && r.prix_au_mille === bestMille;
+      const cls = best ? ' comp-cell-best' : '';
+      const devF = (r.devise || 'EUR').toUpperCase();
+      const devD = (r.devise_prix_devis || 'EUR').toUpperCase();
+      const rid = r.reponse_id;
+      const noRep = rid == null || rid === '';
+      const dis = noRep ? ' disabled' : '';
+      // Quotation cell : bouton "Saisir prix" si pas de réponse enregistrée
+      const quotationCell = noRep
+        ? '<td><button type="button" class="btn btn-ghost btn-sm btn-saisir-prix" data-lid="'+escAttr(r.ligne_id||'')+'" data-fid="'+escAttr(r.fourni_id||'')+'" data-fournisseur="'+escAttr(r.nom_fournisseur||'')+'" data-ref="'+escAttr(r.ref_produit||'')+'" style="font-size:11px;padding:4px 8px;color:var(--accent);border:1px dashed var(--accent);background:var(--accent-bg)">'+icon('edit',12)+' Saisir</button></td>'
+        : '<td class="'+cls.trim()+'">'+formatMoney(r.quotation, devF)+'</td>';
+      // Condi. : lecture seule, unité de vente issue de la fiche produit.
+      // Si l'unité exige des données de conditionnement absentes (etiq_par_condi
+      // null pour un type carton/palette/bobine), on invite à compléter la fiche.
+      const uvType = r.unite_vente_type || 'mille';
+      const needsFiche = (uvType !== 'mille' && uvType !== 'etiquette') && (r.etiq_par_condi == null);
+      const condiCell = needsFiche
+        ? '<td><span class="btn-fiche-alerte" data-ref="'+escAttr(r.ref_produit||'')+'" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--warn,#a16207);background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.4);padding:3px 8px;border-radius:6px;cursor:pointer" title="Conditionnement manquant dans la fiche produit — clique pour compléter">'+icon('wrench',11)+' Compléter</span></td>'
+        : '<td><span class="comp-condi-label">'+escHtml(condiLabel(r))+'</span></td>';
+      // Prix d'achat conditionné (devise devis, par unité de vente). Calculé serveur.
+      const condiPrixCell = (r.prix_achat_conditionne != null)
+        ? '<td>'+formatMoney(r.prix_achat_conditionne, devD)+'</td>'
+        : '<td style="color:var(--muted)">—</td>';
+      // Prix de vente final = prix d'achat conditionné × coef × marge. Calculé serveur.
+      const prixVenteCell = (r.prix_vente_final != null)
+        ? '<td class="'+cls.trim()+'" style="font-weight:700">'+formatMoney(r.prix_vente_final, devD)+'</td>'
+        : '<td style="color:var(--muted)">—</td>';
+      // Marge brute (%) = (dernier prix de vente − prix d'achat condi.) / prix d'achat condi.
+      // Colonne étroite : texte sur plusieurs lignes. Dernier prix de vente en sous-titre.
+      let margeBruteCell;
+      if (!r.has_produit) {
+        margeBruteCell = '<td class="comp-col-margeb"><span style="font-size:10px;color:var(--warn,#a16207);line-height:1.25;display:inline-block">Produit non existant</span></td>';
+      } else if (r.dernier_prix_vente == null) {
+        margeBruteCell = '<td class="comp-col-margeb"><span style="font-size:10px;color:var(--muted);line-height:1.25;display:inline-block">Dernier prix de vente à renseigner</span></td>';
+      } else if (r.marge_brute_pct == null) {
+        margeBruteCell = '<td class="comp-col-margeb"><span style="color:var(--muted)">—</span><div style="font-size:10px;color:var(--accent);line-height:1.2;margin-top:2px">PV '+formatMoney(r.dernier_prix_vente, devD)+'</div></td>';
+      } else {
+        const pct = r.marge_brute_pct;
+        const col = pct >= 0 ? 'var(--success,#16a34a)' : 'var(--danger)';
+        margeBruteCell = '<td class="comp-col-margeb">'+
+          '<div style="font-size:14px;font-weight:700;color:'+col+';line-height:1.1">'+(pct>=0?'+':'')+pct.toLocaleString('fr-FR',{maximumFractionDigits:1})+'&nbsp;%</div>'+
+          '<div style="font-size:10px;color:var(--accent);margin-top:2px;line-height:1.2">PV '+formatMoney(r.dernier_prix_vente, devD)+'</div>'+
+          '</td>';
+      }
+      const rs = ' rowspan="'+span+'"';
+      const produitCells = ri > 0 ? '' :
+        '<td class="ref comp-prod"'+rs+'>'+escHtml(r.ref_produit)+'</td>'+
+        '<td class="txt-left comp-col-fa comp-prod"'+rs+' style="font-size:11px;color:var(--text2)">'+escHtml(r.frontal||'—')+'</td>'+
+        '<td class="txt-left comp-col-fa comp-prod"'+rs+' style="font-size:11px;color:var(--text2)">'+escHtml(r.adhesif||'—')+'</td>'+
+        '<td class="comp-col-etiqbob comp-prod"'+rs+'>'+formatInt(r.etiquettes_par_bobine)+'</td>'+
+        '<td class="comp-prod"'+rs+'>'+formatInt(r.quantite_etiquettes)+'</td>';
+      body += '<tr class="comp-offre" data-reponse-id="'+escAttr(rid||'')+'">'+
+        produitCells+
+        '<td class="txt-left comp-col-fourn">'+escHtml(r.nom_fournisseur||'')+'</td>'+
+        quotationCell+
+        '<td>'+escHtml(devF)+'</td>'+
+        '<td class="comp-col-uquot">'+'<select class="inp-unite-quot" data-rep="'+escAttr(rid||'')+'"'+dis+'>'+'<option value="mille"'+(r.unite_quotation==='mille'?' selected':'')+'>Mille</option>'+'<option value="bobine"'+(r.unite_quotation==='bobine'?' selected':'')+'>Bobine</option>'+'</select>'+((r.unite_quotation_original && r.unite_quotation !== r.unite_quotation_original) ? ' <span style="font-size:9px;padding:1px 4px;background:var(--warning-bg,rgba(234,179,8,.15));color:var(--warning,#a16207);border-radius:4px;font-weight:600">m</span>' : '')+'</td>'+
+        '<td>'+formatMoney(r.prix_calcule, devF)+'</td>'+
+        '<td style="color:var(--text2);font-size:11px" data-tr="'+escAttr(rid||'')+'">'+formatMoney(r.transport_amount, devF)+'</td>'+
+        '<td class="'+cls.trim()+'">'+formatMoney(r.prix_au_mille, devF)+'</td>'+
+        '<td class="'+cls.trim()+'" data-pv="'+escAttr(rid)+'">'+formatMoney(r.prix_achat_mille_dd != null ? r.prix_achat_mille_dd : r.prix_au_mille, devD)+'</td>'+
+        condiCell+
+        condiPrixCell+
+        '<td><select class="inp-dev-devis" data-rep="'+escAttr(rid||'')+'"'+dis+'>'+
+          '<option value="EUR"'+(devD==='EUR'?' selected':'')+'>EUR</option>'+
+          '<option value="USD"'+(devD==='USD'?' selected':'')+'>USD</option>'+
+        '</select></td>'+
+        '<td class="comp-td-coef"><input type="number" step="0.01" min="0.01" class="inp-coef" data-rep="'+escAttr(rid||'')+'" value="'+escAttr(r.coef != null ? r.coef : 1)+'"'+dis+'></td>'+
+        '<td class="comp-td-marge"><input type="number" step="0.01" min="0.01" class="inp-marge" data-rep="'+escAttr(rid||'')+'" value="'+escAttr(r.marge != null ? r.marge : 1)+'"'+dis+'></td>'+
+        prixVenteCell+
+        margeBruteCell+
+        '</tr>';
+      // Détail par série sous la ligne — ligne d'info pleine largeur (robuste au
+      // nombre de colonnes) : libellé + qté + prix calculé + prix de vente/mille.
+      const sb = Array.isArray(r.series_breakdown) ? r.series_breakdown : [];
+      if (sb.length > 0) {
+        sb.forEach(s => {
+          body += '<tr class="comp-serie-sub">'+
+            '<td class="serie-label" colspan="'+(NB_COLS - NB_COLS_PRODUIT)+'">'+icon('corner-down-right',11)+' <strong style="color:var(--text2)">'+escHtml(s.libelle||'—')+'</strong>'+(s.notes?' <span style="color:var(--muted)">· '+escHtml(s.notes)+'</span>':'')+' — '+formatInt(s.quantite)+' étiq. · Prix calculé '+formatMoney(s.prix_calcule, devF)+' · Prix vente/mille '+formatMoney(s.prix_vente, devD)+'</td>'+
+            '</tr>';
+        });
+      }
+    });
   });
   const fxNote = c.eur_usd_rate
     ? '<p style="font-size:11px;color:var(--muted);margin-top:10px">Taux EUR/USD : '+Number(c.eur_usd_rate).toLocaleString('fr-FR', {maximumFractionDigits:4})+' — conversion appliquée sur le <strong>prix d\'achat</strong> si les devises diffèrent. Prix de vente = prix d\'achat conditionné × coef × marge.</p>'
