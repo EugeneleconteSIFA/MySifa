@@ -200,7 +200,7 @@ check('enregistrer efface l\'essai', panneauFx.includes('S.fxDraft = null'), tru
 // Un bouton qu'on oublie, c'est un réglage qui n'a jamais changé — et rien à
 // l'écran ne le disait. Même patron que les fiches : débounce + pastille.
 check('plus de bouton Appliquer', src.includes('id="si-save"'), false);
-check('le panneau a sa pastille', panneau.includes('etat("si-save-status")'), true);
+check('le panneau a sa pastille', panneau.includes('id="si-save-status"'), true);
 check('la pastille utilise le même rendu d\'état',
   panneau.includes('saveStatusHtml(S.settingsSaveStatus'), true);
 check('« Rafraîchir le taux » reste un bouton', panneau.includes('id="si-fx"'), true);

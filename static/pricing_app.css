@@ -1048,10 +1048,46 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 .imp-titre{font-size:13px;font-weight:700;color:var(--text);margin:0 0 10px}
 .transport-propage{max-width:420px}
 .marge-taux{margin-top:10px}
-/* Le champ de marge se range sous la case, aligné sur son libellé : il ne
-   répond qu'à la question qu'elle pose. */
-.si-marge-champ{margin:14px 0 0 30px;display:flex;flex-direction:column;gap:10px}
-.si-marge-champ > .field{margin:0}
-.si-commun-aide{margin:-6px 0 14px}
-.si-fx-btn{margin-top:8px;align-self:flex-start}
-.si-commun .si-state{margin-top:16px}
+.si-marge > .field{margin-bottom:10px}
+.si-fx-btn{justify-self:start}
+
+/* ─── Fiche matière tenue sur un écran (oct. 2026) ───
+   Les aides et exemples passent à DROITE du champ qu'ils expliquent : sous le
+   champ, chacun ajoutait deux à quatre lignes, et la fiche ne tenait plus sur
+   un écran. Seuls les champs qui portent une aide changent de mise en page. */
+.form-layout-1 .field:has(> .field-hint, > .si-meta){
+  --fld-w:340px;
+  display:grid;grid-template-columns:minmax(0,var(--fld-w)) minmax(0,1fr);
+  column-gap:18px;row-gap:4px;align-items:start}
+.form-layout-1 .field.f-num:has(> .field-hint, > .si-meta){--fld-w:200px}
+.form-layout-1 .field.f-price:has(> .field-hint){--fld-w:max-content}
+.form-layout-1 .field:has(> .field-hint, > .si-meta) > *{grid-column:1}
+.form-layout-1 .field:has(> .field-hint, > .si-meta) > label{grid-column:1 / -1;margin-bottom:2px}
+.form-layout-1 .field:has(> .field-hint, > .si-meta) > :is(.field-hint,.si-meta,.si-fx-btn,.si-state){
+  grid-column:2;margin-top:0;align-self:center}
+.form-layout-1 .field:has(> .field-hint, > .si-meta) > :is(input,select){max-width:none}
+/* Sans aide, un champ garde la largeur de ceux qui en ont : une liste
+   tendue sur toute la carte se lit comme un bandeau, pas comme un champ. */
+.form-layout-1 .field:not(.f-num) > select{max-width:340px}
+.form-layout-1 .transport-propage{max-width:none}
+.form-layout-1 .transport-aide .aide-ex,
+.form-layout-1 .transport-aide .aide-quand{margin-top:4px}
+.form-layout-1 .form-section{margin-bottom:14px}
+.form-layout-1 .imp-groupe + .imp-groupe{margin-top:12px;padding-top:12px}
+@media(max-width:700px){
+  .form-layout-1 .field:has(> .field-hint, > .si-meta){display:block}
+  .form-layout-1 .field:has(> .field-hint, > .si-meta) > :is(.field-hint,.si-meta){margin-top:5px}
+}
+
+/* Le détail du calcul reste à l'écran pendant la saisie, comme le bandeau
+   d'enregistrement : on règle un transport en regardant le sous-total bouger.
+   Collé en bas tant que la fiche défile, il reprend sa place à la fin. */
+#mat-recap,#decl-recap{position:sticky;bottom:0;z-index:20;padding-bottom:12px}
+#mat-recap .recap-card,#decl-recap .recap-card{padding:10px 14px;margin-top:12px;
+  border-left:3px solid var(--accent);box-shadow:0 -6px 18px rgba(15,23,42,.14)}
+#mat-recap .recap-head,#decl-recap .recap-head{margin-bottom:8px}
+#mat-recap .recap-head > div,#decl-recap .recap-head > div{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline}
+#mat-recap .recap-formula,#decl-recap .recap-formula{margin-top:0}
+#mat-recap table.recap-table td,#decl-recap table.recap-table td{padding:7px 12px}
+#mat-recap table.recap-table th,#decl-recap table.recap-table th{padding:6px 12px}
+#mat-recap .recap-notes,#decl-recap .recap-notes{margin-top:6px}
