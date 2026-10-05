@@ -37,6 +37,8 @@
     settings: null,
     // Observateur de hauteur du bandeau d'actions fixe (voir syncSavebarSpacer).
     savebarRO: null,
+    // Idem pour le détail du calcul, fixé en bas d'écran.
+    recapRO: null,
     // Tarifs fournisseurs : liste de l'annuaire, et fiche ouverte.
     tarifFournisseurs: [],
     tarifFiche: null,
@@ -376,11 +378,11 @@
           ${o.champs}
         </div>
       </div>
-      <div class="imp-groupe"><h4 class="imp-titre">Taxe d'importation</h4>
+      <div class="imp-groupe"><h4 class="imp-titre">Taxe d'importation (en %)</h4>
         <div class="imp-liste">
-          <div class="field f-num"><label>Taux <span class="lbl-unit">% du sous-total</span></label>
-            <input type="number" step="0.01" id="${o.taxId}" value="${escAttr(o.tax)}"/>
-            <div class="field-hint">6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
+          <div class="field f-num">
+            <input type="number" step="0.01" id="${o.taxId}" value="${escAttr(o.tax)}" aria-label="Taxe d'importation en % du sous-total"/>
+            <div class="field-hint">% du sous-total · 6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
           </div>
         </div>
       </div>
@@ -2473,56 +2475,50 @@
     const ro = S.canWrite ? "" : " disabled";
     const cat = categorieFiche(f);
     const editable = !!(s && S.canWrite);
+    const caseMarge = `<label class="check-row" title="Décoché, la matière entre dans le prix de revient mais on ne marge pas dessus.">
+          <input type="checkbox" id="${prefixe}-marge" ${f && f.applique_marge !== false ? "checked" : ""}${ro}/>
+          <span class="check-title">Appliquer à cette matière</span>
+        </label>`;
 
-    // Un seul champ de marge : celui qui s'applique à cette matière. Une
-    // matière de catégorie connue lit la marge de sa catégorie (vide = marge
-    // par défaut) ; afficher aussi la marge par défaut faisait deux chiffres
-    // pour une seule question. Sans catégorie, c'est la marge par défaut qui
-    // s'applique, et c'est elle qu'on règle.
-    const catConnue = !!(s && cat && (s.categories_marge || []).some((c) => c.code === cat));
-    let champMarge = "";
-    if (editable && catConnue) {
-      const propre = (s.marges_categorie || {})[cat];
-      const libelle = escHtml(categorieLabel(cat));
-      const defaut = escHtml(fmtNum(s.default_margin_pct, 2, 2));
-      champMarge = `<div class="field f-num"><label for="si-mcat-${escAttr(cat)}">${libelle} <span class="lbl-unit">%</span></label>
-          <input type="number" step="0.01" min="0" id="si-mcat-${escAttr(cat)}"
-                 data-si-marge-cat="${escAttr(cat)}"
-                 value="${escAttr(propre != null ? propre : "")}"
-                 placeholder="${escAttr(fmtNum(s.default_margin_pct, 2, 2))}"/>
-          <div class="field-hint">Commune aux matières ${libelle} · vide = marge par défaut (${defaut} %)</div>
-        </div>`;
-    } else if (editable) {
-      champMarge = `<div class="field f-num"><label for="si-margin">Par défaut <span class="lbl-unit">%</span></label>
-          <input type="number" step="0.01" id="si-margin" value="${escAttr(s.default_margin_pct)}"/>
-          <div class="field-hint">Matière sans catégorie · vaut pour toutes celles qui n'en ont pas</div>
+    if (!editable) {
+      return `<div class="form-section si-marge"><h3>Marge</h3>
+          ${caseMarge}
+          ${s ? `<div class="field-hint marge-taux" id="si-marge-taux" data-cat="${escAttr(cat)}">${margeTauxHtml(cat)}</div>` : ""}
         </div>`;
     }
 
-    // Le titre de section dit déjà « Marge » : la case ne le répète pas, et
-    // son explication passe en infobulle.
-    const blocMatiere = `
-      <div class="form-section si-marge"><h3>Marge</h3>
-        ${champMarge}
-        <label class="check-row" title="Décoché, la matière entre dans le prix de revient mais on ne marge pas dessus.">
-          <input type="checkbox" id="${prefixe}-marge" ${f && f.applique_marge !== false ? "checked" : ""}${ro}/>
-          <span class="check-title">Appliquer à cette matière</span>
-        </label>
-        ${!champMarge && s ? `<div class="field-hint marge-taux" id="si-marge-taux" data-cat="${escAttr(cat)}">${margeTauxHtml(cat)}</div>` : ""}
-      </div>`;
-
-    if (!editable) return blocMatiere;
+    // Un seul champ de marge : celui qui s'applique à cette matière. Une
+    // matière de catégorie connue lit la marge de sa catégorie (vide = marge
+    // par défaut, rappelée en gris dans le champ) ; sans catégorie, c'est la
+    // marge par défaut qu'on règle. Le titre dit lequel, le champ n'a pas de
+    // libellé à lui : un titre et un sous-titre disaient deux fois « marge ».
+    const catConnue = !!(cat && (s.categories_marge || []).some((c) => c.code === cat));
+    const propre = catConnue ? (s.marges_categorie || {})[cat] : null;
+    const titreMarge = catConnue
+      ? `Marge ${escHtml(categorieLabel(cat))} (en %)`
+      : "Marge par défaut (en %)";
+    const champMarge = catConnue
+      ? `<input type="number" step="0.01" min="0" id="si-mcat-${escAttr(cat)}"
+                 data-si-marge-cat="${escAttr(cat)}" aria-label="${escAttr(titreMarge)}"
+                 value="${escAttr(propre != null ? propre : "")}"
+                 placeholder="${escAttr(fmtNum(s.default_margin_pct, 2, 2))}"/>`
+      : `<input type="number" step="0.01" id="si-margin" aria-label="${escAttr(titreMarge)}"
+                 value="${escAttr(s.default_margin_pct)}"/>`;
 
     const stale = isFxStale(s.eur_usd_rate_updated_at);
     // Un taux en essai ne porte ni date ni source : il n'est pas enregistré.
     const essaiFx =
       fxEssai() !== undefined &&
       Math.abs(fxEssai() - parseFloat(s.eur_usd_rate || 0)) > 1e-9;
-    return `${blocMatiere}
+    return `
+      <div class="form-section si-marge"><h3>${titreMarge}</h3>
+        <div class="si-marge-ligne">${champMarge}${caseMarge}</div>
+      </div>
       <div class="form-section si-commun">
-        <h3>Taux de change</h3>
-        <div class="field f-num"><label for="si-rate">USD → EUR ${stale ? fxStaleBadgeHtml() : ""}</label>
-          <input type="number" step="0.0001" id="si-rate" value="${escAttr(S.fxDraft != null ? S.fxDraft : s.eur_usd_rate)}"/>
+        <h3>Taux de change (USD → EUR) ${stale ? fxStaleBadgeHtml() : ""}</h3>
+        <div class="field f-num">
+          <input type="number" step="0.0001" id="si-rate" aria-label="Taux de change USD vers EUR"
+                 value="${escAttr(S.fxDraft != null ? S.fxDraft : s.eur_usd_rate)}"/>
           <div class="si-meta" id="si-rate-meta">${
             essaiFx
               ? "Taux d'essai — le calcul en tient compte, l'enregistrement suit dans la seconde."
@@ -2654,6 +2650,24 @@
     if (S.savebarRO) {
       S.savebarRO.disconnect();
       S.savebarRO = null;
+    }
+    if (S.recapRO) {
+      S.recapRO.disconnect();
+      S.recapRO = null;
+    }
+    // Le détail du calcul est fixé en bas d'écran : l'espaceur de fin de page
+    // lui laisse la place, sinon il masquerait les dernières lignes.
+    const recap = document.querySelector(".recap-fixe");
+    const basPage = document.querySelector(".recap-spacer");
+    if (recap && basPage) {
+      const majBas = () => {
+        basPage.style.height = recap.offsetHeight + 16 + "px";
+      };
+      majBas();
+      if (typeof ResizeObserver === "function") {
+        S.recapRO = new ResizeObserver(majBas);
+        S.recapRO.observe(recap);
+      }
     }
     const bar = document.querySelector(".pr-savebar");
     const spacer = document.querySelector(".savebar-spacer");
@@ -2928,6 +2942,7 @@
       <div class="pr-savebar">
         <button type="button" class="btn btn-soft btn-sm" id="btn-back-mat">${icon("arrow-left", 14)} Retour liste</button>
         <div class="savebar-state savebar-state-${S.matSaveStatus}" id="mat-save-status">${saveStatusHtml(S.matSaveStatus, S.matSavedAt)}</div>
+        <div class="mat-summary sb-summary" id="mat-summary">${matSummaryHtml(S.matPreview)}</div>
         <div class="savebar-actions">
           ${!isNew && S.canWrite ? '<button type="button" class="btn btn-danger btn-sm" id="btn-del-mat">Supprimer</button>' : ""}
           ${isNew && S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-save-mat">Créer la matière</button>' : ""}
@@ -2972,7 +2987,6 @@
           isNew ? "Nouvelle matière" : "Éditer matière",
           isNew ? "" : escHtml(f.name)
         )}
-        <div class="mat-summary" id="mat-summary">${matSummaryHtml(S.matPreview)}</div>
         <div class="form-layout form-layout-1">
         <div class="form-card">
           <div class="form-section"><h3>Identification</h3>
@@ -3042,9 +3056,10 @@
         </div>
         </div>
 
-        <div id="mat-recap">${recapTableHtml(S.matPreview)}</div>
+        <div id="mat-recap" class="recap-fixe">${recapTableHtml(S.matPreview)}</div>
 
         ${!isNew && hist ? `<div class="form-card" style="margin-top:16px"><div class="form-section" style="margin:0"><h3>Historique prix (10 derniers)</h3><div class="table-wrap"><table class="pr-table"><thead><tr><th>Date</th><th>Prix</th><th>Source</th></tr></thead><tbody>${hist}</tbody></table></div></div></div>` : ""}
+        <div class="recap-spacer" aria-hidden="true"></div>
       </div>
     `);
 
@@ -4049,6 +4064,7 @@
       <div class="pr-savebar">
         <button type="button" class="btn btn-soft btn-sm" id="btn-back-decl">${icon("arrow-left", 14)} Retour liste</button>
         <div class="savebar-state savebar-state-${S.declSaveStatus}" id="decl-save-status">${saveStatusHtml(S.declSaveStatus, S.declSavedAt)}</div>
+        <div class="mat-summary sb-summary" id="decl-summary">${matSummaryHtml(S.declPreview)}</div>
         <div class="savebar-actions">
           <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${S.declForm.matiere_id}" target="_blank" rel="noopener" title="Ouvrir la matière dans MyStock">MyStock ↗</a>
         </div>
@@ -4061,8 +4077,6 @@
     // Le transport ne se propage que depuis un fournisseur identifié : c'est
     // SON tarif qu'on recopie, pas un réglage flottant de la déclinaison.
     const declPrincipal = declFournisseurPrincipal(f);
-    const prixTxt = `${fmtNum(f.unit_price, 4, 4)} ${unit}`;
-
     setContent(`
       <div class="pr-narrow">
         ${declSaveBarHtml()}
@@ -4070,22 +4084,8 @@
           "Matière MyStock",
           `${escHtml(f.reference)} — ${escHtml(f.libelle)}`
         )}
-        <div class="mat-summary" id="decl-summary">${matSummaryHtml(S.declPreview)}</div>
         <div class="form-layout form-layout-1">
         <div class="form-card">
-
-          <div class="form-section"><h3>Identification</h3>
-            <div class="ms-locked">
-              <strong>${escHtml(f.reference)}</strong> — ${escHtml(f.designation || "")}
-              · ${escHtml(f.libelle)} · ${escHtml(f.categorie || "")}
-              <br>Prix en vigueur : <strong>${escHtml(prixTxt)}</strong>${
-                f.fournisseur_nom ? ` chez <strong>${escHtml(f.fournisseur_nom)}</strong>` : " (aucun fournisseur principal)"
-              }.
-              Sous-total d'achat : <strong>${escHtml(fmtNum(f.sous_total_achat, 4, 4))} ${escHtml(unit)}</strong>
-              — c'est cette valeur que la valorisation MyStock affiche.
-              <br>Le prix se modifie dans l'onglet Matières MyStock, où vivent les fournisseurs.
-            </div>
-          </div>
 
           <!-- La section « Caractéristiques » (grammage + perte) a quitté les
                fiches matière le 31 août 2026. Un adhésif ne s'achète pas plus
@@ -4140,8 +4140,9 @@
         </div>
         </div>
 
-        <div id="decl-recap">${recapTableHtml(S.declPreview)}</div>
+        <div id="decl-recap" class="recap-fixe">${recapTableHtml(S.declPreview)}</div>
         ${declHistoriqueHtml(f.historique)}
+        <div class="recap-spacer" aria-hidden="true"></div>
       </div>
     `);
 
