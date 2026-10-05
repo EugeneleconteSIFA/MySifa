@@ -1048,11 +1048,10 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 .imp-titre{font-size:13px;font-weight:700;color:var(--text);margin:0 0 10px}
 .transport-propage{max-width:420px}
 .marge-taux{margin-top:10px}
+/* Le champ de marge se range sous la case, aligné sur son libellé : il ne
+   répond qu'à la question qu'elle pose. */
+.si-marge-champ{margin:14px 0 0 30px;display:flex;flex-direction:column;gap:10px}
+.si-marge-champ > .field{margin:0}
 .si-commun-aide{margin:-6px 0 14px}
-.si-fx-btn{margin-top:8px}
+.si-fx-btn{margin-top:8px;align-self:flex-start}
 .si-commun .si-state{margin-top:16px}
-.marge-cats{display:flex;flex-direction:column;gap:8px;max-width:340px}
-.marge-cat{display:grid;grid-template-columns:120px 1fr auto;align-items:center;gap:10px}
-.marge-cat label{margin:0;font-size:13px;font-weight:600;color:var(--text);text-transform:none;letter-spacing:0}
-.marge-cat input{max-width:none}
-.marge-cat.courante label{color:var(--accent)}

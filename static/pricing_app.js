@@ -358,8 +358,8 @@
       <button type="button" class="btn btn-sm btn-propage" id="${escAttr(id)}">
         ${icon("truck", 14)} Appliquer aux autres matières
       </button>
-      <div class="field-hint">Recopie « matière importée », la méthode de transport et les taxes
-        sur les matières ${cat ? escHtml(cat) : "de la même catégorie"} achetées à
+      <div class="field-hint">Recopie « matière importée », la méthode de transport et la taxe
+        d'importation sur les matières ${cat ? escHtml(cat) : "de la même catégorie"} achetées à
         ${escHtml(fournisseurNom)}. La base de prix et la devise, elles, ne bougent pas.</div>
     </div></div>`;
   }
@@ -2472,8 +2472,38 @@
     const s = S.settings;
     const ro = S.canWrite ? "" : " disabled";
     const cat = categorieFiche(f);
+    const editable = !!(s && S.canWrite);
+    const etat = (id) => `<div class="savebar-state savebar-state-${S.settingsSaveStatus} si-state"${id ? ` id="${id}"` : ""}>${
+      saveStatusHtml(S.settingsSaveStatus, S.settingsSavedAt)
+    }</div>`;
+
+    // Un seul champ de marge : celui qui s'applique à cette matière. Une
+    // matière de catégorie connue lit la marge de sa catégorie (vide = marge
+    // par défaut) ; afficher aussi la marge par défaut faisait deux chiffres
+    // pour une seule question. Sans catégorie, c'est la marge par défaut qui
+    // s'applique, et c'est elle qu'on règle.
+    const catConnue = !!(s && cat && (s.categories_marge || []).some((c) => c.code === cat));
+    let champMarge = "";
+    if (editable && catConnue) {
+      const propre = (s.marges_categorie || {})[cat];
+      const libelle = escHtml(categorieLabel(cat));
+      const defaut = escHtml(fmtNum(s.default_margin_pct, 2, 2));
+      champMarge = `<div class="field f-num"><label for="si-mcat-${escAttr(cat)}">Marge ${libelle} <span class="lbl-unit">%</span></label>
+          <input type="number" step="0.01" min="0" id="si-mcat-${escAttr(cat)}"
+                 data-si-marge-cat="${escAttr(cat)}"
+                 value="${escAttr(propre != null ? propre : "")}"
+                 placeholder="${escAttr(fmtNum(s.default_margin_pct, 2, 2))}"/>
+          <div class="field-hint">Commune à toutes les matières ${libelle}. Vide = marge par défaut (${defaut} %).</div>
+        </div>`;
+    } else if (editable) {
+      champMarge = `<div class="field f-num"><label for="si-margin">Marge par défaut <span class="lbl-unit">%</span></label>
+          <input type="number" step="0.01" id="si-margin" value="${escAttr(s.default_margin_pct)}"/>
+          <div class="field-hint">Cette matière n'a pas de catégorie : la marge par défaut s'applique. Elle vaut pour toutes les matières sans marge de catégorie.</div>
+        </div>`;
+    }
+
     const blocMatiere = `
-      <div class="form-section"><h3>Marge</h3>
+      <div class="form-section si-marge"><h3>Marge</h3>
         <label class="check-row">
           <input type="checkbox" id="${prefixe}-marge" ${f && f.applique_marge !== false ? "checked" : ""}${ro}/>
           <span>
@@ -2481,62 +2511,32 @@
             <span class="check-sub">Décoché, la matière entre dans le prix de revient mais on ne marge pas dessus.</span>
           </span>
         </label>
-        ${s ? `<div class="field-hint marge-taux" id="si-marge-taux" data-cat="${escAttr(cat)}">${margeTauxHtml(cat)}</div>` : ""}
+        ${champMarge
+          ? `<div class="si-marge-champ">${champMarge}${etat("")}</div>`
+          : (s ? `<div class="field-hint marge-taux" id="si-marge-taux" data-cat="${escAttr(cat)}">${margeTauxHtml(cat)}</div>` : "")}
       </div>`;
 
-    if (!s || !S.canWrite) return blocMatiere;
+    if (!editable) return blocMatiere;
 
     const stale = isFxStale(s.eur_usd_rate_updated_at);
     // Un taux en essai ne porte ni date ni source : il n'est pas enregistré.
     const essaiFx =
       fxEssai() !== undefined &&
       Math.abs(fxEssai() - parseFloat(s.eur_usd_rate || 0)) > 1e-9;
-    // Seule la catégorie de la fiche ouverte : les autres ne la concernent
-    // pas, et se règlent depuis une fiche de leur catégorie.
-    const marges = s.marges_categorie || {};
-    const lignesCat = (s.categories_marge || [])
-      .filter((c) => c.code === cat)
-      .map((c) => `<div class="marge-cat courante">
-          <label for="si-mcat-${escAttr(c.code)}">${escHtml(c.label)}</label>
-          <input type="number" step="0.01" min="0" id="si-mcat-${escAttr(c.code)}"
-                 data-si-marge-cat="${escAttr(c.code)}"
-                 value="${escAttr(marges[c.code] != null ? marges[c.code] : "")}"
-                 placeholder="${escAttr(fmtNum(s.default_margin_pct, 2, 2))}"/>
-          <span class="lbl-unit">%</span>
-        </div>`)
-      .join("");
     return `${blocMatiere}
       <div class="form-section si-commun">
-        <h3>Paramètres communs à toutes les matières</h3>
-        <div class="field-hint si-commun-aide">Ces réglages valent pour tout le module, pas seulement pour cette fiche.</div>
-        <div class="imp-groupe"><h4 class="imp-titre">Change</h4>
-          <div class="imp-liste">
-            <div class="field f-num"><label>Taux USD → EUR ${stale ? fxStaleBadgeHtml() : ""}</label>
-              <input type="number" step="0.0001" id="si-rate" value="${escAttr(S.fxDraft != null ? S.fxDraft : s.eur_usd_rate)}"/>
-              <div class="si-meta" id="si-rate-meta">${
-                essaiFx
-                  ? "Taux d'essai — le calcul en tient compte, l'enregistrement suit dans la seconde."
-                  : escHtml(fxMetaText(s))
-              }</div>
-              <button type="button" class="btn btn-soft btn-sm si-fx-btn" id="si-fx">Rafraîchir le taux</button>
-            </div>
-          </div>
+        <h3>Taux de change</h3>
+        <div class="field-hint si-commun-aide">Commun à toutes les matières : le modifier ici le change pour tout le module.</div>
+        <div class="field f-num"><label for="si-rate">USD → EUR ${stale ? fxStaleBadgeHtml() : ""}</label>
+          <input type="number" step="0.0001" id="si-rate" value="${escAttr(S.fxDraft != null ? S.fxDraft : s.eur_usd_rate)}"/>
+          <div class="si-meta" id="si-rate-meta">${
+            essaiFx
+              ? "Taux d'essai — le calcul en tient compte, l'enregistrement suit dans la seconde."
+              : escHtml(fxMetaText(s))
+          }</div>
+          <button type="button" class="btn btn-soft btn-sm si-fx-btn" id="si-fx">Rafraîchir le taux</button>
         </div>
-        <div class="imp-groupe"><h4 class="imp-titre">Marges</h4>
-          <div class="imp-liste">
-            <div class="field f-num"><label>Marge par défaut <span class="lbl-unit">%</span></label>
-              <input type="number" step="0.01" id="si-margin" value="${escAttr(s.default_margin_pct)}"/>
-              <div class="field-hint">S'applique à toute catégorie sans marge propre.</div>
-            </div>
-            ${lignesCat ? `<div class="field"><label>Marge de la catégorie</label>
-              <div class="marge-cats">${lignesCat}</div>
-              <div class="field-hint">Vide = marge par défaut.</div>
-            </div>` : ""}
-          </div>
-        </div>
-        <div class="savebar-state savebar-state-${S.settingsSaveStatus} si-state" id="si-save-status">${
-          saveStatusHtml(S.settingsSaveStatus, S.settingsSavedAt)
-        }</div>
+        ${etat("si-save-status")}
       </div>`;
   }
 
@@ -2810,11 +2810,12 @@
   function setSettingsSaveStatus(statut) {
     S.settingsSaveStatus = statut;
     if (statut === "ok") S.settingsSavedAt = new Date();
-    const el = document.getElementById("si-save-status");
-    if (el) {
+    // Deux pastilles : sous la marge et sous le taux de change. Les deux
+    // partent par le même enregistrement, elles disent la même chose.
+    document.querySelectorAll(".si-state").forEach((el) => {
       el.className = "savebar-state savebar-state-" + statut + " si-state";
       el.innerHTML = saveStatusHtml(statut, S.settingsSavedAt);
-    }
+    });
   }
 
   /**
@@ -2834,10 +2835,13 @@
         return el ? parseFloat(el.value) : NaN;
       };
       const taux = lu("si-rate");
+      // La marge par défaut n'est à l'écran que sur une matière sans
+      // catégorie : absente, elle ne part pas et reste inchangée.
+      const avecMarge = !!document.getElementById("si-margin");
       const marge = lu("si-margin");
       // Champ vidé le temps de retaper : rien ne part, et la pastille reste
       // sur « attente » pour que l'écart se voie. Un taux nul diviserait.
-      if (!(taux > 0) || !Number.isFinite(marge)) return;
+      if (!(taux > 0) || (avecMarge && !Number.isFinite(marge))) return;
       // Marge par catégorie : vide = retour à la marge par défaut (null).
       const margesCat = {};
       let margeCatInvalide = false;
@@ -2853,7 +2857,10 @@
       try {
         S.settings = await api("/api/pricing/settings", {
           method: "PATCH",
-          body: { eur_usd_rate: taux, default_margin_pct: marge, marges_categorie: margesCat },
+          body: Object.assign(
+            { eur_usd_rate: taux, marges_categorie: margesCat },
+            avecMarge ? { default_margin_pct: marge } : {}
+          ),
         });
         const tauxEl = document.getElementById("si-marge-taux");
         if (tauxEl) tauxEl.innerHTML = margeTauxHtml(tauxEl.getAttribute("data-cat") || "");
