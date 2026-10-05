@@ -109,7 +109,7 @@ check('le formulaire monte le panneau Paramètres', form.includes('inlineSetting
 check('la fiche MyStock monte le même panneau', src.includes('inlineSettingsHtml("d", f)'), true);
 check('la case marge est dans le panneau Paramètres', panneau.includes('${prefixe}-marge'), true);
 check('le panneau distingue les deux portées',
-  panneau.includes('<h3>Marge</h3>') && panneau.includes('Paramètres communs à toutes les matières'), true);
+  panneau.includes('<h3>Marge</h3>') && panneau.includes('Commun à toutes les matières'), true);
 check('une marge par catégorie se saisit', panneau.includes('data-si-marge-cat'), true);
 check('le panneau ne s\'appelle plus « Paramètres globaux »',
   panneau.includes('Paramètres globaux'), false);
@@ -200,7 +200,7 @@ check('enregistrer efface l\'essai', panneauFx.includes('S.fxDraft = null'), tru
 // Un bouton qu'on oublie, c'est un réglage qui n'a jamais changé — et rien à
 // l'écran ne le disait. Même patron que les fiches : débounce + pastille.
 check('plus de bouton Appliquer', src.includes('id="si-save"'), false);
-check('le panneau a sa pastille', panneau.includes('id="si-save-status"'), true);
+check('le panneau a sa pastille', panneau.includes('etat("si-save-status")'), true);
 check('la pastille utilise le même rendu d\'état',
   panneau.includes('saveStatusHtml(S.settingsSaveStatus'), true);
 check('« Rafraîchir le taux » reste un bouton', panneau.includes('id="si-fx"'), true);
@@ -224,5 +224,15 @@ for (const fn of ['loadMaterialForm', 'loadDeclinaisonForm']) {
 check('plus de mention du bouton Enregistrer du bandeau',
   src.includes('par le bouton Enregistrer du bandeau'), false);
 
+// ─── Une seule marge à l'écran (oct. 2026) ──────────────────────────────────
+// La matière lit la marge de sa catégorie ; la marge par défaut n'apparaît que
+// sur une matière sans catégorie. Deux champs pour une question faisaient
+// chercher lequel comptait.
+check('la marge par défaut n\'est qu\'un repli', panneau.includes('} else if (editable) {'), true);
+check('plus de liste de toutes les catégories', panneau.includes('categories_marge || []).map'), false);
+check('sans champ marge par défaut, elle ne part pas',
+  src.includes('avecMarge ? { default_margin_pct: marge } : {}'), true);
+
 console.log(ko === 0 ? '\nTOUT EST VERT' : '\n' + ko + ' ECHEC(S)');
 process.exit(ko === 0 ? 0 : 1);
+

@@ -92,6 +92,7 @@ def _row_blob(d: dict) -> str:
         d.get("nb_palette"),
         d.get("poids_total_kg"),
         d.get("date_livraison"),
+        d.get("date_chargement"),
         d.get("created_by_email"),
         d.get("validated_by_email"),
         d.get("validated_at"),
@@ -115,6 +116,7 @@ _HIST_SEARCH_COLS = (
     "d.nb_palette",
     "d.poids_total_kg",
     "d.date_livraison",
+    "d.date_chargement",
     "d.created_by_email",
     "d.validated_by_email",
     "d.validated_at",
@@ -1150,11 +1152,11 @@ def create_depart(request: Request, body: dict = Body(...)):
                 date_enlevement, affreteurs, transporteur, transporteur_id, client,
                 code_postal_destination,
                 ref_sifa, arc, no_cde_transport, no_bl, type_palette_matiere_id,
-                type_colis, nb_palette, poids_total_kg, date_livraison,
+                type_colis, nb_palette, poids_total_kg, date_livraison, date_chargement,
                 planning_entry_id, palette_europe, palette_europe_statut,
                 palette_europe_date_retour, palette_europe_note,
                 statut, created_at, created_by_email
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'en_attente', ?, ?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'en_attente', ?, ?)""",
             (
                 date_enl,
                 _f("affreteurs"),
@@ -1171,6 +1173,7 @@ def create_depart(request: Request, body: dict = Body(...)):
                 _float_opt("nb_palette"),
                 _float_opt("poids_total_kg"),
                 _f("date_livraison"),
+                _f("date_chargement"),
                 planning_entry_id,
                 palette_europe,
                 palette_europe_statut,
@@ -1328,6 +1331,7 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
         "no_cde_transport",
         "no_bl",
         "date_livraison",
+        "date_chargement",
     ]
     for k in fields_text:
         if k in body:

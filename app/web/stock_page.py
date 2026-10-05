@@ -9304,8 +9304,8 @@ function appendMatiereRefEditFields(parent, item) {
         el('label', null, 'Catégorie'),
         el('div', { cls: 'mp-readonly' }, MP_CAT_LABELS[item.categorie] || item.categorie || '—'),
       ),
-      el('div', { cls: 'mp-field' }, el('label', null, 'Référence'), refInp),
-      el('div', { cls: 'mp-field' }, el('label', null, 'Description'), desInp),
+      el('div', { cls: 'mp-field' }, el('label', null, 'Libellé commercial'), refInp),
+      el('div', { cls: 'mp-field' }, el('label', null, 'Libellé technique'), desInp),
       couleurWrap,
     ),
     mpFormSection('Catégorisation',
@@ -12107,8 +12107,8 @@ function buildMatieresAdminAddForm(opts) {
   syncAdminAddFields();
   foot.append(
     el('div', { cls: 'mp-field' }, el('label', null, 'Catégorie'), catSel),
-    el('div', { cls: 'mp-field' }, el('label', null, 'Référence'), refInp),
-    el('div', { cls: 'mp-field' }, el('label', null, 'Désignation'), desInp),
+    el('div', { cls: 'mp-field' }, el('label', null, 'Libellé commercial'), refInp),
+    el('div', { cls: 'mp-field' }, el('label', null, 'Libellé technique'), desInp),
     sousCategorieSel.el,
     couleurWrap,
     pppWrap,
