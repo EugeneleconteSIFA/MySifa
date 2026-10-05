@@ -1081,13 +1081,38 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 
 /* Le détail du calcul reste à l'écran pendant la saisie, comme le bandeau
    d'enregistrement : on règle un transport en regardant le sous-total bouger.
-   Collé en bas tant que la fiche défile, il reprend sa place à la fin. */
-#mat-recap,#decl-recap{position:sticky;bottom:0;z-index:20;padding-bottom:12px}
-#mat-recap .recap-card,#decl-recap .recap-card{padding:10px 14px;margin-top:12px;
+   Fixé en bas d'écran (un `sticky` dépend de l'élément qui défile et ne
+   tenait pas sur la vraie page), aligné sur le bandeau du haut ;
+   `.recap-spacer` lui réserve la place en fin de page. */
+.recap-fixe{position:fixed;bottom:12px;left:244px;right:24px;max-width:1180px;margin:0 auto;z-index:55}
+.recap-fixe .recap-card{padding:10px 14px;margin:0;
   border-left:3px solid var(--accent);box-shadow:0 -6px 18px rgba(15,23,42,.14)}
-#mat-recap .recap-head,#decl-recap .recap-head{margin-bottom:8px}
-#mat-recap .recap-head > div,#decl-recap .recap-head > div{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline}
-#mat-recap .recap-formula,#decl-recap .recap-formula{margin-top:0}
-#mat-recap table.recap-table td,#decl-recap table.recap-table td{padding:7px 12px}
-#mat-recap table.recap-table th,#decl-recap table.recap-table th{padding:6px 12px}
-#mat-recap .recap-notes,#decl-recap .recap-notes{margin-top:6px}
+.recap-fixe .recap-head{margin-bottom:8px}
+.recap-fixe .recap-head > div{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline}
+.recap-fixe .recap-formula{margin-top:0}
+.recap-fixe table.recap-table td{padding:7px 12px}
+.recap-fixe table.recap-table th{padding:6px 12px}
+.recap-fixe .recap-notes{margin-top:6px}
+.recap-spacer{height:180px}
+@media(max-width:900px){.recap-fixe{left:16px;right:16px}}
+@media(max-width:700px){.recap-fixe{left:10px;right:10px;bottom:8px}}
+@media print{.recap-fixe{position:static}.recap-spacer{display:none}}
+
+/* Résumé (sous-total, prix d'achat, change) dans le bandeau d'enregistrement. */
+.pr-savebar .sb-summary{background:none;border:0;border-radius:0;padding:0 0 0 14px;margin:0;
+  gap:18px;align-items:center;border-left:1px solid var(--border)}
+.pr-savebar .sb-summary .ms-label{font-size:9px}
+.pr-savebar .sb-summary .ms-value{font-size:13px;margin-top:1px}
+.pr-savebar .sb-summary .ms-main .ms-value{font-size:16px}
+@media(max-width:640px){.pr-savebar .sb-summary{order:4;width:100%;padding:6px 0 0;border-left:0}}
+
+/* Aides lisibles sur le fond teinté de l'encadré import. */
+.form-layout-1 .field-hint,.form-layout-1 .si-meta,.form-layout-1 .check-sub{color:var(--text2)}
+
+/* Marge : le champ et sa case sur une ligne. */
+.si-marge-ligne{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px}
+.si-marge-ligne > input{width:200px;background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:12px 14px;color:var(--text);font-size:14px;font-family:inherit}
+.si-marge-ligne > input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-bg)}
+.si-marge-ligne .check-row{align-items:center}
+.si-commun h3{display:flex;align-items:center;gap:8px}

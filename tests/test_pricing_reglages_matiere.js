@@ -228,7 +228,7 @@ check('plus de mention du bouton Enregistrer du bandeau',
 // La matière lit la marge de sa catégorie ; la marge par défaut n'apparaît que
 // sur une matière sans catégorie. Deux champs pour une question faisaient
 // chercher lequel comptait.
-check('la marge par défaut n\'est qu\'un repli', panneau.includes('} else if (editable) {'), true);
+check('la marge par défaut n\'est qu\'un repli', panneau.includes('"Marge par défaut (en %)"'), true);
 check('plus de liste de toutes les catégories', panneau.includes('categories_marge || []).map'), false);
 check('sans champ marge par défaut, elle ne part pas',
   src.includes('avecMarge ? { default_margin_pct: marge } : {}'), true);
