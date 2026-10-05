@@ -2101,6 +2101,7 @@ function retenirReponse(reponseId,demandeId){
   set({expeDevisModal:{type:'retenir',reponseId,demandeId,form:{
     commentaire:'',
     fichier:null,
+    prevenir_autres:true,
     inflight:false
   }}});
 }
@@ -2116,6 +2117,7 @@ async function confirmerRetenirAvecFichier(reponseId,demandeId){
     if(m.form.fichier&&m.form.fichier instanceof File){
       fd.append('fichier',m.form.fichier);
     }
+    fd.append('prevenir_autres',m.form.prevenir_autres===false?'0':'1');
     const r=await fetch('/api/expe/devis/reponses/'+reponseId+'/retenir',{
       method:'POST',
       credentials:'include',
@@ -2129,7 +2131,11 @@ async function confirmerRetenirAvecFichier(reponseId,demandeId){
     let msg='Transporteur retenu. Départ créé dans Suivi des départs.';
     if(res&&res.email_envoye)msg+=' Email envoyé à '+(res.email_destinataire||'—')+'.';
     else if(res&&res.email_error)msg+=' Email non envoyé ('+res.email_error+').';
-    showToast(msg,'success');
+    const nPrev=Number(res&&res.autres_prevenus)||0;
+    const echecs=(res&&Array.isArray(res.autres_echecs))?res.autres_echecs:[];
+    if(nPrev)msg+=' '+nPrev+' autre'+(nPrev>1?'s':'')+' transporteur'+(nPrev>1?'s':'')+' prévenu'+(nPrev>1?'s':'')+'.';
+    if(echecs.length)msg+=' Non prévenu'+(echecs.length>1?'s':'')+' : '+echecs.join(', ')+'.';
+    showToast(msg,echecs.length?'info':'success');
     fermerExpeDevisModal();
     const newDepartId=res&&res.depart_id?Number(res.depart_id):null;
     S.expeDepartHighlightId=newDepartId;
@@ -3217,6 +3223,21 @@ function renderExpeDevisModal(){
       h('label',{className:'expe-devis-label'},'Pièce jointe',
         h('div',{style:{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:'2px'}},pjBtn,pjInfo,fileInp)
       )
+    ));
+    // Les autres transporteurs sollicites apprennent l'issue : « offre non
+    // retenue » s'ils ont chiffre, « plus d'actualite » s'ils n'ont pas
+    // encore repondu. Coche par defaut — un transporteur laisse sans nouvelles
+    // relance, ou pire, bloque un camion.
+    const prev=h('input',{type:'checkbox'});
+    prev.checked=f.prevenir_autres!==false;
+    prev.addEventListener('change',e=>{f.prevenir_autres=e.target.checked;});
+    box.appendChild(h('label',{style:{display:'flex',alignItems:'flex-start',gap:'8px',
+      fontSize:'13px',color:'var(--text2)',margin:'4px 0 14px',cursor:'pointer',lineHeight:'1.5'}},
+      prev,
+      h('span',null,
+        h('strong',{style:{color:'var(--text)'}},'Prévenir les autres transporteurs'),
+        h('br'),
+        'Offre non retenue pour ceux qui ont chiffré, demande plus d\'actualité pour ceux qui n\'ont pas répondu.')
     ));
     const cancelBtn=h('button',{type:'button',className:'btn btn-ghost',onClick:fermerExpeDevisModal},'Annuler');
     const confirmBtn=h('button',{type:'button',className:'btn btn-accent',

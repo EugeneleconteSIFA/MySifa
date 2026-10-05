@@ -58,6 +58,7 @@ EV_EMAIL_ECHEC = "email_echec"
 EV_EMAIL_OUVERT = "email_ouvert"
 EV_EMAIL_RELANCE = "email_relance"
 EV_EMAIL_ATTRIBUTION = "email_attribution"
+EV_EMAIL_ISSUE = "email_issue"
 EV_PORTAIL_OUVERT = "portail_ouvert"
 EV_REPONSE_DEPOSEE = "reponse_deposee"
 EV_REPONSE_SAISIE = "reponse_saisie"
@@ -70,6 +71,7 @@ LIBELLES = {
     EV_EMAIL_OUVERT: "Email ouvert",
     EV_EMAIL_RELANCE: "Relance envoyée par email",
     EV_EMAIL_ATTRIBUTION: "Confirmation d'attribution envoyée",
+    EV_EMAIL_ISSUE: "Issue de la demande notifiée par email",
     EV_PORTAIL_OUVERT: "Portail consulté",
     EV_REPONSE_DEPOSEE: "Offre déposée sur le portail",
     EV_REPONSE_SAISIE: "Offre saisie en interne",

@@ -968,6 +968,125 @@ def email_expe_devis_confirmation(
     return subject, body
 
 
+# Les deux issues qu'un transporteur non retenu peut apprendre. Celui qui a
+# chiffré mérite de savoir que son prix n'a pas été pris ; celui qui n'a pas
+# encore répondu doit surtout cesser de travailler sur une demande close.
+EXPE_DEVIS_ISSUES = ("non_retenue", "plus_actualite")
+
+
+def email_expe_devis_issue(
+    *,
+    demande: dict,
+    reponse: dict,
+    user: dict,
+    issue: str,
+    langue: str = "fr",
+) -> tuple[str, str]:
+    """Sujet et corps HTML — issue d'une demande de tarif pour un transporteur
+    qui n'a PAS été retenu. Envoyé avec la confirmation du transporteur retenu.
+
+    - `non_retenue`    : il a remis une offre, une autre a été choisie.
+    - `plus_actualite` : il n'a pas encore répondu, la demande n'a plus lieu
+      d'être — un transporteur a été trouvé.
+
+    Le prix et le nom du transporteur retenu ne figurent jamais dans le mail :
+    ils ne regardent pas les concurrents.
+    """
+    if issue not in EXPE_DEVIS_ISSUES:
+        raise ValueError(f"issue inconnue : {issue}")
+    en = str(langue or "").lower().startswith("en")
+    cp = (demande.get("code_postal_destination") or "").strip()
+    ref_dem = (demande.get("reference") or "").strip()
+    nom_trp = (reponse.get("nom_transporteur") or "").strip()
+    user_nom = (
+        user.get("nom") or user.get("email") or user.get("identifiant") or "SIFA"
+    )
+
+    objet_ref = " — ".join(x for x in (ref_dem, cp) if x)
+    if en:
+        salut = f"Hello {_esc(nom_trp)}," if nom_trp else "Hello,"
+        if issue == "non_retenue":
+            subject = "SIFA transport quote — offer not selected"
+            subtitle = "Offer not selected"
+            corps = (
+                "Thank you for your quote. After comparing the offers received, "
+                "we have chosen another carrier for this shipment."
+            )
+            fin = "We will be glad to consult you again for future shipments."
+        else:
+            subject = "SIFA transport quote — request closed"
+            subtitle = "Request closed"
+            corps = (
+                "This quote request is no longer relevant: a carrier has been "
+                "found for this shipment. There is no need to send us an offer."
+            )
+            fin = "Thank you for your attention."
+        ref_lbl, dest_lbl = "Quote reference", "Destination (postcode)"
+        signature = "Best regards,"
+        service = "Shipping department — SIFA"
+        footer = "SIFA — Shipping department"
+    else:
+        salut = f"Bonjour {_esc(nom_trp)}," if nom_trp else "Bonjour,"
+        if issue == "non_retenue":
+            subject = "Devis transport SIFA — offre non retenue"
+            subtitle = "Offre non retenue"
+            corps = (
+                "Merci pour votre proposition. Après comparaison des offres "
+                "reçues, nous avons confié ce transport à un autre prestataire."
+            )
+            fin = "Nous ne manquerons pas de vous consulter pour nos prochains envois."
+        else:
+            subject = "Devis transport SIFA — demande plus d'actualité"
+            subtitle = "Demande close"
+            corps = (
+                "Cette demande de tarif n'est plus d'actualité : un transporteur "
+                "a été trouvé pour cet envoi. Inutile de nous adresser une offre."
+            )
+            fin = "Merci de votre attention."
+        ref_lbl, dest_lbl = "Référence devis", "Destination (CP)"
+        signature = "Cordialement,"
+        service = "Service Expéditions — SIFA"
+        footer = "SIFA — Service expéditions"
+    if objet_ref:
+        subject = f"{subject} — {objet_ref}"
+
+    detail_rows: list[tuple[str, str]] = []
+    if ref_dem:
+        detail_rows.append((ref_lbl, _esc(ref_dem)))
+    if cp:
+        detail_rows.append((dest_lbl, _esc(cp)))
+    detail_table = _email_detail_table(detail_rows) if detail_rows else ""
+
+    inner = f"""
+    <p style="margin:0 0 14px;font-size:15px;color:#0f172a;font-weight:600">
+      {salut}
+    </p>
+    <p style="margin:0 0 18px;font-size:14px;color:#475569;line-height:1.65">
+      {_esc(corps)}
+    </p>
+    {detail_table}
+    <p style="margin:18px 0 0;font-size:14px;color:#475569;line-height:1.65">
+      {_esc(fin)}
+    </p>
+    <p style="margin:22px 0 0;font-size:13px;color:#64748b;line-height:1.65">
+      {signature}<br>
+      <strong style="color:#0f172a;font-size:14px">{_esc(user_nom)}</strong><br>
+      {service}
+    </p>"""
+
+    body = email_mysifa_layout(
+        subtitle=subtitle,
+        body_html=inner,
+        cta_href=None,
+        cta_label=None,
+        footer_note=footer,
+        footer_contact=True,
+        lang="en" if en else "fr",
+        marque="SIFA",
+    )
+    return subject, body
+
+
 
 def email_offre_retenue(
     ao: dict,

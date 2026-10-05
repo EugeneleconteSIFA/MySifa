@@ -83,6 +83,18 @@ def _require_ao(request: Request) -> dict:
     return user
 
 
+def _expediteur_ao(user: dict) -> str | None:
+    """Boîte expéditrice d'un mail fournisseur : la personne qui a cliqué.
+
+    Un AO engage l'acheteur qui le suit : le fournisseur doit voir son nom et
+    lui répondre directement, pas à une boîte générique. Si Graph refuse
+    d'envoyer depuis cette boîte (403/404), `send_email` retombe sur SMTP —
+    le mail part quand même, depuis l'adresse habituelle.
+    """
+    addr = str(user.get("email") or user.get("identifiant") or "").strip()
+    return addr if "@" in addr else None
+
+
 def _get_ao_or_404(conn, ao_id: int) -> dict:
     row = conn.execute("SELECT * FROM ao_demandes WHERE id=?", (ao_id,)).fetchone()
     if not row:
@@ -2115,7 +2127,7 @@ async def cloturer_ao(request: Request, ao_id: int):
       - fournisseur_retenu_id (int) : id du fournisseur invite retenu
       - message_perso (str) : message personnalise ajoute a l'email au retenu
     """
-    _require_ao(request)
+    user = _require_ao(request)
     try:
         body = await request.json()
     except Exception:
@@ -2172,7 +2184,10 @@ async def cloturer_ao(request: Request, ao_id: int):
                 message_perso=message_perso,
                 pixel_url=px_retenu,
             )
-            ok = send_email(fourni_retenu["email_contact"], subject, html_body)
+            ok = send_email(
+                fourni_retenu["email_contact"], subject, html_body,
+                reply_to=_expediteur_ao(user), from_upn=_expediteur_ao(user),
+            )
             if ok:
                 with get_db() as conn2:
                     ao_ev.log_evenement(
@@ -3337,7 +3352,8 @@ def _auto_attach_fournisseur_pdfs(
 
 @router.post("/{ao_id}/envoyer")
 def envoyer_ao(request: Request, ao_id: int):
-    _require_ao(request)
+    user = _require_ao(request)
+    expediteur = _expediteur_ao(user)
     now = _now_paris_iso()
     envoyes = 0
     erreurs = 0
@@ -3409,7 +3425,10 @@ def envoyer_ao(request: Request, ao_id: int):
             # l'email part quand même — sans suivi, mais il part.
             px = ao_ev.url_pixel(ao_ev.token_pixel(conn, int(fourni["id"])), "inv")
             subject, html_body = email_invitation_ao(ao, fourni, lien, lignes, pixel_url=px)
-            ok = send_email(fourni["email_contact"], subject, html_body)
+            ok = send_email(
+                fourni["email_contact"], subject, html_body,
+                reply_to=expediteur, from_upn=expediteur,
+            )
             if ok:
                 conn.execute(
                     "UPDATE ao_fournisseurs SET date_envoi=? WHERE id=?",
@@ -3614,7 +3633,10 @@ async def post_message(request: Request, ao_id: int, fourni_id: int):
         langue=fourni.get("langue") or "fr",
         pixel_url=px_msg,
     )
-    if send_email(fourni["email_contact"], subject, html_body):
+    if send_email(
+        fourni["email_contact"], subject, html_body,
+        reply_to=_expediteur_ao(user), from_upn=_expediteur_ao(user),
+    ):
         with get_db() as conn2:
             ao_ev.log_evenement(
                 conn2,
