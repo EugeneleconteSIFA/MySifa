@@ -37,6 +37,10 @@
 
   function configure(o){ o = o || {}; if(o.role != null) role = String(o.role || ""); }
   function register(key, g){ if(!key || !g || !Array.isArray(g.steps)) return; registry[key] = g; }
+  // Les guides sont réservés aux superadmins. Exception par guide :
+  // `tous: true` dans sa définition l'ouvre (auto-open + bouton) à tous les
+  // rôles — aujourd'hui « accueil-widgets » seulement (mysifa_accueil.js).
+  function visible(key){ return role === "superadmin" || !!(registry[key] && registry[key].tous); }
   function registerMany(obj){ Object.keys(obj||{}).forEach(function(k){ register(k, obj[k]); }); }
   function isAcked(key){ return ackedKeys.has(key); }
 
@@ -62,7 +66,7 @@
 
   function autoOpen(key){
     if(registry[key]){ currentKey = key; updateHelpBtn(); }
-    if(role !== "superadmin") return;
+    if(!visible(key)) return;
     if(!loaded) return;
     if(!registry[key]) return;
     if(ackedKeys.has(key)) return;
@@ -75,7 +79,7 @@
     if(!chain) return;
     while(chainIdx < chain.length){
       var k = chain[chainIdx];
-      if(role === "superadmin" && loaded && registry[k] && !ackedKeys.has(k) && !openedThisSession.has(k)){
+      if(visible(k) && loaded && registry[k] && !ackedKeys.has(k) && !openedThisSession.has(k)){
         openedThisSession.add(k);
         (function(kk){ setTimeout(function(){ open(kk, {autoOpened:true}); }, 300); })(k);
         return;
@@ -307,7 +311,7 @@
     if(b) b.style.display = "none";
   }
   function bookBtn(key){
-    if(role !== "superadmin") return "";
+    if(!visible(key)) return "";
     if(!registry[key]) return "";
     return '<button type="button" class="mguide-help-inline" title="Guide de la page" aria-label="Guide de la page" onclick="MySifaGuides.open(\''+key+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></button>';
   }
