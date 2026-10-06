@@ -209,9 +209,11 @@ check('enregistrer efface l\'essai', panneauFx.includes('S.fxDraft = null'), tru
 // Un bouton qu'on oublie, c'est un réglage qui n'a jamais changé — et rien à
 // l'écran ne le disait. Même patron que les fiches : débounce + pastille.
 check('plus de bouton Appliquer', src.includes('id="si-save"'), false);
-check('le panneau a sa pastille', panneau.includes('id="si-save-status"'), true);
+// L'état de marge et taux de change s'affiche dans le bandeau du haut.
+check('plus de pastille en bas du panneau', panneau.includes('id="si-save-status"'), false);
+check('l\'état part dans le bandeau', extraire('setSettingsSaveStatus').includes('decl-save-status'), true);
 check('la pastille utilise le même rendu d\'état',
-  panneau.includes('saveStatusHtml(S.settingsSaveStatus'), true);
+  extraire('setSettingsSaveStatus').includes('saveStatusHtml(statut'), true);
 // Plus de bouton : le taux se corrige à la main et la saisie l'enregistre.
 check('plus de bouton « Rafraîchir le taux »', panneau.includes('id="si-fx"'), false);
 check('le taux enregistre à la frappe',
