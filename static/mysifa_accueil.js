@@ -79,8 +79,7 @@
       fermer: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
       valeurs: '<path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M2 14h4"/><path d="M10 8h4"/><path d="M18 16h4"/>',
       demande: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v6"/><path d="M9 10h6"/>',
-      corbeille: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
-      poignee: '<circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/>'
+      corbeille: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>'
     }[nom] || "";
     return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + "</svg>";
   }
@@ -174,7 +173,6 @@
       ".mac-carte.glisse{position:fixed;z-index:200;opacity:.92;box-shadow:0 12px 32px rgba(0,0,0,.25);pointer-events:none}",
       ".mac-place{border:2px dashed var(--accent,#22d3ee);border-radius:12px;background:var(--accent-bg,rgba(34,211,238,.12));flex-shrink:0}",
       "#mysifa-accueil.edition .mac-carte{touch-action:none;user-select:none}",
-      ".mac-poignee{cursor:grab}",
       ".mac-vide{border:1px dashed var(--border,#1e293b);border-radius:12px;padding:14px;color:var(--muted,#94a3b8);line-height:1.5}",
       ".mac-vide b{color:var(--text,#f1f5f9)}",
       ".mac-avis{display:flex;flex-direction:column;gap:6px;margin:0 8px 10px 0}",
@@ -365,7 +363,6 @@
       return;
     }
     o.innerHTML =
-      '<span class="mac-btn mac-poignee" title="Glisser pour déplacer">' + icone("poignee") + "</span>" +
       '<span class="mac-esp"></span>' +
       '<button type="button" class="mac-btn" data-act="val" title="Valeurs affichées et alertes">' + icone("valeurs") + "</button>" +
       '<button type="button" class="mac-btn" data-act="nom" title="Renommer">' + icone("reglages") + "</button>" +
@@ -788,7 +785,7 @@
       {
         icon: ICO('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>'),
         title: "Personnaliser la colonne",
-        body: "<p><span class=\"mguide-hl\">Personnaliser</span> fait apparaître sous chaque indicateur une poignée pour le <strong>glisser</strong> à sa place, des curseurs pour changer les <strong>valeurs</strong> affichées et leurs alertes, un crayon pour le <strong>renommer</strong> et la <strong>corbeille</strong> (deux clics). La flèche en haut replie la colonne.</p>",
+        body: "<p><span class=\"mguide-hl\">Personnaliser</span> permet de <strong>glisser</strong> chaque indicateur à sa place et fait apparaître dessous des curseurs pour changer les <strong>valeurs</strong> affichées et leurs alertes, un crayon pour le <strong>renommer</strong> et la <strong>corbeille</strong> (deux clics). La flèche en haut replie la colonne.</p>",
         illu: SVG +
           '<rect x="80" y="10" width="180" height="130" rx="10" fill="var(--bg)" stroke="var(--border)"/>' +
           '<rect x="90" y="18" width="90" height="16" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="135" y="29" font-size="7" fill="var(--text2)" text-anchor="middle">TABLEAUX DE BORD</text>' +
