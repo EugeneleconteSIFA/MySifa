@@ -772,8 +772,8 @@
       .map((it) => {
         const on =
           active === it.route ||
-          (it.route === "materials" && active.startsWith("material")) ||
-          (it.route === "products" && active.startsWith("product"));
+          (it.route === "materials" && (active.startsWith("material") || active === "mystock-edit")) ||
+          (it.route === "products" && (active.startsWith("product") || active.startsWith("msproduct")));
         return (
           `<button type="button" class="nav-btn${on ? " active" : ""}" data-nav="${escAttr(it.path)}">` +
           icon(it.icon, 16) +
@@ -796,6 +796,9 @@
       products: ["Produits", "Liste"],
       "product-new": ["Produit", "Nouveau"],
       "product-edit": ["Produit", "Édition"],
+      "mystock-edit": ["Matière", "MyStock"],
+      "msproduct-new": ["Produit", "Nouveau"],
+      "msproduct-edit": ["Produit", "MyStock"],
       settings: ["Paramètres", "Coûts matières"],
     };
     const t = titles[active] || titles.materials;
@@ -3447,8 +3450,8 @@
           extra_material_ids: [...(p.extra_material_ids || [])],
           custom_margin_pct: p.custom_margin_pct != null ? String(p.custom_margin_pct) : "",
         };
+        S.prodPrerempli = true;
         navigate("/pricing/products/new");
-        await bootRoute();
       };
     });
     document.querySelectorAll(".prod-sel").forEach((cb) => {
@@ -3591,8 +3594,12 @@
   }
 
   function defaultProductForm() {
+    // Une fiche neuve part vierge, sauf quand elle vient de « Dupliquer » :
+    // avant, elle reprenait la dernière fiche ouverte, code compris.
+    const prerempli = S.prodPrerempli && S.formProduct;
+    S.prodPrerempli = false;
     return (
-      S.formProduct || {
+      (prerempli ? S.formProduct : null) || {
         code: "",
         name: "",
         frontal_id: "",
@@ -3889,13 +3896,21 @@
             <input type="number" step="0.0001" id="s-rate" value="${escAttr(s.eur_usd_rate)}"/>
             <div class="field-hint">1 USD = ce montant en euros · Source : ${escHtml(s.eur_usd_rate_source || "—")} · MAJ : ${escHtml(fxDate)}</div>
           </div>
-          <div class="field"><label>Marge par défaut <span class="lbl-unit">% du prix de revient</span></label>
-            <input type="number" step="0.01" id="s-margin" value="${escAttr(s.default_margin_pct)}"/>
-            <div class="field-hint">Appliquée à tous les produits sans marge personnalisée.</div>
+          <div class="field"><label>Marge par défaut <span class="lbl-unit">%</span></label>
+            <input type="number" step="0.01" min="0" id="s-margin" value="${escAttr(s.default_margin_pct)}"/>
+            <div class="field-hint">Pour toute catégorie sans marge propre.</div>
+          </div>
+          <div class="field"><label>Marge par catégorie <span class="lbl-unit">%</span></label>
+            <div class="set-marges">${(s.categories_marge || []).map((c) => {
+              const v = (s.marges_categorie || {})[c.code];
+              return `<label class="set-marge"><span>${escHtml(c.label)}</span>
+                <input type="number" step="0.01" min="0" data-s-marge-cat="${escAttr(c.code)}"
+                       value="${escAttr(v != null ? v : "")}" placeholder="${escAttr(fmtNum(s.default_margin_pct, 2, 2))}"/></label>`;
+            }).join("")}</div>
+            <div class="field-hint">Vide = marge par défaut. Un produit sans marge propre applique à chaque matière la marge de sa catégorie, sur les matières où « Appliquer la marge » est coché.</div>
           </div>
           <div class="modal-actions">
             <button type="button" class="btn btn-accent" id="s-save">Enregistrer</button>
-            <button type="button" class="btn btn-soft" id="s-fx">Rafraîchir le taux</button>
             <button type="button" class="btn btn-soft" id="s-cancel">Annuler</button>
           </div>
         </div>
@@ -3910,27 +3925,32 @@
     document.getElementById("set-close").onclick = close;
     document.getElementById("s-cancel").onclick = close;
     document.getElementById("s-save").onclick = async () => {
+      // Vide = retour à la marge par défaut (null), comme sur la fiche matière.
+      const marges = {};
+      let invalide = false;
+      document.querySelectorAll("[data-s-marge-cat]").forEach((el) => {
+        const v = String(el.value || "").trim().replace(",", ".");
+        const n = parseFloat(v);
+        if (v === "") marges[el.getAttribute("data-s-marge-cat")] = null;
+        else if (Number.isFinite(n) && n >= 0) marges[el.getAttribute("data-s-marge-cat")] = n;
+        else invalide = true;
+      });
+      if (invalide) {
+        showToast("Marge invalide — nombre positif attendu.", "danger");
+        return;
+      }
       try {
         S.settings = await api("/api/pricing/settings", {
           method: "PATCH",
           body: {
             eur_usd_rate: parseFloat(document.getElementById("s-rate").value),
             default_margin_pct: parseFloat(document.getElementById("s-margin").value),
+            marges_categorie: marges,
           },
         });
         showToast("Paramètres enregistrés.", "success");
         close();
         await bootRoute();
-      } catch (e) {
-        showToast(e.message, "danger");
-      }
-    };
-    document.getElementById("s-fx").onclick = async () => {
-      try {
-        const r = await api("/api/pricing/settings/refresh-fx", { method: "POST" });
-        showToast("Taux mis à jour : " + fmtNum(r.eur_usd_rate, 4, 4), "success");
-        S.settings = await api("/api/pricing/settings");
-        openSettingsModal();
       } catch (e) {
         showToast(e.message, "danger");
       }
@@ -4267,14 +4287,35 @@
     S.msProducts = data.produits || [];
   }
 
+  /* Libellé de chaque matière déjà dans la composition. Le sélecteur ne liste
+     que les matières actives de la catégorie de l'emplacement : sans ce repli,
+     une matière désactivée ou rangée ailleurs s'affichait « Aucun », et
+     l'enregistrement suivant la retirait du produit sans prévenir. */
+  function mspLabelsDepuis(composants) {
+    const out = {};
+    (composants || []).forEach((c) => {
+      out[c.declinaison_id] = `${c.reference} · ${c.designation || ""}`;
+    });
+    return out;
+  }
+
   async function loadMsProductForm(id) {
     await loadMsDeclinaisons();
+    S.msProdErreur = null;
+    S.msProdModifie = false;
     if (!id) {
-      if (!S.formMsProduct) S.formMsProduct = defaultMsProductForm();
+      // Une fiche neuve part vierge — sauf quand elle vient de « Dupliquer ».
+      // Avant, elle reprenait l'état de la dernière fiche ouverte.
+      if (!S.msProdPrerempli || !S.formMsProduct) {
+        S.formMsProduct = defaultMsProductForm();
+        S.msProdLabels = {};
+      }
+      S.msProdPrerempli = false;
       S.msProdPreview = null;
       return;
     }
     const p = await api("/api/pricing/mystock/produits/" + id);
+    S.msProdLabels = mspLabelsDepuis(p.composants);
     const roles = {};
     const autres = [];
     (p.composants || []).forEach((c) => {
@@ -4290,6 +4331,7 @@
       custom_margin_pct: p.custom_margin_pct != null ? String(p.custom_margin_pct) : "",
     };
     S.msProdPreview = p.cost || null;
+    S.msProdErreur = p.cout_erreur || null;
   }
 
   /* Le libellé d'une matière dans le sélecteur : sa référence et son prix
@@ -4326,7 +4368,7 @@
                        value="${escAttr(f.perte)}" placeholder="0"/></div>
               <div class="msp-conso-out">
                 <span class="msp-conso-lbl">Poids retenu</span>
-                <strong>${escHtml(fmtNum(poids, 4, 4))} kg/m²</strong>
+                <strong>${escHtml(fmtNum(poids, 4, 5))} kg/m²</strong>
                 ${f.gram ? "" : '<span class="msp-conso-manque">à renseigner — sans lui ce composant coûte 0</span>'}
               </div>
             </div>`
@@ -4347,18 +4389,24 @@
     const list = categorie
       ? S.msDecls.filter((d) => (d.categorie || "").toLowerCase() === categorie)
       : S.msDecls;
-    const opts = list
+    let opts = list
       .map(
         (d) =>
           `<option value="${d.id}" ${String(d.id) === String(selectedId) ? "selected" : ""}>${escHtml(msDeclLabel(d))}</option>`
       )
       .join("");
+    if (selectedId && !list.some((d) => String(d.id) === String(selectedId))) {
+      const ailleurs = (S.msDecls || []).find((d) => String(d.id) === String(selectedId));
+      const lib = ailleurs
+        ? msDeclLabel(ailleurs) + " (autre catégorie)"
+        : ((S.msProdLabels || {})[selectedId] || "Matière n°" + selectedId) + " (inactive)";
+      opts = `<option value="${escAttr(selectedId)}" selected>${escHtml(lib)}</option>` + opts;
+    }
     return `<option value="">— Aucun —</option>${opts}`;
   }
 
   function msProductFormHtml(isNew) {
     const f = S.formMsProduct;
-    const defMargin = S.settings ? fmtNum(S.settings.default_margin_pct, 2, 2) : "—";
     const slots = MSP_ROLES.map(
       (r) => mspSlotHtml("role:" + r.role, r.label, r.categorie, f.roles[r.role], null)
     ).join("");
@@ -4369,13 +4417,15 @@
       <div class="savebar-spacer" aria-hidden="true"></div>
       <div class="pr-savebar">
         <button type="button" class="btn btn-soft btn-sm" id="btn-back-msprod">${icon("arrow-left", 14)} Retour liste</button>
+        <div class="savebar-state savebar-state-${S.msProdModifie ? "attente" : "vierge"}" id="msp-etat">${
+          S.msProdModifie ? "Modifications non enregistrées" : "Aucune modification"}</div>
+        ${savebarTitreHtml(isNew ? "Nouveau produit" : "Produit MyStock", isNew ? "" : escHtml(f.code))}
         <div class="savebar-actions">
+          ${gearHtml()}
           ${!isNew && S.canWrite ? '<button type="button" class="btn btn-danger btn-sm" id="btn-del-msprod">Supprimer</button>' : ""}
           ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-save-msprod">Enregistrer</button>' : ""}
         </div>
       </div>
-      ${pageHead(isNew ? "Nouveau produit MyStock" : "Éditer produit MyStock",
-                 isNew ? "" : escHtml(f.code))}
       <div class="form-grid">
         <div class="form-card">
           <div class="field-row">
@@ -4387,9 +4437,9 @@
             <div id="msp-autres">${autres || '<div class="empty" style="padding:8px 0">Aucune autre matière.</div>'}</div>
             ${S.canWrite ? `<button type="button" class="btn btn-soft btn-sm" id="msp-add-autre">${icon("plus", 14)} Ajouter une matière</button>` : ""}
           </div>
-          <div class="field"><label>Marge personnalisée <span class="lbl-unit">% du prix de revient</span></label>
-            <input type="number" step="0.01" id="msp-margin" value="${escAttr(f.custom_margin_pct)}" placeholder="Défaut : ${escAttr(defMargin)} %"/>
-            <div class="field-hint">Laisser vide pour appliquer la marge par défaut des paramètres.</div>
+          <div class="field f-num"><label>Marge propre au produit <span class="lbl-unit">%</span></label>
+            <input type="number" step="0.01" min="0" id="msp-margin" value="${escAttr(f.custom_margin_pct)}" placeholder="Catégories"/>
+            <div class="field-hint">${escHtml(margesCategoriesTexte())}</div>
           </div>
           <div class="form-section" style="margin-top:14px"><h3>Ce qui fait bouger ce coût</h3>
             <div class="field-hint" style="margin:-6px 0 10px">
@@ -4401,7 +4451,7 @@
             <div id="msp-leviers">${msProductLeviersHtml()}</div>
           </div>
         </div>
-        <div class="side-panel" id="msp-recap">${productRecapHtml(S.msProdPreview)}</div>
+        <div class="side-panel" id="msp-recap"></div>
       </div>`;
   }
 
@@ -4455,14 +4505,14 @@
        française ajoute du bruit à une ligne qui doit se lire d'un coup. */
     const termes = [`${escHtml(fmtNum(prix, 3, 3))} ${escHtml(unite)}`];
     if (transp) termes.push(`<span class="msp-terme t-transport">+ ${escHtml(fmtNum(transp, 3, 3))} transport</span>`);
-    if (taxes) termes.push(`<span class="msp-terme t-taxe">+ ${escHtml(fmtNum(taxes, 3, 3))} taxes</span>`);
+    if (taxes) termes.push(`<span class="msp-terme t-taxe">+ ${escHtml(fmtNum(taxes, 3, 3))} taxe d'import.</span>`);
 
     const gauche = termes.length > 1
       ? `(${termes.join(" ")}) <span class="muted">=</span> <strong>${escHtml(fmtNum(sousTotal, 3, 3))} ${escHtml(unite)}</strong>`
       : termes[0];
 
     const chaine = perKg
-      ? `${gauche} <span class="muted">×</span> ${escHtml(fmtNum(poids, 4, 4))} kg/m²`
+      ? `${gauche} <span class="muted">×</span> ${escHtml(fmtNum(poids, 4, 5))} kg/m²`
         + (taux !== 1 ? ` <span class="muted">×</span> ${escHtml(fmtNum(taux, 4, 4))}` : "")
         + ` <span class="muted">→</span> <strong class="msp-lev-total">${escHtml(cout)}</strong>`
       : `${gauche}`
@@ -4484,7 +4534,7 @@
     }
     if (taxes) {
       const tp = b ? parseFloat(b.taxe_pct || 0) : 0;
-      mentions.push(`Taxes d'importation : <strong>${escHtml(fmtNum(taxes, 3, 3))} ${escHtml(unite)}</strong>`
+      mentions.push(`Taxe d'importation : <strong>${escHtml(fmtNum(taxes, 3, 3))} ${escHtml(unite)}</strong>`
         + (tp ? ` — ${escHtml(fmtPct(tp))} du sous-total` : "") + ".");
     }
     if (perKg && comp.grammage_gsm) {
@@ -4631,10 +4681,11 @@
       });
       if (serie !== mspApercuSerie) return;
       S.msProdPreview = r.cost || null;
+      S.msProdErreur = r.cout_erreur || null;
     } catch (e) {
       if (serie !== mspApercuSerie) return;
-      // Une composition refusée (grammage aberrant, rôle en double) ne doit pas
-      // effacer l'écran : on garde le dernier total valide et on le dit.
+      // Une composition refusée (grammage aberrant, rôle en double) n'efface
+      // pas le dernier total valide, mais le dit : il n'est plus à jour.
       S.msProdErreur = e.message || "composition incomplète";
     }
     peindreApercuMsProduct();
@@ -4651,6 +4702,9 @@
     const rec = document.getElementById("msp-recap");
     if (rec) {
       rec.innerHTML =
+        (S.msProdErreur
+          ? `<div class="field-hint" style="color:var(--danger);margin-bottom:10px">Calcul impossible — ${escHtml(S.msProdErreur)}</div>`
+          : "") +
         productRecapHtml(S.msProdPreview) +
         (manquants
           ? `<div class="field-hint" style="color:var(--warn);margin-top:10px">${manquants} matière(s) au kilo sans grammage : elles comptent pour 0 dans ce total.</div>`
@@ -4663,13 +4717,48 @@
     }
   }
 
+  /* « Vide = la marge de chaque matière : Frontal 6 %, Adhésif 9 %… » — la
+     marge ne se lit plus dans un réglage unique : chaque catégorie a la sienne,
+     et seules les matières où « Appliquer la marge » est coché y entrent. */
+  function margesCategoriesTexte() {
+    const s = S.settings;
+    if (!s) return "Vide = marge de la catégorie de chaque matière.";
+    const parts = (s.categories_marge || [])
+      .filter((c) => ["frontal", "adhesif", "glassine"].includes(c.code)
+        || (s.marges_categorie || {})[c.code] != null)
+      .map((c) => {
+        const v = (s.marges_categorie || {})[c.code];
+        return `${c.label} ${fmtNum(v != null ? v : s.default_margin_pct, 0, 2)} %`;
+      });
+    return "Vide = marge de la catégorie de chaque matière" + (parts.length ? " : " + parts.join(", ") : "") + ".";
+  }
+
+  function marquerMsProdModifie() {
+    S.msProdModifie = true;
+    const el = document.getElementById("msp-etat");
+    if (el) {
+      el.className = "savebar-state savebar-state-attente";
+      el.textContent = "Modifications non enregistrées";
+    }
+  }
+
   function renderMsProductForm(isNew) {
     setContent(msProductFormHtml(isNew));
 
-    document.getElementById("btn-back-msprod").onclick = () => navigate("/pricing/products");
+    // La fiche produit s'enregistre au bouton : quitter la page ne doit pas
+    // jeter une composition qu'on vient de régler sans le dire.
+    document.getElementById("btn-back-msprod").onclick = async () => {
+      if (S.msProdModifie && !(await confirmerAction({
+        message: "Des modifications ne sont pas enregistrées. Quitter quand même ?",
+        labelOk: "Quitter sans enregistrer", danger: true,
+      }))) return;
+      S.msProdModifie = false;
+      navigate("/pricing/products");
+    };
 
     const majAperçu = () => {
       syncMsProductFromDom();
+      marquerMsProdModifie();
       refreshMsProductPreview();
     };
     ["msp-code", "msp-designation", "msp-margin"].forEach((id) => {
@@ -4682,6 +4771,7 @@
     document.querySelectorAll("[data-msp-sel]").forEach((sel) => {
       sel.onchange = () => {
         syncMsProductFromDom();
+        S.msProdModifie = true;
         renderMsProductForm(isNew);
       };
     });
@@ -4695,7 +4785,7 @@
     if (add) {
       add.onclick = () => {
         syncMsProductFromDom();
-        S.formMsProduct.autres.push("");
+        S.formMsProduct.autres.push(mspSlot(""));
         renderMsProductForm(isNew);
       };
     }
@@ -4703,6 +4793,7 @@
       btn.onclick = () => {
         syncMsProductFromDom();
         S.formMsProduct.autres.splice(parseInt(btn.getAttribute("data-msp-del"), 10), 1);
+        S.msProdModifie = true;
         renderMsProductForm(isNew);
       };
     });
@@ -4722,6 +4813,7 @@
         }
       };
     }
+    peindreApercuMsProduct();
     refreshMsProductPreview();
   }
 
@@ -4738,6 +4830,7 @@
       if (isNew) {
         const p = await api("/api/pricing/mystock/produits", { method: "POST", body });
         S.formMsProduct = null;
+        S.msProdModifie = false;
         showToast("Produit créé.", "success");
         navigate("/pricing/mystock/produit/" + p.id);
       } else {
@@ -4754,9 +4847,15 @@
   const MSP_ROLE_LABEL = {
     frontal: "Frontal",
     adhesif: "Adhésif",
-    silicone: "Silicone",
     glassine: "Glassine",
   };
+
+  /** « extra_2 » (nom du moteur pour une matière libre) → « Autre 2 ». */
+  function mspRoleLabel(role) {
+    if (MSP_ROLE_LABEL[role]) return MSP_ROLE_LABEL[role];
+    const m = /^extra_(\d+)$/.exec(role || "");
+    return m ? "Autre " + m[1] : role;
+  }
 
   /**
    * Étiquette courte d'un composant dans la liste.
@@ -4806,7 +4905,7 @@
     const c = p.cost;
     if (!c || !c.components || !c.components.length) {
       return `<div class="ms-detail"><div class="empty" style="padding:16px 22px">
-        Aucun coût calculable : les matières de ce produit n'ont pas encore de prix.
+        ${escHtml(p.cout_erreur ? "Calcul impossible — " + p.cout_erreur : "Aucun coût calculable : les matières de ce produit n'ont pas encore de prix.")}
       </div></div>`;
     }
     const lignes = c.components
@@ -4819,7 +4918,7 @@
         const transp = parseFloat((x.breakdown && x.breakdown.transport_eur_m2) || 0);
         const transpPart = prix > 0 ? Math.min(100, (transp / prix) * 100) : 0;
         return `<tr>
-          <td class="msp-role">${escHtml(MSP_ROLE_LABEL[x.role] || x.role)}</td>
+          <td class="msp-role">${escHtml(mspRoleLabel(x.role))}</td>
           <td><button type="button" class="msp-lien" data-msp-mat="${x.material_id}"
                 title="Ouvrir le paramétrage de cette matière">${escHtml(x.name)}</button></td>
           <td class="msp-num">${prix > 0 ? escHtml(fmtEurM2(prix)) : '<span class="muted">sans prix</span>'}</td>
@@ -4870,8 +4969,9 @@
   function msProductDetailCartesHtml(p) {
     const c = p.cost;
     if (!c || !c.components || !c.components.length) {
-      return `<div class="msf-empty">Aucun coût calculable : les matières de ce produit
-        n'ont pas encore de prix.</div>`;
+      return `<div class="msf-empty">${escHtml(p.cout_erreur
+        ? "Calcul impossible — " + p.cout_erreur
+        : "Aucun coût calculable : les matières de ce produit n'ont pas encore de prix.")}</div>`;
     }
     const total = parseFloat(c.total_eur_per_m2 || 0);
     const transportTotal = (c.components || []).reduce(
@@ -4884,7 +4984,7 @@
       .join("");
     const legende = c.components
       .map((x, i) => `<span><i style="background:var(--c${(i % 5) + 1})"></i>${escHtml(
-        MSP_ROLE_LABEL[x.role] || x.role)} ${escHtml(fmtPct(x.share_pct))}</span>`)
+        mspRoleLabel(x.role))} ${escHtml(fmtPct(x.share_pct))}</span>`)
       .join("");
     const lignes = c.components
       .map((x) => {
@@ -4894,7 +4994,7 @@
             <dt>
               <button type="button" class="msp-lien" data-msp-mat="${x.material_id}"
                 title="Ouvrir le paramétrage de cette matière">${escHtml(x.name)}</button>
-              <span class="msp-carte-role">${escHtml(MSP_ROLE_LABEL[x.role] || x.role)}</span>
+              <span class="msp-carte-role">${escHtml(mspRoleLabel(x.role))}</span>
             </dt>
             <dd>${prix > 0 ? escHtml(fmtEurM2(prix)) : '<span class="muted">sans prix</span>'}
               ${transp ? `<span class="msp-carte-transp">dont transport ${escHtml(fmtEurM2(transp))}</span>` : ""}
@@ -5109,9 +5209,13 @@
         if (!src) return;
         const roles = {};
         const autres = [];
+        // Des emplacements complets, comme au chargement d'une fiche : des
+        // identifiants nus laissaient chaque sélecteur sur « Aucun » et
+        // perdaient grammage et perte — la copie arrivait vide.
         (src.composants || []).forEach((c) => {
-          if (MSP_ROLES.some((r) => r.role === c.role)) roles[c.role] = c.declinaison_id;
-          else autres.push(c.declinaison_id);
+          const slot = mspSlot(c.declinaison_id, c.grammage_gsm, c.perte_pct);
+          if (MSP_ROLES.some((r) => r.role === c.role)) roles[c.role] = slot;
+          else autres.push(slot);
         });
         S.formMsProduct = {
           code: src.code + "-copie",
@@ -5121,6 +5225,8 @@
           custom_margin_pct:
             src.custom_margin_pct != null ? String(src.custom_margin_pct) : "",
         };
+        S.msProdLabels = mspLabelsDepuis(src.composants);
+        S.msProdPrerempli = true;
         navigate("/pricing/mystock/produit/new");
       };
     });

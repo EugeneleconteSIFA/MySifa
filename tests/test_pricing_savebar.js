@@ -19,9 +19,11 @@ function extraire(nom) {
   throw new Error('accolades non fermées : ' + nom);
 }
 
-const ctx = { S: {} };
+// Le bandeau porte aussi le titre de la fiche et son résumé (oct. 2026).
+const ctx = { S: { formMaterial: { name: 'Frontal test' } } };
 vm.createContext(ctx);
-vm.runInContext([extraire('icon'), extraire('heureCourte'),
+vm.runInContext([extraire('icon'), extraire('heureCourte'), extraire('escHtml'),
+                 extraire('gearHtml'), extraire('savebarTitreHtml'), extraire('matSummaryHtml'),
                  extraire('saveStatusHtml'), extraire('matSaveBarHtml')].join('\n'), ctx);
 
 function html(opts) { Object.assign(ctx.S, opts.S); return ctx.matSaveBarHtml(opts.isNew); }
@@ -109,8 +111,9 @@ for (const [nom, borneFin] of [
   ['renderDeclinaisonForm(', 'function productsTabsHtml('],
 ]) {
   const zone = src.slice(src.indexOf('function ' + nom), src.indexOf(borneFin));
-  check(nom + ' : le bandeau précède le titre',
-    zone.indexOf('SaveBarHtml(') < zone.indexOf('${pageHead('), true);
+  // Depuis oct. 2026 le titre vit DANS le bandeau : plus d'en-tête de page.
+  check(nom + ' : le titre est dans le bandeau, pas en en-tête',
+    zone.includes('SaveBarHtml(') && !zone.includes('${pageHead('), true);
 }
 
 // L'espaceur reprend la hauteur réelle du bandeau (il passe sur deux lignes en

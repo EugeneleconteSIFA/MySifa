@@ -1422,6 +1422,10 @@ def list_mystock_materials(
     """Une ligne par matière MyStock devisable, avec ses déclinaisons et prix."""
     _require_read(request)
     with get_db() as conn:
+        # Une matière MyStock sans déclinaison n'a nulle part où porter son
+        # prix : elle était absente de cette liste et des produits.
+        if mystock_prix.amorcer_declinaisons(conn):
+            conn.commit()
         materials = mystock_prix.list_materials(
             conn, q=q, categorie=categorie, actives_only=active_only
         )
@@ -1762,16 +1766,28 @@ def patch_mystock_parametrage(request: Request, declinaison_id: int, body: dict 
 # ─── Produits devisés à partir des matières MyStock ──────────────────────────
 
 
-def _cout_produit_mystock(conn, produit: dict, reglages) -> Optional[ProductCostOut]:
-    """Prix de revient d'un produit MyStock, au même format que ceux de la base CM."""
+def _poser_cout(conn, produit: dict, reglages, cache: Optional[dict] = None) -> dict:
+    """Pose `cost` et `cout_erreur` sur le produit : l'écran dit POURQUOI un coût manque."""
+    produit["cost"], produit["cout_erreur"] = _cout_et_erreur(conn, produit, reglages, cache)
+    return produit
+
+
+def _cout_et_erreur(conn, produit: dict, reglages, cache: Optional[dict] = None):
+    """Prix de revient d'un produit MyStock (format de la base CM) et raison d'un échec.
+
+    Un produit mal réglé ne fait pas tomber la liste :
+    il s'affiche sans coût, avec la raison — avant, il disait « sélectionnez les
+    composants » alors que les composants étaient là."""
     if not produit.get("composants"):
-        return None
+        return None, None
+    if cache is None:
+        cache = {}
     try:
-        res = mystock_produits.cout_produit(conn, produit, reglages)
-    except PricingError:
-        # Une déclinaison mal réglée ne doit pas faire tomber la liste entière :
-        # le produit s'affiche sans coût, la fiche dira pourquoi.
-        return None
+        res = mystock_produits.cout_produit(conn, produit, reglages, cache)
+    except PricingError as e:
+        return None, str(e)
+    except ArithmeticError:
+        return None, "Calcul impossible — vérifier les prix et grammages des composants."
     # La décomposition part avec chaque composant, comme sur la base CM.
     # Sans elle, l'écran affichait « 4,200 €/kg × 0,0240 kg/m² → 0,1098 €/m² » :
     # une multiplication qui ne tombe pas juste, parce que le transport et les
@@ -1779,7 +1795,7 @@ def _cout_produit_mystock(conn, produit: dict, reglages) -> Optional[ProductCost
     # chiffre qu'on ne peut pas refaire de tête passe pour un chiffre faux.
     detail = {}
     for c in produit.get("composants", []):
-        param = mystock_prix.parametrage(conn, c["declinaison_id"])
+        param = mystock_produits.parametrage_cache(conn, c["declinaison_id"], cache)
         if not param:
             continue
         param = {
@@ -1815,7 +1831,7 @@ def _cout_produit_mystock(conn, produit: dict, reglages) -> Optional[ProductCost
             )
             for c in res.components
         ],
-    )
+    ), None
 
 
 @router.get("/api/pricing/mystock/declinaisons")
@@ -1826,6 +1842,10 @@ def list_mystock_declinaisons(request: Request):
     """
     _require_read(request)
     with get_db() as conn:
+        # Une matière MyStock sans déclinaison n'a nulle part où porter son
+        # prix : elle était absente de cette liste et des produits.
+        if mystock_prix.amorcer_declinaisons(conn):
+            conn.commit()
         materials = mystock_prix.list_materials(conn, actives_only=True)
         reglages = load_pricing_settings(conn)
         from app.services.pricing.repository import declinaison_to_pricing_material
@@ -1833,20 +1853,6 @@ def list_mystock_declinaisons(request: Request):
         out = []
         for m in materials:
             for d in m.get("declinaisons", []):
-                cout = None
-                if d.get("unit_price"):
-                    try:
-                        cout = float(
-                            compute_material_price_per_m2(
-                                declinaison_to_pricing_material(
-                                    {**d, "declinaison_id": d["id"],
-                                     "reference": m["reference"], "libelle": d["libelle"]}
-                                ),
-                                reglages,
-                            ).price_eur_per_m2
-                        )
-                    except PricingError:
-                        pass
                 out.append({
                     "id": d["id"],
                     "matiere_id": m["id"],
@@ -1857,7 +1863,6 @@ def list_mystock_declinaisons(request: Request):
                     "libelle": d["libelle"],
                     "parametre": d["parametre"],
                     "unit_price": d["unit_price"],
-                    "cout_eur_m2": cout,
                     # Les leviers du coût, exposés en clair.
                     #
                     # Le prix d'achat d'une matière ne dépend ni de la laize ni
@@ -1908,8 +1913,9 @@ def list_mystock_produits(
         produits = mystock_produits.list_produits(conn, q=q, actifs_only=active_only)
         if with_cost:
             reglages = load_pricing_settings(conn)
+            cache: dict = {}
             for p in produits:
-                p["cost"] = _cout_produit_mystock(conn, p, reglages)
+                _poser_cout(conn, p, reglages, cache)
     return {"produits": produits}
 
 
@@ -1920,7 +1926,7 @@ def get_mystock_produit(request: Request, produit_id: int):
         p = mystock_produits.get_produit(conn, produit_id)
         if not p:
             raise HTTPException(status_code=404, detail="Produit introuvable.")
-        p["cost"] = _cout_produit_mystock(conn, p, load_pricing_settings(conn))
+        _poser_cout(conn, p, load_pricing_settings(conn))
     return p
 
 
@@ -1941,7 +1947,18 @@ def preview_mystock_produit(request: Request, body: dict = Body(...)):
     if err:
         raise HTTPException(status_code=400, detail=err)
     if not composants:
-        return {"cost": None}
+        return {"cost": None, "cout_erreur": None}
+    # Même contrôle qu'à l'enregistrement : une marge refusée à la création ne
+    # doit pas donner un aperçu muet (ni une erreur 500 sur « 12,5 »).
+    brute = body.get("custom_margin_pct")
+    marge = None
+    if brute not in (None, "", "null"):
+        try:
+            marge = float(str(brute).replace(",", "."))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Marge invalide — nombre attendu.")
+        if marge < 0 or marge > 1000:
+            raise HTTPException(status_code=400, detail="Marge hors limites — valeur entre 0 et 1000 %.")
     with get_db() as conn:
         manque = mystock_produits.composants_existent(conn, composants)
         if manque:
@@ -1950,10 +1967,11 @@ def preview_mystock_produit(request: Request, body: dict = Body(...)):
             "id": 0,
             "code": "PREVIEW",
             "designation": "Aperçu",
-            "custom_margin_pct": body.get("custom_margin_pct"),
+            "custom_margin_pct": marge,
             "composants": composants,
         }
-        return {"cost": _cout_produit_mystock(conn, produit, load_pricing_settings(conn))}
+        _poser_cout(conn, produit, load_pricing_settings(conn))
+        return {"cost": produit["cost"], "cout_erreur": produit["cout_erreur"]}
 
 
 @router.post("/api/pricing/mystock/produits")
@@ -1972,8 +1990,7 @@ def create_mystock_produit(request: Request, body: dict = Body(...)):
         if not res.get("ok"):
             raise HTTPException(status_code=400, detail=res.get("reason", "Création refusée"))
         conn.commit()
-        p = res["produit"]
-        p["cost"] = _cout_produit_mystock(conn, p, load_pricing_settings(conn))
+        p = _poser_cout(conn, res["produit"], load_pricing_settings(conn))
     return p
 
 
@@ -1987,8 +2004,7 @@ def update_mystock_produit(request: Request, produit_id: int, body: dict = Body(
         if not res.get("ok"):
             raise HTTPException(status_code=400, detail=res.get("reason", "Modification refusée"))
         conn.commit()
-        p = res["produit"]
-        p["cost"] = _cout_produit_mystock(conn, p, load_pricing_settings(conn))
+        p = _poser_cout(conn, res["produit"], load_pricing_settings(conn))
     return p
 
 

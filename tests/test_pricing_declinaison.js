@@ -29,6 +29,8 @@ const ctx = { window: { location: { pathname: '/' } }, S: {}, console };
 vm.createContext(ctx);
 vm.runInContext([extraire('parseRoute'), extraire('icon'),
                  extraire('heureCourte'), extraire('saveStatusHtml'),
+                 extraire('escHtml'), extraire('gearHtml'), extraire('savebarTitreHtml'),
+                 extraire('matSummaryHtml'),
                  extraire('declSaveBarHtml')].join('\n'), ctx);
 
 function route(p) { ctx.window.location.pathname = p; return ctx.parseRoute(); }

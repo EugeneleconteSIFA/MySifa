@@ -1132,3 +1132,13 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 .recap-ligne .recap-unit{margin-top:0;font-size:12px;color:var(--text2)}
 .recap-strong .recap-ligne .recap-value{font-size:17px}
 .recap-detail{font-size:11px;color:var(--text2);margin-top:2px}
+
+/* Fenêtre Paramètres : une ligne par catégorie de marge. */
+.set-marges{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px 14px}
+.set-marge{display:flex;align-items:center;gap:8px;margin:0;font-size:13px;font-weight:600;
+  color:var(--text);text-transform:none;letter-spacing:0}
+.set-marge span{flex:1}
+.set-marge input{width:84px}
+/* Le récapitulatif collant d'une fiche produit passait sous le bandeau
+   d'enregistrement, fixé en haut : il se cale dessous. */
+.savebar-spacer ~ .form-grid .side-panel{top:96px}

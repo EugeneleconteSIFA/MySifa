@@ -187,13 +187,26 @@ def _ecrire_composants(conn: sqlite3.Connection, produit_id: int, composants: li
         )
 
 
-def cout_produit(conn: sqlite3.Connection, produit: dict, reglages) -> Any:
+def parametrage_cache(conn: sqlite3.Connection, declinaison_id: int, cache: Optional[dict]) -> Optional[dict]:
+    """`parametrage` d'une déclinaison, mémorisé dans `cache` s'il est fourni."""
+    if cache is None:
+        return parametrage(conn, declinaison_id)
+    if declinaison_id not in cache:
+        cache[declinaison_id] = parametrage(conn, declinaison_id)
+    return cache[declinaison_id]
+
+
+def cout_produit(conn: sqlite3.Connection, produit: dict, reglages, cache: Optional[dict] = None) -> Any:
     """
     Prix de revient d'un produit MyStock.
 
     Les déclinaisons prennent la place des matières : leur identifiant sert d'id
     dans la carte passée au moteur. Les rôles usuels occupent les emplacements
     nommés, le reste part en composants libres.
+
+    `cache` (déclinaison → paramétrage) se partage entre les produits d'une même
+    liste : une déclinaison sert à des dizaines de produits, et chaque
+    `parametrage` coûte une dizaine de requêtes.
     """
     carte = {}
     slots: dict[str, Optional[int]] = {
@@ -201,7 +214,7 @@ def cout_produit(conn: sqlite3.Connection, produit: dict, reglages) -> Any:
     }
     extras: list[int] = []
     for c in produit.get("composants", []):
-        param = parametrage(conn, c["declinaison_id"])
+        param = parametrage_cache(conn, c["declinaison_id"], cache)
         if not param:
             raise PricingError(f"Matière introuvable (id={c['declinaison_id']}).")
         # Le poids vient du COMPOSANT, pas de la matière : c'est le produit qui
@@ -375,11 +388,12 @@ def modifier_produit(
     if not sets and composants is None:
         return {"ok": False, "reason": "aucune modification"}
 
-    if sets:
-        sets.extend(["updated_at=?", "updated_by_name=?"])
-        args.extend([_now(), user_name])
-        args.append(produit_id)
-        conn.execute(f"UPDATE mp_produit SET {', '.join(sets)} WHERE id=?", args)
+    # Une composition modifiée est une modification du produit : elle date et
+    # signe la fiche comme le reste.
+    sets.extend(["updated_at=?", "updated_by_name=?"])
+    args.extend([_now(), user_name])
+    args.append(produit_id)
+    conn.execute(f"UPDATE mp_produit SET {', '.join(sets)} WHERE id=?", args)
     if composants is not None:
         _ecrire_composants(conn, produit_id, composants)
     return {"ok": True, "produit": get_produit(conn, produit_id)}

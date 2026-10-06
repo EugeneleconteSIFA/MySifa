@@ -443,6 +443,12 @@ with dbmod.get_db() as conn:
     MP.set_parametrage(conn, declinaison_id=d30["id"], patch={"applique_marge": True})
     check("recochée depuis une autre déclinaison : toutes suivent",
           set(marges_2028()), {1})
+    # Une déclinaison ajoutée après coup hérite de la case de sa matière.
+    MP.set_parametrage(conn, declinaison_id=d22["id"], patch={"applique_marge": False})
+    assert MP.add_declinaison(conn, matiere_id=mat_2028, valeur_gsm=77)["ok"]
+    check("une nouvelle déclinaison hérite de « marge non appliquée »",
+          set(marges_2028()), {0})
+    MP.set_parametrage(conn, declinaison_id=d22["id"], patch={"applique_marge": True})
 
     # Import en USD avec transport au pourcentage : (prix + transport) × taux.
     MP.set_parametrage(conn, declinaison_id=d22["id"], patch={
@@ -998,6 +1004,20 @@ with dbmod.get_db() as conn:
           PROD.get_produit(conn, r8["produit"]["id"])["actif"], False)
     check("recherche par code", len(PROD.list_produits(conn, q="MS-1")), 1)
     check("recherche sans résultat", len(PROD.list_produits(conn, q="zzz")), 0)
+
+    print("\n--- toute matière MyStock a sa déclinaison ---")
+    conn.execute(
+        "INSERT INTO matieres_premieres (categorie, reference, designation, actif) "
+        "VALUES ('frontal', 'F-NEUF', 'Frontal créé dans MyStock', 1)")
+    neuf = conn.execute("SELECT id FROM matieres_premieres WHERE reference='F-NEUF'").fetchone()[0]
+    check("une matière sans déclinaison est amorcée", MP.amorcer_declinaisons(conn) >= 1, True)
+    check("elle a sa déclinaison",
+          conn.execute("SELECT COUNT(*) FROM mp_matiere_declinaison WHERE matiere_id=?",
+                       (neuf,)).fetchone()[0], 1)
+    check("elle apparaît dans la liste des matières",
+          any(m["id"] == neuf and m.get("declinaisons") for m in MP.list_materials(conn)), True)
+    check("l'amorçage est idempotent", MP.amorcer_declinaisons(conn), 0)
+    conn.commit()
 
     print("\n--- migrations rejouables ---")
     avant = conn.execute("SELECT COUNT(*) FROM mp_matiere_declinaison").fetchone()[0]
