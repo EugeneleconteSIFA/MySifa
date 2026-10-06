@@ -863,8 +863,34 @@
       return chargerRegistre().then(function () { questionnaire(o); });
     };
     window.MySifaBlocs.demander = demander;
+    window.MySifaBlocs.capturer = function () { if (!actif) entrer(); };
 
     new MutationObserver(scanner).observe(document.documentElement, { childList: true, subtree: true });
-    chargerRegistre().then(function () { if (registreOk) creerBouton(); });
+    chargerRegistre().then(function () {
+      if (!registreOk) return;
+      creerBouton();
+      captureDemandee();
+    });
   }
+
+  /* Arrivée depuis l'accueil (« Essayer sur… ») : ?capture=<nom du bloc>
+     ouvre la capture dès que les blocs de la page sont affichés, et amène le
+     bloc proposé à l'écran. Le paramètre est retiré de l'adresse aussitôt. */
+  function captureDemandee() {
+    var u;
+    try { u = new URL(location.href); } catch (e) { return; }
+    var nom = u.searchParams.get("capture");
+    if (nom === null) return;
+    u.searchParams.delete("capture");
+    try { history.replaceState(history.state, "", u.pathname + u.search + u.hash); } catch (e) { /* adresse inchangée */ }
+    var debut = Date.now();
+    (function attendre() {
+      var cible = nom ? document.querySelector('[data-bloc="' + nom.replace(/["\\]/g, "") + '"]') : null;
+      var pret = nom ? (cible && cible.getClientRects().length) : MySifaBlocsPret();
+      if (!pret && Date.now() - debut < 10000) { setTimeout(attendre, 400); return; }
+      window.MySifaBlocs.capturer();
+      if (cible) setTimeout(function () { cible.scrollIntoView({ block: "center", behavior: "smooth" }); }, 300);
+    })();
+  }
+  function MySifaBlocsPret() { return document.querySelectorAll("[data-bloc]").length > 0; }
 })();
