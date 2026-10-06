@@ -792,7 +792,9 @@
   var SVG = '<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">';
 
   var GUIDE_ACCUEIL = {
-    "accueil-widgets": { steps: [
+    // tous: true — exception à la règle « guides réservés aux superadmins »
+    // (mysifa_guides.js) : c'est le mode d'emploi de l'accueil de chacun.
+    "accueil-widgets": { tous: true, steps: [
       {
         icon: ICO('<rect x="3" y="3" width="7" height="18" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>'),
         title: "Mes tableaux de bord",
@@ -811,27 +813,30 @@
       {
         icon: ICO('<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M12 8v8"/><path d="M8 12h8"/>'),
         title: "Capturer un bloc",
-        body: "<p>Dans n'importe quelle appli, le <strong>bouton de capture</strong> du coin bas-droit (ou <span class=\"mguide-tag\">Alt+C</span>) entoure de pointillés chaque bloc qu'on peut épingler. Cliquez sur celui qui vous intéresse.</p>",
+        body: "<p>Dans une appli, le <strong>bouton de capture</strong> en bas à droite (ou <span class=\"mguide-tag\">Alt+C</span>) efface le reste de la page : seuls les blocs épinglables restent, <strong>entourés</strong>. Au survol, un aperçu montre les valeurs qu'ils afficheraient. Cliquez sur celui qui vous intéresse.</p>",
         illu: SVG +
           '<rect x="6" y="6" width="328" height="138" rx="10" fill="var(--card)" stroke="var(--border)"/>' +
-          '<rect x="90" y="14" width="160" height="18" rx="6" fill="var(--card)" stroke="var(--accent)"/><text x="170" y="26" font-size="7.5" fill="var(--text)" text-anchor="middle">Capture : cliquez sur un bloc</text>' +
-          '<rect x="18" y="42" width="140" height="42" rx="7" fill="var(--accent-bg)" stroke="var(--accent)" stroke-dasharray="4 3" stroke-width="1.5"/><text x="28" y="58" font-size="8" font-weight="700" fill="var(--text)">Temps</text><text x="28" y="74" font-size="11" font-weight="700" fill="var(--text)">1h 57min</text>' +
-          '<rect x="170" y="42" width="140" height="42" rx="7" fill="none" stroke="var(--accent)" stroke-dasharray="4 3"/><text x="180" y="58" font-size="8" font-weight="700" fill="var(--text)">Quantités</text><text x="180" y="74" font-size="11" font-weight="700" fill="var(--text)">12 505 m</text>' +
-          '<rect x="18" y="92" width="292" height="36" rx="7" fill="none" stroke="var(--accent)" stroke-dasharray="4 3"/><text x="28" y="114" font-size="8" fill="var(--muted)">Statut des machines</text>' +
-          '<circle cx="312" cy="128" r="11" fill="var(--accent)"/><path d="M307 128h10M312 123v10" stroke="#fff" stroke-width="1.6"/></svg>'
+          '<rect x="90" y="12" width="160" height="16" rx="6" fill="var(--card)" stroke="var(--accent)"/><text x="170" y="23" font-size="7" fill="var(--text)" text-anchor="middle">Capture : cliquez sur un bloc</text>' +
+          '<g opacity=".18"><rect x="18" y="36" width="56" height="100" rx="6" fill="var(--muted)"/><rect x="250" y="96" width="76" height="40" rx="6" fill="var(--muted)"/></g>' +
+          '<rect x="84" y="38" width="112" height="44" rx="7" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="2"/><text x="94" y="54" font-size="8" font-weight="700" fill="var(--text)">Chiffres du stock</text><text x="94" y="72" font-size="12" font-weight="700" fill="var(--text)">6</text>' +
+          '<rect x="84" y="92" width="156" height="44" rx="7" fill="none" stroke="var(--accent)" stroke-width="2"/><text x="94" y="108" font-size="8" font-weight="700" fill="var(--text)">Stocks à réapprovisionner</text>' +
+          '<rect x="206" y="34" width="120" height="54" rx="7" fill="var(--card)" stroke="var(--accent)"/><text x="214" y="47" font-size="7.5" font-weight="700" fill="var(--accent)">Chiffres du stock</text>' +
+          '<text x="214" y="60" font-size="7" fill="var(--muted)">MP à approvisionner</text><text x="318" y="60" font-size="7" font-weight="700" fill="var(--text)" text-anchor="end">6</text>' +
+          '<text x="214" y="71" font-size="7" fill="var(--muted)">Expéditions du jour</text><text x="318" y="71" font-size="7" font-weight="700" fill="var(--text)" text-anchor="end">3</text>' +
+          '<text x="214" y="82" font-size="6.5" fill="var(--muted)">Cliquez pour choisir…</text></svg>'
       },
       {
         icon: ICO('<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>'),
         title: "Choisir les valeurs",
-        body: "<p>Un panneau s'ouvre : cochez <strong>jusqu'à 4 valeurs</strong>, dans l'ordre où vous voulez les voir. Pour chacune, une alerte facultative la passe <strong>en rouge</strong> au-dessus ou en dessous d'un seuil.</p>",
+        body: "<p>Un panneau s'ouvre : cochez <strong>jusqu'à 4 valeurs</strong>, dans l'ordre où vous voulez les voir. Une alerte facultative passe un <strong>nombre</strong> en rouge au-dessus, en dessous ou à égalité d'un seuil. Un texte (état, opérateur) s'affiche sans alerte.</p>",
         illu: SVG +
           '<rect x="80" y="6" width="180" height="138" rx="10" fill="var(--card)" stroke="var(--border)"/>' +
-          '<text x="92" y="24" font-size="9" font-weight="700" fill="var(--text)">Ajouter à mon accueil</text>' +
-          '<rect x="92" y="32" width="156" height="34" rx="6" fill="var(--bg)" stroke="var(--border)"/><rect x="99" y="39" width="9" height="9" rx="2" fill="var(--accent)"/><text x="114" y="47" font-size="8" fill="var(--text)">Arrêts (min)</text>' +
-          '<rect x="99" y="52" width="142" height="10" rx="3" fill="var(--card)" stroke="var(--border)"/><text x="103" y="60" font-size="6.5" fill="var(--danger)">Rouge au-dessus de 60</text>' +
-          '<rect x="92" y="70" width="156" height="18" rx="6" fill="var(--bg)" stroke="var(--border)"/><rect x="99" y="75" width="9" height="9" rx="2" fill="none" stroke="var(--muted)"/><text x="114" y="83" font-size="8" fill="var(--text2)">Calage (min)</text>' +
-          '<rect x="92" y="96" width="156" height="14" rx="4" fill="var(--bg)" stroke="var(--accent)"/><text x="98" y="106" font-size="7" fill="var(--text)">Temps de production</text>' +
-          '<rect x="160" y="118" width="88" height="18" rx="6" fill="var(--accent)"/><text x="204" y="130" font-size="7.5" fill="#fff" text-anchor="middle" font-weight="700">Ajouter à mon accueil</text></svg>'
+          '<text x="92" y="22" font-size="8.5" font-weight="700" fill="var(--text)">Ajouter à mes tableaux de bord</text>' +
+          '<rect x="92" y="30" width="156" height="34" rx="6" fill="var(--bg)" stroke="var(--border)"/><rect x="99" y="37" width="9" height="9" rx="2" fill="var(--accent)"/><text x="114" y="45" font-size="8" fill="var(--text)">Arrêts (min)</text>' +
+          '<rect x="99" y="50" width="142" height="10" rx="3" fill="var(--card)" stroke="var(--border)"/><text x="103" y="58" font-size="6.5" fill="var(--danger)">Rouge au-dessus de 60</text>' +
+          '<rect x="92" y="68" width="156" height="28" rx="6" fill="var(--bg)" stroke="var(--border)"/><rect x="99" y="73" width="9" height="9" rx="2" fill="var(--accent)"/><text x="114" y="81" font-size="8" fill="var(--text)">État</text><text x="114" y="91" font-size="6.5" fill="var(--muted)">Valeur texte : pas d\'alerte possible.</text>' +
+          '<rect x="92" y="100" width="156" height="14" rx="4" fill="var(--bg)" stroke="var(--accent)"/><text x="98" y="110" font-size="7" fill="var(--text)">Cohésio 2</text>' +
+          '<rect x="196" y="120" width="52" height="18" rx="6" fill="var(--accent)"/><text x="222" y="132" font-size="7.5" fill="#fff" text-anchor="middle" font-weight="700">Ajouter</text></svg>'
       },
       {
         icon: ICO('<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>'),
@@ -848,15 +853,31 @@
       {
         icon: ICO('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>'),
         title: "Personnaliser la colonne",
-        body: "<p><span class=\"mguide-hl\">Personnaliser</span> permet de <strong>glisser</strong> chaque indicateur à sa place et fait apparaître dessous des curseurs pour changer les <strong>valeurs</strong> affichées et leurs alertes, un crayon pour le <strong>renommer</strong> et la <strong>corbeille</strong> (deux clics). La flèche en haut replie la colonne.</p>",
+        body: "<p><span class=\"mguide-hl\">Personnaliser</span> permet de <strong>glisser</strong> chaque indicateur à sa place. Sous chacun : les curseurs changent les <strong>valeurs</strong> et leurs alertes, le crayon le <strong>renomme</strong>, la corbeille le supprime (deux clics). L'icône tableau, en haut, replie la colonne.</p>",
         illu: SVG +
           '<rect x="80" y="10" width="180" height="130" rx="10" fill="var(--bg)" stroke="var(--border)"/>' +
           '<rect x="90" y="18" width="90" height="16" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="135" y="29" font-size="7" fill="var(--text2)" text-anchor="middle">TABLEAUX DE BORD</text>' +
           '<rect x="186" y="18" width="64" height="16" rx="5" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="218" y="29" font-size="7" fill="var(--accent)" text-anchor="middle">Terminer</text>' +
           '<rect x="90" y="42" width="160" height="44" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="98" y="56" font-size="8" font-weight="700" fill="var(--text)">Départs programmés</text>' +
           '<rect x="90" y="70" width="160" height="16" rx="0" fill="var(--bg)" stroke="var(--border)"/>' +
-          '<text x="100" y="81" font-size="8" fill="var(--muted)">⠿</text><rect x="212" y="72" width="14" height="12" rx="3" fill="var(--card)" stroke="var(--border)"/><rect x="230" y="72" width="14" height="12" rx="3" fill="var(--danger)"/>' +
+          '<rect x="194" y="72" width="14" height="12" rx="3" fill="var(--card)" stroke="var(--border)"/><path d="M198 75v6M201 75v6M204 75v6" stroke="var(--text2)" stroke-width="1"/>' +
+          '<rect x="212" y="72" width="14" height="12" rx="3" fill="var(--card)" stroke="var(--border)"/><path d="M216 81l5-5" stroke="var(--text2)" stroke-width="1.2"/>' +
+          '<rect x="230" y="72" width="14" height="12" rx="3" fill="var(--danger)"/>' +
           '<rect x="90" y="94" width="160" height="38" rx="7" fill="var(--accent-bg)" stroke="var(--accent)" stroke-dasharray="4 3"/><text x="170" y="117" font-size="7.5" fill="var(--accent)" text-anchor="middle">déposer ici</text></svg>'
+      },
+      {
+        icon: ICO('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v6"/><path d="M9 10h6"/>'),
+        title: "Un chiffre manque ?",
+        body: "<p>Si le chiffre que vous voulez suivre n'est capturable nulle part, utilisez <strong>Faire une demande de tableau de bord</strong>, en bas de la colonne : choisissez l'application, décrivez le chiffre. La demande part aux administrateurs de MySifa.</p>",
+        illu: SVG +
+          '<rect x="14" y="10" width="120" height="130" rx="10" fill="var(--bg)" stroke="var(--border)"/>' +
+          '<rect x="22" y="18" width="104" height="30" rx="6" fill="var(--card)" stroke="var(--border)"/><rect x="22" y="54" width="104" height="30" rx="6" fill="var(--card)" stroke="var(--border)"/>' +
+          '<rect x="22" y="104" width="104" height="26" rx="7" fill="var(--accent-bg)" stroke="var(--accent)" stroke-dasharray="3 2"/><text x="74" y="115" font-size="6.5" fill="var(--accent)" text-anchor="middle">Faire une demande</text><text x="74" y="124" font-size="6.5" fill="var(--accent)" text-anchor="middle">de tableau de bord</text>' +
+          '<path d="M134 117h28" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#fl2)"/><defs><marker id="fl2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--accent)"/></marker></defs>' +
+          '<rect x="168" y="10" width="158" height="130" rx="10" fill="var(--card)" stroke="var(--border)"/><text x="178" y="27" font-size="8" font-weight="700" fill="var(--text)">Faire une demande</text>' +
+          '<text x="178" y="42" font-size="6.5" fill="var(--muted)">APPLICATION CONCERNÉE</text><rect x="178" y="46" width="138" height="14" rx="4" fill="var(--bg)" stroke="var(--border)"/><text x="184" y="56" font-size="7" fill="var(--text)">MyExpé</text>' +
+          '<text x="178" y="72" font-size="6.5" fill="var(--muted)">QUEL CHIFFRE ?</text><rect x="178" y="76" width="138" height="34" rx="4" fill="var(--bg)" stroke="var(--border)"/><text x="184" y="88" font-size="6.5" fill="var(--text2)">Palettes parties cette semaine…</text>' +
+          '<rect x="248" y="116" width="68" height="16" rx="5" fill="var(--accent)"/><text x="282" y="127" font-size="7" fill="#fff" text-anchor="middle" font-weight="700">Envoyer</text></svg>'
       }
     ]}
   };
