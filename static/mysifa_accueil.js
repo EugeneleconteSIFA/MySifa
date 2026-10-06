@@ -197,22 +197,23 @@
     return isNaN(n) ? null : n;
   }
 
+  /* Une alerte compare un nombre à un seuil. Une valeur texte (état, nom)
+     n'en déclenche jamais, même posée avant le 06/10/2026. */
   function alerteDeclenchee(alerte, valeur) {
     if (!alerte || valeur == null || valeur === "") return false;
-    if (alerte.op === "=") {
-      var a = nombre(valeur), b = nombre(alerte.seuil);
-      if (a !== null && b !== null && /^[\s\d.,\-]+$/.test(String(alerte.seuil))) return a === b;
-      return String(valeur).trim().toLowerCase() === String(alerte.seuil).trim().toLowerCase();
-    }
     var x = nombre(valeur), s = nombre(alerte.seuil);
     if (x === null || s === null) return false;
+    if (alerte.op === "=") return x === s;
     return alerte.op === ">" ? x > s : x < s;
   }
 
   function afficherValeurs(c) {
     var w = c.w;
-    var libs = {};
-    ((w.bloc_info && w.bloc_info.valeurs) || []).forEach(function (v) { libs[v.cle] = v.libelle; });
+    var libs = {}, textes = {};
+    ((w.bloc_info && w.bloc_info.valeurs) || []).forEach(function (v) {
+      libs[v.cle] = v.libelle;
+      if (v.nombre === false) textes[v.cle] = true;
+    });
     var zone = c.el.querySelector(".mac-vals");
     zone.innerHTML = "";
     var enAlerte = [];
@@ -227,7 +228,7 @@
       var nb = document.createElement("span");
       nb.className = "v";
       nb.textContent = val == null || val === "" ? "—" : val;
-      if (alerteDeclenchee(v.alerte, nb_)) { ligne.classList.add("alerte"); enAlerte.push(libs[v.cle] || v.cle); }
+      if (!textes[v.cle] && alerteDeclenchee(v.alerte, nb_)) { ligne.classList.add("alerte"); enAlerte.push(libs[v.cle] || v.cle); }
       ligne.appendChild(nb);
       ligne.appendChild(lib);
       zone.appendChild(ligne);
@@ -400,9 +401,11 @@
       return;
     }
     var coches = [], alertes = {};
+    var textes = {};
+    w.bloc_info.valeurs.forEach(function (v) { if (v.nombre === false) textes[v.cle] = true; });
     (w.valeurs || []).forEach(function (v) {
       coches.push(v.cle);
-      if (v.alerte && v.alerte.op) alertes[v.cle] = { op: v.alerte.op, seuil: String(v.alerte.seuil) };
+      if (v.alerte && v.alerte.op && !textes[v.cle]) alertes[v.cle] = { op: v.alerte.op, seuil: String(v.alerte.seuil) };
     });
     mb.questionnaire({
       bloc: w.bloc_info,
