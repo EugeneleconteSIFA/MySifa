@@ -166,6 +166,26 @@
       });
     },
 
+    /* ── Maintenance (app/web/maintenance_page.py) ─────────────────────
+       Le calcul des statuts vit côté serveur (app/services/maintenance_statuts.py),
+       traduction exacte de celui de la page. Sans machine ni catégorie
+       capturées (widget antérieur), le serveur prend ses défauts. */
+    "maintenance.statuts": function (ctx) {
+      var q = new URLSearchParams();
+      if (ctx.params.get("bloc_machine")) q.set("machine", ctx.params.get("bloc_machine"));
+      if (ctx.params.get("bloc_categorie")) q.set("categorie", ctx.params.get("bloc_categorie"));
+      return ctx.json("/api/maintenance/statuts?" + q.toString()).then(function (d) {
+        var v = d.valeurs || {};
+        var t = {};
+        Object.keys(v).forEach(function (k) { t[k] = String(v[k]); });
+        return r(t, v);
+      }, function (e) {
+        // Machine supprimée ou désactivée : l'indicateur suit son objet.
+        if (e && e.status === 404) return { introuvable: true };
+        throw e;
+      });
+    },
+
     /* ── Gestionnaire de tâches (app/web/taches_page.py) ─────────────── */
     "taches.compteurs": function (ctx) {
       return Promise.all([

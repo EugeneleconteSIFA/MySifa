@@ -1494,6 +1494,95 @@ class SaveAsTemplateBody(BaseModel):
 
 
 
+def historique_termine(conn, where: List[str], params: List[Any]) -> list:
+    """Opérations terminées, au format de GET /api/maintenance/history.
+
+    Seule lecture de l'historique : l'écran Historique et le calcul des
+    statuts de maintenance (app/services/maintenance_statuts.py) partent des
+    mêmes lignes, limite comprise.
+    """
+    rows = conn.execute(
+        f"""SELECT o.id             AS op_id,
+                   e.id             AS event_id,
+                   e.machine        AS machine,
+                   e.nom            AS event_nom,
+                   e.heure_debut    AS event_heure_debut,
+                   e.heure_fin      AS event_heure_fin,
+                   o.consignes      AS consignes,
+                   o.machines_csv   AS op_machines_csv,
+                   o.code           AS code,
+                   c.label          AS code_label,
+                   c.categorie      AS categorie,
+                   o.duree_reelle_min AS duree_reelle_min,
+                   o.observations   AS commentaire,
+                   o.pieces_changees AS pieces_changees,
+                   o.done_at        AS done_at,
+                   o.done_by        AS done_by,
+                   ub.nom           AS done_by_nom,
+                   o.updated_at     AS updated_at,
+                   o.updated_by     AS updated_by,
+                   uu.nom           AS updated_by_nom,
+                   e.date_prevue    AS date_prevue,
+                   e.created_by     AS created_by,
+                   uc.nom           AS created_by_nom,
+                   e.created_at     AS event_created_at,
+                   e.source         AS source
+            FROM maintenance_event_ops o
+            JOIN maintenance_events e ON e.id = o.event_id
+            LEFT JOIN maintenance_codes c ON c.code = o.code
+            LEFT JOIN users ub ON ub.id = o.done_by
+            LEFT JOIN users uc ON uc.id = e.created_by
+            LEFT JOIN users uu ON uu.id = o.updated_by
+            WHERE {" AND ".join(where)}
+            ORDER BY COALESCE(o.done_at, e.date_prevue) DESC, o.id DESC
+            LIMIT 2000""",
+        params,
+    ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        # Machines : préfère op.machines_csv, fallback event.machine
+        machines_list = _machines_csv_to_list(d.pop("op_machines_csv"))
+        if not machines_list and d.get("machine"):
+            machines_list = _machines_csv_to_list(d["machine"])
+        d["machines"] = machines_list
+        d["machine"] = " · ".join(machines_list) if machines_list else (d.get("machine") or "")
+        # Date_saisie : done_at si présent (moment d'exécution enregistré),
+        # sinon date_prevue (jour d'intervention déclaré).
+        d["date_saisie"] = d.get("done_at") or d.get("date_prevue")
+        # Opérateur : done_by en priorité (qui a marqué termine), fallback creator.
+        d["operateur"] = d.get("done_by_nom") or d.get("created_by_nom") or ""
+        d["type"] = d.get("code_label") or d.get("code") or ""
+        # Flag libre : détection LIB-xxx (compat avec _libre côté client)
+        d["libre"] = bool(d.get("code") and str(d["code"]).startswith("LIB-"))
+        out.append(d)
+    return out
+
+
+@router.get("/api/maintenance/statuts")
+def get_statuts(request: Request, machine: Optional[str] = None,
+                categorie: Optional[str] = None):
+    """Compteurs de l'accueil Maintenance pour une machine et une catégorie
+    (en retard, dû bientôt, à jour, jamais saisi). Calcul dans
+    app/services/maintenance_statuts.py ; sert au widget d'accueil
+    maintenance.statuts. Sans machine : la première machine active."""
+    from app.services import maintenance_statuts as ms
+
+    _require_access(request)
+    cat = categorie or ms.CATEGORIE_DEFAUT
+    if cat not in ms.CATEGORIES:
+        raise HTTPException(status_code=400, detail="Catégorie inconnue — entretien, remplacements ou all.")
+    with get_db() as conn:
+        machines = [r["nom"] for r in conn.execute(
+            "SELECT nom FROM machines WHERE actif = 1 ORDER BY id"
+        ).fetchall()]
+        nom = (machine or "").strip() or (machines[0] if machines else "")
+        if nom not in machines:
+            raise HTTPException(status_code=404, detail="Machine introuvable.")
+        res = ms.statuts_machine(conn, nom, cat)
+    return {"machine": nom, "categorie": cat, **res}
+
+
 @router.get("/api/maintenance/history")
 def get_history(
     request: Request,
@@ -1532,61 +1621,7 @@ def get_history(
         where.append("(o.done_by = ? OR e.created_by = ?)")
         params.extend([operator_id, operator_id])
     with get_db() as conn:
-        rows = conn.execute(
-            f"""SELECT o.id             AS op_id,
-                       e.id             AS event_id,
-                       e.machine        AS machine,
-                       e.nom            AS event_nom,
-                       e.heure_debut    AS event_heure_debut,
-                       e.heure_fin      AS event_heure_fin,
-                       o.consignes      AS consignes,
-                       o.machines_csv   AS op_machines_csv,
-                       o.code           AS code,
-                       c.label          AS code_label,
-                       c.categorie      AS categorie,
-                       o.duree_reelle_min AS duree_reelle_min,
-                       o.observations   AS commentaire,
-                       o.pieces_changees AS pieces_changees,
-                       o.done_at        AS done_at,
-                       o.done_by        AS done_by,
-                       ub.nom           AS done_by_nom,
-                       o.updated_at     AS updated_at,
-                       o.updated_by     AS updated_by,
-                       uu.nom           AS updated_by_nom,
-                       e.date_prevue    AS date_prevue,
-                       e.created_by     AS created_by,
-                       uc.nom           AS created_by_nom,
-                       e.created_at     AS event_created_at,
-                       e.source         AS source
-                FROM maintenance_event_ops o
-                JOIN maintenance_events e ON e.id = o.event_id
-                LEFT JOIN maintenance_codes c ON c.code = o.code
-                LEFT JOIN users ub ON ub.id = o.done_by
-                LEFT JOIN users uc ON uc.id = e.created_by
-                LEFT JOIN users uu ON uu.id = o.updated_by
-                WHERE {" AND ".join(where)}
-                ORDER BY COALESCE(o.done_at, e.date_prevue) DESC, o.id DESC
-                LIMIT 2000""",
-            params,
-        ).fetchall()
-    out = []
-    for r in rows:
-        d = dict(r)
-        # Machines : préfère op.machines_csv, fallback event.machine
-        machines_list = _machines_csv_to_list(d.pop("op_machines_csv"))
-        if not machines_list and d.get("machine"):
-            machines_list = _machines_csv_to_list(d["machine"])
-        d["machines"] = machines_list
-        d["machine"] = " · ".join(machines_list) if machines_list else (d.get("machine") or "")
-        # Date_saisie : done_at si présent (moment d'exécution enregistré),
-        # sinon date_prevue (jour d'intervention déclaré).
-        d["date_saisie"] = d.get("done_at") or d.get("date_prevue")
-        # Opérateur : done_by en priorité (qui a marqué termine), fallback creator.
-        d["operateur"] = d.get("done_by_nom") or d.get("created_by_nom") or ""
-        d["type"] = d.get("code_label") or d.get("code") or ""
-        # Flag libre : détection LIB-xxx (compat avec _libre côté client)
-        d["libre"] = bool(d.get("code") and str(d["code"]).startswith("LIB-"))
-        out.append(d)
+        out = historique_termine(conn, where, params)
     return {"history": out}
 
 
