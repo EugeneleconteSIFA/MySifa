@@ -256,6 +256,26 @@ class TestComputeMaterialPricePerM2(unittest.TestCase):
         self.assertEqual(res.price_eur_per_m2, attendu)
         self.assertEqual(res.breakdown.taxe_pct, D("6.0000"))
         self.assertGreater(res.breakdown.taxes_src, D("0"))
+        # Dans la base d'achat (USD/kg), comme le prix : 10 × 6 % = 0,60.
+        self.assertEqual(res.breakdown.taxes_src, D("0.6000"))
+
+    def test_taxe_sans_poids(self):
+        """Fiche matière sans poids : la taxe du détail reste dans la base d'achat."""
+        mat = PricingMaterial(
+            id=22,
+            name="Adhésif importé",
+            unit_price=D("3.2"),
+            weight_per_m2=D("0"),
+            price_currency="EUR",
+            price_basis="PER_KG",
+            taxe_pct=D("10"),
+            is_imported=True,
+            transport_mode="PCT",
+            transport_pct=D("7.21"),
+        )
+        res = compute_material_price_per_m2(mat, _settings())
+        # (3,2 + 0,2307) × 10 % = 0,3431 €/kg — et non 0 faute de poids.
+        self.assertEqual(res.breakdown.taxes_src, D("0.3431"))
 
     def test_transport_par_conteneur(self):
         """Le coût d'un conteneur se répartit sur ce qu'il transporte."""

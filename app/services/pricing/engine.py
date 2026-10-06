@@ -138,6 +138,11 @@ def compute_material_price_per_m2(
     achat_src = raw + transport
     taxes_src = achat_src * taxe_pct / _HUNDRED
     subtotal_src = achat_src + taxes_src
+    # Le détail affiche prix et transport dans la base d'achat (€/kg pour un
+    # prix au kilo) : la taxe doit l'être aussi. `taxes_src` est au m² (prix ×
+    # poids) ; sur une fiche matière, qui n'a plus de poids, il valait 0 et le
+    # sous-total affiché oubliait la taxe (3,431 €/kg au lieu de 3,774).
+    taxes_base_achat = (unit_src + transport_src) * taxe_pct / _HUNDRED
     fx = subtotal_src * (rate - _ONE)
     subtotal_eur = subtotal_src * rate
     uplift = taxes_src * rate
@@ -158,7 +163,7 @@ def compute_material_price_per_m2(
         subtotal_eur=_q4(subtotal_eur),
         transport_eur_m2=_q4(transport * rate),
         transport_pct_effective=_q4(transport_pct_eff),
-        taxes_src=_q4(taxes_src),
+        taxes_src=_q4(taxes_base_achat),
         taxe_pct=_q4(taxe_pct),
     )
     price = _q4(total)

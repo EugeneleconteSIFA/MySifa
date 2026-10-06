@@ -3996,6 +3996,10 @@
         },
       });
     } catch (e) {
+      // Un aperçu refusé laissait l'ancien calcul à l'écran sans rien dire :
+      // la marge saisie semblait ignorée. Le détail affiche l'erreur.
+      const rec = document.getElementById("decl-recap");
+      if (rec) rec.innerHTML = `<div class="recap-card"><div class="empty" style="color:var(--danger)">Calcul impossible — ${escHtml(e.message)}</div></div>`;
       return;
     }
     const sum = document.getElementById("decl-summary");
