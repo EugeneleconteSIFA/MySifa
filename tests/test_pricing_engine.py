@@ -379,6 +379,12 @@ class TestComputeProductCost(unittest.TestCase):
             ),
         }
 
+    def test_apercu_accepte_les_quatre_methodes_de_transport(self):
+        """L'aperçu d'une fiche matière accepte chaque méthode du moteur."""
+        from app.services.pricing.schemas import MaterialPreviewIn
+        for mode in ("AMOUNT", "PCT", "CONTENEUR", "FORFAIT"):
+            self.assertEqual(MaterialPreviewIn(transport_mode=mode).transport_mode, mode)
+
     def test_marges_de_categorie_sur_assiette_nulle(self):
         """Deux taux de catégorie, aucun prix : marge nulle, pas d'erreur 0/0.
 
