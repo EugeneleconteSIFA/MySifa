@@ -750,6 +750,17 @@ def create_tache(payload: TacheIn, request: Request):
             # différents et l'arborescence apparaîtrait tronquée.
             service = parent.get("service") or service
         assignes = _valid_assignes(conn, payload.assignes)
+        if payload.parent_id and payload.assignes is None:
+            # Sous-tâche créée sans choix d'assignés (ajout rapide depuis le
+            # détail de la mère) : elle hérite des assignés de sa mère. Une
+            # liste vide envoyée explicitement reste, elle, une sous-tâche
+            # non assignée.
+            assignes = [
+                r["user_id"] for r in conn.execute(
+                    "SELECT user_id FROM taches_assignes WHERE tache_id=? ORDER BY assigne_at",
+                    (int(payload.parent_id),),
+                ).fetchall()
+            ]
         tache_id = _inserer_tache(
             conn, user, titre=titre, description=payload.description,
             statut=statut, priorite=priorite, ttype=ttype, module=module,
