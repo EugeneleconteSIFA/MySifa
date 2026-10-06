@@ -111,9 +111,9 @@ un interrupteur de capture (`blocs_reglages`). Couper un bloc masque ses
 widgets sans les supprimer. On n'y crée ni ne renomme aucun bloc.
 
 Les anciens tableaux de bord flottants (router `dashboards.py`, onglet profil
-« Mes dashboards ») ont été retirés le 04/10/2026. Leurs tables `dashboards`
-et `user_dashboards` restent en base jusqu'à la migration de suppression du
-lot suivant.
+« Mes dashboards ») ont été retirés le 04/10/2026, leurs tables `dashboards`
+et `user_dashboards` le 06/10/2026 (migration
+`suppression_anciens_dashboards`). Ne pas les recréer.
 
 Un indicateur existant se modifie depuis l'accueil (Personnaliser › curseurs) :
 c'est le même questionnaire qu'à la capture, exposé par

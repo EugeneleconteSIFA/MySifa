@@ -141,8 +141,9 @@ TABLES_LISIBLES: set[str] = {
     "formation_modules", "formation_quiz", "formation_videos",
     "formations", "role_parcours_defaut",
 
-    # ── Roles, acces et tableaux de bord (4 tables, 101 lignes)
-    "dashboards", "role_access_defaults", "user_access_overrides", "user_dashboards",
+    # ── Roles et acces (2 tables). dashboards / user_dashboards supprimées
+    # le 06/10/2026 (migration suppression_anciens_dashboards).
+    "role_access_defaults", "user_access_overrides",
 
     # ── Deploiement et schema (5 tables, 524 lignes)
     "promotion_history", "schema_migrations", "schema_migrations_fichiers",
