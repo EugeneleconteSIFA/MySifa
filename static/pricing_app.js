@@ -2372,13 +2372,15 @@
     // prix de revient, marge et prix de vente sont partis le 31 août 2026 :
     // tous les quatre supposent une quantité posée, que seul le produit
     // connaît. La matière dit ce qu'elle coûte rendue, et rien de plus.
-    cells.push({
-      label: "Change",
-      value: cur === "USD" ? "× " + fmtNum(rate, 4, 4) : "—",
-      unit: "",
-      detail: cur === "USD" ? "USD → EUR" : "achat en €",
-      muted: cur !== "USD",
-    });
+    // Un achat en euros n'a pas de change : la colonne n'apparaît qu'en USD.
+    if (cur === "USD") {
+      cells.push({
+        label: "Change",
+        value: "× " + fmtNum(rate, 4, 4),
+        unit: "",
+        detail: "USD → EUR",
+      });
+    }
     const uniteEur = perM2 ? "€/m² acheté" : "€/kg";
     if (cur === "USD") {
       cells.push({ label: "Sous-total en euros", value: p3(sousTotal * rate), unit: uniteEur });
@@ -2520,10 +2522,11 @@
     const essaiFx =
       fxEssai() !== undefined &&
       Math.abs(fxEssai() - parseFloat(s.eur_usd_rate || 0)) > 1e-9;
-    return `
-      <div class="form-section si-marge"><h3>${titreMarge}</h3>
-        <div class="si-marge-ligne">${champMarge}${caseMarge}</div>
-      </div>
+    // Le taux de change ne sert qu'à un achat en USD : en euros, le champ
+    // n'apparaît pas (il revient dès qu'on passe la devise en USD, la fiche
+    // se redessinant au changement de devise).
+    const enUsd = String((f && f.price_currency) || "EUR").toUpperCase() === "USD";
+    const tauxChange = !enUsd ? "" : `
       <div class="form-section si-commun">
         <h3>Taux de change (USD → EUR) ${stale ? fxStaleBadgeHtml() : ""}</h3>
         <div class="field f-num">
@@ -2536,6 +2539,11 @@
           }</div>
         </div>
       </div>`;
+    return `
+      <div class="form-section si-marge"><h3>${titreMarge}</h3>
+        <div class="si-marge-ligne">${champMarge}${caseMarge}</div>
+      </div>
+      ${tauxChange}`;
   }
 
   /**
@@ -2852,6 +2860,7 @@
         const el = document.getElementById(id);
         return el ? parseFloat(el.value) : NaN;
       };
+      const avecTaux = !!document.getElementById("si-rate");
       const taux = lu("si-rate");
       // La marge par défaut n'est à l'écran que sur une matière sans
       // catégorie : absente, elle ne part pas et reste inchangée.
@@ -2859,7 +2868,7 @@
       const marge = lu("si-margin");
       // Champ vidé le temps de retaper : rien ne part, et la pastille reste
       // sur « attente » pour que l'écart se voie. Un taux nul diviserait.
-      if (!(taux > 0) || (avecMarge && !Number.isFinite(marge))) return;
+      if ((avecTaux && !(taux > 0)) || (avecMarge && !Number.isFinite(marge))) return;
       // Marge par catégorie : vide = retour à la marge par défaut (null).
       const margesCat = {};
       let margeCatInvalide = false;
@@ -2876,7 +2885,8 @@
         S.settings = await api("/api/pricing/settings", {
           method: "PATCH",
           body: Object.assign(
-            { eur_usd_rate: taux, marges_categorie: margesCat },
+            { marges_categorie: margesCat },
+            avecTaux ? { eur_usd_rate: taux } : {},
             avecMarge ? { default_margin_pct: marge } : {}
           ),
         });

@@ -224,7 +224,12 @@ check('un seul PATCH, sur les paramètres',
   autoSet.includes('"/api/pricing/settings"'), true);
 check('taux et marge partent ensemble',
   autoSet.includes('eur_usd_rate: taux') && autoSet.includes('default_margin_pct: marge'), true);
-check('un champ vide n\'écrit rien', autoSet.includes('if (!(taux > 0)'), true);
+check('un champ vide n\'écrit rien', autoSet.includes('(avecTaux && !(taux > 0))'), true);
+// Achat en euros : ni champ de taux ni colonne Change (oct. 2026).
+check('sans champ de taux, aucun taux ne part', autoSet.includes('avecTaux ? { eur_usd_rate: taux } : {}'), true);
+check('le taux de change n\'apparaît qu\'en USD', panneau.includes('const tauxChange = !enUsd ? ""'), true);
+check('pas de colonne Change pour un achat en euros',
+  /if \(cur === "USD"\) \{\s*cells\.push\(\{\s*label: "Change"/.test(recap), true);
 check('la pastille passe par « cours »', autoSet.includes('setSettingsSaveStatus("cours")'), true);
 check('et par « err » sur erreur', autoSet.includes('setSettingsSaveStatus("err")'), true);
 check('enregistré, le taux n\'est plus un essai', autoSet.includes('S.fxDraft = null'), true);
