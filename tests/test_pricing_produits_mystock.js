@@ -143,6 +143,7 @@ vm.runInContext([
   extraire('fmtEurM2'), extraire('fmtPct'),
   src.slice(src.indexOf('const MSP_ROLE_LABEL ='),
             src.indexOf('};', src.indexOf('const MSP_ROLE_LABEL =')) + 2),
+  extraire('mspRoleLabel'),
   extraire('supportCle'), constanteObjet('SUPPORT_LABELS'),
   extraire('supportBadge'), extraire('msProductComp'),
   extraire('msProductCompLabel'), extraire('msProductGrammage'),
@@ -270,7 +271,7 @@ check('plus de bouton texte dans cette liste', listeMs.includes('>Éditer</butto
 check('la duplication ouvre le formulaire de création',
   src.includes('navigate("/pricing/mystock/produit/new")'), true);
 check('le formulaire pré-rempli survit au chargement',
-  src.includes('if (!S.formMsProduct) S.formMsProduct = defaultMsProductForm();'), true);
+  extraire('loadMsProductForm').includes('S.msProdPrerempli'), true);
 const dup = src.slice(src.indexOf('data-msp-dup]'), src.indexOf('data-msp-mat]'));
 for (const champ of ['code:', 'designation:', 'roles', 'autres', 'custom_margin_pct:']) {
   check('la copie reprend : ' + champ, dup.includes(champ), true);
@@ -365,7 +366,7 @@ check('avec le chemin pour le corriger', bAdh.includes('tarif fournisseur'), tru
 check('un composant sans transport ne l\'invente pas',
   bPP.includes('transport'), false);
 check('le serveur envoie la decomposition',
-  /_cout_produit_mystock[^]*?breakdown=\(/.test(api), true);
+  /_cout_et_erreur[^]*?breakdown=\(/.test(api), true);
 check('la part de transport a sa ligne dans le recap',
   extraire('transportRecapHtml').includes('dont transport'), true);
 check('et sa colonne dans le detail deplie', src.includes('msp-transp'), true);
@@ -429,6 +430,59 @@ check('plus de champ grammage cote matiere',
   src.includes('id="f-gsm"') || src.includes('id="d-gsm"'), false);
 check('la fiche declinaison n\'envoie plus de grammage',
   extraire('autoEnregistrerDecl').includes('grammage_gsm'), false);
+
+// ─── Remise à plat des produits (oct. 2026) ─────────────────────────────────
+// Dupliquer reprend des emplacements complets, pas des identifiants nus.
+const dupDebut = src.indexOf('document.querySelectorAll("[data-msp-dup]")');
+const dupMsp = src.slice(dupDebut, src.indexOf('navigate("/pricing/mystock/produit/new")', dupDebut));
+check('dupliquer reprend matière, grammage et perte',
+  dupMsp.includes('mspSlot(c.declinaison_id, c.grammage_gsm, c.perte_pct)'), true);
+
+// Une matière déjà choisie reste proposée, même hors de la liste filtrée.
+const ctxOpt = { S: { msDecls: [
+    { id: 1, categorie: 'frontal', reference: 'F70', designation: 'Thermique', unit_price: 0.3, price_basis: 'PER_M2' },
+    { id: 2, categorie: 'complexe', reference: 'CX', designation: 'Complexe', unit_price: 0.5, price_basis: 'PER_M2' }],
+  msProdLabels: { 9: '1408 · Adhésif retiré' } },
+  escHtml: (x) => String(x), escAttr: (x) => String(x),
+  fmtNum: (v) => String(v) };
+vm.createContext(ctxOpt);
+vm.runInContext([extraire('msDeclLabel'), extraire('msDeclOptions')].join('\n'), ctxOpt);
+check('matière d\'une autre catégorie : gardée et sélectionnée',
+  /value="2" selected/.test(ctxOpt.msDeclOptions('frontal', 2)), true);
+check('matière inactive : gardée avec son libellé',
+  ctxOpt.msDeclOptions('frontal', 9).includes('1408 · Adhésif retiré (inactive)'), true);
+check('sans sélection, rien d\'ajouté',
+  (ctxOpt.msDeclOptions('frontal', '').match(/<option/g) || []).length, 2);
+
+// Rôles : plus de « extra_1 » à l'écran.
+const ctxRole = {};
+vm.createContext(ctxRole);
+vm.runInContext(constanteObjet('MSP_ROLE_LABEL') + '\n' + extraire('mspRoleLabel'), ctxRole);
+check('extra_2 s\'affiche « Autre 2 »', ctxRole.mspRoleLabel('extra_2'), 'Autre 2');
+check('adhesif s\'affiche « Adhésif »', ctxRole.mspRoleLabel('adhesif'), 'Adhésif');
+
+// Les erreurs de calcul se voient.
+check('l\'aperçu affiche son erreur',
+  extraire('peindreApercuMsProduct').includes('S.msProdErreur'), true);
+check('l\'aperçu reprend la raison du serveur',
+  extraire('demanderApercuMsProduct').includes('r.cout_erreur'), true);
+check('le serveur nomme la raison d\'un coût manquant',
+  api.includes('produit["cost"], produit["cout_erreur"]'), true);
+
+// Fiche produit : titre dans le bandeau, sortie protégée, marge de catégorie.
+const fiche = extraire('msProductFormHtml');
+check('titre de la fiche dans le bandeau', fiche.includes('savebarTitreHtml('), true);
+check('plus d\'en-tête de page sur la fiche produit', fiche.includes('pageHead('), false);
+check('plus de « marge par défaut des paramètres »',
+  fiche.includes('marge par défaut des paramètres'), false);
+check('« Retour liste » demande confirmation si modifié',
+  extraire('renderMsProductForm').includes('S.msProdModifie && !(await confirmerAction('), true);
+check('une fiche neuve part vierge', extraire('loadMsProductForm').includes('defaultMsProductForm()'), true);
+
+// Paramètres : les marges de catégorie s'y règlent, plus de bouton de rafraîchissement.
+const reglages = extraire('openSettingsModal');
+check('marges par catégorie dans les paramètres', reglages.includes('marges_categorie: marges'), true);
+check('plus de « Rafraîchir le taux » dans les paramètres', reglages.includes('s-fx'), false);
 
 console.log(ko === 0 ? '\nTOUT EST VERT' : '\n' + ko + ' ECHEC(S)');
 process.exit(ko === 0 ? 0 : 1);
