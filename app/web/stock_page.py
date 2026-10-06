@@ -2389,7 +2389,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
 <script src="/static/mysifa_stock_modals.js?v=empl-terrain1"></script>
-<script src="/static/mysifa_destockage.js?v=3"></script>
+<script src="/static/mysifa_destockage.js?v=4"></script>
 <script src="/static/mysifa_dock.js?v=2"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>

@@ -206,6 +206,10 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 .comp-scroll::-webkit-scrollbar-thumb{background:var(--muted);border-radius:6px;border:2px solid var(--bg)}
 .comp-scroll::-webkit-scrollbar-thumb:hover{background:var(--accent)}
 .comp-scroll{scrollbar-width:thin;scrollbar-color:var(--muted) var(--bg)}
+.comp-scroll{cursor:grab}
+.comp-scroll.is-dragging{cursor:grabbing;user-select:none}
+.comp-scroll input,.comp-scroll select,.comp-scroll button{cursor:auto}
+.comp-scroll button,.comp-scroll .btn-fiche-alerte{cursor:pointer}
 .comp-condi-label{font-size:11px;font-weight:600;color:var(--text2);white-space:nowrap}
 /* Colonnes Frontal / Adhésif / Fournisseur : compactes mais lisibles, texte sur
    2-3 lignes (pas 5-6). On coupe seulement les mots vraiment trop longs. */
@@ -4043,6 +4047,46 @@ function renderComparaison() {
     : '<p style="font-size:11px;color:var(--muted);margin-top:10px">Prix de vente = prix d\'achat conditionné × coef × marge. Unité de vente (Condi.) définie dans la fiche produit.</p>';
   return '<div class="card"><div class="comp-scroll"><table class="comp-table"><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>'+fxNote+'</div>';
 }
+
+/* Glisser pour faire defiler le comparatif.
+
+   Vingt colonnes ne tiennent pas a l'ecran : on attrape le tableau a la
+   souris et on le tire de cote, sans aller chercher la barre de defilement
+   en bas. Ecouteurs poses une fois sur le document — le tableau est
+   reconstruit a chaque render(). Un clic sur un champ, une liste ou un
+   bouton garde son comportement ; un glisser ne declenche pas de clic. */
+(function () {
+  let drag = null;
+  document.addEventListener('mousedown', e => {
+    if (e.button !== 0 || !e.target.closest) return;
+    const box = e.target.closest('.comp-scroll');
+    if (!box || box.scrollWidth <= box.clientWidth) return;
+    if (e.target.closest('input,select,textarea,button,a,label,.btn-fiche-alerte')) return;
+    drag = {box: box, x: e.clientX, left: box.scrollLeft, moved: false};
+  });
+  document.addEventListener('mousemove', e => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x;
+    if (!drag.moved) {
+      if (Math.abs(dx) < 4) return;
+      drag.moved = true;
+      drag.box.classList.add('is-dragging');
+    }
+    drag.box.scrollLeft = drag.left - dx;
+    e.preventDefault();
+  });
+  document.addEventListener('mouseup', () => {
+    if (!drag) return;
+    const moved = drag.moved;
+    drag.box.classList.remove('is-dragging');
+    drag = null;
+    if (moved) {
+      const stop = ev => { ev.stopPropagation(); ev.preventDefault(); };
+      document.addEventListener('click', stop, {capture: true, once: true});
+      setTimeout(() => document.removeEventListener('click', stop, {capture: true}), 0);
+    }
+  });
+})();
 
 function renderMessagerieContent(container) {
   const fournis = S.detail.fournisseurs || [];
