@@ -429,6 +429,22 @@ def taches_meta(request: Request):
     mon_service = _service(user)
     with get_db() as conn:
         users = [dict(u) for u in _users_assignables(conn, user)]
+        # Demandeurs = auteurs des tâches visibles, pas la liste des assignables :
+        # une demande de tableau de bord peut venir d'un compte qui n'a pas accès
+        # au gestionnaire (creer_tache_pour).
+        scope, scope_params = _scope_sql(user)
+        demandeurs = [
+            {"id": r["createur_user_id"], "nom": r["nom"] or ""}
+            for r in conn.execute(
+                f"""SELECT t.createur_user_id, MAX(t.createur_nom) AS nom
+                      FROM taches t
+                     WHERE t.deleted_at IS NULL AND t.createur_user_id IS NOT NULL
+                       AND {scope}
+                     GROUP BY t.createur_user_id
+                     ORDER BY nom COLLATE NOCASE""",
+                scope_params,
+            ).fetchall()
+        ]
     for u in users:
         u["service_label"] = role_label(u.get("role") or "")
     # Un non-admin ne rattache une tâche qu'à son propre service : lui proposer
@@ -443,6 +459,7 @@ def taches_meta(request: Request):
         "modules": taches_modules(),
         "services": services,
         "users": users,
+        "demandeurs": demandeurs,
         "niveau": niveau,
         "moi": {
             "id": user.get("id"),
@@ -461,6 +478,7 @@ def list_taches(
     request: Request,
     statut: Optional[str] = None,
     assigne: Optional[int] = None,
+    createur: Optional[int] = None,
     priorite: Optional[str] = None,
     type: Optional[str] = None,
     module: Optional[str] = None,
@@ -483,6 +501,9 @@ def list_taches(
     if assigne:
         where.append("EXISTS (SELECT 1 FROM taches_assignes a WHERE a.tache_id=t.id AND a.user_id=?)")
         params.append(int(assigne))
+    if createur:
+        where.append("t.createur_user_id=?")
+        params.append(int(createur))
     if non_assignees:
         where.append("NOT EXISTS (SELECT 1 FROM taches_assignes a WHERE a.tache_id=t.id)")
     if priorite and priorite in TACHES_PRIORITES_CODES:

@@ -180,6 +180,7 @@ kbd{display:inline-block;min-width:17px;padding:1px 5px;border-radius:5px;backgr
 .tcard-retard i{display:block;width:6px;height:6px;border-radius:50%;background:var(--danger);
   box-shadow:0 0 0 3px rgba(248,113,113,.16)}
 .tcard-title{font-size:12px;font-weight:600;color:var(--text);line-height:1.35;word-break:break-word}
+.tcard-par{font-size:10px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .avatar{width:22px;height:22px;border-radius:50%;background:var(--accent-bg);color:var(--accent);font-size:9px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;letter-spacing:-.2px}
 .avatar img{width:100%;height:100%;object-fit:cover}
 .avatar.none{background:var(--bg);color:var(--muted);border:1px dashed var(--border)}
@@ -474,6 +475,7 @@ tbody tr.row-sous:hover td{background:var(--accent-bg)}
         <span class="cnt" id="cnt-moi" style="display:none">0</span>
       </button>
       <select class="filter" id="f-assigne"><option value="">Tout le monde</option></select>
+      <select class="filter" id="f-createur"><option value="">Tous demandeurs</option></select>
       <select class="filter" id="f-priorite"><option value="">Toutes priorités</option></select>
       <select class="filter" id="f-type"><option value="">Tous types</option></select>
       <select class="filter" id="f-module"><option value="">Tous modules</option></select>
@@ -534,7 +536,7 @@ const S = {
   detailTab: 'detail',
   // `moi` : bascule « Mes tâches ». C'est un filtre, pas une vue — il s'applique
   // au Kanban comme à la Liste et survit au changement d'onglet.
-  filtres: {q:'', assigne:'', priorite:'', type:'', module:'', service:'', rapide:'', moi:false},
+  filtres: {q:'', assigne:'', createur:'', priorite:'', type:'', module:'', service:'', rapide:'', moi:false},
   sousTaches: true,     // vue Liste : afficher ou non les lignes de sous-tâches
   ouverts: new Set(),   // Kanban : cartes dont la pile de sous-tâches est dépliée
   actif: null,          // carte visée par les touches 1–5 (survol ou J/K)
@@ -798,6 +800,8 @@ function remplirFiltres(){
   const fa=document.getElementById('f-assigne');
   fa.innerHTML='<option value="">Tout le monde</option><option value="0">Non assignées</option>'+
     (S.meta.users||[]).map(u=>'<option value="'+u.id+'">'+esc(u.nom||'')+'</option>').join('');
+  document.getElementById('f-createur').innerHTML='<option value="">Tous demandeurs</option>'+
+    (S.meta.demandeurs||[]).map(u=>'<option value="'+u.id+'">'+esc(u.nom||'')+'</option>').join('');
   document.getElementById('f-priorite').innerHTML='<option value="">Toutes priorités</option>'+
     (S.meta.priorites||[]).map(p=>'<option value="'+esc(p.code)+'">'+esc(p.label)+'</option>').join('');
   document.getElementById('f-type').innerHTML='<option value="">Tous types</option>'+
@@ -828,6 +832,7 @@ function queryFiltres(){
   }
   else if(f.assigne==='0')p.set('non_assignees','1');
   else if(f.assigne)p.set('assigne',f.assigne);
+  if(f.createur)p.set('createur',f.createur);
   if(f.priorite)p.set('priorite',f.priorite);
   if(f.type)p.set('type',f.type);
   if(f.module)p.set('module',f.module);
@@ -982,6 +987,7 @@ function carteHtml(t,enfants){
 
   // Tout ce qu'on retire de la carte reste accessible au survol.
   const infos=[];
+  if(t.createur_nom)infos.push('Demandée par '+t.createur_nom);
   if(t.priorite)infos.push('Priorité : '+prio.label);
   if(t.type)infos.push(typeLabel(t.type));
   if(t.module)infos.push(moduleLabel(t.module));
@@ -1024,6 +1030,7 @@ function carteHtml(t,enfants){
       tete+
       '<div class="tcard-title">'+esc(t.titre)+'</div>'+
       (t.parent_titre?'<div style="font-size:10px;color:var(--muted);margin-top:3px">↳ '+esc(t.parent_titre)+'</div>':'')+
+      (t.createur_nom?'<div class="tcard-par">par '+esc(t.createur_nom)+'</div>':'')+
       prog+
     '</div>'+
     (kids.length&&ouvert?'<div class="sous-pile">'+kids.map(sousCarteHtml).join('')+'</div>':'')+
@@ -1176,6 +1183,7 @@ const COLONNES_LISTE=[
   {champ:'statut',label:'Statut'},
   {champ:'priorite',label:'Priorité'},
   {champ:'assignes',label:'Assigné'},
+  {champ:'createur_nom',label:'Demandeur'},
   {champ:'module',label:'Module'},
   {champ:'echeance',label:'Échéance'},
   {champ:'temps_passe_h',label:'Temps'},
@@ -1275,6 +1283,7 @@ function renderListe(){
         ?('<span style="display:inline-flex;align-items:center;gap:8px" title="'+esc((t.assignes||[]).map(u=>u.nom).join(', '))+'">'+
             pileHtml(t.assignes,2)+esc(nomsAssignes(t.assignes))+'</span>')
         :'<span style="color:var(--muted)">—</span>')+'</td>'+
+      '<td>'+(t.createur_nom?esc(t.createur_nom):'<span style="color:var(--muted)">—</span>')+'</td>'+
       '<td>'+esc(t.module?moduleLabel(t.module):'—')+'</td>'+
       '<td class="due'+dueCls+'">'+(t.echeance?esc(fmtDate(t.echeance)):'—')+'</td>'+
       '<td>'+(t.temps_passe_h?esc(fmtH(t.temps_passe_h)):(t.estimation_h?'0 h':'—'))+(t.estimation_h?'<span style="color:var(--muted)"> / '+esc(fmtH(t.estimation_h))+'</span>':'')+'</td>'+
@@ -1842,7 +1851,7 @@ function brancherFiltres(){
   q.addEventListener('keydown',e=>{
     if(e.key==='Escape'){q.value='';S.filtres.q='';chargerTaches();}
   });
-  [['f-assigne','assigne'],['f-priorite','priorite'],['f-type','type'],
+  [['f-assigne','assigne'],['f-createur','createur'],['f-priorite','priorite'],['f-type','type'],
    ['f-module','module'],['f-service','service']].forEach(([id,champ])=>{
     const el=document.getElementById(id);
     if(!el)return;
@@ -1900,8 +1909,8 @@ function brancherSousTaches(){
 }
 
 function resetFiltres(){
-  S.filtres={q:'',assigne:'',priorite:'',type:'',module:'',service:'',rapide:'',moi:false};
-  ['f-q','f-assigne','f-priorite','f-type','f-module','f-service'].forEach(id=>{
+  S.filtres={q:'',assigne:'',createur:'',priorite:'',type:'',module:'',service:'',rapide:'',moi:false};
+  ['f-q','f-assigne','f-createur','f-priorite','f-type','f-module','f-service'].forEach(id=>{
     const el=document.getElementById(id);if(el){el.value='';el.classList.remove('on');}
   });
   try{localStorage.setItem('mysifa_taches_moi','0');}catch(e){}
