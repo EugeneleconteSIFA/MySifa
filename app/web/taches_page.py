@@ -625,9 +625,9 @@ function champAssignes(hostId, selection, onChange, connus){
   if(!host)return;
   let ids=(selection||[]).slice();
   let ouvert=false;
-  // `connus` = les assignés réels de la tâche. La liste proposée couvre tous
-  // les services, mais une tâche plus ancienne peut porter quelqu'un qui n'y
-  // figure plus : on l'affiche quand même pour pouvoir le retirer.
+  // `connus` = les assignés réels de la tâche. La liste proposée se limite aux
+  // superadmins, mais une tâche plus ancienne peut porter quelqu'un qui n'y
+  // figure pas : on l'affiche quand même pour pouvoir le retirer.
   const horsListe=(connus||[]).filter(u=>!((S.meta&&S.meta.users)||[]).some(x=>x.id===u.id));
 
   function tousUsers(){

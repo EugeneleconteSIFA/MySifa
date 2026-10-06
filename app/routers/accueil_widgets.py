@@ -9,6 +9,8 @@ Endpoints utilisateur :
   PUT    /api/accueil/widgets-ordre         réordonner (liste complète des ids)
   GET    /api/accueil/prefs                 colonne repliée ou non
   PUT    /api/accueil/prefs
+  POST   /api/accueil/demandes              demande de tableau de bord → tâche
+                                            « évolution » assignée aux superadmins
 
 Endpoints superadmin (écran « Blocs capturables » de Paramètres) :
   GET    /api/accueil/blocs/admin           tous les blocs, usage, interrupteur
@@ -132,6 +134,11 @@ class Prefs(BaseModel):
     colonne_repliee: bool
 
 
+class Demande(BaseModel):
+    texte: str
+    page: Optional[str] = None
+
+
 class Reglage(BaseModel):
     capturable: bool
 
@@ -194,6 +201,70 @@ def creer_widget(body: WidgetCreate, request: Request):
         conn.commit()
         row = _get_widget_or_404(conn, cur.lastrowid, user["id"])
         return _widget_public(row, user, _desactives(conn))
+
+
+# Une demande crée une tâche par envoi : de quoi dire ce qu'on veut sans
+# pouvoir noyer le gestionnaire de tâches.
+DEMANDES_PAR_JOUR = 5
+_TITRE_DEMANDE = "Demande de tableau de bord"
+
+
+@router.post("/api/accueil/demandes")
+def demander_tableau(body: Demande, request: Request):
+    """Demande libre d'un indicateur qui n'existe pas encore.
+
+    Ouvert à tous : la tâche est créée au nom du demandeur, même s'il n'a pas
+    accès au gestionnaire de tâches, et assignée à tous les superadmins actifs
+    (ils la voient dans leur badge « tâches assignées »).
+    """
+    from config import ROLE_SUPERADMIN, role_label
+    from app.routers.taches import creer_tache_pour
+
+    user = get_current_user(request)
+    texte = (body.texte or "").strip()
+    if len(texte) < 10:
+        raise HTTPException(400, "Décrivez votre besoin en quelques mots (10 caractères minimum).")
+    if len(texte) > 2000:
+        raise HTTPException(400, "Demande trop longue — 2 000 caractères maximum.")
+    page = (body.page or "").strip()[:300]
+    if page and not page.startswith("/"):
+        page = ""
+    resume = " ".join(texte.split())
+    titre = f"{_TITRE_DEMANDE} — {resume[:80]}{'…' if len(resume) > 80 else ''}"
+
+    with get_db() as conn:
+        deja = conn.execute(
+            "SELECT COUNT(*) FROM taches WHERE createur_user_id=? AND titre LIKE ?"
+            " AND substr(created_at,1,10)=?",
+            (user["id"], _TITRE_DEMANDE + "%", _now()[:10]),
+        ).fetchone()[0]
+        if deja >= DEMANDES_PAR_JOUR:
+            raise HTTPException(429, f"{DEMANDES_PAR_JOUR} demandes par jour au maximum — réessayez demain.")
+        superadmins = [r["id"] for r in conn.execute(
+            "SELECT id FROM users WHERE role=? AND actif=1 ORDER BY id", (ROLE_SUPERADMIN,)
+        ).fetchall()]
+        if not superadmins:
+            raise HTTPException(503, "Aucun administrateur pour recevoir la demande.")
+        indicateurs = [r["nom"] for r in conn.execute(
+            "SELECT nom FROM accueil_widgets WHERE user_id=? ORDER BY ordre, id", (user["id"],)
+        ).fetchall()]
+        lignes = [
+            texte, "",
+            f"Demandeur : {user.get('nom') or user.get('email') or ''} ({role_label(user.get('role'))})",
+        ]
+        if page:
+            lignes.append(f"Page d'origine : {page}")
+        lignes.append("Indicateurs actuels : " + (", ".join(indicateurs) if indicateurs else "aucun"))
+        try:
+            creer_tache_pour(
+                conn, user, titre=titre, description="\n".join(lignes),
+                ttype="evolution", module="portail", service=ROLE_SUPERADMIN,
+                assignes=superadmins,
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        conn.commit()
+    return {"success": True}
 
 
 @router.patch("/api/accueil/widgets/{widget_id}")

@@ -115,6 +115,18 @@ Les anciens tableaux de bord flottants (router `dashboards.py`, onglet profil
 et `user_dashboards` restent en base jusqu'à la migration de suppression du
 lot suivant.
 
+Un indicateur existant se modifie depuis l'accueil (Personnaliser › curseurs) :
+c'est le même questionnaire qu'à la capture, exposé par
+`window.MySifaBlocs.questionnaire(o)` — ne pas en écrire un second.
+
+**Demande de tableau de bord** : quand le bloc voulu n'existe pas, le lien en
+bas de la colonne (et le toast « aucun bloc capturable ») ouvre
+`MySifaBlocs.demander()`. `POST /api/accueil/demandes` crée une tâche
+« évolution » (module portail) au nom du demandeur, assignée à tous les
+superadmins actifs, via `creer_tache_pour()` de `app/routers/taches.py` — seul
+point d'écriture d'une tâche hors du gestionnaire. 5 demandes par jour et par
+personne.
+
 Guide in-app : `accueil-widgets`, défini dans `mysifa_accueil.js`
 (moteur partagé `mysifa_guides.js`), bouton « ? » dans l'en-tête de la
 colonne.

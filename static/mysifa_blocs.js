@@ -285,6 +285,7 @@
     var registre = null;          // { nom: bloc } capturables pour cet utilisateur
     var registreOk = false;       // faux hors connexion (écran de login, site public)
     var valeursMax = 4;
+    var survole = null;
     var chargement = null;
     var actif = false;
     var bouton = null, bandeau = null, bulle = null, panneau = null, styleOk = false;
@@ -326,16 +327,28 @@
         ".mysifa-cap-btn:hover{transform:scale(1.08)}",
         ".mysifa-cap-btn svg{display:block;color:var(--bg,#0a0e17)}",
         ".mysifa-cap-btn.on{box-shadow:0 0 0 3px var(--accent-bg,rgba(34,211,238,.35)),0 6px 24px rgba(34,211,238,.5)}",
-        "html.mysifa-capture .mysifa-capturable{outline:2px dashed var(--accent,#22d3ee)!important;outline-offset:3px;cursor:copy!important}",
-        "html.mysifa-capture .mysifa-capturable.survol{outline-style:solid!important;background-color:var(--accent-bg,rgba(34,211,238,.12))!important}",
+        // Tout ce qui n'est pas capturable s'efface : seuls les blocs restent lisibles.
+        "html.mysifa-capture .mysifa-cap-attenue{opacity:.15!important;filter:grayscale(1) blur(1px)!important;transition:opacity .2s,filter .2s}",
+        "html.perf-eco.mysifa-capture .mysifa-cap-attenue{filter:none!important;transition:none!important}",
+        "html.mysifa-capture .mysifa-capturable{outline:2px solid var(--accent,#22d3ee)!important;outline-offset:4px;cursor:copy!important;",
+        "  box-shadow:0 0 0 8px var(--accent-bg,rgba(34,211,238,.10)),0 0 28px rgba(34,211,238,.30)!important;border-radius:8px}",
+        "html.mysifa-capture .mysifa-capturable.survol{outline-width:3px!important;background-color:var(--accent-bg,rgba(34,211,238,.12))!important;",
+        "  box-shadow:0 0 0 8px var(--accent-bg,rgba(34,211,238,.18)),0 0 36px rgba(34,211,238,.55)!important}",
         ".mysifa-cap-bandeau{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147482001;display:flex;gap:12px;align-items:center;",
         "  background:var(--card,#111827);color:var(--text,#f1f5f9);border:1px solid var(--accent,#22d3ee);border-radius:12px;padding:8px 10px 8px 14px;",
         "  font:13px 'Segoe UI',system-ui,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.2);max-width:calc(100vw - 32px)}",
         ".mysifa-cap-bandeau button,.mysifa-cap-pan button{font:600 12px 'Segoe UI',system-ui,sans-serif;border-radius:10px;padding:7px 12px;cursor:pointer;",
         "  background:var(--bg,#0a0e17);color:var(--text,#f1f5f9);border:1px solid var(--border,#1e293b)}",
         "@media (max-width:600px){.mysifa-cap-bandeau{left:12px;right:12px;transform:none;max-width:none}}",
-        ".mysifa-cap-bulle{position:fixed;z-index:2147482002;pointer-events:none;background:var(--accent,#22d3ee);color:#fff;",
-        "  font:600 12px 'Segoe UI',system-ui,sans-serif;padding:4px 8px;border-radius:8px;display:none;white-space:nowrap}",
+        // Bulle de survol = aperçu de l'indicateur : nom et valeurs qu'il pourrait afficher.
+        ".mysifa-cap-bulle{position:fixed;z-index:2147482002;pointer-events:none;background:var(--card,#111827);color:var(--text,#f1f5f9);",
+        "  border:1px solid var(--accent,#22d3ee);box-shadow:0 8px 24px rgba(0,0,0,.35);font:12px 'Segoe UI',system-ui,sans-serif;",
+        "  padding:8px 10px;border-radius:10px;display:none;width:260px;box-sizing:border-box}",
+        ".mysifa-cap-bulle .cb-t{font-weight:700;margin-bottom:6px;color:var(--accent,#22d3ee)}",
+        ".mysifa-cap-bulle .cb-v{display:flex;justify-content:space-between;gap:10px;padding:2px 0;border-top:1px solid var(--border,#1e293b)}",
+        ".mysifa-cap-bulle .cb-v span:first-child{color:var(--muted,#94a3b8);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+        ".mysifa-cap-bulle .cb-v b{font-variant-numeric:tabular-nums;white-space:nowrap}",
+        ".mysifa-cap-bulle .cb-a{margin-top:6px;color:var(--muted,#94a3b8);font-size:11px}",
         ".mysifa-cap-pan{position:fixed;top:0;right:0;bottom:0;width:380px;max-width:100vw;z-index:2147482003;overflow:auto;",
         "  background:var(--card,#111827);color:var(--text,#f1f5f9);border-left:1px solid var(--border,#1e293b);",
         "  box-shadow:-10px 0 30px rgba(0,0,0,.25);padding:20px;font:13px 'Segoe UI',system-ui,sans-serif;box-sizing:border-box}",
@@ -353,6 +366,7 @@
         ".mysifa-cap-pan select,.mysifa-cap-pan input[type=text]{font:13px 'Segoe UI',system-ui,sans-serif;background:var(--card,#111827);",
         "  color:var(--text,#f1f5f9);border:1px solid var(--border,#1e293b);border-radius:8px;padding:6px 8px;min-width:0}",
         ".mysifa-cap-pan input.cap-nom{width:100%;box-sizing:border-box}",
+        ".mysifa-cap-pan textarea.cap-texte{width:100%;box-sizing:border-box;resize:vertical;font:13px 'Segoe UI',system-ui,sans-serif;background:var(--card,#111827);color:var(--text,#f1f5f9);border:1px solid var(--border,#1e293b);border-radius:8px;padding:8px}",
         ".mysifa-cap-pan .cap-choix{display:flex;gap:6px;flex-wrap:wrap}",
         ".mysifa-cap-pan .cap-choix button.on{background:var(--accent-bg,rgba(34,211,238,.12));border-color:var(--accent,#22d3ee);color:var(--accent,#22d3ee)}",
         ".mysifa-cap-pan .cap-err{color:var(--danger,#f87171);min-height:18px;margin-top:12px}",
@@ -360,17 +374,25 @@
         ".mysifa-cap-pan button.cap-ok{background:var(--accent,#22d3ee);border-color:var(--accent,#22d3ee);color:#fff}",
         ".mysifa-cap-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:2147482004;background:var(--card,#111827);",
         "  color:var(--text,#f1f5f9);border:1px solid var(--border,#1e293b);border-radius:10px;padding:10px 16px;",
-        "  font:13px 'Segoe UI',system-ui,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.2)}"
+        "  font:13px 'Segoe UI',system-ui,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.2);display:flex;align-items:center;gap:12px}",
+        ".mysifa-cap-toast button{font:600 12px 'Segoe UI',system-ui,sans-serif;border-radius:8px;padding:5px 10px;cursor:pointer;background:var(--accent,#22d3ee);color:#fff;border:none}"
       ].join("\n");
       document.head.appendChild(st);
     }
 
-    function toast(texte) {
+    function toast(texte, action, faire) {
       var t = document.createElement("div");
       t.className = "mysifa-cap-toast";
       t.textContent = texte;
+      if (action) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.textContent = action;
+        b.addEventListener("click", function () { t.remove(); faire(); });
+        t.appendChild(b);
+      }
       document.body.appendChild(t);
-      setTimeout(function () { t.remove(); }, 2600);
+      setTimeout(function () { t.remove(); }, action ? 6000 : 2600);
     }
 
     /* Le bouton vit dans le dock commun des boutons flottants (mysifa_dock.js :
@@ -428,7 +450,12 @@
       setTimeout(ranger, 2500);
     }
 
-    function scanner() {
+    function scanner(muts) {
+      // La bulle, le bandeau et le panneau changent sans cesse : ne pas
+      // recalculer la page (et perdre le survol) pour eux.
+      if (muts && muts.every(function (m) {
+        return m.target.closest && m.target.closest(NOTRE_UI);
+      })) return;
       clearTimeout(minuteurScan);
       minuteurScan = setTimeout(function () {
         if (actif) marquer();
@@ -438,7 +465,73 @@
     function marquer() {
       var anciens = document.querySelectorAll(".mysifa-capturable");
       for (var i = 0; i < anciens.length; i++) anciens[i].classList.remove("mysifa-capturable", "survol");
-      blocsDeLaPage().forEach(function (el) { el.classList.add("mysifa-capturable"); });
+      var blocs = blocsDeLaPage();
+      blocs.forEach(function (el) { el.classList.add("mysifa-capturable"); });
+      attenuer(blocs);
+      if (survole && survole.isConnected) survole.classList.add("survol");
+    }
+
+    /* Efface tout ce qui n'est ni un bloc capturable ni un de ses ancêtres :
+       on remonte de chaque bloc jusqu'à <body>, et chaque frère hors de ce
+       chemin est atténué. Les blocs gardent leur contenu intact. */
+    var NOTRE_UI = ".mysifa-cap-pan,.mysifa-cap-bandeau,.mysifa-cap-btn,.mysifa-cap-bulle,.mysifa-cap-toast";
+    function desattenuer() {
+      var a = document.querySelectorAll(".mysifa-cap-attenue");
+      for (var i = 0; i < a.length; i++) a[i].classList.remove("mysifa-cap-attenue");
+    }
+    function attenuer(blocs) {
+      desattenuer();
+      var chemin = new Set();
+      blocs.forEach(function (el) {
+        for (var n = el; n && n !== document.body; n = n.parentElement) chemin.add(n);
+      });
+      var parents = [document.body];
+      chemin.forEach(function (n) { if (!n.classList.contains("mysifa-capturable")) parents.push(n); });
+      parents.forEach(function (p) {
+        for (var i = 0; i < p.children.length; i++) {
+          var c = p.children[i];
+          if (chemin.has(c) || /^(SCRIPT|STYLE|LINK|META|TEMPLATE)$/.test(c.tagName)) continue;
+          if (c.matches(NOTRE_UI)) continue;
+          c.classList.add("mysifa-cap-attenue");
+        }
+      });
+    }
+
+    function dessinerBulle(bloc) {
+      var b = registre[bloc.getAttribute("data-bloc")] || {};
+      var lib = bloc.getAttribute("data-bloc-objet-libelle");
+      var vals = lireValeurs(bloc);
+      bulle.innerHTML = "";
+      var t = document.createElement("div");
+      t.className = "cb-t";
+      t.textContent = (b.libelle || "Bloc") + (lib ? " · " + lib : "");
+      bulle.appendChild(t);
+      (b.valeurs || []).slice(0, 8).forEach(function (v) {
+        var l = document.createElement("div");
+        l.className = "cb-v";
+        var k = document.createElement("span");
+        k.textContent = v.libelle;
+        var x = document.createElement("b");
+        x.textContent = vals[v.cle] != null && vals[v.cle] !== "" ? vals[v.cle] : "—";
+        l.appendChild(k);
+        l.appendChild(x);
+        bulle.appendChild(l);
+      });
+      var a = document.createElement("div");
+      a.className = "cb-a";
+      a.textContent = "Cliquez pour choisir les valeurs à afficher (" + valeursMax + " au maximum).";
+      bulle.appendChild(a);
+    }
+
+    function placerBulle(bloc) {
+      var r = bloc.getBoundingClientRect();
+      bulle.style.display = "block";
+      var h = bulle.offsetHeight, w = bulle.offsetWidth;
+      var haut = r.top - h - 10;
+      if (haut < 8) haut = Math.min(window.innerHeight - h - 8, r.bottom + 10);
+      if (haut < 8) haut = 8;
+      bulle.style.top = haut + "px";
+      bulle.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + "px";
     }
 
     function blocSous(cible) {
@@ -452,7 +545,10 @@
 
     function entrer() {
       chargerRegistre().then(function () {
-        if (!blocsDeLaPage().length) { toast("Aucun bloc capturable sur cette page pour l'instant."); return; }
+        if (!blocsDeLaPage().length) {
+          toast("Aucun bloc capturable sur cette page pour l'instant.", "Faire une demande", demander);
+          return;
+        }
         poserStyle();
         actif = true;
         document.documentElement.classList.add("mysifa-capture");
@@ -480,6 +576,7 @@
       document.documentElement.classList.remove("mysifa-capture");
       var anciens = document.querySelectorAll(".mysifa-capturable");
       for (var i = 0; i < anciens.length; i++) anciens[i].classList.remove("mysifa-capturable", "survol");
+      desattenuer();
       if (bouton) bouton.classList.remove("on");
       if (bandeau) { bandeau.remove(); bandeau = null; }
       if (bulle) { bulle.remove(); bulle = null; }
@@ -507,19 +604,15 @@
       var anciens = document.querySelectorAll(".mysifa-capturable.survol");
       for (var i = 0; i < anciens.length; i++) anciens[i].classList.remove("survol");
       var bloc = blocSous(e.target);
-      if (!bloc) { bulle.style.display = "none"; return; }
+      if (!bloc) { survole = null; bulle.style.display = "none"; return; }
       bloc.classList.add("survol");
-      var b = registre[bloc.getAttribute("data-bloc")] || {};
-      var lib = bloc.getAttribute("data-bloc-objet-libelle");
-      bulle.textContent = (b.libelle || "Bloc") + (lib ? " · " + lib : "");
-      var r = bloc.getBoundingClientRect();
-      bulle.style.display = "block";
-      bulle.style.left = Math.max(8, r.left) + "px";
-      bulle.style.top = Math.max(8, r.top - 30) + "px";
+      survole = bloc;
+      dessinerBulle(bloc);
+      placerBulle(bloc);
     }, true);
 
     document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && actif) {
+      if (e.key === "Escape" && (actif || panneau)) {
         if (panneau) fermerPanneau(); else quitter();
         return;
       }
@@ -557,33 +650,31 @@
       return u.pathname + u.search + u.hash;
     }
 
-    /* Le questionnaire : une seule page courte, réponses présélectionnées.
-       Sans valeur clé, il se réduit au nom. */
-    function ouvrirPanneau(el) {
-      var nom = el.getAttribute("data-bloc");
-      var bloc = registre[nom];
-      if (!bloc) return;
-      var objet = el.getAttribute("data-bloc-objet") || null;
-      var objetLib = el.getAttribute("data-bloc-objet-libelle") || null;
-      var actuelles = lireValeurs(el);
+    /* Le questionnaire : valeurs à afficher (4 au maximum, dans l'ordre),
+       une alerte facultative par valeur, le nom. Il sert à la création
+       (capture d'un bloc) comme à la modification d'un indicateur existant
+       (bouton « Valeurs » de l'accueil, via MySifaBlocs.questionnaire). */
+    function questionnaire(o) {
+      var bloc = o.bloc;
+      var actuelles = o.actuelles || {};
       var etat = {
-        coches: bloc.valeurs.length ? [bloc.valeurs[0].cle] : [],
-        alertes: {},
-        affichage: "valeurs",
-        hauteur: "m"
+        coches: (o.coches && o.coches.length) ? o.coches.slice()
+          : (bloc.valeurs.length ? [bloc.valeurs[0].cle] : []),
+        alertes: JSON.parse(JSON.stringify(o.alertes || {}))
       };
-
+      poserStyle();
+      fermerPanneau();
       panneau = document.createElement("aside");
       panneau.className = "mysifa-cap-pan";
       panneau.setAttribute("role", "dialog");
-      panneau.setAttribute("aria-label", "Ajouter à mes tableaux de bord");
+      panneau.setAttribute("aria-label", o.titre);
       document.body.appendChild(panneau);
 
       function dessiner() {
-        var h = '<h2>Ajouter à mes tableaux de bord</h2>' +
-          '<p class="cap-sous">Capturé : ' + esc(bloc.libelle) + (objetLib ? " · " + esc(objetLib) : "") + "</p>";
+        var h = "<h2>" + esc(o.titre) + "</h2>" +
+          '<p class="cap-sous">' + esc(o.sousTitre) + "</p>";
         if (bloc.valeurs.length) {
-          h += '<div class="cap-lbl">Valeurs à afficher (' + valeursMax + ' au maximum)</div>';
+          h += '<div class="cap-lbl">Valeurs à afficher (' + valeursMax + " au maximum)</div>";
           bloc.valeurs.forEach(function (v) {
             var rang = etat.coches.indexOf(v.cle);
             var al = etat.alertes[v.cle] || { op: "", seuil: "" };
@@ -591,7 +682,7 @@
               '<input type="checkbox" data-cle="' + esc(v.cle) + '"' + (rang >= 0 ? " checked" : "") + ">" +
               (rang >= 0 ? '<span class="cap-num">' + (rang + 1) + "</span>" : "") +
               "<span>" + esc(v.libelle) + "</span>" +
-              '<span class="cap-cur">' + esc(actuelles[v.cle] != null ? actuelles[v.cle] : "—") + "</span></label>";
+              '<span class="cap-cur">' + esc(actuelles[v.cle] != null && actuelles[v.cle] !== "" ? actuelles[v.cle] : "—") + "</span></label>";
             if (rang >= 0) {
               h += '<div class="cap-alerte"><select data-alerte-op="' + esc(v.cle) + '">' +
                 '<option value=""' + (al.op === "" ? " selected" : "") + ">Pas d'alerte</option>" +
@@ -605,12 +696,11 @@
           });
         }
         var nomActuel = panneau.querySelector("input.cap-nom");
-        // Un objet suivi se nomme par lui-même (« Cohésio 2 »), sinon le bloc.
-        var nomVal = nomActuel ? nomActuel.value : (objetLib || bloc.libelle);
+        var nomVal = nomActuel ? nomActuel.value : (o.nom || "");
         h += '<div class="cap-lbl">Nom</div><input type="text" class="cap-nom" maxlength="80" value="' + esc(nomVal) + '">' +
           '<div class="cap-err" role="alert"></div>' +
           '<div class="cap-pied"><button type="button" data-act="annuler">Annuler</button>' +
-          '<button type="button" class="cap-ok" data-act="ok">Ajouter</button></div>';
+          '<button type="button" class="cap-ok" data-act="ok">' + esc(o.bouton) + "</button></div>";
         panneau.innerHTML = h;
       }
 
@@ -646,11 +736,11 @@
       panneau.addEventListener("click", function (e) {
         var b = e.target.closest("button");
         if (!b) return;
-        if (b.getAttribute("data-act") === "annuler") { fermerPanneau(); return; }
-        if (b.getAttribute("data-act") === "ok") envoyer(b);
+        if (b.getAttribute("data-act") === "annuler") { fermerPanneau(); if (o.annuler) o.annuler(); return; }
+        if (b.getAttribute("data-act") === "ok") valider(b);
       });
 
-      function envoyer(b) {
+      function valider(b) {
         var nomW = (panneau.querySelector("input.cap-nom").value || "").trim();
         if (!nomW) { erreur("Nom de l'indicateur obligatoire."); return; }
         if (!etat.coches.length) { erreur("Cochez au moins une valeur."); return; }
@@ -666,18 +756,11 @@
           }
         }
         b.disabled = true;
-        api("/api/accueil/widgets", {
-          method: "POST",
-          body: {
-            bloc: nom, objet: objet, url_capture: urlCapture(), nom: nomW,
-            valeurs: valeurs, affichage: etat.affichage, hauteur: etat.hauteur
-          }
-        }).then(function () {
-          quitter();
-          toast("Indicateur ajouté à vos tableaux de bord.");
+        Promise.resolve(o.envoyer({ nom: nomW, valeurs: valeurs })).then(function () {
+          fermerPanneau();
         }).catch(function (err) {
           b.disabled = false;
-          erreur(err.message);
+          erreur(err && err.message ? err.message : "Enregistrement impossible.");
         });
       }
 
@@ -685,6 +768,75 @@
       var champ = panneau.querySelector("input.cap-nom");
       if (champ) champ.focus();
     }
+
+    function ouvrirPanneau(el) {
+      var nom = el.getAttribute("data-bloc");
+      var bloc = registre[nom];
+      if (!bloc) return;
+      var objet = el.getAttribute("data-bloc-objet") || null;
+      var objetLib = el.getAttribute("data-bloc-objet-libelle") || null;
+      var url = urlCapture();
+      questionnaire({
+        bloc: bloc,
+        actuelles: lireValeurs(el),
+        titre: "Ajouter à mes tableaux de bord",
+        sousTitre: "Capturé : " + bloc.libelle + (objetLib ? " · " + objetLib : ""),
+        // Un objet suivi se nomme par lui-même (« Cohésio 2 »), sinon le bloc.
+        nom: objetLib || bloc.libelle,
+        bouton: "Ajouter",
+        envoyer: function (p) {
+          return api("/api/accueil/widgets", {
+            method: "POST",
+            body: { bloc: nom, objet: objet, url_capture: url, nom: p.nom, valeurs: p.valeurs, affichage: "valeurs", hauteur: "m" }
+          }).then(function () {
+            quitter();
+            toast("Indicateur ajouté à vos tableaux de bord.");
+          });
+        }
+      });
+    }
+
+    /* Demande de tableau de bord : un chiffre qui n'est pas encore
+       capturable. Le serveur en fait une tâche du Gestionnaire de tâches,
+       assignée aux superadmins (POST /api/accueil/demandes). */
+    function demander() {
+      poserStyle();
+      fermerPanneau();
+      panneau = document.createElement("aside");
+      panneau.className = "mysifa-cap-pan";
+      panneau.setAttribute("role", "dialog");
+      panneau.setAttribute("aria-label", "Faire une demande de tableau de bord");
+      panneau.innerHTML =
+        "<h2>Faire une demande de tableau de bord</h2>" +
+        '<p class="cap-sous">Décrivez le chiffre que vous aimeriez suivre. La demande est transmise aux administrateurs de MySifa.</p>' +
+        '<div class="cap-lbl">Quel chiffre voulez-vous suivre ?</div>' +
+        '<textarea class="cap-texte" maxlength="2000" rows="6" placeholder="Par exemple : le nombre de palettes parties cette semaine, par transporteur."></textarea>' +
+        '<div class="cap-err" role="alert"></div>' +
+        '<div class="cap-pied"><button type="button" data-act="annuler">Annuler</button>' +
+        '<button type="button" class="cap-ok" data-act="ok">Envoyer la demande</button></div>';
+      document.body.appendChild(panneau);
+      var zone = panneau.querySelector(".cap-texte");
+      var err = panneau.querySelector(".cap-err");
+      zone.addEventListener("input", function () { err.textContent = ""; });
+      panneau.addEventListener("click", function (e) {
+        var b = e.target.closest("button");
+        if (!b) return;
+        if (b.getAttribute("data-act") === "annuler") { fermerPanneau(); return; }
+        if (b.getAttribute("data-act") !== "ok") return;
+        var texte = zone.value.trim();
+        if (texte.length < 10) { err.textContent = "Décrivez le chiffre en quelques mots (10 caractères au moins)."; return; }
+        b.disabled = true;
+        api("/api/accueil/demandes", { method: "POST", body: { texte: texte, page: location.pathname + location.search + location.hash } })
+          .then(function () { fermerPanneau(); toast("Demande envoyée."); })
+          .catch(function (e2) { b.disabled = false; err.textContent = e2.message; });
+      });
+      zone.focus();
+    }
+
+    window.MySifaBlocs.questionnaire = function (o) {
+      return chargerRegistre().then(function () { questionnaire(o); });
+    };
+    window.MySifaBlocs.demander = demander;
 
     new MutationObserver(scanner).observe(document.documentElement, { childList: true, subtree: true });
     chargerRegistre().then(function () { if (registreOk) creerBouton(); });
