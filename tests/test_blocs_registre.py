@@ -110,6 +110,7 @@ NOM_TEST = "test.onglet.bloc"
 reg.BLOCS[NOM_TEST] = reg.Bloc(
     appli="test", libelle="Bloc de test", url="/test?tab=a#vue", type="liste",
     valeurs=(("lignes", "Lignes"), ("a", "A"), ("b", "B"), ("c", "C"), ("d", "D")),
+    textes=("d",),
     alias=("test.ancien.bloc",),
 )
 
@@ -151,8 +152,11 @@ verifier(creer(affichage=None)["affichage"] == "valeurs", "affichage « valeurs 
 refuse("opérateur d'alerte", valeurs=[{"cle": "a", "alerte": {"op": ">=", "seuil": "3"}}])
 refuse("seuil non numérique", valeurs=[{"cle": "a", "alerte": {"op": ">", "seuil": "beaucoup"}}])
 refuse("seuil vide", valeurs=[{"cle": "a", "alerte": {"op": "<", "seuil": ""}}])
-etat = creer(valeurs=[{"cle": "a", "alerte": {"op": "=", "seuil": "Arrêt"}}])
-verifier(etat["valeurs"][0]["alerte"] == {"op": "=", "seuil": "Arrêt"}, "alerte sur un état acceptée")
+refuse("alerte « égal à » sur un seuil texte", valeurs=[{"cle": "a", "alerte": {"op": "=", "seuil": "Arrêt"}}])
+refuse("alerte sur une valeur texte", valeurs=[{"cle": "d", "alerte": {"op": ">", "seuil": "3"}}])
+verifier(creer(valeurs=[{"cle": "d"}])["valeurs"][0]["alerte"] is None, "valeur texte affichée sans alerte")
+egal = creer(valeurs=[{"cle": "a", "alerte": {"op": "=", "seuil": "0"}}])
+verifier(egal["valeurs"][0]["alerte"] == {"op": "=", "seuil": "0"}, "alerte « égal à » sur un nombre acceptée")
 verifier(creer(valeurs=[{"cle": "a", "alerte": {"op": ">", "seuil": "12,5"}}])["valeurs"][0]["alerte"]["seuil"] == "12,5",
          "seuil décimal à virgule accepté")
 

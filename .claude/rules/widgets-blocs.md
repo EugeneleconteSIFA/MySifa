@@ -41,6 +41,11 @@ texte lisible (`En production`), jamais le code technique. **Un bloc sans
 valeur clé n'est pas capturable** (le registre le refuse) : pour un graphique
 ou une frise, déclarer au moins un chiffre qui le résume.
 
+**Valeur texte** (état, nom d'opérateur, référence de dossier) : la déclarer
+dans `textes=(…)` de son entrée au registre. Elle s'affiche, mais n'accepte
+pas d'alerte — une alerte compare un nombre à un seuil numérique, serveur et
+questionnaire refusent tout le reste.
+
 **Nombre distinct du texte** : quand la valeur affichée n'est pas un nombre
 (« 1h 57min »), poser aussi `data-bloc-nombre-<cle>` (`117`) : c'est lui que
 l'alerte compare.

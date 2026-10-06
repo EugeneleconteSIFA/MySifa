@@ -55,6 +55,10 @@ class Bloc:
     acces: str | None = None      # app_id passé à user_has_app_access ; None = tout connecté
     objet: str | None = None      # nature de l'objet suivi (« machine »), sinon None
     alias: tuple = field(default=())  # anciens noms, pour les widgets créés avant un renommage
+    # Clés dont la valeur est un texte (état, nom, référence) : affichées, mais
+    # sans alerte — une alerte compare à un seuil, elle n'a de sens que sur un
+    # nombre. Toute clé absente d'ici est un nombre.
+    textes: tuple = ()
 
 
 # Nom stable → bloc. Un nom ne change JAMAIS : pour renommer, créer le nouveau
@@ -101,6 +105,7 @@ BLOCS: dict[str, Bloc] = {
         appli="prod", libelle="Machine", url="/prod?page=production", type="objet",
         valeurs=(("etat", "État"), ("depuis", "Depuis (min)"), ("operateur", "Opérateur"),
                  ("dossier", "Dossier")),
+        textes=("etat", "operateur", "dossier"),
         acces="prod", objet="machine",
     ),
     "prod.ensemble.sanity": Bloc(
@@ -156,6 +161,7 @@ BLOCS: dict[str, Bloc] = {
         type="objet",
         valeurs=(("en-cours", "Dossier en cours"), ("attente", "Dossiers en attente"),
                  ("charge", "Charge en attente (h)")),
+        textes=("en-cours",),
         acces="planning", objet="machine",
     ),
     # ── Gestionnaire de tâches (app/web/taches_page.py) ──
@@ -243,6 +249,7 @@ BLOCS: dict[str, Bloc] = {
         url="/",
         type="objet",
         valeurs=(("etat", "État"), ("avancement", "Avancement (%)")),
+        textes=("etat",),
         objet="machine",
     ),
 }
@@ -354,7 +361,8 @@ def valider_widget(data: dict, *, creation: bool) -> dict:
             if cles_bloc is not None and cle not in cles_bloc:
                 raise ValueError("Valeur clé inconnue pour ce bloc.")
             vues.add(cle)
-            propres.append({"cle": cle, "alerte": _valider_alerte(v.get("alerte"))})
+            numerique = bloc is None or cle not in bloc.textes
+            propres.append({"cle": cle, "alerte": _valider_alerte(v.get("alerte"), numerique)})
         out["valeurs"] = propres
 
     if creation or "affichage" in data:
@@ -376,22 +384,23 @@ def valider_widget(data: dict, *, creation: bool) -> dict:
     return out
 
 
-def _valider_alerte(alerte) -> dict | None:
+def _valider_alerte(alerte, numerique: bool = True) -> dict | None:
     if not alerte:
         return None
     if not isinstance(alerte, dict):
         raise ValueError("Alerte invalide.")
+    if not numerique:
+        raise ValueError("Pas d'alerte sur une valeur texte — le seuil se compare à un nombre.")
     op = alerte.get("op")
     if op not in ALERTE_OPS:
         raise ValueError("Alerte invalide — au-dessus, en dessous ou égal à.")
     seuil = str(alerte.get("seuil") if alerte.get("seuil") is not None else "").strip()
     if not seuil:
         raise ValueError("Seuil d'alerte manquant.")
-    if op in (">", "<"):
-        try:
-            float(seuil.replace(",", "."))
-        except ValueError:
-            raise ValueError("Seuil d'alerte : un nombre est attendu.") from None
+    try:
+        float(seuil.replace(",", "."))
+    except ValueError:
+        raise ValueError("Seuil d'alerte : un nombre est attendu.") from None
     return {"op": op, "seuil": seuil[:60]}
 
 
@@ -411,6 +420,9 @@ def erreurs_registre() -> list[str]:
         cles = [c for c, _ in b.valeurs]
         if len(set(cles)) != len(cles) or any(not _CLE_RE.match(c) for c in cles):
             errs.append(f"{nom} : clés de valeurs invalides ou en double")
+        for t in b.textes:
+            if t not in cles:
+                errs.append(f"{nom} : textes cite {t!r}, absent des valeurs")
         for a in b.alias:
             if a in BLOCS:
                 errs.append(f"{nom} : l'alias {a} est aussi un nom actuel")

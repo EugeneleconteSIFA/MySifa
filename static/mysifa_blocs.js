@@ -361,6 +361,7 @@
         ".mysifa-cap-pan .cap-num{display:inline-flex;width:18px;height:18px;border-radius:50%;align-items:center;justify-content:center;",
         "  font-size:11px;font-weight:700;background:var(--accent,#22d3ee);color:#fff}",
         ".mysifa-cap-pan .cap-alerte{display:flex;gap:6px;margin-top:8px}",
+        ".mysifa-cap-pan .cap-sans-alerte{margin-top:6px;font-size:12px;color:var(--muted,#94a3b8)}",
         ".mysifa-cap-pan .cap-alerte select{flex:1}",
         ".mysifa-cap-pan .cap-alerte input{width:96px;flex:none}",
         ".mysifa-cap-pan select,.mysifa-cap-pan input[type=text]{font:13px 'Segoe UI',system-ui,sans-serif;background:var(--card,#111827);",
@@ -662,6 +663,9 @@
           : (bloc.valeurs.length ? [bloc.valeurs[0].cle] : []),
         alertes: JSON.parse(JSON.stringify(o.alertes || {}))
       };
+      // Pas d'alerte sur une valeur texte (seuil = nombre) : celles posées
+      // avant le 06/10/2026 tombent au prochain enregistrement.
+      bloc.valeurs.forEach(function (v) { if (v.nombre === false) delete etat.alertes[v.cle]; });
       poserStyle();
       fermerPanneau();
       panneau = document.createElement("aside");
@@ -683,14 +687,16 @@
               (rang >= 0 ? '<span class="cap-num">' + (rang + 1) + "</span>" : "") +
               "<span>" + esc(v.libelle) + "</span>" +
               '<span class="cap-cur">' + esc(actuelles[v.cle] != null && actuelles[v.cle] !== "" ? actuelles[v.cle] : "—") + "</span></label>";
-            if (rang >= 0) {
+            if (rang >= 0 && v.nombre === false) {
+              h += '<div class="cap-sans-alerte">Valeur texte : pas d\'alerte possible.</div>';
+            } else if (rang >= 0) {
               h += '<div class="cap-alerte"><select data-alerte-op="' + esc(v.cle) + '">' +
                 '<option value=""' + (al.op === "" ? " selected" : "") + ">Pas d'alerte</option>" +
                 '<option value=">"' + (al.op === ">" ? " selected" : "") + ">Rouge au-dessus de</option>" +
                 '<option value="<"' + (al.op === "<" ? " selected" : "") + ">Rouge en dessous de</option>" +
                 '<option value="="' + (al.op === "=" ? " selected" : "") + ">Rouge si égal à</option></select>" +
                 '<input type="text" data-alerte-seuil="' + esc(v.cle) + '" value="' + esc(al.seuil) + '"' +
-                (al.op ? "" : ' style="display:none"') + ' placeholder="Seuil"></div>';
+                (al.op ? "" : ' style="display:none"') + ' inputmode="decimal" placeholder="Nombre"></div>';
             }
             h += "</div>";
           });
@@ -750,6 +756,7 @@
           var al = etat.alertes[cle];
           if (al && al.op) {
             if (!String(al.seuil || "").trim()) { erreur("Seuil d'alerte manquant."); return; }
+            if (isNaN(parseFloat(String(al.seuil).trim().replace(",", ".")))) { erreur("Seuil d'alerte : un nombre est attendu."); return; }
             valeurs.push({ cle: cle, alerte: { op: al.op, seuil: String(al.seuil).trim() } });
           } else {
             valeurs.push({ cle: cle, alerte: null });

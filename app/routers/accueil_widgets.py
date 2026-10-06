@@ -62,7 +62,8 @@ def _bloc_public(nom: str, b: reg.Bloc) -> dict:
         "libelle": b.libelle,
         "type": b.type,
         "objet": b.objet,
-        "valeurs": [{"cle": c, "libelle": l} for c, l in b.valeurs],
+        # nombre=False : valeur texte (état, nom), affichée mais sans alerte.
+        "valeurs": [{"cle": c, "libelle": l, "nombre": c not in b.textes} for c, l in b.valeurs],
         "url": b.url,
     }
 
