@@ -334,7 +334,7 @@ def valider_widget(data: dict, *, creation: bool) -> dict:
     if creation or "nom" in data:
         nom = str(data.get("nom") or "").strip()
         if not nom:
-            raise ValueError("Nom du widget obligatoire.")
+            raise ValueError("Nom de l'indicateur obligatoire.")
         if len(nom) > NOM_WIDGET_MAX:
             raise ValueError(f"Nom trop long — {NOM_WIDGET_MAX} caractères au maximum.")
         out["nom"] = nom
@@ -344,7 +344,7 @@ def valider_widget(data: dict, *, creation: bool) -> dict:
         if not isinstance(valeurs, list):
             raise ValueError("Valeurs invalides.")
         if len(valeurs) > VALEURS_MAX:
-            raise ValueError(f"{VALEURS_MAX} valeurs au maximum par widget.")
+            raise ValueError(f"{VALEURS_MAX} valeurs au maximum par indicateur.")
         cles_bloc = {c for c, _ in bloc.valeurs} if bloc else None
         vues, propres = set(), []
         for v in valeurs:

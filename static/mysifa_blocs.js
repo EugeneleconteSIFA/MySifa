@@ -416,8 +416,8 @@
       bouton.type = "button";
       bouton.id = "mysifa-cap-fab";
       bouton.className = "mysifa-dock-fab mysifa-dock-extra mysifa-cap-btn";
-      bouton.title = "Capturer un bloc pour l'accueil (Alt+C)";
-      bouton.setAttribute("aria-label", "Capturer un bloc pour l'accueil");
+      bouton.title = "Ajouter un bloc à mes tableaux de bord (Alt+C)";
+      bouton.setAttribute("aria-label", "Ajouter un bloc à mes tableaux de bord");
       bouton.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>';
       bouton.addEventListener("click", function () { actif ? quitter() : entrer(); });
       document.body.appendChild(bouton);
@@ -461,7 +461,7 @@
         bandeau = document.createElement("div");
         bandeau.className = "mysifa-cap-bandeau";
         var txt = document.createElement("span");
-        txt.textContent = "Capture : cliquez sur un bloc pour l'ajouter à l'accueil. Échap pour quitter.";
+        txt.textContent = "Capture : cliquez sur un bloc pour l'ajouter à vos tableaux de bord. Échap pour quitter.";
         var q = document.createElement("button");
         q.type = "button";
         q.textContent = "Quitter";
@@ -576,11 +576,11 @@
       panneau = document.createElement("aside");
       panneau.className = "mysifa-cap-pan";
       panneau.setAttribute("role", "dialog");
-      panneau.setAttribute("aria-label", "Ajouter à mon accueil");
+      panneau.setAttribute("aria-label", "Ajouter à mes tableaux de bord");
       document.body.appendChild(panneau);
 
       function dessiner() {
-        var h = '<h2>Ajouter à mon accueil</h2>' +
+        var h = '<h2>Ajouter à mes tableaux de bord</h2>' +
           '<p class="cap-sous">Capturé : ' + esc(bloc.libelle) + (objetLib ? " · " + esc(objetLib) : "") + "</p>";
         if (bloc.valeurs.length) {
           h += '<div class="cap-lbl">Valeurs à afficher (' + valeursMax + ' au maximum)</div>';
@@ -610,7 +610,7 @@
         h += '<div class="cap-lbl">Nom</div><input type="text" class="cap-nom" maxlength="80" value="' + esc(nomVal) + '">' +
           '<div class="cap-err" role="alert"></div>' +
           '<div class="cap-pied"><button type="button" data-act="annuler">Annuler</button>' +
-          '<button type="button" class="cap-ok" data-act="ok">Ajouter à mon accueil</button></div>';
+          '<button type="button" class="cap-ok" data-act="ok">Ajouter</button></div>';
         panneau.innerHTML = h;
       }
 
@@ -652,7 +652,7 @@
 
       function envoyer(b) {
         var nomW = (panneau.querySelector("input.cap-nom").value || "").trim();
-        if (!nomW) { erreur("Nom du widget obligatoire."); return; }
+        if (!nomW) { erreur("Nom de l'indicateur obligatoire."); return; }
         if (!etat.coches.length) { erreur("Cochez au moins une valeur."); return; }
         var valeurs = [];
         for (var i = 0; i < etat.coches.length; i++) {
@@ -674,7 +674,7 @@
           }
         }).then(function () {
           quitter();
-          toast("Widget ajouté à l'accueil.");
+          toast("Indicateur ajouté à vos tableaux de bord.");
         }).catch(function (err) {
           b.disabled = false;
           erreur(err.message);

@@ -101,7 +101,7 @@ def _get_widget_or_404(conn, widget_id: int, user_id: int):
         (widget_id, user_id),
     ).fetchone()
     if not row:
-        raise HTTPException(404, "Widget introuvable.")
+        raise HTTPException(404, "Indicateur introuvable.")
     return row
 
 

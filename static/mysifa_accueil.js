@@ -71,6 +71,7 @@
   function icone(nom) {
     var p = {
       reglages: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+      tableau: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
       replier: '<path d="m15 18-6-6 6-6"/>',
       deplier: '<path d="m9 18 6-6-6-6"/>',
       fermer: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
@@ -99,8 +100,12 @@
       "@media (min-width:1600px){#mysifa-accueil{--mac-w:380px}}",
       "@media (min-width:900px) and (max-width:1199px){#mysifa-accueil{--mac-w:172px}}",
       "@media (max-width:899px){#mysifa-accueil{padding:12px 16px 0;width:100%}}",
-      ".mac-tete{display:flex;align-items:center;gap:6px;margin:0 0 10px;padding-right:8px}",
-      ".mac-titre{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted,#94a3b8);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      // Titre sur sa propre ligne, boutons dessous : « Mes tableaux de bord »
+      // ne tient pas à côté des boutons dans une colonne de 300 px.
+      ".mac-tete{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 10px;padding-right:8px}",
+      ".mac-tete .mac-titre{order:-1;flex:1 0 100%}",
+      ".mac-tete .mac-perso{margin-left:auto}",
+      ".mac-titre{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted,#94a3b8);flex:1;min-width:0;line-height:1.25}",
       ".mac-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:30px;min-width:30px;padding:0 8px;border-radius:10px;cursor:pointer;",
       "  background:var(--card,#111827);color:var(--text2,#cbd5e1);border:1px solid var(--border,#1e293b);font:600 12px 'Segoe UI',system-ui,sans-serif}",
       ".mac-btn:hover{background:var(--bg,#0a0e17);color:var(--accent,#22d3ee)}",
@@ -243,7 +248,7 @@
     el.setAttribute("data-id", w.id);
     el.innerHTML =
       '<div class="mac-ctete" title="Ouvrir la page"><span class="mac-nom"></span><span class="mac-point"></span>' +
-      '<button type="button" class="mac-corb" title="Supprimer ce widget" aria-label="Supprimer ce widget">' + icone("corbeille") + "</button></div>" +
+      '<button type="button" class="mac-corb" title="Supprimer cet indicateur" aria-label="Supprimer cet indicateur">' + icone("corbeille") + "</button></div>" +
       '<div class="mac-vals"></div>' +
       '<div class="mac-indispo">Bloc indisponible à cette taille. Cliquez sur le titre pour ouvrir la page.</div>' +
       '<div class="mac-cadre"><div class="mac-attente">Chargement…</div><div class="mac-voile"></div></div>' +
@@ -426,7 +431,7 @@
   function dessinerListe() {
     var liste = racine.querySelector(".mac-liste");
     if (!W.widgets.length) {
-      liste.innerHTML = '<div class="mac-vide"><b>Aucun widget pour l\'instant.</b><br>' +
+      liste.innerHTML = '<div class="mac-vide"><b>Aucun indicateur pour l\'instant.</b><br>' +
         "Dans une appli, cliquez sur le bouton de capture (ou Alt+C), puis sur un bloc : " +
         "il s'ajoute ici et se met à jour chaque minute.</div>";
       return;
@@ -516,8 +521,13 @@
     racine.classList.toggle("repliee", W.repliee);
     document.body.classList.toggle("mysifa-accueil-repliee", W.repliee);
     var b = racine.querySelector(".mac-repli");
-    b.innerHTML = icone(W.repliee ? "deplier" : "replier");
-    b.title = W.repliee ? "Afficher mes widgets" : "Replier la colonne";
+    // Icône de tableau de bord (demande du 06/10/2026) : la flèche ne disait
+    // pas à quoi sert la colonne. L'état se lit au fond actif et à l'infobulle.
+    b.innerHTML = icone("tableau");
+    b.classList.toggle("on", W.repliee);
+    b.title = W.repliee ? "Afficher mes tableaux de bord" : "Replier mes tableaux de bord";
+    b.setAttribute("aria-label", b.title);
+    b.setAttribute("aria-expanded", W.repliee ? "false" : "true");
     if (sauver) api("/api/accueil/prefs", { method: "PUT", body: { colonne_repliee: W.repliee } }).catch(function () {});
   }
 
@@ -554,7 +564,7 @@
     } else if (d.type === "introuvable") {
       c.absences += 1;
       if (c.absences >= CONFIRMATIONS_ABSENCE) {
-        supprimer(c, "Widget retiré : « " + c.w.nom + " » — l'élément suivi n'existe plus.");
+        supprimer(c, "Indicateur retiré : « " + c.w.nom + " » — l'élément suivi n'existe plus.");
       } else {
         // Premier constat : on recharge pour écarter une page simplement lente.
         setTimeout(function () {
@@ -592,7 +602,7 @@
           if (res && res.introuvable) {
             c.absences += 1;
             if (c.absences >= CONFIRMATIONS_ABSENCE) {
-              supprimer(c, "Widget retiré : « " + c.w.nom + " » — l'élément suivi n'existe plus.");
+              supprimer(c, "Indicateur retiré : « " + c.w.nom + " » — l'élément suivi n'existe plus.");
             }
             return;
           }
@@ -652,7 +662,7 @@
     direction: [
       "Composer une colonne de pilotage : production, stock, expéditions, qualité.",
       "Poser des alertes sur les chiffres qui demandent une décision.",
-      "Ouvrir la page d'origine depuis un widget pour creuser un chiffre."
+      "Ouvrir la page d'origine depuis un indicateur pour creuser un chiffre."
     ]
   };
 
@@ -685,12 +695,12 @@
     "accueil-widgets": { steps: [
       {
         icon: ICO('<rect x="3" y="3" width="7" height="18" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>'),
-        title: "Mes widgets",
+        title: "Mes tableaux de bord",
         body: "<p>La colonne de gauche réunit les chiffres que vous suivez au quotidien, pris directement dans les applis. Chacun se met à jour <strong>chaque minute</strong> et ouvre sa page d'origine au clic.</p>",
         extra: "__BULLETS__",
         illu: SVG +
           '<rect x="6" y="6" width="328" height="138" rx="10" fill="var(--bg)" stroke="var(--border)"/>' +
-          '<text x="16" y="24" font-size="9" font-weight="700" fill="var(--muted)">MES WIDGETS</text>' +
+          '<text x="16" y="24" font-size="9" font-weight="700" fill="var(--muted)">MES TABLEAUX DE BORD</text>' +
           '<rect x="14" y="32" width="110" height="34" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="22" y="45" font-size="8" font-weight="700" fill="var(--text)">Stocks à réapprovisionner</text><text x="22" y="60" font-size="13" font-weight="700" fill="var(--text)">6</text><text x="34" y="60" font-size="8" fill="var(--muted)">matières sous seuil</text>' +
           '<rect x="14" y="72" width="110" height="34" rx="7" fill="var(--card)" stroke="var(--danger)"/><text x="22" y="85" font-size="8" font-weight="700" fill="var(--text)">Départs programmés</text><circle cx="116" cy="82" r="3" fill="var(--danger)"/><text x="22" y="100" font-size="13" font-weight="700" fill="var(--danger)">1</text><text x="34" y="100" font-size="8" fill="var(--muted)">départ en attente</text>' +
           '<rect x="14" y="112" width="110" height="26" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="22" y="129" font-size="8" font-weight="700" fill="var(--text)">Cohésio 2 · En production</text>' +
@@ -726,7 +736,7 @@
       {
         icon: ICO('<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>'),
         title: "Lire et ouvrir",
-        body: "<p>Le widget relit ses chiffres <strong>chaque minute</strong>, directement auprès de l'appli. Un point rouge signale une alerte. Un clic ouvre la page d'origine <strong>avec ses filtres</strong> : c'est là que l'on agit. Une période capturée (« 7 derniers jours ») reste glissante.</p>",
+        body: "<p>L'indicateur relit ses chiffres <strong>chaque minute</strong>, directement auprès de l'appli. Un point rouge signale une alerte. Un clic ouvre la page d'origine <strong>avec ses filtres</strong> : c'est là que l'on agit. Une période capturée (« 7 derniers jours ») reste glissante.</p>",
         illu: SVG +
           '<rect x="20" y="20" width="130" height="58" rx="8" fill="var(--card)" stroke="var(--danger)"/><text x="30" y="36" font-size="8.5" font-weight="700" fill="var(--text)">Temps de production</text><circle cx="140" cy="33" r="3" fill="var(--danger)"/>' +
           '<text x="30" y="56" font-size="13" font-weight="700" fill="var(--danger)">1h 12min</text><text x="30" y="70" font-size="7.5" fill="var(--muted)">Arrêts (min)</text>' +
@@ -738,10 +748,10 @@
       {
         icon: ICO('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>'),
         title: "Personnaliser la colonne",
-        body: "<p><span class=\"mguide-hl\">Personnaliser</span> fait apparaître sous chaque widget une poignée pour le <strong>glisser</strong> à sa place, un crayon pour le <strong>renommer</strong> et la <strong>corbeille</strong> (deux clics). La flèche en haut replie la colonne.</p>",
+        body: "<p><span class=\"mguide-hl\">Personnaliser</span> fait apparaître sous chaque indicateur une poignée pour le <strong>glisser</strong> à sa place, un crayon pour le <strong>renommer</strong> et la <strong>corbeille</strong> (deux clics). La flèche en haut replie la colonne.</p>",
         illu: SVG +
           '<rect x="80" y="10" width="180" height="130" rx="10" fill="var(--bg)" stroke="var(--border)"/>' +
-          '<rect x="90" y="18" width="62" height="16" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="121" y="29" font-size="7" fill="var(--text2)" text-anchor="middle">‹ MES WIDGETS</text>' +
+          '<rect x="90" y="18" width="90" height="16" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="135" y="29" font-size="7" fill="var(--text2)" text-anchor="middle">TABLEAUX DE BORD</text>' +
           '<rect x="186" y="18" width="64" height="16" rx="5" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="218" y="29" font-size="7" fill="var(--accent)" text-anchor="middle">Terminer</text>' +
           '<rect x="90" y="42" width="160" height="44" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="98" y="56" font-size="8" font-weight="700" fill="var(--text)">Départs programmés</text>' +
           '<rect x="90" y="70" width="160" height="16" rx="0" fill="var(--bg)" stroke="var(--border)"/>' +
@@ -773,11 +783,11 @@
     poserStyle();
     racine = document.createElement("aside");
     racine.id = "mysifa-accueil";
-    racine.setAttribute("aria-label", "Mes widgets");
+    racine.setAttribute("aria-label", "Mes tableaux de bord");
     racine.innerHTML =
       '<div class="mac-tete">' +
       '<button type="button" class="mac-btn mac-repli"></button>' +
-      '<span class="mac-titre">Mes widgets</span>' +
+      '<span class="mac-titre">Mes tableaux de bord</span>' +
       '<span class="mac-guide"></span>' +
       '<button type="button" class="mac-btn mac-perso" title="Réorganiser, redimensionner, renommer">' + icone("reglages") + "<span>Personnaliser</span></button>" +
       "</div>" +
@@ -800,7 +810,7 @@
     lireSources();
     W.disparus.forEach(function (w) {
       api("/api/accueil/widgets/" + w.id, { method: "DELETE" }).catch(function () {});
-      avis("Widget retiré : « " + w.nom + " » — ce bloc n'existe plus dans MySifa.");
+      avis("Indicateur retiré : « " + w.nom + " » — ce bloc n'existe plus dans MySifa.");
     });
 
     bootGuide();
