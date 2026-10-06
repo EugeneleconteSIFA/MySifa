@@ -20,6 +20,7 @@ import sqlite3
 import sys
 
 sys.path.insert(0, ".")
+import database                                       # noqa: E402,F401  avant tout app.* (voir CLAUDE.md)
 from app.services import erp_types                     # noqa: E402
 from app.services import erp_catalogue as cat          # noqa: E402
 from app.services import erp_mirror as miroir          # noqa: E402
