@@ -325,12 +325,13 @@
     }
     if (mode === "CONTENEUR" || mode === "FORFAIT") {
       const l = TRANSPORT_CHAMPS[mode];
-      return `<div class="field f-num"><label>${escHtml(l.cout)} <span class="lbl-unit">${escHtml(CUR_SYM[(f.price_currency || "EUR").toUpperCase()] || "€")}</span></label>
+      // Coût et quantité côte à côte : ils forment une seule division.
+      return `<div class="champs-duo"><div class="field f-num"><label>${escHtml(l.cout)} <span class="lbl-unit">${escHtml(CUR_SYM[(f.price_currency || "EUR").toUpperCase()] || "€")}</span></label>
           <input type="number" step="0.01" id="${prefixe}-tcout" value="${escAttr(f.transport_cout)}"/></div>
         <div class="field f-num"><label>${escHtml(l.qte)} <span class="lbl-unit">${escHtml(f.price_basis === "PER_M2" ? "m²" : "kg")}</span></label>
           <input type="number" step="0.01" id="${prefixe}-tqte" value="${escAttr(f.transport_quantite)}"/>
           <div class="field-hint" id="${prefixe}-transport-eq">${transportEqText(apercu)}</div>
-        </div>`;
+        </div></div>`;
     }
     return `<div class="field f-num"><label>Transport <span class="lbl-unit">${escHtml(unit)}</span></label>
       <input type="number" step="0.0001" id="${prefixe}-transport" value="${escAttr(f.transport_unit_price)}"/>
@@ -2519,7 +2520,8 @@
     const essaiFx =
       fxEssai() !== undefined &&
       Math.abs(fxEssai() - parseFloat(s.eur_usd_rate || 0)) > 1e-9;
-    return `
+    // Marge et taux de change côte à côte : deux réglages d'une ligne chacun.
+    return `<div class="si-duo">
       <div class="form-section si-marge"><h3>${titreMarge}</h3>
         <div class="si-marge-ligne">${champMarge}${caseMarge}</div>
       </div>
@@ -2537,7 +2539,7 @@
             saveStatusHtml(S.settingsSaveStatus, S.settingsSavedAt)
           }</div>
         </div>
-      </div>`;
+      </div></div>`;
   }
 
   /**
@@ -4116,7 +4118,7 @@
                produit — et il se saisit désormais sur le composant, dans la
                fiche produit MyStock. -->
 
-          <div class="form-section"><h3>Prix d'achat</h3>
+          <div class="form-section">
             <div class="imp-liste">
               <div class="field f-mid"><label>Devise achat</label><select id="d-cur">
                 <option value="EUR" ${f.price_currency==="EUR"?"selected":""}>EUR — euro (€)</option>
