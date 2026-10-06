@@ -289,9 +289,15 @@ def compute_product_cost(
         if len(taux_vus) <= 1:
             margin_pct_q = _q4(next(iter(taux_vus)) if taux_vus else (s.default_margin_pct or _ZERO))
             margin_q = _q4(_q4(base_marge) * margin_pct_q / _HUNDRED)
-        else:
+        elif _q4(base_marge) > 0:
             margin_q = _q4(marge_cat)
             margin_pct_q = _q4(margin_q / _q4(base_marge) * _HUNDRED)
+        else:
+            # Plusieurs taux mais une assiette nulle (matières sans prix ou
+            # sans grammage) : pas de marge, et surtout pas de 0/0 — il
+            # faisait tomber toute la liste des produits en erreur 500.
+            margin_q = _ZERO
+            margin_pct_q = _ZERO
     sell = _q4(total_q + margin_q)
 
     if total_q > 0:

@@ -443,6 +443,12 @@ with dbmod.get_db() as conn:
     MP.set_parametrage(conn, declinaison_id=d30["id"], patch={"applique_marge": True})
     check("recochée depuis une autre déclinaison : toutes suivent",
           set(marges_2028()), {1})
+    # Une déclinaison ajoutée après coup hérite de la case de sa matière.
+    MP.set_parametrage(conn, declinaison_id=d22["id"], patch={"applique_marge": False})
+    assert MP.add_declinaison(conn, matiere_id=mat_2028, valeur_gsm=77)["ok"]
+    check("une nouvelle déclinaison hérite de « marge non appliquée »",
+          set(marges_2028()), {0})
+    MP.set_parametrage(conn, declinaison_id=d22["id"], patch={"applique_marge": True})
 
     # Import en USD avec transport au pourcentage : (prix + transport) × taux.
     MP.set_parametrage(conn, declinaison_id=d22["id"], patch={

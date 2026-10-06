@@ -379,6 +379,45 @@ class TestComputeProductCost(unittest.TestCase):
             ),
         }
 
+    def test_marges_de_categorie_sur_assiette_nulle(self):
+        """Deux taux de catégorie, aucun prix : marge nulle, pas d'erreur 0/0.
+
+        La division faisait tomber toute la liste des produits en 500 dès
+        qu'un brouillon de produit n'avait ni prix ni grammage.
+        """
+        mats = {
+            1: PricingMaterial(id=1, name="Frontal sans prix", unit_price=D("0"),
+                               weight_per_m2=D("0"), price_currency="EUR",
+                               price_basis="PER_M2", categorie="frontal"),
+            2: PricingMaterial(id=2, name="Adhésif sans grammage", unit_price=D("4"),
+                               weight_per_m2=D("0"), price_currency="EUR",
+                               price_basis="PER_KG", categorie="adhesif"),
+        }
+        s = _settings(marges_categorie={"frontal": D("30"), "adhesif": D("25")})
+        res = compute_product_cost(
+            PricingProduct(id=11, code="BROUILLON", name="Brouillon", frontal_id=1, adhesif_id=2),
+            mats, s,
+        )
+        self.assertEqual(res.margin_eur_m2, D("0"))
+        self.assertEqual(res.margin_pct, D("0"))
+
+    def test_marges_de_categorie_ponderees(self):
+        """Deux taux : la marge est la somme des marges de chaque catégorie."""
+        mats = {
+            1: PricingMaterial(id=1, name="Frontal", unit_price=D("0.20"),
+                               weight_per_m2=D("0"), price_currency="EUR",
+                               price_basis="PER_M2", categorie="frontal"),
+            2: PricingMaterial(id=2, name="Adhésif", unit_price=D("0.10"),
+                               weight_per_m2=D("0"), price_currency="EUR",
+                               price_basis="PER_M2", categorie="adhesif"),
+        }
+        s = _settings(marges_categorie={"frontal": D("10"), "adhesif": D("20")})
+        res = compute_product_cost(
+            PricingProduct(id=12, code="P", name="P", frontal_id=1, adhesif_id=2), mats, s,
+        )
+        # 0,20 × 10 % + 0,10 × 20 % = 0,04 €/m²
+        self.assertEqual(res.margin_eur_m2, D("0.0400"))
+
     def test_product_four_components(self):
         mats = self._four_materials()
         product = PricingProduct(
