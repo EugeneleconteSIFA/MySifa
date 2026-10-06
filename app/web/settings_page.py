@@ -10753,20 +10753,22 @@ async function renderSettingsBlocs() {
       html += '<div class="card" style="margin-bottom:14px;padding:0;overflow:hidden">' +
         '<div style="padding:10px 14px;font-weight:700;font-size:13px;border-bottom:1px solid var(--border)">' + escHtml(nomAppli(app)) + '</div>' +
         '<table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed">' +
-        '<colgroup><col style="width:38%"><col style="width:38%"><col style="width:10%"><col style="width:14%"></colgroup>' +
+        '<colgroup><col style="width:34%"><col style="width:40%"><col style="width:11%"><col style="width:15%"></colgroup>' +
         '<thead><tr style="color:var(--muted);font-size:12px;text-align:left">' +
         '<th style="padding:8px 14px">Bloc</th><th style="padding:8px">Valeurs clés</th>' +
         '<th style="padding:8px;text-align:right">Indicateurs</th><th style="padding:8px 14px;text-align:right">Capture</th></tr></thead><tbody>' +
         parAppli[app].map(b =>
           '<tr style="border-top:1px solid var(--border)">' +
-          '<td style="padding:8px 14px"><div style="font-weight:600">' + escHtml(b.libelle) +
+          '<td style="padding:8px 14px;white-space:normal;vertical-align:middle"><div style="font-weight:600">' + escHtml(b.libelle) +
             (b.nouveau ? ' <span style="font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-bg);border-radius:6px;padding:1px 6px;margin-left:4px">Nouveau</span>' : '') +
-            '</div><div style="font-family:ui-monospace,monospace;font-size:11px;color:var(--muted)">' + escHtml(b.nom) + '</div></td>' +
-          '<td style="padding:8px;color:var(--text2)">' + (b.valeurs || []).map(v => escHtml(v.libelle)).join(' · ') + '</td>' +
-          '<td style="padding:8px;text-align:right;font-variant-numeric:tabular-nums">' + (b.nb_widgets || 0) + '</td>' +
-          '<td style="padding:8px 14px;text-align:right"><label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">' +
+            '</div><div style="font-family:ui-monospace,monospace;font-size:11px;color:var(--muted);overflow-wrap:anywhere">' + escHtml(b.nom) + '</div></td>' +
+          '<td style="padding:8px;color:var(--text2);white-space:normal;line-height:1.45;vertical-align:middle">' + (b.valeurs || []).map(v => escHtml(v.libelle)).join(' · ') + '</td>' +
+          '<td style="padding:8px;text-align:right;font-variant-numeric:tabular-nums;vertical-align:middle">' + (b.nb_widgets || 0) + '</td>' +
+          '<td style="padding:8px 14px;vertical-align:middle"><div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">' +
+            '<span style="font-size:12px;color:var(--muted)">' + (b.capturable ? 'Active' : 'Coupée') + '</span>' +
+            '<label class="toggle" title="' + (b.capturable ? 'Couper la capture' : 'Activer la capture') + '">' +
             '<input type="checkbox" data-bloc-capturable="' + escAttr(b.nom) + '"' + (b.capturable ? ' checked' : '') + '>' +
-            '<span style="font-size:12px;color:var(--muted)">' + (b.capturable ? 'Active' : 'Coupée') + '</span></label></td>' +
+            '<span class="toggle-track"><span class="toggle-thumb"></span></span></label></div></td>' +
           '</tr>').join('') +
         '</tbody></table></div>';
     });
