@@ -18895,7 +18895,18 @@ function buildMonitoringKpis(snap, allLines) {
     { label: 'Sans correspondance', value: sansTotal, mod: (sansTotal > 0 ? 'warn' : 'accent') },
     { label: 'Stocks négatifs', value: snap.nb_negatifs || 0, mod: (snap.nb_negatifs > 0 ? 'danger' : 'accent') },
   ];
-  return el('div', { cls: 'dash-kpi-grid', style: { marginBottom: '16px' } },
+  // Widget d'accueil (app/services/blocs_registre.py) : le widget suit
+  // toujours le DERNIER import, comme l'ouverture de l'écran.
+  return el('div', { cls: 'dash-kpi-grid', style: { marginBottom: '16px' },
+                     'data-bloc': 'stock.monitoring.kpis',
+                     'data-bloc-valeur-comparees': fN(kpis[0].value),
+                     'data-bloc-nombre-comparees': String(kpis[0].value),
+                     'data-bloc-valeur-ecarts': fN(kpis[1].value),
+                     'data-bloc-nombre-ecarts': String(kpis[1].value),
+                     'data-bloc-valeur-sans-corresp': fN(kpis[2].value),
+                     'data-bloc-nombre-sans-corresp': String(kpis[2].value),
+                     'data-bloc-valeur-negatifs': fN(kpis[3].value),
+                     'data-bloc-nombre-negatifs': String(kpis[3].value) },
     ...kpis.map(k => el('div', { cls: 'stat-card' },
       el('div', { cls: 'stat-label' }, k.label),
       el('div', { cls: 'stat-value ' + k.mod }, fN(k.value)),

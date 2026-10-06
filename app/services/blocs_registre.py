@@ -78,6 +78,13 @@ BLOCS: dict[str, Bloc] = {
         valeurs=(("references", "Références"), ("sous-seuil", "Sous le seuil")),
         acces="stock", objet="categorie",
     ),
+    "stock.monitoring.kpis": Bloc(
+        appli="stock", libelle="Monitoring stocks PF", url="/stock?tab=monitoring",
+        type="chiffre",
+        valeurs=(("comparees", "Références comparées"), ("ecarts", "Écarts"),
+                 ("sans-corresp", "Sans correspondance"), ("negatifs", "Stocks négatifs")),
+        acces="stock",
+    ),
     "stock.dashboard.kpis": Bloc(
         appli="stock",
         libelle="Chiffres du stock",
