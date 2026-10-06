@@ -311,7 +311,10 @@ class MaterialPreviewIn(BaseModel):
     """Preview prix €/m² sans persistance (formulaire matière)."""
 
     unit_price: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
-    weight_per_m2: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
+    # Six décimales, comme `poids_retenu` en base : 17 g/m² + 9 % de perte font
+    # 0,01853 kg/m². À quatre, l'aperçu était refusé et la fiche ne se
+    # recalculait plus (la marge saisie restait sans effet à l'écran).
+    weight_per_m2: Decimal = Field(default=Decimal("0"), decimal_places=6, max_digits=12)
     price_currency: PriceCurrency = "EUR"
     price_basis: PriceBasis = "PER_KG"
     taxe_pct: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
