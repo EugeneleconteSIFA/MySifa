@@ -2291,6 +2291,7 @@
       taxe_pct: parseFloat(f.taxe_pct) || 0,
       is_imported: !!f.is_imported,
       applique_marge: f.applique_marge !== false,
+      categorie: categorieFiche(f) || null,
       transport_mode: f.transport_mode || "AMOUNT",
       transport_unit_price: parseFloat(f.transport_unit_price) || 0,
       transport_pct: parseFloat(f.transport_pct) || 0,
@@ -2368,14 +2369,24 @@
       detail: cur === "USD" ? "USD → EUR" : "achat en €",
       muted: cur !== "USD",
     });
+    const uniteEur = perM2 ? "€/m² acheté" : "€/kg";
     if (cur === "USD") {
-      cells.push({
-        label: "Sous-total en euros",
-        value: p3(sousTotal * rate),
-        unit: perM2 ? "€/m² acheté" : "€/kg",
-        strong: true,
-      });
+      cells.push({ label: "Sous-total en euros", value: p3(sousTotal * rate), unit: uniteEur });
     }
+    // Marge et prix de vente dans l'unité d'achat, en euros : on voit ce que
+    // la marge de la catégorie ajoute au kilo (ou au m² acheté). Le serveur
+    // renvoie un taux nul quand la case « Appliquer » est décochée.
+    const margePct = parseFloat(computed.margin_pct || 0);
+    const baseEur = sousTotal * (cur === "USD" ? rate : 1);
+    const margeEur = baseEur * margePct / 100;
+    cells.push({
+      label: "Marge",
+      value: margePct ? p3(margeEur) : "—",
+      unit: margePct ? uniteEur : "",
+      detail: margePct ? fmtPct(margePct) : "non appliquée",
+      muted: !margePct,
+    });
+    cells.push({ label: "Prix de vente", value: p3(baseEur + margeEur), unit: uniteEur, strong: true });
 
     // Ni titre ni notes : le tableau est fixé en bas d'écran, chaque ligne
     // de texte y mange de la place sur la fiche qu'on est en train de régler.
@@ -3975,6 +3986,7 @@
           taxe_pct: parseFloat(f.taxe_pct) || 0,
           is_imported: !!f.is_imported,
           applique_marge: f.applique_marge !== false,
+          categorie: categorieFiche(f) || null,
           transport_mode: f.transport_mode || "AMOUNT",
           transport_unit_price: parseFloat(f.transport_unit_price) || 0,
           transport_pct: parseFloat(f.transport_pct) || 0,

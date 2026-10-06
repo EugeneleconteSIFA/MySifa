@@ -135,6 +135,11 @@ check('plus de ligne « incidence taxes »', recap.includes('Incidence taxes'), 
 check('plus de titre au-dessus du détail', recap.includes('recap-title'), false);
 check('plus de notes sous le détail', recap.includes('recap-notes'), false);
 check('trois décimales sur les prix', recap.includes('fmtNum(v, 3, 3)'), true);
+check('le détail montre la marge et le prix de vente',
+  recap.includes('label: "Marge"') && recap.includes('label: "Prix de vente"'), true);
+check('les deux aperçus envoient la catégorie (marge de catégorie)',
+  extraire('materialPreviewPayload').includes('categorie: categorieFiche(f)')
+    && extraire('refreshDeclPreview').includes('categorie: categorieFiche(f)'), true);
 
 // ─── Méthodes de transport ──────────────────────────────────────────────────
 const modes = src.slice(src.indexOf('const TRANSPORT_MODES ='),
