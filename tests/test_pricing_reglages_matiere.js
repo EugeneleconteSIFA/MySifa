@@ -109,7 +109,7 @@ check('le formulaire monte le panneau Paramètres', form.includes('inlineSetting
 check('la fiche MyStock monte le même panneau', src.includes('inlineSettingsHtml("d", f)'), true);
 check('la case marge est dans le panneau Paramètres', panneau.includes('${prefixe}-marge'), true);
 check('le panneau distingue les deux portées',
-  panneau.includes('<h3>Marge</h3>') && panneau.includes('Commun à toutes les matières'), true);
+  panneau.includes('<h3>Marge</h3>') && panneau.includes('Taux de change (USD → EUR)'), true);
 check('une marge par catégorie se saisit', panneau.includes('data-si-marge-cat'), true);
 check('le panneau ne s\'appelle plus « Paramètres globaux »',
   panneau.includes('Paramètres globaux'), false);
@@ -203,7 +203,8 @@ check('plus de bouton Appliquer', src.includes('id="si-save"'), false);
 check('le panneau a sa pastille', panneau.includes('id="si-save-status"'), true);
 check('la pastille utilise le même rendu d\'état',
   panneau.includes('saveStatusHtml(S.settingsSaveStatus'), true);
-check('« Rafraîchir le taux » reste un bouton', panneau.includes('id="si-fx"'), true);
+// Plus de bouton : le taux se corrige à la main et la saisie l'enregistre.
+check('plus de bouton « Rafraîchir le taux »', panneau.includes('id="si-fx"'), false);
 check('le taux enregistre à la frappe',
   panneauFx.includes('autoEnregistrerSettings(recalculerApercu)'), true);
 check('la marge par défaut aussi', panneauFx.includes('champMarge'), true);

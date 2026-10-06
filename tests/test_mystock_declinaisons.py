@@ -424,6 +424,26 @@ with dbmod.get_db() as conn:
     check("un patch vide ne fait rien",
           MP.set_parametrage(conn, declinaison_id=d22["id"], patch={})["ok"], False)
 
+    # La case « Appliquer la marge » vaut pour toute la matière : un produit
+    # monté sur 2028/30 doit suivre la case cochée depuis la fiche 2028/22.
+    mat_2028 = conn.execute("SELECT matiere_id FROM mp_matiere_declinaison WHERE id=?",
+                            (d22["id"],)).fetchone()[0]
+
+    def marges_2028():
+        return sorted(r[0] for r in conn.execute(
+            "SELECT applique_marge FROM mp_matiere_declinaison WHERE matiere_id=?",
+            (mat_2028,)))
+    MP.set_parametrage(conn, declinaison_id=d22["id"], patch={"applique_marge": False})
+    check("marge décochée sur toutes les déclinaisons de la matière",
+          set(marges_2028()), {0})
+    check("les autres matières ne bougent pas",
+          conn.execute("SELECT COUNT(*) FROM mp_matiere_declinaison "
+                       "WHERE matiere_id<>? AND applique_marge=0",
+                       (mat_2028,)).fetchone()[0], 0)
+    MP.set_parametrage(conn, declinaison_id=d30["id"], patch={"applique_marge": True})
+    check("recochée depuis une autre déclinaison : toutes suivent",
+          set(marges_2028()), {1})
+
     # Import en USD avec transport au pourcentage : (prix + transport) × taux.
     MP.set_parametrage(conn, declinaison_id=d22["id"], patch={
         "price_currency": "USD", "is_imported": True, "taxe_pct": 6,

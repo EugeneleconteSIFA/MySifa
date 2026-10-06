@@ -305,7 +305,6 @@
     return `<div class="field-hint transport-aide">
         ${escHtml(a.quoi)}
         <span class="aide-ex"><strong>Exemple :</strong> ${escHtml(a.exemple)}</span>
-        <span class="aide-quand">${escHtml(a.quand)}</span>
       </div>`;
   }
 
@@ -808,10 +807,21 @@
    * En-tête de page commun. `sub` et `actions` acceptent du HTML.
    * L'engrenage Paramètres est présent sur toutes les pages (droits en écriture).
    */
-  function pageHead(title, sub, actions) {
-    const gear = S.canWrite
+  /** Roue des paramètres du module (en-tête de page ou bandeau d'une fiche). */
+  function gearHtml() {
+    return S.canWrite
       ? `<button type="button" class="icon-btn" id="btn-open-settings" title="Paramètres">${icon("settings", 16)}</button>`
       : "";
+  }
+
+  /** Titre d'une fiche, posé au centre du bandeau d'enregistrement : en
+      en-tête de page, il prenait une ligne et demie de hauteur pour rien. */
+  function savebarTitreHtml(titre, sous) {
+    return `<div class="sb-titre"><strong>${escHtml(titre)}</strong>${sous ? ` <span class="sb-titre-sous">/ ${sous}</span>` : ""}</div>`;
+  }
+
+  function pageHead(title, sub, actions) {
+    const gear = gearHtml();
     return `<div class="page-head">
         <div><h1>${escHtml(title)}</h1>${sub ? `<div class="sub">${sub}</div>` : ""}</div>
         <div class="page-head-actions">${actions || ""}${gear}</div>
@@ -1859,7 +1869,6 @@
                 <input type="checkbox" id="tf-imp" ${t.is_imported ? "checked" : ""}/>
                 <span>
                   <span class="check-title">Matière importée</span>
-                  <span class="check-sub">Un coût de transport s'ajoute au prix d'achat avant conversion.</span>
                 </span>
               </label>
               <div class="import-fields" style="${t.is_imported ? "" : "display:none"}">
@@ -2524,8 +2533,6 @@
               ? "Taux d'essai — le calcul en tient compte, l'enregistrement suit dans la seconde."
               : escHtml(fxMetaText(s))
           }</div>
-          <div class="field-hint">Commun à toutes les matières : le modifier ici le change pour tout le module.</div>
-          <button type="button" class="btn btn-soft btn-sm si-fx-btn" id="si-fx">Rafraîchir le taux</button>
           <div class="savebar-state savebar-state-${S.settingsSaveStatus} si-state" id="si-save-status">${
             saveStatusHtml(S.settingsSaveStatus, S.settingsSavedAt)
           }</div>
@@ -2942,8 +2949,10 @@
       <div class="pr-savebar">
         <button type="button" class="btn btn-soft btn-sm" id="btn-back-mat">${icon("arrow-left", 14)} Retour liste</button>
         <div class="savebar-state savebar-state-${S.matSaveStatus}" id="mat-save-status">${saveStatusHtml(S.matSaveStatus, S.matSavedAt)}</div>
+        ${savebarTitreHtml(isNew ? "Nouvelle matière" : "Matière", isNew ? "" : escHtml(S.formMaterial.name))}
         <div class="mat-summary sb-summary" id="mat-summary">${matSummaryHtml(S.matPreview)}</div>
         <div class="savebar-actions">
+          ${gearHtml()}
           ${!isNew && S.canWrite ? '<button type="button" class="btn btn-danger btn-sm" id="btn-del-mat">Supprimer</button>' : ""}
           ${isNew && S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-save-mat">Créer la matière</button>' : ""}
         </div>
@@ -2983,10 +2992,6 @@
     setContent(`
       <div class="pr-narrow">
         ${matSaveBarHtml(isNew)}
-        ${pageHead(
-          isNew ? "Nouvelle matière" : "Éditer matière",
-          isNew ? "" : escHtml(f.name)
-        )}
         <div class="form-layout form-layout-1">
         <div class="form-card">
           <div class="form-section"><h3>Identification</h3>
@@ -3039,7 +3044,6 @@
                 <input type="checkbox" id="f-imp" ${f.is_imported?"checked":""}/>
                 <span>
                   <span class="check-title">Matière importée</span>
-                  <span class="check-sub">Un coût de transport s'ajoute au prix d'achat avant conversion.</span>
                 </span>
               </label>
               <div id="import-fields" class="import-fields" style="${f.is_imported?"":"display:none"}">
@@ -4064,8 +4068,10 @@
       <div class="pr-savebar">
         <button type="button" class="btn btn-soft btn-sm" id="btn-back-decl">${icon("arrow-left", 14)} Retour liste</button>
         <div class="savebar-state savebar-state-${S.declSaveStatus}" id="decl-save-status">${saveStatusHtml(S.declSaveStatus, S.declSavedAt)}</div>
+        ${savebarTitreHtml("Matière MyStock", `${escHtml(S.declForm.reference)} — ${escHtml(S.declForm.libelle)}`)}
         <div class="mat-summary sb-summary" id="decl-summary">${matSummaryHtml(S.declPreview)}</div>
         <div class="savebar-actions">
+          ${gearHtml()}
           <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${S.declForm.matiere_id}" target="_blank" rel="noopener" title="Ouvrir la matière dans MyStock">MyStock ↗</a>
         </div>
       </div>`;
@@ -4080,10 +4086,6 @@
     setContent(`
       <div class="pr-narrow">
         ${declSaveBarHtml()}
-        ${pageHead(
-          "Matière MyStock",
-          `${escHtml(f.reference)} — ${escHtml(f.libelle)}`
-        )}
         <div class="form-layout form-layout-1">
         <div class="form-card">
 
@@ -4114,11 +4116,6 @@
                 <input type="checkbox" id="d-imp" ${f.is_imported?"checked":""}/>
                 <span>
                   <span class="check-title">Matière importée</span>
-                  <span class="check-sub">Un coût de transport s'ajoute au prix d'achat avant conversion.${
-                    declPrincipal
-                      ? ` Import, transport et taxes s'enregistrent sur le tarif ${escHtml(declPrincipal.fournisseur_nom)} × cette matière : ils valent pour toutes ses déclinaisons.`
-                      : " Aucun fournisseur principal : ces réglages ne valent que pour cette déclinaison."
-                  }</span>
                 </span>
               </label>
               <div id="d-import-fields" class="import-fields" style="${f.is_imported?"":"display:none"}">

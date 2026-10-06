@@ -1025,6 +1025,19 @@ def set_parametrage(
     conn.execute(
         f"UPDATE mp_matiere_declinaison SET {', '.join(sets)} WHERE id=?", args
     )
+    # « Appliquer la marge » vaut pour la MATIÈRE, pas pour la déclinaison
+    # ouverte. Les produits pointent des déclinaisons différentes d'une même
+    # matière (1408 : trois déclinaisons, réparties sur treize produits) : ne
+    # poser la case que sur celle de la fiche laissait la marge appliquée sur
+    # tous les produits montés sur les autres, et la case semblait sans effet.
+    if "applique_marge" in patch:
+        conn.execute(
+            """UPDATE mp_matiere_declinaison
+                  SET applique_marge=?, updated_at=?, updated_by_name=?
+                WHERE matiere_id=? AND id<>?""",
+            (1 if patch["applique_marge"] else 0, _now(), user_name,
+             int(_col(actuelle, "matiere_id")), declinaison_id),
+        )
     # Transport et taxes déplacent le sous-total sans toucher au prix d'achat :
     # la valorisation MyStock doit suivre, et l'historique doit le dire. Quand le
     # tarif a fait le travail, il a déjà journalisé et poussé la valorisation pour

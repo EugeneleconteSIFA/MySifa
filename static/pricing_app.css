@@ -1116,3 +1116,12 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 .si-marge-ligne > input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-bg)}
 .si-marge-ligne .check-row{align-items:center}
 .si-commun h3{display:flex;align-items:center;gap:8px}
+
+/* Titre de la fiche au centre du bandeau. */
+.pr-savebar .sb-titre{flex:1 1 auto;min-width:0;text-align:center;font-size:14px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr-savebar .sb-titre strong{font-weight:800;color:var(--text)}
+.pr-savebar .sb-titre-sous{color:var(--text2)}
+.pr-savebar .sb-titre + .sb-summary{margin-left:0}
+.pr-savebar .sb-titre ~ .savebar-actions{margin-left:0}
+@media(max-width:640px){.pr-savebar .sb-titre{order:3;width:100%;text-align:left}}
