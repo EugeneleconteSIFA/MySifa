@@ -5026,33 +5026,8 @@ def maintenance_codes_list(request: Request, include_libres: int = 0,
     get_current_user(request)
     from database import get_db
     with get_db() as conn:
-        # SELECT defensif : libre + usage_count peuvent ne pas exister sur
-        # DB pas encore migree. Le try/except dans _maint_row_to_dict
-        # gere le fallback.
-        cols = {c["name"] for c in conn.execute("PRAGMA table_info(maintenance_codes)").fetchall()}
-        has_libre = "libre" in cols
-        has_usage = "usage_count" in cols
-        sel_extra = ""
-        if has_libre: sel_extra += ",libre"
-        if has_usage: sel_extra += ",usage_count"
-        # v229 : rattachement pièce d'usure (absent des DB pas encore migrées).
-        if "usure_piece_id" in cols: sel_extra += ",usure_piece_id"
-        if "usure_position" in cols: sel_extra += ",usure_position"
-        has_archived = "archived_at" in cols
-        if has_archived: sel_extra += ",archived_at"
-        conds = []
-        if has_libre and not include_libres:
-            conds.append("libre = 0")
-        if has_archived and not include_archived:
-            conds.append("archived_at IS NULL")
-        where = ("WHERE " + " AND ".join(conds)) if conds else ""
-        rows = conn.execute(
-            f"""SELECT code,label,niveau,categorie,periodique,intervalle,metrage_ref,
-                      created_at,updated_at{sel_extra}
-               FROM maintenance_codes
-               {where}
-               ORDER BY categorie ASC, code ASC"""
-        ).fetchall()
+        rows = lire_codes_maintenance(conn, include_libres=bool(include_libres),
+                                      include_archived=bool(include_archived))
         # Enrichissement : nombre de documents attaches par code
         # (Table creee a la volee si absente, garantit la robustesse).
         docs_by_code = {}
@@ -5071,6 +5046,41 @@ def maintenance_codes_list(request: Request, include_libres: int = 0,
         d["docs_count"] = docs_by_code.get(d["code"], 0)
         items.append(d)
     return {"items": items}
+
+
+def lire_codes_maintenance(conn, include_libres: bool = False,
+                           include_archived: bool = False) -> list:
+    """Codes du catalogue maintenance (lignes brutes, à passer à
+    _maint_row_to_dict). Seule lecture du catalogue : GET /api/maintenance/codes
+    et le calcul des statuts (app/services/maintenance_statuts.py) en partent.
+    """
+    # SELECT defensif : libre + usage_count peuvent ne pas exister sur
+    # DB pas encore migree. Le try/except dans _maint_row_to_dict
+    # gere le fallback.
+    cols = {c["name"] for c in conn.execute("PRAGMA table_info(maintenance_codes)").fetchall()}
+    has_libre = "libre" in cols
+    has_usage = "usage_count" in cols
+    sel_extra = ""
+    if has_libre: sel_extra += ",libre"
+    if has_usage: sel_extra += ",usage_count"
+    # v229 : rattachement pièce d'usure (absent des DB pas encore migrées).
+    if "usure_piece_id" in cols: sel_extra += ",usure_piece_id"
+    if "usure_position" in cols: sel_extra += ",usure_position"
+    has_archived = "archived_at" in cols
+    if has_archived: sel_extra += ",archived_at"
+    conds = []
+    if has_libre and not include_libres:
+        conds.append("libre = 0")
+    if has_archived and not include_archived:
+        conds.append("archived_at IS NULL")
+    where = ("WHERE " + " AND ".join(conds)) if conds else ""
+    return conn.execute(
+        f"""SELECT code,label,niveau,categorie,periodique,intervalle,metrage_ref,
+                  created_at,updated_at{sel_extra}
+           FROM maintenance_codes
+           {where}
+           ORDER BY categorie ASC, code ASC"""
+    ).fetchall()
 
 
 @router.post("/api/maintenance/codes")

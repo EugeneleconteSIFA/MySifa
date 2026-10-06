@@ -7824,6 +7824,11 @@ function setMaintCatFilter(c){
   renderMaintCards();
 }
 
+// Capture d'un widget : la machine et la catégorie affichées rejoignent
+// l'adresse capturée, la source du widget les relit (mysifa_blocs_sources.js).
+window.mysifaBlocsContexte = function(){
+  return { bloc_machine: getMaintMachine(), bloc_categorie: getMaintCatFilter() };
+};
 function getMaintMachine(){
   try{ return localStorage.getItem(MAINT_MACHINE_KEY) || 'Cohésio 1'; }
   catch(e){ return 'Cohésio 1'; }
@@ -8699,9 +8704,11 @@ function renderMaintCards(){
   const neverAndUnknown = statusCounts.never + statusCounts.unknown;
   // Le compteur "Tous" reflète ce qui sera VU (donc sans never/unknown).
   statusCounts.all = statusCounts.overdue + statusCounts.soon + statusCounts.ok;
-  // Widget d'accueil (app/services/blocs_registre.py). Pas de source API : le
-  // statut se calcule ici, en partie depuis des saisies gardées dans le
-  // navigateur ; le widget lit donc la page elle-même.
+  // Widget d'accueil (app/services/blocs_registre.py). Le widget ne lit pas
+  // ces attributs : il appelle GET /api/maintenance/statuts, qui refait ce
+  // calcul côté serveur (app/services/maintenance_statuts.py). Ils servent à
+  // l'aperçu de la capture. Toute règle de statut modifiée ici doit l'être
+  // aussi là-bas — tests/test_maintenance_statuts.py compare les deux.
   const _blocMaint = document.getElementById('maint-status-chips');
   if(_blocMaint){
     _blocMaint.setAttribute('data-bloc-objet-libelle', machine || '');

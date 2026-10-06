@@ -90,6 +90,13 @@ impose de le reporter dans la source — sinon le widget et la page affichent
 deux chiffres différents. Les regroupements calculés côté page (synthèses par
 opérateur…) restent sans source plutôt que d'être réécrits à moitié.
 
+**Calcul qui n'existe que dans la page** (aucune API ne renvoie le chiffre) :
+ne pas le réécrire dans la source, ni laisser le widget charger la page. Le
+porter côté serveur dans un service, l'exposer par un endpoint que la source
+appelle, et rejouer les fonctions JS de la page contre leur traduction Python
+dans un test. Modèle : Maintenance — `app/services/maintenance_statuts.py`,
+`GET /api/maintenance/statuts`, `tests/test_maintenance_statuts.py`.
+
 Une page dont les filtres ne vivent pas dans l'URL les déclare à la capture :
 `window.mysifaBlocsContexte = () => ({bloc_periode: 'last7', bloc_machine: [...]})`.
 Ils rejoignent l'URL capturée et la source les relit (`ctx.params`). Une

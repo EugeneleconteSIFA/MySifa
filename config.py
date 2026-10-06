@@ -55,6 +55,10 @@ APP_VERSION = "3.3.0"
 # Nom affiché en wordmark, titres, footers.
 APP_NAME = os.getenv("APP_NAME", "MySifa")
 
+# Fuseau de l'atelier : « aujourd'hui » des calculs serveur (statuts de
+# maintenance…), le même que celui du navigateur des utilisateurs.
+FUSEAU_HORAIRE = os.getenv("FUSEAU_HORAIRE", "Europe/Paris")
+
 # Seuil (ms) au-dela duquel une requete HTTP est loggee comme lente
 # (middleware log_slow_requests dans main.py). 0 = desactive.
 SLOW_REQUEST_MS = int(os.getenv("SLOW_REQUEST_MS", "500"))
