@@ -25,7 +25,8 @@
 (function () {
   'use strict';
 
-  const E = { opts: null, data: null, cand: {}, rows: [], entryId: null, edition: null, paravent: false };
+  const E = { opts: null, data: null, cand: {}, rows: [], entryId: null, edition: null, paravent: false,
+    choix: null };
 
   const UNITES = {ml: ['ml', 'ml'], kg: ['kg', 'kg'], bobine: ['bobine', 'bobines'],
     tube: ['tube', 'tubes'], palette: ['palette', 'palettes'], carton: ['carton', 'cartons'],
@@ -76,7 +77,25 @@
     + 'border-radius:8px;border:1px dashed var(--accent);background:var(--bg);color:var(--accent);'
     + 'font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:background .12s}'
     + '.dr-ajout:hover{background:var(--accent-bg)}'
-    + '.dr-nature{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text)}';
+    + '.dr-nature{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text)}'
+    + '.dr-mat{display:flex;align-items:center;gap:8px;text-align:left;cursor:pointer}'
+    + '.dr-mat:hover:not(:disabled),.dr-mat[aria-expanded="true"]{border-color:var(--accent)!important}'
+    + '.dr-mat:disabled{cursor:default;opacity:.6}'
+    + '.dr-mat-lib{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
+    + '.dr-mat-chev{flex:none;color:var(--muted);font-size:11px}'
+    + '.dr-choix{position:fixed;z-index:20;display:flex;flex-direction:column;background:var(--card);'
+    + 'border:1px solid var(--accent);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.28);overflow:hidden}'
+    + '.dr-choix input{flex:none;margin:8px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;'
+    + 'background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none}'
+    + '.dr-choix input:focus{border-color:var(--accent)}'
+    + '.dr-choix-liste{overflow-y:auto;padding:0 6px 6px}'
+    + '.dr-choix-it{padding:7px 9px;border-radius:6px;cursor:pointer;font-size:13px;line-height:1.35}'
+    + '.dr-choix-it.on{background:var(--accent-bg)}'
+    + '.dr-choix-it .ref{font-weight:700;color:var(--text)}'
+    + '.dr-choix-it .des{color:var(--muted)}'
+    + '.dr-choix-it.sel .ref::before{content:"✓ ";color:var(--accent)}'
+    + '.dr-choix-it.creer{color:var(--accent);font-weight:700;border-top:1px solid var(--border);border-radius:0 0 6px 6px}'
+    + '.dr-choix-vide{padding:10px 9px;font-size:13px;color:var(--muted)}';
 
   function injecterStyle() {
     if (document.getElementById('dr-style')) return;
@@ -308,36 +327,49 @@
       + '</div></div></td></tr>';
   }
 
-  function ligneHtml(i) {
+  // Matières proposables sur une ligne : celles des catégories de
+  // remplacement, plus la matière retenue et celle de la fiche.
+  function optionsLigne(i) {
     const r = E.rows[i];
     const l = r.ligne;
     const c = candidat(r.mid);
-    const conv = (c && c.conversion) || l.conversion || {};
     const options = [];
     const vus = new Set();
     (l.categories_remplacement || []).forEach(cat => ((E.data.candidats || {})[cat] || []).forEach(o => {
+      if (vus.has(o.matiere_id)) return;
       vus.add(o.matiere_id);
       options.push(o);
     }));
     if (r.mid && !vus.has(r.mid) && c) { options.unshift(c); vus.add(r.mid); }
     if (l.matiere_id && !vus.has(l.matiere_id) && candidat(l.matiere_id)) options.unshift(candidat(l.matiere_id));
+    return options;
+  }
+
+  function libelleMatiere(o) {
+    return (o.reference || '') + (o.designation && o.designation !== o.reference ? ' — ' + o.designation : '');
+  }
+
+  function ligneHtml(i) {
+    const r = E.rows[i];
+    const l = r.ligne;
+    const c = candidat(r.mid);
+    const conv = (c && c.conversion) || l.conversion || {};
 
     // min-width : sans lui, la laize posée à droite écrasait la matière à
     // quinze caractères (« 70gsm TOP Ther »).
     const selStyle = 'flex:1 1 260px;min-width:230px;width:100%;max-width:400px;background:var(--bg);border:1px solid var(--border);'
       + 'border-radius:7px;padding:6px 8px;color:var(--text);font-family:inherit;font-size:13px;font-weight:700';
-    const opts = (r.mid ? '' : '<option value="">' + esc(l.source_value || 'Choisir une matière') + '</option>')
-      + options.map(o => '<option value="' + o.matiere_id + '"' + (o.matiere_id === r.mid ? ' selected' : '') + '>'
-        + esc(o.reference || '') + (o.designation && o.designation !== o.reference ? ' — ' + esc(o.designation) : '')
-        + '</option>').join('')
-      // Créer une référence depuis n'importe quelle ligne (02/10/2026) : la
-      // bonne matière manque souvent alors qu'une autre a été proposée.
-      + ((l.categories_remplacement || []).length
-        ? '<option value="__creer__">+ Créer une référence…</option>' : '');
+    // Un bouton qui ouvre une recherche, plus un <select> (05/10/2026) : pour
+    // trouver une matière proche, on tape « PP transp » au lieu de faire
+    // défiler toute la catégorie.
     const catAjout = l.ajout ? ((l.categories_remplacement || [])[0] || '') : '';
-    const select = '<select data-dr-mat="' + i + '" style="' + selStyle + '"'
-      + (l.ajout && !catAjout ? ' disabled' : '') + '>'
-      + (l.ajout && !catAjout ? '<option value="">Nature d\'abord</option>' : opts) + '</select>';
+    const inactif = l.ajout && !catAjout;
+    const lib = inactif ? 'Nature d\'abord'
+      : (c ? libelleMatiere(c) : (l.source_value || 'Choisir une matière'));
+    const select = '<button type="button" class="dr-mat" data-dr-mat="' + i + '" style="' + selStyle + '"'
+      + ' aria-haspopup="listbox" aria-expanded="false"' + (inactif ? ' disabled' : '') + ' title="' + esc(lib) + '">'
+      + '<span class="dr-mat-lib"' + (c ? '' : ' style="color:var(--muted)"') + '>' + esc(lib) + '</span>'
+      + '<span class="dr-mat-chev" aria-hidden="true">▾</span></button>';
 
     // La laize se choisit SUR LA MÊME LIGNE que la matière (11/09/2026) :
     // en dessous, elle doublait la hauteur de chaque ligne de bobine.
@@ -427,6 +459,7 @@
   }
 
   function rendreLignes() {
+    fermerChoix();
     const tb = document.getElementById('dr-tbody');
     if (!tb) return;
     tb.innerHTML = E.rows.length
@@ -466,8 +499,152 @@
     r.mid = null; r.lid = null; r.val = 0;
     if (E.edition && E.edition.i === i) E.edition = null;
     rendreLignes();
-    const sel = document.querySelector('[data-dr-mat="' + i + '"]');
-    if (sel && !sel.disabled) sel.focus();
+    ouvrirChoix(i);
+  }
+
+  // ── Recherche de matière ─────────────────────────────────────────────
+  // Le panneau est en position fixe, rattaché à l'overlay : le tableau est
+  // dans un conteneur overflow-x:auto qui couperait une liste absolue.
+  function normaliser(s) {
+    return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  }
+
+  function resultatsChoix() {
+    const ch = E.choix;
+    const r = E.rows[ch.i];
+    const mots = normaliser(ch.q).split(/\s+/).filter(Boolean);
+    const items = optionsLigne(ch.i).filter(o => {
+      if (!mots.length) return true;
+      const t = normaliser((o.reference || '') + ' ' + (o.designation || ''));
+      return mots.every(m => t.includes(m));
+    }).map(o => ({mid: o.matiere_id, o: o}));
+    // Créer une référence depuis n'importe quelle ligne (02/10/2026) : la
+    // bonne matière manque souvent alors qu'une autre a été proposée.
+    if ((r.ligne.categories_remplacement || []).length) items.push({mid: '__creer__'});
+    return items;
+  }
+
+  function rendreChoix() {
+    const ch = E.choix;
+    const liste = document.getElementById('dr-choix-liste');
+    if (!ch || !liste) return;
+    ch.items = resultatsChoix();
+    if (ch.actif >= ch.items.length) ch.actif = ch.items.length - 1;
+    if (ch.actif < 0) ch.actif = 0;
+    const r = E.rows[ch.i];
+    const nbMat = ch.items.filter(x => x.mid !== '__creer__').length;
+    liste.innerHTML = (nbMat ? '' : '<div class="dr-choix-vide">'
+        + (ch.q.trim() ? 'Aucun résultat pour « ' + esc(ch.q.trim()) + ' »' : 'Aucune matière dans cette catégorie.') + '</div>')
+      + ch.items.map((x, k) => {
+        const cls = 'dr-choix-it' + (k === ch.actif ? ' on' : '')
+          + (x.mid === '__creer__' ? ' creer' : (x.mid === r.mid ? ' sel' : ''));
+        const corps = x.mid === '__creer__' ? '+ Créer une référence…'
+          : '<span class="ref">' + esc(x.o.reference || '') + '</span>'
+            + (x.o.designation && x.o.designation !== x.o.reference ? ' <span class="des">— ' + esc(x.o.designation) + '</span>' : '');
+        return '<div role="option" class="' + cls + '" data-dr-choix-k="' + k + '"'
+          + (k === ch.actif ? ' aria-selected="true"' : '') + '>' + corps + '</div>';
+      }).join('');
+    const on = liste.querySelector('.dr-choix-it.on');
+    if (on) on.scrollIntoView({block: 'nearest'});
+  }
+
+  function placerChoix() {
+    const ch = E.choix;
+    const p = document.getElementById('dr-choix');
+    const btn = ch && document.querySelector('[data-dr-mat="' + ch.i + '"]');
+    if (!p || !btn) return;
+    const rc = btn.getBoundingClientRect();
+    const vh = window.innerHeight;
+    const vw = window.innerWidth;
+    const largeur = Math.min(Math.max(rc.width, 420), vw - 16);
+    const dessous = vh - rc.bottom - 12;
+    const dessus = rc.top - 12;
+    const enHaut = dessous < 240 && dessus > dessous;
+    const haut = Math.min(380, enHaut ? dessus : dessous);
+    p.style.left = Math.max(8, Math.min(rc.left, vw - largeur - 8)) + 'px';
+    p.style.width = largeur + 'px';
+    p.style.maxHeight = haut + 'px';
+    p.style.top = enHaut ? '' : (rc.bottom + 4) + 'px';
+    p.style.bottom = enHaut ? (vh - rc.top + 4) + 'px' : '';
+  }
+
+  function fermerChoix(rendreFocus) {
+    const ch = E.choix;
+    if (!ch) return;
+    E.choix = null;
+    const p = document.getElementById('dr-choix');
+    if (p) p.remove();
+    window.removeEventListener('resize', placerChoix);
+    const btn = document.querySelector('[data-dr-mat="' + ch.i + '"]');
+    if (btn) {
+      btn.setAttribute('aria-expanded', 'false');
+      if (rendreFocus) btn.focus();
+    }
+  }
+
+  function validerChoix(k) {
+    const ch = E.choix;
+    const x = ch && ch.items[k];
+    if (!x) return;
+    const i = ch.i;
+    fermerChoix();
+    changerMatiere(i, String(x.mid));
+  }
+
+  function ouvrirChoix(i) {
+    fermerChoix();
+    const btn = document.querySelector('[data-dr-mat="' + i + '"]');
+    const overlay = document.querySelector('[data-dr-overlay]');
+    if (!btn || btn.disabled || !overlay) return;
+    const r = E.rows[i];
+    const items = optionsLigne(i);
+    E.choix = {i: i, q: '', actif: Math.max(0, items.findIndex(o => o.matiere_id === r.mid)), items: []};
+    const p = document.createElement('div');
+    p.id = 'dr-choix';
+    p.className = 'dr-choix';
+    p.innerHTML = '<input type="text" id="dr-choix-q" autocomplete="off" spellcheck="false" '
+      + 'placeholder="Rechercher (référence, désignation…)" aria-label="Rechercher une matière">'
+      + '<div id="dr-choix-liste" class="dr-choix-liste" role="listbox"></div>';
+    overlay.appendChild(p);
+    btn.setAttribute('aria-expanded', 'true');
+    placerChoix();
+    rendreChoix();
+    window.addEventListener('resize', placerChoix);
+    const q = p.querySelector('input');
+    q.addEventListener('input', () => {
+      if (!E.choix) return;
+      E.choix.q = q.value;
+      E.choix.actif = 0;
+      rendreChoix();
+    });
+    q.addEventListener('keydown', (ev) => {
+      const ch = E.choix;
+      if (!ch) return;
+      if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+        ev.preventDefault();
+        const n = ch.items.length;
+        if (n) { ch.actif = (ch.actif + (ev.key === 'ArrowDown' ? 1 : n - 1)) % n; rendreChoix(); }
+      } else if (ev.key === 'Enter') {
+        ev.preventDefault();
+        validerChoix(ch.actif);
+      } else if (ev.key === 'Escape') {
+        // Échap vide d'abord la recherche, puis ferme — jamais la modale.
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (q.value) { q.value = ''; ch.q = ''; ch.actif = 0; rendreChoix(); } else fermerChoix(true);
+      } else if (ev.key === 'Tab') {
+        fermerChoix();
+      }
+    });
+    // mousedown : le choix est lu avant que le champ ne perde le focus.
+    p.addEventListener('mousedown', (ev) => {
+      ev.stopPropagation();
+      const it = ev.target.closest('[data-dr-choix-k]');
+      if (!it) return;
+      ev.preventDefault();
+      validerChoix(Number(it.getAttribute('data-dr-choix-k')));
+    });
+    requestAnimationFrame(() => { q.focus(); });
   }
 
   function changerMatiere(i, valeur) {
@@ -704,7 +881,6 @@
       const t = ev.target;
       if (t.id === 'dr-paravent') { E.paravent = t.checked; rendreLignes(); return; }
       if (t.hasAttribute('data-dr-nat')) changerNature(Number(t.getAttribute('data-dr-nat')), t.value);
-      else if (t.hasAttribute('data-dr-mat')) changerMatiere(Number(t.getAttribute('data-dr-mat')), t.value);
       else if (t.hasAttribute('data-dr-lz')) {
         const r = E.rows[Number(t.getAttribute('data-dr-lz'))];
         if (r) { r.lid = t.value === '' ? null : Number(t.value); rendreLignes(); }
@@ -721,6 +897,11 @@
     body.addEventListener('click', async (ev) => {
       const t = ev.target.closest('button');
       if (!t) return;
+      if (t.hasAttribute('data-dr-mat')) {
+        const i = Number(t.getAttribute('data-dr-mat'));
+        if (E.choix && E.choix.i === i) fermerChoix(); else ouvrirChoix(i);
+        return;
+      }
       if (t.hasAttribute('data-dr-ajout')) { ajouterLigne(); return; }
       if (t.hasAttribute('data-dr-retirer')) { retirerLigne(Number(t.getAttribute('data-dr-retirer'))); return; }
       if (t.hasAttribute('data-dr-creer')) { E.edition = {i: Number(t.getAttribute('data-dr-creer')), mode: 'creer'}; rendreLignes(); return; }
@@ -747,6 +928,7 @@
   async function ouvrir(entryId, opts) {
     E.opts = opts || {};
     E.entryId = entryId;
+    fermerChoix();
     E.data = null; E.rows = []; E.cand = {}; E.edition = null; E.paravent = false;
     const root = document.getElementById('mroot');
     if (!root) return;
@@ -769,6 +951,10 @@
       + '</div></div>';
     const overlay = root.querySelector('[data-dr-overlay]');
     overlay.addEventListener('click', (ev) => { if (ev.target === overlay) fermer(); });
+    overlay.addEventListener('mousedown', (ev) => {
+      if (E.choix && !ev.target.closest('[data-dr-mat]')) fermerChoix();
+    });
+    overlay.addEventListener('scroll', placerChoix);
     root.querySelector('[data-dr-fermer]').addEventListener('click', fermer);
     const body = document.getElementById('dr-body');
     try {
