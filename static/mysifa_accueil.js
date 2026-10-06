@@ -45,6 +45,9 @@
     cartes: {}               // id → { el, iframe, valeurs, absences, w }
   };
   var racine = null;
+  var minuteur = null;       // rafraîchissement chaque minute
+  var ecoutes = false;       // resize / visibilitychange posés une seule fois
+  var demarrage = false;     // demarrer() en cours
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
@@ -712,7 +715,9 @@
           c.el.classList.add("prete");
           afficherValeurs(c);
         })
-        .catch(function () {
+        .catch(function (e) {
+          // Session expirée : plus rien ne doit rester à l'écran.
+          if (e && e.status === 401) { demonter(); return; }
           // API momentanément indisponible : on garde les dernières valeurs.
           c.el.classList.add("prete");
         });
@@ -730,7 +735,7 @@
   }
 
   function rafraichir() {
-    if (document.hidden) return;
+    if (!racine || document.hidden) return;
     lireSources();
     Object.keys(W.cartes).forEach(function (id) {
       var f = W.cartes[id].iframe;
@@ -920,7 +925,6 @@
     document.body.insertBefore(racine, rootApp || document.body.firstChild);
     document.body.classList.add("mysifa-accueil-on");
     majHaut();
-    window.addEventListener("resize", majHaut);
 
     racine.querySelector(".mac-perso").addEventListener("click", basculerEdition);
     racine.querySelector(".mac-demande").addEventListener("click", function () {
@@ -940,13 +944,57 @@
     });
 
     bootGuide();
-    setInterval(rafraichir, RAFRAICHISSEMENT_MS);
-    document.addEventListener("visibilitychange", function () { if (!document.hidden) rafraichir(); });
+    minuteur = setInterval(rafraichir, RAFRAICHISSEMENT_MS);
+    if (!ecoutes) {
+      ecoutes = true;
+      window.addEventListener("resize", majHaut);
+      document.addEventListener("visibilitychange", function () { if (!document.hidden) rafraichir(); });
+    }
+  }
+
+  /* Déconnexion ou session expirée : le portail affiche l'écran de connexion
+     SANS recharger la page (S.app = 'login'). La colonne vit hors de #root :
+     sans ce démontage, elle restait affichée avec les chiffres de
+     l'utilisateur précédent (constaté en prod le 06/10/2026). On retire tout :
+     DOM, état, minuteur. Une nouvelle connexion repart de zéro. */
+  function demonter() {
+    if (minuteur) { clearInterval(minuteur); minuteur = null; }
+    if (racine) { racine.remove(); racine = null; }
+    document.body.classList.remove("mysifa-accueil-on", "mysifa-accueil-repliee");
+    W.widgets = []; W.disparus = []; W.avis = []; W.cartes = {};
+    W.edition = false; W.repliee = false;
+  }
+
+  /* Suit l'affichage du portail. Page du portail absente (écran de
+     connexion, autre vue) : la colonne est masquée tout de suite, puis
+     démontée si la session est finie. Page revenue : réaffichée, ou
+     remontée pour l'utilisateur qui vient de se connecter. */
+  var verifPrevue = false;
+  function surveiller() {
+    if (verifPrevue) return;
+    verifPrevue = true;
+    setTimeout(function () {
+      verifPrevue = false;
+      var portail = !!document.querySelector(".portal-page");
+      if (portail && !racine) { demarrer(); return; }
+      if (!racine) return;
+      if (portail) {
+        racine.style.display = "";
+        document.body.classList.add("mysifa-accueil-on");
+        return;
+      }
+      if (racine.style.display === "none") return;
+      racine.style.display = "none";
+      document.body.classList.remove("mysifa-accueil-on");
+      api("/api/accueil/prefs").catch(function (e) { if (e && e.status === 401) demonter(); });
+    }, 0);
   }
 
   /* Le portail n'est monté que pour un utilisateur connecté : on attend sa
      page, et un 401 sur l'API suffit à ne rien afficher (écran de connexion). */
   function demarrer() {
+    if (demarrage || racine) return;
+    demarrage = true;
     Promise.all([api("/api/accueil/widgets"), api("/api/accueil/prefs")]).then(function (r) {
       var tous = r[0].widgets || [];
       // « desactive » (bloc coupé par le superadmin) et « inaccessible »
@@ -954,20 +1002,17 @@
       W.widgets = tous.filter(function (w) { return w.etat === "ok"; });
       W.disparus = tous.filter(function (w) { return w.etat === "disparu"; });
       W.repliee = !!r[1].colonne_repliee;
-      return chargerSources().then(monter);
-    }).catch(function () { /* non connecté ou API indisponible : pas de colonne */ });
+      return chargerSources().then(function () {
+        // Entre-temps, l'utilisateur a pu quitter le portail (déconnexion).
+        if (document.querySelector(".portal-page") && !racine) monter();
+      });
+    }).catch(function () { /* non connecté ou API indisponible : pas de colonne */ })
+      .then(function () { demarrage = false; });
   }
 
   // On attend la page du portail, aussi lente soit-elle : un poste chargé ne
   // doit pas perdre sa colonne parce que le portail a mis 15 s à s'afficher.
-  if (document.querySelector(".portal-page")) {
-    demarrer();
-  } else {
-    var guet = new MutationObserver(function () {
-      if (!document.querySelector(".portal-page")) return;
-      guet.disconnect();
-      demarrer();
-    });
-    guet.observe(document.documentElement, { childList: true, subtree: true });
-  }
+  // L'observation reste active ensuite : déconnexion, reconnexion.
+  new MutationObserver(surveiller).observe(document.documentElement, { childList: true, subtree: true });
+  surveiller();
 })();

@@ -152,6 +152,14 @@ impose de relire ses 6 étapes et leurs illustrations.
 - Une page en mode embarqué (`window.MySifaBlocs.embarque`) ne doit pas ouvrir
   de modale, de visite guidée ni d'annonce : elles seraient masquées mais
   pourraient marquer « vu » côté serveur.
+- La colonne vit hors de `#root` : le portail ne la reconstruit pas, donc ne
+  l'efface pas non plus. Déconnexion ou session expirée affichent l'écran de
+  connexion **sans recharger la page** — `mysifa_accueil.js` surveille la
+  présence de `.portal-page`, masque la colonne dès qu'elle disparaît et la
+  démonte (DOM, état, minuteur) si `/api/accueil/prefs` répond 401. Tout
+  nouvel élément affichant des données hors de `#root` doit suivre la même
+  règle (fuite constatée en prod le 06/10/2026 : chiffres de l'utilisateur
+  précédent visibles sur l'écran de connexion).
 - Versions : `main.py` injecte `mysifa_blocs.js?v=APP_VERSION`, qui charge
   `mysifa_accueil.js` avec la même version. Aucun compteur manuel à tenir.
 - Le bouton de capture est un bouton « extra » du dock
