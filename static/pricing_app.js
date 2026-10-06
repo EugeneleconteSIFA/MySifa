@@ -2291,6 +2291,7 @@
       taxe_pct: parseFloat(f.taxe_pct) || 0,
       is_imported: !!f.is_imported,
       applique_marge: f.applique_marge !== false,
+      categorie: categorieFiche(f) || null,
       transport_mode: f.transport_mode || "AMOUNT",
       transport_unit_price: parseFloat(f.transport_unit_price) || 0,
       transport_pct: parseFloat(f.transport_pct) || 0,
@@ -2330,35 +2331,32 @@
     const unit = unitLabel(cur, basis);
     const perM2 = basis === "PER_M2";
     const rate = parseFloat(b.fx_rate || 1);
-    const w = parseFloat(b.weight_per_m2 || 0);
     const hasTransport = parseFloat(b.transport_src || 0) > 0;
     const taxePct = parseFloat(b.taxe_pct || 0);
     const taxesSrc = parseFloat(b.taxes_src || 0);
+    const sousTotal =
+      parseFloat(b.unit_price_src || 0) + parseFloat(b.transport_src || 0) + taxesSrc;
+    // Trois décimales : la quatrième ne change aucune décision et alourdit la
+    // lecture. L'unité se lit à droite du chiffre, la précision en dessous.
+    const p3 = (v) => fmtNum(v, 3, 3);
 
     const cells = [
-      { label: "Prix d'achat", value: fmtNum(b.unit_price_src, 4, 4), unit: unit },
+      { label: "Prix d'achat", value: p3(b.unit_price_src), unit: unit },
       {
         label: "Transport",
-        value: hasTransport ? fmtNum(b.transport_src, 4, 4) : "—",
-        unit: hasTransport
-          ? `${unit} · ${fmtPct(b.transport_pct_effective || 0)} du prix`
-          : "non imputé",
+        value: hasTransport ? p3(b.transport_src) : "—",
+        unit: hasTransport ? unit : "",
+        detail: hasTransport ? `${fmtPct(b.transport_pct_effective || 0)} du prix` : "non imputé",
         muted: !hasTransport,
       },
       {
         label: "Taxe d'importation",
-        value: taxePct ? fmtNum(taxesSrc, 4, 4) : "—",
-        unit: taxePct ? `${unit} · ${fmtPct(taxePct)} du sous-total` : "non imputées",
+        value: taxePct ? p3(taxesSrc) : "—",
+        unit: taxePct ? unit : "",
+        detail: taxePct ? `${fmtPct(taxePct)} du sous-total` : "non imputée",
         muted: !taxePct,
       },
-      {
-        label: "Sous-total achat",
-        value: fmtNum(
-          parseFloat(b.unit_price_src || 0) + parseFloat(b.transport_src || 0) + taxesSrc,
-          4, 4
-        ),
-        unit: unit,
-      },
+      { label: "Sous-total achat", value: p3(sousTotal), unit: unit },
     ];
     // Le tableau s'arrête au sous-total d'achat converti. « Ramené au m² »,
     // prix de revient, marge et prix de vente sont partis le 31 août 2026 :
@@ -2367,56 +2365,49 @@
     cells.push({
       label: "Change",
       value: cur === "USD" ? "× " + fmtNum(rate, 4, 4) : "—",
-      unit: cur === "USD" ? "USD → EUR" : "achat en €",
+      unit: "",
+      detail: cur === "USD" ? "USD → EUR" : "achat en €",
       muted: cur !== "USD",
     });
+    const uniteEur = perM2 ? "€/m² acheté" : "€/kg";
     if (cur === "USD") {
-      cells.push({
-        label: "Sous-total en euros",
-        value: fmtNum(
-          (parseFloat(b.unit_price_src || 0) + parseFloat(b.transport_src || 0) + taxesSrc) * rate,
-          4, 4
-        ),
-        unit: perM2 ? "€/m² acheté" : "€/kg",
-        strong: true,
-      });
+      cells.push({ label: "Sous-total en euros", value: p3(sousTotal * rate), unit: uniteEur });
     }
+    // Marge et prix de vente dans l'unité d'achat, en euros : on voit ce que
+    // la marge de la catégorie ajoute au kilo (ou au m² acheté). Le serveur
+    // renvoie un taux nul quand la case « Appliquer » est décochée.
+    const margePct = parseFloat(computed.margin_pct || 0);
+    const baseEur = sousTotal * (cur === "USD" ? rate : 1);
+    const margeEur = baseEur * margePct / 100;
+    cells.push({
+      label: "Marge",
+      value: margePct ? p3(margeEur) : "—",
+      unit: margePct ? uniteEur : "",
+      detail: margePct ? fmtPct(margePct) : "non appliquée",
+      muted: !margePct,
+    });
+    cells.push({ label: "Prix de vente", value: p3(baseEur + margeEur), unit: uniteEur, strong: true });
 
+    // Ni titre ni notes : le tableau est fixé en bas d'écran, chaque ligne
+    // de texte y mange de la place sur la fiche qu'on est en train de régler.
     const head = cells.map((c) => `<th>${escHtml(c.label)}</th>`).join("");
     const body = cells
       .map(
         (c) =>
           `<td class="${c.strong ? "recap-strong" : ""}${c.muted ? " recap-muted" : ""}">` +
-          `<div class="recap-value">${escHtml(c.value)}</div>` +
-          (c.unit ? `<div class="recap-unit">${escHtml(c.unit)}</div>` : "") +
+          `<div class="recap-ligne"><span class="recap-value">${escHtml(c.value)}</span>` +
+          (c.unit ? `<span class="recap-unit">${escHtml(c.unit)}</span>` : "") +
+          "</div>" +
+          (c.detail ? `<div class="recap-detail">${escHtml(c.detail)}</div>` : "") +
           "</td>"
       )
       .join("");
 
-    const notes = [];
-    if (!perM2) {
-      notes.push(
-        w > 0
-          ? `Prix au kilo ramené au m² via le poids : × ${fmtNum(w, 4, 4)} kg/m².`
-          : `Poids au m² non renseigné : le prix au kilo ne peut pas être ramené au m².`
-      );
-    }
-    if (hasTransport) {
-      notes.push(`Transport ramené en euros : ${fmtEurM2(b.transport_eur_m2 || 0)}.`);
-    }
-
     return `
       <div class="recap-card">
-        <div class="recap-head">
-          <div>
-            <div class="recap-title">Détail du calcul</div>
-            <div class="recap-formula">(prix d'achat + transport + taxes) × change</div>
-          </div>
-        </div>
         <div class="recap-scroll">
           <table class="recap-table"><thead><tr>${head}</tr></thead><tbody><tr>${body}</tr></tbody></table>
         </div>
-        ${notes.length ? `<div class="recap-notes">${notes.join(" · ")}</div>` : ""}
       </div>`;
   }
 
@@ -2612,11 +2603,11 @@
     return `
       <div class="ms-item ms-main">
         <div class="ms-label">Sous-total d'achat</div>
-        <div class="ms-value">${escHtml(fmtNum(st, 4, 4))} <span class="ms-unit">${escHtml(unit)}</span></div>
+        <div class="ms-value">${escHtml(fmtNum(st, 3, 3))} <span class="ms-unit">${escHtml(unit)}</span></div>
       </div>
       <div class="ms-item">
         <div class="ms-label">Prix d'achat</div>
-        <div class="ms-value">${escHtml(fmtNum(b.unit_price_src, 4, 4))} <span class="ms-unit">${escHtml(unit)}</span></div>
+        <div class="ms-value">${escHtml(fmtNum(b.unit_price_src, 3, 3))} <span class="ms-unit">${escHtml(unit)}</span></div>
       </div>
       <div class="ms-item">
         <div class="ms-label">Change</div>
@@ -3995,6 +3986,7 @@
           taxe_pct: parseFloat(f.taxe_pct) || 0,
           is_imported: !!f.is_imported,
           applique_marge: f.applique_marge !== false,
+          categorie: categorieFiche(f) || null,
           transport_mode: f.transport_mode || "AMOUNT",
           transport_unit_price: parseFloat(f.transport_unit_price) || 0,
           transport_pct: parseFloat(f.transport_pct) || 0,
