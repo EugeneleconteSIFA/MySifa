@@ -416,6 +416,34 @@ def ensure_grammage(conn: sqlite3.Connection, valeur_gsm: float) -> int:
     return int(cur.lastrowid)
 
 
+def amorcer_declinaisons(conn: sqlite3.Connection) -> int:
+    """
+    Donne une déclinaison à chaque matière MyStock active qui n'en a pas.
+
+    La déclinaison porte le prix : sans elle, une matière n'existe ni dans
+    Coûts matières ni dans les sélecteurs des produits. 33 frontaux actifs sur
+    47 étaient dans ce cas (octobre 2026) — créés dans MyStock, jamais
+    rattachés, donc introuvables au moment de composer un produit. On amorce
+    une déclinaison sans valeur (« Toutes déclinaisons ») et sa ligne de prix
+    vide, comme le ferait un ajout à la main. Idempotent : une matière qui a
+    déjà une déclinaison n'est pas touchée. Renvoie le nombre créé.
+    """
+    placeholders = ",".join("?" for _ in CATEGORIES_VISIBLES)
+    manquantes = conn.execute(
+        f"""SELECT mp.id FROM matieres_premieres mp
+             WHERE mp.actif = 1
+               AND LOWER(mp.categorie) IN ({placeholders})
+               AND NOT EXISTS (SELECT 1 FROM mp_matiere_declinaison d
+                                WHERE d.matiere_id = mp.id)""",
+        sorted(CATEGORIES_VISIBLES),
+    ).fetchall()
+    n = 0
+    for r in manquantes:
+        if add_declinaison(conn, matiere_id=int(r["id"])).get("ok"):
+            n += 1
+    return n
+
+
 def add_declinaison(
     conn: sqlite3.Connection,
     *,

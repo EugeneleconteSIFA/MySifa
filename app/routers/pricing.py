@@ -1422,6 +1422,10 @@ def list_mystock_materials(
     """Une ligne par matière MyStock devisable, avec ses déclinaisons et prix."""
     _require_read(request)
     with get_db() as conn:
+        # Une matière MyStock sans déclinaison n'a nulle part où porter son
+        # prix : elle était absente de cette liste et des produits.
+        if mystock_prix.amorcer_declinaisons(conn):
+            conn.commit()
         materials = mystock_prix.list_materials(
             conn, q=q, categorie=categorie, actives_only=active_only
         )
@@ -1838,6 +1842,10 @@ def list_mystock_declinaisons(request: Request):
     """
     _require_read(request)
     with get_db() as conn:
+        # Une matière MyStock sans déclinaison n'a nulle part où porter son
+        # prix : elle était absente de cette liste et des produits.
+        if mystock_prix.amorcer_declinaisons(conn):
+            conn.commit()
         materials = mystock_prix.list_materials(conn, actives_only=True)
         reglages = load_pricing_settings(conn)
         from app.services.pricing.repository import declinaison_to_pricing_material
