@@ -21,8 +21,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 MaterialCategoryCode = Literal["FRONTAL", "ADHESIF", "SILICONE", "GLASSINE", "AUTRE"]
 PriceCurrency = Literal["EUR", "USD"]
 PriceBasis = Literal["PER_KG", "PER_M2"]
-# Transport : montant dans la devise/base d'achat, ou % du prix d'achat.
-TransportMode = Literal["AMOUNT", "PCT"]
+# Transport : montant dans la devise/base d'achat, % du prix d'achat, coût d'un
+# conteneur ou forfait de commande réparti sur sa quantité. Les quatre méthodes
+# du moteur (`pricing/types.py`) : à deux seulement, l'aperçu des fiches était
+# refusé dès qu'un tarif passait au conteneur ou au forfait — et la marge ou le
+# taux modifiés ne se voyaient plus.
+TransportMode = Literal["AMOUNT", "PCT", "CONTENEUR", "FORFAIT"]
 
 # ─── Settings (singleton key/value) ────────────────────────────────────────────
 
