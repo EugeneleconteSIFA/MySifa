@@ -89,7 +89,11 @@ check('et confirmé après', modale.includes('declinaisons_touchees'), true);
 check('la devise est en lecture ici', modale.includes('Se règle sur sa fiche'), true);
 check('chaque méthode n\'affiche que ses champs',
   modale.includes("if (mode === \"PCT\")") && modale.includes('TRANSPORT_CHAMPS[mode]'), true);
-check('avec l\'aide de la méthode choisie', modale.includes('transportAideHtml(mode)'), true);
+// L'aide passe par l'encadré import commun aux fiches (importChampsHtml).
+const encadreImport = app.slice(app.indexOf('function importChampsHtml('),
+                                app.indexOf('\n  }\n', app.indexOf('function importChampsHtml(')));
+check('avec l\'aide de la méthode choisie',
+  modale.includes('importChampsHtml(') && encadreImport.includes('transportAideHtml(o.mode)'), true);
 
 // Un transitaire ne change pas de méthode d'un frontal à l'autre : le réglage
 // doit pouvoir se poser une fois pour toute la catégorie, sans dix allers-retours.
