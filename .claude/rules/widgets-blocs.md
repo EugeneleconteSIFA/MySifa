@@ -154,5 +154,9 @@ colonne.
 - Le bouton de capture est un bouton « extra » du dock
   (`.mysifa-dock-fab.mysifa-dock-extra`, rangé par `mysifa_dock.js`). Sur une
   page sans dock, il prend le même aspect et se place seul.
+- `?capture=<nom du bloc>` sur n'importe quelle page ouvre la capture dès que
+  le bloc est affiché, puis le paramètre est retiré de l'adresse. C'est ce
+  qu'utilisent les liens « Essayer sur… » de la colonne vide (le seul mode
+  d'emploi visible hors superadmins : les guides in-app leur sont réservés).
 - Dans un widget, la page embarquée défile mais ne réagit pas aux clics : un
   clic demande à l'accueil d'ouvrir la page d'origine.

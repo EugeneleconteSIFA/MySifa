@@ -173,8 +173,19 @@
       ".mac-carte.glisse{position:fixed;z-index:200;opacity:.92;box-shadow:0 12px 32px rgba(0,0,0,.25);pointer-events:none}",
       ".mac-place{border:2px dashed var(--accent,#22d3ee);border-radius:12px;background:var(--accent-bg,rgba(34,211,238,.12));flex-shrink:0}",
       "#mysifa-accueil.edition .mac-carte{touch-action:none;user-select:none}",
-      ".mac-vide{border:1px dashed var(--border,#1e293b);border-radius:12px;padding:14px;color:var(--muted,#94a3b8);line-height:1.5}",
-      ".mac-vide b{color:var(--text,#f1f5f9)}",
+      ".mac-vide{border:1px dashed var(--border,#1e293b);border-radius:12px;padding:14px;color:var(--muted,#94a3b8);line-height:1.45}",
+      ".mac-vide-t{font-weight:700;color:var(--text,#f1f5f9);font-size:14px;margin-bottom:4px}",
+      ".mac-vide-p{margin:0 0 10px;font-size:12px}",
+      ".mac-etapes{list-style:none;margin:0 0 12px;padding:0;display:flex;flex-direction:column;gap:8px}",
+      ".mac-etapes li{display:flex;gap:8px;align-items:flex-start;color:var(--text2,#cbd5e1)}",
+      ".mac-num{flex-shrink:0;width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--accent-bg,rgba(34,211,238,.12));color:var(--accent,#22d3ee);font-weight:700;font-size:11px}",
+      ".mac-capico{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--accent,#22d3ee);color:var(--bg,#0a0e17);vertical-align:middle;margin:0 1px}",
+      ".mac-vide kbd{font:600 11px 'Segoe UI',system-ui,sans-serif;border:1px solid var(--border,#1e293b);border-bottom-width:2px;border-radius:5px;padding:0 4px;background:var(--card,#111827);color:var(--text,#f1f5f9)}",
+      ".mac-essai{display:flex;flex-direction:column;gap:6px}",
+      ".mac-essai-t{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}",
+      ".mac-essai-l{display:block;padding:7px 10px;border-radius:9px;border:1px solid var(--accent,#22d3ee);color:var(--accent,#22d3ee);background:var(--accent-bg,rgba(34,211,238,.08));text-decoration:none;font-weight:600;font-size:12px}",
+      ".mac-essai-l::after{content:' →'}",
+      ".mac-essai-l:hover{background:var(--accent,#22d3ee);color:var(--bg,#0a0e17)}",
       ".mac-avis{display:flex;flex-direction:column;gap:6px;margin:0 8px 10px 0}",
       ".mac-avis div{display:flex;gap:6px;align-items:flex-start;background:var(--card,#111827);border:1px solid var(--warn,#fbbf24);border-radius:10px;padding:8px 10px;color:var(--text2,#cbd5e1)}",
       ".mac-avis span{flex:1}",
@@ -464,13 +475,65 @@
     });
   }
 
+  /* ── Colonne vide : mode d'emploi en trois étapes ─────────────────────
+     Les guides in-app ne s'ouvrent qu'aux superadmins : pour tous les autres,
+     c'est ici que se découvre la capture. « Essayer sur… » propose quelques
+     blocs que l'utilisateur peut capturer et ouvre leur page capture lancée
+     (?capture=<bloc>, lu par mysifa_blocs.js). */
+  var ICONE_CAPTURE = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>';
+  var SUGGESTIONS_MAX = 3;
+
+  function dessinerVide(liste) {
+    liste.innerHTML =
+      '<div class="mac-vide">' +
+      '<div class="mac-vide-t">Épinglez les chiffres que vous suivez</div>' +
+      '<p class="mac-vide-p">Stocks à réapprovisionner, machines en marche, départs du jour… ils s\'affichent ici et se mettent à jour chaque minute.</p>' +
+      '<ol class="mac-etapes">' +
+      '<li><span class="mac-num">1</span><span>Ouvrez une appli.</span></li>' +
+      '<li><span class="mac-num">2</span><span>Cliquez sur <span class="mac-capico" title="Bouton de capture">' + ICONE_CAPTURE + '</span> en bas à droite, ou faites <kbd>Alt</kbd>+<kbd>C</kbd>.</span></li>' +
+      '<li><span class="mac-num">3</span><span>Cliquez sur un bloc entouré, cochez les valeurs à afficher.</span></li>' +
+      '</ol>' +
+      '<div class="mac-essai"></div>' +
+      '</div>';
+    api("/api/accueil/blocs").then(function (d) {
+      var zone = liste.querySelector(".mac-essai");
+      if (!zone) return;
+      // Un bloc par appli, dans l'ordre du registre ; ceux de l'accueil
+      // lui-même n'ont pas besoin d'un détour.
+      var vus = {}, choix = [];
+      (d.blocs || []).forEach(function (b) {
+        if (choix.length >= SUGGESTIONS_MAX || vus[b.appli] || b.appli === "portail" || b.objet) return;
+        vus[b.appli] = true;
+        choix.push(b);
+      });
+      if (!choix.length) return;
+      var t = document.createElement("div");
+      t.className = "mac-essai-t";
+      t.textContent = "Essayer sur :";
+      zone.appendChild(t);
+      choix.forEach(function (b) {
+        var a = document.createElement("a");
+        a.className = "mac-essai-l";
+        a.href = urlEssai(b);
+        a.textContent = b.libelle;
+        zone.appendChild(a);
+      });
+    }).catch(function () { /* sans suggestions, les trois étapes suffisent */ });
+  }
+
+  function urlEssai(b) {
+    try {
+      var u = new URL(b.url, ORIGINE);
+      u.searchParams.set("capture", b.nom);
+      return u.pathname + u.search + u.hash;
+    } catch (e) { return b.url; }
+  }
+
   /* ── Liste et glisser-déposer ──────────────────────────────────────── */
   function dessinerListe() {
     var liste = racine.querySelector(".mac-liste");
     if (!W.widgets.length) {
-      liste.innerHTML = '<div class="mac-vide"><b>Aucun indicateur pour l\'instant.</b><br>' +
-        "Dans une appli, cliquez sur le bouton de capture (ou Alt+C), puis sur un bloc : " +
-        "il s'ajoute ici et se met à jour chaque minute.</div>";
+      dessinerVide(liste);
       return;
     }
     W.widgets.forEach(function (w) {
