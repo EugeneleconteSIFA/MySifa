@@ -23,7 +23,7 @@ function extraire(nom) {
 const ctx = { S: { formMaterial: { name: 'Frontal test' } } };
 vm.createContext(ctx);
 vm.runInContext([extraire('icon'), extraire('heureCourte'), extraire('escHtml'),
-                 extraire('gearHtml'), extraire('savebarTitreHtml'), extraire('matSummaryHtml'),
+                 extraire('gearHtml'), extraire('savebarTitreHtml'), extraire('matSummaryHtml'), extraire('sbNomHtml'), extraire('recapTableHtml'),
                  extraire('saveStatusHtml'), extraire('matSaveBarHtml')].join('\n'), ctx);
 
 function html(opts) { Object.assign(ctx.S, opts.S); return ctx.matSaveBarHtml(opts.isNew); }

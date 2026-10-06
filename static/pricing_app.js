@@ -823,6 +823,12 @@
     return `<div class="sb-titre"><strong>${escHtml(titre)}</strong>${sous ? ` <span class="sb-titre-sous">/ ${sous}</span>` : ""}</div>`;
   }
 
+  /** Nom de la matière, mis en avant sous les actions du bandeau. */
+  function sbNomHtml(nom, detail) {
+    return `<div class="sb-nom"><strong>${escHtml(nom || "")}</strong>${
+      detail ? ` <span class="sb-nom-detail">${escHtml(detail)}</span>` : ""}</div>`;
+  }
+
   function pageHead(title, sub, actions) {
     const gear = gearHtml();
     return `<div class="page-head">
@@ -2344,7 +2350,7 @@
     const p3 = (v) => fmtNum(v, 3, 3);
 
     const cells = [
-      { label: "Prix d'achat", value: p3(b.unit_price_src), unit: unit },
+      { label: "Prix d'achat", value: p3(b.unit_price_src), unit: unit, strong: true },
       {
         label: "Transport",
         value: hasTransport ? p3(b.transport_src) : "—",
@@ -2943,13 +2949,13 @@
       <div class="pr-savebar">
         <button type="button" class="btn btn-soft btn-sm" id="btn-back-mat">${icon("arrow-left", 14)} Retour liste</button>
         <div class="savebar-state savebar-state-${S.matSaveStatus}" id="mat-save-status">${saveStatusHtml(S.matSaveStatus, S.matSavedAt)}</div>
-        ${savebarTitreHtml(isNew ? "Nouvelle matière" : "Matière", isNew ? "" : escHtml(S.formMaterial.name))}
-        <div class="mat-summary sb-summary" id="mat-summary">${matSummaryHtml(S.matPreview)}</div>
         <div class="savebar-actions">
           ${gearHtml()}
           ${!isNew && S.canWrite ? '<button type="button" class="btn btn-danger btn-sm" id="btn-del-mat">Supprimer</button>' : ""}
           ${isNew && S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-save-mat">Créer la matière</button>' : ""}
         </div>
+        ${sbNomHtml(isNew ? "Nouvelle matière" : S.formMaterial.name, "")}
+        <div class="sb-recap" id="mat-recap">${recapTableHtml(S.matPreview)}</div>
       </div>`;
   }
 
@@ -3054,10 +3060,8 @@
         </div>
         </div>
 
-        <div id="mat-recap" class="recap-fixe">${recapTableHtml(S.matPreview)}</div>
 
         ${!isNew && hist ? `<div class="form-card" style="margin-top:16px"><div class="form-section" style="margin:0"><h3>Historique prix (10 derniers)</h3><div class="table-wrap"><table class="pr-table"><thead><tr><th>Date</th><th>Prix</th><th>Source</th></tr></thead><tbody>${hist}</tbody></table></div></div></div>` : ""}
-        <div class="recap-spacer" aria-hidden="true"></div>
       </div>
     `);
 
@@ -4084,12 +4088,12 @@
       <div class="pr-savebar">
         <button type="button" class="btn btn-soft btn-sm" id="btn-back-decl">${icon("arrow-left", 14)} Retour liste</button>
         <div class="savebar-state savebar-state-${S.declSaveStatus}" id="decl-save-status">${saveStatusHtml(S.declSaveStatus, S.declSavedAt)}</div>
-        ${savebarTitreHtml("Matière MyStock", `${escHtml(S.declForm.reference)} — ${escHtml(S.declForm.libelle)}`)}
-        <div class="mat-summary sb-summary" id="decl-summary">${matSummaryHtml(S.declPreview)}</div>
         <div class="savebar-actions">
           ${gearHtml()}
           <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${S.declForm.matiere_id}" target="_blank" rel="noopener" title="Ouvrir la matière dans MyStock">MyStock ↗</a>
         </div>
+        ${sbNomHtml(S.declForm.reference, S.declForm.designation)}
+        <div class="sb-recap" id="decl-recap">${recapTableHtml(S.declPreview)}</div>
       </div>`;
   }
 
@@ -4153,9 +4157,7 @@
         </div>
         </div>
 
-        <div id="decl-recap" class="recap-fixe">${recapTableHtml(S.declPreview)}</div>
         ${declHistoriqueHtml(f.historique)}
-        <div class="recap-spacer" aria-hidden="true"></div>
       </div>
     `);
 
