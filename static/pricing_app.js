@@ -2949,12 +2949,12 @@
       <div class="pr-savebar">
         <button type="button" class="btn btn-soft btn-sm" id="btn-back-mat">${icon("arrow-left", 14)} Retour liste</button>
         <div class="savebar-state savebar-state-${S.matSaveStatus}" id="mat-save-status">${saveStatusHtml(S.matSaveStatus, S.matSavedAt)}</div>
+        ${sbNomHtml(isNew ? "Nouvelle matière" : S.formMaterial.name, "")}
         <div class="savebar-actions">
           ${gearHtml()}
           ${!isNew && S.canWrite ? '<button type="button" class="btn btn-danger btn-sm" id="btn-del-mat">Supprimer</button>' : ""}
           ${isNew && S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-save-mat">Créer la matière</button>' : ""}
         </div>
-        ${sbNomHtml(isNew ? "Nouvelle matière" : S.formMaterial.name, "")}
         <div class="sb-recap" id="mat-recap">${recapTableHtml(S.matPreview)}</div>
       </div>`;
   }
@@ -4088,11 +4088,11 @@
       <div class="pr-savebar">
         <button type="button" class="btn btn-soft btn-sm" id="btn-back-decl">${icon("arrow-left", 14)} Retour liste</button>
         <div class="savebar-state savebar-state-${S.declSaveStatus}" id="decl-save-status">${saveStatusHtml(S.declSaveStatus, S.declSavedAt)}</div>
+        ${sbNomHtml(S.declForm.reference, S.declForm.designation)}
         <div class="savebar-actions">
           ${gearHtml()}
           <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${S.declForm.matiere_id}" target="_blank" rel="noopener" title="Ouvrir la matière dans MyStock">MyStock ↗</a>
         </div>
-        ${sbNomHtml(S.declForm.reference, S.declForm.designation)}
         <div class="sb-recap" id="decl-recap">${recapTableHtml(S.declPreview)}</div>
       </div>`;
   }
