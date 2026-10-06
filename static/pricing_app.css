@@ -1181,6 +1181,8 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 @media(min-width:701px){
   .champs-duo{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:flex-start}
   .champs-duo > .field{margin:0}
-  .si-duo{display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 40px;align-items:start}
-  .si-duo > .form-section{margin-bottom:0}
 }
+
+/* Libellés et titres de section en foncé : en gris clair, ils se perdaient
+   sur le fond teinté de l'encadré import. */
+.form-layout-1 .field label,.form-layout-1 .form-section h3{color:var(--text)}

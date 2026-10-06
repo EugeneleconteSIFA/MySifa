@@ -370,7 +370,7 @@
      Transport (méthode, puis ses champs), Taxes, puis la propagation. Une
      seule mise en page pour les trois fiches qui l'affichent. */
   function importChampsHtml(o) {
-    return `<div class="imp-groupe"><h4 class="imp-titre">Transport</h4>
+    return `<div class="imp-groupe">
         <div class="imp-liste">
           <div class="field f-mid"><label>Méthode de transport</label>
             <select id="${o.modeId}">${transportModeOptions(o.mode)}</select>
@@ -2520,8 +2520,7 @@
     const essaiFx =
       fxEssai() !== undefined &&
       Math.abs(fxEssai() - parseFloat(s.eur_usd_rate || 0)) > 1e-9;
-    // Marge et taux de change côte à côte : deux réglages d'une ligne chacun.
-    return `<div class="si-duo">
+    return `
       <div class="form-section si-marge"><h3>${titreMarge}</h3>
         <div class="si-marge-ligne">${champMarge}${caseMarge}</div>
       </div>
@@ -2535,11 +2534,8 @@
               ? "Taux d'essai — le calcul en tient compte, l'enregistrement suit dans la seconde."
               : escHtml(fxMetaText(s))
           }</div>
-          <div class="savebar-state savebar-state-${S.settingsSaveStatus} si-state" id="si-save-status">${
-            saveStatusHtml(S.settingsSaveStatus, S.settingsSavedAt)
-          }</div>
         </div>
-      </div></div>`;
+      </div>`;
   }
 
   /**
@@ -2830,9 +2826,12 @@
   function setSettingsSaveStatus(statut) {
     S.settingsSaveStatus = statut;
     if (statut === "ok") S.settingsSavedAt = new Date();
-    const el = document.getElementById("si-save-status");
-    if (el) {
-      el.className = "savebar-state savebar-state-" + statut + " si-state";
+    // Marge et taux de change n'ont plus de pastille à eux : leur état
+    // s'affiche dans le bandeau du haut, à la place de celui de la fiche,
+    // le temps de l'enregistrement.
+    const el = document.getElementById("decl-save-status") || document.getElementById("mat-save-status");
+    if (el && statut !== "vierge") {
+      el.className = "savebar-state savebar-state-" + statut;
       el.innerHTML = saveStatusHtml(statut, S.settingsSavedAt);
     }
   }
