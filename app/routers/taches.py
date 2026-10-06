@@ -305,44 +305,21 @@ def _parse_assignes(brut: Optional[str]) -> list[dict]:
 # ─── Personnes assignables ────────────────────────────────────────────────
 
 def _users_assignables(conn, user: dict) -> list:
-    """Comptes actifs qu'on peut assigner : ceux qui peuvent ouvrir l'app.
+    """Comptes actifs qu'on peut assigner : les superadmins uniquement.
 
-    Assigner quelqu'un qui recevra un 403 en cliquant n'a pas de sens. La liste
-    se déduit donc de la matrice d'accès, pas d'un rôle en dur.
-
-    Tous services confondus, volontairement : une tâche se confie à la personne
-    qui sait la traiter, pas à un organigramme. L'assigné la voit à titre
-    personnel (clause « mes tâches » du périmètre) sans que la tâche entre pour
-    autant dans le périmètre de son service — la confier à quelqu'un ne la
-    publie pas à toute son équipe.
+    Proposer tous les comptes qui ouvrent l'app noyait le sélecteur sous une
+    trentaine de noms, alors que les tâches se confient en pratique aux
+    superadmins. Le rôle vient de `ROLE_SUPERADMIN` (config), pas d'un nom.
 
     Le contrôle serveur de `_valid_assignes` reste, lui, ouvert à tout compte
     actif : des tâches plus anciennes portent des assignés qui ne sont plus
     proposés ici, et il faut pouvoir les rouvrir et les désassigner.
     """
-    filtres = ["u.actif=1"]
-    params: list = []
-
-    a_matrice = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='role_access_defaults'"
-    ).fetchone()
-    if a_matrice:
-        filtres.append(
-            "(u.role=?"
-            " OR EXISTS (SELECT 1 FROM role_access_defaults r"
-            "             WHERE r.role=u.role AND r.app_id=? AND r.module_id='_app'"
-            "               AND r.level<>'none')"
-            " OR EXISTS (SELECT 1 FROM user_access_overrides o"
-            "             WHERE o.user_id=u.id AND o.app_id=? AND o.module_id='_app'"
-            "               AND o.level<>'none'))"
-        )
-        params.extend([ROLE_SUPERADMIN, APP, APP])
-
     return conn.execute(
-        f"""SELECT id, nom, role, avatar_url FROM users u
-             WHERE {' AND '.join(filtres)}
-             ORDER BY nom COLLATE NOCASE""",
-        params,
+        """SELECT id, nom, role, avatar_url FROM users u
+            WHERE u.actif=1 AND u.role=?
+            ORDER BY nom COLLATE NOCASE""",
+        (ROLE_SUPERADMIN,),
     ).fetchall()
 
 
@@ -697,7 +674,6 @@ def create_tache(payload: TacheIn, request: Request):
     echeance = _valid_date(payload.echeance, "Échéance")
     estimation = _valid_heures(payload.estimation_h, "Estimation")
     service = _valid_service(user, payload.service)
-    now = _now()
 
     with get_db() as conn:
         if payload.parent_id:
@@ -711,28 +687,73 @@ def create_tache(payload: TacheIn, request: Request):
             # différents et l'arborescence apparaîtrait tronquée.
             service = parent.get("service") or service
         assignes = _valid_assignes(conn, payload.assignes)
-        cur = conn.execute(
-            """INSERT INTO taches
-               (titre,description,statut,priorite,type,module,service,
-                createur_user_id,createur_nom,parent_id,echeance,estimation_h,
-                temps_passe_h,ordre,created_at,updated_at,started_at,done_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?)""",
-            (
-                titre[:300], (payload.description or "").strip() or None,
-                statut, priorite, ttype, module, service,
-                user.get("id"), _nom(user),
-                payload.parent_id, echeance, estimation,
-                _next_ordre(conn, statut), now, now,
-                now if statut == "en_cours" else None,
-                now if statut in TACHES_STATUTS_FINAUX else None,
-            ),
+        tache_id = _inserer_tache(
+            conn, user, titre=titre, description=payload.description,
+            statut=statut, priorite=priorite, ttype=ttype, module=module,
+            service=service, parent_id=payload.parent_id, echeance=echeance,
+            estimation=estimation, assignes=assignes,
         )
-        tache_id = cur.lastrowid
-        if assignes:
-            _set_assignes(conn, tache_id, assignes, user)
-        _log(conn, tache_id, user, "creation")
         conn.commit()
     return {"success": True, "id": tache_id}
+
+
+def _inserer_tache(conn, user: dict, *, titre: str, description: Optional[str],
+                   statut: str, priorite: str, ttype: str, module: Optional[str],
+                   service: str, parent_id: Optional[int] = None,
+                   echeance: Optional[str] = None, estimation: Optional[float] = None,
+                   assignes: Optional[list] = None) -> int:
+    """Insère une tâche déjà validée, ses assignés et sa ligne d'activité.
+
+    Point unique d'écriture d'une création : l'API du gestionnaire et les
+    demandes venues d'autres écrans (creer_tache_pour) passent toutes deux ici.
+    Le commit reste à l'appelant.
+    """
+    now = _now()
+    cur = conn.execute(
+        """INSERT INTO taches
+           (titre,description,statut,priorite,type,module,service,
+            createur_user_id,createur_nom,parent_id,echeance,estimation_h,
+            temps_passe_h,ordre,created_at,updated_at,started_at,done_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?)""",
+        (
+            titre[:300], (description or "").strip() or None,
+            statut, priorite, ttype, module, service,
+            user.get("id"), _nom(user),
+            parent_id, echeance, estimation,
+            _next_ordre(conn, statut), now, now,
+            now if statut == "en_cours" else None,
+            now if statut in TACHES_STATUTS_FINAUX else None,
+        ),
+    )
+    tache_id = cur.lastrowid
+    if assignes:
+        _set_assignes(conn, tache_id, assignes, user)
+    _log(conn, tache_id, user, "creation")
+    return tache_id
+
+
+def creer_tache_pour(conn, demandeur: dict, *, titre: str, description: str,
+                     ttype: str, module: Optional[str], service: str,
+                     assignes: list[int], statut: str = "a_faire") -> int:
+    """Crée une tâche au nom d'un utilisateur qui n'a pas forcément accès au
+    gestionnaire (demande de tableau de bord depuis l'accueil…).
+
+    L'appelant a déjà contrôlé ses propres droits : ici, on ne vérifie que la
+    cohérence avec les référentiels du gestionnaire. Le commit reste à l'appelant.
+    """
+    if statut not in TACHES_STATUTS_CODES:
+        raise ValueError("Statut inconnu.")
+    if ttype not in TACHES_TYPES_CODES:
+        raise ValueError("Type inconnu.")
+    if module and module not in _module_codes():
+        module = None
+    if service not in TACHES_SERVICES_CODES:
+        raise ValueError("Service inconnu.")
+    return _inserer_tache(
+        conn, demandeur, titre=titre, description=description, statut=statut,
+        priorite="normale", ttype=ttype, module=module, service=service,
+        assignes=_valid_assignes(conn, assignes),
+    )
 
 
 _PATCH_LABELS = {
