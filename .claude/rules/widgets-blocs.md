@@ -140,6 +140,14 @@ superadmins actifs, via `creer_tache_pour()` de `app/routers/taches.py` — seul
 point d'écriture d'une tâche hors du gestionnaire. 5 demandes par jour et par
 personne.
 
+Une demande faite depuis une appli joint l'**écran concerné** (prérempli,
+modifiable) et son adresse. Le libellé vient de `window.mysifaEcran()` si la
+page le définit (MyStock : onglet, catégorie de matières, matière ouverte),
+sinon du titre de l'onglet du navigateur (« Matières premières — MyStock —
+MySifa » → « MyStock › Matières premières »). Une page dont la sous-vue
+n'est ni dans son titre ni dans son URL doit définir `mysifaEcran`. Le
+bandeau du mode capture propose aussi « Faire une demande ».
+
 Guide in-app : `accueil-widgets`, défini dans `mysifa_accueil.js`
 (moteur partagé `mysifa_guides.js`), bouton « ? » dans l'en-tête de la
 colonne. Seul guide ouvert à **tous les rôles** (`tous: true`, décision du
