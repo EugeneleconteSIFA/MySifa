@@ -305,22 +305,64 @@ def _parse_assignes(brut: Optional[str]) -> list[dict]:
 # ─── Personnes assignables ────────────────────────────────────────────────
 
 def _users_assignables(conn, user: dict) -> list:
-    """Comptes actifs qu'on peut assigner : les superadmins uniquement.
+    """Comptes actifs qu'on peut assigner : ceux qui peuvent ouvrir l'app.
 
-    Proposer tous les comptes qui ouvrent l'app noyait le sélecteur sous une
-    trentaine de noms, alors que les tâches se confient en pratique aux
-    superadmins. Le rôle vient de `ROLE_SUPERADMIN` (config), pas d'un nom.
+    Assigner quelqu'un qui recevra un 403 en cliquant n'a pas de sens. La liste
+    se déduit donc de la matrice d'accès, pas d'un rôle en dur.
+
+    Tous services confondus, volontairement : une tâche se confie à la personne
+    qui sait la traiter, pas à un organigramme. L'assigné la voit à titre
+    personnel (clause « mes tâches » du périmètre) sans que la tâche entre pour
+    autant dans le périmètre de son service — la confier à quelqu'un ne la
+    publie pas à toute son équipe.
+
+    Ordre de la liste, pensé pour qu'on trouve vite la bonne personne : soi-même,
+    puis les superadmins, puis son propre service, puis tous les autres —
+    alphabétique à l'intérieur de chaque groupe.
 
     Le contrôle serveur de `_valid_assignes` reste, lui, ouvert à tout compte
     actif : des tâches plus anciennes portent des assignés qui ne sont plus
     proposés ici, et il faut pouvoir les rouvrir et les désassigner.
     """
-    return conn.execute(
-        """SELECT id, nom, role, avatar_url FROM users u
-            WHERE u.actif=1 AND u.role=?
-            ORDER BY nom COLLATE NOCASE""",
-        (ROLE_SUPERADMIN,),
+    filtres = ["u.actif=1"]
+    params: list = []
+
+    a_matrice = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='role_access_defaults'"
+    ).fetchone()
+    if a_matrice:
+        filtres.append(
+            "(u.role=?"
+            " OR EXISTS (SELECT 1 FROM role_access_defaults r"
+            "             WHERE r.role=u.role AND r.app_id=? AND r.module_id='_app'"
+            "               AND r.level<>'none')"
+            " OR EXISTS (SELECT 1 FROM user_access_overrides o"
+            "             WHERE o.user_id=u.id AND o.app_id=? AND o.module_id='_app'"
+            "               AND o.level<>'none'))"
+        )
+        params.extend([ROLE_SUPERADMIN, APP, APP])
+
+    rows = conn.execute(
+        f"""SELECT id, nom, role, avatar_url FROM users u
+             WHERE {' AND '.join(filtres)}
+             ORDER BY nom COLLATE NOCASE""",
+        params,
     ).fetchall()
+
+    moi = user.get("id")
+    mon_service = _service(user)
+
+    def _groupe(u) -> int:
+        if u["id"] == moi:
+            return 0
+        if u["role"] == ROLE_SUPERADMIN:
+            return 1
+        if mon_service and u["role"] == mon_service:
+            return 2
+        return 3
+
+    # sorted() est stable : l'ordre alphabétique du SQL tient dans chaque groupe.
+    return sorted(rows, key=_groupe)
 
 
 # ─── Schémas ──────────────────────────────────────────────────────────────
