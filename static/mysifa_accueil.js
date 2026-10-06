@@ -13,7 +13,9 @@
  * Paliers (largeur vue par la page, zoom compris) :
  *   ≥ 1600 px   colonne de 380 px
  *   1200-1599   colonne de 300 px
- *   900-1199    colonne compacte de 172 px : valeur principale seule
+ *   900-1199    colonne compacte de 220 px : toutes les valeurs, libellé
+ *               au-dessus du chiffre (plus de valeur principale seule :
+ *               l'indicateur paraissait replié, retour du 06/10/2026)
  *   < 900       section repliable en haut de l'accueil
  *
  * Toute donnée affichée passe par textContent ou esc().
@@ -100,7 +102,7 @@
       "  body.mysifa-accueil-on.mysifa-accueil-repliee #root{margin-left:56px}",
       "}",
       "@media (min-width:1600px){#mysifa-accueil{--mac-w:380px}}",
-      "@media (min-width:900px) and (max-width:1199px){#mysifa-accueil{--mac-w:172px}}",
+      "@media (min-width:900px) and (max-width:1199px){#mysifa-accueil{--mac-w:220px}}",
       "@media (max-width:899px){#mysifa-accueil{padding:12px 16px 0;width:100%}}",
       // Titre sur sa propre ligne, boutons dessous : « Mes tableaux de bord »
       // ne tient pas à côté des boutons dans une colonne de 300 px.
@@ -156,9 +158,11 @@
       "@media (min-width:900px) and (max-width:1199px){",
       "  .mac-carte .mac-cadre{position:absolute!important;left:-10000px!important;width:1100px!important;visibility:hidden!important}",
       "  .mac-carte .mac-cadre iframe{width:1100px!important;height:700px!important}",
-      "  .mac-val:nth-child(n+2){display:none}",
-      "  .mac-val .lib{display:none}",
-      "  .mac-perso,.mac-outils{display:none!important}",
+      "  .mac-vals{gap:4px}",
+      "  .mac-val{flex-direction:column;align-items:stretch;gap:0}",
+      "  .mac-val .lib{font-size:11px}",
+      "  .mac-val .v{font-size:17px;line-height:1.2}",
+      "  .mac-perso span{display:none}",
       "}",
       ".mac-outils{display:none;align-items:center;gap:4px;padding:6px 8px;border-top:1px solid var(--border,#1e293b);background:var(--bg,#0a0e17)}",
       "#mysifa-accueil.edition .mac-outils{display:flex}",
