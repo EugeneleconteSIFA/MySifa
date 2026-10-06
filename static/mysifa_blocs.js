@@ -367,6 +367,7 @@
         ".mysifa-cap-pan select,.mysifa-cap-pan input[type=text]{font:13px 'Segoe UI',system-ui,sans-serif;background:var(--card,#111827);",
         "  color:var(--text,#f1f5f9);border:1px solid var(--border,#1e293b);border-radius:8px;padding:6px 8px;min-width:0}",
         ".mysifa-cap-pan input.cap-nom{width:100%;box-sizing:border-box}",
+        ".mysifa-cap-pan select.cap-appli{width:100%;box-sizing:border-box;font:13px 'Segoe UI',system-ui,sans-serif;background:var(--card,#111827);color:var(--text,#f1f5f9);border:1px solid var(--border,#1e293b);border-radius:8px;padding:7px 8px}",
         ".mysifa-cap-pan textarea.cap-texte{width:100%;box-sizing:border-box;resize:vertical;font:13px 'Segoe UI',system-ui,sans-serif;background:var(--card,#111827);color:var(--text,#f1f5f9);border:1px solid var(--border,#1e293b);border-radius:8px;padding:8px}",
         ".mysifa-cap-pan .cap-choix{display:flex;gap:6px;flex-wrap:wrap}",
         ".mysifa-cap-pan .cap-choix button.on{background:var(--accent-bg,rgba(34,211,238,.12));border-color:var(--accent,#22d3ee);color:var(--accent,#22d3ee)}",
@@ -816,6 +817,8 @@
       panneau.innerHTML =
         "<h2>Faire une demande de tableau de bord</h2>" +
         '<p class="cap-sous">Décrivez le chiffre que vous aimeriez suivre. La demande est transmise aux administrateurs de MySifa.</p>' +
+        '<div class="cap-lbl">Application concernée</div>' +
+        '<select class="cap-appli"><option value="">Chargement…</option></select>' +
         '<div class="cap-lbl">Quel chiffre voulez-vous suivre ?</div>' +
         '<textarea class="cap-texte" maxlength="2000" rows="6" placeholder="Par exemple : le nombre de palettes parties cette semaine, par transporteur."></textarea>' +
         '<div class="cap-err" role="alert"></div>' +
@@ -823,17 +826,33 @@
         '<button type="button" class="cap-ok" data-act="ok">Envoyer la demande</button></div>';
       document.body.appendChild(panneau);
       var zone = panneau.querySelector(".cap-texte");
+      var choix = panneau.querySelector(".cap-appli");
       var err = panneau.querySelector(".cap-err");
       zone.addEventListener("input", function () { err.textContent = ""; });
+      choix.addEventListener("change", function () { err.textContent = ""; });
+      // Depuis une appli (/stock, /planning-rh…), elle est présélectionnée ;
+      // depuis l'accueil, le demandeur choisit.
+      var ici = (location.pathname.split("/")[1] || "").replace(/-/g, "_");
+      api("/api/accueil/demandes/applis").then(function (d) {
+        choix.innerHTML = '<option value="">Choisir une application…</option>';
+        (d.applis || []).forEach(function (a) {
+          var o = document.createElement("option");
+          o.value = a.code;
+          o.textContent = a.label;
+          if (a.code === ici) o.selected = true;
+          choix.appendChild(o);
+        });
+      }).catch(function () { err.textContent = "Liste des applications indisponible — réessayez."; });
       panneau.addEventListener("click", function (e) {
         var b = e.target.closest("button");
         if (!b) return;
         if (b.getAttribute("data-act") === "annuler") { fermerPanneau(); return; }
         if (b.getAttribute("data-act") !== "ok") return;
         var texte = zone.value.trim();
+        if (!choix.value) { err.textContent = "Choisissez l'application concernée."; choix.focus(); return; }
         if (texte.length < 10) { err.textContent = "Décrivez le chiffre en quelques mots (10 caractères au moins)."; return; }
         b.disabled = true;
-        api("/api/accueil/demandes", { method: "POST", body: { texte: texte, page: location.pathname + location.search + location.hash } })
+        api("/api/accueil/demandes", { method: "POST", body: { texte: texte, appli: choix.value } })
           .then(function () { fermerPanneau(); toast("Demande envoyée."); })
           .catch(function (e2) { b.disabled = false; err.textContent = e2.message; });
       });
