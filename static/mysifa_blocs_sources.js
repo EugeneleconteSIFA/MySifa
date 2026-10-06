@@ -166,6 +166,47 @@
       });
     },
 
+    /* ── MyStock › Matières premières : tuile d'une catégorie ────────────
+       Même API et même rapprochement que buildMatieresAccueil / mpPillMatch
+       (app/web/stock_page.py). L'objet est l'id de la tuile : « carton »,
+       « tout », ou « frontal:<slug> » pour une sous-section des frontaux. */
+    "stock.matieres.categorie": function (ctx) {
+      return ctx.json("/api/stock/matieres").then(function (list) {
+        list = Array.isArray(list) ? list : [];
+        var id = String(ctx.objet || "");
+        var PREFIXE = "frontal:";
+        function slug(x) {
+          return String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "");
+        }
+        var garde;
+        if (id === "tout") {
+          garde = function () { return true; };
+        } else if (id.indexOf(PREFIXE) === 0) {
+          var sl = id.slice(PREFIXE.length), libelle = null;
+          if (sl) {
+            // Libellé de la sous-section : celui de sa première matière, comme mpFrontalSousSections.
+            list.some(function (m) {
+              var ss = (m.sous_section || "").trim();
+              if (String(m.categorie || "").toLowerCase() === "frontal" && ss && slug(ss) === sl) { libelle = ss; return true; }
+              return false;
+            });
+            if (!libelle) return { introuvable: true };
+          }
+          garde = function (m) {
+            if (m.categorie !== "frontal") return false;
+            var ss = (m.sous_section || "").trim();
+            return libelle ? ss.toLowerCase() === libelle.toLowerCase() : !ss;
+          };
+        } else {
+          garde = function (m) { return m.categorie === id; };
+        }
+        var items = list.filter(garde);
+        var sous = items.filter(function (m) { return m.en_alerte; }).length;
+        return r({ references: String(items.length), "sous-seuil": String(sous) },
+                 { references: items.length, "sous-seuil": sous });
+      });
+    },
+
     /* ── Maintenance (app/web/maintenance_page.py) ─────────────────────
        Le calcul des statuts vit côté serveur (app/services/maintenance_statuts.py),
        traduction exacte de celui de la page. Sans machine ni catégorie

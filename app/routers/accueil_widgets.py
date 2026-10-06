@@ -139,6 +139,8 @@ class Prefs(BaseModel):
 class Demande(BaseModel):
     texte: str
     appli: str
+    ecran: Optional[str] = None    # « MyStock › Matières premières › Cartons »
+    lien: Optional[str] = None     # adresse interne de l'écran d'origine
 
 
 class Reglage(BaseModel):
@@ -243,6 +245,10 @@ def demander_tableau(body: Demande, request: Request):
     appli = (body.appli or "").strip()
     if appli not in libelles:
         raise HTTPException(400, "Choisissez l'application concernée.")
+    ecran = " ".join((body.ecran or "").split())[:200]
+    lien = (body.lien or "").strip()
+    if lien and not reg.url_capture_valide(lien):
+        lien = ""
     resume = " ".join(texte.split())
     titre = f"{_TITRE_DEMANDE} — {resume[:80]}{'…' if len(resume) > 80 else ''}"
 
@@ -267,6 +273,10 @@ def demander_tableau(body: Demande, request: Request):
             f"Demandeur : {user.get('nom') or user.get('email') or ''} ({role_label(user.get('role'))})",
             f"Application concernée : {libelles[appli]}",
         ]
+        if ecran:
+            lignes.append(f"Écran concerné : {ecran}")
+        if lien:
+            lignes.append(f"Lien : {lien}")
         lignes.append("Indicateurs actuels : " + (", ".join(indicateurs) if indicateurs else "aucun"))
         try:
             creer_tache_pour(

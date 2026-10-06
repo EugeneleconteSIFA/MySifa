@@ -339,6 +339,7 @@
         "  font:13px 'Segoe UI',system-ui,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.2);max-width:calc(100vw - 32px)}",
         ".mysifa-cap-bandeau button,.mysifa-cap-pan button{font:600 12px 'Segoe UI',system-ui,sans-serif;border-radius:10px;padding:7px 12px;cursor:pointer;",
         "  background:var(--bg,#0a0e17);color:var(--text,#f1f5f9);border:1px solid var(--border,#1e293b)}",
+        ".mysifa-cap-bandeau button{white-space:nowrap;flex-shrink:0}",
         "@media (max-width:600px){.mysifa-cap-bandeau{left:12px;right:12px;transform:none;max-width:none}}",
         // Bulle de survol = aperçu de l'indicateur : nom et valeurs qu'il pourrait afficher.
         ".mysifa-cap-bulle{position:fixed;z-index:2147482002;pointer-events:none;background:var(--card,#111827);color:var(--text,#f1f5f9);",
@@ -367,6 +368,8 @@
         ".mysifa-cap-pan select,.mysifa-cap-pan input[type=text]{font:13px 'Segoe UI',system-ui,sans-serif;background:var(--card,#111827);",
         "  color:var(--text,#f1f5f9);border:1px solid var(--border,#1e293b);border-radius:8px;padding:6px 8px;min-width:0}",
         ".mysifa-cap-pan input.cap-nom{width:100%;box-sizing:border-box}",
+        ".mysifa-cap-pan input.cap-ecran{width:100%;box-sizing:border-box;font:13px 'Segoe UI',system-ui,sans-serif;background:var(--card,#111827);color:var(--text,#f1f5f9);border:1px solid var(--border,#1e293b);border-radius:8px;padding:7px 8px}",
+        ".mysifa-cap-pan .cap-facult{text-transform:none;letter-spacing:0;font-weight:400}",
         ".mysifa-cap-pan select.cap-appli{width:100%;box-sizing:border-box;font:13px 'Segoe UI',system-ui,sans-serif;background:var(--card,#111827);color:var(--text,#f1f5f9);border:1px solid var(--border,#1e293b);border-radius:8px;padding:7px 8px}",
         ".mysifa-cap-pan textarea.cap-texte{width:100%;box-sizing:border-box;resize:vertical;font:13px 'Segoe UI',system-ui,sans-serif;background:var(--card,#111827);color:var(--text,#f1f5f9);border:1px solid var(--border,#1e293b);border-radius:8px;padding:8px}",
         ".mysifa-cap-pan .cap-choix{display:flex;gap:6px;flex-wrap:wrap}",
@@ -564,7 +567,15 @@
         q.type = "button";
         q.textContent = "Quitter";
         q.addEventListener("click", quitter);
+        // Le chiffre voulu n'est pas entouré : c'est ici qu'on le demande,
+        // l'écran courant part avec la demande.
+        var dem = document.createElement("button");
+        dem.type = "button";
+        dem.textContent = "Faire une demande";
+        dem.title = "Demander un indicateur qui n'est pas capturable sur cet écran";
+        dem.addEventListener("click", function () { quitter(); demander(); });
         bandeau.appendChild(txt);
+        bandeau.appendChild(dem);
         bandeau.appendChild(q);
         document.body.appendChild(bandeau);
         bulle = document.createElement("div");
@@ -807,6 +818,19 @@
     /* Demande de tableau de bord : un chiffre qui n'est pas encore
        capturable. Le serveur en fait une tâche du Gestionnaire de tâches,
        assignée aux superadmins (POST /api/accueil/demandes). */
+    /* Libellé lisible de l'écran courant (« MyStock › Matières premières ›
+       Cartons »). Une page peut le préciser par window.mysifaEcran() ; sinon
+       on le déduit du titre de l'onglet (« Matières premières — MyStock —
+       MySifa » : le dernier segment, le nom du produit, est retiré). */
+    function ecranCourant() {
+      if (typeof window.mysifaEcran === "function") {
+        try { var e = window.mysifaEcran(); if (e) return String(e); } catch (err) { /* titre en secours */ }
+      }
+      var parts = String(document.title || "").split(" — ").map(function (x) { return x.trim(); }).filter(Boolean);
+      if (parts.length > 1) parts.pop();
+      return parts.reverse().join(" › ");
+    }
+
     function demander() {
       poserStyle();
       fermerPanneau();
@@ -819,6 +843,8 @@
         '<p class="cap-sous">Décrivez le chiffre que vous aimeriez suivre. La demande est transmise aux administrateurs de MySifa.</p>' +
         '<div class="cap-lbl">Application concernée</div>' +
         '<select class="cap-appli"><option value="">Chargement…</option></select>' +
+        '<div class="cap-lbl">Écran ou onglet concerné <span class="cap-facult">(facultatif)</span></div>' +
+        '<input type="text" class="cap-ecran" maxlength="200" placeholder="Par exemple : MyStock › Matières premières › Cartons">' +
         '<div class="cap-lbl">Quel chiffre voulez-vous suivre ?</div>' +
         '<textarea class="cap-texte" maxlength="2000" rows="6" placeholder="Par exemple : le nombre de palettes parties cette semaine, par transporteur."></textarea>' +
         '<div class="cap-err" role="alert"></div>' +
@@ -827,6 +853,11 @@
       document.body.appendChild(panneau);
       var zone = panneau.querySelector(".cap-texte");
       var choix = panneau.querySelector(".cap-appli");
+      // Depuis une appli, l'écran est connu : il est prérempli (modifiable) et
+      // son adresse accompagne la demande. Depuis l'accueil, le demandeur le
+      // précise lui-même s'il le souhaite.
+      var depuisAppli = location.pathname !== "/";
+      panneau.querySelector(".cap-ecran").value = depuisAppli ? ecranCourant() : "";
       var err = panneau.querySelector(".cap-err");
       zone.addEventListener("input", function () { err.textContent = ""; });
       choix.addEventListener("change", function () { err.textContent = ""; });
@@ -852,7 +883,11 @@
         if (!choix.value) { err.textContent = "Choisissez l'application concernée."; choix.focus(); return; }
         if (texte.length < 10) { err.textContent = "Décrivez le chiffre en quelques mots (10 caractères au moins)."; return; }
         b.disabled = true;
-        api("/api/accueil/demandes", { method: "POST", body: { texte: texte, appli: choix.value } })
+        var lien = depuisAppli ? location.pathname + location.search + location.hash : null;
+        api("/api/accueil/demandes", { method: "POST", body: {
+          texte: texte, appli: choix.value,
+          ecran: panneau.querySelector(".cap-ecran").value.trim() || null, lien: lien
+        } })
           .then(function () { fermerPanneau(); toast("Demande envoyée."); })
           .catch(function (e2) { b.disabled = false; err.textContent = e2.message; });
       });

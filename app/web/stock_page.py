@@ -6070,9 +6070,16 @@ function buildMatieresAccueil(head, banner, searchWrap) {
   const tuile = (d, extraCls) => {
     const items = list.filter(m => mpPillMatch(d, m));
     const alertes = items.filter(m => m.en_alerte).length;
+    // Widget d'accueil : une tuile = une catégorie suivie
+    // (app/services/blocs_registre.py, source dans mysifa_blocs_sources.js).
     return el('button', {
       cls: 'mp-tuile' + (extraCls ? ' ' + extraCls : ''),
       type: 'button',
+      'data-bloc': 'stock.matieres.categorie',
+      'data-bloc-objet': d.id,
+      'data-bloc-objet-libelle': d.cat === 'tout' ? 'Toutes catégories' : d.label,
+      'data-bloc-valeur-references': String(items.length),
+      'data-bloc-valeur-sous-seuil': String(alertes),
       on: { click: () => { mpOuvrirCategorie(d); if (typeof stockSyncUrl === 'function') stockSyncUrl(); renderMatieresView(); } },
     },
       el('span', { cls: 'mp-tuile-nom' }, d.cat === 'tout' ? 'Toutes catégories' : d.label),
@@ -25002,6 +25009,19 @@ function renderValorisationView(fullRebuild) {
   renderValorisationHistoriqueModal();
 }
 
+// Écran courant, en clair, pour une demande de tableau de bord
+// (mysifa_blocs.js) : onglet, puis catégorie de matières et matière ouvertes.
+window.mysifaEcran = function () {
+  const parts = ['MyStock', (STOCK_TAB_DOC_TITLES[S.tab] || '').split(' — ')[0]].filter(Boolean);
+  if (S.tab === 'matieres' && !S.matieresAccueil && S.matieresCat && S.matieresCat !== 'tout') {
+    const ss = S.matieresSousSection;
+    const cat = MP_PILL_CATS.find(p => p.id === S.matieresCat);
+    if (S.matieresCat === 'frontal' && ss) parts.push(ss === MP_SOUS_SECTION_NONE ? 'Frontaux sans sous-section' : ss);
+    else if (cat) parts.push(cat.label);
+  }
+  if (S.selMatiere && S.selMatiere.matiere) parts.push(mpTitre(S.selMatiere.matiere));
+  return parts.join(' › ');
+};
 const STOCK_TAB_DOC_TITLES = {
   dashboard: 'Tableau de bord — MyStock — MySifa',
   matieres: 'Matières premières — MyStock — MySifa',

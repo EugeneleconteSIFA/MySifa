@@ -72,6 +72,12 @@ BLOCS: dict[str, Bloc] = {
         valeurs=(("lignes", "Matières sous seuil"),),
         acces="stock",
     ),
+    "stock.matieres.categorie": Bloc(
+        appli="stock", libelle="Catégorie de matières", url="/stock?tab=matieres",
+        type="objet",
+        valeurs=(("references", "Références"), ("sous-seuil", "Sous le seuil")),
+        acces="stock", objet="categorie",
+    ),
     "stock.dashboard.kpis": Bloc(
         appli="stock",
         libelle="Chiffres du stock",
