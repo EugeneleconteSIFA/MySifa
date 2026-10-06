@@ -1179,7 +1179,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             </button>
             <button type="button" class="menu-item" data-goto="blocs" data-req-section="blocs">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg></span>
-              <span class="mi-body"><span class="mi-lbl">Blocs capturables</span><span class="mi-desc">Ce que les widgets d'accueil peuvent épingler, et leur usage.</span></span>
+              <span class="mi-body"><span class="mi-lbl">Blocs capturables</span><span class="mi-desc">Ce que les tableaux de bord de l'accueil peuvent épingler, et leur usage.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
             <button type="button" class="menu-item" data-goto="fsc">
@@ -3522,7 +3522,7 @@ function syncSettingsPageHead(tabId) {
     notifications: { title: 'Notifications',  sub: "Pastilles rouges par service, sur les applis de l'écran d'accueil" },
     audit:        { title: 'Audit',           sub: 'Log d\'activité' },
     fsc:          { title: 'Registre FSC',    sub: '' },
-    blocs:        { title: 'Blocs capturables', sub: "Widgets d'accueil" },
+    blocs:        { title: 'Blocs capturables', sub: "Tableaux de bord de l'accueil" },
     api:          { title: 'Clés API',        sub: 'Tokens d\'intégration' },
     printers:     { title: 'Imprimantes',     sub: 'Configuration et templates' },
     promote:      { title: 'Déploiement',     sub: 'Promouvoir v1 → v2' },
@@ -8256,7 +8256,7 @@ const _FMT_GUIDES = {
   'erp-overview': 'ERP — Lecture de RVGI',
   'expe-devis': 'MyExpé — Devis transporteurs',
   'mystock-flux-matieres': 'MyStock — Déstockage et écarts RVGI',
-  'accueil-widgets': 'Accueil — Mes widgets',
+  'accueil-widgets': 'Accueil — Mes tableaux de bord',
 };
 
 function _fmtGuideLabel(key){ return _FMT_GUIDES[key] || key; }
@@ -10740,9 +10740,9 @@ async function renderSettingsBlocs() {
     let html = '<div style="max-width:900px;margin:0 auto;padding:0 0 40px">' +
       '<p style="font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.5">' +
       'Les blocs sont déclarés dans le code. Ici, on suit leur usage et on peut couper la capture d\'un bloc : ' +
-      'ses widgets existants sont masqués, et réapparaissent si on le réactive.</p>' +
+      'les indicateurs existants sont masqués, et réapparaissent si on le réactive.</p>' +
       '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">' +
-      [['Blocs', blocs.length], ['Capturables', actifs], ['Widgets créés', widgets], ['Nouveaux', nouveaux]].map(k =>
+      [['Blocs', blocs.length], ['Capturables', actifs], ['Indicateurs créés', widgets], ['Nouveaux', nouveaux]].map(k =>
         '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;min-width:120px">' +
         '<div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">' + escHtml(k[0]) + '</div>' +
         '<div style="font-size:20px;font-weight:700;color:var(--text)">' + k[1] + '</div></div>').join('') +
@@ -10756,7 +10756,7 @@ async function renderSettingsBlocs() {
         '<colgroup><col style="width:38%"><col style="width:38%"><col style="width:10%"><col style="width:14%"></colgroup>' +
         '<thead><tr style="color:var(--muted);font-size:12px;text-align:left">' +
         '<th style="padding:8px 14px">Bloc</th><th style="padding:8px">Valeurs clés</th>' +
-        '<th style="padding:8px;text-align:right">Widgets</th><th style="padding:8px 14px;text-align:right">Capture</th></tr></thead><tbody>' +
+        '<th style="padding:8px;text-align:right">Indicateurs</th><th style="padding:8px 14px;text-align:right">Capture</th></tr></thead><tbody>' +
         parAppli[app].map(b =>
           '<tr style="border-top:1px solid var(--border)">' +
           '<td style="padding:8px 14px"><div style="font-weight:600">' + escHtml(b.libelle) +
