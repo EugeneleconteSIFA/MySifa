@@ -127,7 +127,8 @@ c'est le même questionnaire qu'à la capture, exposé par
 **Demande de tableau de bord** : quand le bloc voulu n'existe pas, le lien en
 bas de la colonne (et le toast « aucun bloc capturable ») ouvre
 `MySifaBlocs.demander()`. `POST /api/accueil/demandes` crée une tâche
-« évolution » (module portail) au nom du demandeur, assignée à tous les
+« évolution » au nom du demandeur, rattachée au module (= application) qu'il
+a choisi dans la liste TACHES_MODULES, assignée à tous les
 superadmins actifs, via `creer_tache_pour()` de `app/routers/taches.py` — seul
 point d'écriture d'une tâche hors du gestionnaire. 5 demandes par jour et par
 personne.

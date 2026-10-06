@@ -9,6 +9,7 @@ Endpoints utilisateur :
   PUT    /api/accueil/widgets-ordre         réordonner (liste complète des ids)
   GET    /api/accueil/prefs                 colonne repliée ou non
   PUT    /api/accueil/prefs
+  GET    /api/accueil/demandes/applis       applications proposées dans la demande
   POST   /api/accueil/demandes              demande de tableau de bord → tâche
                                             « évolution » assignée aux superadmins
 
@@ -137,7 +138,7 @@ class Prefs(BaseModel):
 
 class Demande(BaseModel):
     texte: str
-    page: Optional[str] = None
+    appli: str
 
 
 class Reglage(BaseModel):
@@ -210,6 +211,17 @@ DEMANDES_PAR_JOUR = 5
 _TITRE_DEMANDE = "Demande de tableau de bord"
 
 
+@router.get("/api/accueil/demandes/applis")
+def applis_demande(request: Request):
+    """Les applications du formulaire de demande = les modules du gestionnaire
+    de tâches (TACHES_MODULES) : l'application choisie devient le module de la
+    tâche créée."""
+    from config import taches_modules
+
+    get_current_user(request)
+    return {"applis": taches_modules()}
+
+
 @router.post("/api/accueil/demandes")
 def demander_tableau(body: Demande, request: Request):
     """Demande libre d'un indicateur qui n'existe pas encore.
@@ -218,7 +230,7 @@ def demander_tableau(body: Demande, request: Request):
     accès au gestionnaire de tâches, et assignée à tous les superadmins actifs
     (ils la voient dans leur badge « tâches assignées »).
     """
-    from config import ROLE_SUPERADMIN, role_label
+    from config import ROLE_SUPERADMIN, role_label, taches_modules
     from app.routers.taches import creer_tache_pour
 
     user = get_current_user(request)
@@ -227,9 +239,10 @@ def demander_tableau(body: Demande, request: Request):
         raise HTTPException(400, "Décrivez votre besoin en quelques mots (10 caractères minimum).")
     if len(texte) > 2000:
         raise HTTPException(400, "Demande trop longue — 2 000 caractères maximum.")
-    page = (body.page or "").strip()[:300]
-    if page and not page.startswith("/"):
-        page = ""
+    libelles = {m["code"]: m["label"] for m in taches_modules()}
+    appli = (body.appli or "").strip()
+    if appli not in libelles:
+        raise HTTPException(400, "Choisissez l'application concernée.")
     resume = " ".join(texte.split())
     titre = f"{_TITRE_DEMANDE} — {resume[:80]}{'…' if len(resume) > 80 else ''}"
 
@@ -252,14 +265,13 @@ def demander_tableau(body: Demande, request: Request):
         lignes = [
             texte, "",
             f"Demandeur : {user.get('nom') or user.get('email') or ''} ({role_label(user.get('role'))})",
+            f"Application concernée : {libelles[appli]}",
         ]
-        if page:
-            lignes.append(f"Page d'origine : {page}")
         lignes.append("Indicateurs actuels : " + (", ".join(indicateurs) if indicateurs else "aucun"))
         try:
             creer_tache_pour(
                 conn, user, titre=titre, description="\n".join(lignes),
-                ttype="evolution", module="portail", service=ROLE_SUPERADMIN,
+                ttype="evolution", module=appli, service=ROLE_SUPERADMIN,
                 assignes=superadmins,
             )
         except ValueError as e:
