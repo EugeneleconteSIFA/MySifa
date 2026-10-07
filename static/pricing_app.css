@@ -1210,3 +1210,12 @@ td.msp-actions{white-space:nowrap}
 td.msp-actions.row-actions{display:table-cell}
 td.msp-actions > *{display:inline-flex;vertical-align:middle;margin-left:6px}
 td.msp-actions > *:first-child{margin-left:0}
+
+/* Détail d'un produit : une seule barre de répartition du prix de revient. */
+.msp-repart{padding:12px 22px 4px}
+.msp-repart-barre{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--border)}
+.msp-repart-barre i{display:block;height:100%}
+.msp-repart-leg{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:8px;font-size:12px;color:var(--text2)}
+.msp-repart-leg span{display:inline-flex;align-items:center;gap:6px}
+.msp-repart-leg i{width:9px;height:9px;border-radius:3px;flex:0 0 9px}
+.msp-pastille{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:8px;vertical-align:middle}
