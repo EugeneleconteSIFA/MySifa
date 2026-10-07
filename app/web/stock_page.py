@@ -6893,7 +6893,17 @@ function buildProduitsFinisTab() {
   const wrap = el('div', { cls: 'content pf-tab', id: 'tab-produits-finis' });
 
   const kpis = S.pfKpis || {};
-  wrap.appendChild(el('div', { cls: 'pf-kpis' },
+  // Widget d'accueil (app/services/blocs_registre.py) : mêmes chiffres que
+  // les trois cartes, tous produits finis confondus (la recherche ne les
+  // filtre pas).
+  const pfCharge = S.pfLoading && S.pfStock === null;
+  const pfBloc = pfCharge ? {} : {
+    'data-bloc': 'stock.pf.kpis',
+    'data-bloc-valeur-references': String(kpis.references ?? 0),
+    'data-bloc-valeur-mouvements': String(kpis.mouvements_aujourdhui ?? 0),
+    'data-bloc-valeur-emplacements': String(kpis.emplacements_occupes ?? 0),
+  };
+  wrap.appendChild(el('div', Object.assign({ cls: 'pf-kpis' }, pfBloc),
     el('div', { cls: 'card pf-kpi', style: { padding: '16px 20px' } },
       el('div', { cls: 'pf-kpi-label' }, 'Références en stock'),
       el('div', { cls: 'pf-kpi-value', id: 'kpi-refs' }, S.pfLoading && S.pfStock === null ? '—' : String(kpis.references ?? 0)),
@@ -15179,14 +15189,33 @@ function buildInventaireList() {
           iconEl('download', 16), ' Exporter l\'inventaire')
       )
     ),
-    el('div', { cls:'invv2-legend' },
-      el('div', { cls:'invv2-legend-item invv2-c-vert' }, el('span', { cls:'invv2-dot' }), '< 15 j'),
-      el('div', { cls:'invv2-legend-item invv2-c-jaune' }, el('span', { cls:'invv2-dot' }), '15–30 j'),
-      el('div', { cls:'invv2-legend-item invv2-c-orange' }, el('span', { cls:'invv2-dot' }), '30–60 j'),
-      el('div', { cls:'invv2-legend-item invv2-c-rouge' }, el('span', { cls:'invv2-dot' }), '> 60 j / Jamais')
-    ),
+    buildInventaireLegende(list),
     searchWrap,
     listContainer
+  );
+}
+
+// Légende des couleurs, avec le nombre d'emplacements de chacune : c'est
+// aussi le bloc capturable de l'inventaire (app/services/blocs_registre.py).
+// La couleur vient du serveur (/api/stock/inventaire-v2/emplacements) ; la
+// recherche ne change pas les compteurs.
+function buildInventaireLegende(list) {
+  const n = (c) => list.filter(e => e.couleur === c).length;
+  const v = { vert: n('vert'), jaune: n('jaune'), orange: n('orange'), rouge: n('rouge') };
+  const item = (c, label) => el('div', { cls:'invv2-legend-item invv2-c-' + c },
+    el('span', { cls:'invv2-dot' }), label + ' · ' + v[c]);
+  const charge = S.invV2List == null;
+  return el('div', Object.assign({ cls:'invv2-legend' }, charge ? {} : {
+      'data-bloc': 'stock.inventaire.anciennete',
+      'data-bloc-valeur-rouge': String(v.rouge),
+      'data-bloc-valeur-orange': String(v.orange),
+      'data-bloc-valeur-a-jour': String(v.vert + v.jaune),
+      'data-bloc-valeur-emplacements': String(list.length),
+    }),
+    item('vert', '< 15 j'),
+    item('jaune', '15–30 j'),
+    item('orange', '30–60 j'),
+    item('rouge', '> 60 j / Jamais')
   );
 }
 
@@ -18636,7 +18665,20 @@ function buildBobines() {
     ),
   );
 
-  const stats = el('div', { cls: 'bob-stats' },
+  // Widget d'accueil (app/services/blocs_registre.py) : l'état choisi
+  // (en stock, consommées…) part avec la capture par mysifaBlocsContexte ; la
+  // recherche, elle, ne filtre pas le widget : pendant une recherche, les
+  // chiffres de la page ne sont plus ceux du widget, le bloc se retire.
+  const coh = b.coherence;
+  const bobBloc = (b.loading || String(b.q || '').trim()) ? {} : {
+    'data-bloc': 'stock.bobines.kpis',
+    'data-bloc-valeur-bobines': String(b.total),
+    'data-bloc-valeur-metrage': bobFmtM(b.metrageTotal) || '0 m',
+    'data-bloc-nombre-metrage': String(Math.round(Number(b.metrageTotal) || 0)),
+    'data-bloc-valeur-ecarts': coh ? String((coh.ecarts || []).length) : '',
+    'data-bloc-valeur-sans-matiere': coh ? String(coh.bobines_sans_matiere || 0) : '',
+  };
+  const stats = el('div', Object.assign({ cls: 'bob-stats' }, bobBloc),
     el('div', { cls: 'stat-card' },
       el('div', { cls: 'stat-label' }, b.etat === 'stock' ? 'Bobines en stock' : 'Bobines'),
       el('div', { cls: 'stat-value accent' }, String(b.total)),
@@ -23133,6 +23175,27 @@ function buildValorisationKpis() {
   );
 
   wrap.append(kpiTotal, kpiMP, kpiPF);
+  // Widget d'accueil (app/services/blocs_registre.py) : les montants mis en
+  // avant par les cartes — le réel quand il est affiché en gros, la base
+  // sinon. Toujours la valorisation du jour : une date figée n'est pas
+  // capturable (elle ne bougerait plus).
+  if (!v.snapshotDate) {
+    const totalAff = totalHasBreakdown ? totalGlobalReel : totalGlobal;
+    const mpAff = showReelBreakdown ? totalMPReel : totalMP;
+    const pfAff = pfHasCharges ? pfTotalAvecCharges : totalPF;
+    const sansPrix = pfLoaded ? Number(pfS.nb_refs_sans_prix || 0) : 0;
+    const bloc = {
+      'data-bloc': 'stock.valorisation.kpis',
+      'data-bloc-valeur-total': valFormatEuro(totalAff),
+      'data-bloc-nombre-total': String(Math.round(totalAff)),
+      'data-bloc-valeur-mp': valFormatEuro(mpAff),
+      'data-bloc-nombre-mp': String(Math.round(mpAff)),
+      'data-bloc-valeur-pf': pfLoaded ? valFormatEuro(pfAff) : '—',
+      'data-bloc-valeur-pf-sans-prix': String(sansPrix),
+    };
+    if (pfLoaded) bloc['data-bloc-nombre-pf'] = String(Math.round(pfAff));
+    Object.keys(bloc).forEach(k => wrap.setAttribute(k, bloc[k]));
+  }
   return wrap;
 }
 
@@ -25053,6 +25116,13 @@ window.mysifaEcran = function () {
   if (S.selMatiere && S.selMatiere.matiere) parts.push(mpTitre(S.selMatiere.matiere));
   return parts.join(' › ');
 };
+
+// Filtres qui ne vivent pas dans l'adresse, joints à la capture d'un bloc
+// (mysifa_blocs.js) : la source du widget les relit dans ctx.params.
+window.mysifaBlocsContexte = function () {
+  if (S.tab === 'bobines') return { bloc_etat: bobEnsureState().etat || 'stock' };
+  return {};
+};
 const STOCK_TAB_DOC_TITLES = {
   dashboard: 'Tableau de bord — MyStock — MySifa',
   matieres: 'Matières premières — MyStock — MySifa',
@@ -26671,6 +26741,14 @@ async function init() {
   else if (S.tab === 'plan-entrepot') { await loadPlanEntrepot(); }
   else if (S.tab === 'production') { await loadProduction(); }
   else { await loadDashboard(); }
+  // Ouverture depuis un indicateur d'accueil : filtres capturés
+  // (mysifaBlocsContexte), puis retirés de l'adresse.
+  const urlBobEtat = (urlParams.get('bloc_etat') || '').trim();
+  if (urlBobEtat && ['stock', 'consommee', 'rebut', 'tous'].includes(urlBobEtat)) {
+    if (S.tab === 'bobines') { bobEnsureState().etat = urlBobEtat; bobEnsureState().page = 0; loadBobines(); }
+    window.__mysifaFiltresLus = true;
+    if (window.MySifaBlocs && window.MySifaBlocs.retirerFiltres && !window.MySifaBlocs.embarque) window.MySifaBlocs.retirerFiltres();
+  }
   if (urlCat && S.tab === 'matieres' && !(urlMatiereId > 0)) {
     const def = mpPillDefs().find(d => d.id === urlCat);
     if (def) { mpOuvrirCategorie(def); renderMatieresView(); }

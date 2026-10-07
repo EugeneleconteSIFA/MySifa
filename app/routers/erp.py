@@ -10,7 +10,7 @@ consommateurs.
 Endpoints
 ---------
   GET /api/erp/meta                    → fraîcheur du miroir, écrans disponibles
-  GET /api/erp/tdb/{cle}               → un tableau de bord (adv | direction)
+  GET /api/erp/tdb/{cle}               → un tableau de bord (adv | direction | achats)
   GET /api/erp/{ecran}/lignes          → liste paginée, filtrée, triée
   GET /api/erp/{ecran}/export          → la vue courante en classeur xlsx
   GET /api/erp/{ecran}/detail/{id}     → toutes les colonnes d'une ligne
@@ -21,6 +21,8 @@ MySifa lit. Le jour où l'on voudra écrire, ce sera un autre chantier, avec
 l'accord de l'éditeur de l'ERP.
 """
 
+import os
+import time
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -205,12 +207,39 @@ def erp_tableau_de_bord(cle: str, request: Request):
     et l'écran qu'il ouvre ne peuvent alors jamais diverger.
     """
     _exiger_acces(request)
-    if cle not in ("adv", "direction"):
+    calcul = _TDB.get(cle)
+    if calcul is None:
         raise HTTPException(status_code=404, detail="Tableau de bord inconnu.")
     try:
-        return erp_tdb.adv() if cle == "adv" else erp_tdb.direction()
+        return _tdb_en_cache(cle, calcul)
     except FileNotFoundError as e:
         raise HTTPException(status_code=503, detail=str(e))
+
+
+_TDB = {"adv": erp_tdb.adv, "direction": erp_tdb.direction, "achats": erp_tdb.achats}
+
+# Les tableaux de bord alimentent aussi les indicateurs de l'accueil
+# (static/mysifa_blocs_sources.js), rafraîchis chaque minute chez chaque
+# utilisateur qui en a épinglé un. Le miroir, lui, ne change qu'à la synchro
+# (5 h et 12 h 30) : on garde le résultat deux minutes, et on le jette dès
+# que le fichier du miroir bouge. Les compteurs MySifa de l'ADV (états de
+# rattachement) prennent donc au plus deux minutes de retard.
+_TDB_CACHE: dict = {}
+_TDB_TTL = 120
+
+
+def _tdb_en_cache(cle, calcul):
+    try:
+        version = os.path.getmtime(miroir.ERP_MIRROR_DB)
+    except (OSError, AttributeError, TypeError):
+        version = None
+    maintenant = time.monotonic()
+    vu = _TDB_CACHE.get(cle)
+    if vu and vu[0] == version and maintenant - vu[1] < _TDB_TTL:
+        return vu[2]
+    res = calcul()
+    _TDB_CACHE[cle] = (version, maintenant, res)
+    return res
 
 
 @router.get("/{cle}/lignes")

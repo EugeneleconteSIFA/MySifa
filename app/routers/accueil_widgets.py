@@ -30,6 +30,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.core.database import get_db
+from config import ROLES_ERP
 from app.services import blocs_registre as reg
 from app.services.auth_service import (
     get_current_user,
@@ -47,8 +48,17 @@ def _now() -> str:
     return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
 
+# Applications ouvertes par rôle et non par le contrôle d'accès des applis :
+# l'indicateur suit la même règle que la page et son API.
+_ACCES_PAR_ROLE = {"erp": ROLES_ERP}
+
+
 def _bloc_accessible(user: dict, bloc: reg.Bloc) -> bool:
-    return bloc.acces is None or user_has_app_access(user, bloc.acces)
+    if bloc.acces is None:
+        return True
+    if bloc.acces in _ACCES_PAR_ROLE:
+        return user.get("role") in _ACCES_PAR_ROLE[bloc.acces]
+    return user_has_app_access(user, bloc.acces)
 
 
 def _desactives(conn) -> set[str]:

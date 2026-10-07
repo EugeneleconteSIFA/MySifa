@@ -105,6 +105,35 @@ BLOCS: dict[str, Bloc] = {
                  ("mappees", "Références associées")),
         acces="stock",
     ),
+    # ── MyStock › Produits finis, Contrôle, Traçabilité, Inventaire ──
+    "stock.pf.kpis": Bloc(
+        appli="stock", libelle="Produits finis", url="/stock?tab=produits-finis",
+        type="chiffre",
+        valeurs=(("references", "Références en stock"), ("mouvements", "Mouvements aujourd'hui"),
+                 ("emplacements", "Emplacements occupés")),
+        acces="stock",
+    ),
+    "stock.valorisation.kpis": Bloc(
+        appli="stock", libelle="Valorisation du stock", url="/stock?tab=valorisation",
+        type="chiffre",
+        valeurs=(("total", "Stock valorisé (€)"), ("mp", "Matières premières (€)"),
+                 ("pf", "Produits finis (€)"), ("pf-sans-prix", "Produits finis sans prix")),
+        acces="stock",
+    ),
+    "stock.bobines.kpis": Bloc(
+        appli="stock", libelle="Traçabilité des bobines", url="/stock?tab=bobines",
+        type="chiffre",
+        valeurs=(("bobines", "Bobines"), ("metrage", "Métrage (m)"),
+                 ("ecarts", "Écarts au compteur"), ("sans-matiere", "Bobines sans matière")),
+        acces="stock",
+    ),
+    "stock.inventaire.anciennete": Bloc(
+        appli="stock", libelle="Ancienneté de l'inventaire", url="/stock?tab=inventaire",
+        type="chiffre",
+        valeurs=(("rouge", "Emplacements à plus de 60 j ou jamais"), ("orange", "Emplacements à 30-60 j"),
+                 ("a-jour", "Emplacements à moins de 30 j"), ("emplacements", "Emplacements avec stock")),
+        acces="stock",
+    ),
     "expe.departs.programmes": Bloc(
         appli="expe",
         libelle="Départs programmés",
@@ -171,6 +200,38 @@ BLOCS: dict[str, Bloc] = {
     "expe.pilotage.envois": Bloc(
         appli="expe", libelle="Envois à piloter", url="/expe#pilotage",
         type="tableau", valeurs=(("lignes", "Envois"),), acces="expe",
+    ),
+    # ── MyExpé › Palettes Europe (app/web/expe_assets.py) ──
+    "expe.palettes.totaux": Bloc(
+        appli="expe", libelle="Palettes Europe", url="/expe#palettes_europe",
+        type="chiffre",
+        valeurs=(("solde", "Solde dû par les transporteurs"), ("envoyees", "Palettes envoyées"),
+                 ("retournees", "Palettes retournées"), ("litiges", "Palettes en litige")),
+        acces="expe",
+    ),
+    "expe.palettes.transporteur": Bloc(
+        appli="expe", libelle="Compte palettes d'un transporteur", url="/expe#palettes_europe",
+        type="objet",
+        valeurs=(("solde", "Solde dû"), ("donnees", "Palettes remises"),
+                 ("rendues", "Palettes rendues"), ("litiges", "Palettes en litige")),
+        acces="expe", objet="transporteur",
+    ),
+    # ── MyExpé › Taxe carburant (app/web/expe_carburant_assets.py) ──
+    "expe.carburant.resume": Bloc(
+        appli="expe", libelle="Taxe carburant", url="/expe#carburant",
+        type="chiffre",
+        valeurs=(("en-attente", "En attente de réponse"), ("anciens", "Taux de plus de 45 j"),
+                 ("jamais", "Jamais mise à jour"), ("a-jour", "À jour"),
+                 ("actifs", "Transporteurs actifs"), ("moyen", "Taux moyen (%)")),
+        acces="expe",
+    ),
+    "expe.carburant.transporteur": Bloc(
+        appli="expe", libelle="Taxe carburant d'un transporteur", url="/expe#carburant",
+        type="objet",
+        valeurs=(("taux", "Taxe carburant (%)"), ("statut", "Statut"),
+                 ("maj", "Mise à jour le"), ("age", "Âge du taux (j)")),
+        textes=("statut", "maj"),
+        acces="expe", objet="transporteur",
     ),
     # ── Planning machine (app/web/planning_page.py) ──
     "planning.dossiers": Bloc(
@@ -259,6 +320,38 @@ BLOCS: dict[str, Bloc] = {
                  ("a-renseigner", "Statuts de contrat à renseigner"),
                  ("incomplets", "Dossiers incomplets")),
         acces="compta",
+    ),
+    # ── ERP RVGI › Tableaux de bord (app/web/erp_page.py, app/services/erp_tdb.py) ──
+    # « erp » n'est pas une application du contrôle d'accès : /erp est ouvert
+    # par rôle (ROLES_ERP), et accueil_widgets traduit cet accès-là.
+    "erp.adv.kpis": Bloc(
+        appli="erp", libelle="TDB ADV — carnet", url="/erp#/tdb_adv",
+        type="chiffre",
+        valeurs=(("commandes", "Commandes à traiter"), ("semaine", "À expédier sous 7 jours"),
+                 ("retard", "Commandes en retard"), ("a-facturer", "BL à facturer"),
+                 ("sans-dossier", "Commandes sans dossier de prod")),
+        acces="erp",
+    ),
+    "erp.direction.kpis": Bloc(
+        appli="erp", libelle="TDB Direction — chiffres du mois", url="/erp#/tdb_direction",
+        type="chiffre",
+        valeurs=(("rentre-mois", "Rentré ce mois (€)"), ("facturable", "Facturable (€)"),
+                 ("facture-mois", "Facturé ce mois (€)"), ("carnet", "Carnet restant (€)")),
+        acces="erp",
+    ),
+    "erp.direction.hier": Bloc(
+        appli="erp", libelle="TDB Direction — rentré hier", url="/erp#/tdb_direction",
+        type="chiffre",
+        valeurs=(("montant", "Rentré hier (€)"), ("commandes", "Commandes rentrées hier"),
+                 ("ecart", "Écart à la moyenne 30 j (%)")),
+        acces="erp",
+    ),
+    "erp.achats.kpis": Bloc(
+        appli="erp", libelle="TDB Achats", url="/erp#/tdb_achats",
+        type="chiffre",
+        valeurs=(("retard", "Commandes fournisseurs en retard"), ("semaine", "Attendues sous 7 jours"),
+                 ("ouvertes", "Commandes fournisseurs ouvertes"), ("receptions", "Lignes reçues sur 7 jours")),
+        acces="erp",
     ),
     "portail.atelier.machine": Bloc(
         appli="portail",

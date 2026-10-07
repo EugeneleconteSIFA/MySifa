@@ -2572,7 +2572,9 @@ const TDB_DEFS={
   tdb_adv:{api:'adv',titre:'TDB ADV',
     sous:'Le fil commande → dossier de production → BL, et ce qui attend une vérification.'},
   tdb_direction:{api:'direction',titre:'TDB Direction',
-    sous:'Rentré, facturable, facturé — et le rentré de la veille.'}
+    sous:'Rentré, facturable, facturé — et le rentré de la veille.'},
+  tdb_achats:{api:'achats',titre:'TDB Achats',
+    sous:'Commandes fournisseurs à recevoir, en retard, et les réceptions de la semaine.'}
 };
 function estTdb(cle){return Object.prototype.hasOwnProperty.call(TDB_DEFS,cle);}
 
@@ -2637,6 +2639,24 @@ function tdbSousLignes(o){
 }
 
 function tdbVide(txt){return '<div class="tdb-vide">'+esc(txt)+'</div>';}
+
+// Valeurs d'un bloc capturable en indicateur d'accueil
+// (app/services/blocs_registre.py) : { cle: [texte, nombre] }. Le nom du bloc
+// s'écrit en clair à côté (data-bloc="…") — le test du registre le cherche
+// dans le code. Une valeur absente (bloc muet) n'est pas déclarée : le
+// widget affiche « — » plutôt qu'un zéro qui mentirait.
+function tdbValeurs(v){
+  let h='';
+  Object.keys(v).forEach(k=>{
+    const x=v[k];
+    if(!x||x[0]==null)return;
+    h+=' data-bloc-valeur-'+k+'="'+esc(x[0])+'"';
+    if(x[1]!=null&&isFinite(Number(x[1])))h+=' data-bloc-nombre-'+k+'="'+esc(String(x[1]))+'"';
+  });
+  return h;
+}
+function tdbCpt(o,cle){return o&&o[cle]!=null?[fmtNb(o[cle],0),o[cle]]:null;}
+function tdbEurVal(v){return v==null?null:[tdbEurTxt(v),Math.round(Number(v))];}
 
 // Un montant se lit d'un coup d'œil ou ne se lit pas : au-delà du millier on
 // abrège, et le titre porte la valeur exacte.
@@ -2795,7 +2815,8 @@ async function ouvrirTdb(cle){
   if(S.ecran!==cle)return;   // l'utilisateur est déjà parti ailleurs
   const hote=corps.querySelector('.tdb-wrap');
   if(!hote)return;
-  hote.innerHTML=(cle==='tdb_adv')?htmlTdbAdv(d):htmlTdbDirection(d);
+  hote.innerHTML=(cle==='tdb_adv')?htmlTdbAdv(d)
+    :(cle==='tdb_achats')?htmlTdbAchats(d):htmlTdbDirection(d);
   tdbBrancher(hote);
   if(cle==='tdb_adv')chargerControlesMySifa(hote);
 }
@@ -2813,7 +2834,10 @@ function htmlTdbAdv(d){
   let h=tdbIndispo(d);
 
   const ret=c.retard||null,dor=c.dormant||null,sem=c.semaine||null,sd=d.sans_dossier||null;
-  h+='<div class="tdb-tuiles">'+
+  h+='<div class="tdb-tuiles" data-bloc="erp.adv.kpis"'+tdbValeurs({
+      commandes:tdbCpt(d.carnet,'commandes'),semaine:tdbCpt(sem,'commandes'),
+      retard:tdbCpt(ret,'commandes'),'a-facturer':tdbCpt(d.a_facturer,'bl'),
+      'sans-dossier':tdbCpt(sd,'commandes')})+'>'+
     tdbTuile({k:'Commandes à traiter',v:tdbLignesCdes(c),
       s:tdbSousLignes(c)+' non soldées',
       va:'#/commandes?position=0',titre:d.formules.carnet})+
@@ -3116,7 +3140,9 @@ function htmlTdbDirection(d){
   if(hier&&hier.date){
     const ecart=(hier.moyenne_30j&&hier.montant!=null)
       ? Math.round((hier.montant/hier.moyenne_30j-1)*100):null;
-    h+='<div class="tdb-bande">'+
+    h+='<div class="tdb-bande" data-bloc="erp.direction.hier"'+tdbValeurs({
+        montant:tdbEurVal(hier.montant),commandes:tdbCpt(hier,'commandes'),
+        ecart:ecart==null?null:[(ecart>=0?'+':'')+ecart+' %',ecart]})+'>'+
       '<div><span class="lab">Rentré hier · '+esc(tdbLibelleJour(hier.date))+'</span>'+
         '<span class="big" title="'+esc(tdbEurExact(hier.montant))+'">'+
         (tdbEur(hier.montant)||'—')+'</span></div>'+
@@ -3129,7 +3155,9 @@ function htmlTdbDirection(d){
       '</div></div>';
   }
 
-  h+='<div class="tdb-tuiles">'+
+  h+='<div class="tdb-tuiles" data-bloc="erp.direction.kpis"'+tdbValeurs({
+      'rentre-mois':tdbEurVal(re.mois),facturable:tdbEurVal(fb.montant),
+      'facture-mois':tdbEurVal(fa.mois),carnet:tdbEurVal(ca.montant)})+'>'+
     tdbTuile({k:'Rentré — ce mois',v:tdbEur(re.mois),
       s:pourcent(re.mois,re.mois_n1,'vs même mois l\'an dernier'),
       sTon:ton(re.mois,re.mois_n1),va:'#/commandes',titre:d.formules.rentre})+
@@ -3264,6 +3292,116 @@ function htmlTdbDirection(d){
   return h;
 }
 
+// ── Achats ───────────────────────────────────────────────────────
+// Le carnet fournisseur, lu comme le carnet client de l'ADV : ce qui doit
+// arriver, ce qui aurait dû arriver, ce qui est arrivé.
+function htmlTdbAchats(d){
+  const o=d.ouvertes||null,b=d.bornes||{},rc=d.receptions||null;
+  const ret=o&&o.retard,sem=o&&o.semaine,dor=o&&o.dormant;
+  const auj=b.aujourdhui||'';
+  let h=tdbIndispo(d);
+  const vaRetard='#/commandes_fournisseur?position=0&livraison_jusqua='+encodeURIComponent(auj)+
+    (dor&&dor.avant?('&livraison_depuis='+encodeURIComponent(dor.avant)):'');
+  h+='<div class="tdb-tuiles" data-bloc="erp.achats.kpis"'+tdbValeurs({
+      ouvertes:tdbCpt(o,'commandes'),semaine:tdbCpt(sem,'commandes'),
+      retard:tdbCpt(ret,'commandes'),receptions:tdbCpt(rc,'lignes')})+'>'+
+    tdbTuile({k:'Commandes fournisseurs ouvertes',v:tdbLignesCdes(o),
+      s:o?(tdbSousLignes(o)+' en cours'):'',
+      va:'#/commandes_fournisseur?position=0',titre:d.formules.achats_ouverts})+
+    tdbTuile({k:'Attendues sous 7 jours',v:tdbLignesCdes(sem),s:tdbSousLignes(sem),
+      va:'#/commandes_fournisseur?position=0&livraison_depuis='+encodeURIComponent(auj)+
+        '&livraison_jusqua='+encodeURIComponent(b.fin_semaine||''),
+      titre:d.formules.achats_semaine})+
+    tdbTuile({k:'En retard de livraison',v:tdbLignesCdes(ret),ton:(ret&&ret.commandes)?'dg':'ok',
+      s:ret?(ret.commandes?(tdbSousLignes(ret)+' · livraison dépassée'):'rien en retard'):'',
+      sTon:(ret&&ret.commandes)?'dg':'ok',va:vaRetard,titre:d.formules.achats_retard})+
+    tdbTuile({k:'Réceptions — 7 jours',
+      v:rc?(fmtNb(rc.lignes,0)+'<em>'+(rc.lignes>1?'lignes':'ligne')+'</em>'):null,
+      s:rc?(fmtNb(rc.commandes,0)+' commandes · '+fmtNb(rc.aujourdhui,0)+' aujourd\'hui'):'',
+      ton:'neu',va:'#/receptions?depuis='+encodeURIComponent(b.depuis_7j||''),
+      titre:d.formules.receptions})+
+    '</div>';
+
+  // ── En retard : la liste à relancer ──
+  let corps;
+  const rt=d.retards||[];
+  if(!o){corps=tdbVide('Commandes fournisseurs indisponibles.');}
+  else if(!rt.length){corps=tdbVide('Aucune livraison fournisseur en retard.');}
+  else{
+    corps='<table class="tdb-t"><thead><tr><th>Commande</th><th>Fournisseur</th><th>Réf.</th>'+
+      '<th>Désignation</th><th class="n">Qté</th><th class="n">Livraison</th>'+
+      '<th>Retard</th></tr></thead><tbody>';
+    rt.forEach(l=>{
+      const j=joursEcoules(l.livraison,auj);
+      const ton=j>=7?'dg':(j>=2?'warn':'');
+      corps+='<tr data-ouvre="commandes_fournisseur" data-id="'+esc(l.id)+'" title="Ouvrir la commande fournisseur">'+
+        '<td class="ref">'+esc(fmtId(l.numero))+(l.ligne!=null?(' · '+esc(fmtId(l.ligne))):'')+'</td>'+
+        '<td class="fort coupe">'+esc(l.fournisseur||'—')+'</td>'+
+        '<td class="ref">'+esc(l.code1!=null&&l.code2!=null?(fmtId(l.code1)+'/'+fmtId(l.code2)):'—')+'</td>'+
+        '<td class="coupe">'+esc(l.des1||'—')+'</td>'+
+        '<td class="n">'+(l.qte==null?'—':fmtNb(l.qte,0))+'</td>'+
+        '<td class="n">'+esc(tdbJourCourt(l.livraison))+'</td>'+
+        '<td><span class="tdb-etiq '+ton+'"><i></i>'+esc(j==null?'—':(j+' j'))+'</span></td></tr>';
+    });
+    corps+='</tbody></table>';
+  }
+  const gauche=tdbPan({titre:'En retard de livraison',
+    cpt:ret?(fmtNb(ret.commandes,0)+' commandes · '+fmtNb(ret.lignes,0)+' lignes'):'',
+    plus:'Ouvrir les commandes',plusVa:vaRetard,corps:corps,
+    note:'Les plus récentes d\'abord : c\'est le fournisseur qu\'on rappelle aujourd\'hui. '+
+         (dor&&dor.lignes?(fmtNb(dor.lignes,0)+' lignes dont la livraison est dépassée depuis plus de '+
+           '90 jours ne sont pas comptées — RVGI ne les soldera plus d\'elles-mêmes. '):'')+
+         'Cliquer une ligne ouvre sa modale et ses réceptions.'});
+
+  // ── Reçu ces 7 derniers jours ──
+  let rcc;
+  const ri=d.receptions_items||[];
+  if(!rc){rcc=tdbVide('Réceptions indisponibles.');}
+  else if(!ri.length){rcc=tdbVide('Aucune réception ces 7 derniers jours.');}
+  else{
+    rcc='<table class="tdb-t"><thead><tr><th>BR</th><th>Commande</th><th>Fournisseur</th>'+
+      '<th>Désignation</th><th class="n">Qté</th><th class="n">Reçu</th></tr></thead><tbody>';
+    ri.forEach(l=>{
+      rcc+='<tr data-ouvre="receptions" data-id="'+esc(l.id)+'" title="Ouvrir la réception">'+
+        '<td class="ref">'+esc(l.ref||'—')+'</td>'+
+        '<td class="ref">'+esc(fmtId(l.numero))+'</td>'+
+        '<td class="fort coupe">'+esc(l.fournisseur||'—')+'</td>'+
+        '<td class="coupe">'+esc(l.designation||'—')+'</td>'+
+        '<td class="n">'+(l.qte==null?'—':fmtNb(l.qte,0))+'</td>'+
+        '<td class="n">'+esc(tdbJourCourt(l.reception))+'</td></tr>';
+    });
+    rcc+='</tbody></table>';
+  }
+  const gauche2=tdbPan({titre:'Reçu ces 7 derniers jours',
+    cpt:rc?(fmtNb(rc.lignes,0)+' lignes'):'',
+    plus:'Ouvrir les réceptions',plusVa:'#/receptions?depuis='+encodeURIComponent(b.depuis_7j||''),
+    corps:rcc,
+    note:'Quantité en unité d\'achat : des mètres linéaires sur les bobines, quelle que soit '+
+         'l\'unité de prix affichée par RVGI.'});
+
+  // ── Par famille ──
+  let pf;
+  const fam=d.par_famille||null;
+  if(!fam){pf=tdbVide('Familles indisponibles.');}
+  else if(!fam.length){pf=tdbVide('Aucune commande fournisseur ouverte.');}
+  else{
+    pf='<table class="tdb-t"><thead><tr><th>Famille</th><th class="n">Lignes ouvertes</th>'+
+       '<th class="n">En retard</th></tr></thead><tbody>';
+    fam.forEach(x=>{
+      pf+='<tr><td class="fort">'+esc(x.libelle)+'</td><td class="n">'+fmtNb(x.lignes,0)+'</td>'+
+        '<td class="n"><span class="tdb-etiq '+(x.retard?'dg':'ok')+'"><i></i>'+fmtNb(x.retard,0)+'</span></td></tr>';
+    });
+    pf+='</tbody></table>';
+  }
+  const droite=tdbPan({titre:'Achats ouverts par famille',corps:pf,
+    note:'La famille regroupe les types d\'article RVGI ; elle se règle dans Paramètres › '+
+         'Types d\'article RVGI. « Sans famille » : un type encore non classé.'});
+
+  h+='<div class="tdb-cols"><div class="tdb-pile">'+gauche+gauche2+'</div>'+
+     '<div class="tdb-pile">'+droite+'</div></div>';
+  return h;
+}
+
 function pourcent(a,b,suffixe){
   const x=Number(a),y=Number(b);
   if(!isFinite(x)||!isFinite(y)||!y)return '';
@@ -3329,6 +3467,13 @@ document.addEventListener('keydown',e=>{
     }
   }
 });
+
+// Écran courant, en clair, pour une demande de tableau de bord
+// (mysifa_blocs.js) : le titre de la page ne dit que « ERP ».
+window.mysifaEcran=function(){
+  const t=document.getElementById('titre');
+  return 'RVGI'+(t&&t.textContent?(' › '+t.textContent):'');
+};
 
 async function boot(){
   // L'ancienne clé propre à MyERP ne sert plus que sans mysifa_theme.js : avec, le

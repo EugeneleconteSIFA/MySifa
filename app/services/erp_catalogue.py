@@ -518,6 +518,10 @@ ECRANS = [
              "enum": "position", "defaut": "0",
              "choix": [{"v": "0|1", "label": "Non soldée (en cours ou partielle)"}]},
             {"nom": "depuis", "label": "Depuis le", "col": "e.amjc", "type": "date_min"},
+            # Les tuiles du TDB Achats ouvrent l'écran sur exactement les
+            # lignes qu'elles comptent : en retard, attendues cette semaine.
+            {"nom": "livraison_depuis", "label": "Livraison depuis", "col": "l.amjl", "type": "date_min"},
+            {"nom": "livraison_jusqua", "label": "Livraison jusqu'au", "col": "l.amjl", "type": "date_max"},
         ],
         "detail": [
             {"titre": "Commande", "champs": ["numero", "ligne", "amjc", "amjl", "rs", "numfou", "vref", "lpos"]},
@@ -1659,6 +1663,12 @@ TABLEAUX_DE_BORD = [
         "resume": "Rentré, facturable, facturé — et le rentré de la veille, "
                   "commande par commande.",
     },
+    {
+        "cle": "tdb_achats",
+        "label": "TDB Achats",
+        "resume": "Commandes fournisseurs à recevoir, en retard, et les "
+                  "réceptions de la semaine.",
+    },
 ]
 
 CLES_TDB = {t["cle"] for t in TABLEAUX_DE_BORD}
@@ -1673,11 +1683,11 @@ _MENU_TECHNIQUE = ["articles", "fiches_fabrication", "outils", "machines",
 _MENU_EXPEDITION = ["livraisons", "commandes", "colisage", "clients"]
 
 MENU_SERVICE = {
-    "superadmin": {"tdb": ["tdb_adv", "tdb_direction"], "ecrans": _MENU_ADV},
-    "direction": {"tdb": ["tdb_direction", "tdb_adv"], "ecrans": _MENU_DIRECTION},
+    "superadmin": {"tdb": ["tdb_adv", "tdb_direction", "tdb_achats"], "ecrans": _MENU_ADV},
+    "direction": {"tdb": ["tdb_direction", "tdb_adv", "tdb_achats"], "ecrans": _MENU_DIRECTION},
     "administration_ventes": {"tdb": ["tdb_adv"], "ecrans": _MENU_ADV},
-    "administration": {"tdb": ["tdb_adv"], "ecrans": _MENU_ADV},
-    "administration_technique": {"tdb": ["tdb_adv"], "ecrans": _MENU_TECHNIQUE},
+    "administration": {"tdb": ["tdb_adv", "tdb_achats"], "ecrans": _MENU_ADV},
+    "administration_technique": {"tdb": ["tdb_adv", "tdb_achats"], "ecrans": _MENU_TECHNIQUE},
     "expedition": {"tdb": [], "ecrans": _MENU_EXPEDITION},
 }
 

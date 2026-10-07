@@ -34,6 +34,15 @@ un tableau) reçoit, **dans le même commit** :
 
 Le nom suit `appli.onglet.bloc`, en minuscules, et **ne change jamais**.
 
+**Appli ouverte par rôle** (ERP RVGI : `ROLES_ERP`, pas d'app_id dans le
+contrôle d'accès) : `acces="erp"`, que `_ACCES_PAR_ROLE` de
+`accueil_widgets.py` traduit en liste de rôles. Une autre appli dans ce cas
+s'y ajoute, plutôt que de laisser `acces=None` (bloc proposé à tous).
+
+**Page rendue en chaînes HTML** (ERP) : le nom s'écrit en clair,
+`'<div class="tdb-tuiles" data-bloc="erp.adv.kpis"'+tdbValeurs({...})+'>'`.
+Un nom construit par concaténation échappe au test du registre.
+
 **Valeurs clés** — un attribut par valeur sur l'élément racine, recalculé à
 chaque rendu : `'data-bloc-valeur-lignes': String(rows.length)`. Une liste ou
 un tableau déclare au minimum `lignes`. Une carte d'état déclare son état en
@@ -109,6 +118,14 @@ Une page dont les filtres ne vivent pas dans l'URL les déclare à la capture :
 `window.mysifaBlocsContexte = () => ({bloc_periode: 'last7', bloc_machine: [...]})`.
 Ils rejoignent l'URL capturée et la source les relit (`ctx.params`). Une
 période se déclare en raccourci (`last7`, `thisMonth`…) pour rester glissante.
+
+**La page relit ses filtres capturés à l'ouverture.** Un clic sur l'indicateur
+rouvre l'adresse capturée : la page lit ses `bloc_…` à son démarrage, les
+applique, pose `window.__mysifaFiltresLus = true` et appelle
+`MySifaBlocs.retirerFiltres()` (sinon `mysifa_blocs.js` s'en charge à son
+chargement). Déclarer un filtre dans `mysifaBlocsContexte` sans le relire au
+démarrage = un clic qui ne retrouve pas les chiffres de l'indicateur. Les
+tris ne sont pas capturés : ils ne changent aucun chiffre.
 
 ### Rafraîchissement léger (blocs sans source)
 

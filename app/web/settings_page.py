@@ -10731,7 +10731,7 @@ async function renderSettingsBlocs() {
     const NOMS_APPLIS = { portail: 'Accueil', prod: 'MyProd', planning: 'Planning machine', stock: 'MyStock',
       expe: 'MyExpé', qualite: 'MyQualité', bat: 'MyBAT', ao: 'MyAO', taches: 'Tâches', messages: 'Messagerie',
       calendrier: 'Calendrier', planning_rh: 'Planning RH', rh_coffre: 'Coffre RH', compta: 'MyCompta',
-      maintenance: 'Maintenance' };
+      maintenance: 'Maintenance', erp: 'ERP RVGI' };
     const nomAppli = a => NOMS_APPLIS[a] || a;
     const parAppli = {};
     blocs.forEach(b => { (parAppli[b.appli] = parAppli[b.appli] || []).push(b); });
