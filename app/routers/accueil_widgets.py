@@ -243,7 +243,7 @@ def demander_tableau(body: Demande, request: Request):
     accès au gestionnaire de tâches, et assignée à tous les superadmins actifs
     (ils la voient dans leur badge « tâches assignées »).
     """
-    from config import ROLE_SUPERADMIN, role_label, taches_modules
+    from config import ROLE_SUPERADMIN, public_base_url, role_label, taches_modules
     from app.routers.taches import creer_tache_pour
 
     user = get_current_user(request)
@@ -284,7 +284,9 @@ def demander_tableau(body: Demande, request: Request):
         if ecran:
             lignes.append(f"Écran concerné : {ecran}")
         if lien:
-            lignes.append(f"Lien : {lien}")
+            # Adresse complète : la tâche se lit aussi hors de MySifa (email,
+            # copie dans un message), où un chemin seul ne mène nulle part.
+            lignes.append(f"Lien : {public_base_url()}{lien}")
         try:
             creer_tache_pour(
                 conn, user, titre=titre, description="\n".join(lignes),
