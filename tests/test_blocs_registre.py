@@ -171,6 +171,28 @@ deplace = reg.url_widget("test.ancien.bloc", "/test?tab=a&client=7#vue")
 verifier(deplace == "/autre?tab=b&client=7#ailleurs",
          f"bloc déplacé : nouvel emplacement + filtres capturés (obtenu {deplace!r})")
 verifier(reg.url_widget("nexiste.pas.du-tout", "/x") is None, "bloc disparu : pas d'URL")
+
+# ── 6. Bloc cliquable : l'indicateur ouvre la page de son objet ─────────
+reg.BLOCS["test.tuile.objet"] = reg.Bloc(
+    appli="test", libelle="Tuile", url="/test?tab=liste", type="objet",
+    valeurs=(("n", "N"),), objet="categorie", lien="/test?tab=liste&cat={objet}",
+)
+verifier(reg.url_widget("test.tuile.objet", "/test?tab=liste&tri=asc", "carton")
+         == "/test?tab=liste&cat=carton&tri=asc",
+         "lien : page de l'objet, filtres capturés conservés")
+verifier(reg.url_widget("test.tuile.objet", "/test?tab=liste&cat=autre", "carton")
+         == "/test?tab=liste&cat=carton",
+         "lien : l'objet du widget l'emporte sur l'adresse capturée")
+verifier(reg.url_widget("test.tuile.objet", "/test?tab=liste", "frontal:couche")
+         == "/test?tab=liste&cat=frontal%3Acouche",
+         "lien : objet composé encodé dans l'adresse")
+verifier(not [e for e in reg.erreurs_registre() if e.startswith("test.tuile.objet")],
+         "lien valide accepté par le registre")
+reg.BLOCS["test.tuile.objet"] = reg.Bloc(
+    appli="test", libelle="Tuile", url="/test", type="liste", valeurs=(("n", "N"),), lien="/test?cat={objet}",
+)
+verifier(any("lien sans objet" in e for e in reg.erreurs_registre()), "lien sur un bloc sans objet refusé")
+del reg.BLOCS["test.tuile.objet"]
 del reg.BLOCS[NOM_TEST]
 
 if echecs:
