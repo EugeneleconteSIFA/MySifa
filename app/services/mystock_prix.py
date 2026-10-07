@@ -163,6 +163,12 @@ def _dernier_prix_par_matiere(conn: sqlite3.Connection) -> dict[int, dict]:
     return out
 
 
+def _sans_accents(v: Any) -> str:
+    import unicodedata
+    t = unicodedata.normalize("NFD", str(v or "").lower())
+    return "".join(ch for ch in t if not unicodedata.combining(ch))
+
+
 def list_materials(
     conn: sqlite3.Connection,
     *,
@@ -188,12 +194,16 @@ def list_materials(
     if categorie:
         sql += " AND LOWER(mp.categorie) = ?"
         args.append(categorie.strip().lower())
-    if q and q.strip():
-        sql += " AND (mp.reference LIKE ? OR mp.designation LIKE ?)"
-        pat = f"%{q.strip()}%"
-        args.extend([pat, pat])
     sql += " ORDER BY mp.categorie ASC, mp.reference COLLATE NOCASE ASC"
     rows = conn.execute(sql, args).fetchall()
+    if q and q.strip():
+        # Recherche sans accents ni casse, faite ici : le LIKE de SQLite
+        # distingue « velin » de « Vélin ».
+        cle = _sans_accents(q.strip())
+        rows = [
+            r for r in rows
+            if cle in _sans_accents(r["reference"]) or cle in _sans_accents(r["designation"])
+        ]
 
     decl_rows = conn.execute(
         """SELECT d.id, d.matiere_id, d.laize_id, d.grammage_id, d.mc_material_id,

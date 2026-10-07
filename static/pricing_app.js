@@ -1447,7 +1447,13 @@
     ];
 
     const filtrees = filtresAppliquer("matieres", S.mystock, COLS);
-    const triees = triAppliquer("matieres", filtrees, COLS);
+    // Ordre par défaut, sans tri posé : catégorie, puis libellé alphabétique.
+    const triees = triEtat("matieres")
+      ? triAppliquer("matieres", filtrees, COLS)
+      : [...filtrees].sort((a, b) =>
+          String(a.categorie || "").localeCompare(String(b.categorie || ""), "fr")
+          || String(a.designation || a.reference || "").localeCompare(
+               String(b.designation || b.reference || ""), "fr", { numeric: true, sensitivity: "base" }));
     const cartes = prCartes();
     const lignes = triees.map(cartes ? mystockMatiereCardHtml : mystockMatiereRowHtml).join("");
     const sousTitre = cartes
@@ -2081,6 +2087,10 @@
     });
   }
 
+  function sansAccents(v) {
+    return String(v == null ? "" : v).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  }
+
   function colFiltre(table, cle) {
     return ((S.colFiltres && S.colFiltres[table]) || {})[cle] || "";
   }
@@ -2093,7 +2103,8 @@
         const v = c.filtreVal ? c.filtreVal(l) : c.val(l);
         const f = colFiltre(table, c.cle);
         if (c.filtre === "choix") return String(v == null ? "" : v) === f;
-        return String(v == null ? "" : v).toLowerCase().includes(f.toLowerCase());
+        // Sans accents ni casse : « velin » trouve « Vélin ».
+        return sansAccents(v).includes(sansAccents(f));
       })
     );
   }
@@ -4941,17 +4952,25 @@
         ${escHtml(p.cout_erreur ? "Calcul impossible — " + p.cout_erreur : "Aucun coût calculable : les matières de ce produit n'ont pas encore de prix.")}
       </div></div>`;
     }
+    // Une seule barre de répartition pour tout le produit : chaque composant y
+    // prend sa part du prix de revient, dans sa couleur, légendée dessous.
+    const couleur = (i) => `var(--c${(i % 5) + 1})`;
+    const barre = c.components
+      .map((x, i) => {
+        const part = Math.max(0, Math.min(100, parseFloat(x.share_pct || 0)));
+        return `<i style="width:${part}%;background:${couleur(i)}" title="${escAttr(
+          mspRoleLabel(x.role) + " — " + x.name + " : " + fmtPct(x.share_pct))}"></i>`;
+      })
+      .join("");
+    const legende = c.components
+      .map((x, i) => `<span><i style="background:${couleur(i)}"></i>${escHtml(
+        mspRoleLabel(x.role))} <strong>${escHtml(fmtPct(x.share_pct))}</strong></span>`)
+      .join("");
     const lignes = c.components
-      .map((x) => {
+      .map((x, i) => {
         const prix = parseFloat(x.price_eur_per_m2 || 0);
-        const part = parseFloat(x.share_pct || 0);
-        // La part de transport DANS ce composant : elle hachure la fin de sa
-        // jauge plutôt que de s'ajouter à côté — le transport est déjà compris
-        // dans le coût, l'afficher en supplément le compterait deux fois.
-        const transp = parseFloat((x.breakdown && x.breakdown.transport_eur_m2) || 0);
-        const transpPart = prix > 0 ? Math.min(100, (transp / prix) * 100) : 0;
         return `<tr>
-          <td class="msp-role">${escHtml(mspRoleLabel(x.role))}</td>
+          <td class="msp-role"><span class="msp-pastille" style="background:${couleur(i)}"></span>${escHtml(mspRoleLabel(x.role))}</td>
           <td><button type="button" class="msp-lien" data-msp-mat="${x.material_id}"
                 title="Ouvrir le paramétrage de cette matière">${escHtml(x.name)}</button></td>
           <td class="msp-num">${prix > 0 ? escHtml(fmtEurM2(prix)) : '<span class="muted">sans prix</span>'}</td>
@@ -4960,32 +4979,20 @@
               ? escHtml(fmtEurM2(x.breakdown.transport_eur_m2))
               : '<span class="muted">—</span>'
           }</td>
-          <td class="msp-part">
-            <span class="msp-jauge" title="${escAttr(
-              fmtPct(part) + " du prix de revient" + (transp ? ` — dont ${fmtEurM2(transp)} de transport` : "")
-            )}"><i style="width:${Math.max(0, Math.min(100, part))}%">${
-              transpPart > 0 ? `<b style="width:${transpPart.toFixed(1)}%"></b>` : ""
-            }</i></span>
-            <span class="msp-part-val">${escHtml(fmtPct(part))}</span>
-          </td>
         </tr>`;
       })
       .join("");
     const manquants = c.components.filter((x) => !(parseFloat(x.price_eur_per_m2) > 0)).length;
     return `<div class="ms-detail">
       <table class="pr-table ms-table msp-detail">
-        <thead><tr><th>Rôle</th><th>Matière MyStock</th><th class="msp-num">Coût €/m²</th><th class="msp-num" title="Part de transport déjà comprise dans le coût — elle ne s'y ajoute pas">dont transport</th><th class="msp-part">Part</th></tr></thead>
+        <thead><tr><th>Rôle</th><th>Matière MyStock</th><th class="msp-num">Coût €/m²</th><th class="msp-num" title="Part de transport déjà comprise dans le coût — elle ne s'y ajoute pas">dont transport</th></tr></thead>
         <tbody>${lignes}</tbody>
       </table>
+      <div class="msp-repart">
+        <div class="msp-repart-barre">${barre}</div>
+        <div class="msp-repart-leg">${legende}</div>
+      </div>
       <div class="msp-totaux">
-        <span>Prix de revient <strong>${escHtml(fmtEurM2(c.total_eur_per_m2))}</strong></span>
-        ${(() => {
-          const t = (c.components || []).reduce(
-            (a, x) => a + parseFloat((x.breakdown && x.breakdown.transport_eur_m2) || 0), 0);
-          const rev = parseFloat(c.total_eur_per_m2 || 0);
-          return t ? `<span class="msp-transport-tot">dont transport <strong>${escHtml(fmtEurM2(t))}</strong> ${escHtml(fmtPct(rev ? (t / rev) * 100 : 0))}</span>` : "";
-        })()}
-        <span>Marge ${escHtml(fmtPct(c.margin_pct))} <strong>${escHtml(fmtEurM2(c.margin_eur_m2))}</strong></span>
         <span>Prix de vente <strong>${escHtml(fmtEurM2(c.sell_price_eur_m2))}</strong></span>
         ${manquants ? `<span class="msp-alerte">${manquants} matière(s) sans prix — le coût est sous-évalué</span>` : ""}
       </div>
