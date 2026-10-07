@@ -1462,7 +1462,7 @@
             <colgroup>
               <col style="width:92px"><col>
               <col style="width:180px"><col style="width:215px">
-              <col style="width:120px"><col style="width:250px">
+              <col style="width:120px"><col style="width:310px">
             </colgroup>
             ${enTetesTriables("matieres", COLS, S.mystock)}
             <tbody>${lignes || '<tr><td colspan="6" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
@@ -1470,7 +1470,7 @@
         </div>`;
 
     setContent(`
-      <div class="pr-narrow">
+      <div class="pr-narrow pr-large">
         ${pageHead("Matières", sousTitre)}
         <div class="filters">
           <input type="search" class="search-input" id="ms-q" placeholder="Rechercher (référence, désignation…)" value="${escAttr(S.filters.msQ)}"/>
@@ -5169,7 +5169,7 @@
             <td class="ms-prix-cell">${c ? fmtEurM2(c.total_eur_per_m2) : '<span style="color:var(--muted)">—</span>'}</td>
             <td class="ms-prix-cell">${c ? fmtEurM2(c.sell_price_eur_m2) : "—"}</td>
             <td class="ms-meta">${c ? fmtPct(c.margin_pct) : "—"}</td>
-            <td class="row-actions" onclick="event.stopPropagation()">
+            <td class="row-actions msp-actions" onclick="event.stopPropagation()">
               <button type="button" class="btn btn-soft btn-sm" data-ft-produit="${p.id}" title="Fiche technique (BOM) : visualiser et télécharger">Fiche</button>
               ${actionBtn("data-msp-edit", p.id, "edit", "Modifier ce produit")}
               ${actionBtn("data-msp-dup", p.id, "copy", "Dupliquer — créer un produit similaire")}
@@ -5192,7 +5192,7 @@
         </div>`;
 
     setContent(`
-      <div class="pr-narrow">
+      <div class="pr-narrow pr-large">
         ${pageHead("Produits", `${S.msProducts.length} produit(s) MyStock`, productsTabsHtml())}
         <div class="filters">
           <input type="search" class="search-input" id="msp-q" placeholder="Rechercher (code, désignation…)" title="Le code et la désignation ont quitté les colonnes : ils se cherchent ici, et se lisent au survol d'une ligne." value="${escAttr(S.filters.msProdQ)}"/>
