@@ -201,6 +201,17 @@ var _expePilSearchTimer=null;
 window.mysifaBlocsContexte=function(){
   return S.expeTab==='pilotage'?{bloc_filtre:S.expePilFiltre||'a_faire'}:{};
 };
+// Ouverture depuis un indicateur : filtre capturé, appliqué au premier rendu
+// du pilotage (S n'est pas encore prêt au chargement de ce script).
+var _expePilFiltreCapture=(function(){
+  try{
+    var f=new URLSearchParams(location.search||'').get('bloc_filtre');
+    if(!f)return null;
+    window.__mysifaFiltresLus = true;
+  if (window.MySifaBlocs && window.MySifaBlocs.retirerFiltres && !window.MySifaBlocs.embarque) window.MySifaBlocs.retirerFiltres();
+    return f;
+  }catch(e){return null;}
+})();
 
 async function loadExpePilotage(){
   set({expePilotageLoading:true});
@@ -742,6 +753,10 @@ function renderExpePilotage(){
     return h('div',{className:'card'},
       h('div',{className:'expe-pil-vide'},
         S.expePilotageLoading?'Chargement du tableau de bord…':'Aucune donnée.'));
+  }
+  if(_expePilFiltreCapture){
+    if(!S.expePilFiltre&&EXPE_PIL_FILTRES.some(function(f){return f.key===_expePilFiltreCapture;}))S.expePilFiltre=_expePilFiltreCapture;
+    _expePilFiltreCapture=null;
   }
   const filtre=S.expePilFiltre||'a_faire';
   const q=S.expePilQ||'';

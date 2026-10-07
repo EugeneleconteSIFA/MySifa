@@ -1348,6 +1348,15 @@ async function loadMe(){
     // Vue par défaut : atelier si dispo, sinon RH (comptabilité tombera d'office ici).
     // On respecte un choix mémorisé si l'utilisateur a les deux accès.
     let stored=null; try{ stored=localStorage.getItem('mysifa.planning_rh.view'); }catch(_){}
+    // Ouverture depuis un indicateur d'accueil : la vue capturée l'emporte.
+    try{
+      const scope=new URLSearchParams(location.search||'').get('bloc_scope');
+      if(scope==='rh' || scope==='atelier'){
+        stored=scope;
+        window.__mysifaFiltresLus=true;
+        if(window.MySifaBlocs&&window.MySifaBlocs.retirerFiltres&&!window.MySifaBlocs.embarque)window.MySifaBlocs.retirerFiltres();
+      }
+    }catch(_){}
     if(S.hasAtelier && S.hasRH){
       S.view = (stored==='rh' || stored==='atelier') ? stored : 'atelier';
     } else if(S.hasAtelier){

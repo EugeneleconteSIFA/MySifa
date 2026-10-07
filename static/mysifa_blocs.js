@@ -119,8 +119,25 @@
        Équivalent posable avant le chargement : window.mysifaBlocsRafraichir. */
     surRafraichir: function (fn) { crochetRafraichir = typeof fn === "function" ? fn : null; },
     lireValeurs: lireValeurs,
-    lireNombres: lireNombres
+    lireNombres: lireNombres,
+    retirerFiltres: retirerFiltres
   };
+
+  /* Filtres capturés (bloc_periode, bloc_machine…) : un clic sur un indicateur
+     rouvre sa page avec eux. La page les relit à son démarrage, pose
+     window.__mysifaFiltresLus, puis ils sont retirés de l'adresse : changer
+     ensuite de filtre et recharger ne doit pas ramener celui de l'indicateur.
+     Une page qui démarre avant ce script est rattrapée ici. */
+  function retirerFiltres() {
+    try {
+      var u = new URL(location.href), retire = false;
+      Array.from(u.searchParams.keys()).forEach(function (k) {
+        if (k.indexOf("bloc_") === 0) { u.searchParams.delete(k); retire = true; }
+      });
+      if (retire) history.replaceState(history.state, "", u.pathname + u.search + u.hash);
+    } catch (e) { /* adresse inchangée : sans conséquence */ }
+  }
+  if (window.__mysifaFiltresLus && !EMBARQUE) retirerFiltres();
 
   if (EMBARQUE && EMBARQUE.nom) { modeEmbarque(EMBARQUE); return; }
   if (window.top !== window) return;

@@ -9653,6 +9653,29 @@ window.mysifaBlocsContexte = function(){
   return ctx;
 };
 
+// Ouverture depuis un indicateur d'accueil : on remet la période et les
+// machines capturées (paramètres posés par mysifaBlocsContexte ci-dessus).
+// « Hier » n'est pas reposé : c'est déjà le défaut de la page, résolu en
+// dernière journée travaillée par chargerDernierJourSaisi.
+(function(){
+  try{
+    const sp = new URLSearchParams(location.search || '');
+    if(!sp.has('bloc_periode') && !sp.has('bloc_machine')) return;
+    const ms = sp.getAll('bloc_machine').filter(Boolean);
+    if(ms.length) S.fv.machines = ms;
+    const k = sp.get('bloc_periode');
+    if(k === 'dates' && sp.get('bloc_du')){
+      S.fv.date_from = sp.get('bloc_du');
+      S.fv.date_to = sp.get('bloc_au') || sp.get('bloc_du');
+    } else if(k && k !== 'yesterday'){
+      const p = _datePresets().filter(x => x.key === k)[0];
+      if(p){ S.fv.date_from = p.from; S.fv.date_to = p.to; }
+    }
+    window.__mysifaFiltresLus = true;
+  if (window.MySifaBlocs && window.MySifaBlocs.retirerFiltres && !window.MySifaBlocs.embarque) window.MySifaBlocs.retirerFiltres();
+  }catch(e){}
+})();
+
 // Derniere journee travaillee : resolue une fois, puis gardee en etat. Sans
 // elle, le raccourci « Hier » retombe sur la veille calendaire.
 async function chargerDernierJourSaisi(){
