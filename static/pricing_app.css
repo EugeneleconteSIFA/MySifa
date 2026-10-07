@@ -1219,3 +1219,6 @@ td.msp-actions > *:first-child{margin-left:0}
 .msp-repart-leg span{display:inline-flex;align-items:center;gap:6px}
 .msp-repart-leg i{width:9px;height:9px;border-radius:3px;flex:0 0 9px}
 .msp-pastille{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:8px;vertical-align:middle}
+/* Produits : le prix de vente est LE chiffre de la ligne. */
+td.msp-vente{font-size:15px;font-weight:800;color:var(--accent)}
+.msp-totaux strong{font-size:16px;color:var(--accent)}
