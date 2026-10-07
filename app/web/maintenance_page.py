@@ -7829,6 +7829,19 @@ function setMaintCatFilter(c){
 window.mysifaBlocsContexte = function(){
   return { bloc_machine: getMaintMachine(), bloc_categorie: getMaintCatFilter() };
 };
+// Ouverture depuis un indicateur : machine et catégorie capturées deviennent
+// celles de l'écran (même mémoire que les boutons de la page).
+(function(){
+  try{
+    const sp = new URLSearchParams(location.search || '');
+    const m = sp.get('bloc_machine'), c = sp.get('bloc_categorie');
+    if(!m && !c) return;
+    if(m) localStorage.setItem(MAINT_MACHINE_KEY, m);
+    if(c === 'all' || c === 'entretien' || c === 'remplacements') localStorage.setItem(MAINT_CAT_FILTER_KEY, c);
+    window.__mysifaFiltresLus = true;
+  if (window.MySifaBlocs && window.MySifaBlocs.retirerFiltres && !window.MySifaBlocs.embarque) window.MySifaBlocs.retirerFiltres();
+  }catch(e){}
+})();
 function getMaintMachine(){
   try{ return localStorage.getItem(MAINT_MACHINE_KEY) || 'Cohésio 1'; }
   catch(e){ return 'Cohésio 1'; }

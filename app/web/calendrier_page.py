@@ -920,6 +920,19 @@ function loadVisible(){
       }
     }
   }catch(e){}
+  // Ouverture depuis un indicateur d'accueil : seuls les calendriers capturés
+  // sont affichés, comme si l'utilisateur les avait cochés (la page enregistre
+  // ensuite ce choix, comme pour la machine en Maintenance).
+  try{
+    const sp=new URLSearchParams(location.search||'');
+    if(sp.has('bloc_calendriers')){
+      const cals=sp.getAll('bloc_calendriers');
+      Object.keys(S.visible).forEach(k=>{S.visible[k]=cals.includes(k);});
+      cals.forEach(k=>{S.visible[k]=true;});
+      window.__mysifaFiltresLus=true;
+    if(window.MySifaBlocs&&window.MySifaBlocs.retirerFiltres&&!window.MySifaBlocs.embarque)window.MySifaBlocs.retirerFiltres();
+    }
+  }catch(e){}
 }
 function saveVisible(){
   try{localStorage.setItem(LS_VISIBLE,JSON.stringify(S.visible));}catch(e){}
