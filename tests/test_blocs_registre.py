@@ -43,7 +43,8 @@ _spec.loader.exec_module(reg)
 # un « = » ou un « : »).
 MOTIF = re.compile(r"""['"]?data-bloc['"]?\s*[:=]\s*['"]([a-z0-9][a-z0-9.\-]*)['"]""")
 # Le moteur et sa documentation citent des exemples de noms : hors périmètre.
-EXCLUS = {"static/mysifa_blocs.js", "static/mysifa_accueil.js", "static/mysifa_blocs_sources.js"}
+EXCLUS = {"static/mysifa_blocs.js", "static/mysifa_accueil.js", "static/mysifa_blocs_sources.js",
+          "static/mysifa_blocs_filtres.js"}
 
 echecs = []
 
@@ -105,6 +106,11 @@ SOURCES = Path("static/mysifa_blocs_sources.js").read_text(encoding="utf-8")
 for nom in re.findall(r'^    "([a-z0-9.\-]+)": function', SOURCES, flags=re.M):
     verifier(nom in reg.BLOCS, f"source {nom} : aucun bloc de ce nom au registre")
 
+# ── 3ter. Filtres décrits : chaque description vise un bloc déclaré ─────
+FILTRES_JS = Path("static/mysifa_blocs_filtres.js").read_text(encoding="utf-8")
+for nom in re.findall(r'^    "([a-z0-9.\-]+)": (?:PROD|\[)', FILTRES_JS, flags=re.M):
+    verifier(nom in reg.BLOCS, f"filtres {nom} : aucun bloc de ce nom au registre")
+
 # ── 4. Validation ───────────────────────────────────────────────────────
 NOM_TEST = "test.onglet.bloc"
 reg.BLOCS[NOM_TEST] = reg.Bloc(
@@ -143,6 +149,13 @@ refuse("bloc inconnu", bloc="nexiste.pas.du-tout")
 refuse("url absolue", url_capture="https://exemple.com/stock")
 refuse("url protocole relatif", url_capture="//exemple.com/stock")
 refuse("url relative", url_capture="stock?tab=a")
+verifier(reg.valider_widget({"url_capture": "/test?bloc_periode=last7"}, creation=False)
+         == {"url_capture": "/test?bloc_periode=last7"}, "modification des filtres : adresse acceptée")
+try:
+    reg.valider_widget({"url_capture": "https://exemple.com/x"}, creation=False)
+    verifier(False, "modification des filtres : adresse externe refusée")
+except ValueError:
+    pass
 refuse("nom vide", nom="   ")
 refuse("nom trop long", nom="x" * 81)
 refuse("hauteur", hauteur="xl")

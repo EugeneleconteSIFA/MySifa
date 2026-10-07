@@ -125,6 +125,7 @@
       ".mac-ctete{display:flex;align-items:center;gap:6px;padding:8px 10px;cursor:pointer}",
       ".mac-ctete:hover .mac-nom{color:var(--accent,#22d3ee)}",
       ".mac-nom{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".mac-filtres{margin:-4px 10px 0;font-size:11px;color:var(--muted,#94a3b8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
       ".mac-point{width:8px;height:8px;border-radius:50%;background:var(--danger,#f87171);display:none;flex-shrink:0}",
       ".mac-carte.alerte .mac-point{display:block}",
       ".mac-cadre{position:relative;border-top:1px solid var(--border,#1e293b)}",
@@ -250,6 +251,21 @@
   }
 
   /* ── Cartes ────────────────────────────────────────────────────────── */
+  /* Sous-titre : les filtres capturés en clair (« 7 derniers jours ·
+     Cohésio 2 »), pour distinguer deux indicateurs du même bloc. Rien pour
+     un bloc sans filtre. */
+  function afficherFiltres(c) {
+    var F = window.MySifaBlocsFiltres;
+    var z = c.el.querySelector(".mac-filtres");
+    if (!z || !F || !F.existe(c.w.bloc)) return;
+    F.preparer(c.w.bloc, api).then(function (defs) {
+      var t = F.decrire(defs, F.lire(defs, c.w.url_capture));
+      z.textContent = t;
+      z.title = t;
+      z.hidden = !t;
+    }).catch(function () { /* sous-titre facultatif */ });
+  }
+
   function srcIframe(w) {
     var u = new URL(w.url, ORIGINE);
     u.searchParams.set("widget", w.bloc);
@@ -270,12 +286,14 @@
     el.innerHTML =
       '<div class="mac-ctete" title="Ouvrir la page"><span class="mac-nom"></span><span class="mac-point"></span>' +
       '<button type="button" class="mac-corb" title="Supprimer cet indicateur" aria-label="Supprimer cet indicateur">' + icone("corbeille") + "</button></div>" +
+      '<div class="mac-filtres" hidden></div>' +
       '<div class="mac-vals"></div>' +
       '<div class="mac-indispo">Bloc indisponible à cette taille. Cliquez sur le titre pour ouvrir la page.</div>' +
       '<div class="mac-cadre"><div class="mac-attente">Chargement…</div><div class="mac-voile"></div></div>' +
       '<div class="mac-outils"></div>';
     var c = { el: el, iframe: null, valeurs: null, absences: 0, w: w };
     el.querySelector(".mac-nom").textContent = w.nom;
+    afficherFiltres(c);
     el.querySelector(".mac-ctete").addEventListener("click", function (e) {
       if (e.target.closest(".mac-corb")) return;
       ouvrir(w, e);
@@ -418,8 +436,13 @@
       coches.push(v.cle);
       if (v.alerte && v.alerte.op && !textes[v.cle]) alertes[v.cle] = { op: v.alerte.op, seuil: String(v.alerte.seuil) };
     });
+    var F = window.MySifaBlocsFiltres;
+    var defsP = (F && F.existe(w.bloc)) ? F.preparer(w.bloc, api).catch(function () { return []; }) : Promise.resolve([]);
+    defsP.then(function (filtres) {
     mb.questionnaire({
       bloc: w.bloc_info,
+      filtres: filtres,
+      url: w.url_capture,
       actuelles: c.valeurs || {},
       coches: coches,
       alertes: alertes,
@@ -427,7 +450,12 @@
       sousTitre: "Capturé : " + w.bloc_info.libelle,
       nom: w.nom,
       bouton: "Enregistrer",
-      envoyer: function (p) { return patcher(c, { nom: p.nom, valeurs: p.valeurs }); }
+      envoyer: function (p) {
+        var champs = { nom: p.nom, valeurs: p.valeurs };
+        if (p.url && p.url !== w.url_capture) champs.url_capture = p.url;
+        return patcher(c, champs);
+      }
+    });
     });
   }
 
@@ -436,6 +464,13 @@
       .then(function (w) {
         for (var k in champs) c.w[k] = w[k];
         c.el.querySelector(".mac-nom").textContent = c.w.nom;
+        if ("url_capture" in champs) {
+          // Filtres changés : nouvelle adresse à ouvrir, nouveaux chiffres.
+          c.w.url = w.url;
+          afficherFiltres(c);
+          if (c.iframe) c.iframe.src = srcIframe(c.w);
+          else lireSources();
+        }
         if (c.iframe) c.iframe.title = c.w.nom;
         afficherValeurs(c);
       })
@@ -724,14 +759,22 @@
     });
   }
 
-  function chargerSources() {
-    if (window.MySifaBlocsSources) return Promise.resolve();
+  function chargerScript(nom, pret) {
+    if (pret()) return Promise.resolve();
     return new Promise(function (ok) {
       var s = document.createElement("script");
-      s.src = "/static/mysifa_blocs_sources.js" + (VERSION ? "?v=" + VERSION : "");
+      s.src = "/static/" + nom + (VERSION ? "?v=" + VERSION : "");
       s.onload = s.onerror = function () { ok(); };
       document.head.appendChild(s);
     });
+  }
+
+  // Sources des valeurs et description des filtres (sous-titres, questionnaire).
+  function chargerSources() {
+    return Promise.all([
+      chargerScript("mysifa_blocs_sources.js", function () { return !!window.MySifaBlocsSources; }),
+      chargerScript("mysifa_blocs_filtres.js", function () { return !!window.MySifaBlocsFiltres; })
+    ]);
   }
 
   function rafraichir() {
@@ -833,7 +876,7 @@
       {
         icon: ICO('<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>'),
         title: "Choisir les valeurs",
-        body: "<p>Un panneau s'ouvre : cochez <strong>jusqu'à 4 valeurs</strong>, dans l'ordre où vous voulez les voir. Une alerte facultative passe un <strong>nombre</strong> en rouge au-dessus, en dessous ou à égalité d'un seuil. Un texte (état, opérateur) s'affiche sans alerte.</p>",
+        body: "<p>Un panneau s'ouvre : cochez <strong>jusqu'à 4 valeurs</strong>, dans l'ordre où vous voulez les voir. Une alerte facultative passe un <strong>nombre</strong> en rouge au-dessus, en dessous ou à égalité d'un seuil. Un texte (état, opérateur) s'affiche sans alerte. Les <strong>filtres</strong> de la page (période, machine…) s'y affichent et se modifient.</p>",
         illu: SVG +
           '<rect x="80" y="6" width="180" height="138" rx="10" fill="var(--card)" stroke="var(--border)"/>' +
           '<text x="92" y="22" font-size="8.5" font-weight="700" fill="var(--text)">Ajouter à mes tableaux de bord</text>' +
@@ -858,7 +901,7 @@
       {
         icon: ICO('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>'),
         title: "Personnaliser la colonne",
-        body: "<p><span class=\"mguide-hl\">Personnaliser</span> permet de <strong>glisser</strong> chaque indicateur à sa place. Sous chacun : les curseurs changent les <strong>valeurs</strong> et leurs alertes, le crayon le <strong>renomme</strong>, la corbeille le supprime (deux clics). L'icône tableau, en haut, replie la colonne.</p>",
+        body: "<p><span class=\"mguide-hl\">Personnaliser</span> permet de <strong>glisser</strong> chaque indicateur à sa place. Sous chacun : les curseurs changent les <strong>filtres</strong>, les <strong>valeurs</strong> et leurs alertes, le crayon le <strong>renomme</strong>, la corbeille le supprime (deux clics). L'icône tableau, en haut, replie la colonne.</p>",
         illu: SVG +
           '<rect x="80" y="10" width="180" height="130" rx="10" fill="var(--bg)" stroke="var(--border)"/>' +
           '<rect x="90" y="18" width="90" height="16" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="135" y="29" font-size="7" fill="var(--text2)" text-anchor="middle">TABLEAUX DE BORD</text>' +

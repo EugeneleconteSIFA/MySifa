@@ -1580,7 +1580,8 @@ def get_statuts(request: Request, machine: Optional[str] = None,
         if nom not in machines:
             raise HTTPException(status_code=404, detail="Machine introuvable.")
         res = ms.statuts_machine(conn, nom, cat)
-    return {"machine": nom, "categorie": cat, **res}
+    # machines : choix proposés pour modifier le filtre d'un indicateur.
+    return {"machine": nom, "categorie": cat, "machines": machines, **res}
 
 
 @router.get("/api/maintenance/history")

@@ -4,7 +4,7 @@ Endpoints utilisateur :
   GET    /api/accueil/blocs                 blocs capturables pour cet utilisateur
   GET    /api/accueil/widgets               mes widgets, URL résolue
   POST   /api/accueil/widgets               créer un widget (depuis la capture)
-  PATCH  /api/accueil/widgets/{id}          renommer, valeurs, affichage, hauteur
+  PATCH  /api/accueil/widgets/{id}          renommer, valeurs, filtres (url_capture), affichage, hauteur
   DELETE /api/accueil/widgets/{id}          supprimer
   PUT    /api/accueil/widgets-ordre         réordonner (liste complète des ids)
   GET    /api/accueil/prefs                 colonne repliée ou non
@@ -133,6 +133,7 @@ class WidgetCreate(BaseModel):
 
 class WidgetUpdate(BaseModel):
     nom: Optional[str] = None
+    url_capture: Optional[str] = None   # filtres modifiés (bloc_periode…)
     valeurs: Optional[list] = None
     affichage: Optional[str] = None
     hauteur: Optional[str] = None
@@ -319,7 +320,7 @@ def modifier_widget(widget_id: int, body: WidgetUpdate, request: Request):
         if "valeurs" in w:
             w["valeurs"] = json.dumps(w["valeurs"], ensure_ascii=False)
         sets, params = [], []
-        for col in ("bloc", "nom", "valeurs", "affichage", "hauteur"):
+        for col in ("bloc", "nom", "valeurs", "affichage", "hauteur", "url_capture"):
             if col in w:
                 sets.append(f"{col}=?")
                 params.append(w[col])

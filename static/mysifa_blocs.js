@@ -379,6 +379,15 @@
         ".mysifa-cap-pan .cap-num{display:inline-flex;width:18px;height:18px;border-radius:50%;align-items:center;justify-content:center;",
         "  font-size:11px;font-weight:700;background:var(--accent,#22d3ee);color:#fff}",
         ".mysifa-cap-pan .cap-alerte{display:flex;gap:6px;margin-top:8px}",
+        ".mysifa-cap-pan .cap-filtres{display:flex;flex-direction:column;gap:8px;border:1px solid var(--border,#1e293b);border-radius:10px;padding:10px;background:var(--bg,#0a0e17)}",
+        ".mysifa-cap-pan .cap-filtre{display:flex;flex-direction:column;gap:4px}",
+        ".mysifa-cap-pan .cap-filtre-l{font-size:12px;font-weight:600;color:var(--text2,#cbd5e1)}",
+        ".mysifa-cap-pan .cap-filtre select,.mysifa-cap-pan .cap-dates input{font:13px 'Segoe UI',system-ui,sans-serif;background:var(--card,#111827);color:var(--text,#f1f5f9);border:1px solid var(--border,#1e293b);border-radius:8px;padding:5px 6px}",
+        ".mysifa-cap-pan .cap-dates{display:flex;align-items:center;gap:6px}",
+        ".mysifa-cap-pan .cap-dates input{flex:1;min-width:0}",
+        ".mysifa-cap-pan .cap-multi{display:flex;flex-wrap:wrap;gap:4px 12px}",
+        ".mysifa-cap-pan .cap-multi label{display:inline-flex;align-items:center;gap:5px;font-size:12px;cursor:pointer}",
+        ".mysifa-cap-pan .cap-filtre-n{font-size:11px;color:var(--muted,#94a3b8)}",
         ".mysifa-cap-pan .cap-sans-alerte{margin-top:6px;font-size:12px;color:var(--muted,#94a3b8)}",
         ".mysifa-cap-pan .cap-alerte select{flex:1}",
         ".mysifa-cap-pan .cap-alerte input{width:96px;flex:none}",
@@ -695,6 +704,11 @@
       // Pas d'alerte sur une valeur texte (seuil = nombre) : celles posées
       // avant le 06/10/2026 tombent au prochain enregistrement.
       bloc.valeurs.forEach(function (v) { if (v.nombre === false) delete etat.alertes[v.cle]; });
+      // Filtres de la page (période, machine…) : affichés et modifiables, à la
+      // capture comme dans « Modifier l'indicateur » (mysifa_blocs_filtres.js).
+      var F = window.MySifaBlocsFiltres;
+      var filtres = (F && o.url && o.filtres && o.filtres.length) ? o.filtres : null;
+      if (filtres) etat.filtres = F.lire(filtres, o.url);
       poserStyle();
       fermerPanneau();
       panneau = document.createElement("aside");
@@ -706,6 +720,7 @@
       function dessiner() {
         var h = "<h2>" + esc(o.titre) + "</h2>" +
           '<p class="cap-sous">' + esc(o.sousTitre) + "</p>";
+        if (filtres) h += dessinerFiltres();
         if (bloc.valeurs.length) {
           h += '<div class="cap-lbl">Valeurs à afficher (' + valeursMax + " au maximum)</div>";
           bloc.valeurs.forEach(function (v) {
@@ -741,8 +756,54 @@
 
       function erreur(t) { var z = panneau.querySelector(".cap-err"); if (z) z.textContent = t || ""; }
 
+      function dessinerFiltres() {
+        var h = '<div class="cap-lbl">Filtres</div><div class="cap-filtres">';
+        filtres.forEach(function (f) {
+          var v = etat.filtres[f.cle];
+          h += '<div class="cap-filtre"><span class="cap-filtre-l">' + esc(f.libelle) + "</span>";
+          if (f.type === "multi") {
+            h += '<div class="cap-multi">';
+            f.choix.forEach(function (c) {
+              h += '<label><input type="checkbox" data-filtre-multi="' + esc(f.cle) + '" value="' + esc(c.v) + '"' +
+                ((v || []).indexOf(c.v) >= 0 ? " checked" : "") + ">" + esc(c.l) + "</label>";
+            });
+            h += '</div><span class="cap-filtre-n">' + esc((v && v.length) ? "" : (f.vide || "")) + "</span>";
+          } else {
+            h += '<select data-filtre="' + esc(f.cle) + '">';
+            f.choix.forEach(function (c) {
+              h += '<option value="' + esc(c.v) + '"' + (c.v === v ? " selected" : "") + ">" + esc(c.l) + "</option>";
+            });
+            h += "</select>";
+            if (f.type === "periode" && v === "dates") {
+              h += '<div class="cap-dates"><input type="date" data-filtre-date="bloc_du" value="' + esc(etat.filtres.bloc_du) + '">' +
+                '<span>au</span><input type="date" data-filtre-date="bloc_au" value="' + esc(etat.filtres.bloc_au) + '"></div>';
+            }
+          }
+          h += "</div>";
+        });
+        return h + "</div>";
+      }
+
       panneau.addEventListener("change", function (e) {
         var t = e.target;
+        if (filtres && t.matches("select[data-filtre]")) {
+          etat.filtres[t.getAttribute("data-filtre")] = t.value;
+          dessiner();
+          return;
+        }
+        if (filtres && t.matches("input[data-filtre-date]")) {
+          etat.filtres[t.getAttribute("data-filtre-date")] = t.value;
+          erreur("");
+          return;
+        }
+        if (filtres && t.matches("input[data-filtre-multi]")) {
+          var cm = t.getAttribute("data-filtre-multi");
+          var sel = (etat.filtres[cm] || []).filter(function (x) { return x !== t.value; });
+          if (t.checked) sel.push(t.value);
+          etat.filtres[cm] = sel;
+          dessiner();
+          return;
+        }
         if (t.matches("input[type=checkbox][data-cle]")) {
           var cle = t.getAttribute("data-cle");
           var i = etat.coches.indexOf(cle);
@@ -791,8 +852,17 @@
             valeurs.push({ cle: cle, alerte: null });
           }
         }
+        var url = null;
+        if (filtres) {
+          var pf = filtres.filter(function (f) { return f.type === "periode"; })[0];
+          if (pf && etat.filtres[pf.cle] === "dates") {
+            if (!etat.filtres.bloc_du) { erreur("Période : choisissez la date de début."); return; }
+            if (etat.filtres.bloc_au && etat.filtres.bloc_au < etat.filtres.bloc_du) { erreur("Période : la date de fin précède celle de début."); return; }
+          }
+          url = F.ecrire(filtres, o.url, etat.filtres);
+        }
         b.disabled = true;
-        Promise.resolve(o.envoyer({ nom: nomW, valeurs: valeurs })).then(function () {
+        Promise.resolve(o.envoyer({ nom: nomW, valeurs: valeurs, url: url })).then(function () {
           fermerPanneau();
         }).catch(function (err) {
           b.disabled = false;
@@ -805,6 +875,22 @@
       if (champ) champ.focus();
     }
 
+    /* Description des filtres par bloc (static/mysifa_blocs_filtres.js),
+       chargée à la première capture. */
+    var chargementFiltres = null;
+    function chargerFiltres() {
+      if (window.MySifaBlocsFiltres) return Promise.resolve();
+      if (!chargementFiltres) {
+        chargementFiltres = new Promise(function (ok) {
+          var s = document.createElement("script");
+          s.src = "/static/mysifa_blocs_filtres.js" + (VERSION ? "?v=" + VERSION : "");
+          s.onload = s.onerror = function () { ok(); };
+          document.head.appendChild(s);
+        });
+      }
+      return chargementFiltres;
+    }
+
     function ouvrirPanneau(el) {
       var nom = el.getAttribute("data-bloc");
       var bloc = registre[nom];
@@ -812,8 +898,13 @@
       var objet = el.getAttribute("data-bloc-objet") || null;
       var objetLib = el.getAttribute("data-bloc-objet-libelle") || null;
       var url = urlCapture();
+      chargerFiltres().then(function () {
+        return window.MySifaBlocsFiltres ? window.MySifaBlocsFiltres.preparer(nom, api) : [];
+      }).catch(function () { return []; }).then(function (filtres) {
       questionnaire({
         bloc: bloc,
+        filtres: filtres,
+        url: url,
         actuelles: lireValeurs(el),
         titre: "Ajouter à mes tableaux de bord",
         sousTitre: "Capturé : " + bloc.libelle + (objetLib ? " · " + objetLib : ""),
@@ -823,12 +914,13 @@
         envoyer: function (p) {
           return api("/api/accueil/widgets", {
             method: "POST",
-            body: { bloc: nom, objet: objet, url_capture: url, nom: p.nom, valeurs: p.valeurs, affichage: "valeurs", hauteur: "m" }
+            body: { bloc: nom, objet: objet, url_capture: p.url || url, nom: p.nom, valeurs: p.valeurs, affichage: "valeurs", hauteur: "m" }
           }).then(function () {
             quitter();
             toast("Indicateur ajouté à vos tableaux de bord.");
           });
         }
+      });
       });
     }
 
@@ -880,7 +972,9 @@
       choix.addEventListener("change", function () { err.textContent = ""; });
       // Depuis une appli (/stock, /planning-rh…), elle est présélectionnée ;
       // depuis l'accueil, le demandeur choisit.
-      var ici = (location.pathname.split("/")[1] || "").replace(/-/g, "_");
+      // Le module porte le premier segment de l'adresse, sauf /rh/coffre.
+      var ici = /^\/rh\/coffre/.test(location.pathname) ? "rh_coffre"
+        : (location.pathname.split("/")[1] || "").replace(/-/g, "_");
       api("/api/accueil/demandes/applis").then(function (d) {
         choix.innerHTML = '<option value="">Choisir une application…</option>';
         (d.applis || []).forEach(function (a) {
@@ -915,6 +1009,7 @@
       return chargerRegistre().then(function () { questionnaire(o); });
     };
     window.MySifaBlocs.demander = demander;
+    window.MySifaBlocs.chargerFiltres = chargerFiltres;
     window.MySifaBlocs.capturer = function () { if (!actif) entrer(); };
 
     new MutationObserver(scanner).observe(document.documentElement, { childList: true, subtree: true });
