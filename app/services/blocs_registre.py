@@ -456,6 +456,13 @@ def valider_widget(data: dict, *, creation: bool) -> dict:
             out["objet"] = str(objet)[:120]
         else:
             out["objet"] = None
+    elif "url_capture" in data:
+        # Filtres modifiés après coup (questionnaire « Modifier l'indicateur ») :
+        # seule l'adresse change, jamais le bloc ni l'objet suivi.
+        url = data.get("url_capture")
+        if not url_capture_valide(url):
+            raise ValueError("Adresse de capture invalide.")
+        out["url_capture"] = url
 
     if creation or "nom" in data:
         nom = str(data.get("nom") or "").strip()
