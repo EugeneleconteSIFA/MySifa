@@ -129,12 +129,13 @@ tris ne sont pas capturés : ils ne changent aucun chiffre.
 
 **Les filtres se voient et se modifient.** `static/mysifa_blocs_filtres.js`
 décrit, bloc par bloc, chaque filtre `bloc_…` (libellé, type `periode` /
-`choix` / `multi`, options et défaut, avec les libellés de la page). Il sert
+`choix` / `multi` / `jour`, options et défaut, avec les libellés de la page). Il sert
 au sous-titre de l'indicateur (« 7 derniers jours · Cohésio 2 ») et à la
 section « Filtres » du questionnaire, à la capture comme dans « Modifier
 l'indicateur » (le PATCH accepte alors `url_capture`). Un filtre ajouté à
 `mysifaBlocsContexte` s'ajoute aussi là ; le test du registre vérifie que
-chaque bloc décrit existe.
+chaque bloc décrit existe. Une date figée (valorisation MyStock « au 17/09 »)
+est un filtre comme un autre : capturable, et modifiable ensuite.
 
 ### Rafraîchissement léger (blocs sans source)
 

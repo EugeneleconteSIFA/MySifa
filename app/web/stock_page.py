@@ -23207,9 +23207,9 @@ function buildValorisationKpis() {
   wrap.append(kpiTotal, kpiMP, kpiPF);
   // Widget d'accueil (app/services/blocs_registre.py) : les montants mis en
   // avant par les cartes — le réel quand il est affiché en gros, la base
-  // sinon. Toujours la valorisation du jour : une date figée n'est pas
-  // capturable (elle ne bougerait plus).
-  if (!v.snapshotDate) {
+  // sinon. Une date figée se capture aussi : elle devient le filtre
+  // « Valorisation au » de l'indicateur (bloc_date, mysifaBlocsContexte).
+  {
     const totalAff = totalHasBreakdown ? totalGlobalReel : totalGlobal;
     const mpAff = showReelBreakdown ? totalMPReel : totalMP;
     const pfAff = pfHasCharges ? pfTotalAvecCharges : totalPF;
@@ -25132,6 +25132,7 @@ window.mysifaEcran = function () {
 // (mysifa_blocs.js) : la source du widget les relit dans ctx.params.
 window.mysifaBlocsContexte = function () {
   if (S.tab === 'bobines') return { bloc_etat: bobEnsureState().etat || 'stock' };
+  if (S.tab === 'valorisation' && valEnsureState().snapshotDate) return { bloc_date: valEnsureState().snapshotDate };
   return {};
 };
 const STOCK_TAB_DOC_TITLES = {
@@ -26702,6 +26703,14 @@ async function init() {
   // Catégorie de matières (?cat=carton, ?cat=frontal:couche) : ouverte une fois
   // les matières chargées, les sous-sections des frontaux en dépendant.
   const urlCat = (urlParams.get('cat') || '').trim();
+  // Valorisation à une date (indicateur capturé sur une date figée) : posée
+  // avant le chargement de l'onglet, qui la passe à l'API.
+  const urlValoDate = (urlParams.get('bloc_date') || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(urlValoDate) && S.tab === 'valorisation') {
+    valEnsureState().snapshotDate = urlValoDate;
+    window.__mysifaFiltresLus = true;
+    if (window.MySifaBlocs && window.MySifaBlocs.retirerFiltres && !window.MySifaBlocs.embarque) window.MySifaBlocs.retirerFiltres();
+  }
   const urlFiche = (urlParams.get('fiche') || '').trim();
   if (['fournisseurs', 'mouvements'].includes(urlFiche)) S.mpVueInit = urlFiche;
   const urlProduitId = parseInt(urlParams.get('produit') || '', 10);

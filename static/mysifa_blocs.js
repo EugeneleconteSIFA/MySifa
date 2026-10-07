@@ -761,7 +761,12 @@
         filtres.forEach(function (f) {
           var v = etat.filtres[f.cle];
           h += '<div class="cap-filtre"><span class="cap-filtre-l">' + esc(f.libelle) + "</span>";
-          if (f.type === "multi") {
+          if (f.type === "jour") {
+            h += '<select data-filtre-jour-mode="' + esc(f.cle) + '">' +
+              '<option value=""' + (v ? "" : " selected") + ">Aujourd'hui</option>" +
+              '<option value="date"' + (v ? " selected" : "") + ">Date choisie</option></select>";
+            if (v) h += '<div class="cap-dates"><input type="date" data-filtre-jour="' + esc(f.cle) + '" value="' + esc(v) + '"></div>';
+          } else if (f.type === "multi") {
             h += '<div class="cap-multi">';
             f.choix.forEach(function (c) {
               h += '<label><input type="checkbox" data-filtre-multi="' + esc(f.cle) + '" value="' + esc(c.v) + '"' +
@@ -789,6 +794,21 @@
         if (filtres && t.matches("select[data-filtre]")) {
           etat.filtres[t.getAttribute("data-filtre")] = t.value;
           dessiner();
+          return;
+        }
+        if (filtres && t.matches("select[data-filtre-jour-mode]")) {
+          var cj = t.getAttribute("data-filtre-jour-mode");
+          if (!t.value) etat.filtres[cj] = "";
+          else if (!etat.filtres[cj]) {
+            var d = new Date();
+            etat.filtres[cj] = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+          }
+          dessiner();
+          return;
+        }
+        if (filtres && t.matches("input[data-filtre-jour]")) {
+          etat.filtres[t.getAttribute("data-filtre-jour")] = t.value;
+          erreur("");
           return;
         }
         if (filtres && t.matches("input[data-filtre-date]")) {
