@@ -83,7 +83,7 @@ def _widget_public(row, user: dict, desactives: set[str]) -> dict:
         return w
     nom, bloc = r
     w["bloc"] = nom
-    w["url"] = reg.url_widget(nom, w["url_capture"])
+    w["url"] = reg.url_widget(nom, w["url_capture"], w.get("objet"))
     w["bloc_info"] = _bloc_public(nom, bloc)
     if nom in desactives:
         w["etat"] = "desactive"

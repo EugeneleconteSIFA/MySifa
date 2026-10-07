@@ -60,6 +60,14 @@ page : elle reste affichée dans le widget.
 l'id en base, `data-bloc-objet-libelle` avec le nom lisible, et `objet="…"`
 dans le registre. Jamais un nom de machine en dur.
 
+**Bloc cliquable sur un objet** (tuile de catégorie, carte machine qui ouvre
+une page) : déclarer où mène le clic, `lien="/stock?tab=matieres&cat={objet}"`
+dans le registre. L'indicateur ouvre alors cette page, pas celle de la
+capture — y compris pour les indicateurs créés avant. La page cible doit
+savoir s'ouvrir sur l'objet par son adresse (ex. `?cat=` de MyStock, lu au
+chargement et tenu à jour par `stockSyncUrl`). Un bloc qui ne mène nulle part
+de plus précis n'a pas de `lien`.
+
 **Bloc à ne pas rendre capturable** (formulaire de saisie, écran de
 paramétrage) : ne pas poser de `data-bloc`. C'est une décision, pas un oubli —
 le pre-commit avertit quand un titre de section apparaît sans `data-bloc`.

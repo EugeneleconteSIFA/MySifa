@@ -4288,6 +4288,8 @@ function stockSyncUrl() {
     if (S.tab === 'besoins-matieres' && S.besoinsView && S.besoinsView !== 'dossier') {
       sp.set('vue', S.besoinsView);
     }
+    const cat = S.tab === 'matieres' ? mpCategorieCourante() : null;
+    if (cat && !(S.selMatiere && S.selMatiere.matiere)) sp.set('cat', cat);
     if (S.selMatiere && S.selMatiere.matiere && S.selMatiere.matiere.id) {
       sp.set('matiere', String(S.selMatiere.matiere.id));
       if (S.selMatiere.vue && S.selMatiere.vue !== 'stock') sp.set('fiche', S.selMatiere.vue);
@@ -6029,6 +6031,21 @@ function mpPillMatch(d, m) {
   return d.sousSection ? ss.toLowerCase() === d.sousSection.toLowerCase() : !ss;
 }
 
+// Identifiant de la catégorie ouverte, le même que celui des tuiles
+// (« carton », « frontal:couche », « frontal: » pour les frontaux sans
+// sous-section, « tout »). null sur l'accueil des catégories. Sert à l'adresse
+// (?cat=) et aux indicateurs d'accueil qui rouvrent la catégorie
+// (lien de stock.matieres.categorie dans app/services/blocs_registre.py).
+function mpCategorieCourante() {
+  if (S.matieresAccueil) return null;
+  const cat = S.matieresCat || 'tout';
+  if (cat === 'frontal' && S.matieresSousSection) {
+    const ss = S.matieresSousSection;
+    return MP_FRONTAL_SS_PREFIX + (ss === MP_SOUS_SECTION_NONE ? '' : mpSousSectionSlug(ss));
+  }
+  return cat;
+}
+
 // Ouvre la liste d'une catégorie (tuile d'accueil, sous-menu de la barre latérale).
 function mpOuvrirCategorie(d) {
   S.matieresQ = '';
@@ -6571,6 +6588,9 @@ function buildMpDetailTabs(m, mouvements) {
 
 function renderMatieresView() {
   if (S.tab !== 'matieres') return;
+  // La catégorie ouverte suit dans l'adresse (?cat=), quel que soit le chemin
+  // pris pour l'ouvrir : tuile, barre de catégories, menu latéral.
+  stockSyncUrl();
   const ae = document.activeElement;
   const focusId = ae?.id;
   const caretStart = ae?.selectionStart;
@@ -26598,6 +26618,9 @@ async function init() {
   if (urlVue && BESOINS_VUES.includes(urlVue)) S.besoinsView = urlVue;
   // Deep-link sur une matière ou un produit (ouvre directement le détail)
   const urlMatiereId = parseInt(urlParams.get('matiere') || '', 10);
+  // Catégorie de matières (?cat=carton, ?cat=frontal:couche) : ouverte une fois
+  // les matières chargées, les sous-sections des frontaux en dépendant.
+  const urlCat = (urlParams.get('cat') || '').trim();
   const urlFiche = (urlParams.get('fiche') || '').trim();
   if (['fournisseurs', 'mouvements'].includes(urlFiche)) S.mpVueInit = urlFiche;
   const urlProduitId = parseInt(urlParams.get('produit') || '', 10);
@@ -26648,6 +26671,10 @@ async function init() {
   else if (S.tab === 'plan-entrepot') { await loadPlanEntrepot(); }
   else if (S.tab === 'production') { await loadProduction(); }
   else { await loadDashboard(); }
+  if (urlCat && S.tab === 'matieres' && !(urlMatiereId > 0)) {
+    const def = mpPillDefs().find(d => d.id === urlCat);
+    if (def) { mpOuvrirCategorie(def); renderMatieresView(); }
+  }
   // Deep-link : ouvrir la matière ou le produit demandé après le chargement
   if (urlMatiereId > 0 && !S.tracaOnly) {
     try { await loadMatiere(urlMatiereId); } catch (e) { /* silencieux */ }

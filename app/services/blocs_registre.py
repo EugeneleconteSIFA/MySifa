@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from urllib.parse import parse_qsl, urlencode, urlsplit
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit
 
 # Plafond décidé le 03/10/2026 : au-delà, un widget devient illisible.
 VALEURS_MAX = 4
@@ -59,6 +59,10 @@ class Bloc:
     # sans alerte — une alerte compare à un seuil, elle n'a de sens que sur un
     # nombre. Toute clé absente d'ici est un nombre.
     textes: tuple = ()
+    # Bloc cliquable sur un objet (tuile de catégorie, carte machine) : où mène
+    # le clic, « {objet} » remplacé par l'objet suivi. L'indicateur ouvre alors
+    # cette page-là, pas celle où le bloc a été capturé.
+    lien: str | None = None
 
 
 # Nom stable → bloc. Un nom ne change JAMAIS : pour renommer, créer le nouveau
@@ -76,7 +80,7 @@ BLOCS: dict[str, Bloc] = {
         appli="stock", libelle="Catégorie de matières", url="/stock?tab=matieres",
         type="objet",
         valeurs=(("references", "Références"), ("sous-seuil", "Sous le seuil")),
-        acces="stock", objet="categorie",
+        acces="stock", objet="categorie", lien="/stock?tab=matieres&cat={objet}",
     ),
     "stock.monitoring.kpis": Bloc(
         appli="stock", libelle="Monitoring stocks PF", url="/stock?tab=monitoring",
@@ -175,7 +179,7 @@ BLOCS: dict[str, Bloc] = {
         valeurs=(("en-cours", "Dossier en cours"), ("attente", "Dossiers en attente"),
                  ("charge", "Charge en attente (h)")),
         textes=("en-cours",),
-        acces="planning", objet="machine",
+        acces="planning", objet="machine", lien="/planning?machine={objet}",
     ),
     # ── Gestionnaire de tâches (app/web/taches_page.py) ──
     "taches.compteurs": Bloc(
@@ -263,7 +267,7 @@ BLOCS: dict[str, Bloc] = {
         type="objet",
         valeurs=(("etat", "État"), ("avancement", "Avancement (%)")),
         textes=("etat",),
-        objet="machine",
+        objet="machine", lien="/planning?machine={objet}",
     ),
 }
 
@@ -291,20 +295,29 @@ def _emplacement(url: str) -> tuple[str, str]:
     return p.path or "/", p.fragment
 
 
-def url_widget(nom: str, url_capture: str) -> str | None:
+def url_widget(nom: str, url_capture: str, objet: str | None = None) -> str | None:
     """URL à ouvrir pour un widget : la page capturée avec ses filtres.
 
-    Si le bloc a changé de place depuis la capture (autre page ou autre onglet
-    en ancre), on part de son emplacement actuel et on y reporte les filtres
-    capturés qui ne contredisent pas l'emplacement.
+    Bloc à objet qui déclare un `lien` : on ouvre la page de l'objet (liste
+    des cartons, planning de la machine), filtres capturés reportés quand ils
+    ne la contredisent pas. Si le bloc a changé de place depuis la capture
+    (autre page ou autre onglet en ancre), on part de son emplacement actuel
+    avec la même règle.
     """
     r = resoudre(nom)
     if not r:
         return None
     bloc = r[1]
+    if bloc.lien and objet:
+        return _avec_filtres(bloc.lien.replace("{objet}", quote(str(objet), safe=":")), url_capture)
     if _emplacement(url_capture) == _emplacement(bloc.url):
         return url_capture
-    base = urlsplit(bloc.url)
+    return _avec_filtres(bloc.url, url_capture)
+
+
+def _avec_filtres(cible: str, url_capture: str) -> str:
+    """`cible`, complétée des paramètres capturés qu'elle ne fixe pas déjà."""
+    base = urlsplit(cible)
     params = dict(parse_qsl(base.query, keep_blank_values=True))
     for k, v in parse_qsl(urlsplit(url_capture).query, keep_blank_values=True):
         params.setdefault(k, v)
@@ -430,6 +443,11 @@ def erreurs_registre() -> list[str]:
             errs.append(f"{nom} : url invalide")
         if not b.valeurs:
             errs.append(f"{nom} : aucune valeur clé — un widget n'affiche que des valeurs")
+        if b.lien is not None:
+            if not b.objet or "{objet}" not in b.lien:
+                errs.append(f"{nom} : lien sans objet — « {{objet}} » attendu, et objet= renseigné")
+            elif not url_capture_valide(b.lien.replace("{objet}", "x")):
+                errs.append(f"{nom} : lien invalide")
         cles = [c for c, _ in b.valeurs]
         if len(set(cles)) != len(cles) or any(not _CLE_RE.match(c) for c in cles):
             errs.append(f"{nom} : clés de valeurs invalides ou en double")
