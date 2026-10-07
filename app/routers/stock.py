@@ -8518,7 +8518,7 @@ def _mp_categorie_order(cat: str) -> int:
         return len(order)
 
 
-def _valorisation_query(conn) -> list[dict]:
+def _valorisation_query(conn, couts_matieres: bool = True) -> list[dict]:
     """Retourne la liste des lignes de valorisation.
 
     - Catégories non laizées : 1 ligne par matière, valorisation = qté × prix_unitaire.
@@ -8740,6 +8740,8 @@ def _valorisation_query(conn) -> list[dict]:
             "taxe_importation": bool(r["taxe_importation"] or 0),
             "cout_transport_inclus": transport_state,  # 0/1/2 (int)
         })
+    if couts_matieres:
+        _enrich_items_couts_matieres(conn, out)
     return out
 
 
@@ -8754,7 +8756,9 @@ def _valorisation_query_at_date(conn, snapshot_date: str | None) -> list[dict]:
     Sinon override quantite + prix_unitaire (non-laizées) OU quantite + prix_eur_m2
     (laizées), puis recalcule les champs dérivés (valorisation, prix_palette,
     valorisation_bobine)."""
-    items = _valorisation_query(conn)
+    # Une date passée se valorise aux prix historisés : le chiffre de Coûts
+    # matières, lui, est celui du jour.
+    items = _valorisation_query(conn, couts_matieres=not snapshot_date)
     if not snapshot_date:
         return items
     stock_nl, stock_l = _mp_stock_snapshot_at_date(conn, snapshot_date)
@@ -8928,6 +8932,11 @@ def _valorisation_summary(
             bucket["nb_refs_valorisees"] += 1
         total += it["valorisation"]
 
+        if it.get("ca_sous_total_eur") is not None:
+            # Ligne chiffrée par Coûts matières : sa valorisation réelle est
+            # déjà en euros, transport et taxes compris.
+            total_reel += float(it.get("valorisation_reelle") or 0)
+            continue
         tax_mult = _row_tax_multiplier(it, import_tax_pct)
         usd_mult = _row_usd_multiplier(it, taux_eur_usd)
         supp_per_m2 = _row_transport_supplement_eur_per_m2(
@@ -9012,6 +9021,11 @@ def _enrich_items_with_usd(
         val_reel  = val × (1 + taxe%/100) × taux_USD
     """
     for it in items:
+        if it.get("ca_sous_total_eur") is not None:
+            # Chiffrée par Coûts matières : devise, transport et taxes y sont
+            # déjà. Ré-appliquer les coefficients historiques les compterait
+            # deux fois. Voir _enrich_items_couts_matieres.
+            continue
         tax_mult = _row_tax_multiplier(it, import_tax_pct)
         usd_mult = _row_usd_multiplier(it, taux_eur_usd)
         mult = tax_mult * usd_mult
@@ -9047,6 +9061,64 @@ def _enrich_items_with_usd(
         it["transport_addon_eur"] = round(supp_per_bobine * qte, 2)
         it["transport_addon_raw"] = round(supp_per_bobine, 4)
         it["transport_supplement_eur_per_m2"] = round(supp_per_m2, 4)
+
+
+def _enrich_items_couts_matieres(conn, items: list[dict]) -> None:
+    """Pose sur chaque ligne le sous-total d'achat EN EUROS et le prix de vente
+    calculés par Coûts matières, puis la valorisation qui en découle.
+
+    Le prix stocké côté MyStock (`prix_unitaire`, `prix_eur_m2`) est un miroir
+    dans la devise et la base d'achat : pour un frontal acheté en USD, ce sont
+    des dollars. La valorisation réelle part donc d'ici, pas du miroir.
+
+    Champs posés (unité de base : €/m² pour une bobine, unité d'achat sinon) :
+    ca_sous_total_eur, ca_prix_vente_eur, ca_devise, ca_taux, ca_marge_pct,
+    ca_plusieurs ; et, à l'échelle de la ligne, ca_sous_total_ligne /
+    ca_prix_vente_ligne (par bobine, palette ou unité), prix_unitaire_reel,
+    prix_eur_m2_reel, valorisation_reelle, valorisation_vente.
+    """
+    try:
+        prix = _mystock_prix.prix_pour_valorisation(conn)
+    except Exception:
+        logger.exception("valorisation : lecture Coûts matières impossible")
+        return
+    for it in items:
+        mid = it.get("matiere_id")
+        entrees = prix.get((mid, it.get("laize_id"))) or prix.get((mid, None))
+        if not entrees:
+            continue
+        # Une matière au grammage porte un prix par grammage ; la ligne de
+        # valorisation n'en a qu'un. On retient celui que le miroir y a écrit.
+        reference = float(it.get("prix_eur_m2") if it.get("laizee") else it.get("prix_unitaire") or 0)
+        e = next((x for x in entrees if abs(x["sous_total_src"] - reference) < 1e-6), entrees[0])
+        st, pv = e["sous_total_eur"], e["prix_vente_eur"]
+        qte = float(it.get("quantite") or 0)
+        if it.get("laizee"):
+            facteur = float(it.get("surface_bobine_m2") or 0)
+            it["prix_eur_m2_reel"] = round(st, 4)
+        elif it.get("avec_conditionnement"):
+            facteur = float(it.get("unites_par_palette") or 0)
+        else:
+            facteur = 1.0
+        st_ligne, pv_ligne = st * facteur, pv * facteur
+        it.update({
+            "ca_sous_total_eur": round(st, 6),
+            "ca_prix_vente_eur": round(pv, 6),
+            "ca_devise": e["devise"],
+            "ca_taux": e["taux"],
+            "ca_marge_pct": e["marge_pct"],
+            "ca_plusieurs": len({round(x["sous_total_eur"], 6) for x in entrees}) > 1,
+            "ca_sous_total_ligne": round(st_ligne, 4),
+            "ca_prix_vente_ligne": round(pv_ligne, 4),
+            # Le front multiplie lui-même par les unités/palette.
+            "prix_unitaire_reel": round(st * facteur if it.get("laizee") else st, 4),
+            "valorisation_reelle": round(qte * st_ligne, 2),
+            "valorisation_vente": round(qte * pv_ligne, 2),
+            "reel_multiplier": 1.0,
+            "transport_addon_eur": 0.0,
+            "transport_addon_raw": 0.0,
+            "transport_supplement_eur_per_m2": 0.0,
+        })
 
 
 # ─── Trend valorisation (30 derniers jours) ──────────────────────────────────

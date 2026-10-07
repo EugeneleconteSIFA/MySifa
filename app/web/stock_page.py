@@ -22696,6 +22696,7 @@ function valFilteredItems() {
         case 'categorie': va = (a.categorie_label || '').toLowerCase(); vb = (b.categorie_label || '').toLowerCase(); break;
         case 'quantite': va = Number(a.quantite || 0); vb = Number(b.quantite || 0); break;
         case 'prix_unitaire': va = Number(a.prix_unitaire || 0); vb = Number(b.prix_unitaire || 0); break;
+        case 'prix_vente': va = Number(a.ca_prix_vente_ligne || 0); vb = Number(b.ca_prix_vente_ligne || 0); break;
         case 'prix_unitaire_reel': va = Number(a.prix_unitaire_reel || a.prix_unitaire || 0); vb = Number(b.prix_unitaire_reel || b.prix_unitaire || 0); break;
         case 'valorisation': va = Number(a.valorisation || 0); vb = Number(b.valorisation || 0); break;
         default: va = 0; vb = 0;
@@ -23363,7 +23364,7 @@ function buildValorisationTableRow(item) {
   // Une ligne est « réelle » dès qu'au moins un flag (USD, taxe ou transport) est actif
   // ET produit un ajustement (multiplicateur ≠ 1 OU forfait transport > 0).
   const hasReel = valored
-    && (item.prix_en_usd || item.taxe_importation || item.cout_transport_inclus)
+    && (item.ca_sous_total_eur != null || item.prix_en_usd || item.taxe_importation || item.cout_transport_inclus)
     && (Number(item.valorisation_reelle || 0) > 0 || Number(item.transport_addon_eur || 0) > 0)
     && Math.abs(Number(item.valorisation_reelle) - Number(item.valorisation)) > 0.005;
   let tdVal;
@@ -23384,18 +23385,22 @@ function buildValorisationTableRow(item) {
     );
   }
 
-  // ── Colonne « Prix unit. réel » : visible uniquement Direction / superadmin ──
+  // ── Colonne « Sous-total achat € » ──
+  // Ligne chiffrée par Coûts matières : le sous-total d'achat (prix + transport
+  // + taxes) converti en euros, calculé côté serveur. Sinon, l'ancien calcul
+  // « prix unitaire réel » (coefficients USD / taxe / conteneur).
   // Mêmes proportions que Prix unitaire (main /pal. + sous-titre €/kg · kg/pal.) mais
   // en vert et sans bouton Modifier. Affichée dès que le prix unitaire diffère de la
   // base (USD, taxe adhésif, ou supplément transport container appliqué).
-  const canSeeUSD = valCanSeeUSD();
   const hasPriceMult = valored
     && Number(item.prix_unitaire_reel || 0) > 0
     && Math.abs(Number(item.prix_unitaire_reel) - Number(item.prix_unitaire)) > 0.00005;
   const hasTransportAddon = Number(item.cout_transport_inclus || 0) > 0
     && Number(item.transport_addon_eur || 0) > 0;
   let tdPrixReel = null;
-  if (canSeeUSD) {
+  if (item.ca_sous_total_eur != null) {
+    tdPrixReel = valCellPrixCoutsMatieres(item, 'achat');
+  } else {
     if (hasPriceMult) {
       const uniteAbbr = valAbbrUnite(item.unite);
       let mainTxt;
@@ -23450,6 +23455,10 @@ function buildValorisationTableRow(item) {
     }
   }
 
+  const tdVente = item.ca_prix_vente_eur != null
+    ? valCellPrixCoutsMatieres(item, 'vente')
+    : el('td', { style: 'padding:10px 12px;text-align:right;font-size:13px;color:var(--muted)' }, '—');
+
   // ── Colonne « Actions » ──
   // Une seule action : l'historique des prix.
   //
@@ -23476,12 +23485,44 @@ function buildValorisationTableRow(item) {
     style: 'padding:10px 12px;text-align:center;white-space:nowrap'
   }, el('div', { style: 'display:inline-flex;gap:6px;align-items:center' }, ...actionsChildren));
 
-  if (canSeeUSD) {
-    tr.append(tdCat, tdRef, tdDes, tdQte, tdPrix, tdPrixReel, tdVal, tdHist);
-  } else {
-    tr.append(tdCat, tdRef, tdDes, tdQte, tdPrix, tdVal, tdHist);
-  }
+  tr.append(tdCat, tdRef, tdDes, tdQte, tdPrix, tdPrixReel, tdVente, tdVal, tdHist);
   return tr;
+}
+
+// Cellule de prix issue de Coûts matières, à l'échelle de la ligne (bobine,
+// palette ou unité) avec le prix de base en sous-titre (€/m², €/kg…).
+// sorte = 'achat' (sous-total d'achat en €) ou 'vente' (prix de vente).
+function valCellPrixCoutsMatieres(item, sorte) {
+  const vente = sorte === 'vente';
+  const base = Number(vente ? item.ca_prix_vente_eur : item.ca_sous_total_eur) || 0;
+  const ligne = Number(vente ? item.ca_prix_vente_ligne : item.ca_sous_total_ligne) || 0;
+  let mainTxt;
+  const sub = [];
+  if (item.laizee) {
+    mainTxt = valFormatEuroDetail(ligne) + ' /bob.';
+    sub.push(valFormatPrixDetail(base) + ' €/m²');
+  } else if (item.avec_conditionnement) {
+    mainTxt = Number(item.unites_par_palette || 0) > 0 ? valFormatEuroDetail(ligne) + ' /pal.' : '—';
+    sub.push(valFormatPrixDetail(base) + ' €/' + (item.unite_achat || 'unité'));
+  } else {
+    const u = valAbbrUnite(item.unite);
+    mainTxt = valFormatEuroDetail(base) + (u ? ' /' + u : '');
+  }
+  if (vente) {
+    sub.push('marge ' + Number(item.ca_marge_pct || 0).toLocaleString('fr-FR') + ' %');
+  } else if (item.ca_devise && item.ca_devise !== 'EUR') {
+    sub.push(item.ca_devise + ' × ' + Number(item.ca_taux || 0).toLocaleString('fr-FR', { maximumFractionDigits: 4 }));
+  }
+  const title = (vente ? "Prix de vente : sous-total d'achat en € + marge" : "Sous-total d'achat (prix + transport + taxes) converti en euros")
+    + ' — calculé par Coûts matières'
+    + (item.ca_plusieurs ? '. Plusieurs déclinaisons à des prix différents : celle valorisée ici est affichée.' : '.');
+  return el('td', { style: 'padding:10px 12px;text-align:right', title: title },
+    el('div', { style: 'display:flex;flex-direction:column;align-items:flex-end' },
+      el('div', { style: 'font-size:13px;font-weight:700;color:' + (vente ? 'var(--text)' : 'var(--success, #16a34a)')
+        + ';font-variant-numeric:tabular-nums;white-space:nowrap' }, mainTxt),
+      el('div', { style: 'font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap' }, sub.join(' · '))
+    )
+  );
 }
 
 // ── Les prix ne se saisissent plus dans MyStock ────────────────────────────
@@ -23719,7 +23760,6 @@ function buildValorisationTable() {
   const thStyleR = thStyle + ';text-align:right';
   const thStyleC = thStyle + ';text-align:center;cursor:default';
 
-  const canSeeUSD = valCanSeeUSD();
   const thChildren = [
     el('th', { style: thStyle, on: { click: () => valToggleSort('categorie') } }, 'Catégorie' + arrow('categorie')),
     el('th', { style: thStyle, on: { click: () => valToggleSort('reference') } }, 'Référence' + arrow('reference')),
@@ -23727,14 +23767,16 @@ function buildValorisationTable() {
     el('th', { style: thStyleR, on: { click: () => valToggleSort('quantite') } }, 'Quantité' + arrow('quantite')),
     el('th', { style: thStyleR, on: { click: () => valToggleSort('prix_unitaire') } }, 'Prix unitaire' + arrow('prix_unitaire')),
   ];
-  if (canSeeUSD) {
-    thChildren.push(
-      el('th', { style: thStyleR + ';color:#16a34a',
-        on: { click: () => valToggleSort('prix_unitaire_reel') },
-        title: 'Prix unitaire converti via le Taux EUR/USD (MyCouts > Paramètres). Affiché pour les références cochées USD.'
-      }, 'Prix unit. réel' + arrow('prix_unitaire_reel'))
-    );
-  }
+  thChildren.push(
+    el('th', { style: thStyleR + ';color:var(--success, #16a34a)',
+      on: { click: () => valToggleSort('prix_unitaire_reel') },
+      title: "Sous-total d'achat (prix + transport + taxes) converti en euros, calculé par Coûts matières."
+    }, 'Sous-total achat €' + arrow('prix_unitaire_reel')),
+    el('th', { style: thStyleR,
+      on: { click: () => valToggleSort('prix_vente') },
+      title: "Sous-total d'achat en euros + marge de la catégorie (Coûts matières)."
+    }, 'Prix de vente' + arrow('prix_vente')),
+  );
   thChildren.push(
     el('th', { style: thStyleR, on: { click: () => valToggleSort('valorisation') } }, 'Valorisation' + arrow('valorisation')),
     el('th', { style: thStyleC }, 'Actions'),

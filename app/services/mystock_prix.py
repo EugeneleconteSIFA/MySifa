@@ -2386,3 +2386,85 @@ def _sync_laize_fournisseurs(conn: sqlite3.Connection, declinaison_id: int) -> N
                (matiere_id, laize_id, fournisseur_id) VALUES (?,?,?)""",
             (matiere_id, laize_id, int(r["fournisseur_id"])),
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Lecture par la valorisation MyStock
+# ─────────────────────────────────────────────────────────────────────────────
+# Le miroir (`_mirror_principal`) recopie le sous-total dans la DEVISE et la
+# BASE d'achat : un frontal acheté en USD y laisse des dollars, un adhésif au
+# kilo des euros par kilo. La valorisation, elle, raisonne en euros. Plutôt que
+# de reconvertir à partir de ce miroir — et de ré-appliquer par-dessus ses
+# anciens coefficients USD / taxe / conteneur, ce qui comptait deux fois le
+# transport et la taxe —, elle lit ici le chiffre que Coûts matières calcule.
+
+
+def prix_pour_valorisation(conn: sqlite3.Connection) -> dict:
+    """
+    Sous-total d'achat en euros et prix de vente, par ligne de valorisation.
+
+    Clé : (matiere_id, laize_id) pour une matière laizée, (matiere_id, None)
+    sinon. Valeur : une liste — une matière au grammage porte une entrée par
+    grammage, et c'est à l'appelant de choisir celle que sa ligne valorise.
+
+    Unités : €/m² pour une matière laizée (le moteur passe du kilo au m² par le
+    poids), unité d'achat pour les autres (€/kg pour un adhésif).
+    """
+    from app.services.pricing.engine import (
+        compute_material_price_per_m2,
+        marge_pct_matiere,
+    )
+    from app.services.pricing.errors import PricingError
+    from app.services.pricing.repository import (
+        declinaison_to_pricing_material,
+        load_pricing_settings,
+    )
+
+    try:
+        reglages = load_pricing_settings(conn)
+    except PricingError:
+        return {}
+    taux_usd = float(reglages.eur_usd_rate)
+
+    out: dict = {}
+    for m in list_materials(conn):
+        laizee = is_laizee(m["categorie"])
+        for d in m.get("declinaisons", []):
+            prix = d.get("prix_principal")
+            if not prix:
+                continue
+            pm = declinaison_to_pricing_material({
+                **d,
+                "declinaison_id": d["id"],
+                "reference": m["reference"],
+                "categorie": m["categorie"],
+                "unit_price": prix,
+            })
+            taux = taux_usd if (d.get("price_currency") or "EUR") == "USD" else 1.0
+            sous_total_src = sous_total_achat(prix, **{c: d[c] for c in _CLES_CALCUL})
+            if laizee:
+                try:
+                    sous_total_eur = float(
+                        compute_material_price_per_m2(pm, reglages).price_eur_per_m2
+                    )
+                except PricingError:
+                    continue
+                if sous_total_eur <= 0:
+                    # Prix au kilo sans poids : le moteur rend 0, la fiche le
+                    # signale. Afficher 0 € ferait croire à une matière gratuite.
+                    continue
+            else:
+                sous_total_eur = sous_total_src * taux
+            marge = float(marge_pct_matiere(pm, reglages)) if pm.applique_marge else 0.0
+            out.setdefault((int(m["id"]), d["laize_id"] if laizee else None), []).append({
+                "declinaison_id": d["id"],
+                "libelle": d["libelle"],
+                "devise": d.get("price_currency") or "EUR",
+                "base": d.get("price_basis"),
+                "taux": round(taux, 6),
+                "sous_total_src": round(sous_total_src, 6),
+                "sous_total_eur": round(sous_total_eur, 6),
+                "marge_pct": round(marge, 4),
+                "prix_vente_eur": round(sous_total_eur * (1 + marge / 100.0), 6),
+            })
+    return out
