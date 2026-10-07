@@ -957,7 +957,21 @@
       }
       var parts = String(document.title || "").split(" — ").map(function (x) { return x.trim(); }).filter(Boolean);
       if (parts.length > 1) parts.pop();
-      return parts.reverse().join(" › ");
+      parts.reverse();
+      // Beaucoup d'applis gardent le même titre d'un onglet à l'autre
+      // (« MyExpé — MySifa ») : l'entrée active du menu latéral dit où l'on est.
+      var actif = document.querySelector(".sidebar .nav-btn.active, nav .nav-btn.active, .nav-btn.active");
+      var lib = "";
+      if (actif) {
+        // Sans les compteurs (« Pilotage 3 ») : ils ne nomment pas l'écran.
+        var copie = actif.cloneNode(true);
+        Array.prototype.forEach.call(copie.querySelectorAll("[class*='badge'], [class*='count']"),
+          function (b) { b.remove(); });
+        lib = String(copie.textContent || "").replace(/\s+/g, " ").trim();
+      }
+      var deja = parts.some(function (x) { return x.toLowerCase() === lib.toLowerCase(); });
+      if (lib && lib.length <= 60 && !deja) parts.push(lib);
+      return parts.join(" › ");
     }
 
     function demander() {
