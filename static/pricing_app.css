@@ -1186,3 +1186,16 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 /* Libellés et titres de section en foncé : en gris clair, ils se perdaient
    sur le fond teinté de l'encadré import. */
 .form-layout-1 .field label,.form-layout-1 .form-section h3{color:var(--text)}
+/* Fiches techniques matière / produit (pricing_fiches.js) */
+.ft-modal{max-width:920px;width:calc(100vw - 32px)}
+.ft-meta{font-size:12px;margin:-4px 0 10px}
+.ft-corps{display:flex;flex-direction:column;gap:10px}
+.ft-pdf{width:100%;height:min(70vh,760px);border:1px solid var(--border);border-radius:8px;background:var(--bg)}
+.ft-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 16px;max-height:65vh;overflow:auto;padding-right:4px}
+.ft-form textarea{width:100%;resize:vertical;font:inherit}
+.ft-bom{border:1px solid var(--border);border-radius:8px;padding:8px 10px}
+.ft-bom-t{font-size:12px;font-weight:600;margin-bottom:6px}
+.ft-bom-l{display:flex;align-items:center;gap:10px;padding:3px 0}
+.ft-bom-r{width:70px;font-size:12px;color:var(--muted)}
+.ft-bom-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ft-vide{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--warn,#d97706);vertical-align:middle}

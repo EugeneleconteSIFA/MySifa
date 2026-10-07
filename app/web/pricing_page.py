@@ -23,7 +23,7 @@ _NO_CACHE = {
 }
 
 
-_ASSETS_PRICING = ("static/pricing_app.css", "static/pricing_app.js")
+_ASSETS_PRICING = ("static/pricing_app.css", "static/pricing_app.js", "static/pricing_fiches.js")
 _EMPREINTE_CACHE: dict[str, str] = {}
 
 
@@ -194,6 +194,7 @@ PRICING_SHELL = r"""<!DOCTYPE html>
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/mysifa_sidebar.js?v=__V__"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
+<script src="/static/pricing_fiches.js?v=__ASSETS__" defer></script>
 <script src="/static/pricing_app.js?v=__ASSETS__" defer></script>
 <script src="/static/mysifa_impersonate.js?v=2"></script>
 <script src="/static/mysifa_cal_rappel.js?v=8"></script>
