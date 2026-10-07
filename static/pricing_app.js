@@ -5144,8 +5144,7 @@
         val: (p) => (msProductComp(p, "GLASSINE") || {}).reference || "" },
       { cle: "autres", titre: "Autres", style: "width:70px",
         val: (p) => (p.composants || []).filter((x) => x.role === "AUTRE").length },
-      { cle: "cout", titre: "Coût", val: (p) => (p.cost ? parseFloat(p.cost.total_eur_per_m2) : null) },
-      { cle: "vente", titre: "Vente", val: (p) => (p.cost ? parseFloat(p.cost.sell_price_eur_m2) : null) },
+      { cle: "vente", titre: "Prix de vente", val: (p) => (p.cost ? parseFloat(p.cost.sell_price_eur_m2) : null) },
       { cle: "marge", titre: "Marge", val: (p) => (p.cost ? parseFloat(p.cost.margin_pct) : null) },
       { cle: "act", titre: "", style: "width:150px" },
     ];
@@ -5173,8 +5172,7 @@
             }</td>
             <td>${msProductCompLabel(p, "GLASSINE")}</td>
             <td>${autres || '<span style="color:var(--muted)">—</span>'}</td>
-            <td class="ms-prix-cell">${c ? fmtEurM2(c.total_eur_per_m2) : '<span style="color:var(--muted)">—</span>'}</td>
-            <td class="ms-prix-cell">${c ? fmtEurM2(c.sell_price_eur_m2) : "—"}</td>
+            <td class="ms-prix-cell msp-vente">${c ? fmtEurM2(c.sell_price_eur_m2) : '<span style="color:var(--muted)">—</span>'}</td>
             <td class="ms-meta">${c ? fmtPct(c.margin_pct) : "—"}</td>
             <td class="row-actions msp-actions" onclick="event.stopPropagation()">
               <button type="button" class="btn btn-soft btn-sm" data-ft-produit="${p.id}" title="Fiche technique (BOM) : visualiser et télécharger">Fiche</button>
@@ -5182,7 +5180,7 @@
               ${actionBtn("data-msp-dup", p.id, "copy", "Dupliquer — créer un produit similaire")}
             </td>
           </tr>
-          ${open ? `<tr class="ms-detail-row msp-detail-row"><td colspan="11">${msProductDetailHtml(p)}</td></tr>` : ""}`;
+          ${open ? `<tr class="ms-detail-row msp-detail-row"><td colspan="10">${msProductDetailHtml(p)}</td></tr>` : ""}`;
       })
       .join("");
 
@@ -5194,7 +5192,7 @@
       : `<div class="table-wrap">
           <table class="pr-table msp-table">
             ${enTetesTriables("produits", COLS, S.msProducts)}
-            <tbody>${rows || '<tr><td colspan="11" class="empty">Aucun produit pour ce filtre.</td></tr>'}</tbody>
+            <tbody>${rows || '<tr><td colspan="10" class="empty">Aucun produit pour ce filtre.</td></tr>'}</tbody>
           </table>
         </div>`;
 
