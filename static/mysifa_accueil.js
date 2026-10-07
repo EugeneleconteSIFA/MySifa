@@ -39,7 +39,8 @@
   var W = {
     widgets: [],
     edition: false,
-    repliee: false,
+    repliee: false,          // état affiché (dépend de la largeur)
+    replieeBureau: false,    // préférence serveur, colonne ≥ 900 px
     avis: [],
     disparus: [],
     cartes: {}               // id → { el, iframe, valeurs, absences, w }
@@ -48,6 +49,20 @@
   var minuteur = null;       // rafraîchissement chaque minute
   var ecoutes = false;       // resize / visibilitychange posés une seule fois
   var demarrage = false;     // demarrer() en cours
+
+  /* Repli sur téléphone : propre à l'appareil et replié par défaut, pour que
+     les applis restent en haut de l'écran. Il ne touche pas la préférence de
+     la colonne sur ordinateur (un seul réglage serveur les liait). */
+  var TELEPHONE = window.matchMedia("(max-width:899px)");
+  var CLE_REPLI_TEL = "mysifa_accueil_repli_tel";
+
+  function replieeTelephone() {
+    try { return localStorage.getItem(CLE_REPLI_TEL) !== "0"; } catch (e) { return true; }
+  }
+
+  function etatRepli() {
+    return TELEPHONE.matches ? replieeTelephone() : W.replieeBureau;
+  }
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
@@ -105,7 +120,16 @@
       "}",
       "@media (min-width:1600px){#mysifa-accueil{--mac-w:380px}}",
       "@media (min-width:900px) and (max-width:1199px){#mysifa-accueil{--mac-w:220px}}",
-      "@media (max-width:899px){#mysifa-accueil{padding:12px 16px 0;width:100%}}",
+      // position + z-index : sans eux, la section reste dans le flux SOUS les
+      // calques fixes du fond animé (body::before/::after, z-index 0) et les
+      // indicateurs paraissent grisés sur téléphone (constaté le 07/10/2026).
+      "@media (max-width:899px){",
+      "  #mysifa-accueil{padding:12px 16px 0;width:100%;position:relative;z-index:2}",
+      // Repliée sur téléphone, le titre reste : une icône seule ne dit pas
+      // ce qu'elle déplie. Le titre se touche aussi pour déplier.
+      "  #mysifa-accueil.repliee .mac-titre{display:block;cursor:pointer}",
+      "  #mysifa-accueil.repliee .mac-tete{margin-bottom:4px}",
+      "}",
       // Titre sur sa propre ligne, boutons dessous : « Mes tableaux de bord »
       // ne tient pas à côté des boutons dans une colonne de 300 px.
       ".mac-tete{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 10px;padding-right:8px}",
@@ -176,7 +200,12 @@
       ".mac-outils input{flex:1;min-width:0;font:13px 'Segoe UI',system-ui,sans-serif;background:var(--card,#111827);color:var(--text,#f1f5f9);border:1px solid var(--border,#1e293b);border-radius:8px;padding:4px 6px}",
       ".mac-carte.glisse{position:fixed;z-index:200;opacity:.92;box-shadow:0 12px 32px rgba(0,0,0,.25);pointer-events:none}",
       ".mac-place{border:2px dashed var(--accent,#22d3ee);border-radius:12px;background:var(--accent-bg,rgba(34,211,238,.12));flex-shrink:0}",
-      "#mysifa-accueil.edition .mac-carte{touch-action:none;user-select:none}",
+      // Au doigt, seule l'en-tête attrape la carte : bloquer le geste sur toute
+      // la carte empêchait de faire défiler la page en mode Personnaliser.
+      "#mysifa-accueil.edition .mac-carte{user-select:none}",
+      "#mysifa-accueil.edition .mac-ctete{touch-action:none}",
+      "#mysifa-accueil.edition .mac-ctete::before{content:'';flex-shrink:0;width:10px;height:14px;opacity:.55;",
+      "  background-image:radial-gradient(currentColor 1.1px,transparent 1.6px);background-size:5px 5px}",
       ".mac-vide{border:1px dashed var(--border,#1e293b);border-radius:12px;padding:14px;color:var(--muted,#94a3b8);line-height:1.45}",
       ".mac-vide-t{font-weight:700;color:var(--text,#f1f5f9);font-size:14px;margin-bottom:4px}",
       ".mac-vide-p{margin:0 0 10px;font-size:12px}",
@@ -184,6 +213,7 @@
       ".mac-etapes li{display:flex;gap:8px;align-items:flex-start;color:var(--text2,#cbd5e1)}",
       ".mac-num{flex-shrink:0;width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--accent-bg,rgba(34,211,238,.12));color:var(--accent,#22d3ee);font-weight:700;font-size:11px}",
       ".mac-capico{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--accent,#22d3ee);color:var(--bg,#0a0e17);vertical-align:middle;margin:0 1px}",
+      "@media (hover:none){.mac-clavier{display:none}}",
       ".mac-vide kbd{font:600 11px 'Segoe UI',system-ui,sans-serif;border:1px solid var(--border,#1e293b);border-bottom-width:2px;border-radius:5px;padding:0 4px;background:var(--card,#111827);color:var(--text,#f1f5f9)}",
       ".mac-essai{display:flex;flex-direction:column;gap:6px}",
       ".mac-essai-t{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}",
@@ -528,7 +558,7 @@
       '<p class="mac-vide-p">Stocks à réapprovisionner, machines en marche, départs du jour… ils s\'affichent ici et se mettent à jour chaque minute.</p>' +
       '<ol class="mac-etapes">' +
       '<li><span class="mac-num">1</span><span>Ouvrez une appli.</span></li>' +
-      '<li><span class="mac-num">2</span><span>Cliquez sur <span class="mac-capico" title="Bouton de capture">' + ICONE_CAPTURE + '</span> en bas à droite, ou faites <kbd>Alt</kbd>+<kbd>C</kbd>.</span></li>' +
+      '<li><span class="mac-num">2</span><span>Cliquez sur <span class="mac-capico" title="Bouton de capture">' + ICONE_CAPTURE + '</span> en bas à droite<span class="mac-clavier">, ou faites <kbd>Alt</kbd>+<kbd>C</kbd></span>.</span></li>' +
       '<li><span class="mac-num">3</span><span>Cliquez sur un bloc entouré, cochez les valeurs à afficher.</span></li>' +
       '</ol>' +
       '<div class="mac-essai"></div>' +
@@ -591,6 +621,7 @@
       if (!W.edition || e.button > 0) return;
       var carte = e.target.closest(".mac-carte");
       if (!carte || e.target.closest("button,input")) return;
+      if (e.pointerType === "touch" && !e.target.closest(".mac-ctete")) return;
       var r = carte.getBoundingClientRect();
       g = { carte: carte, dy: e.clientY - r.top, x0: e.clientX, y0: e.clientY, actif: false, r: r, id: e.pointerId };
       try { carte.setPointerCapture(e.pointerId); } catch (err) { /* navigateur ancien */ }
@@ -656,6 +687,7 @@
   }
 
   function basculerRepli(sauver) {
+    if (!racine) return;
     racine.classList.toggle("repliee", W.repliee);
     document.body.classList.toggle("mysifa-accueil-repliee", W.repliee);
     var b = racine.querySelector(".mac-repli");
@@ -666,7 +698,18 @@
     b.title = W.repliee ? "Afficher mes tableaux de bord" : "Replier mes tableaux de bord";
     b.setAttribute("aria-label", b.title);
     b.setAttribute("aria-expanded", W.repliee ? "false" : "true");
-    if (sauver) api("/api/accueil/prefs", { method: "PUT", body: { colonne_repliee: W.repliee } }).catch(function () {});
+    if (!sauver) return;
+    if (TELEPHONE.matches) {
+      try { localStorage.setItem(CLE_REPLI_TEL, W.repliee ? "1" : "0"); } catch (e) { /* stockage bloqué : repli non retenu */ }
+      return;
+    }
+    W.replieeBureau = W.repliee;
+    api("/api/accueil/prefs", { method: "PUT", body: { colonne_repliee: W.repliee } }).catch(function () {});
+  }
+
+  function inverserRepli() {
+    W.repliee = !W.repliee;
+    basculerRepli(true);
   }
 
   /* ── Messages des iframes ──────────────────────────────────────────── */
@@ -973,9 +1016,9 @@
     racine.querySelector(".mac-demande").addEventListener("click", function () {
       if (window.MySifaBlocs && window.MySifaBlocs.demander) window.MySifaBlocs.demander();
     });
-    racine.querySelector(".mac-repli").addEventListener("click", function () {
-      W.repliee = !W.repliee;
-      basculerRepli(true);
+    racine.querySelector(".mac-repli").addEventListener("click", inverserRepli);
+    racine.querySelector(".mac-titre").addEventListener("click", function () {
+      if (TELEPHONE.matches && W.repliee) inverserRepli();
     });
     brancherGlisser(racine.querySelector(".mac-liste"));
     basculerRepli(false);
@@ -991,6 +1034,10 @@
     if (!ecoutes) {
       ecoutes = true;
       window.addEventListener("resize", majHaut);
+      // Rotation, fenêtre redimensionnée : chaque largeur reprend son repli.
+      var changeLargeur = function () { W.repliee = etatRepli(); basculerRepli(false); };
+      if (TELEPHONE.addEventListener) TELEPHONE.addEventListener("change", changeLargeur);
+      else if (TELEPHONE.addListener) TELEPHONE.addListener(changeLargeur);
       document.addEventListener("visibilitychange", function () { if (!document.hidden) rafraichir(); });
     }
   }
@@ -1005,7 +1052,7 @@
     if (racine) { racine.remove(); racine = null; }
     document.body.classList.remove("mysifa-accueil-on", "mysifa-accueil-repliee");
     W.widgets = []; W.disparus = []; W.avis = []; W.cartes = {};
-    W.edition = false; W.repliee = false;
+    W.edition = false; W.repliee = false; W.replieeBureau = false;
   }
 
   /* Suit l'affichage du portail. Page du portail absente (écran de
@@ -1044,7 +1091,8 @@
       // (droits retirés) : masqués, pas supprimés — ils reviennent avec l'accès.
       W.widgets = tous.filter(function (w) { return w.etat === "ok"; });
       W.disparus = tous.filter(function (w) { return w.etat === "disparu"; });
-      W.repliee = !!r[1].colonne_repliee;
+      W.replieeBureau = !!r[1].colonne_repliee;
+      W.repliee = etatRepli();
       return chargerSources().then(function () {
         // Entre-temps, l'utilisateur a pu quitter le portail (déconnexion).
         if (document.querySelector(".portal-page") && !racine) monter();
