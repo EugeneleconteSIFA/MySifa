@@ -14,7 +14,8 @@
  * mêmes valeurs et les mêmes libellés que la page.
  *
  * Types : « periode » (raccourcis de MyProd, ou dates fixes bloc_du/bloc_au),
- * « choix » (une valeur), « multi » (plusieurs valeurs, aucune = « vide »).
+ * « choix » (une valeur), « multi » (plusieurs valeurs, aucune = « vide »),
+ * « jour » (aujourd'hui, ou une date fixe AAAA-MM-JJ).
  * `options(api)` rend [{ v, l }] ; `defaut` est la valeur de la page quand
  * l'adresse n'en porte pas.
  */
@@ -100,6 +101,12 @@
     "planning-rh.conges": [{
       cle: "bloc_scope", libelle: "Vue", type: "choix", defaut: "atelier",
       options: liste([["atelier", "Atelier"], ["rh", "RH"]])
+    }],
+
+    // Sélecteur « Valorisation au » de MyStock (stock_page.py) : vide = du jour.
+    "stock.valorisation.kpis": [{
+      cle: "bloc_date", libelle: "Valorisation au", type: "jour", defaut: "",
+      options: liste([])
     }],
 
     // Sélecteur d'état des bobines (stock_page.py)
@@ -188,6 +195,8 @@
       var v = etat[f.cle];
       if (f.type === "multi") {
         if (v && v.length) morceaux.push(v.map(lib).join(", "));
+      } else if (f.type === "jour") {
+        morceaux.push(v ? "au " + jjmm(v) + "/" + String(v).slice(0, 4) : "Aujourd'hui");
       } else if (f.type === "periode" && v === "dates") {
         if (etat.bloc_du) morceaux.push(etat.bloc_au && etat.bloc_au !== etat.bloc_du
           ? "du " + jjmm(etat.bloc_du) + " au " + jjmm(etat.bloc_au) : "le " + jjmm(etat.bloc_du));

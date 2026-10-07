@@ -317,9 +317,12 @@
        production) pour la direction quand il diffère de la base, la base
        sinon. Toujours la valorisation du jour. */
     "stock.valorisation.kpis": function (ctx) {
+      // Date figée capturée (bloc_date) : mêmes appels que la page, avec ?date=.
+      var jour = ctx.params.get("bloc_date");
+      var qs = jour ? "?date=" + encodeURIComponent(jour) : "";
       return Promise.all([
-        ctx.json("/api/stock/valorisation"),
-        ctx.json("/api/stock/valorisation/pf")
+        ctx.json("/api/stock/valorisation" + qs),
+        ctx.json("/api/stock/valorisation/pf" + qs)
       ]).then(function (x) {
         var s = (x[0] && x[0].summary) || {}, pf = (x[1] && x[1].summary) || {};
         var voitReel = !!s.can_see_usd;
