@@ -239,14 +239,6 @@ BLOCS: dict[str, Bloc] = {
                  ("actifs", "Transporteurs actifs"), ("moyen", "Taux moyen (%)")),
         acces="expe",
     ),
-    "expe.carburant.transporteur": Bloc(
-        appli="expe", libelle="Taxe carburant d'un transporteur", url="/expe#carburant",
-        type="objet",
-        valeurs=(("taux", "Taxe carburant (%)"), ("statut", "Statut"),
-                 ("maj", "Mise à jour le"), ("age", "Âge du taux (j)")),
-        textes=("statut", "maj"),
-        acces="expe", objet="transporteur",
-    ),
     # ── Planning machine (app/web/planning_page.py) ──
     "planning.dossiers": Bloc(
         appli="planning", libelle="Dossiers au planning", url="/planning",

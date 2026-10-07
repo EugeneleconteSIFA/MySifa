@@ -271,32 +271,6 @@ function _expeCarbAncien(t){
   return age!=null&&age>EXPE_CARB_JOURS_ANCIEN;
 }
 
-// Libellé du statut, tel que la pastille l'affiche (_expeCarbStatut).
-function _expeCarbStatutTexte(t){
-  if(t.statut==='en_attente')return 'En attente';
-  if(t.statut==='a_jour')return 'À jour';
-  return t.pct?'Non datée':'Jamais renseignée';
-}
-
-// Ligne d'un transporteur, capturable en widget d'accueil : l'objet suivi est
-// l'id du transporteur dans le référentiel.
-function _expeCarbBloc(t){
-  const vide=!t.maj_le&&!t.pct;
-  const age=_expeCarbAge(t.maj_le);
-  const b={
-    'data-bloc':'expe.carburant.transporteur',
-    'data-bloc-objet':String(t.id),
-    'data-bloc-objet-libelle':t.nom||'',
-    'data-bloc-valeur-taux':vide?'Non renseignée':_expeCarbPct(t.pct),
-    'data-bloc-valeur-statut':_expeCarbStatutTexte(t),
-    'data-bloc-valeur-maj':t.maj_le?_expeCarbJour(t.maj_le):'—',
-    'data-bloc-valeur-age':age==null?'—':(age+' j')
-  };
-  if(!vide)b['data-bloc-nombre-taux']=String(Number(Number(t.pct||0).toFixed(2)));
-  if(age!=null)b['data-bloc-nombre-age']=String(age);
-  return b;
-}
-
 function _expeCarbLigne(t){
   const C=_expeCarb();
   const age=_expeCarbAge(t.maj_le);
@@ -320,7 +294,7 @@ function _expeCarbLigne(t){
     ' ',
     h('button',{type:'button',className:'expe-carb-btn2'+(C.open===t.id?' on':''),
       onClick:()=>void expeCarbToggleHist(t.id)},iconEl('clock',12),' Historique'));
-  const rows=[h('tr',Object.assign({className:t.statut==='en_attente'?'expe-carb-row--attente':''},_expeCarbBloc(t)),
+  const rows=[h('tr',{className:t.statut==='en_attente'?'expe-carb-row--attente':''},
     h('td',null,h('div',{className:'expe-carb-nom'},t.nom),
       h('div',{className:'expe-carb-sub'},(t.emails||[]).length?((t.emails.length)+' contact(s) email'):'Aucun email de contact')),
     _expeCarbCellulePct(t),

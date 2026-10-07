@@ -416,7 +416,7 @@
     },
 
     /* ── MyExpé › Taxe carburant (app/web/expe_carburant_assets.py) ─────
-       Mêmes règles que _expeCarbTuiles et _expeCarbBloc. */
+       Mêmes règles que _expeCarbTuiles. */
     "expe.carburant.resume": function (ctx) {
       return ctx.json("/api/expe/carburant").then(function (d) {
         var list = (d && d.transporteurs) || [];
@@ -433,28 +433,6 @@
         return res;
       });
     },
-    "expe.carburant.transporteur": function (ctx) {
-      return ctx.json("/api/expe/carburant").then(function (d) {
-        var t = ((d && d.transporteurs) || []).filter(function (x) {
-          return String(x.id) === String(ctx.objet);
-        })[0];
-        if (!t) return { introuvable: true };
-        var vide = !t.maj_le && !t.pct;
-        var age = carbAge(t.maj_le);
-        var statut = t.statut === "en_attente" ? "En attente" : t.statut === "a_jour" ? "À jour"
-          : (t.pct ? "Non datée" : "Jamais renseignée");
-        var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(t.maj_le || ""));
-        var res = r({
-          taux: vide ? "Non renseignée" : carbPct(t.pct), statut: statut,
-          maj: m ? (m[3] + "/" + m[2] + "/" + m[1]) : "—",
-          age: age == null ? "—" : age + " j"
-        }, {});
-        if (!vide) res.nombres.taux = Number(Number(t.pct || 0).toFixed(2));
-        if (age != null) res.nombres.age = age;
-        return res;
-      });
-    },
-
     /* ── ERP RVGI › Tableaux de bord (app/web/erp_page.py) ──────────────
        Mêmes champs que htmlTdbAdv, htmlTdbDirection et htmlTdbAchats. Le
        serveur garde le calcul deux minutes (app/routers/erp.py) : le miroir
