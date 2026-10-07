@@ -219,14 +219,28 @@ function _expeCarbTuiles(list){
   const n=k=>list.filter(t=>t.statut===k).length;
   const renseignes=list.filter(t=>t.maj_le||t.pct);
   const moy=renseignes.length?renseignes.reduce((s,t)=>s+Number(t.pct||0),0)/renseignes.length:null;
+  const anciens=list.filter(_expeCarbAncien).length;
   const tuiles=[
     {lbl:'Transporteurs actifs',val:String(list.length)},
     {lbl:'À jour',val:String(n('a_jour'))},
     {lbl:'En attente de réponse',val:String(n('en_attente')),cls:n('en_attente')?'expe-carb-tuile--warn':''},
     {lbl:'Jamais mise à jour',val:String(n('jamais'))},
+    {lbl:'Taux de plus de '+EXPE_CARB_JOURS_ANCIEN+' j',val:String(anciens),cls:anciens?'expe-carb-tuile--warn':''},
     {lbl:'Taux moyen',val:moy==null?'—':_expeCarbPct(moy)}
   ];
-  return h('div',{className:'expe-carb-tuiles'},
+  // Widget d'accueil (app/services/blocs_registre.py) : mêmes chiffres que
+  // les tuiles, recalculés par la source sur la même API.
+  const bloc={
+    'data-bloc':'expe.carburant.resume',
+    'data-bloc-valeur-actifs':String(list.length),
+    'data-bloc-valeur-a-jour':String(n('a_jour')),
+    'data-bloc-valeur-en-attente':String(n('en_attente')),
+    'data-bloc-valeur-jamais':String(n('jamais')),
+    'data-bloc-valeur-anciens':String(anciens),
+    'data-bloc-valeur-moyen':moy==null?'—':_expeCarbPct(moy)
+  };
+  if(moy!=null)bloc['data-bloc-nombre-moyen']=String(Number(moy.toFixed(2)));
+  return h('div',Object.assign({className:'expe-carb-tuiles'},bloc),
     ...tuiles.map(x=>h('div',{className:'expe-carb-tuile '+(x.cls||'')},
       h('div',{className:'expe-carb-tuile-lbl'},x.lbl),
       h('div',{className:'expe-carb-tuile-val'},x.val))));
@@ -251,10 +265,42 @@ function _expeCarbCellulePct(t){
     h('span',{className:'expe-carb-pct'+(vide?' expe-carb-pct--vide':'')},vide?'Non renseignée':_expeCarbPct(t.pct)));
 }
 
+// Taux saisi il y a plus de EXPE_CARB_JOURS_ANCIEN jours.
+function _expeCarbAncien(t){
+  const age=_expeCarbAge(t.maj_le);
+  return age!=null&&age>EXPE_CARB_JOURS_ANCIEN;
+}
+
+// Libellé du statut, tel que la pastille l'affiche (_expeCarbStatut).
+function _expeCarbStatutTexte(t){
+  if(t.statut==='en_attente')return 'En attente';
+  if(t.statut==='a_jour')return 'À jour';
+  return t.pct?'Non datée':'Jamais renseignée';
+}
+
+// Ligne d'un transporteur, capturable en widget d'accueil : l'objet suivi est
+// l'id du transporteur dans le référentiel.
+function _expeCarbBloc(t){
+  const vide=!t.maj_le&&!t.pct;
+  const age=_expeCarbAge(t.maj_le);
+  const b={
+    'data-bloc':'expe.carburant.transporteur',
+    'data-bloc-objet':String(t.id),
+    'data-bloc-objet-libelle':t.nom||'',
+    'data-bloc-valeur-taux':vide?'Non renseignée':_expeCarbPct(t.pct),
+    'data-bloc-valeur-statut':_expeCarbStatutTexte(t),
+    'data-bloc-valeur-maj':t.maj_le?_expeCarbJour(t.maj_le):'—',
+    'data-bloc-valeur-age':age==null?'—':(age+' j')
+  };
+  if(!vide)b['data-bloc-nombre-taux']=String(Number(Number(t.pct||0).toFixed(2)));
+  if(age!=null)b['data-bloc-nombre-age']=String(age);
+  return b;
+}
+
 function _expeCarbLigne(t){
   const C=_expeCarb();
   const age=_expeCarbAge(t.maj_le);
-  const ancien=age!=null&&age>EXPE_CARB_JOURS_ANCIEN;
+  const ancien=_expeCarbAncien(t);
   const majCell=t.maj_le
     ? h('td',{className:'expe-carb-date'},
         h('div',{className:ancien?'expe-carb-vieux':'',
@@ -274,7 +320,7 @@ function _expeCarbLigne(t){
     ' ',
     h('button',{type:'button',className:'expe-carb-btn2'+(C.open===t.id?' on':''),
       onClick:()=>void expeCarbToggleHist(t.id)},iconEl('clock',12),' Historique'));
-  const rows=[h('tr',{className:t.statut==='en_attente'?'expe-carb-row--attente':''},
+  const rows=[h('tr',Object.assign({className:t.statut==='en_attente'?'expe-carb-row--attente':''},_expeCarbBloc(t)),
     h('td',null,h('div',{className:'expe-carb-nom'},t.nom),
       h('div',{className:'expe-carb-sub'},(t.emails||[]).length?((t.emails.length)+' contact(s) email'):'Aucun email de contact')),
     _expeCarbCellulePct(t),

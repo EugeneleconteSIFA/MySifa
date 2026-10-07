@@ -34,6 +34,36 @@
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   }
   function r(valeurs, nombres) { return { valeurs: valeurs, nombres: nombres || {} }; }
+  // Des nombres seuls : affichés tels quels, comparés tels quels.
+  function rN(v, fmt) {
+    var t = {};
+    Object.keys(v).forEach(function (k) { t[k] = fmt ? fmt(v[k]) : String(v[k]); });
+    return r(t, v);
+  }
+  // MyStock › Valorisation (stock_page.py) : valFormatEuro
+  function fEuro(n) {
+    return Number(n || 0).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + " €";
+  }
+  // ERP (erp_page.py) : fmtNb(n, 0) et tdbEurTxt — au-delà du millier on abrège.
+  function fNb0(n) { return Number(n || 0).toLocaleString("fr-FR", { maximumFractionDigits: 0 }); }
+  function fNbDec(n, d) {
+    return Number(n).toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
+  }
+  function fEurAbrege(v) {
+    if (v == null || v === "") return null;
+    var n = Number(v);
+    if (!isFinite(n)) return null;
+    var a = Math.abs(n);
+    if (a >= 1e6) return fNbDec(n / 1e6, 2) + " M€";
+    if (a >= 1000) return fNbDec(n / 1000, a < 1e5 ? 1 : 0) + " k€";
+    return fNbDec(n, 0) + " €";
+  }
+  // Palettes Europe (expe_assets.py) : _expePalFmt
+  function fPal(v) {
+    var n = Number(v);
+    n = isFinite(n) ? n : 0;
+    return (Math.round(n * 100) / 100).toLocaleString("fr-FR");
+  }
 
   /* ── Période de MyProd ─────────────────────────────────────────────────
      La capture enregistre le raccourci de période (bloc_periode=last7…), pas
@@ -70,6 +100,41 @@
 
   function prodDashboard(ctx) {
     return paramsProd(ctx).then(function (qs) { return ctx.json("/api/dashboard/production?" + qs); });
+  }
+
+  /* ── MyExpé › Taxe carburant : _expeCarbPct, _expeCarbAge ──────────── */
+  var CARB_JOURS_ANCIEN = 45;   // EXPE_CARB_JOURS_ANCIEN
+  function carbPct(v) {
+    if (v == null || !isFinite(Number(v))) return "—";
+    return String(Number(Number(v).toFixed(2))).replace(".", ",") + " %";
+  }
+  function carbAge(isoDate) {
+    if (!isoDate) return null;
+    var d = new Date(String(isoDate).slice(0, 10) + "T00:00:00");
+    if (isNaN(d)) return null;
+    return Math.floor((Date.now() - d.getTime()) / 86400000);
+  }
+  function carbAncien(t) { var a = carbAge(t.maj_le); return a != null && a > CARB_JOURS_ANCIEN; }
+
+  /* ── ERP : une valeur absente reste absente ────────────────────────── */
+  function erpCompte(v) {
+    var res = r({}, {});
+    Object.keys(v).forEach(function (k) {
+      if (v[k] == null) return;
+      res.valeurs[k] = fNb0(v[k]);
+      res.nombres[k] = Number(v[k]);
+    });
+    return res;
+  }
+  function erpEuros(v) {
+    var res = r({}, {});
+    Object.keys(v).forEach(function (k) {
+      var t = fEurAbrege(v[k]);
+      if (t == null) return;
+      res.valeurs[k] = t;
+      res.nombres[k] = Math.round(Number(v[k]));
+    });
+    return res;
   }
 
   var SOURCES = {
@@ -229,6 +294,209 @@
           var t = {};
           Object.keys(v).forEach(function (k) { t[k] = fN(v[k]); });
           return r(t, v);
+        });
+      });
+    },
+
+    /* ── MyStock › Produits finis ──────────────────────────────────────
+       Les trois cartes de buildProduitsFinisTab, calculées par le serveur. */
+    "stock.pf.kpis": function (ctx) {
+      return ctx.json("/api/stock/produits-finis").then(function (d) {
+        var k = (d && d.kpis) || {};
+        return rN({
+          references: Number(k.references || 0),
+          mouvements: Number(k.mouvements_aujourdhui || 0),
+          emplacements: Number(k.emplacements_occupes || 0)
+        });
+      });
+    },
+
+    /* ── MyStock › Contrôle › Valorisation ─────────────────────────────
+       Même calcul que buildValorisationKpis : le montant mis en avant par
+       chaque carte — « réel » (taux USD, taxe, transport, charges de
+       production) pour la direction quand il diffère de la base, la base
+       sinon. Toujours la valorisation du jour. */
+    "stock.valorisation.kpis": function (ctx) {
+      return Promise.all([
+        ctx.json("/api/stock/valorisation"),
+        ctx.json("/api/stock/valorisation/pf")
+      ]).then(function (x) {
+        var s = (x[0] && x[0].summary) || {}, pf = (x[1] && x[1].summary) || {};
+        var voitReel = !!s.can_see_usd;
+        var nbFlags = Number(s.nb_refs_usd_only || 0) + Number(s.nb_refs_tax_only || 0)
+          + Number(s.nb_refs_usd_and_tax || 0) + Number(s.nb_refs_transport || 0);
+        var reelMP = voitReel && nbFlags > 0 && (Number(s.taux_eur_usd || 0) > 0
+          || Number(s.import_tax_pct || 0) > 0 || Number(s.transport_cost_fixed_eur || 0) > 0);
+        var chargesPF = voitReel && (Number(pf.charge_production_pct || 0) > 0 || Number(pf.storage_fees_pct || 0) > 0);
+        var mpBase = Number(s.total_mp || 0), mpReel = Number(s.total_mp_reel || s.total_mp || 0);
+        var pfBase = Number(pf.total_pf || 0), pfReel = chargesPF ? Number(pf.total_pf_avec_charges || 0) : pfBase;
+        var total = (reelMP || chargesPF) ? mpReel + pfReel : mpBase + pfBase;
+        var mp = reelMP ? mpReel : mpBase, pfAff = chargesPF ? pfReel : pfBase;
+        var sansPrix = Number(pf.nb_refs_sans_prix || 0);
+        return r(
+          { total: fEuro(total), mp: fEuro(mp), pf: fEuro(pfAff), "pf-sans-prix": String(sansPrix) },
+          { total: Math.round(total), mp: Math.round(mp), pf: Math.round(pfAff), "pf-sans-prix": sansPrix }
+        );
+      });
+    },
+
+    /* ── MyStock › Outils › Traçabilité (bobines) ──────────────────────
+       Mêmes appels que loadBobines, pour l'état capturé (bloc_etat). Le
+       total et le métrage portent sur tout le filtre, pas sur la page : une
+       seule ligne demandée suffit. */
+    "stock.bobines.kpis": function (ctx) {
+      var etat = ctx.params.get("bloc_etat") || "stock";
+      return Promise.all([
+        ctx.json("/api/stock/bobines?etat=" + encodeURIComponent(etat) + "&limit=1"),
+        ctx.json("/api/stock/bobines/coherence").catch(function () { return null; })
+      ]).then(function (x) {
+        var b = x[0] || {}, c = x[1];
+        var m = Number(b.metrage_total || 0);
+        var t = {
+          bobines: String(Number(b.total || 0)),
+          metrage: m.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " m"
+        };
+        var n = { bobines: Number(b.total || 0), metrage: Math.round(m) };
+        if (c) {
+          n.ecarts = (c.ecarts || []).length;
+          n["sans-matiere"] = Number(c.bobines_sans_matiere || 0);
+          t.ecarts = String(n.ecarts);
+          t["sans-matiere"] = String(n["sans-matiere"]);
+        }
+        return r(t, n);
+      });
+    },
+
+    /* ── MyStock › Produits › Inventaire ───────────────────────────────
+       Même décompte que buildInventaireLegende : la couleur de chaque
+       emplacement vient du serveur. */
+    "stock.inventaire.anciennete": function (ctx) {
+      return ctx.json("/api/stock/inventaire-v2/emplacements").then(function (list) {
+        list = Array.isArray(list) ? list : [];
+        function n(c) { return list.filter(function (e) { return e.couleur === c; }).length; }
+        return rN({
+          rouge: n("rouge"), orange: n("orange"), "a-jour": n("vert") + n("jaune"),
+          emplacements: list.length
+        });
+      });
+    },
+
+    /* ── MyExpé › Palettes Europe ──────────────────────────────────────
+       Totaux et comptes transporteurs ne dépendent d'aucun filtre de
+       l'écran. Le filtre « perdue » ne sert qu'à alléger la liste des
+       départs, que le widget ne lit pas. */
+    "expe.palettes.totaux": function (ctx) {
+      return ctx.json("/api/expe/palettes-europe?statut=perdue").then(function (d) {
+        var t = (d && d.totaux) || {};
+        var solde = Number(t.solde_transporteurs || 0), lit = Number(t.nb_pal_contestees || 0);
+        return r({
+          solde: fPal(solde), envoyees: String(t.nb_pal_envoyees || 0),
+          retournees: String(t.nb_pal_retournees || 0), litiges: fPal(lit)
+        }, {
+          solde: solde, envoyees: Number(t.nb_pal_envoyees || 0),
+          retournees: Number(t.nb_pal_retournees || 0), litiges: lit
+        });
+      });
+    },
+    "expe.palettes.transporteur": function (ctx) {
+      return ctx.json("/api/expe/palettes-europe?statut=perdue").then(function (d) {
+        var t = ((d && d.recap_transporteurs) || []).filter(function (x) {
+          return String(x.key) === String(ctx.objet);
+        })[0];
+        if (!t) return { introuvable: true };
+        var v = {
+          solde: Number(t.solde || 0), donnees: Number(t.donnees || 0),
+          rendues: Number(t.rendues || 0), litiges: Number(t.nb_pal_contestees || 0)
+        };
+        return rN(v, fPal);
+      });
+    },
+
+    /* ── MyExpé › Taxe carburant (app/web/expe_carburant_assets.py) ─────
+       Mêmes règles que _expeCarbTuiles et _expeCarbBloc. */
+    "expe.carburant.resume": function (ctx) {
+      return ctx.json("/api/expe/carburant").then(function (d) {
+        var list = (d && d.transporteurs) || [];
+        function n(k) { return list.filter(function (t) { return t.statut === k; }).length; }
+        var rens = list.filter(function (t) { return t.maj_le || t.pct; });
+        var moy = rens.length ? rens.reduce(function (s, t) { return s + Number(t.pct || 0); }, 0) / rens.length : null;
+        var v = {
+          actifs: list.length, "a-jour": n("a_jour"), "en-attente": n("en_attente"),
+          jamais: n("jamais"), anciens: list.filter(carbAncien).length
+        };
+        var res = rN(v);
+        res.valeurs.moyen = moy == null ? "—" : carbPct(moy);
+        if (moy != null) res.nombres.moyen = Number(moy.toFixed(2));
+        return res;
+      });
+    },
+    "expe.carburant.transporteur": function (ctx) {
+      return ctx.json("/api/expe/carburant").then(function (d) {
+        var t = ((d && d.transporteurs) || []).filter(function (x) {
+          return String(x.id) === String(ctx.objet);
+        })[0];
+        if (!t) return { introuvable: true };
+        var vide = !t.maj_le && !t.pct;
+        var age = carbAge(t.maj_le);
+        var statut = t.statut === "en_attente" ? "En attente" : t.statut === "a_jour" ? "À jour"
+          : (t.pct ? "Non datée" : "Jamais renseignée");
+        var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(t.maj_le || ""));
+        var res = r({
+          taux: vide ? "Non renseignée" : carbPct(t.pct), statut: statut,
+          maj: m ? (m[3] + "/" + m[2] + "/" + m[1]) : "—",
+          age: age == null ? "—" : age + " j"
+        }, {});
+        if (!vide) res.nombres.taux = Number(Number(t.pct || 0).toFixed(2));
+        if (age != null) res.nombres.age = age;
+        return res;
+      });
+    },
+
+    /* ── ERP RVGI › Tableaux de bord (app/web/erp_page.py) ──────────────
+       Mêmes champs que htmlTdbAdv, htmlTdbDirection et htmlTdbAchats. Le
+       serveur garde le calcul deux minutes (app/routers/erp.py) : le miroir
+       ne change qu'à la synchro. Un bloc muet (table absente du miroir)
+       laisse sa valeur vide plutôt qu'un zéro. */
+    "erp.adv.kpis": function (ctx) {
+      return ctx.json("/api/erp/tdb/adv").then(function (d) {
+        var c = d.carnet || null;
+        return erpCompte({
+          commandes: c && c.commandes, semaine: c && c.semaine && c.semaine.commandes,
+          retard: c && c.retard && c.retard.commandes, "a-facturer": d.a_facturer && d.a_facturer.bl,
+          "sans-dossier": d.sans_dossier && d.sans_dossier.commandes
+        });
+      });
+    },
+    "erp.direction.kpis": function (ctx) {
+      return ctx.json("/api/erp/tdb/direction").then(function (d) {
+        return erpEuros({
+          "rentre-mois": d.rentre && d.rentre.mois, facturable: d.facturable && d.facturable.montant,
+          "facture-mois": d.facture && d.facture.mois, carnet: d.carnet && d.carnet.montant
+        });
+      });
+    },
+    "erp.direction.hier": function (ctx) {
+      return ctx.json("/api/erp/tdb/direction").then(function (d) {
+        var h = d.hier || {};
+        var res = erpEuros({ montant: h.date ? h.montant : null });
+        if (h.date && h.commandes != null) {
+          res.valeurs.commandes = fNb0(h.commandes);
+          res.nombres.commandes = Number(h.commandes);
+        }
+        if (h.date && h.moyenne_30j && h.montant != null) {
+          var e = Math.round((h.montant / h.moyenne_30j - 1) * 100);
+          res.valeurs.ecart = (e >= 0 ? "+" : "") + e + " %";
+          res.nombres.ecart = e;
+        }
+        return res;
+      });
+    },
+    "erp.achats.kpis": function (ctx) {
+      return ctx.json("/api/erp/tdb/achats").then(function (d) {
+        var o = d.ouvertes || null;
+        return erpCompte({
+          ouvertes: o && o.commandes, semaine: o && o.semaine && o.semaine.commandes,
+          retard: o && o.retard && o.retard.commandes, receptions: d.receptions && d.receptions.lignes
         });
       });
     },

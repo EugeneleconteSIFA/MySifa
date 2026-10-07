@@ -150,6 +150,15 @@ FORMULES = {
     "facturable": "part non facturée du total HT de la ligne de commande "
                   "d'origine, au prorata de (qte livrée − qte facturée)",
     "encours": "Σ du total HT du carnet, au prorata de ce qui reste à traiter",
+    "achats_ouverts": "lignes de commande fournisseur en position « en cours » "
+                      "(cdf_ligne.lpos = 0), dont la commande existe encore",
+    "achats_retard": "achats ouverts dont la date de livraison (cdf_ligne.amjl) "
+                     "est passée depuis moins de 90 jours ; au-delà la ligne "
+                     "est comptée comme dormante",
+    "achats_semaine": "achats ouverts dont la livraison tombe dans les 7 "
+                      "prochains jours",
+    "receptions": "lignes de réception (lif_ligne) datées des 7 derniers jours, "
+                  "aujourd'hui compris",
 }
 
 
@@ -605,6 +614,149 @@ def direction():
             }
         else:
             sortie["carnet"] = None
+
+    return sortie
+
+
+# ── Tableau de bord achats ───────────────────────────────────────────────────
+
+def achats():
+    """Ce qui doit arriver, ce qui est en retard, ce qui est arrivé.
+
+    Même lecture que le carnet client de l'ADV, appliquée aux commandes
+    fournisseurs : `lpos` est tenu par RVGI (une ligne reçue en plusieurs fois
+    reste « en cours » jusqu'à la dernière réception, cf. l'écran Réceptions),
+    `amjl` est la date de livraison promise, les sentinelles de date sont
+    écartées, et une ligne dont la commande a disparu de l'export ne compte
+    pas. La famille (matière, sous-traitance, outillage, consommable) vient de
+    Paramètres › Types d'article RVGI, comme sur les écrans.
+    """
+    b = _bornes()
+    sortie = {
+        "present": miroir.miroir_present(),
+        "bornes": b,
+        "formules": FORMULES,
+        "indispo": [],
+    }
+    if not sortie["present"]:
+        return sortie
+
+    aujourdhui = date.fromisoformat(b["aujourdhui"])
+    limite_dormant = (aujourdhui - timedelta(days=JOURS_DORMANT)).isoformat()
+    il_y_a_7j = (aujourdhui - timedelta(days=6)).isoformat()
+    sortie["bornes"]["depuis_7j"] = il_y_a_7j
+
+    with miroir.get_erp_db() as conn:
+        sch = _Schema(conn)
+
+        # ── Les commandes fournisseurs ouvertes ──────────────────────────
+        manque = sch.manque("cdf_ligne", "numero", "ligne", "lpos", "amjl")
+        if manque:
+            sortie["indispo"].append("Achats ouverts : " + manque)
+            sortie["ouvertes"] = None
+        else:
+            ouvert = ("COALESCE(l.lpos, 0) = %d AND %s"
+                      % (POS_EN_COURS, _existe_piece(sch, entete="cdf_entete")))
+            date_ok = _date_reelle(_jour("l.amjl"))
+
+            def _compte(where, params=()):
+                r = _lignes(conn, "SELECT COUNT(*) AS lignes, "
+                            "COUNT(DISTINCT l.numero) AS commandes "
+                            "FROM cdf_ligne l WHERE " + where, params)
+                return {"lignes": _entier(r[0]["lignes"]) if r else 0,
+                        "commandes": _entier(r[0]["commandes"]) if r else 0}
+
+            sortie["ouvertes"] = _compte(ouvert)
+            sortie["ouvertes"]["retard"] = _compte(
+                ouvert + " AND " + date_ok
+                + " AND substr(l.amjl,1,10) < ? AND substr(l.amjl,1,10) >= ?",
+                (b["aujourdhui"], limite_dormant))
+            sortie["ouvertes"]["dormant"] = _compte(
+                ouvert + " AND " + date_ok + " AND substr(l.amjl,1,10) < ?",
+                (limite_dormant,))
+            sortie["ouvertes"]["semaine"] = _compte(
+                ouvert + " AND " + date_ok
+                + " AND substr(l.amjl,1,10) >= ? AND substr(l.amjl,1,10) < ?",
+                (b["aujourdhui"], b["fin_semaine"]))
+            sortie["ouvertes"]["dormant"]["avant"] = limite_dormant
+
+            # Par famille : la famille se lit dans la base de production, le
+            # type dans le miroir — regroupement fait ici, pas en SQL.
+            if "type" in sch.cols("cdf_ligne"):
+                from app.services import erp_types
+                fam = erp_types.familles_par_type()
+                par_type = _lignes(conn, """
+                    SELECT CAST(l.type AS INTEGER) AS type, COUNT(*) AS lignes,
+                           SUM(CASE WHEN %s AND substr(l.amjl,1,10) < ?
+                                     AND substr(l.amjl,1,10) >= ? THEN 1 ELSE 0 END) AS retard
+                      FROM cdf_ligne l WHERE %s
+                  GROUP BY CAST(l.type AS INTEGER)
+                """ % (date_ok, ouvert), (b["aujourdhui"], limite_dormant))
+                cumul = {}
+                for r in par_type:
+                    cle = fam.get(_entier(r["type"])) or ""
+                    c = cumul.setdefault(cle, {"famille": cle, "lignes": 0, "retard": 0})
+                    c["lignes"] += _entier(r["lignes"])
+                    c["retard"] += _entier(r["retard"])
+                ordre = [k for k, _ in erp_types.FAMILLES] + [""]
+                sortie["par_famille"] = [
+                    dict(cumul[k], libelle=erp_types.LIBELLE_FAMILLE.get(k, "Sans famille"))
+                    for k in ordre if k in cumul]
+            else:
+                sortie["par_famille"] = None
+
+            joint_fou = ("LEFT JOIN cdf_entete e ON e.numero = l.numero"
+                         if sch.a("cdf_entete", "numero", "rs") else "")
+            champ_fou = "e.rs" if joint_fou else "''"
+            champs_art = ", ".join(
+                ("l.%s AS %s" % (c, c)) if c in sch.cols("cdf_ligne") else ("NULL AS %s" % c)
+                for c in ("des1", "code1", "code2", "qte"))
+            sortie["retards"] = _lignes(conn, """
+                SELECT l.id AS id, l.numero AS numero, l.ligne AS ligne,
+                       %s AS fournisseur, %s, l.amjl AS livraison
+                  FROM cdf_ligne l %s
+                 WHERE %s AND %s AND substr(l.amjl,1,10) < ? AND substr(l.amjl,1,10) >= ?
+              ORDER BY substr(l.amjl,1,10) DESC
+                 LIMIT %d
+            """ % (champ_fou, champs_art, joint_fou, ouvert, date_ok, MAX_LIGNES_LISTE),
+                (b["aujourdhui"], limite_dormant))
+
+        # ── Les réceptions récentes ──────────────────────────────────────
+        manque = sch.manque("lif_ligne", "numero", "amjl")
+        if manque:
+            sortie["indispo"].append("Réceptions : " + manque)
+            sortie["receptions"] = None
+        else:
+            recente = ("substr(l.amjl,1,10) >= ? AND substr(l.amjl,1,10) <= ?")
+            p7 = (il_y_a_7j, b["aujourdhui"])
+            r = _lignes(conn, "SELECT COUNT(*) AS lignes, COUNT(DISTINCT l.numero) AS commandes "
+                        "FROM lif_ligne l WHERE " + recente, p7)
+            sortie["receptions"] = {
+                "lignes": _entier(r[0]["lignes"]) if r else 0,
+                "commandes": _entier(r[0]["commandes"]) if r else 0,
+                "aujourdhui": _entier(_un(conn, "SELECT COUNT(*) FROM lif_ligne l "
+                                          "WHERE substr(l.amjl,1,10) = ?", (b["aujourdhui"],))),
+            }
+            # Ce qui a été reçu se lit sur la ligne de commande, jointe sur le
+            # COUPLE (numéro, ligne) — le numéro seul ramènerait toute la
+            # commande pour chaque réception.
+            joint_cde = ("LEFT JOIN cdf_ligne c ON c.numero = l.numero AND c.ligne = l.ligne"
+                         if sch.a("lif_ligne", "ligne") and sch.a("cdf_ligne", "numero", "ligne", "des1")
+                         else "")
+            joint_fou = ("LEFT JOIN cdf_entete e ON e.numero = l.numero"
+                         if sch.a("cdf_entete", "numero", "rs") else "")
+            sortie["receptions_items"] = _lignes(conn, """
+                SELECT l.id AS id, l.numero AS numero, %s AS ref, l.amjl AS reception,
+                       %s AS fournisseur, %s AS designation, %s AS qte
+                  FROM lif_ligne l %s %s
+                 WHERE %s
+              ORDER BY substr(l.amjl,1,10) DESC, l.id DESC
+                 LIMIT %d
+            """ % ("l.ref" if "ref" in sch.cols("lif_ligne") else "NULL",
+                   "e.rs" if joint_fou else "''",
+                   "c.des1" if joint_cde else "''",
+                   "l.qte" if "qte" in sch.cols("lif_ligne") else "NULL",
+                   joint_fou, joint_cde, recente, MAX_LIGNES_LISTE), p7)
 
     return sortie
 

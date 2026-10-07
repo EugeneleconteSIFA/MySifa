@@ -6060,6 +6060,27 @@ function _expePalNatureTag(l){
     EXPE_PAL_SENS_LABELS[l.sens]||l.sens||'Mouvement');
 }
 
+// Compte d'un transporteur, capturable en widget d'accueil : l'objet suivi
+// est la clé du compte (« id:12 », ou « nom:… » pour un transporteur hors
+// référentiel), celle que /api/expe/palettes-europe renvoie.
+function _expePalBlocTrp(t){
+  if(!t||!t.key)return {};
+  const solde=_expePalNum(t.solde);
+  return {
+    'data-bloc':'expe.palettes.transporteur',
+    'data-bloc-objet':String(t.key),
+    'data-bloc-objet-libelle':t.transporteur||'—',
+    'data-bloc-valeur-solde':_expePalFmt(solde),
+    'data-bloc-nombre-solde':String(solde),
+    'data-bloc-valeur-donnees':_expePalFmt(t.donnees),
+    'data-bloc-nombre-donnees':String(_expePalNum(t.donnees)),
+    'data-bloc-valeur-rendues':_expePalFmt(t.rendues),
+    'data-bloc-nombre-rendues':String(_expePalNum(t.rendues)),
+    'data-bloc-valeur-litiges':_expePalFmt(t.nb_pal_contestees),
+    'data-bloc-nombre-litiges':String(_expePalNum(t.nb_pal_contestees))
+  };
+}
+
 async function loadExpePalContestations(){
   if(S.app!=='expe')return;
   try{
@@ -6455,7 +6476,18 @@ function renderExpePalettesEurope(){
 
   // Bandeau totaux — le solde en tête : c'est le chiffre qu'on vient chercher.
   const soldeTot = _expePalNum(tot.solde_transporteurs);
-  const totauxBlock = h('div',{className:'expe-pal-eur-totaux'},
+  // Widget d'accueil (app/services/blocs_registre.py) : les totaux ne
+  // dépendent d'aucun filtre de l'écran, le widget lit les mêmes.
+  const totauxBloc = S.expePalettesEuropeData ? {
+    'data-bloc':'expe.palettes.totaux',
+    'data-bloc-valeur-solde':_expePalFmt(soldeTot),
+    'data-bloc-nombre-solde':String(soldeTot),
+    'data-bloc-valeur-envoyees':String(tot.nb_pal_envoyees||0),
+    'data-bloc-valeur-retournees':String(tot.nb_pal_retournees||0),
+    'data-bloc-valeur-litiges':_expePalFmt(tot.nb_pal_contestees),
+    'data-bloc-nombre-litiges':String(_expePalNum(tot.nb_pal_contestees))
+  } : {};
+  const totauxBlock = h('div',Object.assign({className:'expe-pal-eur-totaux'},totauxBloc),
     h('div',{className:'expe-pal-eur-tot-card'+(soldeTot>0?' expe-pal-eur-tot-card--warn':' expe-pal-eur-tot-card--ok')},
       h('div',{className:'expe-pal-eur-tot-lbl'},'Solde dû par les transporteurs'),
       h('div',{className:'expe-pal-eur-tot-val'},_expePalFmt(soldeTot))
@@ -6480,7 +6512,7 @@ function renderExpePalettesEurope(){
   );
   const trpRows = recapTrp.length ? recapTrp.map(t=>{
     const solde=_expePalNum(t.solde);
-    return h('tr',{className:'expe-pal-eur-trp-row'+(solde>0?' expe-pal-eur-trp-row--debt':''),
+    return h('tr',Object.assign({className:'expe-pal-eur-trp-row'+(solde>0?' expe-pal-eur-trp-row--debt':''),
       title:'Ouvrir le relevé de compte',
       onClick:e=>{
         // Les boutons d'action de la dernière colonne ont leur propre effet :
@@ -6488,7 +6520,7 @@ function renderExpePalettesEurope(){
         // aussi le relevé derrière la modale.
         if(e.target.closest('button')) return;
         void ouvrirJournalPalettes(t);
-      }},
+      }},_expePalBlocTrp(t)),
       h('td',{style:{fontWeight:'700'}},
         (c=>c?trpTag(t.transporteur||'—',c):(t.transporteur||'—'))(
           (function(){
@@ -7126,7 +7158,7 @@ function expeCarteCompteTrp(t){
     t.nb_contestations ? h('span',null,h('span',{className:'msf-badge msf-badge--danger'},
       _expePalFmt(t.nb_pal_contestees)+' en litige')) : null
   );
-  return h('div',{className:'msf-card expe-carte'+cls},
+  return h('div',Object.assign({className:'msf-card expe-carte'+cls},_expePalBlocTrp(t)),
     h('button',{type:'button',className:'expe-carte-tete',
       onClick:()=>void ouvrirJournalPalettes(t)},
       h('span',{className:'msf-card-head'},
