@@ -33,11 +33,12 @@ def _charger(conn, objet: str, objet_id: int) -> dict:
 def _reponse(objet: str, o: dict) -> dict:
     if objet == "matiere":
         titre = o.get("designation") or o.get("reference")
-        herite = ft.donnees_matiere({**o, "fiche": {"data": {}}})
+        herite = ft.sources_matiere(o)
         composants = []
     else:
         titre = o.get("designation") or o.get("code")
-        herite = {k: v for k, v in ft.donnees_produit({**o, "fiche": {"data": {}}}).items()}
+        herite = {k: {"valeur": v, "source": "composants"}
+                  for k, v in ft.donnees_produit({**o, "fiche": {"data": {}}}).items()}
         composants = [
             {"role": c["role"], "matiere_id": c["matiere"]["id"],
              "reference": c["matiere"]["reference"], "designation": c["matiere"]["designation"],

@@ -6412,7 +6412,12 @@ function buildMatiereDetail() {
   const actions = actionBtns.length ? el('div', { cls: 'mp-actions' }, ...actionBtns) : null;
 
   const meta = [];
-  if (mpIsGlassineCategory(m) && m.couleur) {
+  const mTech = mpIsLaizeeCategory(m.categorie) || mpIsAdhesifCategory(m);
+  if (mTech) {
+    if (!mpIsAdhesifCategory(m) && Number(m.weight_gsm) > 0) meta.push('Grammage : ' + fN(m.weight_gsm) + ' g/m²');
+    if (Number(m.epaisseur_um) > 0) meta.push('Épaisseur : ' + fN(m.epaisseur_um) + ' µm');
+  }
+  if ((mpIsGlassineCategory(m) || mTech) && m.couleur) {
     meta.push('Couleur : ' + m.couleur);
   }
   if (mpHasConditionnement(m.categorie) && m.unites_par_palette > 0) {
@@ -8750,6 +8755,19 @@ function matiereRefEditPayload(item, fields) {
   };
   if (mpIsGlassineCategory(item) && fields.couleurInp) {
     payload.couleur = fields.couleurInp.value.trim() || des;
+  } else if (fields.isTech && fields.couleurInp) {
+    payload.couleur = fields.couleurInp.value.trim();
+  }
+  if (fields.isTech && fields.epInp) {
+    // Toujours envoyee, meme vide : c'est ce qui permet de l'effacer.
+    const raw = (fields.epInp.value || '').replace(',', '.').trim();
+    if (raw === '') {
+      payload.epaisseur_um = null;
+    } else {
+      const e = parseFloat(raw);
+      if (isNaN(e) || e <= 0) return { error: 'Épaisseur : valeur > 0 obligatoire.' };
+      payload.epaisseur_um = e;
+    }
   }
   if (fields.sousCategorieSel) {
     // Toujours envoyees, meme vides, pour autoriser l'effacement.
@@ -8805,7 +8823,7 @@ function matiereRefEditPayload(item, fields) {
     payload.cartons_par_palette = cpp.value;
     payload.kg_par_carton = kgc.value;
   }
-  if (fields.isAdhesif && fields.gsmInp) {
+  if ((fields.isAdhesif || fields.isTech) && fields.gsmInp) {
     // Toujours envoyé, même vide : c'est ce qui permet d'effacer un grammage.
     const raw = (fields.gsmInp.value || '').replace(',', '.').trim();
     if (raw === '') {
@@ -8872,7 +8890,11 @@ function appendMatiereRefEditFields(parent, item) {
     intervalleInp,
     el('div', { cls: 'mp-hint' }, 'Défaut 180 j. Sert au calcul du statut vert/orange/rouge dans l\'inventaire matière.'),
   );
-  const couleurWrap = el('div', { cls: 'mp-field', style: { display: mpIsGlassineCategory(item) ? '' : 'none' } });
+  // Grammage, épaisseur et couleur : caractéristiques techniques des matières
+  // qui composent un produit (frontal, adhésif, glassine, complexe). Elles
+  // alimentent la fiche technique de Coûts matières.
+  const isTech = mpIsLaizeeCategory(item.categorie) || mpIsAdhesifCategory(item);
+  const couleurWrap = el('div', { cls: 'mp-field', style: { display: (mpIsGlassineCategory(item) || isTech) ? '' : 'none' } });
   const couleurInp = el('input', { attrs: { type: 'text', placeholder: 'Ex. Blanc, Kraft…' } });
   couleurInp.value = item.couleur || '';
   couleurWrap.append(el('label', null, 'Couleur'), couleurInp);
@@ -9306,11 +9328,17 @@ function appendMatiereRefEditFields(parent, item) {
     el('div', { cls: 'mp-field' }, el('label', null, 'Cartons par palette'), cppInp),
     el('div', { cls: 'mp-field' }, el('label', null, 'Kg d\'adhésif par carton'), kgcInp),
     el('div', { cls: 'mp-field' }, el('label', null, 'Kg par palette'), kgPalOut, kgPalHint),
-    el('div', { cls: 'mp-field' }, el('label', null, 'Grammage (g/m²)'), gsmInp,
-      el('div', { cls: 'mp-hint' },
-        'Sert au calcul du besoin en kilos : grammage × métrage × laize. '
-        + 'Sans lui, le besoin adhésif reste non chiffré.')),
   ] : [];
+  const epInp = el('input', { attrs: { type: 'number', min: '0', step: '0.1', placeholder: 'Ex. 62' } });
+  epInp.value = String(item.epaisseur_um > 0 ? item.epaisseur_um : '');
+  const sectionTech = isTech ? mpFormSection('Caractéristiques techniques',
+    el('div', { cls: 'mp-field' }, el('label', null, 'Grammage (g/m²)'), gsmInp,
+      isAdhesif ? el('div', { cls: 'mp-hint' },
+        'Sert au calcul du besoin en kilos : grammage × métrage × laize. '
+        + 'Sans lui, le besoin adhésif reste non chiffré.') : null),
+    el('div', { cls: 'mp-field' }, el('label', null, 'Épaisseur (µm)'), epInp),
+    couleurWrap,
+  ) : null;
 
   // Sous-section (catégories autre + frontal) — cloisonnée par catégorie
   const hasSousSection = mpCategorieHasSousSection(item.categorie);
@@ -9343,8 +9371,9 @@ function appendMatiereRefEditFields(parent, item) {
       ),
       el('div', { cls: 'mp-field' }, el('label', null, 'Libellé commercial'), refInp),
       el('div', { cls: 'mp-field' }, el('label', null, 'Libellé technique'), desInp),
-      couleurWrap,
+      isTech ? null : couleurWrap,
     ),
+    sectionTech,
     mpFormSection('Catégorisation',
       sousCategorieSel.el,
       sousSectionWrap,
@@ -9366,7 +9395,7 @@ function appendMatiereRefEditFields(parent, item) {
     ? mpFormSection('Laizes & tarification', laizeWrap)
     : null;
   parent.append(...[grille, sectionLaizes].filter(Boolean));
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, ltInp, isMandrin, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds: null, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, abbrevInp, hasAbbrev, sousCategorieSel };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, ltInp, isMandrin, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds: null, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, isTech, epInp, abbrevInp, hasAbbrev, sousCategorieSel };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -23353,91 +23382,29 @@ function buildValorisationTableRow(item) {
     el('span', { style: 'margin-left:5px;font-size:11px;color:var(--muted);font-weight:500' }, item.unite || '')
   );
 
-  let tdPrix;
-  if (item.laizee) {
-    // Pour les matières laizées : prix unitaire = valorisation_bobine (lecture seule)
-    // + bouton "Paramètres" pour éditer prix m² + métrage au niveau matière
-    let display;
-    if (item.incomplete) {
-      display = el('span', { style: 'color:#fb923c;font-size:12px;font-weight:700' }, 'À configurer');
-    } else if ((item.prix_unitaire || 0) > 0) {
-      display = valFormatEuroDetail(item.prix_unitaire) + ' /bob.';
-    } else {
-      display = el('span', { style: 'color:var(--muted)' }, 'non valorisé');
-    }
-    const params = el('div', { style: 'font-size:10px;color:var(--muted);margin-top:2px' },
-      (item.prix_eur_m2 || 0) > 0 ? (item.prix_eur_m2.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 4 }) + ' €/m²') : 'prix m² ?',
-      ' · ',
-      (item.metres_lineaires_par_bobine || 0) > 0 ? (item.metres_lineaires_par_bobine.toLocaleString('fr-FR') + ' m') : 'métrage ?',
-    );
-    // Le métrage par bobine reste éditable ici (c'est du conditionnement) ;
-    // le prix au m², lui, vient de Coûts matières.
-    const editBtn = el('button', {
-      type: 'button', title: 'Éditer le métrage par bobine',
-      style: 'background:var(--card);border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:11px;margin-top:4px;display:inline-flex;align-items:center;gap:4px',
-      on: { click: () => openValorisationParamsModal(item.matiere_id) },
+  // Plus de colonne « Prix unitaire » : elle montrait le miroir de Coûts
+  // matières dans la devise d'achat, pas un prix en euros. Les prix viennent
+  // des colonnes Sous-total achat € et Prix de vente. Le conditionnement
+  // (métrage par bobine, unités par palette) se règle depuis les actions.
+  let cfgBtn = null;
+  if (item.laizee || item.avec_conditionnement) {
+    const aConfigurer = item.laizee
+      ? !((item.metres_lineaires_par_bobine || 0) > 0)
+      : !((item.unites_par_palette || 0) > 0);
+    const libelle = item.laizee ? 'Métrage' : 'Conditionnement';
+    cfgBtn = el('button', {
+      type: 'button',
+      title: item.laizee ? 'Éditer le métrage par bobine'
+        : 'Éditer le conditionnement (' + (item.unite_achat || 'unité') + ' par palette)',
+      style: 'background:var(--card);border:1px solid ' + (aConfigurer ? 'var(--warn, #fb923c)' : 'var(--border)')
+        + ';border-radius:6px;padding:4px 8px;cursor:pointer;color:' + (aConfigurer ? 'var(--warn, #fb923c)' : 'var(--text2)')
+        + ';font-size:11px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap',
+      on: { click: () => item.laizee
+        ? openValorisationParamsModal(item.matiere_id)
+        : openValorisationConditionnementModal(item.matiere_id || item.id) },
     });
-    editBtn.appendChild(iconEl('edit', 11));
-    editBtn.appendChild(el('span', null, 'Métrage'));
-    tdPrix = el('td', { style: 'padding:10px 12px;text-align:right' },
-      el('div', { style: 'display:flex;flex-direction:column;align-items:flex-end' },
-        el('div', { style: 'font-size:13px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums' }, display),
-        params,
-        el('div', { style: 'display:flex;gap:6px;align-items:center' }, editBtn, valLienCoutsMatieres(item)),
-      )
-    );
-  } else if (item.avec_conditionnement) {
-    // Cartons / Adhésifs / Mandrins : prix saisi = prix à l'unité d'achat,
-    // affichage style frontal (prix palette calculé + sous-titre + bouton Modifier).
-    const upp = Number(item.unites_par_palette || 0);
-    const prixUnit = Number(item.prix_unitaire || 0);
-    const prixPal = Number(item.prix_palette || (upp * prixUnit));
-    const uniteAchat = item.unite_achat || 'unité';
-    let display;
-    if (item.incomplete || upp <= 0 || prixUnit <= 0) {
-      display = el('span', { style: 'color:#fb923c;font-size:12px;font-weight:700' }, 'À configurer');
-    } else {
-      display = valFormatEuroDetail(prixPal) + ' /pal.';
-    }
-    const prixUnitTxt = prixUnit > 0
-      ? (prixUnit.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 4 }) + ' €/' + uniteAchat)
-      : 'prix unité ?';
-    const upTxt = upp > 0
-      ? (upp.toLocaleString('fr-FR') + ' ' + uniteAchat + '/pal.')
-      : 'conditionnement ?';
-    const params = el('div', { style: 'font-size:10px;color:var(--muted);margin-top:2px' },
-      prixUnitTxt, ' · ', upTxt);
-    // Le conditionnement (unités par palette) reste éditable ici ; le prix
-    // unitaire d'achat, lui, vient de Coûts matières.
-    const editBtn = el('button', {
-      type: 'button', title: 'Éditer le conditionnement (' + uniteAchat + ' par palette)',
-      style: 'background:var(--card);border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:11px;margin-top:4px;display:inline-flex;align-items:center;gap:4px',
-      on: { click: () => openValorisationConditionnementModal(item.matiere_id || item.id) },
-    });
-    editBtn.appendChild(iconEl('edit', 11));
-    editBtn.appendChild(el('span', null, 'Conditionnement'));
-    tdPrix = el('td', { style: 'padding:10px 12px;text-align:right' },
-      el('div', { style: 'display:flex;flex-direction:column;align-items:flex-end' },
-        el('div', { style: 'font-size:13px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums' }, display),
-        params,
-        el('div', { style: 'display:flex;gap:6px;align-items:center' }, editBtn, valLienCoutsMatieres(item)),
-      )
-    );
-  } else {
-    // Palette / autre : le prix n'a ni conditionnement ni métrage à régler ici,
-    // il est simplement affiché — la saisie se fait dans Coûts matières.
-    const prixUnit = Number(item.prix_unitaire) || 0;
-    const display = prixUnit > 0
-      ? el('span', null,
-          valFormatPrixDetail(prixUnit),
-          el('span', { style: 'margin-left:4px;font-size:11px;color:var(--muted);font-weight:500' }, '€/' + (item.unite || '')))
-      : el('span', { style: 'color:var(--muted);font-weight:500' }, 'non valorisé');
-    tdPrix = el('td', { style: 'padding:10px 12px;text-align:right' },
-      el('div', { style: 'display:flex;flex-direction:column;align-items:flex-end' },
-        el('div', { style: 'font-size:13px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums' }, display),
-        valLienCoutsMatieres(item),
-      )
-    );
+    cfgBtn.appendChild(iconEl('edit', 11));
+    cfgBtn.appendChild(el('span', null, aConfigurer ? libelle + ' ?' : libelle));
   }
 
   // "Valorisée" = prix > 0 ET (si conditionnement requis) unites_par_palette > 0
@@ -23563,12 +23530,15 @@ function buildValorisationTableRow(item) {
   });
   histBtn.appendChild(iconEl('clock', 14));
 
-  const actionsChildren = [histBtn];
+  const lienCm = valLienCoutsMatieres(item, 'Coûts matières');
+  lienCm.style.marginTop = '0';
+  lienCm.style.whiteSpace = 'nowrap';
+  const actionsChildren = [lienCm, ...(cfgBtn ? [cfgBtn] : []), histBtn];
   const tdHist = el('td', {
     style: 'padding:10px 12px;text-align:center;white-space:nowrap'
   }, el('div', { style: 'display:inline-flex;gap:6px;align-items:center' }, ...actionsChildren));
 
-  tr.append(tdCat, tdRef, tdDes, tdQte, tdPrix, tdPrixReel, tdVente, tdVal, tdHist);
+  tr.append(tdCat, tdRef, tdDes, tdQte, tdPrixReel, tdVente, tdVal, tdHist);
   return tr;
 }
 
@@ -23848,7 +23818,6 @@ function buildValorisationTable() {
     el('th', { style: thStyle, on: { click: () => valToggleSort('reference') } }, 'Référence' + arrow('reference')),
     el('th', { style: thStyle, on: { click: () => valToggleSort('designation') } }, 'Désignation' + arrow('designation')),
     el('th', { style: thStyleR, on: { click: () => valToggleSort('quantite') } }, 'Quantité' + arrow('quantite')),
-    el('th', { style: thStyleR, on: { click: () => valToggleSort('prix_unitaire') } }, 'Prix unitaire' + arrow('prix_unitaire')),
   ];
   thChildren.push(
     el('th', { style: thStyleR + ';color:var(--success, #16a34a)',

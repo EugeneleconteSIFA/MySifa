@@ -1199,3 +1199,14 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 .ft-bom-r{width:70px;font-size:12px;color:var(--muted)}
 .ft-bom-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ft-vide{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--warn,#d97706);vertical-align:middle}
+.ft-src{margin-left:6px;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:600;text-transform:none;letter-spacing:0;background:var(--accent-bg);color:var(--accent)}
+
+/* Matières et Produits MyStock : tableaux plus larges, pour que les boutons
+   d'action tiennent sur une seule ligne (Fiche, Paramétrage, MyStock /
+   Fiche, Modifier, Dupliquer). */
+.pr-narrow.pr-large{max-width:1480px}
+table.msl-table td.ms-actions{overflow:visible}
+td.msp-actions{white-space:nowrap}
+td.msp-actions.row-actions{display:table-cell}
+td.msp-actions > *{display:inline-flex;vertical-align:middle;margin-left:6px}
+td.msp-actions > *:first-child{margin-left:0}
