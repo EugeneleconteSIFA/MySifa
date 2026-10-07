@@ -318,6 +318,12 @@ tbody tr.row-sous:hover td{background:var(--accent-bg)}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 .field textarea{min-height:96px;resize:vertical;line-height:1.55}
 .field.full{grid-column:1/-1}
+.d-liens{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.d-liens:empty{display:none}
+.d-lien{display:flex;align-items:center;gap:8px}
+.d-liens a{font-size:12px;color:var(--accent);text-decoration:underline;word-break:break-all}
+.d-copier{flex-shrink:0;font-family:inherit;font-size:11px;font-weight:600;padding:3px 9px;border-radius:7px;cursor:pointer;background:var(--bg);color:var(--text2);border:1px solid var(--border)}
+.d-copier:hover{border-color:var(--accent);color:var(--accent)}
 .sec{margin-bottom:20px}
 .sec-hd{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}
 .sec-hd h3{margin:0;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--text2)}
@@ -545,6 +551,20 @@ const S = {
   me: null,
 };
 
+// Liens de la description, cliquables sous la zone de saisie : une zone de
+// texte éditable ne peut pas porter de lien. Seuls http(s) et les adresses
+// internes (« /stock?tab=… ») sont repris, échappés.
+function liensDescription(txt){
+  const vus=new Set(),out=[];
+  String(txt||'').split(/\s+/).forEach(m=>{
+    m=m.replace(/[),.;:!?»"']+$/,'');
+    if(!/^https?:\/\/\S+$/i.test(m)&&!/^\/[^\/\s]\S*$/.test(m))return;
+    if(vus.has(m))return;vus.add(m);
+    out.push('<div class="d-lien"><a href="'+esc(m)+'" target="_blank" rel="noopener">'+esc(m)+'</a>'+
+      '<button type="button" class="d-copier" data-copier="'+esc(m)+'">Copier</button></div>');
+  });
+  return out.join('');
+}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function toast(msg,type){const t=document.createElement('div');t.className='toast'+(type==='err'?' err':'');t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3400);}
 async function api(url,opts){
@@ -1397,7 +1417,8 @@ function paneDetail(d){
       '<div style="font-size:11px;color:var(--muted);margin-top:5px">Cumul : <b style="color:var(--text2)">'+esc(fmtH(t.temps_passe_h)||'0 h')+'</b>'+
       (t.estimation_h?' sur '+esc(fmtH(t.estimation_h))+' estimées':'')+'</div>'+
     '</div>'+
-    '<div class="field full"><label>Description</label><textarea id="d-description" placeholder="Contexte, attendu, critères d’acceptation…">'+esc(t.description||'')+'</textarea></div>'+
+    '<div class="field full"><label>Description</label><textarea id="d-description" placeholder="Contexte, attendu, critères d’acceptation…">'+esc(t.description||'')+'</textarea>'+
+      '<div class="d-liens" id="d-liens">'+liensDescription(t.description)+'</div></div>'+
   '</div>'+
 
   '<div class="sec">'+
@@ -1545,6 +1566,24 @@ function brancherDetail(){
 
   const desc=root.querySelector('#d-description');
   if(desc){
+    desc.addEventListener('input',()=>{
+      const l=root.querySelector('#d-liens');
+      if(l)l.innerHTML=liensDescription(desc.value);
+    });
+    const liens=root.querySelector('#d-liens');
+    if(liens)liens.addEventListener('click',e=>{
+      const b=e.target.closest('[data-copier]');
+      if(!b)return;
+      const v=b.getAttribute('data-copier');
+      const fini=()=>toast('Lien copié.');
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(v).then(fini,()=>toast('Copie impossible.','err'));
+      }else{
+        const ta=document.createElement('textarea');ta.value=v;document.body.appendChild(ta);ta.select();
+        try{document.execCommand('copy');fini();}catch(_){toast('Copie impossible.','err');}
+        ta.remove();
+      }
+    });
     desc.addEventListener('blur',()=>{
       if((desc.value||'')===(t.description||''))return;
       patch('description',desc.value);
