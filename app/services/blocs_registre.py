@@ -158,6 +158,20 @@ BLOCS: dict[str, Bloc] = {
         appli="prod", libelle="Qualité de saisie", url="/prod?page=production",
         type="chiffre", valeurs=(("score", "Score"),), acces="prod",
     ),
+    # ── MyProd › Production › Erreurs & Qualité (static/mysifa_prod_core.js) ──
+    "prod.erreurs.score": Bloc(
+        appli="prod", libelle="Sanity Score", url="/prod?page=production#erreurs",
+        type="chiffre",
+        valeurs=(("score", "Score"), ("mention", "Appréciation"), ("journees", "Journées")),
+        textes=("mention",), acces="prod",
+    ),
+    "prod.erreurs.kpis": Bloc(
+        appli="prod", libelle="Erreurs & Qualité", url="/prod?page=production#erreurs",
+        type="chiffre",
+        valeurs=(("operations", "Total opérations"), ("critique", "Critique"), ("attention", "Attention"),
+                 ("normal", "Normal"), ("erreurs", "Erreurs de saisie")),
+        acces="prod",
+    ),
     "prod.ensemble.quantites": Bloc(
         appli="prod", libelle="Quantités produites", url="/prod?page=production",
         type="chiffre",

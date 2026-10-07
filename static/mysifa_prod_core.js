@@ -7086,9 +7086,25 @@ function renderHist(){
     const ops=Object.keys(d.sanity_by_operateur||{});
     ops.forEach(op=>parts.push(renderSanity(d.sanity_by_operateur[op], opName(op))));
   }else if(d.sanity){
-    parts.push(renderSanity(d.sanity));
+    // Widget d'accueil (app/services/blocs_registre.py) : le score de la
+    // période filtrée, comme sur la Vue d'ensemble, avec son appréciation.
+    const bandeau=renderSanity(d.sanity);
+    if(bandeau){
+      bandeau.setAttribute('data-bloc','prod.erreurs.score');
+      bandeau.setAttribute('data-bloc-valeur-score',String(d.sanity.score||0));
+      bandeau.setAttribute('data-bloc-valeur-mention',String(d.sanity.mention||''));
+      bandeau.setAttribute('data-bloc-valeur-journees',String(d.sanity.journees||0));
+    }
+    parts.push(bandeau);
   }
-  parts.push(h('div',{className:'stats'},
+  // Widget d'accueil : les cinq compteurs ci-dessous (même source que la page).
+  parts.push(h('div',{className:'stats','data-bloc':'prod.erreurs.kpis',
+      'data-bloc-valeur-operations':fN(d.total_operations),
+      'data-bloc-nombre-operations':String(d.total_operations||0),
+      'data-bloc-valeur-critique':fN(sc.critique),
+      'data-bloc-valeur-attention':fN(sc.attention),
+      'data-bloc-valeur-normal':fN(sc.info),
+      'data-bloc-valeur-erreurs':fN(seCount)},
     h('div',{className:'stat'},h('div',{className:'stat-label'},'Total opérations'),h('div',{className:'stat-value',style:{color:'var(--c1)'}},fN(d.total_operations))),
     h('div',{className:'stat',style:{borderColor:'var(--danger)33'}},h('div',{className:'stat-label'},'🔴 Critique'),h('div',{className:'stat-value',style:{color:'var(--danger)'}},fN(sc.critique))),
     h('div',{className:'stat',style:{borderColor:'var(--warn)33'}},h('div',{className:'stat-label'},'🟡 Attention'),h('div',{className:'stat-value',style:{color:'var(--warn)'}},fN(sc.attention))),

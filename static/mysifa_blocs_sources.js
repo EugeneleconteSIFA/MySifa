@@ -737,6 +737,34 @@
         return r({ score: String(sc) }, { score: sc });
       });
     },
+    /* ── MyProd › Erreurs & Qualité (renderHist) : même API et mêmes
+       filtres que la Vue d'ensemble ; les compteurs sont ceux des cartes. */
+    "prod.erreurs.score": function (ctx) {
+      return paramsProd(ctx).then(function (qs) {
+        return ctx.json("/api/dashboard/historique?" + qs);
+      }).then(function (d) {
+        var s = (d && d.sanity) || {};
+        var sc = Number(s.score || 0), j = Number(s.journees || 0);
+        return r({ score: String(sc), mention: String(s.mention || ""), journees: String(j) },
+                 { score: sc, journees: j });
+      });
+    },
+    "prod.erreurs.kpis": function (ctx) {
+      return paramsProd(ctx).then(function (qs) {
+        return ctx.json("/api/dashboard/historique?" + qs);
+      }).then(function (d) {
+        d = d || {};
+        var c = d.severity_counts || {};
+        var v = {
+          operations: Number(d.total_operations || 0), critique: Number(c.critique || 0),
+          attention: Number(c.attention || 0), normal: Number(c.info || 0),
+          erreurs: Number(d.saisie_errors_count || 0)
+        };
+        var t = {};
+        Object.keys(v).forEach(function (k) { t[k] = fN(v[k]); });
+        return r(t, v);
+      });
+    },
     "prod.ensemble.quantites": function (ctx) {
       return prodDashboard(ctx).then(function (d) {
         var p = d.produit || {};

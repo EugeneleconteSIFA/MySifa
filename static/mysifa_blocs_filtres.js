@@ -65,6 +65,8 @@
     "prod.ensemble.par-operateur": PROD,
     "prod.ensemble.par-machine": PROD,
     "prod.ensemble.par-jour": PROD,
+    "prod.erreurs.score": PROD,
+    "prod.erreurs.kpis": PROD,
 
     // EXPE_PIL_FILTRES (expe_pilotage_assets.py)
     "expe.pilotage.envois": [{
