@@ -2088,7 +2088,7 @@
   }
 
   function sansAccents(v) {
-    return String(v == null ? "" : v).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    return String(v == null ? "" : v).toLowerCase().normalize("NFD").replace(/[0300-036f]/g, "");
   }
 
   function colFiltre(table, cle) {
