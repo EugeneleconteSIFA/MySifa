@@ -276,9 +276,6 @@ def demander_tableau(body: Demande, request: Request):
         ).fetchall()]
         if not superadmins:
             raise HTTPException(503, "Aucun administrateur pour recevoir la demande.")
-        indicateurs = [r["nom"] for r in conn.execute(
-            "SELECT nom FROM accueil_widgets WHERE user_id=? ORDER BY ordre, id", (user["id"],)
-        ).fetchall()]
         lignes = [
             texte, "",
             f"Demandeur : {user.get('nom') or user.get('email') or ''} ({role_label(user.get('role'))})",
@@ -288,7 +285,6 @@ def demander_tableau(body: Demande, request: Request):
             lignes.append(f"Écran concerné : {ecran}")
         if lien:
             lignes.append(f"Lien : {lien}")
-        lignes.append("Indicateurs actuels : " + (", ".join(indicateurs) if indicateurs else "aucun"))
         try:
             creer_tache_pour(
                 conn, user, titre=titre, description="\n".join(lignes),
