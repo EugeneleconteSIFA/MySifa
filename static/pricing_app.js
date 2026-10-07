@@ -1126,6 +1126,23 @@
     return window.MysFournisseurPicker.fromSelect(el, opts || {});
   }
 
+  /* Fiche technique d'une matière ou d'un produit (pricing_fiches.js) :
+     aperçu, téléchargement, saisie. Même geste sur les deux listes. */
+  function bindFichesTechniques() {
+    [["data-ft-matiere", "matiere"], ["data-ft-produit", "produit"]].forEach(([attr, objet]) => {
+      document.querySelectorAll("[" + attr + "]").forEach((b) => {
+        b.onclick = (e) => {
+          e.stopPropagation();
+          if (!window.PricingFiches) return;
+          window.PricingFiches.open(objet, parseInt(b.getAttribute(attr), 10), {
+            canWrite: S.canWrite,
+            toast: showToast,
+          });
+        };
+      });
+    });
+  }
+
   /** Bouton d'action en icône seule, avec bulle d'aide au survol. */
   function actionBtn(attr, valeur, nom, titre, danger) {
     return `<button type="button" class="ico-btn${danger ? " danger" : ""}" ${attr}="${escAttr(valeur)}" title="${escAttr(titre)}" aria-label="${escAttr(titre)}">${icon(nom, 15)}</button>`;
@@ -1294,8 +1311,9 @@
       : "";
 
     const fiche = decls.length
-      ? `<a class="btn btn-soft btn-sm" href="/pricing/mystock/${decls[0].id}" title="Ouvrir le paramétrage détaillé">Fiche</a>`
+      ? `<a class="btn btn-soft btn-sm" href="/pricing/mystock/${decls[0].id}" title="Ouvrir le paramétrage détaillé du coût">Paramétrage</a>`
       : "";
+    const ficheTech = `<button type="button" class="btn btn-soft btn-sm" data-ft-matiere="${m.id}" title="Fiche technique : visualiser et télécharger">Fiche</button>`;
 
     return `<tr class="msl-row" data-ms-mat="${m.id}">
         <td>${categorieBadge(m.categorie)}</td>
@@ -1304,7 +1322,7 @@
         <td class="msl-prix">${prixCell}</td>
         <td class="msl-majcell">${dernierPrixCellHtml(m)}</td>
         <td class="ms-actions" onclick="event.stopPropagation()">
-          ${fiche}
+          ${ficheTech}${fiche}
           <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${m.id}" target="_blank" rel="noopener" title="Ouvrir la fiche dans MyStock">MyStock ↗</a>
         </td>
       </tr>`;
@@ -1373,8 +1391,9 @@
            aria-label="Tarif fournisseur">${icon("truck", 17)}${principale.a_tarif === false ? '<span class="ms-tarif-manquant" aria-hidden="true"></span>' : ""}</button>`
       : "";
     const fiche = decls.length
-      ? `<a class="btn btn-soft btn-sm" href="/pricing/mystock/${decls[0].id}" title="Ouvrir le paramétrage détaillé">Fiche</a>`
+      ? `<a class="btn btn-soft btn-sm" href="/pricing/mystock/${decls[0].id}" title="Ouvrir le paramétrage détaillé du coût">Paramétrage</a>`
       : "";
+    const ficheTech = `<button type="button" class="btn btn-soft btn-sm" data-ft-matiere="${m.id}" title="Fiche technique : visualiser et télécharger">Fiche</button>`;
 
     return `<article class="msf-card msl-card" data-ms-mat="${m.id}">
         <div class="msf-card-head">
@@ -1390,7 +1409,7 @@
           : `<div class="msl-card-prix">${prixBloc}</div>
              <div class="msl-card-maj">${dernierPrixCellHtml(m)}</div>`}
         <div class="msl-card-act">
-          ${tarifBtn}${fiche}
+          ${tarifBtn}${ficheTech}${fiche}
           <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${m.id}"
              target="_blank" rel="noopener" title="Ouvrir la fiche dans MyStock">MyStock ↗</a>
         </div>
@@ -1424,7 +1443,7 @@
         suffixe: `<span class="msl-th-hint">${icon("edit", 11)} modifiable ici</span>` },
       { cle: "maj", titre: "Dernier prix", val: (m) => m.prix_maj_le || null,
         aide: "Date de la dernière saisie du prix — donc la dernière fois qu'il a été revu" },
-      { cle: "act", titre: "", style: "width:172px" },
+      { cle: "act", titre: "", style: "width:250px" },
     ];
 
     const filtrees = filtresAppliquer("matieres", S.mystock, COLS);
@@ -1443,7 +1462,7 @@
             <colgroup>
               <col style="width:92px"><col>
               <col style="width:180px"><col style="width:215px">
-              <col style="width:120px"><col style="width:172px">
+              <col style="width:120px"><col style="width:250px">
             </colgroup>
             ${enTetesTriables("matieres", COLS, S.mystock)}
             <tbody>${lignes || '<tr><td colspan="6" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
@@ -1525,6 +1544,7 @@
   }
 
   function bindMsListeActions() {
+    bindFichesTechniques();
     document.querySelectorAll("[data-ms-tarif]").forEach((btn) => {
       btn.onclick = async (e) => {
         e.stopPropagation();
@@ -5075,6 +5095,9 @@
         </button>
         ${open ? `<div class="msf-offre-b">
           ${msProductDetailCartesHtml(p)}
+          <div class="msp-carte-act">
+            <button type="button" class="btn btn-soft btn-sm" data-ft-produit="${p.id}">Fiche technique</button>
+          </div>
           ${S.canWrite ? `<div class="msp-carte-act">
             <button type="button" class="btn btn-soft btn-sm" data-msp-edit="${p.id}">Modifier</button>
             <button type="button" class="btn btn-soft btn-sm" data-msp-dup="${p.id}">Dupliquer</button>
@@ -5117,7 +5140,7 @@
       { cle: "cout", titre: "Coût", val: (p) => (p.cost ? parseFloat(p.cost.total_eur_per_m2) : null) },
       { cle: "vente", titre: "Vente", val: (p) => (p.cost ? parseFloat(p.cost.sell_price_eur_m2) : null) },
       { cle: "marge", titre: "Marge", val: (p) => (p.cost ? parseFloat(p.cost.margin_pct) : null) },
-      { cle: "act", titre: "", style: "width:96px" },
+      { cle: "act", titre: "", style: "width:150px" },
     ];
 
     const filtres = filtresAppliquer("produits", S.msProducts, COLS);
@@ -5147,6 +5170,7 @@
             <td class="ms-prix-cell">${c ? fmtEurM2(c.sell_price_eur_m2) : "—"}</td>
             <td class="ms-meta">${c ? fmtPct(c.margin_pct) : "—"}</td>
             <td class="row-actions" onclick="event.stopPropagation()">
+              <button type="button" class="btn btn-soft btn-sm" data-ft-produit="${p.id}" title="Fiche technique (BOM) : visualiser et télécharger">Fiche</button>
               ${actionBtn("data-msp-edit", p.id, "edit", "Modifier ce produit")}
               ${actionBtn("data-msp-dup", p.id, "copy", "Dupliquer — créer un produit similaire")}
             </td>
@@ -5210,6 +5234,7 @@
         renderMsProductsList();
       };
     });
+    bindFichesTechniques();
     document.querySelectorAll("[data-msp-edit]").forEach((b) => {
       b.onclick = () => navigate("/pricing/mystock/produit/" + b.getAttribute("data-msp-edit"));
     });

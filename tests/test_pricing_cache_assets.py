@@ -65,9 +65,11 @@ def main():
           'href="/static/pricing_app.css?v=__ASSETS__"' in page, True)
     check("le JS porte une empreinte",
           'src="/static/pricing_app.js?v=__ASSETS__"' in page, True)
+    check("le JS des fiches techniques porte une empreinte",
+          'src="/static/pricing_fiches.js?v=__ASSETS__"' in page, True)
     check("le marqueur est bien remplacé",
           '.replace("__ASSETS__", _empreinte_assets())' in page, True)
-    check("aucun marqueur oublié", page.count("__ASSETS__"), 3)
+    check("aucun marqueur oublié", page.count("__ASSETS__"), 4)
 
     print("\n--- l'empreinte suit les fichiers ---")
     empreinte = empreinte_isolee(("static/pricing_app.css", "static/pricing_app.js"))

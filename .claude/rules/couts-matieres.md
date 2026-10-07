@@ -324,3 +324,25 @@ Tests : `python3 tests/test_mystock_declinaisons.py`,
 `node tests/test_pricing_produits_mystock.js`.
 
 ---
+
+### Fiches techniques matière et produit (7 octobre 2026)
+
+Chaque ligne des deux listes porte un bouton **Fiche** : la fiche technique
+destinée au client (aucun prix), visualisée dans une modale, téléchargeable en
+PDF, et modifiable par qui peut écrire. Le bouton qui ouvrait
+`/pricing/mystock/<id>` s'appelle désormais **Paramétrage**.
+
+- Table `mp_fiche_technique` (`objet` = `matiere` | `produit`, `objet_id`,
+  `data` JSON). Les champs saisissables sont déclarés dans
+  `app/services/pricing/fiche_technique.py` (`CHAMPS_MATIERE`,
+  `CHAMPS_PRODUIT`) : en ajouter un ne demande pas de migration.
+- La fiche produit est une **BOM** : elle assemble les fiches de ses
+  composants dans l'ordre de la composition (frontal, adhésif, dorsal = la
+  glassine). Ce qu'elle ne dit pas est repris : performances de l'adhésif,
+  épaisseur totale = somme des épaisseurs des composants, grammage d'adhésif
+  depuis le composant, couleur et grammage depuis MyStock.
+- API : `GET|PUT /api/pricing/fiches/{objet}/{id}`,
+  `GET /api/pricing/fiches/{objet}/{id}/pdf[?telecharger=1]`
+  (`app/routers/pricing_fiches.py`). Front : `static/pricing_fiches.js`.
+
+Test : `python3 tests/test_fiches_techniques.py`.
