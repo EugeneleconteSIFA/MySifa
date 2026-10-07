@@ -345,4 +345,15 @@ PDF, et modifiable par qui peut écrire. Le bouton qui ouvrait
   `GET /api/pricing/fiches/{objet}/{id}/pdf[?telecharger=1]`
   (`app/routers/pricing_fiches.py`). Front : `static/pricing_fiches.js`.
 
+- **D'où viennent les valeurs reprises** (`sources_matiere`) : la fiche
+  saisie, sinon MyStock (`weight_gsm`, `epaisseur_um`, `couleur`, éditables
+  dans « Caractéristiques techniques » de la matière, et affichés dans son
+  détail), sinon RVGI : `mat_mat.m1_epais` et `mat_mat.pds` de l'article relié
+  par `erp_article_matiere`. `pds` n'est jamais lu sur un adhésif : c'est le
+  poids du carton (25 000 g), pas un grammage. La modale nomme la source de
+  chaque valeur reprise.
+- La fiche produit ouvre sur une **vue éclatée** (`_vue_eclatee`), reprise
+  des formes et teintes du SVG de la page d'accueil du site : une couche par
+  composant, une couche silicone sous l'adhésif quand le produit a une glassine.
+
 Test : `python3 tests/test_fiches_techniques.py`.

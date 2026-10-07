@@ -20,6 +20,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.graphics.shapes import Circle, Drawing, Line, Polygon, String
 from reportlab.platypus import KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from xml.sax.saxutils import escape
 
@@ -122,35 +123,92 @@ def ecrire(conn: sqlite3.Connection, objet: str, objet_id: int, data: dict, par:
     return lire(conn, objet, objet_id)
 
 
+def _pos(v) -> Optional[float]:
+    try:
+        f = float(str(v).replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+    return f if f > 0 else None
+
+
+def _rvgi_matiere(conn: sqlite3.Connection, matiere_id: int, categorie: str) -> dict:
+    """Grammage et épaisseur de l'article RVGI relié (`erp_article_matiere`).
+
+    `mat_mat.pds` est le grammage d'un papier, mais le poids du carton pour un
+    adhésif (25 000 g) : on ne le lit donc pas sur un adhésif. Un miroir absent
+    ou une matière non reliée rendent un dict vide, jamais une erreur.
+    """
+    try:
+        liens = conn.execute(
+            "SELECT code1, code2 FROM erp_article_matiere WHERE matiere_id=?", (matiere_id,)
+        ).fetchall()
+    except sqlite3.Error:
+        return {}
+    if not liens:
+        return {}
+    try:
+        from app.services import erp_mirror as miroir
+
+        if not miroir.miroir_present():
+            return {}
+        with miroir.get_erp_db() as c:
+            if "mat_mat" not in miroir.tables_presentes(c):
+                return {}
+            for l in liens:
+                r = c.execute(
+                    "SELECT pds, m1_epais FROM mat_mat WHERE corbeille = 0 "
+                    "AND CAST(code1 AS TEXT) = ? AND CAST(code2 AS TEXT) = ? LIMIT 1",
+                    (str(l["code1"]).strip(), str(l["code2"] or "").strip()),
+                ).fetchone()
+                if not r:
+                    continue
+                d = {}
+                ep = _pos(r["m1_epais"])
+                if ep:
+                    d["epaisseur_um"] = f"{ep:g}"
+                g = _pos(r["pds"])
+                if g and g < 1000 and "adh" not in (categorie or "").lower():
+                    d["grammage_gsm"] = f"{g:g}"
+                if d:
+                    return d
+    except Exception:
+        return {}
+    return {}
+
+
 def matiere(conn: sqlite3.Connection, matiere_id: int) -> Optional[dict]:
-    row = conn.execute(
-        "SELECT id, reference, designation, categorie, sous_section, couleur, weight_gsm "
-        "FROM matieres_premieres WHERE id=?",
-        (matiere_id,),
-    ).fetchone()
+    row = conn.execute("SELECT * FROM matieres_premieres WHERE id=?", (matiere_id,)).fetchone()
     if not row:
         return None
     m = dict(row)
-    fiche = lire(conn, "matiere", matiere_id)
-    m["fiche"] = fiche
+    m["fiche"] = lire(conn, "matiere", matiere_id)
+    m["rvgi"] = _rvgi_matiere(conn, matiere_id, m.get("categorie") or "")
     return m
 
 
-def _defauts_matiere(m: dict) -> dict:
-    """Ce que la base sait déjà, pour qu'une fiche jamais saisie ne soit pas vide."""
-    d: dict[str, str] = {}
-    if m.get("couleur"):
-        d["couleur"] = str(m["couleur"])
-    if m.get("weight_gsm"):
-        try:
-            d["grammage_gsm"] = f"{float(m['weight_gsm']):g}"
-        except (TypeError, ValueError):
-            pass
-    return d
+def sources_matiere(m: dict) -> dict:
+    """Valeurs reprises quand la fiche se tait, avec leur provenance.
+
+    Ordre de priorité : la fiche saisie, puis MyStock, puis RVGI.
+    Retour : {champ: {"valeur": ..., "source": "MyStock" | "RVGI"}}.
+    """
+    out: dict[str, dict] = {}
+    for cle, val in (m.get("rvgi") or {}).items():
+        out[cle] = {"valeur": val, "source": "RVGI"}
+    mystock = {
+        "couleur": (m.get("couleur") or "").strip() or None,
+        "grammage_gsm": _pos(m.get("weight_gsm")),
+        "epaisseur_um": _pos(m.get("epaisseur_um")),
+    }
+    for cle, val in mystock.items():
+        if val:
+            out[cle] = {"valeur": f"{val:g}" if isinstance(val, float) else str(val), "source": "MyStock"}
+    return out
 
 
 def donnees_matiere(m: dict) -> dict:
-    return {**_defauts_matiere(m), **(m.get("fiche") or {}).get("data", {})}
+    herite = {k: v["valeur"] for k, v in sources_matiere(m).items()}
+    return {**herite, **(m.get("fiche") or {}).get("data", {})}
 
 
 def produit(conn: sqlite3.Connection, produit_id: int) -> Optional[dict]:
@@ -171,7 +229,8 @@ def produit(conn: sqlite3.Connection, produit_id: int) -> Optional[dict]:
         if not m:
             continue
         data = donnees_matiere(m)
-        # Le grammage d'adhésif est porté par la composition, pas par la matière.
+        # Le grammage d'adhésif est porté par la composition : il l'emporte sur
+        # celui de la matière, sauf saisie explicite sur la fiche.
         if c["grammage_gsm"] and not (m["fiche"]["data"] or {}).get("grammage_gsm"):
             data["grammage_gsm"] = f"{float(c['grammage_gsm']):g}"
         composants.append({"role": c["role"], "matiere": m, "data": data})
@@ -295,6 +354,82 @@ def _document(titre: str, sous_titre: str, corps: list, reference: str) -> bytes
     return buf.getvalue()
 
 
+# Vue éclatée — reprise du visuel de la page d'accueil du site (mêmes formes,
+# mêmes teintes) : une couche par composant, dessinée de bas en haut pour que
+# chacune masque celle du dessous.
+_COUCHES = {
+    # rôle : (face, côté gauche, côté droit, trait, titre)
+    "FRONTAL": ("#E2E8F0", "#CBD5E1", "#B6C2D1", "#94A3B8", "Frontal"),
+    "ADHESIF": ("#22D3EE", "#0E9DB5", "#0B8AA0", "#0E7490", "Adhésif"),
+    "SILICONE": ("#A78BFA", "#8B6FE8", "#7C5FDB", "#7C3AED", "Silicone"),
+    "GLASSINE": ("#FBBF24", "#E0A615", "#C99510", "#B45309", "Support"),
+    "AUTRE": ("#D1FAE5", "#A7F3D0", "#6EE7B7", "#059669", "Autre"),
+}
+
+
+def _couches(p: dict) -> list[dict]:
+    ordre = {"FRONTAL": 0, "ADHESIF": 1, "GLASSINE": 3, "AUTRE": 4}
+    comps = sorted(p["composants"], key=lambda c: ordre.get(c["role"], 9))
+    out = []
+    for c in comps:
+        d = c["data"]
+        nom = d.get("nom_commercial") or c["matiere"].get("designation") or c["matiere"].get("reference") or ""
+        details = " · ".join(x for x in (
+            f"{d['epaisseur_um']} µm" if d.get("epaisseur_um") else "",
+            f"{d['grammage_gsm']} g/m²" if d.get("grammage_gsm") else "",
+            d.get("couleur") or "",
+        ) if x)
+        if c["role"] == "GLASSINE":
+            # La glassine porte sa couche anti-adhérente : le site la montre à part.
+            out.append({"role": "SILICONE", "nom": "Couche anti-adhérente", "details": "", "ep": None})
+        out.append({"role": c["role"] if c["role"] in _COUCHES else "AUTRE", "nom": nom,
+                    "details": details, "ep": _pos(d.get("epaisseur_um"))})
+    return out
+
+
+def _vue_eclatee(p: dict, largeur: float) -> Optional[Drawing]:
+    couches = _couches(p)
+    if not couches:
+        return None
+    pas, haut0, larg_svg = 80, 66, 720
+    h_svg = haut0 + (len(couches) - 1) * pas + 92
+    k = largeur / larg_svg
+    dessin = Drawing(largeur, h_svg * k)
+
+    def pt(x, y):
+        return [x * k, (h_svg - y) * k]
+
+    def poly(points, fond, trait=None):
+        flat = [v for xy in points for v in pt(*xy)]
+        dessin.add(Polygon(flat, fillColor=colors.HexColor(fond),
+                           strokeColor=colors.HexColor(trait) if trait else None,
+                           strokeWidth=0.6 if trait else 0))
+
+    for i in range(len(couches) - 1, -1, -1):
+        c = couches[i]
+        face, gauche, droite, trait, titre = _COUCHES[c["role"]]
+        y = haut0 + i * pas
+        # Épaisseur visuelle proportionnée aux microns, bornée pour rester lisible.
+        e = 12 if c["ep"] is None else max(5, min(16, c["ep"] / 5))
+        if c["role"] == "SILICONE":
+            e = 4
+        poly([(40, y), (250, y - 50), (400, y + 10), (190, y + 60)], face, trait)
+        poly([(40, y), (190, y + 60), (190, y + 60 + e), (40, y + e)], gauche)
+        poly([(190, y + 60), (400, y + 10), (400, y + 10 + e), (190, y + 60 + e)], droite)
+        x1, y1 = pt(400, y + 10)
+        x2, _ = pt(440, y + 10)
+        dessin.add(Line(x1, y1, x2, y1, strokeColor=_DOUX, strokeWidth=0.6))
+        dessin.add(Circle(x1, y1, 2.5 * k, fillColor=_DOUX, strokeColor=None))
+        tx, ty = pt(448, y + 6)
+        dessin.add(String(tx, ty, titre, fontName="Helvetica-Bold", fontSize=13 * k * 1.25, fillColor=_ENCRE))
+        nom = c["nom"] if len(c["nom"]) <= 46 else c["nom"][:45] + "…"
+        dessin.add(String(tx, ty - 15 * k * 1.25, nom, fontName="Helvetica", fontSize=11 * k * 1.25, fillColor=_ENCRE))
+        if c["details"]:
+            dessin.add(String(tx, ty - 29 * k * 1.25, c["details"], fontName="Helvetica",
+                              fontSize=10 * k * 1.25, fillColor=_DOUX))
+    return dessin
+
+
 def pdf_matiere(m: dict) -> bytes:
     st = _styles()
     data = donnees_matiere(m)
@@ -316,6 +451,10 @@ def pdf_produit(p: dict) -> bytes:
     corps: list[Any] = []
     if d.get("description"):
         corps += [_p(d["description"], st["txt"]), Spacer(1, 4)]
+    vue = _vue_eclatee(p, 150 * mm)
+    if vue is not None:
+        vue.hAlign = "CENTER"
+        corps += [KeepTogether([_p("Vue éclatée", st["h"]), vue]), Spacer(1, 6)]
     for c in p["composants"]:
         corps += _section_composant(
             _ROLE_SECTION.get(c["role"], "Composant"),

@@ -38,12 +38,14 @@
   function formHtml(f) {
     return f.champs.map((c) => {
       const val = f.data[c.cle] || "";
-      const ph = f.herite[c.cle] ? "Repris : " + f.herite[c.cle] : "";
+      const h = f.herite[c.cle];
+      const ph = h ? "Repris de " + h.source + " : " + h.valeur : "";
       const lab = `${esc(c.label)}${c.unite ? ` <span class="lbl-unit">${esc(c.unite)}</span>` : ""}`;
       const input = c.multi
         ? `<textarea rows="3" data-ft="${esc(c.cle)}" placeholder="${esc(ph)}">${esc(val)}</textarea>`
         : `<input type="text" data-ft="${esc(c.cle)}" value="${esc(val)}" placeholder="${esc(ph)}"/>`;
-      return `<div class="field"><label>${lab}</label>${input}</div>`;
+      const src = h && !val ? ` <span class="ft-src" title="Valeur reprise tant que ce champ reste vide">${esc(h.source)}</span>` : "";
+      return `<div class="field"><label>${lab}${src}</label>${input}</div>`;
     }).join("");
   }
 
@@ -77,7 +79,7 @@
     const rendre = () => {
       const maj = f.updated_at
         ? `Mise à jour le ${esc(f.updated_at.slice(0, 10).split("-").reverse().join("/"))}${f.updated_by_name ? " par " + esc(f.updated_by_name) : ""}`
-        : "Fiche jamais renseignée — le PDF reprend ce que la base sait déjà";
+        : "Fiche jamais renseignée — le PDF reprend MyStock et RVGI";
       root.innerHTML = `
         <div class="modal-backdrop" id="ft-back">
           <div class="modal ft-modal" role="dialog" aria-label="Fiche technique">

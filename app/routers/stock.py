@@ -408,6 +408,13 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
             weight_gsm = v if v > 0 else None
         except (TypeError, ValueError):
             weight_gsm = None
+    epaisseur_um = None
+    if "epaisseur_um" in keys and r["epaisseur_um"] is not None:
+        try:
+            v = float(r["epaisseur_um"])
+            epaisseur_um = v if v > 0 else None
+        except (TypeError, ValueError):
+            epaisseur_um = None
     laizee = _mp_is_laizee(cat)
     prix_par_laize = False
     if "prix_par_laize" in keys and r["prix_par_laize"] is not None:
@@ -517,6 +524,7 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
         "kg_par_carton": cond["kg_par_carton"],
         "kg_par_palette": cond["kg_par_palette"],
         "weight_gsm": weight_gsm,
+        "epaisseur_um": epaisseur_um,
         "unites_saisie": _mp_unites_saisie_disponibles(cat, cond),
         "complete": complete,
         # Les deux stocks — voir le bloc de calcul plus haut.
@@ -6076,6 +6084,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
                    COALESCE(mp.prix_par_laize, 0) AS prix_par_laize,
                    mp.unites_par_palette, mp.longueur_tube_mm,
                    mp.cartons_par_palette, mp.kg_par_carton, mp.weight_gsm,
+                   mp.epaisseur_um,
                    mp.sous_section,
                    COALESCE(mp.intervalle_inventaire_jours, 180) AS intervalle_inventaire_jours,
                    COALESCE(s.quantite, 0) AS quantite
@@ -6745,11 +6754,9 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
             sets.append("longueur_tube_mm=?")
             params.append(v_f)
 
-        # Grammage (g/m²) — comme le conditionnement, il dépend de la catégorie,
-        # donc traité ici. Une valeur vide efface le grammage (NULL).
+        # Grammage (g/m²) — sur toute matière : il sert au besoin adhésif en
+        # kilos et à la fiche technique des autres. Une valeur vide l'efface.
         if "weight_gsm" in body:
-            if not _mp_is_adhesif(row["categorie"]):
-                raise HTTPException(400, "Grammage réservé aux adhésifs.")
             v = body.get("weight_gsm")
             try:
                 v_int = int(float(v)) if v not in (None, "") else None
@@ -6759,6 +6766,18 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
                 raise HTTPException(400, "Grammage hors bornes (1–99999 g/m²).")
             sets.append("weight_gsm=?")
             params.append(v_int)
+
+        # Épaisseur (µm) — fiche technique. Une valeur vide l'efface.
+        if "epaisseur_um" in body:
+            v = body.get("epaisseur_um")
+            try:
+                v_f = float(str(v).replace(",", ".")) if v not in (None, "") else None
+            except (TypeError, ValueError):
+                raise HTTPException(400, "Épaisseur invalide.") from None
+            if v_f is not None and (v_f <= 0 or v_f > 10000):
+                raise HTTPException(400, "Épaisseur hors bornes (1–10000 µm).")
+            sets.append("epaisseur_um=?")
+            params.append(v_f)
 
         if not sets:
             raise HTTPException(400, "Aucun champ à mettre à jour.")
