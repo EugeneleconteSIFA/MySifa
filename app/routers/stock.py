@@ -6,6 +6,7 @@ import csv
 import io
 import json
 import logging
+import os
 import re
 import sqlite3
 import unicodedata
@@ -16,7 +17,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from app.services import mystock_prix as _mystock_prix
 from app.services import packing_list as _pl
@@ -27,6 +28,10 @@ from app.services import fsc_registre as _registre
 from app.services.fsc_certificat import evaluer_certificat
 from config import (
     FSC_CLAIM_LABELS,
+    RECEPTION_DOCUMENT_EXTENSIONS,
+    RECEPTION_DOCUMENT_TAILLE_MAX,
+    RECEPTION_DOCUMENTS_DIR,
+    RECEPTION_TYPES_DOCUMENT,
     STOCK_UNITE_VENTE_DEFAUT,
     STOCK_EMPLACEMENT_AU_SOL,
     STOCK_EMPLACEMENT_AU_SOL_LABEL,
@@ -4004,14 +4009,142 @@ def list_receptions(request: Request, limit: int = 50):
                     "metrage_restant": b["metrage_restant"],
                     "impacte_stock": int(b["impacte_stock"] or 0),
                 })
+        # Commande d'achat RVGI : portée par la réception quand elle vient de
+        # l'ERP, sinon par la ligne du registre FSC qui lui est rattachée.
+        cde_par_lot: dict[int, str] = {}
+        fsc_par_lot: dict[int, bool] = {}
+        docs_par_lot: dict[int, list] = {lid: [] for lid in lot_ids}
+        if lot_ids:
+            placeholders = ",".join("?" for _ in lot_ids)
+            try:
+                for r in conn.execute(
+                    f"""SELECT reception_id, MIN(cde_numero) AS cde
+                          FROM fsc_reception
+                         WHERE reception_id IN ({placeholders}) AND cde_numero IS NOT NULL
+                         GROUP BY reception_id""", lot_ids):
+                    cde_par_lot[r["reception_id"]] = str(r["cde"])
+            except sqlite3.OperationalError:
+                pass
+            # Matières du lot : celles des bobines scannées, et celle attendue
+            # de la ligne RVGI tant que rien n'est scanné. Le drapeau se règle
+            # sur la fiche matière (un complexe peut être papier ou synthétique).
+            for r in conn.execute(
+                f"""SELECT DISTINCT x.reception_id
+                      FROM (SELECT reception_id, matiere_id FROM stock_reception_items
+                             WHERE reception_id IN ({placeholders})
+                            UNION
+                            SELECT id, rvgi_matiere_id FROM stock_receptions
+                             WHERE id IN ({placeholders})) x
+                      JOIN matieres_premieres m ON m.id = x.matiere_id
+                     WHERE COALESCE(m.matiere_fsc, 0) = 1""",
+                lot_ids + lot_ids):
+                fsc_par_lot[r["reception_id"]] = True
+            for r in conn.execute(
+                f"""SELECT id, reception_id, type_doc, nom_origine, taille, depose_le, depose_par
+                      FROM stock_reception_documents
+                     WHERE reception_id IN ({placeholders}) AND supprime_le IS NULL
+                     ORDER BY id""", lot_ids):
+                docs_par_lot.setdefault(r["reception_id"], []).append(dict(r))
     result = []
     for lot in lots:
         d = dict(lot)
         bobines = bobines_par_lot.get(d["id"], [])
         d["bobines"] = bobines
         d["items"] = [b["code_barre"] for b in bobines]
+        d["commande_achat"] = (str(d.get("rvgi_cde") or "").strip()
+                               or cde_par_lot.get(d["id"]) or None)
+        d["matiere_fsc"] = bool(fsc_par_lot.get(d["id"]))
+        d["documents"] = docs_par_lot.get(d["id"], [])
         result.append(d)
     return {"receptions": result}
+
+
+# ── Pièces fournisseur d'une réception (BL, facture) ─────────────────────────
+
+def _chemin_document(nom_stockage: str) -> str:
+    # Le nom de stockage est généré par le serveur ; basename par sûreté.
+    return os.path.join(RECEPTION_DOCUMENTS_DIR, os.path.basename(nom_stockage))
+
+
+@router.post("/api/stock/receptions/{reception_id}/documents")
+async def deposer_document_reception(reception_id: int, request: Request,
+                                     type_doc: str = Form(...),
+                                     fichier: UploadFile = File(...)):
+    user = require_stock_write(request)
+    if type_doc not in RECEPTION_TYPES_DOCUMENT:
+        raise HTTPException(400, "Type de pièce invalide — BL ou facture.")
+    nom = os.path.basename(fichier.filename or "").strip()
+    ext = os.path.splitext(nom)[1].lower()
+    if ext not in RECEPTION_DOCUMENT_EXTENSIONS:
+        raise HTTPException(400, "Format refusé — PDF, JPG ou PNG.")
+    contenu = await fichier.read()
+    if not contenu:
+        raise HTTPException(400, "Fichier vide.")
+    if len(contenu) > RECEPTION_DOCUMENT_TAILLE_MAX:
+        raise HTTPException(400, "Fichier trop lourd — %d Mo maximum."
+                            % (RECEPTION_DOCUMENT_TAILLE_MAX // (1024 * 1024)))
+    maintenant = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        lot = conn.execute("SELECT id, lot_numero FROM stock_receptions WHERE id=?",
+                           (reception_id,)).fetchone()
+        if not lot:
+            raise HTTPException(404, "Réception introuvable.")
+        nom_stockage = "rec_%d_%s_%s%s" % (reception_id, type_doc,
+                                           datetime.now().strftime("%Y%m%d%H%M%S%f"), ext)
+        with open(_chemin_document(nom_stockage), "wb") as f:
+            f.write(contenu)
+        cur = conn.execute(
+            """INSERT INTO stock_reception_documents
+               (reception_id, type_doc, nom_stockage, nom_origine, taille, depose_le, depose_par)
+               VALUES (?,?,?,?,?,?,?)""",
+            (reception_id, type_doc, nom_stockage, nom[:200], len(contenu), maintenant,
+             user.get("nom") or user.get("email")))
+        conn.commit()
+        doc_id = cur.lastrowid
+    log_action(
+        user=user, action="CREATE", module="stock",
+        objet=f"Réception {lot['lot_numero'] or reception_id} — {RECEPTION_TYPES_DOCUMENT[type_doc]}",
+        detail={"reception_id": reception_id, "document_id": doc_id, "fichier": nom[:200]},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "id": doc_id}
+
+
+@router.get("/api/stock/receptions/{reception_id}/documents/{doc_id}")
+def telecharger_document_reception(reception_id: int, doc_id: int, request: Request):
+    require_stock(request)
+    with get_db() as conn:
+        doc = conn.execute(
+            """SELECT nom_stockage, nom_origine FROM stock_reception_documents
+                WHERE id=? AND reception_id=? AND supprime_le IS NULL""",
+            (doc_id, reception_id)).fetchone()
+    if not doc:
+        raise HTTPException(404, "Pièce introuvable.")
+    chemin = _chemin_document(doc["nom_stockage"])
+    if not os.path.isfile(chemin):
+        raise HTTPException(404, "Fichier absent du serveur.")
+    return FileResponse(path=chemin, filename=doc["nom_origine"] or doc["nom_stockage"],
+                        content_disposition_type="attachment")
+
+
+@router.delete("/api/stock/receptions/{reception_id}/documents/{doc_id}")
+def retirer_document_reception(reception_id: int, doc_id: int, request: Request):
+    user = require_stock_write(request)
+    maintenant = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        cur = conn.execute(
+            """UPDATE stock_reception_documents SET supprime_le=?, supprime_par=?
+                WHERE id=? AND reception_id=? AND supprime_le IS NULL""",
+            (maintenant, user.get("nom") or user.get("email"), doc_id, reception_id))
+        conn.commit()
+        if not cur.rowcount:
+            raise HTTPException(404, "Pièce introuvable.")
+    log_action(
+        user=user, action="DELETE", module="stock",
+        objet=f"Réception {reception_id} — pièce {doc_id} retirée",
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True}
 
 
 @router.get("/api/stock/traca/bobines-recentes")
@@ -6076,7 +6209,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
                    COALESCE(mp.prix_par_laize, 0) AS prix_par_laize,
                    mp.unites_par_palette, mp.longueur_tube_mm,
                    mp.cartons_par_palette, mp.kg_par_carton, mp.weight_gsm,
-                   mp.sous_section,
+                   mp.sous_section, COALESCE(mp.matiere_fsc, 0) AS matiere_fsc,
                    COALESCE(mp.intervalle_inventaire_jours, 180) AS intervalle_inventaire_jours,
                    COALESCE(s.quantite, 0) AS quantite
             FROM matieres_premieres mp
@@ -6688,6 +6821,9 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
             raise HTTPException(400, "Unités par palette négatif.")
         sets.append("unites_par_palette=?")
         params.append(v)
+    if "matiere_fsc" in body:
+        sets.append("matiere_fsc=?")
+        params.append(1 if body.get("matiere_fsc") else 0)
     if "sous_section" in body:
         sv = (body.get("sous_section") or "").strip() or None
         sets.append("sous_section=?")
