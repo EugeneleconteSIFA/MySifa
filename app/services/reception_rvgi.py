@@ -591,11 +591,15 @@ _SQL_HISTO_ERP = """
 
 def historique(conn, conn_erp=None, limite=300):
     """Les receptions RVGI deja entrees en stock, la plus recente en tete."""
+    # `matiere_fsc` arrive par migration : une base qui ne l'a pas encore
+    # (tests, instance en retard) doit garder son historique.
+    cols_mp = {r[1] for r in conn.execute("PRAGMA table_info(matieres_premieres)")}
+    expr_fsc = "COALESCE(mp.matiere_fsc, 0)" if "matiere_fsc" in cols_mp else "0"
     try:
         rows = conn.execute(
             "SELECT i.lif_id, i.numero, i.ligne, i.amjl, i.qte_rvgi, i.matiere_id, "
             "       i.laize_id, i.quantite, i.unite, i.regime, i.integre_at, i.integre_par, "
-            "       i.reception_id, COALESCE(mp.matiere_fsc, 0) AS matiere_fsc, "
+            "       i.reception_id, " + expr_fsc + " AS matiere_fsc, "
             "       mp.reference AS matiere_ref, mp.designation AS matiere_designation, "
             "       lz.label AS laize_label "
             "FROM erp_reception_integree i "
