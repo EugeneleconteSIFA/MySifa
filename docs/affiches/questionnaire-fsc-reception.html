@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>FSC — Questionnaire réception</title>
+<style>
+  :root{
+    --bg:#f1f5f9; --card:#ffffff; --border:#cbd5e1;
+    --text:#0f172a; --text2:#475569; --muted:#64748b;
+    --green:#059669; --green-bg:rgba(5,150,105,0.14); --green-bg-soft:rgba(5,150,105,0.07);
+    --red:#dc2626;
+  }
+  
+  @page{ size:A4; margin:0 }
+  *{ box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact }
+  html,body{ margin:0; background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif }
+  .page{ width:210mm; height:297mm; padding:15mm 14mm 12mm; display:flex; flex-direction:column; gap:6mm; page-break-after:always; background:var(--bg) }
+  .hero{ display:flex; align-items:center; gap:14px }
+  .mark{ width:46px; height:46px; border-radius:13px; background:var(--green-bg); color:var(--green); display:flex; align-items:center; justify-content:center }
+  .mark svg{ width:28px; height:28px }
+  h1{ margin:0; font-size:34px; font-weight:800; letter-spacing:-1px; text-transform:uppercase }
+  h1 em{ font-style:normal; color:var(--green) }
+  .team{ margin-left:auto; padding:6px 14px; border-radius:999px; background:var(--green-bg); color:var(--green); font-size:12px; font-weight:800; letter-spacing:2.2px; text-transform:uppercase }
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:16px; padding:6mm 7mm }
+  .meta{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:6mm; font-size:13px; font-weight:700; color:var(--text2) }
+  .meta div{ border-bottom:1px solid var(--border); padding-bottom:6px }
+  .qt{ font-size:20px; font-weight:800; line-height:1.25; margin:0 0 2mm }
+  .hint{ font-size:13px; color:var(--muted); font-weight:600; margin-bottom:4mm }
+  .q{ display:flex; align-items:center; gap:10px; padding:2.6mm 0; border-bottom:1px solid rgba(203,213,225,.7); font-size:14.5px; font-weight:600; color:var(--text2) }
+  .q:last-child{ border-bottom:none }
+  .box{ width:17px; height:17px; border:2px solid var(--text2); border-radius:4px; flex-shrink:0 }
+  .l{ width:18px; font-weight:800; color:var(--green); flex-shrink:0 }
+  .score{ display:flex; justify-content:flex-end; gap:10px; font-size:14px; font-weight:800 }
+  table{ width:100%; border-collapse:collapse; font-size:13px }
+  th{ text-align:left; font-size:11px; letter-spacing:1.4px; text-transform:uppercase; color:var(--muted); padding:0 6px 8px; border-bottom:2px solid var(--border) }
+  td{ height:11.5mm; border-bottom:1px solid var(--border); padding:0 6px }
+  td+td, th+th{ border-left:1px solid rgba(203,213,225,.7) }
+  .ack{ font-size:13.5px; line-height:1.45; color:var(--text2); font-weight:600; margin:0 }
+  .ack em{ font-style:normal; color:var(--green); font-weight:800 }
+  .key{ font-size:15px; line-height:1.6; font-weight:700; color:var(--text2) }
+  .key b{ color:var(--green) } .key i{ font-style:normal; color:var(--red) }
+  .ft{ margin-top:auto; font-size:9px; color:var(--muted); text-align:center; text-transform:uppercase; letter-spacing:1.5px; font-weight:700 }
+</style></head><body>
+<div class="page">
+  <div class="hero"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg></div><h1>Réception <em>FSC</em></h1><span class="team">Questionnaire</span></div>
+  <div class="card meta"><div>Nom :</div><div>Date :</div><div>Poste :</div></div>
+  <div class="card">
+    <p class="qt">À la réception de bobines FSC, que devez-vous vérifier ?</p>
+    <div class="hint">Cochez toutes les bonnes réponses. Plusieurs réponses possibles.</div>
+    <div class="q"><span class="box"></span><span class="l">A</span><span>L'allégation FSC (ex. FSC Mix Credit) sur chaque ligne article du BL</span></div><div class="q"><span class="box"></span><span class="l">B</span><span>La couleur du mandrin des bobines</span></div><div class="q"><span class="box"></span><span class="l">C</span><span>Le numéro de certificat (ex. ESTS-COC-242264), sur chaque ligne article ou dans le corps du document</span></div><div class="q"><span class="box"></span><span class="l">D</span><span>Le logo FSC imprimé sur l'emballage : il suffit à lui seul</span></div><div class="q"><span class="box"></span><span class="l">E</span><span>Le nombre de bobines reçues correspond au BL</span></div><div class="q"><span class="box"></span><span class="l">F</span><span>Le nom du chauffeur</span></div><div class="q"><span class="box"></span><span class="l">G</span><span>L'allégation et le numéro de certificat sont aussi sur la facture</span></div><div class="q"><span class="box"></span><span class="l">H</span><span>Le fournisseur livre d'habitude du FSC : étiquette verte posée d'office</span></div><div class="q"><span class="box"></span><span class="l">I</span><span>L'étiquette d'identification de chaque bobine</span></div><div class="q"><span class="box"></span><span class="l">J</span><span>Le poids total du camion</span></div><div class="q"><span class="box"></span><span class="l">K</span><span>La matière est concernée : thermique, couché, vélin ou complexe de ces matières</span></div><div class="q"><span class="box"></span><span class="l">L</span><span>Un certificat envoyé par mail par le commercial remplace le BL</span></div><div class="q"><span class="box"></span><span class="l">M</span><span>Un seul point manque : pas d'étiquette Matière FSC</span></div><div class="q"><span class="box"></span><span class="l">N</span><span>Un point manque : étiquette Matière FSC quand même, on régularise plus tard</span></div>
+  </div>
+  <div class="score">Score : ______ / 14</div>
+  <div class="ft">MySifa · FSC-STD-40-004 V3-1 · document interne SIFA</div>
+</div>
+<div class="page">
+  <div class="hero"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg></div><h1>Réception <em>FSC</em></h1><span class="team">Feuille d'émargement</span></div>
+  <div class="card meta"><div>Date de la formation :</div><div>Formateur :</div><div>Durée :</div></div>
+  <p class="ack">En signant, je confirme avoir été formé(e) aux vérifications de réception des bobines FSC : <em>allégation sur chaque ligne article du BL et de la facture</em>, <em>numéro de certificat</em> sur la ligne article ou dans le corps du document, <em>comptage des bobines</em>, <em>étiquette d'identification</em>. Si un point manque : pas d'étiquette Matière FSC.</p>
+  <div class="card"><table><tr><th style="width:30%">Nom Prénom</th><th style="width:18%">Poste</th><th style="width:12%">Score</th><th style="width:18%">Date</th><th>Signature</th></tr><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr></table></div>
+  <div class="ft">MySifa · FSC-STD-40-004 V3-1 · document interne SIFA</div>
+</div>
+<div class="page">
+  <div class="hero"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg></div><h1>Réception <em>FSC</em></h1><span class="team">Corrigé · formateur</span></div>
+  <div class="card key">
+    <div><b>Bonnes réponses (7) :</b> A, C, E, G, I, K, M</div>
+    <div><i>Mauvaises réponses (7) :</i> B, D, F, H, J, L, N</div>
+    <div style="margin-top:4mm;font-weight:600;font-size:13.5px">Barème : 1 point par case correcte (cochée si bonne, laissée vide si mauvaise), soit 14 points. Seuil conseillé : 12/14, et aucune erreur sur M et N. En dessous, reprendre l'affiche avec la personne.</div>
+  </div>
+  <div class="ft">MySifa · FSC-STD-40-004 V3-1 · document interne SIFA</div>
+</div>
+</body></html>

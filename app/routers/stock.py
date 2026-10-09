@@ -9234,6 +9234,28 @@ def get_valorisation_trend(request: Request, days: int = 30):
     return {"points": points, "days": days}
 
 
+def _valorisation_marges_vente(conn) -> dict:
+    """Marge de vente par catégorie, lue dans Coûts matières.
+
+    Le total de vente affiché en valorisation = sous-total d'achat × (1 + marge%).
+    Les supports logistiques (mandrin, palette, carton) ne sont pas vendus en
+    tant que matière : absents de la table, ils ressortent à 0 % côté écran."""
+    from app.services.pricing.repository import load_marges_categorie
+    try:
+        row = conn.execute(
+            "SELECT value_decimal FROM mc_setting WHERE key = 'default_margin_pct'"
+        ).fetchone()
+        defaut = float(row["value_decimal"]) if row and row["value_decimal"] is not None else 0.0
+    except sqlite3.OperationalError:
+        defaut = 0.0
+    par_cat = {k: float(v) for k, v in load_marges_categorie(conn).items()}
+    return {
+        "par_categorie": {
+            c: par_cat.get(c, defaut) for c in _mystock_prix.CATEGORIES_VISIBLES
+        },
+    }
+
+
 @router.get("/api/stock/valorisation")
 def get_valorisation(request: Request, date: str | None = None):
     """Valorisation MP. Query optionnel `date=YYYY-MM-DD` → figée à cette date
@@ -9247,10 +9269,15 @@ def get_valorisation(request: Request, date: str | None = None):
         taux = _get_taux_eur_usd(conn) if can_see_usd else 0.0
         tax_pct = _get_import_tax_pct(conn) if can_see_usd else 0.0
         c_full, c_half, q_full, q_half = _get_container_params(conn) if can_see_usd else (0.0, 0.0, 0.0, 0.0)
+        marges = _valorisation_marges_vente(conn)
+        storage_pct = _get_storage_fees_pct(conn)
     _enrich_items_with_usd(items, taux, tax_pct, c_full, c_half, q_full, q_half)
     summary = _valorisation_summary(items, taux, tax_pct, c_full, c_half, q_full, q_half)
     summary["can_see_usd"] = can_see_usd
     summary["snapshot_date"] = snapshot_date  # None si aujourd'hui
+    summary["marges_vente"] = marges
+    # Frais de stockage appliqués au sous-total d'achat dans la carte MP.
+    summary["storage_fees_pct"] = round(storage_pct, 4)
     return {
         "items": items,
         "summary": summary,

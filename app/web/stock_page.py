@@ -23054,6 +23054,31 @@ function buildValorisationSparkline() {
   return wrap;
 }
 
+// Sous-total d'achat d'une ligne : prix + taxe + transport (= colonne Valorisation).
+function valItemAchat(it) {
+  const r = it.valorisation_reelle;
+  return Number(r != null ? r : (it.valorisation || 0)) || 0;
+}
+// Total de vente d'une ligne : sous-total d'achat + marge de la catégorie (Coûts matières).
+function valItemVente(it) {
+  const v = valEnsureState();
+  const m = (v.summary && v.summary.marges_vente && v.summary.marges_vente.par_categorie) || {};
+  const pct = Number(m[String(it.categorie || '').toLowerCase()] || 0);
+  return valItemAchat(it) * (1 + pct / 100);
+}
+function valTotaux(items) {
+  let achat = 0, vente = 0;
+  (items || []).forEach(it => { achat += valItemAchat(it); vente += valItemVente(it); });
+  return { achat, vente };
+}
+// Montant de pastille : sous-total d'achat, total de vente en sous-titre.
+function valPillMontant(t) {
+  return el('span', { style: 'display:inline-flex;flex-direction:column;align-items:flex-start;line-height:1.15' },
+    el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + valFormatEuro(t.achat)),
+    el('span', { style: 'font-size:10px;font-weight:500;opacity:.6' }, 'vente ' + valFormatEuro(t.vente))
+  );
+}
+
 function buildValorisationKpis() {
   const v = valEnsureState();
   const pf = (S.valorisation && S.valorisation.pf) ? S.valorisation.pf : null;
@@ -23076,7 +23101,10 @@ function buildValorisationKpis() {
   const showReelBreakdown = canSeeUSD
     && (nbUsdOnly + nbTaxOnly + nbBoth + nbTransport) > 0
     && (tauxRaw > 0 || taxPctRaw > 0 || transportRaw > 0);
-  const totalMPReel = Number(s.total_mp_reel || s.total_mp || 0);
+  // Frais de stockage (Coûts matières) appliqués au sous-total d'achat MP.
+  const mpStoragePct = Number(s.storage_fees_pct || 0);
+  const mpStorageMult = 1 + mpStoragePct / 100;
+  const totalMPReel = Number(s.total_mp_reel || s.total_mp || 0) * mpStorageMult;
   // pfHasCharges est calculé plus bas mais nécessaire ici pour le total réel — on le
   // dérive directement à partir de pfS pour éviter la dépendance sur la variable.
   const _pfCharge = pfLoaded ? Number(pfS.charge_production_pct || 0) : 0;
@@ -23148,22 +23176,20 @@ function buildValorisationKpis() {
   const kpiMPChildren = [
     el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Matières premières'),
   ];
-  if (showReelBreakdown) {
-    kpiMPChildren.push(
-      el('div', { style: 'font-size:24px;font-weight:800;color:#16a34a' }, valFormatEuro(totalMPReel))
-    );
-    kpiMPChildren.push(
-      el('div', { style: 'font-size:15px;font-weight:700;color:var(--muted);margin-top:4px;display:flex;align-items:baseline;gap:6px' },
-        el('span', null, valFormatEuro(totalMP)),
-        el('span', { style: 'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px' }, 'base')
-      )
-    );
-  } else {
-    // Vue non-direction : affiche simplement le total MP en gros vert (sinon
-    // la card serait vide). Cette valeur EST la base pour eux -- pas de reel.
-    kpiMPChildren.push(
-      el('div', { style: 'font-size:24px;font-weight:800;color:var(--accent)' }, valFormatEuro(totalMP))
-    );
+  // Chiffre principal = sous-total d'achat (somme des lignes du tableau),
+  // sous-titre = total de vente (marge de la catégorie, Coûts matières).
+  const mpTot = valTotaux(v.items);
+  kpiMPChildren.push(
+    el('div', { style: 'font-size:24px;font-weight:800;color:var(--accent)' }, valFormatEuro(mpTot.achat * mpStorageMult))
+  );
+  kpiMPChildren.push(
+    el('div', { style: 'font-size:15px;font-weight:700;color:var(--muted);margin-top:4px;display:flex;align-items:baseline;gap:6px' },
+      el('span', null, valFormatEuro(mpTot.vente)),
+      el('span', { style: 'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px' }, 'vente')
+    )
+  );
+  if (mpStoragePct > 0) {
+    kpiMPChildren.push(el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' }, 'Frais de stockage inclus'));
   }
   // Sous-texte enleve (referentiel / taux USD / taxe / transport) -- infos
   // dispo dans la table + settings, on garde la card epuree.
@@ -23191,6 +23217,9 @@ function buildValorisationKpis() {
         el('span', { style: 'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px' }, 'base')
       )
     );
+    const pfMention = pfChargePct > 0 && pfStoragePct > 0 ? 'Coûts directs et frais de stockage inclus'
+      : pfChargePct > 0 ? 'Coûts directs inclus' : 'Frais de stockage inclus';
+    kpiPFChildren.push(el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' }, pfMention));
   } else {
     kpiPFChildren.push(
       el('div', { style: 'font-size:24px;font-weight:800;color:var(--text)' }, pfLoaded ? valFormatEuro(totalPF) : '—')
@@ -23241,20 +23270,20 @@ function buildValorisationCategoriePills() {
   const active = 'padding:7px 14px;border-radius:999px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px';
 
   // Précalcule les totaux par sous-section frontal (à partir des items)
-  const frontalBySs = new Map(); // ss(lowercase) → { label, total }
-  let frontalSansSsTotal = 0;
+  const frontalBySs = new Map(); // ss(lowercase) → { label, items }
+  const frontalSansSs = [];
   let hasFrontalSansSs = false;
   items.forEach(it => {
     if (String(it.categorie || '').toLowerCase() !== 'frontal') return;
     const ssRaw = (it.sous_section || '').trim();
     if (!ssRaw) {
-      frontalSansSsTotal += Number(it.valorisation || 0);
+      frontalSansSs.push(it);
       hasFrontalSansSs = true;
       return;
     }
     const k = ssRaw.toLowerCase();
-    if (!frontalBySs.has(k)) frontalBySs.set(k, { label: ssRaw, total: 0 });
-    frontalBySs.get(k).total += Number(it.valorisation || 0);
+    if (!frontalBySs.has(k)) frontalBySs.set(k, { label: ssRaw, items: [] });
+    frontalBySs.get(k).items.push(it);
   });
   const frontalSsList = Array.from(frontalBySs.values())
     .sort((a, b) => a.label.localeCompare(b.label, 'fr'));
@@ -23277,7 +23306,7 @@ function buildValorisationCategoriePills() {
     on: { click: () => {
       v.filterCategorie = null; v.filterSousSection = null; renderValorisationView(true);
     } } }, 'Toutes catégories',
-    el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + valFormatEuro(s.total_mp))
+    valPillMontant(valTotaux(items))
   );
   wrap.appendChild(allBtn);
 
@@ -23301,7 +23330,7 @@ function buildValorisationCategoriePills() {
             }
             renderValorisationView(true);
           } } }, ss.label,
-          el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + valFormatEuro(ss.total))
+          valPillMontant(valTotaux(ss.items))
         );
         wrap.appendChild(btn);
       });
@@ -23318,7 +23347,7 @@ function buildValorisationCategoriePills() {
             }
             renderValorisationView(true);
           } } }, 'Frontal (sans sous-section)',
-          el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + valFormatEuro(frontalSansSsTotal))
+          valPillMontant(valTotaux(frontalSansSs))
         );
         wrap.appendChild(btn);
       }
@@ -23334,7 +23363,7 @@ function buildValorisationCategoriePills() {
           }
           renderValorisationView(true);
         } } }, c.categorie_label,
-        el('span', { style: 'opacity:.7;font-weight:600' }, '· ' + valFormatEuro(c.total))
+        valPillMontant(valTotaux(items.filter(it => it.categorie === c.categorie)))
       );
       wrap.appendChild(btn);
     }
