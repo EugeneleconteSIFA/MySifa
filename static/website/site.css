@@ -517,3 +517,8 @@ p{margin:0}
   .cta-band{padding:24px 20px}
   .sec-sm{padding:56px 0}
 }
+
+/* Rangée enduction sans le bloc « Ce que vous y gagnez » : les 4 étapes en 2×2, centrées face à la photo */
+.end-row{align-items:center}
+.end-row .photo-stack{position:static}
+@media (min-width:901px){.end-row .steps{grid-template-columns:1fr 1fr}.end-row .step{padding:30px 28px}.end-row .step:nth-child(3){border-left:0}.end-row .step:nth-child(n+3){border-top:2px dashed var(--border2)}}
