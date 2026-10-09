@@ -2334,6 +2334,15 @@ body.light .btn-recep-success svg{stroke:#ffffff !important;color:#ffffff !impor
 .recep-lot-preview{font-family:monospace;font-size:11px;color:var(--muted);padding:6px 10px;background:var(--bg);border:1px dashed var(--border);border-radius:6px;margin-top:6px;display:inline-block}
 .recep-lot-preview strong{color:var(--accent);font-weight:700}
 .recep-hist-lot{font-family:monospace;font-size:11px;color:var(--accent);font-weight:700;background:var(--accent-bg);padding:2px 7px;border-radius:5px;white-space:nowrap;flex-shrink:0}
+/* Réception de matière FSC (vélin, couché, thermique, complexe papier) :
+   toute la ligne passe en vert gras, pour la repérer d'un coup d'œil. */
+.recep-ligne-fsc,.recep-ligne-fsc td,.recep-ligne-fsc td div,.recep-ligne-fsc td span,
+.recep-ligne-fsc .recep-hist-date,.recep-ligne-fsc .recep-hist-note,.recep-ligne-fsc .recep-hist-four,
+.recep-ligne-fsc .recep-hist-user,.recep-ligne-fsc .recep-hist-cde{color:var(--success,#34d399)!important;font-weight:700}
+body.light .recep-ligne-fsc,body.light .recep-ligne-fsc td,body.light .recep-ligne-fsc td div,
+body.light .recep-ligne-fsc td span,body.light .recep-ligne-fsc .recep-hist-date,body.light .recep-ligne-fsc .recep-hist-note,
+body.light .recep-ligne-fsc .recep-hist-four,body.light .recep-ligne-fsc .recep-hist-user,
+body.light .recep-ligne-fsc .recep-hist-cde{color:#0f7c3a!important}
 .recep-hist-cde{font-family:monospace;font-size:11px;color:var(--text2);font-weight:700;background:var(--bg);border:1px solid var(--border);padding:2px 7px;border-radius:5px;white-space:nowrap;flex-shrink:0}
 .recep-hist-pj{font-size:11px;color:var(--muted);white-space:nowrap;flex-shrink:0;display:inline-flex;align-items:center;gap:3px}
 .recep-docs{display:flex;flex-direction:column;gap:6px}
@@ -8947,7 +8956,7 @@ function appendMatiereRefEditFields(parent, item) {
   const fscWrap = hasFsc
     ? el('div', { cls: 'mp-field' },
         el('label', { style: 'display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-weight:600' },
-          fscChk, el('span', null, 'Matière FSC')),
+          fscChk, el('span', { cls: 'sm-fsc-value', style: 'font-weight:800' }, 'Matière FSC')),
         el('div', { cls: 'mp-hint' }, 'Papier d\'origine forestière (vélin, couché, thermique). '
           + 'Décocher pour un synthétique.'))
     : el('div', { style: { display: 'none' } });
@@ -21509,6 +21518,7 @@ function buildReceptionRvgi() {
       el('th', null, 'Article RVGI'),
       el('th', null, 'Référence MySifa'),
       el('th', { cls: 'num' }, 'Quantité'),
+      el('th', null, 'Pièces'),
       el('th', null, 'État'))),
     tbody);
   wrap.appendChild(el('div', { cls: 'bes-card bes-scroll-x' }, table));
@@ -21581,7 +21591,7 @@ function buildRvgiHistorique() {
   const petit = 'font-size:11.5px;color:var(--muted);margin-top:2px';
   const tbody = el('tbody');
   lignes.forEach(l => {
-    tbody.appendChild(el('tr', null,
+    tbody.appendChild(el('tr', l.matiere_fsc ? { cls: 'recep-ligne-fsc' } : null,
       el('td', { style: 'white-space:nowrap;vertical-align:top' },
         el('div', { style: 'font-weight:700' }, l.amjl ? _fmtDate(l.amjl) : '—'),
         l.fournisseur ? el('div', { style: petit }, l.fournisseur) : null),
@@ -21698,6 +21708,9 @@ function rvgiLigne(l) {
       l.alerte));
   }
   tr.appendChild(tdQte);
+
+  // BL et facture se joignent au moment de valider la réception.
+  tr.appendChild(recepCelluleDocuments(l, loadReceptionRvgi));
 
   const tdAct = el('td', { style: 'vertical-align:top;min-width:200px' });
   if (l.integrable) {
@@ -22648,7 +22661,7 @@ function buildReceptionHistorique() {
         }, iconEl('trash', 15));
         rowChildren.push(delBtn);
       }
-      const row = el('div', { cls: 'recep-hist-row', on: { click: () => {
+      const row = el('div', { cls: 'recep-hist-row' + (lot.matiere_fsc ? ' recep-ligne-fsc' : ''), on: { click: () => {
         S.recepExpandedId = isOpen ? null : lot.id;
         renderContent();
       }}}, ...rowChildren);

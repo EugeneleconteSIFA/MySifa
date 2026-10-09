@@ -4188,9 +4188,19 @@ def retirer_document_reception(reception_id: int, doc_id: int, request: Request)
 async def deposer_document_ligne_rvgi(lif_id: int, request: Request,
                                       type_doc: str = Form(...),
                                       fichier: UploadFile = File(...)):
+    # La ligne peut être encore dans la file « Depuis l'ERP » : on l'accepte
+    # si l'historique ou le miroir la connaît.
+    from app.services import erp_mirror as _miroir
     with get_db() as conn:
         lig = conn.execute("SELECT numero, ligne FROM erp_reception_integree WHERE lif_id=?",
                            (lif_id,)).fetchone()
+    if not lig and _miroir.miroir_present():
+        try:
+            with _miroir.get_erp_db() as erp:
+                lig = erp.execute("SELECT numero, ligne FROM lif_ligne WHERE id=?",
+                                  (lif_id,)).fetchone()
+        except Exception:
+            lig = None
     if not lig:
         raise HTTPException(404, "Ligne de réception RVGI introuvable.")
     return await _deposer_document(request, "lif_id", lif_id,
@@ -11233,6 +11243,12 @@ def reception_rvgi_file(request: Request, limite: int = 300):
     try:
         with get_db() as conn, _miroir.get_erp_db() as erp:
             res = _rr.lignes_a_integrer(conn, erp, limite=limite)
+            # BL et facture se joignent dès la validation de la réception ; ils
+            # suivent la ligne (lif_id) dans l'historique une fois intégrée.
+            lignes = res.get("lignes") or []
+            par_lif = _documents_par(conn, "lif_id", [l["lif_id"] for l in lignes if l.get("lif_id")])
+            for l in lignes:
+                l["documents"] = par_lif.get(l.get("lif_id"), [])
     except FileNotFoundError as e:
         raise HTTPException(503, str(e)) from None
     res["familles"] = {str(t): v[0] for t, v in _rr.PERIMETRE.items()}
