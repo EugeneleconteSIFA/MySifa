@@ -21505,6 +21505,7 @@ function buildReceptionRvgi() {
   const table = el('table', { cls: 'bes-table' },
     el('thead', null, el('tr', null,
       el('th', null, 'Réception'),
+      el('th', null, 'Commande RVGI'),
       el('th', null, 'Article RVGI'),
       el('th', null, 'Référence MySifa'),
       el('th', { cls: 'num' }, 'Quantité'),
@@ -21583,8 +21584,11 @@ function buildRvgiHistorique() {
     tbody.appendChild(el('tr', null,
       el('td', { style: 'white-space:nowrap;vertical-align:top' },
         el('div', { style: 'font-weight:700' }, l.amjl ? _fmtDate(l.amjl) : '—'),
-        el('div', { style: petit }, 'cde ' + (l.numero || '?') + '/' + (l.ligne || '?') + (l.ref_br ? ' · BL ' + l.ref_br : '')),
         l.fournisseur ? el('div', { style: petit }, l.fournisseur) : null),
+      el('td', { style: 'white-space:nowrap;vertical-align:top' },
+        el('div', { style: 'font-family:var(--mono,monospace);font-weight:700' }, l.numero ? String(l.numero) : '—'),
+        el('div', { style: petit }, l.ligne ? 'ligne ' + l.ligne : ''),
+        l.ref_br ? el('div', { style: petit }, 'BL ' + l.ref_br) : null),
       el('td', { style: 'vertical-align:top;min-width:200px' },
         el('div', { style: 'font-family:var(--mono,monospace);font-weight:700' }, l.article || '—'),
         l.libelle ? el('div', { style: petit + ';max-width:360px' }, l.libelle) : null),
@@ -21607,6 +21611,7 @@ function buildRvgiHistorique() {
   const table = el('table', { cls: 'bes-table' },
     el('thead', null, el('tr', null,
       el('th', null, 'Livraison'),
+      el('th', null, 'Commande RVGI'),
       el('th', null, 'Article RVGI'),
       el('th', null, 'Référence MySifa'),
       el('th', { cls: 'num' }, 'Quantité'),
@@ -21623,8 +21628,11 @@ function rvgiLigne(l) {
 
   tr.appendChild(el('td', { style: 'white-space:nowrap;vertical-align:top' },
     el('div', { style: 'font-weight:700' }, l.amjl ? _fmtDate(l.amjl) : '—'),
-    el('div', { style: petit }, 'cde ' + l.numero + '/' + l.ligne),
     l.fournisseur ? el('div', { style: petit }, l.fournisseur) : null));
+
+  tr.appendChild(el('td', { style: 'white-space:nowrap;vertical-align:top' },
+    el('div', { style: 'font-family:var(--mono,monospace);font-weight:700' }, l.numero ? String(l.numero) : '—'),
+    el('div', { style: petit }, l.ligne ? 'ligne ' + l.ligne : '')));
 
   tr.appendChild(el('td', { style: 'vertical-align:top;min-width:220px' },
     el('div', { style: 'font-family:var(--mono,monospace);font-weight:700' }, l.article),
