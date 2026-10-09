@@ -98,7 +98,9 @@ snap = _charger("app/services/carnet_snapshot.py", "carnet_snap")
 cas = [
     ({"date_livraison": "2026-10-15"},                        "2026-10", "ISO"),
     ({"date_livraison": "15/10/2026"},                        "2026-10", "français"),
-    ({"date_livraison": "A livrer le 03/04",
+    # Année explicite : « 03/04 » seul se résout sur la prochaine occurrence,
+    # et l'attendu changeait avec la date du jour.
+    ({"date_livraison": "A livrer le 03/04/2026",
       "planned_end": "2026-09-01"},                           "2026-04", "phrase — prime sur planned_end"),
     ({"date_livraison": "", "planned_end": "2026-09-20"},     "2026-09", "repli planned_end"),
     ({"date_livraison": None, "planned_end": None,
