@@ -4047,12 +4047,7 @@ def list_receptions(request: Request, limit: int = 50):
                      WHERE COALESCE(m.matiere_fsc, 0) = 1""",
                 lot_ids + lot_ids):
                 fsc_par_lot[r["reception_id"]] = True
-            for r in conn.execute(
-                f"""SELECT id, reception_id, type_doc, nom_origine, taille, depose_le, depose_par
-                      FROM stock_reception_documents
-                     WHERE reception_id IN ({placeholders}) AND supprime_le IS NULL
-                     ORDER BY id""", lot_ids):
-                docs_par_lot.setdefault(r["reception_id"], []).append(dict(r))
+            docs_par_lot.update(_documents_par(conn, "reception_id", lot_ids))
     result = []
     for lot in lots:
         d = dict(lot)
@@ -4074,10 +4069,26 @@ def _chemin_document(nom_stockage: str) -> str:
     return os.path.join(RECEPTION_DOCUMENTS_DIR, os.path.basename(nom_stockage))
 
 
-@router.post("/api/stock/receptions/{reception_id}/documents")
-async def deposer_document_reception(reception_id: int, request: Request,
-                                     type_doc: str = Form(...),
-                                     fichier: UploadFile = File(...)):
+def _documents_par(conn, colonne: str, ids: list) -> dict:
+    """Pièces actives par `reception_id` ou par `lif_id`."""
+    out: dict = {}
+    if not ids:
+        return out
+    try:
+        rows = conn.execute(
+            f"""SELECT id, reception_id, lif_id, type_doc, nom_origine, taille, depose_le, depose_par
+                  FROM stock_reception_documents
+                 WHERE {colonne} IN ({",".join("?" for _ in ids)}) AND supprime_le IS NULL
+                 ORDER BY id""", list(ids)).fetchall()
+    except sqlite3.OperationalError:
+        return out
+    for r in rows:
+        out.setdefault(r[colonne], []).append(dict(r))
+    return out
+
+
+async def _deposer_document(request: Request, colonne: str, cle: int, libelle: str,
+                            type_doc: str, fichier: UploadFile) -> dict:
     user = require_stock_write(request)
     if type_doc not in RECEPTION_TYPES_DOCUMENT:
         raise HTTPException(400, "Type de pièce invalide — BL ou facture.")
@@ -4092,40 +4103,34 @@ async def deposer_document_reception(reception_id: int, request: Request,
         raise HTTPException(400, "Fichier trop lourd — %d Mo maximum."
                             % (RECEPTION_DOCUMENT_TAILLE_MAX // (1024 * 1024)))
     maintenant = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    nom_stockage = "rec_%s_%d_%s_%s%s" % ("lif" if colonne == "lif_id" else "r", cle, type_doc,
+                                          datetime.now().strftime("%Y%m%d%H%M%S%f"), ext)
     with get_db() as conn:
-        lot = conn.execute("SELECT id, lot_numero FROM stock_receptions WHERE id=?",
-                           (reception_id,)).fetchone()
-        if not lot:
-            raise HTTPException(404, "Réception introuvable.")
-        nom_stockage = "rec_%d_%s_%s%s" % (reception_id, type_doc,
-                                           datetime.now().strftime("%Y%m%d%H%M%S%f"), ext)
         with open(_chemin_document(nom_stockage), "wb") as f:
             f.write(contenu)
         cur = conn.execute(
-            """INSERT INTO stock_reception_documents
-               (reception_id, type_doc, nom_stockage, nom_origine, taille, depose_le, depose_par)
+            f"""INSERT INTO stock_reception_documents
+               ({colonne}, type_doc, nom_stockage, nom_origine, taille, depose_le, depose_par)
                VALUES (?,?,?,?,?,?,?)""",
-            (reception_id, type_doc, nom_stockage, nom[:200], len(contenu), maintenant,
+            (cle, type_doc, nom_stockage, nom[:200], len(contenu), maintenant,
              user.get("nom") or user.get("email")))
         conn.commit()
         doc_id = cur.lastrowid
     log_action(
         user=user, action="CREATE", module="stock",
-        objet=f"Réception {lot['lot_numero'] or reception_id} — {RECEPTION_TYPES_DOCUMENT[type_doc]}",
-        detail={"reception_id": reception_id, "document_id": doc_id, "fichier": nom[:200]},
+        objet=f"{libelle} — {RECEPTION_TYPES_DOCUMENT[type_doc]}",
+        detail={colonne: cle, "document_id": doc_id, "fichier": nom[:200]},
         ip=request.client.host if request.client else None,
     )
     return {"success": True, "id": doc_id}
 
 
-@router.get("/api/stock/receptions/{reception_id}/documents/{doc_id}")
-def telecharger_document_reception(reception_id: int, doc_id: int, request: Request):
-    require_stock(request)
+def _telecharger_document(colonne: str, cle: int, doc_id: int):
     with get_db() as conn:
         doc = conn.execute(
-            """SELECT nom_stockage, nom_origine FROM stock_reception_documents
-                WHERE id=? AND reception_id=? AND supprime_le IS NULL""",
-            (doc_id, reception_id)).fetchone()
+            f"""SELECT nom_stockage, nom_origine FROM stock_reception_documents
+                WHERE id=? AND {colonne}=? AND supprime_le IS NULL""",
+            (doc_id, cle)).fetchone()
     if not doc:
         raise HTTPException(404, "Pièce introuvable.")
     chemin = _chemin_document(doc["nom_stockage"])
@@ -4135,24 +4140,72 @@ def telecharger_document_reception(reception_id: int, doc_id: int, request: Requ
                         content_disposition_type="attachment")
 
 
-@router.delete("/api/stock/receptions/{reception_id}/documents/{doc_id}")
-def retirer_document_reception(reception_id: int, doc_id: int, request: Request):
+def _retirer_document(request: Request, colonne: str, cle: int, doc_id: int, libelle: str):
     user = require_stock_write(request)
     maintenant = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     with get_db() as conn:
         cur = conn.execute(
-            """UPDATE stock_reception_documents SET supprime_le=?, supprime_par=?
-                WHERE id=? AND reception_id=? AND supprime_le IS NULL""",
-            (maintenant, user.get("nom") or user.get("email"), doc_id, reception_id))
+            f"""UPDATE stock_reception_documents SET supprime_le=?, supprime_par=?
+                WHERE id=? AND {colonne}=? AND supprime_le IS NULL""",
+            (maintenant, user.get("nom") or user.get("email"), doc_id, cle))
         conn.commit()
         if not cur.rowcount:
             raise HTTPException(404, "Pièce introuvable.")
     log_action(
         user=user, action="DELETE", module="stock",
-        objet=f"Réception {reception_id} — pièce {doc_id} retirée",
+        objet=f"{libelle} — pièce {doc_id} retirée",
         ip=request.client.host if request.client else None,
     )
     return {"success": True}
+
+
+@router.post("/api/stock/receptions/{reception_id}/documents")
+async def deposer_document_reception(reception_id: int, request: Request,
+                                     type_doc: str = Form(...),
+                                     fichier: UploadFile = File(...)):
+    with get_db() as conn:
+        lot = conn.execute("SELECT lot_numero FROM stock_receptions WHERE id=?",
+                           (reception_id,)).fetchone()
+    if not lot:
+        raise HTTPException(404, "Réception introuvable.")
+    return await _deposer_document(request, "reception_id", reception_id,
+                                   f"Réception {lot['lot_numero'] or reception_id}", type_doc, fichier)
+
+
+@router.get("/api/stock/receptions/{reception_id}/documents/{doc_id}")
+def telecharger_document_reception(reception_id: int, doc_id: int, request: Request):
+    require_stock(request)
+    return _telecharger_document("reception_id", reception_id, doc_id)
+
+
+@router.delete("/api/stock/receptions/{reception_id}/documents/{doc_id}")
+def retirer_document_reception(reception_id: int, doc_id: int, request: Request):
+    return _retirer_document(request, "reception_id", reception_id, doc_id,
+                             f"Réception {reception_id}")
+
+
+@router.post("/api/stock/reception-rvgi/{lif_id}/documents")
+async def deposer_document_ligne_rvgi(lif_id: int, request: Request,
+                                      type_doc: str = Form(...),
+                                      fichier: UploadFile = File(...)):
+    with get_db() as conn:
+        lig = conn.execute("SELECT numero, ligne FROM erp_reception_integree WHERE lif_id=?",
+                           (lif_id,)).fetchone()
+    if not lig:
+        raise HTTPException(404, "Ligne de réception RVGI introuvable.")
+    return await _deposer_document(request, "lif_id", lif_id,
+                                   f"Réception RVGI cde {lig['numero']}/{lig['ligne']}", type_doc, fichier)
+
+
+@router.get("/api/stock/reception-rvgi/{lif_id}/documents/{doc_id}")
+def telecharger_document_ligne_rvgi(lif_id: int, doc_id: int, request: Request):
+    require_stock(request)
+    return _telecharger_document("lif_id", lif_id, doc_id)
+
+
+@router.delete("/api/stock/reception-rvgi/{lif_id}/documents/{doc_id}")
+def retirer_document_ligne_rvgi(lif_id: int, doc_id: int, request: Request):
+    return _retirer_document(request, "lif_id", lif_id, doc_id, f"Réception RVGI {lif_id}")
 
 
 @router.get("/api/stock/traca/bobines-recentes")
@@ -11203,6 +11256,13 @@ def reception_rvgi_historique(request: Request, limite: int = 300):
                 lignes = _rr.historique(conn, None, limite=limite)
         else:
             lignes = _rr.historique(conn, None, limite=limite)
+        # Pièces fournisseur : celles de la ligne ERP, et celles déposées sur
+        # la réception scannée qui en est issue.
+        par_lif = _documents_par(conn, "lif_id", [l["lif_id"] for l in lignes])
+        par_rec = _documents_par(conn, "reception_id",
+                                 [l["reception_id"] for l in lignes if l.get("reception_id")])
+        for l in lignes:
+            l["documents"] = par_lif.get(l["lif_id"], []) + par_rec.get(l.get("reception_id"), [])
     return {"lignes": lignes, "total": len(lignes)}
 
 

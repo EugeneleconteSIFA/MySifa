@@ -21593,7 +21593,12 @@ function buildRvgiHistorique() {
         el('div', { style: 'font-family:var(--mono,monospace);font-weight:700' }, l.article || '—'),
         l.libelle ? el('div', { style: petit + ';max-width:360px' }, l.libelle) : null),
       el('td', { style: 'vertical-align:top;min-width:180px' },
-        el('div', { style: 'font-weight:700' }, l.matiere_ref || ('#' + (l.matiere_id || '?'))),
+        el('div', { style: 'font-weight:700;display:flex;gap:6px;align-items:center;flex-wrap:wrap' },
+          l.matiere_ref || ('#' + (l.matiere_id || '?')),
+          l.matiere_fsc ? el('span', {
+            cls: 'sm-fsc-badge',
+            attrs: { title: 'Vélin, couché, thermique ou complexe papier : matière suivie en FSC' },
+          }, 'MATIÈRE FSC') : null),
         el('div', { style: petit },
           [l.matiere_designation && l.matiere_designation !== l.matiere_ref ? l.matiere_designation : '',
            l.laize_label ? 'laize ' + l.laize_label : ''].filter(Boolean).join(' · '))),
@@ -21603,6 +21608,7 @@ function buildRvgiHistorique() {
       el('td', { style: 'white-space:nowrap;vertical-align:top' },
         el('div', null, _rvgiFmtDateHeure(l.saisie_erp)),
         el('div', { style: petit }, l.operateur_erp != null ? 'opérateur RVGI n° ' + l.operateur_erp : '—')),
+      recepCelluleDocuments(l, loadRvgiHistorique),
       el('td', { style: 'white-space:nowrap;vertical-align:top' },
         el('div', null, _rvgiFmtDateHeure(l.integre_at)),
         el('div', { style: petit }, l.integre_par ? 'par ' + l.integre_par : '—')),
@@ -21616,6 +21622,7 @@ function buildRvgiHistorique() {
       el('th', null, 'Référence MySifa'),
       el('th', { cls: 'num' }, 'Quantité'),
       el('th', null, 'Saisie RVGI'),
+      el('th', null, 'Pièces'),
       el('th', null, 'Entrée MySifa'))),
     tbody);
   wrap.appendChild(el('div', { cls: 'bes-card bes-scroll-x' }, table));
@@ -22470,7 +22477,9 @@ function recepResumeDocuments(docs) {
   return 'BL : ' + n('bl') + ' · Facture : ' + n('facture');
 }
 
-function recepDeposerDocument(lot, typeDoc) {
+// `base` = chemin d'API qui porte les pièces : une réception scannée
+// (/api/stock/receptions/<id>) ou une ligne ERP (/api/stock/reception-rvgi/<lif_id>).
+function recepDeposerDocument(base, typeDoc, apres) {
   const inp = el('input', { attrs: { type: 'file', accept: '.pdf,.jpg,.jpeg,.png' }, style: { display: 'none' } });
   inp.addEventListener('change', async () => {
     const f = inp.files && inp.files[0];
@@ -22480,9 +22489,9 @@ function recepDeposerDocument(lot, typeDoc) {
     fd.append('type_doc', typeDoc);
     fd.append('fichier', f);
     try {
-      await apiUpload('/api/stock/receptions/' + lot.id + '/documents', fd);
+      await apiUpload(base + '/documents', fd);
       showToast(RECEP_TYPES_DOC[typeDoc] + ' ajouté.', 'success');
-      await loadRecepHistory();
+      await apres();
     } catch (e) {
       showToast(e.message || 'Dépôt impossible.', 'error');
     }
@@ -22491,18 +22500,19 @@ function recepDeposerDocument(lot, typeDoc) {
   inp.click();
 }
 
-async function recepRetirerDocument(lot, doc) {
+async function recepRetirerDocument(base, doc, apres) {
   if (!confirm('Retirer « ' + (doc.nom_origine || 'ce fichier') + ' » de la réception ?')) return;
   try {
-    await api('/api/stock/receptions/' + lot.id + '/documents/' + doc.id, { method: 'DELETE' });
+    await api(base + '/documents/' + doc.id, { method: 'DELETE' });
     showToast('Pièce retirée.', 'success');
-    await loadRecepHistory();
+    await apres();
   } catch (e) {
     showToast(e.message || 'Retrait impossible.', 'error');
   }
 }
 
 function recepRenderDocuments(lot) {
+  const base = '/api/stock/receptions/' + lot.id;
   const docs = lot.documents || [];
   const bloc = el('div', { cls: 'recep-docs', on: { click: e => e.stopPropagation() } });
   bloc.appendChild(el('div', { style: { fontSize: '11px', color: 'var(--muted)', fontWeight: '700', textTransform: 'uppercase' } },
@@ -22511,7 +22521,7 @@ function recepRenderDocuments(lot) {
     bloc.appendChild(el('div', { cls: 'recep-docs-actions' },
       ...Object.entries(RECEP_TYPES_DOC).map(([t, lbl]) => el('button', {
         cls: 'btn-recep btn-recep-ghost', type: 'button',
-        on: { click: () => recepDeposerDocument(lot, t) },
+        on: { click: () => recepDeposerDocument(base, t, loadRecepHistory) },
       }, iconEl('upload', 14), ' Ajouter ' + (t === 'bl' ? 'le BL' : 'la facture')))));
   }
   if (!docs.length) {
@@ -22519,7 +22529,7 @@ function recepRenderDocuments(lot) {
   }
   docs.forEach(d => {
     const lien = el('a', {
-      attrs: { href: API + '/api/stock/receptions/' + lot.id + '/documents/' + d.id },
+      attrs: { href: API + base + '/documents/' + d.id },
     }, d.nom_origine || 'fichier');
     const ligne = el('div', { cls: 'recep-doc' },
       el('span', { style: { fontWeight: '700', minWidth: '130px' } }, RECEP_TYPES_DOC[d.type_doc] || d.type_doc),
@@ -22530,12 +22540,48 @@ function recepRenderDocuments(lot) {
       ligne.appendChild(el('button', {
         cls: 'recep-hist-del', type: 'button',
         attrs: { title: 'Retirer la pièce', 'aria-label': 'Retirer la pièce' },
-        on: { click: () => recepRetirerDocument(lot, d) },
+        on: { click: () => recepRetirerDocument(base, d, loadRecepHistory) },
       }, iconEl('trash', 13)));
     }
     bloc.appendChild(ligne);
   });
   return bloc;
+}
+
+// Version compacte pour une ligne du tableau ERP : deux boutons et les
+// fichiers déjà joints. Une pièce déposée sur la réception scannée issue de la
+// ligne se télécharge ici aussi, depuis son propre chemin.
+function recepCelluleDocuments(l, apres) {
+  const base = '/api/stock/reception-rvgi/' + l.lif_id;
+  const td = el('td', { style: 'vertical-align:top;min-width:170px' });
+  (l.documents || []).forEach(d => {
+    const b = d.lif_id ? base : '/api/stock/receptions/' + d.reception_id;
+    const ligne = el('div', { cls: 'recep-doc', style: { marginBottom: '4px' } },
+      el('span', { style: { fontWeight: '700' } }, d.type_doc === 'facture' ? 'Facture' : 'BL'),
+      el('a', { attrs: { href: API + b + '/documents/' + d.id, title: d.nom_origine || '' } },
+        (d.nom_origine || 'fichier').length > 22 ? (d.nom_origine || '').slice(0, 20) + '…' : (d.nom_origine || 'fichier')));
+    if (!S.stockReadOnly) {
+      ligne.appendChild(el('button', {
+        cls: 'recep-hist-del', type: 'button',
+        attrs: { title: 'Retirer la pièce', 'aria-label': 'Retirer la pièce' },
+        on: { click: () => recepRetirerDocument(b, d, apres) },
+      }, iconEl('trash', 12)));
+    }
+    td.appendChild(ligne);
+  });
+  if (!S.stockReadOnly) {
+    td.appendChild(el('div', { cls: 'recep-docs-actions' },
+      ...Object.keys(RECEP_TYPES_DOC).map(t => el('button', {
+        type: 'button',
+        style: 'padding:3px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);'
+          + 'color:var(--text2);font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap',
+        attrs: { title: 'Ajouter ' + RECEP_TYPES_DOC[t].toLowerCase() },
+        on: { click: () => recepDeposerDocument(base, t, apres) },
+      }, '+ ' + (t === 'bl' ? 'BL' : 'Facture')))));
+  } else if (!(l.documents || []).length) {
+    td.appendChild(el('span', { style: { color: 'var(--muted)' } }, '—'));
+  }
+  return td;
 }
 
 function buildReceptionHistorique() {

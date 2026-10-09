@@ -595,6 +595,7 @@ def historique(conn, conn_erp=None, limite=300):
         rows = conn.execute(
             "SELECT i.lif_id, i.numero, i.ligne, i.amjl, i.qte_rvgi, i.matiere_id, "
             "       i.laize_id, i.quantite, i.unite, i.regime, i.integre_at, i.integre_par, "
+            "       i.reception_id, COALESCE(mp.matiere_fsc, 0) AS matiere_fsc, "
             "       mp.reference AS matiere_ref, mp.designation AS matiere_designation, "
             "       lz.label AS laize_label "
             "FROM erp_reception_integree i "
