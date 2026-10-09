@@ -2334,6 +2334,13 @@ body.light .btn-recep-success svg{stroke:#ffffff !important;color:#ffffff !impor
 .recep-lot-preview{font-family:monospace;font-size:11px;color:var(--muted);padding:6px 10px;background:var(--bg);border:1px dashed var(--border);border-radius:6px;margin-top:6px;display:inline-block}
 .recep-lot-preview strong{color:var(--accent);font-weight:700}
 .recep-hist-lot{font-family:monospace;font-size:11px;color:var(--accent);font-weight:700;background:var(--accent-bg);padding:2px 7px;border-radius:5px;white-space:nowrap;flex-shrink:0}
+.recep-hist-cde{font-family:monospace;font-size:11px;color:var(--text2);font-weight:700;background:var(--bg);border:1px solid var(--border);padding:2px 7px;border-radius:5px;white-space:nowrap;flex-shrink:0}
+.recep-hist-pj{font-size:11px;color:var(--muted);white-space:nowrap;flex-shrink:0;display:inline-flex;align-items:center;gap:3px}
+.recep-docs{display:flex;flex-direction:column;gap:6px}
+.recep-docs-actions{display:flex;gap:8px;flex-wrap:wrap}
+.recep-doc{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)}
+.recep-doc a{color:var(--accent);font-weight:600;text-decoration:none}
+.recep-doc a:hover{text-decoration:underline}
 /* Modale impression étiquettes */
 @keyframes recepPrintOverlayIn{from{opacity:0}to{opacity:1}}
 @keyframes recepPrintSheetIn{
@@ -8778,6 +8785,7 @@ function matiereRefEditPayload(item, fields) {
     // Toujours envoyée, même vide, pour autoriser l'effacement.
     payload.abbreviation = fields.abbrevInp.value.trim();
   }
+  if (fields.hasFsc && fields.fscChk) payload.matiere_fsc = fields.fscChk.checked ? 1 : 0;
   if (fields.hasSousSection && fields.sousSectionSel) {
     // sous_section toujours envoye pour les categories qui la supportent (autorise vidage)
     payload.sous_section = fields.sousSectionSel.getValue();
@@ -8931,6 +8939,18 @@ function appendMatiereRefEditFields(parent, item) {
     } },
   }, item.abbreviation ? 'Masquer le libelle force' : 'Forcer un libelle different…');
   if (!item.abbreviation) abbrevBody.style.display = 'none';
+  // Matière FSC : vélin, couché, thermique et leurs complexes. Un complexe
+  // synthétique (PP, PE, PET) reste décoché. Sert au badge de la réception.
+  const hasFsc = abbrevCat === 'frontal' || abbrevCat === 'complexe';
+  const fscChk = el('input', { attrs: { type: 'checkbox' } });
+  fscChk.checked = !!item.matiere_fsc;
+  const fscWrap = hasFsc
+    ? el('div', { cls: 'mp-field' },
+        el('label', { style: 'display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-weight:600' },
+          fscChk, el('span', null, 'Matière FSC')),
+        el('div', { cls: 'mp-hint' }, 'Papier d\'origine forestière (vélin, couché, thermique). '
+          + 'Décocher pour un synthétique.'))
+    : el('div', { style: { display: 'none' } });
   const abbrevWrap = hasAbbrev
     ? el('div', { cls: 'mp-advanced' }, abbrevToggle, abbrevBody)
     : el('div', { style: { display: 'none' } });
@@ -9378,6 +9398,7 @@ function appendMatiereRefEditFields(parent, item) {
       sousCategorieSel.el,
       sousSectionWrap,
       abbrevWrap,
+      fscWrap,
     ),
     sectionConditionnement,
     mpFormSection('Stock & inventaire',
@@ -9395,7 +9416,7 @@ function appendMatiereRefEditFields(parent, item) {
     ? mpFormSection('Laizes & tarification', laizeWrap)
     : null;
   parent.append(...[grille, sectionLaizes].filter(Boolean));
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, ltInp, isMandrin, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds: null, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, isTech, epInp, abbrevInp, hasAbbrev, sousCategorieSel };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, ltInp, isMandrin, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds: null, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, isTech, epInp, abbrevInp, hasAbbrev, sousCategorieSel, fscChk, hasFsc };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -22433,6 +22454,82 @@ function buildReceptionListe() {
   return wrap;
 }
 
+// ── Pièces fournisseur d'une réception (BL, facture) ─────────────
+const RECEP_TYPES_DOC = { bl: 'BL fournisseur', facture: 'Facture fournisseur' };
+
+function recepResumeDocuments(docs) {
+  const n = t => (docs || []).filter(d => d.type_doc === t).length;
+  return 'BL : ' + n('bl') + ' · Facture : ' + n('facture');
+}
+
+function recepDeposerDocument(lot, typeDoc) {
+  const inp = el('input', { attrs: { type: 'file', accept: '.pdf,.jpg,.jpeg,.png' }, style: { display: 'none' } });
+  inp.addEventListener('change', async () => {
+    const f = inp.files && inp.files[0];
+    inp.remove();
+    if (!f) return;
+    const fd = new FormData();
+    fd.append('type_doc', typeDoc);
+    fd.append('fichier', f);
+    try {
+      await apiUpload('/api/stock/receptions/' + lot.id + '/documents', fd);
+      showToast(RECEP_TYPES_DOC[typeDoc] + ' ajouté.', 'success');
+      await loadRecepHistory();
+    } catch (e) {
+      showToast(e.message || 'Dépôt impossible.', 'error');
+    }
+  });
+  document.body.appendChild(inp);
+  inp.click();
+}
+
+async function recepRetirerDocument(lot, doc) {
+  if (!confirm('Retirer « ' + (doc.nom_origine || 'ce fichier') + ' » de la réception ?')) return;
+  try {
+    await api('/api/stock/receptions/' + lot.id + '/documents/' + doc.id, { method: 'DELETE' });
+    showToast('Pièce retirée.', 'success');
+    await loadRecepHistory();
+  } catch (e) {
+    showToast(e.message || 'Retrait impossible.', 'error');
+  }
+}
+
+function recepRenderDocuments(lot) {
+  const docs = lot.documents || [];
+  const bloc = el('div', { cls: 'recep-docs', on: { click: e => e.stopPropagation() } });
+  bloc.appendChild(el('div', { style: { fontSize: '11px', color: 'var(--muted)', fontWeight: '700', textTransform: 'uppercase' } },
+    'Pièces fournisseur' + (lot.commande_achat ? ' · commande d\'achat ' + lot.commande_achat : '')));
+  if (!S.stockReadOnly && !receptionAnnulee(lot)) {
+    bloc.appendChild(el('div', { cls: 'recep-docs-actions' },
+      ...Object.entries(RECEP_TYPES_DOC).map(([t, lbl]) => el('button', {
+        cls: 'btn-recep btn-recep-ghost', type: 'button',
+        on: { click: () => recepDeposerDocument(lot, t) },
+      }, iconEl('upload', 14), ' Ajouter ' + (t === 'bl' ? 'le BL' : 'la facture')))));
+  }
+  if (!docs.length) {
+    bloc.appendChild(el('div', { style: { fontSize: '12px', color: 'var(--muted)' } }, 'Aucun BL ni facture joint.'));
+  }
+  docs.forEach(d => {
+    const lien = el('a', {
+      attrs: { href: API + '/api/stock/receptions/' + lot.id + '/documents/' + d.id },
+    }, d.nom_origine || 'fichier');
+    const ligne = el('div', { cls: 'recep-doc' },
+      el('span', { style: { fontWeight: '700', minWidth: '130px' } }, RECEP_TYPES_DOC[d.type_doc] || d.type_doc),
+      lien,
+      el('span', { style: { color: 'var(--muted)' } },
+        (d.depose_le ? String(d.depose_le).slice(0, 10) : '') + (d.depose_par ? ' · ' + d.depose_par : '')));
+    if (!S.stockReadOnly) {
+      ligne.appendChild(el('button', {
+        cls: 'recep-hist-del', type: 'button',
+        attrs: { title: 'Retirer la pièce', 'aria-label': 'Retirer la pièce' },
+        on: { click: () => recepRetirerDocument(lot, d) },
+      }, iconEl('trash', 13)));
+    }
+    bloc.appendChild(ligne);
+  });
+  return bloc;
+}
+
 function buildReceptionHistorique() {
   const hist = el('div', { cls: 'recep-hist' });
   hist.appendChild(el('div', { cls: 'recep-hist-head' }, iconEl('truck', 14), ' Historique des réceptions'));
@@ -22452,6 +22549,23 @@ function buildReceptionHistorique() {
       ];
       if (lot.lot_numero) {
         rowChildren.push(el('span', { cls: 'recep-hist-lot', attrs: { title: 'Numéro de lot' } }, lot.lot_numero));
+      }
+      rowChildren.push(el('span', {
+        cls: 'recep-hist-cde',
+        attrs: { title: 'Commande d\'achat RVGI' },
+      }, lot.commande_achat ? 'Cde ' + lot.commande_achat : 'Cde —'));
+      if (lot.matiere_fsc) {
+        rowChildren.push(el('span', {
+          cls: 'sm-fsc-badge',
+          attrs: { title: 'Vélin, couché, thermique ou complexe : matière suivie en FSC' },
+        }, 'MATIÈRE FSC'));
+      }
+      const nbDocs = (lot.documents || []).length;
+      if (nbDocs) {
+        rowChildren.push(el('span', {
+          cls: 'recep-hist-pj',
+          attrs: { title: recepResumeDocuments(lot.documents) },
+        }, iconEl('file-text', 12), String(nbDocs)));
       }
       rowChildren.push(
         fscClaimBadge(lot.fsc_type_claim),
@@ -22497,6 +22611,7 @@ function buildReceptionHistorique() {
         // d'impression et la correction du claim FSC existaient sans que
         // personne puisse les voir.
         const blocBobines = bobines.length ? recepRenderBobines(lot, bobines) : null;
+        detail.appendChild(recepRenderDocuments(lot));
         // Bouton réimprimer les étiquettes pour ce lot
         if (lot.lot_numero) {
           const reprintBtn = el('button', {

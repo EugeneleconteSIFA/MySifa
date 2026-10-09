@@ -577,6 +577,12 @@ FSC_TYPES_REGISTRE = (3, 4, 5, 6, 7, 8)
 # Le synthétique est laizé mais n'est pas d'origine forestière : il entre au
 # registre, avec la mention, parce que l'auditeur veut voir la question tranchée.
 FSC_TYPES_NON_FORESTIERS = (8,)
+# Pièces fournisseur attachables à une réception.
+RECEPTION_TYPES_DOCUMENT = {"bl": "BL fournisseur", "facture": "Facture fournisseur"}
+RECEPTION_DOCUMENT_EXTENSIONS = (".pdf", ".jpg", ".jpeg", ".png")
+RECEPTION_DOCUMENT_TAILLE_MAX = int(os.getenv("RECEPTION_DOCUMENT_TAILLE_MAX", str(15 * 1024 * 1024)))
+RECEPTION_DOCUMENTS_DIR = os.path.join(UPLOADS_ROOT, "receptions")
+os.makedirs(RECEPTION_DOCUMENTS_DIR, exist_ok=True)
 # Étiquette posée sur la bobine à la réception (règle d'identification SIFA).
 FSC_ETIQUETTES = {"verte": "Verte — matière FSC", "orange": "Orange — matière non FSC"}
 # Conservation réglementaire des enregistrements de chaîne de contrôle.
