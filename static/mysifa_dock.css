@@ -227,6 +227,7 @@ body.mysifa-dock-hidden .calc-fab,
 body.mysifa-dock-hidden #cw-bubble,
 body.mysifa-dock-hidden #cw-bar,
 body.mysifa-dock-hidden #ai-chat-root,
+body.mysifa-dock-hidden #ai-chat-btn,
 body.mysifa-dock-hidden #postit-dock-root {
   opacity: 0 !important;
   pointer-events: none !important;
@@ -239,4 +240,96 @@ body.mysifa-dock-hidden #ai-chat-panel,
 body.mysifa-dock-hidden #cw-panel,
 body.mysifa-dock-hidden #postit-dock-menu {
   display: none !important;
+}
+
+/* ── Barre verticale (ordinateur, mysifa_dock.js › layoutBarre) ──────────
+   Les boutons gardent leur position fixe, calculée un par un : la barre
+   n'est qu'un fond dessiné derrière eux. Au repos, des icônes neutres sur
+   fond carte, pour ne pas concurrencer les boutons d'action de la page ;
+   l'orange signale le survol et l'outil ouvert. */
+@media (min-width: 901px) {
+  #mysifa-dock-barre {
+    position: fixed;
+    z-index: 8001;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 26px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+    pointer-events: none;
+    box-sizing: border-box;
+  }
+  #mysifa-dock-sep {
+    position: fixed;
+    z-index: 8002;
+    width: 28px;
+    height: 1px;
+    background: var(--border);
+    pointer-events: none;
+  }
+  body.mysifa-dock-barre .mysifa-dock-fab,
+  body.mysifa-dock-barre .calc-fab,
+  body.mysifa-dock-barre #ai-chat-btn,
+  body.mysifa-dock-barre #cw-bubble {
+    width: 40px !important;
+    height: 40px !important;
+    border-radius: 12px !important;
+    background: transparent !important;
+    color: var(--text2) !important;
+    box-shadow: none !important;
+    transform: none !important;
+    transition: background 0.15s, color 0.15s;
+  }
+  body.mysifa-dock-barre .mysifa-dock-fab:hover,
+  body.mysifa-dock-barre .calc-fab:hover,
+  body.mysifa-dock-barre #ai-chat-btn:hover,
+  body.mysifa-dock-barre #cw-bubble:hover {
+    background: var(--accent-bg) !important;
+    color: var(--accent) !important;
+  }
+  body.mysifa-dock-barre .mysifa-dock-fab-active,
+  body.mysifa-dock-barre .calc-fab-active,
+  body.mysifa-dock-barre .cw-bubble-active {
+    background: var(--accent) !important;
+    color: white !important;
+  }
+  body.mysifa-dock-barre .mysifa-dock-fab svg,
+  body.mysifa-dock-barre .calc-fab svg,
+  body.mysifa-dock-barre #ai-chat-btn svg,
+  body.mysifa-dock-barre #cw-bubble svg {
+    color: currentColor !important;
+    width: 20px;
+    height: 20px;
+  }
+  body.mysifa-dock-barre #cw-bubble-badge {
+    top: -4px;
+    right: -4px;
+    border-color: var(--card);
+  }
+  body.mysifa-dock-barre #mysifa-dock-toggle {
+    width: 40px;
+    height: 24px;
+    border-radius: 8px;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    opacity: 1;
+    z-index: 8003;
+  }
+  body.mysifa-dock-barre #mysifa-dock-toggle:hover {
+    background: var(--accent-bg);
+    color: var(--accent);
+  }
+}
+@media (min-width: 901px) {
+  /* Icône de la carte de France : un masque teinté par son fond. */
+  body.mysifa-dock-barre .expe-carte-fab-icon {
+    background-color: currentColor !important;
+    width: 20px;
+    height: 20px;
+  }
+  /* Mode capture en cours : le bouton reste allumé. */
+  body.mysifa-dock-barre .mysifa-cap-btn.on {
+    background: var(--accent) !important;
+    color: white !important;
+  }
 }
