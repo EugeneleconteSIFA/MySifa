@@ -149,9 +149,30 @@ window.mysifaBlocsRafraichir = function () {
 };
 ```
 
+### Boutons flottants par application
+
+Les boutons en bas à droite (messagerie, post-it, assistant IA, calculette,
+capture, tâche rapide Option+T) ne s'incluent plus page par page :
+`main.py` (`_boutons_flottants`, dans le middleware `inject_tache_quick`)
+les injecte dans toute page connectée qui ne les a pas déjà, puis
+`static/mysifa_boutons.js` les démarre si la page ne l'a pas fait. Une
+nouvelle page n'a rien à faire, à condition que son adresse soit déclarée dans
+`APPLIS` de `app/services/boutons_flottants.py`. Une adresse absente de cette
+liste, comme une page publique, ne reçoit rien.
+
+Le superadmin coupe un bouton appli par appli (même écran, section « Boutons
+flottants par application », table `boutons_flottants_reglages`). Le réglage
+part dans le `<head>` de la page : `window.__MYSIFA_BOUTONS__` et une règle
+CSS qui masque le bouton. Un bouton sans icône (raccourci clavier) lit
+`window.MySifaBoutons.actif(cle)`.
+
+Nouveau bouton flottant : l'ajouter à `BOUTONS` avec le sélecteur de ses
+éléments. S'il dépend du code d'une seule page, le déclarer `appli="…"` : il
+ne se règle que là.
+
 ### Pilotage (superadmin)
 
-Paramètres › Audit › **Blocs capturables** (`renderSettingsBlocs` dans
+Paramètres › Audit › **Widgets et tableaux de bord**, section « Blocs capturables » (`renderSettingsBlocsCapturables` dans
 `settings_page.py`, visibilité `blocs` = superadmin réel) liste les blocs du
 registre, le nombre de widgets créés sur chacun, l'étiquette « Nouveau », et
 un interrupteur de capture (`blocs_reglages`). Couper un bloc masque ses

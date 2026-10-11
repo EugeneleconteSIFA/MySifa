@@ -468,11 +468,62 @@ async def inject_staging_bandeau(request: Request, call_next):
 # Coût pour les autres rôles : un <script> de 20 Ko en cache navigateur, aucun
 # appel réseau tant que le raccourci n'a pas servi (le script résout le rôle
 # paresseusement). html2canvas n'est chargé qu'à la première capture.
-_TACHE_QUICK_TAG = b'<script src="/static/mysifa_tache_quick.js?v=2" defer></script>'
+_TACHE_QUICK_TAG = b'<script src="/static/mysifa_tache_quick.js?v=3" defer></script>'
 # Même logique pour la capture de blocs en widget d'accueil (mysifa_blocs.js) :
 # un bloc capturable doit l'être sur toutes les pages, sans liste à tenir.
 _BLOCS_TAG = f'<script src="/static/mysifa_blocs.js?v={APP_VERSION}" defer></script>'.encode()
 _BODY_CLOSE_RE = re.compile(rb"</body>", re.IGNORECASE)
+_HEAD_OPEN_RE = re.compile(rb"<head(?:\s[^>]*)?>", re.IGNORECASE)
+
+# ── Boutons flottants (messagerie, post-it, assistant IA, calculette…) ──────
+# Même principe : injectés dans toute page connectée qui ne les inclut pas
+# déjà, au lieu d'être recopiés page par page — plusieurs modules n'en avaient
+# aucun. Le réglage par appli (Paramètres › Audit › Widgets et tableaux de
+# bord, app/services/boutons_flottants.py) part dans le <head> : réglage lu
+# par les scripts, et CSS qui masque les boutons coupés. Un script absent de la
+# page n'est ajouté que si son bouton est actif dans cette appli.
+_BOUTONS_CSS = (
+    (b"/static/mysifa_dock.css", None),
+    (b"/static/mysifa_postit.css", "postit"),
+    (b"/static/mysifa_ai_chat.css", "ia"),
+)
+# Ordre de chargement imposé : le dock d'abord, la messagerie dans l'ordre de
+# ses trois fichiers, le démarreur en dernier.
+_BOUTONS_JS = (
+    (b"/static/mysifa_dock.js", None),
+    (b"/static/mysifa_postit.js", "postit"),
+    (b"/static/mysifa_calc.js", "calculette"),
+    (b"/static/mysifa_ai_chat.js", "ia"),
+    (b"/static/chat_mentions.js", "messagerie"),
+    (b"/static/chat_widget.js", "messagerie"),
+    (b"/static/chat_widget_v2.js", "messagerie"),
+)
+
+
+def _boutons_flottants(request: Request, body: bytes) -> tuple[bytes, bytes]:
+    """(ce qui va dans le <head>, ce qui va avant </body>) pour cette page."""
+    from app.services import boutons_flottants as _bf
+    appli = _bf.appli_de_chemin(request.url.path)
+    if not appli:
+        return b"", b""
+    from app.core.database import get_db as _gdb
+    reglages = _bf.reglages_en_cache(_gdb)
+    tete = _bf.tete_de_page(reglages, appli).encode("utf-8")
+    # Sans session, la page renvoie vers la connexion : rien à démarrer. Dans
+    # un widget d'accueil ou une iframe (?widget=, ?embed=), pas de boutons.
+    q = request.query_params
+    if not request.cookies.get("sifa_token") or "widget" in q or q.get("embed") == "1":
+        return tete, b""
+    off = set(_bf.coupes(reglages, appli))
+    pied = b""
+    for chemin, cle in _BOUTONS_CSS:
+        if chemin not in body and (cle is None or cle not in off):
+            pied += b'<link rel="stylesheet" href="' + chemin + b'">'
+    for chemin, cle in _BOUTONS_JS:
+        if chemin + b'"' not in body and chemin + b"?" not in body and (cle is None or cle not in off):
+            pied += b'<script src="' + chemin + b'"></script>'
+    pied += ('<script src="/static/mysifa_boutons.js?v=%s"></script>' % APP_VERSION).encode()
+    return tete, pied
 
 
 @app.middleware("http")
@@ -496,6 +547,20 @@ async def inject_tache_quick(request: Request, call_next):
     # donc rien à y injecter.
     p = request.url.path
     _tags = b"".join(t for t in (_TACHE_QUICK_TAG, _BLOCS_TAG) if t not in body)
+    _tete = b""
+    if not p.startswith("/portail/") and b"mysifa-boutons-off" not in body and b"__MYSIFA_BOUTONS__=" not in body:
+        try:
+            _tete, _pied = _boutons_flottants(request, body)
+            _tags = _pied + _tags
+        except Exception:
+            # Un réglage illisible ne doit jamais casser une page.
+            _tete = b""
+    if _tete:
+        _h = _HEAD_OPEN_RE.search(body)
+        if _h:
+            body = body[:_h.end()] + _tete + body[_h.end():]
+        else:
+            _tags = _tete + _tags
     if p.startswith("/portail/") or not _tags:
         new_body = body
     else:

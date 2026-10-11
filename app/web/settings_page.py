@@ -955,7 +955,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
       </button>
       <button type="button" class="nav-btn" data-req-section="blocs" data-tab="blocs">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>
-        Blocs capturables
+        Widgets et tableaux de bord
       </button>
       <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="fsc">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1179,7 +1179,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             </button>
             <button type="button" class="menu-item" data-goto="blocs" data-req-section="blocs">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg></span>
-              <span class="mi-body"><span class="mi-lbl">Blocs capturables</span><span class="mi-desc">Ce que les tableaux de bord de l'accueil peuvent épingler, et leur usage.</span></span>
+              <span class="mi-body"><span class="mi-lbl">Widgets et tableaux de bord</span><span class="mi-desc">Blocs capturables par les tableaux de bord, et boutons flottants de chaque application.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
             <button type="button" class="menu-item" data-goto="fsc">
@@ -3522,7 +3522,7 @@ function syncSettingsPageHead(tabId) {
     notifications: { title: 'Notifications',  sub: "Pastilles rouges par service, sur les applis de l'écran d'accueil" },
     audit:        { title: 'Audit',           sub: 'Log d\'activité' },
     fsc:          { title: 'Registre FSC',    sub: '' },
-    blocs:        { title: 'Blocs capturables', sub: "Tableaux de bord de l'accueil" },
+    blocs:        { title: 'Widgets et tableaux de bord', sub: "Blocs capturables · boutons flottants par application" },
     api:          { title: 'Clés API',        sub: 'Tokens d\'intégration' },
     printers:     { title: 'Imprimantes',     sub: 'Configuration et templates' },
     promote:      { title: 'Déploiement',     sub: 'Promouvoir v1 → v2' },
@@ -10699,8 +10699,28 @@ function prWizToggleAgentMode() {
 // ce qui existe, ce qui sert (nombre de widgets), ce qui est nouveau, et on
 // peut couper la capture d'un bloc — ses widgets sont alors masqués, pas
 // supprimés.
-async function renderSettingsBlocs() {
-  const root = document.getElementById('blocs-admin');
+// L'écran a deux sections : les blocs capturables (ci-dessous) et les boutons
+// flottants par application (renderSettingsBoutons). Le choix de section reste
+// le temps de la session de l'onglet.
+let _widgetsSection = 'blocs';
+function renderSettingsBlocs() {
+  const hote = document.getElementById('blocs-admin');
+  if (!hote) return;
+  const onglet = (cle, lib) => '<button type="button" data-wsec="' + cle + '" style="padding:7px 14px;border-radius:999px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;' +
+    (_widgetsSection === cle ? 'background:var(--accent-bg);border:1px solid var(--accent);color:var(--accent)' : 'background:var(--card);border:1px solid var(--border);color:var(--text)') +
+    '">' + lib + '</button>';
+  hote.innerHTML = '<div style="max-width:1100px;margin:0 auto 14px;display:flex;gap:8px;flex-wrap:wrap">' +
+    onglet('blocs', 'Blocs capturables') + onglet('boutons', 'Boutons flottants par application') + '</div>' +
+    '<div id="widgets-section"></div>';
+  hote.querySelectorAll('[data-wsec]').forEach(b => b.addEventListener('click', () => {
+    _widgetsSection = b.getAttribute('data-wsec');
+    renderSettingsBlocs();
+  }));
+  if (_widgetsSection === 'boutons') renderSettingsBoutons(); else renderSettingsBlocsCapturables();
+}
+
+async function renderSettingsBlocsCapturables() {
+  const root = document.getElementById('widgets-section');
   if (!root) return;
   root.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:13px">Chargement…</div>';
   let blocs = [];
@@ -10793,6 +10813,81 @@ async function renderSettingsBlocs() {
         if (await regler(b.nom, b.capturable)) b.nouveau = false;
       }
       dessiner();
+    });
+  }
+  dessiner();
+}
+
+// ── Boutons flottants par application ─────────────────────────────────
+// Superadmin uniquement, réglage valable pour tout le monde. Les boutons et
+// les applications sont déclarés dans le code (app/services/boutons_flottants.py) ;
+// ici on coupe ou réactive un bouton dans une appli. Un bouton propre à une
+// appli (Métrage bobine, Carte de France) n'a qu'une case réglable.
+async function renderSettingsBoutons() {
+  const root = document.getElementById('widgets-section');
+  if (!root) return;
+  root.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:13px">Chargement…</div>';
+  let g;
+  try {
+    const r = await fetch('/api/accueil/boutons/admin', { credentials: 'include' });
+    if (!r.ok) throw new Error('Chargement impossible (' + r.status + ').');
+    g = await r.json();
+  } catch (e) {
+    root.innerHTML = '<div style="padding:20px;color:var(--danger);font-size:13px">' + escHtml(e.message) + '</div>';
+    return;
+  }
+
+  function dessiner() {
+    const bs = g.boutons || [];
+    const coupes = bs.reduce((t, b) => t + Object.values(b.etats).filter(v => v === false).length, 0);
+    let html = '<div style="max-width:1100px;margin:0 auto;padding:0 0 40px">' +
+      '<p style="font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.5">' +
+      'Les boutons en bas à droite de l\'écran, application par application. Couper une case masque le bouton ' +
+      'pour tous les utilisateurs de cette application, au prochain chargement de page. ' +
+      'L\'assistant IA reste réservé aux rôles qui y ont droit. ' +
+      (coupes ? '<b style="color:var(--text)">' + coupes + ' case' + (coupes > 1 ? 's coupées' : ' coupée') + '.</b>' : 'Tout est activé.') +
+      '</p><div class="card" style="padding:0;overflow:auto">' +
+      '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+      '<thead><tr style="color:var(--muted);font-size:12px;text-align:left">' +
+      '<th style="padding:10px 14px;position:sticky;left:0;background:var(--card)">Application</th>' +
+      bs.map(b => '<th style="padding:10px 8px;text-align:center;vertical-align:bottom;min-width:92px">' +
+        '<div style="font-weight:700;color:var(--text);font-size:12px">' + escHtml(b.libelle) + '</div>' +
+        (b.propre ? '<div style="font-size:11px;font-weight:400">propre à ' + escHtml(b.propre_libelle || b.propre) + '</div>'
+                  : (b.detail ? '<div style="font-size:11px;font-weight:400">' + escHtml(b.detail) + '</div>' : '')) +
+        '</th>').join('') +
+      '</tr></thead><tbody>' +
+      (g.applis || []).map(a => '<tr style="border-top:1px solid var(--border)">' +
+        '<td style="padding:8px 14px;font-weight:600;white-space:nowrap;position:sticky;left:0;background:var(--card)">' + escHtml(a.libelle) + '</td>' +
+        bs.map(b => {
+          const v = b.etats[a.code];
+          if (v === null || v === undefined) {
+            return '<td style="padding:8px;text-align:center;color:var(--muted)" title="Propre à ' + escAttr(b.propre_libelle || '') + '">—</td>';
+          }
+          return '<td style="padding:8px;text-align:center"><label class="toggle" title="' +
+            escAttr((v ? 'Couper ' : 'Activer ') + b.libelle + ' dans ' + a.libelle) + '">' +
+            '<input type="checkbox" data-bf-appli="' + escAttr(a.code) + '" data-bf-bouton="' + escAttr(b.cle) + '"' + (v ? ' checked' : '') + '>' +
+            '<span class="toggle-track"><span class="toggle-thumb"></span></span></label></td>';
+        }).join('') + '</tr>').join('') +
+      '</tbody></table></div></div>';
+    root.innerHTML = html;
+    root.querySelectorAll('input[data-bf-appli]').forEach(inp => {
+      inp.addEventListener('change', async () => {
+        inp.disabled = true;
+        try {
+          const r = await fetch('/api/accueil/boutons/admin', {
+            method: 'PUT', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ appli: inp.getAttribute('data-bf-appli'), bouton: inp.getAttribute('data-bf-bouton'), actif: inp.checked })
+          });
+          if (!r.ok) throw new Error();
+          g = await r.json();
+          toast(inp.checked ? 'Bouton activé.' : 'Bouton coupé.');
+        } catch (e) {
+          inp.checked = !inp.checked;
+          toast('Réglage impossible.', true);
+        }
+        dessiner();
+      });
     });
   }
   dessiner();
