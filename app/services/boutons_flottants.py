@@ -92,7 +92,7 @@ BOUTONS: tuple[Bouton, ...] = (
     Bouton("calculette", "Calculette", "", "#_calc_fab,#_calc_panel"),
     Bouton("capture", "Capture tableau de bord", "Bouton et raccourci Alt+C",
            "#mysifa-cap-fab"),
-    Bouton("tache", "Tâche rapide", "Raccourci Option+T, sans icône", None),
+    Bouton("tache", "Tâche rapide", "Raccourci Option+T", None),
     Bouton("carte_france", "Carte de France (délais)", "", "#expe-carte-fab,#expe-carte-panel",
            appli="expe"),
     Bouton("metrage", "Métrage bobine", "", "#mtr-fab,#mtr-panel", appli="stock"),

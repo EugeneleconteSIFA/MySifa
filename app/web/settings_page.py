@@ -10709,7 +10709,9 @@ function renderSettingsBlocs() {
   const onglet = (cle, lib) => '<button type="button" data-wsec="' + cle + '" style="padding:7px 14px;border-radius:999px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;' +
     (_widgetsSection === cle ? 'background:var(--accent-bg);border:1px solid var(--accent);color:var(--accent)' : 'background:var(--card);border:1px solid var(--border);color:var(--text)') +
     '">' + lib + '</button>';
-  hote.innerHTML = '<div style="max-width:1100px;margin:0 auto 14px;display:flex;gap:8px;flex-wrap:wrap">' +
+  // Tout aligné à gauche, sous le titre de la page : onglets et contenu
+  // partagent le même bord.
+  hote.innerHTML = '<div style="margin:0 0 14px;display:flex;gap:8px;flex-wrap:wrap">' +
     onglet('blocs', 'Blocs capturables') + onglet('boutons', 'Boutons flottants par application') + '</div>' +
     '<div id="widgets-section"></div>';
   hote.querySelectorAll('[data-wsec]').forEach(b => b.addEventListener('click', () => {
@@ -10757,7 +10759,7 @@ async function renderSettingsBlocsCapturables() {
     blocs.forEach(b => { (parAppli[b.appli] = parAppli[b.appli] || []).push(b); });
     const applis = Object.keys(parAppli).sort((x, y) => nomAppli(x).localeCompare(nomAppli(y), 'fr'));
 
-    let html = '<div style="max-width:900px;margin:0 auto;padding:0 0 40px">' +
+    let html = '<div style="max-width:1100px;margin:0;padding:0 0 40px">' +
       '<p style="font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.5">' +
       'Les blocs sont déclarés dans le code. Ici, on suit leur usage et on peut couper la capture d\'un bloc : ' +
       'les indicateurs existants sont masqués, et réapparaissent si on le réactive.</p>' +
@@ -10840,7 +10842,7 @@ async function renderSettingsBoutons() {
   function dessiner() {
     const bs = g.boutons || [];
     const coupes = bs.reduce((t, b) => t + Object.values(b.etats).filter(v => v === false).length, 0);
-    let html = '<div style="max-width:1100px;margin:0 auto;padding:0 0 40px">' +
+    let html = '<div style="max-width:1100px;margin:0;padding:0 0 40px">' +
       '<p style="font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.5">' +
       'Les boutons en bas à droite de l\'écran, application par application. Couper une case masque le bouton ' +
       'pour tous les utilisateurs de cette application, au prochain chargement de page. ' +
