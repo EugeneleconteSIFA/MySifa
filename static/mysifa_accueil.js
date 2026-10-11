@@ -97,6 +97,9 @@
       fermer: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
       valeurs: '<path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M2 14h4"/><path d="M10 8h4"/><path d="M18 16h4"/>',
       demande: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v6"/><path d="M9 10h6"/>',
+      "taille-s": '<path d="M4 12h16"/>',
+      "taille-m": '<rect x="4" y="6" width="16" height="12" rx="2"/>',
+      "taille-l": '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 16v-4"/><path d="M12 16V9"/><path d="M16 16v-6"/>',
       corbeille: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>'
     }[nom] || "";
     return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + "</svg>";
@@ -250,6 +253,41 @@
       ".mac-pied .seuil{flex:1;min-width:0;color:var(--danger,#f87171);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
       ".mac-pied .maj{margin-left:auto;white-space:nowrap;flex-shrink:0}",
       ".mac-pied .maj.ancienne{color:var(--warn,#fbbf24)}",
+      // Tendance (« ↑ 12 % ») : couleur selon le sens de la série, pas du signe.
+      ".mac-tend{font-size:11px;font-weight:600;color:var(--muted,#94a3b8);white-space:nowrap}",
+      ".mac-tend.bon{color:var(--success,#34d399)}",
+      ".mac-tend.mauvais{color:var(--danger,#f87171)}",
+      ".mac-pied .tend{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}",
+      ".mac-pied .tend:empty,.mac-pied .seuil:empty{display:none}",
+      ".mac-prin{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;min-width:0}",
+      ".mac-prin .mac-grand{flex:1;min-width:0}",
+      ".mac-spark{flex-shrink:0;display:block;width:84px;height:28px}",
+      // Grand format : graphique sur 30 jours ou liste, sous les valeurs.
+      ".mac-extra{padding:8px 10px 0 14px}",
+      ".mac-extra:empty{display:none}",
+      ".mac-graph svg{display:block;width:100%;height:auto}",
+      ".mac-graph-pied{display:flex;justify-content:space-between;gap:6px;margin-top:2px;font-size:11px;color:var(--muted,#94a3b8)}",
+      ".mac-graph-pied span:nth-child(2){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}",
+      ".mac-li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;align-items:center;padding:5px 0;border-top:1px solid var(--border,#1e293b);font-size:12px}",
+      ".mac-li:first-child{border-top:0;padding-top:0}",
+      ".mac-li .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text,#f1f5f9)}",
+      ".mac-li .q{font-size:11px;color:var(--muted,#94a3b8);font-variant-numeric:tabular-nums;white-space:nowrap}",
+      ".mac-li .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--bg,#0a0e17);overflow:hidden}",
+      ".mac-li .bar i{display:block;height:100%;background:var(--danger,#f87171)}",
+      ".mac-li-plus{font-size:11px;color:var(--muted,#94a3b8);padding-top:4px}",
+      ".mac-li-vide{font-size:12px;color:var(--muted,#94a3b8);font-style:italic}",
+      // Compact : une ligne — nom, valeur, tendance. Le reste se cache.
+      ".mac-court{display:none;align-items:center;gap:6px;flex-shrink:0;min-width:0;max-width:60%}",
+      ".mac-court .v{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".mac-court .u{font-size:11px;font-weight:600;color:var(--muted,#94a3b8)}",
+      ".mac-court.alerte .v,.mac-court.alerte .u{color:var(--danger,#f87171)}",
+      ".mac-carte.t-s .mac-court{display:inline-flex}",
+      ".mac-carte.t-s .mac-vals,.mac-carte.t-s .mac-pied,.mac-carte.t-s .mac-filtres,.mac-carte.t-s .mac-appli,.mac-carte.t-s .mac-extra{display:none!important}",
+      ".mac-carte.t-s .mac-ctete{padding:8px 10px 8px 14px}",
+      ".mac-carte.t-s.alerte .mac-point{width:9px;height:9px;padding:0;font-size:0}",
+      ".mac-tailles{display:inline-flex;gap:2px;padding:2px;border-radius:9px;background:var(--card,#111827);border:1px solid var(--border,#1e293b)}",
+      ".mac-tailles .mac-btn{border:0;height:22px;min-width:24px;padding:0 4px;background:transparent}",
+      ".mac-tailles .mac-btn.on{background:var(--accent-bg,rgba(34,211,238,.12));color:var(--accent,#22d3ee)}",
       "@media (min-width:900px) and (max-width:1199px){",
       "  .mac-carte .mac-cadre{position:absolute!important;left:-10000px!important;width:1100px!important;visibility:hidden!important}",
       "  .mac-carte .mac-cadre iframe{width:1100px!important;height:700px!important}",
@@ -374,7 +412,154 @@
     z.classList.toggle("ancienne", min >= 5);
   }
 
+  /* Taille : s compact, m standard, l grand. Le grand format n'existe que
+     pour un bloc qui a une série ou une liste (registre), et pas dans la
+     colonne de 220 px, trop étroite pour un graphique : il y redevient
+     standard, le choix restant enregistré pour un écran plus large. */
+  var COLONNE_ETROITE = window.matchMedia("(min-width:900px) and (max-width:1199px)");
+  var SERIE_MS = 10 * 60000;   // les jours passés ne bougent plus : série relue toutes les 10 min
+  var GRAPHE_JOURS = 30, SPARK_JOURS = 14, LISTE_MAX = 5;
+  // Passage dans la colonne de 220 px ou retour : le grand format suit.
+  function surLargeur() {
+    Object.keys(W.cartes).forEach(function (id) { afficherValeurs(W.cartes[id]); });
+    lireSources();
+  }
+  if (COLONNE_ETROITE.addEventListener) COLONNE_ETROITE.addEventListener("change", surLargeur);
+  else if (COLONNE_ETROITE.addListener) COLONNE_ETROITE.addListener(surLargeur);
+
+  function taille(c) {
+    var h = c.w.hauteur;
+    if (h === "s") return "s";
+    if (h === "l" && c.w.bloc_info && c.w.bloc_info.grand && !COLONNE_ETROITE.matches) return "l";
+    return "m";
+  }
+
+  function appliquerTaille(c) {
+    var t = taille(c);
+    c.el.classList.remove("t-s", "t-m", "t-l");
+    c.el.classList.add("t-" + t);
+    return t;
+  }
+
+  function jourDecale(n) {
+    var d = new Date(); d.setDate(d.getDate() + n);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+
+  // « 75 » minutes → « 1h 15min », comme fMin des pages MyProd.
+  function valeurUnite(v, unite) {
+    if (v == null) return "—";
+    if (unite === "min") {
+      var h = Math.floor(v / 60), m = Math.round(v % 60);
+      return h > 0 ? h + "h " + String(m).padStart(2, "0") + "min" : m + " min";
+    }
+    return Math.round(v).toLocaleString("fr-FR") + (unite ? " " + unite : "");
+  }
+
+  function tendanceDe(c, it) {
+    var t = c.serie && c.serie.tendances && c.serie.tendances[it.cle];
+    if (!t || !it.serie || !t.precedent) return null;
+    var pct = Math.round((t.actuel - t.precedent) / Math.abs(t.precedent) * 100);
+    var bon = pct === 0 ? null : (it.serie === "+") === (pct > 0);
+    return {
+      court: (pct > 0 ? "↑ " : pct < 0 ? "↓ " : "= ") + Math.abs(pct) + " %",
+      libelle: t.libelle,
+      cls: "mac-tend" + (bon === true ? " bon" : bon === false ? " mauvais" : "")
+    };
+  }
+
+  // Barres jour par jour ; un jour sans saisie (week-end, fermeture) reste un trait.
+  function barres(c, cle, jours, larg, haut, regle) {
+    var J = (c.serie && c.serie.jours) || {};
+    var vals = [];
+    for (var i = jours - 1; i >= 0; i--) {
+      var j = jourDecale(-i);
+      vals.push({ j: j, v: J[j] && J[j][cle] != null ? J[j][cle] : null });
+    }
+    var seuil = regle && (regle.op === "<" || regle.op === ">") && c.serie.quotidien ? nombre(regle.seuil) : null;
+    var max = Math.max.apply(null, vals.map(function (x) { return x.v || 0; }).concat([seuil || 0])) || 1;
+    max *= 1.08;
+    var pas = larg / jours, lb = Math.max(2, pas * 0.74);
+    var out = "";
+    vals.forEach(function (x, k) {
+      var X = (k * pas + (pas - lb) / 2).toFixed(1);
+      if (!x.v) {
+        out += '<rect x="' + X + '" y="' + (haut - 2) + '" width="' + lb.toFixed(1) + '" height="2" rx="1" fill="var(--border)"/>';
+        return;
+      }
+      var hb = Math.max(2, x.v / max * (haut - 2));
+      var rouge = seuil != null && alerteDeclenchee(regle, x.v);
+      out += '<rect x="' + X + '" y="' + (haut - hb).toFixed(1) + '" width="' + lb.toFixed(1) + '" height="' + hb.toFixed(1) +
+        '" rx="1.5" fill="' + (rouge ? "var(--danger)" : "var(--mac-a)") + '"><title>' + x.j.slice(8, 10) + "/" + x.j.slice(5, 7) +
+        "</title></rect>";
+    });
+    return { svg: out, vals: vals, seuil: seuil, max: max };
+  }
+
+  function sparkline(c, it) {
+    var b = barres(c, it.cle, SPARK_JOURS, 84, 28, null);
+    var e = document.createElement("span");
+    e.innerHTML = '<svg class="mac-spark" viewBox="0 0 84 28" aria-hidden="true">' + b.svg + "</svg>";
+    return e.firstChild;
+  }
+
+  function graphique(c, it) {
+    var H = 96, L = 276;
+    var b = barres(c, it.cle, GRAPHE_JOURS, L, H, it.regle);
+    var svg = b.svg;
+    if (b.seuil != null) {
+      var y = (H - b.seuil / b.max * (H - 2)).toFixed(1);
+      svg += '<line x1="0" y1="' + y + '" x2="' + L + '" y2="' + y + '" stroke="var(--danger)" stroke-width="1" stroke-dasharray="4 3"/>' +
+        '<text x="' + (L - 2) + '" y="' + Math.max(9, y - 3) + '" font-size="9" font-weight="600" fill="var(--danger)" text-anchor="end">Seuil</text>';
+    }
+    var g = document.createElement("div");
+    g.className = "mac-graph";
+    g.innerHTML = '<svg viewBox="0 0 ' + L + " " + H + '" role="img" aria-label="' + esc(it.lib) + ' sur 30 jours">' + svg + "</svg>";
+    var pleins = b.vals.filter(function (x) { return x.v; });
+    var moy = pleins.length ? pleins.reduce(function (t, x) { return t + x.v; }, 0) / pleins.length : null;
+    var hors = b.seuil != null ? pleins.filter(function (x) { return alerteDeclenchee(it.regle, x.v); }).length : 0;
+    var pied = document.createElement("div");
+    pied.className = "mac-graph-pied";
+    var d0 = b.vals[0].j, d1 = b.vals[b.vals.length - 1].j;
+    pied.appendChild(span("", d0.slice(8, 10) + "/" + d0.slice(5, 7)));
+    var mil = span("", (moy == null ? "Aucune saisie" : "Moy. " + valeurUnite(moy, it.uniteLib) + " / jour") +
+      (hors ? " · " + hors + " j hors seuil" : ""));
+    mil.title = "Moyenne des jours travaillés sur 30 jours";
+    pied.appendChild(mil);
+    pied.appendChild(span("", d1.slice(8, 10) + "/" + d1.slice(5, 7)));
+    g.appendChild(pied);
+    return g;
+  }
+
+  function liste(c) {
+    var z = document.createElement("div");
+    var L = c.liste;
+    if (!L) return z;
+    if (!L.lignes || !L.lignes.length) { z.appendChild(span("mac-li-vide", "Aucune ligne.")); return z; }
+    L.lignes.slice(0, LISTE_MAX).forEach(function (l) {
+      var r = document.createElement("div");
+      r.className = "mac-li";
+      var n = span("n", l.libelle || "—");
+      n.title = l.libelle || "";
+      r.appendChild(n);
+      r.appendChild(span("q", l.detail || ""));
+      if (l.ratio != null) {
+        var bar = document.createElement("span");
+        bar.className = "bar";
+        var i = document.createElement("i");
+        i.style.width = Math.round(Math.max(0.03, l.ratio) * 100) + "%";
+        bar.appendChild(i);
+        r.appendChild(bar);
+      }
+      z.appendChild(r);
+    });
+    var reste = (L.total || L.lignes.length) - LISTE_MAX;
+    if (reste > 0) z.appendChild(span("mac-li-plus", "+ " + reste + (reste > 1 ? " autres" : " autre")));
+    return z;
+  }
+
   function afficherValeurs(c) {
+    var t_ = appliquerTaille(c);
     var w = c.w;
     var defs = {};
     ((w.bloc_info && w.bloc_info.valeurs) || []).forEach(function (v) { defs[v.cle] = v; });
@@ -388,7 +573,7 @@
       return {
         cle: v.cle, texte: texte, ton: d.ton ? ((c.tons && c.tons[v.cle]) || "neutre") : null,
         lib: lu.lib, libComplet: d.libelle || v.cle, unite: uniteDe(t, lu.unite), uniteLib: lu.unite, t: t,
-        alerte: !texte && alerteDeclenchee(v.alerte, nb_), regle: v.alerte
+        alerte: !texte && alerteDeclenchee(v.alerte, nb_), regle: v.alerte, serie: d.serie || null
       };
     });
     var zone = c.el.querySelector(".mac-vals");
@@ -407,8 +592,16 @@
         g.appendChild(span("v", prin.t || "—"));
         if (prin.t && prin.unite) g.appendChild(span("u", prin.unite));
         g.appendChild(span("l", prin.lib));
-        zone.appendChild(g);
         grand = g;
+        if (t_ === "m" && prin.serie && c.serie) {
+          var lp = document.createElement("div");
+          lp.className = "mac-prin";
+          lp.appendChild(g);
+          lp.appendChild(sparkline(c, prin));
+          zone.appendChild(lp);
+        } else {
+          zone.appendChild(g);
+        }
       }
     }
 
@@ -465,6 +658,37 @@
     } else {
       seuil.textContent = "";
     }
+    // Tendance de la première valeur suivie jour par jour ; l'alerte passe devant.
+    var suivie = items.filter(function (it) { return tendanceDe(c, it); })[0];
+    var td = suivie ? tendanceDe(c, suivie) : null;
+    var zt = c.el.querySelector(".mac-pied .tend");
+    zt.className = "tend" + (td && !enAlerte.length ? " " + td.cls : "");
+    zt.textContent = td && !enAlerte.length ? td.court + " " + td.libelle : "";
+    zt.title = td ? (items.length > 1 ? suivie.lib + " " : "") + td.court + " " + td.libelle : "";
+
+    // Compact : la première valeur et sa tendance, dans l'en-tête.
+    var court = c.el.querySelector(".mac-court");
+    court.innerHTML = "";
+    court.className = "mac-court" + (prin && prin.alerte ? " alerte" : "");
+    if (prin) {
+      if (prin.ton && prin.t) court.appendChild(badge(prin.t, prin.ton, true));
+      else {
+        court.appendChild(span("v", prin.t || "—"));
+        if (prin.t && prin.unite) court.appendChild(span("u", prin.unite));
+      }
+      var tp = tendanceDe(c, prin);
+      if (tp) { var e_ = span(tp.cls, tp.court); e_.title = tp.libelle; court.appendChild(e_); }
+    }
+
+    // Grand : graphique de la première valeur suivie, sinon la liste du bloc.
+    var extra = c.el.querySelector(".mac-extra");
+    extra.innerHTML = "";
+    if (t_ === "l") {
+      var ig = items.filter(function (it) { return it.serie; })[0];
+      if (ig && c.serie) extra.appendChild(graphique(c, ig));
+      else if (c.w.bloc_info && c.w.bloc_info.liste && c.liste) extra.appendChild(liste(c));
+    }
+
     c.el.classList.toggle("alerte", enAlerte.length > 0);
     c.el.querySelector(".mac-point").title = enAlerte.length
       ? "Alerte : " + enAlerte.map(function (x) { return x.libComplet; }).join(", ") : "";
@@ -505,11 +729,12 @@
     el.className = "mac-carte aff-valeurs";
     el.setAttribute("data-id", w.id);
     el.innerHTML =
-      '<div class="mac-ctete" title="Ouvrir la page"><span class="mac-nom"></span><span class="mac-point">Alerte</span><span class="mac-appli" hidden></span>' +
+      '<div class="mac-ctete" title="Ouvrir la page"><span class="mac-nom"></span><span class="mac-court"></span><span class="mac-point">Alerte</span><span class="mac-appli" hidden></span>' +
       '<button type="button" class="mac-corb" title="Supprimer cet indicateur" aria-label="Supprimer cet indicateur">' + icone("corbeille") + "</button></div>" +
       '<div class="mac-filtres" hidden></div>' +
       '<div class="mac-vals"></div>' +
-      '<div class="mac-pied"><span class="seuil"></span><span class="maj"></span></div>' +
+      '<div class="mac-extra"></div>' +
+      '<div class="mac-pied"><span class="tend"></span><span class="seuil"></span><span class="maj"></span></div>' +
       '<div class="mac-indispo">Bloc indisponible à cette taille. Cliquez sur le titre pour ouvrir la page.</div>' +
       '<div class="mac-cadre"><div class="mac-attente">Chargement…</div><div class="mac-voile"></div></div>' +
       '<div class="mac-outils"></div>';
@@ -626,7 +851,16 @@
       setTimeout(function () { inp.focus(); inp.select(); }, 0);
       return;
     }
+    var tailles = [["s", "Compact : une ligne"], ["m", "Standard"]];
+    if (w.bloc_info && w.bloc_info.grand) {
+      tailles.push(["l", w.bloc_info.liste ? "Grand : liste détaillée" : "Grand : graphique sur 30 jours"]);
+    }
+    var hc = w.hauteur === "s" || w.hauteur === "l" ? w.hauteur : "m";
     o.innerHTML =
+      '<span class="mac-tailles" role="group" aria-label="Taille">' + tailles.map(function (t) {
+        return '<button type="button" class="mac-btn' + (t[0] === hc ? " on" : "") + '" data-act="taille" data-t="' + t[0] +
+          '" title="' + t[1] + '" aria-pressed="' + (t[0] === hc) + '">' + icone("taille-" + t[0]) + "</button>";
+      }).join("") + "</span>" +
       '<span class="mac-esp"></span>' +
       '<button type="button" class="mac-btn" data-act="val" title="Valeurs affichées et alertes">' + icone("valeurs") + "</button>" +
       '<button type="button" class="mac-btn" data-act="nom" title="Renommer">' + icone("reglages") + "</button>" +
@@ -636,6 +870,12 @@
       var b = e.target.closest("button");
       if (!b) return;
       e.stopPropagation();
+      if (b.getAttribute("data-act") === "taille") {
+        var nt = b.getAttribute("data-t");
+        if (nt === hc) return;
+        patcher(c, { hauteur: nt }).then(function () { dessinerOutils(c); lireSources(); }).catch(function () {});
+        return;
+      }
       if (b.getAttribute("data-act") === "val") {
         modifierValeurs(c);
       } else if (b.getAttribute("data-act") === "nom") {
@@ -967,6 +1207,28 @@
     return (S && typeof S[w.bloc] === "function") ? S[w.bloc] : null;
   }
 
+  /* Série (tendance, mini-courbe, graphique) et liste (grand format) : mêmes
+     API que les valeurs, servies par le cache du tour. La série n'est relue
+     que toutes les 10 minutes, ou quand les filtres changent. */
+  function chargerExtras(c, json, params) {
+    var bi = c.w.bloc_info || {};
+    var S_ = window.MySifaBlocsSeries || {}, L_ = window.MySifaBlocsListes || {};
+    var ctx = { json: json, objet: c.w.objet, params: params };
+    var attente = [];
+    var aSerie = typeof S_[c.w.bloc] === "function" && (bi.valeurs || []).some(function (v) { return v.serie; });
+    if (aSerie && (!c.serieLe || Date.now() - c.serieLe > SERIE_MS || c.serieCapture !== c.w.url_capture)) {
+      attente.push(Promise.resolve().then(function () { return S_[c.w.bloc](ctx); }).then(function (r) {
+        c.serie = r || null; c.serieLe = Date.now(); c.serieCapture = c.w.url_capture;
+      }).catch(function () { /* série facultative : la carte reste sans tendance */ }));
+    }
+    if (taille(c) === "l" && bi.liste && typeof L_[c.w.bloc] === "function") {
+      attente.push(Promise.resolve().then(function () { return L_[c.w.bloc](ctx); }).then(function (r) {
+        c.liste = r || null;
+      }).catch(function () { /* liste facultative */ }));
+    }
+    if (attente.length) Promise.all(attente).then(function () { if (W.cartes[c.w.id]) afficherValeurs(c); });
+  }
+
   function lireSources() {
     // Cache d'un tour : dix widgets sur la même API = un seul appel.
     var cache = {};
@@ -998,6 +1260,7 @@
           c.majLe = Date.now();
           c.el.classList.add("prete");
           afficherValeurs(c);
+          chargerExtras(c, json, params);
         })
         .catch(function (e) {
           // Session expirée : plus rien ne doit rester à l'écran.
@@ -1154,7 +1417,7 @@
       {
         icon: ICO('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>'),
         title: "Personnaliser la colonne",
-        body: "<p><span class=\"mguide-hl\">Personnaliser</span> permet de <strong>glisser</strong> chaque indicateur à sa place. Sous chacun : les curseurs changent les <strong>filtres</strong>, les <strong>valeurs</strong> et leurs alertes, le crayon le <strong>renomme</strong>, la corbeille le supprime (deux clics). L'icône tableau, en haut, replie la colonne.</p>",
+        body: "<p><span class=\"mguide-hl\">Personnaliser</span> permet de <strong>glisser</strong> chaque indicateur à sa place. Sous chacun : trois boutons règlent la <strong>taille</strong> (compact sur une ligne, standard, grand avec graphique sur 30 jours ou liste quand le bloc en a), les curseurs changent les <strong>filtres</strong>, les <strong>valeurs</strong> et leurs alertes, le crayon le <strong>renomme</strong>, la corbeille le supprime (deux clics). L'icône tableau, en haut, replie la colonne.</p>",
         illu: SVG +
           '<rect x="80" y="10" width="180" height="130" rx="10" fill="var(--bg)" stroke="var(--border)"/>' +
           '<rect x="90" y="18" width="90" height="16" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="135" y="29" font-size="7" fill="var(--text2)" text-anchor="middle">TABLEAUX DE BORD</text>' +

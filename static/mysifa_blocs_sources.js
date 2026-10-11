@@ -782,5 +782,148 @@
     // (_prodAggBy, hors repiquage) — chargement de page en attendant.
   };
 
+  /* ── Séries par jour (tendance, mini-courbe, grand format) ─────────────
+     Une série rend { jours: {"AAAA-MM-JJ": {cle: nombre}}, quotidien,
+     tendances: {cle: {actuel, precedent, libelle}} }. Elle s'additionne jour
+     par jour (registre : series=). La tendance compare la période capturée à
+     la précédente de même durée, calculée sur la même série des deux côtés. */
+  function jourIso(d) { return iso(d); }
+  function decaler(isoJ, n) {
+    var d = new Date(isoJ + "T12:00:00"); d.setDate(d.getDate() + n); return jourIso(d);
+  }
+  function ecartJours(a, b) {
+    return Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / 86400000);
+  }
+  // Période précédente, mêmes raccourcis que periodeProd().
+  function periodePrecedente(cle, p) {
+    var n = ecartJours(p.from, p.to) + 1;
+    if (cle === "thisMonth") {
+      var f = new Date(p.from + "T12:00:00"), t = new Date(p.to + "T12:00:00");
+      var d0 = new Date(f.getFullYear(), f.getMonth() - 1, 1, 12);
+      var fin = new Date(f.getFullYear(), f.getMonth(), 0, 12);
+      var d1 = new Date(f.getFullYear(), f.getMonth() - 1, Math.min(t.getDate(), fin.getDate()), 12);
+      return { from: jourIso(d0), to: jourIso(d1), libelle: "vs même période du mois dernier" };
+    }
+    if (cle === "prevMonth") {
+      var g = new Date(p.from + "T12:00:00");
+      return { from: jourIso(new Date(g.getFullYear(), g.getMonth() - 1, 1, 12)),
+               to: jourIso(new Date(g.getFullYear(), g.getMonth(), 0, 12)), libelle: "vs mois précédent" };
+    }
+    if (cle === "last7" || cle === "last30") {
+      return { from: decaler(p.from, -n), to: decaler(p.from, -1), libelle: "vs " + n + " jours précédents" };
+    }
+    if (cle === "dates") return { from: decaler(p.from, -n), to: decaler(p.from, -1), libelle: "vs période précédente" };
+    // Hier, aujourd'hui : le jour travaillé précédent, trouvé dans la série.
+    return { jourTravaille: true, from: decaler(p.from, -45), to: decaler(p.from, -1), libelle: "vs jour travaillé précédent" };
+  }
+
+  function somme(jours, du, au, cle) {
+    var t = 0, vu = false;
+    Object.keys(jours).forEach(function (j) {
+      if (j >= du && j <= au && jours[j][cle] != null) { t += jours[j][cle]; vu = true; }
+    });
+    return vu ? t : null;
+  }
+
+  function serieProd(ctx, lire) {
+    var cleP = ctx.params.get("bloc_periode") || "yesterday";
+    return periodeProd(ctx).then(function (p) {
+      var prec = periodePrecedente(cleP, p);
+      var auj = iso(new Date());
+      var du = [prec.from, decaler(auj, -29)].sort()[0];
+      var q = new URLSearchParams();
+      ctx.params.getAll("bloc_machine").forEach(function (m) { q.append("machine", m); });
+      q.set("date_from", du);
+      q.set("date_to", auj);
+      return ctx.json("/api/dashboard/production?" + q.toString()).then(function (d) {
+        var jours = {};
+        ((d && d.by_day) || []).forEach(function (row) {
+          if (row && /^\d{4}-\d{2}-\d{2}$/.test(String(row.key))) jours[row.key] = lire(row);
+        });
+        var cles = Object.keys(lire({}));
+        var tendances = {};
+        var pDu = prec.from, pAu = prec.to;
+        if (prec.jourTravaille) {
+          var avant = Object.keys(jours).filter(function (j) { return j < p.from; }).sort();
+          if (!avant.length) return { jours: jours, quotidien: true, tendances: {} };
+          pDu = pAu = avant[avant.length - 1];
+        }
+        cles.forEach(function (k) {
+          var a = somme(jours, p.from, p.to, k), b = somme(jours, pDu, pAu, k);
+          if (a != null && b) tendances[k] = { actuel: a, precedent: b, libelle: prec.libelle };
+        });
+        return { jours: jours, quotidien: p.from === p.to, tendances: tendances };
+      });
+    });
+  }
+
+  var SERIES = {
+    // Même agrégat by_day que le tableau « Par jour » de la Vue d'ensemble.
+    "prod.ensemble.quantites": function (ctx) {
+      return serieProd(ctx, function (row) { return { metrage: Number(row.metrage_m || 0) }; });
+    },
+    // Comme la page : la production affichée inclut les arrêts.
+    "prod.ensemble.temps": function (ctx) {
+      return serieProd(ctx, function (row) {
+        return {
+          calage: Math.round(Number(row.calage_min || 0)),
+          production: Math.round(Number(row.prod_min || 0) + Number(row.arret_min || 0)),
+          arrets: Math.round(Number(row.arret_min || 0))
+        };
+      });
+    }
+  };
+
+  /* ── Listes (grand format) ─────────────────────────────────────────────
+     Une liste rend { lignes: [{libelle, detail, ratio}], total }. ratio
+     (0 à 1) dessine une barre de remplissage. Lignes et mises en forme sont
+     celles de la page ; seul l'ordre peut différer (le plus urgent d'abord). */
+  // MyStock (mysifa_stock_modals.js) : mpUniteNom / mpUniteShort / mpStockLine.
+  function mpUniteCourte(cat) {
+    var c = String(cat || "").toLowerCase();
+    if (c === "frontal" || c === "glassine" || c === "complexe") return "bob.";
+    if (c === "adhesif") return "kg";
+    if (c === "autre") return "u.";
+    return "pal.";
+  }
+  function fN0(n) { return Number(n || 0).toLocaleString("fr-FR"); }
+  // MyExpé (expe_assets.py) : date d'enlèvement en jj/mm.
+  function jjmm(v) {
+    var m = String(v || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? m[3] + "/" + m[2] : "";
+  }
+
+  var LISTES = {
+    // Comme buildDashboardAlertes : « stock / min. seuil », la plus basse d'abord.
+    "stock.dashboard.reappro": function (ctx) {
+      return ctx.json("/api/stock/dashboard").then(function (d) {
+        var l = (d.alertes_mp || []).map(function (a) {
+          var u = mpUniteCourte(a.categorie), q = Number(a.quantite || 0), sl = Number(a.seuil_alerte || 0);
+          return {
+            libelle: (a.reference || "") + " — " + (a.designation || ""),
+            detail: fN0(q) + " " + u + " / min. " + fN0(sl) + " " + u,
+            ratio: sl > 0 ? Math.max(0, Math.min(1, q / sl)) : null
+          };
+        });
+        l.sort(function (x, y) { return (x.ratio == null ? 2 : x.ratio) - (y.ratio == null ? 2 : y.ratio); });
+        return { lignes: l, total: l.length };
+      });
+    },
+    // Comme renderExpeSuiviDeparts : client, transporteur, date, palettes.
+    "expe.departs.programmes": function (ctx) {
+      return ctx.json("/api/expe/departs/jour").then(function (rows) {
+        rows = Array.isArray(rows) ? rows : [];
+        var l = rows.map(function (r_) {
+          var det = [r_.transporteur || "", jjmm(r_.date_enlevement),
+                     r_.nb_palette != null ? r_.nb_palette + " pal." : ""].filter(Boolean).join(" · ");
+          return { libelle: r_.client || "—", detail: det, ratio: null };
+        });
+        return { lignes: l, total: l.length };
+      });
+    }
+  };
+
   window.MySifaBlocsSources = SOURCES;
+  window.MySifaBlocsSeries = SERIES;
+  window.MySifaBlocsListes = LISTES;
 })();

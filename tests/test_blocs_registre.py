@@ -126,6 +126,25 @@ for nom, b in reg.BLOCS.items():
             verifier(re.search(r"\{\s*" + re.escape(cle) + r"\s*:[^{}]*\}\s*\)", corps),
                      f"source {nom} : ton {cle!r} non rendu (troisième argument de r())")
 
+# ── 3quater-bis. Grand format : la série ou la liste existe ─────────────
+_noms_de = lambda objet: set(re.findall(r'^    "([a-z0-9.\-]+)": function', SOURCES.split("var " + objet + " = {", 1)[1].split("\n  };", 1)[0], flags=re.M)) \
+    if ("var " + objet + " = {") in SOURCES else set()
+SERIES_JS, LISTES_JS = _noms_de("SERIES"), _noms_de("LISTES")
+for nom, b in reg.BLOCS.items():
+    if b.series:
+        verifier(nom in SERIES_JS, f"{nom} : series= déclaré mais aucune entrée dans SERIES (mysifa_blocs_sources.js)")
+    if b.liste:
+        verifier(nom in LISTES_JS, f"{nom} : liste=True mais aucune entrée dans LISTES (mysifa_blocs_sources.js)")
+for nom in SERIES_JS | LISTES_JS:
+    verifier(nom in reg.BLOCS and reg.BLOCS[nom].grand, f"{nom} : série ou liste sans déclaration au registre")
+try:
+    reg.valider_widget({"bloc": "stock.dashboard.kpis", "hauteur": "l"}, creation=False)
+    verifier(False, "grand format accepté sur un bloc sans série ni liste")
+except ValueError:
+    pass
+verifier(reg.valider_widget({"bloc": "stock.dashboard.reappro", "hauteur": "l"}, creation=False)["hauteur"] == "l",
+         "grand format accepté sur un bloc à liste")
+
 # ── 3quinquies. Pastille d'appli : chaque icône est dessinée ────────────
 ACCUEIL_JS = Path("static/mysifa_accueil.js").read_text(encoding="utf-8")
 _icones = re.search(r"var ICONES_APPLI = \{(.*?)\n  \};", ACCUEIL_JS, flags=re.S)

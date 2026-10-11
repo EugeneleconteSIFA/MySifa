@@ -76,6 +76,28 @@ parenthèses (`("metrage", "Métrage (m)")` → « 37 112 m »). Six caractères
 plus. Une valeur déjà mise en forme avec son unité (« 42 min », « 12 k€ »)
 n'en reçoit pas une seconde.
 
+**Taille de l'indicateur** (décision du 11/10/2026) : colonne `hauteur` de
+`accueil_widgets`, `s` compact (une ligne : nom, valeur, tendance), `m`
+standard, `l` grand. Elle se règle dans Personnaliser (trois boutons sous la
+carte). Le grand format n'existe que pour un bloc qui déclare :
+
+- `series=(("metrage", "+"), …)` : une série **qui s'additionne jour par jour**
+  (métrage, minutes), jamais une moyenne ou une vitesse, ni un compte de
+  dossiers (un dossier sur deux jours compterait deux fois). Le sens `+` / `-`
+  dit si une hausse est bonne ; il colore la tendance. La source va dans
+  `SERIES` de `mysifa_blocs_sources.js` et rend `{jours, quotidien,
+  tendances}` : la période capturée comparée à la précédente de même durée
+  (jour travaillé précédent pour « hier »), calculée sur la même série des
+  deux côtés. Grand format = barres sur 30 jours, seuil d'alerte en pointillé
+  quand la période est d'un jour ; standard = mini-courbe sur 14 jours.
+- `liste=True` : la source va dans `LISTES` et rend `{lignes: [{libelle,
+  detail, ratio}], total}`, avec les libellés et mises en forme de la page.
+  Grand format = les 5 premières lignes, les plus urgentes d'abord.
+
+Le serveur refuse `hauteur="l"` sur un bloc qui n'a ni l'un ni l'autre. Dans
+la colonne de 220 px, le grand format s'affiche en standard. Le test du
+registre vérifie que chaque `series=` / `liste=True` a sa source.
+
 **Nombre distinct du texte** : quand la valeur affichée n'est pas un nombre
 (« 1h 57min »), poser aussi `data-bloc-nombre-<cle>` (`117`) : c'est lui que
 l'alerte compare.

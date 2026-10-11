@@ -34,7 +34,12 @@ from urllib.parse import parse_qsl, quote, urlencode, urlsplit
 # Plafond décidé le 03/10/2026 : au-delà, un widget devient illisible.
 VALEURS_MAX = 4
 NOM_WIDGET_MAX = 80
+# Taille de l'indicateur (colonne `hauteur`, nom gardé depuis l'affichage
+# « bloc ») : s compact (une ligne), m standard, l grand (graphique ou liste).
 HAUTEURS = ("s", "m", "l")
+# Sens d'une série : « + » quand une hausse est une bonne nouvelle (métrage),
+# « - » quand c'est l'inverse (arrêts). Il colore la tendance.
+SENS_SERIE = ("+", "-")
 AFFICHAGES = ("bloc", "valeurs")
 TYPES = ("chiffre", "liste", "tableau", "graphique", "etat", "objet", "fiche")
 # Opérateurs d'alerte : comparaison numérique, ou égalité pour un état
@@ -112,6 +117,17 @@ class Bloc:
     # data-bloc-ton-<cle> (ok, warn, danger, neutre) et la source rend
     # tons={cle: …}, tous deux lus d'un champ de l'API, jamais du libellé.
     tons: tuple = ()
+    # Clés qui ont une série par jour (source SERIES de mysifa_blocs_sources.js) :
+    # ((cle, sens), …). Elles reçoivent la tendance et la mini-courbe, et
+    # ouvrent le grand format en graphique sur 30 jours. Une série s'additionne
+    # jour par jour : une moyenne ou une vitesse n'en est pas une.
+    series: tuple = ()
+    # Le bloc sait lister ses lignes (source LISTES) : grand format en liste.
+    liste: bool = False
+
+    @property
+    def grand(self) -> bool:
+        return bool(self.series) or self.liste
 
 
 # Nom stable → bloc. Un nom ne change JAMAIS : pour renommer, créer le nouveau
@@ -124,6 +140,7 @@ BLOCS: dict[str, Bloc] = {
         type="liste",
         valeurs=(("lignes", "Matières sous seuil"),),
         acces="stock",
+        liste=True,
     ),
     "stock.matieres.categorie": Bloc(
         appli="stock", libelle="Catégorie de matières", url="/stock?tab=matieres",
@@ -190,6 +207,7 @@ BLOCS: dict[str, Bloc] = {
         type="tableau",
         valeurs=(("lignes", "Départs en attente"),),
         acces="expe",
+        liste=True,
     ),
     # ── MyProd › Production › Vue d'ensemble (static/mysifa_prod_core.js) ──
     "prod.ensemble.machines": Bloc(
@@ -229,6 +247,7 @@ BLOCS: dict[str, Bloc] = {
         valeurs=(("metrage", "Métrage (m)"), ("dossiers", "Dossiers produits"),
                  ("vitesse", "Vitesse (m/min)")),
         acces="prod",
+        series=(("metrage", "+"),),
     ),
     "prod.ensemble.temps": Bloc(
         appli="prod", libelle="Temps de production", url="/prod?page=production",
@@ -236,6 +255,7 @@ BLOCS: dict[str, Bloc] = {
         valeurs=(("production", "Production (min)"), ("calage", "Calage (min)"),
                  ("arrets", "Arrêts (min)")),
         acces="prod",
+        series=(("calage", "-"), ("production", "+"), ("arrets", "-")),
     ),
     "prod.ensemble.par-dossier": Bloc(
         appli="prod", libelle="Synthèse par dossier", url="/prod?page=production",
@@ -560,7 +580,9 @@ def valider_widget(data: dict, *, creation: bool) -> dict:
     if creation or "hauteur" in data:
         hauteur = data.get("hauteur") or "m"
         if hauteur not in HAUTEURS:
-            raise ValueError("Hauteur invalide — s, m ou l.")
+            raise ValueError("Taille invalide — compact, standard ou grand.")
+        if hauteur == "l" and bloc is not None and not bloc.grand:
+            raise ValueError("Grand format indisponible : ce bloc n'a ni historique ni liste.")
         out["hauteur"] = hauteur
 
     if creation and not out.get("valeurs"):
@@ -612,6 +634,11 @@ def erreurs_registre() -> list[str]:
         for t in b.tons:
             if t not in b.textes:
                 errs.append(f"{nom} : tons cite {t!r}, absent des textes — seul un texte se colore")
+        for t, sens in b.series:
+            if t not in cles or t in b.textes:
+                errs.append(f"{nom} : série {t!r} absente des valeurs, ou valeur texte")
+            if sens not in SENS_SERIE:
+                errs.append(f"{nom} : sens de série {sens!r} invalide (+ ou -)")
         if b.appli not in APPLIS:
             errs.append(f"{nom} : appli {b.appli!r} absente d'APPLIS (pastille de l'indicateur)")
         for t in b.textes:
