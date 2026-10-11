@@ -470,9 +470,7 @@ function renderCompta(){
       h('button',{className:'nav-btn'+(tab==='cession'?' active':''),onClick:()=>{set({comptaTab:'cession'});}},
         iconEl('clock',15),'  Cession (en cours)'),
       h('button',{className:'nav-btn'+(tab==='paie'?' active':''),onClick:()=>{if(!S.paieEmpLoaded){paieLoadEmployes();}paieLoadVars().then(()=>render());set({comptaTab:'paie'});}},
-        iconEl('credit-card',15),'  Paies'),
-      h('button',{className:'nav-btn'+(tab==='rhoutil'?' active':''),onClick:()=>{set({comptaTab:'rhoutil'});rhOutilLoad();}},
-        iconEl('users',15),'  Outil RH')
+        iconEl('credit-card',15),'  Paies')
     ),
     // Pied commun à toutes les applis (static/mysifa_sidebar.js, v3.3.0). Le
     // support garde la fenêtre de contact de la coquille (S.contactOpen) et la
@@ -760,8 +758,6 @@ function renderCompta(){
     );
   }else if(tab==='paie'){
     content=renderPaieTab();
-  }else if(tab==='rhoutil'){
-    content=renderRhOutilTab();
   }
 
   const body=h('div',{className:'app'},
@@ -769,8 +765,8 @@ function renderCompta(){
     h('main',{className:'main'},
       h('div',{className:'container'},
         topbar,
-          h('h1',null,S.comptaTab==='paie'?'Gestion des Paies':S.comptaTab==='rhoutil'?'Outil RH':'MyCompta'),
-        h('div',{className:'subtitle'},S.comptaTab==='paie'?'Saisie mensuelle · Export xlsx':S.comptaTab==='rhoutil'?'Employés suivis':'Import Factor → mise en forme → copier vers CW'),
+          h('h1',null,S.comptaTab==='paie'?'Gestion des Paies':'MyCompta'),
+        h('div',{className:'subtitle'},S.comptaTab==='paie'?'Saisie mensuelle · Export xlsx':'Import Factor → mise en forme → copier vers CW'),
         content
       )
     )

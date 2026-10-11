@@ -1,10 +1,10 @@
-"""MySifa — Outil RH (MyCompta) : contrat d'un employé suivi.
+"""MySifa — Outil RH (MyRH) : contrat d'un employé suivi.
 
 Le contrat (type, date de début, date de fin) est stocké dans la fiche Paie
 (paie_employes), seule source du statut : la Paie et l'Outil RH lisent et
 écrivent la même ligne. Ce module ne touche QUE ces trois colonnes ; le
 salaire, le taux horaire, les primes et le matricule restent à la Paie.
-Accès : celui de l'Outil RH (accès à MyCompta).
+Accès : celui de l'Outil RH (accès à MyRH).
 """
 
 from datetime import datetime

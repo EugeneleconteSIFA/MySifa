@@ -1876,7 +1876,9 @@ let S={
   // « /compta#rhoutil » ouvre directement l'Outil RH (lien d'un widget
   // d'accueil). Les autres onglets restent sur Factor : ils chargent leurs
   // données au clic, pas à l'ouverture.
-  comptaTab:(function(){try{return location.pathname==='/compta'&&location.hash==='#rhoutil'?'rhoutil':'factor';}catch(e){return 'factor';}})(),
+  // L'Outil RH a quitté MyCompta pour MyRH : un ancien lien « /compta#rhoutil »
+  // (favori, widget) mène à /rh.
+  comptaTab:(function(){try{if(location.pathname==='/compta'&&location.hash==='#rhoutil')location.replace('/rh');}catch(e){}return 'factor';})(),
   comptaFactorMode:'file',
   comptaPasteText:'',
   comptaAcheteurs:[],
@@ -10749,7 +10751,7 @@ function render(){
   const __keepScroll=__captureScroll();
   root.innerHTML='';
   document.body.classList.toggle('sb-open', !!S.sidebarOpen);
-  document.body.classList.toggle('has-topbar', S.app==='prod' || S.app==='stock' || S.app==='compta' || S.app==='expe' || S.app==='devis');
+  document.body.classList.toggle('has-topbar', S.app==='prod' || S.app==='stock' || S.app==='compta' || S.app==='myrh' || S.app==='expe' || S.app==='devis');
   document.body.classList.toggle('mysifa-app-prod', S.app==='prod');
   document.body.classList.toggle('mysifa-app-expe', S.app==='expe');
   const _prodFilterPages=['production','historique','saisies'];
@@ -10795,6 +10797,7 @@ function render(){
   }
   else if(S.app==='stock'){root.appendChild(renderStock());}
   else if(S.app==='compta'){root.appendChild(renderCompta());}
+  else if(S.app==='myrh'){root.appendChild(renderMyRH());}
   else if(S.app==='expe'){root.appendChild(renderExpe());}
   else if(S.app==='devis'){window.location.href='/pricing';return;}
   else if(S.app==='messages'){root.appendChild(renderMessagesApp());}

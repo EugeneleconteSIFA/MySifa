@@ -1538,6 +1538,8 @@ function renderPortal(){
   const isStock = aa ? !!aa.stock : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','logistique','expedition','commercial'].includes(urole)));
   const isProd  = aa ? !!aa.prod : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','fabrication','expedition','commercial'].includes(urole)));
   const isCompta = aa ? !!aa.compta : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','comptabilite'].includes(urole)));
+  // MyRH : droits servis par /api/auth/me (config.ROLES_MYRH + exceptions).
+  const isMyRH = aa ? !!aa.myrh : isSuper;
   const isExpe = aa ? !!aa.expe : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','expedition','logistique','commercial'].includes(urole)));
   const isFab = aa ? !!aa.fabrication : (isSuper || urole==='fabrication' || !!(urole && ['direction','administration','administration_ventes','administration_technique'].includes(urole)));
   // MyPrint : les étiquettes de traçabilité. La direction en était exclue par
@@ -1642,6 +1644,20 @@ function renderPortal(){
       h('div',{className:'portal-app-icon'},iconEl('calculator',28)),
       h('div',{className:'portal-app-name'},'MyCompta'),
       h('div',{className:'portal-app-desc'},'Comptabilité — accès réservé')
+    )});
+  }
+
+  if(isMyRH){
+    const id='myrh';
+    tileSpecs.push({id,el:h('div',{
+      className:'portal-app'+(S.portalLoading==='myrh'?' portal-app--busy':''),
+      'data-portal-id':id,
+      draggable:S.portalLoading==='myrh'?'false':'true',
+      onClick:async()=>{if(_portalDragSuppressClick)return;window.location.href='/rh';}
+    },
+      h('div',{className:'portal-app-icon'},iconEl('users',28)),
+      h('div',{className:'portal-app-name'},'MyRH'),
+      h('div',{className:'portal-app-desc'},'Suivi des nouveaux employés')
     )});
   }
 
