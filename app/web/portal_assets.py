@@ -2190,6 +2190,7 @@ function renderPortal(){
             'data-bloc-objet':String(m.id),
             'data-bloc-objet-libelle':String(m.nom||''),
             'data-bloc-valeur-etat':_etatLib[m.etat]||String(m.etat||''),
+            'data-bloc-ton-etat':String(m.ton||'neutre'),
             'data-bloc-valeur-avancement':(m.avancement_pct!==null&&m.avancement_pct!==undefined)?String(m.avancement_pct):'',
             onClick:()=>{window.location.href='/planning?machine='+encodeURIComponent(m.id);}
           },

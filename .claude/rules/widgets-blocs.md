@@ -55,6 +55,27 @@ dans `textes=(…)` de son entrée au registre. Elle s'affiche, mais n'accepte
 pas d'alerte — une alerte compare un nombre à un seuil numérique, serveur et
 questionnaire refusent tout le reste.
 
+**État en badge coloré** (état machine, appréciation d'un score) : la clé va
+dans `tons=(…)` du registre (elle doit déjà être dans `textes`). La page pose
+`data-bloc-ton-<cle>` et la source rend un troisième argument à `r()`
+(`{etat: m.statut_ton}`), avec une valeur parmi `ok`, `warn`, `danger`,
+`neutre` (`TONS_ETAT` de `config.py`). Le ton vient **toujours d'un champ de
+l'API** (`statut_ton` de `/api/production/machine-status`, `ton` de
+`/api/portail/atelier`, `sanity.ton`), calculé côté serveur par
+`ton_statut_machine()` & co. Jamais déduit du libellé affiché. Un arrêt est
+`danger`, pas `warn` : `--warn` est un bleu dans Ambre. Le test du registre
+vérifie que page et source fournissent le ton déclaré.
+
+**Appli du bloc** : chaque `appli` du registre a son entrée dans `APPLIS`
+(libellé, icône, teinte `accent` / `c1`…`c4` du thème). L'indicateur en tire
+son filet de couleur et sa pastille. Une appli nouvelle s'y ajoute avec son
+icône dans `ICONES_APPLI` de `mysifa_accueil.js` ; le test échoue sinon.
+
+**Unité** : l'indicateur la lit dans le libellé de la valeur, entre
+parenthèses (`("metrage", "Métrage (m)")` → « 37 112 m »). Six caractères au
+plus. Une valeur déjà mise en forme avec son unité (« 42 min », « 12 k€ »)
+n'en reçoit pas une seconde.
+
 **Nombre distinct du texte** : quand la valeur affichée n'est pas un nombre
 (« 1h 57min »), poser aussi `data-bloc-nombre-<cle>` (`117`) : c'est lui que
 l'alerte compare.

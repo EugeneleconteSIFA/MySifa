@@ -16,7 +16,7 @@
  *                   widgets sur la même API = un seul appel)
  *   ctx.objet       l'objet suivi (id de machine…), ou null
  *   ctx.params      URLSearchParams de l'URL capturée (période, filtres)
- * et rend { valeurs: {cle: texte}, nombres: {cle: nombre} }, ou
+ * et rend { valeurs: {cle: texte}, nombres: {cle: nombre}, tons: {cle: ton} }, ou
  * { introuvable: true } quand l'objet suivi n'existe plus.
  */
 (function () {
@@ -33,7 +33,9 @@
   function iso(d) {
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   }
-  function r(valeurs, nombres) { return { valeurs: valeurs, nombres: nombres || {} }; }
+  // tons : couleur d'un état en badge (ok, warn, danger, neutre), fournie par
+  // l'API — jamais déduite du libellé.
+  function r(valeurs, nombres, tons) { return { valeurs: valeurs, nombres: nombres || {}, tons: tons || {} }; }
   // Des nombres seuls : affichés tels quels, comparés tels quels.
   function rN(v, fmt) {
     var t = {};
@@ -680,7 +682,8 @@
         var pct = m.avancement_pct;
         return r(
           { etat: lib[m.etat] || String(m.etat || ""), avancement: pct == null ? "" : String(pct) },
-          { avancement: pct }
+          { avancement: pct },
+          { etat: m.ton || "neutre" }
         );
       });
     },
@@ -697,7 +700,7 @@
     "prod.ensemble.machine": function (ctx) {
       return ctx.json("/api/production/machine-status").then(function (ms) {
         var m = ms && ms[ctx.objet];
-        if (!m) return r({ etat: "Éteinte" });
+        if (!m) return r({ etat: "Éteinte" }, {}, { etat: "neutre" });
         var duree = m.duree_min;
         var dureeTxt = duree == null || duree < 0 ? "" : duree < 1 ? "à l'instant"
           : (Math.floor(duree / 60) === 0 ? (duree % 60) + " min"
@@ -707,7 +710,7 @@
           operateur: m.operateur || "",
           dossier: m.dossier && m.dossier.no_dossier ? String(m.dossier.no_dossier) : "",
           depuis: dureeTxt
-        }, { depuis: duree });
+        }, { depuis: duree }, { etat: m.statut_ton || "neutre" });
       });
     },
     "prod.ensemble.sanity": function (ctx) {
@@ -727,7 +730,7 @@
         var s = (d && d.sanity) || {};
         var sc = Number(s.score || 0), j = Number(s.journees || 0);
         return r({ score: String(sc), mention: String(s.mention || ""), journees: String(j) },
-                 { score: sc, journees: j });
+                 { score: sc, journees: j }, { mention: s.ton || "neutre" });
       });
     },
     "prod.erreurs.kpis": function (ctx) {

@@ -10,6 +10,7 @@ from services.analyse import analyse_saisie_errors, assign_shift_keys
 from services.auth_service import get_current_user, is_admin, can_view_all_prod
 from services.prod_machine_filter import append_machine_filter, norm_machine_canonical
 from config import CODE_ARRIVEE, CODE_DEPART, CODE_DEBUT_DOS, CODE_FIN_DOS, CODE_CALAGE, CODES_CALAGE, CODE_PRODUCTION, CODE_REPRISE
+from config import ton_couleur_sanity
 from config import SANITY_JOURNEE_MIN_H, SANITY_DELAI_Z1_H, SANITY_POIDS_MIN_MIN, SANITY_METRES_PAR_BOBINE
 
 router = APIRouter()
@@ -708,6 +709,11 @@ def dashboard_historique(
             for op in sel_ops:
                 sub = [r for r in san_list if str(r.get("operateur") or "") == str(op)]
                 sanity_by_operateur[op] = compute_sanity_score_v2(sub, sanity_ctx)
+
+    # Couleur du badge de l'appréciation (widgets d'accueil).
+    for _s in [sanity] + list((sanity_by_operateur or {}).values()):
+        if isinstance(_s, dict):
+            _s["ton"] = ton_couleur_sanity(_s.get("color"))
 
     return {
         "blocked": False,

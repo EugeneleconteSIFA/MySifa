@@ -41,6 +41,50 @@ TYPES = ("chiffre", "liste", "tableau", "graphique", "etat", "objet", "fiche")
 # (« rouge si Arrêt »).
 ALERTE_OPS = (">", "<", "=")
 
+# Teintes d'appli : variables du thème (static/mysifa_theme.css), qui
+# changent avec la palette de l'utilisateur. --c5 est écartée : rouge dans
+# toutes les palettes, elle se confondrait avec une alerte.
+TEINTES = ("accent", "c1", "c2", "c3", "c4")
+# Icônes dessinées par mysifa_accueil.js (ICONES_APPLI).
+ICONES_APPLI = ("atelier", "planning", "maintenance", "stock", "erp", "ao", "compta",
+                "expe", "qualite", "bat", "rh", "coffre", "calendrier", "taches",
+                "messages", "accueil")
+
+
+@dataclass(frozen=True)
+class Appli:
+    libelle: str
+    icone: str
+    teinte: str
+
+
+# Appli d'un bloc → pastille de l'indicateur (nom, icône, couleur). Décrit le
+# logiciel, pas l'entreprise. Les teintes regroupent des familles : atelier,
+# gestion, flux, personnel. Une appli nouvelle au registre s'ajoute ici, sinon
+# le test échoue.
+APPLIS: dict[str, Appli] = {
+    "prod": Appli("MyProd", "atelier", "c1"),
+    "planning": Appli("Planning", "planning", "c1"),
+    "maintenance": Appli("Maintenance", "maintenance", "c1"),
+    "stock": Appli("MyStock", "stock", "c2"),
+    "erp": Appli("ERP", "erp", "c2"),
+    "ao": Appli("MyAO", "ao", "c2"),
+    "compta": Appli("MyCompta", "compta", "c2"),
+    "expe": Appli("MyExpé", "expe", "c3"),
+    "qualite": Appli("MyQualité", "qualite", "c3"),
+    "bat": Appli("MyBAT", "bat", "c3"),
+    "planning_rh": Appli("Planning RH", "rh", "c4"),
+    "rh_coffre": Appli("Coffre RH", "coffre", "c4"),
+    "calendrier": Appli("Calendrier", "calendrier", "c4"),
+    "taches": Appli("Tâches", "taches", "c4"),
+    "messages": Appli("Messagerie", "messages", "c4"),
+    "portail": Appli("Accueil", "accueil", "accent"),
+}
+
+# Couleur d'une valeur en badge : TONS_ETAT de config.py, recopié ici pour
+# garder le module pur (le test vérifie que les deux listes concordent).
+TONS = ("ok", "warn", "danger", "neutre")
+
 _NOM_RE = re.compile(r"^[a-z0-9-]+(\.[a-z0-9-]+)+$")
 _CLE_RE = re.compile(r"^[a-z0-9-]+$")
 
@@ -63,6 +107,10 @@ class Bloc:
     # le clic, « {objet} » remplacé par l'objet suivi. L'indicateur ouvre alors
     # cette page-là, pas celle où le bloc a été capturé.
     lien: str | None = None
+    # Clés texte affichées en badge coloré (état, appréciation). La page pose
+    # data-bloc-ton-<cle> (ok, warn, danger, neutre) et la source rend
+    # tons={cle: …}, tous deux lus d'un champ de l'API, jamais du libellé.
+    tons: tuple = ()
 
 
 # Nom stable → bloc. Un nom ne change JAMAIS : pour renommer, créer le nouveau
@@ -153,6 +201,7 @@ BLOCS: dict[str, Bloc] = {
                  ("dossier", "Dossier")),
         textes=("etat", "operateur", "dossier"),
         acces="prod", objet="machine",
+        tons=("etat",),
     ),
     "prod.ensemble.sanity": Bloc(
         appli="prod", libelle="Qualité de saisie", url="/prod?page=production",
@@ -164,6 +213,7 @@ BLOCS: dict[str, Bloc] = {
         type="chiffre",
         valeurs=(("score", "Score"), ("mention", "Appréciation"), ("journees", "Journées")),
         textes=("mention",), acces="prod",
+        tons=("mention",),
     ),
     "prod.erreurs.kpis": Bloc(
         appli="prod", libelle="Erreurs & Qualité", url="/prod?page=production#erreurs",
@@ -370,6 +420,7 @@ BLOCS: dict[str, Bloc] = {
         valeurs=(("etat", "État"), ("avancement", "Avancement (%)")),
         textes=("etat",),
         objet="machine", lien="/planning?machine={objet}",
+        tons=("etat",),
     ),
 }
 
@@ -377,6 +428,11 @@ BLOCS: dict[str, Bloc] = {
 def _index_alias() -> dict[str, str]:
     idx = {}
     for nom, b in BLOCS.items():
+        for t in b.tons:
+            if t not in b.textes:
+                errs.append(f"{nom} : tons cite {t!r}, absent des textes — seul un texte se colore")
+        if b.appli not in APPLIS:
+            errs.append(f"{nom} : appli {b.appli!r} absente d'APPLIS (pastille de l'indicateur)")
         for a in b.alias:
             idx[a] = nom
     return idx
@@ -569,4 +625,9 @@ def erreurs_registre() -> list[str]:
             if a in alias_vus:
                 errs.append(f"{nom} : l'alias {a} est déjà porté par {alias_vus[a]}")
             alias_vus[a] = nom
+    for cle, a in APPLIS.items():
+        if a.teinte not in TEINTES:
+            errs.append(f"APPLIS[{cle}] : teinte {a.teinte!r} inconnue")
+        if a.icone not in ICONES_APPLI:
+            errs.append(f"APPLIS[{cle}] : icône {a.icone!r} inconnue")
     return errs

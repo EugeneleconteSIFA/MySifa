@@ -71,14 +71,19 @@ def _desactives(conn) -> set[str]:
 
 
 def _bloc_public(nom: str, b: reg.Bloc) -> dict:
+    app = reg.APPLIS.get(b.appli)
     return {
         "nom": nom,
         "appli": b.appli,
+        # Pastille de l'indicateur : nom, icône et teinte du thème.
+        "appli_info": {"libelle": app.libelle, "icone": app.icone, "teinte": app.teinte} if app else None,
         "libelle": b.libelle,
         "type": b.type,
         "objet": b.objet,
         # nombre=False : valeur texte (état, nom), affichée mais sans alerte.
-        "valeurs": [{"cle": c, "libelle": l, "nombre": c not in b.textes} for c, l in b.valeurs],
+        # ton=True : texte affiché en badge coloré (data-bloc-ton-<cle>).
+        "valeurs": [{"cle": c, "libelle": l, "nombre": c not in b.textes, "ton": c in b.tons}
+                    for c, l in b.valeurs],
         "url": b.url,
     }
 
