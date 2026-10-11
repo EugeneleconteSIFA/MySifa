@@ -139,6 +139,69 @@
     return res;
   }
 
+  /* MyStock › Matières premières : même rapprochement que
+     buildMatieresAccueil / mpPillMatch (app/web/stock_page.py). L'objet est
+     l'id de la tuile : « carton », « tout », ou « frontal:<slug> ». Rend les
+     matières de la tuile, ou null si la sous-section n'existe plus. */
+  function matieresDeCategorie(list, objet) {
+    list = Array.isArray(list) ? list : [];
+    var id = String(objet || "");
+    var PREFIXE = "frontal:";
+    function slug(x) {
+      return String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "");
+    }
+    var garde;
+    if (id === "tout") {
+      garde = function () { return true; };
+    } else if (id.indexOf(PREFIXE) === 0) {
+      var sl = id.slice(PREFIXE.length), libelle = null;
+      if (sl) {
+        // Libellé de la sous-section : celui de sa première matière, comme mpFrontalSousSections.
+        list.some(function (m) {
+          var ss = (m.sous_section || "").trim();
+          if (String(m.categorie || "").toLowerCase() === "frontal" && ss && slug(ss) === sl) { libelle = ss; return true; }
+          return false;
+        });
+        if (!libelle) return null;
+      }
+      garde = function (m) {
+        if (m.categorie !== "frontal") return false;
+        var ss = (m.sous_section || "").trim();
+        return libelle ? ss.toLowerCase() === libelle.toLowerCase() : !ss;
+      };
+    } else {
+      garde = function (m) { return m.categorie === id; };
+    }
+    return list.filter(garde);
+  }
+
+  // MyExpé › Pilotage : même tri que _expePilFiltre() de la page, recherche texte exclue.
+  function envoisFiltres(d, ctx) {
+    var f = ctx.params.get("bloc_filtre") || "a_faire";
+    return ((d && d.envois) || []).filter(function (e) {
+      if (f === "tout") return true;
+      if (f === "retard") return e.alerte === "retard";
+      if (f === "commande") return e.jalons && e.jalons.transport && e.jalons.transport.fait && e.alerte !== "parti";
+      if (f === "parti") return e.alerte === "parti";
+      return e.alerte === "retard" || e.alerte === "urgent" || e.alerte === "a_commander";
+    });
+  }
+
+  // Outil RH : rhOutilEtatContrat() — fin de contrat proche ou dépassée. Même
+  // règle que la source « compta.rh.contrats » ci-dessous, à modifier ensemble.
+  function contratProche(sv) {
+    var sansFin = (sv && sv.contrats_sans_fin) || [];
+    var alerte = Number(sv && sv.alerte_fin_contrat_jours) || 15;
+    var auj = new Date(); auj.setHours(0, 0, 0, 0);
+    return function (m) {
+      if (!m.contrat_type || sansFin.indexOf(m.contrat_type) !== -1 || !m.contrat_fin) return false;
+      var r_ = String(m.contrat_fin).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!r_) return false;
+      var j = Math.round((new Date(+r_[1], +r_[2] - 1, +r_[3]) - auj) / 86400000);
+      return j <= alerte;
+    };
+  }
+
   var SOURCES = {
     /* ── MyStock › Tableau de bord ─────────────────────────────────────── */
     "stock.dashboard.reappro": function (ctx) {
@@ -204,15 +267,7 @@
     },
     "expe.pilotage.envois": function (ctx) {
       return ctx.json("/api/expe/pilotage").then(function (d) {
-        // Même tri que _expePilFiltre() de la page, recherche texte exclue.
-        var f = ctx.params.get("bloc_filtre") || "a_faire";
-        var n = ((d && d.envois) || []).filter(function (e) {
-          if (f === "tout") return true;
-          if (f === "retard") return e.alerte === "retard";
-          if (f === "commande") return e.jalons && e.jalons.transport && e.jalons.transport.fait && e.alerte !== "parti";
-          if (f === "parti") return e.alerte === "parti";
-          return e.alerte === "retard" || e.alerte === "urgent" || e.alerte === "a_commander";
-        }).length;
+        var n = envoisFiltres(d, ctx).length;
         return r({ lignes: String(n) }, { lignes: n });
       });
     },
@@ -239,35 +294,8 @@
        « tout », ou « frontal:<slug> » pour une sous-section des frontaux. */
     "stock.matieres.categorie": function (ctx) {
       return ctx.json("/api/stock/matieres").then(function (list) {
-        list = Array.isArray(list) ? list : [];
-        var id = String(ctx.objet || "");
-        var PREFIXE = "frontal:";
-        function slug(x) {
-          return String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "");
-        }
-        var garde;
-        if (id === "tout") {
-          garde = function () { return true; };
-        } else if (id.indexOf(PREFIXE) === 0) {
-          var sl = id.slice(PREFIXE.length), libelle = null;
-          if (sl) {
-            // Libellé de la sous-section : celui de sa première matière, comme mpFrontalSousSections.
-            list.some(function (m) {
-              var ss = (m.sous_section || "").trim();
-              if (String(m.categorie || "").toLowerCase() === "frontal" && ss && slug(ss) === sl) { libelle = ss; return true; }
-              return false;
-            });
-            if (!libelle) return { introuvable: true };
-          }
-          garde = function (m) {
-            if (m.categorie !== "frontal") return false;
-            var ss = (m.sous_section || "").trim();
-            return libelle ? ss.toLowerCase() === libelle.toLowerCase() : !ss;
-          };
-        } else {
-          garde = function (m) { return m.categorie === id; };
-        }
-        var items = list.filter(garde);
+        var items = matieresDeCategorie(list, ctx.objet);
+        if (!items) return { introuvable: true };
         var sous = items.filter(function (m) { return m.en_alerte; }).length;
         return r({ references: String(items.length), "sous-seuil": String(sous) },
                  { references: items.length, "sous-seuil": sous });
@@ -910,6 +938,128 @@
         });
         l.sort(function (x, y) { return (x.ratio == null ? 2 : x.ratio) - (y.ratio == null ? 2 : y.ratio); });
         return { lignes: l, total: l.length };
+      });
+    },
+    // Comme qualite_page.py (STATUTS, GRAVITES) : la plus grave puis la plus ancienne.
+    "qualite.nc.statuts": function (ctx) {
+      return ctx.json("/api/qualite/nc").then(function (ncs) {
+        var ST = { ouverte: "Ouverte", en_analyse: "En analyse", action_corrective: "Action corrective", en_verification: "En vérification" };
+        var GR = { mineure: "Mineure", majeure: "Majeure", critique: "Critique" };
+        var RANG = { critique: 0, majeure: 1, mineure: 2 };
+        var l = (Array.isArray(ncs) ? ncs : []).filter(function (c) { return c.statut !== "cloturee"; });
+        l.sort(function (a, b) {
+          return ((RANG[a.gravite] == null ? 3 : RANG[a.gravite]) - (RANG[b.gravite] == null ? 3 : RANG[b.gravite])) ||
+            String(a.date_nc || a.created_at || "").localeCompare(String(b.date_nc || b.created_at || ""));
+        });
+        return {
+          lignes: l.map(function (c) {
+            return { libelle: (c.numero ? c.numero + " — " : "") + (c.titre || ""),
+                     detail: [ST[c.statut] || c.statut, GR[c.gravite] || c.gravite, c.pilote_nom || ""].filter(Boolean).join(" · ") };
+          }),
+          total: l.length
+        };
+      });
+    },
+    // Comme bat_page.py (statutLabel, STATUT_RANK) : à faire d'abord.
+    "bat.statuts": function (ctx) {
+      return ctx.json("/api/bat").then(function (rows) {
+        var LIB = { a_faire: "À faire", en_attente: "En attente" }, RANG = { a_faire: 0, en_attente: 1 };
+        var l = (Array.isArray(rows) ? rows : []).filter(function (e) { return e.statut in LIB; });
+        l.sort(function (a, b) { return RANG[a.statut] - RANG[b.statut] || String(a.updated_at || "").localeCompare(String(b.updated_at || "")); });
+        return {
+          lignes: l.map(function (e) {
+            return { libelle: (e.numero_client || "") + "/" + (e.numero_article || ""), detail: LIB[e.statut] + (e.updated_at ? " · " + jjmm(e.updated_at) : "") };
+          }),
+          total: l.length
+        };
+      });
+    },
+    // Comme rh_coffre_page.py : employé, date et montant TTC, la plus ancienne d'abord.
+    "rh-coffre.ndf": function (ctx) {
+      return ctx.json("/api/rh-coffre/ndf?statut=soumise").then(function (d) {
+        var l = ((d && d.notes) || []).slice().sort(function (a, b) { return String(a.date_frais || "").localeCompare(String(b.date_frais || "")); });
+        return {
+          lignes: l.map(function (n) {
+            var m = (Number(n.montant_ttc) || 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+            return { libelle: n.employe_nom || "—", detail: [n.categorie || "", jjmm(n.date_frais), m].filter(Boolean).join(" · ") };
+          }),
+          total: l.length
+        };
+      });
+    },
+    // Absents aujourd'hui, même règle que la source (congé non refusé couvrant le jour).
+    "planning-rh.conges": function (ctx) {
+      var scope = ctx.params.get("bloc_scope") === "rh" ? "rh" : "atelier";
+      return ctx.json("/api/rh/conges" + (scope === "rh" ? "?scope=rh" : "")).then(function (d) {
+        var auj = iso(new Date());
+        var l = ((d && d.conges) || []).filter(function (c) { return c.statut !== "refuse" && c.date_debut <= auj && c.date_fin >= auj; });
+        l.sort(function (a, b) { return String(a.date_fin).localeCompare(String(b.date_fin)); });
+        return {
+          lignes: l.map(function (c) {
+            return { libelle: c.user_nom || "—", detail: "Jusqu'au " + jjmm(c.date_fin) + (c.statut === "pose" ? " · à valider" : "") };
+          }),
+          total: l.length
+        };
+      });
+    },
+    // Fins de contrat proches ou dépassées, la plus proche d'abord.
+    "compta.rh.contrats": function (ctx) {
+      return Promise.all([ctx.json("/api/rh-outil/membres"), ctx.json("/api/rh-outil/services")]).then(function (x) {
+        var proche = contratProche(x[1] || {});
+        var l = ((x[0] && x[0].membres) || []).filter(proche);
+        l.sort(function (a, b) { return String(a.contrat_fin).localeCompare(String(b.contrat_fin)); });
+        return {
+          lignes: l.map(function (m) {
+            return { libelle: m.nom || "—", detail: (m.contrat_type || "") + " · fin " + jjmm(m.contrat_fin) + "/" + String(m.contrat_fin).slice(0, 4) };
+          }),
+          total: l.length
+        };
+      });
+    },
+    // Envois du filtre capturé, le plus pressé d'abord (date visée).
+    "expe.pilotage.envois": function (ctx) {
+      return ctx.json("/api/expe/pilotage").then(function (d) {
+        var LIB = { retard: "En retard", urgent: "Urgent", a_commander: "À programmer", parti: "Parti" };
+        var l = envoisFiltres(d, ctx).slice();
+        l.sort(function (a, b) { return String(a.date_cible || "9").localeCompare(String(b.date_cible || "9")); });
+        return {
+          lignes: l.map(function (e) {
+            return { libelle: e.client || "—", detail: [LIB[e.alerte] || "", e.date_cible ? "visé " + jjmm(e.date_cible) : ""].filter(Boolean).join(" · ") };
+          }),
+          total: l.length
+        };
+      });
+    },
+    // Appels envoyés, avec leurs réponses ; l'échéance la plus proche d'abord.
+    "ao.appels": function (ctx) {
+      return ctx.json("/api/ao").then(function (all) {
+        var l = (Array.isArray(all) ? all : []).filter(function (a) { return a.statut === "envoyee"; });
+        l.sort(function (a, b) { return String(a.date_limite || "9").localeCompare(String(b.date_limite || "9")); });
+        return {
+          lignes: l.map(function (a) {
+            var n = Number(a.nb_reponses) || 0, t = Number(a.nb_fournisseurs) || 0;
+            return { libelle: [a.reference, a.titre].filter(Boolean).join(" — ") || "—",
+                     detail: n + "/" + t + " réponse" + (n > 1 ? "s" : "") + (a.date_limite ? " · limite " + jjmm(a.date_limite) : ""),
+                     ratio: t ? n / t : null };
+          }),
+          total: l.length
+        };
+      });
+    },
+    // Matières de la tuile, celles sous le seuil d'abord (même rapprochement que la source).
+    "stock.matieres.categorie": function (ctx) {
+      return ctx.json("/api/stock/matieres").then(function (list) {
+        var items = matieresDeCategorie(list, ctx.objet) || [];
+        var l = items.slice().sort(function (a, b) { return (b.en_alerte ? 1 : 0) - (a.en_alerte ? 1 : 0); });
+        return {
+          lignes: l.map(function (m) {
+            var u = mpUniteCourte(m.categorie);
+            return { libelle: (m.reference || "") + " — " + (m.designation || ""),
+                     detail: fN0(m.quantite != null ? m.quantite : m.stock_total) + " " + u + (m.seuil_alerte ? " / min. " + fN0(m.seuil_alerte) + " " + u : ""),
+                     ratio: m.en_alerte && Number(m.seuil_alerte) > 0 ? Math.max(0, Math.min(1, Number(m.quantite || 0) / Number(m.seuil_alerte))) : null };
+          }),
+          total: l.length
+        };
       });
     },
     // Comme renderExpeSuiviDeparts : client, transporteur, date, palettes.

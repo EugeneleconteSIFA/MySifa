@@ -178,10 +178,32 @@ async def lifespan(app: FastAPI):
     # Push des notifications par service : prod uniquement (le return staging
     # ci-dessus garantit qu'un même événement ne part pas deux fois).
     _notif_task = asyncio.create_task(_boucle_push_notifications())
+    # Relevés des indicateurs d'accueil : prod uniquement. v1 reçoit chaque
+    # nuit la base de prod, relevés compris.
+    _releves_task = asyncio.create_task(_boucle_releves_accueil())
     try:
         yield
     finally:
         _notif_task.cancel()
+        _releves_task.cancel()
+
+
+async def _boucle_releves_accueil():
+    """Toutes les 30 minutes, photographie les indicateurs d'accueil qui n'ont
+    pas d'historique (app/services/accueil_releves.py)."""
+    from app.core.database import get_db as _get_db
+    from app.services import accueil_releves as _releves
+
+    await asyncio.sleep(120)
+    while True:
+        try:
+            n = await asyncio.to_thread(_releves.tour, _get_db)
+            print(f"[MySifa] relevés d'accueil : {n} écrit(s)")
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[MySifa] relevés d'accueil : tour en échec ({e})")
+        await asyncio.sleep(1800)
 
 
 async def _boucle_push_notifications():

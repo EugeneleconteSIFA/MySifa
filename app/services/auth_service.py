@@ -3,6 +3,7 @@ SIFA — Service authentification v0.6
 Gestion des 3 rôles : direction, administration, fabrication
 """
 import bcrypt
+import contextvars
 import json
 import secrets
 from datetime import datetime, timedelta
@@ -328,8 +329,45 @@ def user_can_write_expe(user: dict) -> bool:
 
 
 # ─── Résolution utilisateur ───────────────────────────────────────
+# ─── Utilisateur système ──────────────────────────────────────────
+# Un traitement de fond (relevés des indicateurs d'accueil,
+# app/services/accueil_releves.py) appelle les routes de lecture en interne,
+# pour reprendre leur calcul exact plutôt que d'en écrire une copie. Il le
+# fait sous cet utilisateur, posé dans une variable de contexte par
+# `en_tant_que_systeme()`. Aucune requête HTTP ne peut le poser : il n'existe
+# ni cookie, ni en-tête, ni paramètre qui y mène, et la variable reprend sa
+# valeur par défaut (None) à la sortie du bloc. Il n'a pas d'id en base
+# (id 0) : une route qui écrirait au nom de l'utilisateur n'a rien à y faire.
+_UTILISATEUR_SYSTEME: contextvars.ContextVar = contextvars.ContextVar(
+    "mysifa_utilisateur_systeme", default=None)
+
+
+class en_tant_que_systeme:
+    """`with en_tant_que_systeme(): ...` — vue complète, superadmin, sans session."""
+
+    def __enter__(self):
+        self._jeton = _UTILISATEUR_SYSTEME.set({
+            "id": 0, "email": "", "identifiant": "systeme", "nom": "Relevé automatique",
+            "role": ROLE_SUPERADMIN, "operateur_lie": None, "machine_id": None, "actif": 1,
+            "access_overrides": None, "nc_service_override": None,
+        })
+        return self
+
+    def __exit__(self, *exc):
+        _UTILISATEUR_SYSTEME.reset(self._jeton)
+        return False
+
+
+def _utilisateur_systeme(request: Request) -> Optional[dict]:
+    u = _UTILISATEUR_SYSTEME.get()
+    return _apply_impersonation(request, dict(u)) if u is not None else None
+
+
 def get_optional_user(request: Request) -> Optional[dict]:
     """Session valide ou None — sans lever d'exception (pour /api/auth/me)."""
+    sys_u = _utilisateur_systeme(request)
+    if sys_u is not None:
+        return sys_u
     token = request.cookies.get(COOKIE_NAME)
     if not token:
         return None
@@ -340,6 +378,9 @@ def get_optional_user(request: Request) -> Optional[dict]:
 
 
 def get_current_user(request: Request) -> dict:
+    sys_u = _utilisateur_systeme(request)
+    if sys_u is not None:
+        return sys_u
     token = request.cookies.get(COOKIE_NAME)
     if not token:
         raise HTTPException(status_code=401, detail="Non authentifié")
