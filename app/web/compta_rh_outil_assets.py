@@ -61,6 +61,7 @@ RH_OUTIL_CSS = r"""
 .rho-justif .rho-chk:checked{background-size:10px 10px}
 .rho-pj{display:inline-flex;align-items:center;gap:3px;border:1px solid transparent;background:transparent;color:var(--muted);font-family:inherit;font-size:11px;font-weight:700;padding:1px 5px;border-radius:6px;cursor:pointer;opacity:.45;transition:opacity .15s,color .15s,border-color .15s,background-color .15s}
 .rho-pj.has{opacity:1;color:var(--accent);background:var(--accent-bg)}
+.rho-pj.manque{white-space:nowrap;flex-shrink:0;opacity:1;color:var(--warn);border-color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent)}
 .rho-item:hover .rho-pj,.rho-pj:focus-visible{opacity:1}
 .rho-pj:hover{border-color:var(--accent);color:var(--accent)}
 @media (hover:none){.rho-pj{opacity:1}}
@@ -113,13 +114,22 @@ RH_OUTIL_CSS = r"""
 .rho-sect{margin-top:14px}
 .rho-sect:first-child{margin-top:0}
 .rho-sect-t{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:0 0 6px}
-.rho-fbloc{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px}
-.rho-fbloc .rho-cat-row .rho-input{background:var(--card)}
-.rho-fctl{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center}
-.rho-fctl .rho-select{padding:4px 8px;font-size:11px;background:var(--card);max-width:190px}
-.rho-fctl .rho-mini{background:var(--card)}
 .rho-cat-row.f{grid-template-columns:minmax(0,1fr) 78px auto}
-.rho-dlg.xl{max-width:740px}
+/* Catalogues : mêmes colonnes pour les documents et les formations */
+.rho-cat-row.doc{grid-template-columns:minmax(0,1fr) 170px 150px 78px 34px}
+.rho-cat-row.form{grid-template-columns:minmax(0,1fr) 175px 170px 135px 78px 34px}
+.rho-cat-row.jus{grid-template-columns:minmax(0,1fr) 150px 34px}
+.rho-cat-row .rho-select{max-width:none;width:100%;box-sizing:border-box;padding:7px 8px;font-size:11px;background:var(--bg)}
+.rho-cat-row .rho-mini{width:100%;box-sizing:border-box}
+.rho-cat-head{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:0 2px 2px}
+.rho-cat-head span:nth-last-child(2){text-align:right}
+.rho-dlg.doc{max-width:860px}
+@media (max-width:820px){
+  .rho-cat-row.doc,.rho-cat-row.form,.rho-cat-row.jus{grid-template-columns:1fr 1fr}
+  .rho-cat-row.doc .rho-input,.rho-cat-row.form .rho-input,.rho-cat-row.jus .rho-input{grid-column:1 / -1}
+  .rho-cat-head{display:none}
+}
+.rho-dlg.xl{max-width:980px}
 .rho-dlg-tools{display:flex;justify-content:flex-end;margin:-6px 0 10px}
 
 /* Contrat (fiche Paie) */
@@ -223,9 +233,12 @@ const RHO_FILTRES=[
 function rhOutilComplet(m){
   return RH_OUTIL_LISTES.every(L=>{
     const it=m[L.cle]||[];
-    return it.length>0&&it.every(x=>x.fait&&(x.justificatifs||[]).every(j=>j.fait));
+    return it.length>0&&it.every(x=>rhOutilRecu(x)&&(x.justificatifs||[]).every(rhOutilRecu));
   });
 }
+// Un élément compte comme fait s'il est coché et, quand le catalogue exige
+// une pièce jointe, s'il en a au moins une.
+function rhOutilRecu(x){return !!x.fait&&(!x.piece_exigee||(x.pieces||[]).length>0);}
 function rhOutilBadge(m){
   const ok=rhOutilComplet(m);
   return h('span',{className:'rho-statut '+(ok?'ok':'ko')},iconEl(ok?'check-circle':'alert-circle',12),ok?'Complet':'Incomplet');
@@ -592,10 +605,11 @@ function rhOutilDate(iso){
 function rhOutilBasePieces(x,base){return base||('/api/rh-outil/documents/attributions/'+x.id+'/pieces');}
 function rhOutilBoutonPieces(L,m,x,base){
   const n=(x.pieces||[]).length;
-  return h('button',{type:'button',className:'rho-pj'+(n?' has':''),
-    title:n?(n+' pièce'+(n>1?'s jointes':' jointe')):'Ajouter une pièce jointe',
-    'aria-label':'Pièces jointes · '+x.libelle+' · '+n,
-    onClick:()=>rhOutilPieces(L,m,x,base)},iconEl('paperclip',12),n?String(n):null);
+  const manque=!!x.piece_exigee&&!n;
+  return h('button',{type:'button',className:'rho-pj'+(n?' has':'')+(manque?' manque':''),
+    title:manque?'Pièce jointe exigée — à joindre':n?(n+' pièce'+(n>1?'s jointes':' jointe')):'Ajouter une pièce jointe (facultative)',
+    'aria-label':'Pièces jointes · '+x.libelle+' · '+n+(manque?' · à joindre':''),
+    onClick:()=>rhOutilPieces(L,m,x,base)},iconEl('paperclip',12),n?String(n):(manque?'à joindre':null));
 }
 function rhOutilPieces(L,m,x,baseCible){
   const {ov,fermer}=rhOutilFenetre();

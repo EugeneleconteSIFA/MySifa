@@ -150,6 +150,29 @@ function rhOutilGererCategories(apres){
   rafraichir();
 }
 
+// ── Pièce jointe facultative ou exigée (document, justificatif) ─────
+// Exigée : chez l'employé, l'élément ne compte comme fait qu'avec un fichier.
+function rhOutilBoutonPieceExigee(x,url,apres){
+  const b=h('button',{type:'button',className:'rho-mini'});
+  // Le bouton change tout de suite ; la liste se recharge ensuite.
+  const peindre=()=>{
+    b.classList.toggle('on',!!x.piece_exigee);
+    b.title='Pièce jointe '+(x.piece_exigee?'exigée':'facultative')+' — cliquer pour changer';
+    b.replaceChildren(iconEl('paperclip',11),x.piece_exigee?'Pièce exigée':'Pièce facultative');
+  };
+  peindre();
+  b.addEventListener('click',async()=>{
+    const v=!x.piece_exigee;
+    b.disabled=true;
+    try{await api(url,rhOutilJson('PUT',{exigee:v}));x.piece_exigee=v;peindre();b.disabled=false;}
+    catch(e){toast(e.message,'error');b.disabled=false;return;}
+    toast(v?'Pièce jointe exigée.':'Pièce jointe facultative.');
+    rhOutilLoad();
+    if(apres)apres();
+  });
+  return b;
+}
+
 // ── Justificatifs attendus d'une formation ────────────────────────
 // Définis dans la formation (attestation, certificat…) ; chaque employé qui a
 // la formation a une case par justificatif, sous la formation, avec pièces
@@ -174,7 +197,8 @@ function rhOutilJustificatifs(x,apres){
         else if(e.key==='Escape'){e.preventDefault();inp.value=jj.libelle;inp.blur();}
       });
       inp.addEventListener('blur',enregistrer);
-      return h('div',{className:'rho-cat-row f'},inp,h('span',{className:'rho-sub'},''),
+      return h('div',{className:'rho-cat-row jus'},inp,
+        rhOutilBoutonPieceExigee(jj,'/api/rh-outil/formations/justificatifs/'+jj.id+'/piece',()=>{dessiner();if(apres)apres();}),
         h('button',{type:'button',className:'rho-del',title:'Supprimer le justificatif',onClick:()=>rhOutilConfirmer({
           titre:'Supprimer ce justificatif ?',nom:jj.libelle,sous:x.libelle,label:'Supprimer',
           texte:'Il n’est plus attendu pour cette formation : la case disparaît chez chaque employé, avec ses pièces jointes.',
@@ -193,18 +217,20 @@ function rhOutilJustificatifs(x,apres){
     let r;
     try{r=await api('/api/rh-outil/formations/catalogue/'+x.id+'/justificatifs',rhOutilJson('POST',{libelle:v}));}
     catch(e){toast(e.message,'error');return;}
-    x.justificatifs=(x.justificatifs||[]).concat([{id:r.id,libelle:v}]);
+    x.justificatifs=(x.justificatifs||[]).concat([{id:r.id,libelle:v,piece_exigee:false}]);
     nouv.value='';dessiner();rhOutilLoad();if(apres)apres();nouv.focus();
     const n=(r&&r.attribues)||0;
     if(n)toast('Attendu chez '+n+' employé'+(n>1?'s qui ont':' qui a')+' déjà la formation.');
   };
   nouv.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();ajouter();}});
   const n=nbAvec();
-  ov.appendChild(rhOutilDialogue('Justificatifs attendus',fermer,
-    h('div',{className:'rho-cat-legend'},x.libelle+' · une case par justificatif apparaît sous la formation, chez chaque employé qui l’a'+(n?' ('+n+' aujourd’hui)':'')+'. Les pièces jointes s’y déposent.'),
+  const dlgJ=rhOutilDialogue('Justificatifs attendus',fermer,
+    h('div',{className:'rho-cat-legend'},x.libelle+' · une case par justificatif apparaît sous la formation, chez chaque employé qui l’a'+(n?' ('+n+' aujourd’hui)':'')+'. « Pièce exigée » : le justificatif ne compte qu’avec un fichier joint.'),
     listEl,
     h('div',{className:'rho-cat-add'},nouv,h('button',{type:'button',className:'rho-btn accent',onClick:ajouter},iconEl('plus',13),'Ajouter'))
-  ));
+  );
+  dlgJ.classList.add('large');
+  ov.appendChild(dlgJ);
   dessiner();
   document.body.appendChild(ov);
   requestAnimationFrame(()=>nouv.focus());
@@ -257,9 +283,11 @@ function rhOutilCatalogue(L){
           },
         })},iconEl('trash',13));
       const compte=h('span',{className:'rho-sub'},nb+' employé'+(nb>1?'s':''));
-      if(!L.categories)return h('div',{className:'rho-cat-row'},inp,exige,compte,suppr);
-      // Formations : intitulé en haut, réglages (catégorie, exigé pour,
-      // justificatifs) dessous, pour garder un intitulé lisible.
+      // Documents : intitulé · exigé pour · pièce jointe · employés · corbeille.
+      if(!L.categories)return h('div',{className:'rho-cat-row doc'},inp,exige,rhOutilBoutonPieceExigee(
+        x,'/api/rh-outil/documents/catalogue/'+x.id+'/piece',rafraichir),compte,suppr);
+      // Formations : mêmes colonnes, la catégorie en plus, les justificatifs
+      // à la place de la pièce jointe.
       const selCat=h('select',{className:'rho-select','aria-label':'Catégorie de '+x.libelle},
         h('option',{value:''},'Sans catégorie'),
         ...(S.rhOutilCategories||[]).map(c=>h('option',{value:String(c.id)},c.libelle)));
@@ -272,13 +300,17 @@ function rhOutilCatalogue(L){
       const nd=(x.justificatifs||[]).length;
       const docs=h('button',{type:'button',className:'rho-mini'+(nd?' on':''),title:'Justificatifs attendus pour cette formation',
         onClick:()=>rhOutilJustificatifs(x,rafraichir)},iconEl('file-text',11),nd?nd+' justificatif'+(nd>1?'s':''):'Justificatifs');
-      return h('div',{className:'rho-fbloc'},
-        h('div',{className:'rho-cat-row f'},inp,compte,suppr),
-        h('div',{className:'rho-fctl'},selCat,exige,docs));
+      return h('div',{className:'rho-cat-row form'},inp,selCat,exige,docs,compte,suppr);
     };
+    // Titres des colonnes, alignés sur la grille des lignes.
+    const entete=L.categories
+      ?h('div',{className:'rho-cat-row form rho-cat-head','aria-hidden':'true'},
+        h('span',null,'Intitulé'),h('span',null,'Catégorie'),h('span',null,'Exigé pour'),h('span',null,'Justificatifs'),h('span',null,'Employés'),h('span',null,''))
+      :h('div',{className:'rho-cat-row doc rho-cat-head','aria-hidden':'true'},
+        h('span',null,'Intitulé'),h('span',null,'Exigé pour'),h('span',null,'Pièce jointe'),h('span',null,'Employés'),h('span',null,''));
     if(!cat.length){listEl.replaceChildren(h('div',{className:'rho-empty'},L.catVide));return;}
-    if(!L.categories){listEl.replaceChildren(...cat.map(ligne));return;}
-    listEl.replaceChildren(...rhOutilParCategorie(cat).map(g=>h('div',{className:'rho-sect'},
+    if(!L.categories){listEl.replaceChildren(entete,...cat.map(ligne));return;}
+    listEl.replaceChildren(entete,...rhOutilParCategorie(cat).map(g=>h('div',{className:'rho-sect'},
       h('div',{className:'rho-sect-t'},g.libelle+' · '+g.items.length),
       h('div',{className:'rho-list'},...g.items.map(ligne)))));
   };
@@ -298,11 +330,11 @@ function rhOutilCatalogue(L){
   nouv.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();ajouter();}});
   const dlg=rhOutilDialogueLarge(L.catalogue,fermer,
     L.categories?h('div',{className:'rho-dlg-tools'},h('button',{type:'button',className:'rho-mini',onClick:()=>rhOutilGererCategories(rafraichir)},iconEl('sliders',11),'Gérer les catégories')):null,
-    h('div',{className:'rho-cat-legend'},'« Exigé pour » : attribué d’office aux employés concernés, présents et à venir.'+(L.categories?' Les justificatifs (attestations…) se déclarent dans chaque formation.':' Documents administratifs : exigés pour tous ou selon le contrat.')+' Retirable ensuite employé par employé.'),
+    h('div',{className:'rho-cat-legend'},'« Exigé pour » : attribué d’office aux employés concernés, présents et à venir.'+(L.categories?' Les justificatifs (attestations…) se déclarent dans chaque formation.':' « Pièce exigée » : le document ne compte qu’avec un fichier joint.')+' Retirable ensuite employé par employé.'),
     h('div',{className:'rho-scroll'},listEl),
     h('div',{className:'rho-cat-add'},nouv,nouvCat,h('button',{type:'button',className:'rho-btn accent',onClick:ajouter},iconEl('plus',13),'Ajouter'))
   );
-  if(L.categories)dlg.classList.add('xl');
+  dlg.classList.add(L.categories?'xl':'doc');
   ov.appendChild(dlg);
   document.body.appendChild(ov);
   rafraichir();

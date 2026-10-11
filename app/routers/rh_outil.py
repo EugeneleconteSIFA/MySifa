@@ -198,6 +198,7 @@ LISTES = {
         "fk": "document_id",
         "exigences": "rh_outil_document_contrats",
         "cible": "contrat",
+        "piece": True,   # réglage « pièce jointe exigée » (colonne piece_exigee)
         # Un employé est dans la cible si le contrat de sa fiche Paie y est.
         "jointure": ("JOIN paie_employes pe ON pe.contrat_type = x.cible "
                      "JOIN rh_outil_membres m ON m.user_id = pe.user_id"),
@@ -506,7 +507,8 @@ def list_membres(request: Request):
             par_membre = par_liste.setdefault(liste, {})
             for a in conn.execute(
                 f"""SELECT a.id, a.membre_id, a.{cfg['fk']} AS element_id, a.fait, e.libelle, e.obligatoire,
-                           {'e.categorie_id' if cfg.get('categories') else 'NULL'} AS categorie_id
+                           {'e.categorie_id' if cfg.get('categories') else 'NULL'} AS categorie_id,
+                           {'e.piece_exigee' if cfg.get('piece') else '0'} AS piece_exigee
                       FROM {cfg['liaison']} a
                       JOIN {cfg['catalogue']} e ON e.id = a.{cfg['fk']}
                      ORDER BY e.libelle COLLATE NOCASE"""
@@ -514,7 +516,8 @@ def list_membres(request: Request):
                 par_membre.setdefault(a["membre_id"], []).append(
                     {"id": a["id"], "element_id": a["element_id"],
                      "libelle": a["libelle"], "fait": bool(a["fait"]),
-                     "obligatoire": bool(a["obligatoire"]), "categorie_id": a["categorie_id"]}
+                     "obligatoire": bool(a["obligatoire"]), "categorie_id": a["categorie_id"],
+                     "piece_exigee": bool(a["piece_exigee"])}
                 )
         pieces: dict = {}
         for pc in conn.execute(
@@ -524,14 +527,14 @@ def list_membres(request: Request):
             pieces.setdefault((pc["cible"], pc["attribution_id"]), []).append(_piece_json(pc))
         justifs: dict = {}
         for jj in conn.execute(
-            """SELECT mj.id, mj.attribution_id, mj.justificatif_id, mj.fait, j.libelle
+            """SELECT mj.id, mj.attribution_id, mj.justificatif_id, mj.fait, j.libelle, j.piece_exigee
                  FROM rh_outil_membre_justificatifs mj
                  JOIN rh_outil_formation_justificatifs j ON j.id = mj.justificatif_id
                 ORDER BY j.libelle COLLATE NOCASE"""
         ).fetchall():
             justifs.setdefault(jj["attribution_id"], []).append(
                 {"id": jj["id"], "justificatif_id": jj["justificatif_id"], "libelle": jj["libelle"],
-                 "fait": bool(jj["fait"])})
+                 "fait": bool(jj["fait"]), "piece_exigee": bool(jj["piece_exigee"])})
     for x in par_liste.get("documents", {}).values():
         for el in x:
             el["pieces"] = pieces.get(("document", el["id"]), [])
@@ -629,6 +632,31 @@ def list_services(request: Request):
             "alerte_fin_contrat_jours": RH_OUTIL_ALERTE_FIN_CONTRAT_JOURS}
 
 
+class PieceExigeeIn(BaseModel):
+    exigee: bool
+
+
+@router.put("/documents/catalogue/{element_id}/piece")
+def set_piece_document(element_id: int, payload: PieceExigeeIn, request: Request):
+    """Pièce jointe facultative ou exigée pour ce document administratif.
+    Ne crée ni ne retire aucun fichier : change seulement ce qui est attendu."""
+    user = _require(request)
+    with get_db() as conn:
+        row = conn.execute("SELECT libelle, piece_exigee FROM rh_outil_documents WHERE id=?",
+                           (element_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, LISTES["documents"]["introuvable"])
+        if bool(row["piece_exigee"]) == payload.exigee:
+            return {"success": True}
+        conn.execute("UPDATE rh_outil_documents SET piece_exigee=? WHERE id=?",
+                     (1 if payload.exigee else 0, element_id))
+        conn.commit()
+    log_action(user=user, action="UPDATE", module="rh_outil",
+               objet=f"Outil RH · {LISTES['documents']['catalogue_nom']} · « {row['libelle']} » : pièce jointe "
+                     f"{'exigée' if payload.exigee else 'facultative'}", request=request)
+    return {"success": True}
+
+
 @router.put("/{liste}/catalogue/{element_id}/exige")
 def set_exige(liste: str, element_id: int, payload: ExigeIn, request: Request):
     """Règle « Exigé pour ». Ce qui devient exigé est attribué tout de suite
@@ -686,6 +714,7 @@ def list_catalogue(liste: str, request: Request):
     with get_db() as conn:
         rows = conn.execute(
             f"""SELECT e.id, e.libelle, e.obligatoire,
+                       {'e.piece_exigee' if cfg.get('piece') else '0'} AS piece_exigee,
                        (SELECT COUNT(*) FROM {cfg['liaison']} a
                          WHERE a.{cfg['fk']} = e.id) AS nb_employes
                   FROM {cfg['catalogue']} e
@@ -699,16 +728,18 @@ def list_catalogue(liste: str, request: Request):
         cats: dict = {}
         if cfg.get("categories"):
             for x in conn.execute(
-                """SELECT id, formation_id, libelle FROM rh_outil_formation_justificatifs
+                """SELECT id, formation_id, libelle, piece_exigee FROM rh_outil_formation_justificatifs
                     ORDER BY libelle COLLATE NOCASE"""
             ).fetchall():
-                lies.setdefault(x["formation_id"], []).append({"id": x["id"], "libelle": x["libelle"]})
+                lies.setdefault(x["formation_id"], []).append(
+                    {"id": x["id"], "libelle": x["libelle"], "piece_exigee": bool(x["piece_exigee"])})
             cats = {x["id"]: x["categorie_id"] for x in conn.execute(
                 "SELECT id, categorie_id FROM rh_outil_formations").fetchall()}
     return {"elements": [
         {"id": r["id"], "libelle": r["libelle"], "nb_employes": r["nb_employes"],
          "obligatoire": bool(r["obligatoire"]), "cibles": exiges.get(r["id"], []),
-         "categorie_id": cats.get(r["id"]), "justificatifs": lies.get(r["id"], [])}
+         "categorie_id": cats.get(r["id"]), "justificatifs": lies.get(r["id"], []),
+         "piece_exigee": bool(r["piece_exigee"])}
         for r in rows
     ]}
 

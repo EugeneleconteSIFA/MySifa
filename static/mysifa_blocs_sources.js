@@ -631,7 +631,7 @@
       });
     },
 
-    /* ── MyCompta › Outil RH (app/web/compta_rh_outil_assets.py) ──────────
+    /* ── MyRH › Outil RH (app/web/compta_rh_outil_assets.py) ──────────────
        Mêmes règles que rhOutilEtatContrat() et rhOutilComplet() ; les listes
        suivies sont celles de RH_OUTIL_LISTES (formations, documents). */
     "compta.rh.contrats": function (ctx) {
@@ -648,11 +648,14 @@
           var j = Math.round((new Date(+r_[1], +r_[2] - 1, +r_[3]) - auj) / 86400000);
           return j <= alerte;
         }
+        // Coché et, si le catalogue exige une pièce jointe, avec un fichier :
+        // même règle que rhOutilRecu() dans la page.
+        function recu(e) { return !!e.fait && (!e.piece_exigee || (e.pieces || []).length > 0); }
         function complet(m) {
           return ["formations", "documents"].every(function (cle) {
             var it = m[cle] || [];
             return it.length > 0 && it.every(function (e) {
-              return e.fait && (e.justificatifs || []).every(function (j) { return j.fait; });
+              return recu(e) && (e.justificatifs || []).every(recu);
             });
           });
         }
