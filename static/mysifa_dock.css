@@ -242,105 +242,111 @@ body.mysifa-dock-hidden #postit-dock-menu {
   display: none !important;
 }
 
-/* ── Barre verticale (ordinateur, mysifa_dock.js › layoutBarre) ──────────
-   Les boutons gardent leur position fixe, calculée un par un : la barre
-   n'est qu'un fond dessiné derrière eux. Au repos, des icônes neutres sur
-   fond carte, pour ne pas concurrencer les boutons d'action de la page ;
-   l'orange signale le survol et l'outil ouvert. */
+/* ── Colonne d'outils (ordinateur, mysifa_dock.js › layoutBarre) ──────────
+   Même principe que les boutons en colonne du portail (Paramètres, profil :
+   .portal-settings-corner dans app/web/portal_assets.py) : des carrés
+   indépendants, fond carte, bordure fine, icône neutre, et la couleur
+   principale du thème au survol et sur l'outil ouvert. Pas de fond commun :
+   les boutons gardent leur position fixe, calculée un par un. */
 @media (min-width: 901px) {
-  #mysifa-dock-barre {
-    position: fixed;
-    z-index: 8001;
-    background: var(--card);
-    border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
-    border-radius: 26px;
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
-    pointer-events: none;
-    box-sizing: border-box;
-  }
+  #mysifa-dock-barre,
   #mysifa-dock-sep {
-    position: fixed;
-    z-index: 8002;
-    width: 28px;
-    height: 1px;
-    background: var(--border);
-    pointer-events: none;
+    display: none !important;
   }
-  /* Une couleur par outil, prise dans la palette du thème de l'utilisateur
-     (--accent, --c1…--c5 de mysifa_theme.css) : elles changent avec Ambre,
-     Pivoine, Forêt… Fond teinté au repos, plus soutenu au survol, couleur
-     pleine quand l'outil est ouvert. */
-  body.mysifa-dock-barre #cw-bubble { --bf: var(--accent); }
-  body.mysifa-dock-barre #ai-chat-btn { --bf: var(--c2); }
-  body.mysifa-dock-barre #postit-dock-btn { --bf: var(--c4); }
-  body.mysifa-dock-barre #_calc_fab { --bf: var(--c3); }
-  body.mysifa-dock-barre #mysifa-cap-fab { --bf: var(--c5); }
-  /* Boutons propres à une appli : jamais deux dans la même barre. */
-  body.mysifa-dock-barre #expe-carte-fab { --bf: var(--c1); }
-  body.mysifa-dock-barre #mtr-fab { --bf: var(--c1); }
   body.mysifa-dock-barre .mysifa-dock-fab,
   body.mysifa-dock-barre .calc-fab,
   body.mysifa-dock-barre #ai-chat-btn,
   body.mysifa-dock-barre #cw-bubble {
-    width: 40px !important;
-    height: 40px !important;
-    border-radius: 12px !important;
-    background: color-mix(in srgb, var(--bf, var(--accent)) 16%, transparent) !important;
-    color: var(--bf, var(--accent)) !important;
-    box-shadow: none !important;
+    width: 48px !important;
+    height: 48px !important;
+    border-radius: 14px !important;
+    background: var(--card) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text2) !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12) !important;
     transform: none !important;
-    transition: background 0.15s, color 0.15s;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s, color 0.15s;
   }
   body.mysifa-dock-barre .mysifa-dock-fab:hover,
   body.mysifa-dock-barre .calc-fab:hover,
   body.mysifa-dock-barre #ai-chat-btn:hover,
-  body.mysifa-dock-barre #cw-bubble:hover {
-    background: color-mix(in srgb, var(--bf, var(--accent)) 30%, transparent) !important;
-  }
+  body.mysifa-dock-barre #cw-bubble:hover,
   body.mysifa-dock-barre .mysifa-dock-fab-active,
   body.mysifa-dock-barre .calc-fab-active,
-  body.mysifa-dock-barre .cw-bubble-active {
-    background: var(--bf, var(--accent)) !important;
-    color: white !important;
+  body.mysifa-dock-barre .cw-bubble-active,
+  body.mysifa-dock-barre .mysifa-cap-btn.on {
+    border-color: var(--accent) !important;
+    background: var(--accent-bg) !important;
+    color: var(--accent) !important;
+    box-shadow: 0 8px 28px rgba(34, 211, 238, 0.12) !important;
   }
   body.mysifa-dock-barre .mysifa-dock-fab svg,
   body.mysifa-dock-barre .calc-fab svg,
   body.mysifa-dock-barre #ai-chat-btn svg,
   body.mysifa-dock-barre #cw-bubble svg {
     color: currentColor !important;
-    width: 20px;
-    height: 20px;
+    width: 21px;
+    height: 21px;
+  }
+  /* Icône de la carte de France : un masque teinté par son fond. */
+  body.mysifa-dock-barre .expe-carte-fab-icon {
+    background-color: currentColor !important;
+    width: 21px;
+    height: 21px;
   }
   body.mysifa-dock-barre #cw-bubble-badge {
-    top: -4px;
-    right: -4px;
-    border-color: var(--card);
+    top: -6px;
+    right: -6px;
+    border-color: var(--bg);
   }
+  /* Repli : une languette au-dessus de la colonne ; repliée, un vrai bouton
+     carré, icône « outils ». */
   body.mysifa-dock-barre #mysifa-dock-toggle {
-    width: 40px;
+    width: 48px;
     height: 24px;
-    border-radius: 8px;
-    background: transparent;
-    border: none;
+    border-radius: 10px;
+    background: var(--card);
+    border: 1px solid var(--border);
     color: var(--muted);
     opacity: 1;
     z-index: 8003;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+  }
+  body.mysifa-dock-barre.mysifa-dock-hidden #mysifa-dock-toggle {
+    height: 48px;
+    border-radius: 14px;
+    color: var(--text2);
   }
   body.mysifa-dock-barre #mysifa-dock-toggle:hover {
+    border-color: var(--accent);
     background: var(--accent-bg);
     color: var(--accent);
   }
 }
+/* Compteur de messages non lus recopié sur le bouton « outils », visible
+   seulement quand la colonne est repliée. */
+#mysifa-dock-toggle-badge {
+  display: none;
+}
 @media (min-width: 901px) {
-  /* Icône de la carte de France : un masque teinté par son fond. */
-  body.mysifa-dock-barre .expe-carte-fab-icon {
-    background-color: currentColor !important;
-    width: 20px;
-    height: 20px;
-  }
-  /* Mode capture en cours : le bouton reste allumé. */
-  body.mysifa-dock-barre .mysifa-cap-btn.on {
-    background: var(--bf, var(--accent)) !important;
-    color: white !important;
+  body.mysifa-dock-barre.mysifa-dock-hidden #mysifa-dock-toggle { position: fixed; }
+  body.mysifa-dock-barre.mysifa-dock-hidden #mysifa-dock-toggle-badge:not(:empty) {
+    display: inline-flex !important;
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 99px;
+    background: var(--danger);
+    color: white;
+    font-size: 10px;
+    font-weight: 800;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--bg);
+    box-sizing: border-box;
   }
 }
