@@ -10842,8 +10842,8 @@ async function renderSettingsBoutons() {
   function dessiner() {
     const bs = g.boutons || [];
     const coupes = bs.reduce((t, b) => t + Object.values(b.etats).filter(v => v === false).length, 0);
-    let html = '<div style="max-width:1100px;margin:0;padding:0 0 40px">' +
-      '<p style="font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.5">' +
+    let html = '<div style="margin:0;padding:0 0 40px">' +
+      '<p style="font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.5;max-width:1100px">' +
       'Les boutons en bas à droite de l\'écran, application par application. Couper une case masque le bouton ' +
       'pour tous les utilisateurs de cette application, au prochain chargement de page. ' +
       'L\'assistant IA reste réservé aux rôles qui y ont droit. ' +
@@ -10852,7 +10852,7 @@ async function renderSettingsBoutons() {
       '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
       '<thead><tr style="color:var(--muted);font-size:12px;text-align:left">' +
       '<th style="padding:10px 14px;position:sticky;left:0;background:var(--card)">Application</th>' +
-      bs.map(b => '<th style="padding:10px 8px;text-align:center;vertical-align:bottom;min-width:92px">' +
+      bs.map(b => '<th style="padding:10px 6px;text-align:center;vertical-align:bottom;min-width:84px;max-width:130px;white-space:normal;line-height:1.3">' +
         '<div style="font-weight:700;color:var(--text);font-size:12px">' + escHtml(b.libelle) + '</div>' +
         (b.propre ? '<div style="font-size:11px;font-weight:400">propre à ' + escHtml(b.propre_libelle || b.propre) + '</div>'
                   : (b.detail ? '<div style="font-size:11px;font-weight:400">' + escHtml(b.detail) + '</div>' : '')) +

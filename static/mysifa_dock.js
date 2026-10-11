@@ -17,6 +17,8 @@
   const Z_FAB_ACTIVE = 8025;
 
   const SVG_EYE = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const SVG_CHEVRON_DOWN = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+  const SVG_CHEVRON_UP = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>';
   const SVG_EYE_OFF = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
 
   function isMobile() {
@@ -603,6 +605,112 @@
     applyActiveFabZIndex();
   }
 
+  /* ── Barre verticale (ordinateur) ─────────────────────────────────────
+     Une seule colonne en bas à droite, fond carte : la messagerie en bas
+     (le coin, là où l'œil va chercher le compteur de non-lus), un trait, puis
+     les outils. En haut, une flèche replie la barre en une pastille. Les
+     panneaux s'ouvrent à gauche de la barre, calés sur son bas. Les boutons
+     restent des éléments `position:fixed` placés un par un : chaque widget
+     garde son propre code, la barre n'est qu'un fond dessiné derrière eux. */
+  var BARRE_BTN = 40;
+  var BARRE_PAD = 6;
+  var BARRE_ECART = 4;
+  var BARRE_L = BARRE_BTN + BARRE_PAD * 2;
+
+  function elementBarre(id, cls) {
+    var el = document.getElementById(id);
+    if (!el) {
+      el = document.createElement('div');
+      el.id = id;
+      el.className = cls;
+      el.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(el);
+    }
+    el.style.display = '';
+    return el;
+  }
+
+  function panneauBarre(el, base, z) {
+    if (!el) return;
+    el.style.left = 'auto';
+    el.style.top = 'auto';
+    el.style.right = safeRight(BARRE_L + 12);
+    el.style.bottom = safeBottom(base);
+    el.style.boxShadow = SHADOW_PANEL;
+    el.style.zIndex = String(z || Z_PANEL);
+  }
+
+  function layoutBarre(calcFab, calcPanel, carteFab, cartePanel, aiRoot, aiBtn, aiPanel, chatBubble, chatPanel) {
+    document.body.classList.add('mysifa-dock-barre');
+    var base = minFabBaseBottom();
+    var replie = document.body.classList.contains('mysifa-dock-hidden');
+    var postitBtn = document.getElementById('postit-dock-btn');
+    var chat = isDockFab(chatBubble) ? chatBubble : null;
+
+    // Du bas vers le haut. La messagerie sur le portail ordinateur reste sa
+    // barre du bas à gauche (#cw-bar), hors de la colonne.
+    var outils = [];
+    if (isVisible(aiRoot) && isDockFab(aiBtn)) outils.push(aiBtn);
+    if (hasPostitDock()) outils.push(postitBtn);
+    if (isDockFab(calcFab)) outils.push(calcFab);
+    if (isDockFab(carteFab)) outils.push(carteFab);
+    dockExtras().forEach(function (f) { outils.push(f); });
+
+    var fond = elementBarre('mysifa-dock-barre', 'mysifa-dock-barre-fond');
+    var sep = elementBarre('mysifa-dock-sep', 'mysifa-dock-barre-sep');
+    var y = base + BARRE_PAD;
+
+    function poser(el) {
+      applyFab(el, safeRight(BARRE_PAD), safeBottom(y));
+      el.style.top = 'auto';
+      el.style.boxShadow = 'none';
+      y += BARRE_BTN + BARRE_ECART;
+    }
+
+    if (!replie) {
+      if (chat) poser(chat);
+      if (chat && outils.length) {
+        sep.style.display = '';
+        sep.style.right = safeRight(BARRE_PAD + 6);
+        sep.style.bottom = safeBottom(y + 1);
+        y += 6;
+      } else {
+        sep.style.display = 'none';
+      }
+      outils.forEach(poser);
+    } else {
+      sep.style.display = 'none';
+    }
+
+    // La flèche, en tête de colonne (ou seule, barre repliée).
+    var bascule = document.getElementById('mysifa-dock-toggle');
+    if (bascule) {
+      bascule.style.right = safeRight(BARRE_PAD);
+      bascule.style.bottom = safeBottom(y);
+      bascule.style.left = 'auto';
+      bascule.style.top = 'auto';
+      y += 24;
+    }
+    var haut = y - base + BARRE_PAD - (bascule ? 0 : BARRE_ECART);
+    var rien = !chat && !outils.length;
+    fond.style.display = rien ? 'none' : '';
+    if (bascule) bascule.style.display = rien ? 'none' : '';
+    fond.style.right = safeRight(0);
+    fond.style.bottom = safeBottom(base);
+    fond.style.width = BARRE_L + 'px';
+    fond.style.height = haut + 'px';
+
+    // Panneaux : à gauche de la barre, calés sur son bas.
+    if (calcPanel && getComputedStyle(calcPanel).display !== 'none') panneauBarre(calcPanel, base);
+    if (cartePanel && getComputedStyle(cartePanel).display !== 'none') panneauBarre(cartePanel, base);
+    if (aiPanel) panneauBarre(aiPanel, base);
+    if (chatPanel && !chatPanel.classList.contains('cw-hidden') && chat) panneauBarre(chatPanel, base);
+    var menu = document.getElementById('postit-dock-menu');
+    if (menu && menu.classList.contains('open')) panneauBarre(menu, base, Z_FAB_ACTIVE);
+    dockExtras().forEach(function (f) { panneauBarre(extraPanelOpen(f), base); });
+    applyActiveFabZIndex();
+  }
+
   function layout() {
     const calcFab = document.getElementById('_calc_fab');
     const calcPanel = document.getElementById('_calc_panel');
@@ -624,6 +732,19 @@
     const hasAi = isVisible(aiRoot) && isVisible(aiBtn);
     const hasChatBubble = isVisible(chatBubble);
     const hasChatBar = isVisible(chatBar);
+
+    // Ordinateur : une barre verticale unique, la même dans toutes les applis
+    // (MyExpé compris). Le téléphone garde ses dispositions ci-dessous.
+    if (!mobile) {
+      layoutBarre(calcFab, calcPanel, carteFab, cartePanel, aiRoot, aiBtn, aiPanel, chatBubble, chatPanel);
+      layoutHiddenPostitsDock();
+      return;
+    }
+    document.body.classList.remove('mysifa-dock-barre');
+    var fond = document.getElementById('mysifa-dock-barre');
+    if (fond) fond.style.display = 'none';
+    var sep = document.getElementById('mysifa-dock-sep');
+    if (sep) sep.style.display = 'none';
 
     if (isExpeApp()) {
       layoutExpe2x2(calcFab, calcPanel, carteFab, cartePanel, aiBtn, aiPanel, chatBubble, chatBar, chatPanel);
@@ -753,20 +874,33 @@
   function initDockToggle() {
     if (document.getElementById('mysifa-dock-toggle')) return;
 
-    var hidden = localStorage.getItem('mysifa_dock_hidden') === '1';
+    var hidden = false;
+    try { hidden = localStorage.getItem('mysifa_dock_hidden') === '1'; } catch (e) {}
     if (hidden) document.body.classList.add('mysifa-dock-hidden');
 
     var btn = document.createElement('button');
     btn.id = 'mysifa-dock-toggle';
-    btn.title = hidden ? 'Afficher les widgets' : 'Masquer les widgets';
-    btn.innerHTML = hidden ? SVG_EYE_OFF : SVG_EYE;
+    btn.type = 'button';
+    // Ordinateur : flèche de la barre ; téléphone : l'œil d'origine.
+    function icone(h) {
+      if (isMobile()) return h ? SVG_EYE_OFF : SVG_EYE;
+      return h ? SVG_CHEVRON_UP : SVG_CHEVRON_DOWN;
+    }
+    function maj(h) {
+      btn.title = h ? 'Afficher les outils' : 'Replier les outils';
+      btn.setAttribute('aria-label', btn.title);
+      btn.innerHTML = icone(h);
+    }
+    maj(hidden);
 
     btn.addEventListener('click', function () {
       var isHidden = document.body.classList.toggle('mysifa-dock-hidden');
-      localStorage.setItem('mysifa_dock_hidden', isHidden ? '1' : '');
-      btn.title = isHidden ? 'Afficher les widgets' : 'Masquer les widgets';
-      btn.innerHTML = isHidden ? SVG_EYE_OFF : SVG_EYE;
+      try { localStorage.setItem('mysifa_dock_hidden', isHidden ? '1' : ''); } catch (e) {}
+      maj(isHidden);
       layout();
+    });
+    window.addEventListener('resize', function () {
+      maj(document.body.classList.contains('mysifa-dock-hidden'));
     });
 
     document.body.appendChild(btn);
