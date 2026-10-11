@@ -74,6 +74,7 @@ APPLIS: dict[str, Appli] = {
     "qualite": Appli("MyQualité", "qualite", "c3"),
     "bat": Appli("MyBAT", "bat", "c3"),
     "planning_rh": Appli("Planning RH", "rh", "c4"),
+    "myrh": Appli("MyRH", "rh", "c4"),
     "rh_coffre": Appli("Coffre RH", "coffre", "c4"),
     "calendrier": Appli("Calendrier", "calendrier", "c4"),
     "taches": Appli("Tâches", "taches", "c4"),
@@ -425,11 +426,6 @@ BLOCS: dict[str, Bloc] = {
 def _index_alias() -> dict[str, str]:
     idx = {}
     for nom, b in BLOCS.items():
-        for t in b.tons:
-            if t not in b.textes:
-                errs.append(f"{nom} : tons cite {t!r}, absent des textes — seul un texte se colore")
-        if b.appli not in APPLIS:
-            errs.append(f"{nom} : appli {b.appli!r} absente d'APPLIS (pastille de l'indicateur)")
         for a in b.alias:
             idx[a] = nom
     return idx
@@ -613,6 +609,11 @@ def erreurs_registre() -> list[str]:
         cles = [c for c, _ in b.valeurs]
         if len(set(cles)) != len(cles) or any(not _CLE_RE.match(c) for c in cles):
             errs.append(f"{nom} : clés de valeurs invalides ou en double")
+        for t in b.tons:
+            if t not in b.textes:
+                errs.append(f"{nom} : tons cite {t!r}, absent des textes — seul un texte se colore")
+        if b.appli not in APPLIS:
+            errs.append(f"{nom} : appli {b.appli!r} absente d'APPLIS (pastille de l'indicateur)")
         for t in b.textes:
             if t not in cles:
                 errs.append(f"{nom} : textes cite {t!r}, absent des valeurs")
