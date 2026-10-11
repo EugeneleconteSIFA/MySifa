@@ -98,6 +98,27 @@ Le serveur refuse `hauteur="l"` sur un bloc qui n'a ni l'un ni l'autre. Dans
 la colonne de 220 px, le grand format s'affiche en standard. Le test du
 registre vérifie que chaque `series=` / `liste=True` a sa source.
 
+**Relevés quotidiens** (décision du 11/10/2026) : un bloc dont la valeur est
+un état à l'instant n'a pas d'historique. `app/services/accueil_releves.py`
+le photographie toutes les 30 minutes (boucle `_boucle_releves_accueil` de
+`main.py`, **prod uniquement** — v1 reçoit les relevés par la copie nocturne)
+dans `accueil_releves`, une ligne par (bloc, objet, filtres, jour) réécrite à
+chaque passage : la ligne d'un jour fini porte l'état du soir. Rien ne les
+affiche encore ; ils serviront aux courbes des blocs sans série.
+
+- Un relevé **appelle la fonction de la route** que la source interroge, sous
+  `en_tant_que_systeme()` (`auth_service.py` : utilisateur superadmin
+  interne, id 0, posé dans une variable de contexte, inatteignable depuis une
+  requête HTTP), puis applique **le même décompte que la source JS**. Changer
+  le décompte d'une source impose de le reporter dans son relevé.
+- Les valeurs personnelles ne sont pas relevées (« mes tâches », messages non
+  lus, NC non lues, agenda).
+- **Tout bloc nouveau** va dans `RELEVEURS` ou dans `NON_RELEVES` avec sa
+  raison (historique déjà en base, personnel, état à la minute) :
+  `tests/test_accueil_releves.py` échoue sinon, et exécute chaque relevé
+  contre une base neuve.
+- Contrôle en prod : `GET /api/accueil/blocs/admin/releves` (superadmin).
+
 **Nombre distinct du texte** : quand la valeur affichée n'est pas un nombre
 (« 1h 57min »), poser aussi `data-bloc-nombre-<cle>` (`117`) : c'est lui que
 l'alerte compare.

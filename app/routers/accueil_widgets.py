@@ -17,6 +17,7 @@ Endpoints superadmin (écran « Widgets et tableaux de bord » de Paramètres) :
   GET    /api/accueil/blocs/admin           tous les blocs, usage, interrupteur
   PATCH  /api/accueil/blocs/admin/{nom}     activer / désactiver la capture
   GET    /api/accueil/blocs/admin/usages    qui a épinglé quels indicateurs
+  GET    /api/accueil/blocs/admin/releves   état des relevés quotidiens (contrôle)
   GET    /api/accueil/boutons/admin         grille applis × boutons flottants
   PUT    /api/accueil/boutons/admin         activer / couper un bouton dans une appli
 
@@ -438,6 +439,23 @@ def blocs_admin(request: Request):
             "updated_by": rg["updated_by"] if rg else None,
         })
     return {"blocs": out}
+
+
+@router.get("/api/accueil/blocs/admin/releves")
+def blocs_releves(request: Request):
+    """État des relevés quotidiens (app/services/accueil_releves.py) —
+    superadmin. Par bloc : jours relevés, combinaisons suivies, premier jour,
+    dernier passage. Sert à vérifier que la boucle tourne en prod.
+    Déclarée AVANT `/blocs/admin/{nom}`, comme `usages`."""
+    from app.services import accueil_releves
+    require_superadmin(request)
+    with get_db() as conn:
+        try:
+            lignes = accueil_releves.etat(conn)
+        except Exception:
+            lignes = []   # table pas encore migrée
+    return {"releves": lignes, "releves_attendus": sorted(accueil_releves.RELEVEURS),
+            "non_releves": accueil_releves.NON_RELEVES}
 
 
 @router.get("/api/accueil/blocs/admin/usages")

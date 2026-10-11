@@ -147,6 +147,7 @@ BLOCS: dict[str, Bloc] = {
         type="objet",
         valeurs=(("references", "Références"), ("sous-seuil", "Sous le seuil")),
         acces="stock", objet="categorie", lien="/stock?tab=matieres&cat={objet}",
+        liste=True,
     ),
     "stock.monitoring.kpis": Bloc(
         appli="stock", libelle="Monitoring stocks PF", url="/stock?tab=monitoring",
@@ -285,6 +286,7 @@ BLOCS: dict[str, Bloc] = {
     "expe.pilotage.envois": Bloc(
         appli="expe", libelle="Envois à piloter", url="/expe#pilotage",
         type="tableau", valeurs=(("lignes", "Envois"),), acces="expe",
+        liste=True,
     ),
     # ── MyExpé › Palettes Europe (app/web/expe_assets.py) ──
     "expe.palettes.totaux": Bloc(
@@ -334,12 +336,14 @@ BLOCS: dict[str, Bloc] = {
                  ("action-corrective", "Action corrective"), ("en-verification", "En vérification"),
                  ("non-lues", "Messages non lus")),
         acces="qualite",
+        liste=True,
     ),
     # ── Coffre RH (app/web/rh_coffre_page.py) ──
     "rh-coffre.ndf": Bloc(
         appli="rh_coffre", libelle="Notes de frais à valider", url="/rh/coffre#ndf",
         type="chiffre",
         valeurs=(("a-valider", "Notes à valider"), ("montant", "Montant à valider (€)")),
+        liste=True,
     ),
     # ── Messagerie (app/web/messages_page.py) ──
     "messages.non-lus": Bloc(
@@ -354,6 +358,7 @@ BLOCS: dict[str, Bloc] = {
         type="chiffre",
         valeurs=(("en-attente", "En attente de validation"), ("a-faire", "À faire"),
                  ("valides", "Validés")),
+        liste=True,
     ),
     # ── Maintenance (app/web/maintenance_page.py) — sans source API ──
     "maintenance.statuts": Bloc(
@@ -368,6 +373,7 @@ BLOCS: dict[str, Bloc] = {
         type="chiffre",
         valeurs=(("envoyees", "Appels en cours"), ("reponses", "Réponses reçues"),
                  ("brouillons", "Brouillons")),
+        liste=True,
     ),
     "prod.of.a-traiter": Bloc(
         appli="prod", libelle="OF à traiter", url="/prod?page=of",
@@ -388,11 +394,13 @@ BLOCS: dict[str, Bloc] = {
         type="liste",
         valeurs=(("absents", "Absents aujourd'hui"), ("a-valider", "Congés posés à valider")),
         acces="planning_rh",
+        liste=True,
     ),
     # ── MyCompta › Outil RH (app/web/compta_rh_outil_assets.py) ──
     "compta.rh.contrats": Bloc(
         appli="compta", libelle="Suivi RH des employés", url="/compta#rhoutil",
         type="chiffre",
+        liste=True,
         valeurs=(("fin-proche", "Fins de contrat proches ou dépassées"),
                  ("a-renseigner", "Statuts de contrat à renseigner"),
                  ("incomplets", "Dossiers incomplets")),
