@@ -469,7 +469,7 @@
   }
 
   // Barres jour par jour ; un jour sans saisie (week-end, fermeture) reste un trait.
-  function barres(c, cle, jours, larg, haut, regle) {
+  function barres(c, cle, jours, larg, haut, regle, unite) {
     var J = (c.serie && c.serie.jours) || {};
     var vals = [];
     for (var i = jours - 1; i >= 0; i--) {
@@ -483,21 +483,25 @@
     var out = "";
     vals.forEach(function (x, k) {
       var X = (k * pas + (pas - lb) / 2).toFixed(1);
+      // Info-bulle : la date et la valeur du jour, pour dater une aberration.
+      var date = x.j.slice(8, 10) + "/" + x.j.slice(5, 7);
       if (!x.v) {
-        out += '<rect x="' + X + '" y="' + (haut - 2) + '" width="' + lb.toFixed(1) + '" height="2" rx="1" fill="var(--border)"/>';
+        out += '<rect x="' + X + '" y="0" width="' + pas.toFixed(1) + '" height="' + haut + '" fill="transparent"><title>' +
+          date + " : aucune saisie</title></rect>" +
+          '<rect x="' + X + '" y="' + (haut - 2) + '" width="' + lb.toFixed(1) + '" height="2" rx="1" fill="var(--border)" pointer-events="none"/>';
         return;
       }
       var hb = Math.max(2, x.v / max * (haut - 2));
       var rouge = seuil != null && alerteDeclenchee(regle, x.v);
       out += '<rect x="' + X + '" y="' + (haut - hb).toFixed(1) + '" width="' + lb.toFixed(1) + '" height="' + hb.toFixed(1) +
-        '" rx="1.5" fill="' + (rouge ? "var(--danger)" : "var(--mac-a)") + '"><title>' + x.j.slice(8, 10) + "/" + x.j.slice(5, 7) +
-        "</title></rect>";
+        '" rx="1.5" fill="' + (rouge ? "var(--danger)" : "var(--mac-a)") + '"><title>' + date + " : " + esc(valeurUnite(x.v, unite)) +
+        (rouge ? " (hors seuil)" : "") + "</title></rect>";
     });
     return { svg: out, vals: vals, seuil: seuil, max: max };
   }
 
   function sparkline(c, it) {
-    var b = barres(c, it.cle, SPARK_JOURS, 84, 28, null);
+    var b = barres(c, it.cle, SPARK_JOURS, 84, 28, null, it.uniteLib);
     var e = document.createElement("span");
     e.innerHTML = '<svg class="mac-spark" viewBox="0 0 84 28" aria-hidden="true">' + b.svg + "</svg>";
     return e.firstChild;
@@ -505,7 +509,7 @@
 
   function graphique(c, it) {
     var H = 96, L = 276;
-    var b = barres(c, it.cle, GRAPHE_JOURS, L, H, it.regle);
+    var b = barres(c, it.cle, GRAPHE_JOURS, L, H, it.regle, it.uniteLib);
     var svg = b.svg;
     if (b.seuil != null) {
       var y = (H - b.seuil / b.max * (H - 2)).toFixed(1);
