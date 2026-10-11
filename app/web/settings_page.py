@@ -10712,13 +10712,16 @@ function renderSettingsBlocs() {
   // Tout aligné à gauche, sous le titre de la page : onglets et contenu
   // partagent le même bord.
   hote.innerHTML = '<div style="margin:0 0 14px;display:flex;gap:8px;flex-wrap:wrap">' +
-    onglet('blocs', 'Blocs capturables') + onglet('boutons', 'Boutons flottants par application') + '</div>' +
+    onglet('blocs', 'Blocs capturables') + onglet('usages', 'Par utilisateur') +
+    onglet('boutons', 'Boutons flottants par application') + '</div>' +
     '<div id="widgets-section"></div>';
   hote.querySelectorAll('[data-wsec]').forEach(b => b.addEventListener('click', () => {
     _widgetsSection = b.getAttribute('data-wsec');
     renderSettingsBlocs();
   }));
-  if (_widgetsSection === 'boutons') renderSettingsBoutons(); else renderSettingsBlocsCapturables();
+  if (_widgetsSection === 'boutons') renderSettingsBoutons();
+  else if (_widgetsSection === 'usages') renderSettingsUsages();
+  else renderSettingsBlocsCapturables();
 }
 
 async function renderSettingsBlocsCapturables() {
@@ -10726,10 +10729,21 @@ async function renderSettingsBlocsCapturables() {
   if (!root) return;
   root.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:13px">Chargement…</div>';
   let blocs = [];
+  // Qui a épinglé chaque bloc : dépliable depuis le nombre d'indicateurs.
+  const parBloc = {};
+  const ouverts = new Set();
   try {
-    const r = await fetch('/api/accueil/blocs/admin', { credentials: 'include' });
+    const [r, ru] = await Promise.all([
+      fetch('/api/accueil/blocs/admin', { credentials: 'include' }),
+      fetch('/api/accueil/blocs/admin/usages', { credentials: 'include' }),
+    ]);
     if (!r.ok) throw new Error('Chargement impossible (' + r.status + ').');
     blocs = (await r.json()).blocs || [];
+    if (ru.ok) {
+      ((await ru.json()).utilisateurs || []).forEach(u => (u.indicateurs || []).forEach(w => {
+        (parBloc[w.bloc] = parBloc[w.bloc] || []).push({ user: u.nom, role: u.role_libelle, nom: w.nom });
+      }));
+    }
   } catch (e) {
     root.innerHTML = '<div style="padding:20px;color:var(--danger);font-size:13px">' + escHtml(e.message) + '</div>';
     return;
@@ -10785,13 +10799,23 @@ async function renderSettingsBlocsCapturables() {
             (b.nouveau ? ' <span style="font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-bg);border-radius:6px;padding:1px 6px;margin-left:4px">Nouveau</span>' : '') +
             '</div><div style="font-family:ui-monospace,monospace;font-size:11px;color:var(--muted);overflow-wrap:anywhere">' + escHtml(b.nom) + '</div></td>' +
           '<td style="padding:8px;color:var(--text2);white-space:normal;line-height:1.45;vertical-align:middle">' + (b.valeurs || []).map(v => escHtml(v.libelle)).join(' · ') + '</td>' +
-          '<td style="padding:8px;text-align:right;font-variant-numeric:tabular-nums;vertical-align:middle">' + (b.nb_widgets || 0) + '</td>' +
+          '<td style="padding:8px;text-align:right;font-variant-numeric:tabular-nums;vertical-align:middle">' +
+            ((parBloc[b.nom] || []).length
+              ? '<button type="button" data-bloc-qui="' + escAttr(b.nom) + '" title="Voir qui l\'a épinglé" style="font:inherit;font-weight:700;cursor:pointer;padding:2px 9px;border-radius:7px;' +
+                (ouverts.has(b.nom) ? 'background:var(--accent-bg);border:1px solid var(--accent);color:var(--accent)' : 'background:var(--bg);border:1px solid var(--border);color:var(--text)') +
+                '">' + (b.nb_widgets || 0) + '</button>'
+              : String(b.nb_widgets || 0)) + '</td>' +
           '<td style="padding:8px 14px;vertical-align:middle"><div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">' +
             '<span style="font-size:12px;color:var(--muted)">' + (b.capturable ? 'Active' : 'Coupée') + '</span>' +
             '<label class="toggle" title="' + (b.capturable ? 'Couper la capture' : 'Activer la capture') + '">' +
             '<input type="checkbox" data-bloc-capturable="' + escAttr(b.nom) + '"' + (b.capturable ? ' checked' : '') + '>' +
             '<span class="toggle-track"><span class="toggle-thumb"></span></span></label></div></td>' +
-          '</tr>').join('') +
+          '</tr>' +
+          (ouverts.has(b.nom) && (parBloc[b.nom] || []).length
+            ? '<tr><td colspan="4" style="padding:0 14px 10px"><div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;display:flex;flex-direction:column;gap:4px;font-size:12px">' +
+              parBloc[b.nom].map(x => '<div><b>' + escHtml(x.user) + '</b> <span style="color:var(--muted)">· ' + escHtml(x.role || '') +
+                '</span> — « ' + escHtml(x.nom) + ' »</div>').join('') + '</div></td></tr>'
+            : '')).join('') +
         '</tbody></table></div>';
     });
     html += '</div>';
@@ -10808,6 +10832,11 @@ async function renderSettingsBlocsCapturables() {
         dessiner();
       });
     });
+    root.querySelectorAll('[data-bloc-qui]').forEach(btn => btn.addEventListener('click', () => {
+      const nom = btn.getAttribute('data-bloc-qui');
+      if (ouverts.has(nom)) ouverts.delete(nom); else ouverts.add(nom);
+      dessiner();
+    }));
     const vus = document.getElementById('blocs-vus');
     if (vus) vus.addEventListener('click', async () => {
       vus.disabled = true;
@@ -10818,6 +10847,110 @@ async function renderSettingsBlocsCapturables() {
     });
   }
   dessiner();
+}
+
+// ── Indicateurs par utilisateur ───────────────────────────────────────
+// Superadmin uniquement. Les tableaux de bord sont personnels : cette vue
+// sert à piloter l'outil (à qui le montrer, qui touchera un bloc retiré).
+// Une ligne par utilisateur actif, dépliable sur le détail de ses indicateurs.
+let _usagesEtat = { q: '', role: '', appli: '', ouverts: new Set() };
+async function renderSettingsUsages() {
+  const root = document.getElementById('widgets-section');
+  if (!root) return;
+  root.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:13px">Chargement…</div>';
+  let users = [];
+  try {
+    const r = await fetch('/api/accueil/blocs/admin/usages', { credentials: 'include' });
+    if (!r.ok) throw new Error('Chargement impossible (' + r.status + ').');
+    users = (await r.json()).utilisateurs || [];
+  } catch (e) {
+    root.innerHTML = '<div style="padding:20px;color:var(--danger);font-size:13px">' + escHtml(e.message) + '</div>';
+    return;
+  }
+  const NOMS_APPLIS = { portail: 'Accueil', prod: 'MyProd', planning: 'Planning machine', stock: 'MyStock',
+    expe: 'MyExpé', qualite: 'MyQualité', bat: 'MyBAT', ao: 'MyAO', taches: 'Tâches', messages: 'Messagerie',
+    calendrier: 'Calendrier', planning_rh: 'Planning RH', rh_coffre: 'Coffre RH', compta: 'MyCompta',
+    maintenance: 'Maintenance', erp: 'ERP RVGI' };
+  const nomAppli = a => NOMS_APPLIS[a] || a || '—';
+  const E = _usagesEtat;
+  const roles = [...new Set(users.map(u => u.role_libelle).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+  const applis = [...new Set(users.flatMap(u => u.indicateurs.map(w => w.appli)).filter(Boolean))]
+    .sort((a, b) => nomAppli(a).localeCompare(nomAppli(b), 'fr'));
+  const fmtJour = s => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '')); return m ? m[3] + '/' + m[2] + '/' + m[1] : '—'; };
+  const sansAccent = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  const champ = 'padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font:inherit;font-size:13px';
+  root.innerHTML = '<div style="padding:0 0 40px;max-width:1100px">' +
+    '<p style="font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.5">' +
+    'Les indicateurs que chacun a épinglés dans sa colonne « Mes tableaux de bord ». Vue réservée au superadmin : ' +
+    'les tableaux de bord restent personnels, personne d\'autre ne voit ceux de ses collègues.</p>' +
+    '<div id="usages-kpis" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"></div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">' +
+    '<input type="search" id="usages-q" placeholder="Rechercher (personne, indicateur…)" style="' + champ + ';min-width:240px;flex:1" value="' + escAttr(E.q) + '">' +
+    '<select id="usages-role" style="' + champ + '"><option value="">Tous les rôles</option>' +
+      roles.map(x => '<option' + (E.role === x ? ' selected' : '') + '>' + escHtml(x) + '</option>').join('') + '</select>' +
+    '<select id="usages-appli" style="' + champ + '"><option value="">Toutes les applis</option>' +
+      applis.map(x => '<option value="' + escAttr(x) + '"' + (E.appli === x ? ' selected' : '') + '>' + escHtml(nomAppli(x)) + '</option>').join('') + '</select>' +
+    '</div><div id="usages-liste"></div></div>';
+
+  function liste() {
+    const q = sansAccent(E.q.trim());
+    const filtres = users.filter(u => {
+      if (E.role && u.role_libelle !== E.role) return false;
+      if (E.appli && !u.indicateurs.some(w => w.appli === E.appli)) return false;
+      if (!q) return true;
+      return sansAccent(u.nom).includes(q) || sansAccent(u.email).includes(q)
+        || u.indicateurs.some(w => sansAccent(w.nom).includes(q) || sansAccent(w.bloc_libelle).includes(q));
+    });
+    const avec = users.filter(u => u.indicateurs.length).length;
+    const total = users.reduce((t, u) => t + u.indicateurs.length, 0);
+    document.getElementById('usages-kpis').innerHTML =
+      [['Utilisateurs avec indicateurs', avec], ['Sans aucun indicateur', users.length - avec], ['Indicateurs', total]].map(k =>
+        '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;min-width:150px">' +
+        '<div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">' + escHtml(k[0]) + '</div>' +
+        '<div style="font-size:20px;font-weight:700;color:var(--text)">' + k[1] + '</div></div>').join('');
+    const hote = document.getElementById('usages-liste');
+    if (!filtres.length) {
+      hote.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:13px">' +
+        (E.q.trim() ? 'Aucun résultat pour « ' + escHtml(E.q.trim()) + ' ».' : 'Aucun utilisateur pour ces filtres.') + '</div>';
+      return;
+    }
+    hote.innerHTML = '<div class="card" style="padding:0;overflow:hidden">' + filtres.map(u => {
+      const ws = E.appli ? u.indicateurs.filter(w => w.appli === E.appli) : u.indicateurs;
+      const ouvert = E.ouverts.has(u.id);
+      const tete = '<button type="button" data-usage-user="' + u.id + '" ' + (ws.length ? '' : 'disabled ') +
+        'style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 14px;background:none;border:none;border-top:1px solid var(--border);font:inherit;color:var(--text);text-align:left;cursor:' + (ws.length ? 'pointer' : 'default') + '">' +
+        '<span style="flex:1;min-width:0"><b>' + escHtml(u.nom) + '</b>' + (u.actif ? '' : ' <span style="font-size:11px;color:var(--muted)">(compte désactivé)</span>') +
+        '<span style="display:block;font-size:12px;color:var(--muted)">' + escHtml(u.role_libelle || '') + ' · ' + escHtml(u.email || '') + '</span></span>' +
+        '<span style="font-size:13px;font-weight:700;color:' + (ws.length ? 'var(--accent)' : 'var(--muted)') + '">' +
+          (ws.length ? ws.length + ' indicateur' + (ws.length > 1 ? 's' : '') : 'aucun') + '</span>' +
+        (ws.length ? '<span style="color:var(--muted);font-size:12px">' + (ouvert ? '▾' : '▸') + '</span>' : '') + '</button>';
+      if (!ouvert || !ws.length) return tete;
+      return tete + '<div style="padding:0 14px 12px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">' +
+        '<thead><tr style="color:var(--muted);font-size:11px;text-align:left"><th style="padding:6px 8px">Indicateur</th><th style="padding:6px 8px">Bloc</th>' +
+        '<th style="padding:6px 8px">Valeurs suivies</th><th style="padding:6px 8px;white-space:nowrap">Créé le</th></tr></thead><tbody>' +
+        ws.map(w => '<tr style="border-top:1px solid var(--border)">' +
+          '<td style="padding:6px 8px;font-weight:600">' + escHtml(w.nom) +
+            (w.etat !== 'ok' ? ' <span style="font-size:11px;color:var(--warn)">(' + (w.etat === 'disparu' ? 'bloc retiré' : 'capture coupée') + ')</span>' : '') + '</td>' +
+          '<td style="padding:6px 8px;color:var(--text2)">' + escHtml(nomAppli(w.appli)) + ' › ' + escHtml(w.bloc_libelle || w.bloc) + '</td>' +
+          '<td style="padding:6px 8px;color:var(--text2)">' + w.valeurs.map(v => escHtml(v.libelle) +
+            (v.alerte ? ' <span style="color:var(--warn)">(alerte ' + escHtml(v.alerte) + ')</span>' : '')).join(' · ') + '</td>' +
+          '<td style="padding:6px 8px;color:var(--muted);white-space:nowrap">' + fmtJour(w.created_at) + '</td></tr>').join('') +
+        '</tbody></table></div>';
+    }).join('') + '</div>';
+    hote.querySelectorAll('[data-usage-user]').forEach(b => b.addEventListener('click', () => {
+      const id = Number(b.getAttribute('data-usage-user'));
+      if (E.ouverts.has(id)) E.ouverts.delete(id); else E.ouverts.add(id);
+      liste();
+    }));
+  }
+  // La recherche ne reconstruit que la liste : le champ garde le focus.
+  const q = document.getElementById('usages-q');
+  q.addEventListener('input', () => { E.q = q.value; liste(); });
+  q.addEventListener('keydown', e => { if (e.key === 'Escape') { q.value = ''; E.q = ''; liste(); } });
+  document.getElementById('usages-role').addEventListener('change', e => { E.role = e.target.value; liste(); });
+  document.getElementById('usages-appli').addEventListener('change', e => { E.appli = e.target.value; liste(); });
+  liste();
 }
 
 // ── Boutons flottants par application ─────────────────────────────────

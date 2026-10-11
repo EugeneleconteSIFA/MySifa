@@ -16,6 +16,7 @@ Endpoints utilisateur :
 Endpoints superadmin (écran « Widgets et tableaux de bord » de Paramètres) :
   GET    /api/accueil/blocs/admin           tous les blocs, usage, interrupteur
   PATCH  /api/accueil/blocs/admin/{nom}     activer / désactiver la capture
+  GET    /api/accueil/blocs/admin/usages    qui a épinglé quels indicateurs
   GET    /api/accueil/boutons/admin         grille applis × boutons flottants
   PUT    /api/accueil/boutons/admin         activer / couper un bouton dans une appli
 
@@ -428,6 +429,70 @@ def blocs_admin(request: Request):
             "updated_by": rg["updated_by"] if rg else None,
         })
     return {"blocs": out}
+
+
+@router.get("/api/accueil/blocs/admin/usages")
+def blocs_usages(request: Request):
+    """Qui a épinglé quels indicateurs — superadmin uniquement.
+
+    Les tableaux de bord sont personnels : cette vue n'existe que pour piloter
+    l'outil (à qui le montrer, qui touchera un bloc qu'on retire). Une ligne
+    par utilisateur actif, avec ou sans indicateur ; le détail de chaque
+    indicateur : nom donné, bloc et appli d'origine, valeurs et alertes.
+    Déclarée AVANT `/blocs/admin/{nom}`, sinon « usages » serait lu comme un nom.
+    """
+    from config import role_label
+
+    require_superadmin(request)
+    with get_db() as conn:
+        desactives = _desactives(conn)
+        users = conn.execute(
+            "SELECT id, nom, email, role, COALESCE(actif, 1) AS actif FROM users"
+            " ORDER BY nom COLLATE NOCASE"
+        ).fetchall()
+        rows = conn.execute(
+            "SELECT id, user_id, bloc, objet, nom, valeurs, ordre, created_at, updated_at"
+            " FROM accueil_widgets ORDER BY user_id, ordre, id"
+        ).fetchall()
+    par_user: dict[int, list] = {}
+    for r in rows:
+        try:
+            choisies = json.loads(r["valeurs"] or "[]")
+        except (TypeError, ValueError):
+            choisies = []
+        res = reg.resoudre(r["bloc"])
+        bloc = res[1] if res else None
+        libelles = dict(bloc.valeurs) if bloc else {}
+        valeurs = []
+        for v in choisies:
+            cle = str((v or {}).get("cle") or "")
+            al = (v or {}).get("alerte") or None
+            valeurs.append({
+                "libelle": libelles.get(cle, cle),
+                "alerte": ("%s %s" % (al.get("op"), al.get("seuil"))) if isinstance(al, dict) else None,
+            })
+        par_user.setdefault(r["user_id"], []).append({
+            "id": r["id"],
+            "nom": r["nom"],
+            "bloc": res[0] if res else r["bloc"],
+            "bloc_libelle": bloc.libelle if bloc else None,
+            "appli": bloc.appli if bloc else None,
+            "etat": ("disparu" if not bloc else "desactive" if res[0] in desactives else "ok"),
+            "valeurs": valeurs,
+            "created_at": r["created_at"],
+            "updated_at": r["updated_at"],
+        })
+    out = []
+    for u in users:
+        ws = par_user.pop(u["id"], [])
+        if not ws and not u["actif"]:
+            continue    # un compte désactivé sans indicateur n'apprend rien
+        out.append({
+            "id": u["id"], "nom": u["nom"], "email": u["email"],
+            "role": u["role"], "role_libelle": role_label(u["role"]),
+            "actif": bool(u["actif"]), "indicateurs": ws,
+        })
+    return {"utilisateurs": out}
 
 
 @router.patch("/api/accueil/blocs/admin/{nom}")

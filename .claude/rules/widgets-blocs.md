@@ -178,6 +178,12 @@ registre, le nombre de widgets créés sur chacun, l'étiquette « Nouveau », e
 un interrupteur de capture (`blocs_reglages`). Couper un bloc masque ses
 widgets sans les supprimer. On n'y crée ni ne renomme aucun bloc.
 
+Deuxième section, **Par utilisateur** (`renderSettingsUsages`,
+`GET /api/accueil/blocs/admin/usages`) : qui a épinglé quels indicateurs,
+avec valeurs et alertes. Dans la liste des blocs, le nombre d'indicateurs se
+déplie sur les mêmes noms. Réservé au superadmin : les tableaux de bord
+restent personnels, aucun autre écran ne montre ceux d'un collègue.
+
 Les anciens tableaux de bord flottants (router `dashboards.py`, onglet profil
 « Mes dashboards ») ont été retirés le 04/10/2026, leurs tables `dashboards`
 et `user_dashboards` le 06/10/2026 (migration
