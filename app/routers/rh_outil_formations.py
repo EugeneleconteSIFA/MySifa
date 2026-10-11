@@ -184,6 +184,29 @@ def rename_justificatif(justificatif_id: int, payload: LibelleIn, request: Reque
     return {"success": True}
 
 
+class PieceExigeeIn(BaseModel):
+    exigee: bool
+
+
+@router.put("/formations/justificatifs/{justificatif_id}/piece")
+def set_piece_justificatif(justificatif_id: int, payload: PieceExigeeIn, request: Request):
+    """Pièce jointe facultative ou exigée pour ce justificatif."""
+    user = _require(request)
+    with get_db() as conn:
+        j = _justificatif(conn, justificatif_id)
+        actuel = conn.execute("SELECT piece_exigee FROM rh_outil_formation_justificatifs WHERE id=?",
+                              (justificatif_id,)).fetchone()[0]
+        if bool(actuel) == payload.exigee:
+            return {"success": True}
+        conn.execute("UPDATE rh_outil_formation_justificatifs SET piece_exigee=? WHERE id=?",
+                     (1 if payload.exigee else 0, justificatif_id))
+        conn.commit()
+    log_action(user=user, action="UPDATE", module="rh_outil",
+               objet=f"Outil RH · formation « {j['formation']} » · justificatif « {j['libelle']} » : pièce jointe "
+                     f"{'exigée' if payload.exigee else 'facultative'}", request=request)
+    return {"success": True}
+
+
 @router.delete("/formations/justificatifs/{justificatif_id}")
 def delete_justificatif(justificatif_id: int, request: Request):
     """Supprime le justificatif de la formation et de tous les employés, avec
