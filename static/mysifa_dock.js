@@ -607,20 +607,28 @@
   }
 
   /* ── Colonne d'outils (ordinateur) ─────────────────────────────────────
-     Même principe que les boutons en colonne du portail (Paramètres,
-     profil) : des carrés indépendants empilés en bas à droite, la messagerie
-     en bas (le coin, là où l'œil cherche le compteur de non-lus), les outils
-     au-dessus. Une languette en tête replie la colonne en un seul bouton
-     « outils ». Les panneaux s'ouvrent à gauche de la colonne, calés sur son
-     bas. Le style est dans mysifa_dock.css (body.mysifa-dock-barre). */
-  var COL_BTN = 48;
-  var COL_ECART = 10;
+     La même « pilule » que la barre du portail (Paramètres, profil, ERP… :
+     .portal-corner-stack dans app/web/portal_assets.py) : une carte
+     verticale qui contient des boutons transparents de 44 px, icône grise,
+     couleur du thème au survol et sur l'outil ouvert. Messagerie en bas (le
+     coin, là où l'œil cherche le compteur de non-lus), outils au-dessus, et
+     en tête un bouton qui replie la pilule en un seul bouton « outils ».
+     Les boutons gardent leur position fixe, calculée un par un ; la carte est
+     un fond dessiné derrière eux (#mysifa-dock-barre). Les panneaux
+     s'ouvrent à gauche, calés sur le bas. Style : mysifa_dock.css. */
+  var PIL_BTN = 44;
+  var PIL_ECART = 2;
+  var PIL_PAD_V = 8;
+  var PIL_PAD_H = 6;
+  var PIL_BORD = 1;
+  var PIL_LARGEUR = PIL_BTN + 2 * (PIL_PAD_H + PIL_BORD);
+  var PIL_REPLI = 28;   // hauteur du bouton de repli, pilule dépliée
 
   function panneauBarre(el, base, z) {
     if (!el) return;
     el.style.left = 'auto';
     el.style.top = 'auto';
-    el.style.right = safeRight(COL_BTN + 12);
+    el.style.right = safeRight(PIL_LARGEUR + 12);
     el.style.bottom = safeBottom(base);
     el.style.boxShadow = SHADOW_PANEL;
     el.style.zIndex = String(z || Z_PANEL);
@@ -634,7 +642,7 @@
     var chat = isDockFab(chatBubble) ? chatBubble : null;
 
     // Du bas vers le haut. Sur le portail ordinateur, la messagerie reste sa
-    // barre du bas à gauche (#cw-bar), hors de la colonne.
+    // barre du bas à gauche (#cw-bar), hors de la pilule.
     var boutons = [];
     if (chat) boutons.push(chat);
     if (isVisible(aiRoot) && isDockFab(aiBtn)) boutons.push(aiBtn);
@@ -643,25 +651,42 @@
     if (isDockFab(carteFab)) boutons.push(carteFab);
     dockExtras().forEach(function (f) { boutons.push(f); });
 
-    var y = base;
+    var fond = document.getElementById('mysifa-dock-barre');
+    if (!fond) {
+      fond = document.createElement('div');
+      fond.id = 'mysifa-dock-barre';
+      fond.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(fond);
+    }
+    var dedans = PIL_PAD_H + PIL_BORD;
+    var y = base + PIL_BORD + PIL_PAD_V;
     if (!replie) {
       boutons.forEach(function (el) {
-        applyFab(el, safeRight(0), safeBottom(y));
+        applyFab(el, safeRight(dedans), safeBottom(y));
         el.style.top = 'auto';
         el.style.boxShadow = '';
-        y += COL_BTN + COL_ECART;
+        y += PIL_BTN + PIL_ECART;
       });
     }
     var bascule = document.getElementById('mysifa-dock-toggle');
+    var hBascule = replie ? PIL_BTN : PIL_REPLI;
     if (bascule) {
       bascule.style.display = boutons.length ? '' : 'none';
-      bascule.style.right = safeRight(0);
+      bascule.style.right = safeRight(dedans);
       bascule.style.bottom = safeBottom(y);
       bascule.style.left = 'auto';
       bascule.style.top = 'auto';
+      y += hBascule;
+    } else if (boutons.length) {
+      y -= PIL_ECART;
     }
+    fond.style.display = boutons.length ? '' : 'none';
+    fond.style.right = safeRight(0);
+    fond.style.bottom = safeBottom(base);
+    fond.style.width = PIL_LARGEUR + 'px';
+    fond.style.height = (y - base + PIL_PAD_V + PIL_BORD) + 'px';
 
-    // Panneaux : à gauche de la colonne, calés sur son bas.
+    // Panneaux : à gauche de la pilule, calés sur son bas.
     if (calcPanel && getComputedStyle(calcPanel).display !== 'none') panneauBarre(calcPanel, base);
     if (cartePanel && getComputedStyle(cartePanel).display !== 'none') panneauBarre(cartePanel, base);
     if (aiPanel) panneauBarre(aiPanel, base);

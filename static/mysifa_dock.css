@@ -243,13 +243,24 @@ body.mysifa-dock-hidden #postit-dock-menu {
 }
 
 /* ── Colonne d'outils (ordinateur, mysifa_dock.js › layoutBarre) ──────────
-   Même principe que les boutons en colonne du portail (Paramètres, profil :
-   .portal-settings-corner dans app/web/portal_assets.py) : des carrés
-   indépendants, fond carte, bordure fine, icône neutre, et la couleur
-   principale du thème au survol et sur l'outil ouvert. Pas de fond commun :
-   les boutons gardent leur position fixe, calculée un par un. */
+   La même pilule que la barre du portail (.portal-corner-stack,
+   app/web/portal_assets.py) : carte, marge 8 × 6 px, coins de 20 px, boutons
+   transparents de 44 px, icône grise, couleur du thème au survol et sur
+   l'outil ouvert. Garder les deux identiques. */
 @media (min-width: 901px) {
-  #mysifa-dock-barre,
+  #mysifa-dock-barre {
+    position: fixed;
+    z-index: 8001;
+    box-sizing: border-box;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    pointer-events: none;
+  }
+  body.light #mysifa-dock-barre {
+    box-shadow: 0 8px 32px rgba(15, 23, 42, 0.10);
+  }
   #mysifa-dock-sep {
     display: none !important;
   }
@@ -257,15 +268,15 @@ body.mysifa-dock-hidden #postit-dock-menu {
   body.mysifa-dock-barre .calc-fab,
   body.mysifa-dock-barre #ai-chat-btn,
   body.mysifa-dock-barre #cw-bubble {
-    width: 48px !important;
-    height: 48px !important;
-    border-radius: 14px !important;
-    background: var(--card) !important;
-    border: 1px solid var(--border) !important;
-    color: var(--text2) !important;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12) !important;
+    width: 44px !important;
+    height: 44px !important;
+    border-radius: 12px !important;
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    color: var(--muted) !important;
+    box-shadow: none !important;
     transform: none !important;
-    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s, color 0.15s;
+    transition: background 0.15s, color 0.15s;
   }
   body.mysifa-dock-barre .mysifa-dock-fab:hover,
   body.mysifa-dock-barre .calc-fab:hover,
@@ -275,51 +286,46 @@ body.mysifa-dock-hidden #postit-dock-menu {
   body.mysifa-dock-barre .calc-fab-active,
   body.mysifa-dock-barre .cw-bubble-active,
   body.mysifa-dock-barre .mysifa-cap-btn.on {
-    border-color: var(--accent) !important;
     background: var(--accent-bg) !important;
     color: var(--accent) !important;
-    box-shadow: 0 8px 28px rgba(34, 211, 238, 0.12) !important;
   }
   body.mysifa-dock-barre .mysifa-dock-fab svg,
   body.mysifa-dock-barre .calc-fab svg,
   body.mysifa-dock-barre #ai-chat-btn svg,
   body.mysifa-dock-barre #cw-bubble svg {
     color: currentColor !important;
-    width: 21px;
-    height: 21px;
+    width: 20px;
+    height: 20px;
   }
   /* Icône de la carte de France : un masque teinté par son fond. */
   body.mysifa-dock-barre .expe-carte-fab-icon {
     background-color: currentColor !important;
-    width: 21px;
-    height: 21px;
+    width: 20px;
+    height: 20px;
   }
   body.mysifa-dock-barre #cw-bubble-badge {
-    top: -6px;
-    right: -6px;
-    border-color: var(--bg);
+    top: 2px;
+    right: 2px;
+    border-color: var(--card);
   }
-  /* Repli : une languette au-dessus de la colonne ; repliée, un vrai bouton
-     carré, icône « outils ». */
+  /* Bouton de repli, en tête de pilule ; pilule repliée, il est seul et
+     porte l'icône « outils ». */
   body.mysifa-dock-barre #mysifa-dock-toggle {
-    width: 48px;
-    height: 24px;
+    width: 44px;
+    height: 28px;
     border-radius: 10px;
-    background: var(--card);
-    border: 1px solid var(--border);
+    background: transparent;
+    border: none;
     color: var(--muted);
     opacity: 1;
     z-index: 8003;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
-    transition: border-color 0.15s, background 0.15s, color 0.15s;
+    transition: background 0.15s, color 0.15s;
   }
   body.mysifa-dock-barre.mysifa-dock-hidden #mysifa-dock-toggle {
-    height: 48px;
-    border-radius: 14px;
-    color: var(--text2);
+    height: 44px;
+    border-radius: 12px;
   }
   body.mysifa-dock-barre #mysifa-dock-toggle:hover {
-    border-color: var(--accent);
     background: var(--accent-bg);
     color: var(--accent);
   }
@@ -334,8 +340,8 @@ body.mysifa-dock-hidden #postit-dock-menu {
   body.mysifa-dock-barre.mysifa-dock-hidden #mysifa-dock-toggle-badge:not(:empty) {
     display: inline-flex !important;
     position: absolute;
-    top: -6px;
-    right: -6px;
+    top: 2px;
+    right: 2px;
     min-width: 18px;
     height: 18px;
     padding: 0 5px;
@@ -346,7 +352,7 @@ body.mysifa-dock-hidden #postit-dock-menu {
     font-weight: 800;
     align-items: center;
     justify-content: center;
-    border: 2px solid var(--bg);
+    border: 2px solid var(--card);
     box-sizing: border-box;
   }
 }
