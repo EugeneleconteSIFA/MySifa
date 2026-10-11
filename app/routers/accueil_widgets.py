@@ -13,9 +13,11 @@ Endpoints utilisateur :
   POST   /api/accueil/demandes              demande de tableau de bord → tâche
                                             « évolution » assignée aux superadmins
 
-Endpoints superadmin (écran « Blocs capturables » de Paramètres) :
+Endpoints superadmin (écran « Widgets et tableaux de bord » de Paramètres) :
   GET    /api/accueil/blocs/admin           tous les blocs, usage, interrupteur
   PATCH  /api/accueil/blocs/admin/{nom}     activer / désactiver la capture
+  GET    /api/accueil/boutons/admin         grille applis × boutons flottants
+  PUT    /api/accueil/boutons/admin         activer / couper un bouton dans une appli
 
 Le serveur ne calcule aucune donnée de bloc : le widget charge la page réelle,
 qui applique ses propres droits. Le filtre d'accès ci-dessous sert seulement à
@@ -32,6 +34,7 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from config import ROLES_ERP
 from app.services import blocs_registre as reg
+from app.services import boutons_flottants as bf
 from app.services.auth_service import (
     get_current_user,
     require_superadmin,
@@ -156,6 +159,12 @@ class Demande(BaseModel):
 
 class Reglage(BaseModel):
     capturable: bool
+
+
+class ReglageBouton(BaseModel):
+    appli: str
+    bouton: str
+    actif: bool
 
 
 # ─── Utilisateur ─────────────────────────────────────────────────────────────
@@ -435,3 +444,33 @@ def regler_bloc(nom: str, body: Reglage, request: Request):
         )
         conn.commit()
     return {"ok": True}
+
+
+# ─── Boutons flottants par application (app/services/boutons_flottants.py) ──
+
+@router.get("/api/accueil/boutons/admin")
+def boutons_admin(request: Request):
+    require_superadmin(request)
+    with get_db() as conn:
+        return bf.grille(bf.lire_reglages(conn))
+
+
+@router.put("/api/accueil/boutons/admin")
+def regler_bouton(body: ReglageBouton, request: Request):
+    user = require_superadmin(request)
+    try:
+        bf.valider(body.appli, body.bouton)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO boutons_flottants_reglages (appli, bouton, actif, updated_at, updated_by)"
+            " VALUES (?,?,?,?,?) ON CONFLICT(appli, bouton) DO UPDATE SET actif=excluded.actif,"
+            " updated_at=excluded.updated_at, updated_by=excluded.updated_by",
+            (body.appli, body.bouton, 1 if body.actif else 0, _now(),
+             user.get("email") or str(user["id"])),
+        )
+        conn.commit()
+        grille = bf.grille(bf.lire_reglages(conn))
+    bf.vider_cache()
+    return grille

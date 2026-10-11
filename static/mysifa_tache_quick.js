@@ -531,6 +531,8 @@
   document.addEventListener('keydown', function (e) {
     if (!estRaccourci(e)) return;
     if (ouverte) return;
+    // Coupée dans cette appli (Paramètres › Widgets et tableaux de bord).
+    if (window.MySifaBoutons && !window.MySifaBoutons.actif('tache')) return;
     // On ne vole pas la frappe dans un champ de saisie : « † » y est légitime.
     if (dansUneSaisie(e)) return;
     e.preventDefault();

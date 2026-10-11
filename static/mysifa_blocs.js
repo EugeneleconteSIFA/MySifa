@@ -656,6 +656,8 @@
         return;
       }
       if (!e.altKey || e.ctrlKey || e.metaKey || e.code !== "KeyC") return;
+      // Capture coupée dans cette appli (Paramètres › Widgets et tableaux de bord).
+      if (!actif && window.MySifaBoutons && !window.MySifaBoutons.actif("capture")) return;
       var t = e.target;
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
       e.preventDefault();
