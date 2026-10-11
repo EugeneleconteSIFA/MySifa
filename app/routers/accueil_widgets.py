@@ -82,8 +82,12 @@ def _bloc_public(nom: str, b: reg.Bloc) -> dict:
         "objet": b.objet,
         # nombre=False : valeur texte (état, nom), affichée mais sans alerte.
         # ton=True : texte affiché en badge coloré (data-bloc-ton-<cle>).
-        "valeurs": [{"cle": c, "libelle": l, "nombre": c not in b.textes, "ton": c in b.tons}
+        # serie : sens (« + » / « - ») d'une valeur suivie jour par jour, sinon None.
+        "valeurs": [{"cle": c, "libelle": l, "nombre": c not in b.textes, "ton": c in b.tons,
+                     "serie": dict(b.series).get(c)}
                     for c, l in b.valeurs],
+        "liste": b.liste,
+        "grand": b.grand,
         "url": b.url,
     }
 
