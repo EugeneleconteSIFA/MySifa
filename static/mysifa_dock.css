@@ -252,7 +252,7 @@ body.mysifa-dock-hidden #postit-dock-menu {
     position: fixed;
     z-index: 8001;
     background: var(--card);
-    border: 1px solid var(--border);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
     border-radius: 26px;
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
     pointer-events: none;
@@ -266,6 +266,18 @@ body.mysifa-dock-hidden #postit-dock-menu {
     background: var(--border);
     pointer-events: none;
   }
+  /* Une couleur par outil, prise dans la palette du thème de l'utilisateur
+     (--accent, --c1…--c5 de mysifa_theme.css) : elles changent avec Ambre,
+     Pivoine, Forêt… Fond teinté au repos, plus soutenu au survol, couleur
+     pleine quand l'outil est ouvert. */
+  body.mysifa-dock-barre #cw-bubble { --bf: var(--accent); }
+  body.mysifa-dock-barre #ai-chat-btn { --bf: var(--c2); }
+  body.mysifa-dock-barre #postit-dock-btn { --bf: var(--c4); }
+  body.mysifa-dock-barre #_calc_fab { --bf: var(--c3); }
+  body.mysifa-dock-barre #mysifa-cap-fab { --bf: var(--c5); }
+  /* Boutons propres à une appli : jamais deux dans la même barre. */
+  body.mysifa-dock-barre #expe-carte-fab { --bf: var(--c1); }
+  body.mysifa-dock-barre #mtr-fab { --bf: var(--c1); }
   body.mysifa-dock-barre .mysifa-dock-fab,
   body.mysifa-dock-barre .calc-fab,
   body.mysifa-dock-barre #ai-chat-btn,
@@ -273,8 +285,8 @@ body.mysifa-dock-hidden #postit-dock-menu {
     width: 40px !important;
     height: 40px !important;
     border-radius: 12px !important;
-    background: transparent !important;
-    color: var(--text2) !important;
+    background: color-mix(in srgb, var(--bf, var(--accent)) 16%, transparent) !important;
+    color: var(--bf, var(--accent)) !important;
     box-shadow: none !important;
     transform: none !important;
     transition: background 0.15s, color 0.15s;
@@ -283,13 +295,12 @@ body.mysifa-dock-hidden #postit-dock-menu {
   body.mysifa-dock-barre .calc-fab:hover,
   body.mysifa-dock-barre #ai-chat-btn:hover,
   body.mysifa-dock-barre #cw-bubble:hover {
-    background: var(--accent-bg) !important;
-    color: var(--accent) !important;
+    background: color-mix(in srgb, var(--bf, var(--accent)) 30%, transparent) !important;
   }
   body.mysifa-dock-barre .mysifa-dock-fab-active,
   body.mysifa-dock-barre .calc-fab-active,
   body.mysifa-dock-barre .cw-bubble-active {
-    background: var(--accent) !important;
+    background: var(--bf, var(--accent)) !important;
     color: white !important;
   }
   body.mysifa-dock-barre .mysifa-dock-fab svg,
@@ -329,7 +340,7 @@ body.mysifa-dock-hidden #postit-dock-menu {
   }
   /* Mode capture en cours : le bouton reste allumé. */
   body.mysifa-dock-barre .mysifa-cap-btn.on {
-    background: var(--accent) !important;
+    background: var(--bf, var(--accent)) !important;
     color: white !important;
   }
 }
