@@ -1,4 +1,4 @@
-"""MySifa — Outil RH (MyCompta) : catégories et justificatifs des formations.
+"""MySifa — Outil RH (MyRH) : catégories et justificatifs des formations.
 
 - Catégories : référentiel modifiable (rh_outil_formation_categories) ;
   supprimer une catégorie laisse ses formations « sans catégorie ».
@@ -7,7 +7,7 @@
   a la formation a une case par justificatif (rh_outil_membre_justificatifs),
   affichée sous la formation, avec pièces jointes (rh_outil_pieces.cible =
   'justificatif', routes dans rh_outil_pieces.py).
-Accès : celui de l'Outil RH (accès à MyCompta).
+Accès : celui de l'Outil RH (accès à MyRH).
 """
 
 from typing import Optional

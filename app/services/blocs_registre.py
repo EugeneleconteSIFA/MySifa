@@ -318,14 +318,17 @@ BLOCS: dict[str, Bloc] = {
         valeurs=(("absents", "Absents aujourd'hui"), ("a-valider", "Congés posés à valider")),
         acces="planning_rh",
     ),
-    # ── MyCompta › Outil RH (app/web/compta_rh_outil_assets.py) ──
+    # ── MyRH › Outil RH (app/web/compta_rh_outil_assets.py) ──
+    # Le nom garde son préfixe « compta » : l'Outil RH vivait dans MyCompta et
+    # un nom de bloc ne change jamais (widgets déjà épinglés). Seuls l'URL et
+    # l'accès ont suivi le déménagement vers MyRH.
     "compta.rh.contrats": Bloc(
-        appli="compta", libelle="Suivi RH des employés", url="/compta#rhoutil",
+        appli="myrh", libelle="Suivi RH des employés", url="/rh",
         type="chiffre",
         valeurs=(("fin-proche", "Fins de contrat proches ou dépassées"),
                  ("a-renseigner", "Statuts de contrat à renseigner"),
                  ("incomplets", "Dossiers incomplets")),
-        acces="compta",
+        acces="myrh",
     ),
     # ── ERP RVGI › Tableaux de bord (app/web/erp_page.py, app/services/erp_tdb.py) ──
     # « erp » n'est pas une application du contrôle d'accès : /erp est ouvert

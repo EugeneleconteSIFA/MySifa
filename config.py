@@ -613,6 +613,9 @@ EXPE_MOTIF_SANS_DOSSIER_NOTE_REQUISE = ("autre",)
 
 ROLES_PROD  = {ROLE_DIRECTION, ROLE_FABRICATION, ROLE_EXPEDITION, ROLE_COMMERCIAL, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
 ROLES_COMPTA = {ROLE_DIRECTION, ROLE_COMPTABILITE, ROLE_SUPERADMIN}
+# MyRH (suivi des nouveaux employés) : au lancement, les mêmes rôles que
+# MyCompta, où l'Outil RH vivait. Réglable ensuite dans Paramètres › Accès.
+ROLES_MYRH = set(ROLES_COMPTA)
 ROLES_EXPE = {ROLE_DIRECTION, ROLE_EXPEDITION, ROLE_LOGISTIQUE, ROLE_COMMERCIAL, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
 ROLES_EXPE_WRITE = {ROLE_DIRECTION, ROLE_EXPEDITION, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
 
@@ -715,7 +718,7 @@ ROLES_SETTINGS = (
 ROLES_TACHES = {ROLE_DIRECTION, ROLE_SUPERADMIN}
 
 # Applications dont l'accès peut être surchargé par utilisateur (hors Paramètres : accès géré par ROLES_SETTINGS_*).
-ACCESS_OVERRIDABLE_APPS = frozenset({"prod", "planning", "planning_rh", "stock", "compta", "expe", "pricing"})
+ACCESS_OVERRIDABLE_APPS = frozenset({"prod", "planning", "planning_rh", "stock", "compta", "myrh", "expe", "pricing"})
 
 # ─── Contrôle d'accès database-driven (migration 184) ────────────
 # 4 niveaux ordinaux — admin >= write >= read >= none. Utilisé partout où le
@@ -770,6 +773,7 @@ APPS_CATALOG = [
         {"id": "cession", "label": "Cession"},
         {"id": "paie", "label": "Paie"},
     ]},
+    {"id": "myrh", "label": "MyRH", "modules": []},
     {"id": "expe", "label": "MyExpé", "modules": [
         {"id": "suivi_departs", "label": "Départs"},
         {"id": "palettes_europe", "label": "Palettes Europe"},
@@ -921,6 +925,7 @@ def default_app_access_for_role(role: str) -> dict:
             "planning": True,
             "stock": True,
             "compta": True,
+            "myrh": True,
             "expe": True,
             "pricing": True,
             "fabrication": True,
@@ -933,6 +938,7 @@ def default_app_access_for_role(role: str) -> dict:
         "planning": role in ROLES_PLANNING_VIEW,
         "stock": role in ROLES_STOCK,
         "compta": role in ROLES_COMPTA,
+        "myrh": role in ROLES_MYRH,
         "expe": role in ROLES_EXPE,
         "pricing": role in ROLES_PRICING,
         "fabrication": role in ROLES_FABRICATION_APP,

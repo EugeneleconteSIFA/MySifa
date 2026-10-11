@@ -1,4 +1,4 @@
-"""MySifa — Outil RH (MyCompta) : pièces jointes.
+"""MySifa — Outil RH (MyRH) : pièces jointes.
 
 Deux cibles, une seule table (rh_outil_pieces.cible) :
 - 'document'     : document administratif d'un employé (rh_outil_membre_documents) ;
@@ -6,7 +6,7 @@ Deux cibles, une seule table (rh_outil_pieces.cible) :
 Fichiers rangés hors de /static sous data/uploads/rh_outil/, nom sur disque
 généré ; type vérifié sur le contenu (PDF, JPG, PNG, WEBP, HEIC) ; service en
 téléchargement par défaut, aperçu isolé (CSP sandbox, nosniff).
-Accès : celui de l'Outil RH (accès à MyCompta).
+Accès : celui de l'Outil RH (accès à MyRH).
 """
 
 import uuid

@@ -1,4 +1,4 @@
-"""MySifa — Outil RH (onglet de MyCompta).
+"""MySifa — Outil RH (application MyRH, page /rh).
 
 Liste partagée des employés suivis dans l'onglet « Outil RH » (suivi des
 nouveaux employés). Deux listes par employé, piochées dans des catalogues
@@ -20,7 +20,7 @@ jamais toucher aux éléments de salaire.
 L'onglet sert au suivi des nouveaux employés : « Nouvel employé » crée le compte
 MySifa (mêmes règles que Paramètres › Comptes, fonctions partagées avec
 app/routers/auth.py) et l'inscrit au suivi avec sa date d'arrivée.
-Accès : quiconque a accès à MyCompta (rôle ou exception réglée dans Paramètres).
+Accès : quiconque a accès à MyRH (rôle ou exception réglée dans Paramètres).
 Créer un compte demande en plus le droit de gérer les comptes (Paramètres).
 """
 
@@ -226,8 +226,8 @@ def _piece_json(pc) -> dict:
 
 def _require(request: Request) -> dict:
     u = get_current_user(request)
-    if not user_has_app_access(u, "compta"):
-        raise HTTPException(status_code=403, detail="Accès réservé à MyCompta")
+    if not user_has_app_access(u, "myrh"):
+        raise HTTPException(status_code=403, detail="Accès réservé à MyRH")
     return u
 
 

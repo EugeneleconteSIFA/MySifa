@@ -40,6 +40,7 @@ from app.web.planning_page import router as planning_page_router
 from app.web.prod_page import router as prod_page_router
 from app.web.stock_page import router as stock_page_router
 from app.web.compta_page import router as compta_page_router
+from app.web.myrh_page import router as myrh_page_router
 from app.web.expe_page import router as expe_page_router
 from app.web.devis_page import router as devis_page_router
 from app.routers.expe_departs import router as expe_departs_router
@@ -623,6 +624,7 @@ app.include_router(planning_page_router)
 app.include_router(prod_page_router)
 app.include_router(stock_page_router)
 app.include_router(compta_page_router)
+app.include_router(myrh_page_router)
 app.include_router(expe_page_router)
 app.include_router(devis_page_router)
 app.include_router(expe_departs_router, prefix="/api/expe")

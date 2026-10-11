@@ -1,4 +1,7 @@
-"""MyCompta — onglet « Outil RH » : CSS et JS.
+"""MyRH — Outil RH (suivi des nouveaux employés) : CSS et JS.
+
+Écran de l'application MyRH (page /rh, renderMyRH ci-dessous). Le nom du
+fichier rappelle que l'outil est né comme onglet de MyCompta.
 
 Concaténés en tête de COMPTA_MAIN_CSS / COMPTA_MAIN_JS (app/web/compta_assets.py).
 API : app/routers/rh_outil.py.
@@ -657,6 +660,53 @@ function rhOutilPieces(L,m,x,baseCible){
   rafraichir();
 }
 
+// ── Application MyRH ──────────────────────────────────────────────
+// Même coquille que les autres applis : barre latérale, barre mobile, pied
+// commun. Un seul écran pour l'instant ; d'autres outils RH viendront se
+// ranger dans la barre latérale.
+function renderMyRH(){
+  const sidebar=h('nav',{className:'sidebar'},
+    h('div',{className:'logo'},
+      h('div',{className:'logo-row'},h('div',{className:'logo-brand'},'My',h('span',null,'RH'))),
+      h('div',{className:'logo-sub'},'by __APP_ORG_NAME__')
+    ),
+    h('div',{className:'nav-scroll tabs msb-nav',style:{width:'100%',margin:0}},
+      h('div',{className:'nav-group-label msb-section'},h('span',null,'Suivi')),
+      h('button',{className:'nav-btn active',onClick:()=>{rhOutilLoad();}},iconEl('users',15),'  Outil RH')
+    ),
+    window.MySifaSidebar
+      ? MySifaSidebar.footer({
+          app:'MyRH', version:'__V_LABEL__', user:S.user,
+          onSupport:()=>set({contactOpen:true}),
+          onTheme:()=>render(),
+          onLogout:doLogout,
+        })
+      : h('div',{className:'sidebar-bottom'})
+  );
+  const topbar=h('div',{className:'mobile-topbar'},
+    h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},iconEl('menu',20)),
+    h('div',null,
+      h('div',{className:'mobile-topbar-title'},'MyRH'),
+      h('div',{className:'mobile-topbar-sub'},'Suivi des nouveaux employés')
+    ),
+    h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
+  );
+  return h('div',null,
+    S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,
+    h('div',{className:'app'},
+      sidebar,
+      h('main',{className:'main'},
+        h('div',{className:'container'},
+          topbar,
+          h('h1',null,'Outil RH'),
+          h('div',{className:'subtitle'},'Suivi des nouveaux employés · formations, documents administratifs, contrats'),
+          renderRhOutilTab()
+        )
+      )
+    )
+  );
+}
+
 // ── Onglet ────────────────────────────────────────────────────────
 function rhOutilCelluleListe(L,m){
   const items=m[L.cle]||[];
@@ -735,8 +785,7 @@ function renderRhOutilTab(){
     ...RH_OUTIL_LISTES.map(L=>h('button',{type:'button',className:'rho-btn',onClick:()=>rhOutilCatalogue(L)},iconEl('sliders',13),L.gerer)),
     S.rhOutilPeutCreer?h('button',{type:'button',className:'rho-btn accent',onClick:rhOutilNouvelEmploye},iconEl('plus',13),'Nouvel employé'):null
   );
-  // Ouverture directe sur l'onglet (/compta#rhoutil) : personne n'a cliqué
-  // sur le bouton qui charge les données, on les charge une fois ici.
+  // Première ouverture de MyRH (/rh) : les données se chargent une fois ici.
   if(!S.rhOutilLoaded&&!S._rhOutilAutoLoad){S._rhOutilAutoLoad=true;rhOutilLoad();}
   if(!S.rhOutilLoaded)return h('div',null,bar,h('div',{className:'card-empty'},'Chargement…'));
   if(!list.length)return h('div',null,bar,h('div',{className:'card-empty'},S.rhOutilPeutCreer?'Aucun employé — utilisez « Nouvel employé ».':'Aucun employé suivi.'));
