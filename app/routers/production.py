@@ -8,7 +8,7 @@ from database import get_db
 from services.timings import compute_dossier_times
 from services.auth_service import get_current_user, is_admin, can_view_all_prod, require_admin
 from services.prod_machine_filter import append_machine_filter
-from config import OPERATION_SEVERITY
+from config import OPERATION_SEVERITY, ton_statut_machine
 import logging
 _log = logging.getLogger(__name__)
 
@@ -571,6 +571,11 @@ def machine_status(request: Request):
         'dossiers_du_jour': rep_dossiers,
         'total_cartons':    total_cartons_rep,
     }
+
+    # Couleur du badge d'état (widgets d'accueil) : lue par les pages et les
+    # sources, jamais déduite du libellé.
+    for _m in result.values():
+        _m['statut_ton'] = ton_statut_machine(_m.get('statut_key'))
 
     return result
 

@@ -1493,3 +1493,47 @@ def mode_livraison_label(code: str) -> str:
 
 def regime_tva_label(code: str) -> str:
     return _label_referentiel(REGIMES_TVA, code)
+
+
+# ── Couleur d'un état affiché en badge (widgets d'accueil) ──────────────
+# Un état machine ou une appréciation se lit à sa couleur avant son texte.
+# Vocabulaire fermé, traduit en couleur du thème par mysifa_accueil.js :
+#   ok      → --success   la machine produit, le score est bon
+#   warn    → --warn      état intermédiaire (calage, changement, planifié)
+#   danger  → --danger    arrêt, score critique
+#   neutre  → --muted     éteinte, libre, sans objet
+# L'arrêt est en danger et non en warn : --warn est un bleu dans Ambre, un
+# arrêt y aurait passé pour une information (arbitrage du 11/10/2026).
+TONS_ETAT = ("ok", "warn", "danger", "neutre")
+
+TONS_STATUT_MACHINE = {
+    "production": "ok",
+    "calage": "warn",
+    "changement": "warn",
+    "nettoyage": "warn",
+    "autre": "warn",
+    "arret": "danger",
+    "eteinte": "neutre",
+    "en_dev": "neutre",
+}
+
+TONS_ETAT_ATELIER = {
+    "prod": "ok",
+    "planifie": "warn",
+    "libre": "neutre",
+}
+
+# Couleur des appréciations du score de saisie (historique.py) → ton.
+TONS_COULEUR_SANITY = {"success": "ok", "warn": "warn", "danger": "danger"}
+
+
+def ton_statut_machine(statut_key: str) -> str:
+    return TONS_STATUT_MACHINE.get(statut_key or "", "neutre")
+
+
+def ton_etat_atelier(etat: str) -> str:
+    return TONS_ETAT_ATELIER.get(etat or "", "neutre")
+
+
+def ton_couleur_sanity(couleur: str) -> str:
+    return TONS_COULEUR_SANITY.get(couleur or "", "neutre")

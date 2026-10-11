@@ -102,6 +102,32 @@
     return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + "</svg>";
   }
 
+  /* Pastille d'appli : une icône par appli, nommée dans APPLIS de
+     app/services/blocs_registre.py (le test vérifie qu'aucune ne manque). */
+  var ICONES_APPLI = {
+    atelier: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+    planning: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h6"/><path d="M10 13h7"/><path d="M7 17h5"/>',
+    maintenance: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><path d="M12 11v6"/><path d="M9 14h6"/>',
+    stock: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/>',
+    erp: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/>',
+    ao: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
+    compta: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8"/><path d="M8 11h.01"/><path d="M12 11h.01"/><path d="M16 11h.01"/><path d="M8 15h.01"/><path d="M12 15h.01"/><path d="M16 15v3"/><path d="M8 18h4"/>',
+    expe: '<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62L18.3 9.38a1 1 0 0 0-.78-.38H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
+    qualite: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/>',
+    bat: '<circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.56-2.5 5.56-5.55C21.97 6.01 17.46 2 12 2z"/>',
+    rh: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    coffre: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    calendrier: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>',
+    taches: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m9 12 2 2 4-4"/>',
+    messages: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
+    accueil: '<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>'
+  };
+
+  function iconeAppli(nom) {
+    return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      (ICONES_APPLI[nom] || ICONES_APPLI.accueil) + "</svg>";
+  }
+
   /* ── Style ─────────────────────────────────────────────────────────── */
   function poserStyle() {
     var st = document.createElement("style");
@@ -144,14 +170,23 @@
       "#mysifa-accueil.repliee .mac-liste,#mysifa-accueil.repliee .mac-titre,#mysifa-accueil.repliee .mac-perso,#mysifa-accueil.repliee .mac-avis,#mysifa-accueil.repliee .mac-demande{display:none}",
       ".mac-demande{display:flex;align-items:center;gap:6px;margin:8px 0 10px;padding:6px 8px;border:1px dashed var(--border,#1e293b);border-radius:10px;background:none;color:var(--muted,#94a3b8);font:12px 'Segoe UI',system-ui,sans-serif;cursor:pointer;text-align:left;flex-shrink:0}",
       ".mac-demande:hover{color:var(--accent,#22d3ee);border-color:var(--accent,#22d3ee);background:var(--accent-bg,rgba(34,211,238,.08))}",
-      ".mac-carte{position:relative;background:var(--card,#111827);border:1px solid var(--border,#1e293b);border-radius:12px;overflow:hidden;flex-shrink:0}",
-      ".mac-carte.alerte{border-color:var(--danger,#f87171);box-shadow:0 0 0 1px var(--danger,#f87171)}",
-      ".mac-ctete{display:flex;align-items:center;gap:6px;padding:8px 10px;cursor:pointer}",
-      ".mac-ctete:hover .mac-nom{color:var(--accent,#22d3ee)}",
-      ".mac-nom{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
-      ".mac-filtres{margin:-4px 10px 0;font-size:11px;color:var(--muted,#94a3b8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
-      ".mac-point{width:8px;height:8px;border-radius:50%;background:var(--danger,#f87171);display:none;flex-shrink:0}",
-      ".mac-carte.alerte .mac-point{display:block}",
+      // --mac-a : teinte de l'appli (APPLIS du registre), une variable du
+      // thème. Filet à gauche, pastille et survol la reprennent.
+      ".mac-carte{--mac-a:var(--accent,#22d3ee);position:relative;background:var(--card,#111827);border:1px solid var(--border,#1e293b);border-radius:12px;overflow:hidden;flex-shrink:0;transition:border-color .15s}",
+      ".mac-carte::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--mac-a);pointer-events:none}",
+      ".mac-carte:hover{border-color:color-mix(in srgb,var(--mac-a) 45%,var(--border,#1e293b))}",
+      ".mac-carte.alerte{background:color-mix(in srgb,var(--danger,#f87171) 6%,var(--card,#111827));border-color:color-mix(in srgb,var(--danger,#f87171) 55%,var(--border,#1e293b))}",
+      ".mac-carte.alerte::before{background:var(--danger,#f87171)}",
+      ".mac-ctete{display:flex;align-items:center;gap:6px;padding:9px 10px 2px 14px;cursor:pointer;min-width:0}",
+      ".mac-ctete:hover .mac-nom{color:var(--mac-a)}",
+      ".mac-nom{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".mac-appli{display:inline-flex;align-items:center;gap:4px;flex-shrink:0;max-width:45%;padding:2px 7px;border-radius:999px;font:600 11px 'Segoe UI',system-ui,sans-serif;",
+      "  color:var(--mac-a);background:color-mix(in srgb,var(--mac-a) 13%,transparent)}",
+      ".mac-appli span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".mac-appli svg{flex-shrink:0}",
+      ".mac-filtres{margin:0 10px 0 14px;font-size:11px;color:var(--muted,#94a3b8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".mac-point{display:none;flex-shrink:0;padding:2px 7px;border-radius:999px;background:var(--danger,#f87171);color:white;font:600 11px 'Segoe UI',system-ui,sans-serif}",
+      ".mac-carte.alerte .mac-point{display:inline-flex}",
       ".mac-cadre{position:relative;border-top:1px solid var(--border,#1e293b)}",
       ".mac-cadre iframe{display:block;width:100%;border:0;background:transparent}",
       // Le voile ne sert qu'en mode Personnaliser : il rend la carte saisissable
@@ -177,18 +212,55 @@
       ".mac-indispo{display:none;padding:10px;color:var(--muted,#94a3b8);font-size:12px;line-height:1.4}",
       ".mac-carte.absent .mac-indispo{display:block}",
       ".mac-carte.absent .mac-cadre{position:absolute!important;left:-10000px!important;visibility:hidden!important}",
-      ".mac-vals{display:flex;flex-direction:column;gap:2px;padding:4px 10px 10px}",
-      ".mac-val{display:flex;align-items:baseline;gap:8px}",
-      ".mac-val .lib{color:var(--muted,#94a3b8);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
-      ".mac-val .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text,#f1f5f9)}",
-      ".mac-val.alerte .v{color:var(--danger,#f87171)}",
+      // Valeurs : la première en grand (chiffre ou badge d'état), les
+      // nombres suivants en tuiles, les textes suivants sur une ligne.
+      ".mac-vals{display:flex;flex-direction:column;gap:6px;padding:6px 10px 0 14px}",
+      ".mac-vals:empty{display:none}",
+      ".mac-grand{display:flex;align-items:baseline;flex-wrap:wrap;gap:0 6px;min-width:0}",
+      ".mac-grand .v{font-size:24px;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;color:var(--text,#f1f5f9)}",
+      ".mac-grand.texte .v{font-size:17px}",
+      ".mac-grand .mac-badge{align-self:center}",
+      ".mac-grand .u{font-size:13px;font-weight:600;color:var(--muted,#94a3b8)}",
+      ".mac-grand .l{font-size:12px;color:var(--muted,#94a3b8);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      ".mac-grand.alerte .v,.mac-grand.alerte .u{color:var(--danger,#f87171)}",
+      // Ton d'un état : TONS_ETAT de config.py → couleur du thème.
+      ".mac-badge{--t:var(--muted,#94a3b8);display:inline-flex;align-items:center;gap:6px;align-self:flex-start;max-width:100%;padding:3px 10px;border-radius:999px;",
+      "  font:600 13px 'Segoe UI',system-ui,sans-serif;color:var(--t);background:color-mix(in srgb,var(--t) 13%,transparent);border:1px solid color-mix(in srgb,var(--t) 35%,transparent)}",
+      ".mac-badge span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".mac-badge::before{content:'';flex-shrink:0;width:8px;height:8px;border-radius:50%;background:var(--t)}",
+      ".mac-badge.ton-ok{--t:var(--success,#34d399)}",
+      ".mac-badge.ton-ok::before{box-shadow:0 0 0 3px color-mix(in srgb,var(--t) 25%,transparent)}",
+      ".mac-badge.ton-warn{--t:var(--warn,#fbbf24)}",
+      ".mac-badge.ton-danger{--t:var(--danger,#f87171)}",
+      ".mac-badge.petit{padding:1px 8px;font-size:11px;gap:5px}",
+      ".mac-badge.petit::before{width:6px;height:6px}",
+      ".mac-tuiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}",
+      ".mac-tuile{min-width:0;padding:5px 8px;border-radius:8px;background:var(--bg,#0a0e17)}",
+      ".mac-tuile .v{display:block;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text,#f1f5f9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".mac-tuile .u{font-size:11px;font-weight:600;color:var(--muted,#94a3b8);margin-left:3px}",
+      ".mac-tuile .l{display:block;font-size:11px;color:var(--muted,#94a3b8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".mac-tuile.alerte{background:color-mix(in srgb,var(--danger,#f87171) 12%,transparent)}",
+      ".mac-tuile.alerte .v,.mac-tuile.alerte .u{color:var(--danger,#f87171)}",
+      ".mac-meta{display:flex;flex-wrap:wrap;align-items:center;gap:2px 0;font-size:12px;color:var(--text2,#cbd5e1);min-width:0}",
+      ".mac-meta > span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}",
+      ".mac-meta > span + span::before{content:'·';margin:0 6px;color:var(--muted,#94a3b8)}",
+      ".mac-meta b{font-weight:700;color:var(--text,#f1f5f9)}",
+      ".mac-meta .alerte b{color:var(--danger,#f87171)}",
+      ".mac-pied{display:flex;align-items:center;gap:8px;padding:6px 10px 8px 14px;font-size:11px;color:var(--muted,#94a3b8);min-width:0}",
+      ".mac-pied .seuil{flex:1;min-width:0;color:var(--danger,#f87171);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".mac-pied .maj{margin-left:auto;white-space:nowrap;flex-shrink:0}",
+      ".mac-pied .maj.ancienne{color:var(--warn,#fbbf24)}",
       "@media (min-width:900px) and (max-width:1199px){",
       "  .mac-carte .mac-cadre{position:absolute!important;left:-10000px!important;width:1100px!important;visibility:hidden!important}",
       "  .mac-carte .mac-cadre iframe{width:1100px!important;height:700px!important}",
-      "  .mac-vals{gap:4px}",
-      "  .mac-val{flex-direction:column;align-items:stretch;gap:0}",
-      "  .mac-val .lib{font-size:11px}",
-      "  .mac-val .v{font-size:17px;line-height:1.2}",
+      // Colonne de 220 px : pastille réduite à l'icône, tuiles en une colonne.
+      "  .mac-appli span{display:none}",
+      "  .mac-appli{padding:3px 5px}",
+      "  .mac-grand .v{font-size:20px}",
+      "  .mac-grand .l{flex-basis:100%}",
+      "  .mac-tuiles{grid-template-columns:minmax(0,1fr)}",
+      "  .mac-pied .seuil{display:none}",
+      "  .mac-carte.alerte .mac-point{width:9px;height:9px;padding:0;font-size:0}",
       "  .mac-perso span{display:none}",
       "}",
       ".mac-outils{display:none;align-items:center;gap:4px;padding:6px 8px;border-top:1px solid var(--border,#1e293b);background:var(--bg,#0a0e17)}",
@@ -250,34 +322,153 @@
     return alerte.op === ">" ? x > s : x < s;
   }
 
+  var TONS = { ok: 1, warn: 1, danger: 1, neutre: 1 };
+  var OPS_ALERTE = { ">": "plus de", "<": "moins de", "=": "égal à" };
+
+  /* « Métrage (m) » → libellé « Métrage », unité « m ». L'unité ne suit que
+     le libellé : aucune n'est connue du code. */
+  function decouperLibelle(lib) {
+    var m = /^(.*\S)\s*\(([^()]{1,6})\)$/.exec(String(lib || ""));
+    return m ? { lib: m[1], unite: m[2] } : { lib: String(lib || ""), unite: "" };
+  }
+
+  // 37112 → « 37 112 ». Une valeur déjà mise en forme par la page reste telle quelle.
+  function formater(val) {
+    var t = String(val);
+    if (/^-?\d{4,}([.,]\d+)?$/.test(t)) {
+      return Number(t.replace(",", ".")).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
+    }
+    return t;
+  }
+
+  // Unité affichée à côté du chiffre, sauf si la valeur la porte déjà (« 42 min »).
+  function uniteDe(texte, unite) {
+    if (!unite || !/^-?[\d\s\u202f\u00a0.,]+$/.test(texte)) return "";
+    return unite;
+  }
+
+  function span(cls, texte) {
+    var e = document.createElement("span");
+    if (cls) e.className = cls;
+    e.textContent = texte;
+    return e;
+  }
+
+  function badge(texte, ton, petit) {
+    var b = document.createElement("span");
+    b.className = "mac-badge ton-" + (TONS[ton] ? ton : "neutre") + (petit ? " petit" : "");
+    b.appendChild(span("", texte));
+    return b;
+  }
+
+  function horodatage(c) {
+    var z = c.el.querySelector(".mac-pied .maj");
+    if (!z) return;
+    if (!c.majLe) { z.textContent = ""; return; }
+    var min = Math.floor((Date.now() - c.majLe) / 60000);
+    var d = new Date(c.majLe);
+    z.textContent = min < 1 ? "à l'instant" : min < 60 ? "il y a " + min + " min"
+      : "à " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+    z.title = "Dernière mise à jour : " + d.toLocaleString("fr-FR");
+    // Rafraîchi chaque minute : au-delà de 5, la page d'origine ne répond plus.
+    z.classList.toggle("ancienne", min >= 5);
+  }
+
   function afficherValeurs(c) {
     var w = c.w;
-    var libs = {}, textes = {};
-    ((w.bloc_info && w.bloc_info.valeurs) || []).forEach(function (v) {
-      libs[v.cle] = v.libelle;
-      if (v.nombre === false) textes[v.cle] = true;
+    var defs = {};
+    ((w.bloc_info && w.bloc_info.valeurs) || []).forEach(function (v) { defs[v.cle] = v; });
+    var items = (w.valeurs || []).map(function (v) {
+      var d = defs[v.cle] || {};
+      var val = c.valeurs ? c.valeurs[v.cle] : undefined;
+      var nb_ = c.nombres && c.nombres[v.cle] != null ? c.nombres[v.cle] : val;
+      var texte = d.nombre === false;
+      var lu = decouperLibelle(d.libelle || v.cle);
+      var t = val == null || val === "" ? "" : (texte ? String(val) : formater(val));
+      return {
+        cle: v.cle, texte: texte, ton: d.ton ? ((c.tons && c.tons[v.cle]) || "neutre") : null,
+        lib: lu.lib, libComplet: d.libelle || v.cle, unite: uniteDe(t, lu.unite), uniteLib: lu.unite, t: t,
+        alerte: !texte && alerteDeclenchee(v.alerte, nb_), regle: v.alerte
+      };
     });
     var zone = c.el.querySelector(".mac-vals");
     zone.innerHTML = "";
-    var enAlerte = [];
-    (w.valeurs || []).forEach(function (v) {
-      var val = c.valeurs ? c.valeurs[v.cle] : undefined;
-      var nb_ = c.nombres && c.nombres[v.cle] != null ? c.nombres[v.cle] : val;
-      var ligne = document.createElement("div");
-      ligne.className = "mac-val";
-      var lib = document.createElement("span");
-      lib.className = "lib";
-      lib.textContent = libs[v.cle] || v.cle;
-      var nb = document.createElement("span");
-      nb.className = "v";
-      nb.textContent = val == null || val === "" ? "—" : val;
-      if (!textes[v.cle] && alerteDeclenchee(v.alerte, nb_)) { ligne.classList.add("alerte"); enAlerte.push(libs[v.cle] || v.cle); }
-      ligne.appendChild(nb);
-      ligne.appendChild(lib);
-      zone.appendChild(ligne);
+    var enAlerte = items.filter(function (it) { return it.alerte; });
+
+    var prin = items[0], grand = null;
+    if (prin) {
+      if (prin.ton && prin.t) {
+        var b = badge(prin.t, prin.ton);
+        b.title = prin.libComplet;
+        zone.appendChild(b);
+      } else {
+        var g = document.createElement("div");
+        g.className = "mac-grand" + (prin.texte ? " texte" : "") + (prin.alerte ? " alerte" : "");
+        g.appendChild(span("v", prin.t || "—"));
+        if (prin.t && prin.unite) g.appendChild(span("u", prin.unite));
+        g.appendChild(span("l", prin.lib));
+        zone.appendChild(g);
+        grand = g;
+      }
+    }
+
+    // Une carte d'état (badge en tête) range tout le reste sur une ligne ;
+    // sinon les nombres vont en tuiles. Une valeur vide ne prend aucune place.
+    var etat = !!(prin && prin.ton && prin.t);
+    var tuiles = document.createElement("div");
+    tuiles.className = "mac-tuiles";
+    var meta = document.createElement("div");
+    meta.className = "mac-meta";
+    items.slice(1).forEach(function (it) {
+      if (!it.t) return;
+      if (it.texte || etat) {
+        var m = document.createElement("span");
+        m.title = it.libComplet;
+        if (it.ton && grand) {
+          // Appréciation d'un chiffre (« 74 · Bon ») : à côté de lui.
+          var bg = badge(it.t, it.ton, true);
+          bg.title = it.libComplet;
+          grand.appendChild(bg);
+          return;
+        }
+        if (it.ton) m.appendChild(badge(it.t, it.ton, true));
+        else if (it.texte) m.textContent = it.t;
+        else {
+          if (it.alerte) m.className = "alerte";
+          m.appendChild(document.createTextNode(it.lib + " "));
+          var bb = document.createElement("b");
+          bb.textContent = it.t + (it.unite ? " " + it.unite : "");
+          m.appendChild(bb);
+        }
+        meta.appendChild(m);
+        return;
+      }
+      var tu = document.createElement("div");
+      tu.className = "mac-tuile" + (it.alerte ? " alerte" : "");
+      tu.title = it.libComplet;
+      var v = span("v", it.t);
+      if (it.unite) v.appendChild(span("u", it.unite));
+      tu.appendChild(v);
+      tu.appendChild(span("l", it.lib));
+      tuiles.appendChild(tu);
     });
+    if (tuiles.childNodes.length) zone.appendChild(tuiles);
+    if (meta.childNodes.length) zone.appendChild(meta);
+
+    var seuil = c.el.querySelector(".mac-pied .seuil");
+    if (enAlerte.length) {
+      var a = enAlerte[0], r = a.regle || {};
+      var s_ = formater(String(r.seuil == null ? "" : r.seuil).replace(/\s/g, ""));
+      // La valeur fautive est déjà en rouge : le pied ne rappelle que la règle.
+      seuil.textContent = enAlerte.length > 1 ? enAlerte.length + " seuils dépassés"
+        : "Seuil : " + (OPS_ALERTE[r.op] || r.op || "") + " " + s_ + (a.uniteLib ? " " + a.uniteLib : "");
+    } else {
+      seuil.textContent = "";
+    }
     c.el.classList.toggle("alerte", enAlerte.length > 0);
-    c.el.querySelector(".mac-point").title = enAlerte.length ? "Alerte : " + enAlerte.join(", ") : "";
+    c.el.querySelector(".mac-point").title = enAlerte.length
+      ? "Alerte : " + enAlerte.map(function (x) { return x.libComplet; }).join(", ") : "";
+    horodatage(c);
   }
 
   /* ── Cartes ────────────────────────────────────────────────────────── */
@@ -314,15 +505,26 @@
     el.className = "mac-carte aff-valeurs";
     el.setAttribute("data-id", w.id);
     el.innerHTML =
-      '<div class="mac-ctete" title="Ouvrir la page"><span class="mac-nom"></span><span class="mac-point"></span>' +
+      '<div class="mac-ctete" title="Ouvrir la page"><span class="mac-nom"></span><span class="mac-point">Alerte</span><span class="mac-appli" hidden></span>' +
       '<button type="button" class="mac-corb" title="Supprimer cet indicateur" aria-label="Supprimer cet indicateur">' + icone("corbeille") + "</button></div>" +
       '<div class="mac-filtres" hidden></div>' +
       '<div class="mac-vals"></div>' +
+      '<div class="mac-pied"><span class="seuil"></span><span class="maj"></span></div>' +
       '<div class="mac-indispo">Bloc indisponible à cette taille. Cliquez sur le titre pour ouvrir la page.</div>' +
       '<div class="mac-cadre"><div class="mac-attente">Chargement…</div><div class="mac-voile"></div></div>' +
       '<div class="mac-outils"></div>';
     var c = { el: el, iframe: null, valeurs: null, absences: 0, w: w };
     el.querySelector(".mac-nom").textContent = w.nom;
+    var app = w.bloc_info && w.bloc_info.appli_info;
+    if (app) {
+      // Teinte : un nom de variable du thème fixé par le registre (TEINTES).
+      if (/^(accent|c[1-5])$/.test(app.teinte)) el.style.setProperty("--mac-a", "var(--" + app.teinte + ")");
+      var pa = el.querySelector(".mac-appli");
+      pa.innerHTML = iconeAppli(app.icone);
+      pa.appendChild(span("", app.libelle));
+      pa.title = app.libelle;
+      pa.hidden = false;
+    }
     afficherFiltres(c);
     el.querySelector(".mac-ctete").addEventListener("click", function (e) {
       if (e.target.closest(".mac-corb")) return;
@@ -728,6 +930,8 @@
       c.absences = 0;
       c.valeurs = d.valeurs || {};
       c.nombres = d.nombres || {};
+      c.tons = d.tons || {};
+      c.majLe = Date.now();
       c.el.classList.remove("absent");
       c.hauteurBloc = d.hauteur || 0;
       ajusterHauteur(c);
@@ -790,6 +994,8 @@
           c.absences = 0;
           c.valeurs = (res && res.valeurs) || {};
           c.nombres = (res && res.nombres) || {};
+          c.tons = (res && res.tons) || {};
+          c.majLe = Date.now();
           c.el.classList.add("prete");
           afficherValeurs(c);
         })
@@ -822,6 +1028,7 @@
 
   function rafraichir() {
     if (!racine || document.hidden) return;
+    Object.keys(W.cartes).forEach(function (id) { horodatage(W.cartes[id]); });
     lireSources();
     Object.keys(W.cartes).forEach(function (id) {
       var f = W.cartes[id].iframe;
@@ -894,9 +1101,11 @@
         illu: SVG +
           '<rect x="6" y="6" width="328" height="138" rx="10" fill="var(--bg)" stroke="var(--border)"/>' +
           '<text x="16" y="24" font-size="9" font-weight="700" fill="var(--muted)">MES TABLEAUX DE BORD</text>' +
-          '<rect x="14" y="32" width="110" height="34" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="22" y="45" font-size="8" font-weight="700" fill="var(--text)">Stocks à réapprovisionner</text><text x="22" y="60" font-size="13" font-weight="700" fill="var(--text)">6</text><text x="34" y="60" font-size="8" fill="var(--muted)">matières sous seuil</text>' +
-          '<rect x="14" y="72" width="110" height="34" rx="7" fill="var(--card)" stroke="var(--danger)"/><text x="22" y="85" font-size="8" font-weight="700" fill="var(--text)">Départs programmés</text><circle cx="116" cy="82" r="3" fill="var(--danger)"/><text x="22" y="100" font-size="13" font-weight="700" fill="var(--danger)">1</text><text x="34" y="100" font-size="8" fill="var(--muted)">départ en attente</text>' +
-          '<rect x="14" y="112" width="110" height="26" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="22" y="129" font-size="8" font-weight="700" fill="var(--text)">Cohésio 2 · En production</text>' +
+          // Même dessin que les cartes : filet de la couleur de l'appli,
+          // pastille « Alerte », badge d'état coloré.
+          '<rect x="14" y="32" width="110" height="34" rx="7" fill="var(--card)" stroke="var(--border)"/><rect x="15" y="33" width="3" height="32" fill="var(--c2)"/><text x="24" y="45" font-size="8" font-weight="700" fill="var(--text)">Stocks à réappro.</text><text x="24" y="60" font-size="13" font-weight="700" fill="var(--text)">6</text><text x="36" y="60" font-size="8" fill="var(--muted)">matières sous seuil</text>' +
+          '<rect x="14" y="72" width="110" height="34" rx="7" fill="var(--card)" stroke="var(--danger)"/><rect x="14" y="72" width="110" height="34" rx="7" fill="var(--danger)" opacity=".07"/><rect x="15" y="73" width="3" height="32" fill="var(--danger)"/><text x="24" y="85" font-size="8" font-weight="700" fill="var(--text)">Départs</text><rect x="90" y="77" width="29" height="11" rx="5.5" fill="var(--danger)"/><text x="104.5" y="85" font-size="6.5" font-weight="700" fill="#fff" text-anchor="middle">Alerte</text><text x="24" y="100" font-size="13" font-weight="700" fill="var(--danger)">1</text><text x="36" y="100" font-size="8" fill="var(--muted)">départ en attente</text>' +
+          '<rect x="14" y="112" width="110" height="26" rx="7" fill="var(--card)" stroke="var(--border)"/><rect x="15" y="113" width="3" height="24" fill="var(--c1)"/><text x="24" y="128" font-size="8" font-weight="700" fill="var(--text)">Cohésio 2</text><rect x="66" y="119" width="52" height="12" rx="6" fill="var(--success)" opacity=".15"/><circle cx="73" cy="125" r="2.2" fill="var(--success)"/><text x="78" y="127.5" font-size="6.5" font-weight="700" fill="var(--success)">Production</text>' +
           '<rect x="140" y="32" width="186" height="106" rx="8" fill="var(--card)" stroke="var(--border)" opacity=".6"/>' +
           [0, 1, 2].map(function (i) { return '<rect x="' + (154 + i * 58) + '" y="52" width="46" height="40" rx="7" fill="var(--bg)" stroke="var(--border)"/>'; }).join("") +
           '<text x="233" y="114" font-size="8" fill="var(--muted)" text-anchor="middle">Vos applis restent à leur place</text></svg>'
@@ -932,10 +1141,11 @@
       {
         icon: ICO('<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>'),
         title: "Lire et ouvrir",
-        body: "<p>L'indicateur relit ses chiffres <strong>chaque minute</strong>, directement auprès de l'appli. Un point rouge signale une alerte. Un clic ouvre la page d'origine <strong>avec ses filtres</strong> : c'est là que l'on agit. Une période capturée (« 7 derniers jours ») reste glissante.</p>",
+        body: "<p>L'indicateur relit ses chiffres <strong>chaque minute</strong>, directement auprès de l'appli. La pastille de couleur dit de quelle appli vient le chiffre, le badge donne l'état d'une machine d'un coup d'œil, et une carte rouge marquée <strong>Alerte</strong> signale un seuil dépassé. L'heure de la dernière lecture s'affiche en bas. Un clic ouvre la page d'origine <strong>avec ses filtres</strong> : c'est là que l'on agit. Une période capturée (« 7 derniers jours ») reste glissante.</p>",
         illu: SVG +
-          '<rect x="20" y="20" width="130" height="58" rx="8" fill="var(--card)" stroke="var(--danger)"/><text x="30" y="36" font-size="8.5" font-weight="700" fill="var(--text)">Temps de production</text><circle cx="140" cy="33" r="3" fill="var(--danger)"/>' +
-          '<text x="30" y="56" font-size="13" font-weight="700" fill="var(--danger)">1h 12min</text><text x="30" y="70" font-size="7.5" fill="var(--muted)">Arrêts (min)</text>' +
+          '<rect x="20" y="20" width="130" height="64" rx="8" fill="var(--card)" stroke="var(--danger)"/><rect x="20" y="20" width="130" height="64" rx="8" fill="var(--danger)" opacity=".07"/><rect x="21" y="21" width="3" height="62" fill="var(--danger)"/><text x="30" y="36" font-size="8.5" font-weight="700" fill="var(--text)">Temps de prod.</text><rect x="112" y="28" width="32" height="12" rx="6" fill="var(--danger)"/><text x="128" y="36.5" font-size="7" font-weight="700" fill="#fff" text-anchor="middle">Alerte</text>' +
+          '<text x="30" y="56" font-size="13" font-weight="700" fill="var(--danger)">1h 12min</text><text x="86" y="56" font-size="7.5" fill="var(--muted)">Arrêts</text>' +
+          '<text x="30" y="75" font-size="6.5" font-weight="700" fill="var(--danger)">Seuil : plus de 60 min</text><text x="142" y="75" font-size="6.5" fill="var(--muted)" text-anchor="end">à l\'instant</text>' +
           '<path d="M155 49h40" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#fl)"/><defs><marker id="fl" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--accent)"/></marker></defs>' +
           '<rect x="200" y="14" width="126" height="122" rx="8" fill="var(--card)" stroke="var(--border)"/><text x="210" y="30" font-size="8.5" font-weight="700" fill="var(--text)">MyProd · Production</text>' +
           '<rect x="210" y="38" width="44" height="10" rx="4" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="232" y="45.5" font-size="6" fill="var(--accent)" text-anchor="middle">7 derniers j.</text>' +

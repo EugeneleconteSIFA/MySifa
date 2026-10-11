@@ -27,6 +27,7 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, HTTPException, Request
 
+from config import ton_etat_atelier
 from database import get_db
 from app.services import portail_volets
 from app.services.auth_service import get_current_user, user_has_app_access
@@ -255,6 +256,7 @@ def portal_atelier(request: Request):
                     "nom": r["nom"],
                     "code": r["code"],
                     "etat": etat,
+                    "ton": ton_etat_atelier(etat),
                     "no_dossier": no_dossier,
                     "client": client,
                     "designation": designation,

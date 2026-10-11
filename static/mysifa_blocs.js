@@ -93,6 +93,17 @@
     return out;
   }
 
+  /* Couleur d'un état affiché en badge (data-bloc-ton-etat="ok") :
+     ok, warn, danger ou neutre (TONS_ETAT de config.py). */
+  function lireTons(el) {
+    var out = {};
+    for (var i = 0; i < el.attributes.length; i++) {
+      var a = el.attributes[i];
+      if (a.name.indexOf("data-bloc-ton-") === 0) out[a.name.slice(14)] = a.value;
+    }
+    return out;
+  }
+
   /* Contexte embarqué : posé par l'accueil dans le nom de l'iframe (il survit
      aux rechargements et aux réécritures d'URL), ou en paramètre d'URL pour
      tester une page à la main. */
@@ -241,6 +252,7 @@
       var etat = {
         valeurs: lireValeurs(cible),
         nombres: lireNombres(cible),
+        tons: lireTons(cible),
         objetLibelle: cible.getAttribute("data-bloc-objet-libelle") || null,
         hauteur: Math.ceil(cible.getBoundingClientRect().height)
       };

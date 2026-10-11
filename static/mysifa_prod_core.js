@@ -7093,6 +7093,7 @@ function renderHist(){
       bandeau.setAttribute('data-bloc','prod.erreurs.score');
       bandeau.setAttribute('data-bloc-valeur-score',String(d.sanity.score||0));
       bandeau.setAttribute('data-bloc-valeur-mention',String(d.sanity.mention||''));
+      bandeau.setAttribute('data-bloc-ton-mention',String(d.sanity.ton||'neutre'));
       bandeau.setAttribute('data-bloc-valeur-journees',String(d.sanity.journees||0));
     }
     parts.push(bandeau);
@@ -10303,6 +10304,7 @@ function renderMachineStatusCards(){
         'data-bloc':'prod.ensemble.machine','data-bloc-objet':String(mkey),
         'data-bloc-objet-libelle':String(nom||''),
         'data-bloc-valeur-etat':String(label||''),
+        'data-bloc-ton-etat':m?(m.statut_ton||'neutre'):'neutre',
         'data-bloc-valeur-operateur':String(op||''),
         'data-bloc-valeur-dossier':dos&&dos.no_dossier?String(dos.no_dossier):'',
         'data-bloc-valeur-depuis':dureeStr||'',

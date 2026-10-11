@@ -111,8 +111,31 @@ FILTRES_JS = Path("static/mysifa_blocs_filtres.js").read_text(encoding="utf-8")
 for nom in re.findall(r'^    "([a-z0-9.\-]+)": (?:PROD|\[)', FILTRES_JS, flags=re.M):
     verifier(nom in reg.BLOCS, f"filtres {nom} : aucun bloc de ce nom au registre")
 
+# ── 3quater. Badges colorés : la page et la source fournissent le ton ───
+TONS_CONFIG = re.search(r"^TONS_ETAT = \(([^)]*)\)", Path("config.py").read_text(encoding="utf-8"), flags=re.M)
+verifier(TONS_CONFIG and tuple(re.findall(r'"([a-z]+)"', TONS_CONFIG.group(1))) == reg.TONS,
+         "TONS du registre et TONS_ETAT de config.py divergent")
+_sources_par_nom = dict(re.findall(r'^    "([a-z0-9.\-]+)": function(.*?)(?=^    "[a-z0-9.\-]+": function|\Z)',
+                                   SOURCES, flags=re.M | re.S))
+for nom, b in reg.BLOCS.items():
+    for cle in b.tons:
+        verifier(any(f"data-bloc-ton-{cle}" in TEXTES[f] for f in fichiers_citant(nom)),
+                 f"{nom} : ton {cle!r} déclaré mais la page ne pose pas data-bloc-ton-{cle}")
+        corps = _sources_par_nom.get(nom)
+        if corps is not None:
+            verifier(re.search(r"\{\s*" + re.escape(cle) + r"\s*:[^{}]*\}\s*\)", corps),
+                     f"source {nom} : ton {cle!r} non rendu (troisième argument de r())")
+
+# ── 3quinquies. Pastille d'appli : chaque icône est dessinée ────────────
+ACCUEIL_JS = Path("static/mysifa_accueil.js").read_text(encoding="utf-8")
+_icones = re.search(r"var ICONES_APPLI = \{(.*?)\n  \};", ACCUEIL_JS, flags=re.S)
+for ic in reg.ICONES_APPLI:
+    verifier(_icones and re.search(r"^\s*" + ic + r":", _icones.group(1), flags=re.M),
+             f"icône d'appli {ic!r} absente d'ICONES_APPLI (mysifa_accueil.js)")
+
 # ── 4. Validation ───────────────────────────────────────────────────────
 NOM_TEST = "test.onglet.bloc"
+reg.APPLIS["test"] = reg.Appli("Test", "accueil", "accent")
 reg.BLOCS[NOM_TEST] = reg.Bloc(
     appli="test", libelle="Bloc de test", url="/test?tab=a#vue", type="liste",
     valeurs=(("lignes", "Lignes"), ("a", "A"), ("b", "B"), ("c", "C"), ("d", "D")),
@@ -207,6 +230,7 @@ reg.BLOCS["test.tuile.objet"] = reg.Bloc(
 verifier(any("lien sans objet" in e for e in reg.erreurs_registre()), "lien sur un bloc sans objet refusé")
 del reg.BLOCS["test.tuile.objet"]
 del reg.BLOCS[NOM_TEST]
+del reg.APPLIS["test"]
 
 if echecs:
     print("ÉCHEC test_blocs_registre :")
