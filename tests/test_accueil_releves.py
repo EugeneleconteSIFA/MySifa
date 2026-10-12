@@ -13,6 +13,9 @@ Ce que ce test protège :
    clé que l'indicateur ne connaît pas.
 3. **Le tour écrit la ligne du jour, une seule fois.** Deux passages le même
    jour réécrivent la ligne au lieu d'en ajouter une.
+3bis. **La valeur du jour est figée à 18 h** (RELEVES_HEURE_FIGEE) : elle
+   suit l'état courant avant, le premier passage à partir de 18 h l'arrête,
+   et minimum et maximum couvrent toute la journée.
 4. **L'utilisateur système ne sort pas de son bloc.** Hors de
    `en_tant_que_systeme()`, une requête sans cookie reste refusée.
 
@@ -100,8 +103,32 @@ with en_tant_que_systeme():
 
 n1 = ar.tour(get_db)
 n2 = ar.tour(get_db)
+
+# ── 3bis. Une journée : 10 h, 17 h 40, 18 h 05, 22 h ────────────────────
+from datetime import datetime  # noqa: E402
+_vraie = ar.RELEVEURS["bat.statuts"]
+_suite = iter([3, 9, 5, 1])
+ar.RELEVEURS["bat.statuts"] = lambda objet, f: {"a-faire": next(_suite)}
+for h, m in ((10, 0), (17, 40), (18, 5), (22, 0)):
+    ar.tour(get_db, maintenant=datetime(2030, 1, 15, h, m))
+ar.RELEVEURS["bat.statuts"] = _vraie
 with get_db() as conn:
-    lignes = conn.execute("SELECT COUNT(*) FROM accueil_releves").fetchone()[0]
+    r = conn.execute("SELECT valeurs, minimums, maximums, maj_le, vu_le FROM accueil_releves"
+                     " WHERE bloc='bat.statuts' AND jour='2030-01-15'").fetchone()
+import json as _j  # noqa: E402
+verifier(r is not None, "journée simulée : aucune ligne écrite")
+if r is not None:
+    verifier(_j.loads(r["valeurs"]) == {"a-faire": 5}, f"valeur figée à 18 h : attendu 5 (passage de 18:05), obtenu {r['valeurs']}")
+    verifier(_j.loads(r["minimums"]) == {"a-faire": 1} and _j.loads(r["maximums"]) == {"a-faire": 9},
+             f"min/max de la journée : attendu 1 et 9, obtenu {r['minimums']} {r['maximums']}")
+    verifier(r["maj_le"] == "2030-01-15T18:05:00" and r["vu_le"] == "2030-01-15T22:00:00",
+             f"heures : valeur à {r['maj_le']}, dernier passage à {r['vu_le']}")
+
+# Passage après 18 h sur une journée sans ligne (serveur redémarré à 19 h) : la valeur est prise.
+f = ar.fusionner(None, {"x": 4}, "2030-01-16T19:00:00", "2030-01-16")
+verifier(f["valeurs"] == {"x": 4}, "premier passage après 18 h : la valeur doit être prise")
+with get_db() as conn:
+    lignes = conn.execute("SELECT COUNT(*) FROM accueil_releves WHERE jour < '2030-01-01'").fetchone()[0]
 verifier(n1 > 0 and n1 == n2, f"tour : {n1} puis {n2} relevés écrits")
 verifier(lignes == n1, f"tour rejoué le même jour : {lignes} lignes pour {n1} relevés")
 

@@ -10864,11 +10864,18 @@ async function renderSettingsBlocsCapturables() {
       '<table style="border-collapse:collapse;font-size:12px;width:100%;font-variant-numeric:tabular-nums">' +
       '<thead><tr style="position:sticky;top:0;background:var(--card)"><th style="text-align:left;padding:6px 10px;color:var(--muted);font-weight:600">Jour</th>' +
       cles.map(v => '<th style="text-align:right;padding:6px 10px;color:var(--muted);font-weight:600;white-space:nowrap">' + escHtml(v.libelle) + '</th>').join('') +
-      '<th style="text-align:right;padding:6px 10px;color:var(--muted);font-weight:600">Relevé à</th></tr></thead><tbody>' +
+      '<th style="text-align:right;padding:6px 10px;color:var(--muted);font-weight:600" title="Heure de la valeur retenue">Valeur à</th></tr></thead><tbody>' +
       lignes.map(l => '<tr style="border-top:1px solid var(--border)"><td style="padding:5px 10px;white-space:nowrap">' + escHtml(jjmm(l.jour) + '/' + String(l.jour).slice(0, 4)) + '</td>' +
-        cles.map(v => '<td style="padding:5px 10px;text-align:right">' + escHtml(nombreFr(l.valeurs[v.cle])) + '</td>').join('') +
+        cles.map(v => {
+          const mi = (l.minimums || {})[v.cle], ma = (l.maximums || {})[v.cle];
+          const ecart = typeof mi === 'number' && typeof ma === 'number' && mi !== ma;
+          return '<td style="padding:5px 10px;text-align:right"><div>' + escHtml(nombreFr(l.valeurs[v.cle])) + '</div>' +
+            (ecart ? '<div style="font-size:11px;color:var(--muted)" title="Minimum et maximum de la journée">' + escHtml(nombreFr(mi) + ' – ' + nombreFr(ma)) + '</div>' : '') + '</td>';
+        }).join('') +
         '<td style="padding:5px 10px;text-align:right;color:var(--muted)">' + escHtml(String(l.maj_le || '').slice(11, 16)) + '</td></tr>').join('') +
-      '</tbody></table></div>';
+      '</tbody></table></div>' +
+      '<div style="margin-top:6px;font-size:11px;color:var(--muted)">Valeur du jour figée au premier passage après ' + escHtml(d.heure_figee || '18:00') +
+      ' ; en petit, le minimum et le maximum de la journée quand ils diffèrent.</div>';
     return h;
   }
 
@@ -10882,8 +10889,16 @@ async function renderSettingsBlocsCapturables() {
     const cell = t => '"' + String(t == null ? '' : t).replace(/"/g, '""') + '"';
     const num = v => typeof v === 'number' ? String(v).replace('.', ',') : '';
     const suivi = d.suivis.find(x => cleSuivi(x) === sel);
-    const csv = [[cell('Jour')].concat(cles.map(v => cell(v.libelle))).concat([cell('Relevé à')]).join(';')]
-      .concat(lignes.map(l => [cell(l.jour)].concat(cles.map(v => num(l.valeurs[v.cle]))).concat([cell(l.maj_le || '')]).join(';')))
+    const entete = [cell('Jour')];
+    cles.forEach(v => entete.push(cell(v.libelle), cell(v.libelle + ' (min)'), cell(v.libelle + ' (max)')));
+    entete.push(cell('Valeur à'));
+    const csv = [entete.join(';')]
+      .concat(lignes.map(l => {
+        const r = [cell(l.jour)];
+        cles.forEach(v => r.push(num(l.valeurs[v.cle]), num((l.minimums || {})[v.cle]), num((l.maximums || {})[v.cle])));
+        r.push(cell(l.maj_le || ''));
+        return r.join(';');
+      }))
       .join('\r\n');
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');

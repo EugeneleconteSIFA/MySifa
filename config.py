@@ -59,6 +59,13 @@ APP_NAME = os.getenv("APP_NAME", "MySifa")
 # maintenance…), le même que celui du navigateur des utilisateurs.
 FUSEAU_HORAIRE = os.getenv("FUSEAU_HORAIRE", "Europe/Paris")
 
+# Relevés des indicateurs d'accueil (app/services/accueil_releves.py) : heure
+# à laquelle la valeur du jour est figée, au format HH:MM, heure de Paris. Le
+# premier passage à partir de cette heure écrit la valeur ; les suivants ne
+# mettent plus à jour que le minimum et le maximum. 18 h = fin de journée de
+# travail (décision du 13/10/2026).
+RELEVES_HEURE_FIGEE = os.getenv("RELEVES_HEURE_FIGEE", "18:00")
+
 # Seuil (ms) au-dela duquel une requete HTTP est loggee comme lente
 # (middleware log_slow_requests dans main.py). 0 = desactive.
 SLOW_REQUEST_MS = int(os.getenv("SLOW_REQUEST_MS", "500"))
