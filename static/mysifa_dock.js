@@ -918,6 +918,101 @@
     document.body.appendChild(btn);
   }
 
+  /* ── Bulles d'aide (ordinateur) ────────────────────────────────────────
+     Au survol d'un bouton de la barre, une bulle au-dessus dit en une phrase
+     à quoi il sert. Le texte est rangé ici, par id de bouton, pour que toute
+     la barre parle d'une même voix ; un bouton inconnu (widget propre à une
+     page) garde son title. Le title natif est retiré pendant le survol, sinon
+     le navigateur affiche une seconde bulle par-dessus. */
+  var AIDES = {
+    'cw-bubble': ['Messagerie', 'Écrire à vos collègues et lire vos messages.'],
+    'ai-chat-btn': ['Assistant MySifa', 'Poser une question, l\'assistant cherche la réponse dans MySifa.'],
+    'postit-dock-btn': ['Post-it', 'Coller une note sur l\'écran, comme sur un bureau.'],
+    '_calc_fab': ['Calculette', 'Faire un calcul rapide sans quitter la page.'],
+    'expe-carte-fab': ['Carte des délais', 'Voir les délais de livraison par département.'],
+    'mysifa-cap-fab': ['Ajouter à l\'accueil', 'Choisir un chiffre de cette page pour le suivre sur l\'accueil.', 'Alt+C'],
+    'mtr-fab': ['Métrage bobine', 'Estimer la longueur de matière sur une bobine.'],
+  };
+  var AIDE_DELAI = 250;
+
+  function aideDe(btn) {
+    if (btn.id === 'mysifa-dock-toggle') {
+      return document.body.classList.contains('mysifa-dock-hidden')
+        ? ['Afficher les outils', 'Ouvrir la barre : messagerie, assistant, post-it…']
+        : ['Replier la barre', 'Ranger tous les outils dans un seul bouton.'];
+    }
+    if (AIDES[btn.id]) return AIDES[btn.id];
+    var t = btn.getAttribute('data-aide-titre') || btn.title || btn.getAttribute('aria-label');
+    return t ? [t, ''] : null;
+  }
+
+  function initAides() {
+    if (document.getElementById('mysifa-dock-aide')) return;
+    var bulle = document.createElement('div');
+    bulle.id = 'mysifa-dock-aide';
+    bulle.setAttribute('role', 'tooltip');
+    document.body.appendChild(bulle);
+    var cible = null;
+    var minuteur = 0;
+
+    function cacher() {
+      clearTimeout(minuteur);
+      bulle.classList.remove('on');
+      if (cible && cible.hasAttribute('data-aide-titre')) {
+        cible.title = cible.getAttribute('data-aide-titre');
+        cible.removeAttribute('data-aide-titre');
+      }
+      cible = null;
+    }
+
+    function montrer(btn) {
+      var a = aideDe(btn);
+      if (!a) return;
+      bulle.textContent = '';
+      var titre = document.createElement('strong');
+      titre.textContent = a[0];
+      bulle.appendChild(titre);
+      if (a[1]) {
+        var texte = document.createElement('span');
+        texte.textContent = a[1];
+        bulle.appendChild(texte);
+      }
+      if (a[2]) {
+        var touche = document.createElement('kbd');
+        touche.textContent = a[2];
+        bulle.appendChild(touche);
+      }
+      bulle.classList.add('on');
+      // Au-dessus du bouton, centrée sur lui, sans sortir de l'écran à droite.
+      var r = btn.getBoundingClientRect();
+      var vw = window.innerWidth || document.documentElement.clientWidth;
+      var l = r.left + r.width / 2 - bulle.offsetWidth / 2;
+      l = Math.max(8, Math.min(l, vw - bulle.offsetWidth - 8));
+      bulle.style.left = Math.round(l) + 'px';
+      bulle.style.top = Math.round(r.top - bulle.offsetHeight - 10) + 'px';
+    }
+
+    document.addEventListener('mouseover', function (e) {
+      if (isMobile() || !document.body.classList.contains('mysifa-dock-barre')) return;
+      var btn = e.target.closest && e.target.closest(
+        '#mysifa-dock-toggle, .mysifa-dock-fab, .calc-fab, #ai-chat-btn, #cw-bubble'
+      );
+      if (btn === cible) return;
+      cacher();
+      if (!btn) return;
+      cible = btn;
+      if (btn.title) {
+        btn.setAttribute('data-aide-titre', btn.title);
+        btn.removeAttribute('title');
+      }
+      minuteur = setTimeout(function () { if (cible === btn) montrer(btn); }, AIDE_DELAI);
+    });
+    // Un clic ouvre l'outil : la bulle cacherait son panneau.
+    document.addEventListener('click', cacher, true);
+    window.addEventListener('scroll', cacher, true);
+    window.addEventListener('blur', cacher);
+  }
+
   function bootPageWidgets() {
     var app = window.__MYSIFA_APP__ || '';
     if (CALC_APPS[app] && typeof window._calc_mount === 'function') window._calc_mount();
@@ -927,6 +1022,7 @@
     if (typeof window.initPostitDock === 'function') window.initPostitDock();
     if (typeof window.initPostitsApp === 'function') window.initPostitsApp();
     initDockToggle();
+    initAides();
     // Après le bouton de repli : la barre le range à son bout gauche.
     layout();
   }
