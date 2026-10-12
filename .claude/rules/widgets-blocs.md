@@ -121,8 +121,9 @@ affiche encore ; ils serviront aux courbes des blocs sans série.
   lus, NC non lues, agenda).
 - **Tout bloc nouveau** va dans une seule de trois tables :
   `RELEVEURS` (relevé), `RECONSTITUABLES` (historique déjà en base, à
-  recalculer plutôt qu'à relever) ou `NON_RELEVES` (personnel, état à la
-  minute, tableau sans source), avec sa raison. `tests/test_accueil_releves.py`
+  recalculer plutôt qu'à relever : séries MyProd, synthèses, états de machine
+  tirés des saisies horodatées) ou `NON_RELEVES` (personnel uniquement), avec
+  sa raison. `tests/test_accueil_releves.py`
   échoue sinon, et exécute chaque relevé contre une base neuve.
 - **Bloc sur un objet** (catégorie, machine, transporteur) : tous ses objets
   existants sont relevés, suivis par un indicateur ou non, via `OBJETS`

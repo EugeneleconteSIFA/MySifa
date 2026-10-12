@@ -24,8 +24,7 @@ reprend une page (.claude/rules/widgets-blocs.md).
 pour un bloc sur un objet, chacun de ses objets existants (`OBJETS`), suivi ou
 non ; et chaque combinaison (objet, filtres capturés) qu'un indicateur suit.
 Les autres blocs sont dans `RECONSTITUABLES` (historique déjà en base) ou
-`NON_RELEVES` (valeur personnelle, état qui change à la minute, tableau sans
-source), avec leur raison. Le test `tests/test_accueil_releves.py` exige que
+`NON_RELEVES` (valeur personnelle), avec leur raison. Le test `tests/test_accueil_releves.py` exige que
 chaque bloc du registre soit dans exactement une des trois.
 
 Best-effort : un relevé en échec est journalisé et laissé de côté, il
@@ -548,20 +547,26 @@ RECONSTITUABLES = {
     "prod.erreurs.score": "recalculable sur les saisies datées de MyProd",
     "prod.erreurs.kpis": "recalculable sur les saisies datées de MyProd",
     "erp.direction.hier": "montants datés, recalculables depuis le miroir ERP",
+    # Synthèses MyProd : un nombre de lignes sur la période, recalculable sur
+    # les mêmes saisies que la page (« Page chargée » est une autre question :
+    # elles n'ont pas de source API).
+    "prod.ensemble.par-dossier": "recalculable sur les saisies datées de MyProd",
+    "prod.ensemble.par-operateur": "recalculable sur les saisies datées de MyProd",
+    "prod.ensemble.par-machine": "recalculable sur les saisies datées de MyProd",
+    "prod.ensemble.par-jour": "recalculable sur les saisies datées de MyProd",
+    # États de machine : un relevé figé à 18 h ne dirait rien de la journée ;
+    # chaque changement d'état est une saisie horodatée (matière d'une frise).
+    "prod.ensemble.machines": "historique minute par minute dans les saisies de production (frise)",
+    "prod.ensemble.machine": "historique minute par minute dans les saisies de production (frise)",
+    "portail.atelier.machine": "en production : saisies horodatées (frise) ; « planifié sans saisie » vient du planning, qui ne garde pas son passé",
 }
 
-# Bloc → pourquoi il n'est ni relevé ni reconstituable.
+# Bloc → pourquoi il n'est ni relevé ni reconstituable : seuls les blocs
+# personnels (reclassement du 13/10/2026).
 # Un bloc nouveau va dans RELEVEURS, RECONSTITUABLES ou NON_RELEVES.
 NON_RELEVES = {
-    "prod.ensemble.par-dossier": "tableau sans source, calculé dans la page",
-    "prod.ensemble.par-operateur": "tableau sans source, calculé dans la page",
-    "prod.ensemble.par-machine": "tableau sans source, calculé dans la page",
-    "prod.ensemble.par-jour": "tableau sans source, calculé dans la page",
-    "prod.ensemble.machines": "état d'une machine, change à la minute",
-    "prod.ensemble.machine": "état d'une machine, change à la minute",
-    "portail.atelier.machine": "état d'une machine, change à la minute",
-    "messages.non-lus": "personnel",
-    "calendrier.agenda": "personnel (calendriers de l'utilisateur)",
+    "messages.non-lus": "personnel : n'a de sens que pour la personne connectée",
+    "calendrier.agenda": "personnel : calendriers de la personne connectée",
 }
 
 
