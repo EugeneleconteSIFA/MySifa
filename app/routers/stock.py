@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from fastapi.responses import FileResponse, StreamingResponse
 
 from app.services import mystock_prix as _mystock_prix
+from app.services import encres_rvgi as _encres_rvgi
 from app.services import packing_list as _pl
 from app.services import stock_bobines as _sb
 from app.services.audit_service import log_action
@@ -145,7 +146,7 @@ def require_stock_write(request: Request) -> dict:
     return user
 
 
-_MP_CATEGORIES = frozenset({"mandrin", "palette", "adhesif", "carton", "frontal", "glassine", "complexe", "autre"})
+_MP_CATEGORIES = frozenset({"mandrin", "palette", "adhesif", "carton", "frontal", "glassine", "complexe", "encre", "autre"})
 _MP_CATEGORIES_LAIZEES = frozenset({"frontal", "glassine", "complexe"})
 
 
@@ -208,6 +209,9 @@ def _mp_unite_gestion(categorie: str) -> str:
     if cat == "adhesif":
         # Depuis la migration mp_adhesif_kg : le stock adhésif se tient au kilo.
         # La palette et le carton restent des unités de SAISIE (cf. _mp_conv_*).
+        return "kg"
+    if cat == "encre":
+        # Stock recopié de RVGI, qui le tient au kilo (cf. encres_rvgi).
         return "kg"
     if cat == "palette":
         return "palette"
@@ -8724,12 +8728,13 @@ _MP_CATEGORIE_LABELS = {
     "mandrin": "Mandrin",
     "carton": "Carton",
     "palette": "Palette",
+    "encre": "Encre",
     "autre": "Autre",
 }
 
 
 def _mp_categorie_order(cat: str) -> int:
-    order = ["frontal", "glassine", "adhesif", "mandrin", "carton", "palette", "autre"]
+    order = ["frontal", "glassine", "adhesif", "encre", "mandrin", "carton", "palette", "autre"]
     try:
         return order.index((cat or "").lower())
     except ValueError:
@@ -9311,6 +9316,15 @@ def _enrich_items_couts_matieres(conn, items: list[dict]) -> None:
         e = next((x for x in entrees if abs(x["sous_total_src"] - reference) < 1e-6), entrees[0])
         st, pv = e["sous_total_eur"], e["prix_vente_eur"]
         qte = float(it.get("quantite") or 0)
+        # Coût conteneur : celui du tarif, et la surcharge propre à la
+        # valorisation quand elle existe (cf. prix_pour_valorisation).
+        it.update({
+            "ca_declinaison_id": e["declinaison_id"],
+            "ca_transport_mode": e.get("transport_mode"),
+            "ca_transport_cout_tarif": e.get("transport_cout_tarif"),
+            "ca_transport_cout_valo": e.get("transport_cout_valo"),
+            "ca_transport_quantite": e.get("transport_quantite"),
+        })
         if it.get("laizee"):
             facteur = float(it.get("surface_bobine_m2") or 0)
             it["prix_eur_m2_reel"] = round(st, 4)
@@ -9464,6 +9478,9 @@ def get_valorisation(request: Request, date: str | None = None):
     can_see_usd = _user_can_see_valorisation_usd(user)
     snapshot_date = _parse_snapshot_date(date)
     with get_db() as conn:
+        if not snapshot_date:
+            # Le stock encre vient de RVGI : on le relit avant de valoriser.
+            _encres_rvgi.synchroniser(conn)
         items = _valorisation_query_at_date(conn, snapshot_date)
         taux = _get_taux_eur_usd(conn) if can_see_usd else 0.0
         tax_pct = _get_import_tax_pct(conn) if can_see_usd else 0.0
@@ -9481,6 +9498,38 @@ def get_valorisation(request: Request, date: str | None = None):
         "items": items,
         "summary": summary,
     }
+
+
+@router.put("/api/stock/valorisation/conteneur/{declinaison_id}")
+async def update_valorisation_conteneur(declinaison_id: int, request: Request):
+    """Coût conteneur retenu par la valorisation seule.
+
+    Body : {"transport_cout": 8000} pour le surcharger, {"transport_cout": null}
+    pour revenir au coût du tarif. Coûts matières n'est jamais modifié.
+    """
+    user = require_stock_matieres_admin(request)
+    if not _user_can_see_valorisation_usd(user):
+        raise HTTPException(403, "Accès refusé.")
+    body = await request.json()
+    raw = body.get("transport_cout")
+    cout = None
+    if raw not in (None, ""):
+        try:
+            cout = float(raw)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Coût conteneur invalide.") from None
+        if cout < 0:
+            raise HTTPException(400, "Coût conteneur négatif.")
+    user_name = (user.get("nom") or user.get("email") or "").strip() or None
+    with get_db() as conn:
+        if not conn.execute(
+            "SELECT 1 FROM mp_matiere_declinaison WHERE id=?", (declinaison_id,)
+        ).fetchone():
+            raise HTTPException(404, "Déclinaison introuvable.")
+        # Une surcharge sur un transport au montant ou au pourcentage serait
+        # sans effet : prix_pour_valorisation ne la lit qu'en conteneur / forfait.
+        _mystock_prix.set_surcharge_conteneur(conn, declinaison_id, cout, user_name=user_name)
+    return {"ok": True, "transport_cout": cout}
 
 
 @router.put("/api/stock/valorisation/{matiere_id}")
