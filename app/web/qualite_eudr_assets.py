@@ -201,7 +201,8 @@ async function eudrVoirReponse(fid){
   }catch(e){ if(e.message === 'unauth') return; }
   const rep = hist[0] || l.reponse; if(!rep) return;
   const lib = rep.libelles || {};
-  const ligne = (k, v) => v ? `<div class="eudr-kv"><span>${escHtml(k)}</span><span>${escHtml(v)}</span></div>` : '';
+  // v arrive deja echappe : escHtml() au point d'appel.
+  const ligne = (k, v) => v ? `<div class="eudr-kv"><span>${escHtml(k)}</span><span>${v}</span></div>` : '';
   eudrMroot().innerHTML = `
   <div class="modal-ov" style="display:flex" onclick="if(event.target===this)closeMroot()">
     <div class="modal lg" onclick="event.stopPropagation()">
@@ -209,21 +210,21 @@ async function eudrVoirReponse(fid){
       <div class="modal-hd"><h3>${escHtml(l.nom)} — réponse EUDR</h3></div>
       <div class="modal-bd">
         <p class="fsc-muted" style="margin:0 0 12px">Reçue le ${escHtml(fmtDateTime(rep.created_at))}${hist.length > 1 ? ` · ${hist.length} réponses au total, la plus récente fait foi` : ''}</p>
-        ${ligne('Répondant', [rep.repondant_nom, rep.repondant_fonction, rep.repondant_email].filter(Boolean).join(' · '))}
-        ${ligne('Établissement', lib.etablissement)}
-        ${ligne('Produits dans le périmètre', lib.perimetre)}
-        ${ligne('Codes NC', rep.codes_nc)}
-        ${ligne('Rôle', lib.role)}
-        ${ligne('DDS à partir du', rep.date_debut_dds ? fmtDate(rep.date_debut_dds) : '')}
-        ${ligne('Transmission des références', lib.transmission)}
-        ${ligne('Précisions', rep.transmission_detail)}
-        ${ligne('Une référence par livraison', lib.ref_par_livraison)}
-        ${ligne('Fournisseurs amont', rep.amont)}
-        ${ligne('Géolocalisation disponible', lib.geolocalisation)}
-        ${ligne('Essences', rep.essences)}
-        ${ligne('Pays de récolte', rep.pays_recolte)}
-        ${ligne('Contact EUDR', [rep.contact_nom, rep.contact_email].filter(Boolean).join(' · '))}
-        ${ligne('Commentaire', rep.commentaire)}
+        ${ligne('Répondant', escHtml([rep.repondant_nom, rep.repondant_fonction, rep.repondant_email].filter(Boolean).join(' · ')))}
+        ${ligne('Établissement', escHtml(lib.etablissement))}
+        ${ligne('Produits dans le périmètre', escHtml(lib.perimetre))}
+        ${ligne('Codes NC', escHtml(rep.codes_nc))}
+        ${ligne('Rôle', escHtml(lib.role))}
+        ${ligne('DDS à partir du', escHtml(rep.date_debut_dds ? fmtDate(rep.date_debut_dds) : ''))}
+        ${ligne('Transmission des références', escHtml(lib.transmission))}
+        ${ligne('Précisions', escHtml(rep.transmission_detail))}
+        ${ligne('Une référence par livraison', escHtml(lib.ref_par_livraison))}
+        ${ligne('Fournisseurs amont', escHtml(rep.amont))}
+        ${ligne('Géolocalisation disponible', escHtml(lib.geolocalisation))}
+        ${ligne('Essences', escHtml(rep.essences))}
+        ${ligne('Pays de récolte', escHtml(rep.pays_recolte))}
+        ${ligne('Contact EUDR', escHtml([rep.contact_nom, rep.contact_email].filter(Boolean).join(' · ')))}
+        ${ligne('Commentaire', escHtml(rep.commentaire))}
       </div>
       <div class="modal-ft"><button type="button" class="fsc-btn" onclick="closeMroot()">Fermer</button></div>
     </div>
