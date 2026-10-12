@@ -553,14 +553,17 @@ def bloc_releves(nom: str, request: Request, jours: int = 90):
         jours = 90
     depuis = (date.today() - timedelta(days=jours - 1)).isoformat()
     with get_db() as conn:
-        try:
-            rows = conn.execute(
-                "SELECT objet, filtres, jour, valeurs, maj_le FROM accueil_releves"
-                " WHERE bloc=? AND jour>=? ORDER BY jour DESC",
-                (nom, depuis),
-            ).fetchall()
-        except Exception:
-            rows = []   # table pas encore migrée
+        rows = []
+        for sql in (
+            "SELECT objet, filtres, jour, valeurs, minimums, maximums, maj_le, vu_le FROM accueil_releves",
+            # Avant la migration accueil_releves_extremes (v1 jusqu'à la copie nocturne).
+            "SELECT objet, filtres, jour, valeurs, '{}' AS minimums, '{}' AS maximums, maj_le, maj_le AS vu_le FROM accueil_releves",
+        ):
+            try:
+                rows = conn.execute(sql + " WHERE bloc=? AND jour>=? ORDER BY jour DESC", (nom, depuis)).fetchall()
+                break
+            except Exception:
+                continue   # colonne ou table absente : forme suivante, sinon aucun relevé
         widgets = conn.execute(
             "SELECT nom, COALESCE(objet, '') AS objet, url_capture FROM accueil_widgets WHERE bloc=?"
             + "".join(" OR bloc=?" for _ in b.alias),
@@ -576,11 +579,15 @@ def bloc_releves(nom: str, request: Request, jours: int = 90):
     for r in rows:
         k = (r["objet"], r["filtres"])
         suivis.setdefault(k, None)
-        try:
-            v = json.loads(r["valeurs"] or "{}")
-        except (TypeError, ValueError):
-            v = {}
-        lignes.append({"objet": r["objet"], "filtres": r["filtres"], "jour": r["jour"], "valeurs": v, "maj_le": r["maj_le"]})
+        def lire(t):
+            try:
+                d = json.loads(t or "{}")
+                return d if isinstance(d, dict) else {}
+            except (TypeError, ValueError):
+                return {}
+        lignes.append({"objet": r["objet"], "filtres": r["filtres"], "jour": r["jour"],
+                       "valeurs": lire(r["valeurs"]), "minimums": lire(r["minimums"]),
+                       "maximums": lire(r["maximums"]), "maj_le": r["maj_le"], "vu_le": r["vu_le"]})
     return {
         "bloc": nom,
         "libelle": b.libelle,
@@ -589,7 +596,13 @@ def bloc_releves(nom: str, request: Request, jours: int = 90):
         "suivis": [{"objet": o, "filtres": f, "filtres_lisibles": dict(parse_qsl(f)),
                     "indicateurs": noms_suivis.get((o, f), [])} for (o, f) in suivis],
         "lignes": lignes,
+        "heure_figee": accueil_releves_heure(),
     }
+
+
+def accueil_releves_heure() -> str:
+    from app.services.accueil_releves import _heure_figee
+    return _heure_figee()
 
 
 @router.get("/api/accueil/blocs/admin/usages")

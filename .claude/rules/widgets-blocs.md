@@ -102,8 +102,14 @@ registre vérifie que chaque `series=` / `liste=True` a sa source.
 un état à l'instant n'a pas d'historique. `app/services/accueil_releves.py`
 le photographie toutes les 30 minutes (boucle `_boucle_releves_accueil` de
 `main.py`, **prod uniquement** — v1 reçoit les relevés par la copie nocturne)
-dans `accueil_releves`, une ligne par (bloc, objet, filtres, jour) réécrite à
-chaque passage : la ligne d'un jour fini porte l'état du soir. Rien ne les
+dans `accueil_releves`, une ligne par (bloc, objet, filtres, jour). La
+**valeur du jour** est celle du premier passage à partir de
+`RELEVES_HEURE_FIGEE` (`config.py`, 18 h : fin de journée de travail, décision
+du 13/10/2026) ; avant, elle suit l'état courant, après elle ne bouge plus. Le
+**minimum** et le **maximum** de toute la journée sont gardés à côté
+(`minimums`, `maximums`). `maj_le` = heure de la valeur retenue, `vu_le` =
+dernier passage (c'est lui qui dit si la boucle tourne). Un serveur arrêté à
+18 h fige la valeur au premier passage qui suit son redémarrage. Rien ne les
 affiche encore ; ils serviront aux courbes des blocs sans série.
 
 - Un relevé **appelle la fonction de la route** que la source interroge, sous
@@ -117,6 +123,9 @@ affiche encore ; ils serviront aux courbes des blocs sans série.
   raison (historique déjà en base, personnel, état à la minute) :
   `tests/test_accueil_releves.py` échoue sinon, et exécute chaque relevé
   contre une base neuve.
+- **Aucune purge** (décision du 12/10/2026) : tout est conservé, y compris
+  les relevés d'un bloc retiré. Ne pas ajouter de durée de conservation sans
+  nouvelle décision.
 - Contrôle en prod : `GET /api/accueil/blocs/admin/releves` (superadmin).
 - Consultation : dans Paramètres › Widgets et tableaux de bord, la pastille
   « Relevé · N j » d'un bloc déplie ses relevés jour par jour (90 jours, une

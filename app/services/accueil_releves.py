@@ -4,9 +4,12 @@ Relevés quotidiens des indicateurs d'accueil.
 Un indicateur qui affiche un état à l'instant (matières sous seuil, NC non
 clôturées, OF à traiter…) n'a pas d'historique : la valeur d'hier est perdue
 dès qu'elle change. Ce module la photographie, toutes les 30 minutes, dans
-`accueil_releves` (migration `accueil_releves_table`). La ligne du jour est
-réécrite à chaque passage : une fois la journée finie, elle porte l'état du
-soir. Rien ne les exploite encore — c'est la matière première des courbes à
+`accueil_releves` (migrations `accueil_releves_table`, `accueil_releves_extremes`).
+Une ligne par jour : la **valeur du jour** est celle du premier passage à
+partir de `RELEVES_HEURE_FIGEE` (18 h) — avant cette heure elle suit l'état
+courant, après elle ne bouge plus —, et le **minimum** et le **maximum** de la
+journée entière sont tenus à côté. `vu_le` est l'heure du dernier passage,
+`maj_le` celle de la valeur retenue. Rien ne les exploite encore — c'est la matière première des courbes à
 venir, et chaque jour sans relevé est un jour d'historique perdu.
 
 **Même calcul que l'indicateur.** Un relevé n'interroge pas la base à sa
@@ -26,6 +29,11 @@ que chaque bloc du registre soit dans l'un ou l'autre.
 
 Best-effort : un relevé en échec est journalisé et laissé de côté, il
 n'empêche ni les autres ni l'application de tourner.
+
+**Conservation : tout est gardé, sans purge** (décision du 12/10/2026). Le
+volume est négligeable (2 à 3 Mo par an), les lignes ne portent que des
+nombres agrégés (aucune donnée personnelle), et un historique effacé ne se
+reconstitue pas. Les relevés d'un bloc retiré du registre restent aussi.
 """
 from __future__ import annotations
 
@@ -37,7 +45,7 @@ from datetime import date, datetime
 from urllib.parse import parse_qsl, urlencode, urlsplit
 from zoneinfo import ZoneInfo
 
-from config import FUSEAU_HORAIRE
+from config import FUSEAU_HORAIRE, RELEVES_HEURE_FIGEE
 
 logger = logging.getLogger(__name__)
 
@@ -525,15 +533,53 @@ def combinaisons(conn) -> list[tuple[str, str, dict]]:
     return out
 
 
-def tour(get_db) -> int:
-    """Un passage : relève chaque combinaison, écrit la ligne du jour.
-    Rend le nombre de relevés écrits."""
+def _heure_figee() -> str:
+    h = str(RELEVES_HEURE_FIGEE or "18:00").strip()
+    try:
+        hh, mm = h.split(":")
+        return f"{int(hh):02d}:{int(mm):02d}"
+    except ValueError:
+        return "18:00"
+
+
+def fusionner(ancien: dict | None, v: dict, instant: str, jour: str) -> dict:
+    """Ligne du jour après un passage à `instant` (AAAA-MM-JJTHH:MM:SS).
+
+    La valeur suit l'état courant jusqu'à l'heure figée, puis le premier
+    passage à partir de cette heure l'arrête. Minimum et maximum couvrent
+    toute la journée. Pur, sans base : c'est ce que le test vérifie."""
+    seuil = f"{jour}T{_heure_figee()}:00"
+    if ancien is None:
+        return {"valeurs": dict(v), "minimums": dict(v), "maximums": dict(v), "maj_le": instant, "vu_le": instant}
+    valeurs, maj = ancien.get("valeurs") or {}, ancien.get("maj_le")
+    deja_figee = bool(maj) and maj >= seuil
+    if not deja_figee:
+        valeurs, maj = dict(v), instant
+    mini, maxi = dict(ancien.get("minimums") or {}), dict(ancien.get("maximums") or {})
+    for k, x in v.items():
+        mini[k] = x if k not in mini else min(mini[k], x)
+        maxi[k] = x if k not in maxi else max(maxi[k], x)
+    return {"valeurs": valeurs, "minimums": mini, "maximums": maxi, "maj_le": maj, "vu_le": instant}
+
+
+def _json(t) -> dict:
+    try:
+        d = json.loads(t or "{}")
+        return d if isinstance(d, dict) else {}
+    except (TypeError, ValueError):
+        return {}
+
+
+def tour(get_db, maintenant: datetime | None = None) -> int:
+    """Un passage : relève chaque combinaison et met à jour la ligne du jour.
+    Rend le nombre de relevés écrits. `maintenant` sert aux tests."""
     from app.services.auth_service import en_tant_que_systeme
-    jour = _aujourdhui().isoformat()
-    maintenant = datetime.now(ZoneInfo(FUSEAU_HORAIRE)).strftime("%Y-%m-%dT%H:%M:%S")
+    maintenant = maintenant or datetime.now(ZoneInfo(FUSEAU_HORAIRE))
+    jour = maintenant.date().isoformat()
+    instant = maintenant.strftime("%Y-%m-%dT%H:%M:%S")
     with get_db() as conn:
         a_faire = combinaisons(conn)
-    ecrits = []
+    releves = []
     with en_tant_que_systeme():
         for bloc, objet, filtres in a_faire:
             try:
@@ -543,27 +589,45 @@ def tour(get_db) -> int:
                 continue
             if v is None:   # objet disparu : rien à relever
                 continue
-            v = {k: x for k, x in v.items() if isinstance(x, (int, float))}
+            v = {k: x for k, x in v.items() if isinstance(x, (int, float)) and not isinstance(x, bool)}
             if not v:       # source muette (miroir ERP absent…) : pas de ligne vide
                 continue
-            ecrits.append((bloc, objet, cle_filtres(filtres), jour, json.dumps(v, ensure_ascii=False), maintenant))
-    if ecrits:
-        with get_db() as conn:
-            conn.executemany(
-                "INSERT INTO accueil_releves (bloc, objet, filtres, jour, valeurs, maj_le)"
-                " VALUES (?, ?, ?, ?, ?, ?)"
-                " ON CONFLICT(bloc, objet, filtres, jour) DO UPDATE SET"
-                " valeurs = excluded.valeurs, maj_le = excluded.maj_le",
-                ecrits,
-            )
-            conn.commit()
-    return len(ecrits)
+            releves.append((bloc, objet, cle_filtres(filtres), v))
+    if not releves:
+        return 0
+    with get_db() as conn:
+        anciens = {
+            (r["bloc"], r["objet"], r["filtres"]): {
+                "valeurs": _json(r["valeurs"]), "minimums": _json(r["minimums"]),
+                "maximums": _json(r["maximums"]), "maj_le": r["maj_le"],
+            }
+            for r in conn.execute(
+                "SELECT bloc, objet, filtres, valeurs, minimums, maximums, maj_le"
+                " FROM accueil_releves WHERE jour=?", (jour,)
+            ).fetchall()
+        }
+        lignes = []
+        for bloc, objet, filtres, v in releves:
+            f = fusionner(anciens.get((bloc, objet, filtres)), v, instant, jour)
+            lignes.append((bloc, objet, filtres, jour, json.dumps(f["valeurs"], ensure_ascii=False),
+                           json.dumps(f["minimums"], ensure_ascii=False), json.dumps(f["maximums"], ensure_ascii=False),
+                           f["maj_le"], f["vu_le"]))
+        conn.executemany(
+            "INSERT INTO accueil_releves (bloc, objet, filtres, jour, valeurs, minimums, maximums, maj_le, vu_le)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            " ON CONFLICT(bloc, objet, filtres, jour) DO UPDATE SET"
+            " valeurs = excluded.valeurs, minimums = excluded.minimums, maximums = excluded.maximums,"
+            " maj_le = excluded.maj_le, vu_le = excluded.vu_le",
+            lignes,
+        )
+        conn.commit()
+    return len(lignes)
 
 
 def etat(conn) -> list[dict]:
     """Pour le contrôle : par bloc, nombre de jours relevés et dernier passage."""
     rows = conn.execute(
         "SELECT bloc, COUNT(DISTINCT jour) AS jours, COUNT(DISTINCT objet || '|' || filtres) AS suivis,"
-        " MIN(jour) AS depuis, MAX(maj_le) AS dernier FROM accueil_releves GROUP BY bloc ORDER BY bloc"
+        " MIN(jour) AS depuis, MAX(COALESCE(vu_le, maj_le)) AS dernier FROM accueil_releves GROUP BY bloc ORDER BY bloc"
     ).fetchall()
     return [dict(r) for r in rows]
