@@ -10735,6 +10735,10 @@ async function renderSettingsBlocsCapturables() {
   // Qui a épinglé chaque bloc : dépliable depuis le nombre d'indicateurs.
   const parBloc = {};
   const ouverts = new Set();
+  // Relevés dépliés : bloc → données reçues, et la série (objet + filtres) choisie.
+  const relevesOuverts = new Set();
+  const relevesData = {};
+  const relevesSel = {};
   try {
     const [r, ru] = await Promise.all([
       fetch('/api/accueil/blocs/admin', { credentials: 'include' }),
@@ -10809,7 +10813,10 @@ async function renderSettingsBlocsCapturables() {
     if (h.type === 'serie') p.push(pastille('Série en base', 'var(--success)', 'Historique jour par jour déjà en base : courbe pleine dès le premier jour'));
     else if (h.type === 'releve') {
       p.push(h.jours
-        ? pastille('Relevé · ' + h.jours + ' j depuis le ' + jjmm(h.depuis), 'var(--success)', 'Dernier passage ' + jjmm(h.dernier))
+        ? '<button type="button" data-bloc-releves="' + escAttr(b.nom) + '" aria-expanded="' + relevesOuverts.has(b.nom) + '" title="Voir les relevés jour par jour" ' +
+          'style="font:inherit;cursor:pointer;border:0;padding:0;background:none">' +
+          pastille((relevesOuverts.has(b.nom) ? '▾ ' : '▸ ') + 'Relevé · ' + h.jours + ' j depuis le ' + jjmm(h.depuis), 'var(--success)', 'Dernier passage ' + jjmm(h.dernier) + ' — cliquer pour voir les relevés') + '</button>'
+
         : h.objet
           ? pastille('Relevé dès qu\'un indicateur le suit', 'var(--muted)', 'Bloc sur un objet (machine, catégorie, transporteur) : chaque objet suivi est relevé')
           : pastille('Relevé · en attente du premier passage', 'var(--warn)', 'La boucle de relevé ne tourne qu\'en prod'));
@@ -10819,6 +10826,83 @@ async function renderSettingsBlocsCapturables() {
     if (b.nb_widgets) p.push(pastille('S ' + (t.s || 0) + ' · M ' + (t.m || 0) + ' · L ' + (t.l || 0), 'var(--muted)', 'Indicateurs par taille : compact, standard, grand'));
     if (b.nb_alertes) p.push(pastille(b.nb_alertes + ' avec alerte', 'var(--danger)', 'Indicateurs qui portent au moins une alerte'));
     return '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">' + p.join('') + '</div>';
+  }
+
+  // Clé d'une série relevée : un objet suivi et un jeu de filtres.
+  const cleSuivi = x => (x.objet || '') + '|' + (x.filtres || '');
+
+  function libelleSuivi(x) {
+    const f = Object.entries(x.filtres_lisibles || {}).map(e => e[0].replace(/^bloc_/, '') + ' ' + e[1]).join(', ');
+    const base = x.objet ? 'Objet ' + x.objet : 'Défaut du bloc';
+    const ind = (x.indicateurs || []).length ? ' — « ' + x.indicateurs.slice(0, 2).join(' », « ') + ' »' + (x.indicateurs.length > 2 ? '…' : '') : '';
+    return base + (f ? ' · ' + f : '') + ind;
+  }
+
+  function nombreFr(v) {
+    return typeof v === 'number' ? v.toLocaleString('fr-FR', { maximumFractionDigits: 2 }) : '—';
+  }
+
+  // Tableau jour par jour d'un bloc relevé, la journée la plus récente en haut.
+  function tableauReleves(nom) {
+    const d = relevesData[nom];
+    if (!d) return '<div style="color:var(--muted)">Chargement…</div>';
+    if (d.erreur) return '<div style="color:var(--danger)">' + escHtml(d.erreur) + '</div>';
+    if (!d.suivis.length) return '<div style="color:var(--muted)">Aucun relevé sur les ' + d.jours + ' derniers jours.</div>';
+    const sel = relevesSel[nom] || cleSuivi(d.suivis[0]);
+    const lignes = d.lignes.filter(l => cleSuivi(l) === sel);
+    const cles = d.valeurs.filter(v => lignes.some(l => l.valeurs[v.cle] != null));
+    let h = '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px">';
+    if (d.suivis.length > 1) {
+      h += '<select data-releves-suivi="' + escAttr(nom) + '" style="font:13px \'Segoe UI\',system-ui,sans-serif;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:4px 8px;max-width:100%">' +
+        d.suivis.map(x => '<option value="' + escAttr(cleSuivi(x)) + '"' + (cleSuivi(x) === sel ? ' selected' : '') + '>' + escHtml(libelleSuivi(x)) + '</option>').join('') + '</select>';
+    } else {
+      h += '<span style="color:var(--text2)">' + escHtml(libelleSuivi(d.suivis[0])) + '</span>';
+    }
+    h += '<span style="flex:1"></span><span style="color:var(--muted);font-size:12px">' + lignes.length + ' jour' + (lignes.length > 1 ? 's' : '') + ' · ' + d.jours + ' derniers jours</span>' +
+      '<button type="button" class="btn" data-releves-csv="' + escAttr(nom) + '" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:4px 10px;font-size:12px">Télécharger en CSV</button></div>';
+    h += '<div style="overflow-x:auto;max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">' +
+      '<table style="border-collapse:collapse;font-size:12px;width:100%;font-variant-numeric:tabular-nums">' +
+      '<thead><tr style="position:sticky;top:0;background:var(--card)"><th style="text-align:left;padding:6px 10px;color:var(--muted);font-weight:600">Jour</th>' +
+      cles.map(v => '<th style="text-align:right;padding:6px 10px;color:var(--muted);font-weight:600;white-space:nowrap">' + escHtml(v.libelle) + '</th>').join('') +
+      '<th style="text-align:right;padding:6px 10px;color:var(--muted);font-weight:600">Relevé à</th></tr></thead><tbody>' +
+      lignes.map(l => '<tr style="border-top:1px solid var(--border)"><td style="padding:5px 10px;white-space:nowrap">' + escHtml(jjmm(l.jour) + '/' + String(l.jour).slice(0, 4)) + '</td>' +
+        cles.map(v => '<td style="padding:5px 10px;text-align:right">' + escHtml(nombreFr(l.valeurs[v.cle])) + '</td>').join('') +
+        '<td style="padding:5px 10px;text-align:right;color:var(--muted)">' + escHtml(String(l.maj_le || '').slice(11, 16)) + '</td></tr>').join('') +
+      '</tbody></table></div>';
+    return h;
+  }
+
+  // Export CSV (séparateur « ; » et virgule décimale : Excel en français).
+  function exporterReleves(nom) {
+    const d = relevesData[nom];
+    if (!d || !d.suivis.length) return;
+    const sel = relevesSel[nom] || cleSuivi(d.suivis[0]);
+    const lignes = d.lignes.filter(l => cleSuivi(l) === sel).slice().reverse();
+    const cles = d.valeurs.filter(v => lignes.some(l => l.valeurs[v.cle] != null));
+    const cell = t => '"' + String(t == null ? '' : t).replace(/"/g, '""') + '"';
+    const num = v => typeof v === 'number' ? String(v).replace('.', ',') : '';
+    const suivi = d.suivis.find(x => cleSuivi(x) === sel);
+    const csv = [[cell('Jour')].concat(cles.map(v => cell(v.libelle))).concat([cell('Relevé à')]).join(';')]
+      .concat(lignes.map(l => [cell(l.jour)].concat(cles.map(v => num(l.valeurs[v.cle]))).concat([cell(l.maj_le || '')]).join(';')))
+      .join('\r\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'releves_' + nom.replace(/[^a-z0-9.-]+/gi, '_') + (suivi && suivi.objet ? '_' + String(suivi.objet).replace(/[^a-z0-9-]+/gi, '_') : '') + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+  }
+
+  async function chargerReleves(nom) {
+    try {
+      const r = await fetch('/api/accueil/blocs/admin/releves/' + encodeURIComponent(nom) + '?jours=90', { credentials: 'include' });
+      if (!r.ok) throw new Error('Relevés indisponibles (' + r.status + ').');
+      relevesData[nom] = await r.json();
+    } catch (e) {
+      relevesData[nom] = { erreur: e.message };
+    }
+    dessiner();
   }
 
   // Repère d'une valeur : état coloré, texte, ou série avec son sens.
@@ -10898,6 +10982,9 @@ async function renderSettingsBlocsCapturables() {
             '<input type="checkbox" data-bloc-capturable="' + escAttr(b.nom) + '"' + (b.capturable ? ' checked' : '') + '>' +
             '<span class="toggle-track"><span class="toggle-thumb"></span></span></label></div></td>' +
           '</tr>' +
+          (relevesOuverts.has(b.nom)
+            ? '<tr><td colspan="4" style="padding:0 14px 12px">' + tableauReleves(b.nom) + '</td></tr>'
+            : '') +
           (ouverts.has(b.nom) && (parBloc[b.nom] || []).length
             ? '<tr><td colspan="4" style="padding:0 14px 10px"><div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;display:flex;flex-direction:column;gap:4px;font-size:12px">' +
               parBloc[b.nom].map(x => '<div><b>' + escHtml(x.user) + '</b> <span style="color:var(--muted)">· ' + escHtml(x.role || '') +
@@ -10919,6 +11006,18 @@ async function renderSettingsBlocsCapturables() {
         dessiner();
       });
     });
+    root.querySelectorAll('[data-bloc-releves]').forEach(btn => btn.addEventListener('click', () => {
+      const nom = btn.getAttribute('data-bloc-releves');
+      if (relevesOuverts.has(nom)) { relevesOuverts.delete(nom); dessiner(); return; }
+      relevesOuverts.add(nom);
+      dessiner();
+      if (!relevesData[nom] || relevesData[nom].erreur) chargerReleves(nom);
+    }));
+    root.querySelectorAll('[data-releves-suivi]').forEach(sel => sel.addEventListener('change', () => {
+      relevesSel[sel.getAttribute('data-releves-suivi')] = sel.value;
+      dessiner();
+    }));
+    root.querySelectorAll('[data-releves-csv]').forEach(btn => btn.addEventListener('click', () => exporterReleves(btn.getAttribute('data-releves-csv'))));
     root.querySelectorAll('[data-bloc-filtre]').forEach(btn => btn.addEventListener('click', () => {
       filtre = btn.getAttribute('data-bloc-filtre');
       dessiner();
