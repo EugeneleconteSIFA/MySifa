@@ -20,7 +20,9 @@ S.eudr = {
   q: '',
   filtre: 'sollicites',  // tous | sollicites | attente | repondus | jamais
   sel: new Set(),
+  bobines: true,     // seulement les fournisseurs de bobines papier (categories frontal/complexe/glassine)
 };
+try{ const _eb = localStorage.getItem('mysifa_eudr_bobines'); if(_eb !== null) S.eudr.bobines = _eb === '1'; }catch(e){}
 
 const EUDR_STATUTS = {
   jamais:   {lbl:'Non sollicité', cls:''},
@@ -53,6 +55,7 @@ function eudrLignes(){
   const d = S.eudr.data; if(!d) return [];
   const q = (S.eudr.q||'').trim().toLowerCase();
   return (d.fournisseurs||[]).filter(l => {
+    if(S.eudr.bobines && !l.bobines) return false;
     if(q && [l.nom,l.groupe,l.pays].join(' ').toLowerCase().indexOf(q) === -1) return false;
     if(S.eudr.filtre === 'sollicites') return l.statut !== 'jamais';
     if(S.eudr.filtre === 'attente') return l.statut === 'envoyee' || l.statut === 'ouverte';
@@ -66,7 +69,7 @@ function eudrRender(){
   const root = document.getElementById('content');
   const d = S.eudr.data;
   if(!root || !d) return;
-  const all = d.fournisseurs||[];
+  const all = (d.fournisseurs||[]).filter(l => !S.eudr.bobines || l.bobines);
   const n = st => all.filter(l => l.statut === st).length;
   const sollicites = all.length - n('jamais');
   const kpi = (f, val, lbl) =>
@@ -93,7 +96,8 @@ function eudrRender(){
       <input type="text" id="eudr-q" class="eudr-search" placeholder="Rechercher (fournisseur, groupe, pays)"
         value="${escAttr(S.eudr.q)}" oninput="S.eudr.q=this.value;eudrRenderList()"
         onkeydown="if(event.key==='Escape'){this.value='';S.eudr.q='';eudrRenderList()}">
-      <button type="button" class="fsc-btn sm${S.eudr.filtre==='tous'?' primary':''}" onclick="eudrSetFiltre('tous')">Tous les fournisseurs</button>
+      <button type="button" class="fsc-btn sm${S.eudr.bobines?' primary':''}" onclick="eudrSetBobines(!S.eudr.bobines)" title="Fournisseurs dont la fiche porte la catégorie frontal (bobine papier), complexe ou glassine">Bobines papier et complexes</button>
+      <button type="button" class="fsc-btn sm${S.eudr.filtre==='tous'?' primary':''}" onclick="eudrSetFiltre('tous')">Tous les statuts</button>
       <span class="eudr-selinfo" id="eudr-selinfo"></span>
     </div>
     <div id="eudr-list"></div>`;
@@ -101,6 +105,11 @@ function eudrRender(){
 }
 
 function eudrSetFiltre(f){ S.eudr.filtre = f; eudrRender(); }
+function eudrSetBobines(on){
+  S.eudr.bobines = !!on;
+  try{ localStorage.setItem('mysifa_eudr_bobines', on ? '1' : '0'); }catch(e){}
+  eudrRender();
+}
 
 function eudrRenderList(){
   const box = document.getElementById('eudr-list'); if(!box) return;

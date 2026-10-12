@@ -81,6 +81,11 @@ def ligne():
 
 
 check("fournisseur listé, jamais sollicité", ligne()["statut"], "jamais")
+check("sans catégorie : pas fournisseur de bobines", ligne()["bobines"], False)
+with get_db() as conn:
+    conn.execute("UPDATE fournisseurs_fsc SET categories='[\"complexe\"]' WHERE id=?", (FID,))
+    conn.commit()
+check("catégorie complexe : fournisseur de bobines", ligne()["bobines"], True)
 
 r = client.post("/api/qualite/eudr/demander",
                 json={"envois": [{"fournisseur_id": FID, "emails": ["achat@papeterie.test"]}]})

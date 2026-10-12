@@ -19,7 +19,13 @@ import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from config import APP_ORG_NAME, EUDR_CHOIX, EUDR_REPONSE_AVANT, eudr_libelle
+from config import (
+    APP_ORG_NAME,
+    EUDR_CATEGORIES_BOBINES,
+    EUDR_CHOIX,
+    EUDR_REPONSE_AVANT,
+    eudr_libelle,
+)
 
 _PARIS = ZoneInfo("Europe/Paris")
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -92,7 +98,7 @@ def emails_fournisseur(conn, fournisseur_id: int, email_fiche: str | None = None
 def liste(conn) -> list[dict]:
     """Fournisseurs actifs, avec leur dernière demande et leur dernière réponse."""
     fours = conn.execute(
-        """SELECT id, nom, pays, groupe, has_fsc, licence, email
+        """SELECT id, nom, pays, groupe, has_fsc, licence, email, categories
            FROM fournisseurs_fsc
            WHERE actif=1 AND COALESCE(fusionne_dans,0)=0
            ORDER BY nom COLLATE NOCASE"""
@@ -129,8 +135,11 @@ def liste(conn) -> list[dict]:
             statut = ST_ENVOYEE
         else:
             statut = "jamais"
+        cats = _categories(f["categories"])
         out.append({
             "id": fid,
+            "categories": cats,
+            "bobines": any(c in EUDR_CATEGORIES_BOBINES for c in cats),
             "nom": f["nom"],
             "pays": f["pays"],
             "groupe": f["groupe"],
@@ -144,6 +153,15 @@ def liste(conn) -> list[dict]:
             "nb_reponses": nb_rep.get(fid, 0),
         })
     return out
+
+
+def _categories(brut) -> list[str]:
+    """`fournisseurs_fsc.categories` est une liste JSON ; vide si illisible."""
+    try:
+        val = json.loads(brut or "[]")
+    except (TypeError, ValueError):
+        return []
+    return [str(c) for c in val] if isinstance(val, list) else []
 
 
 def _reponse_lisible(rep: dict) -> dict:

@@ -43,7 +43,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "3.3.0"
+APP_VERSION = "3.4.0"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -1614,6 +1614,11 @@ EUDR_CHOIX = {
         "sans_objet": ("Not applicable (our supplier files the statement)", "Sans objet (DDS amont)"),
     },
 }
+
+# Catégories de la fiche fournisseur (`fournisseurs_fsc.categories`) qui font
+# d'un fournisseur un fournisseur de bobines papier : c'est lui que l'EUDR vise.
+# Filtre « Bobines papier » de l'onglet EUDR.
+EUDR_CATEGORIES_BOBINES = ("frontal", "complexe", "glassine")
 
 # Délai indiqué au fournisseur dans l'email de demande.
 EUDR_REPONSE_AVANT = os.getenv("EUDR_REPONSE_AVANT", "2026-11-15")
