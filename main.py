@@ -100,6 +100,9 @@ from app.web.bat_page import router as bat_page_router
 from app.routers.qualite import router as qualite_api_router
 from app.routers.qualite_ged import router as qualite_ged_router
 from app.routers.qualite_fsc import router as qualite_fsc_router
+from app.routers.qualite_eudr import router as qualite_eudr_router
+from app.routers.qualite_eudr import router_api as eudr_portail_api_router
+from app.routers.qualite_eudr import router_html as eudr_portail_html_router
 from app.web.qualite_page import router as qualite_page_router
 from app.routers.pwa import router as pwa_router
 from app.routers.push import router as push_router
@@ -748,6 +751,9 @@ app.include_router(bat_page_router)
 app.include_router(qualite_api_router)
 app.include_router(qualite_ged_router)
 app.include_router(qualite_fsc_router)
+app.include_router(qualite_eudr_router)
+app.include_router(eudr_portail_html_router)
+app.include_router(eudr_portail_api_router)
 app.include_router(qualite_page_router)
 app.include_router(pwa_router)
 app.include_router(push_router)

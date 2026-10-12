@@ -23,7 +23,7 @@ GED_JS = r"""
 // ══════════════════════════════════════════════════════════════════════
 
 S.ged = {
-  tab: 'docs',        // 'docs' = documents clients (existant) | 'explorer' | 'fsc'
+  tab: 'docs',        // 'docs' = documents clients (existant) | 'explorer' | 'fsc' | 'eudr'
   path: [0],          // chemin courant : [0, id1, id2, ...] - 0 = racine
   cols: [],           // contenu de chaque niveau, aligne sur path
   trashCount: 0,
@@ -52,6 +52,7 @@ function sifaTabsHtml(active){
     ${tab('docs','Documents clients','Generer les Declarations UE et attestations a envoyer aux clients')}
     ${tab('explorer','Explorateur','Parcourir, deposer et rechercher les documents qualite')}
     ${tab('fsc','FSC','Fournisseurs certifies FSC, categories FSC et controles sur la base FSC')}
+    ${tab('eudr','EUDR','Questionnaire EUDR envoye aux fournisseurs et leurs reponses')}
   </div>`;
 }
 
@@ -60,6 +61,7 @@ function setSifaTab(k){
   try{ localStorage.setItem('mysifa_sifa_tab', k); }catch(e){}
   if(k === 'explorer') gedEnter();
   else if(k === 'fsc' && typeof fscEnter === 'function') fscEnter();
+  else if(k === 'eudr' && typeof eudrEnter === 'function') eudrEnter();
   else if(typeof loadSifaDocsList === 'function') loadSifaDocsList();
 }
 

@@ -10,6 +10,7 @@ from app.web.access_denied import access_denied_response
 from config import APP_VERSION
 from app.web.qualite_ged_assets import GED_JS
 from app.web.qualite_fsc_assets import FSC_JS
+from app.web.qualite_eudr_assets import EUDR_JS
 
 ROLES_QUALITE = {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}
 ROLES_QUALITE_READONLY = {"commercial"}
@@ -42,6 +43,7 @@ def qualite_page(request: Request):
         .replace("__USER_ROLE__", user.get("role", ""))
         .replace("__GED_ASSETS__", GED_JS)
         .replace("__FSC_ASSETS__", FSC_JS)
+        .replace("__EUDR_ASSETS__", EUDR_JS)
     )
     return HTMLResponse(
         content=html,
@@ -871,6 +873,7 @@ function setView(v, opts){
     // et « FSC ». L'onglet actif est memorise dans localStorage, on y revient donc directement.
     if(typeof gedActiveTab==='function' && gedActiveTab()==='explorer'){ gedEnter(); }
     else if(typeof gedActiveTab==='function' && gedActiveTab()==='fsc' && typeof fscEnter==='function'){ fscEnter(); }
+    else if(typeof gedActiveTab==='function' && gedActiveTab()==='eudr' && typeof eudrEnter==='function'){ eudrEnter(); }
     else if(typeof loadSifaDocsList==='function') loadSifaDocsList();
   } else if(v==='sifa-docs-detail'){
     const nav=document.getElementById('nav-sifa-docs'); if(nav) nav.classList.add('active');
@@ -2915,6 +2918,7 @@ function renderSifaDocsList(){
   // Si l'utilisateur est sur l'onglet Explorateur, c'est lui qui rend la page.
   if(typeof gedActiveTab==='function' && gedActiveTab()==='explorer'){ gedEnter(); return; }
   if(typeof gedActiveTab==='function' && gedActiveTab()==='fsc' && typeof fscEnter==='function'){ fscEnter(); return; }
+  if(typeof gedActiveTab==='function' && gedActiveTab()==='eudr' && typeof eudrEnter==='function'){ eudrEnter(); return; }
   const templates = S.sifaDocsTemplates || [];
   const cards = templates.map(t => `
     <div class="sd-card" onclick="openSifaDoc('${escAttr(t.code)}')">
@@ -7673,6 +7677,7 @@ async function saveMatriceCell(fourId, ficheId){
 window.addEventListener('hashchange',function(){try{var hv=_readQualiteView();if(hv)setView(hv,{silent:true});}catch(e){}});
 __GED_ASSETS__
 __FSC_ASSETS__
+__EUDR_ASSETS__
 init();
 </script>
 <script src="/static/mysifa_impersonate.js?v=2"></script>
