@@ -37,6 +37,8 @@ svc = _charger("reunion", RACINE / "app" / "services" / "reunion.py")
 mig = _charger("mig_reunions", RACINE / "app" / "core" / "migrations" / "2026_08_31_reunions_prod.py")
 mig_mach = _charger("mig_reunion_machines",
                     RACINE / "app" / "core" / "migrations" / "2026_09_01_reunion_machines.py")
+mig_statut = _charger("mig_reunion_actions_statut",
+                      RACINE / "app" / "core" / "migrations" / "2026_10_12_reunion_actions_statut.py")
 
 FAIL = []
 
@@ -54,6 +56,7 @@ def base():
     conn.row_factory = sqlite3.Row
     mig.appliquer(conn)
     mig_mach.appliquer(conn)
+    mig_statut.appliquer(conn)
     return conn
 
 
@@ -144,6 +147,19 @@ def test_actions():
     verifier("par qui", fait["fait_par"], "Eugene")
     verifier("decochee", svc.modifier_action(conn, a["id"], "Eugene", fait=False)["fait"], False)
     verifier("et la trace part", svc.modifier_action(conn, a["id"], "Eugene", fait=False)["fait_par"], None)
+
+    verifier("statut initial", svc.modifier_action(conn, a["id"], "Eugene")["statut"], "a_faire")
+    enc = svc.modifier_action(conn, a["id"], "Eugene", statut="en_cours")
+    verifier("en cours", (enc["statut"], enc["fait"]), ("en_cours", False))
+    fin = svc.modifier_action(conn, a["id"], "Eugene", statut="termine")
+    verifier("termine coche", (fin["statut"], fin["fait"]), ("termine", True))
+    verifier("statut inconnu ignore",
+             svc.modifier_action(conn, a["id"], "Eugene", statut="n_importe")["statut"], "termine")
+    verifier("decocher repasse a faire",
+             svc.modifier_action(conn, a["id"], "Eugene", fait=False)["statut"], "a_faire")
+    suivi = svc.toutes_actions(conn)
+    verifier("suivi : toutes les actions", len(suivi), 2)
+    verifier("suivi : reunion portee", suivi[0]["reunion_titre"], r["titre"])
 
     verifier("texte corrige",
              svc.modifier_action(conn, a["id"], "Eugene", texte="Commander 4 lames")["texte"],
