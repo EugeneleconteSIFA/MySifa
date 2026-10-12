@@ -10729,6 +10729,9 @@ async function renderSettingsBlocsCapturables() {
   if (!root) return;
   root.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:13px">Chargement…</div>';
   let blocs = [];
+  let applisReg = {}, etatReleves = {};
+  // Filtre de travail : tous, sans grand format, sans historique, page chargée.
+  let filtre = 'tous';
   // Qui a épinglé chaque bloc : dépliable depuis le nombre d'indicateurs.
   const parBloc = {};
   const ouverts = new Set();
@@ -10738,7 +10741,10 @@ async function renderSettingsBlocsCapturables() {
       fetch('/api/accueil/blocs/admin/usages', { credentials: 'include' }),
     ]);
     if (!r.ok) throw new Error('Chargement impossible (' + r.status + ').');
-    blocs = (await r.json()).blocs || [];
+    const dataBlocs = await r.json();
+    blocs = dataBlocs.blocs || [];
+    applisReg = dataBlocs.applis || {};
+    etatReleves = dataBlocs.releves || {};
     if (ru.ok) {
       ((await ru.json()).utilisateurs || []).forEach(u => (u.indicateurs || []).forEach(w => {
         (parBloc[w.bloc] = parBloc[w.bloc] || []).push({ user: u.nom, role: u.role_libelle, nom: w.nom });
@@ -10759,18 +10765,89 @@ async function renderSettingsBlocsCapturables() {
     return true;
   }
 
+  // Pastille de ligne : texte coloré sur fond teinté de la même couleur.
+  function pastille(texte, couleur, titre) {
+    return '<span title="' + escAttr(titre || '') + '" style="display:inline-flex;align-items:center;font-size:11px;font-weight:600;' +
+      'padding:1px 7px;border-radius:999px;white-space:nowrap;color:' + couleur + ';' +
+      'background:color-mix(in srgb,' + couleur + ' 13%,transparent)">' + escHtml(texte) + '</span>';
+  }
+
+  function jjmm(iso) {
+    const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/);
+    return m ? m[3] + '/' + m[2] + (m[4] ? ' ' + m[4] + ':' + m[5] : '') : '';
+  }
+
+  function tuile(titre, valeur, sous, alerte) {
+    return '<div style="background:var(--card);border:1px solid ' + (alerte ? 'var(--warn)' : 'var(--border)') + ';border-radius:10px;padding:10px 14px;min-width:150px">' +
+      '<div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">' + escHtml(titre) + '</div>' +
+      '<div style="font-size:20px;font-weight:700;color:' + (alerte ? 'var(--warn)' : 'var(--text)') + '">' + escHtml(valeur) + '</div>' +
+      (sous ? '<div style="font-size:11px;color:' + (alerte ? 'var(--warn)' : 'var(--muted)') + '">' + escHtml(sous) + '</div>' : '') + '</div>';
+  }
+
+  function tuileFormats() {
+    const t = { s: 0, m: 0, l: 0 };
+    blocs.forEach(b => ['s', 'm', 'l'].forEach(k => { t[k] += (b.tailles || {})[k] || 0; }));
+    return tuile('Formats', t.s + ' · ' + t.m + ' · ' + t.l, 'compact · standard · grand');
+  }
+
+  // Santé de la boucle de relevé (prod) : un passage toutes les 30 min.
+  function tuileReleves() {
+    const e = etatReleves || {};
+    const d = e.dernier ? new Date(String(e.dernier).replace(' ', 'T')) : null;
+    const age = d && !isNaN(d) ? Math.round((Date.now() - d.getTime()) / 60000) : null;
+    const enRetard = age == null || age > 60;
+    const sous = age == null ? 'aucun passage enregistré'
+      : 'dernier passage ' + (age < 1 ? "à l'instant" : age < 120 ? 'il y a ' + age + ' min' : 'le ' + jjmm(e.dernier));
+    return tuile('Relevés', (e.blocs || 0) + ' / ' + (e.attendus || 0), sous, enRetard);
+  }
+
+  // Ce que sait faire un bloc : grand format, historique, mode de lecture.
+  function pastillesBloc(b) {
+    const p = [];
+    if (b.grand) p.push(pastille(b.liste ? 'Grand · liste' : 'Grand · graphique 30 j', 'var(--accent)', 'Format grand proposé à la capture'));
+    const h = b.historique || {};
+    if (h.type === 'serie') p.push(pastille('Série en base', 'var(--success)', 'Historique jour par jour déjà en base : courbe pleine dès le premier jour'));
+    else if (h.type === 'releve') {
+      p.push(h.jours
+        ? pastille('Relevé · ' + h.jours + ' j depuis le ' + jjmm(h.depuis), 'var(--success)', 'Dernier passage ' + jjmm(h.dernier))
+        : h.objet
+          ? pastille('Relevé dès qu\'un indicateur le suit', 'var(--muted)', 'Bloc sur un objet (machine, catégorie, transporteur) : chaque objet suivi est relevé')
+          : pastille('Relevé · en attente du premier passage', 'var(--warn)', 'La boucle de relevé ne tourne qu\'en prod'));
+    } else p.push(pastille('Sans historique', 'var(--muted)', h.raison || ''));
+    if (b.lecture === 'page') p.push(pastille('Page chargée', 'var(--warn)', 'Sans source API : la page est chargée hors écran à chaque rafraîchissement (≈ 400 Ko par minute et par indicateur)'));
+    const t = b.tailles || {};
+    if (b.nb_widgets) p.push(pastille('S ' + (t.s || 0) + ' · M ' + (t.m || 0) + ' · L ' + (t.l || 0), 'var(--muted)', 'Indicateurs par taille : compact, standard, grand'));
+    if (b.nb_alertes) p.push(pastille(b.nb_alertes + ' avec alerte', 'var(--danger)', 'Indicateurs qui portent au moins une alerte'));
+    return '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">' + p.join('') + '</div>';
+  }
+
+  // Repère d'une valeur : état coloré, texte, ou série avec son sens.
+  function valeurLib(v) {
+    let rep = '';
+    if (v.ton) rep = ' <span title="Affichée en badge coloré" style="color:var(--accent)">●</span>';
+    else if (v.nombre === false) rep = ' <span title="Texte : affichée sans alerte" style="color:var(--muted);font-size:11px">T</span>';
+    else if (v.serie) rep = ' <span title="Tendance : ' + (v.serie === '+' ? 'une hausse est bonne' : 'une baisse est bonne') + '" style="color:var(--success);font-size:11px">' + (v.serie === '+' ? '↑' : '↓') + '</span>';
+    return escHtml(v.libelle) + rep;
+  }
+
   function dessiner() {
     const nouveaux = blocs.filter(b => b.nouveau).length;
     const actifs = blocs.filter(b => b.capturable).length;
     const widgets = blocs.reduce((t, b) => t + (b.nb_widgets || 0), 0);
-    // Noms d'applis affichés : ceux des tuiles du portail.
-    const NOMS_APPLIS = { portail: 'Accueil', prod: 'MyProd', planning: 'Planning machine', stock: 'MyStock',
-      expe: 'MyExpé', qualite: 'MyQualité', bat: 'MyBAT', ao: 'MyAO', taches: 'Tâches', messages: 'Messagerie',
-      calendrier: 'Calendrier', planning_rh: 'Planning RH', rh_coffre: 'Coffre RH', compta: 'MyCompta',
-      maintenance: 'Maintenance', erp: 'ERP RVGI' };
-    const nomAppli = a => NOMS_APPLIS[a] || a;
+    // Noms et couleurs d'applis : APPLIS du registre (app/services/blocs_registre.py),
+    // les mêmes que les pastilles des indicateurs de l'accueil.
+    const nomAppli = a => (applisReg[a] && applisReg[a].libelle) || a;
+    const teinteAppli = a => /^(accent|c[1-5])$/.test((applisReg[a] || {}).teinte || '') ? 'var(--' + applisReg[a].teinte + ')' : 'var(--accent)';
+    const sansHisto = b => !b.historique || b.historique.type === 'aucun';
+    const garde = {
+      tous: () => true,
+      'sans-grand': b => !b.grand,
+      'sans-histo': sansHisto,
+      page: b => b.lecture === 'page',
+    }[filtre] || (() => true);
+    const visibles = blocs.filter(garde);
     const parAppli = {};
-    blocs.forEach(b => { (parAppli[b.appli] = parAppli[b.appli] || []).push(b); });
+    visibles.forEach(b => { (parAppli[b.appli] = parAppli[b.appli] || []).push(b); });
     const applis = Object.keys(parAppli).sort((x, y) => nomAppli(x).localeCompare(nomAppli(y), 'fr'));
 
     let html = '<div style="max-width:1100px;margin:0;padding:0 0 40px">' +
@@ -10782,11 +10859,20 @@ async function renderSettingsBlocsCapturables() {
         '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;min-width:120px">' +
         '<div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">' + escHtml(k[0]) + '</div>' +
         '<div style="font-size:20px;font-weight:700;color:var(--text)">' + k[1] + '</div></div>').join('') +
+      tuileFormats() + tuileReleves() +
       (nouveaux ? '<button type="button" class="btn" id="blocs-vus" style="align-self:center;background:var(--card);border:1px solid var(--border);color:var(--text)">Marquer les nouveaux comme vus</button>' : '') +
       '</div>';
 
+    const FILTRES = [['tous', 'Tous', blocs.length], ['sans-grand', 'Sans grand format', blocs.filter(b => !b.grand).length],
+      ['sans-histo', 'Sans historique', blocs.filter(sansHisto).length], ['page', 'Page chargée', blocs.filter(b => b.lecture === 'page').length]];
+    html += '<div role="group" aria-label="Filtrer les blocs" style="display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px">' +
+      FILTRES.map(f => '<button type="button" data-bloc-filtre="' + f[0] + '" aria-pressed="' + (filtre === f[0]) + '" style="font:600 12px \'Segoe UI\',system-ui,sans-serif;cursor:pointer;padding:5px 10px;border-radius:8px;' +
+        (filtre === f[0] ? 'background:var(--accent-bg);border:1px solid var(--accent);color:var(--accent)' : 'background:var(--card);border:1px solid var(--border);color:var(--text2)') +
+        '">' + escHtml(f[1]) + ' · ' + f[2] + '</button>').join('') + '</div>';
+    if (!visibles.length) html += '<div style="padding:14px;color:var(--muted);font-size:13px">Aucun bloc pour ce filtre.</div>';
+
     applis.forEach(app => {
-      html += '<div class="card" style="margin-bottom:14px;padding:0;overflow:hidden">' +
+      html += '<div class="card" style="margin-bottom:14px;padding:0;overflow:hidden;border-left:4px solid ' + teinteAppli(app) + '">' +
         '<div style="padding:10px 14px;font-weight:700;font-size:13px;border-bottom:1px solid var(--border)">' + escHtml(nomAppli(app)) + '</div>' +
         '<table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed">' +
         '<colgroup><col style="width:34%"><col style="width:40%"><col style="width:11%"><col style="width:15%"></colgroup>' +
@@ -10797,8 +10883,9 @@ async function renderSettingsBlocsCapturables() {
           '<tr style="border-top:1px solid var(--border)">' +
           '<td style="padding:8px 14px;white-space:normal;vertical-align:middle"><div style="font-weight:600">' + escHtml(b.libelle) +
             (b.nouveau ? ' <span style="font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-bg);border-radius:6px;padding:1px 6px;margin-left:4px">Nouveau</span>' : '') +
-            '</div><div style="font-family:ui-monospace,monospace;font-size:11px;color:var(--muted);overflow-wrap:anywhere">' + escHtml(b.nom) + '</div></td>' +
-          '<td style="padding:8px;color:var(--text2);white-space:normal;line-height:1.45;vertical-align:middle">' + (b.valeurs || []).map(v => escHtml(v.libelle)).join(' · ') + '</td>' +
+            '</div><div style="font-family:ui-monospace,monospace;font-size:11px;color:var(--muted);overflow-wrap:anywhere">' + escHtml(b.nom) + '</div>' +
+            pastillesBloc(b) + '</td>' +
+          '<td style="padding:8px;color:var(--text2);white-space:normal;line-height:1.45;vertical-align:middle">' + (b.valeurs || []).map(valeurLib).join(' · ') + '</td>' +
           '<td style="padding:8px;text-align:right;font-variant-numeric:tabular-nums;vertical-align:middle">' +
             ((parBloc[b.nom] || []).length
               ? '<button type="button" data-bloc-qui="' + escAttr(b.nom) + '" title="Voir qui l\'a épinglé" style="font:inherit;font-weight:700;cursor:pointer;padding:2px 9px;border-radius:7px;' +
@@ -10832,6 +10919,10 @@ async function renderSettingsBlocsCapturables() {
         dessiner();
       });
     });
+    root.querySelectorAll('[data-bloc-filtre]').forEach(btn => btn.addEventListener('click', () => {
+      filtre = btn.getAttribute('data-bloc-filtre');
+      dessiner();
+    }));
     root.querySelectorAll('[data-bloc-qui]').forEach(btn => btn.addEventListener('click', () => {
       const nom = btn.getAttribute('data-bloc-qui');
       if (ouverts.has(nom)) ouverts.delete(nom); else ouverts.add(nom);

@@ -242,6 +242,17 @@ registre, le nombre de widgets créés sur chacun, l'étiquette « Nouveau », e
 un interrupteur de capture (`blocs_reglages`). Couper un bloc masque ses
 widgets sans les supprimer. On n'y crée ni ne renomme aucun bloc.
 
+Depuis le 12/10/2026, la même section dit aussi, bloc par bloc, ce qu'il sait
+faire (`GET /api/accueil/blocs/admin`) : grand format (graphique ou liste),
+historique (série en base, relevé quotidien avec son nombre de jours, ou la
+raison de `NON_RELEVES`), mode de lecture (API, ou page chargée hors écran —
+déduit de la table `SOURCES` de `mysifa_blocs_sources.js`), répartition des
+indicateurs par taille et alertes posées. Deux tuiles en tête : « Formats » et
+« Relevés », qui passe en avertissement si la boucle n'a pas tourné depuis une
+heure. Filtres : sans grand format, sans historique, page chargée — les listes
+de travail du chantier. Les noms et teintes d'applis viennent d'`APPLIS` du
+registre, plus d'une liste propre à la page.
+
 Deuxième section, **Par utilisateur** (`renderSettingsUsages`,
 `GET /api/accueil/blocs/admin/usages`) : qui a épinglé quels indicateurs,
 avec valeurs et alertes. Dans la liste des blocs, le nombre d'indicateurs se
