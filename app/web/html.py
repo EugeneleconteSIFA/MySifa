@@ -50,6 +50,7 @@ from app.web.expe_notes_assets import (
 )
 from app.web.expe_guide import EXPE_DEVIS_GUIDE_JS
 from app.web.expe_pilotage_assets import EXPE_PILOTAGE_CSS, EXPE_PILOTAGE_JS
+from app.web.expe_emails_assets import EXPE_EMAILS_CSS, EXPE_EMAILS_JS
 from app.web.expe_carburant_assets import EXPE_CARBURANT_CSS, EXPE_CARBURANT_JS
 from app.web.compta_assets import (
     COMPTA_MAIN_CSS,
@@ -1312,6 +1313,7 @@ __EXPE_CARTE_FRANCE_CSS__
 __EXPE_NOTES_CSS__
 __EXPE_ZONES_CSS__
 __EXPE_PILOTAGE_CSS__
+__EXPE_EMAILS_CSS__
 __EXPE_CARBURANT_CSS__
 /* ── Paie (onglet MyCompta) ── */
 .paie-layout{display:flex;gap:14px;height:calc(100vh - 210px);overflow:hidden}
@@ -11121,6 +11123,8 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__EXPE_ZONES_JS__", EXPE_ZONES_JS)
         .replace("__EXPE_PILOTAGE_CSS__", EXPE_PILOTAGE_CSS)
         .replace("__EXPE_PILOTAGE_JS__", EXPE_PILOTAGE_JS)
+        .replace("__EXPE_EMAILS_CSS__", EXPE_EMAILS_CSS)
+        .replace("__EXPE_EMAILS_JS__", EXPE_EMAILS_JS)
         .replace("__EXPE_CARBURANT_CSS__", EXPE_CARBURANT_CSS)
         .replace("__EXPE_CARBURANT_JS__", EXPE_CARBURANT_JS)
         # ─── Branding paramétrable (LAST : appliqué aux contenus injectés

@@ -4429,7 +4429,7 @@ EXPE_MAIN_CSS = r"""
 """
 
 EXPE_MAIN_JS = r"""
-var EXPE_VALID_TABS=['pilotage','suivi_departs','palettes_europe','comparateur','devis','poids','transporteurs','carburant','zones','prospects'];
+var EXPE_VALID_TABS=['pilotage','emails','suivi_departs','palettes_europe','comparateur','devis','poids','transporteurs','carburant','zones','prospects'];
 var _expeHashRestored=false;
 function _readExpeHash(){
   try{var h=(location.hash||'').replace(/^#/,'').trim();
@@ -4655,6 +4655,7 @@ __EXPE_NOTES_JS__
 __EXPE_THEMATIQUES_JS__
 __EXPE_ZONES_JS__
 __EXPE_PILOTAGE_JS__
+__EXPE_EMAILS_JS__
 __EXPE_CARBURANT_JS__
 function renderExpePoids(){
   const rows=S.expePoidsRows||[];
@@ -7553,6 +7554,7 @@ function renderExpe(){
   }
   if(S.expeTab==='dashboard')S.expeTab='suivi_departs';
   if(S.expeTab==='pilotage'&&!expePilotageVisible())S.expeTab='suivi_departs';
+  if(S.expeTab==='emails'&&!expePilotageVisible())S.expeTab='suivi_departs';
   const tab=S.expeTab||'suivi_departs';
   _syncExpeHash();
   const sub=S.expeDepartSubTab||'jour';
@@ -7578,6 +7580,8 @@ function renderExpe(){
     // en continu (un BL edite dans RVGI, un depart valide par un collegue) et
     // un tableau de bord perime induit en erreur plus qu'il n'aide.
     else if(tab==='pilotage'){void loadExpePilotage();if(!T.list.length&&!T.loading)void loadTransporteurs();}
+    // Rechargé à chaque entrée : l'agent relève la boîte toutes les 5 minutes.
+    else if(tab==='emails'){void loadExpeEmails();}
   }
 
   const sidebar=h('nav',{className:'sidebar msb-nav'},
@@ -7590,6 +7594,7 @@ function renderExpe(){
       const SECTIONS = [
         { key:'ops', label:'Opérations', items:[
           ...(expePilotageVisible()?[{tab:'pilotage',ico:'activity',label:'Pilotage'}]:[]),
+          ...(expePilotageVisible()?[{tab:'emails',ico:'mail',label:'Emails commandes'}]:[]),
           {tab:'suivi_departs',  ico:'clipboard', label:'Départs'},
           {tab:'palettes_europe',ico:'pallet',    label:'Palettes Europe'},
         ]},
@@ -7669,6 +7674,7 @@ function renderExpe(){
       h('div',{className:'mobile-topbar-title'},'MyExpé'),
       h('div',{className:'mobile-topbar-sub'},
         tab==='pilotage'?'Pilotage des expéditions':
+        tab==='emails'?'Emails commandes':
         tab==='suivi_departs'?(sub==='historique'?'Historique départs':'Départs programmés'):
         tab==='palettes_europe'?'Suivi des palettes Europe consignées':
         tab==='transporteurs'?'Transporteurs':tab==='carburant'?'Taxe carburant':tab==='zones'?'Zone géographique':tab==='devis'?'Demandes de devis':tab==='prospects'?'Prospects transporteurs':tab==='poids'?'Calcul poids':'Comparateur tarifs')
@@ -7677,6 +7683,7 @@ function renderExpe(){
   );
 
   const content=tab==='pilotage'?renderExpePilotage():
+    tab==='emails'?renderExpeEmails():
     tab==='suivi_departs'?renderExpeSuiviDepartsWithSubtabs():
     tab==='palettes_europe'?renderExpePalettesEurope():
     tab==='transporteurs'?renderExpeTransporteurs():tab==='poids'?renderExpePoids():
@@ -7702,12 +7709,13 @@ function renderExpe(){
     h('div',{className:'app'},
       sidebar,
       h('main',{className:'main'},
-        h('div',Object.assign({className:'container'},_moExpeEnter?{'data-page-enter':''}:{},(tab==='suivi_departs'||tab==='palettes_europe'||tab==='pilotage')?{style:{maxWidth:'1600px'}}:{}),
+        h('div',Object.assign({className:'container'},_moExpeEnter?{'data-page-enter':''}:{},(tab==='suivi_departs'||tab==='palettes_europe'||tab==='pilotage'||tab==='emails')?{style:{maxWidth:'1600px'}}:{}),
           topbar,
           h('h1',null,'MyExpé'),
           !expeCanWrite()?h('div',{className:'readonly-notice',style:{marginBottom:'12px'}},iconEl('eye',13),' Lecture seule — consultation des départs, transporteurs et délais'):null,
           h('div',{className:'subtitle'},
             tab==='pilotage'?'Ce qui part bientôt : transport commandé, enlèvement, bon de livraison'
+            :tab==='emails'?'Boîte des commandes triée par l’agent : catégorie, commandes RVGI, suivi du traitement'
             :tab==='suivi_departs'?(sub==='historique'?'Recherche multi-critères sur les départs validés'
               :'Enregistrement des enlèvements et validation vers l\'historique')
             :tab==='palettes_europe'?'Compte courant des palettes Europe — combien chaque transporteur nous doit'

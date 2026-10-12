@@ -279,6 +279,8 @@ MCP_OAUTH_ROLES = frozenset(
 # ses compteurs demandent une lecture avertie. À élargir à `expedition` et
 # `logistique` quand les chiffres seront stabilisés.
 ROLES_EXPE_PILOTAGE = {ROLE_DIRECTION, ROLE_SUPERADMIN}
+# Emails de commandes : même rodage que le pilotage.
+ROLES_EXPE_EMAILS = ROLES_EXPE_PILOTAGE
 ROLES_STOCK = {ROLE_DIRECTION, ROLE_LOGISTIQUE, ROLE_EXPEDITION, ROLE_COMMERCIAL, ROLE_FABRICATION, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
 
 # MyStock — zone « Au sol - à expédier » : stock prêt à expédier (code technique, affiché « Au sol - à expédier »)
@@ -1143,6 +1145,14 @@ EXPE_MEMO_FROM = os.getenv("EXPE_MEMO_FROM", EXPE_DEVIS_FROM)
 # Modèle qui rédige les points d'attention. Les chiffres du mémo, eux, sont
 # calculés par le code : le modèle ne fait que hiérarchiser.
 EXPE_MEMO_MODELE = os.getenv("EXPE_MEMO_MODELE", DEVIS_IA_MODELE)
+
+# ─── MyExpé — agent emails de commandes ────────────────────────────
+# Boîte relevée en lecture seule par Microsoft Graph (permission Mail.Read
+# de l'application Azure sur cette boîte). Activation et délai de relance
+# se règlent dans MyExpé › Emails commandes.
+EMAILS_COMMANDES_BOITE = os.getenv("EMAILS_COMMANDES_BOITE", "commandes@sifa.pro")
+EMAILS_COMMANDES_MODELE = os.getenv("EMAILS_COMMANDES_MODELE", DEVIS_IA_MODELE)
+
 DEVIS_IA_MAX_TOKENS = int(os.getenv("DEVIS_IA_MAX_TOKENS", "4000"))
 # Budget de caractères envoyés au modèle. Un classeur de devis embarque ses
 # référentiels (feuille « Matière » : 1 488 lignes) : sans plafond, les vingt
