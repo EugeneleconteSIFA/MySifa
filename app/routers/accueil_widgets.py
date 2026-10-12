@@ -18,6 +18,7 @@ Endpoints superadmin (écran « Widgets et tableaux de bord » de Paramètres) :
   PATCH  /api/accueil/blocs/admin/{nom}     activer / désactiver la capture
   GET    /api/accueil/blocs/admin/usages    qui a épinglé quels indicateurs
   GET    /api/accueil/blocs/admin/releves   état des relevés quotidiens (contrôle)
+  GET    /api/accueil/blocs/admin/releves/{nom}  relevés d'un bloc, jour par jour
   GET    /api/accueil/boutons/admin         grille applis × boutons flottants
   PUT    /api/accueil/boutons/admin         activer / couper un bouton dans une appli
 
@@ -526,6 +527,69 @@ def blocs_releves(request: Request):
             lignes = []   # table pas encore migrée
     return {"releves": lignes, "releves_attendus": sorted(accueil_releves.RELEVEURS),
             "non_releves": accueil_releves.NON_RELEVES}
+
+
+RELEVES_JOURS_MAX = 400
+
+
+@router.get("/api/accueil/blocs/admin/releves/{nom}")
+def bloc_releves(nom: str, request: Request, jours: int = 90):
+    """Relevés d'un bloc sur les `jours` derniers jours — superadmin.
+
+    Une série par combinaison suivie (objet, filtres) : le défaut du bloc, et
+    chaque objet ou jeu de filtres qu'un indicateur suit. Chaque combinaison
+    porte les noms des indicateurs qui la suivent, pour qu'on sache à quoi
+    correspond « objet 3 » sans aller lire la base."""
+    from datetime import date, timedelta
+    from urllib.parse import parse_qsl
+    require_superadmin(request)
+    res = reg.resoudre(nom)
+    if not res:
+        raise HTTPException(404, "Bloc inconnu.")
+    nom, b = res
+    try:
+        jours = max(1, min(int(jours), RELEVES_JOURS_MAX))
+    except (TypeError, ValueError):
+        jours = 90
+    depuis = (date.today() - timedelta(days=jours - 1)).isoformat()
+    with get_db() as conn:
+        try:
+            rows = conn.execute(
+                "SELECT objet, filtres, jour, valeurs, maj_le FROM accueil_releves"
+                " WHERE bloc=? AND jour>=? ORDER BY jour DESC",
+                (nom, depuis),
+            ).fetchall()
+        except Exception:
+            rows = []   # table pas encore migrée
+        widgets = conn.execute(
+            "SELECT nom, COALESCE(objet, '') AS objet, url_capture FROM accueil_widgets WHERE bloc=?"
+            + "".join(" OR bloc=?" for _ in b.alias),
+            (nom, *b.alias),
+        ).fetchall()
+    from app.services.accueil_releves import cle_filtres, filtres_de
+    noms_suivis: dict = {}
+    for w in widgets:
+        k = (str(w["objet"] or ""), cle_filtres(filtres_de(w["url_capture"])))
+        noms_suivis.setdefault(k, []).append(w["nom"])
+    suivis: dict = {}
+    lignes = []
+    for r in rows:
+        k = (r["objet"], r["filtres"])
+        suivis.setdefault(k, None)
+        try:
+            v = json.loads(r["valeurs"] or "{}")
+        except (TypeError, ValueError):
+            v = {}
+        lignes.append({"objet": r["objet"], "filtres": r["filtres"], "jour": r["jour"], "valeurs": v, "maj_le": r["maj_le"]})
+    return {
+        "bloc": nom,
+        "libelle": b.libelle,
+        "jours": jours,
+        "valeurs": [{"cle": c, "libelle": l} for c, l in b.valeurs if c not in b.textes],
+        "suivis": [{"objet": o, "filtres": f, "filtres_lisibles": dict(parse_qsl(f)),
+                    "indicateurs": noms_suivis.get((o, f), [])} for (o, f) in suivis],
+        "lignes": lignes,
+    }
 
 
 @router.get("/api/accueil/blocs/admin/usages")

@@ -118,6 +118,11 @@ affiche encore ; ils serviront aux courbes des blocs sans série.
   `tests/test_accueil_releves.py` échoue sinon, et exécute chaque relevé
   contre une base neuve.
 - Contrôle en prod : `GET /api/accueil/blocs/admin/releves` (superadmin).
+- Consultation : dans Paramètres › Widgets et tableaux de bord, la pastille
+  « Relevé · N j » d'un bloc déplie ses relevés jour par jour (90 jours, une
+  série par objet ou jeu de filtres suivi, avec le nom des indicateurs
+  concernés) et les exporte en CSV.
+  `GET /api/accueil/blocs/admin/releves/{nom}?jours=90` (superadmin, 400 j max).
 
 **Nombre distinct du texte** : quand la valeur affichée n'est pas un nombre
 (« 1h 57min »), poser aussi `data-bloc-nombre-<cle>` (`117`) : c'est lui que
