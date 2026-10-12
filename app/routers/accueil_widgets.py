@@ -27,7 +27,9 @@ ne pas proposer à la capture un bloc dont la page serait refusée.
 """
 
 import json
+import re
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -412,8 +414,37 @@ def ecrire_prefs(body: Prefs, request: Request):
 
 # ─── Superadmin ──────────────────────────────────────────────────────────────
 
+_SOURCES_JS = Path(__file__).resolve().parents[2] / "static" / "mysifa_blocs_sources.js"
+_SOURCES_CACHE: dict = {}
+
+
+def _blocs_avec_source() -> set[str]:
+    """Blocs lus par API (table SOURCES de mysifa_blocs_sources.js). Les autres
+    chargent leur page hors écran à chaque rafraîchissement — c'est ce que
+    Paramètres signale. Relu seulement quand le fichier change."""
+    try:
+        mtime = _SOURCES_JS.stat().st_mtime
+    except OSError:
+        return set()
+    if _SOURCES_CACHE.get("mtime") != mtime:
+        texte = _SOURCES_JS.read_text(encoding="utf-8")
+        corps = texte.split("var SOURCES = {", 1)[1].split("\n  };", 1)[0] if "var SOURCES = {" in texte else ""
+        _SOURCES_CACHE.update(mtime=mtime, noms=set(re.findall(r'^    "([a-z0-9.\-]+)": function', corps, flags=re.M)))
+    return _SOURCES_CACHE["noms"]
+
+
+def _etat_releves(conn) -> dict:
+    from app.services import accueil_releves
+    try:
+        lignes = {r["bloc"]: r for r in accueil_releves.etat(conn)}
+    except Exception:
+        lignes = {}   # table pas encore migrée (v1 avant la copie nocturne)
+    return lignes
+
+
 @router.get("/api/accueil/blocs/admin")
 def blocs_admin(request: Request):
+    from app.services import accueil_releves
     require_superadmin(request)
     with get_db() as conn:
         reglages = {
@@ -426,6 +457,22 @@ def blocs_admin(request: Request):
                 "SELECT bloc, COUNT(*) AS n FROM accueil_widgets GROUP BY bloc"
             ).fetchall()
         }
+        # Taille et alertes des indicateurs, par bloc (alias ramenés au nom actuel).
+        tailles: dict = {}
+        alertes: dict = {}
+        for r in conn.execute("SELECT bloc, hauteur, valeurs FROM accueil_widgets").fetchall():
+            res = reg.resoudre(r["bloc"])
+            nom_b = res[0] if res else r["bloc"]
+            t = r["hauteur"] if r["hauteur"] in reg.HAUTEURS else "m"
+            tailles.setdefault(nom_b, {"s": 0, "m": 0, "l": 0})[t] += 1
+            try:
+                vals = json.loads(r["valeurs"] or "[]")
+            except (TypeError, ValueError):
+                vals = []
+            if any((v or {}).get("alerte") for v in vals):
+                alertes[nom_b] = alertes.get(nom_b, 0) + 1
+        releves = _etat_releves(conn)
+    sources = _blocs_avec_source()
     out = []
     for nom, b in reg.BLOCS.items():
         rg = reglages.get(nom)
@@ -437,8 +484,31 @@ def blocs_admin(request: Request):
             "nb_widgets": n,
             "updated_at": rg["updated_at"] if rg else None,
             "updated_by": rg["updated_by"] if rg else None,
+            "tailles": tailles.get(nom, {"s": 0, "m": 0, "l": 0}),
+            "nb_alertes": alertes.get(nom, 0),
+            # api : valeurs lues par une source ; page : page chargée hors écran.
+            "lecture": "api" if nom in sources else "page",
+            "historique": _historique(nom, b, releves, accueil_releves),
         })
-    return {"blocs": out}
+    derniers = [r["dernier"] for r in releves.values() if r["dernier"]]
+    return {
+        "blocs": out,
+        "applis": {k: {"libelle": a.libelle, "icone": a.icone, "teinte": a.teinte} for k, a in reg.APPLIS.items()},
+        "releves": {"blocs": len(releves), "attendus": len(accueil_releves.RELEVEURS),
+                    "dernier": max(derniers) if derniers else None},
+    }
+
+
+def _historique(nom: str, b, releves: dict, accueil_releves) -> dict:
+    """D'où vient la courbe d'un bloc : série en base, relevé quotidien, ou rien."""
+    if b.series:
+        return {"type": "serie"}
+    if nom in accueil_releves.RELEVEURS:
+        r = releves.get(nom)
+        # objet : relevé seulement pour les objets qu'un indicateur suit.
+        return {"type": "releve", "jours": r["jours"] if r else 0, "depuis": r["depuis"] if r else None,
+                "dernier": r["dernier"] if r else None, "objet": bool(b.objet)}
+    return {"type": "aucun", "raison": accueil_releves.NON_RELEVES.get(nom, "")}
 
 
 @router.get("/api/accueil/blocs/admin/releves")
