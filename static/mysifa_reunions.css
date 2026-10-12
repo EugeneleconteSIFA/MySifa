@@ -339,3 +339,57 @@ body.reduce-anim .reu-btn:hover{transform:none !important}
 .reu-moment-btn + .reu-moment-btn{border-left:1px solid var(--border)}
 .reu-moment-btn:hover{color:var(--accent)}
 .reu-moment-btn.on{background:var(--accent-bg);color:var(--accent)}
+
+/* ── Suivi des actions (accueil de l'onglet) ─────────────────── */
+.reu-titre-sec{font-size:15px;font-weight:700;color:var(--text);margin:4px 0 10px}
+.reu-filtres{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.reu-filtre{background:var(--card);border:1px solid var(--border);color:var(--text2);
+  border-radius:999px;padding:5px 12px;font-size:12.5px;font-weight:600;cursor:pointer;
+  font-family:inherit}
+.reu-filtre b{color:var(--muted);font-weight:700;margin-left:3px}
+.reu-filtre:hover{border-color:var(--accent);color:var(--accent)}
+.reu-filtre.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.reu-board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;
+  align-items:start;margin-bottom:18px}
+@media (max-width:1000px){.reu-board{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:600px){.reu-board{grid-template-columns:minmax(0,1fr)}}
+.reu-col{background:var(--bg);border:1px solid var(--border);border-radius:12px;
+  padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.reu-col h3{margin:2px 2px 4px;font-size:12px;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--muted);font-weight:700;display:flex;align-items:center;gap:7px}
+.reu-col-p{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.reu-col-n{font-size:11px;font-weight:700;color:var(--muted);border:1px solid var(--border);
+  border-radius:999px;padding:0 7px}
+.reu-col.st-en_cours .reu-col-p{background:var(--accent)}
+.reu-col.st-en_attente .reu-col-p{background:var(--warn,#fbbf24)}
+.reu-col.st-termine .reu-col-p{background:var(--success,#34d399)}
+.reu-col-vide{font-size:12.5px;color:var(--muted);padding:6px 4px}
+.reu-col-plus{background:transparent;border:none;color:var(--accent);font-size:12px;
+  cursor:pointer;font-family:inherit;padding:4px;text-align:left}
+.reu-carte{background:var(--card);border:1px solid var(--border);border-radius:10px;
+  padding:9px 10px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.reu-carte.retard{box-shadow:inset 3px 0 0 0 var(--danger)}
+.reu-carte-t{font-size:13.5px;color:var(--text);line-height:1.4;overflow-wrap:anywhere}
+.reu-col.st-termine .reu-carte-t{color:var(--muted);text-decoration:line-through}
+.reu-carte-meta{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px}
+.reu-carte-qui{font-weight:700;color:var(--text2)}
+.reu-carte-qui.vide{font-weight:600;color:var(--muted);font-style:italic}
+.reu-carte-quand{color:var(--muted)}
+.reu-carte.retard .reu-carte-quand{color:var(--danger);font-weight:700}
+.reu-carte-pied{display:flex;gap:6px;align-items:center;justify-content:space-between}
+.reu-carte-reu{background:transparent;border:none;color:var(--muted);font-size:11.5px;
+  cursor:pointer;font-family:inherit;padding:0;text-align:right;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.reu-carte-reu:hover{color:var(--accent);text-decoration:underline}
+select.reu-statut{background:var(--card);border:1px solid var(--border);border-radius:999px;
+  padding:3px 8px;font-size:12px;font-weight:700;color:var(--text2);font-family:inherit;
+  cursor:pointer;flex:none}
+select.reu-statut:focus{outline:none;border-color:var(--accent)}
+select.reu-statut.st-en_cours{color:var(--accent);border-color:var(--accent)}
+select.reu-statut.st-en_attente{color:var(--warn,#fbbf24);border-color:var(--warn,#fbbf24)}
+select.reu-statut.st-termine{color:var(--success,#34d399);border-color:var(--success,#34d399)}
+.reu-act select.reu-statut{margin-top:1px}
+.reu-hist{margin-top:6px}
+.reu-hist>summary{cursor:pointer;font-size:15px;font-weight:700;color:var(--text);
+  margin:4px 0 10px;display:flex;align-items:center;gap:8px}
+.reu-doc-act-st{font-weight:700}

@@ -37,7 +37,10 @@
     plein: false,                      // reunion affichee seule, sans la coquille
     aSupprimer: null,                  // reunion dont la suppression est demandee
     erreur: null,
-    contexteCharge: false
+    contexteCharge: false,
+    suivi: null,                       // toutes les actions, toutes reunions
+    filtreResp: '',                    // '' = tous, '~' = non attribuees
+    toutTermine: false                 // colonne Termine depliee
   };
   var racineCourante = null;
   var notesTimer = null;
@@ -100,6 +103,11 @@
     S.reunions = d.reunions || [];
   }
 
+  async function chargerSuivi(){
+    var d = await appel('/api/reunions/actions');
+    S.suivi = d.actions || [];
+  }
+
   async function chargerReunion(id){
     var d = await appel('/api/reunions/' + encodeURIComponent(id));
     S.reunion = d.reunion;
@@ -125,7 +133,7 @@
     try{
       S.erreur = null;
       await chargerContexte();
-      await chargerListe();
+      await Promise.all([chargerListe(), chargerSuivi()]);
       if(S.ouverteId && !S.reunion){
         await chargerReunion(S.ouverteId);
         S.vue = 'reunion';
@@ -237,6 +245,146 @@
       + '</div>';
   }
 
+  /* Rendu : suivi des actions ----------------------------------
+     L'ecran d'accueil de l'onglet. Une reunion sert a decider ; ce qu'on vient
+     y chercher ensuite, c'est ce qui reste a faire et qui le porte. Quatre
+     colonnes par statut, toutes reunions confondues, filtrables par
+     responsable. Le statut se change sur la carte, sans ouvrir la reunion. */
+
+  var STATUTS = [
+    {code: 'a_faire', libelle: '\u00c0 faire'},
+    {code: 'en_cours', libelle: 'En cours'},
+    {code: 'en_attente', libelle: 'En attente'},
+    {code: 'termine', libelle: 'Termin\u00e9'}
+  ];
+  var TERMINE_VUES = 8;
+  var NON_ATTRIBUE = '~';
+
+  function statutDe(a){
+    if(a && STATUTS.some(function(s){ return s.code === a.statut; })) return a.statut;
+    return (a && a.fait) ? 'termine' : 'a_faire';
+  }
+
+  function selectStatut(a){
+    var st = statutDe(a);
+    return '<select class="reu-statut st-' + st + '" data-statut="' + escA(a.id) + '" '
+      + 'aria-label="Statut de l\'action">'
+      + STATUTS.map(function(s){
+          return '<option value="' + s.code + '"' + (s.code === st ? ' selected' : '') + '>'
+               + esc(s.libelle) + '</option>';
+        }).join('')
+      + '</select>';
+  }
+
+  function enRetard(a, aujourdhui){
+    return !!(a.echeance && statutDe(a) !== 'termine'
+              && String(a.echeance).slice(0, 10) < aujourdhui);
+  }
+
+  function responsables(l){
+    var vus = {};
+    (l || []).forEach(function(a){
+      var n = String(a.responsable || '').trim();
+      if(n) vus[n] = (vus[n] || 0) + (statutDe(a) === 'termine' ? 0 : 1);
+    });
+    return Object.keys(vus).sort(function(x, y){ return x.localeCompare(y, 'fr'); })
+      .map(function(n){ return {nom: n, ouvertes: vus[n]}; });
+  }
+
+  function rendreCarte(a, aujourdhui){
+    var retard = enRetard(a, aujourdhui);
+    var qui = String(a.responsable || '').trim();
+    return '<div class="reu-carte' + (retard ? ' retard' : '') + '">'
+      + '<div class="reu-carte-t">' + esc(a.texte) + '</div>'
+      + '<div class="reu-carte-meta">'
+      +   '<span class="reu-carte-qui' + (qui ? '' : ' vide') + '">'
+      +     esc(qui || 'Non attribu\u00e9e') + '</span>'
+      +   (a.echeance
+            ? '<span class="reu-carte-quand">' + (retard ? 'En retard · ' : '')
+              + esc(dateFr(a.echeance)) + '</span>'
+            : '')
+      + '</div>'
+      + '<div class="reu-carte-pied">'
+      +   selectStatut(a)
+      +   (a.reunion_id
+            ? '<button type="button" class="reu-carte-reu" data-ouvrir="' + escA(a.reunion_id) + '" '
+              + 'title="Ouvrir la r\u00e9union">' + esc(a.reunion_titre || 'R\u00e9union') + '</button>'
+            : '')
+      + '</div>'
+      + '</div>';
+  }
+
+  function rendreSuivi(l, etat){
+    if(l === null || l === undefined) return '<div class="reu-vide">Chargement&hellip;</div>';
+    etat = etat || {};
+    var aujourdhui = etat.aujourdhui || jourLocalIso(new Date());
+    var filtre = etat.filtreResp || '';
+    var vues = l.filter(function(a){
+      var n = String(a.responsable || '').trim();
+      if(!filtre) return true;
+      if(filtre === NON_ATTRIBUE) return !n;
+      return n === filtre;
+    });
+    var gens = responsables(l);
+    var sansResp = l.filter(function(a){
+      return !String(a.responsable || '').trim() && statutDe(a) !== 'termine';
+    }).length;
+    var filtres = '<div class="reu-filtres" role="group" aria-label="Filtrer par responsable">'
+      + '<button type="button" class="reu-filtre' + (!filtre ? ' on' : '') + '" data-resp="">Tous</button>'
+      + gens.map(function(g){
+          return '<button type="button" class="reu-filtre' + (filtre === g.nom ? ' on' : '') + '" '
+               + 'data-resp="' + escA(g.nom) + '">' + esc(g.nom)
+               + (g.ouvertes ? ' <b>' + g.ouvertes + '</b>' : '') + '</button>';
+        }).join('')
+      + (sansResp
+          ? '<button type="button" class="reu-filtre' + (filtre === NON_ATTRIBUE ? ' on' : '') + '" '
+            + 'data-resp="' + NON_ATTRIBUE + '">Non attribu\u00e9es <b>' + sansResp + '</b></button>'
+          : '')
+      + '</div>';
+    var colonnes = STATUTS.map(function(s){
+      var cartes = vues.filter(function(a){ return statutDe(a) === s.code; });
+      if(s.code === 'termine'){
+        // Les plus recemment terminees d'abord : le reste est de l'historique.
+        cartes.sort(function(x, y){
+          return String(y.fait_le || '').localeCompare(String(x.fait_le || ''));
+        });
+      }
+      var total = cartes.length;
+      var masquees = 0;
+      if(s.code === 'termine' && !etat.toutTermine && total > TERMINE_VUES){
+        masquees = total - TERMINE_VUES;
+        cartes = cartes.slice(0, TERMINE_VUES);
+      }
+      return '<section class="reu-col st-' + s.code + '">'
+        + '<h3><span class="reu-col-p" aria-hidden="true"></span>' + esc(s.libelle)
+        + ' <span class="reu-col-n">' + total + '</span></h3>'
+        + (cartes.length
+            ? cartes.map(function(a){ return rendreCarte(a, aujourdhui); }).join('')
+            : '<div class="reu-col-vide">Aucune action.</div>')
+        + (masquees
+            ? '<button type="button" class="reu-col-plus" data-r="tout-termine">'
+              + 'Voir les ' + masquees + ' plus anciennes</button>'
+            : '')
+        + '</section>';
+    }).join('');
+    if(!l.length){
+      return '<div class="reu-vide">Aucune action d\u00e9cid\u00e9e pour l\'instant.<br>'
+           + 'Les actions se cr\u00e9ent pendant une r\u00e9union et se suivent ici.</div>';
+    }
+    return filtres + '<div class="reu-board">' + colonnes + '</div>';
+  }
+
+  function rendreAccueil(reunions, suivi, etat){
+    var n = (reunions || []).length;
+    return '<h2 class="reu-titre-sec">Suivi des actions</h2>'
+      + rendreSuivi(suivi, etat)
+      + '<details class="reu-hist"' + (etat && etat.histOuvert ? ' open' : '') + '>'
+      + '<summary>R\u00e9unions' + (reunions ? ' <span class="reu-col-n">' + n + '</span>' : '')
+      + '</summary>'
+      + rendreListe(reunions)
+      + '</details>';
+  }
+
   function rendreListe(l){
     if(l === null || l === undefined) return '<div class="reu-vide">Chargement&hellip;</div>';
     if(!l.length){
@@ -329,9 +477,14 @@
       +       '<h3>Actions</h3>'
       +       '<div class="reu-hint">Ce qui a &eacute;t&eacute; d&eacute;cid&eacute;, et par qui.</div>'
       +       '<div id="reu-actions">' + rendreActions(r.actions || []) + '</div>'
+      +       '<datalist id="reu-personnes">'
+      +         (etat.personnes || []).map(function(p){
+                  return '<option value="' + escA(p.nom) + '">';
+                }).join('')
+      +       '</datalist>'
       +       '<div class="reu-actform">'
       +         '<input id="reu-a-txt" placeholder="Action &agrave; faire">'
-      +         '<div class="reu-duo"><input id="reu-a-qui" placeholder="Qui">'
+      +         '<div class="reu-duo"><input id="reu-a-qui" placeholder="Qui" list="reu-personnes">'
       +           '<input type="date" id="reu-a-quand" title="Pour quand"></div>'
       +         '<button type="button" class="reu-btn" data-r="ajout-action">Ajouter l\'action</button>'
       +       '</div>'
@@ -514,9 +667,9 @@
           + (a.echeance ? (a.responsable ? ' · ' : '') + 'pour le ' + esc(dateFr(a.echeance)) : '')
           + '</div>'
         : '';
-      return '<div class="reu-act' + (a.fait ? ' fait' : '') + '">'
-        + '<input type="checkbox" data-coche="' + escA(a.id) + '"' + (a.fait ? ' checked' : '') + '>'
+      return '<div class="reu-act' + (statutDe(a) === 'termine' ? ' fait' : '') + '">'
         + '<div class="reu-a-txt">' + esc(a.texte) + meta + '</div>'
+        + selectStatut(a)
         + '<button type="button" class="reu-a-sup" data-sup="' + escA(a.id) + '" '
         + 'title="Supprimer">×</button></div>';
     }).join('');
@@ -599,7 +752,11 @@
                                                : ((S.reunion && S.reunion.notes) || ''));
       peindreProd(vue);
     }else{
-      vue.innerHTML = rendreListe(S.reunions);
+      var hist = vue.querySelector('details.reu-hist');
+      vue.innerHTML = rendreAccueil(S.reunions, S.suivi, {
+        filtreResp: S.filtreResp, toutTermine: S.toutTermine,
+        histOuvert: hist ? hist.open : false
+      });
     }
   }
 
@@ -699,7 +856,8 @@
   async function majAction(id, corps){
     try{
       await poster('/api/reunions/actions/' + encodeURIComponent(id), corps);
-      await recharger();
+      if(S.vue === 'reunion'){ await recharger(); }
+      else{ await chargerSuivi(); peindre(); }
     }catch(e){ toast(e.message, 'danger'); }
   }
 
@@ -731,7 +889,9 @@
           + (a.echeance ? (a.responsable ? ' · ' : '') + 'pour le ' + esc(dateFr(a.echeance)) : '')
           + '</span>'
         : '';
+      var st = STATUTS.filter(function(s){ return s.code === statutDe(a); })[0];
       return '<div class="reu-doc-act' + (a.fait ? ' fait' : '') + '">'
+           + '<span class="reu-doc-act-st">' + esc(st ? st.libelle : '') + '</span> '
            + esc(a.texte) + meta + '</div>';
     }).join('');
     var chiffres = '';
@@ -810,18 +970,24 @@
       }
       var el = ev.target.closest
         ? ev.target.closest('[data-r],[data-sup],[data-part-add],[data-part-sup],'
-                            + '[data-mach],[data-mach-tout]') : null;
+                            + '[data-mach],[data-mach-tout],[data-resp],[data-ouvrir]') : null;
       if(el && rac.contains(el)){
         var act = el.getAttribute('data-r');
         if(act === 'liste'){
           S.vue = 'liste'; S.reunion = null; S.prod = null; S.notesLocal = null;
           S.plein = false; appliquerPlein();
           peindre();
-          try{ await chargerListe(); }catch(e){ S.erreur = e.message; }
+          try{ await Promise.all([chargerListe(), chargerSuivi()]); }
+          catch(e){ S.erreur = e.message; }
           peindre();
           return;
         }
         if(act === 'lancer'){ ouvrirModale(rac); return; }
+        if(act === 'tout-termine'){ S.toutTermine = true; peindre(); return; }
+        if(el.hasAttribute('data-resp')){
+          S.filtreResp = el.getAttribute('data-resp') || ''; peindre(); return;
+        }
+        if(el.hasAttribute('data-ouvrir')){ await ouvrir(el.getAttribute('data-ouvrir')); return; }
         if(act === 'moment'){ choisirMoment(rac, el.getAttribute('data-moment')); return; }
         if(act === 'annuler'){ fermerModale(rac); return; }
         if(act === 'creer'){ await creer(rac); return; }
@@ -854,8 +1020,8 @@
       if(t.id === 'reu-titre'){ await enregistrer({titre: t.value}); peindre(); return; }
       if(t.id === 'reu-du'){ await enregistrer({date_debut: t.value}, true); await recharger(); return; }
       if(t.id === 'reu-au'){ await enregistrer({date_fin: t.value}, true); await recharger(); return; }
-      if(t.hasAttribute && t.hasAttribute('data-coche')){
-        await majAction(t.getAttribute('data-coche'), {fait: t.checked});
+      if(t.hasAttribute && t.hasAttribute('data-statut')){
+        await majAction(t.getAttribute('data-statut'), {statut: t.value});
       }
     });
 
@@ -1076,7 +1242,7 @@
     brancher(racine);
     poserEchap();
     appliquerPlein();
-    if(!S.contexteCharge || S.reunions === null){ amorcer(); }
+    if(!S.contexteCharge || S.reunions === null || S.suivi === null){ amorcer(); }
     else{ peindre(); }
   }
 
@@ -1087,11 +1253,13 @@
     S.veille = null; S.veilleOuverte = false; S.veilleChargee = false;
     S.personnes = []; S.rechercheP = '';
     S.contexteCharge = false;
+    S.suivi = null; S.filtreResp = ''; S.toutTermine = false;
   }
 
   window.MySifaReunions = {
     monter: monter, reset: reset,
     rendreListe: rendreListe, rendreReunion: rendreReunion,
+    rendreSuivi: rendreSuivi, rendreAccueil: rendreAccueil,
     rendreActions: rendreActions, rendreParticipants: rendreParticipants,
     rendreMachines: rendreMachines,
     rendreDocument: rendreDocument

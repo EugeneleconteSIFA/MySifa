@@ -23,6 +23,21 @@ from typing import Any, Dict, List, Optional
 STATUT_OUVERTE = "ouverte"
 STATUT_CLOSE = "close"
 
+# Statuts d'une action, dans l'ordre du suivi. `termine` est le seul final :
+# la colonne `fait` le suit, pour ce qui lit encore la case.
+ACTION_STATUTS = (
+    {"code": "a_faire", "libelle": "À faire"},
+    {"code": "en_cours", "libelle": "En cours"},
+    {"code": "en_attente", "libelle": "En attente"},
+    {"code": "termine", "libelle": "Terminé"},
+)
+ACTION_STATUTS_CODES = {s["code"] for s in ACTION_STATUTS}
+ACTION_TERMINE = "termine"
+
+
+def action_statuts() -> List[Dict[str, str]]:
+    return [dict(s) for s in ACTION_STATUTS]
+
 _JOURS = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
 
 
@@ -95,21 +110,41 @@ def _poser_machines(conn, reunion_id: int, noms: Optional[List[str]]) -> None:
             )
 
 
+def _action(row) -> Dict[str, Any]:
+    d = dict(row)
+    d["fait"] = bool(d.get("fait"))
+    # Base pas encore migree : le statut se deduit de la case.
+    if d.get("statut") not in ACTION_STATUTS_CODES:
+        d["statut"] = ACTION_TERMINE if d["fait"] else "a_faire"
+    return d
+
+
 def actions(conn, reunion_id: int) -> List[Dict[str, Any]]:
     if not _table_existe(conn, "reunion_actions"):
         return []
     rows = conn.execute(
-        """SELECT id, texte, responsable, echeance, fait, fait_le, fait_par, created_at
-             FROM reunion_actions WHERE reunion_id=?
+        """SELECT * FROM reunion_actions WHERE reunion_id=?
             ORDER BY fait, echeance IS NULL, echeance, id""",
         (int(reunion_id),),
     ).fetchall()
-    out = []
-    for r in rows:
-        d = dict(r)
-        d["fait"] = bool(d["fait"])
-        out.append(d)
-    return out
+    return [_action(r) for r in rows]
+
+
+def toutes_actions(conn) -> List[Dict[str, Any]]:
+    """Le suivi : toutes les actions, toutes reunions confondues.
+
+    Chaque action porte la reunion qui l'a decidee — titre et date — pour
+    qu'on puisse y revenir depuis le tableau de suivi.
+    """
+    if not _table_existe(conn, "reunion_actions") or not _table_existe(conn, "reunions"):
+        return []
+    rows = conn.execute(
+        """SELECT a.*, r.titre AS reunion_titre, r.date_debut AS reunion_date
+             FROM reunion_actions a
+             JOIN reunions r ON r.id = a.reunion_id
+            ORDER BY a.echeance IS NULL, a.echeance, r.date_debut DESC, a.id"""
+    ).fetchall()
+    return [_action(r) for r in rows]
 
 
 def reunion(conn, reunion_id: int) -> Optional[Dict[str, Any]]:
@@ -353,15 +388,18 @@ def ajouter_action(conn, reunion_id: int, texte: str, responsable: str = "",
     )
     conn.commit()
     row = conn.execute("SELECT * FROM reunion_actions WHERE id=?", (cur.lastrowid,)).fetchone()
-    d = dict(row)
-    d["fait"] = bool(d["fait"])
-    return d
+    return _action(row)
 
 
 def modifier_action(conn, action_id: int, auteur: str, texte: Optional[str] = None,
                     responsable: Optional[str] = None, echeance: Optional[str] = None,
-                    fait: Optional[bool] = None) -> Optional[Dict[str, Any]]:
-    """Corrige une action, ou la coche. Un texte vide la supprime."""
+                    fait: Optional[bool] = None,
+                    statut: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Corrige une action, change son statut, ou la coche. Un texte vide la supprime.
+
+    Le statut et la case vont ensemble : cocher vaut `termine`, decocher
+    `a_faire` ; passer en `termine` coche, en sortir decoche.
+    """
     row = conn.execute("SELECT * FROM reunion_actions WHERE id=?", (int(action_id),)).fetchone()
     if not row:
         return None
@@ -376,15 +414,23 @@ def modifier_action(conn, action_id: int, auteur: str, texte: Optional[str] = No
         champs.append("responsable=?"); valeurs.append(_txt(responsable) or None)
     if echeance is not None:
         champs.append("echeance=?"); valeurs.append(_jour(echeance) or None)
+    if statut is not None and _txt(statut) not in ACTION_STATUTS_CODES:
+        statut = None
+    if statut is not None:
+        statut = _txt(statut)
+        fait = statut == ACTION_TERMINE
+    elif fait is not None:
+        statut = ACTION_TERMINE if fait else "a_faire"
+    if statut is not None and "statut" in row.keys():
+        champs.append("statut=?"); valeurs.append(statut)
     if fait is not None:
         champs += ["fait=?", "fait_le=?", "fait_par=?"]
         valeurs += [1 if fait else 0, _now() if fait else None,
                     _txt(auteur) if fait else None]
     if not champs:
-        d = dict(row); d["fait"] = bool(d["fait"]); return d
+        return _action(row)
     valeurs.append(int(action_id))
     conn.execute(f"UPDATE reunion_actions SET {', '.join(champs)} WHERE id=?", valeurs)
     conn.commit()
     maj = conn.execute("SELECT * FROM reunion_actions WHERE id=?", (int(action_id),)).fetchone()
-    d = dict(maj); d["fait"] = bool(d["fait"])
-    return d
+    return _action(maj)

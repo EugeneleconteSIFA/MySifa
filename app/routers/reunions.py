@@ -80,6 +80,15 @@ def liste_reunions(request: Request, limite: int = 100):
         return {"reunions": rn.liste(conn, limite)}
 
 
+@router.get("/api/reunions/actions")
+def suivi_actions(request: Request):
+    """Le suivi des actions, toutes reunions confondues. Declaree avant
+    /api/reunions/{reunion_id} : sinon « actions » serait lu comme un id."""
+    _autorise(request)
+    with get_db() as conn:
+        return {"actions": rn.toutes_actions(conn), "statuts": rn.action_statuts()}
+
+
 @router.get("/api/reunions/contexte")
 def contexte(request: Request):
     """De quoi ouvrir la page : reunion en cours, plage proposee, participants."""
@@ -208,5 +217,6 @@ async def modifier_action(action_id: int, request: Request):
                                texte=body.get("texte"),
                                responsable=body.get("responsable"),
                                echeance=body.get("echeance"),
-                               fait=None if fait is None else bool(fait))
+                               fait=None if fait is None else bool(fait),
+                               statut=body.get("statut"))
     return {"action": a, "supprimee": a is None}

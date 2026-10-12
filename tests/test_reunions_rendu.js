@@ -319,8 +319,8 @@ const actions = M.rendreActions(REUNION.actions);
 verifier("action : texte", actions.includes("Regler la tension"));
 verifier("action : responsable", actions.includes("Marc"));
 verifier("action : echeance formatee", actions.includes("pour le 02/09/2026"));
-verifier("action : case a cocher", actions.includes('data-coche="1"'));
-verifier("action : faite cochee", actions.includes('data-coche="2" checked'));
+verifier("action : selecteur de statut", actions.includes('data-statut="1"'));
+verifier("action : faite en termine", actions.includes('<option value="termine" selected'));
 verifier("action : classe fait", actions.includes('class="reu-act fait"'));
 verifier("action : suppression", actions.includes('data-sup="1"'));
 verifier("action sans responsable ni echeance : pas de meta vide",
@@ -376,6 +376,25 @@ verifier("document : toutes les machines",
           .includes("toutes les machines"));
 verifier("document : notes echappees",
          !M.rendreDocument(REUNION, null, piege).includes("<img src=x"));
+
+console.log("\n7. Le suivi des actions range par statut et filtre par responsable");
+const SUIVI = [
+  { id: 1, texte: "Changer l'anilox", responsable: "Paul", echeance: "2026-01-02", statut: "a_faire", fait: false, reunion_id: 4, reunion_titre: "Point 10/10" },
+  { id: 2, texte: "Regler la DSI", responsable: "Marc", echeance: "", statut: "en_cours", fait: false, reunion_id: 4, reunion_titre: "Point 10/10" },
+  { id: 3, texte: "Devis", responsable: "", echeance: "", statut: "en_attente", fait: false, reunion_id: 5 },
+  { id: 4, texte: "Ancienne", responsable: "Paul", echeance: "", fait: true, reunion_id: 5 }
+];
+const board = M.rendreSuivi(SUIVI, { aujourdhui: "2026-10-12" });
+verifier("suivi : quatre colonnes", board.split('<section class="reu-col').length - 1 === 4);
+verifier("suivi : sans statut, la case decide", board.includes('data-statut="4"') && board.indexOf('st-termine') < board.lastIndexOf('Ancienne'));
+verifier("suivi : retard signale", board.includes('reu-carte retard') && board.includes("En retard"));
+verifier("suivi : non attribuee nommee", board.includes("Non attribuée"));
+verifier("suivi : lien vers la reunion", board.includes('data-ouvrir="4"'));
+verifier("suivi : filtre Paul", M.rendreSuivi(SUIVI, { filtreResp: "Paul" }).indexOf("Regler la DSI") === -1);
+verifier("suivi : filtre non attribuees", M.rendreSuivi(SUIVI, { filtreResp: "~" }).includes("Devis")
+         && M.rendreSuivi(SUIVI, { filtreResp: "~" }).indexOf("anilox") === -1);
+verifier("suivi : echappement", !M.rendreSuivi([{ id: 9, texte: piege, responsable: piege, statut: "a_faire" }]).includes("<img src=x"));
+verifier("accueil : liste des reunions repliee", M.rendreAccueil([], SUIVI, {}).includes('<details class="reu-hist">'));
 
 console.log("\n" + "=".repeat(60));
 if (ECHECS.length) {
