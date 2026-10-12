@@ -509,6 +509,8 @@ def _historique(nom: str, b, releves: dict, accueil_releves) -> dict:
         # objet : relevé seulement pour les objets qu'un indicateur suit.
         return {"type": "releve", "jours": r["jours"] if r else 0, "depuis": r["depuis"] if r else None,
                 "dernier": r["dernier"] if r else None, "objet": bool(b.objet)}
+    if nom in accueil_releves.RECONSTITUABLES:
+        return {"type": "reconstituable", "raison": accueil_releves.RECONSTITUABLES[nom]}
     return {"type": "aucun", "raison": accueil_releves.NON_RELEVES.get(nom, "")}
 
 
@@ -526,6 +528,7 @@ def blocs_releves(request: Request):
         except Exception:
             lignes = []   # table pas encore migrée
     return {"releves": lignes, "releves_attendus": sorted(accueil_releves.RELEVEURS),
+            "reconstituables": accueil_releves.RECONSTITUABLES,
             "non_releves": accueil_releves.NON_RELEVES}
 
 

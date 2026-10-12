@@ -20,12 +20,13 @@ source. Changer la route change donc le relevé avec elle ; changer le
 décompte d'une source impose de reporter ici, comme pour une source qui
 reprend une page (.claude/rules/widgets-blocs.md).
 
-**Ce qui est relevé.** Chaque bloc de `RELEVEURS`, une fois avec ses filtres
-par défaut, plus chaque combinaison (objet suivi, filtres capturés) qu'un
-indicateur existant suit. Les blocs absents de `RELEVEURS` sont listés dans
-`NON_RELEVES` avec la raison : historique déjà en base, valeur personnelle,
-ou état qui change à la minute. Le test `tests/test_accueil_releves.py` exige
-que chaque bloc du registre soit dans l'un ou l'autre.
+**Ce qui est relevé.** Chaque bloc de `RELEVEURS` avec ses filtres par défaut ;
+pour un bloc sur un objet, chacun de ses objets existants (`OBJETS`), suivi ou
+non ; et chaque combinaison (objet, filtres capturés) qu'un indicateur suit.
+Les autres blocs sont dans `RECONSTITUABLES` (historique déjà en base) ou
+`NON_RELEVES` (valeur personnelle, état qui change à la minute, tableau sans
+source), avec leur raison. Le test `tests/test_accueil_releves.py` exige que
+chaque bloc du registre soit dans exactement une des trois.
 
 Best-effort : un relevé en échec est journalisé et laissé de côté, il
 n'empêche ni les autres ni l'application de tourner.
@@ -159,6 +160,26 @@ def r_stock_categorie(objet, f):
         garde = lambda m: m.get("categorie") == ident
     items = [m for m in liste if garde(m)]
     return {"references": len(items), "sous-seuil": sum(1 for m in items if m.get("en_alerte"))}
+
+
+def r_stock_valorisation(objet, f):
+    # stock.valorisation.kpis — même calcul que la source (réel MP + PF chargés
+    # quand l'utilisateur voit l'USD ; l'utilisateur système le voit).
+    from app.routers import stock
+    jour = f.get("bloc_date") or None
+    s_ = (appeler(stock.get_valorisation, date=jour) or {}).get("summary") or {}
+    pf = (appeler(stock.list_valorisation_pf, date=jour) or {}).get("summary") or {}
+    voit_reel = bool(s_.get("can_see_usd"))
+    nb_flags = sum(_n(s_.get(k)) for k in ("nb_refs_usd_only", "nb_refs_tax_only", "nb_refs_usd_and_tax", "nb_refs_transport"))
+    reel_mp = voit_reel and nb_flags > 0 and (_n(s_.get("taux_eur_usd")) > 0 or _n(s_.get("import_tax_pct")) > 0
+                                               or _n(s_.get("transport_cost_fixed_eur")) > 0)
+    charges_pf = voit_reel and (_n(pf.get("charge_production_pct")) > 0 or _n(pf.get("storage_fees_pct")) > 0)
+    mp_base, mp_reel = _n(s_.get("total_mp")), _n(s_.get("total_mp_reel") or s_.get("total_mp"))
+    pf_base = _n(pf.get("total_pf"))
+    pf_reel = _n(pf.get("total_pf_avec_charges")) if charges_pf else pf_base
+    total = (mp_reel + pf_reel) if (reel_mp or charges_pf) else (mp_base + pf_base)
+    return {"total": round(total), "mp": round(mp_reel if reel_mp else mp_base),
+            "pf": round(pf_reel if charges_pf else pf_base), "pf-sans-prix": _n(pf.get("nb_refs_sans_prix"))}
 
 
 def r_stock_monitoring(objet, f):
@@ -451,6 +472,7 @@ RELEVEURS = {
     "stock.pf.kpis": r_stock_pf,
     "stock.bobines.kpis": r_stock_bobines,
     "stock.inventaire.anciennete": r_stock_anciennete,
+    "stock.valorisation.kpis": r_stock_valorisation,
     "expe.departs.programmes": r_expe_departs,
     "expe.pilotage.resume": r_expe_resume,
     "expe.pilotage.envois": r_expe_envois,
@@ -472,19 +494,69 @@ RELEVEURS = {
     "erp.achats.kpis": r_erp_achats,
 }
 
-# Bloc → pourquoi il n'est pas relevé. Un bloc nouveau va dans l'un ou l'autre.
+# Bloc sur un objet → la liste de ses objets existants. Chacun est relevé dès
+# aujourd'hui, suivi par un indicateur ou non : le jour où quelqu'un l'épingle,
+# sa courbe a déjà son historique (décision du 13/10/2026). Mêmes identifiants
+# que l'attribut data-bloc-objet de la page.
+def _objets_categories():
+    # stock.matieres.categorie — tuiles de buildMatieresAccueil / mpPillDefs :
+    # « tout », une par catégorie, et pour les frontaux une par sous-section
+    # (« frontal: » pour ceux qui n'en ont pas).
+    from app.routers import stock
+    liste = appeler(stock.list_matieres_premieres) or []
+    cats, sous, sans = set(), set(), False
+    for m in liste:
+        c = str(m.get("categorie") or "")
+        if c.lower() == "frontal":
+            sl = _slug((m.get("sous_section") or "").strip())
+            if sl:
+                sous.add(sl)
+            else:
+                sans = True
+        elif c:
+            cats.add(c)
+    # Dès qu'un frontal existe, mpFrontalSousSections rend au moins une entrée :
+    # la tuile est toujours « frontal:<slug> », « frontal: » pour les sans sous-section.
+    frontaux = [f"frontal:{x}" for x in sorted(sous)] + (["frontal:"] if sans else [])
+    return ["tout"] + sorted(cats) + frontaux
+
+
+def _objets_machines():
+    # planning.dossiers — machines actives, par id (comme la page Planning).
+    from database import get_db
+    with get_db() as conn:
+        return [str(r[0]) for r in conn.execute("SELECT id FROM machines WHERE actif=1 ORDER BY id").fetchall()]
+
+
+def _objets_transporteurs():
+    # expe.palettes.transporteur — transporteurs du récapitulatif des palettes.
+    return [str(t.get("key")) for t in (_palettes().get("recap_transporteurs") or []) if t.get("key") not in (None, "")]
+
+
+OBJETS = {
+    "stock.matieres.categorie": _objets_categories,
+    "planning.dossiers": _objets_machines,
+    "expe.palettes.transporteur": _objets_transporteurs,
+}
+
+# Bloc → d'où se reconstituerait sa courbe : l'historique est déjà en base,
+# on ne le relève pas.
+RECONSTITUABLES = {
+    "prod.ensemble.quantites": "série par jour en base (by_day de /api/dashboard/production)",
+    "prod.ensemble.temps": "série par jour en base (by_day de /api/dashboard/production)",
+    "prod.ensemble.sanity": "recalculable sur les saisies datées de MyProd",
+    "prod.erreurs.score": "recalculable sur les saisies datées de MyProd",
+    "prod.erreurs.kpis": "recalculable sur les saisies datées de MyProd",
+    "erp.direction.hier": "montants datés, recalculables depuis le miroir ERP",
+}
+
+# Bloc → pourquoi il n'est ni relevé ni reconstituable.
+# Un bloc nouveau va dans RELEVEURS, RECONSTITUABLES ou NON_RELEVES.
 NON_RELEVES = {
-    "prod.ensemble.quantites": "historique en base (by_day de /api/dashboard/production)",
-    "prod.ensemble.temps": "historique en base (by_day de /api/dashboard/production)",
-    "prod.ensemble.sanity": "calculé sur une période de saisies datées",
-    "prod.erreurs.score": "calculé sur une période de saisies datées",
-    "prod.erreurs.kpis": "calculé sur une période de saisies datées",
     "prod.ensemble.par-dossier": "tableau sans source, calculé dans la page",
     "prod.ensemble.par-operateur": "tableau sans source, calculé dans la page",
     "prod.ensemble.par-machine": "tableau sans source, calculé dans la page",
     "prod.ensemble.par-jour": "tableau sans source, calculé dans la page",
-    "stock.valorisation.kpis": "historique reconstitué (/api/stock/valorisation/trend)",
-    "erp.direction.hier": "montants datés, reconstituables depuis le miroir",
     "prod.ensemble.machines": "état d'une machine, change à la minute",
     "prod.ensemble.machine": "état d'une machine, change à la minute",
     "portail.atelier.machine": "état d'une machine, change à la minute",
@@ -581,6 +653,19 @@ def tour(get_db, maintenant: datetime | None = None) -> int:
         a_faire = combinaisons(conn)
     releves = []
     with en_tant_que_systeme():
+        vus = {(b, o, cle_filtres(f)) for b, o, f in a_faire}
+        for bloc, enumerer in OBJETS.items():
+            if bloc not in RELEVEURS:
+                continue
+            try:
+                objets = enumerer()
+            except Exception as e:
+                logger.warning("objets de %s introuvables : %s", bloc, e)
+                objets = []
+            for o in objets:
+                if (bloc, o, "") not in vus:
+                    vus.add((bloc, o, ""))
+                    a_faire.append((bloc, o, {}))
         for bloc, objet, filtres in a_faire:
             try:
                 v = RELEVEURS[bloc](objet, filtres)

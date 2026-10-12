@@ -10820,6 +10820,8 @@ async function renderSettingsBlocsCapturables() {
         : h.objet
           ? pastille('Relevé dès qu\'un indicateur le suit', 'var(--muted)', 'Bloc sur un objet (machine, catégorie, transporteur) : chaque objet suivi est relevé')
           : pastille('Relevé · en attente du premier passage', 'var(--warn)', 'La boucle de relevé ne tourne qu\'en prod'));
+    } else if (h.type === 'reconstituable') {
+      p.push(pastille('Historique reconstituable', 'var(--success)', 'Pas de relevé : ' + (h.raison || 'données datées déjà en base')));
     } else p.push(pastille('Sans historique', 'var(--muted)', h.raison || ''));
     if (b.lecture === 'page') p.push(pastille('Page chargée', 'var(--warn)', 'Sans source API : la page est chargée hors écran à chaque rafraîchissement (≈ 400 Ko par minute et par indicateur)'));
     const t = b.tailles || {};
@@ -10937,6 +10939,7 @@ async function renderSettingsBlocsCapturables() {
     // les mêmes que les pastilles des indicateurs de l'accueil.
     const nomAppli = a => (applisReg[a] && applisReg[a].libelle) || a;
     const teinteAppli = a => /^(accent|c[1-5])$/.test((applisReg[a] || {}).teinte || '') ? 'var(--' + applisReg[a].teinte + ')' : 'var(--accent)';
+    // « Sans historique » = ni série, ni relevé, ni données datées pour le recalculer.
     const sansHisto = b => !b.historique || b.historique.type === 'aucun';
     const garde = {
       tous: () => true,

@@ -119,10 +119,18 @@ affiche encore ; ils serviront aux courbes des blocs sans série.
   le décompte d'une source impose de le reporter dans son relevé.
 - Les valeurs personnelles ne sont pas relevées (« mes tâches », messages non
   lus, NC non lues, agenda).
-- **Tout bloc nouveau** va dans `RELEVEURS` ou dans `NON_RELEVES` avec sa
-  raison (historique déjà en base, personnel, état à la minute) :
-  `tests/test_accueil_releves.py` échoue sinon, et exécute chaque relevé
-  contre une base neuve.
+- **Tout bloc nouveau** va dans une seule de trois tables :
+  `RELEVEURS` (relevé), `RECONSTITUABLES` (historique déjà en base, à
+  recalculer plutôt qu'à relever) ou `NON_RELEVES` (personnel, état à la
+  minute, tableau sans source), avec sa raison. `tests/test_accueil_releves.py`
+  échoue sinon, et exécute chaque relevé contre une base neuve.
+- **Bloc sur un objet** (catégorie, machine, transporteur) : tous ses objets
+  existants sont relevés, suivis par un indicateur ou non, via `OBJETS`
+  (décision du 13/10/2026) — l'historique est là le jour où quelqu'un
+  l'épingle. Les identifiants sont ceux du `data-bloc-objet` de la page.
+- La valorisation du stock est **relevée** bien que reconstituable
+  (`/api/stock/valorisation/trend`) : le recalcul ne rend que le total, sur
+  90 jours au plus, aux prix connus après coup.
 - **Aucune purge** (décision du 12/10/2026) : tout est conservé, y compris
   les relevés d'un bloc retiré. Ne pas ajouter de durée de conservation sans
   nouvelle décision.
