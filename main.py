@@ -45,6 +45,7 @@ from app.web.expe_page import router as expe_page_router
 from app.web.devis_page import router as devis_page_router
 from app.routers.expe_departs import router as expe_departs_router
 from app.routers.expe_pilotage import router as expe_pilotage_router
+from app.routers.expe_emails import router as expe_emails_router
 from app.routers.expe_carburant import router as expe_carburant_router
 from app.routers.settings import router as settings_api_router
 from app.routers.clients import router as clients_api_router
@@ -181,11 +182,15 @@ async def lifespan(app: FastAPI):
     # Relevés des indicateurs d'accueil : prod uniquement. v1 reçoit chaque
     # nuit la base de prod, relevés compris.
     _releves_task = asyncio.create_task(_boucle_releves_accueil())
+    _memo_task = asyncio.create_task(_boucle_memo_expedition())
+    _emails_task = asyncio.create_task(_boucle_emails_commandes())
     try:
         yield
     finally:
         _notif_task.cancel()
         _releves_task.cancel()
+        _memo_task.cancel()
+        _emails_task.cancel()
 
 
 async def _boucle_releves_accueil():
@@ -227,6 +232,44 @@ async def _boucle_push_notifications():
             print(f"[MySifa] notifications : tour de push en échec ({e})")
         await asyncio.sleep(300)
 
+
+
+async def _boucle_memo_expedition():
+    """Chaque minute, envoie le mémo expédition du matin s'il est dû
+    (heure et destinataires réglés dans MyExpé › Pilotage)."""
+    from app.core.database import get_db as _get_db
+    from app.services import expe_memo as _memo
+
+    await asyncio.sleep(90)
+    while True:
+        try:
+            res = await asyncio.to_thread(_memo.tour_automatique, _get_db)
+            if res:
+                print(f"[MySifa] mémo expédition : envoyé={res['envoye']} · {res['sujet']}")
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[MySifa] mémo expédition : tour en échec ({e})")
+        await asyncio.sleep(60)
+
+
+async def _boucle_emails_commandes():
+    """Toutes les 5 minutes, relève et trie la boîte des commandes si l'agent
+    est activé dans MyExpé › Emails commandes."""
+    from app.core.database import get_db as _get_db
+    from app.services import emails_commandes as _emails
+
+    await asyncio.sleep(120)
+    while True:
+        try:
+            res = await asyncio.to_thread(_emails.tour_automatique, _get_db)
+            if res and (res["nouveaux"] or res["classes"]):
+                print(f"[MySifa] emails commandes : {res['nouveaux']} relevé(s), {res['classes']} classé(s)")
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[MySifa] emails commandes : tour en échec ({e})")
+        await asyncio.sleep(300)
 
 app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=lifespan)
 
@@ -651,6 +694,7 @@ app.include_router(expe_page_router)
 app.include_router(devis_page_router)
 app.include_router(expe_departs_router, prefix="/api/expe")
 app.include_router(expe_pilotage_router, prefix="/api/expe")
+app.include_router(expe_emails_router, prefix="/api/expe")
 app.include_router(expe_carburant_router, prefix="/api/expe")
 app.include_router(settings_api_router)
 app.include_router(clients_api_router)
