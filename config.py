@@ -1566,3 +1566,62 @@ def ton_etat_atelier(etat: str) -> str:
 
 def ton_couleur_sanity(couleur: str) -> str:
     return TONS_COULEUR_SANITY.get(couleur or "", "neutre")
+
+
+# ── EUDR (règlement UE 2023/1115) — questionnaire fournisseurs ─────────────
+# Choix proposés dans le formulaire fournisseur (portail /portail/eudr/<jeton>).
+# Clé stockée en base → (libellé anglais montré au fournisseur, libellé
+# français montré dans MyQualité). Le formulaire part en anglais : c'est la
+# langue d'échange avec les fournisseurs papier.
+EUDR_CHOIX = {
+    "etablissement": {
+        "eu": ("Established in the European Union", "Établi dans l'UE"),
+        "non_eu": ("Established outside the European Union", "Établi hors UE"),
+    },
+    "perimetre": {
+        "oui": ("Yes, all of them", "Oui, tous"),
+        "partiel": ("Some of them", "En partie"),
+        "non": ("No", "Non"),
+        "ne_sait_pas": ("Not determined yet", "Pas encore déterminé"),
+    },
+    "role": {
+        "operateur": ("Operator — we place the products on the EU market and file due diligence statements",
+                      "Opérateur — dépose les DDS"),
+        "aval": ("Downstream operator — we rely on our suppliers' statements",
+                 "Opérateur en aval — s'appuie sur les DDS amont"),
+        "commercant": ("Trader — we resell without transformation", "Commerçant — revend sans transformer"),
+        "non_concerne": ("Not concerned", "Non concerné"),
+        "ne_sait_pas": ("Not determined yet", "Pas encore déterminé"),
+    },
+    "transmission": {
+        "bl": ("On the delivery note", "Sur le bon de livraison"),
+        "facture": ("On the invoice", "Sur la facture"),
+        "edi": ("By EDI", "Par EDI"),
+        "portail": ("Through a customer portal", "Via un portail"),
+        "email": ("By email, per shipment", "Par email, à chaque envoi"),
+        "autre": ("Other (please specify)", "Autre"),
+        "ne_sait_pas": ("Not determined yet", "Pas encore déterminé"),
+    },
+    "ref_par_livraison": {
+        "oui": ("Yes", "Oui"),
+        "non": ("No", "Non"),
+        "ne_sait_pas": ("Not determined yet", "Pas encore déterminé"),
+    },
+    "geolocalisation": {
+        "oui": ("Yes, available now", "Oui, disponible"),
+        "en_cours": ("Being collected", "En cours de collecte"),
+        "non": ("No", "Non"),
+        "sans_objet": ("Not applicable (our supplier files the statement)", "Sans objet (DDS amont)"),
+    },
+}
+
+# Délai indiqué au fournisseur dans l'email de demande.
+EUDR_REPONSE_AVANT = os.getenv("EUDR_REPONSE_AVANT", "2026-11-15")
+
+
+def eudr_libelle(champ: str, cle: str | None, langue: str = "fr") -> str:
+    """Libellé d'un choix EUDR ; la clé brute si elle est inconnue."""
+    paire = EUDR_CHOIX.get(champ, {}).get(cle or "")
+    if not paire:
+        return cle or ""
+    return paire[0] if langue == "en" else paire[1]
