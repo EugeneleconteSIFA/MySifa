@@ -242,8 +242,8 @@ body.mysifa-dock-hidden #postit-dock-menu {
   display: none !important;
 }
 
-/* ── Colonne d'outils (ordinateur, mysifa_dock.js › layoutBarre) ──────────
-   La même pilule que la barre du portail (.portal-corner-stack,
+/* ── Barre d'outils (ordinateur, mysifa_dock.js › layoutBarre) ────────────
+   Horizontale, le long du bas de l'écran. La même carte que la barre du portail (.portal-corner-stack,
    app/web/portal_assets.py) : carte, marge 8 × 6 px, coins de 20 px, boutons
    transparents de 44 px, icône grise, couleur du thème au survol et sur
    l'outil ouvert. Garder les deux identiques. */
@@ -308,21 +308,23 @@ body.mysifa-dock-hidden #postit-dock-menu {
     right: 2px;
     border-color: var(--card);
   }
-  /* Bouton de repli, en tête de pilule ; pilule repliée, il est seul et
-     porte l'icône « outils ». */
+  /* Bouton de repli, au bout gauche de la barre, dans la couleur du thème
+     pour ne pas passer pour un outil ; barre repliée, il est seul, gris
+     comme un bouton, et porte l'icône « outils ». */
   body.mysifa-dock-barre #mysifa-dock-toggle {
-    width: 44px;
-    height: 28px;
+    width: 28px;
+    height: 44px;
     border-radius: 10px;
     background: transparent;
     border: none;
-    color: var(--muted);
+    color: var(--accent);
     opacity: 1;
     z-index: 8003;
     transition: background 0.15s, color 0.15s;
   }
   body.mysifa-dock-barre.mysifa-dock-hidden #mysifa-dock-toggle {
-    height: 44px;
+    width: 44px;
+    color: var(--muted);
     border-radius: 12px;
   }
   body.mysifa-dock-barre #mysifa-dock-toggle:hover {
@@ -331,7 +333,7 @@ body.mysifa-dock-hidden #postit-dock-menu {
   }
 }
 /* Compteur de messages non lus recopié sur le bouton « outils », visible
-   seulement quand la colonne est repliée. */
+   seulement quand la barre est repliée. */
 #mysifa-dock-toggle-badge {
   display: none;
 }

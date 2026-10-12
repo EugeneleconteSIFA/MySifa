@@ -17,9 +17,10 @@
   const Z_FAB_ACTIVE = 8025;
 
   const SVG_EYE = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
-  const SVG_CHEVRON_DOWN = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
-  // Colonne repliée : quatre carrés arrondis, la boîte à outils.
-  const SVG_OUTILS = '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>';
+  // Barre dépliée : chevron vers le coin, là où elle se replie.
+  const SVG_CHEVRON_RIGHT = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>';
+  // Barre repliée : la barre elle-même en miniature, ce que le clic déplie.
+  const SVG_OUTILS = '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="8" width="20" height="8" rx="4"/><circle cx="7.5" cy="12" r=".6" fill="currentColor"/><circle cx="12" cy="12" r=".6" fill="currentColor"/><circle cx="16.5" cy="12" r=".6" fill="currentColor"/></svg>';
   const SVG_EYE_OFF = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
 
   function isMobile() {
@@ -357,7 +358,7 @@
     var widgetLeft = vw;
     var widgetTop = vh;
 
-    DOCK_WIDGET_FAB_IDS.map(function (id) { return document.getElementById(id); })
+    DOCK_WIDGET_FAB_IDS.concat(['mysifa-dock-barre']).map(function (id) { return document.getElementById(id); })
       .concat(dockExtras()).forEach(function (el) {
       if (!isDockFab(el)) return;
       var r = el.getBoundingClientRect();
@@ -606,30 +607,31 @@
     applyActiveFabZIndex();
   }
 
-  /* ── Colonne d'outils (ordinateur) ─────────────────────────────────────
-     La même « pilule » que la barre du portail (Paramètres, profil, ERP… :
-     .portal-corner-stack dans app/web/portal_assets.py) : une carte
-     verticale qui contient des boutons transparents de 44 px, icône grise,
-     couleur du thème au survol et sur l'outil ouvert. Messagerie en bas (le
-     coin, là où l'œil cherche le compteur de non-lus), outils au-dessus, et
-     en tête un bouton qui replie la pilule en un seul bouton « outils ».
-     Les boutons gardent leur position fixe, calculée un par un ; la carte est
-     un fond dessiné derrière eux (#mysifa-dock-barre). Les panneaux
-     s'ouvrent à gauche, calés sur le bas. Style : mysifa_dock.css. */
+  /* ── Barre d'outils (ordinateur) ───────────────────────────────────────
+     La même carte que la barre du portail (Paramètres, profil, ERP… :
+     .portal-corner-stack dans app/web/portal_assets.py), couchée à
+     l'horizontale le long du bas de l'écran : des boutons transparents de
+     44 px, icône grise, couleur du thème au survol et sur l'outil ouvert.
+     Messagerie dans le coin (là où l'œil cherche le compteur de non-lus),
+     outils à sa gauche, et en bout de barre un bouton qui la replie en un
+     seul bouton « outils ». Les boutons gardent leur position fixe, calculée
+     un par un ; la carte est un fond dessiné derrière eux
+     (#mysifa-dock-barre). Les panneaux s'ouvrent au-dessus, calés à droite.
+     Style : mysifa_dock.css. */
   var PIL_BTN = 44;
   var PIL_ECART = 2;
-  var PIL_PAD_V = 8;
-  var PIL_PAD_H = 6;
+  var PIL_PAD_LONG = 8;    // marge aux deux bouts de la barre
+  var PIL_PAD_TRAVERS = 6; // marge au-dessus et au-dessous des boutons
   var PIL_BORD = 1;
-  var PIL_LARGEUR = PIL_BTN + 2 * (PIL_PAD_H + PIL_BORD);
-  var PIL_REPLI = 28;   // hauteur du bouton de repli, pilule dépliée
+  var PIL_HAUTEUR = PIL_BTN + 2 * (PIL_PAD_TRAVERS + PIL_BORD);
+  var PIL_REPLI = 28;   // largeur du bouton de repli, barre dépliée
 
   function panneauBarre(el, base, z) {
     if (!el) return;
     el.style.left = 'auto';
     el.style.top = 'auto';
-    el.style.right = safeRight(PIL_LARGEUR + 12);
-    el.style.bottom = safeBottom(base);
+    el.style.right = safeRight(0);
+    el.style.bottom = safeBottom(base + PIL_HAUTEUR + 12);
     el.style.boxShadow = SHADOW_PANEL;
     el.style.zIndex = String(z || Z_PANEL);
   }
@@ -641,8 +643,8 @@
     var postitBtn = document.getElementById('postit-dock-btn');
     var chat = isDockFab(chatBubble) ? chatBubble : null;
 
-    // Du bas vers le haut. Sur le portail ordinateur, la messagerie reste sa
-    // barre du bas à gauche (#cw-bar), hors de la pilule.
+    // De droite à gauche. Sur le portail ordinateur, la messagerie reste sa
+    // barre du bas à gauche (#cw-bar), hors de la barre d'outils.
     var boutons = [];
     if (chat) boutons.push(chat);
     if (isVisible(aiRoot) && isDockFab(aiBtn)) boutons.push(aiBtn);
@@ -658,35 +660,35 @@
       fond.setAttribute('aria-hidden', 'true');
       document.body.appendChild(fond);
     }
-    var dedans = PIL_PAD_H + PIL_BORD;
-    var y = base + PIL_BORD + PIL_PAD_V;
+    var dedans = base + PIL_PAD_TRAVERS + PIL_BORD;
+    var x = PIL_BORD + PIL_PAD_LONG;
     if (!replie) {
       boutons.forEach(function (el) {
-        applyFab(el, safeRight(dedans), safeBottom(y));
+        applyFab(el, safeRight(x), safeBottom(dedans));
         el.style.top = 'auto';
         el.style.boxShadow = '';
-        y += PIL_BTN + PIL_ECART;
+        x += PIL_BTN + PIL_ECART;
       });
     }
     var bascule = document.getElementById('mysifa-dock-toggle');
-    var hBascule = replie ? PIL_BTN : PIL_REPLI;
+    var lBascule = replie ? PIL_BTN : PIL_REPLI;
     if (bascule) {
       bascule.style.display = boutons.length ? '' : 'none';
-      bascule.style.right = safeRight(dedans);
-      bascule.style.bottom = safeBottom(y);
+      bascule.style.right = safeRight(x);
+      bascule.style.bottom = safeBottom(dedans);
       bascule.style.left = 'auto';
       bascule.style.top = 'auto';
-      y += hBascule;
+      x += lBascule;
     } else if (boutons.length) {
-      y -= PIL_ECART;
+      x -= PIL_ECART;
     }
     fond.style.display = boutons.length ? '' : 'none';
     fond.style.right = safeRight(0);
     fond.style.bottom = safeBottom(base);
-    fond.style.width = PIL_LARGEUR + 'px';
-    fond.style.height = (y - base + PIL_PAD_V + PIL_BORD) + 'px';
+    fond.style.height = PIL_HAUTEUR + 'px';
+    fond.style.width = (x + PIL_PAD_LONG + PIL_BORD) + 'px';
 
-    // Panneaux : à gauche de la pilule, calés sur son bas.
+    // Panneaux : au-dessus de la barre, calés à droite.
     if (calcPanel && getComputedStyle(calcPanel).display !== 'none') panneauBarre(calcPanel, base);
     if (cartePanel && getComputedStyle(cartePanel).display !== 'none') panneauBarre(cartePanel, base);
     if (aiPanel) panneauBarre(aiPanel, base);
@@ -719,7 +721,7 @@
     const hasChatBubble = isVisible(chatBubble);
     const hasChatBar = isVisible(chatBar);
 
-    // Ordinateur : une barre verticale unique, la même dans toutes les applis
+    // Ordinateur : une barre horizontale unique, la même dans toutes les applis
     // (MyExpé compris). Le téléphone garde ses dispositions ci-dessous.
     if (!mobile) {
       layoutBarre(calcFab, calcPanel, carteFab, cartePanel, aiRoot, aiBtn, aiPanel, chatBubble, chatPanel);
@@ -870,7 +872,7 @@
     // Ordinateur : flèche de la barre ; téléphone : l'œil d'origine.
     function icone(h) {
       if (isMobile()) return h ? SVG_EYE_OFF : SVG_EYE;
-      return h ? SVG_OUTILS : SVG_CHEVRON_DOWN;
+      return h ? SVG_OUTILS : SVG_CHEVRON_RIGHT;
     }
     function maj(h) {
       btn.title = h ? 'Afficher les outils' : 'Replier les outils';
@@ -889,7 +891,7 @@
       maj(document.body.classList.contains('mysifa-dock-hidden'));
     });
 
-    // Colonne repliée : le compteur de messages non lus passe sur le bouton
+    // Barre repliée : le compteur de messages non lus passe sur le bouton
     // « outils », sinon un nouveau message passerait inaperçu.
     var pastille = document.createElement('span');
     pastille.id = 'mysifa-dock-toggle-badge';
@@ -924,8 +926,9 @@
     if (typeof window.initAiChatWidget === 'function') window.initAiChatWidget();
     if (typeof window.initPostitDock === 'function') window.initPostitDock();
     if (typeof window.initPostitsApp === 'function') window.initPostitsApp();
-    layout();
     initDockToggle();
+    // Après le bouton de repli : la barre le range à son bout gauche.
+    layout();
   }
 
   window.addEventListener('resize', layout);
