@@ -1136,6 +1136,13 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 # n'est pas un classeur (PDF, scan, photo d'un tirage).
 DEVIS_IA_ACTIVE = os.getenv("DEVIS_IA_ACTIVE", "1") not in ("0", "false", "False")
 DEVIS_IA_MODELE = os.getenv("DEVIS_IA_MODELE", "claude-sonnet-4-5-20250929")
+# ─── MyExpé — mémo du matin ────────────────────────────────────────
+# Boîte qui expédie le mémo quotidien au service expédition (heure et
+# destinataires se règlent dans MyExpé › Pilotage, pas ici).
+EXPE_MEMO_FROM = os.getenv("EXPE_MEMO_FROM", EXPE_DEVIS_FROM)
+# Modèle qui rédige les points d'attention. Les chiffres du mémo, eux, sont
+# calculés par le code : le modèle ne fait que hiérarchiser.
+EXPE_MEMO_MODELE = os.getenv("EXPE_MEMO_MODELE", DEVIS_IA_MODELE)
 DEVIS_IA_MAX_TOKENS = int(os.getenv("DEVIS_IA_MAX_TOKENS", "4000"))
 # Budget de caractères envoyés au modèle. Un classeur de devis embarque ses
 # référentiels (feuille « Matière » : 1 488 lignes) : sans plafond, les vingt

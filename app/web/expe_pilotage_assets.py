@@ -846,7 +846,120 @@ function renderExpePilotage(){
     barre,
     corps,
     _expePilReglages(data),
+    _expePilMemo(),
     renderExpePilotageModal()
   );
+}
+"""
+
+
+# ── Mémo du matin ────────────────────────────────────────────────────────────
+# Réglages du mémo quotidien envoyé au service expédition (heure, destinataires,
+# activation), aperçu, envoi immédiat et derniers envois.
+
+EXPE_PILOTAGE_CSS += r"""
+.expe-pil-memo textarea{width:100%;min-height:64px;padding:8px 11px;background:var(--bg);
+  border:1px solid var(--border);border-radius:8px;color:var(--text);font:inherit;font-size:13px;resize:vertical}
+.expe-pil-memo textarea:focus{border-color:var(--accent);outline:none}
+.expe-pil-memo-actif{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)}
+.expe-pil-memo-actif input{width:auto}
+.expe-pil-memo-histo{margin-top:16px;font-size:12px;color:var(--muted)}
+.expe-pil-memo-histo div{display:flex;gap:10px;padding:5px 0;border-top:1px solid var(--border)}
+.expe-pil-memo-histo a{color:var(--accent);text-decoration:none}
+.expe-pil-memo-ko{color:var(--danger)}
+"""
+
+EXPE_PILOTAGE_JS += r"""
+async function expePilMemoCharger(){
+  try{
+    const d=await api('/api/expe/pilotage/memo');
+    set({expePilMemo:d});
+  }catch(e){
+    showToast(e.message||'Réglages du mémo indisponibles','danger');
+  }
+}
+
+async function expePilMemoEnregistrer(vals){
+  try{
+    await api('/api/expe/pilotage/memo',{method:'PUT',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(vals)});
+    showToast('Mémo enregistré.','success');
+    await expePilMemoCharger();
+  }catch(e){
+    showToast(e.message||'Enregistrement impossible','danger');
+  }
+}
+
+async function expePilMemoEnvoyer(moi){
+  if(!moi&&!confirm('Envoyer le mémo maintenant à tous les destinataires ?'))return;
+  showToast('Préparation du mémo…','info');
+  try{
+    await api('/api/expe/pilotage/memo/envoyer',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({moi:!!moi})});
+    showToast(moi?'Mémo envoyé sur votre adresse.':'Mémo envoyé.','success');
+    await expePilMemoCharger();
+  }catch(e){
+    showToast(e.message||'Envoi impossible','danger');
+  }
+}
+
+function _expePilMemo(){
+  if(!S.expePilMemoOuvert){
+    return h('div',{className:'expe-pil-reglages'},
+      h('button',{type:'button',className:'expe-pil-act',
+        onClick:function(){set({expePilMemoOuvert:true});void expePilMemoCharger();}},
+        iconEl('mail',13),' Mémo du matin'));
+  }
+  const d=S.expePilMemo;
+  if(!d){
+    return h('div',{className:'card expe-pil-reglages'},
+      h('div',{className:'expe-pil-reglages-corps'},
+        h('div',{className:'expe-pil-aide'},'Chargement…')));
+  }
+  const r=d.reglages||{};
+  const peut=expeCanWrite();
+  const actif=h('input',{type:'checkbox',checked:!!r.actif,disabled:!peut});
+  const heure=h('input',{type:'time',value:r.heure||'06:00',disabled:!peut});
+  const dest=h('textarea',{disabled:!peut,placeholder:'adresse@exemple.fr, une par ligne ou séparées par des virgules'});
+  dest.value=(r.destinataires||[]).join(', ');
+
+  const histo=(d.historique||[]).length
+    ? h('div',{className:'expe-pil-memo-histo'},
+        h('label',null,'Derniers envois'),
+        ...d.historique.map(function(m){
+          return h('div',null,
+            h('span',null,(m.cree_le||'').replace('T',' ').slice(0,16)),
+            h('span',null,m.declencheur==='auto'?'automatique':'manuel'),
+            m.envoye?h('span',null,'✓'):h('span',{className:'expe-pil-memo-ko'},'× échec'),
+            h('a',{href:'/api/expe/pilotage/memo/'+encodeURIComponent(m.id),target:'_blank',
+              rel:'noopener'},'Relire'));
+        }))
+    : null;
+
+  return h('div',{className:'card expe-pil-reglages expe-pil-memo'},
+    h('div',{className:'card-header'},h('h3',null,'Mémo du matin')),
+    h('div',{className:'expe-pil-reglages-corps'},
+      h('div',{className:'expe-pil-aide',style:'margin:0 0 14px'},
+        'Chaque jour ouvré, un email récapitule les départs du jour, les affrètements et messageries à réserver, '+
+        'les retards et les affrètements des 7 prochains jours ouvrés. Les chiffres sont ceux de ce tableau.'),
+      h('div',{className:'expe-pil-reglages-grid'},
+        h('div',null,h('label',null,'Envoi automatique'),
+          h('label',{className:'expe-pil-memo-actif'},actif,' Activé, du lundi au vendredi')),
+        h('div',null,h('label',null,'Heure d’envoi'),heure,
+          h('div',{className:'expe-pil-aide'},'Heure de Paris.'))),
+      h('div',{style:'margin-top:18px'},h('label',null,'Destinataires'),dest),
+      h('div',{className:'expe-pil-reglages-actions'},
+        peut?h('button',{type:'button',className:'btn-accent',onClick:function(){
+          void expePilMemoEnregistrer({actif:actif.checked,heure:heure.value,destinataires:dest.value});
+        }},'Enregistrer'):null,
+        h('a',{className:'expe-pil-act',href:'/api/expe/pilotage/memo/apercu',target:'_blank',
+          rel:'noopener'},'Aperçu'),
+        peut?h('button',{type:'button',className:'expe-pil-act',
+          onClick:function(){void expePilMemoEnvoyer(true);}},'M’envoyer un test'):null,
+        peut?h('button',{type:'button',className:'expe-pil-act',
+          onClick:function(){void expePilMemoEnvoyer(false);}},'Envoyer maintenant'):null,
+        h('button',{type:'button',className:'expe-pil-act',
+          onClick:function(){set({expePilMemoOuvert:false});}},'Fermer')),
+      histo));
 }
 """

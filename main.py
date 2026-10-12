@@ -181,11 +181,13 @@ async def lifespan(app: FastAPI):
     # Relevés des indicateurs d'accueil : prod uniquement. v1 reçoit chaque
     # nuit la base de prod, relevés compris.
     _releves_task = asyncio.create_task(_boucle_releves_accueil())
+    _memo_task = asyncio.create_task(_boucle_memo_expedition())
     try:
         yield
     finally:
         _notif_task.cancel()
         _releves_task.cancel()
+        _memo_task.cancel()
 
 
 async def _boucle_releves_accueil():
@@ -227,6 +229,25 @@ async def _boucle_push_notifications():
             print(f"[MySifa] notifications : tour de push en échec ({e})")
         await asyncio.sleep(300)
 
+
+
+async def _boucle_memo_expedition():
+    """Chaque minute, envoie le mémo expédition du matin s'il est dû
+    (heure et destinataires réglés dans MyExpé › Pilotage)."""
+    from app.core.database import get_db as _get_db
+    from app.services import expe_memo as _memo
+
+    await asyncio.sleep(90)
+    while True:
+        try:
+            res = await asyncio.to_thread(_memo.tour_automatique, _get_db)
+            if res:
+                print(f"[MySifa] mémo expédition : envoyé={res['envoye']} · {res['sujet']}")
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[MySifa] mémo expédition : tour en échec ({e})")
+        await asyncio.sleep(60)
 
 app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=lifespan)
 

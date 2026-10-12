@@ -25,6 +25,7 @@ from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Body, HTTPException, Request
+from fastapi.responses import HTMLResponse
 
 from app.services import expe_pilotage as pil
 from app.services.audit_service import log_action
@@ -433,3 +434,70 @@ def _nombre(v: Any, champ: str) -> Optional[float]:
     if val < 0 or val > 999:
         raise HTTPException(status_code=400, detail=f"{champ} — valeur entre 0 et 999.")
     return val
+
+
+# ─── Mémo du matin ───────────────────────────────────────────────────────────
+# Le mémo quotidien du service expédition (`app/services/expe_memo.py`) : ses
+# réglages, son aperçu, l'envoi immédiat et l'historique des envois.
+
+from app.services import expe_memo as memo  # noqa: E402
+
+
+@router.get("/pilotage/memo")
+def lire_memo(request: Request):
+    _require_expe(request)
+    with get_db() as conn:
+        return {"reglages": memo.charger_reglages(conn),
+                "historique": memo.historique(conn)}
+
+
+@router.put("/pilotage/memo")
+def ecrire_memo(request: Request, body: dict = Body(...)):
+    user = _require_expe_write(request)
+    with get_db() as conn:
+        try:
+            reglages = memo.enregistrer_reglages(conn, body or {})
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    log_action(user=user, action="UPDATE", module="expe",
+               objet="Mémo expédition · réglages",
+               ip=request.client.host if request.client else None)
+    return {"reglages": reglages}
+
+
+@router.get("/pilotage/memo/apercu", response_class=HTMLResponse)
+def apercu_memo(request: Request):
+    """Le mémo tel qu'il partirait maintenant, sans l'envoyer."""
+    _require_expe(request)
+    with get_db() as conn:
+        return HTMLResponse(memo.construire_memo(conn)["html"])
+
+
+@router.post("/pilotage/memo/envoyer")
+def envoyer_memo(request: Request, body: dict = Body(default={})):
+    """Envoi immédiat. `moi: true` l'envoie seulement à l'utilisateur connecté."""
+    user = _require_expe_write(request)
+    with get_db() as conn:
+        if (body or {}).get("moi"):
+            dest = [_email(user)] if _email(user) else []
+        else:
+            dest = memo.charger_reglages(conn)["destinataires"]
+        if not dest:
+            raise HTTPException(status_code=400, detail="Aucun destinataire.")
+        res = memo.envoyer(conn, dest, "manuel")
+    log_action(user=user, action="CREATE", module="expe",
+               objet="Mémo expédition · envoi manuel",
+               ip=request.client.host if request.client else None)
+    if not res["envoye"]:
+        raise HTTPException(status_code=502, detail="Envoi refusé par le serveur de messagerie.")
+    return res
+
+
+@router.get("/pilotage/memo/{memo_id}", response_class=HTMLResponse)
+def relire_memo(request: Request, memo_id: int):
+    _require_expe(request)
+    with get_db() as conn:
+        html = memo.html_archive(conn, memo_id)
+    if html is None:
+        raise HTTPException(status_code=404, detail="Mémo introuvable.")
+    return HTMLResponse(html)
