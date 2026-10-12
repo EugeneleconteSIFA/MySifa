@@ -10817,9 +10817,9 @@ async function renderSettingsBlocsCapturables() {
           'style="font:inherit;cursor:pointer;border:0;padding:0;background:none">' +
           pastille((relevesOuverts.has(b.nom) ? '▾ ' : '▸ ') + 'Relevé · ' + h.jours + ' j depuis le ' + jjmm(h.depuis), 'var(--success)', 'Dernier passage ' + jjmm(h.dernier) + ' — cliquer pour voir les relevés') + '</button>'
 
-        : h.objet
-          ? pastille('Relevé dès qu\'un indicateur le suit', 'var(--muted)', 'Bloc sur un objet (machine, catégorie, transporteur) : chaque objet suivi est relevé')
-          : pastille('Relevé · en attente du premier passage', 'var(--warn)', 'La boucle de relevé ne tourne qu\'en prod'));
+        : pastille('Relevé · en attente du premier passage', 'var(--warn)',
+            'La boucle de relevé ne tourne qu\'en prod ; v1 reçoit ses relevés par la copie de la nuit' +
+            (h.objet ? '. Chaque objet existant (machine, catégorie, transporteur) est relevé, suivi ou non.' : '')));
     } else if (h.type === 'reconstituable') {
       p.push(pastille('Historique reconstituable', 'var(--success)', 'Pas de relevé : ' + (h.raison || 'données datées déjà en base')));
     } else p.push(pastille('Sans historique', 'var(--muted)', h.raison || ''));

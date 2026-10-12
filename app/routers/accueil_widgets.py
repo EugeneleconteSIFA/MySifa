@@ -506,7 +506,7 @@ def _historique(nom: str, b, releves: dict, accueil_releves) -> dict:
         return {"type": "serie"}
     if nom in accueil_releves.RELEVEURS:
         r = releves.get(nom)
-        # objet : relevé seulement pour les objets qu'un indicateur suit.
+        # objet : bloc relevé une fois par objet existant (accueil_releves.OBJETS).
         return {"type": "releve", "jours": r["jours"] if r else 0, "depuis": r["depuis"] if r else None,
                 "dernier": r["dernier"] if r else None, "objet": bool(b.objet)}
     if nom in accueil_releves.RECONSTITUABLES:
