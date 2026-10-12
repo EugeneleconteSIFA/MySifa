@@ -3,9 +3,11 @@
 
 Ce que ce test protège :
 
-1. **Aucun bloc oublié.** Chaque bloc du registre est soit relevé
-   (RELEVEURS), soit écarté avec sa raison (NON_RELEVES) — jamais les deux,
-   jamais aucun. Un bloc ajouté au registre oblige à trancher.
+1. **Aucun bloc oublié.** Chaque bloc du registre est dans exactement une
+   des trois tables : relevé (RELEVEURS), reconstituable (RECONSTITUABLES) ou
+   écarté avec sa raison (NON_RELEVES). Un bloc sur un objet qui est relevé a
+   son énumération d'objets (OBJETS). Un bloc ajouté au registre oblige à
+   trancher.
 2. **Un relevé rend les clés du registre.** Chaque relevé est exécuté contre
    une base neuve (migrations jouées dans un fichier temporaire) sous
    l'utilisateur système : il ne doit pas lever, et ses clés doivent être des
@@ -58,20 +60,23 @@ _src = (RACINE / "app/services/accueil_releves.py").read_text(encoding="utf-8")
 _arbre = ast.parse(_src)
 noms = {}
 for n in _arbre.body:
-    if isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name) and n.targets[0].id in ("RELEVEURS", "NON_RELEVES"):
+    if isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name) and n.targets[0].id in ("RELEVEURS", "NON_RELEVES", "RECONSTITUABLES", "OBJETS"):
         noms[n.targets[0].id] = {k.value for k in n.value.keys}
 releves, ecartes = noms.get("RELEVEURS", set()), noms.get("NON_RELEVES", set())
+reconst, objets = noms.get("RECONSTITUABLES", set()), noms.get("OBJETS", set())
 for nom in reg.BLOCS:
-    verifier((nom in releves) != (nom in ecartes),
-             f"{nom} : ni relevé ni écarté (ou les deux) — l'ajouter à RELEVEURS ou NON_RELEVES")
-for nom in releves | ecartes:
+    n_ = (nom in releves) + (nom in ecartes) + (nom in reconst)
+    verifier(n_ == 1, f"{nom} : dans {n_} table(s) — l'ajouter à une seule de RELEVEURS, RECONSTITUABLES, NON_RELEVES")
+    if nom in releves and reg.BLOCS[nom].objet:
+        verifier(nom in objets, f"{nom} : relevé sur un objet sans énumération dans OBJETS")
+for nom in releves | ecartes | reconst | objets:
     verifier(nom in reg.BLOCS, f"{nom} : cité dans accueil_releves.py mais absent du registre")
 fin()
 
 try:
     import fastapi  # noqa: F401
 except ImportError:
-    print(f"test_accueil_releves : OK partiel ({len(releves)} relevés, {len(ecartes)} écartés) — FastAPI absent, exécution non testée")
+    print(f"test_accueil_releves : OK partiel ({len(releves)} relevés, {len(reconst)} reconstituables, {len(ecartes)} écartés) — FastAPI absent, exécution non testée")
     sys.exit(0)
 
 # ── 2-4. Exécution contre une base neuve ────────────────────────────────
@@ -100,6 +105,15 @@ with en_tant_que_systeme():
             continue
         inconnues = set(v) - numeriques
         verifier(not inconnues, f"{nom} : clés hors registre {sorted(inconnues)}")
+
+with en_tant_que_systeme():
+    for nom, enumerer in ar.OBJETS.items():
+        try:
+            objets_ = enumerer()
+            verifier(isinstance(objets_, list) and all(isinstance(o, str) for o in objets_),
+                     f"{nom} : l'énumération des objets doit rendre une liste de textes")
+        except Exception as e:
+            verifier(False, f"{nom} : l'énumération des objets lève {type(e).__name__} : {e}")
 
 n1 = ar.tour(get_db)
 n2 = ar.tour(get_db)
@@ -140,4 +154,4 @@ except Exception:
 verifier(refuse, "hors de en_tant_que_systeme, une requête sans cookie est acceptée")
 
 fin()
-print(f"test_accueil_releves : OK ({len(ar.RELEVEURS)} relevés, {len(ar.NON_RELEVES)} écartés, {n1} écrits par tour)")
+print(f"test_accueil_releves : OK ({len(ar.RELEVEURS)} relevés, {len(ar.RECONSTITUABLES)} reconstituables, {len(ar.NON_RELEVES)} écartés, {n1} écrits par tour)")
