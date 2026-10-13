@@ -46,7 +46,9 @@ from typing import Any, Optional
 CATEGORIES_LAIZEES = frozenset({"frontal", "glassine", "complexe"})
 CATEGORIES_GRAMMAGE = frozenset({"adhesif"})
 # Catégories visibles dans Coûts matières : tout sauf les supports logistiques.
-CATEGORIES_VISIBLES = frozenset({"frontal", "glassine", "complexe", "adhesif", "autre"})
+CATEGORIES_VISIBLES = frozenset({"frontal", "glassine", "complexe", "adhesif", "encre", "autre"})
+# Catégories tarifées au kilo sans se décliner au grammage.
+CATEGORIES_AU_KILO = frozenset({"encre"})
 
 
 def _now() -> str:
@@ -363,7 +365,7 @@ def list_materials(
                 "actif": bool(r["actif"]),
                 "type_declinaison": type_declinaison(cat),
                 "unite": "€/m²" if cat in CATEGORIES_LAIZEES else "€/kg"
-                if cat in CATEGORIES_GRAMMAGE
+                if cat in CATEGORIES_GRAMMAGE or cat in CATEGORIES_AU_KILO
                 else "€/unité",
                 "prix_min": min(prix) if prix else None,
                 "prix_max": max(prix) if prix else None,
@@ -2435,6 +2437,7 @@ def prix_pour_valorisation(conn: sqlite3.Connection) -> dict:
     except PricingError:
         return {}
     taux_usd = float(reglages.eur_usd_rate)
+    surcharges = surcharges_conteneur(conn)
 
     out: dict = {}
     for m in list_materials(conn):
@@ -2451,7 +2454,24 @@ def prix_pour_valorisation(conn: sqlite3.Connection) -> dict:
                 "unit_price": prix,
             })
             taux = taux_usd if (d.get("price_currency") or "EUR") == "USD" else 1.0
+            # Le sous-total « source » reste celui de Coûts matières : c'est lui
+            # que le miroir MyStock porte, et l'appelant s'en sert pour retrouver
+            # la déclinaison de sa ligne.
             sous_total_src = sous_total_achat(prix, **{c: d[c] for c in _CLES_CALCUL})
+            mode = (d.get("transport_mode") or "AMOUNT").upper()
+            cout_tarif = _f(d.get("transport_cout"))
+            cout_valo = surcharges.get(int(d["id"])) if mode in MODES_COUT_TOTAL else None
+            if cout_valo is not None and d.get("is_imported"):
+                d = {**d, "transport_cout": cout_valo}
+                pm = declinaison_to_pricing_material({
+                    **d,
+                    "declinaison_id": d["id"],
+                    "reference": m["reference"],
+                    "categorie": m["categorie"],
+                    "unit_price": prix,
+                })
+            else:
+                cout_valo = None
             if laizee:
                 try:
                     sous_total_eur = float(
@@ -2464,7 +2484,7 @@ def prix_pour_valorisation(conn: sqlite3.Connection) -> dict:
                     # signale. Afficher 0 € ferait croire à une matière gratuite.
                     continue
             else:
-                sous_total_eur = sous_total_src * taux
+                sous_total_eur = sous_total_achat(prix, **{c: d[c] for c in _CLES_CALCUL}) * taux
             marge = float(marge_pct_matiere(pm, reglages)) if pm.applique_marge else 0.0
             out.setdefault((int(m["id"]), d["laize_id"] if laizee else None), []).append({
                 "declinaison_id": d["id"],
@@ -2476,5 +2496,51 @@ def prix_pour_valorisation(conn: sqlite3.Connection) -> dict:
                 "sous_total_eur": round(sous_total_eur, 6),
                 "marge_pct": round(marge, 4),
                 "prix_vente_eur": round(sous_total_eur * (1 + marge / 100.0), 6),
+                "transport_mode": mode if d.get("is_imported") else None,
+                "transport_cout_tarif": cout_tarif,
+                "transport_cout_valo": cout_valo,
+                "transport_quantite": _f(d.get("transport_quantite")),
             })
     return out
+
+
+# Modes où le transport est un coût total réparti sur une quantité : ce coût
+# total est ce que la valorisation peut surcharger.
+MODES_COUT_TOTAL = frozenset({"CONTENEUR", "FORFAIT"})
+
+
+def surcharges_conteneur(conn: sqlite3.Connection) -> dict:
+    """{declinaison_id: coût conteneur retenu par la valorisation}."""
+    try:
+        rows = conn.execute(
+            "SELECT declinaison_id, transport_cout FROM valo_transport_surcharge"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    return {int(r[0]): float(r[1]) for r in rows if r[1] is not None}
+
+
+def set_surcharge_conteneur(
+    conn: sqlite3.Connection, declinaison_id: int, cout: Optional[float],
+    *, user_name: Optional[str] = None,
+) -> None:
+    """Pose ou retire (cout=None) le coût conteneur propre à la valorisation.
+
+    N'écrit jamais dans le tarif : Coûts matières garde son chiffre.
+    """
+    if cout is None:
+        conn.execute(
+            "DELETE FROM valo_transport_surcharge WHERE declinaison_id=?", (declinaison_id,)
+        )
+    else:
+        conn.execute(
+            """INSERT INTO valo_transport_surcharge
+                   (declinaison_id, transport_cout, updated_at, updated_by_name)
+               VALUES (?,?,?,?)
+               ON CONFLICT(declinaison_id) DO UPDATE SET
+                   transport_cout=excluded.transport_cout,
+                   updated_at=excluded.updated_at,
+                   updated_by_name=excluded.updated_by_name""",
+            (declinaison_id, float(cout), _now(), user_name),
+        )
+    conn.commit()

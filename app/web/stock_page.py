@@ -2413,7 +2413,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=fiche-mp2">
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
-<script src="/static/mysifa_stock_modals.js?v=empl-terrain1"></script>
+<script src="/static/mysifa_stock_modals.js?v=encre2"></script>
 <script src="/static/mysifa_destockage.js?v=6"></script>
 <script src="/static/mysifa_dock.js?v=2"></script>
 <script src="/static/mysifa_postit.js"></script>
@@ -5862,6 +5862,7 @@ const MP_PILL_CATS = [
   { id: 'frontal', label: 'Frontaux' },
   { id: 'glassine', label: 'Glassines' },
   { id: 'complexe', label: 'Complexes' },
+  { id: 'encre', label: 'Encres' },
   { id: 'autre', label: 'Autre' },
 ];
 
@@ -5923,7 +5924,7 @@ function mpLabelUnitesParPalette(cat) {
 function mpUniteAchat(cat) {
   const c = (cat || '').toLowerCase();
   if (c === 'carton') return 'carton';
-  if (c === 'adhesif') return 'kg';
+  if (c === 'adhesif' || c === 'encre') return 'kg';
   if (c === 'mandrin') return 'tube';
   return 'unité';
 }
@@ -11833,7 +11834,7 @@ function renderMatieresAdminDrawer() {
   const pillBase = 'padding:5px 12px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s';
   const pillActive = 'padding:5px 12px;border-radius:999px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer';
   const pillsWrap = el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px 4px' });
-  const CATS_ORDER = ['tout', 'mandrin', 'frontal', 'glassine', 'palette', 'adhesif', 'carton', 'complexe', 'autre'];
+  const CATS_ORDER = ['tout', 'mandrin', 'frontal', 'glassine', 'palette', 'adhesif', 'carton', 'complexe', 'encre', 'autre'];
   CATS_ORDER.forEach(c => {
     const isAct = filterCat === c;
     pillsWrap.appendChild(el('button', {
@@ -11884,7 +11885,7 @@ function renderMatieresAdminDrawer() {
     body.appendChild(el('div', { style: 'padding:30px;text-align:center;color:var(--muted);font-size:13px' },
       filterQ ? ('Aucune référence pour « ' + filterQ + ' ».') : 'Aucune référence dans cette catégorie.'));
   }
-  ['mandrin', 'frontal', 'glassine', 'palette', 'adhesif', 'carton', 'complexe', 'autre'].forEach(cat => {
+  ['mandrin', 'frontal', 'glassine', 'palette', 'adhesif', 'carton', 'complexe', 'encre', 'autre'].forEach(cat => {
     if (!byCat[cat] || !byCat[cat].length) return;
     body.appendChild(el('div', { style: { fontSize: '11px', fontWeight: '600', color: 'var(--muted)', margin: '12px 0 8px', textTransform: 'uppercase' } },
       MP_CAT_LABELS[cat] || cat));
@@ -24086,13 +24087,110 @@ function valCellPrixCoutsMatieres(item, sorte) {
   const title = (vente ? "Prix de vente : sous-total d'achat en € + marge" : "Sous-total d'achat (prix + transport + taxes) converti en euros")
     + ' — calculé par Coûts matières'
     + (item.ca_plusieurs ? '. Plusieurs déclinaisons à des prix différents : celle valorisée ici est affichée.' : '.');
+  const lignes = [
+    el('div', { style: 'font-size:13px;font-weight:700;color:' + (vente ? 'var(--text)' : 'var(--success, #16a34a)')
+      + ';font-variant-numeric:tabular-nums;white-space:nowrap' }, mainTxt),
+    el('div', { style: 'font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap' }, sub.join(' · ')),
+  ];
+  if (!vente && valTransportSurchargeable(item)) lignes.push(valLienConteneur(item));
   return el('td', { style: 'padding:10px 12px;text-align:right', title: title },
-    el('div', { style: 'display:flex;flex-direction:column;align-items:flex-end' },
-      el('div', { style: 'font-size:13px;font-weight:700;color:' + (vente ? 'var(--text)' : 'var(--success, #16a34a)')
-        + ';font-variant-numeric:tabular-nums;white-space:nowrap' }, mainTxt),
-      el('div', { style: 'font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap' }, sub.join(' · '))
-    )
+    el('div', { style: 'display:flex;flex-direction:column;align-items:flex-end' }, ...lignes)
   );
+}
+
+// ── Coût conteneur propre à la valorisation ────────────────────────────────
+// Le tarif Coûts matières répartit un coût de conteneur (ou un forfait) sur la
+// quantité transportée. La valorisation peut retenir un autre coût, pour
+// chiffrer le stock à un autre prix de transport : la surcharge ne remonte
+// jamais dans Coûts matières.
+function valTransportSurchargeable(item) {
+  const m = (item.ca_transport_mode || '').toUpperCase();
+  return (m === 'CONTENEUR' || m === 'FORFAIT') && Number(item.ca_transport_quantite || 0) > 0;
+}
+
+function valLienConteneur(item) {
+  const forfait = (item.ca_transport_mode || '').toUpperCase() === 'FORFAIT';
+  const surcharge = item.ca_transport_cout_valo != null;
+  const cout = surcharge ? item.ca_transport_cout_valo : item.ca_transport_cout_tarif;
+  const devise = item.ca_devise || 'EUR';
+  const txt = (forfait ? 'forfait ' : 'conteneur ')
+    + Number(cout || 0).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) + ' ' + devise
+    + (surcharge ? ' (valo)' : '');
+  return el('button', {
+    type: 'button',
+    title: surcharge
+      ? 'Coût retenu par la valorisation. Tarif Coûts matières : '
+        + Number(item.ca_transport_cout_tarif || 0).toLocaleString('fr-FR') + ' ' + devise
+      : 'Modifier le coût retenu par la valorisation (Coûts matières reste inchangé)',
+    style: 'margin-top:2px;padding:0;border:0;background:none;cursor:pointer;font-size:10px;white-space:nowrap;'
+      + 'text-decoration:underline dotted;color:' + (surcharge ? 'var(--accent)' : 'var(--muted)')
+      + ';font-weight:' + (surcharge ? '700' : '500'),
+    on: { click: () => openValorisationConteneurModal(item) },
+  }, txt);
+}
+
+function openValorisationConteneurModal(item) {
+  const root = document.getElementById('mroot');
+  if (!root) return;
+  root.innerHTML = '';
+  const forfait = (item.ca_transport_mode || '').toUpperCase() === 'FORFAIT';
+  const devise = item.ca_devise || 'EUR';
+  const tarif = Number(item.ca_transport_cout_tarif || 0);
+  const qte = Number(item.ca_transport_quantite || 0);
+  const overlay = el('div', {
+    style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px',
+    on: { click: (e) => { if (e.target === overlay) { root.innerHTML = ''; } } },
+  });
+  const box = el('div', { style: 'background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:480px;padding:22px' });
+  box.appendChild(el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px' },
+    forfait ? 'Forfait transport — valorisation' : 'Coût conteneur — valorisation'));
+  box.appendChild(el('div', { style: 'font-size:15px;font-weight:700;color:var(--text);margin-bottom:14px' },
+    (item.reference || '') + ' — ' + (item.designation || '')));
+  box.appendChild(el('div', { style: 'font-size:12px;color:var(--text2);background:var(--bg);border:1px dashed var(--border);border-radius:8px;padding:10px 12px;margin-bottom:14px' },
+    'Tarif Coûts matières : ' + tarif.toLocaleString('fr-FR') + ' ' + devise
+    + ' réparti sur ' + qte.toLocaleString('fr-FR') + '. Le coût saisi ici sert uniquement à la valorisation.'));
+  box.appendChild(el('label', { style: 'display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px' },
+    'Coût retenu (' + devise + ')'));
+  const inp = el('input', { type: 'number', step: '1', min: '0',
+    style: 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;font-variant-numeric:tabular-nums' });
+  inp.value = String(item.ca_transport_cout_valo != null ? item.ca_transport_cout_valo : tarif);
+  box.appendChild(inp);
+
+  const envoyer = async (valeur) => {
+    try {
+      await api('/api/stock/valorisation/conteneur/' + item.ca_declinaison_id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transport_cout: valeur }),
+      });
+      showToast(valeur == null ? 'Coût du tarif rétabli.' : 'Coût conteneur enregistré.', 'success');
+      root.innerHTML = '';
+      await loadValorisation();
+    } catch (e) {
+      showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
+    }
+  };
+  const btnStyle = 'padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-weight:600;cursor:pointer';
+  const actions = el('div', { style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:18px;flex-wrap:wrap' });
+  if (item.ca_transport_cout_valo != null) {
+    actions.appendChild(el('button', { type: 'button', style: btnStyle + ';margin-right:auto',
+      on: { click: () => envoyer(null) } }, 'Revenir au tarif'));
+  }
+  actions.appendChild(el('button', { type: 'button', style: btnStyle,
+    on: { click: () => { root.innerHTML = ''; } } }, 'Annuler'));
+  actions.appendChild(el('button', {
+    type: 'button',
+    style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:700;cursor:pointer',
+    on: { click: () => {
+      const v = parseFloat((inp.value || '').replace(',', '.'));
+      if (isNaN(v) || v < 0) { showToast('Coût invalide — valeur positive attendue.', 'danger'); return; }
+      envoyer(v);
+    } },
+  }, 'Enregistrer'));
+  box.appendChild(actions);
+  overlay.appendChild(box);
+  root.appendChild(overlay);
+  setTimeout(() => inp.focus(), 50);
 }
 
 // ── Les prix ne se saisissent plus dans MyStock ────────────────────────────

@@ -171,7 +171,7 @@
   var STOCK_EMPL_SORTIE_PROD_LABEL = 'En attente - sortie de prod';
   var STOCK_UNITE_VENTE_DEFAUT = 'etiquette';
 
-  const MP_CAT_LABELS = { mandrin: 'Mandrin', palette: 'Palette', adhesif: 'Adhésif', carton: 'Carton', frontal: 'Frontal', glassine: 'Glassine', complexe: 'Complexe', autre: 'Autre' };
+  const MP_CAT_LABELS = { mandrin: 'Mandrin', palette: 'Palette', adhesif: 'Adhésif', carton: 'Carton', frontal: 'Frontal', glassine: 'Glassine', complexe: 'Complexe', encre: 'Encre', autre: 'Autre' };
 
   const MP_MVT_TITLES = {
     entree: 'Entrée en stock',
@@ -703,6 +703,8 @@
     // Adhésif : le stock se tient au kilo. Palette et carton restent des unités
     // de SAISIE, converties côté serveur à la validation du mouvement.
     if (c === 'adhesif') return 'kg';
+    // Encre : stock recopié de RVGI, tenu au kilo (pots de 5 kg, cf. encres_rvgi).
+    if (c === 'encre') return 'kg';
     if (c === 'carton') return 'palette';
     if (c === 'palette') return 'palette';
     if (c === 'autre') return 'unite';
@@ -783,6 +785,7 @@
   function mpQuantiteInputAttrs(catOrMatiere, uniteSaisie) {
     const c = mpCtx(catOrMatiere).categorie;
     if (c === 'palette') return { type: 'number', min: '40', step: '1' };
+    if (c === 'encre') return { type: 'number', min: '0', step: '0.1' };
     if (c === 'adhesif') {
       // Au kilo, le décimal est nécessaire (retour d'une palette entamée) ;
       // à la palette ou au carton, seules les unités entières ont un sens.

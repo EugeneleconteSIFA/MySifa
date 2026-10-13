@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 from config import ROLES_PRICING_WRITE, ROLES_SETTINGS_LOGISTIQUE
 from database import get_db
 from app.services.auth_service import get_current_user, effective_role, user_has_app_access
+from app.services import encres_rvgi
 from app.services.pricing import (
     PricingError,
     compute_material_price_per_m2,
@@ -1422,6 +1423,9 @@ def list_mystock_materials(
     """Une ligne par matière MyStock devisable, avec ses déclinaisons et prix."""
     _require_read(request)
     with get_db() as conn:
+        # Les encres naissent du miroir RVGI : sans cette relecture, une encre
+        # nouvelle n'apparaîtrait qu'après un passage par la valorisation.
+        encres_rvgi.synchroniser(conn)
         # Une matière MyStock sans déclinaison n'a nulle part où porter son
         # prix : elle était absente de cette liste et des produits.
         if mystock_prix.amorcer_declinaisons(conn):
