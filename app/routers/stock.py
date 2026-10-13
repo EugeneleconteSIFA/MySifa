@@ -7540,6 +7540,47 @@ def matieres_inventaire_export(request: Request, format: str = "xlsx", categorie
     )
 
 
+@router.post("/api/stock/matieres/export-liste")
+async def matieres_export_liste(request: Request):
+    """Export Excel ou PDF de la liste Matières premières telle qu'affichée.
+
+    Body : {"format": "xlsx"|"pdf", "titre", "sous_titre", "colonnes": [...],
+    "lignes": [{"cellules": [...], "groupe": bool}]}. L'écran envoie ses
+    lignes déjà filtrées et triées (cf. `app/services/export_tableau.py`).
+    """
+    user = require_stock(request)
+    body = await request.json()
+    fmt = str(body.get("format") or "xlsx").strip().lower()
+    if fmt not in ("xlsx", "pdf"):
+        raise HTTPException(400, "Format : xlsx ou pdf.")
+    colonnes = [str(c) for c in (body.get("colonnes") or [])][:30]
+    lignes = body.get("lignes") or []
+    if not colonnes or not isinstance(lignes, list):
+        raise HTTPException(400, "Colonnes et lignes requises.")
+    if len(lignes) > 20000:
+        raise HTTPException(400, "Liste trop longue pour un export (20 000 lignes max).")
+    lignes = [l for l in lignes if isinstance(l, dict)]
+    titre = str(body.get("titre") or "Matières premières")[:120]
+    sous_titre = str(body.get("sous_titre") or "")[:300]
+    from app.services import export_tableau as et
+    now = _now_paris().replace(tzinfo=None)
+    nom = f"matieres-premieres-{now.strftime('%Y-%m-%d')}"
+    if fmt == "pdf":
+        par = (user.get("nom") or user.get("email") or "") if isinstance(user, dict) else ""
+        contenu = et.pdf(titre, sous_titre, colonnes, lignes, now, par)
+        return StreamingResponse(io.BytesIO(contenu), media_type="application/pdf",
+                                 headers={"Content-Disposition": f'attachment; filename="{nom}.pdf"'})
+    try:
+        contenu = et.classeur(titre, sous_titre, colonnes, lignes, now)
+    except ImportError as e:
+        raise HTTPException(500, f"openpyxl indisponible : {e}") from None
+    return StreamingResponse(
+        io.BytesIO(contenu),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{nom}.xlsx"'},
+    )
+
+
 @router.get("/api/stock/matieres/inventaire")
 def matieres_inventaire_liste(request: Request):
     """Liste des matières avec dernier inventaire, jours écoulés et statut couleur."""
