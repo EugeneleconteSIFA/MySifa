@@ -22217,8 +22217,6 @@ function rvgiLigne(l) {
       majDetail();
     });
     majDetail();
-    });
-    majDetail();
     tdMat.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center' },
       sel,
       el('button', {
