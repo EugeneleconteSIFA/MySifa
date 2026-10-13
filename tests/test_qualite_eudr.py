@@ -171,6 +171,18 @@ r = client.get(f"/api/portail/eudr/{TOKEN}")
 check("pré-remplissage avec la dernière réponse", r.json()["precedente"]["role"], "aval")
 check("pré-remplissage sans IP", "ip" in r.json()["precedente"], False)
 
+# Aperçu du questionnaire depuis MyQualité : données factices, aucune écriture.
+with get_db() as conn:
+    avant_dem = conn.execute("SELECT COUNT(*) FROM eudr_demandes").fetchone()[0]
+r = client.get("/qualite/eudr/apercu?lang=es")
+check("aperçu servi", r.status_code, 200)
+check("aperçu : mode aperçu actif", '"fournisseur": "Exemple fournisseur"' in r.text, True)
+check("aperçu : langue demandée", '"langue": "es"' in r.text, True)
+with get_db() as conn:
+    check("aperçu : aucune demande créée",
+          conn.execute("SELECT COUNT(*) FROM eudr_demandes").fetchone()[0], avant_dem)
+check("page fournisseur : pas en mode aperçu", "const APERCU = null;" in client.get(f"/portail/eudr/{TOKEN}").text, True)
+
 print()
 if ECHECS:
     print(f"{len(ECHECS)} échec(s)")

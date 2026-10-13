@@ -110,6 +110,7 @@ _I18N = {
         "done_t": "Thank you — your answers have been recorded.",
         "done_p": "You can come back to this page with the same link to update them.",
         "foot": "__ORG__ supplier portal — personal link, do not share.",
+        "preview": "Preview — this is what the supplier sees. Nothing is sent.",
     },
     "fr": {
         "brand": "__ORG__ · Portail fournisseur", "title": "Questionnaire EUDR",
@@ -142,6 +143,7 @@ _I18N = {
         "done_t": "Merci — vos réponses sont enregistrées.",
         "done_p": "Vous pouvez revenir sur cette page avec le même lien pour les mettre à jour.",
         "foot": "Portail fournisseur __ORG__ — lien personnel, ne pas partager.",
+        "preview": "Aperçu — c'est ce que voit le fournisseur. Rien n'est envoyé.",
     },
     "es": {
         "brand": "__ORG__ · Portal de proveedores", "title": "Cuestionario EUDR",
@@ -174,18 +176,23 @@ _I18N = {
         "done_t": "Gracias — sus respuestas han quedado registradas.",
         "done_p": "Puede volver a esta página con el mismo enlace para actualizarlas.",
         "foot": "Portal de proveedores de __ORG__ — enlace personal, no compartir.",
+        "preview": "Vista previa — esto es lo que ve el proveedor. No se envía nada.",
     },
 }
 
 
-def get_eudr_portail_html(token: str) -> str:
+def get_eudr_portail_html(token: str, apercu: dict | None = None) -> str:
+    """Page du formulaire. `apercu` : données factices servies par MyQualité
+    (bouton « Aperçu du questionnaire ») — la page ne contacte alors aucune API
+    et n'enregistre rien."""
     org = APP_ORG_NAME
     i18n = json.dumps(_I18N, ensure_ascii=False).replace("__ORG__", org).replace("</", "<\\/")
     return (_PAGE
             .replace("__HEAD__", _HEAD)
             .replace("__ORG_HTML__", _esc(org))
             .replace("__I18N__", i18n)
-            .replace("__TOKEN__", json.dumps(token)))
+            .replace("__TOKEN__", json.dumps(token))
+            .replace("__APERCU__", json.dumps(apercu, ensure_ascii=False).replace("</", "<\\/")))
 
 
 _PAGE = r"""<!DOCTYPE html>
@@ -205,6 +212,7 @@ _PAGE = r"""<!DOCTYPE html>
       <button type="button" data-l="en">EN</button><button type="button" data-l="fr">FR</button><button type="button" data-l="es">ES</button>
     </div>
   </div>
+  <div class="card" id="t-preview" style="display:none;border-color:var(--accent);color:var(--accent);font-weight:700;font-size:13px;padding:12px 16px"></div>
   <h1 id="t-title"></h1>
   <p class="lead" id="lead"></p>
   <div id="root"><div class="card" id="t-loading"></div></div>
@@ -212,6 +220,7 @@ _PAGE = r"""<!DOCTYPE html>
 </div>
 <script>
 const TOKEN = __TOKEN__;
+const APERCU = __APERCU__;
 const API = '/api/portail/eudr/' + encodeURIComponent(TOKEN);
 const I18N = __I18N__;
 let D = null;
@@ -226,6 +235,8 @@ function entete(){
   document.getElementById('t-brand').textContent = t('brand');
   document.getElementById('t-title').textContent = t('title');
   document.getElementById('t-foot').textContent = t('foot');
+  const pv = document.getElementById('t-preview');
+  if(APERCU){ pv.style.display = 'block'; pv.textContent = t('preview'); }
   document.getElementById('lead').textContent = D ? t('lead') + ' ' + D.fournisseur + '.' : '';
   document.querySelectorAll('#langs button').forEach(b => b.classList.toggle('on', b.dataset.l === (LANG||'en')));
 }
@@ -309,7 +320,7 @@ function changerLangue(l){
   try{ const u = new URL(location.href); u.searchParams.set('lang', l); history.replaceState(null, '', u); }catch(e){}
   if(D && cur){
     render(cur);
-    fetch(API + '/langue', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({langue:l})}).catch(() => {});
+    if(!APERCU) fetch(API + '/langue', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({langue:l})}).catch(() => {});
   } else {
     entete();
     const ld = document.getElementById('t-loading'); if(ld) ld.textContent = t('loading');
@@ -325,6 +336,7 @@ async function envoyer(ev){
   if(!body.role){ err.textContent = t('e_role'); return; }
   if(!(body.repondant_nom||'').trim()){ err.textContent = t('e_name'); return; }
   if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((body.repondant_email||'').trim())){ err.textContent = t('e_email'); return; }
+  if(APERCU){ err.textContent = t('preview'); return; }
   go.disabled = true;
   try{
     const r = await fetch(API, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
@@ -340,9 +352,12 @@ entete();
 document.getElementById('t-loading').textContent = t('loading');
 (async () => {
   try{
-    const r = await fetch(API);
-    if(!r.ok){ document.getElementById('root').innerHTML = '<div class="card">'+esc(t('invalid'))+'</div>'; return; }
-    D = await r.json();
+    if(APERCU){ D = APERCU; }
+    else {
+      const r = await fetch(API);
+      if(!r.ok){ document.getElementById('root').innerHTML = '<div class="card">'+esc(t('invalid'))+'</div>'; return; }
+      D = await r.json();
+    }
     if(!LANG) LANG = I18N[D.langue] ? D.langue : 'en';
     render();
   }catch(e){ document.getElementById('root').innerHTML = '<div class="card">'+esc(t('network_load'))+'</div>'; }

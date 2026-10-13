@@ -55,6 +55,35 @@ def reponses_fournisseur(request: Request, fournisseur_id: int):
         return {"reponses": eudr.historique(conn, fournisseur_id)}
 
 
+@router_html.get("/qualite/eudr/apercu", response_class=HTMLResponse)
+def apercu_questionnaire(request: Request):
+    """Le formulaire tel que le voit le fournisseur, sur des données factices.
+    Rien n'est enregistré : la page ne contacte aucune API (`apercu`)."""
+    _require_qualite_view(request)
+    donnees = _donnees_formulaire(
+        fournisseur="Exemple fournisseur",
+        email="contact@fournisseur.example",
+        langue=request.query_params.get("lang"),
+        precedente=None,
+    )
+    return HTMLResponse(get_eudr_portail_html("apercu", apercu=donnees))
+
+
+def _donnees_formulaire(*, fournisseur: str, email: str, langue, precedente) -> dict:
+    return {
+        "fournisseur": fournisseur,
+        "email": email,
+        "langue": eudr_langue(langue),
+        "precedente": precedente,
+        # Les trois langues d'un coup : changer de langue sur la page ne
+        # recharge rien et ne perd pas ce qui est déjà saisi.
+        "choix": {
+            lang: {c: {k: v[lang] for k, v in opts.items()} for c, opts in EUDR_CHOIX.items()}
+            for lang in EUDR_LANGUES
+        },
+    }
+
+
 @router.post("/demander")
 def demander(request: Request, body: dict = Body(...)):
     """Envoie le lien du questionnaire.
@@ -157,18 +186,12 @@ def donnees_portail(request: Request, token: str):
         if not dem:
             raise HTTPException(status_code=404, detail="Invalid or expired link.")
         precedente = eudr.derniere_reponse(conn, int(dem["fournisseur_id"]))
-    return {
-        "fournisseur": dem["fournisseur_nom"],
-        "email": dem["email"],
-        "langue": eudr_langue(dem.get("langue")),
-        "precedente": precedente,
-        # Les trois langues d'un coup : changer de langue sur la page ne
-        # recharge rien et ne perd pas ce qui est déjà saisi.
-        "choix": {
-            lang: {c: {k: v[lang] for k, v in opts.items()} for c, opts in EUDR_CHOIX.items()}
-            for lang in EUDR_LANGUES
-        },
-    }
+    return _donnees_formulaire(
+        fournisseur=dem["fournisseur_nom"],
+        email=dem["email"],
+        langue=dem.get("langue"),
+        precedente=precedente,
+    )
 
 
 @router_api.post("/{token}/langue")

@@ -18,7 +18,7 @@ EUDR_JS = r"""
 S.eudr = {
   data: null,        // reponse de /api/qualite/eudr/fournisseurs
   q: '',
-  filtre: 'sollicites',  // tous | sollicites | attente | repondus | jamais
+  filtre: 'tous',    // tous | sollicites | attente | repondus | jamais
   sel: new Set(),
   bobines: true,     // seulement les fournisseurs de bobines papier (categories frontal/complexe/glassine)
 };
@@ -84,9 +84,10 @@ function eudrRender(){
         <h1>EUDR</h1>
         <p>Règlement (UE) 2023/1115 sur les produits zéro déforestation. Chaque fournisseur reçoit un lien personnel vers un questionnaire (anglais, français ou espagnol) : périmètre, rôle, codes NC, transmission des numéros de référence des déclarations de diligence raisonnée. Les réponses arrivent ici ; la personne qui a envoyé la demande est prévenue par email.</p>
       </div>
-      ${admin ? `<div class="fsc-hero-actions">
-        <button type="button" class="btn btn-accent" id="eudr-send-btn" onclick="eudrOuvrirEnvoi()">Envoyer le questionnaire</button>
-      </div>` : ''}
+      <div class="fsc-hero-actions">
+        <a class="fsc-btn" href="/qualite/eudr/apercu?lang=fr" target="_blank" rel="noopener" title="Le formulaire tel que le voit le fournisseur — rien n'est enregistré">Aperçu du questionnaire</a>
+        ${admin ? `<button type="button" class="btn btn-accent" id="eudr-send-btn" onclick="eudrOuvrirEnvoi()">Envoyer le questionnaire</button>` : ''}
+      </div>
     </div>
     <div class="fsc-kpis">
       ${kpi('sollicites', sollicites, 'Fournisseurs sollicités')}
