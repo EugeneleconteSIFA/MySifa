@@ -1433,6 +1433,12 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-modal.mp-modal-cond{max-width:980px;padding:22px}
 .mp-cond-scroll{max-height:62vh;overflow:auto;margin-top:10px}
 .mp-cond-table td{vertical-align:middle}
+.mp-cond-filtres{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.mp-cond-filtres .mp-search{flex:1 1 260px;min-width:200px}
+.mp-cond-sel{padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-size:13px;font-family:inherit}
+.mp-cond-th{cursor:pointer;user-select:none}
+.mp-cond-th:hover,.mp-cond-th.on{color:var(--accent)}
+.mp-cond-th[data-sens]:not([data-sens=""])::after{content:" " attr(data-sens);font-size:9px}
 .mp-var-table .c-type{min-width:260px}
 .mp-var-table .c-act{width:76px}
 .mp-var-grp td{background:var(--bg);padding:8px 10px;border-bottom:1px solid var(--border)}
@@ -9762,14 +9768,51 @@ function mpCondBar(m) {
   return bar;
 }
 
-// Modale « Ajuster le conditionnement » : une ligne par référence de la liste
-// affichée (filtres compris). Seules les lignes modifiées sont envoyées.
-function openCondAjustModal() {
+// Modale « Ajuster le conditionnement » : références de la liste affichée.
+// Une matière en bobines a UNE ligne PAR FOURNISSEUR : la longueur d'une
+// bobine dépend de qui la livre (`mp_variantes.ml_bobine`). Les autres
+// matières gardent une ligne, et les consommables y portent leur prix au
+// conditionnement. Filtres et tris ne reconstruisent jamais les lignes : ils
+// les masquent et les réordonnent, pour ne rien perdre de ce qui est saisi.
+async function openCondAjustModal() {
   if (!isMatieresAdmin() || S.stockReadOnly) return;
   closeMroot();
   const mroot = document.getElementById('mroot');
   if (!mroot) return;
-  const items = filterMatieresList().filter(m => mpCondChamps(m).length || mpCondPrix(m));
+  let variantes = [];
+  try {
+    const d = await api('/api/stock/variantes-conditionnement');
+    variantes = Array.isArray(d.variantes) ? d.variantes : [];
+  } catch (err) {
+    showToast('Fournisseurs indisponibles : ' + err.message, 'error');
+  }
+  const parMatiere = new Map();
+  variantes.forEach(v => {
+    if (!parMatiere.has(v.matiere_id)) parMatiere.set(v.matiere_id, []);
+    parMatiere.get(v.matiere_id).push(v);
+  });
+  const catLabel = (m) => (MP_CAT_LABELS[m.categorie] || m.categorie || '')
+    + (m.sous_section ? ' · ' + m.sous_section : '');
+
+  // ── Lignes ──
+  const lignes = [];
+  filterMatieresList().forEach(m => {
+    const vs = mpIsLaizeeCategory(m.categorie) ? (parMatiere.get(m.id) || []) : [];
+    if (vs.length) {
+      vs.forEach(v => lignes.push({
+        m, v, fournisseur: v.fournisseur_nom || 'Fournisseur non identifié',
+        champs: [{ cle: 'ml_bobine', label: 'm / bobine', step: '1', val: v.ml_bobine }],
+        cp: null,
+      }));
+      return;
+    }
+    const champs = mpCondChamps(m);
+    const cp = mpCondPrix(m);
+    if (!champs.length && !cp) return;
+    lignes.push({ m, v: null, fournisseur: '', champs, cp });
+  });
+  const avecPrix = lignes.some(l => l.cp);
+
   const overlay = el('div', {
     cls: 'mp-modal-overlay',
     on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
@@ -9780,71 +9823,158 @@ function openCondAjustModal() {
     el('button', { cls: 'mp-modal-close', type: 'button',
       attrs: { title: 'Fermer', 'aria-label': 'Fermer' }, on: { click: closeMroot } }, '×')));
   box.appendChild(el('div', { cls: 'mp-modal-sub' },
-    'Quantité contenue dans une unité de conditionnement, ligne par ligne (références de la liste affichée). '
-    + 'Le prix au conditionnement d\'un consommable met à jour la valorisation et Coûts matières.'));
-  const lignes = [];
-  if (!items.length) {
-    box.appendChild(el('div', { cls: 'card-empty' }, 'Aucune référence dans cette sélection.'));
-  } else {
-    const tbl = el('table', { cls: 'mp-var-table mp-cond-table' });
-    tbl.appendChild(el('thead', null, el('tr', null,
-      el('th', null, 'Référence'), el('th', null, 'Désignation'),
-      el('th', null, 'Conditionnement'), el('th', null, 'Prix au conditionnement'))));
-    const tb = el('tbody');
-    items.forEach(m => {
-      const inputs = {};
-      const champs = mpCondChamps(m);
-      const tdCond = el('td', null, ...champs.map(c => {
-        const inp = mpCondInput(c);
-        inputs[c.cle] = inp;
-        return el('label', { cls: 'mp-cond-champ' }, inp, el('span', null, c.label));
-      }));
-      if (!champs.length) tdCond.appendChild(el('span', { cls: 'mp-var-meta' }, 'à l\'unité'));
-      const cp = mpCondPrix(m);
-      let pInp = null;
-      const tdPrix = el('td');
-      if (cp) {
-        pInp = mpCondPrixInput(m, cp);
-        tdPrix.appendChild(el('label', { cls: 'mp-cond-champ' }, pInp, el('span', null, '€ / ' + cp.unite)));
-      } else {
-        tdPrix.appendChild(el('span', { cls: 'mp-var-meta' }, 'prix au m² — fiche matière'));
-      }
-      [...Object.values(inputs), pInp].forEach(i => { if (i) i.dataset.initial = i.value; });
-      lignes.push({ m, inputs, pInp, cp });
-      tb.appendChild(el('tr', null,
-        el('td', null, el('strong', null, m.reference || '')),
-        el('td', null, m.designation || ''), tdCond, tdPrix));
+    'Quantité contenue dans une unité de conditionnement. Les bobines se règlent par fournisseur'
+    + (avecPrix ? ' ; le prix au conditionnement d\'un consommable met à jour la valorisation et Coûts matières.' : '.')));
+
+  // ── Barre de filtres ──
+  const F = { q: '', cat: '', fourn: '', tri: null, sens: 1 };
+  const qInp = el('input', { cls: 'mp-search', attrs: {
+    type: 'search', placeholder: 'Rechercher (référence, désignation, fournisseur…)', 'aria-label': 'Rechercher' } });
+  const options = (vals, tous) => [el('option', { attrs: { value: '' } }, tous),
+    ...[...new Set(vals)].filter(Boolean).sort((a, b) => a.localeCompare(b, 'fr'))
+      .map(x => el('option', { attrs: { value: x } }, x))];
+  const catSel = el('select', { cls: 'mp-cond-sel', attrs: { 'aria-label': 'Catégorie' } },
+    ...options(lignes.map(l => catLabel(l.m)), 'Toutes catégories'));
+  const fournSel = el('select', { cls: 'mp-cond-sel', attrs: { 'aria-label': 'Fournisseur' } },
+    ...options(lignes.map(l => l.fournisseur), 'Tous fournisseurs'));
+  const compteur = el('span', { cls: 'mp-var-meta' });
+  box.appendChild(el('div', { cls: 'mp-cond-filtres' }, qInp, catSel, fournSel, compteur));
+
+  // ── Table ──
+  const cols = [
+    { id: 'ref', label: 'Référence', val: l => l.m.reference || '' },
+    { id: 'des', label: 'Désignation', val: l => l.m.designation || '' },
+    { id: 'cat', label: 'Catégorie', val: l => catLabel(l.m) },
+    { id: 'fourn', label: 'Fournisseur', val: l => l.fournisseur },
+    { id: 'cond', label: 'Conditionnement', val: l => parseFloat((l.inputs[0] || {}).value) || null, num: true },
+  ];
+  if (avecPrix) cols.push({ id: 'prix', label: 'Prix au conditionnement',
+    val: l => (l.pInp ? parseFloat(l.pInp.value) || null : null), num: true });
+  const tbl = el('table', { cls: 'mp-var-table mp-cond-table' });
+  const ths = cols.map(c => {
+    const th = el('th', { cls: 'mp-cond-th', attrs: { title: 'Trier' } }, c.label);
+    th.addEventListener('click', () => {
+      if (F.tri !== c.id) { F.tri = c.id; F.sens = 1; }
+      else if (F.sens === 1) F.sens = -1;
+      else { F.tri = null; F.sens = 1; }
+      appliquer();
     });
-    tbl.appendChild(tb);
-    box.appendChild(el('div', { cls: 'mp-var-scroll mp-cond-scroll' }, tbl));
+    return th;
+  });
+  tbl.appendChild(el('thead', null, el('tr', null, ...ths)));
+  const tb = el('tbody');
+  lignes.forEach((l, i) => {
+    l.ordre = i;
+    l.inputs = l.champs.map(c => {
+      const inp = mpCondInput(c);
+      inp.dataset.initial = inp.value;
+      return inp;
+    });
+    if (l.cp) {
+      l.pInp = mpCondPrixInput(l.m, l.cp);
+      l.pInp.dataset.initial = l.pInp.value;
+    }
+    const tdCond = el('td', null, ...l.inputs.map((inp, k) =>
+      el('label', { cls: 'mp-cond-champ' }, inp, el('span', null, l.champs[k].label))));
+    if (!l.inputs.length) tdCond.appendChild(el('span', { cls: 'mp-var-meta' }, 'à l\'unité'));
+    l.tr = el('tr', null,
+      el('td', null, el('strong', null, l.m.reference || '')),
+      el('td', null, l.m.designation || ''),
+      el('td', null, catLabel(l.m)),
+      el('td', null, l.v
+        ? [l.fournisseur, l.v.principal ? el('span', { cls: 'mp-var-badge', style: 'margin-left:6px' }, 'Principal') : null]
+        : el('span', { cls: 'mp-var-meta' }, '—')),
+      tdCond,
+      avecPrix ? el('td', null, l.pInp
+        ? el('label', { cls: 'mp-cond-champ' }, l.pInp, el('span', null, '€ / ' + l.cp.unite)) : null) : null);
+    l.texte = [l.m.reference, l.m.designation, l.fournisseur, catLabel(l.m)].join(' ').toLowerCase();
+  });
+  const vide = el('tr', { style: 'display:none' },
+    el('td', { attrs: { colspan: String(cols.length) }, cls: 'mp-var-meta' }, ''));
+
+  function appliquer() {
+    const q = F.q.trim().toLowerCase();
+    const vues = lignes.filter(l => (!q || l.texte.includes(q))
+      && (!F.cat || catLabel(l.m) === F.cat) && (!F.fourn || l.fournisseur === F.fourn));
+    const col = cols.find(c => c.id === F.tri);
+    const ordre = vues.slice().sort((a, b) => {
+      if (!col) return a.ordre - b.ordre;
+      const va = col.val(a), vb = col.val(b);
+      // Les valeurs manquantes restent en bas, dans les deux sens.
+      if (va == null || va === '') return (vb == null || vb === '') ? a.ordre - b.ordre : 1;
+      if (vb == null || vb === '') return -1;
+      const r = col.num ? va - vb : String(va).localeCompare(String(vb), 'fr', { numeric: true });
+      return (r || a.ordre - b.ordre) * (r ? F.sens : 1);
+    });
+    const visibles = new Set(ordre);
+    lignes.forEach(l => { l.tr.style.display = visibles.has(l) ? '' : 'none'; });
+    ordre.forEach(l => tb.appendChild(l.tr));
+    vide.style.display = ordre.length ? 'none' : '';
+    vide.firstChild.textContent = F.q ? 'Aucun résultat pour « ' + F.q + ' »' : 'Aucune référence pour ces filtres.';
+    tb.appendChild(vide);
+    ths.forEach((th, k) => {
+      const actif = cols[k].id === F.tri;
+      th.classList.toggle('on', actif);
+      th.dataset.sens = actif ? (F.sens === 1 ? '▲' : '▼') : '';
+    });
+    compteur.textContent = ordre.length + ' / ' + lignes.length + ' ligne' + (lignes.length > 1 ? 's' : '');
   }
+  qInp.addEventListener('input', () => { F.q = qInp.value; appliquer(); });
+  qInp.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.stopPropagation(); qInp.value = ''; F.q = ''; appliquer(); }
+  });
+  catSel.addEventListener('change', () => { F.cat = catSel.value; appliquer(); });
+  fournSel.addEventListener('change', () => { F.fourn = fournSel.value; appliquer(); });
+  tbl.appendChild(tb);
+  if (lignes.length) {
+    box.appendChild(el('div', { cls: 'mp-var-scroll mp-cond-scroll' }, tbl));
+    appliquer();
+  } else {
+    box.appendChild(el('div', { cls: 'card-empty' }, 'Aucune référence dans cette sélection.'));
+  }
+
+  // ── Enregistrement : seules les lignes modifiées partent ──
   const btnSave = el('button', { cls: 'btn', type: 'button' }, 'Enregistrer');
   btnSave.addEventListener('click', async () => {
     const modif = (i) => !!i && i.value !== i.dataset.initial;
-    const aFaire = lignes.filter(l => Object.values(l.inputs).some(modif) || modif(l.pInp));
+    const aFaire = lignes.filter(l => l.inputs.some(modif) || modif(l.pInp));
     if (!aFaire.length) { closeMroot(); return; }
     btnSave.disabled = true;
     let ok = 0;
     const erreurs = [];
     for (const l of aFaire) {
+      const parCle = {};
+      l.champs.forEach((c, k) => { parCle[c.cle] = l.inputs[k]; });
       try {
-        if (Object.values(l.inputs).some(modif)) await mpCondEnregistrer(l.m, l.inputs);
+        if (l.inputs.some(modif)) {
+          if (l.v) {
+            const r = mpLireNombre(parCle.ml_bobine);
+            if (r.error) throw new Error('m / bobine : valeur > 0 obligatoire.');
+            await api('/api/stock/variantes/' + l.v.id, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ml_bobine: r.value }),
+            });
+          } else {
+            await mpCondEnregistrer(l.m, parCle);
+          }
+        }
         if (modif(l.pInp)) {
           const r = mpLireNombre(l.pInp);
           if (r.error) throw new Error('prix : valeur > 0 obligatoire.');
           if (!r.vide) {
             // Le facteur suit le conditionnement saisi sur la même ligne.
-            const v = (k) => mpLireNombre(l.inputs[k]).value || 0;
+            const v = (k) => mpLireNombre(parCle[k]).value || 0;
             let facteur = l.cp.facteur;
-            if (l.inputs.unites_par_palette) facteur = v('unites_par_palette');
-            if (l.inputs.cartons_par_palette) facteur = v('cartons_par_palette') * v('kg_par_carton');
+            if (parCle.unites_par_palette) facteur = v('unites_par_palette');
+            if (parCle.cartons_par_palette) facteur = v('cartons_par_palette') * v('kg_par_carton');
             if (!facteur) throw new Error('prix au conditionnement sans conditionnement renseigné.');
             await mpCondPrixEnregistrer(l.m, r.value, facteur, l.cp.unite);
           }
         }
         ok++;
       } catch (err) {
-        erreurs.push((l.m.reference || '#' + l.m.id) + ' — ' + err.message);
+        erreurs.push((l.m.reference || '#' + l.m.id) + (l.v ? ' (' + l.fournisseur + ')' : '') + ' — ' + err.message);
       }
     }
     btnSave.disabled = false;
@@ -9855,7 +9985,7 @@ function openCondAjustModal() {
       return;
     }
     closeMroot();
-    showToast(ok + (ok > 1 ? ' références mises à jour.' : ' référence mise à jour.'), 'success');
+    showToast(ok + (ok > 1 ? ' lignes mises à jour.' : ' ligne mise à jour.'), 'success');
   });
   box.appendChild(el('div', { cls: 'mp-modal-actions' },
     el('div', { cls: 'mp-modal-actions-right' },
@@ -9863,6 +9993,7 @@ function openCondAjustModal() {
       btnSave)));
   overlay.appendChild(box);
   mroot.appendChild(overlay);
+  requestAnimationFrame(() => qInp.focus());
 }
 
 function buildMatieres() {

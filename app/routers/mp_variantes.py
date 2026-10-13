@@ -40,6 +40,27 @@ def lister_variantes(matiere_id: int, request: Request, inactives: int = 0):
     return out
 
 
+@router.get("/api/stock/variantes-conditionnement")
+def variantes_conditionnement(request: Request):
+    """Variantes actives de toutes les matières, avec leur longueur de bobine.
+
+    Sert à la modale « Ajuster le conditionnement » : une bobine ne fait pas la
+    même longueur d'un fournisseur à l'autre. Une requête pour toute la liste,
+    au lieu d'une par matière.
+    """
+    require_stock(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT v.id, v.matiere_id, v.fournisseur_id, f.nom AS fournisseur_nom,
+                      v.libelle_technique, v.ref_fournisseur, v.ml_bobine, v.principal
+                 FROM mp_variantes v
+                 LEFT JOIN fournisseurs_fsc f ON f.id = v.fournisseur_id
+                WHERE v.actif = 1
+                ORDER BY v.matiere_id, v.principal DESC, f.nom COLLATE NOCASE"""
+        ).fetchall()
+    return {"variantes": [dict(r) for r in rows]}
+
+
 @router.get("/api/stock/mp-stock-fournisseurs")
 def stock_fournisseurs(request: Request, matiere_id: int | None = None):
     """Stock RVGI par fournisseur, article et laize (toutes matières, ou une)."""
