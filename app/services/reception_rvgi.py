@@ -261,6 +261,45 @@ def proposer(libelle_rvgi, matieres, limite=4):
             for s, m in notes[:limite]]
 
 
+def details_matieres(conn):
+    """Ce qui distingue deux matieres voisines dans une liste de choix.
+
+    La reference MySifa est un libelle COMMERCIAL : « PP blanc brillant 100 µm »
+    ne dit ni la colle, ni le fournisseur, ni la laize. Pour apparier un article
+    RVGI, il faut le libelle TECHNIQUE des variantes fournisseur et les laizes
+    deja connues de la matiere.
+    """
+    techs, laizes = {}, {}
+    try:
+        for r in conn.execute(
+                "SELECT matiere_id, libelle_technique FROM mp_variantes "
+                "WHERE actif = 1 AND COALESCE(libelle_technique, '') <> '' "
+                "ORDER BY principal DESC, id"):
+            l = techs.setdefault(int(r["matiere_id"]), [])
+            if r["libelle_technique"] not in l:
+                l.append(r["libelle_technique"])
+    except Exception:
+        pass  # table mp_variantes absente : migration pas encore passee
+    try:
+        for r in conn.execute(
+                "SELECT ml.matiere_id, lz.valeur_mm FROM mp_matiere_laizes ml "
+                "JOIN mp_laizes lz ON lz.id = ml.laize_id "
+                "WHERE COALESCE(lz.actif, 1) = 1 ORDER BY lz.valeur_mm"):
+            if r["valeur_mm"]:
+                laizes.setdefault(int(r["matiere_id"]), []).append(float(r["valeur_mm"]))
+    except Exception:
+        pass
+    return {mid: {"libelles_techniques": techs.get(mid, []), "laizes_mm": laizes.get(mid, [])}
+            for mid in set(techs) | set(laizes)}
+
+
+def _habiller(choix, details):
+    vide = {"libelles_techniques": [], "laizes_mm": []}
+    for c in choix:
+        c.update(details.get(c["matiere_id"], vide))
+    return choix
+
+
 # ── Longueur de bobine annoncee par l'ERP ───────────────────────────────────
 
 _RE_ML = re.compile(
@@ -478,6 +517,17 @@ def _deja_integrees(conn):
         "SELECT lif_id FROM erp_reception_integree").fetchall()}
 
 
+def _annulees(conn):
+    """Derniere annulation de chaque ligne, ou {} si la table manque encore."""
+    try:
+        return {int(r["lif_id"]): {"annule_at": r["annule_at"], "annule_par": r["annule_par"]}
+                for r in conn.execute(
+                    "SELECT lif_id, annule_at, annule_par FROM erp_reception_annulee "
+                    "ORDER BY id")}
+    except Exception:
+        return {}
+
+
 def _candidates(matieres, type_code):
     """Les matieres qu'un type RVGI peut designer, et elles seules."""
     cat, sous, _ = perimetre_de(type_code)
@@ -508,6 +558,8 @@ def lignes_a_integrer(conn, conn_erp, limite=300):
     par_id = {m["id"]: m for m in matieres}
     ml_var = ml_variantes(conn)
     faites = _deja_integrees(conn)
+    annulees = _annulees(conn)
+    details = details_matieres(conn)
 
     lignes = []
     for r in brut:
@@ -523,11 +575,18 @@ def lignes_a_integrer(conn, conn_erp, limite=300):
             # une matiere morte qu'on ne peut que delier.
             mid = None
         libelle = ((r["lib_erp"] or r["des1"] or "") + " " + (r["cond_erp"] or "")).strip()
-        propositions = ([] if matiere else
-                        proposer(libelle, _candidates(matieres, type_code)))
+        candidates = [] if matiere else _candidates(matieres, type_code)
+        propositions = proposer(libelle, candidates) if candidates else []
         if type_code in PERIMETRE_SOUS_CONDITION and not matiere:
             if not propositions or propositions[0]["score"] < SEUIL_SOUS_CONDITION:
                 continue
+        _habiller(propositions, details)
+        deja = {p["matiere_id"] for p in propositions}
+        autres = _habiller(
+            [{"matiere_id": m["id"], "reference": m.get("reference"),
+              "designation": m.get("designation")}
+             for m in sorted(candidates, key=lambda m: (m.get("reference") or "").lower())
+             if m["id"] not in deja], details)
 
         conv = (convertir(type_code, r["qte"], matiere, r["cond_erp"], ml_var.get(cle))
                 if matiere else
@@ -551,6 +610,10 @@ def lignes_a_integrer(conn, conn_erp, limite=300):
             "matiere_ref": (matiere or {}).get("reference"),
             "matiere_designation": (matiere or {}).get("designation"),
             "propositions": propositions,
+            "autres_matieres": autres,
+            "famille": perimetre_de(type_code)[0],
+            "sous_section": perimetre_de(type_code)[1],
+            "annulation": annulees.get(int(r["lif_id"])),
             "quantite": conv.get("quantite"),
             "unite": conv.get("unite"),
             "detail": conv.get("detail"),
@@ -806,6 +869,64 @@ def integrer(conn, ligne, user, appliquer_mouvement):
                         else "Entrée en stock — les codes-barres se rattachent au scan.")}
 
 
+def annuler(conn, lif_id, user, appliquer_mouvement):
+    """Defait l'entree en stock d'une reception validee par erreur.
+
+    Le stock est repris par une SORTIE qui pointe le mouvement d'entree
+    (`annule_mouvement_id`) : le journal des mouvements garde l'aller et le
+    retour, rien n'est efface. La ligne quitte `erp_reception_integree` et
+    revient dans la file ; `erp_reception_annulee` l'empeche d'y etre reprise
+    automatiquement par `integrer_tout`.
+
+    Refuse une reception de bobines deja scannees : leurs codes-barres portent
+    la tracabilite FSC, les retirer du stock en silence la rendrait muette.
+
+    Ne committe pas.
+    """
+    from datetime import datetime
+
+    lif_id = int(lif_id)
+    i = conn.execute("SELECT * FROM erp_reception_integree WHERE lif_id=?",
+                     (lif_id,)).fetchone()
+    if i is None:
+        raise ValueError("Réception absente de l'historique — déjà annulée ?")
+    i = dict(i)
+    reception_id = i.get("reception_id")
+    if reception_id:
+        n = conn.execute("SELECT COUNT(*) FROM stock_reception_items WHERE reception_id=?",
+                         (reception_id,)).fetchone()[0]
+        if n:
+            raise ValueError("%d bobine(s) déjà scannée(s) sur cette réception — "
+                             "les retirer d'abord du stock." % n)
+
+    origine = "Annulation réception RVGI %s/%s du %s" % (
+        i.get("numero"), i.get("ligne"), i.get("amjl") or "?")
+    q = float(i.get("quantite") or 0)
+    mouvement_id = None
+    if q > 0 and i.get("matiere_id"):
+        res = appliquer_mouvement(
+            conn, user, int(i["matiere_id"]), "sortie", q,
+            laize_id=i.get("laize_id"), note=origine,
+            annule_mouvement_id=i.get("mouvement_id"),
+            autoriser_negatif=True)
+        mouvement_id = res.get("mouvement_id")
+    if reception_id:
+        conn.execute("DELETE FROM stock_receptions WHERE id=? AND COALESCE(nb_bobines, 0) = 0",
+                     (reception_id,))
+
+    auteur = (user or {}).get("nom") or (user or {}).get("email") or ""
+    conn.execute(
+        "INSERT INTO erp_reception_annulee (lif_id, matiere_id, laize_id, quantite, unite, "
+        " regime, integre_at, integre_par, mouvement_id, annule_at, annule_par) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (lif_id, i.get("matiere_id"), i.get("laize_id"), q, i.get("unite"), i.get("regime"),
+         i.get("integre_at"), i.get("integre_par"), mouvement_id,
+         datetime.now().isoformat(timespec="seconds"), auteur))
+    conn.execute("DELETE FROM erp_reception_integree WHERE lif_id=?", (lif_id,))
+    return {"lif_id": lif_id, "matiere_id": i.get("matiere_id"), "quantite": q,
+            "unite": i.get("unite"), "mouvement_id": mouvement_id}
+
+
 def _lier_laize(conn, matiere_id, laize_id):
     """Rattache la laize a la matiere si ce n'est pas deja fait.
 
@@ -835,6 +956,11 @@ def integrer_tout(conn, conn_erp, user, appliquer_mouvement, limite=500):
     faites, refusees, en_attente = [], [], 0
     for ligne in file["lignes"]:
         if not ligne.get("integrable"):
+            en_attente += 1
+            continue
+        # Annulee a la main : elle ne rentre qu'a la main, sinon la synchro
+        # suivante referait l'erreur qu'on vient de defaire.
+        if ligne.get("annulation"):
             en_attente += 1
             continue
         try:

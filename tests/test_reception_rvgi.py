@@ -257,6 +257,47 @@ rr._laize_id(base, 470.0)
 check("laize existante réutilisée",
       base.execute("SELECT COUNT(*) FROM mp_laizes").fetchone()[0], n_avant)
 
+# Annuler une entrée validée par erreur : une sortie liée à l'entrée, la ligne
+# quitte l'historique, et la trace empêche la synchro de la reprendre.
+base.executescript("""
+    CREATE TABLE stock_reception_items (id INTEGER PRIMARY KEY, reception_id INTEGER,
+        code_barre TEXT);
+    CREATE TABLE erp_reception_annulee (id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lif_id INTEGER NOT NULL, matiere_id INTEGER, laize_id INTEGER, quantite REAL,
+        unite TEXT, regime TEXT, integre_at TEXT, integre_par TEXT, mouvement_id INTEGER,
+        annule_at TEXT NOT NULL, annule_par TEXT);
+""")
+
+
+def faux_mouvement_kw(conn, user, matiere_id, type_mvt, quantite, **kw):
+    mouvements.append((matiere_id, type_mvt, quantite, kw.get("annule_mouvement_id")))
+    return {"mouvement_id": 900 + len(mouvements)}
+
+
+r = rr.annuler(base, 1, {"nom": "Test"}, faux_mouvement_kw)
+check("annulation carton : une sortie de la même quantité, liée à l'entrée",
+      mouvements[-1], (18, "sortie", 2.0, 901))
+vrai("annulation : la ligne quitte l'historique",
+     base.execute("SELECT 1 FROM erp_reception_integree WHERE lif_id=1").fetchone() is None)
+check("annulation : la trace est posée", list(rr._annulees(base)), [1])
+try:
+    rr.annuler(base, 1, {"nom": "Test"}, faux_mouvement_kw)
+    vrai("seconde annulation refusée", False, "elle est passée")
+except ValueError:
+    vrai("seconde annulation refusée", True)
+
+rec_id = base.execute("SELECT reception_id FROM erp_reception_integree WHERE lif_id=2").fetchone()[0]
+base.execute("INSERT INTO stock_reception_items (reception_id, code_barre) VALUES (?, 'X1')", (rec_id,))
+try:
+    rr.annuler(base, 2, {"nom": "Test"}, faux_mouvement_kw)
+    vrai("bobine scannée : annulation refusée", False, "elle est passée")
+except ValueError as e:
+    vrai("bobine scannée : annulation refusée", "scannée" in str(e), str(e))
+base.execute("DELETE FROM stock_reception_items")
+rr.annuler(base, 2, {"nom": "Test"}, faux_mouvement_kw)
+vrai("bobine non scannée : la réception vide disparaît",
+     base.execute("SELECT 1 FROM stock_receptions WHERE id=?", (rec_id,)).fetchone() is None)
+
 
 # ── 8. L'appariement ────────────────────────────────────────────────────────
 print("\nAppariement")

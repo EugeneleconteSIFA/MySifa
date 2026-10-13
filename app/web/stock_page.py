@@ -2198,6 +2198,12 @@ body:not(.light) .plan-pill-tip-jours.plan-pill-c-rouge{color:#f87171}
 .recep-mini-close:hover{color:var(--danger)}
 
 .recep-page{padding:14px 20px 20px;max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+/* Petits boutons de la file et de l'historique ERP (posés dans une card). */
+.recep-rvgi-mini { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:6px;
+  border:1px solid var(--border); background:var(--bg); color:var(--text2); font-family:inherit;
+  font-size:11px; cursor:pointer; white-space:nowrap; }
+.recep-rvgi-mini:hover { border-color:var(--accent); color:var(--accent); }
+.recep-rvgi-mini:disabled { opacity:.5; cursor:default; }
 /* File « Depuis l'ERP » : un tableau à cinq colonnes ne tient pas dans 860 px. */
 .recep-page.recep-page-large{max-width:none}
 .recep-head-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;width:100%;margin-bottom:2px}
@@ -9535,7 +9541,9 @@ async function deleteMatiereRef(item) {
   }
 }
 
-function openMatiereRefEditModal(item) {
+// `apres` : rappel facultatif une fois enregistré (réception ERP : relire la
+// file, dont la quantité convertie dépend du conditionnement de la matière).
+function openMatiereRefEditModal(item, apres) {
   if (!item || !isMatieresAdmin()) return;
   closeMroot();
   const mroot = document.getElementById('mroot');
@@ -9564,6 +9572,7 @@ function openMatiereRefEditModal(item) {
     if (S.selMatiere && S.selMatiere.matiere && S.selMatiere.matiere.id === item.id) {
       await refreshSelMatiere();
     }
+    if (typeof apres === 'function') await apres();
   };
   const hasStock = (parseFloat(item.quantite) || 0) > 0;
   box.appendChild(el('div', { cls: 'mp-modal-actions' },
@@ -10605,7 +10614,9 @@ function mpSeedDepuisRvgi(a) {
 
 // Création d'une référence dans une modale — bouton « + », ligne « Créer la
 // référence » et articles RVGI. Même formulaire que le tiroir des références.
-async function openMatiereCreateModal(seed) {
+// `opts.onCreated` remplace l'ouverture de la fiche créée (réception ERP : on
+// reste sur la file, la ligne s'apparie toute seule).
+async function openMatiereCreateModal(seed, opts) {
   if (!isMatieresAdmin()) return;
   closeMroot();
   S.matieresAdminAddError = '';
@@ -10642,6 +10653,7 @@ async function openMatiereCreateModal(seed) {
       closeMroot();
       S.mpRvgi = null;
       await loadMatieres();
+      if (opts && typeof opts.onCreated === 'function') { await opts.onCreated(created); return; }
       if (created && created.id) await loadMatiere(created.id);
     },
   }));
@@ -22059,7 +22071,13 @@ function buildRvgiHistorique() {
       recepCelluleDocuments(l, loadRvgiHistorique),
       el('td', { style: 'white-space:nowrap;vertical-align:top' },
         el('div', null, _rvgiFmtDateHeure(l.integre_at)),
-        el('div', { style: petit }, l.integre_par ? 'par ' + l.integre_par : '—')),
+        el('div', { style: petit }, l.integre_par ? 'par ' + l.integre_par : '—'),
+        S.stockReadOnly ? null : el('button', {
+          type: 'button', cls: 'recep-rvgi-mini',
+          attrs: { title: 'Retirer cette entrée du stock et remettre la ligne dans la file « Depuis l\'ERP »' },
+          style: 'margin-top:6px',
+          on: { click: (ev) => rvgiAnnulerEntree(l, ev.currentTarget) },
+        }, iconEl('rotate-ccw', 12), ' Annuler l\'entrée')),
     ));
   });
   const table = el('table', { cls: 'bes-table' },
@@ -22077,6 +22095,62 @@ function buildRvgiHistorique() {
   return wrap;
 }
 
+// Défait une entrée validée par erreur : le stock est repris par une sortie
+// liée à l'entrée, la ligne revient dans « Depuis l'ERP » et n'en ressortira
+// qu'à la main (la synchro ne la réintègre pas).
+async function rvgiAnnulerEntree(l, btn) {
+  const qte = l.quantite != null ? fN(l.quantite) + ' ' + (l.unite || '') : '';
+  if (!confirm('Annuler l\'entrée en stock de cette réception ?\n\n'
+      + (l.matiere_ref || '') + (qte ? ' — ' + qte : '') + '\n'
+      + 'Commande ' + (l.numero || '?') + ' ligne ' + (l.ligne || '?') + '\n\n'
+      + 'La quantité sort du stock et la ligne revient dans « Depuis l\'ERP ». '
+      + 'Elle n\'y sera pas réintégrée automatiquement.')) return;
+  if (btn) btn.disabled = true;
+  try {
+    await api('/api/stock/reception-rvgi/' + l.lif_id + '/annuler', { method: 'POST' });
+    showToast('Entrée annulée — la ligne est de retour dans « Depuis l\'ERP ».', 'success');
+    S.rvgiFile = null;
+    loadRvgiCountBackground();
+    await loadRvgiHistorique();
+  } catch (e) {
+    showToast('Annulation impossible : ' + ((e && e.message) || e), 'error');
+    if (btn) btn.disabled = false;
+  }
+}
+
+// Libellé d'une matière dans la liste d'appariement : la référence MySifa est
+// commerciale, c'est le libellé technique fournisseur et la laize qui
+// départagent deux candidates voisines.
+function rvgiLibelleChoix(p, avecScore) {
+  const morceaux = [p.reference || ('#' + p.matiere_id)];
+  if (p.designation && p.designation !== p.reference) morceaux.push(p.designation);
+  let txt = morceaux.join(' — ');
+  const tech = (p.libelles_techniques || []).join(' / ');
+  if (tech) txt += ' · ' + tech;
+  const lz = (p.laizes_mm || []).map(v => fN(v)).join(', ');
+  if (lz) txt += ' · laize ' + lz + ' mm';
+  if (avecScore && p.score != null) txt += '  (' + Math.round(p.score * 100) + ' %)';
+  return txt;
+}
+
+async function rvgiCreerReference(l) {
+  const famille = l.famille || undefined;
+  await openMatiereCreateModal({
+    categorie: famille,
+    sous_section: famille === 'frontal' ? (l.sous_section || '') : '',
+    reference: '',
+    designation: l.libelle || '',
+    rvgi: { code1: l.code1, code2: l.code2, type_code: l.type_code, libelle: l.libelle || '' },
+  }, { onCreated: async () => { await loadReceptionRvgi(); } });
+}
+
+async function rvgiOuvrirParametres(l) {
+  if (!Array.isArray(S.matieres) || !S.matieres.some(m => m.id === l.matiere_id)) await loadMatieres();
+  const m = (S.matieres || []).find(x => x.id === l.matiere_id);
+  if (!m) { showToast('Référence introuvable dans MyStock.', 'error'); return; }
+  openMatiereRefEditModal(m, loadReceptionRvgi);
+}
+
 function rvgiLigne(l) {
   const tr = el('tr');
   const petit = 'font-size:11.5px;color:var(--muted);margin-top:2px';
@@ -22087,7 +22161,11 @@ function rvgiLigne(l) {
 
   tr.appendChild(el('td', { style: 'white-space:nowrap;vertical-align:top' },
     el('div', { style: 'font-family:var(--mono,monospace);font-weight:700' }, l.numero ? String(l.numero) : '—'),
-    el('div', { style: petit }, l.ligne ? 'ligne ' + l.ligne : '')));
+    el('div', { style: petit }, l.ligne ? 'ligne ' + l.ligne : ''),
+    l.annulation ? el('div', { style: 'font-size:11px;color:var(--warn);margin-top:3px;white-space:normal;max-width:160px',
+      attrs: { title: 'Entrée annulée : la ligne ne sera pas réintégrée automatiquement' } },
+      'entrée annulée le ' + _rvgiFmtDateHeure(l.annulation.annule_at)
+      + (l.annulation.annule_par ? ' par ' + l.annulation.annule_par : '')) : null));
 
   tr.appendChild(el('td', { style: 'vertical-align:top;min-width:220px' },
     el('div', { style: 'font-family:var(--mono,monospace);font-weight:700' }, l.article),
@@ -22106,26 +22184,47 @@ function rvgiLigne(l) {
         style: 'padding:3px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);'
           + 'color:var(--text2);font-family:inherit;font-size:11px;cursor:pointer',
         on: { click: () => rvgiApparier(l, null) },
-      }, 'Délier')));
+      }, 'Délier'),
+      isMatieresAdmin() && !S.stockReadOnly ? el('button', {
+        type: 'button', cls: 'recep-rvgi-mini',
+        attrs: { title: 'Modifier les paramètres de la référence MySifa (conditionnement, seuils…)' },
+        on: { click: () => rvgiOuvrirParametres(l) },
+      }, iconEl('settings', 12), ' Paramètres') : null));
     if (l.matiere_designation) tdMat.appendChild(el('div', { style: petit }, l.matiere_designation));
-  } else if ((l.propositions || []).length) {
+  } else {
+    const props = l.propositions || [];
+    const autres = l.autres_matieres || [];
+    const peutCreer = isMatieresAdmin() && !S.stockReadOnly;
     const sel = el('select', {
       style: 'flex:1;min-width:0;max-width:380px;padding:6px 8px;border-radius:7px;border:1px solid var(--border);'
         + 'background:var(--bg);color:var(--text);font-family:inherit;font-size:13px' },
-      el('option', { attrs: { value: '' } }, '— choisir —'),
-      ...l.propositions.map((p, i) => el('option', {
-        attrs: Object.assign({ value: String(p.matiere_id) }, i === 0 ? { selected: 'selected' } : {}),
-      }, p.reference + (p.designation && p.designation !== p.reference ? ' — ' + p.designation : '')
-         + '  (' + Math.round(p.score * 100) + ' %)')));
+      el('option', { attrs: { value: '' } }, props.length || autres.length ? '— choisir —' : '— aucune référence —'),
+      peutCreer ? el('option', { attrs: { value: '__creer' } }, '+ Créer une référence…') : null,
+      props.length ? el('optgroup', { attrs: { label: 'Proposées' } },
+        ...props.map((p, i) => el('option', {
+          attrs: Object.assign({ value: String(p.matiere_id) }, i === 0 ? { selected: 'selected' } : {}),
+        }, rvgiLibelleChoix(p, true)))) : null,
+      autres.length ? el('optgroup', { attrs: { label: 'Autres ' + (l.famille || 'références') } },
+        ...autres.map(p => el('option', { attrs: { value: String(p.matiere_id) } }, rvgiLibelleChoix(p, false)))) : null);
+    // Le libellé complet de la matière choisie, sous la liste : une option
+    // tronquée par la largeur du select ne montre pas le libellé technique.
+    const detail = el('div', { style: petit + ';max-width:380px;white-space:normal' });
+    const majDetail = () => {
+      const p = props.concat(autres).find(x => String(x.matiere_id) === sel.value);
+      detail.textContent = p ? rvgiLibelleChoix(p, false) : '';
+    };
+    sel.addEventListener('change', () => {
+      if (sel.value === '__creer') { sel.value = ''; rvgiCreerReference(l); }
+      majDetail();
+    });
+    majDetail();
     tdMat.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center' },
       sel,
       el('button', {
         cls: 'btn-sm', type: 'button',
-        on: { click: () => sel.value && rvgiApparier(l, Number(sel.value)) },
+        on: { click: () => sel.value && sel.value !== '__creer' && rvgiApparier(l, Number(sel.value)) },
       }, 'Apparier')));
-  } else {
-    tdMat.appendChild(el('span', { style: 'font-size:12px;color:var(--muted)' },
-      'Aucune référence proposée — apparier depuis Monitoring › Écarts matières RVGI'));
+    tdMat.appendChild(detail);
   }
   tr.appendChild(tdMat);
 
