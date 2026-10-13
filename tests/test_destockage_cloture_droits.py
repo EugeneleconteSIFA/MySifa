@@ -3,11 +3,10 @@ Déstockage à la clôture, et fermeture des mouvements MP à la main.
 
 Ce que ce test protège, dans l'ordre où ça casse :
 
-1. **La clôture déstocke, mais jamais rétroactivement.** Sans date de mise en
-   service, `destocker_a_la_cloture` ne fait rien ; avant cette date non plus.
-   C'est la même précaution que le balayage : 232 dossiers portaient déjà un
-   marquage « déstocké » sans qu'aucun mouvement n'ait été écrit, et les
-   rejouer réécrirait un historique que plus personne ne peut vérifier.
+1. **La clôture déstocke toujours** (décision du 13/10/2026). La date de mise
+   en service ne garde plus que le balayage, qui rattrape des dossiers
+   anciens ; une clôture est un événement du jour, la sortie part tout de
+   suite et la relecture de l'onglet Déstockage l'ajuste ensuite.
 2. **Un dossier déjà sorti du stock n'est pas resorti.** La double sortie est
    silencieuse et ne se voit qu'à l'inventaire suivant.
 3. **Le mouvement porte le nom de l'automatisme.** L'opérateur qui tape le
@@ -101,15 +100,12 @@ def base(depuis, etat="todo"):
     return conn
 
 
-print("\n1. La clôture ne déstocke pas rétroactivement")
-appels.clear()
-check("automatisme jamais mis en service : ne fait rien",
-      destocker_a_la_cloture(base(None), 7, {"id": 4}), None)
-check("clé présente mais vide : ne fait rien",
-      destocker_a_la_cloture(base(""), 7, {"id": 4}), None)
-check("mise en service dans le futur : ne fait rien",
-      destocker_a_la_cloture(base(DEMAIN), 7, {"id": 4}), None)
-check("aucun appel au déstockage", appels, [])
+print("\n1. La clôture déstocke sans attendre la mise en service")
+for depuis in (None, "", DEMAIN):
+    appels.clear()
+    check(f"mise en service = {depuis!r} : le dossier sort du stock",
+          (destocker_a_la_cloture(base(depuis), 7, {"id": 4}) or {}).get("etat"), "done")
+    check("un appel au déstockage", len(appels), 1)
 
 print("\n2. Un dossier déjà sorti du stock n'est pas resorti")
 appels.clear()

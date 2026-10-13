@@ -1424,6 +1424,15 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-var-table td{padding:9px 10px;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:top}
 .mp-var-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .mp-var-table .c-radio{width:28px}
+.mp-cond-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:10px 12px;margin:8px 0 10px;background:var(--bg);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--text2)}
+.mp-cond-titre{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.mp-cond-champ{display:inline-flex;align-items:center;gap:6px;margin-right:10px;white-space:nowrap;font-size:12px;color:var(--muted)}
+.mp-cond-inp{width:96px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
+.mp-cond-inp:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.mp-var-table td .mp-cond-inp{background:var(--bg)}
+.mp-modal.mp-modal-cond{max-width:980px;padding:22px}
+.mp-cond-scroll{max-height:62vh;overflow:auto;margin-top:10px}
+.mp-cond-table td{vertical-align:middle}
 .mp-var-table .c-type{min-width:260px}
 .mp-var-table .c-act{width:76px}
 .mp-var-grp td{background:var(--bg);padding:8px 10px;border-bottom:1px solid var(--border)}
@@ -2405,7 +2414,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
 <script src="/static/mysifa_stock_modals.js?v=encre2"></script>
-<script src="/static/mysifa_destockage.js?v=4"></script>
+<script src="/static/mysifa_destockage.js?v=6"></script>
 <script src="/static/mysifa_dock.js?v=2"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
@@ -9592,6 +9601,270 @@ function buildMatiereRefEditForm(item, onSaved) {
   return wrap;
 }
 
+// ── Conditionnement : quantité par unité de conditionnement ────────────────
+// Une seule définition par catégorie, partagée par la modale « Ajuster le
+// conditionnement », la fiche (onglet Fournisseurs) et la fiche référence :
+//   laizées          → mètres par bobine
+//   carton / mandrin → unités par palette (valorisation = palettes × unités × prix)
+//   adhésif          → cartons par palette × kg par carton
+function mpCondChamps(m) {
+  const cat = (m.categorie || '').toLowerCase();
+  if (mpIsLaizeeCategory(cat)) {
+    return [{ cle: 'metres_lineaires_par_bobine', label: 'm / bobine', step: '1', val: m.metres_lineaires_par_bobine }];
+  }
+  if (mpHasConditionnement(cat)) {
+    return [{ cle: 'unites_par_palette', label: mpUniteAchat(cat) + 's / palette', step: '1', val: m.unites_par_palette }];
+  }
+  if (cat === 'adhesif') {
+    return [
+      { cle: 'cartons_par_palette', label: 'cartons / palette', step: '1', val: m.cartons_par_palette },
+      { cle: 'kg_par_carton', label: 'kg / carton', step: '0.01', val: m.kg_par_carton },
+    ];
+  }
+  return [];
+}
+
+// Prix d'un consommable à son unité de conditionnement. Le prix de valorisation
+// (`prix_unitaire`) reste à l'unité d'achat : c'est lui que lisent la
+// valorisation et Coûts matières. On affiche et on saisit prix × facteur,
+// on enregistre prix ÷ facteur. Sans objet pour une matière laizée (prix au m²).
+function mpCondPrix(m) {
+  const cat = (m.categorie || '').toLowerCase();
+  if (mpIsLaizeeCategory(cat)) return null;
+  if (mpHasConditionnement(cat)) {
+    return { unite: 'palette', facteur: m.unites_par_palette > 0 ? Number(m.unites_par_palette) : null };
+  }
+  if (cat === 'adhesif') {
+    return { unite: 'palette', facteur: m.kg_par_palette > 0 ? Number(m.kg_par_palette) : null };
+  }
+  return { unite: m.unite || 'unité', facteur: 1 };
+}
+
+function mpLireNombre(inp) {
+  const raw = String((inp && inp.value) || '').replace(',', '.').trim();
+  if (raw === '') return { vide: true, value: null };
+  const v = parseFloat(raw);
+  if (isNaN(v) || v <= 0) return { error: true };
+  return { value: v };
+}
+
+// Enregistre le conditionnement d'une matière. `inputs` : { cle: input }.
+async function mpCondEnregistrer(m, inputs) {
+  const payload = {};
+  for (const c of mpCondChamps(m)) {
+    const inp = inputs[c.cle];
+    if (!inp) continue;
+    const r = mpLireNombre(inp);
+    if (r.error) throw new Error(c.label + ' : valeur > 0 obligatoire.');
+    payload[c.cle] = r.value;
+  }
+  if (!Object.keys(payload).length) return false;
+  await api('/api/stock/matieres/' + m.id, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return true;
+}
+
+// Enregistre un prix saisi à l'unité de conditionnement. Passe par la
+// valorisation : c'est elle qui historise et qui fait redescendre le prix dans
+// Coûts matières (`resync_depuis_mystock`).
+async function mpCondPrixEnregistrer(m, prixCond, facteur, unite) {
+  const prix = Math.round(prixCond / facteur * 1e6) / 1e6;
+  await api('/api/stock/valorisation/' + m.id, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prix_unitaire: prix,
+      note: 'Prix saisi par ' + unite + ' : ' + fN(prixCond) + ' €',
+    }),
+  });
+  return prix;
+}
+
+function mpCondInput(c) {
+  const inp = el('input', { cls: 'mp-cond-inp', attrs: {
+    type: 'number', min: '0', step: c.step, 'aria-label': c.label,
+  } });
+  inp.value = c.val != null && c.val > 0 ? String(c.val) : '';
+  return inp;
+}
+
+function mpCondPrixInput(m, cp) {
+  const prix = Number(m.prix_unitaire || 0);
+  const inp = el('input', { cls: 'mp-cond-inp', attrs: {
+    type: 'number', min: '0', step: '0.01', 'aria-label': 'Prix par ' + cp.unite,
+  } });
+  inp.value = prix > 0 && cp.facteur ? String(Math.round(prix * cp.facteur * 10000) / 10000) : '';
+  return inp;
+}
+
+// Bandeau de la fiche (onglet Fournisseurs) : conditionnement éditable en
+// place, et prix au conditionnement pour un consommable. Enregistré au `change`.
+function mpCondBar(m) {
+  const champs = mpCondChamps(m);
+  const cp = mpCondPrix(m);
+  if (!champs.length && !cp) return null;
+  const canEdit = !S.stockReadOnly && isMatieresAdmin();
+  const bar = el('div', { cls: 'mp-cond-bar' });
+  bar.appendChild(el('span', { cls: 'mp-cond-titre' }, 'Conditionnement'));
+  const recharger = () => refreshSelMatiere();
+  const inputs = {};
+  champs.forEach(c => {
+    if (!canEdit) {
+      bar.appendChild(el('span', null, el('strong', null, c.val > 0 ? fN(c.val) : '—'), ' ' + c.label));
+      return;
+    }
+    const inp = mpCondInput(c);
+    inputs[c.cle] = inp;
+    inp.addEventListener('change', async () => {
+      try {
+        await mpCondEnregistrer(m, inputs);
+        showToast('Conditionnement enregistré.', 'success');
+        await recharger();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+    bar.appendChild(el('label', { cls: 'mp-cond-champ' }, inp, el('span', null, c.label)));
+  });
+  if (!champs.length) bar.appendChild(el('span', { cls: 'mp-var-meta' }, 'à l\'unité'));
+  if (cp) {
+    const prix = Number(m.prix_unitaire || 0);
+    if (!cp.facteur) {
+      bar.appendChild(el('span', { cls: 'mp-var-meta' },
+        'Prix / ' + cp.unite + ' : renseigner le conditionnement d\'abord.'));
+    } else if (!canEdit) {
+      bar.appendChild(el('span', null, 'Prix ', el('strong', null,
+        prix > 0 ? fN(prix * cp.facteur) + ' € / ' + cp.unite : '—')));
+    } else {
+      const pInp = mpCondPrixInput(m, cp);
+      pInp.addEventListener('change', async () => {
+        const r = mpLireNombre(pInp);
+        if (r.vide) return;
+        if (r.error) { showToast('Prix : valeur > 0 obligatoire.', 'error'); return; }
+        try {
+          await mpCondPrixEnregistrer(m, r.value, cp.facteur, cp.unite);
+          showToast('Prix enregistré — valorisation et Coûts matières à jour.', 'success');
+          await recharger();
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+      bar.appendChild(el('label', { cls: 'mp-cond-champ' }, pInp, el('span', null, '€ / ' + cp.unite)));
+      if (cp.facteur !== 1 && prix > 0) {
+        bar.appendChild(el('span', { cls: 'mp-var-meta' },
+          'soit ' + fN(prix) + ' € / ' + mpUniteAchat(m.categorie)));
+      }
+    }
+  }
+  return bar;
+}
+
+// Modale « Ajuster le conditionnement » : une ligne par référence de la liste
+// affichée (filtres compris). Seules les lignes modifiées sont envoyées.
+function openCondAjustModal() {
+  if (!isMatieresAdmin() || S.stockReadOnly) return;
+  closeMroot();
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  const items = filterMatieresList().filter(m => mpCondChamps(m).length || mpCondPrix(m));
+  const overlay = el('div', {
+    cls: 'mp-modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
+  });
+  const box = el('div', { cls: 'mp-modal mp-modal-cond', on: { click: (e) => e.stopPropagation() } });
+  box.appendChild(el('div', { cls: 'mp-modal-head' },
+    el('h3', null, 'Ajuster le conditionnement'),
+    el('button', { cls: 'mp-modal-close', type: 'button',
+      attrs: { title: 'Fermer', 'aria-label': 'Fermer' }, on: { click: closeMroot } }, '×')));
+  box.appendChild(el('div', { cls: 'mp-modal-sub' },
+    'Quantité contenue dans une unité de conditionnement, ligne par ligne (références de la liste affichée). '
+    + 'Le prix au conditionnement d\'un consommable met à jour la valorisation et Coûts matières.'));
+  const lignes = [];
+  if (!items.length) {
+    box.appendChild(el('div', { cls: 'card-empty' }, 'Aucune référence dans cette sélection.'));
+  } else {
+    const tbl = el('table', { cls: 'mp-var-table mp-cond-table' });
+    tbl.appendChild(el('thead', null, el('tr', null,
+      el('th', null, 'Référence'), el('th', null, 'Désignation'),
+      el('th', null, 'Conditionnement'), el('th', null, 'Prix au conditionnement'))));
+    const tb = el('tbody');
+    items.forEach(m => {
+      const inputs = {};
+      const champs = mpCondChamps(m);
+      const tdCond = el('td', null, ...champs.map(c => {
+        const inp = mpCondInput(c);
+        inputs[c.cle] = inp;
+        return el('label', { cls: 'mp-cond-champ' }, inp, el('span', null, c.label));
+      }));
+      if (!champs.length) tdCond.appendChild(el('span', { cls: 'mp-var-meta' }, 'à l\'unité'));
+      const cp = mpCondPrix(m);
+      let pInp = null;
+      const tdPrix = el('td');
+      if (cp) {
+        pInp = mpCondPrixInput(m, cp);
+        tdPrix.appendChild(el('label', { cls: 'mp-cond-champ' }, pInp, el('span', null, '€ / ' + cp.unite)));
+      } else {
+        tdPrix.appendChild(el('span', { cls: 'mp-var-meta' }, 'prix au m² — fiche matière'));
+      }
+      [...Object.values(inputs), pInp].forEach(i => { if (i) i.dataset.initial = i.value; });
+      lignes.push({ m, inputs, pInp, cp });
+      tb.appendChild(el('tr', null,
+        el('td', null, el('strong', null, m.reference || '')),
+        el('td', null, m.designation || ''), tdCond, tdPrix));
+    });
+    tbl.appendChild(tb);
+    box.appendChild(el('div', { cls: 'mp-var-scroll mp-cond-scroll' }, tbl));
+  }
+  const btnSave = el('button', { cls: 'btn', type: 'button' }, 'Enregistrer');
+  btnSave.addEventListener('click', async () => {
+    const modif = (i) => !!i && i.value !== i.dataset.initial;
+    const aFaire = lignes.filter(l => Object.values(l.inputs).some(modif) || modif(l.pInp));
+    if (!aFaire.length) { closeMroot(); return; }
+    btnSave.disabled = true;
+    let ok = 0;
+    const erreurs = [];
+    for (const l of aFaire) {
+      try {
+        if (Object.values(l.inputs).some(modif)) await mpCondEnregistrer(l.m, l.inputs);
+        if (modif(l.pInp)) {
+          const r = mpLireNombre(l.pInp);
+          if (r.error) throw new Error('prix : valeur > 0 obligatoire.');
+          if (!r.vide) {
+            // Le facteur suit le conditionnement saisi sur la même ligne.
+            const v = (k) => mpLireNombre(l.inputs[k]).value || 0;
+            let facteur = l.cp.facteur;
+            if (l.inputs.unites_par_palette) facteur = v('unites_par_palette');
+            if (l.inputs.cartons_par_palette) facteur = v('cartons_par_palette') * v('kg_par_carton');
+            if (!facteur) throw new Error('prix au conditionnement sans conditionnement renseigné.');
+            await mpCondPrixEnregistrer(l.m, r.value, facteur, l.cp.unite);
+          }
+        }
+        ok++;
+      } catch (err) {
+        erreurs.push((l.m.reference || '#' + l.m.id) + ' — ' + err.message);
+      }
+    }
+    btnSave.disabled = false;
+    await loadMatieres();
+    if (S.selMatiere) await refreshSelMatiere();
+    if (erreurs.length) {
+      showToast(erreurs.join(' · '), 'error');
+      return;
+    }
+    closeMroot();
+    showToast(ok + (ok > 1 ? ' références mises à jour.' : ' référence mise à jour.'), 'success');
+  });
+  box.appendChild(el('div', { cls: 'mp-modal-actions' },
+    el('div', { cls: 'mp-modal-actions-right' },
+      el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMroot } }, 'Annuler'),
+      btnSave)));
+  overlay.appendChild(box);
+  mroot.appendChild(overlay);
+}
+
 function buildMatieres() {
   if (S.matieres === null) {
     return el('div', { cls: 'content' }, el('div', { cls: 'hist-page' },
@@ -9633,6 +9906,14 @@ function buildMatieres() {
             type: 'button',
             on: { click: () => openMatieresAdminDrawer() },
           }, 'Gérer les références')
+        : null,
+      (isMatieresAdmin() && !S.stockReadOnly)
+        ? el('button', {
+            cls: 'btn',
+            type: 'button',
+            attrs: { title: 'Quantité par conditionnement et prix des consommables, ligne par ligne' },
+            on: { click: () => openCondAjustModal() },
+          }, 'Ajuster le conditionnement')
         : null,
     ),
   );
@@ -10745,6 +11026,8 @@ function buildMpVariantesTable(m) {
       : (stockData.disponible ? 'Stock : RVGI, par article fournisseur'
         : 'Stock RVGI indisponible (' + (stockData.motif || 'miroir absent') + ')')),
   ));
+  const condBar = mpCondBar(m);
+  if (condBar) card.appendChild(condBar);
   const lignesVues = lignesRvgi.filter(l => mpFiltreLigne(l, 'mpVarFiltre'));
   if (varGrain === 'laize') {
     card.appendChild(buildMpVarParLaize(m, lignesVues));
@@ -10823,7 +11106,7 @@ function buildMpVariantesTable(m) {
         el('td', null, (v.laizes && v.laizes.length) ? v.laizes.join(', ')
           : (stockArticle(v) && stockArticle(v).laizes.size
             ? [...stockArticle(v).laizes].sort((x, y) => x - y).map(x => fN(x)).join(', ') : '—')),
-        el('td', { cls: 'num' }, v.ml_bobine ? fN(v.ml_bobine) : '—'),
+        el('td', { cls: 'num' }, (canEdit && v.actif) ? mpVarMlInput(m, v) : (v.ml_bobine ? fN(v.ml_bobine) : '—')),
         el('td', { cls: 'num' },
           v.dernier_achat ? mpVarDate(v.dernier_achat) : '—',
           v.commandes_rvgi ? el('div', { cls: 'mp-var-meta' },
@@ -10896,6 +11179,29 @@ function buildMpVarParLaize(m, lignes) {
     el('td', { cls: 'num' }, ''), el('td', null, '')));
   tbl.appendChild(tb);
   return el('div', { cls: 'mp-var-scroll' }, tbl);
+}
+
+// Longueur de bobine chez CE fournisseur (variante). Le conditionnement de la
+// matière, lui, se règle dans le bandeau au-dessus de la table.
+function mpVarMlInput(m, v) {
+  const inp = mpCondInput({ step: '1', label: 'm / bobine chez ' + (v.fournisseur_nom || 'ce fournisseur'), val: v.ml_bobine });
+  inp.placeholder = m.metres_lineaires_par_bobine > 0 ? String(m.metres_lineaires_par_bobine) : '';
+  inp.addEventListener('change', async () => {
+    const r = mpLireNombre(inp);
+    if (r.error) { showToast('m / bobine : valeur > 0 obligatoire.', 'error'); return; }
+    try {
+      const d = await api('/api/stock/variantes/' + v.id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ml_bobine: r.value }),
+      });
+      showToast('Conditionnement enregistré.', 'success');
+      mpVarSetData(d);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+  return inp;
 }
 
 async function setMpVariantePrincipal(m, v) {
@@ -25552,33 +25858,6 @@ function dstOuvrirRelecture(d) {
   });
 }
 
-// « Déstocker » n'écrit plus rien directement (10/09/2026) : il ouvre la
-// vérification, où l'on contrôle, corrige et complète avant de valider.
-function dstDestocker(d) {
-  dstOuvrirRelecture(d);
-}
-
-async function dstBalayer(btn) {
-  const a = dstEtat().auto || {};
-  if (!confirm('Déstocker automatiquement les dossiers terminés depuis la mise en service ?\n\n'
-      + (a.en_attente || 0) + ' dossier(s) terminé(s) attendent. Seuls ceux dont les données sont complètes sortiront, '
-      + 'sans vérification dossier par dossier. Pour vérifier un dossier avant sa sortie, utiliser « Déstocker » sur sa ligne.')) return;
-  if (btn) btn.disabled = true;
-  try {
-    const r = await api('/api/stock/destockage/auto/balayer', { method: 'POST' });
-    if (!r.actif) { showToast(r.message || 'Déstockage automatique non mis en service.', 'info'); }
-    else {
-      const t = r.traites || [];
-      const ok = t.filter(x => x.etat === 'done' || x.etat === 'reserve').length;
-      showToast(ok + ' dossier(s) déstocké(s), ' + (t.length - ok) + ' resté(s) bloqué(s).', 'success');
-    }
-    await loadDestockage();
-  } catch (e) {
-    showToast(e.message || 'Balayage impossible.', 'error');
-  }
-  if (btn) btn.disabled = false;
-}
-
 async function dstMiseEnService(valeur, btn) {
   if (btn) btn.disabled = true;
   try {
@@ -25602,12 +25881,6 @@ function dstCarteAutomatisme(st) {
   const aujourdHui = new Date().toISOString().slice(0, 10);
   const actions = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center' });
   if (!S.stockReadOnly) {
-    actions.appendChild(el('button', {
-      type: 'button',
-      style: btnStyle + 'background:var(--accent);border:1px solid var(--accent);color:white',
-      on: { click: (e) => dstBalayer(e.currentTarget) },
-      attrs: { title: 'Sortir du stock les dossiers terminés depuis la mise en service' },
-    }, 'Déstocker les dossiers terminés'));
     if (isMatieresAdmin()) {
       actions.appendChild(el('button', {
         type: 'button',
@@ -25660,13 +25933,11 @@ function dstTableDossiers(st) {
       on: { click: (e) => onClick(e.currentTarget) },
     }, label);
     if (!S.stockReadOnly) {
-      if (x.destockage === 'todo') {
-        // Bloqué : le calcul refuse, mais la vérification permet de saisir à
-        // la main et de compléter ce qui manque.
-        act.appendChild(btn(x.pret ? 'Déstocker' : 'Vérifier', () => dstDestocker(x), x.pret));
-      } else {
-        act.appendChild(btn('Relire', () => dstOuvrirRelecture(x), x.destockage === 'reserve' || !x.relu_par));
-      }
+      // Un seul geste, un seul mot (13/10/2026) : « Contrôler » ouvre la même
+      // modale quel que soit l'état. Le bouton est plein tant qu'il reste
+      // quelque chose à faire — à sortir, réserve à lever, sortie non relue.
+      const aFaire = x.destockage === 'todo' || x.destockage === 'reserve' || !x.relu_par;
+      act.appendChild(btn('Contrôler', () => dstOuvrirRelecture(x), aFaire));
     }
     if (st.vue === 'a_traiter') {
       const motif = x.destockage === 'reserve' ? (x.reserve || '')
@@ -26595,26 +26866,26 @@ var STOCK_GUIDES = {
     {
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`,
       title: 'Déstockage et écarts RVGI',
-      body: `Les mouvements de matières sont <strong>automatiques</strong> : les entrées viennent des réceptions RVGI, les sorties du déstockage des dossiers terminés. L'onglet <strong>Déstockage</strong> sert à <strong>relire</strong> ce qui a été écrit, la section <strong>Monitoring › Écarts matières RVGI</strong> à <strong>comparer</strong> avec RVGI. Le bouton <strong>À destocker</strong> du planning de prod est un simple repère pour le déstockage fait dans RVGI : il ne touche pas au stock MySifa.`,
+      body: `Les mouvements de matières sont <strong>automatiques</strong> : les entrées viennent des réceptions RVGI, les sorties du déstockage des dossiers terminés. L'onglet <strong>Déstockage</strong> sert à <strong>contrôler</strong> ce qui a été écrit, la section <strong>Monitoring › Écarts matières RVGI</strong> à <strong>comparer</strong> avec RVGI. Le bouton <strong>À destocker</strong> du planning de prod est un simple repère pour le déstockage fait dans RVGI : il ne touche pas au stock MySifa.`,
       extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous avez à faire</div><ul class="mguide-svc-list"><li>Traiter les dossiers bloqués ou avec réserves.</li><li>Relire le déstockage d'un dossier et ajuster au réel.</li><li>Regarder chaque jour les écarts sur 48 h et apparier les articles RVGI manquants.</li></ul></div></div>`
     },
     {
       title: 'À traiter',
-      body: `Les dossiers terminés pas encore sortis du stock. <span class="mguide-tag">Prêt</span> se déstocke d'un clic ; <span class="mguide-tag">Bloqué</span> dit ce qui manque (métrage, fiche qui ne boucle pas) ; <span class="mguide-tag">Réserves</span> signale une matière non rattachée.`,
+      body: `Les dossiers terminés pas encore sortis du stock. La clôture du dossier sort la matière d'elle-même ; « Contrôler » permet de la vérifier ou de la saisir. <span class="mguide-tag">Prêt</span> : données complètes ; <span class="mguide-tag">Bloqué</span> dit ce qui manque (métrage, fiche qui ne boucle pas) ; <span class="mguide-tag">Réserves</span> signale une matière non rattachée.`,
       illu: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
         <text x="12" y="20" font-size="12" fill="var(--text)" font-weight="800">Déstockage</text>
         <rect x="12" y="28" width="62" height="18" rx="9" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="43" y="40" font-size="8" fill="var(--accent)" text-anchor="middle" font-weight="700">À traiter</text>
         <rect x="80" y="28" width="62" height="18" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="111" y="40" font-size="8" fill="var(--text2)" text-anchor="middle">Déstockés</text>
         <g font-size="8">
-        <rect x="12" y="54" width="316" height="26" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="22" y="70" fill="var(--text)" font-weight="700">9932366</text><text x="80" y="70" fill="var(--text2)">Client A</text><rect x="170" y="60" width="40" height="14" rx="7" fill="var(--bg)" stroke="var(--accent)"/><text x="190" y="70" fill="var(--accent)" text-anchor="middle">Prêt</text><rect x="262" y="59" width="58" height="16" rx="5" fill="var(--accent)"/><text x="291" y="70" fill="#fff" text-anchor="middle" font-weight="700">Déstocker</text>
+        <rect x="12" y="54" width="316" height="26" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="22" y="70" fill="var(--text)" font-weight="700">9932366</text><text x="80" y="70" fill="var(--text2)">Client A</text><rect x="170" y="60" width="40" height="14" rx="7" fill="var(--bg)" stroke="var(--accent)"/><text x="190" y="70" fill="var(--accent)" text-anchor="middle">Prêt</text><rect x="262" y="59" width="58" height="16" rx="5" fill="var(--accent)"/><text x="291" y="70" fill="#fff" text-anchor="middle" font-weight="700">Contrôler</text>
         <rect x="12" y="84" width="316" height="26" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="22" y="100" fill="var(--text)" font-weight="700">9932375</text><text x="80" y="100" fill="var(--text2)">Client B</text><rect x="170" y="90" width="44" height="14" rx="7" fill="var(--bg)" stroke="var(--danger)"/><text x="192" y="100" fill="var(--danger)" text-anchor="middle">Bloqué</text><text x="222" y="100" fill="var(--muted)">métrage absent</text>
-        <rect x="12" y="114" width="316" height="26" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="22" y="130" fill="var(--text)" font-weight="700">9932423</text><text x="80" y="130" fill="var(--text2)">Client C</text><rect x="170" y="120" width="50" height="14" rx="7" fill="var(--bg)" stroke="var(--warn)"/><text x="195" y="130" fill="var(--warn)" text-anchor="middle">Réserves</text><rect x="262" y="119" width="58" height="16" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="291" y="130" fill="var(--text)" text-anchor="middle">Relire</text>
+        <rect x="12" y="114" width="316" height="26" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="22" y="130" fill="var(--text)" font-weight="700">9932423</text><text x="80" y="130" fill="var(--text2)">Client C</text><rect x="170" y="120" width="50" height="14" rx="7" fill="var(--bg)" stroke="var(--warn)"/><text x="195" y="130" fill="var(--warn)" text-anchor="middle">Réserves</text><rect x="262" y="119" width="58" height="16" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="291" y="130" fill="var(--text)" text-anchor="middle">Contrôler</text>
         </g>
       </svg>`
     },
     {
-      title: 'Relire un déstockage',
-      body: `« Relire » ouvre le détail : <span class="mguide-hl">consommé</span> calculé, <span class="mguide-hl">ajusté</span> à saisir dans l'unité de l'atelier (ml, kg, cartons, mandrins) et l'équivalent <span class="mguide-hl">simplifié</span> en bobines, tubes ou palettes. Une matière peut être remplacée par une autre de sa catégorie. Enregistrer marque le dossier comme relu.`,
+      title: 'Contrôler un déstockage',
+      body: `« Contrôler » ouvre le détail : <span class="mguide-hl">consommé</span> calculé, <span class="mguide-hl">ajusté</span> à saisir dans l'unité de l'atelier (ml, kg, cartons, mandrins) et l'équivalent <span class="mguide-hl">simplifié</span> en bobines, tubes ou palettes. Une matière peut être remplacée par une autre de sa catégorie. « Valider le contrôle » marque le dossier comme relu.`,
       illu: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
         <rect x="8" y="8" width="324" height="134" rx="10" fill="var(--card)" stroke="var(--border)"/>
         <g font-size="7" fill="var(--muted)"><text x="18" y="26">MATIÈRE</text><text x="170" y="26">CONSOMMÉ</text><text x="228" y="26">AJUSTÉ</text><text x="284" y="26">SIMPLIFIÉ</text></g>
@@ -26625,7 +26896,7 @@ var STOCK_GUIDES = {
         <text x="214" y="72" fill="var(--muted)" text-anchor="end">121 cartons</text><rect x="222" y="60" width="52" height="18" rx="4" fill="var(--bg)" stroke="var(--border)"/><text x="268" y="72" fill="var(--text)" text-anchor="end">121</text><text x="284" y="72" fill="var(--text2)">2,4 pal.</text>
         </g>
         <rect x="18" y="112" width="120" height="20" rx="6" fill="var(--bg)" stroke="var(--border)"/><text x="78" y="126" font-size="8" fill="var(--danger)" text-anchor="middle">Annuler tout</text>
-        <rect x="250" y="112" width="72" height="20" rx="6" fill="var(--accent)"/><text x="286" y="126" font-size="8" fill="#fff" text-anchor="middle" font-weight="700">Enregistrer</text>
+        <rect x="226" y="112" width="96" height="20" rx="6" fill="var(--accent)"/><text x="274" y="126" font-size="8" fill="#fff" text-anchor="middle" font-weight="700">Valider le contrôle</text>
       </svg>`
     },
     {
