@@ -497,7 +497,9 @@ async def inject_tache_quick(request: Request, call_next):
     # donc rien à y injecter.
     p = request.url.path
     _tags = b"".join(t for t in (_TACHE_QUICK_TAG, _BLOCS_TAG) if t not in body)
-    if p.startswith("/portail/") or not _tags:
+    # Le site vitrine (/website) est une maquette du site public : aucun outil
+    # interne (raccourci tâche, capture de blocs) ne doit y apparaître.
+    if p.startswith("/portail/") or p.startswith("/website") or not _tags:
         new_body = body
     else:
         # Insertion avant le DERNIER </body>, jamais le premier. Plusieurs pages
