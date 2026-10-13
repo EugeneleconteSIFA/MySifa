@@ -9996,6 +9996,112 @@ async function openCondAjustModal() {
   requestAnimationFrame(() => qInp.focus());
 }
 
+// Ordre d'affichage de la liste : triée dans une catégorie ; sous « Tout »,
+// regroupée par catégorie (frontaux éclatés par sous-section, comme les pills).
+// Partagé par l'écran et l'export, pour que le fichier suive l'écran.
+function mpGroupesAffichage(filtered) {
+  if ((S.matieresCat || 'tout') !== 'tout') {
+    return [{ label: null, items: filtered.slice().sort(mpCompareTri) }];
+  }
+  const buckets = new Map();
+  filtered.forEach(m => {
+    const c = mpCategorieKey(m.categorie);
+    const ss = (m.sous_section || '').trim();
+    const k = c === 'frontal' ? 'frontal:' + ss : c;
+    const label = c === 'frontal' ? (ss || 'Frontal (sans sous-section)') : (MP_CAT_LABELS[c] || c);
+    if (!buckets.has(k)) buckets.set(k, { label, items: [] });
+    buckets.get(k).items.push(m);
+  });
+  return Array.from(buckets.values())
+    .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
+    .map(b => ({ label: b.label, items: b.items.slice().sort(mpCompareTri) }));
+}
+
+// Lignes exportées : vue Matière depuis les données, vues fournisseur depuis
+// le tableau affiché (ses colonnes dépendent du filtre et de RVGI).
+function mpExportDonnees() {
+  const grain = (!S.matieresAccueil && MP_GRAINS.some(g => g.id === S.mpGrain)) ? S.mpGrain : 'matiere';
+  if (grain !== 'matiere') {
+    const tbl = document.querySelector('#scroll-area .mp-grain table');
+    if (!tbl) return null;
+    const colonnes = [...tbl.querySelectorAll('thead th')].map(th => th.textContent.trim());
+    const lignes = [];
+    tbl.querySelectorAll('tbody tr').forEach(tr => {
+      const tds = [...tr.children];
+      const span = n => parseInt(n.getAttribute('colspan') || '1', 10);
+      if (tds.length === 1 && span(tds[0]) >= colonnes.length) {
+        lignes.push({ groupe: true, cellules: [tds[0].textContent.replace(/\s+/g, ' ').trim()] });
+        return;
+      }
+      const cellules = [];
+      tds.forEach(td => {
+        cellules.push(td.textContent.replace(/\s+/g, ' ').trim());
+        for (let i = 1; i < span(td); i++) cellules.push('');
+      });
+      lignes.push({ groupe: false, cellules });
+    });
+    return { colonnes, lignes, vue: (MP_GRAINS.find(g => g.id === grain) || {}).label };
+  }
+  const colonnes = ['Catégorie', 'Désignation', 'Référence', 'Stock', 'Métrage', 'Seuil', 'Sous le seuil'];
+  const lignes = [];
+  mpGroupesAffichage(filterMatieresList()).forEach(g => {
+    if (g.label != null) lignes.push({ groupe: true, cellules: [g.label + ' · ' + g.items.length] });
+    g.items.forEach(m => {
+      const seuil = parseFloat(m.seuil_alerte) || 0;
+      lignes.push({ groupe: false, cellules: [
+        MP_CAT_LABELS[mpCategorieKey(m.categorie)] || m.categorie || '',
+        mpTitre(m),
+        mpSousTitre(m) || m.reference || '',
+        mpStockLine(m.quantite, m),
+        (mpIsLaizeeCategory(m.categorie) && m.stock_reel != null) ? mpFmtReel(m) : '',
+        seuil ? mpStockLine(seuil, m) : '',
+        m.en_alerte ? 'Oui' : '',
+      ] });
+    });
+  });
+  return { colonnes, lignes, vue: 'Matière' };
+}
+
+async function mpExporterListe(format) {
+  if (S.mpExporting) return;
+  const d = mpExportDonnees();
+  if (!d || !d.lignes.length) { showToast('Rien à exporter.', 'danger'); return; }
+  const cat = S.matieresCat || 'tout';
+  const pill = mpPillDefs().find(p => p.cat === cat && (!p.isFrontalSs
+    || (p.sousSection || MP_SOUS_SECTION_NONE) === (S.matieresSousSection || MP_SOUS_SECTION_NONE)));
+  const q = (S.matieresQ || '').trim();
+  const tri = (MP_TRIS.find(t => t.id === (S.mpTri || 'alpha')) || {}).label;
+  const sous = [
+    cat === 'tout' ? 'Toutes catégories' : (pill ? pill.label : cat),
+    q ? '« ' + q + ' »' : null,
+    'une ligne par ' + (d.vue || 'matière').toLowerCase(),
+    tri ? 'tri : ' + tri : null,
+  ].filter(Boolean).join(' · ');
+  S.mpExporting = true;
+  try {
+    const resp = await fetch('/api/stock/matieres/export-liste', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ format, titre: 'Matières premières', sous_titre: sous,
+        colonnes: d.colonnes, lignes: d.lignes }),
+    });
+    if (!resp.ok) throw new Error((await resp.text().catch(() => '')) || 'export impossible');
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'matieres-premieres-' + new Date().toISOString().slice(0, 10) + '.' + format;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  } catch (e) {
+    showToast('Export impossible : ' + (e?.message || 'erreur inconnue'), 'danger');
+  } finally {
+    S.mpExporting = false;
+  }
+}
+
 function buildMatieres() {
   if (S.matieres === null) {
     return el('div', { cls: 'content' }, el('div', { cls: 'hist-page' },
@@ -10020,6 +10126,16 @@ function buildMatieres() {
       ),
     ),
     el('div', { cls: 'hist-head-actions' },
+      el('button', {
+        cls: 'hist-export-btn', type: 'button',
+        attrs: { title: 'Exporter en Excel la liste affichée (filtres, tri et vue en cours)' },
+        on: { click: (e) => { e.stopPropagation(); mpExporterListe('xlsx'); } },
+      }, iconEl('download', 16), ' Excel'),
+      el('button', {
+        cls: 'hist-export-btn', type: 'button',
+        attrs: { title: 'Exporter en PDF la liste affichée (filtres, tri et vue en cours)' },
+        on: { click: (e) => { e.stopPropagation(); mpExporterListe('pdf'); } },
+      }, iconEl('download', 16), ' PDF'),
       // Le bouton montre l'icone du mode VERS lequel on bascule, pas du mode
       // courant : c'est ce que l'utilisateur obtient en cliquant.
       el('button', {
@@ -10207,44 +10323,13 @@ function buildMatieres() {
     // Cas 1 : pill spécifique (Couché, Mandrins, etc.) → rendu plat, pas de header.
     // Cas 2 : pill "Tout" → on regroupe par "catégorie virtuelle" où les frontaux
     //         sont éclatés par sous_section, exactement comme dans la barre de pills.
-    const curCat = S.matieresCat || 'tout';
-    if (curCat !== 'tout') {
-      filtered.slice().sort(mpCompareTri).forEach(renderMpCard);
-    } else {
-      // Construit des buckets par catégorie virtuelle
-      const buckets = new Map();
-      const keyFor = (m) => {
-        const c = mpCategorieKey(m.categorie);
-        if (c === 'frontal') {
-          const ss = (m.sous_section || '').trim();
-          return ss ? ('frontal:' + ss) : 'frontal:';
-        }
-        return c;
-      };
-      const labelFor = (m) => {
-        const c = mpCategorieKey(m.categorie);
-        if (c === 'frontal') {
-          const ss = (m.sous_section || '').trim();
-          return ss || 'Frontal (sans sous-section)';
-        }
-        return MP_CAT_LABELS[c] || c;
-      };
-      filtered.forEach(m => {
-        const k = keyFor(m);
-        if (!buckets.has(k)) buckets.set(k, { label: labelFor(m), items: [] });
-        buckets.get(k).items.push(m);
-      });
-      const keys = Array.from(buckets.keys()).sort((a, b) => {
-        const la = buckets.get(a).label, lb = buckets.get(b).label;
-        return la.localeCompare(lb, 'fr');
-      });
-      keys.forEach(k => {
-        const b = buckets.get(k);
+    mpGroupesAffichage(filtered).forEach(g => {
+      if (g.label != null) {
         list.appendChild(el('div', { cls: 'mp-section-head', style: mpSectionHeadStyle },
-          b.label + ' · ' + b.items.length));
-        b.items.slice().sort(mpCompareTri).forEach(renderMpCard);
-      });
-    }
+          g.label + ' · ' + g.items.length));
+      }
+      g.items.forEach(renderMpCard);
+    });
   }
   // Bandeau orange si des matières frontal/glassine/complexe sont incomplètes
   const banner = (S.matieresIncompleteCount > 0)
