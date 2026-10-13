@@ -1581,50 +1581,77 @@ def ton_couleur_sanity(couleur: str) -> str:
 
 # ── EUDR (règlement UE 2023/1115) — questionnaire fournisseurs ─────────────
 # Choix proposés dans le formulaire fournisseur (portail /portail/eudr/<jeton>).
-# Clé stockée en base → (libellé anglais montré au fournisseur, libellé
-# français montré dans MyQualité). Le formulaire part en anglais : c'est la
-# langue d'échange avec les fournisseurs papier.
+# Clé stockée en base → libellé dans chaque langue du formulaire (en, fr, es)
+# et libellé court montré dans MyQualité (« court »).
+EUDR_LANGUES = ("en", "fr", "es")
+
+
+def _c(en: str, fr: str, es: str, court: str | None = None) -> dict:
+    return {"en": en, "fr": fr, "es": es, "court": court or fr}
+
+
 EUDR_CHOIX = {
     "etablissement": {
-        "eu": ("Established in the European Union", "Établi dans l'UE"),
-        "non_eu": ("Established outside the European Union", "Établi hors UE"),
+        "eu": _c("Established in the European Union", "Établie dans l'Union européenne",
+                 "Establecida en la Unión Europea", "Établi dans l'UE"),
+        "non_eu": _c("Established outside the European Union", "Établie hors de l'Union européenne",
+                     "Establecida fuera de la Unión Europea", "Établi hors UE"),
     },
     "perimetre": {
-        "oui": ("Yes, all of them", "Oui, tous"),
-        "partiel": ("Some of them", "En partie"),
-        "non": ("No", "Non"),
-        "ne_sait_pas": ("Not determined yet", "Pas encore déterminé"),
+        "oui": _c("Yes, all of them", "Oui, tous", "Sí, todos", "Oui, tous"),
+        "partiel": _c("Some of them", "Une partie seulement", "Solo una parte", "En partie"),
+        "non": _c("No", "Non", "No"),
+        "ne_sait_pas": _c("Not determined yet", "Pas encore déterminé", "Aún no determinado"),
     },
     "role": {
-        "operateur": ("Operator — we place the products on the EU market and file due diligence statements",
-                      "Opérateur — dépose les DDS"),
-        "aval": ("Downstream operator — we rely on our suppliers' statements",
-                 "Opérateur en aval — s'appuie sur les DDS amont"),
-        "commercant": ("Trader — we resell without transformation", "Commerçant — revend sans transformer"),
-        "non_concerne": ("Not concerned", "Non concerné"),
-        "ne_sait_pas": ("Not determined yet", "Pas encore déterminé"),
+        "operateur": _c(
+            "Operator — we place the products on the EU market and file due diligence statements",
+            "Opérateur — nous mettons les produits sur le marché de l'UE et déposons les déclarations de diligence raisonnée",
+            "Operador — comercializamos los productos en el mercado de la UE y presentamos las declaraciones de diligencia debida",
+            "Opérateur — dépose les DDS"),
+        "aval": _c(
+            "Downstream operator — we rely on our suppliers' statements",
+            "Opérateur en aval — nous nous appuyons sur les déclarations de nos fournisseurs",
+            "Operador posterior — nos basamos en las declaraciones de nuestros proveedores",
+            "Opérateur en aval — s'appuie sur les DDS amont"),
+        "commercant": _c("Trader — we resell without transformation",
+                         "Commerçant — nous revendons sans transformation",
+                         "Comerciante — revendemos sin transformación",
+                         "Commerçant — revend sans transformer"),
+        "non_concerne": _c("Not concerned", "Non concerné", "No afectado"),
+        "ne_sait_pas": _c("Not determined yet", "Pas encore déterminé", "Aún no determinado"),
     },
     "transmission": {
-        "bl": ("On the delivery note", "Sur le bon de livraison"),
-        "facture": ("On the invoice", "Sur la facture"),
-        "edi": ("By EDI", "Par EDI"),
-        "portail": ("Through a customer portal", "Via un portail"),
-        "email": ("By email, per shipment", "Par email, à chaque envoi"),
-        "autre": ("Other (please specify)", "Autre"),
-        "ne_sait_pas": ("Not determined yet", "Pas encore déterminé"),
+        "bl": _c("On the delivery note", "Sur le bon de livraison", "En el albarán de entrega"),
+        "facture": _c("On the invoice", "Sur la facture", "En la factura"),
+        "edi": _c("By EDI", "Par EDI", "Por EDI"),
+        "portail": _c("Through a customer portal", "Via un portail client", "A través de un portal de cliente", "Via un portail"),
+        "email": _c("By email, per shipment", "Par email, à chaque envoi", "Por correo electrónico, en cada envío"),
+        "autre": _c("Other (please specify)", "Autre (à préciser)", "Otro (especificar)", "Autre"),
+        "ne_sait_pas": _c("Not determined yet", "Pas encore déterminé", "Aún no determinado"),
     },
     "ref_par_livraison": {
-        "oui": ("Yes", "Oui"),
-        "non": ("No", "Non"),
-        "ne_sait_pas": ("Not determined yet", "Pas encore déterminé"),
+        "oui": _c("Yes", "Oui", "Sí"),
+        "non": _c("No", "Non", "No"),
+        "ne_sait_pas": _c("Not determined yet", "Pas encore déterminé", "Aún no determinado"),
     },
     "geolocalisation": {
-        "oui": ("Yes, available now", "Oui, disponible"),
-        "en_cours": ("Being collected", "En cours de collecte"),
-        "non": ("No", "Non"),
-        "sans_objet": ("Not applicable (our supplier files the statement)", "Sans objet (DDS amont)"),
+        "oui": _c("Yes, available now", "Oui, disponible dès maintenant", "Sí, disponible ahora", "Oui, disponible"),
+        "en_cours": _c("Being collected", "En cours de collecte", "En proceso de recopilación"),
+        "non": _c("No", "Non", "No"),
+        "sans_objet": _c("Not applicable (our supplier files the statement)",
+                         "Sans objet (notre fournisseur dépose la déclaration)",
+                         "No aplica (nuestro proveedor presenta la declaración)",
+                         "Sans objet (DDS amont)"),
     },
 }
+
+
+def eudr_langue(valeur) -> str:
+    """Langue du questionnaire : en, fr ou es ; anglais par défaut."""
+    v = str(valeur or "").strip().lower()[:2]
+    return v if v in EUDR_LANGUES else "en"
+
 
 # Catégories de la fiche fournisseur (`fournisseurs_fsc.categories`) qui font
 # d'un fournisseur un fournisseur de bobines papier : c'est lui que l'EUDR vise.
@@ -1635,9 +1662,9 @@ EUDR_CATEGORIES_BOBINES = ("frontal", "complexe", "glassine")
 EUDR_REPONSE_AVANT = os.getenv("EUDR_REPONSE_AVANT", "2026-11-15")
 
 
-def eudr_libelle(champ: str, cle: str | None, langue: str = "fr") -> str:
-    """Libellé d'un choix EUDR ; la clé brute si elle est inconnue."""
-    paire = EUDR_CHOIX.get(champ, {}).get(cle or "")
-    if not paire:
+def eudr_libelle(champ: str, cle: str | None, langue: str = "court") -> str:
+    """Libellé d'un choix EUDR (« court » = MyQualité) ; la clé brute si inconnue."""
+    opt = EUDR_CHOIX.get(champ, {}).get(cle or "")
+    if not opt:
         return cle or ""
-    return paire[0] if langue == "en" else paire[1]
+    return opt.get(langue) or opt["court"]

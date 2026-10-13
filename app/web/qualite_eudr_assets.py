@@ -24,6 +24,8 @@ S.eudr = {
 };
 try{ const _eb = localStorage.getItem('mysifa_eudr_bobines'); if(_eb !== null) S.eudr.bobines = _eb === '1'; }catch(e){}
 
+const EUDR_LANGUES = {en:'Anglais', fr:'Français', es:'Espagnol'};
+
 const EUDR_STATUTS = {
   jamais:   {lbl:'Non sollicité', cls:''},
   envoyee:  {lbl:'Envoyé',        cls:'warn'},
@@ -80,7 +82,7 @@ function eudrRender(){
     <div class="fsc-hero">
       <div class="fsc-hero-txt">
         <h1>EUDR</h1>
-        <p>Règlement (UE) 2023/1115 sur les produits zéro déforestation. Chaque fournisseur reçoit un lien personnel vers un questionnaire (en anglais) : périmètre, rôle, codes NC, transmission des numéros de référence des déclarations de diligence raisonnée. Les réponses arrivent ici ; la personne qui a envoyé la demande est prévenue par email.</p>
+        <p>Règlement (UE) 2023/1115 sur les produits zéro déforestation. Chaque fournisseur reçoit un lien personnel vers un questionnaire (anglais, français ou espagnol) : périmètre, rôle, codes NC, transmission des numéros de référence des déclarations de diligence raisonnée. Les réponses arrivent ici ; la personne qui a envoyé la demande est prévenue par email.</p>
       </div>
       ${admin ? `<div class="fsc-hero-actions">
         <button type="button" class="btn btn-accent" id="eudr-send-btn" onclick="eudrOuvrirEnvoi()">Envoyer le questionnaire</button>
@@ -164,11 +166,14 @@ function eudrOuvrirEnvoi(){
       <button type="button" class="modal-close" onclick="closeMroot()">×</button>
       <div class="modal-hd"><h3>Envoyer le questionnaire EUDR</h3></div>
       <div class="modal-bd">
-        <p style="margin:0 0 12px">Un email en anglais part de votre boîte, avec un lien personnel par adresse. Un fournisseur déjà sollicité reçoit une relance avec le même lien. Séparez plusieurs adresses par une virgule.</p>
+        <p style="margin:0 0 12px">Un email part de votre boîte, avec un lien personnel par adresse, dans la langue choisie (le fournisseur peut en changer sur le formulaire). Un fournisseur déjà sollicité reçoit une relance avec le même lien. Séparez plusieurs adresses par une virgule.</p>
         ${choisis.map(l => `
           <div class="eudr-envoi">
             <div class="eudr-envoi-nom"><b>${escHtml(l.nom)}</b> <span class="fsc-muted">${escHtml((EUDR_STATUTS[l.statut]||{}).lbl||'')}</span></div>
             <input type="text" class="eudr-envoi-mail" data-id="${l.id}" value="${escAttr(l.emails.slice(0,1).join(', '))}" placeholder="adresse@fournisseur.com">
+            <select class="eudr-envoi-lang" data-id="${l.id}" title="Langue de l'email et du formulaire">
+              ${Object.keys(EUDR_LANGUES).map(k => `<option value="${k}"${(l.langue||'en')===k?' selected':''}>${EUDR_LANGUES[k]}</option>`).join('')}
+            </select>
           </div>`).join('')}
       </div>
       <div class="modal-ft">
@@ -183,6 +188,7 @@ async function eudrEnvoyer(){
   const envois = [...document.querySelectorAll('.eudr-envoi-mail')].map(i => ({
     fournisseur_id: parseInt(i.dataset.id, 10),
     emails: i.value.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean),
+    langue: (document.querySelector(`.eudr-envoi-lang[data-id="${i.dataset.id}"]`)||{}).value || 'en',
   }));
   const vides = envois.filter(e => !e.emails.length).length;
   if(vides){ showToast(`${vides} fournisseur(s) sans adresse — complétez ou décochez-les.`,'danger'); return; }
@@ -264,6 +270,7 @@ async function eudrVoirReponse(fid){
   .eudr-empty{padding:30px;text-align:center;color:var(--muted);background:var(--card);border:1px solid var(--border);border-radius:12px}
   .eudr-envoi{display:flex;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);flex-wrap:wrap}
   .eudr-envoi-nom{flex:1;min-width:180px}
+  .eudr-envoi-lang{padding:9px 10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:inherit;font-size:13px}
   .eudr-envoi-mail{flex:1.4;min-width:220px;padding:9px 12px;border-radius:10px;border:1px solid var(--border);
     background:var(--bg);color:var(--text);font:inherit;font-size:13px}
   .eudr-kv{display:grid;grid-template-columns:200px 1fr;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)}

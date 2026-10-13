@@ -113,7 +113,37 @@ check("statut ouvert après visite", ligne()["statut"], "ouverte")
 
 r = client.get(f"/api/portail/eudr/{TOKEN}")
 check("API publique : nom du fournisseur", r.json()["fournisseur"], "Papeterie Test")
-check("API publique : choix en anglais", r.json()["choix"]["role"]["non_concerne"], "Not concerned")
+check("API publique : choix en anglais", r.json()["choix"]["en"]["role"]["non_concerne"], "Not concerned")
+check("API publique : choix en espagnol", r.json()["choix"]["es"]["role"]["non_concerne"], "No afectado")
+check("langue par défaut de la demande : anglais", r.json()["langue"], "en")
+
+# Langues : un second fournisseur sollicité en espagnol.
+with get_db() as conn:
+    FID2 = conn.execute("INSERT INTO fournisseurs_fsc (nom, pays) VALUES ('Papelera Test', 'ES')").lastrowid
+    conn.execute("INSERT INTO fournisseur_contacts (fournisseur_id, nom, emails, langue, is_principal, actif, created_at)"
+                 " VALUES (?, 'Ana', '[\"ana@papelera.test\"]', 'es', 1, 1, '2026-10-13T08:00:00')", (FID2,))
+    conn.commit()
+l2 = next(f for f in client.get("/api/qualite/eudr/fournisseurs").json()["fournisseurs"] if f["id"] == FID2)
+check("langue proposée = langue du contact", l2["langue"], "es")
+n_av = len(ENVOIS)
+client.post("/api/qualite/eudr/demander",
+            json={"envois": [{"fournisseur_id": FID2, "emails": ["ana@papelera.test"], "langue": "es"}]})
+check("email en espagnol", ENVOIS[n_av]["subject"].startswith("EUDR — información solicitada"), True)
+check("lien ouvert en espagnol", "?lang=es" in ENVOIS[n_av]["html"], True)
+with get_db() as conn:
+    TOK2 = conn.execute("SELECT token FROM eudr_demandes WHERE fournisseur_id=?", (FID2,)).fetchone()[0]
+check("langue de la demande : espagnol", client.get(f"/api/portail/eudr/{TOK2}").json()["langue"], "es")
+client.post(f"/api/portail/eudr/{TOK2}/langue", json={"langue": "fr"})
+check("le fournisseur passe en français", client.get(f"/api/portail/eudr/{TOK2}").json()["langue"], "fr")
+client.post(f"/api/portail/eudr/{TOK2}/langue", json={"langue": "xx"})
+check("langue inconnue : anglais", client.get(f"/api/portail/eudr/{TOK2}").json()["langue"], "en")
+client.post(f"/api/portail/eudr/{TOK2}/langue", json={"langue": "fr"})
+l2 = next(f for f in client.get("/api/qualite/eudr/fournisseurs").json()["fournisseurs"] if f["id"] == FID2)
+check("relance proposée dans la langue choisie", l2["langue"], "fr")
+n_av = len(ENVOIS)
+client.post("/api/qualite/eudr/demander",
+            json={"envois": [{"fournisseur_id": FID2, "emails": ["ana@papelera.test"], "langue": l2["langue"]}]})
+check("relance en français", ENVOIS[n_av]["subject"], "Relance — EUDR — informations demandées par SIFA")
 
 base = {"repondant_nom": "Hans", "repondant_email": "hans@papeterie.test", "role": "operateur",
         "perimetre": "oui", "transmission": "bl", "codes_nc": "4810 92", "etablissement": "eu"}

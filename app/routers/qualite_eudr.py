@@ -26,7 +26,7 @@ from app.services import qualite_eudr as eudr
 from app.services.audit_service import log_action
 from app.services.email_service import send_email
 from app.web.eudr_portail_page import get_eudr_404_html, get_eudr_portail_html
-from config import EUDR_CHOIX, public_base_url
+from config import EUDR_CHOIX, EUDR_LANGUES, eudr_langue, public_base_url
 
 router = APIRouter(prefix="/api/qualite/eudr", tags=["qualite_eudr"])
 router_html = APIRouter(tags=["eudr_portail"])
@@ -59,7 +59,7 @@ def reponses_fournisseur(request: Request, fournisseur_id: int):
 def demander(request: Request, body: dict = Body(...)):
     """Envoie le lien du questionnaire.
 
-    `envois` : [{fournisseur_id, emails: [..]}]. L'expéditeur est la personne
+    `envois` : [{fournisseur_id, emails: [..], langue: en|fr|es}]. L'expéditeur est la personne
     qui clique, comme pour les appels d'offres : le fournisseur lui répond
     directement. Commit par fournisseur — un envoi parti reste noté même si
     le suivant plante.
@@ -90,18 +90,20 @@ def demander(request: Request, body: dict = Body(...)):
             if not adresses:
                 sans_email.append(four["nom"])
                 continue
+            langue = eudr_langue(e.get("langue"))
             ok_un = False
             for email in adresses:
-                dem = eudr.demande_pour(conn, fournisseur_id=fid, email=email)
+                dem = eudr.demande_pour(conn, fournisseur_id=fid, email=email, langue=langue)
                 sujet, corps = eudr.email_demande(
                     nom_fournisseur=four["nom"],
                     lien=f"{public_base_url()}/portail/eudr/{dem['token']}",
                     user_nom=user_nom,
                     relance=int(dem.get("nb_envois") or 0) > 0,
+                    langue=langue,
                 )
                 if send_email(to=email, subject=sujet, html_body=corps,
                               reply_to=expediteur, from_upn=expediteur):
-                    eudr.noter_envoi(conn, demande_id=int(dem["id"]), auteur=auteur)
+                    eudr.noter_envoi(conn, demande_id=int(dem["id"]), auteur=auteur, langue=langue)
                     ok_un = True
             (envoyes if ok_un else echecs).append(four["nom"])
             conn.commit()
@@ -158,9 +160,28 @@ def donnees_portail(request: Request, token: str):
     return {
         "fournisseur": dem["fournisseur_nom"],
         "email": dem["email"],
+        "langue": eudr_langue(dem.get("langue")),
         "precedente": precedente,
-        "choix": {c: {k: v[0] for k, v in opts.items()} for c, opts in EUDR_CHOIX.items()},
+        # Les trois langues d'un coup : changer de langue sur la page ne
+        # recharge rien et ne perd pas ce qui est déjà saisi.
+        "choix": {
+            lang: {c: {k: v[lang] for k, v in opts.items()} for c, opts in EUDR_CHOIX.items()}
+            for lang in EUDR_LANGUES
+        },
     }
+
+
+@router_api.post("/{token}/langue")
+def changer_langue(request: Request, token: str, body: dict = Body(...)):
+    """Le fournisseur change de langue : les relances suivront ce choix."""
+    ip = _client_ip(request)
+    with get_db() as conn:
+        dem = _demande_ou_none(conn, token, ip)
+        if not dem:
+            raise HTTPException(status_code=404, detail="Invalid or expired link.")
+        eudr.noter_langue(conn, dem, (body or {}).get("langue"))
+        conn.commit()
+    return {"ok": True}
 
 
 @router_api.post("/{token}")
@@ -175,6 +196,8 @@ def repondre(request: Request, token: str, body: dict = Body(...)):
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
         eudr.enregistrer_reponse(conn, demande=dem, reponse=reponse, ip=ip)
+        if (body or {}).get("langue"):
+            eudr.noter_langue(conn, dem, body["langue"])
         conn.commit()
 
     # La notification ne doit jamais faire échouer la réponse du fournisseur.
