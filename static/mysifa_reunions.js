@@ -19,6 +19,9 @@
   // Resolu a chaque appel, pas une fois au montage : les fonctions de rendu
   // pur s'en servent aussi, et elles s'appellent sans passer par monter().
   function rp(){ return window.MySifaRetourProd || null; }
+  // Preference de confort, par navigateur : jamais un etat qui doit survivre.
+  function lirePref(k){ try{ return window.localStorage.getItem(k); }catch(e){ return null; } }
+  function ecrirePref(k, v){ try{ window.localStorage.setItem(k, v); }catch(e){} }
   var S = {
     vue: 'liste',                      // 'liste' | 'reunion'
     reunions: null,                    // liste chargee
@@ -40,7 +43,9 @@
     contexteCharge: false,
     suivi: null,                       // toutes les actions, toutes reunions
     filtreResp: '',                    // '' = tous, '~' = non attribuees
-    toutTermine: false                 // colonne Termine depliee
+    toutTermine: false,                // colonne Termine depliee en entier
+    voirTermine: lirePref('reu.voirTermine') === '1',
+    rechercheA: ''                     // recherche dans le suivi
   };
   var racineCourante = null;
   var notesTimer = null;
@@ -338,64 +343,107 @@
       + '</article>';
   }
 
-  function rendreSuivi(l, etat){
-    if(l === null || l === undefined) return '<div class="reu-vide">Chargement&hellip;</div>';
-    etat = etat || {};
-    var aujourdhui = etat.aujourdhui || jourLocalIso(new Date());
+  /* Le tableau ne donne pas la meme place a chaque colonne. « A faire » est
+     toujours la plus longue : elle prend la moitie de la largeur et range ses
+     tuiles sur plusieurs rangs, plutot que de descendre sur trois ecrans.
+     « En cours » et « En attente » sont courtes par nature. « Termine » est de
+     l'historique : repliee par defaut en une bande etroite, qui reste une
+     cible de depot — on y glisse une tuile pour la clore sans deplier. */
+  function filtrer(l, etat){
     var filtre = etat.filtreResp || '';
-    var vues = l.filter(function(a){
+    var q = pli(etat.recherche || '');
+    return l.filter(function(a){
       var n = String(a.responsable || '').trim();
-      if(!filtre) return true;
-      if(filtre === NON_ATTRIBUE) return !n;
-      return n === filtre;
+      if(filtre === NON_ATTRIBUE && n) return false;
+      if(filtre && filtre !== NON_ATTRIBUE && n !== filtre) return false;
+      if(q && pli([a.texte, n, a.reunion_titre].join(' ')).indexOf(q) === -1) return false;
+      return true;
     });
-    var gens = responsables(l);
-    var sansResp = l.filter(function(a){
-      return !String(a.responsable || '').trim() && statutDe(a) !== 'termine';
-    }).length;
-    var filtres = '<div class="reu-filtres" role="group" aria-label="Filtrer par responsable">'
-      + '<button type="button" class="reu-filtre' + (!filtre ? ' on' : '') + '" data-resp="">Tous</button>'
-      + gens.map(function(g){
-          return '<button type="button" class="reu-filtre' + (filtre === g.nom ? ' on' : '') + '" '
-               + 'data-resp="' + escA(g.nom) + '">' + esc(g.nom)
-               + (g.ouvertes ? ' <b>' + g.ouvertes + '</b>' : '') + '</button>';
-        }).join('')
-      + (sansResp
-          ? '<button type="button" class="reu-filtre' + (filtre === NON_ATTRIBUE ? ' on' : '') + '" '
-            + 'data-resp="' + NON_ATTRIBUE + '">Non attribu\u00e9es <b>' + sansResp + '</b></button>'
-          : '')
-      + '</div>';
+  }
+
+  function rendreBoard(l, etat){
+    var aujourdhui = etat.aujourdhui || jourLocalIso(new Date());
+    var vues = filtrer(l, etat);
+    var voir = !!etat.voirTermine;
     var colonnes = STATUTS.map(function(s){
       var cartes = vues.filter(function(a){ return statutDe(a) === s.code; });
+      var total = cartes.length;
       if(s.code === 'termine'){
+        if(!voir){
+          return '<section class="reu-col reu-rail st-termine" data-col="termine" '
+            + 'data-r="voir-termine" title="Afficher les actions terminées">'
+            + '<span class="reu-col-p" aria-hidden="true"></span>'
+            + '<span class="reu-rail-t">Terminé · ' + total + '</span>'
+            + '<span class="reu-rail-h">Déposer ici pour terminer</span>'
+            + '</section>';
+        }
         // Les plus recemment terminees d'abord : le reste est de l'historique.
         cartes.sort(function(x, y){
           return String(y.fait_le || '').localeCompare(String(x.fait_le || ''));
         });
       }
-      var total = cartes.length;
       var masquees = 0;
       if(s.code === 'termine' && !etat.toutTermine && total > TERMINE_VUES){
         masquees = total - TERMINE_VUES;
         cartes = cartes.slice(0, TERMINE_VUES);
       }
+      var retards = cartes.filter(function(a){ return enRetard(a, aujourdhui); }).length;
       return '<section class="reu-col st-' + s.code + '" data-col="' + s.code + '">'
         + '<h3><span class="reu-col-p" aria-hidden="true"></span>' + esc(s.libelle)
-        + ' <span class="reu-col-n">' + total + '</span></h3>'
+        + (retards ? ' <span class="reu-col-retard">' + retards + ' en retard</span>' : '')
+        + ' <span class="reu-col-n">' + total + '</span>'
+        + (s.code === 'termine'
+            ? '<button type="button" class="reu-col-replier" data-r="voir-termine" '
+              + 'title="Replier" aria-label="Replier la colonne Terminé">×</button>'
+            : '')
+        + '</h3>'
+        + '<div class="reu-col-cartes">'
         + (cartes.length
             ? cartes.map(function(a){ return rendreCarte(a, aujourdhui); }).join('')
-            : '<div class="reu-col-vide">Aucune action.</div>')
+            : '<div class="reu-col-vide">' + (s.code === 'a_faire' ? 'Rien à faire.' : 'Déposez une action ici.') + '</div>')
+        + '</div>'
         + (masquees
             ? '<button type="button" class="reu-col-plus" data-r="tout-termine">'
               + 'Voir les ' + masquees + ' plus anciennes</button>'
             : '')
         + '</section>';
     }).join('');
+    return '<div class="reu-board' + (voir ? ' avec-termine' : '') + '">' + colonnes + '</div>';
+  }
+
+  function rendreSuivi(l, etat){
+    if(l === null || l === undefined) return '<div class="reu-vide">Chargement&hellip;</div>';
+    etat = etat || {};
     if(!l.length){
-      return '<div class="reu-vide">Aucune action d\u00e9cid\u00e9e pour l\'instant.<br>'
-           + 'Les actions se cr\u00e9ent pendant une r\u00e9union et se suivent ici.</div>';
+      return '<div class="reu-vide">Aucune action décidée pour l\'instant.<br>'
+           + 'Les actions se créent pendant une réunion et se suivent ici.</div>';
     }
-    return filtres + '<div class="reu-board">' + colonnes + '</div>';
+    var filtre = etat.filtreResp || '';
+    var gens = responsables(l);
+    var sansResp = l.filter(function(a){
+      return !String(a.responsable || '').trim() && statutDe(a) !== 'termine';
+    }).length;
+    var barre = '<div class="reu-suivi-barre">'
+      + '<div class="reu-filtres" role="group" aria-label="Filtrer par responsable">'
+      + '<button type="button" class="reu-filtre' + (!filtre ? ' on' : '') + '" data-resp="">Tous</button>'
+      + gens.map(function(g){
+          return '<button type="button" class="reu-filtre' + (filtre === g.nom ? ' on' : '') + '" '
+               + 'data-resp="' + escA(g.nom) + '">'
+               + '<span class="reu-avatar" aria-hidden="true">' + esc(initiales(g.nom)) + '</span>'
+               + esc(g.nom) + (g.ouvertes ? ' <b>' + g.ouvertes + '</b>' : '') + '</button>';
+        }).join('')
+      + (sansResp
+          ? '<button type="button" class="reu-filtre' + (filtre === NON_ATTRIBUE ? ' on' : '') + '" '
+            + 'data-resp="' + NON_ATTRIBUE + '">Non attribuées <b>' + sansResp + '</b></button>'
+          : '')
+      + '</div>'
+      + '<input type="search" id="reu-suivi-q" class="reu-suivi-q" placeholder="Rechercher une action" '
+      +   'aria-label="Rechercher une action" value="' + escA(etat.recherche || '') + '">'
+      + '<button type="button" class="reu-filtre' + (etat.voirTermine ? ' on' : '') + '" '
+      +   'data-r="voir-termine" aria-pressed="' + (etat.voirTermine ? 'true' : 'false') + '">'
+      +   (etat.voirTermine ? 'Masquer les terminées' : 'Afficher les terminées') + '</button>'
+      + '</div>';
+    return barre + '<div id="reu-board-zone">' + rendreBoard(l, etat) + '</div>';
   }
 
   function rendreAccueil(reunions, suivi, etat){
@@ -779,6 +827,7 @@
       var hist = vue.querySelector('details.reu-hist');
       vue.innerHTML = rendreAccueil(S.reunions, S.suivi, {
         filtreResp: S.filtreResp, toutTermine: S.toutTermine,
+        voirTermine: S.voirTermine, recherche: S.rechercheA,
         histOuvert: hist ? hist.open : false
       });
     }
@@ -1025,6 +1074,11 @@
         }
         if(act === 'lancer'){ ouvrirModale(rac); return; }
         if(act === 'tout-termine'){ S.toutTermine = true; peindre(); return; }
+        if(act === 'voir-termine'){
+          S.voirTermine = !S.voirTermine;
+          ecrirePref('reu.voirTermine', S.voirTermine ? '1' : '0');
+          peindre(); return;
+        }
         if(el.hasAttribute('data-resp')){
           S.filtreResp = el.getAttribute('data-resp') || ''; peindre(); return;
         }
@@ -1070,6 +1124,15 @@
       if(ev.target.id === 'reu-p-q'){
         S.rechercheP = ev.target.value;
         peindreParticipants(rac, true);
+        return;
+      }
+      if(ev.target.id === 'reu-suivi-q'){
+        S.rechercheA = ev.target.value;
+        var zone = rac.querySelector('#reu-board-zone');
+        if(zone && S.suivi) zone.innerHTML = rendreBoard(S.suivi, {
+          filtreResp: S.filtreResp, toutTermine: S.toutTermine,
+          voirTermine: S.voirTermine, recherche: S.rechercheA
+        });
         return;
       }
       if(ev.target.id !== 'reu-notes') return;
@@ -1330,7 +1393,7 @@
     S.veille = null; S.veilleOuverte = false; S.veilleChargee = false;
     S.personnes = []; S.rechercheP = '';
     S.contexteCharge = false;
-    S.suivi = null; S.filtreResp = ''; S.toutTermine = false;
+    S.suivi = null; S.filtreResp = ''; S.toutTermine = false; S.rechercheA = '';
   }
 
   window.MySifaReunions = {

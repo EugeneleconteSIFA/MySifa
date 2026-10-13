@@ -349,10 +349,46 @@ body.reduce-anim .reu-btn:hover{transform:none !important}
 .reu-filtre b{color:var(--muted);font-weight:700;margin-left:3px}
 .reu-filtre:hover{border-color:var(--accent);color:var(--accent)}
 .reu-filtre.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
-.reu-board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;
-  align-items:start;margin-bottom:18px}
-@media (max-width:1000px){.reu-board{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:600px){.reu-board{grid-template-columns:minmax(0,1fr)}}
+.reu-suivi-barre{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:0 0 12px}
+.reu-suivi-barre .reu-filtres{margin:0;flex:1;min-width:0}
+.reu-filtre{display:inline-flex;align-items:center;gap:6px}
+.reu-filtre .reu-avatar{width:18px;height:18px;font-size:9px}
+.reu-suivi-q{background:var(--card);border:1px solid var(--border);border-radius:999px;
+  padding:6px 13px;font-size:13px;color:var(--text);font-family:inherit;width:220px;max-width:100%}
+.reu-suivi-q:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.reu-board{display:grid;gap:12px;align-items:start;margin-bottom:18px;
+  grid-template-columns:minmax(0,2.2fr) minmax(0,1fr) minmax(0,1fr) 56px}
+.reu-board.avec-termine{grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)}
+.reu-col.st-a_faire .reu-col-cartes{display:grid;gap:9px;
+  grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
+.reu-col-cartes{display:flex;flex-direction:column;gap:9px;min-width:0}
+.reu-col.st-a_faire .reu-col-vide{grid-column:1/-1}
+@media (max-width:1100px){
+  .reu-board,.reu-board.avec-termine{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .reu-col.st-a_faire{grid-column:1/-1}
+  .reu-rail{grid-column:1/-1}
+}
+@media (max-width:600px){
+  .reu-board,.reu-board.avec-termine{grid-template-columns:minmax(0,1fr)}
+  .reu-suivi-q{width:100%}
+}
+/* Colonne Termine repliee : une bande, cliquable et cible de depot. */
+.reu-rail{cursor:pointer;align-items:center;justify-content:flex-start;padding:14px 0;
+  min-height:220px;gap:10px;align-self:stretch}
+.reu-rail-t,.reu-rail-h{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap}
+.reu-rail-t{font-size:12px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;
+  color:var(--text2)}
+.reu-rail-h{font-size:11px;color:var(--muted)}
+.reu-rail:hover{border-color:var(--success,#34d399)}
+@media (max-width:1100px){
+  .reu-rail{min-height:0;flex-direction:row;padding:10px 14px}
+  .reu-rail-t,.reu-rail-h{writing-mode:horizontal-tb;transform:none}
+}
+.reu-col-retard{font-size:10.5px;font-weight:700;color:var(--danger);text-transform:none;
+  letter-spacing:0}
+.reu-col-replier{background:transparent;border:none;color:var(--muted);cursor:pointer;
+  font-size:16px;line-height:1;padding:0 2px;font-family:inherit}
+.reu-col-replier:hover{color:var(--text)}
 .reu-col{background:var(--bg);border:1px solid var(--border);border-radius:14px;
   padding:10px;display:flex;flex-direction:column;gap:9px;min-width:0;min-height:140px;
   border-top:3px solid var(--muted);
@@ -376,7 +412,7 @@ body.reduce-anim .reu-btn:hover{transform:none !important}
   cursor:pointer;font-family:inherit;padding:4px;text-align:left}
 
 .reu-carte{position:relative;background:var(--card);border:1px solid var(--border);
-  border-radius:12px;padding:11px 12px 10px 15px;display:flex;flex-direction:column;gap:8px;
+  border-radius:12px;padding:10px 11px 9px 14px;display:flex;flex-direction:column;gap:7px;
   min-width:0;cursor:grab;box-shadow:0 1px 2px rgba(0,0,0,.04);
   transition:box-shadow var(--mo-fast,.15s) var(--ease-out,ease),
              transform var(--mo-fast,.15s) var(--ease-out,ease),
@@ -405,7 +441,7 @@ body.reduce-anim .reu-btn:hover{transform:none !important}
   padding:2px 8px}
 .reu-carte.retard .reu-carte-quand{color:var(--danger);border-color:var(--danger);
   background:transparent}
-.reu-carte-t{font-size:15px;font-weight:700;color:var(--text);line-height:1.35;
+.reu-carte-t{font-size:14.5px;font-weight:700;color:var(--text);line-height:1.35;
   overflow-wrap:anywhere}
 .reu-carte-t::first-letter{text-transform:uppercase}
 .reu-carte.st-termine .reu-carte-t{color:var(--muted);text-decoration:line-through;font-weight:600}
