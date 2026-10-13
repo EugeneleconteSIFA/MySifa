@@ -3059,6 +3059,21 @@ def _candidats_remplacement(conn, categories: set, mod_laize, perte_pct) -> dict
         _SQL_MATIERE_CONV + " WHERE categorie IN (%s) "
         "   AND COALESCE(actif, 1) = 1 AND COALESCE(brouillon, 0) = 0 "
         " ORDER BY reference" % marques, tuple(cats)).fetchall()]
+    # Stock et fournisseur : ce qui départage deux références voisines au
+    # moment de choisir (on prend celle qui est réellement en rayon).
+    stocks = {int(s["matiere_id"]): float(s["quantite"] or 0) for s in conn.execute(
+        "SELECT matiere_id, quantite FROM mp_stock").fetchall()}
+    fournisseurs: dict = {}
+    try:
+        for f in conn.execute(
+                "SELECT v.matiere_id, f.nom FROM mp_variantes v "
+                "JOIN fournisseurs_fsc f ON f.id = v.fournisseur_id "
+                "WHERE v.actif = 1 ORDER BY v.principal DESC, v.id").fetchall():
+            l = fournisseurs.setdefault(int(f["matiere_id"]), [])
+            if f["nom"] and f["nom"] not in l:
+                l.append(f["nom"])
+    except sqlite3.OperationalError:
+        pass  # mp_variantes absente : migration pas encore passée
     out: dict = {}
     for r in rows:
         kind = _kind_de_categorie(r["categorie"])
@@ -3066,6 +3081,8 @@ def _candidats_remplacement(conn, categories: set, mod_laize, perte_pct) -> dict
         out.setdefault(r["categorie"], []).append({
             "matiere_id": r["id"], "reference": r["reference"],
             "designation": r["designation"], "categorie": r["categorie"],
+            "stock": stocks.get(int(r["id"]), 0.0),
+            "fournisseurs": fournisseurs.get(int(r["id"]), []),
             "kind": kind, "conversion": conv,
             "laizes": (_laizes_matiere(conn, r["id"])
                        if r["categorie"] in _CATEGORIES_BOBINE else []),

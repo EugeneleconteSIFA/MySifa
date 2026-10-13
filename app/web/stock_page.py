@@ -2426,7 +2426,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
 <script src="/static/mysifa_stock_modals.js?v=encre2"></script>
-<script src="/static/mysifa_destockage.js?v=7"></script>
+<script src="/static/mysifa_destockage.js?v=8"></script>
 <script src="/static/mysifa_dock.js?v=2"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
@@ -26217,20 +26217,73 @@ function dstCarteAutomatisme(st) {
     ));
 }
 
+// Tri par en-tête : croissant, décroissant, puis ordre d'origine. Les valeurs
+// vides vont en bas dans les deux sens.
+function dstTrier(st, rows, cols) {
+  const t = st.tri;
+  const c = t && cols.find(x => x.k === t.k);
+  if (!c || !c.val) return rows;
+  const vide = v => v == null || v === '';
+  return rows.slice().sort((a, b) => {
+    const va = c.val(a), vb = c.val(b);
+    if (vide(va) && vide(vb)) return 0;
+    if (vide(va)) return 1;
+    if (vide(vb)) return -1;
+    const r = (typeof va === 'number' && typeof vb === 'number') ? va - vb
+      : String(va).localeCompare(String(vb), 'fr', { numeric: true, sensitivity: 'base' });
+    return t.sens === 'desc' ? -r : r;
+  });
+}
+
+function dstRafraichirListe(st) {
+  const cible = document.getElementById('dst-liste');
+  if (cible) { cible.innerHTML = ''; cible.appendChild(st.vue === 'mouvements' ? dstTableMouvements(st) : dstTableDossiers(st)); }
+}
+
+function dstEntetes(st, cols) {
+  return el('thead', {}, el('tr', {}, ...cols.map(c => {
+    if (!c.val) return el('th', {}, c.l);
+    const actif = st.tri && st.tri.k === c.k;
+    return el('th', {
+      style: 'cursor:pointer;user-select:none;white-space:nowrap' + (actif ? ';color:var(--accent)' : ''),
+      attrs: { title: 'Trier' },
+      on: { click: () => {
+        if (!actif) st.tri = { k: c.k, sens: 'asc' };
+        else if (st.tri.sens === 'asc') st.tri = { k: c.k, sens: 'desc' };
+        else st.tri = null;
+        dstRafraichirListe(st);
+      } },
+    }, c.l, el('span', { style: 'margin-left:4px;opacity:' + (actif ? '1' : '.35') },
+      actif ? (st.tri.sens === 'asc' ? '▴' : '▾') : '↕'));
+  })));
+}
+
 function dstTableDossiers(st) {
   const d = st.data || {};
   const q = (st.filtre || '').trim().toLowerCase();
-  const rows = (d.dossiers || []).filter(x => !q
-    || [x.reference, x.numero_of, x.client, x.machine].some(v => String(v || '').toLowerCase().includes(q)));
+  const cols = st.vue === 'a_traiter'
+    ? [{ k: 'dossier', l: 'Dossier', val: x => x.numero_of || x.reference || '' },
+       { k: 'client', l: 'Client', val: x => x.client || '' },
+       { k: 'machine', l: 'Machine', val: x => x.machine || '' },
+       { k: 'fin', l: 'Fin', val: x => x.fin || '' },
+       { k: 'etat', l: 'État', val: x => x.destockage === 'todo' ? (x.pret ? 'Prêt' : 'Bloqué') : (x.destockage || '') },
+       { k: 'motif', l: 'Motif', val: x => x.destockage === 'reserve' ? (x.reserve || '') : (x.pret ? '' : (x.blocage || '')) },
+       { k: '', l: '' }]
+    : [{ k: 'dossier', l: 'Dossier', val: x => x.numero_of || x.reference || '' },
+       { k: 'client', l: 'Client', val: x => x.client || '' },
+       { k: 'destocke', l: 'Déstocké', val: x => x.destockage_at || '' },
+       { k: 'par', l: 'Par', val: x => x.destockage_par || '' },
+       { k: 'relu', l: 'Relu', val: x => x.relu_at || '' },
+       { k: 'matieres', l: 'Matières sorties', val: x => (x.matieres || []).length },
+       { k: '', l: '' }];
+  const rows = dstTrier(st, (d.dossiers || []).filter(x => !q
+    || [x.reference, x.numero_of, x.client, x.machine].some(v => String(v || '').toLowerCase().includes(q))), cols);
   if (!rows.length) {
     return el('div', { cls: 'bes-empty' },
       st.vue === 'a_traiter' ? 'Aucun dossier terminé à déstocker sur la période.' : 'Aucun dossier déstocké sur la période.');
   }
   const table = el('table', { cls: 'bes-table' });
-  const entetes = st.vue === 'a_traiter'
-    ? ['Dossier', 'Client', 'Machine', 'Fin', 'État', 'Motif', '']
-    : ['Dossier', 'Client', 'Déstocké', 'Par', 'Relu', 'Matières sorties', ''];
-  table.appendChild(el('thead', {}, el('tr', {}, ...entetes.map(h => el('th', {}, h)))));
+  table.appendChild(dstEntetes(st, cols));
   const tbody = el('tbody', {});
   rows.forEach(x => {
     const ref = el('td', {},
@@ -26343,12 +26396,19 @@ const DST_NATURES = { automatique: 'Automatique', ajustement: 'Ajustement', annu
 function dstTableMouvements(st) {
   const mv = ((st.data || {}).mouvements || []);
   const q = (st.filtre || '').trim().toLowerCase();
-  const rows = mv.filter(m => !q
-    || [m.no_dossier, m.reference, m.designation, m.client, m.created_by_name].some(v => String(v || '').toLowerCase().includes(q)));
+  const cols = [
+    { k: 'date', l: 'Date', val: m => m.created_at || '' },
+    { k: 'dossier', l: 'Dossier', val: m => m.no_dossier || '' },
+    { k: 'matiere', l: 'Matière', val: m => m.reference || '' },
+    { k: 'nature', l: 'Nature', val: m => DST_NATURES[m.nature] || m.nature || '' },
+    { k: 'qte', l: 'Quantité', val: m => (m.type_mouvement === 'sortie' ? -1 : 1) * Number(m.quantite || 0) },
+    { k: 'apres', l: 'Stock après', val: m => m.quantite_apres == null ? null : Number(m.quantite_apres) },
+    { k: 'par', l: 'Par', val: m => m.created_by_name || '' }];
+  const rows = dstTrier(st, mv.filter(m => !q
+    || [m.no_dossier, m.reference, m.designation, m.client, m.created_by_name].some(v => String(v || '').toLowerCase().includes(q))), cols);
   if (!rows.length) return el('div', { cls: 'bes-empty' }, 'Aucun mouvement de déstockage sur la période.');
   const table = el('table', { cls: 'bes-table' });
-  table.appendChild(el('thead', {}, el('tr', {},
-    ...['Date', 'Dossier', 'Matière', 'Nature', 'Quantité', 'Stock après', 'Par'].map(h => el('th', {}, h)))));
+  table.appendChild(dstEntetes(st, cols));
   const tbody = el('tbody', {});
   rows.forEach(m => {
     const sortie = m.type_mouvement === 'sortie';
@@ -26396,7 +26456,7 @@ function buildDestockage() {
       style: 'padding:7px 14px;border-radius:999px;font-family:inherit;font-weight:600;cursor:pointer;'
         + (actif ? 'background:var(--accent-bg);border:1px solid var(--accent);color:var(--accent)'
                  : 'background:var(--card);border:1px solid var(--border);color:var(--text)'),
-      on: { click: () => { if (st.vue !== v) { st.vue = v; st.data = null; loadDestockage(); } } },
+      on: { click: () => { if (st.vue !== v) { st.vue = v; st.data = null; st.tri = null; loadDestockage(); } } },
     }, label));
   });
   const periode = el('select', {
@@ -26411,8 +26471,7 @@ function buildDestockage() {
     style: 'padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-family:inherit;min-width:200px',
     on: { input: (e) => {
       st.filtre = e.target.value;
-      const cible = document.getElementById('dst-liste');
-      if (cible) { cible.innerHTML = ''; cible.appendChild(st.vue === 'mouvements' ? dstTableMouvements(st) : dstTableDossiers(st)); }
+      dstRafraichirListe(st);
     } },
   });
   barre.appendChild(recherche);

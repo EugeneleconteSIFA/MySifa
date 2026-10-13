@@ -93,6 +93,9 @@
     + '.dr-choix-it.on{background:var(--accent-bg)}'
     + '.dr-choix-it .ref{font-weight:700;color:var(--text)}'
     + '.dr-choix-it .des{color:var(--muted)}'
+    + '.dr-choix-it .info{font-size:11.5px;color:var(--muted);margin-top:1px}'
+    + '.dr-choix-it .stk{font-weight:700;color:var(--success)}'
+    + '.dr-choix-it .stk.vide{color:var(--danger)}'
     + '.dr-choix-it.sel .ref::before{content:"✓ ";color:var(--accent)}'
     + '.dr-choix-it.creer{color:var(--accent);font-weight:700;border-top:1px solid var(--border);border-radius:0 0 6px 6px}'
     + '.dr-choix-vide{padding:10px 9px;font-size:13px;color:var(--muted)}';
@@ -515,13 +518,24 @@
     const mots = normaliser(ch.q).split(/\s+/).filter(Boolean);
     const items = optionsLigne(ch.i).filter(o => {
       if (!mots.length) return true;
-      const t = normaliser((o.reference || '') + ' ' + (o.designation || ''));
+      const t = normaliser((o.reference || '') + ' ' + (o.designation || '') + ' ' + (o.fournisseurs || []).join(' '));
       return mots.every(m => t.includes(m));
     }).map(o => ({mid: o.matiere_id, o: o}));
     // Créer une référence depuis n'importe quelle ligne (02/10/2026) : la
     // bonne matière manque souvent alors qu'une autre a été proposée.
     if ((r.ligne.categories_remplacement || []).length) items.push({mid: '__creer__'});
     return items;
+  }
+
+  // Stock en rayon et fournisseur(s) : ce qui fait choisir entre deux
+  // références voisines. Le stock lu est celui d'avant ce déstockage.
+  function infosChoix(o) {
+    const u = ((o.conversion || {}).unite_reelle) || '';
+    const st = Number(o.stock || 0);
+    const four = (o.fournisseurs || []).join(', ');
+    return '<div class="info"><span class="' + (st > 0 ? 'stk' : 'stk vide') + '">Stock '
+      + esc(nombre(st)) + (u ? ' ' + esc(unite(u, st)) : '') + '</span>'
+      + (four ? ' · ' + esc(four) : '') + '</div>';
   }
 
   function rendreChoix() {
@@ -540,7 +554,8 @@
           + (x.mid === '__creer__' ? ' creer' : (x.mid === r.mid ? ' sel' : ''));
         const corps = x.mid === '__creer__' ? '+ Créer une référence…'
           : '<span class="ref">' + esc(x.o.reference || '') + '</span>'
-            + (x.o.designation && x.o.designation !== x.o.reference ? ' <span class="des">— ' + esc(x.o.designation) + '</span>' : '');
+            + (x.o.designation && x.o.designation !== x.o.reference ? ' <span class="des">— ' + esc(x.o.designation) + '</span>' : '')
+            + infosChoix(x.o);
         return '<div role="option" class="' + cls + '" data-dr-choix-k="' + k + '"'
           + (k === ch.actif ? ' aria-selected="true"' : '') + '>' + corps + '</div>';
       }).join('');
