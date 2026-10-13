@@ -2404,7 +2404,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=fiche-mp2">
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
-<script src="/static/mysifa_stock_modals.js?v=encre1"></script>
+<script src="/static/mysifa_stock_modals.js?v=encre2"></script>
 <script src="/static/mysifa_destockage.js?v=4"></script>
 <script src="/static/mysifa_dock.js?v=2"></script>
 <script src="/static/mysifa_postit.js"></script>
@@ -5915,7 +5915,7 @@ function mpLabelUnitesParPalette(cat) {
 function mpUniteAchat(cat) {
   const c = (cat || '').toLowerCase();
   if (c === 'carton') return 'carton';
-  if (c === 'adhesif') return 'kg';
+  if (c === 'adhesif' || c === 'encre') return 'kg';
   if (c === 'mandrin') return 'tube';
   return 'unité';
 }
