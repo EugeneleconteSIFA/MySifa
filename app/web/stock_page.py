@@ -22206,12 +22206,12 @@ async function rvgiAnnulerEntree(l, btn) {
 // Libellé d'une matière dans la liste d'appariement : la référence MySifa est
 // commerciale, c'est le libellé technique fournisseur et la laize qui
 // départagent deux candidates voisines.
+// Un seul libellé : le technique s'il existe (il contient déjà le commercial,
+// « PP blanc brillant 100 µm (Jindal 100 LH 243) »), sinon la référence.
 function rvgiLibelleChoix(p, avecScore) {
-  const morceaux = [p.reference || ('#' + p.matiere_id)];
-  if (p.designation && p.designation !== p.reference) morceaux.push(p.designation);
-  let txt = morceaux.join(' — ');
   const tech = (p.libelles_techniques || []).join(' / ');
-  if (tech) txt += ' · ' + tech;
+  let txt = tech || p.reference || ('#' + p.matiere_id);
+  if (!tech && p.designation && p.designation !== p.reference) txt += ' — ' + p.designation;
   const lz = (p.laizes_mm || []).map(v => fN(v)).join(', ');
   if (lz) txt += ' · laize ' + lz + ' mm';
   if (avecScore && p.score != null) txt += '  (' + Math.round(p.score * 100) + ' %)';
@@ -22291,12 +22291,11 @@ function rvgiLigne(l) {
         }, rvgiLibelleChoix(p, true)))) : null,
       autres.length ? el('optgroup', { attrs: { label: 'Autres ' + (l.famille || 'références') } },
         ...autres.map(p => el('option', { attrs: { value: String(p.matiere_id) } }, rvgiLibelleChoix(p, false)))) : null);
-    // Le libellé complet de la matière choisie, sous la liste : une option
-    // tronquée par la largeur du select ne montre pas le libellé technique.
-    const detail = el('div', { style: petit + ';max-width:380px;white-space:normal' });
+    // Libellé complet au survol : une option longue est coupée par la largeur
+    // du select, mais la répéter sous la liste doublait la hauteur de la ligne.
     const majDetail = () => {
       const p = props.concat(autres).find(x => String(x.matiere_id) === sel.value);
-      detail.textContent = p ? rvgiLibelleChoix(p, false) : '';
+      sel.title = p ? rvgiLibelleChoix(p, false) : '';
     };
     sel.addEventListener('change', () => {
       if (sel.value === '__creer') { sel.value = ''; rvgiCreerReference(l); }
@@ -22309,7 +22308,6 @@ function rvgiLigne(l) {
         cls: 'btn-sm', type: 'button',
         on: { click: () => sel.value && sel.value !== '__creer' && rvgiApparier(l, Number(sel.value)) },
       }, 'Apparier')));
-    tdMat.appendChild(detail);
   }
   tr.appendChild(tdMat);
 
