@@ -1424,6 +1424,15 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-var-table td{padding:9px 10px;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:top}
 .mp-var-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .mp-var-table .c-radio{width:28px}
+.mp-cond-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:10px 12px;margin:8px 0 10px;background:var(--bg);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--text2)}
+.mp-cond-titre{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.mp-cond-champ{display:inline-flex;align-items:center;gap:6px;margin-right:10px;white-space:nowrap;font-size:12px;color:var(--muted)}
+.mp-cond-inp{width:96px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
+.mp-cond-inp:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.mp-var-table td .mp-cond-inp{background:var(--bg)}
+.mp-modal.mp-modal-cond{max-width:980px;padding:22px}
+.mp-cond-scroll{max-height:62vh;overflow:auto;margin-top:10px}
+.mp-cond-table td{vertical-align:middle}
 .mp-var-table .c-type{min-width:260px}
 .mp-var-table .c-act{width:76px}
 .mp-var-grp td{background:var(--bg);padding:8px 10px;border-bottom:1px solid var(--border)}
@@ -9591,6 +9600,270 @@ function buildMatiereRefEditForm(item, onSaved) {
   return wrap;
 }
 
+// ── Conditionnement : quantité par unité de conditionnement ────────────────
+// Une seule définition par catégorie, partagée par la modale « Ajuster le
+// conditionnement », la fiche (onglet Fournisseurs) et la fiche référence :
+//   laizées          → mètres par bobine
+//   carton / mandrin → unités par palette (valorisation = palettes × unités × prix)
+//   adhésif          → cartons par palette × kg par carton
+function mpCondChamps(m) {
+  const cat = (m.categorie || '').toLowerCase();
+  if (mpIsLaizeeCategory(cat)) {
+    return [{ cle: 'metres_lineaires_par_bobine', label: 'm / bobine', step: '1', val: m.metres_lineaires_par_bobine }];
+  }
+  if (mpHasConditionnement(cat)) {
+    return [{ cle: 'unites_par_palette', label: mpUniteAchat(cat) + 's / palette', step: '1', val: m.unites_par_palette }];
+  }
+  if (cat === 'adhesif') {
+    return [
+      { cle: 'cartons_par_palette', label: 'cartons / palette', step: '1', val: m.cartons_par_palette },
+      { cle: 'kg_par_carton', label: 'kg / carton', step: '0.01', val: m.kg_par_carton },
+    ];
+  }
+  return [];
+}
+
+// Prix d'un consommable à son unité de conditionnement. Le prix de valorisation
+// (`prix_unitaire`) reste à l'unité d'achat : c'est lui que lisent la
+// valorisation et Coûts matières. On affiche et on saisit prix × facteur,
+// on enregistre prix ÷ facteur. Sans objet pour une matière laizée (prix au m²).
+function mpCondPrix(m) {
+  const cat = (m.categorie || '').toLowerCase();
+  if (mpIsLaizeeCategory(cat)) return null;
+  if (mpHasConditionnement(cat)) {
+    return { unite: 'palette', facteur: m.unites_par_palette > 0 ? Number(m.unites_par_palette) : null };
+  }
+  if (cat === 'adhesif') {
+    return { unite: 'palette', facteur: m.kg_par_palette > 0 ? Number(m.kg_par_palette) : null };
+  }
+  return { unite: m.unite || 'unité', facteur: 1 };
+}
+
+function mpLireNombre(inp) {
+  const raw = String((inp && inp.value) || '').replace(',', '.').trim();
+  if (raw === '') return { vide: true, value: null };
+  const v = parseFloat(raw);
+  if (isNaN(v) || v <= 0) return { error: true };
+  return { value: v };
+}
+
+// Enregistre le conditionnement d'une matière. `inputs` : { cle: input }.
+async function mpCondEnregistrer(m, inputs) {
+  const payload = {};
+  for (const c of mpCondChamps(m)) {
+    const inp = inputs[c.cle];
+    if (!inp) continue;
+    const r = mpLireNombre(inp);
+    if (r.error) throw new Error(c.label + ' : valeur > 0 obligatoire.');
+    payload[c.cle] = r.value;
+  }
+  if (!Object.keys(payload).length) return false;
+  await api('/api/stock/matieres/' + m.id, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return true;
+}
+
+// Enregistre un prix saisi à l'unité de conditionnement. Passe par la
+// valorisation : c'est elle qui historise et qui fait redescendre le prix dans
+// Coûts matières (`resync_depuis_mystock`).
+async function mpCondPrixEnregistrer(m, prixCond, facteur, unite) {
+  const prix = Math.round(prixCond / facteur * 1e6) / 1e6;
+  await api('/api/stock/valorisation/' + m.id, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prix_unitaire: prix,
+      note: 'Prix saisi par ' + unite + ' : ' + fN(prixCond) + ' €',
+    }),
+  });
+  return prix;
+}
+
+function mpCondInput(c) {
+  const inp = el('input', { cls: 'mp-cond-inp', attrs: {
+    type: 'number', min: '0', step: c.step, 'aria-label': c.label,
+  } });
+  inp.value = c.val != null && c.val > 0 ? String(c.val) : '';
+  return inp;
+}
+
+function mpCondPrixInput(m, cp) {
+  const prix = Number(m.prix_unitaire || 0);
+  const inp = el('input', { cls: 'mp-cond-inp', attrs: {
+    type: 'number', min: '0', step: '0.01', 'aria-label': 'Prix par ' + cp.unite,
+  } });
+  inp.value = prix > 0 && cp.facteur ? String(Math.round(prix * cp.facteur * 10000) / 10000) : '';
+  return inp;
+}
+
+// Bandeau de la fiche (onglet Fournisseurs) : conditionnement éditable en
+// place, et prix au conditionnement pour un consommable. Enregistré au `change`.
+function mpCondBar(m) {
+  const champs = mpCondChamps(m);
+  const cp = mpCondPrix(m);
+  if (!champs.length && !cp) return null;
+  const canEdit = !S.stockReadOnly && isMatieresAdmin();
+  const bar = el('div', { cls: 'mp-cond-bar' });
+  bar.appendChild(el('span', { cls: 'mp-cond-titre' }, 'Conditionnement'));
+  const recharger = () => refreshSelMatiere();
+  const inputs = {};
+  champs.forEach(c => {
+    if (!canEdit) {
+      bar.appendChild(el('span', null, el('strong', null, c.val > 0 ? fN(c.val) : '—'), ' ' + c.label));
+      return;
+    }
+    const inp = mpCondInput(c);
+    inputs[c.cle] = inp;
+    inp.addEventListener('change', async () => {
+      try {
+        await mpCondEnregistrer(m, inputs);
+        showToast('Conditionnement enregistré.', 'success');
+        await recharger();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+    bar.appendChild(el('label', { cls: 'mp-cond-champ' }, inp, el('span', null, c.label)));
+  });
+  if (!champs.length) bar.appendChild(el('span', { cls: 'mp-var-meta' }, 'à l\'unité'));
+  if (cp) {
+    const prix = Number(m.prix_unitaire || 0);
+    if (!cp.facteur) {
+      bar.appendChild(el('span', { cls: 'mp-var-meta' },
+        'Prix / ' + cp.unite + ' : renseigner le conditionnement d\'abord.'));
+    } else if (!canEdit) {
+      bar.appendChild(el('span', null, 'Prix ', el('strong', null,
+        prix > 0 ? fN(prix * cp.facteur) + ' € / ' + cp.unite : '—')));
+    } else {
+      const pInp = mpCondPrixInput(m, cp);
+      pInp.addEventListener('change', async () => {
+        const r = mpLireNombre(pInp);
+        if (r.vide) return;
+        if (r.error) { showToast('Prix : valeur > 0 obligatoire.', 'error'); return; }
+        try {
+          await mpCondPrixEnregistrer(m, r.value, cp.facteur, cp.unite);
+          showToast('Prix enregistré — valorisation et Coûts matières à jour.', 'success');
+          await recharger();
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+      bar.appendChild(el('label', { cls: 'mp-cond-champ' }, pInp, el('span', null, '€ / ' + cp.unite)));
+      if (cp.facteur !== 1 && prix > 0) {
+        bar.appendChild(el('span', { cls: 'mp-var-meta' },
+          'soit ' + fN(prix) + ' € / ' + mpUniteAchat(m.categorie)));
+      }
+    }
+  }
+  return bar;
+}
+
+// Modale « Ajuster le conditionnement » : une ligne par référence de la liste
+// affichée (filtres compris). Seules les lignes modifiées sont envoyées.
+function openCondAjustModal() {
+  if (!isMatieresAdmin() || S.stockReadOnly) return;
+  closeMroot();
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  const items = filterMatieresList().filter(m => mpCondChamps(m).length || mpCondPrix(m));
+  const overlay = el('div', {
+    cls: 'mp-modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
+  });
+  const box = el('div', { cls: 'mp-modal mp-modal-cond', on: { click: (e) => e.stopPropagation() } });
+  box.appendChild(el('div', { cls: 'mp-modal-head' },
+    el('h3', null, 'Ajuster le conditionnement'),
+    el('button', { cls: 'mp-modal-close', type: 'button',
+      attrs: { title: 'Fermer', 'aria-label': 'Fermer' }, on: { click: closeMroot } }, '×')));
+  box.appendChild(el('div', { cls: 'mp-modal-sub' },
+    'Quantité contenue dans une unité de conditionnement, ligne par ligne (références de la liste affichée). '
+    + 'Le prix au conditionnement d\'un consommable met à jour la valorisation et Coûts matières.'));
+  const lignes = [];
+  if (!items.length) {
+    box.appendChild(el('div', { cls: 'card-empty' }, 'Aucune référence dans cette sélection.'));
+  } else {
+    const tbl = el('table', { cls: 'mp-var-table mp-cond-table' });
+    tbl.appendChild(el('thead', null, el('tr', null,
+      el('th', null, 'Référence'), el('th', null, 'Désignation'),
+      el('th', null, 'Conditionnement'), el('th', null, 'Prix au conditionnement'))));
+    const tb = el('tbody');
+    items.forEach(m => {
+      const inputs = {};
+      const champs = mpCondChamps(m);
+      const tdCond = el('td', null, ...champs.map(c => {
+        const inp = mpCondInput(c);
+        inputs[c.cle] = inp;
+        return el('label', { cls: 'mp-cond-champ' }, inp, el('span', null, c.label));
+      }));
+      if (!champs.length) tdCond.appendChild(el('span', { cls: 'mp-var-meta' }, 'à l\'unité'));
+      const cp = mpCondPrix(m);
+      let pInp = null;
+      const tdPrix = el('td');
+      if (cp) {
+        pInp = mpCondPrixInput(m, cp);
+        tdPrix.appendChild(el('label', { cls: 'mp-cond-champ' }, pInp, el('span', null, '€ / ' + cp.unite)));
+      } else {
+        tdPrix.appendChild(el('span', { cls: 'mp-var-meta' }, 'prix au m² — fiche matière'));
+      }
+      [...Object.values(inputs), pInp].forEach(i => { if (i) i.dataset.initial = i.value; });
+      lignes.push({ m, inputs, pInp, cp });
+      tb.appendChild(el('tr', null,
+        el('td', null, el('strong', null, m.reference || '')),
+        el('td', null, m.designation || ''), tdCond, tdPrix));
+    });
+    tbl.appendChild(tb);
+    box.appendChild(el('div', { cls: 'mp-var-scroll mp-cond-scroll' }, tbl));
+  }
+  const btnSave = el('button', { cls: 'btn', type: 'button' }, 'Enregistrer');
+  btnSave.addEventListener('click', async () => {
+    const modif = (i) => !!i && i.value !== i.dataset.initial;
+    const aFaire = lignes.filter(l => Object.values(l.inputs).some(modif) || modif(l.pInp));
+    if (!aFaire.length) { closeMroot(); return; }
+    btnSave.disabled = true;
+    let ok = 0;
+    const erreurs = [];
+    for (const l of aFaire) {
+      try {
+        if (Object.values(l.inputs).some(modif)) await mpCondEnregistrer(l.m, l.inputs);
+        if (modif(l.pInp)) {
+          const r = mpLireNombre(l.pInp);
+          if (r.error) throw new Error('prix : valeur > 0 obligatoire.');
+          if (!r.vide) {
+            // Le facteur suit le conditionnement saisi sur la même ligne.
+            const v = (k) => mpLireNombre(l.inputs[k]).value || 0;
+            let facteur = l.cp.facteur;
+            if (l.inputs.unites_par_palette) facteur = v('unites_par_palette');
+            if (l.inputs.cartons_par_palette) facteur = v('cartons_par_palette') * v('kg_par_carton');
+            if (!facteur) throw new Error('prix au conditionnement sans conditionnement renseigné.');
+            await mpCondPrixEnregistrer(l.m, r.value, facteur, l.cp.unite);
+          }
+        }
+        ok++;
+      } catch (err) {
+        erreurs.push((l.m.reference || '#' + l.m.id) + ' — ' + err.message);
+      }
+    }
+    btnSave.disabled = false;
+    await loadMatieres();
+    if (S.selMatiere) await refreshSelMatiere();
+    if (erreurs.length) {
+      showToast(erreurs.join(' · '), 'error');
+      return;
+    }
+    closeMroot();
+    showToast(ok + (ok > 1 ? ' références mises à jour.' : ' référence mise à jour.'), 'success');
+  });
+  box.appendChild(el('div', { cls: 'mp-modal-actions' },
+    el('div', { cls: 'mp-modal-actions-right' },
+      el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMroot } }, 'Annuler'),
+      btnSave)));
+  overlay.appendChild(box);
+  mroot.appendChild(overlay);
+}
+
 function buildMatieres() {
   if (S.matieres === null) {
     return el('div', { cls: 'content' }, el('div', { cls: 'hist-page' },
@@ -9632,6 +9905,14 @@ function buildMatieres() {
             type: 'button',
             on: { click: () => openMatieresAdminDrawer() },
           }, 'Gérer les références')
+        : null,
+      (isMatieresAdmin() && !S.stockReadOnly)
+        ? el('button', {
+            cls: 'btn',
+            type: 'button',
+            attrs: { title: 'Quantité par conditionnement et prix des consommables, ligne par ligne' },
+            on: { click: () => openCondAjustModal() },
+          }, 'Ajuster le conditionnement')
         : null,
     ),
   );
@@ -10744,6 +11025,8 @@ function buildMpVariantesTable(m) {
       : (stockData.disponible ? 'Stock : RVGI, par article fournisseur'
         : 'Stock RVGI indisponible (' + (stockData.motif || 'miroir absent') + ')')),
   ));
+  const condBar = mpCondBar(m);
+  if (condBar) card.appendChild(condBar);
   const lignesVues = lignesRvgi.filter(l => mpFiltreLigne(l, 'mpVarFiltre'));
   if (varGrain === 'laize') {
     card.appendChild(buildMpVarParLaize(m, lignesVues));
@@ -10822,7 +11105,7 @@ function buildMpVariantesTable(m) {
         el('td', null, (v.laizes && v.laizes.length) ? v.laizes.join(', ')
           : (stockArticle(v) && stockArticle(v).laizes.size
             ? [...stockArticle(v).laizes].sort((x, y) => x - y).map(x => fN(x)).join(', ') : '—')),
-        el('td', { cls: 'num' }, v.ml_bobine ? fN(v.ml_bobine) : '—'),
+        el('td', { cls: 'num' }, (canEdit && v.actif) ? mpVarMlInput(m, v) : (v.ml_bobine ? fN(v.ml_bobine) : '—')),
         el('td', { cls: 'num' },
           v.dernier_achat ? mpVarDate(v.dernier_achat) : '—',
           v.commandes_rvgi ? el('div', { cls: 'mp-var-meta' },
@@ -10895,6 +11178,29 @@ function buildMpVarParLaize(m, lignes) {
     el('td', { cls: 'num' }, ''), el('td', null, '')));
   tbl.appendChild(tb);
   return el('div', { cls: 'mp-var-scroll' }, tbl);
+}
+
+// Longueur de bobine chez CE fournisseur (variante). Le conditionnement de la
+// matière, lui, se règle dans le bandeau au-dessus de la table.
+function mpVarMlInput(m, v) {
+  const inp = mpCondInput({ step: '1', label: 'm / bobine chez ' + (v.fournisseur_nom || 'ce fournisseur'), val: v.ml_bobine });
+  inp.placeholder = m.metres_lineaires_par_bobine > 0 ? String(m.metres_lineaires_par_bobine) : '';
+  inp.addEventListener('change', async () => {
+    const r = mpLireNombre(inp);
+    if (r.error) { showToast('m / bobine : valeur > 0 obligatoire.', 'error'); return; }
+    try {
+      const d = await api('/api/stock/variantes/' + v.id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ml_bobine: r.value }),
+      });
+      showToast('Conditionnement enregistré.', 'success');
+      mpVarSetData(d);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+  return inp;
 }
 
 async function setMpVariantePrincipal(m, v) {

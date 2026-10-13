@@ -4337,20 +4337,20 @@ def destocker_a_la_cloture(conn, pe_id: int, user: dict | None = None) -> dict |
     il n'attend pas qu'on pense à cliquer. Appelé depuis la saisie du code 89
     et depuis la clôture forcée du planning.
 
-    Rend None quand il n'y a rien à faire — automatisme non mis en service,
-    dossier antérieur à la mise en service, ou dossier déjà sorti du stock.
+    Rend None quand il n'y a rien à faire — dossier déjà sorti du stock.
     L'appelant commite : ce module ne maîtrise pas sa transaction.
+
+    La date de mise en service (`destockage_auto_depuis`) ne garde plus que le
+    BALAYAGE, qui rattrape des dossiers anciens. Une clôture est un événement
+    du jour : rien de rétroactif à craindre. Décision du 13/10/2026 : la sortie
+    se fait à la clôture, la relecture de l'onglet Déstockage l'ajuste ensuite
+    (`/ajuster`), au lieu d'attendre une validation pour sortir quoi que ce soit.
 
     Le nom porté par le mouvement est celui de l'automatisme, pas celui de
     l'opérateur qui a tapé le code 89 : il n'a rien décidé, et lire son nom
     dans la colonne « déstocké par » enverrait la collègue lui demander des
     comptes sur une sortie qu'il n'a pas faite. L'identifiant, lui, reste.
     """
-    depuis = _config_texte(conn, CLE_DESTOCKAGE_DEPUIS)
-    if not depuis:
-        return None
-    if datetime.now().strftime("%Y-%m-%d") < depuis:
-        return None
     row = conn.execute(
         "SELECT COALESCE(destockage, 'todo') AS etat FROM planning_entries WHERE id=?",
         (pe_id,),

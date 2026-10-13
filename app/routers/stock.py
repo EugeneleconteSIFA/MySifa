@@ -528,6 +528,11 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
         "cartons_par_palette": cond["cartons_par_palette"],
         "kg_par_carton": cond["kg_par_carton"],
         "kg_par_palette": cond["kg_par_palette"],
+        # Prix de valorisation à l'unité de gestion (non laizées). Sert à saisir
+        # le coût d'un consommable à son unité de conditionnement.
+        "prix_unitaire": (float(r["prix_unitaire"])
+                          if "prix_unitaire" in keys and r["prix_unitaire"] is not None
+                          else None),
         "weight_gsm": weight_gsm,
         "epaisseur_um": epaisseur_um,
         "unites_saisie": _mp_unites_saisie_disponibles(cat, cond),
@@ -6283,9 +6288,11 @@ def list_matieres_premieres(request: Request, all: int = 0):
                    mp.epaisseur_um,
                    mp.sous_section, COALESCE(mp.matiere_fsc, 0) AS matiere_fsc,
                    COALESCE(mp.intervalle_inventaire_jours, 180) AS intervalle_inventaire_jours,
-                   COALESCE(s.quantite, 0) AS quantite
+                   COALESCE(s.quantite, 0) AS quantite,
+                   v.prix_unitaire AS prix_unitaire
             FROM matieres_premieres mp
             LEFT JOIN mp_stock s ON s.matiere_id = mp.id
+            LEFT JOIN mp_valorisation v ON v.matiere_id = mp.id
             {where_actif}
             ORDER BY mp.categorie ASC, mp.reference ASC
             """
