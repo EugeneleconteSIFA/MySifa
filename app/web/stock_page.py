@@ -2414,7 +2414,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
 <script src="/static/mysifa_stock_modals.js?v=empl-terrain1"></script>
-<script src="/static/mysifa_destockage.js?v=5"></script>
+<script src="/static/mysifa_destockage.js?v=6"></script>
 <script src="/static/mysifa_dock.js?v=2"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
@@ -25760,33 +25760,6 @@ function dstOuvrirRelecture(d) {
   });
 }
 
-// « Déstocker » n'écrit plus rien directement (10/09/2026) : il ouvre la
-// vérification, où l'on contrôle, corrige et complète avant de valider.
-function dstDestocker(d) {
-  dstOuvrirRelecture(d);
-}
-
-async function dstBalayer(btn) {
-  const a = dstEtat().auto || {};
-  if (!confirm('Déstocker automatiquement les dossiers terminés depuis la mise en service ?\n\n'
-      + (a.en_attente || 0) + ' dossier(s) terminé(s) attendent. Seuls ceux dont les données sont complètes sortiront, '
-      + 'sans vérification dossier par dossier. Pour vérifier un dossier avant sa sortie, utiliser « Déstocker » sur sa ligne.')) return;
-  if (btn) btn.disabled = true;
-  try {
-    const r = await api('/api/stock/destockage/auto/balayer', { method: 'POST' });
-    if (!r.actif) { showToast(r.message || 'Déstockage automatique non mis en service.', 'info'); }
-    else {
-      const t = r.traites || [];
-      const ok = t.filter(x => x.etat === 'done' || x.etat === 'reserve').length;
-      showToast(ok + ' dossier(s) déstocké(s), ' + (t.length - ok) + ' resté(s) bloqué(s).', 'success');
-    }
-    await loadDestockage();
-  } catch (e) {
-    showToast(e.message || 'Balayage impossible.', 'error');
-  }
-  if (btn) btn.disabled = false;
-}
-
 async function dstMiseEnService(valeur, btn) {
   if (btn) btn.disabled = true;
   try {
@@ -25810,12 +25783,6 @@ function dstCarteAutomatisme(st) {
   const aujourdHui = new Date().toISOString().slice(0, 10);
   const actions = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center' });
   if (!S.stockReadOnly) {
-    actions.appendChild(el('button', {
-      type: 'button',
-      style: btnStyle + 'background:var(--accent);border:1px solid var(--accent);color:white',
-      on: { click: (e) => dstBalayer(e.currentTarget) },
-      attrs: { title: 'Sortir du stock les dossiers terminés depuis la mise en service' },
-    }, 'Déstocker les dossiers terminés'));
     if (isMatieresAdmin()) {
       actions.appendChild(el('button', {
         type: 'button',
@@ -25868,13 +25835,11 @@ function dstTableDossiers(st) {
       on: { click: (e) => onClick(e.currentTarget) },
     }, label);
     if (!S.stockReadOnly) {
-      if (x.destockage === 'todo') {
-        // Bloqué : le calcul refuse, mais la vérification permet de saisir à
-        // la main et de compléter ce qui manque.
-        act.appendChild(btn(x.pret ? 'Déstocker' : 'Vérifier', () => dstDestocker(x), x.pret));
-      } else {
-        act.appendChild(btn('Relire', () => dstOuvrirRelecture(x), x.destockage === 'reserve' || !x.relu_par));
-      }
+      // Un seul geste, un seul mot (13/10/2026) : « Contrôler » ouvre la même
+      // modale quel que soit l'état. Le bouton est plein tant qu'il reste
+      // quelque chose à faire — à sortir, réserve à lever, sortie non relue.
+      const aFaire = x.destockage === 'todo' || x.destockage === 'reserve' || !x.relu_par;
+      act.appendChild(btn('Contrôler', () => dstOuvrirRelecture(x), aFaire));
     }
     if (st.vue === 'a_traiter') {
       const motif = x.destockage === 'reserve' ? (x.reserve || '')
@@ -26803,26 +26768,26 @@ var STOCK_GUIDES = {
     {
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`,
       title: 'Déstockage et écarts RVGI',
-      body: `Les mouvements de matières sont <strong>automatiques</strong> : les entrées viennent des réceptions RVGI, les sorties du déstockage des dossiers terminés. L'onglet <strong>Déstockage</strong> sert à <strong>relire</strong> ce qui a été écrit, la section <strong>Monitoring › Écarts matières RVGI</strong> à <strong>comparer</strong> avec RVGI. Le bouton <strong>À destocker</strong> du planning de prod est un simple repère pour le déstockage fait dans RVGI : il ne touche pas au stock MySifa.`,
+      body: `Les mouvements de matières sont <strong>automatiques</strong> : les entrées viennent des réceptions RVGI, les sorties du déstockage des dossiers terminés. L'onglet <strong>Déstockage</strong> sert à <strong>contrôler</strong> ce qui a été écrit, la section <strong>Monitoring › Écarts matières RVGI</strong> à <strong>comparer</strong> avec RVGI. Le bouton <strong>À destocker</strong> du planning de prod est un simple repère pour le déstockage fait dans RVGI : il ne touche pas au stock MySifa.`,
       extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous avez à faire</div><ul class="mguide-svc-list"><li>Traiter les dossiers bloqués ou avec réserves.</li><li>Relire le déstockage d'un dossier et ajuster au réel.</li><li>Regarder chaque jour les écarts sur 48 h et apparier les articles RVGI manquants.</li></ul></div></div>`
     },
     {
       title: 'À traiter',
-      body: `Les dossiers terminés pas encore sortis du stock. <span class="mguide-tag">Prêt</span> se déstocke d'un clic ; <span class="mguide-tag">Bloqué</span> dit ce qui manque (métrage, fiche qui ne boucle pas) ; <span class="mguide-tag">Réserves</span> signale une matière non rattachée.`,
+      body: `Les dossiers terminés pas encore sortis du stock. La clôture du dossier sort la matière d'elle-même ; « Contrôler » permet de la vérifier ou de la saisir. <span class="mguide-tag">Prêt</span> : données complètes ; <span class="mguide-tag">Bloqué</span> dit ce qui manque (métrage, fiche qui ne boucle pas) ; <span class="mguide-tag">Réserves</span> signale une matière non rattachée.`,
       illu: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
         <text x="12" y="20" font-size="12" fill="var(--text)" font-weight="800">Déstockage</text>
         <rect x="12" y="28" width="62" height="18" rx="9" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="43" y="40" font-size="8" fill="var(--accent)" text-anchor="middle" font-weight="700">À traiter</text>
         <rect x="80" y="28" width="62" height="18" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="111" y="40" font-size="8" fill="var(--text2)" text-anchor="middle">Déstockés</text>
         <g font-size="8">
-        <rect x="12" y="54" width="316" height="26" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="22" y="70" fill="var(--text)" font-weight="700">9932366</text><text x="80" y="70" fill="var(--text2)">Client A</text><rect x="170" y="60" width="40" height="14" rx="7" fill="var(--bg)" stroke="var(--accent)"/><text x="190" y="70" fill="var(--accent)" text-anchor="middle">Prêt</text><rect x="262" y="59" width="58" height="16" rx="5" fill="var(--accent)"/><text x="291" y="70" fill="#fff" text-anchor="middle" font-weight="700">Déstocker</text>
+        <rect x="12" y="54" width="316" height="26" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="22" y="70" fill="var(--text)" font-weight="700">9932366</text><text x="80" y="70" fill="var(--text2)">Client A</text><rect x="170" y="60" width="40" height="14" rx="7" fill="var(--bg)" stroke="var(--accent)"/><text x="190" y="70" fill="var(--accent)" text-anchor="middle">Prêt</text><rect x="262" y="59" width="58" height="16" rx="5" fill="var(--accent)"/><text x="291" y="70" fill="#fff" text-anchor="middle" font-weight="700">Contrôler</text>
         <rect x="12" y="84" width="316" height="26" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="22" y="100" fill="var(--text)" font-weight="700">9932375</text><text x="80" y="100" fill="var(--text2)">Client B</text><rect x="170" y="90" width="44" height="14" rx="7" fill="var(--bg)" stroke="var(--danger)"/><text x="192" y="100" fill="var(--danger)" text-anchor="middle">Bloqué</text><text x="222" y="100" fill="var(--muted)">métrage absent</text>
-        <rect x="12" y="114" width="316" height="26" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="22" y="130" fill="var(--text)" font-weight="700">9932423</text><text x="80" y="130" fill="var(--text2)">Client C</text><rect x="170" y="120" width="50" height="14" rx="7" fill="var(--bg)" stroke="var(--warn)"/><text x="195" y="130" fill="var(--warn)" text-anchor="middle">Réserves</text><rect x="262" y="119" width="58" height="16" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="291" y="130" fill="var(--text)" text-anchor="middle">Relire</text>
+        <rect x="12" y="114" width="316" height="26" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="22" y="130" fill="var(--text)" font-weight="700">9932423</text><text x="80" y="130" fill="var(--text2)">Client C</text><rect x="170" y="120" width="50" height="14" rx="7" fill="var(--bg)" stroke="var(--warn)"/><text x="195" y="130" fill="var(--warn)" text-anchor="middle">Réserves</text><rect x="262" y="119" width="58" height="16" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="291" y="130" fill="var(--text)" text-anchor="middle">Contrôler</text>
         </g>
       </svg>`
     },
     {
-      title: 'Relire un déstockage',
-      body: `« Relire » ouvre le détail : <span class="mguide-hl">consommé</span> calculé, <span class="mguide-hl">ajusté</span> à saisir dans l'unité de l'atelier (ml, kg, cartons, mandrins) et l'équivalent <span class="mguide-hl">simplifié</span> en bobines, tubes ou palettes. Une matière peut être remplacée par une autre de sa catégorie. Enregistrer marque le dossier comme relu.`,
+      title: 'Contrôler un déstockage',
+      body: `« Contrôler » ouvre le détail : <span class="mguide-hl">consommé</span> calculé, <span class="mguide-hl">ajusté</span> à saisir dans l'unité de l'atelier (ml, kg, cartons, mandrins) et l'équivalent <span class="mguide-hl">simplifié</span> en bobines, tubes ou palettes. Une matière peut être remplacée par une autre de sa catégorie. « Valider le contrôle » marque le dossier comme relu.`,
       illu: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
         <rect x="8" y="8" width="324" height="134" rx="10" fill="var(--card)" stroke="var(--border)"/>
         <g font-size="7" fill="var(--muted)"><text x="18" y="26">MATIÈRE</text><text x="170" y="26">CONSOMMÉ</text><text x="228" y="26">AJUSTÉ</text><text x="284" y="26">SIMPLIFIÉ</text></g>
@@ -26833,7 +26798,7 @@ var STOCK_GUIDES = {
         <text x="214" y="72" fill="var(--muted)" text-anchor="end">121 cartons</text><rect x="222" y="60" width="52" height="18" rx="4" fill="var(--bg)" stroke="var(--border)"/><text x="268" y="72" fill="var(--text)" text-anchor="end">121</text><text x="284" y="72" fill="var(--text2)">2,4 pal.</text>
         </g>
         <rect x="18" y="112" width="120" height="20" rx="6" fill="var(--bg)" stroke="var(--border)"/><text x="78" y="126" font-size="8" fill="var(--danger)" text-anchor="middle">Annuler tout</text>
-        <rect x="250" y="112" width="72" height="20" rx="6" fill="var(--accent)"/><text x="286" y="126" font-size="8" fill="#fff" text-anchor="middle" font-weight="700">Enregistrer</text>
+        <rect x="226" y="112" width="96" height="20" rx="6" fill="var(--accent)"/><text x="274" y="126" font-size="8" fill="#fff" text-anchor="middle" font-weight="700">Valider le contrôle</text>
       </svg>`
     },
     {

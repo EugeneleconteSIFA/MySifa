@@ -811,11 +811,11 @@
       ? '<button type="button" data-dr-action="fermer" style="padding:9px 14px;border-radius:8px;border:1px solid var(--border);'
         + 'background:var(--bg);color:var(--text);font-family:inherit;font-weight:600;cursor:pointer">Annuler</button>'
         + '<button type="button" data-dr-action="enregistrer" style="padding:9px 16px;border-radius:8px;border:1px solid var(--accent);'
-        + 'background:var(--accent);color:white;font-family:inherit;font-weight:700;cursor:pointer">Valider le déstockage</button>'
+        + 'background:var(--accent);color:white;font-family:inherit;font-weight:700;cursor:pointer">Valider le contrôle</button>'
       : '<button type="button" data-dr-action="annuler" style="padding:9px 14px;border-radius:8px;border:1px solid var(--border);'
         + 'background:var(--bg);color:var(--danger);font-family:inherit;font-weight:600;cursor:pointer">Annuler tout le déstockage</button>'
         + '<button type="button" data-dr-action="enregistrer" style="padding:9px 16px;border-radius:8px;border:1px solid var(--accent);'
-        + 'background:var(--accent);color:white;font-family:inherit;font-weight:700;cursor:pointer">Enregistrer</button>';
+        + 'background:var(--accent);color:white;font-family:inherit;font-weight:700;cursor:pointer">Valider le contrôle</button>';
     const suivi = enApercu ? ''
       : '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Déstockage ' + esc(etatTxt)
         + (quand ? ' · ' + esc(quand) : '') + (dossier.destockage_par ? ' par ' + esc(dossier.destockage_par) : '')
