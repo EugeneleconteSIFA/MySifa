@@ -55,7 +55,7 @@ TOLERES = {
     "e.message": "message de l'objet Error du navigateur",
     # Portail EUDR : area(<nom du champ>) recoit un nom de champ ecrit dans le
     # code ; la valeur pre-remplie est echappee par esc() dans area().
-    "{area(": "nom de champ du formulaire EUDR, valeur echappee dans area()",
+    "area(": "nom de champ du formulaire EUDR, valeur echappee dans area()",
     # Ternaires qui ne rendent qu'un signe ou un libelle ecrit dans le code.
     "(n.description||'').length>90?'…':''": "n'affiche qu'une ellipse",
     "(n.description||'').length>80?'…':''": "n'affiche qu'une ellipse",
