@@ -4431,11 +4431,18 @@ def balayer_destockage_auto(conn, user: dict, limite: int = 40) -> dict:
 
     try:
         candidats = [r["id"] for r in conn.execute(
-            """SELECT id FROM planning_entries
-                WHERE statut = 'termine'
-                  AND COALESCE(destockage, 'todo') = 'todo'
-                  AND COALESCE(updated_at, '') >= ?
-                ORDER BY id
+            # Sur la FIN du dossier, pas sur `updated_at` : une replanification
+            # remet ce dernier a jour en masse (162 anciens dossiers de
+            # Cohesio 1 retouches le 13/10/2026 a 16 h 22), et le balayage les
+            # aurait tous destockes. Un dossier qui porte deja des mouvements
+            # (destockage annule a la main) n'est pas rejoue non plus.
+            """SELECT pe.id FROM planning_entries pe
+                WHERE pe.statut = 'termine'
+                  AND COALESCE(pe.destockage, 'todo') = 'todo'
+                  AND COALESCE(pe.planned_end, '') >= ?
+                  AND NOT EXISTS (SELECT 1 FROM mp_mouvements m
+                                   WHERE m.planning_entry_id = pe.id)
+                ORDER BY pe.id
                 LIMIT ?""",
             (depuis, int(limite)),
         ).fetchall()]
@@ -4612,8 +4619,8 @@ async def destockage_auto_mise_en_service(request: Request):
 
     Body : { depuis: "AAAA-MM-JJ" } — vide pour l'arrêter.
 
-    Aucune reprise rétroactive : seuls les dossiers dont la dernière
-    modification est postérieure à cette date entrent dans le balayage.
+    Aucune reprise rétroactive : seuls les dossiers dont la fin est
+    postérieure à cette date entrent dans le balayage.
     """
     user = require_stock_matieres_admin(request)
     body = await request.json()
