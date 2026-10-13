@@ -301,6 +301,10 @@ STOCK_EMPLACEMENT_SORTIE_PROD_LABEL = "En attente - sortie de prod"
 # une instance Kernse surcharge via STOCK_UNITE_VENTE_DEFAUT dans son .env.
 STOCK_UNITE_VENTE_DEFAUT = os.getenv("STOCK_UNITE_VENTE_DEFAUT", "étiquette")
 
+# Vitesse (m/min) au-delà de laquelle un métrage saisi est une faute de frappe
+# sur un compteur : le déstockage refuse alors de s'en servir.
+PROD_VITESSE_MAX_M_MIN = float(os.getenv("PROD_VITESSE_MAX_M_MIN", "400"))
+
 # ─── Certification FSC ────────────────────────────────────────────
 # Volontairement mono-certification : FSC est le seul référentiel dont SIFA a
 # besoin aujourd'hui, et généraliser en « certifications » (PEFC, ISCC…) ferait

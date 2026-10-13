@@ -848,7 +848,10 @@
     const reel = Number((d.reel || {}).metrage || 0) || null;
     const m = v => v == null ? '—' : Math.round(v).toLocaleString('fr-FR') + ' m';
     let sousReel = reel == null ? 'aucune saisie' : '';
-    if (reel != null && theo) {
+    const alerte = (d.reel || {}).alerte;
+    if (alerte) {
+      sousReel = 'invraisemblable — non utilisé';
+    } else if (reel != null && theo) {
       const p = Math.round((reel - theo) / theo * 1000) / 10;
       sousReel = (Math.abs(p) < 0.05 ? '= théorique'
         : (p > 0 ? '+' : '−') + Math.abs(p).toLocaleString('fr-FR') + ' % / théorique');
@@ -860,7 +863,9 @@
       + (sous ? '<div style="font-size:11px;color:var(--muted);margin-top:1px">' + esc(sous) + '</div>' : '')
       + '</div>';
     return bloc('Métrage théorique', m(theo))
-      + bloc('Métrage réel', m(reel), sousReel);
+      + bloc('Métrage réel', m(reel), sousReel)
+      + (alerte ? '<div style="flex-basis:100%;padding:8px 12px;border-radius:9px;border:1px solid var(--danger);'
+        + 'color:var(--danger);font-size:12px;font-weight:600">' + esc(alerte.charAt(0).toUpperCase() + alerte.slice(1)) + '.</div>' : '');
   }
 
   function afficherInfos(d) {
@@ -925,6 +930,94 @@
     });
   }
 
+  // ── Données de prod ─────────────────────────────────────────────────────
+  // Ce qu'on regarde pour juger une quantité : les chiffres de la fiche
+  // dossier du planning (même calcul serveur) et les saisies de MyProd.
+  function duree(min) {
+    const m = Math.round(Number(min || 0));
+    if (!m) return '—';
+    const h = Math.floor(m / 60);
+    return h ? h + ' h ' + String(m % 60).padStart(2, '0') : m + ' min';
+  }
+  function dateCourte(iso) {
+    const t = String(iso || '');
+    return t.length >= 16 ? t.slice(8, 10) + '/' + t.slice(5, 7) + ' ' + t.slice(11, 16) : t;
+  }
+  function prodHtml(d) {
+    const st = d.stats || {};
+    const tt = st.temps_totaux || {};
+    const q = st.quantites || {};
+    const carte = (lib, val) => '<div style="padding:8px 12px;border-radius:9px;background:var(--bg);border:1px solid var(--border);min-width:110px">'
+      + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">' + lib + '</div>'
+      + '<div style="font-size:14px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;margin-top:2px">' + val + '</div></div>';
+    const th = 'style="text-align:left;padding:6px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap"';
+    const td = (v, num) => '<td style="padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text2);'
+      + (num ? 'text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap' : '') + '">' + v + '</td>';
+    let h = '<div style="border:1px solid var(--border);border-radius:12px;padding:14px">';
+    if (d.alerte) {
+      h += '<div style="margin-bottom:10px;color:var(--danger);font-size:12px;font-weight:600">'
+        + esc(d.alerte.charAt(0).toUpperCase() + d.alerte.slice(1)) + '.</div>';
+    }
+    h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
+      + carte('Durée totale', duree(tt.duree_totale_min))
+      + carte('Calage', duree(tt.calage_min))
+      + carte('Production', duree(tt.production_min))
+      + carte('Arrêts', duree(tt.arret_min))
+      + carte('Étiquettes', nombre(q.etiquettes))
+      + carte('Métrage', q.metrage_m ? nombre(Math.round(q.metrage_m)) + ' m' : '—')
+      + carte('Vitesse', st.vitesse_m_min ? nombre(Math.round(st.vitesse_m_min * 10) / 10) + ' m/min' : '—')
+      + '</div>';
+    const ops = st.operateurs || [];
+    if (ops.length) {
+      h += '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px"><thead><tr>'
+        + '<th ' + th + '>Opérateur</th><th ' + th + '>Saisies</th><th ' + th + '>Calage</th><th ' + th + '>Prod</th>'
+        + '<th ' + th + '>Arrêts</th><th ' + th + '>Total</th></tr></thead><tbody>'
+        + ops.map(o => '<tr>' + td(esc(o.operateur || '?')) + td(nombre(o.nb_saisies), 1) + td(duree(o.calage_min), 1)
+          + td(duree(o.prod_min), 1) + td(duree(o.arret_min), 1) + td(duree(o.minutes), 1) + '</tr>').join('')
+        + '</tbody></table>';
+    }
+    const rows = d.saisies || [];
+    h += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:4px">'
+      + 'Saisies (' + rows.length + ')</div>';
+    if (!rows.length) return h + '<div style="color:var(--muted);font-size:13px">Aucune saisie de production pour ce dossier.</div></div>';
+    h += '<div style="max-height:320px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'
+      + '<th ' + th + '>Date</th><th ' + th + '>Opération</th><th ' + th + '>Opérateur</th><th ' + th + '>Machine</th>'
+      + '<th ' + th + '>Qté traitée</th><th ' + th + '>Compteur début</th><th ' + th + '>Compteur fin</th><th ' + th + '>Commentaire</th>'
+      + '</tr></thead><tbody>'
+      + rows.map(r => {
+        const code = String(r.operation_code || '');
+        const deb = code === '01' && r.metrage_prevu ? nombre(r.metrage_prevu) : '';
+        const fin = code === '89' && r.metrage_reel ? nombre(r.metrage_reel) : '';
+        return '<tr>' + td(esc(dateCourte(r.date_operation)))
+          + td('<strong style="color:var(--text)">' + esc(code) + '</strong> ' + esc(r.operation || '')
+            + (r.fin_dossier ? ' <span style="font-size:10px;color:var(--accent)">· dossier clôturé</span>' : ''))
+          + td(esc(r.operateur || '')) + td(esc(r.machine || ''))
+          + td(r.quantite_traitee ? nombre(r.quantite_traitee) : '', 1)
+          + td(deb, 1) + td(fin, 1) + td(esc(r.commentaire || '')) + '</tr>';
+      }).join('')
+      + '</tbody></table></div></div>';
+    return h;
+  }
+  async function basculerProd(bouton, entryId) {
+    const zone = document.getElementById('dr-prod');
+    if (!zone) return;
+    const ouvert = !zone.hidden;
+    zone.hidden = ouvert;
+    bouton.setAttribute('aria-expanded', ouvert ? 'false' : 'true');
+    bouton.style.background = ouvert ? 'var(--bg)' : 'var(--accent-bg)';
+    bouton.style.borderColor = ouvert ? 'var(--border)' : 'var(--accent)';
+    bouton.style.color = ouvert ? 'var(--text)' : 'var(--accent)';
+    if (ouvert || zone.dataset.charge) return;
+    zone.innerHTML = '<div style="padding:12px;color:var(--muted)">Chargement des données de production…</div>';
+    try {
+      const d = await appel('/api/stock/destockage/' + entryId + '/production');
+      zone.innerHTML = prodHtml(d);
+      zone.dataset.charge = '1';
+    } catch (err) {
+      zone.innerHTML = '<div style="padding:12px;color:var(--danger)">' + esc(err.message || 'Données indisponibles.') + '</div>';
+    }
+  }
+
   async function ouvrir(entryId, opts) {
     E.opts = opts || {};
     E.entryId = entryId;
@@ -944,9 +1037,13 @@
       + '<h3 style="margin:0;font-size:18px;color:var(--text);display:flex;align-items:center;gap:8px">'
       + (E.opts.icone || '') + '<span>Déstockage — ' + esc(ref)
       + '<span id="dr-titre-detail" style="font-weight:600;color:var(--text2)"></span></span></h3>'
+      + '<div style="display:flex;gap:8px">'
+      + '<button type="button" data-dr-prod aria-expanded="false" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);'
+      + 'background:var(--bg);color:var(--text);font-family:inherit;font-weight:600;cursor:pointer">Données de prod</button>'
       + '<button type="button" data-dr-fermer style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);'
-      + 'background:var(--bg);color:var(--text);font-family:inherit;cursor:pointer">Fermer</button></div>'
+      + 'background:var(--bg);color:var(--text);font-family:inherit;cursor:pointer">Fermer</button></div></div>'
       + '<div id="dr-infos" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"></div>'
+      + '<div id="dr-prod" hidden style="margin-bottom:16px"></div>'
       + '<div id="dr-body"><div style="padding:24px;text-align:center;color:var(--muted)">Chargement…</div></div>'
       + '</div></div>';
     const overlay = root.querySelector('[data-dr-overlay]');
@@ -956,6 +1053,7 @@
     });
     overlay.addEventListener('scroll', placerChoix);
     root.querySelector('[data-dr-fermer]').addEventListener('click', fermer);
+    root.querySelector('[data-dr-prod]').addEventListener('click', (ev) => basculerProd(ev.currentTarget, entryId));
     const body = document.getElementById('dr-body');
     try {
       const d = await appel('/api/stock/destockage/' + entryId + '/relecture');

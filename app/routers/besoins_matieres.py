@@ -62,6 +62,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 
 from app.core.database import get_db
+from config import PROD_VITESSE_MAX_M_MIN
 from app.services.carnet_snapshot import (
     agreger as agreger_carnet, capturer as capturer_carnet, capturer_si_besoin,
     couverture as couverture_carnet, laize_mm as _laize_mm,
@@ -2726,30 +2727,90 @@ async def rattacher_fiche(planning_id: int, request: Request):
 # ═════════════════════════════════════════════════════════════════════════
 
 
+def _saisies_dossier(conn, no_dossier: str) -> list:
+    """Saisies d'atelier du dossier, dans l'ordre chronologique.
+
+    Mêmes colonnes que la fiche dossier du planning (`production-stats`) : le
+    métrage se calcule par le même code, sur les mêmes lignes.
+    """
+    rows = conn.execute(
+        """SELECT id, operateur, date_operation, operation, operation_code,
+                  operation_category, machine, no_dossier, client, designation,
+                  quantite_a_traiter, quantite_traitee, commentaire, fin_dossier,
+                  COALESCE(metrage_total_debut, metrage_prevu) AS metrage_prevu,
+                  COALESCE(metrage_total_fin, metrage_reel)   AS metrage_reel
+           FROM production_data
+           WHERE TRIM(no_dossier) = TRIM(?)
+             AND COALESCE(est_annule, 0) = 0
+           ORDER BY date_operation, id""",
+        (no_dossier,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _minutes_de_marche(rows: list) -> float:
+    """Durée cumulée des passages machine : de chaque début (01) à sa fin (89).
+
+    Sans passage complet, l'écart entre la première et la dernière saisie.
+    """
+    def _dt(v):
+        try:
+            return datetime.fromisoformat(str(v)[:19])
+        except (TypeError, ValueError):
+            return None
+    total, debut = 0.0, None
+    dates = [d for d in (_dt(r.get("date_operation")) for r in rows) if d]
+    for r in rows:
+        d = _dt(r.get("date_operation"))
+        code = str(r.get("operation_code") or "").strip()
+        if not d:
+            continue
+        if code == "01" and debut is None:
+            debut = d
+        elif code == "89" and debut is not None:
+            total += max(0.0, (d - debut).total_seconds() / 60.0)
+            debut = None
+    if not total and len(dates) > 1:
+        total = (max(dates) - min(dates)).total_seconds() / 60.0
+    return total
+
+
+def _alerte_metrage(metrage, rows: list):
+    """Un métrage que la machine n'a pas pu produire dans le temps saisi.
+
+    Le métrage d'un dossier est la différence entre le compteur de fin et
+    celui de début. Un chiffre de trop sur le compteur de fin (636 367 000 au
+    lieu de 6 363 670, dossier 1153/0016 le 05/10/2026) donne 630 millions de
+    mètres — et le déstockage automatique sortirait cette quantité du stock.
+    Au-delà de `PROD_VITESSE_MAX_M_MIN` sur la durée de marche (30 min au
+    moins), le chiffre est tenu pour une faute de saisie.
+    """
+    if not metrage:
+        return None
+    minutes = max(_minutes_de_marche(rows), 30.0)
+    plafond = PROD_VITESSE_MAX_M_MIN * minutes
+    if metrage <= plafond:
+        return None
+    return ("métrage saisi invraisemblable : %s m en %s h de marche (plus de %s m/min) "
+            "— corriger le compteur de fin de production dans MyProd › Saisies"
+            % (_n(round(metrage)), ("%.1f" % (minutes / 60.0)).replace(".", ","), _n(round(PROD_VITESSE_MAX_M_MIN))))
+
+
 def _production_reelle(conn, pe: dict) -> dict:
     """Quantités réellement produites, lues dans les saisies d'atelier.
 
-    Retourne { metrage, etiquettes, source } — source vaut 'reel' dès qu'une
-    saisie exploitable existe, 'theorique' sinon.
+    Retourne { metrage, etiquettes, source, alerte } — source vaut 'reel' dès
+    qu'une saisie exploitable existe, 'invraisemblable' quand le métrage saisi
+    ne peut pas être vrai (il n'est alors pas utilisé), 'theorique' sinon.
     """
-    vide = {"metrage": None, "etiquettes": None, "source": "theorique"}
+    vide = {"metrage": None, "etiquettes": None, "source": "theorique", "alerte": None}
     no_dossier = (pe.get("numero_of") or pe.get("reference") or "").strip()
     if not no_dossier:
         return vide
     try:
         from app.services.dossier_stats import build_dossier_production_stats
-        rows = conn.execute(
-            """SELECT id, operateur, date_operation, operation, operation_code,
-                      operation_category, machine, no_dossier, client, designation,
-                      quantite_a_traiter, quantite_traitee,
-                      COALESCE(metrage_total_debut, metrage_prevu) AS metrage_prevu,
-                      COALESCE(metrage_total_fin, metrage_reel)   AS metrage_reel
-               FROM production_data
-               WHERE TRIM(no_dossier) = TRIM(?)
-                 AND COALESCE(est_annule, 0) = 0""",
-            (no_dossier,),
-        ).fetchall()
-        stats = build_dossier_production_stats([dict(r) for r in rows], no_dossier)
+        rows = _saisies_dossier(conn, no_dossier)
+        stats = build_dossier_production_stats(rows, no_dossier)
     except Exception:
         return vide
     q = (stats or {}).get("quantites") or {}
@@ -2757,7 +2818,9 @@ def _production_reelle(conn, pe: dict) -> dict:
     etiquettes = _f(q.get("etiquettes"))
     if not metrage and not etiquettes:
         return vide
-    return {"metrage": metrage, "etiquettes": etiquettes, "source": "reel"}
+    alerte = _alerte_metrage(metrage, rows)
+    return {"metrage": metrage, "etiquettes": etiquettes,
+            "source": "invraisemblable" if alerte else "reel", "alerte": alerte}
 
 
 def _laizes_matiere(conn, matiere_id: int) -> list:
@@ -3213,7 +3276,7 @@ def _motif_reserve(l: dict) -> str:
     return "%s « %s » : %s" % (l.get("kind"), quoi, motif)
 
 
-def _controle_donnees(pe: dict, lignes: list) -> dict:
+def _controle_donnees(pe: dict, lignes: list, alerte_reel: str | None = None) -> dict:
     """Le déstockage peut-il s'appuyer sur ces documents ?
 
     Ce contrôle remplace le verrou documentaire du 5 août, qui exigeait que
@@ -3242,6 +3305,12 @@ def _controle_donnees(pe: dict, lignes: list) -> dict:
     """
     blocages: list = []
     reserves: list = []
+
+    # Une saisie de production invraisemblable bloque : le théorique de l'OF
+    # pourrait servir, mais la sortie ne vaudrait pas mieux qu'une estimation
+    # faite à côté d'un chiffre faux que personne n'aurait corrigé.
+    if alerte_reel:
+        blocages.append(alerte_reel)
 
     metrage = _f(pe.get("of_metrage"))
     etiquettes = _f(pe.get("qte_etiquettes"))
@@ -3399,7 +3468,7 @@ def _destockage_lignes(conn, planning_id: int) -> dict:
     docs = _etat_documents(pe)
     # `docs` reste rendu : l'écran montre l'état de relecture des documents.
     # Ce n'est simplement plus lui qui décide du mouvement.
-    controle = _controle_donnees(pe, lignes)
+    controle = _controle_donnees(pe, lignes, reel.get("alerte"))
     controle["notes"] = notes_composition
     return {
         "controle": controle,
@@ -3422,7 +3491,8 @@ def _destockage_lignes(conn, planning_id: int) -> dict:
         "documents": docs,
         "blocage": controle["blocage"],
         "source_calcul": reel["source"],
-        "reel": {"metrage": reel["metrage"], "etiquettes": reel["etiquettes"]},
+        "reel": {"metrage": reel["metrage"], "etiquettes": reel["etiquettes"],
+                 "alerte": reel.get("alerte")},
         "theorique": {"metrage": _f(pe.get("of_metrage")),
                       "etiquettes": _f(pe.get("qte_etiquettes"))},
         "laize_dossier": lz.get("laize"),
@@ -3963,6 +4033,31 @@ def _cibles_stock(conn, lignes: list, mod_laize, perte_pct) -> dict:
         cle = (mid, lid)
         cibles[cle] = round(cibles.get(cle, 0.0) + qs, 6)
     return cibles
+
+
+@router.get("/api/stock/destockage/{planning_id}/production")
+def destockage_production(planning_id: int, request: Request):
+    """Données de production du dossier, pour juger les quantités à sortir.
+
+    Les statistiques sont celles de la fiche dossier du planning
+    (`build_dossier_production_stats`), toutes machines confondues ; les
+    saisies, celles de MyProd › Saisies. Lecture seule.
+    """
+    require_stock_write(request)
+    from app.services.dossier_stats import build_dossier_production_stats
+    with get_db() as conn:
+        pe = conn.execute(
+            "SELECT id, reference, numero_of FROM planning_entries WHERE id=?",
+            (planning_id,),
+        ).fetchone()
+        if not pe:
+            raise HTTPException(404, "Dossier introuvable.")
+        no_dossier = (pe["numero_of"] or pe["reference"] or "").strip()
+        rows = _saisies_dossier(conn, no_dossier) if no_dossier else []
+    stats = build_dossier_production_stats(rows, no_dossier)
+    metrage = _f(((stats or {}).get("quantites") or {}).get("metrage_m"))
+    return {"no_dossier": no_dossier, "stats": stats, "saisies": rows,
+            "alerte": _alerte_metrage(metrage, rows)}
 
 
 @router.post("/api/stock/destockage/{planning_id}/ajuster")
