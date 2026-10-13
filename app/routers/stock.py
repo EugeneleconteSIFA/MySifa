@@ -6274,6 +6274,9 @@ def list_matieres_premieres(request: Request, all: int = 0):
     user = require_stock(request)
     include_inactive = bool(all) and user.get("role") in _STOCK_MATIERES_ADMIN_ROLES
     with get_db() as conn:
+        # Les encres naissent de RVGI : sans cette synchro, elles n'existent
+        # qu'après une visite de la valorisation (cf. encres_rvgi).
+        _encres_rvgi.synchroniser(conn)
         where_actif = "" if include_inactive else "WHERE mp.actif = 1"
         rows = conn.execute(
             f"""
