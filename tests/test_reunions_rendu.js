@@ -386,7 +386,10 @@ const SUIVI = [
 ];
 const board = M.rendreSuivi(SUIVI, { aujourdhui: "2026-10-12" });
 verifier("suivi : quatre colonnes", board.split('<section class="reu-col').length - 1 === 4);
-verifier("suivi : sans statut, la case decide", board.includes('data-statut="4"') && board.indexOf('st-termine') < board.lastIndexOf('Ancienne'));
+verifier("suivi : termine repliee par defaut", board.includes('reu-rail st-termine') && board.indexOf("Ancienne") === -1);
+verifier("suivi : termine depliee sur demande", M.rendreSuivi(SUIVI, { voirTermine: true }).includes("Ancienne"));
+verifier("suivi : recherche", M.rendreSuivi(SUIVI, { recherche: "anilox" }).indexOf("Regler la DSI") === -1);
+verifier("suivi : sans statut, la case decide", M.rendreSuivi(SUIVI, { voirTermine: true }).includes('<article class="reu-carte st-termine'));
 verifier("suivi : retard signale", board.includes(' retard" draggable') && board.includes("En retard"));
 verifier("suivi : non attribuee nommee", board.includes("Non attribuée"));
 verifier("suivi : lien vers la reunion", board.includes('data-ouvrir="4"'));
