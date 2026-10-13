@@ -11488,3 +11488,26 @@ async def reception_rvgi_integrer(request: Request):
                    objet="reception_rvgi:integration",
                    detail="%d ligne(s) intégrée(s), %d refusée(s)" % (len(faits), len(refuses)))
     return {"integrees": faits, "refusees": refuses}
+
+
+@router.post("/api/stock/reception-rvgi/{lif_id}/annuler")
+def reception_rvgi_annuler(lif_id: int, request: Request):
+    """Défait l'entrée en stock d'une réception RVGI validée par erreur.
+
+    Le stock est repris par une sortie liée à l'entrée, la ligne revient dans
+    la file « Depuis l'ERP » et n'en ressort plus qu'à la main.
+    """
+    user = require_stock(request)
+    from app.services import reception_rvgi as _rr
+
+    with get_db() as conn:
+        try:
+            res = _rr.annuler(conn, lif_id, user, appliquer_mouvement_mp)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        conn.commit()
+    log_action(user=user, request=request, module="stock", action="DELETE",
+               objet="reception_rvgi:%s" % lif_id,
+               detail="entrée annulée : %g %s sur matière %s" % (
+                   res["quantite"], res.get("unite") or "", res.get("matiere_id")))
+    return res
