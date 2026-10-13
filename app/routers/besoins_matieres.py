@@ -195,6 +195,7 @@ _SQL_PE = """
            -- L'OF chiffre souvent lui-meme le conditionnement : ces valeurs
            -- priment sur toute reconstitution a partir de la fiche technique.
            oi.nb_mandrins    AS of_nb_mandrins,
+           oi.mandrin_longueur AS of_mandrin_longueur,
            oi.nb_cartons     AS of_nb_cartons,
            oi.conditionnement AS of_conditionnement,
            COALESCE(oi.valide, 0) AS of_valide,
@@ -637,6 +638,18 @@ def _nb_bobines_dossier(pe: dict, qte: Optional[float]) -> dict:
     return {"nb": None, "formule": "Calcul impossible", "variables": [], "manque": manque}
 
 
+def _longueur_mandrin(pe: dict):
+    """Hauteur d'un mandrin coupé (mm) : laize du module de la fiche, sinon
+    la longueur de mandrin que l'OF porte lui-même.
+
+    Un dossier sans fiche technique rapprochée garde un OF complet (« 650
+    mandrins de 103,7 mm, 47 tubes ») : refuser de convertir ses mandrins en
+    tubes faute de fiche bloquait une ligne dont toutes les données étaient
+    là (dossier 9932542, 13/10/2026).
+    """
+    return _f(pe.get("ft_mod_laize")) or _f(pe.get("of_mandrin_longueur"))
+
+
 def _mandrin_tubes(pe: dict, mapping: dict, nb_mandrins: float,
                    perte_pct: float) -> dict:
     """Traduit un besoin en mandrins en nombre de tubes, puis de palettes.
@@ -651,13 +664,13 @@ def _mandrin_tubes(pe: dict, mapping: dict, nb_mandrins: float,
     vide = {"tubes": None, "palettes": None, "mandrins_par_tube": None,
             "detail_tubes": None, "manque_tubes": []}
     m = _matiere_du_dossier(pe, mapping, "mandrin")
-    laize_mod = _f(pe.get("ft_mod_laize"))
+    laize_mod = _longueur_mandrin(pe)
     lg_tube = _f(m.get("longueur_tube_mm")) if m else None
     upp = _f(m.get("unites_par_palette")) if m else None
 
     manque = []
     if not laize_mod:
-        manque.append("Laize module de la fiche technique (mod_laize)")
+        manque.append("Longueur de mandrin — laize module de la fiche technique ou longueur de l'OF")
     if not lg_tube:
         manque.append("Longueur tube — à saisir sur la fiche matière mandrin")
     if not laize_mod or not lg_tube or not nb_mandrins:
@@ -1020,6 +1033,7 @@ _SQL_OF_ORPHELINS = """
            oi.metrage        AS of_metrage,
            oi.laize          AS of_laize,
            oi.nb_mandrins    AS of_nb_mandrins,
+           oi.mandrin_longueur AS of_mandrin_longueur,
            oi.nb_cartons     AS of_nb_cartons,
            oi.conditionnement AS of_conditionnement,
            COALESCE(oi.valide, 0) AS of_valide,
@@ -2979,7 +2993,7 @@ def _conversion_matiere(kind: str, mp: dict, mod_laize, perte_pct) -> dict:
         laize = _f(mod_laize)
         utile = lg * (1.0 - float(perte_pct or 0) / 100.0) if lg else None
         if not laize:
-            out["manque"] = "Laize module absente de la fiche technique"
+            out["manque"] = "Longueur de mandrin absente de la fiche technique et de l'OF"
         elif not utile or utile <= 0:
             out["manque"] = "Longueur tube non renseignée sur la matière"
         else:
@@ -3498,7 +3512,7 @@ def _destockage_lignes(conn, planning_id: int) -> dict:
         "laize_dossier": lz.get("laize"),
         # Ce qu'il faut pour convertir mandrins → tubes sur une matière
         # choisie en remplacement, sans refaire tout le calcul du dossier.
-        "contexte": {"mod_laize": _f(pe_calc.get("ft_mod_laize")),
+        "contexte": {"mod_laize": _longueur_mandrin(pe_calc),
                      "perte_pct": perte_pct},
         "lignes": lignes,
         "mouvements": deja,
@@ -4069,7 +4083,7 @@ async def destockage_ajuster(planning_id: int, request: Request):
             raise HTTPException(404, "Dossier introuvable.")
 
         dossiers = _load_dossiers(conn, _SQL_PE_UN, (planning_id,))
-        mod_laize = _f(dossiers[0].get("ft_mod_laize")) if dossiers else None
+        mod_laize = _longueur_mandrin(dossiers[0]) if dossiers else None
         perte_pct = stock_config_float(conn, "mandrin_perte_coupe_pct")
         cibles = _cibles_stock(conn, lignes, mod_laize, perte_pct)
         net, _ = _net_sorti(conn, planning_id)
