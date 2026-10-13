@@ -145,10 +145,12 @@ client.post("/api/qualite/eudr/demander",
             json={"envois": [{"fournisseur_id": FID2, "emails": ["ana@papelera.test"], "langue": l2["langue"]}]})
 check("relance en français", ENVOIS[n_av]["subject"], "Relance — EUDR — informations demandées par SIFA")
 
-base = {"repondant_nom": "Hans", "repondant_email": "hans@papeterie.test", "role": "operateur",
+base = {"repondant_societe": "Papeterie Test GmbH", "repondant_nom": "Hans", "repondant_email": "hans@papeterie.test", "role": "operateur",
         "perimetre": "oui", "transmission": "bl", "codes_nc": "4810 92", "etablissement": "eu"}
 check("réponse sans rôle refusée",
       client.post(f"/api/portail/eudr/{TOKEN}", json={**base, "role": ""}).status_code, 400)
+check("réponse sans société refusée",
+      client.post(f"/api/portail/eudr/{TOKEN}", json={**base, "repondant_societe": ""}).status_code, 400)
 check("réponse sans email refusée",
       client.post(f"/api/portail/eudr/{TOKEN}", json={**base, "repondant_email": "x"}).status_code, 400)
 check("choix inconnu refusé",

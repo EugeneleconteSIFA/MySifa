@@ -37,7 +37,9 @@ ST_REPONDUE = "repondue"
 
 # Champs texte libres du formulaire et leur longueur maximale.
 CHAMPS_TEXTE = {
+    "repondant_societe": 200,
     "repondant_nom": 200,
+    "repondant_tel": 50,
     "repondant_fonction": 200,
     "repondant_email": 200,
     "codes_nc": 500,
@@ -279,6 +281,8 @@ def valider_reponse(body: dict) -> dict:
         if v and v not in EUDR_CHOIX[champ]:
             raise ValueError(f"Invalid value for {champ}.")
         propre[champ] = v or None
+    if not propre["repondant_societe"]:
+        raise ValueError("Please enter your company name.")
     if not propre["repondant_nom"]:
         raise ValueError("Please enter your name.")
     if not email_valide(propre["repondant_email"]):
@@ -450,6 +454,7 @@ def email_reponse_recue(*, nom_fournisseur: str, reponse: dict, lien_mysifa: str
 
     lignes = [
         ("Fournisseur", _esc(nom_fournisseur)),
+        ("Société", _esc(reponse.get("repondant_societe") or "")),
         ("Répondant", _esc(f"{reponse.get('repondant_nom') or ''} — {reponse.get('repondant_email') or ''}")),
         ("Rôle", _esc(eudr_libelle("role", reponse.get("role")))),
         ("Produits dans le périmètre", _esc(eudr_libelle("perimetre", reponse.get("perimetre")))),

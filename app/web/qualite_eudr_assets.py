@@ -226,7 +226,8 @@ async function eudrVoirReponse(fid){
       <div class="modal-hd"><h3>${escHtml(l.nom)} — réponse EUDR</h3></div>
       <div class="modal-bd">
         <p class="fsc-muted" style="margin:0 0 12px">Reçue le ${escHtml(fmtDateTime(rep.created_at))}${hist.length > 1 ? ` · ${hist.length} réponses au total, la plus récente fait foi` : ''}</p>
-        ${ligne('Répondant', escHtml([rep.repondant_nom, rep.repondant_fonction, rep.repondant_email].filter(Boolean).join(' · ')))}
+        ${ligne('Société', escHtml(rep.repondant_societe))}
+        ${ligne('Répondant', escHtml([rep.repondant_nom, rep.repondant_fonction, rep.repondant_email, rep.repondant_tel].filter(Boolean).join(' · ')))}
         ${ligne('Établissement', escHtml(lib.etablissement))}
         ${ligne('Produits dans le périmètre', escHtml(lib.perimetre))}
         ${ligne('Codes NC', escHtml(rep.codes_nc))}
