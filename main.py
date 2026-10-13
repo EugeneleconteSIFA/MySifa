@@ -618,7 +618,10 @@ async def inject_tache_quick(request: Request, call_next):
     p = request.url.path
     _tags = b"".join(t for t in (_TACHE_QUICK_TAG, _BLOCS_TAG) if t not in body)
     _tete = b""
-    if not p.startswith("/portail/") and b"mysifa-boutons-off" not in body and b"__MYSIFA_BOUTONS__=" not in body:
+    # Le site vitrine (/website) est une maquette du site public : aucun outil
+    # interne (boutons flottants, raccourci tâche, capture de blocs) n'y apparaît.
+    _vitrine = p.startswith("/website")
+    if not p.startswith("/portail/") and not _vitrine and b"mysifa-boutons-off" not in body and b"__MYSIFA_BOUTONS__=" not in body:
         try:
             _tete, _pied = _boutons_flottants(request, body)
             _tags = _pied + _tags
@@ -631,7 +634,7 @@ async def inject_tache_quick(request: Request, call_next):
             body = body[:_h.end()] + _tete + body[_h.end():]
         else:
             _tags = _tete + _tags
-    if p.startswith("/portail/") or not _tags:
+    if p.startswith("/portail/") or _vitrine or not _tags:
         new_body = body
     else:
         # Insertion avant le DERNIER </body>, jamais le premier. Plusieurs pages
