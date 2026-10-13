@@ -387,7 +387,7 @@ const SUIVI = [
 const board = M.rendreSuivi(SUIVI, { aujourdhui: "2026-10-12" });
 verifier("suivi : quatre colonnes", board.split('<section class="reu-col').length - 1 === 4);
 verifier("suivi : sans statut, la case decide", board.includes('data-statut="4"') && board.indexOf('st-termine') < board.lastIndexOf('Ancienne'));
-verifier("suivi : retard signale", board.includes('reu-carte retard') && board.includes("En retard"));
+verifier("suivi : retard signale", board.includes(' retard" draggable') && board.includes("En retard"));
 verifier("suivi : non attribuee nommee", board.includes("Non attribuée"));
 verifier("suivi : lien vers la reunion", board.includes('data-ouvrir="4"'));
 verifier("suivi : filtre Paul", M.rendreSuivi(SUIVI, { filtreResp: "Paul" }).indexOf("Regler la DSI") === -1);
