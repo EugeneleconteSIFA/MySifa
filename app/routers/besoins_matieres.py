@@ -4035,31 +4035,6 @@ def _cibles_stock(conn, lignes: list, mod_laize, perte_pct) -> dict:
     return cibles
 
 
-@router.get("/api/stock/destockage/{planning_id}/production")
-def destockage_production(planning_id: int, request: Request):
-    """Données de production du dossier, pour juger les quantités à sortir.
-
-    Les statistiques sont celles de la fiche dossier du planning
-    (`build_dossier_production_stats`), toutes machines confondues ; les
-    saisies, celles de MyProd › Saisies. Lecture seule.
-    """
-    require_stock_write(request)
-    from app.services.dossier_stats import build_dossier_production_stats
-    with get_db() as conn:
-        pe = conn.execute(
-            "SELECT id, reference, numero_of FROM planning_entries WHERE id=?",
-            (planning_id,),
-        ).fetchone()
-        if not pe:
-            raise HTTPException(404, "Dossier introuvable.")
-        no_dossier = (pe["numero_of"] or pe["reference"] or "").strip()
-        rows = _saisies_dossier(conn, no_dossier) if no_dossier else []
-    stats = build_dossier_production_stats(rows, no_dossier)
-    metrage = _f(((stats or {}).get("quantites") or {}).get("metrage_m"))
-    return {"no_dossier": no_dossier, "stats": stats, "saisies": rows,
-            "alerte": _alerte_metrage(metrage, rows)}
-
-
 @router.post("/api/stock/destockage/{planning_id}/ajuster")
 async def destockage_ajuster(planning_id: int, request: Request):
     """Corrige ce qui est sorti, sans effacer ce qui a été écrit.
@@ -4484,6 +4459,31 @@ def destockage_auto_dossier(planning_id: int, request: Request):
             raise HTTPException(400, res.get("motif") or "Déstockage impossible.")
         conn.commit()
     return {"success": True, **res}
+
+
+@router.get("/api/stock/destockage/{planning_id}/production")
+def destockage_production(planning_id: int, request: Request):
+    """Données de production du dossier, pour juger les quantités à sortir.
+
+    Les statistiques sont celles de la fiche dossier du planning
+    (`build_dossier_production_stats`), toutes machines confondues ; les
+    saisies, celles de MyProd › Saisies. Lecture seule.
+    """
+    require_stock_write(request)
+    from app.services.dossier_stats import build_dossier_production_stats
+    with get_db() as conn:
+        pe = conn.execute(
+            "SELECT id, reference, numero_of FROM planning_entries WHERE id=?",
+            (planning_id,),
+        ).fetchone()
+        if not pe:
+            raise HTTPException(404, "Dossier introuvable.")
+        no_dossier = (pe["numero_of"] or pe["reference"] or "").strip()
+        rows = _saisies_dossier(conn, no_dossier) if no_dossier else []
+    stats = build_dossier_production_stats(rows, no_dossier)
+    metrage = _f(((stats or {}).get("quantites") or {}).get("metrage_m"))
+    return {"no_dossier": no_dossier, "stats": stats, "saisies": rows,
+            "alerte": _alerte_metrage(metrage, rows)}
 
 
 @router.post("/api/stock/destockage/auto/balayer")
