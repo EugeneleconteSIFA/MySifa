@@ -187,6 +187,7 @@ async def lifespan(app: FastAPI):
     _releves_task = asyncio.create_task(_boucle_releves_accueil())
     _memo_task = asyncio.create_task(_boucle_memo_expedition())
     _emails_task = asyncio.create_task(_boucle_emails_commandes())
+    _cloture_task = asyncio.create_task(_boucle_cloture_fin_prevue())
     try:
         yield
     finally:
@@ -194,6 +195,7 @@ async def lifespan(app: FastAPI):
         _releves_task.cancel()
         _memo_task.cancel()
         _emails_task.cancel()
+        _cloture_task.cancel()
 
 
 async def _boucle_releves_accueil():
@@ -254,6 +256,27 @@ async def _boucle_memo_expedition():
         except Exception as e:
             print(f"[MySifa] mémo expédition : tour en échec ({e})")
         await asyncio.sleep(60)
+
+
+async def _boucle_cloture_fin_prevue():
+    """Toutes les 15 minutes, clot et destocke les dossiers des postes sans
+    saisie de production (case « Cloture a la fin prevue » des machines)
+    dont la fin prevue au planning est passee."""
+    from app.core.database import get_db as _get_db
+    from app.routers.besoins_matieres import tour_cloture_fin_prevue
+
+    await asyncio.sleep(150)
+    while True:
+        try:
+            res = await asyncio.to_thread(tour_cloture_fin_prevue, _get_db)
+            if res.get("clos"):
+                print(f"[MySifa] clôture à la fin prévue : {len(res['clos'])} dossier(s) clos, "
+                      f"{len(res['traites'])} déstocké(s)")
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[MySifa] clôture à la fin prévue : tour en échec ({e})")
+        await asyncio.sleep(900)
 
 
 async def _boucle_emails_commandes():
