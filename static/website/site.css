@@ -522,3 +522,15 @@ p{margin:0}
 .end-row{align-items:center}
 .end-row .photo-stack{position:static}
 @media (min-width:901px){.end-row .steps{grid-template-columns:1fr 1fr}.end-row .step{padding:30px 28px}.end-row .step:nth-child(3){border-left:0}.end-row .step:nth-child(n+3){border-top:2px dashed var(--border2)}}
+
+/* Parc machines : la phrase finale doit passer sous les cartes décalées de 40 px */
+.machines+.claim{margin-top:62px}
+@media (max-width:600px){.machines+.claim{margin-top:22px}}
+
+/* Engagements : 7 cartes, 4 + 3 centrées (plus de trou en fin de grille) */
+.engage{display:flex;flex-wrap:wrap;justify-content:center}
+.engage .eng{flex:0 0 calc((100% - 3 * 14px) / 4)}
+@media (max-width:1100px){.engage .eng{flex-basis:calc((100% - 2 * 14px) / 3)}}
+@media (max-width:600px){.engage .eng{flex-basis:calc((100% - 12px) / 2)}}
+/* Entreprise sans frise : texte centré face aux photos */
+.ent-grid{align-items:center}
