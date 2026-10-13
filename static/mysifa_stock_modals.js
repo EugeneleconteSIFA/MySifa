@@ -171,7 +171,7 @@
   var STOCK_EMPL_SORTIE_PROD_LABEL = 'En attente - sortie de prod';
   var STOCK_UNITE_VENTE_DEFAUT = 'etiquette';
 
-  const MP_CAT_LABELS = { mandrin: 'Mandrin', palette: 'Palette', adhesif: 'Adhésif', carton: 'Carton', frontal: 'Frontal', glassine: 'Glassine', complexe: 'Complexe', autre: 'Autre' };
+  const MP_CAT_LABELS = { mandrin: 'Mandrin', palette: 'Palette', adhesif: 'Adhésif', carton: 'Carton', frontal: 'Frontal', glassine: 'Glassine', complexe: 'Complexe', encre: 'Encre', autre: 'Autre' };
 
   const MP_MVT_TITLES = {
     entree: 'Entrée en stock',
