@@ -124,6 +124,23 @@ def synchroniser(conn) -> dict:
                     WHERE matiere_id=? AND COALESCE(prix,0)=0""",
                 (a["prix"], now, mid),
             )
+            # Miroir MyStock du prix (lu par la valorisation et « Ajuster le
+            # conditionnement ») : même règle, un prix saisi n'est pas écrasé.
+            v = conn.execute(
+                "SELECT prix_unitaire FROM mp_valorisation WHERE matiere_id=?", (mid,)
+            ).fetchone()
+            if v is None:
+                conn.execute(
+                    """INSERT INTO mp_valorisation (matiere_id, prix_unitaire, updated_at, updated_by_name)
+                       VALUES (?,?,?,'Synchro RVGI')""",
+                    (mid, a["prix"], now),
+                )
+            elif not float(v[0] or 0):
+                conn.execute(
+                    """UPDATE mp_valorisation SET prix_unitaire=?, updated_at=?, updated_by_name='Synchro RVGI'
+                        WHERE matiere_id=?""",
+                    (a["prix"], now, mid),
+                )
         qte = float((stocks.get(ref) or {}).get("stock_erp") or 0)
         if abs(qte) >= STOCK_NON_SUIVI:
             qte = 0.0
