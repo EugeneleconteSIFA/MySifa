@@ -291,27 +291,51 @@
       .map(function(n){ return {nom: n, ouvertes: vus[n]}; });
   }
 
+  /* Une tuile de kanban : l'action d'abord, en gros ; qui la porte et pour
+     quand, en pastilles au-dessus ; la reunion d'origine en pied. La tuile se
+     glisse d'une colonne a l'autre ; le selecteur reste pour le clavier et
+     les ecrans tactiles, ou le glisser-deposer HTML5 ne fonctionne pas. */
+  function initiales(nom){
+    var m = String(nom || '').trim().split(/\s+/).filter(Boolean);
+    if(!m.length) return '?';
+    return (m[0][0] + (m.length > 1 ? m[m.length - 1][0] : '')).toUpperCase();
+  }
+
+  var ICONE_CAL =
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    + 'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>';
+  var ICONE_REU =
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    + 'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>'
+    + '<path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
+
   function rendreCarte(a, aujourdhui){
     var retard = enRetard(a, aujourdhui);
     var qui = String(a.responsable || '').trim();
-    return '<div class="reu-carte' + (retard ? ' retard' : '') + '">'
-      + '<div class="reu-carte-t">' + esc(a.texte) + '</div>'
-      + '<div class="reu-carte-meta">'
+    var st = statutDe(a);
+    return '<article class="reu-carte st-' + st + (retard ? ' retard' : '') + '" '
+      + 'draggable="true" data-carte="' + escA(a.id) + '">'
+      + '<div class="reu-carte-haut">'
       +   '<span class="reu-carte-qui' + (qui ? '' : ' vide') + '">'
-      +     esc(qui || 'Non attribu\u00e9e') + '</span>'
+      +     '<span class="reu-avatar" aria-hidden="true">' + esc(initiales(qui)) + '</span>'
+      +     esc(qui || 'Non attribuée') + '</span>'
       +   (a.echeance
-            ? '<span class="reu-carte-quand">' + (retard ? 'En retard · ' : '')
-              + esc(dateFr(a.echeance)) + '</span>'
+            ? '<span class="reu-carte-quand" title="Échéance">' + ICONE_CAL
+              + (retard ? 'En retard · ' : '') + esc(dateFr(a.echeance)) + '</span>'
             : '')
       + '</div>'
+      + '<div class="reu-carte-t">' + esc(a.texte) + '</div>'
       + '<div class="reu-carte-pied">'
-      +   selectStatut(a)
       +   (a.reunion_id
             ? '<button type="button" class="reu-carte-reu" data-ouvrir="' + escA(a.reunion_id) + '" '
-              + 'title="Ouvrir la r\u00e9union">' + esc(a.reunion_titre || 'R\u00e9union') + '</button>'
-            : '')
+              + 'title="Ouvrir la réunion">' + ICONE_REU
+              + '<span>' + esc(a.reunion_titre || 'Réunion') + '</span></button>'
+            : '<span></span>')
+      +   selectStatut(a)
       + '</div>'
-      + '</div>';
+      + '</article>';
   }
 
   function rendreSuivi(l, etat){
@@ -355,7 +379,7 @@
         masquees = total - TERMINE_VUES;
         cartes = cartes.slice(0, TERMINE_VUES);
       }
-      return '<section class="reu-col st-' + s.code + '">'
+      return '<section class="reu-col st-' + s.code + '" data-col="' + s.code + '">'
         + '<h3><span class="reu-col-p" aria-hidden="true"></span>' + esc(s.libelle)
         + ' <span class="reu-col-n">' + total + '</span></h3>'
         + (cartes.length
@@ -853,6 +877,23 @@
     }catch(e){ toast(e.message, 'danger'); }
   }
 
+  async function deplacer(id, statut){
+    var a = (S.suivi || []).filter(function(x){ return String(x.id) === String(id); })[0];
+    if(!a || statutDe(a) === statut) return;
+    var avant = {statut: a.statut, fait: a.fait, fait_le: a.fait_le};
+    a.statut = statut; a.fait = statut === 'termine';
+    if(a.fait) a.fait_le = new Date().toISOString();
+    peindre();
+    try{
+      await poster('/api/reunions/actions/' + encodeURIComponent(id), {statut: statut});
+      await chargerSuivi();
+    }catch(e){
+      Object.assign(a, avant);
+      toast(e.message, 'danger');
+    }
+    peindre();
+  }
+
   async function majAction(id, corps){
     try{
       await poster('/api/reunions/actions/' + encodeURIComponent(id), corps);
@@ -1047,6 +1088,42 @@
         var e2 = rac.querySelector('#reu-notes-etat');
         if(e2) e2.textContent = S.notesEtat;
       }, 900);
+    });
+
+    /* Glisser-deposer du kanban. Delegue sur la racine, comme le reste : le
+       tableau est repeint a chaque changement. */
+    var glisse = null;
+    rac.addEventListener('dragstart', function(ev){
+      var c = ev.target.closest ? ev.target.closest('[data-carte]') : null;
+      if(!c) return;
+      glisse = c.getAttribute('data-carte');
+      try{ ev.dataTransfer.setData('text/plain', glisse); ev.dataTransfer.effectAllowed = 'move'; }catch(e){}
+      setTimeout(function(){ c.classList.add('glisse'); }, 0);
+    });
+    rac.addEventListener('dragend', function(){
+      glisse = null;
+      rac.querySelectorAll('.glisse,.survol').forEach(function(n){
+        n.classList.remove('glisse'); n.classList.remove('survol');
+      });
+    });
+    rac.addEventListener('dragover', function(ev){
+      if(!glisse) return;
+      var col = ev.target.closest ? ev.target.closest('[data-col]') : null;
+      if(!col) return;
+      ev.preventDefault();
+      try{ ev.dataTransfer.dropEffect = 'move'; }catch(e){}
+      rac.querySelectorAll('.reu-col.survol').forEach(function(n){
+        if(n !== col) n.classList.remove('survol');
+      });
+      col.classList.add('survol');
+    });
+    rac.addEventListener('drop', async function(ev){
+      var col = ev.target.closest ? ev.target.closest('[data-col]') : null;
+      if(!col || !glisse) return;
+      ev.preventDefault();
+      var id = glisse;
+      glisse = null;
+      await deplacer(id, col.getAttribute('data-col'));
     });
 
     rac.addEventListener('keydown', async function(ev){
