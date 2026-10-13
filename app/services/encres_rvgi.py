@@ -3,8 +3,8 @@
 MyStock ne mouvemente pas les encres : leur stock vit dans RVGI. Plutôt que de
 le ressaisir, on crée une matière « encre » par article encre du miroir
 (`mat_mat.type = 8`) et on y recopie la quantité RVGI — le `qte2` du dernier
-mouvement, cf. `erp_stock`. Le prix, lui, se saisit dans Coûts matières comme
-pour toute autre matière.
+mouvement, cf. `erp_stock`. Le prix d'achat RVGI (€/kg) est repris tant
+qu'aucun prix n'a été saisi dans Coûts matières.
 
 Le lien article ↔ matière passe par `erp_article_matiere`, dont `type_code` est
 le type de la LIGNE D'ACHAT (`mat_mat.type + 2`, cf. erp_types) : 10 pour une
@@ -28,17 +28,30 @@ TYPE_LIGNE_ACHAT = TYPE_ARTICLE + 2
 STOCK_NON_SUIVI = 1e10
 
 
+def _prix_kg(pa, pafou1) -> float:
+    """Prix d'achat RVGI au kilo : `pa`, ou à défaut le tarif de 1re tranche."""
+    for v in (pa, pafou1):
+        try:
+            f = float(v or 0)
+        except (TypeError, ValueError):
+            continue
+        if f > 0:
+            return f
+    return 0.0
+
+
 def _articles_rvgi() -> list[dict]:
     with miroir.get_erp_db() as conn:
         if "mat_mat" not in miroir.tables_presentes(conn):
             return []
         rows = conn.execute(
-            "SELECT code1, code2, libc1 FROM mat_mat WHERE corbeille = 0 AND type = ?",
+            "SELECT code1, code2, libc1, pa, pafou1 FROM mat_mat WHERE corbeille = 0 AND type = ?",
             (TYPE_ARTICLE,),
         ).fetchall()
     return [
         {"code1": str(r["code1"]).strip(), "code2": str(r["code2"]).strip(),
-         "libelle": (r["libc1"] or "").strip()}
+         "libelle": (r["libc1"] or "").strip(),
+         "prix": _prix_kg(r["pa"], r["pafou1"])}
         for r in rows if str(r["code1"] or "").strip()
     ]
 
@@ -102,6 +115,14 @@ def synchroniser(conn) -> dict:
                    (code1, code2, type_code, matiere_id, origine, created_at, created_by_name)
                    VALUES (?,?,?,?,'encre_rvgi',?,'Synchro RVGI')""",
                 (a["code1"], a["code2"], TYPE_LIGNE_ACHAT, mid, now),
+            )
+        # Prix RVGI repris tant qu'aucun prix n'a été saisi : une saisie dans
+        # Coûts matières (prix > 0) n'est jamais écrasée.
+        if a["prix"] > 0:
+            conn.execute(
+                """UPDATE mp_matiere_prix SET prix=?, updated_at=?
+                    WHERE matiere_id=? AND COALESCE(prix,0)=0""",
+                (a["prix"], now, mid),
             )
         qte = float((stocks.get(ref) or {}).get("stock_erp") or 0)
         if abs(qte) >= STOCK_NON_SUIVI:
