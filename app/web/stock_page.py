@@ -79,6 +79,7 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
+<link rel="stylesheet" href="/static/mysifa_etiq_specifiques.css?v=1">
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -2429,6 +2430,8 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
 <script src="/static/mysifa_stock_modals.js?v=encre2"></script>
+<script src="/static/mysifa_etiq_specifiques.js?v=2"></script>
+<script src="/static/mysifa_etiq_editeur.js?v=2"></script>
 <script src="/static/mysifa_destockage.js?v=8"></script>
 <script src="/static/mysifa_dock.js?v=2"></script>
 <script src="/static/mysifa_postit.js"></script>
@@ -15073,6 +15076,12 @@ const TRACA_POSTES = [
   { id:'logistique', label:'Logistique',   icon:'truck',     color:'#10b981', colorBg:'rgba(16,185,129,.12)' },
 ];
 
+// Outils de MyPrint adressables comme un poste (?tab=traca&poste=…), mais qui
+// ne sont pas un poste d'étiquetage : ils ont leur propre écran.
+const TRACA_OUTILS = [
+  { id:'specifiques', label:'Étiquettes spécifiques', icon:'tag', sous:'Par client, séries, SSCC' },
+];
+
 const TRACA_FORMATS = [
   { id:'a4p',     label:'A4 paysage',   dims:'297×210 mm' },
   { id:'120x105', label:'120×105 mm',   dims:'120×105 mm' },
@@ -15951,6 +15960,19 @@ function tracaSyncUrl(posteId) {
 }
 
 function buildTraca() {
+  // Étiquettes spécifiques : éditeur façon BarTender, monté par
+  // static/mysifa_etiq_specifiques.js. Le module garde son propre nœud et son
+  // état : un renderContent() le rattache sans le reconstruire.
+  if (S.tracaPoste === 'specifiques') {
+    const root = el('div',{id:'etiq-spec-root'});
+    if (window.EtiqSpec) window.EtiqSpec.mount(root);
+    // Pleine largeur : l'éditeur a besoin de place pour l'aperçu à l'échelle.
+    return el('div',{cls:'content',style:{maxWidth:'none'}},
+      el('div',{cls:'traca-back-bar'},
+        el('button',{cls:'traca-back-btn',on:{click:()=>{ S.tracaPoste=null; tracaSyncUrl(null); renderContent(); }}},
+          iconEl('arrow-left',15), ' Postes')),
+      root);
+  }
   if (S.tracaPoste) {
     const poste = TRACA_POSTES.find(p=>p.id===S.tracaPoste);
     if (poste) return buildTracaPosteView(poste);
@@ -15966,9 +15988,16 @@ function buildTraca() {
     );
     return card;
   });
+  const outils = TRACA_OUTILS.map(o=>el('div',{cls:'traca-poste-card',on:{click:()=>{ S.tracaPoste=o.id; tracaSyncUrl(o.id); renderContent(); }}},
+    el('div',{cls:'traca-poste-icon',style:{background:'var(--accent-bg)',color:'var(--accent)'}}, iconEl(o.icon,22)),
+    el('div',{cls:'traca-poste-label'},o.label),
+    el('div',{cls:'traca-poste-count'},o.sous)
+  ));
   return el('div',{cls:'content'},
     el('div',{cls:'traca-section-title'},'Sélectionner un poste de travail'),
-    el('div',{cls:'traca-postes-grid'},...cards)
+    el('div',{cls:'traca-postes-grid'},...cards),
+    el('div',{cls:'traca-section-title',style:{marginTop:'18px'}},'Outils'),
+    el('div',{cls:'traca-postes-grid'},...outils)
   );
 }
 
@@ -27926,7 +27955,7 @@ async function init() {
     // render() est déjà passé au-dessus : il faut redessiner le contenu, sinon
     // l'écran reste sur la grille des postes malgré l'URL.
     const urlPoste = urlParams.get('poste');
-    if (urlPoste && TRACA_POSTES.some(p => p.id === urlPoste)) {
+    if (urlPoste && (TRACA_OUTILS.some(o => o.id === urlPoste) || TRACA_POSTES.some(p => p.id === urlPoste))) {
       S.tracaPoste = urlPoste;
       renderContent();
     }

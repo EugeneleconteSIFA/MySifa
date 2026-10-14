@@ -120,6 +120,7 @@ from app.routers.learning import router as learning_api_router
 from app.routers.guides import router as guides_api_router
 from app.web.learning_page import router as learning_page_router
 from app.routers.print import router as print_router
+from app.routers.print_specifiques import router as print_specifiques_router
 from app.routers.besoins_matieres import router as besoins_matieres_router
 from app.routers.taches import router as taches_api_router
 from app.web.taches_page import router as taches_page_router
@@ -826,6 +827,7 @@ app.include_router(learning_api_router)
 app.include_router(guides_api_router)
 app.include_router(learning_page_router)
 app.include_router(print_router)
+app.include_router(print_specifiques_router)
 app.include_router(taches_api_router)
 app.include_router(taches_page_router)
 # Les deux : sans include_router, /api/erp/* renverrait un 404 silencieux.
