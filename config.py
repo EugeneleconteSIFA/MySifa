@@ -1210,6 +1210,31 @@ ETIQ_IA_MODELES = (
 def etiq_ia_modeles() -> list[dict]:
     return [{"id": i, "libelle": l, "aide": a, "repli": r} for i, l, a, r in ETIQ_IA_MODELES]
 ETIQ_UPLOAD_DIR = os.path.join(UPLOADS_ROOT, "etiquettes_specifiques")
+
+# ─── Agent IA (widget présent sur tout le site) ───────────────────
+# Arbitrage d'Eugène du 14/10/2026 : l'agent est réservé aux bureaux. Il lit
+# comme le connecteur MCP (base MySifa + miroir RVGI, tables RH / paie /
+# messagerie exclues) et propose des actions que l'utilisateur confirme.
+ROLES_AGENT_IA = (
+    {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_COMMERCIAL, ROLE_COMPTABILITE, ROLE_EXPEDITION}
+    | ROLES_ADMINISTRATION_ALL
+)
+# Qui lit le miroir RVGI (commandes, factures, tiers) depuis l'agent.
+ROLES_AGENT_RVGI = set(ROLES_AGENT_IA)
+AGENT_IA_MODELE = os.getenv("AGENT_IA_MODELE", "claude-sonnet-5-5")
+# (identifiant, libellé, aide, repli serveur) — même logique que ETIQ_IA_MODELES.
+AGENT_IA_MODELES = (
+    ("claude-sonnet-5-5", "Sonnet 5.5", "Recommandé — croise plusieurs sources, écrit le SQL.", True),
+    ("claude-haiku-5-5", "Haiku 5.5", "Plus rapide, pour les questions simples.", False),
+)
+AGENT_IA_MAX_TOURS = int(os.getenv("AGENT_IA_MAX_TOURS", "12"))
+AGENT_IA_RATE_MAX = int(os.getenv("AGENT_IA_RATE_MAX", "20"))      # requêtes / minute / utilisateur
+# Une action proposée et pas confirmée dans ce délai n'est plus exécutable.
+AGENT_IA_ACTION_TTL_MIN = int(os.getenv("AGENT_IA_ACTION_TTL_MIN", "30"))
+
+
+def agent_ia_modeles() -> list[dict]:
+    return [{"id": i, "libelle": l, "aide": a, "repli": r} for i, l, a, r in AGENT_IA_MODELES]
 ETIQ_PIECE_MAX_OCTETS = int(os.getenv("ETIQ_PIECE_MAX_OCTETS", str(15 * 1024 * 1024)))
 
 # ─── MyTradu

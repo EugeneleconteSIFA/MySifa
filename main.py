@@ -594,6 +594,14 @@ _BOUTONS_JS = (
 )
 
 
+# /static/ est servi avec 24 h de cache : un fichier modifié doit changer
+# d'adresse. À incrémenter avec les inclusions explicites des pages.
+_VERSION_ASSET = {
+    b"/static/mysifa_ai_chat.css": b"?v=2",
+    b"/static/mysifa_ai_chat.js": b"?v=2",
+}
+
+
 def _boutons_flottants(request: Request, body: bytes) -> tuple[bytes, bytes]:
     """(ce qui va dans le <head>, ce qui va avant </body>) pour cette page."""
     from app.services import boutons_flottants as _bf
@@ -612,10 +620,10 @@ def _boutons_flottants(request: Request, body: bytes) -> tuple[bytes, bytes]:
     pied = b""
     for chemin, cle in _BOUTONS_CSS:
         if chemin not in body and (cle is None or cle not in off):
-            pied += b'<link rel="stylesheet" href="' + chemin + b'">'
+            pied += b'<link rel="stylesheet" href="' + chemin + _VERSION_ASSET.get(chemin, b"") + b'">'
     for chemin, cle in _BOUTONS_JS:
         if chemin + b'"' not in body and chemin + b"?" not in body and (cle is None or cle not in off):
-            pied += b'<script src="' + chemin + b'"></script>'
+            pied += b'<script src="' + chemin + _VERSION_ASSET.get(chemin, b"") + b'"></script>'
     pied += ('<script src="/static/mysifa_boutons.js?v=%s"></script>' % APP_VERSION).encode()
     return tete, pied
 

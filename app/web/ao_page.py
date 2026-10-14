@@ -449,12 +449,12 @@ margin-left:6px;cursor:help;vertical-align:middle}
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
-<link rel="stylesheet" href="/static/mysifa_ai_chat.css">
+<link rel="stylesheet" href="/static/mysifa_ai_chat.css?v=2">
 <script>window.__MYSIFA_APP__='ao';</script>
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
-<script src="/static/mysifa_ai_chat.js"></script>
+<script src="/static/mysifa_ai_chat.js?v=2"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
