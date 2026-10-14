@@ -756,8 +756,99 @@
   function joursCourbe(c) {
     var n = horizon(c), debut = jourDecale(-(n - 1));
     var depuis = c.releves && c.releves.depuis;
-    if (depuis && depuis > debut) debut = depuis < jourDecale(-6) ? depuis : jourDecale(-6);
+    if (depuis && depuis > debut) debut = depuis;
     return joursEntre(debut, jourDecale(0));
+  }
+
+  // Montant court pour les repères d'échelle : « 1,65 M », « 412 k », « 37 ».
+  function court(v) {
+    var a = Math.abs(v);
+    if (a >= 1e6) return (v / 1e6).toLocaleString("fr-FR", { maximumFractionDigits: 2 }) + " M";
+    if (a >= 1e4) return Math.round(v / 1e3).toLocaleString("fr-FR") + " k";
+    return (Math.round(v * 10) / 10).toLocaleString("fr-FR");
+  }
+
+  // Tracé lissé (Catmull-Rom → Bézier) d'une suite de points [x, y].
+  function lisse(pts) {
+    if (pts.length < 3) return "M" + pts.map(function (p) { return p[0].toFixed(1) + "," + p[1].toFixed(1); }).join(" L");
+    var d = "M" + pts[0][0].toFixed(1) + "," + pts[0][1].toFixed(1);
+    for (var i = 0; i < pts.length - 1; i++) {
+      var p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+      var c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
+      var c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
+      d += " C" + c1x.toFixed(1) + "," + c1y.toFixed(1) + " " + c2x.toFixed(1) + "," + c2y.toFixed(1) + " " + p2[0].toFixed(1) + "," + p2[1].toFixed(1);
+    }
+    return d;
+  }
+
+  /* Courbe de niveau du grand format : aire légère et tracé lissé de la valeur
+     de 18 h, fourchette min–max du jour en trait vertical discret, repères
+     d'échelle en haut et en bas, seuil en pointillé. Un jour sans relevé
+     coupe le tracé. Aujourd'hui : point creux, valeur du moment. */
+  function dessinCourbe(pts, L, H, o) {
+    var vals = [];
+    pts.forEach(function (p) { [p.v, p.mi, p.ma].forEach(function (x) { if (x != null) vals.push(x); }); });
+    if (o.seuil != null) vals.push(o.seuil);
+    if (!vals.length) return "";
+    var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    if (lo === hi) { var e = Math.abs(lo) * 0.05 || 1; lo -= e; hi += e; }
+    var m = (hi - lo) * 0.12;
+    var vlo = lo, vhi = hi;
+    lo = lo >= 0 ? Math.max(0, lo - m) : lo - m;
+    hi += m;
+    var G = 34, Hh = H - 8, top = 4;
+    var Lu = L - G - 6, pas = pts.length > 1 ? Lu / (pts.length - 1) : 0;
+    var X = function (k) { return G + (pts.length > 1 ? k * pas : Lu / 2); };
+    var Y = function (v) { return top + Hh - (v - lo) / (hi - lo) * Hh; };
+    var out = "";
+    [vhi, vlo].forEach(function (v) {
+      var y = Y(v);
+      out += '<line x1="' + G + '" y1="' + y.toFixed(1) + '" x2="' + (L - 2) + '" y2="' + y.toFixed(1) + '" stroke="var(--border)" stroke-width="1"/>' +
+        '<text x="' + (G - 5) + '" y="' + (y + 3).toFixed(1) + '" font-size="9" fill="var(--muted)" text-anchor="end">' + esc(court(v)) + "</text>";
+    });
+    if (o.seuil != null) {
+      var ys = Y(o.seuil).toFixed(1);
+      out += '<line x1="' + G + '" y1="' + ys + '" x2="' + (L - 2) + '" y2="' + ys + '" stroke="var(--danger)" stroke-width="1" stroke-dasharray="4 3"/>';
+    }
+    var segs = [], cur = [];
+    pts.forEach(function (p, k) { if (p.v == null) { if (cur.length) segs.push(cur); cur = []; } else cur.push(k); });
+    if (cur.length) segs.push(cur);
+    var base = (top + Hh).toFixed(1);
+    segs.forEach(function (sg) {
+      var xy = sg.map(function (k) { return [X(k), Y(pts[k].v)]; });
+      if (xy.length > 1) {
+        out += '<path d="' + lisse(xy) + " L" + xy[xy.length - 1][0].toFixed(1) + "," + base + " L" + xy[0][0].toFixed(1) + "," + base +
+          ' Z" fill="var(--mac-a)" fill-opacity=".10"/>';
+      }
+    });
+    pts.forEach(function (p, k) {
+      if (p.mi == null || p.ma == null || p.mi === p.ma) return;
+      out += '<line x1="' + X(k).toFixed(1) + '" y1="' + Y(p.ma).toFixed(1) + '" x2="' + X(k).toFixed(1) + '" y2="' + Y(p.mi).toFixed(1) +
+        '" stroke="var(--mac-a)" stroke-opacity=".35" stroke-width="3" stroke-linecap="round"/>';
+    });
+    segs.forEach(function (sg) {
+      if (sg.length < 2) return;
+      out += '<path d="' + lisse(sg.map(function (k) { return [X(k), Y(pts[k].v)]; })) +
+        '" fill="none" stroke="var(--mac-a)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+    });
+    pts.forEach(function (p, k) {
+      if (p.v == null) return;
+      var rouge = o.regle && alerteDeclenchee(o.regle, p.v);
+      var coul = rouge ? "var(--danger)" : "var(--mac-a)";
+      out += p.enCours
+        ? '<circle cx="' + X(k).toFixed(1) + '" cy="' + Y(p.v).toFixed(1) + '" r="3.5" fill="var(--card)" stroke="' + coul + '" stroke-width="2"/>'
+        : (pts.length <= 40 || rouge ? '<circle cx="' + X(k).toFixed(1) + '" cy="' + Y(p.v).toFixed(1) + '" r="' + (rouge ? 3 : 2.2) + '" fill="' + coul + '"/>' : "");
+    });
+    var demi = pts.length > 1 ? pas / 2 : Lu / 2;
+    pts.forEach(function (p, k) {
+      var date = p.j.slice(8, 10) + "/" + p.j.slice(5, 7);
+      var t = p.v == null ? date + " : aucun relevé"
+        : date + (p.enCours ? " (en cours)" : " à 18 h") + " : " + valeurUnite(p.v, o.unite) +
+          (p.mi != null && p.ma != null && p.mi !== p.ma ? " · dans la journée " + valeurUnite(p.mi, o.unite) + " – " + valeurUnite(p.ma, o.unite) : "");
+      out += '<rect x="' + Math.max(0, X(k) - demi).toFixed(1) + '" y="0" width="' + Math.max(4, demi * 2).toFixed(1) + '" height="' + H +
+        '" fill="transparent"><title>' + esc(t) + "</title></rect>";
+    });
+    return out;
   }
 
   function courbe(c, it) {
@@ -767,17 +858,18 @@
     var seuil = it.regle && (it.regle.op === "<" || it.regle.op === ">") ? nombre(it.regle.seuil) : null;
     var g = document.createElement("div");
     g.className = "mac-graph mac-courbe";
-    var d = svgCourbe(pts, L, H, { bande: true, points: true, bulles: true, seuil: seuil, regle: it.regle, unite: it.uniteLib });
     var avecHisto = pts.some(function (p) { return p.v != null && !p.enCours; });
-    g.innerHTML = '<svg viewBox="-4 0 ' + (L + 8) + " " + H + '" role="img" aria-label="' + esc(it.lib) + " sur " + n + ' jours">' + d.svg + "</svg>";
+    g.innerHTML = '<svg viewBox="0 0 ' + L + " " + H + '" role="img" aria-label="' + esc(it.lib) + " sur " + jours.length + ' jours">' +
+      dessinCourbe(pts, L, H, { seuil: seuil, regle: it.regle, unite: it.uniteLib }) + "</svg>";
     var pied = document.createElement("div");
     pied.className = "mac-graph-pied";
     var d0 = jours[0];
     pied.appendChild(span("", d0.slice(8, 10) + "/" + d0.slice(5, 7)));
     var depuis = c.releves && c.releves.depuis;
     var mil;
+    pied.style.paddingLeft = "34px";   // aligné sur l'axe, après les repères d'échelle
+    // L'axe part du premier relevé : sa date, à gauche, dit déjà d'où part l'historique.
     if (!avecHisto) mil = span("", "Premier relevé ce soir à 18 h");
-    else if (depuis && depuis > jourDecale(-(n - 1))) mil = span("", "Historique depuis le " + depuis.slice(8, 10) + "/" + depuis.slice(5, 7));
     else {
       var pleins = pts.filter(function (p) { return p.v != null; });
       var moy = pleins.reduce(function (t, p) { return t + p.v; }, 0) / pleins.length;
@@ -838,8 +930,9 @@
     if (!z) return;
     var F = window.MySifaBlocsFiltres;
     var enCourbe = taille(c) === "l" && modeGrand(c) === "courbe";
+    var deuxVues = taille(c) === "l" && !!(c.w.bloc_info && c.w.bloc_info.liste) && aHistorique(c);
     var aFiltres = !!(F && F.existe(c.w.bloc));
-    var voir = !c.apercu && taille(c) === "l" && (aFiltres || enCourbe);
+    var voir = !c.apercu && taille(c) === "l" && (aFiltres || enCourbe || deuxVues);
     c.el.classList.toggle("a-fbar", !!voir);
     if (!voir) { z.hidden = true; return; }
     if (!aFiltres) c.defsF = c.defsF || [];
@@ -858,6 +951,14 @@
     // horizons que l'historique remplit déjà — 30 j au-delà de 7 jours de
     // relevés, 90 j au-delà de 30. Une option seule n'est pas un choix : rien.
     // Le réglage enregistré reste, et reprend effet quand l'historique suit.
+    // Bascule Liste · Courbe (bloc_vue), pour un bloc qui a les deux.
+    if (deuxVues) {
+      var vue = modeGrand(c);
+      h += '<span class="mac-fgr" role="group" aria-label="Affichage">' + [["liste", "Liste"], ["courbe", "Courbe"]].map(function (x) {
+        return '<button type="button" data-fcle="bloc_vue" data-fv="' + x[0] + '"' +
+          (x[0] === vue ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + ">" + x[1] + "</button>";
+      }).join("") + "</span>";
+    }
     var dispo = enCourbe ? horizonsDisponibles(c) : [];
     if (dispo.length > 1) {
       var hz = String(horizon(c));
@@ -908,9 +1009,11 @@
       var b = e.target.closest("button[data-fv]");
       if (!b || b.classList.contains("on") || z.classList.contains("en-cours")) return;
       if (b.getAttribute("data-fv") === "dates") return;
-      if (b.getAttribute("data-fcle") === "bloc_horizon") {
+      if (b.getAttribute("data-fcle") === "bloc_horizon" || b.getAttribute("data-fcle") === "bloc_vue") {
+        var k_ = b.getAttribute("data-fcle"), v_ = b.getAttribute("data-fv");
+        if (k_ === "bloc_vue" && v_ === "liste") v_ = null;   // liste = défaut : rien dans l'adresse
         z.classList.add("en-cours");
-        patcher(c, { url_capture: avecParam(c.w.url_capture, "bloc_horizon", b.getAttribute("data-fv")) })
+        patcher(c, { url_capture: avecParam(c.w.url_capture, k_, v_) })
           .catch(function () {}).then(function () { z.classList.remove("en-cours"); });
         return;
       }
