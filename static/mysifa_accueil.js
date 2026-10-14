@@ -288,6 +288,23 @@
       ".mac-carte.t-s .mac-vals,.mac-carte.t-s .mac-pied,.mac-carte.t-s .mac-filtres,.mac-carte.t-s .mac-appli,.mac-carte.t-s .mac-extra{display:none!important}",
       ".mac-carte.t-s .mac-ctete{padding:8px 10px 8px 14px}",
       ".mac-carte.t-s.alerte .mac-point{width:9px;height:9px;padding:0;font-size:0}",
+      // Barre de filtres du grand format : pastilles sous le titre.
+      ".mac-fbar{display:flex;flex-wrap:wrap;align-items:flex-start;gap:4px 6px;padding:6px 10px 0 14px}",
+      ".mac-fbar[hidden]{display:none}",
+      ".mac-fbar.en-cours{opacity:.6;pointer-events:none}",
+      ".mac-fgr{display:inline-flex;flex-wrap:wrap;gap:2px;padding:2px;border-radius:9px;background:var(--bg,#0a0e17);border:1px solid var(--border,#1e293b)}",
+      ".mac-fgr button{font:600 11px 'Segoe UI',system-ui,sans-serif;border:0;background:transparent;color:var(--text2,#cbd5e1);padding:2px 7px;border-radius:7px;cursor:pointer;white-space:nowrap}",
+      ".mac-fgr button:hover{color:var(--mac-a)}",
+      ".mac-fgr button.on{background:color-mix(in srgb,var(--mac-a) 14%,transparent);color:var(--mac-a);cursor:default}",
+      ".mac-fmulti{font-size:11px;color:var(--text2,#cbd5e1);max-width:100%}",
+      ".mac-fmulti summary{cursor:pointer;font-weight:600;padding:3px 8px;border-radius:9px;background:var(--bg,#0a0e17);border:1px solid var(--border,#1e293b);list-style:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".mac-fmulti summary::-webkit-details-marker{display:none}",
+      ".mac-fmulti summary::after{content:' ▾';color:var(--muted,#94a3b8)}",
+      ".mac-fmulti div{display:flex;flex-wrap:wrap;gap:2px 10px;padding:6px 4px 0}",
+      ".mac-fmulti label{display:inline-flex;align-items:center;gap:4px;cursor:pointer}",
+      // Barre affichée : le sous-titre des filtres ferait doublon.
+      ".mac-carte.a-fbar .mac-filtres{display:none!important}",
+      "#mysifa-accueil.edition .mac-fbar{display:none}",
       ".mac-tailles{display:inline-flex;gap:2px;padding:2px;border-radius:9px;background:var(--card,#111827);border:1px solid var(--border,#1e293b)}",
       ".mac-tailles .mac-btn{border:0;height:22px;min-width:24px;padding:0 4px;background:transparent}",
       ".mac-tailles .mac-btn.on{background:var(--accent-bg,rgba(34,211,238,.12));color:var(--accent,#22d3ee)}",
@@ -421,7 +438,7 @@
      standard, le choix restant enregistré pour un écran plus large. */
   var COLONNE_ETROITE = window.matchMedia("(min-width:900px) and (max-width:1199px)");
   var SERIE_MS = 10 * 60000;   // les jours passés ne bougent plus : série relue toutes les 10 min
-  var GRAPHE_JOURS = 30, SPARK_JOURS = 14, LISTE_MAX = 5;
+  var GRAPHE_JOURS = 30, GRAPHE_MAX = 93, SPARK_JOURS = 14, LISTE_MAX = 5;
   // Passage dans la colonne de 220 px ou retour : le grand format suit.
   function surLargeur() {
     Object.keys(W.cartes).forEach(function (id) { afficherValeurs(W.cartes[id]); });
@@ -472,13 +489,40 @@
   }
 
   // Barres jour par jour ; un jour sans saisie (week-end, fermeture) reste un trait.
-  function barres(c, cle, jours, larg, haut, regle, unite) {
-    var J = (c.serie && c.serie.jours) || {};
-    var vals = [];
-    for (var i = jours - 1; i >= 0; i--) {
-      var j = jourDecale(-i);
-      vals.push({ j: j, v: J[j] && J[j][cle] != null ? J[j][cle] : null });
+  // Les n derniers jours jusqu'à aujourd'hui (AAAA-MM-JJ).
+  function derniersJours(n) {
+    var out = [];
+    for (var i = n - 1; i >= 0; i--) out.push(jourDecale(-i));
+    return out;
+  }
+
+  // Jours d'une période, bornes comprises.
+  function joursEntre(du, au) {
+    var out = [], d = new Date(du + "T12:00:00"), fin = new Date(au + "T12:00:00");
+    while (d <= fin && out.length < 400) {
+      out.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"));
+      d.setDate(d.getDate() + 1);
     }
+    return out;
+  }
+
+  /* Jours du grand graphique : la période capturée dès qu'elle couvre au
+     moins 7 jours (7 j, 30 j, mois) — le graphique suit alors le filtre ;
+     sinon (aujourd'hui, dernier jour) les 30 derniers jours, une barre seule
+     ne montrant rien. Au-delà de 93 jours, les 93 derniers de la période. */
+  function joursGraphe(c) {
+    var s_ = c.serie || {};
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s_.du || "") && /^\d{4}-\d{2}-\d{2}$/.test(s_.au || "")) {
+      var j = joursEntre(s_.du, s_.au);
+      if (j.length >= 7) return j.slice(-GRAPHE_MAX);
+    }
+    return derniersJours(GRAPHE_JOURS);
+  }
+
+  function barres(c, cle, dates, larg, haut, regle, unite) {
+    var J = (c.serie && c.serie.jours) || {};
+    var jours = dates.length;
+    var vals = dates.map(function (j) { return { j: j, v: J[j] && J[j][cle] != null ? J[j][cle] : null }; });
     var seuil = regle && (regle.op === "<" || regle.op === ">") && c.serie.quotidien ? nombre(regle.seuil) : null;
     var max = Math.max.apply(null, vals.map(function (x) { return x.v || 0; }).concat([seuil || 0])) || 1;
     max *= 1.08;
@@ -504,7 +548,7 @@
   }
 
   function sparkline(c, it) {
-    var b = barres(c, it.cle, SPARK_JOURS, 84, 28, null, it.uniteLib);
+    var b = barres(c, it.cle, derniersJours(SPARK_JOURS), 84, 28, null, it.uniteLib);
     var e = document.createElement("span");
     e.innerHTML = '<svg class="mac-spark" viewBox="0 0 84 28" aria-hidden="true">' + b.svg + "</svg>";
     return e.firstChild;
@@ -512,7 +556,7 @@
 
   function graphique(c, it) {
     var H = 96, L = 276;
-    var b = barres(c, it.cle, GRAPHE_JOURS, L, H, it.regle, it.uniteLib);
+    var b = barres(c, it.cle, joursGraphe(c), L, H, it.regle, it.uniteLib);
     var svg = b.svg;
     if (b.seuil != null) {
       var y = (H - b.seuil / b.max * (H - 2)).toFixed(1);
@@ -521,7 +565,7 @@
     }
     var g = document.createElement("div");
     g.className = "mac-graph";
-    g.innerHTML = '<svg viewBox="0 0 ' + L + " " + H + '" role="img" aria-label="' + esc(it.lib) + ' sur 30 jours">' + svg + "</svg>";
+    g.innerHTML = '<svg viewBox="0 0 ' + L + " " + H + '" role="img" aria-label="' + esc(it.lib) + " sur " + b.vals.length + ' jours">' + svg + "</svg>";
     var pleins = b.vals.filter(function (x) { return x.v; });
     var moy = pleins.length ? pleins.reduce(function (t, x) { return t + x.v; }, 0) / pleins.length : null;
     var hors = b.seuil != null ? pleins.filter(function (x) { return alerteDeclenchee(it.regle, x.v); }).length : 0;
@@ -531,7 +575,7 @@
     pied.appendChild(span("", d0.slice(8, 10) + "/" + d0.slice(5, 7)));
     var mil = span("", (moy == null ? "Aucune saisie" : "Moy. " + valeurUnite(moy, it.uniteLib) + " / jour") +
       (hors ? " · " + hors + " j hors seuil" : ""));
-    mil.title = "Moyenne des jours travaillés sur 30 jours";
+    mil.title = "Moyenne des jours travaillés sur " + b.vals.length + " jours";
     pied.appendChild(mil);
     pied.appendChild(span("", d1.slice(8, 10) + "/" + d1.slice(5, 7)));
     g.appendChild(pied);
@@ -565,8 +609,94 @@
     return z;
   }
 
+  /* Grand format : les filtres du bloc (période, liste, vue, machines) se
+     règlent sur la carte même, en pastilles. Le choix est enregistré dans
+     l'adresse capturée de l'indicateur (PATCH url_capture), comme depuis le
+     questionnaire de Personnaliser, qui garde tous les filtres (dates
+     choisies comprises). Décision du 14/10/2026. */
+  var PERIODE_COURT = { today: "Auj.", yesterday: "Dernier jour", last7: "7 j", last30: "30 j",
+                        thisMonth: "Mois", prevMonth: "Mois dernier" };
+
+  function barreFiltres(c) {
+    var z = c.el.querySelector(".mac-fbar");
+    if (!z) return;
+    var F = window.MySifaBlocsFiltres;
+    var voir = !c.apercu && taille(c) === "l" && F && F.existe(c.w.bloc);
+    c.el.classList.toggle("a-fbar", !!voir);
+    if (!voir) { z.hidden = true; return; }
+    if (!c.defsF) {
+      if (!c.defsChargement) {
+        c.defsChargement = F.preparer(c.w.bloc, api).then(function (defs) {
+          c.defsF = defs || [];
+          barreFiltres(c);
+        }).catch(function () { c.defsChargement = null; });
+      }
+      return;
+    }
+    var etat = F.lire(c.defsF, c.w.url_capture);
+    var h = "";
+    c.defsF.forEach(function (f) {
+      var v = etat[f.cle];
+      if (f.type === "periode" || f.type === "choix") {
+        var opts = (f.choix || []).filter(function (o) { return o.v !== "dates" || v === "dates"; });
+        h += '<span class="mac-fgr" role="group" aria-label="' + esc(f.libelle) + '">' + opts.map(function (o) {
+          var lib = f.type === "periode" ? (PERIODE_COURT[o.v] || (o.v === "dates" ? F.decrire([f], etat) || "Dates" : o.l)) : o.l;
+          return '<button type="button" data-fcle="' + esc(f.cle) + '" data-fv="' + esc(o.v) + '"' +
+            (o.v === v ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') +
+            (o.v === "dates" ? ' title="Dates choisies : à changer depuis Personnaliser"' : ' title="' + esc(o.l) + '"') +
+            ">" + esc(lib) + "</button>";
+        }).join("") + "</span>";
+      } else if (f.type === "multi" && (f.choix || []).length) {
+        var sel = v || [];
+        var resume = sel.length ? sel.map(function (x) {
+          var o = f.choix.filter(function (y) { return y.v === x; })[0];
+          return o ? o.l : x;
+        }).join(", ") : (f.vide || "Tout");
+        h += '<details class="mac-fmulti"' + (c.multiOuvert === f.cle ? " open" : "") + ' data-fcle="' + esc(f.cle) + '">' +
+          "<summary>" + esc(f.libelle) + " : " + esc(resume) + "</summary><div>" +
+          f.choix.map(function (o) {
+            return '<label><input type="checkbox" data-fmulti="' + esc(f.cle) + '" value="' + esc(o.v) + '"' +
+              (sel.indexOf(o.v) >= 0 ? " checked" : "") + ">" + esc(o.l) + "</label>";
+          }).join("") + "</div></details>";
+      }
+      // « jour » (date figée) : seulement dans Personnaliser.
+    });
+    z.innerHTML = h;
+    z.hidden = !h;
+    if (z.dataset.ecoute) return;
+    z.dataset.ecoute = "1";
+    function appliquer(etat2) {
+      var url = F.ecrire(c.defsF, c.w.url_capture, etat2);
+      if (url === c.w.url_capture) return;
+      z.classList.add("en-cours");
+      patcher(c, { url_capture: url }).catch(function () {}).then(function () { z.classList.remove("en-cours"); });
+    }
+    z.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var b = e.target.closest("button[data-fv]");
+      if (!b || b.classList.contains("on") || z.classList.contains("en-cours")) return;
+      if (b.getAttribute("data-fv") === "dates") return;
+      var etat2 = F.lire(c.defsF, c.w.url_capture);
+      etat2[b.getAttribute("data-fcle")] = b.getAttribute("data-fv");
+      appliquer(etat2);
+    });
+    z.addEventListener("toggle", function (e) {
+      var d = e.target.closest && e.target.closest("details[data-fcle]");
+      if (d) c.multiOuvert = d.open ? d.getAttribute("data-fcle") : (c.multiOuvert === d.getAttribute("data-fcle") ? null : c.multiOuvert);
+    }, true);
+    z.addEventListener("change", function (e) {
+      var t = e.target;
+      if (!t.matches("input[data-fmulti]")) return;
+      var cle = t.getAttribute("data-fmulti");
+      var etat2 = F.lire(c.defsF, c.w.url_capture);
+      etat2[cle] = Array.prototype.map.call(z.querySelectorAll('input[data-fmulti="' + cle + '"]:checked'), function (x) { return x.value; });
+      appliquer(etat2);
+    });
+  }
+
   function afficherValeurs(c) {
     var t_ = appliquerTaille(c);
+    barreFiltres(c);
     var w = c.w;
     var defs = {};
     ((w.bloc_info && w.bloc_info.valeurs) || []).forEach(function (v) { defs[v.cle] = v; });
@@ -741,6 +871,7 @@
       '<div class="mac-ctete" title="Ouvrir la page"><span class="mac-nom"></span><span class="mac-court"></span><span class="mac-point">Alerte</span><span class="mac-appli" hidden></span>' +
       '<button type="button" class="mac-corb" title="Supprimer cet indicateur" aria-label="Supprimer cet indicateur">' + icone("corbeille") + "</button></div>" +
       '<div class="mac-filtres" hidden></div>' +
+      '<div class="mac-fbar" hidden></div>' +
       '<div class="mac-vals"></div>' +
       '<div class="mac-extra"></div>' +
       '<div class="mac-pied"><span class="tend"></span><span class="seuil"></span><span class="maj"></span></div>' +
@@ -1522,7 +1653,7 @@
       {
         icon: ICO('<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>'),
         title: "Lire et ouvrir",
-        body: "<p>L'indicateur relit ses chiffres <strong>chaque minute</strong>, directement auprès de l'appli. La pastille de couleur dit de quelle appli vient le chiffre, le badge donne l'état d'une machine d'un coup d'œil, et une carte rouge marquée <strong>Alerte</strong> signale un seuil dépassé. L'heure de la dernière lecture s'affiche en bas. Un clic ouvre la page d'origine <strong>avec ses filtres</strong> : c'est là que l'on agit. Une période capturée (« 7 derniers jours ») reste glissante.</p>",
+        body: "<p>L'indicateur relit ses chiffres <strong>chaque minute</strong>, directement auprès de l'appli. La pastille de couleur dit de quelle appli vient le chiffre, le badge donne l'état d'une machine d'un coup d'œil, et une carte rouge marquée <strong>Alerte</strong> signale un seuil dépassé. L'heure de la dernière lecture s'affiche en bas. Un clic ouvre la page d'origine <strong>avec ses filtres</strong> : c'est là que l'on agit. Une période capturée (« 7 derniers jours ») reste glissante. En <strong>grand format</strong>, les filtres (période, machines, liste) se changent directement sur la carte, et le graphique suit la période choisie.</p>",
         illu: SVG +
           '<rect x="20" y="20" width="130" height="64" rx="8" fill="var(--card)" stroke="var(--danger)"/><rect x="20" y="20" width="130" height="64" rx="8" fill="var(--danger)" opacity=".07"/><rect x="21" y="21" width="3" height="62" fill="var(--danger)"/><text x="30" y="36" font-size="8.5" font-weight="700" fill="var(--text)">Temps de prod.</text><rect x="112" y="28" width="32" height="12" rx="6" fill="var(--danger)"/><text x="128" y="36.5" font-size="7" font-weight="700" fill="#fff" text-anchor="middle">Alerte</text>' +
           '<text x="30" y="56" font-size="13" font-weight="700" fill="var(--danger)">1h 12min</text><text x="86" y="56" font-size="7.5" fill="var(--muted)">Arrêts</text>' +

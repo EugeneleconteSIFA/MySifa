@@ -815,7 +815,8 @@
 
   /* ── Séries par jour (tendance, mini-courbe, grand format) ─────────────
      Une série rend { jours: {"AAAA-MM-JJ": {cle: nombre}}, quotidien,
-     tendances: {cle: {actuel, precedent, libelle}} }. Elle s'additionne jour
+     tendances: {cle: {actuel, precedent, libelle}}, du, au } (du / au : la
+     période capturée). Elle s'additionne jour
      par jour (registre : series=). La tendance compare la période capturée à
      la précédente de même durée, calculée sur la même série des deux côtés. */
   function jourIso(d) { return iso(d); }
@@ -876,14 +877,15 @@
         var pDu = prec.from, pAu = prec.to;
         if (prec.jourTravaille) {
           var avant = Object.keys(jours).filter(function (j) { return j < p.from; }).sort();
-          if (!avant.length) return { jours: jours, quotidien: true, tendances: {} };
+          if (!avant.length) return { jours: jours, quotidien: true, tendances: {}, du: p.from, au: p.to };
           pDu = pAu = avant[avant.length - 1];
         }
         cles.forEach(function (k) {
           var a = somme(jours, p.from, p.to, k), b = somme(jours, pDu, pAu, k);
           if (a != null && b) tendances[k] = { actuel: a, precedent: b, libelle: prec.libelle };
         });
-        return { jours: jours, quotidien: p.from === p.to, tendances: tendances };
+        // du / au : la période capturée, que le grand format suit dès 7 jours.
+        return { jours: jours, quotidien: p.from === p.to, tendances: tendances, du: p.from, au: p.to };
       });
     });
   }

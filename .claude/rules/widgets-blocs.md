@@ -92,11 +92,23 @@ carte). Le grand format n'existe que pour un bloc qui déclare :
   `SERIES` de `mysifa_blocs_sources.js` et rend `{jours, quotidien,
   tendances}` : la période capturée comparée à la précédente de même durée
   (jour travaillé précédent pour « hier »), calculée sur la même série des
-  deux côtés. Grand format = barres sur 30 jours, seuil d'alerte en pointillé
-  quand la période est d'un jour ; standard = mini-courbe sur 14 jours.
+  deux côtés. Grand format = barres sur la période capturée (30 derniers
+  jours quand elle fait moins de 7 jours), seuil d'alerte en pointillé quand la
+  période est d'un jour ; standard = mini-courbe sur 14 jours.
 - `liste=True` : la source va dans `LISTES` et rend `{lignes: [{libelle,
   detail, ratio}], total}`, avec les libellés et mises en forme de la page.
   Grand format = les 5 premières lignes, les plus urgentes d'abord.
+
+**Filtres sur la carte en grand format** (décision du 14/10/2026) : un bloc
+qui a des filtres (`mysifa_blocs_filtres.js`) les montre, en grand format
+seulement, sous le titre de sa carte. Les choix et périodes deviennent des
+pastilles (libellés courts `PERIODE_COURT`), et les filtres multiples (machines)
+un menu dépliant. Un choix est **enregistré** : PATCH `url_capture`, comme
+depuis Personnaliser, qui garde tous les filtres, dates choisies comprises. Le
+graphique suit la période dès qu'elle couvre 7 jours (la série rend `du` et
+`au`), au plus 93 jours. En dessous (aujourd'hui, dernier jour), il garde les 30
+derniers jours. Barre masquée en compact, en standard, en mode Personnaliser et
+dans l'aperçu de la capture.
 
 Le serveur refuse `hauteur="l"` sur un bloc qui n'a ni l'un ni l'autre. Dans
 la colonne de 220 px, le grand format s'affiche en standard. Le test du
