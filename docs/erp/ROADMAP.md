@@ -1,7 +1,7 @@
 # Nouvel ERP SIFA — erp.mysifa.com
 
 > Document vivant. Mis à jour à chaque lot livré ou décision prise.
-> Dernière mise à jour : 14/10/2026 (après-midi).
+> Dernière mise à jour : 14/10/2026 (fin d'après-midi).
 > Captures RVGI attendues : [captures-erp-existant.md](captures-erp-existant.md).
 
 ## Cap
@@ -59,14 +59,19 @@ RVGI vient ensuite, en une fois.
 | Routage par Host | `main.py` → `router_hote_erp` ; `config.py` → `ERP2_HOSTS`, `ERP2_PREFIXE`, `ROLES_ERP2` |
 | Pages | `app/web/erp2/page.py` (connexion, coque), `app/web/erp2/impression.py` (A4) |
 | API | `app/routers/erp2_api.py` (`/api/erp2/*`, superadmin, une transaction par écriture) |
-| Métier | `app/services/gc/` : `calculs.py`, `pieces.py`, `fichiers.py`, `compta.py`, `demo.py` |
-| Base | migrations `gc_socle`, `gc_reglements` (tables `gc_*` dans `production.db`) |
+| Métier | `app/services/gc/` : `calculs.py`, `pieces.py`, `fichiers.py`, `compta.py`, `export_compta.py`, `demo.py` |
+| Base | migrations `gc_socle`, `gc_reglements`, `gc_production`, `gc_marches`, `gc_comptes` (tables `gc_*` dans `production.db`) |
 | Interface | `static/erp/` : `erp.js` (coque, routage, recherche), `erp_ui.js` (composants), `erp_grille.js`, `erp_pieces.js`, `erp_fichiers.js`, `erp_gestion.js`, `erp_compta.js`, `erp.css`, `erp_ecrans.css` |
-| Tests | `tests/test_gc_pieces.py` (calculs, chaîne complète, refus, annulation, achats, règlements), `tests/test_erp2_hote.py` |
+| Tests | `tests/test_gc_pieces.py` (calculs, chaîne complète, refus, annulation, achats, règlements, OF, marchés, duplication, stock négatif), `tests/test_gc_export.py` (FEC), `tests/test_erp2_hote.py` |
 | Dev local | worktree `../MySifa-erp`, base de dev propre, `http://erp.localhost:8010` |
 
 ## Ce qui marche aujourd'hui (14/10/2026)
 
+- **Marchés** : contrat cadre (quantité, prix, fin du marché), appels = commandes
+  liées, reste à appeler, refus d'appel sur un marché échu.
+- **Production** : ordre de fabrication lancé depuis une commande (produits
+  finis seulement), consommations matière (sortie de stock, lot), déclarations
+  de production (entrée PF, lot), états lancé / en production / terminé.
 - **Ventes** : devis → commande → BL (livraisons partielles, reliquats,
   « solder » un reliquat) → facture (regroupement de plusieurs BL) → avoir
   (plafonné au facturé). États calculés : envoyé / accepté, à livrer / livrée
@@ -80,7 +85,11 @@ RVGI vient ensuite, en une fois.
 - **Stocks** : état par article et dépôt, journal des mouvements, inventaire et
   ajustement.
 - **Compta** : échéances (conditions : jours, fin de mois, le N du mois),
-  encaissements et paiements avec lettrage, factures réglées en partie / réglées.
+  encaissements et paiements avec lettrage, factures réglées en partie / réglées,
+  export FEC (journaux ventes, achats, banque) avec plan de comptes paramétrable
+  et contrôle d'équilibre.
+- **Pièces** : duplication, alerte à la validation d'un BL qui passe le stock
+  sous zéro.
 - **Fichiers** : clients, fournisseurs (adresses multiples, contacts,
   conditions, blocage), articles (nature, famille, unité, base de prix, tarifs).
 - **Impression** : devis, ARC, BL, facture, avoir, bon de commande en A4, avec
@@ -99,27 +108,23 @@ Statuts : ☐ à faire · ◐ en cours · ✓ fait
 | 0 | Socle : sous-domaine, connexion, coque, DA, favicon | ✓ |
 | 1 | Design system : grille, fiche, pièce, champs, autocomplétion, fenêtres, recherche | ✓ — reste colonnes déplaçables / redimensionnables |
 | 2 | Fichiers de base et paramètres | ✓ |
-| 3 | Ventes : devis, commandes, BL, factures, avoirs, impression | ✓ — reste marchés, devis multi-quantités, envoi par mail |
+| 3 | Ventes : devis, marchés, commandes, BL, factures, avoirs, impression | ✓ — reste devis multi-quantités, envoi par mail (à confirmer avec la capture RVGI des marchés) |
 | 4 | Achats : commandes, réceptions, factures fournisseur | ✓ — reste rapprochement facture / réception avec écarts de prix, appels d'offres |
-| 5 | Stocks MP et PF | ◐ — reste lots / bobines, valorisation, transferts, alerte de stock négatif |
-| 6 | Production | ☐ |
-| 7 | Comptabilité | ◐ — échéances et règlements faits ; reste relances, export comptable, facturation électronique |
+| 5 | Stocks MP et PF | ◐ — reste lots / bobines (Q7), valorisation (Q6), transferts |
+| 6 | Production | ◐ — OF, consommations, déclarations faits ; reste nomenclature / besoins matières, lien MyProd (Q8) |
+| 7 | Comptabilité | ◐ — échéances, règlements, FEC faits ; reste relances, format du logiciel compta (Q1), facturation électronique |
 | 8 | Recette, reprise RVGI, mise en service | ☐ |
 
 ### Prochaines étapes, dans l'ordre
 
-1. **Marchés** (contrat cadre et appels) — attend la capture RVGI d'un marché.
-2. **Production** : ordre de fabrication depuis une ligne de commande,
-   consommation matière, déclaration de produit fini (entrée en stock PF).
-   Question Q8 à trancher : s'appuyer sur MyProd / planning (recommandé : l'OF
-   de l'ERP crée ou relie le dossier MyProd, et les saisies MyProd alimentent
-   les consommations), ou les remplacer.
-3. **Stock** : lots et bobines (traçabilité FSC), valorisation, alerte quand un
-   BL fait passer le stock sous zéro.
-4. **Compta** : export des écritures de vente et d'achat (format Q1), relances.
-5. **Ergonomie** : colonnes déplaçables, envoi des pièces par mail, duplication
-   d'une pièce, devis à plusieurs quantités.
-6. **Reprise** : script miroir RVGI → `gc_*` rejouable, avec rapport d'écarts.
+1. **Lien production ↔ MyProd** (Q8) : recommandation — l'OF de l'ERP crée ou
+   relie le dossier MyProd, et les saisies MyProd alimentent consommations et
+   déclarations. Attend la décision.
+2. **Stock** : lots et bobines (Q7), valorisation (Q6), transferts entre dépôts.
+3. **Compta** : relances clients, format d'import du logiciel comptable (Q1).
+4. **Ergonomie** : colonnes déplaçables, envoi des pièces par mail, devis à
+   plusieurs quantités, rapprochement facture fournisseur / réception.
+5. **Reprise** : script miroir RVGI → `gc_*` rejouable, avec rapport d'écarts.
 
 ## Questions ouvertes
 
@@ -141,3 +146,4 @@ Statuts : ☐ à faire · ◐ en cours · ✓ fait
 | Date | Événement |
 |---|---|
 | 14/10/2026 | DNS `erp.mysifa.com`, vhost sur v1. Décisions D1–D10. Lot 0 (socle), lot 1 (design system), lot 2 (fichiers), lot 3 (ventes), lot 4 (achats), stock de base, échéances et règlements, impression A4, jeu de démonstration |
+| 14/10/2026 | Ordres de fabrication, marchés, duplication, alerte de stock négatif, export FEC. 17 tests métier |
