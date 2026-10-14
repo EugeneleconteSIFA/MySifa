@@ -254,6 +254,51 @@ class Chaine(unittest.TestCase):
         self.assertEqual(pieces.charger(c, fa)["statut"], "partiel")
         self.assertEqual(compta.echeances(c, 1, ouvertes=True)[0]["reste_cents"], 5000)
 
+    def test_of_et_duplication(self):
+        c = self.conn
+        c.execute("INSERT OR IGNORE INTO gc_sequences (code, libelle, format) VALUES ('of', 'OF', 'OF{AA}{N:05}')")
+        c.execute(
+            """INSERT INTO gc_articles (id, code, libelle, nature, unite, base_prix, prix_achat_cents, gere_stock,
+                   cree_le, modifie_le) VALUES (3, 'MP1', 'Papier', 'mp', 'ML', 1, 50, 1, ?, ?)""", (NOW, NOW))
+        co = pieces.creer(c, "commande", 1)
+        pieces.enregistrer(c, co, None, [_ligne(1, 10_000_000, 1250, 1000), _ligne(2, 1000, 8000)])
+        pieces.valider(c, co)
+        of = pieces.transformer(c, [co], "of")
+        lo = pieces.charger(c, of)["lignes"]
+        self.assertEqual([x["article_id"] for x in lo], [1])          # le calage ne se fabrique pas
+        pieces.valider(c, of)
+        self.assertTrue(pieces.charger(c, of)["numero"].startswith("OF"))
+        # L'OF n'empêche pas de livrer, ni ne compte comme livré
+        self.assertEqual(pieces.charger(c, co)["statut"], "valide")
+        pieces.declarer_consommation(c, of, 3, 2_000_000)
+        pieces.declarer_production(c, of, 6_000_000)
+        self.assertEqual(pieces.charger(c, of)["statut"], "partiel")
+        pieces.declarer_production(c, of, 4_000_000)
+        self.assertEqual(pieces.charger(c, of)["statut"], "solde")
+        stock = {r["article_id"]: r["q"] for r in c.execute(
+            "SELECT article_id, SUM(quantite_milli) q FROM gc_mouvements GROUP BY article_id").fetchall()}
+        self.assertEqual(stock, {1: 10_000_000, 3: -2_000_000})
+        with self.assertRaises(ErreurPiece):
+            pieces.transformer(c, [co], "of")                          # déjà entièrement lancé
+        bl = pieces.transformer(c, [co], "bl")                          # mais toujours livrable
+        pieces.valider(c, bl)
+        self.assertEqual(pieces.alertes_stock(c, bl), [])
+        # Duplication : même tiers, mêmes lignes, sans lien amont
+        d = pieces.dupliquer(c, co)
+        dd = pieces.charger(c, d)
+        self.assertEqual(dd["statut"], "brouillon")
+        self.assertEqual([x["quantite_milli"] for x in dd["lignes"]], [10_000_000, 1000])
+        self.assertTrue(all(x["ligne_amont_id"] is None for x in dd["lignes"]))
+
+    def test_alerte_stock_negatif(self):
+        c = self.conn
+        co = pieces.creer(c, "commande", 1)
+        pieces.enregistrer(c, co, None, [_ligne(1, 3_000_000, 1250, 1000)])
+        pieces.valider(c, co)
+        bl = pieces.transformer(c, [co], "bl")
+        pieces.valider(c, bl)
+        self.assertEqual(pieces.alertes_stock(c, bl), ["ETQ1 : stock -3 000 ETQ au dépôt PRINC"])
+
     def test_achat_reception_stock(self):
         c = self.conn
         c.execute("UPDATE gc_articles SET prix_achat_cents=900 WHERE id=1")

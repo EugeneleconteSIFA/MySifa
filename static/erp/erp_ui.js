@@ -96,6 +96,7 @@
     cde_fournisseur: {valide: 'À recevoir', partiel: 'Reçue en partie', solde: 'Reçue'},
     reception: {valide: 'À facturer', partiel: 'Facturée en partie', solde: 'Facturée'},
     facture_fournisseur: {valide: 'À payer', partiel: 'Payée en partie', solde: 'Payée'},
+    of: {valide: 'Lancé', partiel: 'En production', solde: 'Terminé'},
   };
   ERP.etat = function (type, statut) {
     var e = ETATS[statut] || {l: statut, ton: 'neutre'};

@@ -25,13 +25,17 @@ from app.services.gc import calculs
 
 TYPES = {
     "devis":               {"libelle": "Devis", "sens": "vente", "aval": ["commande"], "stock": 0, "legal": False},
-    "commande":            {"libelle": "Commande", "sens": "vente", "aval": ["bl"], "stock": 0, "legal": False},
+    "commande":            {"libelle": "Commande", "sens": "vente", "aval": ["bl", "of"], "stock": 0, "legal": False},
     "bl":                  {"libelle": "Bon de livraison", "sens": "vente", "aval": ["facture"], "stock": -1, "legal": False},
     "facture":             {"libelle": "Facture", "sens": "vente", "aval": ["avoir"], "stock": 0, "legal": True},
     "avoir":               {"libelle": "Avoir", "sens": "vente", "aval": [], "stock": 0, "legal": True},
     "cde_fournisseur":     {"libelle": "Commande fournisseur", "sens": "achat", "aval": ["reception"], "stock": 0, "legal": False},
     "reception":           {"libelle": "Réception", "sens": "achat", "aval": ["facture_fournisseur"], "stock": 1, "legal": False},
     "facture_fournisseur": {"libelle": "Facture fournisseur", "sens": "achat", "aval": [], "stock": 0, "legal": False},
+    # Ordre de fabrication : lancé depuis une ligne de commande, pour le client
+    # de la commande. Ses mouvements (production +PF, consommation −MP) sont
+    # saisis au fil de l'eau, pas à la validation.
+    "of":                  {"libelle": "Ordre de fabrication", "sens": "vente", "aval": [], "stock": 0, "legal": False},
 }
 
 # Types aval qui font avancer l'état d'une pièce (partiel / soldé). Un avoir
@@ -143,9 +147,34 @@ def qte_aval(conn, ligne_id: int, types: list[str]) -> int:
     return int(r["q"])
 
 
+def qte_produite(conn, ligne_id: int) -> int:
+    r = conn.execute(
+        "SELECT COALESCE(SUM(quantite_milli),0) q FROM gc_mouvements WHERE ligne_id=? AND type='production'",
+        (ligne_id,)).fetchone()
+    return int(r["q"])
+
+
+def _statut_of(conn, p) -> str:
+    lignes = conn.execute(
+        "SELECT id, quantite_milli, solde FROM gc_pieces_lignes WHERE piece_id=? AND article_id IS NOT NULL",
+        (p["id"],)).fetchall()
+    prod = [qte_produite(conn, l["id"]) for l in lignes]
+    if lignes and all(q >= int(l["quantite_milli"]) or l["solde"] for q, l in zip(prod, lignes)):
+        statut = "solde"
+    else:
+        statut = "partiel" if any(prod) else "valide"
+    if statut != p["statut"]:
+        conn.execute("UPDATE gc_pieces SET statut=?, modifie_le=? WHERE id=?", (statut, _maintenant(), p["id"]))
+    return statut
+
+
 def recalculer_statut(conn, piece_id: int) -> str:
     p = _piece(conn, piece_id)
-    if p["statut"] in ("brouillon", "annule") or p["type"] not in AVANCEMENT:
+    if p["statut"] in ("brouillon", "annule"):
+        return p["statut"]
+    if p["type"] == "of":
+        return _statut_of(conn, p)
+    if p["type"] not in AVANCEMENT:
         return p["statut"]
     types = AVANCEMENT[p["type"]]
     lignes = conn.execute(
@@ -199,6 +228,8 @@ def charger(conn, piece_id: int) -> dict:
            WHERE l.piece_id=? ORDER BY l.rang, l.id""", (piece_id,)).fetchall():
         d = dict(l)
         d["qte_aval_milli"] = qte_aval(conn, l["id"], av) if l["article_id"] else 0
+        if p["type"] == "of" and l["article_id"]:
+            d["qte_aval_milli"] = qte_produite(conn, l["id"])
         if l["ligne_amont_id"]:
             pa = conn.execute(
                 """SELECT p.id, p.type, p.numero FROM gc_pieces_lignes la JOIN gc_pieces p ON p.id=la.piece_id
@@ -384,7 +415,9 @@ def valider(conn, piece_id: int, user: dict | None = None) -> str:
     if p["statut"] != "brouillon":
         raise ErreurPiece("Pièce déjà validée.")
     t = _verifier_tiers(conn, p["type"], p["tiers_id"])
-    if TYPES[p["type"]]["sens"] == "vente" and t["bloque"] and p["type"] != "avoir":
+    # Un client bloqué ne reçoit plus de pièce commerciale ; l'avoir (qui lui
+    # rend de l'argent) et l'OF (interne) restent possibles.
+    if TYPES[p["type"]]["sens"] == "vente" and t["bloque"] and p["type"] not in ("avoir", "of"):
         raise ErreurPiece(f"{t['raison_sociale']} est bloqué : débloquer le client avant de valider.")
     lignes = conn.execute(
         """SELECT l.*, a.gere_stock FROM gc_pieces_lignes l JOIN gc_articles a ON a.id=l.article_id
@@ -422,6 +455,87 @@ def valider(conn, piece_id: int, user: dict | None = None) -> str:
         recalculer_statut(conn, amont)
     recalculer_statut(conn, piece_id)
     return numero
+
+
+def alertes_stock(conn, piece_id: int) -> list[str]:
+    """Articles de la pièce dont le stock du dépôt est passé sous zéro.
+    Ne bloque rien (question Q9 de la roadmap) : l'écran l'affiche."""
+    out = []
+    for r in conn.execute(
+        """SELECT a.code, m.depot, a.unite,
+                  (SELECT SUM(m2.quantite_milli) FROM gc_mouvements m2 WHERE m2.article_id=m.article_id AND m2.depot=m.depot) AS q
+           FROM gc_mouvements m JOIN gc_articles a ON a.id=m.article_id
+           WHERE m.piece_id=? GROUP BY m.article_id, m.depot""", (piece_id,)).fetchall():
+        if r["q"] is not None and int(r["q"]) < 0:
+            q = f"{int(r['q']) / 1000:,.3f}".rstrip("0").rstrip(".").replace(",", " ").replace(".", ",")
+            out.append(f"{r['code']} : stock {q} {r['unite']} au dépôt {r['depot']}")
+    return out
+
+
+def dupliquer(conn, piece_id: int, user: dict | None = None) -> int:
+    """Nouveau brouillon du même type et du même tiers, avec les mêmes lignes
+    (sans lien amont : c'est une nouvelle pièce, pas une suite)."""
+    p = _piece(conn, piece_id)
+    if p["type"] == "avoir":
+        raise ErreurPiece("Un avoir se crée depuis sa facture, pas par duplication.")
+    nouvelle = creer(conn, p["type"], p["tiers_id"], user)
+    lignes = [{"article_id": l["article_id"], "libelle": l["libelle"], "quantite_milli": l["quantite_milli"],
+               "base_prix": l["base_prix"], "prix_cents": l["prix_cents"], "remise_bp": l["remise_bp"],
+               "tva_code": l["tva_code"], "notes": l["notes"]}
+              for l in conn.execute("SELECT * FROM gc_pieces_lignes WHERE piece_id=? ORDER BY rang", (piece_id,)).fetchall()]
+    enregistrer(conn, nouvelle, {"ref_tiers": "", "remise_bp": p["remise_bp"], "notes": p["notes"],
+                                 "adresse_livraison_id": p["adresse_livraison_id"]}, lignes)
+    return nouvelle
+
+
+def _of_ouvert(conn, of_id: int):
+    p = _piece(conn, of_id)
+    if p["type"] != "of":
+        raise ErreurPiece("Ce n'est pas un ordre de fabrication.")
+    if p["statut"] not in ("valide", "partiel", "solde"):
+        raise ErreurPiece("Ordre de fabrication non lancé ou annulé.")
+    if not p["depot"]:
+        raise ErreurPiece("Dépôt obligatoire sur l'ordre de fabrication.")
+    return p
+
+
+def declarer_production(conn, of_id: int, quantite_milli: int, lot: str = "", jour: str | None = None,
+                        user: dict | None = None) -> int:
+    """Entrée en stock du produit fini fabriqué par l'OF."""
+    p = _of_ouvert(conn, of_id)
+    q = _entier(quantite_milli, "Quantité", 1)
+    l = conn.execute(
+        "SELECT id, article_id FROM gc_pieces_lignes WHERE piece_id=? AND article_id IS NOT NULL ORDER BY rang LIMIT 1",
+        (of_id,)).fetchone()
+    if not l:
+        raise ErreurPiece("Aucun produit sur l'ordre de fabrication.")
+    now = _maintenant()
+    cur = conn.execute(
+        """INSERT INTO gc_mouvements (date_mvt, article_id, depot, quantite_milli, type, lot, piece_id, ligne_id,
+               commentaire, cree_par, cree_le) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        (jour or now[:10], l["article_id"], p["depot"], q, "production", str(lot or ""), of_id, l["id"],
+         "Production " + (p["numero"] or ""), _nom(user), now))
+    _statut_of(conn, _piece(conn, of_id))
+    return int(cur.lastrowid)
+
+
+def declarer_consommation(conn, of_id: int, article_id: int, quantite_milli: int, lot: str = "",
+                          jour: str | None = None, user: dict | None = None) -> int:
+    """Sortie de stock d'une matière consommée par l'OF."""
+    p = _of_ouvert(conn, of_id)
+    q = _entier(quantite_milli, "Quantité", 1)
+    a = conn.execute("SELECT id, nature, gere_stock FROM gc_articles WHERE id=?", (_entier(article_id, "Article"),)).fetchone()
+    if not a or not a["gere_stock"]:
+        raise ErreurPiece("Article introuvable ou non géré en stock.")
+    if a["nature"] == "service":
+        raise ErreurPiece("Une prestation ne se consomme pas.")
+    now = _maintenant()
+    cur = conn.execute(
+        """INSERT INTO gc_mouvements (date_mvt, article_id, depot, quantite_milli, type, lot, piece_id,
+               commentaire, cree_par, cree_le) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (jour or now[:10], a["id"], p["depot"], -q, "consommation", str(lot or ""), of_id,
+         "Consommation " + (p["numero"] or ""), _nom(user), now))
+    return int(cur.lastrowid)
 
 
 def _verifier_plafond_avoir(conn, avoir_id: int) -> None:
@@ -466,7 +580,9 @@ def transformer(conn, sources: list[int], cible: str, user: dict | None = None) 
     for p in ps:
         if p["statut"] in ("brouillon", "annule"):
             raise ErreurPiece(f"{p['numero'] or 'Brouillon'} : seule une pièce validée se transforme.")
-    reprise = AVANCEMENT.get(src_type) or ([cible] if cible == "avoir" else [])
+    # Le reste se mesure contre les pièces du type demandé : une commande se
+    # livre (BL) et se fabrique (OF) indépendamment.
+    reprise = AVANCEMENT.get(src_type) if cible in AVANCEMENT.get(src_type, []) else [cible]
     lignes = []
     for p in ps:
         for l in conn.execute(
@@ -474,6 +590,10 @@ def transformer(conn, sources: list[int], cible: str, user: dict | None = None) 
         ).fetchall():
             if l["solde"]:
                 continue
+            if cible == "of":
+                a = conn.execute("SELECT nature, gere_stock FROM gc_articles WHERE id=?", (l["article_id"],)).fetchone()
+                if not a or a["nature"] != "pf":
+                    continue   # on ne fabrique que des produits finis
             reste = int(l["quantite_milli"]) - qte_aval(conn, l["id"], reprise)
             if reste <= 0:
                 continue

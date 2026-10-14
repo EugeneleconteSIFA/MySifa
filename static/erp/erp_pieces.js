@@ -22,16 +22,19 @@
     '/achats/commandes': {types: ['cde_fournisseur'], nouveau: 'cde_fournisseur'},
     '/achats/receptions': {types: ['reception'], nouveau: 'reception'},
     '/achats/factures': {types: ['facture_fournisseur'], nouveau: 'facture_fournisseur'},
+    '/production/ordres': {types: ['of']},
   };
 
   // Libellé du bouton qui crée la pièce aval.
   var ACTION_AVAL = {
     commande: 'Transformer en commande', bl: 'Livrer', facture: 'Facturer', avoir: 'Faire un avoir',
-    reception: 'Réceptionner', facture_fournisseur: 'Saisir la facture',
+    reception: 'Réceptionner', facture_fournisseur: 'Saisir la facture', of: 'Lancer en fabrication',
   };
   // Pièces qu'on peut regrouper dans une même pièce aval.
   var REGROUPABLE = {facture: 'bl', facture_fournisseur: 'reception'};
-  var AVEC_STOCK = {bl: 1, reception: 1};
+  var AVEC_STOCK = {bl: 1, reception: 1, of: 1};
+  // Pièces sans valeur commerciale : ni prix, ni totaux, ni conditions de paiement.
+  var SANS_PRIX = {of: 1};
   var ARTICLES_PAR_SENS = {vente: ['pf', 'service'], achat: ['mp', 'service', 'pf']};
 
   function routeDe(type) {
@@ -201,12 +204,14 @@
       if (/^(commande|cde_fournisseur|devis)$/.test(P.type)) champs.push(ERP.champ('Livraison prévue', ERP.saisie(P, 'date_livraison', 'date', {lecture: ro, change: marquer})));
       champs.push(ERP.champ(P.type === 'facture_fournisseur' ? 'N° de facture fournisseur' : vente ? 'Réf. commande client' : 'Réf. fournisseur',
         ERP.saisie(P, 'ref_tiers', 'texte', {lecture: ro, change: marquer})));
-      champs.push(ERP.champ('Adresse de facturation', ERP.choix(P, 'adresse_facturation_id', adrs('facturation'), {lecture: ro, avecVide: '—', nombre: true, change: marquer}), {large: true}));
+      if (!SANS_PRIX[P.type]) champs.push(ERP.champ('Adresse de facturation', ERP.choix(P, 'adresse_facturation_id', adrs('facturation'), {lecture: ro, avecVide: '—', nombre: true, change: marquer}), {large: true}));
       if (vente) champs.push(ERP.champ('Adresse de livraison', ERP.choix(P, 'adresse_livraison_id', adrs('livraison'), {lecture: ro, avecVide: '—', nombre: true, change: marquer}), {large: true}));
-      champs.push(ERP.champ('Conditions de paiement', ERP.choix(P, 'condition_paiement', ERP.optionsRef('conditions_paiement'), {lecture: ro, avecVide: '—', change: marquer})));
-      champs.push(ERP.champ('Mode de paiement', ERP.choix(P, 'mode_paiement', ERP.optionsRef('modes_paiement'), {lecture: ro, avecVide: '—', change: marquer})));
+      if (!SANS_PRIX[P.type]) {
+        champs.push(ERP.champ('Conditions de paiement', ERP.choix(P, 'condition_paiement', ERP.optionsRef('conditions_paiement'), {lecture: ro, avecVide: '—', change: marquer})));
+        champs.push(ERP.champ('Mode de paiement', ERP.choix(P, 'mode_paiement', ERP.optionsRef('modes_paiement'), {lecture: ro, avecVide: '—', change: marquer})));
+      }
       if (AVEC_STOCK[P.type]) champs.push(ERP.champ('Dépôt', ERP.choix(P, 'depot', ERP.optionsRef('depots'), {lecture: ro, change: marquer})));
-      if (vente) champs.push(ERP.champ('Remise de pied', ERP.saisie(P, 'remise_bp', 'pct', {lecture: ro, placeholder: '0', change: function () { marquer(); majTotaux(); }})));
+      if (vente && !SANS_PRIX[P.type]) champs.push(ERP.champ('Remise de pied', ERP.saisie(P, 'remise_bp', 'pct', {lecture: ro, placeholder: '0', change: function () { marquer(); majTotaux(); }})));
       if (!ro || P.notes) champs.push(ERP.champ('Notes imprimées', ERP.saisie(P, 'notes', 'zone', {lecture: ro, lignes: 2, change: marquer}), {plein: true}));
       if (!ro || P.notes_internes) champs.push(ERP.champ('Notes internes', ERP.saisie(P, 'notes_internes', 'zone', {lecture: ro, lignes: 2, change: marquer}), {plein: true}));
       return ERP.carte('En-tête', h('div', {className: 'erp-form'}, champs));
@@ -308,6 +313,11 @@
         tr.appendChild(h('td', {className: 'c-libelle'}, lib));
         tr.appendChild(h('td', {className: 'c-qte'}, saisieCellule(l, i, 'quantite_milli', 'qte', 'qte')));
         tr.appendChild(h('td', {className: 'c-unite', text: l.unite || ''}));
+        if (SANS_PRIX[P.type]) {
+          tr.appendChild(h('td', {className: 'c-suppr'}, h('button', {type: 'button', className: 'erp-x', title: 'Supprimer la ligne', text: '×',
+            onclick: function () { lignes.splice(i, 1); marquer(); dessinerLignes(); }})));
+          return tr;
+        }
         var prix = saisieCellule(l, i, 'prix_cents', 'euros', 'prix');
         tr.appendChild(h('td', {className: 'c-prix'}, prix,
           l.base_prix > 1 ? h('span', {className: 'erp-base', text: '/ ' + ERP.fmt.qte(l.base_prix * 1000, 0)}) : null,
@@ -327,7 +337,7 @@
 
     function ligneLecture(l, i) {
       var reste = l.article_id ? Math.max(0, l.quantite_milli - (l.qte_aval_milli || 0)) : 0;
-      var suivi = P.statut !== 'annule' && /^(devis|commande|bl|cde_fournisseur|reception)$/.test(P.type);
+      var suivi = P.statut !== 'annule' && /^(devis|commande|bl|cde_fournisseur|reception|of)$/.test(P.type);
       var tr = h('tr', {className: (l.article_id ? '' : 'texte') + (l.solde ? ' solde' : '')});
       tr.appendChild(h('td', {className: 'rang', text: String(i + 1)}));
       if (!l.article_id) {
@@ -339,11 +349,13 @@
         l.amont ? h('div', {className: 'erp-amont'}, 'depuis ', ERP.lien(l.amont.numero || 'brouillon', ERP.cheminPiece(l.amont.type, l.amont.id))) : null));
       tr.appendChild(h('td', {className: 'c-qte num', text: ERP.fmt.qte(l.quantite_milli, decimales(l))}));
       tr.appendChild(h('td', {className: 'c-unite', text: l.unite || ''}));
-      tr.appendChild(h('td', {className: 'c-prix num'}, ERP.fmt.euros(l.prix_cents),
-        l.base_prix > 1 ? h('span', {className: 'erp-base', text: '/ ' + ERP.fmt.qte(l.base_prix * 1000, 0)}) : null));
-      tr.appendChild(h('td', {className: 'c-remise num', text: ERP.fmt.pct(l.remise_bp)}));
-      tr.appendChild(h('td', {className: 'c-tva', text: l.tva_code || ''}));
-      tr.appendChild(h('td', {className: 'c-montant num', text: ERP.fmt.euros(l.montant_ht_cents)}));
+      if (!SANS_PRIX[P.type]) {
+        tr.appendChild(h('td', {className: 'c-prix num'}, ERP.fmt.euros(l.prix_cents),
+          l.base_prix > 1 ? h('span', {className: 'erp-base', text: '/ ' + ERP.fmt.qte(l.base_prix * 1000, 0)}) : null));
+        tr.appendChild(h('td', {className: 'c-remise num', text: ERP.fmt.pct(l.remise_bp)}));
+        tr.appendChild(h('td', {className: 'c-tva', text: l.tva_code || ''}));
+        tr.appendChild(h('td', {className: 'c-montant num', text: ERP.fmt.euros(l.montant_ht_cents)}));
+      }
       if (suivi) {
         tr.appendChild(h('td', {className: 'c-qte num', text: ERP.fmt.qte(l.qte_aval_milli, decimales(l))}));
         var td = h('td', {className: 'c-reste num'});
@@ -368,11 +380,12 @@
     }
 
     function enTetesLignes() {
-      var suivi = lecture() && P.statut !== 'annule' && /^(devis|commande|bl|cde_fournisseur|reception)$/.test(P.type);
-      var repris = {devis: 'Commandé', commande: 'Livré', bl: 'Facturé', cde_fournisseur: 'Reçu', reception: 'Facturé'}[P.type];
+      var suivi = lecture() && P.statut !== 'annule' && /^(devis|commande|bl|cde_fournisseur|reception|of)$/.test(P.type);
+      var repris = {devis: 'Commandé', commande: 'Livré', bl: 'Facturé', cde_fournisseur: 'Reçu', reception: 'Facturé', of: 'Produit'}[P.type];
       return h('tr', null, h('th', {text: '#'}), h('th', {text: 'Article'}), h('th', {text: 'Désignation'}),
-        h('th', {className: 'num', text: 'Quantité'}), h('th', {text: 'Unité'}), h('th', {className: 'num', text: 'Prix HT'}),
-        h('th', {className: 'num', text: 'Remise'}), h('th', {text: 'TVA'}), h('th', {className: 'num', text: 'Montant HT'}),
+        h('th', {className: 'num', text: 'Quantité'}), h('th', {text: 'Unité'}),
+        SANS_PRIX[P.type] ? null : [h('th', {className: 'num', text: 'Prix HT'}), h('th', {className: 'num', text: 'Remise'}),
+                                    h('th', {text: 'TVA'}), h('th', {className: 'num', text: 'Montant HT'})],
         suivi ? h('th', {className: 'num', text: repris}) : null, suivi ? h('th', {className: 'num', text: 'Reste'}) : null,
         lecture() ? null : h('th'));
     }
@@ -402,6 +415,7 @@
 
     function majTotaux() {
       if (!totauxEl) return;
+      if (SANS_PRIX[P.type]) { totauxEl.textContent = ''; return; }
       var t = ERP.calc.totaux(lignes, P.remise_bp || 0);
       totauxEl.textContent = '';
       var brut = t.bases.reduce(function (s, b) { return s + b.ht_brut; }, 0);
@@ -504,6 +518,7 @@
       if (modifie) await enregistrer(true);
       var r = await ERP.api('/api/erp2/pieces/' + P.id + '/valider', {method: 'POST'});
       ERP.toast(libType(P.type) + ' ' + r.numero + ' validé(e).', 'success');
+      (r.alertes || []).forEach(function (a) { ERP.toast('Stock négatif — ' + a, 'danger'); });
       await charger();
     }
 
@@ -512,6 +527,52 @@
         if (modifie) await enregistrer(true);
         window.open('/imprimer/' + P.id, '_blank');
       }, {titre: 'Document A4 — imprimer ou enregistrer en PDF'});
+    }
+
+    function boutonDupliquer() {
+      return ERP.bouton('Dupliquer', async function () {
+        if (modifie) await enregistrer(true);
+        var r = await ERP.api('/api/erp2/pieces/' + P.id + '/dupliquer', {method: 'POST'});
+        ERP.toast('Copie créée en brouillon.', 'success');
+        ERP.aller(ERP.cheminPiece(P.type, r.id));
+      }, {titre: 'Nouveau brouillon avec les mêmes lignes'});
+    }
+
+    function saisieOF(genre) {
+      return ERP.api('/api/erp2/articles').then(function (arts) {
+        var M = {quantite_milli: null, lot: '', date: new Date().toISOString().slice(0, 10), article_id: null};
+        var champs = [];
+        if (genre === 'consommation') {
+          arts = arts.filter(function (a) { return a.gere_stock && a.actif && a.nature !== 'service'; });
+          var inp = h('input', {className: 'erp-input', placeholder: 'Matière (code ou libellé)'});
+          ERP.autocomplete(inp, function (q) {
+            return ERP.filtrer(arts, q, ['code', 'libelle']).map(function (x) {
+              return {titre: x.code + ' — ' + x.libelle, sous: 'stock ' + ERP.fmt.qte(x.stock_milli) + ' ' + x.unite, valeur: x};
+            });
+          }, function (x) { M.article_id = x.id; inp.value = x.code + ' — ' + x.libelle; }, {ouvrirAuFocus: true});
+          champs.push(ERP.champ('Matière', inp, {plein: true}));
+        } else {
+          var l0 = lignes.filter(function (l) { return l.article_id; })[0];
+          if (l0) {
+            M.quantite_milli = Math.max(0, l0.quantite_milli - (l0.qte_aval_milli || 0)) || null;
+            champs.push(h('p', {className: 'erp-modal-texte', text: l0.article_code + ' — ' + l0.libelle + ' · reste à produire : ' +
+              ERP.fmt.qte(Math.max(0, l0.quantite_milli - (l0.qte_aval_milli || 0))) + ' ' + (l0.unite || '')}));
+          }
+        }
+        champs.push(ERP.champ('Quantité', ERP.saisie(M, 'quantite_milli', 'qte')));
+        champs.push(ERP.champ('Lot', ERP.saisie(M, 'lot', 'texte')));
+        champs.push(ERP.champ('Date', ERP.saisie(M, 'date', 'date')));
+        ERP.modal(genre === 'production' ? 'Déclarer une production' : 'Saisir une consommation', h('div', {className: 'erp-form'}, champs), [
+          {libelle: 'Annuler'},
+          {libelle: 'Enregistrer', accent: true, action: async function () {
+            if (!(M.quantite_milli > 0)) throw new Error('Quantité obligatoire.');
+            if (genre === 'consommation' && !M.article_id) throw new Error('Choisir la matière.');
+            await ERP.api('/api/erp2/pieces/' + P.id + '/' + genre, {method: 'POST', body: M});
+            ERP.toast(genre === 'production' ? 'Production enregistrée.' : 'Consommation enregistrée.', 'success');
+            await charger();
+          }},
+        ]);
+      });
     }
 
     function dessinerActions() {
@@ -533,6 +594,11 @@
       } else {
         btnEnr = null;
         a.push(boutonImprimer());
+        if (P.type !== 'avoir' && P.type !== 'of') a.push(boutonDupliquer());
+        if (P.type === 'of' && P.statut !== 'annule') {
+          a.push(ERP.bouton('Consommation', function () { return saisieOF('consommation'); }));
+          a.push(ERP.bouton('Déclarer une production', function () { return saisieOF('production'); }, {accent: P.statut !== 'solde'}));
+        }
         if (P.statut !== 'annule') {
           var aPayer = P.echeances.filter(function (e) { return e.montant_cents > e.regle_cents; });
           if (aPayer.length && (P.type === 'facture' || P.type === 'facture_fournisseur')) {
@@ -541,7 +607,10 @@
                                           echeanceId: aPayer[0].id}, charger);
             }, {accent: true}));
           }
+          // Étape déjà entièrement faite : pas de bouton (l'OF reste possible).
+          var AVANCE = {devis: 'commande', commande: 'bl', bl: 'facture', cde_fournisseur: 'reception', reception: 'facture_fournisseur'};
           (P.aval_possibles || []).forEach(function (cible) {
+            if (P.statut === 'solde' && AVANCE[P.type] === cible) return;
             a.push(ERP.bouton(ACTION_AVAL[cible] || libType(cible), function () { return transformer(P, cible); }, {accent: cible !== 'avoir'}));
           });
           if (!(ERP.types[P.type] || {}).legal) {
@@ -559,7 +628,7 @@
 
     function dessiner() {
       var t = libType(P.type) + ' ' + nomPiece(P);
-      ctx.titre(t, (sensDe(P.type) === 'vente' ? 'Ventes' : 'Achats') + ' › ' + libType(P.type));
+      ctx.titre(t, (P.type === 'of' ? 'Production' : sensDe(P.type) === 'vente' ? 'Ventes' : 'Achats') + ' › ' + libType(P.type));
       corps.textContent = '';
       var tete = h('div', {className: 'erp-piece-tete'},
         ERP.pastille(P.type, P.statut),

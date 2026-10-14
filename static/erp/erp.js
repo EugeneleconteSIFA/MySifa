@@ -32,6 +32,9 @@
       {chemin: '/stocks/etat', libelle: 'État du stock'},
       {chemin: '/stocks/mouvements', libelle: 'Mouvements'},
     ]},
+    {groupe: 'Production', liens: [
+      {chemin: '/production/ordres', libelle: 'Ordres de fabrication'},
+    ]},
     {groupe: 'Comptabilité', liens: [
       {chemin: '/compta/echeances', libelle: 'Échéances'},
       {chemin: '/compta/reglements', libelle: 'Règlements'},

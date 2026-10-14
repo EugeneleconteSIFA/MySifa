@@ -21,8 +21,9 @@ TITRES = {
     "devis": "Devis", "commande": "Accusé de réception de commande", "bl": "Bon de livraison",
     "facture": "Facture", "avoir": "Avoir", "cde_fournisseur": "Bon de commande",
     "reception": "Bon de réception", "facture_fournisseur": "Facture fournisseur",
+    "of": "Ordre de fabrication",
 }
-SANS_PRIX = {"bl", "reception"}
+SANS_PRIX = {"bl", "reception", "of"}
 
 
 def _e(v) -> str:

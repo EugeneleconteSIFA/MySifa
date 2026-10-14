@@ -201,8 +201,39 @@ def piece_valider(piece_id: int, request: Request):
     u = _user(request)
     with _ecriture() as conn:
         numero = pieces.valider(conn, piece_id, u)
+        alertes = pieces.alertes_stock(conn, piece_id)
     _trace(request, u, "VALIDATE", f"Pièce {numero}")
-    return {"numero": numero}
+    return {"numero": numero, "alertes": alertes}
+
+
+@router.post("/pieces/{piece_id}/dupliquer")
+def piece_dupliquer(piece_id: int, request: Request):
+    u = _user(request)
+    with _ecriture() as conn:
+        pid = pieces.dupliquer(conn, piece_id, u)
+    _trace(request, u, "CREATE", f"Pièce #{pid} (copie de #{piece_id})")
+    return {"id": pid}
+
+
+@router.post("/pieces/{piece_id}/production")
+async def of_production(piece_id: int, request: Request):
+    u = _user(request)
+    b = await request.json()
+    with _ecriture() as conn:
+        mid = pieces.declarer_production(conn, piece_id, b.get("quantite_milli"), b.get("lot") or "", b.get("date") or None, u)
+    _trace(request, u, "CREATE", f"Production sur OF #{piece_id}", {"quantite_milli": b.get("quantite_milli")})
+    return {"id": mid}
+
+
+@router.post("/pieces/{piece_id}/consommation")
+async def of_consommation(piece_id: int, request: Request):
+    u = _user(request)
+    b = await request.json()
+    with _ecriture() as conn:
+        mid = pieces.declarer_consommation(conn, piece_id, b.get("article_id"), b.get("quantite_milli"),
+                                           b.get("lot") or "", b.get("date") or None, u)
+    _trace(request, u, "CREATE", f"Consommation sur OF #{piece_id}", {"article_id": b.get("article_id")})
+    return {"id": mid}
 
 
 @router.post("/pieces/transformer")

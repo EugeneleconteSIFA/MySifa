@@ -143,7 +143,7 @@ def reinitialiser(conn, user: dict | None = None) -> dict:
         return pid
 
     # Stock initial : inventaire d'ouverture
-    for code, q in (("PF0001", 40_000_000), ("PF0002", 15_000_000), ("PF0004", 8_000_000),
+    for code, q in (("PF0001", 4_000_000), ("PF0002", 15_000_000), ("PF0004", 8_000_000),
                     ("MP0001", 6_000_000), ("MP0002", 4_500_000), ("MP0003", 3_000_000), ("MP0004", 25_000)):
         fichiers.mouvement_manuel(conn, {"type": "inventaire", "article_id": arts[code], "depot": "PRINC",
                                          "quantite_milli": q, "date_mvt": jour(-40),
@@ -156,6 +156,11 @@ def reinitialiser(conn, user: dict | None = None) -> dict:
     c1 = suite([d1], "commande", jour(-25))
     conn.execute("UPDATE gc_pieces SET ref_tiers='BC-2026-118', date_livraison=? WHERE id=?", (jour(-10), c1))
     pieces.valider(conn, c1, user)
+    # Fabrication avant livraison : papier consommé, étiquettes produites
+    of1 = suite([c1], "of", jour(-20))
+    pieces.valider(conn, of1, user)
+    pieces.declarer_consommation(conn, of1, arts["MP0001"], 4_200_000, "B26-0412", jour(-18), user)
+    pieces.declarer_production(conn, of1, 36_000_000, "L26-0418", jour(-15), user)
     b1 = suite([c1], "bl", jour(-12),
                modif=lambda ls: [dict(l, quantite_milli=35_000_000) if l["article_code"] == "PF0001" else l for l in ls])
     pieces.valider(conn, b1, user)
