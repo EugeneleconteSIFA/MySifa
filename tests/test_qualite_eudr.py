@@ -185,6 +185,14 @@ with get_db() as conn:
           conn.execute("SELECT COUNT(*) FROM eudr_demandes").fetchone()[0], avant_dem)
 check("page fournisseur : pas en mode aperçu", "const APERCU = null;" in client.get(f"/portail/eudr/{TOKEN}").text, True)
 
+# Destinataire retiré : son lien ne fonctionne plus.
+with get_db() as conn:
+    DID = conn.execute("SELECT id FROM eudr_demandes WHERE token=?", (TOKEN,)).fetchone()[0]
+check("retrait accepté", client.post(f"/api/qualite/eudr/demandes/{DID}/annuler").status_code, 200)
+check("lien retiré : formulaire invalide", client.get(f"/portail/eudr/{TOKEN}").status_code, 404)
+check("retrait en double : 404", client.post(f"/api/qualite/eudr/demandes/{DID}/annuler").status_code, 404)
+check("réponses conservées après retrait", ligne()["statut"], "repondue")
+
 print()
 if ECHECS:
     print(f"{len(ECHECS)} échec(s)")

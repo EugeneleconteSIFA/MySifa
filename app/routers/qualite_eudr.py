@@ -84,6 +84,26 @@ def _donnees_formulaire(*, fournisseur: str, email: str, langue, precedente) -> 
     }
 
 
+@router.post("/demandes/{demande_id}/annuler")
+def annuler_demande(request: Request, demande_id: int):
+    """Retire un destinataire : son lien cesse de fonctionner."""
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        dem = eudr.annuler_demande(conn, demande_id)
+        if not dem:
+            raise HTTPException(status_code=404, detail="Envoi introuvable ou déjà retiré.")
+        conn.commit()
+        fournisseurs = eudr.liste(conn)
+    log_action(
+        user=user,
+        action="DELETE",
+        module="qualite",
+        objet=f"EUDR — lien de {dem['fournisseur_nom']} désactivé ({dem['email']})",
+        ip=request.client.host if request.client else None,
+    )
+    return {"fournisseurs": fournisseurs}
+
+
 @router.post("/demander")
 def demander(request: Request, body: dict = Body(...)):
     """Envoie le lien du questionnaire.

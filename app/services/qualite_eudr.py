@@ -230,6 +230,21 @@ def noter_envoi(conn, *, demande_id: int, auteur: str | None, langue: str = "en"
     )
 
 
+def annuler_demande(conn, demande_id: int) -> dict | None:
+    """Désactive un lien envoyé à la mauvaise adresse : le formulaire répond
+    alors « lien invalide ». Les réponses déjà reçues par ce lien restent."""
+    row = conn.execute(
+        """SELECT d.id, d.email, f.nom AS fournisseur_nom FROM eudr_demandes d
+           JOIN fournisseurs_fsc f ON f.id=d.fournisseur_id
+           WHERE d.id=? AND d.actif=1""",
+        (int(demande_id),),
+    ).fetchone()
+    if not row:
+        return None
+    conn.execute("UPDATE eudr_demandes SET actif=0 WHERE id=?", (int(demande_id),))
+    return dict(row)
+
+
 def noter_langue(conn, demande: dict, langue: str) -> None:
     """Le fournisseur a changé de langue sur le formulaire : la relance suivante
     partira dans celle-ci."""

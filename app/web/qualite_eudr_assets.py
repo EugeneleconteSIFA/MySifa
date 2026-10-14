@@ -136,7 +136,10 @@ function eudrRenderList(){
       return `<div class="eudr-row${admin?'':' ro'}">
         ${admin ? `<span><input type="checkbox" ${S.eudr.sel.has(l.id)?'checked':''} onchange="eudrSel(${l.id},this.checked)"></span>` : ''}
         <span><b>${escHtml(l.nom)}</b> <span class="fsc-muted">${escHtml(l.pays||'')}</span>
-          ${l.emails.length ? '' : '<div class="eudr-warn">Aucun email connu</div>'}</span>
+          ${(l.demandes||[]).length
+            ? `<div class="eudr-dest">Envoyé à ${(l.demandes||[]).map(d => escHtml(d.email) +
+                (admin ? ` <button type="button" class="eudr-dest-x" title="Retirer ce destinataire : son lien cesse de fonctionner" onclick="eudrAnnulerDemande(${d.id})">×</button>` : '')).join(', ')}</div>`
+            : (l.emails.length ? '' : '<div class="eudr-warn">Aucun email connu</div>')}</span>
         <span><span class="eudr-badge ${st.cls}">${escHtml(st.lbl)}</span></span>
         <span class="fsc-muted">${l.derniere_demande ? escHtml(fmtDate(l.derniere_demande)) : '—'}</span>
         <span>${rep ? escHtml(rep.libelles.role || '—') : '—'}</span>
@@ -145,6 +148,20 @@ function eudrRenderList(){
       </div>`;
     }).join('')}
   </div>`;
+}
+
+async function eudrAnnulerDemande(id){
+  const l = (S.eudr.data.fournisseurs||[]).find(x => (x.demandes||[]).some(d => d.id === id));
+  const d = l && l.demandes.find(x => x.id === id);
+  if(!d || !confirm(`Retirer ${d.email} pour ${l.nom} ? Le lien envoyé à cette adresse ne fonctionnera plus.`)) return;
+  try{
+    const r = await api(`/api/qualite/eudr/demandes/${id}/annuler`, {method:'POST'});
+    const j = await r.json().catch(() => ({}));
+    if(!r.ok){ showToast(j.detail || 'Retrait impossible.','danger'); return; }
+    S.eudr.data.fournisseurs = j.fournisseurs || S.eudr.data.fournisseurs;
+    showToast('Destinataire retiré.','success');
+    eudrRender();
+  }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); }
 }
 
 function eudrSel(id, on){ if(on) S.eudr.sel.add(id); else S.eudr.sel.delete(id); eudrRenderList(); }
@@ -263,6 +280,10 @@ async function eudrVoirReponse(fid){
   .eudr-row.ro{grid-template-columns:minmax(180px,2fr) 120px 110px minmax(140px,1.5fr) minmax(150px,1.5fr) 130px}
   .eudr-head{border-top:none;font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:700;color:var(--muted)}
   .eudr-row b{color:var(--text)}
+  .eudr-dest{font-size:11.5px;color:var(--muted);word-break:break-all}
+  .eudr-dest-x{border:1px solid var(--border);background:var(--bg);color:var(--muted);border-radius:6px;width:18px;height:18px;line-height:14px;
+    font-size:13px;cursor:pointer;padding:0;margin-left:2px}
+  .eudr-dest-x:hover{color:var(--danger);border-color:var(--danger)}
   .eudr-warn{font-size:11px;color:var(--danger);font-weight:600}
   .eudr-badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:700;
     border:1px solid var(--border);color:var(--muted)}
