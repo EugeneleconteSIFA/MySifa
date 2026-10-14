@@ -11315,7 +11315,7 @@ function buildMpVariantesTable(m) {
           el('strong', null, mpFmtStockRvgi(totG))) : null,
       )));
     g.rows.sort((a, b) => (b.principal - a.principal) || (b.actif - a.actif));
-    g.rows.forEach((v, iv) => {
+    g.rows.forEach(v => {
       const radio = el('button', {
         cls: 'mp-var-radio' + (v.principal ? ' on' : ''),
         type: 'button',
@@ -11345,14 +11345,7 @@ function buildMpVariantesTable(m) {
           v.commandes_rvgi ? el('div', { cls: 'mp-var-meta' },
             v.commandes_rvgi + ' commande' + (v.commandes_rvgi > 1 ? 's' : '')) : null),
         el('td', { cls: 'num' }, mpFmtStockRvgi(stockArticle(v))),
-        // Le prix est celui du fournisseur, pas de l'article : une seule
-        // cellule pour tout le groupe.
-        iv === 0
-          ? el('td', { cls: 'num', attrs: { rowspan: String(g.rows.length) } },
-              (data.peut_modifier_prix && g.rows.some(x => x.actif))
-                ? mpPrixInput(m, data, g.id, g.nom, null)
-                : mpPrixTexte(data, g.id, null))
-          : null,
+        el('td', { cls: 'num' }, mpPrixArticleInput(m, data, v)),
         el('td', { cls: 'c-act' }, canEdit
           ? el('div', { cls: 'mp-var-actions' },
               v.actif ? el('button', {
@@ -11460,6 +11453,44 @@ function mpPrixInput(m, data, fid, nom, declId) {
       const ok = declId
         ? await mpEcrirePrix(m, '/api/pricing/mystock/prix', { declinaison_id: declId, fournisseur_id: fid || null, prix })
         : await mpEcrirePrix(m, '/api/pricing/mystock/prix-fournisseur', { matiere_id: m.id, fournisseur_id: fid || null, prix });
+      if (!ok) inp.value = initial;
+    } catch (err) {
+      showToast(err.message, 'error');
+      inp.value = initial;
+    }
+  });
+  return el('span', { cls: 'mp-prix-cell' }, inp, el('span', { cls: 'mp-var-meta' }, unite));
+}
+
+// Prix d'un article fournisseur. Celui qui fixe le prix de son fournisseur
+// (principal, ou seul article du fournisseur) affiche à défaut le prix déjà
+// en vigueur chez ce fournisseur.
+function mpPrixArticleInput(m, data, v) {
+  const unite = (data.prix && data.prix.unite) || '';
+  const fr = mpPrixFourchette(mpPrixLignes(data, v.fournisseur_id).map(l => Number(l.prix || 0)));
+  const propre = Number(v.prix_achat || 0) > 0 ? Number(v.prix_achat) : null;
+  const val = propre != null ? propre : (v.pousse_prix && fr && fr.unique != null ? fr.unique : null);
+  const titre = v.pousse_prix
+    ? 'Prix de cet article — appliqué au fournisseur dans Coûts matières'
+    : 'Prix de cet article — comparaison, sans effet sur le prix en vigueur';
+  if (!data.peut_modifier_prix || !v.actif) {
+    return el('span', { attrs: { title: titre } }, val != null
+      ? val.toLocaleString('fr-FR', { maximumFractionDigits: 4 }) + ' ' + unite : '—');
+  }
+  const inp = el('input', { cls: 'mp-cond-inp mp-prix-inp', attrs: {
+    type: 'number', min: '0', step: '0.001', title: titre,
+    'aria-label': 'Prix d\'achat de ' + (mpVarLibelle(v) || 'cet article'),
+  } });
+  inp.value = val != null ? String(val) : '';
+  inp.placeholder = (!v.pousse_prix && fr) ? fr.txt : 'à compléter';
+  const initial = inp.value;
+  inp.addEventListener('change', async () => {
+    const raw = String(inp.value || '').replace(',', '.').trim();
+    if (raw === '' || raw === initial) { inp.value = initial; return; }
+    const prix = parseFloat(raw);
+    if (isNaN(prix) || prix < 0) { showToast('Prix invalide — valeur positive attendue.', 'error'); inp.value = initial; return; }
+    try {
+      const ok = await mpEcrirePrix(m, '/api/stock/variantes/' + v.id + '/prix', { prix });
       if (!ok) inp.value = initial;
     } catch (err) {
       showToast(err.message, 'error');
