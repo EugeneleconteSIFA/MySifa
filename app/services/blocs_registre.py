@@ -37,6 +37,9 @@ NOM_WIDGET_MAX = 80
 # Taille de l'indicateur (colonne `hauteur`, nom gardé depuis l'affichage
 # « bloc ») : s compact (une ligne), m standard, l grand (graphique ou liste).
 HAUTEURS = ("s", "m", "l")
+# Compact = une ligne : seule la première valeur s'y lit, en garder plusieurs
+# n'aurait pas de sens (décision du 14/10/2026).
+COMPACT_UNE_VALEUR = "Compact : une seule valeur à afficher."
 # Sens d'une série : « + » quand une hausse est une bonne nouvelle (métrage),
 # « - » quand c'est l'inverse (arrêts). Il colore la tendance.
 SENS_SERIE = ("+", "-")
@@ -598,6 +601,8 @@ def valider_widget(data: dict, *, creation: bool) -> dict:
 
     if creation and not out.get("valeurs"):
         raise ValueError("Cochez au moins une valeur.")
+    if out.get("hauteur") == "s" and len(out.get("valeurs") or []) > 1:
+        raise ValueError(COMPACT_UNE_VALEUR)
     return out
 
 

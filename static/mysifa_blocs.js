@@ -763,6 +763,26 @@
         // Taille sur l'accueil ; « grand » seulement si le bloc a une série ou une liste.
         taille: o.taille === "s" || (o.taille === "l" && bloc.grand) ? o.taille : "m"
       };
+      // Compact = une ligne, une seule valeur lisible : on ne garde que la
+      // première (serveur : COMPACT_UNE_VALEUR). Les autres sont mises de côté
+      // et reviennent si l'on change de taille dans ce même questionnaire.
+      function garderPremiere() {
+        if (etat.coches.length <= 1) return;
+        etat.avantCompact = { coches: etat.coches.slice(), alertes: JSON.parse(JSON.stringify(etat.alertes)) };
+        var garde = etat.coches[0];
+        etat.coches = [garde];
+        Object.keys(etat.alertes).forEach(function (k) { if (k !== garde) delete etat.alertes[k]; });
+        etat.noteCompact = garde;
+      }
+      function rendreValeurs() {
+        var a = etat.avantCompact;
+        etat.avantCompact = null;
+        etat.noteCompact = null;
+        if (!a || etat.coches.length !== 1 || etat.coches[0] !== a.coches[0]) return;
+        etat.coches = a.coches;
+        Object.keys(a.alertes).forEach(function (k) { if (!(k in etat.alertes)) etat.alertes[k] = a.alertes[k]; });
+      }
+      if (etat.taille === "s") garderPremiere();
       // Pas d'alerte sur une valeur texte (seuil = nombre) : celles posées
       // avant le 06/10/2026 tombent au prochain enregistrement.
       bloc.valeurs.forEach(function (v) { if (v.nombre === false) delete etat.alertes[v.cle]; });
@@ -785,7 +805,8 @@
           (o.apercu ? '<div class="cap-apercu-ici"></div>' : "");
         if (filtres) h += dessinerFiltres();
         if (bloc.valeurs.length) {
-          h += '<div class="cap-lbl">Valeurs à afficher (' + valeursMax + " au maximum)</div>";
+          h += '<div class="cap-lbl">' + (etat.taille === "s" ? "Valeur à afficher (une seule en compact)"
+            : "Valeurs à afficher (" + valeursMax + " au maximum)") + "</div>";
           bloc.valeurs.forEach(function (v) {
             var rang = etat.coches.indexOf(v.cle);
             var al = etat.alertes[v.cle] || { op: "", seuil: "" };
@@ -818,7 +839,9 @@
               (t.k === etat.taille ? ' class="on"' : "") + ">" + esc(t.lib) + "</button>";
           }).join("") + "</div>" +
           '<div class="cap-taille-aide">' + esc(etat.taille === "l" ? aideGrand : choisie.aide) +
-          (bloc.grand ? "" : " Pas de grand format pour ce bloc : il n'a ni historique ni liste.") + "</div>";
+          (bloc.grand ? "" : " Pas de grand format pour ce bloc : il n'a ni historique ni liste.") +
+          (etat.taille === "s" && etat.noteCompact ? " Seule « " + esc(libelleValeur(etat.noteCompact)) +
+            " » est gardée ; les autres valeurs reviennent si vous changez de taille." : "") + "</div>";
         var nomActuel = panneau.querySelector("input.cap-nom");
         var nomVal = nomActuel ? nomActuel.value : (o.nom || "");
         h += '<div class="cap-lbl">Nom</div><input type="text" class="cap-nom" maxlength="80" value="' + esc(nomVal) + '">' +
@@ -873,6 +896,10 @@
       }
 
       function erreur(t) { var z = panneau.querySelector(".cap-err"); if (z) z.textContent = t || ""; }
+      function libelleValeur(cle) {
+        var v = bloc.valeurs.filter(function (x) { return x.cle === cle; })[0];
+        return v ? v.libelle : cle;
+      }
 
       function dessinerFiltres() {
         var h = '<div class="cap-lbl">Filtres</div><div class="cap-filtres">';
@@ -946,8 +973,16 @@
           var cle = t.getAttribute("data-cle");
           var i = etat.coches.indexOf(cle);
           if (t.checked && i < 0) {
-            if (etat.coches.length >= valeursMax) { t.checked = false; erreur(valeursMax + " valeurs au maximum."); return; }
-            etat.coches.push(cle);
+            if (etat.taille === "s") {
+              // Compact : la valeur cochée remplace la précédente.
+              etat.coches.forEach(function (k) { delete etat.alertes[k]; });
+              etat.coches = [cle];
+              etat.avantCompact = null;
+              etat.noteCompact = null;
+            } else {
+              if (etat.coches.length >= valeursMax) { t.checked = false; erreur(valeursMax + " valeurs au maximum."); return; }
+              etat.coches.push(cle);
+            }
           } else if (!t.checked && i >= 0) {
             etat.coches.splice(i, 1);
             delete etat.alertes[cle];
@@ -973,7 +1008,14 @@
         var b = e.target.closest("button");
         if (!b) return;
         if (b.getAttribute("data-act") === "annuler") { fermerPanneau(); if (o.annuler) o.annuler(); return; }
-        if (b.hasAttribute("data-taille")) { etat.taille = b.getAttribute("data-taille"); dessiner(); return; }
+        if (b.hasAttribute("data-taille")) {
+          var nt = b.getAttribute("data-taille");
+          if (nt === "s" && etat.taille !== "s") garderPremiere();
+          else if (nt !== "s" && etat.taille === "s") rendreValeurs();
+          etat.taille = nt;
+          dessiner();
+          return;
+        }
         if (b.getAttribute("data-act") === "ok") valider(b);
       });
 
@@ -981,6 +1023,7 @@
         var nomW = (panneau.querySelector("input.cap-nom").value || "").trim();
         if (!nomW) { erreur("Nom de l'indicateur obligatoire."); return; }
         if (!etat.coches.length) { erreur("Cochez au moins une valeur."); return; }
+        if (etat.taille === "s" && etat.coches.length > 1) { erreur("Compact : une seule valeur à afficher."); return; }
         var valeurs = [];
         for (var i = 0; i < etat.coches.length; i++) {
           var cle = etat.coches[i];

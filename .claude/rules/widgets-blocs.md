@@ -78,7 +78,11 @@ n'en reçoit pas une seconde.
 
 **Taille de l'indicateur** (décision du 11/10/2026) : colonne `hauteur` de
 `accueil_widgets`, `s` compact (une ligne : nom, valeur, tendance), `m`
-standard, `l` grand. Elle se règle dans Personnaliser (trois boutons sous la
+standard, `l` grand. **Compact = une seule valeur** (décision du 14/10/2026) :
+le serveur refuse un compact à plusieurs valeurs (`COMPACT_UNE_VALEUR`, contrôlé
+sur l'état final au PATCH) ; le questionnaire ne garde que la première en
+passant en compact et rend les autres si l'on change de taille ; le bouton
+Compact de Personnaliser garde la première et le dit. Elle se règle dans Personnaliser (trois boutons sous la
 carte). Le grand format n'existe que pour un bloc qui déclare :
 
 - `series=(("metrage", "+"), …)` : une série **qui s'additionne jour par jour**

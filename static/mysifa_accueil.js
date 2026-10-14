@@ -928,7 +928,7 @@
       setTimeout(function () { inp.focus(); inp.select(); }, 0);
       return;
     }
-    var tailles = [["s", "Compact : une ligne"], ["m", "Standard"]];
+    var tailles = [["s", "Compact : une ligne, une seule valeur"], ["m", "Standard"]];
     if (w.bloc_info && w.bloc_info.grand) {
       tailles.push(["l", w.bloc_info.liste ? "Grand : liste détaillée" : "Grand : graphique sur 30 jours"]);
     }
@@ -950,7 +950,21 @@
       if (b.getAttribute("data-act") === "taille") {
         var nt = b.getAttribute("data-t");
         if (nt === hc) return;
-        patcher(c, { hauteur: nt }).then(function () { dessinerOutils(c); lireSources(); }).catch(function () {});
+        var champs = { hauteur: nt };
+        // Compact = une seule valeur (COMPACT_UNE_VALEUR côté serveur) : on
+        // garde la première, et on le dit ; « Modifier » rajoute les autres.
+        var vals = w.valeurs || [];
+        var gardee = null;
+        if (nt === "s" && vals.length > 1) {
+          champs.valeurs = [vals[0]];
+          var d0 = ((w.bloc_info && w.bloc_info.valeurs) || []).filter(function (v) { return v.cle === vals[0].cle; })[0];
+          gardee = d0 ? d0.libelle : vals[0].cle;
+        }
+        patcher(c, champs).then(function () {
+          dessinerOutils(c);
+          lireSources();
+          if (gardee) avis("« " + w.nom + " » en compact : seule « " + gardee + " » est gardée. Pour en afficher plusieurs, repassez en standard.");
+        }).catch(function () {});
         return;
       }
       if (b.getAttribute("data-act") === "val") {
