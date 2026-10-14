@@ -793,6 +793,11 @@
       if (filtres) etat.filtres = F.lire(filtres, o.url);
       poserStyle();
       fermerPanneau();
+      // La bulle de survol du dernier bloc survolé ne doit pas rester à
+      // l'écran pendant le questionnaire (elle passait pour un second aperçu).
+      if (bulle) bulle.style.display = "none";
+      var survoles = document.querySelectorAll(".mysifa-capturable.survol");
+      for (var sv = 0; sv < survoles.length; sv++) survoles[sv].classList.remove("survol");
       panneau = document.createElement("aside");
       panneau.className = "mysifa-cap-pan";
       panneau.setAttribute("role", "dialog");
@@ -885,7 +890,7 @@
         // Largeur réelle d'une carte dans la colonne, dans la limite du panneau.
         plateau.style.width = Math.min(largeurCarte(), panneau.clientWidth - 40) + "px";
         plateau.innerHTML = '<div class="cap-plateau-t">Aperçu sur votre accueil</div><div class="cap-plateau-c"></div>' +
-          '<div class="cap-plateau-n">Chiffres de la page à cet instant ; sur l\'accueil, ils se mettent à jour chaque minute.</div>';
+          '<div class="cap-plateau-n">Chiffres de cet instant, avec les filtres choisis ; sur l\'accueil, ils se mettent à jour chaque minute.</div>';
         apercuZone.appendChild(plateau);
         if (ici) ici.replaceWith(apercuZone);
         chargerApercu().then(function (ok) {
