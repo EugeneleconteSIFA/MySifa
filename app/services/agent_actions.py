@@ -528,6 +528,10 @@ async def lire(app, cookies: dict, cle: str, params: dict) -> Any:
         data = r.text[:2000]
     if r.status_code >= 400:
         raise ActionInvalide(f"Écran {cle} : {_message(data, r.status_code) or r.status_code}")
+    if cle == "stock_emplacement" and isinstance(data, dict):
+        # L'écran affiche aussi l'historique de l'emplacement : sans lui,
+        # l'agent ne confond plus le stock présent avec les mouvements passés.
+        data = {k: v for k, v in data.items() if k not in ("mouvements", "historique")}
     return data
 
 
