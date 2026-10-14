@@ -102,18 +102,21 @@ carte). Le grand format n'existe que pour un bloc qui déclare :
 - `historique=(("lignes", "-"), …)` (décision du 14/10/2026) : valeurs
   **relevées** chaque jour (bloc dans `RELEVEURS`), sens `+`, `-` ou `=`
   (neutre, sans couleur). Ce sont des NIVEAUX, pas des flux : grand format en
-  **courbe** (valeur de 18 h, bande min–max de la journée, trou pour un jour
-  sans relevé, aujourd'hui = valeur du moment marquée « en cours »), horizon
+  **courbe** (tracé lissé de la valeur de 18 h sur une aire légère, fourchette
+  min–max du jour en trait vertical discret, repères d'échelle haut et bas,
+  trou pour un jour sans relevé, aujourd'hui = valeur du moment en point creux
+  « en cours » ; retour du 14/10 : une bande en polygone ne se lisait pas), horizon
   7 / 30 / 90 jours en pastilles (`bloc_horizon`), **seulement celles que
   l'historique remplit** : 30 j au-delà de 7 jours de relevés, 90 j au-delà de
   30 ; aucune pastille tant qu'il n'y a qu'une option. Le réglage enregistré
   reste et reprend effet quand l'historique suit. L'axe part du premier relevé
-  si l'historique est plus court (7 jours au moins). Tendance : vs hier en
+  si l'historique est plus court que l'horizon. Tendance : vs hier en
   standard et compact, vs le début de l'horizon en courbe ; en nombre, en %
   au-delà de 100. Standard : mini-courbe sur 14 jours. Données :
   `GET /api/accueil/releves/{bloc}?url=&objet=&jours=` (accès du bloc). Un bloc
-  qui a une liste ET un historique choisit dans le questionnaire « Liste »
-  (défaut) ou « Courbe » (`bloc_vue`). `bloc_vue` et `bloc_horizon` sont des
+  qui a une liste ET un historique choisit « Liste » (défaut) ou « Courbe »
+  (`bloc_vue`), dans le questionnaire comme par la bascule en pastilles sur la
+  carte. `bloc_vue` et `bloc_horizon` sont des
   réglages d'affichage (`PARAMS_AFFICHAGE`) : ils ne comptent pas dans la clé
   des relevés. `series=` et `historique=` s'excluent. Le test des relevés
   exige `historique=` sur tout bloc relevé, et inversement.
