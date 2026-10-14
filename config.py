@@ -1197,6 +1197,34 @@ DEVIS_TOLERANCE_COHERENCE = float(os.getenv("DEVIS_TOLERANCE_COHERENCE", "0.05")
 # qui a produit un chiffre, des mois après.
 DEVIS_UPLOAD_DIR = os.path.join(UPLOADS_ROOT, "devis")
 
+# ─── MyPrint — étiquettes spécifiques ─────────────────────────────
+# Tous les rôles qui ont la tuile MyPrint créent, modifient et impriment
+# (arbitrage d'Eugène du 14/10/2026). La file des demandes de nouveau format
+# reste au super admin.
+ROLES_MYPRINT = (
+    {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_FABRICATION, ROLE_LOGISTIQUE, ROLE_EXPEDITION}
+    | ROLES_ADMINISTRATION_ALL
+)
+# Assistant de paramétrage : lit des photos et PDF d'étiquettes, raisonne sur
+# des coordonnées — le modèle le plus capable par défaut.
+ETIQ_IA_MODELE = os.getenv("ETIQ_IA_MODELE", "claude-opus-5-5")
+# Modèles proposés dans l'assistant (choix de l'utilisateur à chaque appel).
+# (identifiant, libellé, aide, repli serveur). Le repli serveur (« fallbacks »)
+# relance la demande sur un autre modèle si celui-ci la refuse ; Haiku ne le
+# propose pas. Le serveur refuse tout identifiant absent de cette liste.
+ETIQ_IA_MODELES = (
+    ("claude-opus-5-5", "Claude Opus 5.5", "Recommandé — précis sur les mises en page et les photos.", True),
+    ("claude-sonnet-5-5", "Claude Sonnet 5.5", "Plus rapide, deux fois moins cher.", True),
+    ("claude-haiku-5-5", "Claude Haiku 5.5", "Le plus rapide, pour les retouches simples.", False),
+    ("claude-fable-5-1", "Claude Fable 5.1", "Le plus capable, plus lent et plus cher.", True),
+)
+
+
+def etiq_ia_modeles() -> list[dict]:
+    return [{"id": i, "libelle": l, "aide": a, "repli": r} for i, l, a, r in ETIQ_IA_MODELES]
+ETIQ_UPLOAD_DIR = os.path.join(UPLOADS_ROOT, "etiquettes_specifiques")
+ETIQ_PIECE_MAX_OCTETS = int(os.getenv("ETIQ_PIECE_MAX_OCTETS", str(15 * 1024 * 1024)))
+
 # ─── MyTradu
 
 # ─── MyTraduction (DeepL) ─────────────────────────────────────────

@@ -1,0 +1,698 @@
+/* MyPrint — étiquettes spécifiques : éditeur.
+ *
+ * Trois colonnes : éléments (liste + réglages de l'élément choisi), aperçu
+ * SVG à l'échelle (on déplace un élément à la souris ou aux flèches),
+ * variables et assistant IA.
+ *
+ * L'aperçu SVG est immédiat mais approché (police, rotation). Le bouton
+ * « Aperçu imprimante » rend le ZPL réel : c'est lui qui fait foi.
+ * Les codes-barres sont dessinés par bwip-js, chargé à la demande.
+ *
+ * Saisie dans un champ : seul l'aperçu est redessiné, jamais le formulaire —
+ * le champ garde son focus et son curseur.
+ */
+(function () {
+  'use strict';
+  const X = () => window.EtiqSpec._;
+  const BWIP_URL = 'https://cdn.jsdelivr.net/npm/bwip-js@4.5.1/dist/bwip-js-min.js';
+  const BCID = { code128: 'code128', gs1_128: 'gs1-128', ean13: 'ean13', datamatrix: 'datamatrix', qrcode: 'qrcode' };
+  const SVGNS = 'http://www.w3.org/2000/svg';
+
+  const ED = { m: null, sel: null, dirty: false, pile: [], propo: null, iaBusy: false, voirPropo: true };
+  let bwipEtat = 'absent';   // absent | charge | pret | erreur
+  const cacheCodes = new Map();
+
+  // ── Outils ──────────────────────────────────────────────────────────
+  // Recherche dans le nœud du module : il peut être hors de la page au
+  // moment du rendu (MyStock le rattache ensuite).
+  function $id(id) { const host = X().ES.host; return host ? host.querySelector('#' + id) : document.getElementById(id); }
+  function s(tag, attrs) {
+    const n = document.createElementNS(SVGNS, tag);
+    for (const [k, v] of Object.entries(attrs || {})) if (v !== null && v !== undefined) n.setAttribute(k, v);
+    return n;
+  }
+  function num(v, d) { const f = parseFloat(String(v).replace(',', '.')); return Number.isFinite(f) ? f : d; }
+  function cloner(o) { return JSON.parse(JSON.stringify(o)); }
+  function layout() { return ED.m.layout; }
+  function elSel() { return layout().elements.find(e => e.id === ED.sel) || null; }
+  function nouvelId() {
+    const ids = new Set(layout().elements.map(e => e.id));
+    let i = layout().elements.length + 1;
+    while (ids.has('e' + i)) i++;
+    return 'e' + i;
+  }
+  function memoriser() {
+    ED.pile.push(JSON.stringify({ layout: ED.m.layout, l: ED.m.largeur_mm, h: ED.m.hauteur_mm }));
+    if (ED.pile.length > 60) ED.pile.shift();
+  }
+  function annuler() {
+    const p = ED.pile.pop();
+    if (!p) { X().toast('Rien à annuler.', 'info'); return; }
+    const o = JSON.parse(p);
+    ED.m.layout = o.layout; ED.m.largeur_mm = o.l; ED.m.hauteur_mm = o.h;
+    if (!elSel()) ED.sel = null;
+    salir(); X().rendre();
+  }
+  function salir() {
+    ED.dirty = true;
+    const b = $id('es-enregistrer');
+    if (b) b.disabled = false;
+  }
+
+  // ── Valeurs d'exemple (aperçu) ──────────────────────────────────────
+  function cleGs1(ch) {
+    let t = 0;
+    for (let i = 0; i < ch.length; i++) t += parseInt(ch[ch.length - 1 - i], 10) * (i % 2 === 0 ? 3 : 1);
+    return String((10 - t % 10) % 10);
+  }
+  function strftime(fmt, d) {
+    const p = n => String(n).padStart(2, '0');
+    return fmt.replace(/%d/g, p(d.getDate())).replace(/%m/g, p(d.getMonth() + 1)).replace(/%Y/g, d.getFullYear())
+      .replace(/%y/g, p(d.getFullYear() % 100)).replace(/%H/g, p(d.getHours())).replace(/%M/g, p(d.getMinutes()))
+      .replace(/%j/g, String(Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 864e5)).padStart(3, '0'));
+  }
+  function valeursExemple(lay) {
+    const out = {};
+    for (const v of lay.variables) {
+      if (v.type === 'fixe') out[v.nom] = v.valeur || '';
+      else if (v.type === 'saisie') out[v.nom] = v.valeur || v.libelle || v.nom;
+      else if (v.type === 'compteur') out[v.nom] = (v.prefixe || '') + String(v.debut ?? 1).padStart(v.longueur || 0, '0') + (v.suffixe || '');
+      else if (v.type === 'sscc') {
+        const pre = String(v.prefixe_gs1 || '').replace(/\D/g, '');
+        const base = (v.extension || '0') + (pre.length >= 7 ? pre : '0000000') + '1'.padStart(16 - Math.max(7, Math.min(10, pre.length || 7)), '0');
+        out[v.nom] = base + cleGs1(base);
+      } else if (v.type === 'date') {
+        const d = new Date(); d.setDate(d.getDate() + (parseInt(v.decalage_jours, 10) || 0));
+        out[v.nom] = strftime(v.format || '%d/%m/%Y', d);
+      }
+    }
+    return out;
+  }
+  function substituer(t, vals) {
+    return String(t || '').replace(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g, (_, n) => vals[n.toLowerCase()] ?? '');
+  }
+  function avertissements(lay) {
+    const decl = new Set(lay.variables.map(v => v.nom));
+    const out = [];
+    const vus = new Set();
+    for (const e of lay.elements) {
+      for (const m of String(e.valeur || '').matchAll(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g)) {
+        const n = m[1].toLowerCase();
+        if (!decl.has(n) && !vus.has(n)) { vus.add(n); out.push(`{{${n}}} est utilisé mais aucune variable « ${n} » n'est déclarée.`); }
+      }
+    }
+    for (const v of lay.variables) {
+      if (v.type === 'sscc') { const l = String(v.prefixe_gs1 || '').replace(/\D/g, '').length; if (l < 7 || l > 10) out.push(`Variable « ${v.nom} » : le préfixe GS1 doit compter 7 à 10 chiffres.`); }
+    }
+    const L = ED.m.largeur_mm, H = ED.m.hauteur_mm;
+    for (const e of lay.elements) if (e.x > L || e.y > H) out.push(`« ${e.nom || e.id} » est hors de l'étiquette.`);
+    return out;
+  }
+
+  // ── Codes-barres (bwip-js) ──────────────────────────────────────────
+  function chargerBwip() {
+    if (bwipEtat !== 'absent') return;
+    bwipEtat = 'charge';
+    const sc = document.createElement('script');
+    sc.src = BWIP_URL;
+    sc.onload = () => { bwipEtat = window.bwipjs ? 'pret' : 'erreur'; dessiner(); };
+    sc.onerror = () => { bwipEtat = 'erreur'; dessiner(); };
+    document.head.appendChild(sc);
+  }
+  function donneesCode(sym, v) {
+    if (sym === 'ean13') return String(v).replace(/\D/g, '').slice(0, 12);
+    if (sym === 'gs1_128') return String(v).replace(/\s+/g, '');
+    return String(v);
+  }
+  // Rend {svg (data URL), modulesX, modulesY} ou {erreur}
+  function code(sym, texte) {
+    const cle = sym + '|' + texte;
+    if (cacheCodes.has(cle)) return cacheCodes.get(cle);
+    let r;
+    try {
+      if (!texte) throw new Error('vide');
+      const opts = { bcid: BCID[sym], text: texte, scale: 1, height: 10, includetext: false, paddingwidth: 0, paddingheight: 0 };
+      if (sym === 'ean13') opts.text = texte.padEnd(12, '0');
+      const raw = window.bwipjs.raw(Object.assign({}, opts))[0];
+      let mx, my;
+      if (raw.pixx) { mx = raw.pixx; my = raw.pixy; }
+      else { mx = (raw.sbs || []).reduce((a, b) => a + b, 0); my = null; }
+      const svg = window.bwipjs.toSVG(opts);
+      r = { url: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg), mx, my };
+    } catch (e) {
+      r = { erreur: String(e.message || e).replace(/^bwipp\.\w+#\d+:\s*/, '').slice(0, 80) };
+    }
+    if (cacheCodes.size > 300) cacheCodes.clear();
+    cacheCodes.set(cle, r);
+    return r;
+  }
+
+  // ── Dessin SVG ──────────────────────────────────────────────────────
+  function dessinerElement(g, e, vals) {
+    const rot = e.rotation ? `rotate(${e.rotation} ${e.x} ${e.y})` : null;
+    if (e.type === 'texte') {
+      const t = substituer(e.valeur, vals);
+      const larg = e.largeur || 0;
+      let ax = e.x, anchor = 'start';
+      if (larg && e.align === 'centre') { ax = e.x + larg / 2; anchor = 'middle'; }
+      if (larg && e.align === 'droite') { ax = e.x + larg; anchor = 'end'; }
+      const lignes = larg ? decouper(t, larg, e.taille, e.lignes || 1) : [t];
+      const txt = s('text', { x: ax, y: e.y + e.taille * 0.82, 'font-size': e.taille, 'text-anchor': anchor,
+        'font-family': "'Arial Narrow', Arial, sans-serif", 'font-weight': e.gras ? 700 : 500,
+        fill: e.inverse ? 'white' : 'black', transform: rot });
+      lignes.forEach((l, i) => {
+        const ts = s('tspan', { x: ax, dy: i ? e.taille * 1.05 : 0 });
+        ts.textContent = l;
+        txt.appendChild(ts);
+      });
+      g.appendChild(txt);
+      return;
+    }
+    if (e.type === 'cadre') {
+      const t = e.epaisseur;
+      const r = (e.arrondi || 0) / 8 * Math.min(e.largeur, e.hauteur) / 2;
+      g.appendChild(e.plein
+        ? s('rect', { x: e.x, y: e.y, width: e.largeur, height: e.hauteur, rx: r, fill: 'black', transform: rot })
+        : s('rect', { x: e.x + t / 2, y: e.y + t / 2, width: Math.max(0.1, e.largeur - t), height: Math.max(0.1, e.hauteur - t),
+          rx: r, fill: 'none', stroke: 'black', 'stroke-width': t }));
+      return;
+    }
+    if (e.type === 'ligne') {
+      g.appendChild(e.orientation === 'v'
+        ? s('rect', { x: e.x, y: e.y, width: e.epaisseur, height: e.longueur, fill: 'black' })
+        : s('rect', { x: e.x, y: e.y, width: e.longueur, height: e.epaisseur, fill: 'black' }));
+      return;
+    }
+    if (e.type === 'code_barre') {
+      const texte = donneesCode(e.symbologie, substituer(e.valeur, vals));
+      const deuxD = e.symbologie === 'datamatrix' || e.symbologie === 'qrcode';
+      if (bwipEtat !== 'pret') {
+        chargerBwip();
+        g.appendChild(s('rect', { x: e.x, y: e.y, width: deuxD ? 15 : 40, height: deuxD ? 15 : e.hauteur, fill: 'none', stroke: 'black', 'stroke-dasharray': '1 1', 'stroke-width': 0.3 }));
+        return;
+      }
+      const c = code(e.symbologie, texte);
+      if (c.erreur) {
+        const w = deuxD ? 15 : 40, ht = deuxD ? 15 : e.hauteur;
+        g.appendChild(s('rect', { x: e.x, y: e.y, width: w, height: ht, fill: 'none', stroke: 'crimson', 'stroke-width': 0.4, 'stroke-dasharray': '1.5 1' }));
+        const t = s('text', { x: e.x + 1, y: e.y + 3.5, 'font-size': 2.6, fill: 'crimson', 'font-family': 'Arial, sans-serif' });
+        t.textContent = 'Code invalide : ' + c.erreur;
+        g.appendChild(t);
+        return;
+      }
+      const w = c.mx * e.module;
+      const ht = deuxD ? (c.my || c.mx) * e.module : e.hauteur;
+      g.appendChild(s('image', { href: c.url, x: e.x, y: e.y, width: w, height: ht, preserveAspectRatio: 'none', transform: rot }));
+      if (e.lisible && !deuxD) {
+        let lisible = texte;
+        if (e.symbologie === 'ean13') lisible = texte.padEnd(12, '0') + cleGs1(texte.padEnd(12, '0'));
+        const t = s('text', { x: e.x + w / 2, y: e.y + ht + 2.6, 'font-size': 2.4, 'text-anchor': 'middle',
+          'font-family': "'Arial Narrow', Arial, sans-serif", fill: 'black', transform: rot });
+        t.textContent = lisible;
+        g.appendChild(t);
+      }
+    }
+  }
+  function decouper(t, larg, taille, max) {
+    const parCar = Math.max(1, Math.floor(larg / (taille * 0.5)));
+    const mots = t.split(/\s+/), lignes = [];
+    let cur = '';
+    for (const m of mots) {
+      if ((cur + ' ' + m).trim().length > parCar && cur) { lignes.push(cur); cur = m; }
+      else cur = (cur + ' ' + m).trim();
+    }
+    if (cur) lignes.push(cur);
+    return lignes.slice(0, max);
+  }
+  function bboxElement(e) {
+    if (e.type === 'texte') return { x: e.x, y: e.y, w: e.largeur || Math.max(4, String(e.valeur || '').length * e.taille * 0.5), h: e.taille * (e.largeur ? (e.lignes || 1) : 1) * 1.05 };
+    if (e.type === 'cadre') return { x: e.x, y: e.y, w: e.largeur, h: e.hauteur };
+    if (e.type === 'ligne') return e.orientation === 'v' ? { x: e.x - 0.5, y: e.y, w: e.epaisseur + 1, h: e.longueur } : { x: e.x, y: e.y - 0.5, w: e.longueur, h: e.epaisseur + 1 };
+    return { x: e.x, y: e.y, w: 20, h: e.hauteur || 15 };
+  }
+
+  function construireSvg(m, lay, interactif) {
+    const L = m.largeur_mm, H = m.hauteur_mm, marge = 3;
+    const svg = s('svg', { viewBox: `${-marge} ${-marge} ${L + 2 * marge} ${H + 2 * marge}`, class: 'es-svg', tabindex: interactif ? 0 : null });
+    svg.appendChild(s('rect', { x: 0, y: 0, width: L, height: H, fill: 'white', class: 'es-papier', rx: 1.2 }));
+    const vals = valeursExemple(lay);
+    for (const e of lay.elements) {
+      const g = s('g', { 'data-id': e.id, class: 'es-el' + (interactif && e.id === ED.sel ? ' sel' : '') });
+      dessinerElement(g, e, vals);
+      if (interactif) {
+        const b = bboxElement(e);
+        g.appendChild(s('rect', { x: b.x, y: b.y, width: Math.max(1, b.w), height: Math.max(1, b.h), class: 'es-poignee' }));
+        // Le cadre de sélection d'un code-barres suit le rendu réel
+        if (e.type === 'code_barre') {
+          const img = g.querySelector('image');
+          if (img) { const p = g.querySelector('.es-poignee'); p.setAttribute('width', img.getAttribute('width')); p.setAttribute('height', parseFloat(img.getAttribute('height')) + (e.lisible ? 3 : 0)); }
+        }
+      }
+      svg.appendChild(g);
+    }
+    return svg;
+  }
+
+  function dessiner() {
+    const zone = $id('es-canevas');
+    if (!zone || !ED.m) return;
+    const montrer = ED.propo && ED.voirPropo;
+    const m = montrer ? Object.assign({}, ED.m, { largeur_mm: ED.propo.largeur_mm, hauteur_mm: ED.propo.hauteur_mm }) : ED.m;
+    const svg = construireSvg(m, montrer ? ED.propo.layout : layout(), !montrer);
+    zone.replaceChildren(svg);
+    if (!montrer) brancherSouris(svg);
+    const av = $id('es-avert');
+    if (av) {
+      const liste = avertissements(montrer ? ED.propo.layout : layout());
+      av.replaceChildren(...liste.map(t => X().h('div', { cls: 'es-avert-ligne', text: t })));
+    }
+    const dim = $id('es-dim');
+    if (dim) dim.textContent = `${X().fmtNum(m.largeur_mm)} × ${X().fmtNum(m.hauteur_mm)} mm · ${ED.m.dpi} dpi` + (montrer ? ' · proposition de Claude' : '');
+  }
+
+  // ── Souris / clavier ────────────────────────────────────────────────
+  function brancherSouris(svg) {
+    let glisse = null;
+    const enMm = (ev) => {
+      const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+      return pt.matrixTransform(svg.getScreenCTM().inverse());
+    };
+    svg.addEventListener('pointerdown', (ev) => {
+      const g = ev.target.closest('.es-el');
+      if (!g) { if (ED.sel) { ED.sel = null; majPanneauElement(); dessiner(); } return; }
+      const e = layout().elements.find(x => x.id === g.dataset.id);
+      if (!e) return;
+      const p = enMm(ev);
+      glisse = { e, dx: p.x - e.x, dy: p.y - e.y, bouge: false };
+      if (ED.sel !== e.id) { ED.sel = e.id; majPanneauElement(); majListe(); }
+      svg.setPointerCapture(ev.pointerId);
+      svg.focus({ preventScroll: true });
+      dessinerSel();
+    });
+    svg.addEventListener('pointermove', (ev) => {
+      if (!glisse) return;
+      const p = enMm(ev);
+      const nx = Math.max(0, Math.round((p.x - glisse.dx) * 2) / 2);
+      const ny = Math.max(0, Math.round((p.y - glisse.dy) * 2) / 2);
+      if (nx === glisse.e.x && ny === glisse.e.y) return;
+      if (!glisse.bouge) { memoriser(); glisse.bouge = true; }
+      glisse.e.x = nx; glisse.e.y = ny;
+      salir();
+      const g = svg.querySelector(`.es-el[data-id="${CSS.escape(glisse.e.id)}"]`);
+      if (g) {
+        g.replaceChildren();
+        dessinerElement(g, glisse.e, valeursExemple(layout()));
+        const b = bboxElement(glisse.e);
+        g.appendChild(s('rect', { x: b.x, y: b.y, width: Math.max(1, b.w), height: Math.max(1, b.h), class: 'es-poignee' }));
+      }
+    });
+    const fin = () => { if (glisse && glisse.bouge) { majChampsPosition(); dessiner(); } glisse = null; };
+    svg.addEventListener('pointerup', fin);
+    svg.addEventListener('pointercancel', fin);
+    svg.addEventListener('keydown', (ev) => {
+      const e = elSel();
+      if (!e) return;
+      const pas = ev.shiftKey ? 5 : 0.5;
+      const d = { ArrowLeft: [-pas, 0], ArrowRight: [pas, 0], ArrowUp: [0, -pas], ArrowDown: [0, pas] }[ev.key];
+      if (d) {
+        ev.preventDefault(); memoriser();
+        e.x = Math.max(0, Math.round((e.x + d[0]) * 2) / 2); e.y = Math.max(0, Math.round((e.y + d[1]) * 2) / 2);
+        salir(); majChampsPosition(); dessiner();
+        requestAnimationFrame(() => $id('es-canevas')?.querySelector('svg')?.focus({ preventScroll: true }));
+      } else if (ev.key === 'Delete' || ev.key === 'Backspace') {
+        ev.preventDefault(); supprimerElement(e);
+      }
+    });
+  }
+  function dessinerSel() {
+    ($id('es-canevas')?.querySelectorAll('.es-el') || []).forEach(g => g.classList.toggle('sel', g.dataset.id === ED.sel));
+  }
+  function majChampsPosition() {
+    const e = elSel();
+    if (!e) return;
+    const fx = $id('es-f-x'), fy = $id('es-f-y');
+    if (fx) fx.value = e.x;
+    if (fy) fy.value = e.y;
+  }
+
+  // ── Panneau éléments ────────────────────────────────────────────────
+  const LIBELLE_TYPE = { texte: 'Texte', code_barre: 'Code-barres', cadre: 'Cadre', ligne: 'Ligne' };
+  const ICONE_TYPE = { texte: 'type', code_barre: 'barcode', cadre: 'square', ligne: 'minus' };
+
+  function ajouter(type) {
+    memoriser();
+    const L = ED.m.largeur_mm, H = ED.m.hauteur_mm;
+    const base = { id: nouvelId(), type, nom: '', x: 5, y: Math.min(H - 10, 5 + layout().elements.length * 4) };
+    const par = {
+      texte: { valeur: 'Texte', taille: 4, gras: false, largeur: 0, lignes: 1, align: 'gauche', rotation: 0, inverse: false },
+      code_barre: { symbologie: 'code128', valeur: '123456789', hauteur: 15, module: 0.375, lisible: true, rotation: 0 },
+      cadre: { x: 2, y: 2, largeur: Math.max(5, L - 4), hauteur: Math.max(5, Math.min(30, H - 4)), epaisseur: 0.5, arrondi: 0, plein: false },
+      ligne: { orientation: 'h', longueur: Math.max(5, L - 10), epaisseur: 0.5 },
+    }[type];
+    const e = Object.assign(base, par);
+    layout().elements.push(e);
+    ED.sel = e.id;
+    salir(); X().rendre();
+  }
+  function supprimerElement(e) {
+    memoriser();
+    ED.m.layout.elements = layout().elements.filter(x => x !== e);
+    ED.sel = null; salir(); X().rendre();
+  }
+  function deplacerOrdre(e, sens) {
+    const arr = layout().elements, i = arr.indexOf(e), j = i + sens;
+    if (j < 0 || j >= arr.length) return;
+    memoriser(); arr.splice(i, 1); arr.splice(j, 0, e); salir(); X().rendre();
+  }
+
+  function majListe() {
+    const zone = $id('es-liste-el');
+    if (!zone) return;
+    const { h, ic } = X();
+    zone.replaceChildren(...layout().elements.map(e => h('div', {
+      cls: 'es-el-ligne' + (e.id === ED.sel ? ' actif' : ''),
+      onclick: () => { ED.sel = e.id; majListe(); majPanneauElement(); dessinerSel(); } },
+      ic(ICONE_TYPE[e.type], 14),
+      h('span', { cls: 'es-el-nom', text: e.nom || resume(e) }),
+      h('span', { cls: 'es-aide', text: LIBELLE_TYPE[e.type] }))));
+    if (!layout().elements.length) zone.appendChild(h('div', { cls: 'es-aide', text: 'Étiquette vide. Ajouter un élément ou décrire l\'étiquette à l\'assistant.' }));
+  }
+  function resume(e) {
+    if (e.type === 'texte') return (e.valeur || '').slice(0, 30) || 'Texte';
+    if (e.type === 'code_barre') return (X().ES.boot.referentiel.symbologies[e.symbologie] || e.symbologie) + ' ' + (e.valeur || '').slice(0, 20);
+    return LIBELLE_TYPE[e.type];
+  }
+
+  function champNum(id, label, e, cle, pas, aide) {
+    const { h, champ } = X();
+    const i = h('input', { cls: 'es-input', id, type: 'number', step: pas || '0.5', value: e[cle] });
+    i.addEventListener('focus', memoriser, { once: true });
+    i.addEventListener('input', () => { e[cle] = num(i.value, e[cle]); salir(); dessiner(); if (cle === 'nom') majListe(); });
+    return champ(label, i, aide);
+  }
+  function champCase(label, e, cle) {
+    const { h } = X();
+    const i = h('input', { type: 'checkbox', checked: !!e[cle] });
+    i.addEventListener('change', () => { memoriser(); e[cle] = i.checked; salir(); dessiner(); });
+    return h('label', { cls: 'es-case' }, i, h('span', { text: label }));
+  }
+  function champChoix(label, e, cle, options, apres) {
+    const { h, champ } = X();
+    const sel = h('select', { cls: 'es-input' }, ...Object.entries(options).map(([k, l]) => h('option', { value: k, text: l })));
+    sel.value = String(e[cle]);
+    sel.addEventListener('change', () => {
+      memoriser();
+      e[cle] = /^\d+$/.test(sel.value) && typeof e[cle] === 'number' ? parseInt(sel.value, 10) : sel.value;
+      salir(); dessiner(); majListe(); if (apres) apres();
+    });
+    return champ(label, sel);
+  }
+  function champTexte(label, e, cle, multi, aide) {
+    const { h, champ } = X();
+    const i = multi ? h('textarea', { cls: 'es-input', rows: 2, value: e[cle] || '' }) : h('input', { cls: 'es-input', value: e[cle] || '' });
+    i.addEventListener('focus', memoriser, { once: true });
+    i.addEventListener('input', () => { e[cle] = i.value; salir(); dessiner(); majListe(); });
+    const blocs = [i];
+    if (cle === 'valeur' && layout().variables.length) {
+      blocs.push(h('div', { cls: 'es-puces' }, ...layout().variables.map(v => h('button', {
+        cls: 'es-puce', type: 'button', title: 'Insérer ' + v.libelle, text: '{{' + v.nom + '}}',
+        onclick: () => {
+          const pos = i.selectionStart ?? i.value.length;
+          i.value = i.value.slice(0, pos) + '{{' + v.nom + '}}' + i.value.slice(i.selectionEnd ?? pos);
+          i.dispatchEvent(new Event('input')); i.focus();
+        } }))));
+    }
+    return champ(label, h('div', { cls: 'es-pile' }, ...blocs), aide);
+  }
+
+  function majPanneauElement() {
+    const zone = $id('es-panneau-el');
+    if (!zone) return;
+    const { h, bouton } = X();
+    const e = elSel();
+    if (!e) { zone.replaceChildren(h('div', { cls: 'es-aide', text: 'Cliquer un élément sur l\'aperçu ou dans la liste pour le régler. Flèches : déplacer de 0,5 mm (Maj : 5 mm). Suppr : retirer.' })); return; }
+    const rot = { 0: '0°', 90: '90°', 180: '180°', 270: '270°' };
+    const f = [champTexte('Nom (repère)', e, 'nom')];
+    f.push(h('div', { cls: 'es-ligne2' }, champNum('es-f-x', 'X (mm)', e, 'x'), champNum('es-f-y', 'Y (mm)', e, 'y')));
+    if (e.type === 'texte') {
+      f.push(champTexte('Texte', e, 'valeur', true, 'Variables : {{nom}}'));
+      f.push(h('div', { cls: 'es-ligne2' }, champNum('es-f-t', 'Hauteur car. (mm)', e, 'taille'), champChoix('Rotation', e, 'rotation', rot)));
+      f.push(h('div', { cls: 'es-ligne2' }, champNum('es-f-l', 'Largeur bloc (mm)', e, 'largeur', '0.5', '0 = sans bloc'), champNum('es-f-n', 'Lignes max', e, 'lignes', '1')));
+      f.push(champChoix('Alignement', e, 'align', { gauche: 'Gauche', centre: 'Centré', droite: 'Droite' }));
+      f.push(h('div', { cls: 'es-ligne2' }, champCase('Gras', e, 'gras'), champCase('Inversé (blanc)', e, 'inverse')));
+    } else if (e.type === 'code_barre') {
+      f.push(champChoix('Symbologie', e, 'symbologie', window.EtiqSpec._.ES.boot.referentiel.symbologies, majPanneauElement));
+      f.push(champTexte('Données', e, 'valeur', false, e.symbologie === 'gs1_128' ? 'AI entre parenthèses : (00){{sscc}}, (02)…(37)…' : (e.symbologie === 'ean13' ? '12 chiffres, la clé est calculée.' : null)));
+      const deuxD = e.symbologie === 'datamatrix' || e.symbologie === 'qrcode';
+      f.push(h('div', { cls: 'es-ligne2' },
+        deuxD ? h('span') : champNum('es-f-h', 'Hauteur (mm)', e, 'hauteur'),
+        champNum('es-f-m', 'Module (mm)', e, 'module', '0.025', 'Barreau le plus fin')));
+      f.push(h('div', { cls: 'es-ligne2' }, champChoix('Rotation', e, 'rotation', rot), deuxD ? h('span') : champCase('Texte en clair', e, 'lisible')));
+    } else if (e.type === 'cadre') {
+      f.push(h('div', { cls: 'es-ligne2' }, champNum('es-f-w', 'Largeur (mm)', e, 'largeur'), champNum('es-f-hh', 'Hauteur (mm)', e, 'hauteur')));
+      f.push(h('div', { cls: 'es-ligne2' }, champNum('es-f-e', 'Épaisseur (mm)', e, 'epaisseur', '0.1'), champNum('es-f-a', 'Arrondi (0–8)', e, 'arrondi', '1')));
+      f.push(champCase('Plein (noir)', e, 'plein'));
+    } else if (e.type === 'ligne') {
+      f.push(champChoix('Orientation', e, 'orientation', { h: 'Horizontale', v: 'Verticale' }));
+      f.push(h('div', { cls: 'es-ligne2' }, champNum('es-f-lg', 'Longueur (mm)', e, 'longueur'), champNum('es-f-e', 'Épaisseur (mm)', e, 'epaisseur', '0.1')));
+    }
+    f.push(h('div', { cls: 'es-ligne-actions' },
+      bouton('Monter', () => deplacerOrdre(e, -1), '', 'arrow-up'),
+      bouton('Descendre', () => deplacerOrdre(e, 1), '', 'arrow-down'),
+      bouton('Dupliquer', () => { memoriser(); const c = cloner(e); c.id = nouvelId(); c.x += 2; c.y += 2; layout().elements.push(c); ED.sel = c.id; salir(); X().rendre(); }, '', 'copy'),
+      bouton('Retirer', () => supprimerElement(e), 'danger', 'trash-2')));
+    zone.replaceChildren(h('div', { cls: 'es-form' }, ...f));
+  }
+
+  // ── Variables ───────────────────────────────────────────────────────
+  function panneauVariables() {
+    const { h, champ, bouton, ES } = X();
+    const types = ES.boot.referentiel.types_variable;
+    const lignes = layout().variables.map((v, idx) => {
+      const corps = [];
+      const nom = h('input', { cls: 'es-input es-mono', value: v.nom, maxlength: 40 });
+      nom.addEventListener('focus', memoriser, { once: true });
+      nom.addEventListener('change', () => {
+        const nv = nom.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/^[^a-z]+/, '');
+        if (!nv) { nom.value = v.nom; return; }
+        // Le renommage suit dans tous les {{…}} de l'étiquette
+        const re = new RegExp('\\{\\{\\s*' + v.nom + '\\s*\\}\\}', 'g');
+        layout().elements.forEach(e => { if (e.valeur) e.valeur = e.valeur.replace(re, '{{' + nv + '}}'); });
+        v.nom = nv; salir(); X().rendre();
+      });
+      const lib = h('input', { cls: 'es-input', value: v.libelle, maxlength: 80 });
+      lib.addEventListener('input', () => { v.libelle = lib.value; salir(); });
+      const typ = h('select', { cls: 'es-input' }, ...Object.entries(types).map(([k, l]) => h('option', { value: k, text: l })));
+      typ.value = v.type;
+      typ.addEventListener('change', () => { memoriser(); v.type = typ.value; Object.assign(v, defautsVar(v.type), { nom: v.nom, libelle: v.libelle, type: v.type }); salir(); X().rendre(); });
+      corps.push(h('div', { cls: 'es-ligne2' }, champ('Nom', nom), champ('Libellé', lib)), champ('Type', typ));
+      const ch = (label, cle, attrs, aide) => {
+        const i = h('input', Object.assign({ cls: 'es-input', value: v[cle] ?? '' }, attrs || {}));
+        i.addEventListener('focus', memoriser, { once: true });
+        i.addEventListener(attrs && attrs.type === 'checkbox' ? 'change' : 'input', () => {
+          v[cle] = attrs && attrs.type === 'checkbox' ? i.checked : (attrs && attrs.type === 'number' ? (parseInt(i.value, 10) || 0) : i.value);
+          salir(); dessiner();
+        });
+        if (attrs && attrs.type === 'checkbox') { i.checked = !!v[cle]; return h('label', { cls: 'es-case' }, i, h('span', { text: label })); }
+        return champ(label, i, aide);
+      };
+      if (v.type === 'fixe') corps.push(ch('Valeur', 'valeur'));
+      if (v.type === 'saisie') corps.push(ch('Valeur par défaut', 'valeur'), ch('Obligatoire', 'obligatoire', { type: 'checkbox' }));
+      if (v.type === 'compteur') corps.push(
+        h('div', { cls: 'es-ligne2' }, ch('Départ', 'debut', { type: 'number', min: 0 }), ch('Pas', 'pas', { type: 'number', min: 1 })),
+        h('div', { cls: 'es-ligne3' }, ch('Préfixe', 'prefixe'), ch('Chiffres', 'longueur', { type: 'number', min: 0, max: 20 }), ch('Suffixe', 'suffixe')));
+      if (v.type === 'sscc') corps.push(
+        h('div', { cls: 'es-ligne2' }, ch('Extension', 'extension', { maxlength: 1 }, '1 chiffre'), ch('Préfixe GS1', 'prefixe_gs1', { maxlength: 10 }, '7 à 10 chiffres')),
+        h('div', { cls: 'es-aide', text: 'La série et la clé sont calculées. Le compteur est commun à toutes les étiquettes de ce préfixe : un SSCC ne sort jamais deux fois.' }));
+      if (v.type === 'date') corps.push(h('div', { cls: 'es-ligne2' }, ch('Format', 'format', null, '%d/%m/%Y, %y, %j…'), ch('Décalage (jours)', 'decalage_jours', { type: 'number' })));
+      corps.push(h('div', { cls: 'es-ligne-actions' }, bouton('Retirer', () => { memoriser(); layout().variables.splice(idx, 1); salir(); X().rendre(); }, 'danger', 'trash-2')));
+      return h('details', { cls: 'es-var', open: v._ouvert ? true : null, ontoggle: (ev) => { v._ouvert = ev.target.open; } },
+        h('summary', {}, h('code', { text: '{{' + v.nom + '}}' }), h('span', { cls: 'es-aide', text: types[v.type] })),
+        h('div', { cls: 'es-form' }, ...corps));
+    });
+    return h('div', { cls: 'es-panneau' },
+      h('div', { cls: 'es-panneau-titre' }, 'Variables',
+        h('button', { cls: 'es-btn es-btn-icone', type: 'button', title: 'Ajouter une variable', onclick: () => {
+          memoriser();
+          const noms = new Set(layout().variables.map(v => v.nom));
+          let n = 'champ', i = 1; while (noms.has(n + i)) i++;
+          layout().variables.push(Object.assign({ nom: n + i, libelle: 'Champ ' + i, type: 'saisie', _ouvert: true }, defautsVar('saisie')));
+          salir(); X().rendre();
+        } }, X().ic('plus', 14))),
+      layout().variables.length ? null : h('div', { cls: 'es-aide', text: 'Une variable remplace {{nom}} dans les textes et codes : saisie à l\'impression, compteur, SSCC, date.' }),
+      ...lignes);
+  }
+  function defautsVar(type) {
+    return { fixe: { valeur: '' }, saisie: { valeur: '', obligatoire: true },
+      compteur: { debut: 1, pas: 1, longueur: 6, prefixe: '', suffixe: '' },
+      sscc: { extension: '0', prefixe_gs1: '' }, date: { format: '%d/%m/%Y', decalage_jours: 0 } }[type] || {};
+  }
+
+  // ── Assistant IA ────────────────────────────────────────────────────
+  function panneauIa() {
+    const { h, bouton, api, toast, selectModeleIa } = X();
+    const modeleIa = selectModeleIa();
+    const consigne = h('textarea', { cls: 'es-input', id: 'es-ia-consigne', rows: 4, maxlength: 4000,
+      placeholder: 'Ex. Ajoute un SSCC en GS1-128 sous le code produit, préfixe 3012345, avec le numéro en clair au-dessus.' });
+    const go = bouton('Proposer', async () => {
+      if (!consigne.value.trim()) { toast('Décrire la modification souhaitée.', 'danger'); return; }
+      ED.iaBusy = true; go.disabled = true; go.textContent = 'Claude travaille…';
+      try {
+        const r = await api('/ia/proposer', { method: 'POST', body: {
+          consigne: consigne.value, modele: modeleIa.select.value, largeur_mm: ED.m.largeur_mm, hauteur_mm: ED.m.hauteur_mm, dpi: ED.m.dpi, layout: nettoyer(layout()) } });
+        ED.propo = r; ED.voirPropo = true; X().rendre();
+      } catch (e) { toast(e.message, 'danger'); go.disabled = false; go.textContent = 'Proposer'; }
+      ED.iaBusy = false;
+    }, 'accent', 'zap');
+    consigne.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) go.click(); });
+    const blocs = [h('div', { cls: 'es-panneau-titre', text: 'Assistant' }),
+      h('div', { cls: 'es-aide', text: 'Décrire la modification. Claude propose une nouvelle mise en page, rien n\'est enregistré avant « Appliquer ».' })];
+    if (ED.propo) {
+      const p = ED.propo;
+      blocs.push(h('div', { cls: 'es-propo' },
+        h('div', { cls: 'es-propo-resume', text: p.resume || 'Proposition prête.' }),
+        h('div', { cls: 'es-aide', text: 'Proposé par ' + (p.modele_libelle || p.modele)
+          + (p.modele_reel && !String(p.modele_reel).startsWith(p.modele) ? ` (relayé par ${p.modele_reel})` : '') }),
+        p.remarques.length ? h('ul', { cls: 'es-propo-remarques' }, ...p.remarques.map(r => h('li', { text: r }))) : null,
+        h('div', { cls: 'es-bascule' },
+          h('button', { cls: 'es-puce' + (!ED.voirPropo ? ' actif' : ''), type: 'button', text: 'Avant', onclick: () => { ED.voirPropo = false; X().rendre(); } }),
+          h('button', { cls: 'es-puce' + (ED.voirPropo ? ' actif' : ''), type: 'button', text: 'Proposition', onclick: () => { ED.voirPropo = true; X().rendre(); } })),
+        h('div', { cls: 'es-ligne-actions' },
+          bouton('Écarter', () => { ED.propo = null; X().rendre(); }),
+          bouton('Appliquer', () => {
+            memoriser();
+            ED.m.layout = cloner(p.layout); ED.m.largeur_mm = p.largeur_mm; ED.m.hauteur_mm = p.hauteur_mm;
+            ED.propo = null; ED.sel = null; salir(); X().rendre();
+            X().toast('Proposition appliquée — enregistrer pour la garder.');
+          }, 'accent', 'check'))));
+    }
+    blocs.push(modeleIa.bloc, consigne, h('div', { cls: 'es-ligne-actions' }, go));
+    return h('div', { cls: 'es-panneau es-ia' }, ...blocs);
+  }
+
+  // Les clés « _xxx » sont de l'état d'écran (variable dépliée…), pas des données.
+  function nettoyer(lay) {
+    return JSON.parse(JSON.stringify(lay, (k, v) => (k.startsWith('_') ? undefined : v)));
+  }
+
+  // ── Barre du haut, enregistrement, aperçu exact ────────────────────
+  async function enregistrer() {
+    const { api, toast } = X();
+    const b = $id('es-enregistrer');
+    if (b) { b.disabled = true; b.textContent = 'Enregistrement…'; }
+    try {
+      const r = await api('/modeles/' + ED.m.id, { method: 'PATCH', body: {
+        nom: ED.m.nom, description: ED.m.description, dossier_id: ED.m.dossier_id,
+        largeur_mm: ED.m.largeur_mm, hauteur_mm: ED.m.hauteur_mm, dpi: ED.m.dpi, layout: nettoyer(layout()) } });
+      ED.m.largeur_mm = r.largeur_mm; ED.m.hauteur_mm = r.hauteur_mm; ED.m.dpi = r.dpi; ED.m.updated_at = r.updated_at;
+      ED.dirty = false;
+      toast('Étiquette enregistrée.');
+      await X().charger();
+    } catch (e) { toast(e.message, 'danger'); }
+    if (b) { b.textContent = 'Enregistrer'; b.disabled = !ED.dirty; }
+  }
+
+  async function apercuExact() {
+    const { api, h, modale, toast, bouton, fermerModale } = X();
+    const corps = { modele_id: ED.m.id, largeur_mm: ED.m.largeur_mm, hauteur_mm: ED.m.hauteur_mm, dpi: ED.m.dpi, layout: nettoyer(layout()) };
+    const zone = h('div', { cls: 'es-apercu-exact' }, h('div', { cls: 'es-vide', text: 'Rendu du ZPL…' }));
+    const zplPre = h('pre', { cls: 'es-zpl', hidden: true });
+    modale('Aperçu imprimante — ' + ED.m.nom, h('div', {}, zone,
+      h('p', { cls: 'es-aide', text: 'Rendu exact du ZPL envoyé à l\'imprimante, avec des valeurs d\'exemple (premier numéro libre de chaque série). Rien n\'est consommé.' }),
+      zplPre), [bouton('Voir le ZPL', () => { zplPre.hidden = !zplPre.hidden; }), bouton('Fermer', fermerModale)], true);
+    try {
+      const [z, png] = await Promise.all([
+        api('/apercu', { method: 'POST', body: corps }),
+        fetch(window.EtiqSpec._.API + '/apercu.png', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corps) })
+          .then(async r => { if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || 'Rendu indisponible.'); } return r.blob(); }),
+      ]);
+      zplPre.textContent = z.zpl;
+      const img = h('img', { alt: 'Aperçu de l\'étiquette', src: URL.createObjectURL(png) });
+      zone.replaceChildren(img);
+    } catch (e) {
+      zone.replaceChildren(h('div', { cls: 'es-vide es-erreur', text: e.message }));
+      api('/apercu', { method: 'POST', body: corps }).then(z => { zplPre.textContent = z.zpl; zplPre.hidden = false; }).catch(() => {});
+    }
+  }
+
+  function quitter() {
+    const { confirmer, ES } = X();
+    const sortir = async () => { ED.m = null; ED.propo = null; ED.dirty = false; ES.view = 'liste'; await X().charger(); X().rendre(); };
+    if (ED.dirty) confirmer('Des modifications ne sont pas enregistrées. Quitter sans enregistrer ?', 'Quitter', sortir);
+    else sortir();
+  }
+
+  function barreHaut() {
+    const { h, bouton, selectDossiers, ES, ic } = X();
+    const nom = h('input', { cls: 'es-input es-nom', value: ED.m.nom, maxlength: 120, title: 'Nom de l\'étiquette' });
+    nom.addEventListener('input', () => { ED.m.nom = nom.value; salir(); });
+    const desc = h('input', { cls: 'es-input', value: ED.m.description || '', maxlength: 1000, placeholder: 'Description (ce qui la distingue)' });
+    desc.addEventListener('input', () => { ED.m.description = desc.value; salir(); });
+    const dossier = selectDossiers(ED.m.dossier_id);
+    dossier.addEventListener('change', () => { ED.m.dossier_id = parseInt(dossier.value, 10); salir(); });
+    const fmt = (cle, pas) => {
+      const i = h('input', { cls: 'es-input es-court', type: 'number', step: pas, value: ED.m[cle] });
+      i.addEventListener('focus', memoriser, { once: true });
+      i.addEventListener('input', () => { ED.m[cle] = num(i.value, ED.m[cle]); salir(); dessiner(); });
+      return i;
+    };
+    const dpi = h('select', { cls: 'es-input es-court' }, ...ES.boot.referentiel.dpi.map(x => h('option', { value: x, text: x + ' dpi' })));
+    dpi.value = String(ED.m.dpi);
+    dpi.addEventListener('change', () => { ED.m.dpi = parseInt(dpi.value, 10); salir(); dessiner(); });
+    const enr = bouton('Enregistrer', enregistrer, 'accent', 'save');
+    enr.id = 'es-enregistrer'; enr.disabled = !ED.dirty;
+    return h('div', { cls: 'es-ed-haut' },
+      h('div', { cls: 'es-ed-ligne' },
+        h('button', { cls: 'es-btn', type: 'button', onclick: quitter }, ic('arrow-left', 15), 'Étiquettes'),
+        nom, dossier,
+        h('div', { cls: 'es-actions' },
+          bouton('Annuler', annuler, '', 'rotate-ccw'),
+          bouton('Aperçu imprimante', apercuExact, '', 'eye'),
+          bouton('Imprimer', () => {
+            if (ED.dirty) { X().toast('Enregistrer avant d\'imprimer.', 'info'); return; }
+            X().modaleImpression(ED.m);
+          }, '', 'printer'),
+          enr)),
+      h('div', { cls: 'es-ed-ligne' }, desc,
+        h('span', { cls: 'es-aide', text: 'Format' }), fmt('largeur_mm', '0.5'), h('span', { text: '×' }), fmt('hauteur_mm', '0.5'),
+        h('span', { cls: 'es-aide', text: 'mm' }), dpi));
+  }
+
+  // ── Vue ─────────────────────────────────────────────────────────────
+  function vue() {
+    const { h, bouton } = X();
+    if (!ED.m) return h('div', { cls: 'es-vide', text: 'Aucune étiquette ouverte.' });
+    const gauche = h('div', { cls: 'es-ed-gauche' },
+      h('div', { cls: 'es-panneau' },
+        h('div', { cls: 'es-panneau-titre', text: 'Éléments' }),
+        h('div', { cls: 'es-ajouts' },
+          bouton('Texte', () => ajouter('texte'), '', 'type'),
+          bouton('Code-barres', () => ajouter('code_barre'), '', 'barcode'),
+          bouton('Cadre', () => ajouter('cadre'), '', 'square'),
+          bouton('Ligne', () => ajouter('ligne'), '', 'minus')),
+        h('div', { cls: 'es-liste-el', id: 'es-liste-el' })),
+      h('div', { cls: 'es-panneau', id: 'es-panneau-el' }));
+    const centre = h('div', { cls: 'es-ed-centre' },
+      h('div', { cls: 'es-dim', id: 'es-dim' }),
+      h('div', { cls: 'es-canevas' + (ED.propo && ED.voirPropo ? ' es-canevas-propo' : ''), id: 'es-canevas' }),
+      h('div', { cls: 'es-avert', id: 'es-avert' }));
+    const droite = h('div', { cls: 'es-ed-droite' }, panneauIa(), panneauVariables());
+    return h('div', { cls: 'es-editeur' }, barreHaut(), h('div', { cls: 'es-ed-corps' }, gauche, centre, droite));
+  }
+  function apres() { if (ED.m) { majListe(); majPanneauElement(); dessiner(); } }
+
+  function ouvrir(m) {
+    ED.m = cloner(m); ED.sel = null; ED.dirty = false; ED.pile = []; ED.propo = null;
+    chargerBwip();
+  }
+
+  // Raccourcis clavier tant que l'éditeur est affiché
+  document.addEventListener('keydown', (ev) => {
+    if (!ED.m || !document.querySelector('.es-editeur') || document.getElementById('es-modale')) return;
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 's') { ev.preventDefault(); if (ED.dirty) enregistrer(); }
+    else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z' && !/INPUT|TEXTAREA/.test(document.activeElement?.tagName || '')) { ev.preventDefault(); annuler(); }
+  });
+  window.addEventListener('beforeunload', (ev) => { if (ED.m && ED.dirty) { ev.preventDefault(); ev.returnValue = ''; } });
+
+  window.EtiqSpec = Object.assign(window.EtiqSpec || {}, { editeur: { vue, apres, ouvrir, _ED: ED } });
+})();

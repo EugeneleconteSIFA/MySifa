@@ -205,6 +205,9 @@ VOLETS_TUILES = {
                 _entree("print_logistique", "Logistique", "/stock?tab=traca&poste=logistique", "truck"),
                 _entree("print_bureaux", "Bureaux", "/stock?tab=traca&poste=bureaux", "printer"),
             ]),
+            _groupe("Outils", [
+                _entree("print_specifiques", "Étiquettes spécifiques", "/stock?tab=traca&poste=specifiques", "tag"),
+            ]),
             _groupe("Configuration", [
                 _entree("print_imprimantes", "Imprimantes", "/settings#printers", "sliders",
                         roles=_ADMIN_LARGE),
