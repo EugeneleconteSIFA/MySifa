@@ -126,6 +126,34 @@ def principal_variante(variante_id: int, request: Request):
     return out
 
 
+@router.post("/api/stock/variantes/{variante_id}/prix")
+async def prix_variante(variante_id: int, request: Request):
+    """Prix d'achat d'un article. Réservé aux rôles qui écrivent dans Coûts matières."""
+    user = require_stock(request)
+    if user.get("role") not in ROLES_PRICING_WRITE:
+        raise HTTPException(403, "Écriture des prix réservée à la Direction.")
+    body = await request.json() or {}
+    try:
+        prix = float(body.get("prix"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Prix invalide — valeur positive attendue.") from None
+    with get_db() as conn:
+        try:
+            res = mv.definir_prix_article(conn, variante_id, prix, confirmer=bool(body.get("confirmer")),
+                                          user_id=user.get("id"), user_name=_auteur(user))
+        except (LookupError, ValueError) as e:
+            _erreur(e)
+        if res.get("a_confirmer"):
+            return res
+        conn.commit()
+        mid = conn.execute("SELECT matiere_id FROM mp_variantes WHERE id=?", (variante_id,)).fetchone()[0]
+        out = mv.lister(conn, mid)
+    log_action(user=user, request=request, module="stock", action="UPDATE",
+               objet=f"matiere:{mid}:variante:{variante_id}",
+               detail=f"Prix d'achat {prix:g}" + (" · prix fournisseur mis à jour" if res.get("pousse") else ""))
+    return out
+
+
 @router.post("/api/stock/variantes/{variante_id}/desactiver")
 def desactiver_variante(variante_id: int, request: Request):
     user = require_stock_matieres_admin(request)
