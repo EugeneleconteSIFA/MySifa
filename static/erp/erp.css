@@ -1,0 +1,95 @@
+/* Nouvel ERP — coque. Couleurs : uniquement les jetons de mysifa_theme.css. */
+
+.erp, .erp-connexion {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 'Segoe UI', system-ui, sans-serif;
+}
+.erp *, .erp-connexion * { box-sizing: border-box; }
+
+/* ── Champs et boutons ─────────────────────────────────────────── */
+.erp-label {
+  display: block; margin: 14px 0 6px;
+  font-size: 12px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase;
+  color: var(--text2);
+}
+.erp-input {
+  width: 100%; padding: 10px 14px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px;
+  font: inherit; font-size: 14px; transition: border-color .15s;
+}
+.erp-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+.erp-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 16px; border-radius: 10px; cursor: pointer;
+  background: var(--card); color: var(--text);
+  border: 1px solid var(--border);
+  font: inherit; font-weight: 700; transition: background .15s, filter .15s;
+}
+.erp-btn:hover { background: var(--bg); }
+.erp-btn-accent { background: var(--accent); border-color: var(--accent); color: white; }
+.erp-btn-accent:hover { background: var(--accent); filter: brightness(1.08); }
+.erp-btn:disabled { opacity: .6; cursor: default; }
+
+/* ── Connexion ─────────────────────────────────────────────────── */
+.erp-cx { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+.erp-cx-carte {
+  width: 100%; max-width: 360px; padding: 32px 28px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+}
+.erp-cx-carte .erp-btn { width: 100%; justify-content: center; margin-top: 18px; }
+.erp-cx-marque { display: flex; align-items: center; gap: 12px; font-size: 32px; font-weight: 800; letter-spacing: 1px; color: var(--text); }
+.erp-cx-marque img { width: 44px; height: 44px; border-radius: 10px; }
+.erp-cx-sous { margin: 2px 0 10px; color: var(--muted); }
+.erp-cx-erreur { min-height: 18px; margin: 10px 0 0; color: var(--danger); font-weight: 600; }
+
+/* ── Coque ─────────────────────────────────────────────────────────
+   Sidebar : composants partagés de MySifa (static/mysifa_sidebar.css :
+   .msb-nav .nav-btn, .msb-section, .msb-footer). Ici, seulement le cadre. */
+.erp-coque { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+.erp-nav {
+  position: sticky; top: 0; height: 100vh; overflow-y: auto; scrollbar-width: thin;
+  display: flex; flex-direction: column;
+  background: var(--card); border-right: 1px solid var(--border);
+}
+.erp-nav .msb-nav { padding: 14px 10px 8px; }
+.erp-nav .msb-section:first-of-type { border-top: none; margin-top: 4px; }
+.logo {
+  display: flex; align-items: center; gap: 11px; padding: 5px 9px; margin-bottom: 6px;
+  border-radius: 9px; cursor: pointer; text-decoration: none; color: var(--text);
+  transition: background .15s, color .15s;
+}
+.logo img { width: 30px; height: 30px; border-radius: 8px; }
+.logo:hover { background: var(--accent-bg); }
+.logo:hover .logo-brand { color: var(--accent); }
+.logo-brand { font-size: 15px; font-weight: 800; transition: color .15s; }
+.logo-brand span { color: var(--accent); }
+.logo-sub { font-size: 10px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 2px; }
+
+.erp-main { min-width: 0; padding: 22px 28px; }
+.erp-titre { margin: 0 0 4px; font-size: 20px; font-weight: 700; }
+.erp-ariane { margin-bottom: 18px; color: var(--muted); }
+.erp-vide {
+  padding: 28px; border: 1px dashed var(--border); border-radius: 12px;
+  background: var(--card); color: var(--text2);
+}
+.erp-vide b { color: var(--text); }
+
+/* ── Mobile ────────────────────────────────────────────────────── */
+.erp-topbar { display: none; }
+@media (max-width: 860px) {
+  .erp-coque { grid-template-columns: 1fr; }
+  .erp-nav {
+    position: fixed; z-index: 50; left: 0; top: 0; width: 260px;
+    transform: translateX(-105%); transition: transform .2s;
+  }
+  body.sb-open .erp-nav { transform: none; }
+  .erp-topbar {
+    display: flex; align-items: center; gap: 10px;
+    position: sticky; top: 0; z-index: 40; padding: 10px 16px;
+    background: var(--card); border-bottom: 1px solid var(--border);
+  }
+  .erp-main { padding: 16px; }
+}

@@ -638,6 +638,18 @@ ROLES_EXPE_WRITE = {ROLE_DIRECTION, ROLE_EXPEDITION, ROLE_SUPERADMIN} | ROLES_AD
 # rien ne le rattache. Le miroir est ouvert en lecture seule — élargir ce
 # périmètre ne donne aucun droit d'écriture sur RVGI.
 ROLES_ERP = ROLES_ADMIN | {ROLE_EXPEDITION}
+
+# Nouvel ERP (remplaçant de RVGI), servi sur son propre sous-domaine par le
+# middleware `router_hote_erp` de main.py : une requête dont le Host figure dans
+# ERP2_HOSTS est servie sous ERP2_PREFIXE. En construction, sans données réelles :
+# réservé au super administrateur. Feuille de route : docs/erp/ROADMAP.md.
+ERP2_HOSTS = frozenset(
+    h.strip().lower()
+    for h in os.getenv("ERP2_HOSTS", "erp.mysifa.com,erp-v1.mysifa.com,erp.localhost").split(",")
+    if h.strip()
+)
+ERP2_PREFIXE = "/_erp"
+ROLES_ERP2 = {ROLE_SUPERADMIN}
 # Tuile portail « Coûts matières » (/pricing) — Direction et super admin uniquement
 ROLES_PRICING = {ROLE_DIRECTION, ROLE_SUPERADMIN}
 ROLES_PRICING_WRITE = ROLES_PRICING

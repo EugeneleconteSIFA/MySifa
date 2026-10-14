@@ -16,7 +16,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR, ENV_NAME, IS_STAGING, UPLOADS_ROOT, SLOW_REQUEST_MS
+from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR, ENV_NAME, IS_STAGING, UPLOADS_ROOT, SLOW_REQUEST_MS, ERP2_HOSTS, ERP2_PREFIXE
 from app.core.audit_middleware import AuditMiddleware
 from app.web.html import render_frontend_html
 
@@ -138,6 +138,7 @@ from app.routers.mcp_server import router as mcp_router
 from app.web.mcp_page import router as mcp_page_router
 from app.routers.mcp_oauth import router as mcp_oauth_router
 from app.web.erp_page import router as erp_page_router
+from app.web.erp2 import router as erp2_page_router
 
 
 @asynccontextmanager
@@ -382,6 +383,29 @@ async def no_cache_planning(request: Request, call_next):
         else:
             response.headers["Cache-Control"] = "public, max-age=86400"
     return response
+
+
+@app.middleware("http")
+async def router_hote_erp(request: Request, call_next):
+    """Sert le nouvel ERP sur son sous-domaine (erp.mysifa.com).
+
+    Sur un Host de `ERP2_HOSTS`, toute page est servie sous `ERP2_PREFIXE` :
+    `erp.mysifa.com/ventes` devient `/_erp/ventes`. L'API, les fichiers
+    statiques et les uploads restent communs — même application, même session.
+    Sur tout autre Host, `ERP2_PREFIXE` n'existe pas : l'ERP ne se consulte
+    que par son adresse.
+    """
+    hote = (request.headers.get("host") or "").split(":")[0].strip().lower()
+    p = request.scope.get("path") or "/"
+    dans_prefixe = p == ERP2_PREFIXE or p.startswith(ERP2_PREFIXE + "/")
+    if hote in ERP2_HOSTS:
+        if not dans_prefixe and not p.startswith(("/api/", "/static/", "/uploads/")):
+            nouveau = ERP2_PREFIXE + p
+            request.scope["path"] = nouveau
+            request.scope["raw_path"] = nouveau.encode("utf-8")
+    elif dans_prefixe:
+        return Response(status_code=404)
+    return await call_next(request)
 
 
 _slow_logger = logging.getLogger("mysifa.slow")
@@ -644,6 +668,10 @@ async def inject_tache_quick(request: Request, call_next):
     # Le site vitrine (/website) est une maquette du site public : aucun outil
     # interne (boutons flottants, raccourci tâche, capture de blocs) n'y apparaît.
     _vitrine = p.startswith("/website")
+    # Le nouvel ERP a sa propre coque : aucun outil de MySifa n'y est injecté.
+    # Test sur le Host, pas sur le chemin : ce middleware voit l'URL d'origine.
+    if (request.headers.get("host") or "").split(":")[0].strip().lower() in ERP2_HOSTS:
+        _vitrine = True
     if not p.startswith("/portail/") and not _vitrine and b"mysifa-boutons-off" not in body and b"__MYSIFA_BOUTONS__=" not in body:
         try:
             _tete, _pied = _boutons_flottants(request, body)
@@ -802,6 +830,7 @@ app.include_router(taches_page_router)
 # Les deux : sans include_router, /api/erp/* renverrait un 404 silencieux.
 app.include_router(erp_api_router)
 app.include_router(erp_page_router)
+app.include_router(erp2_page_router)
 app.include_router(rvgi_api_router)
 app.include_router(stock_compare_router)
 app.include_router(stock_ecarts_rvgi_router)
