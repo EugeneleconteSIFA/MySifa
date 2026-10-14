@@ -104,7 +104,10 @@ carte). Le grand format n'existe que pour un bloc qui déclare :
   (neutre, sans couleur). Ce sont des NIVEAUX, pas des flux : grand format en
   **courbe** (valeur de 18 h, bande min–max de la journée, trou pour un jour
   sans relevé, aujourd'hui = valeur du moment marquée « en cours »), horizon
-  7 / 30 / 90 jours en pastilles (`bloc_horizon`). L'axe part du premier relevé
+  7 / 30 / 90 jours en pastilles (`bloc_horizon`), **seulement celles que
+  l'historique remplit** : 30 j au-delà de 7 jours de relevés, 90 j au-delà de
+  30 ; aucune pastille tant qu'il n'y a qu'une option. Le réglage enregistré
+  reste et reprend effet quand l'historique suit. L'axe part du premier relevé
   si l'historique est plus court (7 jours au moins). Tendance : vs hier en
   standard et compact, vs le début de l'horizon en courbe ; en nombre, en %
   au-delà de 100. Standard : mini-courbe sur 14 jours. Données :
