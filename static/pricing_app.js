@@ -1246,9 +1246,14 @@
   function msLibelleLienHtml(m) {
     const lib = m.designation || m.reference || "";
     const decls = m.declinaisons || [];
-    return decls.length
+    const lien = decls.length
       ? `<a class="msl-lib" href="/pricing/mystock/${decls[0].id}" title="${escAttr(lib + " — ouvrir la fiche")}">${escHtml(lib)}</a>`
       : `<a class="msl-lib" href="/stock?tab=matieres&matiere=${m.id}" target="_blank" rel="noopener" title="${escAttr(lib + " — ouvrir dans MyStock")}">${escHtml(lib)}</a>`;
+    // Libellés techniques des variantes fournisseur, sous le commercial.
+    const techs = (m.libelles_techniques || []).filter((t) => t && t !== lib);
+    return techs.length
+      ? `${lien}<div class="msl-tech" title="${escAttr("Libellé technique : " + techs.join(" · "))}">${escHtml(techs.join(" · "))}</div>`
+      : lien;
   }
 
   function mystockMatiereRowHtml(m) {
@@ -1433,7 +1438,7 @@
       { cle: "cat", titre: "Cat.", style: "width:92px", filtre: "choix",
         val: (m) => m.categorie },
       { cle: "lib", titre: "Libellé commercial", filtre: "texte",
-        val: (m) => m.designation || m.reference || "" },
+        val: (m) => [m.designation || m.reference || ""].concat(m.libelles_techniques || []).join(" · ") },
       { cle: "fourn", titre: "Fournisseur principal", filtre: "choix",
         val: (m) => {
           const f = msFournisseursPrincipaux(m).map((x) => x.nom).filter(Boolean);
