@@ -11353,6 +11353,11 @@ function buildMpVariantesTable(m) {
                 attrs: { title: 'Modifier', 'aria-label': 'Modifier le fournisseur' },
                 on: { click: () => openMpVarianteModal(m, v) },
               }, iconEl('edit', 14)) : null,
+              v.actif ? el('button', {
+                cls: 'mp-empl-ico', type: 'button',
+                attrs: { title: 'Déplacer vers une autre matière', 'aria-label': 'Déplacer vers une autre matière' },
+                on: { click: () => openMpDeplacerModal(m, v) },
+              }, iconEl('move', 14)) : null,
               el('button', {
                 cls: 'mp-empl-ico', type: 'button',
                 attrs: v.actif
@@ -11619,6 +11624,78 @@ async function toggleMpVariante(m, v) {
   } catch (err) {
     showToast(err.message, 'error');
   }
+}
+
+// Range un article fournisseur sous une autre matière (autre libellé commercial).
+function openMpDeplacerModal(m, v) {
+  if (!m || !v || S.stockReadOnly) return;
+  closeMroot();
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+  const overlay = el('div', {
+    cls: 'mp-modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
+  });
+  const box = el('div', { cls: 'mp-modal', on: { click: (e) => e.stopPropagation() } });
+  box.appendChild(el('div', { cls: 'mp-modal-head' },
+    el('h3', null, 'Déplacer vers une autre matière'),
+    el('button', { cls: 'mp-modal-close', type: 'button',
+      attrs: { title: 'Fermer', 'aria-label': 'Fermer' }, on: { click: closeMroot } }, '×')));
+  box.appendChild(el('div', { cls: 'mp-modal-sub' },
+    (v.fournisseur_nom ? v.fournisseur_nom + ' · ' : '') + (mpVarLibelle(v) || v.libelle_technique || '')));
+  box.appendChild(el('div', { cls: 'mp-hint', style: 'margin:0 0 12px' },
+    'L\'article garde son fournisseur, son article RVGI et son prix ; son stock RVGI et ses réceptions suivent. '
+    + 'Les prix déjà saisis sur « ' + (m.designation || m.reference || '') + ' » restent sur cette matière.'));
+  const q = el('input', { cls: 'field-input', attrs: { type: 'search', placeholder: 'Rechercher une matière (libellé, référence)' } });
+  const sel = el('select', { attrs: { size: '10', 'aria-label': 'Matière cible' }, style: 'width:100%' });
+  const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const toutes = (Array.isArray(S.matieres) ? S.matieres : [])
+    .filter(x => x.id !== m.id && x.actif !== false && x.actif !== 0)
+    .sort((a, b) => String(a.designation || a.reference || '').localeCompare(String(b.designation || b.reference || ''), 'fr'));
+  const remplir = () => {
+    const k = norm(q.value);
+    sel.innerHTML = '';
+    toutes.filter(x => !k || norm(x.designation).includes(k) || norm(x.reference).includes(k)
+      || norm(x.categorie).includes(k)).slice(0, 200)
+      .forEach(x => sel.appendChild(el('option', { value: String(x.id) },
+        (x.designation || x.reference || '') + (x.categorie ? ' · ' + x.categorie : ''))));
+  };
+  q.addEventListener('input', remplir);
+  remplir();
+  box.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Nouvelle matière'), q));
+  box.appendChild(el('div', { cls: 'mp-field' }, sel));
+  const errEl = el('div', { cls: 'mp-admin-err' });
+  box.appendChild(errEl);
+  const okBtn = el('button', { cls: 'btn', type: 'button' }, 'Déplacer');
+  const valider = async () => {
+    errEl.textContent = '';
+    if (!sel.value) { errEl.textContent = 'Choisir la matière cible.'; return; }
+    okBtn.disabled = true;
+    try {
+      const d = await api('/api/stock/variantes/' + v.id + '/deplacer', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matiere_id: parseInt(sel.value, 10) }),
+      });
+      closeMroot();
+      const dep = d.deplacement || {};
+      showToast('Article déplacé vers « ' + (dep.cible_libelle || 'la matière choisie') + ' »'
+        + (dep.principal ? ', où il devient principal.' : '.'), 'success');
+      mpVarSetData(d);
+      await refreshSelMatiere();
+    } catch (err) {
+      errEl.textContent = err.message || 'Erreur.';
+      okBtn.disabled = false;
+    }
+  };
+  okBtn.addEventListener('click', valider);
+  sel.addEventListener('dblclick', valider);
+  box.appendChild(el('div', { cls: 'mp-modal-actions' },
+    el('div', { cls: 'mp-modal-actions-right' },
+      el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMroot } }, 'Annuler'),
+      okBtn)));
+  overlay.appendChild(box);
+  mroot.appendChild(overlay);
+  q.focus();
 }
 
 function openMpVarianteModal(m, existing) {

@@ -518,6 +518,71 @@ def definir_prix_article(
     return {"ok": True, "pousse": pousse}
 
 
+def deplacer(
+    conn: sqlite3.Connection,
+    variante_id: int,
+    matiere_cible_id: int,
+    auteur: Optional[str] = None,
+    user_id: Optional[int] = None,
+) -> dict:
+    """Range un article fournisseur sous une autre matière (autre libellé commercial).
+
+    L'article garde son fournisseur, son libellé technique, son article RVGI et
+    son prix ; l'appariement RVGI suit, pour que son stock et ses réceptions
+    tombent sur la nouvelle matière. Les prix déjà saisis dans Coûts matières
+    sur l'ancienne matière restent où ils sont : ce sont ceux de cette matière.
+
+    L'article principal ne part pas tant qu'un autre article de la matière
+    peut le remplacer : la matière perdrait son prix en vigueur sans le dire.
+    Sur la matière cible, il devient principal s'il n'y en a aucun ; sinon son
+    prix s'applique à son fournisseur s'il y est seul.
+    """
+    r = _get(conn, variante_id)
+    try:
+        cible = int(matiere_cible_id)
+    except (TypeError, ValueError):
+        raise ValueError("Matière cible invalide.") from None
+    if cible == r["matiere_id"]:
+        raise ValueError("L'article est déjà rangé sous cette matière.")
+    if not conn.execute("SELECT 1 FROM matieres_premieres WHERE id=?", (cible,)).fetchone():
+        raise LookupError("Matière cible introuvable.")
+    if not r["actif"]:
+        raise ValueError("Article désactivé : le réactiver avant de le déplacer.")
+    if r["principal"]:
+        autres = conn.execute(
+            "SELECT COUNT(*) FROM mp_variantes WHERE matiere_id=? AND actif=1 AND id<>?",
+            (r["matiere_id"], variante_id),
+        ).fetchone()[0]
+        if autres:
+            raise ValueError("Article principal : choisir d'abord un autre article principal "
+                             "pour cette matière, puis le déplacer.")
+    conn.execute(
+        "UPDATE mp_variantes SET matiere_id=?, principal=0, updated_at=?, updated_by_name=? WHERE id=?",
+        (cible, _now(), auteur, variante_id),
+    )
+    if r["rvgi_code1"]:
+        _sync_erp(conn, variante_id, cible, r["rvgi_code1"], r["rvgi_code2"], r["rvgi_type_code"], auteur)
+
+    a_principal = conn.execute(
+        "SELECT 1 FROM mp_variantes WHERE matiere_id=? AND actif=1 AND principal=1", (cible,)
+    ).fetchone()
+    devient_principal = False
+    if not a_principal:
+        definir_principal(conn, variante_id, user_id=user_id, user_name=auteur)
+        devient_principal = True
+    else:
+        prix = _col(_get(conn, variante_id), "prix_achat")
+        if prix and float(prix) > 0 and _pousse_prix(conn, _get(conn, variante_id)):
+            from app.services import mystock_prix
+            mystock_prix.set_prix_fournisseur_matiere(
+                conn, matiere_id=cible, fournisseur_id=r["fournisseur_id"], prix=float(prix),
+                confirmer=True, user_id=user_id, user_name=auteur,
+                origine="MyStock — article déplacé",
+            )
+    return {"ok": True, "matiere_origine": r["matiere_id"], "matiere_cible": cible,
+            "principal": devient_principal}
+
+
 def _assurer_variante(conn: sqlite3.Connection, matiere_id: int, fournisseur_id: int,
                       auteur: Optional[str]) -> int:
     """La variante active de ce fournisseur pour cette matière, créée au besoin."""
