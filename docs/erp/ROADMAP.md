@@ -125,6 +125,8 @@ Statuts : ☐ à faire · ◐ en cours · ✓ fait
 5. **Achats** : unité d'achat (m²) et de conditionnement (ML) avec laize, « N bobines de X soit Y ML ».
 6. **Reprise** : script miroir RVGI → `gc_*` rejouable, avec rapport d'écarts.
 7. Après la mise en service : traçabilité, lots et bobines, gestion de stock (D11).
+8. **Appels d'offre = MyAO** (14/10) : l'ERP lit les demandes MyAO ; une demande clôturée devient une commande fournisseur en brouillon (fournisseur retenu, prix de sa réponse). Correspondance fournisseur MyAO (`fournisseurs_fsc`) ↔ tiers ERP et produit MyAO ↔ article ERP à établir.
+9. **Assistant IA de l'ERP** (14/10) : sur le modèle de l'agent MySifa (`agent_ia.py` / `agent_actions.py` : lecture libre, écritures par catalogue fermé, carte à confirmer, rejouée par l'écran existant). Actions visées : passer une commande, créer un fournisseur ou un client, rattacher un document fournisseur (BL, facture) à une réception et contrôler ses informations (quantités, prix, références) contre la commande.
 
 ## Questions ouvertes
 
