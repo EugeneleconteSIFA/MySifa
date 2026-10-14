@@ -414,15 +414,15 @@
         ".mysifa-cap-pan .cap-choix button.on{background:var(--accent-bg,rgba(34,211,238,.12));border-color:var(--accent,#22d3ee);color:var(--accent,#22d3ee)}",
         ".mysifa-cap-pan .cap-err{color:var(--danger,#f87171);min-height:18px;margin-top:12px}",
         ".mysifa-cap-pan .cap-taille-aide{margin-top:6px;font-size:12px;color:var(--muted,#94a3b8);line-height:1.4}",
-        // Aperçu de l'indicateur, au centre de l'écran, à gauche du questionnaire.
-        // Purement visuel : il ne capte aucun clic.
-        ".mysifa-cap-apercu{position:fixed;top:0;bottom:0;left:0;right:380px;z-index:2147482002;display:flex;align-items:center;justify-content:center;",
-        "  pointer-events:none;background:color-mix(in srgb,var(--bg,#0a0e17) 55%,transparent);font:13px 'Segoe UI',system-ui,sans-serif;color:var(--text,#f1f5f9)}",
-        ".mysifa-cap-apercu .cap-plateau{background:var(--bg,#0a0e17);border:1px solid var(--border,#1e293b);border-radius:16px;padding:14px 16px 12px;",
-        "  box-shadow:0 18px 48px rgba(0,0,0,.28);max-height:calc(100vh - 48px);overflow:hidden;box-sizing:content-box}",
-        ".mysifa-cap-apercu .cap-plateau-t{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted,#94a3b8);margin:0 0 10px}",
-        ".mysifa-cap-apercu .cap-plateau-n{font-size:11px;color:var(--muted,#94a3b8);margin:10px 0 0;line-height:1.4}",
-        "@media (max-width:899px){.mysifa-cap-apercu{display:none}}",
+        // Aperçu de l'indicateur, en tête du questionnaire, accroché pendant le
+        // défilement : on voit l'effet de chaque réglage sans quitter le panneau.
+        ".mysifa-cap-pan .mysifa-cap-apercu{position:sticky;top:-20px;z-index:1;margin:0 -20px 4px;padding:12px 20px 12px;",
+        "  background:var(--bg,#0a0e17);border-top:1px solid var(--border,#1e293b);border-bottom:1px solid var(--border,#1e293b);pointer-events:none}",
+        ".mysifa-cap-apercu .cap-plateau{margin:0 auto}",
+        ".mysifa-cap-apercu .cap-plateau-t{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted,#94a3b8);margin:0 0 8px}",
+        ".mysifa-cap-apercu .cap-plateau-n{font-size:11px;color:var(--muted,#94a3b8);margin:8px 0 0;line-height:1.4}",
+        // Écran bas : l'aperçu défile avec le reste plutôt que de masquer les réglages.
+        "@media (max-height:700px){.mysifa-cap-pan .mysifa-cap-apercu{position:static}}",
         ".mysifa-cap-pan .cap-pied{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}",
         ".mysifa-cap-pan button.cap-ok{background:var(--accent,#22d3ee);border-color:var(--accent,#22d3ee);color:#fff}",
         ".mysifa-cap-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:2147482004;background:var(--card,#111827);",
@@ -686,10 +686,10 @@
       actif ? quitter() : entrer();
     });
 
-    var apercuZone = null;      // aperçu centré de l'indicateur (création)
+    var apercuZone = null;      // aperçu de l'indicateur, en tête du questionnaire (création)
     function fermerPanneau() {
       if (panneau) { panneau.remove(); panneau = null; }
-      if (apercuZone) { apercuZone.remove(); apercuZone = null; }
+      apercuZone = null;
     }
 
     /* Le rendu des cartes vit dans mysifa_accueil.js : pour l'aperçu, on le
@@ -713,6 +713,7 @@
     // (paliers de mysifa_accueil.js : 380, 300 ou 220 px, moins ses marges).
     function largeurCarte() {
       var w = window.innerWidth;
+      if (w < 900) return 10000;   // téléphone : colonne pleine largeur, bornée par le panneau
       var col = w >= 1600 ? 380 : w >= 1200 ? 300 : 220;
       return col - 24;
     }
@@ -748,8 +749,8 @@
 
     /* Le questionnaire : valeurs à afficher (4 au maximum, dans l'ordre),
        une alerte facultative par valeur, la taille sur l'accueil, le nom. À
-       la création (o.apercu), l'indicateur est montré au centre de l'écran
-       tel qu'il apparaîtra. Il sert à la création
+       la création (o.apercu), l'indicateur est montré en tête du panneau tel
+       qu'il apparaîtra, et suit chaque réglage. Il sert à la création
        (capture d'un bloc) comme à la modification d'un indicateur existant
        (bouton « Valeurs » de l'accueil, via MySifaBlocs.questionnaire). */
     function questionnaire(o) {
@@ -780,7 +781,8 @@
 
       function dessiner() {
         var h = "<h2>" + esc(o.titre) + "</h2>" +
-          '<p class="cap-sous">' + esc(o.sousTitre) + "</p>";
+          '<p class="cap-sous">' + esc(o.sousTitre) + "</p>" +
+          (o.apercu ? '<div class="cap-apercu-ici"></div>' : "");
         if (filtres) h += dessinerFiltres();
         if (bloc.valeurs.length) {
           h += '<div class="cap-lbl">Valeurs à afficher (' + valeursMax + " au maximum)</div>";
@@ -846,6 +848,10 @@
       }
       function majApercu() {
         if (!o.apercu || !panneau) return;
+        // Le questionnaire est redessiné à chaque réglage : l'aperçu, lui, est
+        // un élément durable, replacé à son emplacement après chaque dessin.
+        var ici = panneau.querySelector(".cap-apercu-ici");
+        if (apercuZone && ici) ici.replaceWith(apercuZone);
         if (apercuVue) { apercuVue.maj(wApercu()); return; }
         if (apercuZone) return;   // chargement en cours
         apercuZone = document.createElement("div");
@@ -853,11 +859,12 @@
         apercuZone.setAttribute("aria-hidden", "true");
         var plateau = document.createElement("div");
         plateau.className = "cap-plateau";
-        plateau.style.width = largeurCarte() + "px";
+        // Largeur réelle d'une carte dans la colonne, dans la limite du panneau.
+        plateau.style.width = Math.min(largeurCarte(), panneau.clientWidth - 40) + "px";
         plateau.innerHTML = '<div class="cap-plateau-t">Aperçu sur votre accueil</div><div class="cap-plateau-c"></div>' +
-          '<div class="cap-plateau-n">Chiffres de la page à cet instant. Sur l\'accueil, ils se mettent à jour chaque minute.</div>';
+          '<div class="cap-plateau-n">Chiffres de la page à cet instant ; sur l\'accueil, ils se mettent à jour chaque minute.</div>';
         apercuZone.appendChild(plateau);
-        document.body.appendChild(apercuZone);
+        if (ici) ici.replaceWith(apercuZone);
         chargerApercu().then(function (ok) {
           if (!ok || !apercuZone || !panneau) return;
           apercuVue = window.MySifaAccueil.apercu({ w: wApercu(), valeurs: o.apercu.valeurs, nombres: o.apercu.nombres, tons: o.apercu.tons });
