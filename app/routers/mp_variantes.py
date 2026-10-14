@@ -154,6 +154,28 @@ async def prix_variante(variante_id: int, request: Request):
     return out
 
 
+@router.post("/api/stock/variantes/{variante_id}/deplacer")
+async def deplacer_variante(variante_id: int, request: Request):
+    """Range l'article sous une autre matière. Renvoie la liste de la matière d'origine."""
+    user = require_stock_matieres_admin(request)
+    body = await request.json() or {}
+    with get_db() as conn:
+        try:
+            res = mv.deplacer(conn, variante_id, body.get("matiere_id"),
+                              auteur=_auteur(user), user_id=user.get("id"))
+        except (LookupError, ValueError) as e:
+            _erreur(e)
+        conn.commit()
+        out = mv.lister(conn, res["matiere_origine"])
+        cible = conn.execute("SELECT reference, designation FROM matieres_premieres WHERE id=?",
+                             (res["matiere_cible"],)).fetchone()
+    out["deplacement"] = {**res, "cible_libelle": (cible["designation"] or cible["reference"] or "")}
+    log_action(user=user, request=request, module="stock", action="UPDATE",
+               objet=f"matiere:{res['matiere_origine']}:variante:{variante_id}",
+               detail=f"Article déplacé vers la matière {res['matiere_cible']}")
+    return out
+
+
 @router.post("/api/stock/variantes/{variante_id}/desactiver")
 def desactiver_variante(variante_id: int, request: Request):
     user = require_stock_matieres_admin(request)
