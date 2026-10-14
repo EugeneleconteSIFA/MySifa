@@ -1280,7 +1280,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/mysifa_poste_bobine.js?v=1"></script>
 <script src="/static/mysifa_bobine_edit.js?v=1.0"></script>
 <script src="/static/mysifa_calc.js"></script>
-<script src="/static/mysifa_ai_chat.js?v=3"></script>
+<script src="/static/mysifa_ai_chat.js?v=4"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>

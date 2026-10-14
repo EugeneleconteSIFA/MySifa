@@ -140,6 +140,25 @@ if u:
     r2 = cl.post(f"/api/ai/actions/{jeton}/confirmer")
     check("double clic : refusé", r2.status_code, 409)
     check("config : widget actif pour superadmin", cl.get("/api/ai/config").json()["actif"], True)
+    conf = cl.get("/api/ai/config").json()
+    check("config : annonce pour un admin", bool(conf.get("annonce") and conf["annonce"].get("texte")), True)
+    msgs = [{"role": "user", "content": "Stock en A141 ?"}, {"role": "assistant", "content": "Vide."}]
+    cid = cl.post("/api/ai/conversations", json={"messages": msgs}).json()["id"]
+    liste = cl.get("/api/ai/conversations").json()
+    check("conversation : listée avec son titre", (liste[0]["id"], liste[0]["titre"]), (cid, "Stock en A141 ?"))
+    msgs.append({"role": "user", "content": "Et B121 ?"})
+    cl.put(f"/api/ai/conversations/{cid}", json={"messages": msgs})
+    check("conversation : rouverte à jour", len(cl.get(f"/api/ai/conversations/{cid}").json()["messages"]), 3)
+    with get_db() as c:
+        c.execute("INSERT INTO users (email,nom,password_hash,role,actif,created_at) VALUES "
+                  "('autre@local','Autre','x','direction',1,'2026-01-01')")
+        c.commit()
+        autre = c.execute("SELECT id FROM users WHERE email='autre@local'").fetchone()[0]
+    cl2 = TestClient(main.app)
+    cl2.cookies.set("sifa_token", create_session(autre))
+    check("conversation : invisible pour un autre", cl2.get(f"/api/ai/conversations/{cid}").status_code, 404)
+    check("conversation : liste d'un autre vide", cl2.get("/api/ai/conversations").json(), [])
+    check("conversation : supprimée", cl.delete(f"/api/ai/conversations/{cid}").json().get("ok"), True)
     ctx = {"app": main.app, "cookies": {"sifa_token": tok}}
     lu = agent_ia.lire_ecran(ctx, {"ecran": "stock_emplacement", "parametres": {"emplacement": "A141"}})
     check("lire_ecran : l'écran MyStock répond", '"erreur"' in lu, False)

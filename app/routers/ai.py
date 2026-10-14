@@ -5,6 +5,8 @@
   POST /api/ai/chat                         une question → réponse + actions proposées
   POST /api/ai/actions/{jeton}/confirmer    exécute une action proposée
   POST /api/ai/actions/{jeton}/annuler
+  GET/POST /api/ai/conversations            conversations de l'utilisateur
+  GET/PUT/DELETE /api/ai/conversations/{id}
 
 La logique vit dans app/services/agent_ia.py (lecture, boucle) et
 app/services/agent_actions.py (catalogue fermé des écritures, exécution).
@@ -19,7 +21,10 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from config import AGENT_IA_ACTION_TTL_MIN, AGENT_IA_MODELE, AGENT_IA_RATE_MAX, ROLES_AGENT_IA, agent_ia_modeles
+from config import (
+    AGENT_IA_ACTION_TTL_MIN, AGENT_IA_ANNONCE_CLE, AGENT_IA_ANNONCE_ROLES, AGENT_IA_ANNONCE_TEXTE,
+    AGENT_IA_CONVERSATIONS_MAX, AGENT_IA_MODELE, AGENT_IA_RATE_MAX, ROLES_AGENT_IA, agent_ia_modeles,
+)
 from database import get_db
 from services.auth_service import get_current_user
 from app.services.ai_context import BRIEF_ROLES
@@ -71,10 +76,15 @@ def ai_brief(request: Request):
 def ai_config(request: Request):
     user = get_current_user(request)
     actif = _agent_autorise(user)
+    annonce = None
+    if actif and AGENT_IA_ANNONCE_TEXTE and (user.get("role") == "superadmin"
+                                            or user.get("role") in AGENT_IA_ANNONCE_ROLES):
+        annonce = {"cle": AGENT_IA_ANNONCE_CLE, "texte": AGENT_IA_ANNONCE_TEXTE}
     return {
         "actif": actif,
         "modeles": agent_ia_modeles() if actif else [],
         "defaut": agent_ia.choisir_modele(None)["id"] if actif else AGENT_IA_MODELE,
+        "annonce": annonce,
     }
 
 
@@ -175,4 +185,103 @@ def annuler_action(jeton: str, request: Request):
             conn.execute("UPDATE ai_actions SET statut='annulee', traite_at=? WHERE id=?",
                          (datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), row["id"]))
             conn.commit()
+    return {"ok": True}
+
+
+# ── Conversations ────────────────────────────────────────────────────────
+# Le widget envoie son état complet (messages + cartes d'action) ; le serveur
+# le garde tel quel. Chacun ne voit que les siennes.
+
+class ConversationPayload(BaseModel):
+    messages: list[dict]
+    titre: Optional[str] = None
+
+
+def _titre(messages: list[dict], titre: Optional[str]) -> str:
+    if titre and titre.strip():
+        return titre.strip()[:120]
+    premier = next((m.get("content") for m in messages if m.get("role") == "user" and m.get("content")), "")
+    t = " ".join(str(premier).split())
+    return (t[:80] + "…") if len(t) > 80 else (t or "Conversation")
+
+
+def _maintenant() -> str:
+    return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+
+@router.get("/conversations")
+def lister_conversations(request: Request):
+    user = _user_agent(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id,titre,nb_messages,updated_at FROM ai_conversations WHERE user_email=? "
+            "ORDER BY updated_at DESC, id DESC LIMIT ?",
+            (user.get("email") or "", AGENT_IA_CONVERSATIONS_MAX)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _conversation(conn, cid: int, user: dict):
+    row = conn.execute("SELECT * FROM ai_conversations WHERE id=? AND user_email=?",
+                       (cid, user.get("email") or "")).fetchone()
+    if not row:
+        raise HTTPException(404, detail="Conversation introuvable.")
+    return row
+
+
+@router.get("/conversations/{cid}")
+def lire_conversation(cid: int, request: Request):
+    user = _user_agent(request)
+    with get_db() as conn:
+        row = _conversation(conn, cid, user)
+    return {"id": row["id"], "titre": row["titre"], "messages": json.loads(row["messages_json"] or "[]"),
+            "updated_at": row["updated_at"]}
+
+
+def _borner(messages: list[dict]) -> str:
+    texte = json.dumps(messages[-200:], ensure_ascii=False)
+    if len(texte) > 2_000_000:
+        raise HTTPException(413, detail="Conversation trop longue — en commencer une nouvelle.")
+    return texte
+
+
+@router.post("/conversations")
+def creer_conversation(payload: ConversationPayload, request: Request):
+    user = _user_agent(request)
+    email = user.get("email") or ""
+    now = _maintenant()
+    with get_db() as conn:
+        cur = conn.execute(
+            "INSERT INTO ai_conversations (user_email,titre,messages_json,nb_messages,created_at,updated_at)"
+            " VALUES (?,?,?,?,?,?)",
+            (email, _titre(payload.messages, payload.titre), _borner(payload.messages),
+             len(payload.messages), now, now))
+        cid = cur.lastrowid
+        # Au-delà du plafond, les plus anciennes partent.
+        conn.execute(
+            "DELETE FROM ai_conversations WHERE user_email=? AND id NOT IN ("
+            " SELECT id FROM ai_conversations WHERE user_email=? ORDER BY updated_at DESC, id DESC LIMIT ?)",
+            (email, email, AGENT_IA_CONVERSATIONS_MAX))
+        conn.commit()
+    return {"id": cid}
+
+
+@router.put("/conversations/{cid}")
+def maj_conversation(cid: int, payload: ConversationPayload, request: Request):
+    user = _user_agent(request)
+    with get_db() as conn:
+        _conversation(conn, cid, user)
+        conn.execute("UPDATE ai_conversations SET titre=?, messages_json=?, nb_messages=?, updated_at=? WHERE id=?",
+                     (_titre(payload.messages, payload.titre), _borner(payload.messages),
+                      len(payload.messages), _maintenant(), cid))
+        conn.commit()
+    return {"id": cid}
+
+
+@router.delete("/conversations/{cid}")
+def supprimer_conversation(cid: int, request: Request):
+    user = _user_agent(request)
+    with get_db() as conn:
+        _conversation(conn, cid, user)
+        conn.execute("DELETE FROM ai_conversations WHERE id=?", (cid,))
+        conn.commit()
     return {"ok": True}

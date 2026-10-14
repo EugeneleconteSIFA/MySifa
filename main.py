@@ -622,8 +622,8 @@ _BOUTONS_JS = (
 # /static/ est servi avec 24 h de cache : un fichier modifié doit changer
 # d'adresse. À incrémenter avec les inclusions explicites des pages.
 _VERSION_ASSET = {
-    b"/static/mysifa_ai_chat.css": b"?v=3",
-    b"/static/mysifa_ai_chat.js": b"?v=3",
+    b"/static/mysifa_ai_chat.css": b"?v=4",
+    b"/static/mysifa_ai_chat.js": b"?v=4",
 }
 
 
