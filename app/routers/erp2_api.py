@@ -171,12 +171,19 @@ def bats(request: Request):
             return []
 
 
+@router.get("/conditionnements")
+def conditionnements(request: Request, article_id: int, tiers_id: int | None = None):
+    _user(request)
+    return _lecture(pieces.conditionnements, article_id, tiers_id)
+
+
 @router.get("/prix")
-def prix(request: Request, article_id: int, tiers_id: int | None = None, quantite_milli: int = 0, sens: str = "vente"):
+def prix(request: Request, article_id: int, tiers_id: int | None = None, quantite_milli: int = 0, sens: str = "vente",
+         laize_dmm: int | None = None, ml_par_bobine_milli: int | None = None):
     _user(request)
     with get_db() as conn:
         try:
-            p = pieces.prix(conn, article_id, tiers_id, quantite_milli, sens)
+            p = pieces.prix(conn, article_id, tiers_id, quantite_milli, sens, None, laize_dmm, ml_par_bobine_milli)
             a = conn.execute("SELECT * FROM gc_articles WHERE id=?", (article_id,)).fetchone()
             t = conn.execute("SELECT * FROM gc_tiers WHERE id=?", (tiers_id,)).fetchone() if tiers_id else None
             code = pieces.code_tva_ligne(conn, t, a)

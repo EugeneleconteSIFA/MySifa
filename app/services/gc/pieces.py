@@ -129,29 +129,55 @@ def code_tva_ligne(conn, tiers, article) -> str | None:
     return tva_par_defaut(conn)
 
 
-def prix(conn, article_id: int, tiers_id: int | None, quantite_milli: int, sens: str, jour: str | None = None) -> dict:
+def prix(conn, article_id: int, tiers_id: int | None, quantite_milli: int, sens: str, jour: str | None = None,
+         laize_dmm: int | None = None, ml_par_bobine_milli: int | None = None) -> dict:
     """Prix applicable : tarif du tiers, puis tarif général, au plus grand
-    palier atteint et en cours de validité ; à défaut, le prix de la fiche."""
+    palier atteint et en cours de validité ; à défaut, le prix de la fiche.
+
+    À l'achat, le prix dépend du conditionnement (laize, longueur de bobine) :
+    un conditionnement demandé ne retient que les tarifs de ce conditionnement
+    (ou sans conditionnement précisé) ; le tarif retourné dit le sien."""
     a = conn.execute("SELECT * FROM gc_articles WHERE id=?", (article_id,)).fetchone()
     if not a:
         raise ErreurPiece("Article introuvable.")
     jour = jour or _aujourdhui()
+    cond_sql, cond_args = "", []
+    if laize_dmm:
+        cond_sql += " AND (laize_dmm IS NULL OR laize_dmm=?)"
+        cond_args.append(int(laize_dmm))
+    if ml_par_bobine_milli:
+        cond_sql += " AND (ml_par_bobine_milli IS NULL OR ml_par_bobine_milli=?)"
+        cond_args.append(int(ml_par_bobine_milli))
     for tid in ([tiers_id] if tiers_id else []) + [None]:
         r = conn.execute(
-            """SELECT prix_cents, qte_min_milli FROM gc_tarifs
+            f"""SELECT prix_cents, qte_min_milli, laize_dmm, ml_par_bobine_milli, ref_fournisseur FROM gc_tarifs
                WHERE article_id=? AND sens=? AND actif=1
                  AND (tiers_id IS ? OR tiers_id=?)
                  AND qte_min_milli<=?
                  AND (debut IS NULL OR debut='' OR debut<=?)
-                 AND (fin IS NULL OR fin='' OR fin>=?)
-               ORDER BY qte_min_milli DESC LIMIT 1""",
-            (article_id, sens, tid, tid, int(quantite_milli or 0), jour, jour),
+                 AND (fin IS NULL OR fin='' OR fin>=?) {cond_sql}
+               ORDER BY (laize_dmm IS NOT NULL) + (ml_par_bobine_milli IS NOT NULL) DESC, qte_min_milli DESC LIMIT 1""",
+            (article_id, sens, tid, tid, int(quantite_milli or 0), jour, jour, *cond_args),
         ).fetchone()
         if r:
             return {"prix_cents": int(r["prix_cents"]), "base_prix": int(a["base_prix"]),
-                    "source": "tarif_tiers" if tid else "tarif_general"}
+                    "source": "tarif_tiers" if tid else "tarif_general",
+                    "laize_dmm": r["laize_dmm"] or laize_dmm or _t(a, "format_l_dmm"),
+                    "ml_par_bobine_milli": r["ml_par_bobine_milli"] or ml_par_bobine_milli or _t(a, "ml_par_bobine_milli"),
+                    "ref_fournisseur": r["ref_fournisseur"] or ""}
     p = a["prix_vente_cents"] if sens == "vente" else a["prix_achat_cents"]
-    return {"prix_cents": int(p or 0), "base_prix": int(a["base_prix"]), "source": "fiche"}
+    return {"prix_cents": int(p or 0), "base_prix": int(a["base_prix"]), "source": "fiche",
+            "laize_dmm": laize_dmm or _t(a, "format_l_dmm"),
+            "ml_par_bobine_milli": ml_par_bobine_milli or _t(a, "ml_par_bobine_milli"), "ref_fournisseur": ""}
+
+
+def conditionnements(conn, article_id: int, tiers_id: int | None) -> list[dict]:
+    """Conditionnements d'achat proposés pour un article chez un fournisseur."""
+    return [dict(r) for r in conn.execute(
+        """SELECT DISTINCT laize_dmm, ml_par_bobine_milli, ref_fournisseur FROM gc_tarifs
+           WHERE article_id=? AND sens='achat' AND actif=1 AND (tiers_id IS NULL OR tiers_id=?)
+             AND (laize_dmm IS NOT NULL OR ml_par_bobine_milli IS NOT NULL)
+           ORDER BY laize_dmm, ml_par_bobine_milli""", (article_id, tiers_id)).fetchall()]
 
 
 # ── Quantités aval et état ────────────────────────────────────────────
@@ -557,13 +583,16 @@ def enregistrer(conn, piece_id: int, entete: dict | None, lignes: list[dict] | N
                 """INSERT INTO gc_pieces_lignes (piece_id, rang, article_id, libelle, quantite_milli, unite,
                        base_prix, prix_cents, remise_bp, tva_code, taux_tva_bp, montant_ht_cents,
                        date_livraison, date_expedition, ligne_amont_id, notes, origine_prod, laboratoire,
-                       ref_client, nb_livraisons, adresse_livraison_id, type_ligne)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       ref_client, nb_livraisons, adresse_livraison_id, type_ligne, laize_dmm, ml_par_bobine_milli)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (piece_id, i, art["id"], libelle, q, art["unite"], base, prix_c, rem, code_tva,
                  taux_tva(conn, code_tva), calculs.montant_ligne(q, prix_c, base, rem),
                  l.get("date_livraison") or None, l.get("date_expedition") or None, amont,
                  str(l.get("notes") or ""), origine_p, labo, str(ref_c), _entier(l.get("nb_livraisons") or 1, "Livraisons", 1),
-                 adr_l, type_l))
+                 adr_l, type_l,
+                 _entier(l["laize_dmm"], "Laize", 1) if l.get("laize_dmm") else _t(art, "format_l_dmm"),
+                 _entier(l["ml_par_bobine_milli"], "Longueur de bobine", 1) if l.get("ml_par_bobine_milli")
+                 else _t(art, "ml_par_bobine_milli")))
     _maj_totaux(conn, piece_id)
 
 
@@ -819,6 +848,7 @@ def transformer(conn, sources: list[int], cible: str, user: dict | None = None) 
                 "date_expedition": _t(l, "date_expedition"), "origine_prod": _t(l, "origine_prod"),
                 "laboratoire": _t(l, "laboratoire"), "ref_client": _t(l, "ref_client"),
                 "adresse_livraison_id": _t(l, "adresse_livraison_id"), "type_ligne": _t(l, "type_ligne"),
+                "laize_dmm": _t(l, "laize_dmm"), "ml_par_bobine_milli": _t(l, "ml_par_bobine_milli"),
             })
     if not lignes:
         raise ErreurPiece("Plus rien à reprendre : tout a déjà été repris.")

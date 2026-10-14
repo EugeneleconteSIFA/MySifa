@@ -369,11 +369,14 @@ def enregistrer_article(conn, article_id: int | None, data: dict, tarifs: list |
             if sens not in ("vente", "achat"):
                 raise ErreurFichier("Tarif : sens vente ou achat.")
             conn.execute(
-                """INSERT INTO gc_tarifs (article_id, tiers_id, sens, qte_min_milli, prix_cents, debut, fin)
-                   VALUES (?,?,?,?,?,?,?)""",
+                """INSERT INTO gc_tarifs (article_id, tiers_id, sens, qte_min_milli, prix_cents, debut, fin,
+                       laize_dmm, ml_par_bobine_milli, ref_fournisseur)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
                 (article_id, _conv(t.get("tiers_id"), "int_null", "Tiers"), sens,
                  _conv(t.get("qte_min_milli"), int, "Palier"), _conv(t.get("prix_cents"), int, "Prix"),
-                 t.get("debut") or None, t.get("fin") or None))
+                 t.get("debut") or None, t.get("fin") or None,
+                 _conv(t.get("laize_dmm"), "int_null", "Laize"), _conv(t.get("ml_par_bobine_milli"), "int_null", "Bobine"),
+                 _conv(t.get("ref_fournisseur"), str, "Réf. fournisseur")))
     return article_id
 
 

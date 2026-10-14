@@ -465,6 +465,28 @@ class Chaine(unittest.TestCase):
         self.assertEqual([m["ca_cents"] for m in s["par_mois"]], [10000, -10000])
         self.assertEqual(s["par_client"][0]["nb_factures"], 1)
 
+    def test_prix_par_conditionnement(self):
+        from app.services.gc import fichiers
+        c = self.conn
+        aid = fichiers.enregistrer_article(c, None, {"libelle": "Thermique 135 g", "nature": "mp", "unite": "M2",
+                                                     "base_prix": 1, "prix_achat_cents": 50}, tarifs=[
+            {"tiers_id": 2, "sens": "achat", "prix_cents": 46, "laize_dmm": 4700, "ml_par_bobine_milli": 12_000_000,
+             "ref_fournisseur": "KPR-412"},
+            {"tiers_id": 2, "sens": "achat", "prix_cents": 49, "laize_dmm": 3300, "ml_par_bobine_milli": 6_000_000},
+        ])
+        p470 = pieces.prix(c, aid, 2, 1000, "achat", None, 4700, None)
+        p330 = pieces.prix(c, aid, 2, 1000, "achat", None, 3300, None)
+        self.assertEqual((p470["prix_cents"], p470["ml_par_bobine_milli"], p470["ref_fournisseur"]), (46, 12_000_000, "KPR-412"))
+        self.assertEqual(p330["prix_cents"], 49)
+        self.assertEqual(len(pieces.conditionnements(c, aid, 2)), 2)
+        cf = pieces.creer(c, "cde_fournisseur", 2)
+        pieces.enregistrer(c, cf, None, [{"article_id": aid, "quantite_milli": 56_400_000, "prix_cents": 46,
+                                          "laize_dmm": 4700, "ml_par_bobine_milli": 12_000_000}])
+        pieces.valider(c, cf)
+        re_ = pieces.transformer(c, [cf], "reception")
+        l = pieces.charger(c, re_)["lignes"][0]
+        self.assertEqual((l["laize_dmm"], l["ml_par_bobine_milli"]), (4700, 12_000_000))   # le conditionnement suit
+
     def test_achat_reception_stock(self):
         c = self.conn
         c.execute("UPDATE gc_articles SET prix_achat_cents=900 WHERE id=1")

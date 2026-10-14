@@ -362,7 +362,8 @@
       var r = await ERP.api('/api/erp2/articles' + (nouveau ? '' : '/' + A.id), {
         method: nouveau ? 'POST' : 'PUT',
         body: {article: champs, tarifs: tarifs.map(function (t) {
-          return {tiers_id: t.tiers_id, sens: t.sens, qte_min_milli: t.qte_min_milli || 0, prix_cents: t.prix_cents, debut: t.debut, fin: t.fin};
+          return {tiers_id: t.tiers_id, sens: t.sens, qte_min_milli: t.qte_min_milli || 0, prix_cents: t.prix_cents, debut: t.debut, fin: t.fin,
+                  laize_dmm: t.laize_dmm, ml_par_bobine_milli: t.ml_par_bobine_milli, ref_fournisseur: t.ref_fournisseur};
         })}});
       modifie = false; ERP.garde = null;
       ERP.toast('Article enregistré.', 'success');
@@ -384,13 +385,17 @@
             cell(ERP.saisie(t, 'prix_cents', 'euros', {change: marquer})),
             cell(ERP.saisie(t, 'debut', 'date', {change: marquer})),
             cell(ERP.saisie(t, 'fin', 'date', {change: marquer})),
+            cell(ERP.saisie(t, 'laize_dmm', 'entier', {change: marquer, placeholder: '1/10 mm'})),
+            cell(ERP.saisie(t, 'ml_par_bobine_milli', 'qte', {change: marquer, placeholder: 'ML'})),
+            cell(ERP.saisie(t, 'ref_fournisseur', 'texte', {change: marquer})),
             h('td', {className: 'c-suppr'}, h('button', {type: 'button', className: 'erp-x', text: '×', title: 'Retirer',
               onclick: function () { tarifs.splice(i, 1); marquer(); dessinerT(); }}))));
         });
       }
       dessinerT();
       var table = h('table', {className: 'erp-lignes'},
-        h('thead', null, h('tr', null, ['Sens', 'Tiers', 'À partir de (qté)', 'Prix HT', 'Du', 'Au', ''].map(function (x) { return h('th', {text: x}); }))),
+        h('thead', null, h('tr', null, ['Sens', 'Tiers', 'À partir de (qté)', 'Prix HT', 'Du', 'Au', 'Laize (1/10 mm)', 'Bobine (ML)', 'Réf. fournisseur', '']
+          .map(function (x) { return h('th', {text: x}); }))),
         tbody);
       return ERP.carte('Tarifs', h('div', null,
         h('p', {className: 'erp-aide', text: 'Prix pour ' + ERP.fmt.qte((A.base_prix || 1) * 1000, 0) + ' ' + (A.unite || '') +

@@ -443,7 +443,46 @@
       var opts = function (o) { return Object.keys(o || {}).map(function (k) { return {v: k, l: o[k]}; }); };
       var adrs = tiers.adresses.filter(function (a) { return a.type === 'livraison'; })
         .map(function (a) { return {v: a.id, l: (a.libelle ? a.libelle + ' — ' : '') + a.adresse1 + ', ' + a.ville}; });
+      var achat = sensDe(P.type) === 'achat';
+      var condCh = null;
+      if (achat) {
+        // Le prix d'achat dépend du conditionnement : en choisir un applique son tarif.
+        // Saisie « quantité » : millièmes d'unité ; la laize est en mm, stockée en dixièmes de mm.
+        var laize = {v: l.laize_dmm != null ? l.laize_dmm * 100 : null};
+        var bob = {v: l.ml_par_bobine_milli};
+        var appliquerCond = async function () {
+          l.laize_dmm = laize.v ? Math.round(laize.v / 100) : null;
+          l.ml_par_bobine_milli = bob.v || null;
+          if (!l.ligne_amont_id) {
+            try {
+              var pr = await ERP.api('/api/erp2/prix?article_id=' + l.article_id + '&tiers_id=' + P.tiers_id + '&sens=achat&quantite_milli=' +
+                (l.quantite_milli || 0) + (l.laize_dmm ? '&laize_dmm=' + l.laize_dmm : '') + (l.ml_par_bobine_milli ? '&ml_par_bobine_milli=' + l.ml_par_bobine_milli : ''));
+              l.prix_cents = pr.prix_cents; l.base_prix = pr.base_prix; l._prixManuel = false;
+            } catch (e) { ERP.toast(e.message, 'danger'); }
+          }
+          recalculer(l); marquer(); dessinerLignes();
+        };
+        condCh = [
+          ERP.champ('Laize (mm)', ERP.saisie(laize, 'v', 'qte', {dec: 1, change: appliquerCond})),
+          ERP.champ('Longueur de bobine (ML)', ERP.saisie(bob, 'v', 'qte', {change: appliquerCond})),
+        ];
+        ERP.api('/api/erp2/conditionnements?article_id=' + l.article_id + '&tiers_id=' + P.tiers_id).then(function (cs) {
+          if (!cs.length || !f.isConnected) return;
+          var choix = {v: ''};
+          var sel = ERP.choix(choix, 'v', cs.map(function (c, k) {
+            return {v: String(k), l: (c.laize_dmm ? 'Laize ' + c.laize_dmm / 10 : '') + (c.ml_par_bobine_milli ? ' · bobine ' + ERP.fmt.qte(c.ml_par_bobine_milli, 0) + ' ML' : '') +
+              (c.ref_fournisseur ? ' · ' + c.ref_fournisseur : '')};
+          }), {avecVide: 'Conditionnements du tarif…', change: function (k) {
+            if (k == null) return;
+            var c = cs[+k];
+            laize.v = c.laize_dmm ? c.laize_dmm * 100 : null; bob.v = c.ml_par_bobine_milli;
+            appliquerCond();
+          }});
+          f.insertBefore(ERP.champ('Conditionnement', sel, {large: true}), f.firstChild);
+        });
+      }
       var f = h('div', {className: 'erp-form erp-ligne-detail'},
+        condCh,
         ERP.champ('Type de ligne', ERP.choix(l, 'type_ligne', opts(M.types_ligne), {change: marquer})),
         ERP.champ('Date d\'expédition', ERP.saisie(l, 'date_expedition', 'date', {change: marquer})),
         ERP.champ('Date de livraison', ERP.saisie(l, 'date_livraison', 'date', {change: marquer})),
@@ -459,6 +498,8 @@
     function resumeLigne(l) {
       var M = ERP.M || {}, morceaux = [];
       if (l.type_ligne && l.type_ligne !== 'livrer_facturer') morceaux.push((M.types_ligne || {})[l.type_ligne] || l.type_ligne);
+      if (sensDe(P.type) === 'achat' && l.laize_dmm) morceaux.push('Laize ' + (l.laize_dmm / 10).toLocaleString('fr-FR') +
+        (l.ml_par_bobine_milli ? ' · bobine ' + ERP.fmt.qte(l.ml_par_bobine_milli, 0) + ' ML' : ''));
       if (l.date_expedition) morceaux.push('Exp. ' + ERP.fmt.date(l.date_expedition));
       if (l.date_livraison) morceaux.push('Liv. ' + ERP.fmt.date(l.date_livraison));
       if (l.origine_prod) morceaux.push((M.origines || {})[l.origine_prod] || l.origine_prod);
@@ -634,7 +675,8 @@
                 prix_cents: l.prix_cents, remise_bp: l.remise_bp, tva_code: l.tva_code, date_livraison: l.date_livraison,
                 ligne_amont_id: l.ligne_amont_id, notes: l.notes, date_expedition: l.date_expedition,
                 origine_prod: l.origine_prod, laboratoire: l.laboratoire, ref_client: l.ref_client,
-                nb_livraisons: l.nb_livraisons, adresse_livraison_id: l.adresse_livraison_id, type_ligne: l.type_ligne};
+                nb_livraisons: l.nb_livraisons, adresse_livraison_id: l.adresse_livraison_id, type_ligne: l.type_ligne,
+                laize_dmm: l.laize_dmm, ml_par_bobine_milli: l.ml_par_bobine_milli};
       });
       return {entete: ent, lignes: ls};
     }

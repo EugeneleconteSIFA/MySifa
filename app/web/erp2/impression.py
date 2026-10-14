@@ -242,8 +242,9 @@ def donnees(conn, piece_id: int, modele: str = "") -> dict:
             if typ != "reception":
                 des.append(f"Unité d'achat : {_e(uv or unites_lib.get(l['unite'], ''))}")
             ua = art["unite_achat"] if "unite_achat" in art.keys() and art["unite_achat"] else l["unite"]
-            cb = calculs.conditionnement_bobines(l["quantite_milli"], ua, art["format_l_dmm"],
-                                                 art["ml_par_bobine_milli"] if "ml_par_bobine_milli" in art.keys() else None)
+            cb = calculs.conditionnement_bobines(
+                l["quantite_milli"], ua, l.get("laize_dmm") or art["format_l_dmm"],
+                l.get("ml_par_bobine_milli") or (art["ml_par_bobine_milli"] if "ml_par_bobine_milli" in art.keys() else None))
             if cb:
                 if art["unite_conditionnement"] if "unite_conditionnement" in art.keys() else "":
                     des.append(f"Unité de conditionnement : {_e(unites_lib.get(art['unite_conditionnement'], art['unite_conditionnement']))}")
