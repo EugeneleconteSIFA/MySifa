@@ -142,8 +142,9 @@ def lister(conn: sqlite3.Connection, matiere_id: int, avec_inactives: bool = Fal
         (matiere_id,),
     ).fetchall()
     prix = conn.execute(
-        """SELECT p.declinaison_id, p.fournisseur_id, p.principal FROM mp_matiere_prix p
-            WHERE p.matiere_id = ?""",
+        """SELECT p.declinaison_id, p.fournisseur_id, p.principal, p.prix, p.updated_at
+             FROM mp_matiere_prix p
+            WHERE p.matiere_id = ? AND p.declinaison_id IS NOT NULL""",
         (matiere_id,),
     ).fetchall()
     prix_fou: dict[Optional[int], set] = {}
@@ -199,11 +200,24 @@ def lister(conn: sqlite3.Connection, matiere_id: int, avec_inactives: bool = Fal
                            or d["grammage_label"] or (("%g g/m²" % d["valeur_gsm"]) if d["valeur_gsm"] else "Sans déclinaison"),
                 "etat": etat,
             })
+    from app.services import mystock_prix
+
     return {
         "matiere": {"id": mp["id"], "reference": mp["reference"], "designation": mp["designation"],
                     "categorie": mp["categorie"]},
         "variantes": variantes,
         "ecarts_prix": ecarts,
+        # Prix d'achat par fournisseur et par laize, pour la saisie depuis la fiche.
+        "prix": {
+            "unite": mystock_prix.unite_prix(mp["categorie"]),
+            "declinaisons": mystock_prix.libelles_declinaisons(conn, matiere_id),
+            "lignes": [
+                {"declinaison_id": int(p["declinaison_id"]), "fournisseur_id": p["fournisseur_id"],
+                 "prix": float(p["prix"] or 0), "principal": bool(p["principal"]),
+                 "updated_at": p["updated_at"]}
+                for p in prix
+            ],
+        },
     }
 
 

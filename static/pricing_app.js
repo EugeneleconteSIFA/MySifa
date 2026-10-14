@@ -9,6 +9,8 @@
 
   const S = {
     canWrite: !!INIT.canWrite,
+    msOuvertes: new Set(),
+    msOuvertesF: new Set(),
     user: INIT.user || {},
     route: { name: "materials", id: null },
     loading: true,
@@ -1256,6 +1258,193 @@
       : lien;
   }
 
+  /* ── Prix par fournisseur, dépliés sous la matière ──────────────────────
+
+     La ligne garde le prix du principal : c'est lui qui sert aux devis et aux
+     coûts produits. Le chevron montre les autres fournisseurs, chacun avec son
+     prix et son coût au m² — c'est le coût au m² qui permet de comparer deux
+     offres. Un second chevron descend à la laize, la granularité où le prix
+     est réellement stocké ; saisir au niveau fournisseur le déploie sur toutes
+     ses laizes. */
+  function msPrixFournisseurs(m) {
+    const parF = new Map();
+    const cle = (id) => (id == null ? "" : String(id));
+    (m.declinaisons || []).forEach((d) => {
+      (d.lignes || []).forEach((l) => {
+        const k = cle(l.fournisseur_id);
+        if (!parF.has(k)) parF.set(k, { id: l.fournisseur_id, nom: l.fournisseur_nom || "", principal: false, laizes: [] });
+        const f = parF.get(k);
+        if (l.principal) f.principal = true;
+        f.laizes.push({ decl: d, ligne: l });
+      });
+    });
+    (m.fournisseurs_variantes || []).forEach((v) => {
+      const k = cle(v.id);
+      if (!parF.has(k)) parF.set(k, { id: v.id, nom: v.nom || "", principal: false, laizes: [] });
+    });
+    return [...parF.values()].sort((a, b) =>
+      (b.principal - a.principal)
+      || ((a.id == null) - (b.id == null))
+      || String(a.nom).localeCompare(String(b.nom), "fr"));
+  }
+
+  function msFourchette(vals, fmt) {
+    const v = vals.filter((x) => x != null && x > 0);
+    if (!v.length) return null;
+    const mn = Math.min(...v), mx = Math.max(...v);
+    return Math.abs(mx - mn) < 1e-9 ? fmt(mn) : `${fmt(mn)} à ${fmt(mx)}`;
+  }
+
+  function msPrixInputHtml(attr, valeur, vals, titre, unite) {
+    const v = vals.filter((x) => x != null && x > 0);
+    const unique = v.length && v.every((x) => Math.abs(x - v[0]) < 1e-9);
+    const ph = !v.length ? "à compléter" : (unique ? "0" : msFourchette(v, (x) => fmtNum(x, 3, 3)));
+    return `<div class="msl-prix-edit${v.length && !unique ? " msl-prix-diverge" : ""}">
+        <span class="msl-prix-ico" aria-hidden="true">${icon("edit", 12)}</span>
+        <input type="number" class="msl-prix-inp" step="0.001" min="0" inputmode="decimal"
+               ${attr} value="${escAttr(unique ? String(v[0]) : "")}" placeholder="${escAttr(ph)}"
+               data-initial="${escAttr(unique ? String(v[0]) : "")}"
+               title="${escAttr(titre)}" aria-label="${escAttr(titre)}"/>
+        <span class="msl-unite">${escHtml(unite || "")}</span>
+      </div>`;
+  }
+
+  function msDerniereDate(lignes) {
+    const d = lignes.map((l) => l.updated_at).filter(Boolean).sort().pop();
+    return d ? `<span class="msl-maj-date">${escHtml(fmtJour(d))}</span>` : '<span class="muted">—</span>';
+  }
+
+  function msSousLignesHtml(m) {
+    const decls = m.declinaisons || [];
+    const fourns = msPrixFournisseurs(m);
+    const ecrit = S.canWrite && decls.length > 0;
+    const fmtCout = (x) => fmtNum(x, 3, 3) + " €/m²";
+    if (!fourns.length) {
+      return `<tr class="msl-sous"><td></td><td colspan="5" class="muted">Aucun fournisseur sur cette matière.</td></tr>`;
+    }
+    return fourns.map((f) => {
+      const fid = f.id == null ? "" : String(f.id);
+      const nom = f.nom || (f.id == null ? "Sans fournisseur" : "Fournisseur");
+      const prixL = f.laizes.map((x) => x.ligne.prix);
+      const cout = msFourchette(f.laizes.map((x) => x.ligne.cout_eur_m2), fmtCout);
+      const ouvertF = S.msOuvertesF.has(m.id + "|" + fid);
+      const parLaize = decls.length > 1;
+      const titre = `Prix d'achat de ${m.reference} chez ${nom}` + (parLaize ? " — appliqué à toutes ses laizes" : "");
+      let html = `<tr class="msl-sous${f.principal ? " msl-sous-princ" : ""}">
+          <td></td>
+          <td class="msl-sous-nom">${escHtml(nom)}${f.principal ? ' <span class="badge badge-frontal">principal</span>' : ""}</td>
+          <td class="msl-sous-cout">${cout ? escHtml(cout) : '<span class="muted">—</span>'}</td>
+          <td class="msl-prix">${ecrit
+            ? msPrixInputHtml(`data-ms-pf="${m.id}|${fid}"`, null, prixL, titre, m.unite)
+            : (msFourchette(prixL, (x) => fmtPrixUnite(x, m.unite)) || '<span class="muted">à compléter</span>')}</td>
+          <td>${msDerniereDate(f.laizes.map((x) => x.ligne))}</td>
+          <td>${parLaize
+            ? `<button type="button" class="msl-chev msl-chev-laize${ouvertF ? " on" : ""}" data-ms-chevf="${m.id}|${fid}"
+                 aria-expanded="${ouvertF}" title="Prix de ${escAttr(nom)} par laize">▸ par laize</button>`
+            : ""}</td>
+        </tr>`;
+      if (parLaize && ouvertF) {
+        html += decls.map((d) => {
+          const x = f.laizes.find((y) => y.decl.id === d.id);
+          const l = x ? x.ligne : null;
+          const t = `Prix de ${nom} pour ${m.reference} en ${d.libelle}`;
+          return `<tr class="msl-sous msl-sous-laize">
+              <td></td>
+              <td class="msl-sous-nom">${escHtml(d.libelle)}${l && l.principal ? ' <span class="muted">· en vigueur</span>' : ""}</td>
+              <td class="msl-sous-cout">${l && l.cout_eur_m2 ? escHtml(fmtCout(l.cout_eur_m2)) : '<span class="muted">—</span>'}</td>
+              <td class="msl-prix">${ecrit
+                ? msPrixInputHtml(`data-ms-pl="${d.id}|${fid}"`, null, [l ? l.prix : null], t, m.unite)
+                : (l && l.prix ? fmtPrixUnite(l.prix, m.unite) : '<span class="muted">à compléter</span>')}</td>
+              <td>${l ? msDerniereDate([l]) : '<span class="muted">—</span>'}</td>
+              <td></td>
+            </tr>`;
+        }).join("");
+      }
+      return html;
+    }).join("");
+  }
+
+  /* Écrit un prix ; si des prix par laize différents seraient écrasés, le
+     serveur répond `a_confirmer` sans rien écrire, et on repose la question. */
+  async function msEcrirePrix(path, body) {
+    let r = await api(path, { method: "POST", body });
+    if (r && r.a_confirmer) {
+      const det = (r.ecarts || []).map((e) => `${e.libelle} : ${fmtNum(e.prix, 3, 3)}`).join(" ; ");
+      const ok = await confirmerAction({
+        titre: "Prix par laize différents",
+        message: `${(r.ecarts || []).length} laize(s) ont un prix propre (${det}). Les aligner sur ${fmtNum(body.prix, 3, 3)} ?`,
+        labelOk: "Aligner",
+      });
+      if (!ok) return false;
+      r = await api(path, { method: "POST", body: { ...body, confirmer: true } });
+    }
+    return true;
+  }
+
+  function bindMsPrixFournisseurs() {
+    document.querySelectorAll("[data-ms-chev]").forEach((b) => {
+      b.onclick = (e) => {
+        e.stopPropagation();
+        const id = parseInt(b.getAttribute("data-ms-chev"), 10);
+        if (S.msOuvertes.has(id)) S.msOuvertes.delete(id); else S.msOuvertes.add(id);
+        msRerendre();
+      };
+    });
+    document.querySelectorAll("[data-ms-chevf]").forEach((b) => {
+      b.onclick = (e) => {
+        e.stopPropagation();
+        const k = b.getAttribute("data-ms-chevf");
+        if (S.msOuvertesF.has(k)) S.msOuvertesF.delete(k); else S.msOuvertesF.add(k);
+        msRerendre();
+      };
+    });
+    const brancher = (attr, corps) => {
+      document.querySelectorAll("[" + attr + "]").forEach((inp) => {
+        const initial = inp.getAttribute("data-initial") || "";
+        inp.onkeydown = (e) => {
+          if (e.key === "Enter") { e.preventDefault(); inp.blur(); }
+          if (e.key === "Escape") { inp.value = initial; inp.blur(); }
+        };
+        inp.onchange = async () => {
+          const brut = String(inp.value || "").trim().replace(",", ".");
+          if (brut === "" || brut === initial) { inp.value = initial; return; }
+          const prix = parseFloat(brut);
+          if (!isFinite(prix) || prix < 0) {
+            showToast("Prix invalide — valeur positive attendue.", "danger");
+            inp.value = initial;
+            return;
+          }
+          const [a, b] = inp.getAttribute(attr).split("|");
+          try {
+            const fait = await msEcrirePrix(corps.path, corps.body(parseInt(a, 10), b === "" ? null : parseInt(b, 10), prix));
+            if (!fait) { inp.value = initial; return; }
+            showToast("Prix enregistré.", "success");
+            await loadMystockList();
+            msRerendre();
+          } catch (e) {
+            showToast(e.message || "Enregistrement refusé.", "danger");
+            inp.value = initial;
+          }
+        };
+      });
+    };
+    brancher("data-ms-pf", {
+      path: "/api/pricing/mystock/prix-fournisseur",
+      body: (mid, fid, prix) => ({ matiere_id: mid, fournisseur_id: fid, prix }),
+    });
+    brancher("data-ms-pl", {
+      path: "/api/pricing/mystock/prix",
+      body: (did, fid, prix) => ({ declinaison_id: did, fournisseur_id: fid, prix }),
+    });
+  }
+
+  // Reconstruit la liste sans perdre la position de défilement.
+  function msRerendre() {
+    const y = window.scrollY;
+    renderMystockList();
+    window.scrollTo(0, y);
+  }
+
   function mystockMatiereRowHtml(m) {
     const decls = m.declinaisons || [];
     const fourns = msFournisseursPrincipaux(m);
@@ -1320,8 +1509,11 @@
       : "";
     const ficheTech = `<button type="button" class="btn btn-soft btn-sm" data-ft-matiere="${m.id}" title="Fiche technique : visualiser et télécharger">Fiche</button>`;
 
-    return `<tr class="msl-row" data-ms-mat="${m.id}">
-        <td>${categorieBadge(m.categorie)}</td>
+    const ouvert = S.msOuvertes.has(m.id);
+    const chev = `<button type="button" class="msl-chev${ouvert ? " on" : ""}" data-ms-chev="${m.id}"
+        aria-expanded="${ouvert}" title="${ouvert ? "Masquer" : "Voir"} les prix de chaque fournisseur">▸</button>`;
+    return `<tr class="msl-row${ouvert ? " msl-ouverte" : ""}" data-ms-mat="${m.id}">
+        <td>${chev}${categorieBadge(m.categorie)}</td>
         <td class="msl-libcell">${msLibelleLienHtml(m)}</td>
         <td class="msl-fourn">${fournCell} ${tarifBtn}</td>
         <td class="msl-prix">${prixCell}</td>
@@ -1330,7 +1522,7 @@
           ${ficheTech}${fiche}
           <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${m.id}" target="_blank" rel="noopener" title="Ouvrir la fiche dans MyStock">MyStock ↗</a>
         </td>
-      </tr>`;
+      </tr>${ouvert ? msSousLignesHtml(m) : ""}`;
   }
 
   /* La meme matiere, en carte.
@@ -1531,6 +1723,7 @@
       renderMystockList();
     };
     bindMsPrixInline();
+    bindMsPrixFournisseurs();
     bindMsListeActions();
   }
 
@@ -1601,10 +1794,8 @@
         if (brut === initial) return;
         dire("enregistrement…", "");
         try {
-          await api("/api/pricing/mystock/prix-matiere", {
-            method: "POST",
-            body: { matiere_id: id, prix: prix },
-          });
+          const fait = await msEcrirePrix("/api/pricing/mystock/prix-matiere", { matiere_id: id, prix: prix });
+          if (!fait) { dire("", ""); inp.value = initial; return; }
           dire("✓ enregistré", "ok");
           inp.classList.remove("msl-prix-diverge");
           const ligne = inp.closest(".msl-prix-edit");

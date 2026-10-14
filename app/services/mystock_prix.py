@@ -93,6 +93,43 @@ def fetch_matiere(conn: sqlite3.Connection, matiere_id: int) -> Optional[sqlite3
     ).fetchone()
 
 
+def unite_prix(categorie: Optional[str]) -> str:
+    """Unité dans laquelle se saisit le prix d'achat d'une catégorie."""
+    cat = _cat(categorie)
+    if cat in CATEGORIES_LAIZEES:
+        return "€/m²"
+    if cat in CATEGORIES_GRAMMAGE or cat in CATEGORIES_AU_KILO:
+        return "€/kg"
+    return "€/unité"
+
+
+def libelles_declinaisons(conn: sqlite3.Connection, matiere_id: int) -> list[dict]:
+    """Déclinaisons d'une matière avec leur libellé (laize, grammage), dans l'ordre d'affichage."""
+    out = []
+    for r in conn.execute(
+        """SELECT d.id, d.laize_id, d.grammage_id, l.valeur_mm, l.label AS laize_label,
+                  g.valeur_gsm, g.label AS grammage_label
+             FROM mp_matiere_declinaison d
+             LEFT JOIN mp_laizes    l ON l.id = d.laize_id
+             LEFT JOIN mp_grammages g ON g.id = d.grammage_id
+            WHERE d.matiere_id = ?
+            ORDER BY l.valeur_mm ASC, g.valeur_gsm ASC, d.id ASC""",
+        (int(matiere_id),),
+    ).fetchall():
+        if r["laize_id"] is not None:
+            lib = r["laize_label"] or (f"{_f(r['valeur_mm']):g} mm" if r["valeur_mm"] is not None else "Laize")
+        elif r["grammage_id"] is not None:
+            lib = r["grammage_label"] or (f"{_f(r['valeur_gsm']):g} g/m²" if r["valeur_gsm"] is not None else "Grammage")
+        else:
+            lib = "Toutes déclinaisons"
+        out.append({
+            "id": int(r["id"]),
+            "libelle": lib,
+            "laize_mm": _f(r["valeur_mm"]) if r["laize_id"] is not None else None,
+        })
+    return out
+
+
 def fetch_declinaison(conn: sqlite3.Connection, declinaison_id: int) -> Optional[sqlite3.Row]:
     return conn.execute(
         """SELECT d.*, mp.categorie, mp.reference, mp.designation
@@ -200,16 +237,27 @@ def list_materials(
     rows = conn.execute(sql, args).fetchall()
     # Libellés techniques des variantes fournisseur actives, principal en tête.
     # Base non migrée : pas de table, pas de libellé, la liste reste servie.
+    # Les fournisseurs de ces variantes servent aussi au détail des prix : un
+    # fournisseur qui livre la matière sans avoir encore de prix doit y figurer.
     techs_par_mat: dict[int, list[str]] = {}
+    fourn_var_par_mat: dict[int, list[dict]] = {}
     try:
         for r in conn.execute(
-            """SELECT matiere_id, libelle_technique FROM mp_variantes
-                WHERE actif = 1 AND COALESCE(libelle_technique, '') <> ''
-                ORDER BY principal DESC, libelle_technique COLLATE NOCASE ASC"""
+            """SELECT v.matiere_id, v.libelle_technique, v.fournisseur_id, f.nom AS fournisseur_nom
+                 FROM mp_variantes v
+                 LEFT JOIN fournisseurs_fsc f ON f.id = v.fournisseur_id
+                WHERE v.actif = 1
+                ORDER BY v.principal DESC, v.libelle_technique COLLATE NOCASE ASC"""
         ).fetchall():
-            l = techs_par_mat.setdefault(int(r["matiere_id"]), [])
-            if r["libelle_technique"] not in l:
-                l.append(r["libelle_technique"])
+            mid_v = int(r["matiere_id"])
+            lib_v = r["libelle_technique"] or ""
+            l = techs_par_mat.setdefault(mid_v, [])
+            if lib_v and lib_v not in l:
+                l.append(lib_v)
+            if r["fournisseur_id"] is not None:
+                fl = fourn_var_par_mat.setdefault(mid_v, [])
+                if all(x["id"] != int(r["fournisseur_id"]) for x in fl):
+                    fl.append({"id": int(r["fournisseur_id"]), "nom": r["fournisseur_nom"] or ""})
     except sqlite3.OperationalError:
         pass
 
@@ -379,11 +427,10 @@ def list_materials(
                 "reference": r["reference"],
                 "designation": r["designation"],
                 "libelles_techniques": techs_par_mat.get(mid, []),
+                "fournisseurs_variantes": fourn_var_par_mat.get(mid, []),
                 "actif": bool(r["actif"]),
                 "type_declinaison": type_declinaison(cat),
-                "unite": "€/m²" if cat in CATEGORIES_LAIZEES else "€/kg"
-                if cat in CATEGORIES_GRAMMAGE or cat in CATEGORIES_AU_KILO
-                else "€/unité",
+                "unite": unite_prix(r["categorie"]),
                 "prix_min": min(prix) if prix else None,
                 "prix_max": max(prix) if prix else None,
                 # Quand ce prix a-t-il été rentré pour la dernière fois — donc
@@ -2226,6 +2273,7 @@ def set_prix_matiere(
     user_id: Optional[int] = None,
     user_name: Optional[str] = None,
     origine: str = "Coûts matières — liste",
+    confirmer: bool = False,
 ) -> dict:
     """Le prix d'achat d'une MATIÈRE, poussé sur toutes ses déclinaisons.
 
@@ -2273,6 +2321,11 @@ def set_prix_matiere(
                                        "cette matière — à régler déclinaison "
                                        "par déclinaison"}
 
+    if not confirmer:
+        ecarts = _ecarts_alignement(conn, matiere_id, cibles, prix)
+        if ecarts:
+            return {"ok": False, "a_confirmer": True, "ecarts": ecarts}
+
     touchees = 0
     for did, fid in cibles:
         res = set_prix(conn, declinaison_id=did, fournisseur_id=fid, prix=float(prix),
@@ -2282,6 +2335,90 @@ def set_prix_matiere(
         touchees += 1
     return {"ok": True, "declinaisons_touchees": touchees,
             "fournisseur_id": next(iter(fournisseurs))}
+
+
+def _ecarts_alignement(
+    conn: sqlite3.Connection,
+    matiere_id: int,
+    cibles: list[tuple[int, Optional[int]]],
+    prix: float,
+) -> list[dict]:
+    """Prix par déclinaison qu'un alignement sur `prix` écraserait.
+
+    Rien à signaler tant que les prix déjà saisis sont tous égaux : on met à
+    jour un prix unique. Dès que deux déclinaisons diffèrent, c'est qu'un prix
+    a été fixé laize par laize, et l'aligner sans le dire le ferait disparaître.
+    Les lignes à zéro ne comptent pas : ce sont des prix à compléter.
+    """
+    libelles = {d["id"]: d["libelle"] for d in libelles_declinaisons(conn, matiere_id)}
+    existants = []
+    for did, fid in cibles:
+        r = conn.execute(
+            """SELECT prix FROM mp_matiere_prix
+                WHERE declinaison_id=? AND COALESCE(fournisseur_id,0)=COALESCE(?,0)""",
+            (did, fid),
+        ).fetchone()
+        if r and _f(r["prix"]) > 0:
+            existants.append((did, _f(r["prix"])))
+    if len({round(p, 6) for _, p in existants}) <= 1:
+        return []
+    return [
+        {"declinaison_id": did, "libelle": libelles.get(did, ""), "prix": p}
+        for did, p in existants
+        if abs(p - float(prix)) > 1e-9
+    ]
+
+
+def set_prix_fournisseur_matiere(
+    conn: sqlite3.Connection,
+    *,
+    matiere_id: int,
+    fournisseur_id: Optional[int],
+    prix: float,
+    confirmer: bool = False,
+    user_id: Optional[int] = None,
+    user_name: Optional[str] = None,
+    origine: str = "Coûts matières — fournisseur",
+) -> dict:
+    """Le prix d'un fournisseur sur toute une matière : toutes SES laizes.
+
+    Ses laizes sont les déclinaisons où il a déjà une ligne de prix ; s'il n'en
+    a aucune, toutes les déclinaisons de la matière. Le prix reste stocké par
+    laize — c'est la granularité qui fait foi — cette saisie ne fait que le
+    déployer. Le fournisseur principal n'est pas changé : un fournisseur
+    secondaire reçoit un prix de comparaison, pas le prix en vigueur.
+
+    Sans `confirmer`, refuse d'écraser des prix par laize qui diffèrent entre
+    eux et renvoie la liste des écarts pour que l'écran la montre.
+    """
+    if prix < 0:
+        return {"ok": False, "reason": "prix négatif interdit"}
+    decls = [d["id"] for d in libelles_declinaisons(conn, matiere_id)]
+    if not decls:
+        return {"ok": False, "reason": "cette matière n'a aucune déclinaison — "
+                                       "créez-en une dans MyStock"}
+    siennes = {
+        int(r["declinaison_id"])
+        for r in conn.execute(
+            """SELECT declinaison_id FROM mp_matiere_prix
+                WHERE matiere_id=? AND COALESCE(fournisseur_id,0)=COALESCE(?,0)
+                  AND declinaison_id IS NOT NULL""",
+            (int(matiere_id), fournisseur_id),
+        ).fetchall()
+    }
+    cibles = [d for d in decls if d in siennes] or decls
+
+    if not confirmer:
+        ecarts = _ecarts_alignement(conn, matiere_id, [(d, fournisseur_id) for d in cibles], prix)
+        if ecarts:
+            return {"ok": False, "a_confirmer": True, "ecarts": ecarts}
+
+    for did in cibles:
+        res = set_prix(conn, declinaison_id=did, fournisseur_id=fournisseur_id, prix=float(prix),
+                       user_id=user_id, user_name=user_name, origine=origine)
+        if not res.get("ok"):
+            return res
+    return {"ok": True, "declinaisons_touchees": len(cibles)}
 
 
 def set_fournisseur(

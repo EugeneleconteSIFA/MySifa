@@ -7,6 +7,7 @@ matières, comme la fiche matière elle-même.
 from fastapi import APIRouter, HTTPException, Request
 
 from app.core.database import get_db
+from config import ROLES_PRICING_WRITE
 from app.routers.stock import require_stock, require_stock_matieres_admin
 from app.services import mp_variantes as mv
 from app.services.audit_service import log_action
@@ -26,7 +27,7 @@ def _erreur(e: Exception):
 
 @router.get("/api/stock/matieres/{matiere_id}/variantes")
 def lister_variantes(matiere_id: int, request: Request, inactives: int = 0):
-    require_stock(request)
+    user = require_stock(request)
     with get_db() as conn:
         try:
             out = mv.lister(conn, matiere_id, avec_inactives=bool(inactives))
@@ -37,6 +38,8 @@ def lister_variantes(matiere_id: int, request: Request, inactives: int = 0):
             {"id": r["id"], "nom": r["nom"]}
             for r in conn.execute("SELECT id, nom FROM fournisseurs_fsc ORDER BY nom COLLATE NOCASE").fetchall()
         ]
+    # Les prix s'écrivent par les endpoints Coûts matières, réservés aux mêmes rôles.
+    out["peut_modifier_prix"] = user.get("role") in ROLES_PRICING_WRITE
     return out
 
 

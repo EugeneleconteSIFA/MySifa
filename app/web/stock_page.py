@@ -1447,6 +1447,9 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-var-type{font-weight:600;color:var(--text);line-height:1.4}
 .mp-var-row.inactive td{opacity:.55}
 .mp-var-ok{color:var(--success);font-weight:700}
+.mp-prix-cell{display:inline-flex;align-items:center;gap:4px;justify-content:flex-end}
+.mp-prix-inp{width:90px}
+.mp-prix-grille td.mp-prix-vigueur .mp-prix-inp{border-color:var(--accent)}
 .mp-var-radio{flex-shrink:0;width:18px;height:18px;margin-top:2px;border:2px solid var(--border);border-radius:50%;background:var(--bg);padding:0;cursor:pointer}
 .mp-var-radio:hover{border-color:var(--accent)}
 .mp-var-radio.on{border-color:var(--accent);background:radial-gradient(circle,var(--accent) 0 45%,var(--bg) 50%)}
@@ -11259,6 +11262,8 @@ function buildMpVariantesTable(m) {
   const lignesVues = lignesRvgi.filter(l => mpFiltreLigne(l, 'mpVarFiltre'));
   if (varGrain === 'laize') {
     card.appendChild(buildMpVarParLaize(m, lignesVues));
+    const grille = buildMpPrixParLaize(m, data);
+    if (grille) card.appendChild(grille);
     return card;
   }
   const totVar = mpTotalRvgi(lignesVues);
@@ -11310,7 +11315,7 @@ function buildMpVariantesTable(m) {
           el('strong', null, mpFmtStockRvgi(totG))) : null,
       )));
     g.rows.sort((a, b) => (b.principal - a.principal) || (b.actif - a.actif));
-    g.rows.forEach(v => {
+    g.rows.forEach((v, iv) => {
       const radio = el('button', {
         cls: 'mp-var-radio' + (v.principal ? ' on' : ''),
         type: 'button',
@@ -11340,9 +11345,14 @@ function buildMpVariantesTable(m) {
           v.commandes_rvgi ? el('div', { cls: 'mp-var-meta' },
             v.commandes_rvgi + ' commande' + (v.commandes_rvgi > 1 ? 's' : '')) : null),
         el('td', { cls: 'num' }, mpFmtStockRvgi(stockArticle(v))),
-        el('td', { cls: 'num', attrs: { title: v.declinaisons_avec_prix
-          ? 'Prix renseigné dans Coûts matières' : 'Aucun prix dans Coûts matières' } },
-          v.declinaisons_avec_prix ? el('span', { cls: 'mp-var-ok' }, '✓') : el('span', { cls: 'mp-var-meta' }, '—')),
+        // Le prix est celui du fournisseur, pas de l'article : une seule
+        // cellule pour tout le groupe.
+        iv === 0
+          ? el('td', { cls: 'num', attrs: { rowspan: String(g.rows.length) } },
+              (data.peut_modifier_prix && g.rows.some(x => x.actif))
+                ? mpPrixInput(m, data, g.id, g.nom, null)
+                : mpPrixTexte(data, g.id, null))
+          : null,
         el('td', { cls: 'c-act' }, canEdit
           ? el('div', { cls: 'mp-var-actions' },
               v.actif ? el('button', {
@@ -11389,6 +11399,121 @@ function buildMpVariantesTable(m) {
     }, S.selMatiere.varInactives ? 'Masquer les désactivés' : 'Voir les désactivés'),
   ));
   return card;
+}
+
+// ── Prix d'achat par fournisseur et par laize ─────────────────────
+// Le prix est stocké par laize et par fournisseur (Coûts matières). Saisi au
+// niveau fournisseur, il se déploie sur toutes ses laizes ; saisi dans la vue
+// Fournisseur × laize, il ne touche que la laize. Seul le principal fait foi
+// pour les devis : les autres sont des prix de comparaison.
+function mpPrixLignes(data, fid) {
+  const p = data && data.prix;
+  if (!p || !Array.isArray(p.lignes)) return [];
+  return p.lignes.filter(l => (l.fournisseur_id || 0) === (fid || 0));
+}
+
+function mpPrixFourchette(vals) {
+  const v = vals.filter(x => x > 0);
+  if (!v.length) return null;
+  const mn = Math.min(...v), mx = Math.max(...v);
+  const f = (x) => x.toLocaleString('fr-FR', { maximumFractionDigits: 4 });
+  return Math.abs(mx - mn) < 1e-9 ? { unique: mn, txt: f(mn) } : { unique: null, txt: f(mn) + ' à ' + f(mx) };
+}
+
+async function mpEcrirePrix(m, path, body) {
+  const envoyer = (b) => api(path, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b),
+  });
+  let r = await envoyer(body);
+  if (r && r.a_confirmer) {
+    const det = (r.ecarts || []).map(e => e.libelle + ' : ' + e.prix).join(' ; ');
+    if (!confirm((r.ecarts || []).length + ' laize(s) ont un prix propre (' + det + ').\n\n'
+      + 'Les aligner sur ' + body.prix + ' ?')) return false;
+    r = await envoyer(Object.assign({}, body, { confirmer: true }));
+  }
+  showToast('Prix enregistré.', 'success');
+  mpVarSetData(await mpFetchVariantes(m.id, S.selMatiere && S.selMatiere.varInactives));
+  // Le prix en vigueur a pu changer : valorisation de la fiche aussi.
+  await refreshSelMatiere();
+  return true;
+}
+
+// Champ de prix. `declId` absent : prix du fournisseur sur toutes ses laizes.
+function mpPrixInput(m, data, fid, nom, declId) {
+  const lignes = mpPrixLignes(data, fid).filter(l => !declId || l.declinaison_id === declId);
+  const fr = mpPrixFourchette(lignes.map(l => Number(l.prix || 0)));
+  const unite = (data.prix && data.prix.unite) || '';
+  const inp = el('input', { cls: 'mp-cond-inp mp-prix-inp', attrs: {
+    type: 'number', min: '0', step: '0.001',
+    'aria-label': 'Prix d\'achat chez ' + nom + (declId ? '' : ', toutes laizes'),
+    title: (declId ? 'Prix sur cette laize' : 'Appliqué à toutes les laizes de ' + nom) + ' (' + unite + ')',
+  } });
+  inp.value = fr && fr.unique != null ? String(fr.unique) : '';
+  inp.placeholder = fr ? fr.txt : 'à compléter';
+  const initial = inp.value;
+  inp.addEventListener('change', async () => {
+    const raw = String(inp.value || '').replace(',', '.').trim();
+    if (raw === '' || raw === initial) { inp.value = initial; return; }
+    const prix = parseFloat(raw);
+    if (isNaN(prix) || prix < 0) { showToast('Prix invalide — valeur positive attendue.', 'error'); inp.value = initial; return; }
+    try {
+      const ok = declId
+        ? await mpEcrirePrix(m, '/api/pricing/mystock/prix', { declinaison_id: declId, fournisseur_id: fid || null, prix })
+        : await mpEcrirePrix(m, '/api/pricing/mystock/prix-fournisseur', { matiere_id: m.id, fournisseur_id: fid || null, prix });
+      if (!ok) inp.value = initial;
+    } catch (err) {
+      showToast(err.message, 'error');
+      inp.value = initial;
+    }
+  });
+  return el('span', { cls: 'mp-prix-cell' }, inp, el('span', { cls: 'mp-var-meta' }, unite));
+}
+
+// Lecture seule : la valeur ou la fourchette, sinon un tiret.
+function mpPrixTexte(data, fid, declId) {
+  const lignes = mpPrixLignes(data, fid).filter(l => !declId || l.declinaison_id === declId);
+  const fr = mpPrixFourchette(lignes.map(l => Number(l.prix || 0)));
+  return fr ? fr.txt + ' ' + ((data.prix && data.prix.unite) || '') : '—';
+}
+
+// Grille laize × fournisseur, sous le stock de la vue Fournisseur × laize.
+function buildMpPrixParLaize(m, data) {
+  const p = data && data.prix;
+  const decls = p && Array.isArray(p.declinaisons) ? p.declinaisons : [];
+  if (!decls.length) return null;
+  const fourns = new Map();
+  (data.variantes || []).filter(v => v.actif).forEach(v => {
+    if (!fourns.has(v.fournisseur_id || 0)) fourns.set(v.fournisseur_id || 0, { id: v.fournisseur_id || 0, nom: v.fournisseur_nom || 'Fournisseur non identifié', principal: false });
+    if (v.principal) fourns.get(v.fournisseur_id || 0).principal = true;
+  });
+  (p.lignes || []).forEach(l => {
+    if (!fourns.has(l.fournisseur_id || 0)) fourns.set(l.fournisseur_id || 0, { id: l.fournisseur_id || 0, nom: l.fournisseur_id ? 'Fournisseur ' + l.fournisseur_id : 'Sans fournisseur', principal: false });
+  });
+  const cols = [...fourns.values()].filter(f => !S.mpVarFiltreFourn || String(f.id) === S.mpVarFiltreFourn)
+    .sort((a, b) => (b.principal - a.principal) || a.nom.localeCompare(b.nom, 'fr'));
+  if (!cols.length) return null;
+  const peut = !!data.peut_modifier_prix;
+  const tbl = el('table', { cls: 'mp-var-table mp-prix-grille' });
+  tbl.appendChild(el('thead', null, el('tr', null,
+    el('th', null, 'Laize'),
+    ...cols.map(f => el('th', { cls: 'num' }, f.nom, f.principal ? el('span', { cls: 'mp-var-badge' }, 'Principal') : null)))));
+  const tb = el('tbody');
+  decls.filter(d => !S.mpVarFiltreLaize || String(Math.round(d.laize_mm || 0)) === S.mpVarFiltreLaize).forEach(d => {
+    tb.appendChild(el('tr', null,
+      el('td', null, el('strong', null, d.libelle)),
+      ...cols.map(f => {
+        const l = mpPrixLignes(data, f.id).find(x => x.declinaison_id === d.id);
+        return el('td', { cls: 'num' + (l && l.principal ? ' mp-prix-vigueur' : ''),
+          attrs: l && l.principal ? { title: 'Prix en vigueur sur cette laize' } : {} },
+          peut ? mpPrixInput(m, data, f.id, f.nom, d.id) : mpPrixTexte(data, f.id, d.id));
+      })));
+  });
+  tbl.appendChild(tb);
+  return el('div', { cls: 'mp-prix-bloc' },
+    el('div', { cls: 'mp-empl-card-title', style: 'margin:16px 0 4px' }, 'Prix d\'achat par laize'),
+    el('div', { cls: 'mp-hint', style: 'margin:0 0 8px' },
+      'Un prix par fournisseur et par laize. Le prix en vigueur (encadré) est celui du principal ; il sert aux devis et aux coûts produits.'),
+    el('div', { cls: 'mp-var-scroll' }, tbl));
 }
 
 // Une section par laize : le stock MySifa de la laize en tête, puis une ligne

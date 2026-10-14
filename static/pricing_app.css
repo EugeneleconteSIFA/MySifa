@@ -1037,6 +1037,16 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 .msl-libcell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .msl-lib{color:var(--text);font-weight:600;text-decoration:none}
 .msl-lib:hover{color:var(--accent);text-decoration:underline}
+.msl-chev{border:0;background:none;color:var(--muted);cursor:pointer;padding:2px 6px 2px 0;font-size:12px;
+  display:inline-block;transition:transform .12s,color .12s}
+.msl-chev:hover{color:var(--accent)}
+.msl-chev.on:not(.msl-chev-laize){transform:rotate(90deg)}
+.msl-chev-laize{font-size:12px;padding:2px 6px}
+.msl-chev-laize.on{color:var(--accent)}
+.msl-sous td{background:color-mix(in srgb,var(--accent) 4%,var(--card));font-size:12.5px;padding-top:6px;padding-bottom:6px}
+.msl-sous-nom{padding-left:24px!important}
+.msl-sous-laize .msl-sous-nom{padding-left:44px!important;color:var(--text2)}
+.msl-sous-cout{font-variant-numeric:tabular-nums;color:var(--muted)}
 .msl-tech{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* ─── Fiche matière en une colonne (oct. 2026) ───

@@ -1663,7 +1663,44 @@ def set_mystock_prix_matiere(request: Request, body: dict = Body(...)):
             prix=prix,
             user_id=user.get("id"),
             user_name=user.get("nom"),
+            confirmer=bool(body.get("confirmer")),
         )
+        if res.get("a_confirmer"):
+            return res
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Modification refusée"))
+        conn.commit()
+    return res
+
+
+@router.post("/api/pricing/mystock/prix-fournisseur")
+def set_mystock_prix_fournisseur(request: Request, body: dict = Body(...)):
+    """Fixe le prix d'un fournisseur sur toutes ses laizes d'une matière.
+
+    Renvoie `a_confirmer` avec la liste des écarts, sans rien écrire, quand des
+    prix par laize différents seraient écrasés ; l'écran repose alors la même
+    requête avec `confirmer`.
+    """
+    user = _require_write(request)
+    try:
+        prix = float(body.get("prix"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="prix invalide") from None
+    matiere_id = _opt_int(body, "matiere_id")
+    if not matiere_id:
+        raise HTTPException(status_code=400, detail="matiere_id manquant")
+    with get_db() as conn:
+        res = mystock_prix.set_prix_fournisseur_matiere(
+            conn,
+            matiere_id=matiere_id,
+            fournisseur_id=_opt_int(body, "fournisseur_id"),
+            prix=prix,
+            confirmer=bool(body.get("confirmer")),
+            user_id=user.get("id"),
+            user_name=user.get("nom"),
+        )
+        if res.get("a_confirmer"):
+            return res
         if not res.get("ok"):
             raise HTTPException(status_code=400, detail=res.get("reason", "Modification refusée"))
         conn.commit()
