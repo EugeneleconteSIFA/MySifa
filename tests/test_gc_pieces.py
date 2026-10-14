@@ -539,6 +539,13 @@ class Chaine(unittest.TestCase):
         lc = [x for x in pieces.carnet(c, ["commande"]) if x["piece_id"] == co][0]
         self.assertEqual(lc["aval_numeros"], pieces.charger(c, bl)["numero"])
 
+    def test_prix_absent_tarif(self):
+        c = self.conn
+        co = pieces.creer(c, "commande", 1)
+        pieces.enregistrer(c, co, None, [{"article_id": 1, "quantite_milli": 60_000_000}, {"article_id": 1, "quantite_milli": 1000, "prix_cents": 0}])
+        ls = pieces.charger(c, co)["lignes"]
+        self.assertEqual([l["prix_cents"] for l in ls], [1100, 0])
+
     def test_reception_par_laize(self):
         from app.services.gc import fichiers
         c = self.conn

@@ -345,6 +345,14 @@ def _convertir(nom: str, typ: str, v: Any):
             return [int(x) for x in vals]
         except (TypeError, ValueError):
             raise ActionInvalide(f"« {nom} » : liste d'identifiants entiers attendue.")
+    if typ == "objets":
+        # Liste d'objets (lignes d'une pièce…) : la forme est contrôlée par
+        # l'action qui la déclare (`construire`, `detailler`).
+        if not isinstance(v, list) or not all(isinstance(x, dict) for x in v):
+            raise ActionInvalide(f"« {nom} » : liste d'objets attendue.")
+        if len(json.dumps(v)) > 20000:
+            raise ActionInvalide(f"« {nom} » : liste trop longue.")
+        return v
     if typ.startswith("enum:"):
         permis = typ[5:].split(",")
         s = str(v).strip().lower() if not isinstance(v, bool) else ("1" if v else "0")
@@ -415,8 +423,12 @@ def preparer(user: dict, cle: str, params: dict, conn=None) -> dict:
     from database import get_db
     details = []
     with (get_db() if conn is None else _Nul(conn)) as c:
+        if a.get("detailler"):
+            details.extend(a["detailler"](c, valeurs))
         for nom, v in valeurs.items():
             lib = a["params"][nom][2]
+            if a.get("detailler") and (a["params"][nom][0] in ("ids", "objets") or nom.endswith("_id")):
+                continue
             if nom in _RESOLVEURS:
                 details.append([lib.split(" (")[0], _libelle_id(c, nom, v)])
             elif a["params"][nom][0] == "ids":
@@ -433,6 +445,8 @@ def preparer(user: dict, cle: str, params: dict, conn=None) -> dict:
             chemin = chemin.replace("{" + nom + "}", str(int(v)))
         else:
             corps[nom] = v
+    if a.get("construire"):
+        corps = a["construire"](corps)
     return {"cle": cle, "libelle": a["libelle"], "module": a["module"], "methode": a["methode"],
             "chemin": chemin, "corps": corps, "details": details, "lien": a.get("lien", "")}
 
@@ -593,3 +607,13 @@ async def executer(request, action: dict) -> dict:
         msg = f"Identifiant {nid}." if nid else ""
     return {"ok": ok, "statut_http": r.status_code, "message": msg, "lien": lien if ok else "",
             "reponse": data if isinstance(data, (dict, list)) else None}
+
+
+# ── Nouvel ERP ───────────────────────────────────────────────────────────
+# Ses actions et lectures vivent dans leur propre module, au même format.
+from app.services import agent_actions_erp as _erp  # noqa: E402
+
+CATALOGUE.extend(_erp.ACTIONS)
+_PAR_CLE.update({a["cle"]: a for a in _erp.ACTIONS})
+LECTURES.extend(_erp.LECTURES)
+_LECTURES.update({l["cle"]: l for l in _erp.LECTURES})

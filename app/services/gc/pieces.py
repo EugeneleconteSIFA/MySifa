@@ -590,6 +590,12 @@ def enregistrer(conn, piece_id: int, entete: dict | None, lignes: list[dict] | N
                     (piece_id, i, libelle, str(l.get("notes") or "")))
                 continue
             q = _entier(l.get("quantite_milli"), f"Ligne {i} : quantité", 1)
+            if l.get("prix_cents") is None and not l.get("ligne_amont_id"):
+                # Prix absent (ligne venue d'un import ou de l'assistant) : le
+                # tarif de l'ERP, comme l'écran le propose à la saisie.
+                tarif = prix(conn, art["id"], p["tiers_id"], q, TYPES[p["type"]]["sens"],
+                             laize_dmm=l.get("laize_dmm") or None)
+                l = dict(l, prix_cents=tarif["prix_cents"], base_prix=l.get("base_prix") or tarif["base_prix"])
             prix_c = _entier(l.get("prix_cents") or 0, f"Ligne {i} : prix", 0)
             base = _entier(l.get("base_prix") or art["base_prix"] or 1, f"Ligne {i} : base de prix", 1)
             rem = _entier(l.get("remise_bp") or 0, f"Ligne {i} : remise", 0)

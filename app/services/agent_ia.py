@@ -215,6 +215,8 @@ def prompt_systeme(user: dict, page: Optional[dict]) -> list[dict]:
         f"Page ouverte : {str(page.get('titre') or '')[:120]} — {str(page.get('url') or '')[:200]}\n"
         f"Bases lisibles : {', '.join(_bases_autorisees(user.get('role', '')))}"
     )
+    from app.services.agent_actions_erp import consigne_page
+    variable += consigne_page(page)
     return [
         {"type": "text", "text": stable, "cache_control": {"type": "ephemeral"}},
         {"type": "text", "text": variable},

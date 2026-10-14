@@ -173,3 +173,9 @@
 .erp-g-choix { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 16px;
   max-height: 60vh; overflow: auto; margin-top: 10px; }
 @media (max-width: 600px) { .erp-g-choix { grid-template-columns: 1fr; } }
+
+/* Ligne Total toujours en bas de la grille, même sans ligne ou en défilant :
+   le corps occupe la hauteur libre, le pied reste collé au bas de la zone. */
+.erp-g-defil { display: flex; flex-direction: column; align-items: flex-start; }
+.erp-g-corps { flex: 1 0 auto; }
+.erp-g-pied { position: sticky; bottom: 0; z-index: 3; margin-top: auto; }
