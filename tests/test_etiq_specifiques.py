@@ -147,7 +147,15 @@ ia._client = lambda: types.SimpleNamespace(messages=types.SimpleNamespace(
     create=lambda **kw: (appels.append(kw), _Rep())[1]))
 vide = {"elements": [], "variables": []}
 r = ia.proposer("x", 100, 50, 203, vide)
-check("sans choix : modèle par défaut", appels[-1]["model"], ia.ETIQ_IA_MODELE)
+check("sans choix : modèle par défaut", appels[-1]["model"], ia.choisir_modele(None)["id"])
+check("seuls Sonnet et Haiku proposés", [m["id"] for m in ia.etiq_ia_modeles()],
+      ["claude-sonnet-5-5", "claude-haiku-5-5"])
+for retire in ("claude-opus-5-5", "claude-fable-5-1"):
+    try:
+        ia.choisir_modele(retire)
+        check(f"{retire} refusé", False)
+    except es.EtiquetteInvalide:
+        check(f"{retire} refusé", True)
 ia.proposer("x", 100, 50, 203, vide, modele="claude-haiku-5-5")
 check("modèle choisi transmis", appels[-1]["model"], "claude-haiku-5-5")
 check("pas de repli serveur pour Haiku", "fallbacks" in appels[-1]["extra_body"], False)

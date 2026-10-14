@@ -171,7 +171,9 @@ def bootstrap(request: Request):
             "symbologies": es.SYMBOLOGIES, "types_variable": es.TYPES_VARIABLE,
             "dpi": list(es.DPI_ADMIS), "statuts_demande": STATUTS_DEMANDE,
             "quantite_max": es.QUANTITE_MAX,
-            "modeles_ia": etiq_ia_modeles(), "modele_ia_defaut": ETIQ_IA_MODELE,
+            "modeles_ia": etiq_ia_modeles(),
+            "modele_ia_defaut": ETIQ_IA_MODELE if any(m["id"] == ETIQ_IA_MODELE for m in etiq_ia_modeles())
+            else etiq_ia_modeles()[0]["id"],
         },
     }
 

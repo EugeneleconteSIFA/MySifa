@@ -155,9 +155,12 @@ def _blocs_pieces(pieces: list[dict]) -> list[dict]:
 def choisir_modele(modele: Optional[str]) -> dict:
     """Le modèle demandé s'il est dans la liste de config.py, sinon le défaut.
     Un identifiant inconnu est refusé plutôt que remplacé en silence."""
-    modeles = {m["id"]: m for m in etiq_ia_modeles()}
+    liste = etiq_ia_modeles()
+    modeles = {m["id"]: m for m in liste}
     if not modele:
-        return modeles.get(ETIQ_IA_MODELE) or {"id": ETIQ_IA_MODELE, "libelle": ETIQ_IA_MODELE, "repli": False}
+        # Un défaut (.env) qui n'est plus dans la liste retombe sur le premier
+        # modèle proposé, plutôt que d'appeler un modèle retiré.
+        return modeles.get(ETIQ_IA_MODELE) or liste[0]
     if modele not in modeles:
         raise EtiquetteInvalide(f"Modèle « {modele} » non proposé — choisir dans la liste.")
     return modeles[modele]
