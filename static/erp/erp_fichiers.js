@@ -29,6 +29,18 @@
         ];
         if (role === 'client') cols.push({cle: 'encours_cents', libelle: 'Encours', type: 'montant', largeur: 120, total: true});
         cols.push({cle: 'etat', libelle: 'État', type: 'statut', largeur: 100});
+        // Colonnes du fichier RVGI : visibles d'emblée pour les fournisseurs,
+        // proposées dans « Colonnes » pour les clients.
+        var four = role === 'fournisseur';
+        [{cle: 'adresse1', libelle: 'Adresse 1', largeur: 220}, {cle: 'adresse2', libelle: 'Adresse 2', largeur: 180},
+         {cle: 'code_postal', libelle: 'C.P.', largeur: 80}, {cle: 'pays', libelle: 'C. pays', largeur: 70},
+         {cle: 'siret', libelle: 'SIRET', largeur: 150}, {cle: 'rcs', libelle: 'RCS', largeur: 120},
+         {cle: 'tva_intra', libelle: 'N° TVA', largeur: 150}, {cle: 'ean', libelle: 'EAN', largeur: 130}, {cle: 'nif', libelle: 'NIF', largeur: 110},
+        ].forEach(function (c) { c.masquee = !four; cols.push(c); });
+        [{cle: 'nom_court', libelle: 'Code AN', largeur: 130}, {cle: 'fax', libelle: 'Fax', largeur: 130},
+         {cle: 'mode_paiement', libelle: 'Mode de paiement', largeur: 120}, {cle: 'compte_auxiliaire', libelle: 'Compte', largeur: 110},
+         {cle: 'famille', libelle: 'Famille', largeur: 120}, {cle: 'representant', libelle: 'Représentant', largeur: 150},
+        ].forEach(function (c) { c.masquee = true; cols.push(c); });
         l.forEach(function (t) { t.etat = !t.actif ? 'inactif' : t.bloque ? 'bloque' : 'actif'; });
         var g = ERP.grille(zone, {
           nom: 'tiers.' + role, cle: 'id', colonnes: cols, lignes: l,
@@ -130,7 +142,8 @@
         T = {est_client: role === 'client' ? 1 : 0, est_fournisseur: role === 'fournisseur' ? 1 : 0, est_prospect: role === 'prospect' ? 1 : 0,
              actif: 1, raison_sociale: '',
              etat: 'normal', remise_bp: 0, facturation_auto: 'par_bl', en_compte: 1, langue: 'fr', designation_docs: 'interne',
-             adresses: [{type: 'principale', libelle: 'Siège', pays: 'FR', par_defaut: 1}], contacts: [], banques: [], pieces: [], tarifs: []};
+             adresses: [{type: 'principale', libelle: 'Siège', pays: 'FR', par_defaut: 1}], contacts: [], banques: [], pieces: [], tarifs: [],
+             nb_ex_aof: 1, nb_ex_cde: 1, envoi_auto_aof: 'non', envoi_auto_cde: 'email', traite: 'sans'};
       } else {
         T = await ERP.api('/api/erp2/tiers/' + parseInt(ctx.param, 10));
         T.etat = T.etat || (T.bloque ? 'bloque' : 'normal');
@@ -150,7 +163,8 @@
       'marge_brute_bp', 'marge_nette_bp', 'notre_no_fournisseur', 'commission_bp', 'est_prospect', 'famille', 'devise',
       'texte_devis', 'texte_arc', 'texte_bl', 'texte_facture',
       'instr_livraison_interne', 'instr_livraison_externe', 'instr_stockage_interne', 'instr_stockage_externe',
-      'instr_facturation_interne', 'instr_facturation_externe'];
+      'instr_facturation_interne', 'instr_facturation_externe', 'texte_aof', 'texte_cde', 'nb_ex_aof', 'nb_ex_cde',
+      'envoi_auto_aof', 'envoi_auto_cde', 'traite', 'journal'];
 
     async function enregistrer() {
       var champs = {};
@@ -197,10 +211,13 @@
         {cle: 'civilite', libelle: 'Civ.', type: 'choix', options: [{v: '', l: '—'}, {v: 'M.', l: 'M.'}, {v: 'Mme', l: 'Mme'}], largeur: '80px'},
         {cle: 'nom', libelle: 'Nom'}, {cle: 'fonction', libelle: 'Fonction'}, {cle: 'telephone', libelle: 'Téléphone'},
         {cle: 'gsm', libelle: 'GSM'}, {cle: 'email', libelle: 'Email'},
+      ].concat(role === 'fournisseur' ? [
+        {cle: 'envoi_aof', libelle: 'Appel d\'offre', type: 'case'}, {cle: 'envoi_cde', libelle: 'Commande', type: 'case'},
+      ] : [
         {cle: 'envoi_devis', libelle: 'Devis', type: 'case'}, {cle: 'envoi_arc', libelle: 'ARC', type: 'case'},
         {cle: 'envoi_bl', libelle: 'BL', type: 'case'}, {cle: 'envoi_facture', libelle: 'Facture', type: 'case'},
         {cle: 'envoi_relance', libelle: 'Relance', type: 'case'},
-      ], {}, marquer);
+      ]), {}, marquer);
       return ERP.carte('Interlocuteurs', h('div', null,
         h('p', {className: 'erp-aide', text: 'Les cases cochées désignent les destinataires automatiques de chaque document.'}), t.el),
         ERP.bouton('+ Interlocuteur', t.ajouter, {petit: true}));
@@ -229,7 +246,31 @@
       return ERP.carte('Banques', t.el, ERP.bouton('+ Banque', t.ajouter, {petit: true}));
     }
 
+    // Fiche fournisseur RVGI : index d'analyses et livraison, spécificités
+    // (texte automatique, exemplaires, expédition par défaut de l'appel
+    // d'offre et de la commande).
+    function ongletCommandesFournisseur() {
+      var M = ERP.M;
+      var envoi = [{v: 'non', l: 'Non'}, {v: 'email', l: 'E-mail'}];
+      return ERP.carte(null, h('div', {className: 'erp-form'},
+        section('Index d\'analyses et livraison'),
+        c('Catégorie 1', 'categorie1'), c('Catégorie 2', 'categorie2'), c('Catégorie 3', 'categorie3'),
+        sel('Mode de livraison', 'transporteur_id', (M.transporteurs || []).map(function (x) { return {v: x.id, l: x.nom}; }), {avecVide: 'Par nos soins', nombre: true}),
+        c('Délai de livraison (jours)', 'jours_expedition', 'entier'),
+        section('Appels d\'offre'),
+        sel('Texte automatique', 'texte_aof', ERP.optionsRef('textes'), {avecVide: '—'}),
+        c('Exemplaires', 'nb_ex_aof', 'entier'),
+        sel('Expédition par défaut', 'envoi_auto_aof', envoi),
+        section('Commandes'),
+        sel('Texte automatique', 'texte_cde', ERP.optionsRef('textes'), {avecVide: '—'}),
+        c('Exemplaires', 'nb_ex_cde', 'entier'),
+        sel('Expédition par défaut', 'envoi_auto_cde', envoi),
+        section('Documents'),
+        sel('Langue', 'langue', [{v: 'fr', l: 'Français'}, {v: 'en', l: 'Anglais'}, {v: 'de', l: 'Allemand'}])));
+    }
+
     function ongletCommercial() {
+      if (role === 'fournisseur') return ongletCommandesFournisseur();
       var M = ERP.M;
       var users = (M.utilisateurs || []).map(function (u) { return {v: u.id, l: u.nom}; });
       return ERP.carte(null, h('div', {className: 'erp-form'},
@@ -263,18 +304,21 @@
         sel('Conditions de paiement', 'condition_paiement', ERP.optionsRef('conditions_paiement'), {avecVide: '—'}),
         sel('Mode de paiement', 'mode_paiement', ERP.optionsRef('modes_paiement'), {avecVide: '—'}),
         sel('Devise', 'devise', ERP.optionsRef('devises')),
-        sel('Facturation', 'facturation_auto', opt(ERP.M.facturation_auto)),
-        c('Email de facturation', 'email_facturation', 'texte', {large: true}),
+        role === 'fournisseur'
+          ? sel('Traite', 'traite', [{v: 'sans', l: 'Sans'}, {v: 'lcr', l: 'LCR'}, {v: 'billet', l: 'Billet à ordre'}])
+          : sel('Facturation', 'facturation_auto', opt(ERP.M.facturation_auto)),
+        role === 'fournisseur' ? null : c('Email de facturation', 'email_facturation', 'texte', {large: true}),
         section('Accords commerciaux'),
         c('Remise', 'remise_bp', 'pct'), c('Escompte', 'escompte_bp', 'pct'),
         c('Encours autorisé', 'encours_max_cents', 'euros'),
-        h('div', {className: 'erp-champ plein erp-cases'},
+        role === 'fournisseur' ? c('Franco de port pour', 'franco_cents', 'euros') : h('div', {className: 'erp-champ plein erp-cases'},
           ERP.case(T, 'en_compte', 'En compte', {change: marquer}),
           ERP.case(T, 'factor', 'Factor (affacturage)', {change: marquer})),
         section('Comptabilité'),
         sel('Position fiscale', 'tva_code', ERP.optionsRef('tva'), {avecVide: 'Soumis à TVA (taux de l\'article)'}),
         c('Compte de tiers', 'compte_auxiliaire', 'texte', {placeholder: T.code || 'code du tiers'}),
-        c('Notre n° chez ce tiers', 'notre_no_fournisseur')));
+        role === 'fournisseur' ? c('Journal', 'journal', 'texte', {placeholder: 'journal d\'achats des réglages'}) : null,
+        c(role === 'fournisseur' ? 'Notre n° client chez lui' : 'Notre n° chez ce tiers', 'notre_no_fournisseur')));
     }
 
     // RVGI : onglets Livraison, Stockage, Facturation — un commentaire interne
@@ -285,6 +329,12 @@
           c('Interne', 'instr_' + cle + '_interne', 'zone', {plein: true, aide: 'Affiché en tête ' + ou + '.'}),
           c('Externe', 'instr_' + cle + '_externe', 'zone', {plein: true, aide: 'Imprimé sur ' + ou.replace(/^d(u|es) /, function (m, x) { return x === 'u' ? 'le ' : 'les '; }) + '.'})];
       };
+      if (role === 'fournisseur') {
+        return ERP.carte(null, h('div', {className: 'erp-form'},
+          bloc('Instructions de réception', 'livraison', 'des réceptions')
+            .concat(bloc('Instructions de stockage', 'stockage', 'des commandes fournisseur'))
+            .concat(bloc('Instructions de facturation', 'facturation', 'des factures fournisseur'))));
+      }
       return ERP.carte(null, h('div', {className: 'erp-form'},
         bloc('Instructions de livraison', 'livraison', "des bons de livraison et de l'ordre d'expédition")
           .concat(bloc('Instructions de stockage', 'stockage', 'des commandes'))
@@ -332,7 +382,13 @@
       }
       ctx.actions.appendChild(ERP.bouton('Enregistrer', enregistrer, {accent: true, titre: 'Ctrl+S'}));
       corps.textContent = '';
-      var onglets = ONGLETS_TIERS.filter(function (o) { return !(nouveau && (o.cle === 'pieces' || o.cle === 'cahier')); });
+      var four = role === 'fournisseur';
+      var onglets = ONGLETS_TIERS.filter(function (o) { return !(nouveau && (o.cle === 'pieces' || o.cle === 'cahier')); })
+        .map(function (o) {
+          if (!four) return o;
+          var lib = {commercial: 'Commandes et livraison', instructions: 'Réception, stockage, facturation'}[o.cle];
+          return lib ? {cle: o.cle, libelle: lib} : o;
+        });
       corps.appendChild(h('div', {className: 'erp-onglets'}, onglets.map(function (o) {
         return h('button', {type: 'button', className: 'erp-onglet' + (o.cle === onglet ? ' actif' : ''), text: o.libelle,
           onclick: function () {

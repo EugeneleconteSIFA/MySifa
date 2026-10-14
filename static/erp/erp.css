@@ -168,3 +168,8 @@
 @media (max-width: 860px) { .erp-main.plein { height: calc(100vh - 52px); } }
 
 .erp-demo-info { margin: 0 0 10px; color: var(--text2); }
+
+/* Choix des colonnes d'une grille */
+.erp-g-choix { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 16px;
+  max-height: 60vh; overflow: auto; margin-top: 10px; }
+@media (max-width: 600px) { .erp-g-choix { grid-template-columns: 1fr; } }

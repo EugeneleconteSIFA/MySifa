@@ -361,11 +361,24 @@ def carnet(conn, types: list[str]) -> list[dict]:
                    p.date_ouverture, p.date_livraison AS piece_date_livraison, p.date_expedition AS piece_date_expedition,
                    t.id AS tiers_id, t.code AS tiers_code, t.raison_sociale AS tiers_nom,
                    a.code AS article_code, a.format_l_dmm, a.format_a_dmm, a.conditionnement,
+                   a.code3, a.designation AS article_designation, a.famille, a.sous_famille,
+                   l.prix_cents, l.laize_dmm, l.notes AS notes_ligne, l.ligne_amont_id, l.unite,
+                   p.cree_par AS operateur, p.valide_par, p.remise_bp AS remise_piece_bp, p.depot, p.notes AS notes_piece,
+                   (SELECT nom FROM users u WHERE u.id=t.adv_id) AS adv,
+                   ad.raison_sociale AS liv_raison_sociale, ad.adresse1 AS liv_adresse1, ad.adresse2 AS liv_adresse2,
+                   ad.code_postal AS liv_cp, ad.ville AS liv_ville, ad.pays AS liv_pays,
+                   pa.numero AS amont_numero, pa.type AS amont_type, la.rang AS amont_rang, pa.ref_tiers AS amont_ref_tiers,
+                   la.quantite_milli AS amont_qte_milli, la.prix_cents AS amont_prix_cents, la.base_prix AS amont_base_prix,
+                   (SELECT GROUP_CONCAT(DISTINCT pv.numero) FROM gc_pieces_lignes lv JOIN gc_pieces pv ON pv.id=lv.piece_id
+                     WHERE lv.ligne_amont_id=l.id AND pv.statut!='annule' AND pv.numero IS NOT NULL) AS aval_numeros,
                    (SELECT COALESCE(SUM(quantite_milli),0) FROM gc_mouvements mv WHERE mv.article_id=l.article_id) AS stock_milli,
                    (SELECT nom FROM users u WHERE u.id=p.representant_id) AS representant,
                    (SELECT nom FROM expe_transporteurs x WHERE x.id=p.transporteur_id) AS transporteur
             FROM gc_pieces_lignes l JOIN gc_pieces p ON p.id=l.piece_id JOIN gc_tiers t ON t.id=p.tiers_id
             LEFT JOIN gc_articles a ON a.id=l.article_id
+            LEFT JOIN gc_tiers_adresses ad ON ad.id=COALESCE(l.adresse_livraison_id, p.adresse_livraison_id)
+            LEFT JOIN gc_pieces_lignes la ON la.id=l.ligne_amont_id
+            LEFT JOIN gc_pieces pa ON pa.id=la.piece_id
             WHERE p.type IN ({m}) AND l.article_id IS NOT NULL
             ORDER BY COALESCE(l.date_expedition, p.date_expedition, l.date_livraison, p.date_livraison, p.date_piece), p.id, l.rang""",
             types).fetchall():
@@ -380,6 +393,17 @@ def carnet(conn, types: list[str]) -> list[dict]:
             d["repris_milli"] = avancement_ligne(conn, d["type"], {"id": d["ligne_id"], "type_ligne": d["type_ligne"],
                                                                    "quantite_milli": d["quantite_milli"]})
         d["reste_milli"] = 0 if d["solde"] else max(0, int(d["quantite_milli"]) - d["repris_milli"])
+        desig = [x for x in (d.pop("article_designation") or "").splitlines() if x.strip()]
+        for i in range(3):
+            d[f"designation{i + 2}"] = desig[i] if i < len(desig) else ""
+        # Ligne d'origine (la commande d'un BL, le BL d'une facture) : son reste.
+        d["amont_reste_milli"] = None
+        if d["amont_numero"] is not None and d["amont_type"]:
+            la = conn.execute("SELECT id, type_ligne, quantite_milli, solde FROM gc_pieces_lignes WHERE id=?",
+                              (d["ligne_amont_id"],)).fetchone()
+            if la:
+                rep = avancement_ligne(conn, d["amont_type"], dict(la))
+                d["amont_reste_milli"] = 0 if la["solde"] else max(0, int(la["quantite_milli"]) - rep)
         if d["statut"] in ("brouillon", "annule"):
             d["position"] = d["statut"]
         elif d["solde"] or d["reste_milli"] == 0:
@@ -444,7 +468,8 @@ def creer(conn, type_piece: str, tiers_id: int, user: dict | None = None, origin
     depot = conn.execute("SELECT code FROM gc_depots WHERE actif=1 ORDER BY rang, code LIMIT 1").fetchone()
     now = _maintenant()
     notes = ""
-    champ_texte = {"devis": "texte_devis", "commande": "texte_arc", "bl": "texte_bl", "facture": "texte_facture"}.get(type_piece)
+    champ_texte = {"devis": "texte_devis", "commande": "texte_arc", "bl": "texte_bl", "facture": "texte_facture",
+                   "aof": "texte_aof", "cde_fournisseur": "texte_cde"}.get(type_piece)
     if champ_texte and _t(t, champ_texte):
         tx = conn.execute("SELECT texte FROM gc_textes WHERE code=? AND actif=1", (t[champ_texte],)).fetchone()
         notes = tx["texte"] if tx else ""

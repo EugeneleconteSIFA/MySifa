@@ -55,6 +55,8 @@ CHAMPS_TIERS = {"code": str, "est_client": bool, "est_fournisseur": bool, "raiso
                 "jours_expedition": int}
 
 CHAMPS_TIERS.update({f"instr_{e}_{s}": str for e in ("livraison", "stockage", "facturation") for s in ("interne", "externe")})
+CHAMPS_TIERS.update({"texte_aof": "ref", "texte_cde": "ref", "nb_ex_aof": int, "nb_ex_cde": int,
+                     "envoi_auto_aof": str, "envoi_auto_cde": str, "traite": str, "journal": str})
 CHAMPS_TIERS.update({"est_prospect": bool, "famille": "ref", "devise": str, "texte_devis": "ref", "texte_arc": "ref",
                      "texte_bl": "ref", "texte_facture": "ref"})
 CHAMPS_TIERS.update({
@@ -69,10 +71,11 @@ FACTURATION_AUTO = {"par_bl": "Une facture par BL", "groupee": "Groupée (fin de
 TYPES_ADRESSE = ("principale", "facturation", "livraison")
 CHAMPS_ADRESSE = ("type", "libelle", "raison_sociale", "adresse1", "adresse2", "code_postal", "ville", "pays",
                   "telephone", "gsm", "email", "siret", "par_defaut")
-CHAMPS_CONTACT = ("civilite", "service", "nom", "fonction", "email", "telephone", "gsm", "envoi_devis", "envoi_arc",
+CHAMPS_CONTACT = ("civilite", "service", "nom", "fonction", "email", "telephone", "gsm", "envoi_aof", "envoi_cde",
+                  "envoi_devis", "envoi_arc",
                   "envoi_bl", "envoi_facture", "envoi_relance")
 CHAMPS_BANQUE = ("nom", "ville", "pays", "iban", "bic")
-CHAMPS_BOOL = {"par_defaut", "envoi_devis", "envoi_arc", "envoi_bl", "envoi_facture", "envoi_relance"}
+CHAMPS_BOOL = {"par_defaut", "envoi_aof", "envoi_cde", "envoi_devis", "envoi_arc", "envoi_bl", "envoi_facture", "envoi_relance"}
 
 CHAMPS_ARTICLE = {"code": str, "libelle": str, "libelle_client": str, "nature": str, "famille": "ref",
                   "unite": str, "base_prix": int, "prix_vente_cents": "int_null", "prix_achat_cents": "int_null",
@@ -183,12 +186,16 @@ def lister_tiers(conn, role: str | None = None) -> list[dict]:
               "client_ou_prospect": "WHERE t.est_client=1 OR t.est_prospect=1"}.get(role or "", "")
     return [dict(r) for r in conn.execute(
         f"""SELECT t.id, t.code, t.raison_sociale, t.est_client, t.est_fournisseur, t.est_prospect, t.email, t.telephone,
-                   t.condition_paiement, t.bloque, t.actif,
-                   (SELECT ville FROM gc_tiers_adresses a WHERE a.tiers_id=t.id AND a.actif=1
-                     ORDER BY a.type='facturation' DESC, a.par_defaut DESC, a.id LIMIT 1) AS ville,
+                   t.condition_paiement, t.bloque, t.actif, t.siret, t.rcs, t.tva_intra, t.ean, t.nif, t.fax,
+                   t.nom_court, t.mode_paiement, t.compte_auxiliaire, t.famille,
+                   ad.adresse1, ad.adresse2, ad.code_postal, ad.ville, ad.pays,
+                   (SELECT nom FROM users u WHERE u.id=t.representant_id) AS representant,
                    (SELECT COALESCE(SUM(e.montant_cents - e.regle_cents),0) FROM gc_echeances e
                      JOIN gc_pieces p ON p.id=e.piece_id WHERE p.tiers_id=t.id AND p.type='facture') AS encours_cents
-            FROM gc_tiers t {filtre} ORDER BY t.raison_sociale""").fetchall()]
+            FROM gc_tiers t
+            LEFT JOIN gc_tiers_adresses ad ON ad.id=(SELECT a.id FROM gc_tiers_adresses a WHERE a.tiers_id=t.id AND a.actif=1
+                     ORDER BY a.type='principale' DESC, a.par_defaut DESC, a.id LIMIT 1)
+            {filtre} ORDER BY t.raison_sociale""").fetchall()]
 
 
 def charger_tiers(conn, tiers_id: int) -> dict:

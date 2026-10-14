@@ -20,7 +20,10 @@ ETAPE_DE_PIECE = {"devis": "devis", "marche": "commande", "commande": "commande"
                   "facture_fournisseur": "facturation"}
 OBJETS = ("tiers", "article")
 # Instructions de la fiche client (onglets RVGI) : étape → colonne de gc_tiers.
-INSTRUCTIONS = {"livraison": "livraison", "commande": "stockage", "facturation": "facturation"}
+# Fournisseur (onglets Réception, Stockage, Facturation) : mêmes colonnes,
+# l'étape réception lit les instructions « livraison », l'étape achat le stockage.
+INSTRUCTIONS = {"livraison": "livraison", "commande": "stockage", "facturation": "facturation",
+                "reception": "livraison", "achat": "stockage"}
 LIBELLES_INSTRUCTIONS = {"livraison": "Livraison", "stockage": "Stockage", "facturation": "Facturation"}
 
 

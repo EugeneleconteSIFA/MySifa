@@ -160,7 +160,16 @@
           {cle: 'total_ht_cents', libelle: 'Total HT', type: 'montant', largeur: 130, total: true},
           {cle: 'total_ttc_cents', libelle: 'Total TTC', type: 'montant', largeur: 130, total: true},
           {cle: 'statut', libelle: 'État', type: 'statut', largeur: 150});
+        var Mq = function (c) { c.masquee = true; cols.push(c); };
+        Mq({cle: 'tiers_code', libelle: vente ? 'Code client' : 'Code fournisseur', largeur: 100});
+        Mq({cle: 'cree_par', libelle: 'Saisie par', largeur: 140});
+        if (vente) Mq({cle: 'representant', libelle: 'Représentant', largeur: 150});
+        Mq({cle: 'mode_libelle', libelle: 'Mode de règlement', largeur: 130});
+        Mq({cle: 'remise_bp', libelle: 'Remise', largeur: 80, rendu: function (l) { return l.remise_bp ? ERP.fmt.pct(l.remise_bp) : ''; }});
+        Mq({cle: 'envoye_le', libelle: 'Envoyée le', type: 'date', largeur: 100});
+        Mq({cle: 'imprime_le', libelle: 'Imprimée le', type: 'date', largeur: 100});
         if (/facture/.test(conf.types[0])) {
+          cols = cols.filter(function (c) { return !/^(cree_par|representant|mode_libelle|remise_bp|imprime_le)$/.test(c.cle); });
           // Situation RVGI : « à éditer et confirmer », puis passage en comptabilité.
           cols.push({cle: 'imprime_le', libelle: 'Édition', largeur: 110, rendu: function (l) {
             return l.numero ? (l.envoye_le ? 'Envoyée' : l.imprime_le ? 'Éditée' : h('b', {className: 'erp-a-faire', text: 'À éditer'})) : ''; }});

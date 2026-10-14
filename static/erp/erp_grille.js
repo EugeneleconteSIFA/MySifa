@@ -10,6 +10,7 @@
  *     nom: 'ventes.commandes',                             // mémorise tri et filtres (localStorage)
  *     selection: function (ligne) {},                      // ligne courante (clavier ou clic)
  *     // colonne : classe(ligne) -> classe CSS de la cellule (ex. 'retard')
+ *     // colonne : masquee: true -> proposée dans « Colonnes », absente par défaut
  *   });
  *   g.maj(nouvellesLignes);
  *
@@ -89,12 +90,23 @@
     try { localStorage.setItem('erp_grille_' + nom, JSON.stringify(v)); } catch (e) { /* stockage indisponible */ }
   }
 
+  // Colonnes affichées : le choix de l'utilisateur (« Colonnes », mémorisé par
+  // grille), sinon celles qui ne sont pas marquées `masquee`. Le choix est
+  // stocké colonne par colonne : une colonne ajoutée plus tard prend son
+  // réglage par défaut.
+  function visible(c, choix) {
+    return choix && Object.prototype.hasOwnProperty.call(choix, c.cle) ? !!choix[c.cle] : !c.masquee;
+  }
+
   function grille(conteneur, opts) {
     var h = window.ERP.h;
-    var cols = opts.colonnes.map(function (c) {
+    var memo = lireMemoire(opts.nom) || {};
+    var choix = memo.colonnes || null;
+    var cols = opts.colonnes.filter(function (c) { return visible(c, choix); }).map(function (c) {
       return Object.assign({type: 'texte', largeur: 140}, c, {_statuts: opts.statuts || null});
     });
-    var memo = lireMemoire(opts.nom) || {};
+    if (!cols.length) cols = [Object.assign({type: 'texte', largeur: 140}, opts.colonnes[0], {_statuts: opts.statuts || null})];
+    var api = {};
     var G = {
       toutes: opts.lignes || [],
       vues: [],
@@ -116,9 +128,12 @@
       appliquer(true);
     }}, 'Effacer les filtres');
     var btnCsv = h('button', {className: 'erp-btn erp-btn-petit', type: 'button', onclick: exporter}, 'Exporter CSV');
+    var btnCols = h('button', {className: 'erp-btn erp-btn-petit', type: 'button', onclick: choisirColonnes,
+      title: 'Choisir les colonnes affichées'}, 'Colonnes (' + cols.length + '/' + opts.colonnes.length + ')');
     barre.appendChild(compte);
     barre.appendChild(h('span', {className: 'erp-g-espace'}));
     barre.appendChild(btnRaz);
+    if (opts.colonnes.length > 1) barre.appendChild(btnCols);
     barre.appendChild(btnCsv);
 
     var defil = h('div', {className: 'erp-g-defil'});
@@ -183,7 +198,7 @@
       G.vues = v;
       G.courant = enTete ? 0 : Math.min(G.courant, Math.max(0, v.length - 1));
       if (enTete) defil.scrollTop = 0;
-      ecrireMemoire(opts.nom, {tri: G.tri, filtres: G.filtres});
+      ecrireMemoire(opts.nom, {tri: G.tri, filtres: G.filtres, colonnes: choix || undefined});
       corps.style.height = (v.length * HAUTEUR) + 'px';
       racine.setAttribute('aria-rowcount', String(v.length));
       var filtre = preds.length > 0;
@@ -321,13 +336,54 @@
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
     }
 
+    // ── Choix des colonnes (RVGI : « Sélectionner les colonnes ») ─────
+    function choisirColonnes() {
+      var etat = {};
+      opts.colonnes.forEach(function (c) { etat[c.cle] = visible(c, choix); });
+      var cases = {};
+      var liste = h('div', {className: 'erp-g-choix'}, opts.colonnes.map(function (c) {
+        var cb = h('input', {type: 'checkbox', checked: etat[c.cle]});
+        cb.addEventListener('change', function () { etat[c.cle] = cb.checked; });
+        cases[c.cle] = cb;
+        return h('label', {className: 'erp-case'}, cb, h('span', {text: c.libelle || c.cle}));
+      }));
+      var tout = function (v) { return function () {
+        opts.colonnes.forEach(function (c) { etat[c.cle] = v === null ? !c.masquee : v; cases[c.cle].checked = etat[c.cle]; });
+      }; };
+      var corps = h('div', null,
+        h('div', {className: 'erp-actions-bas'},
+          h('button', {type: 'button', className: 'erp-btn erp-btn-petit', onclick: tout(true)}, 'Tout cocher'),
+          h('button', {type: 'button', className: 'erp-btn erp-btn-petit', onclick: tout(false)}, 'Tout décocher'),
+          h('button', {type: 'button', className: 'erp-btn erp-btn-petit', onclick: tout(null)}, 'Colonnes par défaut')),
+        liste);
+      window.ERP.modal('Colonnes affichées', corps, [
+        {libelle: 'Annuler'},
+        {libelle: 'Appliquer', accent: true, action: function () {
+          var m = lireMemoire(opts.nom) || {};
+          m.colonnes = etat;
+          ecrireMemoire(opts.nom, m);
+          reconstruire();
+        }},
+      ]);
+    }
+
+    // Reconstruit la grille avec les nouvelles colonnes, au même endroit ; les
+    // appels de l'écran (maj, focus) passent toujours par le même objet.
+    function reconstruire() {
+      var hote = h('div');
+      var g2 = grille(hote, Object.assign({}, opts, {lignes: G.toutes}));
+      racine.replaceWith(hote.firstChild);
+      Object.assign(api, g2);
+      api.focus();
+    }
+
     appliquer();
 
-    return {
+    return Object.assign(api, {
       maj: function (lignes) { G.toutes = lignes || []; appliquer(); },
       lignesVisibles: function () { return G.vues.slice(); },
       focus: function () { racine.focus(); },
-    };
+    });
   }
 
   window.ERP.grille = grille;

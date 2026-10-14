@@ -74,6 +74,47 @@
       cols.push({cle: 'transporteur', libelle: 'Transporteur', largeur: 130});
     }
     cols.push({cle: 'montant_ht_cents', libelle: 'Montant HT', type: 'montant', largeur: 120, total: true});
+    // Colonnes proposées dans « Colonnes » (TDB RVGI : sélectionner les colonnes)
+    var M = function (c) { c.masquee = true; cols.push(c); };
+    var AMONT = {commande: 'Devis / marché', bl: 'Commande', facture: 'BL', avoir: 'Facture', reception: 'Commande fourn.',
+                 facture_fournisseur: 'Réception', of: 'Commande'};
+    if (AMONT[type]) {
+      cols.splice(2, 0, {cle: 'amont_numero', libelle: AMONT[type], largeur: 110},
+                         {cle: 'amont_rang', libelle: 'Lg ' + AMONT[type].toLowerCase(), type: 'nombre', largeur: 70, masquee: true});
+      M({cle: 'amont_qte_milli', libelle: 'Qté ' + AMONT[type].toLowerCase(), type: 'qte', largeur: 120});
+      M({cle: 'amont_reste_milli', libelle: type === 'bl' ? 'Reste à livrer' : 'Reste ' + AMONT[type].toLowerCase(), type: 'qte', largeur: 120});
+      M({cle: 'amont_prix_cents', libelle: 'P.U. HT ' + AMONT[type].toLowerCase(), type: 'montant', largeur: 120});
+      M({cle: 'amont_ref_tiers', libelle: 'Réf. ' + AMONT[type].toLowerCase(), largeur: 140});
+    }
+    M({cle: 'aval_numeros', libelle: {devis: 'Commandes', marche: 'Commandes', commande: 'BL', bl: 'Factures',
+      cde_fournisseur: 'Réceptions', reception: 'Factures fourn.', of: 'Productions'}[type] || 'Pièces suivantes', largeur: 140});
+    M({cle: 'tiers_code', libelle: vente ? 'Code client' : 'Code fournisseur', largeur: 100});
+    M({cle: 'operateur', libelle: 'Opérateur', largeur: 140});
+    M({cle: 'valide_par', libelle: 'Validé par', largeur: 140});
+    if (vente) M({cle: 'adv', libelle: 'ADV', largeur: 140});
+    M({cle: 'ref_tiers', libelle: vente ? 'Réf. commande client' : 'Réf. fournisseur', largeur: 150});
+    M({cle: 'prix_cents', libelle: 'P.U. HT', type: 'montant', largeur: 110});
+    M({cle: 'unite', libelle: 'Unité', largeur: 70});
+    M({cle: 'code3', libelle: 'Code 3', largeur: 90});
+    M({cle: 'famille_lib', libelle: 'Famille', largeur: 130});
+    M({cle: 'format_l', libelle: 'Format L', largeur: 90});
+    M({cle: 'format_a', libelle: 'Format A', largeur: 90});
+    M({cle: 'laize', libelle: 'Laize', largeur: 80});
+    M({cle: 'designation2', libelle: 'Désignation 2', largeur: 220});
+    M({cle: 'designation3', libelle: 'Désignation 3', largeur: 220});
+    M({cle: 'designation4', libelle: 'Désignation 4', largeur: 220});
+    M({cle: 'conditionnement', libelle: 'Conditionnement', largeur: 180});
+    M({cle: 'stock_milli', libelle: 'Stock réel', type: 'qte', largeur: 110});
+    if (vente) {
+      M({cle: 'liv_raison_sociale', libelle: 'Raison sociale livraison', largeur: 200});
+      M({cle: 'liv_adresse1', libelle: 'Adresse de livraison', largeur: 200});
+      M({cle: 'liv_adresse2', libelle: 'Adresse de livraison 2', largeur: 180});
+      M({cle: 'liv_cp', libelle: 'C.P.', largeur: 80});
+      M({cle: 'liv_ville', libelle: 'Ville', largeur: 150});
+      M({cle: 'liv_pays', libelle: 'Pays', largeur: 70});
+    }
+    M({cle: 'depot_lib', libelle: 'Dépôt', largeur: 120});
+    M({cle: 'notes_ligne', libelle: 'Notes de ligne', largeur: 220});
     return cols;
   }
 
@@ -143,6 +184,11 @@
         l.situation_of = l.situation_of ? 'of_' + l.situation_of : '';
         l.bat = l.bat ? 'bat_' + l.bat : '';
         l.type_ligne_lib = (ERP.M.types_ligne || {})[l.type_ligne] || '';
+        var mm = function (d) { return d ? (d / 10).toLocaleString('fr-FR') : ''; };
+        l.format_l = mm(l.format_l_dmm); l.format_a = mm(l.format_a_dmm); l.laize = mm(l.laize_dmm);
+        l.famille_lib = l.famille ? ERP.refLibelle('familles', l.famille) : '';
+        l.depot_lib = l.depot ? ERP.refLibelle('depots', l.depot) : '';
+        if (l.aval_numeros) l.aval_numeros = l.aval_numeros.split(',').join(', ');
       });
       grilleZone.textContent = '';
       g = ERP.grille(grilleZone, {

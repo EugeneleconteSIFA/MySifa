@@ -84,7 +84,7 @@ def ecritures(conn, debut: str, fin: str) -> list[dict]:
     n = 0
 
     for p in conn.execute(
-        """SELECT p.*, t.raison_sociale, t.code AS tiers_code, t.compte_auxiliaire FROM gc_pieces p
+        """SELECT p.*, t.raison_sociale, t.code AS tiers_code, t.compte_auxiliaire, t.journal AS journal_tiers FROM gc_pieces p
            JOIN gc_tiers t ON t.id=p.tiers_id
            WHERE p.type IN ('facture','avoir','facture_fournisseur') AND p.numero IS NOT NULL AND p.statut!='annule'
              AND substr(p.date_piece,1,10) BETWEEN ? AND ? ORDER BY p.date_piece, p.id""", (debut, fin)).fetchall():
@@ -109,7 +109,9 @@ def ecritures(conn, debut: str, fin: str) -> list[dict]:
             lignes = charge + taxe + [tiers_l]
         if signe < 0:   # avoir : on inverse débit et crédit
             lignes = [(c, cl, a, al, cr, db) for c, cl, a, al, db, cr in lignes]
-        out += _ecriture(jv if vente else ja, f"{(jv if vente else ja)[0]}{n:06d}", p["date_piece"], p["numero"],
+        # Journal propre au fournisseur (fiche RVGI › Comptabilité), sinon celui des réglages.
+        jp = jv if vente else ((p["journal_tiers"], "Achats") if p["journal_tiers"] else ja)
+        out += _ecriture(jp, f"{jp[0]}{n:06d}", p["date_piece"], p["numero"],
                          p["date_piece"], lib, p["valide_le"], lignes)
 
     for r in conn.execute(

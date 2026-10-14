@@ -524,6 +524,21 @@ class Chaine(unittest.TestCase):
         self.assertEqual(q, 30_000_000)
         self.assertEqual(pieces.charger(c, cf)["statut"], "solde")
 
+    def test_carnet_colonnes_rvgi(self):
+        c = self.conn
+        co = pieces.creer(c, "commande", 1)
+        pieces.enregistrer(c, co, None, [_ligne(1, 10_000, 100)])
+        pieces.valider(c, co)
+        bl = pieces.transformer(c, [co], "bl")
+        lg = pieces.charger(c, bl)["lignes"]
+        pieces.enregistrer(c, bl, None, [dict(lg[0], quantite_milli=4_000)])
+        pieces.valider(c, bl)
+        l = [x for x in pieces.carnet(c, ["bl"]) if x["piece_id"] == bl][0]
+        self.assertEqual(l["amont_numero"], pieces.charger(c, co)["numero"])
+        self.assertEqual((l["amont_qte_milli"], l["amont_reste_milli"]), (10_000, 6_000))
+        lc = [x for x in pieces.carnet(c, ["commande"]) if x["piece_id"] == co][0]
+        self.assertEqual(lc["aval_numeros"], pieces.charger(c, bl)["numero"])
+
     def test_reception_par_laize(self):
         from app.services.gc import fichiers
         c = self.conn

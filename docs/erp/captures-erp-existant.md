@@ -45,7 +45,7 @@ Priorité : **P1** bloque le lot en cours · **P2** le lot suivant · **P3** plu
 | ☐ | P2 | **PDF** d'un devis et d'une confirmation de commande envoyée au client | Mise en page |
 | ✓ | P2 | Fiche client : onglets **Livraison**, **Stockage**, **Facturation** (commentaires interne / externe, faits le 14/10) (nomenclature : sans objet ; pas d'onglet Tarifs dans RVGI ; cahiers des charges faits) | Ce qu'ils contiennent |
 | ☐ | P2 | **Ordonnancement** et **Production** | Ce qui est encore utilisé (le module est abandonné depuis avril 2026) |
-| ☐ | P1 | **Fiche fournisseur** (tous ses onglets), **TDB commandes d'achat**, **commande d'achat** (en-tête et ligne), **TDB réceptions**, **réception**, **facture fournisseur** (saisie et rapprochement) | Ce qui diffère de la fiche client, contrôle des factures d'achat. Stocks matières : reçu le 14/10 |
+| ◐ | P1 | Fiche fournisseur et liste reçues le 14/10 (faites) ; restent **TDB commandes d'achat**, **commande d'achat** (en-tête et ligne), **TDB réceptions**, **réception**, **facture fournisseur** (saisie et rapprochement) | Ce qui diffère de la fiche client, contrôle des factures d'achat. Stocks matières : reçu le 14/10 |
 | ☐ | P2 | **Comptabilités** : l'export et un fichier exemple | Format attendu par le logiciel comptable |
 | ☐ | P2 | **Paramètres** : conditions de paiement, positions fiscales, unités | Listes complètes |
 | ☐ | P3 | **Contrôles**, **Appels d'offre**, **Hits parades**, **Statistiques** | Ce que la direction y regarde |

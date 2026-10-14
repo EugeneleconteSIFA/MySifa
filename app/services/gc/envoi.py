@@ -16,7 +16,7 @@ from app.services.gc import fichiers, pdf, pieces
 
 # Case de la fiche client qui désigne les destinataires de chaque document.
 DRAPEAU = {"devis": "envoi_devis", "marche": "envoi_arc", "commande": "envoi_arc", "bl": "envoi_bl",
-           "facture": "envoi_facture", "avoir": "envoi_facture"}
+           "facture": "envoi_facture", "avoir": "envoi_facture", "aof": "envoi_aof", "cde_fournisseur": "envoi_cde"}
 NOM_DOC = {"devis": "notre devis", "marche": "notre marché", "commande": "la confirmation de votre commande",
            "bl": "le bon de livraison", "facture": "notre facture", "avoir": "notre avoir",
            "aof": "notre demande de prix", "cde_fournisseur": "notre bon de commande"}
