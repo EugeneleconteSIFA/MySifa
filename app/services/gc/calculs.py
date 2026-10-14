@@ -37,28 +37,36 @@ def montant_ligne(quantite_milli: int, prix_cents: int, base_prix: int = 1, remi
     return div_arrondi(num, 1000 * base * 10000)
 
 
-def totaux(lignes: list[dict], remise_piece_bp: int = 0) -> dict:
-    """Totaux d'une pièce.
+def totaux(lignes: list[dict], remise_piece_bp: int = 0, escompte_bp: int = 0, acompte_cents: int = 0) -> dict:
+    """Totaux d'une pièce, dans l'ordre de RVGI : HT brut → remise → HT net →
+    escompte → HT net financier → TVA → TTC → acompte → net à payer.
 
     `lignes` : dicts avec `montant_ht_cents` et `taux_tva_bp`. Retourne
-    {ht, tva, ttc, remise, bases: [{taux_bp, ht_brut, remise, ht, tva}]}.
+    {ht, tva, ttc, remise, escompte, acompte, net_a_payer,
+     bases: [{taux_bp, ht_brut, remise, escompte, ht, tva}]} où `ht` est le
+    HT net financier, base de la TVA.
     """
     par_taux: dict[int, int] = {}
     for l in lignes:
         t = int(l.get("taux_tva_bp") or 0)
         par_taux[t] = par_taux.get(t, 0) + int(l.get("montant_ht_cents") or 0)
     bases = []
-    ht = tva = rem = 0
+    ht = tva = rem = esc = 0
     for t in sorted(par_taux):
         brut = par_taux[t]
         r = div_arrondi(brut * int(remise_piece_bp or 0), 10000)
         net = brut - r
-        tv = div_arrondi(net * t, 10000)
-        bases.append({"taux_bp": t, "ht_brut": brut, "remise": r, "ht": net, "tva": tv})
-        ht += net
+        e = div_arrondi(net * int(escompte_bp or 0), 10000)
+        net_f = net - e
+        tv = div_arrondi(net_f * t, 10000)
+        bases.append({"taux_bp": t, "ht_brut": brut, "remise": r, "escompte": e, "ht": net_f, "tva": tv})
+        ht += net_f
         tva += tv
         rem += r
-    return {"ht": ht, "tva": tva, "ttc": ht + tva, "remise": rem, "bases": bases}
+        esc += e
+    acompte = int(acompte_cents or 0)
+    return {"ht": ht, "tva": tva, "ttc": ht + tva, "remise": rem, "escompte": esc, "acompte": acompte,
+            "net_a_payer": ht + tva - acompte, "bases": bases}
 
 
 def date_echeance(d: date, jours: int, fin_de_mois: bool = False, jour_du_mois: int = 0) -> date:
@@ -99,15 +107,19 @@ def prendre_numero(conn, code: str, d: date) -> str:
     de l'appelant. Le compteur repart à 1 au changement d'année si la
     séquence est annuelle. À appeler juste avant le commit : un rollback
     rend le numéro, il n'y a donc jamais de trou."""
-    s = conn.execute(
-        "SELECT format, prochain, annuel, annee FROM gc_sequences WHERE code=?", (code,)
-    ).fetchone()
+    s = conn.execute("SELECT * FROM gc_sequences WHERE code=?", (code,)).fetchone()
     if not s:
         raise ValueError(f"Aucune séquence de numérotation pour « {code} ».")
+    cles = s.keys()
+    reinit = s["reinit"] if "reinit" in cles and s["reinit"] else ("annuelle" if int(s["annuel"]) else "jamais")
+    mois = int(s["mois"]) if "mois" in cles else 0
     n = int(s["prochain"])
-    if int(s["annuel"]) and int(s["annee"]) != d.year:
+    if reinit == "annuelle" and int(s["annee"]) != d.year:
         n = 1
-    conn.execute(
-        "UPDATE gc_sequences SET prochain=?, annee=? WHERE code=?", (n + 1, d.year, code)
-    )
+    elif reinit == "mensuelle" and (int(s["annee"]), mois) != (d.year, d.month):
+        n = 1
+    if "mois" in cles:
+        conn.execute("UPDATE gc_sequences SET prochain=?, annee=?, mois=? WHERE code=?", (n + 1, d.year, d.month, code))
+    else:
+        conn.execute("UPDATE gc_sequences SET prochain=?, annee=? WHERE code=?", (n + 1, d.year, code))
     return formater_numero(s["format"], n, d)

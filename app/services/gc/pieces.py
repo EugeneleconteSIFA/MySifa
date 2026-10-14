@@ -58,7 +58,19 @@ CHAMPS_ENTETE = (
     "date_piece", "date_livraison", "date_validite", "ref_tiers",
     "adresse_facturation_id", "adresse_livraison_id", "condition_paiement",
     "mode_paiement", "depot", "remise_bp", "notes", "notes_internes",
+    # relevés sur RVGI (migration gc_parite_rvgi)
+    "contact_id", "transporteur_id", "jours_expedition", "date_expedition", "franco_cents",
+    "escompte_bp", "acompte_cents", "representant_id", "commission_bp", "recepisse", "nb_colis",
+    "nb_palettes", "poids_g", "emballage", "date_ouverture",
 )
+CHAMPS_ENTIERS = {"jours_expedition", "franco_cents", "escompte_bp", "acompte_cents", "commission_bp",
+                  "nb_colis", "nb_palettes", "poids_g"}
+CHAMPS_TEXTE = {"ref_tiers", "notes", "notes_internes", "recepisse", "emballage"}
+ORIGINES = {"fabrication": "Fabrication", "stock": "Stock", "soustraitance": "Sous-traitance"}
+LABORATOIRES = {"renouvellement": "Renouvellement", "creation": "Création", "modification": "Modification"}
+REPORT_ENTETE = ("ref_tiers", "adresse_facturation_id", "adresse_livraison_id", "condition_paiement", "mode_paiement",
+                 "depot", "remise_bp", "contact_id", "transporteur_id", "jours_expedition", "date_expedition",
+                 "date_livraison", "franco_cents", "escompte_bp", "representant_id", "commission_bp")
 
 
 class ErreurPiece(ValueError):
@@ -256,7 +268,7 @@ def charger(conn, piece_id: int) -> dict:
     p["mouvements"] = [dict(r) for r in conn.execute(
         """SELECT m.*, a.code AS article_code FROM gc_mouvements m JOIN gc_articles a ON a.id=m.article_id
            WHERE m.piece_id=? ORDER BY m.id""", (piece_id,)).fetchall()]
-    p["totaux"] = calculs.totaux(lignes, p["remise_bp"])
+    p["totaux"] = calculs.totaux(lignes, p["remise_bp"], p.get("escompte_bp") or 0, p.get("acompte_cents") or 0)
     return p
 
 
@@ -269,6 +281,51 @@ def lister(conn, types: list[str]) -> list[dict]:
                    (SELECT COUNT(*) FROM gc_pieces_lignes l WHERE l.piece_id=p.id AND l.article_id IS NOT NULL) AS nb_lignes
             FROM gc_pieces p JOIN gc_tiers t ON t.id=p.tiers_id
             WHERE p.type IN ({m}) ORDER BY p.date_piece DESC, p.id DESC""", types).fetchall()]
+
+
+def carnet(conn, types: list[str]) -> list[dict]:
+    """Vue par ligne. `repris_milli` : quantité reprise par l'étape suivante
+    (commandée pour un devis ou un marché, livrée pour une commande, facturée
+    pour un BL). `situation_of` : état du dernier OF de la ligne."""
+    m = ",".join("?" * len(types))
+    out = []
+    for l in conn.execute(
+        f"""SELECT l.id AS ligne_id, l.rang, l.article_id, l.libelle, l.quantite_milli, l.unite, l.base_prix,
+                   l.prix_cents, l.montant_ht_cents, l.date_livraison, l.date_expedition, l.origine_prod,
+                   l.laboratoire, l.ref_client, l.solde, l.nb_livraisons,
+                   p.id AS piece_id, p.type, p.numero, p.statut, p.date_piece, p.ref_tiers, p.date_validite,
+                   p.date_ouverture, p.date_livraison AS piece_date_livraison, p.date_expedition AS piece_date_expedition,
+                   t.id AS tiers_id, t.code AS tiers_code, t.raison_sociale AS tiers_nom,
+                   a.code AS article_code, a.format_l_dmm, a.format_a_dmm, a.conditionnement,
+                   (SELECT COALESCE(SUM(quantite_milli),0) FROM gc_mouvements mv WHERE mv.article_id=l.article_id) AS stock_milli,
+                   (SELECT nom FROM users u WHERE u.id=p.representant_id) AS representant,
+                   (SELECT nom FROM expe_transporteurs x WHERE x.id=p.transporteur_id) AS transporteur
+            FROM gc_pieces_lignes l JOIN gc_pieces p ON p.id=l.piece_id JOIN gc_tiers t ON t.id=p.tiers_id
+            LEFT JOIN gc_articles a ON a.id=l.article_id
+            WHERE p.type IN ({m}) AND l.article_id IS NOT NULL
+            ORDER BY COALESCE(l.date_expedition, p.date_expedition, l.date_livraison, p.date_livraison, p.date_piece), p.id, l.rang""",
+            types).fetchall():
+        d = dict(l)
+        d["date_expedition"] = d["date_expedition"] or d.pop("piece_date_expedition")
+        d["date_livraison"] = d["date_livraison"] or d.pop("piece_date_livraison")
+        d.pop("piece_date_expedition", None)
+        d.pop("piece_date_livraison", None)
+        av = AVANCEMENT.get(d["type"], [])
+        d["repris_milli"] = qte_aval(conn, d["ligne_id"], av) if d["type"] != "of" else qte_produite(conn, d["ligne_id"])
+        d["reste_milli"] = 0 if d["solde"] else max(0, int(d["quantite_milli"]) - d["repris_milli"])
+        if d["statut"] in ("brouillon", "annule"):
+            d["position"] = d["statut"]
+        elif d["solde"] or d["reste_milli"] == 0:
+            d["position"] = "solde"
+        else:
+            d["position"] = "partiel" if d["repris_milli"] else "valide"
+        of = conn.execute(
+            """SELECT p.statut FROM gc_pieces_lignes lo JOIN gc_pieces p ON p.id=lo.piece_id
+               WHERE lo.ligne_amont_id=? AND p.type='of' AND p.statut!='annule' ORDER BY p.id DESC LIMIT 1""",
+            (d["ligne_id"],)).fetchone()
+        d["situation_of"] = of["statut"] if of else ("a_ordonnancer" if d["origine_prod"] == "fabrication" and d["type"] in ("commande", "marche") else "")
+        out.append(d)
+    return out
 
 
 # ── Écriture ──────────────────────────────────────────────────────────
@@ -301,17 +358,24 @@ def creer(conn, type_piece: str, tiers_id: int, user: dict | None = None, origin
     cur = conn.execute(
         """INSERT INTO gc_pieces (type, statut, tiers_id, date_piece, adresse_facturation_id,
                adresse_livraison_id, condition_paiement, mode_paiement, depot, remise_bp,
+               transporteur_id, jours_expedition, representant_id,
                origine, cree_par, cree_le, modifie_le)
-           VALUES (?, 'brouillon', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, 'brouillon', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (type_piece, tiers_id, _aujourdhui(),
          _adresse_defaut(conn, tiers_id, "facturation"),
          _adresse_defaut(conn, tiers_id, "livraison"),
          t["condition_paiement"], t["mode_paiement"],
          depot["code"] if depot else None,
          int(t["remise_bp"] or 0) if TYPES[type_piece]["sens"] == "vente" else 0,
+         _t(t, "transporteur_id"), int(_t(t, "jours_expedition") or 0), _t(t, "representant_id"),
          origine, _nom(user), now, now),
     )
     return int(cur.lastrowid)
+
+
+def _t(row, cle):
+    """Colonne facultative (ajoutée par une migration plus récente)."""
+    return row[cle] if cle in row.keys() else None
 
 
 def _entier(v, nom: str, mini: int | None = None) -> int:
@@ -351,8 +415,28 @@ def enregistrer(conn, piece_id: int, entete: dict | None, lignes: list[dict] | N
                             raise ErreurPiece("Adresse d'un autre tiers.")
                 elif c in ("condition_paiement", "mode_paiement", "depot"):
                     v = v or None
+                elif c in CHAMPS_ENTIERS:
+                    v = None if v in ("", None) and c in ("franco_cents", "nb_colis", "nb_palettes", "poids_g") \
+                        else _entier(v or 0, c, 0)
+                    if c in ("escompte_bp", "commission_bp") and v and v > 10000:
+                        raise ErreurPiece("Pourcentage invalide — 100 % au plus.")
+                elif c == "contact_id":
+                    v = None if v in ("", None) else _entier(v, "Contact")
+                    if v and not conn.execute("SELECT 1 FROM gc_tiers_contacts WHERE id=? AND tiers_id=?",
+                                              (v, p["tiers_id"])).fetchone():
+                        raise ErreurPiece("Contact d'un autre tiers.")
+                elif c == "transporteur_id":
+                    v = None if v in ("", None) else _entier(v, "Transporteur")
+                    if v and not conn.execute("SELECT 1 FROM expe_transporteurs WHERE id=?", (v,)).fetchone():
+                        raise ErreurPiece("Transporteur inconnu.")
+                elif c == "representant_id":
+                    v = None if v in ("", None) else _entier(v, "Représentant")
+                    if v and not conn.execute("SELECT 1 FROM users WHERE id=?", (v,)).fetchone():
+                        raise ErreurPiece("Représentant inconnu.")
+                elif c in ("date_livraison", "date_validite", "date_expedition", "date_ouverture"):
+                    v = v or None
                 else:
-                    v = "" if v is None and c in ("ref_tiers", "notes", "notes_internes") else v
+                    v = "" if v is None and c in CHAMPS_TEXTE else v
                 if c == "date_piece" and not v:
                     raise ErreurPiece("Date de pièce obligatoire.")
                 sets.append(f"{c}=?")
@@ -392,14 +476,34 @@ def enregistrer(conn, piece_id: int, entete: dict | None, lignes: list[dict] | N
                 if (not la or la["type"] not in amont_ok or la["tiers_id"] != p["tiers_id"]
                         or la["statut"] in ("brouillon", "annule") or la["article_id"] != art["id"]):
                     raise ErreurPiece(f"Ligne {i} : lien vers la pièce d'origine invalide.")
+            origine_p = l.get("origine_prod")
+            if origine_p is None:
+                origine_p = _t(art, "origine_prod") or ("fabrication" if art["nature"] == "pf" else "")
+            if origine_p and origine_p not in ORIGINES:
+                raise ErreurPiece(f"Ligne {i} : origine inconnue.")
+            labo = l.get("laboratoire")
+            if labo is None:
+                labo = "renouvellement" if art["nature"] == "pf" else ""
+            if labo and labo not in LABORATOIRES:
+                raise ErreurPiece(f"Ligne {i} : laboratoire inconnu.")
+            adr_l = l.get("adresse_livraison_id") or None
+            if adr_l and not conn.execute("SELECT 1 FROM gc_tiers_adresses WHERE id=? AND tiers_id=?",
+                                          (adr_l, p["tiers_id"])).fetchone():
+                raise ErreurPiece(f"Ligne {i} : adresse d'un autre tiers.")
+            ref_c = l.get("ref_client")
+            if ref_c is None:
+                ref_c = _t(art, "ref_client") or ""
             conn.execute(
                 """INSERT INTO gc_pieces_lignes (piece_id, rang, article_id, libelle, quantite_milli, unite,
                        base_prix, prix_cents, remise_bp, tva_code, taux_tva_bp, montant_ht_cents,
-                       date_livraison, ligne_amont_id, notes)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       date_livraison, date_expedition, ligne_amont_id, notes, origine_prod, laboratoire,
+                       ref_client, nb_livraisons, adresse_livraison_id)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (piece_id, i, art["id"], libelle, q, art["unite"], base, prix_c, rem, code_tva,
                  taux_tva(conn, code_tva), calculs.montant_ligne(q, prix_c, base, rem),
-                 l.get("date_livraison") or None, amont, str(l.get("notes") or "")))
+                 l.get("date_livraison") or None, l.get("date_expedition") or None, amont,
+                 str(l.get("notes") or ""), origine_p, labo, str(ref_c), _entier(l.get("nb_livraisons") or 1, "Livraisons", 1),
+                 adr_l))
     _maj_totaux(conn, piece_id)
 
 
@@ -408,7 +512,7 @@ def _maj_totaux(conn, piece_id: int) -> None:
     lignes = conn.execute(
         "SELECT montant_ht_cents, taux_tva_bp FROM gc_pieces_lignes WHERE piece_id=? AND article_id IS NOT NULL",
         (piece_id,)).fetchall()
-    tot = calculs.totaux([dict(l) for l in lignes], p["remise_bp"])
+    tot = calculs.totaux([dict(l) for l in lignes], p["remise_bp"], _t(p, "escompte_bp") or 0)
     conn.execute(
         "UPDATE gc_pieces SET total_ht_cents=?, total_tva_cents=?, total_ttc_cents=?, modifie_le=? WHERE id=?",
         (tot["ht"], tot["tva"], tot["ttc"], _maintenant(), piece_id))
@@ -564,8 +668,10 @@ def _creer_echeances(conn, piece_id: int) -> None:
         c = conn.execute("SELECT * FROM gc_conditions_paiement WHERE code=?", (p["condition_paiement"],)).fetchone()
     d = date.fromisoformat(p["date_piece"][:10])
     e = calculs.date_echeance(d, c["jours"], bool(c["fin_de_mois"]), c["jour_du_mois"]) if c else d
-    conn.execute("INSERT INTO gc_echeances (piece_id, date_echeance, montant_cents) VALUES (?,?,?)",
-                 (piece_id, e.isoformat(), p["total_ttc_cents"]))
+    net = int(p["total_ttc_cents"]) - int(_t(p, "acompte_cents") or 0)
+    if net > 0:
+        conn.execute("INSERT INTO gc_echeances (piece_id, date_echeance, montant_cents) VALUES (?,?,?)",
+                     (piece_id, e.isoformat(), net))
 
 
 def transformer(conn, sources: list[int], cible: str, user: dict | None = None) -> int:
@@ -607,20 +713,18 @@ def transformer(conn, sources: list[int], cible: str, user: dict | None = None) 
                 "article_id": l["article_id"], "libelle": l["libelle"], "quantite_milli": reste,
                 "base_prix": l["base_prix"], "prix_cents": l["prix_cents"], "remise_bp": l["remise_bp"],
                 "tva_code": l["tva_code"], "date_livraison": l["date_livraison"], "ligne_amont_id": l["id"],
+                "date_expedition": _t(l, "date_expedition"), "origine_prod": _t(l, "origine_prod"),
+                "laboratoire": _t(l, "laboratoire"), "ref_client": _t(l, "ref_client"),
+                "adresse_livraison_id": _t(l, "adresse_livraison_id"),
             })
     if not lignes:
         raise ErreurPiece("Plus rien à reprendre : tout a déjà été repris.")
     nouvelle = creer(conn, cible, ps[0]["tiers_id"], user)
     src = ps[0]
-    entete = {
-        "ref_tiers": src["ref_tiers"],
-        "adresse_facturation_id": src["adresse_facturation_id"],
-        "adresse_livraison_id": src["adresse_livraison_id"],
-        "condition_paiement": src["condition_paiement"],
-        "mode_paiement": src["mode_paiement"],
-        "depot": src["depot"],
-        "remise_bp": src["remise_bp"],
-    }
+    entete = {k: src[k] for k in REPORT_ENTETE if k in src.keys()}
+    if cible in ("facture", "avoir", "facture_fournisseur"):
+        entete.pop("date_livraison", None)
+        entete.pop("date_expedition", None)
     if cible == "avoir":
         conn.execute("UPDATE gc_pieces SET piece_annulee_id=? WHERE id=?", (src["id"], nouvelle))
     enregistrer(conn, nouvelle, entete, lignes)

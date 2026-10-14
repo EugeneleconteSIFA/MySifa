@@ -68,6 +68,14 @@ def meta(request: Request):
             "societe": fichiers.lire_societe(conn),
             "types": pieces.TYPES,
             "natures": fichiers.NATURES,
+            "origines": pieces.ORIGINES,
+            "laboratoires": pieces.LABORATOIRES,
+            # Branchés sur MySifa : transporteurs de MyExpé, comptes des commerciaux.
+            "transporteurs": [dict(r) for r in conn.execute(
+                "SELECT id, nom FROM expe_transporteurs ORDER BY nom").fetchall()],
+            "representants": [dict(r) for r in conn.execute(
+                """SELECT id, nom FROM users WHERE COALESCE(actif,1)=1
+                   AND role IN ('commercial','direction','superadmin') ORDER BY nom""").fetchall()],
         }
 
 
@@ -168,6 +176,17 @@ def pieces_liste(request: Request, types: str):
     if not liste:
         raise HTTPException(400, "Type de pièce inconnu.")
     return _lecture(pieces.lister, liste)
+
+
+@router.get("/carnet")
+def carnet(request: Request, types: str):
+    """Une ligne par ligne de pièce (le « TDB » de RVGI) : dates, origine,
+    laboratoire, quantités reprises et reste, situation de l'OF, stock."""
+    _user(request)
+    liste = [t for t in types.split(",") if t in pieces.TYPES]
+    if not liste:
+        raise HTTPException(400, "Type de pièce inconnu.")
+    return _lecture(pieces.carnet, liste)
 
 
 @router.get("/pieces/{piece_id}")

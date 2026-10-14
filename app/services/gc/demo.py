@@ -71,7 +71,10 @@ def reinitialiser(conn, user: dict | None = None) -> dict:
     if autres:
         raise pieces.ErreurPiece(f"{autres} pièce(s) réelle(s) en base : la démonstration ne se réinitialise plus.")
     effacer(conn)
-    conn.execute("UPDATE gc_sequences SET prochain=1, annee=0")
+    conn.execute("UPDATE gc_sequences SET prochain=1, annee=0, mois=0")
+    # Compteurs continus de RVGI : départ fictif dans la même plage
+    for code, n in (("commande", 9900001), ("bl", 9930001), ("of", 1)):
+        conn.execute("UPDATE gc_sequences SET prochain=? WHERE code=?", (n, code))
     fichiers.enregistrer_societe(conn, {
         "raison_sociale": "Société de démonstration", "forme_juridique": "SAS", "capital_cents": 10_000_000,
         "siret": "000 000 000 00000", "rcs": "RCS Démo", "tva_intra": "FR00000000000",

@@ -54,7 +54,8 @@ def _ventilation(conn, piece) -> tuple[list[tuple[str, int, int]], dict]:
             FROM gc_pieces_lignes l JOIN gc_articles a ON a.id=l.article_id
             LEFT JOIN gc_familles f ON f.code=a.famille
             WHERE l.piece_id=?""", (defaut, piece["id"])).fetchall()
-    tot = calculs.totaux([dict(l) for l in lignes], piece["remise_bp"])
+    esc = piece["escompte_bp"] if "escompte_bp" in piece.keys() else 0
+    tot = calculs.totaux([dict(l) for l in lignes], piece["remise_bp"], esc or 0)
     par = {}
     for l in lignes:
         k = (l["compte"], int(l["taux_tva_bp"]))

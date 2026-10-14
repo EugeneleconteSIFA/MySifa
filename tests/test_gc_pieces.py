@@ -43,7 +43,7 @@ def _base(conn):
     for t in ("gc_relances", "gc_reglements_affectations", "gc_reglements", "gc_mouvements", "gc_echeances", "gc_pieces_lignes", "gc_pieces", "gc_tarifs",
               "gc_articles", "gc_tiers_adresses", "gc_tiers"):
         conn.execute(f"DELETE FROM {t}")
-    conn.execute("UPDATE gc_sequences SET prochain=1, annee=0")
+    conn.execute("UPDATE gc_sequences SET prochain=1, annee=0, mois=0")
     conn.execute(
         """INSERT INTO gc_tiers (id, code, est_client, raison_sociale, condition_paiement, cree_le, modifie_le)
            VALUES (1, 'C1', 1, 'Client Un', '30FM', ?, ?)""", (NOW, NOW))
@@ -108,6 +108,13 @@ class Calculs(unittest.TestCase):
             self.assertEqual(calculs.prendre_numero(conn, "facture", date(2026, 12, 31)), "FA2600001")
             self.assertEqual(calculs.prendre_numero(conn, "facture", date(2026, 12, 31)), "FA2600002")
             self.assertEqual(calculs.prendre_numero(conn, "facture", date(2027, 1, 1)), "FA2700001")
+            # Devis : compteur mensuel ; commande : continu
+            self.assertEqual(calculs.prendre_numero(conn, "devis", date(2026, 10, 30)), "2610001")
+            self.assertEqual(calculs.prendre_numero(conn, "devis", date(2026, 10, 31)), "2610002")
+            self.assertEqual(calculs.prendre_numero(conn, "devis", date(2026, 11, 2)), "2611001")
+            conn.execute("UPDATE gc_sequences SET prochain=9932727 WHERE code='commande'")
+            self.assertEqual(calculs.prendre_numero(conn, "commande", date(2026, 12, 31)), "9932727")
+            self.assertEqual(calculs.prendre_numero(conn, "commande", date(2027, 1, 2)), "9932728")
             conn.rollback()
 
 
@@ -132,7 +139,7 @@ class Chaine(unittest.TestCase):
         dv = pieces.creer(c, "devis", 1)
         pieces.enregistrer(c, dv, {"date_piece": "2026-10-14"}, [
             _ligne(1, 20_000_000, 1250, 1000), _ligne(2, 1000, 8000), {"libelle": "Texte libre"}])
-        self.assertEqual(pieces.valider(c, dv), "DE2600001")
+        self.assertEqual(pieces.valider(c, dv), "2610001")      # format RVGI : AAMM + 3 chiffres
 
         co = pieces.transformer(c, [dv], "commande")
         # Le devis n'est accepté qu'à la validation de la commande ; le
@@ -143,7 +150,7 @@ class Chaine(unittest.TestCase):
         cmd = pieces.charger(c, co)
         self.assertEqual(len(cmd["lignes"]), 2)   # la ligne de texte ne suit pas
         pieces.enregistrer(c, co, {"date_piece": "2026-10-14"}, None)
-        self.assertEqual(pieces.valider(c, co), "CO2600001")
+        self.assertEqual(pieces.valider(c, co), "0000001")      # compteur continu sur 7 chiffres
         self.assertEqual(pieces.charger(c, dv)["statut"], "solde")
 
         # Première livraison partielle : 12 000 étiquettes, calage livré
@@ -351,6 +358,37 @@ class Chaine(unittest.TestCase):
         with self.assertRaises(ErreurPiece):
             fichiers.mouvement_manuel(c, {"type": "transfert", "article_id": 1, "depot": "PRINC",
                                           "depot_destination": "PRINC", "quantite_milli": 1000})
+
+    def test_parite_rvgi(self):
+        c = self.conn
+        t = calculs.totaux([{"montant_ht_cents": 10000, "taux_tva_bp": 2000}], 1000, 200, 3000)
+        self.assertEqual((t["remise"], t["escompte"], t["ht"], t["tva"], t["ttc"], t["net_a_payer"]),
+                         (1000, 180, 8820, 1764, 10584, 7584))
+        co = pieces.creer(c, "commande", 1)
+        pieces.enregistrer(c, co, {"date_piece": "2026-10-01", "date_livraison": "2026-10-20", "jours_expedition": 2,
+                                   "acompte_cents": 2000},
+                           [_ligne(1, 5_000_000, 1250, 1000, date_livraison="2026-10-20", date_expedition="2026-10-18",
+                                   origine_prod="stock", ref_client="REF-CLI-9")])
+        l = pieces.charger(c, co)["lignes"][0]
+        self.assertEqual((l["origine_prod"], l["laboratoire"], l["ref_client"]), ("stock", "renouvellement", "REF-CLI-9"))
+        pieces.valider(c, co)
+        k = [x for x in pieces.carnet(c, ["commande"]) if x["piece_id"] == co][0]
+        self.assertEqual((k["date_expedition"], k["reste_milli"], k["position"], k["situation_of"]),
+                         ("2026-10-18", 5_000_000, "valide", ""))
+        bl = pieces.transformer(c, [co], "bl")
+        lb = pieces.charger(c, bl)["lignes"][0]
+        self.assertEqual((lb["date_expedition"], lb["origine_prod"], lb["ref_client"]), ("2026-10-18", "stock", "REF-CLI-9"))
+        with self.assertRaises(ErreurPiece):
+            pieces.enregistrer(c, bl, None, [dict(lb, origine_prod="inconnue")])
+        pieces.enregistrer(c, bl, None, [dict(lb, quantite_milli=2_000_000)])
+        pieces.valider(c, bl)
+        k = [x for x in pieces.carnet(c, ["commande"]) if x["piece_id"] == co][0]
+        self.assertEqual((k["repris_milli"], k["reste_milli"], k["position"]), (2_000_000, 3_000_000, "partiel"))
+        fa = pieces.transformer(c, [bl], "facture")
+        c.execute("UPDATE gc_pieces SET acompte_cents=1000 WHERE id=?", (fa,))
+        pieces.valider(c, fa)
+        f = pieces.charger(c, fa)
+        self.assertEqual(f["echeances"][0]["montant_cents"], f["total_ttc_cents"] - 1000)
 
     def test_achat_reception_stock(self):
         c = self.conn

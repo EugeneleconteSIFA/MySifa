@@ -169,15 +169,21 @@ def rendre(conn, piece_id: int) -> str:
     totaux = ""
     mentions = []
     if not sans_prix:
-        tot = calculs.totaux(p["lignes"], p["remise_bp"])
+        tot = calculs.totaux(p["lignes"], p["remise_bp"], p.get("escompte_bp") or 0, p.get("acompte_cents") or 0)
         rows = []
-        if tot["remise"]:
+        if tot["remise"] or tot["escompte"]:
             rows.append(("Total HT brut", _euros(sum(b["ht_brut"] for b in tot["bases"]))))
+        if tot["remise"]:
             rows.append((f'Remise {int(p["remise_bp"]) / 100:g} %'.replace(".", ","), "− " + _euros(tot["remise"])))
+        if tot["escompte"]:
+            rows.append((f'Escompte {int(p["escompte_bp"]) / 100:g} %'.replace(".", ","), "− " + _euros(tot["escompte"])))
         rows.append(("Total HT", _euros(tot["ht"])))
         for b in tot["bases"]:
             rows.append((f'TVA {b["taux_bp"] / 100:g} % sur {_euros(b["ht"])}'.replace(".", ","), _euros(b["tva"])))
         rows.append(("Total TTC" if p["type"] != "avoir" else "Total TTC en votre faveur", _euros(tot["ttc"])))
+        if tot["acompte"]:
+            rows.append(("Acompte versé", "− " + _euros(tot["acompte"])))
+            rows.append(("Net à payer", _euros(tot["net_a_payer"])))
         totaux = '<table class="totaux">' + "".join(
             f'<tr class="{"fort" if i == len(rows) - 1 else ""}"><td>{_e(a)}</td><td class="n">{b}</td></tr>'
             for i, (a, b) in enumerate(rows)) + "</table>"
@@ -222,7 +228,8 @@ def rendre(conn, piece_id: int) -> str:
     if p["type"] in ("facture", "avoir"):
         if soc.get("penalites_retard"):
             mentions.append(soc["penalites_retard"])
-        mentions.append("Pas d'escompte pour paiement anticipé.")
+        if not p.get("escompte_bp"):
+            mentions.append("Pas d'escompte pour paiement anticipé.")
     if p["notes"]:
         mentions.insert(0, p["notes"])
     banque = ""

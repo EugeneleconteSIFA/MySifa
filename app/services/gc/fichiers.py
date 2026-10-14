@@ -38,7 +38,8 @@ CHAMPS_TIERS = {"code": str, "est_client": bool, "est_fournisseur": bool, "raiso
                 "tva_intra": str, "email": str, "email_facturation": str, "telephone": str,
                 "condition_paiement": "ref", "mode_paiement": "ref", "tva_code": "ref", "remise_bp": int,
                 "encours_max_cents": "int_null", "bloque": bool, "notes": str, "actif": bool,
-                "compte_auxiliaire": str}
+                "compte_auxiliaire": str, "representant_id": "int_null", "transporteur_id": "int_null",
+                "jours_expedition": int}
 
 CHAMPS_ADRESSE = ("type", "libelle", "adresse1", "adresse2", "code_postal", "ville", "pays", "par_defaut")
 CHAMPS_CONTACT = ("nom", "fonction", "email", "telephone")
@@ -46,7 +47,8 @@ CHAMPS_CONTACT = ("nom", "fonction", "email", "telephone")
 CHAMPS_ARTICLE = {"code": str, "libelle": str, "libelle_client": str, "nature": str, "famille": "ref",
                   "unite": str, "base_prix": int, "prix_vente_cents": "int_null", "prix_achat_cents": "int_null",
                   "tva_code": "ref", "gere_stock": bool, "fournisseur_id": "int_null", "client_id": "int_null",
-                  "notes": str, "actif": bool}
+                  "notes": str, "actif": bool, "ref_client": str, "format_l_dmm": "int_null",
+                  "format_a_dmm": "int_null", "conditionnement": str, "designation": str, "origine_prod": str}
 
 NATURES = {"pf": "Produit fini", "mp": "Matière première", "service": "Prestation"}
 
