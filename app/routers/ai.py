@@ -1,235 +1,81 @@
-"""MySifa — Agent IA (Claude via Anthropic SDK)."""
+"""MySifa — Agent IA (widget présent sur tout le site).
+
+  GET  /api/ai/brief                        résumé de la journée (direction)
+  GET  /api/ai/config                       le widget s'affiche-t-il, quels modèles
+  POST /api/ai/chat                         une question → réponse + actions proposées
+  POST /api/ai/actions/{jeton}/confirmer    exécute une action proposée
+  POST /api/ai/actions/{jeton}/annuler
+
+La logique vit dans app/services/agent_ia.py (lecture, boucle) et
+app/services/agent_actions.py (catalogue fermé des écritures, exécution).
+"""
 from __future__ import annotations
 
 import json
-import os
 import time
+from datetime import datetime, timedelta
 from typing import Any, Optional
 
-import anthropic
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from config import AGENT_IA_ACTION_TTL_MIN, AGENT_IA_MODELE, AGENT_IA_RATE_MAX, ROLES_AGENT_IA, agent_ia_modeles
 from database import get_db
 from services.auth_service import get_current_user
-from app.services.ai_context import (
-    BRIEF_ROLES,
-    build_system_prompt,
-    get_tools_for_role,
-    get_user_scope,
-)
-from app.services.ai_data import (
-    build_daily_brief,
-    execute_pending_action,
-    fetch_context_for_role,
-    tool_expe_detail,
-    tool_planning_close_dossier_prepare,
-    tool_planning_client_schedule,
-    tool_planning_detail,
-    tool_production_detail,
-    tool_stock_adjust_prepare,
-    tool_stock_emplacement,
-    tool_stock_search,
-    tool_traceability_dossier_bobines,
-)
+from app.services.ai_context import BRIEF_ROLES
+from app.services.ai_data import build_daily_brief
+from app.services import agent_ia, agent_actions
+from app.services.audit_service import log_action
 
 router = APIRouter(prefix="/api/ai", tags=["agent-ia"])
 
-ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
-MAX_TOKENS = 1024
-MAX_TOOL_LOOPS = 6
-RATE_LIMIT_MAX = 20
-RATE_LIMIT_WINDOW_SEC = 60.0
-
-# user_id → timestamps des requêtes (nettoyage lazy à chaque appel)
+RATE_WINDOW_SEC = 60.0
 _rate_buckets: dict[Any, list[float]] = {}
-# user_id → action en attente de confirmation
-_pending_actions: dict[Any, dict[str, Any]] = {}
 
-TOOLS: list[dict[str, Any]] = [
-    {
-        "name": "production_detail",
-        "description": (
-            "Détail de la production sur N jours : saisies par jour pour une machine, "
-            "ou synthèse par machine si machine_nom absent."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "machine_nom": {
-                    "type": "string",
-                    "description": "Nom de la machine (ex. Cohésio 1). Optionnel.",
-                },
-                "jours": {
-                    "type": "integer",
-                    "description": "Nombre de jours à remonter (défaut 7, max 90).",
-                },
-            },
-        },
-    },
-    {
-        "name": "planning_detail",
-        "description": (
-            "Liste des dossiers au planning machine, filtrable par machine, client et statut. "
-            "Pour les dates de passage (« quand »), préférer planning_client_schedule."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "machine_nom": {
-                    "type": "string",
-                    "description": "Nom de la machine. Optionnel.",
-                },
-                "client": {
-                    "type": "string",
-                    "description": "Filtrer par nom de client (fragment). Optionnel.",
-                },
-                "statut": {
-                    "type": "string",
-                    "description": "attente | en_cours | termine. Optionnel.",
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Nombre max de dossiers (défaut 10, max 30).",
-                },
-            },
-        },
-    },
-    {
-        "name": "planning_client_schedule",
-        "description": (
-            "Dates estimées de passage en production pour les dossiers d'un client "
-            "(file d'attente, début/fin en heures ouvrées machine). À utiliser pour "
-            "répondre aux questions « quand », « à quelle date », « position N »."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "client": {
-                    "type": "string",
-                    "description": "Nom ou fragment du client (ex. SNV).",
-                },
-                "machine_nom": {
-                    "type": "string",
-                    "description": "Limiter à une machine. Optionnel.",
-                },
-            },
-            "required": ["client"],
-        },
-    },
-    {
-        "name": "traceability_dossier_bobines",
-        "description": (
-            "Liste les bobines matière utilisées sur un dossier de fabrication : "
-            "codes barres scannés en saisie production (MyProd > Traçabilité). "
-            "À utiliser pour « bobines utilisées », « matières scannées », « codes barres du dossier ». "
-            "Ne pas confondre avec le stock articles (stock_search)."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "no_dossier": {
-                    "type": "string",
-                    "description": (
-                        "Numéro ou référence du dossier / OF "
-                        "(ex. 9931595, Reliquat 9931595, référence planning)."
-                    ),
-                },
-                "query": {
-                    "type": "string",
-                    "description": "Alias de no_dossier si la référence est formulée autrement.",
-                },
-            },
-        },
-    },
-    {
-        "name": "stock_search",
-        "description": (
-            "Recherche un article en stock (produits finis / matières en entrepôt) "
-            "par référence ou désignation. Pas pour les bobines scannées sur un dossier fabrication. "
-            "Pour un code emplacement (ex. B121), utiliser stock_emplacement."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Référence ou fragment de désignation.",
-                },
-            },
-            "required": ["query"],
-        },
-    },
-    {
-        "name": "stock_emplacement",
-        "description": (
-            "Liste les articles présents à un emplacement entrepôt "
-            "(ex. B121, A211) : références, quantités et unités. "
-            "À utiliser pour « stock dans B121 », « contenu de l'emplacement », « qu'y a-t-il en B121 »."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "emplacement": {
-                    "type": "string",
-                    "description": "Code emplacement (lettre + 3 chiffres, ex. B121).",
-                },
-            },
-            "required": ["emplacement"],
-        },
-    },
-    {
-        "name": "expe_detail",
-        "description": "Expéditions à venir (en attente ou validées) sur une période.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "jours": {
-                    "type": "integer",
-                    "description": "Horizon en jours à partir d'aujourd'hui (défaut 14, max 60).",
-                },
-            },
-        },
-    },
-    {
-        "name": "planning_close_dossier",
-        "description": (
-            "Demande la clôture d'un dossier planning (statut terminé). "
-            "Nécessite une confirmation explicite de l'utilisateur avant exécution."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "entry_id": {
-                    "type": "integer",
-                    "description": "ID de l'entrée planning_entries.",
-                },
-            },
-            "required": ["entry_id"],
-        },
-    },
-    {
-        "name": "stock_adjust",
-        "description": (
-            "Demande un ajustement de stock à un emplacement. "
-            "Nécessite une confirmation explicite avant exécution."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "reference": {"type": "string", "description": "Référence produit."},
-                "emplacement": {"type": "string", "description": "Code emplacement."},
-                "nouvelle_quantite": {
-                    "type": "number",
-                    "description": "Quantité cible après ajustement.",
-                },
-                "raison": {"type": "string", "description": "Motif de l'ajustement."},
-            },
-            "required": ["reference", "emplacement", "nouvelle_quantite", "raison"],
-        },
-    },
-]
+
+def _agent_autorise(user: dict) -> bool:
+    return user.get("role") == "superadmin" or user.get("role") in ROLES_AGENT_IA
+
+
+def _user_agent(request: Request) -> dict:
+    user = get_current_user(request)
+    if not _agent_autorise(user):
+        raise HTTPException(403, detail="Agent IA non ouvert pour ce rôle.")
+    return user
+
+
+def _check_rate_limit(user: dict) -> None:
+    uid = user.get("id") or user.get("email") or "?"
+    now = time.time()
+    for key in list(_rate_buckets):
+        _rate_buckets[key] = [t for t in _rate_buckets[key] if t > now - RATE_WINDOW_SEC]
+        if not _rate_buckets[key]:
+            del _rate_buckets[key]
+    times = _rate_buckets.setdefault(uid, [])
+    if len(times) >= AGENT_IA_RATE_MAX:
+        raise HTTPException(429, detail="Trop de requêtes — attendre une minute.")
+    times.append(now)
+
+
+@router.get("/brief")
+def ai_brief(request: Request):
+    """Résumé JSON de la journée — direction et superadmin uniquement."""
+    user = get_current_user(request)
+    if user.get("role", "") not in BRIEF_ROLES:
+        raise HTTPException(403, detail="Accès réservé à la direction.")
+    with get_db() as conn:
+        return build_daily_brief(conn)
+
+
+@router.get("/config")
+def ai_config(request: Request):
+    user = get_current_user(request)
+    actif = _agent_autorise(user)
+    return {
+        "actif": actif,
+        "modeles": agent_ia_modeles() if actif else [],
+        "defaut": agent_ia.choisir_modele(None)["id"] if actif else AGENT_IA_MODELE,
+    }
 
 
 class Message(BaseModel):
@@ -239,243 +85,93 @@ class Message(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[Message]
-    module: Optional[str] = None   # module actif côté client
+    module: Optional[str] = None
+    page: Optional[dict] = None       # {url, titre}
+    modele: Optional[str] = None
 
 
-class ChatResponse(BaseModel):
-    reply: str
-    status: Optional[str] = None   # "ok" | "err" | "info" | None
-
-
-def _extract_confirm_payload(message: str) -> dict[str, Any] | None:
-    marker = "[CONFIRM_ACTION:"
-    if marker not in message:
-        return None
-    start = message.index(marker) + len(marker)
-    end = message.rindex("]")
-    return json.loads(message[start:end])
-
-
-def _check_rate_limit(user: dict) -> None:
-    """Max 20 requêtes / minute par utilisateur (nettoyage lazy des entrées expirées)."""
-    uid = _user_key(user)
-    now = time.time()
-    cutoff = now - RATE_LIMIT_WINDOW_SEC
-
-    for key in list(_rate_buckets):
-        _rate_buckets[key] = [t for t in _rate_buckets[key] if t > cutoff]
-        if not _rate_buckets[key]:
-            del _rate_buckets[key]
-
-    times = _rate_buckets.setdefault(uid, [])
-    times[:] = [t for t in times if t > cutoff]
-    if len(times) >= RATE_LIMIT_MAX:
-        raise HTTPException(429, detail="Trop de requêtes.")
-    times.append(now)
-
-
-def _tools_for_role(role: str) -> list[dict[str, Any]]:
-    allowed = set(get_tools_for_role(role))
-    return [t for t in TOOLS if t["name"] in allowed]
-
-
-def _user_key(user: dict) -> Any:
-    uid = user.get("id")
-    if uid is not None:
-        return uid
-    return user.get("email") or "unknown"
-
-
-def _is_confirmation(text: str) -> bool:
-    t = (text or "").strip().lower()
-    if not t:
-        return False
-    if t in ("oui", "ok", "confirme", "oui, confirme", "oui confirme"):
-        return True
-    return any(w in ("oui", "ok", "confirme") for w in t.replace(",", " ").split())
-
-
-def _is_cancellation(text: str) -> bool:
-    t = (text or "").strip().lower()
-    return t in ("non", "annuler", "annule", "cancel") or t.startswith("annul")
-
-
-@router.get("/brief")
-def ai_brief(request: Request):
-    """Résumé JSON de la journée — direction et superadmin uniquement."""
-    user = get_current_user(request)
-    role = user.get("role", "")
-    if role not in BRIEF_ROLES:
-        raise HTTPException(403, detail="Accès réservé à la direction.")
-
-    with get_db() as conn:
-        return build_daily_brief(conn)
-
-
-@router.post("/chat", response_model=ChatResponse)
-async def chat(req: ChatRequest, request: Request):
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        raise HTTPException(503, detail="ANTHROPIC_API_KEY non configurée.")
-
-    user = get_current_user(request)
-    role = user.get("role", "")
-    scope = get_user_scope(role)
-    if not scope:
-        raise HTTPException(403, detail="Aucun accès agent IA pour ce rôle.")
-
+@router.post("/chat")
+def chat(req: ChatRequest, request: Request):
+    user = _user_agent(request)
     _check_rate_limit(user)
-
-    ukey = _user_key(user)
-    last_user_msg = next(
-        (m.content for m in reversed(req.messages) if m.role == "user"),
-        "",
-    )
-
-    if _is_cancellation(last_user_msg):
-        _pending_actions.pop(ukey, None)
-
-    if _is_confirmation(last_user_msg):
-        pending = _pending_actions.pop(ukey, None)
-        if pending:
-            with get_db() as conn:
-                try:
-                    result = execute_pending_action(conn, user, pending)
-                    return JSONResponse({"reply": result, "status": "ok"})
-                except Exception as e:
-                    return JSONResponse(
-                        {"reply": f"Erreur lors de l'exécution : {e}", "status": "err"}
-                    )
-
-    allowed_tools = _tools_for_role(role)
-    client = anthropic.Anthropic(api_key=api_key)
-    system = build_system_prompt(user, req.module)
-
-    messages = [{"role": m.role, "content": m.content} for m in req.messages]
-
-    final_reply = ""
-    final_status: str | None = None
-
+    # Historique borné : les 30 derniers messages, texte seul, alternance garantie.
+    hist: list[dict] = []
+    for m in req.messages[-30:]:
+        if m.role not in ("user", "assistant") or not (m.content or "").strip():
+            continue
+        if hist and hist[-1]["role"] == m.role:
+            hist[-1]["content"] += "\n\n" + m.content[:8000]
+        else:
+            hist.append({"role": m.role, "content": m.content[:8000]})
+    while hist and hist[0]["role"] != "user":
+        hist.pop(0)
+    if not hist or hist[-1]["role"] != "user":
+        raise HTTPException(400, detail="Message vide.")
+    page = dict(req.page or {})
+    if req.module and not page.get("titre"):
+        page["titre"] = req.module
     with get_db() as conn:
-        context_data = fetch_context_for_role(conn, user)
-        if context_data:
-            system += f"\n\n--- Données actuelles ---\n{context_data}"
-
-        for _ in range(MAX_TOOL_LOOPS):
-            kwargs: dict[str, Any] = {
-                "model": ANTHROPIC_MODEL,
-                "max_tokens": MAX_TOKENS,
-                "system": system,
-                "messages": messages,
-            }
-            if allowed_tools:
-                kwargs["tools"] = allowed_tools
-
-            try:
-                response = client.messages.create(**kwargs)
-            except anthropic.APIError as e:
-                raise HTTPException(502, detail=f"Erreur API Anthropic : {e}")
-
-            stop = response.stop_reason
-            content = response.content
-
-            if stop == "end_turn":
-                for block in content:
-                    if block.type == "text":
-                        final_reply += block.text
-                break
-
-            if stop != "tool_use":
-                final_reply = "Je n'ai pas pu traiter cette demande."
-                final_status = "err"
-                break
-
-            # Traitement tool_use
-            messages.append({"role": "assistant", "content": [b.model_dump() for b in content]})
-            tool_results = []
-            for block in content:
-                if block.type != "tool_use":
-                    continue
-                result, status = await _dispatch_tool(
-                    conn, user, block.name, block.input, allowed_tools, ukey
-                )
-                final_status = status
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": result,
-                })
-            messages.append({"role": "user", "content": tool_results})
-
-    return JSONResponse({"reply": final_reply or "OK.", "status": final_status})
+        try:
+            res = agent_ia.converser(conn, user, hist, page, req.modele)
+        except agent_ia.ErreurAgent as e:
+            raise HTTPException(503 if "clé" in str(e) else 502, detail=str(e))
+    # La conversation n'est pas journalisée (module « ai » aveugle au contenu) :
+    # seulement le fait qu'il y a eu lecture, et quels outils.
+    if res["outils"]:
+        log_action(user=user, action="SEARCH", module="ai",
+                   objet=f"Agent IA · {len(res['outils'])} outil(s)",
+                   detail={"outils": sorted(set(res["outils"])), "modele": res["modele"]}, request=request)
+    return {"reply": res["reponse"], "actions": res["actions"], "modele": res["modele"]}
 
 
-async def _dispatch_tool(
-    conn,
-    user: dict,
-    name: str,
-    inp: dict,
-    allowed_tools: list[dict[str, Any]],
-    user_key: Any,
-) -> tuple[str, str]:
-    """Dispatch vers les fonctions outils."""
-    allowed_names = {t["name"] for t in allowed_tools}
-    if name not in allowed_names:
-        return ("Accès non autorisé à cet outil.", "err")
+def _action(conn, jeton: str, user: dict):
+    row = conn.execute("SELECT * FROM ai_actions WHERE jeton=?", (jeton,)).fetchone()
+    if not row or row["user_email"] != (user.get("email") or ""):
+        raise HTTPException(404, detail="Action introuvable.")
+    return row
 
-    scope = get_user_scope(user.get("role", ""))
-    inp = inp if isinstance(inp, dict) else {}
 
-    try:
-        if name == "production_detail":
-            if "production" not in scope:
-                return ("Accès production non autorisé pour ce rôle.", "err")
-            return (tool_production_detail(conn, inp), "ok")
+@router.post("/actions/{jeton}/confirmer")
+async def confirmer_action(jeton: str, request: Request):
+    user = _user_agent(request)
+    now = datetime.now()
+    with get_db() as conn:
+        row = _action(conn, jeton, user)
+        if row["statut"] != "proposee":
+            raise HTTPException(409, detail="Action déjà traitée.")
+        cree = datetime.fromisoformat(row["created_at"])
+        if now - cree > timedelta(minutes=AGENT_IA_ACTION_TTL_MIN):
+            conn.execute("UPDATE ai_actions SET statut='expiree', traite_at=? WHERE id=?",
+                         (now.strftime("%Y-%m-%dT%H:%M:%S"), row["id"]))
+            conn.commit()
+            raise HTTPException(410, detail="Proposition expirée — redemander à l'agent.")
+        # Passage atomique : deux clics rapides n'exécutent qu'une fois.
+        cur = conn.execute("UPDATE ai_actions SET statut='en_cours' WHERE id=? AND statut='proposee'", (row["id"],))
+        conn.commit()
+        if cur.rowcount != 1:
+            raise HTTPException(409, detail="Action déjà traitée.")
+        action = dict(row)
+    res = await agent_actions.executer(request, action)
+    statut = "executee" if res["ok"] else "echec"
+    with get_db() as conn:
+        conn.execute("UPDATE ai_actions SET statut=?, resultat_json=?, traite_at=? WHERE id=?",
+                     (statut, json.dumps(res, ensure_ascii=False, default=str)[:20000],
+                      datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), action["id"]))
+        conn.commit()
+    log_action(user=user, action="VALIDATE", module="ai",
+               objet=f"Agent IA · {action['libelle']}" + ("" if res["ok"] else " · échec"),
+               detail={"resume": action["resume"], "chemin": action["chemin"], "statut": res.get("statut_http"),
+                       "message": res.get("message")}, request=request)
+    return res
 
-        if name == "planning_detail":
-            if "planning" not in scope:
-                return ("Accès planning non autorisé pour ce rôle.", "err")
-            return (tool_planning_detail(conn, inp), "ok")
 
-        if name == "planning_client_schedule":
-            if "planning" not in scope:
-                return ("Accès planning non autorisé pour ce rôle.", "err")
-            return (tool_planning_client_schedule(conn, inp), "ok")
-
-        if name == "traceability_dossier_bobines":
-            if "production" not in scope:
-                return ("Accès traçabilité fabrication non autorisé pour ce rôle.", "err")
-            return (tool_traceability_dossier_bobines(conn, inp), "ok")
-
-        if name == "stock_search":
-            if "stock" not in scope:
-                return ("Accès stock non autorisé pour ce rôle.", "err")
-            return (tool_stock_search(conn, inp), "ok")
-
-        if name == "stock_emplacement":
-            if "stock" not in scope:
-                return ("Accès stock non autorisé pour ce rôle.", "err")
-            return (tool_stock_emplacement(conn, inp), "ok")
-
-        if name == "expe_detail":
-            if "expe" not in scope:
-                return ("Accès expéditions non autorisé pour ce rôle.", "err")
-            return (tool_expe_detail(conn, inp), "ok")
-
-        if name == "planning_close_dossier":
-            msg = tool_planning_close_dossier_prepare(conn, inp)
-            payload = _extract_confirm_payload(msg)
-            if payload:
-                _pending_actions[user_key] = payload
-            return (msg, "info")
-
-        if name == "stock_adjust":
-            msg = tool_stock_adjust_prepare(conn, inp)
-            payload = _extract_confirm_payload(msg)
-            if payload:
-                _pending_actions[user_key] = payload
-            return (msg, "info")
-
-        return (f"Outil inconnu : {name}.", "err")
-    except Exception as e:
-        return (f"Erreur lecture données : {e}", "err")
+@router.post("/actions/{jeton}/annuler")
+def annuler_action(jeton: str, request: Request):
+    user = _user_agent(request)
+    with get_db() as conn:
+        row = _action(conn, jeton, user)
+        if row["statut"] == "proposee":
+            conn.execute("UPDATE ai_actions SET statut='annulee', traite_at=? WHERE id=?",
+                         (datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), row["id"]))
+            conn.commit()
+    return {"ok": True}

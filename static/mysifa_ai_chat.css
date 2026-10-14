@@ -298,7 +298,7 @@
 }
 .ai-confirm-btn.primary {
   background: var(--accent);
-  color: var(--bg);
+  color: white;
   border-color: var(--accent);
 }
 @media (max-width: 900px) {
@@ -338,4 +338,45 @@
   #ai-messages {
     min-height: 0;
   }
+}
+
+/* ── Agent (octobre 2026) : en-tête, cartes d'action, Markdown ── */
+#ai-chat-panel { width: 420px; height: 600px; max-height: calc(100vh - 110px); }
+#ai-chat-panel.ai-grand { width: min(760px, calc(100vw - 48px)); height: calc(100vh - 110px); }
+#ai-chat-header { align-items: center; gap: 6px; }
+#ai-chat-header .ai-title { flex: 1; min-width: 0; }
+#ai-modele { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+  font: inherit; font-size: 11px; padding: 4px 6px; max-width: 110px; cursor: pointer; }
+.ai-hbtn { background: var(--bg); color: var(--text2); border: 1px solid var(--border); border-radius: 8px;
+  width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
+.ai-hbtn:hover { border-color: var(--accent); color: var(--accent); }
+.ai-typing-txt { font-size: 11px; color: var(--muted); margin-left: 6px; }
+.ai-msg.bot .ai-bubble p { margin: 0 0 6px; }
+.ai-msg.bot .ai-bubble p:last-child { margin-bottom: 0; }
+.ai-msg.bot .ai-bubble ul { margin: 4px 0 6px; padding-left: 18px; }
+.ai-msg.bot .ai-bubble code { font-family: ui-monospace, Consolas, monospace; font-size: 11px; background: var(--bg); padding: 1px 4px; border-radius: 4px; }
+.ai-h { font-weight: 700; margin: 6px 0 4px; }
+.ai-table-wrap { overflow-x: auto; margin: 6px 0; }
+.ai-table { border-collapse: collapse; font-size: 11.5px; width: 100%; }
+.ai-table th { text-align: left; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); padding: 4px 6px; white-space: nowrap; }
+.ai-table td { border-bottom: 1px solid var(--border); padding: 4px 6px; vertical-align: top; }
+.ai-msg.ai-err .ai-bubble { border-left: 3px solid var(--danger); }
+#ai-chat-panel .ai-msg.bot { max-width: 100%; }
+#ai-chat-panel.ai-grand .ai-msg.user { max-width: 80%; }
+.ai-action { margin-top: 8px; border: 1px solid var(--accent); background: var(--accent-bg); border-radius: 10px; padding: 10px 12px; font-size: 12.5px; }
+.ai-action-executee { border-color: var(--success); background: var(--card); }
+.ai-action-echec { border-color: var(--danger); background: var(--card); }
+.ai-action-annulee { border-color: var(--border); background: var(--card); opacity: .75; }
+.ai-action-titre { font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--accent); }
+.ai-action-resume { margin: 4px 0 6px; font-weight: 600; color: var(--text); line-height: 1.4; }
+.ai-action-details { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0 0 4px; font-size: 12px; }
+.ai-action-details dt { color: var(--muted); }
+.ai-action-details dd { margin: 0; color: var(--text); word-break: break-word; }
+.ai-action-etat { font-size: 12px; font-weight: 600; margin-top: 4px; }
+.ai-action-executee .ai-action-etat { color: var(--success); }
+.ai-action-echec .ai-action-etat { color: var(--danger); }
+.ai-action-lien { display: inline-block; margin-top: 6px; font-size: 12px; font-weight: 700; color: var(--accent); }
+@media (max-width: 900px) {
+  #ai-chat-panel, #ai-chat-panel.ai-grand { width: auto; height: min(600px, calc(100dvh - 110px)); }
+  #ai-grand { display: none; }
 }
