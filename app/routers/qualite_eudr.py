@@ -11,8 +11,12 @@ Deux faces, comme la taxe carburant de MyExpé :
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, HTTPException, Request
-from fastapi.responses import HTMLResponse
+import os
+from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, Body, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse
 
 from app.core.database import get_db
 from app.routers.expe_portail import (
@@ -21,16 +25,18 @@ from app.routers.expe_portail import (
     _record_invalid_attempt,
     _visiteur_interne,
 )
-from app.routers.qualite import _require_qualite_access, _require_qualite_view
+from app.routers.qualite import _require_qualite_access, _require_qualite_view, _sanitize_filename
 from app.services import qualite_eudr as eudr
 from app.services.audit_service import log_action
 from app.services.email_service import send_email
 from app.web.eudr_portail_page import get_eudr_404_html, get_eudr_portail_html
-from config import EUDR_CHOIX, EUDR_LANGUES, eudr_langue, public_base_url
+from config import EUDR_CHOIX, EUDR_LANGUES, UPLOAD_DIR, eudr_langue, public_base_url
 
 router = APIRouter(prefix="/api/qualite/eudr", tags=["qualite_eudr"])
 router_html = APIRouter(tags=["eudr_portail"])
 router_api = APIRouter(prefix="/api/portail/eudr", tags=["eudr_portail_api"])
+
+EUDR_PIECES_DIR = os.path.join(UPLOAD_DIR, "qualite", "eudr")
 
 
 def _auteur(user: dict) -> str | None:
@@ -82,6 +88,81 @@ def _donnees_formulaire(*, fournisseur: str, email: str, langue, precedente) -> 
             for lang in EUDR_LANGUES
         },
     }
+
+
+@router.post("/fournisseurs/{fournisseur_id}/saisie")
+async def saisie_manuelle(
+    request: Request,
+    fournisseur_id: int,
+    role: str = Form(""),
+    perimetre: str = Form(""),
+    transmission: str = Form(""),
+    commentaire: str = Form(""),
+    piece: Optional[UploadFile] = File(None),
+):
+    """Réponse reçue hors formulaire (courrier, email, appel) : saisie par la
+    qualité, avec le courrier en pièce jointe. Le fournisseur passe en
+    « Répondu » ; ses demandes en cours restent valables."""
+    user = _require_qualite_access(request)
+    fichier = None
+    if piece is not None and piece.filename:
+        original = _sanitize_filename(piece.filename)
+        ext = original.rsplit(".", 1)[-1].lower() if "." in original else ""
+        if ext not in eudr.PIECE_TYPES:
+            raise HTTPException(status_code=400, detail="Pièce jointe : PDF, image, email (.msg, .eml) ou Word uniquement.")
+        contenu = await piece.read()
+        if len(contenu) > eudr.PIECE_MAX_OCTETS:
+            raise HTTPException(status_code=400, detail="Pièce jointe trop lourde — 15 Mo maximum.")
+        os.makedirs(EUDR_PIECES_DIR, exist_ok=True)
+        nom_disque = f"eudr_{fournisseur_id}_{datetime.now().strftime('%Y%m%d%H%M%S%f')}.{ext}"
+        with open(os.path.join(EUDR_PIECES_DIR, nom_disque), "wb") as fh:
+            fh.write(contenu)
+        fichier = (nom_disque, original, eudr.PIECE_TYPES[ext])
+    with get_db() as conn:
+        four = conn.execute("SELECT id, nom FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
+        if not four:
+            raise HTTPException(status_code=404, detail="Fournisseur introuvable.")
+        try:
+            eudr.enregistrer_manuel(
+                conn, fournisseur_id=fournisseur_id, auteur=_auteur(user), piece=fichier,
+                body={"role": role, "perimetre": perimetre, "transmission": transmission,
+                      "commentaire": commentaire},
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        conn.commit()
+        fournisseurs = eudr.liste(conn)
+    log_action(
+        user=user,
+        action="CREATE",
+        module="qualite",
+        objet=f"EUDR — réponse saisie à la main pour {four['nom']}",
+        ip=request.client.host if request.client else None,
+    )
+    return {"fournisseurs": fournisseurs}
+
+
+@router.get("/reponses/{reponse_id}/piece")
+def piece_jointe(request: Request, reponse_id: int):
+    _require_qualite_view(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT piece_filename, piece_original FROM eudr_reponses WHERE id=?", (reponse_id,)
+        ).fetchone()
+    if not row or not row["piece_filename"]:
+        raise HTTPException(status_code=404, detail="Aucune pièce jointe pour cette réponse.")
+    chemin = os.path.join(EUDR_PIECES_DIR, row["piece_filename"])
+    if not os.path.isfile(chemin):
+        raise HTTPException(status_code=404, detail="Fichier absent du serveur.")
+    ext = row["piece_filename"].rsplit(".", 1)[-1].lower()
+    # Type déduit de l'extension, jamais du type annoncé par le navigateur.
+    media = eudr.PIECE_TYPES.get(ext)
+    if not media:
+        raise HTTPException(status_code=404, detail="Type de fichier non servi.")
+    nom = _sanitize_filename(row["piece_original"] or row["piece_filename"])
+    mode = "inline" if ext in eudr.PIECE_EN_LIGNE else "attachment"
+    return FileResponse(chemin, media_type=media,
+                        headers={"Content-Disposition": f'{mode}; filename="{nom}"'})
 
 
 @router.post("/demandes/{demande_id}/annuler")
