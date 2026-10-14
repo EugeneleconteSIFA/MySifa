@@ -99,6 +99,22 @@ carte). Le grand format n'existe que pour un bloc qui déclare :
   detail, ratio}], total}`, avec les libellés et mises en forme de la page.
   Grand format = les 5 premières lignes, les plus urgentes d'abord.
 
+- `historique=(("lignes", "-"), …)` (décision du 14/10/2026) : valeurs
+  **relevées** chaque jour (bloc dans `RELEVEURS`), sens `+`, `-` ou `=`
+  (neutre, sans couleur). Ce sont des NIVEAUX, pas des flux : grand format en
+  **courbe** (valeur de 18 h, bande min–max de la journée, trou pour un jour
+  sans relevé, aujourd'hui = valeur du moment marquée « en cours »), horizon
+  7 / 30 / 90 jours en pastilles (`bloc_horizon`). L'axe part du premier relevé
+  si l'historique est plus court (7 jours au moins). Tendance : vs hier en
+  standard et compact, vs le début de l'horizon en courbe ; en nombre, en %
+  au-delà de 100. Standard : mini-courbe sur 14 jours. Données :
+  `GET /api/accueil/releves/{bloc}?url=&objet=&jours=` (accès du bloc). Un bloc
+  qui a une liste ET un historique choisit dans le questionnaire « Liste »
+  (défaut) ou « Courbe » (`bloc_vue`). `bloc_vue` et `bloc_horizon` sont des
+  réglages d'affichage (`PARAMS_AFFICHAGE`) : ils ne comptent pas dans la clé
+  des relevés. `series=` et `historique=` s'excluent. Le test des relevés
+  exige `historique=` sur tout bloc relevé, et inversement.
+
 **Filtres sur la carte en grand format** (décision du 14/10/2026) : un bloc
 qui a des filtres (`mysifa_blocs_filtres.js`) les montre, en grand format
 seulement, sous le titre de sa carte. Les choix et périodes deviennent des

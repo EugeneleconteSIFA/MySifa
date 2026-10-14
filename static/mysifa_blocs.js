@@ -722,6 +722,18 @@
       return col - 24;
     }
 
+    // Réglage d'affichage dans l'adresse capturée (bloc_vue : liste ou courbe).
+    function avecParam(url, k, v) {
+      try {
+        var u = new URL(url, location.origin);
+        if (v == null || v === "") u.searchParams.delete(k); else u.searchParams.set(k, v);
+        return u.pathname + u.search + u.hash;
+      } catch (e) { return url; }
+    }
+    function paramUrl(url, k) {
+      try { return new URL(url, location.origin).searchParams.get(k); } catch (e) { return null; }
+    }
+
     var TAILLES = [
       { k: "s", lib: "Compact", aide: "Une ligne : le nom, la valeur et sa tendance. Pour suivre beaucoup d'indicateurs d'un coup d'œil." },
       { k: "m", lib: "Standard", aide: "La carte complète : valeurs, badge d'état, mini-courbe sur 14 jours quand le chiffre a un historique." },
@@ -787,6 +799,14 @@
         Object.keys(a.alertes).forEach(function (k) { if (!(k in etat.alertes)) etat.alertes[k] = a.alertes[k]; });
       }
       if (etat.taille === "s") garderPremiere();
+      // Grand format d'un bloc qui a une liste ET des relevés : liste ou courbe.
+      var aSerie = bloc.valeurs.some(function (v) { return v.serie; });
+      var aHisto = !!(bloc.historique && Object.keys(bloc.historique).length);
+      var deuxGrands = !!(bloc.liste && aHisto && !aSerie);
+      etat.vue = paramUrl(o.url, "bloc_vue") === "courbe" ? "courbe" : "liste";
+      function urlAvecVue(url) {
+        return deuxGrands ? avecParam(url, "bloc_vue", etat.vue === "courbe" ? "courbe" : null) : url;
+      }
       // Pas d'alerte sur une valeur texte (seuil = nombre) : celles posées
       // avant le 06/10/2026 tombent au prochain enregistrement.
       bloc.valeurs.forEach(function (v) { if (v.nombre === false) delete etat.alertes[v.cle]; });
@@ -843,13 +863,23 @@
         }
         var tailles = TAILLES.filter(function (t) { return t.k !== "l" || bloc.grand; });
         var choisie = TAILLES.filter(function (t) { return t.k === etat.taille; })[0];
-        var aideGrand = bloc.liste ? "La carte et la liste détaillée : les 5 premières lignes, les plus urgentes d'abord."
-          : "La carte et un graphique sur 30 jours, avec le seuil d'alerte.";
+        var AIDES_GRAND = {
+          graphique: "La carte et un graphique jour par jour sur la période choisie, avec le seuil d'alerte.",
+          liste: "La carte et la liste détaillée : les 5 premières lignes, les plus urgentes d'abord.",
+          courbe: "La carte et la courbe jour par jour : la valeur relevée à 18 h, et en bande le minimum et le maximum de la journée."
+        };
+        var modeG = aSerie ? "graphique" : deuxGrands ? etat.vue : bloc.liste ? "liste" : "courbe";
+        var aideGrand = AIDES_GRAND[modeG];
         h += '<div class="cap-lbl">Taille sur l\'accueil</div><div class="cap-choix" role="group" aria-label="Taille">' +
           tailles.map(function (t) {
             return '<button type="button" data-taille="' + t.k + '" aria-pressed="' + (t.k === etat.taille) + '"' +
               (t.k === etat.taille ? ' class="on"' : "") + ">" + esc(t.lib) + "</button>";
           }).join("") + "</div>" +
+          (etat.taille === "l" && deuxGrands ? '<div class="cap-choix" role="group" aria-label="Grand format" style="margin-top:8px">' +
+            [["liste", "Liste"], ["courbe", "Courbe"]].map(function (x) {
+              return '<button type="button" data-vue="' + x[0] + '" aria-pressed="' + (x[0] === etat.vue) + '"' +
+                (x[0] === etat.vue ? ' class="on"' : "") + ">" + x[1] + "</button>";
+            }).join("") + "</div>" : "") +
           '<div class="cap-taille-aide">' + esc(etat.taille === "l" ? aideGrand : choisie.aide) +
           (bloc.grand ? "" : " Pas de grand format pour ce bloc : il n'a ni historique ni liste.") +
           (etat.taille === "s" && etat.noteCompact ? " Seule « " + esc(libelleValeur(etat.noteCompact)) +
@@ -876,6 +906,7 @@
         });
         var url = o.url;
         if (filtres) { try { url = F.ecrire(filtres, o.url, etat.filtres) || o.url; } catch (e) { url = o.url; } }
+        url = urlAvecVue(url);
         var champNom = panneau && panneau.querySelector("input.cap-nom");
         return { id: "apercu", bloc: bloc.nom, nom: (champNom ? champNom.value : o.nom) || bloc.libelle,
                  objet: (o.apercu && o.apercu.objet) || null, url: url, url_capture: url, hauteur: etat.taille,
@@ -1028,6 +1059,7 @@
         var b = e.target.closest("button");
         if (!b) return;
         if (b.getAttribute("data-act") === "annuler") { fermerPanneau(); return; }
+        if (b.hasAttribute("data-vue")) { etat.vue = b.getAttribute("data-vue"); dessiner(); return; }
         if (b.hasAttribute("data-taille")) {
           var nt = b.getAttribute("data-taille");
           if (nt === "s" && etat.taille !== "s") garderPremiere();
@@ -1065,6 +1097,7 @@
           }
           url = F.ecrire(filtres, o.url, etat.filtres);
         }
+        if (deuxGrands) url = urlAvecVue(url || o.url);
         b.disabled = true;
         Promise.resolve(o.envoyer({ nom: nomW, valeurs: valeurs, url: url, hauteur: etat.taille })).then(function () {
           enregistre = true;

@@ -69,6 +69,11 @@ for nom in reg.BLOCS:
     verifier(n_ == 1, f"{nom} : dans {n_} table(s) — l'ajouter à une seule de RELEVEURS, RECONSTITUABLES, NON_RELEVES")
     if nom in releves and reg.BLOCS[nom].objet:
         verifier(nom in objets, f"{nom} : relevé sur un objet sans énumération dans OBJETS")
+    # Une courbe de relevés ne se lit que si le bloc est relevé.
+    if reg.BLOCS[nom].historique:
+        verifier(nom in releves, f"{nom} : historique= déclaré mais le bloc n'est pas dans RELEVEURS")
+for nom in releves:
+    verifier(bool(reg.BLOCS[nom].historique), f"{nom} : relevé sans historique= au registre — la courbe n'en saura rien")
 for nom in releves | ecartes | reconst | objets:
     verifier(nom in reg.BLOCS, f"{nom} : cité dans accueil_releves.py mais absent du registre")
 fin()

@@ -138,7 +138,7 @@ for nom, b in reg.BLOCS.items():
 for nom in SERIES_JS | LISTES_JS:
     verifier(nom in reg.BLOCS and reg.BLOCS[nom].grand, f"{nom} : série ou liste sans déclaration au registre")
 try:
-    reg.valider_widget({"bloc": "stock.dashboard.kpis", "hauteur": "l"}, creation=False)
+    reg.valider_widget({"bloc": "messages.non-lus", "hauteur": "l"}, creation=False)
     verifier(False, "grand format accepté sur un bloc sans série ni liste")
 except ValueError:
     pass

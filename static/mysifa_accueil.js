@@ -268,7 +268,7 @@
       // Grand format : graphique sur 30 jours ou liste, sous les valeurs.
       ".mac-extra{padding:8px 10px 0 14px}",
       ".mac-extra:empty{display:none}",
-      ".mac-graph svg{display:block;width:100%;height:auto}",
+      ".mac-graph svg{display:block;width:100%;height:auto;overflow:visible}",
       ".mac-graph-pied{display:flex;justify-content:space-between;gap:6px;margin-top:2px;font-size:11px;color:var(--muted,#94a3b8)}",
       ".mac-graph-pied span:nth-child(2){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}",
       ".mac-li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;align-items:center;padding:5px 0;border-top:1px solid var(--border,#1e293b);font-size:12px}",
@@ -476,7 +476,78 @@
     return Math.round(v).toLocaleString("fr-FR") + (unite ? " " + unite : "");
   }
 
+  /* Réglages d'affichage portés par l'adresse capturée (PARAMS_AFFICHAGE du
+     registre) : bloc_vue (liste ou courbe) et bloc_horizon (7, 30, 90). Ils
+     ne changent aucun chiffre et ne comptent pas dans la clé des relevés. */
+  function paramUrl(url, k) {
+    try { return new URL(url, ORIGINE).searchParams.get(k); } catch (e) { return null; }
+  }
+  function avecParam(url, k, v) {
+    try {
+      var u = new URL(url, ORIGINE);
+      if (v == null || v === "") u.searchParams.delete(k); else u.searchParams.set(k, v);
+      return u.pathname + u.search + u.hash;
+    } catch (e) { return url; }
+  }
+  function aHistorique(c) {
+    var h = c.w.bloc_info && c.w.bloc_info.historique;
+    return !!(h && Object.keys(h).length);
+  }
+  // Grand format : « graphique » (série MyProd), « liste » ou « courbe » (relevés).
+  function modeGrand(c) {
+    var bi = c.w.bloc_info || {};
+    if ((bi.valeurs || []).some(function (v) { return v.serie; })) return "graphique";
+    if (bi.liste && aHistorique(c)) return paramUrl(c.w.url_capture, "bloc_vue") === "courbe" ? "courbe" : "liste";
+    if (bi.liste) return "liste";
+    if (aHistorique(c)) return "courbe";
+    return null;
+  }
+  var HORIZONS = ["7", "30", "90"];
+  function horizon(c) {
+    var h = paramUrl(c.w.url_capture, "bloc_horizon");
+    return HORIZONS.indexOf(h) >= 0 ? Number(h) : 30;
+  }
+
+  // Valeur numérique du moment d'une clé (nombre déclaré, sinon le texte lu).
+  function valeurDuMoment(c, cle) {
+    var n = c.nombres && c.nombres[cle];
+    if (typeof n === "number") return n;
+    return nombre(c.valeurs ? c.valeurs[cle] : null);
+  }
+
+  /* Tendance d'une valeur relevée : en standard et compact, la valeur du
+     moment contre celle d'hier (18 h) ; en courbe, contre le premier jour de
+     l'horizon. Écart en nombre pour un compte, en % au-delà de 100. */
+  function tendanceReleve(c, it) {
+    var R = c.releves && c.releves.jours;
+    if (!R || !it.histo) return null;
+    var cur = valeurDuMoment(c, it.cle);
+    if (cur == null) return null;
+    var ref = null, lib = "";
+    if (taille(c) === "l" && modeGrand(c) === "courbe") {
+      var jours = joursEntre(jourDecale(-(horizon(c) - 1)), jourDecale(-1));
+      for (var i = 0; i < jours.length; i++) {
+        var x = R[jours[i]] && R[jours[i]][it.cle];
+        if (typeof x === "number") { ref = x; lib = i === 0 ? "en " + horizon(c) + " j" : "depuis le " + jours[i].slice(8, 10) + "/" + jours[i].slice(5, 7); break; }
+      }
+    } else {
+      var h = R[jourDecale(-1)] && R[jourDecale(-1)][it.cle];
+      if (typeof h === "number") { ref = h; lib = "vs hier"; }
+    }
+    if (ref == null) return null;
+    var d = cur - ref;
+    var enPct = Math.abs(ref) >= 100;
+    var mesure = enPct ? (ref ? Math.round(d / Math.abs(ref) * 100) : 0) : Math.round(d * 100) / 100;
+    var bon = d === 0 || it.histo === "=" ? null : (it.histo === "+") === (d > 0);
+    return {
+      court: (d > 0 ? "↑ " : d < 0 ? "↓ " : "= ") + Math.abs(mesure).toLocaleString("fr-FR") + (enPct ? " %" : ""),
+      libelle: lib,
+      cls: "mac-tend" + (bon === true ? " bon" : bon === false ? " mauvais" : "")
+    };
+  }
+
   function tendanceDe(c, it) {
+    if (!it.serie && it.histo) return tendanceReleve(c, it);
     var t = c.serie && c.serie.tendances && c.serie.tendances[it.cle];
     if (!t || !it.serie || !t.precedent) return null;
     var pct = Math.round((t.actuel - t.precedent) / Math.abs(t.precedent) * 100);
@@ -582,6 +653,141 @@
     return g;
   }
 
+  /* Points d'une courbe de niveau : la valeur retenue de chaque jour (18 h)
+     et sa fourchette ; aujourd'hui, la valeur du moment. Un jour sans relevé
+     reste un trou, jamais un zéro. */
+  function pointsReleves(c, cle, jours) {
+    var R = (c.releves && c.releves.jours) || {}, MI = (c.releves && c.releves.minimums) || {}, MA = (c.releves && c.releves.maximums) || {};
+    var auj = jourDecale(0);
+    return jours.map(function (j) {
+      var v = R[j] && typeof R[j][cle] === "number" ? R[j][cle] : null;
+      var mi = MI[j] && typeof MI[j][cle] === "number" ? MI[j][cle] : null;
+      var ma = MA[j] && typeof MA[j][cle] === "number" ? MA[j][cle] : null;
+      if (j === auj) {
+        var cur = valeurDuMoment(c, cle);
+        if (cur != null) {
+          v = cur;
+          mi = mi == null ? cur : Math.min(mi, cur);
+          ma = ma == null ? cur : Math.max(ma, cur);
+        }
+      }
+      return { j: j, v: v, mi: mi, ma: ma, enCours: j === auj };
+    });
+  }
+
+  function svgCourbe(pts, L, H, opts) {
+    opts = opts || {};
+    var vals = [];
+    pts.forEach(function (p) { [p.v, opts.bande ? p.mi : null, opts.bande ? p.ma : null].forEach(function (x) { if (x != null) vals.push(x); }); });
+    if (opts.seuil != null) vals.push(opts.seuil);
+    if (!vals.length) return { svg: "", vide: true };
+    var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    if (lo === hi) { lo -= 1; hi += 1; }
+    var marge = (hi - lo) * 0.1;
+    lo = Math.max(lo - marge, Math.min.apply(null, vals) >= 0 ? 0 : -Infinity);
+    hi += marge;
+    var haut = H - 4, pas = pts.length > 1 ? L / (pts.length - 1) : L;
+    var X = function (k) { return (pts.length > 1 ? k * pas : L / 2).toFixed(1); };
+    var Y = function (v) { return (2 + haut - (v - lo) / (hi - lo) * haut).toFixed(1); };
+    var out = "";
+    // Segments contigus : un jour manquant coupe la courbe et la bande.
+    var segs = [], cur = [];
+    pts.forEach(function (p, k) { if (p.v == null) { if (cur.length) segs.push(cur); cur = []; } else cur.push(k); });
+    if (cur.length) segs.push(cur);
+    if (opts.bande) {
+      segs.forEach(function (sg) {
+        var haut_ = sg.map(function (k) { return X(k) + "," + Y(pts[k].ma != null ? pts[k].ma : pts[k].v); });
+        var bas = sg.slice().reverse().map(function (k) { return X(k) + "," + Y(pts[k].mi != null ? pts[k].mi : pts[k].v); });
+        if (sg.length === 1) {
+          var k0 = sg[0];
+          out += '<line x1="' + X(k0) + '" y1="' + Y(pts[k0].ma != null ? pts[k0].ma : pts[k0].v) + '" x2="' + X(k0) + '" y2="' + Y(pts[k0].mi != null ? pts[k0].mi : pts[k0].v) +
+            '" stroke="var(--mac-a)" stroke-opacity=".25" stroke-width="6" stroke-linecap="round"/>';
+        } else {
+          out += '<polygon points="' + haut_.concat(bas).join(" ") + '" fill="var(--mac-a)" fill-opacity=".14"/>';
+        }
+      });
+    }
+    if (opts.seuil != null) {
+      out += '<line x1="0" y1="' + Y(opts.seuil) + '" x2="' + L + '" y2="' + Y(opts.seuil) + '" stroke="var(--danger)" stroke-width="1" stroke-dasharray="4 3"/>';
+    }
+    segs.forEach(function (sg) {
+      if (sg.length > 1) {
+        out += '<polyline points="' + sg.map(function (k) { return X(k) + "," + Y(pts[k].v); }).join(" ") +
+          '" fill="none" stroke="var(--mac-a)" stroke-width="' + (opts.trait || 2) + '" stroke-linejoin="round" stroke-linecap="round"/>';
+      }
+    });
+    if (opts.points) {
+      pts.forEach(function (p, k) {
+        if (p.v == null) return;
+        var rouge = opts.regle && alerteDeclenchee(opts.regle, p.v);
+        var coul = rouge ? "var(--danger)" : "var(--mac-a)";
+        out += p.enCours
+          ? '<circle cx="' + X(k) + '" cy="' + Y(p.v) + '" r="3.5" fill="var(--card)" stroke="' + coul + '" stroke-width="2"/>'
+          : '<circle cx="' + X(k) + '" cy="' + Y(p.v) + '" r="' + (pts.length > 40 ? 1.4 : 2.2) + '" fill="' + coul + '"/>';
+      });
+    }
+    // Info-bulles : une zone par jour.
+    if (opts.bulles) {
+      pts.forEach(function (p, k) {
+        var x0 = Math.max(0, Number(X(k)) - pas / 2);
+        var date = p.j.slice(8, 10) + "/" + p.j.slice(5, 7);
+        var t = p.v == null ? date + " : aucun relevé"
+          : date + (p.enCours ? " (en cours)" : " à 18 h") + " : " + valeurUnite(p.v, opts.unite) +
+            (p.mi != null && p.ma != null && p.mi !== p.ma ? " · dans la journée " + valeurUnite(p.mi, opts.unite) + " – " + valeurUnite(p.ma, opts.unite) : "");
+        out += '<rect x="' + x0.toFixed(1) + '" y="0" width="' + Math.max(2, pas).toFixed(1) + '" height="' + H + '" fill="transparent"><title>' + esc(t) + "</title></rect>";
+      });
+    }
+    return { svg: out, vide: false };
+  }
+
+  /* Jours de la courbe : l'horizon choisi, mais à partir du premier relevé
+     quand l'historique est plus court (7 jours au moins) — sinon quelques
+     points s'écrasent sur la droite d'un axe vide. */
+  function joursCourbe(c) {
+    var n = horizon(c), debut = jourDecale(-(n - 1));
+    var depuis = c.releves && c.releves.depuis;
+    if (depuis && depuis > debut) debut = depuis < jourDecale(-6) ? depuis : jourDecale(-6);
+    return joursEntre(debut, jourDecale(0));
+  }
+
+  function courbe(c, it) {
+    var H = 96, L = 276, n = horizon(c);
+    var jours = joursCourbe(c);
+    var pts = pointsReleves(c, it.cle, jours);
+    var seuil = it.regle && (it.regle.op === "<" || it.regle.op === ">") ? nombre(it.regle.seuil) : null;
+    var g = document.createElement("div");
+    g.className = "mac-graph mac-courbe";
+    var d = svgCourbe(pts, L, H, { bande: true, points: true, bulles: true, seuil: seuil, regle: it.regle, unite: it.uniteLib });
+    var avecHisto = pts.some(function (p) { return p.v != null && !p.enCours; });
+    g.innerHTML = '<svg viewBox="-4 0 ' + (L + 8) + " " + H + '" role="img" aria-label="' + esc(it.lib) + " sur " + n + ' jours">' + d.svg + "</svg>";
+    var pied = document.createElement("div");
+    pied.className = "mac-graph-pied";
+    var d0 = jours[0];
+    pied.appendChild(span("", d0.slice(8, 10) + "/" + d0.slice(5, 7)));
+    var depuis = c.releves && c.releves.depuis;
+    var mil;
+    if (!avecHisto) mil = span("", "Premier relevé ce soir à 18 h");
+    else if (depuis && depuis > jourDecale(-(n - 1))) mil = span("", "Historique depuis le " + depuis.slice(8, 10) + "/" + depuis.slice(5, 7));
+    else {
+      var pleins = pts.filter(function (p) { return p.v != null; });
+      var moy = pleins.reduce(function (t, p) { return t + p.v; }, 0) / pleins.length;
+      mil = span("", "Moy. " + valeurUnite(moy, it.uniteLib));
+    }
+    mil.title = "Valeur relevée chaque jour à 18 h ; la bande montre le minimum et le maximum de la journée.";
+    pied.appendChild(mil);
+    pied.appendChild(span("", "auj."));
+    g.appendChild(pied);
+    return g;
+  }
+
+  function sparklineReleves(c, it) {
+    var pts = pointsReleves(c, it.cle, derniersJours(SPARK_JOURS));
+    var d = svgCourbe(pts, 84, 28, { trait: 1.6, points: false });
+    var e = document.createElement("span");
+    e.innerHTML = '<svg class="mac-spark" viewBox="-2 0 88 28" aria-hidden="true">' + d.svg + "</svg>";
+    return e.firstChild;
+  }
+
   function liste(c) {
     var z = document.createElement("div");
     var L = c.liste;
@@ -621,9 +827,12 @@
     var z = c.el.querySelector(".mac-fbar");
     if (!z) return;
     var F = window.MySifaBlocsFiltres;
-    var voir = !c.apercu && taille(c) === "l" && F && F.existe(c.w.bloc);
+    var enCourbe = taille(c) === "l" && modeGrand(c) === "courbe";
+    var aFiltres = !!(F && F.existe(c.w.bloc));
+    var voir = !c.apercu && taille(c) === "l" && (aFiltres || enCourbe);
     c.el.classList.toggle("a-fbar", !!voir);
     if (!voir) { z.hidden = true; return; }
+    if (!aFiltres) c.defsF = c.defsF || [];
     if (!c.defsF) {
       if (!c.defsChargement) {
         c.defsChargement = F.preparer(c.w.bloc, api).then(function (defs) {
@@ -633,8 +842,16 @@
       }
       return;
     }
-    var etat = F.lire(c.defsF, c.w.url_capture);
+    var etat = F ? F.lire(c.defsF, c.w.url_capture) : {};
     var h = "";
+    // Horizon de la courbe (réglage d'affichage, bloc_horizon).
+    if (enCourbe) {
+      var hz = String(horizon(c));
+      h += '<span class="mac-fgr" role="group" aria-label="Horizon">' + HORIZONS.map(function (x) {
+        return '<button type="button" data-fcle="bloc_horizon" data-fv="' + x + '"' +
+          (x === hz ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + ' title="Courbe sur ' + x + ' jours">' + x + " j</button>";
+      }).join("") + "</span>";
+    }
     c.defsF.forEach(function (f) {
       var v = etat[f.cle];
       if (f.type === "periode" || f.type === "choix") {
@@ -676,6 +893,12 @@
       var b = e.target.closest("button[data-fv]");
       if (!b || b.classList.contains("on") || z.classList.contains("en-cours")) return;
       if (b.getAttribute("data-fv") === "dates") return;
+      if (b.getAttribute("data-fcle") === "bloc_horizon") {
+        z.classList.add("en-cours");
+        patcher(c, { url_capture: avecParam(c.w.url_capture, "bloc_horizon", b.getAttribute("data-fv")) })
+          .catch(function () {}).then(function () { z.classList.remove("en-cours"); });
+        return;
+      }
       var etat2 = F.lire(c.defsF, c.w.url_capture);
       etat2[b.getAttribute("data-fcle")] = b.getAttribute("data-fv");
       appliquer(etat2);
@@ -710,7 +933,8 @@
       return {
         cle: v.cle, texte: texte, ton: d.ton ? ((c.tons && c.tons[v.cle]) || "neutre") : null,
         lib: lu.lib, libComplet: d.libelle || v.cle, unite: uniteDe(t, lu.unite), uniteLib: lu.unite, t: t,
-        alerte: !texte && alerteDeclenchee(v.alerte, nb_), regle: v.alerte, serie: d.serie || null
+        alerte: !texte && alerteDeclenchee(v.alerte, nb_), regle: v.alerte, serie: d.serie || null,
+        histo: (c.w.bloc_info && c.w.bloc_info.historique && c.w.bloc_info.historique[v.cle]) || null
       };
     });
     var zone = c.el.querySelector(".mac-vals");
@@ -730,11 +954,13 @@
         if (prin.t && prin.unite) g.appendChild(span("u", prin.unite));
         g.appendChild(span("l", prin.lib));
         grand = g;
-        if (t_ === "m" && prin.serie && c.serie) {
+        var avecSpark = t_ === "m" && ((prin.serie && c.serie) ||
+          (prin.histo && c.releves && Object.keys(c.releves.jours || {}).length));
+        if (avecSpark) {
           var lp = document.createElement("div");
           lp.className = "mac-prin";
           lp.appendChild(g);
-          lp.appendChild(sparkline(c, prin));
+          lp.appendChild(prin.serie ? sparkline(c, prin) : sparklineReleves(c, prin));
           zone.appendChild(lp);
         } else {
           zone.appendChild(g);
@@ -821,9 +1047,16 @@
     var extra = c.el.querySelector(".mac-extra");
     extra.innerHTML = "";
     if (t_ === "l") {
-      var ig = items.filter(function (it) { return it.serie; })[0];
-      if (ig && c.serie) extra.appendChild(graphique(c, ig));
-      else if (c.w.bloc_info && c.w.bloc_info.liste && c.liste) extra.appendChild(liste(c));
+      var mg = modeGrand(c);
+      if (mg === "graphique") {
+        var ig = items.filter(function (it) { return it.serie; })[0];
+        if (ig && c.serie) extra.appendChild(graphique(c, ig));
+      } else if (mg === "courbe") {
+        var ih = items.filter(function (it) { return it.histo; })[0];
+        if (ih && c.releves) extra.appendChild(courbe(c, ih));
+      } else if (mg === "liste" && c.liste) {
+        extra.appendChild(liste(c));
+      }
     }
 
     c.el.classList.toggle("alerte", enAlerte.length > 0);
@@ -952,7 +1185,9 @@
           Promise.resolve().then(function () { return S_[c.w.bloc](ctx); })
             .then(function (r) { c.serie = r || null; afficherValeurs(c); }).catch(function () {});
         }
-        if (taille(c) === "l" && bi.liste && typeof L_[c.w.bloc] === "function" && c.listeCapture !== c.w.url_capture) {
+        var pr = chargerReleves(c);
+        if (pr) pr.then(function () { afficherValeurs(c); });
+        if (taille(c) === "l" && modeGrand(c) === "liste" && typeof L_[c.w.bloc] === "function" && c.listeCapture !== c.w.url_capture) {
           c.listeCapture = c.w.url_capture;
           Promise.resolve().then(function () { return L_[c.w.bloc](ctx); })
             .then(function (r) { c.liste = r || null; afficherValeurs(c); }).catch(function () {});
@@ -1084,7 +1319,10 @@
     }
     var tailles = [["s", "Compact : une ligne, une seule valeur"], ["m", "Standard"]];
     if (w.bloc_info && w.bloc_info.grand) {
-      tailles.push(["l", w.bloc_info.liste ? "Grand : liste détaillée" : "Grand : graphique sur 30 jours"]);
+      var mg_ = (w.bloc_info.valeurs || []).some(function (v) { return v.serie; }) ? "graphique"
+        : (w.bloc_info.liste ? (aHistorique(c) ? "liste ou courbe" : "liste") : "courbe");
+      tailles.push(["l", { graphique: "Grand : graphique jour par jour", liste: "Grand : liste détaillée",
+                           "liste ou courbe": "Grand : liste détaillée ou courbe", courbe: "Grand : courbe jour par jour" }[mg_]]);
     }
     var hc = w.hauteur === "s" || w.hauteur === "l" ? w.hauteur : "m";
     o.innerHTML =
@@ -1499,12 +1737,31 @@
         c.serie = r || null; c.serieLe = Date.now(); c.serieCapture = c.w.url_capture;
       }).catch(function () { /* série facultative : la carte reste sans tendance */ }));
     }
-    if (taille(c) === "l" && bi.liste && typeof L_[c.w.bloc] === "function") {
+    if (taille(c) === "l" && modeGrand(c) === "liste" && typeof L_[c.w.bloc] === "function") {
       attente.push(Promise.resolve().then(function () { return L_[c.w.bloc](ctx); }).then(function (r) {
         c.liste = r || null;
       }).catch(function () { /* liste facultative */ }));
     }
+    var p_ = chargerReleves(c);
+    if (p_) attente.push(p_);
     if (attente.length) Promise.all(attente).then(function () { if (W.cartes[c.w.id]) afficherValeurs(c); });
+  }
+
+  /* Relevés d'un indicateur (GET /api/accueil/releves/{bloc}) : relus toutes
+     les 10 minutes — la valeur du jour ne se fige qu'à 18 h —, ou quand
+     filtres, objet ou horizon changent. */
+  function chargerReleves(c) {
+    if (!aHistorique(c)) return null;
+    var n = Math.max(horizon(c), SPARK_JOURS + 1);
+    var cle = c.w.url_capture + "|" + (c.w.objet || "") + "|" + n;
+    if (c.relevesCle === cle && c.relevesLe && Date.now() - c.relevesLe < SERIE_MS) return null;
+    c.relevesCle = cle;
+    var q = new URLSearchParams({ url: c.w.url_capture || "", objet: c.w.objet || "", jours: String(n) });
+    return api("/api/accueil/releves/" + encodeURIComponent(c.w.bloc) + "?" + q.toString()).then(function (r) {
+      if (c.relevesCle !== cle) return;
+      c.releves = r || null;
+      c.relevesLe = Date.now();
+    }).catch(function () { c.relevesCle = null; /* pas d'historique : carte sans courbe */ });
   }
 
   function lireSources() {
@@ -1682,7 +1939,7 @@
       {
         icon: ICO('<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>'),
         title: "Lire et ouvrir",
-        body: "<p>L'indicateur relit ses chiffres <strong>chaque minute</strong>, directement auprès de l'appli. La pastille de couleur dit de quelle appli vient le chiffre, le badge donne l'état d'une machine d'un coup d'œil, et une carte rouge marquée <strong>Alerte</strong> signale un seuil dépassé. L'heure de la dernière lecture s'affiche en bas. Un clic ouvre la page d'origine <strong>avec ses filtres</strong> : c'est là que l'on agit. Une période capturée (« 7 derniers jours ») reste glissante. En <strong>grand format</strong>, les filtres (période, machines, liste) se changent directement sur la carte, et le graphique suit la période choisie.</p>",
+        body: "<p>L'indicateur relit ses chiffres <strong>chaque minute</strong>, directement auprès de l'appli. La pastille de couleur dit de quelle appli vient le chiffre, le badge donne l'état d'une machine d'un coup d'œil, et une carte rouge marquée <strong>Alerte</strong> signale un seuil dépassé. L'heure de la dernière lecture s'affiche en bas. Un clic ouvre la page d'origine <strong>avec ses filtres</strong> : c'est là que l'on agit. Une période capturée (« 7 derniers jours ») reste glissante. En <strong>grand format</strong>, les filtres (période, machines, liste) se changent directement sur la carte, et le graphique suit la période choisie. Un chiffre relevé chaque jour (stock, NC, retards…) s'y affiche en <strong>courbe</strong> : la valeur de 18 h, et en bande le minimum et le maximum de la journée.</p>",
         illu: SVG +
           '<rect x="20" y="20" width="130" height="64" rx="8" fill="var(--card)" stroke="var(--danger)"/><rect x="20" y="20" width="130" height="64" rx="8" fill="var(--danger)" opacity=".07"/><rect x="21" y="21" width="3" height="62" fill="var(--danger)"/><text x="30" y="36" font-size="8.5" font-weight="700" fill="var(--text)">Temps de prod.</text><rect x="112" y="28" width="32" height="12" rx="6" fill="var(--danger)"/><text x="128" y="36.5" font-size="7" font-weight="700" fill="#fff" text-anchor="middle">Alerte</text>' +
           '<text x="30" y="56" font-size="13" font-weight="700" fill="var(--danger)">1h 12min</text><text x="86" y="56" font-size="7.5" fill="var(--muted)">Arrêts</text>' +
