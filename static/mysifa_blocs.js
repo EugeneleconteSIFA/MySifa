@@ -413,6 +413,16 @@
         ".mysifa-cap-pan .cap-choix{display:flex;gap:6px;flex-wrap:wrap}",
         ".mysifa-cap-pan .cap-choix button.on{background:var(--accent-bg,rgba(34,211,238,.12));border-color:var(--accent,#22d3ee);color:var(--accent,#22d3ee)}",
         ".mysifa-cap-pan .cap-err{color:var(--danger,#f87171);min-height:18px;margin-top:12px}",
+        ".mysifa-cap-pan .cap-taille-aide{margin-top:6px;font-size:12px;color:var(--muted,#94a3b8);line-height:1.4}",
+        // Aperçu de l'indicateur, au centre de l'écran, à gauche du questionnaire.
+        // Purement visuel : il ne capte aucun clic.
+        ".mysifa-cap-apercu{position:fixed;top:0;bottom:0;left:0;right:380px;z-index:2147482002;display:flex;align-items:center;justify-content:center;",
+        "  pointer-events:none;background:color-mix(in srgb,var(--bg,#0a0e17) 55%,transparent);font:13px 'Segoe UI',system-ui,sans-serif;color:var(--text,#f1f5f9)}",
+        ".mysifa-cap-apercu .cap-plateau{background:var(--bg,#0a0e17);border:1px solid var(--border,#1e293b);border-radius:16px;padding:14px 16px 12px;",
+        "  box-shadow:0 18px 48px rgba(0,0,0,.28);max-height:calc(100vh - 48px);overflow:hidden;box-sizing:content-box}",
+        ".mysifa-cap-apercu .cap-plateau-t{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted,#94a3b8);margin:0 0 10px}",
+        ".mysifa-cap-apercu .cap-plateau-n{font-size:11px;color:var(--muted,#94a3b8);margin:10px 0 0;line-height:1.4}",
+        "@media (max-width:899px){.mysifa-cap-apercu{display:none}}",
         ".mysifa-cap-pan .cap-pied{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}",
         ".mysifa-cap-pan button.cap-ok{background:var(--accent,#22d3ee);border-color:var(--accent,#22d3ee);color:#fff}",
         ".mysifa-cap-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:2147482004;background:var(--card,#111827);",
@@ -517,7 +527,7 @@
     /* Efface tout ce qui n'est ni un bloc capturable ni un de ses ancêtres :
        on remonte de chaque bloc jusqu'à <body>, et chaque frère hors de ce
        chemin est atténué. Les blocs gardent leur contenu intact. */
-    var NOTRE_UI = ".mysifa-cap-pan,.mysifa-cap-bandeau,.mysifa-cap-btn,.mysifa-cap-bulle,.mysifa-cap-toast";
+    var NOTRE_UI = ".mysifa-cap-pan,.mysifa-cap-apercu,.mysifa-cap-bandeau,.mysifa-cap-btn,.mysifa-cap-bulle,.mysifa-cap-toast";
     function desattenuer() {
       var a = document.querySelectorAll(".mysifa-cap-attenue");
       for (var i = 0; i < a.length; i++) a[i].classList.remove("mysifa-cap-attenue");
@@ -676,9 +686,42 @@
       actif ? quitter() : entrer();
     });
 
+    var apercuZone = null;      // aperçu centré de l'indicateur (création)
     function fermerPanneau() {
       if (panneau) { panneau.remove(); panneau = null; }
+      if (apercuZone) { apercuZone.remove(); apercuZone = null; }
     }
+
+    /* Le rendu des cartes vit dans mysifa_accueil.js : pour l'aperçu, on le
+       charge sans sa colonne hors de l'accueil. Une seule implémentation. */
+    var chargementApercu = null;
+    function chargerApercu() {
+      if (window.MySifaAccueil && window.MySifaAccueil.apercu) return Promise.resolve(true);
+      if (!chargementApercu) {
+        chargementApercu = new Promise(function (ok) {
+          if (location.pathname !== "/") window.__mysifaAccueilApercuSeul = true;
+          var s = document.createElement("script");
+          s.src = "/static/mysifa_accueil.js" + (VERSION ? "?v=" + VERSION : "");
+          s.onload = s.onerror = function () { ok(!!(window.MySifaAccueil && window.MySifaAccueil.apercu)); };
+          document.head.appendChild(s);
+        });
+      }
+      return chargementApercu;
+    }
+
+    // Largeur d'une carte dans la colonne de l'accueil, selon l'écran
+    // (paliers de mysifa_accueil.js : 380, 300 ou 220 px, moins ses marges).
+    function largeurCarte() {
+      var w = window.innerWidth;
+      var col = w >= 1600 ? 380 : w >= 1200 ? 300 : 220;
+      return col - 24;
+    }
+
+    var TAILLES = [
+      { k: "s", lib: "Compact", aide: "Une ligne : le nom, la valeur et sa tendance. Pour suivre beaucoup d'indicateurs d'un coup d'œil." },
+      { k: "m", lib: "Standard", aide: "La carte complète : valeurs, badge d'état, mini-courbe sur 14 jours quand le chiffre a un historique." },
+      { k: "l", lib: "Grand", aide: "" }
+    ];
 
     /* Une page dont les filtres ne vivent pas dans l'URL (période de MyProd…)
        les déclare par window.mysifaBlocsContexte() : { bloc_periode: "last7",
@@ -704,7 +747,9 @@
     }
 
     /* Le questionnaire : valeurs à afficher (4 au maximum, dans l'ordre),
-       une alerte facultative par valeur, le nom. Il sert à la création
+       une alerte facultative par valeur, la taille sur l'accueil, le nom. À
+       la création (o.apercu), l'indicateur est montré au centre de l'écran
+       tel qu'il apparaîtra. Il sert à la création
        (capture d'un bloc) comme à la modification d'un indicateur existant
        (bouton « Valeurs » de l'accueil, via MySifaBlocs.questionnaire). */
     function questionnaire(o) {
@@ -713,7 +758,9 @@
       var etat = {
         coches: (o.coches && o.coches.length) ? o.coches.slice()
           : (bloc.valeurs.length ? [bloc.valeurs[0].cle] : []),
-        alertes: JSON.parse(JSON.stringify(o.alertes || {}))
+        alertes: JSON.parse(JSON.stringify(o.alertes || {})),
+        // Taille sur l'accueil ; « grand » seulement si le bloc a une série ou une liste.
+        taille: o.taille === "s" || (o.taille === "l" && bloc.grand) ? o.taille : "m"
       };
       // Pas d'alerte sur une valeur texte (seuil = nombre) : celles posées
       // avant le 06/10/2026 tombent au prochain enregistrement.
@@ -759,6 +806,17 @@
             h += "</div>";
           });
         }
+        var tailles = TAILLES.filter(function (t) { return t.k !== "l" || bloc.grand; });
+        var choisie = TAILLES.filter(function (t) { return t.k === etat.taille; })[0];
+        var aideGrand = bloc.liste ? "La carte et la liste détaillée : les 5 premières lignes, les plus urgentes d'abord."
+          : "La carte et un graphique sur 30 jours, avec le seuil d'alerte.";
+        h += '<div class="cap-lbl">Taille sur l\'accueil</div><div class="cap-choix" role="group" aria-label="Taille">' +
+          tailles.map(function (t) {
+            return '<button type="button" data-taille="' + t.k + '" aria-pressed="' + (t.k === etat.taille) + '"' +
+              (t.k === etat.taille ? ' class="on"' : "") + ">" + esc(t.lib) + "</button>";
+          }).join("") + "</div>" +
+          '<div class="cap-taille-aide">' + esc(etat.taille === "l" ? aideGrand : choisie.aide) +
+          (bloc.grand ? "" : " Pas de grand format pour ce bloc : il n'a ni historique ni liste.") + "</div>";
         var nomActuel = panneau.querySelector("input.cap-nom");
         var nomVal = nomActuel ? nomActuel.value : (o.nom || "");
         h += '<div class="cap-lbl">Nom</div><input type="text" class="cap-nom" maxlength="80" value="' + esc(nomVal) + '">' +
@@ -766,6 +824,45 @@
           '<div class="cap-pied"><button type="button" data-act="annuler">Annuler</button>' +
           '<button type="button" class="cap-ok" data-act="ok">' + esc(o.bouton) + "</button></div>";
         panneau.innerHTML = h;
+        majApercu();
+      }
+
+      /* Aperçu : l'indicateur tel qu'il apparaîtra sur l'accueil, avec les
+         choix du moment (valeurs, alertes, taille, nom, filtres). */
+      var apercuVue = null;
+      function wApercu() {
+        var vals = etat.coches.map(function (cle) {
+          var al = etat.alertes[cle];
+          var seuil = al ? String(al.seuil || "").trim() : "";
+          var ok = al && al.op && seuil && !isNaN(parseFloat(seuil.replace(",", ".")));
+          return { cle: cle, alerte: ok ? { op: al.op, seuil: seuil } : null };
+        });
+        var url = o.url;
+        if (filtres) { try { url = F.ecrire(filtres, o.url, etat.filtres) || o.url; } catch (e) { url = o.url; } }
+        var champNom = panneau && panneau.querySelector("input.cap-nom");
+        return { id: "apercu", bloc: bloc.nom, nom: (champNom ? champNom.value : o.nom) || bloc.libelle,
+                 objet: o.apercu.objet || null, url: url, url_capture: url, hauteur: etat.taille,
+                 valeurs: vals, bloc_info: bloc };
+      }
+      function majApercu() {
+        if (!o.apercu || !panneau) return;
+        if (apercuVue) { apercuVue.maj(wApercu()); return; }
+        if (apercuZone) return;   // chargement en cours
+        apercuZone = document.createElement("div");
+        apercuZone.className = "mysifa-cap-apercu";
+        apercuZone.setAttribute("aria-hidden", "true");
+        var plateau = document.createElement("div");
+        plateau.className = "cap-plateau";
+        plateau.style.width = largeurCarte() + "px";
+        plateau.innerHTML = '<div class="cap-plateau-t">Aperçu sur votre accueil</div><div class="cap-plateau-c"></div>' +
+          '<div class="cap-plateau-n">Chiffres de la page à cet instant. Sur l\'accueil, ils se mettent à jour chaque minute.</div>';
+        apercuZone.appendChild(plateau);
+        document.body.appendChild(apercuZone);
+        chargerApercu().then(function (ok) {
+          if (!ok || !apercuZone || !panneau) return;
+          apercuVue = window.MySifaAccueil.apercu({ w: wApercu(), valeurs: o.apercu.valeurs, nombres: o.apercu.nombres, tons: o.apercu.tons });
+          plateau.querySelector(".cap-plateau-c").appendChild(apercuVue.el);
+        });
       }
 
       function erreur(t) { var z = panneau.querySelector(".cap-err"); if (z) z.textContent = t || ""; }
@@ -862,11 +959,14 @@
           etat.alertes[c] = { op: (etat.alertes[c] || {}).op || "", seuil: t.value };
         }
         erreur("");
+        // Nom ou seuil tapé : l'aperçu suit, sans redessiner le questionnaire.
+        if (t.matches("input.cap-nom, input[data-alerte-seuil]")) majApercu();
       });
       panneau.addEventListener("click", function (e) {
         var b = e.target.closest("button");
         if (!b) return;
         if (b.getAttribute("data-act") === "annuler") { fermerPanneau(); if (o.annuler) o.annuler(); return; }
+        if (b.hasAttribute("data-taille")) { etat.taille = b.getAttribute("data-taille"); dessiner(); return; }
         if (b.getAttribute("data-act") === "ok") valider(b);
       });
 
@@ -896,7 +996,7 @@
           url = F.ecrire(filtres, o.url, etat.filtres);
         }
         b.disabled = true;
-        Promise.resolve(o.envoyer({ nom: nomW, valeurs: valeurs, url: url })).then(function () {
+        Promise.resolve(o.envoyer({ nom: nomW, valeurs: valeurs, url: url, hauteur: etat.taille })).then(function () {
           fermerPanneau();
         }).catch(function (err) {
           b.disabled = false;
@@ -940,6 +1040,8 @@
         filtres: filtres,
         url: url,
         actuelles: lireValeurs(el),
+        apercu: { valeurs: lireValeurs(el), nombres: lireNombres(el), tons: lireTons(el), objet: objet },
+        taille: "m",
         titre: "Ajouter à mes tableaux de bord",
         sousTitre: "Capturé : " + bloc.libelle + (objetLib ? " · " + objetLib : ""),
         // Un objet suivi se nomme par lui-même (« Cohésio 2 »), sinon le bloc.
@@ -948,7 +1050,7 @@
         envoyer: function (p) {
           return api("/api/accueil/widgets", {
             method: "POST",
-            body: { bloc: nom, objet: objet, url_capture: p.url || url, nom: p.nom, valeurs: p.valeurs, affichage: "valeurs", hauteur: "m" }
+            body: { bloc: nom, objet: objet, url_capture: p.url || url, nom: p.nom, valeurs: p.valeurs, affichage: "valeurs", hauteur: p.hauteur || "m" }
           }).then(function () {
             quitter();
             toast("Indicateur ajouté à vos tableaux de bord.");

@@ -132,8 +132,11 @@
   }
 
   /* ── Style ─────────────────────────────────────────────────────────── */
+  // Une seule feuille : l'aperçu de la capture et la colonne la partagent.
   function poserStyle() {
+    if (document.getElementById("mysifa-accueil-style")) return;
     var st = document.createElement("style");
+    st.id = "mysifa-accueil-style";
     st.textContent = [
       "#mysifa-accueil{--mac-w:300px;font:13px 'Segoe UI',system-ui,sans-serif;color:var(--text,#f1f5f9);box-sizing:border-box}",
       "#mysifa-accueil *{box-sizing:border-box}",
@@ -728,7 +731,9 @@
     else location.href = w.url;
   }
 
-  function creerCarte(w) {
+  /* Squelette d'une carte et pastille d'appli : le même pour la colonne et
+     pour l'aperçu de la capture (MySifaAccueil.apercu). */
+  function squelette(w) {
     var el = document.createElement("div");
     el.className = "mac-carte aff-valeurs";
     el.setAttribute("data-id", w.id);
@@ -742,7 +747,6 @@
       '<div class="mac-indispo">Bloc indisponible à cette taille. Cliquez sur le titre pour ouvrir la page.</div>' +
       '<div class="mac-cadre"><div class="mac-attente">Chargement…</div><div class="mac-voile"></div></div>' +
       '<div class="mac-outils"></div>';
-    var c = { el: el, iframe: null, valeurs: null, absences: 0, w: w };
     el.querySelector(".mac-nom").textContent = w.nom;
     var app = w.bloc_info && w.bloc_info.appli_info;
     if (app) {
@@ -754,6 +758,75 @@
       pa.title = app.libelle;
       pa.hidden = false;
     }
+    return el;
+  }
+
+  /* Aperçu d'un indicateur pas encore créé, pour le questionnaire de capture
+     (mysifa_blocs.js) : même carte, mêmes règles d'affichage, avec les
+     valeurs que la page affiche à cet instant. Série et liste sont lues par
+     les mêmes sources que la colonne. Rend { el, maj(w) } : maj redessine
+     après un changement de taille, de valeurs, de nom ou de filtres. */
+  function apercu(o) {
+    poserStyle();
+    var c = { el: null, iframe: null, w: o.w, valeurs: o.valeurs || {}, nombres: o.nombres || {},
+              tons: o.tons || {}, majLe: Date.now(), serie: null, liste: null, apercu: true };
+    c.el = squelette(o.w);
+    c.el.classList.add("prete", "mac-apercu");
+    ["mac-corb", "mac-cadre", "mac-outils", "mac-indispo"].forEach(function (k) {
+      var x = c.el.querySelector("." + k);
+      if (x) x.remove();
+    });
+    c.el.querySelector(".mac-ctete").removeAttribute("title");
+    function sousTitre() {
+      var F = window.MySifaBlocsFiltres;
+      var z = c.el.querySelector(".mac-filtres");
+      if (!F || !F.existe(c.w.bloc)) return;
+      F.preparer(c.w.bloc, api).then(function (defs) {
+        var t = F.decrire(defs, F.lire(defs, c.w.url_capture));
+        z.textContent = t;
+        z.hidden = !t;
+      }).catch(function () { /* sous-titre facultatif */ });
+    }
+    function extras() {
+      chargerSources().then(function () {
+        var S_ = window.MySifaBlocsSeries || {}, L_ = window.MySifaBlocsListes || {};
+        var bi = c.w.bloc_info || {};
+        var params;
+        try { params = new URL(c.w.url_capture, ORIGINE).searchParams; } catch (e) { params = new URLSearchParams(); }
+        var ctx = { json: api, objet: c.w.objet, params: params };
+        var aSerie = typeof S_[c.w.bloc] === "function" && (bi.valeurs || []).some(function (v) { return v.serie; });
+        if (aSerie && c.serieCapture !== c.w.url_capture) {
+          c.serieCapture = c.w.url_capture;
+          Promise.resolve().then(function () { return S_[c.w.bloc](ctx); })
+            .then(function (r) { c.serie = r || null; afficherValeurs(c); }).catch(function () {});
+        }
+        if (taille(c) === "l" && bi.liste && typeof L_[c.w.bloc] === "function" && c.listeCapture !== c.w.url_capture) {
+          c.listeCapture = c.w.url_capture;
+          Promise.resolve().then(function () { return L_[c.w.bloc](ctx); })
+            .then(function (r) { c.liste = r || null; afficherValeurs(c); }).catch(function () {});
+        }
+      });
+    }
+    afficherValeurs(c);
+    sousTitre();
+    extras();
+    return {
+      el: c.el,
+      maj: function (w2) {
+        var filtresChanges = w2.url_capture !== c.w.url_capture;
+        c.w = w2;
+        c.el.querySelector(".mac-nom").textContent = w2.nom || "";
+        afficherValeurs(c);
+        if (filtresChanges) sousTitre();
+        extras();
+      }
+    };
+  }
+  window.MySifaAccueil.apercu = apercu;
+
+  function creerCarte(w) {
+    var el = squelette(w);
+    var c = { el: el, iframe: null, valeurs: null, absences: 0, w: w };
     afficherFiltres(c);
     el.querySelector(".mac-ctete").addEventListener("click", function (e) {
       if (e.target.closest(".mac-corb")) return;
@@ -925,9 +998,11 @@
       titre: "Modifier l'indicateur",
       sousTitre: "Capturé : " + w.bloc_info.libelle,
       nom: w.nom,
+      taille: w.hauteur,
       bouton: "Enregistrer",
       envoyer: function (p) {
         var champs = { nom: p.nom, valeurs: p.valeurs };
+        if (p.hauteur && p.hauteur !== (w.hauteur || "m")) champs.hauteur = p.hauteur;
         if (p.url && p.url !== w.url_capture) champs.url_capture = p.url;
         return patcher(c, champs);
       }
@@ -949,6 +1024,8 @@
         }
         if (c.iframe) c.iframe.title = c.w.nom;
         afficherValeurs(c);
+        // Taille changée depuis le questionnaire : boutons à jour, liste ou série à lire.
+        if ("hauteur" in champs) { dessinerOutils(c); lireSources(); }
       })
       .catch(function (e) { avis(e.message); throw e; });
   }
@@ -1395,7 +1472,7 @@
       {
         icon: ICO('<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>'),
         title: "Choisir les valeurs",
-        body: "<p>Un panneau s'ouvre : cochez <strong>jusqu'à 4 valeurs</strong>, dans l'ordre où vous voulez les voir. Une alerte facultative passe un <strong>nombre</strong> en rouge au-dessus, en dessous ou à égalité d'un seuil. Un texte (état, opérateur) s'affiche sans alerte. Les <strong>filtres</strong> de la page (période, machine…) s'y affichent et se modifient.</p>",
+        body: "<p>Un panneau s'ouvre : cochez <strong>jusqu'à 4 valeurs</strong>, dans l'ordre où vous voulez les voir. Une alerte facultative passe un <strong>nombre</strong> en rouge au-dessus, en dessous ou à égalité d'un seuil. Un texte (état, opérateur) s'affiche sans alerte. Les <strong>filtres</strong> de la page (période, machine…) s'y affichent et se modifient. Choisissez enfin la <strong>taille</strong> : compact, standard, ou grand quand le bloc a un graphique ou une liste. Au centre de l'écran, un <strong>aperçu</strong> montre l'indicateur tel qu'il apparaîtra sur votre accueil.</p>",
         illu: SVG +
           '<rect x="80" y="6" width="180" height="138" rx="10" fill="var(--card)" stroke="var(--border)"/>' +
           '<text x="92" y="22" font-size="8.5" font-weight="700" fill="var(--text)">Ajouter à mes tableaux de bord</text>' +
@@ -1581,6 +1658,8 @@
   // On attend la page du portail, aussi lente soit-elle : un poste chargé ne
   // doit pas perdre sa colonne parce que le portail a mis 15 s à s'afficher.
   // L'observation reste active ensuite : déconnexion, reconnexion.
+  // Chargé hors de l'accueil pour le seul aperçu de la capture : pas de colonne.
+  if (window.__mysifaAccueilApercuSeul) return;
   new MutationObserver(surveiller).observe(document.documentElement, { childList: true, subtree: true });
   surveiller();
 })();
