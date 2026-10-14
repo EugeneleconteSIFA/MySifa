@@ -137,7 +137,7 @@ Statuts : ☐ à faire · ◐ en cours · ✓ fait
 | Q5 | Captures des écrans RVGI les plus utilisés | Ergonomie, marchés |
 | Q6 | Valorisation du stock : PMP, dernier prix d'achat, prix standard ? | Stock |
 | Q7 | Gestion par lot / bobine en MP : obligatoire (FSC) ? | Stock |
-| Q8 | Production : l'ERP reprend-il MyProd / planning, ou s'appuie-t-il dessus ? | Production |
+| Q8 | ✓ Réponse du 14/10 : l'ordonnancement reste dans MySifa (www), l'ERP s'appuie dessus. Colisage et contrôles RVGI : abandonnés | — |
 | Q9 | Un BL peut-il faire passer le stock PF sous zéro (blocage, alerte, rien) ? | Stock |
 | Q10 | Les services (calage, cliché) passent-ils par le BL, ou se facturent-ils directement depuis la commande ? | Ventes |
 
