@@ -26,6 +26,11 @@ from typing import Any, Optional
 _CHAMPS_TEXTE = ("libelle_technique", "ref_fournisseur", "note")
 
 
+def _col(r: sqlite3.Row, nom: str) -> Any:
+    """Colonne facultative : None sur une base où la migration n'est pas passée."""
+    return r[nom] if nom in r.keys() else None
+
+
 def _now() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
@@ -176,6 +181,9 @@ def lister(conn: sqlite3.Connection, matiere_id: int, avec_inactives: bool = Fal
             "note": r["note"] or "",
             "laizes": laizes_fou.get(r["fournisseur_id"], []) if r["fournisseur_id"] else [],
             "declinaisons_avec_prix": len(prix_fou.get(r["fournisseur_id"], set())) if r["fournisseur_id"] else 0,
+            "prix_achat": _col(r, "prix_achat"),
+            "prix_maj_le": _col(r, "prix_maj_le"),
+            "pousse_prix": _pousse_prix(conn, r),
             "dernier_achat": (achats.get(key) or {}).get("date") if key else None,
             "commandes_rvgi": (achats.get(key) or {}).get("commandes") if key else None,
             "updated_at": r["updated_at"] or r["created_at"],
@@ -417,6 +425,15 @@ def definir_principal(
     _poser_principal(conn, r["matiere_id"], variante_id, user_name)
     suivies, sans_prix = [], []
     fid = r["fournisseur_id"]
+    # L'article devenu principal apporte son prix : passer de R5000 à R5050
+    # change le prix en vigueur, pas seulement le nom du fournisseur.
+    prix_article = _col(r, "prix_achat")
+    if fid is not None and prix_article and float(prix_article) > 0:
+        mystock_prix.set_prix_fournisseur_matiere(
+            conn, matiere_id=r["matiere_id"], fournisseur_id=fid, prix=float(prix_article),
+            confirmer=True, user_id=user_id, user_name=user_name,
+            origine="MyStock — article principal",
+        )
     for d in conn.execute(
         """SELECT d.id, l.label, l.valeur_mm, g.label AS g_label, g.valeur_gsm
              FROM mp_matiere_declinaison d
@@ -443,6 +460,62 @@ def definir_principal(
         if res.get("ok"):
             suivies.append(lib)
     return {"ok": True, "declinaisons_suivies": suivies, "declinaisons_sans_prix": sans_prix}
+
+
+def _pousse_prix(conn: sqlite3.Connection, r: sqlite3.Row) -> bool:
+    """L'article fixe-t-il le prix de son fournisseur dans Coûts matières ?
+
+    Oui s'il est l'article principal de la matière, ou le seul article actif
+    de son fournisseur : il n'y a alors aucune ambiguïté sur le prix à retenir.
+    """
+    if not r["actif"] or r["fournisseur_id"] is None:
+        return False
+    if r["principal"]:
+        return True
+    n = conn.execute(
+        "SELECT COUNT(*) FROM mp_variantes WHERE matiere_id=? AND fournisseur_id=? AND actif=1",
+        (r["matiere_id"], r["fournisseur_id"]),
+    ).fetchone()[0]
+    return n == 1
+
+
+def definir_prix_article(
+    conn: sqlite3.Connection,
+    variante_id: int,
+    prix: float,
+    *,
+    confirmer: bool = False,
+    user_id: Optional[int] = None,
+    user_name: Optional[str] = None,
+) -> dict:
+    """Prix d'achat d'un article fournisseur.
+
+    Toujours enregistré sur l'article. Si l'article fixe le prix de son
+    fournisseur (`_pousse_prix`), il est aussi déployé sur toutes les laizes de
+    ce fournisseur dans Coûts matières — avec la même confirmation que
+    Coûts matières quand des prix par laize différents seraient écrasés.
+    """
+    from app.services import mystock_prix
+
+    if prix is None or prix < 0:
+        raise ValueError("Prix invalide — valeur positive attendue.")
+    r = _get(conn, variante_id)
+    pousse = _pousse_prix(conn, r)
+    if pousse:
+        res = mystock_prix.set_prix_fournisseur_matiere(
+            conn, matiere_id=r["matiere_id"], fournisseur_id=r["fournisseur_id"], prix=float(prix),
+            confirmer=confirmer, user_id=user_id, user_name=user_name,
+            origine="MyStock — article fournisseur",
+        )
+        if res.get("a_confirmer"):
+            return res
+        if not res.get("ok"):
+            raise ValueError(res.get("reason") or "Prix refusé.")
+    conn.execute(
+        "UPDATE mp_variantes SET prix_achat=?, prix_maj_le=?, prix_maj_par=? WHERE id=?",
+        (float(prix), _now(), user_name, variante_id),
+    )
+    return {"ok": True, "pousse": pousse}
 
 
 def _assurer_variante(conn: sqlite3.Connection, matiere_id: int, fournisseur_id: int,
