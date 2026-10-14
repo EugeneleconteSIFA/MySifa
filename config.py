@@ -1185,6 +1185,20 @@ DEVIS_TOLERANCE_COHERENCE = float(os.getenv("DEVIS_TOLERANCE_COHERENCE", "0.05")
 # qui a produit un chiffre, des mois après.
 DEVIS_UPLOAD_DIR = os.path.join(UPLOADS_ROOT, "devis")
 
+# ─── MyPrint — étiquettes spécifiques ─────────────────────────────
+# Tous les rôles qui ont la tuile MyPrint créent, modifient et impriment
+# (arbitrage d'Eugène du 14/10/2026). La file des demandes de nouveau format
+# reste au super admin.
+ROLES_MYPRINT = (
+    {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_FABRICATION, ROLE_LOGISTIQUE, ROLE_EXPEDITION}
+    | ROLES_ADMINISTRATION_ALL
+)
+# Assistant de paramétrage : lit des photos et PDF d'étiquettes, raisonne sur
+# des coordonnées — le modèle le plus capable par défaut.
+ETIQ_IA_MODELE = os.getenv("ETIQ_IA_MODELE", "claude-opus-5-5")
+ETIQ_UPLOAD_DIR = os.path.join(UPLOADS_ROOT, "etiquettes_specifiques")
+ETIQ_PIECE_MAX_OCTETS = int(os.getenv("ETIQ_PIECE_MAX_OCTETS", str(15 * 1024 * 1024)))
+
 # ─── MyTradu
 
 # ─── MyTraduction (DeepL) ─────────────────────────────────────────
