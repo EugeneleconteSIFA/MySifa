@@ -437,6 +437,104 @@ def preparer(user: dict, cle: str, params: dict, conn=None) -> dict:
             "chemin": chemin, "corps": corps, "details": details, "lien": a.get("lien", "")}
 
 
+# ── Lectures d'écran ─────────────────────────────────────────────────────
+# Ce qu'un écran AFFICHE se lit à l'écran, pas en SQL : le stock d'un
+# emplacement n'est pas la somme des mouvements ni des lots, c'est ce que
+# calcule l'écran MyStock. Même mécanique que les écritures (appel interne
+# avec la session de l'utilisateur), en GET seulement.
+LECTURES: list[dict[str, Any]] = [
+    {"cle": "stock_emplacement", "chemin": "/api/stock/emplacements/{emplacement}",
+     "aide": "Contenu d'un emplacement tel que MyStock l'affiche (références, quantités, inventaire).",
+     "params": {"emplacement": ("str", True, "code, ex. A141")}},
+    {"cle": "stock_recherche", "chemin": "/api/stock/search",
+     "aide": "Recherche MyStock (produits finis et emplacements) sur un fragment.",
+     "params": {"q": ("str", True, "fragment de référence, désignation ou emplacement")}},
+    {"cle": "stock_produits", "chemin": "/api/stock/produits",
+     "aide": "Liste des produits finis avec leur stock total, filtrée par q.",
+     "params": {"q": ("str", False, "fragment")}},
+    {"cle": "stock_produit_emplacements", "chemin": "/api/stock/produits/{produit_id}/emplacements",
+     "aide": "Où se trouve un produit fini, emplacement par emplacement.",
+     "params": {"produit_id": ("int", True, "produits.id")}},
+    {"cle": "stock_emplacements_liste", "chemin": "/api/stock/emplacements-list",
+     "aide": "Liste des codes d'emplacement connus.", "params": {}},
+    {"cle": "matieres", "chemin": "/api/stock/matieres",
+     "aide": "Matières premières avec leur stock (écran Matières premières).", "params": {}},
+    {"cle": "matiere_laizes", "chemin": "/api/stock/matieres/{matiere_id}/laizes",
+     "aide": "Stock d'une matière par laize.", "params": {"matiere_id": ("int", True, "matieres_premieres.id")}},
+    {"cle": "planning_machines", "chemin": "/api/planning/machines",
+     "aide": "Machines du planning (id, nom).", "params": {}},
+    {"cle": "planning_dossiers", "chemin": "/api/planning/machines/{machine_id}/entries",
+     "aide": "Dossiers au planning d'une machine, dans l'ordre de la file.",
+     "params": {"machine_id": ("int", True, "machines.id")}},
+    {"cle": "saisies", "chemin": "/api/saisies",
+     "aide": "Saisies de production (écran Saisies) filtrées.",
+     "params": {"no_dossier": ("str", False, ""), "machine": ("str", False, ""), "operateur": ("str", False, ""),
+                "date_from": ("str", False, "AAAA-MM-JJ"), "date_to": ("str", False, "AAAA-MM-JJ"),
+                "limit": ("int", False, "défaut 100")}},
+    {"cle": "taches_meta", "chemin": "/api/taches/meta",
+     "aide": "Listes de référence des tâches : modules, services, utilisateurs assignables.", "params": {}},
+    {"cle": "calendrier_invitables", "chemin": "/api/calendrier/invitables",
+     "aide": "Personnes qu'on peut inviter à un événement (ids).", "params": {}},
+    {"cle": "reunion_en_cours", "chemin": "/api/reunions/contexte",
+     "aide": "Point de production ouvert par l'utilisateur, s'il y en a un.", "params": {}},
+    {"cle": "reunions", "chemin": "/api/reunions",
+     "aide": "Points de production, du plus récent au plus ancien.", "params": {}},
+    {"cle": "mes_postits", "chemin": "/api/postits",
+     "aide": "Post-its de l'utilisateur connecté (les siens seulement).", "params": {}},
+]
+_LECTURES = {l["cle"]: l for l in LECTURES}
+
+
+def description_lectures() -> str:
+    lignes = []
+    for l in LECTURES:
+        ps = ", ".join(f"{n}{'*' if r else ''}" + (f" ({a})" if a else "") for n, (_t, r, a) in l["params"].items())
+        lignes.append(f"- {l['cle']} — {l['aide']}" + (f" Paramètres : {ps}" if ps else ""))
+    return "\n".join(lignes)
+
+
+async def lire(app, cookies: dict, cle: str, params: dict) -> Any:
+    """GET interne sur un écran du catalogue. Lève ActionInvalide."""
+    import httpx
+    from urllib.parse import quote
+    l = _LECTURES.get(cle)
+    if not l:
+        raise ActionInvalide(f"Écran « {cle} » inconnu.")
+    params = params if isinstance(params, dict) else {}
+    inconnus = set(params) - set(l["params"])
+    if inconnus:
+        raise ActionInvalide(f"Paramètre(s) inconnu(s) : {', '.join(sorted(inconnus))}.")
+    chemin, query = l["chemin"], {}
+    for nom, (typ, req, _a) in l["params"].items():
+        v = params.get(nom)
+        if v in (None, ""):
+            if req:
+                raise ActionInvalide(f"Paramètre obligatoire manquant : {nom}.")
+            continue
+        v = _convertir(nom, typ, v)
+        if "{" + nom + "}" in chemin:
+            chemin = chemin.replace("{" + nom + "}", quote(str(v), safe=""))
+        else:
+            query[nom] = v
+    if cle == "saisies":
+        query.setdefault("limit", 100)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://mysifa.interne",
+                                 cookies=cookies, timeout=60) as client:
+        r = await client.get(chemin, params=query)
+    try:
+        data = r.json()
+    except Exception:
+        data = r.text[:2000]
+    if r.status_code >= 400:
+        raise ActionInvalide(f"Écran {cle} : {_message(data, r.status_code) or r.status_code}")
+    if cle == "stock_emplacement" and isinstance(data, dict):
+        # L'écran affiche aussi l'historique de l'emplacement : sans lui,
+        # l'agent ne confond plus le stock présent avec les mouvements passés.
+        data = {k: v for k, v in data.items() if k not in ("mouvements", "historique")}
+    return data
+
+
 class _Nul:
     """Contexte qui rend une connexion déjà ouverte sans la fermer."""
     def __init__(self, conn):

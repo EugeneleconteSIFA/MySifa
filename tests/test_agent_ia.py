@@ -140,6 +140,12 @@ if u:
     r2 = cl.post(f"/api/ai/actions/{jeton}/confirmer")
     check("double clic : refusé", r2.status_code, 409)
     check("config : widget actif pour superadmin", cl.get("/api/ai/config").json()["actif"], True)
+    ctx = {"app": main.app, "cookies": {"sifa_token": tok}}
+    lu = agent_ia.lire_ecran(ctx, {"ecran": "stock_emplacement", "parametres": {"emplacement": "A141"}})
+    check("lire_ecran : l'écran MyStock répond", '"erreur"' in lu, False)
+    lu = agent_ia.lire_ecran(ctx, {"ecran": "stock_emplacement", "parametres": {"x": 1}})
+    check("lire_ecran : paramètre inconnu refusé", "inconnu" in lu, True)
+    check("lire_ecran : sans contexte, refus propre", "erreur" in agent_ia.lire_ecran(None, {"ecran": "reunions"}), True)
     with get_db() as c:
         n = c.execute("SELECT COUNT(*) FROM postits WHERE title='Test agent' AND user_id=?", (u["id"],)).fetchone()[0]
         check("post-it réellement créé par l'écran", n, 1)

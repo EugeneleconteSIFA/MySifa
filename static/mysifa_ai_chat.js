@@ -39,7 +39,11 @@
   function ecrireLocal(cle, v) { try { localStorage.setItem(cle, v); } catch (e) {} }
 
   function ensureDom() {
-    if (document.getElementById('ai-chat-root')) return;
+    var ancien = document.getElementById('ai-chat-root');
+    // Un ancien bloc écrit en dur dans une page (ou resté en cache) n'a pas
+    // le choix du modèle : on le remplace plutôt que de s'y brancher à moitié.
+    if (ancien && document.getElementById('ai-modele')) return;
+    if (ancien) ancien.remove();
     var root = document.createElement('div');
     root.id = 'ai-chat-root';
     root.style.display = 'none';

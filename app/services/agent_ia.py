@@ -66,12 +66,21 @@ def outils_pour(user: dict) -> list[dict]:
         if base and "enum" in base:
             base["enum"] = bases
         out.append({"name": o["name"], "description": o["description"], "input_schema": schema})
-    # Les post-its sont hors du connecteur (données personnelles) : l'agent
-    # ne lit que ceux de l'utilisateur connecté, pour y ajouter une ligne.
     out.append({
-        "name": "mes_postits",
-        "description": "Post-its de l'utilisateur connecté (id, type, titre, lignes). Seulement les siens.",
-        "input_schema": {"type": "object", "properties": {}},
+        "name": "lire_ecran",
+        "description": (
+            "Lit un écran MySifa tel que l'utilisateur le voit, avec ses droits. À PRÉFÉRER au SQL dès "
+            "qu'on demande ce qu'un écran affiche : stock d'un emplacement ou d'un produit, stock "
+            "matière, file du planning, saisies. Le stock n'est jamais la somme des mouvements ni des "
+            "lots : c'est ce que calcule l'écran.\n\nÉcrans :\n" + aa.description_lectures()),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "ecran": {"type": "string", "enum": [l["cle"] for l in aa.LECTURES]},
+                "parametres": {"type": "object"},
+            },
+            "required": ["ecran"],
+        },
     })
     actions = aa.catalogue_pour(user)
     if actions:
@@ -104,25 +113,31 @@ def _texte(valeur: Any) -> str:
     return t
 
 
-def _mes_postits(user: dict) -> str:
-    from database import get_db
-    with get_db() as conn:
-        rows = conn.execute("SELECT id,type,title FROM postits WHERE user_id=? AND COALESCE(hidden,0)=0 ORDER BY id",
-                            (user.get("id"),)).fetchall()
-        out = []
-        for r in rows:
-            try:
-                lignes = [t[0] for t in conn.execute(
-                    "SELECT text FROM postit_tasks WHERE postit_id=? ORDER BY order_index", (r["id"],)).fetchall()]
-            except Exception:
-                lignes = []
-            out.append({"id": r["id"], "type": r["type"], "titre": r["title"], "lignes": lignes})
-    return _texte(out)
+def _sync(fn, *args):
+    """Lance une coroutine depuis le fil de travail de la requête (route
+    synchrone sous anyio), ou depuis un script / test sans boucle."""
+    import anyio
+    try:
+        return anyio.from_thread.run(fn, *args)
+    except RuntimeError:
+        import asyncio
+        return asyncio.run(fn(*args))
+
+
+def lire_ecran(contexte: Optional[dict], args: dict) -> str:
+    if not contexte or not contexte.get("app"):
+        return _texte({"erreur": "Lecture d'écran indisponible dans ce contexte."})
+    try:
+        data = _sync(aa.lire, contexte["app"], contexte.get("cookies") or {},
+                     args.get("ecran", ""), args.get("parametres") or {})
+        return _texte(data)
+    except aa.ActionInvalide as e:
+        return _texte({"erreur": str(e)})
+    except Exception as e:
+        return _texte({"erreur": f"{type(e).__name__} : {e}"})
 
 
 def executer_lecture(user: dict, nom: str, args: dict) -> str:
-    if nom == "mes_postits":
-        return _mes_postits(user)
     from app.routers.mcp_server import _executer_outil
     from app.services.mcp_data import ErreurMCP
     base = (args or {}).get("base")
@@ -160,7 +175,11 @@ def enregistrer_proposition(conn, user: dict, args: dict, modele: str) -> dict:
 _REGLES = """Tu es l'agent intégré de MySifa, l'outil de gestion de production de SIFA (fabricant d'étiquettes).
 Tu réponds en français, de façon directe et factuelle, sans formule commerciale ni emoji.
 
-Lecture : tu disposes des outils du connecteur MySifa (bases `mysifa` et `rvgi`). Applique
+Ce qu'un écran affiche se lit avec `lire_ecran` (stock d'un emplacement, d'un produit, d'une
+matière ; file du planning ; saisies) : c'est le chiffre que l'utilisateur voit. N'en reconstitue
+jamais un en SQL à partir des mouvements ou des lots, et ne liste pas les lignes à zéro.
+
+Lecture transversale : tu disposes des outils du connecteur MySifa (bases `mysifa` et `rvgi`). Applique
 strictement les règles de lecture ci-dessous. Ne devine jamais un nom de colonne : consulte
 `mysifa_schema` (avec un `filtre`) avant d'écrire du SQL. Un chiffre de temps ou de métrage
 vient de `mysifa_metric`, jamais d'un calcul SQL. Un identifiant donné par l'utilisateur passe
@@ -214,7 +233,8 @@ def _client():
 
 
 def converser(conn, user: dict, historique: list[dict], page: Optional[dict] = None,
-              modele: Optional[str] = None) -> dict:
+              modele: Optional[str] = None, contexte: Optional[dict] = None) -> dict:
+    """`contexte` : {app, cookies} de la requête, pour lire_ecran."""
     """Rend {reponse, actions, outils, modele}. `historique` : [{role, content(str)}]."""
     client = _client()
     if client is None:
@@ -263,6 +283,8 @@ def converser(conn, user: dict, historique: list[dict], page: Optional[dict] = N
                     erreur = False
                 except aa.ActionInvalide as e:
                     contenu, erreur = f"Action refusée : {e}", True
+            elif b.name == "lire_ecran":
+                contenu, erreur = lire_ecran(contexte, args), False
             else:
                 contenu, erreur = executer_lecture(user, b.name, args), False
             resultats.append({"type": "tool_result", "tool_use_id": b.id, "content": contenu,
