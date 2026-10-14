@@ -1243,6 +1243,15 @@ AGENT_IA_MAX_TOURS = int(os.getenv("AGENT_IA_MAX_TOURS", "12"))
 AGENT_IA_RATE_MAX = int(os.getenv("AGENT_IA_RATE_MAX", "20"))      # requêtes / minute / utilisateur
 # Une action proposée et pas confirmée dans ce délai n'est plus exécutable.
 AGENT_IA_ACTION_TTL_MIN = int(os.getenv("AGENT_IA_ACTION_TTL_MIN", "30"))
+# Conversations gardées par utilisateur (les plus anciennes au-delà sont purgées).
+AGENT_IA_CONVERSATIONS_MAX = int(os.getenv("AGENT_IA_CONVERSATIONS_MAX", "50"))
+# Bulle d'annonce au-dessus du bouton de l'agent. Changer la clé la refait
+# apparaître chez tout le monde ; texte vide = pas de bulle.
+AGENT_IA_ANNONCE_CLE = os.getenv("AGENT_IA_ANNONCE_CLE", "agent-2026-10")
+AGENT_IA_ANNONCE_TEXTE = os.getenv(
+    "AGENT_IA_ANNONCE_TEXTE",
+    "Mise à niveau de l'agent IA : il lit toutes les données et prépare vos saisies. Testez-moi.")
+AGENT_IA_ANNONCE_ROLES = ROLES_ADMIN
 
 
 def agent_ia_modeles() -> list[dict]:
