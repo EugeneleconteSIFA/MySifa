@@ -68,6 +68,11 @@ CHAMPS_ENTIERS = {"jours_expedition", "franco_cents", "escompte_bp", "acompte_ce
 CHAMPS_TEXTE = {"ref_tiers", "notes", "notes_internes", "recepisse", "emballage"}
 ORIGINES = {"fabrication": "Fabrication", "stock": "Stock", "soustraitance": "Sous-traitance"}
 LABORATOIRES = {"renouvellement": "Renouvellement", "creation": "Création", "modification": "Modification"}
+# Une ligne en création ou en modification exige un BAT validé (module BAT de MySifa).
+LABORATOIRES_AVEC_BAT = {"creation", "modification"}
+TYPES_LIGNE = {"livrer_facturer": "À livrer et facturer", "livrer_sans_facture": "À livrer sans facture",
+               "stocker": "À stocker"}
+BAT_LIBELLES = {"a_faire": "À faire", "en_attente": "En attente", "valide": "Validé"}
 REPORT_ENTETE = ("ref_tiers", "adresse_facturation_id", "adresse_livraison_id", "condition_paiement", "mode_paiement",
                  "depot", "remise_bp", "contact_id", "transporteur_id", "jours_expedition", "date_expedition",
                  "date_livraison", "franco_cents", "escompte_bp", "representant_id", "commission_bp")
@@ -170,6 +175,29 @@ def qte_produite(conn, ligne_id: int) -> int:
     return int(r["q"])
 
 
+def qte_produite_pour(conn, ligne_cde_id: int) -> int:
+    """Quantité produite par les OF actifs lancés depuis une ligne de commande."""
+    r = conn.execute(
+        """SELECT COALESCE(SUM(m.quantite_milli),0) q FROM gc_mouvements m
+           JOIN gc_pieces_lignes lo ON lo.id=m.ligne_id JOIN gc_pieces po ON po.id=lo.piece_id
+           WHERE lo.ligne_amont_id=? AND po.type='of' AND po.statut!='annule' AND m.type='production'""",
+        (ligne_cde_id,)).fetchone()
+    return int(r["q"])
+
+
+def avancement_ligne(conn, piece_type: str, l) -> int:
+    """Quantité « reprise » d'une ligne, selon son type :
+    - ligne à stocker d'une commande : quantité produite par ses OF ;
+    - ligne de BL livrée sans facture : entièrement « reprise » (rien à facturer) ;
+    - sinon : quantité reprise par l'étape suivante."""
+    tl = l["type_ligne"] if "type_ligne" in l.keys() else "livrer_facturer"
+    if piece_type == "commande" and tl == "stocker":
+        return qte_produite_pour(conn, l["id"])
+    if piece_type == "bl" and tl == "livrer_sans_facture":
+        return int(l["quantite_milli"])
+    return qte_aval(conn, l["id"], AVANCEMENT.get(piece_type, []))
+
+
 def _statut_of(conn, p) -> str:
     lignes = conn.execute(
         "SELECT id, quantite_milli, solde FROM gc_pieces_lignes WHERE piece_id=? AND article_id IS NOT NULL",
@@ -192,15 +220,14 @@ def recalculer_statut(conn, piece_id: int) -> str:
         return _statut_of(conn, p)
     if p["type"] not in AVANCEMENT:
         return p["statut"]
-    types = AVANCEMENT[p["type"]]
     lignes = conn.execute(
-        "SELECT id, quantite_milli, solde FROM gc_pieces_lignes WHERE piece_id=? AND article_id IS NOT NULL",
+        "SELECT * FROM gc_pieces_lignes WHERE piece_id=? AND article_id IS NOT NULL",
         (piece_id,),
     ).fetchall()
     touche = False
     complet = bool(lignes)
     for l in lignes:
-        q = qte_aval(conn, l["id"], types)
+        q = avancement_ligne(conn, p["type"], l)
         if q > 0:
             touche = True
         if q < int(l["quantite_milli"]) and not l["solde"]:
@@ -292,7 +319,7 @@ def carnet(conn, types: list[str]) -> list[dict]:
     for l in conn.execute(
         f"""SELECT l.id AS ligne_id, l.rang, l.article_id, l.libelle, l.quantite_milli, l.unite, l.base_prix,
                    l.prix_cents, l.montant_ht_cents, l.date_livraison, l.date_expedition, l.origine_prod,
-                   l.laboratoire, l.ref_client, l.solde, l.nb_livraisons,
+                   l.laboratoire, l.ref_client, l.solde, l.nb_livraisons, l.type_ligne, l.quantite_milli AS q_l,
                    p.id AS piece_id, p.type, p.numero, p.statut, p.date_piece, p.ref_tiers, p.date_validite,
                    p.date_ouverture, p.date_livraison AS piece_date_livraison, p.date_expedition AS piece_date_expedition,
                    t.id AS tiers_id, t.code AS tiers_code, t.raison_sociale AS tiers_nom,
@@ -310,8 +337,11 @@ def carnet(conn, types: list[str]) -> list[dict]:
         d["date_livraison"] = d["date_livraison"] or d.pop("piece_date_livraison")
         d.pop("piece_date_expedition", None)
         d.pop("piece_date_livraison", None)
-        av = AVANCEMENT.get(d["type"], [])
-        d["repris_milli"] = qte_aval(conn, d["ligne_id"], av) if d["type"] != "of" else qte_produite(conn, d["ligne_id"])
+        if d["type"] == "of":
+            d["repris_milli"] = qte_produite(conn, d["ligne_id"])
+        else:
+            d["repris_milli"] = avancement_ligne(conn, d["type"], {"id": d["ligne_id"], "type_ligne": d["type_ligne"],
+                                                                   "quantite_milli": d["quantite_milli"]})
         d["reste_milli"] = 0 if d["solde"] else max(0, int(d["quantite_milli"]) - d["repris_milli"])
         if d["statut"] in ("brouillon", "annule"):
             d["position"] = d["statut"]
@@ -323,6 +353,17 @@ def carnet(conn, types: list[str]) -> list[dict]:
             """SELECT p.statut FROM gc_pieces_lignes lo JOIN gc_pieces p ON p.id=lo.piece_id
                WHERE lo.ligne_amont_id=? AND p.type='of' AND p.statut!='annule' ORDER BY p.id DESC LIMIT 1""",
             (d["ligne_id"],)).fetchone()
+        # Quantité à fabriquer : calculée, jamais saisie (C4 : un écart saisi
+        # avec la quantité commandée était le plus souvent un bug). Reste à
+        # livrer moins le stock disponible, moins ce que les OF ont déjà produit.
+        if d["origine_prod"] == "fabrication" and d["type"] in ("commande", "marche") and d["reste_milli"] > 0:
+            deja = qte_produite_pour(conn, d["ligne_id"])
+            d["a_fabriquer_milli"] = max(0, d["reste_milli"] - max(0, int(d["stock_milli"] or 0)) - deja)
+        else:
+            d["a_fabriquer_milli"] = 0
+        d["bat"] = ""
+        if d["laboratoire"] in LABORATOIRES_AVEC_BAT and d["position"] not in ("solde", "annule"):
+            d["bat"] = bat_article(conn, d["article_id"]) or "non_rattache"
         a_lancer = d["origine_prod"] == "fabrication" and d["type"] in ("commande", "marche") and d["reste_milli"] > 0
         d["situation_of"] = of["statut"] if of else ("a_ordonnancer" if a_lancer else "")
         out.append(d)
@@ -500,17 +541,20 @@ def enregistrer(conn, piece_id: int, entete: dict | None, lignes: list[dict] | N
             ref_c = l.get("ref_client")
             if ref_c is None:
                 ref_c = _t(art, "ref_client") or ""
+            type_l = l.get("type_ligne") or "livrer_facturer"
+            if type_l not in TYPES_LIGNE:
+                raise ErreurPiece(f"Ligne {i} : type de ligne inconnu.")
             conn.execute(
                 """INSERT INTO gc_pieces_lignes (piece_id, rang, article_id, libelle, quantite_milli, unite,
                        base_prix, prix_cents, remise_bp, tva_code, taux_tva_bp, montant_ht_cents,
                        date_livraison, date_expedition, ligne_amont_id, notes, origine_prod, laboratoire,
-                       ref_client, nb_livraisons, adresse_livraison_id)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       ref_client, nb_livraisons, adresse_livraison_id, type_ligne)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (piece_id, i, art["id"], libelle, q, art["unite"], base, prix_c, rem, code_tva,
                  taux_tva(conn, code_tva), calculs.montant_ligne(q, prix_c, base, rem),
                  l.get("date_livraison") or None, l.get("date_expedition") or None, amont,
                  str(l.get("notes") or ""), origine_p, labo, str(ref_c), _entier(l.get("nb_livraisons") or 1, "Livraisons", 1),
-                 adr_l))
+                 adr_l, type_l))
     _maj_totaux(conn, piece_id)
 
 
@@ -587,6 +631,35 @@ def alertes_stock(conn, piece_id: int) -> list[str]:
     return out
 
 
+def bat_article(conn, article_id: int) -> str:
+    """État du BAT lié à l'article : '' si aucun, sinon a_faire / en_attente / valide."""
+    a = conn.execute("SELECT bat_id FROM gc_articles WHERE id=?", (article_id,)).fetchone()
+    if not a or "bat_id" not in a.keys() or not a["bat_id"]:
+        return ""
+    try:
+        b = conn.execute("SELECT statut FROM bat_entries WHERE id=?", (a["bat_id"],)).fetchone()
+    except Exception:
+        return ""
+    return b["statut"] if b else ""
+
+
+def alertes_bat(conn, piece_id: int) -> list[str]:
+    """Lignes en création ou modification dont le BAT n'est pas validé.
+    N'empêche rien : l'écran l'affiche (à durcir si Eugène le décide)."""
+    out = []
+    for l in conn.execute(
+        """SELECT l.article_id, a.code, COALESCE(NULLIF(l.laboratoire,''), la.laboratoire) AS labo
+           FROM gc_pieces_lignes l JOIN gc_articles a ON a.id=l.article_id
+           LEFT JOIN gc_pieces_lignes la ON la.id=l.ligne_amont_id
+           WHERE l.piece_id=?""", (piece_id,)).fetchall():
+        if l["labo"] in LABORATOIRES_AVEC_BAT:
+            etat = bat_article(conn, l["article_id"])
+            if etat != "valide":
+                out.append(f"{l['code']} : BAT {BAT_LIBELLES.get(etat, 'non rattaché').lower()} — la ligne est en "
+                           f"{LABORATOIRES[l['labo']].lower()}.")
+    return out
+
+
 def dupliquer(conn, piece_id: int, user: dict | None = None) -> int:
     """Nouveau brouillon du même type et du même tiers, avec les mêmes lignes
     (sans lien amont : c'est une nouvelle pièce, pas une suite)."""
@@ -596,7 +669,8 @@ def dupliquer(conn, piece_id: int, user: dict | None = None) -> int:
     nouvelle = creer(conn, p["type"], p["tiers_id"], user)
     lignes = [{"article_id": l["article_id"], "libelle": l["libelle"], "quantite_milli": l["quantite_milli"],
                "base_prix": l["base_prix"], "prix_cents": l["prix_cents"], "remise_bp": l["remise_bp"],
-               "tva_code": l["tva_code"], "notes": l["notes"]}
+               "tva_code": l["tva_code"], "notes": l["notes"], "type_ligne": _t(l, "type_ligne"),
+               "origine_prod": _t(l, "origine_prod"), "laboratoire": _t(l, "laboratoire"), "ref_client": _t(l, "ref_client")}
               for l in conn.execute("SELECT * FROM gc_pieces_lignes WHERE piece_id=? ORDER BY rang", (piece_id,)).fetchall()]
     enregistrer(conn, nouvelle, {"ref_tiers": "", "remise_bp": p["remise_bp"], "notes": p["notes"],
                                  "adresse_livraison_id": p["adresse_livraison_id"]}, lignes)
@@ -631,6 +705,8 @@ def declarer_production(conn, of_id: int, quantite_milli: int, lot: str = "", jo
         (jour or now[:10], l["article_id"], p["depot"], q, "production", str(lot or ""), of_id, l["id"],
          "Production " + (p["numero"] or ""), _nom(user), now))
     _statut_of(conn, _piece(conn, of_id))
+    for amont in _pieces_amont(conn, of_id):     # une ligne « à stocker » se solde à la production
+        recalculer_statut(conn, amont)
     return int(cur.lastrowid)
 
 
@@ -709,11 +785,22 @@ def transformer(conn, sources: list[int], cible: str, user: dict | None = None) 
         ).fetchall():
             if l["solde"]:
                 continue
+            tl = _t(l, "type_ligne") or "livrer_facturer"
             if cible == "of":
                 a = conn.execute("SELECT nature, gere_stock FROM gc_articles WHERE id=?", (l["article_id"],)).fetchone()
                 if not a or a["nature"] != "pf":
                     continue   # on ne fabrique que des produits finis
-            reste = int(l["quantite_milli"]) - qte_aval(conn, l["id"], reprise)
+            if cible == "bl" and tl == "stocker":
+                continue       # fabriquée pour le stock : ne se livre pas
+            if cible == "of" and (_t(l, "origine_prod") or "fabrication") != "fabrication":
+                continue       # servie depuis le stock ou sous-traitée : pas d'OF
+            if cible in ("facture", "avoir") and tl == "livrer_sans_facture":
+                continue       # livrée sans facture
+            deja = qte_aval(conn, l["id"], reprise)
+            if cible == "of":
+                # Ce qui est déjà livré n'est plus à fabriquer.
+                deja = max(deja, qte_aval(conn, l["id"], ["bl"]))
+            reste = int(l["quantite_milli"]) - deja
             if reste <= 0:
                 continue
             lignes.append({
@@ -722,7 +809,7 @@ def transformer(conn, sources: list[int], cible: str, user: dict | None = None) 
                 "tva_code": l["tva_code"], "date_livraison": l["date_livraison"], "ligne_amont_id": l["id"],
                 "date_expedition": _t(l, "date_expedition"), "origine_prod": _t(l, "origine_prod"),
                 "laboratoire": _t(l, "laboratoire"), "ref_client": _t(l, "ref_client"),
-                "adresse_livraison_id": _t(l, "adresse_livraison_id"),
+                "adresse_livraison_id": _t(l, "adresse_livraison_id"), "type_ligne": _t(l, "type_ligne"),
             })
     if not lignes:
         raise ErreurPiece("Plus rien à reprendre : tout a déjà été repris.")

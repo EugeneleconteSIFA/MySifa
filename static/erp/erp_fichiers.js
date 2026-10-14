@@ -231,12 +231,13 @@
     var nouveau = ctx.param === 'nouveau';
     var corps = h('div', {className: 'erp-fiche'}, ERP.chargement());
     main.appendChild(corps);
-    var A, tarifs, tiers = [], modifie = false;
+    var A, tarifs, tiers = [], bats = [], modifie = false;
     function marquer() { modifie = true; ERP.garde = function () { return modifie; }; }
 
     async function charger() {
-      var r = await Promise.all([ERP.meta(), ERP.api('/api/erp2/tiers')]);
+      var r = await Promise.all([ERP.meta(), ERP.api('/api/erp2/tiers'), ERP.api('/api/erp2/bats')]);
       tiers = r[1];
+      bats = r[2];
       if (nouveau) A = {nature: 'pf', unite: 'U', base_prix: 1, gere_stock: 1, actif: 1, libelle: '', tarifs: [], stock: [], mouvements: []};
       else A = await ERP.api('/api/erp2/articles/' + parseInt(ctx.param, 10));
       tarifs = A.tarifs.map(function (t) { return Object.assign({}, t); });
@@ -247,7 +248,8 @@
     async function enregistrer() {
       var champs = {};
       ['code', 'libelle', 'libelle_client', 'nature', 'famille', 'unite', 'base_prix', 'prix_vente_cents', 'prix_achat_cents',
-       'tva_code', 'gere_stock', 'fournisseur_id', 'client_id', 'notes', 'actif'].forEach(function (k) { if (k in A) champs[k] = A[k]; });
+       'tva_code', 'gere_stock', 'fournisseur_id', 'client_id', 'notes', 'actif', 'ref_client', 'format_l_dmm', 'format_a_dmm',
+       'conditionnement', 'origine_prod', 'bat_id'].forEach(function (k) { if (k in A) champs[k] = A[k]; });
       var r = await ERP.api('/api/erp2/articles' + (nouveau ? '' : '/' + A.id), {
         method: nouveau ? 'POST' : 'PUT',
         body: {article: champs, tarifs: tarifs.map(function (t) {
@@ -306,6 +308,14 @@
           aide: 'Désignation imprimée sur les pièces du client, si elle diffère.'}),
         ERP.champ('Client propriétaire', ERP.choix(A, 'client_id', clients, {avecVide: '— (article catalogue)', nombre: true, change: marquer})),
         ERP.champ('Fournisseur habituel', ERP.choix(A, 'fournisseur_id', fourn, {avecVide: '—', nombre: true, change: marquer})),
+        ERP.champ('Réf. produit client', ERP.saisie(A, 'ref_client', 'texte', {change: marquer})),
+        ERP.champ('Laize (1/10 mm)', ERP.saisie(A, 'format_l_dmm', 'entier', {change: marquer}), {aide: '900 pour 90 mm'}),
+        ERP.champ('Avance (1/10 mm)', ERP.saisie(A, 'format_a_dmm', 'entier', {change: marquer})),
+        ERP.champ('Conditionnement', ERP.saisie(A, 'conditionnement', 'texte', {change: marquer}), {large: true}),
+        ERP.champ('Origine habituelle', ERP.choix(A, 'origine_prod', Object.keys(ERP.M.origines || {}).map(function (k) { return {v: k, l: ERP.M.origines[k]}; }), {avecVide: '—', change: marquer})),
+        ERP.champ('BAT (module BAT de MySifa)', ERP.choix(A, 'bat_id', bats.map(function (b) {
+          return {v: b.id, l: b.description + ' / ' + b.numero_article + ' — ' + ((ERP.M.bat_libelles || {})[b.statut] || b.statut)}; }),
+          {avecVide: '— aucun', nombre: true, change: marquer}), {large: true, aide: 'Exigé validé pour une ligne en création ou en modification.'}),
         ERP.champ('Notes', ERP.saisie(A, 'notes', 'zone', {change: marquer}), {plein: true}),
         h('div', {className: 'erp-champ plein erp-cases'},
           ERP.case(A, 'gere_stock', 'Géré en stock', {change: marquer}), ERP.case(A, 'actif', 'Actif', {change: marquer})));

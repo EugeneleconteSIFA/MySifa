@@ -70,6 +70,8 @@ def meta(request: Request):
             "natures": fichiers.NATURES,
             "origines": pieces.ORIGINES,
             "laboratoires": pieces.LABORATOIRES,
+            "types_ligne": pieces.TYPES_LIGNE,
+            "bat_libelles": pieces.BAT_LIBELLES,
             # Branchés sur MySifa : transporteurs de MyExpé, comptes des commerciaux.
             "transporteurs": [dict(r) for r in conn.execute(
                 "SELECT id, nom FROM expe_transporteurs ORDER BY nom").fetchall()],
@@ -151,6 +153,19 @@ async def article_enregistrer(request: Request, article_id: int | None = None):
     return {"id": aid}
 
 
+@router.get("/bats")
+def bats(request: Request):
+    """BAT du module BAT de MySifa, pour les rattacher à un article."""
+    _user(request)
+    with get_db() as conn:
+        try:
+            return [dict(r) for r in conn.execute(
+                """SELECT id, description, numero_article, statut, updated_at FROM bat_entries
+                   ORDER BY description, numero_article""").fetchall()]
+        except Exception:
+            return []
+
+
 @router.get("/prix")
 def prix(request: Request, article_id: int, tiers_id: int | None = None, quantite_milli: int = 0, sens: str = "vente"):
     _user(request)
@@ -223,6 +238,8 @@ def piece_valider(piece_id: int, request: Request):
     with _ecriture() as conn:
         numero = pieces.valider(conn, piece_id, u)
         alertes = pieces.alertes_stock(conn, piece_id)
+        if conn.execute("SELECT type FROM gc_pieces WHERE id=?", (piece_id,)).fetchone()["type"] == "of":
+            alertes += pieces.alertes_bat(conn, piece_id)
     _trace(request, u, "VALIDATE", f"Pièce {numero}")
     return {"numero": numero, "alertes": alertes}
 

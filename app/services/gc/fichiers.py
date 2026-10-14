@@ -48,7 +48,8 @@ CHAMPS_ARTICLE = {"code": str, "libelle": str, "libelle_client": str, "nature": 
                   "unite": str, "base_prix": int, "prix_vente_cents": "int_null", "prix_achat_cents": "int_null",
                   "tva_code": "ref", "gere_stock": bool, "fournisseur_id": "int_null", "client_id": "int_null",
                   "notes": str, "actif": bool, "ref_client": str, "format_l_dmm": "int_null",
-                  "format_a_dmm": "int_null", "conditionnement": str, "designation": str, "origine_prod": str}
+                  "format_a_dmm": "int_null", "conditionnement": str, "designation": str, "origine_prod": str,
+                  "bat_id": "int_null"}
 
 NATURES = {"pf": "Produit fini", "mp": "Matière première", "service": "Prestation"}
 

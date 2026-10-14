@@ -21,6 +21,11 @@
     of_valide: {libelle: 'Lancé', ton: 'accent'},
     of_partiel: {libelle: 'En production', ton: 'warn'},
     of_solde: {libelle: 'Terminé', ton: 'ok'},
+    // BAT (module BAT de MySifa) — préfixe « bat_ » pour la même raison
+    bat_non_rattache: {libelle: 'BAT à rattacher', ton: 'danger'},
+    bat_a_faire: {libelle: 'BAT à faire', ton: 'danger'},
+    bat_en_attente: {libelle: 'BAT en attente', ton: 'warn'},
+    bat_valide: {libelle: 'BAT validé', ton: 'ok'},
   };
 
   // Ce que « repris » veut dire selon la pièce.
@@ -49,10 +54,15 @@
       cols.push({cle: 'date_livraison', libelle: 'Liv. prévue', type: 'date', largeur: 100, classe: enRetard('date_livraison')});
     }
     cols.push({cle: 'laboratoire_lib', libelle: 'Laboratoire', largeur: 130});
+    if (/^(commande|marche|devis)$/.test(type)) cols.push({cle: 'bat', libelle: 'BAT', type: 'statut', largeur: 140});
     cols.push({cle: 'position', libelle: 'Position', type: 'statut', largeur: 150});
     cols.push({cle: 'quantite_milli', libelle: type === 'bl' ? 'Qté livrée' : 'Qté commandée', type: 'qte', largeur: 125});
     cols.push({cle: 'origine_lib', libelle: 'Origine', largeur: 115});
-    if (/^(commande|marche)$/.test(type)) cols.push({cle: 'situation_of', libelle: 'Situation OF', type: 'statut', largeur: 140});
+    if (/^(commande|marche)$/.test(type)) {
+      cols.push({cle: 'situation_of', libelle: 'Situation OF', type: 'statut', largeur: 140});
+      cols.push({cle: 'a_fabriquer_milli', libelle: 'À fabriquer', type: 'qte', largeur: 110});
+    }
+    cols.push({cle: 'type_ligne_lib', libelle: 'Type', largeur: 150});
     cols.push({cle: 'repris_milli', libelle: REPRIS[type] || 'Repris', type: 'qte', largeur: 110});
     cols.push({cle: 'reste_milli', libelle: 'Reste', type: 'qte', largeur: 110, total: true});
     cols.push({cle: 'article_code', libelle: 'Article', largeur: 100});
@@ -130,6 +140,8 @@
         l.origine_lib = (ERP.M.origines || {})[l.origine_prod] || '';
         l.laboratoire_lib = (ERP.M.laboratoires || {})[l.laboratoire] || '';
         l.situation_of = l.situation_of ? 'of_' + l.situation_of : '';
+        l.bat = l.bat ? 'bat_' + l.bat : '';
+        l.type_ligne_lib = (ERP.M.types_ligne || {})[l.type_ligne] || '';
       });
       grilleZone.textContent = '';
       g = ERP.grille(grilleZone, {

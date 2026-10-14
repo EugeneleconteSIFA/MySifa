@@ -390,6 +390,38 @@ class Chaine(unittest.TestCase):
         f = pieces.charger(c, fa)
         self.assertEqual(f["echeances"][0]["montant_cents"], f["total_ttc_cents"] - 1000)
 
+    def test_type_ligne_et_bat(self):
+        c = self.conn
+        c.execute("INSERT OR IGNORE INTO gc_sequences (code, libelle, format) VALUES ('of', 'OF', 'OF{AA}{N:05}')")
+        c.execute("""INSERT INTO gc_articles (id, code, libelle, nature, unite, base_prix, prix_vente_cents, tva_code,
+                   gere_stock, cree_le, modifie_le) VALUES (4, 'ETQ2', 'Étiquette 2', 'pf', 'ETQ', 1000, 900, 'N', 1, ?, ?)""",
+                  (NOW, NOW))
+        co = pieces.creer(c, "commande", 1)
+        pieces.enregistrer(c, co, None, [
+            _ligne(1, 1_000_000, 1250, 1000),                                      # normale
+            _ligne(4, 2_000_000, 900, 1000, type_ligne="livrer_sans_facture"),     # échantillon
+            _ligne(1, 3_000_000, 1250, 1000, type_ligne="stocker", laboratoire="creation"),
+        ])
+        pieces.valider(c, co)
+        bl = pieces.transformer(c, [co], "bl")
+        self.assertEqual([x["type_ligne"] for x in pieces.charger(c, bl)["lignes"]],
+                         ["livrer_facturer", "livrer_sans_facture"])               # la ligne à stocker ne se livre pas
+        pieces.valider(c, bl)
+        self.assertEqual(pieces.charger(c, co)["statut"], "partiel")              # reste la ligne à stocker
+        fa = pieces.transformer(c, [bl], "facture")
+        self.assertEqual(len(pieces.charger(c, fa)["lignes"]), 1)                 # pas de facture pour l'échantillon
+        pieces.valider(c, fa)
+        self.assertEqual(pieces.charger(c, bl)["statut"], "solde")               # BL entièrement traité
+        k = [x for x in pieces.carnet(c, ["commande"]) if x["piece_id"] == co and x["rang"] == 3][0]
+        self.assertEqual((k["bat"], k["a_fabriquer_milli"]), ("non_rattache", 3_000_000))
+        of = pieces.transformer(c, [co], "of")
+        lo = [x for x in pieces.charger(c, of)["lignes"]]
+        self.assertEqual(len(lo), 1)                                              # seule la ligne à stocker reste à fabriquer
+        pieces.valider(c, of)
+        self.assertEqual(len(pieces.alertes_bat(c, of)), 1)                        # BAT non rattaché
+        pieces.declarer_production(c, of, 3_000_000)
+        self.assertEqual(pieces.charger(c, co)["statut"], "solde")               # produite = ligne à stocker soldée
+
     def test_achat_reception_stock(self):
         c = self.conn
         c.execute("UPDATE gc_articles SET prix_achat_cents=900 WHERE id=1")

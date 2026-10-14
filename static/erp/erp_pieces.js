@@ -291,7 +291,8 @@
     function nouvelleLigne() {
       return {article_id: null, libelle: '', quantite_milli: null, base_prix: 1, prix_cents: null, remise_bp: 0,
               tva_code: null, taux_tva_bp: 0, montant_ht_cents: 0, _nouvelle: true,
-              date_livraison: P.date_livraison || null, date_expedition: P.date_expedition || null, nb_livraisons: 1};
+              date_livraison: P.date_livraison || null, date_expedition: P.date_expedition || null, nb_livraisons: 1,
+              type_ligne: 'livrer_facturer'};
     }
 
     // Les lignes qui suivaient les dates de l'en-tête les suivent encore.
@@ -430,6 +431,7 @@
       var adrs = tiers.adresses.filter(function (a) { return a.type === 'livraison'; })
         .map(function (a) { return {v: a.id, l: (a.libelle ? a.libelle + ' — ' : '') + a.adresse1 + ', ' + a.ville}; });
       var f = h('div', {className: 'erp-form erp-ligne-detail'},
+        ERP.champ('Type de ligne', ERP.choix(l, 'type_ligne', opts(M.types_ligne), {change: marquer})),
         ERP.champ('Date d\'expédition', ERP.saisie(l, 'date_expedition', 'date', {change: marquer})),
         ERP.champ('Date de livraison', ERP.saisie(l, 'date_livraison', 'date', {change: marquer})),
         ERP.champ('Origine', ERP.choix(l, 'origine_prod', opts(M.origines), {avecVide: '—', change: marquer})),
@@ -443,6 +445,7 @@
     // Résumé du détail sous la désignation (lecture).
     function resumeLigne(l) {
       var M = ERP.M || {}, morceaux = [];
+      if (l.type_ligne && l.type_ligne !== 'livrer_facturer') morceaux.push((M.types_ligne || {})[l.type_ligne] || l.type_ligne);
       if (l.date_expedition) morceaux.push('Exp. ' + ERP.fmt.date(l.date_expedition));
       if (l.date_livraison) morceaux.push('Liv. ' + ERP.fmt.date(l.date_livraison));
       if (l.origine_prod) morceaux.push((M.origines || {})[l.origine_prod] || l.origine_prod);
@@ -618,7 +621,7 @@
                 prix_cents: l.prix_cents, remise_bp: l.remise_bp, tva_code: l.tva_code, date_livraison: l.date_livraison,
                 ligne_amont_id: l.ligne_amont_id, notes: l.notes, date_expedition: l.date_expedition,
                 origine_prod: l.origine_prod, laboratoire: l.laboratoire, ref_client: l.ref_client,
-                nb_livraisons: l.nb_livraisons, adresse_livraison_id: l.adresse_livraison_id};
+                nb_livraisons: l.nb_livraisons, adresse_livraison_id: l.adresse_livraison_id, type_ligne: l.type_ligne};
       });
       return {entete: ent, lignes: ls};
     }
