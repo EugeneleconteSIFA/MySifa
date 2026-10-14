@@ -19,6 +19,9 @@ Priorité : **P1** bloque le lot en cours · **P2** le lot suivant · **P3** plu
 | Menu principal | Navigation : contacts, devis, marchés, commandes, livraisons, facturation, comptabilités, stocks PF, colisage, ordonnancement, production, appels d'offre, achats, réceptions, stocks matières, contrôles |
 | Numérotation observée | Commandes et BL : compteur continu sur 7 chiffres (99xxxxx) ; devis AAMMNNN ; marchés : compteur simple ; factures AAMM + 4 chiffres ; commandes et factures d'achat : compteur simple |
 | PDF : ordre d'expédition, BL, facture, commande d'achat, réception, facture d'achat | Impression refaite sur ce modèle : adresses (facturation barrée sur BL et ordre d'expédition), cartouche Date / Client / Page, « suivie par », V/Réf commande et produit, unité de vente, rappel commande / BL, commandé / déjà livré / livré / reliquat, pied de BL, origine et nature, règlement et échéance, TVA sur les débits, affacturage, pénalités, réserve de propriété |
+| Fiche client : principal, interlocuteurs, adresses, banques | Fiche client en onglets : code court, groupe, état, identifiants, ADV, catégories, langue, désignation interne / client, BAT à chaque commande, mode de facturation, factor, en compte, escompte, franco, marges de devis, compte de tiers ; interlocuteurs avec service et documents reçus automatiquement (devis, ARC, BL, facture, relance) ; adresses principale / facturation / livraison avec raison sociale, téléphone, e-mail, SIRET ; banques |
+| Fiche produit, liste des produits | Code 3, désignation sur plusieurs lignes, couleur, poids, sous-famille, gamme, cliché, EAN, unités d'achat / de conditionnement / de vente, taxe écologique, code douane, prix de stock, stock mini / maxi, zone, références client 1 à 3, libellé client ; liste avec format, sous-famille, réf. client |
+| Facture (consultation) | Situation « à éditer » / « éditée », « à transférer » / « transférée » en comptabilité |
 | Affiche FSC « Quelle allégation pour ce dossier » | Allégation calculée des matières consommées par l'OF (la plus basse l'emporte, non FSC et Controlled Wood → non FSC, film / colle / encre ignorés), imprimée sur BL et facture avec le certificat, alerte si un produit vendu certifié ne l'est pas |
 
 ## Questions soulevées par ces captures
@@ -39,8 +42,7 @@ Priorité : **P1** bloque le lot en cours · **P2** le lot suivant · **P3** plu
 |---|---|---|---|
 | ☐ | P1 | **Facturation** : l'écran de facturation (le PDF est reçu) | Comment on part des BL |
 | ☐ | P2 | **PDF** d'un devis et d'une confirmation de commande envoyée au client | Mise en page |
-| ☐ | P1 | **Fiche client**, chaque onglet | Adresses multiples, contacts, conditions, tarifs, encours |
-| ☐ | P1 | **Fiche article produit fini**, chaque onglet | Format, unités, conditionnement, prix, liens outil / fiche technique |
+| ☐ | P2 | Fiche produit : onglets **Nomenclature**, **Tarifs**, **Cahiers des charges** ; fiche client : **Cahiers des charges**, **Livraison**, **Stockage**, **Facturation** | Ce qu'ils contiennent |
 | ☐ | P2 | **Ordonnancement** et **Production** | Ce qui est encore utilisé (le module est abandonné depuis avril 2026) |
 | ☐ | P2 | **Achats**, **Réceptions**, **Stocks matières** | Commande fournisseur, réception contre commande, bobines |
 | ☐ | P2 | **Comptabilités** : l'export et un fichier exemple | Format attendu par le logiciel comptable |

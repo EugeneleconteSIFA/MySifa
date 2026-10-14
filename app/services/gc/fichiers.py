@@ -42,8 +42,22 @@ CHAMPS_TIERS = {"code": str, "est_client": bool, "est_fournisseur": bool, "raiso
                 "compte_auxiliaire": str, "representant_id": "int_null", "transporteur_id": "int_null",
                 "jours_expedition": int}
 
-CHAMPS_ADRESSE = ("type", "libelle", "adresse1", "adresse2", "code_postal", "ville", "pays", "par_defaut")
-CHAMPS_CONTACT = ("nom", "fonction", "email", "telephone")
+CHAMPS_TIERS.update({
+    "nom_court": str, "groupe_id": "int_null", "etat": str, "fax": str, "site_web": str, "rcs": str, "ean": str,
+    "nif": str, "adv_id": "int_null", "categorie1": str, "categorie2": str, "categorie3": str, "langue": str,
+    "designation_docs": str, "bat_chaque_cde": bool, "fiche_conformite": bool, "facturation_auto": str,
+    "factor": bool, "en_compte": bool, "escompte_bp": int, "franco_cents": "int_null", "marge_brute_bp": "int_null",
+    "marge_nette_bp": "int_null", "notre_no_fournisseur": str, "commission_bp": int,
+})
+ETATS_TIERS = {"normal": "Normal", "bloque": "Bloqué", "sommeil": "En sommeil"}
+FACTURATION_AUTO = {"par_bl": "Une facture par BL", "groupee": "Groupée (fin de période)", "manuelle": "Manuelle"}
+TYPES_ADRESSE = ("principale", "facturation", "livraison")
+CHAMPS_ADRESSE = ("type", "libelle", "raison_sociale", "adresse1", "adresse2", "code_postal", "ville", "pays",
+                  "telephone", "gsm", "email", "siret", "par_defaut")
+CHAMPS_CONTACT = ("civilite", "service", "nom", "fonction", "email", "telephone", "gsm", "envoi_devis", "envoi_arc",
+                  "envoi_bl", "envoi_facture", "envoi_relance")
+CHAMPS_BANQUE = ("nom", "ville", "pays", "iban", "bic")
+CHAMPS_BOOL = {"par_defaut", "envoi_devis", "envoi_arc", "envoi_bl", "envoi_facture", "envoi_relance"}
 
 CHAMPS_ARTICLE = {"code": str, "libelle": str, "libelle_client": str, "nature": str, "famille": "ref",
                   "unite": str, "base_prix": int, "prix_vente_cents": "int_null", "prix_achat_cents": "int_null",
@@ -51,7 +65,11 @@ CHAMPS_ARTICLE = {"code": str, "libelle": str, "libelle_client": str, "nature": 
                   "notes": str, "actif": bool, "ref_client": str, "format_l_dmm": "int_null",
                   "format_a_dmm": "int_null", "conditionnement": str, "designation": str, "origine_prod": str,
                   "bat_id": "int_null", "fsc_allegation": str, "fsc_pct": "int_null", "fsc_bois": bool,
-                  "fsc_requis": bool}
+                  "fsc_requis": bool, "code3": str, "couleur": str, "poids_g": "int_null", "sous_famille": str,
+                  "gamme": str, "cliche": str, "ean": str, "unite_achat": str, "unite_conditionnement": str,
+                  "taxe_eco_cents": "int_null", "code_douane": str, "prix_stock_cents": "int_null",
+                  "stock_mini_milli": "int_null", "stock_maxi_milli": "int_null", "zone": str,
+                  "remplacement_id": "int_null", "ref_client2": str, "ref_client3": str}
 
 NATURES = {"pf": "Produit fini", "mp": "Matière première", "service": "Prestation"}
 
@@ -159,6 +177,11 @@ def charger_tiers(conn, tiers_id: int) -> dict:
         (tiers_id,)).fetchall()]
     d["contacts"] = [dict(r) for r in conn.execute(
         "SELECT * FROM gc_tiers_contacts WHERE tiers_id=? AND actif=1 ORDER BY id", (tiers_id,)).fetchall()]
+    try:
+        d["banques"] = [dict(r) for r in conn.execute(
+            "SELECT * FROM gc_tiers_banques WHERE tiers_id=? AND actif=1 ORDER BY id", (tiers_id,)).fetchall()]
+    except Exception:
+        d["banques"] = []
     d["tarifs"] = [dict(r) for r in conn.execute(
         """SELECT g.*, a.code AS article_code, a.libelle AS article_libelle, a.base_prix, a.unite
            FROM gc_tarifs g JOIN gc_articles a ON a.id=g.article_id
@@ -179,8 +202,16 @@ def _code_suivant(conn, table: str, prefixe: str) -> str:
 
 
 def enregistrer_tiers(conn, tiers_id: int | None, data: dict, adresses: list | None = None,
-                      contacts: list | None = None, origine: str = "erp") -> int:
+                      contacts: list | None = None, origine: str = "erp", banques: list | None = None) -> int:
     vals = {c: _conv(data.get(c), t, c) for c, t in CHAMPS_TIERS.items() if c in data}
+    if "etat" in vals:
+        if vals["etat"] not in ETATS_TIERS:
+            raise ErreurFichier("État inconnu.")
+        vals["bloque"] = 1 if vals["etat"] == "bloque" else 0       # l'état « bloqué » commande le blocage
+    if "facturation_auto" in vals and vals["facturation_auto"] not in FACTURATION_AUTO:
+        raise ErreurFichier("Mode de facturation inconnu.")
+    if vals.get("groupe_id") and tiers_id and int(vals["groupe_id"]) == int(tiers_id):
+        raise ErreurFichier("Un client ne peut pas être son propre groupe.")
     now = _maintenant()
     if tiers_id is None:
         if not vals.get("raison_sociale"):
@@ -214,6 +245,9 @@ def enregistrer_tiers(conn, tiers_id: int | None, data: dict, adresses: list | N
     if contacts is not None:
         _synchroniser(conn, "gc_tiers_contacts", tiers_id, contacts, CHAMPS_CONTACT,
                       obligatoire="nom", libelle="Contact")
+    if banques is not None:
+        _synchroniser(conn, "gc_tiers_banques", tiers_id, banques, CHAMPS_BANQUE,
+                      obligatoire="nom", libelle="Banque")
     return tiers_id
 
 
@@ -221,12 +255,12 @@ def _synchroniser(conn, table, tiers_id, lignes, champs, obligatoire, libelle):
     """Met à jour les lignes connues, crée les nouvelles, désactive les absentes."""
     gardes = set()
     for l in lignes:
-        vals = {c: (_conv(l.get(c), bool, c) if c == "par_defaut" else _conv(l.get(c), str, c))
+        vals = {c: (_conv(l.get(c), bool, c) if c in CHAMPS_BOOL else _conv(l.get(c), str, c))
                 for c in champs if c in l}
         if not vals.get(obligatoire):
             continue
-        if table == "gc_tiers_adresses" and vals.get("type") not in ("facturation", "livraison"):
-            raise ErreurFichier("Type d'adresse : facturation ou livraison.")
+        if table == "gc_tiers_adresses" and vals.get("type") not in TYPES_ADRESSE:
+            raise ErreurFichier("Type d'adresse : principale, facturation ou livraison.")
         lid = l.get("id")
         if lid and conn.execute(f"SELECT 1 FROM {table} WHERE id=? AND tiers_id=?", (lid, tiers_id)).fetchone():
             conn.execute(f"UPDATE {table} SET {', '.join(c + '=?' for c in vals)}, actif=1 WHERE id=?",
@@ -254,6 +288,7 @@ def lister_articles(conn, nature: str | None = None) -> list[dict]:
     filtre, args = ("WHERE a.nature=?", (nature,)) if nature else ("", ())
     return [dict(r) for r in conn.execute(
         f"""SELECT a.id, a.code, a.libelle, a.nature, a.famille, a.unite, a.base_prix, a.client_id,
+                   a.format_l_dmm, a.format_a_dmm, a.sous_famille, a.ref_client,
                    (SELECT raison_sociale FROM gc_tiers t WHERE t.id=a.client_id) AS client_nom,
                    a.prix_vente_cents, a.prix_achat_cents, a.gere_stock, a.actif,
                    (SELECT COALESCE(SUM(m.quantite_milli),0) FROM gc_mouvements m WHERE m.article_id=a.id) AS stock_milli

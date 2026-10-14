@@ -158,6 +158,13 @@
           {cle: 'total_ht_cents', libelle: 'Total HT', type: 'montant', largeur: 130, total: true},
           {cle: 'total_ttc_cents', libelle: 'Total TTC', type: 'montant', largeur: 130, total: true},
           {cle: 'statut', libelle: 'État', type: 'statut', largeur: 150});
+        if (/facture/.test(conf.types[0])) {
+          // Situation RVGI : « à éditer et confirmer », puis passage en comptabilité.
+          cols.push({cle: 'imprime_le', libelle: 'Édition', largeur: 110, rendu: function (l) {
+            return l.numero ? (l.imprime_le ? 'Éditée' : h('b', {className: 'erp-a-faire', text: 'À éditer'})) : ''; }});
+          cols.push({cle: 'comptabilise_le', libelle: 'Comptabilité', largeur: 120, rendu: function (l) {
+            return l.comptabilise_le ? 'Transférée' : (l.numero ? 'À transférer' : ''); }});
+        }
         var g = ERP.grille(zone, {
           nom: 'pieces.' + conf.types.join('_'), cle: 'id', colonnes: cols, lignes: lignes,
           statuts: ERP.statutsPour(conf.types),

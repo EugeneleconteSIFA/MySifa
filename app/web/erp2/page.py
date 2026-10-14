@@ -136,7 +136,12 @@ def erp2_imprimer(request: Request, piece_id: int, modele: str = ""):
     from app.web.erp2.impression import rendre
     with get_db() as conn:
         try:
-            return HTMLResponse(rendre(conn, piece_id, modele))
+            html_doc = rendre(conn, piece_id, modele)
+            # Situation de la pièce : éditée (RVGI : « à éditer et confirmer »)
+            conn.execute("UPDATE gc_pieces SET imprime_le=COALESCE(imprime_le, datetime('now','localtime')) "
+                         "WHERE id=? AND numero IS NOT NULL", (piece_id,))
+            conn.commit()
+            return HTMLResponse(html_doc)
         except ErreurPiece as e:
             raise HTTPException(404, str(e)) from None
 

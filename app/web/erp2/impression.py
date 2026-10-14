@@ -208,8 +208,12 @@ def rendre(conn, piece_id: int, modele: str = "") -> str:
             droite.append(f"V/Réf commande : {_e(p['ref_tiers'])}")
         if l.get("ref_client"):
             droite.append(f"V/Réf produit : {_e(l['ref_client'])}")
-        des = [f'<div class="code"><span>{_e(l["article_code"])}</span><b>{"<br>".join(droite)}</b></div>',
-               f"<div>{_e(l['libelle'])}</div>"]
+        # Désignation interne ou désignation client, selon la fiche client
+        libelle_doc = l["libelle"]
+        if vente and "designation_docs" in t.keys() and t["designation_docs"] == "client" and art["libelle_client"]:
+            libelle_doc = art["libelle_client"]
+        des = [f'<div class="code"><span>{_e(l["article_code"])}</span><b>{"<br>".join(droite)}</b></div>']
+        des += [f"<div>{_e(x)}</div>" for x in str(libelle_doc or "").splitlines() if x.strip()]
         for x in (art["designation"] if "designation" in art.keys() else "", art["conditionnement"] if "conditionnement" in art.keys() else ""):
             for ligne in str(x or "").splitlines():
                 if ligne.strip():

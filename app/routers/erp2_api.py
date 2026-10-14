@@ -71,6 +71,10 @@ def meta(request: Request):
             "origines": pieces.ORIGINES,
             "laboratoires": pieces.LABORATOIRES,
             "types_ligne": pieces.TYPES_LIGNE,
+            "etats_tiers": fichiers.ETATS_TIERS,
+            "facturation_auto": fichiers.FACTURATION_AUTO,
+            "utilisateurs": [dict(r) for r in conn.execute(
+                "SELECT id, nom FROM users WHERE COALESCE(actif,1)=1 ORDER BY nom").fetchall()],
             "fsc": fsc.LIBELLES,
             "bat_libelles": pieces.BAT_LIBELLES,
             # Branchés sur MySifa : transporteurs de MyExpé, comptes des commerciaux.
@@ -124,7 +128,7 @@ async def tiers_enregistrer(request: Request, tiers_id: int | None = None):
     body = await request.json()
     with _ecriture() as conn:
         tid = fichiers.enregistrer_tiers(conn, tiers_id, body.get("tiers") or {},
-                                         body.get("adresses"), body.get("contacts"))
+                                         body.get("adresses"), body.get("contacts"), banques=body.get("banques"))
     _trace(request, u, "CREATE" if tiers_id is None else "UPDATE", f"Tiers #{tid}")
     return {"id": tid}
 
@@ -438,6 +442,11 @@ def compta_fec(request: Request, debut: str, fin: str):
     if pb:
         raise HTTPException(400, "Export refusé : " + " ".join(pb[:5]))
     nom = f"{siren}FEC{fin.replace('-', '')}.txt"
+    with get_db() as conn:
+        conn.execute("""UPDATE gc_pieces SET comptabilise_le=COALESCE(comptabilise_le, datetime('now','localtime'))
+                        WHERE type IN ('facture','avoir','facture_fournisseur') AND numero IS NOT NULL
+                          AND substr(date_piece,1,10) BETWEEN ? AND ?""", (debut, fin))
+        conn.commit()
     _trace(request, u, "EXPORT", f"FEC {debut} → {fin}", {"lignes": len(lignes)})
     return Response(export_compta.fec(lignes).encode("utf-8"), media_type="text/plain; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="{nom}"'})

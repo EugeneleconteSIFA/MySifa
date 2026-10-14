@@ -231,3 +231,6 @@ select.erp-input:disabled { appearance: none; }
 /* Saisie de règlement */
 .erp-regl-ech { margin-bottom: 8px; }
 .erp-aide.erreur { color: var(--danger); font-weight: 600; }
+
+.erp-lignes .c-case { width: 52px; text-align: center; }
+.erp-a-faire { color: var(--warn); }
