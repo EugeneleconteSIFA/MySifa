@@ -15,9 +15,18 @@ Ce test verrouille :
 Le modèle est remplacé par un faux client : aucun appel réseau.
 """
 
+import os
 import sys
+import tempfile
 import types
+from datetime import datetime
 from pathlib import Path
+
+# Base isolée AVANT tout import projet : la CI lance les tests en parallèle,
+# deux tests qui migrent la même base se marchent dessus (colonne en double).
+_tmp = tempfile.mkdtemp(prefix="mysifa_agent_test_")
+os.environ["DB_PATH"] = os.path.join(_tmp, "test.db")
+os.environ["ERP_MIRROR_DB"] = os.path.join(_tmp, "erp_mirror.db")
 
 RACINE = Path(__file__).resolve().parents[1]
 if str(RACINE) not in sys.path:
@@ -27,6 +36,14 @@ import database  # noqa: E402,F401  (shim d'abord, voir CLAUDE.md)
 from database import get_db  # noqa: E402
 from app.services import agent_actions as aa  # noqa: E402
 from app.services import agent_ia  # noqa: E402
+
+# Jeu de données minimal : un super admin pour la session, une machine.
+with get_db() as _c:
+    _now = datetime.now().isoformat(timespec="seconds")
+    _c.execute("INSERT INTO users (email,nom,password_hash,role,actif,created_at) VALUES (?,?,?,?,1,?)",
+               ("agent.test@local", "Agent Test", "x", "superadmin", _now))
+    _c.execute("INSERT INTO machines (nom,code,actif,created_at) VALUES ('Machine test','MTEST',1,?)", (_now,))
+    _c.commit()
 
 ECHECS = []
 
