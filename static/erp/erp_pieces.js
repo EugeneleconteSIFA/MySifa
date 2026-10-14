@@ -514,6 +514,10 @@
         ERP.champ('Laboratoire', ERP.choix(l, 'laboratoire', opts(M.laboratoires), {avecVide: '—', change: marquer})),
         ERP.champ('Réf. produit client', ERP.saisie(l, 'ref_client', 'texte', {change: marquer})),
         ERP.champ('Nombre de livraisons', ERP.saisie(l, 'nb_livraisons', 'entier', {change: marquer})),
+        P.type === 'cde_fournisseur' ? h('div', {className: 'erp-champ erp-cases'},
+          ERP.case(l, 'dates_confirmees', 'Dates confirmées par le fournisseur', {change: marquer})) : null,
+        P.type === 'reception' ? ERP.champ('Zone de rangement', ERP.saisie(l, 'zone_rangement', 'texte', {change: marquer})) : null,
+        P.type === 'reception' ? ERP.champ('Zone douane', ERP.saisie(l, 'zone_douane', 'texte', {change: marquer})) : null,
         adrs.length > 1 ? ERP.champ('Livraison chez', ERP.choix(l, 'adresse_livraison_id', adrs, {avecVide: 'Adresse de la pièce', nombre: true, change: marquer}), {large: true}) : null);
       return h('tr', {className: 'erp-detail-ligne'}, h('td'), h('td', {colSpan: String(nbCol)}, f));
     }
@@ -700,7 +704,8 @@
                 ligne_amont_id: l.ligne_amont_id, notes: l.notes, date_expedition: l.date_expedition,
                 origine_prod: l.origine_prod, laboratoire: l.laboratoire, ref_client: l.ref_client,
                 nb_livraisons: l.nb_livraisons, adresse_livraison_id: l.adresse_livraison_id, type_ligne: l.type_ligne,
-                laize_dmm: l.laize_dmm, ml_par_bobine_milli: l.ml_par_bobine_milli};
+                laize_dmm: l.laize_dmm, ml_par_bobine_milli: l.ml_par_bobine_milli, dates_confirmees: l.dates_confirmees,
+                zone_rangement: l.zone_rangement, zone_douane: l.zone_douane};
       });
       return {entete: ent, lignes: ls};
     }

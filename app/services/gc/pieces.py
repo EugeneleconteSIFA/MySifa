@@ -363,6 +363,7 @@ def carnet(conn, types: list[str]) -> list[dict]:
                    a.code AS article_code, a.format_l_dmm, a.format_a_dmm, a.conditionnement,
                    a.code3, a.designation AS article_designation, a.famille, a.sous_famille,
                    l.prix_cents, l.laize_dmm, l.notes AS notes_ligne, l.ligne_amont_id, l.unite,
+                   l.dates_confirmees, l.zone_rangement, l.zone_douane, l.remise_bp AS remise_ligne_bp,
                    p.cree_par AS operateur, p.valide_par, p.remise_bp AS remise_piece_bp, p.depot, p.notes AS notes_piece,
                    (SELECT nom FROM users u WHERE u.id=t.adv_id) AS adv,
                    ad.raison_sociale AS liv_raison_sociale, ad.adresse1 AS liv_adresse1, ad.adresse2 AS liv_adresse2,
@@ -627,8 +628,9 @@ def enregistrer(conn, piece_id: int, entete: dict | None, lignes: list[dict] | N
                 """INSERT INTO gc_pieces_lignes (piece_id, rang, article_id, libelle, quantite_milli, unite,
                        base_prix, prix_cents, remise_bp, tva_code, taux_tva_bp, montant_ht_cents,
                        date_livraison, date_expedition, ligne_amont_id, notes, origine_prod, laboratoire,
-                       ref_client, nb_livraisons, adresse_livraison_id, type_ligne, laize_dmm, ml_par_bobine_milli)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       ref_client, nb_livraisons, adresse_livraison_id, type_ligne, laize_dmm, ml_par_bobine_milli,
+                       dates_confirmees, zone_rangement, zone_douane)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (piece_id, i, art["id"], libelle, q, art["unite"], base, prix_c, rem, code_tva,
                  taux_tva(conn, code_tva), calculs.montant_ligne(q, prix_c, base, rem),
                  l.get("date_livraison") or None, l.get("date_expedition") or None, amont,
@@ -636,7 +638,9 @@ def enregistrer(conn, piece_id: int, entete: dict | None, lignes: list[dict] | N
                  adr_l, type_l,
                  _entier(l["laize_dmm"], "Laize", 1) if l.get("laize_dmm") else _t(art, "format_l_dmm"),
                  _entier(l["ml_par_bobine_milli"], "Longueur de bobine", 1) if l.get("ml_par_bobine_milli")
-                 else _t(art, "ml_par_bobine_milli")))
+                 else _t(art, "ml_par_bobine_milli"),
+                 1 if l.get("dates_confirmees") in (True, 1, "1") else 0,
+                 str(l.get("zone_rangement") or ""), str(l.get("zone_douane") or "")))
     _maj_totaux(conn, piece_id)
 
 
@@ -895,6 +899,7 @@ def transformer(conn, sources: list[int], cible: str, user: dict | None = None) 
                 "laboratoire": _t(l, "laboratoire"), "ref_client": _t(l, "ref_client"),
                 "adresse_livraison_id": _t(l, "adresse_livraison_id"), "type_ligne": _t(l, "type_ligne"),
                 "laize_dmm": _t(l, "laize_dmm"), "ml_par_bobine_milli": _t(l, "ml_par_bobine_milli"),
+                "dates_confirmees": _t(l, "dates_confirmees"),
             })
     if not lignes:
         raise ErreurPiece("Plus rien à reprendre : tout a déjà été repris.")

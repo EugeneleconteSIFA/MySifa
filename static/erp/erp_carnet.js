@@ -96,7 +96,12 @@
     M({cle: 'prix_cents', libelle: 'P.U. HT', type: 'montant', largeur: 110});
     M({cle: 'unite', libelle: 'Unité', largeur: 70});
     M({cle: 'code3', libelle: 'Code 3', largeur: 90});
-    M({cle: 'famille_lib', libelle: 'Famille', largeur: 130});
+    // RVGI met le type (famille) en tête de ses TDB d'achat.
+    if (!vente) cols.splice(2, 0, {cle: 'famille_lib', libelle: 'Type', largeur: 130});
+    else M({cle: 'famille_lib', libelle: 'Famille', largeur: 130});
+    if (type === 'cde_fournisseur') M({cle: 'dates_conf', libelle: 'Dates confirmées', largeur: 120});
+    if (type === 'reception') { M({cle: 'zone_rangement', libelle: 'Zone de rangement', largeur: 140}); M({cle: 'zone_douane', libelle: 'Zone douane', largeur: 120}); }
+    M({cle: 'prix_net', libelle: 'P.U. HT net', type: 'montant', largeur: 110});
     M({cle: 'format_l', libelle: 'Format L', largeur: 90});
     M({cle: 'format_a', libelle: 'Format A', largeur: 90});
     M({cle: 'laize', libelle: 'Laize', largeur: 80});
@@ -189,6 +194,8 @@
         l.famille_lib = l.famille ? ERP.refLibelle('familles', l.famille) : '';
         l.depot_lib = l.depot ? ERP.refLibelle('depots', l.depot) : '';
         if (l.aval_numeros) l.aval_numeros = l.aval_numeros.split(',').join(', ');
+        l.dates_conf = l.dates_confirmees ? 'Oui' : 'Non';
+        l.prix_net = l.prix_cents != null ? Math.round(l.prix_cents * (10000 - (l.remise_ligne_bp || 0)) / 10000) : null;
       });
       grilleZone.textContent = '';
       g = ERP.grille(grilleZone, {
