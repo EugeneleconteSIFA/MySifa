@@ -1,7 +1,8 @@
 # Nouvel ERP SIFA — erp.mysifa.com
 
 > Document vivant. Mis à jour à chaque lot livré ou décision prise.
-> Dernière mise à jour : 14/10/2026.
+> Dernière mise à jour : 14/10/2026 (après-midi).
+> Captures RVGI attendues : [captures-erp-existant.md](captures-erp-existant.md).
 
 ## Cap
 
@@ -9,9 +10,10 @@ Remplacer RVGI par un ERP développé dans MySifa et servi sur
 `erp.mysifa.com`. Le problème n°1 de RVGI est l'interface ; le n°2,
 l'expérience (ressaisies, ruptures de chaîne).
 
-L'ERP se construit **de fond en comble, sans données réelles**, testé en
-local. Il n'est déployé et essayé par Eugène qu'une fois **tous** les modules
-développés. La reprise des données RVGI vient ensuite, en une fois.
+L'ERP se construit **de fond en comble**, avec un petit jeu de données fictives
+mais une vraie base, une vraie API et de vraies règles (D9). Il n'est mis en
+service qu'une fois **tous** les modules développés. La reprise des données
+RVGI vient ensuite, en une fois.
 
 ## Décisions
 
@@ -21,171 +23,121 @@ développés. La reprise des données RVGI vient ensuite, en une fois.
 | D2 | 14/10 | **Le code vit dans MySifa**, routé par sous-domaine | Même app FastAPI, même base, mêmes comptes. Les liens dossier / OF / stock / expé sont natifs |
 | D3 | 14/10 | Premier module : **Ventes** | Devis → commande → BL → facture → échéance |
 | D4 | 14/10 | Utilisateurs cibles : ADV, direction, achats/logistique, comptabilité | Écrans conçus par métier, pas par table |
-| D5 | 14/10 | **Superadmin seul**, aucune donnée réelle | Pas de lecture du miroir RVGI pour construire ; jeux de données de démonstration générés |
-| D6 | 14/10 | **Pas de mise en service** avant que tous les modules soient faits | L'ERP n'est ouvert à personne d'autre qu'Eugène tant que ventes, achats, stocks, production et compta ne sont pas finis |
-| D7 | 14/10 | **Eugène teste sur `erp.mysifa.com`**, branché sur l'instance v1 (port 8002) | Le code part sur `staging` au fil de l'eau ; le cron de v1 le déploie. La prod (8000) ne sert pas l'ERP avant la fin |
-| D8 | 14/10 | **DA de MySifa** : jetons de couleur, Segoe UI, sidebar commune (`mysifa_sidebar.css`) | Favicon : l'icône MyS, fond cyan, S noir |
+| D5 | 14/10 | **Superadmin seul**, aucune donnée réelle | Pas de lecture du miroir RVGI pour construire |
+| D6 | 14/10 | **Pas de mise en service** avant que tous les modules soient faits | Ventes, devis, marchés, achats, stocks MP et PF, production, compta |
+| D7 | 14/10 | **Eugène teste sur `erp.mysifa.com`**, branché sur l'instance v1 (port 8002) | Le code part sur `staging` au fil de l'eau ; le cron de v1 le déploie |
+| D8 | 14/10 | **DA de MySifa** : jetons de couleur, Segoe UI, sidebar commune | Favicon : l'icône MyS, fond cyan, S noir |
+| D9 | 14/10 | **Reproduire l'ERP « en vrai » avec très peu de lignes** | Jeu de démonstration en base (`origine='demo'`), passé par le moteur de pièces ; réinitialisable dans Paramètres › Démonstration |
+| D10 | 14/10 | **Chantier ERP isolé dans un worktree** `../MySifa-erp` (branche `feature/erp-roadmap`) | Une autre session travaille dans le dossier principal : plus de collision de branche ni de fichiers |
 
 ## Principes non négociables
 
-1. **Rigueur des liens.** Chaque pièce connaît ses pièces amont et aval
-   (devis → commande → OF → BL → facture → règlement ; CDF → réception →
-   facture fournisseur). Un lien est une clé étrangère, jamais un numéro
-   recopié. Chaque lien a son test.
-2. **Numérotation légale continue.** Factures et avoirs : séquence continue,
-   sans trou, figée à l'émission. La séquence est un référentiel ; son point
-   de départ se règlera à la reprise.
-3. **Une pièce émise ne se modifie pas, elle s'annule par une autre pièce.**
-   Facture → avoir. Journal d'audit sur tout le reste.
-4. **Montants en centimes entiers**, quantités en entiers d'unité de base
-   (millièmes si besoin). TVA calculée selon une règle unique et testée.
-   Jamais de `REAL` pour un montant.
-5. **Le stock est un journal de mouvements**, jamais un compteur qu'on écrase.
-   Une quantité en stock est la somme de ses mouvements.
-6. **Rien de SIFA en dur** (CLAUDE.md) : séquences, conditions de paiement,
-   TVA, dépôts, unités, familles → référentiels en base, éditables dans
-   Paramètres de l'ERP.
-7. **Interface clavier d'abord.** Tabulation, raccourcis, autocomplétion :
-   aucune saisie courante n'exige la souris.
-8. **Pensé pour la reprise.** Chaque table métier porte une colonne d'origine
-   (`origine`, `origine_ref`) pour accueillir l'historique RVGI sans
-   collision de numéros.
+1. **Rigueur des liens.** Chaque ligne de pièce connaît sa ligne amont
+   (`ligne_amont_id`). Reliquats, « livré », « facturé », états des pièces
+   amont et pièces liées s'en déduisent. Jamais un numéro recopié.
+2. **Numérotation légale continue.** Le numéro est pris à la validation, dans
+   la transaction : un refus le rend, il n'y a pas de trou.
+3. **Une pièce émise ne se modifie pas.** Brouillon modifiable ; validée en
+   lecture seule ; facture → avoir ; autres pièces annulables tant qu'aucune
+   pièce aval active n'en dépend, stock contrepassé.
+4. **Entiers partout** : centimes, millièmes de quantité, points de base. Prix
+   pour `base_prix` unités (au mille pour l'étiquette). Une règle d'arrondi,
+   dans `calculs.py`, copiée dans `ERP.calc` pour l'affichage et testée.
+5. **Le stock est un journal de mouvements** (`gc_mouvements`). BL = sortie,
+   réception = entrée, inventaire = écart avec le théorique.
+6. **Rien de SIFA en dur** : TVA, conditions, modes, unités, familles, dépôts,
+   numérotation, société → Paramètres de l'ERP.
+7. **Clavier d'abord** : Entrée enchaîne les cellules et crée la ligne suivante,
+   Ctrl+S enregistre, Ctrl+K cherche partout, flèches dans les listes.
+8. **Pensé pour la reprise** : `origine` / `origine_ref` sur tiers, articles,
+   pièces, règlements.
 
-## Architecture
+## Architecture (en place)
 
-```
-erp.mysifa.com ─┐                          ┌─ app/web/erp2/        coque (page.py)
-                ├─ nginx ─ FastAPI MySifa ─┼─ static/erp/          design system + écrans (JS/CSS)
-www.mysifa.com ─┘  (middleware Host)       ├─ app/routers/erp2_*   API ERP
-                                           ├─ app/services/gc/     logique métier
-                                           └─ production.db        tables gc_*
-```
+| Couche | Fichiers |
+|---|---|
+| Routage par Host | `main.py` → `router_hote_erp` ; `config.py` → `ERP2_HOSTS`, `ERP2_PREFIXE`, `ROLES_ERP2` |
+| Pages | `app/web/erp2/page.py` (connexion, coque), `app/web/erp2/impression.py` (A4) |
+| API | `app/routers/erp2_api.py` (`/api/erp2/*`, superadmin, une transaction par écriture) |
+| Métier | `app/services/gc/` : `calculs.py`, `pieces.py`, `fichiers.py`, `compta.py`, `demo.py` |
+| Base | migrations `gc_socle`, `gc_reglements` (tables `gc_*` dans `production.db`) |
+| Interface | `static/erp/` : `erp.js` (coque, routage, recherche), `erp_ui.js` (composants), `erp_grille.js`, `erp_pieces.js`, `erp_fichiers.js`, `erp_gestion.js`, `erp_compta.js`, `erp.css`, `erp_ecrans.css` |
+| Tests | `tests/test_gc_pieces.py` (calculs, chaîne complète, refus, annulation, achats, règlements), `tests/test_erp2_hote.py` |
+| Dev local | worktree `../MySifa-erp`, base de dev propre, `http://erp.localhost:8010` |
 
-- **Routage** : `router_hote_erp` (main.py). Sur un Host de `ERP2_HOSTS`
-  (config.py), toute page est servie sous `/_erp` ; `/api`, `/static`,
-  `/uploads` restent communs. Sur `www`, `/_erp` répond 404.
-- **Session** : cookie propre à `erp.mysifa.com` (connexion dédiée sur
-  l'ERP, mêmes comptes). Pas de cookie partagé avec `www` : évite la
-  collision de `sifa_token` entre prod et v1.
-- **Accès** : `ROLES_ERP2` (config.py) = superadmin.
-- **Tables** : préfixe `gc_` dans `production.db`, pour ne pas les confondre
-  avec les tables `erp_*` qui décrivent le miroir RVGI. Une migration fichier
-  par lot.
-- **Code mergé au fil de l'eau sur `staging`** : `erp.mysifa.com` pointe sur
-  v1 (8002), où Eugène teste. Pas de branche longue qui diverge pendant des
-  mois. Sur la prod, rien ne mène à l'ERP tant que nginx ne l'y envoie pas.
-- **Dev local** : `.claude/launch.json` → `http://erp.localhost:8010`.
+## Ce qui marche aujourd'hui (14/10/2026)
+
+- **Ventes** : devis → commande → BL (livraisons partielles, reliquats,
+  « solder » un reliquat) → facture (regroupement de plusieurs BL) → avoir
+  (plafonné au facturé). États calculés : envoyé / accepté, à livrer / livrée
+  en partie / livrée, à facturer / facturé, émise / réglée.
+- **Achats** : commande fournisseur → réception (entrée en stock, partielle) →
+  facture fournisseur.
+- **Prix** : tarif du tiers par palier, puis tarif général, puis fiche ; prix
+  au mille ; remise ligne et remise de pied ; régime de TVA du tiers (UE,
+  export) prioritaire sur le taux de l'article. Un prix convenu ne bouge plus
+  quand la quantité change.
+- **Stocks** : état par article et dépôt, journal des mouvements, inventaire et
+  ajustement.
+- **Compta** : échéances (conditions : jours, fin de mois, le N du mois),
+  encaissements et paiements avec lettrage, factures réglées en partie / réglées.
+- **Fichiers** : clients, fournisseurs (adresses multiples, contacts,
+  conditions, blocage), articles (nature, famille, unité, base de prix, tarifs).
+- **Impression** : devis, ARC, BL, facture, avoir, bon de commande en A4, avec
+  les mentions légales de facture.
+- **Paramètres** : société, numérotation, TVA, conditions et modes de
+  paiement, unités, familles, dépôts, démonstration.
+- **Accueil** : devis en attente, commandes à livrer et en retard, BL à
+  facturer, échéances en retard, commandes fournisseur à recevoir, CA de l'année.
 
 ## Lots
 
 Statuts : ☐ à faire · ◐ en cours · ✓ fait
 
-### Lot 0 — Socle ✓
+| Lot | Contenu | État |
+|---|---|---|
+| 0 | Socle : sous-domaine, connexion, coque, DA, favicon | ✓ |
+| 1 | Design system : grille, fiche, pièce, champs, autocomplétion, fenêtres, recherche | ✓ — reste colonnes déplaçables / redimensionnables |
+| 2 | Fichiers de base et paramètres | ✓ |
+| 3 | Ventes : devis, commandes, BL, factures, avoirs, impression | ✓ — reste marchés, devis multi-quantités, envoi par mail |
+| 4 | Achats : commandes, réceptions, factures fournisseur | ✓ — reste rapprochement facture / réception avec écarts de prix, appels d'offres |
+| 5 | Stocks MP et PF | ◐ — reste lots / bobines, valorisation, transferts, alerte de stock négatif |
+| 6 | Production | ☐ |
+| 7 | Comptabilité | ◐ — échéances et règlements faits ; reste relances, export comptable, facturation électronique |
+| 8 | Recette, reprise RVGI, mise en service | ☐ |
 
-| | Tâche |
-|---|---|
-| ✓ | DNS `erp.mysifa.com` → VPS 168.231.85.64 |
-| ✓ | Middleware Host, préfixe `/_erp` invisible hors sous-domaine |
-| ✓ | Connexion ERP, accès superadmin, refus des autres rôles |
-| ✓ | Coque : navigation par domaine, routage par chemin, thème, mobile |
-| ✓ | Tests `tests/test_erp2_hote.py` |
-| ✓ | DA MySifa (sidebar commune), favicon dédié |
-| ✓ | vhost nginx `erp.mysifa.com` → 127.0.0.1:8002 + certificat — en ligne le 14/10/2026 |
+### Prochaines étapes, dans l'ordre
 
-### Lot 1 — Design system ERP
-
-L'interface est la raison du projet : ce lot se fait avant tout écran métier,
-à partir des captures de RVGI.
-
-| | Tâche |
-|---|---|
-| ◐ | **Grille** (`static/erp/erp_grille.js`) : fait — tri 3 états, filtres par colonne (texte sans accents, `>`, `<`, `a..b`, dates), totaux, export CSV, clavier, rendu virtualisé (10 000 lignes), mémoire des filtres. Reste : colonnes réordonnables / redimensionnables |
-| ☐ | **Fiche** (client, article…) : en-tête + sections + onglets liés |
-| ☐ | **Pièce** (devis, commande, BL, facture) : en-tête, saisie de lignes au clavier, totaux live, statut, pièces liées amont/aval |
-| ☐ | Champs : autocomplétion tiers / article, montant, quantité + unité, date, référentiel |
-| ☐ | Recherche globale (Ctrl K), onglets de pièces ouvertes, toasts |
-| ◐ | Page de démonstration des composants : `Paramètres › Composants` (données fictives) — à valider par Eugène |
-
-### Lot 2 — Fichiers de base et paramètres
-
-| | Tâche |
-|---|---|
-| ☐ | Référentiels : TVA, unités, conditions et modes de paiement, devises, pays, dépôts, familles, séquences de numérotation |
-| ☐ | Tiers : clients (adresses de livraison / facturation, contacts, conditions), fournisseurs |
-| ☐ | Articles : produits finis, matières, prestations ; unités de stock / vente / achat et conversions |
-| ☐ | Tarifs : prix de vente par client et palier, prix d'achat par fournisseur |
-| ☐ | Générateur de données de démonstration (rejouable, remet à zéro) |
-
-### Lot 3 — Ventes
-
-| | Tâche |
-|---|---|
-| ☐ | Devis : saisie, variantes de quantité, PDF, envoi, transformation en commande |
-| ☐ | Marchés : contrat cadre, appels de livraison, suivi du consommé |
-| ☐ | Commandes : saisie, ARC PDF, reliquats, statut En cours / partielle / soldée |
-| ☐ | Livraisons (BL) : depuis commande(s), colisage, reliquats, PDF |
-| ☐ | Factures et avoirs : depuis BL(s), mentions obligatoires, séquence continue, PDF |
-| ☐ | Tableau de bord ventes : carnet, retards, facturable |
-
-### Lot 4 — Achats
-
-| | Tâche |
-|---|---|
-| ☐ | Appels d'offres / demandes de prix |
-| ☐ | Commandes fournisseur : saisie, PDF, envoi |
-| ☐ | Réceptions : contre CDF, écarts, lots |
-| ☐ | Factures fournisseur : rapprochement commande / réception / facture |
-
-### Lot 5 — Stocks matières et produits finis
-
-| | Tâche |
-|---|---|
-| ☐ | Journal de mouvements unique (entrée, sortie, transfert, inventaire, ajustement) |
-| ☐ | Stock MP : par article, dépôt, lot / bobine |
-| ☐ | Stock PF : par article, dépôt, lot |
-| ☐ | Inventaire, valorisation (PMP ou dernier prix — à décider) |
-| ☐ | Mouvements automatiques : réception (+MP), sortie fabrication (−MP), déclaration (+PF), BL (−PF) |
-
-### Lot 6 — Production
-
-| | Tâche |
-|---|---|
-| ☐ | Ordres de fabrication depuis la commande : nomenclature, gamme, besoins matières |
-| ☐ | Déclarations de production et consommations |
-| ☐ | Lien avec MyProd / planning existants (à décider : Q8) |
-
-### Lot 7 — Comptabilité
-
-| | Tâche |
-|---|---|
-| ☐ | Échéances clients et fournisseurs |
-| ☐ | Règlements, lettrage, relances |
-| ☐ | Journaux et export comptable (format du logiciel compta : Q1) |
-| ☐ | Facturation électronique : réception obligatoire depuis le 01/09/2026, émission pour les PME au 01/09/2027 ; plateforme agréée (Q4) |
-
-### Lot 8 — Recette, reprise, déploiement
-
-| | Tâche |
-|---|---|
-| ☐ | Recette complète de bout en bout sur données de démonstration |
-| ☐ | Script de reprise miroir RVGI → `gc_*`, rejouable, avec rapport d'écarts (pièces, CA par mois, encours, stock) |
-| ☐ | Promotion, bascule, gel de RVGI |
+1. **Marchés** (contrat cadre et appels) — attend la capture RVGI d'un marché.
+2. **Production** : ordre de fabrication depuis une ligne de commande,
+   consommation matière, déclaration de produit fini (entrée en stock PF).
+   Question Q8 à trancher : s'appuyer sur MyProd / planning (recommandé : l'OF
+   de l'ERP crée ou relie le dossier MyProd, et les saisies MyProd alimentent
+   les consommations), ou les remplacer.
+3. **Stock** : lots et bobines (traçabilité FSC), valorisation, alerte quand un
+   BL fait passer le stock sous zéro.
+4. **Compta** : export des écritures de vente et d'achat (format Q1), relances.
+5. **Ergonomie** : colonnes déplaçables, envoi des pièces par mail, duplication
+   d'une pièce, devis à plusieurs quantités.
+6. **Reprise** : script miroir RVGI → `gc_*` rejouable, avec rapport d'écarts.
 
 ## Questions ouvertes
 
 | # | Question | Bloque |
 |---|---|---|
-| Q1 | Quel logiciel de comptabilité reçoit les écritures, sous quel format ? | Lot 7 |
-| Q2 | Une seule société, ou plusieurs ? | Lot 2 |
-| Q3 | Format des numéros devis / commande / BL / facture : on garde ceux de RVGI ? | Lot 2 |
-| Q4 | Plateforme agréée de facturation électronique : choisie ? | Lot 7 |
-| Q5 | Captures des écrans RVGI les plus utilisés, et ce qui agace le plus | Lot 1 |
-| Q6 | Valorisation du stock : PMP, dernier prix d'achat, prix standard ? | Lot 5 |
-| Q7 | Gestion par lot / bobine en MP : obligatoire (FSC) ? | Lot 5 |
-| Q8 | Production : l'ERP reprend-il le rôle de MyProd / planning, ou s'appuie-t-il sur eux ? | Lot 6 |
+| Q1 | Quel logiciel de comptabilité reçoit les écritures, sous quel format ? | Export comptable |
+| Q2 | Une seule société, ou plusieurs ? | Reprise |
+| Q3 | Format des numéros devis / commande / BL / facture : on garde ceux de RVGI ? | Paramètres › Numérotation (réglable) |
+| Q4 | Plateforme agréée de facturation électronique : choisie ? | Facturation électronique |
+| Q5 | Captures des écrans RVGI les plus utilisés | Ergonomie, marchés |
+| Q6 | Valorisation du stock : PMP, dernier prix d'achat, prix standard ? | Stock |
+| Q7 | Gestion par lot / bobine en MP : obligatoire (FSC) ? | Stock |
+| Q8 | Production : l'ERP reprend-il MyProd / planning, ou s'appuie-t-il dessus ? | Production |
+| Q9 | Un BL peut-il faire passer le stock PF sous zéro (blocage, alerte, rien) ? | Stock |
+| Q10 | Les services (calage, cliché) passent-ils par le BL, ou se facturent-ils directement depuis la commande ? | Ventes |
 
 ## Journal
 
 | Date | Événement |
 |---|---|
-| 14/10/2026 | DNS `erp.mysifa.com` créé. Décisions D1–D8. Lot 0 livré (socle, connexion, coque, DA, favicon) |
+| 14/10/2026 | DNS `erp.mysifa.com`, vhost sur v1. Décisions D1–D10. Lot 0 (socle), lot 1 (design system), lot 2 (fichiers), lot 3 (ventes), lot 4 (achats), stock de base, échéances et règlements, impression A4, jeu de démonstration |
