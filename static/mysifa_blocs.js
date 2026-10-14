@@ -687,9 +687,13 @@
     });
 
     var apercuZone = null;      // aperçu de l'indicateur, en tête du questionnaire (création)
+    var surFermeture = null;    // annulation du questionnaire ouvert (Échap, Annuler, autre panneau)
     function fermerPanneau() {
       if (panneau) { panneau.remove(); panneau = null; }
       apercuZone = null;
+      var f = surFermeture;
+      surFermeture = null;
+      if (f) f();
     }
 
     /* Le rendu des cartes vit dans mysifa_accueil.js : pour l'aperçu, on le
@@ -803,6 +807,9 @@
       panneau.setAttribute("role", "dialog");
       panneau.setAttribute("aria-label", o.titre);
       document.body.appendChild(panneau);
+      // Fermé sans enregistrer, de quelque façon que ce soit : o.annuler.
+      var enregistre = false;
+      surFermeture = function () { if (!enregistre && o.annuler) o.annuler(); };
 
       function dessiner() {
         var h = "<h2>" + esc(o.titre) + "</h2>" +
@@ -871,10 +878,18 @@
         if (filtres) { try { url = F.ecrire(filtres, o.url, etat.filtres) || o.url; } catch (e) { url = o.url; } }
         var champNom = panneau && panneau.querySelector("input.cap-nom");
         return { id: "apercu", bloc: bloc.nom, nom: (champNom ? champNom.value : o.nom) || bloc.libelle,
-                 objet: o.apercu.objet || null, url: url, url_capture: url, hauteur: etat.taille,
+                 objet: (o.apercu && o.apercu.objet) || null, url: url, url_capture: url, hauteur: etat.taille,
                  valeurs: vals, bloc_info: bloc };
       }
+      /* État du moment, pour qui suit le questionnaire en direct (o.surChange :
+         la carte de l'accueil, dans « Modifier l'indicateur »). */
+      function etatCourant() {
+        var w = wApercu();
+        return { nom: w.nom, valeurs: w.valeurs, url: w.url_capture, hauteur: w.hauteur };
+      }
+
       function majApercu() {
+        if (o.surChange && panneau) { try { o.surChange(etatCourant()); } catch (e) { /* aperçu facultatif */ } }
         if (!o.apercu || !panneau) return;
         // Le questionnaire est redessiné à chaque réglage : l'aperçu, lui, est
         // un élément durable, replacé à son emplacement après chaque dessin.
@@ -1012,7 +1027,7 @@
       panneau.addEventListener("click", function (e) {
         var b = e.target.closest("button");
         if (!b) return;
-        if (b.getAttribute("data-act") === "annuler") { fermerPanneau(); if (o.annuler) o.annuler(); return; }
+        if (b.getAttribute("data-act") === "annuler") { fermerPanneau(); return; }
         if (b.hasAttribute("data-taille")) {
           var nt = b.getAttribute("data-taille");
           if (nt === "s" && etat.taille !== "s") garderPremiere();
@@ -1052,6 +1067,7 @@
         }
         b.disabled = true;
         Promise.resolve(o.envoyer({ nom: nomW, valeurs: valeurs, url: url, hauteur: etat.taille })).then(function () {
+          enregistre = true;
           fermerPanneau();
         }).catch(function (err) {
           b.disabled = false;
