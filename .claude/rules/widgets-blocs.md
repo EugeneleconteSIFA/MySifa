@@ -113,7 +113,15 @@ carte). Le grand format n'existe que pour un bloc qui déclare :
   si l'historique est plus court que l'horizon. Tendance : vs hier en
   standard et compact, vs le début de l'horizon en courbe ; en nombre, en %
   au-delà de 100. Standard : mini-courbe sur 14 jours. Données :
-  `GET /api/accueil/releves/{bloc}?url=&objet=&jours=` (accès du bloc). Un bloc
+  `GET /api/accueil/releves/{bloc}?url=&objet=&jours=`. **Droits** (faille
+  corrigée le 14/10/2026) : l'accès à l'appli ne suffit pas, car les relevés sont
+  faits en vue complète. La route rejoue le relevé sous les droits du
+  demandeur (`peut_voir` dans `accueil_releves.py`, objet et filtres compris)
+  et refuse (403) s'il ne verrait pas ce chiffre en direct. Une route qui filtre
+  par périmètre sans refuser (tâches) a une garde explicite dans `GARDES`. Tout
+  relevé ajouté sur une route de ce genre doit y entrer ; le test des relevés
+  vérifie qu'un opérateur ne lit ni notes de frais, ni valorisation, ni
+  compteurs d'équipe. Un bloc
   qui a une liste ET un historique choisit « Liste » (défaut) ou « Courbe »
   (`bloc_vue`), dans le questionnaire comme par la bascule en pastilles sur la
   carte. `bloc_vue` et `bloc_horizon` sont des
