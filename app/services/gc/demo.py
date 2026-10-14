@@ -35,9 +35,9 @@ ARTICLES = [
     ("PF0003", "Étiquette pharma 35x20 couché", "pf", "ETQ", "ETQ", 1000, 1500, None, "N", 1),
     ("PF0004", "Étiquette fromage Ø80 couché brillant", "pf", "ETQ", "ETQ", 1000, 3100, None, "N", 1),
     ("PF0005", "Weinetikett 90x120 Naturpapier", "pf", "ETQ", "ETQ", 1000, 4200, None, "N", 1),
-    ("MP0001", "Vergé blanc adhésif permanent 330 mm", "mp", "PAP", "ML", 1, None, 62, "N", 1),
-    ("MP0002", "PP blanc 60µ adhésif 330 mm", "mp", "FIL", "ML", 1, None, 48, "N", 1),
-    ("MP0003", "Couché brillant adhésif 250 mm", "mp", "PAP", "ML", 1, None, 21, "N", 1),
+    ("MP0001", "Vergé blanc adhésif permanent 330 mm", "mp", "VEL", "ML", 1, None, 62, "N", 1),
+    ("MP0002", "PP blanc 60µ adhésif 330 mm", "mp", "SYN", "ML", 1, None, 48, "N", 1),
+    ("MP0003", "Couché brillant adhésif 250 mm", "mp", "COU", "ML", 1, None, 21, "N", 1),
     ("MP0004", "Encre noire UV", "mp", "ENC", "KG", 1, None, 2850, "N", 1),
     ("PR0001", "Frais de calage", "service", "PREST", "FORF", 1, 8500, None, "N", 0),
     ("PR0002", "Création de cliché", "service", "PREST", "U", 1, 6500, None, "N", 0),
@@ -109,7 +109,7 @@ def reinitialiser(conn, user: dict | None = None) -> dict:
                       "code_postal": cp, "ville": ville, "par_defaut": 1}], origine="demo")
 
     arts = {}
-    fourn = {"PAP": "F0001", "FIL": "F0002", "ENC": "F0003"}
+    fourn = {"VEL": "F0001", "COU": "F0001", "SYN": "F0002", "ENC": "F0003"}
     for code, lib, nat, fam, un, base, pv, pa, tva, st in ARTICLES:
         arts[code] = fichiers.enregistrer_article(conn, None, {
             "code": None if nat == "pf" else code, "client_id": tiers.get(CLIENT_DU_PRODUIT.get(code, "")), "libelle": lib, "nature": nat, "famille": fam, "unite": un, "base_prix": base,

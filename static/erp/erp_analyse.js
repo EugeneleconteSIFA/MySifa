@@ -35,6 +35,48 @@
     }).catch(function (e) { zone.textContent = ''; zone.appendChild(ERP.erreur(e)); });
   };
 
+  // ── Référentiels tenus dans MySifa (lecture) ─────────────────────
+  // Machines, outillage, teintes et fiches de fabrication vivent dans MySifa :
+  // l'ERP les lit tels quels (D2), ils se modifient dans MySifa.
+  function ecranMysifa(quoi, colonnes, note, ouvrir) {
+    return function (main) {
+      main.classList.add('plein');
+      main.appendChild(h('p', {className: 'erp-aide', text: note}));
+      var zone = h('div', {className: 'erp-zone'}, ERP.chargement());
+      main.appendChild(zone);
+      ERP.api('/api/erp2/mysifa/' + quoi).then(function (l) {
+        zone.textContent = '';
+        ERP.grille(zone, {nom: 'mysifa.' + quoi, cle: 'id', lignes: l, colonnes: colonnes, ouvrir: ouvrir,
+          statuts: {'1': {libelle: 'Actif', ton: 'ok'}, '0': {libelle: 'Inactif', ton: 'neutre'}}});
+      }).catch(function (e) { zone.textContent = ''; zone.appendChild(ERP.erreur(e)); });
+    };
+  }
+  var actif = {cle: 'actif_lib', libelle: 'État', largeur: 100, rendu: function (x) {
+    return h('span', {className: 'erp-pastille ton-' + (x.actif ? 'ok' : 'neutre'), text: x.actif ? 'Actif' : 'Inactif'}); }};
+  ERP.ecrans['/fichiers/machines'] = ecranMysifa('machines', [
+    {cle: 'code', libelle: 'Code', largeur: 100}, {cle: 'nom', libelle: 'Machine', largeur: 260},
+    {cle: 'hors_production', libelle: 'Hors production', largeur: 140, rendu: function (x) { return x.hors_production ? 'Oui' : ''; }}, actif,
+  ], 'Les machines se gèrent dans MySifa (Paramètres).');
+  ERP.ecrans['/fichiers/outillage'] = ecranMysifa('outils', [
+    {cle: 'type_libelle', libelle: 'Type', largeur: 160}, {cle: 'numero', libelle: 'Numéro', largeur: 130},
+    {cle: 'label', libelle: 'Libellé', largeur: 320},
+    {cle: 'a_valider', libelle: 'À valider', largeur: 110, rendu: function (x) { return x.a_valider ? 'Oui' : ''; }}, actif,
+  ], 'L\'outillage (plaques, contre-parties, magnétiques, clichés…) se gère dans MySifa.');
+  ERP.ecrans['/fichiers/teintes'] = ecranMysifa('teintes', [
+    {cle: 'hex', libelle: '', largeur: 50, rendu: function (x) {
+      var s = h('span', {className: 'erp-teinte'});
+      if (x.hex) s.style.background = x.hex;   // code hexadécimal vérifié côté serveur
+      return s; }},
+    {cle: 'code', libelle: 'Code', largeur: 130}, {cle: 'libelle', libelle: 'Teinte', largeur: 320}, actif,
+  ], 'Les teintes viennent du référentiel des encres de MySifa.');
+  ERP.ecrans['/fichiers/fiches'] = ecranMysifa('fiches', [
+    {cle: 'reference', libelle: 'Référence', largeur: 140}, {cle: 'designation', libelle: 'Désignation', largeur: 300},
+    {cle: 'client', libelle: 'Client', largeur: 180}, {cle: 'format', libelle: 'Format', largeur: 120},
+    {cle: 'laize', libelle: 'Laize', largeur: 90}, {cle: 'matiere', libelle: 'Matière', largeur: 200},
+    {cle: 'nb_couleurs', libelle: 'Couleurs', largeur: 90}, {cle: 'machine', libelle: 'Machine', largeur: 120},
+    {cle: 'valide', libelle: 'Validée', largeur: 90, rendu: function (x) { return x.valide ? 'Oui' : ''; }},
+  ], 'Les fiches de fabrication sont tenues dans MySifa (fiches techniques).');
+
   // ── Statistiques ─────────────────────────────────────────────────
   var VUES = [
     {cle: 'par_client', libelle: 'Par client'},

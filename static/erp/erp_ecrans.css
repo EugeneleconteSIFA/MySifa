@@ -227,6 +227,9 @@ select.erp-input:disabled { appearance: none; }
 /* Envoi par e-mail */
 .erp-envoi-dest { margin-bottom: 10px; }
 
+/* Teinte : pastille de couleur */
+.erp-teinte { display: inline-block; width: 22px; height: 16px; border-radius: 4px; border: 1px solid var(--border); }
+
 /* Export comptable */
 .erp-export-barre { max-width: 420px; margin-bottom: 8px; }
 .erp-export-info { margin-bottom: 10px; }

@@ -42,6 +42,7 @@ CHAMPS_TIERS = {"code": str, "est_client": bool, "est_fournisseur": bool, "raiso
                 "compte_auxiliaire": str, "representant_id": "int_null", "transporteur_id": "int_null",
                 "jours_expedition": int}
 
+CHAMPS_TIERS.update({"est_prospect": bool})
 CHAMPS_TIERS.update({
     "nom_court": str, "groupe_id": "int_null", "etat": str, "fax": str, "site_web": str, "rcs": str, "ean": str,
     "nif": str, "adv_id": "int_null", "categorie1": str, "categorie2": str, "categorie3": str, "langue": str,
@@ -157,9 +158,11 @@ def enregistrer_societe(conn, data: dict) -> None:
 # ── Tiers ─────────────────────────────────────────────────────────────
 
 def lister_tiers(conn, role: str | None = None) -> list[dict]:
-    filtre = {"client": "WHERE t.est_client=1", "fournisseur": "WHERE t.est_fournisseur=1"}.get(role or "", "")
+    filtre = {"client": "WHERE t.est_client=1", "fournisseur": "WHERE t.est_fournisseur=1",
+              "prospect": "WHERE t.est_prospect=1 AND t.est_client=0",
+              "client_ou_prospect": "WHERE t.est_client=1 OR t.est_prospect=1"}.get(role or "", "")
     return [dict(r) for r in conn.execute(
-        f"""SELECT t.id, t.code, t.raison_sociale, t.est_client, t.est_fournisseur, t.email, t.telephone,
+        f"""SELECT t.id, t.code, t.raison_sociale, t.est_client, t.est_fournisseur, t.est_prospect, t.email, t.telephone,
                    t.condition_paiement, t.bloque, t.actif,
                    (SELECT ville FROM gc_tiers_adresses a WHERE a.tiers_id=t.id AND a.actif=1
                      ORDER BY a.type='facturation' DESC, a.par_defaut DESC, a.id LIMIT 1) AS ville,
@@ -217,10 +220,11 @@ def enregistrer_tiers(conn, tiers_id: int | None, data: dict, adresses: list | N
     if tiers_id is None:
         if not vals.get("raison_sociale"):
             raise ErreurFichier("Raison sociale obligatoire.")
-        if not vals.get("est_client") and not vals.get("est_fournisseur"):
-            raise ErreurFichier("Cocher client, fournisseur, ou les deux.")
+        if not vals.get("est_client") and not vals.get("est_fournisseur") and not vals.get("est_prospect"):
+            raise ErreurFichier("Cocher client, prospect ou fournisseur.")
         if not vals.get("code"):
-            vals["code"] = _code_suivant(conn, "gc_tiers", "C" if vals.get("est_client") else "F")
+            vals["code"] = _code_suivant(conn, "gc_tiers", "C" if vals.get("est_client") else
+                                         "P" if vals.get("est_prospect") else "F")
         if conn.execute("SELECT 1 FROM gc_tiers WHERE code=?", (vals["code"],)).fetchone():
             raise ErreurFichier(f"Le code {vals['code']} est déjà pris.")
         cols = [*vals, "origine", "cree_le", "modifie_le"]

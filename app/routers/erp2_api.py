@@ -403,6 +403,37 @@ def reglement_supprimer(reglement_id: int, request: Request):
     return {"ok": True}
 
 
+_HEX = __import__("re").compile(r"^#?[0-9A-Fa-f]{6}$")
+
+
+@router.get("/mysifa/{quoi}")
+def referentiel_mysifa(quoi: str, request: Request):
+    """Référentiels tenus dans MySifa, lus tels quels par l'ERP (D2) :
+    machines, outillage, teintes, fiches de fabrication. Lecture seule ici."""
+    _user(request)
+    requetes = {
+        "machines": "SELECT id, code, nom, actif, hors_production FROM machines ORDER BY nom",
+        "outils": """SELECT o.id, o.numero, o.label, o.actif, o.a_valider, t.label AS type_libelle, t.ordre
+                     FROM outils o LEFT JOIN outil_types t ON t.cle=o.type_cle ORDER BY t.ordre, o.numero""",
+        "outil_types": "SELECT cle, label, label_pluriel, ordre, actif FROM outil_types ORDER BY ordre",
+        "teintes": "SELECT id, code, libelle, hex, actif FROM encres_couleurs ORDER BY code",
+        "fiches": """SELECT id, reference, designation, client, format, laize, matiere, adhesif, nb_couleurs, machine,
+                            conditionnement, valide, article_code1, article_code2 FROM fiches_techniques
+                     ORDER BY reference""",
+    }
+    if quoi not in requetes:
+        raise HTTPException(404, "Référentiel inconnu.")
+    with get_db() as conn:
+        try:
+            lignes = [dict(r) for r in conn.execute(requetes[quoi]).fetchall()]
+        except Exception:
+            return []
+    if quoi == "teintes":
+        for l in lignes:   # couleur affichée seulement si c'est un vrai code hexadécimal
+            l["hex"] = ("#" + l["hex"].lstrip("#")) if l.get("hex") and _HEX.match(str(l["hex"])) else ""
+    return lignes
+
+
 @router.get("/contacts")
 def contacts(request: Request):
     """Annuaire : tous les interlocuteurs actifs, avec leur tiers."""

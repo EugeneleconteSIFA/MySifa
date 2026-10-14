@@ -45,8 +45,15 @@
     ]},
     {groupe: 'Fichiers', liens: [
       {chemin: '/fichiers/clients', libelle: 'Clients'},
+      {chemin: '/fichiers/prospects', libelle: 'Prospects'},
       {chemin: '/fichiers/fournisseurs', libelle: 'Fournisseurs'},
-      {chemin: '/fichiers/articles', libelle: 'Articles'},
+      {chemin: '/fichiers/produits', libelle: 'Produits'},
+      {chemin: '/fichiers/matieres', libelle: 'Matières'},
+      {chemin: '/fichiers/prestations', libelle: 'Prestations'},
+      {chemin: '/fichiers/fiches', libelle: 'Fiches de fabrication'},
+      {chemin: '/fichiers/machines', libelle: 'Machines'},
+      {chemin: '/fichiers/outillage', libelle: 'Outillage'},
+      {chemin: '/fichiers/teintes', libelle: 'Teintes'},
       {chemin: '/fichiers/contacts', libelle: 'Contacts'},
     ]},
     {groupe: 'Analyse', liens: [

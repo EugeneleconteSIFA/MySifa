@@ -57,7 +57,7 @@
   // ── Choix du tiers pour une nouvelle pièce ───────────────────────
   async function choisirTiers(type) {
     var sens = sensDe(type);
-    var tiers = await ERP.api('/api/erp2/tiers?role=' + (sens === 'vente' ? 'client' : 'fournisseur'));
+    var tiers = await ERP.api('/api/erp2/tiers?role=' + (sens === 'vente' ? (type === 'devis' ? 'client_ou_prospect' : 'client') : 'fournisseur'));
     return new Promise(function (resoudre) {
       var choisi = null;
       var inp = h('input', {className: 'erp-input', placeholder: sens === 'vente' ? 'Client (nom ou code)' : 'Fournisseur (nom ou code)'});

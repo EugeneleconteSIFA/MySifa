@@ -9,8 +9,8 @@
 
   // ── Tiers ────────────────────────────────────────────────────────
   function ecranTiers(role) {
-    var base = role === 'client' ? '/fichiers/clients' : '/fichiers/fournisseurs';
-    var nomRole = role === 'client' ? 'client' : 'fournisseur';
+    var base = {client: '/fichiers/clients', prospect: '/fichiers/prospects', fournisseur: '/fichiers/fournisseurs'}[role];
+    var nomRole = role;
     return function (main, ctx) {
       if (ctx.param) return ficheTiers(main, ctx, role, base);
       main.classList.add('plein');
@@ -94,7 +94,8 @@
       var r = await Promise.all([ERP.meta(), ERP.api('/api/erp2/tiers?role=' + role)]);
       tiersListe = r[1];
       if (nouveau) {
-        T = {est_client: role === 'client' ? 1 : 0, est_fournisseur: role === 'fournisseur' ? 1 : 0, actif: 1, raison_sociale: '',
+        T = {est_client: role === 'client' ? 1 : 0, est_fournisseur: role === 'fournisseur' ? 1 : 0, est_prospect: role === 'prospect' ? 1 : 0,
+             actif: 1, raison_sociale: '',
              etat: 'normal', remise_bp: 0, facturation_auto: 'par_bl', en_compte: 1, langue: 'fr', designation_docs: 'interne',
              adresses: [{type: 'principale', libelle: 'Siège', pays: 'FR', par_defaut: 1}], contacts: [], banques: [], pieces: [], tarifs: []};
       } else {
@@ -113,7 +114,7 @@
       'compte_auxiliaire', 'representant_id', 'transporteur_id', 'jours_expedition', 'nom_court', 'groupe_id', 'etat', 'fax',
       'site_web', 'rcs', 'ean', 'nif', 'adv_id', 'categorie1', 'categorie2', 'categorie3', 'langue', 'designation_docs',
       'bat_chaque_cde', 'fiche_conformite', 'facturation_auto', 'factor', 'en_compte', 'escompte_bp', 'franco_cents',
-      'marge_brute_bp', 'marge_nette_bp', 'notre_no_fournisseur', 'commission_bp'];
+      'marge_brute_bp', 'marge_nette_bp', 'notre_no_fournisseur', 'commission_bp', 'est_prospect'];
 
     async function enregistrer() {
       var champs = {};
@@ -146,6 +147,7 @@
         c('Téléphone', 'telephone'), c('Fax', 'fax'), c('Email', 'email'), c('Site', 'site_web'),
         h('div', {className: 'erp-champ plein erp-cases'},
           ERP.case(T, 'est_client', 'Client', {change: marquer}),
+          ERP.case(T, 'est_prospect', 'Prospect', {change: marquer}),
           ERP.case(T, 'est_fournisseur', 'Fournisseur', {change: marquer}),
           ERP.case(T, 'actif', 'Actif', {change: marquer})),
         c('Notes', 'notes', 'zone', {plein: true})));
@@ -251,9 +253,17 @@
     }
 
     function dessiner() {
-      ctx.titre(nouveau ? (role === 'client' ? 'Nouveau client' : 'Nouveau fournisseur') : T.raison_sociale,
-        'Fichiers › ' + (role === 'client' ? 'Clients' : 'Fournisseurs') + (nouveau ? '' : ' › ' + T.code + (T.nom_court ? ' · ' + T.nom_court : '')));
+      ctx.titre(nouveau ? ({client: 'Nouveau client', prospect: 'Nouveau prospect', fournisseur: 'Nouveau fournisseur'}[role]) : T.raison_sociale,
+        'Fichiers › ' + ({client: 'Clients', prospect: 'Prospects', fournisseur: 'Fournisseurs'}[role]) + (nouveau ? '' : ' › ' + T.code + (T.nom_court ? ' · ' + T.nom_court : '')));
       ctx.actions.textContent = '';
+      if (!nouveau && T.est_prospect && !T.est_client && role === 'prospect') {
+        ctx.actions.appendChild(ERP.bouton('Nouveau devis', function () { return creerPour('devis'); }));
+        ctx.actions.appendChild(ERP.bouton('Passer en client', async function () {
+          await ERP.api('/api/erp2/tiers/' + T.id, {method: 'PUT', body: {tiers: {est_client: 1, est_prospect: 0}}});
+          ERP.toast('Le prospect est maintenant client.', 'success');
+          ERP.aller('/fichiers/clients/' + T.id, true);
+        }));
+      }
       if (!nouveau && T.est_client && role === 'client') {
         ctx.actions.appendChild(ERP.bouton('Nouveau devis', function () { return creerPour('devis'); }));
         ctx.actions.appendChild(ERP.bouton('Nouvelle commande', function () { return creerPour('commande'); }));
@@ -297,42 +307,84 @@
   }
 
   // ── Articles ─────────────────────────────────────────────────────
-  ERP.ecrans['/fichiers/articles'] = function (main, ctx) {
-    if (ctx.param) return ficheArticle(main, ctx);
-    main.classList.add('plein');
-    ctx.actions.appendChild(ERP.bouton('Nouvel article', function () { ERP.aller('/fichiers/articles/nouveau'); }, {accent: true}));
-    var zone = h('div', {className: 'erp-zone'}, ERP.chargement());
-    main.appendChild(zone);
-    Promise.all([ERP.meta(), ERP.api('/api/erp2/articles')]).then(function (r) {
-      zone.textContent = '';
-      var natures = {};
-      Object.keys(ERP.M.natures).forEach(function (k) { natures[k] = {libelle: ERP.M.natures[k], ton: k === 'pf' ? 'accent' : k === 'mp' ? 'warn' : 'neutre'}; });
-      r[1].forEach(function (a) { a.famille_lib = ERP.refLibelle('familles', a.famille); });
-      var g = ERP.grille(zone, {
-        nom: 'articles', cle: 'id', lignes: r[1], statuts: natures,
-        colonnes: [
-          {cle: 'code', libelle: 'Code', largeur: 100},
-          {cle: 'libelle', libelle: 'Libellé', largeur: 320},
-          {cle: 'nature', libelle: 'Nature', type: 'statut', largeur: 150},
-          {cle: 'client_nom', libelle: 'Client', largeur: 200},
-          {cle: 'format', libelle: 'Format (mm)', largeur: 110, rendu: function (a) {
-            return a.format_l_dmm ? (a.format_l_dmm / 10).toLocaleString('fr-FR') + ' × ' + ((a.format_a_dmm || 0) / 10).toLocaleString('fr-FR') : ''; }},
-          {cle: 'sous_famille', libelle: 'Sous-famille', largeur: 120},
-          {cle: 'ref_client', libelle: 'Réf. client', largeur: 130},
-          {cle: 'famille_lib', libelle: 'Famille', largeur: 170},
-          {cle: 'unite', libelle: 'Unité', largeur: 70},
-          {cle: 'prix_vente_cents', libelle: 'Prix de vente', type: 'montant', largeur: 120},
-          {cle: 'prix_achat_cents', libelle: 'Prix d\'achat', type: 'montant', largeur: 120},
-          {cle: 'base_prix', libelle: 'Pour', type: 'nombre', largeur: 70},
-          {cle: 'stock_milli', libelle: 'Stock', type: 'qte', largeur: 120},
-        ],
-        ouvrir: function (a) { ERP.aller('/fichiers/articles/' + a.id); },
-      });
-      requestAnimationFrame(function () { g.focus(); });
-    }).catch(function (e) { zone.textContent = ''; zone.appendChild(ERP.erreur(e)); });
+  // Produits, matières, prestations : une liste par nature, comme le menu
+  // Fichiers de RVGI. Les matières se rangent par type (familles de nature
+  // « matière », réglables dans Paramètres › Familles).
+  var LISTES_ARTICLES = {
+    '/fichiers/produits': {nature: 'pf', nouveau: 'Nouveau produit'},
+    '/fichiers/matieres': {nature: 'mp', nouveau: 'Nouvelle matière'},
+    '/fichiers/prestations': {nature: 'service', nouveau: 'Nouvelle prestation'},
+    '/fichiers/articles': {nature: null, nouveau: 'Nouvel article'},
   };
 
-  function ficheArticle(main, ctx) {
+  function ecranArticles(base) {
+    var conf = LISTES_ARTICLES[base];
+    return function (main, ctx) {
+      if (ctx.param) return ficheArticle(main, ctx, conf.nature, base);
+      main.classList.add('plein');
+      ctx.actions.appendChild(ERP.bouton(conf.nouveau, function () { ERP.aller(base + '/nouveau'); }, {accent: true}));
+      var famille = null;
+      try { famille = sessionStorage.getItem('erp_famille_' + base) || null; } catch (e) { /* */ }
+      var onglets = h('div', {className: 'erp-onglets'});
+      var zone = h('div', {className: 'erp-zone'}, ERP.chargement());
+      main.appendChild(onglets);
+      main.appendChild(zone);
+      Promise.all([ERP.meta(), ERP.api('/api/erp2/articles' + (conf.nature ? '?nature=' + conf.nature : ''))]).then(function (r) {
+        var tous = r[1];
+        tous.forEach(function (a) { a.famille_lib = ERP.refLibelle('familles', a.famille); });
+        var g = null;
+        function filtrees() { return famille ? tous.filter(function (a) { return a.famille === famille; }) : tous; }
+        if (conf.nature === 'mp') {
+          var fams = ERP.ref('familles', true).filter(function (f) { return f.nature === 'mp'; });
+          var dessinerOnglets = function () {
+            onglets.textContent = '';
+            [{code: null, libelle: 'Toutes'}].concat(fams).forEach(function (f) {
+              var n = f.code ? tous.filter(function (a) { return a.famille === f.code; }).length : tous.length;
+              onglets.appendChild(h('button', {type: 'button', className: 'erp-onglet' + (f.code === famille ? ' actif' : ''),
+                text: f.libelle + (n ? ' · ' + n : ''), onclick: function () {
+                  famille = f.code;
+                  try { sessionStorage.setItem('erp_famille_' + base, famille || ''); } catch (e) { /* */ }
+                  dessinerOnglets(); if (g) g.maj(filtrees());
+                }}));
+            });
+          };
+          dessinerOnglets();
+        }
+        zone.textContent = '';
+        var cols = [{cle: 'code', libelle: 'Code', largeur: 110}, {cle: 'libelle', libelle: 'Libellé', largeur: 320}];
+        if (!conf.nature) {
+          var natures = {};
+          Object.keys(ERP.M.natures).forEach(function (k) { natures[k] = {libelle: ERP.M.natures[k], ton: k === 'pf' ? 'accent' : k === 'mp' ? 'warn' : 'neutre'}; });
+          cols.push({cle: 'nature', libelle: 'Nature', type: 'statut', largeur: 150});
+        }
+        if (conf.nature !== 'mp' && conf.nature !== 'service') cols.push({cle: 'client_nom', libelle: 'Client', largeur: 200},
+          {cle: 'ref_client', libelle: 'Réf. client', largeur: 130});
+        cols.push({cle: 'format', libelle: conf.nature === 'mp' ? 'Laize (mm)' : 'Format (mm)', largeur: 110, rendu: function (a) {
+          if (!a.format_l_dmm) return '';
+          var l = (a.format_l_dmm / 10).toLocaleString('fr-FR');
+          return conf.nature === 'mp' ? l : l + ' × ' + ((a.format_a_dmm || 0) / 10).toLocaleString('fr-FR'); }});
+        cols.push({cle: 'famille_lib', libelle: conf.nature === 'mp' ? 'Type' : 'Famille', largeur: 160},
+          {cle: 'sous_famille', libelle: 'Sous-famille', largeur: 120},
+          {cle: 'unite', libelle: 'Unité', largeur: 70});
+        if (conf.nature !== 'mp') cols.push({cle: 'prix_vente_cents', libelle: 'Prix de vente', type: 'montant', largeur: 120});
+        if (conf.nature !== 'pf') cols.push({cle: 'prix_achat_cents', libelle: 'Prix d\'achat', type: 'montant', largeur: 120});
+        cols.push({cle: 'base_prix', libelle: 'Pour', type: 'nombre', largeur: 70});
+        if (conf.nature !== 'service') cols.push({cle: 'stock_milli', libelle: 'Stock', type: 'qte', largeur: 120});
+        g = ERP.grille(zone, {
+          nom: 'articles.' + (conf.nature || 'tous'), cle: 'id', lignes: filtrees(), colonnes: cols, statuts: natures,
+          ouvrir: function (a) { ERP.aller(base + '/' + a.id); },
+        });
+        requestAnimationFrame(function () { g.focus(); });
+      }).catch(function (e) { zone.textContent = ''; zone.appendChild(ERP.erreur(e)); });
+    };
+  }
+  Object.keys(LISTES_ARTICLES).forEach(function (b) { ERP.ecrans[b] = ecranArticles(b); });
+  ERP.cheminArticle = function (a) {
+    return ({pf: '/fichiers/produits/', mp: '/fichiers/matieres/', service: '/fichiers/prestations/'}[a.nature] || '/fichiers/articles/') + a.id;
+  };
+
+  function ficheArticle(main, ctx, natureListe, base) {
+    base = base || '/fichiers/articles';
     var nouveau = ctx.param === 'nouveau';
     var corps = h('div', {className: 'erp-fiche'}, ERP.chargement());
     main.appendChild(corps);
@@ -343,7 +395,9 @@
       var r = await Promise.all([ERP.meta(), ERP.api('/api/erp2/tiers'), ERP.api('/api/erp2/bats')]);
       tiers = r[1];
       bats = r[2];
-      if (nouveau) A = {nature: 'pf', unite: 'U', base_prix: 1, gere_stock: 1, actif: 1, libelle: '', tarifs: [], stock: [], mouvements: []};
+      if (nouveau) A = {nature: natureListe || 'pf', unite: natureListe === 'mp' ? 'ML' : natureListe === 'service' ? 'FORF' : 'ETQ',
+                        base_prix: natureListe === 'pf' ? 1000 : 1, gere_stock: natureListe === 'service' ? 0 : 1, actif: 1, libelle: '',
+                        tarifs: [], stock: [], mouvements: []};
       else A = await ERP.api('/api/erp2/articles/' + parseInt(ctx.param, 10));
       tarifs = A.tarifs.map(function (t) { return Object.assign({}, t); });
       modifie = false; ERP.garde = null;
@@ -367,7 +421,7 @@
         })}});
       modifie = false; ERP.garde = null;
       ERP.toast('Article enregistré.', 'success');
-      if (nouveau) ERP.aller('/fichiers/articles/' + r.id, true);
+      if (nouveau) ERP.aller(base + '/' + r.id, true);
       else await charger();
     }
 
@@ -506,5 +560,6 @@
   }
 
   ERP.ecrans['/fichiers/clients'] = ecranTiers('client');
+  ERP.ecrans['/fichiers/prospects'] = ecranTiers('prospect');
   ERP.ecrans['/fichiers/fournisseurs'] = ecranTiers('fournisseur');
 })();

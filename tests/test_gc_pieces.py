@@ -487,6 +487,19 @@ class Chaine(unittest.TestCase):
         l = pieces.charger(c, re_)["lignes"][0]
         self.assertEqual((l["laize_dmm"], l["ml_par_bobine_milli"]), (4700, 12_000_000))   # le conditionnement suit
 
+    def test_prospect(self):
+        from app.services.gc import fichiers
+        c = self.conn
+        pid = fichiers.enregistrer_tiers(c, None, {"raison_sociale": "Prospect SA", "est_prospect": 1})
+        self.assertTrue(c.execute("SELECT code FROM gc_tiers WHERE id=?", (pid,)).fetchone()["code"].startswith("P"))
+        dv = pieces.creer(c, "devis", pid)                      # devis possible
+        pieces.enregistrer(c, dv, None, [_ligne(2, 1000, 100)])
+        pieces.valider(c, dv)
+        with self.assertRaises(ErreurPiece):
+            pieces.transformer(c, [dv], "commande")            # commande : le passer client d'abord
+        fichiers.enregistrer_tiers(c, pid, {"est_client": 1})
+        self.assertIsNotNone(pieces.transformer(c, [dv], "commande"))
+
     def test_achat_reception_stock(self):
         c = self.conn
         c.execute("UPDATE gc_articles SET prix_achat_cents=900 WHERE id=1")

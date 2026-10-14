@@ -408,7 +408,13 @@ def _verifier_tiers(conn, type_piece: str, tiers_id: int):
     if not t:
         raise ErreurPiece("Tiers introuvable.")
     sens = TYPES[type_piece]["sens"]
+    prospect = "est_prospect" in t.keys() and t["est_prospect"]
     if sens == "vente" and not t["est_client"]:
+        # Un prospect reçoit des devis ; pour commander, il passe client sur sa fiche.
+        if prospect and type_piece == "devis":
+            return t
+        if prospect:
+            raise ErreurPiece(f"{t['raison_sociale']} est un prospect : le passer en client sur sa fiche avant de commander.")
         raise ErreurPiece(f"{t['raison_sociale']} n'est pas déclaré client.")
     if sens == "achat" and not t["est_fournisseur"]:
         raise ErreurPiece(f"{t['raison_sociale']} n'est pas déclaré fournisseur.")
