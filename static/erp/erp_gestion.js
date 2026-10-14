@@ -188,15 +188,16 @@
     {cle: 'unites', libelle: 'Unités'},
     {cle: 'familles', libelle: 'Familles'},
     {cle: 'depots', libelle: 'Dépôts'},
+    {cle: 'comptabilite', libelle: 'Comptabilité'},
     {cle: 'demo', libelle: 'Démonstration'},
   ];
   // Colonnes éditables par référentiel : [cle, libellé, type]
   var COLS_REF = {
-    tva: [['libelle', 'Libellé', 'texte'], ['taux_bp', 'Taux', 'pct'], ['mention', 'Mention sur facture', 'texte'], ['rang', 'Ordre', 'entier'], ['actif', 'Actif', 'case']],
+    tva: [['libelle', 'Libellé', 'texte'], ['taux_bp', 'Taux', 'pct'], ['mention', 'Mention sur facture', 'texte'], ['compte_collecte', 'Compte collectée', 'texte'], ['compte_deductible', 'Compte déductible', 'texte'], ['rang', 'Ordre', 'entier'], ['actif', 'Actif', 'case']],
     conditions_paiement: [['libelle', 'Libellé', 'texte'], ['jours', 'Jours', 'entier'], ['fin_de_mois', 'Fin de mois', 'case'], ['jour_du_mois', 'Le … du mois', 'entier'], ['rang', 'Ordre', 'entier'], ['actif', 'Actif', 'case']],
     modes_paiement: [['libelle', 'Libellé', 'texte'], ['rang', 'Ordre', 'entier'], ['actif', 'Actif', 'case']],
     unites: [['libelle', 'Libellé', 'texte'], ['decimales', 'Décimales', 'entier'], ['rang', 'Ordre', 'entier'], ['actif', 'Actif', 'case']],
-    familles: [['libelle', 'Libellé', 'texte'], ['nature', 'Nature', 'nature'], ['rang', 'Ordre', 'entier'], ['actif', 'Actif', 'case']],
+    familles: [['libelle', 'Libellé', 'texte'], ['nature', 'Nature', 'nature'], ['compte_vente', 'Compte de vente', 'texte'], ['compte_achat', 'Compte d\'achat', 'texte'], ['rang', 'Ordre', 'entier'], ['actif', 'Actif', 'case']],
     depots: [['libelle', 'Libellé', 'texte'], ['rang', 'Ordre', 'entier'], ['actif', 'Actif', 'case']],
     sequences: [['libelle', 'Pièce', 'lecture'], ['format', 'Format', 'texte'], ['prochain', 'Prochain numéro', 'entier'], ['annuel', 'Remis à 1 chaque année', 'case']],
   };
@@ -214,6 +215,7 @@
       zone.textContent = '';
       if (onglet === 'societe') zone.appendChild(ongletSociete(ctx));
       else if (onglet === 'demo') zone.appendChild(ongletDemo());
+      else if (onglet === 'comptabilite') ongletCompta(zone, ctx);
       else zone.appendChild(ongletRef(onglet, ctx));
     }).catch(function (e) { zone.textContent = ''; zone.appendChild(ERP.erreur(e)); });
   };
@@ -284,6 +286,70 @@
         lignes.push(n); dessiner();
       }, {petit: true}));
   }
+
+  function ongletCompta(zone, ctx) {
+    ERP.api('/api/erp2/compta/reglages').then(function (lignes) {
+      var form = h('div', {className: 'erp-form'}, lignes.map(function (l) {
+        return ERP.champ(l.libelle, ERP.saisie(l, 'valeur', 'texte', {change: function () { ERP.garde = function () { return true; }; }}));
+      }));
+      ctx.actions.appendChild(ERP.bouton('Enregistrer', async function () {
+        await ERP.api('/api/erp2/compta/reglages', {method: 'PUT', body: {lignes: lignes}});
+        ERP.garde = null;
+        ERP.toast('Réglages comptables enregistrés.', 'success');
+      }, {accent: true}));
+      zone.appendChild(ERP.carte('Comptes et journaux de l\'export comptable', h('div', null,
+        h('p', {className: 'erp-aide', text: 'Les comptes de TVA se règlent dans l\'onglet TVA, les comptes de vente et d\'achat par famille dans Familles, le compte auxiliaire sur la fiche du tiers (par défaut : son code).'}),
+        form)));
+    }).catch(function (e) { zone.appendChild(ERP.erreur(e)); });
+  }
+
+  // ── Export comptable ─────────────────────────────────────────────
+  ERP.ecrans['/compta/export'] = function (main, ctx) {
+    main.classList.add('plein');
+    var j = new Date();
+    var P = {debut: j.getFullYear() + '-01-01', fin: j.toISOString().slice(0, 10)};
+    var info = h('div', {className: 'erp-export-info'});
+    var zone = h('div', {className: 'erp-zone'});
+    var barre = h('div', {className: 'erp-form erp-export-barre'},
+      ERP.champ('Du', ERP.saisie(P, 'debut', 'date', {change: charger})),
+      ERP.champ('Au', ERP.saisie(P, 'fin', 'date', {change: charger})));
+    ctx.actions.appendChild(ERP.bouton('Télécharger le FEC', async function () {
+      var r = await fetch('/api/erp2/compta/fec?debut=' + P.debut + '&fin=' + P.fin, {credentials: 'same-origin'});
+      if (!r.ok) { var e = await r.json().catch(function () { return {}; }); throw new Error(e.detail || 'Export impossible.'); }
+      var nom = (r.headers.get('Content-Disposition') || '').replace(/.*filename="([^"]+)".*/, '$1') || 'FEC.txt';
+      var url = URL.createObjectURL(await r.blob());
+      var a = h('a', {href: url, download: nom}); document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    }, {accent: true}));
+    main.appendChild(barre);
+    main.appendChild(info);
+    main.appendChild(zone);
+    async function charger() {
+      zone.textContent = ''; zone.appendChild(ERP.chargement());
+      try {
+        var r = await ERP.api('/api/erp2/compta/ecritures?debut=' + P.debut + '&fin=' + P.fin);
+        info.textContent = '';
+        if (r.controles.length) info.appendChild(h('div', {className: 'erp-vide erreur'}, r.controles.map(function (c) { return h('div', {text: c}); })));
+        else info.appendChild(h('div', {className: 'erp-aide', text: r.lignes.length + ' lignes d\'écritures, toutes équilibrées.'}));
+        zone.textContent = '';
+        ERP.grille(zone, {
+          nom: 'compta.ecritures', cle: 'EcritureNum', lignes: r.lignes,
+          colonnes: [
+            {cle: 'JournalCode', libelle: 'Journal', largeur: 80},
+            {cle: 'EcritureNum', libelle: 'N°', largeur: 100},
+            {cle: 'EcritureDate', libelle: 'Date', largeur: 100, rendu: function (l) { var d = l.EcritureDate; return d.slice(6, 8) + '/' + d.slice(4, 6) + '/' + d.slice(0, 4); }},
+            {cle: 'CompteNum', libelle: 'Compte', largeur: 100},
+            {cle: 'CompAuxNum', libelle: 'Auxiliaire', largeur: 100},
+            {cle: 'PieceRef', libelle: 'Pièce', largeur: 120},
+            {cle: 'EcritureLib', libelle: 'Libellé', largeur: 300},
+            {cle: 'debit_cents', libelle: 'Débit', type: 'montant', largeur: 120, total: true},
+            {cle: 'credit_cents', libelle: 'Crédit', type: 'montant', largeur: 120, total: true},
+          ],
+        });
+      } catch (e) { zone.textContent = ''; zone.appendChild(ERP.erreur(e)); }
+    }
+    charger();
+  };
 
   function ongletDemo() {
     return ERP.carte('Jeu de démonstration', h('div', null,

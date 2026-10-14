@@ -12,7 +12,8 @@ from app.services.gc.pieces import ErreurPiece as ErreurFichier  # même nature 
 # Référentiels éditables dans Paramètres. `champs` : nom -> type (str, int, bool).
 REFERENTIELS = {
     "tva": {"table": "gc_tva", "libelle": "Taux de TVA",
-            "champs": {"libelle": str, "taux_bp": int, "mention": str, "actif": bool, "rang": int}},
+            "champs": {"libelle": str, "taux_bp": int, "mention": str, "compte_collecte": str,
+                       "compte_deductible": str, "actif": bool, "rang": int}},
     "unites": {"table": "gc_unites", "libelle": "Unités",
                "champs": {"libelle": str, "decimales": int, "actif": bool, "rang": int}},
     "conditions_paiement": {"table": "gc_conditions_paiement", "libelle": "Conditions de paiement",
@@ -23,7 +24,8 @@ REFERENTIELS = {
     "depots": {"table": "gc_depots", "libelle": "Dépôts",
                "champs": {"libelle": str, "actif": bool, "rang": int}},
     "familles": {"table": "gc_familles", "libelle": "Familles d'articles",
-                 "champs": {"libelle": str, "nature": str, "actif": bool, "rang": int}},
+                 "champs": {"libelle": str, "nature": str, "compte_vente": str, "compte_achat": str,
+                            "actif": bool, "rang": int}},
     "sequences": {"table": "gc_sequences", "libelle": "Numérotation",
                   "champs": {"libelle": str, "format": str, "prochain": int, "annuel": bool}},
 }
@@ -35,7 +37,8 @@ CHAMPS_SOCIETE = ("raison_sociale", "forme_juridique", "capital_cents", "siret",
 CHAMPS_TIERS = {"code": str, "est_client": bool, "est_fournisseur": bool, "raison_sociale": str, "siret": str,
                 "tva_intra": str, "email": str, "email_facturation": str, "telephone": str,
                 "condition_paiement": "ref", "mode_paiement": "ref", "tva_code": "ref", "remise_bp": int,
-                "encours_max_cents": "int_null", "bloque": bool, "notes": str, "actif": bool}
+                "encours_max_cents": "int_null", "bloque": bool, "notes": str, "actif": bool,
+                "compte_auxiliaire": str}
 
 CHAMPS_ADRESSE = ("type", "libelle", "adresse1", "adresse2", "code_postal", "ville", "pays", "par_defaut")
 CHAMPS_CONTACT = ("nom", "fonction", "email", "telephone")

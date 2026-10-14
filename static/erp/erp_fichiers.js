@@ -93,7 +93,7 @@
     async function enregistrer() {
       var champs = {};
       ['code', 'est_client', 'est_fournisseur', 'raison_sociale', 'siret', 'tva_intra', 'email', 'email_facturation', 'telephone',
-       'condition_paiement', 'mode_paiement', 'tva_code', 'remise_bp', 'encours_max_cents', 'bloque', 'notes', 'actif']
+       'condition_paiement', 'mode_paiement', 'tva_code', 'remise_bp', 'encours_max_cents', 'bloque', 'notes', 'actif', 'compte_auxiliaire']
         .forEach(function (k) { if (k in T) champs[k] = T[k]; });
       var r = await ERP.api('/api/erp2/tiers' + (nouveau ? '' : '/' + T.id), {
         method: nouveau ? 'POST' : 'PUT', body: {tiers: champs, adresses: adresses, contacts: contacts}});
@@ -138,6 +138,7 @@
           {aide: 'Export ou livraison intracommunautaire : le taux du tiers remplace celui de l\'article.'}),
         role === 'client' ? ERP.champ('Remise habituelle', ERP.saisie(T, 'remise_bp', 'pct', {change: marquer, placeholder: '0'})) : null,
         role === 'client' ? ERP.champ('Encours maximum', ERP.saisie(T, 'encours_max_cents', 'euros', {change: marquer})) : null,
+        ERP.champ('Compte auxiliaire', ERP.saisie(T, 'compte_auxiliaire', 'texte', {change: marquer, placeholder: T.code || 'code du tiers'})),
         ERP.champ('Notes', ERP.saisie(T, 'notes', 'zone', {change: marquer}), {plein: true}));
 
       var tAdr = tableEditable(adresses, [

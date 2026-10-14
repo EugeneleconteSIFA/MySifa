@@ -39,6 +39,7 @@
     {groupe: 'Comptabilité', liens: [
       {chemin: '/compta/echeances', libelle: 'Échéances'},
       {chemin: '/compta/reglements', libelle: 'Règlements'},
+      {chemin: '/compta/export', libelle: 'Export comptable'},
     ]},
     {groupe: 'Fichiers', liens: [
       {chemin: '/fichiers/clients', libelle: 'Clients'},

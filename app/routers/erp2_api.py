@@ -14,7 +14,9 @@ from config import ROLES_ERP2
 from app.core.database import get_db
 from app.services.auth_service import get_current_user
 from app.services.audit_service import log_action
-from app.services.gc import compta, demo, fichiers, pieces
+from fastapi.responses import Response
+
+from app.services.gc import compta, demo, export_compta, fichiers, pieces
 from app.services.gc.pieces import ErreurPiece
 
 router = APIRouter(prefix="/api/erp2", tags=["erp2"])
@@ -329,6 +331,47 @@ def reglement_supprimer(reglement_id: int, request: Request):
         compta.supprimer_reglement(conn, reglement_id)
     _trace(request, u, "DELETE", f"Règlement #{reglement_id}")
     return {"ok": True}
+
+
+@router.get("/compta/reglages")
+def compta_reglages(request: Request):
+    _user(request)
+    with get_db() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM gc_compta_reglages ORDER BY rang").fetchall()]
+
+
+@router.put("/compta/reglages")
+async def compta_reglages_maj(request: Request):
+    u = _user(request)
+    body = await request.json()
+    with _ecriture() as conn:
+        for l in body.get("lignes") or []:
+            conn.execute("UPDATE gc_compta_reglages SET valeur=? WHERE cle=?", (str(l.get("valeur") or "").strip(), l.get("cle")))
+    _trace(request, u, "UPDATE", "Réglages comptables")
+    return {"ok": True}
+
+
+@router.get("/compta/ecritures")
+def compta_ecritures(request: Request, debut: str, fin: str):
+    _user(request)
+    with get_db() as conn:
+        lignes = export_compta.ecritures(conn, debut, fin)
+    return {"lignes": lignes, "controles": export_compta.controles(lignes)}
+
+
+@router.get("/compta/fec")
+def compta_fec(request: Request, debut: str, fin: str):
+    u = _user(request)
+    with get_db() as conn:
+        lignes = export_compta.ecritures(conn, debut, fin)
+        siren = "".join(ch for ch in (fichiers.lire_societe(conn).get("siret") or "") if ch.isdigit())[:9] or "000000000"
+    pb = export_compta.controles(lignes)
+    if pb:
+        raise HTTPException(400, "Export refusé : " + " ".join(pb[:5]))
+    nom = f"{siren}FEC{fin.replace('-', '')}.txt"
+    _trace(request, u, "EXPORT", f"FEC {debut} → {fin}", {"lignes": len(lignes)})
+    return Response(export_compta.fec(lignes).encode("utf-8"), media_type="text/plain; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{nom}"'})
 
 
 # ── Recherche globale ─────────────────────────────────────────────────
