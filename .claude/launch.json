@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mysifa-erp",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-X", "utf8", "-m", "uvicorn", "main:app", "--port", "8010"],
+      "port": 8010,
+      "url": "http://erp.localhost:8010"
+    }
+  ]
+}
