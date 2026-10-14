@@ -351,12 +351,23 @@
     try { [modele, imps] = await Promise.all([api('/modeles/' + m.id), imprimantes()]); }
     catch (e) { toast(e.message, 'danger'); return; }
     const vars = modele.layout.variables;
-    const zpl = imps.filter(i => (i.langage || 'zpl') === 'zpl');
-    const autres = imps.filter(i => (i.langage || 'zpl') !== 'zpl');
+    // Toutes les imprimantes actives : ZPL pour les Zebra, PDF (planche A4,
+    // étiquettes à taille réelle) pour les imprimantes de bureau.
+    const estZpl = i => (i.langage || 'zpl') === 'zpl';
     const selImp = h('select', { cls: 'es-input' },
-      h('option', { value: '', text: zpl.length ? '— Choisir —' : 'Aucune imprimante ZPL active' }),
-      ...zpl.map(i => h('option', { value: i.id, text: i.nom + (i.poste ? ' · ' + i.poste : '') })));
-    try { const mem = localStorage.getItem(LS_IMPRIMANTE); if (mem && zpl.some(i => String(i.id) === mem)) selImp.value = mem; } catch (e) {}
+      h('option', { value: '', text: imps.length ? '— Choisir —' : 'Aucune imprimante active' }),
+      ...imps.map(i => h('option', { value: i.id,
+        text: i.nom + (i.poste ? ' · ' + i.poste : '') + (estZpl(i) ? '' : ' · PDF A4') })));
+    try { const mem = localStorage.getItem(LS_IMPRIMANTE); if (mem && imps.some(i => String(i.id) === mem)) selImp.value = mem; } catch (e) {}
+    const aideImp = h('span', { cls: 'es-champ-aide' });
+    const majAideImp = () => {
+      const i = imps.find(x => String(x.id) === selImp.value);
+      aideImp.textContent = !i ? '' : estZpl(i)
+        ? 'Étiquettes en ZPL, au format du rouleau.'
+        : 'Imprimante de bureau : PDF, étiquettes à taille réelle posées en planche sur A4.';
+    };
+    selImp.addEventListener('change', majAideImp);
+    majAideImp();
     const qte = h('input', { cls: 'es-input', type: 'number', min: 1, max: ES.boot.referentiel.quantite_max, value: 1 });
     const ex = h('input', { cls: 'es-input', type: 'number', min: 1, max: 99, value: 1 });
     const saisies = {}, departs = {};
@@ -410,7 +421,7 @@
     }, 'accent', 'printer');
 
     modale('Imprimer « ' + m.nom + ' »', h('div', { cls: 'es-form' },
-      champ('Imprimante', selImp, autres.length ? `${autres.length} imprimante(s) non ZPL masquée(s) — activer l'émulation ZPL pour les utiliser.` : null),
+      h('label', { cls: 'es-champ' }, h('span', { cls: 'es-champ-label', text: 'Imprimante' }), selImp, aideImp),
       h('div', { cls: 'es-ligne2' },
         champ('Quantité (série)', qte, 'Nombre d\'étiquettes différentes.'),
         champ('Exemplaires', ex, 'Copies identiques de chacune.')),
