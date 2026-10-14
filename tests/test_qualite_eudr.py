@@ -185,6 +185,45 @@ with get_db() as conn:
           conn.execute("SELECT COUNT(*) FROM eudr_demandes").fetchone()[0], avant_dem)
 check("page fournisseur : pas en mode aperçu", "const APERCU = null;" in client.get(f"/portail/eudr/{TOKEN}").text, True)
 
+# Destinataire retiré : son lien ne fonctionne plus.
+with get_db() as conn:
+    DID = conn.execute("SELECT id FROM eudr_demandes WHERE token=?", (TOKEN,)).fetchone()[0]
+check("retrait accepté", client.post(f"/api/qualite/eudr/demandes/{DID}/annuler").status_code, 200)
+check("lien retiré : formulaire invalide", client.get(f"/portail/eudr/{TOKEN}").status_code, 404)
+check("retrait en double : 404", client.post(f"/api/qualite/eudr/demandes/{DID}/annuler").status_code, 404)
+check("réponses conservées après retrait", ligne()["statut"], "repondue")
+
+# Saisie manuelle (réponse reçue par courrier), avec pièce jointe.
+import app.routers.qualite_eudr as _re  # noqa: E402
+_re.EUDR_PIECES_DIR = os.path.join(_TMP, "pieces")
+with get_db() as conn:
+    FID3 = conn.execute("INSERT INTO fournisseurs_fsc (nom, pays) VALUES ('Distributeur Test', 'FR')").lastrowid
+    conn.commit()
+check("saisie sans commentaire refusée",
+      client.post(f"/api/qualite/eudr/fournisseurs/{FID3}/saisie", data={"role": "aval"}).status_code, 400)
+check("pièce exécutable refusée",
+      client.post(f"/api/qualite/eudr/fournisseurs/{FID3}/saisie", data={"commentaire": "x"},
+                  files={"piece": ("a.html", b"<script>", "text/html")}).status_code, 400)
+r = client.post(f"/api/qualite/eudr/fournisseurs/{FID3}/saisie",
+                data={"role": "aval", "commentaire": "Courrier du 13/10 : troisième acteur."},
+                files={"piece": ("courrier avery.pdf", b"%PDF-1.4 test", "application/pdf")})
+check("saisie manuelle acceptée", r.status_code, 200)
+l3 = next(f for f in r.json()["fournisseurs"] if f["id"] == FID3)
+check("saisie manuelle : statut répondu", l3["statut"], "repondue")
+check("saisie manuelle : source", l3["reponse"]["source"], "manuel")
+check("saisie manuelle : auteur", l3["reponse"]["saisi_par"], USER["email"])
+check("saisie manuelle : aucun destinataire affiché", l3["demandes"], [])
+r = client.get(f"/api/qualite/eudr/reponses/{l3['reponse']['id']}/piece")
+check("pièce jointe servie", (r.status_code, r.content), (200, b"%PDF-1.4 test"))
+check("pièce PDF ouverte dans le navigateur", r.headers["content-disposition"].startswith("inline"), True)
+# Le formulaire fournisseur ne reprend jamais une saisie manuelle (commentaire interne).
+with get_db() as conn:
+    conn.execute("INSERT INTO eudr_demandes (fournisseur_id, email, token, statut, created_at)"
+                 " VALUES (?, 'x@distrib.test', 'tok-manuel', 'envoyee', '2026-10-14T09:00:00')", (FID3,))
+    conn.commit()
+check("formulaire : pas de préremplissage par la saisie manuelle",
+      client.get("/api/portail/eudr/tok-manuel").json()["precedente"], None)
+
 print()
 if ECHECS:
     print(f"{len(ECHECS)} échec(s)")

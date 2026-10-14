@@ -230,6 +230,67 @@ def noter_envoi(conn, *, demande_id: int, auteur: str | None, langue: str = "en"
     )
 
 
+# Pièces jointes d'une saisie manuelle : extension → type servi. Liste fermée,
+# rien d'exécutable. PDF et images s'ouvrent dans le navigateur, le reste se
+# télécharge.
+PIECE_TYPES = {
+    "pdf": "application/pdf", "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+    "webp": "image/webp", "msg": "application/vnd.ms-outlook", "eml": "message/rfc822",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+PIECE_EN_LIGNE = {"pdf", "png", "jpg", "jpeg", "webp"}
+PIECE_MAX_OCTETS = 15 * 1024 * 1024
+
+
+def enregistrer_manuel(conn, *, fournisseur_id: int, body: dict, auteur: str | None,
+                       piece: tuple[str, str, str] | None) -> int:
+    """Réponse saisie dans MyQualité (courrier, email, appel). Lève ValueError.
+
+    `piece` = (nom sur disque, nom d'origine, type MIME), fichier déjà écrit.
+    """
+    champs: dict = {}
+    for champ in ("role", "perimetre", "transmission"):
+        v = str(body.get(champ) or "").strip()
+        if v and v not in EUDR_CHOIX[champ]:
+            raise ValueError("Choix invalide.")
+        champs[champ] = v or None
+    commentaire = str(body.get("commentaire") or "").strip()[:4000]
+    if not commentaire:
+        raise ValueError("Commentaire obligatoire — résumez ce que le fournisseur a répondu.")
+    now = now_paris_iso()
+    # Demande inactive : la réponse garde un demande_id, aucun lien n'existe.
+    cur = conn.execute(
+        """INSERT INTO eudr_demandes (fournisseur_id, email, token, statut, envoye_par,
+                                      repondu_le, actif, created_at)
+           VALUES (?, '', ?, ?, ?, ?, 0, ?)""",
+        (int(fournisseur_id), str(uuid.uuid4()), ST_REPONDUE, auteur, now, now),
+    )
+    p = piece or (None, None, None)
+    cur = conn.execute(
+        """INSERT INTO eudr_reponses (demande_id, fournisseur_id, role, perimetre, transmission,
+               commentaire, source, saisi_par, piece_filename, piece_original, piece_mime, created_at)
+           VALUES (?,?,?,?,?,?, 'manuel', ?,?,?,?,?)""",
+        (cur.lastrowid, int(fournisseur_id), champs["role"], champs["perimetre"],
+         champs["transmission"], commentaire, auteur, p[0], p[1], p[2], now),
+    )
+    return int(cur.lastrowid)
+
+
+def annuler_demande(conn, demande_id: int) -> dict | None:
+    """Désactive un lien envoyé à la mauvaise adresse : le formulaire répond
+    alors « lien invalide ». Les réponses déjà reçues par ce lien restent."""
+    row = conn.execute(
+        """SELECT d.id, d.email, f.nom AS fournisseur_nom FROM eudr_demandes d
+           JOIN fournisseurs_fsc f ON f.id=d.fournisseur_id
+           WHERE d.id=? AND d.actif=1""",
+        (int(demande_id),),
+    ).fetchone()
+    if not row:
+        return None
+    conn.execute("UPDATE eudr_demandes SET actif=0 WHERE id=?", (int(demande_id),))
+    return dict(row)
+
+
 def noter_langue(conn, demande: dict, langue: str) -> None:
     """Le fournisseur a changé de langue sur le formulaire : la relance suivante
     partira dans celle-ci."""
@@ -258,8 +319,11 @@ def noter_ouverture(conn, demande: dict) -> None:
 
 
 def derniere_reponse(conn, fournisseur_id: int) -> dict | None:
+    """Dernière réponse du fournisseur lui-même, pour préremplir son formulaire.
+    Une saisie manuelle n'en fait pas partie : son commentaire est interne."""
     row = conn.execute(
-        "SELECT * FROM eudr_reponses WHERE fournisseur_id=? ORDER BY id DESC LIMIT 1",
+        """SELECT * FROM eudr_reponses WHERE fournisseur_id=? AND COALESCE(source,'portail')<>'manuel'
+           ORDER BY id DESC LIMIT 1""",
         (int(fournisseur_id),),
     ).fetchone()
     if not row:

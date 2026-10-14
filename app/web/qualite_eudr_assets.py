@@ -136,15 +136,87 @@ function eudrRenderList(){
       return `<div class="eudr-row${admin?'':' ro'}">
         ${admin ? `<span><input type="checkbox" ${S.eudr.sel.has(l.id)?'checked':''} onchange="eudrSel(${l.id},this.checked)"></span>` : ''}
         <span><b>${escHtml(l.nom)}</b> <span class="fsc-muted">${escHtml(l.pays||'')}</span>
-          ${l.emails.length ? '' : '<div class="eudr-warn">Aucun email connu</div>'}</span>
+          ${(l.demandes||[]).length
+            ? `<div class="eudr-dest">Envoyé à ${(l.demandes||[]).map(d => escHtml(d.email) +
+                (admin ? ` <button type="button" class="eudr-dest-x" title="Retirer ce destinataire : son lien cesse de fonctionner" onclick="eudrAnnulerDemande(${d.id})">×</button>` : '')).join(', ')}</div>`
+            : (l.emails.length ? '' : '<div class="eudr-warn">Aucun email connu</div>')}</span>
         <span><span class="eudr-badge ${st.cls}">${escHtml(st.lbl)}</span></span>
         <span class="fsc-muted">${l.derniere_demande ? escHtml(fmtDate(l.derniere_demande)) : '—'}</span>
         <span>${rep ? escHtml(rep.libelles.role || '—') : '—'}</span>
         <span>${rep ? escHtml(rep.libelles.transmission || '—') : '—'}</span>
-        <span>${rep ? `<button type="button" class="fsc-btn sm" onclick="eudrVoirReponse(${l.id})">Voir la réponse</button>` : ''}</span>
+        <span class="eudr-acts">${rep ? `<button type="button" class="fsc-btn sm" onclick="eudrVoirReponse(${l.id})">Voir la réponse</button>` : ''}
+          ${admin ? `<button type="button" class="fsc-btn sm" onclick="eudrOuvrirSaisie(${l.id})" title="Réponse reçue par courrier, email ou téléphone">Saisie manuelle</button>` : ''}</span>
       </div>`;
     }).join('')}
   </div>`;
+}
+
+async function eudrAnnulerDemande(id){
+  const l = (S.eudr.data.fournisseurs||[]).find(x => (x.demandes||[]).some(d => d.id === id));
+  const d = l && l.demandes.find(x => x.id === id);
+  if(!d || !confirm(`Retirer ${d.email} pour ${l.nom} ? Le lien envoyé à cette adresse ne fonctionnera plus.`)) return;
+  try{
+    const r = await api(`/api/qualite/eudr/demandes/${id}/annuler`, {method:'POST'});
+    const j = await r.json().catch(() => ({}));
+    if(!r.ok){ showToast(j.detail || 'Retrait impossible.','danger'); return; }
+    S.eudr.data.fournisseurs = j.fournisseurs || S.eudr.data.fournisseurs;
+    showToast('Destinataire retiré.','success');
+    eudrRender();
+  }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); }
+}
+
+// ─── Saisie manuelle ─────────────────────────────────────────────────
+// Réponse reçue hors formulaire : rôle, périmètre, transmission, commentaire
+// obligatoire, courrier en pièce jointe. Le fournisseur passe en « Répondu ».
+function eudrOuvrirSaisie(fid){
+  const l = (S.eudr.data.fournisseurs||[]).find(x => x.id === fid); if(!l) return;
+  const ch = S.eudr.data.choix || {};
+  const sel = (name, lbl) => `<label class="eudr-f"><span>${escHtml(lbl)}</span>
+    <select id="eudr-m-${name}"><option value="">— Non précisé —</option>
+      ${Object.keys(ch[name]||{}).map(k => `<option value="${escAttr(k)}">${escHtml(ch[name][k].court)}</option>`).join('')}
+    </select></label>`;
+  eudrMroot().innerHTML = `
+  <div class="modal-ov" style="display:flex" onclick="if(event.target===this)closeMroot()">
+    <div class="modal lg" onclick="event.stopPropagation()">
+      <button type="button" class="modal-close" onclick="closeMroot()">×</button>
+      <div class="modal-hd"><h3>${escHtml(l.nom)} — saisie manuelle</h3></div>
+      <div class="modal-bd">
+        <p style="margin:0 0 12px">Pour une réponse reçue par courrier, email ou téléphone. Le fournisseur passe en « Répondu » ; les liens déjà envoyés restent valables.</p>
+        ${sel('role','Rôle')}
+        ${sel('perimetre','Produits dans le périmètre')}
+        ${sel('transmission','Transmission des références')}
+        <label class="eudr-f"><span>Commentaire *</span>
+          <textarea id="eudr-m-commentaire" rows="4" placeholder="Ce que le fournisseur a répondu, et sa source (courrier du 13/10, appel…)"></textarea></label>
+        <label class="eudr-f"><span>Pièce jointe — PDF, image, email (.msg, .eml) ou Word, 15 Mo maximum</span>
+          <input type="file" id="eudr-m-piece" accept=".pdf,.png,.jpg,.jpeg,.webp,.msg,.eml,.docx"></label>
+      </div>
+      <div class="modal-ft">
+        <button type="button" class="fsc-btn" onclick="closeMroot()">Annuler</button>
+        <button type="button" class="btn btn-accent" id="eudr-m-go" onclick="eudrEnregistrerSaisie(${fid})">Enregistrer</button>
+      </div>
+    </div>
+  </div>`;
+  requestAnimationFrame(() => { const t = document.getElementById('eudr-m-commentaire'); if(t) t.focus(); });
+}
+
+async function eudrEnregistrerSaisie(fid){
+  const com = document.getElementById('eudr-m-commentaire').value.trim();
+  if(!com){ showToast('Commentaire obligatoire — résumez ce que le fournisseur a répondu.','danger'); return; }
+  const fd = new FormData();
+  ['role','perimetre','transmission'].forEach(k => fd.append(k, document.getElementById('eudr-m-'+k).value));
+  fd.append('commentaire', com);
+  const f = document.getElementById('eudr-m-piece').files[0];
+  if(f) fd.append('piece', f);
+  const go = document.getElementById('eudr-m-go'); go.disabled = true; go.textContent = 'Enregistrement…';
+  try{
+    const r = await api(`/api/qualite/eudr/fournisseurs/${fid}/saisie`, {method:'POST', body: fd});
+    const j = await r.json().catch(() => ({}));
+    if(!r.ok){ showToast(j.detail || 'Enregistrement impossible.','danger'); go.disabled = false; go.textContent = 'Enregistrer'; return; }
+    S.eudr.data.fournisseurs = j.fournisseurs || S.eudr.data.fournisseurs;
+    closeMroot();
+    showToast('Réponse enregistrée.','success');
+    eudrRender();
+  }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); go.disabled = false; go.textContent = 'Enregistrer'; }
 }
 
 function eudrSel(id, on){ if(on) S.eudr.sel.add(id); else S.eudr.sel.delete(id); eudrRenderList(); }
@@ -225,7 +297,8 @@ async function eudrVoirReponse(fid){
       <button type="button" class="modal-close" onclick="closeMroot()">×</button>
       <div class="modal-hd"><h3>${escHtml(l.nom)} — réponse EUDR</h3></div>
       <div class="modal-bd">
-        <p class="fsc-muted" style="margin:0 0 12px">Reçue le ${escHtml(fmtDateTime(rep.created_at))}${hist.length > 1 ? ` · ${hist.length} réponses au total, la plus récente fait foi` : ''}</p>
+        <p class="fsc-muted" style="margin:0 0 12px">${rep.source === 'manuel' ? `Saisie manuelle par ${escHtml(rep.saisi_par || '—')} le` : 'Reçue le'} ${escHtml(fmtDateTime(rep.created_at))}${hist.length > 1 ? ` · ${hist.length} réponses au total, la plus récente fait foi` : ''}</p>
+        ${rep.piece_filename ? `<p style="margin:0 0 12px"><a class="fsc-btn sm" href="/api/qualite/eudr/reponses/${rep.id}/piece" target="_blank" rel="noopener">Pièce jointe : ${escHtml(rep.piece_original || 'fichier')}</a></p>` : ''}
         ${ligne('Société', escHtml(rep.repondant_societe))}
         ${ligne('Répondant', escHtml([rep.repondant_nom, rep.repondant_fonction, rep.repondant_email, rep.repondant_tel].filter(Boolean).join(' · ')))}
         ${ligne('Établissement', escHtml(lib.etablissement))}
@@ -258,11 +331,20 @@ async function eudrVoirReponse(fid){
   .eudr-search:focus{outline:none;border-color:var(--accent)}
   .eudr-selinfo{font-size:12px;color:var(--muted)}
   .eudr-table{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
-  .eudr-row{display:grid;grid-template-columns:32px minmax(180px,2fr) 120px 110px minmax(140px,1.5fr) minmax(150px,1.5fr) 130px;
+  .eudr-row{display:grid;grid-template-columns:32px minmax(180px,2fr) 120px 110px minmax(140px,1.5fr) minmax(150px,1.5fr) 150px;
     gap:10px;align-items:center;padding:10px 14px;border-top:1px solid var(--border);font-size:13px;color:var(--text2)}
-  .eudr-row.ro{grid-template-columns:minmax(180px,2fr) 120px 110px minmax(140px,1.5fr) minmax(150px,1.5fr) 130px}
+  .eudr-row.ro{grid-template-columns:minmax(180px,2fr) 120px 110px minmax(140px,1.5fr) minmax(150px,1.5fr) 150px}
   .eudr-head{border-top:none;font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:700;color:var(--muted)}
   .eudr-row b{color:var(--text)}
+  .eudr-acts{display:flex;gap:6px;flex-wrap:wrap}
+  .eudr-f{display:block;margin-bottom:12px}
+  .eudr-f span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:700;color:var(--muted);margin-bottom:5px}
+  .eudr-f select,.eudr-f textarea,.eudr-f input[type=file]{width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border);
+    background:var(--bg);color:var(--text);font:inherit;font-size:13px}
+  .eudr-dest{font-size:11.5px;color:var(--muted);word-break:break-all}
+  .eudr-dest-x{border:1px solid var(--border);background:var(--bg);color:var(--muted);border-radius:6px;width:18px;height:18px;line-height:14px;
+    font-size:13px;cursor:pointer;padding:0;margin-left:2px}
+  .eudr-dest-x:hover{color:var(--danger);border-color:var(--danger)}
   .eudr-warn{font-size:11px;color:var(--danger);font-weight:600}
   .eudr-badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:700;
     border:1px solid var(--border);color:var(--muted)}
