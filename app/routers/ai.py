@@ -112,7 +112,8 @@ def chat(req: ChatRequest, request: Request):
         page["titre"] = req.module
     with get_db() as conn:
         try:
-            res = agent_ia.converser(conn, user, hist, page, req.modele)
+            res = agent_ia.converser(conn, user, hist, page, req.modele,
+                                     contexte={"app": request.app, "cookies": dict(request.cookies)})
         except agent_ia.ErreurAgent as e:
             raise HTTPException(503 if "clé" in str(e) else 502, detail=str(e))
     # La conversation n'est pas journalisée (module « ai » aveugle au contenu) :
