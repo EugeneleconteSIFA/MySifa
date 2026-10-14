@@ -26,8 +26,20 @@ REFERENTIELS = {
     "familles": {"table": "gc_familles", "libelle": "Familles d'articles",
                  "champs": {"libelle": str, "nature": str, "compte_vente": str, "compte_achat": str,
                             "actif": bool, "rang": int}},
+    "pays": {"table": "gc_pays", "libelle": "Pays",
+             "champs": {"libelle": str, "ue": bool, "actif": bool, "rang": int}},
+    "devises": {"table": "gc_devises", "libelle": "Devises",
+                "champs": {"libelle": str, "symbole": str, "actif": bool, "rang": int}},
+    "banques": {"table": "gc_banques", "libelle": "Banques de la société",
+                "champs": {"libelle": str, "iban": str, "bic": str, "compte": str, "journal": str, "actif": bool, "rang": int}},
+    "types_contact": {"table": "gc_types_contact", "libelle": "Types de contacts",
+                      "champs": {"libelle": str, "actif": bool, "rang": int}},
+    "gammes": {"table": "gc_gammes", "libelle": "Gammes de produits",
+               "champs": {"libelle": str, "actif": bool, "rang": int}},
+    "textes": {"table": "gc_textes", "libelle": "Libellés automatiques",
+               "champs": {"libelle": str, "texte": str, "actif": bool, "rang": int}},
     "sequences": {"table": "gc_sequences", "libelle": "Numérotation",
-                  "champs": {"libelle": str, "format": str, "prochain": int, "annuel": bool}},
+                  "champs": {"libelle": str, "format": str, "prochain": int, "reinit": str}},
 }
 
 CHAMPS_SOCIETE = ("raison_sociale", "forme_juridique", "capital_cents", "siret", "rcs", "tva_intra", "ape",
@@ -42,7 +54,8 @@ CHAMPS_TIERS = {"code": str, "est_client": bool, "est_fournisseur": bool, "raiso
                 "compte_auxiliaire": str, "representant_id": "int_null", "transporteur_id": "int_null",
                 "jours_expedition": int}
 
-CHAMPS_TIERS.update({"est_prospect": bool})
+CHAMPS_TIERS.update({"est_prospect": bool, "famille": "ref", "devise": str, "texte_devis": "ref", "texte_arc": "ref",
+                     "texte_bl": "ref", "texte_facture": "ref"})
 CHAMPS_TIERS.update({
     "nom_court": str, "groupe_id": "int_null", "etat": str, "fax": str, "site_web": str, "rcs": str, "ean": str,
     "nif": str, "adv_id": "int_null", "categorie1": str, "categorie2": str, "categorie3": str, "langue": str,
@@ -74,6 +87,8 @@ CHAMPS_ARTICLE = {"code": str, "libelle": str, "libelle_client": str, "nature": 
                   "ml_par_bobine_milli": "int_null"}
 
 NATURES = {"pf": "Produit fini", "mp": "Matière première", "service": "Prestation"}
+# Familles (RVGI « 20-Familles ») : de produits, de matières, de clients, de fournisseurs.
+NATURES_FAMILLE = dict(NATURES, client="Clients et prospects", fournisseur="Fournisseurs")
 
 
 def _maintenant() -> str:
@@ -127,8 +142,10 @@ def enregistrer_referentiel(conn, nom: str, ligne: dict) -> None:
             raise ErreurFichier("Prochain numéro : 1 au minimum.")
         if "format" in vals and "{N" not in vals["format"]:
             raise ErreurFichier("Le format doit contenir le compteur {N} (ex. FA{AA}{N:05}).")
-    if nom == "familles" and vals.get("nature", "pf") not in NATURES:
+    if nom == "familles" and vals.get("nature", "pf") not in NATURES_FAMILLE:
         raise ErreurFichier("Nature invalide.")
+    if nom == "sequences" and "reinit" in vals and vals["reinit"] not in ("annuelle", "mensuelle", "jamais"):
+        raise ErreurFichier("Remise à zéro : annuelle, mensuelle ou jamais.")
     existe = conn.execute(f"SELECT 1 FROM {r['table']} WHERE code=?", (code,)).fetchone()
     if existe:
         if vals:

@@ -500,6 +500,17 @@ class Chaine(unittest.TestCase):
         fichiers.enregistrer_tiers(c, pid, {"est_client": 1})
         self.assertIsNotNone(pieces.transformer(c, [dv], "commande"))
 
+    def test_texte_automatique(self):
+        c = self.conn
+        c.execute("INSERT INTO gc_textes (code, libelle, texte) VALUES ('LIV', 'Livraison', 'Livraison sur rendez-vous.')")
+        c.execute("UPDATE gc_tiers SET texte_bl='LIV' WHERE id=1")
+        co = pieces.creer(c, "commande", 1)
+        self.assertEqual(pieces.charger(c, co)["notes"], "")
+        pieces.enregistrer(c, co, None, [_ligne(1, 1000, 100)])
+        pieces.valider(c, co)
+        bl = pieces.transformer(c, [co], "bl")
+        self.assertEqual(pieces.charger(c, bl)["notes"], "Livraison sur rendez-vous.")
+
     def test_achat_reception_stock(self):
         c = self.conn
         c.execute("UPDATE gc_articles SET prix_achat_cents=900 WHERE id=1")

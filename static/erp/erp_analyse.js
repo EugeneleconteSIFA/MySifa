@@ -57,11 +57,14 @@
     {cle: 'code', libelle: 'Code', largeur: 100}, {cle: 'nom', libelle: 'Machine', largeur: 260},
     {cle: 'hors_production', libelle: 'Hors production', largeur: 140, rendu: function (x) { return x.hors_production ? 'Oui' : ''; }}, actif,
   ], 'Les machines se gèrent dans MySifa (Paramètres).');
+  // Regroupement RVGI : découpes (plaques), cylindres (magnétiques, pelicuts,
+  // contre-parties), clichés — porté par outil_types.groupe dans MySifa.
   ERP.ecrans['/fichiers/outillage'] = ecranMysifa('outils', [
+    {cle: 'groupe', libelle: 'Famille', largeur: 130},
     {cle: 'type_libelle', libelle: 'Type', largeur: 160}, {cle: 'numero', libelle: 'Numéro', largeur: 130},
     {cle: 'label', libelle: 'Libellé', largeur: 320},
     {cle: 'a_valider', libelle: 'À valider', largeur: 110, rendu: function (x) { return x.a_valider ? 'Oui' : ''; }}, actif,
-  ], 'L\'outillage (plaques, contre-parties, magnétiques, clichés…) se gère dans MySifa.');
+  ], 'Découpes (plaques), cylindres (magnétiques, pelicuts, contre-parties) et clichés : l\'outillage se gère dans MySifa.');
   ERP.ecrans['/fichiers/teintes'] = ecranMysifa('teintes', [
     {cle: 'hex', libelle: '', largeur: 50, rendu: function (x) {
       var s = h('span', {className: 'erp-teinte'});

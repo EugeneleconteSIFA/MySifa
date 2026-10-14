@@ -93,9 +93,10 @@ def enregistrer_reglement(conn, data: dict, user: dict | None = None) -> int:
         raise ErreurPiece("Les affectations dépassent le montant du règlement.")
     cur = conn.execute(
         """INSERT INTO gc_reglements (tiers_id, sens, date_reglement, mode_paiement, montant_cents, reference, notes,
-               cree_par, cree_le) VALUES (?,?,?,?,?,?,?,?,?)""",
+               cree_par, cree_le, banque) VALUES (?,?,?,?,?,?,?,?,?,?)""",
         (tiers_id, sens, data["date_reglement"], data.get("mode_paiement") or None, montant,
-         str(data.get("reference") or ""), str(data.get("notes") or ""), str((user or {}).get("nom") or ""), _maintenant()))
+         str(data.get("reference") or ""), str(data.get("notes") or ""), str((user or {}).get("nom") or ""), _maintenant(),
+         data.get("banque") or None))
     rid = int(cur.lastrowid)
     for eid, m in lignes:
         conn.execute("INSERT INTO gc_reglements_affectations (reglement_id, echeance_id, montant_cents) VALUES (?,?,?)",

@@ -435,19 +435,24 @@ def creer(conn, type_piece: str, tiers_id: int, user: dict | None = None, origin
     t = _verifier_tiers(conn, type_piece, tiers_id)
     depot = conn.execute("SELECT code FROM gc_depots WHERE actif=1 ORDER BY rang, code LIMIT 1").fetchone()
     now = _maintenant()
+    notes = ""
+    champ_texte = {"devis": "texte_devis", "commande": "texte_arc", "bl": "texte_bl", "facture": "texte_facture"}.get(type_piece)
+    if champ_texte and _t(t, champ_texte):
+        tx = conn.execute("SELECT texte FROM gc_textes WHERE code=? AND actif=1", (t[champ_texte],)).fetchone()
+        notes = tx["texte"] if tx else ""
     cur = conn.execute(
         """INSERT INTO gc_pieces (type, statut, tiers_id, date_piece, adresse_facturation_id,
                adresse_livraison_id, condition_paiement, mode_paiement, depot, remise_bp,
-               transporteur_id, jours_expedition, representant_id,
+               transporteur_id, jours_expedition, representant_id, notes,
                origine, cree_par, cree_le, modifie_le)
-           VALUES (?, 'brouillon', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, 'brouillon', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (type_piece, tiers_id, _aujourdhui(),
          _adresse_defaut(conn, tiers_id, "facturation"),
          _adresse_defaut(conn, tiers_id, "livraison"),
          t["condition_paiement"], t["mode_paiement"],
          depot["code"] if depot else None,
          int(t["remise_bp"] or 0) if TYPES[type_piece]["sens"] == "vente" else 0,
-         _t(t, "transporteur_id"), int(_t(t, "jours_expedition") or 0), _t(t, "representant_id"),
+         _t(t, "transporteur_id"), int(_t(t, "jours_expedition") or 0), _t(t, "representant_id"), notes,
          origine, _nom(user), now, now),
     )
     return int(cur.lastrowid)

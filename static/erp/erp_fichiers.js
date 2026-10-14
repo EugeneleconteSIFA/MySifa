@@ -114,7 +114,8 @@
       'compte_auxiliaire', 'representant_id', 'transporteur_id', 'jours_expedition', 'nom_court', 'groupe_id', 'etat', 'fax',
       'site_web', 'rcs', 'ean', 'nif', 'adv_id', 'categorie1', 'categorie2', 'categorie3', 'langue', 'designation_docs',
       'bat_chaque_cde', 'fiche_conformite', 'facturation_auto', 'factor', 'en_compte', 'escompte_bp', 'franco_cents',
-      'marge_brute_bp', 'marge_nette_bp', 'notre_no_fournisseur', 'commission_bp', 'est_prospect'];
+      'marge_brute_bp', 'marge_nette_bp', 'notre_no_fournisseur', 'commission_bp', 'est_prospect', 'famille', 'devise',
+      'texte_devis', 'texte_arc', 'texte_bl', 'texte_facture'];
 
     async function enregistrer() {
       var champs = {};
@@ -141,6 +142,8 @@
         c('Nom court (code AN)', 'nom_court'),
         sel('Groupe', 'groupe_id', groupes, {avecVide: '—', nombre: true}),
         sel('État', 'etat', opt(ERP.M.etats_tiers), {aide: '« Bloqué » : aucune pièce de vente ne se valide.'}),
+        sel('Famille', 'famille', ERP.ref('familles', true).filter(function (f) {
+          return f.nature === (role === 'fournisseur' ? 'fournisseur' : 'client'); }).map(function (f) { return {v: f.code, l: f.libelle}; }), {avecVide: '—'}),
         section('Identifiants'),
         c('SIRET', 'siret'), c('RCS', 'rcs'), c('N° TVA intracommunautaire', 'tva_intra'), c('EAN', 'ean'), c('NIF', 'nif'),
         section('Coordonnées'),
@@ -155,7 +158,8 @@
 
     function ongletInterlocuteurs() {
       var t = tableEditable(contacts, [
-        {cle: 'service', libelle: 'Service', largeur: '120px'}, {cle: 'civilite', libelle: 'Civ.', largeur: '60px'},
+        {cle: 'service', libelle: 'Service', type: 'choix', options: [{v: '', l: '—'}].concat(ERP.ref('types_contact', true).map(function (x) { return {v: x.libelle, l: x.libelle}; })), largeur: '140px'},
+        {cle: 'civilite', libelle: 'Civ.', type: 'choix', options: [{v: '', l: '—'}, {v: 'M.', l: 'M.'}, {v: 'Mme', l: 'Mme'}], largeur: '80px'},
         {cle: 'nom', libelle: 'Nom'}, {cle: 'fonction', libelle: 'Fonction'}, {cle: 'telephone', libelle: 'Téléphone'},
         {cle: 'gsm', libelle: 'GSM'}, {cle: 'email', libelle: 'Email'},
         {cle: 'envoi_devis', libelle: 'Devis', type: 'case'}, {cle: 'envoi_arc', libelle: 'ARC', type: 'case'},
@@ -172,7 +176,8 @@
         {cle: 'type', libelle: 'Type', type: 'choix', options: [{v: 'principale', l: 'Principale'}, {v: 'facturation', l: 'Facturation'}, {v: 'livraison', l: 'Livraison'}], largeur: '130px'},
         {cle: 'libelle', libelle: 'Libellé'}, {cle: 'raison_sociale', libelle: 'Raison sociale'},
         {cle: 'adresse1', libelle: 'Adresse'}, {cle: 'adresse2', libelle: 'Complément'},
-        {cle: 'code_postal', libelle: 'CP', largeur: '90px'}, {cle: 'ville', libelle: 'Ville'}, {cle: 'pays', libelle: 'Pays', largeur: '70px'},
+        {cle: 'code_postal', libelle: 'CP', largeur: '90px'}, {cle: 'ville', libelle: 'Ville'},
+        {cle: 'pays', libelle: 'Pays', type: 'choix', options: ERP.ref('pays', true).map(function (x) { return {v: x.code, l: x.libelle}; }), largeur: '130px'},
         {cle: 'telephone', libelle: 'Téléphone'}, {cle: 'email', libelle: 'Email'}, {cle: 'siret', libelle: 'SIRET'},
         {cle: 'par_defaut', libelle: 'Défaut', type: 'case'},
       ], {type: 'livraison', pays: 'FR'}, marquer);
@@ -206,6 +211,10 @@
         sel('Langue', 'langue', [{v: 'fr', l: 'Français'}, {v: 'en', l: 'Anglais'}, {v: 'de', l: 'Allemand'}]),
         sel('Désignation imprimée', 'designation_docs', [{v: 'interne', l: 'Interne'}, {v: 'client', l: 'Client'}],
           {aide: 'Client : les pièces portent le libellé client de l\'article.'}),
+        sel('Texte automatique — devis', 'texte_devis', ERP.optionsRef('textes'), {avecVide: '—'}),
+        sel('Texte automatique — ARC', 'texte_arc', ERP.optionsRef('textes'), {avecVide: '—'}),
+        sel('Texte automatique — BL', 'texte_bl', ERP.optionsRef('textes'), {avecVide: '—'}),
+        sel('Texte automatique — facture', 'texte_facture', ERP.optionsRef('textes'), {avecVide: '—'}),
         h('div', {className: 'erp-champ plein erp-cases'},
           ERP.case(T, 'bat_chaque_cde', 'BAT à chaque commande', {change: marquer}),
           ERP.case(T, 'fiche_conformite', 'Fiche de conformité', {change: marquer})),
@@ -218,6 +227,7 @@
         section('Règlement'),
         sel('Conditions de paiement', 'condition_paiement', ERP.optionsRef('conditions_paiement'), {avecVide: '—'}),
         sel('Mode de paiement', 'mode_paiement', ERP.optionsRef('modes_paiement'), {avecVide: '—'}),
+        sel('Devise', 'devise', ERP.optionsRef('devises')),
         sel('Facturation', 'facturation_auto', opt(ERP.M.facturation_auto)),
         c('Email de facturation', 'email_facturation', 'texte', {large: true}),
         section('Accords commerciaux'),
@@ -464,7 +474,7 @@
       ctx.actions.appendChild(ERP.bouton('Enregistrer', enregistrer, {accent: true, titre: 'Ctrl+S'}));
       corps.textContent = '';
       var natures = Object.keys(ERP.M.natures).map(function (k) { return {v: k, l: ERP.M.natures[k]}; });
-      var familles = ERP.ref('familles', true).map(function (f) { return {v: f.code, l: f.libelle}; });
+      var familles = ERP.ref('familles', true).filter(function (f) { return f.nature === A.nature; }).map(function (f) { return {v: f.code, l: f.libelle}; });
       var fourn = tiers.filter(function (t) { return t.est_fournisseur; }).map(function (t) { return {v: t.id, l: t.raison_sociale}; });
       var clients = tiers.filter(function (t) { return t.est_client; }).map(function (t) { return {v: t.id, l: t.raison_sociale}; });
       var sec = function (t) { return h('div', {className: 'erp-champ plein erp-section-form', text: t}); };
@@ -489,7 +499,9 @@
         c('Conditionnement', 'conditionnement', 'texte', {large: true}),
         sec('Index de recherche'),
         sel('Famille', 'famille', familles, {avecVide: '—'}),
-        c('Sous-famille', 'sous_famille'), c('Gamme', 'gamme'), c('Cliché', 'cliche'), c('Code-barres EAN', 'ean'),
+        c('Sous-famille', 'sous_famille'),
+        sel('Gamme', 'gamme', ERP.ref('gammes', true).map(function (g) { return {v: g.code, l: g.libelle}; }), {avecVide: '—'}),
+        c('Cliché', 'cliche'), c('Code-barres EAN', 'ean'),
         sel('Origine habituelle', 'origine_prod', Object.keys(ERP.M.origines || {}).map(function (k) { return {v: k, l: ERP.M.origines[k]}; }), {avecVide: '—'}),
         sel('BAT (module BAT de MySifa)', 'bat_id', bats.map(function (b) {
           return {v: b.id, l: b.description + ' / ' + b.numero_article + ' — ' + ((ERP.M.bat_libelles || {})[b.statut] || b.statut)}; }),

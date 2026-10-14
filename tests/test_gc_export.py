@@ -79,6 +79,17 @@ class Export(unittest.TestCase):
         self.assertEqual([x for x in v if x["CompteNum"] == "411000"][0]["credit_cents"],
                          pieces.charger(c, av)["total_ttc_cents"])
 
+    def test_banque_du_reglement(self):
+        from app.services.gc import compta
+        c = self.c
+        c.execute("INSERT INTO gc_banques (code, libelle, compte, journal) VALUES ('CIC', 'CIC', '512100', 'BQ1')")
+        e = c.execute("""SELECT e.id, p.tiers_id FROM gc_echeances e JOIN gc_pieces p ON p.id=e.piece_id
+                         WHERE e.montant_cents > e.regle_cents LIMIT 1""").fetchone()
+        compta.enregistrer_reglement(c, {"tiers_id": e["tiers_id"], "date_reglement": "2026-10-10", "montant_cents": 100,
+                                         "banque": "CIC", "affectations": [{"echeance_id": e["id"], "montant_cents": 100}]})
+        l = [x for x in export_compta.ecritures(c, "2026-10-10", "2026-10-10") if x["JournalCode"] == "BQ1"]
+        self.assertEqual({x["CompteNum"] for x in l}, {"512100", "411000"})
+
     def test_format_fec(self):
         l = export_compta.ecritures(self.c, "2000-01-01", "2999-12-31")
         txt = export_compta.fec(l).split("\r\n")

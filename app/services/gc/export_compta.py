@@ -119,14 +119,19 @@ def ecritures(conn, debut: str, fin: str) -> list[dict]:
         n += 1
         aux = r["compte_auxiliaire"] or r["tiers_code"]
         m = int(r["montant_cents"])
+        # Banque du règlement : son compte et son journal, sinon les réglages généraux.
+        bq = conn.execute("SELECT compte, journal FROM gc_banques WHERE code=?", (r["banque"],)).fetchone() \
+            if "banque" in r.keys() and r["banque"] else None
+        compte_bq = (bq["compte"] if bq and bq["compte"] else R.get("compte_banque", ""))
+        jbr = ((bq["journal"], "Banque") if bq and bq["journal"] else jb)
         lib = f"Règlement {r['raison_sociale']} {r['reference'] or ''}".strip()[:100]
         if r["sens"] == "encaissement":
-            lignes = [(R.get("compte_banque", ""), "Banque", "", "", m, 0),
+            lignes = [(compte_bq, "Banque", "", "", m, 0),
                       (R.get("compte_clients", ""), "Clients", aux, r["raison_sociale"], 0, m)]
         else:
             lignes = [(R.get("compte_fournisseurs", ""), "Fournisseurs", aux, r["raison_sociale"], m, 0),
-                      (R.get("compte_banque", ""), "Banque", "", "", 0, m)]
-        out += _ecriture(jb, f"{jb[0]}{n:06d}", r["date_reglement"], r["reference"] or f"REG{r['id']}",
+                      (compte_bq, "Banque", "", "", 0, m)]
+        out += _ecriture(jbr, f"{jbr[0]}{n:06d}", r["date_reglement"], r["reference"] or f"REG{r['id']}",
                          r["date_reglement"], lib, r["cree_le"], lignes)
     return out
 

@@ -198,6 +198,12 @@
     {cle: 'unites', libelle: 'Unités'},
     {cle: 'familles', libelle: 'Familles'},
     {cle: 'depots', libelle: 'Dépôts'},
+    {cle: 'pays', libelle: 'Pays'},
+    {cle: 'devises', libelle: 'Devises'},
+    {cle: 'banques', libelle: 'Banques'},
+    {cle: 'types_contact', libelle: 'Types de contacts'},
+    {cle: 'gammes', libelle: 'Gammes'},
+    {cle: 'textes', libelle: 'Libellés automatiques'},
     {cle: 'comptabilite', libelle: 'Comptabilité'},
     {cle: 'demo', libelle: 'Démonstration'},
   ];
@@ -209,7 +215,13 @@
     unites: [['libelle', 'Libellé', 'texte'], ['decimales', 'Décimales', 'entier'], ['rang', 'Ordre', 'entier'], ['actif', 'Actif', 'case']],
     familles: [['libelle', 'Libellé', 'texte'], ['nature', 'Nature', 'nature'], ['compte_vente', 'Compte de vente', 'texte'], ['compte_achat', 'Compte d\'achat', 'texte'], ['rang', 'Ordre', 'entier'], ['actif', 'Actif', 'case']],
     depots: [['libelle', 'Libellé', 'texte'], ['rang', 'Ordre', 'entier'], ['actif', 'Actif', 'case']],
-    sequences: [['libelle', 'Pièce', 'lecture'], ['format', 'Format', 'texte'], ['prochain', 'Prochain numéro', 'entier'], ['annuel', 'Remis à 1 chaque année', 'case']],
+    sequences: [['libelle', 'Pièce', 'lecture'], ['format', 'Format', 'texte'], ['prochain', 'Prochain numéro', 'entier'], ['reinit', 'Remise à zéro', 'reinit']],
+    pays: [['libelle', 'Pays', 'texte'], ['ue', 'Union européenne', 'case'], ['rang', 'Ordre', 'entier'], ['actif', 'Actif', 'case']],
+    devises: [['libelle', 'Devise', 'texte'], ['symbole', 'Symbole', 'texte'], ['rang', 'Ordre', 'entier'], ['actif', 'Actif', 'case']],
+    banques: [['libelle', 'Banque', 'texte'], ['iban', 'IBAN', 'texte'], ['bic', 'BIC', 'texte'], ['compte', 'Compte comptable', 'texte'], ['journal', 'Journal', 'texte'], ['actif', 'Active', 'case']],
+    types_contact: [['libelle', 'Type', 'texte'], ['rang', 'Ordre', 'entier'], ['actif', 'Actif', 'case']],
+    gammes: [['libelle', 'Gamme', 'texte'], ['rang', 'Ordre', 'entier'], ['actif', 'Active', 'case']],
+    textes: [['libelle', 'Libellé', 'texte'], ['texte', 'Texte imprimé', 'texte'], ['rang', 'Ordre', 'entier'], ['actif', 'Actif', 'case']],
   };
 
   ERP.ecrans['/parametres'] = function (main, ctx) {
@@ -263,7 +275,7 @@
     var cols = COLS_REF[nom];
     var modifiees = {};
     var tbody = h('tbody');
-    var natures = Object.keys(ERP.M.natures).map(function (k) { return {v: k, l: ERP.M.natures[k]}; });
+    var natures = Object.keys(ERP.M.natures_famille || ERP.M.natures).map(function (k) { return {v: k, l: (ERP.M.natures_famille || ERP.M.natures)[k]}; });
     function m(l) { modifiees[l.code] = l; ERP.garde = function () { return true; }; }
     function dessiner() {
       tbody.textContent = '';
@@ -276,6 +288,7 @@
           if (c[2] === 'case') el = ERP.case(l, c[0], '', {change: function () { m(l); }});
           else if (c[2] === 'lecture') el = h('span', {text: l[c[0]]});
           else if (c[2] === 'nature') el = ERP.choix(l, c[0], natures, {change: function () { m(l); }});
+          else if (c[2] === 'reinit') el = ERP.choix(l, c[0], [{v: 'annuelle', l: 'Chaque année'}, {v: 'mensuelle', l: 'Chaque mois'}, {v: 'jamais', l: 'Jamais'}], {change: function () { m(l); }});
           else el = ERP.saisie(l, c[0], c[2], {change: function () { m(l); }});
           if (el.classList && c[2] !== 'case') el.classList.add('erp-cell');
           tr.appendChild(h('td', null, el));
@@ -295,7 +308,10 @@
     }, {accent: true}));
     var aide = nom === 'sequences'
       ? 'Jetons : {AAAA} année, {AA} année sur 2 chiffres, {MM} mois, {N:05} compteur sur 5 chiffres. Le numéro est attribué à la validation, sans trou possible.'
-      : nom === 'tva' ? 'Taux en pourcentage (20 pour 20 %). La mention s\'imprime sur la facture (exonération, autoliquidation).' : '';
+      : nom === 'tva' ? 'Taux en pourcentage (20 pour 20 %). La mention s\'imprime sur la facture (exonération, autoliquidation).'
+      : nom === 'textes' ? 'Texte imprimé sur les pièces d\'un client qui l\'a choisi (fiche client › Commercial et livraison › Documents).'
+      : nom === 'banques' ? 'Banque choisie à l\'encaissement : son compte et son journal servent à l\'export comptable.'
+      : nom === 'familles' ? 'Familles de produits, de matières (types), de clients et de fournisseurs.' : '';
     var table = h('table', {className: 'erp-lignes'},
       h('thead', null, h('tr', null, h('th', {text: 'Code'}), cols.map(function (c) { return h('th', {text: c[1]}); }))), tbody);
     var titre = (ERP.M.referentiels_libelles || {})[nom] || nom;

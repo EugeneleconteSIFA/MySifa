@@ -68,6 +68,7 @@ def meta(request: Request):
             "societe": fichiers.lire_societe(conn),
             "types": pieces.TYPES,
             "natures": fichiers.NATURES,
+            "natures_famille": fichiers.NATURES_FAMILLE,
             "origines": pieces.ORIGINES,
             "laboratoires": pieces.LABORATOIRES,
             "types_ligne": pieces.TYPES_LIGNE,
@@ -413,9 +414,11 @@ def referentiel_mysifa(quoi: str, request: Request):
     _user(request)
     requetes = {
         "machines": "SELECT id, code, nom, actif, hors_production FROM machines ORDER BY nom",
-        "outils": """SELECT o.id, o.numero, o.label, o.actif, o.a_valider, t.label AS type_libelle, t.ordre
+        "outils": """SELECT o.id, o.numero, o.label, o.actif, o.a_valider, t.label AS type_libelle, t.ordre,
+                            COALESCE(NULLIF(t.groupe,''), t.label_pluriel, t.label) AS groupe
                      FROM outils o LEFT JOIN outil_types t ON t.cle=o.type_cle ORDER BY t.ordre, o.numero""",
-        "outil_types": "SELECT cle, label, label_pluriel, ordre, actif FROM outil_types ORDER BY ordre",
+        "outil_types": """SELECT cle, label, label_pluriel, ordre, actif, COALESCE(NULLIF(groupe,''), label_pluriel) AS groupe
+                          FROM outil_types ORDER BY ordre""",
         "teintes": "SELECT id, code, libelle, hex, actif FROM encres_couleurs ORDER BY code",
         "fiches": """SELECT id, reference, designation, client, format, laize, matiere, adhesif, nb_couleurs, machine,
                             conditionnement, valide, article_code1, article_code2 FROM fiches_techniques

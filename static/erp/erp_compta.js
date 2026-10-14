@@ -84,6 +84,7 @@
         ERP.champ('Date', ERP.saisie(R, 'date_reglement', 'date')),
         ERP.champ('Montant reçu', montantInp),
         ERP.champ('Mode', ERP.choix(R, 'mode_paiement', ERP.optionsRef('modes_paiement'))),
+        ERP.ref('banques', true).length ? ERP.champ('Banque', ERP.choix(R, 'banque', ERP.optionsRef('banques'), {avecVide: '—'})) : null,
         ERP.champ('Référence (libellé bancaire, n° de chèque)', ERP.saisie(R, 'reference', 'texte'), {large: true})),
       h('div', {className: 'erp-liens-titre', text: 'Affectation aux échéances'}), zoneEch, resteEl);
     dessinerEch();
