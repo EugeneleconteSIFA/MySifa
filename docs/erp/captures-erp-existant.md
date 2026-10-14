@@ -43,7 +43,7 @@ Priorité : **P1** bloque le lot en cours · **P2** le lot suivant · **P3** plu
 |---|---|---|---|
 | ✓ | P1 | **Facturation** : TDB et fiche facture reçus (14/10) | Colonnes échéance, remise, TVA, escompte, règlement, encaissement, représentant, saisie par |
 | ☐ | P2 | **PDF** d'un devis et d'une confirmation de commande envoyée au client | Mise en page |
-| ☐ | P2 | Fiche client : onglets **Livraison**, **Stockage**, **Facturation** (nomenclature : sans objet ; pas d'onglet Tarifs dans RVGI ; cahiers des charges faits) | Ce qu'ils contiennent |
+| ✓ | P2 | Fiche client : onglets **Livraison**, **Stockage**, **Facturation** (commentaires interne / externe, faits le 14/10) (nomenclature : sans objet ; pas d'onglet Tarifs dans RVGI ; cahiers des charges faits) | Ce qu'ils contiennent |
 | ☐ | P2 | **Ordonnancement** et **Production** | Ce qui est encore utilisé (le module est abandonné depuis avril 2026) |
 | ☐ | P2 | **Achats**, **Réceptions**, **Stocks matières** | Commande fournisseur, réception contre commande, bobines |
 | ☐ | P2 | **Comptabilités** : l'export et un fichier exemple | Format attendu par le logiciel comptable |

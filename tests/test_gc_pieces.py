@@ -550,6 +550,9 @@ class Chaine(unittest.TestCase):
         self.assertEqual([n["texte"] for n in notes], ["Colis complets uniquement.", "Mandrin 76."])
         with self.assertRaises(pieces.ErreurPiece):
             cahiers.enregistrer(c, "tiers", 1, [{"etape": "nimporte", "texte": "x"}])
+        c.execute("UPDATE gc_tiers SET instr_livraison_interne='Appeler avant.', instr_livraison_externe='Quai 3.' WHERE id=1")
+        notes = pieces.charger(c, bl)["cahier"]
+        self.assertEqual([(n["texte"], n["imprime"]) for n in notes][:2], [("Appeler avant.", 0), ("Quai 3.", 1)])
 
 
 if __name__ == "__main__":

@@ -110,6 +110,7 @@
     {cle: 'commercial', libelle: 'Commercial et livraison'},
     {cle: 'facturation', libelle: 'Facturation et comptabilité'},
     {cle: 'cahier', libelle: 'Cahier des charges'},
+    {cle: 'instructions', libelle: 'Livraison, stockage, facturation'},
     {cle: 'pieces', libelle: 'Pièces et tarifs'},
   ];
 
@@ -147,7 +148,9 @@
       'site_web', 'rcs', 'ean', 'nif', 'adv_id', 'categorie1', 'categorie2', 'categorie3', 'langue', 'designation_docs',
       'bat_chaque_cde', 'fiche_conformite', 'facturation_auto', 'factor', 'en_compte', 'escompte_bp', 'franco_cents',
       'marge_brute_bp', 'marge_nette_bp', 'notre_no_fournisseur', 'commission_bp', 'est_prospect', 'famille', 'devise',
-      'texte_devis', 'texte_arc', 'texte_bl', 'texte_facture'];
+      'texte_devis', 'texte_arc', 'texte_bl', 'texte_facture',
+      'instr_livraison_interne', 'instr_livraison_externe', 'instr_stockage_interne', 'instr_stockage_externe',
+      'instr_facturation_interne', 'instr_facturation_externe'];
 
     async function enregistrer() {
       var champs = {};
@@ -274,6 +277,20 @@
         c('Notre n° chez ce tiers', 'notre_no_fournisseur')));
     }
 
+    // RVGI : onglets Livraison, Stockage, Facturation — un commentaire interne
+    // (affiché sur la pièce) et un externe (imprimé sur le document du client).
+    function ongletInstructions() {
+      var bloc = function (titre, cle, ou) {
+        return [section(titre),
+          c('Interne', 'instr_' + cle + '_interne', 'zone', {plein: true, aide: 'Affiché en tête ' + ou + '.'}),
+          c('Externe', 'instr_' + cle + '_externe', 'zone', {plein: true, aide: 'Imprimé sur ' + ou.replace(/^d(u|es) /, function (m, x) { return x === 'u' ? 'le ' : 'les '; }) + '.'})];
+      };
+      return ERP.carte(null, h('div', {className: 'erp-form'},
+        bloc('Instructions de livraison', 'livraison', "des bons de livraison et de l'ordre d'expédition")
+          .concat(bloc('Instructions de stockage', 'stockage', 'des commandes'))
+          .concat(bloc('Instructions de facturation', 'facturation', 'des factures et avoirs'))));
+    }
+
     function ongletPieces() {
       var blocs = [];
       if (T.pieces.length) {
@@ -327,7 +344,7 @@
       })));
       var vue = {principal: ongletPrincipal, interlocuteurs: ongletInterlocuteurs, adresses: ongletAdresses, banques: ongletBanques,
                  commercial: ongletCommercial, facturation: ongletFacturation, pieces: ongletPieces,
-                 cahier: function () { return carteCahier('tiers', T.id); }}[onglet] || ongletPrincipal;
+                 cahier: function () { return carteCahier('tiers', T.id); }, instructions: ongletInstructions}[onglet] || ongletPrincipal;
       corps.appendChild(vue());
       if (nouveau && onglet === 'principal') requestAnimationFrame(function () { var f = corps.querySelector('input'); if (f) f.focus(); });
     }

@@ -19,6 +19,9 @@ ETAPE_DE_PIECE = {"devis": "devis", "marche": "commande", "commande": "commande"
                   "aof": "achat", "cde_fournisseur": "achat", "reception": "reception",
                   "facture_fournisseur": "facturation"}
 OBJETS = ("tiers", "article")
+# Instructions de la fiche client (onglets RVGI) : étape → colonne de gc_tiers.
+INSTRUCTIONS = {"livraison": "livraison", "commande": "stockage", "facturation": "facturation"}
+LIBELLES_INSTRUCTIONS = {"livraison": "Livraison", "stockage": "Stockage", "facturation": "Facturation"}
 
 
 def lister(conn, objet: str, objet_id: int) -> list[dict]:
@@ -57,7 +60,16 @@ def pour_piece(conn, piece_id: int, etape: str | None = None) -> list[dict]:
     etape = etape or ETAPE_DE_PIECE.get(p["type"])
     if not etape:
         return []
-    out = [dict(r, source=r["src"]) for r in conn.execute(
+    out = []
+    if etape in INSTRUCTIONS:
+        col = INSTRUCTIONS[etape]
+        t = conn.execute(f"SELECT raison_sociale, instr_{col}_interne AS i, instr_{col}_externe AS x FROM gc_tiers WHERE id=?",
+                         (p["tiers_id"],)).fetchone()
+        src = f"{t['raison_sociale']} (instructions de {LIBELLES_INSTRUCTIONS[col].lower()})" if t else ""
+        for texte, imprime in ((t["i"] if t else None, 0), (t["x"] if t else None, 1)):
+            if texte and texte.strip():
+                out.append({"texte": texte.strip(), "imprime": imprime, "etape": etape, "source": src})
+    out += [dict(r, source=r["src"]) for r in conn.execute(
         """SELECT c.texte, c.imprime, c.etape, t.raison_sociale AS src FROM gc_cahiers c JOIN gc_tiers t ON t.id=c.objet_id
            WHERE c.objet='tiers' AND c.objet_id=? AND c.etape=? ORDER BY c.rang""", (p["tiers_id"], etape)).fetchall()]
     out += [dict(r, source=r["src"]) for r in conn.execute(

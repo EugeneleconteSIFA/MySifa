@@ -54,6 +54,7 @@ CHAMPS_TIERS = {"code": str, "est_client": bool, "est_fournisseur": bool, "raiso
                 "compte_auxiliaire": str, "representant_id": "int_null", "transporteur_id": "int_null",
                 "jours_expedition": int}
 
+CHAMPS_TIERS.update({f"instr_{e}_{s}": str for e in ("livraison", "stockage", "facturation") for s in ("interne", "externe")})
 CHAMPS_TIERS.update({"est_prospect": bool, "famille": "ref", "devise": str, "texte_devis": "ref", "texte_arc": "ref",
                      "texte_bl": "ref", "texte_facture": "ref"})
 CHAMPS_TIERS.update({
