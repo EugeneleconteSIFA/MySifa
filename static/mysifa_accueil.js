@@ -503,6 +503,16 @@
     return null;
   }
   var HORIZONS = ["7", "30", "90"];
+  // Jours d'historique d'un indicateur relevé (du premier relevé à aujourd'hui).
+  function joursHistorique(c) {
+    var d = c.releves && c.releves.depuis;
+    if (!d) return 0;
+    return Math.round((new Date(jourDecale(0) + "T12:00:00") - new Date(d + "T12:00:00")) / 86400000) + 1;
+  }
+  function horizonsDisponibles(c) {
+    var n = joursHistorique(c);
+    return HORIZONS.filter(function (x, i) { return i === 0 || n > Number(HORIZONS[i - 1]); });
+  }
   function horizon(c) {
     var h = paramUrl(c.w.url_capture, "bloc_horizon");
     return HORIZONS.indexOf(h) >= 0 ? Number(h) : 30;
@@ -844,10 +854,15 @@
     }
     var etat = F ? F.lire(c.defsF, c.w.url_capture) : {};
     var h = "";
-    // Horizon de la courbe (réglage d'affichage, bloc_horizon).
-    if (enCourbe) {
+    // Horizon de la courbe (réglage d'affichage, bloc_horizon) : seulement les
+    // horizons que l'historique remplit déjà — 30 j au-delà de 7 jours de
+    // relevés, 90 j au-delà de 30. Une option seule n'est pas un choix : rien.
+    // Le réglage enregistré reste, et reprend effet quand l'historique suit.
+    var dispo = enCourbe ? horizonsDisponibles(c) : [];
+    if (dispo.length > 1) {
       var hz = String(horizon(c));
-      h += '<span class="mac-fgr" role="group" aria-label="Horizon">' + HORIZONS.map(function (x) {
+      if (dispo.indexOf(hz) < 0) hz = dispo[dispo.length - 1];
+      h += '<span class="mac-fgr" role="group" aria-label="Horizon">' + dispo.map(function (x) {
         return '<button type="button" data-fcle="bloc_horizon" data-fv="' + x + '"' +
           (x === hz ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + ' title="Courbe sur ' + x + ' jours">' + x + " j</button>";
       }).join("") + "</span>";
