@@ -253,7 +253,8 @@ def stock_article(conn, article_id: int) -> list[dict]:
 def lister_articles(conn, nature: str | None = None) -> list[dict]:
     filtre, args = ("WHERE a.nature=?", (nature,)) if nature else ("", ())
     return [dict(r) for r in conn.execute(
-        f"""SELECT a.id, a.code, a.libelle, a.nature, a.famille, a.unite, a.base_prix,
+        f"""SELECT a.id, a.code, a.libelle, a.nature, a.famille, a.unite, a.base_prix, a.client_id,
+                   (SELECT raison_sociale FROM gc_tiers t WHERE t.id=a.client_id) AS client_nom,
                    a.prix_vente_cents, a.prix_achat_cents, a.gere_stock, a.actif,
                    (SELECT COALESCE(SUM(m.quantite_milli),0) FROM gc_mouvements m WHERE m.article_id=a.id) AS stock_milli
             FROM gc_articles a {filtre} ORDER BY a.code""", args).fetchall()]
@@ -289,6 +290,15 @@ def enregistrer_article(conn, article_id: int | None, data: dict, tarifs: list |
         for c in ("libelle", "nature", "unite"):
             if not vals.get(c):
                 raise ErreurFichier(f"{c.capitalize()} obligatoire.")
+        # Un produit fini appartient toujours à un client (réponse C7) ; son code
+        # est celui de RVGI : code client / rang chez ce client (« 1183/0001 »).
+        if vals["nature"] == "pf":
+            cli = conn.execute("SELECT code, est_client FROM gc_tiers WHERE id=?", (vals.get("client_id"),)).fetchone() \
+                if vals.get("client_id") else None
+            if not cli or not cli["est_client"]:
+                raise ErreurFichier("Un produit fini appartient à un client : choisir le client.")
+            if not vals.get("code"):
+                vals["code"] = _code_suivant(conn, "gc_articles", cli["code"] + "/")
         if not vals.get("code"):
             vals["code"] = _code_suivant(conn, "gc_articles", {"pf": "PF", "mp": "MP", "service": "PR"}[vals["nature"]])
         if conn.execute("SELECT 1 FROM gc_articles WHERE code=?", (vals["code"],)).fetchone():
@@ -305,6 +315,12 @@ def enregistrer_article(conn, article_id: int | None, data: dict, tarifs: list |
             raise ErreurFichier(f"Le code {vals['code']} est déjà pris.")
         if "libelle" in vals and not vals["libelle"]:
             raise ErreurFichier("Libellé obligatoire.")
+        if "client_id" in vals or "nature" in vals:
+            cur_a = conn.execute("SELECT nature, client_id FROM gc_articles WHERE id=?", (article_id,)).fetchone()
+            nat = vals.get("nature", cur_a["nature"])
+            cli = vals.get("client_id", cur_a["client_id"])
+            if nat == "pf" and not cli:
+                raise ErreurFichier("Un produit fini appartient à un client : choisir le client.")
         if vals:
             conn.execute(f"UPDATE gc_articles SET {', '.join(c + '=?' for c in vals)}, modifie_le=? WHERE id=?",
                          (*vals.values(), now, article_id))

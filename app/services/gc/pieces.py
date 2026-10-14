@@ -503,6 +503,9 @@ def enregistrer(conn, piece_id: int, entete: dict | None, lignes: list[dict] | N
                 art = conn.execute("SELECT * FROM gc_articles WHERE id=?", (_entier(l["article_id"], "Article"),)).fetchone()
                 if not art:
                     raise ErreurPiece(f"Ligne {i} : article introuvable.")
+            if (art is not None and TYPES[p["type"]]["sens"] == "vente" and art["nature"] == "pf"
+                    and art["client_id"] and art["client_id"] != p["tiers_id"]):
+                raise ErreurPiece(f"Ligne {i} : {art['code']} est le produit d'un autre client.")
             libelle = str(l.get("libelle") or (art["libelle"] if art else "")).strip()
             if art is None:
                 if not libelle:

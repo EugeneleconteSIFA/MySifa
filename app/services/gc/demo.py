@@ -25,12 +25,16 @@ FOURNISSEURS = [
     ("F0002", "Films Techniques Rhône", "Vienne", "38200", "30FM"),
     ("F0003", "Encres Morel", "Orléans", "45000", "30FM"),
 ]
+# Les produits finis appartiennent à un client : la clé de gauche est un repère
+# interne à ce fichier, le vrai code (« C0001/0001 ») est attribué à la création.
+CLIENT_DU_PRODUIT = {"PF0001": "C0001", "PF0002": "C0002", "PF0003": "C0003", "PF0004": "C0004", "PF0005": "C0005"}
 ARTICLES = [
-    # code, libellé, nature, famille, unité, base, PV, PA, tva, stock
+    # repère, libellé, nature, famille, unité, base, PV, PA, tva, stock
     ("PF0001", "Étiquette vin 90x120 vergé blanc", "pf", "ETQ", "ETQ", 1000, 4200, None, "N", 1),
     ("PF0002", "Étiquette bière 70x90 PP blanc", "pf", "ETQ", "ETQ", 1000, 2800, None, "N", 1),
     ("PF0003", "Étiquette pharma 35x20 couché", "pf", "ETQ", "ETQ", 1000, 1500, None, "N", 1),
     ("PF0004", "Étiquette fromage Ø80 couché brillant", "pf", "ETQ", "ETQ", 1000, 3100, None, "N", 1),
+    ("PF0005", "Weinetikett 90x120 Naturpapier", "pf", "ETQ", "ETQ", 1000, 4200, None, "N", 1),
     ("MP0001", "Vergé blanc adhésif permanent 330 mm", "mp", "PAP", "ML", 1, None, 62, "N", 1),
     ("MP0002", "PP blanc 60µ adhésif 330 mm", "mp", "FIL", "ML", 1, None, 48, "N", 1),
     ("MP0003", "Couché brillant adhésif 250 mm", "mp", "PAP", "ML", 1, None, 21, "N", 1),
@@ -108,7 +112,7 @@ def reinitialiser(conn, user: dict | None = None) -> dict:
     fourn = {"PAP": "F0001", "FIL": "F0002", "ENC": "F0003"}
     for code, lib, nat, fam, un, base, pv, pa, tva, st in ARTICLES:
         arts[code] = fichiers.enregistrer_article(conn, None, {
-            "code": code, "libelle": lib, "nature": nat, "famille": fam, "unite": un, "base_prix": base,
+            "code": None if nat == "pf" else code, "client_id": tiers.get(CLIENT_DU_PRODUIT.get(code, "")), "libelle": lib, "nature": nat, "famille": fam, "unite": un, "base_prix": base,
             "prix_vente_cents": pv, "prix_achat_cents": pa, "tva_code": tva, "gere_stock": st,
             "fournisseur_id": tiers.get(fourn.get(fam, "")),
         }, origine="demo")
@@ -184,7 +188,7 @@ def reinitialiser(conn, user: dict | None = None) -> dict:
     pieces.declarer_consommation(conn, of1, arts["MP0001"], 4_200_000, "B26-0412", jour(-18), user)
     pieces.declarer_production(conn, of1, 36_000_000, "L26-0418", jour(-15), user)
     b1 = suite([c1], "bl", jour(-12),
-               modif=lambda ls: [dict(l, quantite_milli=35_000_000) if l["article_code"] == "PF0001" else l for l in ls])
+               modif=lambda ls: [dict(l, quantite_milli=35_000_000) if l["article_id"] == arts["PF0001"] else l for l in ls])
     pieces.valider(conn, b1, user)
     f1 = suite([b1], "facture", jour(-11))
     pieces.valider(conn, f1, user)
@@ -202,7 +206,7 @@ def reinitialiser(conn, user: dict | None = None) -> dict:
     b2 = suite([c2], "bl", jour(-2))
     pieces.valider(conn, b2, user)
 
-    c3 = nouvelle("commande", "C0005", [ligne("PF0001", 20_000_000, "C0005")], jour(-3),
+    c3 = nouvelle("commande", "C0005", [ligne("PF0005", 20_000_000, "C0005")], jour(-3),
                   ref_tiers="PO 88123", date_livraison=jour(12))
     pieces.valider(conn, c3, user)
 

@@ -29,9 +29,9 @@ Priorité : **P1** bloque le lot en cours · **P2** le lot suivant · **P3** plu
 | C2 | ✓ À livrer et facturer · à livrer sans facture · à stocker |
 | C3 | ~~Colonnes C.C., I.L., I.S., I.F.~~ — abandonnées (réponse du 14/10 : « je ne sais plus ») |
 | C4 | ✓ Souvent du stock, en général un bug : la quantité à fabriquer est calculée (reste − stock − déjà produit), jamais saisie |
-| C5 | **Unité de vente « 11 — Mille »** : la liste des unités de vente utilisées |
-| C6 | **Colisage** : étape entre stock PF et livraison — que s'y saisit-il ? |
-| C7 | **Code AN** (code client / code article, ex. 1153 / 0003) : l'article est-il toujours propre à un client ? |
+| C5 | ✓ L'unité de vente change selon le client : elle suit l'article, qui appartient au client (C7) |
+| C6 | ✓ Colisage : ne sert à rien chez SIFA — pas repris |
+| C7 | ✓ Oui : un produit fini appartient à un client, code « code client / rang », et une pièce de vente n'accepte que les produits de son client |
 
 ## Encore à fournir
 
@@ -41,7 +41,6 @@ Priorité : **P1** bloque le lot en cours · **P2** le lot suivant · **P3** plu
 | ☐ | P2 | **PDF** d'un devis et d'une confirmation de commande envoyée au client | Mise en page |
 | ☐ | P1 | **Fiche client**, chaque onglet | Adresses multiples, contacts, conditions, tarifs, encours |
 | ☐ | P1 | **Fiche article produit fini**, chaque onglet | Format, unités, conditionnement, prix, liens outil / fiche technique |
-| ☐ | P2 | **Colisage** | Voir C6 |
 | ☐ | P2 | **Ordonnancement** et **Production** | Ce qui est encore utilisé (le module est abandonné depuis avril 2026) |
 | ☐ | P2 | **Achats**, **Réceptions**, **Stocks matières** | Commande fournisseur, réception contre commande, bobines |
 | ☐ | P2 | **Comptabilités** : l'export et un fichier exemple | Format attendu par le logiciel comptable |

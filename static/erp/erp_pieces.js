@@ -194,7 +194,11 @@
       ]);
       tiers = r2[0];
       var natures = ARTICLES_PAR_SENS[sensDe(P.type)];
-      articles = r2[1].filter(function (a) { return a.actif && natures.indexOf(a.nature) >= 0; });
+      var vente = sensDe(P.type) === 'vente';
+      // Vente : les produits finis du client, plus les prestations et articles communs.
+      articles = r2[1].filter(function (a) {
+        return a.actif && natures.indexOf(a.nature) >= 0 && !(vente && a.nature === 'pf' && a.client_id && a.client_id !== P.tiers_id);
+      });
       // Un prix déjà enregistré ne bouge plus quand la quantité change : il a
       // été convenu (et sur une ligne reprise, il vient de la pièce amont).
       lignes = P.lignes.map(function (l) { return Object.assign({_prixManuel: !!l.prix_cents || !!l.ligne_amont_id}, l); });

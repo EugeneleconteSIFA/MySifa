@@ -54,6 +54,7 @@ class Export(unittest.TestCase):
         c = self.c
         t = c.execute("SELECT id FROM gc_tiers WHERE code='C0002'").fetchone()["id"]   # remise 2 %
         a = {r["code"]: r["id"] for r in c.execute("SELECT id, code FROM gc_articles").fetchall()}
+        a["PF0002"] = c.execute("SELECT id FROM gc_articles WHERE client_id=? AND nature='pf'", (t,)).fetchone()["id"]
         co = pieces.creer(c, "commande", t)
         pieces.enregistrer(c, co, {"date_piece": "2026-05-01"}, [
             {"article_id": a["PF0002"], "quantite_milli": 3_333_000, "prix_cents": 2800, "base_prix": 1000},

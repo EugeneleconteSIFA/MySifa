@@ -422,6 +422,20 @@ class Chaine(unittest.TestCase):
         pieces.declarer_production(c, of, 3_000_000)
         self.assertEqual(pieces.charger(c, co)["statut"], "solde")               # produite = ligne à stocker soldée
 
+    def test_produit_du_client(self):
+        from app.services.gc import fichiers
+        c = self.conn
+        with self.assertRaises(ErreurPiece):
+            fichiers.enregistrer_article(c, None, {"libelle": "Sans client", "nature": "pf", "unite": "ETQ"})
+        aid = fichiers.enregistrer_article(c, None, {"libelle": "Étiquette du client 1", "nature": "pf", "unite": "ETQ",
+                                                     "client_id": 1, "base_prix": 1000})
+        self.assertEqual(c.execute("SELECT code FROM gc_articles WHERE id=?", (aid,)).fetchone()["code"], "C1/0001")
+        c.execute("""INSERT INTO gc_tiers (id, code, est_client, raison_sociale, cree_le, modifie_le)
+                     VALUES (3, 'C2', 1, 'Autre client', ?, ?)""", (NOW, NOW))
+        co = pieces.creer(c, "commande", 3)
+        with self.assertRaises(ErreurPiece):
+            pieces.enregistrer(c, co, None, [_ligne(aid, 1000, 100)])     # produit d'un autre client
+
     def test_achat_reception_stock(self):
         c = self.conn
         c.execute("UPDATE gc_articles SET prix_achat_cents=900 WHERE id=1")
