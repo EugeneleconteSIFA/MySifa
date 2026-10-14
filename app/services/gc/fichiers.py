@@ -69,7 +69,8 @@ CHAMPS_ARTICLE = {"code": str, "libelle": str, "libelle_client": str, "nature": 
                   "gamme": str, "cliche": str, "ean": str, "unite_achat": str, "unite_conditionnement": str,
                   "taxe_eco_cents": "int_null", "code_douane": str, "prix_stock_cents": "int_null",
                   "stock_mini_milli": "int_null", "stock_maxi_milli": "int_null", "zone": str,
-                  "remplacement_id": "int_null", "ref_client2": str, "ref_client3": str}
+                  "remplacement_id": "int_null", "ref_client2": str, "ref_client3": str,
+                  "ml_par_bobine_milli": "int_null"}
 
 NATURES = {"pf": "Produit fini", "mp": "Matière première", "service": "Prestation"}
 

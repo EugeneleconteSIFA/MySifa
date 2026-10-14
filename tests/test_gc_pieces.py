@@ -93,6 +93,13 @@ class Calculs(unittest.TestCase):
         self.assertEqual(t["tva"], 1800 + 248)   # 4500 × 5,5 % = 247,5 → 248
         self.assertEqual(t["ttc"], t["ht"] + t["tva"])
 
+    def test_conditionnement_bobines(self):
+        # Bon de commande RVGI 5568 : 56 400 m² en laize 470 = 120 000 ML = 10 bobines de 12 000
+        cb = calculs.conditionnement_bobines(56_400_000, "M2", 4700, 12_000_000)
+        self.assertEqual((cb["ml_milli"], cb["bobines"]), (120_000_000, 10))
+        self.assertEqual(calculs.conditionnement_bobines(28_200_000, "M2", 4700, 10_000_000)["bobines"], 6)
+        self.assertIsNone(calculs.conditionnement_bobines(1000, "ML", 4700, None))
+
     def test_echeance(self):
         d = date(2026, 10, 14)
         self.assertEqual(calculs.date_echeance(d, 30), date(2026, 11, 13))

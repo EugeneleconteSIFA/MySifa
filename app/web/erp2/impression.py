@@ -238,8 +238,21 @@ def donnees(conn, piece_id: int, modele: str = "") -> dict:
         uv = _unite_vente(l["base_prix"], l["unite"], unites_lib)
         if typ in ("bl", "facture", "avoir", "commande") and uv and not expedition:
             des.append(f"Unité de vente : {_e(uv)}")
-        if typ in ("cde_fournisseur", "aof"):
-            des.append(f"Unité d'achat : {_e(uv or unites_lib.get(l['unite'], ''))}")
+        if typ in ("cde_fournisseur", "aof", "reception"):
+            if typ != "reception":
+                des.append(f"Unité d'achat : {_e(uv or unites_lib.get(l['unite'], ''))}")
+            ua = art["unite_achat"] if "unite_achat" in art.keys() and art["unite_achat"] else l["unite"]
+            cb = calculs.conditionnement_bobines(l["quantite_milli"], ua, art["format_l_dmm"],
+                                                 art["ml_par_bobine_milli"] if "ml_par_bobine_milli" in art.keys() else None)
+            if cb:
+                if art["unite_conditionnement"] if "unite_conditionnement" in art.keys() else "":
+                    des.append(f"Unité de conditionnement : {_e(unites_lib.get(art['unite_conditionnement'], art['unite_conditionnement']))}")
+                des.append(f"Laize {cb['laize_mm']:g}".replace(".", ","))
+                ml = _qte(cb["ml_milli"], 2)
+                if cb["bobines"]:
+                    des.append(f"<b>{cb['bobines']} bobines de {_qte(cb['ml_par_bobine_milli'], 0)} soit {ml} ML</b>")
+                else:
+                    des.append(f"<b>Soit {ml} ML</b>")
         rappel = []
         if "commande" in ch:
             rappel.append(f"Commande No {_e(ch['commande'][0])}/{ch['commande'][1]}")
@@ -288,7 +301,14 @@ def donnees(conn, piece_id: int, modele: str = "") -> dict:
         elif typ == "of":
             cells = [q, _e(unites_lib.get(l["unite"], l["unite"]))]
         else:
-            pu = f'{l["prix_cents"] / 100:,.3f}'.replace(",", " ").replace(".", ",")
+            # Comme RVGI : un prix au mille s'affiche au mille (3 décimales) ; sinon
+            # à l'unité, avec 4 décimales si la base l'exige (0,4540 € le m²).
+            base = int(l["base_prix"] or 1)
+            if base in (1, 1000):
+                pu = f'{l["prix_cents"] / 100:,.3f}'
+            else:
+                pu = f'{l["prix_cents"] / 100 / base:,.4f}'
+            pu = pu.replace(",", " ").replace(".", ",")
             if l["remise_bp"]:
                 pu += f'<br/>−{int(l["remise_bp"]) / 100:g} %'.replace(".", ",")
             mt = _euros(l["montant_ht_cents"]).replace(" €", "")

@@ -84,6 +84,21 @@ def date_echeance(d: date, jours: int, fin_de_mois: bool = False, jour_du_mois: 
     return e
 
 
+def conditionnement_bobines(quantite_milli: int, unite: str, laize_dmm: int | None,
+                            ml_par_bobine_milli: int | None) -> dict | None:
+    """Équivalent en mètres linéaires et en bobines d'une quantité achetée au m².
+
+    56 400 m² en laize 470 mm = 120 000 ML ; en bobines de 12 000 ML = 10 bobines.
+    None si l'unité n'est pas le m² ou si la laize manque."""
+    if (unite or "").upper() not in ("M2", "M²") or not laize_dmm:
+        return None
+    ml_milli = div_arrondi(int(quantite_milli) * 10000, int(laize_dmm))   # m² / (laize mm / 1000)
+    out = {"ml_milli": ml_milli, "laize_mm": int(laize_dmm) / 10, "bobines": None, "ml_par_bobine_milli": ml_par_bobine_milli}
+    if ml_par_bobine_milli:
+        out["bobines"] = -(-ml_milli // int(ml_par_bobine_milli))          # arrondi au supérieur
+    return out
+
+
 _JETON = re.compile(r"\{(AAAA|AA|MM|N(?::(\d+))?)\}")
 
 

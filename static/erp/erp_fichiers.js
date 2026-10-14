@@ -357,7 +357,7 @@
        'conditionnement', 'origine_prod', 'bat_id', 'fsc_allegation', 'fsc_pct', 'fsc_bois', 'fsc_requis', 'designation',
        'code3', 'couleur', 'poids_g', 'sous_famille', 'gamme', 'cliche', 'ean', 'unite_achat', 'unite_conditionnement',
        'taxe_eco_cents', 'code_douane', 'prix_stock_cents', 'stock_mini_milli', 'stock_maxi_milli', 'zone',
-       'ref_client2', 'ref_client3']
+       'ref_client2', 'ref_client3', 'ml_par_bobine_milli']
         .forEach(function (k) { if (k in A) champs[k] = A[k]; });
       var r = await ERP.api('/api/erp2/articles' + (nouveau ? '' : '/' + A.id), {
         method: nouveau ? 'POST' : 'PUT',
@@ -453,7 +453,9 @@
         c('Taxe écologique', 'taxe_eco_cents', 'euros'), c('Code douane', 'code_douane'),
         sec('Stock'),
         c('Prix de stock', 'prix_stock_cents', 'euros'), c('Zone', 'zone'),
-        c('Stock mini', 'stock_mini_milli', 'qte'), c('Stock maxi', 'stock_maxi_milli', 'qte'));
+        c('Stock mini', 'stock_mini_milli', 'qte'), c('Stock maxi', 'stock_maxi_milli', 'qte'),
+        A.nature === 'mp' ? c('Longueur d\'une bobine (ML)', 'ml_par_bobine_milli', 'qte',
+          {aide: 'Achat au m² : la commande affiche laize, nombre de bobines et mètres linéaires.'}) : null);
       // FSC : la matière porte son allégation ; le produit fini dit s'il est vendu certifié.
       // L'allégation d'un dossier se calcule des matières consommées (règle de l'affiche atelier).
       var fscOpts = Object.keys(ERP.M.fsc || {}).map(function (k) { return {v: k, l: ERP.M.fsc[k]}; });
