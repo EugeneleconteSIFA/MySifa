@@ -361,6 +361,8 @@ def carnet(conn, types: list[str]) -> list[dict]:
             d["a_fabriquer_milli"] = max(0, d["reste_milli"] - max(0, int(d["stock_milli"] or 0)) - deja)
         else:
             d["a_fabriquer_milli"] = 0
+        from app.services.gc import fsc as _fsc
+        d["fsc"] = _fsc.libelle(_fsc.allegation_ligne(conn, d["ligne_id"])) if d["type"] in ("commande", "marche", "bl") else ""
         d["bat"] = ""
         if d["laboratoire"] in LABORATOIRES_AVEC_BAT and d["position"] not in ("solde", "annule"):
             d["bat"] = bat_article(conn, d["article_id"]) or "non_rattache"

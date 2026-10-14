@@ -32,7 +32,8 @@ REFERENTIELS = {
 
 CHAMPS_SOCIETE = ("raison_sociale", "forme_juridique", "capital_cents", "siret", "rcs", "tva_intra", "ape",
                   "adresse1", "adresse2", "code_postal", "ville", "pays", "telephone", "email", "iban", "bic",
-                  "penalites_retard")
+                  "penalites_retard", "fsc_certificat", "fsc_licence", "mention_origine", "texte_affacturage",
+                  "texte_penalites", "texte_juridiction", "texte_reserve_propriete", "tva_sur_debits")
 
 CHAMPS_TIERS = {"code": str, "est_client": bool, "est_fournisseur": bool, "raison_sociale": str, "siret": str,
                 "tva_intra": str, "email": str, "email_facturation": str, "telephone": str,
@@ -49,7 +50,8 @@ CHAMPS_ARTICLE = {"code": str, "libelle": str, "libelle_client": str, "nature": 
                   "tva_code": "ref", "gere_stock": bool, "fournisseur_id": "int_null", "client_id": "int_null",
                   "notes": str, "actif": bool, "ref_client": str, "format_l_dmm": "int_null",
                   "format_a_dmm": "int_null", "conditionnement": str, "designation": str, "origine_prod": str,
-                  "bat_id": "int_null"}
+                  "bat_id": "int_null", "fsc_allegation": str, "fsc_pct": "int_null", "fsc_bois": bool,
+                  "fsc_requis": bool}
 
 NATURES = {"pf": "Produit fini", "mp": "Matière première", "service": "Prestation"}
 
@@ -127,7 +129,7 @@ def enregistrer_societe(conn, data: dict) -> None:
     vals = {}
     for c in CHAMPS_SOCIETE:
         if c in data:
-            vals[c] = _conv(data[c], "int_null" if c == "capital_cents" else str, c)
+            vals[c] = _conv(data[c], "int_null" if c == "capital_cents" else bool if c == "tva_sur_debits" else str, c)
     if vals:
         conn.execute(f"UPDATE gc_societe SET {', '.join(c + '=?' for c in vals)}, modifie_le=? WHERE id=1",
                      (*vals.values(), _maintenant()))

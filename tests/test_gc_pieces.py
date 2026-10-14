@@ -105,9 +105,9 @@ class Calculs(unittest.TestCase):
         self.assertEqual(calculs.formater_numero("{AAAA}-{MM}-{N}", 7, date(2026, 3, 1)), "2026-03-7")
         with get_db() as conn:
             _base(conn)
-            self.assertEqual(calculs.prendre_numero(conn, "facture", date(2026, 12, 31)), "FA2600001")
-            self.assertEqual(calculs.prendre_numero(conn, "facture", date(2026, 12, 31)), "FA2600002")
-            self.assertEqual(calculs.prendre_numero(conn, "facture", date(2027, 1, 1)), "FA2700001")
+            self.assertEqual(calculs.prendre_numero(conn, "facture", date(2026, 12, 31)), "26120001")   # format RVGI
+            self.assertEqual(calculs.prendre_numero(conn, "facture", date(2026, 12, 31)), "26120002")
+            self.assertEqual(calculs.prendre_numero(conn, "facture", date(2027, 1, 1)), "27010001")
             # Devis : compteur mensuel ; commande : continu
             self.assertEqual(calculs.prendre_numero(conn, "devis", date(2026, 10, 30)), "2610001")
             self.assertEqual(calculs.prendre_numero(conn, "devis", date(2026, 10, 31)), "2610002")
@@ -177,7 +177,7 @@ class Chaine(unittest.TestCase):
         fa = pieces.transformer(c, [bl, bl2], "facture")
         f = pieces.charger(c, fa)
         self.assertEqual(sum(x["montant_ht_cents"] for x in f["lignes"]), 25000 + 8000)
-        self.assertEqual(pieces.valider(c, fa), "FA2600001")
+        self.assertRegex(pieces.valider(c, fa), r"^\d{4}0001$")          # AAMM + compteur mensuel
         f = pieces.charger(c, fa)
         self.assertEqual(f["total_ttc_cents"], 33000 + 6600)
         self.assertEqual(f["echeances"][0]["date_echeance"], "2026-11-30")

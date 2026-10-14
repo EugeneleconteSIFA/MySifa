@@ -16,7 +16,7 @@ from app.services.auth_service import get_current_user
 from app.services.audit_service import log_action
 from fastapi.responses import Response
 
-from app.services.gc import compta, demo, export_compta, fichiers, pieces
+from app.services.gc import compta, demo, export_compta, fichiers, fsc, pieces
 from app.services.gc.pieces import ErreurPiece
 
 router = APIRouter(prefix="/api/erp2", tags=["erp2"])
@@ -71,6 +71,7 @@ def meta(request: Request):
             "origines": pieces.ORIGINES,
             "laboratoires": pieces.LABORATOIRES,
             "types_ligne": pieces.TYPES_LIGNE,
+            "fsc": fsc.LIBELLES,
             "bat_libelles": pieces.BAT_LIBELLES,
             # Branchés sur MySifa : transporteurs de MyExpé, comptes des commerciaux.
             "transporteurs": [dict(r) for r in conn.execute(
@@ -238,8 +239,11 @@ def piece_valider(piece_id: int, request: Request):
     with _ecriture() as conn:
         numero = pieces.valider(conn, piece_id, u)
         alertes = pieces.alertes_stock(conn, piece_id)
-        if conn.execute("SELECT type FROM gc_pieces WHERE id=?", (piece_id,)).fetchone()["type"] == "of":
+        type_p = conn.execute("SELECT type FROM gc_pieces WHERE id=?", (piece_id,)).fetchone()["type"]
+        if type_p == "of":
             alertes += pieces.alertes_bat(conn, piece_id)
+        if type_p in ("bl", "facture"):
+            alertes += fsc.alertes(conn, piece_id)
     _trace(request, u, "VALIDATE", f"Pièce {numero}")
     return {"numero": numero, "alertes": alertes}
 
