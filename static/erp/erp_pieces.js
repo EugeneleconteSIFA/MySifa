@@ -534,6 +534,13 @@
         btnEnr = null;
         a.push(boutonImprimer());
         if (P.statut !== 'annule') {
+          var aPayer = P.echeances.filter(function (e) { return e.montant_cents > e.regle_cents; });
+          if (aPayer.length && (P.type === 'facture' || P.type === 'facture_fournisseur')) {
+            a.push(ERP.bouton(P.type === 'facture' ? 'Encaisser' : 'Payer', function () {
+              return ERP.saisirReglement({tiers: tiers, sens: P.type === 'facture' ? 'encaissement' : 'decaissement',
+                                          echeanceId: aPayer[0].id}, charger);
+            }, {accent: true}));
+          }
           (P.aval_possibles || []).forEach(function (cible) {
             a.push(ERP.bouton(ACTION_AVAL[cible] || libType(cible), function () { return transformer(P, cible); }, {accent: cible !== 'avoir'}));
           });

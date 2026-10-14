@@ -40,7 +40,7 @@ NOW = "2026-10-14T10:00:00"
 
 
 def _base(conn):
-    for t in ("gc_mouvements", "gc_echeances", "gc_pieces_lignes", "gc_pieces", "gc_tarifs",
+    for t in ("gc_reglements_affectations", "gc_reglements", "gc_mouvements", "gc_echeances", "gc_pieces_lignes", "gc_pieces", "gc_tarifs",
               "gc_articles", "gc_tiers_adresses", "gc_tiers"):
         conn.execute(f"DELETE FROM {t}")
     conn.execute("UPDATE gc_sequences SET prochain=1, annee=0")
@@ -224,6 +224,35 @@ class Chaine(unittest.TestCase):
             pieces.valider(c, co)
         with self.assertRaises(ErreurPiece):
             pieces.enregistrer(c, co, None, [_ligne(1, 0, 100)])  # quantité nulle
+
+    def test_reglements(self):
+        from app.services.gc import compta
+        c = self.conn
+        co = pieces.creer(c, "commande", 1)
+        pieces.enregistrer(c, co, None, [_ligne(2, 1000, 10000)])   # 100 € HT, 120 € TTC
+        pieces.valider(c, co)
+        bl = pieces.transformer(c, [co], "bl")
+        pieces.valider(c, bl)
+        fa = pieces.transformer(c, [bl], "facture")
+        pieces.valider(c, fa)
+        ech = compta.echeances(c, 1, ouvertes=True)
+        self.assertEqual([e["reste_cents"] for e in ech], [12000])
+        with self.assertRaises(ErreurPiece):     # au-delà du reste dû
+            compta.enregistrer_reglement(c, {"tiers_id": 1, "date_reglement": "2026-10-20", "montant_cents": 15000,
+                                             "affectations": [{"echeance_id": ech[0]["id"], "montant_cents": 13000}]})
+        with self.assertRaises(ErreurPiece):     # affectations > montant
+            compta.enregistrer_reglement(c, {"tiers_id": 1, "date_reglement": "2026-10-20", "montant_cents": 1000,
+                                             "affectations": [{"echeance_id": ech[0]["id"], "montant_cents": 5000}]})
+        r1 = compta.enregistrer_reglement(c, {"tiers_id": 1, "date_reglement": "2026-10-20", "montant_cents": 5000,
+                                              "affectations": [{"echeance_id": ech[0]["id"], "montant_cents": 5000}]})
+        self.assertEqual(pieces.charger(c, fa)["statut"], "partiel")
+        compta.enregistrer_reglement(c, {"tiers_id": 1, "date_reglement": "2026-10-25", "montant_cents": 7000,
+                                         "affectations": [{"echeance_id": ech[0]["id"], "montant_cents": 7000}]})
+        self.assertEqual(pieces.charger(c, fa)["statut"], "solde")
+        self.assertEqual(compta.echeances(c, 1, ouvertes=True), [])
+        compta.supprimer_reglement(c, r1)
+        self.assertEqual(pieces.charger(c, fa)["statut"], "partiel")
+        self.assertEqual(compta.echeances(c, 1, ouvertes=True)[0]["reste_cents"], 5000)
 
     def test_achat_reception_stock(self):
         c = self.conn

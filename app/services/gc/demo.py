@@ -44,6 +44,9 @@ TABLES = ("gc_mouvements", "gc_echeances", "gc_pieces_lignes", "gc_pieces", "gc_
 
 
 def effacer(conn) -> None:
+    t = "SELECT id FROM gc_tiers WHERE origine='demo'"
+    conn.execute(f"DELETE FROM gc_reglements_affectations WHERE reglement_id IN (SELECT id FROM gc_reglements WHERE tiers_id IN ({t}))")
+    conn.execute(f"DELETE FROM gc_reglements WHERE tiers_id IN ({t})")
     ids = "SELECT id FROM gc_pieces WHERE origine='demo'"
     conn.execute(f"DELETE FROM gc_mouvements WHERE piece_id IN ({ids}) OR article_id IN (SELECT id FROM gc_articles WHERE origine='demo')")
     conn.execute(f"DELETE FROM gc_echeances WHERE piece_id IN ({ids})")
@@ -51,7 +54,6 @@ def effacer(conn) -> None:
     conn.execute("DELETE FROM gc_pieces WHERE origine='demo'")
     conn.execute("DELETE FROM gc_tarifs WHERE article_id IN (SELECT id FROM gc_articles WHERE origine='demo')")
     conn.execute("DELETE FROM gc_articles WHERE origine='demo'")
-    t = "SELECT id FROM gc_tiers WHERE origine='demo'"
     conn.execute(f"DELETE FROM gc_tiers_contacts WHERE tiers_id IN ({t})")
     conn.execute(f"DELETE FROM gc_tiers_adresses WHERE tiers_id IN ({t})")
     conn.execute("DELETE FROM gc_tiers WHERE origine='demo'")
@@ -159,6 +161,13 @@ def reinitialiser(conn, user: dict | None = None) -> dict:
     pieces.valider(conn, b1, user)
     f1 = suite([b1], "facture", jour(-11))
     pieces.valider(conn, f1, user)
+
+    from app.services.gc import compta
+    ech = conn.execute("SELECT id, montant_cents FROM gc_echeances WHERE piece_id=?", (f1,)).fetchone()
+    compta.enregistrer_reglement(conn, {
+        "tiers_id": tiers["C0001"], "sens": "encaissement", "date_reglement": jour(-3), "mode_paiement": "VIR",
+        "montant_cents": 100000, "reference": "VIR DOMAINE 3 COLLINES",
+        "affectations": [{"echeance_id": ech["id"], "montant_cents": 100000}]}, user)
 
     c2 = nouvelle("commande", "C0002", [ligne("PF0002", 12_000_000, "C0002"), ligne("PR0002", 2000, "C0002")],
                   jour(-8), ref_tiers="Cde 4471", date_livraison=jour(5))

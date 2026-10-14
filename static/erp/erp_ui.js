@@ -91,11 +91,11 @@
     devis: {valide: 'Envoyé', partiel: 'Accepté en partie', solde: 'Accepté'},
     commande: {valide: 'À livrer', partiel: 'Livrée en partie', solde: 'Livrée'},
     bl: {valide: 'À facturer', partiel: 'Facturé en partie', solde: 'Facturé'},
-    facture: {valide: 'Émise'},
+    facture: {valide: 'Émise', partiel: 'Réglée en partie', solde: 'Réglée'},
     avoir: {valide: 'Émis'},
     cde_fournisseur: {valide: 'À recevoir', partiel: 'Reçue en partie', solde: 'Reçue'},
     reception: {valide: 'À facturer', partiel: 'Facturée en partie', solde: 'Facturée'},
-    facture_fournisseur: {valide: 'Enregistrée'},
+    facture_fournisseur: {valide: 'À payer', partiel: 'Payée en partie', solde: 'Payée'},
   };
   ERP.etat = function (type, statut) {
     var e = ETATS[statut] || {l: statut, ton: 'neutre'};
@@ -257,7 +257,8 @@
     var fond, corps = h('div', {className: 'erp-modal-corps'}, contenu);
     var pied = h('div', {className: 'erp-modal-pied'});
     function fermer() { fond.remove(); document.removeEventListener('keydown', echap, true); if (o.fermeture) o.fermeture(); }
-    function echap(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fermer(); } }
+    // Échap ferme d'abord une liste de suggestions ouverte, pas la fenêtre.
+    function echap(e) { if (e.key === 'Escape' && !document.querySelector('.erp-ac')) { e.preventDefault(); e.stopPropagation(); fermer(); } }
     (boutons || [{libelle: 'Fermer'}]).forEach(function (b) {
       var btn = h('button', {type: 'button', className: 'erp-btn' + (b.accent ? ' erp-btn-accent' : '') + (b.danger ? ' erp-btn-danger' : ''),
         text: b.libelle});

@@ -14,7 +14,7 @@ from config import ROLES_ERP2
 from app.core.database import get_db
 from app.services.auth_service import get_current_user
 from app.services.audit_service import log_action
-from app.services.gc import demo, fichiers, pieces
+from app.services.gc import compta, demo, fichiers, pieces
 from app.services.gc.pieces import ErreurPiece
 
 router = APIRouter(prefix="/api/erp2", tags=["erp2"])
@@ -270,16 +270,34 @@ async def mouvement_creer(request: Request):
 # ── Comptabilité ──────────────────────────────────────────────────────
 
 @router.get("/echeances")
-def echeances(request: Request):
+def echeances(request: Request, tiers_id: int | None = None, ouvertes: bool = False):
     _user(request)
-    with get_db() as conn:
-        return [dict(r) for r in conn.execute(
-            """SELECT e.id, e.date_echeance, e.montant_cents, e.regle_cents,
-                      e.montant_cents - e.regle_cents AS reste_cents,
-                      p.id AS piece_id, p.type, p.numero, p.date_piece, p.mode_paiement,
-                      t.id AS tiers_id, t.raison_sociale AS tiers_nom
-               FROM gc_echeances e JOIN gc_pieces p ON p.id=e.piece_id JOIN gc_tiers t ON t.id=p.tiers_id
-               ORDER BY e.date_echeance""").fetchall()]
+    return _lecture(compta.echeances, tiers_id, ouvertes)
+
+
+@router.get("/reglements")
+def reglements(request: Request):
+    _user(request)
+    return _lecture(compta.reglements)
+
+
+@router.post("/reglements")
+async def reglement_creer(request: Request):
+    u = _user(request)
+    body = await request.json()
+    with _ecriture() as conn:
+        rid = compta.enregistrer_reglement(conn, body, u)
+    _trace(request, u, "CREATE", f"Règlement #{rid}", {"montant_cents": body.get("montant_cents")})
+    return {"id": rid}
+
+
+@router.delete("/reglements/{reglement_id}")
+def reglement_supprimer(reglement_id: int, request: Request):
+    u = _user(request)
+    with _ecriture() as conn:
+        compta.supprimer_reglement(conn, reglement_id)
+    _trace(request, u, "DELETE", f"Règlement #{reglement_id}")
+    return {"ok": True}
 
 
 # ── Recherche globale ─────────────────────────────────────────────────

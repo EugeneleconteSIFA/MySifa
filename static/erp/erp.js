@@ -34,6 +34,7 @@
     ]},
     {groupe: 'Comptabilité', liens: [
       {chemin: '/compta/echeances', libelle: 'Échéances'},
+      {chemin: '/compta/reglements', libelle: 'Règlements'},
     ]},
     {groupe: 'Fichiers', liens: [
       {chemin: '/fichiers/clients', libelle: 'Clients'},

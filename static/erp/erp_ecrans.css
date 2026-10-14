@@ -200,3 +200,7 @@ select.erp-input:disabled { appearance: none; }
 /* Tables éditables des fiches (adresses, contacts, tarifs) */
 .erp-fiche .erp-lignes input.erp-cell[type="text"] { min-width: 110px; }
 .erp-fiche .erp-lignes select.erp-cell { min-width: 120px; }
+
+/* Saisie de règlement */
+.erp-regl-ech { margin-bottom: 8px; }
+.erp-aide.erreur { color: var(--danger); font-weight: 600; }
