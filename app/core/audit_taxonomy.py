@@ -50,6 +50,7 @@ MODULE_LABELS: dict[str, str] = {
     "diagnostic": "Diagnostic SQL",
     "dossiers": "Dossiers",
     "erp": "ERP / RVGI",
+    "erp2": "Nouvel ERP",
     "expe": "MyExpé",
     "fabrication": "Fabrication",
     "fsc": "FSC",
@@ -205,6 +206,7 @@ PATH_MODULES: dict[str, str] = {
     # echanges machine (/oauth/token, /oauth/register) sont dans SKIP_PREFIXES.
     "/oauth": "mcp",
     "/api/encres": "settings",
+    "/api/erp2": "erp2",
     "/api/erp": "erp",
     "/api/rvgi": "erp",
     "/api/rvgi-tiers": "erp",

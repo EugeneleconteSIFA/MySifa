@@ -1,0 +1,243 @@
+"""
+Nouvel ERP — calculs et cycle de vie des pièces (app/services/gc).
+
+1. Montant de ligne : prix au mille, remise, arrondi au demi supérieur.
+2. Totaux : TVA par taux, remise de pied par taux, TTC = HT + TVA.
+3. Échéances : date de facture, fin de mois, jour fixe.
+4. Numérotation : format, compteur, remise à 1 au changement d'année.
+5. Chaîne devis → commande → BL → facture : liens de ligne, reliquats,
+   état des pièces amont, mouvements de stock, échéances, numéros.
+6. Refus : modifier une pièce validée, annuler une facture, valider pour un
+   client bloqué, transformer deux fois au-delà du reste, avoir au-delà du
+   facturé.
+7. Annulation d'un BL : stock contrepassé, commande rouverte.
+
+Lancer : python3 tests/test_gc_pieces.py
+"""
+from __future__ import annotations
+
+import os
+import sys
+import tempfile
+import unittest
+from datetime import date
+from pathlib import Path
+
+_tmp = tempfile.mkdtemp(prefix="mysifa_gc_test_")
+os.environ["DB_PATH"] = os.path.join(_tmp, "test.db")
+os.environ["ERP_MIRROR_DB"] = os.path.join(_tmp, "erp_mirror.db")
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import database  # noqa: E402,F401 — le shim d'abord (CLAUDE.md)
+from database import get_db  # noqa: E402
+from app.services.gc import calculs, pieces  # noqa: E402
+from app.services.gc.pieces import ErreurPiece  # noqa: E402
+
+NOW = "2026-10-14T10:00:00"
+
+
+def _base(conn):
+    for t in ("gc_mouvements", "gc_echeances", "gc_pieces_lignes", "gc_pieces", "gc_tarifs",
+              "gc_articles", "gc_tiers_adresses", "gc_tiers"):
+        conn.execute(f"DELETE FROM {t}")
+    conn.execute("UPDATE gc_sequences SET prochain=1, annee=0")
+    conn.execute(
+        """INSERT INTO gc_tiers (id, code, est_client, raison_sociale, condition_paiement, cree_le, modifie_le)
+           VALUES (1, 'C1', 1, 'Client Un', '30FM', ?, ?)""", (NOW, NOW))
+    conn.execute(
+        """INSERT INTO gc_tiers (id, code, est_fournisseur, raison_sociale, cree_le, modifie_le)
+           VALUES (2, 'F1', 1, 'Fournisseur Un', ?, ?)""", (NOW, NOW))
+    conn.execute(
+        """INSERT INTO gc_articles (id, code, libelle, nature, unite, base_prix, prix_vente_cents, tva_code,
+               gere_stock, cree_le, modifie_le)
+           VALUES (1, 'ETQ1', 'Étiquette test', 'pf', 'ETQ', 1000, 1250, 'N', 1, ?, ?)""", (NOW, NOW))
+    conn.execute(
+        """INSERT INTO gc_articles (id, code, libelle, nature, unite, base_prix, prix_vente_cents, tva_code,
+               gere_stock, cree_le, modifie_le)
+           VALUES (2, 'CALAGE', 'Frais de calage', 'service', 'FORF', 1, 8000, 'N', 0, ?, ?)""", (NOW, NOW))
+    conn.execute(
+        """INSERT INTO gc_tarifs (article_id, tiers_id, sens, qte_min_milli, prix_cents)
+           VALUES (1, 1, 'vente', 50000000, 1100)""")
+
+
+def _ligne(article, q, prix=None, base=None, **k):
+    d = {"article_id": article, "quantite_milli": q}
+    if prix is not None:
+        d["prix_cents"] = prix
+    if base is not None:
+        d["base_prix"] = base
+    d.update(k)
+    return d
+
+
+class Calculs(unittest.TestCase):
+    def test_montant_ligne(self):
+        # 12 500 étiquettes à 12,50 € le mille = 156,25 €
+        self.assertEqual(calculs.montant_ligne(12_500_000, 1250, 1000), 15625)
+        # 3 unités à 0,333 € → 0,999 → 1,00 €
+        self.assertEqual(calculs.montant_ligne(3000, 333, 10), 100)
+        # remise 10 % sur 100,00 € = 90,00 €
+        self.assertEqual(calculs.montant_ligne(1000, 10000, 1, 1000), 9000)
+        # demi-centime arrondi au supérieur : 0,5 unité à 0,01 €
+        self.assertEqual(calculs.montant_ligne(500, 1, 1), 1)
+
+    def test_totaux(self):
+        t = calculs.totaux([
+            {"montant_ht_cents": 10000, "taux_tva_bp": 2000},
+            {"montant_ht_cents": 5000, "taux_tva_bp": 550},
+        ], remise_piece_bp=1000)
+        self.assertEqual(t["ht"], 9000 + 4500)
+        self.assertEqual(t["tva"], 1800 + 248)   # 4500 × 5,5 % = 247,5 → 248
+        self.assertEqual(t["ttc"], t["ht"] + t["tva"])
+
+    def test_echeance(self):
+        d = date(2026, 10, 14)
+        self.assertEqual(calculs.date_echeance(d, 30), date(2026, 11, 13))
+        self.assertEqual(calculs.date_echeance(d, 30, True), date(2026, 11, 30))
+        self.assertEqual(calculs.date_echeance(d, 45, True, 10), date(2026, 12, 10))
+        self.assertEqual(calculs.date_echeance(date(2026, 12, 20), 0, True, 10), date(2027, 1, 10))
+
+    def test_numero(self):
+        self.assertEqual(calculs.formater_numero("FA{AA}{N:05}", 12, date(2026, 1, 1)), "FA2600012")
+        self.assertEqual(calculs.formater_numero("{AAAA}-{MM}-{N}", 7, date(2026, 3, 1)), "2026-03-7")
+        with get_db() as conn:
+            _base(conn)
+            self.assertEqual(calculs.prendre_numero(conn, "facture", date(2026, 12, 31)), "FA2600001")
+            self.assertEqual(calculs.prendre_numero(conn, "facture", date(2026, 12, 31)), "FA2600002")
+            self.assertEqual(calculs.prendre_numero(conn, "facture", date(2027, 1, 1)), "FA2700001")
+            conn.rollback()
+
+
+class Chaine(unittest.TestCase):
+    def setUp(self):
+        self.ctx = get_db()
+        self.conn = self.ctx.__enter__()
+        _base(self.conn)
+
+    def tearDown(self):
+        self.conn.rollback()
+        self.ctx.__exit__(None, None, None)
+
+    def test_prix_tarif_palier(self):
+        c = self.conn
+        self.assertEqual(pieces.prix(c, 1, 1, 10_000_000, "vente")["prix_cents"], 1250)
+        p = pieces.prix(c, 1, 1, 60_000_000, "vente")
+        self.assertEqual((p["prix_cents"], p["source"]), (1100, "tarif_tiers"))
+
+    def test_chaine_complete(self):
+        c = self.conn
+        dv = pieces.creer(c, "devis", 1)
+        pieces.enregistrer(c, dv, {"date_piece": "2026-10-14"}, [
+            _ligne(1, 20_000_000, 1250, 1000), _ligne(2, 1000, 8000), {"libelle": "Texte libre"}])
+        self.assertEqual(pieces.valider(c, dv), "DE2600001")
+
+        co = pieces.transformer(c, [dv], "commande")
+        # Le devis n'est accepté qu'à la validation de la commande ; le
+        # brouillon suffit en revanche à empêcher une seconde transformation.
+        self.assertEqual(pieces.charger(c, dv)["statut"], "valide")
+        with self.assertRaises(ErreurPiece):
+            pieces.transformer(c, [dv], "commande")
+        cmd = pieces.charger(c, co)
+        self.assertEqual(len(cmd["lignes"]), 2)   # la ligne de texte ne suit pas
+        pieces.enregistrer(c, co, {"date_piece": "2026-10-14"}, None)
+        self.assertEqual(pieces.valider(c, co), "CO2600001")
+        self.assertEqual(pieces.charger(c, dv)["statut"], "solde")
+
+        # Première livraison partielle : 12 000 étiquettes, calage livré
+        bl = pieces.transformer(c, [co], "bl")
+        l = pieces.charger(c, bl)["lignes"]
+        l[0]["quantite_milli"] = 12_000_000
+        pieces.enregistrer(c, bl, None, l)
+        pieces.valider(c, bl)
+        self.assertEqual(pieces.charger(c, co)["statut"], "partiel")
+        stock = c.execute("SELECT SUM(quantite_milli) q FROM gc_mouvements WHERE article_id=1").fetchone()["q"]
+        self.assertEqual(stock, -12_000_000)
+        self.assertIsNone(c.execute("SELECT 1 FROM gc_mouvements WHERE article_id=2").fetchone())  # service
+
+        # Reliquat : 8 000 étiquettes, plus de calage
+        bl2 = pieces.transformer(c, [co], "bl")
+        l2 = pieces.charger(c, bl2)["lignes"]
+        self.assertEqual([x["quantite_milli"] for x in l2], [8_000_000])
+        pieces.valider(c, bl2)
+        self.assertEqual(pieces.charger(c, co)["statut"], "solde")
+        with self.assertRaises(ErreurPiece):
+            pieces.transformer(c, [co], "bl")
+
+        # Une facture pour les deux BL
+        fa = pieces.transformer(c, [bl, bl2], "facture")
+        f = pieces.charger(c, fa)
+        self.assertEqual(sum(x["montant_ht_cents"] for x in f["lignes"]), 25000 + 8000)
+        self.assertEqual(pieces.valider(c, fa), "FA2600001")
+        f = pieces.charger(c, fa)
+        self.assertEqual(f["total_ttc_cents"], 33000 + 6600)
+        self.assertEqual(f["echeances"][0]["date_echeance"], "2026-11-30")
+        self.assertEqual(f["echeances"][0]["montant_cents"], 39600)
+        self.assertEqual({p["id"] for p in f["amont"]}, {bl, bl2})
+        self.assertEqual(pieces.charger(c, bl)["statut"], "solde")
+
+        # Refus
+        with self.assertRaises(ErreurPiece):
+            pieces.enregistrer(c, fa, {"notes": "x"}, None)
+        with self.assertRaises(ErreurPiece):
+            pieces.annuler(c, fa)
+        with self.assertRaises(ErreurPiece):
+            pieces.annuler(c, bl)       # facturé
+
+        # Avoir partiel, puis avoir au-delà du facturé
+        av = pieces.transformer(c, [fa], "avoir")
+        la = pieces.charger(c, av)["lignes"]
+        pieces.enregistrer(c, av, None, [dict(la[0], quantite_milli=1_000_000)])
+        self.assertEqual(pieces.valider(c, av), "AV2600001")
+        av2 = pieces.transformer(c, [fa], "avoir")
+        la2 = pieces.charger(c, av2)["lignes"]
+        self.assertEqual(la2[0]["quantite_milli"], 11_000_000)   # 12 000 du 1er BL − 1 000
+        pieces.enregistrer(c, av2, None, [dict(la2[0], quantite_milli=11_000_001)])
+        with self.assertRaises(ErreurPiece):
+            pieces.valider(c, av2)
+
+    def test_annulation_bl(self):
+        c = self.conn
+        co = pieces.creer(c, "commande", 1)
+        pieces.enregistrer(c, co, None, [_ligne(1, 5_000_000, 1250, 1000)])
+        pieces.valider(c, co)
+        bl = pieces.transformer(c, [co], "bl")
+        pieces.valider(c, bl)
+        self.assertEqual(pieces.charger(c, co)["statut"], "solde")
+        pieces.annuler(c, bl)
+        self.assertEqual(pieces.charger(c, co)["statut"], "valide")
+        q = c.execute("SELECT SUM(quantite_milli) q FROM gc_mouvements WHERE article_id=1").fetchone()["q"]
+        self.assertEqual(q, 0)
+        bl2 = pieces.transformer(c, [co], "bl")   # de nouveau possible
+        self.assertEqual(pieces.charger(c, bl2)["lignes"][0]["quantite_milli"], 5_000_000)
+
+    def test_refus(self):
+        c = self.conn
+        with self.assertRaises(ErreurPiece):
+            pieces.creer(c, "commande", 2)          # fournisseur, pas client
+        c.execute("UPDATE gc_tiers SET bloque=1 WHERE id=1")
+        co = pieces.creer(c, "commande", 1)
+        pieces.enregistrer(c, co, None, [_ligne(1, 1000, 100)])
+        with self.assertRaises(ErreurPiece):
+            pieces.valider(c, co)
+        with self.assertRaises(ErreurPiece):
+            pieces.enregistrer(c, co, None, [_ligne(1, 0, 100)])  # quantité nulle
+
+    def test_achat_reception_stock(self):
+        c = self.conn
+        c.execute("UPDATE gc_articles SET prix_achat_cents=900 WHERE id=1")
+        cf = pieces.creer(c, "cde_fournisseur", 2)
+        self.assertEqual(pieces.prix(c, 1, 2, 1000, "achat")["prix_cents"], 900)
+        pieces.enregistrer(c, cf, None, [_ligne(1, 30_000_000, 900, 1000)])
+        pieces.valider(c, cf)
+        re_ = pieces.transformer(c, [cf], "reception")
+        pieces.valider(c, re_)
+        q = c.execute("SELECT SUM(quantite_milli) q FROM gc_mouvements WHERE article_id=1").fetchone()["q"]
+        self.assertEqual(q, 30_000_000)
+        self.assertEqual(pieces.charger(c, cf)["statut"], "solde")
+
+
+if __name__ == "__main__":
+    unittest.main()

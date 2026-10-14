@@ -139,6 +139,7 @@ from app.web.mcp_page import router as mcp_page_router
 from app.routers.mcp_oauth import router as mcp_oauth_router
 from app.web.erp_page import router as erp_page_router
 from app.web.erp2 import router as erp2_page_router
+from app.routers.erp2_api import router as erp2_api_router
 
 
 @asynccontextmanager
@@ -830,6 +831,7 @@ app.include_router(taches_page_router)
 # Les deux : sans include_router, /api/erp/* renverrait un 404 silencieux.
 app.include_router(erp_api_router)
 app.include_router(erp_page_router)
+app.include_router(erp2_api_router)
 app.include_router(erp2_page_router)
 app.include_router(rvgi_api_router)
 app.include_router(stock_compare_router)
