@@ -8,6 +8,8 @@
  *     ouvrir: function (ligne) {},                         // Entrée ou double-clic
  *     statuts: {valeur: {libelle, ton}},                   // pour type statut ; ton : ok | warn | danger | neutre | accent
  *     nom: 'ventes.commandes',                             // mémorise tri et filtres (localStorage)
+ *     selection: function (ligne) {},                      // ligne courante (clavier ou clic)
+ *     // colonne : classe(ligne) -> classe CSS de la cellule (ex. 'retard')
  *   });
  *   g.maj(nouvellesLignes);
  *
@@ -195,6 +197,7 @@
       });
       renderTotaux();
       renderLignes(true);
+      if (opts.selection) opts.selection(G.vues[G.courant] || null);
     }
 
     function trier(cle) {
@@ -243,7 +246,7 @@
       tr.addEventListener('dblclick', function () { if (opts.ouvrir) opts.ouvrir(l); });
       cols.forEach(function (c) {
         var v = l[c.cle];
-        var td = h('div', {className: 'erp-g-td' + (/^(nombre|montant|qte)$/.test(c.type) ? ' num' : ''), role: 'gridcell'});
+        var td = h('div', {className: 'erp-g-td' + (/^(nombre|montant|qte)$/.test(c.type) ? ' num' : '') + (c.classe ? ' ' + (c.classe(l) || '') : ''), role: 'gridcell'});
         if (c.rendu) {
           var n = c.rendu(l);
           if (n != null) td.appendChild(typeof n === 'string' ? document.createTextNode(n) : n);
@@ -262,6 +265,7 @@
     function allerA(i, defiler) {
       if (!G.vues.length) return;
       G.courant = Math.max(0, Math.min(G.vues.length - 1, i));
+      if (opts.selection) opts.selection(G.vues[G.courant]);
       if (defiler !== false) {
         var y = G.courant * HAUTEUR;
         var entete = tete.offsetHeight + filtresL.offsetHeight;

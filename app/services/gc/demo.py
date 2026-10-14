@@ -89,6 +89,7 @@ def reinitialiser(conn, user: dict | None = None) -> dict:
             "code": code, "est_client": 1, "raison_sociale": nom, "condition_paiement": cond,
             "mode_paiement": "VIR", "remise_bp": rem, "tva_code": tva,
             "email": "adv@" + nom.split()[-1].lower() + ".example", "encours_max_cents": 5_000_000,
+            "jours_expedition": 5 if tva == "UE" else 2,
         }, adresses=[
             {"type": "facturation", "libelle": "Siège", "adresse1": "12 avenue Centrale", "code_postal": cp,
              "ville": ville, "pays": "DE" if tva == "UE" else "FR", "par_defaut": 1},
@@ -111,6 +112,15 @@ def reinitialiser(conn, user: dict | None = None) -> dict:
             "prix_vente_cents": pv, "prix_achat_cents": pa, "tva_code": tva, "gere_stock": st,
             "fournisseur_id": tiers.get(fourn.get(fam, "")),
         }, origine="demo")
+    # Formats (dixièmes de mm), conditionnement, référence produit chez le client
+    for code, l_, a_, cond, ref in (("PF0001", 900, 1200, "Bobine de 1 000 étiquettes, mandrin 76", "VIN-RG-75"),
+                                    ("PF0002", 700, 900, "Bobine de 2 000 étiquettes", "BIERE-BL-33"),
+                                    ("PF0003", 350, 200, "Bobine de 5 000 étiquettes", "PH-0420"),
+                                    ("PF0004", 800, 800, "Bobine de 1 000 étiquettes", "FROM-80")):
+        fichiers.enregistrer_article(conn, arts[code], {"format_l_dmm": l_, "format_a_dmm": a_,
+                                                        "conditionnement": cond, "ref_client": ref,
+                                                        "origine_prod": "fabrication"})
+
     # Tarifs négociés : un client au palier, un fournisseur
     fichiers.enregistrer_article(conn, arts["PF0001"], {}, tarifs=[
         {"tiers_id": tiers["C0001"], "sens": "vente", "qte_min_milli": 0, "prix_cents": 4000},
@@ -158,7 +168,7 @@ def reinitialiser(conn, user: dict | None = None) -> dict:
                   jour(-30), date_validite=jour(0))
     pieces.valider(conn, d1, user)
     c1 = suite([d1], "commande", jour(-25))
-    conn.execute("UPDATE gc_pieces SET ref_tiers='BC-2026-118', date_livraison=? WHERE id=?", (jour(-10), c1))
+    pieces.enregistrer(conn, c1, {"ref_tiers": "BC-2026-118", "date_livraison": jour(-10), "jours_expedition": 2}, None)
     pieces.valider(conn, c1, user)
     # Fabrication avant livraison : papier consommé, étiquettes produites
     of1 = suite([c1], "of", jour(-20))
@@ -198,7 +208,7 @@ def reinitialiser(conn, user: dict | None = None) -> dict:
                   ref_tiers="Contrat 2026-27")
     pieces.valider(conn, m1, user)
     ap1 = suite([m1], "commande", jour(-5), modif=lambda ls: [dict(l, quantite_milli=25_000_000) for l in ls])
-    conn.execute("UPDATE gc_pieces SET ref_tiers='Appel 1', date_livraison=? WHERE id=?", (jour(9), ap1))
+    pieces.enregistrer(conn, ap1, {"ref_tiers": "Appel 1", "date_livraison": jour(9)}, None)
     pieces.valider(conn, ap1, user)
 
     # Achats

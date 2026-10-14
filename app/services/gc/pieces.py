@@ -19,7 +19,7 @@ facture compris.
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from app.services.gc import calculs
 
@@ -323,7 +323,8 @@ def carnet(conn, types: list[str]) -> list[dict]:
             """SELECT p.statut FROM gc_pieces_lignes lo JOIN gc_pieces p ON p.id=lo.piece_id
                WHERE lo.ligne_amont_id=? AND p.type='of' AND p.statut!='annule' ORDER BY p.id DESC LIMIT 1""",
             (d["ligne_id"],)).fetchone()
-        d["situation_of"] = of["statut"] if of else ("a_ordonnancer" if d["origine_prod"] == "fabrication" and d["type"] in ("commande", "marche") else "")
+        a_lancer = d["origine_prod"] == "fabrication" and d["type"] in ("commande", "marche") and d["reste_milli"] > 0
+        d["situation_of"] = of["statut"] if of else ("a_ordonnancer" if a_lancer else "")
         out.append(d)
     return out
 
@@ -443,6 +444,12 @@ def enregistrer(conn, piece_id: int, entete: dict | None, lignes: list[dict] | N
                 vals.append(v)
         if sets:
             conn.execute(f"UPDATE gc_pieces SET {', '.join(sets)} WHERE id=?", (*vals, piece_id))
+        # Date d'expédition absente : livraison − jours d'expédition (calendaires).
+        q = conn.execute("SELECT date_livraison, date_expedition, jours_expedition FROM gc_pieces WHERE id=?",
+                         (piece_id,)).fetchone()
+        if q["date_livraison"] and not q["date_expedition"]:
+            exp = date.fromisoformat(q["date_livraison"][:10]) - timedelta(days=int(q["jours_expedition"] or 0))
+            conn.execute("UPDATE gc_pieces SET date_expedition=? WHERE id=?", (exp.isoformat(), piece_id))
 
     if lignes is not None:
         amont_ok = [k for k, v in TYPES.items() if p["type"] in v["aval"]]

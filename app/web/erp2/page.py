@@ -92,6 +92,7 @@ _COQUE = """<body class="erp">
 <script src="/static/erp/erp_ui.js?v=__V__"></script>
 <script src="/static/erp/erp_grille.js?v=__V__"></script>
 <script src="/static/erp/erp_pieces.js?v=__V__"></script>
+<script src="/static/erp/erp_carnet.js?v=__V__"></script>
 <script src="/static/erp/erp_fichiers.js?v=__V__"></script>
 <script src="/static/erp/erp_gestion.js?v=__V__"></script>
 <script src="/static/erp/erp_compta.js?v=__V__"></script>

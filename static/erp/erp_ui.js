@@ -43,20 +43,23 @@
     montantLigne: function (qMilli, prixCents, base, remiseBp) {
       return divArrondi((qMilli || 0) * (prixCents || 0) * (10000 - (remiseBp || 0)), 1000 * Math.max(1, base || 1) * 10000);
     },
-    totaux: function (lignes, remisePieceBp) {
+    totaux: function (lignes, remisePieceBp, escompteBp, acompteCents) {
       var par = {};
       lignes.forEach(function (l) {
         if (!l.article_id) return;
         var t = l.taux_tva_bp || 0;
         par[t] = (par[t] || 0) + (l.montant_ht_cents || 0);
       });
-      var out = {ht: 0, tva: 0, ttc: 0, remise: 0, bases: []};
+      var out = {ht: 0, tva: 0, ttc: 0, remise: 0, escompte: 0, bases: []};
       Object.keys(par).map(Number).sort(function (a, b) { return a - b; }).forEach(function (t) {
-        var brut = par[t], r = divArrondi(brut * (remisePieceBp || 0), 10000), net = brut - r, tv = divArrondi(net * t, 10000);
-        out.bases.push({taux_bp: t, ht_brut: brut, remise: r, ht: net, tva: tv});
-        out.ht += net; out.tva += tv; out.remise += r;
+        var brut = par[t], r = divArrondi(brut * (remisePieceBp || 0), 10000), net = brut - r;
+        var e = divArrondi(net * (escompteBp || 0), 10000), netF = net - e, tv = divArrondi(netF * t, 10000);
+        out.bases.push({taux_bp: t, ht_brut: brut, remise: r, escompte: e, ht: netF, tva: tv});
+        out.ht += netF; out.tva += tv; out.remise += r; out.escompte += e;
       });
       out.ttc = out.ht + out.tva;
+      out.acompte = acompteCents || 0;
+      out.net_a_payer = out.ttc - out.acompte;
       return out;
     },
   };

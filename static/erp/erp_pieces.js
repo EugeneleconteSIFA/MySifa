@@ -36,6 +36,9 @@
   var AVEC_STOCK = {bl: 1, reception: 1, of: 1};
   // Pièces sans valeur commerciale : ni prix, ni totaux, ni conditions de paiement.
   var SANS_PRIX = {of: 1};
+  // Listes qui s'ouvrent par défaut en vue par ligne (true) ; false = par pièce
+  // mais la vue par ligne reste proposée. Absent = pas de vue par ligne.
+  var PAR_LIGNE = {commande: true, devis: true, marche: true, bl: true, cde_fournisseur: true, of: false};
   var ARTICLES_PAR_SENS = {vente: ['pf', 'service'], achat: ['mp', 'service', 'pf']};
 
   function routeDe(type) {
@@ -116,6 +119,22 @@
       var conf = ROUTES[route];
       if (ctx.param) return ecranPiece(main, ctx, conf);
       main.classList.add('plein');
+      // Vue par ligne (le « TDB » de RVGI) ou par pièce, mémorisée par liste.
+      var parLigne = !!PAR_LIGNE[conf.types[0]];
+      var cleVue = 'erp_vue_' + route;
+      try { var v = localStorage.getItem(cleVue); if (v) parLigne = v === 'ligne'; } catch (e) { /* stockage indisponible */ }
+      if (PAR_LIGNE[conf.types[0]] !== undefined) {
+        var bascule = h('div', {className: 'erp-bascule'},
+          h('button', {type: 'button', className: 'erp-onglet' + (parLigne ? ' actif' : ''), text: 'Par ligne',
+            onclick: function () { try { localStorage.setItem(cleVue, 'ligne'); } catch (e) { /* */ } ERP.rafraichir(); }}),
+          h('button', {type: 'button', className: 'erp-onglet' + (parLigne ? '' : ' actif'), text: 'Par pièce',
+            onclick: function () { try { localStorage.setItem(cleVue, 'piece'); } catch (e) { /* */ } ERP.rafraichir(); }}));
+        ctx.actions.appendChild(bascule);
+      }
+      if (conf.nouveau && parLigne) {
+        ctx.actions.appendChild(ERP.bouton('Nouveau : ' + libType(conf.nouveau).toLowerCase(), function () { return nouvellePiece(conf.nouveau); }, {accent: true}));
+      }
+      if (parLigne && ERP.carnet) return ERP.carnet(main, ctx, conf);
       var zone = h('div', {className: 'erp-zone'}, ERP.chargement());
       main.appendChild(zone);
       Promise.all([ERP.meta(), ERP.api('/api/erp2/pieces?types=' + conf.types.join(','))]).then(function (r) {
@@ -179,6 +198,7 @@
       // Un prix déjà enregistré ne bouge plus quand la quantité change : il a
       // été convenu (et sur une ligne reprise, il vient de la pièce amont).
       lignes = P.lignes.map(function (l) { return Object.assign({_prixManuel: !!l.prix_cents || !!l.ligne_amont_id}, l); });
+      datesEntete = {liv: P.date_livraison, exp: P.date_expedition};
       modifie = false;
       ERP.garde = null;
       dessiner();
@@ -198,14 +218,53 @@
         return tiers.adresses.filter(function (a) { return a.type === type; })
           .map(function (a) { return {v: a.id, l: (a.libelle ? a.libelle + ' — ' : '') + [a.adresse1, a.code_postal + ' ' + a.ville].join(', ')}; });
       };
+      var section = function (t) { return h('div', {className: 'erp-champ plein erp-section-form', text: t}); };
+      var M = ERP.M || {};
       var champs = [
         ERP.champ('Date', ERP.saisie(P, 'date_piece', 'date', {lecture: ro, change: marquer})),
       ];
       if (P.type === 'devis') champs.push(ERP.champ('Valable jusqu\'au', ERP.saisie(P, 'date_validite', 'date', {lecture: ro, change: marquer})));
-      if (P.type === 'marche') champs.push(ERP.champ('Fin du marché', ERP.saisie(P, 'date_validite', 'date', {lecture: ro, change: marquer})));
-      if (/^(commande|cde_fournisseur|devis)$/.test(P.type)) champs.push(ERP.champ('Livraison prévue', ERP.saisie(P, 'date_livraison', 'date', {lecture: ro, change: marquer})));
-      champs.push(ERP.champ(P.type === 'facture_fournisseur' ? 'N° de facture fournisseur' : vente ? 'Réf. commande client' : 'Réf. fournisseur',
+      if (P.type === 'marche') {
+        champs.push(ERP.champ('Ouverture', ERP.saisie(P, 'date_ouverture', 'date', {lecture: ro, change: marquer})));
+        champs.push(ERP.champ('Fermeture', ERP.saisie(P, 'date_validite', 'date', {lecture: ro, change: marquer})));
+      }
+      champs.push(ERP.champ(P.type === 'facture_fournisseur' ? 'N° de facture fournisseur' : vente ? 'Vos références (réf. client)' : 'Réf. fournisseur',
         ERP.saisie(P, 'ref_tiers', 'texte', {lecture: ro, change: marquer})));
+      if (tiers.contacts.length || P.contact_id) {
+        champs.push(ERP.champ('À l\'attention de', ERP.choix(P, 'contact_id', tiers.contacts.map(function (c) {
+          return {v: c.id, l: c.nom + (c.fonction ? ' — ' + c.fonction : '')}; }), {lecture: ro, avecVide: '—', nombre: true, change: marquer})));
+      }
+      // Livraison : la date d'expédition se déduit de la date de livraison et
+      // des jours de transport ; elle reste modifiable.
+      var avecLivraison = /^(devis|marche|commande|bl|cde_fournisseur|of)$/.test(P.type);
+      if (avecLivraison) {
+        champs.push(section('Livraison'));
+        var expInp = ERP.saisie(P, 'date_expedition', 'date', {lecture: ro, change: marquer});
+        var recalculerExp = function () {
+          if (!P.date_livraison) return;
+          var d = new Date(P.date_livraison + 'T12:00:00');
+          d.setDate(d.getDate() - (P.jours_expedition || 0));
+          P.date_expedition = d.toISOString().slice(0, 10);
+          expInp.value = P.date_expedition;
+          majDatesLignes();
+        };
+        champs.push(ERP.champ('Date de livraison', ERP.saisie(P, 'date_livraison', 'date', {lecture: ro, change: function () { marquer(); recalculerExp(); }})));
+        champs.push(ERP.champ('Jours d\'expédition', ERP.saisie(P, 'jours_expedition', 'entier', {lecture: ro, placeholder: '0', change: function () { marquer(); recalculerExp(); }})));
+        champs.push(ERP.champ('Date d\'expédition', expInp));
+        if (vente) champs.push(ERP.champ('Mode de livraison', ERP.choix(P, 'transporteur_id', (M.transporteurs || []).map(function (x) { return {v: x.id, l: x.nom}; }),
+          {lecture: ro, avecVide: 'Par nos soins / —', nombre: true, change: marquer})));
+        if (vente && !SANS_PRIX[P.type]) champs.push(ERP.champ('Franco de port pour', ERP.saisie(P, 'franco_cents', 'euros', {lecture: ro, change: marquer})));
+      }
+      if (P.type === 'bl') {
+        champs.push(section('Expédition'));
+        champs.push(ERP.champ('Récépissé', ERP.saisie(P, 'recepisse', 'texte', {lecture: ro, change: marquer})));
+        champs.push(ERP.champ('Colis', ERP.saisie(P, 'nb_colis', 'entier', {lecture: ro, change: marquer})));
+        champs.push(ERP.champ('Palettes', ERP.saisie(P, 'nb_palettes', 'entier', {lecture: ro, change: marquer})));
+        // Grammes en base = millièmes de kg : le format « quantité » affiche des kg.
+        champs.push(ERP.champ('Poids (kg)', ERP.saisie(P, 'poids_g', 'qte', {lecture: ro, change: marquer})));
+        champs.push(ERP.champ('Emballage', ERP.saisie(P, 'emballage', 'texte', {lecture: ro, change: marquer}), {large: true}));
+      }
+      champs.push(section('Adresses et règlement'));
       if (!SANS_PRIX[P.type]) champs.push(ERP.champ('Adresse de facturation', ERP.choix(P, 'adresse_facturation_id', adrs('facturation'), {lecture: ro, avecVide: '—', nombre: true, change: marquer}), {large: true}));
       if (vente) champs.push(ERP.champ('Adresse de livraison', ERP.choix(P, 'adresse_livraison_id', adrs('livraison'), {lecture: ro, avecVide: '—', nombre: true, change: marquer}), {large: true}));
       if (!SANS_PRIX[P.type]) {
@@ -214,6 +273,15 @@
       }
       if (AVEC_STOCK[P.type]) champs.push(ERP.champ('Dépôt', ERP.choix(P, 'depot', ERP.optionsRef('depots'), {lecture: ro, change: marquer})));
       if (vente && !SANS_PRIX[P.type]) champs.push(ERP.champ('Remise de pied', ERP.saisie(P, 'remise_bp', 'pct', {lecture: ro, placeholder: '0', change: function () { marquer(); majTotaux(); }})));
+      if (!SANS_PRIX[P.type] && P.type !== 'marche') {
+        champs.push(ERP.champ('Escompte', ERP.saisie(P, 'escompte_bp', 'pct', {lecture: ro, placeholder: '0', change: function () { marquer(); majTotaux(); }})));
+        if (/^(commande|facture)$/.test(P.type)) champs.push(ERP.champ('Acompte versé', ERP.saisie(P, 'acompte_cents', 'euros', {lecture: ro, change: function () { marquer(); majTotaux(); }})));
+      }
+      if (vente && !SANS_PRIX[P.type]) {
+        champs.push(ERP.champ('Représentant', ERP.choix(P, 'representant_id', (M.representants || []).map(function (x) { return {v: x.id, l: x.nom}; }),
+          {lecture: ro, avecVide: '—', nombre: true, change: marquer})));
+        champs.push(ERP.champ('Commission', ERP.saisie(P, 'commission_bp', 'pct', {lecture: ro, placeholder: '0', change: marquer})));
+      }
       if (!ro || P.notes) champs.push(ERP.champ('Notes imprimées', ERP.saisie(P, 'notes', 'zone', {lecture: ro, lignes: 2, change: marquer}), {plein: true}));
       if (!ro || P.notes_internes) champs.push(ERP.champ('Notes internes', ERP.saisie(P, 'notes_internes', 'zone', {lecture: ro, lignes: 2, change: marquer}), {plein: true}));
       return ERP.carte('En-tête', h('div', {className: 'erp-form'}, champs));
@@ -222,7 +290,19 @@
     // ── Lignes ────────────────────────────────────────────────────
     function nouvelleLigne() {
       return {article_id: null, libelle: '', quantite_milli: null, base_prix: 1, prix_cents: null, remise_bp: 0,
-              tva_code: null, taux_tva_bp: 0, montant_ht_cents: 0, _nouvelle: true};
+              tva_code: null, taux_tva_bp: 0, montant_ht_cents: 0, _nouvelle: true,
+              date_livraison: P.date_livraison || null, date_expedition: P.date_expedition || null, nb_livraisons: 1};
+    }
+
+    // Les lignes qui suivaient les dates de l'en-tête les suivent encore.
+    var datesEntete = {liv: null, exp: null};
+    function majDatesLignes() {
+      lignes.forEach(function (l) {
+        if (!l.date_livraison || l.date_livraison === datesEntete.liv) l.date_livraison = P.date_livraison;
+        if (!l.date_expedition || l.date_expedition === datesEntete.exp) l.date_expedition = P.date_expedition;
+      });
+      datesEntete = {liv: P.date_livraison, exp: P.date_expedition};
+      dessinerLignes();
     }
 
     function recalculer(l) {
@@ -252,6 +332,9 @@
         });
       }, async function (a) {
         l.article_id = a.id; l.article_code = a.code; l.libelle = a.libelle; l.unite = a.unite; l.base_prix = a.base_prix;
+        l.origine_prod = a.origine_prod || (a.nature === 'pf' ? 'fabrication' : '');
+        l.laboratoire = a.nature === 'pf' ? 'renouvellement' : '';
+        l.ref_client = a.ref_client || '';
         l._prixManuel = false;
         await appliquerPrix(l);
         recalculer(l);
@@ -332,9 +415,40 @@
         tr.appendChild(h('td', {className: 'c-tva'}, tva));
         tr.appendChild(h('td', {className: 'c-montant num', 'data-montant': i, text: l.article_id ? ERP.fmt.euros(l.montant_ht_cents) : ''}));
       }
-      tr.appendChild(h('td', {className: 'c-suppr'}, h('button', {type: 'button', className: 'erp-x', title: 'Supprimer la ligne', text: '×',
-        onclick: function () { lignes.splice(i, 1); marquer(); dessinerLignes(); }})));
+      tr.appendChild(h('td', {className: 'c-suppr'},
+        l.article_id ? h('button', {type: 'button', className: 'erp-x' + (l._ouvert ? ' actif' : ''), title: 'Dates, origine, laboratoire, réf. client', text: '⋯',
+          onclick: function () { l._ouvert = !l._ouvert; dessinerLignes(); }}) : null,
+        h('button', {type: 'button', className: 'erp-x', title: 'Supprimer la ligne', text: '×',
+          onclick: function () { lignes.splice(i, 1); marquer(); dessinerLignes(); }})));
       return tr;
+    }
+
+    // Volet de détail d'une ligne (édition) : ce que RVGI met dans sa fiche ligne.
+    function ligneDetail(l, i, nbCol) {
+      var M = ERP.M || {};
+      var opts = function (o) { return Object.keys(o || {}).map(function (k) { return {v: k, l: o[k]}; }); };
+      var adrs = tiers.adresses.filter(function (a) { return a.type === 'livraison'; })
+        .map(function (a) { return {v: a.id, l: (a.libelle ? a.libelle + ' — ' : '') + a.adresse1 + ', ' + a.ville}; });
+      var f = h('div', {className: 'erp-form erp-ligne-detail'},
+        ERP.champ('Date d\'expédition', ERP.saisie(l, 'date_expedition', 'date', {change: marquer})),
+        ERP.champ('Date de livraison', ERP.saisie(l, 'date_livraison', 'date', {change: marquer})),
+        ERP.champ('Origine', ERP.choix(l, 'origine_prod', opts(M.origines), {avecVide: '—', change: marquer})),
+        ERP.champ('Laboratoire', ERP.choix(l, 'laboratoire', opts(M.laboratoires), {avecVide: '—', change: marquer})),
+        ERP.champ('Réf. produit client', ERP.saisie(l, 'ref_client', 'texte', {change: marquer})),
+        ERP.champ('Nombre de livraisons', ERP.saisie(l, 'nb_livraisons', 'entier', {change: marquer})),
+        adrs.length > 1 ? ERP.champ('Livraison chez', ERP.choix(l, 'adresse_livraison_id', adrs, {avecVide: 'Adresse de la pièce', nombre: true, change: marquer}), {large: true}) : null);
+      return h('tr', {className: 'erp-detail-ligne'}, h('td'), h('td', {colSpan: String(nbCol)}, f));
+    }
+
+    // Résumé du détail sous la désignation (lecture).
+    function resumeLigne(l) {
+      var M = ERP.M || {}, morceaux = [];
+      if (l.date_expedition) morceaux.push('Exp. ' + ERP.fmt.date(l.date_expedition));
+      if (l.date_livraison) morceaux.push('Liv. ' + ERP.fmt.date(l.date_livraison));
+      if (l.origine_prod) morceaux.push((M.origines || {})[l.origine_prod] || l.origine_prod);
+      if (l.laboratoire) morceaux.push((M.laboratoires || {})[l.laboratoire] || l.laboratoire);
+      if (l.ref_client) morceaux.push('Réf. client ' + l.ref_client);
+      return morceaux.length ? h('div', {className: 'erp-amont', text: morceaux.join(' · ')}) : null;
     }
 
     function ligneLecture(l, i) {
@@ -347,7 +461,7 @@
         return tr;
       }
       tr.appendChild(h('td', {className: 'c-article'}, ERP.lien(l.article_code, '/fichiers/articles/' + l.article_id)));
-      tr.appendChild(h('td', {className: 'c-libelle'}, h('span', {text: l.libelle}),
+      tr.appendChild(h('td', {className: 'c-libelle'}, h('span', {text: l.libelle}), resumeLigne(l),
         l.amont ? h('div', {className: 'erp-amont'}, 'depuis ', ERP.lien(l.amont.numero || 'brouillon', ERP.cheminPiece(l.amont.type, l.amont.id))) : null));
       tr.appendChild(h('td', {className: 'c-qte num', text: ERP.fmt.qte(l.quantite_milli, decimales(l))}));
       tr.appendChild(h('td', {className: 'c-unite', text: l.unite || ''}));
@@ -399,7 +513,10 @@
         garde = {i: +ae.getAttribute('data-i'), f: ae.getAttribute('data-f')};
       }
       tbody.textContent = '';
-      lignes.forEach(function (l, i) { tbody.appendChild(lecture() ? ligneLecture(l, i) : ligneEdition(l, i)); });
+      lignes.forEach(function (l, i) {
+        tbody.appendChild(lecture() ? ligneLecture(l, i) : ligneEdition(l, i));
+        if (!lecture() && l._ouvert && l.article_id) tbody.appendChild(ligneDetail(l, i, SANS_PRIX[P.type] ? 5 : 9));
+      });
       var cible = focusApres || garde;
       focusApres = null;
       if (cible) {
@@ -418,17 +535,20 @@
     function majTotaux() {
       if (!totauxEl) return;
       if (SANS_PRIX[P.type]) { totauxEl.textContent = ''; return; }
-      var t = ERP.calc.totaux(lignes, P.remise_bp || 0);
+      var t = ERP.calc.totaux(lignes, P.remise_bp || 0, P.escompte_bp || 0, P.acompte_cents || 0);
       totauxEl.textContent = '';
       var brut = t.bases.reduce(function (s, b) { return s + b.ht_brut; }, 0);
       var rows = [];
-      if (t.remise) {
-        rows.push(['Total HT brut', ERP.fmt.euros(brut)]);
-        rows.push(['Remise ' + ERP.fmt.pct(P.remise_bp), '− ' + ERP.fmt.euros(t.remise)]);
-      }
+      if (t.remise || t.escompte) rows.push(['Total HT brut', ERP.fmt.euros(brut)]);
+      if (t.remise) rows.push(['Remise ' + ERP.fmt.pct(P.remise_bp), '− ' + ERP.fmt.euros(t.remise)]);
+      if (t.escompte) rows.push(['Escompte ' + ERP.fmt.pct(P.escompte_bp), '− ' + ERP.fmt.euros(t.escompte)]);
       rows.push(['Total HT', ERP.fmt.euros(t.ht), 'fort']);
       t.bases.forEach(function (b) { rows.push(['TVA ' + ERP.fmt.pct(b.taux_bp || 0).replace(/^$/, '0 %') + ' sur ' + ERP.fmt.euros(b.ht), ERP.fmt.euros(b.tva)]); });
-      rows.push([P.type === 'avoir' ? 'Total TTC à rembourser' : 'Total TTC', ERP.fmt.euros(t.ttc), 'total']);
+      rows.push([P.type === 'avoir' ? 'Total TTC à rembourser' : 'Total TTC', ERP.fmt.euros(t.ttc), t.acompte ? 'fort' : 'total']);
+      if (t.acompte) {
+        rows.push(['Acompte', '− ' + ERP.fmt.euros(t.acompte)]);
+        rows.push(['Net à payer', ERP.fmt.euros(t.net_a_payer), 'total']);
+      }
       rows.forEach(function (r) {
         totauxEl.appendChild(h('div', {className: 'erp-tot-ligne' + (r[2] ? ' ' + r[2] : '')}, h('span', {text: r[0]}), h('b', {text: r[1]})));
       });
@@ -489,11 +609,16 @@
     function corpsEnvoi() {
       var ent = {};
       ['date_piece', 'date_livraison', 'date_validite', 'ref_tiers', 'adresse_facturation_id', 'adresse_livraison_id',
-       'condition_paiement', 'mode_paiement', 'depot', 'remise_bp', 'notes', 'notes_internes'].forEach(function (k) { ent[k] = P[k]; });
+       'condition_paiement', 'mode_paiement', 'depot', 'remise_bp', 'notes', 'notes_internes',
+       'contact_id', 'transporteur_id', 'jours_expedition', 'date_expedition', 'franco_cents', 'escompte_bp',
+       'acompte_cents', 'representant_id', 'commission_bp', 'recepisse', 'nb_colis', 'nb_palettes', 'poids_g',
+       'emballage', 'date_ouverture'].forEach(function (k) { if (k in P) ent[k] = P[k]; });
       var ls = lignes.filter(function (l) { return l.article_id || (l.libelle && !l._nouvelle); }).map(function (l) {
         return {article_id: l.article_id, libelle: l.libelle, quantite_milli: l.quantite_milli, base_prix: l.base_prix,
                 prix_cents: l.prix_cents, remise_bp: l.remise_bp, tva_code: l.tva_code, date_livraison: l.date_livraison,
-                ligne_amont_id: l.ligne_amont_id, notes: l.notes};
+                ligne_amont_id: l.ligne_amont_id, notes: l.notes, date_expedition: l.date_expedition,
+                origine_prod: l.origine_prod, laboratoire: l.laboratoire, ref_client: l.ref_client,
+                nb_livraisons: l.nb_livraisons, adresse_livraison_id: l.adresse_livraison_id};
       });
       return {entete: ent, lignes: ls};
     }

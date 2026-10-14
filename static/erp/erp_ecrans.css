@@ -201,6 +201,29 @@ select.erp-input:disabled { appearance: none; }
 .erp-fiche .erp-lignes input.erp-cell[type="text"] { min-width: 110px; }
 .erp-fiche .erp-lignes select.erp-cell { min-width: 120px; }
 
+/* En-tête par sections, détail de ligne */
+.erp-section-form { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border);
+  font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); }
+.erp-detail-ligne td { background: var(--bg); }
+.erp-ligne-detail { padding: 4px 4px 10px; }
+.erp-x.actif { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+.erp-lignes .c-suppr { width: 60px; white-space: nowrap; }
+.erp-lignes .c-suppr .erp-x + .erp-x { margin-left: 4px; }
+
+/* Tableaux de bord par ligne */
+.erp-bascule { display: inline-flex; gap: 4px; margin-right: 6px; }
+.erp-bascule .erp-onglet { padding: 7px 12px; }
+.erp-carnet-barre { margin-bottom: 8px; color: var(--text2); }
+.erp-g-td.retard { background: var(--danger); color: white; font-weight: 700; }
+.erp-panneau {
+  display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; margin-top: 10px; padding: 12px 14px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px; min-height: 92px;
+}
+.erp-panneau-bloc { min-width: 180px; }
+.erp-panneau-bloc.actions { margin-left: auto; align-self: center; }
+.erp-panneau-ligne { display: flex; gap: 10px; justify-content: space-between; font-size: 12.5px; padding: 1px 0; }
+.erp-panneau-ligne span { color: var(--muted); }
+
 /* Export comptable */
 .erp-export-barre { max-width: 420px; margin-bottom: 8px; }
 .erp-export-info { margin-bottom: 10px; }
