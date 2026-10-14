@@ -84,11 +84,15 @@ def index_stock(perimetre: str = "pf") -> Dict[str, Dict[str, Any]]:
         # de même horodatage par l'id : RVGI écrit parfois trois lignes dans la
         # même seconde (mise à zéro puis ré-entrée), et prendre la mauvaise
         # inverserait le stock.
+        # mvt = 0 n'est pas un mouvement : c'est la fiche de réapprovisionnement
+        # de l'article, datée 1899-12-30, où qte1 = stock minimum et qte2 = stock
+        # maximum (1 850 lignes, toutes dans stm_hist). Un article qui n'a que
+        # cette ligne n'a jamais bougé : son stock est 0, pas son maximum.
         sql = """
             SELECT h.code1, h.code2, h.qte2, h.qte1, h.amjh, h.des1, h.mvt
               FROM "%s" h
               JOIN (SELECT code1, code2, MAX(amjh || '#' || id) AS mx
-                      FROM "%s" GROUP BY code1, code2) d
+                      FROM "%s" WHERE COALESCE(mvt, 0) <> 0 GROUP BY code1, code2) d
                 ON d.code1 IS h.code1 AND d.code2 IS h.code2
                AND d.mx = h.amjh || '#' || h.id
         """ % (p["mouvements"], p["mouvements"])
