@@ -16,7 +16,7 @@ from app.services.auth_service import get_current_user
 from app.services.audit_service import log_action
 from fastapi.responses import Response
 
-from app.services.gc import compta, demo, export_compta, fichiers, fsc, pieces
+from app.services.gc import compta, demo, envoi, export_compta, fichiers, fsc, pieces
 from app.services.gc.pieces import ErreurPiece
 
 router = APIRouter(prefix="/api/erp2", tags=["erp2"])
@@ -250,6 +250,25 @@ def piece_valider(piece_id: int, request: Request):
             alertes += fsc.alertes(conn, piece_id)
     _trace(request, u, "VALIDATE", f"Pièce {numero}")
     return {"numero": numero, "alertes": alertes}
+
+
+@router.get("/pieces/{piece_id}/envoi")
+def piece_envoi_preparation(piece_id: int, request: Request):
+    _user(request)
+    return _lecture(envoi.preparation, piece_id)
+
+
+@router.post("/pieces/{piece_id}/envoyer")
+async def piece_envoyer(piece_id: int, request: Request):
+    u = _user(request)
+    b = await request.json()
+    with _ecriture() as conn:
+        ok = envoi.envoyer(conn, piece_id, b.get("destinataires") or [], b.get("copie") or [],
+                           b.get("objet") or "", b.get("message") or "", u)
+    _trace(request, u, "SEND", f"Pièce #{piece_id} par e-mail", {"destinataires": b.get("destinataires"), "reussi": ok})
+    if not ok:
+        raise HTTPException(502, "L'envoi a échoué : service e-mail indisponible ou refusé. L'échec est tracé.")
+    return {"ok": True}
 
 
 @router.post("/pieces/{piece_id}/dupliquer")

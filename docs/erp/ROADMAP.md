@@ -118,10 +118,10 @@ Statuts : ☐ à faire · ◐ en cours · ✓ fait
 
 ### Prochaines étapes, dans l'ordre (parité RVGI d'abord, D11)
 
-1. **Appels d'offre** fournisseurs (demande de prix → commande fournisseur).
-2. **Contacts** : l'annuaire de tous les interlocuteurs.
-3. **Statistiques et palmarès** (« hits parades ») : CA par client, par article, par mois, par représentant.
-4. **Envoi des pièces par e-mail** aux interlocuteurs cochés sur la fiche client.
+1. ✓ **Appels d'offre** fournisseurs (demande de prix → commande fournisseur).
+2. ✓ **Contacts** : l'annuaire de tous les interlocuteurs.
+3. ✓ **Statistiques et palmarès** (« hits parades ») : CA par client, par article, par mois, par représentant.
+4. ✓ **Envoi des pièces par e-mail** (PDF joint, destinataires d'après la fiche client, historique des envois).
 5. **Achats** : unité d'achat (m²) et de conditionnement (ML) avec laize, « N bobines de X soit Y ML ».
 6. **Reprise** : script miroir RVGI → `gc_*` rejouable, avec rapport d'écarts.
 7. Après la mise en service : traçabilité, lots et bobines, gestion de stock (D11).

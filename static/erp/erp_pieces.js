@@ -163,7 +163,7 @@
         if (/facture/.test(conf.types[0])) {
           // Situation RVGI : « à éditer et confirmer », puis passage en comptabilité.
           cols.push({cle: 'imprime_le', libelle: 'Édition', largeur: 110, rendu: function (l) {
-            return l.numero ? (l.imprime_le ? 'Éditée' : h('b', {className: 'erp-a-faire', text: 'À éditer'})) : ''; }});
+            return l.numero ? (l.envoye_le ? 'Envoyée' : l.imprime_le ? 'Éditée' : h('b', {className: 'erp-a-faire', text: 'À éditer'})) : ''; }});
           cols.push({cle: 'comptabilise_le', libelle: 'Comptabilité', largeur: 120, rendu: function (l) {
             return l.comptabilise_le ? 'Transférée' : (l.numero ? 'À transférer' : ''); }});
         }
@@ -665,6 +665,51 @@
       await charger();
     }
 
+    async function envoyerParMail() {
+      if (modifie) await enregistrer(true);
+      var prep = await ERP.api('/api/erp2/pieces/' + P.id + '/envoi');
+      var E = {objet: prep.objet, message: prep.message, autres: '', copie: ''};
+      var coches = {};
+      prep.destinataires.forEach(function (d) { coches[d] = true; });
+      var liste = h('div', {className: 'erp-envoi-dest'});
+      var emails = [];
+      prep.contacts.forEach(function (c) { if (emails.indexOf(c.email) < 0) emails.push(c.email); });
+      prep.destinataires.forEach(function (d) { if (emails.indexOf(d) < 0) emails.push(d); });
+      emails.forEach(function (em) {
+        var c = prep.contacts.filter(function (x) { return x.email === em; })[0];
+        var cb = h('input', {type: 'checkbox', checked: !!coches[em]});
+        cb.addEventListener('change', function () { coches[em] = cb.checked; });
+        liste.appendChild(h('label', {className: 'erp-case ligne'}, cb, h('b', {text: em}),
+          h('span', {className: 'erp-muet', text: c ? [c.nom, c.service].filter(Boolean).join(' · ') : 'e-mail de la fiche'})));
+      });
+      if (!emails.length) liste.appendChild(h('div', {className: 'erp-muet', text: 'Aucun e-mail sur la fiche du tiers : saisir un destinataire.'}));
+      var corps = h('div', null,
+        h('div', {className: 'erp-liens-titre', text: 'Destinataires'}), liste,
+        h('div', {className: 'erp-form'},
+          ERP.champ('Autres destinataires (séparés par des virgules)', ERP.saisie(E, 'autres', 'texte'), {plein: true}),
+          ERP.champ('Copie à', ERP.saisie(E, 'copie', 'texte'), {plein: true}),
+          ERP.champ('Objet', ERP.saisie(E, 'objet', 'texte'), {plein: true}),
+          ERP.champ('Message', ERP.saisie(E, 'message', 'zone', {lignes: 8}), {plein: true})),
+        h('p', {className: 'erp-aide', text: 'Pièce jointe : ' + prep.fichier}),
+        prep.envois.length ? h('div', null, h('div', {className: 'erp-liens-titre', text: 'Déjà envoyée'}),
+          h('div', {className: 'erp-liens'}, prep.envois.map(function (x) {
+            return h('div', {className: 'erp-liens-item'}, h('span', {text: ERP.fmt.date(x.envoye_le) + ' ' + x.envoye_le.slice(11, 16)}),
+              h('span', {text: x.destinataires}), h('span', {className: 'erp-pastille ton-' + (x.reussi ? 'ok' : 'danger'), text: x.reussi ? 'Envoyé' : 'Échec'}));
+          }))) : null);
+      var decouper = function (s) { return String(s || '').split(/[,;\s]+/).filter(Boolean); };
+      ERP.modal('Envoyer par e-mail', corps, [
+        {libelle: 'Annuler'},
+        {libelle: 'Envoyer', accent: true, action: async function () {
+          var dest = Object.keys(coches).filter(function (k) { return coches[k]; }).concat(decouper(E.autres));
+          if (!dest.length) throw new Error('Choisir au moins un destinataire.');
+          await ERP.api('/api/erp2/pieces/' + P.id + '/envoyer', {method: 'POST',
+            body: {destinataires: dest, copie: decouper(E.copie), objet: E.objet, message: E.message}});
+          ERP.toast('Envoyé à ' + dest.join(', ') + '.', 'success');
+          await charger();
+        }},
+      ], {large: true});
+    }
+
     function boutonImprimer() {
       var b = ERP.bouton('Imprimer', async function () {
         if (modifie) await enregistrer(true);
@@ -743,6 +788,7 @@
       } else {
         btnEnr = null;
         a.push(boutonImprimer());
+        if (P.statut !== 'annule' && P.type !== 'of') a.push(ERP.bouton('Envoyer', envoyerParMail, {titre: 'Par e-mail, PDF en pièce jointe'}));
         if (P.type !== 'avoir' && P.type !== 'of') a.push(boutonDupliquer());
         if (P.type === 'of' && P.statut !== 'annule') {
           a.push(ERP.bouton('Consommation', function () { return saisieOF('consommation'); }));

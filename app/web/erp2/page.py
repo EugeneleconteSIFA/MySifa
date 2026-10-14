@@ -122,7 +122,7 @@ def erp2_imprimer_relance(request: Request, tiers_id: int, niveau: int = 1):
 
 # Déclarées AVANT la route générique : FastAPI prend la première qui correspond.
 @router.get(ERP2_PREFIXE + "/imprimer/{piece_id}", response_class=HTMLResponse)
-def erp2_imprimer(request: Request, piece_id: int, modele: str = ""):
+def erp2_imprimer(request: Request, piece_id: int, modele: str = "", format: str = ""):
     try:
         user = get_current_user(request)
     except HTTPException as e:
@@ -137,6 +137,14 @@ def erp2_imprimer(request: Request, piece_id: int, modele: str = ""):
     from app.web.erp2.impression import rendre
     with get_db() as conn:
         try:
+            if format == "pdf":
+                from fastapi.responses import Response
+                from app.services.gc import pdf
+                from app.services.gc.envoi import nom_fichier
+                from app.web.erp2.impression import donnees
+                D = donnees(conn, piece_id, modele)
+                return Response(pdf.generer(D), media_type="application/pdf",
+                                headers={"Content-Disposition": f'attachment; filename="{nom_fichier(D)}"'})
             html_doc = rendre(conn, piece_id, modele)
             # Situation de la pièce : éditée (RVGI : « à éditer et confirmer »)
             conn.execute("UPDATE gc_pieces SET imprime_le=COALESCE(imprime_le, datetime('now','localtime')) "

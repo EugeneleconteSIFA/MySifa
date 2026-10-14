@@ -305,6 +305,7 @@ def lister(conn, types: list[str]) -> list[dict]:
     m = ",".join("?" * len(types))
     return [dict(r) for r in conn.execute(
         f"""SELECT p.id, p.type, p.numero, p.statut, p.date_piece, p.date_livraison, p.ref_tiers, p.imprime_le, p.comptabilise_le,
+                   p.envoye_le,
                    p.total_ht_cents, p.total_ttc_cents, p.tiers_id, t.code AS tiers_code,
                    t.raison_sociale AS tiers_nom,
                    (SELECT COUNT(*) FROM gc_pieces_lignes l WHERE l.piece_id=p.id AND l.article_id IS NOT NULL) AS nb_lignes
