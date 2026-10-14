@@ -302,8 +302,13 @@ série ou une liste) et, à la capture (`o.apercu`), montre en tête du panneau
 14/10 : centré sur la page, il paraissait perdu) l'indicateur tel qu'il
 apparaîtra : même carte, rendue par
 `MySifaAccueil.apercu()` de `mysifa_accueil.js` (chargé hors de l'accueil avec
-`window.__mysifaAccueilApercuSeul`, sans colonne), valeurs lues sur la page,
-série et liste par les sources. Ne pas écrire un second rendu de carte pour
+`window.__mysifaAccueilApercuSeul`, sans colonne). Ses valeurs sont **calculées
+par la source du bloc avec les filtres choisis** dans le questionnaire, comme
+sur l'accueil une fois créé (retour du 14/10 : lues sur la page, elles ne
+suivaient pas un changement de période) ; celles de la page ne servent qu'en
+attendant la réponse, ou pour un bloc sans source. Série et liste viennent
+aussi des sources. La bulle de survol du mode capture est masquée à
+l'ouverture du questionnaire. Ne pas écrire un second rendu de carte pour
 l'aperçu. Le questionnaire est redessiné à chaque réglage : l'aperçu est un
 élément durable, replacé dans `.cap-apercu-ici` après chaque dessin, jamais
 recréé. Sa largeur est celle d'une carte dans la colonne de l'utilisateur,

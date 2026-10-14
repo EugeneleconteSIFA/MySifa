@@ -762,9 +762,11 @@
   }
 
   /* Aperçu d'un indicateur pas encore créé, pour le questionnaire de capture
-     (mysifa_blocs.js) : même carte, mêmes règles d'affichage, avec les
-     valeurs que la page affiche à cet instant. Série et liste sont lues par
-     les mêmes sources que la colonne. Rend { el, maj(w) } : maj redessine
+     (mysifa_blocs.js) : même carte, mêmes règles d'affichage. Les valeurs
+     viennent de la source du bloc, avec les filtres choisis dans le
+     questionnaire — comme sur l'accueil une fois créé ; en attendant sa
+     réponse, et pour un bloc sans source, ce sont celles de la page. Série
+     et liste sont lues par les mêmes sources que la colonne. Rend { el, maj(w) } : maj redessine
      après un changement de taille, de valeurs, de nom ou de filtres. */
   function apercu(o) {
     poserStyle();
@@ -786,6 +788,25 @@
         z.textContent = t;
         z.hidden = !t;
       }).catch(function () { /* sous-titre facultatif */ });
+    }
+    // Valeurs recalculées pour les filtres choisis (période, machines…).
+    function valeursSource() {
+      chargerSources().then(function () {
+        var src = sourceDe(c.w);
+        if (!src || c.valeursCapture === c.w.url_capture) return;
+        var cap = c.valeursCapture = c.w.url_capture;
+        var params;
+        try { params = new URL(cap, ORIGINE).searchParams; } catch (e) { params = new URLSearchParams(); }
+        Promise.resolve().then(function () { return src({ json: api, objet: c.w.objet, params: params }); })
+          .then(function (res) {
+            if (!res || res.introuvable || c.valeursCapture !== cap) return;   // filtres changés entre-temps
+            c.valeurs = res.valeurs || {};
+            c.nombres = res.nombres || {};
+            c.tons = res.tons || {};
+            c.majLe = Date.now();
+            afficherValeurs(c);
+          }).catch(function () { /* on garde les valeurs de la page */ });
+      });
     }
     function extras() {
       chargerSources().then(function () {
@@ -809,6 +830,7 @@
     }
     afficherValeurs(c);
     sousTitre();
+    valeursSource();
     extras();
     return {
       el: c.el,
@@ -818,6 +840,7 @@
         c.el.querySelector(".mac-nom").textContent = w2.nom || "";
         afficherValeurs(c);
         if (filtresChanges) sousTitre();
+        valeursSource();
         extras();
       }
     };
