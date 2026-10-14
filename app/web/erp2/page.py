@@ -121,7 +121,7 @@ def erp2_imprimer_relance(request: Request, tiers_id: int, niveau: int = 1):
 
 # Déclarées AVANT la route générique : FastAPI prend la première qui correspond.
 @router.get(ERP2_PREFIXE + "/imprimer/{piece_id}", response_class=HTMLResponse)
-def erp2_imprimer(request: Request, piece_id: int):
+def erp2_imprimer(request: Request, piece_id: int, modele: str = ""):
     try:
         user = get_current_user(request)
     except HTTPException as e:
@@ -136,7 +136,7 @@ def erp2_imprimer(request: Request, piece_id: int):
     from app.web.erp2.impression import rendre
     with get_db() as conn:
         try:
-            return HTMLResponse(rendre(conn, piece_id))
+            return HTMLResponse(rendre(conn, piece_id, modele))
         except ErreurPiece as e:
             raise HTTPException(404, str(e)) from None
 

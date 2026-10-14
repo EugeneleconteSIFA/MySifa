@@ -134,165 +134,345 @@ tr.total td {{ border-top: 1.5px solid black; font-weight: 700; }}
 </div></body></html>"""
 
 
-def rendre(conn, piece_id: int) -> str:
+def _chaine(conn, ligne_id: int) -> dict:
+    """Pièces d'origine d'une ligne : {'commande': (numero, rang), 'bl': (numero, date)}."""
+    out = {}
+    lid = ligne_id
+    for _ in range(4):
+        r = conn.execute(
+            """SELECT la.id, la.rang, la.ligne_amont_id, pa.type, pa.numero, pa.date_piece
+               FROM gc_pieces_lignes l JOIN gc_pieces_lignes la ON la.id=l.ligne_amont_id
+               JOIN gc_pieces pa ON pa.id=la.piece_id WHERE l.id=?""", (lid,)).fetchone()
+        if not r:
+            break
+        if r["type"] in ("commande", "marche", "cde_fournisseur") and r["type"] not in out:
+            out[r["type"]] = (r["numero"], r["rang"])
+        if r["type"] in ("bl", "reception") and r["type"] not in out:
+            out[r["type"]] = (r["numero"], r["date_piece"])
+        lid = r["id"]
+    return out
+
+
+def _unite_vente(base: int, unite: str, libelles: dict) -> str:
+    if int(base or 1) == 1000:
+        return "Prix et Quantité au mille"
+    lib = libelles.get(unite, unite or "")
+    return f"Prix et Quantité {'à la' if lib[:1].lower() in 'bé' else 'au'} {lib.lower()}" if lib else ""
+
+
+def rendre(conn, piece_id: int, modele: str = "") -> str:
+    """Document A4 d'une pièce. `modele='expedition'` sur une commande : l'ordre
+    d'expédition interne (stock restant, date de production) au lieu de la
+    confirmation de commande."""
+    from app.services.gc import fsc
     p = pieces.charger(conn, piece_id)
     soc = fichiers.lire_societe(conn)
     t = conn.execute("SELECT * FROM gc_tiers WHERE id=?", (p["tiers_id"],)).fetchone()
     unites = {r["code"]: r for r in conn.execute("SELECT * FROM gc_unites").fetchall()}
+    unites_lib = {k: v["libelle"] for k, v in unites.items()}
     tvas = {r["code"]: r for r in conn.execute("SELECT * FROM gc_tva").fetchall()}
-    sans_prix = p["type"] in SANS_PRIX
-    titre = TITRES.get(p["type"], p["type"])
+    typ = p["type"]
+    expedition = typ == "commande" and modele == "expedition"
+    vente = pieces.TYPES[typ]["sens"] == "vente"
+    titres = dict(TITRES, commande="Confirmation de commande", reception="Bon de réception",
+                  facture_fournisseur="Facture d'achats", cde_fournisseur="Bon de commande")
+    titre = "Ordre d'expédition" if expedition else titres.get(typ, typ)
     numero = p["numero"] or "BROUILLON"
 
-    # ── Lignes ───────────────────────────────────────────────────────
+    # ── Colonnes selon le document ───────────────────────────────────
+    if expedition:
+        cols = [("Quantité", "n"), ("Unité de vente", ""), ("Stock restant", "n"), ("", "")]
+    elif typ == "bl":
+        cols = [("Quantité commandée", "n"), ("Quantité déjà livrée", "n"), ("Quantité livrée", "n fort"), ("Reliquat", "n")]
+    elif typ == "reception":
+        cols = [("Qté commandée", "n"), ("Qté livrée", "n")]
+    elif typ == "of":
+        cols = [("Quantité", "n"), ("Unité", "")]
+    elif typ == "cde_fournisseur":
+        cols = [("Quantité", "n"), ("P.U. H.T.", "n"), ("Unité d'achat", ""), ("Montant H.T.", "n"), ("Date de livraison", "")]
+    else:
+        cols = [("Quantité", "n"), ("P.U. H.T.", "n"), ("Montant H.T.", "n"), ("TVA", "n")]
+
+    fsc_present = False
     corps = []
     for l in p["lignes"]:
         if not l["article_id"]:
-            corps.append(f'<tr class="texte"><td colspan="{3 if sans_prix else 6}">{_e(l["libelle"])}</td></tr>')
+            corps.append(f'<tr class="texte"><td colspan="{len(cols) + 1}">{_e(l["libelle"])}</td></tr>')
             continue
+        art = conn.execute("SELECT * FROM gc_articles WHERE id=?", (l["article_id"],)).fetchone()
         dec = int(unites[l["unite"]]["decimales"]) if l["unite"] in unites else 3
-        desig = f'<b>{_e(l["article_code"])}</b> {_e(l["libelle"])}'
-        if sans_prix:
-            corps.append(f'<tr><td>{desig}</td><td class="n">{_qte(l["quantite_milli"], dec)}</td><td>{_e(l["unite"])}</td></tr>')
+        ch = _chaine(conn, l["id"])
+        # Désignation : code, réf. client à droite, libellé, détails, rappel des pièces d'origine
+        droite = []
+        if vente and p["ref_tiers"] and typ in ("bl", "facture", "avoir"):
+            droite.append(f"V/Réf commande : {_e(p['ref_tiers'])}")
+        if l.get("ref_client"):
+            droite.append(f"V/Réf produit : {_e(l['ref_client'])}")
+        des = [f'<div class="code"><span>{_e(l["article_code"])}</span><b>{"<br>".join(droite)}</b></div>',
+               f"<div>{_e(l['libelle'])}</div>"]
+        for x in (art["designation"] if "designation" in art.keys() else "", art["conditionnement"] if "conditionnement" in art.keys() else ""):
+            for ligne in str(x or "").splitlines():
+                if ligne.strip():
+                    des.append(f"<div>{_e(ligne)}</div>")
+        uv = _unite_vente(l["base_prix"], l["unite"], unites_lib)
+        if typ in ("bl", "facture", "avoir", "commande") and uv and not expedition:
+            des.append(f"<div>Unité de vente : {_e(uv)}</div>")
+        if typ == "cde_fournisseur":
+            des.append(f"<div>Unité d'achat : {_e(uv or unites_lib.get(l['unite'], ''))}</div>")
+        rappel = []
+        if "commande" in ch:
+            rappel.append(f"Commande No {_e(ch['commande'][0])}/{ch['commande'][1]}")
+        elif typ in ("commande", "marche") and p["numero"] and not expedition:
+            rappel.append(f"Cde : {_e(p['numero'])}/{l['rang']}")
+        if "bl" in ch:
+            rappel.append(f"BL No {_e(ch['bl'][0])} du {_date(ch['bl'][1])}")
+        if "cde_fournisseur" in ch:
+            rappel.append(f"Notre Cde : {_e(ch['cde_fournisseur'][0])}/{ch['cde_fournisseur'][1]}")
+        if expedition and p["numero"]:
+            rappel.append(f"Cde : {_e(p['numero'])}/{l['rang']}")
+        if rappel:
+            des.append(f"<div>{' · '.join(rappel)}</div>")
+        if vente and typ in ("bl", "facture", "avoir", "commande"):
+            a = fsc.allegation_ligne(conn, l["id"]) if typ != "commande" else None
+            if a and a[0] in fsc.FSC:
+                fsc_present = True
+                des.append(f'<div class="fsc">{_e(fsc.libelle(a))}'
+                           f'{" — " + _e(soc.get("fsc_certificat")) if soc.get("fsc_certificat") else ""}</div>')
+            elif typ == "commande" and "fsc_requis" in art.keys() and art["fsc_requis"]:
+                fsc_present = True
+                des.append('<div class="fsc">Certifié FSC</div>')
+
+        q = _qte(l["quantite_milli"], dec)
+        if expedition:
+            stock = conn.execute("SELECT COALESCE(SUM(quantite_milli),0) s FROM gc_mouvements WHERE article_id=?",
+                                 (l["article_id"],)).fetchone()["s"]
+            orig = pieces.ORIGINES.get(l.get("origine_prod") or "", "")
+            cells = [q, _e(unites_lib.get(l["unite"], l["unite"])), _qte(stock, dec),
+                     f"{_e(orig)}<br>{_date(l.get('date_expedition') or p.get('date_expedition'))}"]
+        elif typ == "bl":
+            cde_q = deja = None
+            if l["ligne_amont_id"]:
+                cl = conn.execute("SELECT quantite_milli FROM gc_pieces_lignes WHERE id=?", (l["ligne_amont_id"],)).fetchone()
+                cde_q = int(cl["quantite_milli"])
+                autres = conn.execute(
+                    """SELECT COALESCE(SUM(lv.quantite_milli),0) q FROM gc_pieces_lignes lv JOIN gc_pieces pv ON pv.id=lv.piece_id
+                       WHERE lv.ligne_amont_id=? AND pv.type='bl' AND pv.statut NOT IN ('annule','brouillon') AND lv.id!=?""",
+                    (l["ligne_amont_id"], l["id"])).fetchone()["q"]
+                deja = int(autres)
+            reliquat = max(0, cde_q - deja - int(l["quantite_milli"])) if cde_q is not None else None
+            cells = [_qte(cde_q, dec) if cde_q is not None else "", _qte(deja, dec) if deja is not None else "",
+                     f"<b>{q}</b>", _qte(reliquat, dec) if reliquat is not None else ""]
+        elif typ == "reception":
+            cde_q = None
+            if l["ligne_amont_id"]:
+                cde_q = conn.execute("SELECT quantite_milli FROM gc_pieces_lignes WHERE id=?",
+                                     (l["ligne_amont_id"],)).fetchone()["quantite_milli"]
+            cells = [_qte(cde_q, dec) if cde_q is not None else "", q]
+        elif typ == "of":
+            cells = [q, _e(unites_lib.get(l["unite"], l["unite"]))]
         else:
-            base = f' <small>/ {_qte(l["base_prix"] * 1000, 0)}</small>' if int(l["base_prix"]) > 1 else ""
-            rem = f'{int(l["remise_bp"]) / 100:g} %'.replace(".", ",") if l["remise_bp"] else ""
-            corps.append(
-                f'<tr><td>{desig}</td><td class="n">{_qte(l["quantite_milli"], dec)} {_e(l["unite"])}</td>'
-                f'<td class="n">{_euros(l["prix_cents"])}{base}</td><td class="n">{rem}</td>'
-                f'<td class="n">{_e(l["tva_code"])}</td><td class="n">{_euros(l["montant_ht_cents"])}</td></tr>')
-    entete_lignes = ('<tr><th>Désignation</th><th class="n">Quantité</th><th>Unité</th></tr>' if sans_prix else
-                     '<tr><th>Désignation</th><th class="n">Quantité</th><th class="n">Prix unitaire HT</th>'
-                     '<th class="n">Remise</th><th class="n">TVA</th><th class="n">Montant HT</th></tr>')
+            pu = f'{l["prix_cents"] / 100:,.3f}'.replace(",", " ").replace(".", ",")
+            rem = f' <small>−{int(l["remise_bp"]) / 100:g} %</small>'.replace(".", ",") if l["remise_bp"] else ""
+            taux = f'{int(l["taux_tva_bp"]) / 100:,.2f} %'.replace(".", ",")
+            mt = _euros(l["montant_ht_cents"]).replace(" €", "")
+            if typ == "cde_fournisseur":
+                cells = [q, pu + rem, _e(unites_lib.get(l["unite"], l["unite"])), mt,
+                         _date(l.get("date_livraison") or p.get("date_livraison"))]
+            else:
+                cells = [q, pu + rem, mt, taux]
+        corps.append("<tr><td class='des'>" + "".join(des) + "</td>" +
+                     "".join(f"<td class='{c[1]}'>{v}</td>" for c, v in zip(cols, cells)) + "</tr>")
 
-    # ── Totaux et mentions ───────────────────────────────────────────
-    totaux = ""
-    mentions = []
-    if not sans_prix:
+    tete_cols = "<tr><th>Désignation</th>" + "".join(f"<th class='{c[1]}'>{_e(c[0])}</th>" for c in cols) + "</tr>"
+
+    # ── Totaux ───────────────────────────────────────────────────────
+    totaux_html = ""
+    mentions_tva = []
+    if typ in ("facture", "avoir", "devis", "commande", "marche", "cde_fournisseur", "facture_fournisseur") and not expedition:
         tot = calculs.totaux(p["lignes"], p["remise_bp"], p.get("escompte_bp") or 0, p.get("acompte_cents") or 0)
-        rows = []
-        if tot["remise"] or tot["escompte"]:
-            rows.append(("Total HT brut", _euros(sum(b["ht_brut"] for b in tot["bases"]))))
-        if tot["remise"]:
-            rows.append((f'Remise {int(p["remise_bp"]) / 100:g} %'.replace(".", ","), "− " + _euros(tot["remise"])))
-        if tot["escompte"]:
-            rows.append((f'Escompte {int(p["escompte_bp"]) / 100:g} %'.replace(".", ","), "− " + _euros(tot["escompte"])))
-        rows.append(("Total HT", _euros(tot["ht"])))
+        lignes_t = []
         for b in tot["bases"]:
-            rows.append((f'TVA {b["taux_bp"] / 100:g} % sur {_euros(b["ht"])}'.replace(".", ","), _euros(b["tva"])))
-        rows.append(("Total TTC" if p["type"] != "avoir" else "Total TTC en votre faveur", _euros(tot["ttc"])))
-        if tot["acompte"]:
-            rows.append(("Acompte versé", "− " + _euros(tot["acompte"])))
-            rows.append(("Net à payer", _euros(tot["net_a_payer"])))
-        totaux = '<table class="totaux">' + "".join(
-            f'<tr class="{"fort" if i == len(rows) - 1 else ""}"><td>{_e(a)}</td><td class="n">{b}</td></tr>'
-            for i, (a, b) in enumerate(rows)) + "</table>"
-        for code in sorted({l["tva_code"] for l in p["lignes"] if l["article_id"]} - {None}):
+            code = next((l["tva_code"] for l in p["lignes"] if l["article_id"] and int(l["taux_tva_bp"]) == b["taux_bp"]), None)
+            taux = "Exonéré" if not b["taux_bp"] else f'{b["taux_bp"] / 100:,.2f} %'.replace(".", ",")
+            lignes_t.append(f"<tr><td>{_euros(sum(x['ht_brut'] for x in tot['bases']))}</td><td>{_euros(b['ht'])}</td>"
+                            f"<td>{taux}</td><td>{_euros(b['tva'])}</td><td>{_euros(b['ht'] + b['tva'])}</td></tr>")
             if code in tvas and tvas[code]["mention"]:
-                mentions.append(tvas[code]["mention"])
+                mentions_tva.append(tvas[code]["mention"])
+        remise = ""
+        if tot["remise"] or tot["escompte"]:
+            remise = (f"<div class='remises'>{'Remise ' + _euros(tot['remise']) if tot['remise'] else ''}"
+                      f"{' · Escompte ' + _euros(tot['escompte']) if tot['escompte'] else ''}</div>")
+        net = (f"<div class='net'><span>{'Net à payer' if typ != 'avoir' else 'Net en votre faveur'} :</span>"
+               f"<b>{_euros(tot['net_a_payer'])}</b></div>")
+        acompte = f"<div class='net petit'><span>Acompte :</span><b>{_euros(tot['acompte'])}</b></div>" if tot["acompte"] else ""
+        totaux_html = (remise + "<table class='totaux'><tr><th>Montant total H.T.</th><th>Base H.T.</th><th>Taux</th>"
+                       "<th>Montant TVA</th><th>Montant TTC</th></tr>" + "".join(lignes_t) + "</table>"
+                       + (f"<div class='mini'>TVA sur les débits</div>" if typ in ("facture", "avoir") and soc.get("tva_sur_debits") else "")
+                       + acompte + net)
+    elif typ == "bl" or typ == "reception":
+        tr = conn.execute("SELECT nom FROM expe_transporteurs WHERE id=?", (p.get("transporteur_id"),)).fetchone() \
+            if p.get("transporteur_id") else None
+        mode = tr["nom"] if tr else "Par nos soins"
+        poids = _qte(p["poids_g"], 3) if p.get("poids_g") else ""
+        totaux_html = ("<table class='totaux pied-bl'><tr><th>Mode de " + ("livraison" if typ == "bl" else "réception") +
+                       "</th><th>Nbre de colis</th><th>Nbre de palettes</th><th>Poids en kg</th><th>Récépissé</th>"
+                       + ("<th>Visa et nom</th>" if typ == "reception" else "") + "</tr>"
+                       f"<tr><td>{_e(mode)}</td><td>{_e(p.get('nb_colis') or '')}</td><td>{_e(p.get('nb_palettes') or '')}</td>"
+                       f"<td>{poids}</td><td>{_e(p.get('recepisse') or '')}</td>" + ("<td></td>" if typ == "reception" else "") + "</tr></table>")
 
-    infos = []
-    if p["ref_tiers"]:
-        infos.append(("Votre référence" if pieces.TYPES[p["type"]]["sens"] == "vente" else "Référence fournisseur", p["ref_tiers"]))
-    if p["type"] == "devis" and p["date_validite"]:
-        infos.append(("Valable jusqu'au", _date(p["date_validite"])))
-    if p["type"] == "marche" and p["date_validite"]:
-        infos.append(("Fin du marché", _date(p["date_validite"])))
-    if p["date_livraison"] and p["type"] in ("commande", "cde_fournisseur", "devis"):
-        infos.append(("Livraison prévue", _date(p["date_livraison"])))
-    cond = None
-    if p["condition_paiement"]:
-        cond = conn.execute("SELECT libelle FROM gc_conditions_paiement WHERE code=?", (p["condition_paiement"],)).fetchone()
-    if cond and not sans_prix:
-        infos.append(("Conditions de paiement", cond["libelle"]))
-    if p["mode_paiement"] and not sans_prix:
-        m = conn.execute("SELECT libelle FROM gc_modes_paiement WHERE code=?", (p["mode_paiement"],)).fetchone()
-        if m:
-            infos.append(("Mode de paiement", m["libelle"]))
-    if p["echeances"]:
-        infos.append(("Échéance", ", ".join(_date(e["date_echeance"]) for e in p["echeances"])))
-    elif p["type"] == "facture" and p["statut"] == "brouillon":
-        c = conn.execute("SELECT * FROM gc_conditions_paiement WHERE code=?", (p["condition_paiement"],)).fetchone() if p["condition_paiement"] else None
-        if c:
-            e = calculs.date_echeance(date.fromisoformat(p["date_piece"][:10]), c["jours"], bool(c["fin_de_mois"]), c["jour_du_mois"])
-            infos.append(("Échéance", _date(e.isoformat())))
-    if p["type"] == "avoir" and p["piece_annulee_id"]:
+    # ── Cartouches ───────────────────────────────────────────────────
+    contact = None
+    if p.get("contact_id"):
+        contact = conn.execute("SELECT nom FROM gc_tiers_contacts WHERE id=?", (p["contact_id"],)).fetchone()
+    suivi = []
+    if p.get("cree_par"):
+        suivi.append(("Commande suivie par" if typ in ("commande", "cde_fournisseur", "devis") else
+                      "Livraison suivie par" if typ == "bl" else "Suivi par", p["cree_par"]))
+    if contact:
+        suivi.append(("À l'attention de", contact["nom"]))
+    if typ in ("cde_fournisseur",) and p.get("date_livraison"):
+        suivi.insert(0, ("Date de réception souhaitée", _date(p["date_livraison"])))
+    if typ == "devis" and p.get("date_validite"):
+        suivi.append(("Valable jusqu'au", _date(p["date_validite"])))
+    if typ == "marche":
+        suivi.append(("Ouverture", _date(p.get("date_ouverture"))))
+        suivi.append(("Fermeture", _date(p.get("date_validite"))))
+    if p.get("ref_tiers") and typ in ("commande", "devis", "marche"):
+        suivi.append(("Vos références", p["ref_tiers"]))
+    if typ == "facture_fournisseur":
+        suivi.append(("N° de facture fournisseur", p.get("ref_tiers") or ""))
+    if typ == "reception" and p.get("ref_tiers"):
+        suivi.append(("BL fournisseur", p["ref_tiers"]))
+    cartouche = (f"<table class='cart'><tr><th>Date</th><th>{'Client' if vente else 'Fournisseur'}</th><th>Page</th></tr>"
+                 f"<tr><td>{_date(p['date_piece'])}</td><td>{_e(t['code'])}</td><td>1</td></tr>"
+                 + (f"<tr><td colspan='3' class='suivi'>" + "<br>".join(f"{_e(a)} : {_e(b)}" for a, b in suivi if b) + "</td></tr>" if suivi else "")
+                 + "</table>")
+
+    reglement = ""
+    if typ in ("facture", "avoir", "facture_fournisseur", "cde_fournisseur", "commande", "devis") and not expedition:
+        cond = conn.execute("SELECT libelle FROM gc_conditions_paiement WHERE code=?", (p["condition_paiement"],)).fetchone() \
+            if p["condition_paiement"] else None
+        mode = conn.execute("SELECT libelle FROM gc_modes_paiement WHERE code=?", (p["mode_paiement"],)).fetchone() \
+            if p["mode_paiement"] else None
+        ech = ", ".join(_date(e["date_echeance"]) for e in p["echeances"])
+        if not ech and typ == "facture" and cond:
+            c = conn.execute("SELECT * FROM gc_conditions_paiement WHERE code=?", (p["condition_paiement"],)).fetchone()
+            ech = _date(calculs.date_echeance(date.fromisoformat(p["date_piece"][:10]), c["jours"], bool(c["fin_de_mois"]),
+                                              c["jour_du_mois"]).isoformat())
+        reglement = ("<table class='regl'><tr><th>Mode de règlement</th>" + ("<th>Échéance</th>" if ech else "") + "</tr>"
+                     f"<tr><td>{_e(mode['libelle'] if mode else '')}<br>{_e(cond['libelle'] if cond else '')}</td>"
+                     + (f"<td class='ech'>{ech}</td>" if ech else "") + "</tr></table>")
+    origine = ""
+    if typ in ("facture", "avoir") and soc.get("mention_origine"):
+        origine = "<div class='origine'>" + "<br>".join(_e(x) for x in soc["mention_origine"].splitlines()) + "</div>"
+    if typ == "avoir" and p.get("piece_annulee_id"):
         f = conn.execute("SELECT numero, date_piece FROM gc_pieces WHERE id=?", (p["piece_annulee_id"],)).fetchone()
         if f:
-            infos.append(("Sur facture", f"{f['numero']} du {_date(f['date_piece'])}"))
-    amont = [a for a in p["amont"] if a["numero"]]
-    if amont and p["type"] in ("bl", "facture"):
-        lib = "Commande" if p["type"] == "bl" else "Bon(s) de livraison"
-        infos.append((lib, ", ".join(a["numero"] for a in amont)))
+            origine += f"<div class='origine'>Avoir sur facture {_e(f['numero'])} du {_date(f['date_piece'])}</div>"
 
-    if p["type"] in ("facture", "avoir"):
-        if soc.get("penalites_retard"):
-            mentions.append(soc["penalites_retard"])
-        if not p.get("escompte_bp"):
-            mentions.append("Pas d'escompte pour paiement anticipé.")
+    # ── Adresses ─────────────────────────────────────────────────────
+    fact = _adresse(conn, p["adresse_facturation_id"])
+    livr = _adresse(conn, p["adresse_livraison_id"])
+    nom = _e(t["raison_sociale"])
+    barre_fact = typ in ("bl",) or expedition
+    if vente:
+        bloc_fact = (f"<div class='adr{' barree' if barre_fact else ''}'><div class='lib'>Adresse de facturation</div>"
+                     f"{nom}<br>{'<br>'.join(_e(x) for x in fact)}"
+                     + (f"<br>V/No TVA : {_e(t['tva_intra'])}" if t["tva_intra"] and typ in ("facture", "avoir") else "") + "</div>")
+        bloc_livr = (f"<div class='adr'><div class='lib'>Adresse de livraison</div>{nom}<br>{'<br>'.join(_e(x) for x in (livr or fact))}</div>"
+                     if typ not in ("devis", "marche") or livr else "")
+        adresses = (bloc_livr + bloc_fact) if typ in ("facture", "avoir") else (bloc_fact + bloc_livr)
+    else:
+        soc_adr_l = [soc.get("adresse1"), soc.get("adresse2"), " ".join(x for x in (soc.get("code_postal"), soc.get("ville")) if x)]
+        adresses = (f"<div class='adr'><div class='lib'>Fournisseur</div><b>{nom}</b><br>{'<br>'.join(_e(x) for x in fact)}</div>"
+                    f"<div class='adr'><div class='lib'>{'Adresse de réception' if typ == 'reception' else 'Adresse de livraison'}</div>"
+                    f"<b>{_e(soc.get('raison_sociale') or '')}</b><br>{'<br>'.join(_e(x) for x in soc_adr_l if x)}</div>")
+    contact_box = "<div class='adr contact'><div class='lib'>Contact</div>" + (_e(contact["nom"]) if contact else "") + "</div>" \
+        if typ == "bl" else ""
+
+    # ── Mentions et pied ─────────────────────────────────────────────
+    mentions = []
     if p["notes"]:
-        mentions.insert(0, p["notes"])
-    banque = ""
-    if p["type"] == "facture" and soc.get("iban"):
-        banque = f'<div class="banque">Règlement par virement — IBAN {_e(soc["iban"])}{" · BIC " + _e(soc["bic"]) if soc.get("bic") else ""}</div>'
+        mentions.append(_e(p["notes"]))
+    mentions += [_e(m) for m in mentions_tva]
+    if fsc_present and soc.get("fsc_certificat"):
+        mentions.append(_e(f"Certificat FSC : {soc['fsc_certificat']}" + (f" — licence {soc['fsc_licence']}" if soc.get("fsc_licence") else "")))
+    if typ in ("facture", "avoir"):
+        if soc.get("texte_affacturage"):
+            mentions.append(f"<span class='affact'>{_e(soc['texte_affacturage'])}</span>")
+        mentions.append(_e(soc.get("texte_penalites") or soc.get("penalites_retard") or ""))
+        if soc.get("texte_reserve_propriete"):
+            mentions.append(_e(soc["texte_reserve_propriete"]))
+    if vente and soc.get("texte_juridiction"):
+        mentions.append(_e(soc["texte_juridiction"]))
+    mentions = [m for m in mentions if m]
 
-    # ── Blocs société / tiers ────────────────────────────────────────
-    soc_adr = [soc.get("adresse1"), soc.get("adresse2"),
-               " ".join(x for x in (soc.get("code_postal"), soc.get("ville")) if x)]
-    soc_contact = " · ".join(x for x in (soc.get("telephone"), soc.get("email")) if x)
+    soc_adr = [soc.get("adresse1"), soc.get("adresse2"), " ".join(x for x in (soc.get("code_postal"), soc.get("ville")) if x)]
+    soc_lignes = [x for x in soc_adr if x]
+    if soc.get("telephone"):
+        soc_lignes.append(f"Tél. {soc['telephone']}")
+    ident = []
+    if soc.get("tva_intra"):
+        ident.append(f"TVA : {soc['tva_intra']}")
+    if soc.get("siret"):
+        ident.append(f"SIRET : {soc['siret']}")
     legal = " · ".join(x for x in (
         " ".join(x for x in (soc.get("forme_juridique"),
                              ("au capital de " + _euros(soc["capital_cents"])) if soc.get("capital_cents") else "") if x),
-        ("SIRET " + soc["siret"]) if soc.get("siret") else "",
-        soc.get("rcs") or "", ("APE " + soc["ape"]) if soc.get("ape") else "",
-        ("TVA " + soc["tva_intra"]) if soc.get("tva_intra") else "") if x)
-
-    fact = _adresse(conn, p["adresse_facturation_id"])
-    livr = _adresse(conn, p["adresse_livraison_id"]) if p["type"] in ("devis", "commande", "bl") else []
-    bloc_tiers = (f'<div class="adr"><div class="lib">{"Client" if pieces.TYPES[p["type"]]["sens"] == "vente" else "Fournisseur"}</div>'
-                  f'<b>{_e(t["raison_sociale"])}</b><br>' + "<br>".join(_e(x) for x in fact) +
-                  (f'<br><small>TVA {_e(t["tva_intra"])}</small>' if t["tva_intra"] else "") +
-                  f'<br><small>Code {_e(t["code"])}</small></div>')
-    if livr and livr != fact:
-        bloc_tiers += f'<div class="adr"><div class="lib">Livraison</div><b>{_e(t["raison_sociale"])}</b><br>' + "<br>".join(_e(x) for x in livr) + "</div>"
-
-    infos_html = "".join(f"<div><span>{_e(a)}</span><b>{_e(b)}</b></div>" for a, b in infos)
-    mentions_html = "".join(f"<p>{_e(m)}</p>" for m in mentions)
+        soc.get("rcs") or "", ("APE " + soc["ape"]) if soc.get("ape") else "") if x)
+    pied = (f"Siège social : {_e(', '.join(soc_lignes[:3]))}" + (f" — {_e(soc_lignes[3])}" if len(soc_lignes) > 3 else "")
+            + f"<br>{_e(soc.get('raison_sociale') or '')} {_e(legal)}")
     filigrane = '<div class="filigrane">BROUILLON</div>' if not p["numero"] else ""
 
     return f"""<!DOCTYPE html>
 <html lang="fr"><head><meta charset="UTF-8">
 <title>{_e(titre)} {_e(numero)}</title>
 <style>
-@page {{ size: A4; margin: 14mm 14mm 16mm; }}
+@page {{ size: A4; margin: 12mm 12mm 14mm; }}
 * {{ box-sizing: border-box; }}
-body {{ margin: 0; font: 10pt/1.4 'Segoe UI', system-ui, sans-serif; color: black; background: white; }}
-.page {{ max-width: 190mm; margin: 0 auto; padding: 8mm 0; position: relative; }}
-.tete {{ display: flex; justify-content: space-between; gap: 10mm; margin-bottom: 8mm; }}
-.soc b {{ font-size: 13pt; }}
-.soc small, .adr small {{ color: dimgray; }}
-.doc {{ text-align: right; }}
-.doc h1 {{ margin: 0; font-size: 16pt; letter-spacing: .5px; }}
-.doc .num {{ font-size: 12pt; font-weight: 700; margin-top: 2mm; }}
-.tiers {{ display: flex; gap: 6mm; justify-content: flex-end; margin-bottom: 6mm; }}
-.adr {{ width: 80mm; border: 1px solid silver; border-radius: 2mm; padding: 3mm 4mm; }}
-.adr .lib {{ font-size: 8pt; text-transform: uppercase; letter-spacing: .5px; color: dimgray; margin-bottom: 1mm; }}
-.infos {{ display: flex; flex-wrap: wrap; gap: 2mm 8mm; margin-bottom: 5mm; }}
-.infos div {{ display: flex; flex-direction: column; }}
-.infos span {{ font-size: 8pt; color: dimgray; text-transform: uppercase; letter-spacing: .4px; }}
-table.lignes {{ width: 100%; border-collapse: collapse; }}
-table.lignes th {{ font-size: 8pt; text-transform: uppercase; letter-spacing: .4px; text-align: left; border-bottom: 1.5px solid black; padding: 2mm 1.5mm; }}
-table.lignes td {{ border-bottom: 1px solid gainsboro; padding: 2mm 1.5mm; vertical-align: top; }}
-table.lignes tr.texte td {{ font-style: italic; color: dimgray; }}
+body {{ margin: 0; font: 9.5pt/1.35 'Segoe UI', system-ui, sans-serif; color: black; background: white; }}
+.page {{ max-width: 190mm; margin: 0 auto; padding: 6mm 0; position: relative; }}
+.haut {{ display: grid; grid-template-columns: 1fr 1.15fr; gap: 6mm; }}
+.soc b {{ font-size: 15pt; letter-spacing: .5px; }}
+.soc div {{ font-size: 8.5pt; }}
+h1 {{ margin: 0 0 3mm; font-size: 16pt; text-align: left; }}
+.adr {{ border: 1px solid dimgray; padding: 2mm 3mm; margin-bottom: 3mm; position: relative; min-height: 24mm; font-size: 10pt; }}
+.adr .lib {{ text-align: center; text-decoration: underline; font-size: 9pt; }}
+.adr.barree {{ background: linear-gradient(to top right, transparent calc(50% - .5px), dimgray, transparent calc(50% + .5px)),
+                           linear-gradient(to bottom right, transparent calc(50% - .5px), dimgray, transparent calc(50% + .5px)); }}
+.adr.contact {{ min-height: 18mm; }}
+.milieu {{ display: grid; grid-template-columns: 1fr 1.15fr; gap: 6mm; margin: 2mm 0 4mm; align-items: start; }}
+table {{ border-collapse: collapse; width: 100%; }}
+.cart th, .cart td, .regl th, .regl td {{ border: 1px solid dimgray; padding: 1.5mm 2mm; text-align: center; font-weight: 400; }}
+.cart td {{ font-size: 11pt; }}
+.cart td.suivi, .regl td {{ text-align: left; font-size: 9pt; }}
+.regl td.ech {{ text-align: center; font-size: 11pt; }}
+.origine {{ font-size: 9.5pt; margin-top: 2mm; }}
+table.lignes {{ border: 1px solid dimgray; }}
+table.lignes th {{ border: 1px solid dimgray; font-weight: 400; padding: 1.5mm; text-align: center; font-size: 9pt; }}
+table.lignes td {{ border-left: 1px solid dimgray; border-right: 1px solid dimgray; padding: 2.5mm 1.5mm 1mm; vertical-align: top; }}
+table.lignes td.des {{ font-size: 8.5pt; width: 52%; }}
+table.lignes td.des .code {{ display: flex; justify-content: space-between; gap: 4mm; }}
+table.lignes td.des .code b {{ text-align: right; }}
+table.lignes td.des .fsc {{ font-weight: 700; }}
+table.lignes tr.texte td {{ font-style: italic; }}
+table.lignes tbody tr:last-child td {{ padding-bottom: 30mm; }}
 .n {{ text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }}
+.fort {{ font-weight: 700; font-size: 10.5pt; }}
 td small {{ color: dimgray; }}
-table.totaux {{ margin: 5mm 0 0 auto; border-collapse: collapse; min-width: 75mm; }}
-table.totaux td {{ padding: 1.2mm 1.5mm; }}
-table.totaux tr.fort td {{ border-top: 1.5px solid black; font-weight: 700; font-size: 11pt; }}
-.mentions {{ margin-top: 8mm; font-size: 8pt; color: dimgray; }}
-.mentions p {{ margin: 0 0 1.5mm; }}
-.banque {{ margin-top: 4mm; font-size: 9pt; }}
-.pied {{ margin-top: 10mm; padding-top: 2mm; border-top: 1px solid silver; font-size: 7.5pt; color: dimgray; text-align: center; }}
+table.totaux {{ margin-top: 0; }}
+table.totaux th, table.totaux td {{ border: 1px solid dimgray; padding: 1.5mm 2mm; font-weight: 400; text-align: center; }}
+table.totaux td {{ font-size: 11pt; text-align: right; }}
+table.pied-bl td {{ text-align: center; font-size: 10pt; }}
+.remises {{ text-align: right; font-size: 9pt; margin: 1mm 0; }}
+.mini {{ font-size: 8pt; }}
+.net {{ display: flex; justify-content: flex-end; gap: 10mm; margin-top: 1mm; font-size: 12pt; }}
+.net span, .net b {{ border: 1px solid dimgray; padding: 1.5mm 4mm; }}
+.net.petit {{ font-size: 10pt; }}
+.mentions {{ margin-top: 4mm; font-size: 7.5pt; }}
+.mentions p {{ margin: 0 0 1mm; }}
+.affact {{ color: firebrick; font-weight: 700; }}
+.pied {{ margin-top: 6mm; font-size: 7.5pt; text-align: center; }}
 .filigrane {{ position: fixed; top: 40%; left: 0; right: 0; text-align: center; font-size: 72pt; font-weight: 800;
   color: gainsboro; transform: rotate(-24deg); pointer-events: none; z-index: -1; }}
 .barre {{ position: sticky; top: 0; background: whitesmoke; border-bottom: 1px solid gainsboro; padding: 8px; text-align: center; }}
@@ -304,17 +484,16 @@ table.totaux tr.fort td {{ border-top: 1.5px solid black; font-weight: 700; font
 <div class="barre"><button onclick="window.print()">Imprimer / enregistrer en PDF</button></div>
 {filigrane}
 <div class="page">
-  <div class="tete">
-    <div class="soc"><b>{_e(soc.get("raison_sociale") or "")}</b><br>{"<br>".join(_e(x) for x in soc_adr if x)}
-      {f"<br><small>{_e(soc_contact)}</small>" if soc_contact else ""}</div>
-    <div class="doc"><h1>{_e(titre)}</h1><div class="num">N° {_e(numero)}</div><div>du {_date(p["date_piece"])}</div></div>
+  <div class="haut">
+    <div class="soc"><b>{_e(soc.get("raison_sociale") or "")}</b>
+      {"".join(f"<div>{_e(x)}</div>" for x in soc_lignes)}
+      <div style="margin-top:2mm">{"<br>".join(_e(x) for x in ident)}</div></div>
+    <div><h1>{_e(titre)} {"No " if typ not in ("facture", "avoir") else ""}{_e(numero)}</h1>{adresses}</div>
   </div>
-  <div class="tiers">{bloc_tiers}</div>
-  <div class="infos">{infos_html}</div>
-  <table class="lignes"><thead>{entete_lignes}</thead><tbody>{"".join(corps)}</tbody></table>
-  {totaux}
-  {banque}
-  <div class="mentions">{mentions_html}</div>
-  <div class="pied">{_e(soc.get("raison_sociale") or "")}{" · " + _e(legal) if legal else ""}</div>
+  <div class="milieu"><div>{cartouche}{origine}</div><div>{reglement}{contact_box}</div></div>
+  <table class="lignes"><thead>{tete_cols}</thead><tbody>{"".join(corps)}</tbody></table>
+  {totaux_html}
+  <div class="mentions">{"".join(f"<p>{m}</p>" for m in mentions)}</div>
+  <div class="pied">{pied}</div>
 </div>
 </body></html>"""

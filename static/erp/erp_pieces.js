@@ -653,10 +653,16 @@
     }
 
     function boutonImprimer() {
-      return ERP.bouton('Imprimer', async function () {
+      var b = ERP.bouton('Imprimer', async function () {
         if (modifie) await enregistrer(true);
         window.open('/imprimer/' + P.id, '_blank');
       }, {titre: 'Document A4 — imprimer ou enregistrer en PDF'});
+      if (P.type !== 'commande') return b;
+      // Commande : la confirmation pour le client, l'ordre d'expédition pour l'atelier.
+      return h('span', {className: 'erp-bascule'}, b, ERP.bouton('Ordre d\'expédition', async function () {
+        if (modifie) await enregistrer(true);
+        window.open('/imprimer/' + P.id + '?modele=expedition', '_blank');
+      }, {titre: 'Document interne : stock restant, date de production'}));
     }
 
     function boutonDupliquer() {

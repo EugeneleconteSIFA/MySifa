@@ -246,7 +246,16 @@
       c('Code APE', 'ape'), c('Adresse', 'adresse1', 'texte', {large: true}), c('Complément', 'adresse2', 'texte', {large: true}),
       c('Code postal', 'code_postal'), c('Ville', 'ville'), c('Pays', 'pays'), c('Téléphone', 'telephone'), c('Email', 'email'),
       c('IBAN', 'iban', 'texte', {large: true}), c('BIC', 'bic'),
-      c('Pénalités de retard (mention obligatoire)', 'penalites_retard', 'zone', {plein: true})));
+      c('Pénalités de retard (mention obligatoire)', 'penalites_retard', 'zone', {plein: true}),
+      h('div', {className: 'erp-champ plein erp-section-form', text: 'FSC'}),
+      c('Code de certificat FSC', 'fsc_certificat'), c('Licence FSC', 'fsc_licence'),
+      h('div', {className: 'erp-champ plein erp-section-form', text: 'Textes des documents'}),
+      c('Origine et nature (en tête de facture)', 'mention_origine', 'zone', {plein: true}),
+      c('Pénalités et escompte (pied de facture)', 'texte_penalites', 'zone', {plein: true}),
+      c('Affacturage (pied de facture, en rouge)', 'texte_affacturage', 'zone', {plein: true}),
+      c('Réserve de propriété', 'texte_reserve_propriete', 'zone', {plein: true}),
+      c('Clause attributive de juridiction (toutes les pièces de vente)', 'texte_juridiction', 'zone', {plein: true}),
+      h('div', {className: 'erp-champ plein erp-cases'}, ERP.case(S, 'tva_sur_debits', 'TVA sur les débits', {change: m}))));
   }
 
   function ongletRef(nom, ctx) {

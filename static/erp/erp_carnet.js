@@ -63,6 +63,7 @@
       cols.push({cle: 'a_fabriquer_milli', libelle: 'À fabriquer', type: 'qte', largeur: 110});
     }
     cols.push({cle: 'type_ligne_lib', libelle: 'Type', largeur: 150});
+    if (/^(commande|marche|bl)$/.test(type)) cols.push({cle: 'fsc', libelle: 'FSC', largeur: 130});
     cols.push({cle: 'repris_milli', libelle: REPRIS[type] || 'Repris', type: 'qte', largeur: 110});
     cols.push({cle: 'reste_milli', libelle: 'Reste', type: 'qte', largeur: 110, total: true});
     cols.push({cle: 'article_code', libelle: 'Article', largeur: 100});

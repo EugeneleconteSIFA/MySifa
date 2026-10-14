@@ -249,7 +249,8 @@
       var champs = {};
       ['code', 'libelle', 'libelle_client', 'nature', 'famille', 'unite', 'base_prix', 'prix_vente_cents', 'prix_achat_cents',
        'tva_code', 'gere_stock', 'fournisseur_id', 'client_id', 'notes', 'actif', 'ref_client', 'format_l_dmm', 'format_a_dmm',
-       'conditionnement', 'origine_prod', 'bat_id'].forEach(function (k) { if (k in A) champs[k] = A[k]; });
+       'conditionnement', 'origine_prod', 'bat_id', 'fsc_allegation', 'fsc_pct', 'fsc_bois', 'fsc_requis']
+        .forEach(function (k) { if (k in A) champs[k] = A[k]; });
       var r = await ERP.api('/api/erp2/articles' + (nouveau ? '' : '/' + A.id), {
         method: nouveau ? 'POST' : 'PUT',
         body: {article: champs, tarifs: tarifs.map(function (t) {
@@ -325,7 +326,18 @@
         ERP.champ('Prix de vente HT', ERP.saisie(A, 'prix_vente_cents', 'euros', {change: marquer})),
         ERP.champ('Prix d\'achat HT', ERP.saisie(A, 'prix_achat_cents', 'euros', {change: marquer})),
         ERP.champ('TVA', ERP.choix(A, 'tva_code', ERP.optionsRef('tva'), {avecVide: '—', change: marquer})));
-      var gauche = h('div', {className: 'erp-piece-principal'}, ERP.carte('Article', ident), ERP.carte('Unité et prix', prix), blocTarifs());
+      // FSC : la matière porte son allégation ; le produit fini dit s'il est vendu certifié.
+      // L'allégation d'un dossier se calcule des matières consommées (règle de l'affiche atelier).
+      var fscOpts = Object.keys(ERP.M.fsc || {}).map(function (k) { return {v: k, l: ERP.M.fsc[k]}; });
+      var blocFsc = A.nature === 'mp'
+        ? h('div', {className: 'erp-form'},
+            ERP.champ('Allégation FSC', ERP.choix(A, 'fsc_allegation', fscOpts, {avecVide: '— (non renseignée)', change: marquer})),
+            ERP.champ('Pourcentage (Mix / Recycled)', ERP.saisie(A, 'fsc_pct', 'entier', {change: marquer})),
+            h('div', {className: 'erp-champ plein erp-cases'}, ERP.case(A, 'fsc_bois', 'Matière à base de bois (papier). Décocher pour un film, une colle, une encre : ils ne comptent pas.', {change: marquer})))
+        : h('div', {className: 'erp-form'},
+            h('div', {className: 'erp-champ plein erp-cases'}, ERP.case(A, 'fsc_requis', 'Vendu certifié FSC : une alerte tombe si la matière consommée ne permet pas l\'allégation.', {change: marquer})));
+      var gauche = h('div', {className: 'erp-piece-principal'}, ERP.carte('Article', ident), ERP.carte('Unité et prix', prix),
+        A.nature !== 'service' ? ERP.carte('FSC', blocFsc) : null, blocTarifs());
       var droite = h('div', {className: 'erp-piece-cote'});
       if (!nouveau && A.gere_stock) {
         droite.appendChild(ERP.carte('Stock', h('div', {className: 'erp-liens'},

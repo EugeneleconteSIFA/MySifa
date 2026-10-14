@@ -121,6 +121,14 @@ def reinitialiser(conn, user: dict | None = None) -> dict:
                                                         "conditionnement": cond, "ref_client": ref,
                                                         "origine_prod": "fabrication"})
 
+    # FSC : papiers certifiés, film et encre hors bois, une étiquette vendue certifiée
+    for code, alleg, pct, bois in (("MP0001", "fsc_mix_credit", None, 1), ("MP0002", "", None, 0),
+                                   ("MP0003", "fsc_mix", 70, 1), ("MP0004", "", None, 0)):
+        fichiers.enregistrer_article(conn, arts[code], {"fsc_allegation": alleg, "fsc_pct": pct, "fsc_bois": bois})
+    fichiers.enregistrer_article(conn, arts["PF0001"], {"fsc_requis": 1})
+    if not fichiers.lire_societe(conn).get("fsc_certificat"):
+        fichiers.enregistrer_societe(conn, {"fsc_certificat": "FSC-C000000 (démonstration)"})
+
     # Tarifs négociés : un client au palier, un fournisseur
     fichiers.enregistrer_article(conn, arts["PF0001"], {}, tarifs=[
         {"tiers_id": tiers["C0001"], "sens": "vente", "qte_min_milli": 0, "prix_cents": 4000},
