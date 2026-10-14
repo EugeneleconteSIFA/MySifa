@@ -43,6 +43,17 @@ COMPACT_UNE_VALEUR = "Compact : une seule valeur à afficher."
 # Sens d'une série : « + » quand une hausse est une bonne nouvelle (métrage),
 # « - » quand c'est l'inverse (arrêts). Il colore la tendance.
 SENS_SERIE = ("+", "-")
+# Sens d'une valeur relevée (historique=) : « = » pour un niveau neutre
+# (nombre de références, valorisation) — tendance sans couleur.
+SENS_HISTORIQUE = ("+", "-", "=")
+# Grand format d'un bloc qui a une liste ET un historique : la liste par
+# défaut, ou la courbe, au choix de l'indicateur. Comme l'horizon de la courbe
+# (7, 30 ou 90 jours), c'est un réglage d'AFFICHAGE porté par l'adresse
+# capturée, pas un filtre de la page : accueil_releves.py l'écarte de la clé
+# des relevés.
+PARAMS_AFFICHAGE = ("bloc_vue", "bloc_horizon")
+VUES_GRAND = ("liste", "courbe")
+HORIZONS = ("7", "30", "90")
 AFFICHAGES = ("bloc", "valeurs")
 TYPES = ("chiffre", "liste", "tableau", "graphique", "etat", "objet", "fiche")
 # Opérateurs d'alerte : comparaison numérique, ou égalité pour un état
@@ -127,10 +138,14 @@ class Bloc:
     series: tuple = ()
     # Le bloc sait lister ses lignes (source LISTES) : grand format en liste.
     liste: bool = False
+    # Valeurs relevées chaque jour (app/services/accueil_releves.py) :
+    # ((cle, sens), …). Ce sont des NIVEAUX (un état du jour), pas des flux :
+    # grand format en courbe, avec la fourchette min–max de la journée.
+    historique: tuple = ()
 
     @property
     def grand(self) -> bool:
-        return bool(self.series) or self.liste
+        return bool(self.series) or self.liste or bool(self.historique)
 
 
 # Nom stable → bloc. Un nom ne change JAMAIS : pour renommer, créer le nouveau
@@ -141,6 +156,7 @@ BLOCS: dict[str, Bloc] = {
         libelle="Stocks à réapprovisionner",
         url="/stock?tab=dashboard",
         type="liste",
+        historique=(("lignes", "-"),),
         valeurs=(("lignes", "Matières sous seuil"),),
         acces="stock",
         liste=True,
@@ -148,6 +164,7 @@ BLOCS: dict[str, Bloc] = {
     "stock.matieres.categorie": Bloc(
         appli="stock", libelle="Catégorie de matières", url="/stock?tab=matieres",
         type="objet",
+        historique=(("references", "="), ("sous-seuil", "-")),
         valeurs=(("references", "Références"), ("sous-seuil", "Sous le seuil")),
         acces="stock", objet="categorie", lien="/stock?tab=matieres&cat={objet}",
         liste=True,
@@ -155,6 +172,7 @@ BLOCS: dict[str, Bloc] = {
     "stock.monitoring.kpis": Bloc(
         appli="stock", libelle="Monitoring stocks PF", url="/stock?tab=monitoring",
         type="chiffre",
+        historique=(("comparees", "="), ("ecarts", "-"), ("sans-corresp", "-"), ("negatifs", "-")),
         valeurs=(("comparees", "Références comparées"), ("ecarts", "Écarts"),
                  ("sans-corresp", "Sans correspondance"), ("negatifs", "Stocks négatifs")),
         acces="stock",
@@ -164,6 +182,7 @@ BLOCS: dict[str, Bloc] = {
         libelle="Chiffres du stock",
         url="/stock?tab=dashboard",
         type="chiffre",
+        historique=(("mp", "-"), ("a-expedier", "="), ("departs", "="), ("refs", "=")),
         valeurs=(("mp", "MP à approvisionner"), ("a-expedier", "Références à expédier"),
                  ("departs", "Expéditions aujourd'hui"), ("refs", "Références en stock")),
         acces="stock",
@@ -171,6 +190,7 @@ BLOCS: dict[str, Bloc] = {
     "stock.besoins.kpis": Bloc(
         appli="stock", libelle="Besoins matières", url="/stock?tab=besoins-matieres",
         type="chiffre",
+        historique=(("a-associer", "-"), ("dossiers", "="), ("mappees", "+")),
         valeurs=(("a-associer", "Références à associer"), ("dossiers", "Dossiers"),
                  ("mappees", "Références associées")),
         acces="stock",
@@ -179,6 +199,7 @@ BLOCS: dict[str, Bloc] = {
     "stock.pf.kpis": Bloc(
         appli="stock", libelle="Produits finis", url="/stock?tab=produits-finis",
         type="chiffre",
+        historique=(("references", "="), ("mouvements", "="), ("emplacements", "=")),
         valeurs=(("references", "Références en stock"), ("mouvements", "Mouvements aujourd'hui"),
                  ("emplacements", "Emplacements occupés")),
         acces="stock",
@@ -186,6 +207,7 @@ BLOCS: dict[str, Bloc] = {
     "stock.valorisation.kpis": Bloc(
         appli="stock", libelle="Valorisation du stock", url="/stock?tab=valorisation",
         type="chiffre",
+        historique=(("total", "="), ("mp", "="), ("pf", "="), ("pf-sans-prix", "-")),
         valeurs=(("total", "Stock valorisé (€)"), ("mp", "Matières premières (€)"),
                  ("pf", "Produits finis (€)"), ("pf-sans-prix", "Produits finis sans prix")),
         acces="stock",
@@ -193,6 +215,7 @@ BLOCS: dict[str, Bloc] = {
     "stock.bobines.kpis": Bloc(
         appli="stock", libelle="Traçabilité des bobines", url="/stock?tab=bobines",
         type="chiffre",
+        historique=(("bobines", "="), ("metrage", "="), ("ecarts", "-"), ("sans-matiere", "-")),
         valeurs=(("bobines", "Bobines"), ("metrage", "Métrage (m)"),
                  ("ecarts", "Écarts au compteur"), ("sans-matiere", "Bobines sans matière")),
         acces="stock",
@@ -200,6 +223,7 @@ BLOCS: dict[str, Bloc] = {
     "stock.inventaire.anciennete": Bloc(
         appli="stock", libelle="Ancienneté de l'inventaire", url="/stock?tab=inventaire",
         type="chiffre",
+        historique=(("rouge", "-"), ("orange", "-"), ("a-jour", "+"), ("emplacements", "=")),
         valeurs=(("rouge", "Emplacements à plus de 60 j ou jamais"), ("orange", "Emplacements à 30-60 j"),
                  ("a-jour", "Emplacements à moins de 30 j"), ("emplacements", "Emplacements avec stock")),
         acces="stock",
@@ -209,6 +233,7 @@ BLOCS: dict[str, Bloc] = {
         libelle="Départs programmés",
         url="/expe#suivi_departs",
         type="tableau",
+        historique=(("lignes", "="),),
         valeurs=(("lignes", "Départs en attente"),),
         acces="expe",
         liste=True,
@@ -281,6 +306,7 @@ BLOCS: dict[str, Bloc] = {
     "expe.pilotage.resume": Bloc(
         appli="expe", libelle="Pilotage des expéditions", url="/expe#pilotage",
         type="chiffre",
+        historique=(("retard", "-"), ("a-programmer", "-"), ("palettes", "-"), ("programme", "="), ("sans-bl", "-")),
         valeurs=(("retard", "En retard"), ("a-programmer", "À programmer"),
                  ("palettes", "Palettes à réserver"), ("programme", "Transport programmé"),
                  ("sans-bl", "Sans BL")),
@@ -289,12 +315,14 @@ BLOCS: dict[str, Bloc] = {
     "expe.pilotage.envois": Bloc(
         appli="expe", libelle="Envois à piloter", url="/expe#pilotage",
         type="tableau", valeurs=(("lignes", "Envois"),), acces="expe",
+        historique=(("lignes", "-"),),
         liste=True,
     ),
     # ── MyExpé › Palettes Europe (app/web/expe_assets.py) ──
     "expe.palettes.totaux": Bloc(
         appli="expe", libelle="Palettes Europe", url="/expe#palettes_europe",
         type="chiffre",
+        historique=(("solde", "-"), ("envoyees", "="), ("retournees", "+"), ("litiges", "-")),
         valeurs=(("solde", "Solde dû par les transporteurs"), ("envoyees", "Palettes envoyées"),
                  ("retournees", "Palettes retournées"), ("litiges", "Palettes en litige")),
         acces="expe",
@@ -302,6 +330,7 @@ BLOCS: dict[str, Bloc] = {
     "expe.palettes.transporteur": Bloc(
         appli="expe", libelle="Compte palettes d'un transporteur", url="/expe#palettes_europe",
         type="objet",
+        historique=(("solde", "-"), ("donnees", "="), ("rendues", "+"), ("litiges", "-")),
         valeurs=(("solde", "Solde dû"), ("donnees", "Palettes remises"),
                  ("rendues", "Palettes rendues"), ("litiges", "Palettes en litige")),
         acces="expe", objet="transporteur",
@@ -310,6 +339,7 @@ BLOCS: dict[str, Bloc] = {
     "expe.carburant.resume": Bloc(
         appli="expe", libelle="Taxe carburant", url="/expe#carburant",
         type="chiffre",
+        historique=(("en-attente", "-"), ("anciens", "-"), ("jamais", "-"), ("a-jour", "+"), ("actifs", "="), ("moyen", "=")),
         valeurs=(("en-attente", "En attente de réponse"), ("anciens", "Taux de plus de 45 j"),
                  ("jamais", "Jamais mise à jour"), ("a-jour", "À jour"),
                  ("actifs", "Transporteurs actifs"), ("moyen", "Taux moyen (%)")),
@@ -319,6 +349,7 @@ BLOCS: dict[str, Bloc] = {
     "planning.dossiers": Bloc(
         appli="planning", libelle="Dossiers au planning", url="/planning",
         type="objet",
+        historique=(("attente", "="), ("charge", "=")),
         valeurs=(("en-cours", "Dossier en cours"), ("attente", "Dossiers en attente"),
                  ("charge", "Charge en attente (h)")),
         textes=("en-cours",),
@@ -328,6 +359,7 @@ BLOCS: dict[str, Bloc] = {
     "taches.compteurs": Bloc(
         appli="taches", libelle="Tâches", url="/taches",
         type="chiffre",
+        historique=(("en-retard", "-"), ("non-assignees", "-")),
         valeurs=(("mes-taches", "Mes tâches ouvertes"), ("mes-retards", "Mes tâches en retard"),
                  ("en-retard", "En retard (équipe)"), ("non-assignees", "Non assignées")),
     ),
@@ -335,6 +367,7 @@ BLOCS: dict[str, Bloc] = {
     "qualite.nc.statuts": Bloc(
         appli="qualite", libelle="Non-conformités", url="/qualite#list",
         type="chiffre",
+        historique=(("ouvertes", "-"), ("en-analyse", "="), ("action-corrective", "="), ("en-verification", "=")),
         valeurs=(("ouvertes", "NC non clôturées"), ("en-analyse", "En analyse"),
                  ("action-corrective", "Action corrective"), ("en-verification", "En vérification"),
                  ("non-lues", "Messages non lus")),
@@ -345,6 +378,7 @@ BLOCS: dict[str, Bloc] = {
     "rh-coffre.ndf": Bloc(
         appli="rh_coffre", libelle="Notes de frais à valider", url="/rh/coffre#ndf",
         type="chiffre",
+        historique=(("a-valider", "-"), ("montant", "-")),
         valeurs=(("a-valider", "Notes à valider"), ("montant", "Montant à valider (€)")),
         liste=True,
     ),
@@ -359,6 +393,7 @@ BLOCS: dict[str, Bloc] = {
     "bat.statuts": Bloc(
         appli="bat", libelle="Bons à tirer", url="/bat",
         type="chiffre",
+        historique=(("en-attente", "-"), ("a-faire", "-"), ("valides", "+")),
         valeurs=(("en-attente", "En attente de validation"), ("a-faire", "À faire"),
                  ("valides", "Validés")),
         liste=True,
@@ -367,6 +402,7 @@ BLOCS: dict[str, Bloc] = {
     "maintenance.statuts": Bloc(
         appli="maintenance", libelle="Maintenance périodique", url="/maintenance#maintenance",
         type="chiffre",
+        historique=(("en-retard", "-"), ("bientot", "="), ("jamais", "-"), ("a-jour", "+")),
         valeurs=(("en-retard", "Opérations en retard"), ("bientot", "Dues bientôt"),
                  ("jamais", "Jamais saisies"), ("a-jour", "À jour")),
     ),
@@ -374,6 +410,7 @@ BLOCS: dict[str, Bloc] = {
     "ao.appels": Bloc(
         appli="ao", libelle="Appels d'offres", url="/ao",
         type="chiffre",
+        historique=(("envoyees", "="), ("reponses", "+"), ("brouillons", "=")),
         valeurs=(("envoyees", "Appels en cours"), ("reponses", "Réponses reçues"),
                  ("brouillons", "Brouillons")),
         liste=True,
@@ -381,6 +418,7 @@ BLOCS: dict[str, Bloc] = {
     "prod.of.a-traiter": Bloc(
         appli="prod", libelle="OF à traiter", url="/prod?page=of",
         type="chiffre",
+        historique=(("total", "-"), ("mappings", "-"), ("sans-of", "-")),
         valeurs=(("total", "OF à traiter"), ("mappings", "Mappings à valider"),
                  ("sans-of", "Dossiers sans OF")),
         acces="prod",
@@ -395,6 +433,7 @@ BLOCS: dict[str, Bloc] = {
     "planning-rh.conges": Bloc(
         appli="planning_rh", libelle="Congés", url="/planning-rh#conges",
         type="liste",
+        historique=(("absents", "="), ("a-valider", "-")),
         valeurs=(("absents", "Absents aujourd'hui"), ("a-valider", "Congés posés à valider")),
         acces="planning_rh",
         liste=True,
@@ -406,6 +445,7 @@ BLOCS: dict[str, Bloc] = {
     "compta.rh.contrats": Bloc(
         appli="myrh", libelle="Suivi RH des employés", url="/rh",
         type="chiffre",
+        historique=(("fin-proche", "-"), ("a-renseigner", "-"), ("incomplets", "-")),
         liste=True,
         valeurs=(("fin-proche", "Fins de contrat proches ou dépassées"),
                  ("a-renseigner", "Statuts de contrat à renseigner"),
@@ -418,6 +458,7 @@ BLOCS: dict[str, Bloc] = {
     "erp.adv.kpis": Bloc(
         appli="erp", libelle="TDB ADV — carnet", url="/erp#/tdb_adv",
         type="chiffre",
+        historique=(("commandes", "="), ("semaine", "="), ("retard", "-"), ("a-facturer", "-"), ("sans-dossier", "-")),
         valeurs=(("commandes", "Commandes à traiter"), ("semaine", "À expédier sous 7 jours"),
                  ("retard", "Commandes en retard"), ("a-facturer", "BL à facturer"),
                  ("sans-dossier", "Commandes sans dossier de prod")),
@@ -426,6 +467,7 @@ BLOCS: dict[str, Bloc] = {
     "erp.direction.kpis": Bloc(
         appli="erp", libelle="TDB Direction — chiffres du mois", url="/erp#/tdb_direction",
         type="chiffre",
+        historique=(("rentre-mois", "+"), ("facturable", "+"), ("facture-mois", "+"), ("carnet", "+")),
         valeurs=(("rentre-mois", "Rentré ce mois (€)"), ("facturable", "Facturable (€)"),
                  ("facture-mois", "Facturé ce mois (€)"), ("carnet", "Carnet restant (€)")),
         acces="erp",
@@ -440,6 +482,7 @@ BLOCS: dict[str, Bloc] = {
     "erp.achats.kpis": Bloc(
         appli="erp", libelle="TDB Achats", url="/erp#/tdb_achats",
         type="chiffre",
+        historique=(("retard", "-"), ("semaine", "="), ("ouvertes", "="), ("receptions", "+")),
         valeurs=(("retard", "Commandes fournisseurs en retard"), ("semaine", "Attendues sous 7 jours"),
                  ("ouvertes", "Commandes fournisseurs ouvertes"), ("receptions", "Lignes reçues sur 7 jours")),
         acces="erp",
@@ -650,6 +693,13 @@ def erreurs_registre() -> list[str]:
         for t in b.tons:
             if t not in b.textes:
                 errs.append(f"{nom} : tons cite {t!r}, absent des textes — seul un texte se colore")
+        for t, sens in b.historique:
+            if t not in cles or t in b.textes:
+                errs.append(f"{nom} : historique {t!r} absent des valeurs, ou valeur texte")
+            if sens not in SENS_HISTORIQUE:
+                errs.append(f"{nom} : sens d'historique {sens!r} invalide (+, - ou =)")
+        if b.series and b.historique:
+            errs.append(f"{nom} : series= et historique= à la fois — un bloc a une série OU des relevés")
         for t, sens in b.series:
             if t not in cles or t in b.textes:
                 errs.append(f"{nom} : série {t!r} absente des valeurs, ou valeur texte")

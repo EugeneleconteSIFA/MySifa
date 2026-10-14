@@ -10824,7 +10824,12 @@ async function renderSettingsBlocsCapturables() {
   // Ce que sait faire un bloc : grand format, historique, mode de lecture.
   function pastillesBloc(b) {
     const p = [];
-    if (b.grand) p.push(pastille(b.liste ? 'Grand · liste' : 'Grand · graphique 30 j', 'var(--accent)', 'Format grand proposé à la capture'));
+    if (b.grand) {
+      const aSerie = (b.valeurs || []).some(v => v.serie);
+      const aHisto = b.historique && Object.keys(b.historique).length;
+      const lib = aSerie ? 'Grand · graphique' : (b.liste && aHisto) ? 'Grand · liste ou courbe' : b.liste ? 'Grand · liste' : 'Grand · courbe';
+      p.push(pastille(lib, 'var(--accent)', 'Format grand proposé à la capture'));
+    }
     const h = b.historique || {};
     if (h.type === 'serie') p.push(pastille('Série en base', 'var(--success)', 'Historique jour par jour déjà en base : courbe pleine dès le premier jour'));
     else if (h.type === 'releve') {

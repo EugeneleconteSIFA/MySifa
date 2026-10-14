@@ -572,12 +572,15 @@ NON_RELEVES = {
 
 # ── Le tour de relevé ───────────────────────────────────────────────────
 def filtres_de(url_capture: str) -> dict:
-    """Les filtres `bloc_…` d'une adresse capturée."""
+    """Les filtres `bloc_…` d'une adresse capturée — sans les réglages
+    d'affichage (vue liste/courbe, horizon), qui ne changent aucun chiffre."""
+    from app.services.blocs_registre import PARAMS_AFFICHAGE
     try:
         q = urlsplit(url_capture or "").query
     except ValueError:
         return {}
-    return {k: v for k, v in parse_qsl(q, keep_blank_values=False) if k.startswith(PREFIXE_FILTRE)}
+    return {k: v for k, v in parse_qsl(q, keep_blank_values=False)
+            if k.startswith(PREFIXE_FILTRE) and k not in PARAMS_AFFICHAGE}
 
 
 def cle_filtres(filtres: dict) -> str:

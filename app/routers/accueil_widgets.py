@@ -19,6 +19,7 @@ Endpoints superadmin (écran « Widgets et tableaux de bord » de Paramètres) :
   GET    /api/accueil/blocs/admin/usages    qui a épinglé quels indicateurs
   GET    /api/accueil/blocs/admin/releves   état des relevés quotidiens (contrôle)
   GET    /api/accueil/blocs/admin/releves/{nom}  relevés d'un bloc, jour par jour
+  GET    /api/accueil/releves/{nom}         courbe d'un indicateur (relevés, accès du bloc)
   GET    /api/accueil/boutons/admin         grille applis × boutons flottants
   PUT    /api/accueil/boutons/admin         activer / couper un bouton dans une appli
 
@@ -92,6 +93,8 @@ def _bloc_public(nom: str, b: reg.Bloc) -> dict:
                     for c, l in b.valeurs],
         "liste": b.liste,
         "grand": b.grand,
+        # Relevés quotidiens : sens par valeur, grand format en courbe.
+        "historique": {c: sens for c, sens in b.historique},
         "url": b.url,
     }
 
@@ -545,6 +548,62 @@ def blocs_releves(request: Request):
 
 
 RELEVES_JOURS_MAX = 400
+
+
+@router.get("/api/accueil/releves/{nom}")
+def releves_indicateur(nom: str, request: Request, url: str = "", objet: str = "", jours: int = 30):
+    """Relevés d'un bloc pour la courbe d'un indicateur : la combinaison
+    (objet, filtres) de son adresse capturée, sur `jours` jours.
+
+    Ouvert à tout utilisateur qui a accès au bloc (même contrôle que la
+    capture) : les relevés sont faits en vue complète, comme ce que montrent
+    déjà ces applis. Rend {jours: {AAAA-MM-JJ: {cle: n}}, minimums, maximums,
+    depuis} ; seules les clés d'historique du bloc sortent."""
+    from datetime import date, timedelta
+    from app.services.accueil_releves import cle_filtres, filtres_de
+    user = get_current_user(request)
+    res = reg.resoudre(nom)
+    if not res:
+        raise HTTPException(404, "Bloc inconnu.")
+    nom, b = res
+    if not b.historique or not _bloc_accessible(user, b):
+        raise HTTPException(404, "Pas d'historique pour ce bloc.")
+    try:
+        jours = max(1, min(int(jours), 120))
+    except (TypeError, ValueError):
+        jours = 30
+    cles = {c for c, _ in b.historique}
+    depuis = (date.today() - timedelta(days=jours - 1)).isoformat()
+    filtres = cle_filtres(filtres_de(url))
+    with get_db() as conn:
+        if nom in _desactives(conn):
+            raise HTTPException(404, "Bloc non capturable.")
+        rows = []
+        try:
+            rows = conn.execute(
+                "SELECT jour, valeurs, minimums, maximums FROM accueil_releves"
+                " WHERE bloc=? AND objet=? AND filtres=? AND jour>=? ORDER BY jour",
+                (nom, str(objet or ""), filtres, depuis),
+            ).fetchall()
+            premier = conn.execute(
+                "SELECT MIN(jour) FROM accueil_releves WHERE bloc=? AND objet=? AND filtres=?",
+                (nom, str(objet or ""), filtres),
+            ).fetchone()[0]
+        except Exception:
+            premier = None   # table ou colonnes pas encore migrées
+
+    def garder(t):
+        try:
+            d = json.loads(t or "{}")
+        except (TypeError, ValueError):
+            return {}
+        return {k: v for k, v in (d if isinstance(d, dict) else {}).items() if k in cles}
+    out = {"jours": {}, "minimums": {}, "maximums": {}, "depuis": premier}
+    for r in rows:
+        out["jours"][r["jour"]] = garder(r["valeurs"])
+        out["minimums"][r["jour"]] = garder(r["minimums"])
+        out["maximums"][r["jour"]] = garder(r["maximums"])
+    return out
 
 
 @router.get("/api/accueil/blocs/admin/releves/{nom}")
