@@ -102,6 +102,69 @@
     ], {large: true});
   };
 
+  // ── Relances ─────────────────────────────────────────────────────
+  var NIVEAUX = {1: 'Rappel', 2: 'Relance', 3: 'Mise en demeure'};
+
+  function ouvrirRelance(r) {
+    return ERP.api('/api/erp2/compta/relances/' + r.tiers_id).then(function (d) {
+      var R = {niveau: r.niveau_propose, notes: ''};
+      var corps = h('div', null,
+        h('p', {className: 'erp-modal-texte', text: d.echeances.length + ' facture(s) échue(s), ' + ERP.fmt.euros(r.echu_cents) +
+          ' dus, plus ancien retard ' + r.jours_retard + ' jours.'}),
+        h('table', {className: 'erp-lignes lecture'},
+          h('thead', null, h('tr', null, h('th', {text: 'Facture'}), h('th', {text: 'Échéance'}), h('th', {className: 'num', text: 'Reste dû'}))),
+          h('tbody', null, d.echeances.map(function (e) {
+            return h('tr', null, h('td', null, ERP.lien(e.numero, ERP.cheminPiece('facture', e.piece_id))),
+              h('td', {text: ERP.fmt.date(e.date_echeance)}), h('td', {className: 'num', text: ERP.fmt.euros(e.reste_cents)}));
+          }))),
+        h('div', {className: 'erp-form'},
+          ERP.champ('Niveau', ERP.choix(R, 'niveau', [1, 2, 3].map(function (n) { return {v: n, l: n + ' — ' + NIVEAUX[n]}; }), {nombre: true})),
+          ERP.champ('Note (appel, promesse de paiement…)', ERP.saisie(R, 'notes', 'texte'), {large: true})),
+        d.historique.length ? h('div', null, h('div', {className: 'erp-liens-titre', text: 'Relances précédentes'}),
+          h('div', {className: 'erp-liens'}, d.historique.map(function (x) {
+            return h('div', {className: 'erp-liens-item'}, h('span', {text: ERP.fmt.date(x.date_relance)}),
+              h('b', {text: NIVEAUX[x.niveau]}), h('span', {text: ERP.fmt.euros(x.montant_cents)}),
+              h('span', {className: 'erp-muet', text: x.notes || ''}));
+          }))) : null);
+      ERP.modal('Relancer ' + r.raison_sociale, corps, [
+        {libelle: 'Fermer'},
+        {libelle: 'Imprimer la lettre', action: function () { window.open('/imprimer-relance/' + r.tiers_id + '?niveau=' + R.niveau, '_blank'); return false; }},
+        {libelle: 'Enregistrer la relance', accent: true, action: async function () {
+          await ERP.api('/api/erp2/compta/relances/' + r.tiers_id, {method: 'POST', body: R});
+          ERP.toast('Relance enregistrée.', 'success');
+          ERP.rafraichir();
+        }},
+      ], {large: true});
+    });
+  }
+
+  ERP.ecrans['/compta/relances'] = function (main) {
+    main.classList.add('plein');
+    var zone = h('div', {className: 'erp-zone'}, ERP.chargement());
+    main.appendChild(zone);
+    Promise.all([ERP.meta(), ERP.api('/api/erp2/compta/relances')]).then(function (r) {
+      zone.textContent = '';
+      r[1].forEach(function (x) { x.niveau_lib = String(x.niveau_propose); x.dernier = x.dernier_niveau ? NIVEAUX[x.dernier_niveau] : ''; });
+      if (!r[1].length) { zone.appendChild(h('div', {className: 'erp-vide', text: 'Aucune facture échue : rien à relancer.'})); return; }
+      var g = ERP.grille(zone, {
+        nom: 'compta.relances', cle: 'tiers_id', lignes: r[1],
+        statuts: {'1': {libelle: 'Rappel', ton: 'warn'}, '2': {libelle: 'Relance', ton: 'danger'}, '3': {libelle: 'Mise en demeure', ton: 'danger'}},
+        colonnes: [
+          {cle: 'raison_sociale', libelle: 'Client', largeur: 260},
+          {cle: 'nb', libelle: 'Factures', type: 'nombre', largeur: 90},
+          {cle: 'echu_cents', libelle: 'Échu', type: 'montant', largeur: 130, total: true},
+          {cle: 'plus_ancienne', libelle: 'Plus ancienne échéance', type: 'date', largeur: 170},
+          {cle: 'jours_retard', libelle: 'Retard (j)', type: 'nombre', largeur: 100},
+          {cle: 'derniere_relance', libelle: 'Dernière relance', type: 'date', largeur: 140},
+          {cle: 'dernier', libelle: 'Niveau envoyé', largeur: 140},
+          {cle: 'niveau_lib', libelle: 'À envoyer', type: 'statut', largeur: 150},
+        ],
+        ouvrir: function (x) { ouvrirRelance(x).catch(function (e) { ERP.toast(e.message, 'danger'); }); },
+      });
+      requestAnimationFrame(function () { g.focus(); });
+    }).catch(function (e) { zone.textContent = ''; zone.appendChild(ERP.erreur(e)); });
+  };
+
   ERP.ecrans['/compta/reglements'] = function (main, ctx) {
     main.classList.add('plein');
     ctx.actions.appendChild(ERP.bouton('Paiement fournisseur', function () { return ERP.saisirReglement({sens: 'decaissement'}, ERP.rafraichir); }));

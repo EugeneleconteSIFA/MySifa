@@ -40,7 +40,7 @@ NOW = "2026-10-14T10:00:00"
 
 
 def _base(conn):
-    for t in ("gc_reglements_affectations", "gc_reglements", "gc_mouvements", "gc_echeances", "gc_pieces_lignes", "gc_pieces", "gc_tarifs",
+    for t in ("gc_relances", "gc_reglements_affectations", "gc_reglements", "gc_mouvements", "gc_echeances", "gc_pieces_lignes", "gc_pieces", "gc_tarifs",
               "gc_articles", "gc_tiers_adresses", "gc_tiers"):
         conn.execute(f"DELETE FROM {t}")
     conn.execute("UPDATE gc_sequences SET prochain=1, annee=0")
@@ -320,6 +320,37 @@ class Chaine(unittest.TestCase):
         bl = pieces.transformer(c, [co], "bl")
         pieces.valider(c, bl)
         self.assertEqual(pieces.alertes_stock(c, bl), ["ETQ1 : stock -3 000 ETQ au dépôt PRINC"])
+
+    def test_relances_et_transfert(self):
+        from app.services.gc import compta, fichiers
+        c = self.conn
+        co = pieces.creer(c, "commande", 1)
+        pieces.enregistrer(c, co, {"date_piece": "2026-01-05"}, [_ligne(2, 1000, 10000)])
+        pieces.valider(c, co)
+        bl = pieces.transformer(c, [co], "bl")
+        pieces.enregistrer(c, bl, {"date_piece": "2026-01-06"}, None)
+        pieces.valider(c, bl)
+        fa = pieces.transformer(c, [bl], "facture")
+        pieces.enregistrer(c, fa, {"date_piece": "2026-01-07"}, None)
+        pieces.valider(c, fa)                                   # 30 FM → 28/02/2026
+        self.assertEqual(compta.relances(c, "2026-02-28"), [])  # pas encore échue
+        r = compta.relances(c, "2026-03-15")
+        self.assertEqual((len(r), r[0]["echu_cents"], r[0]["niveau_propose"], r[0]["jours_retard"]), (1, 12000, 1, 15))
+        compta.enregistrer_relance(c, 1, 1, "2026-03-15")
+        self.assertEqual(compta.relances(c, "2026-03-30")[0]["niveau_propose"], 2)
+        with self.assertRaises(ErreurPiece):
+            compta.enregistrer_relance(c, 2, 1, "2026-03-15")   # rien d'échu
+        # Transfert : deux mouvements, stock total inchangé
+        c.execute("INSERT OR IGNORE INTO gc_depots (code, libelle) VALUES ('EXT', 'Externe')")
+        fichiers.mouvement_manuel(c, {"type": "inventaire", "article_id": 1, "depot": "PRINC", "quantite_milli": 5_000_000})
+        fichiers.mouvement_manuel(c, {"type": "transfert", "article_id": 1, "depot": "PRINC", "depot_destination": "EXT",
+                                      "quantite_milli": 2_000_000})
+        par = {r["depot"]: r["q"] for r in c.execute(
+            "SELECT depot, SUM(quantite_milli) q FROM gc_mouvements WHERE article_id=1 GROUP BY depot").fetchall()}
+        self.assertEqual(par, {"PRINC": 3_000_000, "EXT": 2_000_000})
+        with self.assertRaises(ErreurPiece):
+            fichiers.mouvement_manuel(c, {"type": "transfert", "article_id": 1, "depot": "PRINC",
+                                          "depot_destination": "PRINC", "quantite_milli": 1000})
 
     def test_achat_reception_stock(self):
         c = self.conn

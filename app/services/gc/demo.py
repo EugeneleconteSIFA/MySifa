@@ -47,6 +47,7 @@ def effacer(conn) -> None:
     t = "SELECT id FROM gc_tiers WHERE origine='demo'"
     conn.execute(f"DELETE FROM gc_reglements_affectations WHERE reglement_id IN (SELECT id FROM gc_reglements WHERE tiers_id IN ({t}))")
     conn.execute(f"DELETE FROM gc_reglements WHERE tiers_id IN ({t})")
+    conn.execute(f"DELETE FROM gc_relances WHERE tiers_id IN ({t})")
     ids = "SELECT id FROM gc_pieces WHERE origine='demo'"
     conn.execute(f"DELETE FROM gc_mouvements WHERE piece_id IN ({ids}) OR article_id IN (SELECT id FROM gc_articles WHERE origine='demo')")
     conn.execute(f"DELETE FROM gc_echeances WHERE piece_id IN ({ids})")

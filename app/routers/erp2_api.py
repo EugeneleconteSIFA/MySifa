@@ -333,6 +333,35 @@ def reglement_supprimer(reglement_id: int, request: Request):
     return {"ok": True}
 
 
+@router.get("/compta/relances")
+def compta_relances(request: Request, jour: str = ""):
+    _user(request)
+    from datetime import date
+    return _lecture(compta.relances, jour or date.today().isoformat())
+
+
+@router.get("/compta/relances/{tiers_id}")
+def compta_relance_detail(tiers_id: int, request: Request, jour: str = ""):
+    _user(request)
+    from datetime import date
+    j = jour or date.today().isoformat()
+    with get_db() as conn:
+        return {"echeances": compta.echeances_echues(conn, tiers_id, j),
+                "historique": compta.historique_relances(conn, tiers_id)}
+
+
+@router.post("/compta/relances/{tiers_id}")
+async def compta_relance_creer(tiers_id: int, request: Request):
+    u = _user(request)
+    b = await request.json()
+    from datetime import date
+    with _ecriture() as conn:
+        rid = compta.enregistrer_relance(conn, tiers_id, int(b.get("niveau") or 1),
+                                         b.get("jour") or date.today().isoformat(), b.get("notes") or "", u)
+    _trace(request, u, "CREATE", f"Relance client #{tiers_id}", {"niveau": b.get("niveau")})
+    return {"id": rid}
+
+
 @router.get("/compta/reglages")
 def compta_reglages(request: Request):
     _user(request)

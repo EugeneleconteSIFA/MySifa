@@ -9,7 +9,7 @@
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from app.services.gc.pieces import ErreurPiece
 
@@ -112,6 +112,61 @@ def supprimer_reglement(conn, reglement_id: int) -> None:
     conn.execute("DELETE FROM gc_reglements_affectations WHERE reglement_id=?", (reglement_id,))
     conn.execute("DELETE FROM gc_reglements WHERE id=?", (reglement_id,))
     _majs(conn, touchees)
+
+
+NIVEAUX = {1: "Rappel", 2: "Relance", 3: "Mise en demeure"}
+
+
+def relances(conn, jour: str) -> list[dict]:
+    """Clients ayant au moins une échéance de facture échue et non réglée au
+    `jour`, avec le niveau proposé : celui qui suit la dernière relance,
+    plafonné à 3 (mise en demeure)."""
+    out = []
+    for t in conn.execute(
+        """SELECT p.tiers_id, t.raison_sociale, t.code, t.email_facturation, t.email,
+                  SUM(e.montant_cents - e.regle_cents) AS echu_cents, MIN(e.date_echeance) AS plus_ancienne,
+                  COUNT(*) AS nb
+           FROM gc_echeances e JOIN gc_pieces p ON p.id=e.piece_id JOIN gc_tiers t ON t.id=p.tiers_id
+           WHERE p.type='facture' AND e.montant_cents > e.regle_cents AND e.date_echeance < ?
+           GROUP BY p.tiers_id ORDER BY plus_ancienne""", (jour,)).fetchall():
+        d = dict(t)
+        der = conn.execute(
+            "SELECT date_relance, niveau FROM gc_relances WHERE tiers_id=? ORDER BY date_relance DESC, id DESC LIMIT 1",
+            (t["tiers_id"],)).fetchone()
+        d["derniere_relance"] = der["date_relance"] if der else None
+        d["dernier_niveau"] = int(der["niveau"]) if der else 0
+        d["niveau_propose"] = min(3, d["dernier_niveau"] + 1)
+        d["jours_retard"] = (date.fromisoformat(jour) - date.fromisoformat(t["plus_ancienne"][:10])).days
+        out.append(d)
+    return out
+
+
+def echeances_echues(conn, tiers_id: int, jour: str) -> list[dict]:
+    return [dict(r) for r in conn.execute(
+        """SELECT e.id, e.date_echeance, e.montant_cents, e.regle_cents, e.montant_cents - e.regle_cents AS reste_cents,
+                  p.id AS piece_id, p.numero, p.date_piece, p.ref_tiers
+           FROM gc_echeances e JOIN gc_pieces p ON p.id=e.piece_id
+           WHERE p.tiers_id=? AND p.type='facture' AND e.montant_cents > e.regle_cents AND e.date_echeance < ?
+           ORDER BY e.date_echeance""", (tiers_id, jour)).fetchall()]
+
+
+def enregistrer_relance(conn, tiers_id: int, niveau: int, jour: str, notes: str = "", user: dict | None = None) -> int:
+    if niveau not in NIVEAUX:
+        raise ErreurPiece("Niveau de relance : 1, 2 ou 3.")
+    ech = echeances_echues(conn, tiers_id, jour)
+    if not ech:
+        raise ErreurPiece("Aucune facture échue pour ce client.")
+    cur = conn.execute(
+        """INSERT INTO gc_relances (tiers_id, date_relance, niveau, montant_cents, factures, notes, cree_par, cree_le)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (tiers_id, jour, niveau, sum(e["reste_cents"] for e in ech), ", ".join(e["numero"] for e in ech),
+         notes or "", str((user or {}).get("nom") or ""), _maintenant()))
+    return int(cur.lastrowid)
+
+
+def historique_relances(conn, tiers_id: int) -> list[dict]:
+    return [dict(r) for r in conn.execute(
+        "SELECT * FROM gc_relances WHERE tiers_id=? ORDER BY date_relance DESC, id DESC", (tiers_id,)).fetchall()]
 
 
 def reglements(conn) -> list[dict]:

@@ -68,16 +68,26 @@
         });
       }, function (a) { M.article_id = a.id; art.value = a.code + ' — ' + a.libelle; info.textContent = 'Stock théorique : ' + ERP.fmt.qte(a.stock_milli) + ' ' + a.unite; });
       var qteLib = h('label', {className: 'erp-label', text: 'Quantité comptée'});
+      var autres = ERP.ref('depots', true).filter(function (d) { return d.code !== M.depot; });
+      M.depot_destination = (autres[0] || {}).code || null;
+      var champDest = ERP.champ('Vers le dépôt', ERP.choix(M, 'depot_destination', ERP.optionsRef('depots')));
+      champDest.style.display = 'none';
       var corps = h('div', {className: 'erp-form'},
         ERP.champ('Article', art, {plein: true}), info,
-        ERP.champ('Type', ERP.choix(M, 'type', [{v: 'inventaire', l: 'Inventaire (quantité comptée)'}, {v: 'ajustement', l: 'Ajustement (+ / − quantité)'}],
-          {change: function (v) { qteLib.textContent = v === 'inventaire' ? 'Quantité comptée' : 'Quantité (négative pour une sortie)'; }})),
+        ERP.champ('Type', ERP.choix(M, 'type', [{v: 'inventaire', l: 'Inventaire (quantité comptée)'},
+                                                {v: 'ajustement', l: 'Ajustement (+ / − quantité)'},
+                                                {v: 'transfert', l: 'Transfert entre dépôts'}],
+          {change: function (v) {
+            qteLib.textContent = v === 'inventaire' ? 'Quantité comptée' : v === 'transfert' ? 'Quantité à transférer' : 'Quantité (négative pour une sortie)';
+            champDest.style.display = v === 'transfert' ? '' : 'none';
+          }})),
         ERP.champ('Dépôt', ERP.choix(M, 'depot', ERP.optionsRef('depots'))),
+        champDest,
         h('div', {className: 'erp-champ'}, qteLib, ERP.saisie(M, 'quantite_milli', 'qte')),
         ERP.champ('Date', ERP.saisie(M, 'date_mvt', 'date')),
         ERP.champ('Lot', ERP.saisie(M, 'lot', 'texte')),
         ERP.champ('Commentaire', ERP.saisie(M, 'commentaire', 'texte'), {plein: true}));
-      ERP.modal('Inventaire ou ajustement', corps, [
+      ERP.modal('Mouvement de stock', corps, [
         {libelle: 'Annuler'},
         {libelle: 'Enregistrer', accent: true, action: async function () {
           if (!M.article_id) throw new Error('Choisir un article.');
@@ -92,7 +102,7 @@
 
   ERP.ecrans['/stocks/etat'] = function (main, ctx) {
     main.classList.add('plein');
-    ctx.actions.appendChild(ERP.bouton('Inventaire / ajustement', function () { return saisieMouvement(ERP.rafraichir); }, {accent: true}));
+    ctx.actions.appendChild(ERP.bouton('Inventaire, ajustement, transfert', function () { return saisieMouvement(ERP.rafraichir); }, {accent: true}));
     var zone = h('div', {className: 'erp-zone'}, ERP.chargement());
     main.appendChild(zone);
     Promise.all([ERP.meta(), ERP.api('/api/erp2/stock')]).then(function (r) {
@@ -118,7 +128,7 @@
 
   ERP.ecrans['/stocks/mouvements'] = function (main, ctx) {
     main.classList.add('plein');
-    ctx.actions.appendChild(ERP.bouton('Inventaire / ajustement', function () { return saisieMouvement(ERP.rafraichir); }, {accent: true}));
+    ctx.actions.appendChild(ERP.bouton('Inventaire, ajustement, transfert', function () { return saisieMouvement(ERP.rafraichir); }, {accent: true}));
     var zone = h('div', {className: 'erp-zone'}, ERP.chargement());
     main.appendChild(zone);
     Promise.all([ERP.meta(), ERP.api('/api/erp2/mouvements')]).then(function (r) {

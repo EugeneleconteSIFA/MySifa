@@ -63,6 +63,77 @@ def _adresse(conn, adr_id) -> list[str]:
     return [x for x in lignes if x]
 
 
+_TEXTES_RELANCE = {
+    1: ("Rappel d'échéance",
+        "Sauf erreur ou omission de notre part, les factures ci-dessous restent impayées à ce jour. "
+        "Nous vous remercions de bien vouloir procéder à leur règlement, ou de nous indiquer s'il s'agit d'un oubli "
+        "de notre part. Si votre paiement est en cours, merci de ne pas tenir compte de ce courrier."),
+    2: ("Relance",
+        "Malgré notre précédent rappel, les factures ci-dessous restent impayées. Nous vous demandons de procéder "
+        "à leur règlement sous huit jours. Nous restons à votre disposition pour tout échange à ce sujet."),
+    3: ("Mise en demeure de payer",
+        "Malgré nos relances, les factures ci-dessous restent impayées. Nous vous mettons en demeure de régler la "
+        "somme indiquée sous huit jours à compter de la réception du présent courrier. À défaut, nous serons "
+        "contraints d'engager une procédure de recouvrement. Des pénalités de retard et l'indemnité forfaitaire de "
+        "40 € par facture sont exigibles de plein droit (art. L441-10 du Code de commerce)."),
+}
+
+
+def rendre_relance(conn, tiers_id: int, niveau: int = 1) -> str:
+    from app.services.gc import compta
+    niveau = niveau if niveau in _TEXTES_RELANCE else 1
+    soc = fichiers.lire_societe(conn)
+    t = conn.execute("SELECT * FROM gc_tiers WHERE id=?", (tiers_id,)).fetchone()
+    if not t:
+        return "<p>Client introuvable.</p>"
+    jour = date.today().isoformat()
+    ech = compta.echeances_echues(conn, tiers_id, jour)
+    adr_id = conn.execute(
+        """SELECT id FROM gc_tiers_adresses WHERE tiers_id=? AND type='facturation' AND actif=1
+           ORDER BY par_defaut DESC, id LIMIT 1""", (tiers_id,)).fetchone()
+    adr = _adresse(conn, adr_id["id"]) if adr_id else []
+    titre, texte = _TEXTES_RELANCE[niveau]
+    lignes = "".join(
+        f'<tr><td><b>{_e(e["numero"])}</b></td><td>{_date(e["date_piece"])}</td><td>{_e(e["ref_tiers"])}</td>'
+        f'<td>{_date(e["date_echeance"])}</td><td class="n">{_euros(e["montant_cents"])}</td>'
+        f'<td class="n">{_euros(e["reste_cents"])}</td></tr>' for e in ech)
+    total = sum(e["reste_cents"] for e in ech)
+    soc_adr = [soc.get("adresse1"), soc.get("adresse2"), " ".join(x for x in (soc.get("code_postal"), soc.get("ville")) if x)]
+    banque = f"<p>Règlement par virement — IBAN {_e(soc['iban'])}</p>" if soc.get("iban") else ""
+    return f"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8"><title>{_e(titre)} — {_e(t["raison_sociale"])}</title>
+<style>
+@page {{ size: A4; margin: 18mm 16mm; }}
+body {{ margin: 0; font: 10.5pt/1.5 'Segoe UI', system-ui, sans-serif; color: black; background: white; }}
+.page {{ max-width: 180mm; margin: 0 auto; padding: 8mm 0; }}
+.tete {{ display: flex; justify-content: space-between; margin-bottom: 14mm; }}
+.dest {{ margin-left: auto; width: 80mm; }}
+h1 {{ font-size: 14pt; margin: 10mm 0 4mm; }}
+table {{ width: 100%; border-collapse: collapse; margin: 6mm 0; }}
+th {{ text-align: left; font-size: 8.5pt; text-transform: uppercase; border-bottom: 1.5px solid black; padding: 2mm 1.5mm; }}
+td {{ border-bottom: 1px solid gainsboro; padding: 2mm 1.5mm; }}
+.n {{ text-align: right; white-space: nowrap; }}
+tr.total td {{ border-top: 1.5px solid black; font-weight: 700; }}
+.barre {{ position: sticky; top: 0; background: whitesmoke; border-bottom: 1px solid gainsboro; padding: 8px; text-align: center; }}
+.barre button {{ font: inherit; font-weight: 700; padding: 6px 16px; border-radius: 8px; border: 1px solid silver; background: white; cursor: pointer; }}
+@media print {{ .barre {{ display: none; }} .page {{ padding: 0; }} }}
+</style></head><body>
+<div class="barre"><button onclick="window.print()">Imprimer / enregistrer en PDF</button></div>
+<div class="page">
+  <div class="tete"><div><b>{_e(soc.get("raison_sociale") or "")}</b><br>{"<br>".join(_e(x) for x in soc_adr if x)}</div></div>
+  <div class="dest"><b>{_e(t["raison_sociale"])}</b><br>{"<br>".join(_e(x) for x in adr)}</div>
+  <p style="text-align:right;margin-top:8mm">{_e(soc.get("ville") or "")}, le {_date(jour)}</p>
+  <h1>{_e(titre)}</h1>
+  <p>Madame, Monsieur,</p>
+  <p>{_e(texte)}</p>
+  <table><thead><tr><th>Facture</th><th>Date</th><th>Votre réf.</th><th>Échéance</th><th class="n">Montant TTC</th><th class="n">Reste dû</th></tr></thead>
+  <tbody>{lignes}<tr class="total"><td colspan="5">Total restant dû</td><td class="n">{_euros(total)}</td></tr></tbody></table>
+  {banque}
+  <p>Nous vous prions d'agréer, Madame, Monsieur, nos salutations distinguées.</p>
+  <p style="margin-top:12mm">Service comptabilité — {_e(soc.get("raison_sociale") or "")}</p>
+</div></body></html>"""
+
+
 def rendre(conn, piece_id: int) -> str:
     p = pieces.charger(conn, piece_id)
     soc = fichiers.lire_societe(conn)

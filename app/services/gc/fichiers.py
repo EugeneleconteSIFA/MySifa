@@ -340,10 +340,11 @@ def mouvements(conn, article_id: int | None = None) -> list[dict]:
 
 
 def mouvement_manuel(conn, data: dict, user: dict | None = None) -> int:
-    """Inventaire ou ajustement : la seule écriture de stock hors pièce."""
+    """Inventaire, ajustement ou transfert : les seules écritures de stock hors pièce.
+    Un transfert écrit deux mouvements (sortie du dépôt, entrée dans l'autre)."""
     typ = data.get("type") or "ajustement"
-    if typ not in ("inventaire", "ajustement"):
-        raise ErreurFichier("Type de mouvement manuel : inventaire ou ajustement.")
+    if typ not in ("inventaire", "ajustement", "transfert"):
+        raise ErreurFichier("Type de mouvement manuel : inventaire, ajustement ou transfert.")
     art = conn.execute("SELECT id, gere_stock FROM gc_articles WHERE id=?",
                        (_conv(data.get("article_id"), int, "Article"),)).fetchone()
     if not art or not art["gere_stock"]:
@@ -352,6 +353,26 @@ def mouvement_manuel(conn, data: dict, user: dict | None = None) -> int:
     if not conn.execute("SELECT 1 FROM gc_depots WHERE code=?", (depot,)).fetchone():
         raise ErreurFichier("Dépôt inconnu.")
     q = _conv(data.get("quantite_milli"), int, "Quantité")
+    if typ == "transfert":
+        dest = data.get("depot_destination")
+        if not conn.execute("SELECT 1 FROM gc_depots WHERE code=?", (dest,)).fetchone():
+            raise ErreurFichier("Dépôt de destination inconnu.")
+        if dest == depot:
+            raise ErreurFichier("Dépôts de départ et d'arrivée identiques.")
+        if q <= 0:
+            raise ErreurFichier("Quantité à transférer : supérieure à zéro.")
+        now = _maintenant()
+        jour = data.get("date_mvt") or now[:10]
+        lot = str(data.get("lot") or "")
+        com = str(data.get("commentaire") or "") or f"Transfert {depot} → {dest}"
+        nom = str((user or {}).get("nom") or "")
+        cur = conn.execute(
+            """INSERT INTO gc_mouvements (date_mvt, article_id, depot, quantite_milli, type, lot, commentaire, cree_par, cree_le)
+               VALUES (?,?,?,?,?,?,?,?,?)""", (jour, art["id"], depot, -q, "transfert", lot, com, nom, now))
+        conn.execute(
+            """INSERT INTO gc_mouvements (date_mvt, article_id, depot, quantite_milli, type, lot, commentaire, cree_par, cree_le)
+               VALUES (?,?,?,?,?,?,?,?,?)""", (jour, art["id"], dest, q, "transfert", lot, com, nom, now))
+        return int(cur.lastrowid)
     if typ == "inventaire":
         # Quantité comptée : le mouvement est l'écart avec le stock théorique.
         th = conn.execute("SELECT COALESCE(SUM(quantite_milli),0) q FROM gc_mouvements WHERE article_id=? AND depot=?",

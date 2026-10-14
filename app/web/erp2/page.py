@@ -101,7 +101,24 @@ _COQUE = """<body class="erp">
 """
 
 
-# Déclarée AVANT la route générique : FastAPI prend la première qui correspond.
+@router.get(ERP2_PREFIXE + "/imprimer-relance/{tiers_id}", response_class=HTMLResponse)
+def erp2_imprimer_relance(request: Request, tiers_id: int, niveau: int = 1):
+    try:
+        user = get_current_user(request)
+    except HTTPException as e:
+        if e.status_code == 401:
+            return HTMLResponse(_entete("Connexion — ERP") + _CONNEXION)
+        raise
+    if user.get("role") not in ROLES_ERP2:
+        from app.web.access_denied import access_denied_response
+        return access_denied_response("ERP")
+    from app.core.database import get_db
+    from app.web.erp2.impression import rendre_relance
+    with get_db() as conn:
+        return HTMLResponse(rendre_relance(conn, tiers_id, niveau))
+
+
+# Déclarées AVANT la route générique : FastAPI prend la première qui correspond.
 @router.get(ERP2_PREFIXE + "/imprimer/{piece_id}", response_class=HTMLResponse)
 def erp2_imprimer(request: Request, piece_id: int):
     try:
