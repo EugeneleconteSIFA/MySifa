@@ -507,6 +507,13 @@
       await charger();
     }
 
+    function boutonImprimer() {
+      return ERP.bouton('Imprimer', async function () {
+        if (modifie) await enregistrer(true);
+        window.open('/imprimer/' + P.id, '_blank');
+      }, {titre: 'Document A4 — imprimer ou enregistrer en PDF'});
+    }
+
     function dessinerActions() {
       ctx.actions.textContent = '';
       var a = [];
@@ -520,10 +527,12 @@
           ERP.toast('Brouillon supprimé.', 'success');
           ERP.aller(routeDe(P.type));
         }, {danger: true}));
+        a.push(boutonImprimer());
         a.push(btnEnr);
         a.push(ERP.bouton('Valider', valider, {accent: true}));
       } else {
         btnEnr = null;
+        a.push(boutonImprimer());
         if (P.statut !== 'annule') {
           (P.aval_possibles || []).forEach(function (cible) {
             a.push(ERP.bouton(ACTION_AVAL[cible] || libType(cible), function () { return transformer(P, cible); }, {accent: cible !== 'avoir'}));
