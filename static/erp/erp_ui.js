@@ -89,6 +89,7 @@
   };
   var ETATS_TYPE = {
     devis: {valide: 'Envoyé', partiel: 'Accepté en partie', solde: 'Accepté'},
+    marche: {valide: 'En cours', partiel: 'Appelé en partie', solde: 'Épuisé'},
     commande: {valide: 'À livrer', partiel: 'Livrée en partie', solde: 'Livrée'},
     bl: {valide: 'À facturer', partiel: 'Facturé en partie', solde: 'Facturé'},
     facture: {valide: 'Émise', partiel: 'Réglée en partie', solde: 'Réglée'},
@@ -130,7 +131,7 @@
     var lecture = !!o.lecture;
     var val = obj[cle];
     var aff = type === 'euros' ? ERP.fmt.eurosNu(val) : type === 'qte' ? ERP.fmt.qte(val, o.dec) :
-              type === 'pct' ? (val ? String(val / 100).replace('.', ',') : '') : (val == null ? '' : String(val));
+              type === 'pct' ? (val ? String(val / 100).replace('.', ',') + (lecture ? ' %' : '') : '') : (val == null ? '' : String(val));
     var el = type === 'zone' ? h('textarea', {className: 'erp-input', rows: o.lignes || 3, disabled: lecture})
                              : h('input', {className: 'erp-input' + (/euros|qte|pct|entier/.test(type) ? ' num' : ''),
                                            type: type === 'date' ? 'date' : 'text', disabled: lecture,

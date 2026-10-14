@@ -16,6 +16,7 @@
 
   var ROUTES = {
     '/ventes/devis': {types: ['devis'], nouveau: 'devis'},
+    '/ventes/marches': {types: ['marche'], nouveau: 'marche'},
     '/ventes/commandes': {types: ['commande'], nouveau: 'commande'},
     '/ventes/livraisons': {types: ['bl'], nouveau: 'bl'},
     '/ventes/factures': {types: ['facture', 'avoir'], nouveau: 'facture'},
@@ -201,6 +202,7 @@
         ERP.champ('Date', ERP.saisie(P, 'date_piece', 'date', {lecture: ro, change: marquer})),
       ];
       if (P.type === 'devis') champs.push(ERP.champ('Valable jusqu\'au', ERP.saisie(P, 'date_validite', 'date', {lecture: ro, change: marquer})));
+      if (P.type === 'marche') champs.push(ERP.champ('Fin du marché', ERP.saisie(P, 'date_validite', 'date', {lecture: ro, change: marquer})));
       if (/^(commande|cde_fournisseur|devis)$/.test(P.type)) champs.push(ERP.champ('Livraison prévue', ERP.saisie(P, 'date_livraison', 'date', {lecture: ro, change: marquer})));
       champs.push(ERP.champ(P.type === 'facture_fournisseur' ? 'N° de facture fournisseur' : vente ? 'Réf. commande client' : 'Réf. fournisseur',
         ERP.saisie(P, 'ref_tiers', 'texte', {lecture: ro, change: marquer})));
@@ -337,7 +339,7 @@
 
     function ligneLecture(l, i) {
       var reste = l.article_id ? Math.max(0, l.quantite_milli - (l.qte_aval_milli || 0)) : 0;
-      var suivi = P.statut !== 'annule' && /^(devis|commande|bl|cde_fournisseur|reception|of)$/.test(P.type);
+      var suivi = P.statut !== 'annule' && /^(devis|marche|commande|bl|cde_fournisseur|reception|of)$/.test(P.type);
       var tr = h('tr', {className: (l.article_id ? '' : 'texte') + (l.solde ? ' solde' : '')});
       tr.appendChild(h('td', {className: 'rang', text: String(i + 1)}));
       if (!l.article_id) {
@@ -380,8 +382,8 @@
     }
 
     function enTetesLignes() {
-      var suivi = lecture() && P.statut !== 'annule' && /^(devis|commande|bl|cde_fournisseur|reception|of)$/.test(P.type);
-      var repris = {devis: 'Commandé', commande: 'Livré', bl: 'Facturé', cde_fournisseur: 'Reçu', reception: 'Facturé', of: 'Produit'}[P.type];
+      var suivi = lecture() && P.statut !== 'annule' && /^(devis|marche|commande|bl|cde_fournisseur|reception|of)$/.test(P.type);
+      var repris = {marche: 'Appelé', devis: 'Commandé', commande: 'Livré', bl: 'Facturé', cde_fournisseur: 'Reçu', reception: 'Facturé', of: 'Produit'}[P.type];
       return h('tr', null, h('th', {text: '#'}), h('th', {text: 'Article'}), h('th', {text: 'Désignation'}),
         h('th', {className: 'num', text: 'Quantité'}), h('th', {text: 'Unité'}),
         SANS_PRIX[P.type] ? null : [h('th', {className: 'num', text: 'Prix HT'}), h('th', {className: 'num', text: 'Remise'}),
@@ -608,10 +610,11 @@
             }, {accent: true}));
           }
           // Étape déjà entièrement faite : pas de bouton (l'OF reste possible).
-          var AVANCE = {devis: 'commande', commande: 'bl', bl: 'facture', cde_fournisseur: 'reception', reception: 'facture_fournisseur'};
+          var AVANCE = {marche: 'commande', devis: 'commande', commande: 'bl', bl: 'facture', cde_fournisseur: 'reception', reception: 'facture_fournisseur'};
           (P.aval_possibles || []).forEach(function (cible) {
             if (P.statut === 'solde' && AVANCE[P.type] === cible) return;
-            a.push(ERP.bouton(ACTION_AVAL[cible] || libType(cible), function () { return transformer(P, cible); }, {accent: cible !== 'avoir'}));
+            var lib = P.type === 'marche' && cible === 'commande' ? 'Passer un appel' : (ACTION_AVAL[cible] || libType(cible));
+            a.push(ERP.bouton(lib, function () { return transformer(P, cible); }, {accent: cible !== 'avoir'}));
           });
           if (!(ERP.types[P.type] || {}).legal) {
             a.push(ERP.bouton('Annuler la pièce', async function () {

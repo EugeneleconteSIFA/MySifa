@@ -19,6 +19,7 @@
     {groupe: null, liens: [{chemin: '/', libelle: 'Accueil'}]},
     {groupe: 'Ventes', liens: [
       {chemin: '/ventes/devis', libelle: 'Devis'},
+      {chemin: '/ventes/marches', libelle: 'Marchés'},
       {chemin: '/ventes/commandes', libelle: 'Commandes'},
       {chemin: '/ventes/livraisons', libelle: 'Livraisons'},
       {chemin: '/ventes/factures', libelle: 'Factures et avoirs'},

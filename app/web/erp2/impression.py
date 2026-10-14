@@ -18,7 +18,7 @@ from datetime import date
 from app.services.gc import calculs, fichiers, pieces
 
 TITRES = {
-    "devis": "Devis", "commande": "Accusé de réception de commande", "bl": "Bon de livraison",
+    "devis": "Devis", "marche": "Marché", "commande": "Accusé de réception de commande", "bl": "Bon de livraison",
     "facture": "Facture", "avoir": "Avoir", "cde_fournisseur": "Bon de commande",
     "reception": "Bon de réception", "facture_fournisseur": "Facture fournisseur",
     "of": "Ordre de fabrication",
@@ -119,6 +119,8 @@ def rendre(conn, piece_id: int) -> str:
         infos.append(("Votre référence" if pieces.TYPES[p["type"]]["sens"] == "vente" else "Référence fournisseur", p["ref_tiers"]))
     if p["type"] == "devis" and p["date_validite"]:
         infos.append(("Valable jusqu'au", _date(p["date_validite"])))
+    if p["type"] == "marche" and p["date_validite"]:
+        infos.append(("Fin du marché", _date(p["date_validite"])))
     if p["date_livraison"] and p["type"] in ("commande", "cde_fournisseur", "devis"):
         infos.append(("Livraison prévue", _date(p["date_livraison"])))
     cond = None

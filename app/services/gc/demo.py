@@ -189,6 +189,14 @@ def reinitialiser(conn, user: dict | None = None) -> dict:
     d5 = nouvelle("devis", "C0004", [ligne("PF0004", 25_000_000, "C0004")], jour(-6), date_validite=jour(24))
     pieces.valider(conn, d5, user)
 
+    # Marché annuel avec un premier appel
+    m1 = nouvelle("marche", "C0002", [ligne("PF0002", 150_000_000, "C0002")], jour(-60), date_validite=jour(300),
+                  ref_tiers="Contrat 2026-27")
+    pieces.valider(conn, m1, user)
+    ap1 = suite([m1], "commande", jour(-5), modif=lambda ls: [dict(l, quantite_milli=25_000_000) for l in ls])
+    conn.execute("UPDATE gc_pieces SET ref_tiers='Appel 1', date_livraison=? WHERE id=?", (jour(9), ap1))
+    pieces.valider(conn, ap1, user)
+
     # Achats
     cf1 = nouvelle("cde_fournisseur", "F0001", [ligne("MP0001", 12_000_000, "F0001", "achat")], jour(-20),
                    date_livraison=jour(-6))

@@ -290,6 +290,28 @@ class Chaine(unittest.TestCase):
         self.assertEqual([x["quantite_milli"] for x in dd["lignes"]], [10_000_000, 1000])
         self.assertTrue(all(x["ligne_amont_id"] is None for x in dd["lignes"]))
 
+    def test_marche_et_appels(self):
+        c = self.conn
+        c.execute("INSERT OR IGNORE INTO gc_sequences (code, libelle, format) VALUES ('marche', 'Marché', 'MA{AA}{N:05}')")
+        ma = pieces.creer(c, "marche", 1)
+        pieces.enregistrer(c, ma, {"date_validite": "2099-12-31"}, [_ligne(1, 100_000_000, 1100, 1000)])
+        pieces.valider(c, ma)
+        a1 = pieces.transformer(c, [ma], "commande")
+        l1 = pieces.charger(c, a1)["lignes"]
+        self.assertEqual(l1[0]["prix_cents"], 1100)                     # prix du marché
+        pieces.enregistrer(c, a1, None, [dict(l1[0], quantite_milli=30_000_000)])
+        pieces.valider(c, a1)
+        self.assertEqual(pieces.charger(c, ma)["statut"], "partiel")
+        a2 = pieces.transformer(c, [ma], "commande")
+        self.assertEqual(pieces.charger(c, a2)["lignes"][0]["quantite_milli"], 70_000_000)   # reste à appeler
+        pieces.valider(c, a2)
+        self.assertEqual(pieces.charger(c, ma)["statut"], "solde")
+        # Marché échu : plus d'appel
+        c.execute("UPDATE gc_pieces SET date_validite='2000-01-01', statut='valide' WHERE id=?", (ma,))
+        c.execute("UPDATE gc_pieces_lignes SET quantite_milli=200000000 WHERE piece_id=?", (ma,))
+        with self.assertRaises(ErreurPiece):
+            pieces.transformer(c, [ma], "commande")
+
     def test_alerte_stock_negatif(self):
         c = self.conn
         co = pieces.creer(c, "commande", 1)

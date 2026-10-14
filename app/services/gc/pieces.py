@@ -25,6 +25,9 @@ from app.services.gc import calculs
 
 TYPES = {
     "devis":               {"libelle": "Devis", "sens": "vente", "aval": ["commande"], "stock": 0, "legal": False},
+    # Marché : contrat cadre (quantité et prix pour une période) ; chaque
+    # appel est une commande liée à la ligne de marché.
+    "marche":              {"libelle": "Marché", "sens": "vente", "aval": ["commande"], "stock": 0, "legal": False},
     "commande":            {"libelle": "Commande", "sens": "vente", "aval": ["bl", "of"], "stock": 0, "legal": False},
     "bl":                  {"libelle": "Bon de livraison", "sens": "vente", "aval": ["facture"], "stock": -1, "legal": False},
     "facture":             {"libelle": "Facture", "sens": "vente", "aval": ["avoir"], "stock": 0, "legal": True},
@@ -42,6 +45,7 @@ TYPES = {
 # ne « solde » pas une facture : il la corrige.
 AVANCEMENT = {
     "devis": ["commande"],
+    "marche": ["commande"],
     "commande": ["bl"],
     "bl": ["facture"],
     "cde_fournisseur": ["reception"],
@@ -580,6 +584,8 @@ def transformer(conn, sources: list[int], cible: str, user: dict | None = None) 
     for p in ps:
         if p["statut"] in ("brouillon", "annule"):
             raise ErreurPiece(f"{p['numero'] or 'Brouillon'} : seule une pièce validée se transforme.")
+        if p["type"] == "marche" and p["date_validite"] and p["date_validite"][:10] < _aujourdhui():
+            raise ErreurPiece(f"Marché {p['numero']} échu le {p['date_validite'][8:10]}/{p['date_validite'][5:7]}/{p['date_validite'][:4]}.")
     # Le reste se mesure contre les pièces du type demandé : une commande se
     # livre (BL) et se fabrique (OF) indépendamment.
     reprise = AVANCEMENT.get(src_type) if cible in AVANCEMENT.get(src_type, []) else [cible]
