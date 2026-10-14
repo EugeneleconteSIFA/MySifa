@@ -1155,6 +1155,22 @@
     });
     var F = window.MySifaBlocsFiltres;
     var defsP = (F && F.existe(w.bloc)) ? F.preparer(w.bloc, api).catch(function () { return []; }) : Promise.resolve([]);
+    /* La carte suit le questionnaire en direct : elle est l'aperçu. Rien
+       n'est enregistré avant « Enregistrer » ; « Annuler », Échap ou un autre
+       panneau la remettent comme avant. */
+    var lecture = null;
+    function relire() {
+      clearTimeout(lecture);
+      lecture = setTimeout(function () { if (W.cartes[w.id] === c) lireSources(); }, 250);
+    }
+    function vue(champs) {
+      var urlAvant = c.w.url_capture;
+      c.w = Object.assign({}, w, champs);
+      c.el.querySelector(".mac-nom").textContent = c.w.nom;
+      afficherValeurs(c);
+      if (c.w.url_capture !== urlAvant) { afficherFiltres(c); if (!c.iframe) relire(); }
+      else if ("hauteur" in champs && champs.hauteur !== w.hauteur && !c.iframe) relire();
+    }
     defsP.then(function (filtres) {
     mb.questionnaire({
       bloc: w.bloc_info,
@@ -1168,6 +1184,19 @@
       nom: w.nom,
       taille: w.hauteur,
       bouton: "Enregistrer",
+      surChange: function (p) {
+        vue({ nom: p.nom || w.nom, valeurs: p.valeurs.length ? p.valeurs : w.valeurs,
+              hauteur: p.hauteur || w.hauteur, url_capture: p.url || w.url_capture });
+      },
+      annuler: function () {
+        if (W.cartes[w.id] !== c) return;
+        var urlTempo = c.w.url_capture, hTempo = c.w.hauteur;
+        c.w = w;
+        c.el.querySelector(".mac-nom").textContent = w.nom;
+        afficherValeurs(c);
+        if (urlTempo !== w.url_capture) afficherFiltres(c);
+        if ((urlTempo !== w.url_capture || hTempo !== w.hauteur) && !c.iframe) relire();
+      },
       envoyer: function (p) {
         var champs = { nom: p.nom, valeurs: p.valeurs };
         if (p.hauteur && p.hauteur !== (w.hauteur || "m")) champs.hauteur = p.hauteur;

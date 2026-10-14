@@ -305,7 +305,13 @@ et `user_dashboards` le 06/10/2026 (migration
 
 Un indicateur existant se modifie depuis l'accueil (Personnaliser › curseurs) :
 c'est le même questionnaire qu'à la capture, exposé par
-`window.MySifaBlocs.questionnaire(o)` — ne pas en écrire un second.
+`window.MySifaBlocs.questionnaire(o)` — ne pas en écrire un second. Pendant
+la modification, **la carte elle-même sert d'aperçu** (retour du 14/10) : le
+questionnaire signale chaque réglage par `o.surChange({nom, valeurs, url,
+hauteur})`, la carte l'applique sans rien enregistrer (`modifierValeurs`), et
+`o.annuler` la remet à l'identique. `o.annuler` est appelé par
+`fermerPanneau()` pour toute fermeture sans enregistrement : bouton Annuler,
+Échap, ouverture d'un autre panneau.
 
 **Taille et aperçu à la création** (décision du 14/10/2026) : le
 questionnaire propose la taille (compact, standard, grand si le bloc a une
