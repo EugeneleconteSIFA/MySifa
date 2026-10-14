@@ -3059,6 +3059,21 @@ def _candidats_remplacement(conn, categories: set, mod_laize, perte_pct) -> dict
         _SQL_MATIERE_CONV + " WHERE categorie IN (%s) "
         "   AND COALESCE(actif, 1) = 1 AND COALESCE(brouillon, 0) = 0 "
         " ORDER BY reference" % marques, tuple(cats)).fetchall()]
+    # Stock et fournisseur : ce qui départage deux références voisines au
+    # moment de choisir (on prend celle qui est réellement en rayon).
+    stocks = {int(s["matiere_id"]): float(s["quantite"] or 0) for s in conn.execute(
+        "SELECT matiere_id, quantite FROM mp_stock").fetchall()}
+    fournisseurs: dict = {}
+    try:
+        for f in conn.execute(
+                "SELECT v.matiere_id, f.nom FROM mp_variantes v "
+                "JOIN fournisseurs_fsc f ON f.id = v.fournisseur_id "
+                "WHERE v.actif = 1 ORDER BY v.principal DESC, v.id").fetchall():
+            l = fournisseurs.setdefault(int(f["matiere_id"]), [])
+            if f["nom"] and f["nom"] not in l:
+                l.append(f["nom"])
+    except sqlite3.OperationalError:
+        pass  # mp_variantes absente : migration pas encore passée
     out: dict = {}
     for r in rows:
         kind = _kind_de_categorie(r["categorie"])
@@ -3066,6 +3081,8 @@ def _candidats_remplacement(conn, categories: set, mod_laize, perte_pct) -> dict
         out.setdefault(r["categorie"], []).append({
             "matiere_id": r["id"], "reference": r["reference"],
             "designation": r["designation"], "categorie": r["categorie"],
+            "stock": stocks.get(int(r["id"]), 0.0),
+            "fournisseurs": fournisseurs.get(int(r["id"]), []),
             "kind": kind, "conversion": conv,
             "laizes": (_laizes_matiere(conn, r["id"])
                        if r["categorie"] in _CATEGORIES_BOBINE else []),
@@ -4366,6 +4383,52 @@ def _destockage_auto_un(conn, pe_id: int, user: dict) -> dict:
             "reserves": reserves, "stocks_negatifs": negatifs}
 
 
+def cloturer_fins_prevues(conn, depuis: str) -> list:
+    """Clot les dossiers des postes sans saisie dont la fin prevue est passee.
+
+    Un poste comme le DSI n'a pas de saisie de production : aucun code 89 ne
+    clot ses dossiers, et le destockage qui suit la cloture ne part jamais
+    (inventaire du 13/10/2026 : complexes en 333 toujours en stock). La
+    machine porte `cloture_fin_prevue` ; ses dossiers sont clos ici, puis le
+    balayage les destocke depuis le theorique de l'OF, comme une cloture
+    forcee au planning.
+
+    Seuls les dossiers dont la fin prevue tombe APRES `depuis` sont pris :
+    arbitrage du 13/10/2026, aucun rattrapage de l'historique. Un dossier qui
+    porte deja une saisie de production reste a la main de l'atelier.
+
+    Rend les id clos. Ne commit pas.
+    """
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(machines)")}
+    if "cloture_fin_prevue" not in cols:
+        return []
+    maintenant = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    rows = conn.execute(
+        """SELECT pe.id, pe.reference
+             FROM planning_entries pe
+             JOIN machines m ON m.id = pe.machine_id
+            WHERE COALESCE(m.cloture_fin_prevue, 0) = 1
+              AND pe.statut IN ('attente', 'en_cours')
+              AND pe.planned_end IS NOT NULL
+              AND pe.planned_end >= ?
+              AND pe.planned_end <= ?
+              AND NOT EXISTS (
+                    SELECT 1 FROM production_data p
+                     WHERE p.no_dossier = pe.reference
+                       AND COALESCE(p.est_annule, 0) = 0)""",
+        (depuis, maintenant),
+    ).fetchall()
+    clos = []
+    for r in rows:
+        conn.execute(
+            "UPDATE planning_entries SET statut='termine', statut_force=1, "
+            "statut_reel='reellement_termine', updated_at=? WHERE id=?",
+            (datetime.now().isoformat(), r["id"]),
+        )
+        clos.append(int(r["id"]))
+    return clos
+
+
 def balayer_destockage_auto(conn, user: dict, limite: int = 40) -> dict:
     """Déstocke les dossiers terminés depuis la mise en service.
 
@@ -4385,11 +4448,18 @@ def balayer_destockage_auto(conn, user: dict, limite: int = 40) -> dict:
 
     try:
         candidats = [r["id"] for r in conn.execute(
-            """SELECT id FROM planning_entries
-                WHERE statut = 'termine'
-                  AND COALESCE(destockage, 'todo') = 'todo'
-                  AND COALESCE(updated_at, '') >= ?
-                ORDER BY id
+            # Sur la FIN du dossier, pas sur `updated_at` : une replanification
+            # remet ce dernier a jour en masse (162 anciens dossiers de
+            # Cohesio 1 retouches le 13/10/2026 a 16 h 22), et le balayage les
+            # aurait tous destockes. Un dossier qui porte deja des mouvements
+            # (destockage annule a la main) n'est pas rejoue non plus.
+            """SELECT pe.id FROM planning_entries pe
+                WHERE pe.statut = 'termine'
+                  AND COALESCE(pe.destockage, 'todo') = 'todo'
+                  AND COALESCE(pe.planned_end, '') >= ?
+                  AND NOT EXISTS (SELECT 1 FROM mp_mouvements m
+                                   WHERE m.planning_entry_id = pe.id)
+                ORDER BY pe.id
                 LIMIT ?""",
             (depuis, int(limite)),
         ).fetchall()]
@@ -4445,6 +4515,35 @@ def destocker_a_la_cloture(conn, pe_id: int, user: dict | None = None) -> dict |
         conn, pe_id,
         {"id": (user or {}).get("id"), "nom": "Déstockage automatique"},
     )
+
+
+def tour_cloture_fin_prevue(get_db_fn) -> dict:
+    """Un tour de la boucle de fond : clot puis destocke les dossiers echus.
+
+    Ne passe PAS par `balayer_destockage_auto` : celui-ci retient les dossiers
+    sur `updated_at`, qu'une replanification remet a jour en masse (162 anciens
+    dossiers de Cohesio 1 retouches le 13/10/2026 a 16 h 22). Ici, on ne
+    destocke que ce qu'on vient soi-meme de clore.
+
+    Sans date de mise en service du destockage automatique, ne fait rien.
+    """
+    with get_db_fn() as conn:
+        depuis = _config_texte(conn, CLE_DESTOCKAGE_DEPUIS)
+        if not depuis:
+            return {"actif": False, "clos": [], "traites": []}
+        clos = cloturer_fins_prevues(conn, depuis)
+        traites = []
+        for pe_id in clos:
+            try:
+                verdict = destocker_a_la_cloture(conn, pe_id)
+            except Exception as e:  # un dossier ne bloque pas les autres
+                logger.warning("cloture fin prevue %s : %s", pe_id, e)
+                verdict = {"planning_id": pe_id, "etat": "erreur", "motif": str(e)}
+            if verdict:
+                traites.append(verdict)
+        if clos:
+            conn.commit()
+    return {"actif": True, "clos": clos, "traites": traites}
 
 
 @router.post("/api/stock/destockage/{planning_id}/auto")
@@ -4537,8 +4636,8 @@ async def destockage_auto_mise_en_service(request: Request):
 
     Body : { depuis: "AAAA-MM-JJ" } — vide pour l'arrêter.
 
-    Aucune reprise rétroactive : seuls les dossiers dont la dernière
-    modification est postérieure à cette date entrent dans le balayage.
+    Aucune reprise rétroactive : seuls les dossiers dont la fin est
+    postérieure à cette date entrent dans le balayage.
     """
     user = require_stock_matieres_admin(request)
     body = await request.json()

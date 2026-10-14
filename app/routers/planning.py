@@ -3819,6 +3819,45 @@ async def set_machine_hors_production(machine_id: int, request: Request):
     return {"success": True, "hors_production": hp}
 
 
+@router.put("/machines/{machine_id}/cloture-fin-prevue")
+async def set_machine_cloture_fin_prevue(machine_id: int, request: Request):
+    """Clot les dossiers de ce poste a leur fin prevue au planning.
+
+    Body: {"cloture_fin_prevue": 0|1}
+    Pour un poste sans saisie de production (le DSI) : aucun code 89 ne vient
+    clore ses dossiers, donc rien ne les destocke. Coche, le balayage du
+    destockage clot chaque dossier dont la fin prevue est passee et le sort du
+    stock depuis le theorique de l'OF.
+    """
+    user = require_admin(request)
+    body = await request.json()
+    try:
+        cfp = 1 if int(body.get("cloture_fin_prevue", 0) or 0) == 1 else 0
+    except (TypeError, ValueError):
+        cfp = 0
+    with get_db() as conn:
+        ex = conn.execute("SELECT id, nom FROM machines WHERE id=?", (machine_id,)).fetchone()
+        if not ex:
+            raise HTTPException(404, "Machine non trouvée")
+        conn.execute(
+            "UPDATE machines SET cloture_fin_prevue=? WHERE id=?",
+            (cfp, machine_id),
+        )
+        conn.commit()
+    try:
+        log_action(
+            user=user,
+            action="UPDATE",
+            module="planning",
+            objet=f"Clôture à la fin prévue poste {ex['nom']}",
+            detail={"cloture_fin_prevue": cfp},
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return {"success": True, "cloture_fin_prevue": cfp}
+
+
 @router.put("/machines/{machine_id}/journee-entiere")
 async def set_machine_journee_entiere(machine_id: int, request: Request):
     """Active/désactive la journée entière par défaut sur une machine.

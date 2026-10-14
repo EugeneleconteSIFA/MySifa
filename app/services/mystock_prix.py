@@ -198,6 +198,21 @@ def list_materials(
         args.append(categorie.strip().lower())
     sql += " ORDER BY mp.categorie ASC, mp.reference COLLATE NOCASE ASC"
     rows = conn.execute(sql, args).fetchall()
+    # Libellés techniques des variantes fournisseur actives, principal en tête.
+    # Base non migrée : pas de table, pas de libellé, la liste reste servie.
+    techs_par_mat: dict[int, list[str]] = {}
+    try:
+        for r in conn.execute(
+            """SELECT matiere_id, libelle_technique FROM mp_variantes
+                WHERE actif = 1 AND COALESCE(libelle_technique, '') <> ''
+                ORDER BY principal DESC, libelle_technique COLLATE NOCASE ASC"""
+        ).fetchall():
+            l = techs_par_mat.setdefault(int(r["matiere_id"]), [])
+            if r["libelle_technique"] not in l:
+                l.append(r["libelle_technique"])
+    except sqlite3.OperationalError:
+        pass
+
     if q and q.strip():
         # Recherche sans accents ni casse, faite ici : le LIKE de SQLite
         # distingue « velin » de « Vélin ».
@@ -205,6 +220,7 @@ def list_materials(
         rows = [
             r for r in rows
             if cle in _sans_accents(r["reference"]) or cle in _sans_accents(r["designation"])
+            or any(cle in _sans_accents(t) for t in techs_par_mat.get(int(r["id"]), []))
         ]
 
     decl_rows = conn.execute(
@@ -362,6 +378,7 @@ def list_materials(
                 "sous_section": _col(r, "sous_section") or None,
                 "reference": r["reference"],
                 "designation": r["designation"],
+                "libelles_techniques": techs_par_mat.get(mid, []),
                 "actif": bool(r["actif"]),
                 "type_declinaison": type_declinaison(cat),
                 "unite": "€/m²" if cat in CATEGORIES_LAIZEES else "€/kg"

@@ -1763,6 +1763,13 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
           <p id="mac-hp-hint" class="sub" style="margin-top:0;margin-bottom:14px;font-size:11px;color:var(--muted)">
             Un point de production compte un m&eacute;trage, une cadence, des arr&ecirc;ts. Un atelier de repiquage n&rsquo;a rien de tout cela &mdash; pas de code de d&eacute;but ni de fin de dossier, donc pas de cycle ni de compteur. Un poste coch&eacute; ici est <b>d&eacute;coch&eacute; par d&eacute;faut</b> dans le p&eacute;rim&egrave;tre d&rsquo;une r&eacute;union : sa pastille reste dans le s&eacute;lecteur, un clic le ram&egrave;ne.
           </p>
+          <label id="mac-cfp-row" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer;margin-bottom:6px;font-size:13px">
+            <input type="checkbox" id="mac-cfp">
+            <span style="font-weight:600;color:var(--text)">Clôture à la fin prévue</span>
+          </label>
+          <p id="mac-cfp-hint" class="sub" style="margin-top:0;margin-bottom:14px;font-size:11px;color:var(--muted)">
+            Pour un poste sans saisie de production : aucun code de fin ne vient clore ses dossiers. Coch&eacute;, chaque dossier est cl&ocirc;tur&eacute; d&egrave;s que sa fin pr&eacute;vue au planning est pass&eacute;e, puis d&eacute;stock&eacute; depuis le th&eacute;orique de l&rsquo;OF. Tenir le planning de ce poste &agrave; jour : un dossier d&eacute;cal&eacute; sans mise &agrave; jour serait d&eacute;stock&eacute; &agrave; sa date pr&eacute;vue.
+          </p>
           <div id="mac-horaires-weekly"></div>
           <div id="mac-horaires-parity" class="hidden" style="margin-top:16px"></div>
           <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
@@ -3995,6 +4002,8 @@ function renderMacHorairesForm() {
   if (sbmBox) sbmBox.checked = !!(m && +m.sans_matiere_premiere === 1);
   const hpBox = document.getElementById('mac-hp');
   if (hpBox) hpBox.checked = !!(m && +m.hors_production === 1);
+  const cfpBox = document.getElementById('mac-cfp');
+  if (cfpBox) cfpBox.checked = !!(m && +m.cloture_fin_prevue === 1);
   if (!weekly || !m) return;
   const mk = macMachineKey(m);
   const isC2 = mk === 'C2';
@@ -4175,6 +4184,13 @@ async function saveMacHoraires() {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ hors_production: hpBox && hpBox.checked ? 1 : 0 }),
+    });
+    // Cloture a la fin prevue : lue par le balayage du destockage.
+    const cfpBox = document.getElementById('mac-cfp');
+    await api('/api/planning/machines/' + id + '/cloture-fin-prevue', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cloture_fin_prevue: cfpBox && cfpBox.checked ? 1 : 0 }),
     });
     toast('Horaires enregistrés.');
     await loadMacMachineDetail();

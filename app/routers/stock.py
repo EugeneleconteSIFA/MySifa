@@ -6185,6 +6185,12 @@ def appliquer_mouvement_mp(
     # (écrit avec autoriser_negatif) — on ne pouvait plus rendre la matière.
     if type_mvt == "sortie" and apres < 0 and not autoriser_negatif:
         raise HTTPException(400, f"Stock insuffisant — stock actuel : {avant:g} {unite}.")
+    # Un stock ne peut pas être négatif (arbitrage du 13/10/2026). Une sortie
+    # autorisée au-delà du stock (déstockage de production) est enregistrée
+    # pour sa quantité réelle dans le mouvement, mais le stock s'arrête à zéro :
+    # la matière manquante n'était pas en rayon, elle ne se doit à personne.
+    if apres < 0:
+        apres = 0.0
 
     if laizee:
         conn.execute(
@@ -6295,7 +6301,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
                    mp.epaisseur_um,
                    mp.sous_section, COALESCE(mp.matiere_fsc, 0) AS matiere_fsc,
                    COALESCE(mp.intervalle_inventaire_jours, 180) AS intervalle_inventaire_jours,
-                   COALESCE(s.quantite, 0) AS quantite,
+                   MAX(COALESCE(s.quantite, 0), 0) AS quantite,
                    v.prix_unitaire AS prix_unitaire
             FROM matieres_premieres mp
             LEFT JOIN mp_stock s ON s.matiere_id = mp.id
@@ -6308,7 +6314,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
         laize_rows = conn.execute(
             """
             SELECT ml.matiere_id, l.id AS laize_id, l.valeur_mm, l.label, l.ordre, l.actif,
-                   COALESCE(sl.quantite, 0) AS quantite,
+                   MAX(COALESCE(sl.quantite, 0), 0) AS quantite,
                    ml.prix_eur_m2 AS laize_prix_eur_m2
             FROM mp_matiere_laizes ml
             JOIN mp_laizes l ON l.id = ml.laize_id
@@ -8805,7 +8811,7 @@ def _valorisation_query(conn, couts_matieres: bool = True) -> list[dict]:
         """
         SELECT mp.id, mp.categorie, mp.reference, mp.designation, mp.actif,
                mp.unites_par_palette, mp.sous_section,
-               COALESCE(s.quantite, 0) AS quantite,
+               MAX(COALESCE(s.quantite, 0), 0) AS quantite,
                COALESCE(v.prix_unitaire, 0) AS prix_unitaire,
                COALESCE(v.prix_en_usd, 0) AS prix_en_usd,
                COALESCE(v.taxe_importation, 0) AS taxe_importation,
@@ -8832,7 +8838,7 @@ def _valorisation_query(conn, couts_matieres: bool = True) -> list[dict]:
                COALESCE(v.taxe_importation, 0) AS taxe_importation,
                COALESCE(v.cout_transport_inclus, 0) AS cout_transport_inclus,
                l.id AS laize_id, l.valeur_mm, l.label AS laize_label, l.ordre AS laize_ordre,
-               COALESCE(sl.quantite, 0) AS quantite
+               MAX(COALESCE(sl.quantite, 0), 0) AS quantite
         FROM matieres_premieres mp
         JOIN mp_matiere_laizes ml ON ml.matiere_id = mp.id
         JOIN mp_laizes l ON l.id = ml.laize_id
@@ -9055,6 +9061,9 @@ def _valorisation_query_at_date(conn, snapshot_date: str | None) -> list[dict]:
             new_qte = float(stock_nl.get(mid_int, it.get("quantite") or 0))
         else:
             new_qte = float(it.get("quantite") or 0)
+        # Un stock ne peut pas être négatif (13/10/2026) : une reconstitution
+        # qui passe sous zéro vaut zéro, et ne retranche rien de la valeur.
+        new_qte = max(0.0, new_qte)
         it["quantite"] = round(new_qte, 4)
         # Override prix (snapshot)
         if mid_int is not None and mid_int in prix_map:
