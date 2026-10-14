@@ -117,31 +117,48 @@ def _dossier_actif(conn, dossier_id) -> None:
 
 
 def _imprimante(conn, imprimante_id):
+    """Toute imprimante active. Le format de sortie suit son langage :
+    ZPL pour les Zebra, PDF pour les autres (voir `_sortie`)."""
     if not imprimante_id:
         raise HTTPException(status_code=400, detail="Choisir une imprimante.")
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(imprimantes)").fetchall()}
+    tc = "type_connexion" if "type_connexion" in cols else "'tcp_ip' AS type_connexion"
     imp = conn.execute(
-        "SELECT id,nom,agent_id,langage,actif,dpi FROM imprimantes WHERE id=?", (int(imprimante_id),)
+        f"SELECT id,nom,agent_id,langage,actif,dpi,{tc} FROM imprimantes WHERE id=?", (int(imprimante_id),)
     ).fetchone()
     if not imp or not imp["actif"]:
         raise HTTPException(status_code=404, detail="Imprimante introuvable ou désactivée.")
-    if (imp["langage"] or "zpl") != "zpl":
-        raise HTTPException(
-            status_code=409,
-            detail=(f"« {imp['nom']} » est déclarée en {imp['langage'].upper()}. Les étiquettes spécifiques "
-                    "sortent en ZPL : activer l'émulation ZPL de l'imprimante (TSC, Honeywell, Sato, "
-                    "Datamax la proposent) puis passer son langage à ZPL dans Paramètres › Imprimantes."),
-        )
     return imp
 
 
-def _creer_job(conn, imp, zpl: str, email: str, data: dict) -> int:
+def _sortie(imp) -> str:
+    """zpl | pdf (file Windows, SumatraPDF) | pdf_brut (PDF envoyé tel quel
+    sur le port 9100 : les laser de bureau Brother, Lexmark, OKI, HP le lisent
+    directement — l'agent l'envoie comme n'importe quel flux brut)."""
+    if (imp["langage"] or "zpl") == "zpl":
+        return "zpl"
+    return "pdf" if (imp["type_connexion"] or "tcp_ip") == "windows_local" else "pdf_brut"
+
+
+def _creer_job(conn, imp, payload: bytes, sortie: str, email: str, data: dict) -> int:
+    if sortie == "pdf":
+        # Options lues par l'agent et passées à SumatraPDF (comme /api/print/pdf).
+        data = dict(data, copies=1, duplex="simplex", format="A4", bin=None, color="monochrome",
+                    filename=f"etiquettes_{data.get('impression_id', '')}.pdf")
     cur = conn.execute(
         "INSERT INTO print_jobs (imprimante_id,agent_id,usage_key,template_id,payload,payload_langage,"
-        "status,created_at,created_by,data_json) VALUES (?,?,?,NULL,?,'zpl','pending',?,?,?)",
-        (imp["id"], imp["agent_id"], "etiquette_specifique", zpl.encode("utf-8"),
+        "status,created_at,created_by,data_json) VALUES (?,?,?,NULL,?,?,'pending',?,?,?)",
+        (imp["id"], imp["agent_id"], "etiquette_specifique", payload, sortie,
          _now(), email, json.dumps(data, ensure_ascii=False)),
     )
     return cur.lastrowid
+
+
+def _payload(sortie: str, zpl: str, layout: dict, largeur_mm, hauteur_mm, valeurs: list, exemplaires: int) -> bytes:
+    if sortie == "zpl":
+        return zpl.encode("utf-8")
+    from app.services.etiq_specifiques_pdf import rendre_pdf
+    return rendre_pdf(layout, largeur_mm, hauteur_mm, valeurs, exemplaires)
 
 
 # ─── Bootstrap ──────────────────────────────────────────────────────────
@@ -171,7 +188,9 @@ def bootstrap(request: Request):
             "symbologies": es.SYMBOLOGIES, "types_variable": es.TYPES_VARIABLE,
             "dpi": list(es.DPI_ADMIS), "statuts_demande": STATUTS_DEMANDE,
             "quantite_max": es.QUANTITE_MAX,
-            "modeles_ia": etiq_ia_modeles(), "modele_ia_defaut": ETIQ_IA_MODELE,
+            "modeles_ia": etiq_ia_modeles(),
+            "modele_ia_defaut": ETIQ_IA_MODELE if any(m["id"] == ETIQ_IA_MODELE for m in etiq_ia_modeles())
+            else etiq_ia_modeles()[0]["id"],
         },
     }
 
@@ -433,10 +452,10 @@ def imprimer(modele_id: int, payload: ImprimerPayload, request: Request):
     with get_db() as conn:
         row = _modele(conn, modele_id)
         imp = _imprimante(conn, payload.imprimante_id)
-        # Verrou d'écriture AVANT de lire les compteurs : deux impressions
-        # simultanées du même SSCC liraient sinon le même « dernier » et
-        # sortiraient les mêmes numéros. La seconde attend la fin de la
-        # première (timeout de get_db) puis lit le compteur à jour.
+        sortie = _sortie(imp)
+        # 1. Sous verrou d'écriture : lecture des compteurs, réservation, trace.
+        # Deux impressions simultanées du même SSCC liraient sinon le même
+        # « dernier ». La seconde attend la fin de la première puis relit.
         if conn.in_transaction:
             conn.commit()
         conn.execute("BEGIN IMMEDIATE")
@@ -453,14 +472,26 @@ def imprimer(modele_id: int, payload: ImprimerPayload, request: Request):
         plages = {nom: {"premier": valeurs[0][nom], "dernier": valeurs[-1][nom]} for nom in p}
         cur = conn.execute(
             "INSERT INTO etiq_impressions (modele_id,imprimante_id,quantite,exemplaires,valeurs_json,plages_json,"
-            "layout_json,zpl,created_at,created_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "layout_json,zpl,valeurs_serie_json,format_sortie,created_at,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (modele_id, imp["id"], q, ex, json.dumps(saisies, ensure_ascii=False),
-             json.dumps(plages, ensure_ascii=False), row["layout_json"], zpl, _now(), email))
+             json.dumps(plages, ensure_ascii=False), row["layout_json"], zpl,
+             json.dumps(valeurs, ensure_ascii=False), sortie, _now(), email))
         impression_id = cur.lastrowid
-        job_id = _creer_job(conn, imp, zpl, email, {"modele_id": modele_id, "impression_id": impression_id})
+        conn.commit()
+        # 2. Hors verrou : le rendu PDF d'une grande série prend du temps, il
+        # ne doit pas bloquer les autres écritures. S'il échoue, les numéros
+        # sont réservés et tracés : la réimpression depuis l'historique les
+        # ressort à l'identique.
+        try:
+            corps = _payload(sortie, zpl, layout, row["largeur_mm"], row["hauteur_mm"], valeurs, ex)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=(
+                f"Numéros réservés mais rendu en échec ({type(e).__name__}). "
+                "Relancer depuis l'historique (Réimprimer)."))
+        job_id = _creer_job(conn, imp, corps, sortie, email, {"modele_id": modele_id, "impression_id": impression_id})
         conn.execute("UPDATE etiq_impressions SET job_id=? WHERE id=?", (job_id, impression_id))
         conn.commit()
-    return {"ok": True, "impression_id": impression_id, "job_id": job_id,
+    return {"ok": True, "impression_id": impression_id, "job_id": job_id, "sortie": sortie,
             "imprimante": imp["nom"], "quantite": q, "plages": plages}
 
 
@@ -489,24 +520,43 @@ class ReimprimerPayload(BaseModel):
 
 @router.post("/impressions/{impression_id}/reimprimer")
 def reimprimer(impression_id: int, payload: ReimprimerPayload, request: Request):
-    """Renvoie exactement le même ZPL : mêmes numéros, aucun compteur ne bouge."""
+    """Mêmes étiquettes, mêmes numéros, aucun compteur ne bouge — sur la même
+    imprimante ou une autre, en ZPL ou en PDF selon celle-ci."""
     user = _user(request)
     with get_db() as conn:
         src = conn.execute("SELECT * FROM etiq_impressions WHERE id=?", (impression_id,)).fetchone()
         if not src:
             raise HTTPException(status_code=404, detail="Impression introuvable.")
         imp = _imprimante(conn, payload.imprimante_id or src["imprimante_id"])
+        sortie = _sortie(imp)
+        brut = src["valeurs_serie_json"] if "valeurs_serie_json" in src.keys() else None
+        valeurs = json.loads(brut) if brut else None
+        if sortie != "zpl" and not valeurs:
+            raise HTTPException(status_code=409, detail=(
+                "Impression antérieure au PDF : réimprimable seulement sur une imprimante ZPL."))
+        largeur = hauteur = 0
+        if sortie != "zpl":
+            m = conn.execute("SELECT largeur_mm,hauteur_mm FROM etiq_modeles WHERE id=?",
+                             (src["modele_id"],)).fetchone()
+            largeur, hauteur = m["largeur_mm"], m["hauteur_mm"]
+        try:
+            layout = es.normaliser_layout(src["layout_json"])
+        except EtiquetteInvalide as e:
+            _invalide(e)
+        corps = _payload(sortie, src["zpl"], layout, largeur, hauteur, valeurs or [], src["exemplaires"])
         cur = conn.execute(
             "INSERT INTO etiq_impressions (modele_id,imprimante_id,quantite,exemplaires,valeurs_json,plages_json,"
-            "layout_json,zpl,reimpression_de,created_at,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "layout_json,zpl,valeurs_serie_json,format_sortie,reimpression_de,created_at,created_by)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (src["modele_id"], imp["id"], src["quantite"], src["exemplaires"], src["valeurs_json"],
-             src["plages_json"], src["layout_json"], src["zpl"], impression_id, _now(), user.get("email")))
+             src["plages_json"], src["layout_json"], src["zpl"], brut, sortie, impression_id,
+             _now(), user.get("email")))
         nid = cur.lastrowid
-        job_id = _creer_job(conn, imp, src["zpl"], user.get("email"),
+        job_id = _creer_job(conn, imp, corps, sortie, user.get("email"),
                             {"modele_id": src["modele_id"], "impression_id": nid, "reimpression_de": impression_id})
         conn.execute("UPDATE etiq_impressions SET job_id=? WHERE id=?", (job_id, nid))
         conn.commit()
-    return {"ok": True, "impression_id": nid, "job_id": job_id, "imprimante": imp["nom"]}
+    return {"ok": True, "impression_id": nid, "job_id": job_id, "imprimante": imp["nom"], "sortie": sortie}
 
 
 # ─── Assistant IA ───────────────────────────────────────────────────────

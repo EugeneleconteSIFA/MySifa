@@ -99,7 +99,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
-<link rel="stylesheet" href="/static/mysifa_ai_chat.css">
+<link rel="stylesheet" href="/static/mysifa_ai_chat.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_resize.css">
@@ -1701,7 +1701,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/mysifa_humeur.js"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=8"></script>
-<script src="/static/mysifa_ai_chat.js"></script>
+<script src="/static/mysifa_ai_chat.js?v=2"></script>
 <script src="/static/mysifa_guides.js"></script>
 <script src="/static/motion.js" defer></script>
 <script>
@@ -10472,7 +10472,12 @@ function _mnbInitials(nom){
   return (parts[0][0]+parts[parts.length-1][0]).toUpperCase();
 }
 function _mnbAiEnabled(){
-  const AI_ROLES=['superadmin','direction','administration','administration_ventes','administration_technique','expedition'];
+  // Le serveur décide (GET /api/ai/config, config.ROLES_AGENT_IA) : le widget
+  // n'affiche son bouton que pour les rôles ouverts. Liste ici pour le seul
+  // premier rendu mobile, avant que la configuration soit chargée.
+  const root=document.getElementById('ai-chat-root');
+  if(root && root.style.display) return root.style.display!=='none';
+  const AI_ROLES=['superadmin','direction','administration','administration_ventes','administration_technique','expedition','commercial','comptabilite'];
   const role=(S.user&&S.user.role)||'';
   return AI_ROLES.indexOf(role)>=0;
 }

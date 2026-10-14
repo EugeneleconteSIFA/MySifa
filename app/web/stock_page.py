@@ -75,7 +75,7 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
-<link rel="stylesheet" href="/static/mysifa_ai_chat.css">
+<link rel="stylesheet" href="/static/mysifa_ai_chat.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
@@ -2430,7 +2430,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
 <script src="/static/mysifa_stock_modals.js?v=encre2"></script>
-<script src="/static/mysifa_etiq_specifiques.js?v=2"></script>
+<script src="/static/mysifa_etiq_specifiques.js?v=3"></script>
 <script src="/static/mysifa_etiq_editeur.js?v=2"></script>
 <script src="/static/mysifa_destockage.js?v=8"></script>
 <script src="/static/mysifa_dock.js?v=2"></script>
@@ -2443,7 +2443,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=8"></script>
-<script src="/static/mysifa_ai_chat.js"></script>
+<script src="/static/mysifa_ai_chat.js?v=2"></script>
 <script>
 /*__TRACA_GUIDE__*/
 const API = window.location.origin;

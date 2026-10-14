@@ -125,6 +125,27 @@ check("variable non déclarée signalée",
       any("inconnue" in a or "aucune variable" in a for a in es.controles(
           es.normaliser_layout({"elements": [{"type": "texte", "x": 1, "y": 1, "valeur": "{{x}}"}]}))))
 
+# ── 4 bis. PDF pour les imprimantes de bureau ─────────────────────────────
+from app.services import etiq_specifiques_pdf as ep  # noqa: E402
+check("GS1-128 : FNC1 en tête, pas après un AI fixe", ep.gs1_vers_code128("(00)123(10)AB"), "ñ0012310AB")
+check("GS1-128 : FNC1 après un AI variable", ep.gs1_vers_code128("(10)AB(17)261231"), "ñ10ABñ17261231")
+lay_pdf = es.normaliser_layout({"elements": [
+    {"type": "texte", "x": 2, "y": 2, "valeur": "{{num}}", "taille": 4},
+    {"type": "code_barre", "x": 2, "y": 8, "symbologie": "gs1_128", "valeur": "(00){{sscc}}", "hauteur": 10},
+    {"type": "code_barre", "x": 60, "y": 8, "symbologie": "datamatrix", "valeur": "{{sscc}}", "module": 0.4},
+    {"type": "code_barre", "x": 80, "y": 8, "symbologie": "qrcode", "valeur": "{{sscc}}", "module": 0.4},
+    {"type": "code_barre", "x": 2, "y": 25, "symbologie": "ean13", "valeur": "301234567890", "hauteur": 8}],
+    "variables": layout["variables"]})
+pl = es.plan_serie(None, 1, lay_pdf, 12)
+vals_pdf = [es.valeurs_etiquette(lay_pdf, pl, i, {"lot": "L"}) for i in range(12)]
+pdf = ep.rendre_pdf(lay_pdf, 100, 50, vals_pdf, 1)
+check("PDF produit", pdf[:5], b"%PDF-")
+try:
+    import pypdfium2
+    check("planche A4 : 12 étiquettes 100x50 → 3 pages", len(pypdfium2.PdfDocument(pdf)), 3)
+except ImportError:
+    pass
+
 # ── 5. Choix du modèle de l'assistant ─────────────────────────────────────
 import types  # noqa: E402
 from app.services import etiq_specifiques_ia as ia  # noqa: E402
@@ -147,7 +168,15 @@ ia._client = lambda: types.SimpleNamespace(messages=types.SimpleNamespace(
     create=lambda **kw: (appels.append(kw), _Rep())[1]))
 vide = {"elements": [], "variables": []}
 r = ia.proposer("x", 100, 50, 203, vide)
-check("sans choix : modèle par défaut", appels[-1]["model"], ia.ETIQ_IA_MODELE)
+check("sans choix : modèle par défaut", appels[-1]["model"], ia.choisir_modele(None)["id"])
+check("seuls Sonnet et Haiku proposés", [m["id"] for m in ia.etiq_ia_modeles()],
+      ["claude-sonnet-5-5", "claude-haiku-5-5"])
+for retire in ("claude-opus-5-5", "claude-fable-5-1"):
+    try:
+        ia.choisir_modele(retire)
+        check(f"{retire} refusé", False)
+    except es.EtiquetteInvalide:
+        check(f"{retire} refusé", True)
 ia.proposer("x", 100, 50, 203, vide, modele="claude-haiku-5-5")
 check("modèle choisi transmis", appels[-1]["model"], "claude-haiku-5-5")
 check("pas de repli serveur pour Haiku", "fallbacks" in appels[-1]["extra_body"], False)
