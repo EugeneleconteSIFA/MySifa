@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mysifa-erp",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-X", "utf8", "-c", "import os,sys; os.chdir('../MySifa-erp'); sys.path.insert(0, '.'); import uvicorn; uvicorn.run('main:app', port=8010, reload=True)"],
+      "port": 8010,
+      "url": "http://erp.localhost:8010"
+    }
+  ]
+}
