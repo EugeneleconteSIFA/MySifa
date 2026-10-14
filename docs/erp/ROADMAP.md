@@ -22,7 +22,9 @@ développés. La reprise des données RVGI vient ensuite, en une fois.
 | D3 | 14/10 | Premier module : **Ventes** | Devis → commande → BL → facture → échéance |
 | D4 | 14/10 | Utilisateurs cibles : ADV, direction, achats/logistique, comptabilité | Écrans conçus par métier, pas par table |
 | D5 | 14/10 | **Superadmin seul**, aucune donnée réelle | Pas de lecture du miroir RVGI pour construire ; jeux de données de démonstration générés |
-| D6 | 14/10 | **Un seul déploiement**, quand tous les modules sont faits | Développement et tests en local (`erp.localhost`) ; pas de vhost ni de certificat avant la fin |
+| D6 | 14/10 | **Pas de mise en service** avant que tous les modules soient faits | L'ERP n'est ouvert à personne d'autre qu'Eugène tant que ventes, achats, stocks, production et compta ne sont pas finis |
+| D7 | 14/10 | **Eugène teste sur `erp.mysifa.com`**, branché sur l'instance v1 (port 8002) | Le code part sur `staging` au fil de l'eau ; le cron de v1 le déploie. La prod (8000) ne sert pas l'ERP avant la fin |
+| D8 | 14/10 | **DA de MySifa** : jetons de couleur, Segoe UI, sidebar commune (`mysifa_sidebar.css`) | Favicon : l'icône MyS, fond cyan, S noir |
 
 ## Principes non négociables
 
@@ -69,9 +71,9 @@ www.mysifa.com ─┘  (middleware Host)       ├─ app/routers/erp2_*   API E
 - **Tables** : préfixe `gc_` dans `production.db`, pour ne pas les confondre
   avec les tables `erp_*` qui décrivent le miroir RVGI. Une migration fichier
   par lot.
-- **Code mergé au fil de l'eau sur `staging`, invisible** : sans vhost
-  nginx, aucun nom ne mène à l'ERP sur le VPS. Pas de branche longue qui
-  diverge de 6 mois.
+- **Code mergé au fil de l'eau sur `staging`** : `erp.mysifa.com` pointe sur
+  v1 (8002), où Eugène teste. Pas de branche longue qui diverge pendant des
+  mois. Sur la prod, rien ne mène à l'ERP tant que nginx ne l'y envoie pas.
 - **Dev local** : `.claude/launch.json` → `http://erp.localhost:8010`.
 
 ## Lots
@@ -87,6 +89,8 @@ Statuts : ☐ à faire · ◐ en cours · ✓ fait
 | ✓ | Connexion ERP, accès superadmin, refus des autres rôles |
 | ✓ | Coque : navigation par domaine, routage par chemin, thème, mobile |
 | ✓ | Tests `tests/test_erp2_hote.py` |
+| ✓ | DA MySifa (sidebar commune), favicon dédié |
+| ☐ | vhost nginx `erp.mysifa.com` → 127.0.0.1:8002 + certificat (sur le VPS, par Eugène) |
 
 ### Lot 1 — Design system ERP
 
@@ -165,7 +169,6 @@ L'interface est la raison du projet : ce lot se fait avant tout écran métier,
 |---|---|
 | ☐ | Recette complète de bout en bout sur données de démonstration |
 | ☐ | Script de reprise miroir RVGI → `gc_*`, rejouable, avec rapport d'écarts (pièces, CA par mois, encours, stock) |
-| ☐ | DNS `erp-v1.mysifa.com`, vhost nginx + certificat, essai d'Eugène sur v1 |
 | ☐ | Promotion, bascule, gel de RVGI |
 
 ## Questions ouvertes
@@ -185,4 +188,4 @@ L'interface est la raison du projet : ce lot se fait avant tout écran métier,
 
 | Date | Événement |
 |---|---|
-| 14/10/2026 | DNS `erp.mysifa.com` créé. Décisions D1–D6. Lot 0 livré (socle, connexion, coque) |
+| 14/10/2026 | DNS `erp.mysifa.com` créé. Décisions D1–D8. Lot 0 livré (socle, connexion, coque, DA, favicon) |
