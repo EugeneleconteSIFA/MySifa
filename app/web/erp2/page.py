@@ -35,6 +35,7 @@ def _entete(titre: str) -> str:
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v={v}">
 <link rel="stylesheet" href="/static/mysifa_perf.css?v={v}">
 <link rel="stylesheet" href="/static/erp/erp.css?v={v}">
+<link rel="stylesheet" href="/static/erp/erp_ecrans.css?v={v}">
 <script src="/static/mysifa_perf.js?v={v}"></script>
 <script src="/static/mysifa_theme.js?v={v}"></script>
 </head>
@@ -88,7 +89,11 @@ _COQUE = """<body class="erp">
 <div id="erp-app"></div>
 <script>window.ERP_CONFIG = {version: "__V__", mysifa: "__MYSIFA__"};</script>
 <script src="/static/erp/erp.js?v=__V__"></script>
+<script src="/static/erp/erp_ui.js?v=__V__"></script>
 <script src="/static/erp/erp_grille.js?v=__V__"></script>
+<script src="/static/erp/erp_pieces.js?v=__V__"></script>
+<script src="/static/erp/erp_fichiers.js?v=__V__"></script>
+<script src="/static/erp/erp_gestion.js?v=__V__"></script>
 <script src="/static/erp/erp_demo.js?v=__V__"></script>
 </body>
 </html>

@@ -1,0 +1,202 @@
+/* Nouvel ERP — écrans métier (erp_ui.js, erp_pieces.js, erp_fichiers.js,
+   erp_gestion.js). Couleurs : uniquement les jetons de mysifa_theme.css. */
+
+/* En-tête d'écran : titre à gauche, actions à droite */
+.erp-entete { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.erp-entete-txt { flex: 1; min-width: 220px; }
+.erp-entete .erp-ariane { margin-bottom: 0; }
+.erp-entete-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.erp-btn-danger { background: var(--danger); border-color: var(--danger); color: white; }
+.erp-btn-danger:hover { background: var(--danger); filter: brightness(1.08); }
+.erp-muet { color: var(--muted); }
+.erp-lien { color: var(--accent); text-decoration: none; font-weight: 600; cursor: pointer; }
+.erp-lien:hover { text-decoration: underline; }
+.erp-chargement { padding: 24px; color: var(--muted); }
+.erp-vide.erreur { border-color: var(--danger); color: var(--danger); }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.neg { color: var(--danger); }
+.pos { color: var(--success); }
+
+/* Cartes */
+.erp-carte { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 14px; }
+.erp-carte-tete { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.erp-carte-tete h2 { flex: 1; margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--text2); }
+.erp-carte-actions { display: flex; gap: 6px; }
+.erp-carte-corps { padding: 14px; }
+
+/* Formulaires */
+.erp-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 4px 14px; }
+.erp-champ { min-width: 0; }
+.erp-champ.large { grid-column: span 2; }
+.erp-champ.plein { grid-column: 1 / -1; }
+.erp-champ .erp-label { margin: 8px 0 4px; font-size: 11px; }
+.erp-form .erp-input { padding: 7px 10px; font-size: 13px; border-radius: 8px; }
+.erp-input.num { text-align: right; font-variant-numeric: tabular-nums; }
+.erp-input.erreur { border-color: var(--danger); }
+.erp-input:disabled { background: transparent; border-color: transparent; color: var(--text); opacity: 1; padding-left: 0; }
+textarea.erp-input { resize: vertical; font-family: inherit; }
+textarea.erp-input:disabled { resize: none; min-height: 0; }
+select.erp-input:disabled { appearance: none; }
+.erp-aide { margin-top: 3px; font-size: 11.5px; color: var(--muted); }
+.erp-cases { display: flex; flex-wrap: wrap; gap: 6px 18px; padding-top: 10px; }
+.erp-case { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+.erp-case input { width: 16px; height: 16px; accent-color: var(--accent); }
+.erp-case.ligne { display: flex; padding: 7px 4px; border-bottom: 1px solid var(--border); gap: 12px; }
+.erp-case.ligne .num { margin-left: auto; }
+
+/* Onglets */
+.erp-onglets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.erp-onglet {
+  padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--card); color: var(--text2); font: inherit; font-weight: 600; cursor: pointer;
+}
+.erp-onglet:hover { background: var(--bg); color: var(--text); }
+.erp-onglet.actif { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+
+/* Pièce et fiche : colonne principale + colonne latérale */
+.erp-piece-tete { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.erp-piece-tiers { font-size: 15px; }
+.erp-piece-grille { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; align-items: start; }
+.erp-piece-grille.seul { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 1200px) { .erp-piece-grille { grid-template-columns: minmax(0, 1fr); } }
+
+/* Tableau de lignes */
+.erp-lignes-defil { overflow-x: auto; }
+.erp-lignes { width: 100%; border-collapse: collapse; }
+.erp-lignes th {
+  padding: 6px 6px; text-align: left; white-space: nowrap;
+  font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--text2);
+  border-bottom: 1px solid var(--border);
+}
+.erp-lignes th.num { text-align: right; }
+.erp-lignes td { padding: 3px 4px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.erp-lignes.lecture td { padding: 7px 6px; }
+.erp-lignes tr.texte td { color: var(--text2); font-style: italic; }
+.erp-lignes tr.solde td { color: var(--muted); }
+.erp-lignes td.rang { width: 28px; color: var(--muted); text-align: right; font-size: 12px; }
+.erp-lignes .c-article { width: 130px; }
+.erp-lignes .c-libelle { min-width: 220px; }
+.erp-lignes .c-qte { width: 115px; }
+.erp-lignes .c-unite { width: 54px; color: var(--muted); font-size: 12px; }
+.erp-lignes .c-prix { width: 150px; white-space: nowrap; }
+.erp-lignes .c-prix .erp-input { display: inline-block; width: 95px; }
+.erp-lignes .c-remise { width: 80px; }
+.erp-lignes .c-tva { width: 70px; }
+.erp-lignes .c-montant { width: 120px; font-weight: 600; white-space: nowrap; }
+.erp-lignes .c-reste { width: 150px; white-space: nowrap; }
+.erp-lignes .c-suppr { width: 30px; }
+.erp-lignes .c-article .erp-input { min-width: 120px; }
+.erp-lignes .c-libelle .erp-input { min-width: 220px; }
+.erp-lignes .c-qte .erp-input { min-width: 100px; }
+.erp-lignes .c-remise .erp-input { min-width: 64px; }
+.erp-lignes .c-tva select { min-width: 70px; }
+.erp-cell.erp-input { width: 100%; padding: 6px 8px; font-size: 13px; border-radius: 7px; background: var(--card); border-color: transparent; }
+.erp-cell.erp-input:hover { border-color: var(--border); }
+.erp-cell.erp-input:focus { background: var(--bg); border-color: var(--accent); }
+.erp-base { margin-left: 4px; font-size: 11px; color: var(--muted); }
+.erp-source {
+  display: inline-block; margin-left: 4px; width: 16px; height: 16px; line-height: 16px; text-align: center;
+  border-radius: 4px; background: var(--accent-bg); color: var(--accent); font-size: 10px; font-weight: 800;
+}
+.erp-amont { font-size: 11.5px; color: var(--muted); }
+.erp-x {
+  width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--card); color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1;
+}
+.erp-x:hover { background: var(--bg); color: var(--danger); border-color: var(--danger); }
+.erp-solder { margin-left: 8px; padding: 3px 8px; font-size: 11px; }
+
+/* Totaux */
+.erp-totaux { margin: 12px 0 0 auto; max-width: 380px; }
+.erp-tot-ligne { display: flex; justify-content: space-between; gap: 16px; padding: 3px 0; color: var(--text2); }
+.erp-tot-ligne b { font-variant-numeric: tabular-nums; color: var(--text); }
+.erp-tot-ligne.fort { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 7px; }
+.erp-tot-ligne.total { border-top: 2px solid var(--border); margin-top: 4px; padding-top: 7px; font-size: 16px; color: var(--text); }
+.erp-tot-ligne.total b { color: var(--accent); }
+
+/* Listes compactes (pièces liées, échéances, mouvements) */
+.erp-liens { display: flex; flex-direction: column; }
+.erp-liens-titre { margin: 8px 0 4px; font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); }
+.erp-liens-titre:first-child { margin-top: 0; }
+.erp-liens-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.erp-liens-item:last-child { border-bottom: none; }
+.erp-liens-item > :first-child { flex: 1; min-width: 120px; }
+
+/* Autocomplétion */
+.erp-ac {
+  position: fixed; z-index: 1000; max-height: 320px; overflow-y: auto;
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .22); padding: 4px;
+}
+.erp-ac-item { display: flex; flex-direction: column; gap: 1px; padding: 7px 10px; border-radius: 7px; cursor: pointer; }
+.erp-ac-item span { font-size: 11.5px; color: var(--muted); }
+.erp-ac-item:hover, .erp-ac-item.sel { background: var(--accent-bg); }
+.erp-ac-item.sel b { color: var(--accent); }
+.erp-ac-vide { padding: 10px; color: var(--muted); }
+
+/* Fenêtres */
+.erp-modal-fond {
+  position: fixed; inset: 0; z-index: 900; display: flex; align-items: flex-start; justify-content: center;
+  padding: 10vh 16px 16px; background: rgba(0, 0, 0, .45);
+}
+.erp-modal {
+  width: 100%; max-width: 520px; max-height: 80vh; display: flex; flex-direction: column;
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
+}
+.erp-modal.large { max-width: 860px; }
+.erp-modal-titre { padding: 14px 18px; font-size: 15px; font-weight: 700; border-bottom: 1px solid var(--border); }
+.erp-modal-corps { padding: 14px 18px; overflow-y: auto; }
+.erp-modal-pied { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); }
+.erp-modal-pied .erp-btn { background: var(--bg); }
+.erp-modal-pied .erp-btn-accent { background: var(--accent); }
+.erp-modal-pied .erp-btn-danger { background: var(--danger); }
+.erp-modal-texte { margin: 0 0 10px; color: var(--text2); line-height: 1.5; }
+
+/* Recherche globale */
+.erp-recherche-btn {
+  display: flex; align-items: center; gap: 8px; width: 100%; margin: 4px 0 6px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--muted);
+  font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.erp-recherche-btn:hover { border-color: var(--accent); color: var(--accent); }
+.erp-recherche-btn span:nth-child(2) { flex: 1; text-align: left; }
+.erp-recherche-btn .msb-ico svg { width: 15px; height: 15px; display: block; }
+.erp-recherche-btn kbd { font: 10px ui-monospace, Consolas, monospace; padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; }
+.erp-rech { max-width: 620px; }
+.erp-rech-input { border-radius: 14px 14px 0 0; border: none; border-bottom: 1px solid var(--border); padding: 16px 18px; font-size: 15px; }
+.erp-rech-input:focus { box-shadow: none; }
+.erp-rech-liste { padding: 6px; overflow-y: auto; }
+.erp-rech-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; cursor: pointer; }
+.erp-rech-item:hover, .erp-rech-item.sel { background: var(--accent-bg); }
+.erp-rech-genre { width: 140px; flex-shrink: 0; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+.erp-rech-sous { margin-left: auto; color: var(--muted); font-size: 12px; }
+.erp-rech-vide { padding: 14px; color: var(--muted); }
+
+/* Toasts */
+.erp-toasts { position: fixed; right: 16px; bottom: 16px; z-index: 1100; display: flex; flex-direction: column; gap: 8px; max-width: 420px; }
+.erp-toast {
+  padding: 10px 16px; border-radius: 10px; background: var(--card); color: var(--text);
+  border: 1px solid var(--border); border-left: 4px solid var(--accent);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .25); transition: opacity .25s, transform .25s;
+}
+.erp-toast.success { border-left-color: var(--success); }
+.erp-toast.danger { border-left-color: var(--danger); }
+.erp-toast.sortie { opacity: 0; transform: translateY(6px); }
+
+/* Accueil */
+.erp-tuiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.erp-tuile {
+  display: block; padding: 16px; border-radius: 12px; text-decoration: none; color: var(--text);
+  background: var(--card); border: 1px solid var(--border); border-top: 3px solid var(--accent);
+  transition: background .15s;
+}
+.erp-tuile:hover { background: var(--accent-bg); }
+.erp-tuile.ton-danger { border-top-color: var(--danger); }
+.erp-tuile.ton-warn { border-top-color: var(--warn); }
+.erp-tuile-titre { font-size: 12px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; }
+.erp-tuile-n { margin: 6px 0 2px; font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.erp-tuile-detail { font-size: 12.5px; color: var(--muted); }
+
+/* Tables éditables des fiches (adresses, contacts, tarifs) */
+.erp-fiche .erp-lignes input.erp-cell[type="text"] { min-width: 110px; }
+.erp-fiche .erp-lignes select.erp-cell { min-width: 120px; }

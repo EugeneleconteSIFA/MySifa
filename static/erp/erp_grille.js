@@ -1,7 +1,8 @@
 /* Nouvel ERP — grille de données.
  *
  *   var g = ERP.grille(conteneur, {
- *     colonnes: [{cle, libelle, type, largeur, total}],   // type : texte | nombre | montant | date | statut
+ *     colonnes: [{cle, libelle, type, largeur, total, rendu}],  // type : texte | nombre | qte | montant | date | statut
+ *                                                       // qte : millièmes ; rendu(ligne) -> nœud DOM (facultatif)
  *     lignes: [...],                                       // objets, toutes en mémoire
  *     cle: 'id',                                           // identifiant de ligne
  *     ouvrir: function (ligne) {},                         // Entrée ou double-clic
@@ -33,6 +34,7 @@
     if (v == null || v === '') return '';
     if (type === 'montant') return NF_MONTANT.format(v / 100) + ' €';
     if (type === 'nombre') return NF_NOMBRE.format(v);
+    if (type === 'qte') return NF_NOMBRE.format(v / 1000);
     if (type === 'date') {
       var s = String(v);
       return s.length >= 10 ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : s;
@@ -50,8 +52,8 @@
   function predicat(col, saisie) {
     var q = saisie.trim();
     if (!q) return null;
-    if (col.type === 'nombre' || col.type === 'montant') {
-      var mult = col.type === 'montant' ? 100 : 1;
+    if (col.type === 'nombre' || col.type === 'montant' || col.type === 'qte') {
+      var mult = col.type === 'montant' ? 100 : col.type === 'qte' ? 1000 : 1;
       var num = function (t) { return parseFloat(t.replace(/\s/g, '').replace(',', '.')) * mult; };
       var m = q.match(/^(>=|<=|>|<|=)?\s*(-?[\d\s,.]+)$/);
       var r = q.match(/^(-?[\d\s,.]+)\s*\.\.\s*(-?[\d\s,.]+)$/);
@@ -126,13 +128,13 @@
 
     cols.forEach(function (c, i) {
       var th = h('div', {
-        className: 'erp-g-th' + (c.type === 'nombre' || c.type === 'montant' ? ' num' : ''),
+        className: 'erp-g-th' + (/^(nombre|montant|qte)$/.test(c.type) ? ' num' : ''),
         role: 'columnheader', title: 'Trier par ' + c.libelle,
         onclick: function () { trier(c.cle); },
       }, h('span', {text: c.libelle}), h('span', {className: 'erp-g-sens'}));
       entetes.push(th);
       tete.appendChild(th);
-      var ph = c.type === 'montant' || c.type === 'nombre' ? '>100, 10..20' : c.type === 'date' ? 'aaaa-mm, jj/mm' : 'Filtrer';
+      var ph = /^(nombre|montant|qte)$/.test(c.type) ? '>100, 10..20' : c.type === 'date' ? 'aaaa-mm, jj/mm' : 'Filtrer';
       var inp = h('input', {className: 'erp-g-filtre', type: 'text', placeholder: ph, 'aria-label': 'Filtre ' + c.libelle});
       inp.value = G.filtres[c.cle] || '';
       inp.addEventListener('input', function () { G.filtres[c.cle] = inp.value; appliquer(true); });
@@ -241,8 +243,11 @@
       tr.addEventListener('dblclick', function () { if (opts.ouvrir) opts.ouvrir(l); });
       cols.forEach(function (c) {
         var v = l[c.cle];
-        var td = h('div', {className: 'erp-g-td' + (c.type === 'nombre' || c.type === 'montant' ? ' num' : ''), role: 'gridcell'});
-        if (c.type === 'statut' && v != null) {
+        var td = h('div', {className: 'erp-g-td' + (/^(nombre|montant|qte)$/.test(c.type) ? ' num' : ''), role: 'gridcell'});
+        if (c.rendu) {
+          var n = c.rendu(l);
+          if (n != null) td.appendChild(typeof n === 'string' ? document.createTextNode(n) : n);
+        } else if (c.type === 'statut' && v != null) {
           var st = (opts.statuts || {})[v] || {libelle: String(v), ton: 'neutre'};
           td.appendChild(h('span', {className: 'erp-pastille ton-' + st.ton, text: st.libelle}));
         } else {
@@ -322,5 +327,5 @@
   }
 
   window.ERP.grille = grille;
-  window.ERP.fmt = fmt;
+  window.ERP.fmtGrille = fmt;
 })();
