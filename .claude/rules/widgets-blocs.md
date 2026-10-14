@@ -291,6 +291,16 @@ Un indicateur existant se modifie depuis l'accueil (Personnaliser › curseurs) 
 c'est le même questionnaire qu'à la capture, exposé par
 `window.MySifaBlocs.questionnaire(o)` — ne pas en écrire un second.
 
+**Taille et aperçu à la création** (décision du 14/10/2026) : le
+questionnaire propose la taille (compact, standard, grand si le bloc a une
+série ou une liste) et, à la capture (`o.apercu`), montre au centre de l'écran
+l'indicateur tel qu'il apparaîtra : même carte, rendue par
+`MySifaAccueil.apercu()` de `mysifa_accueil.js` (chargé hors de l'accueil avec
+`window.__mysifaAccueilApercuSeul`, sans colonne), valeurs lues sur la page,
+série et liste par les sources. Ne pas écrire un second rendu de carte pour
+l'aperçu. L'aperçu fait partie de `NOTRE_UI` : le mode capture ne l'estompe
+pas. Masqué sous 900 px (le questionnaire prend toute la largeur).
+
 **Demande de tableau de bord** : quand le bloc voulu n'existe pas, le lien en
 bas de la colonne (et le toast « aucun bloc capturable ») ouvre
 `MySifaBlocs.demander()`. `POST /api/accueil/demandes` crée une tâche
