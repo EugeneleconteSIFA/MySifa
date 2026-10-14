@@ -338,6 +338,18 @@ def modifier_widget(widget_id: int, body: WidgetUpdate, request: Request):
             raise HTTPException(400, str(e)) from None
         if "valeurs" in w and not w["valeurs"]:
             raise HTTPException(400, "Cochez au moins une valeur.")
+        # Compact = une valeur : contrôlé sur l'état final, quand l'un des deux change.
+        if "hauteur" in w or "valeurs" in w:
+            h_fin = w.get("hauteur", actuel["hauteur"])
+            if "valeurs" in w:
+                n_fin = len(w["valeurs"])
+            else:
+                try:
+                    n_fin = len(json.loads(actuel["valeurs"] or "[]"))
+                except (TypeError, ValueError):
+                    n_fin = 0
+            if h_fin == "s" and n_fin > 1:
+                raise HTTPException(400, reg.COMPACT_UNE_VALEUR)
         if "valeurs" in w:
             w["valeurs"] = json.dumps(w["valeurs"], ensure_ascii=False)
         sets, params = [], []
