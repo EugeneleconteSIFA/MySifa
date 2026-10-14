@@ -16,7 +16,7 @@ from app.services.auth_service import get_current_user
 from app.services.audit_service import log_action
 from fastapi.responses import Response
 
-from app.services.gc import compta, demo, envoi, export_compta, fichiers, fsc, pieces
+from app.services.gc import cahiers, compta, demo, envoi, export_compta, fichiers, fsc, pieces
 from app.services.gc.pieces import ErreurPiece
 
 router = APIRouter(prefix="/api/erp2", tags=["erp2"])
@@ -69,6 +69,7 @@ def meta(request: Request):
             "types": pieces.TYPES,
             "natures": fichiers.NATURES,
             "natures_famille": fichiers.NATURES_FAMILLE,
+            "etapes": cahiers.ETAPES,
             "origines": pieces.ORIGINES,
             "laboratoires": pieces.LABORATOIRES,
             "types_ligne": pieces.TYPES_LIGNE,
@@ -304,7 +305,7 @@ async def of_consommation(piece_id: int, request: Request):
     b = await request.json()
     with _ecriture() as conn:
         mid = pieces.declarer_consommation(conn, piece_id, b.get("article_id"), b.get("quantite_milli"),
-                                           b.get("lot") or "", b.get("date") or None, u)
+                                           b.get("lot") or "", b.get("date") or None, u, b.get("laize_dmm"))
     _trace(request, u, "CREATE", f"Consommation sur OF #{piece_id}", {"article_id": b.get("article_id")})
     return {"id": mid}
 
@@ -353,6 +354,22 @@ async def ligne_solde(ligne_id: int, request: Request):
 def stock(request: Request):
     _user(request)
     return _lecture(fichiers.stock)
+
+
+@router.get("/cahiers/{objet}/{objet_id}")
+def cahier_lire(objet: str, objet_id: int, request: Request):
+    _user(request)
+    return _lecture(cahiers.lister, objet, objet_id)
+
+
+@router.put("/cahiers/{objet}/{objet_id}")
+async def cahier_enregistrer(objet: str, objet_id: int, request: Request):
+    u = _user(request)
+    b = await request.json()
+    with _ecriture() as conn:
+        cahiers.enregistrer(conn, objet, objet_id, b.get("lignes") or [], u)
+    _trace(request, u, "UPDATE", f"Cahier des charges {objet} #{objet_id}")
+    return {"ok": True}
 
 
 @router.get("/mouvements")

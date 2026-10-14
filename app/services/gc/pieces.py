@@ -324,6 +324,9 @@ def charger(conn, piece_id: int) -> dict:
         """SELECT m.*, a.code AS article_code FROM gc_mouvements m JOIN gc_articles a ON a.id=m.article_id
            WHERE m.piece_id=? ORDER BY m.id""", (piece_id,)).fetchall()]
     p["totaux"] = calculs.totaux(lignes, p["remise_bp"], p.get("escompte_bp") or 0, p.get("acompte_cents") or 0)
+    from app.services.gc import cahiers   # import local : cahiers dépend de ce module
+    p["cahier"] = cahiers.pour_piece(conn, piece_id)
+    p["etape"] = cahiers.ETAPE_DE_PIECE.get(p["type"])
     return p
 
 
@@ -331,7 +334,12 @@ def lister(conn, types: list[str]) -> list[dict]:
     m = ",".join("?" * len(types))
     return [dict(r) for r in conn.execute(
         f"""SELECT p.id, p.type, p.numero, p.statut, p.date_piece, p.date_livraison, p.ref_tiers, p.imprime_le, p.comptabilise_le,
-                   p.envoye_le,
+                   p.envoye_le, p.remise_bp, p.escompte_bp, p.cree_par,
+                   (SELECT libelle FROM gc_modes_paiement mp WHERE mp.code=p.mode_paiement) AS mode_libelle,
+                   (SELECT nom FROM users u WHERE u.id=p.representant_id) AS representant,
+                   (SELECT MIN(date_echeance) FROM gc_echeances e WHERE e.piece_id=p.id) AS date_echeance,
+                   (SELECT COALESCE(SUM(montant_cents),0) FROM gc_echeances e WHERE e.piece_id=p.id) AS echeances_cents,
+                   (SELECT COALESCE(SUM(regle_cents),0) FROM gc_echeances e WHERE e.piece_id=p.id) AS regle_cents,
                    p.total_ht_cents, p.total_ttc_cents, p.tiers_id, t.code AS tiers_code,
                    t.raison_sociale AS tiers_nom,
                    (SELECT COUNT(*) FROM gc_pieces_lignes l WHERE l.piece_id=p.id AND l.article_id IS NOT NULL) AS nb_lignes
@@ -650,11 +658,12 @@ def valider(conn, piece_id: int, user: dict | None = None) -> str:
             if l["gere_stock"]:
                 conn.execute(
                     """INSERT INTO gc_mouvements (date_mvt, article_id, depot, quantite_milli, type, piece_id,
-                           ligne_id, valeur_cents, cree_par, cree_le)
-                       VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                           ligne_id, valeur_cents, cree_par, cree_le, laize_dmm)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                     (p["date_piece"][:10], l["article_id"], p["depot"], sens_stock * int(l["quantite_milli"]),
                      "livraison" if sens_stock < 0 else "reception", piece_id, l["id"],
-                     l["montant_ht_cents"], _nom(user), now))
+                     l["montant_ht_cents"], _nom(user), now,
+                     (l["laize_dmm"] or None) if sens_stock > 0 and "laize_dmm" in l.keys() else None))
 
     if p["type"] in TYPES_AVEC_ECHEANCES:
         _creer_echeances(conn, piece_id)
@@ -760,7 +769,7 @@ def declarer_production(conn, of_id: int, quantite_milli: int, lot: str = "", jo
 
 
 def declarer_consommation(conn, of_id: int, article_id: int, quantite_milli: int, lot: str = "",
-                          jour: str | None = None, user: dict | None = None) -> int:
+                          jour: str | None = None, user: dict | None = None, laize_dmm: int | None = None) -> int:
     """Sortie de stock d'une matière consommée par l'OF."""
     p = _of_ouvert(conn, of_id)
     q = _entier(quantite_milli, "Quantité", 1)
@@ -772,9 +781,10 @@ def declarer_consommation(conn, of_id: int, article_id: int, quantite_milli: int
     now = _maintenant()
     cur = conn.execute(
         """INSERT INTO gc_mouvements (date_mvt, article_id, depot, quantite_milli, type, lot, piece_id,
-               commentaire, cree_par, cree_le) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+               commentaire, cree_par, cree_le, laize_dmm) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
         (jour or now[:10], a["id"], p["depot"], -q, "consommation", str(lot or ""), of_id,
-         "Consommation " + (p["numero"] or ""), _nom(user), now))
+         "Consommation " + (p["numero"] or ""), _nom(user), now,
+         _entier(laize_dmm, "Laize", 1) if laize_dmm not in (None, "", 0) else None))
     return int(cur.lastrowid)
 
 

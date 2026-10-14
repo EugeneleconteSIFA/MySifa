@@ -249,3 +249,10 @@ select.erp-input:disabled { appearance: none; }
 .erp-histo-val { font-size: 10.5px; color: var(--text2); margin-bottom: 3px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .erp-histo-lib { font-size: 11px; color: var(--muted); margin-top: 4px; white-space: nowrap; }
 .erp-stats-grille { height: 420px; }
+
+/* Cahier des charges affiché sur la pièce */
+.erp-cahier { border: 1px solid var(--warn); border-left-width: 4px; border-radius: 8px; padding: 10px 14px; margin: 0 0 12px;
+  background: color-mix(in srgb, var(--warn) 8%, transparent); }
+.erp-cahier-titre { font-weight: 700; margin-bottom: 4px; }
+.erp-cahier-note { line-height: 1.5; }
+.erp-actions-bas { display: flex; gap: 8px; margin-top: 8px; }

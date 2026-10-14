@@ -442,6 +442,13 @@ def donnees(conn, piece_id: int, modele: str = "") -> dict:
             mentions.append(_e(soc["texte_reserve_propriete"]))
     if vente and soc.get("texte_juridiction"):
         mentions.append(_e(soc["texte_juridiction"]))
+    # Cahier des charges : toutes les notes sur un document interne, les
+    # notes « imprimées » seulement sur le document du tiers.
+    from app.services.gc import cahiers
+    etape = "livraison" if expedition else None
+    for n in cahiers.pour_piece(conn, piece_id, etape):
+        if expedition or n["imprime"]:
+            mentions.append(_e(f"{n['source']} — {n['texte']}"))
     D["mentions"] = [m for m in mentions if m]
 
     soc_lignes = [x for x in (soc.get("adresse1"), soc.get("adresse2"),

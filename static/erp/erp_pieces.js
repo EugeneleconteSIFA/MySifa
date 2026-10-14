@@ -166,6 +166,21 @@
             return l.numero ? (l.envoye_le ? 'Envoyée' : l.imprime_le ? 'Éditée' : h('b', {className: 'erp-a-faire', text: 'À éditer'})) : ''; }});
           cols.push({cle: 'comptabilise_le', libelle: 'Comptabilité', largeur: 120, rendu: function (l) {
             return l.comptabilise_le ? 'Transférée' : (l.numero ? 'À transférer' : ''); }});
+          // Colonnes du TDB facturation de RVGI
+          lignes.forEach(function (l) {
+            l.tva_cents = (l.total_ttc_cents || 0) - (l.total_ht_cents || 0);
+            l.encaissement = !l.echeances_cents ? '' : l.regle_cents >= l.echeances_cents ? (vente ? 'Encaissée en totalité' : 'Payée')
+              : l.regle_cents > 0 ? 'Partiellement' : (vente ? 'Non encaissée' : 'Non payée');
+          });
+          cols.push(
+            {cle: 'date_echeance', libelle: 'Échéance', type: 'date', largeur: 100},
+            {cle: 'remise_bp', libelle: 'Remise', largeur: 80, rendu: function (l) { return l.remise_bp ? ERP.fmt.pct(l.remise_bp) : ''; }},
+            {cle: 'tva_cents', libelle: 'Total TVA', type: 'montant', largeur: 120, total: true},
+            {cle: 'escompte_bp', libelle: 'Escompte', largeur: 90, rendu: function (l) { return l.escompte_bp ? ERP.fmt.pct(l.escompte_bp) : ''; }},
+            {cle: 'mode_libelle', libelle: 'Règlement', largeur: 120},
+            {cle: 'encaissement', libelle: vente ? 'Encaissement' : 'Paiement', largeur: 160},
+            {cle: 'representant', libelle: 'Représentant', largeur: 150},
+            {cle: 'cree_par', libelle: 'Saisie par', largeur: 140});
         }
         var g = ERP.grille(zone, {
           nom: 'pieces.' + conf.types.join('_'), cle: 'id', colonnes: cols, lignes: lignes,
@@ -796,6 +811,7 @@
           }
         }
         champs.push(ERP.champ('Quantité', ERP.saisie(M, 'quantite_milli', 'qte')));
+        if (genre === 'consommation') champs.push(ERP.champ('Laize (1/10 mm)', ERP.saisie(M, 'laize_dmm', 'entier'), {aide: 'Stock matière tenu par laize.'}));
         champs.push(ERP.champ('Lot', ERP.saisie(M, 'lot', 'texte')));
         champs.push(ERP.champ('Date', ERP.saisie(M, 'date', 'date')));
         ERP.modal(genre === 'production' ? 'Déclarer une production' : 'Saisir une consommation', h('div', {className: 'erp-form'}, champs), [
@@ -876,6 +892,14 @@
         tiers.bloque ? h('span', {className: 'erp-pastille ton-danger', text: 'Client bloqué'}) : null,
         P.valide_le ? h('span', {className: 'erp-muet', text: 'Validé le ' + ERP.fmt.date(P.valide_le) + (P.valide_par ? ' par ' + P.valide_par : '')}) : null);
       corps.appendChild(tete);
+      if ((P.cahier || []).length) {
+        corps.appendChild(h('div', {className: 'erp-cahier'},
+          h('div', {className: 'erp-cahier-titre', text: 'Cahier des charges — ' + ((ERP.M.etapes || {})[P.etape] || P.etape)}),
+          P.cahier.map(function (n) {
+            return h('div', {className: 'erp-cahier-note'}, h('b', {text: n.source + ' : '}), document.createTextNode(n.texte),
+              n.imprime ? h('span', {className: 'erp-muet', text: ' · imprimée'}) : null);
+          })));
+      }
       // Les lignes prennent toute la largeur : c'est là que l'ADV travaille.
       corps.appendChild(blocLignes());
       var grille = h('div', {className: 'erp-piece-grille'});

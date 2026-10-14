@@ -69,6 +69,37 @@
     };
   }
 
+  // ── Cahier des charges (RVGI) : notes d'un tiers ou d'un article pour une
+  // étape de la chaîne. Enregistré à part de la fiche (bouton propre).
+  function carteCahier(objet, id) {
+    var lignes = [], modifie = false;
+    var boite = h('div', null, ERP.chargement());
+    var etapes = Object.keys(ERP.M.etapes || {}).map(function (k) { return {v: k, l: ERP.M.etapes[k]}; });
+    var bouton = ERP.bouton('Enregistrer le cahier', async function () {
+      await ERP.api('/api/erp2/cahiers/' + objet + '/' + id, {method: 'PUT', body: {lignes: lignes}});
+      modifie = false; bouton.disabled = true;
+      ERP.toast('Cahier des charges enregistré.', 'success');
+    }, {petit: true});
+    bouton.disabled = true;
+    function marquer() { modifie = true; bouton.disabled = false; }
+    function dessiner() {
+      boite.textContent = '';
+      var t = tableEditable(lignes, [
+        {cle: 'etape', libelle: 'Étape', type: 'choix', options: etapes, largeur: '150px'},
+        {cle: 'texte', libelle: 'Note'},
+        {cle: 'imprime', libelle: 'Imprimée', type: 'case'},
+      ], {etape: 'livraison', texte: '', imprime: 0}, marquer);
+      boite.appendChild(h('p', {className: 'erp-aide', text: 'Chaque pièce de l\'étape affiche ces notes (exemple : livraison — colis complets uniquement). ' +
+        '« Imprimée » : la note sort aussi sur le document envoyé ; sinon elle reste interne (l\'ordre d\'expédition reprend toutes les notes de livraison).'}));
+      boite.appendChild(t.el);
+      boite.appendChild(h('div', {className: 'erp-actions-bas'}, ERP.bouton('+ Note', t.ajouter, {petit: true}), bouton));
+    }
+    ERP.api('/api/erp2/cahiers/' + objet + '/' + id).then(function (l) { lignes = l; dessiner(); })
+      .catch(function (e) { boite.textContent = ''; boite.appendChild(ERP.erreur(e)); });
+    return ERP.carte('Cahier des charges', boite);
+  }
+  ERP.carteCahier = carteCahier;
+
   // Fiche tiers en onglets, comme RVGI : principal, interlocuteurs, adresses,
   // banques, commercial et livraison, facturation et comptabilité, pièces.
   var ONGLETS_TIERS = [
@@ -78,6 +109,7 @@
     {cle: 'banques', libelle: 'Banques'},
     {cle: 'commercial', libelle: 'Commercial et livraison'},
     {cle: 'facturation', libelle: 'Facturation et comptabilité'},
+    {cle: 'cahier', libelle: 'Cahier des charges'},
     {cle: 'pieces', libelle: 'Pièces et tarifs'},
   ];
 
@@ -283,7 +315,7 @@
       }
       ctx.actions.appendChild(ERP.bouton('Enregistrer', enregistrer, {accent: true, titre: 'Ctrl+S'}));
       corps.textContent = '';
-      var onglets = ONGLETS_TIERS.filter(function (o) { return !(nouveau && o.cle === 'pieces'); });
+      var onglets = ONGLETS_TIERS.filter(function (o) { return !(nouveau && (o.cle === 'pieces' || o.cle === 'cahier')); });
       corps.appendChild(h('div', {className: 'erp-onglets'}, onglets.map(function (o) {
         return h('button', {type: 'button', className: 'erp-onglet' + (o.cle === onglet ? ' actif' : ''), text: o.libelle,
           onclick: function () {
@@ -294,7 +326,8 @@
           }});
       })));
       var vue = {principal: ongletPrincipal, interlocuteurs: ongletInterlocuteurs, adresses: ongletAdresses, banques: ongletBanques,
-                 commercial: ongletCommercial, facturation: ongletFacturation, pieces: ongletPieces}[onglet] || ongletPrincipal;
+                 commercial: ongletCommercial, facturation: ongletFacturation, pieces: ongletPieces,
+                 cahier: function () { return carteCahier('tiers', T.id); }}[onglet] || ongletPrincipal;
       corps.appendChild(vue());
       if (nouveau && onglet === 'principal') requestAnimationFrame(function () { var f = corps.querySelector('input'); if (f) f.focus(); });
     }
@@ -373,6 +406,10 @@
           if (!a.format_l_dmm) return '';
           var l = (a.format_l_dmm / 10).toLocaleString('fr-FR');
           return conf.nature === 'mp' ? l : l + ' × ' + ((a.format_a_dmm || 0) / 10).toLocaleString('fr-FR'); }});
+        if (conf.nature === 'mp') cols.push({cle: 'libelle_technique', libelle: 'Libellé technique', largeur: 260},
+          {cle: 'adhesif', libelle: 'Adhésif', largeur: 140}, {cle: 'protecteur', libelle: 'Protecteur', largeur: 120},
+          {cle: 'film', libelle: 'Film', largeur: 60, rendu: function (a) { return a.film ? 'Oui' : ''; }},
+          {cle: 'synthetique', libelle: 'Synth.', largeur: 70, rendu: function (a) { return a.synthetique ? 'Oui' : ''; }});
         cols.push({cle: 'famille_lib', libelle: conf.nature === 'mp' ? 'Type' : 'Famille', largeur: 160},
           {cle: 'sous_famille', libelle: 'Sous-famille', largeur: 120},
           {cle: 'unite', libelle: 'Unité', largeur: 70});
@@ -421,7 +458,8 @@
        'conditionnement', 'origine_prod', 'bat_id', 'fsc_allegation', 'fsc_pct', 'fsc_bois', 'fsc_requis', 'designation',
        'code3', 'couleur', 'poids_g', 'sous_famille', 'gamme', 'cliche', 'ean', 'unite_achat', 'unite_conditionnement',
        'taxe_eco_cents', 'code_douane', 'prix_stock_cents', 'stock_mini_milli', 'stock_maxi_milli', 'zone',
-       'ref_client2', 'ref_client3', 'ml_par_bobine_milli']
+       'ref_client2', 'ref_client3', 'ml_par_bobine_milli', 'libelle_technique', 'libelle_technique2', 'adhesif',
+       'protecteur', 'film', 'synthetique', 'epaisseur_milli', 'compte_vente', 'compte_achat']
         .forEach(function (k) { if (k in A) champs[k] = A[k]; });
       var r = await ERP.api('/api/erp2/articles' + (nouveau ? '' : '/' + A.id), {
         method: nouveau ? 'POST' : 'PUT',
@@ -497,6 +535,14 @@
         c('Avance (1/10 mm)', 'format_a_dmm', 'entier'),
         c('Couleur', 'couleur'), c('Poids (g)', 'poids_g', 'entier'),
         c('Conditionnement', 'conditionnement', 'texte', {large: true}),
+        A.nature === 'mp' ? sec('Caractéristiques matière') : null,
+        A.nature === 'mp' ? c('Libellé technique', 'libelle_technique', 'texte', {large: true}) : null,
+        A.nature === 'mp' ? c('Libellé technique 2', 'libelle_technique2', 'texte', {large: true}) : null,
+        A.nature === 'mp' ? c('Adhésif', 'adhesif') : null,
+        A.nature === 'mp' ? c('Protecteur', 'protecteur') : null,
+        A.nature === 'mp' ? c('Épaisseur (µm)', 'epaisseur_milli', 'qte') : null,
+        A.nature === 'mp' ? h('div', {className: 'erp-champ plein erp-cases'},
+          ERP.case(A, 'film', 'Film', {change: marquer}), ERP.case(A, 'synthetique', 'Matière synthétique', {change: marquer})) : null,
         sec('Index de recherche'),
         sel('Famille', 'famille', familles, {avecVide: '—'}),
         c('Sous-famille', 'sous_famille'),
@@ -522,6 +568,8 @@
         c('Prix de vente HT', 'prix_vente_cents', 'euros'), c('Prix d\'achat HT', 'prix_achat_cents', 'euros'),
         sel('TVA', 'tva_code', ERP.optionsRef('tva'), {avecVide: '—'}),
         c('Taxe écologique', 'taxe_eco_cents', 'euros'), c('Code douane', 'code_douane'),
+        A.nature !== 'mp' ? c('Compte de vente', 'compte_vente', 'texte', {placeholder: 'celui de la famille'}) : null,
+        A.nature !== 'pf' ? c('Compte d\'achat', 'compte_achat', 'texte', {placeholder: 'celui de la famille'}) : null,
         sec('Stock'),
         c('Prix de stock', 'prix_stock_cents', 'euros'), c('Zone', 'zone'),
         c('Stock mini', 'stock_mini_milli', 'qte'), c('Stock maxi', 'stock_maxi_milli', 'qte'),
@@ -543,7 +591,8 @@
       if (!nouveau && A.gere_stock) {
         droite.appendChild(ERP.carte('Stock', h('div', {className: 'erp-liens'},
           A.stock.length ? A.stock.map(function (s) {
-            return h('div', {className: 'erp-liens-item'}, h('span', {text: ERP.refLibelle('depots', s.depot)}),
+            return h('div', {className: 'erp-liens-item'}, h('span', {text: ERP.refLibelle('depots', s.depot) +
+              (s.laize_dmm ? ' · laize ' + (s.laize_dmm / 10).toLocaleString('fr-FR') + ' mm' : '')}),
               h('b', {className: 'num', text: ERP.fmt.qte(s.quantite_milli) + ' ' + A.unite}));
           }) : h('div', {className: 'erp-muet', text: 'Aucun mouvement.'}))));
         if (A.mouvements.length) {
@@ -554,6 +603,7 @@
           }))));
         }
       }
+      if (!nouveau) droite.appendChild(carteCahier('article', A.id));
       var g = h('div', {className: 'erp-piece-grille' + (droite.childNodes.length ? '' : ' seul')}, gauche);
       if (droite.childNodes.length) g.appendChild(droite);
       corps.appendChild(g);

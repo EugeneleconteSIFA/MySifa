@@ -85,6 +85,7 @@
         champDest,
         h('div', {className: 'erp-champ'}, qteLib, ERP.saisie(M, 'quantite_milli', 'qte')),
         ERP.champ('Date', ERP.saisie(M, 'date_mvt', 'date')),
+        ERP.champ('Laize (1/10 mm)', ERP.saisie(M, 'laize_dmm', 'entier'), {aide: 'Matières : le stock est tenu par laize.'}),
         ERP.champ('Lot', ERP.saisie(M, 'lot', 'texte')),
         ERP.champ('Commentaire', ERP.saisie(M, 'commentaire', 'texte'), {plein: true}));
       ERP.modal('Mouvement de stock', corps, [
@@ -109,16 +110,30 @@
       zone.textContent = '';
       var natures = {};
       Object.keys(ERP.M.natures).forEach(function (k) { natures[k] = {libelle: ERP.M.natures[k], ton: k === 'pf' ? 'accent' : 'warn'}; });
-      r[1].forEach(function (s) { s.depot_lib = ERP.refLibelle('depots', s.depot); });
+      r[1].forEach(function (s) {
+        s.depot_lib = ERP.refLibelle('depots', s.depot);
+        s.famille_lib = ERP.refLibelle('familles', s.famille);
+      });
+      var mm = function (d) { return d ? (d / 10).toLocaleString('fr-FR') : ''; };
+      // TDB stock de RVGI : produits par client, matières par laize ; en rouge
+      // l'article dont le stock total passe sous son stock mini.
       ERP.grille(zone, {
-        nom: 'stock.etat', cle: 'id', lignes: r[1], statuts: natures,
+        nom: 'stock.etat', cle: 'cle', lignes: r[1], statuts: natures,
         colonnes: [
-          {cle: 'code', libelle: 'Article', largeur: 100},
-          {cle: 'libelle', libelle: 'Libellé', largeur: 320},
-          {cle: 'nature', libelle: 'Nature', type: 'statut', largeur: 150},
-          {cle: 'depot_lib', libelle: 'Dépôt', largeur: 150},
-          {cle: 'quantite_milli', libelle: 'Quantité', type: 'qte', largeur: 130},
+          {cle: 'nature', libelle: 'Nature', type: 'statut', largeur: 140},
+          {cle: 'famille_lib', libelle: 'Famille / type', largeur: 140},
+          {cle: 'client_nom', libelle: 'Client', largeur: 180},
+          {cle: 'code', libelle: 'Article', largeur: 110},
+          {cle: 'laize_dmm', libelle: 'Laize', largeur: 80, rendu: function (s) { return mm(s.laize_dmm); }},
+          {cle: 'libelle', libelle: 'Libellé', largeur: 280},
+          {cle: 'depot_lib', libelle: 'Dépôt', largeur: 130},
+          {cle: 'quantite_milli', libelle: 'Stock réel', type: 'qte', largeur: 120, classe: function (s) { return s.sous_mini ? 'retard' : ''; }},
+          {cle: 'stock_mini_milli', libelle: 'Stock mini', type: 'qte', largeur: 110},
+          {cle: 'stock_maxi_milli', libelle: 'Stock maxi', type: 'qte', largeur: 110},
           {cle: 'unite', libelle: 'Unité', largeur: 70},
+          {cle: 'format', libelle: 'Format', largeur: 110, rendu: function (s) {
+            return s.nature === 'pf' && s.format_l_dmm ? mm(s.format_l_dmm) + ' × ' + mm(s.format_a_dmm) : ''; }},
+          {cle: 'ref_client', libelle: 'Réf. client', largeur: 130},
           {cle: 'dernier_mvt', libelle: 'Dernier mouvement', type: 'date', largeur: 140},
         ],
         ouvrir: function (s) { ERP.aller('/fichiers/articles/' + s.id); },
@@ -145,6 +160,7 @@
           {cle: 'article_code', libelle: 'Article', largeur: 100},
           {cle: 'article_libelle', libelle: 'Libellé', largeur: 280},
           {cle: 'depot', libelle: 'Dépôt', largeur: 90},
+          {cle: 'laize_dmm', libelle: 'Laize', largeur: 80, rendu: function (m) { return m.laize_dmm ? (m.laize_dmm / 10).toLocaleString('fr-FR') : ''; }},
           {cle: 'quantite_milli', libelle: 'Quantité', type: 'qte', largeur: 130},
           {cle: 'unite', libelle: 'Unité', largeur: 70},
           {cle: 'piece_numero', libelle: 'Pièce', largeur: 120},

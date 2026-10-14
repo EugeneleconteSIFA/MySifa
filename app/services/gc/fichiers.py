@@ -84,7 +84,9 @@ CHAMPS_ARTICLE = {"code": str, "libelle": str, "libelle_client": str, "nature": 
                   "taxe_eco_cents": "int_null", "code_douane": str, "prix_stock_cents": "int_null",
                   "stock_mini_milli": "int_null", "stock_maxi_milli": "int_null", "zone": str,
                   "remplacement_id": "int_null", "ref_client2": str, "ref_client3": str,
-                  "ml_par_bobine_milli": "int_null"}
+                  "ml_par_bobine_milli": "int_null", "libelle_technique": str, "libelle_technique2": str,
+                  "adhesif": str, "protecteur": str, "film": bool, "synthetique": bool, "epaisseur_milli": "int_null",
+                  "compte_vente": str, "compte_achat": str}
 
 NATURES = {"pf": "Produit fini", "mp": "Matière première", "service": "Prestation"}
 # Familles (RVGI « 20-Familles ») : de produits, de matières, de clients, de fournisseurs.
@@ -302,8 +304,8 @@ def _synchroniser(conn, table, tiers_id, lignes, champs, obligatoire, libelle):
 
 def stock_article(conn, article_id: int) -> list[dict]:
     return [dict(r) for r in conn.execute(
-        """SELECT depot, SUM(quantite_milli) AS quantite_milli FROM gc_mouvements
-           WHERE article_id=? GROUP BY depot ORDER BY depot""", (article_id,)).fetchall()]
+        """SELECT depot, laize_dmm, SUM(quantite_milli) AS quantite_milli FROM gc_mouvements
+           WHERE article_id=? GROUP BY depot, laize_dmm ORDER BY depot, laize_dmm""", (article_id,)).fetchall()]
 
 
 def lister_articles(conn, nature: str | None = None) -> list[dict]:
@@ -311,6 +313,7 @@ def lister_articles(conn, nature: str | None = None) -> list[dict]:
     return [dict(r) for r in conn.execute(
         f"""SELECT a.id, a.code, a.libelle, a.nature, a.famille, a.unite, a.base_prix, a.client_id,
                    a.format_l_dmm, a.format_a_dmm, a.sous_famille, a.ref_client,
+                   a.libelle_technique, a.adhesif, a.protecteur, a.film, a.synthetique,
                    (SELECT raison_sociale FROM gc_tiers t WHERE t.id=a.client_id) AS client_nom,
                    a.prix_vente_cents, a.prix_achat_cents, a.gere_stock, a.actif,
                    (SELECT COALESCE(SUM(m.quantite_milli),0) FROM gc_mouvements m WHERE m.article_id=a.id) AS stock_milli
@@ -402,17 +405,28 @@ def enregistrer_article(conn, article_id: int | None, data: dict, tarifs: list |
 
 
 def stock(conn) -> list[dict]:
-    return [dict(r) for r in conn.execute(
-        """SELECT a.id, a.code, a.libelle, a.nature, a.unite, m.depot,
-                  SUM(m.quantite_milli) AS quantite_milli, MAX(m.date_mvt) AS dernier_mvt
+    """Stock par article, dépôt et laize (RVGI : code 3 des matières). `sous_mini` :
+    le stock total de l'article est sous son stock mini (rouge dans RVGI)."""
+    out = [dict(r) for r in conn.execute(
+        """SELECT a.id, a.code, a.libelle, a.nature, a.unite, a.famille, a.client_id, a.ref_client,
+                  a.format_l_dmm, a.format_a_dmm, a.stock_mini_milli, a.stock_maxi_milli, a.libelle_technique,
+                  (SELECT raison_sociale FROM gc_tiers t WHERE t.id=a.client_id) AS client_nom,
+                  m.depot, m.laize_dmm,
+                  SUM(m.quantite_milli) AS quantite_milli, MAX(m.date_mvt) AS dernier_mvt,
+                  (SELECT SUM(m2.quantite_milli) FROM gc_mouvements m2 WHERE m2.article_id=a.id) AS total_article_milli
            FROM gc_mouvements m JOIN gc_articles a ON a.id=m.article_id
-           GROUP BY a.id, m.depot ORDER BY a.code, m.depot""").fetchall()]
+           GROUP BY a.id, m.depot, m.laize_dmm ORDER BY a.code, m.depot, m.laize_dmm""").fetchall()]
+    for d in out:
+        d["cle"] = f"{d['id']}-{d['depot']}-{d['laize_dmm'] or ''}"
+        mini = d["stock_mini_milli"]
+        d["sous_mini"] = 1 if (d["total_article_milli"] or 0) < 0 or (mini and (d["total_article_milli"] or 0) < mini) else 0
+    return out
 
 
 def mouvements(conn, article_id: int | None = None) -> list[dict]:
     filtre, args = ("WHERE m.article_id=?", (article_id,)) if article_id else ("", ())
     return [dict(r) for r in conn.execute(
-        f"""SELECT m.id, m.date_mvt, m.depot, m.quantite_milli, m.type, m.lot, m.commentaire, m.piece_id,
+        f"""SELECT m.id, m.date_mvt, m.depot, m.quantite_milli, m.type, m.lot, m.commentaire, m.piece_id, m.laize_dmm,
                    a.id AS article_id, a.code AS article_code, a.libelle AS article_libelle, a.unite,
                    p.numero AS piece_numero, p.type AS piece_type
             FROM gc_mouvements m JOIN gc_articles a ON a.id=m.article_id
@@ -434,6 +448,7 @@ def mouvement_manuel(conn, data: dict, user: dict | None = None) -> int:
     if not conn.execute("SELECT 1 FROM gc_depots WHERE code=?", (depot,)).fetchone():
         raise ErreurFichier("Dépôt inconnu.")
     q = _conv(data.get("quantite_milli"), int, "Quantité")
+    laize = _conv(data.get("laize_dmm"), "int_null", "Laize") or None
     if typ == "transfert":
         dest = data.get("depot_destination")
         if not conn.execute("SELECT 1 FROM gc_depots WHERE code=?", (dest,)).fetchone():
@@ -448,23 +463,23 @@ def mouvement_manuel(conn, data: dict, user: dict | None = None) -> int:
         com = str(data.get("commentaire") or "") or f"Transfert {depot} → {dest}"
         nom = str((user or {}).get("nom") or "")
         cur = conn.execute(
-            """INSERT INTO gc_mouvements (date_mvt, article_id, depot, quantite_milli, type, lot, commentaire, cree_par, cree_le)
-               VALUES (?,?,?,?,?,?,?,?,?)""", (jour, art["id"], depot, -q, "transfert", lot, com, nom, now))
+            """INSERT INTO gc_mouvements (date_mvt, article_id, depot, quantite_milli, type, lot, commentaire, cree_par, cree_le,
+                   laize_dmm) VALUES (?,?,?,?,?,?,?,?,?,?)""", (jour, art["id"], depot, -q, "transfert", lot, com, nom, now, laize))
         conn.execute(
-            """INSERT INTO gc_mouvements (date_mvt, article_id, depot, quantite_milli, type, lot, commentaire, cree_par, cree_le)
-               VALUES (?,?,?,?,?,?,?,?,?)""", (jour, art["id"], dest, q, "transfert", lot, com, nom, now))
+            """INSERT INTO gc_mouvements (date_mvt, article_id, depot, quantite_milli, type, lot, commentaire, cree_par, cree_le,
+                   laize_dmm) VALUES (?,?,?,?,?,?,?,?,?,?)""", (jour, art["id"], dest, q, "transfert", lot, com, nom, now, laize))
         return int(cur.lastrowid)
     if typ == "inventaire":
         # Quantité comptée : le mouvement est l'écart avec le stock théorique.
-        th = conn.execute("SELECT COALESCE(SUM(quantite_milli),0) q FROM gc_mouvements WHERE article_id=? AND depot=?",
-                          (art["id"], depot)).fetchone()["q"]
+        th = conn.execute("""SELECT COALESCE(SUM(quantite_milli),0) q FROM gc_mouvements WHERE article_id=? AND depot=?
+                             AND COALESCE(laize_dmm,0)=?""", (art["id"], depot, laize or 0)).fetchone()["q"]
         q = q - int(th)
     if q == 0:
         raise ErreurFichier("Aucun écart : rien à enregistrer.")
     now = _maintenant()
     cur = conn.execute(
-        """INSERT INTO gc_mouvements (date_mvt, article_id, depot, quantite_milli, type, lot, commentaire, cree_par, cree_le)
-           VALUES (?,?,?,?,?,?,?,?,?)""",
+        """INSERT INTO gc_mouvements (date_mvt, article_id, depot, quantite_milli, type, lot, commentaire, cree_par, cree_le,
+               laize_dmm) VALUES (?,?,?,?,?,?,?,?,?,?)""",
         (data.get("date_mvt") or now[:10], art["id"], depot, q, typ, str(data.get("lot") or ""),
-         str(data.get("commentaire") or ""), str((user or {}).get("nom") or ""), now))
+         str(data.get("commentaire") or ""), str((user or {}).get("nom") or ""), now, laize))
     return int(cur.lastrowid)

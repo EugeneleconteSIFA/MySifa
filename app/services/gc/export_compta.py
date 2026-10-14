@@ -50,7 +50,7 @@ def _ventilation(conn, piece) -> tuple[list[tuple[str, int, int]], dict]:
     defaut_cle = "compte_vente_defaut" if sens == "compte_vente" else "compte_achat_defaut"
     defaut = reglages(conn).get(defaut_cle, "")
     lignes = conn.execute(
-        f"""SELECT l.montant_ht_cents, l.taux_tva_bp, COALESCE(NULLIF(f.{sens}, ''), ?) AS compte
+        f"""SELECT l.montant_ht_cents, l.taux_tva_bp, COALESCE(NULLIF(a.{sens}, ''), NULLIF(f.{sens}, ''), ?) AS compte
             FROM gc_pieces_lignes l JOIN gc_articles a ON a.id=l.article_id
             LEFT JOIN gc_familles f ON f.code=a.famille
             WHERE l.piece_id=?""", (defaut, piece["id"])).fetchall()

@@ -58,6 +58,8 @@ def effacer(conn) -> None:
     conn.execute(f"DELETE FROM gc_pieces_lignes WHERE piece_id IN ({ids})")
     conn.execute("DELETE FROM gc_pieces WHERE origine='demo'")
     conn.execute("DELETE FROM gc_tarifs WHERE article_id IN (SELECT id FROM gc_articles WHERE origine='demo')")
+    conn.execute(f"""DELETE FROM gc_cahiers WHERE (objet='tiers' AND objet_id IN ({t}))
+                     OR (objet='article' AND objet_id IN (SELECT id FROM gc_articles WHERE origine='demo'))""")
     conn.execute("DELETE FROM gc_articles WHERE origine='demo'")
     conn.execute(f"DELETE FROM gc_tiers_contacts WHERE tiers_id IN ({t})")
     conn.execute(f"DELETE FROM gc_tiers_adresses WHERE tiers_id IN ({t})")
@@ -233,6 +235,14 @@ def reinitialiser(conn, user: dict | None = None) -> dict:
     cf2 = nouvelle("cde_fournisseur", "F0003", [ligne("MP0004", 40_000, "F0003", "achat")], jour(-4),
                    date_livraison=jour(3))
     pieces.valider(conn, cf2, user)
+
+    # Cahiers des charges
+    from app.services.gc import cahiers
+    cahiers.enregistrer(conn, "tiers", tiers["C0001"], [
+        {"etape": "livraison", "texte": "Colis complets uniquement, palette filmée.", "imprime": 0},
+        {"etape": "facturation", "texte": "Rappeler le numéro de commande client sur la facture.", "imprime": 0}], user)
+    cahiers.enregistrer(conn, "article", arts["PF0001"], [
+        {"etape": "fabrication", "texte": "Contrôle couleur au spectro sur le premier mandrin."}], user)
 
     return {t: conn.execute(f"SELECT COUNT(*) n FROM {t} WHERE " + (
         "origine='demo'" if t in ("gc_pieces", "gc_articles", "gc_tiers") else "1=1")).fetchone()["n"]

@@ -524,6 +524,33 @@ class Chaine(unittest.TestCase):
         self.assertEqual(q, 30_000_000)
         self.assertEqual(pieces.charger(c, cf)["statut"], "solde")
 
+    def test_reception_par_laize(self):
+        from app.services.gc import fichiers
+        c = self.conn
+        cf = pieces.creer(c, "cde_fournisseur", 2)
+        pieces.enregistrer(c, cf, None, [_ligne(1, 5_000_000, 900, 1000, laize_dmm=1600)])
+        pieces.valider(c, cf)
+        re_ = pieces.transformer(c, [cf], "reception")
+        pieces.valider(c, re_)
+        l = [s for s in fichiers.stock(c) if s["id"] == 1]
+        self.assertEqual([(s["laize_dmm"], s["quantite_milli"]) for s in l], [(1600, 5_000_000)])
+
+    def test_cahier_des_charges(self):
+        from app.services.gc import cahiers
+        c = self.conn
+        cahiers.enregistrer(c, "tiers", 1, [{"etape": "livraison", "texte": "Colis complets uniquement.", "imprime": 1},
+                                            {"etape": "devis", "texte": "Toujours deux paliers."}])
+        cahiers.enregistrer(c, "article", 1, [{"etape": "livraison", "texte": "Mandrin 76."}])
+        co = pieces.creer(c, "commande", 1)
+        pieces.enregistrer(c, co, None, [_ligne(1, 1000, 100)])
+        self.assertEqual(pieces.charger(c, co)["cahier"], [])
+        pieces.valider(c, co)
+        bl = pieces.transformer(c, [co], "bl")
+        notes = pieces.charger(c, bl)["cahier"]
+        self.assertEqual([n["texte"] for n in notes], ["Colis complets uniquement.", "Mandrin 76."])
+        with self.assertRaises(pieces.ErreurPiece):
+            cahiers.enregistrer(c, "tiers", 1, [{"etape": "nimporte", "texte": "x"}])
+
 
 if __name__ == "__main__":
     unittest.main()
