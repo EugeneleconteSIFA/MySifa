@@ -90,7 +90,7 @@ Statuts : ☐ à faire · ◐ en cours · ✓ fait
 | ✓ | Coque : navigation par domaine, routage par chemin, thème, mobile |
 | ✓ | Tests `tests/test_erp2_hote.py` |
 | ✓ | DA MySifa (sidebar commune), favicon dédié |
-| ☐ | vhost nginx `erp.mysifa.com` → 127.0.0.1:8002 + certificat (sur le VPS, par Eugène) |
+| ✓ | vhost nginx `erp.mysifa.com` → 127.0.0.1:8002 + certificat — en ligne le 14/10/2026 |
 
 ### Lot 1 — Design system ERP
 
@@ -99,12 +99,12 @@ L'interface est la raison du projet : ce lot se fait avant tout écran métier,
 
 | | Tâche |
 |---|---|
-| ☐ | **Grille** : tri, filtres colonne, colonnes réordonnables, totaux, export, navigation clavier, 10 000+ lignes fluides |
+| ◐ | **Grille** (`static/erp/erp_grille.js`) : fait — tri 3 états, filtres par colonne (texte sans accents, `>`, `<`, `a..b`, dates), totaux, export CSV, clavier, rendu virtualisé (10 000 lignes), mémoire des filtres. Reste : colonnes réordonnables / redimensionnables |
 | ☐ | **Fiche** (client, article…) : en-tête + sections + onglets liés |
 | ☐ | **Pièce** (devis, commande, BL, facture) : en-tête, saisie de lignes au clavier, totaux live, statut, pièces liées amont/aval |
 | ☐ | Champs : autocomplétion tiers / article, montant, quantité + unité, date, référentiel |
 | ☐ | Recherche globale (Ctrl K), onglets de pièces ouvertes, toasts |
-| ☐ | Page de démonstration des composants, validée par Eugène |
+| ◐ | Page de démonstration des composants : `Paramètres › Composants` (données fictives) — à valider par Eugène |
 
 ### Lot 2 — Fichiers de base et paramètres
 

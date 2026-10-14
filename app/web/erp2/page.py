@@ -88,6 +88,8 @@ _COQUE = """<body class="erp">
 <div id="erp-app"></div>
 <script>window.ERP_CONFIG = {version: "__V__", mysifa: "__MYSIFA__"};</script>
 <script src="/static/erp/erp.js?v=__V__"></script>
+<script src="/static/erp/erp_grille.js?v=__V__"></script>
+<script src="/static/erp/erp_demo.js?v=__V__"></script>
 </body>
 </html>
 """

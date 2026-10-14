@@ -43,6 +43,7 @@
     ]},
     {groupe: 'Paramètres', liens: [
       {chemin: '/parametres', libelle: 'Paramètres'},
+      {chemin: '/parametres/composants', libelle: 'Composants'},
     ]},
   ];
 
@@ -190,7 +191,12 @@
 
   var ERP = window.ERP = {ecrans: {}, api: api, h: h, aller: aller, S: S};
 
-  api('/api/auth/me').then(function (u) { S.user = u; render(); })
-    .catch(function () { render(); });
-  render();
+  // Premier rendu une fois tous les scripts chargés : les écrans
+  // (erp_demo.js, puis les modules) s'enregistrent après ce fichier.
+  function demarrer() {
+    render();
+    api('/api/auth/me').then(function (u) { S.user = u; render(); }).catch(function () {});
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer);
+  else demarrer();
 })();
