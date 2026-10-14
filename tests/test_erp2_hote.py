@@ -56,7 +56,12 @@ class HoteErp(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn('id="erp-app"', r.text)
         self.assertIn("/static/erp/erp.js", r.text)
-        self.assertNotIn("mysifa_boutons.js", r.text)
+        # Seul l'assistant IA est inclus (par la coque elle-même) : l'injection
+        # des autres boutons flottants ne passe pas sur le sous-domaine.
+        self.assertIn("mysifa_ai_chat.js", r.text)
+        self.assertEqual(r.text.count("mysifa_boutons.js"), 1)
+        self.assertNotIn("mysifa_postit.js", r.text)
+        self.assertNotIn("chat_widget.js", r.text)
         self.assertNotIn("mysifa_blocs.js", r.text)
 
     def test_autre_role_refuse(self):
