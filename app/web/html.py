@@ -99,7 +99,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
-<link rel="stylesheet" href="/static/mysifa_ai_chat.css?v=2">
+<link rel="stylesheet" href="/static/mysifa_ai_chat.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_resize.css">
@@ -1701,7 +1701,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/mysifa_humeur.js"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=8"></script>
-<script src="/static/mysifa_ai_chat.js?v=2"></script>
+<script src="/static/mysifa_ai_chat.js?v=3"></script>
 <script src="/static/mysifa_guides.js"></script>
 <script src="/static/motion.js" defer></script>
 <script>
@@ -11008,31 +11008,7 @@ try{
 }catch(e){}
 checkAuth();
 </script>
-<!-- Agent IA -->
-<div id="ai-chat-root">
-  <button id="ai-chat-btn" type="button" aria-label="Assistant IA" title="Assistant MySifa">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-    </svg>
-  </button>
-  <div id="ai-chat-panel" role="dialog" aria-label="Assistant MySifa">
-      <div id="ai-chat-header">
-      <span class="ai-dot"></span>
-      <div class="ai-title">Assistant MySifa<span class="ai-sub">Posez vos questions sur la production, le stock…</span></div>
-      <button id="ai-chat-close" type="button" aria-label="Fermer">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="1" y1="1" x2="13" y2="13"/><line x1="13" y1="1" x2="1" y2="13"/></svg>
-      </button>
-    </div>
-    <div id="ai-messages"></div>
-    <div id="ai-typing"><span class="ai-dot-t"></span><span class="ai-dot-t"></span><span class="ai-dot-t"></span></div>
-      <div id="ai-input-area">
-      <textarea id="ai-input" placeholder="Votre question…" rows="1" aria-label="Message"></textarea>
-      <button id="ai-send" type="button" aria-label="Envoyer">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg>
-      </button>
-    </div>
-  </div>
-</div>
+<!-- Agent IA : construit par /static/mysifa_ai_chat.js (ensureDom) -->
 </body>
 </html>"""
 
