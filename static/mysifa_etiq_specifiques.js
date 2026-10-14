@@ -18,6 +18,7 @@
     [100, 150], [100, 100], [100, 50], [105, 50], [120, 105], [148, 105], [60, 40], [50, 25],
   ];
   const LS_IMPRIMANTE = 'mysifa_etiq_spec_imprimante';
+  const LS_MODELE_IA = 'mysifa_etiq_spec_modele_ia';
 
   const ES = {
     host: null, view: 'liste', boot: null, dossierId: null, q: '',
@@ -116,6 +117,23 @@
     if (valeur) s.value = String(valeur);
     return s;
   }
+  // Choix du modèle de l'assistant : liste servie par le serveur (config.py),
+  // dernier choix retenu sur le poste. L'aide sous la liste suit la sélection.
+  function selectModeleIa() {
+    const ref = ES.boot.referentiel;
+    const liste = ref.modeles_ia || [];
+    const s = h('select', { cls: 'es-input', title: 'Modèle utilisé par l\'assistant' },
+      ...liste.map(m => h('option', { value: m.id, text: m.libelle })));
+    let mem = null;
+    try { mem = localStorage.getItem(LS_MODELE_IA); } catch (e) {}
+    s.value = liste.some(m => m.id === mem) ? mem : ref.modele_ia_defaut;
+    const aide = h('span', { cls: 'es-champ-aide' });
+    const maj = () => { aide.textContent = (liste.find(m => m.id === s.value) || {}).aide || ''; };
+    s.addEventListener('change', () => { try { localStorage.setItem(LS_MODELE_IA, s.value); } catch (e) {} maj(); });
+    maj();
+    return { select: s, bloc: h('label', { cls: 'es-champ' }, h('span', { cls: 'es-champ-label', text: 'Modèle' }), s, aide) };
+  }
+
   function bouton(label, onclick, variante, icone) {
     return h('button', { cls: 'es-btn' + (variante ? ' es-btn-' + variante : ''), type: 'button', onclick },
       icone ? ic(icone, 15) : null, label);
@@ -502,12 +520,13 @@
       const dossier = selectDossiers(d.dossier_id, true);
       const consigne = h('textarea', { cls: 'es-input', rows: 3, maxlength: 4000,
         placeholder: 'Facultatif : précision pour Claude (préfixe GS1 à utiliser, zone à ignorer sur la photo…)' });
+      const modeleIa = selectModeleIa();
       const gen = bouton(d.modele_id ? 'Générer un nouveau brouillon avec Claude' : 'Générer le brouillon avec Claude', async () => {
         if (!dossier.value) { toast('Choisir le dossier où créer l\'étiquette.', 'danger'); return; }
         occupe(gen, true, 'Claude prépare l\'étiquette…');
         try {
-          const r = await api('/demandes/' + d.id + '/generer', { method: 'POST', body: { dossier_id: parseInt(dossier.value, 10), consigne: consigne.value } });
-          toast('Brouillon créé — à relire avant livraison.');
+          const r = await api('/demandes/' + d.id + '/generer', { method: 'POST', body: { dossier_id: parseInt(dossier.value, 10), consigne: consigne.value, modele: modeleIa.select.value } });
+          toast(`Brouillon créé par ${r.modele_libelle} — à relire avant livraison.`);
           await charger(); ES.demandes = await api('/demandes');
           ouvrirEditeur(r.modele_id);
         } catch (e) { toast(e.message, 'danger'); occupe(gen, false); }
@@ -524,7 +543,7 @@
       blocs.push(h('div', { cls: 'es-encart' },
         h('div', { cls: 'es-encart-titre', text: 'Paramétrer avec Claude' }),
         h('p', { cls: 'es-aide', text: 'Claude lit la description et les pièces jointes (images, PDF), crée l\'étiquette dans le dossier choisi et passe la demande en cours. Le brouillon s\'ouvre dans l\'éditeur.' }),
-        champ('Dossier', dossier), champ('Consigne', consigne), h('div', { cls: 'es-ligne-actions' }, gen)));
+        champ('Dossier', dossier), modeleIa.bloc, champ('Consigne', consigne), h('div', { cls: 'es-ligne-actions' }, gen)));
       blocs.push(h('div', { cls: 'es-encart' },
         h('div', { cls: 'es-encart-titre', text: 'Suivi' }),
         champ('Statut', statut), champ('Réponse', reponse), h('div', { cls: 'es-ligne-actions' }, enr)));
@@ -548,6 +567,6 @@
 
   window.EtiqSpec = Object.assign(window.EtiqSpec || {}, {
     mount, _: { ES, h, ic, api, toast, champ, bouton, occupe, modale, fermerModale, confirmer,
-      selectDossiers, fmtNum, fmtFormat, rendre, charger, modaleImpression, modaleHistorique, API },
+      selectDossiers, selectModeleIa, fmtNum, fmtFormat, rendre, charger, modaleImpression, modaleHistorique, API },
   });
 })();

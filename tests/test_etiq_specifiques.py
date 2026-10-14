@@ -125,6 +125,40 @@ check("variable non déclarée signalée",
       any("inconnue" in a or "aucune variable" in a for a in es.controles(
           es.normaliser_layout({"elements": [{"type": "texte", "x": 1, "y": 1, "valeur": "{{x}}"}]}))))
 
+# ── 5. Choix du modèle de l'assistant ─────────────────────────────────────
+import types  # noqa: E402
+from app.services import etiq_specifiques_ia as ia  # noqa: E402
+appels = []
+
+
+class _Bloc:
+    type = "tool_use"
+    name = "proposer_etiquette"
+    input = {"largeur_mm": 100, "hauteur_mm": 50, "resume": "ok", "elements": [], "variables": []}
+
+
+class _Rep:
+    stop_reason = "tool_use"
+    content = [_Bloc()]
+    model = ""
+
+
+ia._client = lambda: types.SimpleNamespace(messages=types.SimpleNamespace(
+    create=lambda **kw: (appels.append(kw), _Rep())[1]))
+vide = {"elements": [], "variables": []}
+r = ia.proposer("x", 100, 50, 203, vide)
+check("sans choix : modèle par défaut", appels[-1]["model"], ia.ETIQ_IA_MODELE)
+ia.proposer("x", 100, 50, 203, vide, modele="claude-haiku-5-5")
+check("modèle choisi transmis", appels[-1]["model"], "claude-haiku-5-5")
+check("pas de repli serveur pour Haiku", "fallbacks" in appels[-1]["extra_body"], False)
+ia.proposer("x", 100, 50, 203, vide, modele="claude-sonnet-5-5")
+check("repli serveur pour Sonnet", appels[-1]["extra_body"].get("fallbacks"), "default")
+try:
+    ia.proposer("x", 100, 50, 203, vide, modele="gpt-quelconque")
+    check("modèle hors liste refusé", False)
+except es.EtiquetteInvalide:
+    check("modèle hors liste refusé", True)
+
 print()
 if ECHECS:
     print(f"{len(ECHECS)} échec(s)")

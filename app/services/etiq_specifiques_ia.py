@@ -21,7 +21,7 @@ import json
 import os
 from typing import Optional
 
-from config import ETIQ_IA_MODELE
+from config import ETIQ_IA_MODELE, etiq_ia_modeles
 from app.services.etiq_specifiques import (
     EtiquetteInvalide, SYMBOLOGIES, TYPES_VARIABLE, normaliser_format, normaliser_layout,
 )
@@ -152,12 +152,25 @@ def _blocs_pieces(pieces: list[dict]) -> list[dict]:
     return blocs
 
 
+def choisir_modele(modele: Optional[str]) -> dict:
+    """Le modèle demandé s'il est dans la liste de config.py, sinon le défaut.
+    Un identifiant inconnu est refusé plutôt que remplacé en silence."""
+    modeles = {m["id"]: m for m in etiq_ia_modeles()}
+    if not modele:
+        return modeles.get(ETIQ_IA_MODELE) or {"id": ETIQ_IA_MODELE, "libelle": ETIQ_IA_MODELE, "repli": False}
+    if modele not in modeles:
+        raise EtiquetteInvalide(f"Modèle « {modele} » non proposé — choisir dans la liste.")
+    return modeles[modele]
+
+
 def proposer(consigne: str, largeur_mm: float, hauteur_mm: float, dpi: int,
-             layout: dict, pieces: Optional[list[dict]] = None, contexte: str = "") -> dict:
+             layout: dict, pieces: Optional[list[dict]] = None, contexte: str = "",
+             modele: Optional[str] = None) -> dict:
     """Rend {"largeur_mm","hauteur_mm","layout","resume","remarques","modele"}.
 
     Lève EtiquetteInvalide avec un message affichable si l'appel échoue.
     """
+    choix = choisir_modele(modele)
     client = _client()
     if client is None:
         raise EtiquetteInvalide("Assistant IA indisponible — clé ANTHROPIC_API_KEY absente du serveur.")
@@ -173,16 +186,19 @@ def proposer(consigne: str, largeur_mm: float, hauteur_mm: float, dpi: int,
     texte += "Consigne :\n" + (consigne or "").strip()
     contenu = _blocs_pieces(pieces or []) + [{"type": "text", "text": texte}]
 
+    options = {"extra_body": {"output_config": {"effort": "medium"}}}
+    if choix.get("repli"):
+        options["extra_headers"] = {"anthropic-beta": "server-side-fallback-2026-07-01"}
+        options["extra_body"]["fallbacks"] = "default"
     try:
         reponse = client.messages.create(
-            model=ETIQ_IA_MODELE,
+            model=choix["id"],
             max_tokens=_MAX_TOKENS,
             system=_CONSIGNE,
             tools=[_OUTIL],
             tool_choice={"type": "auto"},
             messages=[{"role": "user", "content": contenu}],
-            extra_headers={"anthropic-beta": "server-side-fallback-2026-07-01"},
-            extra_body={"fallbacks": "default", "output_config": {"effort": "medium"}},
+            **options,
         )
     except Exception as e:
         raise EtiquetteInvalide(f"Appel à l'assistant en échec : {e}")
@@ -212,5 +228,8 @@ def proposer(consigne: str, largeur_mm: float, hauteur_mm: float, dpi: int,
         "largeur_mm": l, "hauteur_mm": h, "layout": nouveau,
         "resume": str(entree.get("resume") or "")[:600],
         "remarques": remarques,
-        "modele": ETIQ_IA_MODELE,
+        "modele": choix["id"],
+        "modele_libelle": choix.get("libelle", choix["id"]),
+        # Le modèle qui a réellement répondu (différent si le repli a joué)
+        "modele_reel": str(getattr(reponse, "model", "") or choix["id"]),
     }

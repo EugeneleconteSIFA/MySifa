@@ -40,7 +40,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from config import ETIQ_PIECE_MAX_OCTETS, ETIQ_UPLOAD_DIR, ROLES_MYPRINT
+from config import ETIQ_IA_MODELE, ETIQ_PIECE_MAX_OCTETS, ETIQ_UPLOAD_DIR, ROLES_MYPRINT, etiq_ia_modeles
 from app.core.database import get_db
 from app.services.auth_service import get_current_user, is_superadmin
 from app.services import etiq_specifiques as es
@@ -171,6 +171,7 @@ def bootstrap(request: Request):
             "symbologies": es.SYMBOLOGIES, "types_variable": es.TYPES_VARIABLE,
             "dpi": list(es.DPI_ADMIS), "statuts_demande": STATUTS_DEMANDE,
             "quantite_max": es.QUANTITE_MAX,
+            "modeles_ia": etiq_ia_modeles(), "modele_ia_defaut": ETIQ_IA_MODELE,
         },
     }
 
@@ -516,6 +517,7 @@ class IaPayload(BaseModel):
     hauteur_mm: float = 150
     dpi: int = 203
     layout: dict = {}
+    modele: Optional[str] = None
 
 
 @router.post("/ia/proposer")
@@ -527,7 +529,7 @@ def ia_proposer(payload: IaPayload, request: Request):
     l, h, d = es.normaliser_format(payload.largeur_mm, payload.hauteur_mm, payload.dpi)
     try:
         layout = es.normaliser_layout(payload.layout)
-        return proposer(payload.consigne[:4000], l, h, d, layout)
+        return proposer(payload.consigne[:4000], l, h, d, layout, modele=payload.modele)
     except EtiquetteInvalide as e:
         _invalide(e)
 
@@ -657,6 +659,7 @@ def patch_demande(demande_id: int, payload: DemandePatch, request: Request):
 class GenererPayload(BaseModel):
     dossier_id: Optional[int] = None
     consigne: Optional[str] = ""
+    modele: Optional[str] = None
 
 
 @router.post("/demandes/{demande_id}/generer")
@@ -665,7 +668,11 @@ def generer_depuis_demande(demande_id: int, payload: GenererPayload, request: Re
     à la demande et passe la demande en cours. Le super admin la relit dans
     l'éditeur avant de la livrer."""
     user = _super(request)
-    from app.services.etiq_specifiques_ia import proposer
+    from app.services.etiq_specifiques_ia import choisir_modele, proposer
+    try:
+        choisir_modele(payload.modele)  # refus immédiat, avant de lire les pièces
+    except EtiquetteInvalide as e:
+        _invalide(e)
     with get_db() as conn:
         dem = _demande_visible(conn, demande_id, user)
         dossier_id = payload.dossier_id or dem["dossier_id"]
@@ -684,11 +691,12 @@ def generer_depuis_demande(demande_id: int, payload: GenererPayload, request: Re
                 f"Description : {dem['description']}")
     consigne = (payload.consigne or "").strip() or "Construis cette étiquette à partir de la demande et des pièces jointes."
     try:
-        res = proposer(consigne[:4000], l, h, d, {"elements": [], "variables": []}, pieces, contexte)
+        res = proposer(consigne[:4000], l, h, d, {"elements": [], "variables": []}, pieces, contexte,
+                       modele=payload.modele)
     except EtiquetteInvalide as e:
         _invalide(e)
     now = _now()
-    description = res["resume"]
+    description = res["resume"] + f" (brouillon : {res['modele_libelle']})"
     if res["remarques"]:
         description += "\nÀ vérifier : " + " · ".join(res["remarques"])
     with get_db() as conn:
@@ -702,7 +710,8 @@ def generer_depuis_demande(demande_id: int, payload: GenererPayload, request: Re
                      " dossier_id=?, traite_at=?, traite_par=? WHERE id=?",
                      (mid, dossier_id, now, user.get("email"), demande_id))
         conn.commit()
-    return {"ok": True, "modele_id": mid, "resume": res["resume"], "remarques": res["remarques"]}
+    return {"ok": True, "modele_id": mid, "resume": res["resume"], "remarques": res["remarques"],
+            "modele_libelle": res["modele_libelle"]}
 
 
 @router.get("/pieces/{piece_id}")

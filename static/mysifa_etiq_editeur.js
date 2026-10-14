@@ -530,7 +530,8 @@
 
   // ── Assistant IA ────────────────────────────────────────────────────
   function panneauIa() {
-    const { h, bouton, api, toast } = X();
+    const { h, bouton, api, toast, selectModeleIa } = X();
+    const modeleIa = selectModeleIa();
     const consigne = h('textarea', { cls: 'es-input', id: 'es-ia-consigne', rows: 4, maxlength: 4000,
       placeholder: 'Ex. Ajoute un SSCC en GS1-128 sous le code produit, préfixe 3012345, avec le numéro en clair au-dessus.' });
     const go = bouton('Proposer', async () => {
@@ -538,7 +539,7 @@
       ED.iaBusy = true; go.disabled = true; go.textContent = 'Claude travaille…';
       try {
         const r = await api('/ia/proposer', { method: 'POST', body: {
-          consigne: consigne.value, largeur_mm: ED.m.largeur_mm, hauteur_mm: ED.m.hauteur_mm, dpi: ED.m.dpi, layout: nettoyer(layout()) } });
+          consigne: consigne.value, modele: modeleIa.select.value, largeur_mm: ED.m.largeur_mm, hauteur_mm: ED.m.hauteur_mm, dpi: ED.m.dpi, layout: nettoyer(layout()) } });
         ED.propo = r; ED.voirPropo = true; X().rendre();
       } catch (e) { toast(e.message, 'danger'); go.disabled = false; go.textContent = 'Proposer'; }
       ED.iaBusy = false;
@@ -550,6 +551,8 @@
       const p = ED.propo;
       blocs.push(h('div', { cls: 'es-propo' },
         h('div', { cls: 'es-propo-resume', text: p.resume || 'Proposition prête.' }),
+        h('div', { cls: 'es-aide', text: 'Proposé par ' + (p.modele_libelle || p.modele)
+          + (p.modele_reel && !String(p.modele_reel).startsWith(p.modele) ? ` (relayé par ${p.modele_reel})` : '') }),
         p.remarques.length ? h('ul', { cls: 'es-propo-remarques' }, ...p.remarques.map(r => h('li', { text: r }))) : null,
         h('div', { cls: 'es-bascule' },
           h('button', { cls: 'es-puce' + (!ED.voirPropo ? ' actif' : ''), type: 'button', text: 'Avant', onclick: () => { ED.voirPropo = false; X().rendre(); } }),
@@ -563,7 +566,7 @@
             X().toast('Proposition appliquée — enregistrer pour la garder.');
           }, 'accent', 'check'))));
     }
-    blocs.push(consigne, h('div', { cls: 'es-ligne-actions' }, go));
+    blocs.push(modeleIa.bloc, consigne, h('div', { cls: 'es-ligne-actions' }, go));
     return h('div', { cls: 'es-panneau es-ia' }, ...blocs);
   }
 
