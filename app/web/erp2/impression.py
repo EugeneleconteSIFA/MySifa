@@ -21,7 +21,7 @@ TITRES = {
     "devis": "Devis", "marche": "Marché", "commande": "Accusé de réception de commande", "bl": "Bon de livraison",
     "facture": "Facture", "avoir": "Avoir", "cde_fournisseur": "Bon de commande",
     "reception": "Bon de réception", "facture_fournisseur": "Facture fournisseur",
-    "of": "Ordre de fabrication",
+    "of": "Ordre de fabrication", "aof": "Demande de prix",
 }
 SANS_PRIX = {"bl", "reception", "of"}
 

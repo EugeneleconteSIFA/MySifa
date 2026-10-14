@@ -234,3 +234,12 @@ select.erp-input:disabled { appearance: none; }
 
 .erp-lignes .c-case { width: 52px; text-align: center; }
 .erp-a-faire { color: var(--warn); }
+
+/* Statistiques : histogramme mensuel */
+.erp-histo { display: flex; align-items: flex-end; gap: 8px; height: 190px; padding-top: 6px; overflow-x: auto; }
+.erp-histo-col { flex: 1; min-width: 46px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.erp-histo-barre { width: 70%; max-width: 46px; background: var(--accent); border-radius: 5px 5px 0 0; }
+.erp-histo-barre.neg { background: var(--danger); }
+.erp-histo-val { font-size: 10.5px; color: var(--text2); margin-bottom: 3px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.erp-histo-lib { font-size: 11px; color: var(--muted); margin-top: 4px; white-space: nowrap; }
+.erp-stats-grille { height: 420px; }

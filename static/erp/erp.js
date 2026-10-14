@@ -25,6 +25,7 @@
       {chemin: '/ventes/factures', libelle: 'Factures et avoirs'},
     ]},
     {groupe: 'Achats', liens: [
+      {chemin: '/achats/appels-offre', libelle: 'Appels d\'offre'},
       {chemin: '/achats/commandes', libelle: 'Commandes fournisseur'},
       {chemin: '/achats/receptions', libelle: 'Réceptions'},
       {chemin: '/achats/factures', libelle: 'Factures fournisseur'},
@@ -46,6 +47,10 @@
       {chemin: '/fichiers/clients', libelle: 'Clients'},
       {chemin: '/fichiers/fournisseurs', libelle: 'Fournisseurs'},
       {chemin: '/fichiers/articles', libelle: 'Articles'},
+      {chemin: '/fichiers/contacts', libelle: 'Contacts'},
+    ]},
+    {groupe: 'Analyse', liens: [
+      {chemin: '/analyse/statistiques', libelle: 'Statistiques'},
     ]},
     {groupe: 'Paramètres', liens: [
       {chemin: '/parametres', libelle: 'Paramètres'},

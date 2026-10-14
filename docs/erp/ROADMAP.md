@@ -29,6 +29,7 @@ RVGI vient ensuite, en une fois.
 | D8 | 14/10 | **DA de MySifa** : jetons de couleur, Segoe UI, sidebar commune | Favicon : l'icône MyS, fond cyan, S noir |
 | D9 | 14/10 | **Reproduire l'ERP « en vrai » avec très peu de lignes** | Jeu de démonstration en base (`origine='demo'`), passé par le moteur de pièces ; réinitialisable dans Paramètres › Démonstration |
 | D10 | 14/10 | **Chantier ERP isolé dans un worktree** `../MySifa-erp` (branche `feature/erp-roadmap`) | Une autre session travaille dans le dossier principal : plus de collision de branche ni de fichiers |
+| D11 | 14/10 | **D'abord la parité avec RVGI**, la traçabilité ensuite | Lots, bobines, traçabilité et gestion de stock avancée restent dans MySifa (www) ; ils entreront dans l'ERP une fois RVGI reproduit. Q6, Q7, Q9 en attente |
 
 ## Principes non négociables
 
@@ -115,16 +116,15 @@ Statuts : ☐ à faire · ◐ en cours · ✓ fait
 | 7 | Comptabilité | ◐ — échéances, règlements, FEC faits ; reste relances, format du logiciel compta (Q1), facturation électronique |
 | 8 | Recette, reprise RVGI, mise en service | ☐ |
 
-### Prochaines étapes, dans l'ordre
+### Prochaines étapes, dans l'ordre (parité RVGI d'abord, D11)
 
-1. **Lien production ↔ MyProd** (Q8) : recommandation — l'OF de l'ERP crée ou
-   relie le dossier MyProd, et les saisies MyProd alimentent consommations et
-   déclarations. Attend la décision.
-2. **Stock** : lots et bobines (Q7), valorisation (Q6), transferts entre dépôts.
-3. **Compta** : relances clients, format d'import du logiciel comptable (Q1).
-4. **Ergonomie** : colonnes déplaçables, envoi des pièces par mail, devis à
-   plusieurs quantités, rapprochement facture fournisseur / réception.
-5. **Reprise** : script miroir RVGI → `gc_*` rejouable, avec rapport d'écarts.
+1. **Appels d'offre** fournisseurs (demande de prix → commande fournisseur).
+2. **Contacts** : l'annuaire de tous les interlocuteurs.
+3. **Statistiques et palmarès** (« hits parades ») : CA par client, par article, par mois, par représentant.
+4. **Envoi des pièces par e-mail** aux interlocuteurs cochés sur la fiche client.
+5. **Achats** : unité d'achat (m²) et de conditionnement (ML) avec laize, « N bobines de X soit Y ML ».
+6. **Reprise** : script miroir RVGI → `gc_*` rejouable, avec rapport d'écarts.
+7. Après la mise en service : traçabilité, lots et bobines, gestion de stock (D11).
 
 ## Questions ouvertes
 

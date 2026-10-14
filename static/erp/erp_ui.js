@@ -98,6 +98,7 @@
     facture: {valide: 'Émise', partiel: 'Réglée en partie', solde: 'Réglée'},
     avoir: {valide: 'Émis'},
     cde_fournisseur: {valide: 'À recevoir', partiel: 'Reçue en partie', solde: 'Reçue'},
+    aof: {valide: 'Envoyé', partiel: 'Commandé en partie', solde: 'Commandé'},
     reception: {valide: 'À facturer', partiel: 'Facturée en partie', solde: 'Facturée'},
     facture_fournisseur: {valide: 'À payer', partiel: 'Payée en partie', solde: 'Payée'},
     of: {valide: 'Lancé', partiel: 'En production', solde: 'Terminé'},

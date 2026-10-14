@@ -32,6 +32,7 @@ TYPES = {
     "bl":                  {"libelle": "Bon de livraison", "sens": "vente", "aval": ["facture"], "stock": -1, "legal": False},
     "facture":             {"libelle": "Facture", "sens": "vente", "aval": ["avoir"], "stock": 0, "legal": True},
     "avoir":               {"libelle": "Avoir", "sens": "vente", "aval": [], "stock": 0, "legal": True},
+    "aof":                 {"libelle": "Appel d'offre", "sens": "achat", "aval": ["cde_fournisseur"], "stock": 0, "legal": False},
     "cde_fournisseur":     {"libelle": "Commande fournisseur", "sens": "achat", "aval": ["reception"], "stock": 0, "legal": False},
     "reception":           {"libelle": "Réception", "sens": "achat", "aval": ["facture_fournisseur"], "stock": 1, "legal": False},
     "facture_fournisseur": {"libelle": "Facture fournisseur", "sens": "achat", "aval": [], "stock": 0, "legal": False},
@@ -49,6 +50,7 @@ AVANCEMENT = {
     "commande": ["bl"],
     "bl": ["facture"],
     "cde_fournisseur": ["reception"],
+    "aof": ["cde_fournisseur"],
     "reception": ["facture_fournisseur"],
 }
 

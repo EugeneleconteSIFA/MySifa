@@ -169,6 +169,37 @@ def historique_relances(conn, tiers_id: int) -> list[dict]:
         "SELECT * FROM gc_relances WHERE tiers_id=? ORDER BY date_relance DESC, id DESC", (tiers_id,)).fetchall()]
 
 
+def statistiques(conn, debut: str, fin: str) -> dict:
+    """Chiffre d'affaires facturé HT (avoirs déduits) sur une période, par client,
+    article, mois et représentant. Par article, c'est le montant des lignes
+    (avant remise de pied) : la remise de pied ne se rattache à aucun article."""
+    sig = "CASE p.type WHEN 'avoir' THEN -1 ELSE 1 END"
+    base = f"""FROM gc_pieces p WHERE p.type IN ('facture','avoir') AND p.numero IS NOT NULL AND p.statut!='annule'
+               AND substr(p.date_piece,1,10) BETWEEN ? AND ?"""
+    par_client = [dict(r) for r in conn.execute(
+        f"""SELECT t.id, t.code, t.raison_sociale AS libelle, SUM({sig}*p.total_ht_cents) AS ca_cents,
+                   COUNT(DISTINCT CASE WHEN p.type='facture' THEN p.id END) AS nb_factures
+            {base.replace("FROM gc_pieces p", "FROM gc_pieces p JOIN gc_tiers t ON t.id=p.tiers_id")}
+            GROUP BY t.id ORDER BY ca_cents DESC""", (debut, fin)).fetchall()]
+    par_mois = [dict(r) for r in conn.execute(
+        f"""SELECT substr(p.date_piece,1,7) AS mois, SUM({sig}*p.total_ht_cents) AS ca_cents {base}
+            GROUP BY mois ORDER BY mois""", (debut, fin)).fetchall()]
+    par_rep = [dict(r) for r in conn.execute(
+        f"""SELECT COALESCE(u.nom, '— sans représentant') AS libelle, SUM({sig}*p.total_ht_cents) AS ca_cents
+            {base.replace("FROM gc_pieces p", "FROM gc_pieces p LEFT JOIN users u ON u.id=p.representant_id")}
+            GROUP BY u.id ORDER BY ca_cents DESC""", (debut, fin)).fetchall()]
+    par_article = [dict(r) for r in conn.execute(
+        f"""SELECT a.id, a.code, a.libelle, SUM({sig}*l.montant_ht_cents) AS ca_cents,
+                   SUM({sig}*l.quantite_milli) AS quantite_milli, a.unite
+            FROM gc_pieces_lignes l JOIN gc_pieces p ON p.id=l.piece_id JOIN gc_articles a ON a.id=l.article_id
+            WHERE p.type IN ('facture','avoir') AND p.numero IS NOT NULL AND p.statut!='annule'
+              AND substr(p.date_piece,1,10) BETWEEN ? AND ?
+            GROUP BY a.id ORDER BY ca_cents DESC""", (debut, fin)).fetchall()]
+    total = sum(x["ca_cents"] or 0 for x in par_mois)
+    return {"total_cents": total, "par_client": par_client, "par_article": par_article,
+            "par_mois": par_mois, "par_representant": par_rep}
+
+
 def reglements(conn) -> list[dict]:
     return [dict(r) for r in conn.execute(
         """SELECT r.*, t.raison_sociale AS tiers_nom, t.code AS tiers_code,

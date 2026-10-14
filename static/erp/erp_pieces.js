@@ -20,6 +20,7 @@
     '/ventes/commandes': {types: ['commande'], nouveau: 'commande'},
     '/ventes/livraisons': {types: ['bl'], nouveau: 'bl'},
     '/ventes/factures': {types: ['facture', 'avoir'], nouveau: 'facture'},
+    '/achats/appels-offre': {types: ['aof'], nouveau: 'aof'},
     '/achats/commandes': {types: ['cde_fournisseur'], nouveau: 'cde_fournisseur'},
     '/achats/receptions': {types: ['reception'], nouveau: 'reception'},
     '/achats/factures': {types: ['facture_fournisseur'], nouveau: 'facture_fournisseur'},
@@ -30,6 +31,7 @@
   var ACTION_AVAL = {
     commande: 'Transformer en commande', bl: 'Livrer', facture: 'Facturer', avoir: 'Faire un avoir',
     reception: 'Réceptionner', facture_fournisseur: 'Saisir la facture', of: 'Lancer en fabrication',
+    cde_fournisseur: 'Commander',
   };
   // Pièces qu'on peut regrouper dans une même pièce aval.
   var REGROUPABLE = {facture: 'bl', facture_fournisseur: 'reception'};
@@ -38,7 +40,7 @@
   var SANS_PRIX = {of: 1};
   // Listes qui s'ouvrent par défaut en vue par ligne (true) ; false = par pièce
   // mais la vue par ligne reste proposée. Absent = pas de vue par ligne.
-  var PAR_LIGNE = {commande: true, devis: true, marche: true, bl: true, cde_fournisseur: true, of: false};
+  var PAR_LIGNE = {commande: true, devis: true, marche: true, bl: true, cde_fournisseur: true, of: false, aof: false};
   var ARTICLES_PAR_SENS = {vente: ['pf', 'service'], achat: ['mp', 'service', 'pf']};
 
   function routeDe(type) {
@@ -755,7 +757,7 @@
             }, {accent: true}));
           }
           // Étape déjà entièrement faite : pas de bouton (l'OF reste possible).
-          var AVANCE = {marche: 'commande', devis: 'commande', commande: 'bl', bl: 'facture', cde_fournisseur: 'reception', reception: 'facture_fournisseur'};
+          var AVANCE = {aof: 'cde_fournisseur', marche: 'commande', devis: 'commande', commande: 'bl', bl: 'facture', cde_fournisseur: 'reception', reception: 'facture_fournisseur'};
           (P.aval_possibles || []).forEach(function (cible) {
             if (P.statut === 'solde' && AVANCE[P.type] === cible) return;
             var lib = P.type === 'marche' && cible === 'commande' ? 'Passer un appel' : (ACTION_AVAL[cible] || libType(cible));

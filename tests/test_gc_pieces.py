@@ -436,6 +436,28 @@ class Chaine(unittest.TestCase):
         with self.assertRaises(ErreurPiece):
             pieces.enregistrer(c, co, None, [_ligne(aid, 1000, 100)])     # produit d'un autre client
 
+    def test_appel_offre_et_stats(self):
+        from app.services.gc import compta
+        c = self.conn
+        c.execute("INSERT OR IGNORE INTO gc_sequences (code, libelle, format, reinit) VALUES ('aof', 'AO', '{N}', 'jamais')")
+        c.execute("UPDATE gc_sequences SET prochain=5568 WHERE code='aof'")
+        ao = pieces.creer(c, "aof", 2)
+        pieces.enregistrer(c, ao, None, [_ligne(1, 1_000_000, 900, 1000)])
+        self.assertEqual(pieces.valider(c, ao), "5568")
+        cf = pieces.transformer(c, [ao], "cde_fournisseur")
+        pieces.valider(c, cf)
+        self.assertEqual(pieces.charger(c, ao)["statut"], "solde")
+        co = pieces.creer(c, "commande", 1)
+        pieces.enregistrer(c, co, {"date_piece": "2026-03-02"}, [_ligne(2, 1000, 10000)])
+        pieces.valider(c, co)
+        bl = pieces.transformer(c, [co], "bl"); pieces.enregistrer(c, bl, {"date_piece": "2026-03-03"}, None); pieces.valider(c, bl)
+        fa = pieces.transformer(c, [bl], "facture"); pieces.enregistrer(c, fa, {"date_piece": "2026-03-04"}, None); pieces.valider(c, fa)
+        av = pieces.transformer(c, [fa], "avoir"); pieces.enregistrer(c, av, {"date_piece": "2026-04-01"}, None); pieces.valider(c, av)
+        s = compta.statistiques(c, "2026-01-01", "2026-12-31")
+        self.assertEqual(s["total_cents"], 0)                                     # facture − avoir
+        self.assertEqual([m["ca_cents"] for m in s["par_mois"]], [10000, -10000])
+        self.assertEqual(s["par_client"][0]["nb_factures"], 1)
+
     def test_achat_reception_stock(self):
         c = self.conn
         c.execute("UPDATE gc_articles SET prix_achat_cents=900 WHERE id=1")

@@ -377,6 +377,23 @@ def reglement_supprimer(reglement_id: int, request: Request):
     return {"ok": True}
 
 
+@router.get("/contacts")
+def contacts(request: Request):
+    """Annuaire : tous les interlocuteurs actifs, avec leur tiers."""
+    _user(request)
+    with get_db() as conn:
+        return [dict(r) for r in conn.execute(
+            """SELECT c.*, t.code AS tiers_code, t.raison_sociale AS tiers_nom, t.est_client, t.est_fournisseur
+               FROM gc_tiers_contacts c JOIN gc_tiers t ON t.id=c.tiers_id
+               WHERE c.actif=1 ORDER BY t.raison_sociale, c.nom""").fetchall()]
+
+
+@router.get("/stats")
+def stats(request: Request, debut: str, fin: str):
+    _user(request)
+    return _lecture(compta.statistiques, debut, fin)
+
+
 @router.get("/compta/relances")
 def compta_relances(request: Request, jour: str = ""):
     _user(request)
