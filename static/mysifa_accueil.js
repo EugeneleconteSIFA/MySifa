@@ -1879,7 +1879,12 @@
       if (c.relevesCle !== cle) return;
       c.releves = r || null;
       c.relevesLe = Date.now();
-    }).catch(function () { c.relevesCle = null; /* pas d'historique : carte sans courbe */ });
+    }).catch(function (e) {
+      // Refus (pas le droit de voir ce chiffre) ou pas d'historique : on ne
+      // redemande qu'au prochain cycle de 10 minutes. Autre erreur : au prochain tour.
+      if (e && (e.status === 403 || e.status === 404)) { c.releves = null; c.relevesLe = Date.now(); }
+      else c.relevesCle = null;
+    });
   }
 
   function lireSources() {

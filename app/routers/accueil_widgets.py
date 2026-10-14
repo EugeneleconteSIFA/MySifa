@@ -560,7 +560,7 @@ def releves_indicateur(nom: str, request: Request, url: str = "", objet: str = "
     déjà ces applis. Rend {jours: {AAAA-MM-JJ: {cle: n}}, minimums, maximums,
     depuis} ; seules les clés d'historique du bloc sortent."""
     from datetime import date, timedelta
-    from app.services.accueil_releves import cle_filtres, filtres_de
+    from app.services.accueil_releves import cle_filtres, filtres_de, peut_voir
     user = get_current_user(request)
     res = reg.resoudre(nom)
     if not res:
@@ -568,6 +568,10 @@ def releves_indicateur(nom: str, request: Request, url: str = "", objet: str = "
     nom, b = res
     if not b.historique or not _bloc_accessible(user, b):
         raise HTTPException(404, "Pas d'historique pour ce bloc.")
+    # Mêmes droits que le chiffre en direct : le relevé est rejoué sous les
+    # droits du demandeur (filtres et objet compris) avant de servir l'historique.
+    if not peut_voir(nom, str(objet or ""), filtres_de(url), request):
+        raise HTTPException(403, "Historique réservé aux personnes qui voient ce chiffre.")
     try:
         jours = max(1, min(int(jours), 120))
     except (TypeError, ValueError):

@@ -38,6 +38,7 @@ reconstitue pas. Les relevés d'un bloc retiré du registre restent aussi.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import inspect
 import json
 import logging
@@ -53,9 +54,17 @@ PREFIXE_FILTRE = "bloc_"
 
 
 # ── Appel interne d'une route ───────────────────────────────────────────
+# Requête réelle d'un utilisateur, posée par `peut_voir` : les routes appelées
+# s'exécutent alors sous SES droits, pas sous l'utilisateur système.
+_REQUETE = contextvars.ContextVar("mysifa_releve_requete", default=None)
+
+
 def _requete():
-    """Une requête vide : ni cookie, ni en-tête. L'utilisateur vient de
-    `en_tant_que_systeme`, pas d'elle."""
+    """La requête du demandeur pendant `peut_voir` ; sinon une requête vide (ni
+    cookie, ni en-tête), l'utilisateur venant de `en_tant_que_systeme`."""
+    reelle = _REQUETE.get()
+    if reelle is not None:
+        return reelle
     from starlette.requests import Request
     return Request({
         "type": "http", "method": "GET", "path": "/", "raw_path": b"/",
@@ -568,6 +577,45 @@ NON_RELEVES = {
     "messages.non-lus": "personnel : n'a de sens que pour la personne connectée",
     "calendrier.agenda": "personnel : calendriers de la personne connectée",
 }
+
+
+# ── Qui peut lire un historique ─────────────────────────────────────────
+# Les relevés sont faits en vue complète. Avant d'en servir l'historique,
+# `peut_voir` rejoue le relevé SOUS LES DROITS DU DEMANDEUR : si la page lui
+# refuserait ce chiffre en direct (401, 403, machine qui n'est pas la sienne,
+# vue RH sans droit RH…), l'historique lui est refusé aussi. Faille corrigée
+# le 14/10/2026 : seul l'accès à l'appli était contrôlé, si bien que le montant
+# des notes de frais ou la valorisation du stock se lisaient au-delà de leur
+# public.
+#
+# Une route qui FILTRE sans refuser (le périmètre des tâches) passerait ce
+# contrôle en rendant ses propres chiffres : elle a une garde explicite.
+def _garde_taches(request) -> bool:
+    from app.routers import taches
+    from app.services.auth_service import get_current_user
+    return taches._niveau(get_current_user(request)) == "admin"
+
+
+GARDES = {
+    "taches.compteurs": _garde_taches,   # compteurs d'équipe : périmètre complet requis
+}
+
+
+def peut_voir(bloc: str, objet: str, filtres: dict, request) -> bool:
+    fn = RELEVEURS.get(bloc)
+    if fn is None:
+        return False
+    jeton = _REQUETE.set(request)
+    try:
+        garde = GARDES.get(bloc)
+        if garde is not None and not garde(request):
+            return False
+        return fn(objet, filtres) is not None
+    except Exception:
+        # Refus (HTTPException 401/403/404) ou erreur : pas d'historique.
+        return False
+    finally:
+        _REQUETE.reset(jeton)
 
 
 # ── Le tour de relevé ───────────────────────────────────────────────────
