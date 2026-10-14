@@ -13,7 +13,7 @@ system de l'ERP, ils n'ont rien à faire dans une chaîne Python.
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from config import APP_VERSION, ERP2_PREFIXE, ROLES_ERP2
+from config import APP_VERSION, ERP2_PREFIXE, ROLES_ERP2, public_base_url
 from app.services.auth_service import get_current_user
 
 router = APIRouter(include_in_schema=False)
@@ -27,8 +27,12 @@ def _entete(titre: str) -> str:
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{titre}</title>
-<link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/erp/erp_icon_32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/static/erp/erp_icon_16.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/erp/erp_icon_192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/erp/erp_icon_180.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v={v}">
+<link rel="stylesheet" href="/static/mysifa_sidebar.css?v={v}">
 <link rel="stylesheet" href="/static/mysifa_perf.css?v={v}">
 <link rel="stylesheet" href="/static/erp/erp.css?v={v}">
 <script src="/static/mysifa_perf.js?v={v}"></script>
@@ -43,7 +47,7 @@ _CONNEXION = """<body class="erp-connexion">
 <!-- mysifa-boutons-off -->
 <main class="erp-cx">
   <form class="erp-cx-carte" id="cx" autocomplete="on">
-    <div class="erp-cx-marque">ERP</div>
+    <div class="erp-cx-marque"><img src="/static/erp/erp_icon_192.png" alt="">ERP</div>
     <p class="erp-cx-sous">SIFA — accès réservé</p>
     <label class="erp-label" for="cx-id">Identifiant ou email</label>
     <input class="erp-input" id="cx-id" name="username" autocomplete="username" required autofocus>
@@ -82,7 +86,7 @@ document.getElementById("cx").addEventListener("submit", async function (e) {
 _COQUE = """<body class="erp">
 <!-- mysifa-boutons-off -->
 <div id="erp-app"></div>
-<script>window.ERP_CONFIG = {version: "__V__"};</script>
+<script>window.ERP_CONFIG = {version: "__V__", mysifa: "__MYSIFA__"};</script>
 <script src="/static/erp/erp.js?v=__V__"></script>
 </body>
 </html>
@@ -104,4 +108,6 @@ def erp2_page(request: Request, chemin: str = ""):
             "ERP",
             detail="Le nouvel ERP est en construction : accès réservé au super administrateur.",
         )
-    return HTMLResponse(_entete("ERP — SIFA") + _COQUE.replace("__V__", f"v{APP_VERSION}"))
+    return HTMLResponse(_entete("ERP — SIFA") + _COQUE
+        .replace("__V__", f"v{APP_VERSION}")
+        .replace("__MYSIFA__", public_base_url().replace('"', "")))

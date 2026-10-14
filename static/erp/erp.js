@@ -93,32 +93,64 @@
     render();
   }
 
+  // Icônes du pied : même dessin que le pied commun de MySifa (mysifa_sidebar.js).
+  var ICO = {
+    soleil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>',
+    lune: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
+    sortie: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+    retour: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>',
+  };
+
+  function ico(nom, classe) {
+    var s = h('span', {className: classe || 'msb-ico'});
+    s.innerHTML = ICO[nom];  // constante du fichier, aucune donnée utilisateur
+    return s;
+  }
+
+  function estClair() {
+    return window.MySifaTheme ? window.MySifaTheme.isLight() : document.body.classList.contains('light');
+  }
+
   function renderNav() {
-    var nav = h('nav', {className: 'erp-nav'},
-      h('a', {className: 'erp-logo', href: '/', title: 'Accueil ERP', onclick: function (e) { e.preventDefault(); aller('/'); }},
-        'ERP', h('span', {text: '·'}), 'SIFA'));
+    var menu = h('div', {className: 'msb-nav'},
+      h('a', {className: 'logo', href: '/', title: 'Accueil ERP', onclick: function (e) { e.preventDefault(); aller('/'); }},
+        h('img', {src: '/static/erp/erp_icon_192.png', alt: ''}),
+        h('div', null,
+          h('div', {className: 'logo-brand'}, 'My', h('span', {text: 'ERP'})),
+          h('div', {className: 'logo-sub', text: 'SIFA'}))));
     NAV.forEach(function (g) {
-      if (g.groupe) nav.appendChild(h('div', {className: 'erp-nav-groupe', text: g.groupe}));
+      if (g.groupe) menu.appendChild(h('div', {className: 'msb-section'}, h('span', {text: g.groupe})));
       g.liens.forEach(function (l) {
-        nav.appendChild(h('a', {
-          className: 'erp-nav-lien' + (l.chemin === S.chemin ? ' actif' : ''),
+        menu.appendChild(h('a', {
+          className: 'nav-btn' + (l.chemin === S.chemin ? ' active' : ''),
           href: l.chemin,
           onclick: function (e) { e.preventDefault(); aller(l.chemin); },
         }, l.libelle));
       });
     });
+
     var u = S.user || {};
-    nav.appendChild(h('div', {className: 'erp-nav-pied'},
-      h('div', {className: 'erp-nav-user'}, h('b', {text: u.nom || ''}), h('small', {text: u.role || ''})),
-      h('button', {className: 'erp-btn', type: 'button', onclick: function () {
+    var cfg = window.ERP_CONFIG || {};
+    var clair = estClair();
+    var pied = h('div', {className: 'sidebar-bottom msb-footer'},
+      cfg.mysifa ? h('a', {className: 'back-mysifa', href: cfg.mysifa},
+        ico('retour'), 'Retour à ', h('span', {className: 'wm'}, 'My', h('span', {text: 'Sifa'}))) : null,
+      h('div', {className: 'user-chip'},
+        h('div', {className: 'uc-top'},
+          u.avatar_url ? h('img', {className: 'uc-avatar', src: u.avatar_url, alt: ''}) : null,
+          h('div', {className: 'uc-info'},
+            h('div', {className: 'uc-name', text: u.nom || ''}),
+            h('div', {className: 'uc-role', text: u.role || ''})))),
+      h('button', {className: 'theme-btn', type: 'button', onclick: function () {
         if (window.MySifaTheme) window.MySifaTheme.toggleMode();
-      }}, 'Thème clair / sombre'),
-      h('button', {className: 'erp-btn', type: 'button', onclick: async function () {
+        render();
+      }}, ico(clair ? 'lune' : 'soleil', 'theme-ico'), h('span', {className: 'theme-label', text: clair ? 'Mode sombre' : 'Mode clair'})),
+      h('button', {className: 'logout-btn', type: 'button', onclick: async function () {
         try { await api('/api/auth/logout', {method: 'POST'}); } catch (e) { /* recharge quand même */ }
         location.href = '/';
-      }}, 'Déconnexion'),
-      h('div', {className: 'erp-nav-version', text: (window.ERP_CONFIG || {}).version || ''})));
-    return nav;
+      }}, ico('sortie'), 'Déconnexion'),
+      h('div', {className: 'version', text: cfg.version || ''}));
+    return h('nav', {className: 'erp-nav'}, menu, pied);
   }
 
   function renderEcran() {

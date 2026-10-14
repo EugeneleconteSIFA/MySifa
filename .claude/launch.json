@@ -4,7 +4,7 @@
     {
       "name": "mysifa-erp",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-X", "utf8", "-m", "uvicorn", "main:app", "--port", "8010"],
+      "runtimeArgs": ["-X", "utf8", "-m", "uvicorn", "main:app", "--port", "8010", "--reload"],
       "port": 8010,
       "url": "http://erp.localhost:8010"
     }

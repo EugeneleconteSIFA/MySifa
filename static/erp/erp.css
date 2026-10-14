@@ -40,45 +40,33 @@
   background: var(--card); border: 1px solid var(--border); border-radius: 14px;
 }
 .erp-cx-carte .erp-btn { width: 100%; justify-content: center; margin-top: 18px; }
-.erp-cx-marque { font-size: 32px; font-weight: 800; letter-spacing: 1px; color: var(--accent); }
+.erp-cx-marque { display: flex; align-items: center; gap: 12px; font-size: 32px; font-weight: 800; letter-spacing: 1px; color: var(--text); }
+.erp-cx-marque img { width: 44px; height: 44px; border-radius: 10px; }
 .erp-cx-sous { margin: 2px 0 10px; color: var(--muted); }
 .erp-cx-erreur { min-height: 18px; margin: 10px 0 0; color: var(--danger); font-weight: 600; }
 
-/* ── Coque ─────────────────────────────────────────────────────── */
-.erp-coque { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
+/* ── Coque ─────────────────────────────────────────────────────────
+   Sidebar : composants partagés de MySifa (static/mysifa_sidebar.css :
+   .msb-nav .nav-btn, .msb-section, .msb-footer). Ici, seulement le cadre. */
+.erp-coque { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
 .erp-nav {
-  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto; scrollbar-width: thin;
   display: flex; flex-direction: column;
   background: var(--card); border-right: 1px solid var(--border);
-  padding: 14px 10px;
 }
-.erp-logo {
-  display: block; padding: 6px 10px 14px; border-radius: 8px;
-  font-size: 22px; font-weight: 800; letter-spacing: .5px;
-  color: var(--text); text-decoration: none; cursor: pointer;
+.erp-nav .msb-nav { padding: 14px 10px 8px; }
+.erp-nav .msb-section:first-of-type { border-top: none; margin-top: 4px; }
+.logo {
+  display: flex; align-items: center; gap: 11px; padding: 5px 9px; margin-bottom: 6px;
+  border-radius: 9px; cursor: pointer; text-decoration: none; color: var(--text);
+  transition: background .15s, color .15s;
 }
-.erp-logo span { color: var(--accent); }
-.erp-logo:hover { background: var(--accent-bg); color: var(--accent); }
-.erp-nav-groupe {
-  margin: 14px 10px 4px;
-  font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase;
-  color: var(--muted);
-}
-.erp-nav-lien {
-  display: flex; align-items: center; gap: 10px;
-  padding: 7px 10px; border-radius: 8px; border: 1px solid transparent;
-  color: var(--text2); text-decoration: none; cursor: pointer;
-}
-.erp-nav-lien:hover { background: var(--bg); color: var(--text); }
-.erp-nav-lien.actif { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
-.erp-nav-pied {
-  margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border);
-  display: flex; flex-direction: column; gap: 6px;
-}
-.erp-nav-user { padding: 4px 10px; }
-.erp-nav-user b { display: block; color: var(--text); }
-.erp-nav-user small { color: var(--muted); }
-.erp-nav-version { padding: 0 10px; font: 11px ui-monospace, Consolas, monospace; color: var(--muted); }
+.logo img { width: 30px; height: 30px; border-radius: 8px; }
+.logo:hover { background: var(--accent-bg); }
+.logo:hover .logo-brand { color: var(--accent); }
+.logo-brand { font-size: 15px; font-weight: 800; transition: color .15s; }
+.logo-brand span { color: var(--accent); }
+.logo-sub { font-size: 10px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 2px; }
 
 .erp-main { min-width: 0; padding: 22px 28px; }
 .erp-titre { margin: 0 0 4px; font-size: 20px; font-weight: 700; }
