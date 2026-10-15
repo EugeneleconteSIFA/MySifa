@@ -306,7 +306,7 @@ async function charger(){
 }
 charger();
 </script>
-<script src="/static/mysifa_cal_rappel.js?v=5"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 </body></html>"""
 
 

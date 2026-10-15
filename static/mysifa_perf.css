@@ -97,7 +97,7 @@ body.perf-eco .login-train-layer { display: none !important; }
   background: var(--card, #111827);
   cursor: pointer;
 }
-.perf-card.selected { border-color: var(--accent, #22d3ee); background: var(--accent-bg, rgba(34,211,238,.12)); }
+.perf-card.selected { border-color: var(--accent, #22d3ee); background: var(--accent-bg, color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)); }
 .perf-card-label { font-weight: 600; margin-bottom: 3px; }
 .perf-card-sub { font-size: 12px; color: var(--muted, #94a3b8); }
 .perf-measure { margin-top: 10px; font-size: 12px; color: var(--muted, #94a3b8); }

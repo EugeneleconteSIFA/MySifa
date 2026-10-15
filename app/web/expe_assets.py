@@ -4082,7 +4082,7 @@ EXPE_MAIN_CSS = r"""
 .expe-row-detail dd{margin:0;font-size:13px;color:var(--text)}
 .expe-help{font-size:10px;color:var(--muted);margin-top:4px}
 .expe-departs-table tbody tr:nth-child(even) td{background:rgba(148,163,184,.06)}
-.expe-departs-table tbody tr:hover td{background:rgba(34,211,238,.06)}
+.expe-departs-table tbody tr:hover td{background:color-mix(in srgb,var(--accent,#22d3ee) 6%,transparent)}
 .expe-dep-actions-td{max-width:none!important;overflow:visible;text-overflow:clip;white-space:normal;vertical-align:middle}
 
 /* Tableau départs (suivi + historique) : largeur forcée à 100% du conteneur via
@@ -4225,7 +4225,7 @@ EXPE_MAIN_CSS = r"""
 .expe-picker-line2{font-size:12px;color:var(--text2);margin-top:3px}
 .expe-picker-meta{font-size:10px;color:var(--muted);display:flex;gap:8px;margin-top:5px;flex-wrap:wrap;align-items:center}
 .expe-picker-statut{padding:2px 8px;border-radius:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;font-size:9px}
-.expe-picker-statut--en_cours{background:rgba(34,211,238,.18);color:var(--accent)}
+.expe-picker-statut--en_cours{background:color-mix(in srgb,var(--accent,#22d3ee) 18%,transparent);color:var(--accent)}
 .expe-picker-statut--attente{background:rgba(251,191,36,.18);color:var(--warn)}
 .expe-picker-statut--termine{background:rgba(52,211,153,.18);color:var(--success,#34d399)}
 .expe-picker-warn{background:rgba(248,113,113,.15);color:var(--danger);padding:2px 8px;border-radius:10px;font-weight:600;font-size:9px;text-transform:uppercase;letter-spacing:.3px}

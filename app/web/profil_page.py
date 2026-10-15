@@ -66,13 +66,13 @@ body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
   font-family:inherit;transition:background .15s,color .15s,box-shadow .2s;margin-bottom:2px;
 }
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
-.nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(34,211,238,.25),0 0 18px rgba(34,211,238,.15)}
+.nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px color-mix(in srgb,var(--accent,#22d3ee) 25%,transparent),0 0 18px color-mix(in srgb,var(--accent,#22d3ee) 15%,transparent)}
 body.palette-ambre .nav-btn:hover:not(.active):not(.back-mysifa),body.palette-forge .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(240,165,0,.28),0 0 16px rgba(240,165,0,.14)}
 body.palette-pivoine .nav-btn:hover:not(.active):not(.back-mysifa),body.palette-cocon .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(240,56,136,.28),0 0 16px rgba(240,56,136,.14)}
 body.palette-foret .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(61,214,126,.28),0 0 16px rgba(61,214,126,.14)}
 body.palette-cendre .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(100,150,200,.28),0 0 16px rgba(100,150,200,.14)}
 body.palette-braise .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(240,112,48,.28),0 0 16px rgba(240,112,48,.14)}
-body.light .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 16px rgba(8,145,178,.12)}
+body.light .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px color-mix(in srgb,var(--accent,#0891b2) 32%,transparent),0 0 16px color-mix(in srgb,var(--accent,#0891b2) 12%,transparent)}
 /* Pied de sidebar : static/mysifa_sidebar.css (v3.3.0). La sidebar a ici 12px de marge
    latérale : le pied la déborde pour que son filet aille d'un bord à l'autre, comme sur MyStock. */
 .sidebar>.msb-footer{margin-left:-12px;margin-right:-12px;padding-left:12px;padding-right:12px}
@@ -346,7 +346,7 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='profil';</script>
-<link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
+<link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js"></script>
@@ -354,9 +354,9 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=11"></script>
+<script src="/static/chat_widget.js?v=13"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script>
 const ROLE_LABELS={
   direction:'Direction',administration:'Administration',fabrication:'Fabrication',

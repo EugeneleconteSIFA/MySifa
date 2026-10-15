@@ -55,13 +55,13 @@ body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;backgrou
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
 .nav-btn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,box-shadow .2s;margin-bottom:2px}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
-.nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(34,211,238,.25),0 0 18px rgba(34,211,238,.15)}
+.nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px color-mix(in srgb,var(--accent,#22d3ee) 25%,transparent),0 0 18px color-mix(in srgb,var(--accent,#22d3ee) 15%,transparent)}
 body.palette-ambre .nav-btn:hover:not(.active):not(.back-mysifa),body.palette-forge .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(240,165,0,.28),0 0 16px rgba(240,165,0,.14)}
 body.palette-pivoine .nav-btn:hover:not(.active):not(.back-mysifa),body.palette-cocon .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(240,56,136,.28),0 0 16px rgba(240,56,136,.14)}
 body.palette-foret .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(61,214,126,.28),0 0 16px rgba(61,214,126,.14)}
 body.palette-cendre .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(100,150,200,.28),0 0 16px rgba(100,150,200,.14)}
 body.palette-braise .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(240,112,48,.28),0 0 16px rgba(240,112,48,.14)}
-body.light .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 16px rgba(8,145,178,.12)}
+body.light .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px color-mix(in srgb,var(--accent,#0891b2) 32%,transparent),0 0 16px color-mix(in srgb,var(--accent,#0891b2) 12%,transparent)}
 .nav-badge{margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--warn);color:#0a0e17;font-size:10px;font-weight:700;line-height:1.5}
 /* Pied de sidebar : static/mysifa_sidebar.css (v3.3.0). La sidebar a ici 12px de marge
    latérale : le pied la déborde pour que son filet aille d'un bord à l'autre, comme sur MyStock. */
@@ -103,12 +103,12 @@ tr:hover td{background:var(--accent-bg)}
 .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
 .b-manquant{background:rgba(148,163,184,.15);color:var(--muted)}
 .b-depose{background:rgba(251,191,36,.15);color:var(--warn)}
-.b-distribue{background:rgba(34,211,238,.15);color:var(--accent)}
+.b-distribue{background:color-mix(in srgb,var(--accent,#22d3ee) 15%,transparent);color:var(--accent)}
 .b-consulte{background:rgba(52,211,153,.15);color:var(--ok)}
 .statut{display:inline-block;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
 .statut.brouillon{background:rgba(148,163,184,.15);color:var(--muted)}
 .statut.soumise{background:rgba(251,191,36,.15);color:var(--warn)}
-.statut.validee{background:rgba(34,211,238,.15);color:var(--accent)}
+.statut.validee{background:color-mix(in srgb,var(--accent,#22d3ee) 15%,transparent);color:var(--accent)}
 .statut.payee{background:rgba(52,211,153,.15);color:var(--ok)}
 .statut.refusee{background:rgba(248,113,113,.15);color:var(--danger)}
 .montant{font-family:'SF Mono','Consolas',monospace;font-weight:700;color:var(--text);text-align:right}
@@ -564,7 +564,7 @@ function exportNdf(){
 })();
 window.addEventListener('hashchange',function(){try{showTab(_readRhCoffreTab(),{silent:true});}catch(e){}});
 </script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 </body>
 </html>
 """

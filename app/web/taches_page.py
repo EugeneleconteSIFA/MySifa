@@ -80,8 +80,8 @@ body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;backgrou
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
 .nav-btn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,box-shadow .2s;margin-bottom:2px}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
-.nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(34,211,238,.25),0 0 18px rgba(34,211,238,.15)}
-body.light .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 16px rgba(8,145,178,.12)}
+.nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px color-mix(in srgb,var(--accent,#22d3ee) 25%,transparent),0 0 18px color-mix(in srgb,var(--accent,#22d3ee) 15%,transparent)}
+body.light .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px color-mix(in srgb,var(--accent,#0891b2) 32%,transparent),0 0 16px color-mix(in srgb,var(--accent,#0891b2) 12%,transparent)}
 .nav-badge{margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:700;line-height:1.5}
 .nav-badge.warn{background:rgba(251,191,36,.16);color:var(--warn)}
 /* Pied de sidebar : static/mysifa_sidebar.css (v3.3.0). La sidebar a ici 12px de marge
@@ -2146,7 +2146,7 @@ function initGuides(){
 })();
 window.addEventListener('hashchange',function(){try{showView(readView(),{silent:true});}catch(e){}});
 </script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 </body>
 </html>
 """

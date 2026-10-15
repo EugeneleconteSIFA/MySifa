@@ -13,6 +13,7 @@ _PARIS = ZoneInfo("Europe/Paris")
 logger = logging.getLogger(__name__)
 
 from app.services.audit_service import log_action
+from config import PROD_VITESSE_MAX_M_MIN
 from app.services import origine_bobine
 from app.services import poste_bobine, bobines_montees
 from database import get_db, parse_datetime
@@ -818,7 +819,8 @@ def list_machines(request: Request):
         rows = conn.execute(
             "SELECT id, nom, code, dernier_metrage FROM machines WHERE actif=1 ORDER BY nom"
         ).fetchall()
-    return {"machines": [dict(r) for r in rows]}
+    return {"machines": [dict(r) for r in rows],
+            "vitesse_max_m_min": PROD_VITESSE_MAX_M_MIN}
 
 
 @router.get("/api/fabrication/machines-du-jour")
@@ -1061,6 +1063,9 @@ def get_session(request: Request, machine_id: int = None):
             "machine_id_courant": rh_payload["machine_id_courant"],
             "creneau_courant": rh_payload["creneau_courant"],
             "fallback_actif": rh_payload["fallback_actif"],
+            # Plafond machine : la page demande confirmation d'un compteur
+            # qui donnerait une vitesse impossible.
+            "vitesse_max_m_min": PROD_VITESSE_MAX_M_MIN,
         }
 
 

@@ -61,7 +61,7 @@
     '.mbe-inp:focus,.mbe-ta:focus{outline:2px solid var(--accent,#0891b2);outline-offset:1px;border-color:transparent}',
     '.mbe-note{font-size:11px;color:var(--muted,#94a3b8);line-height:1.5;margin:0}',
     '.mbe-lock{display:grid;gap:6px;padding:10px 12px;border-radius:9px;',
-    '  background:var(--accent-bg,rgba(8,145,178,.10));border:1px solid var(--border,#e2e8f0)}',
+    '  background:var(--accent-bg,color-mix(in srgb,var(--accent,#0891b2) 10%,transparent));border:1px solid var(--border,#e2e8f0)}',
     '.mbe-lock-val{font-size:13px;font-weight:700}',
     '.mbe-actions{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px 16px;',
     '  border-top:1px solid var(--border,#e2e8f0)}',
