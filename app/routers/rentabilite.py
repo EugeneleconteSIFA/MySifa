@@ -471,6 +471,7 @@ def list_links(request: Request):
             # doit rester lisible plutôt que renvoyer une 500.
             "origine": _texte(r, "origine", "manuel"),
             "valide_at": _texte(r, "valide_at", "") or None,
+            "valide_par": _texte(r, "valide_par", "") or None,
             "motif": _texte(r, "motif", ""),
             "score": _colonne(r, "score", 0.0),
             "no_dossiers": [],
@@ -577,6 +578,10 @@ async def put_links(planning_entry_id: int, request: Request):
     return {"success": True}
 
 
+# Signature d'une validation faite par le moteur (format, laize, client et
+# matière identiques), distincte d'un e-mail : on sait que personne n'a relu.
+VALIDEUR_AUTO = "auto:identique"
+
 _COLONNES_DEVIS_RAPPROCHEMENT = (
     "id, filename, client, date_devis, format_h, format_v, laize, "
     "qte_etiquettes, vitesse_theorique"
@@ -646,21 +651,27 @@ def rapprocher(conn) -> dict:
     proposees = {p["planning_entry_id"] for p in propositions}
 
     now = datetime.now().isoformat()
-    nouvelles = 0
+    nouvelles = validees = 0
     for p in propositions:
         avant = liens.get(p["planning_entry_id"])
         if not avant or avant["devis_id"] != p["devis_id"]:
             nouvelles += 1
+        # Même format, laize, client et matière : le rattachement naît
+        # validé. `valide_par` le dit, pour qu'on sache que personne ne l'a
+        # relu — « Détacher » reste possible comme sur toute liaison verte.
+        valide = bool(p.get("valide"))
+        validees += valide
         conn.execute(
             """INSERT INTO rent_links
                  (planning_entry_id, devis_id, updated_at, origine, score, motif,
                   valide_par, valide_at)
-               VALUES (?,?,?,'auto',?,?,NULL,NULL)
+               VALUES (?,?,?,'auto',?,?,?,?)
                ON CONFLICT(planning_entry_id) DO UPDATE
                  SET devis_id=excluded.devis_id, updated_at=excluded.updated_at,
                      origine='auto', score=excluded.score, motif=excluded.motif,
-                     valide_par=NULL, valide_at=NULL""",
-            (p["planning_entry_id"], p["devis_id"], now, p["score"], p["motif"]),
+                     valide_par=excluded.valide_par, valide_at=excluded.valide_at""",
+            (p["planning_entry_id"], p["devis_id"], now, p["score"], p["motif"],
+             VALIDEUR_AUTO if valide else None, now if valide else None),
         )
     retirees = 0
     for eid, l in liens.items():
@@ -673,6 +684,7 @@ def rapprocher(conn) -> dict:
     return {
         "proposees": len(propositions),
         "nouvelles": nouvelles,
+        "validees": validees,
         "retirees": retirees,
         "devis_examines": len(devis_rows),
         "entrees_libres": len(entrees) - len(decides),

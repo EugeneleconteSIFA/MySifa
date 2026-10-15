@@ -4991,7 +4991,7 @@ async function loadRentLinks(){
     d.forEach(l=>{ map[Number(l.planning_entry_id)] = {
       devis_id: l.devis_id||null, no_dossiers: l.no_dossiers||[],
       origine: l.origine||'manuel', valide_at: l.valide_at||null,
-      motif: l.motif||'', score: l.score||null,
+      motif: l.motif||'', score: l.score||null, valide_par: l.valide_par||null,
       // Les chiffres du devis rattaché, pour le survol d'un bloc. Repris tels
       // quels : ce sont ceux de la fiche devis, et les recalculer ici
       // produirait un troisième chiffre pour le même dossier.
@@ -5501,6 +5501,14 @@ function rentEtatLien(link){
   return 'vert';
 }
 
+/* Le libellé d'un état, avec le cas du vert posé par le moteur : il doit se
+   distinguer d'un vert relu par quelqu'un. */
+function rentLibelleEtat(lien, etat){
+  if(etat === 'vert' && lien && lien.valide_par === 'auto:identique')
+    return 'Validé automatiquement — format, laize, client et matière identiques';
+  return RENT_ETAT_LIB[etat];
+}
+
 var RENT_ETAT_LIB = {
   rouge:   'Aucun devis rattaché',
   orange:  'Rattachement proposé — à confirmer',
@@ -5552,11 +5560,12 @@ async function rentRapprochementAuto(){
   S.rentAutoEnCours = true;
   try{
     const r = await api('/api/rentabilite/rapprochement', {method:'POST'});
-    if(r && (r.nouvelles || r.retirees)) await loadRentLinks();
-    if(r && r.nouvelles){
-      toast(r.nouvelles + ' devis rattaché' + (r.nouvelles > 1 ? 's' : '')
-            + ' automatiquement — à confirmer (en orange).');
-    }
+    if(r && (r.nouvelles || r.retirees || r.validees)) await loadRentLinks();
+    const aConfirmer = r ? Math.max(0, (r.nouvelles || 0) - (r.validees || 0)) : 0;
+    const morceaux = [];
+    if(r && r.validees) morceaux.push(r.validees + ' validé' + (r.validees > 1 ? 's' : ''));
+    if(aConfirmer) morceaux.push(aConfirmer + ' à confirmer');
+    if(morceaux.length) toast('Devis rattachés automatiquement : ' + morceaux.join(', ') + '.');
   }catch(_){ /* le bouton reste là pour relancer à la main */ }
   finally{ S.rentAutoEnCours = false; }
 }
@@ -5598,13 +5607,17 @@ function rentSelecteurDevis(o){
   const racine = h('div',{className:'rent-choix'}, resume,
     h('div',{className:'rent-choix-saisie'}, iconEl('search',14), champ), liste);
 
+  /* Une ligne, quatre repères : ce qui permet de reconnaître un devis d'un
+     coup d'œil. Le nom de fichier et le détail du score restent au survol —
+     affichés, ils noyaient la liste (retour du 15/10/2026). */
   const fmtQte = n => Number(n).toLocaleString('fr-FR');
+  const fmtJour = d => { const t = String(d || '').slice(0,10).split('-');
+    return t.length === 3 ? t[2] + '/' + t[1] + '/' + t[0] : ''; };
   const details = s => [
     (s.format_h && s.format_v) ? (s.format_v + '×' + s.format_h + ' mm') : null,
-    s.papier || null, s.colle || null,
+    s.papier || null,
     s.qte_etiquettes ? fmtQte(s.qte_etiquettes) + ' ex' : null,
-    s.vitesse_theorique ? s.vitesse_theorique + ' m/mn' : null,
-    s.date_devis ? String(s.date_devis).slice(0,10) : null,
+    s.date_devis ? fmtJour(s.date_devis) : null,
   ].filter(Boolean).join(' · ');
 
   const peindreResume = () => {
@@ -5615,9 +5628,8 @@ function rentSelecteurDevis(o){
     }
     const dv = devisList.find(d => Number(d.id) === courant) || {id:courant};
     resume.append(
-      h('div',{className:'rent-choix-resume'},
+      h('div',{className:'rent-choix-resume', title:dv.filename || ''},
         h('div',{className:'rent-choix-client'}, dv.client || ('Devis #' + courant)),
-        h('div',{className:'rent-choix-fichier', title:dv.filename || ''}, dv.filename || ''),
         h('div',{className:'rent-choix-details'}, details(dv))),
       h('button',{type:'button', className:'btn-sec rent-choix-voir', title:'Ouvrir la fiche du devis',
         onClick:()=>ouvrirDevisModal(courant)}, 'Voir'),
@@ -5654,10 +5666,9 @@ function rentSelecteurDevis(o){
             Number(s.devis_id) === courant ? h('span',{className:'rent-sug-lie'},'lié') : null,
             s.rejete ? h('span',{className:'rent-choix-rejete'},'rejeté') : null,
             h('span',{className:'rent-choix-score ' + ton,
-              title:'Concordance avec le dossier : format, laize, client, papier, colle, date'},
+              title: s.motif ? 'Concordance : ' + s.motif : 'Aucun critère en commun avec le dossier'},
               score ? score + ' %' : '—')),
-          h('div',{className:'rent-choix-fichier', title:s.filename || ''}, s.filename || ''),
-          h('div',{className:'rent-choix-details'}, s.motif || details(s))));
+          h('div',{className:'rent-choix-details', title:s.filename || ''}, details(s))));
       });
     }
     liste.hidden = false;
@@ -5677,7 +5688,7 @@ function rentSelecteurDevis(o){
     let r = [];
     try{
       r = await api('/api/rentabilite/planning/' + o.entryId + '/devis-suggeres?limit='
-        + (q ? 30 : 8) + (q ? '&q=' + encodeURIComponent(q) : ''));
+        + (q ? 30 : 5) + (q ? '&q=' + encodeURIComponent(q) : ''));
     }catch(_){ r = []; }
     if(t !== jeton || document.activeElement !== champ) return;
     items = Array.isArray(r) ? r : [];
@@ -5760,11 +5771,9 @@ async function ouvrirRattachementModal(entryId){
       ),
       h('button',{className:'contact-close-btn',title:'Fermer',onClick:fermerRattachementModal},'✕')
     ),
-    h('div',{className:'rent-lier-etat rent-lier-etat-' + etat},
+    h('div',{className:'rent-lier-etat rent-lier-etat-' + etat, title:lien.motif || ''},
       h('span',{className:'rent-point rent-point-' + etat}),
-      h('span',null, RENT_ETAT_LIB[etat]),
-      (etat === 'orange' && lien.motif)
-        ? h('span',{className:'rent-lier-motif'}, ' — ' + lien.motif) : null
+      h('span',null, rentLibelleEtat(lien, etat))
     ),
     corps
   );
@@ -6606,8 +6615,7 @@ function renderRentPanneau(g, listeVisible){
   const bandeauProposition = rentEtatLien(lien)==='orange'
     ? h('div',{className:'rent-lier-etat rent-lier-etat-orange rent-panneau-prop'},
         h('span',{className:'rent-point rent-point-orange'}),
-        h('span',null,'Rattachement proposé'),
-        lien.motif ? h('span',{className:'rent-lier-motif'},' — '+lien.motif) : null,
+        h('span',{title:lien.motif||''},'Rattachement proposé — à confirmer'),
         h('span',{style:{flex:'1'}}),
         h('button',{type:'button',className:'btn-sm',onClick:async e=>{
           e.stopPropagation(); await rentValiderLien(entryId);
