@@ -95,8 +95,17 @@ paths:
      corrige au passage sur chaque écran, comme les hexadécimaux.
 
 **Inputs / Champs**
+
+**Fond blanc obligatoire.** Un champ de saisie (`input`, `textarea`, `select`)
+posé sur un fond qui n'est pas blanc — page en `var(--bg)`, canevas, bloc
+teinté — prend **toujours** `background: var(--card)` (blanc en thème clair,
+surface de carte en sombre). Jamais `var(--bg)` : le champ se fond alors dans
+le gris de la page et l'opérateur ne voit plus où saisir. Cela vaut aussi pour
+un champ dans une carte : `var(--card)` partout, la bordure suffit à le
+détacher. L'existant en `var(--bg)` se corrige au passage sur chaque écran.
+
 ```css
-background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+background: var(--card); border: 1px solid var(--border); border-radius: 10px;
 padding: 12px 16px; color: var(--text); font-size: 14px;
 transition: border-color .15s
 input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34,211,238,.12) }
