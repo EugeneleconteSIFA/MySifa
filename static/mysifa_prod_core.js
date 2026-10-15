@@ -337,6 +337,9 @@
       p.ref=tf.ref; p.client=tf.client; p.machine=tf.machine; p.statut=tf.statut;
       var ts=S.tracSort||{};
       if(ts.col){ p.tri=ts.col; if(ts.dir==='desc') p.sens='desc'; }
+      if(S.traceabiliteDossier!==undefined&&S.tracDossierRef){
+        p.dossier=S.tracDossierRef; nav+='/dossier:'+S.tracDossierRef;
+      }
     }
     if(S.page==='rentabilite'){
       var rs=S.rentSubTab||'dossiers';
@@ -415,6 +418,9 @@
     if(page==='traceabilite'){
       S.tracFilters={ref:u.get('ref',''),client:u.get('client',''),machine:u.get('machine',''),statut:u.get('statut','')};
       S.tracSort=tri?{col:tri,dir:desc?'desc':'asc'}:{col:null,dir:'asc'};
+      // Fiche à ouvrir : chargée par nav() ou au démarrage (_tracDossierUrl).
+      S._tracDossierUrl=(S.tracaSubTab==='dossiers'&&u.get('dossier',null))||null;
+      if(!S._tracDossierUrl){ S.traceabiliteDossier=undefined; S.tracDossierRef=null; }
     }
     if(page==='rentabilite'){
       if(S.rentSubTab==='devis'){
@@ -2909,6 +2915,9 @@ async function loadTracabilite(machineId){
 }
 
 async function loadTracabiliteDossier(ref){
+  // La référence est gardée à part : pendant le chargement la fiche vaut
+  // null, et l'adresse (?dossier=) doit déjà la porter.
+  S.tracDossierRef = ref;
   S.traceabiliteDossier = null; render();
   try{
     // Charger les deux en parallèle : vue production + vue FSC
@@ -13398,6 +13407,7 @@ function renderProdKpis(){
           await loadImports();
         }else if(S.page === 'traceabilite'){
           await loadTracabilite();
+          if(S._tracDossierUrl){ const r=S._tracDossierUrl; S._tracDossierUrl=null; await loadTracabiliteDossier(r); }
         }else if(S.page === 'of' && canAccessOfTab()){
           await loadOfImports();
           if(S.ofSubTab === 'pending') await loadPendingOfMappings();
@@ -13501,6 +13511,7 @@ function renderProdKpis(){
           await loadImports();
         }else if(S.page === 'traceabilite'){
           await loadTracabilite();
+          if(S._tracDossierUrl){ const r=S._tracDossierUrl; S._tracDossierUrl=null; await loadTracabiliteDossier(r); }
         }else if(S.page === 'of' && canAccessOfTab()){
           await loadOfImports();
           if(S.ofSubTab === 'pending') await loadPendingOfMappings();
@@ -13582,6 +13593,7 @@ function renderProdKpis(){
         S.traceabiliteDossier = undefined;
         S.tracShowAttente = false;
         await loadTracabilite();
+        if(S._tracDossierUrl){ const r=S._tracDossierUrl; S._tracDossierUrl=null; await loadTracabiliteDossier(r); }
       }else if(S.page === 'fiches' && canAccessOfTab()){
         if(S.fichesSubTab === 'orphelines') await loadFichesOrphelines();
         else await loadFiches();
