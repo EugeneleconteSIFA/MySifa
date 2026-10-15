@@ -90,7 +90,7 @@ rendrait les anciens filtres.
 
 | Appli | État |
 |---|---|
-| MyProd | Fait le 15/10/2026 : page, sous-onglets, période, machines, opérateurs, dossiers, tris (saisies, traçabilité, rentabilité), Retour de prod (vue, machine, compte-rendu ouvert), entrée de rentabilité ouverte |
+| MyProd | Fait le 15/10/2026 : page, sous-onglets, période, machines, opérateurs, dossiers, tris (saisies, traçabilité, rentabilité), Retour de prod (vue, machine, compte-rendu ouvert), fiche dossier de Traçabilité (`dossier`), entrée de rentabilité ouverte |
 | ERP RVGI | Déjà conforme (`#/ecran?filtres`) |
 | MyStock | Partiel (`?tab=&vue=&cat=&matiere=…`) : filtres de listes et tris à ajouter, passer au helper |
 | Planning, MyExpé, Paramètres, Qualité, Maintenance, RH, Compta, Tâches | À faire |
