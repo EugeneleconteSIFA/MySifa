@@ -1022,6 +1022,11 @@ def _vigilance(cr: Dict[str, Any], minutes_arret: float) -> List[Dict[str, str]]
         })
 
     decl = (cr.get("calage") or {}).get("declaration") or {}
+    if decl.get("signalement"):
+        points.append({
+            "cle": "calage_signale",
+            "texte": "Chiffrage signale incoherent a la cloture — « " + decl["signalement"] + " »",
+        })
     if decl.get("motifs_non_appliques"):
         points.append({
             "cle": "calage_non_reporte",

@@ -1714,6 +1714,10 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
 .saisies-table-wrap td.td-op-cloture{max-width:none}
 .saisie-pill-cloture{margin-left:6px;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;
   letter-spacing:.2px;white-space:nowrap;color:var(--success);border:1px solid var(--success)}
+/* « Production » qui ferme un calage : même mise en avant, en orange. */
+.saisies-table-wrap tr.data-row.saisie-row-fin-calage > td{border-bottom:2px solid var(--warn) !important}
+.saisie-pill-fin-calage{margin-left:6px;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;
+  letter-spacing:.2px;white-space:nowrap;color:var(--warn);border:1px solid var(--warn)}
 .saisies-bascule{display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border-radius:8px;
   border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:600;
   cursor:pointer;white-space:nowrap;font-family:inherit}

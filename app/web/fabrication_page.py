@@ -593,6 +593,49 @@ body.light table.fab-table tr.fab-row-last td{
 }
 .fab-modal-btns .fab-btn-fictif{width:auto;flex:0 1 auto;margin-top:0}
 
+/* Fin de production en écrans : passage animé, barre de progression. */
+.fin-etape-entre{animation:finEntre .32s cubic-bezier(.2,.8,.2,1)}
+.fin-etape-entre.arriere{animation-name:finEntreArriere}
+@keyframes finEntre{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:none}}
+@keyframes finEntreArriere{from{opacity:0;transform:translateX(-28px)}to{opacity:1;transform:none}}
+.fin-progres{height:4px;border-radius:2px;background:var(--border);margin:0 0 16px;overflow:hidden}
+.fin-progres-barre{height:100%;background:var(--accent);border-radius:2px}
+.fin-progres-barre.anime{animation:finProgres .5s ease-out}
+@keyframes finProgres{from{width:var(--fin-de)}}
+.fin-pill-allume{animation:finPill 1.2s ease-out}
+@keyframes finPill{0%{box-shadow:0 0 0 0 rgba(34,211,238,.55)}100%{box-shadow:0 0 0 10px rgba(34,211,238,0)}}
+.reduce-anim .fin-etape-entre,.reduce-anim .fin-progres-barre.anime,.reduce-anim .fin-pill-allume{animation:none}
+@media (prefers-reduced-motion:reduce){
+  .fin-etape-entre,.fin-progres-barre.anime,.fin-pill-allume{animation:none}
+}
+/* Heures du calage : réglées au doigt, en 24 h. */
+.fin-heure{display:inline-flex;align-items:center;justify-content:space-between;gap:12px;
+  min-width:240px;padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);
+  background:var(--bg);color:var(--text);cursor:pointer;font-family:inherit}
+.fin-heure:hover,.fin-heure.actif{border-color:var(--accent)}
+.fin-heure.actif{background:var(--accent-bg)}
+.fin-heure-jour{font-size:13px;color:var(--text2)}
+.fin-heure-hm{font-size:22px;font-weight:800;letter-spacing:.5px;font-variant-numeric:tabular-nums}
+.fin-heure.vide .fin-heure-hm{color:var(--muted)}
+.fin-heure-edit{display:inline-flex;color:var(--accent)}
+.fin-editeur{margin-top:8px;padding:12px;border-radius:12px;background:var(--bg);border:1px solid var(--accent)}
+.fin-editeur-titre{font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+  color:var(--muted);margin:8px 0 6px}
+.fin-editeur-ligne{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.fin-grille{display:grid;gap:6px}
+.fin-grille-heures{grid-template-columns:repeat(8,1fr)}
+.fin-grille-minutes{grid-template-columns:repeat(6,1fr)}
+.fin-pastille{min-width:44px;padding:9px 0;border-radius:8px;border:1px solid var(--border);
+  background:var(--card);color:var(--text);font-family:inherit;font-size:14px;font-weight:700;
+  cursor:pointer;font-variant-numeric:tabular-nums}
+.fin-editeur-ligne .fin-pastille{padding:8px 12px}
+.fin-pastille:hover{border-color:var(--accent)}
+.fin-pastille.actif{background:var(--accent);border-color:var(--accent);color:white}
+.fin-lien-signal{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:8px;
+  border:1px dashed var(--warn);background:var(--bg);color:var(--warn);font-family:inherit;
+  font-size:13px;font-weight:700;cursor:pointer}
+.fin-lien-signal:hover,.fin-lien-signal.actif{background:rgba(251,191,36,.10)}
+
 /* Modals #mroot (design system) */
 #mroot{position:fixed;inset:0;z-index:1100;pointer-events:none}
 #mroot:empty{display:none;position:static;inset:auto;width:0;height:0;overflow:hidden;z-index:auto}
@@ -6689,7 +6732,20 @@ const FIN_ETAPES_CLOTURE = [
 function finReinitialiser(){
   return {finDossierOui:null, finEtape:'choix', finNoteVal:'', finNoteChargee:false,
           finNbMatieres:null, finMatiereMotif:'', finCalage:null, finCalageVals:null,
-          finCalageConfirme:false, finCompteurConfirme:null};
+          finCalageConfirme:false, finCompteurConfirme:null, finCalageEdit:null, finSignalOuvert:false,
+          finSignalement:'', _finEtapeVue:null, _finModalVue:false};
+}
+
+// Ordre des écrans, pour savoir dans quel sens animer le passage.
+const FIN_ORDRE = ['choix','compteur','calage','cloture'];
+
+function finMinutesTotales(hm){
+  const m = /^(\d{2}):(\d{2})$/.exec(hm||'');
+  return m ? (+m[1])*60 + (+m[2]) : null;
+}
+function finHm(total){
+  const t = ((total % 1440) + 1440) % 1440;
+  return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');
 }
 
 function fermerFinModal(){
@@ -6851,26 +6907,26 @@ function renderFinModal(){
   // que le dossier est déclaré terminé — « R.A.S. » est une réponse valable,
   // le silence n'en est pas une.
   const noteInp = h('textarea',{
-    rows:'3',
-    placeholder:'Ce qu\'il faut savoir la prochaine fois que ce dossier passe…',
+    rows:'2',
+    placeholder:'À savoir pour la prochaine fois…',
     style:{width:'100%',fontFamily:'inherit',fontSize:'14px',padding:'10px 12px',
            borderRadius:'8px',border:'1px solid var(--border2)',background:'var(--bg)',
-           color:'var(--text)',resize:'vertical'},
+           color:'var(--text)',resize:'vertical',minHeight:'58px'},
   });
   noteInp.value = S.finNoteVal||'';
   noteInp.addEventListener('input',e=>{ S.finNoteVal=e.target.value; });
 
   const noteBloc = h('div',{className:'fab-field'},
-    h('label',null,'Info prod — obligatoire'),
-    h('div',{className:'fab-field-hint'},
-      'Visible en Traçabilité et à la prochaine production de cette référence.'),
-    noteInp,
-    h('button',{
-      type:'button',
-      className:'fab-btn fab-btn-muted fab-btn-sm',
-      style:{marginTop:'8px'},
-      onClick:()=>{ S.finNoteVal='R.A.S.'; noteInp.value='R.A.S.'; noteInp.focus(); }
-    },'R.A.S. — rien à signaler')
+    h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',
+        gap:'8px',marginBottom:'6px'}},
+      h('label',{style:{margin:0}},'Info prod'),
+      h('button',{
+        type:'button',
+        className:'fab-btn fab-btn-muted fab-btn-sm',
+        style:{background:'var(--bg)'},
+        onClick:()=>{ S.finNoteVal='R.A.S.'; noteInp.value='R.A.S.'; noteInp.focus(); }
+      },'R.A.S.')),
+    noteInp
   );
 
   // ── Aucun code matiere scanne : on demande pourquoi ──────────────────────
@@ -6887,11 +6943,11 @@ function renderFinModal(){
   const aucuneMatiere = (S.finNbMatieres === 0);
 
   const motifInp = h('textarea',{
-    rows:'2',
-    placeholder:'Ex : bobine deja scannee sur le dossier precedent, poste sans matiere...',
+    rows:'1',
+    placeholder:'Autre raison…',
     style:{width:'100%',fontFamily:'inherit',fontSize:'14px',padding:'10px 12px',
            borderRadius:'8px',border:'1px solid var(--border2)',background:'var(--bg)',
-           color:'var(--text)',resize:'vertical'},
+           color:'var(--text)',resize:'vertical',minHeight:'42px'},
   });
   motifInp.value = S.finMatiereMotif||'';
   motifInp.addEventListener('input',e=>{ S.finMatiereMotif=e.target.value; });
@@ -6934,22 +6990,21 @@ function renderFinModal(){
   const matiereBloc = aucuneMatiere ? h('div',{className:'fab-field',
     style:{padding:'12px 14px',borderRadius:'10px',
            background:'rgba(251,191,36,.10)',border:'1px solid rgba(251,191,36,.4)'}},
-    h('label',null,'Aucun code matiere scanne — pourquoi ? (obligatoire)'),
+    h('label',null,'Aucune bobine scannée — pourquoi ?'),
     repriseBloc,
-    h('div',{className:'fab-field-hint'},
-      'Ce dossier n\'a aucune bobine en tracabilite. Dites ce qui s\'est passe : '
-      +'la reponse est conservee avec la saisie.'),
-    motifInp,
-    h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'8px'}},
+    h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',marginBottom:'8px'}},
       mkMotifBtn('Bobine deja scannee sur un dossier precedent'),
       mkMotifBtn('Poste sans matiere')
-    )
+    ),
+    motifInp
   ) : null;
 
   // ── Écran Calage : la ligne du dossier de prod papier ─────────────────────
-  // Trois heures, dans l'ordre où l'opérateur les a notées. Pré-remplies
-  // depuis les saisies ; il recopie ce qu'il a sous les yeux. Les durées se
-  // recalculent pendant la frappe sans reconstruire l'écran.
+  // Trois heures, dans l'ordre où l'opérateur les a notées, pré-remplies
+  // depuis les saisies. Une heure se règle au doigt, en 24 h : on touche la
+  // ligne, une grille d'heures et une grille de minutes s'ouvrent dessous —
+  // pas de sélecteur du navigateur, qui affiche AM/PM selon la langue du poste
+  // et se manipule mal sur une tablette d'atelier.
   const renderCalage = () => {
     const p = S.finCalage;
     if(!p) return h('div',{className:'fab-modal-sub'},'Chargement des heures du dossier…');
@@ -6958,76 +7013,136 @@ function renderFinModal(){
     const auj = nowIsoLocal().slice(0,10);
     const jours = Array.from(new Set([...(p.jours||[]), auj,
       vals.debut.jour, vals.fin.jour, vals.prod.jour].filter(Boolean))).sort();
-
-    const dureeCalage = h('strong',null,'');
-    const dureeProd = h('strong',null,'');
-    const alerte = h('div',{style:{display:'none'}});
     const seuil = p.seuil_alerte_min;
 
-    const majDurees = () => {
-      const d = finCalageIso(vals.debut), f = finCalageIso(vals.fin), pr = finCalageIso(vals.prod);
-      const mc = finMinutesEntre(d, f), mp = finMinutesEntre(f, pr);
-      dureeCalage.textContent = finDureeTxt(mc);
-      dureeProd.textContent = finDureeTxt(mp);
-      const long = seuil && mc != null && mc > seuil;
-      alerte.style.display = long ? '' : 'none';
-      if(!long && S.finCalageConfirme) S.finCalageConfirme = false;
+    const d = finCalageIso(vals.debut), f = finCalageIso(vals.fin), pr = finCalageIso(vals.prod);
+    const mc = finMinutesEntre(d, f), mp = finMinutesEntre(f, pr);
+
+    // ── Durées, en tête ──
+    const grand = (txt, couleur) => h('div',{style:{fontSize:'30px',fontWeight:'800',lineHeight:'1.1',
+      color:couleur,fontVariantNumeric:'tabular-nums'}}, txt);
+    const tuile = (libelle, valeur) => h('div',{style:{flex:'1',padding:'12px 14px',
+        borderRadius:'10px',background:'var(--bg)',border:'1px solid var(--border)'}},
+      h('div',{style:{fontSize:'11px',fontWeight:'700',letterSpacing:'.5px',
+        textTransform:'uppercase',color:'var(--muted)',marginBottom:'4px'}},libelle),
+      valeur);
+    const durees = h('div',{style:{display:'flex',gap:'10px',marginBottom:'14px'}},
+      tuile('Calage', grand(finDureeTxt(mc), 'var(--accent)')),
+      tuile('Production', grand(finDureeTxt(mp), 'var(--text)')));
+
+    const long = seuil && mc != null && mc > seuil;
+    if(!long && S.finCalageConfirme) S.finCalageConfirme = false;
+    const alerte = long ? h('div',{style:{display:'flex',alignItems:'center',gap:'10px',
+        flexWrap:'wrap',padding:'10px 14px',borderRadius:'10px',marginBottom:'14px',
+        background:'rgba(251,191,36,.10)',border:'1px solid rgba(251,191,36,.4)',
+        fontSize:'13px',color:'var(--text)'}},
+      h('span',{style:{flex:'1'}},'Calage inhabituel — habituellement '
+        +finDureeTxt(Math.round(p.mediane_machine_min||0))+'.'),
+      S.finCalageConfirme
+        ? h('span',{style:{fontWeight:'700',color:'var(--success)'}},'✓ Confirmé')
+        : h('button',{type:'button',className:'fab-btn fab-btn-muted fab-btn-sm',
+            style:{background:'var(--bg)'},
+            onClick:()=>{ S.finCalageConfirme = true; fabRenderPreserveUi({}); }},
+            'Les heures sont justes')) : null;
+
+    // ── Sélecteur d'heure ──
+    const majVal = (cle, patch) => { Object.assign(vals[cle], patch); fabRenderPreserveUi({}); };
+    const pastille = (txt, actif, onClick, extra) => h('button',{type:'button',
+        className:'fin-pastille'+(actif?' actif':''), onClick, style:extra||null}, txt);
+
+    const editeur = (cle) => {
+      const v = vals[cle];
+      let tot = finMinutesTotales(v.hm);
+      if(tot == null){
+        // Pas d'heure encore : on part de l'heure voisine, sinon de maintenant.
+        const voisin = cle === 'debut' ? vals.fin.hm : (cle === 'fin' ? vals.debut.hm : vals.fin.hm);
+        tot = finMinutesTotales(voisin) ?? finMinutesTotales(nowIsoLocal().slice(11,16));
+      }
+      const hh = Math.floor(tot/60), mm = tot % 60;
+      const regler = t => majVal(cle, {hm: finHm(t)});
+      return h('div',{className:'fin-editeur'},
+        jours.length > 1 ? h('div',{className:'fin-editeur-ligne'},
+          ...jours.map(j => pastille(finJourTxt(j), j === v.jour, ()=>majVal(cle,{jour:j})))) : null,
+        h('div',{className:'fin-editeur-titre'},'Heure'),
+        h('div',{className:'fin-grille fin-grille-heures'},
+          ...Array.from({length:24},(_,i)=>pastille(String(i).padStart(2,'0'), i===hh,
+            ()=>regler(i*60+mm)))),
+        h('div',{className:'fin-editeur-titre'},'Minutes'),
+        h('div',{className:'fin-grille fin-grille-minutes'},
+          ...Array.from({length:12},(_,i)=>i*5).map(m=>pastille(String(m).padStart(2,'0'),
+            m===mm, ()=>regler(hh*60+m)))),
+        h('div',{className:'fin-editeur-ligne',style:{justifyContent:'space-between',marginTop:'10px'}},
+          h('div',{style:{display:'flex',gap:'6px'}},
+            pastille('− 1 min', false, ()=>regler(tot-1)),
+            pastille('+ 1 min', false, ()=>regler(tot+1))),
+          h('button',{type:'button',className:'fab-btn fab-btn-primary fab-btn-sm',
+            style:{color:'white'},
+            onClick:()=>{ if(!v.hm) v.hm = finHm(tot); set({finCalageEdit:null}); }},
+            svgIcon('check',14),' OK'))
+      );
     };
 
     const ligne = (cle, libelle) => {
       const v = vals[cle];
-      const heure = h('input',{type:'time',step:'60',style:{fontSize:'18px',fontWeight:'700',
-        textAlign:'center',fontVariantNumeric:'tabular-nums'}});
-      heure.value = v.hm || '';
-      heure.addEventListener('input',e=>{ v.hm = e.target.value; majDurees(); });
-      let jourEl;
-      if(jours.length > 1){
-        jourEl = h('select',null, ...jours.map(j=>{
-          const o = h('option',{value:j}, finJourTxt(j));
-          if(j===v.jour) o.selected = true;
-          return o;
-        }));
-        jourEl.addEventListener('change',e=>{ v.jour = e.target.value; majDurees(); });
-      } else {
-        jourEl = h('div',{style:{fontSize:'13px',color:'var(--text2)',padding:'10px 0'}}, finJourTxt(v.jour));
-      }
-      return h('div',{className:'fab-field',style:{display:'grid',
-          gridTemplateColumns:'1fr 120px 120px',gap:'10px',alignItems:'center',marginBottom:'10px'}},
-        h('label',{style:{margin:0}},libelle),
-        jourEl,
-        heure
-      );
+      const ouvert = S.finCalageEdit === cle;
+      const chip = h('button',{type:'button',className:'fin-heure'+(ouvert?' actif':'')+(v.hm?'':' vide'),
+          onClick:()=>set({finCalageEdit: ouvert ? null : cle})},
+        h('span',{className:'fin-heure-jour'}, finJourTxt(v.jour)),
+        h('span',{className:'fin-heure-hm'}, v.hm || '--:--'),
+        h('span',{className:'fin-heure-edit',title:'Modifier'}, svgIcon('edit',16)));
+      return h('div',{style:{marginBottom:'10px'}},
+        h('div',{style:{display:'grid',gridTemplateColumns:'1fr auto',gap:'10px',alignItems:'center'}},
+          h('div',{style:{fontSize:'11px',fontWeight:'700',letterSpacing:'.5px',
+            textTransform:'uppercase',color:'var(--text2)'}},libelle),
+          chip),
+        ouvert ? editeur(cle) : null);
     };
 
-    alerte.appendChild(h('div',{style:{padding:'12px 14px',borderRadius:'10px',marginTop:'4px',
-        background:'rgba(251,191,36,.10)',border:'1px solid rgba(251,191,36,.4)',
-        fontSize:'13px',color:'var(--text)',lineHeight:'1.5'}},
-      'Calage plus de trois fois plus long que d\'habitude sur cette machine (médiane '
-        +finDureeTxt(Math.round(p.mediane_machine_min||0))+'). Vérifiez les heures du dossier de prod.',
-      h('div',{style:{marginTop:'8px'}},
-        S.finCalageConfirme
-          ? h('span',{style:{fontWeight:'700',color:'var(--success)'}},'✓ Heures confirmées')
-          : h('button',{type:'button',className:'fab-btn fab-btn-muted fab-btn-sm',
-              onClick:()=>{ S.finCalageConfirme = true; fabRenderPreserveUi({}); }},
-              'Les heures sont justes'))
-    ));
+    // ── Métrages : compteur avant calage, en fin de calage, en fin de prod ──
+    const cDeb = p.compteur_debut, cCal = p.compteur_fin_calage;
+    const cFinRaw = S.metrageFinVal ? parseFloat(String(S.metrageFinVal).replace(',','.')) : null;
+    const cFin = (cFinRaw != null && isFinite(cFinRaw)) ? cFinRaw : null;
+    const diff = (a, b) => (a != null && b != null && a >= b) ? a - b : null;
+    const mCal = diff(cCal, cDeb), mProd = diff(cFin, cCal), mTot = diff(cFin, cDeb);
+    const fm = v => v == null ? '—' : Math.round(v).toLocaleString('fr-FR')+' m';
+    const metre = (libelle, v, accent) => h('div',{style:{flex:'1',minWidth:'0'}},
+      h('div',{style:{fontSize:'11px',fontWeight:'700',letterSpacing:'.5px',
+        textTransform:'uppercase',color:'var(--muted)'}},libelle),
+      h('div',{style:{fontSize:'18px',fontWeight:'800',fontVariantNumeric:'tabular-nums',
+        color: accent ? 'var(--accent)' : 'var(--text)'}}, fm(v)));
+    const metrages = h('div',{style:{marginTop:'6px',paddingTop:'12px',borderTop:'1px solid var(--border)'}},
+      h('div',{style:{display:'flex',gap:'10px'}},
+        metre('Métrage calage', mCal, true),
+        metre('Métrage production', mProd, false),
+        metre('Métrage total', mTot, false)),
+      cCal == null ? h('div',{className:'fab-field-hint',style:{marginTop:'4px'}},
+        'Compteur non relevé en fin de calage.') : null);
 
-    const bloc = h('div',null,
-      h('div',{className:'fab-modal-sub'},
-        p.erreur
-          ? 'Heures des saisies indisponibles. Recopiez les trois heures du dossier de prod.'
-          : 'Pré-rempli depuis les saisies. Recopiez les heures notées sur le dossier de prod.'),
+    // ── Signaler un chiffrage incohérent ──
+    const sigInp = h('textarea',{rows:'2',placeholder:'Ce qui ne colle pas…',
+      style:{width:'100%',fontFamily:'inherit',fontSize:'14px',padding:'10px 12px',minHeight:'58px',
+             borderRadius:'8px',border:'1px solid var(--warn)',background:'var(--bg)',
+             color:'var(--text)',resize:'vertical',marginTop:'8px'}});
+    sigInp.value = S.finSignalement || '';
+    sigInp.addEventListener('input', e=>{ S.finSignalement = e.target.value; });
+    const signal = h('div',{style:{marginTop:'12px'}},
+      h('button',{type:'button',className:'fin-lien-signal'+(S.finSignalOuvert?' actif':''),
+          onClick:()=>{ set({finSignalOuvert: !S.finSignalOuvert});
+                        if(!S.finSignalOuvert) return;
+                        setTimeout(()=>{ try{ document.querySelector('.fin-signal-txt').focus(); }catch(_){} }, 60); }},
+        svgIcon('alert',15), ' Signaler un chiffrage incohérent'),
+      S.finSignalOuvert ? (sigInp.classList.add('fin-signal-txt'), sigInp) : null);
+
+    return h('div',null,
+      durees,
+      alerte,
+      p.erreur ? h('div',{className:'fab-modal-sub'},'Heures des saisies indisponibles.') : null,
       ligne('debut','Début calage'),
       ligne('fin','Fin calage'),
       ligne('prod','Fin de prod'),
-      h('div',{style:{display:'flex',gap:'18px',flexWrap:'wrap',fontSize:'13px',
-          color:'var(--text2)',padding:'10px 0 4px',borderTop:'1px solid var(--border)'}},
-        h('span',null,'Calage ',dureeCalage),
-        h('span',null,'Production ',dureeProd)),
-      alerte
+      metrages,
+      signal
     );
-    majDurees();
-    return bloc;
   };
 
   // ── Envoi ─────────────────────────────────────────────────────────────────
@@ -7080,7 +7195,11 @@ function renderFinModal(){
         fin_dossier: termine,
       };
       if(termine && noteTxt) body.info_prod = noteTxt;
-      if(calage) body.calage = calage;
+      if(calage){
+        const sig = String(S.finSignalement||'').trim();
+        if(sig) calage.signalement = sig;
+        body.calage = calage;
+      }
       if(aucuneMatiere && motifTxt) body.matiere_absente_motif = motifTxt;
       body.metrage_fin = mFin;
       if(S.nbEtiquettes) body.qte_etiquettes = parseFloat(String(S.nbEtiquettes).replace(',','.'));
@@ -7136,13 +7255,31 @@ function renderFinModal(){
   );
 
   // Fil d'étapes : où on en est, et ce qu'il reste.
+  // Passage d'un écran à l'autre : il glisse, la barre avance, la pastille de
+  // l'étape s'allume. Le conducteur VOIT qu'il a changé d'écran et qu'il en
+  // reste — sans ça trois écrans se ressemblent et il valide en croyant avoir
+  // fini. L'animation ne joue qu'au changement d'écran, pas à chaque rendu.
+  const etapeAvant = S._finEtapeVue;
+  const change = etapeAvant !== etape;
+  const sens = (change && etapeAvant != null && FIN_ORDRE.indexOf(etape) < FIN_ORDRE.indexOf(etapeAvant))
+    ? 'arriere' : 'avant';
+  S._finEtapeVue = etape;
+  const pct = i => Math.max(0, Math.min(100, ((i+1) / FIN_ETAPES_CLOTURE.length) * 100));
+  const idxAvant = etapes.indexOf(etapeAvant);
+  let progres = null;
+  if(termine && etape !== 'choix'){
+    const barre = h('div',{className:'fin-progres-barre'+(change?' anime':''),style:{width:pct(idx)+'%'}});
+    barre.style.setProperty('--fin-de', (idxAvant >= 0 ? pct(idxAvant) : 0)+'%');
+    progres = h('div',{className:'fin-progres'}, barre);
+  }
+
   const fil = (etape !== 'choix') ? h('div',{style:{display:'flex',alignItems:'center',gap:'8px',
-      flexWrap:'wrap',marginBottom:'16px',fontSize:'12px'}},
+      flexWrap:'wrap',marginBottom:'10px',fontSize:'12px'}},
     h('button',{type:'button',className:'fab-btn fab-btn-muted fab-btn-sm',
         style:{background:'var(--bg)'},onClick:()=>set({finEtape:'choix'})},
       termine ? 'Dossier terminé' : 'À reprendre plus tard', ' · Changer'),
     termine ? h('div',{style:{display:'flex',gap:'6px',alignItems:'center',marginLeft:'auto'}},
-      ...FIN_ETAPES_CLOTURE.map((e,i)=>h('span',{style:{
+      ...FIN_ETAPES_CLOTURE.map((e,i)=>h('span',{className:(i===idx && change)?'fin-pill-allume':'',style:{
           padding:'4px 10px',borderRadius:'20px',fontWeight:'700',
           border:'1px solid '+(i===idx?'var(--accent)':'var(--border)'),
           background: i===idx ? 'var(--accent-bg)' : 'var(--bg)',
@@ -7175,8 +7312,13 @@ function renderFinModal(){
     ];
   }
 
+  // La fenêtre entre en scène une fois. Les rendus suivants (un toucher sur la
+  // grille des heures, un écran de plus) ne rejouent pas son apparition : elle
+  // clignoterait à chaque geste.
+  const premiere = !S._finModalVue;
+  S._finModalVue = true;
   return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)fermerFinModal();}},
-    h('div',{className:'fab-modal'},
+    h('div',{className:'fab-modal',style:premiere?null:{animation:'none'}},
       h('div',{className:'fab-modal-title'},opLabel('89','Fin de production')),
       S.dossier ? h('div',{className:'fab-modal-sub'},
         'Dossier ',
@@ -7185,7 +7327,8 @@ function renderFinModal(){
         (S.dossier.client && !(S.dossier.fictif||isFictifDossierRef(S.dossier.reference))) ? (' — '+S.dossier.client) : ''
       ) : null,
       fil,
-      corps,
+      progres,
+      h('div',{className: change ? 'fin-etape-entre '+sens : ''}, corps),
       h('div',{className:'fab-modal-btns'}, ...boutons)
     )
   );

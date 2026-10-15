@@ -278,6 +278,25 @@ class TestCalageCloture(unittest.TestCase):
             self.assertEqual(conn.execute("SELECT dernier_metrage FROM machines WHERE id=?",
                                           (MACHINE_ID,)).fetchone()[0], 820.0)
 
+    # ── 6 bis. Une faute de frappe ancienne ne bloque pas le relevé ──────
+    def test_5b_releve_face_a_une_faute_de_frappe(self):
+        from database import get_db
+
+        faute = self._saisie("89", -600, dossier="CAL-ANCIEN")
+        s01 = self._saisie("01", 0)
+        self._saisie("02", 1)
+        s03 = self._saisie("03", 30)
+        with get_db() as conn:
+            # Constat réel du 05/10/2026 : 636 367 000 m au lieu de 6 367 000.
+            conn.execute("UPDATE production_data SET metrage_total_fin=636367000 WHERE id=?", (faute,))
+            conn.execute("UPDATE production_data SET metrage_total_debut=6616847 WHERE id=?", (s01,))
+            conn.commit()
+        url = f"/api/fabrication/saisie/{s03}/compteur-fin-calage"
+        r = self.client.put(url, json={"metrage_compteur": 6617300})
+        self.assertEqual(r.status_code, 200, r.text)
+        # Le dernier relevé reste la référence : redescendre sous le 01 est refusé.
+        self.assertEqual(self.client.put(url, json={"metrage_compteur": 6616000}).status_code, 400)
+
     # ── 7. Gâche mesurée, comparée au devis, dans le compte-rendu ────────
     def test_6_gache_devis_compte_rendu(self):
         from database import get_db
@@ -331,6 +350,60 @@ class TestCalageCloture(unittest.TestCase):
             g = __import__("app.services.calage_cloture", fromlist=["x"]).gache_calage(conn, DOSSIER)
         self.assertIsNone(g["metres"])
         self.assertEqual(g["plages_sans_releve"], 1)
+
+    # ── 7 bis. Fin de prod à la minute face à une saisie à la seconde ────
+    def test_6b_fin_prod_meme_minute(self):
+        from database import get_db
+        from app.services import calage_cloture as cc
+
+        self._saisie("01", 0)
+        self._saisie("02", 1)
+        self._saisie("03", 20)
+        s = self._saisie("61", 30)  # nettoyage cliqué à 30 min 35 s
+        with get_db() as conn:
+            conn.execute("UPDATE production_data SET date_operation=? WHERE id=?",
+                         (_iso(self.t0 + timedelta(minutes=30, seconds=35)), s))
+            conn.commit()
+            heure, motif = cc.heure_fin_prod(
+                conn, DOSSIER, MACHINE_NOM,
+                {"debut_calage": self.t0, "fin_calage": self.t0 + timedelta(minutes=10),
+                 "fin_prod": self.t0 + timedelta(minutes=30)},
+                datetime.now())
+        self.assertIsNone(motif)
+        self.assertEqual(heure, _iso(self.t0 + timedelta(minutes=30, seconds=36)))
+
+    # ── 8. Compteurs proposés et signalement d'un chiffrage incohérent ───
+    def test_7_compteurs_et_signalement(self):
+        from database import get_db
+        from app.services import rapport_dossier as rd
+
+        s01 = self._saisie("01", 0)
+        self._saisie("02", 1)
+        s03 = self._saisie("03", 60)
+        with get_db() as conn:
+            conn.execute("UPDATE production_data SET metrage_total_debut=20000 WHERE id=?", (s01,))
+            conn.execute("UPDATE production_data SET metrage_compteur=20700 WHERE id=?", (s03,))
+            conn.commit()
+        p = self.client.get("/api/fabrication/calage-cloture",
+                            params={"no_dossier": DOSSIER, "machine_id": MACHINE_ID}).json()
+        self.assertEqual(p["compteur_debut"], 20000.0)
+        self.assertEqual(p["compteur_fin_calage"], 20700.0)
+
+        prod = datetime.now().replace(second=0, microsecond=0) - timedelta(minutes=5)
+        r = self.client.post("/api/fabrication/saisie", json={
+            "operation": "89 - Fin de production", "machine_id": MACHINE_ID,
+            "no_dossier": DOSSIER, "fin_dossier": True, "metrage_fin": 25000,
+            "calage": {"debut_calage": _iso(self.t0 + timedelta(minutes=1)),
+                       "fin_calage": _iso(self.t0 + timedelta(minutes=60)),
+                       "fin_prod": _iso(prod),
+                       "signalement": "Calage noté 45 min sur le papier"},
+        })
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(self._declarations()[-1]["signalement"], "Calage noté 45 min sur le papier")
+        with get_db() as conn:
+            cr = rd.compte_rendu(conn, DOSSIER)
+        self.assertEqual(cr["calage"]["declaration"]["signalement"], "Calage noté 45 min sur le papier")
+        self.assertIn("calage_signale", [v["cle"] for v in cr["vigilance"]])
 
 
 if __name__ == "__main__":
