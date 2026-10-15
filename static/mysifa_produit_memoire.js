@@ -1564,6 +1564,7 @@
   // ── File de rattachement des scans ─────────────────────────────────
   async function openRattachement() {
     contenantInline = null;
+    scansSurChange = null;
     state = { tab: 'scannes', data: null, mode: 'rattachement', noDossier: null,
               docs: null, sel: null, q: '' };
     await chargerScans();
@@ -1881,6 +1882,11 @@
         if (n && state.q) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); }
       });
     }
+    // Rendu dans une page (MyProd) : l'onglet et le scan choisi remontent à
+    // la page, qui les met dans son adresse (url-etat.md).
+    if (contenantInline && scansSurChange) {
+      try { scansSurChange({ onglet: state.tab, scan: state.tab === 'rattacher' ? state.sel : null }); } catch (e) {}
+    }
   }
 
   // ── Bouton « Historique » pour Saisieprod ──────────────────────────
@@ -1989,7 +1995,10 @@
   // Le contenant est fourni par l'appelant a chaque rendu : MyProd reconstruit
   // son DOM entierement, garder une reference d'un rendu a l'autre pointerait
   // sur un element detache.
-  async function monterScansDans(contenant) {
+  // `init` : { onglet: 'scannes' | 'rattacher', scan: id } repris de l'adresse
+  // de la page ; `surChange` est rappelé à chaque rendu avec le même objet.
+  var scansSurChange = null;
+  async function monterScansDans(contenant, init, surChange) {
     // Contenant detache : MyProd a deja re-rendu depuis. Sans ce garde-fou,
     // mount() basculerait en surcouche et ferait surgir une modale que
     // personne n'a demandee.
@@ -2000,8 +2009,10 @@
     // Quand MyProd change de page, l'element est detache et mount() bascule
     // tout seul en surcouche.
     contenantInline = contenant;
-    state = { tab: 'scannes', data: null, mode: 'rattachement',
-              noDossier: null, docs: null, sel: null, q: '' };
+    scansSurChange = typeof surChange === 'function' ? surChange : null;
+    init = init || {};
+    state = { tab: init.onglet === 'rattacher' ? 'rattacher' : 'scannes', data: null, mode: 'rattachement',
+              noDossier: null, docs: null, sel: init.scan ? Number(init.scan) : null, q: '' };
     await chargerScans();
   }
 
