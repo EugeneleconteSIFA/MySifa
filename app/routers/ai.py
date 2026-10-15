@@ -26,6 +26,7 @@ from config import (
     AGENT_IA_CONVERSATIONS_MAX, AGENT_IA_MODELE, AGENT_IA_RATE_MAX, ROLES_AGENT_IA, agent_ia_modeles,
 )
 from database import get_db
+from app.services import ia_usage
 from services.auth_service import get_current_user
 from app.services.ai_context import BRIEF_ROLES
 from app.services.ai_data import build_daily_brief
@@ -120,7 +121,7 @@ def chat(req: ChatRequest, request: Request):
     page = dict(req.page or {})
     if req.module and not page.get("titre"):
         page["titre"] = req.module
-    with get_db() as conn:
+    with ia_usage.suivi(user, "agent", page.get("titre") or ""), get_db() as conn:
         try:
             res = agent_ia.converser(conn, user, hist, page, req.modele,
                                      contexte={"app": request.app, "cookies": dict(request.cookies)})

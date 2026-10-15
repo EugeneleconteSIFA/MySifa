@@ -572,14 +572,16 @@ class IaPayload(BaseModel):
 
 @router.post("/ia/proposer")
 def ia_proposer(payload: IaPayload, request: Request):
-    _user(request)
+    user = _user(request)
     if not (payload.consigne or "").strip():
         raise HTTPException(status_code=400, detail="Décrire la modification souhaitée.")
+    from app.services import ia_usage
     from app.services.etiq_specifiques_ia import proposer
     l, h, d = es.normaliser_format(payload.largeur_mm, payload.hauteur_mm, payload.dpi)
     try:
         layout = es.normaliser_layout(payload.layout)
-        return proposer(payload.consigne[:4000], l, h, d, layout, modele=payload.modele)
+        with ia_usage.suivi(user, "etiquettes", "print"):
+            return proposer(payload.consigne[:4000], l, h, d, layout, modele=payload.modele)
     except EtiquetteInvalide as e:
         _invalide(e)
 
@@ -740,9 +742,11 @@ def generer_depuis_demande(demande_id: int, payload: GenererPayload, request: Re
     contexte = (f"Demande de nouveau format.\nClient : {dem['client'] or '—'}\nTitre : {dem['titre']}\n"
                 f"Description : {dem['description']}")
     consigne = (payload.consigne or "").strip() or "Construis cette étiquette à partir de la demande et des pièces jointes."
+    from app.services import ia_usage
     try:
-        res = proposer(consigne[:4000], l, h, d, {"elements": [], "variables": []}, pieces, contexte,
-                       modele=payload.modele)
+        with ia_usage.suivi(user, "etiquettes", "demande"):
+            res = proposer(consigne[:4000], l, h, d, {"elements": [], "variables": []}, pieces, contexte,
+                           modele=payload.modele)
     except EtiquetteInvalide as e:
         _invalide(e)
     now = _now()

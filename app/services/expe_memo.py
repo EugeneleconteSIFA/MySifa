@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 from app.services import expe_pilotage as pil
+from app.services import ia_usage
 
 PARIS = ZoneInfo("Europe/Paris")
 
@@ -270,6 +271,7 @@ def points_a_retenir(rub: Dict[str, List[dict]], today: date) -> List[str]:
             max_tokens=600,
             messages=[{"role": "user", "content": consigne}],
         )
+        ia_usage.noter(rep, "memo_expe")
         texte = "".join(b.text for b in rep.content if getattr(b, "type", "") == "text")
     except Exception as e:
         print(f"[MySifa] mémo expé : points d'attention indisponibles ({e})")

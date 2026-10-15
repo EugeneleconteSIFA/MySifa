@@ -25,6 +25,7 @@ from config import (
     AGENT_IA_MAX_TOURS, AGENT_IA_MODELE, ROLES_AGENT_RVGI, agent_ia_modeles,
 )
 from app.services import agent_actions as aa
+from app.services import ia_usage
 
 PARIS = ZoneInfo("Europe/Paris")
 MAX_TOKENS = 8000
@@ -260,6 +261,7 @@ def converser(conn, user: dict, historique: list[dict], page: Optional[dict] = N
                 tools=outils, messages=messages, **options)
         except Exception as e:
             raise ErreurAgent(f"Appel au modèle en échec : {e}")
+        ia_usage.noter(rep, "agent")
         texte = "".join(b.text for b in rep.content if getattr(b, "type", "") == "text")
         if rep.stop_reason == "refusal":
             texte = texte or "Je ne peux pas traiter cette demande."

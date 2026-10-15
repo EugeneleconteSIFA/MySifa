@@ -59,6 +59,7 @@ from app.services.fsc_classification import (
     libelle_portee,
     nettoyer_liste,
 )
+from app.services import ia_usage
 from app.services.fsc_lecture_certificat import lire_certificat
 from app.services import fsc_import_controles as importlot
 from config import (
@@ -563,7 +564,8 @@ def fsc_lire_certificat(cert_id: int, request: Request):
     with open(chemin, "rb") as fh:
         contenu = fh.read()
 
-    lecture = lire_certificat(contenu, d.get("original_name") or d["filename"], d.get("mime_type") or "")
+    with ia_usage.suivi(user, "fsc", "qualite"):
+        lecture = lire_certificat(contenu, d.get("original_name") or d["filename"], d.get("mime_type") or "")
 
     with get_db() as conn:
         conn.execute(

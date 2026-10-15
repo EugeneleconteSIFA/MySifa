@@ -29,6 +29,7 @@ from fastapi import APIRouter, File, Form, Header, HTTPException, Request, Uploa
 
 from database import get_db
 from services.auth_service import get_current_user
+from app.services import ia_usage
 from app.services.devis_extraction import extraire_devis
 from app.services.devis_rapprochement import (
     classer_pour_entree as classer_devis_pour_entree,
@@ -860,7 +861,7 @@ async def import_devis(request: Request, file: UploadFile = File(...),
     trouvé les champs clés : c'est le bouton « Relire avec l'IA » de l'écran
     de validation, quand il manque un indicateur secondaire.
     """
-    require_rentabilite(request)
+    user = require_rentabilite(request)
     contents = await file.read()
     filename = file.filename or "devis.xlsx"
 
@@ -876,11 +877,12 @@ async def import_devis(request: Request, file: UploadFile = File(...),
             400, f"Fichier trop volumineux — {DEVIS_MAX_FILE_MB} Mo maximum."
         )
 
-    resultat = extraire_devis(
-        contents, filename,
-        content_type=(file.content_type or ""),
-        forcer_ia=bool(forcer_ia),
-    )
+    with ia_usage.suivi(user, "devis", "rentabilite"):
+        resultat = extraire_devis(
+            contents, filename,
+            content_type=(file.content_type or ""),
+            forcer_ia=bool(forcer_ia),
+        )
     resultat["fichier_chemin"] = _conserver_fichier(contents, filename)
     resultat["fichier_mime"] = file.content_type or ""
 
@@ -1301,8 +1303,9 @@ def _enregistrer_devis_agent(contents: bytes, filename: str, content_type: str,
     # Le chemin sur le partage sert de repli pour le client : le modèle maison
     # arrive prérempli « Mon client » et beaucoup ne le remplacent pas, alors
     # que le dossier de rangement, lui, porte le vrai nom.
-    resultat = extraire_devis(contents, filename, content_type=content_type,
-                              chemin_origine=chemin_origine)
+    with ia_usage.suivi({"nom": "Pont API (agent devis)"}, "devis", "bridge"):
+        resultat = extraire_devis(contents, filename, content_type=content_type,
+                                  chemin_origine=chemin_origine)
     apercu = resultat.get("preview") or {}
     a_verifier, motif = _devis_a_verifier(resultat)
 
