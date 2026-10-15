@@ -18,6 +18,7 @@ Ce que ces tests protègent, et pourquoi chacun existe :
 Lancement : `python3 tests/test_of_creation.py`
 """
 
+import _base_temporaire  # noqa: E402,F401  — base jetable, avant config/database/app.*
 import os
 import sqlite3
 import sys

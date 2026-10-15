@@ -1,4 +1,5 @@
 """Fiches techniques matière et produit (BOM) : saisie, héritage, PDF."""
+import _base_temporaire  # noqa: E402,F401  — base jetable, avant config/database/app.*
 import sys; sys.path.insert(0, '.')
 import database  # noqa: F401 — d'abord, toujours
 import sqlite3

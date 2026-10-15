@@ -22,6 +22,7 @@ Ce que ces cas verrouillent :
 
 Lancer : python3 tests/test_besoins_tendance_laize.py
 """
+import _base_temporaire  # noqa: E402,F401  — base jetable, avant config/database/app.*
 import sys
 
 sys.path.insert(0, ".")
