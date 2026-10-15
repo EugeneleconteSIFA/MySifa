@@ -145,19 +145,20 @@
       // déborde sous la colonne. À 1, la page passait devant et captait tous
       // les clics de la colonne (régression du 04/10/2026). Les voiles des
       // visites guidées (9500, 20000) restent au-dessus.
-      "  #mysifa-accueil{position:fixed;left:0;top:var(--mac-top,0px);bottom:96px;width:var(--mac-w);z-index:110;padding:16px 0 0 16px;display:flex;flex-direction:column}",
+      "  #mysifa-accueil{position:fixed;left:0;top:var(--mac-top,0px);bottom:96px;width:var(--mac-w);z-index:110;padding:16px 14px 0 16px;display:flex;flex-direction:column}",
       "  body.mysifa-accueil-on #root{margin-left:var(--mac-w)}",
-      "  #mysifa-accueil.repliee{width:56px}",
-      // Languette au bord droit, en haut, à hauteur de l'en-tête (demande du
-      // 15/10/2026 ; à mi-hauteur, elle flottait seule à côté de la bande
-      // repliée). Elle y reste pour la rouvrir. Le bouton tableau ne sert plus
-      // qu'une fois repliée, comme repère de ce que la bande contient.
-      "  .mac-languette{position:absolute;top:16px;right:-12px;z-index:2;display:flex;align-items:center;justify-content:center;",
-      "    width:22px;height:30px;padding:0;border-radius:0 10px 10px 0;cursor:pointer;background:var(--card,#111827);color:var(--muted,#94a3b8);",
-      "    border:1px solid var(--border,#1e293b);border-left:0;box-shadow:2px 0 6px rgba(0,0,0,.12)}",
-      "  .mac-languette:hover,.mac-languette:focus-visible{color:var(--accent,#22d3ee);border-color:var(--accent,#22d3ee)}",
-      "  #mysifa-accueil:not(.repliee) .mac-repli{display:none}",
-      "  body.mysifa-accueil-on.mysifa-accueil-repliee #root{margin-left:56px}",
+      // Bande fine sur toute la hauteur, chevron au milieu (demande du
+      // 15/10/2026 : une languette isolée paraissait flotter). Repliée, il ne
+      // reste que la bande ; dépliée, elle borde la colonne à droite. Le
+      // bouton tableau ne sert plus que sur téléphone.
+      "  .mac-languette{position:absolute;top:0;bottom:0;right:0;width:14px;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;",
+      "    background:var(--card,#111827);color:var(--text2,#cbd5e1);border:0;border-left:1px solid var(--border,#1e293b);border-right:1px solid var(--border,#1e293b)}",
+      "  .mac-languette svg{flex-shrink:0}",
+      "  .mac-languette:hover,.mac-languette:focus-visible{color:var(--accent,#22d3ee);background:color-mix(in srgb,var(--accent,#22d3ee) 8%,var(--card,#111827))}",
+      "  #mysifa-accueil .mac-repli{display:none}",
+      "  #mysifa-accueil.repliee{width:14px;padding:0}",
+      "  #mysifa-accueil.repliee .mac-tete{display:none}",
+      "  body.mysifa-accueil-on.mysifa-accueil-repliee #root{margin-left:14px}",
       "}",
       "@media (min-width:1600px){#mysifa-accueil{--mac-w:380px}}",
       "@media (min-width:900px) and (max-width:1199px){#mysifa-accueil{--mac-w:220px}}",
