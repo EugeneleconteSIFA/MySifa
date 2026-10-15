@@ -714,12 +714,13 @@
     }
 
     // Largeur d'une carte dans la colonne de l'accueil, selon l'écran
-    // (paliers de mysifa_accueil.js : 380, 300 ou 220 px, moins ses marges).
+    // (paliers de mysifa_accueil.js : 380, 300 ou 220 px, moins ses marges
+    // et la bande du repli).
     function largeurCarte() {
       var w = window.innerWidth;
       if (w < 900) return 10000;   // téléphone : colonne pleine largeur, bornée par le panneau
       var col = w >= 1600 ? 380 : w >= 1200 ? 300 : 220;
-      return col - 24;
+      return col - 38;
     }
 
     // Réglage d'affichage dans l'adresse capturée (bloc_vue : liste ou courbe).
