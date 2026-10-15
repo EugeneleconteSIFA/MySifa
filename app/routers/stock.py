@@ -21,6 +21,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from app.services import mystock_prix as _mystock_prix
 from app.services import encres_rvgi as _encres_rvgi
+from app.services import valo_cloture as _valo_cloture
 from app.services import packing_list as _pl
 from app.services import stock_bobines as _sb
 from app.services.audit_service import log_action
@@ -695,6 +696,9 @@ _SNAPSHOT_CACHE_MAX_ENTRIES = 32
 _MP_STOCK_SNAPSHOT_CACHE: dict[tuple[str, int], tuple[dict[int, float], dict[tuple[int, int], float]]] = {}
 _MP_PRICE_SNAPSHOT_CACHE: dict[tuple[str, int], dict[int, float]] = {}
 _PF_STOCK_SNAPSHOT_CACHE: dict[tuple[str, int], dict[int, float]] = {}
+# Préfixe de la note posée par /convertir-unite : la reconstitution à date s'en
+# sert pour ramener les quantités antérieures à la conversion dans l'unité actuelle.
+_NOTE_CONVERSION_UNITE = _valo_cloture.NOTE_CONVERSION_UNITE
 _PF_PRICE_SNAPSHOT_CACHE: dict[tuple[str, int], dict[int, float]] = {}
 
 
@@ -862,6 +866,33 @@ def _pf_stock_snapshot_at_date_uncached(conn, date_iso: str) -> dict[int, float]
         empl = r["emplacement"] or ""
         by_prod_empl[(pid, empl)] = float(r["quantite_avant"] or 0)
         seen_prods.add(pid)
+    # Une conversion d'unité postérieure à la date multiplie le stock actuel mais
+    # pas les mouvements d'avant : leurs quantite_avant sont dans l'ancienne unité.
+    # On applique le facteur (quantite_apres / quantite_avant de la trace posée
+    # par la conversion) pour tout exprimer dans l'unité actuelle du produit.
+    conv_rows = conn.execute(
+        """
+        SELECT produit_id, created_at,
+               MAX(quantite_apres / quantite_avant) AS facteur
+        FROM mouvements_stock
+        WHERE created_at > ? AND note LIKE ? AND quantite_avant > 0
+        GROUP BY produit_id, created_at
+        """,
+        (end, _NOTE_CONVERSION_UNITE + "%"),
+    ).fetchall()
+    facteurs: dict[int, float] = {}
+    for r in conv_rows:
+        try:
+            pid = int(r["produit_id"])
+            f = float(r["facteur"] or 0)
+        except (TypeError, ValueError):
+            continue
+        if f > 0:
+            facteurs[pid] = facteurs.get(pid, 1.0) * f
+    if facteurs:
+        for (pid, empl), q in by_prod_empl.items():
+            if pid in facteurs:
+                by_prod_empl[(pid, empl)] = q * facteurs[pid]
     # Complète avec stock actuel pour tous les couples (produit, emplacement)
     # NON couverts par un mouvement postérieur.
     try:
@@ -2082,7 +2113,7 @@ async def convertir_unite_produit(produit_id: int, request: Request):
         ).fetchall()
         created_by_name = (user.get("nom") or "").strip() or None
         note_ajust = (
-            f"Changement d'unité de vente : {ancienne_unite} → {nouvelle_unite} "
+            f"{_NOTE_CONVERSION_UNITE} : {ancienne_unite} → {nouvelle_unite} "
             f"(facteur ×{facteur:g})"
         )
         for r in empls_actifs:
@@ -9042,7 +9073,16 @@ def _valorisation_query_at_date(conn, snapshot_date: str | None) -> list[dict]:
     if not snapshot_date:
         return items
     stock_nl, stock_l = _mp_stock_snapshot_at_date(conn, snapshot_date)
-    prix_map = _mp_price_snapshot_at_date(conn, snapshot_date)
+    # Clôture d'inventaire : corrections saisies après la date mais rattachées
+    # à elle, et prix lus jusqu'à la date limite. Copies : le snapshot est en cache.
+    ecart_nl, ecart_l = _valo_cloture.ecarts_mp(conn, snapshot_date)
+    if ecart_nl or ecart_l:
+        stock_nl, stock_l = dict(stock_nl), dict(stock_l)
+        for k, d in ecart_nl.items():
+            stock_nl[k] = stock_nl.get(k, 0.0) + d
+        for k, d in ecart_l.items():
+            stock_l[k] = stock_l.get(k, 0.0) + d
+    prix_map = _mp_price_snapshot_at_date(conn, _valo_cloture.date_prix(conn, snapshot_date))
     for it in items:
         mid = it.get("matiere_id")
         try:
@@ -9552,12 +9592,73 @@ def get_valorisation(request: Request, date: str | None = None):
     summary["can_see_usd"] = can_see_usd
     summary["snapshot_date"] = snapshot_date  # None si aujourd'hui
     summary["marges_vente"] = marges
+    if snapshot_date:
+        with get_db() as conn:
+            summary["cloture"] = _valo_cloture.lire(conn, snapshot_date)
     # Frais de stockage appliqués au sous-total d'achat dans la carte MP.
     summary["storage_fees_pct"] = round(storage_pct, 4)
     return {
         "items": items,
         "summary": summary,
     }
+
+
+@router.get("/api/stock/valorisation/cloture")
+def get_valorisation_cloture(request: Request, date: str | None = None):
+    """Clôture d'inventaire à une date passée et mouvements rattachables
+    (saisis après cette date). Cf. app/services/valo_cloture.py."""
+    require_stock_matieres_admin(request)
+    snapshot_date = _parse_snapshot_date(date)
+    if not snapshot_date:
+        raise HTTPException(400, "Date de clôture obligatoire (AAAA-MM-JJ, passée).")
+    with get_db() as conn:
+        return {
+            "cloture": _valo_cloture.lire(conn, snapshot_date),
+            "mouvements": _valo_cloture.candidats(conn, snapshot_date),
+        }
+
+
+@router.put("/api/stock/valorisation/cloture")
+async def put_valorisation_cloture(request: Request):
+    """Enregistre la clôture d'une date : date limite des prix et mouvements
+    rattachés. Body : {date, date_limite_prix, mp_ids: [], pf_ids: []}."""
+    user = require_stock_matieres_admin(request)
+    body = await request.json()
+    snapshot_date = _parse_snapshot_date(body.get("date"))
+    if not snapshot_date:
+        raise HTTPException(400, "Date de clôture obligatoire (AAAA-MM-JJ, passée).")
+    limite = (body.get("date_limite_prix") or "").strip() or None
+    if limite:
+        try:
+            datetime.strptime(limite, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(400, "Date limite des prix invalide (AAAA-MM-JJ).") from None
+        if limite < snapshot_date:
+            raise HTTPException(400, "La date limite des prix doit suivre la date de clôture.")
+
+    def _ids(cle):
+        try:
+            return sorted({int(x) for x in (body.get(cle) or [])})
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Identifiants de mouvements invalides.") from None
+
+    mp_ids, pf_ids = _ids("mp_ids"), _ids("pf_ids")
+    par = (user.get("nom") or "").strip() or user.get("email")
+    with get_db() as conn:
+        res = _valo_cloture.enregistrer(
+            conn, snapshot_date, limite, mp_ids, pf_ids,
+            now=_now_paris().strftime("%Y-%m-%dT%H:%M:%S"), par=par,
+        )
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="stock",
+        objet=f"Clôture valorisation {snapshot_date}",
+        detail={"date_limite_prix": limite, "nb_mp": len(mp_ids), "nb_pf": len(pf_ids),
+                "nb_rattaches": res["nb_rattaches"]},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, **res}
 
 
 @router.put("/api/stock/valorisation/conteneur/{declinaison_id}")
@@ -10177,7 +10278,13 @@ def _pf_valo_query_at_date(conn: sqlite3.Connection, snapshot_date: str | None) 
     if not snapshot_date:
         return items
     stock_pf = _pf_stock_snapshot_at_date(conn, snapshot_date)
-    prix_map = _pf_price_snapshot_at_date(conn, snapshot_date)
+    # Clôture d'inventaire (cf. _valorisation_query_at_date).
+    ecart_pf = _valo_cloture.ecarts_pf(conn, snapshot_date)
+    if ecart_pf:
+        stock_pf = dict(stock_pf)
+        for k, d in ecart_pf.items():
+            stock_pf[k] = stock_pf.get(k, 0.0) + d
+    prix_map = _pf_price_snapshot_at_date(conn, _valo_cloture.date_prix(conn, snapshot_date))
     for it in items:
         try:
             pid = int(it["id"])
