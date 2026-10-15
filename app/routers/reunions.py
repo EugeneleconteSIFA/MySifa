@@ -7,7 +7,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, HTTPException, Request
 
 from config import (CODE_ANNUL_DOS, CODE_ARRIVEE, CODE_DEBUT_DOS,
-                    CODE_DEPART, CODE_FIN_DOS, ROLES_PROD)
+                    CODE_DEPART, CODE_FIN_DOS, PROD_VITESSE_MAX_M_MIN, ROLES_PROD)
 from database import get_db
 from services.auth_service import effective_role, get_current_user
 from app.services import rapport_dossier as rd
@@ -54,7 +54,8 @@ def _detail_prod(conn, r: Dict[str, Any]) -> Dict[str, Any]:
         machine = [m for m in dispo if m.strip().lower() not in exclus]
     return {
         "atelier": rd.retour_atelier(conn, machine, b["debut"], b["fin"],
-                                     code_fin=CODE_FIN_DOS),
+                                     code_fin=CODE_FIN_DOS,
+                                     vitesse_max=PROD_VITESSE_MAX_M_MIN),
         # `presence=True` : le point de production lit les pointages 86/87.
         # C'est ce qui empeche un dossier ouvert le vendredi et repris le lundi
         # de se dessiner en un seul rectangle qui traverse un samedi ou la
@@ -66,7 +67,8 @@ def _detail_prod(conn, r: Dict[str, Any]) -> Dict[str, Any]:
                           code_depart=CODE_DEPART),
         "comptes_rendus": rd.comptes_rendus_periode(conn, b["debut"], b["fin"],
                                                     machine=machine,
-                                                    code_fin=CODE_FIN_DOS),
+                                                    code_fin=CODE_FIN_DOS,
+                                                    vitesse_max=PROD_VITESSE_MAX_M_MIN),
         "machines": dispo,
         "machines_hors_production": hors,
     }

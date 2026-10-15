@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from config import CODE_PRODUCTION, CODE_REPRISE, OPERATION_SEVERITY
 from database import parse_datetime
 from services.timings import compute_dossier_times
+from config import PROD_VITESSE_MAX_M_MIN
 
 _FMTS = (
     "%Y-%m-%dT%H:%M:%S",
@@ -202,6 +203,24 @@ def _by_operation(rows: List[dict]) -> List[dict]:
     return sorted(out, key=lambda x: (-x["minutes"], x["code"]))
 
 
+def vitesse_plausible(metrage: float, minutes: float):
+    """Vitesse en m/min et drapeau d'aberration : (vitesse, aberrante).
+
+    Un 03 et un 89 saisis a la meme minute laissent quelques secondes de
+    production (312 m / 0,7 min = 445 m/min) ; un chiffre en trop au compteur
+    donne des milliers de m/min. Au-dela du plafond machine, la vitesse ne
+    vaut rien : 0 et `aberrante`, que les ecrans affichent « erreur saisie ».
+    """
+    metrage = float(metrage or 0)
+    minutes = float(minutes or 0)
+    if minutes <= 0:
+        return 0.0, False
+    v = metrage / minutes
+    if v > PROD_VITESSE_MAX_M_MIN:
+        return 0.0, True
+    return round(v, 3), False
+
+
 def _clean_operateur(name: str) -> str:
     s = str(name or "").strip()
     if " - " in s:
@@ -248,8 +267,7 @@ def build_dossier_production_stats(rows: List[dict], no_dossier: str) -> dict:
 
     etiquettes = round(sum(float(d.get("etiquettes") or 0) for d in dossier_times), 1)
     metrage = round(sum(float(d.get("metrage_m") or 0) for d in dossier_times), 1)
-    denom = prod + arret
-    vitesse = round(metrage / denom, 3) if denom > 0 else 0.0
+    vitesse, vitesse_aberrante = vitesse_plausible(metrage, prod + arret)
 
     by_category = [
         {"category": "calage", "label": "Calage", "minutes": round(calage, 1)},
@@ -317,6 +335,8 @@ def build_dossier_production_stats(rows: List[dict], no_dossier: str) -> dict:
         },
         "quantites": {"etiquettes": etiquettes, "metrage_m": metrage},
         "vitesse_m_min": vitesse,
+        "vitesse_aberrante": vitesse_aberrante,
+        "vitesse_max_m_min": PROD_VITESSE_MAX_M_MIN,
         "by_category": by_category,
         "by_operation": _by_operation(all_list),
         "operateurs": operateurs,

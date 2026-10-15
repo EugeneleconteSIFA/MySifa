@@ -51,7 +51,9 @@
   }
   // La machine se regle en m/min : c'est l'unite du conducteur, celle de
   // `produit_series.vitesse_m_min` et celle qu'affiche tout MySifa. Pas de m/h.
-  function vitesse(v) {
+  // `aberrante` : au-dela du plafond machine, le serveur a retire le chiffre.
+  function vitesse(v, aberrante) {
+    if (aberrante) return '<span style="color:var(--danger);font-weight:400">erreur saisie</span>';
     return (v === null || v === undefined || isNaN(v)) ? "—" : fnum(v, 1) + " m/min";
   }
 
@@ -437,7 +439,7 @@
        + kpi(fnum(p.metrage) + ' m', "Métrage",
              d.dossiers + (d.dossiers > 1 ? " dossiers" : " dossier"))
        + kpi(minutesTxt(p.minutes_production), "Production",
-             p.vitesse_m_min ? vitesse(p.vitesse_m_min) : "")
+             (p.vitesse_m_min || p.vitesse_aberrante) ? vitesse(p.vitesse_m_min, p.vitesse_aberrante) : "")
        + kpi(minutesTxt(p.minutes_calage), "Calage",
              p.gache_calage_m != null
                ? "gâche " + fnum(p.gache_calage_m) + " m · " + p.dossiers_avec_gache
@@ -470,8 +472,8 @@
            + '<td>' + escHtml(r.client || "—") + '</td>'
            + '<td>' + escHtml(r.ref_produit_norm || r.designation || "—") + '</td>'
            + '<td class="num">' + fnum(r.metrage) + ' m</td>'
-           + '<td class="num">' + vitesse(r.cadence_m_min)
-           + '<div class="rp-sous">' + vitesse(r.vitesse_m_min) + ' hors arrêts</div></td>'
+           + '<td class="num">' + vitesse(r.cadence_m_min, r.cadence_aberrante)
+           + '<div class="rp-sous">' + vitesse(r.vitesse_m_min, r.vitesse_aberrante) + ' hors arrêts</div></td>'
            + '<td class="num">' + hab + '</td>'
            + '<td class="num">' + ecart + '</td></tr>';
       });
@@ -552,7 +554,7 @@
          + '<td>' + escHtml(r.client || "—") + '</td>'
          + '<td>' + escHtml(r.machine || "—") + '</td>'
          + '<td class="num">' + fnum(r.metrage_reel) + ' m</td>'
-         + '<td class="num">' + (r.cadence_m_min ? vitesse(r.cadence_m_min) : '—') + '</td>'
+         + '<td class="num">' + vitesse(r.cadence_m_min || null, r.cadence_aberrante) + '</td>'
          + '<td class="num">' + ecartHtml(r.ecart_cadence_pct) + '</td>'
          + '<td>' + info + '</td>'
          + '<td class="num">' + (r.nb_commentaires || 0) + '</td>'
@@ -803,8 +805,8 @@
     h += '<div class="rp-bloc"><div class="rp-kpis">'
        + kpi(fnum(m.reel) + ' m', "Métrage",
              m.prevu ? "prévu " + fnum(m.prevu) + " m" : (m.fiable ? "" : "non exploitable"))
-       + kpi(vitesse(cr.vitesse_m_min), "Vitesse", "hors arrêts")
-       + kpi(vitesse(cr.cadence_m_min), "Cadence", "arrêts compris")
+       + kpi(vitesse(cr.vitesse_m_min, cr.vitesse_aberrante), "Vitesse", "hors arrêts")
+       + kpi(vitesse(cr.cadence_m_min, cr.cadence_aberrante), "Cadence", "arrêts compris")
        + kpi(minutesTxt(t.total_minutes), "Temps", (id.nb_saisies || 0) + " saisies")
        + kpi(escHtml((id.conducteurs || []).join(", ") || "—"), "Conducteurs", "")
        + '</div></div>';

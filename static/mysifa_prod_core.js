@@ -7143,7 +7143,7 @@ function renderSuivi(){
     if(!isExp) return row;
 
     const panel = h('div',{style:{
-      borderLeft:'3px solid var(--accent)',background:'rgba(34,211,238,.04)',
+      borderLeft:'3px solid var(--accent)',background:'color-mix(in srgb,var(--accent,#22d3ee) 4%,transparent)',
       padding:'16px 20px',marginBottom:'2px'
     }});
 
@@ -7297,12 +7297,12 @@ function renderHist(){
       'data-bloc-valeur-normal':fN(sc.info),
       'data-bloc-valeur-erreurs':fN(seCount)},
     h('div',{className:'stat'},h('div',{className:'stat-label'},'Total opérations'),h('div',{className:'stat-value',style:{color:'var(--c1)'}},fN(d.total_operations))),
-    h('div',{className:'stat',style:{borderColor:'var(--danger)33'}},h('div',{className:'stat-label'},'🔴 Critique'),h('div',{className:'stat-value',style:{color:'var(--danger)'}},fN(sc.critique))),
-    h('div',{className:'stat',style:{borderColor:'var(--warn)33'}},h('div',{className:'stat-label'},'🟡 Attention'),h('div',{className:'stat-value',style:{color:'var(--warn)'}},fN(sc.attention))),
-    h('div',{className:'stat'},h('div',{className:'stat-label'},'🟢 Normal'),h('div',{className:'stat-value',style:{color:'var(--success)'}},fN(sc.info))),
-    h('div',{className:'stat',style:{borderColor:'var(--danger)55'}},h('div',{className:'stat-label'},'⛔ Erreurs saisie'),h('div',{className:'stat-value',style:{color:seCount>0?'var(--danger)':'var(--success)'}},fN(seCount))),
+    h('div',{className:'stat',style:{borderColor:'var(--danger)33'}},h('div',{className:'stat-label'},h('span',{className:'sev-dot',style:{background:'var(--danger)'}}),'Critique'),h('div',{className:'stat-value',style:{color:'var(--danger)'}},fN(sc.critique))),
+    h('div',{className:'stat',style:{borderColor:'var(--warn)33'}},h('div',{className:'stat-label'},h('span',{className:'sev-dot',style:{background:'var(--warn)'}}),'Attention'),h('div',{className:'stat-value',style:{color:'var(--warn)'}},fN(sc.attention))),
+    h('div',{className:'stat'},h('div',{className:'stat-label'},h('span',{className:'sev-dot',style:{background:'var(--success)'}}),'Normal'),h('div',{className:'stat-value',style:{color:'var(--success)'}},fN(sc.info))),
+    h('div',{className:'stat',style:{borderColor:'var(--danger)55'}},h('div',{className:'stat-label'},h('span',{className:'sev-dot',style:{background:'var(--danger)'}}),'Erreurs saisie'),h('div',{className:'stat-value',style:{color:seCount>0?'var(--danger)':'var(--success)'}},fN(seCount))),
   ));
-  parts.push(h('div',{className:'section-title'},'⛔ Erreurs de saisie'));
+  parts.push(h('div',{className:'section-title'},'Erreurs de saisie'));
   const sanityForList = (d.sanity_by_operateur && d.sanity_by_operateur[Object.keys(d.sanity_by_operateur||{})[0]]) ? null : d.sanity;
   parts.push(h('div',{className:'card'},
     h('div',{className:'card-header'},
@@ -9649,7 +9649,7 @@ function renderSaisies(){
 
     let rowBg = '';
     if (isAlertAck) {
-      rowBg = 'rgba(34,211,238,.10)';           // v2.3.43 : cyan discret alertes validées
+      rowBg = 'color-mix(in srgb,var(--accent,#22d3ee) 10%,transparent)';           // v2.3.43 : cyan discret alertes validées
     } else if (fictifRow) {
       rowBg = 'rgba(167,139,250,.10)';          // dossier fictif (FICTIF:)
     } else if (row.operation_severity === 'critique') {
@@ -9671,7 +9671,7 @@ function renderSaisies(){
     // <tr> en border-collapse : c'est le fond qui fait le bloc visuel.
     if (cycleAnnule) rowBg = 'rgba(251,191,36,.13)';
     if (rowBg) tr.style.background = rowBg;
-    if (S.selectedRows.has(selKey)) tr.style.background = 'rgba(34,211,238,.12)';
+    if (S.selectedRows.has(selKey)) tr.style.background = 'color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)';
 
     // v2.3.43 : les acks d'alertes sont TOUJOURS cliquables (même en readOnly)
     // et ouvrent le viewer partagé MysifaAckViewer.open.
@@ -10518,6 +10518,117 @@ function renderSanity(sanity, title){
   );
 }
 
+// Version compacte pour le bandeau de la vue d'ensemble : anneau de 44 px,
+// score, mention. Clic → Erreurs & qualité.
+function renderSanityCompact(sanity){
+  const score=sanity.score||0;
+  const colorMap={success:'var(--success)',warn:'var(--warn)',danger:'var(--danger)'};
+  const col=colorMap[sanity.color]||'var(--muted)';
+  const r=18,circ=2*Math.PI*r,offset=circ-(score/100)*circ;
+  const NS='http://www.w3.org/2000/svg';
+  const svg=document.createElementNS(NS,'svg');
+  svg.setAttribute('width','44');svg.setAttribute('height','44');svg.setAttribute('viewBox','0 0 44 44');svg.style.transform='rotate(-90deg)';
+  [['var(--border)',0],[col,offset]].forEach(([stroke,off],i)=>{
+    const c=document.createElementNS(NS,'circle');
+    c.setAttribute('cx','22');c.setAttribute('cy','22');c.setAttribute('r',String(r));
+    c.setAttribute('fill','none');c.setAttribute('stroke',stroke);c.setAttribute('stroke-width','5');
+    if(i){c.setAttribute('stroke-linecap','round');c.setAttribute('stroke-dasharray',String(circ));c.setAttribute('stroke-dashoffset',String(off));}
+    svg.appendChild(c);
+  });
+  return h('div',{className:'pv-groupe pv-sanity',
+      'data-bloc':'prod.ensemble.sanity','data-bloc-valeur-score':String(score),
+      title:'Voir le détail des erreurs → Historique & Erreurs',
+      onClick:async()=>{ S.subPage='erreurs'; if(!S.historique) await loadHist(); render(); }},
+    h('div',{className:'pv-anneau'},svg,h('span',{style:{color:col}},String(score))),
+    h('div',null,
+      h('div',{className:'pv-mention',style:{color:col}},sanity.mention||''),
+      h('div',{className:'pv-lib'},'Qualité de saisie'
+        +(sanity.journees?(' · '+sanity.journees+' j.'):'')),
+      h('a',{href:'#',className:'pv-lien',onClick:e=>{
+        e.preventDefault(); e.stopPropagation(); openSanityExplication(sanity);
+      }},'Comment c\'est calculé ?'))
+  );
+}
+
+// Styles de la vue d'ensemble, injectes une fois : le CSS de MyProd ne se
+// rafraichit qu'au changement de version, ces regles suivent le JS.
+function _prodVueCss(){
+  if(document.getElementById('prod-vue-css')) return;
+  const st=document.createElement('style'); st.id='prod-vue-css';
+  st.textContent=''
+    +'.mst-choix{display:inline-flex;gap:4px;flex-wrap:wrap}'
+    +'.mst-chip{font:inherit;font-size:10px;font-weight:600;padding:2px 8px;border-radius:999px;cursor:pointer;'
+    +'background:var(--card);border:1px solid var(--border);color:var(--muted);text-transform:none;letter-spacing:0}'
+    +'.mst-chip:hover{background:var(--bg)}'
+    +'.mst-chip.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}'
+    +'.pv-bandeau{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px}'
+    +'.pv-groupe{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:8px 12px;flex:1 1 300px;min-width:0}'
+    +'.pv-sanity{flex:0 1 250px;display:flex;align-items:center;gap:10px;cursor:pointer}'
+    +'.pv-sanity:hover{border-color:var(--accent)}'
+    +'.pv-anneau{position:relative;width:44px;height:44px;flex-shrink:0}'
+    +'.pv-anneau span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800}'
+    +'.pv-mention{font-size:13px;font-weight:700}'
+    +'.pv-lien{font-size:10px;color:var(--accent)}'
+    +'.pv-titre{display:flex;align-items:center;gap:4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:4px}'
+    +'.pv-hors{margin-left:6px;font-style:italic;font-weight:400;text-transform:none;letter-spacing:0}'
+    +'.pv-tuiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}'
+    +'.pv-tuile{padding:4px 8px;border-left:3px solid var(--c,var(--border));border-radius:4px;'
+    +'background:color-mix(in srgb,var(--c,var(--bg)) 7%,transparent)}'
+    +'.pv-lib{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);font-weight:600}'
+    +'.pv-pt{width:6px;height:6px;border-radius:50%;background:var(--c);display:inline-block}'
+    +'.pv-val{font-size:16px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}'
+    +'.ps-c-cal{color:var(--c4)}.ps-c-prod{color:var(--success)}.ps-c-arr{color:var(--danger)}.ps-c-nul{color:var(--muted)}'
+    +'.ps-met{position:relative;min-width:110px}'
+    +'.ps-met-barre{position:absolute;left:8px;right:8px;bottom:5px;height:3px;border-radius:2px;background:var(--border)}'
+    +'.ps-met-barre i{display:block;height:100%;border-radius:2px;background:var(--accent)}'
+    +'tr.ps-ligne{cursor:pointer}'
+    +'tr.ps-ligne:hover td{background:var(--accent-bg)}'
+    +'tr.ps-ligne.ouvert td{background:var(--accent-bg);border-bottom-color:transparent}'
+    +'.ps-chev{display:inline-flex;transition:transform .15s;margin-right:6px;color:var(--muted);vertical-align:middle}'
+    +'tr.ps-ligne.ouvert .ps-chev{transform:rotate(90deg);color:var(--accent)}'
+    +'tr.ps-detail>td{padding:10px 12px 16px!important;background:var(--bg)}'
+    +'.ps-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--c);margin-right:5px;vertical-align:1px}';
+  document.head.appendChild(st);
+}
+
+// Detail d'un dossier sous sa ligne : le panneau « Donnees de prod » du
+// destockage (static/mysifa_donnees_prod.js), charge au premier depliage.
+function _psDetailCharger(no, cible){
+  S.psDetailCache = S.psDetailCache || {};
+  const cache = S.psDetailCache[no];
+  if(cache && cache.html){ cible.innerHTML = cache.html; return; }
+  cible.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:12px">Chargement des saisies…</div>';
+  api('/api/production/dossier-detail?no_dossier='+encodeURIComponent(no)).then(d=>{
+    const html = (window.MySifaDonneesProd && d) ? window.MySifaDonneesProd.html(d)
+      : '<div style="color:var(--danger)">Affichage indisponible — rechargez la page.</div>';
+    S.psDetailCache[no] = {html};
+    if(cible.isConnected) cible.innerHTML = html;
+  }).catch(e=>{
+    cible.textContent = (e && e.message) || 'Saisies indisponibles.';
+    cible.style.color = 'var(--danger)';
+  });
+}
+function _psDetailLigne(no, colSpan){
+  const zone = h('div');
+  _psDetailCharger(no, zone);
+  return h('tr',{className:'ps-detail','data-ps-detail':no}, h('td',{colSpan:colSpan}, zone));
+}
+// Une ligne de dossier qui se deplie ; l'etat tient au re-rendu.
+function _psLigneDossier(no, cells, colSpan){
+  S.psOuverts = S.psOuverts || {};
+  const tr = h('tr',{className:'ps-ligne'+(S.psOuverts[no]?' ouvert':''),
+    title:'Voir les saisies du dossier',
+    onClick:()=>{
+      const ouvert = !S.psOuverts[no];
+      S.psOuverts[no] = ouvert;
+      tr.classList.toggle('ouvert', ouvert);
+      const suiv = tr.nextElementSibling;
+      if(suiv && suiv.getAttribute('data-ps-detail') === no) suiv.remove();
+      if(ouvert) tr.after(_psDetailLigne(no, colSpan));
+    }}, ...cells);
+  return S.psOuverts[no] ? [tr, _psDetailLigne(no, colSpan)] : [tr];
+}
+
 // Modale « Comment c'est calculé » : les règles viennent du serveur
 // (sanity_regles), la même source que le calcul.
 function openSanityExplication(sanity, title){
@@ -10608,6 +10719,36 @@ function renderSanityEventsBlock(sanity){
 }
 
 
+// ── Vitesse : « — » si rien a diviser, « erreur saisie » si impossible ──
+// Le plafond vient du serveur (`vitesse_max_m_min`) : au-dela, le compteur a
+// ete mal releve ou le 03 et le 89 sont tombes a la meme minute.
+function vitMax(){ return Number(S.production && S.production.vitesse_max_m_min) || 0; }
+function vitCalc(metrage, minutes){
+  const mn = Number(minutes||0);
+  if(!(mn > 0)) return {v:null, err:false};
+  const v = Number(metrage||0) / mn, max = vitMax();
+  return (max && v > max) ? {v:null, err:true} : {v:v, err:false};
+}
+// Vitesse d'un ensemble de sessions : les sessions impossibles sont sorties du
+// calcul. Il ne reste rien de sain alors qu'il y en avait : erreur.
+function vitSessions(rows){
+  let m = 0, mn = 0, err = false, sain = false;
+  (rows||[]).forEach(r=>{
+    const den = Number(r.temps_prod_min||0) + Number(r.temps_arret_min||0);
+    if(r.vitesse_aberrante || vitCalc(r.metrage_m, den).err){ err = true; return; }
+    sain = true; m += Number(r.metrage_m||0); mn += den;
+  });
+  return (!sain && err) ? {v:null, err:true} : vitCalc(m, mn);
+}
+function vitSrv(v, aberrante){
+  if(aberrante) return {v:null, err:true};
+  return {v:(v != null && Number(v) > 0) ? Number(v) : null, err:false};
+}
+function vitTxt(c){ return c.err ? 'erreur saisie' : (c.v == null ? '—' : c.v.toFixed(2)+' m/min'); }
+function vitEl(c){
+  return c.err ? h('span',{style:{color:'var(--danger)',fontWeight:'400'}},'erreur saisie') : vitTxt(c);
+}
+
 // ── Helpers Repiquage / agregations Vue d'ensemble Production ────────
 function _isRepMachine(m){
   if(!m) return false;
@@ -10621,12 +10762,13 @@ function _prodAggBy(rows, keyName){
     const k = String(r[keyName]==null?'':r[keyName]).trim();
     if(!k || k==='?') return;
     const x = m[k] = m[k] || {
-      key: k, _dosSet: new Set(),
+      key: k, _dosSet: new Set(), _rows: [],
       etiquettes: 0, metrage_m: 0, cartons: 0,
       calage_min: 0, prod_min: 0, arret_min: 0,
     };
     const dos = String(r.no_dossier||'').trim();
     if(dos) x._dosSet.add(dos);
+    x._rows.push(r);
     x.etiquettes += Number(r.etiquettes||0);
     x.metrage_m += Number(r.metrage_m||0);
     x.cartons += Number(r.cartons||0);
@@ -10636,8 +10778,9 @@ function _prodAggBy(rows, keyName){
   });
   return Object.values(m).map(v => {
     v.dossiers = v._dosSet.size; delete v._dosSet;
-    const den = Math.round(v.prod_min) + Math.round(v.arret_min);
-    v.vitesse_m_min = den>0 ? Number((v.metrage_m/den).toFixed(2)) : 0;
+    const vit = vitSessions(v._rows); delete v._rows;
+    v.vitesse_m_min = vit.v != null ? Number(vit.v.toFixed(2)) : 0;
+    v.vitesse_aberrante = vit.err;
     v.etiquettes = Math.round(v.etiquettes*10)/10;
     v.metrage_m = Math.round(v.metrage_m*10)/10;
     return v;
@@ -10720,6 +10863,23 @@ function _prodSynthTabSet(v){
   try{ localStorage.setItem('mysifa.prod.synthtab', v); }catch(e){}
 }
 
+// Cartes de statut affichees dans la vue d'ensemble : choix de chacun,
+// garde dans le navigateur. DSI et Repiquage masques par defaut.
+const MST_MACHINES = [['C1','Cohésio 1'],['C2','Cohésio 2'],['DSI','DSI'],['REP','Repiquage']];
+function _mstMasques(){
+  try{
+    const v = localStorage.getItem('mysifa.prod.mst.masques');
+    if(v != null){ const a = JSON.parse(v); if(Array.isArray(a)) return a; }
+  }catch(e){}
+  return ['DSI','REP'];
+}
+function _mstBasculer(k){
+  const a = _mstMasques();
+  const i = a.indexOf(k);
+  if(i >= 0) a.splice(i,1); else a.push(k);
+  try{ localStorage.setItem('mysifa.prod.mst.masques', JSON.stringify(a)); }catch(e){}
+}
+
 function renderMachineStatusCards(){
   const ms = S.machineStatus;
   const ICONS = {
@@ -10758,7 +10918,7 @@ function renderMachineStatusCards(){
     const isOn  = sk!=='eteinte';
     const dureeStr = m ? fmtDuree(m.duree_min) : null;
     const dureeLabel = DUREE_LABEL[sk]||'Depuis';
-    return h('div',{className:`mst-card mst-${sk}`,
+    return h('div',{className:`mst-card mst-${sk}`,'data-mkey':mkey,
         'data-bloc':'prod.ensemble.machine','data-bloc-objet':String(mkey),
         'data-bloc-objet-libelle':String(nom||''),
         'data-bloc-valeur-etat':String(label||''),
@@ -10863,8 +11023,17 @@ function renderMachineStatusCards(){
   const titleNode = h('span',{className:'section-title',style:{display:'inline-flex',alignItems:'center',gap:'4px',margin:0,padding:0,border:'none',flex:'1'}},
     iconEl('cpu',13),' Statut machines',
     h('span',{
-      style:{marginLeft:'auto',display:'inline-flex',gap:'8px'},
+      style:{marginLeft:'auto',display:'inline-flex',gap:'8px',alignItems:'center'},
     },
+      h('span',{className:'mst-choix',title:'Machines affichées'},
+        ...MST_MACHINES.map(([k,lib])=>{
+          const on = !_mstMasques().includes(k);
+          const nom = (k==='C1'||k==='C2') && ms && ms[k] && ms[k].nom ? ms[k].nom : lib;
+          return h('button',{type:'button',className:'mst-chip'+(on?' on':''),
+            title:(on?'Masquer ':'Afficher ')+nom,
+            onClick:e=>{ e.stopPropagation(); _mstBasculer(k); render(); }}, nom);
+        })
+      ),
       h('button',{
         type:'button',
         id:'mst-refresh-btn',
@@ -10879,16 +11048,13 @@ function renderMachineStatusCards(){
       },'↺ Actualiser')
     )
   );
-  const contentNode = h('div',null,
-    h('div',{className:'mst-grid'},
-      mkCard('C1'),
-      mkCard('C2')
-    ),
-    h('div',{className:'mst-grid',style:{marginTop:'12px'}},
-      mkCardDsi(),
-      mkCardRepiquage()
-    )
-  );
+  const masques = _mstMasques();
+  const cartes = MST_MACHINES.filter(([k])=>!masques.includes(k)).map(([k])=>
+    k==='DSI' ? mkCardDsi() : k==='REP' ? mkCardRepiquage() : mkCard(k));
+  const contentNode = cartes.length
+    ? h('div',{className:'mst-grid'}, ...cartes)
+    : h('div',{style:{fontSize:'12px',color:'var(--muted)',padding:'4px 2px 14px'}},
+        'Aucune machine affichée — choisissez-les en haut à droite.');
   const _enMarche=['C1','C2'].filter(k=>ms&&ms[k]&&(ms[k].statut_key||'eteinte')!=='eteinte').length;
   return makeCollapsibleSection(titleNode, contentNode, 'machines', true,
     {'data-bloc':'prod.ensemble.machines','data-bloc-valeur-en-marche':String(_enMarche)});
@@ -11077,9 +11243,8 @@ function updateMachineStatusDOM(){
   }
   const grid=document.querySelector('.mst-grid');
   if(!grid)return;
-  const cards=grid.querySelectorAll('.mst-card');
-  cards.forEach((card,idx)=>{
-    const mkey=idx===0?'C1':'C2';
+  grid.querySelectorAll('.mst-card[data-mkey]').forEach(card=>{
+    const mkey=card.getAttribute('data-mkey');
     const m=ms&&ms[mkey];
     const sk=m?(m.statut_key||'eteinte'):'eteinte';
     const label=m?(m.statut_label||'Éteinte'):'Éteinte';
@@ -11539,13 +11704,13 @@ function _mpmListeSynthese(byDosNoRep){
   let items;
   if(axe === 'dossier'){
     items = _prodAggDossier(byDosNoRep).map(function(r){
-      const den = Math.round(Number(r.temps_prod_min||0)) + Math.round(Number(r.temps_arret_min||0));
+      const den = Number(r.temps_prod_min||0) + Number(r.temps_arret_min||0);
       return {
         key: String(r.no_dossier),
         titre: '#'+r.no_dossier,
         sous: prodSynthCleanClient(r.client) || '—',
         n: fN(r.metrage_m||0)+' m',
-        vit: (den>0 ? (Number(r.metrage_m||0)/den).toFixed(2) : '0.00')+' m/min',
+        vit: vitEl(vitCalc(r.metrage_m, den)),
       };
     });
   }else{
@@ -11562,7 +11727,7 @@ function _mpmListeSynthese(byDosNoRep){
         sous: fN(r.dossiers||0)+' dossier'+((r.dossiers||0)>1?'s':'')
               + ' · ' + fMin(r.prod_min) + ' de prod',
         n: fN(r.metrage_m||0)+' m',
-        vit: (Number(r.vitesse_m_min)||0).toFixed(2)+' m/min',
+        vit: vitEl(vitSrv(r.vitesse_m_min, r.vitesse_aberrante)),
       };
     });
   }
@@ -11687,7 +11852,8 @@ function renderMpmKpis(){
   // 2. Les chiffres de la periode --------------------------------------
   if(!onlyRep){
     const prodInclArrets = Number(tt.production_min||0) + Number(tt.arret_min||0);
-    const vitesse = (d.vitesse_m_min != null) ? Number(d.vitesse_m_min).toFixed(2) : '0.00';
+    const vitC = vitSrv(d.vitesse_m_min, d.vitesse_aberrante);
+    const vitesse = vitC.v != null ? vitC.v.toFixed(2) : vitEl(vitC);
     const kv = function(lbl, val){
       return h('div',{className:'msf-kv'}, h('dt',null,lbl), h('dd',null,val));
     };
@@ -11704,7 +11870,7 @@ function renderMpmKpis(){
             h('dd',null, fN(prod.metrage_m||0), h('small',null,'m'))),
           h('dl',{className:'mpm-hero-t mpm-hero-t--accent'},
             h('dt',null,'Vitesse'),
-            h('dd',null, vitesse, h('small',null,'m/min')))
+            h('dd',null, vitesse, vitC.v != null ? h('small',null,'m/min') : null))
         ),
         h('div',{className:'msf-card'},
           kv('Dossiers produits', fN(prod.dossiers||0)),
@@ -12195,8 +12361,7 @@ function prodSynthTotals(sessions){
     t.arret_min+=Number(s.temps_arret_min||0);
   });
   t.metrage_m=Math.round(t.metrage_m*10)/10;
-  const den=Math.round(t.prod_min)+Math.round(t.arret_min);
-  t.vitesse=den>0?(t.metrage_m/den).toFixed(2):'0.00';
+  t.vit=vitSessions(sessions);
   return t;
 }
 function prodSynthCleanClient(c){
@@ -12300,8 +12465,7 @@ function openProdSynthDetail(type,keys,index,opts){
     ];
     colSpan = showDossierCol?11:10;
     sessionRows = sessions.length ? sessions.map(s=>{
-      const den=Math.round(Number(s.temps_prod_min||0))+Math.round(Number(s.temps_arret_min||0));
-      const vit=den>0?(Number(s.metrage_m||0)/den).toFixed(2):'0.00';
+      const vit=vitEl(vitSessions([s]));
       const cli=prodSynthCleanClient(s.client);
       const des=(s.designation||'').replace(/^,\s*/,'').trim();
       return h('tr',null,
@@ -12315,7 +12479,7 @@ function openProdSynthDetail(type,keys,index,opts){
         h('td',{className:'prod-synth-detail-td-num'},fMin(s.temps_calage_min)),
         h('td',{className:'prod-synth-detail-td-num'},fMin(s.temps_prod_min)),
         h('td',{className:'prod-synth-detail-td-num'},fMin(s.temps_arret_min)),
-        h('td',{className:'prod-synth-detail-td-vit'},vit+' m/min')
+        h('td',{className:'prod-synth-detail-td-vit'},vit)
       );
     }) : [h('tr',null,h('td',{colSpan:colSpan,className:'prod-synth-detail-empty'},'Aucune session sur la période filtrée.'))];
   }
@@ -12343,7 +12507,7 @@ function openProdSynthDetail(type,keys,index,opts){
         kpi('Calage',fMin(tot.calage_min)),
         kpi('Production',fMin(tot.prod_min)),
         kpi('Arrêts',fMin(tot.arret_min)),
-        kpi('Vitesse',tot.vitesse+' m/min')
+        kpi('Vitesse',vitEl(tot.vit))
       );
   const formKids=[
     h('button',{type:'button',className:'add-row-close',title:'Fermer (Échap)',onClick:e=>{e.stopPropagation();closeProdSynthModal();}},'×'),
@@ -12452,80 +12616,65 @@ function renderProdKpis(){
     parts.push(renderMachineStatusCards());
   }
 
-  // ── Sanity score cliquable ───────────────────────────────────────
-  // Le rôle « commercial » n'a pas accès à la vue Erreurs & Qualité : on retire le clic vers ce détail.
+  // ── Bandeau de la periode : qualite de saisie, quantites, temps ──
+  // Trois blocs sur une ligne au lieu de trois sections pleine largeur.
+  // Chaque groupe garde son nom de bloc (widgets d'accueil).
+  _prodVueCss();
+  const bandeau = [];
+  // Le rôle « commercial » n'a pas accès à la vue Erreurs & Qualité : pas de clic vers ce détail.
   if(S.historique&&S.historique.sanity && !isCommercial(S.user)){
-    const sc=renderSanity(S.historique.sanity);
-    if(sc){
-      sc.setAttribute('data-bloc','prod.ensemble.sanity');
-      sc.setAttribute('data-bloc-valeur-score',String(S.historique.sanity.score||0));
-      sc.style.cursor='pointer';
-      sc.title='Voir le détail des erreurs → Historique & Erreurs';
-      sc.addEventListener('click',async()=>{
-        S.subPage='erreurs';
-        if(!S.historique) await loadHist();
-        render();
-      });
-      sc.appendChild(h('div',{style:{fontSize:'11px',color:'var(--accent)',marginTop:'6px',textDecoration:'underline'}},'Voir le détail →'));
-      parts.push(sc);
-    }
+    bandeau.push(renderSanityCompact(S.historique.sanity));
   }
-
-  // Helper mention italique "(hors repiquage)" — affichee uniquement
-  // si donnees mixtes (rep + autres machines).
-  const horsRepMention = () => hasRep && !onlyRep
-    ? h('span',{style:{fontStyle:'italic',color:'var(--muted)',fontSize:'11px',marginLeft:'8px',fontWeight:'400'}},'(hors repiquage)')
-    : null;
-
-  // ── QUANTITÉS — masque si seulement repiquage ────────────────────
-  if(!onlyRep){
-    parts.push(makeCollapsibleSection(
-      h('span',{className:'section-title',style:{display:'inline-flex',alignItems:'center',gap:'4px',margin:0,padding:0,border:'none'}},
-        iconEl('box',13),' Quantités', horsRepMention()
-      ),
-      h('div',{className:'stats'},
-        h('div',{className:'stat'},h('div',{className:'stat-label'},'Dossiers produits'),h('div',{className:'stat-value'},fN(prod.dossiers||0))),
-        h('div',{className:'stat'},h('div',{className:'stat-label'},'Métrage'),h('div',{className:'stat-value'},fN(prod.metrage_m||0)+' m')),
-        h('div',{className:'stat'},h('div',{className:'stat-label'},'Vitesse'),h('div',{className:'stat-value'},((d.vitesse_m_min!=null)?Number(d.vitesse_m_min).toFixed(2):'0.00')+' m/min')),
-      ),
-      'quantites', true,
-      {'data-bloc':'prod.ensemble.quantites',
-       'data-bloc-valeur-dossiers':fN(prod.dossiers||0),
-       'data-bloc-nombre-dossiers':String(prod.dossiers||0),
-       'data-bloc-valeur-metrage':fN(prod.metrage_m||0)+' m',
-       'data-bloc-nombre-metrage':String(prod.metrage_m||0),
-       'data-bloc-valeur-vitesse':((d.vitesse_m_min!=null)?Number(d.vitesse_m_min).toFixed(2):'0.00')+' m/min',
-       'data-bloc-nombre-vitesse':String(d.vitesse_m_min||0)}
-    ));
-  }
-
-  // ── TEMPS — masque si seulement repiquage ────────────────────────
+  const horsRep = hasRep && !onlyRep
+    ? h('span',{className:'pv-hors'},'hors repiquage') : null;
+  const tuile = (lib, val, c) => h('div',{className:'pv-tuile',style:c?('--c:'+c):null},
+    h('div',{className:'pv-lib'}, c?h('i',{className:'pv-pt'}):null, lib),
+    h('div',{className:'pv-val'}, val));
   if(!onlyRep){
     const prodInclArrets = (Number(tt.production_min||0) + Number(tt.arret_min||0));
-    parts.push(makeCollapsibleSection(
-      h('span',{className:'section-title',style:{display:'inline-flex',alignItems:'center',gap:'4px',margin:0,padding:0,border:'none'}},
-        iconEl('clock',13),' Temps', horsRepMention()
-      ),
-      h('div',{className:'time-kpi'},
-        h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('wrench',12),' Calage'),h('div',{className:'tc-value'},fMin(tt.calage_min))),
-        h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('play',12),' Production'),h('div',{className:'tc-value'},fMin(prodInclArrets))),
-        h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('alert-triangle',12),' Arrêts'),h('div',{className:'tc-value'},fMin(tt.arret_min))),
-      ),
-      'temps', true,
-      {'data-bloc':'prod.ensemble.temps',
-       'data-bloc-valeur-calage':fMin(tt.calage_min),'data-bloc-nombre-calage':String(Math.round(Number(tt.calage_min||0))),
-       'data-bloc-valeur-production':fMin(prodInclArrets),'data-bloc-nombre-production':String(Math.round(prodInclArrets)),
-       'data-bloc-valeur-arrets':fMin(tt.arret_min),'data-bloc-nombre-arrets':String(Math.round(Number(tt.arret_min||0)))}
+    bandeau.push(h('div',{className:'pv-groupe',
+        'data-bloc':'prod.ensemble.quantites',
+        'data-bloc-valeur-dossiers':fN(prod.dossiers||0),
+        'data-bloc-nombre-dossiers':String(prod.dossiers||0),
+        'data-bloc-valeur-metrage':fN(prod.metrage_m||0)+' m',
+        'data-bloc-nombre-metrage':String(prod.metrage_m||0),
+        'data-bloc-valeur-vitesse':vitTxt(vitSrv(d.vitesse_m_min,d.vitesse_aberrante)),
+        'data-bloc-nombre-vitesse':String(d.vitesse_aberrante?0:(d.vitesse_m_min||0))},
+      h('div',{className:'pv-titre','data-bloc-entete':''},iconEl('box',11),' Quantités',horsRep),
+      h('div',{className:'pv-tuiles'},
+        tuile('Dossiers', fN(prod.dossiers||0)),
+        tuile('Métrage', fN(prod.metrage_m||0)+' m', 'var(--accent)'),
+        tuile('Vitesse', vitEl(vitSrv(d.vitesse_m_min,d.vitesse_aberrante)), 'var(--warn)'))
+    ));
+    bandeau.push(h('div',{className:'pv-groupe',
+        'data-bloc':'prod.ensemble.temps',
+        'data-bloc-valeur-calage':fMin(tt.calage_min),'data-bloc-nombre-calage':String(Math.round(Number(tt.calage_min||0))),
+        'data-bloc-valeur-production':fMin(prodInclArrets),'data-bloc-nombre-production':String(Math.round(prodInclArrets)),
+        'data-bloc-valeur-arrets':fMin(tt.arret_min),'data-bloc-nombre-arrets':String(Math.round(Number(tt.arret_min||0)))},
+      h('div',{className:'pv-titre','data-bloc-entete':''},iconEl('clock',11),' Temps',horsRep ? horsRep.cloneNode(true) : null),
+      h('div',{className:'pv-tuiles'},
+        tuile('Calage', fMin(tt.calage_min), 'var(--c4)'),
+        tuile('Production', fMin(prodInclArrets), 'var(--success)'),
+        tuile('Arrêts', fMin(tt.arret_min), 'var(--danger)'))
     ));
   }
+  if(bandeau.length) parts.push(h('div',{className:'pv-bandeau'}, ...bandeau));
 
   // ── SYNTHÈSE DÉTAILLÉE — sous-onglets Machines / Repiquage ───────
   const activeSubTab = _prodSynthTabGet(hasRep, onlyRep);
   // Builders pour chaque sous-onglet
+  // Couleur par nature de temps, la meme que les pastilles des saisies.
+  const _psTh = (lib,c) => h('th',null,h('i',{className:'ps-dot',style:'--c:'+c}),lib);
+  const _psMin = (v,cls) => h('td',{style:{fontFamily:'monospace'},
+    className:Math.round(Number(v||0))>0?cls:'ps-c-nul'}, fMin(v));
+  const _psMetrage = (v,max) => h('td',{className:'ps-met',style:{fontFamily:'monospace'}},
+    fN(v||0)+' m',
+    h('span',{className:'ps-met-barre'},h('i',{style:{width:(max>0?Math.round(Number(v||0)/max*100):0)+'%'}})));
   function buildMachinesPart(){
     const synthParts = [];
     // Par numéro de dossier (+ Client, − Étiquettes)
     const rowsAgg = _prodAggDossier(byDosNoRep);
+    const metMaxDos = Math.max(0, ...rowsAgg.map(r=>Number(r.metrage_m||0)));
     if(rowsAgg.length){
       const dossierKeys = rowsAgg.map(r=>String(r.no_dossier));
       synthParts.push(h('div',{className:'card','data-bloc':'prod.ensemble.par-dossier',
@@ -12536,20 +12685,21 @@ function renderProdKpis(){
             h('th',null,'Dossier'),
             h('th',null,'Client'),
             h('th',null,'Métrage'),
-            h('th',null,'Calage'),
-            h('th',null,'Prod'),
-            h('th',null,'Arrêts'),
-            h('th',null,'Vitesse')
+            _psTh('Calage','var(--c4)'),
+            _psTh('Prod','var(--success)'),
+            _psTh('Arrêts','var(--danger)'),
+            _psTh('Vitesse','var(--warn)')
           )),
-          h('tbody',null,...rowsAgg.map((r,i)=>h('tr',null,
-            makeProdSynthKeyCell(r.no_dossier||'','dossier',dossierKeys,i),
+          h('tbody',null,...rowsAgg.flatMap(r=>_psLigneDossier(String(r.no_dossier||''), [
+            h('td',{style:{fontWeight:'700',color:'var(--text)'}},
+              h('span',{className:'ps-chev'},iconEl('chevron-right',12)), r.no_dossier||''),
             h('td',{className:'prod-synth-detail-td-text'}, prodSynthCleanClient(r.client) || '—'),
-            h('td',{style:{fontFamily:'monospace'}},fN(r.metrage_m||0)+' m'),
-            h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_calage_min)),
-            h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_prod_min)),
-            h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_arret_min)),
-            h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},(()=>{const den=Math.round(Number(r.temps_prod_min||0))+Math.round(Number(r.temps_arret_min||0));return (den>0?(Number(r.metrage_m||0)/den).toFixed(2):'0.00')+' m/min';})())
-          )))
+            _psMetrage(r.metrage_m, metMaxDos),
+            _psMin(r.temps_calage_min,'ps-c-cal'),
+            _psMin(r.temps_prod_min,'ps-c-prod'),
+            _psMin(r.temps_arret_min,'ps-c-arr'),
+            h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},vitEl(vitCalc(r.metrage_m, Number(r.temps_prod_min||0)+Number(r.temps_arret_min||0))))
+          ], 7)))
         ))
       ));
     }
@@ -12557,6 +12707,7 @@ function renderProdKpis(){
     function renderAggCard(title, rows, keyLabel, synthType){
       if(!rows||!rows.length) return null;
       const keys=rows.map(r=>String(r.key));
+      const metMax=Math.max(0, ...rows.map(r=>Number(r.metrage_m||0)));
       const typeMap={'Opérateur':'operator','Machine':'machine','Jour':'day'};
       const st=synthType||(typeMap[keyLabel]||'');
       const bloc=keyLabel==='Opérateur'?'prod.ensemble.par-operateur'
@@ -12568,16 +12719,16 @@ function renderProdKpis(){
         h('div',{style:{overflowX:'auto'}},h('table',null,
           h('thead',null,h('tr',null,
             h('th',null,keyLabel),h('th',null,'Dossiers'),
-            h('th',null,'Métrage'),h('th',null,'Calage'),h('th',null,'Prod'),h('th',null,'Arrêts'),h('th',null,'Vitesse')
+            h('th',null,'Métrage'),_psTh('Calage','var(--c4)'),_psTh('Prod','var(--success)'),_psTh('Arrêts','var(--danger)'),_psTh('Vitesse','var(--warn)')
           )),
           h('tbody',null,...rows.map((r,i)=>h('tr',null,
             makeProdSynthKeyCell(keyLabel==='Opérateur'?opName(r.key):(keyLabel==='Jour'?formatJourLabel(r.key):r.key),st,keys,i),
             h('td',{style:{fontFamily:'monospace'}},fN(r.dossiers||0)),
-            h('td',{style:{fontFamily:'monospace'}},fN(r.metrage_m||0)+' m'),
-            h('td',{style:{fontFamily:'monospace'}},fMin(r.calage_min)),
-            h('td',{style:{fontFamily:'monospace'}},fMin(r.prod_min)),
-            h('td',{style:{fontFamily:'monospace'}},fMin(r.arret_min)),
-            h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},(Number(r.vitesse_m_min)||0).toFixed(2)+' m/min')
+            _psMetrage(r.metrage_m, metMax),
+            _psMin(r.calage_min,'ps-c-cal'),
+            _psMin(r.prod_min,'ps-c-prod'),
+            _psMin(r.arret_min,'ps-c-arr'),
+            h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},vitEl(vitSrv(r.vitesse_m_min,r.vitesse_aberrante)))
           )))
         ))
       );
@@ -13038,7 +13189,7 @@ function renderProdKpis(){
   const synthContent = activeSubTab === 'repiquage' ? buildRepiquagePart() : buildMachinesPart();
 
   parts.push(makeCollapsibleSection(
-    h('span',{className:'section-title',style:{margin:0,padding:0,border:'none'}},'📌 Synthèse détaillée'),
+    h('span',{className:'section-title',style:{margin:0,padding:0,border:'none'}},iconEl('layers',13),' Synthèse détaillée'),
     h('div',null, subTabsBar, synthContent),
     'synthese'
   ));
@@ -13486,7 +13637,7 @@ function renderProdKpis(){
       + '.myprod-menu{max-width:960px}'
       + '.myprod-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:8px}'
       + '.myprod-tile{display:flex;align-items:center;gap:14px;text-align:left;width:100%;padding:18px 18px;background:var(--card);border:1px solid var(--border);border-radius:14px;cursor:pointer;color:var(--text);font-family:inherit;transition:border-color .15s,transform .15s,box-shadow .15s}'
-      + '.myprod-tile:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 22px rgba(34,211,238,.12)}'
+      + '.myprod-tile:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 22px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}'
       + '.myprod-tile-ic{width:44px;height:44px;border-radius:12px;background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}'
       + '.myprod-tile-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}'
       + '.myprod-tile-lbl{font-size:15px;font-weight:800;color:var(--text)}'

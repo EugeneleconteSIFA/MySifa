@@ -1,13 +1,13 @@
 .support-btn{
   display:flex;align-items:center;gap:8px;
   padding:10px 12px;border-radius:12px;
-  border:1.5px solid rgba(34,211,238,.35);
-  background:rgba(34,211,238,.08);
+  border:1.5px solid color-mix(in srgb,var(--accent,#22d3ee) 35%,transparent);
+  background:color-mix(in srgb,var(--accent,#22d3ee) 8%,transparent);
   color:var(--accent);
   cursor:pointer;font-size:12px;width:100%;
   font-family:inherit;transition:all .15s;
 }
-.support-btn:hover{background:rgba(34,211,238,.14);border-color:var(--accent);color:var(--accent)}
+.support-btn:hover{background:color-mix(in srgb,var(--accent,#22d3ee) 14%,transparent);border-color:var(--accent);color:var(--accent)}
 .support-btn .support-ico{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px}
 .support-btn .support-ico svg{width:18px;height:18px;display:block}
 

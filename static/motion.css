@@ -31,7 +31,7 @@
 @keyframes mo-scale-in  { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
 @keyframes mo-slide-left{ from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
 @keyframes mo-pulse     { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
-@keyframes mo-pulse-ring{ 0% { box-shadow: 0 0 0 0 var(--ring-c, rgba(34,211,238,.45)); } 70%,100% { box-shadow: 0 0 0 7px transparent; } }
+@keyframes mo-pulse-ring{ 0% { box-shadow: 0 0 0 0 var(--ring-c, color-mix(in srgb,var(--accent,#22d3ee) 45%,transparent)); } 70%,100% { box-shadow: 0 0 0 7px transparent; } }
 @keyframes mo-shimmer   { 0% { background-position: -160% 0; } 100% { background-position: 260% 0; } }
 @keyframes mo-spin      { to { transform: rotate(360deg); } }
 

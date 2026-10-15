@@ -114,6 +114,9 @@ MINUTES_MIN_CADENCE = 15.0
 # Plafond de plausibilite machine. Il ne sert pas a juger une bonne serie mais
 # a jeter les lignes impossibles : `produit_series` porte des metrages qui sont
 # le compteur machine entier (90 351 374 m sur 4 h), soit 365 943 m/min.
+# Comme les codes d'operation, il arrive en parametre (`vitesse_max`) : la
+# source est `config.PROD_VITESSE_MAX_M_MIN`. Cette valeur ne sert que de
+# defaut aux appels sans configuration (tests sur base en memoire).
 VITESSE_MAX_PLAUSIBLE = 200.0
 
 
@@ -727,7 +730,8 @@ def _ref_produit(conn, no_dossier: str) -> Optional[str]:
 
 
 def reperes_reference(conn, ref_produit_norm: Optional[str],
-                      no_dossier_exclu: str = "") -> Dict[str, Any]:
+                      no_dossier_exclu: str = "",
+                      vitesse_max: float = VITESSE_MAX_PLAUSIBLE) -> Dict[str, Any]:
     """Ce que la meme reference a donne les fois precedentes.
 
     C'est le seul retour qui ait une valeur pour un conducteur : non pas
@@ -778,7 +782,7 @@ def reperes_reference(conn, ref_produit_norm: Optional[str],
     # possible, soit pas.
     def _retenue(r: Any) -> bool:
         v = _f(r["vitesse_m_min"])
-        if not (0 < v <= VITESSE_MAX_PLAUSIBLE):
+        if not (0 < v <= vitesse_max):
             return False
         if r["metrage_m"] is not None and _f(r["metrage_m"]) < METRAGE_MIN_CADENCE:
             return False
@@ -808,7 +812,8 @@ def reperes_reference(conn, ref_produit_norm: Optional[str],
 
 def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
                  code_debut: str = "01", code_annul: str = "90",
-                 debut: str = "", fin: str = "") -> Dict[str, Any]:
+                 debut: str = "", fin: str = "",
+                 vitesse_max: float = VITESSE_MAX_PLAUSIBLE) -> Dict[str, Any]:
     """Tout ce que la production de ce dossier a produit comme information.
 
     Les codes de debut et de fin arrivent en parametres — ils vivent dans
@@ -843,6 +848,14 @@ def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
     # (production + arret), seule base comparable au repere historique.
     minutes_cadence = minutes_prod + _minutes_de(temps, CAT_ARRET)
     cadence = (metrage["reel"] / minutes_cadence) if minutes_cadence > 0 and metrage["reel"] > 0 else None
+    # Au-dela du plafond machine, le chiffre vient d'une saisie fausse (compteur
+    # mal releve, 03 et 89 a la meme minute) : il disparait, l'ecran dit pourquoi.
+    vitesse_aberrante = vitesse is not None and vitesse > vitesse_max
+    cadence_aberrante = cadence is not None and cadence > vitesse_max
+    if vitesse_aberrante:
+        vitesse = None
+    if cadence_aberrante:
+        cadence = None
     # La cadence reste affichee ; c'est son ECART au repere qu'on ne calcule
     # pas sur une serie trop courte — un « +74 % » tire de 4 minutes de
     # production se discute a la machine comme s'il etait vrai.
@@ -850,7 +863,7 @@ def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
                      and minutes_cadence >= MINUTES_MIN_CADENCE)
 
     ref = _ref_produit(conn, no_dossier)
-    reperes = reperes_reference(conn, ref, no_dossier)
+    reperes = reperes_reference(conn, ref, no_dossier, vitesse_max=vitesse_max)
 
     info = info_prod(conn, no_dossier)
     coms = commentaires(conn, no_dossier, saisies)
@@ -937,6 +950,8 @@ def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
         "metrage": metrage,
         "vitesse_m_min": round(vitesse, 1) if vitesse else None,
         "cadence_m_min": round(cadence, 1) if cadence else None,
+        "vitesse_aberrante": vitesse_aberrante,
+        "cadence_aberrante": cadence_aberrante,
         "cadence_assez": cadence_assez,
         "reference": reperes,
         "ecarts": {
@@ -1077,6 +1092,8 @@ def resume(cr: Dict[str, Any]) -> Dict[str, Any]:
         "metrage_reel": cr["metrage"]["reel"],
         "vitesse_m_min": cr["vitesse_m_min"],
         "cadence_m_min": cr["cadence_m_min"],
+        "vitesse_aberrante": cr.get("vitesse_aberrante", False),
+        "cadence_aberrante": cr.get("cadence_aberrante", False),
         "ecart_cadence_pct": cr["ecarts"]["cadence_pct"],
         "minutes_total": cr["temps"]["total_minutes"],
         "info_prod": bool(info),
@@ -1094,12 +1111,14 @@ def resume(cr: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def comptes_rendus_periode(conn, debut: str, fin: str, machine: Any = "",
-                           code_fin: str = "89", limite: int = 200) -> List[Dict[str, Any]]:
+                           code_fin: str = "89", limite: int = 200,
+                           vitesse_max: float = VITESSE_MAX_PLAUSIBLE) -> List[Dict[str, Any]]:
     """Les comptes-rendus d'une periode, en projection compacte."""
     numeros = dossiers_clotures(conn, debut, fin, machine, code_fin)[:max(0, limite)]
     out = []
     for no_d in numeros:
-        cr = compte_rendu(conn, no_d, code_fin=code_fin, debut=debut, fin=fin)
+        cr = compte_rendu(conn, no_d, code_fin=code_fin, debut=debut, fin=fin,
+                          vitesse_max=vitesse_max)
         if cr.get("existe"):
             out.append(resume(cr))
     out.sort(key=lambda r: r.get("date_fin") or "", reverse=True)
@@ -1109,7 +1128,8 @@ def comptes_rendus_periode(conn, debut: str, fin: str, machine: Any = "",
 # ─── Retour a l'atelier ──────────────────────────────────────────────────────
 
 def retour_atelier(conn, machine: Any, debut: str, fin: str,
-                   code_fin: str = "89") -> Dict[str, Any]:
+                   code_fin: str = "89",
+                   vitesse_max: float = VITESSE_MAX_PLAUSIBLE) -> Dict[str, Any]:
     """Ce qu'on rend aux conducteurs d'une machine, pour une semaine.
 
     Trois regles de conception, qui expliquent ce qui n'y figure pas :
@@ -1129,7 +1149,8 @@ def retour_atelier(conn, machine: Any, debut: str, fin: str,
     # La periode descend jusqu'au calcul : sans elle, chaque dossier versait sa
     # vie entiere dans le bilan d'une journee. Un point du 31/08 affichait
     # 28 h d'activite sur une machine dont la journee en compte 15.
-    crs = [compte_rendu(conn, n, code_fin=code_fin, debut=debut, fin=fin)
+    crs = [compte_rendu(conn, n, code_fin=code_fin, debut=debut, fin=fin,
+                        vitesse_max=vitesse_max)
            for n in numeros]
     crs = [c for c in crs if c.get("existe")]
 
@@ -1138,6 +1159,14 @@ def retour_atelier(conn, machine: Any, debut: str, fin: str,
     minutes_arret = sum(sum(_minutes_de(c["temps"], k) for k in CATEGORIES_COUTEUSES) for c in crs)
     minutes_total = sum(c["temps"]["total_minutes"] for c in crs)
     metrage = sum(c["metrage"]["reel"] for c in crs)
+    # La vitesse de la periode ne compte que les dossiers dont la vitesse est
+    # possible : un seul compteur faux suffirait a la porter a 900 m/min.
+    sains = [c for c in crs if not c.get("vitesse_aberrante")]
+    vit_min = sum(_minutes_de(c["temps"], CAT_PRODUCTION) for c in sains)
+    vit_m = sum(c["metrage"]["reel"] for c in sains)
+    vitesse_periode = (vit_m / vit_min) if vit_min > 0 else None
+    if vitesse_periode is not None and vitesse_periode > vitesse_max:
+        vitesse_periode = None
     # Gâche de calage : seuls les dossiers dont le compteur a été relevé en fin
     # de calage comptent, et l'écran dit combien ils sont sur le total.
     gaches = [((c.get("calage") or {}).get("gache") or {}).get("metres") for c in crs]
@@ -1148,7 +1177,7 @@ def retour_atelier(conn, machine: Any, debut: str, fin: str,
     # References produites, avec l'ecart au repere historique.
     refs: List[Dict[str, Any]] = []
     for c in crs:
-        if c["cadence_m_min"] is None:
+        if c["cadence_m_min"] is None and not c.get("cadence_aberrante"):
             continue
         refs.append({
             "cadence_assez": bool(c.get("cadence_assez", True)),
@@ -1159,6 +1188,8 @@ def retour_atelier(conn, machine: Any, debut: str, fin: str,
             "metrage": c["metrage"]["reel"],
             "vitesse_m_min": c["vitesse_m_min"],
             "cadence_m_min": c["cadence_m_min"],
+            "vitesse_aberrante": c.get("vitesse_aberrante", False),
+            "cadence_aberrante": c.get("cadence_aberrante", False),
             "cadence_reference_m_min": c["reference"].get("cadence_mediane_m_min"),
             "series_passees": c["reference"].get("series", 0),
             "ecart_pct": c["ecarts"]["cadence_pct"],
@@ -1248,7 +1279,10 @@ def retour_atelier(conn, machine: Any, debut: str, fin: str,
             "minutes_arret": round(minutes_arret, 1),
             "minutes_total": round(minutes_total, 1),
             "metrage": round(metrage, 1),
-            "vitesse_m_min": round(metrage / minutes_prod, 1) if minutes_prod > 0 else None,
+            "vitesse_m_min": round(vitesse_periode, 1) if vitesse_periode else None,
+            "vitesse_aberrante": vitesse_periode is None and any(
+                c.get("vitesse_aberrante") for c in crs),
+            "dossiers_vitesse_aberrante": len(crs) - len(sains),
             "part_arret_pct": round(minutes_arret / minutes_total * 100.0, 1) if minutes_total > 0 else 0.0,
             "gache_calage_m": round(sum(gaches), 1) if gaches else None,
             "dossiers_avec_gache": len(gaches),

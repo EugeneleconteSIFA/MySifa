@@ -404,7 +404,7 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
   resize:none;max-height:80px;min-height:36px;outline:none;line-height:1.4;
   transition:border-color .15s;
 }
-#chat-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.1)}
+#chat-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 10%,transparent)}
 #chat-send{
   width:36px;height:36px;border-radius:8px;background:var(--accent);
   border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
@@ -510,7 +510,7 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 .chat-msg-attach{display:block;margin-top:6px}
 .chat-msg-attach-img img{max-width:280px;max-height:200px;border-radius:8px;display:block}
 .chat-msg-attach-file{display:inline-flex;padding:6px 10px;background:var(--accent-bg);
-  border:1px solid rgba(34,211,238,.25);border-radius:8px;font-size:12px;color:var(--accent);text-decoration:none}
+  border:1px solid color-mix(in srgb,var(--accent,#22d3ee) 25%,transparent);border-radius:8px;font-size:12px;color:var(--accent);text-decoration:none}
 .chat-msg.mine .chat-msg-attach-file{background:rgba(0,0,0,.12);border-color:rgba(255,255,255,.25);color:var(--bg)}
 .chat-modal-overlay{
   position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.55);
@@ -689,9 +689,9 @@ body.sb-open .sidebar-overlay{display:block}
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_chat_badge.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=11"></script>
+<script src="/static/chat_widget.js?v=13"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_humeur.js"></script>
 <script>
 window.__MYSIFA_UID__ = __USER_ID__;

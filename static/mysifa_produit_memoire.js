@@ -799,7 +799,8 @@
           kpi('Production', fMin(s.temps_prod_min)),
           kpi('Arrets', fMin(s.temps_arret_min)),
           kpi('Metrage', s.metrage_m != null ? fNum(s.metrage_m) + ' m' : '—'),
-          kpi('Vitesse', s.vitesse_m_min != null ? fNum(s.vitesse_m_min, 1) + ' m/mn' : '—'),
+          s.vitesse_aberrante ? kpiErr('Vitesse')
+            : kpi('Vitesse', s.vitesse_m_min != null ? fNum(s.vitesse_m_min, 1) + ' m/mn' : '—'),
           kpi('Etiquettes', s.etiquettes != null ? fNum(s.etiquettes) : '—'),
         ]),
       ];
@@ -848,6 +849,13 @@
     return el('div', { className: 'pmem-kpi' }, [
       el('span', { className: 'pmem-kpi-lbl', text: lbl }),
       el('span', { className: 'pmem-kpi-val', text: val }),
+    ]);
+  }
+  // Vitesse au-dela du plafond machine : la saisie est fausse, pas la machine.
+  function kpiErr(lbl) {
+    return el('div', { className: 'pmem-kpi' }, [
+      el('span', { className: 'pmem-kpi-lbl', text: lbl }),
+      el('span', { className: 'pmem-kpi-val', style: 'color:var(--danger);font-weight:400', text: 'erreur saisie' }),
     ]);
   }
 

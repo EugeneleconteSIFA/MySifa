@@ -611,7 +611,7 @@ async def inject_staging_bandeau(request: Request, call_next):
 # Coût pour les autres rôles : un <script> de 20 Ko en cache navigateur, aucun
 # appel réseau tant que le raccourci n'a pas servi (le script résout le rôle
 # paresseusement). html2canvas n'est chargé qu'à la première capture.
-_TACHE_QUICK_TAG = b'<script src="/static/mysifa_tache_quick.js?v=3" defer></script>'
+_TACHE_QUICK_TAG = b'<script src="/static/mysifa_tache_quick.js?v=4" defer></script>'
 # Même logique pour la capture de blocs en widget d'accueil (mysifa_blocs.js) :
 # un bloc capturable doit l'être sur toutes les pages, sans liste à tenir.
 _BLOCS_TAG = f'<script src="/static/mysifa_blocs.js?v={APP_VERSION}" defer></script>'.encode()

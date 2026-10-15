@@ -4,9 +4,32 @@
     {
       "name": "mysifa-erp",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-X", "utf8", "-m", "uvicorn", "main:app", "--port", "8010", "--reload"],
+      "runtimeArgs": [
+        "-X",
+        "utf8",
+        "-m",
+        "uvicorn",
+        "main:app",
+        "--port",
+        "8010",
+        "--reload"
+      ],
       "port": 8010,
       "url": "http://erp.localhost:8010"
+    },
+    {
+      "name": "mysifa-local",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-X",
+        "utf8",
+        "-m",
+        "uvicorn",
+        "main:app",
+        "--port",
+        "8011"
+      ],
+      "port": 8011
     }
   ]
 }

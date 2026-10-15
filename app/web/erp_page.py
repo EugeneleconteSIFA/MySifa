@@ -282,7 +282,7 @@ td.num .saut{justify-content:flex-end}
 .badge.n0{background:rgba(148,163,184,.16);color:var(--muted)}
 .badge.n1{background:rgba(251,191,36,.16);color:var(--warn)}
 .badge.n2{background:rgba(52,211,153,.16);color:var(--ok)}
-.badge.n3{background:rgba(34,211,238,.14);color:var(--accent)}
+.badge.n3{background:color-mix(in srgb,var(--accent,#22d3ee) 14%,transparent);color:var(--accent)}
 .neg{color:var(--danger);font-weight:600}
 .badge.r-oui{background:rgba(52,211,153,.16);color:var(--ok)}
 .badge.r-partiel{background:rgba(251,191,36,.16);color:var(--warn)}
@@ -686,7 +686,7 @@ body.light .tdb-tip{box-shadow:0 12px 34px rgba(15,23,42,.16)}
 <script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_guides.js"></script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 
 <div class="sidebar-overlay" id="sb-ov" onclick="fermerSidebar()"></div>
 

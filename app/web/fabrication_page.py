@@ -75,7 +75,7 @@ FABRICATION_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
-<link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=fiche-mp2">
+<link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=fiche2-mp2">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
@@ -298,10 +298,10 @@ table.fab-table td{
 }
 table.fab-table tr:last-child td{border-bottom:none}
 table.fab-table tr.fab-row-last td{
-  background:rgba(34,211,238,.04);
+  background:color-mix(in srgb,var(--accent,#22d3ee) 4%,transparent);
 }
 body.light table.fab-table tr.fab-row-last td{
-  background:rgba(8,145,178,.06);
+  background:color-mix(in srgb,var(--accent,#0891b2) 6%,transparent);
 }
 .fab-time{font-family:monospace;font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;letter-spacing:.2px}
 .fab-client-cell{display:inline-block;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
@@ -483,7 +483,7 @@ body.light table.fab-table tr.fab-row-last td{
 .fab-btn-success{background:var(--success);color:var(--bg)}
 .fab-btn-warn{background:var(--warn);color:var(--bg)}
 .fab-btn-danger{background:var(--danger);color:#fff}
-.fab-btn-ghost{background:var(--accent-bg);color:var(--accent);border:1px solid rgba(34,211,238,.3)}
+.fab-btn-ghost{background:var(--accent-bg);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent,#22d3ee) 30%,transparent)}
 .fab-btn-muted{background:transparent;color:var(--text2);border:1px solid var(--border)}
 .fab-btn-muted:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .fab-btn-sm{padding:7px 12px;font-size:12px;border-radius:8px}
@@ -503,7 +503,7 @@ body.light table.fab-table tr.fab-row-last td{
   border-radius:8px;padding:8px 12px;font-size:12px;color:var(--text);
   outline:none;transition:border-color .15s;font-family:inherit;
 }
-.fab-search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.fab-search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .fab-search-input::placeholder{color:var(--muted)}
 .fab-search-btn{
   padding:8px 14px;background:var(--accent);color:#0a0e17;
@@ -559,7 +559,7 @@ body.light table.fab-table tr.fab-row-last td{
   outline:none;font-family:inherit;transition:border-color .15s;
 }
 .fab-field input:focus,.fab-field textarea:focus,.fab-field select:focus{
-  border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)
+  border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)
 }
 .fab-field textarea{resize:vertical;min-height:70px}
 /* Moteur de saisie d'outil : resultats sous le champ de recherche. La liste
@@ -665,7 +665,7 @@ body.light table.fab-table tr.fab-row-last td{
   display:flex;flex-direction:column;gap:3px;
 }
 .fab-picker-item:hover{border-color:var(--accent);background:var(--accent-bg)}
-.fab-picker-item--hi{border-color:var(--accent);background:var(--accent-bg);outline:2px solid rgba(34,211,238,.35);outline-offset:1px}
+.fab-picker-item--hi{border-color:var(--accent);background:var(--accent-bg);outline:2px solid color-mix(in srgb,var(--accent,#22d3ee) 35%,transparent);outline-offset:1px}
 /* Dossier certifié dans le sélecteur : liseré vert à gauche. Discret sur
    une liste longue, mais suffisant pour repérer les dossiers FSC d'un coup
    d'œil sans les lire un par un. */
@@ -917,7 +917,7 @@ table.fab-of-table tr:last-child td{border-bottom:none}
 .fab-of-preview-table tr.fab-of-missing td{background:rgba(251,191,36,.08)}
 .fab-of-preview-table input{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;
   background:var(--bg);color:var(--text);font-size:13px;font-family:inherit}
-.fab-of-preview-table input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.fab-of-preview-table input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .fab-of-modal-wide{max-width:720px;width:100%;max-height:88vh;overflow-y:auto}
 .fab-of-spinner{display:flex;align-items:center;justify-content:center;gap:10px;padding:40px;color:var(--muted);font-size:13px}
 
@@ -948,11 +948,11 @@ table.fab-of-table tr:last-child td{border-bottom:none}
   border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);
   outline:none;font-family:inherit;transition:border-color .15s;
 }
-.fab-traca-manual:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.fab-traca-manual:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .fab-traca-video-wrap{position:relative;border-radius:10px;overflow:hidden;background:#000;height:140px;flex-shrink:0}
 .fab-traca-video-wrap video{width:100%;height:100%;object-fit:cover;display:block}
 .fab-traca-scan-line{
-  position:absolute;left:0;right:0;height:2px;background:rgba(34,211,238,.8);
+  position:absolute;left:0;right:0;height:2px;background:color-mix(in srgb,var(--accent,#22d3ee) 80%,transparent);
   animation:scanLine 1.8s ease-in-out infinite;
 }
 @keyframes scanLine{0%{top:10%}50%{top:85%}100%{top:10%}}
@@ -1312,7 +1312,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='fabrication';</script>
-<link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
+<link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
@@ -1321,16 +1321,16 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <script src="/static/mysifa_poste_bobine.js?v=1"></script>
-<script src="/static/mysifa_bobine_edit.js?v=1.0"></script>
+<script src="/static/mysifa_bobine_edit.js?v=1.1"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=11"></script>
+<script src="/static/chat_widget.js?v=13"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
-<script src="/static/mysifa_alert_runtime.js?v=2.4.5"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.4.19"></script>
 <!-- Memoire produit : fiche par reference produit, partagee avec MyProd -->
-<script src="/static/mysifa_produit_memoire.js?v=2.3"></script>
+<script src="/static/mysifa_produit_memoire.js?v=2.4"></script>
 <script>
   // Démarre le polleur d'alertes maintenance dès que la page est prête.
   // Le runtime interroge /api/maintenance/alerts/active toutes les 15 s,
@@ -1439,6 +1439,9 @@ let S = {
   finCalage: null,
   finCalageVals: null,
   finCalageConfirme: false,
+  vitesseMax: 0,                // plafond machine (m/min), fourni par le serveur
+  debutCompteurConfirme: null,  // compteur deja signale improbable, confirme au 2e clic
+  finCompteurConfirme: null,
   showCompteurCalage: false,
   compteurCalageCtx: null,
   compteurCalageVal: '',
@@ -2023,6 +2026,7 @@ async function loadSession(opts){
     machineIdCourant: d.machine_id_courant||null,
     creneauCourant: d.creneau_courant||'',
     fallbackActif: !!d.fallback_actif,
+    vitesseMax: Number(d.vitesse_max_m_min)||S.vitesseMax||0,
   };
   if(S.wantedMachineId && Array.isArray(d.machines_du_jour) && d.machines_du_jour.length){
     const stillValid = d.machines_du_jour.some(m=>m.machine_id===S.wantedMachineId);
@@ -2125,7 +2129,18 @@ async function loadDossiers(){
 
 async function loadMachines(){
   const d = await apiFetch('/api/fabrication/machines').catch(()=>null);
-  if(d) set({machines: d.machines||[]});
+  if(d) set({machines: d.machines||[], vitesseMax: Number(d.vitesse_max_m_min)||S.vitesseMax||0});
+}
+
+/* Un compteur dont l'ecart donnerait une vitesse impossible est presque
+   toujours un chiffre en trop ou une ligne mal lue. On ne bloque pas (la
+   machine a pu tourner hors dossier), on fait relire : une seconde validation
+   de la meme valeur passe. Rend true si la saisie peut partir. */
+function compteurConfirme(cle, valeur, message){
+  if(S[cle] === valeur) return true;
+  S[cle] = valeur;
+  showToast(message+' Vérifiez le compteur, puis validez à nouveau pour confirmer.','danger');
+  return false;
 }
 
 async function triggerOp(opCode, opLabel, extra={}){
@@ -2345,7 +2360,7 @@ function renderSidebar(){
                 display:'flex', flexDirection:'column', gap:'2px',
                 transition:'background .12s',
               },
-              onMouseEnter:(e)=>{ if(!isActive) e.currentTarget.style.background='rgba(34,211,238,.06)'; },
+              onMouseEnter:(e)=>{ if(!isActive) e.currentTarget.style.background='color-mix(in srgb,var(--accent,#22d3ee) 6%,transparent)'; },
               onMouseLeave:(e)=>{ if(!isActive) e.currentTarget.style.background='transparent'; },
               onClick:()=>{ if(!isActive) openRepiquageDossier(ref); },
             },
@@ -6570,6 +6585,14 @@ function renderDebutModal(){
       showToast('Métrage invalide : le compteur était à '+Math.round(dernierM).toLocaleString('fr-FR')+' m — valeur saisie trop petite','danger');
       return;
     }
+    // Plus d'une heure a pleine vitesse depuis le dernier releve : suspect.
+    const ecartDebut = (dernierM != null) ? mDebut - dernierM : 0;
+    if(S.vitesseMax && ecartDebut > S.vitesseMax * 60
+       && !compteurConfirme('debutCompteurConfirme', mDebut,
+            'Compteur improbable : '+Math.round(ecartDebut).toLocaleString('fr-FR')
+            +' m de plus que le dernier relevé ('+Math.round(dernierM).toLocaleString('fr-FR')+' m).')){
+      return;
+    }
 
     set({showDebutModal:false, loading:true});
     try{
@@ -6709,7 +6732,7 @@ const FIN_ETAPES_CLOTURE = [
 function finReinitialiser(){
   return {finDossierOui:null, finEtape:'choix', finNoteVal:'', finNoteChargee:false,
           finNbMatieres:null, finMatiereMotif:'', finCalage:null, finCalageVals:null,
-          finCalageConfirme:false, finCalageEdit:null, finSignalOuvert:false,
+          finCalageConfirme:false, finCompteurConfirme:null, finCalageEdit:null, finSignalOuvert:false,
           finSignalement:'', _finEtapeVue:null, _finModalVue:false};
 }
 
@@ -6807,6 +6830,20 @@ function finValiderCompteur(){
     if(debutCtr !== null && mFin < debutCtr){
       showToast('Métrage fin ('+Math.round(mFin).toLocaleString('fr-FR')+' m) inférieur au début de production ('+Math.round(debutCtr).toLocaleString('fr-FR')+' m)','danger');
       return null;
+    }
+    // Metrage du dossier rapporte au temps ecoule depuis le demarrage : au-dela
+    // du plafond machine, le compteur est mal releve.
+    const minutes = debutRow ? finMinutesEntre(debutRow.date_operation, nowIsoLocal()) : null;
+    if(debutCtr !== null && S.vitesseMax && minutes != null){
+      const metres = mFin - debutCtr;
+      const vit = metres / Math.max(minutes, 1);
+      if(vit > S.vitesseMax
+         && !compteurConfirme('finCompteurConfirme', mFin,
+              'Métrage improbable : '+Math.round(metres).toLocaleString('fr-FR')+' m en '
+              +finDureeTxt(minutes)+', soit '+Math.round(vit).toLocaleString('fr-FR')
+              +' m/min (maximum machine : '+Math.round(S.vitesseMax)+' m/min).')){
+        return null;
+      }
     }
   }
   return mFin;

@@ -19,7 +19,7 @@ import unicodedata
 from datetime import date, datetime
 from typing import Any, Optional
 
-from config import CODE_ANNUL_DOS, CODE_DEBUT_DOS, CODE_FIN_DOS
+from config import CODE_ANNUL_DOS, CODE_DEBUT_DOS, CODE_FIN_DOS, PROD_VITESSE_MAX_M_MIN
 from app.core.database import get_db
 from app.services import rapport_dossier as rd
 from app.services.mcp_data import ErreurMCP
@@ -71,6 +71,7 @@ def _cr(conn, no_dossier: str, debut: str = "", fin: str = "") -> dict[str, Any]
     return rd.compte_rendu(
         conn, no_dossier, code_fin=CODE_FIN_DOS, code_debut=CODE_DEBUT_DOS,
         code_annul=CODE_ANNUL_DOS, debut=debut, fin=fin,
+        vitesse_max=PROD_VITESSE_MAX_M_MIN,
     )
 
 
@@ -112,10 +113,12 @@ def metric(dossier: Optional[str] = None, du: Optional[str] = None,
 
         b = _bornes(conn, du, au)
         atelier = rd.retour_atelier(conn, (machine or "").strip(), b["debut"], b["fin"],
-                                    code_fin=CODE_FIN_DOS)
+                                    code_fin=CODE_FIN_DOS,
+                                    vitesse_max=PROD_VITESSE_MAX_M_MIN)
         lignes = rd.comptes_rendus_periode(conn, b["debut"], b["fin"],
                                            machine=(machine or "").strip(),
-                                           code_fin=CODE_FIN_DOS, limite=200)
+                                           code_fin=CODE_FIN_DOS, limite=200,
+                                           vitesse_max=PROD_VITESSE_MAX_M_MIN)
     return {
         "portee": "periode",
         "periode": b,

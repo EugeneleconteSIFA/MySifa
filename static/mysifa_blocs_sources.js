@@ -780,12 +780,13 @@
     "prod.ensemble.quantites": function (ctx) {
       return prodDashboard(ctx).then(function (d) {
         var p = d.produit || {};
-        var vit = d.vitesse_m_min;
+        // Comme la page : « erreur saisie » au-dela du plafond, « — » sans valeur.
+        var vit = d.vitesse_aberrante ? 0 : Number(d.vitesse_m_min || 0);
         return r({
           dossiers: fN(p.dossiers || 0),
           metrage: fN(p.metrage_m || 0) + " m",
-          vitesse: (vit != null ? Number(vit).toFixed(2) : "0.00") + " m/min"
-        }, { dossiers: p.dossiers || 0, metrage: p.metrage_m || 0, vitesse: vit || 0 });
+          vitesse: d.vitesse_aberrante ? "erreur saisie" : (vit > 0 ? vit.toFixed(2) + " m/min" : "—")
+        }, { dossiers: p.dossiers || 0, metrage: p.metrage_m || 0, vitesse: vit });
       });
     },
     "prod.ensemble.temps": function (ctx) {
