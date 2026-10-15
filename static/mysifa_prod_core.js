@@ -375,7 +375,7 @@
     // d'une ligne de synthèse à l'autre avec les flèches, remplace l'entrée —
     // cent devis relus ne font pas cent retours.
     var mo=_prodModaleCourante();
-    if(mo){ p[mo.cle]=mo.id; nav+='/'+mo.cle; }
+    if(mo){ p[mo.cle]=mo.id; nav+='/'+mo.cle; if(mo.extra) Object.assign(p,mo.extra); }
     return {params:p, nav:nav};
   }
 
@@ -397,6 +397,18 @@
     synthese:{page:'production',
       ouvrir:function(v){ var i=String(v).indexOf(':'); if(i>0) openProdSynthDetail(v.slice(0,i),[v.slice(i+1)],0); },
       fermer:function(){ closeProdSynthModal(true); }},
+    // Mémoire produit (mysifa_produit_memoire.js) : surcouche ouverte depuis
+    // Scans d'OF, la liste des produits ou une saisie — donc sur toute page
+    // (page:null). L'onglet voyage dans produit_onglet.
+    produit:{page:null, extra:['produit_onglet'],
+      ouvrir:function(ref,u){ var M=window.MySifaProduitMemoire; if(M) M.openFiche(ref,{onglet:u.get('produit_onglet',null)}); },
+      fermer:function(){ _pmemFermer(); }},
+    historique:{page:null, extra:['produit_onglet'],
+      ouvrir:function(no,u){ var M=window.MySifaProduitMemoire; if(M) M.openHistorique(no,{onglet:u.get('produit_onglet',null)}); },
+      fermer:function(){ _pmemFermer(); }},
+    produits:{page:null,
+      ouvrir:function(){ var M=window.MySifaProduitMemoire; if(M) M.openListe(); },
+      fermer:function(){ _pmemFermer(); }},
     of:{page:'of',
       ouvrir:function(id){ if(/^[0-9]+$/.test(id)) openOfEditModal({id:Number(id)}); },
       fermer:function(){ if(S.ofEditModal) closeOfEditModal(); }},
@@ -404,6 +416,31 @@
       ouvrir:function(id){ var f=(S.fiches||[]).filter(function(x){return String(x.id)===String(id);})[0]; if(f) openFicheEditModal(f); },
       fermer:function(){ if(S.ficheEditModal) closeFicheEditModal(); }}
   };
+  // Fermeture technique de la surcouche mémoire produit (Retour du
+  // navigateur) : son signal de fermeture ne doit pas toucher l'adresse.
+  var _pmemSilence=false;
+  function _pmemFermer(){
+    var M=window.MySifaProduitMemoire; if(!M) return;
+    _pmemSilence=true; try{ M.fermer(); }finally{ _pmemSilence=false; }
+  }
+  // Branché au premier prodSyncUrl : mysifa_produit_memoire.js est chargé
+  // APRÈS ce fichier, il n'existe pas encore quand celui-ci s'exécute.
+  var _pmemBranche=false;
+  function _pmemBrancher(){
+    if(_pmemBranche||!window.MySifaProduitMemoire||!MySifaProduitMemoire.surAdresse) return;
+    _pmemBranche=true;
+    MySifaProduitMemoire.surAdresse(function(e){
+      if(_pmemSilence) return;
+      var cles=['produit','historique','produits'];
+      if(e){
+        S.urlModale={cle:e.cle, id:e.id,
+          extra:(e.onglet&&e.onglet!=='series')?{produit_onglet:e.onglet}:null};
+      }else if(S.urlModale&&cles.indexOf(S.urlModale.cle)!==-1){
+        S.urlModale=null;
+      }else return;
+      prodSyncUrl();
+    });
+  }
   function _prodModaleCourante(){
     if(S.ofEditModal&&S.ofEditModal.id) return {cle:'of',id:S.ofEditModal.id};
     if(S.ficheEditModal&&S.ficheEditModal.id) return {cle:'fiche',id:S.ficheEditModal.id};
@@ -422,11 +459,12 @@
     }
     cour=_prodModaleCourante();
     if(voulue&&!cour){
-      try{ _MODALES_URL[voulue.cle].ouvrir(String(voulue.id)); }catch(e){}
+      try{ _MODALES_URL[voulue.cle].ouvrir(String(voulue.id), voulue.u||MySifaUrl.lire()); }catch(e){}
     }
   }
 
   function prodSyncUrl(){
+    _pmemBrancher();
     if(!window.MySifaUrl||!S.user||S.app==='login') return;
     try{ var r=_prodParams(); MySifaUrl.ecrire(r.params,{navigation:r.nav}); }catch(e){}
   }
@@ -518,8 +556,8 @@
     }
     S._modaleUrl=null;
     Object.keys(_MODALES_URL).forEach(function(cle){
-      var v=u.get(cle,null);
-      if(v&&_MODALES_URL[cle].page===page&&v.length<=120) S._modaleUrl={cle:cle,id:v};
+      var v=u.get(cle,null), pg=_MODALES_URL[cle].page;
+      if(v&&(pg===null||pg===page)&&v.length<=120) S._modaleUrl={cle:cle,id:v,u:u};
     });
     return avant!==JSON.stringify([S.fv.date_from,S.fv.date_to,S.fv.machines,S.fv.operateurs,S.fv.dossiers]);
   }
@@ -531,7 +569,10 @@
     // un changement d'endroit (page, sous-onglet, fiche, filtres) le fait.
     var _sansModale=function(){
       var p=Object.assign({},_prodParams().params);
-      Object.keys(_MODALES_URL).forEach(function(k){ if(S.page===_MODALES_URL[k].page) delete p[k]; });
+      Object.keys(_MODALES_URL).forEach(function(k){
+        var m=_MODALES_URL[k];
+        if(m.page===null||S.page===m.page){ delete p[k]; (m.extra||[]).forEach(function(x){ delete p[x]; }); }
+      });
       return JSON.stringify(p);
     };
     MySifaUrl.surRetour(async function(){

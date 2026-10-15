@@ -415,11 +415,35 @@
   // construite une seule fois : c'est le contenant qui change, pas l'ecran.
   var contenantInline = null;
 
-  function close() {
+  function closeInterne() {
     fermerApercuScan();
     var ov = document.getElementById(OVERLAY_ID);
     if (ov) ov.remove();
     document.removeEventListener('keydown', onKey);
+    return !!ov;
+  }
+  function close() {
+    if (closeInterne()) signalerAdresse(null);
+  }
+
+  // ── Adresse de la page hôte (url-etat.md) ─────────────────────────
+  // La page qui l'enregistre (MyProd) met la surcouche ouverte dans son
+  // adresse : { cle: 'produit' | 'historique' | 'produits', id, onglet },
+  // ou null à la fermeture. Rien n'est signalé pour la vue rendue dans la
+  // page (Scans d'OF), qui a son propre rappel.
+  var surAdresse = null;
+  function signalerAdresse(e) {
+    if (!surAdresse) return;
+    if (e === undefined) {
+      e = null;
+      if (!contenantInline && document.getElementById(OVERLAY_ID)) {
+        if (state.mode === 'fiche' && state.ref) e = { cle: 'produit', id: state.ref, onglet: state.tab };
+        else if (state.mode === 'historique' && state.noDossier) e = { cle: 'historique', id: state.noDossier, onglet: state.tab };
+        else if (state.mode === 'liste') e = { cle: 'produits', id: 'liste' };
+      }
+      if (!e) return;
+    }
+    try { surAdresse(e); } catch (x) {}
   }
 
   function onKey(e) {
@@ -441,12 +465,13 @@
         return;
       }
     }
-    close();
+    closeInterne();
     var ov = el('div', { className: 'pmem-ov', id: OVERLAY_ID });
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
     ov.appendChild(node);
     document.body.appendChild(ov);
     document.addEventListener('keydown', onKey);
+    signalerAdresse();
   }
 
   // ── Apercu d'un scan, dans MySifa ──────────────────────────────────
@@ -1369,10 +1394,16 @@
   }
 
   // ── Portes d'entree ────────────────────────────────────────────────
-  async function openHistorique(noDossier) {
+  // `o.onglet` : onglet à ouvrir (series | savoirs | documents), repris de
+  // l'adresse de la page hôte.
+  var ONGLETS_FICHE = ['series', 'savoirs', 'documents'];
+  function ongletDemande(o) {
+    return (o && ONGLETS_FICHE.indexOf(o.onglet) !== -1) ? o.onglet : 'series';
+  }
+  async function openHistorique(noDossier, o) {
     contenantInline = null;
     await chargerTypes();
-    state = { tab: 'series', data: null, mode: 'historique', noDossier: noDossier, docs: null, sel: null };
+    state = { tab: ongletDemande(o), data: null, mode: 'historique', noDossier: noDossier, docs: null, sel: null };
     try {
       state.data = await api(urlHistorique(noDossier));
     } catch (e) { toast(e.message || 'Historique indisponible.', 'danger'); return; }
@@ -1380,10 +1411,10 @@
     renderCourant();
   }
 
-  async function openFiche(ref) {
+  async function openFiche(ref, o) {
     contenantInline = null;
     await chargerTypes();
-    state = { tab: 'series', data: null, mode: 'fiche', noDossier: null, docs: null, sel: null };
+    state = { tab: ongletDemande(o), data: null, mode: 'fiche', noDossier: null, docs: null, sel: null, ref: ref };
     try {
       state.data = await api('/api/produits/' + encodeURI(ref));
     } catch (e) { toast(e.message || 'Fiche indisponible.', 'danger'); return; }
@@ -2027,5 +2058,6 @@
     monterScansDans: monterScansDans,
     normRef: normRef,
     fermer: close,
+    surAdresse: function (fn) { surAdresse = typeof fn === 'function' ? fn : null; },
   };
 })();

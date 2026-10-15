@@ -132,13 +132,13 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <script src="/static/mysifa_donnees_prod.js?v=1"></script>
 <!-- Adresse de la page : onglet, filtres, tri et objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=2"></script>
-<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent15-ecart3-sais4-bob5-msb1-san3-mpm2-ton1-vit2-sev1-url5"></script>
+<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent15-ecart3-sais4-bob5-msb1-san3-mpm2-ton1-vit2-sev1-url6"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>
 <!-- v2.3.42 : viewer partagé du détail d'un ack d'alerte (identique à Maintenance) -->
 <script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__-ack2"></script>
 <!-- Memoire produit : fiche par reference (partagee avec Saisieprod) -->
-<script src="/static/mysifa_produit_memoire.js?v=__V_LABEL__-pmem19"></script>
+<script src="/static/mysifa_produit_memoire.js?v=__V_LABEL__-pmem20"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 </body>
 </html>"""
