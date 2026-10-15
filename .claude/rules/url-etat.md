@@ -79,6 +79,20 @@ dérivation ET à la fonction de lecture. Un état visible qui n'est pas dans
 l'adresse est un oubli, sauf exceptions assumées : recherche texte,
 pagination, sections repliées, formulaire de CRÉATION en cours.
 
+**TOUTES les fenêtres en font partie, formulaires compris** (retour du
+15/10/2026 : « tu les oublies presque toujours »). Avant de déclarer une appli
+faite, inventaire par grep — toute fonction qui écrit dans `#mroot` ou pose
+une surcouche sur `body`, page ET `static/*.js` partagés — et inventaire des
+clics qui ouvrent un objet par sa référence (lignes de liste, activité
+récente, tuiles, résultats de recherche). La réponse liste ce qui est couvert
+et ce qui est exclu, avec la raison. Seules exclusions admises : caméra,
+étape interne d'un geste en cours (confirmation, écart à justifier), sortie
+d'impression.
+
+Contrôler aussi que l'objet ouvert est lu au BON endroit de l'état : la fiche
+produit de MyStock range son id dans `S.selProduit.produit.id`, pas
+`S.selProduit.id` — l'adresse ne l'a jamais portée jusqu'au 15/10/2026.
+
 **Les fenêtres de détail en font partie** (décision du 15/10/2026) : un devis,
 un OF, une fiche technique, une ligne de synthèse ouverts par-dessus la page
 sont des objets ouverts comme les autres. Modèle : `_MODALES_URL` de
@@ -110,8 +124,11 @@ geste en oublie toujours un. MyStock observe `document.body`
 après tout changement d'affichage. Ses fenêtres se ferment par cinq chemins
 différents : `stockModaleOuverte(cle, id)` en tête de la fonction d'ouverture
 retient l'élément ajouté à la page, et la fenêtre est réputée fermée dès qu'il
-n'y est plus. Une nouvelle fenêtre de consultation = une entrée dans
-`_STOCK_MODALES` + cet appel.
+n'y est plus. Les autres fenêtres (37 fonctions, formulaires compris)
+ne sont pas modifiées : `stockEnvelopperOuvreurs()` les enveloppe au
+démarrage depuis `_STOCK_OUVREURS` (fonction, clé, valeur tirée des
+arguments), et `_STOCK_REOUVRIR` dit comment rouvrir chacune à partir de
+l'adresse. Une nouvelle fenêtre = une ligne dans chacune des deux tables.
 
 ### Module autonome monté dans une page
 

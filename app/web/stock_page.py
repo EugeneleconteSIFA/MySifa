@@ -2441,7 +2441,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : onglet, filtres, tri, objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=2"></script>
-<script src="/static/stock_url.js?v=1"></script>
+<script src="/static/stock_url.js?v=2"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=13"></script>
@@ -28162,6 +28162,8 @@ async function init() {
   }
   // Emplacement d'inventaire, référence de négoce, bâtiment du plan ouverts
   // par l'adresse ; puis l'adresse suit l'écran.
+  // Toutes les fenêtres déclarent leur ouverture dans l'adresse (stock_url.js).
+  try { stockEnvelopperOuvreurs(); } catch (e) {}
   try { if (window.MySifaUrl) await stockOuvrirObjetsUrl(MySifaUrl.lire(), false); } catch (e) {}
   _stockUrlPrete = true;
   stockSyncUrl();

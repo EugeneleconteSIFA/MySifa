@@ -51,6 +51,172 @@ const _STOCK_MODALES = {
                                   : v === 'matieres' ? openMatieresAdminDrawer()
                                   : openBesoinsMappingModal()) },
 };
+// ── Toutes les autres fenêtres, formulaires compris ────────────────────
+// Inventaire du 15/10/2026 (grep des fonctions qui écrivent dans #mroot ou
+// posent une surcouche sur body, stock_page.py + mysifa_stock_modals.js).
+// Chaque fonction d'ouverture est ENVELOPPÉE au démarrage (stockEnvelopper-
+// Ouvreurs) : elle déclare sa fenêtre puis s'exécute — aucune des quarante
+// fonctions n'a à connaître l'adresse. `valeur(args)` tire de ses arguments
+// ce qui suffit à la rouvrir ; `ouvrir(v)` retrouve les objets dans l'état.
+//
+// Hors adresse, volontairement : caméra (startCamera, recepStartCamera),
+// choix d'imprimante et impression d'étiquettes après une réception
+// (transitoires, liés à un geste qui vient d'avoir lieu), confirmation de
+// sortie d'un produit fini (étape de la fenêtre de sortie), écart FSC (étape
+// d'enregistrement d'un mouvement), modale de laizes de la tendance.
+async function _stockMatiereParId(id) {
+  if (!id) return undefined;
+  const sm = S.selMatiere && S.selMatiere.matiere;
+  if (sm && String(sm.id) === String(id)) return sm;
+  if (!S.matieres) { try { const d = await api('/api/stock/matieres'); S.matieres = Array.isArray(d) ? d : []; } catch (e) {} }
+  return (S.matieres || []).find(x => String(x.id) === String(id)) || undefined;
+}
+function _stockProduitCourant(id) {
+  const p = S.selProduit && S.selProduit.produit;
+  return (p && String(p.id) === String(id)) ? p : undefined;
+}
+function _stockLigneLot(pid, empl) {
+  const e = ((S.selProduit && S.selProduit.emplacements) || []).find(x => String(x.emplacement) === String(empl));
+  if (!e) return null;
+  const p = (S.selProduit && S.selProduit.produit) || {};
+  return { qLot: e.quantite_lot_fifo != null ? e.quantite_lot_fifo : e.quantite,
+           unite: e.unite || p.unite || '', ref: e.reference || p.reference || '', row: e };
+}
+const _deux = v => { const i = String(v).indexOf(':'); return i < 0 ? [String(v), ''] : [String(v).slice(0, i), String(v).slice(i + 1)]; };
+
+const _STOCK_OUVREURS = [
+  // [fonction, clé, valeur(args)]
+  ['openModalMouvement',       'mouvement_mp',   a => a[0] + (a[1] && a[1].id ? ':' + a[1].id : '')],
+  ['openModalPfMouvement',     'mouvement_pf',   a => a[0] + (a[1] && a[1].id ? ':' + a[1].id : '')],
+  ['openPfMvtModal',           'mouvement_produit_fini', a => a[0] || 'entree'],
+  ['openNgMvtModal',           'mouvement_negoce', a => a[0] || 'entree'],
+  ['openNgCatalogueModal',     'catalogue_negoce', a => a[0] || 'tout'],
+  ['openPfExportCsvModal',     'export',         () => 'produits-finis'],
+  ['openInvPfExportModal',     'export',         () => 'inventaire'],
+  ['openStockSortieProdQuick', 'rapide',         () => 'sortie-prod'],
+  ['openStockAExpedierQuick',  'rapide',         () => 'a-expedier'],
+  ['openDashboardAddPfModal',  'rapide',         () => 'ajout-pf'],
+  ['openEmplEntreeModal',      'entree_empl',    a => a[0]],
+  ['openMvtModal',             'mouvement',      a => (a[3] || 'entree') + ':' + a[0] + ':' + (a[2] || '')],
+  ['openMoveLotModal',         'deplacer_lot',   a => a[0] + ':' + a[1]],
+  ['sortirLot',                'sortir_lot',     a => a[0] + ':' + a[1]],
+  ['openEmplInventaireConfirm','inventaire_confirmer', a => a[0]],
+  ['invV2OpenModifyModal',     'inv_modifier',   a => a[0]],
+  ['invV2OpenCommentModal',    'inv_note',       a => a[0]],
+  ['invV2OpenAddProductModal', 'inv_ajout',      () => 'produit'],
+  ['openMatiereRefEditModal',  'modifier_matiere', a => a[0] && a[0].id],
+  ['openMatiereCopyFromCard',  'copier_matiere', a => a[0] && a[0].id],
+  ['openCondAjustModal',       'conditionnements', () => 'tous'],
+  ['openMatiereCreateModal',   'nouvelle_matiere', () => 'oui'],
+  ['openMpDeplacerModal',      'deplacer_variante', a => a[1] && a[1].id],
+  ['openMpVarianteModal',      'variante',       a => (a[1] && a[1].id) || 'nouvelle'],
+  ['openMpEmplacementModal',   'emplacement_matiere', a => (a[1] && (a[1].id || a[1].emplacement)) || 'nouveau'],
+  ['openModalInventaireMatiere','inventaire_matiere', a => a[0] && a[0].id],
+  ['openReceptionMatiereModal','reception_matiere', a => a[0] && a[0].id],
+  ['openProductionEdit',       'production_modifier', a => a[0] && a[0].reference],
+  ['openProductionAddTo',      'production_ajouter',  a => a[0] && a[0].reference],
+  ['openTracaPrint',           'impression',     a => a[0] && a[0].id],
+  ['openBesoinDocApercu',      'apercu_doc',     a => a[0] + ':' + (a[1] || '')],
+  ['openDocEtatModal',         'etat_doc',       a => a[0] + ':' + a[1]],
+  ['openBesoinAssocierModal',  'associer',       a => a[0] + ':' + a[1]],
+  ['openBesoinCreerMatiere',   'creer_matiere',  a => a[0] + ':' + a[1]],
+  ['openBesoinsHelpModal',     'aide',           () => 'besoins'],
+  ['openValorisationConteneurModal', 'conteneur', a => a[0] && (a[0].id != null ? a[0].id : a[0].matiere_id)],
+  ['openValorisationClotureModal',   'cloture',  () => 'valorisation'],
+];
+
+const _STOCK_REOUVRIR = {
+  mouvement_mp: async v => { const [t, id] = _deux(v); openModalMouvement(t, await _stockMatiereParId(id)); },
+  mouvement_pf: v => { const [t, id] = _deux(v); openModalPfMouvement(t, _stockProduitCourant(id)); },
+  mouvement_produit_fini: v => openPfMvtModal(v),
+  mouvement_negoce: v => openNgMvtModal(v),
+  catalogue_negoce: v => openNgCatalogueModal(v === 'tout' ? undefined : v),
+  export: v => (v === 'inventaire' ? openInvPfExportModal() : openPfExportCsvModal()),
+  rapide: v => (v === 'sortie-prod' ? openStockSortieProdQuick() : v === 'a-expedier' ? openStockAExpedierQuick() : openDashboardAddPfModal()),
+  entree_empl: v => openEmplEntreeModal(v),
+  mouvement: v => {
+    const [t, reste] = _deux(v); const [pid, empl] = _deux(reste);
+    const p = _stockProduitCourant(pid);
+    openMvtModal(Number(pid), p ? p.reference : '', empl, t);
+  },
+  deplacer_lot: v => {
+    const [pid, empl] = _deux(v); const l = _stockLigneLot(pid, empl);
+    if (l) openMoveLotModal(Number(pid), empl, l.qLot, l.unite, l.ref, l.row.nb_lots, { fsc: l.row.fsc });
+  },
+  sortir_lot: v => {
+    const [pid, empl] = _deux(v); const l = _stockLigneLot(pid, empl);
+    if (l) sortirLot(Number(pid), empl, l.qLot, l.unite, l.ref, l.row.nb_lots, { fsc: l.row.fsc });
+  },
+  inventaire_confirmer: v => openEmplInventaireConfirm(v),
+  inv_modifier: v => {
+    const r = ((S.invV2Detail && S.invV2Detail.refs) || []).find(x => String(x.produit_id) === String(v));
+    if (r) invV2OpenModifyModal(r.produit_id, parseFloat(r.quantite) || 0, r.reference, r.designation, r.unite || '');
+  },
+  inv_note: v => {
+    const r = ((S.invV2Detail && S.invV2Detail.refs) || []).find(x => String(x.produit_id) === String(v));
+    if (r) invV2OpenCommentModal(r.produit_id, r.reference, r.designation);
+  },
+  inv_ajout: () => invV2OpenAddProductModal(),
+  modifier_matiere: async v => { const m = await _stockMatiereParId(v); if (m) openMatiereRefEditModal(m); },
+  copier_matiere: async v => { const m = await _stockMatiereParId(v); if (m) openMatiereCopyFromCard(m); },
+  conditionnements: () => openCondAjustModal(),
+  nouvelle_matiere: () => openMatiereCreateModal(),
+  deplacer_variante: v => {
+    const m = S.selMatiere && S.selMatiere.matiere;
+    const vs = (S.selMatiere && S.selMatiere.variantes && S.selMatiere.variantes.variantes) || [];
+    const x = vs.find(y => String(y.id) === String(v));
+    if (m && x) openMpDeplacerModal(m, x);
+  },
+  variante: v => {
+    const m = S.selMatiere && S.selMatiere.matiere; if (!m) return;
+    const vs = (S.selMatiere.variantes && S.selMatiere.variantes.variantes) || [];
+    openMpVarianteModal(m, v === 'nouvelle' ? null : (vs.find(y => String(y.id) === String(v)) || null));
+  },
+  emplacement_matiere: v => {
+    const m = S.selMatiere && S.selMatiere.matiere; if (!m) return;
+    const es = Array.isArray(m.emplacements) ? m.emplacements : [];
+    openMpEmplacementModal(m, v === 'nouveau' ? null : (es.find(e => String(e.id || e.emplacement) === String(v)) || null));
+  },
+  inventaire_matiere: async v => { const m = await _stockMatiereParId(v); if (m) openModalInventaireMatiere(m); },
+  reception_matiere: async v => { const m = await _stockMatiereParId(v); if (m) openReceptionMatiereModal(m); },
+  production_modifier: v => { const r = ((S.productionZ1 && S.productionZ1.refs) || []).find(x => x.reference === v); if (r) openProductionEdit(r); },
+  production_ajouter: v => { const r = ((S.productionZ1 && S.productionZ1.refs) || []).find(x => x.reference === v); if (r) openProductionAddTo(r); },
+  impression: v => { const e = (typeof TRACA_ETIQUETTES !== 'undefined' ? TRACA_ETIQUETTES : []).find(x => String(x.id) === String(v)); if (e) openTracaPrint(e); },
+  apercu_doc: v => { const [d, t] = _deux(v); openBesoinDocApercu(d, t); },
+  etat_doc: v => { const [t, id] = _deux(v); openDocEtatModal(t, id, ''); },
+  associer: v => { const [k, x] = _deux(v); openBesoinAssocierModal(k, x); },
+  creer_matiere: v => { const [k, x] = _deux(v); openBesoinCreerMatiere(k, x); },
+  aide: () => openBesoinsHelpModal(),
+  conteneur: v => {
+    const it = ((S.valorisation && S.valorisation.items) || []).find(x => String(x.id != null ? x.id : x.matiere_id) === String(v));
+    if (it) openValorisationConteneurModal(it);
+  },
+  cloture: () => openValorisationClotureModal(),
+  import: () => { S.importRefsOpen = true; S.importRefsPreview = null; render(); },
+  unites: () => { S.unitModalOpen = true; S.unitNewLabel = ''; S.unitNewBase = 'cartons'; S.unitNewQty = ''; render(); },
+};
+
+// Enveloppe chaque fonction d'ouverture (appelé une fois, à la fin d'init()).
+// Les fonctions de premier niveau d'un script classique sont des propriétés
+// de window : réassigner window[nom] change aussi les appels internes.
+function stockEnvelopperOuvreurs() {
+  _STOCK_OUVREURS.forEach(([nom, cle, valeur]) => {
+    const orig = window[nom];
+    if (typeof orig !== 'function' || orig.__adresse) return;
+    const env = function () {
+      let v = null;
+      try { v = valeur(arguments); } catch (e) {}
+      if (v !== null && v !== undefined && v !== '' && String(v).length <= 120) stockModaleOuverte(cle, v);
+      return orig.apply(this, arguments);
+    };
+    env.__adresse = true;
+    window[nom] = env;
+  });
+  Object.keys(_STOCK_REOUVRIR).forEach(cle => {
+    if (!_STOCK_MODALES[cle]) _STOCK_MODALES[cle] = { ok: /^.{1,120}$/, ouvrir: _STOCK_REOUVRIR[cle] };
+  });
+}
+
 // Une fenêtre se déclare en s'ouvrant. Les fenêtres de MyStock se ferment par
 // cinq chemins différents (closeMroot, retrait direct, fond cliqué…) : au lieu
 // de les suivre un par un, on retient l'élément qu'elle a ajouté à la page, et
@@ -88,6 +254,7 @@ function _stockModaleVivante() {
   return mo;
 }
 function _stockFermerModale() {
+  if (S.importRefsOpen || S.unitModalOpen) { S.importRefsOpen = false; S.unitModalOpen = false; render(); }
   const mo = S.urlModale;
   S.urlModale = null;
   if (!mo || !mo.el) return;
@@ -99,6 +266,9 @@ function stockParams() {
   const r = _stockParamsBase();
   const mo = _stockModaleVivante();
   if (mo) { r.params[mo.cle] = mo.id; r.nav += '/' + mo.cle; }
+  // Fenêtres décrites par un drapeau de S (rendues par render()).
+  else if (S.importRefsOpen) { r.params.import = 'references'; r.nav += '/import'; }
+  else if (S.unitModalOpen) { r.params.unites = 'nouvelle'; r.nav += '/unites'; }
   return r;
 }
 
@@ -121,12 +291,18 @@ function _stockParamsBase() {
     if (S.mpVarFiltreLaize) p.var_laize = S.mpVarFiltreLaize;
     return { params: p, nav: nav + '/matiere:' + p.matiere + '/' + (p.fiche || '') };
   }
-  if (S.selProduit && S.selProduit.id) {
-    p.produit = String(S.selProduit.id);
+  // loadProduit() range la réponse de l'API telle quelle : l'id est dans
+  // .produit, et loadEmplacement() met le code dans .emplacement. L'ancien
+  // code lisait .id et .code, qui n'existent pas : ni la fiche produit ni
+  // l'emplacement n'arrivaient dans l'adresse.
+  const pid = S.selProduit && ((S.selProduit.produit && S.selProduit.produit.id) || S.selProduit.id);
+  if (pid) {
+    p.produit = String(pid);
     return { params: p, nav: nav + '/produit:' + p.produit };
   }
-  if (S.selEmpl && S.selEmpl.code) {
-    p.empl = S.selEmpl.code;
+  const ecode = S.selEmpl && (S.selEmpl.emplacement || S.selEmpl.code);
+  if (ecode) {
+    p.empl = String(ecode);
     return { params: p, nav: nav + '/empl:' + p.empl };
   }
 
@@ -296,6 +472,10 @@ async function stockModaleUrl(u) {
     const v = u.get(cle, null);
     if (v && _STOCK_MODALES[cle].ok.test(v)) voulue = { cle, id: v };
   });
+  // Fenêtres à drapeau (import du référentiel, unités de vente).
+  const drapeau = voulue && (voulue.cle === 'import' || voulue.cle === 'unites');
+  if ((S.importRefsOpen || S.unitModalOpen) && !drapeau) { S.importRefsOpen = false; S.unitModalOpen = false; render(); }
+  if (drapeau) return void (_stockModaleVivante() || (S.importRefsOpen || S.unitModalOpen) || _STOCK_MODALES[voulue.cle].ouvrir(voulue.id));
   const cour = _stockModaleVivante();
   if (cour && (!voulue || cour.cle !== voulue.cle || cour.id !== voulue.id)) _stockFermerModale();
   if (voulue && !_stockModaleVivante()) { try { await _STOCK_MODALES[voulue.cle].ouvrir(voulue.id); } catch (e) {} }
