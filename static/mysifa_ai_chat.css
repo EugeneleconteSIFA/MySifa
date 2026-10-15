@@ -435,3 +435,14 @@ html body.mysifa-dock-barre #ai-chat-root #ai-chat-btn.mysifa-dock-fab-active { 
 .ai-table th { font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; }
 .ai-table td:first-child { font-weight: 700; color: var(--text); white-space: nowrap; }
 .ai-table tbody tr:nth-child(even) td { background: var(--card); }
+/* Réponses compactes (retour d'Eugène du 15/10/2026) : moins d'air entre les
+   blocs, interligne resserré, tableau plus dense. */
+.ai-msg.bot .ai-bubble { line-height: 1.42; padding: 7px 11px; }
+.ai-msg.bot .ai-bubble p { margin: 0 0 3px; }
+.ai-msg.bot .ai-bubble ul, .ai-msg.bot .ai-bubble ol { margin: 2px 0 4px; }
+.ai-msg.bot .ai-bubble li { margin: 1px 0; }
+.ai-h { margin: 7px 0 2px; }
+.ai-note { margin: 4px 0; padding: 4px 9px; }
+.ai-table-wrap { margin: 4px 0; }
+.ai-table th, .ai-table td { padding: 3px 6px; }
+#ai-messages { gap: 6px; }
