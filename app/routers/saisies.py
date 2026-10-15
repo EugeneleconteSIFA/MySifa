@@ -359,7 +359,7 @@ def list_saisies(
             f"""SELECT id,import_id,operateur,date_operation,operation,operation_code,
                        operation_severity,operation_category,machine,no_dossier,client,designation,
                        quantite_a_traiter,quantite_traitee,metrage_prevu,metrage_reel,
-                       metrage_total_debut,metrage_total_fin,
+                       metrage_total_debut,metrage_total_fin,metrage_compteur,
                        commentaire,service,est_manuel,modifie_par,modifie_le,modifie_note,
                        COALESCE(est_annule,0) AS est_annule,annule_le,annule_par,annule_motif,
                        fin_dossier

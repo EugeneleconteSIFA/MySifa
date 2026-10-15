@@ -9046,7 +9046,48 @@ function saisiesAvecDurees(baseRows){
 
 // Métrage dossier (Fin dossier = compteur fin - compteur début), posé en
 // r._metrage_dossier sur les lignes 89 et 90. Modifie les lignes en place.
+// Fin de calage : le « Production » qui ferme une suite de saisies de calage
+// reçoit r._fin_calage = {minutes, metres}. Durée depuis la première saisie de
+// la suite ; mètres = compteur relevé à ce « Production » − dernier compteur
+// relevé avant le début du calage. Même règle que gache_calage() côté serveur
+// (app/services/calage_cloture.py) : une saisie d'une autre catégorie coupe
+// la suite, un relevé manquant laisse les mètres vides.
+function saisiesMarquerFinsCalage(rows){
+  const HORS = new Set(['alert_ack', 'stock_pf', 'stock_mp']);
+  const chrono = rows.filter(r => !HORS.has(r.kind) && !HORS.has(r.operation_category)
+                               && !Number(r.est_annule||0))
+    .sort((a,b)=>(a.date_operation||'').localeCompare(b.date_operation||'')
+                 || (Number(a.id)||0) - (Number(b.id)||0));
+  const parMachine = {};
+  const compteur = r => {
+    const c = r.operation_code || '';
+    const v = c === '01' ? (r.metrage_total_debut ?? r.metrage_prevu)
+            : (c === '89' || c === '90') ? (r.metrage_total_fin ?? r.metrage_reel)
+            : r.metrage_compteur;
+    return v != null && v !== '' ? parseFloat(v) : null;
+  };
+  chrono.forEach(r=>{
+    const st = parMachine[r.machine||''] || (parMachine[r.machine||''] = {debut:null, ctrAvant:null, dernierCtr:null});
+    const cat = r.operation_category || '';
+    if(cat === 'calage'){
+      if(st.debut == null){ st.debut = r.date_operation; st.ctrAvant = st.dernierCtr; }
+    } else if(cat === 'production' && st.debut != null){
+      const t0 = Date.parse(st.debut), t1 = Date.parse(r.date_operation||'');
+      const ctr = r.metrage_compteur != null ? parseFloat(r.metrage_compteur) : null;
+      const metres = (ctr != null && st.ctrAvant != null && ctr >= st.ctrAvant) ? ctr - st.ctrAvant : null;
+      r._fin_calage = {minutes: (isFinite(t0) && isFinite(t1) && t1 >= t0) ? Math.round((t1-t0)/60000) : null,
+                       metres: metres};
+      st.debut = null;
+    } else {
+      st.debut = null;
+    }
+    const c = compteur(r);
+    if(c != null) st.dernierCtr = c;
+  });
+}
+
 function saisiesCalculerMetrages(rows){
+  saisiesMarquerFinsCalage(rows);
   const debutByDossier = {}; // no_dossier → compteur début (metrage_total_debut ?? metrage_prevu)
   const chrono = [...rows].sort((a,b)=>(a.date_operation||'').localeCompare(b.date_operation||''));
   chrono.forEach(r=>{
@@ -9188,7 +9229,9 @@ function renderSaisies(){
     // Fin de production où l'opérateur a choisi « Dossier terminé » : un trait
     // sous la ligne ferme visuellement le dossier.
     const finDossierRow = (row.operation_code||'')==='89' && Number(row.fin_dossier)===1;
-    const tr=h('tr',{className:'data-row'+(fictifRow?' saisie-row-fictif':'')+(annuleRow?' saisie-row-annule':'')+(finDossierRow?' saisie-row-fin-dossier':''),
+    // « Production » qui ferme un calage : même mise en avant, en orange.
+    const finCalage = !annuleRow ? row._fin_calage : null;
+    const tr=h('tr',{className:'data-row'+(fictifRow?' saisie-row-fictif':'')+(annuleRow?' saisie-row-annule':'')+(finDossierRow?' saisie-row-fin-dossier':'')+(finCalage?' saisie-row-fin-calage':''),
       style:{cursor:(readOnly||annuleRow)?'default':'pointer'}});
     if(annuleRow) tr.title = annuleTip;
     else if(cycleAnnule) tr.title = cycleTip;
@@ -9268,7 +9311,13 @@ function renderSaisies(){
     // saisie (« + Manuel », « Corrigé ») et ne doit pas être prise.
  
     tr.appendChild(h('td',{style:{fontSize:'11px',color:'var(--muted)',whiteSpace:'nowrap',fontFamily:'monospace'}},fDSecs(row.date_operation)));
-    tr.appendChild(h('td',finDossierRow?{className:'td-op-cloture'}:null,row.operation||'-',
+    tr.appendChild(h('td',(finDossierRow||finCalage)?{className:'td-op-cloture'}:null,row.operation||'-',
+      finCalage
+        ? h('span',{className:'saisie-pill-fin-calage',
+            title:'Calage de '+fmtDurMin(finCalage.minutes)
+              +(finCalage.metres!=null ? ' · '+fN(finCalage.metres)+' m passés au calage' : ' · compteur non relevé')},
+            'Fin de calage · '+fmtDurMin(finCalage.minutes))
+        : null,
       cycleAnnule
         ? h('span',{title:cycleTip,
             style:{marginLeft:'6px',padding:'1px 6px',borderRadius:'4px',fontSize:'10px',
@@ -9299,7 +9348,11 @@ function renderSaisies(){
         })()
     ));
     tr.appendChild(h('td',{style:{color:'var(--c3)'}},
-      row._metrage_dossier!=null
+      (finCalage && finCalage.metres!=null)
+        ? h('span',{style:{color:'var(--warn)',fontWeight:'700'},
+            title:'Gâche de calage = compteur à la fin du calage − compteur avant le calage'},
+            '⇒ '+fN(finCalage.metres)+' m calage')
+        : row._metrage_dossier!=null
         ? (()=>{
             const finCtr   = row.metrage_total_fin   ?? row.metrage_reel;
             const debutCtr = row.metrage_total_debut != null
@@ -11325,6 +11378,7 @@ function _mpmSaiDuree(m){
   return Math.floor(mm/60)+' h '+String(mm%60).padStart(2,'0');
 }
 function _mpmSaiMetrage(row){
+  if(row._fin_calage && row._fin_calage.metres != null) return '⇒ '+fN(row._fin_calage.metres)+' m calage';
   if(row._metrage_dossier != null)    return '⇒ '+fN(row._metrage_dossier)+' m';
   if(row.metrage_total_fin != null)   return fN(row.metrage_total_fin)+' m (cpt fin)';
   if(row.metrage_reel != null)        return fN(row.metrage_reel)+' m';
@@ -11431,6 +11485,9 @@ function renderMpmSaisies(d, rows, readOnly){
     if(row.modifie_par) tags.push(h('span',{className:'msf-badge'},'Corrigé'));
     if((row.operation_code||'') === '89' && Number(row.fin_dossier) === 1)
       tags.push(h('span',{className:'msf-badge msf-badge--ok'},'Dossier clôturé'));
+    if(row._fin_calage && !annule)
+      tags.push(h('span',{className:'msf-badge msf-badge--warn'},
+        'Fin de calage · '+(_mpmSaiDuree(row._fin_calage.minutes) || '0 min')));
 
     const dur = _mpmSaiDuree(row.duree_min);
     const met = _mpmSaiMetrage(row);
