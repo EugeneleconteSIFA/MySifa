@@ -91,6 +91,17 @@ en `onClick` (l'événement serait pris pour `sansAdresse`). La clé de
 navigation ne porte pas l'id : passer d'un détail au suivant remplace.
 Fermer ou rouvrir une fenêtre au Retour ne recharge pas la page.
 
+### Page sans rendu central (MyStock)
+
+Quand chaque vue se redessine elle-même, appeler la synchro depuis chaque
+geste en oublie toujours un. MyStock observe `document.body`
+(`MutationObserver`, une synchro par image au plus) et recalcule l'adresse
+après tout changement d'affichage. Ses fenêtres se ferment par cinq chemins
+différents : `stockModaleOuverte(cle, id)` en tête de la fonction d'ouverture
+retient l'élément ajouté à la page, et la fenêtre est réputée fermée dès qu'il
+n'y est plus. Une nouvelle fenêtre de consultation = une entrée dans
+`_STOCK_MODALES` + cet appel.
+
 ### Module autonome monté dans une page
 
 Un écran rendu par un autre fichier (Réunions : `mysifa_reunions.js`, Scans
@@ -125,6 +136,6 @@ rendrait les anciens filtres.
 |---|---|
 | MyProd | Fait le 15/10/2026 : page, sous-onglets, période, machines, opérateurs, dossiers, tris (saisies, traçabilité, rentabilité), Retour de prod (vue, machine, compte-rendu ouvert), fiche dossier de Traçabilité (`dossier`), entrée de rentabilité ouverte, Pilotage de rentabilité (`machine`, `semaines`, `semaine`), fenêtres de détail (`devis`, `rattachement`, `of`, `fiche`, `synthese`), Réunions (`reunion`, `resp`), Scans d'OF (`sous=rattacher`, `scan`), mémoire produit en surcouche sur toute page (`produit`, `historique`, `produits=liste`, onglet dans `produit_onglet`) |
 | ERP RVGI | Déjà conforme (`#/ecran?filtres`) |
-| MyStock | Partiel (`?tab=&vue=&cat=&matiere=…`) : filtres de listes et tris à ajouter, passer au helper |
+| MyStock | Fait le 15/10/2026 : `tab`, `sous` (réception, contrôle ERP, déstockage), `vue` (besoins), objets (`matiere`+`fiche`, `produit`, `ref`, `empl`, `inventaire`, `negoce`, `batiment`, `element`, `poste`, `lot`), filtres et tris par onglet, fenêtres de consultation et de réglages (`fiche_pf`, `historique_prix`, `historique_pf`, `besoins_dossier`, `parametres_matiere`, `conditionnement`, `reglages=valorisation|matieres|correspondances`) |
 | Planning | Fait le 15/10/2026 : `machine`, `vue`, `horizon` (1w/4w), `semaine` (lundi en date, pas un décalage), fenêtres `dossier`, `of` (aperçu), `stats`, `fsc`, `reglages=machine`, `reglages_semaine`, `horaires`, `commentaire_jour`, `commentaire_semaine` (dates en `AAAA-MM-JJ`). Changer de machine ou de vue recharge la page, comme au clic |
 | MyExpé, Paramètres, Qualité, Maintenance, RH, Compta, Tâches | À faire |
