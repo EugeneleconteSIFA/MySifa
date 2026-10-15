@@ -232,7 +232,16 @@ def _comparaison_from_no_dossiers(conn, devis_row, no_dossiers: list[str]) -> di
             return None
         return f"+{v}%" if v > 0 else f"{v}%"
 
+    # Gâche de calage relevée au compteur en fin de calage. Les dossiers sans
+    # relevé n'entrent pas dans la somme ; sans aucun relevé, la case reste
+    # vide plutôt que d'afficher un zéro qui se lirait comme « pas de gâche ».
+    from app.services.calage_cloture import gache_calage
+    gaches = [gache_calage(conn, dos)["metres"] for dos in no_dossiers]
+    gaches = [g for g in gaches if g is not None]
+    gache_reel = round(sum(gaches), 1) if gaches else None
+
     reel = {
+        "metrage_calage_ml":    gache_reel,
         "temps_calage_mn":      round(tps_calage_reel, 1),
         "temps_production_mn":  round(tps_prod_reel, 1),
         "temps_arret_mn":       round(tps_arret_reel, 1),
@@ -258,6 +267,8 @@ def _comparaison_from_no_dossiers(conn, devis_row, no_dossiers: list[str]) -> di
     }
 
     ecarts = {
+        "metrage_calage_ml":    (fmt_pct(pct_diff(gache_reel, theo["metrage_calage_ml"]))
+                                 if gache_reel is not None else None),
         "temps_calage_mn":      fmt_pct(pct_diff(reel["temps_calage_mn"],     theo["temps_calage_mn"])),
         "temps_production_mn":  fmt_pct(pct_diff(reel["temps_production_mn"], theo["temps_production_mn"])),
         "metrage_ml":           fmt_pct(pct_diff(reel["metrage_ml"],           theo["metrage_ml"])),

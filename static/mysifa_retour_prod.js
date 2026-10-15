@@ -438,7 +438,11 @@
              d.dossiers + (d.dossiers > 1 ? " dossiers" : " dossier"))
        + kpi(minutesTxt(p.minutes_production), "Production",
              p.vitesse_m_min ? vitesse(p.vitesse_m_min) : "")
-       + kpi(minutesTxt(p.minutes_calage), "Calage", "")
+       + kpi(minutesTxt(p.minutes_calage), "Calage",
+             p.gache_calage_m != null
+               ? "gâche " + fnum(p.gache_calage_m) + " m · " + p.dossiers_avec_gache
+                 + (p.dossiers_avec_gache > 1 ? " dossiers relevés" : " dossier relevé")
+               : "")
        + kpi(minutesTxt(p.minutes_arret), "Arrêts",
              p.part_arret_pct ? fnum(p.part_arret_pct, 1) + " % du temps" : "")
        + '</div></div>';
@@ -730,6 +734,42 @@
     + 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
     + '<polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg>';
 
+  /* Calage et gâche : le temps (heures recopiées du dossier de prod à la
+     clôture), les mètres relevés au compteur en fin de calage, et ce que le
+     devis prévoyait. Chaque chiffre absent dit pourquoi il manque. */
+  function heureCourte(iso) {
+    return iso ? String(iso).slice(11, 16) : "—";
+  }
+  function renderCalage(c) {
+    if (!c) return "";
+    var d = c.declaration, g = c.gache || {}, dv = c.devis;
+    var sousTemps = d
+      ? "déclaré " + heureCourte(d.debut_calage) + " → " + heureCourte(d.fin_calage)
+        + (d.minutes_mesurees != null ? " · saisies " + minutesTxt(d.minutes_mesurees) : "")
+      : "non déclaré à la clôture";
+    var sousGache = g.metres != null
+      ? (g.plages.length > 1 ? g.plages.length + " calages relevés" : "relevé au compteur")
+      : (g.plages_sans_releve ? "compteur non relevé en fin de calage" : "aucun calage relevé");
+    var h = '<div class="rp-bloc"><div class="rp-titre">Calage et gâche</div><div class="rp-kpis">'
+          + kpi(minutesTxt(c.minutes), "Calage", sousTemps)
+          + kpi(g.metres != null ? fnum(g.metres) + " m" : "—", "Gâche de calage", sousGache);
+    if (dv) {
+      h += kpi(minutesTxt(dv.minutes) + " · " + fnum(dv.metres) + " m", "Prévu au devis",
+               "calage outil + impression")
+         + kpi(ecartHtml(c.ecart_devis_minutes_pct), "Écart temps", "réel / devis")
+         + kpi(ecartHtml(c.ecart_devis_metres_pct), "Écart gâche", "réel / devis");
+    } else {
+      h += kpi("—", "Prévu au devis", "aucun devis rattaché");
+    }
+    h += '</div>';
+    if (d && (d.motifs_non_appliques || []).length) {
+      h += '<div class="rp-manque">Heures déclarées non reportées sur les saisies : '
+         + d.motifs_non_appliques.map(escHtml).join(" ")
+         + ' À corriger dans Saisies.</div>';
+    }
+    return h + '</div>';
+  }
+
   function renderCR(cr, opts) {
     opts = opts || {};
     var id = cr.identite || {}, t = cr.temps || {}, m = cr.metrage || {};
@@ -777,6 +817,8 @@
       });
       h += '</tbody></table></div>';
     }
+
+    h += renderCalage(cr.calage);
 
     /* Info prod — toujours affichee, meme absente : c'est le manque qui compte. */
     h += '<div class="rp-bloc"><div class="rp-titre">Info prod</div><div id="rp-ip-vue">'

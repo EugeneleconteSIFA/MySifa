@@ -4864,6 +4864,8 @@ function renderComparaison(comp){
     ? ' (outil + impression)' : '';
   const ROWS=[
     {label:'Temps calage'+calageDetail, unit:'mn',  key:'temps_calage_mn', invert:true},
+    // Réel = compteur relevé en fin de calage ; « - » tant qu'il ne l'a pas été.
+    {label:'Gâche de calage'+calageDetail, unit:'ml', key:'metrage_calage_ml', invert:true},
     {label:'Temps production', unit:'mn',  key:'temps_production_mn', invert:true},
     {label:'Métrage',          unit:'ml',  key:'metrage_ml'},
     {label:'Qté étiquettes',   unit:'ex',  key:'qte_etiquettes'},
