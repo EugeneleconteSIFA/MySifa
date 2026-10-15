@@ -261,6 +261,7 @@ un fichier de leur périmètre. Dans les deux cas, n'ouvre que celles qui serven
 | `emails-transactionnels.md` | services mail, `weekly_report.py` |
 | `git-conflits.md` | scripts shell, `.githooks/**` |
 | `widgets-blocs.md` | `app/web/**`, `static/**.js` — blocs capturables en widget d'accueil |
+| `url-etat.md` | `app/web/**`, `static/**.js` — l'URL porte onglet, filtres, tri et objet ouvert |
 | `ecriture-fichiers.md` | chargée à chaque session (concerne l'acte d'écrire) |
 
 **Skills** — à invoquer explicitement :

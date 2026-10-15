@@ -270,45 +270,178 @@
   function set(u){
     Object.assign(S, u);
     render();
-    if(u.page!==undefined||u.subPage!==undefined||u.ofSubTab!==undefined)_syncProdHash();
   }
 
+  // ── Adresse de la page (static/mysifa_url.js, .claude/rules/url-etat.md) ──
+  // L'adresse porte tout ce qu'on regarde : page, sous-onglet, filtres, tri,
+  // compte-rendu ou dossier ouvert. Elle se recalcule à chaque render() :
+  // aucun gestionnaire de clic n'a à y penser. Changer de page, de
+  // sous-onglet ou ouvrir un objet empile une entrée d'historique ; un
+  // filtre ou un tri la remplace.
   var _PROD_SUB_TABS=['kpis','saisies','erreurs','retour','reunions'];
-  var _OF_SUB_TABS=['of','fiche','pending','sansof'];
-  function _readProdHash(){
-    try{var h=(location.hash||'').replace(/^#/,'').trim();
-      if(!h)return null;
-      var r={};
-      if(_PROD_SUB_TABS.indexOf(h)!==-1)r.subPage=h;
-      else if(_OF_SUB_TABS.indexOf(h)!==-1)r.ofSubTab=h;
-      return (r.subPage||r.ofSubTab)?r:null;
-    }catch(e){return null;}
+  var _PROD_PAGES=['menu','production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of','scans','fiches'];
+  // Sous-onglets par page, le premier est le défaut (jamais écrit).
+  var _SOUS_PAR_PAGE={
+    production:_PROD_SUB_TABS,
+    of:['of','pending','sansof'],
+    fiches:['liste','orphelines'],
+    traceabilite:['dossiers','traceur'],
+    rentabilite:['dossiers','pilotage','devis']
+  };
+  var _SOUS_CHAMP={production:'subPage',of:'ofSubTab',fiches:'fichesSubTab',traceabilite:'tracaSubTab',rentabilite:'rentSubTab'};
+  // Anciennes adresses « #saisies », « #pending » : relues, puis réécrites.
+  var _HASH_HERITE={kpis:['production','kpis'],saisies:['production','saisies'],erreurs:['production','erreurs'],
+    retour:['production','retour'],reunions:['production','reunions'],
+    of:['of','of'],fiche:['of','of'],pending:['of','pending'],sansof:['of','sansof']};
+  var _PAGES_FILTRES=['production','historique','saisies'];
+  var _RE_CLE=/^[A-Za-z0-9_]{1,40}$/;
+
+  function _sousCourant(){
+    var champ=_SOUS_CHAMP[S.page];
+    var liste=_SOUS_PAR_PAGE[S.page];
+    if(!champ) return null;
+    var v=S[champ]||liste[0];
+    return v===liste[0]?null:v;
   }
-  // L'URL porte la page (?page=) ET le sous-onglet (#hash). Ne mettre à jour
-  // que le hash laissait « ?page=production#saisies » affiché sur la
-  // Traçabilité : un rafraîchissement ramenait aux Saisies.
-  function _syncProdHash(){
-    try{
-      var h='';
-      if(S.page==='production'&&S.subPage&&S.subPage!=='kpis')h=S.subPage;
-      else if(S.page==='of'&&S.ofSubTab&&S.ofSubTab!=='of')h=S.ofSubTab;
-      var sp=new URLSearchParams(location.search||'');
-      if(S.page)sp.set('page',S.page);else sp.delete('page');
-      var qs=sp.toString();
-      var target=location.pathname+(qs?'?'+qs:'')+(h?'#'+h:'');
-      if(target!==location.pathname+location.search+location.hash){
-        try{history.replaceState(null,'',target);}catch(e){}
+
+  function _prodParams(){
+    var p={};
+    if(S.page&&S.page!=='production') p.page=S.page;
+    var sous=_sousCourant();
+    if(sous) p.sous=sous;
+    var nav=(S.page||'production')+'/'+(sous||'');
+
+    if(_PAGES_FILTRES.indexOf(S.page)!==-1){
+      var fv=S.fv||{};
+      var pr=_datePresets().filter(function(x){return x.from===fv.date_from&&x.to===fv.date_to;})[0];
+      if(pr){ if(pr.key!=='yesterday') p.periode=pr.key; }
+      else if(fv.date_from||fv.date_to){ p.du=fv.date_from||''; p.au=fv.date_to||''; }
+      p.machine=(fv.machines||[]).slice();
+      p.operateur=(fv.operateurs||[]).slice();
+      p.dossier=(fv.dossiers||[]).slice();
+    }
+    var sousEff=S.page==='production'?(S.subPage||'kpis'):null;
+    if(S.page==='saisies'||sousEff==='saisies'){
+      var so=S.sortState||{};
+      if(so.col){ p.tri=so.col; if(so.asc===false) p.sens='desc'; }
+    }
+    if(sousEff==='retour'){
+      var rp=S.retourProd||{};
+      if(rp.vue==='liste') p.vue='liste';
+      if(rp.machine) p.retour_machine=rp.machine;
+      if(rp.dossier){ p.cr=rp.dossier; nav+='/cr:'+rp.dossier; }
+      nav+='/'+(rp.vue||'feuille');
+    }
+    if(S.page==='traceabilite'&&(S.tracaSubTab||'dossiers')==='dossiers'){
+      var tf=S.tracFilters||{};
+      p.ref=tf.ref; p.client=tf.client; p.machine=tf.machine; p.statut=tf.statut;
+      var ts=S.tracSort||{};
+      if(ts.col){ p.tri=ts.col; if(ts.dir==='desc') p.sens='desc'; }
+    }
+    if(S.page==='rentabilite'){
+      var rs=S.rentSubTab||'dossiers';
+      if(rs==='dossiers'){
+        if(S.rentFiltre&&S.rentFiltre!=='a_lier') p.filtre=S.rentFiltre;
+        var rt=S.rentTri||{};
+        if(rt.champ&&!(rt.champ==='debut'&&rt.sens==='desc')){ p.tri=rt.champ; p.sens=rt.sens||'asc'; }
+        if(S.rentSelEntryId){ p.entree=S.rentSelEntryId; nav+='/entree:'+S.rentSelEntryId; }
+      }else if(rs==='devis'){
+        if(S.rentDevisFiltre&&S.rentDevisFiltre!=='tous') p.filtre=S.rentDevisFiltre;
+        var dt=S.rentDevisTri||{};
+        if(dt.champ&&!(dt.champ==='defaut'&&dt.sens==='desc')){ p.tri=dt.champ; p.sens=dt.sens||'asc'; }
       }
-    }catch(e){}
+    }
+    return {params:p, nav:nav};
   }
-  window.addEventListener('hashchange',function(){
-    try{var hv=_readProdHash();
-      if(hv){
-        if(hv.subPage&&S.page==='production'){S.subPage=hv.subPage;render();}
-        if(hv.ofSubTab&&S.page==='of'){S.ofSubTab=hv.ofSubTab;render();}
+
+  function prodSyncUrl(){
+    if(!window.MySifaUrl||!S.user||S.app==='login') return;
+    try{ var r=_prodParams(); MySifaUrl.ecrire(r.params,{navigation:r.nav}); }catch(e){}
+  }
+  // Ancien nom, encore appelé par le clic sur un sous-onglet.
+  var _syncProdHash=prodSyncUrl;
+
+  // Applique l'adresse à l'état. Rend vrai si la période ou les filtres ont
+  // changé (il faut alors recharger les chiffres, pas seulement la page).
+  // `complet` (retour arrière) : une clé absente remet le défaut. Au
+  // démarrage, elle laisse l'état tel quel — les filtres d'un indicateur
+  // d'accueil (bloc_…) y ont déjà été posés et retirés de l'adresse.
+  function prodLireUrl(complet){
+    if(!window.MySifaUrl) return false;
+    var u=MySifaUrl.lire();
+    var page=u.get('page','production',_PROD_PAGES);
+    var sous=u.get('sous',null);
+    var h=MySifaUrl.hashHerite();
+    if(!u.a('sous')&&h&&_HASH_HERITE[h]&&(!u.a('page')||u.get('page')===_HASH_HERITE[h][0])){
+      page=_HASH_HERITE[h][0]; sous=_HASH_HERITE[h][1];
+    }
+    S.page=page;
+    Object.keys(_SOUS_CHAMP).forEach(function(pg){
+      var liste=_SOUS_PAR_PAGE[pg];
+      S[_SOUS_CHAMP[pg]]=(pg===page&&sous&&liste.indexOf(sous)!==-1)?sous:liste[0];
+    });
+
+    var avant=JSON.stringify([S.fv.date_from,S.fv.date_to,S.fv.machines,S.fv.operateurs,S.fv.dossiers]);
+    // Ouverture depuis un indicateur : ses bloc_… font foi. L'adresse
+    // capturée porte aussi machine= / periode= du jour de la capture, que
+    // « Modifier l'indicateur » ne réécrit pas — les relire ici rendrait
+    // les anciens filtres.
+    var filtresBloc=!complet&&window.__mysifaFiltresLus;
+    if(_PAGES_FILTRES.indexOf(page)!==-1&&!filtresBloc){
+      var k=u.get('periode',null);
+      var pr=k?_datePresets().filter(function(x){return x.key===k;})[0]:null;
+      if(pr){ S.fv.date_from=pr.from; S.fv.date_to=pr.to; }
+      else if(u.get('du')){ S.fv.date_from=u.get('du'); S.fv.date_to=u.get('au')||u.get('du'); }
+      else if(complet){
+        var y=_datePresets().filter(function(x){return x.key==='yesterday';})[0];
+        S.fv.date_from=y.from; S.fv.date_to=y.to;
       }
-    }catch(e){}
-  });
+      if(complet||u.a('machine')) S.fv.machines=u.tous('machine');
+      if(complet||u.a('operateur')) S.fv.operateurs=u.tous('operateur');
+      if(complet||u.a('dossier')) S.fv.dossiers=u.tous('dossier');
+    }
+    var tri=u.get('tri',null), desc=u.get('sens',null)==='desc';
+    if(tri&&!_RE_CLE.test(tri)) tri=null;
+    if(page==='saisies'||(page==='production'&&S.subPage==='saisies')){
+      S.sortState=tri?{col:tri,asc:!desc}:{col:null,asc:true};
+    }
+    if(page==='production'&&S.subPage==='retour'){
+      S.retourProd=Object.assign({},S.retourProd||{},{
+        vue:u.get('vue','feuille',['feuille','liste']),
+        machine:u.get('retour_machine',''),
+        dossier:u.get('cr',null), cr:null
+      });
+    }
+    if(page==='traceabilite'){
+      S.tracFilters={ref:u.get('ref',''),client:u.get('client',''),machine:u.get('machine',''),statut:u.get('statut','')};
+      S.tracSort=tri?{col:tri,dir:desc?'desc':'asc'}:{col:null,dir:'asc'};
+    }
+    if(page==='rentabilite'){
+      if(S.rentSubTab==='devis'){
+        S.rentDevisFiltre=u.get('filtre','tous');
+        S.rentDevisTri=tri?{champ:tri,sens:desc?'desc':'asc'}:{champ:'defaut',sens:'desc'};
+      }else{
+        S.rentFiltre=u.get('filtre','a_lier');
+        S.rentTri=tri?{champ:tri,sens:desc?'desc':'asc'}:{champ:'debut',sens:'desc'};
+        var ent=u.get('entree',null);
+        S.rentSelEntryId=ent?(isNaN(Number(ent))?ent:Number(ent)):null;
+      }
+    }
+    return avant!==JSON.stringify([S.fv.date_from,S.fv.date_to,S.fv.machines,S.fv.operateurs,S.fv.dossiers]);
+  }
+
+  // Retour / Suivant du navigateur : on réapplique l'adresse, on recharge
+  // ce que la page affiche, et les chiffres si les filtres diffèrent.
+  if(window.MySifaUrl){
+    MySifaUrl.surRetour(async function(){
+      if(!S.user||S.app==='login') return;
+      var filtres=prodLireUrl(true);
+      if(S.page==='production'&&S.subPage==='kpis') startMachineStatusPolling();
+      else stopMachineStatusPolling();
+      await nav();
+      if(filtres) await applyF();
+    });
+  }
   function toast(m, t = 'success'){
     set({toast: {message: m, type: t}});
     setTimeout(() => set({toast: null}), 3500);
@@ -13232,10 +13365,8 @@ function renderProdKpis(){
         if(p === 'users'){ window.location.href = '/settings'; return; }
         if(p === 'matiere_prix'){ window.location.href = '/pricing'; return; }
         if(p === 'profil'){ window.location.href = '/profil'; return; }
-        const allowed = new Set(['menu','production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of','scans','fiches']);
-        if(allowed.has(p)) S.page = p;
       }catch(e){}
-      try{var _hv=_readProdHash();if(_hv){if(_hv.subPage)S.subPage=_hv.subPage;if(_hv.ofSubTab)S.ofSubTab=_hv.ofSubTab;}}catch(e){}
+      try{ prodLireUrl(false); }catch(e){}
       // Charger les données initiales pour la sous-page courante (étape 2g).
       try{ startAlertsBadgePolling(); }catch(e){}
       try{
@@ -13249,6 +13380,8 @@ function renderProdKpis(){
             await loadHist();
             await loadMachineStatus();
           }
+          // Arrivée par l'adresse sur Retour de prod (?sous=retour&cr=…).
+          if(S.subPage === 'retour') await loadRetourProd();
         }else if(S.page === 'dossiers'){
           await loadDos();
         }else if(S.page === 'suivi'){
@@ -13267,6 +13400,8 @@ function renderProdKpis(){
           await loadTracabilite();
         }else if(S.page === 'of' && canAccessOfTab()){
           await loadOfImports();
+          if(S.ofSubTab === 'pending') await loadPendingOfMappings();
+          else if(S.ofSubTab === 'sansof') await loadDossiersSansOf();
         }else if(S.page === 'fiches' && canAccessOfTab()){
           // Arrivee directe par /prod?page=fiches (lien de la barre laterale
           // du Planning) : sans ce chargement la page s'ouvre vide.
@@ -13331,9 +13466,8 @@ function renderProdKpis(){
         if(p === 'users'){ window.location.href = '/settings'; return; }
         if(p === 'matiere_prix'){ window.location.href = '/pricing'; return; }
         if(p === 'profil'){ window.location.href = '/profil'; return; }
-        const allowed = new Set(['menu','production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of','scans','fiches']);
-        if(allowed.has(p)) S.page = p;
       }catch(e){}
+      try{ prodLireUrl(false); }catch(e){}
       S.loginError = null;
       S.loginSubmitting = false;
       render();
@@ -13349,6 +13483,8 @@ function renderProdKpis(){
             await loadHist();
             await loadMachineStatus();
           }
+          // Arrivée par l'adresse sur Retour de prod (?sous=retour&cr=…).
+          if(S.subPage === 'retour') await loadRetourProd();
         }else if(S.page === 'dossiers'){
           await loadDos();
         }else if(S.page === 'suivi'){
@@ -13367,6 +13503,8 @@ function renderProdKpis(){
           await loadTracabilite();
         }else if(S.page === 'of' && canAccessOfTab()){
           await loadOfImports();
+          if(S.ofSubTab === 'pending') await loadPendingOfMappings();
+          else if(S.ofSubTab === 'sansof') await loadDossiersSansOf();
         }else if(S.page === 'fiches' && canAccessOfTab()){
           // Arrivee directe par /prod?page=fiches (lien de la barre laterale
           // du Planning) : sans ce chargement la page s'ouvre vide.
@@ -13416,6 +13554,8 @@ function renderProdKpis(){
         }else if(S.subPage === 'erreurs'){
           await loadHist();
           await loadProdEcarts();
+        }else if(S.subPage === 'retour'){
+          await loadRetourProd();
         }
       }
       // Sous-pages "héritées" (compat ?page=xxx)
@@ -13448,8 +13588,8 @@ function renderProdKpis(){
       }else if(S.page === 'of' && canAccessOfTab()){
         await loadOfImports();
         if(S.ofSubTab === 'fiche') await loadFiches();
-        else if(S.ofSubTab === 'sans_of') await loadDossiersSansOf();
-        else if(S.ofSubTab === 'mappings') await loadPendingOfMappings();
+        else if(S.ofSubTab === 'sansof' || S.ofSubTab === 'sans_of') await loadDossiersSansOf();
+        else if(S.ofSubTab === 'pending' || S.ofSubTab === 'mappings') await loadPendingOfMappings();
       }
     }catch(e){
       console.warn('[mysifa_prod_core] nav() erreur:', e && e.message);
@@ -13912,6 +14052,8 @@ function renderProdKpis(){
     // élément n'est animé : on évite les replays parasites.
     try { __moApplyPostRender(root); } catch(e){}
     try { __restoreScroll(__keepScroll); } catch(e){}
+    // L'adresse suit ce qui vient d'être affiché (prodSyncUrl).
+    prodSyncUrl();
   }
 
   // État de nav pour détecter les transitions d'onglet
