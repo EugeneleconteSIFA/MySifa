@@ -154,8 +154,13 @@
       // Tout le rail se clique pour rouvrir. Le bouton tableau ne sert plus
       // que sur téléphone.
       "  #mysifa-accueil .mac-repli{display:none}",
-      "  .mac-tete .mac-titre{padding-right:30px}",
-      "  .mac-languette{position:absolute;top:12px;right:8px;width:24px;height:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:0;cursor:pointer;",
+      // En-tête sur une ligne (15/10/2026) : titre, guide, Personnaliser en
+      // icône (libellé « Terminer » seulement pendant l'édition), chevron.
+      "  #mysifa-accueil .mac-tete{flex-wrap:nowrap;padding-right:40px}",
+      "  #mysifa-accueil .mac-tete .mac-titre{order:0;flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      "  #mysifa-accueil .mac-tete .mac-perso{margin-left:0}",
+      "  #mysifa-accueil:not(.edition) .mac-perso span{display:none}",
+      "  .mac-languette{position:absolute;top:19px;right:8px;width:24px;height:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:0;cursor:pointer;",
       "    background:var(--card,#111827);color:var(--text2,#cbd5e1);border:1px solid var(--border,#1e293b);border-radius:8px;font:600 11px 'Segoe UI',system-ui,sans-serif}",
       "  .mac-languette svg{flex-shrink:0}",
       "  .mac-languette:hover,.mac-languette:focus-visible{color:var(--accent,#22d3ee);border-color:var(--accent,#22d3ee)}",
