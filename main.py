@@ -48,6 +48,7 @@ from app.routers.expe_pilotage import router as expe_pilotage_router
 from app.routers.expe_emails import router as expe_emails_router
 from app.routers.expe_carburant import router as expe_carburant_router
 from app.routers.settings import router as settings_api_router
+from app.routers.coherence import router as coherence_router
 from app.routers.clients import router as clients_api_router
 from app.web.settings_page import router as settings_page_router
 from app.routers.fabrication import router as fabrication_api_router
@@ -191,6 +192,7 @@ async def lifespan(app: FastAPI):
     _memo_task = asyncio.create_task(_boucle_memo_expedition())
     _emails_task = asyncio.create_task(_boucle_emails_commandes())
     _cloture_task = asyncio.create_task(_boucle_cloture_fin_prevue())
+    _coherence_task = asyncio.create_task(_boucle_coherence())
     try:
         yield
     finally:
@@ -199,6 +201,7 @@ async def lifespan(app: FastAPI):
         _memo_task.cancel()
         _emails_task.cancel()
         _cloture_task.cancel()
+        _coherence_task.cancel()
 
 
 async def _boucle_releves_accueil():
@@ -280,6 +283,26 @@ async def _boucle_cloture_fin_prevue():
         except Exception as e:
             print(f"[MySifa] clôture à la fin prévue : tour en échec ({e})")
         await asyncio.sleep(900)
+
+
+async def _boucle_coherence():
+    """Toutes les 30 minutes, fait tourner les contrôleurs de cohérence
+    (app/services/coherence.py). Aucun appel à l'IA : des règles en code."""
+    from app.core.database import get_db as _get_db
+    from app.services import coherence as _coherence
+
+    await asyncio.sleep(300)
+    while True:
+        try:
+            res = await asyncio.to_thread(_coherence.tour, _get_db)
+            print(f"[MySifa] cohérence : {res.get('ouverts', 0)} écart(s) ouvert(s), "
+                  f"{res.get('nouveaux', 0)} nouveau(x), {res.get('resolus', 0)} résolu(s)"
+                  + (f", contrôleurs en échec : {', '.join(res['erreurs'])}" if res.get("erreurs") else ""))
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[MySifa] cohérence : tour en échec ({e})")
+        await asyncio.sleep(1800)
 
 
 async def _boucle_emails_commandes():
@@ -763,6 +786,7 @@ app.include_router(expe_departs_router, prefix="/api/expe")
 app.include_router(expe_pilotage_router, prefix="/api/expe")
 app.include_router(expe_emails_router, prefix="/api/expe")
 app.include_router(expe_carburant_router, prefix="/api/expe")
+app.include_router(coherence_router)
 app.include_router(settings_api_router)
 app.include_router(clients_api_router)
 app.include_router(settings_page_router)

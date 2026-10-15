@@ -978,6 +978,10 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><circle cx="12" cy="12" r="4"/></svg>
         Usage IA
       </button>
+      <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="coherence">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        Cohérence
+      </button>
       <div class="nav-group-label msb-section msb-toggle" data-req-section="print_full"><span>Impression</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-req-section="print_full" data-tab="printers">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
@@ -1209,6 +1213,11 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <button type="button" class="menu-item" data-goto="iausage">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><circle cx="12" cy="12" r="4"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Usage IA</span><span class="mi-desc">Coût des appels à Claude, par utilisateur et par fonction.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button type="button" class="menu-item" data-goto="coherence">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Cohérence</span><span class="mi-desc">Écarts entre prod, planning, OF, fiches, MyExpé, MyStock et RVGI.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
           </div>
@@ -2472,6 +2481,21 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
       </div>
     </section>
 
+    <!-- ═══════════════════════ PANEL COHÉRENCE ═══════════════════════ -->
+    <section id="panel-coherence" class="hidden" data-req-section="audit_full">
+      <div style="max-width:1100px">
+        <div style="margin-bottom:18px">
+          <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px">Cohérence</div>
+          <div style="font-size:13px;color:var(--muted)">
+            Ce qui ne colle pas entre deux sources : production et planning, OF et fiches techniques,
+            BL RVGI, départs MyExpé et sorties MyStock. Relevé par des règles, sans IA ;
+            l'agent IA lit cette liste pour expliquer un écart.
+          </div>
+        </div>
+        <div id="coherence-root"></div>
+      </div>
+    </section>
+
     <!-- ═══════════════════════ PANEL USAGE IA ═══════════════════════ -->
     <section id="panel-iausage" class="hidden" data-req-section="audit_full">
       <div style="max-width:1100px">
@@ -3446,6 +3470,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
      la page n'y accroche que trois appels. -->
 <script src="/static/mysifa_rvgi_tiers.js?v=__V_LABEL__"></script>
 <script src="/static/settings_ia_usage.js?v=1"></script>
+<script src="/static/settings_coherence.js?v=1"></script>
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
 <script src="/static/chat_mentions.js"></script>
@@ -3556,6 +3581,7 @@ function syncSettingsPageHead(tabId) {
     blocs:        { title: 'Widgets et tableaux de bord', sub: "Blocs capturables · boutons flottants par application" },
     api:          { title: 'Clés API',        sub: 'Tokens d\'intégration' },
     iausage:      { title: 'Usage IA',        sub: 'Coût et utilisateurs des appels à Claude' },
+    coherence:    { title: 'Cohérence',       sub: 'Écarts entre les sources de données' },
     printers:     { title: 'Imprimantes',     sub: 'Configuration et templates' },
     promote:      { title: 'Déploiement',     sub: 'Promouvoir v1 → v2' },
     diagnostic:   { title: 'Lecture SQL',     sub: 'SELECT encadré sur la base de cette instance' },
@@ -3710,7 +3736,7 @@ document.addEventListener('keydown', function (ev) {
   }
 });
 
-const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','encres','emplacements','laizes','mandrins','importations','bridge','transport','typesarticle','updates','notifications','audit','fsc','blocs','api','iausage','promote','printers','formations','diagnostic'];
+const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','encres','emplacements','laizes','mandrins','importations','bridge','transport','typesarticle','updates','notifications','audit','fsc','blocs','api','iausage','coherence','promote','printers','formations','diagnostic'];
 
 function setTab(id, opts) {
   if (!VALID_TABS.includes(id)) id = 'menu';
@@ -3733,7 +3759,7 @@ function setTab(id, opts) {
       }
     } catch(e){}
   }
-  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'encres', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'transport', 'typesarticle', 'updates', 'notifications', 'audit', 'fsc', 'blocs', 'api', 'iausage', 'promote', 'printers', 'formations', 'diagnostic'].forEach(p => {
+  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'encres', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'transport', 'typesarticle', 'updates', 'notifications', 'audit', 'fsc', 'blocs', 'api', 'iausage', 'coherence', 'promote', 'printers', 'formations', 'diagnostic'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -3763,6 +3789,7 @@ function setTab(id, opts) {
   if (id === 'blocs') renderSettingsBlocs();
   if (id === 'api') loadApiKeys();
   if (id === 'iausage' && window.initIaUsagePanel) window.initIaUsagePanel();
+  if (id === 'coherence' && window.initCoherencePanel) window.initCoherencePanel();
   if (id === 'promote') loadPromoteStatus();
   if (id === 'diagnostic') initDiagnosticPanel();
 }
