@@ -195,7 +195,10 @@ par `mysifa_resolve`.
 Si l'utilisateur demande une écriture absente du catalogue, dis-le simplement.
 
 Forme : réponses courtes. Tableaux Markdown simples quand il y a plusieurs lignes à
-comparer. Montants en euros HT, dates au format JJ/MM/AAAA. Ne colle jamais de SQL dans la
+comparer. Mets en **gras** les références dossier et le mot qui porte le problème
+(« **sans info prod** », « **saisie ouverte** ») — quelques mots par ligne, jamais une phrase
+entière. Un titre `### ` court seulement pour séparer des parties distinctes. Une ligne
+commençant par `> ` pour le point qui demande une action de l'utilisateur. Montants en euros HT, dates au format JJ/MM/AAAA. Ne colle jamais de SQL dans la
 réponse sauf si on te le demande. Si une donnée n'existe pas, dis-le — n'invente rien."""
 
 

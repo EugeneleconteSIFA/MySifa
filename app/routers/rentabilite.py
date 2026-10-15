@@ -21,6 +21,7 @@ DEUX CHEMINS D'ENTRÉE, ET ILS N'ONT PAS LES MÊMES GARANTIES.
 import hashlib
 import json
 import os
+import unicodedata
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -32,8 +33,10 @@ from services.auth_service import get_current_user
 from app.services import ia_usage
 from app.services.devis_extraction import extraire_devis
 from app.services.devis_rapprochement import (
+    caracteristiques_devis,
     classer_pour_entree as classer_devis_pour_entree,
     proposer as proposer_rapprochements,
+    vocabulaire as vocabulaire_rapprochement,
 )
 from app.services.dossier_stats import build_dossier_production_stats
 from config import (
@@ -563,15 +566,116 @@ async def put_links(planning_entry_id: int, request: Request):
     return {"success": True}
 
 
+_COLONNES_DEVIS_RAPPROCHEMENT = (
+    "id, filename, client, date_devis, format_h, format_v, laize, "
+    "qte_etiquettes, vitesse_theorique"
+)
+
+# Papier et colle d'une entrée de planning viennent de son OF. `debut_production`
+# sert de date quand le créneau n'a pas de début prévu.
+_SQL_ENTREES_RAPPROCHEMENT = """
+    SELECT e.id, e.client, e.description, e.ref_produit, e.reference,
+           e.format_l, e.format_h, e.laize, e.planned_start,
+           o.matiere AS matiere, o.adhesif_label AS adhesif
+      FROM planning_entries e
+      JOIN machines m ON m.id = e.machine_id
+      LEFT JOIN of_imports o ON o.id = e.of_import_id
+"""
+
+
+def _table_existe(conn, nom: str) -> bool:
+    return bool(conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (nom,)
+    ).fetchone())
+
+
+def _vocabulaire(conn) -> dict:
+    """Familles de papier et types de colle, tirés des OF réellement importés."""
+    lignes = conn.execute(
+        "SELECT matiere, adhesif_label FROM of_imports"
+    ).fetchall()
+    return vocabulaire_rapprochement(
+        [r["matiere"] for r in lignes if r["matiere"]],
+        [r["adhesif_label"] for r in lignes if r["adhesif_label"]],
+    )
+
+
+def _rejets(conn) -> dict:
+    if not _table_existe(conn, "rent_rejets"):
+        return {}
+    out: dict[int, set] = {}
+    for r in conn.execute("SELECT planning_entry_id, devis_id FROM rent_rejets").fetchall():
+        out.setdefault(int(r["planning_entry_id"]), set()).add(int(r["devis_id"]))
+    return out
+
+
+def rapprocher(conn) -> dict:
+    """Pose ou rafraîchit les propositions du moteur sur tout le planning.
+
+    Ce qui est hors jeu : toute liaison décidée par quelqu'un (manuelle, ou
+    proposition confirmée). Ce qui est rejoué : les propositions encore
+    orange — elles sont l'avis du moteur, et cet avis change quand un devis
+    arrive. Une proposition que le moteur ne referait plus est retirée, plutôt
+    que de rester affichée sur des bases périmées.
+    """
+    devis_rows = [dict(r) for r in conn.execute(
+        f"SELECT {_COLONNES_DEVIS_RAPPROCHEMENT} FROM devis"
+    ).fetchall()]
+    entrees = [dict(r) for r in conn.execute(
+        _SQL_ENTREES_RAPPROCHEMENT + " WHERE m.actif = 1"
+    ).fetchall()]
+    liens = {int(r["planning_entry_id"]): dict(r) for r in conn.execute(
+        "SELECT planning_entry_id, devis_id, origine, valide_at FROM rent_links"
+    ).fetchall()}
+    decides = [eid for eid, l in liens.items()
+               if l["devis_id"] and (l["origine"] != "auto" or l["valide_at"])]
+
+    propositions = proposer_rapprochements(
+        devis_rows, entrees, decides, _vocabulaire(conn), _rejets(conn))
+    proposees = {p["planning_entry_id"] for p in propositions}
+
+    now = datetime.now().isoformat()
+    nouvelles = 0
+    for p in propositions:
+        avant = liens.get(p["planning_entry_id"])
+        if not avant or avant["devis_id"] != p["devis_id"]:
+            nouvelles += 1
+        conn.execute(
+            """INSERT INTO rent_links
+                 (planning_entry_id, devis_id, updated_at, origine, score, motif,
+                  valide_par, valide_at)
+               VALUES (?,?,?,'auto',?,?,NULL,NULL)
+               ON CONFLICT(planning_entry_id) DO UPDATE
+                 SET devis_id=excluded.devis_id, updated_at=excluded.updated_at,
+                     origine='auto', score=excluded.score, motif=excluded.motif,
+                     valide_par=NULL, valide_at=NULL""",
+            (p["planning_entry_id"], p["devis_id"], now, p["score"], p["motif"]),
+        )
+    retirees = 0
+    for eid, l in liens.items():
+        if l["origine"] == "auto" and not l["valide_at"] and eid not in proposees:
+            retirees += conn.execute(
+                "DELETE FROM rent_links WHERE planning_entry_id=? AND origine='auto' "
+                "AND valide_at IS NULL", (eid,)
+            ).rowcount
+    conn.commit()
+    return {
+        "proposees": len(propositions),
+        "nouvelles": nouvelles,
+        "retirees": retirees,
+        "devis_examines": len(devis_rows),
+        "entrees_libres": len(entrees) - len(decides),
+        "propositions": propositions[:50],
+    }
+
+
 @router.post("/api/rentabilite/rapprochement")
 def lancer_rapprochement(request: Request):
-    """Propose des liaisons devis ↔ dossier, sans jamais en écraser une.
+    """Propose des liaisons devis ↔ dossier, sans jamais écraser une décision.
 
-    Le moteur ne décide rien : il pose des propositions en orange, que
-    quelqu'un confirme ou rejette. C'est la raison d'être de l'état
-    intermédiaire — une liaison automatique validée d'office serait
-    indiscernable d'une liaison choisie, et la comparaison devis/réel n'aurait
-    plus de socle vérifiable.
+    Appelé tout seul à l'ouverture de l'onglet Rentabilité : le rattachement
+    se fait sans qu'on le demande, il ne reste qu'à confirmer ou corriger.
+    Les propositions restent orange tant que personne ne les a confirmées.
     """
     require_rentabilite(request)
     with get_db() as conn:
@@ -581,81 +685,74 @@ def lancer_rapprochement(request: Request):
                 "La base n'a pas encore la migration des liaisons automatiques. "
                 "Redémarre l'application pour qu'elle s'applique.",
             )
+        return rapprocher(conn)
 
-        devis_rows = [dict(r) for r in conn.execute(
-            "SELECT id, filename, client, date_devis, format_h, format_v, laize "
-            "FROM devis"
-        ).fetchall()]
-        entrees = [dict(r) for r in conn.execute(
-            """SELECT e.id, e.client, e.description, e.ref_produit, e.reference,
-                      e.format_l, e.format_h, e.laize, e.planned_start
-                 FROM planning_entries e
-                 JOIN machines m ON m.id = e.machine_id
-                WHERE m.actif = 1"""
-        ).fetchall()]
-        # Toute entrée déjà liée est hors jeu, proposition comprise : relancer
-        # le moteur ne doit pas défaire ce qu'on a commencé à relire.
-        deja = [int(r["planning_entry_id"]) for r in conn.execute(
-            "SELECT planning_entry_id FROM rent_links"
-        ).fetchall()]
 
-        propositions = proposer_rapprochements(devis_rows, entrees, deja)
-
-        now = datetime.now().isoformat()
-        for p in propositions:
-            conn.execute(
-                """INSERT INTO rent_links
-                     (planning_entry_id, devis_id, updated_at, origine, score, motif,
-                      valide_par, valide_at)
-                   VALUES (?,?,?,'auto',?,?,NULL,NULL)
-                   ON CONFLICT(planning_entry_id) DO NOTHING""",
-                (p["planning_entry_id"], p["devis_id"], now, p["score"], p["motif"]),
-            )
-        conn.commit()
-
-    return {
-        "proposees": len(propositions),
-        "devis_examines": len(devis_rows),
-        "entrees_libres": len(entrees) - len(set(deja)),
-        "propositions": propositions[:50],
-    }
+def _texte_devis(dv: dict) -> str:
+    return " ".join(str(dv.get(k) or "") for k in ("client", "filename", "date_devis"))
 
 
 @router.get("/api/rentabilite/planning/{planning_entry_id}/devis-suggeres")
-def devis_suggeres(planning_entry_id: int, request: Request, limit: int = 8):
+def devis_suggeres(planning_entry_id: int, request: Request, limit: int = 8, q: str = ""):
     """Les devis les plus plausibles pour ce dossier, motif à l'appui.
 
-    Complément indispensable du rapprochement automatique. Sur ce planning,
-    format + client + laize laissent encore jusqu'à treize dossiers
-    indiscernables : le même produit refabriqué pour le même client. Le moteur
-    refuse de trancher, et il a raison — mais l'écran doit quand même mettre
-    les bons candidats sous la main plutôt que renvoyer à la liste entière.
+    Sans `q` : les candidats du moteur, du plus au moins probable.
+    Avec `q` : TOUS les devis dont le client, le fichier ou la date contient
+    chacun des mots tapés, rangés par concordance avec le dossier. Taper
+    « roquette » sort d'abord les devis Roquette au bon format.
     """
     require_rentabilite(request)
     with get_db() as conn:
         entree = conn.execute(
-            """SELECT id, client, description, ref_produit, reference,
-                      format_l, format_h, laize, planned_start
-                 FROM planning_entries WHERE id=?""",
-            (planning_entry_id,),
+            _SQL_ENTREES_RAPPROCHEMENT + " WHERE e.id=?", (planning_entry_id,),
         ).fetchone()
         if not entree:
             raise HTTPException(404, "Entrée planning introuvable")
         devis_rows = [dict(r) for r in conn.execute(
-            "SELECT id, filename, client, date_devis, format_h, format_v, laize, "
-            "qte_etiquettes, vitesse_theorique FROM devis"
+            f"SELECT {_COLONNES_DEVIS_RAPPROCHEMENT}, a_verifier FROM devis"
         ).fetchall()]
+        voc = _vocabulaire(conn)
+        rejetes = _rejets(conn).get(planning_entry_id, set())
 
-    classes = classer_devis_pour_entree(devis_rows, dict(entree),
-                                        max(1, min(int(limit or 8), 20)))
+    limite = max(1, min(int(limit or 8), 40))
+    mots = [m for m in normaliser_recherche(q).split() if m]
+    if mots:
+        devis_rows = [d for d in devis_rows
+                      if all(m in normaliser_recherche(_texte_devis(d)) for m in mots)]
+        classes = classer_devis_pour_entree(devis_rows, dict(entree), len(devis_rows), voc)
+        notes = {c["devis_id"]: c for c in classes}
+        # Meilleure concordance d'abord ; à concordance égale, le plus récent.
+        devis_rows.sort(key=lambda d: str(d.get("date_devis") or ""), reverse=True)
+        devis_rows.sort(key=lambda d: -(notes.get(int(d["id"]), {}).get("score") or 0))
+        classes = [notes.get(int(d["id"])) or {"devis_id": int(d["id"]), "score": 0.0,
+                                               "fond": 0.0, "motif": ""}
+                   for d in devis_rows[:limite]]
+    else:
+        classes = classer_devis_pour_entree(devis_rows, dict(entree), limite, voc)
+
     par_id = {int(d["id"]): d for d in devis_rows}
     for c in classes:
         dv = par_id.get(c["devis_id"], {})
-        c["filename"] = dv.get("filename")
-        c["client"] = dv.get("client")
-        c["qte_etiquettes"] = dv.get("qte_etiquettes")
-        c["vitesse_theorique"] = dv.get("vitesse_theorique")
+        car = caracteristiques_devis(dv, voc)
+        c.update({
+            "filename": dv.get("filename"),
+            "client": dv.get("client"),
+            "date_devis": dv.get("date_devis"),
+            "format_h": dv.get("format_h"),
+            "format_v": dv.get("format_v"),
+            "laize": dv.get("laize"),
+            "qte_etiquettes": dv.get("qte_etiquettes"),
+            "vitesse_theorique": dv.get("vitesse_theorique"),
+            "papier": " ".join(x for x in (car["famille"], car["qualificatif"]) if x),
+            "colle": " / ".join(car["colles"]),
+            "rejete": c["devis_id"] in rejetes,
+        })
     return classes
+
+
+def normaliser_recherche(txt) -> str:
+    t = unicodedata.normalize("NFD", str(txt or "").lower())
+    return "".join(ch for ch in t if unicodedata.category(ch) != "Mn")
 
 
 @router.post("/api/rentabilite/links/{planning_entry_id}/valider")
@@ -752,8 +849,20 @@ def supprimer_lien(planning_entry_id: int, request: Request):
     Les dossiers de production liés restent : ils ont été saisis à part et ne
     dépendent pas du devis.
     """
-    require_rentabilite(request)
+    user = require_rentabilite(request)
     with get_db() as conn:
+        lien = conn.execute(
+            "SELECT devis_id FROM rent_links WHERE planning_entry_id=?", (planning_entry_id,)
+        ).fetchone()
+        # Le couple refusé est mémorisé : le moteur tourne tout seul, et sans
+        # cette trace il reproposerait le même devis au passage suivant.
+        if lien and lien["devis_id"] and _table_existe(conn, "rent_rejets"):
+            conn.execute(
+                "INSERT OR IGNORE INTO rent_rejets "
+                "(planning_entry_id, devis_id, rejete_par, rejete_at) VALUES (?,?,?,?)",
+                (planning_entry_id, int(lien["devis_id"]), user.get("email", ""),
+                 datetime.now().isoformat()),
+            )
         n = conn.execute(
             "DELETE FROM rent_links WHERE planning_entry_id=?", (planning_entry_id,)
         ).rowcount
@@ -1005,6 +1114,13 @@ async def create_devis(request: Request):
 
         _remplacer_indicateurs(conn, devis_id, body.get("indicateurs") or [], now)
         conn.commit()
+        # Un devis de plus peut trancher un dossier resté sans proposition.
+        # Jamais au prix de l'enregistrement : le devis est déjà en base.
+        try:
+            if _colonnes_rent_links(conn):
+                rapprocher(conn)
+        except Exception:
+            pass
     return {"success": True, "devis_id": devis_id}
 
 
@@ -1164,6 +1280,29 @@ async def update_devis(devis_id: int, request: Request):
             )
         conn.commit()
     return {"success": True}
+
+
+@router.post("/api/rentabilite/devis/{devis_id}/valider")
+def valider_devis(devis_id: int, request: Request):
+    """Quelqu'un a relu le devis tel qu'il est lu : le doute est levé.
+
+    Le pendant de « Modifier » quand il n'y a rien à modifier. Sans ce geste,
+    un devis juste mais ramassé par l'agent restait « à vérifier » à vie, ou
+    obligeait à ouvrir l'écran de correction pour l'enregistrer tel quel.
+    """
+    user = require_rentabilite(request)
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM devis WHERE id=?", (devis_id,)).fetchone():
+            raise HTTPException(404, "Devis non trouvé")
+        cols = _colonnes_devis(conn)
+        now = datetime.now().isoformat()
+        if "valide_par" in cols:
+            conn.execute("UPDATE devis SET valide_par=?, valide_at=? WHERE id=?",
+                         (user.get("email", ""), now, devis_id))
+        if "a_verifier" in cols:
+            conn.execute("UPDATE devis SET a_verifier=0, note='' WHERE id=?", (devis_id,))
+        conn.commit()
+    return {"success": True, "valide_at": now}
 
 
 # ── Supprimer un devis ────────────────────────────────────────────
