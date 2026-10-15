@@ -982,11 +982,24 @@ let _urlPrete=false;            // posé à la fin du démarrage : avant, l'adre
 let _modaleUrl=null;            // fenêtre demandée par l'adresse, ouverte après load()
 const _PLAN_VUES_URL=["prod","expe","prod_expe"];
 const _PLAN_HORIZONS=["1w","2w","4w"];
+// Par fenêtre : la forme de valeur admise, comment la rouvrir, la fermer.
+// Toutes s'affichent dans #mroot (closeM) sauf l'aperçu OF, qui a sa surcouche.
+const _PLAN_ID=/^[0-9]+$/, _PLAN_JOUR=/^\d{4}-\d{2}-\d{2}$/;
+const _planJourDe=v=>new Date(v+"T12:00:00");
 const _PLAN_MODALES={
-  dossier:{ouvrir:id=>openEdit(id),           fermer:()=>closeM(true)},
-  stats:  {ouvrir:id=>openDossierStatsModal(id), fermer:()=>closeM(true)},
-  of:     {ouvrir:id=>openOfPreview(id),      fermer:()=>closeOfPreview(true)}
+  dossier:{ok:_PLAN_ID,ouvrir:v=>openEdit(Number(v)),              fermer:()=>closeM(true)},
+  stats:  {ok:_PLAN_ID,ouvrir:v=>openDossierStatsModal(Number(v)), fermer:()=>closeM(true)},
+  of:     {ok:_PLAN_ID,ouvrir:v=>openOfPreview(Number(v)),         fermer:()=>closeOfPreview(true)},
+  fsc:    {ok:/^[A-Za-z0-9 ._+\-\/]{1,60}$/,ouvrir:v=>openFscRapport(v), fermer:()=>closeM(true)},
+  // Réglages horaires par défaut de la machine (roue dentée de l'en-tête).
+  reglages:{ok:/^machine$/,ouvrir:()=>openDefaultsModal(),         fermer:()=>closeM(true)},
+  reglages_semaine:{ok:_PLAN_JOUR,ouvrir:v=>openWeekSettingsModal(getMon(_planJourDe(v)).getTime()), fermer:()=>closeM(true)},
+  horaires:{ok:_PLAN_JOUR,ouvrir:v=>openHorairesModal(v,_planJourDe(v).getDay()), fermer:()=>closeM(true)},
+  commentaire_jour:{ok:_PLAN_JOUR,ouvrir:v=>openDayCommentModal(v,_planJourDe(v).getDay()), fermer:()=>closeM(true)},
+  commentaire_semaine:{ok:_PLAN_JOUR,ouvrir:v=>{const m=getMon(_planJourDe(v));openWeekCommentModal(semaineKey(m),m.getTime());}, fermer:()=>closeM(true)}
 };
+// Déclare la fenêtre qui vient de s'ouvrir (appelé en tête de chaque open…).
+function planningModaleOuverte(cle,id){ S.urlModale={cle,id:String(id)}; planningSyncUrl(); }
 function _planLundiIso(wo){ return ymdate(addD(getMon(new Date()),wo*7)); }
 function planningParams(){
   const p={machine:MID||null};
@@ -1018,21 +1031,21 @@ function planningLireUrl(complet){
   _modaleUrl=null;
   Object.keys(_PLAN_MODALES).forEach(cle=>{
     const v=u.get(cle,null);
-    if(v&&/^[0-9]+$/.test(v)) _modaleUrl={cle,id:Number(v)};
+    if(v&&_PLAN_MODALES[cle].ok.test(v)) _modaleUrl={cle,id:v};
   });
   return avant!==S.view+"|"+S.wo;
 }
 function planningAppliquerModaleUrl(){
   const voulue=_modaleUrl; _modaleUrl=null;
   const cour=S.urlModale;
-  if(cour&&(!voulue||voulue.cle!==cour.cle||voulue.id!==cour.id)){
+  if(cour&&(!voulue||voulue.cle!==cour.cle||String(voulue.id)!==String(cour.id))){
     try{ _PLAN_MODALES[cour.cle].fermer(); }catch(e){}
     // L'aperçu OF refermé rend la main à la fenêtre du dossier restée
     // dessous (closeOfPreview la remet dans S.urlModale) : ne pas l'effacer.
     if(S.urlModale===cour) S.urlModale=null;
   }
   const deja=S.urlModale;
-  if(voulue&&!(deja&&deja.cle===voulue.cle&&deja.id===voulue.id)){
+  if(voulue&&!(deja&&deja.cle===voulue.cle&&String(deja.id)===String(voulue.id))){
     try{ _PLAN_MODALES[voulue.cle].ouvrir(voulue.id); }catch(e){}
   }
 }
@@ -4632,7 +4645,7 @@ async function submitAdd(){
 function fscRapportBtnHtml(e){
   if(!e||!(e.fsc_requis===1||e.fsc_requis===true)) return "";
   const refFscEnc=encodeURIComponent((e.reference||e.numero_of||"").trim());
-  return `<button type="button" onclick="closeM();openFscRapport(decodeURIComponent('${escAttr(refFscEnc)}'))"
+  return `<button type="button" onclick="closeM(true);openFscRapport(decodeURIComponent('${escAttr(refFscEnc)}'))"
       style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;
              border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
              font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap"
@@ -4684,6 +4697,7 @@ function printFscAvertissement(id){
 async function openFscRapport(noDossier){
   const ref=(noDossier||"").trim();
   if(!ref){ showToast("Référence dossier manquante.","danger"); return; }
+  planningModaleOuverte("fsc",ref);
   try{
     const res=await fetch("/api/fabrication/tracabilite/"+encodeURIComponent(ref),{
       credentials:"include",
@@ -4779,7 +4793,7 @@ async function openFscRapport(noDossier){
 function openEdit(id){
   if(!CAN_EDIT && !IS_PLANNING_RO_ROLE) return;
   const e=S.entries.find(x=>x.id===id);if(!e)return;
-  S.urlModale={cle:"dossier",id:e.id}; planningSyncUrl();
+  planningModaleOuverte("dossier",e.id);
   const RO=(!CAN_EDIT && IS_PLANNING_RO_ROLE);
   // Dossier existant : la case FSC s'enregistre à la volée (voir
   // persistFscDepuisModale). Remis à null par closeM().
@@ -4935,7 +4949,7 @@ async function openOfPreview(entryId){
   // Ouvert depuis la fenêtre du dossier : il la remplace dans l'adresse ; la
   // refermer y revient (closeOfPreview).
   S._urlSousOf=(S.urlModale&&S.urlModale.cle!=="of")?S.urlModale:null;
-  S.urlModale={cle:"of",id:entryId}; planningSyncUrl();
+  planningModaleOuverte("of",entryId);
   const ov=document.createElement('div');
   ov.className='of-preview-overlay';
   ov.id='of-preview-overlay';
@@ -5678,7 +5692,7 @@ function renderDossierStatsBody(d){
 }
 async function openDossierStatsModal(entryId){
   const e=S.entries.find(x=>x.id===entryId);
-  S.urlModale={cle:"stats",id:entryId}; planningSyncUrl();
+  planningModaleOuverte("stats",entryId);
   const ref=(e&&(e.numero_of||e.reference))||"Dossier";
   document.getElementById("mroot").innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md md--stats">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px">
@@ -5751,11 +5765,13 @@ async function annulerAnnulationPlanning(entryId){
   };
 }
 
-// `sansAdresse` : fermeture technique (Retour du navigateur) — l'adresse est
-// déjà à jour. Appelée sans argument partout ailleurs (onclick="closeM()").
+// `sansAdresse` : fermeture technique — Retour du navigateur, ou fenêtre qui
+// en remplace aussitôt une autre (closeM(true);openFscRapport(…)) : sans lui,
+// le recul d'historique de la fermeture refermerait la nouvelle fenêtre.
+// Appelée sans argument partout ailleurs (onclick="closeM()").
 function closeM(sansAdresse){
   document.getElementById("mroot").innerHTML="";
-  if(S.urlModale&&(S.urlModale.cle==="dossier"||S.urlModale.cle==="stats")){
+  if(S.urlModale&&S.urlModale.cle!=="of"){
     S.urlModale=null;
     if(!sansAdresse) planningSyncUrl();
   }
@@ -5880,6 +5896,7 @@ function setView(v){
 function openHorairesModal(ds, di){
   if(!CAN_EDIT) return;
   if(!S.machine) return;
+  if(ds) planningModaleOuverte("horaires",ds);
   // Lire les horaires actuels pour cette date (override ou hebdo)
   const dateObj = ds ? new Date(ds) : new Date();
   const wh=getWhForDate(di,dateObj,ds,true);
@@ -5958,6 +5975,7 @@ function commentModalDeleteBtn(onDeleteFn,hasExisting){
 }
 function openWeekCommentModal(sk,monTs){
   const mon=monTs?new Date(monTs):getMon(new Date());
+  planningModaleOuverte("commentaire_semaine",ymdate(mon));
   const wn=wkNum(mon);
   const existing=((S.weekComments||{})[sk]||"").trim();
   const readOnly=!CAN_EDIT;
@@ -6003,6 +6021,7 @@ async function submitWeekComment(sk){
   }
 }
 function openDayCommentModal(ds,di){
+  if(ds) planningModaleOuverte("commentaire_jour",ds);
   const dn={1:"Lundi",2:"Mardi",3:"Mercredi",4:"Jeudi",5:"Vendredi",6:"Samedi"}[di]||"Jour";
   const dateLabel=ds?new Date(ds+"T12:00:00").toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):dn;
   const existing=((S.dayComments||{})[ds]||"").trim();
@@ -6053,6 +6072,7 @@ async function submitDayComment(ds){
 function openWeekSettingsModal(monTs){
   if(!CAN_EDIT) return;
   const mon=new Date(monTs);
+  planningModaleOuverte("reglages_semaine",ymdate(mon));
   const wn=wkNum(mon);
   const DN_FULL={1:"Lundi",2:"Mardi",3:"Mercredi",4:"Jeudi",5:"Vendredi",6:"Samedi"};
   let rows="";
@@ -6173,6 +6193,7 @@ async function submitWeekSettings(monTs){
 }
 
 function openDefaultsModal(){
+  planningModaleOuverte("reglages","machine");
   const defs=getMachineDefaults();
   function row(lbl,id,val){
     return `<div class="fd"><label>${lbl} (HH:MM)</label><input type="text" inputmode="numeric" placeholder="07:00" id="${id}" value="${timeInputFromFloat(val)}"></div>`;

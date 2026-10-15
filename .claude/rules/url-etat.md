@@ -102,6 +102,13 @@ attend le chargement du module, c'est elle que la page écrit — sinon l'adress
 perdrait l'objet demandé le temps du chargement, puis empilerait une étape de
 trop.
 
+Une **surcouche** d'un module (mémoire produit) se signale de la même façon :
+`MySifaProduitMemoire.surAdresse(fn)` reçoit `{cle, id, onglet}` à chaque
+rendu et `null` à la fermeture. Une fenêtre qui en remplace une autre dans le
+même geste ferme la première **sans adresse** (`closeM(true)`) : sinon le
+recul d'historique de la fermeture referme la nouvelle. Un module chargé après
+le script de la page s'abonne au premier rendu, pas à l'exécution du script.
+
 ### Lien avec les indicateurs d'accueil
 
 Une page dont les filtres sont dans l'adresse n'a, à terme, plus besoin de
@@ -116,8 +123,8 @@ rendrait les anciens filtres.
 
 | Appli | État |
 |---|---|
-| MyProd | Fait le 15/10/2026 : page, sous-onglets, période, machines, opérateurs, dossiers, tris (saisies, traçabilité, rentabilité), Retour de prod (vue, machine, compte-rendu ouvert), fiche dossier de Traçabilité (`dossier`), entrée de rentabilité ouverte, Pilotage de rentabilité (`machine`, `semaines`, `semaine`), fenêtres de détail (`devis`, `rattachement`, `of`, `fiche`, `synthese`), Réunions (`reunion`, `resp`), Scans d'OF (`sous=rattacher`, `scan`) |
+| MyProd | Fait le 15/10/2026 : page, sous-onglets, période, machines, opérateurs, dossiers, tris (saisies, traçabilité, rentabilité), Retour de prod (vue, machine, compte-rendu ouvert), fiche dossier de Traçabilité (`dossier`), entrée de rentabilité ouverte, Pilotage de rentabilité (`machine`, `semaines`, `semaine`), fenêtres de détail (`devis`, `rattachement`, `of`, `fiche`, `synthese`), Réunions (`reunion`, `resp`), Scans d'OF (`sous=rattacher`, `scan`), mémoire produit en surcouche sur toute page (`produit`, `historique`, `produits=liste`, onglet dans `produit_onglet`) |
 | ERP RVGI | Déjà conforme (`#/ecran?filtres`) |
 | MyStock | Partiel (`?tab=&vue=&cat=&matiere=…`) : filtres de listes et tris à ajouter, passer au helper |
-| Planning | Fait le 15/10/2026 : `machine`, `vue`, `horizon` (1w/4w), `semaine` (lundi en date, pas un décalage), fenêtres `dossier`, `of` (aperçu), `stats`. Changer de machine ou de vue recharge la page, comme au clic |
+| Planning | Fait le 15/10/2026 : `machine`, `vue`, `horizon` (1w/4w), `semaine` (lundi en date, pas un décalage), fenêtres `dossier`, `of` (aperçu), `stats`, `fsc`, `reglages=machine`, `reglages_semaine`, `horaires`, `commentaire_jour`, `commentaire_semaine` (dates en `AAAA-MM-JJ`). Changer de machine ou de vue recharge la page, comme au clic |
 | MyExpé, Paramètres, Qualité, Maintenance, RH, Compta, Tâches | À faire |
