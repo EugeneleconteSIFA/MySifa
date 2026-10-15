@@ -21,6 +21,12 @@
  * Pendant le rappel, toute écriture remplace : réappliquer un état ne doit
  * pas recréer l'entrée qu'on vient de quitter.
  *
+ * Revenir là d'où l'on vient (fermer une fiche, « ← Retour à la liste »)
+ * RECULE dans l'historique au lieu d'empiler : sinon Retour, juste après,
+ * rouvrirait la fiche qu'on vient de fermer. Le recul n'a lieu que si
+ * l'adresse visée est exactement celle qu'on avait quittée ; un filtre
+ * changé entre-temps fait empiler normalement.
+ *
  * Une page embarquée (widget d'accueil, iframe) n'empile jamais : l'historique
  * d'un iframe se mêle à celui de la page qui le contient, et Retour sur
  * l'accueil ferait reculer le widget au lieu de la page.
@@ -36,6 +42,9 @@
 
   var navCourante = null;
   var enRetour = 0;
+  // Recul demandé (history.back) dont le popstate n'est pas encore arrivé :
+  // les écritures sont suspendues, c'est lui qui fixera l'adresse.
+  var reculEnCours = false;
 
   function embarque() {
     try {
@@ -96,19 +105,31 @@
     var cible = location.pathname + (qs ? "?" + qs : "") + (opts.hash ? "#" + opts.hash : "");
     var nav = opts.navigation === undefined ? navCourante : String(opts.navigation);
     var actuelle = location.pathname + location.search + location.hash;
-    var empiler = !enRetour && !embarque() && navCourante !== null && nav !== navCourante;
-    navCourante = nav;
-    var etat = { mysifaNav: nav };
+    if (reculEnCours) return;
+    var st = history.state || {};
+    var libre = !enRetour && !embarque() && navCourante !== null && nav !== navCourante;
     try {
-      if (empiler) history.pushState(etat, "", cible);
-      else if (cible !== actuelle || !history.state || history.state.mysifaNav !== nav) {
-        history.replaceState(etat, "", cible);
+      if (libre && st.depuisUrl === cible) {
+        reculEnCours = true;
+        setTimeout(function () { reculEnCours = false; }, 1500);
+        history.back();
+        return;
       }
+      if (libre) {
+        history.pushState({ mysifaNav: nav, depuisUrl: actuelle }, "", cible);
+      } else {
+        // Même endroit : on garde d'où l'on venait, pour que la fermeture
+        // recule encore après un filtre ou un tri.
+        var etat = nav === st.mysifaNav ? Object.assign({}, st, { mysifaNav: nav }) : { mysifaNav: nav };
+        if (cible !== actuelle || st.mysifaNav !== nav) history.replaceState(etat, "", cible);
+      }
+      navCourante = nav;
     } catch (e) { /* l'adresse est un confort, jamais un blocage */ }
   }
 
   function surRetour(fn) {
     window.addEventListener("popstate", function (ev) {
+      reculEnCours = false;
       navCourante = ev.state && ev.state.mysifaNav !== undefined ? ev.state.mysifaNav : null;
       enRetour++;
       var fin = function () { enRetour = Math.max(0, enRetour - 1); };
