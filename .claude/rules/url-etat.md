@@ -47,6 +47,9 @@ MySifaUrl.surRetour(async u => { …réappliquer, recharger… });
   Quand elle change, l'adresse **s'empile** (Retour y ramène). Un filtre ou
   un tri **remplace** : dix filtres essayés ne font pas dix retours.
 - Pendant `surRetour`, toute écriture remplace.
+- **Fermer recule.** Revenir exactement à l'adresse qu'on avait quittée
+  (fermer une fiche, « ← Retour à la liste ») fait `history.back()` au lieu
+  d'empiler : sinon Retour, juste après, rouvrirait la fiche fermée.
 - Une page embarquée (widget d'accueil, iframe) n'empile jamais : l'historique
   d'un iframe se mêle à celui de l'accueil.
 - `bloc_…`, `capture`, `embed`, `next` sont préservés : ils appartiennent à
@@ -74,7 +77,19 @@ MySifaUrl.surRetour(async u => { …réappliquer, recharger… });
 Dans le même commit que l'onglet ou le filtre : l'ajouter à la fonction de
 dérivation ET à la fonction de lecture. Un état visible qui n'est pas dans
 l'adresse est un oubli, sauf exceptions assumées : recherche texte,
-pagination, sections repliées, modales de saisie (formulaire en cours).
+pagination, sections repliées, formulaire de CRÉATION en cours.
+
+**Les fenêtres de détail en font partie** (décision du 15/10/2026) : un devis,
+un OF, une fiche technique, une ligne de synthèse ouverts par-dessus la page
+sont des objets ouverts comme les autres. Modèle : `_MODALES_URL` de
+`mysifa_prod_core.js` — par clé, la page qui la porte, comment la rouvrir
+(après chargement des données) et la fermer. Une fenêtre DOM (hors de `S`) se
+déclare dans `S.urlModale` à l'ouverture et s'en retire à la fermeture ; sa
+fonction de fermeture prend un `sansAdresse` pour les fermetures techniques
+(réouverture, Retour du navigateur) — et ne doit donc jamais être passée nue
+en `onClick` (l'événement serait pris pour `sansAdresse`). La clé de
+navigation ne porte pas l'id : passer d'un détail au suivant remplace.
+Fermer ou rouvrir une fenêtre au Retour ne recharge pas la page.
 
 ### Lien avec les indicateurs d'accueil
 
@@ -90,7 +105,7 @@ rendrait les anciens filtres.
 
 | Appli | État |
 |---|---|
-| MyProd | Fait le 15/10/2026 : page, sous-onglets, période, machines, opérateurs, dossiers, tris (saisies, traçabilité, rentabilité), Retour de prod (vue, machine, compte-rendu ouvert), fiche dossier de Traçabilité (`dossier`), entrée de rentabilité ouverte |
+| MyProd | Fait le 15/10/2026 : page, sous-onglets, période, machines, opérateurs, dossiers, tris (saisies, traçabilité, rentabilité), Retour de prod (vue, machine, compte-rendu ouvert), fiche dossier de Traçabilité (`dossier`), entrée de rentabilité ouverte, fenêtres de détail (`devis`, `of`, `fiche`, `synthese`) |
 | ERP RVGI | Déjà conforme (`#/ecran?filtres`) |
 | MyStock | Partiel (`?tab=&vue=&cat=&matiere=…`) : filtres de listes et tris à ajouter, passer au helper |
 | Planning, MyExpé, Paramètres, Qualité, Maintenance, RH, Compta, Tâches | À faire |

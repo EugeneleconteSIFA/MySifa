@@ -354,7 +354,54 @@
         if(dt.champ&&!(dt.champ==='defaut'&&dt.sens==='desc')){ p.tri=dt.champ; p.sens=dt.sens||'asc'; }
       }
     }
+    // Fenêtres de détail posées par-dessus la page : un objet ouvert comme
+    // un autre, donc une entrée d'historique. La clé de navigation ne porte
+    // pas l'id : passer d'un devis au suivant (« Valider » enchaîne), ou
+    // d'une ligne de synthèse à l'autre avec les flèches, remplace l'entrée —
+    // cent devis relus ne font pas cent retours.
+    var mo=_prodModaleCourante();
+    if(mo){ p[mo.cle]=mo.id; nav+='/'+mo.cle; }
     return {params:p, nav:nav};
+  }
+
+  // Fenêtres de détail que l'adresse sait rouvrir. `ouvrir` est appelé une
+  // fois les données de la page chargées. OF et fiche technique vivent dans
+  // S ; devis et synthèse sont des fenêtres DOM qui se déclarent dans
+  // S.urlModale à l'ouverture et s'en retirent à la fermeture.
+  var _MODALES_URL={
+    devis:{page:'rentabilite',
+      ouvrir:function(id){ if((S.devisList||[]).some(function(d){return String(d.id)===String(id);})) ouvrirDevisModal(Number(id)); },
+      fermer:function(){ fermerDevisModal(true); }},
+    synthese:{page:'production',
+      ouvrir:function(v){ var i=String(v).indexOf(':'); if(i>0) openProdSynthDetail(v.slice(0,i),[v.slice(i+1)],0); },
+      fermer:function(){ closeProdSynthModal(true); }},
+    of:{page:'of',
+      ouvrir:function(id){ if(/^[0-9]+$/.test(id)) openOfEditModal({id:Number(id)}); },
+      fermer:function(){ if(S.ofEditModal) closeOfEditModal(); }},
+    fiche:{page:'fiches',
+      ouvrir:function(id){ var f=(S.fiches||[]).filter(function(x){return String(x.id)===String(id);})[0]; if(f) openFicheEditModal(f); },
+      fermer:function(){ if(S.ficheEditModal) closeFicheEditModal(); }}
+  };
+  function _prodModaleCourante(){
+    if(S.ofEditModal&&S.ofEditModal.id) return {cle:'of',id:S.ofEditModal.id};
+    if(S.ficheEditModal&&S.ficheEditModal.id) return {cle:'fiche',id:S.ficheEditModal.id};
+    var m=S.urlModale;
+    if(m&&m.cle&&m.id!=null&&m.id!=='') return m;
+    return null;
+  }
+  // Après chargement (démarrage, Retour/Suivant) : ferme ce que l'adresse ne
+  // demande plus, ouvre ce qu'elle demande.
+  function prodAppliquerModaleUrl(){
+    var voulue=S._modaleUrl||null; S._modaleUrl=null;
+    var cour=_prodModaleCourante();
+    if(cour&&(!voulue||voulue.cle!==cour.cle||String(voulue.id)!==String(cour.id))){
+      try{ _MODALES_URL[cour.cle].fermer(); }catch(e){}
+      S.urlModale=null;
+    }
+    cour=_prodModaleCourante();
+    if(voulue&&!cour){
+      try{ _MODALES_URL[voulue.cle].ouvrir(String(voulue.id)); }catch(e){}
+    }
   }
 
   function prodSyncUrl(){
@@ -433,19 +480,35 @@
         S.rentSelEntryId=ent?(isNaN(Number(ent))?ent:Number(ent)):null;
       }
     }
+    S._modaleUrl=null;
+    Object.keys(_MODALES_URL).forEach(function(cle){
+      var v=u.get(cle,null);
+      if(v&&_MODALES_URL[cle].page===page&&v.length<=120) S._modaleUrl={cle:cle,id:v};
+    });
     return avant!==JSON.stringify([S.fv.date_from,S.fv.date_to,S.fv.machines,S.fv.operateurs,S.fv.dossiers]);
   }
 
   // Retour / Suivant du navigateur : on réapplique l'adresse, on recharge
   // ce que la page affiche, et les chiffres si les filtres diffèrent.
   if(window.MySifaUrl){
+    // Fermer ou rouvrir une fenêtre de détail ne recharge pas la page : seul
+    // un changement d'endroit (page, sous-onglet, fiche, filtres) le fait.
+    var _sansModale=function(){
+      var p=Object.assign({},_prodParams().params);
+      Object.keys(_MODALES_URL).forEach(function(k){ if(S.page===_MODALES_URL[k].page) delete p[k]; });
+      return JSON.stringify(p);
+    };
     MySifaUrl.surRetour(async function(){
       if(!S.user||S.app==='login') return;
+      var avant=_sansModale();
       var filtres=prodLireUrl(true);
-      if(S.page==='production'&&S.subPage==='kpis') startMachineStatusPolling();
-      else stopMachineStatusPolling();
-      await nav();
-      if(filtres) await applyF();
+      if(_sansModale()!==avant||filtres){
+        if(S.page==='production'&&S.subPage==='kpis') startMachineStatusPolling();
+        else stopMachineStatusPolling();
+        await nav();
+        if(filtres) await applyF();
+      }else render();
+      prodAppliquerModaleUrl();
     });
   }
   function toast(m, t = 'success'){
@@ -6907,14 +6970,21 @@ function ouvrirCorrectionDevis(dv){
    Elle est posée dans `document.body`, pas dans `#root` : `render()` vide
    `#root` à chaque changement d'état, et une modale rendue dedans
    disparaîtrait au premier rafraîchissement. */
-function fermerDevisModal(){
-  document.getElementById('devis-detail-modal')?.remove();
+// `sansAdresse` : fermeture technique (réouverture, Retour du navigateur) —
+// l'adresse est déjà ou sera tenue par l'appelant.
+function fermerDevisModal(sansAdresse){
+  const el=document.getElementById('devis-detail-modal');
+  if(el) el.remove();
+  if(!sansAdresse && el && S.urlModale && S.urlModale.cle==='devis'){
+    S.urlModale=null; prodSyncUrl();
+  }
 }
 
 function ouvrirDevisModal(devisId){
-  fermerDevisModal();
+  fermerDevisModal(true);
   const dv = (S.devisList||[]).find(d=>Number(d.id)===Number(devisId));
   if(!dv){ toast('Devis introuvable.','error'); return; }
+  S.urlModale={cle:'devis',id:dv.id}; prodSyncUrl();
 
   let champs={};
   try{ champs = dv.extraction_json ? JSON.parse(dv.extraction_json) : {}; }catch(_){ champs={}; }
@@ -6963,7 +7033,7 @@ function ouvrirDevisModal(devisId){
         h('div',{style:{fontSize:'11px',color:'var(--muted)'}}, dv.filename||'')
       ),
       h('button',{className:'contact-close-btn',title:'Fermer',
-        onClick:fermerDevisModal},'✕')
+        onClick:()=>fermerDevisModal()},'✕')
     ),
     (Number(dv.a_verifier)===1 && dv.note)
       ? h('div',{className:'devis-alertes'},
@@ -6985,7 +7055,7 @@ function ouvrirDevisModal(devisId){
         // à cliquer sans lire.
         await deleteDevis(dv.id); fermerDevisModal();
       }},'Supprimer'),
-      h('button',{type:'button',className:'btn-sec',onClick:fermerDevisModal},'Fermer')
+      h('button',{type:'button',className:'btn-sec',onClick:()=>fermerDevisModal()},'Fermer')
     )
   );
   boite.addEventListener('click',e=>e.stopPropagation());
@@ -7000,9 +7070,10 @@ async function validerDevis(devisId, o){
     await api('/api/rentabilite/devis/'+devisId+'/valider',{method:'POST'});
   }catch(e){ toast(e.message,'error'); return; }
   await loadDevis();
-  fermerDevisModal();
   const suivant = (S.devisList||[]).find(d=>Number(d.a_verifier)===1 && Number(d.id)!==Number(devisId));
-  if(suivant && S.rentDevisFiltre==='verifier' && !(o && o.enchainer===false)){
+  const enchaine = !!(suivant && S.rentDevisFiltre==='verifier' && !(o && o.enchainer===false));
+  fermerDevisModal(enchaine);
+  if(enchaine){
     toast('Devis validé — suivant à vérifier.');
     ouvrirDevisModal(suivant.id);
   }else{
@@ -12519,7 +12590,11 @@ function prodSynthCleanClient(c){
   if(p.length===2&&/^\d+$/.test(p[0].trim()))return p[1].trim();
   return String(c).trim();
 }
-function closeProdSynthModal(){
+function closeProdSynthModal(sansAdresse){
+  if(!sansAdresse && S.urlModale && S.urlModale.cle==='synthese'
+     && document.querySelector('.prod-synth-modal')){
+    S.urlModale=null; prodSyncUrl();
+  }
   try{
     const m=document.querySelector('.prod-synth-modal');
     if(m&&m._navKeyHandler){
@@ -12537,7 +12612,11 @@ function openProdSynthDetail(type,keys,index,opts){
   if(!Number.isFinite(idx)||idx<0)idx=0;
   if(idx>=list.length)idx=list.length-1;
   const key=list[idx];
-  closeProdSynthModal();
+  closeProdSynthModal(true);
+  // Une synthèse calculée à part (équipes de repiquage, filtre propre) ne se
+  // rouvre pas depuis l'adresse : elle n'y figure pas.
+  S.urlModale = opts.customSessionsFn ? null : {cle:'synthese', id:type+':'+key};
+  prodSyncUrl();
   const TYPE_TITLES={dossier:'Dossier',operator:'Opérateur',machine:'Machine',day:'Jour',team:'Équipe'};
   // Sessions : custom (par equipe repiquage) OU filtre standard
   let sessions;
@@ -13420,6 +13499,8 @@ function renderProdKpis(){
         }
         // Badge "Mappings OF à valider" dans la sidebar
         try{ if(canAccessOfTab()) loadPendingOfCount(); }catch(e){}
+        // Fenêtre de détail demandée par l'adresse (?devis=, ?of=…).
+        try{ render(); prodAppliquerModaleUrl(); }catch(e){}
         try{ loadProdEcartsCount(); }catch(e){}
       }catch(e){
         console.warn('[mysifa_prod_core] checkAuth load erreur:', e && e.message);
@@ -13524,6 +13605,8 @@ function renderProdKpis(){
         }
         // Badge "Mappings OF à valider" dans la sidebar
         try{ if(canAccessOfTab()) loadPendingOfCount(); }catch(e){}
+        // Fenêtre de détail demandée par l'adresse (?devis=, ?of=…).
+        try{ render(); prodAppliquerModaleUrl(); }catch(e){}
         try{ loadProdEcartsCount(); }catch(e){}
         render();
       }catch(e){
