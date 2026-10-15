@@ -348,6 +348,12 @@
         var rt=S.rentTri||{};
         if(rt.champ&&!(rt.champ==='debut'&&rt.sens==='desc')){ p.tri=rt.champ; p.sens=rt.sens||'asc'; }
         if(S.rentSelEntryId){ p.entree=S.rentSelEntryId; nav+='/entree:'+S.rentSelEntryId; }
+      }else if(rs==='pilotage'){
+        // Machine : seulement si choisie (le défaut est calculé, la machine
+        // qui a le plus à lier). Semaine : seulement si ce n'est pas l'actuelle.
+        if(S.rentPilotMachine) p.machine=S.rentPilotMachine;
+        if(S.rentPilotSemaines&&Number(S.rentPilotSemaines)!==2) p.semaines=S.rentPilotSemaines;
+        if(S.rentPilotLundi&&S.rentPilotLundi!==rentISOJour(rentLundiDe(new Date()))) p.semaine=S.rentPilotLundi;
       }else if(rs==='devis'){
         if(S.rentDevisFiltre&&S.rentDevisFiltre!=='tous') p.filtre=S.rentDevisFiltre;
         var dt=S.rentDevisTri||{};
@@ -369,6 +375,13 @@
   // S ; devis et synthèse sont des fenêtres DOM qui se déclarent dans
   // S.urlModale à l'ouverture et s'en retirent à la fermeture.
   var _MODALES_URL={
+    rattachement:{page:'rentabilite',
+      ouvrir:async function(id){
+        if(!/^[0-9]+$/.test(id)) return;
+        if(!S.rentLinksCharges) await loadRentLinks();
+        ouvrirRattachementModal(Number(id));
+      },
+      fermer:function(){ fermerRattachementModal(true); }},
     devis:{page:'rentabilite',
       ouvrir:function(id){ if((S.devisList||[]).some(function(d){return String(d.id)===String(id);})) ouvrirDevisModal(Number(id)); },
       fermer:function(){ fermerDevisModal(true); }},
@@ -470,7 +483,12 @@
       if(!S._tracDossierUrl){ S.traceabiliteDossier=undefined; S.tracDossierRef=null; }
     }
     if(page==='rentabilite'){
-      if(S.rentSubTab==='devis'){
+      if(S.rentSubTab==='pilotage'){
+        S.rentPilotMachine=u.get('machine',null);
+        S.rentPilotSemaines=Number(u.get('semaines','2',['1','2','4']));
+        var sem=u.get('semaine',null);
+        S.rentPilotLundi=(sem&&/^\d{4}-\d{2}-\d{2}$/.test(sem))?sem:null;
+      }else if(S.rentSubTab==='devis'){
         S.rentDevisFiltre=u.get('filtre','tous');
         S.rentDevisTri=tri?{champ:tri,sens:desc?'desc':'asc'}:{champ:'defaut',sens:'desc'};
       }else{
@@ -5941,8 +5959,14 @@ function rentSelecteurDevis(o){
 }
 
 // ── Fenêtre de rattachement ──────────────────────────────────────
-function fermerRattachementModal(){
-  document.getElementById('rent-lier-modal')?.remove();
+// `sansAdresse` : fermeture technique (relance, réouverture, Retour du
+// navigateur, passage à la fiche complète) — voir url-etat.md.
+function fermerRattachementModal(sansAdresse){
+  const el=document.getElementById('rent-lier-modal');
+  if(el) el.remove();
+  if(!sansAdresse && el && S.urlModale && S.urlModale.cle==='rattachement'){
+    S.urlModale=null; prodSyncUrl();
+  }
 }
 
 /* Cliquer un bloc ouvre CE dossier, pas la liste filtrée sur lui. Le geste
@@ -5951,13 +5975,14 @@ function fermerRattachementModal(){
    une mise à jour partielle — `render()` ne la connaît pas, elle vit dans
    `document.body` pour survivre au rafraîchissement de `#root`. */
 async function ouvrirRattachementModal(entryId){
-  fermerRattachementModal();
+  fermerRattachementModal(true);
   const entree = (S.rentList || []).find(e => Number(e.id) === Number(entryId));
   if(!entree){ toast('Dossier introuvable.', 'error'); return; }
+  S.urlModale={cle:'rattachement', id:entree.id}; prodSyncUrl();
   const lien = (S.rentLinksById || {})[Number(entryId)] || {devis_id:null, no_dossiers:[]};
   const etat = rentEtatLien(lien);
 
-  const overlay = h('div',{id:'rent-lier-modal',className:'contact-modal-overlay'});
+  const overlay = h('div',{id:'rent-lier-modal',className:'contact-modal-overlay','data-entree':String(entree.id)});
   overlay.addEventListener('click', e => { if(e.target === overlay) fermerRattachementModal(); });
   const surTouche = e => {
     if(e.key === 'Escape'){ fermerRattachementModal(); document.removeEventListener('keydown', surTouche); }
@@ -5967,7 +5992,7 @@ async function ouvrirRattachementModal(entryId){
   const corps = h('div',{className:'contact-modal-body'},
     h('div',{className:'rent-lier-attente'}, 'Recherche des devis plausibles…'));
 
-  const relancer = async () => { fermerRattachementModal(); await ouvrirRattachementModal(entryId); };
+  const relancer = async () => { fermerRattachementModal(true); await ouvrirRattachementModal(entryId); };
 
   /* L'état et ce qu'on peut en faire tiennent sur UNE bande : Confirmer et
      Rejeter à droite du libellé. Posés dessous, ils collaient au bandeau et
@@ -5998,7 +6023,7 @@ async function ouvrirRattachementModal(entryId){
           [entree.reference, entree.machine_nom, rentFmtFormat(entree) + ' mm']
             .filter(Boolean).join(' · '))
       ),
-      h('button',{className:'contact-close-btn',title:'Fermer',onClick:fermerRattachementModal},'✕')
+      h('button',{className:'contact-close-btn',title:'Fermer',onClick:()=>fermerRattachementModal()},'✕')
     ),
     bandeau,
     corps
@@ -6024,10 +6049,13 @@ async function ouvrirRattachementModal(entryId){
   if(etat !== 'vert') requestAnimationFrame(() => selecteur.querySelector('input')?.focus());
   corps.appendChild(h('div',{className:'rent-lier-pied'},
     h('button',{type:'button',className:'btn-sec',onClick:()=>{
-      fermerRattachementModal();
+      // On quitte la fenêtre POUR un autre endroit : pas de recul, sinon le
+      // retour arrière ramènerait au Pilotage par-dessus ce set().
+      fermerRattachementModal(true);
+      S.urlModale=null;
       set({rentSubTab:'dossiers', rentSelEntryId:entree.id, rentFiltre:'tous'});
     }},'Ouvrir la fiche complète', iconEl('chevron-right',13)),
-    h('button',{type:'button',className:'btn-sec',onClick:fermerRattachementModal},'Fermer')
+    h('button',{type:'button',className:'btn-sec',onClick:()=>fermerRattachementModal()},'Fermer')
   ));
 }
 
@@ -6976,7 +7004,11 @@ function fermerDevisModal(sansAdresse){
   const el=document.getElementById('devis-detail-modal');
   if(el) el.remove();
   if(!sansAdresse && el && S.urlModale && S.urlModale.cle==='devis'){
-    S.urlModale=null; prodSyncUrl();
+    // Ouvert par « Voir » depuis la fenêtre de rattachement : celle-ci est
+    // toujours là-dessous, l'adresse revient à elle.
+    const lier=document.getElementById('rent-lier-modal');
+    S.urlModale = (lier && lier.dataset.entree) ? {cle:'rattachement', id:Number(lier.dataset.entree)} : null;
+    prodSyncUrl();
   }
 }
 
