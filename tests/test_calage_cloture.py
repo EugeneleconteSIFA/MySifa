@@ -351,6 +351,39 @@ class TestCalageCloture(unittest.TestCase):
         self.assertIsNone(g["metres"])
         self.assertEqual(g["plages_sans_releve"], 1)
 
+    # ── 8. Compteurs proposés et signalement d'un chiffrage incohérent ───
+    def test_7_compteurs_et_signalement(self):
+        from database import get_db
+        from app.services import rapport_dossier as rd
+
+        s01 = self._saisie("01", 0)
+        self._saisie("02", 1)
+        s03 = self._saisie("03", 60)
+        with get_db() as conn:
+            conn.execute("UPDATE production_data SET metrage_total_debut=20000 WHERE id=?", (s01,))
+            conn.execute("UPDATE production_data SET metrage_compteur=20700 WHERE id=?", (s03,))
+            conn.commit()
+        p = self.client.get("/api/fabrication/calage-cloture",
+                            params={"no_dossier": DOSSIER, "machine_id": MACHINE_ID}).json()
+        self.assertEqual(p["compteur_debut"], 20000.0)
+        self.assertEqual(p["compteur_fin_calage"], 20700.0)
+
+        prod = datetime.now().replace(second=0, microsecond=0) - timedelta(minutes=5)
+        r = self.client.post("/api/fabrication/saisie", json={
+            "operation": "89 - Fin de production", "machine_id": MACHINE_ID,
+            "no_dossier": DOSSIER, "fin_dossier": True, "metrage_fin": 25000,
+            "calage": {"debut_calage": _iso(self.t0 + timedelta(minutes=1)),
+                       "fin_calage": _iso(self.t0 + timedelta(minutes=60)),
+                       "fin_prod": _iso(prod),
+                       "signalement": "Calage noté 45 min sur le papier"},
+        })
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(self._declarations()[-1]["signalement"], "Calage noté 45 min sur le papier")
+        with get_db() as conn:
+            cr = rd.compte_rendu(conn, DOSSIER)
+        self.assertEqual(cr["calage"]["declaration"]["signalement"], "Calage noté 45 min sur le papier")
+        self.assertIn("calage_signale", [v["cle"] for v in cr["vigilance"]])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

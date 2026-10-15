@@ -183,7 +183,30 @@ def proposer(conn, no_dossier: str, machine: str, maintenant: datetime) -> Dict[
     jours = sorted({str(r["date_operation"])[:10] for r in rows if _meme_dossier(r, no_dossier)}
                    | {maintenant.strftime("%Y-%m-%d")})
     mediane = mediane_calage_machine(conn, machine)
+    # Compteurs pour les métrages de l'écran : celui d'avant le calage (le 01,
+    # ou la fin du dossier précédent) et celui relevé en fin de calage. Le
+    # compteur de fin de prod, l'opérateur vient de le saisir à l'écran 1.
+    depart = None
+    borne = debut or next((r["date_operation"] for r in rows
+                           if _meme_dossier(r, no_dossier) and _code(r) == CODE_DEBUT_DOS), None)
+    if borne:
+        params = (CODE_DEBUT_DOS, CODE_FIN_DOS, CODE_ANNUL_DOS)
+        ligne = conn.execute(
+            f"""SELECT {_SQL_COMPTEUR} AS ctr FROM production_data
+                 WHERE trim(machine) = trim(?) AND COALESCE(est_annule, 0) = 0
+                   AND date_operation <= ? AND ({_SQL_COMPTEUR}) IS NOT NULL
+                 ORDER BY date_operation DESC, id DESC LIMIT 1""",
+            params + (machine, borne) + params,
+        ).fetchone()
+        depart = float(ligne["ctr"]) if ligne and ligne["ctr"] is not None else None
+    ctr_fin_calage = None
+    if a["fin"] is not None:
+        r = conn.execute("SELECT metrage_compteur FROM production_data WHERE id=?",
+                         (rows[a["fin"]]["id"],)).fetchone()
+        ctr_fin_calage = float(r[0]) if r and r[0] is not None else None
     return {
+        "compteur_debut": depart,
+        "compteur_fin_calage": ctr_fin_calage,
         "debut_calage": debut,
         "fin_calage": fin,
         "fin_prod": _iso(maintenant),
@@ -260,7 +283,8 @@ def _place_libre(rows, i, quand: datetime) -> bool:
 
 def appliquer(conn, *, no_dossier: str, machine: str, declare: Dict[str, datetime],
               saisie_cloture_id: int, fin_prod_mesure: str,
-              fin_prod_motif: Optional[str], auteur: str, maintenant: datetime) -> Dict[str, Any]:
+              fin_prod_motif: Optional[str], auteur: str, maintenant: datetime,
+              signalement: Optional[str] = None) -> Dict[str, Any]:
     """Corrige les saisies d'après les heures déclarées et enregistre la
     déclaration. La saisie de clôture est déjà insérée, à son heure retenue.
     Ne commite pas : c'est à l'appelant."""
@@ -362,6 +386,16 @@ def appliquer(conn, *, no_dossier: str, machine: str, declare: Dict[str, datetim
          json.dumps(motifs, ensure_ascii=False) if motifs else None,
          auteur, _iso(maintenant)),
     )
+    # Signalement d'un chiffrage incohérent : écrit à part, la colonne vient
+    # d'une migration plus récente que la table.
+    signalement = (signalement or "").strip()[:1000]
+    if signalement:
+        try:
+            conn.execute(
+                "UPDATE dossier_calages_declares SET signalement=? WHERE id=last_insert_rowid()",
+                (signalement,))
+        except Exception:
+            logger.exception("[calage] signalement non enregistré")
     return {"debut_applique": debut_ok, "fin_calage_applique": fin_ok,
             "fin_prod_applique": not fin_prod_motif, "motifs": motifs}
 
@@ -406,6 +440,7 @@ def declaration(conn, no_dossier: str) -> Optional[Dict[str, Any]]:
                       if declare is not None and mesure is not None else None),
         "applique": bool(r["debut_applique"] and r["fin_calage_applique"] and r["fin_prod_applique"]),
         "motifs_non_appliques": motifs,
+        "signalement": (r["signalement"] if "signalement" in r.keys() else None) or None,
         "declare_par": r["declare_par"],
         "declare_le": r["declare_le"],
     }

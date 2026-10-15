@@ -1808,6 +1808,7 @@ async def create_saisie(request: Request):
                     declare=calage_declare, saisie_cloture_id=new_id,
                     fin_prod_mesure=fin_prod_mesure, fin_prod_motif=fin_prod_motif,
                     auteur=operateur,
+                    signalement=(body.get("calage") or {}).get("signalement"),
                     maintenant=datetime.now(_PARIS).replace(tzinfo=None),
                 )
                 conn.commit()

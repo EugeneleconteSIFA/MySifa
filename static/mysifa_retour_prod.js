@@ -762,6 +762,10 @@
       h += kpi("—", "Prévu au devis", "aucun devis rattaché");
     }
     h += '</div>';
+    if (d && d.signalement) {
+      h += '<div class="rp-manque">Chiffrage signalé incohérent par '
+         + escHtml(d.declare_par || "le conducteur") + ' : « ' + escHtml(d.signalement) + ' »</div>';
+    }
     if (d && (d.motifs_non_appliques || []).length) {
       h += '<div class="rp-manque">Heures déclarées non reportées sur les saisies : '
          + d.motifs_non_appliques.map(escHtml).join(" ")
