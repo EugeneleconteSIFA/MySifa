@@ -6,7 +6,8 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 
-from config import CODE_ANNUL_DOS, CODE_DEBUT_DOS, CODE_FIN_DOS, ROLES_PROD
+from config import (CODE_ANNUL_DOS, CODE_DEBUT_DOS, CODE_FIN_DOS,
+                    PROD_VITESSE_MAX_M_MIN, ROLES_PROD)
 from database import get_db
 from services.auth_service import effective_role, get_current_user
 from app.services import rapport_dossier as rd
@@ -130,6 +131,7 @@ def liste_comptes_rendus(request: Request, mode: str = "jour", jour: str | None 
         lignes = rd.comptes_rendus_periode(
             conn, b["debut"], b["fin"], machine=machine or "",
             code_fin=CODE_FIN_DOS, limite=int(limite),
+            vitesse_max=PROD_VITESSE_MAX_M_MIN,
         )
     return {"periode": b, "machine": machine or "", "lignes": lignes}
 
@@ -158,7 +160,8 @@ def retour_atelier(request: Request, machine: str = "", mode: str = "jour",
     b = _bornes(mode, jour, year, week, du, au)
     with get_db() as conn:
         data = rd.retour_atelier(conn, (machine or "").strip(), b["debut"], b["fin"],
-                                 code_fin=CODE_FIN_DOS)
+                                 code_fin=CODE_FIN_DOS,
+                                 vitesse_max=PROD_VITESSE_MAX_M_MIN)
     return {**data, "periode": b}
 
 
@@ -303,7 +306,8 @@ def compte_rendu_dossier(no_dossier: str, request: Request):
     _autorise(request)
     with get_db() as conn:
         cr = rd.compte_rendu(conn, no_dossier, code_fin=CODE_FIN_DOS,
-                             code_debut=CODE_DEBUT_DOS, code_annul=CODE_ANNUL_DOS)
+                             code_debut=CODE_DEBUT_DOS, code_annul=CODE_ANNUL_DOS,
+                             vitesse_max=PROD_VITESSE_MAX_M_MIN)
     if not cr.get("existe"):
         raise HTTPException(status_code=404,
                             detail=f"Aucune saisie pour le dossier {no_dossier}.")

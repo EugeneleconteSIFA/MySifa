@@ -301,9 +301,13 @@ STOCK_EMPLACEMENT_SORTIE_PROD_LABEL = "En attente - sortie de prod"
 # une instance Kernse surcharge via STOCK_UNITE_VENTE_DEFAUT dans son .env.
 STOCK_UNITE_VENTE_DEFAUT = os.getenv("STOCK_UNITE_VENTE_DEFAUT", "étiquette")
 
-# Vitesse (m/min) au-delà de laquelle un métrage saisi est une faute de frappe
-# sur un compteur : le déstockage refuse alors de s'en servir.
-PROD_VITESSE_MAX_M_MIN = float(os.getenv("PROD_VITESSE_MAX_M_MIN", "400"))
+# Plafond de vitesse machine (m/min), unique pour tout MySifa. Au-delà, le
+# métrage saisi est une faute de compteur (chiffre en trop, 03 et 89 à la même
+# minute) : le déstockage refuse de s'en servir, les écrans affichent « erreur
+# saisie », la saisie atelier demande confirmation, et la série est écartée des
+# repères de cadence. Ramené de 400 à 200 le 15/10/2026 : les machines
+# tournent autour de 75-100 m/min.
+PROD_VITESSE_MAX_M_MIN = float(os.getenv("PROD_VITESSE_MAX_M_MIN", "200"))
 
 # ─── Certification FSC ────────────────────────────────────────────
 # Volontairement mono-certification : FSC est le seul référentiel dont SIFA a

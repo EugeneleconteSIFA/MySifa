@@ -47,7 +47,7 @@
   transition:border-color .15s,background .15s,transform .1s;line-height:1;padding:0;
 }
 .mys-humeur-btn:hover{
-  border-color:var(--accent,#22d3ee);background:var(--accent-bg,rgba(34,211,238,0.12));
+  border-color:var(--accent,#22d3ee);background:var(--accent-bg,color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent));
   transform:scale(1.1);
 }
 .mys-humeur-lbl{font-size:10px;color:var(--muted,#94a3b8);font-weight:600;

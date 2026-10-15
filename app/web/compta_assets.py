@@ -12,8 +12,8 @@ COMPTA_MAIN_CSS = RH_OUTIL_CSS + r"""
 .compta-add-bar-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
 .compta-add-bar-fields label{display:block;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
 .compta-add-bar-fields input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-size:14px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
-.compta-add-bar-fields input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
-body.light .compta-add-bar-fields input:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
+.compta-add-bar-fields input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
+body.light .compta-add-bar-fields input:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#0891b2) 12%,transparent)}
 .compta-add-bar-actions{display:flex;gap:10px;margin-top:14px;align-items:center}
 """
 

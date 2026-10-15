@@ -59,7 +59,7 @@ AO_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/support_widget.css">
 <style>
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
-body.light{--muted:#64748b;--accent-bg:rgba(8,145,178,.1);}
+body.light{--muted:#64748b;--accent-bg:color-mix(in srgb,var(--accent,#0891b2) 10%,transparent);}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text)}
@@ -140,7 +140,7 @@ a.btn,a.btn:hover{text-decoration:none}
 .badge-success{background:rgba(52,211,153,.15);color:var(--success)}
 .eng-chip{display:inline-block;font-size:11px;font-weight:600;padding:2px 7px;border-radius:6px;white-space:nowrap;line-height:1.5}
 .eng-on{background:rgba(52,211,153,.15);color:var(--success)}
-.eng-strong{background:rgba(34,211,238,.15);color:var(--accent)}
+.eng-strong{background:color-mix(in srgb,var(--accent,#22d3ee) 15%,transparent);color:var(--accent)}
 .eng-doubt{background:rgba(251,191,36,.15);color:var(--warn)}
 .eng-off{background:rgba(148,163,184,.12);color:var(--muted)}
 .eng-when{font-size:10px;color:var(--muted);margin-top:3px}
@@ -173,7 +173,7 @@ a.btn,a.btn:hover{text-decoration:none}
 .detail-meta{font-size:13px;color:var(--text2);line-height:1.6}
 .detail-actions{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}
 input,select,textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-size:14px;font-family:inherit}
-input:focus,select:focus,textarea:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
 .field{margin-bottom:14px}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -446,19 +446,19 @@ margin-left:6px;cursor:help;vertical-align:middle}
      Parametres > Fabrication > Impression). Autonome : aucun appel a faire. -->
 <link rel="stylesheet" href="/static/mysifa_encre_picker.css?v=__V_LABEL__">
 <script src="/static/mysifa_encre_picker.js?v=__V_LABEL__"></script>
-<link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
+<link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
-<link rel="stylesheet" href="/static/mysifa_ai_chat.css?v=6">
+<link rel="stylesheet" href="/static/mysifa_ai_chat.css?v=7">
 <script>window.__MYSIFA_APP__='ao';</script>
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=11"></script>
+<script src="/static/chat_widget.js?v=13"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script>
 const BASE_URL = __BASE_URL__;
 const S = {
@@ -2735,7 +2735,7 @@ function openQuickProduitModal(onCreated) {
     '<div style="position:relative">'+
     '<input id="qp-client-search" type="text" placeholder="Tape un nom (min 2 lettres)..." autocomplete="off" style="width:100%;padding:8px 10px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);box-sizing:border-box;font-family:inherit">'+
     '<div id="qp-client-results" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card);border:1px solid var(--border);border-radius:0 0 8px 8px;max-height:180px;overflow:auto;z-index:2"></div>'+
-    '<div id="qp-client-selected" style="display:none;margin-top:6px;padding:6px 10px;background:var(--accent-bg,rgba(34,211,238,.08));border:1px solid var(--border);border-radius:8px;font-size:13px"></div>'+
+    '<div id="qp-client-selected" style="display:none;margin-top:6px;padding:6px 10px;background:var(--accent-bg,color-mix(in srgb,var(--accent,#22d3ee) 8%,transparent));border:1px solid var(--border);border-radius:8px;font-size:13px"></div>'+
     '</div></div>'+
     '<div style="margin-bottom:16px"><label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px">Unite</label>'+
     '<select id="qp-unite" style="width:100%;padding:8px 10px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit">'+
@@ -3148,7 +3148,7 @@ async function openCreateAoWizard(initialState) {
                   state.info.client_label = row.dataset.clabel;
                   render();
                 };
-                row.onmouseenter = () => { row.style.background = 'var(--accent-bg, rgba(34,211,238,.08))'; };
+                row.onmouseenter = () => { row.style.background = 'var(--accent-bg, color-mix(in srgb,var(--accent,#22d3ee) 8%,transparent))'; };
                 row.onmouseleave = () => { row.style.background = ''; };
               });
             } catch (e) {
@@ -3496,7 +3496,7 @@ async function openAddFournisseurModalV2() {
               const key = f.id + ':' + c.id;
               const alreadyIn = state._contactInAo ? state._contactInAo(f, c) : false;
               const emails = (c.emails || []).join(', ');
-              const principal = c.is_principal ? '<span style="font-size:10px;background:rgba(34,211,238,.15);color:var(--accent);padding:1px 6px;border-radius:6px;margin-left:4px">★</span>' : '';
+              const principal = c.is_principal ? '<span style="font-size:10px;background:color-mix(in srgb,var(--accent,#22d3ee) 15%,transparent);color:var(--accent);padding:1px 6px;border-radius:6px;margin-left:4px">★</span>' : '';
               const badgeIn = alreadyIn ? ' <span style="font-size:10px;background:var(--accent-bg);color:var(--accent);padding:1px 6px;border-radius:6px;margin-left:4px;font-weight:600">déjà dans l\'AO</span>' : '';
               const cbAttrs = alreadyIn ? ' checked disabled' : (state.selectedContacts.has(key) ? ' checked' : '');
               const lblStyle = alreadyIn ? 'opacity:.5;cursor:not-allowed' : 'cursor:pointer';

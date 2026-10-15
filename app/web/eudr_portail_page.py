@@ -32,9 +32,9 @@ _HEAD = """
   <link rel="icon" href="/static/expe_portail_favicon.svg" type="image/svg+xml">
   <style>
     :root{--bg:#f1f5f9;--card:#ffffff;--field:#f8fafc;--border:#e2e8f0;--text:#0f172a;--text2:#334155; /* hex-ok : theme clair du portail public */
-      --muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);--danger:#dc2626;--ok:#059669} /* hex-ok */
+      --muted:#64748b;--accent:#0891b2;--accent-bg:color-mix(in srgb,var(--accent,#0891b2) 10%,transparent);--danger:#dc2626;--ok:#059669} /* hex-ok */
     :root[data-theme=dark]{--bg:#0a0e17;--card:#111827;--field:#0f172a;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1; /* hex-ok : theme sombre */
-      --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);--danger:#f87171;--ok:#34d399} /* hex-ok */
+      --muted:#94a3b8;--accent:#22d3ee;--accent-bg:color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent);--danger:#f87171;--ok:#34d399} /* hex-ok */
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;
       padding:20px 16px 32px;line-height:1.55}

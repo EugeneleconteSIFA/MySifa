@@ -82,7 +82,7 @@ h1{font-size:22px;margin:0 0 8px;font-weight:700}
 /* Liste des formations */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;cursor:pointer;transition:all .15s;position:relative}
-.card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 24px rgba(34,211,238,.08)}
+.card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 24px color-mix(in srgb,var(--accent,#22d3ee) 8%,transparent)}
 .card-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:6px}
 .card-titre{font-size:16px;font-weight:700;margin-bottom:8px}
 .card-desc{font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:16px;min-height:36px}
@@ -500,7 +500,7 @@ window.submitQuiz = async function(module_id) {
 loadYtApi();
 route();
 </script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 </body>
 </html>
 """
@@ -519,8 +519,8 @@ LEARNING_ADMIN_HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <style>
-:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);--ok:#34d399;--warn:#fbbf24;--danger:#f87171}
-body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);--ok:#059669;--warn:#d24b00;--danger:#dc2626}
+:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent);--ok:#34d399;--warn:#fbbf24;--danger:#f87171}
+body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-bg:color-mix(in srgb,var(--accent,#0891b2) 10%,transparent);--ok:#059669;--warn:#d24b00;--danger:#dc2626}
 *{box-sizing:border-box}
 body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
 .wrap{max-width:1200px;margin:0 auto;padding:24px 20px 80px}
@@ -558,7 +558,7 @@ body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;backgrou
 .form-row{display:grid;grid-template-columns:180px 1fr;gap:12px;margin-bottom:12px;align-items:center}
 .form-row label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
 .form-row input, .form-row textarea, .form-row select{width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:13px}
-.form-row input:focus,.form-row textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.form-row input:focus,.form-row textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .form-row textarea{min-height:60px;resize:vertical}
 .form-actions{display:flex;gap:8px;margin-top:16px}
 
@@ -1077,7 +1077,7 @@ window.deleteQuestion = async function(qid) {
 
 loadFormations();
 </script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 </body>
 </html>
 """

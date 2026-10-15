@@ -20,7 +20,7 @@ WIDGET_INSTALL_HTML = r"""<!DOCTYPE html>
   --text2:#cbd5e1;
   --muted:#94a3b8;
   --accent:#22d3ee;
-  --accent-bg: rgba(34,211,238,0.12);
+  --accent-bg: color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent);
   --success:#34d399;
   --warn:#fbbf24;
   --danger:#f87171;
@@ -47,7 +47,7 @@ body.light{
   --text2:#334155;
   --muted:#64748b;
   --accent:#0891b2;
-  --accent-bg: rgba(8,145,178,0.12);
+  --accent-bg: color-mix(in srgb,var(--accent,#0891b2) 12%,transparent);
 }
 .container{max-width:none;width:100%}
 .header{position:relative;text-align:center;margin-bottom:28px}

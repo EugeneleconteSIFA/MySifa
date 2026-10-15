@@ -48,8 +48,8 @@ PAIE_HTML = r"""<!DOCTYPE html>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
-:root{--accent-bg:rgba(34,211,238,.08);--ok:#34d399;--sidebar-w:280px;}
-body.light{--muted:#64748b;--accent-bg:rgba(8,145,178,.08);}
+:root{--accent-bg:color-mix(in srgb,var(--accent,#22d3ee) 8%,transparent);--ok:#34d399;--sidebar-w:280px;}
+body.light{--muted:#64748b;--accent-bg:color-mix(in srgb,var(--accent,#0891b2) 8%,transparent);}
 html,body{height:100%;overflow:hidden}
 body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:14px}
 
@@ -109,7 +109,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
   padding:10px 12px;border-radius:8px;cursor:pointer;
   border:1px solid transparent;transition:all .12s;margin-bottom:2px;
 }
-.emp-item:hover{background:var(--accent-bg);border-color:rgba(34,211,238,.2)}
+.emp-item:hover{background:var(--accent-bg);border-color:color-mix(in srgb,var(--accent,#22d3ee) 20%,transparent)}
 .emp-item.active{background:var(--accent-bg);border-color:var(--accent)}
 .emp-item-name{font-size:13px;font-weight:700;color:var(--text)}
 .emp-item-sub{font-size:11px;color:var(--muted);margin-top:1px}
@@ -184,7 +184,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 .emp-header-meta{display:flex;gap:16px;flex-wrap:wrap}
 .emp-badge{
   font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;
-  background:var(--accent-bg);color:var(--accent);border:1px solid rgba(34,211,238,.3);
+  background:var(--accent-bg);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent,#22d3ee) 30%,transparent);
 }
 .emp-header-save{
   padding:8px 18px;border-radius:8px;background:var(--accent);color:#0a0e17;
@@ -201,7 +201,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 }
 .paie-section-title{
   padding:12px 18px;font-size:12px;font-weight:800;color:var(--accent);
-  text-transform:uppercase;letter-spacing:.5px;background:rgba(34,211,238,.04);
+  text-transform:uppercase;letter-spacing:.5px;background:color-mix(in srgb,var(--accent,#22d3ee) 4%,transparent);
   border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;
 }
 .paie-grid{
@@ -264,7 +264,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
   padding:10px 14px;border-radius:8px;cursor:pointer;
   border:1px solid transparent;transition:all .12s;margin-bottom:4px;
 }
-.history-item:hover{background:var(--accent-bg);border-color:rgba(34,211,238,.2)}
+.history-item:hover{background:var(--accent-bg);border-color:color-mix(in srgb,var(--accent,#22d3ee) 20%,transparent)}
 .history-item.active{background:var(--accent-bg);border-color:var(--accent)}
 .history-item-label{font-size:13px;font-weight:700;color:var(--accent)}
 .history-item-sub{font-size:11px;color:var(--muted)}
@@ -370,16 +370,16 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='paie';</script>
-<link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
+<link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=11"></script>
+<script src="/static/chat_widget.js?v=13"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script>
 'use strict';
 

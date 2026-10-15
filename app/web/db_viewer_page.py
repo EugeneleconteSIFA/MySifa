@@ -59,8 +59,8 @@ def db_viewer_page(request: Request):
 <style>
 *,*::before,*::after{{margin:0;padding:0;box-sizing:border-box}}
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
-:root{{--accent-bg:rgba(34,211,238,.10);--ok:#34d399;--sidebar-w:260px;}}
-body.light{{--muted:#64748b;--accent-bg:rgba(8,145,178,.09);}}
+:root{{--accent-bg:color-mix(in srgb,var(--accent,#22d3ee) 10%,transparent);--ok:#34d399;--sidebar-w:260px;}}
+body.light{{--muted:#64748b;--accent-bg:color-mix(in srgb,var(--accent,#0891b2) 9%,transparent);}}
 html,body{{height:100%;overflow:hidden}}
 body{{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px}}
 
@@ -97,7 +97,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sa
   padding:9px 10px;border-radius:8px;cursor:pointer;
   border:1px solid transparent;transition:all .12s;margin-bottom:1px;
 }}
-.tbl-item:hover{{background:var(--accent-bg);border-color:rgba(34,211,238,.2)}}
+.tbl-item:hover{{background:var(--accent-bg);border-color:color-mix(in srgb,var(--accent,#22d3ee) 20%,transparent)}}
 .tbl-item.active{{background:var(--accent-bg);border-color:var(--accent)}}
 .tbl-item-ico{{
   width:28px;height:28px;border-radius:6px;
@@ -105,16 +105,16 @@ body{{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sa
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
   color:var(--muted);transition:color .12s;
 }}
-.tbl-item.active .tbl-item-ico,.tbl-item:hover .tbl-item-ico{{color:var(--accent);border-color:rgba(34,211,238,.3)}}
+.tbl-item.active .tbl-item-ico,.tbl-item:hover .tbl-item-ico{{color:var(--accent);border-color:color-mix(in srgb,var(--accent,#22d3ee) 30%,transparent)}}
 .tbl-item-info{{flex:1;min-width:0}}
 .tbl-item-name{{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
 .tbl-item-meta{{font-size:10px;color:var(--muted);margin-top:1px}}
 .tbl-item.active .tbl-item-name{{color:var(--accent)}}
 .tbl-rows-badge{{
   font-size:10px;font-weight:700;padding:2px 7px;border-radius:12px;
-  background:rgba(34,211,238,.1);color:var(--accent);flex-shrink:0;
+  background:color-mix(in srgb,var(--accent,#22d3ee) 10%,transparent);color:var(--accent);flex-shrink:0;
 }}
-body.light .tbl-rows-badge{{background:rgba(8,145,178,.1)}}
+body.light .tbl-rows-badge{{background:color-mix(in srgb,var(--accent,#0891b2) 10%,transparent)}}
 
 /* Pied de sidebar : static/mysifa_sidebar.css (v3.3.0). */
 
@@ -135,7 +135,7 @@ body.light .tbl-rows-badge{{background:rgba(8,145,178,.1)}}
 .stat-pill-ico{{color:var(--muted);display:flex}}
 .stat-pill-val{{font-size:13px;font-weight:700;color:var(--text)}}
 .stat-pill-lbl{{font-size:11px;color:var(--muted)}}
-.stat-pill.accent{{background:var(--accent-bg);border-color:rgba(34,211,238,.25)}}
+.stat-pill.accent{{background:var(--accent-bg);border-color:color-mix(in srgb,var(--accent,#22d3ee) 25%,transparent)}}
 .stat-pill.accent .stat-pill-val{{color:var(--accent)}}
 
 /* Topbar */
@@ -264,7 +264,7 @@ body.light .tbl-rows-badge{{background:rgba(8,145,178,.1)}}
   font-family:inherit;font-weight:600;transition:all .12s;
 }}
 .view-tab.active{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}}
-.view-tab:hover:not(.active){{border-color:rgba(34,211,238,.3);color:var(--text)}}
+.view-tab:hover:not(.active){{border-color:color-mix(in srgb,var(--accent,#22d3ee) 30%,transparent);color:var(--text)}}
 
 /* Recherche IA */
 .ai-query-bar{{
@@ -330,16 +330,16 @@ body.light .tbl-rows-badge{{background:rgba(8,145,178,.1)}}
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script>window.__MYSIFA_APP__='db';</script>
-<link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
+<link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=11"></script>
+<script src="/static/chat_widget.js?v=13"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script>
 (function(){{
   function bootChatDock(){{

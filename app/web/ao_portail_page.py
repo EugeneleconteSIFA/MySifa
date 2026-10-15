@@ -133,12 +133,12 @@ def get_portail_html(
 {_LANG_BTN_CSS}
 :root{{
   --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
-  --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);
+  --muted:#94a3b8;--accent:#22d3ee;--accent-bg:color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent);
   --success:#34d399;--warn:#fbbf24;--danger:#f87171;
 }}
 body.light{{
   --bg:#f1f5f9;--card:#ffffff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
-  --muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.1);
+  --muted:#64748b;--accent:#0891b2;--accent-bg:color-mix(in srgb,var(--accent,#0891b2) 10%,transparent);
   --success:#059669;--warn:#d24b00;--danger:#dc2626;
 }}
 *{{box-sizing:border-box;margin:0;padding:0}}
@@ -175,7 +175,7 @@ body{{
   box-shadow:0 1px 2px rgba(0,0,0,.03);
 }}
 .tab:hover{{background:var(--bg);border-color:var(--accent);color:var(--accent)}}
-.tab.active{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);box-shadow:0 2px 6px rgba(8,145,178,.15)}}
+.tab.active{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);box-shadow:0 2px 6px color-mix(in srgb,var(--accent,#0891b2) 15%,transparent)}}
 .panel{{
   background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;
 }}
@@ -201,8 +201,8 @@ input,textarea,select{{
   padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;
   transition:border-color .15s,box-shadow .15s;
 }}
-input:focus,textarea:focus,select:focus{{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}}
-body.light input:focus,body.light textarea:focus,body.light select:focus{{box-shadow:0 0 0 3px rgba(8,145,178,.12)}}
+input:focus,textarea:focus,select:focus{{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}}
+body.light input:focus,body.light textarea:focus,body.light select:focus{{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#0891b2) 12%,transparent)}}
 input:disabled,textarea:disabled{{opacity:.65;cursor:not-allowed}}
 body.light .btn{{color:#fff}}
 label.lbl{{
@@ -931,12 +931,12 @@ def get_mes_demandes_html(
 {_LANG_BTN_CSS}
 :root{{
   --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
-  --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);
+  --muted:#94a3b8;--accent:#22d3ee;--accent-bg:color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent);
   --success:#34d399;--warn:#fbbf24;--danger:#f87171;
 }}
 body.light{{
   --bg:#f1f5f9;--card:#ffffff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
-  --muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.1);
+  --muted:#64748b;--accent:#0891b2;--accent-bg:color-mix(in srgb,var(--accent,#0891b2) 10%,transparent);
   --success:#059669;--warn:#d24b00;--danger:#dc2626;
 }}
 *{{box-sizing:border-box;margin:0;padding:0}}

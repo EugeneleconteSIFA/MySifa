@@ -197,6 +197,6 @@ PRICING_SHELL = r"""<!DOCTYPE html>
 <script src="/static/pricing_fiches.js?v=__ASSETS__" defer></script>
 <script src="/static/pricing_app.js?v=__ASSETS__" defer></script>
 <script src="/static/mysifa_impersonate.js?v=2"></script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 </body>
 </html>"""

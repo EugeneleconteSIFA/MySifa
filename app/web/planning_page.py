@@ -120,12 +120,12 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .contact-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}
 .btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:12px;
   padding:12px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:box-shadow .2s,border-color .15s,color .15s,filter .15s}
-.btn-sec:hover{box-shadow:0 0 0 1px rgba(34,211,238,.32),0 0 20px rgba(34,211,238,.2);border-color:rgba(34,211,238,.45);color:var(--accent)}
+.btn-sec:hover{box-shadow:0 0 0 1px color-mix(in srgb,var(--accent,#22d3ee) 32%,transparent),0 0 20px color-mix(in srgb,var(--accent,#22d3ee) 20%,transparent);border-color:color-mix(in srgb,var(--accent,#22d3ee) 45%,transparent);color:var(--accent)}
 .btn-sec:active{transform:translateY(1px)}
 .btn-ghost{background:transparent;border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:12px;font-weight:600;
   color:var(--text2);cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s,box-shadow .2s,transform .05s}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg);
-  box-shadow:0 0 0 1px rgba(34,211,238,.22),0 0 18px rgba(34,211,238,.12)}
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent,#22d3ee) 22%,transparent),0 0 18px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .btn-ghost:active{transform:translateY(1px)}
 .btn{background:var(--accent);color:var(--bg);border:none;border-radius:12px;padding:12px 16px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit}
 .btn:disabled{opacity:.7;cursor:not-allowed}
@@ -143,7 +143,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
   transition:all .15s;max-width:min(520px,72vw)
 }
 .m-sel:hover{border-color:var(--accent);background:var(--accent-bg)}
-.m-sel:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.m-sel:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .m-sel option{background:var(--card);color:var(--text)}
 .m-sub{font-size:12px;color:var(--muted)}
 .h-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
@@ -217,7 +217,7 @@ body.light .d-bg.a0{background:rgba(2,6,23,.015)}
 body.light .d-bg.a1{background:rgba(2,6,23,.085)}
 .d-sep{position:absolute;top:0;bottom:0;width:2px;background:rgba(148,163,184,.45);z-index:2;pointer-events:none}
 body.light .d-sep{background:rgba(71,85,105,.35)}
-.d-sep::after{content:'';position:absolute;top:0;bottom:0;left:-6px;width:14px;background:linear-gradient(90deg,rgba(34,211,238,0),rgba(34,211,238,.08),rgba(34,211,238,0));opacity:.35}
+.d-sep::after{content:'';position:absolute;top:0;bottom:0;left:-6px;width:14px;background:linear-gradient(90deg,color-mix(in srgb,var(--accent,#22d3ee) 0%,transparent),color-mix(in srgb,var(--accent,#22d3ee) 8%,transparent),color-mix(in srgb,var(--accent,#22d3ee) 0%,transparent));opacity:.35}
 .slot{position:absolute;top:8px;bottom:8px;border-radius:6px;display:flex;align-items:center;
   justify-content:center;cursor:pointer;transition:all .15s;overflow:visible;padding:3px 6px}
 .slot[draggable="true"]{cursor:grab}
@@ -575,8 +575,8 @@ body.light .btn-p{color:#fff}
 #tbody.has-search .tr.tr-reel-termine{opacity:1;filter:none}
 .slot.tl-drop-over{outline:3px solid var(--accent);outline-offset:3px;z-index:30;filter:brightness(1.15)}
 /* À placer au planning — zébré */
-.tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--bg-dark),var(--bg-dark) 10px,rgba(34,211,238,.07) 10px,rgba(34,211,238,.07) 20px)!important}
-body.light .tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--card),var(--card) 10px,rgba(8,145,178,.08) 10px,rgba(8,145,178,.08) 20px)!important}
+.tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--bg-dark),var(--bg-dark) 10px,color-mix(in srgb,var(--accent,#22d3ee) 7%,transparent) 10px,color-mix(in srgb,var(--accent,#22d3ee) 7%,transparent) 20px)!important}
+body.light .tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--card),var(--card) 10px,color-mix(in srgb,var(--accent,#0891b2) 8%,transparent) 10px,color-mix(in srgb,var(--accent,#0891b2) 8%,transparent) 20px)!important}
 .slot.slot-aplacer{background-image:repeating-linear-gradient(135deg,transparent,transparent 5px,rgba(0,0,0,.12) 5px,rgba(0,0,0,.12) 10px)!important}
 /* Réellement terminé (saisie opérateur confirmée) */
 .slot.slot-reel-termine{opacity:.55!important;filter:grayscale(35%) brightness(.82)!important}
@@ -612,7 +612,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
   transition:border-color .15s,box-shadow .15s
 }
 .planning-vue-sel:hover{border-color:var(--accent)}
-.planning-vue-sel:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.planning-vue-sel:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .of-dropzone{border:2px dashed var(--border);border-radius:12px;padding:36px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
 .of-dropzone:hover,.of-dropzone.of-dropzone--active{border-color:var(--accent);background:var(--accent-bg)}
 
@@ -857,7 +857,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='planning';</script>
 <link rel="stylesheet" href="/static/mysifa_mobile.css?v=2">
-<link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
+<link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js"></script>
@@ -866,9 +866,9 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=11"></script>
+<script src="/static/chat_widget.js?v=13"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
 <script>
 // Handler d'erreurs installé *avant* le script principal (capte aussi les erreurs de parsing).
@@ -5526,7 +5526,7 @@ function renderDossierStatsBody(d){
     <div class="ds-stat"><div class="ds-stat-lbl">Saisies</div><div class="ds-stat-val">${fN(d.nb_saisies)}</div></div>
     <div class="ds-stat"><div class="ds-stat-lbl">Étiquettes</div><div class="ds-stat-val">${fN(q.etiquettes)}</div></div>
     <div class="ds-stat"><div class="ds-stat-lbl">Métrage</div><div class="ds-stat-val">${fN(q.metrage_m)} m</div></div>
-    <div class="ds-stat"><div class="ds-stat-lbl">Vitesse</div><div class="ds-stat-val">${Number(d.vitesse_m_min||0).toFixed(2)} m/min</div></div>
+    <div class="ds-stat"><div class="ds-stat-lbl">Vitesse</div><div class="ds-stat-val">${d.vitesse_aberrante?'<span style="color:var(--danger);font-weight:400">erreur saisie</span>':(Number(d.vitesse_m_min)>0?Number(d.vitesse_m_min).toFixed(2)+' m/min':'—')}</div></div>
   </div>`;
   html+=`<div class="ds-section">${icon("clock",13)} Temps</div>
   <div class="ds-time-kpi">

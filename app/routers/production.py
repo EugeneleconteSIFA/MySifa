@@ -6,6 +6,8 @@ from zoneinfo import ZoneInfo as _ZoneInfo
 _TZ_PARIS = _ZoneInfo('Europe/Paris')
 from database import get_db
 from services.timings import compute_dossier_times
+from app.services.dossier_stats import vitesse_plausible
+from config import PROD_VITESSE_MAX_M_MIN
 from services.auth_service import get_current_user, is_admin, can_view_all_prod, require_admin
 from services.prod_machine_filter import append_machine_filter
 from config import OPERATION_SEVERITY, ton_statut_machine
@@ -795,8 +797,24 @@ def dashboard_production(
     etiquettes_total  = round(sum(float(d.get("etiquettes") or 0) for d in _by_dos_for_totals), 1)
     nb_dossiers_total = len([d for d in _by_dos_for_totals if d.get("no_dossier")])
 
-    denom = float(total_prod + total_arret)
-    vitesse_m_min = round(metrage_total / denom, 3) if denom > 0 else 0.0
+    # Chaque ligne est jugee seule : une session a vitesse impossible (compteur
+    # mal saisi, 03 et 89 a la meme minute) est marquee et sortie du calcul
+    # des vitesses agregees, sinon un seul chiffre en trop fausse la periode.
+    for d in by_dossier:
+        _v, d["vitesse_aberrante"] = vitesse_plausible(
+            d.get("metrage_m"),
+            float(d.get("temps_prod_min") or 0) + float(d.get("temps_arret_min") or 0))
+
+    def _vitesse_saine(rows):
+        saines = [r for r in rows if not r.get("vitesse_aberrante")]
+        v, aberr = vitesse_plausible(
+            sum(float(r.get("metrage_m") or 0) for r in saines),
+            sum(float(r.get("temps_prod_min") or 0) + float(r.get("temps_arret_min") or 0)
+                for r in saines))
+        # Plus rien de sain a montrer alors que des lignes existent : erreur.
+        return v, aberr or (not saines and any(r.get("vitesse_aberrante") for r in rows))
+
+    vitesse_m_min, vitesse_aberrante = _vitesse_saine(_by_dos_for_totals)
 
     # ── Agrégations ──────────────────────────────────────────────────────────
     def agg_key(rows, key_name):
@@ -811,10 +829,12 @@ def dashboard_production(
             x["calage_min"] += float(r.get("temps_calage_min") or 0)
             x["prod_min"]   += float(r.get("temps_prod_min")   or 0)
             x["arret_min"]  += float(r.get("temps_arret_min")  or 0)
+        groupes = {}
+        for r in rows:
+            groupes.setdefault(str(r.get(key_name) or "").strip() or "?", []).append(r)
         res = []
         for k, v in out.items():
-            den = v["prod_min"] + v["arret_min"]
-            v["vitesse_m_min"] = round((v["metrage_m"] / den), 3) if den > 0 else 0.0
+            v["vitesse_m_min"], v["vitesse_aberrante"] = _vitesse_saine(groupes.get(k, []))
             v["etiquettes"] = round(v["etiquettes"], 1)
             v["metrage_m"]  = round(v["metrage_m"],  1)
             v["calage_min"] = round(v["calage_min"],  1)
@@ -878,12 +898,41 @@ def dashboard_production(
             "arret_min":       round(total_arret,  1),
         },
         "vitesse_m_min": vitesse_m_min,
+        "vitesse_aberrante": vitesse_aberrante,
+        "vitesse_max_m_min": PROD_VITESSE_MAX_M_MIN,
         "by_machine":  by_machine,
         "by_operator": by_operator,
         "by_dossier":  sorted([d for d in by_dossier_with_rep if d.get("no_dossier")],
                                key=lambda x: x.get("temps_total_calage_min") or 0, reverse=True),
         "by_day": by_day,
     }
+
+
+@router.get("/api/production/dossier-detail")
+def dossier_detail(request: Request, no_dossier: str = ""):
+    """Statistiques et saisies d'un dossier : le panneau « Données de prod ».
+
+    Même lecture que le déstockage (`/api/stock/destockage/{id}/production`) :
+    mêmes saisies, même calcul, même rendu. Un compte qui ne voit que sa
+    production ne voit que ses propres saisies.
+    """
+    from app.routers.besoins_matieres import _saisies_dossier, _alerte_metrage
+    from app.services.dossier_stats import build_dossier_production_stats
+    user = get_current_user(request)
+    ref = (no_dossier or "").strip()
+    if not ref:
+        raise HTTPException(status_code=400, detail="Référence dossier manquante.")
+    with get_db() as conn:
+        rows = _saisies_dossier(conn, ref)
+    if not can_view_all_prod(user):
+        moi = (user.get("operateur_lie") or user.get("nom") or "").strip().lower()
+        if not moi:
+            raise HTTPException(status_code=403, detail="Compte non lié à un opérateur.")
+        rows = [r for r in rows if str(r.get("operateur") or "").strip().lower() == moi]
+    stats = build_dossier_production_stats(rows, ref)
+    metrage = float(((stats or {}).get("quantites") or {}).get("metrage_m") or 0)
+    return {"no_dossier": ref, "stats": stats, "saisies": rows,
+            "alerte": _alerte_metrage(metrage, rows)}
 
 
 @router.get("/api/production/dernier-jour-saisi")
