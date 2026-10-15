@@ -1465,11 +1465,38 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
 
 /* Fenêtre de détail d'un devis. Reprend `.contact-modal`, élargie : quinze
    cartes de valeurs à 210 px ont besoin de plus que les 560 px par défaut. */
-.devis-modal{max-width:900px}
+.devis-modal{max-width:1180px}
 .devis-modal .contact-modal-body{margin-top:4px}
-.devis-modal-actions{display:flex;gap:10px;justify-content:flex-end;
-  flex-wrap:wrap;margin-top:18px;padding-top:14px;
+.devis-modal-actions{display:flex;gap:10px;justify-content:flex-end;align-items:center;
+  flex-wrap:wrap;margin-top:12px;padding-top:12px;
   border-top:1px solid var(--border)}
+.devis-modal-valide{display:inline-flex;align-items:center;gap:4px;margin-right:auto;
+  font-size:12px;font-weight:600;color:var(--success)}
+
+/* Quinze valeurs lisibles d'un seul regard, sans faire défiler (retour du
+   15/10/2026) : cartes resserrées, cinq par ligne, provenance sur la ligne du
+   libellé, note coupée à une ligne (texte entier au survol). Limité à la
+   fenêtre de détail : l'écran de validation garde ses cartes aérées. */
+.devis-modal .rent-champs-sections{padding:0}
+.devis-modal .rent-section + .rent-section{margin-top:2px}
+.devis-modal .rent-section-titre{font-size:10px;padding:8px 0 5px;margin-bottom:7px}
+.devis-modal .rent-champs{grid-template-columns:repeat(5,minmax(0,1fr));gap:7px}
+.devis-modal .rent-champ{padding:6px 9px;border-radius:8px;min-width:0}
+.devis-modal .rent-champ-lbl{font-size:10.5px;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.devis-modal .rent-champ-val{font-size:15px;margin-top:2px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.devis-modal .devis-meta{margin-top:3px;gap:4px;flex-wrap:nowrap;overflow:hidden}
+.devis-modal .devis-source{font-size:9px;padding:0 4px}
+.devis-modal .devis-conf{font-size:9px;padding:0 5px}
+.devis-modal .rent-champ-note{margin-top:3px;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+@media(max-width:1000px){
+  .devis-modal .rent-champs{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(max-width:560px){
+  .devis-modal .rent-champs{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 @media(max-width:640px){
   .devis-modal-actions{justify-content:stretch}
   .devis-modal-actions button{flex:1}
@@ -1703,3 +1730,48 @@ body.recopie-en-cours,body.recopie-en-cours *{cursor:ns-resize !important;user-s
 .sanity-howto-pts.is-bonus{color:var(--success);background:var(--success-bg,var(--accent-bg))}
 .sanity-howto-note{font-size:12px;color:var(--muted);margin:0 0 4px}
 .sanity-howto-releve{padding:8px 10px;border:1px solid var(--border);border-radius:10px}
+
+/* ── Choix du devis d'un dossier (recherche classée) ───────────────
+   Remplace le menu déroulant de tous les devis. Le champ vide montre les
+   candidats du moteur ; tapé, il cherche partout, rangé par concordance. */
+.rent-choix{position:relative;display:flex;flex-direction:column;gap:8px;min-width:0}
+.rent-choix-courant{display:flex;align-items:center;gap:8px;min-width:0;
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px}
+.rent-choix-resume{flex:1;min-width:0}
+.rent-choix-vide{font-size:12px;color:var(--muted)}
+.rent-choix-saisie{display:flex;align-items:center;gap:8px;color:var(--muted);
+  background:var(--card);border:1px solid var(--border);border-radius:10px;padding:0 10px}
+.rent-choix-saisie:focus-within{border-color:var(--accent)}
+.rent-choix-saisie .rent-choix-champ{border:0;background:transparent;flex:1;
+  min-width:0;padding:9px 0;box-shadow:none;outline:none}
+.rent-choix-liste{position:absolute;left:0;right:0;top:100%;margin-top:4px;z-index:40;
+  max-height:min(420px,55vh);overflow:auto;background:var(--card);
+  border:1px solid var(--border);border-radius:10px;padding:4px;
+  box-shadow:0 14px 36px rgba(0,0,0,.28)}
+.rent-choix-titre{font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;
+  letter-spacing:.5px;padding:6px 8px 4px}
+.rent-choix-rien{font-size:12px;color:var(--muted);padding:12px 10px}
+.rent-choix-item{padding:7px 9px;border-radius:8px;cursor:pointer;display:flex;
+  flex-direction:column;gap:2px;border:1px solid transparent}
+.rent-choix-item.is-actif{background:var(--accent-bg);border-color:var(--accent)}
+.rent-choix-item.is-lie{border-color:var(--accent)}
+.rent-choix-item.is-rejete{opacity:.55}
+.rent-choix-tete{display:flex;align-items:baseline;gap:8px;min-width:0}
+.rent-choix-client{font-size:12px;font-weight:700;color:var(--text);flex:1;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rent-choix-fichier{font-size:11px;color:var(--text2);overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.rent-choix-details{font-size:10.5px;color:var(--muted);overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.rent-choix-score{font-size:11px;font-family:monospace;font-weight:700;flex-shrink:0;
+  padding:0 6px;border-radius:10px}
+.rent-choix-score.is-fort{color:var(--success);background:var(--success-bg, transparent)}
+.rent-choix-score.is-moyen{color:var(--warn)}
+.rent-choix-score.is-nul{color:var(--muted)}
+.rent-choix-score.is-contraire{color:var(--danger)}
+.rent-choix-rejete{font-size:10px;font-weight:700;color:var(--danger);
+  text-transform:uppercase;letter-spacing:.04em;flex-shrink:0}
+.rent-lier-modal .rent-choix-liste{position:static;margin-top:0;box-shadow:none;
+  max-height:min(380px,50vh)}
+.rent-panneau-prop{margin-bottom:12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.rent-pastille-propose{color:var(--warn);border-color:var(--warn)}
