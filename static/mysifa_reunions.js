@@ -139,7 +139,12 @@
       S.erreur = null;
       await chargerContexte();
       await Promise.all([chargerListe(), chargerSuivi()]);
-      if(S.ouverteId && !S.reunion){
+      if(S.allerApres){
+        // L'adresse demande un endroit précis : il prime sur la reprise de la
+        // réunion laissée ouverte.
+        var a = S.allerApres; S.allerApres = null;
+        await appliquerAller(a);
+      }else if(S.ouverteId && !S.reunion){
         await chargerReunion(S.ouverteId);
         S.vue = 'reunion';
       }
@@ -147,6 +152,7 @@
       S.erreur = e.message;
     }
     peindre();
+    if(S.allerFin){ var fin = S.allerFin; S.allerFin = null; fin(); }
   }
 
   /* Squelette --------------------------------------------------- */
@@ -789,6 +795,9 @@
   function peindre(){
     var rac = racineCourante;
     if(!rac || !rac.isConnected) return;
+    // La page hôte (MyProd) met la réunion ouverte et le filtre du suivi dans
+    // son adresse (url-etat.md).
+    try{ if(opts.surChange) opts.surChange(etatAdresse()); }catch(e){}
     var boiteErr = rac.querySelector('#reu-erreur');
     if(boiteErr){
       boiteErr.innerHTML = S.erreur
@@ -1372,6 +1381,42 @@
     }catch(e){ toast(e.message, 'danger'); }
   }
 
+  /* Adresse de la page hôte ------------------------------------ */
+
+  // Ce que l'adresse doit porter : la réunion ouverte, le filtre du suivi
+  // ('' = tous, '~' = non attribuées, sinon un responsable).
+  function etatAdresse(){
+    return {
+      reunion: (S.vue === 'reunion' && S.reunion) ? S.reunion.id : null,
+      resp: S.filtreResp || ''
+    };
+  }
+  async function appliquerAller(a){
+    S.filtreResp = a.resp || '';
+    if(a.reunion){
+      if(!S.reunion || String(S.reunion.id) !== String(a.reunion)){
+        try{ await chargerReunion(a.reunion); S.vue = 'reunion'; }
+        catch(e){ S.vue = 'liste'; S.reunion = null; toast(e.message, 'danger'); }
+      }else S.vue = 'reunion';
+    }else{
+      S.vue = 'liste'; S.reunion = null; S.prod = null; S.notesLocal = null;
+    }
+  }
+  // Va à l'endroit décrit par l'adresse. Avant le premier chargement, la
+  // demande attend la fin d'amorcer().
+  async function aller(a){
+    a = a || {};
+    if(!S.contexteCharge || S.reunions === null){
+      // Résolue par amorcer(), une fois l'endroit affiché.
+      return new Promise(function(fin){ S.allerApres = a; S.allerFin = fin; });
+    }
+    var cible = a.reunion ? String(a.reunion) : null;
+    var cour = etatAdresse();
+    if(String(cour.reunion || '') === String(cible || '') && cour.resp === (a.resp || '')) return;
+    await appliquerAller(a);
+    peindre();
+  }
+
   /* Montage ----------------------------------------------------- */
 
   function monter(racine, o){
@@ -1398,6 +1443,7 @@
 
   window.MySifaReunions = {
     monter: monter, reset: reset,
+    aller: aller, etatAdresse: etatAdresse,
     rendreListe: rendreListe, rendreReunion: rendreReunion,
     rendreSuivi: rendreSuivi, rendreAccueil: rendreAccueil,
     rendreActions: rendreActions, rendreParticipants: rendreParticipants,

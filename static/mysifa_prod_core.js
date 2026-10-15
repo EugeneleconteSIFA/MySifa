@@ -286,9 +286,10 @@
     of:['of','pending','sansof'],
     fiches:['liste','orphelines'],
     traceabilite:['dossiers','traceur'],
-    rentabilite:['dossiers','pilotage','devis']
+    rentabilite:['dossiers','pilotage','devis'],
+    scans:['scannes','rattacher']
   };
-  var _SOUS_CHAMP={production:'subPage',of:'ofSubTab',fiches:'fichesSubTab',traceabilite:'tracaSubTab',rentabilite:'rentSubTab'};
+  var _SOUS_CHAMP={production:'subPage',of:'ofSubTab',fiches:'fichesSubTab',traceabilite:'tracaSubTab',rentabilite:'rentSubTab',scans:'scansSous'};
   // Anciennes adresses « #saisies », « #pending » : relues, puis réécrites.
   var _HASH_HERITE={kpis:['production','kpis'],saisies:['production','saisies'],erreurs:['production','erreurs'],
     retour:['production','retour'],reunions:['production','reunions'],
@@ -332,6 +333,14 @@
       if(rp.dossier){ p.cr=rp.dossier; nav+='/cr:'+rp.dossier; }
       nav+='/'+(rp.vue||'feuille');
     }
+    if(sousEff==='reunions'){
+      // Module autonome (mysifa_reunions.js) : il dit ce qu'il montre. Tant
+      // qu'une demande de l'adresse attend son chargement, c'est elle qui vaut.
+      var re=S._reunionsUrl||(window.MySifaReunions&&MySifaReunions.etatAdresse?MySifaReunions.etatAdresse():{});
+      if(re.reunion){ p.reunion=re.reunion; nav+='/reunion'; }
+      if(re.resp) p.resp=re.resp;
+    }
+    if(S.page==='scans'&&S.scansSous==='rattacher'&&S.scansScan) p.scan=S.scansScan;
     if(S.page==='traceabilite'&&(S.tracaSubTab||'dossiers')==='dossiers'){
       var tf=S.tracFilters||{};
       p.ref=tf.ref; p.client=tf.client; p.machine=tf.machine; p.statut=tf.statut;
@@ -474,6 +483,15 @@
         machine:u.get('retour_machine',''),
         dossier:u.get('cr',null), cr:null
       });
+    }
+    S._reunionsUrl=null;
+    if(page==='production'&&S.subPage==='reunions'){
+      var reu=u.get('reunion',null);
+      S._reunionsUrl={reunion:(reu&&/^[0-9]+$/.test(reu))?Number(reu):null, resp:u.get('resp','')};
+    }
+    if(page==='scans'){
+      var sc=u.get('scan',null);
+      S.scansScan=(sc&&/^[0-9]+$/.test(sc))?Number(sc):null;
     }
     if(page==='traceabilite'){
       S.tracFilters={ref:u.get('ref',''),client:u.get('client',''),machine:u.get('machine',''),statut:u.get('statut','')};
@@ -12438,8 +12456,16 @@ function renderReunionsTab(){
   }
   requestAnimationFrame(function(){
     window.MySifaReunions.monter(hote, {
-      toast: (m,t)=>{ try{ showToast(m,t); }catch(e){} }
+      toast: (m,t)=>{ try{ showToast(m,t); }catch(e){} },
+      // Réunion ouverte, filtre du suivi : dans l'adresse (prodSyncUrl).
+      surChange: ()=>{ if(!S._reunionsUrl) prodSyncUrl(); }
     });
+    if(S._reunionsUrl && window.MySifaReunions.aller){
+      const a=S._reunionsUrl;
+      window.MySifaReunions.aller(a).then(()=>{
+        if(S._reunionsUrl===a){ S._reunionsUrl=null; prodSyncUrl(); }
+      });
+    }
   });
   return hote;
 }
@@ -14041,7 +14067,11 @@ function renderProdKpis(){
       const _cible = pageContent;
       if(window.MySifaProduitMemoire){
         requestAnimationFrame(function(){
-          window.MySifaProduitMemoire.monterScansDans(_cible);
+          // Onglet et scan choisi : repris de l'adresse, et remontés à chaque
+          // rendu du module pour la tenir à jour.
+          window.MySifaProduitMemoire.monterScansDans(_cible,
+            {onglet:S.scansSous, scan:S.scansScan},
+            function(e){ S.scansSous=e.onglet; S.scansScan=e.scan||null; prodSyncUrl(); });
         });
       }else{
         pageContent.appendChild(h('div', {style: 'color:var(--muted);font-size:13px;padding:24px'},

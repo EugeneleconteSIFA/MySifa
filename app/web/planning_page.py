@@ -870,6 +870,8 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
+<!-- Adresse de la page : machine, vue, horizon, semaine, fenêtre ouverte (url-etat.md). -->
+<script src="/static/mysifa_url.js?v=2"></script>
 <script>
 // Handler d'erreurs installé *avant* le script principal (capte aussi les erreurs de parsing).
 function showFatal(message, lineno, colno, extra){
@@ -969,6 +971,87 @@ let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holiday
   planningTab:"timeline",
   contactOpen:false,contactSubject:"",contactMessage:"",contactSending:false,searchQuery:"",tlSearchQuery:"",tlSearchIdx:0,activeDossier:null,
   tlTotalDays:5,machineHoursPerDay:16};
+// ── Adresse de la page (static/mysifa_url.js, .claude/rules/url-etat.md) ──
+// machine, vue (prod / expé), horizon (1w / 2w / 4w), semaine affichée (lundi
+// en date, pas un décalage : un lien garde son sens la semaine suivante) et
+// fenêtre ouverte (dossier, aperçu OF, statistiques). Recalculée à la fin de
+// render(). Changer de semaine ou d'horizon remplace l'adresse ; ouvrir une
+// fenêtre l'empile, la fermer recule.
+let _urlPrete=false;            // posé à la fin du démarrage : avant, l'adresse
+                                // porte encore q / tlq / auto / depuis-of à lire.
+let _modaleUrl=null;            // fenêtre demandée par l'adresse, ouverte après load()
+const _PLAN_VUES_URL=["prod","expe","prod_expe"];
+const _PLAN_HORIZONS=["1w","2w","4w"];
+const _PLAN_MODALES={
+  dossier:{ouvrir:id=>openEdit(id),           fermer:()=>closeM(true)},
+  stats:  {ouvrir:id=>openDossierStatsModal(id), fermer:()=>closeM(true)},
+  of:     {ouvrir:id=>openOfPreview(id),      fermer:()=>closeOfPreview(true)}
+};
+function _planLundiIso(wo){ return ymdate(addD(getMon(new Date()),wo*7)); }
+function planningParams(){
+  const p={machine:MID||null};
+  if(S.planningVue&&S.planningVue!=="prod") p.vue=S.planningVue;
+  if(S.view&&S.view!=="2w") p.horizon=S.view;
+  if(S.wo) p.semaine=_planLundiIso(S.wo);
+  let nav="m"+MID+"/"+(S.planningVue||"prod");
+  const mo=S.urlModale;
+  if(mo&&mo.cle&&mo.id!=null){ p[mo.cle]=mo.id; nav+="/"+mo.cle; }
+  return {params:p,nav};
+}
+function planningSyncUrl(){
+  if(!_urlPrete||!window.MySifaUrl||!MID) return;
+  try{ const r=planningParams(); MySifaUrl.ecrire(r.params,{navigation:r.nav}); }catch(e){}
+}
+// Horizon, semaine et fenêtre demandés par l'adresse. Rend vrai si la vue
+// affichée change (il faut recharger le planning).
+function planningLireUrl(complet){
+  if(!window.MySifaUrl) return false;
+  const u=MySifaUrl.lire();
+  const avant=S.view+"|"+S.wo;
+  const hz=u.get("horizon",null,_PLAN_HORIZONS);
+  if(hz) S.view=hz; else if(complet) S.view="2w";
+  const sem=u.get("semaine",null);
+  if(sem&&/^\d{4}-\d{2}-\d{2}$/.test(sem)){
+    const lundi=getMon(new Date(sem+"T00:00:00"));
+    S.wo=Math.round((lundi-getMon(new Date()))/(7*86400000));
+  }else if(complet) S.wo=0;
+  _modaleUrl=null;
+  Object.keys(_PLAN_MODALES).forEach(cle=>{
+    const v=u.get(cle,null);
+    if(v&&/^[0-9]+$/.test(v)) _modaleUrl={cle,id:Number(v)};
+  });
+  return avant!==S.view+"|"+S.wo;
+}
+function planningAppliquerModaleUrl(){
+  const voulue=_modaleUrl; _modaleUrl=null;
+  const cour=S.urlModale;
+  if(cour&&(!voulue||voulue.cle!==cour.cle||voulue.id!==cour.id)){
+    try{ _PLAN_MODALES[cour.cle].fermer(); }catch(e){}
+    // L'aperçu OF refermé rend la main à la fenêtre du dossier restée
+    // dessous (closeOfPreview la remet dans S.urlModale) : ne pas l'effacer.
+    if(S.urlModale===cour) S.urlModale=null;
+  }
+  const deja=S.urlModale;
+  if(voulue&&!(deja&&deja.cle===voulue.cle&&deja.id===voulue.id)){
+    try{ _PLAN_MODALES[voulue.cle].ouvrir(voulue.id); }catch(e){}
+  }
+}
+if(window.MySifaUrl){
+  MySifaUrl.surRetour(async u=>{
+    if(!_urlPrete) return;
+    // Autre machine ou autre vue : la page se reconstruit entièrement, comme
+    // au clic sur le sélecteur (qui recharge déjà la page).
+    const m=parseInt(u.get("machine",""),10);
+    const v=u.get("vue","prod",_PLAN_VUES_URL);
+    if((isFinite(m)&&m!==MID)||v!==S.planningVue){ location.reload(); return; }
+    if(planningLireUrl(true)){
+      try{ localStorage.setItem("mysifa.planning.view",S.view); }catch(e){}
+      await load();
+    }
+    planningAppliquerModaleUrl();
+  });
+}
+
 let _allTlMatches=[];
 let ME=null;
 let PENDING_OF_COUNT=0;
@@ -2560,6 +2643,8 @@ function render(){
   // Motion : (re)scan apres chaque render — pose --i pour les cascades et
   // arme les Observers. No-op si window.Motion absent (defer non charge).
   try{ if(window.Motion) window.Motion.scan(document); }catch(_){}
+  // L'adresse suit ce qui vient d'être affiché.
+  planningSyncUrl();
 }
 
 // ── Timeline search — scan ALL slots (across all week offsets) ──────────────
@@ -4694,6 +4779,7 @@ async function openFscRapport(noDossier){
 function openEdit(id){
   if(!CAN_EDIT && !IS_PLANNING_RO_ROLE) return;
   const e=S.entries.find(x=>x.id===id);if(!e)return;
+  S.urlModale={cle:"dossier",id:e.id}; planningSyncUrl();
   const RO=(!CAN_EDIT && IS_PLANNING_RO_ROLE);
   // Dossier existant : la case FSC s'enregistre à la volée (voir
   // persistFscDepuisModale). Remis à null par closeM().
@@ -4846,6 +4932,10 @@ async function submitEdit(id){
 }
 
 async function openOfPreview(entryId){
+  // Ouvert depuis la fenêtre du dossier : il la remplace dans l'adresse ; la
+  // refermer y revient (closeOfPreview).
+  S._urlSousOf=(S.urlModale&&S.urlModale.cle!=="of")?S.urlModale:null;
+  S.urlModale={cle:"of",id:entryId}; planningSyncUrl();
   const ov=document.createElement('div');
   ov.className='of-preview-overlay';
   ov.id='of-preview-overlay';
@@ -4978,9 +5068,15 @@ function switchOfPreviewTab(tab){
   }
 }
 
-function closeOfPreview(){
+function closeOfPreview(sansAdresse){
   const ov=document.getElementById('of-preview-overlay');
   if(ov) ov.remove();
+  if(ov&&S.urlModale&&S.urlModale.cle==="of"){
+    // La fenêtre du dossier reste dessous si l'aperçu a été ouvert depuis elle.
+    const sous=S._urlSousOf; S._urlSousOf=null;
+    S.urlModale=(sous&&document.querySelector("#mroot .mo"))?sous:null;
+    if(!sansAdresse) planningSyncUrl();
+  }
   window._ofPlanningState = null;
 }
 
@@ -5582,6 +5678,7 @@ function renderDossierStatsBody(d){
 }
 async function openDossierStatsModal(entryId){
   const e=S.entries.find(x=>x.id===entryId);
+  S.urlModale={cle:"stats",id:entryId}; planningSyncUrl();
   const ref=(e&&(e.numero_of||e.reference))||"Dossier";
   document.getElementById("mroot").innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md md--stats">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px">
@@ -5654,8 +5751,14 @@ async function annulerAnnulationPlanning(entryId){
   };
 }
 
-function closeM(){
+// `sansAdresse` : fermeture technique (Retour du navigateur) — l'adresse est
+// déjà à jour. Appelée sans argument partout ailleurs (onclick="closeM()").
+function closeM(sansAdresse){
   document.getElementById("mroot").innerHTML="";
+  if(S.urlModale&&(S.urlModale.cle==="dossier"||S.urlModale.cle==="stats")){
+    S.urlModale=null;
+    if(!sansAdresse) planningSyncUrl();
+  }
   _dossierEditId=null;
   // Un enregistrement à la volée (case FSC) a modifié le dossier : le planning
   // est rechargé maintenant que la modale est fermée, badge FSC compris.
@@ -6337,6 +6440,7 @@ async function boot(){
       if(wanted) MID=wanted.id;
     }
   }catch(e){console.error(e);MID=0;}
+  try{ planningLireUrl(false); }catch(e){}
   await load();
   // Si on arrive via un chip cross-machine, naviguer directement vers le 1er match.
   try{
@@ -6353,6 +6457,11 @@ async function boot(){
       setTimeout(()=>{try{openAddDepuisOf(parseInt(depuisOf,10));}catch(e){}},260);
     }
   }catch(e){}
+  // Les paramètres d'un seul usage sont lus : l'adresse peut maintenant suivre
+  // l'écran, et rouvrir la fenêtre qu'elle demande (?dossier=, ?of=, ?stats=).
+  _urlPrete=true;
+  planningSyncUrl();
+  try{ planningAppliquerModaleUrl(); }catch(e){}
   // Vérifier les annonces de mise à jour après le chargement initial
   checkUpdates();
   try{ initPlanningGuides(); }catch(e){}

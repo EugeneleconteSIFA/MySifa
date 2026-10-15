@@ -91,6 +91,17 @@ en `onClick` (l'événement serait pris pour `sansAdresse`). La clé de
 navigation ne porte pas l'id : passer d'un détail au suivant remplace.
 Fermer ou rouvrir une fenêtre au Retour ne recharge pas la page.
 
+### Module autonome monté dans une page
+
+Un écran rendu par un autre fichier (Réunions : `mysifa_reunions.js`, Scans
+d'OF : `mysifa_produit_memoire.js`) garde son propre état. Il expose ce que
+l'adresse doit porter (`etatAdresse()`), sait y aller (`aller(etat)`, ou un
+`init` passé au montage) et prévient la page à chaque rendu (`surChange`).
+La page ne lit jamais l'intérieur du module. Tant qu'une demande de l'adresse
+attend le chargement du module, c'est elle que la page écrit — sinon l'adresse
+perdrait l'objet demandé le temps du chargement, puis empilerait une étape de
+trop.
+
 ### Lien avec les indicateurs d'accueil
 
 Une page dont les filtres sont dans l'adresse n'a, à terme, plus besoin de
@@ -105,7 +116,8 @@ rendrait les anciens filtres.
 
 | Appli | État |
 |---|---|
-| MyProd | Fait le 15/10/2026 : page, sous-onglets, période, machines, opérateurs, dossiers, tris (saisies, traçabilité, rentabilité), Retour de prod (vue, machine, compte-rendu ouvert), fiche dossier de Traçabilité (`dossier`), entrée de rentabilité ouverte, Pilotage de rentabilité (`machine`, `semaines`, `semaine`), fenêtres de détail (`devis`, `rattachement`, `of`, `fiche`, `synthese`) |
+| MyProd | Fait le 15/10/2026 : page, sous-onglets, période, machines, opérateurs, dossiers, tris (saisies, traçabilité, rentabilité), Retour de prod (vue, machine, compte-rendu ouvert), fiche dossier de Traçabilité (`dossier`), entrée de rentabilité ouverte, Pilotage de rentabilité (`machine`, `semaines`, `semaine`), fenêtres de détail (`devis`, `rattachement`, `of`, `fiche`, `synthese`), Réunions (`reunion`, `resp`), Scans d'OF (`sous=rattacher`, `scan`) |
 | ERP RVGI | Déjà conforme (`#/ecran?filtres`) |
 | MyStock | Partiel (`?tab=&vue=&cat=&matiere=…`) : filtres de listes et tris à ajouter, passer au helper |
-| Planning, MyExpé, Paramètres, Qualité, Maintenance, RH, Compta, Tâches | À faire |
+| Planning | Fait le 15/10/2026 : `machine`, `vue`, `horizon` (1w/4w), `semaine` (lundi en date, pas un décalage), fenêtres `dossier`, `of` (aperçu), `stats`. Changer de machine ou de vue recharge la page, comme au clic |
+| MyExpé, Paramètres, Qualité, Maintenance, RH, Compta, Tâches | À faire |
