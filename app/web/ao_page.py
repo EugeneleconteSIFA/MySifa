@@ -59,7 +59,7 @@ AO_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/support_widget.css">
 <style>
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
-body.light{--muted:#64748b;--accent-bg:color-mix(in srgb,var(--accent,#0891b2) 10%,transparent);}
+body.light{--muted:#64748b;--accent-bg:rgba(8,145,178,.1);}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text)}

@@ -69,7 +69,7 @@ def _tableau(entetes, lignes, vide):
 
 _CSS = """
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-:root{--accent-bg:color-mix(in srgb,var(--accent,#22d3ee) 10%,transparent)}
+:root{--accent-bg:rgba(34,211,238,.10)}
 body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;
      font-size:13px;min-height:100vh;padding:34px 22px 60px}
 .wrap{max-width:960px;margin:0 auto}

@@ -59,8 +59,8 @@ def db_viewer_page(request: Request):
 <style>
 *,*::before,*::after{{margin:0;padding:0;box-sizing:border-box}}
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
-:root{{--accent-bg:color-mix(in srgb,var(--accent,#22d3ee) 10%,transparent);--ok:#34d399;--sidebar-w:260px;}}
-body.light{{--muted:#64748b;--accent-bg:color-mix(in srgb,var(--accent,#0891b2) 9%,transparent);}}
+:root{{--accent-bg:rgba(34,211,238,.10);--ok:#34d399;--sidebar-w:260px;}}
+body.light{{--muted:#64748b;--accent-bg:rgba(8,145,178,.09);}}
 html,body{{height:100%;overflow:hidden}}
 body{{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px}}
 
