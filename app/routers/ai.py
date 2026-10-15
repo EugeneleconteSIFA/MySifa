@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from database import get_db
+from app.services import ia_usage
 from services.auth_service import get_current_user
 from app.services.ai_context import (
     BRIEF_ROLES,
@@ -356,7 +357,7 @@ async def chat(req: ChatRequest, request: Request):
     final_reply = ""
     final_status: str | None = None
 
-    with get_db() as conn:
+    with ia_usage.suivi(user, "agent", req.module or "") as usage, get_db() as conn:
         context_data = fetch_context_for_role(conn, user)
         if context_data:
             system += f"\n\n--- Données actuelles ---\n{context_data}"
@@ -375,6 +376,7 @@ async def chat(req: ChatRequest, request: Request):
                 response = client.messages.create(**kwargs)
             except anthropic.APIError as e:
                 raise HTTPException(502, detail=f"Erreur API Anthropic : {e}")
+            usage.noter(response)
 
             stop = response.stop_reason
             content = response.content
@@ -388,6 +390,7 @@ async def chat(req: ChatRequest, request: Request):
             if stop != "tool_use":
                 final_reply = "Je n'ai pas pu traiter cette demande."
                 final_status = "err"
+                usage.statut = "err"
                 break
 
             # Traitement tool_use

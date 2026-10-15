@@ -2879,20 +2879,24 @@ async def parse_tarif_ia(request: Request, transporteur_id: int):
 
     import anthropic as _anthropic
 
+    from app.services import ia_usage
+
     client = _anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    message = client.messages.create(
-        model="claude-opus-4-6",
-        max_tokens=8192,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    content_block,
-                    {"type": "text", "text": _PROMPT_EXTRACTION_TARIF},
-                ],
-            }
-        ],
-    )
+    with ia_usage.suivi(user, "tarif_transport"):
+        message = client.messages.create(
+            model="claude-opus-4-6",
+            max_tokens=8192,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        content_block,
+                        {"type": "text", "text": _PROMPT_EXTRACTION_TARIF},
+                    ],
+                }
+            ],
+        )
+        ia_usage.noter(message, "tarif_transport")
 
     raw = message.content[0].text
     data = _parse_tarif_json_raw(raw)

@@ -40,6 +40,7 @@ from app.services.maint_op_merge import merge_op_rows
 from services.auth_service import (
     get_current_user,
     require_settings,
+    require_settings_audit,
     is_real_superadmin,
     merged_app_access,
     parse_access_overrides_raw,
@@ -3234,6 +3235,16 @@ def list_api_keys(request: Request):
                FROM api_keys ORDER BY created_at DESC"""
         ).fetchall()
     return {"keys": [dict(r) for r in rows]}
+
+
+@router.get("/api/settings/ia-usage")
+def ia_usage_synthese(request: Request, jours: int = 30):
+    """Consommation de l'IA sur la période : coût, utilisateurs, fonctions."""
+    require_settings_audit(request)
+    from database import get_db
+    from app.services.ia_usage import synthese
+    with get_db() as conn:
+        return synthese(conn, jours)
 
 
 @router.post("/api/settings/api-keys")
