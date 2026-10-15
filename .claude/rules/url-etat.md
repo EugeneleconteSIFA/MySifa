@@ -105,7 +105,7 @@ rendrait les anciens filtres.
 
 | Appli | État |
 |---|---|
-| MyProd | Fait le 15/10/2026 : page, sous-onglets, période, machines, opérateurs, dossiers, tris (saisies, traçabilité, rentabilité), Retour de prod (vue, machine, compte-rendu ouvert), fiche dossier de Traçabilité (`dossier`), entrée de rentabilité ouverte, fenêtres de détail (`devis`, `of`, `fiche`, `synthese`) |
+| MyProd | Fait le 15/10/2026 : page, sous-onglets, période, machines, opérateurs, dossiers, tris (saisies, traçabilité, rentabilité), Retour de prod (vue, machine, compte-rendu ouvert), fiche dossier de Traçabilité (`dossier`), entrée de rentabilité ouverte, Pilotage de rentabilité (`machine`, `semaines`, `semaine`), fenêtres de détail (`devis`, `rattachement`, `of`, `fiche`, `synthese`) |
 | ERP RVGI | Déjà conforme (`#/ecran?filtres`) |
 | MyStock | Partiel (`?tab=&vue=&cat=&matiere=…`) : filtres de listes et tris à ajouter, passer au helper |
 | Planning, MyExpé, Paramètres, Qualité, Maintenance, RH, Compta, Tâches | À faire |
