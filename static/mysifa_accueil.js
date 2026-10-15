@@ -145,20 +145,28 @@
       // déborde sous la colonne. À 1, la page passait devant et captait tous
       // les clics de la colonne (régression du 04/10/2026). Les voiles des
       // visites guidées (9500, 20000) restent au-dessus.
-      "  #mysifa-accueil{position:fixed;left:0;top:var(--mac-top,0px);bottom:96px;width:var(--mac-w);z-index:110;padding:16px 14px 0 16px;display:flex;flex-direction:column}",
+      "  #mysifa-accueil{position:fixed;left:0;top:var(--mac-top,0px);bottom:96px;width:var(--mac-w);z-index:110;padding:16px 0 0 16px;display:flex;flex-direction:column;border-right:1px solid var(--border,#1e293b)}",
       "  body.mysifa-accueil-on #root{margin-left:var(--mac-w)}",
-      // Bande fine sur toute la hauteur, chevron au milieu (demande du
-      // 15/10/2026 : une languette isolée paraissait flotter). Repliée, il ne
-      // reste que la bande ; dépliée, elle borde la colonne à droite. Le
-      // bouton tableau ne sert plus que sur téléphone.
-      "  .mac-languette{position:absolute;top:0;bottom:0;right:0;width:14px;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;",
-      "    background:var(--card,#111827);color:var(--text2,#cbd5e1);border:0;border-left:1px solid var(--border,#1e293b);border-right:1px solid var(--border,#1e293b)}",
-      "  .mac-languette svg{flex-shrink:0}",
-      "  .mac-languette:hover,.mac-languette:focus-visible{color:var(--accent,#22d3ee);background:color-mix(in srgb,var(--accent,#22d3ee) 8%,var(--card,#111827))}",
+      // Rail étiqueté (choix du 15/10/2026, parmi quatre maquettes) : dépliée,
+      // un chevron dans l'en-tête, à droite du titre, et un trait sépare la
+      // colonne de la page ; repliée, un rail de 30 px qui dit ce qu'il
+      // contient (libellé vertical) et combien d'indicateurs sont en alerte.
+      // Tout le rail se clique pour rouvrir. Le bouton tableau ne sert plus
+      // que sur téléphone.
       "  #mysifa-accueil .mac-repli{display:none}",
-      "  #mysifa-accueil.repliee{width:14px;padding:0}",
+      "  .mac-tete .mac-titre{padding-right:30px}",
+      "  .mac-languette{position:absolute;top:12px;right:8px;width:24px;height:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:0;cursor:pointer;",
+      "    background:var(--card,#111827);color:var(--text2,#cbd5e1);border:1px solid var(--border,#1e293b);border-radius:8px;font:600 11px 'Segoe UI',system-ui,sans-serif}",
+      "  .mac-languette svg{flex-shrink:0}",
+      "  .mac-languette:hover,.mac-languette:focus-visible{color:var(--accent,#22d3ee);border-color:var(--accent,#22d3ee)}",
+      "  .mac-languette .mac-rail-nom,.mac-languette .mac-rail-alertes{display:none}",
+      "  #mysifa-accueil.repliee{width:30px;padding:0;background:var(--card,#111827)}",
       "  #mysifa-accueil.repliee .mac-tete{display:none}",
-      "  body.mysifa-accueil-on.mysifa-accueil-repliee #root{margin-left:14px}",
+      "  #mysifa-accueil.repliee .mac-languette{top:0;right:0;bottom:0;left:0;width:auto;height:auto;justify-content:flex-start;padding:12px 0;border:0;border-radius:0;background:none}",
+      "  #mysifa-accueil.repliee .mac-languette:hover{background:color-mix(in srgb,var(--accent,#22d3ee) 7%,transparent)}",
+      "  #mysifa-accueil.repliee .mac-rail-nom{display:block;writing-mode:vertical-rl;transform:rotate(180deg);text-transform:uppercase;letter-spacing:.5px;color:var(--muted,#94a3b8);white-space:nowrap}",
+      "  #mysifa-accueil.repliee .mac-rail-alertes:not([hidden]){display:flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:var(--danger,#f87171);color:#fff}",
+      "  body.mysifa-accueil-on.mysifa-accueil-repliee #root{margin-left:30px}",
       "}",
       "@media (min-width:1600px){#mysifa-accueil{--mac-w:380px}}",
       "@media (min-width:900px) and (max-width:1199px){#mysifa-accueil{--mac-w:220px}}",
@@ -1188,6 +1196,7 @@
     }
 
     c.el.classList.toggle("alerte", enAlerte.length > 0);
+    majRail();
     c.el.querySelector(".mac-point").title = enAlerte.length
       ? "Alerte : " + enAlerte.map(function (x) { return x.libComplet; }).join(", ") : "";
     horodatage(c);
@@ -1590,6 +1599,7 @@
         c.el.remove();
         delete W.cartes[c.w.id];
         W.widgets = W.widgets.filter(function (x) { return x.id !== c.w.id; });
+        majRail();
         if (motif) avis(motif);
         if (!W.widgets.length) dessinerListe();
       });
@@ -1774,7 +1784,7 @@
     b.setAttribute("aria-label", b.title);
     b.setAttribute("aria-expanded", W.repliee ? "false" : "true");
     var l = racine.querySelector(".mac-languette");
-    l.innerHTML = icone(W.repliee ? "deplier" : "replier");
+    l.querySelector(".mac-rail-chev").innerHTML = icone(W.repliee ? "deplier" : "replier");
     l.title = b.title;
     l.setAttribute("aria-label", b.title);
     l.setAttribute("aria-expanded", b.getAttribute("aria-expanded"));
@@ -1785,6 +1795,16 @@
     }
     W.replieeBureau = W.repliee;
     api("/api/accueil/prefs", { method: "PUT", body: { colonne_repliee: W.repliee } }).catch(function () {});
+  }
+
+  // Nombre d'indicateurs en alerte, sur le rail de la colonne repliée.
+  function majRail() {
+    var z = racine && racine.querySelector(".mac-rail-alertes");
+    if (!z) return;
+    var n = racine.querySelectorAll(".mac-liste .mac-carte.alerte").length;
+    z.hidden = !n;
+    z.textContent = n ? String(n) : "";
+    z.title = n ? n + (n > 1 ? " indicateurs en alerte" : " indicateur en alerte") : "";
   }
 
   function inverserRepli() {
@@ -2142,7 +2162,8 @@
       '<div class="mac-liste"></div>' +
       '<button type="button" class="mac-demande" title="Envoyer une demande aux administrateurs">' + icone("demande") +
       "<span>Faire une demande de tableau de bord</span></button>" +
-      '<button type="button" class="mac-languette"></button>';
+      '<button type="button" class="mac-languette"><span class="mac-rail-chev"></span>' +
+      '<span class="mac-rail-nom">Tableaux de bord</span><span class="mac-rail-alertes" hidden></span></button>';
     var rootApp = document.getElementById("root");
     document.body.insertBefore(racine, rootApp || document.body.firstChild);
     document.body.classList.add("mysifa-accueil-on");
