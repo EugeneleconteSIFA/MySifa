@@ -62,8 +62,8 @@ ERP_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_mobile_topbar.css">
 <style>
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
-:root{--serie2:#a78bfa;--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent);--accent-bord:color-mix(in srgb,var(--accent,#22d3ee) 45%,transparent);--ok:#34d399;--success:#34d399;--danger:#f87171;--warn:#fbbf24}
-body.light{--serie2:#6d4ddb;--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-bg:color-mix(in srgb,var(--accent,#0891b2) 10%,transparent);--accent-bord:color-mix(in srgb,var(--accent,#0891b2) 42%,transparent);--ok:#059669;--success:#059669;--danger:#dc2626;--warn:#d24b00}
+:root{--serie2:#a78bfa;--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);--accent-bord:rgba(34,211,238,.45);--ok:#34d399;--success:#34d399;--danger:#f87171;--warn:#fbbf24}
+body.light{--serie2:#6d4ddb;--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);--accent-bord:rgba(8,145,178,.42);--ok:#059669;--success:#059669;--danger:#dc2626;--warn:#d24b00}
 *{box-sizing:border-box}
 /* La page ne défile pas : elle occupe l'écran, et c'est la grille qui roule
    sous son en-tête. Le bandeau de v1 ajoute 24 px de padding en haut du body —

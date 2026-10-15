@@ -145,8 +145,8 @@ tr:hover .ctrl-dossier-pill{border-color:var(--accent);cursor:pointer}
 .ack-di-v{font-size:12px;color:var(--text);font-weight:600;word-break:break-word}
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
-:root{--accent-bg:color-mix(in srgb,var(--accent,#22d3ee) 10%,transparent);--accent-fg:#0a0e17;--ok:#34d399;--sidebar-w:220px;}
-html.light-pre body,body.light{--muted:#64748b;--accent-bg:color-mix(in srgb,var(--accent,#0891b2) 8%,transparent);--accent-fg:#ffffff;--ok:#059669;}
+:root{--accent-bg:rgba(34,211,238,.10);--accent-fg:#0a0e17;--ok:#34d399;--sidebar-w:220px;}
+html.light-pre body,body.light{--muted:#64748b;--accent-bg:rgba(8,145,178,.08);--accent-fg:#ffffff;--ok:#059669;}
 html,body{height:100%;overflow:hidden}
 body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px}
 ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}

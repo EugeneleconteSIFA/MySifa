@@ -14,7 +14,7 @@ WIDGET_HTML = r"""<!DOCTYPE html>
 :root{
   --bg:#0a0e17;--card:#111827;--border:#1e293b;
   --text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;
-  --accent-bg:color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent);
+  --accent-bg:rgba(34,211,238,0.12);
 }
 html,body{
   background:var(--bg);color:var(--text);
@@ -24,7 +24,7 @@ html,body{
 body.light{
   --bg:#f1f5f9;--card:#ffffff;--border:#e2e8f0;
   --text:#0f172a;--text2:#334155;--muted:#64748b;--accent:#0891b2;
-  --accent-bg:color-mix(in srgb,var(--accent,#0891b2) 12%,transparent);
+  --accent-bg:rgba(8,145,178,0.12);
 }
 /* ── Barre titre (déplaçable dans Electron) ── */
 .tb{
