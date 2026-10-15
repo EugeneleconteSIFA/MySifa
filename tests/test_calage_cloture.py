@@ -278,6 +278,25 @@ class TestCalageCloture(unittest.TestCase):
             self.assertEqual(conn.execute("SELECT dernier_metrage FROM machines WHERE id=?",
                                           (MACHINE_ID,)).fetchone()[0], 820.0)
 
+    # ── 6 bis. Une faute de frappe ancienne ne bloque pas le relevé ──────
+    def test_5b_releve_face_a_une_faute_de_frappe(self):
+        from database import get_db
+
+        faute = self._saisie("89", -600, dossier="CAL-ANCIEN")
+        s01 = self._saisie("01", 0)
+        self._saisie("02", 1)
+        s03 = self._saisie("03", 30)
+        with get_db() as conn:
+            # Constat réel du 05/10/2026 : 636 367 000 m au lieu de 6 367 000.
+            conn.execute("UPDATE production_data SET metrage_total_fin=636367000 WHERE id=?", (faute,))
+            conn.execute("UPDATE production_data SET metrage_total_debut=6616847 WHERE id=?", (s01,))
+            conn.commit()
+        url = f"/api/fabrication/saisie/{s03}/compteur-fin-calage"
+        r = self.client.put(url, json={"metrage_compteur": 6617300})
+        self.assertEqual(r.status_code, 200, r.text)
+        # Le dernier relevé reste la référence : redescendre sous le 01 est refusé.
+        self.assertEqual(self.client.put(url, json={"metrage_compteur": 6616000}).status_code, 400)
+
     # ── 7. Gâche mesurée, comparée au devis, dans le compte-rendu ────────
     def test_6_gache_devis_compte_rendu(self):
         from database import get_db

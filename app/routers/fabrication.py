@@ -4072,30 +4072,33 @@ async def update_matiere_commentaire(matiere_id: int, request: Request):
 
 
 def _dernier_releve_avant(conn, saisie_id, date_operation, machine):
-    """Plus grand relevé du compteur machine ANTÉRIEUR à une saisie.
+    """Dernier relevé du compteur machine ANTÉRIEUR à une saisie.
 
     On ne compare pas à `machines.dernier_metrage` quand une saisie plus
     récente l'a déjà fait avancer : corriger un relevé de la veille
-    deviendrait impossible."""
-    return conn.execute(
-        """SELECT MAX(ctr) FROM (
-               SELECT COALESCE(metrage_total_debut, metrage_prevu) AS ctr
+    deviendrait impossible.
+
+    Le DERNIER relevé, pas le plus grand : une seule faute de frappe dans
+    l'historique (636 367 000 m saisis le 05/10/2026 sur Cohésio 1 au lieu de
+    6 367 000) bloquait pour toujours tout relevé de la machine. Chaque saisie
+    ne porte que son propre compteur : le début au 01, la fin au 89 / 90, le
+    relevé intermédiaire ailleurs."""
+    row = conn.execute(
+        """SELECT ctr FROM (
+               SELECT date_operation, id,
+                      CASE WHEN operation_code = '01'
+                             THEN COALESCE(metrage_total_debut, metrage_prevu)
+                           WHEN operation_code IN ('89', '90')
+                             THEN COALESCE(metrage_total_fin, metrage_reel)
+                           ELSE metrage_compteur END AS ctr
                  FROM production_data
-                WHERE id <> ? AND date_operation <= ?
-                  AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
-               UNION ALL
-               SELECT COALESCE(metrage_total_fin, metrage_reel)
-                 FROM production_data
-                WHERE id <> ? AND date_operation <= ?
-                  AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
-               UNION ALL
-               SELECT metrage_compteur
-                 FROM production_data
-                WHERE id <> ? AND date_operation <= ?
-                  AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
-           )""",
-        (saisie_id, date_operation, machine) * 3,
-    ).fetchone()[0]
+                WHERE id <> ? AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
+                  AND (date_operation < ? OR (date_operation = ? AND id < ?))
+           ) WHERE ctr IS NOT NULL
+           ORDER BY date_operation DESC, id DESC LIMIT 1""",
+        (saisie_id, machine, date_operation, date_operation, saisie_id),
+    ).fetchone()
+    return row[0] if row else None
 
 
 @router.put("/api/fabrication/saisie/{saisie_id}/compteur-fin-calage")
