@@ -41,6 +41,12 @@ UN DEVIS PEUT SERVIR PLUSIEURS DOSSIERS. Un produit refabriqué dix fois l'est
 sur le même devis : interdire au devis de servir deux entrées laissait neuf
 dossiers sur dix sans rattachement.
 
+VALIDATION AUTOMATIQUE (décision du 15/10/2026). Quand le devis retenu a le
+même format, la même laize, le même client et la même matière que le dossier
+— et aucune colle contraire —, le rattachement naît validé (vert) au lieu
+d'attendre une confirmation. Sur le planning réel, ces cas-là se sont révélés
+justes à la relecture : les faire confirmer un par un n'apprenait rien.
+
 Les liaisons décidées par quelqu'un ne sont jamais touchées. Un couple rejeté
 n'est plus jamais reproposé (`rent_rejets`).
 """
@@ -389,17 +395,25 @@ def evaluer(devis: dict, entree: dict, voc: dict | None = None) -> dict:
     s_format, m_format = _score_format(pd["cotes"], pe["cotes"])
     if s_format <= 0:
         return {"score": 0.0, "fond": 0.0, "motif": "", "format_ok": False,
-                "contradiction": False}
+                "contradiction": False, "identique": False}
 
     cd, ce = pd["car"], pe["car"]
     total, motifs = s_format, [m_format]
     s_papier, s_colle = _score_papier(cd, ce), _score_colle(cd, ce)
-    for pts, motif in (_score_client(pd["client"], pe["client"], pe["nom"]),
-                       _score_laize(devis, entree), s_papier, s_colle):
+    s_client = _score_client(pd["client"], pe["client"], pe["nom"])
+    s_laize = _score_laize(devis, entree)
+    for pts, motif in (s_client, s_laize, s_papier, s_colle):
         total += pts
         if motif:
             motifs.append(motif)
     contradiction = s_papier[0] < 0 or s_colle[0] < 0
+    # « Même matière » : même famille, et même qualificatif quand l'OF en
+    # porte un (thermique éco ≠ thermique pro ; « Couché » seul suffit).
+    meme_matiere = bool(cd["famille"]) and cd["famille"] == ce["famille"] and bool(
+        not ce["qualificatif"]
+        or (cd["qualificatif"] and _prefixe_commun(cd["qualificatif"], ce["qualificatif"])))
+    identique = (not contradiction and meme_matiere and s_laize[0] > 0
+                 and s_client[0] >= POIDS_CLIENT * 0.8)
     utilises = {cd["famille"], cd["qualificatif"], *cd["colles"]}
     pts, motif = _score_mots(pd["mots"], pe["mots"], utilises)
     total += pts
@@ -416,6 +430,7 @@ def evaluer(devis: dict, entree: dict, voc: dict | None = None) -> dict:
         "motif": " · ".join(m for m in motifs if m),
         "format_ok": True,
         "contradiction": contradiction,
+        "identique": identique,
     }
 
 
@@ -479,6 +494,7 @@ def classer_pour_entree(devis_rows, entree: dict, limite: int = 8,
             "fond": note["fond"],
             "motif": note["motif"],
             "contradiction": note["contradiction"],
+            "identique": note["identique"],
         })
     classes.sort(key=lambda c: (-c["score"], -c["devis_id"]))
     return classes[:limite]
@@ -530,5 +546,6 @@ def proposer(devis_rows, entrees_rows, deja_liees, voc: dict | None = None,
                 "planning_entry_id": eid,
                 "score": p["score"],
                 "motif": p["motif"],
+                "valide": bool(p.get("identique")),
             })
     return retenus

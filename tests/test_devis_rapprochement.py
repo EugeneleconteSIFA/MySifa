@@ -100,6 +100,18 @@ check("le devis au bon papier et à la bonne colle", p and p["devis_id"], 10)
 check("motif cite papier et colle",
       bool(p and "papier thermique pro" in p["motif"] and "colle permanent" in p["motif"]), True)
 
+print("\n3 bis. Validation automatique")
+check("format, laize, client et matière identiques : validé d'office",
+      bool(p and p.get("identique")), True)
+autre_client = devis(14, "50x60 mm thermique pro permanent 12-10-2026.xlsx", client="Bricorama")
+p2 = meilleur_devis([autre_client], ENTREE, VOC)
+check("client différent : proposé mais pas validé", (bool(p2), bool(p2 and p2.get("identique"))),
+      (True, False))
+sans_qualif = devis(15, "50x60 mm thermique permanent 12-10-2026.xlsx")
+p3 = meilleur_devis([sans_qualif], ENTREE, VOC)
+check("matière incomplète (thermique sans « pro ») : pas validé",
+      bool(p3 and p3.get("identique")), False)
+
 print("\n4. Papier contraire")
 velin = devis(12, "50x60 velin permanent 12-10-2026.xlsx")
 check("vélin contre thermique : pas de proposition", meilleur_devis([velin], ENTREE, VOC), None)
@@ -151,13 +163,17 @@ with get_db() as conn:
     liens = {x["planning_entry_id"]: dict(x) for x in conn.execute("SELECT * FROM rent_links")}
     check("les deux dossiers rattachés au même devis (refabrication)",
           [liens.get(e1, {}).get("devis_id"), liens.get(e2, {}).get("devis_id")], [ids[0], ids[0]])
-    check("propositions orange", liens[e1]["origine"] + "/" + str(liens[e1]["valide_at"]), "auto/None")
+    check("identiques : validés d'office par le moteur",
+          (liens[e1]["origine"], liens[e1]["valide_par"], bool(liens[e1]["valide_at"])),
+          ("auto", "auto:identique", True))
+    check("compteur de validations", r["validees"], 2)
 
     # Rejet sur e1, comme le fait DELETE /links/{id}
     conn.execute("INSERT INTO rent_rejets (planning_entry_id, devis_id) VALUES (?,?)", (e1, ids[0]))
     conn.execute("DELETE FROM rent_links WHERE planning_entry_id=?", (e1,))
-    # e2 confirmé par quelqu'un
-    conn.execute("UPDATE rent_links SET valide_at='2026-10-15' WHERE planning_entry_id=?", (e2,))
+    # e2 relu par quelqu'un
+    conn.execute("UPDATE rent_links SET valide_at='2026-10-15', valide_par='eugene' "
+                 "WHERE planning_entry_id=?", (e2,))
     conn.commit()
     rapprocher(conn)
     liens = {x["planning_entry_id"]: dict(x) for x in conn.execute("SELECT * FROM rent_links")}
