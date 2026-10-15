@@ -5148,6 +5148,7 @@ function rentEtat(head, link){
     statut, termine: statut==='termine', aDevis, aProd,
     comparable: aDevis===true && aProd===true,
     aLier: statut==='termine' && aDevis===false,
+    aConfirmer: rentEtatLien(link)==='orange',
   };
 }
 
@@ -5540,6 +5541,24 @@ async function rentLancerRapprochement(){
   }catch(e){ toast(e.message, 'error'); }
 }
 
+/* Le rattachement se fait sans qu'on le demande : à l'ouverture de l'onglet,
+   le moteur propose ce qu'il peut, et il ne reste qu'à confirmer ou corriger.
+   Silencieux s'il n'a rien de neuf ; jamais bloquant — l'écran est déjà
+   affiché quand il répond. */
+async function rentRapprochementAuto(){
+  if(S.rentAutoEnCours) return;
+  S.rentAutoEnCours = true;
+  try{
+    const r = await api('/api/rentabilite/rapprochement', {method:'POST'});
+    if(r && (r.nouvelles || r.retirees)) await loadRentLinks();
+    if(r && r.nouvelles){
+      toast(r.nouvelles + ' devis rattaché' + (r.nouvelles > 1 ? 's' : '')
+            + ' automatiquement — à confirmer (en orange).');
+    }
+  }catch(_){ /* le bouton reste là pour relancer à la main */ }
+  finally{ S.rentAutoEnCours = false; }
+}
+
 async function rentValiderLien(entryId){
   await api('/api/rentabilite/links/' + entryId + '/valider', {method:'POST'});
   await loadRentLinks();
@@ -5865,10 +5884,11 @@ function renderRentPilotage(){
 
   const btnMoteur = h('button',{type:'button',className:'btn-sm',
     disabled:!charges || !(S.devisList || []).length,
-    title:'Cherche, pour chaque dossier sans devis, un devis dont le format, la '
-        + 'laize, le client et la date concordent. Ne propose que les cas nets.',
+    title:'Le rattachement tourne tout seul à l\'ouverture de l\'onglet. Relancer '
+        + 'après un import : format, laize, client, papier, colle et date doivent '
+        + 'concorder, seuls les cas nets sont proposés.',
     onClick:rentLancerRapprochement},
-    iconEl('shield-check',13), ' Proposer les rattachements');
+    iconEl('shield-check',13), ' Relancer le rattachement');
 
   /* Recherche, comme dans le planning : on n'enlève rien de la timeline, on
      éteint ce qui ne correspond pas. Masquer les autres blocs ferait perdre le
@@ -6170,6 +6190,8 @@ function renderRentDossiers(){
   const FILTRES = [
     {key:'a_lier',      label:'À lier',      test:e=>e.aLier,
      aide:'Dossiers terminés sans devis lié'},
+    {key:'a_confirmer', label:'À confirmer', test:e=>e.aConfirmer,
+     aide:'Devis rattaché automatiquement — à confirmer ou corriger'},
     {key:'comparables', label:'Comparables', test:e=>e.comparable,
      aide:'Devis et production liés — l\'écart est calculable'},
     {key:'tous',        label:'Tous',        test:()=>true, aide:'Tout le planning'},
@@ -6351,6 +6373,7 @@ function renderRentDossiers(){
     }
     if(etat.termine || etat.aDevis===true){
       if(etat.aDevis===null) etats.push(rentPastille('Devis …','attente'));
+      else if(etat.aConfirmer) etats.push(rentPastille('Devis proposé','propose','Rattaché automatiquement — à confirmer'));
       else if(etat.aDevis) etats.push(rentPastille('Devis','ok','Un devis est lié'));
       else if(!dansFileALier) etats.push(rentPastille('Devis','manque','Dossier terminé sans devis lié'));
     }
@@ -6463,7 +6486,6 @@ function renderRentDossiers(){
 function renderRentPanneau(g, listeVisible){
   const head=g.head;
   const entryId=Number(head.id);
-  const devisList=S.devisList||[];
   const lien=(S.rentLinksById||{})[entryId]||{devis_id:null,no_dossiers:[]};
   let curDossiers=(lien.no_dossiers||[]).slice();
 
@@ -6576,7 +6598,25 @@ function renderRentPanneau(g, listeVisible){
     : h('div',{className:'card-empty',style:{padding:'18px'}},
         'Lie un devis et des dossiers de production, puis clique sur « Comparer ».');
 
+  /* Proposition du moteur : on la lit, on la confirme ou on la rejette sans
+     quitter la ligne. Rejeter la retire ET l'interdit pour ce dossier — le
+     moteur tourne tout seul, il la reproposerait sinon. */
+  const bandeauProposition = rentEtatLien(lien)==='orange'
+    ? h('div',{className:'rent-lier-etat rent-lier-etat-orange rent-panneau-prop'},
+        h('span',{className:'rent-point rent-point-orange'}),
+        h('span',null,'Rattachement proposé'),
+        lien.motif ? h('span',{className:'rent-lier-motif'},' — '+lien.motif) : null,
+        h('span',{style:{flex:'1'}}),
+        h('button',{type:'button',className:'btn-sm',onClick:async e=>{
+          e.stopPropagation(); await rentValiderLien(entryId);
+        }}, iconEl('check-circle',13),' Confirmer'),
+        h('button',{type:'button',className:'btn-danger',onClick:async e=>{
+          e.stopPropagation(); await rentRejeterLien(entryId);
+        }},'Rejeter'))
+    : null;
+
   return h('div',{className:'rent-panneau'},
+    bandeauProposition,
     h('div',{className:'rent-panneau-grille'},
       h('div',null,
         h('div',{className:'form-section-title'},'Devis'),
@@ -6646,11 +6686,11 @@ function renderChampDevis(cle, m){
   if(m && m.origine==='repli') meta.push(h('span',{className:'devis-conf devis-conf-moyenne'},'déduit'));
 
   return h('div',{className:'rent-champ'+(m&&m.confiance&&m.confiance!=='haute'?' is-doute':'')},
-    h('div',{className:'rent-champ-lbl'}, (m&&m.libelle)||cle),
+    h('div',{className:'rent-champ-lbl',title:(m&&m.libelle)||cle}, (m&&m.libelle)||cle),
     h('div',{className:'rent-champ-val'}, valeur,
       (m&&m.unite)?h('span',{className:'rent-champ-unite'},' '+m.unite):null),
     meta.length?h('div',{className:'devis-meta'},...meta):null,
-    (m&&m.commentaire)?h('div',{className:'rent-champ-note'}, m.commentaire):null
+    (m&&m.commentaire)?h('div',{className:'rent-champ-note',title:m.commentaire}, m.commentaire):null
   );
 }
 
@@ -6738,6 +6778,11 @@ function ouvrirDevisModal(devisId){
     : h('div',{className:'card-empty'},
         'Ce devis a été importé avant le suivi de provenance : aucune source enregistrée.');
 
+  /* Valider = « je l'ai relu, c'est juste ». Un devis ramassé par l'agent
+     n'est jamais validé tant que personne ne l'a ouvert ; un devis saisi ou
+     corrigé à l'écran l'est d'office. */
+  const dejaValide = Number(dv.a_verifier)!==1 && !!dv.valide_at;
+
   const boite=h('div',{className:'contact-modal devis-modal'},
     h('div',{className:'contact-modal-head'},
       h('div',null,
@@ -6754,7 +6799,12 @@ function ouvrirDevisModal(devisId){
       : null,
     h('div',{className:'contact-modal-body'}, corps),
     h('div',{className:'devis-modal-actions'},
-      h('button',{type:'button',className:'btn-sm',onClick:()=>{
+      dejaValide
+        ? h('span',{className:'devis-modal-valide'},
+            iconEl('check-circle',13),' Validé'+(dv.valide_at?' le '+String(dv.valide_at).slice(0,10):''))
+        : h('button',{type:'button',className:'btn-sm',onClick:()=>validerDevis(dv.id)},
+            iconEl('check-circle',13),' Valider'),
+      h('button',{type:'button',className:'btn-sec',onClick:()=>{
         fermerDevisModal(); ouvrirCorrectionDevis(dv);
       }},'Modifier'),
       h('button',{type:'button',className:'btn-danger',onClick:async()=>{
@@ -6768,6 +6818,23 @@ function ouvrirDevisModal(devisId){
   boite.addEventListener('click',e=>e.stopPropagation());
   overlay.appendChild(boite);
   document.body.appendChild(overlay);
+}
+
+/* Valide le devis ouvert, puis enchaîne sur le suivant à vérifier : cent
+   trente devis se relisent à la suite, pas en rouvrant la liste à chaque fois. */
+async function validerDevis(devisId){
+  try{
+    await api('/api/rentabilite/devis/'+devisId+'/valider',{method:'POST'});
+  }catch(e){ toast(e.message,'error'); return; }
+  await loadDevis();
+  fermerDevisModal();
+  const suivant = (S.devisList||[]).find(d=>Number(d.a_verifier)===1 && Number(d.id)!==Number(devisId));
+  if(suivant && S.rentDevisFiltre==='verifier'){
+    toast('Devis validé — suivant à vérifier.');
+    ouvrirDevisModal(suivant.id);
+  }else{
+    toast('Devis validé.');
+  }
 }
 
 function renderRentDevis(){
@@ -12898,6 +12965,7 @@ function renderProdKpis(){
         // Les liaisons de TOUTES les entrees, pas seulement des douze
         // affichees : sans elles, ni compteur ni filtre « a lier ».
         await loadRentLinks();
+        rentRapprochementAuto();
       }else if(S.page === 'traceabilite'){
         S.traceabilite = null;
         S.traceabiliteDossier = undefined;
