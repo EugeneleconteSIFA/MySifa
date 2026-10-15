@@ -148,6 +148,15 @@
       "  #mysifa-accueil{position:fixed;left:0;top:var(--mac-top,0px);bottom:96px;width:var(--mac-w);z-index:110;padding:16px 0 0 16px;display:flex;flex-direction:column}",
       "  body.mysifa-accueil-on #root{margin-left:var(--mac-w)}",
       "  #mysifa-accueil.repliee{width:56px}",
+      // Languette au bord droit, à mi-hauteur (demande du 15/10/2026) : le
+      // geste attendu pour replier une colonne. Elle reste sur la bande
+      // repliée pour la rouvrir. Le bouton tableau ne sert plus qu'une fois
+      // repliée, comme repère de ce que la bande contient.
+      "  .mac-languette{position:absolute;top:50%;right:-12px;transform:translateY(-50%);z-index:2;display:flex;align-items:center;justify-content:center;",
+      "    width:22px;height:48px;padding:0;border-radius:0 10px 10px 0;cursor:pointer;background:var(--card,#111827);color:var(--muted,#94a3b8);",
+      "    border:1px solid var(--border,#1e293b);border-left:0;box-shadow:2px 0 6px rgba(0,0,0,.12)}",
+      "  .mac-languette:hover,.mac-languette:focus-visible{color:var(--accent,#22d3ee);border-color:var(--accent,#22d3ee)}",
+      "  #mysifa-accueil:not(.repliee) .mac-repli{display:none}",
       "  body.mysifa-accueil-on.mysifa-accueil-repliee #root{margin-left:56px}",
       "}",
       "@media (min-width:1600px){#mysifa-accueil{--mac-w:380px}}",
@@ -161,6 +170,7 @@
       // ce qu'elle déplie. Le titre se touche aussi pour déplier.
       "  #mysifa-accueil.repliee .mac-titre{display:block;cursor:pointer}",
       "  #mysifa-accueil.repliee .mac-tete{margin-bottom:4px}",
+      "  .mac-languette{display:none}",
       "}",
       // Titre sur sa propre ligne, boutons dessous : « Mes tableaux de bord »
       // ne tient pas à côté des boutons dans une colonne de 300 px.
@@ -199,14 +209,14 @@
       // pour le glisser-déposer. Hors édition, l'iframe défile librement.
       ".mac-cadre .mac-voile{position:absolute;inset:0;display:none}",
       "#mysifa-accueil.edition .mac-cadre .mac-voile{display:block;cursor:grab}",
-      ".mac-corb{display:none;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;cursor:pointer;flex-shrink:0;",
-      "  background:var(--bg,#0a0e17);color:var(--muted,#94a3b8);border:1px solid var(--border,#1e293b)}",
-      ".mac-ctete:hover .mac-corb,.mac-corb:focus-visible,.mac-corb.confirmer{display:inline-flex}",
+      // Toujours visible (demande du 15/10/2026) : au survol seulement, on
+      // ne savait pas qu'on pouvait supprimer. Discrète au repos, rouge au
+      // survol ; seule façon de supprimer, en mode Personnaliser compris.
+      ".mac-corb{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;cursor:pointer;flex-shrink:0;",
+      "  background:none;color:var(--muted,#94a3b8);border:1px solid transparent;opacity:.6;transition:opacity .15s,color .15s,background .15s}",
+      ".mac-corb:hover,.mac-corb:focus-visible,.mac-corb.confirmer{opacity:1}",
       ".mac-corb:hover,.mac-corb.confirmer{color:#fff;background:var(--danger,#f87171);border-color:var(--danger,#f87171)}",
       ".mac-corb.confirmer{width:auto;padding:0 8px;font:600 11px 'Segoe UI',system-ui,sans-serif}",
-      "#mysifa-accueil.edition .mac-corb{display:none!important}",
-      // Écran tactile : pas de survol, la corbeille reste visible.
-      "@media (hover:none){.mac-corb{display:inline-flex}}",
       ".mac-attente{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted,#94a3b8);pointer-events:none}",
       ".mac-carte.prete .mac-attente{display:none}",
       // Avant que le script embarqué n'ait isolé le bloc, l'iframe montre la
@@ -326,7 +336,6 @@
       "#mysifa-accueil.edition .mac-carte{cursor:grab}",
       ".mac-outils .mac-btn{height:26px;min-width:26px;padding:0 6px;font-size:11px}",
       ".mac-outils .mac-esp{flex:1}",
-      ".mac-outils .mac-sup-ok,.mac-outils [data-act=sup]:hover{background:var(--danger,#f87171);border-color:var(--danger,#f87171);color:#fff}",
       ".mac-outils input{flex:1;min-width:0;font:13px 'Segoe UI',system-ui,sans-serif;background:var(--card,#111827);color:var(--text,#f1f5f9);border:1px solid var(--border,#1e293b);border-radius:8px;padding:4px 6px}",
       ".mac-carte.glisse{position:fixed;z-index:200;opacity:.92;box-shadow:0 12px 32px rgba(0,0,0,.25);pointer-events:none}",
       ".mac-place{border:2px dashed var(--accent,#22d3ee);border-radius:12px;background:var(--accent-bg,rgba(34,211,238,.12));flex-shrink:0}",
@@ -1450,9 +1459,7 @@
       }).join("") + "</span>" +
       '<span class="mac-esp"></span>' +
       '<button type="button" class="mac-btn" data-act="val" title="Valeurs affichées et alertes">' + icone("valeurs") + "</button>" +
-      '<button type="button" class="mac-btn" data-act="nom" title="Renommer">' + icone("reglages") + "</button>" +
-      '<button type="button" class="mac-btn' + (c.confirmer ? " mac-sup-ok" : "") + '" data-act="sup" title="Supprimer">' +
-      (c.confirmer ? "Supprimer ?" : icone("corbeille")) + "</button>";
+      '<button type="button" class="mac-btn" data-act="nom" title="Renommer">' + icone("reglages") + "</button>";
     o.onclick = function (e) {
       var b = e.target.closest("button");
       if (!b) return;
@@ -1482,14 +1489,6 @@
       } else if (b.getAttribute("data-act") === "nom") {
         c.renommage = true;
         dessinerOutils(c);
-      } else if (b.getAttribute("data-act") === "sup") {
-        if (!c.confirmer) {
-          c.confirmer = true;
-          dessinerOutils(c);
-          setTimeout(function () { if (c.confirmer) { c.confirmer = false; dessinerOutils(c); } }, 4000);
-          return;
-        }
-        supprimer(c, null);
       }
     };
   }
@@ -1757,7 +1756,6 @@
     Object.keys(W.cartes).forEach(function (id) {
       var c = W.cartes[id];
       c.renommage = false;
-      c.confirmer = false;
       dessinerOutils(c);
     });
   }
@@ -1774,6 +1772,11 @@
     b.title = W.repliee ? "Afficher mes tableaux de bord" : "Replier mes tableaux de bord";
     b.setAttribute("aria-label", b.title);
     b.setAttribute("aria-expanded", W.repliee ? "false" : "true");
+    var l = racine.querySelector(".mac-languette");
+    l.innerHTML = icone(W.repliee ? "deplier" : "replier");
+    l.title = b.title;
+    l.setAttribute("aria-label", b.title);
+    l.setAttribute("aria-expanded", b.getAttribute("aria-expanded"));
     if (!sauver) return;
     if (TELEPHONE.matches) {
       try { localStorage.setItem(CLE_REPLI_TEL, W.repliee ? "1" : "0"); } catch (e) { /* stockage bloqué : repli non retenu */ }
@@ -2075,7 +2078,7 @@
       {
         icon: ICO('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>'),
         title: "Personnaliser la colonne",
-        body: "<p><span class=\"mguide-hl\">Personnaliser</span> permet de <strong>glisser</strong> chaque indicateur à sa place. Sous chacun : trois boutons règlent la <strong>taille</strong> (compact sur une ligne, standard, grand avec graphique sur 30 jours ou liste quand le bloc en a), les curseurs changent les <strong>filtres</strong>, les <strong>valeurs</strong> et leurs alertes, le crayon le <strong>renomme</strong>, la corbeille le supprime (deux clics). L'icône tableau, en haut, replie la colonne.</p>",
+        body: "<p><span class=\"mguide-hl\">Personnaliser</span> permet de <strong>glisser</strong> chaque indicateur à sa place. Sous chacun : trois boutons règlent la <strong>taille</strong> (compact sur une ligne, standard, grand avec graphique sur 30 jours ou liste quand le bloc en a), les curseurs changent les <strong>filtres</strong>, les <strong>valeurs</strong> et leurs alertes, le crayon le <strong>renomme</strong>. La corbeille, en haut de chaque indicateur, le supprime (deux clics). Le chevron au bord de la colonne la replie et la rouvre.</p>",
         illu: SVG +
           '<rect x="80" y="10" width="180" height="130" rx="10" fill="var(--bg)" stroke="var(--border)"/>' +
           '<rect x="90" y="18" width="90" height="16" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="135" y="29" font-size="7" fill="var(--text2)" text-anchor="middle">TABLEAUX DE BORD</text>' +
@@ -2137,7 +2140,8 @@
       '<div class="mac-avis"></div>' +
       '<div class="mac-liste"></div>' +
       '<button type="button" class="mac-demande" title="Envoyer une demande aux administrateurs">' + icone("demande") +
-      "<span>Faire une demande de tableau de bord</span></button>";
+      "<span>Faire une demande de tableau de bord</span></button>" +
+      '<button type="button" class="mac-languette"></button>';
     var rootApp = document.getElementById("root");
     document.body.insertBefore(racine, rootApp || document.body.firstChild);
     document.body.classList.add("mysifa-accueil-on");
@@ -2148,6 +2152,7 @@
       if (window.MySifaBlocs && window.MySifaBlocs.demander) window.MySifaBlocs.demander();
     });
     racine.querySelector(".mac-repli").addEventListener("click", inverserRepli);
+    racine.querySelector(".mac-languette").addEventListener("click", inverserRepli);
     racine.querySelector(".mac-titre").addEventListener("click", function () {
       if (TELEPHONE.matches && W.repliee) inverserRepli();
     });
