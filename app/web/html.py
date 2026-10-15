@@ -99,7 +99,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
-<link rel="stylesheet" href="/static/mysifa_ai_chat.css?v=5">
+<link rel="stylesheet" href="/static/mysifa_ai_chat.css?v=6">
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_resize.css">
