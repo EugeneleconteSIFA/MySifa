@@ -154,6 +154,13 @@ def _compter_coherence(conn):
     return compter_ouverts(conn)
 
 
+def _compter_ecarts_prod(conn):
+    """Écarts ouverts de la famille Production : dossiers fictifs, chiffrages
+    signalés, heures non reportées, arrêts sans explication…"""
+    from app.services.coherence import compter_ouverts
+    return compter_ouverts(conn, "prod")
+
+
 DETECTEURS: dict[str, Detecteur] = {d.code: d for d in (
     Detecteur(
         code="stock.receptions_rvgi",
@@ -199,6 +206,17 @@ DETECTEURS: dict[str, Detecteur] = {d.code: d for d in (
                     "relevés toutes les 30 minutes.",
         lien="/settings#coherence",
         compter=_compter_coherence,
+        roles_suggeres=("direction",),
+    ),
+    Detecteur(
+        code="prod.ecarts",
+        app="prod", app_label="MyProd",
+        titre="Écarts de saisie à traiter",
+        description="Dossiers fictifs à rattacher, chiffrages signalés à la clôture, heures de "
+                    "calage non reportées et autres écarts de la production. À valider ou "
+                    "corriger dans MyProd › Production › Erreurs & Qualité.",
+        lien="/prod#erreurs",
+        compter=_compter_ecarts_prod,
         roles_suggeres=("direction",),
     ),
 )}

@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from statistics import median
 from typing import Any, Dict, List, Optional
 
@@ -258,6 +258,11 @@ def heure_fin_prod(conn, no_dossier: str, machine: str, declare: Dict[str, datet
     borne = _dt(derniere["date_operation"])
     if a["fin"] == len(rows) - 1 and _place_libre(rows, a["fin"], declare["fin_calage"]):
         borne = declare["fin_calage"]
+    # Les heures déclarées sont à la minute, les saisies à la seconde : une
+    # fin de prod notée 16:10 n'est pas « avant » une saisie de 16:10:35. La
+    # clôture se place alors juste après elle.
+    if borne and P < borne and P.replace(second=0) == borne.replace(second=0, microsecond=0):
+        return _iso(borne.replace(microsecond=0) + timedelta(seconds=1)), None
     if borne and P < borne:
         return None, (f"Fin de prod {_hm(P)} antérieure à la saisie "
                       f"« {derniere['operation']} » de {_hm(derniere['date_operation'])}.")
@@ -568,3 +573,101 @@ def bilan(conn, no_dossier: str, minutes_calage: float) -> Dict[str, Any]:
         "ecart_devis_minutes_pct": pct(minutes_calage or None, dv and dv["minutes"]),
         "ecart_devis_metres_pct": pct(g["metres"], dv and dv["metres"]),
     }
+
+
+# ─── Correction depuis MyProd › Erreurs & Qualité ────────────────────────────
+
+def lire_declaration_id(conn, declaration_id: int) -> Optional[Dict[str, Any]]:
+    r = conn.execute("SELECT * FROM dossier_calages_declares WHERE id=?", (declaration_id,)).fetchone()
+    return dict(r) if r else None
+
+
+def marquer_traite(conn, declaration_id: int, auteur: str, maintenant: datetime) -> None:
+    """La déclaration sort de la file des écarts (validée ou corrigée). Ne commite pas."""
+    conn.execute(
+        "UPDATE dossier_calages_declares SET traite_le=?, traite_par=? WHERE id=?",
+        (_iso(maintenant), auteur, declaration_id))
+
+
+def forcer_heures(conn, declaration_id: int, declare: Dict[str, datetime], auteur: str,
+                  maintenant: datetime, simuler: bool = False) -> Dict[str, Any]:
+    """Reporte les trois heures sur les saisies, sans la garde qui refuse
+    d'enjamber une autre saisie.
+
+    À la clôture, une heure qui enjambait une saisie n'était pas appliquée :
+    l'opérateur n'avait personne à qui demander. Ici c'est un responsable qui
+    décide, après avoir vu l'aperçu (`simuler=True`) : les saisies bornes
+    prennent les heures déclarées, et celles qu'elles enjambent changent de
+    côté (un changement de plaque noté après la fin de calage devient un
+    changement en cours de production). Rien n'est supprimé.
+
+    Rend {"changements": [...], "inseree": bool}. Ne commite pas."""
+    decl = lire_declaration_id(conn, declaration_id)
+    if not decl:
+        raise LookupError("Déclaration introuvable.")
+    no_dossier, machine = decl["no_dossier"], decl["machine"]
+    cloture_id = decl.get("saisie_cloture_id")
+    a = _analyser(conn, no_dossier, machine, maintenant, cloture_id=cloture_id)
+    rows = [dict(r) for r in a["rows"]]
+    i_debut, i_fin = a["debut"], a["fin"]
+    D, F, P = declare["debut_calage"], declare["fin_calage"], declare["fin_prod"]
+    note = "Heures du dossier de prod reportées depuis Erreurs & Qualité"
+    changements: List[Dict[str, Any]] = []
+
+    def changer(r, quand):
+        if str(r["date_operation"])[:16] == _iso(quand)[:16]:
+            return
+        changements.append({"saisie_id": r["id"], "operation": r["operation"],
+                            "avant": r["date_operation"], "apres": _iso(quand)})
+        if not simuler:
+            _deplacer(conn, r["id"], quand, auteur, note, maintenant)
+
+    if i_debut is None:
+        raise ValueError("Aucune saisie de calage sur ce dossier : rien à déplacer.")
+    changer(rows[i_debut], D)
+    # Le 01 du dossier ne peut pas suivre le début du calage.
+    for r in rows[:i_debut]:
+        if _meme_dossier(r, no_dossier) and _code(r) == CODE_DEBUT_DOS and _dt(r["date_operation"]) > D:
+            changer(r, D)
+
+    inseree = False
+    if i_fin is not None:
+        changer(rows[i_fin], F)
+    else:
+        inseree = True
+        changements.append({"saisie_id": None, "operation": f"{CODE_PRODUCTION} - Production (ajoutée)",
+                            "avant": None, "apres": _iso(F)})
+        if not simuler:
+            ref = rows[i_debut]
+            cl = classify_operation(CODE_PRODUCTION)
+            op_str = f"{CODE_PRODUCTION} - {cl.get('label') or 'Production'}"
+            conn.execute(
+                """INSERT INTO production_data
+                   (operateur, date_operation, operation, operation_code,
+                    operation_severity, operation_category, machine, no_dossier,
+                    client, designation, quantite_a_traiter, quantite_traitee,
+                    service, data, est_manuel, modifie_par, modifie_le, modifie_note)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,0,0,'fabrication',?,1,?,?,?)""",
+                (ref["operateur"], _iso(F), op_str, CODE_PRODUCTION,
+                 cl.get("severity") or "info", cl.get("category") or CAT_PRODUCTION,
+                 machine, no_dossier, ref["client"], ref["designation"],
+                 json.dumps({"date_operation": _iso(F), "operation": op_str,
+                             "no_dossier": no_dossier, "machine": machine}),
+                 auteur, _iso(maintenant), note))
+
+    if cloture_id:
+        r = conn.execute("SELECT id, operation, date_operation FROM production_data WHERE id=?",
+                         (cloture_id,)).fetchone()
+        if r:
+            changer(dict(r), P)
+
+    if not simuler:
+        conn.execute(
+            """UPDATE dossier_calages_declares
+                  SET debut_calage_declare=?, fin_calage_declare=?, fin_prod_declare=?,
+                      debut_applique=1, fin_calage_applique=1, fin_prod_applique=1,
+                      motifs_non_appliques=NULL
+                WHERE id=?""",
+            (_iso(D), _iso(F), _iso(P), declaration_id))
+        marquer_traite(conn, declaration_id, auteur, maintenant)
+    return {"changements": changements, "inseree": inseree}

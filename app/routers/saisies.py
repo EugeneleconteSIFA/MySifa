@@ -778,6 +778,96 @@ def suggest_target_dossiers(request: Request, q: str = "", limit: int = 20):
     return out[:lim]
 
 
+def rattacher_fictif(conn, from_ref: str, to_raw: str, user_email: str) -> dict:
+    """Rattache toutes les saisies d'un dossier FICTIF:… à un dossier réel :
+    saisies de production, traça matières et liens de rentabilité. Commite.
+    Utilisé par la route ci-dessous et par la correction des écarts de
+    saisie dans MyProd (app/routers/prod_ecarts.py)."""
+    user = {"email": user_email}
+    now = datetime.now().isoformat()
+    note = f"Rattachement {from_ref} → {to_raw.strip()}"
+
+    target = _resolve_target_dossier_meta(conn, to_raw)
+    to_ref = target["no_dossier"]
+    client = target.get("client") or ""
+    designation = target.get("designation") or ""
+
+    rows = conn.execute(
+        "SELECT id, data FROM production_data WHERE TRIM(no_dossier) = TRIM(?)",
+        (from_ref,),
+    ).fetchall()
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"Aucune saisie pour {from_ref}")
+
+    updated_saisies = 0
+    for r in rows:
+        data = {}
+        if r["data"]:
+            try:
+                data = json.loads(r["data"])
+            except Exception:
+                data = {}
+        if not isinstance(data, dict):
+            data = {}
+        data["no_dossier"] = to_ref
+        if client:
+            data["client"] = client
+        if designation:
+            data["designation"] = designation
+        conn.execute(
+            """UPDATE production_data SET
+               no_dossier=?, client=?, designation=?, data=?,
+               modifie_par=?, modifie_le=?, modifie_note=?
+               WHERE id=?""",
+            (
+                to_ref,
+                client or None,
+                designation or None,
+                json.dumps(data, default=str),
+                user["email"],
+                now,
+                note,
+                r["id"],
+            ),
+        )
+        updated_saisies += 1
+
+    mat_res = conn.execute(
+        "UPDATE fab_matieres_utilisees SET no_dossier=? WHERE TRIM(no_dossier)=TRIM(?)",
+        (to_ref, from_ref),
+    )
+    updated_matieres = mat_res.rowcount
+
+    link_rows = conn.execute(
+        "SELECT id, planning_entry_id FROM rent_prod_links WHERE TRIM(no_dossier)=TRIM(?)",
+        (from_ref,),
+    ).fetchall()
+    updated_links = 0
+    for lk in link_rows:
+        dup = conn.execute(
+            "SELECT 1 FROM rent_prod_links WHERE planning_entry_id=? AND TRIM(no_dossier)=TRIM(?)",
+            (lk["planning_entry_id"], to_ref),
+        ).fetchone()
+        if dup:
+            conn.execute("DELETE FROM rent_prod_links WHERE id=?", (lk["id"],))
+        else:
+            conn.execute(
+                "UPDATE rent_prod_links SET no_dossier=? WHERE id=?",
+                (to_ref, lk["id"]),
+            )
+            updated_links += 1
+    conn.commit()
+    return {
+        "success": True,
+        "from_no_dossier": from_ref,
+        "to_no_dossier": to_ref,
+        "updated_saisies": updated_saisies,
+        "updated_matieres": updated_matieres,
+        "updated_links": updated_links,
+        "target": target,
+    }
+
+
 @router.post("/api/saisies/reassign/fictif")
 async def reassign_fictif_dossier(request: Request):
     """Rattache toutes les saisies d'un dossier FICTIF:… à un dossier réel existant."""
@@ -797,91 +887,8 @@ async def reassign_fictif_dossier(request: Request):
     if from_ref.lower() == to_raw.strip().lower():
         raise HTTPException(status_code=400, detail="Le dossier cible doit être différent du fictif")
 
-    now = datetime.now().isoformat()
-    note = f"Rattachement {from_ref} → {to_raw.strip()}"
-
     with get_db() as conn:
-        target = _resolve_target_dossier_meta(conn, to_raw)
-        to_ref = target["no_dossier"]
-        client = target.get("client") or ""
-        designation = target.get("designation") or ""
-
-        rows = conn.execute(
-            "SELECT id, data FROM production_data WHERE TRIM(no_dossier) = TRIM(?)",
-            (from_ref,),
-        ).fetchall()
-        if not rows:
-            raise HTTPException(status_code=404, detail=f"Aucune saisie pour {from_ref}")
-
-        updated_saisies = 0
-        for r in rows:
-            data = {}
-            if r["data"]:
-                try:
-                    data = json.loads(r["data"])
-                except Exception:
-                    data = {}
-            if not isinstance(data, dict):
-                data = {}
-            data["no_dossier"] = to_ref
-            if client:
-                data["client"] = client
-            if designation:
-                data["designation"] = designation
-            conn.execute(
-                """UPDATE production_data SET
-                   no_dossier=?, client=?, designation=?, data=?,
-                   modifie_par=?, modifie_le=?, modifie_note=?
-                   WHERE id=?""",
-                (
-                    to_ref,
-                    client or None,
-                    designation or None,
-                    json.dumps(data, default=str),
-                    user["email"],
-                    now,
-                    note,
-                    r["id"],
-                ),
-            )
-            updated_saisies += 1
-
-        mat_res = conn.execute(
-            "UPDATE fab_matieres_utilisees SET no_dossier=? WHERE TRIM(no_dossier)=TRIM(?)",
-            (to_ref, from_ref),
-        )
-        updated_matieres = mat_res.rowcount
-
-        link_rows = conn.execute(
-            "SELECT id, planning_entry_id FROM rent_prod_links WHERE TRIM(no_dossier)=TRIM(?)",
-            (from_ref,),
-        ).fetchall()
-        updated_links = 0
-        for lk in link_rows:
-            dup = conn.execute(
-                "SELECT 1 FROM rent_prod_links WHERE planning_entry_id=? AND TRIM(no_dossier)=TRIM(?)",
-                (lk["planning_entry_id"], to_ref),
-            ).fetchone()
-            if dup:
-                conn.execute("DELETE FROM rent_prod_links WHERE id=?", (lk["id"],))
-            else:
-                conn.execute(
-                    "UPDATE rent_prod_links SET no_dossier=? WHERE id=?",
-                    (to_ref, lk["id"]),
-                )
-                updated_links += 1
-
-        conn.commit()
-
-    return {
-        "success": True,
-        "from_no_dossier": from_ref,
-        "to_no_dossier": to_ref,
-        "updated_saisies": updated_saisies,
-        "updated_matieres": updated_matieres,
-        "updated_links": updated_links,
-        "target": target,
-    }
+        return rattacher_fictif(conn, from_ref, to_raw, user["email"])
 
 
 @router.put("/api/saisies/{row_id}")

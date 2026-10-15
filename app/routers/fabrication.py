@@ -1816,6 +1816,15 @@ async def create_saisie(request: Request):
                 conn.rollback()
                 logger.exception("[fabrication] calage déclaré non enregistré")
 
+        # Écarts de saisie (signalement, heures non reportées, dossier fictif) :
+        # la pastille MyProd s'allume maintenant, pas au passage des 30 minutes.
+        if calage_declare or (no_dossier and no_dossier.startswith("FICTIF:")):
+            try:
+                from app.services import coherence
+                coherence.rafraichir_saisies(conn)
+            except Exception:
+                logger.exception("[fabrication] écarts de saisie non rafraîchis")
+
         # ── Début de production : les bobines restées montées ────────────────
         # Seul l'écran « Démarrer un dossier » envoie `bobines_montees` : une
         # saisie 01 venue d'ailleurs (reprise après coup, import) ne dit rien

@@ -69,6 +69,18 @@ REGLES: Dict[str, Regle] = {r.code: r for r in (
     Regle("prod.saisie_ouverte", "prod", "Saisie restée ouverte",
           "Saisie restée ouverte d'un jour à l'autre : le temps du dossier est faux.",
           "moyenne", "/prod#retour"),
+    Regle("prod.dossier_fictif", "prod", "Dossier fictif à rattacher",
+          "Saisies faites sur un dossier hors planning (FICTIF:…) et jamais rattachées "
+          "au vrai dossier : leur temps et leur matière ne comptent pour aucun dossier.",
+          "moyenne", "/prod#erreurs"),
+    Regle("prod.calage_signale", "prod", "Chiffrage signalé incohérent",
+          "Le conducteur a signalé, à la clôture, que les durées ou métrages affichés "
+          "ne collaient pas avec ce qu'il a vu.",
+          "moyenne", "/prod#erreurs"),
+    Regle("prod.calage_non_reporte", "prod", "Heures de calage non reportées",
+          "Heures du dossier de prod déclarées à la clôture qui n'ont pas pu être "
+          "reportées sur les saisies : le temps de calage affiché reste celui des clics.",
+          "moyenne", "/prod#erreurs"),
     Regle("flux.bl_sans_depart", "flux", "BL RVGI sans départ MyExpé",
           "Bon de livraison émis dans RVGI qu'aucun départ MyExpé ne porte.",
           "moyenne", "/expe#suivi_departs"),
@@ -328,6 +340,65 @@ def ctrl_prod_vigilance(conn, s, depuis: str, aujourdhui: str, **_) -> List[dict
     return out
 
 
+def ctrl_prod_saisies(conn, s, depuis: str, **_) -> List[dict]:
+    """Ce que la saisie de prod laisse à traiter : dossiers fictifs non
+    rattachés, chiffrages signalés et heures de calage non reportées à la
+    clôture. Les deux derniers sortent de la file quand MyProd les marque
+    traités (`dossier_calages_declares.traite_le`)."""
+    out: List[dict] = []
+    # Un fictif reste à traiter tant qu'il n'est pas rattaché, quelle que soit
+    # sa date : ses heures ne comptent pour aucun dossier.
+    for r in conn.execute(
+            """SELECT no_dossier, MAX(machine) AS machine, COUNT(*) AS n,
+                      MIN(date_operation) AS premiere, MAX(date_operation) AS derniere,
+                      MAX(operateur) AS operateur
+                 FROM production_data
+                WHERE no_dossier LIKE 'FICTIF:%' AND COALESCE(est_annule, 0) = 0
+                GROUP BY no_dossier""").fetchall():
+        of = str(r["no_dossier"])[len("FICTIF:"):]
+        out.append(_ecart(
+            "prod.dossier_fictif", "dossier", r["no_dossier"],
+            f"Dossier hors planning {of} · {r['machine'] or '—'}",
+            f"{r['n']} saisie{'s' if r['n'] > 1 else ''} du {_jour_fr(r['premiere'])} "
+            f"au {_jour_fr(r['derniere'])}, par {r['operateur'] or '—'}, sans dossier réel.",
+            {"no_dossier": r["no_dossier"], "of": of, "machine": r["machine"],
+             "nb_saisies": r["n"], "premiere": r["premiere"], "derniere": r["derniere"]}))
+
+    if "dossier_calages_declares" not in _tables(conn):
+        return out
+    cols = _colonnes(conn, "dossier_calages_declares")
+    if "traite_le" not in cols:
+        return out
+    sig = "signalement" if "signalement" in cols else "NULL"
+    for r in conn.execute(
+            f"""SELECT id, no_dossier, machine, declare_par, declare_le, {sig} AS signalement,
+                       motifs_non_appliques, debut_calage_declare, fin_calage_declare
+                  FROM dossier_calages_declares
+                 WHERE traite_le IS NULL AND declare_le >= ?
+                   AND id IN (SELECT MAX(id) FROM dossier_calages_declares GROUP BY no_dossier)""",
+            (depuis,)).fetchall():
+        base = {"declaration_id": r["id"], "no_dossier": r["no_dossier"], "machine": r["machine"],
+                "declare_par": r["declare_par"], "declare_le": r["declare_le"]}
+        if (r["signalement"] or "").strip():
+            out.append(_ecart(
+                "prod.calage_signale", "dossier", r["no_dossier"],
+                f"{r['no_dossier']} · {r['machine'] or '—'}",
+                f"« {r['signalement'].strip()} » — {r['declare_par'] or 'conducteur'}, "
+                f"clôture du {_jour_fr(r['declare_le'])}.",
+                dict(base, signalement=r["signalement"].strip()), cle=f"{r['no_dossier']}:{r['id']}"))
+        try:
+            motifs = json.loads(r["motifs_non_appliques"] or "[]")
+        except Exception:
+            motifs = []
+        if motifs:
+            out.append(_ecart(
+                "prod.calage_non_reporte", "dossier", r["no_dossier"],
+                f"{r['no_dossier']} · {r['machine'] or '—'}",
+                " ".join(motifs),
+                dict(base, motifs=motifs), cle=f"{r['no_dossier']}:{r['id']}"))
+    return out
+
+
 # ─── Livraison RVGI → départ MyExpé → sortie MyStock ────────────────────────
 
 def _bl_rvgi(erp, depuis: str, jusqua: str) -> List[dict]:
@@ -570,6 +641,8 @@ CONTROLEURS: List[tuple] = [
     (ctrl_prod_quantites, ("prod.quantite_vs_of", "prod.quantite_non_saisie"), False),
     (ctrl_prod_vigilance, ("prod.info_prod_absente", "prod.seuils_sans_explication",
                            "prod.saisie_ouverte"), False),
+    (ctrl_prod_saisies, ("prod.dossier_fictif", "prod.calage_signale",
+                         "prod.calage_non_reporte"), False),
     (ctrl_flux_bl_departs, ("flux.bl_sans_depart", "flux.depart_sans_bl", "flux.bl_inconnu"), True),
     (ctrl_flux_sortie_stock, ("flux.expedie_sans_sortie",), True),
     (ctrl_flux_date_enlevement, ("flux.date_enlevement",), False),
@@ -606,6 +679,23 @@ def executer(conn, erp=None, releve: str = "") -> Dict[str, Any]:
     bilan = synchroniser(conn, trouves, reussies, _iso(now))
     bilan["erreurs"] = erreurs
     return bilan
+
+
+CODES_SAISIES = ("prod.dossier_fictif", "prod.calage_signale", "prod.calage_non_reporte")
+
+
+def rafraichir_saisies(conn) -> Dict[str, Any]:
+    """Recalcule tout de suite les écarts de saisie, sans attendre le passage
+    des 30 minutes : un signalement fait à la clôture doit allumer la pastille
+    maintenant, et un écart corrigé dans MyProd l'éteindre aussitôt."""
+    if "coherence_ecarts" not in _tables(conn):
+        return {}
+    reg = charger_reglages(conn)
+    actives = reg["regles"]
+    codes = [c for c in CODES_SAISIES if actives.get(c)]
+    depuis = _iso(maintenant() - timedelta(days=int(reg["seuils"]["fenetre_jours"])))
+    trouves = [e for e in ctrl_prod_saisies(conn, reg["seuils"], depuis=depuis) if e["regle"] in codes]
+    return synchroniser(conn, trouves, set(CODES_SAISIES), _iso(maintenant()))
 
 
 def synchroniser(conn, trouves: List[dict], reussies: set, horodatage: str) -> Dict[str, int]:

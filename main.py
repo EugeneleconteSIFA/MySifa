@@ -49,6 +49,7 @@ from app.routers.expe_emails import router as expe_emails_router
 from app.routers.expe_carburant import router as expe_carburant_router
 from app.routers.settings import router as settings_api_router
 from app.routers.coherence import router as coherence_router
+from app.routers.prod_ecarts import router as prod_ecarts_router
 from app.routers.clients import router as clients_api_router
 from app.web.settings_page import router as settings_page_router
 from app.routers.fabrication import router as fabrication_api_router
@@ -787,6 +788,7 @@ app.include_router(expe_pilotage_router, prefix="/api/expe")
 app.include_router(expe_emails_router, prefix="/api/expe")
 app.include_router(expe_carburant_router, prefix="/api/expe")
 app.include_router(coherence_router)
+app.include_router(prod_ecarts_router)
 app.include_router(settings_api_router)
 app.include_router(clients_api_router)
 app.include_router(settings_page_router)

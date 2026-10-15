@@ -190,6 +190,8 @@
 
     // Mappings OF en attente / dossiers sans OF (étape 2l)
     pendingOfCount: 0,
+    prodEcartsCount: 0,   // écarts de saisie à traiter (pastilles Production / Erreurs)
+    prodEcarts: null,
     pendingOfMappings: [],
     pendingOfAmbigus: [],
     pendingOfSansOf: [],
@@ -7268,6 +7270,8 @@ function renderHist(){
   if(!d)return h('div',{className:'card-empty'},'Importez un fichier XLSX pour voir les données');
   if(d.blocked)return h('div',{className:'card'},h('div',{className:'card-blocked'},h('div',{className:'cb-icon'},iconEl('lock',32)),h('div',{className:'cb-msg'},d.message)));
   const sc=d.severity_counts||{};const seCount=d.saisie_errors_count||0;const parts=[];
+  // Ce qu'il faut traiter d'abord : les écarts à valider ou corriger.
+  const blocEcarts=renderProdEcarts(); if(blocEcarts) parts.push(blocEcarts);
   if(d.sanity_by_operateur){
     const ops=Object.keys(d.sanity_by_operateur||{});
     ops.forEach(op=>parts.push(renderSanity(d.sanity_by_operateur[op], opName(op))));
@@ -9164,6 +9168,221 @@ async function openFictifReassignModal(){
   const modal=h('div',{className:'add-row-modal',onClick:e=>{if(e.target===modal)closeModal();}},form);
   document.getElementById('root').appendChild(modal);
   if(sources.length===1) fromSel.value=sources[0].no_dossier;
+}
+
+// ── Écarts de saisie à traiter (Erreurs & Qualité) ──────────────
+// La file vient de Cohérence, famille prod (/api/prod/ecarts). Chaque écart
+// se valide (il est normal) ou se corrige : rattacher un fictif, reporter des
+// heures de calage, ou ouvrir la saisie concernée. Le même nombre allume la
+// pastille de l'onglet Production, du sous-onglet et de la tuile du portail.
+async function loadProdEcartsCount(){
+  if(!isAdmin(S.user)) return;
+  try{
+    const d = await api('/api/prod/ecarts/count');
+    set({prodEcartsCount: Number(d && d.n || 0)});
+  }catch(e){}
+}
+
+async function loadProdEcarts(){
+  if(!isAdmin(S.user)) return;
+  try{
+    const d = await api('/api/prod/ecarts');
+    S.prodEcarts = (d && d.ecarts) || [];
+    S.prodEcartsCount = S.prodEcarts.length;
+  }catch(e){ S.prodEcarts = []; }
+}
+
+async function _ecartsApresAction(msg){
+  closeModal();
+  toast(msg, 'success');
+  await loadProdEcarts();
+  if(S.subPage === 'saisies') { try{ await loadSaisies(); }catch(_){} }
+  render();
+}
+
+function _ecartModal(titre, ...corps){
+  try{ const m=document.querySelector('.add-row-modal'); if(m) m.remove(); }catch(e){}
+  const form=h('div',{className:'add-row-form',style:{minWidth:'min(560px,92vw)',maxWidth:'680px'}},
+    h('button',{type:'button',className:'add-row-close',title:'Fermer',onClick:(e)=>{e.stopPropagation();closeModal();}},'×'),
+    h('h3',{style:{marginBottom:'12px'}},titre),
+    ...corps);
+  const modal=h('div',{className:'add-row-modal',onClick:e=>{if(e.target===modal)closeModal();}},form);
+  document.getElementById('root').appendChild(modal);
+  return form;
+}
+
+function _ecartBoutons(onOk, libelle){
+  return h('div',{style:{display:'flex',gap:'8px',justifyContent:'flex-end',marginTop:'18px'}},
+    h('button',{type:'button',className:'btn-ghost',style:{background:'var(--bg)'},onClick:()=>closeModal()},'Annuler'),
+    h('button',{type:'button',className:'btn-sm',
+      style:{background:'var(--accent)',color:'white',border:'none',padding:'8px 16px',borderRadius:'8px',fontWeight:'700'},
+      onClick:onOk}, libelle));
+}
+
+function openValiderEcart(e){
+  const txt=h('textarea',{rows:'2',placeholder:'Pourquoi c\'est normal (facultatif)',
+    style:{width:'100%',padding:'10px 12px',borderRadius:'8px',border:'1px solid var(--border)',
+           background:'var(--bg)',color:'var(--text)',fontFamily:'inherit',fontSize:'13px'}});
+  _ecartModal('Valider l\'écart',
+    h('p',{style:{fontSize:'13px',color:'var(--text2)',margin:'0 0 10px'}},e.titre+' — '+(e.detail||'')),
+    txt,
+    _ecartBoutons(async()=>{
+      try{
+        await api('/api/prod/ecarts/'+e.id+'/valider',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({commentaire:txt.value||''})});
+        await _ecartsApresAction('Écart validé.');
+      }catch(err){ toast(err.message||'Validation impossible','error'); }
+    }, 'Valider'));
+}
+
+function _heureFr(iso){
+  if(!iso) return '—';
+  const s=String(iso); return s.slice(8,10)+'/'+s.slice(5,7)+' '+s.slice(11,16);
+}
+
+async function openCorrigerEcart(e){
+  let ap;
+  try{ ap = await api('/api/prod/ecarts/'+e.id+'/correction'); }
+  catch(err){ toast(err.message||'Correction indisponible','error'); return; }
+  const corriger = async(corps, msg)=>{
+    try{
+      await api('/api/prod/ecarts/'+e.id+'/corriger',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(corps||{})});
+      await _ecartsApresAction(msg);
+    }catch(err){ toast(err.message||'Correction impossible','error'); }
+  };
+
+  if(ap.action === 'rattacher'){
+    let choix = (ap.candidats||[]).length === 1 ? ap.candidats[0].no_dossier : '';
+    const inp=h('input',{type:'text',className:'form-sel',style:{width:'100%',marginTop:'8px'},
+      placeholder:'Autre dossier (référence ou OF)…', value: choix});
+    inp.addEventListener('input',()=>{ choix = inp.value.trim(); });
+    const liste = (ap.candidats||[]).map(c=>h('button',{type:'button',
+        className:'btn-ghost',style:{display:'block',width:'100%',textAlign:'left',marginBottom:'6px',
+          background:'var(--bg)',border:'1px solid var(--border)',padding:'8px 12px',borderRadius:'8px'},
+        onClick:()=>{ choix=c.no_dossier; inp.value=c.no_dossier; }},
+      h('b',null,c.no_dossier), ' ', h('span',{style:{color:'var(--muted)'}},
+        [c.client, c.statut].filter(Boolean).join(' · '))));
+    _ecartModal('Rattacher le dossier hors planning',
+      h('p',{style:{fontSize:'13px',color:'var(--text2)',margin:'0 0 10px'}},e.detail||''),
+      liste.length ? h('div',null,h('div',{style:{fontSize:'11px',fontWeight:'700',textTransform:'uppercase',
+        letterSpacing:'.5px',color:'var(--muted)',marginBottom:'6px'}},'Dossiers du même OF'),...liste)
+        : h('p',{style:{fontSize:'13px',color:'var(--muted)'}},'Aucun dossier ne porte cet OF : indiquez le dossier.'),
+      inp,
+      _ecartBoutons(()=>{
+        if(!choix){ toast('Choisissez le dossier de rattachement.','error'); return; }
+        corriger({to_no_dossier:choix}, 'Saisies rattachées à '+choix+'.');
+      }, 'Rattacher'));
+    return;
+  }
+
+  if(ap.action === 'reappliquer'){
+    if(ap.erreur){ toast(ap.erreur,'error'); return; }
+    const ch = (ap.apercu && ap.apercu.changements) || [];
+    _ecartModal('Reporter les heures du dossier de prod',
+      h('p',{style:{fontSize:'13px',color:'var(--text2)',margin:'0 0 10px'}},e.detail||''),
+      !ch.length ? h('p',{style:{fontSize:'13px',fontWeight:'700',margin:'0'}},
+        'Les saisies sont déjà à ces heures : il n\'y a rien à déplacer. « Reporter » clôt l\'écart.') :
+      h('table',{className:'saisies-table',style:{width:'100%',fontSize:'13px'}},
+        h('thead',null,h('tr',null,h('th',null,'Saisie'),h('th',null,'Avant'),h('th',null,'Après'))),
+        h('tbody',null,...ch.map(c=>h('tr',null,
+          h('td',null,c.operation||''),
+          h('td',{style:{color:'var(--muted)'}},_heureFr(c.avant)),
+          h('td',{style:{fontWeight:'700'}},_heureFr(c.apres)))))),
+      h('p',{style:{fontSize:'12px',color:'var(--muted)',margin:'10px 0 0'}},
+        'Les saisies enjambées changent de côté du calage ; aucune n\'est supprimée. Chaque modification est tracée.'),
+      _ecartBoutons(()=>corriger({}, 'Heures reportées sur les saisies.'), 'Reporter ces heures'));
+    return;
+  }
+
+  if(ap.action === 'heures'){
+    const d = ap.declaration || {};
+    // Date + heure en 24 h tapée au clavier : le champ date-heure du
+    // navigateur passe en AM/PM selon la langue du poste.
+    const champ = (libelle, iso, mesure)=>{
+      const st={padding:'8px 10px',borderRadius:'8px',border:'1px solid var(--border)',
+                background:'var(--bg)',color:'var(--text)',fontFamily:'inherit',fontSize:'14px'};
+      const jour=h('input',{type:'date',value:iso?String(iso).slice(0,10):'',style:st});
+      const heure=h('input',{type:'text',inputmode:'numeric',maxlength:'5',placeholder:'HH:MM',
+        value:iso?String(iso).slice(11,16):'',style:Object.assign({},st,{width:'84px',textAlign:'center',
+          fontWeight:'700',fontVariantNumeric:'tabular-nums'})});
+      heure.addEventListener('input',()=>{
+        const d=heure.value.replace(/\D/g,'').slice(0,4);
+        heure.value = d.length>2 ? d.slice(0,2)+':'+d.slice(2) : d;
+      });
+      return {jour, heure, el:h('div',{style:{display:'grid',gridTemplateColumns:'120px 1fr 84px 120px',gap:'10px',
+          alignItems:'center',marginBottom:'8px'}},
+        h('div',{style:{fontSize:'11px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.5px',
+          color:'var(--text2)'}},libelle), jour, heure,
+        h('div',{style:{fontSize:'12px',color:'var(--muted)'}},'saisies : '+_heureFr(mesure)))};
+    };
+    const a=champ('Début calage', d.debut_calage_declare, d.debut_calage_mesure);
+    const b=champ('Fin calage', d.fin_calage_declare, d.fin_calage_mesure);
+    const c=champ('Fin de prod', d.fin_prod_declare, d.fin_prod_mesure);
+    _ecartModal('Corriger les heures du dossier '+(d.no_dossier||''),
+      d.signalement ? h('div',{style:{padding:'10px 12px',borderRadius:'8px',marginBottom:'12px',
+          border:'1px solid var(--warn)',background:'rgba(251,191,36,.10)',fontSize:'13px'}},
+        h('b',null,(d.declare_par||'Le conducteur')+' : '),'« '+d.signalement+' »') : null,
+      a.el, b.el, c.el,
+      _ecartBoutons(()=>{
+        const v=x=>(x.jour.value && /^([01]\d|2[0-3]):[0-5]\d$/.test(x.heure.value))
+          ? x.jour.value+'T'+x.heure.value+':00' : '';
+        if(!v(a) || !v(b) || !v(c)){ toast('Heure invalide — format HH:MM, de 00:00 à 23:59.','error'); return; }
+        corriger({debut_calage:v(a), fin_calage:v(b), fin_prod:v(c)}, 'Heures corrigées et reportées.');
+      }, 'Corriger et reporter'));
+    return;
+  }
+
+  if(ap.action === 'saisie'){
+    if(!ap.saisie){ toast('Saisie concernée introuvable — ouvrez le dossier dans Saisies.','error'); return; }
+    openEditModal(ap.saisie);
+    toast('Corrigez la saisie, puis validez l\'écart.','info');
+    return;
+  }
+
+  if(ap.lien) window.location.href = ap.lien;
+}
+
+function renderProdEcarts(){
+  if(!isAdmin(S.user)) return null;
+  const liste = S.prodEcarts;
+  if(liste == null){
+    // Arrivée directe sur /prod#erreurs : aucun chemin de démarrage n'a encore
+    // chargé la liste, le bloc la demande lui-même (une seule fois).
+    if(!S._prodEcartsEnCours){
+      S._prodEcartsEnCours = true;
+      loadProdEcarts().then(()=>{ S._prodEcartsEnCours = false; render(); });
+    }
+    return h('div',{className:'card',style:{marginBottom:'16px'}},
+      h('div',{className:'card-empty'},'Chargement des écarts à traiter…'));
+  }
+  const couleur = g => g==='haute' ? 'var(--danger)' : g==='moyenne' ? 'var(--warn)' : 'var(--muted)';
+  const libAction = {rattacher:'Rattacher', reappliquer:'Reporter les heures', heures:'Corriger les heures',
+                     saisie:'Ouvrir la saisie', lien:'Ouvrir'};
+  const lignes = liste.map(e=>h('div',{style:{display:'grid',gridTemplateColumns:'10px 1fr auto',gap:'12px',
+      alignItems:'center',padding:'10px 4px',borderBottom:'1px solid var(--border)'}},
+    h('span',{style:{width:'10px',height:'10px',borderRadius:'50%',background:couleur(e.gravite)},
+      title:'Gravité '+(e.gravite||'')}),
+    h('div',{style:{minWidth:'0'}},
+      h('div',{style:{fontSize:'13px',fontWeight:'700'}},
+        e.regle_titre, h('span',{style:{fontWeight:'500',color:'var(--text2)'}},' · '+e.titre)),
+      h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'2px'}},e.detail||'')),
+    h('div',{style:{display:'flex',gap:'6px',flexShrink:'0'}},
+      h('button',{type:'button',className:'btn-ghost',
+        style:{background:'var(--bg)',border:'1px solid var(--border)',padding:'6px 12px',borderRadius:'8px',fontWeight:'700'},
+        onClick:()=>openValiderEcart(e)},iconEl('check',13),' Valider'),
+      h('button',{type:'button',className:'btn-sm',
+        style:{background:'var(--accent)',color:'white',border:'none',padding:'6px 12px',borderRadius:'8px',fontWeight:'700'},
+        onClick:()=>openCorrigerEcart(e)},iconEl('pencil',13),' '+(libAction[e.action]||'Corriger')))));
+  // Liste de travail : volontairement pas capturable en widget (pas de
+  // data-bloc), la pastille du portail porte déjà le nombre.
+  return h('div',{className:'card',style:{marginBottom:'16px'}},
+    h('div',{className:'card-header'},
+      h('h3',null,iconEl('alert-triangle',15),' À traiter'),
+      h('span',{className:'nav-tab-badge',style:{marginLeft:'8px'}},String(liste.length))),
+    liste.length
+      ? h('div',{style:{padding:'0 14px 6px'}},...lignes)
+      : h('div',{className:'card-empty'},'Rien à traiter : aucune saisie à valider ou corriger.'));
 }
 
 // ── Saisies : durées et métrages ─────────────────────────────────
@@ -11769,10 +11988,14 @@ function renderProdPage(){
         else{stopMachineStatusPolling();}
         if(t.key==='saisies'&&!S.saisies)  await loadSaisies();
         if(t.key==='erreurs'&&!S.historique) await loadHist();
+        if(t.key==='erreurs') await loadProdEcarts();
         if(t.key==='retour'&&!S.retourProd) await loadRetourProd();
         render();
       }
-    }, iconEl(t.icon,14),' '+t.label))
+    }, iconEl(t.icon,14),' '+t.label,
+       (t.key==='erreurs' && Number(S.prodEcartsCount||0) > 0)
+         ? h('span',{className:'nav-tab-badge',title:'Écarts de saisie à traiter'},String(S.prodEcartsCount))
+         : null))
   );
   let content;
   if(subPage==='saisies')  content = renderSaisiesWithImport();
@@ -12894,6 +13117,7 @@ function renderProdKpis(){
         }
         // Badge "Mappings OF à valider" dans la sidebar
         try{ if(canAccessOfTab()) loadPendingOfCount(); }catch(e){}
+        try{ loadProdEcartsCount(); }catch(e){}
       }catch(e){
         console.warn('[mysifa_prod_core] checkAuth load erreur:', e && e.message);
       }
@@ -12993,6 +13217,7 @@ function renderProdKpis(){
         }
         // Badge "Mappings OF à valider" dans la sidebar
         try{ if(canAccessOfTab()) loadPendingOfCount(); }catch(e){}
+        try{ loadProdEcartsCount(); }catch(e){}
         render();
       }catch(e){
         console.warn('[mysifa_prod_core] doLogin load erreur:', e && e.message);
@@ -13032,6 +13257,7 @@ function renderProdKpis(){
           await loadSaisies();
         }else if(S.subPage === 'erreurs'){
           await loadHist();
+          await loadProdEcarts();
         }
       }
       // Sous-pages "héritées" (compat ?page=xxx)
@@ -13165,7 +13391,7 @@ function renderProdKpis(){
       ? (canPlanningNav(S.user) ? [{key: '_planning', label: 'Planning', icon: 'calendar'}] : [])
       : [
           ...(canPlanningNav(S.user) ? [{key: '_planning', label: 'Planning', icon: 'calendar'}] : []),
-          {key: 'production', label: 'Production', icon: 'wrench'},
+          {key: 'production', label: 'Production', icon: 'wrench', withEcartsBadge: true},
           {key: 'traceabilite', label: 'Tra\u00e7abilit\u00e9', icon: 'layers'},
           ...(admin ? [{key: 'rentabilite', label: 'Rentabilit\u00e9', icon: 'trending-up'}] : []),
           // Section : les OF, leurs fiches et leurs scans vivent ensemble.
@@ -13203,6 +13429,15 @@ function renderProdKpis(){
         });
         btn.appendChild(iconEl(i.icon, 15));
         btn.appendChild(document.createTextNode('  ' + i.label));
+        if(i.withEcartsBadge){
+          const n = Number(S.prodEcartsCount || 0);
+          if(n > 0){
+            btn.appendChild(h('span', {
+              style: 'margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--danger);color:white;font-size:10px;font-weight:700;line-height:1.5;flex-shrink:0',
+              title: n + ' \u00e9cart' + (n > 1 ? 's' : '') + ' de saisie \u00e0 traiter',
+            }, String(n)));
+          }
+        }
         if(i.withPendingOfBadge){
           const cnt = Number(S.pendingOfCount || 0);
           if(cnt > 0){

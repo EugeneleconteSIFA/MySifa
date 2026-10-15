@@ -351,6 +351,27 @@ class TestCalageCloture(unittest.TestCase):
         self.assertIsNone(g["metres"])
         self.assertEqual(g["plages_sans_releve"], 1)
 
+    # ── 7 bis. Fin de prod à la minute face à une saisie à la seconde ────
+    def test_6b_fin_prod_meme_minute(self):
+        from database import get_db
+        from app.services import calage_cloture as cc
+
+        self._saisie("01", 0)
+        self._saisie("02", 1)
+        self._saisie("03", 20)
+        s = self._saisie("61", 30)  # nettoyage cliqué à 30 min 35 s
+        with get_db() as conn:
+            conn.execute("UPDATE production_data SET date_operation=? WHERE id=?",
+                         (_iso(self.t0 + timedelta(minutes=30, seconds=35)), s))
+            conn.commit()
+            heure, motif = cc.heure_fin_prod(
+                conn, DOSSIER, MACHINE_NOM,
+                {"debut_calage": self.t0, "fin_calage": self.t0 + timedelta(minutes=10),
+                 "fin_prod": self.t0 + timedelta(minutes=30)},
+                datetime.now())
+        self.assertIsNone(motif)
+        self.assertEqual(heure, _iso(self.t0 + timedelta(minutes=30, seconds=36)))
+
     # ── 8. Compteurs proposés et signalement d'un chiffrage incohérent ───
     def test_7_compteurs_et_signalement(self):
         from database import get_db
