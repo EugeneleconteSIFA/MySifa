@@ -91,6 +91,17 @@ en `onClick` (l'événement serait pris pour `sansAdresse`). La clé de
 navigation ne porte pas l'id : passer d'un détail au suivant remplace.
 Fermer ou rouvrir une fenêtre au Retour ne recharge pas la page.
 
+### Où vit le code
+
+Une page générée en chaîne Python géante ne s'alourdit pas de son code
+d'adresse : il vit dans `static/<page>_url.js` (`static/stock_url.js`,
+`static/planning_url.js`), inclus juste après `mysifa_url.js` et AVANT le
+script principal, avec un `?v=` figé. Le fichier ne fait que déclarer des
+fonctions et s'abonner à `surRetour` ; il ne lit `S` et les fonctions de la
+page qu'à l'appel (scripts classiques : les `let`/`const` de premier niveau
+partagent la portée globale, donc aucun nom ne doit y être déclaré deux fois).
+MyProd garde le sien dans `mysifa_prod_core.js`, déjà un fichier statique.
+
 ### Page sans rendu central (MyStock)
 
 Quand chaque vue se redessine elle-même, appeler la synchro depuis chaque
