@@ -907,6 +907,15 @@ def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
     minutes_calage = _minutes_de(temps, CAT_CALAGE)
     minutes_arret = sum(_minutes_de(temps, c) for c in CATEGORIES_COUTEUSES)
 
+    # Calage et gâche : heures déclarées à la clôture, mètres relevés au
+    # compteur, chiffrage du devis. Comme les écrits, ils appartiennent au
+    # dossier et non à la période : le temps passé, lui, suit la fenêtre.
+    try:
+        from app.services import calage_cloture
+        calage = calage_cloture.bilan(conn, no_dossier, minutes_calage)
+    except Exception:
+        calage = None
+
     cr = {
         "no_dossier": no_dossier,
         "existe": True,
@@ -942,6 +951,7 @@ def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
         },
         "seuils": seuils,
         "non_conformites": ncs,
+        "calage": calage,
     }
     cr["frise"] = frise_dossier(conn, no_dossier)
     cr["vigilance"] = _vigilance(cr, minutes_arret)
@@ -994,6 +1004,15 @@ def _vigilance(cr: Dict[str, Any], minutes_arret: float) -> List[Dict[str, str]]
             "cle": "metrage_incomplet",
             "texte": (f"{cr['metrage']['fins_sans_debut']} cloture sans compteur de debut : "
                       "le metrage affiche est incomplet."),
+        })
+
+    decl = (cr.get("calage") or {}).get("declaration") or {}
+    if decl.get("motifs_non_appliques"):
+        points.append({
+            "cle": "calage_non_reporte",
+            "texte": ("Heures de calage declarees a la cloture non reportees sur les saisies — "
+                      + " ".join(decl["motifs_non_appliques"])
+                      + " A corriger dans Saisies."),
         })
 
     total_min = cr["temps"]["total_minutes"]
@@ -1114,6 +1133,10 @@ def retour_atelier(conn, machine: Any, debut: str, fin: str,
     minutes_arret = sum(sum(_minutes_de(c["temps"], k) for k in CATEGORIES_COUTEUSES) for c in crs)
     minutes_total = sum(c["temps"]["total_minutes"] for c in crs)
     metrage = sum(c["metrage"]["reel"] for c in crs)
+    # Gâche de calage : seuls les dossiers dont le compteur a été relevé en fin
+    # de calage comptent, et l'écran dit combien ils sont sur le total.
+    gaches = [((c.get("calage") or {}).get("gache") or {}).get("metres") for c in crs]
+    gaches = [g for g in gaches if g is not None]
 
     conducteurs = sorted({n for c in crs for n in c["identite"]["conducteurs"]})
 
@@ -1222,6 +1245,8 @@ def retour_atelier(conn, machine: Any, debut: str, fin: str,
             "metrage": round(metrage, 1),
             "vitesse_m_min": round(metrage / minutes_prod, 1) if minutes_prod > 0 else None,
             "part_arret_pct": round(minutes_arret / minutes_total * 100.0, 1) if minutes_total > 0 else 0.0,
+            "gache_calage_m": round(sum(gaches), 1) if gaches else None,
+            "dossiers_avec_gache": len(gaches),
         },
         "references": refs,
         "arrets_couteux": couteux,

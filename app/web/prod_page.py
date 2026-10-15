@@ -108,7 +108,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <script src="/static/mysifa_user_chip.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
-<script src="/static/mysifa_retour_prod.js?v=__V_LABEL__-reu14"></script>
+<script src="/static/mysifa_retour_prod.js?v=__V_LABEL__-reu15"></script>
 <!-- Points de production : monte par l'onglet Reunions de MyProd. Charge
      AVANT le coeur, qui le cherche sur window au moment du rendu. -->
 <script src="/static/mysifa_reunions.js?v=__V_LABEL__-reu16"></script>
@@ -128,7 +128,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <script src="/static/mysifa_bobine_edit.js?v=1.0"></script>
 <!-- Export PDF des saisies par operateur et par session (appele par le core) -->
 <script src="/static/mysifa_saisies_pdf.js?v=1"></script>
-<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent10-sais4-bob5-msb1-san3-mpm2-ton1"></script>
+<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent11-sais4-bob5-msb1-san3-mpm2-ton1"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>
 <!-- v2.3.42 : viewer partagé du détail d'un ack d'alerte (identique à Maintenance) -->

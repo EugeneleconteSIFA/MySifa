@@ -1002,6 +1002,10 @@ CODES_CALAGE: frozenset[str] = frozenset({
     "02", "10", "11", "12", "58", "59", "60", "74", "75"
 })
 
+# Calage déclaré à la clôture : au-delà de ce multiple de la médiane de la
+# machine, l'écran demande de confirmer les heures recopiées du dossier papier.
+CALAGE_ALERTE_FACTEUR = float(os.getenv("CALAGE_ALERTE_FACTEUR", "3"))
+
 # ─── Sanity score (qualité de saisie MyProd) ─────────────────────
 # Journée opérateur (86 → 87) plus courte que ce seuil : le départ demande un
 # motif, et la journée n'est pénalisée que si le motif n'a pas été donné.
