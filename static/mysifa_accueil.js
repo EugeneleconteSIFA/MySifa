@@ -148,12 +148,12 @@
       "  #mysifa-accueil{position:fixed;left:0;top:var(--mac-top,0px);bottom:96px;width:var(--mac-w);z-index:110;padding:16px 0 0 16px;display:flex;flex-direction:column}",
       "  body.mysifa-accueil-on #root{margin-left:var(--mac-w)}",
       "  #mysifa-accueil.repliee{width:56px}",
-      // Languette au bord droit, à mi-hauteur (demande du 15/10/2026) : le
-      // geste attendu pour replier une colonne. Elle reste sur la bande
-      // repliée pour la rouvrir. Le bouton tableau ne sert plus qu'une fois
-      // repliée, comme repère de ce que la bande contient.
-      "  .mac-languette{position:absolute;top:50%;right:-12px;transform:translateY(-50%);z-index:2;display:flex;align-items:center;justify-content:center;",
-      "    width:22px;height:48px;padding:0;border-radius:0 10px 10px 0;cursor:pointer;background:var(--card,#111827);color:var(--muted,#94a3b8);",
+      // Languette au bord droit, en haut, à hauteur de l'en-tête (demande du
+      // 15/10/2026 ; à mi-hauteur, elle flottait seule à côté de la bande
+      // repliée). Elle y reste pour la rouvrir. Le bouton tableau ne sert plus
+      // qu'une fois repliée, comme repère de ce que la bande contient.
+      "  .mac-languette{position:absolute;top:16px;right:-12px;z-index:2;display:flex;align-items:center;justify-content:center;",
+      "    width:22px;height:30px;padding:0;border-radius:0 10px 10px 0;cursor:pointer;background:var(--card,#111827);color:var(--muted,#94a3b8);",
       "    border:1px solid var(--border,#1e293b);border-left:0;box-shadow:2px 0 6px rgba(0,0,0,.12)}",
       "  .mac-languette:hover,.mac-languette:focus-visible{color:var(--accent,#22d3ee);border-color:var(--accent,#22d3ee)}",
       "  #mysifa-accueil:not(.repliee) .mac-repli{display:none}",
