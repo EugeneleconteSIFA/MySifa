@@ -324,6 +324,31 @@ OUTILS: list[dict[str, Any]] = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "mysifa_ecarts",
+        "title": "Écarts de cohérence",
+        "description": "Ce qui ne colle pas entre deux sources, relevé toutes les 30 minutes par les "
+                       "contrôleurs de cohérence : BL RVGI sans départ MyExpé, article livré sans "
+                       "sortie de stock, quantité produite loin de l'OF, OF différent de sa fiche "
+                       "technique, dossier en retard sur sa livraison, saisie restée ouverte… "
+                       "Chaque écart porte ses chiffres (`detail`, `donnees`). Pour expliquer un "
+                       "écart, croiser ensuite avec mysifa_dossier, mysifa_sql ou les écrans. "
+                       "Par défaut : les écarts ouverts, les plus graves d'abord.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "famille": {"type": "string", "enum": ["prod", "flux", "documents"],
+                            "description": "prod = production et planning ; flux = BL RVGI, départs, "
+                                           "sorties de stock ; documents = OF, fiches techniques."},
+                "statut": {"type": "string", "enum": ["ouvert", "explique", "resolu", "tous"],
+                           "default": "ouvert"},
+                "objet": {"type": "string",
+                          "description": "Fragment d'un dossier, d'un BL ou d'une référence article."},
+                "limite": {"type": "integer", "minimum": 1, "maximum": 300, "default": 100},
+            },
+            "additionalProperties": False,
+        },
+    },
 ]
 
 
@@ -360,6 +385,11 @@ def _executer_outil(nom: str, args: dict[str, Any]) -> Any:
         return mcp_metier.anomalies(
             args.get("du"), args.get("au"), args.get("machine"),
             int(args.get("limite") or 50),
+        )
+    if nom == "mysifa_ecarts":
+        return mcp_metier.ecarts(
+            args.get("famille"), args.get("statut") or "ouvert", args.get("objet"),
+            int(args.get("limite") or 100),
         )
     raise mcp_data.ErreurMCP(f"Outil inconnu : « {nom} ».")
 
