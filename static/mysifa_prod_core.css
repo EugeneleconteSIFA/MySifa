@@ -1278,7 +1278,7 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
 .rent-dossiers .rent-ligne{
   display:grid;align-items:center;gap:14px;
   grid-template-columns:minmax(200px,2.4fr) minmax(90px,.9fr) 92px 82px 92px
-                        minmax(96px,auto) 18px}
+                        minmax(200px,auto) 18px}
 .rent-tete{padding:8px 18px;border-bottom:1px solid var(--border);
   background:var(--bg)}
 .rd-th{display:inline-flex;align-items:center;gap:4px;background:none;border:0;
@@ -1298,6 +1298,29 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
   cursor:pointer;transition:background .15s,border-color .15s}
 .rent-ligne:hover{background:var(--bg)}
 .rent-ligne.is-open{background:var(--accent-bg);border-left-color:var(--accent)}
+/* Le filet gauche dit l'état du devis, comme les blocs du Pilotage : la page
+   se lit en couleur avant de se lire en texte (retour du 15/10/2026). */
+.rent-ligne.rent-ligne-rouge{border-left-color:var(--danger)}
+.rent-ligne.rent-ligne-orange{border-left-color:var(--warn)}
+.rent-ligne.rent-ligne-vert{border-left-color:var(--success)}
+.rent-ligne.is-open{border-left-color:var(--accent)}
+.rent-devis-cell{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.rent-devis-chip{display:inline-flex;align-items:center;gap:6px;max-width:190px;
+  font-family:inherit;font-size:12px;font-weight:600;padding:5px 11px;
+  border-radius:999px;border:1px solid var(--border);background:var(--bg);
+  color:var(--text2);cursor:pointer;transition:filter .15s,border-color .15s}
+.rent-devis-chip:hover{filter:brightness(.97);border-color:var(--accent)}
+.rent-devis-chip-nom{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rent-devis-chip.is-rouge{color:var(--danger);border-color:var(--danger);
+  background:var(--danger-bg)}
+.rent-devis-chip.is-orange{color:var(--warn);border-color:var(--warn);
+  background:var(--warn-bg)}
+.rent-devis-chip.is-vert{color:var(--success);border-color:var(--success);
+  background:var(--success-bg)}
+.rent-devis-ok{display:inline-flex;align-items:center;justify-content:center;
+  width:28px;height:28px;border-radius:999px;border:1px solid var(--success);
+  background:var(--card);color:var(--success);cursor:pointer;flex-shrink:0}
+.rent-devis-ok:hover{background:var(--success-bg)}
 .rd-dossier{min-width:0}
 .rent-ligne-titre{font-size:13px;font-weight:700;color:var(--text);
   line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1400,6 +1423,10 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
    que le DOM les dit visibles. `flex-wrap:wrap` est le second garde-fou :
    sur un ecran etroit ils passent a la ligne au lieu de disparaitre. */
 .rent-table td.rent-actions-td{text-align:right;min-width:196px}
+/* Trois boutons sur un devis à vérifier (Valider, Modifier, Supprimer) : la
+   colonne s'élargit pour les garder sur une ligne, en police d'interface. */
+.rent-table td.rent-actions-td{min-width:300px;font-family:inherit}
+.rent-table td.rent-actions-td .rent-actions{flex-wrap:nowrap}
 
 .rent-methode{font-size:10px;font-weight:600;color:var(--text2);
   background:var(--bg);border:1px solid var(--border);padding:2px 8px;
@@ -1627,9 +1654,11 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
 
 /* ── Fenêtre de rattachement ─────────────────────────────────────── */
 .rent-lier-modal{max-width:640px}
-.rent-lier-etat{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  font-size:12px;font-weight:600;padding:9px 18px;
-  border-bottom:1px solid var(--border)}
+.rent-lier-etat{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  font-size:13px;font-weight:600;padding:12px 16px;margin:4px 0 18px;
+  border-radius:10px}
+.rent-lier-etat-lib{flex:1;min-width:180px}
+.rent-lier-etat .rent-lier-actions{display:flex;gap:8px;margin:0}
 .rent-lier-etat-vert{background:var(--success-bg);color:var(--success)}
 .rent-lier-etat-orange{background:var(--warn-bg);color:var(--warn)}
 .rent-lier-etat-rouge{background:var(--danger-bg);color:var(--danger)}
@@ -1777,3 +1806,7 @@ body.recopie-en-cours,body.recopie-en-cours *{cursor:ns-resize !important;user-s
   max-height:min(400px,50vh)}
 .rent-panneau-prop{margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .rent-pastille-propose{color:var(--warn);border-color:var(--warn)}
+
+/* Liste des devis allégée : le nom du client lisible, le fichier en dessous. */
+.rent-devis-client{display:flex;align-items:center;gap:8px}
+.rent-devis-nom{font-size:13px;font-weight:700;color:var(--text)}
