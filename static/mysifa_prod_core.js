@@ -449,6 +449,7 @@
       'file': '<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>',
       'play': '<polygon points="5 3 19 12 5 21 5 3"/>',
       'check-circle': '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+      'check': '<polyline points="20 6 9 17 4 12"/>',
       'x': '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
       'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
       'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
@@ -5761,28 +5762,9 @@ async function ouvrirRattachementModal(entryId){
 
   const relancer = async () => { fermerRattachementModal(); await ouvrirRattachementModal(entryId); };
 
-  const boite = h('div',{className:'contact-modal rent-lier-modal'},
-    h('div',{className:'contact-modal-head'},
-      h('div',null,
-        h('h3',{style:{margin:'0 0 3px'}}, entree.client || '(client non renseigné)'),
-        h('div',{style:{fontSize:'11px',color:'var(--muted)'}},
-          [entree.reference, entree.machine_nom, rentFmtFormat(entree) + ' mm']
-            .filter(Boolean).join(' · '))
-      ),
-      h('button',{className:'contact-close-btn',title:'Fermer',onClick:fermerRattachementModal},'✕')
-    ),
-    h('div',{className:'rent-lier-etat rent-lier-etat-' + etat, title:lien.motif || ''},
-      h('span',{className:'rent-point rent-point-' + etat}),
-      h('span',null, rentLibelleEtat(lien, etat))
-    ),
-    corps
-  );
-  boite.addEventListener('click', e => e.stopPropagation());
-  overlay.appendChild(boite);
-  document.body.appendChild(overlay);
-
-  // Une proposition se juge sur son motif : la confirmer sans l'avoir lu
-  // reviendrait à valider le moteur, pas le rattachement.
+  /* L'état et ce qu'on peut en faire tiennent sur UNE bande : Confirmer et
+     Rejeter à droite du libellé. Posés dessous, ils collaient au bandeau et
+     se lisaient comme une seconde rangée sans rapport (retour du 15/10/2026). */
   const actionsHaut = [];
   if(etat === 'orange'){
     actionsHaut.push(h('button',{type:'button',className:'btn-sm',onClick:async()=>{
@@ -5796,6 +5778,27 @@ async function ouvrirRattachementModal(entryId){
       await rentRejeterLien(entryId); await relancer();
     }}, 'Détacher'));
   }
+  const bandeau = h('div',{className:'rent-lier-etat rent-lier-etat-' + etat, title:lien.motif || ''},
+    h('span',{className:'rent-point rent-point-' + etat}),
+    h('span',{className:'rent-lier-etat-lib'}, rentLibelleEtat(lien, etat)),
+    actionsHaut.length ? h('div',{className:'rent-lier-actions'}, ...actionsHaut) : null);
+
+  const boite = h('div',{className:'contact-modal rent-lier-modal'},
+    h('div',{className:'contact-modal-head'},
+      h('div',null,
+        h('h3',{style:{margin:'0 0 3px'}}, entree.client || '(client non renseigné)'),
+        h('div',{style:{fontSize:'11px',color:'var(--muted)'}},
+          [entree.reference, entree.machine_nom, rentFmtFormat(entree) + ' mm']
+            .filter(Boolean).join(' · '))
+      ),
+      h('button',{className:'contact-close-btn',title:'Fermer',onClick:fermerRattachementModal},'✕')
+    ),
+    bandeau,
+    corps
+  );
+  boite.addEventListener('click', e => e.stopPropagation());
+  overlay.appendChild(boite);
+  document.body.appendChild(overlay);
 
   if(!document.getElementById('rent-lier-modal')) return; // fermée entre-temps
 
@@ -5809,7 +5812,6 @@ async function ouvrirRattachementModal(entryId){
   const selecteur = rentSelecteurDevis({entryId, devisId:lien.devis_id, onChange:choisir});
 
   corps.innerHTML = '';
-  if(actionsHaut.length) corps.appendChild(h('div',{className:'rent-lier-actions'}, ...actionsHaut));
   corps.appendChild(h('div',{className:'form-section-title'},'Devis'));
   corps.appendChild(selecteur);
   if(etat !== 'vert') requestAnimationFrame(() => selecteur.querySelector('input')?.focus());
@@ -6351,6 +6353,28 @@ function renderRentDossiers(){
     const entryId=Number(head.id);
     const ouvert = String(S.rentSelEntryId||'')===String(head.id);
     const etat = rentEtat(head, liens[entryId]);
+    const lienLigne = liens[entryId];
+    const couleur = rentEtatLien(charges ? (lienLigne || {devis_id:null}) : null);
+
+    /* Le devis se voit et se rattache depuis la ligne (retour du 15/10/2026) :
+       la pastille porte la couleur de l'état et ouvre la fenêtre de
+       rattachement sans déplier le panneau. Une proposition se confirme d'un
+       clic sur la coche, sans ouvrir quoi que ce soit. */
+    const nomDevis = (lienLigne && lienLigne.devis && lienLigne.devis.client) || 'Devis lié';
+    const pastilleDevis = couleur === 'inconnu' ? null : h('div',{className:'rent-devis-cell'},
+      h('button',{type:'button', className:'rent-devis-chip is-' + couleur,
+          title: couleur === 'rouge' ? 'Rattacher un devis'
+               : (couleur === 'orange' ? 'Proposé — à confirmer' + (lienLigne.motif ? ' · ' + lienLigne.motif : '')
+                                       : rentLibelleEtat(lienLigne, 'vert')),
+          onClick:e => { e.stopPropagation(); ouvrirRattachementModal(entryId); }},
+        couleur === 'rouge' ? iconEl('plus',12) : h('span',{className:'rent-point rent-point-' + couleur}),
+        h('span',{className:'rent-devis-chip-nom'}, couleur === 'rouge' ? 'Lier un devis' : nomDevis)),
+      couleur === 'orange'
+        ? h('button',{type:'button', className:'rent-devis-ok', title:'Confirmer ce rattachement',
+            'aria-label':'Confirmer ce rattachement',
+            onClick:async e => { e.stopPropagation(); await rentValiderLien(entryId); }},
+            iconEl('check',14))
+        : null);
 
     /* Le client et le format d'abord : c'est par là qu'on reconnaît un
        dossier. La référence dessous, sur sa propre ligne — c'est ce qu'on
@@ -6382,24 +6406,19 @@ function renderRentDossiers(){
         etat.termine?'Terminé':(etat.statut==='en_cours'?'En cours':'En attente'),
         etat.termine?'ok':'attente'));
     }
-    if(etat.termine || etat.aDevis===true){
-      if(etat.aDevis===null) etats.push(rentPastille('Devis …','attente'));
-      else if(etat.aConfirmer) etats.push(rentPastille('Devis proposé','propose','Rattaché automatiquement — à confirmer'));
-      else if(etat.aDevis) etats.push(rentPastille('Devis','ok','Un devis est lié'));
-      else if(!dansFileALier) etats.push(rentPastille('Devis','manque','Dossier terminé sans devis lié'));
-    }
+    // Le devis a sa propre pastille, cliquable (`pastilleDevis`).
     if(etat.termine || etat.aProd===true){
       if(etat.aProd===null) etats.push(rentPastille('Prod …','attente'));
       else if(etat.aProd) etats.push(rentPastille('Prod','ok','Des dossiers de production sont liés'));
       else if(!dansFileALier) etats.push(rentPastille('Prod','manque','Aucun dossier de production lié'));
     }
-    const pastilles = h('div',{className:'rent-etats'}, ...etats);
+    const pastilles = h('div',{className:'rent-etats'}, pastilleDevis, ...etats);
 
     const cellule = (cls, txt, titreAttr) => h('div',
       {className:'rd-cell'+(cls?' '+cls:''), title: titreAttr || ''},
       txt || '—');
 
-    const ligne = h('div',{className:'rent-ligne'+(ouvert?' is-open':''),
+    const ligne = h('div',{className:'rent-ligne rent-ligne-'+couleur+(ouvert?' is-open':''),
       onClick:async()=>{
         const suivant = ouvert ? null : head.id;
         set({rentSelEntryId:suivant});
@@ -6832,14 +6851,14 @@ function ouvrirDevisModal(devisId){
 
 /* Valide le devis ouvert, puis enchaîne sur le suivant à vérifier : cent
    trente devis se relisent à la suite, pas en rouvrant la liste à chaque fois. */
-async function validerDevis(devisId){
+async function validerDevis(devisId, o){
   try{
     await api('/api/rentabilite/devis/'+devisId+'/valider',{method:'POST'});
   }catch(e){ toast(e.message,'error'); return; }
   await loadDevis();
   fermerDevisModal();
   const suivant = (S.devisList||[]).find(d=>Number(d.a_verifier)===1 && Number(d.id)!==Number(devisId));
-  if(suivant && S.rentDevisFiltre==='verifier'){
+  if(suivant && S.rentDevisFiltre==='verifier' && !(o && o.enchainer===false)){
     toast('Devis validé — suivant à vérifier.');
     ouvrirDevisModal(suivant.id);
   }else{
@@ -6970,37 +6989,33 @@ function renderRentDevis(){
   const table = listeAffichee.length
     ? h('div',{style:{overflowX:'auto'}},
         h('table',{className:'rent-table'},
+          /* Cinq colonnes utiles (retour du 15/10/2026). « Lecture » et
+             « Dossiers » sont partis : le mode de lecture se voit dans la
+             fiche, et le compteur de dossiers ne lisait que l'ancienne
+             table de liaison — il affichait 0 partout. */
           h('thead',null,h('tr',null,
             thTri('client','Client'), thTri('date','Date'),
             thTri('quantite','Quantité','num'), thTri('vitesse','Vitesse','num'),
-            thTri('calage','Calage','num'), thTri('lecture','Lecture'),
-            thTri('dossiers','Dossiers','num'),
-            h('th',{className:'num'},'Actions')
+            thTri('calage','Calage','num'),
+            h('th',{className:'num'},'')
           )),
           h('tbody',null,...listeAffichee.map(dv=>{
             const calage=(Number(dv.temps_calage_mn)||0)+(Number(dv.temps_calage_impression_mn)||0);
             const doute = Number(dv.a_verifier)===1;
             return h('tr',{style:{cursor:'pointer'},
               onClick:()=>ouvrirDevisModal(dv.id)},
+              /* Le client, sa pastille de doute, le fichier dessous. Le motif
+                 du doute est au survol de la pastille et dans la fiche : écrit
+                 sur la ligne, il doublait la hauteur de cent trente devis. */
               h('td',null,
-                h('div',{style:{display:'flex',alignItems:'center',gap:'8px'}},
-                  h('span',{style:{fontWeight:'600'}}, dv.client||'(client non lu)'),
-                  doute?rentPastille('à vérifier','manque',dv.note||''):null,
-                  dv.source==='agent'?h('span',{className:'rent-methode',
-                    title:'Ramassé automatiquement sur le partage réseau'},'auto'):null),
-                h('div',{className:'rent-fichier',title:dv.filename||''}, dv.filename||''),
-                // Le motif du doute, sur la ligne : aller le chercher ailleurs
-                // reviendrait à ne jamais le lire. Sur UNE ligne : en trois
-                // lignes de phrase, chaque devis douteux poussait les suivants
-                // hors de l'écran et on ne lisait plus la liste du tout. Le
-                // texte entier reste au survol et dans la fenêtre de détail.
-                (doute&&dv.note)?h('div',{className:'rent-motif',title:dv.note}, dv.note):null),
-              h('td',null, dv.date_devis||'—'),
+                h('div',{className:'rent-devis-client'},
+                  h('span',{className:'rent-devis-nom'}, dv.client||'(client non lu)'),
+                  doute?rentPastille('à vérifier','manque',dv.note||''):null),
+                h('div',{className:'rent-fichier',title:dv.filename||''}, dv.filename||'')),
+              h('td',null, dv.date_devis ? String(dv.date_devis).slice(0,10) : '—'),
               h('td',{className:'num'}, fmt(dv.qte_etiquettes)),
               h('td',{className:'num'}, fmt(dv.vitesse_theorique,'m/mn')),
               h('td',{className:'num'}, calage?fmt(calage,'mn'):'—'),
-              h('td',null, h('span',{className:'rent-methode'}, LIB_METHODE[dv.extraction_methode]||'—')),
-              h('td',{className:'num'}, String(dv.nb_dossiers_lies||0)),
               /* Les actions vivent sur la ligne. `stopPropagation` est
                  indispensable : sans lui, cliquer « Supprimer » ouvrirait
                  aussi la fenêtre de détail du devis qu'on vient d'effacer. */
@@ -7011,7 +7026,12 @@ function renderRentDevis(){
                  peint sous la colonne voisine donc invisible. */
               h('td',{className:'num rent-actions-td'},
                 h('div',{className:'rent-actions'},
-                  h('button',{type:'button',className:'btn-sm',title:'Corriger les valeurs lues',
+                  // Valider sur la ligne : un devis juste se relit dans la
+                  // liste et se valide sans ouvrir la fiche.
+                  doute ? h('button',{type:'button',className:'btn-sm',title:'Le devis est juste tel qu\'il est lu',
+                    onClick:async e=>{e.stopPropagation();await validerDevis(dv.id,{enchainer:false});}},
+                    iconEl('check',13),' Valider') : null,
+                  h('button',{type:'button',className:'btn-sec',title:'Corriger les valeurs lues',
                     onClick:e=>{e.stopPropagation();ouvrirCorrectionDevis(dv);}},'Modifier'),
                   h('button',{type:'button',className:'btn-danger',title:'Supprimer ce devis',
                     onClick:async e=>{e.stopPropagation();await deleteDevis(dv.id);}},'Supprimer')
