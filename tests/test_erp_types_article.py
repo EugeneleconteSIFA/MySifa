@@ -16,6 +16,7 @@ Ce que ce test protège, dans l'ordre où ça casse :
 
 Les deux derniers blocs ne tournent que si le miroir est présent.
 """
+import _base_temporaire  # noqa: E402,F401  — base jetable, avant config/database/app.*
 import sqlite3
 import sys
 

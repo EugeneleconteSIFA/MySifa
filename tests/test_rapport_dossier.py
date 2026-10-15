@@ -17,6 +17,7 @@ charger `database` ni FastAPI.
 Lancer : python3 tests/test_rapport_dossier.py
 """
 
+import _base_temporaire  # noqa: E402,F401  — base jetable, avant config/database/app.*
 import importlib.util
 import json
 import sqlite3

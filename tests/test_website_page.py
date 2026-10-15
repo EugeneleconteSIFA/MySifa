@@ -1,4 +1,5 @@
 """Pages /website/ : aperçu du site vitrine, derrière la connexion."""
+import _base_temporaire  # noqa: E402,F401  — base jetable, avant config/database/app.*
 import sys
 
 sys.path.insert(0, ".")

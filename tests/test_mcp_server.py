@@ -22,6 +22,7 @@ installe.
 Lancer : python3 tests/test_mcp_server.py
 """
 
+import _base_temporaire  # noqa: E402,F401  — base jetable, avant config/database/app.*
 import importlib.util
 import os
 import sqlite3
