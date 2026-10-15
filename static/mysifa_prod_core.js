@@ -10587,6 +10587,13 @@ function _prodVueCss(){
     +'.ps-chev{display:inline-flex;transition:transform .15s;margin-right:6px;color:var(--muted);vertical-align:middle}'
     +'tr.ps-ligne.ouvert .ps-chev{transform:rotate(90deg);color:var(--accent)}'
     +'tr.ps-detail>td{padding:10px 12px 16px!important;background:var(--bg)}'
+    // Un dossier déplié forme un bloc : trait d'accent au-dessus de sa ligne,
+    // bande à gauche sur la ligne et son détail, trait épais dessous. Deux
+    // dossiers ouverts à la suite ne se confondent plus.
+    +'tr.ps-ligne.ouvert td{border-top:2px solid var(--accent)!important}'
+    +'tr.ps-ligne.ouvert td:first-child,tr.ps-detail>td{box-shadow:inset 4px 0 0 var(--accent)}'
+    +'tr.ps-detail>td{border-bottom:3px solid var(--accent)!important}'
+    +'tr.ps-detail+tr.ps-ligne:not(.ouvert) td{border-top:6px solid var(--card)!important}'
     +'.ps-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--c);margin-right:5px;vertical-align:1px}';
   document.head.appendChild(st);
 }
