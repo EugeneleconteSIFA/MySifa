@@ -5552,6 +5552,154 @@ async function rentRejeterLien(entryId){
   toast('Rattachement retiré.');
 }
 
+/* Choisir le devis d'un dossier. Remplace le menu déroulant de sept cents
+   devis, qu'on ne pouvait que faire défiler.
+
+   Le champ vide montre ce que le moteur juge le plus plausible — format,
+   laize, client, papier, colle, date — avec son motif. Taper filtre TOUS les
+   devis (client, nom du fichier, date), toujours rangés par concordance avec
+   le dossier : « roquette » sort d'abord les devis Roquette au bon format.
+   Flèches, Entrée et Échap au clavier ; la liste est la seule chose
+   reconstruite, jamais le champ (il garderait sinon le focus perdu).
+
+   `o` : {entryId, devisId, onChange(devisId|null), placeholder} */
+function rentSelecteurDevis(o){
+  const devisList = S.devisList || [];
+  let courant = o.devisId ? Number(o.devisId) : null;
+  let items = [], actif = -1, jeton = 0, minuteur = null;
+
+  const resume = h('div',{className:'rent-choix-courant'});
+  const champ = h('input',{type:'text', className:'rent-input rent-choix-champ',
+    autocomplete:'off', role:'combobox', 'aria-expanded':'false',
+    placeholder: o.placeholder || 'Rechercher un devis (client, format, papier, date…)'});
+  const liste = h('div',{className:'rent-choix-liste', role:'listbox'});
+  liste.hidden = true;
+  const racine = h('div',{className:'rent-choix'}, resume,
+    h('div',{className:'rent-choix-saisie'}, iconEl('search',14), champ), liste);
+
+  const fmtQte = n => Number(n).toLocaleString('fr-FR');
+  const details = s => [
+    (s.format_h && s.format_v) ? (s.format_v + '×' + s.format_h + ' mm') : null,
+    s.papier || null, s.colle || null,
+    s.qte_etiquettes ? fmtQte(s.qte_etiquettes) + ' ex' : null,
+    s.vitesse_theorique ? s.vitesse_theorique + ' m/mn' : null,
+    s.date_devis ? String(s.date_devis).slice(0,10) : null,
+  ].filter(Boolean).join(' · ');
+
+  const peindreResume = () => {
+    resume.innerHTML = '';
+    if(!courant){
+      resume.append(h('span',{className:'rent-choix-vide'},'Aucun devis lié'));
+      return;
+    }
+    const dv = devisList.find(d => Number(d.id) === courant) || {id:courant};
+    resume.append(
+      h('div',{className:'rent-choix-resume'},
+        h('div',{className:'rent-choix-client'}, dv.client || ('Devis #' + courant)),
+        h('div',{className:'rent-choix-fichier', title:dv.filename || ''}, dv.filename || ''),
+        h('div',{className:'rent-choix-details'}, details(dv))),
+      h('button',{type:'button', className:'btn-sec rent-choix-voir', title:'Ouvrir la fiche du devis',
+        onClick:()=>ouvrirDevisModal(courant)}, 'Voir'),
+      h('button',{type:'button', className:'btn-sec', title:'Ne lier aucun devis',
+        onClick:()=>choisir(null)}, 'Retirer'));
+  };
+
+  const fermer = () => {
+    liste.hidden = true; actif = -1;
+    champ.setAttribute('aria-expanded','false');
+  };
+
+  const peindreListe = (titre) => {
+    liste.innerHTML = '';
+    if(!items.length){
+      const q = champ.value.trim();
+      liste.append(h('div',{className:'rent-choix-rien'},
+        q ? 'Aucun résultat pour « ' + q + ' »' : 'Aucun devis au format de ce dossier. Tape un client ou un nom de fichier.'));
+    }else{
+      if(titre) liste.append(h('div',{className:'rent-choix-titre'}, titre));
+      items.forEach((s, i) => {
+        const score = Math.round(Number(s.score) || 0);
+        const ton = s.contradiction ? 'is-contraire' : (score >= 58 ? 'is-fort' : (score > 0 ? 'is-moyen' : 'is-nul'));
+        liste.append(h('div',{
+            className:'rent-choix-item' + (i === actif ? ' is-actif' : '')
+              + (Number(s.devis_id) === courant ? ' is-lie' : '') + (s.rejete ? ' is-rejete' : ''),
+            role:'option',
+            // mousedown, pas click : le champ perdrait le focus avant le clic
+            // et refermerait la liste sous le pointeur.
+            onMousedown:e => { e.preventDefault(); choisir(Number(s.devis_id)); },
+            onMouseenter:() => { actif = i; marquerActif(); }},
+          h('div',{className:'rent-choix-tete'},
+            h('span',{className:'rent-choix-client'}, s.client || '(client non lu)'),
+            Number(s.devis_id) === courant ? h('span',{className:'rent-sug-lie'},'lié') : null,
+            s.rejete ? h('span',{className:'rent-choix-rejete'},'rejeté') : null,
+            h('span',{className:'rent-choix-score ' + ton,
+              title:'Concordance avec le dossier : format, laize, client, papier, colle, date'},
+              score ? score + ' %' : '—')),
+          h('div',{className:'rent-choix-fichier', title:s.filename || ''}, s.filename || ''),
+          h('div',{className:'rent-choix-details'}, s.motif || details(s))));
+      });
+    }
+    liste.hidden = false;
+    champ.setAttribute('aria-expanded','true');
+  };
+
+  const marquerActif = () => {
+    [...liste.querySelectorAll('.rent-choix-item')].forEach((el, i) => {
+      el.classList.toggle('is-actif', i === actif);
+      if(i === actif) el.scrollIntoView({block:'nearest'});
+    });
+  };
+
+  const charger = async () => {
+    const q = champ.value.trim();
+    const t = ++jeton;
+    let r = [];
+    try{
+      r = await api('/api/rentabilite/planning/' + o.entryId + '/devis-suggeres?limit='
+        + (q ? 30 : 8) + (q ? '&q=' + encodeURIComponent(q) : ''));
+    }catch(_){ r = []; }
+    if(t !== jeton || document.activeElement !== champ) return;
+    items = Array.isArray(r) ? r : [];
+    actif = items.length ? 0 : -1;
+    peindreListe(q ? null : 'Les plus plausibles pour ce dossier');
+  };
+
+  const choisir = (id) => {
+    courant = id ? Number(id) : null;
+    champ.value = '';
+    fermer(); champ.blur();
+    peindreResume();
+    if(o.onChange) o.onChange(courant);
+  };
+
+  champ.addEventListener('focus', charger);
+  champ.addEventListener('input', () => {
+    clearTimeout(minuteur);
+    minuteur = setTimeout(charger, 180);
+  });
+  champ.addEventListener('blur', () => setTimeout(fermer, 120));
+  champ.addEventListener('keydown', e => {
+    if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault();
+      if(liste.hidden){ charger(); return; }
+      if(!items.length) return;
+      actif = (actif + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      marquerActif();
+    }else if(e.key === 'Enter'){
+      e.preventDefault();
+      if(!liste.hidden && items[actif]) choisir(Number(items[actif].devis_id));
+    }else if(e.key === 'Escape'){
+      e.stopPropagation();
+      if(champ.value){ champ.value = ''; charger(); }
+      else { fermer(); champ.blur(); }
+    }
+  });
+
+  peindreResume();
+  racine.valeur = () => courant;
+  return racine;
+}
+
 // ── Fenêtre de rattachement ──────────────────────────────────────
 function fermerRattachementModal(){
   document.getElementById('rent-lier-modal')?.remove();
@@ -5619,72 +5767,22 @@ async function ouvrirRattachementModal(entryId){
     }}, 'Détacher'));
   }
 
-  let suggestions = [];
-  try{
-    suggestions = await api('/api/rentabilite/planning/' + entryId + '/devis-suggeres');
-  }catch(_){ suggestions = []; }
   if(!document.getElementById('rent-lier-modal')) return; // fermée entre-temps
-
-  const devisList = S.devisList || [];
-  const libelleDevis = dv => (dv.client || dv.filename || ('Devis #' + dv.id))
-    + (dv.qte_etiquettes ? (' — ' + Number(dv.qte_etiquettes).toLocaleString('fr-FR') + ' ex') : '')
-    + (dv.vitesse_theorique ? (' — ' + dv.vitesse_theorique + ' m/mn') : '');
 
   const choisir = async (devisId) => {
     await rentSaveLinks(entryId, devisId, (lien.no_dossiers || []));
     await relancer();
   };
 
-  /* Les suggestions d'abord, la liste complète ensuite. Le moteur ne tranche
-     que quand il est sûr — et il l'est rarement, parce qu'un même produit est
-     refabriqué des dizaines de fois pour le même client. Ce qu'il sait faire,
-     c'est remonter les bons candidats en tête. Sans cette liste, l'ambiguïté
-     renverrait l'utilisateur à un menu déroulant de plusieurs centaines de
-     devis, et le rattachement ne se ferait pas. */
-  const blocSug = suggestions.length
-    ? h('div',null,
-        h('div',{className:'form-section-title'},'Devis plausibles'),
-        h('div',{className:'rent-sug-liste'},
-          ...suggestions.map(s => h('button',{type:'button',className:'rent-sug'
-              + (Number(lien.devis_id) === Number(s.devis_id) ? ' is-lie' : ''),
-              onClick:()=>choisir(s.devis_id)},
-            h('div',{className:'rent-sug-tete'},
-              h('span',{className:'rent-sug-nom'}, s.client || s.filename || ('Devis #' + s.devis_id)),
-              (Number(lien.devis_id) === Number(s.devis_id))
-                ? h('span',{className:'rent-sug-lie'},'rattaché') : null,
-              h('span',{className:'rent-sug-score',
-                title:'Concordance calculée : format, laize, client, date'},
-                Math.round(s.score) + ' %')
-            ),
-            h('div',{className:'rent-sug-motif'}, s.motif || '—'),
-            (s.qte_etiquettes || s.vitesse_theorique)
-              ? h('div',{className:'rent-sug-chiffres'},
-                  [s.qte_etiquettes ? Number(s.qte_etiquettes).toLocaleString('fr-FR') + ' ex' : null,
-                   s.vitesse_theorique ? s.vitesse_theorique + ' m/mn' : null]
-                    .filter(Boolean).join(' · '))
-              : null
-          ))
-        ))
-    : h('div',{className:'card-empty',style:{padding:'14px'}},
-        devisList.length
-          ? 'Aucun devis ne correspond au format de ce dossier.'
-          : 'Aucun devis importé pour l\'instant.');
-
-  const selecteur = h('select',{className:'form-sel',style:{width:'100%'}},
-    h('option',{value:''},'— choisir dans tous les devis —'),
-    ...devisList.map(dv => h('option',{value:String(dv.id),
-      selected:!!(lien.devis_id && Number(lien.devis_id) === Number(dv.id))}, libelleDevis(dv)))
-  );
-  selecteur.addEventListener('change', () => {
-    if(selecteur.value) choisir(Number(selecteur.value));
-  });
+  /* Un seul champ : vide, il montre les candidats du moteur avec leur motif ;
+     tapé, il cherche dans tous les devis, toujours rangés par concordance. */
+  const selecteur = rentSelecteurDevis({entryId, devisId:lien.devis_id, onChange:choisir});
 
   corps.innerHTML = '';
   if(actionsHaut.length) corps.appendChild(h('div',{className:'rent-lier-actions'}, ...actionsHaut));
-  corps.appendChild(blocSug);
-  corps.appendChild(h('div',{style:{marginTop:'16px'}},
-    h('div',{className:'form-section-title'},'Tous les devis'),
-    selecteur));
+  corps.appendChild(h('div',{className:'form-section-title'},'Devis'));
+  corps.appendChild(selecteur);
+  if(etat !== 'vert') requestAnimationFrame(() => selecteur.querySelector('input')?.focus());
   corps.appendChild(h('div',{className:'rent-lier-pied'},
     h('button',{type:'button',className:'btn-sec',onClick:()=>{
       fermerRattachementModal();
@@ -6369,18 +6467,9 @@ function renderRentPanneau(g, listeVisible){
   const lien=(S.rentLinksById||{})[entryId]||{devis_id:null,no_dossiers:[]};
   let curDossiers=(lien.no_dossiers||[]).slice();
 
-  const devisSel=h('select',{className:'form-sel',style:{minWidth:'260px',flex:'1'}},
-    h('option',{value:''},'Aucun devis lié'),
-    ...devisList.map(dv=>{
-      const lbl=(dv.client||dv.filename||('Devis #'+dv.id))
-        +(dv.qte_etiquettes?(' — '+Number(dv.qte_etiquettes).toLocaleString('fr-FR')+' ex'):'')
-        +(dv.vitesse_theorique?(' — '+dv.vitesse_theorique+' m/mn'):'');
-      // L'attribut, pas seulement la propriété : la sélection doit survivre à
-      // l'insertion des options dans le <select> et rester lisible dans le DOM.
-      return h('option',{value:String(dv.id),
-        selected:!!(lien.devis_id && Number(lien.devis_id)===Number(dv.id))}, lbl);
-    })
-  );
+  // Le choix n'est enregistré qu'au clic sur « Enregistrer », avec les
+  // dossiers de production : on peut corriger les deux avant de valider.
+  const devisSel=rentSelecteurDevis({entryId, devisId:lien.devis_id});
 
   const dosInput=h('input',{type:'text',className:'rent-input',
     placeholder:'N° dossier production (ex : 1003/0002)…',
@@ -6446,7 +6535,7 @@ function renderRentPanneau(g, listeVisible){
   const suivant = indexCourant>=0 ? listeVisible[indexCourant+1] : null;
 
   const enregistrer=async(puisSuivant)=>{
-    const did = devisSel.value ? Number(devisSel.value) : null;
+    const did = devisSel.valeur();
     await rentSaveLinks(entryId, did, curDossiers);
     if(puisSuivant && suivant){
       // La pagination se recale au rendu, sur la liste à jour.
@@ -6491,7 +6580,7 @@ function renderRentPanneau(g, listeVisible){
     h('div',{className:'rent-panneau-grille'},
       h('div',null,
         h('div',{className:'form-section-title'},'Devis'),
-        h('div',{style:{display:'flex',gap:'10px',flexWrap:'wrap'}}, devisSel),
+        devisSel,
         dz, dzInp
       ),
       h('div',null,
