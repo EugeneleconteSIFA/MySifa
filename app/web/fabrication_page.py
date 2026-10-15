@@ -6814,26 +6814,26 @@ function renderFinModal(){
   // que le dossier est déclaré terminé — « R.A.S. » est une réponse valable,
   // le silence n'en est pas une.
   const noteInp = h('textarea',{
-    rows:'3',
-    placeholder:'Ce qu\'il faut savoir la prochaine fois que ce dossier passe…',
+    rows:'2',
+    placeholder:'À savoir pour la prochaine fois…',
     style:{width:'100%',fontFamily:'inherit',fontSize:'14px',padding:'10px 12px',
            borderRadius:'8px',border:'1px solid var(--border2)',background:'var(--bg)',
-           color:'var(--text)',resize:'vertical'},
+           color:'var(--text)',resize:'vertical',minHeight:'58px'},
   });
   noteInp.value = S.finNoteVal||'';
   noteInp.addEventListener('input',e=>{ S.finNoteVal=e.target.value; });
 
   const noteBloc = h('div',{className:'fab-field'},
-    h('label',null,'Info prod — obligatoire'),
-    h('div',{className:'fab-field-hint'},
-      'Visible en Traçabilité et à la prochaine production de cette référence.'),
-    noteInp,
-    h('button',{
-      type:'button',
-      className:'fab-btn fab-btn-muted fab-btn-sm',
-      style:{marginTop:'8px'},
-      onClick:()=>{ S.finNoteVal='R.A.S.'; noteInp.value='R.A.S.'; noteInp.focus(); }
-    },'R.A.S. — rien à signaler')
+    h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',
+        gap:'8px',marginBottom:'6px'}},
+      h('label',{style:{margin:0}},'Info prod'),
+      h('button',{
+        type:'button',
+        className:'fab-btn fab-btn-muted fab-btn-sm',
+        style:{background:'var(--bg)'},
+        onClick:()=>{ S.finNoteVal='R.A.S.'; noteInp.value='R.A.S.'; noteInp.focus(); }
+      },'R.A.S.')),
+    noteInp
   );
 
   // ── Aucun code matiere scanne : on demande pourquoi ──────────────────────
@@ -6850,11 +6850,11 @@ function renderFinModal(){
   const aucuneMatiere = (S.finNbMatieres === 0);
 
   const motifInp = h('textarea',{
-    rows:'2',
-    placeholder:'Ex : bobine deja scannee sur le dossier precedent, poste sans matiere...',
+    rows:'1',
+    placeholder:'Autre raison…',
     style:{width:'100%',fontFamily:'inherit',fontSize:'14px',padding:'10px 12px',
            borderRadius:'8px',border:'1px solid var(--border2)',background:'var(--bg)',
-           color:'var(--text)',resize:'vertical'},
+           color:'var(--text)',resize:'vertical',minHeight:'42px'},
   });
   motifInp.value = S.finMatiereMotif||'';
   motifInp.addEventListener('input',e=>{ S.finMatiereMotif=e.target.value; });
@@ -6897,16 +6897,13 @@ function renderFinModal(){
   const matiereBloc = aucuneMatiere ? h('div',{className:'fab-field',
     style:{padding:'12px 14px',borderRadius:'10px',
            background:'rgba(251,191,36,.10)',border:'1px solid rgba(251,191,36,.4)'}},
-    h('label',null,'Aucun code matiere scanne — pourquoi ? (obligatoire)'),
+    h('label',null,'Aucune bobine scannée — pourquoi ?'),
     repriseBloc,
-    h('div',{className:'fab-field-hint'},
-      'Ce dossier n\'a aucune bobine en tracabilite. Dites ce qui s\'est passe : '
-      +'la reponse est conservee avec la saisie.'),
-    motifInp,
-    h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'8px'}},
+    h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',marginBottom:'8px'}},
       mkMotifBtn('Bobine deja scannee sur un dossier precedent'),
       mkMotifBtn('Poste sans matiere')
-    )
+    ),
+    motifInp
   ) : null;
 
   // ── Écran Calage : la ligne du dossier de prod papier ─────────────────────
@@ -6922,8 +6919,17 @@ function renderFinModal(){
     const jours = Array.from(new Set([...(p.jours||[]), auj,
       vals.debut.jour, vals.fin.jour, vals.prod.jour].filter(Boolean))).sort();
 
-    const dureeCalage = h('strong',null,'');
-    const dureeProd = h('strong',null,'');
+    // Les deux durées sont ce que l'opérateur vérifie d'un coup d'œil : elles
+    // passent en tête, en grand ; les heures ne sont que le moyen de les fixer.
+    const dureeCalage = h('div',{style:{fontSize:'30px',fontWeight:'800',lineHeight:'1.1',
+      color:'var(--accent)',fontVariantNumeric:'tabular-nums'}},'');
+    const dureeProd = h('div',{style:{fontSize:'30px',fontWeight:'800',lineHeight:'1.1',
+      color:'var(--text)',fontVariantNumeric:'tabular-nums'}},'');
+    const tuile = (libelle, valeur) => h('div',{style:{flex:'1',padding:'12px 14px',
+        borderRadius:'10px',background:'var(--bg)',border:'1px solid var(--border)'}},
+      h('div',{style:{fontSize:'11px',fontWeight:'700',letterSpacing:'.5px',
+        textTransform:'uppercase',color:'var(--muted)',marginBottom:'4px'}},libelle),
+      valeur);
     const alerte = h('div',{style:{display:'none'}});
     const seuil = p.seuil_alerte_min;
 
@@ -6962,32 +6968,28 @@ function renderFinModal(){
       );
     };
 
-    alerte.appendChild(h('div',{style:{padding:'12px 14px',borderRadius:'10px',marginTop:'4px',
+    alerte.appendChild(h('div',{style:{display:'flex',alignItems:'center',gap:'10px',
+        flexWrap:'wrap',padding:'10px 14px',borderRadius:'10px',marginBottom:'14px',
         background:'rgba(251,191,36,.10)',border:'1px solid rgba(251,191,36,.4)',
-        fontSize:'13px',color:'var(--text)',lineHeight:'1.5'}},
-      'Calage plus de trois fois plus long que d\'habitude sur cette machine (médiane '
-        +finDureeTxt(Math.round(p.mediane_machine_min||0))+'). Vérifiez les heures du dossier de prod.',
-      h('div',{style:{marginTop:'8px'}},
-        S.finCalageConfirme
-          ? h('span',{style:{fontWeight:'700',color:'var(--success)'}},'✓ Heures confirmées')
-          : h('button',{type:'button',className:'fab-btn fab-btn-muted fab-btn-sm',
-              onClick:()=>{ S.finCalageConfirme = true; fabRenderPreserveUi({}); }},
-              'Les heures sont justes'))
+        fontSize:'13px',color:'var(--text)'}},
+      h('span',{style:{flex:'1'}},'Calage inhabituel — habituellement '
+        +finDureeTxt(Math.round(p.mediane_machine_min||0))+'.'),
+      S.finCalageConfirme
+        ? h('span',{style:{fontWeight:'700',color:'var(--success)'}},'✓ Confirmé')
+        : h('button',{type:'button',className:'fab-btn fab-btn-muted fab-btn-sm',
+            onClick:()=>{ S.finCalageConfirme = true; fabRenderPreserveUi({}); }},
+            'Les heures sont justes')
     ));
 
     const bloc = h('div',null,
-      h('div',{className:'fab-modal-sub'},
-        p.erreur
-          ? 'Heures des saisies indisponibles. Recopiez les trois heures du dossier de prod.'
-          : 'Pré-rempli depuis les saisies. Recopiez les heures notées sur le dossier de prod.'),
+      h('div',{style:{display:'flex',gap:'10px',marginBottom:'14px'}},
+        tuile('Calage', dureeCalage),
+        tuile('Production', dureeProd)),
+      alerte,
+      p.erreur ? h('div',{className:'fab-modal-sub'},'Heures des saisies indisponibles.') : null,
       ligne('debut','Début calage'),
       ligne('fin','Fin calage'),
-      ligne('prod','Fin de prod'),
-      h('div',{style:{display:'flex',gap:'18px',flexWrap:'wrap',fontSize:'13px',
-          color:'var(--text2)',padding:'10px 0 4px',borderTop:'1px solid var(--border)'}},
-        h('span',null,'Calage ',dureeCalage),
-        h('span',null,'Production ',dureeProd)),
-      alerte
+      ligne('prod','Fin de prod')
     );
     majDurees();
     return bloc;
