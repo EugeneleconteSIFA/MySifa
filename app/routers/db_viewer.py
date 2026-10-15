@@ -25,7 +25,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 
-from app.services import diagnostic_sql
+from app.services import diagnostic_sql, ia_usage
 from app.services.auth_service import get_current_user
 from app.services.db_ai_query import run_natural_language_query
 from config import DB_PATH, ROLE_SUPERADMIN, ROLE_DIRECTION
@@ -229,10 +229,11 @@ def db_ai_query(request: Request, body: dict = Body(...)):
     colonnes masquées : il ne peut donc pas proposer de lire ce qui est fermé.
     Et s'il le faisait quand même, l'autoriseur refuserait à la lecture.
     """
-    _require_db_access(request)
+    user = _require_db_access(request)
     question = body.get("question") or body.get("q") or ""
     try:
-        return run_natural_language_query(str(question))
+        with ia_usage.suivi(user, "sql", "db_viewer"):
+            return run_natural_language_query(str(question))
     except HTTPException:
         raise
     except (diagnostic_sql.DiagnosticRefus, diagnostic_sql.DiagnosticTropLong) as e:

@@ -254,3 +254,26 @@ def anomalies(du: Optional[str] = None, au: Optional[str] = None,
         "points": points,
         "ecran": ECRAN_RETOUR_PROD,
     }
+
+
+# ── ecarts ───────────────────────────────────────────────────────────────────
+
+def ecarts(famille: Optional[str] = None, statut: str = "ouvert", objet: Optional[str] = None,
+           limite: int = 100) -> dict[str, Any]:
+    """La file des contrôleurs de cohérence, telle que Paramètres › Cohérence l'affiche."""
+    from app.services import coherence
+
+    with get_db() as conn:
+        if "coherence_ecarts" not in coherence._tables(conn):
+            return {"ecarts": [], "message": "Contrôleurs de cohérence pas encore installés sur cette base."}
+        res = coherence.lister(conn, famille or None, statut or "ouvert", None, objet or None,
+                               max(1, min(int(limite or 100), 300)))
+    for e in res["ecarts"]:
+        e.pop("explique_par", None)
+    res["familles"] = coherence.FAMILLES
+    res["regles"] = {c: {"titre": r.titre, "description": r.description, "famille": r.famille}
+                     for c, r in coherence.REGLES.items()}
+    res["ecran"] = "/settings#coherence"
+    if not res["ecarts"]:
+        res["message"] = "Aucun écart pour ces critères."
+    return res

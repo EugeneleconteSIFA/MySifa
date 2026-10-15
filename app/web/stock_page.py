@@ -75,11 +75,11 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
-<link rel="stylesheet" href="/static/mysifa_ai_chat.css?v=4">
+<link rel="stylesheet" href="/static/mysifa_ai_chat.css?v=6">
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
-<link rel="stylesheet" href="/static/mysifa_etiq_specifiques.css?v=1">
+<link rel="stylesheet" href="/static/mysifa_etiq_specifiques.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -2443,7 +2443,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=8"></script>
-<script src="/static/mysifa_ai_chat.js?v=4"></script>
+<script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script>
 /*__TRACA_GUIDE__*/
 const API = window.location.origin;

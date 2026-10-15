@@ -20,6 +20,7 @@ si FastAPI est installe, et sont sautes sinon (la CI ne l'installe pas).
 Lancer : python3 tests/test_audit_journal.py
 """
 
+import _base_temporaire  # noqa: E402,F401  — base jetable, avant config/database/app.*
 import importlib.util
 import re
 import sys

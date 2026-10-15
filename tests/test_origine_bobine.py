@@ -24,6 +24,7 @@ Ce que ces cas verrouillent :
 
 Lancer : python3 tests/test_origine_bobine.py
 """
+import _base_temporaire  # noqa: E402,F401  — base jetable, avant config/database/app.*
 import json
 import sqlite3
 import sys

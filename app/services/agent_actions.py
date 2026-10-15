@@ -286,6 +286,20 @@ CATALOGUE: list[dict[str, Any]] = [
             "text": ("str", True, "Ligne", ""),
         },
     },
+    # ── Contrôles de cohérence ───────────────────────────────────────────
+    {
+        "cle": "coherence_expliquer", "libelle": "Écart de cohérence expliqué", "module": "settings",
+        "methode": "POST", "chemin": "/api/settings/coherence/{ecart_id}/expliquer",
+        "lien": "/settings#coherence",
+        "autorise": _role_dans({ROLE_DIRECTION, ROLE_SUPERADMIN}),
+        "aide": "Marque un écart de cohérence (coherence_ecarts.id, lu avec mysifa_ecarts) comme "
+                "expliqué : il reste visible mais sort de la pastille. À proposer quand l'utilisateur "
+                "donne la raison de l'écart ; l'explication reprend ses mots.",
+        "params": {
+            "ecart_id": ("int", True, "Écart (coherence_ecarts.id)", ""),
+            "explication": ("str", True, "Explication", "pourquoi l'écart est normal"),
+        },
+    },
 ]
 _PAR_CLE = {a["cle"]: a for a in CATALOGUE}
 
@@ -373,6 +387,7 @@ _RESOLVEURS = {
     "reunion_id": ("SELECT COALESCE(titre, 'Réunion') || ' (' || substr(COALESCE(date_debut,''),1,10) || ')' "
                    "FROM reunions WHERE id=?", "Réunion"),
     "laize_id": ("SELECT 'laize ' || id FROM mp_matiere_laizes WHERE id=?", "Laize"),
+    "ecart_id": ("SELECT titre || ' — ' || COALESCE(detail, '') FROM coherence_ecarts WHERE id=?", "Écart"),
 }
 
 

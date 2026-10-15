@@ -11,6 +11,7 @@ de l'etiquette, le dossier fourre-tout. Sans ce tri, un devis range dans
 Lancer : python3 tests/test_devis_client_repli.py
 """
 
+import _base_temporaire  # noqa: E402,F401  — base jetable, avant config/database/app.*
 import os
 import sys
 from pathlib import Path

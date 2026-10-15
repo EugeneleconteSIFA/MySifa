@@ -420,3 +420,29 @@ body.palette-pivoine.light { --ia: #4f46e5; --ia-bg: rgba(79, 70, 229, .10); --i
 html body.mysifa-dock-barre #ai-chat-root #ai-chat-btn { color: var(--ia) !important; background: var(--ia-bg) !important; }
 html body.mysifa-dock-barre #ai-chat-root #ai-chat-btn:hover,
 html body.mysifa-dock-barre #ai-chat-root #ai-chat-btn.mysifa-dock-fab-active { border-color: var(--ia) !important; }
+
+/* Mise en forme des réponses : le gras porte la couleur de l'agent, les
+   mesures (durées, %, montants) ressortent, « > » encadre un point à traiter. */
+#ai-typing { margin: 2px 14px 12px; }
+.ai-msg.bot .ai-bubble strong { color: var(--ia); font-weight: 700; }
+.ai-msg.bot .ai-bubble .ai-num { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ai-msg.bot .ai-bubble ol { margin: 4px 0 6px; padding-left: 20px; }
+.ai-msg.bot .ai-bubble li { margin: 2px 0; }
+.ai-msg.bot .ai-bubble li::marker { color: var(--ia); font-weight: 700; }
+.ai-h { color: var(--ia); font-size: 11.5px; text-transform: uppercase; letter-spacing: .5px; margin: 10px 0 4px; }
+.ai-h:first-child { margin-top: 0; }
+.ai-note { margin: 6px 0; padding: 6px 10px; border-left: 3px solid var(--warn); border-radius: 0 8px 8px 0; background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.ai-table th { font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; }
+.ai-table td:first-child { font-weight: 700; color: var(--text); white-space: nowrap; }
+.ai-table tbody tr:nth-child(even) td { background: var(--card); }
+/* Réponses compactes (retour d'Eugène du 15/10/2026) : moins d'air entre les
+   blocs, interligne resserré, tableau plus dense. */
+.ai-msg.bot .ai-bubble { line-height: 1.42; padding: 7px 11px; }
+.ai-msg.bot .ai-bubble p { margin: 0 0 3px; }
+.ai-msg.bot .ai-bubble ul, .ai-msg.bot .ai-bubble ol { margin: 2px 0 4px; }
+.ai-msg.bot .ai-bubble li { margin: 1px 0; }
+.ai-h { margin: 7px 0 2px; }
+.ai-note { margin: 4px 0; padding: 4px 9px; }
+.ai-table-wrap { margin: 4px 0; }
+.ai-table th, .ai-table td { padding: 3px 6px; }
+#ai-messages { gap: 6px; }

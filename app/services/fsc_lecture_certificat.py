@@ -37,6 +37,7 @@ import re
 from datetime import date
 from typing import Optional
 
+from app.services import ia_usage
 from config import FSC_CLAIMS_PORTEE, FSC_LECTURE_IA_ACTIVE, FSC_LECTURE_IA_MODELE
 
 # Budget de caractères envoyés au modèle ou analysés : un certificat fait une à
@@ -324,6 +325,7 @@ def lire_ia(file_bytes: bytes, filename: str, mime: str, kind: str) -> tuple[Opt
         )
     except Exception as e:
         return None, f"Appel au modèle en échec : {e}"
+    ia_usage.noter(reponse, "fsc")
 
     for b in reponse.content:
         if getattr(b, "type", "") != "tool_use":

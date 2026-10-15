@@ -35,6 +35,8 @@ import os
 import re
 from typing import Any, Optional
 
+from app.services import ia_usage
+
 from config import (
     DEVIS_IA_ACTIVE,
     DEVIS_IA_MAX_CARACTERES,
@@ -340,6 +342,7 @@ def _appel_modele(blocs: list[dict]) -> tuple[Optional[dict], Optional[str], str
         )
     except Exception as e:
         return None, f"Appel au modèle en échec : {e}", modele
+    ia_usage.noter(reponse, "devis")
 
     for bloc in reponse.content:
         if getattr(bloc, "type", "") == "tool_use":

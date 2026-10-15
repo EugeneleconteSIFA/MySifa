@@ -1159,6 +1159,43 @@ GIPHY_API_KEY = os.getenv("GIPHY_API_KEY", "")
 # ─── MyExpé — parsing grilles tarifaires (IA) ───────────────────────
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
+# ─── Usage IA — tarifs Anthropic pour le calcul du coût ────────────
+# Prix publics en dollars par million de tokens (entrée, sortie), repérés par
+# préfixe de l'identifiant de modèle : « claude-sonnet-4-5-20250929 » se range
+# sous « claude-sonnet-4-5 ». Le préfixe le plus long l'emporte. La lecture de
+# cache coûte 10 % du prix d'entrée, l'écriture 125 %. Le coût est figé à
+# l'enregistrement de l'appel : une baisse de tarif ne réécrit pas l'historique.
+# Surcharge sans redéploiement : IA_TARIFS_MODELES_JSON='{"claude-x": [1, 5]}'.
+_IA_TARIFS_DEFAUT = {
+    "claude-haiku-4-5":  (1.00, 5.00),
+    "claude-haiku-5-5":  (0.10, 0.50),
+    "claude-sonnet-4":   (3.00, 15.00),
+    "claude-sonnet-5":   (2.00, 10.00),
+    "claude-sonnet-5-5": (2.00, 10.00),
+    "claude-opus-4-5":   (5.00, 25.00),
+    "claude-opus-4-6":   (5.00, 25.00),
+    "claude-opus-4-7":   (5.00, 25.00),
+    "claude-opus-4-8":   (5.00, 25.00),
+    "claude-opus-5":     (5.00, 25.00),
+    "claude-opus-5-5":   (4.00, 20.00),
+    "claude-fable-5":    (10.00, 50.00),
+}
+IA_CACHE_LECTURE_FACTEUR = 0.10
+IA_CACHE_ECRITURE_FACTEUR = 1.25
+
+
+def ia_tarifs_modeles() -> dict:
+    """Grille {préfixe de modèle: (entrée, sortie)} en $ par million de tokens."""
+    tarifs = dict(_IA_TARIFS_DEFAUT)
+    brut = os.getenv("IA_TARIFS_MODELES_JSON", "").strip()
+    if brut:
+        try:
+            for cle, val in json.loads(brut).items():
+                tarifs[str(cle)] = (float(val[0]), float(val[1]))
+        except Exception:
+            pass
+    return tarifs
+
 # ─── Rentabilité — lecture des devis (parser puis IA) ──────────────
 # Chaque commercial devise à sa façon. Le parser à motifs traite le modèle
 # maison ; l'IA prend le relais dès qu'un champ clé manque, ou que le fichier

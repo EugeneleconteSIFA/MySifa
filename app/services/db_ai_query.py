@@ -16,7 +16,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from app.services import diagnostic_sql
+from app.services import diagnostic_sql, ia_usage
 from config import ANTHROPIC_API_KEY, DB_PATH
 
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
@@ -130,6 +130,7 @@ def natural_language_to_sql(question: str, schema: str) -> dict[str, str]:
         system=_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_msg}],
     )
+    ia_usage.noter(message, "sql")
     raw = ""
     for block in message.content:
         if getattr(block, "type", None) == "text":

@@ -449,6 +449,7 @@
       'file': '<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>',
       'play': '<polygon points="5 3 19 12 5 21 5 3"/>',
       'check-circle': '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+      'check': '<polyline points="20 6 9 17 4 12"/>',
       'x': '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
       'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
       'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
@@ -4991,7 +4992,7 @@ async function loadRentLinks(){
     d.forEach(l=>{ map[Number(l.planning_entry_id)] = {
       devis_id: l.devis_id||null, no_dossiers: l.no_dossiers||[],
       origine: l.origine||'manuel', valide_at: l.valide_at||null,
-      motif: l.motif||'', score: l.score||null,
+      motif: l.motif||'', score: l.score||null, valide_par: l.valide_par||null,
       // Les chiffres du devis rattaché, pour le survol d'un bloc. Repris tels
       // quels : ce sont ceux de la fiche devis, et les recalculer ici
       // produirait un troisième chiffre pour le même dossier.
@@ -5150,6 +5151,7 @@ function rentEtat(head, link){
     statut, termine: statut==='termine', aDevis, aProd,
     comparable: aDevis===true && aProd===true,
     aLier: statut==='termine' && aDevis===false,
+    aConfirmer: rentEtatLien(link)==='orange',
   };
 }
 
@@ -5500,6 +5502,14 @@ function rentEtatLien(link){
   return 'vert';
 }
 
+/* Le libellé d'un état, avec le cas du vert posé par le moteur : il doit se
+   distinguer d'un vert relu par quelqu'un. */
+function rentLibelleEtat(lien, etat){
+  if(etat === 'vert' && lien && lien.valide_par === 'auto:identique')
+    return 'Validé automatiquement — format, laize, client et matière identiques';
+  return RENT_ETAT_LIB[etat];
+}
+
 var RENT_ETAT_LIB = {
   rouge:   'Aucun devis rattaché',
   orange:  'Rattachement proposé — à confirmer',
@@ -5542,6 +5552,25 @@ async function rentLancerRapprochement(){
   }catch(e){ toast(e.message, 'error'); }
 }
 
+/* Le rattachement se fait sans qu'on le demande : à l'ouverture de l'onglet,
+   le moteur propose ce qu'il peut, et il ne reste qu'à confirmer ou corriger.
+   Silencieux s'il n'a rien de neuf ; jamais bloquant — l'écran est déjà
+   affiché quand il répond. */
+async function rentRapprochementAuto(){
+  if(S.rentAutoEnCours) return;
+  S.rentAutoEnCours = true;
+  try{
+    const r = await api('/api/rentabilite/rapprochement', {method:'POST'});
+    if(r && (r.nouvelles || r.retirees || r.validees)) await loadRentLinks();
+    const aConfirmer = r ? Math.max(0, (r.nouvelles || 0) - (r.validees || 0)) : 0;
+    const morceaux = [];
+    if(r && r.validees) morceaux.push(r.validees + ' validé' + (r.validees > 1 ? 's' : ''));
+    if(aConfirmer) morceaux.push(aConfirmer + ' à confirmer');
+    if(morceaux.length) toast('Devis rattachés automatiquement : ' + morceaux.join(', ') + '.');
+  }catch(_){ /* le bouton reste là pour relancer à la main */ }
+  finally{ S.rentAutoEnCours = false; }
+}
+
 async function rentValiderLien(entryId){
   await api('/api/rentabilite/links/' + entryId + '/valider', {method:'POST'});
   await loadRentLinks();
@@ -5552,6 +5581,156 @@ async function rentRejeterLien(entryId){
   await api('/api/rentabilite/links/' + entryId, {method:'DELETE'});
   await loadRentLinks();
   toast('Rattachement retiré.');
+}
+
+/* Choisir le devis d'un dossier. Remplace le menu déroulant de sept cents
+   devis, qu'on ne pouvait que faire défiler.
+
+   Le champ vide montre ce que le moteur juge le plus plausible — format,
+   laize, client, papier, colle, date — avec son motif. Taper filtre TOUS les
+   devis (client, nom du fichier, date), toujours rangés par concordance avec
+   le dossier : « roquette » sort d'abord les devis Roquette au bon format.
+   Flèches, Entrée et Échap au clavier ; la liste est la seule chose
+   reconstruite, jamais le champ (il garderait sinon le focus perdu).
+
+   `o` : {entryId, devisId, onChange(devisId|null), placeholder} */
+function rentSelecteurDevis(o){
+  const devisList = S.devisList || [];
+  let courant = o.devisId ? Number(o.devisId) : null;
+  let items = [], actif = -1, jeton = 0, minuteur = null;
+
+  const resume = h('div',{className:'rent-choix-courant'});
+  const champ = h('input',{type:'text', className:'rent-input rent-choix-champ',
+    autocomplete:'off', role:'combobox', 'aria-expanded':'false',
+    placeholder: o.placeholder || 'Rechercher un devis (client, format, papier, date…)'});
+  const liste = h('div',{className:'rent-choix-liste', role:'listbox'});
+  liste.hidden = true;
+  const racine = h('div',{className:'rent-choix'}, resume,
+    h('div',{className:'rent-choix-saisie'}, iconEl('search',14), champ), liste);
+
+  /* Une ligne, quatre repères : ce qui permet de reconnaître un devis d'un
+     coup d'œil. Le nom de fichier et le détail du score restent au survol —
+     affichés, ils noyaient la liste (retour du 15/10/2026). */
+  const fmtQte = n => Number(n).toLocaleString('fr-FR');
+  const fmtJour = d => { const t = String(d || '').slice(0,10).split('-');
+    return t.length === 3 ? t[2] + '/' + t[1] + '/' + t[0] : ''; };
+  const details = s => [
+    (s.format_h && s.format_v) ? (s.format_v + '×' + s.format_h + ' mm') : null,
+    s.papier || null,
+    s.qte_etiquettes ? fmtQte(s.qte_etiquettes) + ' ex' : null,
+    s.date_devis ? fmtJour(s.date_devis) : null,
+  ].filter(Boolean).join(' · ');
+
+  const peindreResume = () => {
+    resume.innerHTML = '';
+    if(!courant){
+      resume.append(h('span',{className:'rent-choix-vide'},'Aucun devis lié'));
+      return;
+    }
+    const dv = devisList.find(d => Number(d.id) === courant) || {id:courant};
+    resume.append(
+      h('div',{className:'rent-choix-resume', title:dv.filename || ''},
+        h('div',{className:'rent-choix-client'}, dv.client || ('Devis #' + courant)),
+        h('div',{className:'rent-choix-details'}, details(dv))),
+      h('button',{type:'button', className:'btn-sec rent-choix-voir', title:'Ouvrir la fiche du devis',
+        onClick:()=>ouvrirDevisModal(courant)}, 'Voir'),
+      h('button',{type:'button', className:'btn-sec', title:'Ne lier aucun devis',
+        onClick:()=>choisir(null)}, 'Retirer'));
+  };
+
+  const fermer = () => {
+    liste.hidden = true; actif = -1;
+    champ.setAttribute('aria-expanded','false');
+  };
+
+  const peindreListe = (titre) => {
+    liste.innerHTML = '';
+    if(!items.length){
+      const q = champ.value.trim();
+      liste.append(h('div',{className:'rent-choix-rien'},
+        q ? 'Aucun résultat pour « ' + q + ' »' : 'Aucun devis au format de ce dossier. Tape un client ou un nom de fichier.'));
+    }else{
+      if(titre) liste.append(h('div',{className:'rent-choix-titre'}, titre));
+      items.forEach((s, i) => {
+        const score = Math.round(Number(s.score) || 0);
+        const ton = s.contradiction ? 'is-contraire' : (score >= 58 ? 'is-fort' : (score > 0 ? 'is-moyen' : 'is-nul'));
+        liste.append(h('div',{
+            className:'rent-choix-item' + (i === actif ? ' is-actif' : '')
+              + (Number(s.devis_id) === courant ? ' is-lie' : '') + (s.rejete ? ' is-rejete' : ''),
+            role:'option',
+            // mousedown, pas click : le champ perdrait le focus avant le clic
+            // et refermerait la liste sous le pointeur.
+            onMousedown:e => { e.preventDefault(); choisir(Number(s.devis_id)); },
+            onMouseenter:() => { actif = i; marquerActif(); }},
+          h('div',{className:'rent-choix-tete'},
+            h('span',{className:'rent-choix-client'}, s.client || '(client non lu)'),
+            Number(s.devis_id) === courant ? h('span',{className:'rent-sug-lie'},'lié') : null,
+            s.rejete ? h('span',{className:'rent-choix-rejete'},'rejeté') : null,
+            h('span',{className:'rent-choix-score ' + ton,
+              title: s.motif ? 'Concordance : ' + s.motif : 'Aucun critère en commun avec le dossier'},
+              score ? score + ' %' : '—')),
+          h('div',{className:'rent-choix-details', title:s.filename || ''}, details(s))));
+      });
+    }
+    liste.hidden = false;
+    champ.setAttribute('aria-expanded','true');
+  };
+
+  const marquerActif = () => {
+    [...liste.querySelectorAll('.rent-choix-item')].forEach((el, i) => {
+      el.classList.toggle('is-actif', i === actif);
+      if(i === actif) el.scrollIntoView({block:'nearest'});
+    });
+  };
+
+  const charger = async () => {
+    const q = champ.value.trim();
+    const t = ++jeton;
+    let r = [];
+    try{
+      r = await api('/api/rentabilite/planning/' + o.entryId + '/devis-suggeres?limit='
+        + (q ? 30 : 5) + (q ? '&q=' + encodeURIComponent(q) : ''));
+    }catch(_){ r = []; }
+    if(t !== jeton || document.activeElement !== champ) return;
+    items = Array.isArray(r) ? r : [];
+    actif = items.length ? 0 : -1;
+    peindreListe(q ? null : 'Les plus plausibles pour ce dossier');
+  };
+
+  const choisir = (id) => {
+    courant = id ? Number(id) : null;
+    champ.value = '';
+    fermer(); champ.blur();
+    peindreResume();
+    if(o.onChange) o.onChange(courant);
+  };
+
+  champ.addEventListener('focus', charger);
+  champ.addEventListener('input', () => {
+    clearTimeout(minuteur);
+    minuteur = setTimeout(charger, 180);
+  });
+  champ.addEventListener('blur', () => setTimeout(fermer, 120));
+  champ.addEventListener('keydown', e => {
+    if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault();
+      if(liste.hidden){ charger(); return; }
+      if(!items.length) return;
+      actif = (actif + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      marquerActif();
+    }else if(e.key === 'Enter'){
+      e.preventDefault();
+      if(!liste.hidden && items[actif]) choisir(Number(items[actif].devis_id));
+    }else if(e.key === 'Escape'){
+      e.stopPropagation();
+      if(champ.value){ champ.value = ''; charger(); }
+      else { fermer(); champ.blur(); }
+    }
+  });
+
+  peindreResume();
+  racine.valeur = () => courant;
+  return racine;
 }
 
 // ── Fenêtre de rattachement ──────────────────────────────────────
@@ -5583,30 +5762,9 @@ async function ouvrirRattachementModal(entryId){
 
   const relancer = async () => { fermerRattachementModal(); await ouvrirRattachementModal(entryId); };
 
-  const boite = h('div',{className:'contact-modal rent-lier-modal'},
-    h('div',{className:'contact-modal-head'},
-      h('div',null,
-        h('h3',{style:{margin:'0 0 3px'}}, entree.client || '(client non renseigné)'),
-        h('div',{style:{fontSize:'11px',color:'var(--muted)'}},
-          [entree.reference, entree.machine_nom, rentFmtFormat(entree) + ' mm']
-            .filter(Boolean).join(' · '))
-      ),
-      h('button',{className:'contact-close-btn',title:'Fermer',onClick:fermerRattachementModal},'✕')
-    ),
-    h('div',{className:'rent-lier-etat rent-lier-etat-' + etat},
-      h('span',{className:'rent-point rent-point-' + etat}),
-      h('span',null, RENT_ETAT_LIB[etat]),
-      (etat === 'orange' && lien.motif)
-        ? h('span',{className:'rent-lier-motif'}, ' — ' + lien.motif) : null
-    ),
-    corps
-  );
-  boite.addEventListener('click', e => e.stopPropagation());
-  overlay.appendChild(boite);
-  document.body.appendChild(overlay);
-
-  // Une proposition se juge sur son motif : la confirmer sans l'avoir lu
-  // reviendrait à valider le moteur, pas le rattachement.
+  /* L'état et ce qu'on peut en faire tiennent sur UNE bande : Confirmer et
+     Rejeter à droite du libellé. Posés dessous, ils collaient au bandeau et
+     se lisaient comme une seconde rangée sans rapport (retour du 15/10/2026). */
   const actionsHaut = [];
   if(etat === 'orange'){
     actionsHaut.push(h('button',{type:'button',className:'btn-sm',onClick:async()=>{
@@ -5620,73 +5778,43 @@ async function ouvrirRattachementModal(entryId){
       await rentRejeterLien(entryId); await relancer();
     }}, 'Détacher'));
   }
+  const bandeau = h('div',{className:'rent-lier-etat rent-lier-etat-' + etat, title:lien.motif || ''},
+    h('span',{className:'rent-point rent-point-' + etat}),
+    h('span',{className:'rent-lier-etat-lib'}, rentLibelleEtat(lien, etat)),
+    actionsHaut.length ? h('div',{className:'rent-lier-actions'}, ...actionsHaut) : null);
 
-  let suggestions = [];
-  try{
-    suggestions = await api('/api/rentabilite/planning/' + entryId + '/devis-suggeres');
-  }catch(_){ suggestions = []; }
+  const boite = h('div',{className:'contact-modal rent-lier-modal'},
+    h('div',{className:'contact-modal-head'},
+      h('div',null,
+        h('h3',{style:{margin:'0 0 3px'}}, entree.client || '(client non renseigné)'),
+        h('div',{style:{fontSize:'11px',color:'var(--muted)'}},
+          [entree.reference, entree.machine_nom, rentFmtFormat(entree) + ' mm']
+            .filter(Boolean).join(' · '))
+      ),
+      h('button',{className:'contact-close-btn',title:'Fermer',onClick:fermerRattachementModal},'✕')
+    ),
+    bandeau,
+    corps
+  );
+  boite.addEventListener('click', e => e.stopPropagation());
+  overlay.appendChild(boite);
+  document.body.appendChild(overlay);
+
   if(!document.getElementById('rent-lier-modal')) return; // fermée entre-temps
-
-  const devisList = S.devisList || [];
-  const libelleDevis = dv => (dv.client || dv.filename || ('Devis #' + dv.id))
-    + (dv.qte_etiquettes ? (' — ' + Number(dv.qte_etiquettes).toLocaleString('fr-FR') + ' ex') : '')
-    + (dv.vitesse_theorique ? (' — ' + dv.vitesse_theorique + ' m/mn') : '');
 
   const choisir = async (devisId) => {
     await rentSaveLinks(entryId, devisId, (lien.no_dossiers || []));
     await relancer();
   };
 
-  /* Les suggestions d'abord, la liste complète ensuite. Le moteur ne tranche
-     que quand il est sûr — et il l'est rarement, parce qu'un même produit est
-     refabriqué des dizaines de fois pour le même client. Ce qu'il sait faire,
-     c'est remonter les bons candidats en tête. Sans cette liste, l'ambiguïté
-     renverrait l'utilisateur à un menu déroulant de plusieurs centaines de
-     devis, et le rattachement ne se ferait pas. */
-  const blocSug = suggestions.length
-    ? h('div',null,
-        h('div',{className:'form-section-title'},'Devis plausibles'),
-        h('div',{className:'rent-sug-liste'},
-          ...suggestions.map(s => h('button',{type:'button',className:'rent-sug'
-              + (Number(lien.devis_id) === Number(s.devis_id) ? ' is-lie' : ''),
-              onClick:()=>choisir(s.devis_id)},
-            h('div',{className:'rent-sug-tete'},
-              h('span',{className:'rent-sug-nom'}, s.client || s.filename || ('Devis #' + s.devis_id)),
-              (Number(lien.devis_id) === Number(s.devis_id))
-                ? h('span',{className:'rent-sug-lie'},'rattaché') : null,
-              h('span',{className:'rent-sug-score',
-                title:'Concordance calculée : format, laize, client, date'},
-                Math.round(s.score) + ' %')
-            ),
-            h('div',{className:'rent-sug-motif'}, s.motif || '—'),
-            (s.qte_etiquettes || s.vitesse_theorique)
-              ? h('div',{className:'rent-sug-chiffres'},
-                  [s.qte_etiquettes ? Number(s.qte_etiquettes).toLocaleString('fr-FR') + ' ex' : null,
-                   s.vitesse_theorique ? s.vitesse_theorique + ' m/mn' : null]
-                    .filter(Boolean).join(' · '))
-              : null
-          ))
-        ))
-    : h('div',{className:'card-empty',style:{padding:'14px'}},
-        devisList.length
-          ? 'Aucun devis ne correspond au format de ce dossier.'
-          : 'Aucun devis importé pour l\'instant.');
-
-  const selecteur = h('select',{className:'form-sel',style:{width:'100%'}},
-    h('option',{value:''},'— choisir dans tous les devis —'),
-    ...devisList.map(dv => h('option',{value:String(dv.id),
-      selected:!!(lien.devis_id && Number(lien.devis_id) === Number(dv.id))}, libelleDevis(dv)))
-  );
-  selecteur.addEventListener('change', () => {
-    if(selecteur.value) choisir(Number(selecteur.value));
-  });
+  /* Un seul champ : vide, il montre les candidats du moteur avec leur motif ;
+     tapé, il cherche dans tous les devis, toujours rangés par concordance. */
+  const selecteur = rentSelecteurDevis({entryId, devisId:lien.devis_id, onChange:choisir});
 
   corps.innerHTML = '';
-  if(actionsHaut.length) corps.appendChild(h('div',{className:'rent-lier-actions'}, ...actionsHaut));
-  corps.appendChild(blocSug);
-  corps.appendChild(h('div',{style:{marginTop:'16px'}},
-    h('div',{className:'form-section-title'},'Tous les devis'),
-    selecteur));
+  corps.appendChild(h('div',{className:'form-section-title'},'Devis'));
+  corps.appendChild(selecteur);
+  if(etat !== 'vert') requestAnimationFrame(() => selecteur.querySelector('input')?.focus());
   corps.appendChild(h('div',{className:'rent-lier-pied'},
     h('button',{type:'button',className:'btn-sec',onClick:()=>{
       fermerRattachementModal();
@@ -5769,10 +5897,11 @@ function renderRentPilotage(){
 
   const btnMoteur = h('button',{type:'button',className:'btn-sm',
     disabled:!charges || !(S.devisList || []).length,
-    title:'Cherche, pour chaque dossier sans devis, un devis dont le format, la '
-        + 'laize, le client et la date concordent. Ne propose que les cas nets.',
+    title:'Le rattachement tourne tout seul à l\'ouverture de l\'onglet. Relancer '
+        + 'après un import : format, laize, client, papier, colle et date doivent '
+        + 'concorder, seuls les cas nets sont proposés.',
     onClick:rentLancerRapprochement},
-    iconEl('shield-check',13), ' Proposer les rattachements');
+    iconEl('shield-check',13), ' Relancer le rattachement');
 
   /* Recherche, comme dans le planning : on n'enlève rien de la timeline, on
      éteint ce qui ne correspond pas. Masquer les autres blocs ferait perdre le
@@ -6074,6 +6203,8 @@ function renderRentDossiers(){
   const FILTRES = [
     {key:'a_lier',      label:'À lier',      test:e=>e.aLier,
      aide:'Dossiers terminés sans devis lié'},
+    {key:'a_confirmer', label:'À confirmer', test:e=>e.aConfirmer,
+     aide:'Devis rattaché automatiquement — à confirmer ou corriger'},
     {key:'comparables', label:'Comparables', test:e=>e.comparable,
      aide:'Devis et production liés — l\'écart est calculable'},
     {key:'tous',        label:'Tous',        test:()=>true, aide:'Tout le planning'},
@@ -6222,6 +6353,28 @@ function renderRentDossiers(){
     const entryId=Number(head.id);
     const ouvert = String(S.rentSelEntryId||'')===String(head.id);
     const etat = rentEtat(head, liens[entryId]);
+    const lienLigne = liens[entryId];
+    const couleur = rentEtatLien(charges ? (lienLigne || {devis_id:null}) : null);
+
+    /* Le devis se voit et se rattache depuis la ligne (retour du 15/10/2026) :
+       la pastille porte la couleur de l'état et ouvre la fenêtre de
+       rattachement sans déplier le panneau. Une proposition se confirme d'un
+       clic sur la coche, sans ouvrir quoi que ce soit. */
+    const nomDevis = (lienLigne && lienLigne.devis && lienLigne.devis.client) || 'Devis lié';
+    const pastilleDevis = couleur === 'inconnu' ? null : h('div',{className:'rent-devis-cell'},
+      h('button',{type:'button', className:'rent-devis-chip is-' + couleur,
+          title: couleur === 'rouge' ? 'Rattacher un devis'
+               : (couleur === 'orange' ? 'Proposé — à confirmer' + (lienLigne.motif ? ' · ' + lienLigne.motif : '')
+                                       : rentLibelleEtat(lienLigne, 'vert')),
+          onClick:e => { e.stopPropagation(); ouvrirRattachementModal(entryId); }},
+        couleur === 'rouge' ? iconEl('plus',12) : h('span',{className:'rent-point rent-point-' + couleur}),
+        h('span',{className:'rent-devis-chip-nom'}, couleur === 'rouge' ? 'Lier un devis' : nomDevis)),
+      couleur === 'orange'
+        ? h('button',{type:'button', className:'rent-devis-ok', title:'Confirmer ce rattachement',
+            'aria-label':'Confirmer ce rattachement',
+            onClick:async e => { e.stopPropagation(); await rentValiderLien(entryId); }},
+            iconEl('check',14))
+        : null);
 
     /* Le client et le format d'abord : c'est par là qu'on reconnaît un
        dossier. La référence dessous, sur sa propre ligne — c'est ce qu'on
@@ -6253,23 +6406,19 @@ function renderRentDossiers(){
         etat.termine?'Terminé':(etat.statut==='en_cours'?'En cours':'En attente'),
         etat.termine?'ok':'attente'));
     }
-    if(etat.termine || etat.aDevis===true){
-      if(etat.aDevis===null) etats.push(rentPastille('Devis …','attente'));
-      else if(etat.aDevis) etats.push(rentPastille('Devis','ok','Un devis est lié'));
-      else if(!dansFileALier) etats.push(rentPastille('Devis','manque','Dossier terminé sans devis lié'));
-    }
+    // Le devis a sa propre pastille, cliquable (`pastilleDevis`).
     if(etat.termine || etat.aProd===true){
       if(etat.aProd===null) etats.push(rentPastille('Prod …','attente'));
       else if(etat.aProd) etats.push(rentPastille('Prod','ok','Des dossiers de production sont liés'));
       else if(!dansFileALier) etats.push(rentPastille('Prod','manque','Aucun dossier de production lié'));
     }
-    const pastilles = h('div',{className:'rent-etats'}, ...etats);
+    const pastilles = h('div',{className:'rent-etats'}, pastilleDevis, ...etats);
 
     const cellule = (cls, txt, titreAttr) => h('div',
       {className:'rd-cell'+(cls?' '+cls:''), title: titreAttr || ''},
       txt || '—');
 
-    const ligne = h('div',{className:'rent-ligne'+(ouvert?' is-open':''),
+    const ligne = h('div',{className:'rent-ligne rent-ligne-'+couleur+(ouvert?' is-open':''),
       onClick:async()=>{
         const suivant = ouvert ? null : head.id;
         set({rentSelEntryId:suivant});
@@ -6367,22 +6516,12 @@ function renderRentDossiers(){
 function renderRentPanneau(g, listeVisible){
   const head=g.head;
   const entryId=Number(head.id);
-  const devisList=S.devisList||[];
   const lien=(S.rentLinksById||{})[entryId]||{devis_id:null,no_dossiers:[]};
   let curDossiers=(lien.no_dossiers||[]).slice();
 
-  const devisSel=h('select',{className:'form-sel',style:{minWidth:'260px',flex:'1'}},
-    h('option',{value:''},'Aucun devis lié'),
-    ...devisList.map(dv=>{
-      const lbl=(dv.client||dv.filename||('Devis #'+dv.id))
-        +(dv.qte_etiquettes?(' — '+Number(dv.qte_etiquettes).toLocaleString('fr-FR')+' ex'):'')
-        +(dv.vitesse_theorique?(' — '+dv.vitesse_theorique+' m/mn'):'');
-      // L'attribut, pas seulement la propriété : la sélection doit survivre à
-      // l'insertion des options dans le <select> et rester lisible dans le DOM.
-      return h('option',{value:String(dv.id),
-        selected:!!(lien.devis_id && Number(lien.devis_id)===Number(dv.id))}, lbl);
-    })
-  );
+  // Le choix n'est enregistré qu'au clic sur « Enregistrer », avec les
+  // dossiers de production : on peut corriger les deux avant de valider.
+  const devisSel=rentSelecteurDevis({entryId, devisId:lien.devis_id});
 
   const dosInput=h('input',{type:'text',className:'rent-input',
     placeholder:'N° dossier production (ex : 1003/0002)…',
@@ -6448,7 +6587,7 @@ function renderRentPanneau(g, listeVisible){
   const suivant = indexCourant>=0 ? listeVisible[indexCourant+1] : null;
 
   const enregistrer=async(puisSuivant)=>{
-    const did = devisSel.value ? Number(devisSel.value) : null;
+    const did = devisSel.valeur();
     await rentSaveLinks(entryId, did, curDossiers);
     if(puisSuivant && suivant){
       // La pagination se recale au rendu, sur la liste à jour.
@@ -6489,11 +6628,28 @@ function renderRentPanneau(g, listeVisible){
     : h('div',{className:'card-empty',style:{padding:'18px'}},
         'Lie un devis et des dossiers de production, puis clique sur « Comparer ».');
 
+  /* Proposition du moteur : on la lit, on la confirme ou on la rejette sans
+     quitter la ligne. Rejeter la retire ET l'interdit pour ce dossier — le
+     moteur tourne tout seul, il la reproposerait sinon. */
+  const bandeauProposition = rentEtatLien(lien)==='orange'
+    ? h('div',{className:'rent-lier-etat rent-lier-etat-orange rent-panneau-prop'},
+        h('span',{className:'rent-point rent-point-orange'}),
+        h('span',{title:lien.motif||''},'Rattachement proposé — à confirmer'),
+        h('span',{style:{flex:'1'}}),
+        h('button',{type:'button',className:'btn-sm',onClick:async e=>{
+          e.stopPropagation(); await rentValiderLien(entryId);
+        }}, iconEl('check-circle',13),' Confirmer'),
+        h('button',{type:'button',className:'btn-danger',onClick:async e=>{
+          e.stopPropagation(); await rentRejeterLien(entryId);
+        }},'Rejeter'))
+    : null;
+
   return h('div',{className:'rent-panneau'},
+    bandeauProposition,
     h('div',{className:'rent-panneau-grille'},
       h('div',null,
         h('div',{className:'form-section-title'},'Devis'),
-        h('div',{style:{display:'flex',gap:'10px',flexWrap:'wrap'}}, devisSel),
+        devisSel,
         dz, dzInp
       ),
       h('div',null,
@@ -6559,11 +6715,11 @@ function renderChampDevis(cle, m){
   if(m && m.origine==='repli') meta.push(h('span',{className:'devis-conf devis-conf-moyenne'},'déduit'));
 
   return h('div',{className:'rent-champ'+(m&&m.confiance&&m.confiance!=='haute'?' is-doute':'')},
-    h('div',{className:'rent-champ-lbl'}, (m&&m.libelle)||cle),
+    h('div',{className:'rent-champ-lbl',title:(m&&m.libelle)||cle}, (m&&m.libelle)||cle),
     h('div',{className:'rent-champ-val'}, valeur,
       (m&&m.unite)?h('span',{className:'rent-champ-unite'},' '+m.unite):null),
     meta.length?h('div',{className:'devis-meta'},...meta):null,
-    (m&&m.commentaire)?h('div',{className:'rent-champ-note'}, m.commentaire):null
+    (m&&m.commentaire)?h('div',{className:'rent-champ-note',title:m.commentaire}, m.commentaire):null
   );
 }
 
@@ -6651,6 +6807,11 @@ function ouvrirDevisModal(devisId){
     : h('div',{className:'card-empty'},
         'Ce devis a été importé avant le suivi de provenance : aucune source enregistrée.');
 
+  /* Valider = « je l'ai relu, c'est juste ». Un devis ramassé par l'agent
+     n'est jamais validé tant que personne ne l'a ouvert ; un devis saisi ou
+     corrigé à l'écran l'est d'office. */
+  const dejaValide = Number(dv.a_verifier)!==1 && !!dv.valide_at;
+
   const boite=h('div',{className:'contact-modal devis-modal'},
     h('div',{className:'contact-modal-head'},
       h('div',null,
@@ -6667,7 +6828,12 @@ function ouvrirDevisModal(devisId){
       : null,
     h('div',{className:'contact-modal-body'}, corps),
     h('div',{className:'devis-modal-actions'},
-      h('button',{type:'button',className:'btn-sm',onClick:()=>{
+      dejaValide
+        ? h('span',{className:'devis-modal-valide'},
+            iconEl('check-circle',13),' Validé'+(dv.valide_at?' le '+String(dv.valide_at).slice(0,10):''))
+        : h('button',{type:'button',className:'btn-sm',onClick:()=>validerDevis(dv.id)},
+            iconEl('check-circle',13),' Valider'),
+      h('button',{type:'button',className:'btn-sec',onClick:()=>{
         fermerDevisModal(); ouvrirCorrectionDevis(dv);
       }},'Modifier'),
       h('button',{type:'button',className:'btn-danger',onClick:async()=>{
@@ -6681,6 +6847,23 @@ function ouvrirDevisModal(devisId){
   boite.addEventListener('click',e=>e.stopPropagation());
   overlay.appendChild(boite);
   document.body.appendChild(overlay);
+}
+
+/* Valide le devis ouvert, puis enchaîne sur le suivant à vérifier : cent
+   trente devis se relisent à la suite, pas en rouvrant la liste à chaque fois. */
+async function validerDevis(devisId, o){
+  try{
+    await api('/api/rentabilite/devis/'+devisId+'/valider',{method:'POST'});
+  }catch(e){ toast(e.message,'error'); return; }
+  await loadDevis();
+  fermerDevisModal();
+  const suivant = (S.devisList||[]).find(d=>Number(d.a_verifier)===1 && Number(d.id)!==Number(devisId));
+  if(suivant && S.rentDevisFiltre==='verifier' && !(o && o.enchainer===false)){
+    toast('Devis validé — suivant à vérifier.');
+    ouvrirDevisModal(suivant.id);
+  }else{
+    toast('Devis validé.');
+  }
 }
 
 function renderRentDevis(){
@@ -6806,37 +6989,33 @@ function renderRentDevis(){
   const table = listeAffichee.length
     ? h('div',{style:{overflowX:'auto'}},
         h('table',{className:'rent-table'},
+          /* Cinq colonnes utiles (retour du 15/10/2026). « Lecture » et
+             « Dossiers » sont partis : le mode de lecture se voit dans la
+             fiche, et le compteur de dossiers ne lisait que l'ancienne
+             table de liaison — il affichait 0 partout. */
           h('thead',null,h('tr',null,
             thTri('client','Client'), thTri('date','Date'),
             thTri('quantite','Quantité','num'), thTri('vitesse','Vitesse','num'),
-            thTri('calage','Calage','num'), thTri('lecture','Lecture'),
-            thTri('dossiers','Dossiers','num'),
-            h('th',{className:'num'},'Actions')
+            thTri('calage','Calage','num'),
+            h('th',{className:'num'},'')
           )),
           h('tbody',null,...listeAffichee.map(dv=>{
             const calage=(Number(dv.temps_calage_mn)||0)+(Number(dv.temps_calage_impression_mn)||0);
             const doute = Number(dv.a_verifier)===1;
             return h('tr',{style:{cursor:'pointer'},
               onClick:()=>ouvrirDevisModal(dv.id)},
+              /* Le client, sa pastille de doute, le fichier dessous. Le motif
+                 du doute est au survol de la pastille et dans la fiche : écrit
+                 sur la ligne, il doublait la hauteur de cent trente devis. */
               h('td',null,
-                h('div',{style:{display:'flex',alignItems:'center',gap:'8px'}},
-                  h('span',{style:{fontWeight:'600'}}, dv.client||'(client non lu)'),
-                  doute?rentPastille('à vérifier','manque',dv.note||''):null,
-                  dv.source==='agent'?h('span',{className:'rent-methode',
-                    title:'Ramassé automatiquement sur le partage réseau'},'auto'):null),
-                h('div',{className:'rent-fichier',title:dv.filename||''}, dv.filename||''),
-                // Le motif du doute, sur la ligne : aller le chercher ailleurs
-                // reviendrait à ne jamais le lire. Sur UNE ligne : en trois
-                // lignes de phrase, chaque devis douteux poussait les suivants
-                // hors de l'écran et on ne lisait plus la liste du tout. Le
-                // texte entier reste au survol et dans la fenêtre de détail.
-                (doute&&dv.note)?h('div',{className:'rent-motif',title:dv.note}, dv.note):null),
-              h('td',null, dv.date_devis||'—'),
+                h('div',{className:'rent-devis-client'},
+                  h('span',{className:'rent-devis-nom'}, dv.client||'(client non lu)'),
+                  doute?rentPastille('à vérifier','manque',dv.note||''):null),
+                h('div',{className:'rent-fichier',title:dv.filename||''}, dv.filename||'')),
+              h('td',null, dv.date_devis ? String(dv.date_devis).slice(0,10) : '—'),
               h('td',{className:'num'}, fmt(dv.qte_etiquettes)),
               h('td',{className:'num'}, fmt(dv.vitesse_theorique,'m/mn')),
               h('td',{className:'num'}, calage?fmt(calage,'mn'):'—'),
-              h('td',null, h('span',{className:'rent-methode'}, LIB_METHODE[dv.extraction_methode]||'—')),
-              h('td',{className:'num'}, String(dv.nb_dossiers_lies||0)),
               /* Les actions vivent sur la ligne. `stopPropagation` est
                  indispensable : sans lui, cliquer « Supprimer » ouvrirait
                  aussi la fenêtre de détail du devis qu'on vient d'effacer. */
@@ -6847,7 +7026,12 @@ function renderRentDevis(){
                  peint sous la colonne voisine donc invisible. */
               h('td',{className:'num rent-actions-td'},
                 h('div',{className:'rent-actions'},
-                  h('button',{type:'button',className:'btn-sm',title:'Corriger les valeurs lues',
+                  // Valider sur la ligne : un devis juste se relit dans la
+                  // liste et se valide sans ouvrir la fiche.
+                  doute ? h('button',{type:'button',className:'btn-sm',title:'Le devis est juste tel qu\'il est lu',
+                    onClick:async e=>{e.stopPropagation();await validerDevis(dv.id,{enchainer:false});}},
+                    iconEl('check',13),' Valider') : null,
+                  h('button',{type:'button',className:'btn-sec',title:'Corriger les valeurs lues',
                     onClick:e=>{e.stopPropagation();ouvrirCorrectionDevis(dv);}},'Modifier'),
                   h('button',{type:'button',className:'btn-danger',title:'Supprimer ce devis',
                     onClick:async e=>{e.stopPropagation();await deleteDevis(dv.id);}},'Supprimer')
@@ -12868,6 +13052,7 @@ function renderProdKpis(){
         // Les liaisons de TOUTES les entrees, pas seulement des douze
         // affichees : sans elles, ni compteur ni filtre « a lier ».
         await loadRentLinks();
+        rentRapprochementAuto();
       }else if(S.page === 'traceabilite'){
         S.traceabilite = null;
         S.traceabiliteDossier = undefined;

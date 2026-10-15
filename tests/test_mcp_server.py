@@ -22,6 +22,7 @@ installe.
 Lancer : python3 tests/test_mcp_server.py
 """
 
+import _base_temporaire  # noqa: E402,F401  — base jetable, avant config/database/app.*
 import importlib.util
 import os
 import sqlite3
@@ -195,13 +196,13 @@ else:
     verifier("les regles de lecture RVGI voyagent avec le serveur",
              "corbeille = 0" in r["instructions"] and "htn" in r["instructions"], True)
     noms = [t["name"] for t in rpc("tools/list")["result"]["tools"]]
-    # Quatre outils d'acces brut a la base, quatre outils metier qui appellent
+    # Quatre outils d'acces brut a la base, cinq outils metier qui appellent
     # le code des ecrans au lieu de recalculer.
     verifier("le catalogue d'outils est complet", sorted(noms), [
         "mysifa_anomalies", "mysifa_apercu_table", "mysifa_bases", "mysifa_dossier",
-        "mysifa_metric", "mysifa_resolve", "mysifa_schema", "mysifa_sql",
+        "mysifa_ecarts", "mysifa_metric", "mysifa_resolve", "mysifa_schema", "mysifa_sql",
     ])
-    metier = {"mysifa_metric", "mysifa_dossier", "mysifa_resolve", "mysifa_anomalies"}
+    metier = {"mysifa_metric", "mysifa_dossier", "mysifa_resolve", "mysifa_anomalies", "mysifa_ecarts"}
     verifier("les outils metier sont tous exposes", sorted(metier - set(noms)), [])
     verifier("chaque outil declare un schema d'entree",
              all("inputSchema" in t for t in rpc("tools/list")["result"]["tools"]), True)
