@@ -26224,6 +26224,173 @@ async function openValorisationSettingsModal() {
   box.appendChild(actions);
 }
 
+// Clôture d'inventaire d'une date passée : date limite des prix et mouvements
+// saisis après la date mais rattachés à elle (app/services/valo_cloture.py).
+async function openValorisationClotureModal() {
+  const v = valEnsureState();
+  const date = v.snapshotDate;
+  const root = document.getElementById('mroot');
+  if (!root || !date) return;
+  const frDate = (iso) => { const p = String(iso || '').slice(0, 10).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : iso; };
+  const fmtQ = (n) => Number(n || 0).toLocaleString('fr-FR', { maximumFractionDigits: 4 });
+  root.innerHTML = '';
+  const overlay = el('div', {
+    style: 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px',
+    on: { click: (e) => { if (e.target === overlay) { root.innerHTML = ''; } } },
+  });
+  const box = el('div', { style: 'background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:880px;max-height:90vh;display:flex;flex-direction:column;padding:22px' });
+  box.appendChild(el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px' }, 'Valorisation'));
+  box.appendChild(el('div', { style: 'font-size:17px;font-weight:800;color:var(--text);margin-bottom:6px' }, 'Clôture d\'inventaire au ' + frDate(date)));
+  box.appendChild(el('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5' },
+    'Les prix saisis jusqu\'à la date limite valent pour cette clôture. Les mouvements cochés comptent comme s\'ils avaient eu lieu le ' + frDate(date) + ' au soir : leur écart s\'ajoute au stock reconstitué. Les autres dates ne changent pas.'));
+  const body = el('div', { style: 'flex:1;min-height:0;overflow-y:auto' }, el('div', { style: 'padding:18px 0;color:var(--muted);font-size:13px;text-align:center' }, 'Chargement…'));
+  box.appendChild(body);
+  overlay.appendChild(box);
+  root.appendChild(overlay);
+
+  let data;
+  try {
+    data = await api('/api/stock/valorisation/cloture?date=' + encodeURIComponent(date));
+  } catch (e) {
+    body.innerHTML = '';
+    body.appendChild(el('div', { style: 'color:var(--danger);font-size:13px' }, 'Erreur : ' + (e?.message || 'chargement impossible')));
+    return;
+  }
+  const mvts = Array.isArray(data?.mouvements) ? data.mouvements : [];
+  const coche = new Set(mvts.filter(m => m.rattache).map(m => m.source + ':' + m.id));
+  const ouverts = new Set();
+  let filtre = '';
+
+  // Groupes : source · jour de saisie · début de note (une reprise = un groupe)
+  const groupes = [];
+  const parCle = {};
+  for (const m of mvts) {
+    const cle = m.source + '|' + String(m.created_at || '').slice(0, 10) + '|' + String(m.note || m.type).slice(0, 40);
+    if (!parCle[cle]) {
+      parCle[cle] = { cle, source: m.source, jour: String(m.created_at || '').slice(0, 10), note: String(m.note || m.type), lignes: [] };
+      groupes.push(parCle[cle]);
+    }
+    parCle[cle].lignes.push(m);
+  }
+
+  body.innerHTML = '';
+  const limiteRow = el('div', { style: 'display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px' });
+  const limiteInp = el('input', { type: 'date', min: date,
+    style: 'padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px' });
+  limiteInp.value = data?.cloture?.date_limite_prix || '';
+  limiteRow.appendChild(el('div', null,
+    el('label', { style: 'display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px' }, 'Date limite des prix'),
+    limiteInp));
+  const searchInp = el('input', { type: 'search', id: 'valclo-search', placeholder: 'Filtrer (référence, désignation, note…)',
+    style: 'flex:1;min-width:220px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px' });
+  limiteRow.appendChild(searchInp);
+  body.appendChild(limiteRow);
+  const compteur = el('div', { style: 'font-size:12px;color:var(--text2);margin-bottom:8px;font-weight:600' });
+  body.appendChild(compteur);
+  const liste = el('div');
+  body.appendChild(liste);
+
+  const majCompteur = () => {
+    let mp = 0, pf = 0;
+    for (const k of coche) { if (k.startsWith('mp:')) mp++; else pf++; }
+    compteur.textContent = mp + ' mouvement(s) matières · ' + pf + ' mouvement(s) produits finis rattachés';
+  };
+  const correspond = (m) => {
+    if (!filtre) return true;
+    const t = (m.reference + ' ' + m.designation + ' ' + m.detail + ' ' + m.note + ' ' + m.par).toLowerCase();
+    return t.includes(filtre);
+  };
+
+  const renderListe = () => {
+    liste.innerHTML = '';
+    if (!mvts.length) {
+      liste.appendChild(el('div', { style: 'padding:18px 0;color:var(--muted);font-size:13px;text-align:center' }, 'Aucune correction d\'inventaire saisie après le ' + frDate(date) + '.'));
+      majCompteur();
+      return;
+    }
+    for (const g of groupes) {
+      const lignes = g.lignes.filter(correspond);
+      if (!lignes.length) continue;
+      const libres = lignes.filter(m => !m.rattache_ailleurs);
+      const nbCoches = libres.filter(m => coche.has(m.source + ':' + m.id)).length;
+      const ouvert = ouverts.has(g.cle) || !!filtre;
+      const grp = el('div', { style: 'border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden' });
+      const cbG = el('input', { type: 'checkbox' });
+      cbG.checked = libres.length > 0 && nbCoches === libres.length;
+      cbG.indeterminate = nbCoches > 0 && nbCoches < libres.length;
+      cbG.disabled = !libres.length;
+      cbG.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const tout = nbCoches < libres.length;
+        for (const m of libres) { const k = m.source + ':' + m.id; if (tout) coche.add(k); else coche.delete(k); }
+        renderListe();
+      });
+      const head = el('div', { style: 'display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);cursor:pointer',
+        on: { click: () => { if (ouverts.has(g.cle)) ouverts.delete(g.cle); else ouverts.add(g.cle); renderListe(); } } });
+      head.appendChild(cbG);
+      head.appendChild(el('span', { style: 'font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--card);border:1px solid var(--border);color:var(--text2)' }, g.source === 'mp' ? 'MATIÈRES' : 'PRODUITS FINIS'));
+      head.appendChild(el('span', { style: 'font-size:13px;font-weight:600;color:var(--text)' }, frDate(g.jour)));
+      head.appendChild(el('span', { style: 'flex:1;min-width:0;font-size:13px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, g.note));
+      head.appendChild(el('span', { style: 'font-size:12px;color:var(--muted);white-space:nowrap' }, nbCoches + ' / ' + lignes.length));
+      head.appendChild(el('span', { style: 'color:var(--muted)' }, ouvert ? '▾' : '▸'));
+      grp.appendChild(head);
+      if (ouvert) {
+        for (const m of lignes) {
+          const k = m.source + ':' + m.id;
+          const cb = el('input', { type: 'checkbox' });
+          cb.checked = coche.has(k);
+          cb.disabled = !!m.rattache_ailleurs;
+          cb.addEventListener('change', () => { if (cb.checked) coche.add(k); else coche.delete(k); renderListe(); });
+          const ecartCol = m.ecart > 0 ? 'var(--success)' : (m.ecart < 0 ? 'var(--danger)' : 'var(--muted)');
+          const row = el('label', { style: 'display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--border);font-size:12px;cursor:pointer' });
+          row.appendChild(cb);
+          row.appendChild(el('div', { style: 'flex:1;min-width:0' },
+            el('div', { style: 'font-weight:600;color:var(--text)' }, (m.reference || '—') + (m.detail ? ' · ' + m.detail : '')),
+            el('div', { style: 'color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap' },
+              m.designation + (m.par ? ' · ' + m.par : '') + (m.rattache_ailleurs ? ' · rattaché à la clôture du ' + frDate(m.rattache_ailleurs) : ''))));
+          row.appendChild(el('div', { style: 'text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums' },
+            el('div', { style: 'color:var(--text2)' }, fmtQ(m.avant) + ' → ' + fmtQ(m.apres) + (m.complement && m.source === 'pf' ? ' ' + m.complement : '')),
+            el('div', { style: 'font-weight:700;color:' + ecartCol }, (m.ecart > 0 ? '+' : '') + fmtQ(m.ecart))));
+          grp.appendChild(row);
+        }
+      }
+      liste.appendChild(grp);
+    }
+    majCompteur();
+  };
+  searchInp.addEventListener('input', () => { filtre = searchInp.value.trim().toLowerCase(); renderListe(); });
+  renderListe();
+
+  const actions = el('div', { style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)' });
+  const cancelBtn = el('button', { type: 'button',
+    style: 'padding:10px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);cursor:pointer;font-size:13px;font-weight:600',
+    on: { click: () => { root.innerHTML = ''; } } }, 'Annuler');
+  const saveBtn = el('button', { type: 'button',
+    style: 'padding:10px 16px;border:none;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-size:13px;font-weight:700' }, 'Enregistrer la clôture');
+  saveBtn.addEventListener('click', async () => {
+    const limite = limiteInp.value || null;
+    if (limite && limite < date) { showToast('Date limite invalide — elle doit suivre le ' + frDate(date) + '.', 'danger'); return; }
+    saveBtn.disabled = true;
+    const ids = (src) => [...coche].filter(k => k.startsWith(src + ':')).map(k => parseInt(k.split(':')[1], 10));
+    try {
+      await api('/api/stock/valorisation/cloture', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: date, date_limite_prix: limite, mp_ids: ids('mp'), pf_ids: ids('pf') }),
+      });
+      root.innerHTML = '';
+      showToast('Clôture enregistrée.', 'success');
+      await Promise.all([loadValorisation(), loadValorisationPF()]);
+    } catch (e) {
+      showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
+      saveBtn.disabled = false;
+    }
+  });
+  actions.appendChild(cancelBtn);
+  actions.appendChild(saveBtn);
+  box.appendChild(actions);
+}
+
 function buildValorisation() {
   const v = valEnsureState();
   const root = el('div', { style: 'padding:18px 20px;max-width:1400px;margin:0 auto' });
@@ -26245,7 +26412,17 @@ function buildValorisation() {
     const badge = el('div', { style:
       'display:flex;align-items:center;gap:8px;padding:10px 14px;margin-bottom:14px;border:1px solid #f59e0b;border-radius:10px;background:rgba(245,158,11,0.08);color:#c2410c;font-size:13px;font-weight:600' });
     badge.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
-    badge.appendChild(el('span', null, 'Valorisation figée au ' + fr + ' — quantités et prix reconstitués à cette date. Paramètres globaux actuels (taux USD, taxe, containers, charges de prod).'));
+    const clo = v.summary && v.summary.cloture;
+    let texte = 'Valorisation figée au ' + fr + ' — quantités et prix reconstitués à cette date. Paramètres globaux actuels (taux USD, taxe, containers, charges de prod).';
+    if (clo) {
+      const lp = clo.date_limite_prix ? clo.date_limite_prix.split('-').reverse().join('/') : null;
+      texte += ' Clôture : ' + (lp ? 'prix saisis jusqu\'au ' + lp : 'prix à la date') + ', ' + (clo.nb_mp + clo.nb_pf) + ' correction(s) rattachée(s).';
+    }
+    badge.appendChild(el('span', { style: 'flex:1' }, texte));
+    const cloBtn = el('button', { type: 'button',
+      style: 'flex-shrink:0;padding:6px 12px;border:1px solid currentColor;border-radius:8px;background:transparent;color:inherit;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap',
+      on: { click: () => openValorisationClotureModal() } }, clo ? 'Modifier la clôture' : 'Clôture d\'inventaire');
+    badge.appendChild(cloBtn);
     root.appendChild(badge);
   }
 
