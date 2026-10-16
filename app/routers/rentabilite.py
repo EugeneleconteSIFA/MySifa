@@ -1323,23 +1323,15 @@ async def update_devis(devis_id: int, request: Request):
     return {"success": True}
 
 
-@router.get("/api/rentabilite/devis-a-traiter/count")
-def devis_a_traiter_count(request: Request):
-    """Compteur des pastilles « Rentabilité » (barre latérale) et « Pilotage ».
-
-    Même calcul que la notification `prod.devis_a_traiter` du portail : devis
-    rattachés à aucun dossier ET datés après aujourd'hui. Les deux pastilles
-    et le portail disent donc le même nombre.
-    """
+@router.get("/api/rentabilite/a-venir-sans-devis/count")
+def a_venir_sans_devis_count(request: Request):
+    """Compteur des pastilles « Rentabilité » (barre latérale) et « Pilotage » :
+    dossiers planifiés après aujourd'hui sans devis rattaché. Même calcul que
+    la notification `prod.devis_a_traiter` du portail, donc même nombre."""
     require_rentabilite(request)
-    from app.services.notifications import devis_a_traiter
+    from app.services.notifications import dossiers_a_venir_sans_devis
     with get_db() as conn:
-        d = devis_a_traiter(conn)
-    return {
-        "total": len(set(d["sans_dossier"]) & set(d["date_future"])),
-        "sans_dossier": len(d["sans_dossier"]),
-        "date_future": len(d["date_future"]),
-    }
+        return {"total": len(dossiers_a_venir_sans_devis(conn))}
 
 
 @router.post("/api/rentabilite/devis/{devis_id}/valider")
