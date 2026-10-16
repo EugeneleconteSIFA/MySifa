@@ -650,6 +650,9 @@ ERP2_HOSTS = frozenset(
 )
 ERP2_PREFIXE = "/_erp"
 ROLES_ERP2 = {ROLE_SUPERADMIN}
+# Lecture des documents fournisseurs (BL, factures) déposés dans l'ERP.
+ERP2_DOC_IA_MODELE = os.getenv("ERP2_DOC_IA_MODELE", "claude-sonnet-5-5")
+ERP2_DOC_MAX_OCTETS = int(os.getenv("ERP2_DOC_MAX_OCTETS", str(15 * 1024 * 1024)))
 # Tuile portail « Coûts matières » (/pricing) — Direction et super admin uniquement
 ROLES_PRICING = {ROLE_DIRECTION, ROLE_SUPERADMIN}
 ROLES_PRICING_WRITE = ROLES_PRICING

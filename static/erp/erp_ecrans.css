@@ -256,3 +256,12 @@ select.erp-input:disabled { appearance: none; }
 .erp-cahier-titre { font-weight: 700; margin-bottom: 4px; }
 .erp-cahier-note { line-height: 1.5; }
 .erp-actions-bas { display: flex; gap: 8px; margin-top: 8px; }
+
+/* Documents fournisseurs : zone de dépôt et fiche lue */
+.erp-depot { display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center; text-align: center;
+  border: 2px dashed var(--border); border-radius: 10px; padding: 18px 16px; margin: 8px 0 12px; cursor: pointer;
+  color: var(--text2); background: var(--card); }
+.erp-depot b { color: var(--text); }
+.erp-depot:hover, .erp-depot:focus, .erp-depot.survol { border-color: var(--accent); color: var(--text); outline: none; }
+.erp-doc-tete { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px 16px; margin-bottom: 12px; }
+.erp-doc-tete a { word-break: break-all; }

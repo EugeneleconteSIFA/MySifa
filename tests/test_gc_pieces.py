@@ -63,6 +63,12 @@ def _base(conn):
            VALUES (1, 1, 'vente', 50000000, 1100)""")
 
 
+def _stocker(conn, article, q, depot="PRINC"):
+    """Stock d'ouverture : un BL ne livre pas un produit absent du stock."""
+    conn.execute("""INSERT INTO gc_mouvements (date_mvt, article_id, depot, quantite_milli, type, cree_le)
+                    VALUES ('2026-01-01', ?, ?, ?, 'inventaire', ?)""", (article, depot, q, NOW))
+
+
 def _ligne(article, q, prix=None, base=None, **k):
     d = {"article_id": article, "quantite_milli": q}
     if prix is not None:
@@ -143,6 +149,7 @@ class Chaine(unittest.TestCase):
 
     def test_chaine_complete(self):
         c = self.conn
+        _stocker(c, 1, 100_000_000)
         dv = pieces.creer(c, "devis", 1)
         pieces.enregistrer(c, dv, {"date_piece": "2026-10-14"}, [
             _ligne(1, 20_000_000, 1250, 1000), _ligne(2, 1000, 8000), {"libelle": "Texte libre"}])
@@ -168,7 +175,7 @@ class Chaine(unittest.TestCase):
         pieces.valider(c, bl)
         self.assertEqual(pieces.charger(c, co)["statut"], "partiel")
         stock = c.execute("SELECT SUM(quantite_milli) q FROM gc_mouvements WHERE article_id=1").fetchone()["q"]
-        self.assertEqual(stock, -12_000_000)
+        self.assertEqual(stock, 100_000_000 - 12_000_000)
         self.assertIsNone(c.execute("SELECT 1 FROM gc_mouvements WHERE article_id=2").fetchone())  # service
 
         # Reliquat : 8 000 étiquettes, plus de calage
@@ -214,6 +221,7 @@ class Chaine(unittest.TestCase):
 
     def test_annulation_bl(self):
         c = self.conn
+        _stocker(c, 1, 100_000_000)
         co = pieces.creer(c, "commande", 1)
         pieces.enregistrer(c, co, None, [_ligne(1, 5_000_000, 1250, 1000)])
         pieces.valider(c, co)
@@ -223,7 +231,7 @@ class Chaine(unittest.TestCase):
         pieces.annuler(c, bl)
         self.assertEqual(pieces.charger(c, co)["statut"], "valide")
         q = c.execute("SELECT SUM(quantite_milli) q FROM gc_mouvements WHERE article_id=1").fetchone()["q"]
-        self.assertEqual(q, 0)
+        self.assertEqual(q, 100_000_000)
         bl2 = pieces.transformer(c, [co], "bl")   # de nouveau possible
         self.assertEqual(pieces.charger(c, bl2)["lignes"][0]["quantite_milli"], 5_000_000)
 
@@ -332,8 +340,14 @@ class Chaine(unittest.TestCase):
         pieces.enregistrer(c, co, None, [_ligne(1, 3_000_000, 1250, 1000)])
         pieces.valider(c, co)
         bl = pieces.transformer(c, [co], "bl")
+        # Un BL ne fait pas passer le stock d'un produit fini sous zéro (16/10/2026).
+        with self.assertRaises(ErreurPiece) as e:
+            pieces.valider(c, bl)
+        self.assertIn("Stock insuffisant — ETQ1 : 0 ETQ en stock au dépôt PRINC, 3 000 à livrer", str(e.exception))
+        self.assertEqual(pieces.charger(c, bl)["statut"], "brouillon")
+        _stocker(c, 1, 3_000_000)
         pieces.valider(c, bl)
-        self.assertEqual(pieces.alertes_stock(c, bl), ["Stock négatif — ETQ1 : stock -3 000 ETQ au dépôt PRINC"])
+        self.assertEqual(pieces.alertes_stock(c, bl), [])
 
     def test_relances_et_transfert(self):
         from app.services.gc import compta, fichiers
@@ -368,6 +382,7 @@ class Chaine(unittest.TestCase):
 
     def test_parite_rvgi(self):
         c = self.conn
+        _stocker(c, 1, 100_000_000)
         t = calculs.totaux([{"montant_ht_cents": 10000, "taux_tva_bp": 2000}], 1000, 200, 3000)
         self.assertEqual((t["remise"], t["escompte"], t["ht"], t["tva"], t["ttc"], t["net_a_payer"]),
                          (1000, 180, 8820, 1764, 10584, 7584))
@@ -399,6 +414,8 @@ class Chaine(unittest.TestCase):
 
     def test_type_ligne_et_bat(self):
         c = self.conn
+        _stocker(c, 1, 1_000_000)        # juste ce que le BL livre
+        _stocker(c, 4, 2_000_000)
         c.execute("INSERT OR IGNORE INTO gc_sequences (code, libelle, format) VALUES ('of', 'OF', 'OF{AA}{N:05}')")
         c.execute("""INSERT INTO gc_articles (id, code, libelle, nature, unite, base_prix, prix_vente_cents, tva_code,
                    gere_stock, cree_le, modifie_le) VALUES (4, 'ETQ2', 'Étiquette 2', 'pf', 'ETQ', 1000, 900, 'N', 1, ?, ?)""",
@@ -526,6 +543,7 @@ class Chaine(unittest.TestCase):
 
     def test_carnet_colonnes_rvgi(self):
         c = self.conn
+        _stocker(c, 1, 100_000_000)
         co = pieces.creer(c, "commande", 1)
         pieces.enregistrer(c, co, None, [_ligne(1, 10_000, 100)])
         pieces.valider(c, co)

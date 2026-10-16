@@ -953,6 +953,7 @@
       var droite = h('div', {className: 'erp-piece-cote'});
       [blocLiens(), blocEcheances(), blocMouvements()].forEach(function (b) { if (b) droite.appendChild(b); });
       if (P.type === 'facture_fournisseur' && !nouveauBrouillonVide()) gauche.appendChild(blocRapprochement());
+      if (/^(cde_fournisseur|reception|facture_fournisseur)$/.test(P.type) && ERP.carteDocuments) droite.appendChild(ERP.carteDocuments(P));
       grille.appendChild(gauche);
       if (droite.childNodes.length) grille.appendChild(droite);
       else grille.classList.add('seul');

@@ -671,10 +671,13 @@ def valider(conn, piece_id: int, user: dict | None = None) -> str:
     if TYPES[p["type"]]["sens"] == "vente" and t["bloque"] and p["type"] not in ("avoir", "of"):
         raise ErreurPiece(f"{t['raison_sociale']} est bloqué : débloquer le client avant de valider.")
     lignes = conn.execute(
-        """SELECT l.*, a.gere_stock FROM gc_pieces_lignes l JOIN gc_articles a ON a.id=l.article_id
+        """SELECT l.*, a.gere_stock, a.nature, a.code AS article_code, a.unite AS article_unite
+           FROM gc_pieces_lignes l JOIN gc_articles a ON a.id=l.article_id
            WHERE l.piece_id=? ORDER BY l.rang""", (piece_id,)).fetchall()
     if not lignes:
         raise ErreurPiece("Aucune ligne d'article : rien à valider.")
+    if p["type"] == "bl":
+        _verifier_stock_bl(conn, p, lignes)
     if p["type"] == "avoir" and p["piece_annulee_id"]:
         _verifier_plafond_avoir(conn, piece_id)
     _maj_totaux(conn, piece_id)
@@ -707,6 +710,25 @@ def valider(conn, piece_id: int, user: dict | None = None) -> str:
         recalculer_statut(conn, amont)
     recalculer_statut(conn, piece_id)
     return numero
+
+
+def _verifier_stock_bl(conn, p, lignes) -> None:
+    """Un BL ne fait pas passer le stock d'un produit fini sous zéro (réponse
+    d'Eugène, 16/10/2026) : la validation est refusée, article par article."""
+    besoin: dict[int, list] = {}
+    for l in lignes:
+        if l["gere_stock"] and l["nature"] == "pf":
+            b = besoin.setdefault(l["article_id"], [0, l["article_code"], l["article_unite"]])
+            b[0] += int(l["quantite_milli"])
+    manques = []
+    for art, (q, code, unite) in besoin.items():
+        dispo = int(conn.execute("SELECT COALESCE(SUM(quantite_milli),0) q FROM gc_mouvements WHERE article_id=? AND depot=?",
+                                 (art, p["depot"])).fetchone()["q"])
+        if q > dispo:
+            f = lambda m: f"{m / 1000:,.3f}".rstrip("0").rstrip(".").replace(",", " ").replace(".", ",")
+            manques.append(f"{code} : {f(max(dispo, 0))} {unite or ''} en stock au dépôt {p['depot']}, {f(q)} à livrer")
+    if manques:
+        raise ErreurPiece("Stock insuffisant — " + " ; ".join(manques) + ". Produire, réceptionner ou corriger le stock avant de livrer.")
 
 
 def alertes_stock(conn, piece_id: int) -> list[str]:

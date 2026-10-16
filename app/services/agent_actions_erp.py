@@ -239,6 +239,20 @@ def _det_myao(conn, v):
     return out
 
 
+def _det_document(conn, v):
+    r = conn.execute("SELECT nom_fichier, statut FROM gc_documents WHERE id=?", (int(v["doc_id"]),)).fetchone()
+    if not r:
+        raise _invalide(f"Document {v['doc_id']} introuvable.")
+    if r["statut"] not in ("analyse",):
+        raise _invalide("Document pas encore lu, ou déjà traité : le lire d'abord (erp_document_lire).")
+    out = [["Document", r["nom_fichier"]], ["Pièce préparée", "réception" if v["cible"] == "reception" else "facture fournisseur"]]
+    if v.get("commande_id"):
+        out.append(["Commande", _piece(conn, v["commande_id"])])
+    if v.get("tiers_id"):
+        out.append(["Fournisseur", _tiers(conn, v["tiers_id"])])
+    return out
+
+
 # ── Catalogue ────────────────────────────────────────────────────────
 
 _LIGNES_AIDE = ("liste d'objets {article_id*, quantite* (en unités de l'article), prix (€ HT pour la base de prix "
@@ -380,6 +394,24 @@ ACTIONS: list[dict[str, Any]] = [
         "construire": lambda v: _corps_myao(v), "detailler": lambda conn, v: _det_myao(conn, v),
     },
     {
+        "cle": "erp_document_lire", "libelle": "ERP — lecture d'un document fournisseur", "module": "erp2",
+        "methode": "POST", "chemin": "/api/erp2/documents/{doc_id}/analyser", "lien": "/achats/documents", "autorise": _erp,
+        "aide": "Fait lire par l'IA un document fournisseur déposé (statut « depose » ou « erreur »).",
+        "params": {"doc_id": ("int", True, "Document (gc_documents.id)", "")},
+    },
+    {
+        "cle": "erp_document_preparer", "libelle": "ERP — pièce préparée depuis un document fournisseur", "module": "erp2",
+        "methode": "POST", "chemin": "/api/erp2/documents/{doc_id}/preparer", "lien": "/achats/documents", "autorise": _erp,
+        "aide": "Depuis un document lu (erp_document) : prépare en BROUILLON la réception (BL) ou la facture fournisseur, "
+                "aux quantités et prix du document, sur la commande rapprochée (ou commande_id). Signaler d'abord les "
+                "écarts relevés par erp_document.",
+        "params": {"doc_id": ("int", True, "Document (gc_documents.id)", ""),
+                   "cible": ("enum:reception,facture_fournisseur", True, "Pièce à préparer", ""),
+                   "commande_id": ("int", False, "Commande fournisseur (gc_pieces.id)", ""),
+                   "tiers_id": ("int", False, "Fournisseur ERP (gc_tiers.id)", "si non reconnu")},
+        "detailler": lambda conn, v: _det_document(conn, v),
+    },
+    {
         "cle": "erp_mouvement_stock", "libelle": "ERP — mouvement de stock", "module": "erp2",
         "methode": "POST", "chemin": "/api/erp2/mouvements", "lien": "/stocks/etat", "autorise": _erp,
         "aide": "Inventaire (quantité comptée), ajustement (+/−) ou transfert entre dépôts, hors pièce.",
@@ -440,6 +472,13 @@ LECTURES: list[dict[str, Any]] = [
     {"cle": "erp_myao_demande", "chemin": "/api/erp2/myao/{ao_id}",
      "aide": "ERP : une demande MyAO prête à commander (lignes, séries, prix du fournisseur retenu, article ERP proposé).",
      "params": {"ao_id": ("int", True, "ao_demandes.id")}},
+    {"cle": "erp_documents", "chemin": "/api/erp2/documents",
+     "aide": "ERP : documents fournisseurs déposés (BL, factures) : état de lecture, fournisseur, n°, commande citée, pièce créée.",
+     "params": {"piece_id": ("int", False, "documents d'une pièce")}},
+    {"cle": "erp_document", "chemin": "/api/erp2/documents/{doc_id}",
+     "aide": "ERP : un document fournisseur lu par l'IA, rapproché de la commande : lignes du document, article commandé, "
+             "reste à recevoir, prix commandé, écarts (quantité, unité, prix).",
+     "params": {"doc_id": ("int", True, "gc_documents.id"), "commande_id": ("int", False, "forcer la commande à comparer")}},
     {"cle": "erp_stock", "chemin": "/api/erp2/stock",
      "aide": "ERP : stock par article, dépôt et laize, avec mini / maxi.", "params": {}},
     {"cle": "erp_echeances", "chemin": "/api/erp2/echeances",
