@@ -148,6 +148,40 @@ def _compter_departs_a_valider(conn):
     return n, (f"{today}:{r['m']}" if n else None)
 
 
+def devis_a_traiter(conn) -> dict:
+    """Les deux listes dont la notification « Devis à traiter » fait
+    l'intersection : devis rattachés à aucun dossier, et devis datés après
+    aujourd'hui. Un devis n'est « à traiter » que s'il est dans les DEUX
+    (décision d'Eugène du 16/10/2026 : l'un ou l'autre seul faisait 572).
+
+    Partagé par le détecteur ci-dessous et par l'écran Rentabilité, pour que
+    la pastille du portail et le bandeau du Pilotage disent le même nombre.
+    """
+    if not {"devis", "rent_links"} <= _tables(conn):
+        return {"sans_dossier": [], "date_future": []}
+    today = datetime.now(_PARIS).date().isoformat()
+    sans = [int(r[0]) for r in conn.execute(
+        """SELECT d.id FROM devis d
+            WHERE NOT EXISTS (SELECT 1 FROM rent_links l WHERE l.devis_id = d.id)
+            ORDER BY d.id"""
+    ).fetchall()]
+    futurs = [int(r[0]) for r in conn.execute(
+        """SELECT id FROM devis
+            WHERE substr(COALESCE(date_devis, ''), 1, 10) > ?
+            ORDER BY id""",
+        (today,),
+    ).fetchall()]
+    return {"sans_dossier": sans, "date_future": futurs}
+
+
+def _compter_devis_a_traiter(conn):
+    """Devis sans dossier ET datés dans le futur."""
+    d = devis_a_traiter(conn)
+    ids = sorted(set(d["sans_dossier"]) & set(d["date_future"]))
+    if not ids:
+        return 0, None
+    emp = hashlib.sha1(",".join(map(str, ids)).encode()).hexdigest()[:16]
+    return len(ids), emp
 def _compter_coherence(conn):
     """Écarts ouverts relevés par les contrôleurs de cohérence."""
     from app.services.coherence import compter_ouverts
@@ -188,6 +222,15 @@ DETECTEURS: dict[str, Detecteur] = {d.code: d for d in (
         lien="/stock?tab=destockage",
         compter=_compter_a_destocker,
         roles_suggeres=("administration_technique",),
+    ),
+    Detecteur(
+        code="prod.devis_a_traiter",
+        app="prod", app_label="MyProd",
+        titre="Devis à traiter",
+        description="Devis rattachés à aucun dossier ET dont la date est postérieure à aujourd'hui.",
+        lien="/prod?page=rentabilite&sous=devis&filtre=a_traiter",
+        compter=_compter_devis_a_traiter,
+        roles_suggeres=(ROLE_SUPERADMIN,),
     ),
     Detecteur(
         code="expe.departs_a_valider",

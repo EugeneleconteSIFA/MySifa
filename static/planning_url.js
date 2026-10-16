@@ -21,13 +21,16 @@ let _modaleUrl=null;            // fenêtre demandée par l'adresse, ouverte apr
 const _PLAN_VUES_URL=["prod","expe","prod_expe"];
 const _PLAN_HORIZONS=["1w","2w","4w"];
 // Par fenêtre : la forme de valeur admise, comment la rouvrir, la fermer.
-// Toutes s'affichent dans #mroot (closeM) sauf l'aperçu OF, qui a sa surcouche.
+// Toutes s'affichent dans #mroot (closeM) sauf l'aperçu OF et le devis, qui
+// ont leur surcouche.
 const _PLAN_ID=/^[0-9]+$/, _PLAN_JOUR=/^\d{4}-\d{2}-\d{2}$/;
 const _planJourDe=v=>new Date(v+"T12:00:00");
 const _PLAN_MODALES={
   dossier:{ok:_PLAN_ID,ouvrir:v=>openEdit(Number(v)),              fermer:()=>closeM(true)},
   stats:  {ok:_PLAN_ID,ouvrir:v=>openDossierStatsModal(Number(v)), fermer:()=>closeM(true)},
   of:     {ok:_PLAN_ID,ouvrir:v=>openOfPreview(Number(v)),         fermer:()=>closeOfPreview(true)},
+  // Rattachement du devis d'un dossier (bouton « Devis » de la fiche).
+  devis:  {ok:_PLAN_ID,ouvrir:v=>ouvrirDevisPlanning(Number(v)),   fermer:()=>fermerDevisPlanning(true)},
   fsc:    {ok:/^[A-Za-z0-9 ._+\-\/]{1,60}$/,ouvrir:v=>openFscRapport(v), fermer:()=>closeM(true)},
   // Réglages horaires par défaut de la machine (roue dentée de l'en-tête).
   reglages:{ok:/^machine$/,ouvrir:()=>openDefaultsModal(),         fermer:()=>closeM(true)},
@@ -78,8 +81,8 @@ function planningAppliquerModaleUrl(){
   const cour=S.urlModale;
   if(cour&&(!voulue||voulue.cle!==cour.cle||String(voulue.id)!==String(cour.id))){
     try{ _PLAN_MODALES[cour.cle].fermer(); }catch(e){}
-    // L'aperçu OF refermé rend la main à la fenêtre du dossier restée
-    // dessous (closeOfPreview la remet dans S.urlModale) : ne pas l'effacer.
+    // L'aperçu OF ou le devis refermés rendent la main à la fenêtre du dossier
+    // restée dessous (ils la remettent dans S.urlModale) : ne pas l'effacer.
     if(S.urlModale===cour) S.urlModale=null;
   }
   const deja=S.urlModale;

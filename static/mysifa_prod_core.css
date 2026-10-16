@@ -1815,3 +1815,16 @@ body.recopie-en-cours,body.recopie-en-cours *{cursor:ns-resize !important;user-s
 /* Liste des devis allégée : le nom du client lisible, le fichier en dessous. */
 .rent-devis-client{display:flex;align-items:center;gap:8px}
 .rent-devis-nom{font-size:13px;font-weight:700;color:var(--text)}
+
+/* Pied de la fenêtre de rattachement : Précédent à gauche, Suivant à droite. */
+.rent-lier-pied{align-items:center}
+.rent-lier-pied-espace{flex:1}
+.rent-lier-fin{font-size:12px;color:var(--success);font-weight:600}
+/* Rappel superadmin : devis sans dossier ou datés dans le futur. */
+.rent-rappel.rent-rappel-info{color:var(--accent);border-color:var(--accent)}
+
+/* Pastille de compteur (barre latérale Rentabilité, onglet Pilotage) : même
+   aspect que celle de l'entrée OF. */
+.rent-nav-pastille{margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--danger);
+  color:white;font-size:10px;font-weight:700;line-height:1.5;flex-shrink:0;font-variant-numeric:tabular-nums}
+.nav-tab .rent-nav-pastille{margin-left:6px}
