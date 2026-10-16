@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
 
 from config import ROLES_ERP2
 from app.core.database import get_db
@@ -16,7 +17,7 @@ from app.services.auth_service import get_current_user
 from app.services.audit_service import log_action
 from fastapi.responses import Response
 
-from app.services.gc import cahiers, compta, demo, envoi, export_compta, fichiers, fsc, pieces
+from app.services.gc import cahiers, compta, demo, documents, envoi, export_compta, fichiers, fsc, myao, pieces, rapprochement
 from app.services.gc.pieces import ErreurPiece
 
 router = APIRouter(prefix="/api/erp2", tags=["erp2"])
@@ -257,8 +258,17 @@ def piece_valider(piece_id: int, request: Request):
             alertes += pieces.alertes_bat(conn, piece_id)
         if type_p in ("bl", "facture"):
             alertes += fsc.alertes(conn, piece_id)
+        if type_p == "facture_fournisseur":
+            alertes += rapprochement.alertes(conn, piece_id)
     _trace(request, u, "VALIDATE", f"Pièce {numero}")
     return {"numero": numero, "alertes": alertes}
+
+
+@router.get("/pieces/{piece_id}/rapprochement")
+def piece_rapprochement(piece_id: int, request: Request):
+    """Facture fournisseur : quantités reçues et prix commandés, ligne à ligne."""
+    _user(request)
+    return _lecture(rapprochement.rapprochement, piece_id)
 
 
 @router.get("/pieces/{piece_id}/envoi")
@@ -354,6 +364,100 @@ async def ligne_solde(ligne_id: int, request: Request):
 def stock(request: Request):
     _user(request)
     return _lecture(fichiers.stock)
+
+
+# ── Documents fournisseurs (BL, factures) ─────────────────────────────
+
+@router.get("/documents")
+def documents_liste(request: Request, piece_id: int | None = None):
+    _user(request)
+    return _lecture(documents.lister, piece_id)
+
+
+@router.post("/documents")
+async def document_deposer(request: Request, fichier: UploadFile = File(...), piece_id: int | None = Form(None)):
+    u = _user(request)
+    contenu = await fichier.read()
+    with _ecriture() as conn:
+        did = documents.deposer(conn, contenu, fichier.filename or "document", piece_id, u)
+    _trace(request, u, "CREATE", f"Document fournisseur #{did}", {"fichier": fichier.filename, "piece_id": piece_id})
+    return {"id": did}
+
+
+@router.get("/documents/{doc_id}")
+def document_detail(doc_id: int, request: Request, commande_id: int | None = None):
+    _user(request)
+    return _lecture(documents.detail, doc_id, commande_id)
+
+
+@router.get("/documents/{doc_id}/fichier")
+def document_fichier(doc_id: int, request: Request):
+    _user(request)
+    with get_db() as conn:
+        try:
+            chemin, nom, mime = documents.fichier(conn, doc_id)
+        except ErreurPiece as e:
+            raise HTTPException(404, str(e)) from None
+    # Jamais servi en ligne : pièce jointe (CLAUDE.md, sécurité des uploads).
+    return FileResponse(chemin, media_type=mime, filename=nom,
+                        headers={"X-Content-Type-Options": "nosniff"})
+
+
+@router.post("/documents/{doc_id}/analyser")
+def document_analyser(doc_id: int, request: Request):
+    u = _user(request)
+    with get_db() as conn:
+        try:
+            d = documents.analyser(conn, doc_id)
+            conn.commit()
+        except ErreurPiece as e:
+            conn.commit()        # le statut « erreur » est gardé
+            raise HTTPException(502 if "clé" in str(e) or "échec" in str(e) else 400, str(e)) from None
+    _trace(request, u, "UPDATE", f"Document fournisseur #{doc_id} lu par l'IA")
+    return d
+
+
+@router.post("/documents/{doc_id}/preparer")
+async def document_preparer(doc_id: int, request: Request):
+    u = _user(request)
+    b = await request.json()
+    with _ecriture() as conn:
+        pid = documents.preparer(conn, doc_id, b.get("cible"), b.get("commande_id"), b.get("tiers_id"), u)
+    _trace(request, u, "CREATE", f"Pièce #{pid} préparée depuis le document #{doc_id}", {"cible": b.get("cible")})
+    return {"id": pid}
+
+
+@router.delete("/documents/{doc_id}")
+def document_supprimer(doc_id: int, request: Request):
+    u = _user(request)
+    with _ecriture() as conn:
+        conn.execute("DELETE FROM gc_documents WHERE id=? AND statut!='traite'", (doc_id,))
+    _trace(request, u, "DELETE", f"Document fournisseur #{doc_id}")
+    return {"ok": True}
+
+
+# ── MyAO (demandes de prix de MySifa) ─────────────────────────────────
+
+@router.get("/myao")
+def myao_liste(request: Request):
+    _user(request)
+    return _lecture(myao.demandes)
+
+
+@router.get("/myao/{ao_id}")
+def myao_detail(ao_id: int, request: Request):
+    _user(request)
+    return _lecture(myao.detail, ao_id)
+
+
+@router.post("/myao/{ao_id}/commande")
+async def myao_commande(ao_id: int, request: Request):
+    u = _user(request)
+    b = await request.json()
+    with _ecriture() as conn:
+        pid = myao.vers_commande(conn, ao_id, b, u)
+    _trace(request, u, "CREATE", f"Commande fournisseur #{pid} depuis la demande MyAO #{ao_id}")
+    return {"id": pid}
 
 
 @router.get("/cahiers/{objet}/{objet_id}")
