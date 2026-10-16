@@ -1023,6 +1023,13 @@ def get_session(request: Request, machine_id: int = None):
             ).fetchone()
             if row:
                 dossier = dict(row)
+                # Vitesse et calage du devis rattaché : le conducteur les lit
+                # dans le pied de page en lançant le dossier.
+                try:
+                    from app.services.calage_cloture import devis_saisie
+                    dossier["devis_prevu"] = devis_saisie(conn, row["id"], active_ref)
+                except Exception:
+                    dossier["devis_prevu"] = None
             elif _is_fictif_dossier(active_ref):
                 dossier = _build_fictif_dossier_dict(active_ref, None)
 
