@@ -608,29 +608,6 @@ body.light table.fab-table tr.fab-row-last td{
 @media (prefers-reduced-motion:reduce){
   .fin-etape-entre,.fin-progres-barre.anime,.fin-pill-allume{animation:none}
 }
-/* Heures du calage : réglées au doigt, en 24 h. */
-.fin-heure{display:inline-flex;align-items:center;justify-content:space-between;gap:12px;
-  min-width:240px;padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);
-  background:var(--bg);color:var(--text);cursor:pointer;font-family:inherit}
-.fin-heure:hover,.fin-heure.actif{border-color:var(--accent)}
-.fin-heure.actif{background:var(--accent-bg)}
-.fin-heure-jour{font-size:13px;color:var(--text2)}
-.fin-heure-hm{font-size:22px;font-weight:800;letter-spacing:.5px;font-variant-numeric:tabular-nums}
-.fin-heure.vide .fin-heure-hm{color:var(--muted)}
-.fin-heure-edit{display:inline-flex;color:var(--accent)}
-.fin-editeur{margin-top:8px;padding:12px;border-radius:12px;background:var(--bg);border:1px solid var(--accent)}
-.fin-editeur-titre{font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
-  color:var(--muted);margin:8px 0 6px}
-.fin-editeur-ligne{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.fin-grille{display:grid;gap:6px}
-.fin-grille-heures{grid-template-columns:repeat(8,1fr)}
-.fin-grille-minutes{grid-template-columns:repeat(6,1fr)}
-.fin-pastille{min-width:44px;padding:9px 0;border-radius:8px;border:1px solid var(--border);
-  background:var(--card);color:var(--text);font-family:inherit;font-size:14px;font-weight:700;
-  cursor:pointer;font-variant-numeric:tabular-nums}
-.fin-editeur-ligne .fin-pastille{padding:8px 12px}
-.fin-pastille:hover{border-color:var(--accent)}
-.fin-pastille.actif{background:var(--accent);border-color:var(--accent);color:white}
 .fin-lien-signal{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:8px;
   border:1px dashed var(--warn);background:var(--bg);color:var(--warn);font-family:inherit;
   font-size:13px;font-weight:700;cursor:pointer}
@@ -1442,6 +1419,7 @@ let S = {
   vitesseMax: 0,                // plafond machine (m/min), fourni par le serveur
   debutCompteurConfirme: null,  // compteur deja signale improbable, confirme au 2e clic
   finCompteurConfirme: null,
+  confirmCompteur: null,
   showCompteurCalage: false,
   compteurCalageCtx: null,
   compteurCalageVal: '',
@@ -1662,7 +1640,7 @@ function fscTypeRequisLabel(t){
 }
 
 function fabIsModalOpen(){
-  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showAnnulModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showOpCommentModal || S.showOutilModal || S.showCompteurCalage || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
+  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showAnnulModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showOpCommentModal || S.showOutilModal || S.showCompteurCalage || S.confirmCompteur || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
   try{
     const mr = document.getElementById('mroot');
     if(mr && mr.firstElementChild) return true;
@@ -2136,11 +2114,45 @@ async function loadMachines(){
    toujours un chiffre en trop ou une ligne mal lue. On ne bloque pas (la
    machine a pu tourner hors dossier), on fait relire : une seconde validation
    de la meme valeur passe. Rend true si la saisie peut partir. */
-function compteurConfirme(cle, valeur, message){
+/* Compteur improbable : une seconde fenêtre montre le calcul (métrage, durée,
+   vitesse comparée au maximum de la machine) et demande de confirmer. Rend
+   true si cette valeur a déjà été confirmée ; sinon ouvre la fenêtre et rend
+   false. « Confirmer » relance l'action interrompue (`relance`). */
+function compteurConfirme(cle, valeur, info, relance){
   if(S[cle] === valeur) return true;
-  S[cle] = valeur;
-  showToast(message+' Vérifiez le compteur, puis validez à nouveau pour confirmer.','danger');
+  S.confirmCompteur = Object.assign({cle, valeur, relance}, info || {});
+  render();
   return false;
+}
+
+function renderConfirmCompteurModal(){
+  const c = S.confirmCompteur || {};
+  const fermer = () => set({confirmCompteur:null});
+  const ligne = (lib, val, fort) => h('div',{style:{display:'flex',justifyContent:'space-between',
+      gap:'16px',padding:'8px 0',borderBottom:'1px solid var(--border)',fontSize:'14px'}},
+    h('span',{style:{color:'var(--text2)'}},lib),
+    h('span',{style:{fontWeight:fort?'800':'600',fontVariantNumeric:'tabular-nums',
+      color:fort?'var(--danger)':'var(--text)'}},val));
+  return h('div',{className:'fab-modal-overlay',style:{zIndex:'1200'},
+      onClick:(e)=>{ if(e.target===e.currentTarget) fermer(); }},
+    h('div',{className:'fab-modal',style:{maxWidth:'440px'}},
+      h('div',{className:'fab-modal-title'},c.titre || 'Compteur à vérifier'),
+      h('div',{className:'fab-modal-sub'},
+        'Ce relevé donne une vitesse au-dessus de ce que la machine peut faire. '
+        +'Vérifiez le compteur avant de confirmer.'),
+      ...(c.lignes||[]).map(l => ligne(l[0], l[1], l[2])),
+      h('div',{className:'fab-modal-btns'},
+        h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',style:{background:'var(--bg)'},
+          onClick:fermer},'Corriger le compteur'),
+        h('button',{className:'fab-btn fab-btn-primary',style:{color:'white'},
+          onClick:()=>{
+            const r = c.relance;
+            S[c.cle] = c.valeur;
+            set({confirmCompteur:null});
+            if(typeof r === 'function') r();
+          }},'Confirmer ce compteur'))
+    )
+  );
 }
 
 async function triggerOp(opCode, opLabel, extra={}){
@@ -6588,9 +6600,15 @@ function renderDebutModal(){
     // Plus d'une heure a pleine vitesse depuis le dernier releve : suspect.
     const ecartDebut = (dernierM != null) ? mDebut - dernierM : 0;
     if(S.vitesseMax && ecartDebut > S.vitesseMax * 60
-       && !compteurConfirme('debutCompteurConfirme', mDebut,
-            'Compteur improbable : '+Math.round(ecartDebut).toLocaleString('fr-FR')
-            +' m de plus que le dernier relevé ('+Math.round(dernierM).toLocaleString('fr-FR')+' m).')){
+       && !compteurConfirme('debutCompteurConfirme', mDebut, {
+            titre:'Compteur de début à vérifier',
+            lignes:[
+              ['Dernier relevé de la machine', Math.round(dernierM).toLocaleString('fr-FR')+' m'],
+              ['Compteur saisi', Math.round(mDebut).toLocaleString('fr-FR')+' m'],
+              ['Écart', Math.round(ecartDebut).toLocaleString('fr-FR')+' m', true],
+              ['Soit, à la vitesse maximale ('+Math.round(S.vitesseMax)+' m/min)',
+               finDureeTxt(Math.round(ecartDebut / S.vitesseMax))+' de production'],
+            ]}, submit)){
       return;
     }
 
@@ -6732,21 +6750,13 @@ const FIN_ETAPES_CLOTURE = [
 function finReinitialiser(){
   return {finDossierOui:null, finEtape:'choix', finNoteVal:'', finNoteChargee:false,
           finNbMatieres:null, finMatiereMotif:'', finCalage:null, finCalageVals:null,
-          finCalageConfirme:false, finCompteurConfirme:null, finCalageEdit:null, finSignalOuvert:false,
+          finCalageConfirme:false, finCompteurConfirme:null, finSignalOuvert:false,
           finSignalement:'', _finEtapeVue:null, _finModalVue:false};
 }
 
 // Ordre des écrans, pour savoir dans quel sens animer le passage.
 const FIN_ORDRE = ['choix','compteur','calage','cloture'];
 
-function finMinutesTotales(hm){
-  const m = /^(\d{2}):(\d{2})$/.exec(hm||'');
-  return m ? (+m[1])*60 + (+m[2]) : null;
-}
-function finHm(total){
-  const t = ((total % 1440) + 1440) % 1440;
-  return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0');
-}
 
 function fermerFinModal(){
   set(Object.assign({showFinModal:false}, finReinitialiser()));
@@ -6805,7 +6815,7 @@ function finJourTxt(jour){
 }
 
 /* Lit le compteur saisi. Rend le métrage, ou null après avoir dit pourquoi. */
-function finValiderCompteur(){
+function finValiderCompteur(relance){
   let mFin = S.metrageFinVal ? parseFloat(String(S.metrageFinVal).replace(',','.')) : null;
   if(mFin !== null && isNaN(mFin)) mFin = null;
 
@@ -6838,10 +6848,16 @@ function finValiderCompteur(){
       const metres = mFin - debutCtr;
       const vit = metres / Math.max(minutes, 1);
       if(vit > S.vitesseMax
-         && !compteurConfirme('finCompteurConfirme', mFin,
-              'Métrage improbable : '+Math.round(metres).toLocaleString('fr-FR')+' m en '
-              +finDureeTxt(minutes)+', soit '+Math.round(vit).toLocaleString('fr-FR')
-              +' m/min (maximum machine : '+Math.round(S.vitesseMax)+' m/min).')){
+         && !compteurConfirme('finCompteurConfirme', mFin, {
+              titre:'Métrage à vérifier',
+              lignes:[
+                ['Compteur au début du dossier', Math.round(debutCtr).toLocaleString('fr-FR')+' m'],
+                ['Compteur saisi', Math.round(mFin).toLocaleString('fr-FR')+' m'],
+                ['Métrage', Math.round(metres).toLocaleString('fr-FR')+' m'],
+                ['Durée depuis le démarrage', finDureeTxt(minutes)],
+                ['Vitesse calculée', Math.round(vit).toLocaleString('fr-FR')+' m/min', true],
+                ['Vitesse maximale de la machine', Math.round(S.vitesseMax)+' m/min'],
+              ]}, relance)){
         return null;
       }
     }
@@ -6858,7 +6874,7 @@ function finValiderCalage(){
     showToast('Recopiez les trois heures du dossier de prod : début de calage, fin de calage, fin de prod.','danger');
     return null;
   }
-  if(!(d < f)){ showToast('La fin de calage doit suivre le début de calage.','danger'); return null; }
+  if(d > f){ showToast('La fin de calage ne peut pas précéder le début de calage.','danger'); return null; }
   if(!(f <= p)){ showToast('La fin de prod ne peut pas précéder la fin de calage.','danger'); return null; }
   if(p > nowIsoLocal()){ showToast('La fin de prod ne peut pas être dans le futur.','danger'); return null; }
   const seuil = S.finCalage && S.finCalage.seuil_alerte_min;
@@ -7010,25 +7026,31 @@ function renderFinModal(){
     if(!p) return h('div',{className:'fab-modal-sub'},'Chargement des heures du dossier…');
     if(!S.finCalageVals) S.finCalageVals = finCalageValsDepuis(p);
     const vals = S.finCalageVals;
-    const auj = nowIsoLocal().slice(0,10);
-    const jours = Array.from(new Set([...(p.jours||[]), auj,
-      vals.debut.jour, vals.fin.jour, vals.prod.jour].filter(Boolean))).sort();
     const seuil = p.seuil_alerte_min;
 
-    const d = finCalageIso(vals.debut), f = finCalageIso(vals.fin), pr = finCalageIso(vals.prod);
-    const mc = finMinutesEntre(d, f), mp = finMinutesEntre(f, pr);
+    const dureesDe = () => {
+      const d = finCalageIso(vals.debut), f = finCalageIso(vals.fin), pr = finCalageIso(vals.prod);
+      return {mc: finMinutesEntre(d, f), mp: finMinutesEntre(f, pr)};
+    };
+    const {mc} = dureesDe();
 
-    // ── Durées, en tête ──
-    const grand = (txt, couleur) => h('div',{style:{fontSize:'30px',fontWeight:'800',lineHeight:'1.1',
-      color:couleur,fontVariantNumeric:'tabular-nums'}}, txt);
+    // ── Durées, en tête ── (recalculées à chaque frappe, sans reconstruire l'écran)
+    const grand = (couleur) => h('div',{style:{fontSize:'30px',fontWeight:'800',lineHeight:'1.1',
+      color:couleur,fontVariantNumeric:'tabular-nums'}}, '');
+    const elCalage = grand('var(--accent)'), elProd = grand('var(--text)');
     const tuile = (libelle, valeur) => h('div',{style:{flex:'1',padding:'12px 14px',
         borderRadius:'10px',background:'var(--bg)',border:'1px solid var(--border)'}},
       h('div',{style:{fontSize:'11px',fontWeight:'700',letterSpacing:'.5px',
         textTransform:'uppercase',color:'var(--muted)',marginBottom:'4px'}},libelle),
       valeur);
     const durees = h('div',{style:{display:'flex',gap:'10px',marginBottom:'14px'}},
-      tuile('Calage', grand(finDureeTxt(mc), 'var(--accent)')),
-      tuile('Production', grand(finDureeTxt(mp), 'var(--text)')));
+      tuile('Calage', elCalage), tuile('Production', elProd));
+    const majDurees = () => {
+      const x = dureesDe();
+      elCalage.textContent = finDureeTxt(x.mc);
+      elProd.textContent = finDureeTxt(x.mp);
+    };
+    majDurees();
 
     const long = seuil && mc != null && mc > seuil;
     if(!long && S.finCalageConfirme) S.finCalageConfirme = false;
@@ -7045,57 +7067,36 @@ function renderFinModal(){
             onClick:()=>{ S.finCalageConfirme = true; fabRenderPreserveUi({}); }},
             'Les heures sont justes')) : null;
 
-    // ── Sélecteur d'heure ──
-    const majVal = (cle, patch) => { Object.assign(vals[cle], patch); fabRenderPreserveUi({}); };
-    const pastille = (txt, actif, onClick, extra) => h('button',{type:'button',
-        className:'fin-pastille'+(actif?' actif':''), onClick, style:extra||null}, txt);
-
-    const editeur = (cle) => {
-      const v = vals[cle];
-      let tot = finMinutesTotales(v.hm);
-      if(tot == null){
-        // Pas d'heure encore : on part de l'heure voisine, sinon de maintenant.
-        const voisin = cle === 'debut' ? vals.fin.hm : (cle === 'fin' ? vals.debut.hm : vals.fin.hm);
-        tot = finMinutesTotales(voisin) ?? finMinutesTotales(nowIsoLocal().slice(11,16));
-      }
-      const hh = Math.floor(tot/60), mm = tot % 60;
-      const regler = t => majVal(cle, {hm: finHm(t)});
-      return h('div',{className:'fin-editeur'},
-        jours.length > 1 ? h('div',{className:'fin-editeur-ligne'},
-          ...jours.map(j => pastille(finJourTxt(j), j === v.jour, ()=>majVal(cle,{jour:j})))) : null,
-        h('div',{className:'fin-editeur-titre'},'Heure'),
-        h('div',{className:'fin-grille fin-grille-heures'},
-          ...Array.from({length:24},(_,i)=>pastille(String(i).padStart(2,'0'), i===hh,
-            ()=>regler(i*60+mm)))),
-        h('div',{className:'fin-editeur-titre'},'Minutes'),
-        h('div',{className:'fin-grille fin-grille-minutes'},
-          ...Array.from({length:12},(_,i)=>i*5).map(m=>pastille(String(m).padStart(2,'0'),
-            m===mm, ()=>regler(hh*60+m)))),
-        h('div',{className:'fin-editeur-ligne',style:{justifyContent:'space-between',marginTop:'10px'}},
-          h('div',{style:{display:'flex',gap:'6px'}},
-            pastille('− 1 min', false, ()=>regler(tot-1)),
-            pastille('+ 1 min', false, ()=>regler(tot+1))),
-          h('button',{type:'button',className:'fab-btn fab-btn-primary fab-btn-sm',
-            style:{color:'white'},
-            onClick:()=>{ if(!v.hm) v.hm = finHm(tot); set({finCalageEdit:null}); }},
-            svgIcon('check',14),' OK'))
-      );
-    };
-
+    // ── Heures : date + heure 24 h tapée au clavier ──
+    // Même saisie que la fenêtre de modification d'une saisie dans MyProd
+    // (makeDateTimeFields) : un champ date, un champ texte HH:MM. Le sélecteur
+    // d'heure du navigateur passe en AM/PM selon la langue du poste.
+    const champ = {background:'var(--card)',border:'1.5px solid var(--border)',borderRadius:'8px',
+      padding:'9px 10px',color:'var(--text)',fontFamily:'inherit'};
     const ligne = (cle, libelle) => {
       const v = vals[cle];
-      const ouvert = S.finCalageEdit === cle;
-      const chip = h('button',{type:'button',className:'fin-heure'+(ouvert?' actif':'')+(v.hm?'':' vide'),
-          onClick:()=>set({finCalageEdit: ouvert ? null : cle})},
-        h('span',{className:'fin-heure-jour'}, finJourTxt(v.jour)),
-        h('span',{className:'fin-heure-hm'}, v.hm || '--:--'),
-        h('span',{className:'fin-heure-edit',title:'Modifier'}, svgIcon('edit',16)));
-      return h('div',{style:{marginBottom:'10px'}},
-        h('div',{style:{display:'grid',gridTemplateColumns:'1fr auto',gap:'10px',alignItems:'center'}},
-          h('div',{style:{fontSize:'11px',fontWeight:'700',letterSpacing:'.5px',
-            textTransform:'uppercase',color:'var(--text2)'}},libelle),
-          chip),
-        ouvert ? editeur(cle) : null);
+      const jour = h('input',{type:'date',lang:'fr',value:v.jour||'',
+        style:Object.assign({},champ,{fontSize:'14px',minWidth:'0'})});
+      jour.addEventListener('change',()=>{ v.jour = jour.value; majDurees(); });
+      const heure = h('input',{type:'text',inputmode:'numeric',autocomplete:'off',maxlength:'5',
+        placeholder:'HH:MM',value:v.hm||'',
+        style:Object.assign({},champ,{width:'96px',textAlign:'center',fontSize:'20px',
+          fontWeight:'800',fontVariantNumeric:'tabular-nums'})});
+      heure.addEventListener('input',()=>{
+        const c = heure.value.replace(/\D/g,'').slice(0,4);
+        heure.value = c.length > 2 ? c.slice(0,2)+':'+c.slice(2) : c;
+        v.hm = /^([01]\d|2[0-3]):[0-5]\d$/.test(heure.value) ? heure.value : '';
+        heure.style.borderColor = (heure.value.length === 5 && !v.hm) ? 'var(--danger)' : 'var(--border)';
+        majDurees();
+      });
+      // L'alerte de calage inhabituel se réévalue quand on quitte le champ.
+      heure.addEventListener('change',()=>fabRenderPreserveUi({}));
+      return h('div',{style:{display:'grid',gridTemplateColumns:'1fr 150px 96px 22px',gap:'8px',
+          alignItems:'center',marginBottom:'10px'}},
+        h('div',{style:{fontSize:'11px',fontWeight:'700',letterSpacing:'.5px',
+          textTransform:'uppercase',color:'var(--text2)'}},libelle),
+        jour, heure,
+        h('span',{style:{display:'inline-flex',color:'var(--accent)'},title:'Modifiable'},svgIcon('edit',16)));
     };
 
     // ── Métrages : compteur avant calage, en fin de calage, en fin de prod ──
@@ -7147,7 +7148,7 @@ function renderFinModal(){
 
   // ── Envoi ─────────────────────────────────────────────────────────────────
   const submit = async()=>{
-    const mFin = finValiderCompteur();
+    const mFin = finValiderCompteur(submit);
     if(mFin === null){ set({finEtape:'compteur'}); return; }
 
     let calage = null;
@@ -7233,7 +7234,7 @@ function renderFinModal(){
   const idx = etapes.indexOf(etape);
   const precedent = () => set({finEtape: idx > 0 ? etapes[idx-1] : 'choix'});
   const suivant = () => {
-    if(etape === 'compteur' && finValiderCompteur() === null) return;
+    if(etape === 'compteur' && finValiderCompteur(suivant) === null) return;
     if(etape === 'calage' && !finValiderCalage()) return;
     set({finEtape: etapes[idx+1]});
   };
@@ -9563,6 +9564,7 @@ function render(){
   if(S.showFictifModal)   root.appendChild(renderFictifModal());
   if(S.showDebutModal)    root.appendChild(renderDebutModal());
   if(S.showFinModal)      root.appendChild(renderFinModal());
+  if(S.confirmCompteur)   root.appendChild(renderConfirmCompteurModal());
   if(S.showCompteurCalage) root.appendChild(renderCompteurCalageModal());
   if(S.showCommentModal)  root.appendChild(renderCommentModal());
   if(S.showAnnulModal)    root.appendChild(renderAnnulModal());

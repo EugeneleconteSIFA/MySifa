@@ -4149,6 +4149,26 @@ async def releve_compteur_fin_calage(saisie_id: int, request: Request):
                         f"— la valeur saisie ({int(m):,} m) ne peut pas être inférieure.").replace(",", " "),
             )
         conn.execute("UPDATE production_data SET metrage_compteur=? WHERE id=?", (m, saisie_id))
+        # Le relevé se lit aussi dans le commentaire de la saisie, avec le
+        # métrage passé au calage quand le compteur d'avant est connu. Ce que
+        # le conducteur avait écrit reste derrière ; un nouveau relevé remplace
+        # l'ancienne mention au lieu de l'empiler.
+        try:
+            from app.services.calage_cloture import gache_calage
+            metres = None
+            if row["no_dossier"]:
+                for pl in gache_calage(conn, row["no_dossier"])["plages"]:
+                    if pl["fin"] == row["date_operation"]:
+                        metres = pl["metres"]
+            fr = lambda v: f"{int(round(v)):,}".replace(",", " ")
+            mention = f"Fin de calage · compteur {fr(m)} m" + (f" · calage {fr(metres)} m" if metres is not None else "")
+            ancien = (row["commentaire"] or "").strip()
+            if ancien.startswith("Fin de calage ·"):
+                ancien = ancien.split(" — ", 1)[1].strip() if " — " in ancien else ""
+            conn.execute("UPDATE production_data SET commentaire=? WHERE id=?",
+                         (mention + (" — " + ancien if ancien else ""), saisie_id))
+        except Exception:
+            logger.exception("[fabrication] commentaire de fin de calage non écrit")
         machine = conn.execute(
             "SELECT id, dernier_metrage FROM machines WHERE trim(nom) = trim(?) OR trim(code) = trim(?) LIMIT 1",
             (row["machine"] or "", row["machine"] or ""),
