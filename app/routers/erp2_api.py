@@ -17,7 +17,8 @@ from app.services.auth_service import get_current_user
 from app.services.audit_service import log_action
 from fastapi.responses import Response
 
-from app.services.gc import cahiers, compta, demo, documents, envoi, export_compta, fichiers, fsc, myao, pieces, rapprochement
+from app.services.gc import (cahiers, compta, demo, documents, envoi, export_compta, fichiers, fsc, myao, pieces,
+                             rapprochement, valorisation)
 from app.services.gc.pieces import ErreurPiece
 
 router = APIRouter(prefix="/api/erp2", tags=["erp2"])
@@ -474,6 +475,14 @@ async def cahier_enregistrer(objet: str, objet_id: int, request: Request):
         cahiers.enregistrer(conn, objet, objet_id, b.get("lignes") or [], u)
     _trace(request, u, "UPDATE", f"Cahier des charges {objet} #{objet_id}")
     return {"ok": True}
+
+
+@router.get("/valorisation")
+def stock_valorisation(request: Request, date: str = ""):
+    """Stock valorisé à une date (quantité et prix à cette date, paramètres de MyStock)."""
+    _user(request)
+    from datetime import date as _d
+    return _lecture(valorisation.valoriser, (date or _d.today().isoformat())[:10])
 
 
 @router.get("/mouvements")

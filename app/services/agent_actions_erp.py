@@ -479,6 +479,10 @@ LECTURES: list[dict[str, Any]] = [
      "aide": "ERP : un document fournisseur lu par l'IA, rapproché de la commande : lignes du document, article commandé, "
              "reste à recevoir, prix commandé, écarts (quantité, unité, prix).",
      "params": {"doc_id": ("int", True, "gc_documents.id"), "commande_id": ("int", False, "forcer la commande à comparer")}},
+    {"cle": "erp_valorisation", "chemin": "/api/erp2/valorisation",
+     "aide": "ERP : stock valorisé à une date (quantité et prix à cette date, source du prix, charges de production et "
+             "frais de stockage de MyStock, totaux matières / produits finis).",
+     "params": {"date": ("str", False, "AAAA-MM-JJ, défaut aujourd'hui")}},
     {"cle": "erp_stock", "chemin": "/api/erp2/stock",
      "aide": "ERP : stock par article, dépôt et laize, avec mini / maxi.", "params": {}},
     {"cle": "erp_echeances", "chemin": "/api/erp2/echeances",

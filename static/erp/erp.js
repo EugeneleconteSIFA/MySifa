@@ -35,6 +35,7 @@
     {groupe: 'Stocks', liens: [
       {chemin: '/stocks/etat', libelle: 'État du stock'},
       {chemin: '/stocks/mouvements', libelle: 'Mouvements'},
+      {chemin: '/stocks/valorisation', libelle: 'Valorisation'},
     ]},
     {groupe: 'Production', liens: [
       {chemin: '/production/ordres', libelle: 'Ordres de fabrication'},
