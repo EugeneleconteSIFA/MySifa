@@ -175,7 +175,7 @@ body{{
   box-shadow:0 1px 2px rgba(0,0,0,.03);
 }}
 .tab:hover{{background:var(--bg);border-color:var(--accent);color:var(--accent)}}
-.tab.active{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);box-shadow:0 2px 6px rgba(8,145,178,.15)}}
+.tab.active{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);box-shadow:0 2px 6px color-mix(in srgb,var(--accent,#0891b2) 15%,transparent)}}
 .panel{{
   background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;
 }}
@@ -201,8 +201,8 @@ input,textarea,select{{
   padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;
   transition:border-color .15s,box-shadow .15s;
 }}
-input:focus,textarea:focus,select:focus{{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}}
-body.light input:focus,body.light textarea:focus,body.light select:focus{{box-shadow:0 0 0 3px rgba(8,145,178,.12)}}
+input:focus,textarea:focus,select:focus{{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}}
+body.light input:focus,body.light textarea:focus,body.light select:focus{{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#0891b2) 12%,transparent)}}
 input:disabled,textarea:disabled{{opacity:.65;cursor:not-allowed}}
 body.light .btn{{color:#fff}}
 label.lbl{{

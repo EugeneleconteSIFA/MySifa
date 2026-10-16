@@ -11,12 +11,12 @@
 .user-chip:hover,
 .fab-user-chip:hover,
 .rh-user-chip:hover {
-  background: rgba(34, 211, 238, .18);
+  background: color-mix(in srgb,var(--accent,#22d3ee) 18%,transparent);
 }
 body.light .user-chip:hover,
 body.light .fab-user-chip:hover,
 body.light .rh-user-chip:hover {
-  background: rgba(8, 145, 178, .12);
+  background: color-mix(in srgb,var(--accent,#0891b2) 12%,transparent);
 }
 .user-chip .uc-top,
 .fab-user-chip .uc-top,

@@ -415,11 +415,35 @@
   // construite une seule fois : c'est le contenant qui change, pas l'ecran.
   var contenantInline = null;
 
-  function close() {
+  function closeInterne() {
     fermerApercuScan();
     var ov = document.getElementById(OVERLAY_ID);
     if (ov) ov.remove();
     document.removeEventListener('keydown', onKey);
+    return !!ov;
+  }
+  function close() {
+    if (closeInterne()) signalerAdresse(null);
+  }
+
+  // ── Adresse de la page hôte (url-etat.md) ─────────────────────────
+  // La page qui l'enregistre (MyProd) met la surcouche ouverte dans son
+  // adresse : { cle: 'produit' | 'historique' | 'produits', id, onglet },
+  // ou null à la fermeture. Rien n'est signalé pour la vue rendue dans la
+  // page (Scans d'OF), qui a son propre rappel.
+  var surAdresse = null;
+  function signalerAdresse(e) {
+    if (!surAdresse) return;
+    if (e === undefined) {
+      e = null;
+      if (!contenantInline && document.getElementById(OVERLAY_ID)) {
+        if (state.mode === 'fiche' && state.ref) e = { cle: 'produit', id: state.ref, onglet: state.tab };
+        else if (state.mode === 'historique' && state.noDossier) e = { cle: 'historique', id: state.noDossier, onglet: state.tab };
+        else if (state.mode === 'liste') e = { cle: 'produits', id: 'liste' };
+      }
+      if (!e) return;
+    }
+    try { surAdresse(e); } catch (x) {}
   }
 
   function onKey(e) {
@@ -441,12 +465,13 @@
         return;
       }
     }
-    close();
+    closeInterne();
     var ov = el('div', { className: 'pmem-ov', id: OVERLAY_ID });
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
     ov.appendChild(node);
     document.body.appendChild(ov);
     document.addEventListener('keydown', onKey);
+    signalerAdresse();
   }
 
   // ── Apercu d'un scan, dans MySifa ──────────────────────────────────
@@ -799,7 +824,8 @@
           kpi('Production', fMin(s.temps_prod_min)),
           kpi('Arrets', fMin(s.temps_arret_min)),
           kpi('Metrage', s.metrage_m != null ? fNum(s.metrage_m) + ' m' : '—'),
-          kpi('Vitesse', s.vitesse_m_min != null ? fNum(s.vitesse_m_min, 1) + ' m/mn' : '—'),
+          s.vitesse_aberrante ? kpiErr('Vitesse')
+            : kpi('Vitesse', s.vitesse_m_min != null ? fNum(s.vitesse_m_min, 1) + ' m/mn' : '—'),
           kpi('Etiquettes', s.etiquettes != null ? fNum(s.etiquettes) : '—'),
         ]),
       ];
@@ -848,6 +874,13 @@
     return el('div', { className: 'pmem-kpi' }, [
       el('span', { className: 'pmem-kpi-lbl', text: lbl }),
       el('span', { className: 'pmem-kpi-val', text: val }),
+    ]);
+  }
+  // Vitesse au-dela du plafond machine : la saisie est fausse, pas la machine.
+  function kpiErr(lbl) {
+    return el('div', { className: 'pmem-kpi' }, [
+      el('span', { className: 'pmem-kpi-lbl', text: lbl }),
+      el('span', { className: 'pmem-kpi-val', style: 'color:var(--danger);font-weight:400', text: 'erreur saisie' }),
     ]);
   }
 
@@ -1361,10 +1394,16 @@
   }
 
   // ── Portes d'entree ────────────────────────────────────────────────
-  async function openHistorique(noDossier) {
+  // `o.onglet` : onglet à ouvrir (series | savoirs | documents), repris de
+  // l'adresse de la page hôte.
+  var ONGLETS_FICHE = ['series', 'savoirs', 'documents'];
+  function ongletDemande(o) {
+    return (o && ONGLETS_FICHE.indexOf(o.onglet) !== -1) ? o.onglet : 'series';
+  }
+  async function openHistorique(noDossier, o) {
     contenantInline = null;
     await chargerTypes();
-    state = { tab: 'series', data: null, mode: 'historique', noDossier: noDossier, docs: null, sel: null };
+    state = { tab: ongletDemande(o), data: null, mode: 'historique', noDossier: noDossier, docs: null, sel: null };
     try {
       state.data = await api(urlHistorique(noDossier));
     } catch (e) { toast(e.message || 'Historique indisponible.', 'danger'); return; }
@@ -1372,10 +1411,10 @@
     renderCourant();
   }
 
-  async function openFiche(ref) {
+  async function openFiche(ref, o) {
     contenantInline = null;
     await chargerTypes();
-    state = { tab: 'series', data: null, mode: 'fiche', noDossier: null, docs: null, sel: null };
+    state = { tab: ongletDemande(o), data: null, mode: 'fiche', noDossier: null, docs: null, sel: null, ref: ref };
     try {
       state.data = await api('/api/produits/' + encodeURI(ref));
     } catch (e) { toast(e.message || 'Fiche indisponible.', 'danger'); return; }
@@ -1556,6 +1595,7 @@
   // ── File de rattachement des scans ─────────────────────────────────
   async function openRattachement() {
     contenantInline = null;
+    scansSurChange = null;
     state = { tab: 'scannes', data: null, mode: 'rattachement', noDossier: null,
               docs: null, sel: null, q: '' };
     await chargerScans();
@@ -1873,6 +1913,11 @@
         if (n && state.q) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); }
       });
     }
+    // Rendu dans une page (MyProd) : l'onglet et le scan choisi remontent à
+    // la page, qui les met dans son adresse (url-etat.md).
+    if (contenantInline && scansSurChange) {
+      try { scansSurChange({ onglet: state.tab, scan: state.tab === 'rattacher' ? state.sel : null }); } catch (e) {}
+    }
   }
 
   // ── Bouton « Historique » pour Saisieprod ──────────────────────────
@@ -1981,7 +2026,10 @@
   // Le contenant est fourni par l'appelant a chaque rendu : MyProd reconstruit
   // son DOM entierement, garder une reference d'un rendu a l'autre pointerait
   // sur un element detache.
-  async function monterScansDans(contenant) {
+  // `init` : { onglet: 'scannes' | 'rattacher', scan: id } repris de l'adresse
+  // de la page ; `surChange` est rappelé à chaque rendu avec le même objet.
+  var scansSurChange = null;
+  async function monterScansDans(contenant, init, surChange) {
     // Contenant detache : MyProd a deja re-rendu depuis. Sans ce garde-fou,
     // mount() basculerait en surcouche et ferait surgir une modale que
     // personne n'a demandee.
@@ -1992,8 +2040,10 @@
     // Quand MyProd change de page, l'element est detache et mount() bascule
     // tout seul en surcouche.
     contenantInline = contenant;
-    state = { tab: 'scannes', data: null, mode: 'rattachement',
-              noDossier: null, docs: null, sel: null, q: '' };
+    scansSurChange = typeof surChange === 'function' ? surChange : null;
+    init = init || {};
+    state = { tab: init.onglet === 'rattacher' ? 'rattacher' : 'scannes', data: null, mode: 'rattachement',
+              noDossier: null, docs: null, sel: init.scan ? Number(init.scan) : null, q: '' };
     await chargerScans();
   }
 
@@ -2008,5 +2058,6 @@
     monterScansDans: monterScansDans,
     normRef: normRef,
     fermer: close,
+    surAdresse: function (fn) { surAdresse = typeof fn === 'function' ? fn : null; },
   };
 })();

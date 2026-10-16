@@ -256,6 +256,7 @@ PATH_MODULES: dict[str, str] = {
     "/api/rh-coffre": "rh_coffre",
     "/api/rh-outil": "rh_outil",
     "/api/saisies": "saisies",
+    "/api/prod/ecarts": "saisies",
     "/api/settings": "settings",
     "/api/fournisseurs": "settings",
     "/api/updates": "settings",

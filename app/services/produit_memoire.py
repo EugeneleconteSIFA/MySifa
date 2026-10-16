@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 from app.services.dossier_stats import build_dossier_production_stats
+from config import PROD_VITESSE_MAX_M_MIN
 
 _PARIS = ZoneInfo("Europe/Paris")
 
@@ -462,7 +463,9 @@ def materialiser_serie(conn, no_dossier: str, cloture_par: Optional[str] = None)
         "duree_totale_min": temps.get("duree_totale_min"),
         "metrage_m": qtes.get("metrage_m"),
         "etiquettes": qtes.get("etiquettes"),
-        "vitesse_m_min": stats.get("vitesse_m_min"),
+        # Vitesse impossible : rien plutot qu'un 0 qui tirerait la mediane.
+        "vitesse_m_min": (None if stats.get("vitesse_aberrante")
+                          else stats.get("vitesse_m_min")),
         "arrets_par_code": json.dumps(arrets, ensure_ascii=False),
         "outillage": json.dumps(_outillage_of(conn, ctx.get("of_import_id")) or {}, ensure_ascii=False),
         "matieres_consommees": json.dumps(_matieres_dossier(conn, ref), ensure_ascii=False),
@@ -556,6 +559,15 @@ def _serie_dict(row) -> dict:
                 d[k] = json.loads(raw)
             except (ValueError, TypeError):
                 d[k] = None
+    # Series figees avant le plafond : une vitesse impossible (compteur mal
+    # saisi) ne s'affiche pas et ne pese pas dans la mediane des reperes.
+    try:
+        v = float(d.get("vitesse_m_min")) if d.get("vitesse_m_min") is not None else None
+    except (TypeError, ValueError):
+        v = None
+    d["vitesse_aberrante"] = v is not None and v > PROD_VITESSE_MAX_M_MIN
+    if d["vitesse_aberrante"]:
+        d["vitesse_m_min"] = None
     return d
 
 

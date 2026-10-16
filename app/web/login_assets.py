@@ -17,8 +17,8 @@ LOGIN_MAIN_CSS = r"""
   font-size:12px;font-family:inherit;font-weight:600;
   transition:background .15s,color .15s,border-color .15s,box-shadow .2s}
 .login-theme-btn:hover{color:var(--accent);border-color:var(--accent);
-  box-shadow:0 0 0 1px rgba(34,211,238,.22),0 0 18px rgba(34,211,238,.14)}
-body.light .login-theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rgba(8,145,178,.12)}
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent,#22d3ee) 22%,transparent),0 0 18px color-mix(in srgb,var(--accent,#22d3ee) 14%,transparent)}
+body.light .login-theme-btn:hover{box-shadow:0 0 0 1px color-mix(in srgb,var(--accent,#0891b2) 28%,transparent),0 0 18px color-mix(in srgb,var(--accent,#0891b2) 12%,transparent)}
 .login-theme-btn .theme-ico{display:inline-flex;align-items:center;line-height:1}
 @media (max-width:480px){.login-theme-btn .theme-label{display:none}}
 .pwd-wrap{position:relative}
@@ -73,7 +73,7 @@ body.light .login-theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 1
   border:1px solid var(--border);
   border-radius:11px;
   color:var(--accent);
-  box-shadow:0 6px 16px rgba(0,0,0,.28), 0 0 0 1px rgba(34,211,238,.18);
+  box-shadow:0 6px 16px rgba(0,0,0,.28), 0 0 0 1px color-mix(in srgb,var(--accent,#22d3ee) 18%,transparent);
   transform:scale(1);
   transform-origin:center;
   transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
@@ -81,14 +81,14 @@ body.light .login-theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 1
   cursor:pointer;
 }
 .login-wagon-tile svg{width:22px;height:22px;display:block}
-body.light .login-wagon-tile{box-shadow:0 6px 16px rgba(15,23,42,.10), 0 0 0 1px rgba(8,145,178,.20)}
+body.light .login-wagon-tile{box-shadow:0 6px 16px rgba(15,23,42,.10), 0 0 0 1px color-mix(in srgb,var(--accent,#0891b2) 20%,transparent)}
 .login-wagon-tile:hover{
   transform:scale(1.22);
   border-color:var(--accent);
-  box-shadow:0 10px 26px rgba(0,0,0,.42), 0 0 0 2px rgba(34,211,238,.45);
+  box-shadow:0 10px 26px rgba(0,0,0,.42), 0 0 0 2px color-mix(in srgb,var(--accent,#22d3ee) 45%,transparent);
 }
 body.light .login-wagon-tile:hover{
-  box-shadow:0 10px 26px rgba(15,23,42,.18), 0 0 0 2px rgba(8,145,178,.35);
+  box-shadow:0 10px 26px rgba(15,23,42,.18), 0 0 0 2px color-mix(in srgb,var(--accent,#0891b2) 35%,transparent);
 }
 .login-wagon-tip{
   position:absolute;
@@ -143,8 +143,8 @@ body.bg-anim-off .login-train-layer{display:none}
   font-size:12px;font-family:inherit;font-weight:600;
   transition:background .15s,color .15s,border-color .15s,box-shadow .2s}
 .login-anim-btn:hover{color:var(--accent);border-color:var(--accent);
-  box-shadow:0 0 0 1px rgba(34,211,238,.22),0 0 18px rgba(34,211,238,.14)}
-body.light .login-anim-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rgba(8,145,178,.12)}
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent,#22d3ee) 22%,transparent),0 0 18px color-mix(in srgb,var(--accent,#22d3ee) 14%,transparent)}
+body.light .login-anim-btn:hover{box-shadow:0 0 0 1px color-mix(in srgb,var(--accent,#0891b2) 28%,transparent),0 0 18px color-mix(in srgb,var(--accent,#0891b2) 12%,transparent)}
 .login-anim-btn .anim-ico{display:inline-flex;align-items:center;line-height:1}
 @media (max-width:480px){.login-anim-btn .anim-label{display:none}}
 """

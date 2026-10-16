@@ -180,6 +180,17 @@ def _compter_devis_a_traiter(conn):
         return 0, None
     emp = hashlib.sha1(",".join(map(str, ids)).encode()).hexdigest()[:16]
     return len(ids), emp
+def _compter_coherence(conn):
+    """Écarts ouverts relevés par les contrôleurs de cohérence."""
+    from app.services.coherence import compter_ouverts
+    return compter_ouverts(conn)
+
+
+def _compter_ecarts_prod(conn):
+    """Écarts ouverts de la famille Production : dossiers fictifs, chiffrages
+    signalés, heures non reportées, arrêts sans explication…"""
+    from app.services.coherence import compter_ouverts
+    return compter_ouverts(conn, "prod")
 
 
 DETECTEURS: dict[str, Detecteur] = {d.code: d for d in (
@@ -215,7 +226,7 @@ DETECTEURS: dict[str, Detecteur] = {d.code: d for d in (
         app="prod", app_label="MyProd",
         titre="Devis à traiter",
         description="Devis rattachés à aucun dossier, ou dont la date est postérieure à aujourd'hui.",
-        lien="/prod?page=rentabilite&devis=a_traiter",
+        lien="/prod?page=rentabilite&sous=devis&filtre=a_traiter",
         compter=_compter_devis_a_traiter,
         roles_suggeres=(ROLE_SUPERADMIN,),
     ),
@@ -227,6 +238,27 @@ DETECTEURS: dict[str, Detecteur] = {d.code: d for d in (
         lien="/expe#suivi_departs",
         compter=_compter_departs_a_valider,
         roles_suggeres=("expedition",),
+    ),
+    Detecteur(
+        code="settings.coherence",
+        app="settings", app_label="Paramètres",
+        titre="Écarts de cohérence",
+        description="Écarts ouverts entre production, planning, OF, fiches, MyExpé, MyStock et RVGI, "
+                    "relevés toutes les 30 minutes.",
+        lien="/settings#coherence",
+        compter=_compter_coherence,
+        roles_suggeres=("direction",),
+    ),
+    Detecteur(
+        code="prod.ecarts",
+        app="prod", app_label="MyProd",
+        titre="Écarts de saisie à traiter",
+        description="Dossiers fictifs à rattacher, chiffrages signalés à la clôture, heures de "
+                    "calage non reportées et autres écarts de la production. À valider ou "
+                    "corriger dans MyProd › Production › Erreurs & Qualité.",
+        lien="/prod#erreurs",
+        compter=_compter_ecarts_prod,
+        roles_suggeres=("direction",),
     ),
 )}
 

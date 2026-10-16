@@ -177,12 +177,12 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .contact-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}
 .btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:12px;
   padding:12px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:box-shadow .2s,border-color .15s,color .15s,filter .15s}
-.btn-sec:hover{box-shadow:0 0 0 1px rgba(34,211,238,.32),0 0 20px rgba(34,211,238,.2);border-color:rgba(34,211,238,.45);color:var(--accent)}
+.btn-sec:hover{box-shadow:0 0 0 1px color-mix(in srgb,var(--accent,#22d3ee) 32%,transparent),0 0 20px color-mix(in srgb,var(--accent,#22d3ee) 20%,transparent);border-color:color-mix(in srgb,var(--accent,#22d3ee) 45%,transparent);color:var(--accent)}
 .btn-sec:active{transform:translateY(1px)}
 .btn-ghost{background:transparent;border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:12px;font-weight:600;
   color:var(--text2);cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s,box-shadow .2s,transform .05s}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg);
-  box-shadow:0 0 0 1px rgba(34,211,238,.22),0 0 18px rgba(34,211,238,.12)}
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent,#22d3ee) 22%,transparent),0 0 18px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .btn-ghost:active{transform:translateY(1px)}
 .btn{background:var(--accent);color:var(--bg);border:none;border-radius:12px;padding:12px 16px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit}
 .btn:disabled{opacity:.7;cursor:not-allowed}
@@ -200,7 +200,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
   transition:all .15s;max-width:min(520px,72vw)
 }
 .m-sel:hover{border-color:var(--accent);background:var(--accent-bg)}
-.m-sel:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.m-sel:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .m-sel option{background:var(--card);color:var(--text)}
 .m-sub{font-size:12px;color:var(--muted)}
 .h-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
@@ -274,7 +274,7 @@ body.light .d-bg.a0{background:rgba(2,6,23,.015)}
 body.light .d-bg.a1{background:rgba(2,6,23,.085)}
 .d-sep{position:absolute;top:0;bottom:0;width:2px;background:rgba(148,163,184,.45);z-index:2;pointer-events:none}
 body.light .d-sep{background:rgba(71,85,105,.35)}
-.d-sep::after{content:'';position:absolute;top:0;bottom:0;left:-6px;width:14px;background:linear-gradient(90deg,rgba(34,211,238,0),rgba(34,211,238,.08),rgba(34,211,238,0));opacity:.35}
+.d-sep::after{content:'';position:absolute;top:0;bottom:0;left:-6px;width:14px;background:linear-gradient(90deg,color-mix(in srgb,var(--accent,#22d3ee) 0%,transparent),color-mix(in srgb,var(--accent,#22d3ee) 8%,transparent),color-mix(in srgb,var(--accent,#22d3ee) 0%,transparent));opacity:.35}
 .slot{position:absolute;top:8px;bottom:8px;border-radius:6px;display:flex;align-items:center;
   justify-content:center;cursor:pointer;transition:all .15s;overflow:visible;padding:3px 6px}
 .slot[draggable="true"]{cursor:grab}
@@ -632,8 +632,8 @@ body.light .btn-p{color:#fff}
 #tbody.has-search .tr.tr-reel-termine{opacity:1;filter:none}
 .slot.tl-drop-over{outline:3px solid var(--accent);outline-offset:3px;z-index:30;filter:brightness(1.15)}
 /* À placer au planning — zébré */
-.tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--bg-dark),var(--bg-dark) 10px,rgba(34,211,238,.07) 10px,rgba(34,211,238,.07) 20px)!important}
-body.light .tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--card),var(--card) 10px,rgba(8,145,178,.08) 10px,rgba(8,145,178,.08) 20px)!important}
+.tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--bg-dark),var(--bg-dark) 10px,color-mix(in srgb,var(--accent,#22d3ee) 7%,transparent) 10px,color-mix(in srgb,var(--accent,#22d3ee) 7%,transparent) 20px)!important}
+body.light .tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--card),var(--card) 10px,color-mix(in srgb,var(--accent,#0891b2) 8%,transparent) 10px,color-mix(in srgb,var(--accent,#0891b2) 8%,transparent) 20px)!important}
 .slot.slot-aplacer{background-image:repeating-linear-gradient(135deg,transparent,transparent 5px,rgba(0,0,0,.12) 5px,rgba(0,0,0,.12) 10px)!important}
 /* Réellement terminé (saisie opérateur confirmée) */
 .slot.slot-reel-termine{opacity:.55!important;filter:grayscale(35%) brightness(.82)!important}
@@ -669,7 +669,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
   transition:border-color .15s,box-shadow .15s
 }
 .planning-vue-sel:hover{border-color:var(--accent)}
-.planning-vue-sel:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.planning-vue-sel:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .of-dropzone{border:2px dashed var(--border);border-radius:12px;padding:36px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
 .of-dropzone:hover,.of-dropzone.of-dropzone--active{border-color:var(--accent);background:var(--accent-bg)}
 
@@ -914,7 +914,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='planning';</script>
 <link rel="stylesheet" href="/static/mysifa_mobile.css?v=2">
-<link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
+<link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js"></script>
@@ -923,10 +923,13 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=11"></script>
+<script src="/static/chat_widget.js?v=13"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
+<!-- Adresse de la page : machine, vue, horizon, semaine, fenêtre ouverte (url-etat.md). -->
+<script src="/static/mysifa_url.js?v=2"></script>
+<script src="/static/planning_url.js?v=1"></script>
 <script>
 // Handler d'erreurs installé *avant* le script principal (capte aussi les erreurs de parsing).
 function showFatal(message, lineno, colno, extra){
@@ -1026,6 +1029,8 @@ let S={machine:null,machines:[],entries:[],timeline:[],wo:0,loading:true,holiday
   planningTab:"timeline",
   contactOpen:false,contactSubject:"",contactMessage:"",contactSending:false,searchQuery:"",tlSearchQuery:"",tlSearchIdx:0,activeDossier:null,
   tlTotalDays:5,machineHoursPerDay:16};
+// Adresse de la page (machine, vue, horizon, semaine, fenêtre ouverte) :
+// static/planning_url.js, chargé avant ce script.
 let _allTlMatches=[];
 let ME=null;
 let PENDING_OF_COUNT=0;
@@ -2070,7 +2075,7 @@ function isHHMM(s){return /^\d{2}:\d{2}$/.test(String(s||"").trim());}
    lui, dit l'état sans qu'on ait à cliquer : rouge sans devis, orange
    proposé, vert validé — les couleurs du Pilotage. */
 function ouvrirDevisDossier(id){
-  window.open('/prod?page=rentabilite&lier='+encodeURIComponent(id),'_blank','noopener');
+  window.open('/prod?page=rentabilite&sous=pilotage&rattachement='+encodeURIComponent(id),'_blank','noopener');
 }
 async function rafraichirBoutonDevis(id){
   const btn=document.getElementById('dossier-devis-btn-'+id);
@@ -2650,6 +2655,8 @@ function render(){
   // Motion : (re)scan apres chaque render — pose --i pour les cascades et
   // arme les Observers. No-op si window.Motion absent (defer non charge).
   try{ if(window.Motion) window.Motion.scan(document); }catch(_){}
+  // L'adresse suit ce qui vient d'être affiché.
+  planningSyncUrl();
 }
 
 // ── Timeline search — scan ALL slots (across all week offsets) ──────────────
@@ -4796,7 +4803,7 @@ async function submitAdd(){
 function fscRapportBtnHtml(e){
   if(!e||!(e.fsc_requis===1||e.fsc_requis===true)) return "";
   const refFscEnc=encodeURIComponent((e.reference||e.numero_of||"").trim());
-  return `<button type="button" onclick="closeM();openFscRapport(decodeURIComponent('${escAttr(refFscEnc)}'))"
+  return `<button type="button" onclick="closeM(true);openFscRapport(decodeURIComponent('${escAttr(refFscEnc)}'))"
       style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;
              border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
              font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap"
@@ -4848,6 +4855,7 @@ function printFscAvertissement(id){
 async function openFscRapport(noDossier){
   const ref=(noDossier||"").trim();
   if(!ref){ showToast("Référence dossier manquante.","danger"); return; }
+  planningModaleOuverte("fsc",ref);
   try{
     const res=await fetch("/api/fabrication/tracabilite/"+encodeURIComponent(ref),{
       credentials:"include",
@@ -4943,6 +4951,7 @@ async function openFscRapport(noDossier){
 function openEdit(id){
   if(!CAN_EDIT && !IS_PLANNING_RO_ROLE) return;
   const e=S.entries.find(x=>x.id===id);if(!e)return;
+  planningModaleOuverte("dossier",e.id);
   const RO=(!CAN_EDIT && IS_PLANNING_RO_ROLE);
   // Dossier existant : la case FSC s'enregistre à la volée (voir
   // persistFscDepuisModale). Remis à null par closeM().
@@ -5090,6 +5099,10 @@ async function submitEdit(id){
 }
 
 async function openOfPreview(entryId){
+  // Ouvert depuis la fenêtre du dossier : il la remplace dans l'adresse ; la
+  // refermer y revient (closeOfPreview).
+  S._urlSousOf=(S.urlModale&&S.urlModale.cle!=="of")?S.urlModale:null;
+  planningModaleOuverte("of",entryId);
   const ov=document.createElement('div');
   ov.className='of-preview-overlay';
   ov.id='of-preview-overlay';
@@ -5222,9 +5235,15 @@ function switchOfPreviewTab(tab){
   }
 }
 
-function closeOfPreview(){
+function closeOfPreview(sansAdresse){
   const ov=document.getElementById('of-preview-overlay');
   if(ov) ov.remove();
+  if(ov&&S.urlModale&&S.urlModale.cle==="of"){
+    // La fenêtre du dossier reste dessous si l'aperçu a été ouvert depuis elle.
+    const sous=S._urlSousOf; S._urlSousOf=null;
+    S.urlModale=(sous&&document.querySelector("#mroot .mo"))?sous:null;
+    if(!sansAdresse) planningSyncUrl();
+  }
   window._ofPlanningState = null;
 }
 
@@ -5770,7 +5789,7 @@ function renderDossierStatsBody(d){
     <div class="ds-stat"><div class="ds-stat-lbl">Saisies</div><div class="ds-stat-val">${fN(d.nb_saisies)}</div></div>
     <div class="ds-stat"><div class="ds-stat-lbl">Étiquettes</div><div class="ds-stat-val">${fN(q.etiquettes)}</div></div>
     <div class="ds-stat"><div class="ds-stat-lbl">Métrage</div><div class="ds-stat-val">${fN(q.metrage_m)} m</div></div>
-    <div class="ds-stat"><div class="ds-stat-lbl">Vitesse</div><div class="ds-stat-val">${Number(d.vitesse_m_min||0).toFixed(2)} m/min</div></div>
+    <div class="ds-stat"><div class="ds-stat-lbl">Vitesse</div><div class="ds-stat-val">${d.vitesse_aberrante?'<span style="color:var(--danger);font-weight:400">erreur saisie</span>':(Number(d.vitesse_m_min)>0?Number(d.vitesse_m_min).toFixed(2)+' m/min':'—')}</div></div>
   </div>`;
   html+=`<div class="ds-section">${icon("clock",13)} Temps</div>
   <div class="ds-time-kpi">
@@ -5826,6 +5845,7 @@ function renderDossierStatsBody(d){
 }
 async function openDossierStatsModal(entryId){
   const e=S.entries.find(x=>x.id===entryId);
+  planningModaleOuverte("stats",entryId);
   const ref=(e&&(e.numero_of||e.reference))||"Dossier";
   document.getElementById("mroot").innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md md--stats">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px">
@@ -5898,8 +5918,16 @@ async function annulerAnnulationPlanning(entryId){
   };
 }
 
-function closeM(){
+// `sansAdresse` : fermeture technique — Retour du navigateur, ou fenêtre qui
+// en remplace aussitôt une autre (closeM(true);openFscRapport(…)) : sans lui,
+// le recul d'historique de la fermeture refermerait la nouvelle fenêtre.
+// Appelée sans argument partout ailleurs (onclick="closeM()").
+function closeM(sansAdresse){
   document.getElementById("mroot").innerHTML="";
+  if(S.urlModale&&S.urlModale.cle!=="of"){
+    S.urlModale=null;
+    if(!sansAdresse) planningSyncUrl();
+  }
   _dossierEditId=null;
   // Un enregistrement à la volée (case FSC) a modifié le dossier : le planning
   // est rechargé maintenant que la modale est fermée, badge FSC compris.
@@ -6021,6 +6049,7 @@ function setView(v){
 function openHorairesModal(ds, di){
   if(!CAN_EDIT) return;
   if(!S.machine) return;
+  if(ds) planningModaleOuverte("horaires",ds);
   // Lire les horaires actuels pour cette date (override ou hebdo)
   const dateObj = ds ? new Date(ds) : new Date();
   const wh=getWhForDate(di,dateObj,ds,true);
@@ -6099,6 +6128,7 @@ function commentModalDeleteBtn(onDeleteFn,hasExisting){
 }
 function openWeekCommentModal(sk,monTs){
   const mon=monTs?new Date(monTs):getMon(new Date());
+  planningModaleOuverte("commentaire_semaine",ymdate(mon));
   const wn=wkNum(mon);
   const existing=((S.weekComments||{})[sk]||"").trim();
   const readOnly=!CAN_EDIT;
@@ -6144,6 +6174,7 @@ async function submitWeekComment(sk){
   }
 }
 function openDayCommentModal(ds,di){
+  if(ds) planningModaleOuverte("commentaire_jour",ds);
   const dn={1:"Lundi",2:"Mardi",3:"Mercredi",4:"Jeudi",5:"Vendredi",6:"Samedi"}[di]||"Jour";
   const dateLabel=ds?new Date(ds+"T12:00:00").toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):dn;
   const existing=((S.dayComments||{})[ds]||"").trim();
@@ -6194,6 +6225,7 @@ async function submitDayComment(ds){
 function openWeekSettingsModal(monTs){
   if(!CAN_EDIT) return;
   const mon=new Date(monTs);
+  planningModaleOuverte("reglages_semaine",ymdate(mon));
   const wn=wkNum(mon);
   const DN_FULL={1:"Lundi",2:"Mardi",3:"Mercredi",4:"Jeudi",5:"Vendredi",6:"Samedi"};
   let rows="";
@@ -6314,6 +6346,7 @@ async function submitWeekSettings(monTs){
 }
 
 function openDefaultsModal(){
+  planningModaleOuverte("reglages","machine");
   const defs=getMachineDefaults();
   function row(lbl,id,val){
     return `<div class="fd"><label>${lbl} (HH:MM)</label><input type="text" inputmode="numeric" placeholder="07:00" id="${id}" value="${timeInputFromFloat(val)}"></div>`;
@@ -6581,6 +6614,7 @@ async function boot(){
       if(wanted) MID=wanted.id;
     }
   }catch(e){console.error(e);MID=0;}
+  try{ planningLireUrl(false); }catch(e){}
   await load();
   // Si on arrive via un chip cross-machine, naviguer directement vers le 1er match.
   try{
@@ -6597,6 +6631,11 @@ async function boot(){
       setTimeout(()=>{try{openAddDepuisOf(parseInt(depuisOf,10));}catch(e){}},260);
     }
   }catch(e){}
+  // Les paramètres d'un seul usage sont lus : l'adresse peut maintenant suivre
+  // l'écran, et rouvrir la fenêtre qu'elle demande (?dossier=, ?of=, ?stats=).
+  _urlPrete=true;
+  planningSyncUrl();
+  try{ planningAppliquerModaleUrl(); }catch(e){}
   // Vérifier les annonces de mise à jour après le chargement initial
   checkUpdates();
   try{ initPlanningGuides(); }catch(e){}

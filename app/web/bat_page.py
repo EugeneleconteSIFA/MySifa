@@ -55,8 +55,8 @@ BAT_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
-<link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
-<link rel="stylesheet" href="/static/mysifa_ai_chat.css?v=5">
+<link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
+<link rel="stylesheet" href="/static/mysifa_ai_chat.css?v=7">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
@@ -130,7 +130,7 @@ body.sb-open .sidebar-overlay{display:block}
 .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap}
 .search-wrap{position:relative;flex:1;min-width:200px}
 .search-input{width:100%;padding:10px 14px 10px 38px;background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s}
-.search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.10)}
+.search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 10%,transparent)}
 .search-ico{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
 
 /* ── Status tabs ── */
@@ -170,7 +170,7 @@ body.light .table-wrap tr:hover td{background:rgba(0,0,0,.02)}
 /* ── Badges statut ── */
 .badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.2px}
 .badge-afaire{background:rgba(251,191,36,.14);color:var(--warn)}
-.badge-attente{background:rgba(34,211,238,.12);color:var(--accent)}
+.badge-attente{background:color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent);color:var(--accent)}
 .badge-valide{background:rgba(52,211,153,.12);color:var(--ok)}
 .badge-clickable{cursor:pointer;transition:filter .15s}
 .badge-clickable:hover{filter:brightness(1.2)}
@@ -197,12 +197,12 @@ body.light .table-wrap tr:hover td{background:rgba(0,0,0,.02)}
 .modal-title{font-size:16px;font-weight:700;margin-bottom:20px}
 .form-label{display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
 .form-input{width:100%;padding:11px 14px;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s}
-.form-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.10)}
+.form-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 10%,transparent)}
 .form-group{margin-bottom:16px}
 .form-hint{font-size:11px;color:var(--muted);margin-top:5px}
 .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:22px}
 .form-select{width:100%;padding:11px 14px;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s;cursor:pointer;appearance:none;-webkit-appearance:none}
-.form-select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.10)}
+.form-select:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 10%,transparent)}
 
 /* ── Upload zone ── */
 .upload-zone{border:2px dashed var(--border);border-radius:10px;padding:28px 20px;text-align:center;cursor:pointer;transition:.15s;color:var(--muted)}
@@ -1162,9 +1162,9 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 }
 </script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=11"></script>
+<script src="/static/chat_widget.js?v=13"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js?v=2"></script>
 </body>

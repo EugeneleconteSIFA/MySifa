@@ -142,7 +142,9 @@ PARAMS = {
                         r"urlTab\s*&&\s*\[([^\]]*)\]\.includes\(urlTab\)",
                         r"'([a-z0-9_-]+)'"),
     ("/prod", "page"): (RACINE / "static/mysifa_prod_core.js",
-                        r"const allowed\s*=\s*new Set\(\[([^\]]*)\]\)",
+                        # Avant mysifa_url.js : `const allowed = new Set([...])` ;
+                        # depuis : `var _PROD_PAGES=[...]`.
+                        r"(?:const allowed\s*=\s*new Set\(|var _PROD_PAGES\s*=\s*)\[([^\]]*)\]",
                         r"'([a-z0-9_-]+)'"),
     ("/planning", "vue"): (RACINE / "app/web/planning_page.py",
                            r"PLANNING_VUES\s*=\s*\[(.*?)\];",

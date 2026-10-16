@@ -28,7 +28,7 @@ body.light #cmdk-overlay{background:rgba(15,23,42,0.35)}
   background:var(--card);
   border:1px solid var(--border);
   border-radius:16px;
-  box-shadow:0 24px 80px rgba(0,0,0,0.55),0 0 0 1px rgba(34,211,238,0.04);
+  box-shadow:0 24px 80px rgba(0,0,0,0.55),0 0 0 1px color-mix(in srgb,var(--accent,#22d3ee) 4%,transparent);
   display:flex;
   flex-direction:column;
   max-height:70vh;
@@ -37,7 +37,7 @@ body.light #cmdk-overlay{background:rgba(15,23,42,0.35)}
   transition:transform .16s cubic-bezier(.22,.61,.36,1);
 }
 #cmdk-overlay.cmdk-open .cmdk-modal{transform:translateY(0) scale(1)}
-body.light .cmdk-modal{box-shadow:0 24px 80px rgba(15,23,42,0.18),0 0 0 1px rgba(8,145,178,0.04)}
+body.light .cmdk-modal{box-shadow:0 24px 80px rgba(15,23,42,0.18),0 0 0 1px color-mix(in srgb,var(--accent,#0891b2) 4%,transparent)}
 
 /* ───── Search bar ───── */
 .cmdk-search{

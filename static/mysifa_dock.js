@@ -9,7 +9,7 @@
   const FAB_SIZE = 48;
   const MOBILE_BP = '(max-width: 900px)';
   const MOBILE_LANDSCAPE_BP = '(max-width: 900px) and (orientation: landscape)';
-  const SHADOW_FAB = '0 4px 16px rgba(34,211,238,0.35)';
+  const SHADOW_FAB = '0 4px 16px color-mix(in srgb,var(--accent,#22d3ee) 35%,transparent)';
   const SHADOW_PANEL = '0 12px 48px rgba(0,0,0,0.5)';
   const Z_FAB = 8002;
   const Z_PANEL = 8015;
