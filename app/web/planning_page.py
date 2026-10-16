@@ -130,6 +130,78 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .tip-devis-vert{background:var(--success)}
 .tip-devis-lib{font-size:10px;font-weight:700;color:var(--warn);margin-left:5px;text-transform:none;letter-spacing:0}
 @media (max-width:1100px){.tip-quad{gap:10px 14px}.tip-quad .tip-grid{font-size:10.5px}}
+/* Infobulle posée sur la page : fixe, au-dessus de tout, jamais plus haute
+   que l'écran. Version resserrée quand l'écran est bas. */
+.tip.tip-ecran{position:fixed;z-index:9500;max-height:calc(100vh - 16px);overflow:hidden}
+.tip.tip-serre{padding:10px 14px}
+.tip.tip-serre .tip-hdr{margin-bottom:6px}
+.tip.tip-serre .tip-quad{gap:8px 16px;margin-top:4px}
+.tip.tip-serre .tip-col-hdr{margin-bottom:4px;padding-bottom:3px;font-size:10px}
+.tip.tip-serre .tip-grid{gap:3px 10px;font-size:10.5px}
+.tip.tip-serre .tip-exig,.tip.tip-serre .tip-annule{margin-top:6px;padding:5px 8px}
+/* Fenêtre devis du planning : par-dessus la fiche dossier (z 1000). */
+.dvp-voile{position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,.45);
+  display:flex;align-items:center;justify-content:center;padding:16px}
+.dvp-boite{width:100%;max-width:600px;max-height:calc(100vh - 32px);overflow-y:auto;
+  background:var(--card);border:1px solid var(--border2);border-radius:16px;padding:20px 22px;
+  box-shadow:0 24px 64px rgba(0,0,0,.45)}
+.dvp-attente{padding:28px;text-align:center;color:var(--muted);font-size:13px}
+.dvp-tete{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
+.dvp-titre{font-size:17px;font-weight:800;color:var(--text)}
+.dvp-sous{font-size:12px;color:var(--muted);margin-top:3px}
+.dvp-fermer{width:36px;height:36px;border-radius:10px;border:1px solid var(--border2);background:var(--bg);
+  color:var(--text2);font-size:20px;line-height:1;cursor:pointer;flex-shrink:0;font-family:inherit}
+.dvp-etat{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;font-weight:600;
+  padding:12px 14px;border-radius:10px;margin-bottom:14px;border:1px solid var(--border2);background:var(--bg)}
+.dvp-etat-lib{flex:1;min-width:160px}
+.dvp-pt{width:9px;height:9px;border-radius:50%;flex-shrink:0;background:var(--muted)}
+.dvp-etat.is-rouge{color:var(--danger);border-color:var(--danger)}
+.dvp-etat.is-rouge .dvp-pt{background:var(--danger)}
+.dvp-etat.is-orange{color:var(--warn);border-color:var(--warn)}
+.dvp-etat.is-orange .dvp-pt{background:var(--warn)}
+.dvp-etat.is-vert{color:var(--success);border-color:var(--success)}
+.dvp-etat.is-vert .dvp-pt{background:var(--success)}
+.dvp-actions{display:flex;gap:8px}
+.dvp-btn{padding:7px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--card);
+  color:var(--text2);font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
+.dvp-btn:hover{border-color:var(--accent);color:var(--accent)}
+.dvp-btn-plein{background:var(--accent);border-color:var(--accent);color:white}
+.dvp-btn-plein:hover{color:white;filter:brightness(1.05)}
+.dvp-btn-danger{color:var(--danger);border-color:var(--danger)}
+.dvp-btn-danger:hover{color:var(--danger);border-color:var(--danger);background:var(--bg)}
+.dvp-courant{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:10px;
+  border:1px solid var(--border2);background:var(--bg);margin-bottom:10px}
+.dvp-courant-txt{flex:1;min-width:0}
+.dvp-cherche{display:flex;align-items:center;gap:10px;padding:0 12px;border:1px solid var(--border2);
+  border-radius:10px;background:var(--card);color:var(--muted)}
+.dvp-cherche:focus-within{border-color:var(--accent)}
+.dvp-cherche input{flex:1;min-width:0;border:0;outline:none;background:transparent;color:var(--text);
+  font-size:14px;padding:11px 0;font-family:inherit}
+.dvp-liste{display:flex;flex-direction:column;gap:4px;margin-top:8px;padding:6px;
+  border:1px solid var(--border2);border-radius:10px;max-height:min(360px,45vh);overflow-y:auto}
+.dvp-liste-t{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;padding:6px 10px 2px}
+.dvp-vide{font-size:13px;color:var(--muted);padding:12px}
+.dvp-item{display:flex;flex-direction:column;gap:4px;text-align:left;width:100%;padding:11px 14px;
+  border-radius:8px;border:1px solid transparent;background:transparent;cursor:pointer;font-family:inherit}
+.dvp-item:hover{background:var(--accent-bg);border-color:var(--accent)}
+.dvp-item.is-lie{border-color:var(--accent)}
+.dvp-item.is-rejete{opacity:.55}
+.dvp-item-tete{display:flex;align-items:center;gap:10px;min-width:0}
+.dvp-client{font-size:15px;font-weight:700;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dvp-details{font-size:13px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dvp-tag{font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.04em}
+.dvp-tag.is-rejete{color:var(--danger)}
+.dvp-score{font-size:12px;font-weight:700;padding:2px 8px;border-radius:10px;font-variant-numeric:tabular-nums;flex-shrink:0}
+.dvp-score.is-fort{color:var(--success)}
+.dvp-score.is-moyen{color:var(--warn)}
+.dvp-score.is-nul{color:var(--muted)}
+.dvp-score.is-contraire{color:var(--danger)}
+.dvp-pied{display:flex;justify-content:flex-end;margin-top:14px}
+@media (max-width:560px){
+  .dvp-voile{align-items:flex-end;padding:0}
+  .dvp-boite{border-radius:16px 16px 0 0;max-height:88vh;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+  .dvp-actions{width:100%}.dvp-actions .dvp-btn{flex:1;min-height:40px}
+}
 /* Panneau du bas (téléphone) : les mêmes sections, repliables. */
 .rd-voile{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.45);
   display:flex;align-items:flex-end;justify-content:center}
@@ -929,7 +1001,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
 <!-- Adresse de la page : machine, vue, horizon, semaine, fenêtre ouverte (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=2"></script>
-<script src="/static/planning_url.js?v=1"></script>
+<script src="/static/planning_url.js?v=2"></script>
 <script>
 // Handler d'erreurs installé *avant* le script principal (capte aussi les erreurs de parsing).
 function showFatal(message, lineno, colno, extra){
@@ -2069,13 +2141,169 @@ function fracToTimeInput(f){
 function isHHMM(s){return /^\d{2}:\d{2}$/.test(String(s||"").trim());}
 
 /* ── Devis du dossier (bouton de la fenêtre d'édition) ─────────────
-   Le rattachement se fait dans MyProd › Rentabilité, qui a la recherche
-   classée, les propositions et le bouton Suivant : on l'ouvre sur ce dossier
-   dans un nouvel onglet plutôt que de recopier la fenêtre ici. Le bouton,
-   lui, dit l'état sans qu'on ait à cliquer : rouge sans devis, orange
-   proposé, vert validé — les couleurs du Pilotage. */
-function ouvrirDevisDossier(id){
-  window.open('/prod?page=rentabilite&sous=pilotage&rattachement='+encodeURIComponent(id),'_blank','noopener');
+   Le bouton dit l'état sans qu'on ait à cliquer : rouge sans devis, orange
+   proposé, vert validé — les couleurs du Pilotage. Le clic ouvre la fenêtre
+   de rattachement PAR-DESSUS la fiche dossier, sans quitter le planning
+   (retour du 16/10/2026) : mêmes routes que MyProd › Rentabilité, même
+   recherche classée, mêmes gestes (Confirmer, Rejeter, Détacher, choisir). */
+let _devisPlan=null;   // {id, lien, sugg, q, jeton}
+function ouvrirDevisDossier(id){ ouvrirDevisPlanning(Number(id)); }
+
+async function ouvrirDevisPlanning(id){
+  // Ouverte depuis la fiche dossier : elle la remplace dans l'adresse ; la
+  // refermer y revient (même mécanique que l'aperçu OF).
+  if(!document.getElementById("devis-plan-voile")){
+    S._urlSousDevis=(S.urlModale&&S.urlModale.cle!=="devis")?S.urlModale:null;
+  }
+  planningModaleOuverte("devis",id);
+  _devisPlan={id:Number(id), lien:null, sugg:[], q:"", jeton:0};
+  let voile=document.getElementById("devis-plan-voile");
+  if(!voile){
+    voile=document.createElement("div");
+    voile.id="devis-plan-voile"; voile.className="dvp-voile";
+    voile.addEventListener("click",e=>{ if(e.target===voile) fermerDevisPlanning(); });
+    document.body.appendChild(voile);
+    document.addEventListener("keydown",_devisPlanEchap,true);
+  }
+  voile.innerHTML=`<div class="dvp-boite" role="dialog" aria-modal="true" aria-label="Devis du dossier"><div class="dvp-attente">Chargement…</div></div>`;
+  await _devisPlanCharger();
+}
+function _devisPlanEchap(e){
+  if(e.key!=="Escape"||!document.getElementById("devis-plan-voile")) return;
+  // Échap ferme d'abord la liste de recherche si on est dedans, puis la fenêtre.
+  const champ=document.getElementById("dvp-q");
+  if(document.activeElement===champ&&champ.value){ champ.value=""; _devisPlanChercher(""); }
+  else fermerDevisPlanning();
+  e.stopPropagation(); e.preventDefault();
+}
+function fermerDevisPlanning(sansAdresse){
+  const v=document.getElementById("devis-plan-voile");
+  if(v) v.remove();
+  document.removeEventListener("keydown",_devisPlanEchap,true);
+  if(v&&S.urlModale&&S.urlModale.cle==="devis"){
+    const sous=S._urlSousDevis; S._urlSousDevis=null;
+    S.urlModale=(sous&&document.querySelector("#mroot .mo"))?sous:null;
+    if(!sansAdresse) planningSyncUrl();
+  }
+  if(_devisPlan){ const id=_devisPlan.id; _devisPlan=null; rafraichirBoutonDevis(id); }
+}
+async function _devisPlanCharger(){
+  const st=_devisPlan; if(!st) return;
+  try{
+    const [lien,sugg]=await Promise.all([
+      apiAbs("/api/rentabilite/links/"+st.id),
+      apiAbs("/api/rentabilite/planning/"+st.id+"/devis-suggeres?limit=5")
+    ]);
+    if(_devisPlan!==st) return;
+    st.lien=lien||{devis_id:null,no_dossiers:[]}; st.sugg=Array.isArray(sugg)?sugg:[];
+  }catch(e){
+    const b=document.querySelector("#devis-plan-voile .dvp-boite");
+    if(b) b.innerHTML=`<div class="dvp-attente">${escHtml(apiErrorMessage(e,"Devis indisponibles."))}</div>
+      <div class="dvp-pied"><button type="button" class="btn-ghost" onclick="fermerDevisPlanning()">Fermer</button></div>`;
+    return;
+  }
+  _devisPlanRendre();
+}
+function _devisPlanEtat(l){ return !l||!l.devis_id?"rouge":((l.origine==="auto"&&!l.valide_at)?"orange":"vert"); }
+function _devisPlanDetails(d){
+  const j=String(d.date_devis||"").slice(0,10).split("-");
+  return [
+    (d.format_v&&d.format_h)?(d.format_v+"×"+d.format_h+" mm"):null,
+    d.papier||null,
+    d.qte_etiquettes?fmtQty(d.qte_etiquettes)+" ex":null,
+    j.length===3?j[2]+"/"+j[1]+"/"+j[0]:null
+  ].filter(Boolean).join(" · ");
+}
+function _devisPlanListe(){
+  const st=_devisPlan; if(!st) return "";
+  if(!st.sugg.length) return `<div class="dvp-vide">${st.q?"Aucun résultat pour « "+escHtml(st.q)+" »":"Aucun devis au format de ce dossier. Tape un client ou un nom de fichier."}</div>`;
+  return (st.q?"":`<div class="dvp-liste-t">Les plus plausibles pour ce dossier</div>`)+st.sugg.map(x=>{
+    const sc=Math.round(Number(x.score)||0);
+    const lie=Number(x.devis_id)===Number(st.lien&&st.lien.devis_id);
+    const ton=x.contradiction?"contraire":(sc>=58?"fort":(sc>0?"moyen":"nul"));
+    return `<button type="button" class="dvp-item${lie?" is-lie":""}${x.rejete?" is-rejete":""}" title="${escAttr(x.filename||"")}"
+        onclick="_devisPlanChoisir(${Number(x.devis_id)})">
+      <span class="dvp-item-tete"><span class="dvp-client">${escHtml(x.client||"(client non lu)")}</span>
+        ${lie?`<span class="dvp-tag">lié</span>`:""}${x.rejete?`<span class="dvp-tag is-rejete">rejeté</span>`:""}
+        <span class="dvp-score is-${ton}" title="${escAttr(x.motif?"Concordance : "+x.motif:"")}">${sc?sc+" %":"—"}</span></span>
+      <span class="dvp-details">${escHtml(_devisPlanDetails(x))}</span>
+    </button>`;
+  }).join("");
+}
+function _devisPlanRendre(){
+  const st=_devisPlan; const b=document.querySelector("#devis-plan-voile .dvp-boite");
+  if(!st||!b) return;
+  const l=st.lien||{}; const etat=_devisPlanEtat(l);
+  const s=_SLOTS_PAR_ID[st.id]||(S.entries||[]).find(e=>Number(e.id)===st.id)||{};
+  const fm=s.format_l&&s.format_h?`${s.format_l}×${s.format_h} mm`:"";
+  const lib=etat==="rouge"?"Aucun devis rattaché"
+          :etat==="orange"?"Rattachement proposé — à confirmer"
+          :(l.valide_par==="auto:identique"?"Validé automatiquement — format, laize, client et matière identiques":"Rattaché et validé");
+  const actions=etat==="orange"
+    ?`<button type="button" class="dvp-btn dvp-btn-plein" onclick="_devisPlanAction('valider')">Confirmer</button>
+      <button type="button" class="dvp-btn dvp-btn-danger" onclick="_devisPlanAction('rejeter')">Rejeter</button>`
+    :etat==="vert"?`<button type="button" class="dvp-btn dvp-btn-danger" onclick="_devisPlanAction('rejeter')">Détacher</button>`:"";
+  const d=l.devis||null;
+  const lieInfo=d?(st.sugg.find(x=>Number(x.devis_id)===Number(l.devis_id))||d):null;
+  b.innerHTML=`<div class="dvp-tete">
+      <div><div class="dvp-titre">${escHtml((s.client||"").trim()||"Dossier")}</div>
+        <div class="dvp-sous">${escHtml([s.numero_of||s.reference,fm].filter(Boolean).join(" · "))}</div></div>
+      <button type="button" class="dvp-fermer" onclick="fermerDevisPlanning()" aria-label="Fermer">×</button>
+    </div>
+    <div class="dvp-etat is-${etat}" title="${escAttr(l.motif||"")}">
+      <span class="dvp-pt"></span><span class="dvp-etat-lib">${lib}</span>
+      ${actions?`<span class="dvp-actions">${actions}</span>`:""}
+    </div>
+    ${lieInfo?`<div class="dvp-courant">
+        <div class="dvp-courant-txt"><div class="dvp-client">${escHtml(lieInfo.client||"Devis lié")}</div>
+          <div class="dvp-details">${escHtml(_devisPlanDetails(lieInfo))}</div></div>
+        <button type="button" class="dvp-btn" onclick="_devisPlanChoisir(null)">Retirer</button>
+      </div>`:""}
+    <div class="dvp-cherche">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="dvp-q" type="text" autocomplete="off" placeholder="Rechercher un devis (client, format, papier, date…)" value="${escAttr(st.q)}">
+    </div>
+    <div class="dvp-liste" id="dvp-liste">${_devisPlanListe()}</div>
+    <div class="dvp-pied"><button type="button" class="btn-ghost" onclick="fermerDevisPlanning()">Fermer</button></div>`;
+  const champ=document.getElementById("dvp-q");
+  let minuteur=null;
+  champ.addEventListener("input",()=>{ clearTimeout(minuteur); minuteur=setTimeout(()=>_devisPlanChercher(champ.value),180); });
+  if(etat!=="vert") requestAnimationFrame(()=>champ.focus());
+}
+async function _devisPlanChercher(q){
+  const st=_devisPlan; if(!st) return;
+  st.q=String(q||"").trim(); const t=++st.jeton;
+  let r=[];
+  try{ r=await apiAbs("/api/rentabilite/planning/"+st.id+"/devis-suggeres?limit="+(st.q?30:5)+(st.q?"&q="+encodeURIComponent(st.q):"")); }catch(_){ r=[]; }
+  if(!_devisPlan||t!==st.jeton) return;
+  st.sugg=Array.isArray(r)?r:[];
+  const liste=document.getElementById("dvp-liste");
+  if(liste) liste.innerHTML=_devisPlanListe();
+}
+async function _devisPlanChoisir(devisId){
+  const st=_devisPlan; if(!st) return;
+  try{
+    await apiAbs("/api/rentabilite/links/"+st.id,{method:"PUT",
+      body:JSON.stringify({devis_id:devisId,no_dossiers:(st.lien&&st.lien.no_dossiers)||[]})});
+    showToast(devisId?"Devis rattaché.":"Devis retiré.");
+  }catch(e){ showToast(apiErrorMessage(e,"Rattachement impossible."),"danger"); return; }
+  await _devisPlanApres();
+}
+async function _devisPlanAction(quoi){
+  const st=_devisPlan; if(!st) return;
+  try{
+    if(quoi==="valider") await apiAbs("/api/rentabilite/links/"+st.id+"/valider",{method:"POST"});
+    else await apiAbs("/api/rentabilite/links/"+st.id,{method:"DELETE"});
+    showToast(quoi==="valider"?"Rattachement confirmé.":"Rattachement retiré.");
+  }catch(e){ showToast(apiErrorMessage(e,"Action impossible."),"danger"); return; }
+  await _devisPlanApres();
+}
+async function _devisPlanApres(){
+  const st=_devisPlan; if(!st) return;
+  st.q="";
+  rafraichirBoutonDevis(st.id);
+  chargerDevisPlanning(true);
+  await _devisPlanCharger();
 }
 async function rafraichirBoutonDevis(id){
   const btn=document.getElementById('dossier-devis-btn-'+id);
@@ -2089,6 +2317,7 @@ async function rafraichirBoutonDevis(id){
   const b=document.getElementById('dossier-devis-btn-'+id);
   if(!b||!l) return;
   const etat=!l.devis_id?'rouge':((l.origine==='auto'&&!l.valide_at)?'orange':'vert');
+  b.classList.remove('is-rouge','is-orange','is-vert');
   b.classList.add('is-'+etat);
   const lib=b.querySelector('span');
   const client=(l.devis&&l.devis.client)||'';
@@ -3691,10 +3920,25 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
     ${(exigTip && !isExpeVueTip)?`<div class="tip-exig"><span class="k">Exigences de production</span>${escHtml(exigTip)}</div>`:""}
     ${bodyHtml}
     ${CAN_EDIT&&d.st!=="Terminé"?`<div style="margin-top:10px;font-size:10px;color:var(--muted);text-align:center;letter-spacing:.5px">↵ Entrée · double-clic pour modifier</div>`:""}`
-  el.closest(".tl-wrap").appendChild(tipEl);moveTip(ev)}
-function moveTip(ev){if(!tipEl)return;const c=tipEl.parentElement.getBoundingClientRect();
-  let x=ev.clientX-c.left+12,y=ev.clientY-c.top-tipEl.offsetHeight-12;
-  if(x+tipEl.offsetWidth>c.width)x=c.width-tipEl.offsetWidth-8;if(x<0)x=8;if(y<0)y=ev.clientY-c.top+20;
+  // Posée sur la page entière, en position fixe : rattachée à la frise, elle
+  // était coupée en bas d'écran dès que le dossier survolé était bas
+  // (retour du 16/10/2026). moveTip la garde toujours entière à l'écran.
+  tipEl.classList.add("tip-ecran");
+  document.body.appendChild(tipEl);moveTip(ev)}
+/* Place l'infobulle là où elle tient ENTIÈRE : au-dessus du curseur, sinon
+   dessous, sinon à côté et calée verticalement dans l'écran. Si elle est
+   plus haute que l'écran (portable bas), elle passe en version resserrée. */
+function moveTip(ev){if(!tipEl)return;
+  const vw=window.innerWidth, vh=window.innerHeight, m=8, g=16;
+  if(!tipEl.classList.contains("tip-serre")&&tipEl.offsetHeight>vh-2*m) tipEl.classList.add("tip-serre");
+  const w=tipEl.offsetWidth, h=tipEl.offsetHeight, cx=ev.clientX, cy=ev.clientY;
+  let x=cx+g; if(x+w>vw-m) x=cx-g-w;
+  if(x<m) x=Math.max(m,Math.min(vw-w-m,cx-w/2));
+  let y=cy-h-g;
+  if(y<m){
+    y=cy+g;
+    if(y+h>vh-m) y=Math.max(m,Math.min(vh-h-m,cy-h/2));
+  }
   tipEl.style.left=x+"px";tipEl.style.top=y+"px"}
 function hideTip(){if(tipEl){tipEl.remove();tipEl=null;}_hoveredSlotEid=null;}
 document.addEventListener("keydown",ev=>{
