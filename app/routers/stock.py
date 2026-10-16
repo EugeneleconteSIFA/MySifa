@@ -8940,6 +8940,7 @@ def _valorisation_query(conn, couts_matieres: bool = True) -> list[dict]:
             "sous_section": (r["sous_section"] if "sous_section" in r.keys() else None),
             "reference": r["reference"],
             "designation": r["designation"],
+            "libelle_commercial": r["designation"],
             "quantite": qte,
             "unite": _mp_unite_gestion(cat),
             "prix_unitaire": prix,
@@ -8991,6 +8992,7 @@ def _valorisation_query(conn, couts_matieres: bool = True) -> list[dict]:
             "sous_section": (r["sous_section"] if "sous_section" in r.keys() else None),
             "reference": r["reference"],
             "designation": r["designation"] + (f" — {r['laize_label']}" if r["laize_label"] else ""),
+            "libelle_commercial": r["designation"],
             "quantite": qte,
             "unite": _mp_unite_gestion(cat),
             "prix_unitaire": round(valo_bobine, 4),  # prix unitaire calculé par bobine (lecture seule)
@@ -9030,6 +9032,7 @@ def _valorisation_query(conn, couts_matieres: bool = True) -> list[dict]:
             "sous_section": (r["sous_section"] if "sous_section" in r.keys() else None),
             "reference": r["reference"],
             "designation": r["designation"],
+            "libelle_commercial": r["designation"],
             "quantite": 0.0,
             "unite": _mp_unite_gestion(cat),
             "prix_unitaire": 0.0,
@@ -9051,6 +9054,20 @@ def _valorisation_query(conn, couts_matieres: bool = True) -> list[dict]:
             "taxe_importation": bool(r["taxe_importation"] or 0),
             "cout_transport_inclus": transport_state,  # 0/1/2 (int)
         })
+    # Libellé technique : celui de la variante fournisseur principale, sinon
+    # de la première variante active. La matière porte le libellé commercial.
+    try:
+        tech_par_mat: dict[int, str] = {}
+        for r in conn.execute(
+            """SELECT matiere_id, libelle_technique FROM mp_variantes
+                WHERE actif = 1 AND COALESCE(libelle_technique, '') <> ''
+                ORDER BY matiere_id, principal DESC, id ASC"""
+        ).fetchall():
+            tech_par_mat.setdefault(int(r[0]), r[1])
+    except sqlite3.OperationalError:
+        tech_par_mat = {}
+    for it in out:
+        it["libelle_technique"] = tech_par_mat.get(int(it["matiere_id"]), "")
     if couts_matieres:
         _enrich_items_couts_matieres(conn, out)
     return out

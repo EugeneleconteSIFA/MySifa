@@ -23840,6 +23840,7 @@ function valFilteredItems() {
     rows = rows.filter(r =>
       (r.reference || '').toLowerCase().includes(q) ||
       (r.designation || '').toLowerCase().includes(q) ||
+      (r.libelle_technique || '').toLowerCase().includes(q) ||
       (r.categorie_label || '').toLowerCase().includes(q)
     );
   }
@@ -23849,6 +23850,7 @@ function valFilteredItems() {
       switch (v.sortColumn) {
         case 'reference': va = (a.reference || '').toLowerCase(); vb = (b.reference || '').toLowerCase(); break;
         case 'designation': va = (a.designation || '').toLowerCase(); vb = (b.designation || '').toLowerCase(); break;
+        case 'libelle_technique': va = (a.libelle_technique || '').toLowerCase(); vb = (b.libelle_technique || '').toLowerCase(); break;
         case 'categorie': va = (a.categorie_label || '').toLowerCase(); vb = (b.categorie_label || '').toLowerCase(); break;
         case 'quantite': va = Number(a.quantite || 0); vb = Number(b.quantite || 0); break;
         case 'prix_unitaire': va = Number(a.prix_unitaire || 0); vb = Number(b.prix_unitaire || 0); break;
@@ -24452,11 +24454,14 @@ function buildValorisationTableRow(item) {
   const badge = dashMpCatBadge(item.categorie, item.sous_section);
   tdCat.appendChild(badge);
 
-  const refLabel = item.reference || '';
+  // Libellé commercial (la matière) et libellé technique (sa variante
+  // fournisseur principale) remplacent référence et désignation. La référence
+  // reste cherchable et lisible au survol.
+  const refLabel = item.libelle_commercial || item.designation || item.reference || '';
   const matiereId = item.matiere_id || item.id;
   const refLink = stockMpRefLink(matiereId, refLabel, {
-    title: 'Ouvrir la matière',
-    style: 'text-decoration:none;color:var(--text);font-weight:800;font-family:monospace;font-size:13px',
+    title: 'Ouvrir la matière' + (item.reference ? ' · ' + item.reference : ''),
+    style: 'text-decoration:none;color:var(--text);font-weight:700;font-size:13px',
   });
   const refChildren = [refLink];
   if (item.laizee && item.laize_label) {
@@ -24468,9 +24473,9 @@ function buildValorisationTableRow(item) {
       'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:6px;background:rgba(251,146,60,0.15);color:#fb923c;font-size:11px;font-weight:700;font-family:inherit' },
       'Aucune laize'));
   }
-  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text);font-family:monospace' }, ...refChildren);
-  const desText = item.designation || '';
-  const tdDes = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text2)' }, desText);
+  const tdRef = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;color:var(--text)' }, ...refChildren);
+  const desText = item.libelle_technique || '—';
+  const tdDes = el('td', { style: 'padding:10px 12px;font-size:13px;color:' + (item.libelle_technique ? 'var(--text2)' : 'var(--muted)') }, desText);
   const tdQte = el('td', { style: 'padding:10px 12px;font-size:13px;color:var(--text);text-align:right;font-variant-numeric:tabular-nums' },
     valFormatQte(item.quantite),
     el('span', { style: 'margin-left:5px;font-size:11px;color:var(--muted);font-weight:500' }, item.unite || '')
@@ -25006,8 +25011,8 @@ function buildValorisationTable() {
 
   const thChildren = [
     el('th', { style: thStyle, on: { click: () => valToggleSort('categorie') } }, 'Catégorie' + arrow('categorie')),
-    el('th', { style: thStyle, on: { click: () => valToggleSort('reference') } }, 'Référence' + arrow('reference')),
-    el('th', { style: thStyle, on: { click: () => valToggleSort('designation') } }, 'Désignation' + arrow('designation')),
+    el('th', { style: thStyle, on: { click: () => valToggleSort('designation') } }, 'Libellé commercial' + arrow('designation')),
+    el('th', { style: thStyle, on: { click: () => valToggleSort('libelle_technique') } }, 'Libellé technique' + arrow('libelle_technique')),
     el('th', { style: thStyleR, on: { click: () => valToggleSort('quantite') } }, 'Quantité' + arrow('quantite')),
   ];
   thChildren.push(
