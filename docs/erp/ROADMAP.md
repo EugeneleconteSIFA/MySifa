@@ -132,15 +132,15 @@ Statuts : ☐ à faire · ◐ en cours · ✓ fait
 
 | # | Question | Bloque |
 |---|---|---|
-| Q1 | Quel logiciel de comptabilité reçoit les écritures, sous quel format ? | Export comptable |
+| Q1 | ✓ 16/10 : **Cegid / Cw** (« Cw »). Format d'import Cw à confirmer (FEC aujourd'hui) | Export comptable |
 | Q2 | Une seule société, ou plusieurs ? | Reprise |
 | Q3 | Format des numéros devis / commande / BL / facture : on garde ceux de RVGI ? | Paramètres › Numérotation (réglable) |
-| Q4 | Plateforme agréée de facturation électronique : choisie ? | Facturation électronique |
+| Q4 | ✓ 16/10 : **Epithète**, la plateforme de la banque | Facturation électronique |
 | Q5 | Captures des écrans RVGI les plus utilisés | Ergonomie, marchés |
-| Q6 | Valorisation du stock : PMP, dernier prix d'achat, prix standard ? | Stock |
+| Q6 | ✓ 16/10 : prix et quantité à la date de valorisation, avec les paramètres complémentaires de MyStock › Valorisation (à reprendre tels quels) | Stock |
 | Q7 | Gestion par lot / bobine en MP : obligatoire (FSC) ? | Stock |
 | Q8 | ✓ Réponse du 14/10 : l'ordonnancement reste dans MySifa (www), l'ERP s'appuie dessus. Colisage et contrôles RVGI : abandonnés | — |
-| Q9 | Un BL peut-il faire passer le stock PF sous zéro (blocage, alerte, rien) ? | Stock |
+| Q9 | ✓ 16/10 : non — la validation du BL est refusée (fait) | — |
 | Q10 | Les services (calage, cliché) passent-ils par le BL, ou se facturent-ils directement depuis la commande ? | Ventes |
 
 ## Journal
@@ -156,3 +156,5 @@ Statuts : ☐ à faire · ◐ en cours · ✓ fait
 | 14/10/2026 | Instructions du client (onglets RVGI Livraison, Stockage, Facturation) : commentaire interne affiché sur la pièce, externe imprimé sur le BL, la commande ou la facture |
 | 14/10/2026 | Choix des colonnes dans toutes les grilles (RVGI « Sélectionner les colonnes »), TDB par ligne enrichis (pièce d'origine, reste à livrer, pièces suivantes, opérateur, désignations 2–4, formats, adresse de livraison…). Fiche fournisseur RVGI : appels d'offre et commandes (texte, exemplaires, expédition), traite, journal, destinataires AO / commande ; identifiants FTP non repris |
 | 14/10/2026 | Assistant IA dans l'ERP : l'agent MySifa reçoit 10 actions ERP (tiers, pièces, validation, étape suivante, annulation, article, règlement, mouvement de stock) et 13 lectures (recherche, tiers, articles, prix, pièces, TDB, stock, échéances, stats, référentiels), dans `agent_actions_erp.py`. Pièce sans prix : tarif de l'ERP. Ligne Total des grilles fixée en bas |
+| 16/10/2026 | Rapprochement facture fournisseur / réceptions / prix commandés. Demandes MyAO → commande fournisseur. Documents fournisseurs (BL, factures) lus par l'IA : fournisseur, commande et lignes retrouvés, écarts, réception ou facture préparée en brouillon ; aussi par l'assistant. Un BL ne fait plus passer le stock d'un produit fini sous zéro (Q9). Réponses Q1, Q4, Q6 |
+| 16/10/2026 | Valorisation du stock à une date (Stocks › Valorisation) : quantité des mouvements jusqu'à la date, prix de stock historisé (sinon dernière réception, sinon fiche), prix au m² pour les matières en laize, charges de production et frais de stockage lus dans MyStock. Lancement de la spécification de reprise RVGI (docs/erp/reprise-rvgi.md) |

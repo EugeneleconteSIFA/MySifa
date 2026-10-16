@@ -90,7 +90,7 @@ CHAMPS_ARTICLE = {"code": str, "libelle": str, "libelle_client": str, "nature": 
                   "remplacement_id": "int_null", "ref_client2": str, "ref_client3": str,
                   "ml_par_bobine_milli": "int_null", "libelle_technique": str, "libelle_technique2": str,
                   "adhesif": str, "protecteur": str, "film": bool, "synthetique": bool, "epaisseur_milli": "int_null",
-                  "compte_vente": str, "compte_achat": str}
+                  "compte_vente": str, "compte_achat": str, "prix_stock_m2_cents": "int_null"}
 
 NATURES = {"pf": "Produit fini", "mp": "Matière première", "service": "Prestation"}
 # Familles (RVGI « 20-Familles ») : de produits, de matières, de clients, de fournisseurs.
@@ -354,6 +354,8 @@ def enregistrer_article(conn, article_id: int | None, data: dict, tarifs: list |
     if "base_prix" in vals and vals["base_prix"] < 1:
         raise ErreurFichier("Base de prix : 1 au minimum.")
     now = _maintenant()
+    avant = dict(conn.execute("SELECT prix_stock_cents, prix_stock_m2_cents FROM gc_articles WHERE id=?",
+                              (article_id,)).fetchone() or {}) if article_id else {}
     if article_id is None:
         for c in ("libelle", "nature", "unite"):
             if not vals.get(c):
@@ -392,6 +394,12 @@ def enregistrer_article(conn, article_id: int | None, data: dict, tarifs: list |
         if vals:
             conn.execute(f"UPDATE gc_articles SET {', '.join(c + '=?' for c in vals)}, modifie_le=? WHERE id=?",
                          (*vals.values(), now, article_id))
+    if "prix_stock_cents" in vals or "prix_stock_m2_cents" in vals:
+        # Historique daté du prix de stock : la valorisation à une date le lit.
+        from app.services.gc import valorisation
+        apres = dict(conn.execute("SELECT prix_stock_cents, prix_stock_m2_cents FROM gc_articles WHERE id=?",
+                                  (article_id,)).fetchone())
+        valorisation.historiser(conn, article_id, avant, apres)
     if tarifs is not None:
         conn.execute("DELETE FROM gc_tarifs WHERE article_id=?", (article_id,))
         for t in tarifs:
