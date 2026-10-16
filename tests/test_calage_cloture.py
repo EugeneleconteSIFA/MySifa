@@ -247,7 +247,7 @@ class TestCalageCloture(unittest.TestCase):
         from database import get_db
 
         self._saisie("01", 0)
-        self._saisie("02", 1)
+        s02 = self._saisie("02", 1)
         with get_db() as conn:
             conn.execute("UPDATE machines SET dernier_metrage=500 WHERE id=?", (MACHINE_ID,))
             conn.commit()
@@ -274,9 +274,11 @@ class TestCalageCloture(unittest.TestCase):
         r3 = self.client.put(url, json={"metrage_compteur": 820})
         self.assertEqual(r3.status_code, 200, r3.text)
         self.assertEqual(self._ligne(ctx["saisie_id"])["metrage_compteur"], 820.0)
-        # Le relevé et le métrage de calage se lisent dans le commentaire.
-        self.assertEqual(self._ligne(ctx["saisie_id"])["commentaire"],
+        # Le relevé et le métrage de calage se lisent dans le commentaire de
+        # la ligne de calage que la reprise ferme, pas sur la reprise.
+        self.assertEqual(self._ligne(s02)["commentaire"],
                          "Fin de calage · compteur 820 m · calage 320 m")
+        self.assertFalse(self._ligne(ctx["saisie_id"])["commentaire"])
         with get_db() as conn:
             self.assertEqual(conn.execute("SELECT dernier_metrage FROM machines WHERE id=?",
                                           (MACHINE_ID,)).fetchone()[0], 820.0)
