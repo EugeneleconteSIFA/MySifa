@@ -60,6 +60,9 @@ class Export(unittest.TestCase):
             {"article_id": a["PF0002"], "quantite_milli": 3_333_000, "prix_cents": 2800, "base_prix": 1000},
             {"article_id": a["PR0001"], "quantite_milli": 1000, "prix_cents": 8501}])
         pieces.valider(c, co)
+        # Un BL ne livre pas au-delà du stock : complément de stock pour la quantité commandée.
+        c.execute("""INSERT INTO gc_mouvements (date_mvt, article_id, depot, quantite_milli, type, cree_le)
+                     VALUES ('2026-05-01', ?, 'PRINC', 1000000, 'ajustement', '2026-05-01T00:00:00')""", (a["PF0002"],))
         bl = pieces.transformer(c, [co], "bl")
         pieces.enregistrer(c, bl, {"date_piece": "2026-05-02"}, None)
         pieces.valider(c, bl)

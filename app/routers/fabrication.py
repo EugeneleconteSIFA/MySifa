@@ -4149,10 +4149,11 @@ async def releve_compteur_fin_calage(saisie_id: int, request: Request):
                         f"— la valeur saisie ({int(m):,} m) ne peut pas être inférieure.").replace(",", " "),
             )
         conn.execute("UPDATE production_data SET metrage_compteur=? WHERE id=?", (m, saisie_id))
-        # Le relevé se lit aussi dans le commentaire de la saisie, avec le
-        # métrage passé au calage quand le compteur d'avant est connu. Ce que
-        # le conducteur avait écrit reste derrière ; un nouveau relevé remplace
-        # l'ancienne mention au lieu de l'empiler.
+        # Le relevé se lit aussi en commentaire, avec le métrage passé au
+        # calage quand le compteur d'avant est connu — sur la LIGNE DE CALAGE
+        # que ce « Production » ferme (la saisie juste avant sur la machine),
+        # pas sur la reprise. Ce que le conducteur avait écrit reste derrière ;
+        # un nouveau relevé remplace l'ancienne mention au lieu de l'empiler.
         try:
             from app.services.calage_cloture import gache_calage
             metres = None
@@ -4162,11 +4163,35 @@ async def releve_compteur_fin_calage(saisie_id: int, request: Request):
                         metres = pl["metres"]
             fr = lambda v: f"{int(round(v)):,}".replace(",", " ")
             mention = f"Fin de calage · compteur {fr(m)} m" + (f" · calage {fr(metres)} m" if metres is not None else "")
-            ancien = (row["commentaire"] or "").strip()
-            if ancien.startswith("Fin de calage ·"):
-                ancien = ancien.split(" — ", 1)[1].strip() if " — " in ancien else ""
-            conn.execute("UPDATE production_data SET commentaire=? WHERE id=?",
-                         (mention + (" — " + ancien if ancien else ""), saisie_id))
+
+            def _sans_mention(txt):
+                txt = (txt or "").strip()
+                if txt.startswith("Fin de calage ·"):
+                    txt = txt.split(" — ", 1)[1].strip() if " — " in txt else ""
+                return txt
+
+            prec = conn.execute(
+                """SELECT id, commentaire, operation_category FROM production_data
+                    WHERE id <> ? AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
+                      AND COALESCE(operation_category,'') NOT IN ('alert_ack','stock_pf','stock_mp')
+                      AND (date_operation < ? OR (date_operation = ? AND id < ?))
+                    ORDER BY date_operation DESC, id DESC LIMIT 1""",
+                (saisie_id, row["machine"] or "", row["date_operation"], row["date_operation"], saisie_id),
+            ).fetchone()
+            if prec and (prec["operation_category"] or "") == "calage":
+                ancien = _sans_mention(prec["commentaire"])
+                conn.execute("UPDATE production_data SET commentaire=? WHERE id=?",
+                             (mention + (" — " + ancien if ancien else ""), prec["id"]))
+                # Une mention posée sur la reprise par une version précédente
+                # n'a plus lieu d'être.
+                reste = _sans_mention(row["commentaire"])
+                if reste != (row["commentaire"] or "").strip():
+                    conn.execute("UPDATE production_data SET commentaire=? WHERE id=?",
+                                 (reste or None, saisie_id))
+            else:
+                ancien = _sans_mention(row["commentaire"])
+                conn.execute("UPDATE production_data SET commentaire=? WHERE id=?",
+                             (mention + (" — " + ancien if ancien else ""), saisie_id))
         except Exception:
             logger.exception("[fabrication] commentaire de fin de calage non écrit")
         machine = conn.execute(

@@ -73,3 +73,6 @@ _tmp_fresh*/
 
 # Sorties de session Claude (brouillons, affiches, exports) — jamais versionnees.
 Claude outputs/
+
+# Documents fournisseurs déposés dans l'ERP (si UPLOADS_ROOT reste à sa valeur par défaut)
+uploads/erp/

@@ -141,6 +141,71 @@
     }).catch(function (e) { zone.textContent = ''; zone.appendChild(ERP.erreur(e)); });
   };
 
+  // ── Valorisation (règle MyStock : prix et quantité à la date) ────
+  var SOURCES = {historique: 'Prix de stock', fiche: 'Prix de stock', reception: 'Dernière réception',
+                 fiche_achat: 'Prix d\'achat (fiche)', fiche_vente: 'Prix de vente (fiche)', aucun: 'Sans prix'};
+  ERP.ecrans['/stocks/valorisation'] = function (main, ctx) {
+    main.classList.add('plein');
+    var P = {date: aujourdhui()};
+    var resume = h('div');
+    var zone = h('div', {className: 'erp-zone'});
+    main.appendChild(h('div', {className: 'erp-form erp-export-barre'}, ERP.champ('Valorisation au', ERP.saisie(P, 'date', 'date', {change: charger}))));
+    main.appendChild(resume);
+    main.appendChild(zone);
+    var g = null;
+    async function charger() {
+      try {
+        var V = (await Promise.all([ERP.meta(), ERP.api('/api/erp2/valorisation?date=' + P.date)]))[1];
+        var T = V.totaux, tuile = function (titre, n, detail) {
+          return h('div', {className: 'erp-tuile'}, h('div', {className: 'erp-tuile-titre', text: titre}),
+            h('div', {className: 'erp-tuile-n', text: ERP.fmt.euros(n)}), detail ? h('div', {className: 'erp-tuile-detail', text: detail}) : null);
+        };
+        resume.textContent = '';
+        resume.appendChild(h('div', {className: 'erp-tuiles'},
+          tuile('Matières', T.mp_cents),
+          tuile('Produits finis', T.pf_net_cents, 'brut ' + ERP.fmt.euros(T.pf_brut_cents) + ' − charges de production ' +
+            String(V.parametres.charge_production_pct).replace('.', ',') + ' %'),
+          T.autre_cents ? tuile('Autres', T.autre_cents) : null,
+          tuile('Stock valorisé — total', T.total_cents, 'dont frais de stockage ' + String(V.parametres.storage_fees_pct).replace('.', ',') +
+            ' % : ' + ERP.fmt.euros(T.frais_stockage_cents))));
+        var alertes = [];
+        if (V.sans_prix) alertes.push(V.sans_prix + ' ligne(s) sans prix : valorisées à zéro.');
+        if (V.negatifs) alertes.push(V.negatifs + ' ligne(s) en stock négatif à cette date : comptées pour zéro.');
+        alertes.forEach(function (a) { resume.appendChild(h('p', {className: 'erp-aide neg', text: a})); });
+        resume.appendChild(h('p', {className: 'erp-aide', text: 'Charges de production et frais de stockage : les réglages de MyStock › Valorisation, à leur valeur actuelle.'}));
+        V.items.forEach(function (i) {
+          i.cle = i.id + '-' + i.depot + '-' + (i.laize_dmm || '');
+          i.source_lib = SOURCES[i.source_prix] || i.source_prix;
+          i.famille_lib = ERP.refLibelle('familles', i.famille);
+          i.laize = i.laize_dmm ? (i.laize_dmm / 10).toLocaleString('fr-FR') : '';
+        });
+        var natures = {};
+        Object.keys(ERP.M.natures).forEach(function (k) { natures[k] = {libelle: ERP.M.natures[k], ton: k === 'pf' ? 'accent' : 'warn'}; });
+        if (g) { g.maj(V.items); return; }
+        zone.textContent = '';
+        g = ERP.grille(zone, {
+          nom: 'stock.valorisation', cle: 'cle', lignes: V.items, statuts: natures,
+          colonnes: [
+            {cle: 'nature', libelle: 'Nature', type: 'statut', largeur: 140},
+            {cle: 'famille_lib', libelle: 'Famille / type', largeur: 140},
+            {cle: 'code', libelle: 'Article', largeur: 110},
+            {cle: 'libelle', libelle: 'Libellé', largeur: 260},
+            {cle: 'depot', libelle: 'Dépôt', largeur: 80},
+            {cle: 'laize', libelle: 'Laize', largeur: 70},
+            {cle: 'quantite_milli', libelle: 'Quantité', type: 'qte', largeur: 120, classe: function (i) { return i.negatif ? 'retard' : ''; }},
+            {cle: 'unite', libelle: 'Unité', largeur: 70},
+            {cle: 'prix_cents', libelle: 'Prix', type: 'montant', largeur: 110, rendu: function (i) {
+              return i.prix_affiche || (i.prix_cents == null ? '—' : ERP.fmt.euros(i.prix_cents) + (i.base_prix > 1 ? ' / ' + ERP.fmt.qte(i.base_prix * 1000, 0) : '')); }},
+            {cle: 'source_lib', libelle: 'Source du prix', largeur: 160, classe: function (i) { return i.source_prix === 'aucun' ? 'retard' : ''; }},
+            {cle: 'valeur_cents', libelle: 'Valeur', type: 'montant', largeur: 130, total: true},
+          ],
+          ouvrir: function (i) { ERP.aller('/fichiers/articles/' + i.id); },
+        });
+      } catch (e) { zone.textContent = ''; zone.appendChild(ERP.erreur(e)); }
+    }
+    charger();
+  };
+
   ERP.ecrans['/stocks/mouvements'] = function (main, ctx) {
     main.classList.add('plein');
     ctx.actions.appendChild(ERP.bouton('Inventaire, ajustement, transfert', function () { return saisieMouvement(ERP.rafraichir); }, {accent: true}));

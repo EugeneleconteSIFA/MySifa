@@ -532,7 +532,7 @@
        'code3', 'couleur', 'poids_g', 'sous_famille', 'gamme', 'cliche', 'ean', 'unite_achat', 'unite_conditionnement',
        'taxe_eco_cents', 'code_douane', 'prix_stock_cents', 'stock_mini_milli', 'stock_maxi_milli', 'zone',
        'ref_client2', 'ref_client3', 'ml_par_bobine_milli', 'libelle_technique', 'libelle_technique2', 'adhesif',
-       'protecteur', 'film', 'synthetique', 'epaisseur_milli', 'compte_vente', 'compte_achat']
+       'protecteur', 'film', 'synthetique', 'epaisseur_milli', 'compte_vente', 'compte_achat', 'prix_stock_m2_cents']
         .forEach(function (k) { if (k in A) champs[k] = A[k]; });
       var r = await ERP.api('/api/erp2/articles' + (nouveau ? '' : '/' + A.id), {
         method: nouveau ? 'POST' : 'PUT',
@@ -644,7 +644,9 @@
         A.nature !== 'mp' ? c('Compte de vente', 'compte_vente', 'texte', {placeholder: 'celui de la famille'}) : null,
         A.nature !== 'pf' ? c('Compte d\'achat', 'compte_achat', 'texte', {placeholder: 'celui de la famille'}) : null,
         sec('Stock'),
-        c('Prix de stock', 'prix_stock_cents', 'euros'), c('Zone', 'zone'),
+        c('Prix de stock', 'prix_stock_cents', 'euros', {aide: 'Valorisation du stock. Chaque changement est daté : la valorisation à une date passée lit le prix de ce jour-là.'}),
+        A.nature === 'mp' ? c('Prix de stock au m²', 'prix_stock_m2_cents', 'euros', {aide: 'Matière en laize suivie en mètres linéaires : valeur = ML × laize × prix au m².'}) : null,
+        c('Zone', 'zone'),
         c('Stock mini', 'stock_mini_milli', 'qte'), c('Stock maxi', 'stock_maxi_milli', 'qte'),
         A.nature === 'mp' ? c('Longueur d\'une bobine (ML)', 'ml_par_bobine_milli', 'qte',
           {aide: 'Achat au m² : la commande affiche laize, nombre de bobines et mètres linéaires.'}) : null);
