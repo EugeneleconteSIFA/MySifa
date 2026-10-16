@@ -333,7 +333,7 @@ class Chaine(unittest.TestCase):
         pieces.valider(c, co)
         bl = pieces.transformer(c, [co], "bl")
         pieces.valider(c, bl)
-        self.assertEqual(pieces.alertes_stock(c, bl), ["ETQ1 : stock -3 000 ETQ au dépôt PRINC"])
+        self.assertEqual(pieces.alertes_stock(c, bl), ["Stock négatif — ETQ1 : stock -3 000 ETQ au dépôt PRINC"])
 
     def test_relances_et_transfert(self):
         from app.services.gc import compta, fichiers
@@ -545,6 +545,27 @@ class Chaine(unittest.TestCase):
         pieces.enregistrer(c, co, None, [{"article_id": 1, "quantite_milli": 60_000_000}, {"article_id": 1, "quantite_milli": 1000, "prix_cents": 0}])
         ls = pieces.charger(c, co)["lignes"]
         self.assertEqual([l["prix_cents"] for l in ls], [1100, 0])
+
+    def test_rapprochement_facture_fournisseur(self):
+        from app.services.gc import rapprochement
+        c = self.conn
+        cf = pieces.creer(c, "cde_fournisseur", 2)
+        pieces.enregistrer(c, cf, None, [_ligne(1, 10_000_000, 900, 1000)])
+        pieces.valider(c, cf)
+        re_ = pieces.transformer(c, [cf], "reception")
+        lr = pieces.charger(c, re_)["lignes"]
+        pieces.enregistrer(c, re_, None, [dict(lr[0], quantite_milli=8_000_000)])
+        pieces.valider(c, re_)
+        ff = pieces.transformer(c, [re_], "facture_fournisseur")
+        R = rapprochement.rapprochement(c, ff)
+        self.assertEqual((R["nb_ecarts"], R["lignes"][0]["qte_recue_milli"]), (0, 8_000_000))
+        lf = pieces.charger(c, ff)["lignes"]
+        pieces.enregistrer(c, ff, None, [dict(lf[0], quantite_milli=9_000_000, prix_cents=950)])
+        d = rapprochement.rapprochement(c, ff)["lignes"][0]
+        self.assertEqual(d["etat"], "ecart_prix_qte")
+        self.assertEqual((d["ecart_qte_milli"], d["prix_commande_cents"], d["ecart_prix_cents"]), (1_000_000, 900, 50))
+        self.assertEqual(d["ecart_montant_cents"], 9_000 * 950 // 1000 * 0 + calculs.montant_ligne(9_000_000, 950, 1000) - calculs.montant_ligne(8_000_000, 900, 1000))
+        self.assertEqual(len(rapprochement.alertes(c, ff)), 2)
 
     def test_reception_par_laize(self):
         from app.services.gc import fichiers

@@ -720,7 +720,7 @@ def alertes_stock(conn, piece_id: int) -> list[str]:
            WHERE m.piece_id=? GROUP BY m.article_id, m.depot""", (piece_id,)).fetchall():
         if r["q"] is not None and int(r["q"]) < 0:
             q = f"{int(r['q']) / 1000:,.3f}".rstrip("0").rstrip(".").replace(",", " ").replace(".", ",")
-            out.append(f"{r['code']} : stock {q} {r['unite']} au dépôt {r['depot']}")
+            out.append(f"Stock négatif — {r['code']} : stock {q} {r['unite']} au dépôt {r['depot']}")
     return out
 
 

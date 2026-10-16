@@ -670,6 +670,38 @@
       return ERP.carte('Pièces liées', h('div', {className: 'erp-liens'}, items));
     }
 
+    function nouveauBrouillonVide() { return !lignes.some(function (l) { return l.article_id; }); }
+
+    // Facture fournisseur : quantités reçues et prix commandés, ligne à ligne
+    // (RVGI : contrôle des factures d'achat). Les écarts n'empêchent rien.
+    function blocRapprochement() {
+      var zone = h('div', null, ERP.chargement());
+      ERP.api('/api/erp2/pieces/' + P.id + '/rapprochement').then(function (R) {
+        zone.textContent = '';
+        if (!R.lignes.length) { zone.appendChild(h('div', {className: 'erp-muet', text: 'Aucune ligne à rapprocher.'})); return; }
+        var ton = {ok: 'ok', sans_reception: 'warn'};
+        var tbody = h('tbody', null, R.lignes.map(function (d) {
+          var u = d.unite ? ' ' + d.unite : '';
+          return h('tr', null,
+            h('td', {text: String(d.rang)}), h('td', {text: d.article_code}),
+            h('td', {text: d.reception ? d.reception + (d.commande ? ' / cde ' + d.commande : '') : '—'}),
+            h('td', {className: 'num', text: d.qte_recue_milli == null ? '—' : ERP.fmt.qte(d.qte_recue_milli) + u}),
+            h('td', {className: 'num' + (d.ecart_qte_milli ? ' neg' : ''), text: ERP.fmt.qte(d.qte_facturee_milli) + u}),
+            h('td', {className: 'num', text: d.prix_commande_cents == null ? '—' : ERP.fmt.euros(d.prix_commande_cents)}),
+            h('td', {className: 'num' + (d.ecart_prix_cents ? ' neg' : ''), text: ERP.fmt.euros(d.prix_facture_cents)}),
+            h('td', {className: 'num' + (d.ecart_montant_cents ? ' neg' : ''), text: ERP.fmt.euros(d.ecart_montant_cents)}),
+            h('td', null, h('span', {className: 'erp-pastille ton-' + (ton[d.etat] || 'danger'), text: R.etats[d.etat] || d.etat})));
+        }));
+        zone.appendChild(h('div', {className: 'erp-lignes-defil'}, h('table', {className: 'erp-lignes'},
+          h('thead', null, h('tr', null, ['Lg', 'Article', 'Réception', 'Reçu', 'Facturé', 'Prix commandé', 'Prix facturé', 'Écart', 'État']
+            .map(function (x) { return h('th', {text: x}); }))), tbody)));
+        zone.appendChild(h('p', {className: R.nb_ecarts ? 'erp-aide neg' : 'erp-aide',
+          text: R.nb_ecarts ? R.nb_ecarts + ' ligne(s) en écart · écart total ' + ERP.fmt.euros(R.ecart_total_cents) + ' HT'
+                            : 'Facture conforme aux réceptions et aux prix commandés.'}));
+      }).catch(function (e) { zone.textContent = ''; zone.appendChild(ERP.erreur(e)); });
+      return ERP.carte('Rapprochement avec les réceptions', zone);
+    }
+
     function blocEcheances() {
       if (!P.echeances.length) return null;
       return ERP.carte('Échéances', h('div', {className: 'erp-liens'}, P.echeances.map(function (e) {
@@ -732,7 +764,7 @@
       if (modifie) await enregistrer(true);
       var r = await ERP.api('/api/erp2/pieces/' + P.id + '/valider', {method: 'POST'});
       ERP.toast(libType(P.type) + ' ' + r.numero + ' validé(e).', 'success');
-      (r.alertes || []).forEach(function (a) { ERP.toast('Stock négatif — ' + a, 'danger'); });
+      (r.alertes || []).forEach(function (a) { ERP.toast(a, 'danger'); });
       await charger();
     }
 
@@ -920,6 +952,7 @@
       var gauche = h('div', {className: 'erp-piece-principal'}, blocEntete());
       var droite = h('div', {className: 'erp-piece-cote'});
       [blocLiens(), blocEcheances(), blocMouvements()].forEach(function (b) { if (b) droite.appendChild(b); });
+      if (P.type === 'facture_fournisseur' && !nouveauBrouillonVide()) gauche.appendChild(blocRapprochement());
       grille.appendChild(gauche);
       if (droite.childNodes.length) grille.appendChild(droite);
       else grille.classList.add('seul');

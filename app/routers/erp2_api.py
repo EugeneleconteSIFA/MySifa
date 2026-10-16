@@ -16,7 +16,7 @@ from app.services.auth_service import get_current_user
 from app.services.audit_service import log_action
 from fastapi.responses import Response
 
-from app.services.gc import cahiers, compta, demo, envoi, export_compta, fichiers, fsc, pieces
+from app.services.gc import cahiers, compta, demo, envoi, export_compta, fichiers, fsc, pieces, rapprochement
 from app.services.gc.pieces import ErreurPiece
 
 router = APIRouter(prefix="/api/erp2", tags=["erp2"])
@@ -257,8 +257,17 @@ def piece_valider(piece_id: int, request: Request):
             alertes += pieces.alertes_bat(conn, piece_id)
         if type_p in ("bl", "facture"):
             alertes += fsc.alertes(conn, piece_id)
+        if type_p == "facture_fournisseur":
+            alertes += rapprochement.alertes(conn, piece_id)
     _trace(request, u, "VALIDATE", f"Pièce {numero}")
     return {"numero": numero, "alertes": alertes}
+
+
+@router.get("/pieces/{piece_id}/rapprochement")
+def piece_rapprochement(piece_id: int, request: Request):
+    """Facture fournisseur : quantités reçues et prix commandés, ligne à ligne."""
+    _user(request)
+    return _lecture(rapprochement.rapprochement, piece_id)
 
 
 @router.get("/pieces/{piece_id}/envoi")
