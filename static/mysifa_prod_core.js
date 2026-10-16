@@ -326,6 +326,7 @@
       var so=S.sortState||{};
       if(so.col){ p.tri=so.col; if(so.asc===false) p.sens='desc'; }
     }
+    if(sousEff==='erreurs'&&S.ecartsFiltre) p.ecart=String(S.ecartsFiltre).replace(/^prod\./,'');
     if(sousEff==='retour'){
       var rp=S.retourProd||{};
       if(rp.vue==='liste') p.vue='liste';
@@ -521,6 +522,10 @@
         machine:u.get('retour_machine',''),
         dossier:u.get('cr',null), cr:null
       });
+    }
+    if(page==='production'&&S.subPage==='erreurs'){
+      var ec=u.get('ecart',null);
+      S.ecartsFiltre=(ec&&/^[a-z_]{1,40}$/.test(ec))?'prod.'+ec:'';
     }
     S._reunionsUrl=null;
     if(page==='production'&&S.subPage==='reunions'){
@@ -9557,26 +9562,120 @@ async function openCorrigerEcart(e){
   };
 
   if(ap.action === 'rattacher'){
+    // Recherche du vrai dossier : référence, OF, réf produit, client ou
+    // désignation. Elle part du numéro noté par l'opérateur — souvent la réf
+    // produit — et les dossiers de la même machine passent devant.
     let choix = (ap.candidats||[]).length === 1 ? ap.candidats[0].no_dossier : '';
-    const inp=h('input',{type:'text',className:'form-sel',style:{width:'100%',marginTop:'8px'},
-      placeholder:'Autre dossier (référence ou OF)…', value: choix});
-    inp.addEventListener('input',()=>{ choix = inp.value.trim(); });
-    const liste = (ap.candidats||[]).map(c=>h('button',{type:'button',
-        className:'btn-ghost',style:{display:'block',width:'100%',textAlign:'left',marginBottom:'6px',
-          background:'var(--bg)',border:'1px solid var(--border)',padding:'8px 12px',borderRadius:'8px'},
-        onClick:()=>{ choix=c.no_dossier; inp.value=c.no_dossier; }},
-      h('b',null,c.no_dossier), ' ', h('span',{style:{color:'var(--muted)'}},
-        [c.client, c.statut].filter(Boolean).join(' · '))));
+    const res = h('div',{style:{maxHeight:'300px',overflowY:'auto',margin:'8px 0'}});
+    const choisi = h('div',{style:{fontSize:'13px',fontWeight:'700',minHeight:'18px'}});
+    const majChoisi = ()=>{ choisi.textContent = choix ? 'Rattacher à : '+choix : ''; };
+    const dessiner = (cands)=>{
+      res.replaceChildren();
+      if(!cands.length){
+        res.appendChild(h('div',{style:{fontSize:'13px',color:'var(--muted)',padding:'8px 0'}},
+          'Aucun dossier pour « '+(inp.value||'')+' ».'));
+        return;
+      }
+      cands.forEach(c=>{
+        const b = h('button',{type:'button',style:{display:'grid',gridTemplateColumns:'1fr auto',gap:'4px 12px',
+            width:'100%',textAlign:'left',marginBottom:'6px',padding:'8px 12px',borderRadius:'8px',cursor:'pointer',
+            fontFamily:'inherit',fontSize:'13px',color:'var(--text)',
+            background: c.no_dossier===choix ? 'var(--accent-bg)' : 'var(--card)',
+            border:'1px solid '+(c.no_dossier===choix ? 'var(--accent)' : 'var(--border)')},
+          onClick:()=>{ choix=c.no_dossier; majChoisi(); dessiner(cands); }},
+          h('b',null,c.no_dossier),
+          h('span',{style:{color:'var(--muted)'}},[c.machine, {attente:'En attente',en_cours:'En cours',termine:'Terminé'}[c.statut]||c.statut].filter(Boolean).join(' · ')),
+          h('span',{style:{color:'var(--text2)'}},[c.client, c.ref_produit ? 'réf '+c.ref_produit : '', c.designation].filter(Boolean).join(' · ')),
+          h('span',{style:{color:'var(--muted)'}},c.planned_start ? 'prévu '+_heureFr(c.planned_start)
+            : (c.derniere ? 'saisi '+_heureFr(c.derniere) : '')));
+        res.appendChild(b);
+      });
+    };
+    const inp = h('input',{type:'text',className:'form-sel',value:ap.recherche||'',
+      placeholder:'Rechercher (dossier, OF, réf produit, client…)',
+      style:{width:'100%',background:'var(--card)'}});
+    let jeton = 0, minuteur = null;
+    inp.addEventListener('input',()=>{
+      clearTimeout(minuteur);
+      minuteur = setTimeout(async()=>{
+        const t = ++jeton;
+        try{
+          const d = await api('/api/prod/ecarts/'+e.id+'/candidats?q='+encodeURIComponent(inp.value.trim()));
+          if(t === jeton) dessiner((d && d.candidats) || []);
+        }catch(err){}
+      }, 220);
+    });
+    inp.addEventListener('keydown',ev=>{ if(ev.key==='Escape'){ inp.value=''; inp.dispatchEvent(new Event('input')); } });
+    const f = ap.fictif || {};
     _ecartModal('Rattacher le dossier hors planning',
-      h('p',{style:{fontSize:'13px',color:'var(--text2)',margin:'0 0 10px'}},e.detail||''),
-      liste.length ? h('div',null,h('div',{style:{fontSize:'11px',fontWeight:'700',textTransform:'uppercase',
-        letterSpacing:'.5px',color:'var(--muted)',marginBottom:'6px'}},'Dossiers du même OF'),...liste)
-        : h('p',{style:{fontSize:'13px',color:'var(--muted)'}},'Aucun dossier ne porte cet OF : indiquez le dossier.'),
-      inp,
+      h('p',{style:{fontSize:'13px',color:'var(--text2)',margin:'0 0 10px'}},
+        'Noté par l\'opérateur : ', h('b',null,f.of||''), ' · '+(f.machine||'')+' · '+(e.detail||'')),
+      inp, res, choisi,
       _ecartBoutons(()=>{
         if(!choix){ toast('Choisissez le dossier de rattachement.','error'); return; }
         corriger({to_no_dossier:choix}, 'Saisies rattachées à '+choix+'.');
       }, 'Rattacher'));
+    dessiner(ap.candidats||[]);
+    majChoisi();
+    requestAnimationFrame(()=>{ try{ inp.focus(); inp.select(); }catch(_){} });
+    return;
+  }
+
+  if(ap.action === 'machine_saisies'){
+    // Dossier « en cours » au planning sans saisie : sa fiche, et les saisies
+    // de sa machine depuis son démarrage prévu. Une saisie faite sous un autre
+    // numéro se corrige d'un clic (fenêtre de modification de la saisie) ; un
+    // dossier fini sans fin de production se règle au planning.
+    const d = ap.dossier || {};
+    const ref = String(d.reference||'').trim();
+    const lignes = (ap.saisies||[]).map(r=>{
+      const sien = String(r.no_dossier||'').trim() === ref;
+      const tr = h('tr',{style:{cursor:'pointer',background: sien ? 'var(--accent-bg)' : ''},
+          title:'Modifier cette saisie',
+          onClick:()=>{ closeModal(); openEditModal(r); }},
+        h('td',{style:{whiteSpace:'nowrap'}},_heureFr(r.date_operation)),
+        h('td',null,r.operation||''),
+        h('td',{style:{fontWeight: sien ? '700' : '400'}},r.no_dossier||'—'),
+        h('td',null,r.operateur||''));
+      return tr;
+    });
+    _ecartModal('Dossier '+(ref||'')+' en cours sans saisie',
+      h('div',{style:{display:'flex',flexWrap:'wrap',gap:'6px 16px',fontSize:'13px',marginBottom:'10px'}},
+        h('span',null,h('b',null,ref)),
+        h('span',null,[d.client, d.ref_produit ? 'réf '+d.ref_produit : ''].filter(Boolean).join(' · ')),
+        h('span',{style:{color:'var(--muted)'}},(d.machine||'')+' · prévu '+_heureFr(d.planned_start)
+          +(d.planned_end ? ' → '+_heureFr(d.planned_end) : ''))),
+      h('p',{style:{fontSize:'12px',color:'var(--muted)',margin:'0 0 8px'}},
+        'Saisies de la machine depuis le démarrage prévu. Cliquez une saisie pour la rattacher au bon dossier ; '
+        +'si le dossier est fini ou pas commencé, corrigez-le au planning.'),
+      lignes.length
+        ? h('div',{style:{maxHeight:'320px',overflowY:'auto',border:'1px solid var(--border)',borderRadius:'8px'}},
+            h('table',{className:'saisies-table',style:{width:'100%',fontSize:'13px'}},
+              h('thead',null,h('tr',null,h('th',null,'Date'),h('th',null,'Opération'),h('th',null,'Dossier'),h('th',null,'Opérateur'))),
+              h('tbody',null,...lignes)))
+        : h('p',{style:{fontSize:'13px',fontWeight:'700'}},'Aucune saisie sur la machine depuis le démarrage prévu.'),
+      h('div',{style:{display:'flex',gap:'8px',justifyContent:'flex-end',marginTop:'14px'}},
+        h('button',{type:'button',className:'btn-ghost',style:{background:'var(--bg)'},onClick:()=>closeModal()},'Fermer'),
+        ap.lien ? h('a',{href:ap.lien,className:'btn-sm',
+          style:{background:'var(--accent)',color:'white',padding:'8px 16px',borderRadius:'8px',
+                 fontWeight:'700',textDecoration:'none'}},'Ouvrir au planning') : null));
+    return;
+  }
+
+  if(ap.action === 'info_prod'){
+    const txt = h('textarea',{rows:'3',placeholder:'À savoir pour la prochaine fois…',
+      style:{width:'100%',padding:'10px 12px',borderRadius:'8px',border:'1px solid var(--border)',
+             background:'var(--card)',color:'var(--text)',fontFamily:'inherit',fontSize:'13px'}});
+    _ecartModal('Info prod du dossier '+(ap.no_dossier||''),
+      h('div',{style:{display:'flex',justifyContent:'flex-end',marginBottom:'6px'}},
+        h('button',{type:'button',className:'btn-ghost',style:{background:'var(--bg)',border:'1px solid var(--border)',
+          padding:'4px 10px',borderRadius:'8px'},onClick:()=>{ txt.value='R.A.S.'; txt.focus(); }},'R.A.S.')),
+      txt,
+      _ecartBoutons(()=>{
+        if(!txt.value.trim()){ toast('Info prod vide — « R.A.S. » si rien à signaler.','error'); return; }
+        corriger({texte:txt.value.trim()}, 'Info prod enregistrée.');
+      }, 'Enregistrer'));
+    requestAnimationFrame(()=>{ try{ txt.focus(); }catch(_){} });
     return;
   }
 
@@ -9647,23 +9746,21 @@ async function openCorrigerEcart(e){
   if(ap.lien) window.location.href = ap.lien;
 }
 
-function renderProdEcarts(){
-  if(!isAdmin(S.user)) return null;
-  const liste = S.prodEcarts;
-  if(liste == null){
-    // Arrivée directe sur /prod#erreurs : aucun chemin de démarrage n'a encore
-    // chargé la liste, le bloc la demande lui-même (une seule fois).
-    if(!S._prodEcartsEnCours){
-      S._prodEcartsEnCours = true;
-      loadProdEcarts().then(()=>{ S._prodEcartsEnCours = false; render(); });
-    }
-    return h('div',{className:'card',style:{marginBottom:'16px'}},
-      h('div',{className:'card-empty'},'Chargement des écarts à traiter…'));
-  }
+// Filtre par type d'écart : dans l'adresse (clé `ecart`), comme tout filtre.
+// La recherche texte n'y va pas : c'est une saisie en cours (url-etat.md).
+function _ecartsFiltres(liste){
+  const f = S.ecartsFiltre || '';
+  const q = String(S.ecartsRecherche||'').trim().toLowerCase();
+  return liste.filter(e=>(!f || e.regle===f)
+    && (!q || [e.titre, e.detail, e.objet_ref, e.regle_titre].join(' ').toLowerCase().indexOf(q) !== -1));
+}
+
+function _ecartLigne(e){
   const couleur = g => g==='haute' ? 'var(--danger)' : g==='moyenne' ? 'var(--warn)' : 'var(--muted)';
   const libAction = {rattacher:'Rattacher', reappliquer:'Reporter les heures', heures:'Corriger les heures',
-                     saisie:'Ouvrir la saisie', lien:'Ouvrir'};
-  const lignes = liste.map(e=>h('div',{style:{display:'grid',gridTemplateColumns:'10px 1fr auto',gap:'12px',
+                     saisie:'Ouvrir la saisie', machine_saisies:'Voir les saisies', planning:'Ouvrir au planning',
+                     info_prod:'Saisir l\'info prod', lien:'Ouvrir'};
+  return h('div',{style:{display:'grid',gridTemplateColumns:'10px 1fr auto',gap:'12px',
       alignItems:'center',padding:'10px 4px',borderBottom:'1px solid var(--border)'}},
     h('span',{style:{width:'10px',height:'10px',borderRadius:'50%',background:couleur(e.gravite)},
       title:'Gravité '+(e.gravite||'')}),
@@ -9677,16 +9774,63 @@ function renderProdEcarts(){
         onClick:()=>openValiderEcart(e)},iconEl('check',13),' Valider'),
       h('button',{type:'button',className:'btn-sm',
         style:{background:'var(--accent)',color:'white',border:'none',padding:'6px 12px',borderRadius:'8px',fontWeight:'700'},
-        onClick:()=>openCorrigerEcart(e)},iconEl('pencil',13),' '+(libAction[e.action]||'Corriger')))));
+        onClick:()=>openCorrigerEcart(e)},iconEl('pencil',13),' '+(libAction[e.action]||'Corriger'))));
+}
+
+function renderProdEcarts(){
+  if(!isAdmin(S.user)) return null;
+  const liste = S.prodEcarts;
+  if(liste == null){
+    // Arrivée directe sur l'onglet : aucun chemin de démarrage n'a encore
+    // chargé la liste, le bloc la demande lui-même (une seule fois).
+    if(!S._prodEcartsEnCours){
+      S._prodEcartsEnCours = true;
+      loadProdEcarts().then(()=>{ S._prodEcartsEnCours = false; render(); });
+    }
+    return h('div',{className:'card',style:{marginBottom:'16px'}},
+      h('div',{className:'card-empty'},'Chargement des écarts à traiter…'));
+  }
+  // Pastilles par type, avec leur nombre ; un type disparu de la liste
+  // (tout validé) libère le filtre.
+  const types = {};
+  liste.forEach(e=>{ (types[e.regle] = types[e.regle] || {titre:e.regle_titre, n:0}).n++; });
+  if(S.ecartsFiltre && !types[S.ecartsFiltre]) S.ecartsFiltre = '';
+  const pastille = (code, libelle, n)=>{
+    const actif = (S.ecartsFiltre||'') === code;
+    return h('button',{type:'button',onClick:()=>set({ecartsFiltre:code}),
+      style:{padding:'5px 10px',borderRadius:'999px',fontSize:'12px',fontWeight:'700',cursor:'pointer',
+        fontFamily:'inherit',border:'1px solid '+(actif?'var(--accent)':'var(--border)'),
+        background:actif?'var(--accent-bg)':'var(--card)',color:actif?'var(--accent)':'var(--text2)'}},
+      libelle+' '+n);
+  };
+  // La liste se redessine seule pendant la frappe : la barre de recherche
+  // n'est jamais reconstruite, elle garde le focus.
+  const zone = h('div',{style:{padding:'0 14px 6px'}});
+  const redessiner = ()=>{
+    const vues = _ecartsFiltres(liste);
+    zone.replaceChildren(...(vues.length ? vues.map(_ecartLigne)
+      : [h('div',{className:'card-empty'}, liste.length
+          ? 'Aucun écart pour « '+(S.ecartsRecherche||'')+' ».'
+          : 'Rien à traiter : aucune saisie à valider ou corriger.')]));
+  };
+  const recherche = h('input',{type:'text',value:S.ecartsRecherche||'',
+    placeholder:'Rechercher (dossier, client, machine…)',
+    style:{flex:'1 1 220px',minWidth:'180px',padding:'7px 10px',borderRadius:'8px',border:'1px solid var(--border)',
+           background:'var(--card)',color:'var(--text)',fontFamily:'inherit',fontSize:'13px'}});
+  recherche.addEventListener('input',()=>{ S.ecartsRecherche = recherche.value; redessiner(); });
+  recherche.addEventListener('keydown',ev=>{ if(ev.key==='Escape'){ recherche.value=''; S.ecartsRecherche=''; redessiner(); } });
+  redessiner();
   // Liste de travail : volontairement pas capturable en widget (pas de
   // data-bloc), la pastille du portail porte déjà le nombre.
   return h('div',{className:'card',style:{marginBottom:'16px'}},
     h('div',{className:'card-header'},
       h('h3',null,iconEl('alert-triangle',15),' À traiter'),
       h('span',{className:'nav-tab-badge',style:{marginLeft:'8px'}},String(liste.length))),
-    liste.length
-      ? h('div',{style:{padding:'0 14px 6px'}},...lignes)
-      : h('div',{className:'card-empty'},'Rien à traiter : aucune saisie à valider ou corriger.'));
+    liste.length ? h('div',{style:{display:'flex',flexWrap:'wrap',gap:'6px',alignItems:'center',padding:'4px 14px 10px'}},
+      pastille('', 'Tous', liste.length),
+      ...Object.keys(types).map(c=>pastille(c, types[c].titre, types[c].n)),
+      recherche) : null,
+    zone);
 }
 
 // ── Saisies : durées et métrages ─────────────────────────────────
