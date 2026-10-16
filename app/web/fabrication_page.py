@@ -868,6 +868,37 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
    centree, elle flottait plus bas que le selecteur de machine et que les
    boutons du centre, et l'oeil ne trouvait plus de ligne d'horizon. */
 .fab-footer-tools{align-items:stretch;justify-content:flex-start;align-self:stretch}
+
+/* ── Pied de page en quatre zones (16/10/2026) ─────────────────
+   Dossier · objectifs devis · actions · saisie. L'identite du dossier passe
+   sur deux lignes au lieu d'une bande qui defile : on lit la reference et le
+   client, puis les caracteristiques, sans chercher ce qui est hors champ. */
+.fab-footer.fab-footer--devis{grid-template-columns:minmax(0,1.25fr) auto auto minmax(0,1fr)}
+.fab-dossier-head{flex-wrap:wrap;row-gap:3px;white-space:normal;overflow:visible;padding-bottom:0}
+.fab-dossier-ref{font-size:17px}
+.fab-dossier-meta{flex-basis:100%;flex-wrap:wrap;gap:3px 14px}
+.fab-dossier-consigne{-webkit-line-clamp:2}
+/* Objectifs du devis : la cible du conducteur au lancement, en gros chiffres,
+   separee du reste par deux filets. */
+.fab-objectifs{
+  display:flex;flex-direction:column;gap:6px;align-self:stretch;
+  padding:0 16px;border-left:1px solid var(--border);border-right:1px solid var(--border);
+}
+.fab-objectifs-titre{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+.fab-objectifs-tuiles{display:flex;gap:8px}
+.fab-objectif{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;min-width:112px}
+.fab-objectif-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text2)}
+.fab-objectif-val{font-size:22px;font-weight:800;color:var(--text);line-height:1.2;white-space:nowrap}
+.fab-objectif-val small{font-size:12px;font-weight:600;color:var(--muted);margin-left:3px}
+/* Onglets et theme sur la meme ligne : le bouton de theme, seul sur sa
+   ligne, etait coupe par le bas de la bande. */
+.fab-footer-tabs-row{gap:8px}
+.fab-footer-tools{justify-content:center}
+.fab-search-wrap{max-width:none}
+@media (max-width:900px){
+  .fab-objectifs{display:none}
+  .fab-footer.fab-footer--devis{grid-template-columns:1fr}
+}
 /* ── Onglet OF (import PDF) ─────────────────────────────────── */
 .fab-of-panel{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .fab-of-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap}
@@ -1293,7 +1324,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
-<script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_dock.js?v=fab1"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
@@ -6099,13 +6130,32 @@ function renderFooter(){
   const actionsSection = h('div',{className:'fab-footer-actions'},
     machineSelectorRow,
     h('div',{className:'fab-footer-btns'},...btns),
-    h('div',{className:'fab-footer-tabs-row'}, tabNav),
-    h('div',{className:'fab-footer-row2'}, themeBtn)
+    h('div',{className:'fab-footer-tabs-row'}, tabNav, themeBtn)
   );
 
-  const footerCls = 'fab-footer' + (isOperatorView ? ' fab-footer-operator' : '');
+  // Objectifs du devis rattache au dossier : vitesse et calage devises. La
+  // zone n'existe que si un devis les chiffre — sans devis, rien a viser.
+  const dv = S.dossier && S.dossier.devis_prevu;
+  const dureeCalage = m => m < 60
+    ? [String(m), h('small',null,'min')]
+    : [Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')];
+  const objectifsSection = (dv && (dv.vitesse || dv.calage_mn))
+    ? h('div',{className:'fab-objectifs',title:'Chiffres du devis rattaché au dossier'},
+        h('div',{className:'fab-objectifs-titre'},'Objectifs devis'),
+        h('div',{className:'fab-objectifs-tuiles'},
+          dv.vitesse ? h('div',{className:'fab-objectif'},
+            h('div',{className:'fab-objectif-lbl'},'Vitesse'),
+            h('div',{className:'fab-objectif-val'}, fN(dv.vitesse), h('small',null,'m/min'))) : null,
+          dv.calage_mn ? h('div',{className:'fab-objectif'},
+            h('div',{className:'fab-objectif-lbl'},'Calage'),
+            h('div',{className:'fab-objectif-val'}, ...dureeCalage(Math.round(dv.calage_mn)))) : null))
+    : null;
+
+  const footerCls = 'fab-footer' + (isOperatorView ? ' fab-footer-operator' : '')
+                  + (objectifsSection ? ' fab-footer--devis' : '');
   return h('div',{className:footerCls},
     infoSection,
+    objectifsSection,
     actionsSection,
     toolsSection
   );
@@ -9519,6 +9569,17 @@ function renderRepiquageAdjustModal(){
   );
 }
 
+/* Les boutons flottants (dock) se posent AU-DESSUS du pied de page, dont la
+ * hauteur varie avec le dossier : mysifa_dock.js la lit dans
+ * minFabBaseBottom(). On ne le relance que quand elle change. */
+function _fabDockAuDessusDuFooter(){
+  const f = document.querySelector('.fab-footer');
+  const hauteur = f ? Math.round(f.getBoundingClientRect().height) : 0;
+  if(hauteur === S._fabFooterH) return;
+  S._fabFooterH = hauteur;
+  try{ if(window.MySifaDock) window.MySifaDock.layout(); }catch(_){}
+}
+
 /* ── Main render ─────────────────────────────────────────────── */
 function render(){
   const ui = _fabCaptureUiState();
@@ -9528,6 +9589,7 @@ function render(){
   document.body.classList.toggle('has-topbar', window.innerWidth <= 900);
   document.body.classList.toggle('sb-open', !!S.sidebarOpen);
   document.body.classList.add('mysifa-app-fabrication');
+  requestAnimationFrame(_fabDockAuDessusDuFooter);
   const root = document.getElementById('root');
   root.innerHTML = '';
 

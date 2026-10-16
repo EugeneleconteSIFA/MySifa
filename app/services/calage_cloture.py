@@ -565,6 +565,46 @@ def prevu_devis(conn, no_dossier: str) -> Optional[Dict[str, Any]]:
     }
 
 
+def devis_saisie(conn, planning_entry_id, no_dossier: str = "") -> Optional[Dict[str, Any]]:
+    """Ce que le devis rattaché annonce, pour le conducteur au lancement :
+    vitesse devisée (m/min) et calage devisé (outil + impression, comme
+    partout ailleurs). Le devis se trouve par le dossier du planning
+    (`rent_links`), sinon par la référence saisie (`rent_prod_links`).
+    None quand aucun devis n'est rattaché ou qu'il ne chiffre ni l'un ni
+    l'autre."""
+    if not (_table_existe(conn, "rent_links") and _table_existe(conn, "devis")):
+        return None
+    d = None
+    if planning_entry_id:
+        d = conn.execute(
+            """SELECT d.* FROM rent_links l JOIN devis d ON d.id = l.devis_id
+                WHERE l.planning_entry_id = ? LIMIT 1""", (planning_entry_id,)).fetchone()
+    if d is None and no_dossier and _table_existe(conn, "rent_prod_links"):
+        d = conn.execute(
+            """SELECT d.* FROM rent_prod_links p
+                 JOIN rent_links l ON l.planning_entry_id = p.planning_entry_id
+                 JOIN devis d ON d.id = l.devis_id
+                WHERE trim(p.no_dossier) = trim(?)
+                ORDER BY p.planning_entry_id DESC LIMIT 1""", (no_dossier,)).fetchone()
+    if d is None:
+        return None
+    cols = set(d.keys())
+
+    def v(nom):
+        try:
+            return float(d[nom] or 0) if nom in cols else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+
+    vitesse = v("vitesse_theorique")
+    calage = v("temps_calage_mn") + v("temps_calage_impression_mn")
+    if vitesse <= 0 and calage <= 0:
+        return None
+    return {"devis_id": d["id"],
+            "vitesse": round(vitesse, 1) if vitesse > 0 else None,
+            "calage_mn": round(calage) if calage > 0 else None}
+
+
 def bilan(conn, no_dossier: str, minutes_calage: float) -> Dict[str, Any]:
     """Calage et gâche du dossier : déclaré, mesuré, prévu.
 

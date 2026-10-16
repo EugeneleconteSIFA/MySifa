@@ -432,6 +432,29 @@ class TestCalageCloture(unittest.TestCase):
         self.assertEqual(self._ligne(s02)["date_operation"], _iso(self.t0 + timedelta(minutes=1, seconds=20)))
         self.assertEqual(self._ligne(s03)["date_operation"], _iso(self.t0 + timedelta(minutes=1, seconds=45)))
 
+    # ── 9. Objectifs devis du pied de page de la saisie ──────────────────
+    def test_9_devis_saisie(self):
+        from database import get_db
+        from app.services.calage_cloture import devis_saisie
+
+        with get_db() as conn:
+            pe = conn.execute(
+                "INSERT INTO planning_entries (machine_id, position, reference, statut) "
+                "VALUES (?, 99, 'CAL-DEVIS', 'en_cours')", (MACHINE_ID,)).lastrowid
+            self.assertIsNone(devis_saisie(conn, pe, "CAL-DEVIS"))
+            did = conn.execute(
+                "INSERT INTO devis (filename, imported_at, vitesse_theorique, temps_calage_mn, "
+                "temps_calage_impression_mn) VALUES ('t.pdf', '2026-10-16T08:00:00', 120, 30, 15)").lastrowid
+            conn.execute("INSERT INTO rent_links (planning_entry_id, devis_id, updated_at) "
+                         "VALUES (?, ?, '2026-10-16T08:00:00')", (pe, did))
+            # Calage = outil + impression, comme la Rentabilité.
+            self.assertEqual(devis_saisie(conn, pe, "CAL-DEVIS"),
+                             {"devis_id": did, "vitesse": 120.0, "calage_mn": 45})
+            conn.execute("DELETE FROM rent_links WHERE planning_entry_id=?", (pe,))
+            conn.execute("DELETE FROM devis WHERE id=?", (did,))
+            conn.execute("DELETE FROM planning_entries WHERE id=?", (pe,))
+            conn.commit()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
