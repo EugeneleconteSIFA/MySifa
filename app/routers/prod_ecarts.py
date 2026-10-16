@@ -23,7 +23,7 @@ Réservé aux rôles d'administration (ceux qui corrigent des saisies).
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 from zoneinfo import ZoneInfo
 
@@ -42,9 +42,15 @@ ACTIONS = {
     "prod.dossier_fictif": "rattacher",
     "prod.calage_non_reporte": "reappliquer",
     "prod.calage_signale": "heures",
+    # Dossier « en cours » sans saisie : la correction est presque toujours
+    # dans les saisies de la machine (faites sous un autre numéro, ou dossier
+    # fini sans fin de production) — on les montre, avec le planning à côté.
+    "prod.en_cours_sans_saisie": "machine_saisies",
+    "prod.retard_prevu": "planning",
+    "prod.info_prod_absente": "info_prod",
 }
 # Règles dont la correction est d'ouvrir une saisie précise.
-SAISIE_A_OUVRIR = {"prod.quantite_vs_of", "prod.quantite_non_saisie", "prod.info_prod_absente",
+SAISIE_A_OUVRIR = {"prod.quantite_vs_of", "prod.quantite_non_saisie",
                    "prod.seuils_sans_explication", "prod.saisie_ouverte"}
 
 
@@ -118,29 +124,93 @@ def _saisie_concernee(conn, e: Dict[str, Any]) -> Optional[dict]:
     return dict(row) if row else None
 
 
-def _candidats_fictif(conn, of: str) -> list:
-    """Vrais dossiers qui portent le même OF que le dossier fictif."""
-    of = (of or "").strip()
-    if not of:
+def _lien_planning(conn, pe_id) -> Optional[str]:
+    """Le planning ouvert sur la fiche du dossier, à la semaine où il est
+    planifié (planning_url.js : machine, semaine, dossier)."""
+    if not pe_id:
+        return None
+    r = conn.execute("SELECT machine_id, planned_start FROM planning_entries WHERE id=?",
+                     (pe_id,)).fetchone()
+    if not r or not r["machine_id"]:
+        return None
+    url = f"/planning?machine={int(r['machine_id'])}&dossier={int(pe_id)}"
+    debut = calage_cloture._dt(r["planned_start"]) if r["planned_start"] else None
+    if debut:
+        lundi = (debut - timedelta(days=debut.weekday())).date().isoformat()
+        url += f"&semaine={lundi}"
+    return url
+
+
+def _candidats(conn, q: str, fictif: Optional[dict] = None, limite: int = 20) -> list:
+    """Dossiers réels où rattacher un fictif : par référence, OF, réf produit,
+    client ou désignation. Sans recherche, ceux qui portent le numéro noté par
+    l'opérateur (souvent la réf produit). Les dossiers de la même machine et
+    pas encore terminés passent devant."""
+    q = (q or "").strip()
+    if not q and fictif:
+        q = str(fictif.get("of") or "").strip()
+    if not q:
         return []
-    vus, out = set(), []
+    like = f"%{q}%"
+    machine = (fictif or {}).get("machine") or ""
+    out, vus = [], set()
     for r in conn.execute(
-            """SELECT reference AS no_dossier, client, statut FROM planning_entries
-                WHERE trim(reference) = trim(?) OR trim(COALESCE(numero_of,'')) = trim(?)
-                   OR reference LIKE ?
-                ORDER BY id DESC LIMIT 10""", (of, of, of + "%")).fetchall():
-        if r["no_dossier"] and r["no_dossier"] not in vus and not r["no_dossier"].startswith("FICTIF:"):
+            """SELECT pe.id, pe.reference AS no_dossier, pe.client, pe.description, pe.ref_produit,
+                      pe.numero_of, pe.statut, pe.planned_start, m.nom AS machine
+                 FROM planning_entries pe LEFT JOIN machines m ON m.id = pe.machine_id
+                WHERE pe.reference NOT LIKE 'FICTIF:%'
+                  AND (pe.reference LIKE ? OR COALESCE(pe.numero_of,'') LIKE ?
+                       OR COALESCE(pe.ref_produit,'') LIKE ? OR COALESCE(pe.ref_produit_norm,'') LIKE ?
+                       OR COALESCE(pe.client,'') LIKE ? OR COALESCE(pe.description,'') LIKE ?)
+                ORDER BY (trim(COALESCE(m.nom,'')) = trim(?)) DESC,
+                         (pe.statut <> 'termine') DESC, pe.id DESC
+                LIMIT ?""", (like, like, like, like, like, like, machine, limite)).fetchall():
+        if r["no_dossier"] and r["no_dossier"] not in vus:
             vus.add(r["no_dossier"])
             out.append({"no_dossier": r["no_dossier"], "client": r["client"],
-                        "source": "planning", "statut": r["statut"]})
+                        "designation": r["description"], "ref_produit": r["ref_produit"],
+                        "statut": r["statut"], "machine": r["machine"],
+                        "planned_start": r["planned_start"], "source": "planning"})
     for r in conn.execute(
-            """SELECT DISTINCT no_dossier, client FROM production_data
-                WHERE no_dossier LIKE ? AND no_dossier NOT LIKE 'FICTIF:%' LIMIT 10""",
-            (of + "%",)).fetchall():
+            """SELECT no_dossier, MAX(client) AS client, MAX(machine) AS machine,
+                      MAX(date_operation) AS derniere
+                 FROM production_data
+                WHERE no_dossier LIKE ? AND no_dossier NOT LIKE 'FICTIF:%'
+                GROUP BY no_dossier ORDER BY derniere DESC LIMIT 10""", (like,)).fetchall():
         if r["no_dossier"] not in vus:
             vus.add(r["no_dossier"])
-            out.append({"no_dossier": r["no_dossier"], "client": r["client"], "source": "saisies"})
+            out.append({"no_dossier": r["no_dossier"], "client": r["client"],
+                        "machine": r["machine"], "derniere": r["derniere"], "source": "saisies"})
     return out
+
+
+def _saisies_machine(conn, pe_id) -> Dict[str, Any]:
+    """Pour un dossier « en cours » sans saisie : sa fiche au planning et les
+    saisies de sa machine depuis la veille de son démarrage prévu — c'est là
+    qu'on voit une saisie faite sous un autre numéro, ou la fin oubliée."""
+    pe = conn.execute(
+        """SELECT pe.*, m.nom AS machine_nom, m.code AS machine_code
+             FROM planning_entries pe LEFT JOIN machines m ON m.id = pe.machine_id
+            WHERE pe.id=?""", (pe_id,)).fetchone()
+    if not pe:
+        return {"dossier": None, "saisies": []}
+    debut = calage_cloture._dt(pe["planned_start"]) if pe["planned_start"] else None
+    depuis = ((debut or _maintenant()) - timedelta(days=1)).strftime("%Y-%m-%dT00:00:00")
+    rows = conn.execute(
+        """SELECT * FROM production_data
+            WHERE COALESCE(est_annule,0)=0
+              AND (trim(machine)=trim(?) OR trim(machine)=trim(?))
+              AND date_operation >= ?
+            ORDER BY date_operation DESC, id DESC LIMIT 80""",
+        (pe["machine_nom"] or "", pe["machine_code"] or "", depuis)).fetchall()
+    return {
+        "dossier": {"id": pe["id"], "reference": pe["reference"], "client": pe["client"],
+                    "description": pe["description"], "ref_produit": pe["ref_produit"],
+                    "machine": pe["machine_nom"], "statut": pe["statut"],
+                    "planned_start": pe["planned_start"], "planned_end": pe["planned_end"]},
+        "saisies": [dict(r) for r in rows],
+        "depuis": depuis,
+    }
 
 
 @router.get("")
@@ -196,7 +266,14 @@ def apercu(ecart_id: int, request: Request):
         out: Dict[str, Any] = {"ecart": {k: e[k] for k in ("id", "regle", "titre", "detail", "objet_ref")},
                                "action": action}
         if action == "rattacher":
-            out["candidats"] = _candidats_fictif(conn, e["donnees"].get("of", ""))
+            out["candidats"] = _candidats(conn, "", e["donnees"])
+            out["recherche"] = e["donnees"].get("of", "")
+            out["no_dossier"] = e["objet_ref"]
+            out["fictif"] = e["donnees"]
+        elif action == "machine_saisies":
+            out.update(_saisies_machine(conn, e["donnees"].get("planning_entry_id")))
+            out["lien"] = _lien_planning(conn, e["donnees"].get("planning_entry_id"))
+        elif action == "info_prod":
             out["no_dossier"] = e["objet_ref"]
         elif action in ("reappliquer", "heures"):
             decl = calage_cloture.lire_declaration_id(conn, int(e["donnees"]["declaration_id"]))
@@ -219,8 +296,19 @@ def apercu(ecart_id: int, request: Request):
             out["saisie"] = _saisie_concernee(conn, e)
         else:
             from app.services.coherence import REGLES
-            out["lien"] = REGLES[e["regle"]].lien if e["regle"] in REGLES else "/prod"
+            out["lien"] = (_lien_planning(conn, e["donnees"].get("planning_entry_id"))
+                           or (REGLES[e["regle"]].lien if e["regle"] in REGLES else "/prod"))
     return out
+
+
+@router.get("/{ecart_id}/candidats")
+def chercher_candidats(ecart_id: int, request: Request, q: str = ""):
+    """Recherche du dossier où rattacher un fictif (référence, OF, réf produit,
+    client, désignation)."""
+    _admin(request)
+    with get_db() as conn:
+        e = _ecart(conn, ecart_id)
+        return {"candidats": _candidats(conn, q, e["donnees"])}
 
 
 @router.post("/{ecart_id}/corriger")
@@ -264,6 +352,14 @@ async def corriger(ecart_id: int, request: Request):
                 raise HTTPException(status_code=400, detail=str(err))
             _resoudre(conn, ecart_id, qui, "Heures du dossier de prod reportées depuis MyProd.")
             detail = {"changements": len(res["changements"])}
+        elif action == "info_prod":
+            texte = str(body.get("texte") or "").strip()
+            if not texte:
+                raise HTTPException(status_code=400, detail="Info prod vide — « R.A.S. » si rien à signaler.")
+            from app.services import produit_memoire as pm
+            pm.enregistrer_info_prod(conn, e["objet_ref"], texte, qui)
+            _resoudre(conn, ecart_id, qui, "Info prod saisie depuis MyProd.")
+            detail = {"info_prod": texte[:200]}
         else:
             raise HTTPException(status_code=409,
                                 detail="Cet écart se corrige dans la saisie concernée, puis se valide.")

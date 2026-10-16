@@ -13,6 +13,10 @@ Ce que chaque bloc protège, posé le 16/10/2026 :
 4. **Corriger des heures non reportées** les reporte en forçant, après un
    aperçu qui ne touche à rien.
 5. **Corriger un chiffrage signalé** reporte les heures corrigées.
+6. **Amener au bon endroit** : un fictif se retrouve par la réf produit
+   notée par l'opérateur, un dossier « en cours » sans saisie montre les
+   saisies de sa machine et un lien planning (machine, semaine, fiche), et
+   l'info prod absente s'écrit depuis l'écart.
 
 Lancer : python3 tests/test_prod_ecarts.py
 """
@@ -213,6 +217,65 @@ class TestProdEcarts(unittest.TestCase):
             apres = conn.execute("SELECT date_operation FROM production_data WHERE id=?", (s03,)).fetchone()[0]
         self.assertEqual(apres, _iso(self.t0 + timedelta(minutes=60)))
         self.assertNotIn("prod.calage_signale", self._ecarts())
+
+    def _ecart_brut(self, regle, objet_ref, donnees):
+        import json
+        from database import get_db
+        maintenant = _iso(datetime.now())
+        with get_db() as conn:
+            cur = conn.execute(
+                """INSERT INTO coherence_ecarts (cle, regle, famille, objet_type, objet_ref, titre,
+                       detail, donnees_json, premiere_vue, derniere_vue)
+                   VALUES (?,?,'prod','dossier',?,?,'',?,?,?)""",
+                (f"{regle}:{objet_ref}", regle, objet_ref, objet_ref, json.dumps(donnees),
+                 maintenant, maintenant))
+            conn.commit()
+            return cur.lastrowid
+
+    def test_5_amener_au_bon_endroit(self):
+        from database import get_db
+        from app.routers import prod_ecarts as pe_mod
+
+        with get_db() as conn:
+            conn.execute("DELETE FROM planning_entries WHERE machine_id=?", (MACHINE_ID,))
+            debut = datetime(2026, 10, 14, 8, 0)  # un mercredi
+            pe_id = conn.execute(
+                """INSERT INTO planning_entries (machine_id, position, reference, client, ref_produit,
+                       statut, planned_start, planned_end)
+                   VALUES (?,1,'ECA-5','Client Test','RP-77881','en_cours',?,?)""",
+                (MACHINE_ID, _iso(debut), _iso(debut + timedelta(hours=4)))).lastrowid
+            conn.commit()
+            # Réf produit notée à la place du numéro de dossier.
+            cands = pe_mod._candidats(conn, "", {"of": "RP-77881", "machine": MACHINE_NOM})
+            self.assertEqual(cands[0]["no_dossier"], "ECA-5")
+            self.assertEqual(pe_mod._candidats(conn, "client test", None)[0]["no_dossier"], "ECA-5")
+            self.assertEqual(pe_mod._lien_planning(conn, pe_id),
+                             f"/planning?machine={MACHINE_ID}&dossier={pe_id}&semaine=2026-10-12")
+        # Recherche à la demande depuis la fenêtre de rattachement.
+        e_id = self._ecart_brut("prod.dossier_fictif", "FICTIF:X", {"of": "zzz", "machine": MACHINE_NOM})
+        r = self.client.get(f"/api/prod/ecarts/{e_id}/candidats", params={"q": "77881"})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertIn("ECA-5", [c["no_dossier"] for c in r.json()["candidats"]])
+
+        # Dossier en cours sans saisie : les saisies de la machine depuis la veille.
+        self.t0 = datetime(2026, 10, 14, 9, 0)
+        sid = self._saisie("01", 0, "AUTRE-5")
+        e_id = self._ecart_brut("prod.en_cours_sans_saisie", "ECA-5", {"planning_entry_id": pe_id})
+        ap = self.client.get(f"/api/prod/ecarts/{e_id}/correction").json()
+        self.assertEqual(ap["action"], "machine_saisies")
+        self.assertEqual(ap["dossier"]["reference"], "ECA-5")
+        self.assertIn(sid, [x["id"] for x in ap["saisies"]])
+        self.assertIn("dossier=", ap["lien"])
+
+        # Info prod absente : écrite depuis l'écart, qui se résout.
+        e_id = self._ecart_brut("prod.info_prod_absente", "ECA-5", {})
+        self.assertEqual(self.client.get(f"/api/prod/ecarts/{e_id}/correction").json()["action"], "info_prod")
+        self.assertEqual(self.client.post(f"/api/prod/ecarts/{e_id}/corriger", json={"texte": ""}).status_code, 400)
+        r = self.client.post(f"/api/prod/ecarts/{e_id}/corriger", json={"texte": "R.A.S."})
+        self.assertEqual(r.status_code, 200, r.text)
+        with get_db() as conn:
+            st = conn.execute("SELECT statut FROM coherence_ecarts WHERE id=?", (e_id,)).fetchone()[0]
+        self.assertEqual(st, "resolu")
 
 
 if __name__ == "__main__":
