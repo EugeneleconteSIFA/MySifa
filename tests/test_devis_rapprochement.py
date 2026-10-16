@@ -193,8 +193,9 @@ with get_db() as conn:
     check("devis jamais rattaché : sans dossier", ids[1] in d["sans_dossier"], True)
     check("devis daté de 2099 : date future", futur in d["date_future"], True)
     n, sig = notif._compter_devis_a_traiter(conn)
-    check("compté une seule fois même s'il coche les deux cas", n,
-          len(set(d["sans_dossier"]) | set(d["date_future"])))
+    check("compte = sans dossier ET date future", n,
+          len(set(d["sans_dossier"]) & set(d["date_future"])))
+    check("le devis de 2099 sans dossier est compté, l'ancien sans dossier non", n, 1)
     regle = notif.regles(conn).get("prod.devis_a_traiter") or {}
     check("règle seedée active pour le superadmin", (regle.get("actif"), regle.get("roles")),
           (True, ["superadmin"]))

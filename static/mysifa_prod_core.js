@@ -956,6 +956,22 @@ async function loadFiches(){
     toast(e.message||'Erreur chargement fiches techniques','error');
   }
 }
+/* Pastilles « Rentabilité » et « Pilotage » (superadmin) : les devis
+   rattachés à aucun dossier ou datés dans le futur — le compteur de la
+   notification « Devis à traiter » du portail, lu par sa propre route pour
+   être juste sur toutes les pages, pas seulement quand les devis sont chargés. */
+async function loadDevisATraiterCount(){
+  if(!isSuperAdmin(S.user)) return;
+  try{
+    const d=await api('/api/rentabilite/devis-a-traiter/count');
+    const n=Number(d&&d.total||0);
+    if(n!==Number(S.devisATraiterCount||0)) set({devisATraiterCount:n});
+  }catch(_){ /* pastille absente plutôt qu'une erreur */ }
+}
+function rentPastilleNav(n, titre){
+  return h('span',{className:'rent-nav-pastille',title:titre}, n>999?'999+':String(n));
+}
+
 async function loadPendingOfCount(){
   try{
     const data=await api('/api/admin/of-link-pending/count');
@@ -5296,6 +5312,7 @@ async function loadRentLinks(){
         origine:'manuel',valide_at:null,motif:'',score:null};
     });
     set({rentLinksById:map, rentLinksCharges:true});
+    loadDevisATraiterCount();
   }catch(e){ toast(e.message,'error'); }
 }
 
@@ -5481,7 +5498,12 @@ function renderRentabilite(){
       'aria-selected': sub===t.key ? 'true' : 'false',
       className:'nav-tab'+(sub===t.key?' active':''),
       onClick:()=>set({rentSubTab:t.key}),
-    }, iconEl(t.icon,14), ' '+t.label))
+    }, iconEl(t.icon,14), ' '+t.label,
+      // Même compteur que la barre latérale : le bandeau qu'il annonce est
+      // dans le Pilotage.
+      (t.key==='pilotage' && isSuperAdmin(S.user) && Number(S.devisATraiterCount||0)>0)
+        ? rentPastilleNav(Number(S.devisATraiterCount), Number(S.devisATraiterCount)+' devis à traiter')
+        : null))
   );
 
   const contenu = sub==='pilotage' ? renderRentPilotage()
@@ -6161,7 +6183,8 @@ async function ouvrirRattachementModal(entryId, file){
 
 // ── La timeline ──────────────────────────────────────────────────
 /* Les devis qui demandent un geste : sans dossier (`nb_rattachements` = 0)
-   ou datés après aujourd'hui. Pendant de `devis_a_traiter()` côté serveur. */
+   ET datés après aujourd'hui (règle du 16/10/2026). Pendant de
+   `devis_a_traiter()` côté serveur. */
 function rentDevisATraiter(liste){
   const auj = rentISOJour(new Date());
   const sans = new Set(), futur = new Set();
@@ -6169,7 +6192,7 @@ function rentDevisATraiter(liste){
     if(!Number(d.nb_rattachements)) sans.add(Number(d.id));
     if(String(d.date_devis || '').slice(0,10) > auj) futur.add(Number(d.id));
   });
-  const tous = new Set([...sans, ...futur]);
+  const tous = new Set([...sans].filter(id => futur.has(id)));
   return {sansDossier:sans.size, futur:futur.size, total:tous.size,
           ids:tous, idsSans:sans, idsFutur:futur};
 }
@@ -6223,10 +6246,8 @@ function renderRentPilotage(){
       className:'rent-rappel rent-rappel-info',
       onClick:()=>set({rentSubTab:'devis', rentDevisFiltre:'a_traiter'})},
     iconEl('bell',14),
-    h('span',null,' ' + [
-      aTraiterDevis.sansDossier ? aTraiterDevis.sansDossier + ' devis rattaché' + (aTraiterDevis.sansDossier > 1 ? 's' : '') + ' à aucun dossier' : null,
-      aTraiterDevis.futur ? aTraiterDevis.futur + ' devis daté' + (aTraiterDevis.futur > 1 ? 's' : '') + ' après aujourd\'hui' : null,
-    ].filter(Boolean).join(' · '))
+    h('span',null,' ' + aTraiterDevis.total + ' devis sans dossier et daté'
+      + (aTraiterDevis.total > 1 ? 's' : '') + ' après aujourd\'hui')
   ) : null;
 
   const rappelDevis = devisDouteux.length ? h('button',{type:'button',className:'rent-rappel',
@@ -7364,7 +7385,7 @@ function renderRentDevis(){
   const barre = (aVerifier.length || aTraiter.total) ? h('div',{className:'rent-filtres',style:{marginBottom:'0'}},
     ...[{key:'tous',label:'Tous',n:devisList.length},
         {key:'verifier',label:'À vérifier',n:aVerifier.length},
-        {key:'a_traiter',label:'Sans dossier ou date future',n:aTraiter.total}]
+        {key:'a_traiter',label:'Sans dossier, date future',n:aTraiter.total}]
         .filter(f=>f.key==='tous' || f.n).map(f=>
       h('button',{type:'button',
         className:'rent-filtre'+(filtreDevis===f.key?' is-active':''),
@@ -7399,7 +7420,7 @@ function renderRentDevis(){
                   doute?rentPastille('à vérifier','manque',dv.note||''):null,
                   aTraiter.idsFutur.has(Number(dv.id))
                     ? rentPastille('date future','propose','Date du devis postérieure à aujourd\'hui — date mal lue ?') : null,
-                  (filtreDevis==='a_traiter' && aTraiter.idsSans.has(Number(dv.id)))
+                  aTraiter.ids.has(Number(dv.id))
                     ? rentPastille('sans dossier','attente','Rattaché à aucun dossier du planning') : null),
                 h('div',{className:'rent-fichier',title:dv.filename||''}, dv.filename||'')),
               h('td',null, dv.date_devis ? String(dv.date_devis).slice(0,10) : '—'),
@@ -13823,6 +13844,7 @@ function renderProdKpis(){
         }
         // Badge "Mappings OF à valider" dans la sidebar
         try{ if(canAccessOfTab()) loadPendingOfCount(); }catch(e){}
+        try{ loadDevisATraiterCount(); }catch(e){}
         // Fenêtre de détail demandée par l'adresse (?devis=, ?of=…).
         try{ render(); prodAppliquerModaleUrl(); }catch(e){}
         try{ loadProdEcartsCount(); }catch(e){}
@@ -13929,6 +13951,7 @@ function renderProdKpis(){
         }
         // Badge "Mappings OF à valider" dans la sidebar
         try{ if(canAccessOfTab()) loadPendingOfCount(); }catch(e){}
+        try{ loadDevisATraiterCount(); }catch(e){}
         // Fenêtre de détail demandée par l'adresse (?devis=, ?of=…).
         try{ render(); prodAppliquerModaleUrl(); }catch(e){}
         try{ loadProdEcartsCount(); }catch(e){}
@@ -14110,7 +14133,7 @@ function renderProdKpis(){
           ...(canPlanningNav(S.user) ? [{key: '_planning', label: 'Planning', icon: 'calendar'}] : []),
           {key: 'production', label: 'Production', icon: 'wrench', withEcartsBadge: true},
           {key: 'traceabilite', label: 'Tra\u00e7abilit\u00e9', icon: 'layers'},
-          ...(admin ? [{key: 'rentabilite', label: 'Rentabilit\u00e9', icon: 'trending-up'}] : []),
+          ...(admin ? [{key: 'rentabilite', label: 'Rentabilit\u00e9', icon: 'trending-up', withDevisBadge: true}] : []),
           // Section : les OF, leurs fiches et leurs scans vivent ensemble.
           // Chercher les scans ailleurs que la ou vivent les OF n'aurait
           // aucune raison d'etre.
@@ -14154,6 +14177,11 @@ function renderProdKpis(){
               title: n + ' \u00e9cart' + (n > 1 ? 's' : '') + ' de saisie \u00e0 traiter',
             }, String(n)));
           }
+        }
+        if(i.withDevisBadge){
+          const nd = Number(S.devisATraiterCount || 0);
+          if(nd > 0) btn.appendChild(rentPastilleNav(nd,
+            nd + ' devis \u00e0 traiter : sans dossier et dat\u00e9s dans le futur'));
         }
         if(i.withPendingOfBadge){
           const cnt = Number(S.pendingOfCount || 0);
