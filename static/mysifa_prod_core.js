@@ -956,14 +956,13 @@ async function loadFiches(){
     toast(e.message||'Erreur chargement fiches techniques','error');
   }
 }
-/* Pastilles « Rentabilité » et « Pilotage » (superadmin) : les devis
-   rattachés à aucun dossier ou datés dans le futur — le compteur de la
-   notification « Devis à traiter » du portail, lu par sa propre route pour
-   être juste sur toutes les pages, pas seulement quand les devis sont chargés. */
+/* Pastilles « Rentabilité » et « Pilotage » (superadmin) : les dossiers
+   planifiés après aujourd'hui sans devis — le compteur de la notification du
+   portail, lu par sa propre route pour être juste sur toutes les pages. */
 async function loadDevisATraiterCount(){
   if(!isSuperAdmin(S.user)) return;
   try{
-    const d=await api('/api/rentabilite/devis-a-traiter/count');
+    const d=await api('/api/rentabilite/a-venir-sans-devis/count');
     const n=Number(d&&d.total||0);
     if(n!==Number(S.devisATraiterCount||0)) set({devisATraiterCount:n});
   }catch(_){ /* pastille absente plutôt qu'une erreur */ }
@@ -5459,6 +5458,8 @@ function rentEtat(head, link){
     comparable: aDevis===true && aProd===true,
     aLier: statut==='termine' && aDevis===false,
     aConfirmer: rentEtatLien(link)==='orange',
+    // Planifié après aujourd'hui, sans devis : à rattacher avant la machine.
+    aVenir: aDevis===false && String(head.planned_start||'').slice(0,10) > rentISOJour(new Date()),
   };
 }
 
@@ -5502,7 +5503,7 @@ function renderRentabilite(){
       // Même compteur que la barre latérale : le bandeau qu'il annonce est
       // dans le Pilotage.
       (t.key==='pilotage' && isSuperAdmin(S.user) && Number(S.devisATraiterCount||0)>0)
-        ? rentPastilleNav(Number(S.devisATraiterCount), Number(S.devisATraiterCount)+' devis à traiter')
+        ? rentPastilleNav(Number(S.devisATraiterCount), Number(S.devisATraiterCount)+' dossiers à venir sans devis')
         : null))
   );
 
@@ -6182,20 +6183,6 @@ async function ouvrirRattachementModal(entryId, file){
 }
 
 // ── La timeline ──────────────────────────────────────────────────
-/* Les devis qui demandent un geste : sans dossier (`nb_rattachements` = 0)
-   ET datés après aujourd'hui (règle du 16/10/2026). Pendant de
-   `devis_a_traiter()` côté serveur. */
-function rentDevisATraiter(liste){
-  const auj = rentISOJour(new Date());
-  const sans = new Set(), futur = new Set();
-  (liste || []).forEach(d => {
-    if(!Number(d.nb_rattachements)) sans.add(Number(d.id));
-    if(String(d.date_devis || '').slice(0,10) > auj) futur.add(Number(d.id));
-  });
-  const tous = new Set([...sans].filter(id => futur.has(id)));
-  return {sansDossier:sans.size, futur:futur.size, total:tous.size,
-          ids:tous, idsSans:sans, idsFutur:futur};
-}
 
 function renderRentPilotage(){
   const groupes = rentGroupes(S.rentList || []);
@@ -6241,13 +6228,13 @@ function renderRentPilotage(){
   /* Superadmin : les devis qui n'ont pas trouvé de dossier, et ceux datés
      après aujourd'hui (date mal lue). Même compte que la pastille MyProd du
      portail (`prod.devis_a_traiter`), pour qu'on lise le même nombre. */
-  const aTraiterDevis = isSuperAdmin(S.user) ? rentDevisATraiter(S.devisList || []) : null;
-  const rappelATraiter = (aTraiterDevis && aTraiterDevis.total) ? h('button',{type:'button',
+  const nAVenir = Number(S.devisATraiterCount || 0);
+  const rappelATraiter = (isSuperAdmin(S.user) && nAVenir) ? h('button',{type:'button',
       className:'rent-rappel rent-rappel-info',
-      onClick:()=>set({rentSubTab:'devis', rentDevisFiltre:'a_traiter'})},
+      onClick:()=>set({rentSubTab:'dossiers', rentFiltre:'a_venir', rentOffset:0, rentSelEntryId:null})},
     iconEl('bell',14),
-    h('span',null,' ' + aTraiterDevis.total + ' devis sans dossier et daté'
-      + (aTraiterDevis.total > 1 ? 's' : '') + ' après aujourd\'hui')
+    h('span',null,' ' + nAVenir + ' dossier' + (nAVenir > 1 ? 's' : '') + ' à venir sans devis'
+      + ' — à rattacher avant leur passage en machine')
   ) : null;
 
   const rappelDevis = devisDouteux.length ? h('button',{type:'button',className:'rent-rappel',
@@ -6592,6 +6579,8 @@ function renderRentDossiers(){
      aide:'Dossiers terminés sans devis lié'},
     {key:'a_confirmer', label:'À confirmer', test:e=>e.aConfirmer,
      aide:'Devis rattaché automatiquement — à confirmer ou corriger'},
+    {key:'a_venir',     label:'À venir sans devis', test:e=>e.aVenir,
+     aide:'Planifiés après aujourd\'hui, sans devis — à rattacher avant leur passage en machine'},
     {key:'comparables', label:'Comparables', test:e=>e.comparable,
      aide:'Devis et production liés — l\'écart est calculable'},
     {key:'tous',        label:'Tous',        test:()=>true, aide:'Tout le planning'},
@@ -7279,11 +7268,9 @@ function renderRentDevis(){
      on les remonte en tête, et on affiche le motif. Sans ça, le drapeau
      n'existerait que dans la base. */
   const aVerifier = devisList.filter(d=>Number(d.a_verifier)===1);
-  const aTraiter = rentDevisATraiter(devisList);
   const FILTRES_DEVIS = {
     tous:      devisList,
     verifier:  aVerifier,
-    a_traiter: devisList.filter(d=>aTraiter.ids.has(Number(d.id))),
   };
   const filtreDevis = FILTRES_DEVIS[S.rentDevisFiltre] ? S.rentDevisFiltre : 'tous';
   /* Six cents devis importés : retrouver celui de Bridor en faisant défiler
@@ -7382,11 +7369,9 @@ function renderRentDevis(){
   chercheDevis.addEventListener('input', () =>
     rentSetGardeFocus({rentDevisQuery:chercheDevis.value}, 'rent-devis-q'));
 
-  const barre = (aVerifier.length || aTraiter.total) ? h('div',{className:'rent-filtres',style:{marginBottom:'0'}},
+  const barre = aVerifier.length ? h('div',{className:'rent-filtres',style:{marginBottom:'0'}},
     ...[{key:'tous',label:'Tous',n:devisList.length},
-        {key:'verifier',label:'À vérifier',n:aVerifier.length},
-        {key:'a_traiter',label:'Sans dossier, date future',n:aTraiter.total}]
-        .filter(f=>f.key==='tous' || f.n).map(f=>
+        {key:'verifier',label:'À vérifier',n:aVerifier.length}].map(f=>
       h('button',{type:'button',
         className:'rent-filtre'+(filtreDevis===f.key?' is-active':''),
         onClick:()=>set({rentDevisFiltre:f.key})},
@@ -7417,11 +7402,7 @@ function renderRentDevis(){
               h('td',null,
                 h('div',{className:'rent-devis-client'},
                   h('span',{className:'rent-devis-nom'}, dv.client||'(client non lu)'),
-                  doute?rentPastille('à vérifier','manque',dv.note||''):null,
-                  aTraiter.idsFutur.has(Number(dv.id))
-                    ? rentPastille('date future','propose','Date du devis postérieure à aujourd\'hui — date mal lue ?') : null,
-                  aTraiter.ids.has(Number(dv.id))
-                    ? rentPastille('sans dossier','attente','Rattaché à aucun dossier du planning') : null),
+                  doute?rentPastille('à vérifier','manque',dv.note||''):null),
                 h('div',{className:'rent-fichier',title:dv.filename||''}, dv.filename||'')),
               h('td',null, dv.date_devis ? String(dv.date_devis).slice(0,10) : '—'),
               h('td',{className:'num'}, fmt(dv.qte_etiquettes)),
@@ -7456,9 +7437,7 @@ function renderRentDevis(){
           ? 'Aucun devis ne correspond à « ' + qDevis + ' ».'
           : (filtreDevis==='verifier'
               ? 'Aucun devis en attente de vérification.'
-              : (filtreDevis==='a_traiter'
-                  ? 'Tous les devis sont rattachés et datés correctement.'
-                  : 'Aucun devis importé. Dépose un fichier ci-dessus.')));
+              : 'Aucun devis importé. Dépose un fichier ci-dessus.'));
 
   return h('div',null, dz, dzInp,
     h('div',{className:'card'},
@@ -14193,7 +14172,7 @@ function renderProdKpis(){
         if(i.withDevisBadge){
           const nd = Number(S.devisATraiterCount || 0);
           if(nd > 0) btn.appendChild(rentPastilleNav(nd,
-            nd + ' devis \u00e0 traiter : sans dossier et dat\u00e9s dans le futur'));
+            nd + ' dossier' + (nd > 1 ? 's' : '') + ' \u00e0 venir sans devis'));
         }
         if(i.withPendingOfBadge){
           const cnt = Number(S.pendingOfCount || 0);

@@ -180,22 +180,32 @@ with get_db() as conn:
     check("devis rejeté jamais reproposé", liens.get(e1, {}).get("devis_id") != ids[0], True)
     check("liaison confirmée intacte", liens[e2]["valide_at"], "2026-10-15")
 
-print("\n8. Notification « Devis à traiter » (superadmin)")
+print("\n8. Notification « Dossiers à venir sans devis » (superadmin)")
 from app.services import notifications as notif          # noqa: E402
 
 with get_db() as conn:
+    # e1 n'a plus de devis (rejeté plus haut), e2 en a un. Les deux sont
+    # planifiés en octobre 2026 ; on en ajoute un à venir sans devis, et un
+    # créneau du même groupe qui ne doit pas compter deux fois.
     futur = conn.execute(
-        "INSERT INTO devis (filename, client, date_devis, format_h, format_v, laize, imported_at) "
-        "VALUES ('x.xlsx','Futur','2099-01-01',10,10,100,'2026-10-16')").lastrowid
+        "INSERT INTO planning_entries (machine_id, position, reference, client, format_l, format_h, "
+        "laize, planned_start, group_id) VALUES (?,3,'R3','X',10,10,100,'2099-01-05','g-futur')",
+        (mid,)).lastrowid
+    conn.execute(
+        "INSERT INTO planning_entries (machine_id, position, reference, client, format_l, format_h, "
+        "laize, planned_start, group_id) VALUES (?,4,'R3b','X',10,10,100,'2099-01-06','g-futur')",
+        (mid,))
+    passe = conn.execute(
+        "INSERT INTO planning_entries (machine_id, position, reference, client, format_l, format_h, "
+        "laize, planned_start) VALUES (?,5,'R4','Y',10,10,100,'2020-01-01')", (mid,)).lastrowid
     conn.commit()
-    d = notif.devis_a_traiter(conn)
-    check("devis rattaché : ni sans dossier ni futur", ids[0] in d["sans_dossier"], False)
-    check("devis jamais rattaché : sans dossier", ids[1] in d["sans_dossier"], True)
-    check("devis daté de 2099 : date future", futur in d["date_future"], True)
+    ids_avenir = notif.dossiers_a_venir_sans_devis(conn)
+    check("dossier à venir sans devis : compté", futur in ids_avenir, True)
+    check("dossier passé sans devis : pas compté", passe in ids_avenir, False)
+    check("dossier avec devis : pas compté", e2 in ids_avenir, False)
+    check("un groupe fractionné compte une fois", len([i for i in ids_avenir if i >= futur]), 1)
     n, sig = notif._compter_devis_a_traiter(conn)
-    check("compte = sans dossier ET date future", n,
-          len(set(d["sans_dossier"]) & set(d["date_future"])))
-    check("le devis de 2099 sans dossier est compté, l'ancien sans dossier non", n, 1)
+    check("la notification compte la même liste", n, len(ids_avenir))
     regle = notif.regles(conn).get("prod.devis_a_traiter") or {}
     check("règle seedée active pour le superadmin", (regle.get("actif"), regle.get("roles")),
           (True, ["superadmin"]))

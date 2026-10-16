@@ -148,40 +148,48 @@ def _compter_departs_a_valider(conn):
     return n, (f"{today}:{r['m']}" if n else None)
 
 
-def devis_a_traiter(conn) -> dict:
-    """Les deux listes dont la notification « Devis à traiter » fait
-    l'intersection : devis rattachés à aucun dossier, et devis datés après
-    aujourd'hui. Un devis n'est « à traiter » que s'il est dans les DEUX
-    (décision d'Eugène du 16/10/2026 : l'un ou l'autre seul faisait 572).
+def dossiers_a_venir_sans_devis(conn) -> list[int]:
+    """Dossiers du planning qui passeront en machine APRÈS aujourd'hui et
+    n'ont encore aucun devis rattaché (règle d'Eugène du 16/10/2026).
 
-    Partagé par le détecteur ci-dessous et par l'écran Rentabilité, pour que
-    la pastille du portail et le bandeau du Pilotage disent le même nombre.
+    C'est le travail utile : relier le devis avant la production, pas après.
+    Un dossier fractionné en plusieurs créneaux (même `group_id`) compte une
+    fois, comme dans l'écran Rentabilité. Partagé par le détecteur ci-dessous
+    et par les pastilles de MyProd, pour qu'ils disent le même nombre.
     """
-    if not {"devis", "rent_links"} <= _tables(conn):
-        return {"sans_dossier": [], "date_future": []}
+    if not {"planning_entries", "rent_links", "machines"} <= _tables(conn):
+        return []
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(planning_entries)")}
+    groupe = "COALESCE(NULLIF(TRIM(e.group_id), ''), CAST(e.id AS TEXT))" \
+        if "group_id" in cols else "CAST(e.id AS TEXT)"
     today = datetime.now(_PARIS).date().isoformat()
-    sans = [int(r[0]) for r in conn.execute(
-        """SELECT d.id FROM devis d
-            WHERE NOT EXISTS (SELECT 1 FROM rent_links l WHERE l.devis_id = d.id)
-            ORDER BY d.id"""
-    ).fetchall()]
-    futurs = [int(r[0]) for r in conn.execute(
-        """SELECT id FROM devis
-            WHERE substr(COALESCE(date_devis, ''), 1, 10) > ?
-            ORDER BY id""",
+    rows = conn.execute(
+        f"""SELECT e.id, {groupe} AS grp FROM planning_entries e
+              JOIN machines m ON m.id = e.machine_id AND m.actif = 1
+             WHERE substr(COALESCE(e.planned_start, ''), 1, 10) > ?
+               AND NOT EXISTS (SELECT 1 FROM rent_links l
+                                WHERE l.planning_entry_id = e.id AND l.devis_id IS NOT NULL)
+             ORDER BY e.id""",
         (today,),
-    ).fetchall()]
-    return {"sans_dossier": sans, "date_future": futurs}
+    ).fetchall()
+    vus, ids = set(), []
+    for r in rows:
+        if r["grp"] in vus:
+            continue
+        vus.add(r["grp"])
+        ids.append(int(r["id"]))
+    return ids
 
 
 def _compter_devis_a_traiter(conn):
-    """Devis sans dossier ET datés dans le futur."""
-    d = devis_a_traiter(conn)
-    ids = sorted(set(d["sans_dossier"]) & set(d["date_future"]))
+    """Dossiers à venir sans devis."""
+    ids = dossiers_a_venir_sans_devis(conn)
     if not ids:
         return 0, None
     emp = hashlib.sha1(",".join(map(str, ids)).encode()).hexdigest()[:16]
     return len(ids), emp
+
+
 def _compter_coherence(conn):
     """Écarts ouverts relevés par les contrôleurs de cohérence."""
     from app.services.coherence import compter_ouverts
@@ -224,11 +232,13 @@ DETECTEURS: dict[str, Detecteur] = {d.code: d for d in (
         roles_suggeres=("administration_technique",),
     ),
     Detecteur(
+        # Code inchangé (la règle en base y est attachée) ; ce qu'il compte a
+        # changé le 16/10/2026 : des dossiers à venir, plus des devis.
         code="prod.devis_a_traiter",
         app="prod", app_label="MyProd",
-        titre="Devis à traiter",
-        description="Devis rattachés à aucun dossier ET dont la date est postérieure à aujourd'hui.",
-        lien="/prod?page=rentabilite&sous=devis&filtre=a_traiter",
+        titre="Dossiers à venir sans devis",
+        description="Dossiers planifiés après aujourd'hui auxquels aucun devis n'est encore rattaché.",
+        lien="/prod?page=rentabilite&filtre=a_venir",
         compter=_compter_devis_a_traiter,
         roles_suggeres=(ROLE_SUPERADMIN,),
     ),
