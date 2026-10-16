@@ -99,12 +99,69 @@ PLANNING_HTML = r"""<!DOCTYPE html>
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
 :root{--blue:#38bdf8;--purple:#a78bfa;--mono:ui-monospace,'Cascadia Code',monospace;--sans:'Segoe UI',system-ui,sans-serif;--bg-dark:#080c12;--border2:#334155;--dim:#cbd5e1;--green:var(--success);--red:var(--danger);--amber:var(--warn);--slot-l1:#1e293b;--slot-l2:#334155;--slot-l3:#475569;--slot-l1-h:#020617;--slot-l2-h:#0f172a;--slot-l3-h:#1e293b;--tip-k:#cbd5e1;--tip-v:#f1f5f9;--tip-lbl:#e2e8f0;--fd-label:#e2e8f0;}
 body.light{--blue:#0ea5e9;--purple:#7c3aed;--bg-dark:#e2e8f0;--border2:#cbd5e1;--dim:#64748b;--slot-l1:#0f172a;--slot-l2:#1e293b;--slot-l3:#334155;--slot-l1-h:#020617;--slot-l2-h:#0f172a;--slot-l3-h:#1e293b;--tip-k:#475569;--tip-v:#0f172a;--tip-lbl:#334155;--fd-label:#334155;}
+/* Boutons d'en-tête de la fenêtre dossier : icône + libellé, même gabarit. */
+.dossier-hdr-btn{display:flex;align-items:center;gap:6px;height:36px;padding:0 12px;
+  border-radius:6px;border:1.5px solid var(--border2);background:var(--card);
+  color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;
+  font-family:inherit;white-space:nowrap;flex-shrink:0;max-width:220px;
+  transition:border-color .15s,color .15s,background .15s}
+.dossier-hdr-btn span{overflow:hidden;text-overflow:ellipsis}
+.dossier-hdr-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--bg)}
+.dossier-hdr-btn.is-rouge{border-color:var(--danger);color:var(--danger)}
+.dossier-hdr-btn.is-orange{border-color:var(--warn);color:var(--warn)}
+.dossier-hdr-btn.is-vert{border-color:var(--success);color:var(--success)}
 body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh}
 ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 /* Sidebar / logo / nav-btn / topbar / responsive : déplacés dans mysifa_myprod_shell.css (PR 1 « unifier MyProd »). */
 .tip-cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px}
 .tip-col-hdr{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--accent);margin-bottom:8px;padding-bottom:5px;border-bottom:1.5px solid var(--accent)}
 @media (max-width:540px){.tip-cols{grid-template-columns:1fr}}
+/* Infobulle en quatre sections : deux colonnes, deux rangées. Les valeurs
+   longues (frontal, conditionnement) passent à la ligne au lieu d'élargir. */
+.tip:has(.tip-quad){max-width:min(640px,calc(100vw - 32px))}
+.tip-quad{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 20px;margin-top:8px}
+.tip-quad .tip-grid{padding-top:0;border-top:none}
+.tip-quad .tip-grid .v{font-family:inherit;font-weight:600;overflow-wrap:anywhere}
+.tip-v-fort{color:var(--accent)!important}
+.tip-vide{font-size:11px;color:var(--muted);font-style:italic}
+.tip-devis-pt{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:6px;vertical-align:middle}
+.tip-devis-rouge{background:var(--danger)}
+.tip-devis-orange{background:var(--warn)}
+.tip-devis-vert{background:var(--success)}
+.tip-devis-lib{font-size:10px;font-weight:700;color:var(--warn);margin-left:5px;text-transform:none;letter-spacing:0}
+@media (max-width:1100px){.tip-quad{gap:10px 14px}.tip-quad .tip-grid{font-size:10.5px}}
+/* Panneau du bas (téléphone) : les mêmes sections, repliables. */
+.rd-voile{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.45);
+  display:flex;align-items:flex-end;justify-content:center}
+.rd-feuille{width:100%;max-width:560px;max-height:85vh;overflow-y:auto;
+  background:var(--card);border-radius:16px 16px 0 0;padding:8px 16px 16px;
+  padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));
+  box-shadow:0 -12px 40px rgba(0,0,0,.35);animation:rdMonte .18s ease}
+@keyframes rdMonte{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}
+.rd-poignee{width:40px;height:4px;border-radius:2px;background:var(--border2);margin:2px auto 10px}
+.rd-tete{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.rd-barre{width:6px;align-self:stretch;min-height:36px;border-radius:3px;flex-shrink:0}
+.rd-titres{flex:1;min-width:0}
+.rd-client{font-size:16px;font-weight:800;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rd-ref{font-size:12px;color:var(--muted);font-family:var(--mono);margin-top:2px}
+.rd-fermer{width:36px;height:36px;border-radius:10px;border:1px solid var(--border2);
+  background:var(--bg);color:var(--text2);font-size:20px;line-height:1;cursor:pointer;flex-shrink:0}
+.rd-sec{border:1px solid var(--border2);border-radius:10px;margin-top:8px;background:var(--bg)}
+.rd-sec summary{list-style:none;display:flex;align-items:center;gap:10px;
+  padding:12px 14px;cursor:pointer;min-height:44px;box-sizing:border-box}
+.rd-sec summary::-webkit-details-marker{display:none}
+.rd-sec summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--muted);
+  border-bottom:2px solid var(--muted);transform:rotate(45deg);flex-shrink:0;margin-left:auto;transition:transform .15s}
+.rd-sec[open] summary::after{transform:rotate(-135deg)}
+.rd-sec-t{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--accent);white-space:nowrap}
+.rd-sec-r{font-size:12.5px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.rd-sec[open] .rd-sec-r{display:none}
+.rd-sec-c{padding:0 14px 12px}
+.rd-sec-c .tip-grid{font-size:13px;padding-top:0;border-top:none;gap:8px 14px}
+.rd-sec-c .tip-grid .v{font-family:inherit;font-weight:600;overflow-wrap:anywhere}
+.rd-feuille .tip-exig{margin:0 0 4px}
+.rd-actions{margin-top:14px}
+.rd-actions .btn{width:100%;min-height:46px}
 .planning-container{max-width:1400px;margin:0 auto}
 
 /* Contact support (messagerie interne) */
@@ -1463,6 +1520,7 @@ async function load(){
     S.machine = m;
     S.timeline = (tl && tl.slots) ? tl.slots : [];
     S.activeDossier = activeDoss;
+    chargerDevisPlanning();
     if(showDossiers || loadEntriesForRO){
       const en = await api(`/machines/${MID}/entries`);
       S.entries = en || [];
@@ -1738,6 +1796,7 @@ function icon(name,size=16){
     'bar-chart-2': '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
     'activity': '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
     'droplet': '<path d="M12 2.7l5.7 5.7a8 8 0 1 1-11.4 0z"/>',
+    'file-check': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><polyline points="9 15 11 17 15 13"/>',
     'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
     'scanner': '<rect x="3" y="13" width="18" height="7" rx="2"/><line x1="7" y1="16.5" x2="17" y2="16.5"/><path d="M6 10V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5"/>',
     'package': '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
@@ -2009,6 +2068,36 @@ function fracToTimeInput(f){
 }
 function isHHMM(s){return /^\d{2}:\d{2}$/.test(String(s||"").trim());}
 
+/* ── Devis du dossier (bouton de la fenêtre d'édition) ─────────────
+   Le rattachement se fait dans MyProd › Rentabilité, qui a la recherche
+   classée, les propositions et le bouton Suivant : on l'ouvre sur ce dossier
+   dans un nouvel onglet plutôt que de recopier la fenêtre ici. Le bouton,
+   lui, dit l'état sans qu'on ait à cliquer : rouge sans devis, orange
+   proposé, vert validé — les couleurs du Pilotage. */
+function ouvrirDevisDossier(id){
+  window.open('/prod?page=rentabilite&sous=pilotage&rattachement='+encodeURIComponent(id),'_blank','noopener');
+}
+async function rafraichirBoutonDevis(id){
+  const btn=document.getElementById('dossier-devis-btn-'+id);
+  if(!btn) return;
+  let l=null;
+  try{
+    const r=await fetch('/api/rentabilite/links/'+id,{credentials:'include'});
+    if(!r.ok){ if(r.status===403) btn.remove(); return; }
+    l=await r.json();
+  }catch(_){ return; }
+  const b=document.getElementById('dossier-devis-btn-'+id);
+  if(!b||!l) return;
+  const etat=!l.devis_id?'rouge':((l.origine==='auto'&&!l.valide_at)?'orange':'vert');
+  b.classList.add('is-'+etat);
+  const lib=b.querySelector('span');
+  const client=(l.devis&&l.devis.client)||'';
+  if(lib) lib.textContent=etat==='rouge'?'Lier un devis':('Devis'+(client?' '+client:''));
+  b.title=etat==='rouge'?'Aucun devis rattaché — ouvrir le rattachement'
+        :etat==='orange'?'Devis proposé automatiquement, à confirmer'+(l.motif?' — '+l.motif:'')
+        :'Devis rattaché'+(l.valide_par==='auto:identique'?' (validé automatiquement)':'');
+}
+
 function isAdmin(u){return u&&(u.role==="direction"||u.role==="administration"||u.role==="administration_ventes"||u.role==="administration_technique"||u.role==="superadmin");}
 function canAccessOfTab(){return isAdmin(ME);}
 function isComptaUser(u){return !!(u&&u.role==="comptabilite");}
@@ -2242,6 +2331,7 @@ function renderPlanAgendaJour(col, todayIso, pxParHeure, minHeightSlot){
     const rawH=(hEnd-hStart)*pxParHeure;
     const height=Math.max(minHeightSlot, Math.round(rawH));
     const co=colorForId(s.entry_id||idx+1);
+    _SLOTS_PAR_ID[s.entry_id||idx]=s;
     const cli=(s.client||'').trim()||(s.numero_of||s.reference||'—');
     const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:'';
     const lz=s.laize?`${s.laize} mm`:'';
@@ -2259,7 +2349,7 @@ function renderPlanAgendaJour(col, todayIso, pxParHeure, minHeightSlot){
     return `<div class="plan-agenda-slot${cls}"
       style="top:${top}px;height:${height-3}px;background:${co}"
       data-eid="${s.entry_id||idx}"
-      onclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()">
+      onclick="hideTip();ouvrirResumeDossier(${s.entry_id||idx});event.stopPropagation()">
       <div class="rail"></div>
       <div class="dur">${escHtml(dur)}</div>
       <div class="l1"><em>${escHtml(cli)}</em>${fscBadgeHtml(s)}${transportBadgeHtml(s)}${gelBadgeHtml(s)}${annuleBadgeHtml(s)}</div>
@@ -3083,6 +3173,7 @@ function mkTL(mon,slots){
     if(spansMultipleWeeks && (s.statut!=="termine") && visibleWorkH < TL_MIN_VISIBLE_H_WHEN_SPLIT) return;
     const l=(sp/tot)*100,w=Math.max(.5,((ep-sp)/tot)*100);
     const co=colorForId(s.entry_id||idx+1);
+    _SLOTS_PAR_ID[s.entry_id||idx]=s;
     const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:"";
     const lz=s.laize?`${s.laize} mm`:"";
     // Ligne 2 : format + laize (vue prod)
@@ -3357,6 +3448,151 @@ function mandrinDiaTxt(raw){
   return String(n).replace(",",".")+" mm";
 }
 
+/* ── Les quatre sections d'un dossier (16/10/2026) ──────────────────
+   Infos générales, techniques (fiche technique), de production (OF) et
+   devis. Construites UNE fois ici, et rendues de deux façons : l'infobulle
+   de la frise sur ordinateur, le panneau du bas sur téléphone, où le survol
+   n'existe pas. Chaque section donne aussi un résumé d'une ligne : c'est ce
+   que le téléphone montre tant que la section est repliée. */
+let _SLOTS_PAR_ID={};
+let _DEVIS_PAR_ENTREE=null, _devisLuA=0;
+
+/* Les devis rattachés, pour toute la machine en une requête. Réservé à qui
+   a accès à la Rentabilité : sur un 403, la section Devis n'existe pas. */
+async function chargerDevisPlanning(force){
+  if(!(ME&&isAdmin(ME))) return;
+  if(!force && _DEVIS_PAR_ENTREE && Date.now()-_devisLuA<60000) return;
+  try{
+    const l=await apiAbs('/api/rentabilite/links');
+    const m={};
+    (l||[]).forEach(x=>{ m[Number(x.planning_entry_id)]=x; });
+    _DEVIS_PAR_ENTREE=m; _devisLuA=Date.now();
+  }catch(_){ /* pas d'accès : pas de section Devis */ }
+}
+
+function infosDossierSections(s){
+  const L=(k,v,cls)=>({k,v:String(v),cls:cls||""});
+  // Techniques : la fiche technique.
+  const tech=[];
+  if(s.laize) tech.push(L("Laize",s.laize+" mm"));
+  if(s.ft_support) tech.push(L("Frontal",s.ft_support));
+  if(s.ft_adhesif) tech.push(L("Adhésif",s.ft_adhesif));
+  if(s.ft_nb_couleurs) tech.push(L("Couleurs",s.ft_nb_couleurs));
+  const man=mandrinDiaTxt(s.ft_mandrin_dia);
+  if(man) tech.push(L("Ø mandrin",man));
+  if(s.ft_etiq_bobine) tech.push(L("Étiq. / bobine",fmtQty(s.ft_etiq_bobine)));
+  if(s.ft_enroulement) tech.push(L("Enroulement",s.ft_enroulement));
+  if(s.ft_palette_type) tech.push(L("Type palette",s.ft_palette_type));
+  // Production : l'OF.
+  const prod=[];
+  if(s.of_numero) prod.push(L("N° OF",s.of_numero));
+  if(s.qte_etiquettes) prod.push(L("Qté étiquettes",fmtQty(s.qte_etiquettes),"fort"));
+  if(s.of_metrage) prod.push(L("Métrage",fmtQty(s.of_metrage)+" m"));
+  if(s.of_bobines) prod.push(L("Bobines",fmtQty(s.of_bobines)));
+  if(s.of_levees) prod.push(L("Levées",s.of_levees));
+  if(s.of_outil) prod.push(L("Outil",s.of_outil));
+  const cond=s.of_conditionnement||s.ft_conditionnement_phrase;
+  if(cond) prod.push(L("Conditionnement",cond));
+  // Devis : les deux chiffres qui se comparent à l'atelier.
+  let devis=null;
+  if(_DEVIS_PAR_ENTREE){
+    const l=_DEVIS_PAR_ENTREE[Number(s.entry_id)];
+    if(!l||!l.devis_id){
+      devis={rows:[],etat:"rouge",vide:"Aucun devis lié",resume:"Aucun devis lié"};
+    }else{
+      const d=l.devis||{};
+      const rows=[];
+      if(d.vitesse) rows.push(L("Vitesse devisée",fmtQty(d.vitesse)+" m/mn","fort"));
+      if(d.calage_mn) rows.push(L("Calage devisé",fmtDur(Number(d.calage_mn)/60)));
+      const etat=(l.origine==="auto"&&!l.valide_at)?"orange":"vert";
+      devis={rows,etat,client:d.client||"",
+        vide:rows.length?"":"Vitesse et calage non lus dans le devis",
+        resume:rows.map(r=>r.v).join(" · ")||"Devis lié"};
+    }
+  }
+  const resume=(rows,max)=>rows.slice(0,max||2).map(r=>r.v).join(" · ");
+  return {
+    tech:{rows:tech,resume:resume([tech.find(r=>r.k==="Frontal"),tech.find(r=>r.k==="Laize")].filter(Boolean))||resume(tech)},
+    prod:{rows:prod,resume:resume([prod.find(r=>r.k==="Qté étiquettes"),prod.find(r=>r.k==="Métrage")].filter(Boolean))||resume(prod)},
+    devis
+  };
+}
+function grilleInfos(rows){
+  return rows.map(r=>`<span class="k">${escHtml(r.k)}</span><span class="v${r.cls?" tip-v-"+r.cls:""}">${escHtml(r.v)}</span>`).join("");
+}
+function enteteDevisInfos(dv){
+  if(!dv) return "";
+  const lib=dv.etat==="orange"?"à confirmer":dv.etat==="vert"?"":"";
+  return `<span class="tip-devis-pt tip-devis-${dv.etat}"></span>${lib?`<span class="tip-devis-lib">${lib}</span>`:""}`;
+}
+
+/* ── Panneau du bas (téléphone) ─────────────────────────────────────
+   Toucher un dossier de l'agenda ouvrait directement la fenêtre d'édition :
+   sur téléphone, on ne voyait jamais ces informations. Le panneau les
+   montre d'abord, sections repliées sur leur résumé d'une ligne, et le
+   bouton du bas ouvre le dossier comme avant. */
+function fermerResumeDossier(){
+  document.getElementById("resume-dossier")?.remove();
+  document.removeEventListener("keydown",_resumeEchap);
+}
+function _resumeEchap(e){ if(e.key==="Escape") fermerResumeDossier(); }
+function ouvrirResumeDossier(eid){
+  fermerResumeDossier();
+  const s=_SLOTS_PAR_ID[eid];
+  if(!s){ openEdit(eid); return; }
+  const sec=infosDossierSections(s);
+  const co=colorForId(s.entry_id||eid);
+  const st=s.statut==="en_cours"?"En cours":s.statut==="termine"?"Terminé":"En attente";
+  const quand=iso=>{ if(!iso) return ""; const d=new Date(iso);
+    return d.toLocaleDateString("fr-FR",{weekday:"short",day:"2-digit",month:"2-digit"})+" "
+         +d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"}); };
+  const fm=s.format_l&&s.format_h?`${s.format_l} × ${s.format_h} mm`:"";
+  const gen=[];
+  if(s.ref_produit) gen.push({k:"Réf produit",v:s.ref_produit});
+  if(fm) gen.push({k:"Format",v:fm});
+  gen.push({k:"Durée",v:fmtDur(s.duree_heures||0)});
+  if(s.start) gen.push({k:"Début",v:quand(s.start)});
+  if(s.end) gen.push({k:"Fin",v:quand(s.end)});
+  if(s.date_livraison) gen.push({k:"Livraison",v:s.date_livraison+(s.date_livraison_imposee?" (imposée)":"")});
+  gen.push({k:"Statut",v:st});
+  const exig=(s.exigences_production||"").trim();
+  const section=(titre,resume,corps,ouverte,extraTitre)=>`<details class="rd-sec"${ouverte?" open":""}>
+      <summary><span class="rd-sec-t">${titre}${extraTitre||""}</span><span class="rd-sec-r">${escHtml(resume||"")}</span></summary>
+      <div class="rd-sec-c">${corps}</div></details>`;
+  const vide=t=>`<div class="tip-vide">${escHtml(t)}</div>`;
+  const html=`<div class="rd-feuille" role="dialog" aria-modal="true" aria-label="Informations du dossier">
+      <div class="rd-poignee"></div>
+      <div class="rd-tete">
+        <div class="rd-barre" style="background:${co}"></div>
+        <div class="rd-titres">
+          <div class="rd-client">${escHtml((s.client||"").trim()||"—")}</div>
+          <div class="rd-ref">${escHtml([s.numero_of||s.reference,s.ref_produit].filter(Boolean).join(" · "))}</div>
+        </div>
+        <button type="button" class="rd-fermer" onclick="fermerResumeDossier()" aria-label="Fermer">×</button>
+      </div>
+      ${exig?`<div class="tip-exig"><span class="k">Exigences de production</span>${escHtml(exig)}</div>`:""}
+      ${section("Infos générales",st+" · "+fmtDur(s.duree_heures||0),`<div class="tip-grid">${grilleInfos(gen)}</div>`,true)}
+      ${section("Infos techniques",sec.tech.resume||"Fiche technique non trouvée",sec.tech.rows.length?`<div class="tip-grid">${grilleInfos(sec.tech.rows)}</div>`:vide("Aucune fiche technique reliée à cette référence."),false)}
+      ${section("Infos de production",sec.prod.resume||"OF non relié",sec.prod.rows.length?`<div class="tip-grid">${grilleInfos(sec.prod.rows)}</div>`:vide("Aucun OF relié à ce dossier."),false)}
+      ${sec.devis?section("Infos devis",sec.devis.resume,sec.devis.rows.length?`<div class="tip-grid">${grilleInfos(sec.devis.rows)}</div>`:vide(sec.devis.vide),false," "+enteteDevisInfos(sec.devis)):""}
+      <div class="rd-actions">
+        <button type="button" class="btn" onclick="fermerResumeDossier();openEdit(${Number(s.entry_id||eid)})">${CAN_EDIT?"Modifier le dossier":"Ouvrir le dossier"}</button>
+      </div>
+    </div>`;
+  const voile=document.createElement("div");
+  voile.id="resume-dossier"; voile.className="rd-voile";
+  voile.innerHTML=html;
+  voile.addEventListener("click",e=>{ if(e.target===voile) fermerResumeDossier(); });
+  // Une section ouverte à la fois : sur un écran de téléphone, quatre
+  // sections dépliées ensemble se lisent en faisant défiler, plus d'un regard.
+  const secs=[...voile.querySelectorAll(".rd-sec")];
+  secs.forEach(d=>d.addEventListener("toggle",()=>{
+    if(d.open) secs.forEach(o=>{ if(o!==d) o.open=false; });
+  }));
+  document.body.appendChild(voile);
+  document.addEventListener("keydown",_resumeEchap);
+}
+
 // ── Tooltip ──
 let tipEl=null;
 let _hoveredSlotEid=null;
@@ -3410,7 +3646,20 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
   const showTechCol = !isExpeVueTip && hasTech;
   const colSide = showExpeCol ? colExpe : (showTechCol ? colTech : null);
   const colTitle = showExpeCol ? 'Infos expéditions' : 'Infos techniques';
-  const bodyHtml = colSide
+  // Vue prod : quatre sections (générales, techniques, production, devis).
+  // La vue expé garde ses deux colonnes, centrées sur l'enlèvement.
+  const sObj=_SLOTS_PAR_ID[d.eid];
+  let quad="";
+  if(!isExpeVueTip && sObj){
+    const sec=infosDossierSections(sObj);
+    const bloc=(titre,corps,extra)=>`<div class="tip-sec"><div class="tip-col-hdr">${titre}${extra||""}</div>${corps}</div>`;
+    const parts=[bloc("Infos générales",`<div class="tip-grid">${colGen}</div>`)];
+    parts.push(bloc("Infos techniques",sec.tech.rows.length?`<div class="tip-grid">${grilleInfos(sec.tech.rows)}</div>`:`<div class="tip-vide">Fiche technique non trouvée</div>`));
+    parts.push(bloc("Infos de production",sec.prod.rows.length?`<div class="tip-grid">${grilleInfos(sec.prod.rows)}</div>`:`<div class="tip-vide">Aucun OF relié</div>`));
+    if(sec.devis) parts.push(bloc("Infos devis",sec.devis.rows.length?`<div class="tip-grid">${grilleInfos(sec.devis.rows)}</div>`:`<div class="tip-vide">${escHtml(sec.devis.vide)}</div>`," "+enteteDevisInfos(sec.devis)));
+    quad=`<div class="tip-quad">${parts.join("")}</div>`;
+  }
+  const bodyHtml = quad ? quad : colSide
     ? `<div class="tip-cols">
          <div><div class="tip-col-hdr">Infos générales</div><div class="tip-grid">${colGen}</div></div>
          <div><div class="tip-col-hdr">${colTitle}</div><div class="tip-grid">${colSide}</div></div>
@@ -4738,29 +4987,24 @@ function openEdit(id){
     <div style="margin-top:3px;font-size:10.5px;color:var(--muted)">${escAttr(e.annule_par||"—")}${(e.annule_le||"")?" · "+escAttr(String(e.annule_le).slice(0,16).replace("T"," ")):""}</div>
     ${isAdmin(ME)?`<button type="button" onclick="annulerAnnulationPlanning(${id})" style="margin-top:8px;padding:6px 10px;border-radius:6px;border:1px solid rgba(248,113,113,.45);background:transparent;color:var(--danger);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Annuler l'annulation</button>`:""}
   </div>`:"";
-  const statsBtn=isTermine?`<button type="button" onclick="openDossierStatsModal(${id})" title="Statistiques de production"
-    style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:6px;border:1.5px solid var(--border2);background:var(--accent-bg);color:var(--accent);cursor:pointer;transition:opacity .15s;font-family:inherit;flex-shrink:0"
-    onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">${icon('bar-chart-2',16)}</button>`:"";
+  /* Boutons d'en-tête : une icône ET un mot (retour du 16/10/2026). Une icône
+     seule — un histogramme, un œil — obligeait à survoler pour savoir où elle
+     menait. Même gabarit pour les trois, couleur seulement pour l'état. */
+  const btnEntete=(onclick,titre,ico,libelle,extra)=>`<button type="button" onclick="${onclick}" title="${titre}"
+    ${extra||""} class="dossier-hdr-btn">${ico}<span>${libelle}</span></button>`;
+  const statsBtn=isTermine?btnEntete(`openDossierStatsModal(${id})`,"Statistiques de production du dossier : temps, métrage, arrêts",icon('bar-chart-2',15),"Stats prod"):"";
+  const ofEyeBtn=btnEntete(`openOfPreview(${id})`,"Voir l'OF et la fiche technique reliés à ce dossier",icon('file-text',15),"OF · fiche");
+  // Devis : réservé à ceux qui ont accès à la Rentabilité (direction,
+  // administration, superadmin). Le bouton naît neutre, puis prend la couleur
+  // de l'état du rattachement dès que la liaison est lue.
+  const devisBtn=isAdmin(ME)?btnEntete(`ouvrirDevisDossier(${id})`,"Voir ou relier le devis de ce dossier",icon('file-check',15),"Devis",`id="dossier-devis-btn-${id}"`):"";
+  if(devisBtn) setTimeout(()=>rafraichirBoutonDevis(id),0);
   // Boutons FSC de l'en-tête : isolés dans un conteneur dédié pour pouvoir
   // être re-rendus seuls quand la case « Certification FSC requise » change,
   // sans reconstruire la modale (et donc sans perdre la saisie en cours).
   // display:contents — le conteneur ne crée pas de boîte : quand il est vide
   // (dossier non FSC) il n'ajoute pas d'espace dans la barre d'en-tête.
   const fscHdr=`<span id="dossier-fsc-hdr" style="display:contents">${fscRapportBtnHtml(e)}${fscPrintBtnHtml(id,e)}</span>`;
-  const ofEyeBtn=`<button type="button"
-    onclick="openOfPreview(${id})"
-    title="Voir l'OF relié à ce dossier"
-    style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;
-           border-radius:6px;border:1.5px solid var(--border2);background:var(--card);
-           color:var(--muted);cursor:pointer;transition:all .15s;font-family:inherit;flex-shrink:0"
-    onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
-    onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-      <circle cx="12" cy="12" r="3"/>
-    </svg>
-  </button>`;
   // En lecture seule (commercial) : on masque le bouton « À destocker » et on ne garde que l'œil OF.
   const destockActionBtn=RO?"":`<button type="button" id="destock-btn-${id}" onclick="toggleDestockage(${id})"
     title="${destockTitre}"
@@ -4769,7 +5013,7 @@ function openEdit(id){
     ${destockIcon}
     <span>${destockLabel}</span>
   </button>`;
-  const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${fscHdr}${statsBtn}${ofEyeBtn}${destockActionBtn}</div>`;
+  const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${fscHdr}${statsBtn}${ofEyeBtn}${devisBtn}${destockActionBtn}</div>`;
 
   // Traçabilité création/modification
   const fmtDate=(iso)=>{

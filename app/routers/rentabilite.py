@@ -511,17 +511,30 @@ def get_links(planning_entry_id: int, request: Request):
         if not ex:
             raise HTTPException(404, "Entrée planning introuvable")
         link = conn.execute(
-            "SELECT devis_id, updated_at FROM rent_links WHERE planning_entry_id=?",
+            "SELECT * FROM rent_links WHERE planning_entry_id=?",
             (planning_entry_id,),
         ).fetchone()
         prod = conn.execute(
             "SELECT no_dossier FROM rent_prod_links WHERE planning_entry_id=? ORDER BY no_dossier",
             (planning_entry_id,),
         ).fetchall()
+        dv = None
+        if link and link["devis_id"]:
+            dv = conn.execute(
+                "SELECT id, client, date_devis, filename FROM devis WHERE id=?",
+                (int(link["devis_id"]),),
+            ).fetchone()
+    # L'état et le devis lié servent au bouton « Devis » de la fenêtre du
+    # planning : il se colore comme le Pilotage sans charger toutes les liaisons.
     return {
         "planning_entry_id": planning_entry_id,
         "devis_id": (link["devis_id"] if link else None),
         "updated_at": (link["updated_at"] if link else None),
+        "origine": _texte(link, "origine", "manuel") if link else None,
+        "valide_at": (_texte(link, "valide_at", "") or None) if link else None,
+        "valide_par": (_texte(link, "valide_par", "") or None) if link else None,
+        "motif": _texte(link, "motif", "") if link else "",
+        "devis": dict(dv) if dv else None,
         "no_dossiers": [r["no_dossier"] for r in prod],
     }
 
@@ -1214,11 +1227,16 @@ def get_indicateurs(devis_id: int, request: Request):
 # ── Liste des devis ───────────────────────────────────────────────
 @router.get("/api/rentabilite/devis")
 def list_devis(request: Request):
+    """Tous les devis. `nb_rattachements` compte les dossiers du planning qui
+    portent ce devis (`rent_links`) : c'est lui qui dit « sans dossier »,
+    l'ancienne table `devis_dossiers` n'étant plus alimentée."""
     require_rentabilite(request)
     with get_db() as conn:
         rows = conn.execute(
             """SELECT d.*,
-                      COUNT(dd.id) as nb_dossiers_lies
+                      COUNT(dd.id) as nb_dossiers_lies,
+                      (SELECT COUNT(*) FROM rent_links l WHERE l.devis_id = d.id)
+                        AS nb_rattachements
                FROM devis d
                LEFT JOIN devis_dossiers dd ON dd.devis_id=d.id
                GROUP BY d.id

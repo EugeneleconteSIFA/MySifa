@@ -205,12 +205,14 @@ def remplir():
     conn.executescript(
         """
         CREATE TABLE machines (id INTEGER PRIMARY KEY, nom TEXT, code TEXT, actif INTEGER DEFAULT 1);
-        CREATE TABLE of_imports (id INTEGER PRIMARY KEY, qte_etiquettes REAL, qte_bobines REAL);
+        CREATE TABLE of_imports (id INTEGER PRIMARY KEY, qte_etiquettes REAL, qte_bobines REAL,
+            of_numero TEXT, metrage INTEGER, nb_levees INTEGER, conditionnement TEXT,
+            outil_1_numero TEXT);
         CREATE TABLE fiches_techniques (
             id INTEGER PRIMARY KEY, reference TEXT, ref_produit_norm TEXT, machine TEXT,
             nb_bobines_carton REAL, palette_nb_cartons_sol REAL, palette_nb_cartons_hauteur REAL,
             support TEXT, adhesif TEXT, palette_type TEXT, cartons TEXT, mandrin_dia REAL,
-            nb_etiq_bobin REAL);
+            nb_etiq_bobin REAL, nb_couleurs INTEGER, enroulement TEXT);
         CREATE TABLE planning_entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT, machine_id INTEGER, position INTEGER,
             reference TEXT, client TEXT, description TEXT, format_l REAL, format_h REAL,

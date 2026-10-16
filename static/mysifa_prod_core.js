@@ -736,6 +736,7 @@
       'play': '<polygon points="5 3 19 12 5 21 5 3"/>',
       'check-circle': '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
       'check': '<polyline points="20 6 9 17 4 12"/>',
+      'bell': '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
       'x': '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
       'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
       'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
@@ -6038,8 +6039,13 @@ function fermerRattachementModal(sansAdresse){
    fermer. La fenêtre se reconstruit après chaque action plutôt que de tenter
    une mise à jour partielle — `render()` ne la connaît pas, elle vit dans
    `document.body` pour survivre au rafraîchissement de `#root`. */
-async function ouvrirRattachementModal(entryId){
+/* `file` : les dossiers de la vue d'où l'on vient (la frise du Pilotage, la
+   page de la liste), dans leur ordre d'affichage. Elle sert au bouton
+   « Suivant », qui saute ce qui est déjà validé : on enchaîne les dossiers à
+   traiter sans refermer la fenêtre (retour du 16/10/2026). */
+async function ouvrirRattachementModal(entryId, file){
   fermerRattachementModal(true);
+  if(Array.isArray(file)) S.rentFileLier = file.map(Number);
   const entree = (S.rentList || []).find(e => Number(e.id) === Number(entryId));
   if(!entree){ toast('Dossier introuvable.', 'error'); return; }
   S.urlModale={cle:'rattachement', id:entree.id}; prodSyncUrl();
@@ -6057,6 +6063,14 @@ async function ouvrirRattachementModal(entryId){
     h('div',{className:'rent-lier-attente'}, 'Recherche des devis plausibles…'));
 
   const relancer = async () => { fermerRattachementModal(true); await ouvrirRattachementModal(entryId); };
+
+  // Le suivant à traiter : après celui-ci dans la file, pas encore vert.
+  const fileLier = S.rentFileLier || [];
+  const rang = fileLier.indexOf(Number(entryId));
+  const aTraiter = id => rentEtatLien((S.rentLinksById || {})[id] || {devis_id:null}) !== 'vert';
+  const suivantId = rang >= 0 ? fileLier.slice(rang + 1).find(aTraiter) : undefined;
+  const precedentId = rang > 0 ? fileLier[rang - 1] : undefined;
+  const resteATraiter = rang >= 0 ? fileLier.slice(rang + 1).filter(aTraiter).length : 0;
 
   /* L'état et ce qu'on peut en faire tiennent sur UNE bande : Confirmer et
      Rejeter à droite du libellé. Posés dessous, ils collaient au bandeau et
@@ -6112,18 +6126,54 @@ async function ouvrirRattachementModal(entryId){
   corps.appendChild(selecteur);
   if(etat !== 'vert') requestAnimationFrame(() => selecteur.querySelector('input')?.focus());
   corps.appendChild(h('div',{className:'rent-lier-pied'},
+    precedentId !== undefined
+      ? h('button',{type:'button',className:'btn-sec',title:'Dossier précédent',
+          onClick:()=>ouvrirRattachementModal(precedentId)}, iconEl('arrow-left',13), ' Précédent')
+      : null,
+    h('span',{className:'rent-lier-pied-espace'}),
     h('button',{type:'button',className:'btn-sec',onClick:()=>{
       // On quitte la fenêtre POUR un autre endroit : pas de recul, sinon le
       // retour arrière ramènerait au Pilotage par-dessus ce set().
       fermerRattachementModal(true);
       S.urlModale=null;
       set({rentSubTab:'dossiers', rentSelEntryId:entree.id, rentFiltre:'tous'});
-    }},'Ouvrir la fiche complète', iconEl('chevron-right',13)),
-    h('button',{type:'button',className:'btn-sec',onClick:()=>fermerRattachementModal()},'Fermer')
+    }},'Fiche complète'),
+    h('button',{type:'button',className:'btn-sec',onClick:()=>fermerRattachementModal()},'Fermer'),
+    suivantId !== undefined
+      ? h('button',{type:'button',className:'btn-sm',
+          title: resteATraiter + ' dossier' + (resteATraiter > 1 ? 's' : '') + ' à traiter dans cette vue',
+          onClick:()=>ouvrirRattachementModal(suivantId)},
+          'Suivant (' + resteATraiter + ')', iconEl('arrow-right',13))
+      : (fileLier.length ? h('span',{className:'rent-lier-fin'},'Plus rien à traiter dans cette vue') : null)
   ));
+  // Flèche droite = suivant, flèche gauche = précédent, hors champ de saisie.
+  // Un seul écouteur à la fois : la fenêtre se rouvre à chaque action, et
+  // chaque ouverture remplace le précédent au lieu de s'y ajouter.
+  if(S.rentSurFleche) document.removeEventListener('keydown', S.rentSurFleche);
+  S.rentSurFleche = e => {
+    if(!document.getElementById('rent-lier-modal')) return;
+    if(e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    if(e.key === 'ArrowRight' && suivantId !== undefined){ e.preventDefault(); ouvrirRattachementModal(suivantId); }
+    if(e.key === 'ArrowLeft' && precedentId !== undefined){ e.preventDefault(); ouvrirRattachementModal(precedentId); }
+  };
+  document.addEventListener('keydown', S.rentSurFleche);
 }
 
 // ── La timeline ──────────────────────────────────────────────────
+/* Les devis qui demandent un geste : sans dossier (`nb_rattachements` = 0)
+   ou datés après aujourd'hui. Pendant de `devis_a_traiter()` côté serveur. */
+function rentDevisATraiter(liste){
+  const auj = rentISOJour(new Date());
+  const sans = new Set(), futur = new Set();
+  (liste || []).forEach(d => {
+    if(!Number(d.nb_rattachements)) sans.add(Number(d.id));
+    if(String(d.date_devis || '').slice(0,10) > auj) futur.add(Number(d.id));
+  });
+  const tous = new Set([...sans, ...futur]);
+  return {sansDossier:sans.size, futur:futur.size, total:tous.size,
+          ids:tous, idsSans:sans, idsFutur:futur};
+}
+
 function renderRentPilotage(){
   const groupes = rentGroupes(S.rentList || []);
   const liens = S.rentLinksById || {};
@@ -6165,6 +6215,20 @@ function renderRentPilotage(){
   );
 
   const devisDouteux = (S.devisList || []).filter(d => Number(d.a_verifier) === 1);
+  /* Superadmin : les devis qui n'ont pas trouvé de dossier, et ceux datés
+     après aujourd'hui (date mal lue). Même compte que la pastille MyProd du
+     portail (`prod.devis_a_traiter`), pour qu'on lise le même nombre. */
+  const aTraiterDevis = isSuperAdmin(S.user) ? rentDevisATraiter(S.devisList || []) : null;
+  const rappelATraiter = (aTraiterDevis && aTraiterDevis.total) ? h('button',{type:'button',
+      className:'rent-rappel rent-rappel-info',
+      onClick:()=>set({rentSubTab:'devis', rentDevisFiltre:'a_traiter'})},
+    iconEl('bell',14),
+    h('span',null,' ' + [
+      aTraiterDevis.sansDossier ? aTraiterDevis.sansDossier + ' devis rattaché' + (aTraiterDevis.sansDossier > 1 ? 's' : '') + ' à aucun dossier' : null,
+      aTraiterDevis.futur ? aTraiterDevis.futur + ' devis daté' + (aTraiterDevis.futur > 1 ? 's' : '') + ' après aujourd\'hui' : null,
+    ].filter(Boolean).join(' · '))
+  ) : null;
+
   const rappelDevis = devisDouteux.length ? h('button',{type:'button',className:'rent-rappel',
     onClick:()=>set({rentSubTab:'devis', rentDevisFiltre:'verifier'})},
     iconEl('alert-triangle',14),
@@ -6239,6 +6303,7 @@ function renderRentPilotage(){
 
   const semaines = [];
   let placesTotal = 0;
+  const fileVue = [];
   let trouvesVisibles = 0;
   for(let s = 0; s < nbSemaines; s++){
     const debutSem = rentAjouterJours(lundi, 7 * s);
@@ -6273,6 +6338,8 @@ function renderRentPilotage(){
       return {g:x.g, gauche, largeur, ligne:0};
     }).filter(b => b.gauche < 100);
     placesTotal += blocs.length;
+    blocs.slice().sort((a, b) => a.gauche - b.gauche || a.ligne - b.ligne)
+      .forEach(b => { const id = Number(b.g.head.id); if(fileVue.indexOf(id) < 0) fileVue.push(id); });
 
     const nbLignes = rentEmpiler(blocs);
     const aujourdhui = new Date();
@@ -6308,7 +6375,7 @@ function renderRentPilotage(){
           onMouseEnter:(ev)=>rentTipMontrer(ev, head, (charges ? liens[Number(head.id)] : null), etat),
           onMouseMove:rentTipPlacer,
           onMouseLeave:rentTipCacher,
-          onClick:()=>{ rentTipCacher(); ouvrirRattachementModal(head.id); }},
+          onClick:()=>{ rentTipCacher(); ouvrirRattachementModal(head.id, fileVue); }},
           h('span',{className:'rent-tl-bloc-cli'}, head.client || '(client ?)'),
           etroit ? null : h('span',{className:'rent-tl-bloc-ref'}, head.reference || ''),
           etroit ? null : h('span',{className:'rent-tl-bloc-meta'},
@@ -6484,7 +6551,7 @@ function renderRentPilotage(){
             : 'Chargement des liaisons…')
   );
 
-  return h('div',null, tuiles, rappelDevis, timeline, resteAFaire, tableauEcarts);
+  return h('div',null, tuiles, rappelDevis, rappelATraiter, timeline, resteAFaire, tableauEcarts);
 }
 
 // ── Sous-onglet Dossiers ─────────────────────────────────────────
@@ -6665,7 +6732,7 @@ function renderRentDossiers(){
           title: couleur === 'rouge' ? 'Rattacher un devis'
                : (couleur === 'orange' ? 'Proposé — à confirmer' + (lienLigne.motif ? ' · ' + lienLigne.motif : '')
                                        : rentLibelleEtat(lienLigne, 'vert')),
-          onClick:e => { e.stopPropagation(); ouvrirRattachementModal(entryId); }},
+          onClick:e => { e.stopPropagation(); ouvrirRattachementModal(entryId, shown.map(x => Number(x.head.id))); }},
         couleur === 'rouge' ? iconEl('plus',12) : h('span',{className:'rent-point rent-point-' + couleur}),
         h('span',{className:'rent-devis-chip-nom'}, couleur === 'rouge' ? 'Lier un devis' : nomDevis)),
       couleur === 'orange'
@@ -7191,7 +7258,13 @@ function renderRentDevis(){
      on les remonte en tête, et on affiche le motif. Sans ça, le drapeau
      n'existerait que dans la base. */
   const aVerifier = devisList.filter(d=>Number(d.a_verifier)===1);
-  const filtreDevis = S.rentDevisFiltre || 'tous';
+  const aTraiter = rentDevisATraiter(devisList);
+  const FILTRES_DEVIS = {
+    tous:      devisList,
+    verifier:  aVerifier,
+    a_traiter: devisList.filter(d=>aTraiter.ids.has(Number(d.id))),
+  };
+  const filtreDevis = FILTRES_DEVIS[S.rentDevisFiltre] ? S.rentDevisFiltre : 'tous';
   /* Six cents devis importés : retrouver celui de Bridor en faisant défiler
      n'est pas une recherche, c'est une fouille. On cherche sur ce qui est
      affiché — client, nom de fichier, date — plus le motif du doute, qui est
@@ -7219,7 +7292,7 @@ function renderRentDevis(){
   const triD = (S.rentDevisTri && TRIS_DEVIS[S.rentDevisTri.champ])
     ? S.rentDevisTri : {champ:'defaut', sens:'desc'};
   const regleD = TRIS_DEVIS[triD.champ];
-  const listeAffichee = (filtreDevis==='verifier' ? aVerifier : devisList)
+  const listeAffichee = FILTRES_DEVIS[filtreDevis]
     .filter(correspond)
     .slice()
     .map((dv, i) => ({dv, i}))
@@ -7288,9 +7361,11 @@ function renderRentDevis(){
   chercheDevis.addEventListener('input', () =>
     rentSetGardeFocus({rentDevisQuery:chercheDevis.value}, 'rent-devis-q'));
 
-  const barre = aVerifier.length ? h('div',{className:'rent-filtres',style:{marginBottom:'0'}},
+  const barre = (aVerifier.length || aTraiter.total) ? h('div',{className:'rent-filtres',style:{marginBottom:'0'}},
     ...[{key:'tous',label:'Tous',n:devisList.length},
-        {key:'verifier',label:'À vérifier',n:aVerifier.length}].map(f=>
+        {key:'verifier',label:'À vérifier',n:aVerifier.length},
+        {key:'a_traiter',label:'Sans dossier ou date future',n:aTraiter.total}]
+        .filter(f=>f.key==='tous' || f.n).map(f=>
       h('button',{type:'button',
         className:'rent-filtre'+(filtreDevis===f.key?' is-active':''),
         onClick:()=>set({rentDevisFiltre:f.key})},
@@ -7321,7 +7396,11 @@ function renderRentDevis(){
               h('td',null,
                 h('div',{className:'rent-devis-client'},
                   h('span',{className:'rent-devis-nom'}, dv.client||'(client non lu)'),
-                  doute?rentPastille('à vérifier','manque',dv.note||''):null),
+                  doute?rentPastille('à vérifier','manque',dv.note||''):null,
+                  aTraiter.idsFutur.has(Number(dv.id))
+                    ? rentPastille('date future','propose','Date du devis postérieure à aujourd\'hui — date mal lue ?') : null,
+                  (filtreDevis==='a_traiter' && aTraiter.idsSans.has(Number(dv.id)))
+                    ? rentPastille('sans dossier','attente','Rattaché à aucun dossier du planning') : null),
                 h('div',{className:'rent-fichier',title:dv.filename||''}, dv.filename||'')),
               h('td',null, dv.date_devis ? String(dv.date_devis).slice(0,10) : '—'),
               h('td',{className:'num'}, fmt(dv.qte_etiquettes)),
@@ -7356,13 +7435,15 @@ function renderRentDevis(){
           ? 'Aucun devis ne correspond à « ' + qDevis + ' ».'
           : (filtreDevis==='verifier'
               ? 'Aucun devis en attente de vérification.'
-              : 'Aucun devis importé. Dépose un fichier ci-dessus.'));
+              : (filtreDevis==='a_traiter'
+                  ? 'Tous les devis sont rattachés et datés correctement.'
+                  : 'Aucun devis importé. Dépose un fichier ci-dessus.')));
 
   return h('div',null, dz, dzInp,
     h('div',{className:'card'},
       h('div',{className:'card-header rent-devis-hdr'},
         h('h3',null,'Devis importés ('+listeAffichee.length
-          + (qDevis ? ' sur ' + (filtreDevis==='verifier' ? aVerifier : devisList).length : '')
+          + (qDevis ? ' sur ' + FILTRES_DEVIS[filtreDevis].length : '')
           + ')'),
         h('div',{className:'rent-devis-outils'},
           chercheDevis,
