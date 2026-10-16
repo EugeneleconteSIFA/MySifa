@@ -52,7 +52,14 @@
 
   /** Décalage minimum des FAB (footer fixe saisie prod, etc.) */
   function minFabBaseBottom() {
-    if (document.body.classList.contains('mysifa-app-fabrication')) return 88;
+    if (document.body.classList.contains('mysifa-app-fabrication')) {
+      // Au-dessus du pied de page de la saisie, à 12 px de son bord : sa
+      // hauteur dépend du dossier, 88 px fixes laissaient le dock recouvrir
+      // la saisie d'opération et les boutons Commenter / Note.
+      var f = document.querySelector('.fab-footer');
+      var h = f ? Math.round(f.getBoundingClientRect().height) : 0;
+      return Math.max(88, h - 12);
+    }
     return 0;
   }
 
