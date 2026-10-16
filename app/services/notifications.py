@@ -149,8 +149,10 @@ def _compter_departs_a_valider(conn):
 
 
 def devis_a_traiter(conn) -> dict:
-    """Devis qui demandent un geste : rattachés à aucun dossier, ou datés après
-    aujourd'hui (date mal lue, ou devis saisi d'avance).
+    """Les deux listes dont la notification « Devis à traiter » fait
+    l'intersection : devis rattachés à aucun dossier, et devis datés après
+    aujourd'hui. Un devis n'est « à traiter » que s'il est dans les DEUX
+    (décision d'Eugène du 16/10/2026 : l'un ou l'autre seul faisait 572).
 
     Partagé par le détecteur ci-dessous et par l'écran Rentabilité, pour que
     la pastille du portail et le bandeau du Pilotage disent le même nombre.
@@ -173,9 +175,9 @@ def devis_a_traiter(conn) -> dict:
 
 
 def _compter_devis_a_traiter(conn):
-    """Devis sans dossier ou datés dans le futur (un devis compté une fois)."""
+    """Devis sans dossier ET datés dans le futur."""
     d = devis_a_traiter(conn)
-    ids = sorted(set(d["sans_dossier"]) | set(d["date_future"]))
+    ids = sorted(set(d["sans_dossier"]) & set(d["date_future"]))
     if not ids:
         return 0, None
     emp = hashlib.sha1(",".join(map(str, ids)).encode()).hexdigest()[:16]
@@ -225,7 +227,7 @@ DETECTEURS: dict[str, Detecteur] = {d.code: d for d in (
         code="prod.devis_a_traiter",
         app="prod", app_label="MyProd",
         titre="Devis à traiter",
-        description="Devis rattachés à aucun dossier, ou dont la date est postérieure à aujourd'hui.",
+        description="Devis rattachés à aucun dossier ET dont la date est postérieure à aujourd'hui.",
         lien="/prod?page=rentabilite&sous=devis&filtre=a_traiter",
         compter=_compter_devis_a_traiter,
         roles_suggeres=(ROLE_SUPERADMIN,),
