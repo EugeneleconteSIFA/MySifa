@@ -13825,6 +13825,11 @@ function renderProdKpis(){
         }else if(S.page === 'rentabilite'){
           await loadDevis();
           await loadRentPlanning();
+          // Arrivée directe (rafraîchissement, lien, notification) : sans les
+          // liaisons, compteurs en « … » et frise toute blanche — comme si
+          // tout était détaché. Même séquence que la navigation (nav()).
+          await loadRentLinks();
+          rentRapprochementAuto();
         }else if(S.page === 'historique'){
           await loadHist();
         }else if(S.page === 'saisies'){
@@ -13932,6 +13937,11 @@ function renderProdKpis(){
         }else if(S.page === 'rentabilite'){
           await loadDevis();
           await loadRentPlanning();
+          // Arrivée directe (rafraîchissement, lien, notification) : sans les
+          // liaisons, compteurs en « … » et frise toute blanche — comme si
+          // tout était détaché. Même séquence que la navigation (nav()).
+          await loadRentLinks();
+          rentRapprochementAuto();
         }else if(S.page === 'historique'){
           await loadHist();
         }else if(S.page === 'saisies'){
