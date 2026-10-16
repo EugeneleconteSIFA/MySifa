@@ -148,6 +148,40 @@ def _compter_departs_a_valider(conn):
     return n, (f"{today}:{r['m']}" if n else None)
 
 
+def devis_a_traiter(conn) -> dict:
+    """Devis qui demandent un geste : rattachés à aucun dossier, ou datés après
+    aujourd'hui (date mal lue, ou devis saisi d'avance).
+
+    Partagé par le détecteur ci-dessous et par l'écran Rentabilité, pour que
+    la pastille du portail et le bandeau du Pilotage disent le même nombre.
+    """
+    if not {"devis", "rent_links"} <= _tables(conn):
+        return {"sans_dossier": [], "date_future": []}
+    today = datetime.now(_PARIS).date().isoformat()
+    sans = [int(r[0]) for r in conn.execute(
+        """SELECT d.id FROM devis d
+            WHERE NOT EXISTS (SELECT 1 FROM rent_links l WHERE l.devis_id = d.id)
+            ORDER BY d.id"""
+    ).fetchall()]
+    futurs = [int(r[0]) for r in conn.execute(
+        """SELECT id FROM devis
+            WHERE substr(COALESCE(date_devis, ''), 1, 10) > ?
+            ORDER BY id""",
+        (today,),
+    ).fetchall()]
+    return {"sans_dossier": sans, "date_future": futurs}
+
+
+def _compter_devis_a_traiter(conn):
+    """Devis sans dossier ou datés dans le futur (un devis compté une fois)."""
+    d = devis_a_traiter(conn)
+    ids = sorted(set(d["sans_dossier"]) | set(d["date_future"]))
+    if not ids:
+        return 0, None
+    emp = hashlib.sha1(",".join(map(str, ids)).encode()).hexdigest()[:16]
+    return len(ids), emp
+
+
 DETECTEURS: dict[str, Detecteur] = {d.code: d for d in (
     Detecteur(
         code="stock.receptions_rvgi",
@@ -175,6 +209,15 @@ DETECTEURS: dict[str, Detecteur] = {d.code: d for d in (
         lien="/stock?tab=destockage",
         compter=_compter_a_destocker,
         roles_suggeres=("administration_technique",),
+    ),
+    Detecteur(
+        code="prod.devis_a_traiter",
+        app="prod", app_label="MyProd",
+        titre="Devis à traiter",
+        description="Devis rattachés à aucun dossier, ou dont la date est postérieure à aujourd'hui.",
+        lien="/prod?page=rentabilite&devis=a_traiter",
+        compter=_compter_devis_a_traiter,
+        roles_suggeres=(ROLE_SUPERADMIN,),
     ),
     Detecteur(
         code="expe.departs_a_valider",

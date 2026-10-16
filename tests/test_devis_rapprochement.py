@@ -180,6 +180,25 @@ with get_db() as conn:
     check("devis rejeté jamais reproposé", liens.get(e1, {}).get("devis_id") != ids[0], True)
     check("liaison confirmée intacte", liens[e2]["valide_at"], "2026-10-15")
 
+print("\n8. Notification « Devis à traiter » (superadmin)")
+from app.services import notifications as notif          # noqa: E402
+
+with get_db() as conn:
+    futur = conn.execute(
+        "INSERT INTO devis (filename, client, date_devis, format_h, format_v, laize, imported_at) "
+        "VALUES ('x.xlsx','Futur','2099-01-01',10,10,100,'2026-10-16')").lastrowid
+    conn.commit()
+    d = notif.devis_a_traiter(conn)
+    check("devis rattaché : ni sans dossier ni futur", ids[0] in d["sans_dossier"], False)
+    check("devis jamais rattaché : sans dossier", ids[1] in d["sans_dossier"], True)
+    check("devis daté de 2099 : date future", futur in d["date_future"], True)
+    n, sig = notif._compter_devis_a_traiter(conn)
+    check("compté une seule fois même s'il coche les deux cas", n,
+          len(set(d["sans_dossier"]) | set(d["date_future"])))
+    regle = notif.regles(conn).get("prod.devis_a_traiter") or {}
+    check("règle seedée active pour le superadmin", (regle.get("actif"), regle.get("roles")),
+          (True, ["superadmin"]))
+
 print()
 if FAIL:
     print(f"ÉCHEC — {len(FAIL)} contrôle(s) en défaut")

@@ -952,6 +952,16 @@ def _of_timeline_fields(e: dict) -> Tuple[bool, Optional[float]]:
     return True, v
 
 
+def _entier_ou_none(v) -> Optional[int]:
+    """Un nombre affichable, ou None : zéro et les valeurs illisibles ne
+    s'affichent pas dans l'infobulle."""
+    try:
+        n = int(round(float(v)))
+    except (TypeError, ValueError):
+        return None
+    return n or None
+
+
 def _slot_payload(e: dict, start_iso: str, end_iso: str,
                   contrainte: Optional[dict] = None,
                   gel: Optional[dict] = None) -> dict:
@@ -1005,6 +1015,18 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str,
         "ft_palette_type": _normalize_palette_type(e.get("_ft_palette_type")),
         "ft_conditionnement_phrase": _build_conditionnement_phrase(e),
         "ft_mandrin_dia": (e.get("_ft_mandrin_dia") or "").strip() or None,
+        # Infobulle en quatre sections (16/10/2026) : ce que la fiche technique
+        # et l'OF disent du dossier, chacun dans sa section. Lus par la même
+        # jointure que le reste — aucune requête de plus par créneau.
+        "ft_nb_couleurs": _entier_ou_none(e.get("_ft_nb_couleurs")),
+        "ft_enroulement": (str(e.get("_ft_enroulement") or "")).strip() or None,
+        "ft_etiq_bobine": _entier_ou_none(e.get("_ft_nb_etiq_bobin")),
+        "of_numero": (str(e.get("_of_numero") or "")).strip() or None,
+        "of_metrage": _entier_ou_none(e.get("_of_metrage")),
+        "of_bobines": _entier_ou_none(e.get("_of_qte_bobines")),
+        "of_levees": _entier_ou_none(e.get("_of_nb_levees")),
+        "of_conditionnement": (str(e.get("_of_conditionnement") or "")).strip() or None,
+        "of_outil": (str(e.get("_of_outil") or "")).strip() or None,
         # Contrainte transport : absente sur la très grande majorité des
         # dossiers (aucun départ réservé de 6 palettes ou plus).
         "transport": _transport_payload(e, end_iso, contrainte),
@@ -1047,6 +1069,13 @@ _SQL_ENTRIES_ENRICHIES = """
             SELECT pe.*,
                    oi.qte_etiquettes  AS _of_qte_etiquettes,
                    oi.qte_bobines     AS _of_qte_bobines,
+                   oi.of_numero       AS _of_numero,
+                   oi.metrage         AS _of_metrage,
+                   oi.nb_levees       AS _of_nb_levees,
+                   oi.conditionnement AS _of_conditionnement,
+                   oi.outil_1_numero  AS _of_outil,
+                   ft.nb_couleurs                AS _ft_nb_couleurs,
+                   ft.enroulement                AS _ft_enroulement,
                    ft.nb_bobines_carton          AS _ft_nb_bobines_carton,
                    ft.palette_nb_cartons_sol     AS _ft_palette_nb_cartons_sol,
                    ft.palette_nb_cartons_hauteur AS _ft_palette_nb_cartons_hauteur,
