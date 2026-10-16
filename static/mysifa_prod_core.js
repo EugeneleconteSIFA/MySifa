@@ -190,6 +190,8 @@
 
     // Mappings OF en attente / dossiers sans OF (étape 2l)
     pendingOfCount: 0,
+    prodEcartsCount: 0,   // écarts de saisie à traiter (pastilles Production / Erreurs)
+    prodEcarts: null,
     pendingOfMappings: [],
     pendingOfAmbigus: [],
     pendingOfSansOf: [],
@@ -268,45 +270,329 @@
   function set(u){
     Object.assign(S, u);
     render();
-    if(u.page!==undefined||u.subPage!==undefined||u.ofSubTab!==undefined)_syncProdHash();
   }
 
+  // ── Adresse de la page (static/mysifa_url.js, .claude/rules/url-etat.md) ──
+  // L'adresse porte tout ce qu'on regarde : page, sous-onglet, filtres, tri,
+  // compte-rendu ou dossier ouvert. Elle se recalcule à chaque render() :
+  // aucun gestionnaire de clic n'a à y penser. Changer de page, de
+  // sous-onglet ou ouvrir un objet empile une entrée d'historique ; un
+  // filtre ou un tri la remplace.
   var _PROD_SUB_TABS=['kpis','saisies','erreurs','retour','reunions'];
-  var _OF_SUB_TABS=['of','fiche','pending','sansof'];
-  function _readProdHash(){
-    try{var h=(location.hash||'').replace(/^#/,'').trim();
-      if(!h)return null;
-      var r={};
-      if(_PROD_SUB_TABS.indexOf(h)!==-1)r.subPage=h;
-      else if(_OF_SUB_TABS.indexOf(h)!==-1)r.ofSubTab=h;
-      return (r.subPage||r.ofSubTab)?r:null;
-    }catch(e){return null;}
+  var _PROD_PAGES=['menu','production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of','scans','fiches'];
+  // Sous-onglets par page, le premier est le défaut (jamais écrit).
+  var _SOUS_PAR_PAGE={
+    production:_PROD_SUB_TABS,
+    of:['of','pending','sansof'],
+    fiches:['liste','orphelines'],
+    traceabilite:['dossiers','traceur'],
+    rentabilite:['dossiers','pilotage','devis'],
+    scans:['scannes','rattacher']
+  };
+  var _SOUS_CHAMP={production:'subPage',of:'ofSubTab',fiches:'fichesSubTab',traceabilite:'tracaSubTab',rentabilite:'rentSubTab',scans:'scansSous'};
+  // Anciennes adresses « #saisies », « #pending » : relues, puis réécrites.
+  var _HASH_HERITE={kpis:['production','kpis'],saisies:['production','saisies'],erreurs:['production','erreurs'],
+    retour:['production','retour'],reunions:['production','reunions'],
+    of:['of','of'],fiche:['of','of'],pending:['of','pending'],sansof:['of','sansof']};
+  var _PAGES_FILTRES=['production','historique','saisies'];
+  var _RE_CLE=/^[A-Za-z0-9_]{1,40}$/;
+
+  function _sousCourant(){
+    var champ=_SOUS_CHAMP[S.page];
+    var liste=_SOUS_PAR_PAGE[S.page];
+    if(!champ) return null;
+    var v=S[champ]||liste[0];
+    return v===liste[0]?null:v;
   }
-  // L'URL porte la page (?page=) ET le sous-onglet (#hash). Ne mettre à jour
-  // que le hash laissait « ?page=production#saisies » affiché sur la
-  // Traçabilité : un rafraîchissement ramenait aux Saisies.
-  function _syncProdHash(){
-    try{
-      var h='';
-      if(S.page==='production'&&S.subPage&&S.subPage!=='kpis')h=S.subPage;
-      else if(S.page==='of'&&S.ofSubTab&&S.ofSubTab!=='of')h=S.ofSubTab;
-      var sp=new URLSearchParams(location.search||'');
-      if(S.page)sp.set('page',S.page);else sp.delete('page');
-      var qs=sp.toString();
-      var target=location.pathname+(qs?'?'+qs:'')+(h?'#'+h:'');
-      if(target!==location.pathname+location.search+location.hash){
-        try{history.replaceState(null,'',target);}catch(e){}
+
+  function _prodParams(){
+    var p={};
+    if(S.page&&S.page!=='production') p.page=S.page;
+    var sous=_sousCourant();
+    if(sous) p.sous=sous;
+    var nav=(S.page||'production')+'/'+(sous||'');
+
+    if(_PAGES_FILTRES.indexOf(S.page)!==-1){
+      var fv=S.fv||{};
+      var pr=_datePresets().filter(function(x){return x.from===fv.date_from&&x.to===fv.date_to;})[0];
+      if(pr){ if(pr.key!=='yesterday') p.periode=pr.key; }
+      else if(fv.date_from||fv.date_to){ p.du=fv.date_from||''; p.au=fv.date_to||''; }
+      p.machine=(fv.machines||[]).slice();
+      p.operateur=(fv.operateurs||[]).slice();
+      p.dossier=(fv.dossiers||[]).slice();
+    }
+    var sousEff=S.page==='production'?(S.subPage||'kpis'):null;
+    if(S.page==='saisies'||sousEff==='saisies'){
+      var so=S.sortState||{};
+      if(so.col){ p.tri=so.col; if(so.asc===false) p.sens='desc'; }
+    }
+    if(sousEff==='erreurs'&&S.ecartsFiltre) p.ecart=String(S.ecartsFiltre).replace(/^prod\./,'');
+    if(sousEff==='retour'){
+      var rp=S.retourProd||{};
+      if(rp.vue==='liste') p.vue='liste';
+      if(rp.machine) p.retour_machine=rp.machine;
+      if(rp.dossier){ p.cr=rp.dossier; nav+='/cr:'+rp.dossier; }
+      nav+='/'+(rp.vue||'feuille');
+    }
+    if(sousEff==='reunions'){
+      // Module autonome (mysifa_reunions.js) : il dit ce qu'il montre. Tant
+      // qu'une demande de l'adresse attend son chargement, c'est elle qui vaut.
+      var re=S._reunionsUrl||(window.MySifaReunions&&MySifaReunions.etatAdresse?MySifaReunions.etatAdresse():{});
+      if(re.reunion){ p.reunion=re.reunion; nav+='/reunion'; }
+      if(re.resp) p.resp=re.resp;
+    }
+    if(S.page==='scans'&&S.scansSous==='rattacher'&&S.scansScan) p.scan=S.scansScan;
+    if(S.page==='traceabilite'&&(S.tracaSubTab||'dossiers')==='dossiers'){
+      var tf=S.tracFilters||{};
+      p.ref=tf.ref; p.client=tf.client; p.machine=tf.machine; p.statut=tf.statut;
+      var ts=S.tracSort||{};
+      if(ts.col){ p.tri=ts.col; if(ts.dir==='desc') p.sens='desc'; }
+      if(S.traceabiliteDossier!==undefined&&S.tracDossierRef){
+        p.dossier=S.tracDossierRef; nav+='/dossier:'+S.tracDossierRef;
       }
-    }catch(e){}
+    }
+    if(S.page==='rentabilite'){
+      var rs=S.rentSubTab||'dossiers';
+      if(rs==='dossiers'){
+        if(S.rentFiltre&&S.rentFiltre!=='a_lier') p.filtre=S.rentFiltre;
+        var rt=S.rentTri||{};
+        if(rt.champ&&!(rt.champ==='debut'&&rt.sens==='desc')){ p.tri=rt.champ; p.sens=rt.sens||'asc'; }
+        if(S.rentSelEntryId){ p.entree=S.rentSelEntryId; nav+='/entree:'+S.rentSelEntryId; }
+      }else if(rs==='pilotage'){
+        // Machine : seulement si choisie (le défaut est calculé, la machine
+        // qui a le plus à lier). Semaine : seulement si ce n'est pas l'actuelle.
+        if(S.rentPilotMachine) p.machine=S.rentPilotMachine;
+        if(S.rentPilotSemaines&&Number(S.rentPilotSemaines)!==2) p.semaines=S.rentPilotSemaines;
+        if(S.rentPilotLundi&&S.rentPilotLundi!==rentISOJour(rentLundiDe(new Date()))) p.semaine=S.rentPilotLundi;
+      }else if(rs==='devis'){
+        if(S.rentDevisFiltre&&S.rentDevisFiltre!=='tous') p.filtre=S.rentDevisFiltre;
+        var dt=S.rentDevisTri||{};
+        if(dt.champ&&!(dt.champ==='defaut'&&dt.sens==='desc')){ p.tri=dt.champ; p.sens=dt.sens||'asc'; }
+      }
+    }
+    // Fenêtres de détail posées par-dessus la page : un objet ouvert comme
+    // un autre, donc une entrée d'historique. La clé de navigation ne porte
+    // pas l'id : passer d'un devis au suivant (« Valider » enchaîne), ou
+    // d'une ligne de synthèse à l'autre avec les flèches, remplace l'entrée —
+    // cent devis relus ne font pas cent retours.
+    var mo=_prodModaleCourante();
+    if(mo){ p[mo.cle]=mo.id; nav+='/'+mo.cle; if(mo.extra) Object.assign(p,mo.extra); }
+    return {params:p, nav:nav};
   }
-  window.addEventListener('hashchange',function(){
-    try{var hv=_readProdHash();
-      if(hv){
-        if(hv.subPage&&S.page==='production'){S.subPage=hv.subPage;render();}
-        if(hv.ofSubTab&&S.page==='of'){S.ofSubTab=hv.ofSubTab;render();}
+
+  // Fenêtres de détail que l'adresse sait rouvrir. `ouvrir` est appelé une
+  // fois les données de la page chargées. OF et fiche technique vivent dans
+  // S ; devis et synthèse sont des fenêtres DOM qui se déclarent dans
+  // S.urlModale à l'ouverture et s'en retirent à la fermeture.
+  var _MODALES_URL={
+    rattachement:{page:'rentabilite',
+      ouvrir:async function(id){
+        if(!/^[0-9]+$/.test(id)) return;
+        if(!S.rentLinksCharges) await loadRentLinks();
+        ouvrirRattachementModal(Number(id));
+      },
+      fermer:function(){ fermerRattachementModal(true); }},
+    devis:{page:'rentabilite',
+      ouvrir:function(id){ if((S.devisList||[]).some(function(d){return String(d.id)===String(id);})) ouvrirDevisModal(Number(id)); },
+      fermer:function(){ fermerDevisModal(true); }},
+    synthese:{page:'production',
+      ouvrir:function(v){ var i=String(v).indexOf(':'); if(i>0) openProdSynthDetail(v.slice(0,i),[v.slice(i+1)],0); },
+      fermer:function(){ closeProdSynthModal(true); }},
+    // Mémoire produit (mysifa_produit_memoire.js) : surcouche ouverte depuis
+    // Scans d'OF, la liste des produits ou une saisie — donc sur toute page
+    // (page:null). L'onglet voyage dans produit_onglet.
+    produit:{page:null, extra:['produit_onglet'],
+      ouvrir:function(ref,u){ var M=window.MySifaProduitMemoire; if(M) M.openFiche(ref,{onglet:u.get('produit_onglet',null)}); },
+      fermer:function(){ _pmemFermer(); }},
+    historique:{page:null, extra:['produit_onglet'],
+      ouvrir:function(no,u){ var M=window.MySifaProduitMemoire; if(M) M.openHistorique(no,{onglet:u.get('produit_onglet',null)}); },
+      fermer:function(){ _pmemFermer(); }},
+    produits:{page:null,
+      ouvrir:function(){ var M=window.MySifaProduitMemoire; if(M) M.openListe(); },
+      fermer:function(){ _pmemFermer(); }},
+    of:{page:'of',
+      ouvrir:function(id){ if(/^[0-9]+$/.test(id)) openOfEditModal({id:Number(id)}); },
+      fermer:function(){ if(S.ofEditModal) closeOfEditModal(); }},
+    fiche:{page:'fiches',
+      ouvrir:function(id){ var f=(S.fiches||[]).filter(function(x){return String(x.id)===String(id);})[0]; if(f) openFicheEditModal(f); },
+      fermer:function(){ if(S.ficheEditModal) closeFicheEditModal(); }}
+  };
+  // Fermeture technique de la surcouche mémoire produit (Retour du
+  // navigateur) : son signal de fermeture ne doit pas toucher l'adresse.
+  var _pmemSilence=false;
+  function _pmemFermer(){
+    var M=window.MySifaProduitMemoire; if(!M) return;
+    _pmemSilence=true; try{ M.fermer(); }finally{ _pmemSilence=false; }
+  }
+  // Branché au premier prodSyncUrl : mysifa_produit_memoire.js est chargé
+  // APRÈS ce fichier, il n'existe pas encore quand celui-ci s'exécute.
+  var _pmemBranche=false;
+  function _pmemBrancher(){
+    if(_pmemBranche||!window.MySifaProduitMemoire||!MySifaProduitMemoire.surAdresse) return;
+    _pmemBranche=true;
+    MySifaProduitMemoire.surAdresse(function(e){
+      if(_pmemSilence) return;
+      var cles=['produit','historique','produits'];
+      if(e){
+        S.urlModale={cle:e.cle, id:e.id,
+          extra:(e.onglet&&e.onglet!=='series')?{produit_onglet:e.onglet}:null};
+      }else if(S.urlModale&&cles.indexOf(S.urlModale.cle)!==-1){
+        S.urlModale=null;
+      }else return;
+      prodSyncUrl();
+    });
+  }
+  function _prodModaleCourante(){
+    if(S.ofEditModal&&S.ofEditModal.id) return {cle:'of',id:S.ofEditModal.id};
+    if(S.ficheEditModal&&S.ficheEditModal.id) return {cle:'fiche',id:S.ficheEditModal.id};
+    var m=S.urlModale;
+    if(m&&m.cle&&m.id!=null&&m.id!=='') return m;
+    return null;
+  }
+  // Après chargement (démarrage, Retour/Suivant) : ferme ce que l'adresse ne
+  // demande plus, ouvre ce qu'elle demande.
+  function prodAppliquerModaleUrl(){
+    var voulue=S._modaleUrl||null; S._modaleUrl=null;
+    var cour=_prodModaleCourante();
+    if(cour&&(!voulue||voulue.cle!==cour.cle||String(voulue.id)!==String(cour.id))){
+      try{ _MODALES_URL[cour.cle].fermer(); }catch(e){}
+      S.urlModale=null;
+    }
+    cour=_prodModaleCourante();
+    if(voulue&&!cour){
+      try{ _MODALES_URL[voulue.cle].ouvrir(String(voulue.id), voulue.u||MySifaUrl.lire()); }catch(e){}
+    }
+  }
+
+  function prodSyncUrl(){
+    _pmemBrancher();
+    if(!window.MySifaUrl||!S.user||S.app==='login') return;
+    try{ var r=_prodParams(); MySifaUrl.ecrire(r.params,{navigation:r.nav}); }catch(e){}
+  }
+  // Ancien nom, encore appelé par le clic sur un sous-onglet.
+  var _syncProdHash=prodSyncUrl;
+
+  // Applique l'adresse à l'état. Rend vrai si la période ou les filtres ont
+  // changé (il faut alors recharger les chiffres, pas seulement la page).
+  // `complet` (retour arrière) : une clé absente remet le défaut. Au
+  // démarrage, elle laisse l'état tel quel — les filtres d'un indicateur
+  // d'accueil (bloc_…) y ont déjà été posés et retirés de l'adresse.
+  function prodLireUrl(complet){
+    if(!window.MySifaUrl) return false;
+    var u=MySifaUrl.lire();
+    var page=u.get('page','production',_PROD_PAGES);
+    var sous=u.get('sous',null);
+    var h=MySifaUrl.hashHerite();
+    if(!u.a('sous')&&h&&_HASH_HERITE[h]&&(!u.a('page')||u.get('page')===_HASH_HERITE[h][0])){
+      page=_HASH_HERITE[h][0]; sous=_HASH_HERITE[h][1];
+    }
+    S.page=page;
+    Object.keys(_SOUS_CHAMP).forEach(function(pg){
+      var liste=_SOUS_PAR_PAGE[pg];
+      S[_SOUS_CHAMP[pg]]=(pg===page&&sous&&liste.indexOf(sous)!==-1)?sous:liste[0];
+    });
+
+    var avant=JSON.stringify([S.fv.date_from,S.fv.date_to,S.fv.machines,S.fv.operateurs,S.fv.dossiers]);
+    // Ouverture depuis un indicateur : ses bloc_… font foi. L'adresse
+    // capturée porte aussi machine= / periode= du jour de la capture, que
+    // « Modifier l'indicateur » ne réécrit pas — les relire ici rendrait
+    // les anciens filtres.
+    var filtresBloc=!complet&&window.__mysifaFiltresLus;
+    if(_PAGES_FILTRES.indexOf(page)!==-1&&!filtresBloc){
+      var k=u.get('periode',null);
+      var pr=k?_datePresets().filter(function(x){return x.key===k;})[0]:null;
+      if(pr){ S.fv.date_from=pr.from; S.fv.date_to=pr.to; }
+      else if(u.get('du')){ S.fv.date_from=u.get('du'); S.fv.date_to=u.get('au')||u.get('du'); }
+      else if(complet){
+        var y=_datePresets().filter(function(x){return x.key==='yesterday';})[0];
+        S.fv.date_from=y.from; S.fv.date_to=y.to;
       }
-    }catch(e){}
-  });
+      if(complet||u.a('machine')) S.fv.machines=u.tous('machine');
+      if(complet||u.a('operateur')) S.fv.operateurs=u.tous('operateur');
+      if(complet||u.a('dossier')) S.fv.dossiers=u.tous('dossier');
+    }
+    var tri=u.get('tri',null), desc=u.get('sens',null)==='desc';
+    if(tri&&!_RE_CLE.test(tri)) tri=null;
+    if(page==='saisies'||(page==='production'&&S.subPage==='saisies')){
+      S.sortState=tri?{col:tri,asc:!desc}:{col:null,asc:true};
+    }
+    if(page==='production'&&S.subPage==='retour'){
+      S.retourProd=Object.assign({},S.retourProd||{},{
+        vue:u.get('vue','feuille',['feuille','liste']),
+        machine:u.get('retour_machine',''),
+        dossier:u.get('cr',null), cr:null
+      });
+    }
+    if(page==='production'&&S.subPage==='erreurs'){
+      var ec=u.get('ecart',null);
+      S.ecartsFiltre=(ec&&/^[a-z_]{1,40}$/.test(ec))?'prod.'+ec:'';
+    }
+    S._reunionsUrl=null;
+    if(page==='production'&&S.subPage==='reunions'){
+      var reu=u.get('reunion',null);
+      S._reunionsUrl={reunion:(reu&&/^[0-9]+$/.test(reu))?Number(reu):null, resp:u.get('resp','')};
+    }
+    if(page==='scans'){
+      var sc=u.get('scan',null);
+      S.scansScan=(sc&&/^[0-9]+$/.test(sc))?Number(sc):null;
+    }
+    if(page==='traceabilite'){
+      S.tracFilters={ref:u.get('ref',''),client:u.get('client',''),machine:u.get('machine',''),statut:u.get('statut','')};
+      S.tracSort=tri?{col:tri,dir:desc?'desc':'asc'}:{col:null,dir:'asc'};
+      // Fiche à ouvrir : chargée par nav() ou au démarrage (_tracDossierUrl).
+      S._tracDossierUrl=(S.tracaSubTab==='dossiers'&&u.get('dossier',null))||null;
+      if(!S._tracDossierUrl){ S.traceabiliteDossier=undefined; S.tracDossierRef=null; }
+    }
+    if(page==='rentabilite'){
+      if(S.rentSubTab==='pilotage'){
+        S.rentPilotMachine=u.get('machine',null);
+        S.rentPilotSemaines=Number(u.get('semaines','2',['1','2','4']));
+        var sem=u.get('semaine',null);
+        S.rentPilotLundi=(sem&&/^\d{4}-\d{2}-\d{2}$/.test(sem))?sem:null;
+      }else if(S.rentSubTab==='devis'){
+        S.rentDevisFiltre=u.get('filtre','tous');
+        S.rentDevisTri=tri?{champ:tri,sens:desc?'desc':'asc'}:{champ:'defaut',sens:'desc'};
+      }else{
+        S.rentFiltre=u.get('filtre','a_lier');
+        S.rentTri=tri?{champ:tri,sens:desc?'desc':'asc'}:{champ:'debut',sens:'desc'};
+        var ent=u.get('entree',null);
+        S.rentSelEntryId=ent?(isNaN(Number(ent))?ent:Number(ent)):null;
+      }
+    }
+    S._modaleUrl=null;
+    Object.keys(_MODALES_URL).forEach(function(cle){
+      var v=u.get(cle,null), pg=_MODALES_URL[cle].page;
+      if(v&&(pg===null||pg===page)&&v.length<=120) S._modaleUrl={cle:cle,id:v,u:u};
+    });
+    return avant!==JSON.stringify([S.fv.date_from,S.fv.date_to,S.fv.machines,S.fv.operateurs,S.fv.dossiers]);
+  }
+
+  // Retour / Suivant du navigateur : on réapplique l'adresse, on recharge
+  // ce que la page affiche, et les chiffres si les filtres diffèrent.
+  if(window.MySifaUrl){
+    // Fermer ou rouvrir une fenêtre de détail ne recharge pas la page : seul
+    // un changement d'endroit (page, sous-onglet, fiche, filtres) le fait.
+    var _sansModale=function(){
+      var p=Object.assign({},_prodParams().params);
+      Object.keys(_MODALES_URL).forEach(function(k){
+        var m=_MODALES_URL[k];
+        if(m.page===null||S.page===m.page){ delete p[k]; (m.extra||[]).forEach(function(x){ delete p[x]; }); }
+      });
+      return JSON.stringify(p);
+    };
+    MySifaUrl.surRetour(async function(){
+      if(!S.user||S.app==='login') return;
+      var avant=_sansModale();
+      var filtres=prodLireUrl(true);
+      if(_sansModale()!==avant||filtres){
+        if(S.page==='production'&&S.subPage==='kpis') startMachineStatusPolling();
+        else stopMachineStatusPolling();
+        await nav();
+        if(filtres) await applyF();
+      }else render();
+      prodAppliquerModaleUrl();
+    });
+  }
   function toast(m, t = 'success'){
     set({toast: {message: m, type: t}});
     setTimeout(() => set({toast: null}), 3500);
@@ -449,6 +735,7 @@
       'file': '<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>',
       'play': '<polygon points="5 3 19 12 5 21 5 3"/>',
       'check-circle': '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+      'check': '<polyline points="20 6 9 17 4 12"/>',
       'x': '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
       'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
       'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
@@ -2773,6 +3060,9 @@ async function loadTracabilite(machineId){
 }
 
 async function loadTracabiliteDossier(ref){
+  // La référence est gardée à part : pendant le chargement la fiche vaut
+  // null, et l'adresse (?dossier=) doit déjà la porter.
+  S.tracDossierRef = ref;
   S.traceabiliteDossier = null; render();
   try{
     // Charger les deux en parallèle : vue production + vue FSC
@@ -4864,6 +5154,8 @@ function renderComparaison(comp){
     ? ' (outil + impression)' : '';
   const ROWS=[
     {label:'Temps calage'+calageDetail, unit:'mn',  key:'temps_calage_mn', invert:true},
+    // Réel = compteur relevé en fin de calage ; « - » tant qu'il ne l'a pas été.
+    {label:'Gâche de calage'+calageDetail, unit:'ml', key:'metrage_calage_ml', invert:true},
     {label:'Temps production', unit:'mn',  key:'temps_production_mn', invert:true},
     {label:'Métrage',          unit:'ml',  key:'metrage_ml'},
     {label:'Qté étiquettes',   unit:'ex',  key:'qte_etiquettes'},
@@ -4989,7 +5281,7 @@ async function loadRentLinks(){
     d.forEach(l=>{ map[Number(l.planning_entry_id)] = {
       devis_id: l.devis_id||null, no_dossiers: l.no_dossiers||[],
       origine: l.origine||'manuel', valide_at: l.valide_at||null,
-      motif: l.motif||'', score: l.score||null,
+      motif: l.motif||'', score: l.score||null, valide_par: l.valide_par||null,
       // Les chiffres du devis rattaché, pour le survol d'un bloc. Repris tels
       // quels : ce sont ceux de la fiche devis, et les recalculer ici
       // produirait un troisième chiffre pour le même dossier.
@@ -5148,6 +5440,7 @@ function rentEtat(head, link){
     statut, termine: statut==='termine', aDevis, aProd,
     comparable: aDevis===true && aProd===true,
     aLier: statut==='termine' && aDevis===false,
+    aConfirmer: rentEtatLien(link)==='orange',
   };
 }
 
@@ -5498,6 +5791,14 @@ function rentEtatLien(link){
   return 'vert';
 }
 
+/* Le libellé d'un état, avec le cas du vert posé par le moteur : il doit se
+   distinguer d'un vert relu par quelqu'un. */
+function rentLibelleEtat(lien, etat){
+  if(etat === 'vert' && lien && lien.valide_par === 'auto:identique')
+    return 'Validé automatiquement — format, laize, client et matière identiques';
+  return RENT_ETAT_LIB[etat];
+}
+
 var RENT_ETAT_LIB = {
   rouge:   'Aucun devis rattaché',
   orange:  'Rattachement proposé — à confirmer',
@@ -5540,6 +5841,25 @@ async function rentLancerRapprochement(){
   }catch(e){ toast(e.message, 'error'); }
 }
 
+/* Le rattachement se fait sans qu'on le demande : à l'ouverture de l'onglet,
+   le moteur propose ce qu'il peut, et il ne reste qu'à confirmer ou corriger.
+   Silencieux s'il n'a rien de neuf ; jamais bloquant — l'écran est déjà
+   affiché quand il répond. */
+async function rentRapprochementAuto(){
+  if(S.rentAutoEnCours) return;
+  S.rentAutoEnCours = true;
+  try{
+    const r = await api('/api/rentabilite/rapprochement', {method:'POST'});
+    if(r && (r.nouvelles || r.retirees || r.validees)) await loadRentLinks();
+    const aConfirmer = r ? Math.max(0, (r.nouvelles || 0) - (r.validees || 0)) : 0;
+    const morceaux = [];
+    if(r && r.validees) morceaux.push(r.validees + ' validé' + (r.validees > 1 ? 's' : ''));
+    if(aConfirmer) morceaux.push(aConfirmer + ' à confirmer');
+    if(morceaux.length) toast('Devis rattachés automatiquement : ' + morceaux.join(', ') + '.');
+  }catch(_){ /* le bouton reste là pour relancer à la main */ }
+  finally{ S.rentAutoEnCours = false; }
+}
+
 async function rentValiderLien(entryId){
   await api('/api/rentabilite/links/' + entryId + '/valider', {method:'POST'});
   await loadRentLinks();
@@ -5552,9 +5872,165 @@ async function rentRejeterLien(entryId){
   toast('Rattachement retiré.');
 }
 
+/* Choisir le devis d'un dossier. Remplace le menu déroulant de sept cents
+   devis, qu'on ne pouvait que faire défiler.
+
+   Le champ vide montre ce que le moteur juge le plus plausible — format,
+   laize, client, papier, colle, date — avec son motif. Taper filtre TOUS les
+   devis (client, nom du fichier, date), toujours rangés par concordance avec
+   le dossier : « roquette » sort d'abord les devis Roquette au bon format.
+   Flèches, Entrée et Échap au clavier ; la liste est la seule chose
+   reconstruite, jamais le champ (il garderait sinon le focus perdu).
+
+   `o` : {entryId, devisId, onChange(devisId|null), placeholder} */
+function rentSelecteurDevis(o){
+  const devisList = S.devisList || [];
+  let courant = o.devisId ? Number(o.devisId) : null;
+  let items = [], actif = -1, jeton = 0, minuteur = null;
+
+  const resume = h('div',{className:'rent-choix-courant'});
+  const champ = h('input',{type:'text', className:'rent-input rent-choix-champ',
+    autocomplete:'off', role:'combobox', 'aria-expanded':'false',
+    placeholder: o.placeholder || 'Rechercher un devis (client, format, papier, date…)'});
+  const liste = h('div',{className:'rent-choix-liste', role:'listbox'});
+  liste.hidden = true;
+  const racine = h('div',{className:'rent-choix'}, resume,
+    h('div',{className:'rent-choix-saisie'}, iconEl('search',14), champ), liste);
+
+  /* Une ligne, quatre repères : ce qui permet de reconnaître un devis d'un
+     coup d'œil. Le nom de fichier et le détail du score restent au survol —
+     affichés, ils noyaient la liste (retour du 15/10/2026). */
+  const fmtQte = n => Number(n).toLocaleString('fr-FR');
+  const fmtJour = d => { const t = String(d || '').slice(0,10).split('-');
+    return t.length === 3 ? t[2] + '/' + t[1] + '/' + t[0] : ''; };
+  const details = s => [
+    (s.format_h && s.format_v) ? (s.format_v + '×' + s.format_h + ' mm') : null,
+    s.papier || null,
+    s.qte_etiquettes ? fmtQte(s.qte_etiquettes) + ' ex' : null,
+    s.date_devis ? fmtJour(s.date_devis) : null,
+  ].filter(Boolean).join(' · ');
+
+  const peindreResume = () => {
+    resume.innerHTML = '';
+    if(!courant){
+      resume.append(h('span',{className:'rent-choix-vide'},'Aucun devis lié'));
+      return;
+    }
+    const dv = devisList.find(d => Number(d.id) === courant) || {id:courant};
+    resume.append(
+      h('div',{className:'rent-choix-resume', title:dv.filename || ''},
+        h('div',{className:'rent-choix-client'}, dv.client || ('Devis #' + courant)),
+        h('div',{className:'rent-choix-details'}, details(dv))),
+      h('button',{type:'button', className:'btn-sec rent-choix-voir', title:'Ouvrir la fiche du devis',
+        onClick:()=>ouvrirDevisModal(courant)}, 'Voir'),
+      h('button',{type:'button', className:'btn-sec', title:'Ne lier aucun devis',
+        onClick:()=>choisir(null)}, 'Retirer'));
+  };
+
+  const fermer = () => {
+    liste.hidden = true; actif = -1;
+    champ.setAttribute('aria-expanded','false');
+  };
+
+  const peindreListe = (titre) => {
+    liste.innerHTML = '';
+    if(!items.length){
+      const q = champ.value.trim();
+      liste.append(h('div',{className:'rent-choix-rien'},
+        q ? 'Aucun résultat pour « ' + q + ' »' : 'Aucun devis au format de ce dossier. Tape un client ou un nom de fichier.'));
+    }else{
+      if(titre) liste.append(h('div',{className:'rent-choix-titre'}, titre));
+      items.forEach((s, i) => {
+        const score = Math.round(Number(s.score) || 0);
+        const ton = s.contradiction ? 'is-contraire' : (score >= 58 ? 'is-fort' : (score > 0 ? 'is-moyen' : 'is-nul'));
+        liste.append(h('div',{
+            className:'rent-choix-item' + (i === actif ? ' is-actif' : '')
+              + (Number(s.devis_id) === courant ? ' is-lie' : '') + (s.rejete ? ' is-rejete' : ''),
+            role:'option',
+            // mousedown, pas click : le champ perdrait le focus avant le clic
+            // et refermerait la liste sous le pointeur.
+            onMousedown:e => { e.preventDefault(); choisir(Number(s.devis_id)); },
+            onMouseenter:() => { actif = i; marquerActif(); }},
+          h('div',{className:'rent-choix-tete'},
+            h('span',{className:'rent-choix-client'}, s.client || '(client non lu)'),
+            Number(s.devis_id) === courant ? h('span',{className:'rent-sug-lie'},'lié') : null,
+            s.rejete ? h('span',{className:'rent-choix-rejete'},'rejeté') : null,
+            h('span',{className:'rent-choix-score ' + ton,
+              title: s.motif ? 'Concordance : ' + s.motif : 'Aucun critère en commun avec le dossier'},
+              score ? score + ' %' : '—')),
+          h('div',{className:'rent-choix-details', title:s.filename || ''}, details(s))));
+      });
+    }
+    liste.hidden = false;
+    champ.setAttribute('aria-expanded','true');
+  };
+
+  const marquerActif = () => {
+    [...liste.querySelectorAll('.rent-choix-item')].forEach((el, i) => {
+      el.classList.toggle('is-actif', i === actif);
+      if(i === actif) el.scrollIntoView({block:'nearest'});
+    });
+  };
+
+  const charger = async () => {
+    const q = champ.value.trim();
+    const t = ++jeton;
+    let r = [];
+    try{
+      r = await api('/api/rentabilite/planning/' + o.entryId + '/devis-suggeres?limit='
+        + (q ? 30 : 5) + (q ? '&q=' + encodeURIComponent(q) : ''));
+    }catch(_){ r = []; }
+    if(t !== jeton || document.activeElement !== champ) return;
+    items = Array.isArray(r) ? r : [];
+    actif = items.length ? 0 : -1;
+    peindreListe(q ? null : 'Les plus plausibles pour ce dossier');
+  };
+
+  const choisir = (id) => {
+    courant = id ? Number(id) : null;
+    champ.value = '';
+    fermer(); champ.blur();
+    peindreResume();
+    if(o.onChange) o.onChange(courant);
+  };
+
+  champ.addEventListener('focus', charger);
+  champ.addEventListener('input', () => {
+    clearTimeout(minuteur);
+    minuteur = setTimeout(charger, 180);
+  });
+  champ.addEventListener('blur', () => setTimeout(fermer, 120));
+  champ.addEventListener('keydown', e => {
+    if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault();
+      if(liste.hidden){ charger(); return; }
+      if(!items.length) return;
+      actif = (actif + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      marquerActif();
+    }else if(e.key === 'Enter'){
+      e.preventDefault();
+      if(!liste.hidden && items[actif]) choisir(Number(items[actif].devis_id));
+    }else if(e.key === 'Escape'){
+      e.stopPropagation();
+      if(champ.value){ champ.value = ''; charger(); }
+      else { fermer(); champ.blur(); }
+    }
+  });
+
+  peindreResume();
+  racine.valeur = () => courant;
+  return racine;
+}
+
 // ── Fenêtre de rattachement ──────────────────────────────────────
-function fermerRattachementModal(){
-  document.getElementById('rent-lier-modal')?.remove();
+// `sansAdresse` : fermeture technique (relance, réouverture, Retour du
+// navigateur, passage à la fiche complète) — voir url-etat.md.
+function fermerRattachementModal(sansAdresse){
+  const el=document.getElementById('rent-lier-modal');
+  if(el) el.remove();
+  if(!sansAdresse && el && S.urlModale && S.urlModale.cle==='rattachement'){
+    S.urlModale=null; prodSyncUrl();
+  }
 }
 
 /* Cliquer un bloc ouvre CE dossier, pas la liste filtrée sur lui. Le geste
@@ -5563,13 +6039,14 @@ function fermerRattachementModal(){
    une mise à jour partielle — `render()` ne la connaît pas, elle vit dans
    `document.body` pour survivre au rafraîchissement de `#root`. */
 async function ouvrirRattachementModal(entryId){
-  fermerRattachementModal();
+  fermerRattachementModal(true);
   const entree = (S.rentList || []).find(e => Number(e.id) === Number(entryId));
   if(!entree){ toast('Dossier introuvable.', 'error'); return; }
+  S.urlModale={cle:'rattachement', id:entree.id}; prodSyncUrl();
   const lien = (S.rentLinksById || {})[Number(entryId)] || {devis_id:null, no_dossiers:[]};
   const etat = rentEtatLien(lien);
 
-  const overlay = h('div',{id:'rent-lier-modal',className:'contact-modal-overlay'});
+  const overlay = h('div',{id:'rent-lier-modal',className:'contact-modal-overlay','data-entree':String(entree.id)});
   overlay.addEventListener('click', e => { if(e.target === overlay) fermerRattachementModal(); });
   const surTouche = e => {
     if(e.key === 'Escape'){ fermerRattachementModal(); document.removeEventListener('keydown', surTouche); }
@@ -5579,32 +6056,11 @@ async function ouvrirRattachementModal(entryId){
   const corps = h('div',{className:'contact-modal-body'},
     h('div',{className:'rent-lier-attente'}, 'Recherche des devis plausibles…'));
 
-  const relancer = async () => { fermerRattachementModal(); await ouvrirRattachementModal(entryId); };
+  const relancer = async () => { fermerRattachementModal(true); await ouvrirRattachementModal(entryId); };
 
-  const boite = h('div',{className:'contact-modal rent-lier-modal'},
-    h('div',{className:'contact-modal-head'},
-      h('div',null,
-        h('h3',{style:{margin:'0 0 3px'}}, entree.client || '(client non renseigné)'),
-        h('div',{style:{fontSize:'11px',color:'var(--muted)'}},
-          [entree.reference, entree.machine_nom, rentFmtFormat(entree) + ' mm']
-            .filter(Boolean).join(' · '))
-      ),
-      h('button',{className:'contact-close-btn',title:'Fermer',onClick:fermerRattachementModal},'✕')
-    ),
-    h('div',{className:'rent-lier-etat rent-lier-etat-' + etat},
-      h('span',{className:'rent-point rent-point-' + etat}),
-      h('span',null, RENT_ETAT_LIB[etat]),
-      (etat === 'orange' && lien.motif)
-        ? h('span',{className:'rent-lier-motif'}, ' — ' + lien.motif) : null
-    ),
-    corps
-  );
-  boite.addEventListener('click', e => e.stopPropagation());
-  overlay.appendChild(boite);
-  document.body.appendChild(overlay);
-
-  // Une proposition se juge sur son motif : la confirmer sans l'avoir lu
-  // reviendrait à valider le moteur, pas le rattachement.
+  /* L'état et ce qu'on peut en faire tiennent sur UNE bande : Confirmer et
+     Rejeter à droite du libellé. Posés dessous, ils collaient au bandeau et
+     se lisaient comme une seconde rangée sans rapport (retour du 15/10/2026). */
   const actionsHaut = [];
   if(etat === 'orange'){
     actionsHaut.push(h('button',{type:'button',className:'btn-sm',onClick:async()=>{
@@ -5618,79 +6074,52 @@ async function ouvrirRattachementModal(entryId){
       await rentRejeterLien(entryId); await relancer();
     }}, 'Détacher'));
   }
+  const bandeau = h('div',{className:'rent-lier-etat rent-lier-etat-' + etat, title:lien.motif || ''},
+    h('span',{className:'rent-point rent-point-' + etat}),
+    h('span',{className:'rent-lier-etat-lib'}, rentLibelleEtat(lien, etat)),
+    actionsHaut.length ? h('div',{className:'rent-lier-actions'}, ...actionsHaut) : null);
 
-  let suggestions = [];
-  try{
-    suggestions = await api('/api/rentabilite/planning/' + entryId + '/devis-suggeres');
-  }catch(_){ suggestions = []; }
+  const boite = h('div',{className:'contact-modal rent-lier-modal'},
+    h('div',{className:'contact-modal-head'},
+      h('div',null,
+        h('h3',{style:{margin:'0 0 3px'}}, entree.client || '(client non renseigné)'),
+        h('div',{style:{fontSize:'11px',color:'var(--muted)'}},
+          [entree.reference, entree.machine_nom, rentFmtFormat(entree) + ' mm']
+            .filter(Boolean).join(' · '))
+      ),
+      h('button',{className:'contact-close-btn',title:'Fermer',onClick:()=>fermerRattachementModal()},'✕')
+    ),
+    bandeau,
+    corps
+  );
+  boite.addEventListener('click', e => e.stopPropagation());
+  overlay.appendChild(boite);
+  document.body.appendChild(overlay);
+
   if(!document.getElementById('rent-lier-modal')) return; // fermée entre-temps
-
-  const devisList = S.devisList || [];
-  const libelleDevis = dv => (dv.client || dv.filename || ('Devis #' + dv.id))
-    + (dv.qte_etiquettes ? (' — ' + Number(dv.qte_etiquettes).toLocaleString('fr-FR') + ' ex') : '')
-    + (dv.vitesse_theorique ? (' — ' + dv.vitesse_theorique + ' m/mn') : '');
 
   const choisir = async (devisId) => {
     await rentSaveLinks(entryId, devisId, (lien.no_dossiers || []));
     await relancer();
   };
 
-  /* Les suggestions d'abord, la liste complète ensuite. Le moteur ne tranche
-     que quand il est sûr — et il l'est rarement, parce qu'un même produit est
-     refabriqué des dizaines de fois pour le même client. Ce qu'il sait faire,
-     c'est remonter les bons candidats en tête. Sans cette liste, l'ambiguïté
-     renverrait l'utilisateur à un menu déroulant de plusieurs centaines de
-     devis, et le rattachement ne se ferait pas. */
-  const blocSug = suggestions.length
-    ? h('div',null,
-        h('div',{className:'form-section-title'},'Devis plausibles'),
-        h('div',{className:'rent-sug-liste'},
-          ...suggestions.map(s => h('button',{type:'button',className:'rent-sug'
-              + (Number(lien.devis_id) === Number(s.devis_id) ? ' is-lie' : ''),
-              onClick:()=>choisir(s.devis_id)},
-            h('div',{className:'rent-sug-tete'},
-              h('span',{className:'rent-sug-nom'}, s.client || s.filename || ('Devis #' + s.devis_id)),
-              (Number(lien.devis_id) === Number(s.devis_id))
-                ? h('span',{className:'rent-sug-lie'},'rattaché') : null,
-              h('span',{className:'rent-sug-score',
-                title:'Concordance calculée : format, laize, client, date'},
-                Math.round(s.score) + ' %')
-            ),
-            h('div',{className:'rent-sug-motif'}, s.motif || '—'),
-            (s.qte_etiquettes || s.vitesse_theorique)
-              ? h('div',{className:'rent-sug-chiffres'},
-                  [s.qte_etiquettes ? Number(s.qte_etiquettes).toLocaleString('fr-FR') + ' ex' : null,
-                   s.vitesse_theorique ? s.vitesse_theorique + ' m/mn' : null]
-                    .filter(Boolean).join(' · '))
-              : null
-          ))
-        ))
-    : h('div',{className:'card-empty',style:{padding:'14px'}},
-        devisList.length
-          ? 'Aucun devis ne correspond au format de ce dossier.'
-          : 'Aucun devis importé pour l\'instant.');
-
-  const selecteur = h('select',{className:'form-sel',style:{width:'100%'}},
-    h('option',{value:''},'— choisir dans tous les devis —'),
-    ...devisList.map(dv => h('option',{value:String(dv.id),
-      selected:!!(lien.devis_id && Number(lien.devis_id) === Number(dv.id))}, libelleDevis(dv)))
-  );
-  selecteur.addEventListener('change', () => {
-    if(selecteur.value) choisir(Number(selecteur.value));
-  });
+  /* Un seul champ : vide, il montre les candidats du moteur avec leur motif ;
+     tapé, il cherche dans tous les devis, toujours rangés par concordance. */
+  const selecteur = rentSelecteurDevis({entryId, devisId:lien.devis_id, onChange:choisir});
 
   corps.innerHTML = '';
-  if(actionsHaut.length) corps.appendChild(h('div',{className:'rent-lier-actions'}, ...actionsHaut));
-  corps.appendChild(blocSug);
-  corps.appendChild(h('div',{style:{marginTop:'16px'}},
-    h('div',{className:'form-section-title'},'Tous les devis'),
-    selecteur));
+  corps.appendChild(h('div',{className:'form-section-title'},'Devis'));
+  corps.appendChild(selecteur);
+  if(etat !== 'vert') requestAnimationFrame(() => selecteur.querySelector('input')?.focus());
   corps.appendChild(h('div',{className:'rent-lier-pied'},
     h('button',{type:'button',className:'btn-sec',onClick:()=>{
-      fermerRattachementModal();
+      // On quitte la fenêtre POUR un autre endroit : pas de recul, sinon le
+      // retour arrière ramènerait au Pilotage par-dessus ce set().
+      fermerRattachementModal(true);
+      S.urlModale=null;
       set({rentSubTab:'dossiers', rentSelEntryId:entree.id, rentFiltre:'tous'});
     }},'Ouvrir la fiche complète', iconEl('chevron-right',13)),
-    h('button',{type:'button',className:'btn-sec',onClick:fermerRattachementModal},'Fermer')
+    h('button',{type:'button',className:'btn-sec',onClick:()=>fermerRattachementModal()},'Fermer')
   ));
 }
 
@@ -5767,10 +6196,11 @@ function renderRentPilotage(){
 
   const btnMoteur = h('button',{type:'button',className:'btn-sm',
     disabled:!charges || !(S.devisList || []).length,
-    title:'Cherche, pour chaque dossier sans devis, un devis dont le format, la '
-        + 'laize, le client et la date concordent. Ne propose que les cas nets.',
+    title:'Le rattachement tourne tout seul à l\'ouverture de l\'onglet. Relancer '
+        + 'après un import : format, laize, client, papier, colle et date doivent '
+        + 'concorder, seuls les cas nets sont proposés.',
     onClick:rentLancerRapprochement},
-    iconEl('shield-check',13), ' Proposer les rattachements');
+    iconEl('shield-check',13), ' Relancer le rattachement');
 
   /* Recherche, comme dans le planning : on n'enlève rien de la timeline, on
      éteint ce qui ne correspond pas. Masquer les autres blocs ferait perdre le
@@ -6072,6 +6502,8 @@ function renderRentDossiers(){
   const FILTRES = [
     {key:'a_lier',      label:'À lier',      test:e=>e.aLier,
      aide:'Dossiers terminés sans devis lié'},
+    {key:'a_confirmer', label:'À confirmer', test:e=>e.aConfirmer,
+     aide:'Devis rattaché automatiquement — à confirmer ou corriger'},
     {key:'comparables', label:'Comparables', test:e=>e.comparable,
      aide:'Devis et production liés — l\'écart est calculable'},
     {key:'tous',        label:'Tous',        test:()=>true, aide:'Tout le planning'},
@@ -6220,6 +6652,28 @@ function renderRentDossiers(){
     const entryId=Number(head.id);
     const ouvert = String(S.rentSelEntryId||'')===String(head.id);
     const etat = rentEtat(head, liens[entryId]);
+    const lienLigne = liens[entryId];
+    const couleur = rentEtatLien(charges ? (lienLigne || {devis_id:null}) : null);
+
+    /* Le devis se voit et se rattache depuis la ligne (retour du 15/10/2026) :
+       la pastille porte la couleur de l'état et ouvre la fenêtre de
+       rattachement sans déplier le panneau. Une proposition se confirme d'un
+       clic sur la coche, sans ouvrir quoi que ce soit. */
+    const nomDevis = (lienLigne && lienLigne.devis && lienLigne.devis.client) || 'Devis lié';
+    const pastilleDevis = couleur === 'inconnu' ? null : h('div',{className:'rent-devis-cell'},
+      h('button',{type:'button', className:'rent-devis-chip is-' + couleur,
+          title: couleur === 'rouge' ? 'Rattacher un devis'
+               : (couleur === 'orange' ? 'Proposé — à confirmer' + (lienLigne.motif ? ' · ' + lienLigne.motif : '')
+                                       : rentLibelleEtat(lienLigne, 'vert')),
+          onClick:e => { e.stopPropagation(); ouvrirRattachementModal(entryId); }},
+        couleur === 'rouge' ? iconEl('plus',12) : h('span',{className:'rent-point rent-point-' + couleur}),
+        h('span',{className:'rent-devis-chip-nom'}, couleur === 'rouge' ? 'Lier un devis' : nomDevis)),
+      couleur === 'orange'
+        ? h('button',{type:'button', className:'rent-devis-ok', title:'Confirmer ce rattachement',
+            'aria-label':'Confirmer ce rattachement',
+            onClick:async e => { e.stopPropagation(); await rentValiderLien(entryId); }},
+            iconEl('check',14))
+        : null);
 
     /* Le client et le format d'abord : c'est par là qu'on reconnaît un
        dossier. La référence dessous, sur sa propre ligne — c'est ce qu'on
@@ -6251,23 +6705,19 @@ function renderRentDossiers(){
         etat.termine?'Terminé':(etat.statut==='en_cours'?'En cours':'En attente'),
         etat.termine?'ok':'attente'));
     }
-    if(etat.termine || etat.aDevis===true){
-      if(etat.aDevis===null) etats.push(rentPastille('Devis …','attente'));
-      else if(etat.aDevis) etats.push(rentPastille('Devis','ok','Un devis est lié'));
-      else if(!dansFileALier) etats.push(rentPastille('Devis','manque','Dossier terminé sans devis lié'));
-    }
+    // Le devis a sa propre pastille, cliquable (`pastilleDevis`).
     if(etat.termine || etat.aProd===true){
       if(etat.aProd===null) etats.push(rentPastille('Prod …','attente'));
       else if(etat.aProd) etats.push(rentPastille('Prod','ok','Des dossiers de production sont liés'));
       else if(!dansFileALier) etats.push(rentPastille('Prod','manque','Aucun dossier de production lié'));
     }
-    const pastilles = h('div',{className:'rent-etats'}, ...etats);
+    const pastilles = h('div',{className:'rent-etats'}, pastilleDevis, ...etats);
 
     const cellule = (cls, txt, titreAttr) => h('div',
       {className:'rd-cell'+(cls?' '+cls:''), title: titreAttr || ''},
       txt || '—');
 
-    const ligne = h('div',{className:'rent-ligne'+(ouvert?' is-open':''),
+    const ligne = h('div',{className:'rent-ligne rent-ligne-'+couleur+(ouvert?' is-open':''),
       onClick:async()=>{
         const suivant = ouvert ? null : head.id;
         set({rentSelEntryId:suivant});
@@ -6365,22 +6815,12 @@ function renderRentDossiers(){
 function renderRentPanneau(g, listeVisible){
   const head=g.head;
   const entryId=Number(head.id);
-  const devisList=S.devisList||[];
   const lien=(S.rentLinksById||{})[entryId]||{devis_id:null,no_dossiers:[]};
   let curDossiers=(lien.no_dossiers||[]).slice();
 
-  const devisSel=h('select',{className:'form-sel',style:{minWidth:'260px',flex:'1'}},
-    h('option',{value:''},'Aucun devis lié'),
-    ...devisList.map(dv=>{
-      const lbl=(dv.client||dv.filename||('Devis #'+dv.id))
-        +(dv.qte_etiquettes?(' — '+Number(dv.qte_etiquettes).toLocaleString('fr-FR')+' ex'):'')
-        +(dv.vitesse_theorique?(' — '+dv.vitesse_theorique+' m/mn'):'');
-      // L'attribut, pas seulement la propriété : la sélection doit survivre à
-      // l'insertion des options dans le <select> et rester lisible dans le DOM.
-      return h('option',{value:String(dv.id),
-        selected:!!(lien.devis_id && Number(lien.devis_id)===Number(dv.id))}, lbl);
-    })
-  );
+  // Le choix n'est enregistré qu'au clic sur « Enregistrer », avec les
+  // dossiers de production : on peut corriger les deux avant de valider.
+  const devisSel=rentSelecteurDevis({entryId, devisId:lien.devis_id});
 
   const dosInput=h('input',{type:'text',className:'rent-input',
     placeholder:'N° dossier production (ex : 1003/0002)…',
@@ -6446,7 +6886,7 @@ function renderRentPanneau(g, listeVisible){
   const suivant = indexCourant>=0 ? listeVisible[indexCourant+1] : null;
 
   const enregistrer=async(puisSuivant)=>{
-    const did = devisSel.value ? Number(devisSel.value) : null;
+    const did = devisSel.valeur();
     await rentSaveLinks(entryId, did, curDossiers);
     if(puisSuivant && suivant){
       // La pagination se recale au rendu, sur la liste à jour.
@@ -6487,11 +6927,28 @@ function renderRentPanneau(g, listeVisible){
     : h('div',{className:'card-empty',style:{padding:'18px'}},
         'Lie un devis et des dossiers de production, puis clique sur « Comparer ».');
 
+  /* Proposition du moteur : on la lit, on la confirme ou on la rejette sans
+     quitter la ligne. Rejeter la retire ET l'interdit pour ce dossier — le
+     moteur tourne tout seul, il la reproposerait sinon. */
+  const bandeauProposition = rentEtatLien(lien)==='orange'
+    ? h('div',{className:'rent-lier-etat rent-lier-etat-orange rent-panneau-prop'},
+        h('span',{className:'rent-point rent-point-orange'}),
+        h('span',{title:lien.motif||''},'Rattachement proposé — à confirmer'),
+        h('span',{style:{flex:'1'}}),
+        h('button',{type:'button',className:'btn-sm',onClick:async e=>{
+          e.stopPropagation(); await rentValiderLien(entryId);
+        }}, iconEl('check-circle',13),' Confirmer'),
+        h('button',{type:'button',className:'btn-danger',onClick:async e=>{
+          e.stopPropagation(); await rentRejeterLien(entryId);
+        }},'Rejeter'))
+    : null;
+
   return h('div',{className:'rent-panneau'},
+    bandeauProposition,
     h('div',{className:'rent-panneau-grille'},
       h('div',null,
         h('div',{className:'form-section-title'},'Devis'),
-        h('div',{style:{display:'flex',gap:'10px',flexWrap:'wrap'}}, devisSel),
+        devisSel,
         dz, dzInp
       ),
       h('div',null,
@@ -6557,11 +7014,11 @@ function renderChampDevis(cle, m){
   if(m && m.origine==='repli') meta.push(h('span',{className:'devis-conf devis-conf-moyenne'},'déduit'));
 
   return h('div',{className:'rent-champ'+(m&&m.confiance&&m.confiance!=='haute'?' is-doute':'')},
-    h('div',{className:'rent-champ-lbl'}, (m&&m.libelle)||cle),
+    h('div',{className:'rent-champ-lbl',title:(m&&m.libelle)||cle}, (m&&m.libelle)||cle),
     h('div',{className:'rent-champ-val'}, valeur,
       (m&&m.unite)?h('span',{className:'rent-champ-unite'},' '+m.unite):null),
     meta.length?h('div',{className:'devis-meta'},...meta):null,
-    (m&&m.commentaire)?h('div',{className:'rent-champ-note'}, m.commentaire):null
+    (m&&m.commentaire)?h('div',{className:'rent-champ-note',title:m.commentaire}, m.commentaire):null
   );
 }
 
@@ -6605,14 +7062,25 @@ function ouvrirCorrectionDevis(dv){
    Elle est posée dans `document.body`, pas dans `#root` : `render()` vide
    `#root` à chaque changement d'état, et une modale rendue dedans
    disparaîtrait au premier rafraîchissement. */
-function fermerDevisModal(){
-  document.getElementById('devis-detail-modal')?.remove();
+// `sansAdresse` : fermeture technique (réouverture, Retour du navigateur) —
+// l'adresse est déjà ou sera tenue par l'appelant.
+function fermerDevisModal(sansAdresse){
+  const el=document.getElementById('devis-detail-modal');
+  if(el) el.remove();
+  if(!sansAdresse && el && S.urlModale && S.urlModale.cle==='devis'){
+    // Ouvert par « Voir » depuis la fenêtre de rattachement : celle-ci est
+    // toujours là-dessous, l'adresse revient à elle.
+    const lier=document.getElementById('rent-lier-modal');
+    S.urlModale = (lier && lier.dataset.entree) ? {cle:'rattachement', id:Number(lier.dataset.entree)} : null;
+    prodSyncUrl();
+  }
 }
 
 function ouvrirDevisModal(devisId){
-  fermerDevisModal();
+  fermerDevisModal(true);
   const dv = (S.devisList||[]).find(d=>Number(d.id)===Number(devisId));
   if(!dv){ toast('Devis introuvable.','error'); return; }
+  S.urlModale={cle:'devis',id:dv.id}; prodSyncUrl();
 
   let champs={};
   try{ champs = dv.extraction_json ? JSON.parse(dv.extraction_json) : {}; }catch(_){ champs={}; }
@@ -6649,6 +7117,11 @@ function ouvrirDevisModal(devisId){
     : h('div',{className:'card-empty'},
         'Ce devis a été importé avant le suivi de provenance : aucune source enregistrée.');
 
+  /* Valider = « je l'ai relu, c'est juste ». Un devis ramassé par l'agent
+     n'est jamais validé tant que personne ne l'a ouvert ; un devis saisi ou
+     corrigé à l'écran l'est d'office. */
+  const dejaValide = Number(dv.a_verifier)!==1 && !!dv.valide_at;
+
   const boite=h('div',{className:'contact-modal devis-modal'},
     h('div',{className:'contact-modal-head'},
       h('div',null,
@@ -6656,7 +7129,7 @@ function ouvrirDevisModal(devisId){
         h('div',{style:{fontSize:'11px',color:'var(--muted)'}}, dv.filename||'')
       ),
       h('button',{className:'contact-close-btn',title:'Fermer',
-        onClick:fermerDevisModal},'✕')
+        onClick:()=>fermerDevisModal()},'✕')
     ),
     (Number(dv.a_verifier)===1 && dv.note)
       ? h('div',{className:'devis-alertes'},
@@ -6665,7 +7138,12 @@ function ouvrirDevisModal(devisId){
       : null,
     h('div',{className:'contact-modal-body'}, corps),
     h('div',{className:'devis-modal-actions'},
-      h('button',{type:'button',className:'btn-sm',onClick:()=>{
+      dejaValide
+        ? h('span',{className:'devis-modal-valide'},
+            iconEl('check-circle',13),' Validé'+(dv.valide_at?' le '+String(dv.valide_at).slice(0,10):''))
+        : h('button',{type:'button',className:'btn-sm',onClick:()=>validerDevis(dv.id)},
+            iconEl('check-circle',13),' Valider'),
+      h('button',{type:'button',className:'btn-sec',onClick:()=>{
         fermerDevisModal(); ouvrirCorrectionDevis(dv);
       }},'Modifier'),
       h('button',{type:'button',className:'btn-danger',onClick:async()=>{
@@ -6673,12 +7151,30 @@ function ouvrirDevisModal(devisId){
         // à cliquer sans lire.
         await deleteDevis(dv.id); fermerDevisModal();
       }},'Supprimer'),
-      h('button',{type:'button',className:'btn-sec',onClick:fermerDevisModal},'Fermer')
+      h('button',{type:'button',className:'btn-sec',onClick:()=>fermerDevisModal()},'Fermer')
     )
   );
   boite.addEventListener('click',e=>e.stopPropagation());
   overlay.appendChild(boite);
   document.body.appendChild(overlay);
+}
+
+/* Valide le devis ouvert, puis enchaîne sur le suivant à vérifier : cent
+   trente devis se relisent à la suite, pas en rouvrant la liste à chaque fois. */
+async function validerDevis(devisId, o){
+  try{
+    await api('/api/rentabilite/devis/'+devisId+'/valider',{method:'POST'});
+  }catch(e){ toast(e.message,'error'); return; }
+  await loadDevis();
+  const suivant = (S.devisList||[]).find(d=>Number(d.a_verifier)===1 && Number(d.id)!==Number(devisId));
+  const enchaine = !!(suivant && S.rentDevisFiltre==='verifier' && !(o && o.enchainer===false));
+  fermerDevisModal(enchaine);
+  if(enchaine){
+    toast('Devis validé — suivant à vérifier.');
+    ouvrirDevisModal(suivant.id);
+  }else{
+    toast('Devis validé.');
+  }
 }
 
 function renderRentDevis(){
@@ -6804,37 +7300,33 @@ function renderRentDevis(){
   const table = listeAffichee.length
     ? h('div',{style:{overflowX:'auto'}},
         h('table',{className:'rent-table'},
+          /* Cinq colonnes utiles (retour du 15/10/2026). « Lecture » et
+             « Dossiers » sont partis : le mode de lecture se voit dans la
+             fiche, et le compteur de dossiers ne lisait que l'ancienne
+             table de liaison — il affichait 0 partout. */
           h('thead',null,h('tr',null,
             thTri('client','Client'), thTri('date','Date'),
             thTri('quantite','Quantité','num'), thTri('vitesse','Vitesse','num'),
-            thTri('calage','Calage','num'), thTri('lecture','Lecture'),
-            thTri('dossiers','Dossiers','num'),
-            h('th',{className:'num'},'Actions')
+            thTri('calage','Calage','num'),
+            h('th',{className:'num'},'')
           )),
           h('tbody',null,...listeAffichee.map(dv=>{
             const calage=(Number(dv.temps_calage_mn)||0)+(Number(dv.temps_calage_impression_mn)||0);
             const doute = Number(dv.a_verifier)===1;
             return h('tr',{style:{cursor:'pointer'},
               onClick:()=>ouvrirDevisModal(dv.id)},
+              /* Le client, sa pastille de doute, le fichier dessous. Le motif
+                 du doute est au survol de la pastille et dans la fiche : écrit
+                 sur la ligne, il doublait la hauteur de cent trente devis. */
               h('td',null,
-                h('div',{style:{display:'flex',alignItems:'center',gap:'8px'}},
-                  h('span',{style:{fontWeight:'600'}}, dv.client||'(client non lu)'),
-                  doute?rentPastille('à vérifier','manque',dv.note||''):null,
-                  dv.source==='agent'?h('span',{className:'rent-methode',
-                    title:'Ramassé automatiquement sur le partage réseau'},'auto'):null),
-                h('div',{className:'rent-fichier',title:dv.filename||''}, dv.filename||''),
-                // Le motif du doute, sur la ligne : aller le chercher ailleurs
-                // reviendrait à ne jamais le lire. Sur UNE ligne : en trois
-                // lignes de phrase, chaque devis douteux poussait les suivants
-                // hors de l'écran et on ne lisait plus la liste du tout. Le
-                // texte entier reste au survol et dans la fenêtre de détail.
-                (doute&&dv.note)?h('div',{className:'rent-motif',title:dv.note}, dv.note):null),
-              h('td',null, dv.date_devis||'—'),
+                h('div',{className:'rent-devis-client'},
+                  h('span',{className:'rent-devis-nom'}, dv.client||'(client non lu)'),
+                  doute?rentPastille('à vérifier','manque',dv.note||''):null),
+                h('div',{className:'rent-fichier',title:dv.filename||''}, dv.filename||'')),
+              h('td',null, dv.date_devis ? String(dv.date_devis).slice(0,10) : '—'),
               h('td',{className:'num'}, fmt(dv.qte_etiquettes)),
               h('td',{className:'num'}, fmt(dv.vitesse_theorique,'m/mn')),
               h('td',{className:'num'}, calage?fmt(calage,'mn'):'—'),
-              h('td',null, h('span',{className:'rent-methode'}, LIB_METHODE[dv.extraction_methode]||'—')),
-              h('td',{className:'num'}, String(dv.nb_dossiers_lies||0)),
               /* Les actions vivent sur la ligne. `stopPropagation` est
                  indispensable : sans lui, cliquer « Supprimer » ouvrirait
                  aussi la fenêtre de détail du devis qu'on vient d'effacer. */
@@ -6845,7 +7337,12 @@ function renderRentDevis(){
                  peint sous la colonne voisine donc invisible. */
               h('td',{className:'num rent-actions-td'},
                 h('div',{className:'rent-actions'},
-                  h('button',{type:'button',className:'btn-sm',title:'Corriger les valeurs lues',
+                  // Valider sur la ligne : un devis juste se relit dans la
+                  // liste et se valide sans ouvrir la fiche.
+                  doute ? h('button',{type:'button',className:'btn-sm',title:'Le devis est juste tel qu\'il est lu',
+                    onClick:async e=>{e.stopPropagation();await validerDevis(dv.id,{enchainer:false});}},
+                    iconEl('check',13),' Valider') : null,
+                  h('button',{type:'button',className:'btn-sec',title:'Corriger les valeurs lues',
                     onClick:e=>{e.stopPropagation();ouvrirCorrectionDevis(dv);}},'Modifier'),
                   h('button',{type:'button',className:'btn-danger',title:'Supprimer ce devis',
                     onClick:async e=>{e.stopPropagation();await deleteDevis(dv.id);}},'Supprimer')
@@ -6955,7 +7452,7 @@ function renderSuivi(){
     if(!isExp) return row;
 
     const panel = h('div',{style:{
-      borderLeft:'3px solid var(--accent)',background:'rgba(34,211,238,.04)',
+      borderLeft:'3px solid var(--accent)',background:'color-mix(in srgb,var(--accent,#22d3ee) 4%,transparent)',
       padding:'16px 20px',marginBottom:'2px'
     }});
 
@@ -7082,6 +7579,8 @@ function renderHist(){
   if(!d)return h('div',{className:'card-empty'},'Importez un fichier XLSX pour voir les données');
   if(d.blocked)return h('div',{className:'card'},h('div',{className:'card-blocked'},h('div',{className:'cb-icon'},iconEl('lock',32)),h('div',{className:'cb-msg'},d.message)));
   const sc=d.severity_counts||{};const seCount=d.saisie_errors_count||0;const parts=[];
+  // Ce qu'il faut traiter d'abord : les écarts à valider ou corriger.
+  const blocEcarts=renderProdEcarts(); if(blocEcarts) parts.push(blocEcarts);
   if(d.sanity_by_operateur){
     const ops=Object.keys(d.sanity_by_operateur||{});
     ops.forEach(op=>parts.push(renderSanity(d.sanity_by_operateur[op], opName(op))));
@@ -7107,12 +7606,12 @@ function renderHist(){
       'data-bloc-valeur-normal':fN(sc.info),
       'data-bloc-valeur-erreurs':fN(seCount)},
     h('div',{className:'stat'},h('div',{className:'stat-label'},'Total opérations'),h('div',{className:'stat-value',style:{color:'var(--c1)'}},fN(d.total_operations))),
-    h('div',{className:'stat',style:{borderColor:'var(--danger)33'}},h('div',{className:'stat-label'},'🔴 Critique'),h('div',{className:'stat-value',style:{color:'var(--danger)'}},fN(sc.critique))),
-    h('div',{className:'stat',style:{borderColor:'var(--warn)33'}},h('div',{className:'stat-label'},'🟡 Attention'),h('div',{className:'stat-value',style:{color:'var(--warn)'}},fN(sc.attention))),
-    h('div',{className:'stat'},h('div',{className:'stat-label'},'🟢 Normal'),h('div',{className:'stat-value',style:{color:'var(--success)'}},fN(sc.info))),
-    h('div',{className:'stat',style:{borderColor:'var(--danger)55'}},h('div',{className:'stat-label'},'⛔ Erreurs saisie'),h('div',{className:'stat-value',style:{color:seCount>0?'var(--danger)':'var(--success)'}},fN(seCount))),
+    h('div',{className:'stat',style:{borderColor:'var(--danger)33'}},h('div',{className:'stat-label'},h('span',{className:'sev-dot',style:{background:'var(--danger)'}}),'Critique'),h('div',{className:'stat-value',style:{color:'var(--danger)'}},fN(sc.critique))),
+    h('div',{className:'stat',style:{borderColor:'var(--warn)33'}},h('div',{className:'stat-label'},h('span',{className:'sev-dot',style:{background:'var(--warn)'}}),'Attention'),h('div',{className:'stat-value',style:{color:'var(--warn)'}},fN(sc.attention))),
+    h('div',{className:'stat'},h('div',{className:'stat-label'},h('span',{className:'sev-dot',style:{background:'var(--success)'}}),'Normal'),h('div',{className:'stat-value',style:{color:'var(--success)'}},fN(sc.info))),
+    h('div',{className:'stat',style:{borderColor:'var(--danger)55'}},h('div',{className:'stat-label'},h('span',{className:'sev-dot',style:{background:'var(--danger)'}}),'Erreurs saisie'),h('div',{className:'stat-value',style:{color:seCount>0?'var(--danger)':'var(--success)'}},fN(seCount))),
   ));
-  parts.push(h('div',{className:'section-title'},'⛔ Erreurs de saisie'));
+  parts.push(h('div',{className:'section-title'},'Erreurs de saisie'));
   const sanityForList = (d.sanity_by_operateur && d.sanity_by_operateur[Object.keys(d.sanity_by_operateur||{})[0]]) ? null : d.sanity;
   parts.push(h('div',{className:'card'},
     h('div',{className:'card-header'},
@@ -8980,6 +9479,360 @@ async function openFictifReassignModal(){
   if(sources.length===1) fromSel.value=sources[0].no_dossier;
 }
 
+// ── Écarts de saisie à traiter (Erreurs & Qualité) ──────────────
+// La file vient de Cohérence, famille prod (/api/prod/ecarts). Chaque écart
+// se valide (il est normal) ou se corrige : rattacher un fictif, reporter des
+// heures de calage, ou ouvrir la saisie concernée. Le même nombre allume la
+// pastille de l'onglet Production, du sous-onglet et de la tuile du portail.
+async function loadProdEcartsCount(){
+  if(!isAdmin(S.user)) return;
+  try{
+    const d = await api('/api/prod/ecarts/count');
+    set({prodEcartsCount: Number(d && d.n || 0)});
+  }catch(e){}
+}
+
+async function loadProdEcarts(){
+  if(!isAdmin(S.user)) return;
+  try{
+    const d = await api('/api/prod/ecarts');
+    S.prodEcarts = (d && d.ecarts) || [];
+    S.prodEcartsCount = S.prodEcarts.length;
+  }catch(e){ S.prodEcarts = []; }
+}
+
+async function _ecartsApresAction(msg){
+  closeModal();
+  toast(msg, 'success');
+  await loadProdEcarts();
+  if(S.subPage === 'saisies') { try{ await loadSaisies(); }catch(_){} }
+  render();
+}
+
+function _ecartModal(titre, ...corps){
+  try{ const m=document.querySelector('.add-row-modal'); if(m) m.remove(); }catch(e){}
+  const form=h('div',{className:'add-row-form',style:{minWidth:'min(560px,92vw)',maxWidth:'680px'}},
+    h('button',{type:'button',className:'add-row-close',title:'Fermer',onClick:(e)=>{e.stopPropagation();closeModal();}},'×'),
+    h('h3',{style:{marginBottom:'12px'}},titre),
+    ...corps);
+  const modal=h('div',{className:'add-row-modal',onClick:e=>{if(e.target===modal)closeModal();}},form);
+  document.getElementById('root').appendChild(modal);
+  return form;
+}
+
+function _ecartBoutons(onOk, libelle){
+  return h('div',{style:{display:'flex',gap:'8px',justifyContent:'flex-end',marginTop:'18px'}},
+    h('button',{type:'button',className:'btn-ghost',style:{background:'var(--bg)'},onClick:()=>closeModal()},'Annuler'),
+    h('button',{type:'button',className:'btn-sm',
+      style:{background:'var(--accent)',color:'white',border:'none',padding:'8px 16px',borderRadius:'8px',fontWeight:'700'},
+      onClick:onOk}, libelle));
+}
+
+function openValiderEcart(e){
+  const txt=h('textarea',{rows:'2',placeholder:'Pourquoi c\'est normal (facultatif)',
+    style:{width:'100%',padding:'10px 12px',borderRadius:'8px',border:'1px solid var(--border)',
+           background:'var(--bg)',color:'var(--text)',fontFamily:'inherit',fontSize:'13px'}});
+  _ecartModal('Valider l\'écart',
+    h('p',{style:{fontSize:'13px',color:'var(--text2)',margin:'0 0 10px'}},e.titre+' — '+(e.detail||'')),
+    txt,
+    _ecartBoutons(async()=>{
+      try{
+        await api('/api/prod/ecarts/'+e.id+'/valider',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({commentaire:txt.value||''})});
+        await _ecartsApresAction('Écart validé.');
+      }catch(err){ toast(err.message||'Validation impossible','error'); }
+    }, 'Valider'));
+}
+
+function _heureFr(iso){
+  if(!iso) return '—';
+  const s=String(iso); return s.slice(8,10)+'/'+s.slice(5,7)+' '+s.slice(11,16);
+}
+
+async function openCorrigerEcart(e){
+  let ap;
+  try{ ap = await api('/api/prod/ecarts/'+e.id+'/correction'); }
+  catch(err){ toast(err.message||'Correction indisponible','error'); return; }
+  const corriger = async(corps, msg)=>{
+    try{
+      await api('/api/prod/ecarts/'+e.id+'/corriger',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(corps||{})});
+      await _ecartsApresAction(msg);
+    }catch(err){ toast(err.message||'Correction impossible','error'); }
+  };
+
+  if(ap.action === 'rattacher'){
+    // Recherche du vrai dossier : référence, OF, réf produit, client ou
+    // désignation. Elle part du numéro noté par l'opérateur — souvent la réf
+    // produit — et les dossiers de la même machine passent devant.
+    let choix = (ap.candidats||[]).length === 1 ? ap.candidats[0].no_dossier : '';
+    const res = h('div',{style:{maxHeight:'300px',overflowY:'auto',margin:'8px 0'}});
+    const choisi = h('div',{style:{fontSize:'13px',fontWeight:'700',minHeight:'18px'}});
+    const majChoisi = ()=>{ choisi.textContent = choix ? 'Rattacher à : '+choix : ''; };
+    const dessiner = (cands)=>{
+      res.replaceChildren();
+      if(!cands.length){
+        res.appendChild(h('div',{style:{fontSize:'13px',color:'var(--muted)',padding:'8px 0'}},
+          'Aucun dossier pour « '+(inp.value||'')+' ».'));
+        return;
+      }
+      cands.forEach(c=>{
+        const b = h('button',{type:'button',style:{display:'grid',gridTemplateColumns:'1fr auto',gap:'4px 12px',
+            width:'100%',textAlign:'left',marginBottom:'6px',padding:'8px 12px',borderRadius:'8px',cursor:'pointer',
+            fontFamily:'inherit',fontSize:'13px',color:'var(--text)',
+            background: c.no_dossier===choix ? 'var(--accent-bg)' : 'var(--card)',
+            border:'1px solid '+(c.no_dossier===choix ? 'var(--accent)' : 'var(--border)')},
+          onClick:()=>{ choix=c.no_dossier; majChoisi(); dessiner(cands); }},
+          h('b',null,c.no_dossier),
+          h('span',{style:{color:'var(--muted)'}},[c.machine, {attente:'En attente',en_cours:'En cours',termine:'Terminé'}[c.statut]||c.statut].filter(Boolean).join(' · ')),
+          h('span',{style:{color:'var(--text2)'}},[c.client, c.ref_produit ? 'réf '+c.ref_produit : '', c.designation].filter(Boolean).join(' · ')),
+          h('span',{style:{color:'var(--muted)'}},c.planned_start ? 'prévu '+_heureFr(c.planned_start)
+            : (c.derniere ? 'saisi '+_heureFr(c.derniere) : '')));
+        res.appendChild(b);
+      });
+    };
+    const inp = h('input',{type:'text',className:'form-sel',value:ap.recherche||'',
+      placeholder:'Rechercher (dossier, OF, réf produit, client…)',
+      style:{width:'100%',background:'var(--card)'}});
+    let jeton = 0, minuteur = null;
+    inp.addEventListener('input',()=>{
+      clearTimeout(minuteur);
+      minuteur = setTimeout(async()=>{
+        const t = ++jeton;
+        try{
+          const d = await api('/api/prod/ecarts/'+e.id+'/candidats?q='+encodeURIComponent(inp.value.trim()));
+          if(t === jeton) dessiner((d && d.candidats) || []);
+        }catch(err){}
+      }, 220);
+    });
+    inp.addEventListener('keydown',ev=>{ if(ev.key==='Escape'){ inp.value=''; inp.dispatchEvent(new Event('input')); } });
+    const f = ap.fictif || {};
+    _ecartModal('Rattacher le dossier hors planning',
+      h('p',{style:{fontSize:'13px',color:'var(--text2)',margin:'0 0 10px'}},
+        'Noté par l\'opérateur : ', h('b',null,f.of||''), ' · '+(f.machine||'')+' · '+(e.detail||'')),
+      inp, res, choisi,
+      _ecartBoutons(()=>{
+        if(!choix){ toast('Choisissez le dossier de rattachement.','error'); return; }
+        corriger({to_no_dossier:choix}, 'Saisies rattachées à '+choix+'.');
+      }, 'Rattacher'));
+    dessiner(ap.candidats||[]);
+    majChoisi();
+    requestAnimationFrame(()=>{ try{ inp.focus(); inp.select(); }catch(_){} });
+    return;
+  }
+
+  if(ap.action === 'machine_saisies'){
+    // Dossier « en cours » au planning sans saisie : sa fiche, et les saisies
+    // de sa machine depuis son démarrage prévu. Une saisie faite sous un autre
+    // numéro se corrige d'un clic (fenêtre de modification de la saisie) ; un
+    // dossier fini sans fin de production se règle au planning.
+    const d = ap.dossier || {};
+    const ref = String(d.reference||'').trim();
+    const lignes = (ap.saisies||[]).map(r=>{
+      const sien = String(r.no_dossier||'').trim() === ref;
+      const tr = h('tr',{style:{cursor:'pointer',background: sien ? 'var(--accent-bg)' : ''},
+          title:'Modifier cette saisie',
+          onClick:()=>{ closeModal(); openEditModal(r); }},
+        h('td',{style:{whiteSpace:'nowrap'}},_heureFr(r.date_operation)),
+        h('td',null,r.operation||''),
+        h('td',{style:{fontWeight: sien ? '700' : '400'}},r.no_dossier||'—'),
+        h('td',null,r.operateur||''));
+      return tr;
+    });
+    _ecartModal('Dossier '+(ref||'')+' en cours sans saisie',
+      h('div',{style:{display:'flex',flexWrap:'wrap',gap:'6px 16px',fontSize:'13px',marginBottom:'10px'}},
+        h('span',null,h('b',null,ref)),
+        h('span',null,[d.client, d.ref_produit ? 'réf '+d.ref_produit : ''].filter(Boolean).join(' · ')),
+        h('span',{style:{color:'var(--muted)'}},(d.machine||'')+' · prévu '+_heureFr(d.planned_start)
+          +(d.planned_end ? ' → '+_heureFr(d.planned_end) : ''))),
+      h('p',{style:{fontSize:'12px',color:'var(--muted)',margin:'0 0 8px'}},
+        'Saisies de la machine depuis le démarrage prévu. Cliquez une saisie pour la rattacher au bon dossier ; '
+        +'si le dossier est fini ou pas commencé, corrigez-le au planning.'),
+      lignes.length
+        ? h('div',{style:{maxHeight:'320px',overflowY:'auto',border:'1px solid var(--border)',borderRadius:'8px'}},
+            h('table',{className:'saisies-table',style:{width:'100%',fontSize:'13px'}},
+              h('thead',null,h('tr',null,h('th',null,'Date'),h('th',null,'Opération'),h('th',null,'Dossier'),h('th',null,'Opérateur'))),
+              h('tbody',null,...lignes)))
+        : h('p',{style:{fontSize:'13px',fontWeight:'700'}},'Aucune saisie sur la machine depuis le démarrage prévu.'),
+      h('div',{style:{display:'flex',gap:'8px',justifyContent:'flex-end',marginTop:'14px'}},
+        h('button',{type:'button',className:'btn-ghost',style:{background:'var(--bg)'},onClick:()=>closeModal()},'Fermer'),
+        ap.lien ? h('a',{href:ap.lien,className:'btn-sm',
+          style:{background:'var(--accent)',color:'white',padding:'8px 16px',borderRadius:'8px',
+                 fontWeight:'700',textDecoration:'none'}},'Ouvrir au planning') : null));
+    return;
+  }
+
+  if(ap.action === 'info_prod'){
+    const txt = h('textarea',{rows:'3',placeholder:'À savoir pour la prochaine fois…',
+      style:{width:'100%',padding:'10px 12px',borderRadius:'8px',border:'1px solid var(--border)',
+             background:'var(--card)',color:'var(--text)',fontFamily:'inherit',fontSize:'13px'}});
+    _ecartModal('Info prod du dossier '+(ap.no_dossier||''),
+      h('div',{style:{display:'flex',justifyContent:'flex-end',marginBottom:'6px'}},
+        h('button',{type:'button',className:'btn-ghost',style:{background:'var(--bg)',border:'1px solid var(--border)',
+          padding:'4px 10px',borderRadius:'8px'},onClick:()=>{ txt.value='R.A.S.'; txt.focus(); }},'R.A.S.')),
+      txt,
+      _ecartBoutons(()=>{
+        if(!txt.value.trim()){ toast('Info prod vide — « R.A.S. » si rien à signaler.','error'); return; }
+        corriger({texte:txt.value.trim()}, 'Info prod enregistrée.');
+      }, 'Enregistrer'));
+    requestAnimationFrame(()=>{ try{ txt.focus(); }catch(_){} });
+    return;
+  }
+
+  if(ap.action === 'reappliquer'){
+    if(ap.erreur){ toast(ap.erreur,'error'); return; }
+    const ch = (ap.apercu && ap.apercu.changements) || [];
+    _ecartModal('Reporter les heures du dossier de prod',
+      h('p',{style:{fontSize:'13px',color:'var(--text2)',margin:'0 0 10px'}},e.detail||''),
+      !ch.length ? h('p',{style:{fontSize:'13px',fontWeight:'700',margin:'0'}},
+        'Les saisies sont déjà à ces heures : il n\'y a rien à déplacer. « Reporter » clôt l\'écart.') :
+      h('table',{className:'saisies-table',style:{width:'100%',fontSize:'13px'}},
+        h('thead',null,h('tr',null,h('th',null,'Saisie'),h('th',null,'Avant'),h('th',null,'Après'))),
+        h('tbody',null,...ch.map(c=>h('tr',null,
+          h('td',null,c.operation||''),
+          h('td',{style:{color:'var(--muted)'}},_heureFr(c.avant)),
+          h('td',{style:{fontWeight:'700'}},_heureFr(c.apres)))))),
+      h('p',{style:{fontSize:'12px',color:'var(--muted)',margin:'10px 0 0'}},
+        'Les saisies enjambées changent de côté du calage ; aucune n\'est supprimée. Chaque modification est tracée.'),
+      _ecartBoutons(()=>corriger({}, 'Heures reportées sur les saisies.'), 'Reporter ces heures'));
+    return;
+  }
+
+  if(ap.action === 'heures'){
+    const d = ap.declaration || {};
+    // Date + heure en 24 h tapée au clavier : le champ date-heure du
+    // navigateur passe en AM/PM selon la langue du poste.
+    const champ = (libelle, iso, mesure)=>{
+      const st={padding:'8px 10px',borderRadius:'8px',border:'1px solid var(--border)',
+                background:'var(--bg)',color:'var(--text)',fontFamily:'inherit',fontSize:'14px'};
+      const jour=h('input',{type:'date',value:iso?String(iso).slice(0,10):'',style:st});
+      const heure=h('input',{type:'text',inputmode:'numeric',maxlength:'5',placeholder:'HH:MM',
+        value:iso?String(iso).slice(11,16):'',style:Object.assign({},st,{width:'84px',textAlign:'center',
+          fontWeight:'700',fontVariantNumeric:'tabular-nums'})});
+      heure.addEventListener('input',()=>{
+        const d=heure.value.replace(/\D/g,'').slice(0,4);
+        heure.value = d.length>2 ? d.slice(0,2)+':'+d.slice(2) : d;
+      });
+      return {jour, heure, el:h('div',{style:{display:'grid',gridTemplateColumns:'120px 1fr 84px 120px',gap:'10px',
+          alignItems:'center',marginBottom:'8px'}},
+        h('div',{style:{fontSize:'11px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.5px',
+          color:'var(--text2)'}},libelle), jour, heure,
+        h('div',{style:{fontSize:'12px',color:'var(--muted)'}},'saisies : '+_heureFr(mesure)))};
+    };
+    const a=champ('Début calage', d.debut_calage_declare, d.debut_calage_mesure);
+    const b=champ('Fin calage', d.fin_calage_declare, d.fin_calage_mesure);
+    const c=champ('Fin de prod', d.fin_prod_declare, d.fin_prod_mesure);
+    _ecartModal('Corriger les heures du dossier '+(d.no_dossier||''),
+      d.signalement ? h('div',{style:{padding:'10px 12px',borderRadius:'8px',marginBottom:'12px',
+          border:'1px solid var(--warn)',background:'rgba(251,191,36,.10)',fontSize:'13px'}},
+        h('b',null,(d.declare_par||'Le conducteur')+' : '),'« '+d.signalement+' »') : null,
+      a.el, b.el, c.el,
+      _ecartBoutons(()=>{
+        const v=x=>(x.jour.value && /^([01]\d|2[0-3]):[0-5]\d$/.test(x.heure.value))
+          ? x.jour.value+'T'+x.heure.value+':00' : '';
+        if(!v(a) || !v(b) || !v(c)){ toast('Heure invalide — format HH:MM, de 00:00 à 23:59.','error'); return; }
+        corriger({debut_calage:v(a), fin_calage:v(b), fin_prod:v(c)}, 'Heures corrigées et reportées.');
+      }, 'Corriger et reporter'));
+    return;
+  }
+
+  if(ap.action === 'saisie'){
+    if(!ap.saisie){ toast('Saisie concernée introuvable — ouvrez le dossier dans Saisies.','error'); return; }
+    openEditModal(ap.saisie);
+    toast('Corrigez la saisie, puis validez l\'écart.','info');
+    return;
+  }
+
+  if(ap.lien) window.location.href = ap.lien;
+}
+
+// Filtre par type d'écart : dans l'adresse (clé `ecart`), comme tout filtre.
+// La recherche texte n'y va pas : c'est une saisie en cours (url-etat.md).
+function _ecartsFiltres(liste){
+  const f = S.ecartsFiltre || '';
+  const q = String(S.ecartsRecherche||'').trim().toLowerCase();
+  return liste.filter(e=>(!f || e.regle===f)
+    && (!q || [e.titre, e.detail, e.objet_ref, e.regle_titre].join(' ').toLowerCase().indexOf(q) !== -1));
+}
+
+function _ecartLigne(e){
+  const couleur = g => g==='haute' ? 'var(--danger)' : g==='moyenne' ? 'var(--warn)' : 'var(--muted)';
+  const libAction = {rattacher:'Rattacher', reappliquer:'Reporter les heures', heures:'Corriger les heures',
+                     saisie:'Ouvrir la saisie', machine_saisies:'Voir les saisies', planning:'Ouvrir au planning',
+                     info_prod:'Saisir l\'info prod', lien:'Ouvrir'};
+  return h('div',{style:{display:'grid',gridTemplateColumns:'10px 1fr auto',gap:'12px',
+      alignItems:'center',padding:'10px 4px',borderBottom:'1px solid var(--border)'}},
+    h('span',{style:{width:'10px',height:'10px',borderRadius:'50%',background:couleur(e.gravite)},
+      title:'Gravité '+(e.gravite||'')}),
+    h('div',{style:{minWidth:'0'}},
+      h('div',{style:{fontSize:'13px',fontWeight:'700'}},
+        e.regle_titre, h('span',{style:{fontWeight:'500',color:'var(--text2)'}},' · '+e.titre)),
+      h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'2px'}},e.detail||'')),
+    h('div',{style:{display:'flex',gap:'6px',flexShrink:'0'}},
+      h('button',{type:'button',className:'btn-ghost',
+        style:{background:'var(--bg)',border:'1px solid var(--border)',padding:'6px 12px',borderRadius:'8px',fontWeight:'700'},
+        onClick:()=>openValiderEcart(e)},iconEl('check',13),' Valider'),
+      h('button',{type:'button',className:'btn-sm',
+        style:{background:'var(--accent)',color:'white',border:'none',padding:'6px 12px',borderRadius:'8px',fontWeight:'700'},
+        onClick:()=>openCorrigerEcart(e)},iconEl('pencil',13),' '+(libAction[e.action]||'Corriger'))));
+}
+
+function renderProdEcarts(){
+  if(!isAdmin(S.user)) return null;
+  const liste = S.prodEcarts;
+  if(liste == null){
+    // Arrivée directe sur l'onglet : aucun chemin de démarrage n'a encore
+    // chargé la liste, le bloc la demande lui-même (une seule fois).
+    if(!S._prodEcartsEnCours){
+      S._prodEcartsEnCours = true;
+      loadProdEcarts().then(()=>{ S._prodEcartsEnCours = false; render(); });
+    }
+    return h('div',{className:'card',style:{marginBottom:'16px'}},
+      h('div',{className:'card-empty'},'Chargement des écarts à traiter…'));
+  }
+  // Pastilles par type, avec leur nombre ; un type disparu de la liste
+  // (tout validé) libère le filtre.
+  const types = {};
+  liste.forEach(e=>{ (types[e.regle] = types[e.regle] || {titre:e.regle_titre, n:0}).n++; });
+  if(S.ecartsFiltre && !types[S.ecartsFiltre]) S.ecartsFiltre = '';
+  const pastille = (code, libelle, n)=>{
+    const actif = (S.ecartsFiltre||'') === code;
+    return h('button',{type:'button',onClick:()=>set({ecartsFiltre:code}),
+      style:{padding:'5px 10px',borderRadius:'999px',fontSize:'12px',fontWeight:'700',cursor:'pointer',
+        fontFamily:'inherit',border:'1px solid '+(actif?'var(--accent)':'var(--border)'),
+        background:actif?'var(--accent-bg)':'var(--card)',color:actif?'var(--accent)':'var(--text2)'}},
+      libelle+' '+n);
+  };
+  // La liste se redessine seule pendant la frappe : la barre de recherche
+  // n'est jamais reconstruite, elle garde le focus.
+  const zone = h('div',{style:{padding:'0 14px 6px'}});
+  const redessiner = ()=>{
+    const vues = _ecartsFiltres(liste);
+    zone.replaceChildren(...(vues.length ? vues.map(_ecartLigne)
+      : [h('div',{className:'card-empty'}, liste.length
+          ? 'Aucun écart pour « '+(S.ecartsRecherche||'')+' ».'
+          : 'Rien à traiter : aucune saisie à valider ou corriger.')]));
+  };
+  const recherche = h('input',{type:'text',value:S.ecartsRecherche||'',
+    placeholder:'Rechercher (dossier, client, machine…)',
+    style:{flex:'1 1 220px',minWidth:'180px',padding:'7px 10px',borderRadius:'8px',border:'1px solid var(--border)',
+           background:'var(--card)',color:'var(--text)',fontFamily:'inherit',fontSize:'13px'}});
+  recherche.addEventListener('input',()=>{ S.ecartsRecherche = recherche.value; redessiner(); });
+  recherche.addEventListener('keydown',ev=>{ if(ev.key==='Escape'){ recherche.value=''; S.ecartsRecherche=''; redessiner(); } });
+  redessiner();
+  // Liste de travail : volontairement pas capturable en widget (pas de
+  // data-bloc), la pastille du portail porte déjà le nombre.
+  return h('div',{className:'card',style:{marginBottom:'16px'}},
+    h('div',{className:'card-header'},
+      h('h3',null,iconEl('alert-triangle',15),' À traiter'),
+      h('span',{className:'nav-tab-badge',style:{marginLeft:'8px'}},String(liste.length))),
+    liste.length ? h('div',{style:{display:'flex',flexWrap:'wrap',gap:'6px',alignItems:'center',padding:'4px 14px 10px'}},
+      pastille('', 'Tous', liste.length),
+      ...Object.keys(types).map(c=>pastille(c, types[c].titre, types[c].n)),
+      recherche) : null,
+    zone);
+}
+
 // ── Saisies : durées et métrages ─────────────────────────────────
 // Partagés par le tableau, le fil mobile et l'export PDF : deux rendus de la
 // même page ne doivent jamais donner deux chiffres pour le même dossier.
@@ -9044,7 +9897,48 @@ function saisiesAvecDurees(baseRows){
 
 // Métrage dossier (Fin dossier = compteur fin - compteur début), posé en
 // r._metrage_dossier sur les lignes 89 et 90. Modifie les lignes en place.
+// Fin de calage : le « Production » qui ferme une suite de saisies de calage
+// reçoit r._fin_calage = {minutes, metres}. Durée depuis la première saisie de
+// la suite ; mètres = compteur relevé à ce « Production » − dernier compteur
+// relevé avant le début du calage. Même règle que gache_calage() côté serveur
+// (app/services/calage_cloture.py) : une saisie d'une autre catégorie coupe
+// la suite, un relevé manquant laisse les mètres vides.
+function saisiesMarquerFinsCalage(rows){
+  const HORS = new Set(['alert_ack', 'stock_pf', 'stock_mp']);
+  const chrono = rows.filter(r => !HORS.has(r.kind) && !HORS.has(r.operation_category)
+                               && !Number(r.est_annule||0))
+    .sort((a,b)=>(a.date_operation||'').localeCompare(b.date_operation||'')
+                 || (Number(a.id)||0) - (Number(b.id)||0));
+  const parMachine = {};
+  const compteur = r => {
+    const c = r.operation_code || '';
+    const v = c === '01' ? (r.metrage_total_debut ?? r.metrage_prevu)
+            : (c === '89' || c === '90') ? (r.metrage_total_fin ?? r.metrage_reel)
+            : r.metrage_compteur;
+    return v != null && v !== '' ? parseFloat(v) : null;
+  };
+  chrono.forEach(r=>{
+    const st = parMachine[r.machine||''] || (parMachine[r.machine||''] = {debut:null, ctrAvant:null, dernierCtr:null});
+    const cat = r.operation_category || '';
+    if(cat === 'calage'){
+      if(st.debut == null){ st.debut = r.date_operation; st.ctrAvant = st.dernierCtr; }
+    } else if(cat === 'production' && st.debut != null){
+      const t0 = Date.parse(st.debut), t1 = Date.parse(r.date_operation||'');
+      const ctr = r.metrage_compteur != null ? parseFloat(r.metrage_compteur) : null;
+      const metres = (ctr != null && st.ctrAvant != null && ctr >= st.ctrAvant) ? ctr - st.ctrAvant : null;
+      r._fin_calage = {minutes: (isFinite(t0) && isFinite(t1) && t1 >= t0) ? Math.round((t1-t0)/60000) : null,
+                       metres: metres};
+      st.debut = null;
+    } else {
+      st.debut = null;
+    }
+    const c = compteur(r);
+    if(c != null) st.dernierCtr = c;
+  });
+}
+
 function saisiesCalculerMetrages(rows){
+  saisiesMarquerFinsCalage(rows);
   const debutByDossier = {}; // no_dossier → compteur début (metrage_total_debut ?? metrage_prevu)
   const chrono = [...rows].sort((a,b)=>(a.date_operation||'').localeCompare(b.date_operation||''));
   chrono.forEach(r=>{
@@ -9186,7 +10080,9 @@ function renderSaisies(){
     // Fin de production où l'opérateur a choisi « Dossier terminé » : un trait
     // sous la ligne ferme visuellement le dossier.
     const finDossierRow = (row.operation_code||'')==='89' && Number(row.fin_dossier)===1;
-    const tr=h('tr',{className:'data-row'+(fictifRow?' saisie-row-fictif':'')+(annuleRow?' saisie-row-annule':'')+(finDossierRow?' saisie-row-fin-dossier':''),
+    // « Production » qui ferme un calage : même mise en avant, en orange.
+    const finCalage = !annuleRow ? row._fin_calage : null;
+    const tr=h('tr',{className:'data-row'+(fictifRow?' saisie-row-fictif':'')+(annuleRow?' saisie-row-annule':'')+(finDossierRow?' saisie-row-fin-dossier':'')+(finCalage?' saisie-row-fin-calage':''),
       style:{cursor:(readOnly||annuleRow)?'default':'pointer'}});
     if(annuleRow) tr.title = annuleTip;
     else if(cycleAnnule) tr.title = cycleTip;
@@ -9201,7 +10097,7 @@ function renderSaisies(){
 
     let rowBg = '';
     if (isAlertAck) {
-      rowBg = 'rgba(34,211,238,.10)';           // v2.3.43 : cyan discret alertes validées
+      rowBg = 'color-mix(in srgb,var(--accent,#22d3ee) 10%,transparent)';           // v2.3.43 : cyan discret alertes validées
     } else if (fictifRow) {
       rowBg = 'rgba(167,139,250,.10)';          // dossier fictif (FICTIF:)
     } else if (row.operation_severity === 'critique') {
@@ -9223,7 +10119,7 @@ function renderSaisies(){
     // <tr> en border-collapse : c'est le fond qui fait le bloc visuel.
     if (cycleAnnule) rowBg = 'rgba(251,191,36,.13)';
     if (rowBg) tr.style.background = rowBg;
-    if (S.selectedRows.has(selKey)) tr.style.background = 'rgba(34,211,238,.12)';
+    if (S.selectedRows.has(selKey)) tr.style.background = 'color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)';
 
     // v2.3.43 : les acks d'alertes sont TOUJOURS cliquables (même en readOnly)
     // et ouvrent le viewer partagé MysifaAckViewer.open.
@@ -9266,7 +10162,13 @@ function renderSaisies(){
     // saisie (« + Manuel », « Corrigé ») et ne doit pas être prise.
  
     tr.appendChild(h('td',{style:{fontSize:'11px',color:'var(--muted)',whiteSpace:'nowrap',fontFamily:'monospace'}},fDSecs(row.date_operation)));
-    tr.appendChild(h('td',finDossierRow?{className:'td-op-cloture'}:null,row.operation||'-',
+    tr.appendChild(h('td',(finDossierRow||finCalage)?{className:'td-op-cloture'}:null,row.operation||'-',
+      finCalage
+        ? h('span',{className:'saisie-pill-fin-calage',
+            title:'Calage de '+fmtDurMin(finCalage.minutes)
+              +(finCalage.metres!=null ? ' · '+fN(finCalage.metres)+' m passés au calage' : ' · compteur non relevé')},
+            'Fin de calage · '+fmtDurMin(finCalage.minutes))
+        : null,
       cycleAnnule
         ? h('span',{title:cycleTip,
             style:{marginLeft:'6px',padding:'1px 6px',borderRadius:'4px',fontSize:'10px',
@@ -9297,7 +10199,11 @@ function renderSaisies(){
         })()
     ));
     tr.appendChild(h('td',{style:{color:'var(--c3)'}},
-      row._metrage_dossier!=null
+      (finCalage && finCalage.metres!=null)
+        ? h('span',{style:{color:'var(--warn)',fontWeight:'700'},
+            title:'Gâche de calage = compteur à la fin du calage − compteur avant le calage'},
+            '⇒ '+fN(finCalage.metres)+' m calage')
+        : row._metrage_dossier!=null
         ? (()=>{
             const finCtr   = row.metrage_total_fin   ?? row.metrage_reel;
             const debutCtr = row.metrage_total_debut != null
@@ -10060,6 +10966,124 @@ function renderSanity(sanity, title){
   );
 }
 
+// Version compacte pour le bandeau de la vue d'ensemble : anneau de 44 px,
+// score, mention. Clic → Erreurs & qualité.
+function renderSanityCompact(sanity){
+  const score=sanity.score||0;
+  const colorMap={success:'var(--success)',warn:'var(--warn)',danger:'var(--danger)'};
+  const col=colorMap[sanity.color]||'var(--muted)';
+  const r=18,circ=2*Math.PI*r,offset=circ-(score/100)*circ;
+  const NS='http://www.w3.org/2000/svg';
+  const svg=document.createElementNS(NS,'svg');
+  svg.setAttribute('width','44');svg.setAttribute('height','44');svg.setAttribute('viewBox','0 0 44 44');svg.style.transform='rotate(-90deg)';
+  [['var(--border)',0],[col,offset]].forEach(([stroke,off],i)=>{
+    const c=document.createElementNS(NS,'circle');
+    c.setAttribute('cx','22');c.setAttribute('cy','22');c.setAttribute('r',String(r));
+    c.setAttribute('fill','none');c.setAttribute('stroke',stroke);c.setAttribute('stroke-width','5');
+    if(i){c.setAttribute('stroke-linecap','round');c.setAttribute('stroke-dasharray',String(circ));c.setAttribute('stroke-dashoffset',String(off));}
+    svg.appendChild(c);
+  });
+  return h('div',{className:'pv-groupe pv-sanity',
+      'data-bloc':'prod.ensemble.sanity','data-bloc-valeur-score':String(score),
+      title:'Voir le détail des erreurs → Historique & Erreurs',
+      onClick:async()=>{ S.subPage='erreurs'; if(!S.historique) await loadHist(); render(); }},
+    h('div',{className:'pv-anneau'},svg,h('span',{style:{color:col}},String(score))),
+    h('div',null,
+      h('div',{className:'pv-mention',style:{color:col}},sanity.mention||''),
+      h('div',{className:'pv-lib'},'Qualité de saisie'
+        +(sanity.journees?(' · '+sanity.journees+' j.'):'')),
+      h('a',{href:'#',className:'pv-lien',onClick:e=>{
+        e.preventDefault(); e.stopPropagation(); openSanityExplication(sanity);
+      }},'Comment c\'est calculé ?'))
+  );
+}
+
+// Styles de la vue d'ensemble, injectes une fois : le CSS de MyProd ne se
+// rafraichit qu'au changement de version, ces regles suivent le JS.
+function _prodVueCss(){
+  if(document.getElementById('prod-vue-css')) return;
+  const st=document.createElement('style'); st.id='prod-vue-css';
+  st.textContent=''
+    +'.mst-choix{display:inline-flex;gap:4px;flex-wrap:wrap}'
+    +'.mst-chip{font:inherit;font-size:10px;font-weight:600;padding:2px 8px;border-radius:999px;cursor:pointer;'
+    +'background:var(--card);border:1px solid var(--border);color:var(--muted);text-transform:none;letter-spacing:0}'
+    +'.mst-chip:hover{background:var(--bg)}'
+    +'.mst-chip.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}'
+    +'.pv-bandeau{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px}'
+    +'.pv-groupe{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:8px 12px;flex:1 1 300px;min-width:0}'
+    +'.pv-sanity{flex:0 1 250px;display:flex;align-items:center;gap:10px;cursor:pointer}'
+    +'.pv-sanity:hover{border-color:var(--accent)}'
+    +'.pv-anneau{position:relative;width:44px;height:44px;flex-shrink:0}'
+    +'.pv-anneau span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800}'
+    +'.pv-mention{font-size:13px;font-weight:700}'
+    +'.pv-lien{font-size:10px;color:var(--accent)}'
+    +'.pv-titre{display:flex;align-items:center;gap:4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:4px}'
+    +'.pv-hors{margin-left:6px;font-style:italic;font-weight:400;text-transform:none;letter-spacing:0}'
+    +'.pv-tuiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}'
+    +'.pv-tuile{padding:4px 8px;border-left:3px solid var(--c,var(--border));border-radius:4px;'
+    +'background:color-mix(in srgb,var(--c,var(--bg)) 7%,transparent)}'
+    +'.pv-lib{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);font-weight:600}'
+    +'.pv-pt{width:6px;height:6px;border-radius:50%;background:var(--c);display:inline-block}'
+    +'.pv-val{font-size:16px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}'
+    +'.ps-c-cal{color:var(--c4)}.ps-c-prod{color:var(--success)}.ps-c-arr{color:var(--danger)}.ps-c-nul{color:var(--muted)}'
+    +'.ps-met{position:relative;min-width:110px}'
+    +'.ps-met-barre{position:absolute;left:8px;right:8px;bottom:5px;height:3px;border-radius:2px;background:var(--border)}'
+    +'.ps-met-barre i{display:block;height:100%;border-radius:2px;background:var(--accent)}'
+    +'tr.ps-ligne{cursor:pointer}'
+    +'tr.ps-ligne:hover td{background:var(--accent-bg)}'
+    +'tr.ps-ligne.ouvert td{background:var(--accent-bg);border-bottom-color:transparent}'
+    +'.ps-chev{display:inline-flex;transition:transform .15s;margin-right:6px;color:var(--muted);vertical-align:middle}'
+    +'tr.ps-ligne.ouvert .ps-chev{transform:rotate(90deg);color:var(--accent)}'
+    +'tr.ps-detail>td{padding:10px 12px 16px!important;background:var(--bg)}'
+    // Un dossier déplié forme un bloc : trait d'accent au-dessus de sa ligne,
+    // bande à gauche sur la ligne et son détail, trait épais dessous. Deux
+    // dossiers ouverts à la suite ne se confondent plus.
+    +'tr.ps-ligne.ouvert td{border-top:2px solid var(--accent)!important}'
+    +'tr.ps-ligne.ouvert td:first-child,tr.ps-detail>td{box-shadow:inset 4px 0 0 var(--accent)}'
+    +'tr.ps-detail>td{border-bottom:3px solid var(--accent)!important}'
+    +'tr.ps-detail+tr.ps-ligne:not(.ouvert) td{border-top:6px solid var(--card)!important}'
+    +'.ps-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--c);margin-right:5px;vertical-align:1px}';
+  document.head.appendChild(st);
+}
+
+// Detail d'un dossier sous sa ligne : le panneau « Donnees de prod » du
+// destockage (static/mysifa_donnees_prod.js), charge au premier depliage.
+function _psDetailCharger(no, cible){
+  S.psDetailCache = S.psDetailCache || {};
+  const cache = S.psDetailCache[no];
+  if(cache && cache.html){ cible.innerHTML = cache.html; return; }
+  cible.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:12px">Chargement des saisies…</div>';
+  api('/api/production/dossier-detail?no_dossier='+encodeURIComponent(no)).then(d=>{
+    const html = (window.MySifaDonneesProd && d) ? window.MySifaDonneesProd.html(d)
+      : '<div style="color:var(--danger)">Affichage indisponible — rechargez la page.</div>';
+    S.psDetailCache[no] = {html};
+    if(cible.isConnected) cible.innerHTML = html;
+  }).catch(e=>{
+    cible.textContent = (e && e.message) || 'Saisies indisponibles.';
+    cible.style.color = 'var(--danger)';
+  });
+}
+function _psDetailLigne(no, colSpan){
+  const zone = h('div');
+  _psDetailCharger(no, zone);
+  return h('tr',{className:'ps-detail','data-ps-detail':no}, h('td',{colSpan:colSpan}, zone));
+}
+// Une ligne de dossier qui se deplie ; l'etat tient au re-rendu.
+function _psLigneDossier(no, cells, colSpan){
+  S.psOuverts = S.psOuverts || {};
+  const tr = h('tr',{className:'ps-ligne'+(S.psOuverts[no]?' ouvert':''),
+    title:'Voir les saisies du dossier',
+    onClick:()=>{
+      const ouvert = !S.psOuverts[no];
+      S.psOuverts[no] = ouvert;
+      tr.classList.toggle('ouvert', ouvert);
+      const suiv = tr.nextElementSibling;
+      if(suiv && suiv.getAttribute('data-ps-detail') === no) suiv.remove();
+      if(ouvert) tr.after(_psDetailLigne(no, colSpan));
+    }}, ...cells);
+  return S.psOuverts[no] ? [tr, _psDetailLigne(no, colSpan)] : [tr];
+}
+
 // Modale « Comment c'est calculé » : les règles viennent du serveur
 // (sanity_regles), la même source que le calcul.
 function openSanityExplication(sanity, title){
@@ -10150,6 +11174,36 @@ function renderSanityEventsBlock(sanity){
 }
 
 
+// ── Vitesse : « — » si rien a diviser, « erreur saisie » si impossible ──
+// Le plafond vient du serveur (`vitesse_max_m_min`) : au-dela, le compteur a
+// ete mal releve ou le 03 et le 89 sont tombes a la meme minute.
+function vitMax(){ return Number(S.production && S.production.vitesse_max_m_min) || 0; }
+function vitCalc(metrage, minutes){
+  const mn = Number(minutes||0);
+  if(!(mn > 0)) return {v:null, err:false};
+  const v = Number(metrage||0) / mn, max = vitMax();
+  return (max && v > max) ? {v:null, err:true} : {v:v, err:false};
+}
+// Vitesse d'un ensemble de sessions : les sessions impossibles sont sorties du
+// calcul. Il ne reste rien de sain alors qu'il y en avait : erreur.
+function vitSessions(rows){
+  let m = 0, mn = 0, err = false, sain = false;
+  (rows||[]).forEach(r=>{
+    const den = Number(r.temps_prod_min||0) + Number(r.temps_arret_min||0);
+    if(r.vitesse_aberrante || vitCalc(r.metrage_m, den).err){ err = true; return; }
+    sain = true; m += Number(r.metrage_m||0); mn += den;
+  });
+  return (!sain && err) ? {v:null, err:true} : vitCalc(m, mn);
+}
+function vitSrv(v, aberrante){
+  if(aberrante) return {v:null, err:true};
+  return {v:(v != null && Number(v) > 0) ? Number(v) : null, err:false};
+}
+function vitTxt(c){ return c.err ? 'erreur saisie' : (c.v == null ? '—' : c.v.toFixed(2)+' m/min'); }
+function vitEl(c){
+  return c.err ? h('span',{style:{color:'var(--danger)',fontWeight:'400'}},'erreur saisie') : vitTxt(c);
+}
+
 // ── Helpers Repiquage / agregations Vue d'ensemble Production ────────
 function _isRepMachine(m){
   if(!m) return false;
@@ -10163,12 +11217,13 @@ function _prodAggBy(rows, keyName){
     const k = String(r[keyName]==null?'':r[keyName]).trim();
     if(!k || k==='?') return;
     const x = m[k] = m[k] || {
-      key: k, _dosSet: new Set(),
+      key: k, _dosSet: new Set(), _rows: [],
       etiquettes: 0, metrage_m: 0, cartons: 0,
       calage_min: 0, prod_min: 0, arret_min: 0,
     };
     const dos = String(r.no_dossier||'').trim();
     if(dos) x._dosSet.add(dos);
+    x._rows.push(r);
     x.etiquettes += Number(r.etiquettes||0);
     x.metrage_m += Number(r.metrage_m||0);
     x.cartons += Number(r.cartons||0);
@@ -10178,8 +11233,9 @@ function _prodAggBy(rows, keyName){
   });
   return Object.values(m).map(v => {
     v.dossiers = v._dosSet.size; delete v._dosSet;
-    const den = Math.round(v.prod_min) + Math.round(v.arret_min);
-    v.vitesse_m_min = den>0 ? Number((v.metrage_m/den).toFixed(2)) : 0;
+    const vit = vitSessions(v._rows); delete v._rows;
+    v.vitesse_m_min = vit.v != null ? Number(vit.v.toFixed(2)) : 0;
+    v.vitesse_aberrante = vit.err;
     v.etiquettes = Math.round(v.etiquettes*10)/10;
     v.metrage_m = Math.round(v.metrage_m*10)/10;
     return v;
@@ -10262,6 +11318,23 @@ function _prodSynthTabSet(v){
   try{ localStorage.setItem('mysifa.prod.synthtab', v); }catch(e){}
 }
 
+// Cartes de statut affichees dans la vue d'ensemble : choix de chacun,
+// garde dans le navigateur. DSI et Repiquage masques par defaut.
+const MST_MACHINES = [['C1','Cohésio 1'],['C2','Cohésio 2'],['DSI','DSI'],['REP','Repiquage']];
+function _mstMasques(){
+  try{
+    const v = localStorage.getItem('mysifa.prod.mst.masques');
+    if(v != null){ const a = JSON.parse(v); if(Array.isArray(a)) return a; }
+  }catch(e){}
+  return ['DSI','REP'];
+}
+function _mstBasculer(k){
+  const a = _mstMasques();
+  const i = a.indexOf(k);
+  if(i >= 0) a.splice(i,1); else a.push(k);
+  try{ localStorage.setItem('mysifa.prod.mst.masques', JSON.stringify(a)); }catch(e){}
+}
+
 function renderMachineStatusCards(){
   const ms = S.machineStatus;
   const ICONS = {
@@ -10300,7 +11373,7 @@ function renderMachineStatusCards(){
     const isOn  = sk!=='eteinte';
     const dureeStr = m ? fmtDuree(m.duree_min) : null;
     const dureeLabel = DUREE_LABEL[sk]||'Depuis';
-    return h('div',{className:`mst-card mst-${sk}`,
+    return h('div',{className:`mst-card mst-${sk}`,'data-mkey':mkey,
         'data-bloc':'prod.ensemble.machine','data-bloc-objet':String(mkey),
         'data-bloc-objet-libelle':String(nom||''),
         'data-bloc-valeur-etat':String(label||''),
@@ -10405,8 +11478,17 @@ function renderMachineStatusCards(){
   const titleNode = h('span',{className:'section-title',style:{display:'inline-flex',alignItems:'center',gap:'4px',margin:0,padding:0,border:'none',flex:'1'}},
     iconEl('cpu',13),' Statut machines',
     h('span',{
-      style:{marginLeft:'auto',display:'inline-flex',gap:'8px'},
+      style:{marginLeft:'auto',display:'inline-flex',gap:'8px',alignItems:'center'},
     },
+      h('span',{className:'mst-choix',title:'Machines affichées'},
+        ...MST_MACHINES.map(([k,lib])=>{
+          const on = !_mstMasques().includes(k);
+          const nom = (k==='C1'||k==='C2') && ms && ms[k] && ms[k].nom ? ms[k].nom : lib;
+          return h('button',{type:'button',className:'mst-chip'+(on?' on':''),
+            title:(on?'Masquer ':'Afficher ')+nom,
+            onClick:e=>{ e.stopPropagation(); _mstBasculer(k); render(); }}, nom);
+        })
+      ),
       h('button',{
         type:'button',
         id:'mst-refresh-btn',
@@ -10421,16 +11503,13 @@ function renderMachineStatusCards(){
       },'↺ Actualiser')
     )
   );
-  const contentNode = h('div',null,
-    h('div',{className:'mst-grid'},
-      mkCard('C1'),
-      mkCard('C2')
-    ),
-    h('div',{className:'mst-grid',style:{marginTop:'12px'}},
-      mkCardDsi(),
-      mkCardRepiquage()
-    )
-  );
+  const masques = _mstMasques();
+  const cartes = MST_MACHINES.filter(([k])=>!masques.includes(k)).map(([k])=>
+    k==='DSI' ? mkCardDsi() : k==='REP' ? mkCardRepiquage() : mkCard(k));
+  const contentNode = cartes.length
+    ? h('div',{className:'mst-grid'}, ...cartes)
+    : h('div',{style:{fontSize:'12px',color:'var(--muted)',padding:'4px 2px 14px'}},
+        'Aucune machine affichée — choisissez-les en haut à droite.');
   const _enMarche=['C1','C2'].filter(k=>ms&&ms[k]&&(ms[k].statut_key||'eteinte')!=='eteinte').length;
   return makeCollapsibleSection(titleNode, contentNode, 'machines', true,
     {'data-bloc':'prod.ensemble.machines','data-bloc-valeur-en-marche':String(_enMarche)});
@@ -10619,9 +11698,8 @@ function updateMachineStatusDOM(){
   }
   const grid=document.querySelector('.mst-grid');
   if(!grid)return;
-  const cards=grid.querySelectorAll('.mst-card');
-  cards.forEach((card,idx)=>{
-    const mkey=idx===0?'C1':'C2';
+  grid.querySelectorAll('.mst-card[data-mkey]').forEach(card=>{
+    const mkey=card.getAttribute('data-mkey');
     const m=ms&&ms[mkey];
     const sk=m?(m.statut_key||'eteinte'):'eteinte';
     const label=m?(m.statut_label||'Éteinte'):'Éteinte';
@@ -11081,13 +12159,13 @@ function _mpmListeSynthese(byDosNoRep){
   let items;
   if(axe === 'dossier'){
     items = _prodAggDossier(byDosNoRep).map(function(r){
-      const den = Math.round(Number(r.temps_prod_min||0)) + Math.round(Number(r.temps_arret_min||0));
+      const den = Number(r.temps_prod_min||0) + Number(r.temps_arret_min||0);
       return {
         key: String(r.no_dossier),
         titre: '#'+r.no_dossier,
         sous: prodSynthCleanClient(r.client) || '—',
         n: fN(r.metrage_m||0)+' m',
-        vit: (den>0 ? (Number(r.metrage_m||0)/den).toFixed(2) : '0.00')+' m/min',
+        vit: vitEl(vitCalc(r.metrage_m, den)),
       };
     });
   }else{
@@ -11104,7 +12182,7 @@ function _mpmListeSynthese(byDosNoRep){
         sous: fN(r.dossiers||0)+' dossier'+((r.dossiers||0)>1?'s':'')
               + ' · ' + fMin(r.prod_min) + ' de prod',
         n: fN(r.metrage_m||0)+' m',
-        vit: (Number(r.vitesse_m_min)||0).toFixed(2)+' m/min',
+        vit: vitEl(vitSrv(r.vitesse_m_min, r.vitesse_aberrante)),
       };
     });
   }
@@ -11229,7 +12307,8 @@ function renderMpmKpis(){
   // 2. Les chiffres de la periode --------------------------------------
   if(!onlyRep){
     const prodInclArrets = Number(tt.production_min||0) + Number(tt.arret_min||0);
-    const vitesse = (d.vitesse_m_min != null) ? Number(d.vitesse_m_min).toFixed(2) : '0.00';
+    const vitC = vitSrv(d.vitesse_m_min, d.vitesse_aberrante);
+    const vitesse = vitC.v != null ? vitC.v.toFixed(2) : vitEl(vitC);
     const kv = function(lbl, val){
       return h('div',{className:'msf-kv'}, h('dt',null,lbl), h('dd',null,val));
     };
@@ -11246,7 +12325,7 @@ function renderMpmKpis(){
             h('dd',null, fN(prod.metrage_m||0), h('small',null,'m'))),
           h('dl',{className:'mpm-hero-t mpm-hero-t--accent'},
             h('dt',null,'Vitesse'),
-            h('dd',null, vitesse, h('small',null,'m/min')))
+            h('dd',null, vitesse, vitC.v != null ? h('small',null,'m/min') : null))
         ),
         h('div',{className:'msf-card'},
           kv('Dossiers produits', fN(prod.dossiers||0)),
@@ -11323,6 +12402,7 @@ function _mpmSaiDuree(m){
   return Math.floor(mm/60)+' h '+String(mm%60).padStart(2,'0');
 }
 function _mpmSaiMetrage(row){
+  if(row._fin_calage && row._fin_calage.metres != null) return '⇒ '+fN(row._fin_calage.metres)+' m calage';
   if(row._metrage_dossier != null)    return '⇒ '+fN(row._metrage_dossier)+' m';
   if(row.metrage_total_fin != null)   return fN(row.metrage_total_fin)+' m (cpt fin)';
   if(row.metrage_reel != null)        return fN(row.metrage_reel)+' m';
@@ -11429,6 +12509,9 @@ function renderMpmSaisies(d, rows, readOnly){
     if(row.modifie_par) tags.push(h('span',{className:'msf-badge'},'Corrigé'));
     if((row.operation_code||'') === '89' && Number(row.fin_dossier) === 1)
       tags.push(h('span',{className:'msf-badge msf-badge--ok'},'Dossier clôturé'));
+    if(row._fin_calage && !annule)
+      tags.push(h('span',{className:'msf-badge msf-badge--warn'},
+        'Fin de calage · '+(_mpmSaiDuree(row._fin_calage.minutes) || '0 min')));
 
     const dur = _mpmSaiDuree(row.duree_min);
     const met = _mpmSaiMetrage(row);
@@ -11526,10 +12609,14 @@ function renderProdPage(){
         else{stopMachineStatusPolling();}
         if(t.key==='saisies'&&!S.saisies)  await loadSaisies();
         if(t.key==='erreurs'&&!S.historique) await loadHist();
+        if(t.key==='erreurs') await loadProdEcarts();
         if(t.key==='retour'&&!S.retourProd) await loadRetourProd();
         render();
       }
-    }, iconEl(t.icon,14),' '+t.label))
+    }, iconEl(t.icon,14),' '+t.label,
+       (t.key==='erreurs' && Number(S.prodEcartsCount||0) > 0)
+         ? h('span',{className:'nav-tab-badge',title:'Écarts de saisie à traiter'},String(S.prodEcartsCount))
+         : null))
   );
   let content;
   if(subPage==='saisies')  content = renderSaisiesWithImport();
@@ -11554,8 +12641,16 @@ function renderReunionsTab(){
   }
   requestAnimationFrame(function(){
     window.MySifaReunions.monter(hote, {
-      toast: (m,t)=>{ try{ showToast(m,t); }catch(e){} }
+      toast: (m,t)=>{ try{ showToast(m,t); }catch(e){} },
+      // Réunion ouverte, filtre du suivi : dans l'adresse (prodSyncUrl).
+      surChange: ()=>{ if(!S._reunionsUrl) prodSyncUrl(); }
     });
+    if(S._reunionsUrl && window.MySifaReunions.aller){
+      const a=S._reunionsUrl;
+      window.MySifaReunions.aller(a).then(()=>{
+        if(S._reunionsUrl===a){ S._reunionsUrl=null; prodSyncUrl(); }
+      });
+    }
   });
   return hote;
 }
@@ -11729,8 +12824,7 @@ function prodSynthTotals(sessions){
     t.arret_min+=Number(s.temps_arret_min||0);
   });
   t.metrage_m=Math.round(t.metrage_m*10)/10;
-  const den=Math.round(t.prod_min)+Math.round(t.arret_min);
-  t.vitesse=den>0?(t.metrage_m/den).toFixed(2):'0.00';
+  t.vit=vitSessions(sessions);
   return t;
 }
 function prodSynthCleanClient(c){
@@ -11739,7 +12833,11 @@ function prodSynthCleanClient(c){
   if(p.length===2&&/^\d+$/.test(p[0].trim()))return p[1].trim();
   return String(c).trim();
 }
-function closeProdSynthModal(){
+function closeProdSynthModal(sansAdresse){
+  if(!sansAdresse && S.urlModale && S.urlModale.cle==='synthese'
+     && document.querySelector('.prod-synth-modal')){
+    S.urlModale=null; prodSyncUrl();
+  }
   try{
     const m=document.querySelector('.prod-synth-modal');
     if(m&&m._navKeyHandler){
@@ -11757,7 +12855,11 @@ function openProdSynthDetail(type,keys,index,opts){
   if(!Number.isFinite(idx)||idx<0)idx=0;
   if(idx>=list.length)idx=list.length-1;
   const key=list[idx];
-  closeProdSynthModal();
+  closeProdSynthModal(true);
+  // Une synthèse calculée à part (équipes de repiquage, filtre propre) ne se
+  // rouvre pas depuis l'adresse : elle n'y figure pas.
+  S.urlModale = opts.customSessionsFn ? null : {cle:'synthese', id:type+':'+key};
+  prodSyncUrl();
   const TYPE_TITLES={dossier:'Dossier',operator:'Opérateur',machine:'Machine',day:'Jour',team:'Équipe'};
   // Sessions : custom (par equipe repiquage) OU filtre standard
   let sessions;
@@ -11834,8 +12936,7 @@ function openProdSynthDetail(type,keys,index,opts){
     ];
     colSpan = showDossierCol?11:10;
     sessionRows = sessions.length ? sessions.map(s=>{
-      const den=Math.round(Number(s.temps_prod_min||0))+Math.round(Number(s.temps_arret_min||0));
-      const vit=den>0?(Number(s.metrage_m||0)/den).toFixed(2):'0.00';
+      const vit=vitEl(vitSessions([s]));
       const cli=prodSynthCleanClient(s.client);
       const des=(s.designation||'').replace(/^,\s*/,'').trim();
       return h('tr',null,
@@ -11849,7 +12950,7 @@ function openProdSynthDetail(type,keys,index,opts){
         h('td',{className:'prod-synth-detail-td-num'},fMin(s.temps_calage_min)),
         h('td',{className:'prod-synth-detail-td-num'},fMin(s.temps_prod_min)),
         h('td',{className:'prod-synth-detail-td-num'},fMin(s.temps_arret_min)),
-        h('td',{className:'prod-synth-detail-td-vit'},vit+' m/min')
+        h('td',{className:'prod-synth-detail-td-vit'},vit)
       );
     }) : [h('tr',null,h('td',{colSpan:colSpan,className:'prod-synth-detail-empty'},'Aucune session sur la période filtrée.'))];
   }
@@ -11877,7 +12978,7 @@ function openProdSynthDetail(type,keys,index,opts){
         kpi('Calage',fMin(tot.calage_min)),
         kpi('Production',fMin(tot.prod_min)),
         kpi('Arrêts',fMin(tot.arret_min)),
-        kpi('Vitesse',tot.vitesse+' m/min')
+        kpi('Vitesse',vitEl(tot.vit))
       );
   const formKids=[
     h('button',{type:'button',className:'add-row-close',title:'Fermer (Échap)',onClick:e=>{e.stopPropagation();closeProdSynthModal();}},'×'),
@@ -11986,80 +13087,65 @@ function renderProdKpis(){
     parts.push(renderMachineStatusCards());
   }
 
-  // ── Sanity score cliquable ───────────────────────────────────────
-  // Le rôle « commercial » n'a pas accès à la vue Erreurs & Qualité : on retire le clic vers ce détail.
+  // ── Bandeau de la periode : qualite de saisie, quantites, temps ──
+  // Trois blocs sur une ligne au lieu de trois sections pleine largeur.
+  // Chaque groupe garde son nom de bloc (widgets d'accueil).
+  _prodVueCss();
+  const bandeau = [];
+  // Le rôle « commercial » n'a pas accès à la vue Erreurs & Qualité : pas de clic vers ce détail.
   if(S.historique&&S.historique.sanity && !isCommercial(S.user)){
-    const sc=renderSanity(S.historique.sanity);
-    if(sc){
-      sc.setAttribute('data-bloc','prod.ensemble.sanity');
-      sc.setAttribute('data-bloc-valeur-score',String(S.historique.sanity.score||0));
-      sc.style.cursor='pointer';
-      sc.title='Voir le détail des erreurs → Historique & Erreurs';
-      sc.addEventListener('click',async()=>{
-        S.subPage='erreurs';
-        if(!S.historique) await loadHist();
-        render();
-      });
-      sc.appendChild(h('div',{style:{fontSize:'11px',color:'var(--accent)',marginTop:'6px',textDecoration:'underline'}},'Voir le détail →'));
-      parts.push(sc);
-    }
+    bandeau.push(renderSanityCompact(S.historique.sanity));
   }
-
-  // Helper mention italique "(hors repiquage)" — affichee uniquement
-  // si donnees mixtes (rep + autres machines).
-  const horsRepMention = () => hasRep && !onlyRep
-    ? h('span',{style:{fontStyle:'italic',color:'var(--muted)',fontSize:'11px',marginLeft:'8px',fontWeight:'400'}},'(hors repiquage)')
-    : null;
-
-  // ── QUANTITÉS — masque si seulement repiquage ────────────────────
-  if(!onlyRep){
-    parts.push(makeCollapsibleSection(
-      h('span',{className:'section-title',style:{display:'inline-flex',alignItems:'center',gap:'4px',margin:0,padding:0,border:'none'}},
-        iconEl('box',13),' Quantités', horsRepMention()
-      ),
-      h('div',{className:'stats'},
-        h('div',{className:'stat'},h('div',{className:'stat-label'},'Dossiers produits'),h('div',{className:'stat-value'},fN(prod.dossiers||0))),
-        h('div',{className:'stat'},h('div',{className:'stat-label'},'Métrage'),h('div',{className:'stat-value'},fN(prod.metrage_m||0)+' m')),
-        h('div',{className:'stat'},h('div',{className:'stat-label'},'Vitesse'),h('div',{className:'stat-value'},((d.vitesse_m_min!=null)?Number(d.vitesse_m_min).toFixed(2):'0.00')+' m/min')),
-      ),
-      'quantites', true,
-      {'data-bloc':'prod.ensemble.quantites',
-       'data-bloc-valeur-dossiers':fN(prod.dossiers||0),
-       'data-bloc-nombre-dossiers':String(prod.dossiers||0),
-       'data-bloc-valeur-metrage':fN(prod.metrage_m||0)+' m',
-       'data-bloc-nombre-metrage':String(prod.metrage_m||0),
-       'data-bloc-valeur-vitesse':((d.vitesse_m_min!=null)?Number(d.vitesse_m_min).toFixed(2):'0.00')+' m/min',
-       'data-bloc-nombre-vitesse':String(d.vitesse_m_min||0)}
-    ));
-  }
-
-  // ── TEMPS — masque si seulement repiquage ────────────────────────
+  const horsRep = hasRep && !onlyRep
+    ? h('span',{className:'pv-hors'},'hors repiquage') : null;
+  const tuile = (lib, val, c) => h('div',{className:'pv-tuile',style:c?('--c:'+c):null},
+    h('div',{className:'pv-lib'}, c?h('i',{className:'pv-pt'}):null, lib),
+    h('div',{className:'pv-val'}, val));
   if(!onlyRep){
     const prodInclArrets = (Number(tt.production_min||0) + Number(tt.arret_min||0));
-    parts.push(makeCollapsibleSection(
-      h('span',{className:'section-title',style:{display:'inline-flex',alignItems:'center',gap:'4px',margin:0,padding:0,border:'none'}},
-        iconEl('clock',13),' Temps', horsRepMention()
-      ),
-      h('div',{className:'time-kpi'},
-        h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('wrench',12),' Calage'),h('div',{className:'tc-value'},fMin(tt.calage_min))),
-        h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('play',12),' Production'),h('div',{className:'tc-value'},fMin(prodInclArrets))),
-        h('div',{className:'time-card'},h('div',{className:'tc-label',style:{display:'inline-flex',alignItems:'center',gap:'6px'}},iconEl('alert-triangle',12),' Arrêts'),h('div',{className:'tc-value'},fMin(tt.arret_min))),
-      ),
-      'temps', true,
-      {'data-bloc':'prod.ensemble.temps',
-       'data-bloc-valeur-calage':fMin(tt.calage_min),'data-bloc-nombre-calage':String(Math.round(Number(tt.calage_min||0))),
-       'data-bloc-valeur-production':fMin(prodInclArrets),'data-bloc-nombre-production':String(Math.round(prodInclArrets)),
-       'data-bloc-valeur-arrets':fMin(tt.arret_min),'data-bloc-nombre-arrets':String(Math.round(Number(tt.arret_min||0)))}
+    bandeau.push(h('div',{className:'pv-groupe',
+        'data-bloc':'prod.ensemble.quantites',
+        'data-bloc-valeur-dossiers':fN(prod.dossiers||0),
+        'data-bloc-nombre-dossiers':String(prod.dossiers||0),
+        'data-bloc-valeur-metrage':fN(prod.metrage_m||0)+' m',
+        'data-bloc-nombre-metrage':String(prod.metrage_m||0),
+        'data-bloc-valeur-vitesse':vitTxt(vitSrv(d.vitesse_m_min,d.vitesse_aberrante)),
+        'data-bloc-nombre-vitesse':String(d.vitesse_aberrante?0:(d.vitesse_m_min||0))},
+      h('div',{className:'pv-titre','data-bloc-entete':''},iconEl('box',11),' Quantités',horsRep),
+      h('div',{className:'pv-tuiles'},
+        tuile('Dossiers', fN(prod.dossiers||0)),
+        tuile('Métrage', fN(prod.metrage_m||0)+' m', 'var(--accent)'),
+        tuile('Vitesse', vitEl(vitSrv(d.vitesse_m_min,d.vitesse_aberrante)), 'var(--warn)'))
+    ));
+    bandeau.push(h('div',{className:'pv-groupe',
+        'data-bloc':'prod.ensemble.temps',
+        'data-bloc-valeur-calage':fMin(tt.calage_min),'data-bloc-nombre-calage':String(Math.round(Number(tt.calage_min||0))),
+        'data-bloc-valeur-production':fMin(prodInclArrets),'data-bloc-nombre-production':String(Math.round(prodInclArrets)),
+        'data-bloc-valeur-arrets':fMin(tt.arret_min),'data-bloc-nombre-arrets':String(Math.round(Number(tt.arret_min||0)))},
+      h('div',{className:'pv-titre','data-bloc-entete':''},iconEl('clock',11),' Temps',horsRep ? horsRep.cloneNode(true) : null),
+      h('div',{className:'pv-tuiles'},
+        tuile('Calage', fMin(tt.calage_min), 'var(--c4)'),
+        tuile('Production', fMin(prodInclArrets), 'var(--success)'),
+        tuile('Arrêts', fMin(tt.arret_min), 'var(--danger)'))
     ));
   }
+  if(bandeau.length) parts.push(h('div',{className:'pv-bandeau'}, ...bandeau));
 
   // ── SYNTHÈSE DÉTAILLÉE — sous-onglets Machines / Repiquage ───────
   const activeSubTab = _prodSynthTabGet(hasRep, onlyRep);
   // Builders pour chaque sous-onglet
+  // Couleur par nature de temps, la meme que les pastilles des saisies.
+  const _psTh = (lib,c) => h('th',null,h('i',{className:'ps-dot',style:'--c:'+c}),lib);
+  const _psMin = (v,cls) => h('td',{style:{fontFamily:'monospace'},
+    className:Math.round(Number(v||0))>0?cls:'ps-c-nul'}, fMin(v));
+  const _psMetrage = (v,max) => h('td',{className:'ps-met',style:{fontFamily:'monospace'}},
+    fN(v||0)+' m',
+    h('span',{className:'ps-met-barre'},h('i',{style:{width:(max>0?Math.round(Number(v||0)/max*100):0)+'%'}})));
   function buildMachinesPart(){
     const synthParts = [];
     // Par numéro de dossier (+ Client, − Étiquettes)
     const rowsAgg = _prodAggDossier(byDosNoRep);
+    const metMaxDos = Math.max(0, ...rowsAgg.map(r=>Number(r.metrage_m||0)));
     if(rowsAgg.length){
       const dossierKeys = rowsAgg.map(r=>String(r.no_dossier));
       synthParts.push(h('div',{className:'card','data-bloc':'prod.ensemble.par-dossier',
@@ -12070,20 +13156,21 @@ function renderProdKpis(){
             h('th',null,'Dossier'),
             h('th',null,'Client'),
             h('th',null,'Métrage'),
-            h('th',null,'Calage'),
-            h('th',null,'Prod'),
-            h('th',null,'Arrêts'),
-            h('th',null,'Vitesse')
+            _psTh('Calage','var(--c4)'),
+            _psTh('Prod','var(--success)'),
+            _psTh('Arrêts','var(--danger)'),
+            _psTh('Vitesse','var(--warn)')
           )),
-          h('tbody',null,...rowsAgg.map((r,i)=>h('tr',null,
-            makeProdSynthKeyCell(r.no_dossier||'','dossier',dossierKeys,i),
+          h('tbody',null,...rowsAgg.flatMap(r=>_psLigneDossier(String(r.no_dossier||''), [
+            h('td',{style:{fontWeight:'700',color:'var(--text)'}},
+              h('span',{className:'ps-chev'},iconEl('chevron-right',12)), r.no_dossier||''),
             h('td',{className:'prod-synth-detail-td-text'}, prodSynthCleanClient(r.client) || '—'),
-            h('td',{style:{fontFamily:'monospace'}},fN(r.metrage_m||0)+' m'),
-            h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_calage_min)),
-            h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_prod_min)),
-            h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_arret_min)),
-            h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},(()=>{const den=Math.round(Number(r.temps_prod_min||0))+Math.round(Number(r.temps_arret_min||0));return (den>0?(Number(r.metrage_m||0)/den).toFixed(2):'0.00')+' m/min';})())
-          )))
+            _psMetrage(r.metrage_m, metMaxDos),
+            _psMin(r.temps_calage_min,'ps-c-cal'),
+            _psMin(r.temps_prod_min,'ps-c-prod'),
+            _psMin(r.temps_arret_min,'ps-c-arr'),
+            h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},vitEl(vitCalc(r.metrage_m, Number(r.temps_prod_min||0)+Number(r.temps_arret_min||0))))
+          ], 7)))
         ))
       ));
     }
@@ -12091,6 +13178,7 @@ function renderProdKpis(){
     function renderAggCard(title, rows, keyLabel, synthType){
       if(!rows||!rows.length) return null;
       const keys=rows.map(r=>String(r.key));
+      const metMax=Math.max(0, ...rows.map(r=>Number(r.metrage_m||0)));
       const typeMap={'Opérateur':'operator','Machine':'machine','Jour':'day'};
       const st=synthType||(typeMap[keyLabel]||'');
       const bloc=keyLabel==='Opérateur'?'prod.ensemble.par-operateur'
@@ -12102,16 +13190,16 @@ function renderProdKpis(){
         h('div',{style:{overflowX:'auto'}},h('table',null,
           h('thead',null,h('tr',null,
             h('th',null,keyLabel),h('th',null,'Dossiers'),
-            h('th',null,'Métrage'),h('th',null,'Calage'),h('th',null,'Prod'),h('th',null,'Arrêts'),h('th',null,'Vitesse')
+            h('th',null,'Métrage'),_psTh('Calage','var(--c4)'),_psTh('Prod','var(--success)'),_psTh('Arrêts','var(--danger)'),_psTh('Vitesse','var(--warn)')
           )),
           h('tbody',null,...rows.map((r,i)=>h('tr',null,
             makeProdSynthKeyCell(keyLabel==='Opérateur'?opName(r.key):(keyLabel==='Jour'?formatJourLabel(r.key):r.key),st,keys,i),
             h('td',{style:{fontFamily:'monospace'}},fN(r.dossiers||0)),
-            h('td',{style:{fontFamily:'monospace'}},fN(r.metrage_m||0)+' m'),
-            h('td',{style:{fontFamily:'monospace'}},fMin(r.calage_min)),
-            h('td',{style:{fontFamily:'monospace'}},fMin(r.prod_min)),
-            h('td',{style:{fontFamily:'monospace'}},fMin(r.arret_min)),
-            h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},(Number(r.vitesse_m_min)||0).toFixed(2)+' m/min')
+            _psMetrage(r.metrage_m, metMax),
+            _psMin(r.calage_min,'ps-c-cal'),
+            _psMin(r.prod_min,'ps-c-prod'),
+            _psMin(r.arret_min,'ps-c-arr'),
+            h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},vitEl(vitSrv(r.vitesse_m_min,r.vitesse_aberrante)))
           )))
         ))
       );
@@ -12572,7 +13660,7 @@ function renderProdKpis(){
   const synthContent = activeSubTab === 'repiquage' ? buildRepiquagePart() : buildMachinesPart();
 
   parts.push(makeCollapsibleSection(
-    h('span',{className:'section-title',style:{margin:0,padding:0,border:'none'}},'📌 Synthèse détaillée'),
+    h('span',{className:'section-title',style:{margin:0,padding:0,border:'none'}},iconEl('layers',13),' Synthèse détaillée'),
     h('div',null, subTabsBar, synthContent),
     'synthese'
   ));
@@ -12608,10 +13696,8 @@ function renderProdKpis(){
         if(p === 'users'){ window.location.href = '/settings'; return; }
         if(p === 'matiere_prix'){ window.location.href = '/pricing'; return; }
         if(p === 'profil'){ window.location.href = '/profil'; return; }
-        const allowed = new Set(['menu','production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of','scans','fiches']);
-        if(allowed.has(p)) S.page = p;
       }catch(e){}
-      try{var _hv=_readProdHash();if(_hv){if(_hv.subPage)S.subPage=_hv.subPage;if(_hv.ofSubTab)S.ofSubTab=_hv.ofSubTab;}}catch(e){}
+      try{ prodLireUrl(false); }catch(e){}
       // Charger les données initiales pour la sous-page courante (étape 2g).
       try{ startAlertsBadgePolling(); }catch(e){}
       try{
@@ -12625,6 +13711,8 @@ function renderProdKpis(){
             await loadHist();
             await loadMachineStatus();
           }
+          // Arrivée par l'adresse sur Retour de prod (?sous=retour&cr=…).
+          if(S.subPage === 'retour') await loadRetourProd();
         }else if(S.page === 'dossiers'){
           await loadDos();
         }else if(S.page === 'suivi'){
@@ -12641,8 +13729,11 @@ function renderProdKpis(){
           await loadImports();
         }else if(S.page === 'traceabilite'){
           await loadTracabilite();
+          if(S._tracDossierUrl){ const r=S._tracDossierUrl; S._tracDossierUrl=null; await loadTracabiliteDossier(r); }
         }else if(S.page === 'of' && canAccessOfTab()){
           await loadOfImports();
+          if(S.ofSubTab === 'pending') await loadPendingOfMappings();
+          else if(S.ofSubTab === 'sansof') await loadDossiersSansOf();
         }else if(S.page === 'fiches' && canAccessOfTab()){
           // Arrivee directe par /prod?page=fiches (lien de la barre laterale
           // du Planning) : sans ce chargement la page s'ouvre vide.
@@ -12651,6 +13742,9 @@ function renderProdKpis(){
         }
         // Badge "Mappings OF à valider" dans la sidebar
         try{ if(canAccessOfTab()) loadPendingOfCount(); }catch(e){}
+        // Fenêtre de détail demandée par l'adresse (?devis=, ?of=…).
+        try{ render(); prodAppliquerModaleUrl(); }catch(e){}
+        try{ loadProdEcartsCount(); }catch(e){}
       }catch(e){
         console.warn('[mysifa_prod_core] checkAuth load erreur:', e && e.message);
       }
@@ -12706,9 +13800,8 @@ function renderProdKpis(){
         if(p === 'users'){ window.location.href = '/settings'; return; }
         if(p === 'matiere_prix'){ window.location.href = '/pricing'; return; }
         if(p === 'profil'){ window.location.href = '/profil'; return; }
-        const allowed = new Set(['menu','production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of','scans','fiches']);
-        if(allowed.has(p)) S.page = p;
       }catch(e){}
+      try{ prodLireUrl(false); }catch(e){}
       S.loginError = null;
       S.loginSubmitting = false;
       render();
@@ -12724,6 +13817,8 @@ function renderProdKpis(){
             await loadHist();
             await loadMachineStatus();
           }
+          // Arrivée par l'adresse sur Retour de prod (?sous=retour&cr=…).
+          if(S.subPage === 'retour') await loadRetourProd();
         }else if(S.page === 'dossiers'){
           await loadDos();
         }else if(S.page === 'suivi'){
@@ -12740,8 +13835,11 @@ function renderProdKpis(){
           await loadImports();
         }else if(S.page === 'traceabilite'){
           await loadTracabilite();
+          if(S._tracDossierUrl){ const r=S._tracDossierUrl; S._tracDossierUrl=null; await loadTracabiliteDossier(r); }
         }else if(S.page === 'of' && canAccessOfTab()){
           await loadOfImports();
+          if(S.ofSubTab === 'pending') await loadPendingOfMappings();
+          else if(S.ofSubTab === 'sansof') await loadDossiersSansOf();
         }else if(S.page === 'fiches' && canAccessOfTab()){
           // Arrivee directe par /prod?page=fiches (lien de la barre laterale
           // du Planning) : sans ce chargement la page s'ouvre vide.
@@ -12750,6 +13848,9 @@ function renderProdKpis(){
         }
         // Badge "Mappings OF à valider" dans la sidebar
         try{ if(canAccessOfTab()) loadPendingOfCount(); }catch(e){}
+        // Fenêtre de détail demandée par l'adresse (?devis=, ?of=…).
+        try{ render(); prodAppliquerModaleUrl(); }catch(e){}
+        try{ loadProdEcartsCount(); }catch(e){}
         render();
       }catch(e){
         console.warn('[mysifa_prod_core] doLogin load erreur:', e && e.message);
@@ -12789,6 +13890,9 @@ function renderProdKpis(){
           await loadSaisies();
         }else if(S.subPage === 'erreurs'){
           await loadHist();
+          await loadProdEcarts();
+        }else if(S.subPage === 'retour'){
+          await loadRetourProd();
         }
       }
       // Sous-pages "héritées" (compat ?page=xxx)
@@ -12809,19 +13913,21 @@ function renderProdKpis(){
         // Les liaisons de TOUTES les entrees, pas seulement des douze
         // affichees : sans elles, ni compteur ni filtre « a lier ».
         await loadRentLinks();
+        rentRapprochementAuto();
       }else if(S.page === 'traceabilite'){
         S.traceabilite = null;
         S.traceabiliteDossier = undefined;
         S.tracShowAttente = false;
         await loadTracabilite();
+        if(S._tracDossierUrl){ const r=S._tracDossierUrl; S._tracDossierUrl=null; await loadTracabiliteDossier(r); }
       }else if(S.page === 'fiches' && canAccessOfTab()){
         if(S.fichesSubTab === 'orphelines') await loadFichesOrphelines();
         else await loadFiches();
       }else if(S.page === 'of' && canAccessOfTab()){
         await loadOfImports();
         if(S.ofSubTab === 'fiche') await loadFiches();
-        else if(S.ofSubTab === 'sans_of') await loadDossiersSansOf();
-        else if(S.ofSubTab === 'mappings') await loadPendingOfMappings();
+        else if(S.ofSubTab === 'sansof' || S.ofSubTab === 'sans_of') await loadDossiersSansOf();
+        else if(S.ofSubTab === 'pending' || S.ofSubTab === 'mappings') await loadPendingOfMappings();
       }
     }catch(e){
       console.warn('[mysifa_prod_core] nav() erreur:', e && e.message);
@@ -12921,7 +14027,7 @@ function renderProdKpis(){
       ? (canPlanningNav(S.user) ? [{key: '_planning', label: 'Planning', icon: 'calendar'}] : [])
       : [
           ...(canPlanningNav(S.user) ? [{key: '_planning', label: 'Planning', icon: 'calendar'}] : []),
-          {key: 'production', label: 'Production', icon: 'wrench'},
+          {key: 'production', label: 'Production', icon: 'wrench', withEcartsBadge: true},
           {key: 'traceabilite', label: 'Tra\u00e7abilit\u00e9', icon: 'layers'},
           ...(admin ? [{key: 'rentabilite', label: 'Rentabilit\u00e9', icon: 'trending-up'}] : []),
           // Section : les OF, leurs fiches et leurs scans vivent ensemble.
@@ -12959,6 +14065,15 @@ function renderProdKpis(){
         });
         btn.appendChild(iconEl(i.icon, 15));
         btn.appendChild(document.createTextNode('  ' + i.label));
+        if(i.withEcartsBadge){
+          const n = Number(S.prodEcartsCount || 0);
+          if(n > 0){
+            btn.appendChild(h('span', {
+              style: 'margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--danger);color:white;font-size:10px;font-weight:700;line-height:1.5;flex-shrink:0',
+              title: n + ' \u00e9cart' + (n > 1 ? 's' : '') + ' de saisie \u00e0 traiter',
+            }, String(n)));
+          }
+        }
         if(i.withPendingOfBadge){
           const cnt = Number(S.pendingOfCount || 0);
           if(cnt > 0){
@@ -13007,7 +14122,7 @@ function renderProdKpis(){
       + '.myprod-menu{max-width:960px}'
       + '.myprod-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:8px}'
       + '.myprod-tile{display:flex;align-items:center;gap:14px;text-align:left;width:100%;padding:18px 18px;background:var(--card);border:1px solid var(--border);border-radius:14px;cursor:pointer;color:var(--text);font-family:inherit;transition:border-color .15s,transform .15s,box-shadow .15s}'
-      + '.myprod-tile:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 22px rgba(34,211,238,.12)}'
+      + '.myprod-tile:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 22px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}'
       + '.myprod-tile-ic{width:44px;height:44px;border-radius:12px;background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}'
       + '.myprod-tile-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}'
       + '.myprod-tile-lbl{font-size:15px;font-weight:800;color:var(--text)}'
@@ -13137,7 +14252,11 @@ function renderProdKpis(){
       const _cible = pageContent;
       if(window.MySifaProduitMemoire){
         requestAnimationFrame(function(){
-          window.MySifaProduitMemoire.monterScansDans(_cible);
+          // Onglet et scan choisi : repris de l'adresse, et remontés à chaque
+          // rendu du module pour la tenir à jour.
+          window.MySifaProduitMemoire.monterScansDans(_cible,
+            {onglet:S.scansSous, scan:S.scansScan},
+            function(e){ S.scansSous=e.onglet; S.scansScan=e.scan||null; prodSyncUrl(); });
         });
       }else{
         pageContent.appendChild(h('div', {style: 'color:var(--muted);font-size:13px;padding:24px'},
@@ -13275,6 +14394,8 @@ function renderProdKpis(){
     // élément n'est animé : on évite les replays parasites.
     try { __moApplyPostRender(root); } catch(e){}
     try { __restoreScroll(__keepScroll); } catch(e){}
+    // L'adresse suit ce qui vient d'être affiché (prodSyncUrl).
+    prodSyncUrl();
   }
 
   // État de nav pour détecter les transitions d'onglet

@@ -84,14 +84,14 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
      intitules de section de la barre laterale. Sans suffixe, le navigateur
      ressert l'ancienne et la section s'affiche nue. -->
 <link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem13-mob1-msb1">
-<link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__-sais3-rent10-san3">
+<link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__-sais4-rent15-san3-sev1">
 <!-- Portrait telephone de MyProd > Production. Le socle mobile partage
      (prefixe .msf-) fournit les briques ; la feuille qui suit ne porte que
      ce qui appartient a MyProd (.mpm-) et quelques reprises du bureau. -->
 <link rel="stylesheet" href="/static/mysifa_mobile.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_prod_mobile.css?v=__V_LABEL__-mpm2">
 <link rel="stylesheet" href="/static/mysifa_retour_prod.css?v=__V_LABEL__-reu14">
-<link rel="stylesheet" href="/static/mysifa_reunions.css?v=__V_LABEL__-reu16">
+<link rel="stylesheet" href="/static/mysifa_reunions.css?v=__V_LABEL__-reu17">
 <link rel="stylesheet" href="/static/mysifa_print_modal.css?v=__V_LABEL__">
 <script src="/static/motion.js?v=__V_LABEL__" defer></script>
 <link rel="stylesheet" href="/static/mysifa_perf.css">
@@ -108,10 +108,10 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <script src="/static/mysifa_user_chip.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
-<script src="/static/mysifa_retour_prod.js?v=__V_LABEL__-reu14"></script>
+<script src="/static/mysifa_retour_prod.js?v=__V_LABEL__-reu17"></script>
 <!-- Points de production : monte par l'onglet Reunions de MyProd. Charge
      AVANT le coeur, qui le cherche sur window au moment du rendu. -->
-<script src="/static/mysifa_reunions.js?v=__V_LABEL__-reu16"></script>
+<script src="/static/mysifa_reunions.js?v=__V_LABEL__-reu17"></script>
 <!-- Selecteur de pieces RVGI, partage avec le planning et MyExpe. Charge
      AVANT le coeur : la modale OF l'appelle des son premier rendu. -->
 <script src="/static/mysifa_rvgi_picker.js?v=__V_LABEL__"></script>
@@ -125,16 +125,20 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
      Parametres > Fabrication > Impression). Autonome : aucun appel a faire. -->
 <link rel="stylesheet" href="/static/mysifa_encre_picker.css?v=__V_LABEL__">
 <script src="/static/mysifa_encre_picker.js?v=__V_LABEL__"></script>
-<script src="/static/mysifa_bobine_edit.js?v=1.0"></script>
+<script src="/static/mysifa_bobine_edit.js?v=1.1"></script>
 <!-- Export PDF des saisies par operateur et par session (appele par le core) -->
 <script src="/static/mysifa_saisies_pdf.js?v=1"></script>
-<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent10-sais4-bob5-msb1-san3-mpm2-ton1"></script>
+<!-- Panneau « Données de prod » d'un dossier (partage avec le destockage) -->
+<script src="/static/mysifa_donnees_prod.js?v=1"></script>
+<!-- Adresse de la page : onglet, filtres, tri et objet ouvert (url-etat.md). -->
+<script src="/static/mysifa_url.js?v=2"></script>
+<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent15-ecart3-sais4-bob5-msb1-san3-mpm2-ton1-vit2-sev1-url6-ecart4"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>
 <!-- v2.3.42 : viewer partagé du détail d'un ack d'alerte (identique à Maintenance) -->
 <script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__-ack2"></script>
 <!-- Memoire produit : fiche par reference (partagee avec Saisieprod) -->
-<script src="/static/mysifa_produit_memoire.js?v=__V_LABEL__-pmem17"></script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_produit_memoire.js?v=__V_LABEL__-pmem20"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 </body>
 </html>"""

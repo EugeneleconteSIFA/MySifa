@@ -145,7 +145,7 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   background-repeat:no-repeat;background-position:right 10px center;
 }
-.cal-mobile-view-sel:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.cal-mobile-view-sel:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
 body.sb-open .sidebar-overlay{display:block}
 .cal-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:16px 20px;border-bottom:1px solid var(--border);background:var(--card);flex-shrink:0}
@@ -349,7 +349,7 @@ body.light .cal-allday-row{background:#f8fafc}
   width:100%;min-width:0;background:var(--bg);border:1px solid var(--border);border-radius:10px;
   padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;transition:border-color .15s;
 }
-.cal-create-field input:focus,.cal-create-field select:focus,.cal-create-field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12);outline:none}
+.cal-create-field input:focus,.cal-create-field select:focus,.cal-create-field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent);outline:none}
 .cal-create-field textarea{min-height:60px;resize:vertical}
 .cal-create-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
 @media(max-width:520px){.cal-create-row{grid-template-columns:1fr}}
@@ -513,7 +513,7 @@ body.cal-dragging{user-select:none}
 .cal-mini-btn.danger:hover{border-color:var(--danger);color:var(--danger)}
 .cal-extern-form{display:grid;grid-template-columns:1fr 120px;gap:8px;margin-top:10px}
 .cal-extern-form input[type=text],.cal-extern-form input[type=url]{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:9px 11px;color:var(--text);font-size:13px;font-family:inherit;min-width:0}
-.cal-extern-form input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12);outline:none}
+.cal-extern-form input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent);outline:none}
 .cal-extern-form .full{grid-column:1 / -1}
 .cal-extern-form input[type=color]{width:100%;height:38px;border:1px solid var(--border);border-radius:10px;background:var(--bg);padding:3px;cursor:pointer}
 </style>
@@ -527,17 +527,17 @@ body.cal-dragging{user-select:none}
 <script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_calendar.js"></script>
 <script>window.__MYSIFA_APP__='calendrier';</script>
-<link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
+<link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
-<script src="/static/mysifa_ai_chat.js?v=4"></script>
+<script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=11"></script>
+<script src="/static/chat_widget.js?v=13"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div class="layout">
   <aside class="sidebar msb-nav">

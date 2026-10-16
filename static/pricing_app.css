@@ -136,7 +136,7 @@ table.pr-table tr{cursor:pointer}
 .mps-support{display:inline-block;padding:3px 8px;border-radius:6px;
   font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
 .mps-support-couche{background:rgba(125,211,252,.22);color:#0284c7}
-.mps-support-synthetique{background:rgba(34,211,238,.18);color:#0891b2}
+.mps-support-synthetique{background:color-mix(in srgb,var(--accent,#22d3ee) 18%,transparent);color:#0891b2}
 .mps-support-thermiques,.mps-support-thermique{background:rgba(99,102,241,.20);color:#4f46e5}
 .mps-support-velin{background:rgba(30,58,138,.22);color:#1e3a8a}
 /* Repli sur la catégorie quand la sous-section manque. */
@@ -146,7 +146,7 @@ table.pr-table tr{cursor:pointer}
 .mps-support-cat-complexe{background:rgba(99,102,241,.15);color:#6366f1}
 .mps-support-cat-mandrin{background:rgba(124,58,237,.15);color:#7c3aed}
 .mps-support-cat-carton{background:rgba(5,150,105,.15);color:#059669}
-.mps-support-cat-palette{background:rgba(8,145,178,.15);color:#0891b2}
+.mps-support-cat-palette{background:color-mix(in srgb,var(--accent,#0891b2) 15%,transparent);color:#0891b2}
 .mps-support-cat-autre{background:rgba(148,163,184,.18);color:#64748b}
 .currency-badge{font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--accent-bg);color:var(--accent)}
 .currency-badge.usd{color:var(--warn);background:rgba(251,191,36,.12)}

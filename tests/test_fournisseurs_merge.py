@@ -20,6 +20,7 @@ Lancement : python3 tests/test_fournisseurs_merge.py
 
 from __future__ import annotations
 
+import _base_temporaire  # noqa: E402,F401  — base jetable, avant config/database/app.*
 import json
 import os
 import sqlite3

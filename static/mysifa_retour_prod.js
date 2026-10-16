@@ -51,7 +51,9 @@
   }
   // La machine se regle en m/min : c'est l'unite du conducteur, celle de
   // `produit_series.vitesse_m_min` et celle qu'affiche tout MySifa. Pas de m/h.
-  function vitesse(v) {
+  // `aberrante` : au-dela du plafond machine, le serveur a retire le chiffre.
+  function vitesse(v, aberrante) {
+    if (aberrante) return '<span style="color:var(--danger);font-weight:400">erreur saisie</span>';
     return (v === null || v === undefined || isNaN(v)) ? "—" : fnum(v, 1) + " m/min";
   }
 
@@ -437,8 +439,12 @@
        + kpi(fnum(p.metrage) + ' m', "Métrage",
              d.dossiers + (d.dossiers > 1 ? " dossiers" : " dossier"))
        + kpi(minutesTxt(p.minutes_production), "Production",
-             p.vitesse_m_min ? vitesse(p.vitesse_m_min) : "")
-       + kpi(minutesTxt(p.minutes_calage), "Calage", "")
+             (p.vitesse_m_min || p.vitesse_aberrante) ? vitesse(p.vitesse_m_min, p.vitesse_aberrante) : "")
+       + kpi(minutesTxt(p.minutes_calage), "Calage",
+             p.gache_calage_m != null
+               ? "gâche " + fnum(p.gache_calage_m) + " m · " + p.dossiers_avec_gache
+                 + (p.dossiers_avec_gache > 1 ? " dossiers relevés" : " dossier relevé")
+               : "")
        + kpi(minutesTxt(p.minutes_arret), "Arrêts",
              p.part_arret_pct ? fnum(p.part_arret_pct, 1) + " % du temps" : "")
        + '</div></div>';
@@ -466,8 +472,8 @@
            + '<td>' + escHtml(r.client || "—") + '</td>'
            + '<td>' + escHtml(r.ref_produit_norm || r.designation || "—") + '</td>'
            + '<td class="num">' + fnum(r.metrage) + ' m</td>'
-           + '<td class="num">' + vitesse(r.cadence_m_min)
-           + '<div class="rp-sous">' + vitesse(r.vitesse_m_min) + ' hors arrêts</div></td>'
+           + '<td class="num">' + vitesse(r.cadence_m_min, r.cadence_aberrante)
+           + '<div class="rp-sous">' + vitesse(r.vitesse_m_min, r.vitesse_aberrante) + ' hors arrêts</div></td>'
            + '<td class="num">' + hab + '</td>'
            + '<td class="num">' + ecart + '</td></tr>';
       });
@@ -548,7 +554,7 @@
          + '<td>' + escHtml(r.client || "—") + '</td>'
          + '<td>' + escHtml(r.machine || "—") + '</td>'
          + '<td class="num">' + fnum(r.metrage_reel) + ' m</td>'
-         + '<td class="num">' + (r.cadence_m_min ? vitesse(r.cadence_m_min) : '—') + '</td>'
+         + '<td class="num">' + vitesse(r.cadence_m_min || null, r.cadence_aberrante) + '</td>'
          + '<td class="num">' + ecartHtml(r.ecart_cadence_pct) + '</td>'
          + '<td>' + info + '</td>'
          + '<td class="num">' + (r.nb_commentaires || 0) + '</td>'
@@ -730,6 +736,46 @@
     + 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
     + '<polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg>';
 
+  /* Calage et gâche : le temps (heures recopiées du dossier de prod à la
+     clôture), les mètres relevés au compteur en fin de calage, et ce que le
+     devis prévoyait. Chaque chiffre absent dit pourquoi il manque. */
+  function heureCourte(iso) {
+    return iso ? String(iso).slice(11, 16) : "—";
+  }
+  function renderCalage(c) {
+    if (!c) return "";
+    var d = c.declaration, g = c.gache || {}, dv = c.devis;
+    var sousTemps = d
+      ? "déclaré " + heureCourte(d.debut_calage) + " → " + heureCourte(d.fin_calage)
+        + (d.minutes_mesurees != null ? " · saisies " + minutesTxt(d.minutes_mesurees) : "")
+      : "non déclaré à la clôture";
+    var sousGache = g.metres != null
+      ? (g.plages.length > 1 ? g.plages.length + " calages relevés" : "relevé au compteur")
+      : (g.plages_sans_releve ? "compteur non relevé en fin de calage" : "aucun calage relevé");
+    var h = '<div class="rp-bloc"><div class="rp-titre">Calage et gâche</div><div class="rp-kpis">'
+          + kpi(minutesTxt(c.minutes), "Calage", sousTemps)
+          + kpi(g.metres != null ? fnum(g.metres) + " m" : "—", "Gâche de calage", sousGache);
+    if (dv) {
+      h += kpi(minutesTxt(dv.minutes) + " · " + fnum(dv.metres) + " m", "Prévu au devis",
+               "calage outil + impression")
+         + kpi(ecartHtml(c.ecart_devis_minutes_pct), "Écart temps", "réel / devis")
+         + kpi(ecartHtml(c.ecart_devis_metres_pct), "Écart gâche", "réel / devis");
+    } else {
+      h += kpi("—", "Prévu au devis", "aucun devis rattaché");
+    }
+    h += '</div>';
+    if (d && d.signalement) {
+      h += '<div class="rp-manque">Chiffrage signalé incohérent par '
+         + escHtml(d.declare_par || "le conducteur") + ' : « ' + escHtml(d.signalement) + ' »</div>';
+    }
+    if (d && (d.motifs_non_appliques || []).length) {
+      h += '<div class="rp-manque">Heures déclarées non reportées sur les saisies : '
+         + d.motifs_non_appliques.map(escHtml).join(" ")
+         + ' À corriger dans Saisies.</div>';
+    }
+    return h + '</div>';
+  }
+
   function renderCR(cr, opts) {
     opts = opts || {};
     var id = cr.identite || {}, t = cr.temps || {}, m = cr.metrage || {};
@@ -759,8 +805,8 @@
     h += '<div class="rp-bloc"><div class="rp-kpis">'
        + kpi(fnum(m.reel) + ' m', "Métrage",
              m.prevu ? "prévu " + fnum(m.prevu) + " m" : (m.fiable ? "" : "non exploitable"))
-       + kpi(vitesse(cr.vitesse_m_min), "Vitesse", "hors arrêts")
-       + kpi(vitesse(cr.cadence_m_min), "Cadence", "arrêts compris")
+       + kpi(vitesse(cr.vitesse_m_min, cr.vitesse_aberrante), "Vitesse", "hors arrêts")
+       + kpi(vitesse(cr.cadence_m_min, cr.cadence_aberrante), "Cadence", "arrêts compris")
        + kpi(minutesTxt(t.total_minutes), "Temps", (id.nb_saisies || 0) + " saisies")
        + kpi(escHtml((id.conducteurs || []).join(", ") || "—"), "Conducteurs", "")
        + '</div></div>';
@@ -777,6 +823,8 @@
       });
       h += '</tbody></table></div>';
     }
+
+    h += renderCalage(cr.calage);
 
     /* Info prod — toujours affichee, meme absente : c'est le manque qui compte. */
     h += '<div class="rp-bloc"><div class="rp-titre">Info prod</div><div id="rp-ip-vue">'

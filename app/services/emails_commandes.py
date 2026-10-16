@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
-from app.services import graph_mail
+from app.services import graph_mail, ia_usage
 
 PARIS = ZoneInfo("Europe/Paris")
 
@@ -238,6 +238,7 @@ def _appel_modele(email: Dict[str, Any], rappro: Dict[str, Any]) -> Dict[str, An
         tool_choice={"type": "tool", "name": "classer_email"},
         messages=[{"role": "user", "content": _consigne(email, rappro)}],
     )
+    ia_usage.noter(rep, "emails_commandes")
     for b in rep.content:
         if getattr(b, "type", "") == "tool_use":
             return dict(b.input or {})

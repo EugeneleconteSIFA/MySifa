@@ -22,7 +22,7 @@ PORTAL_MAIN_CSS = r"""
   outline:none;
   transition:border-color .15s, box-shadow .15s;
 }
-.portal-search input:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(34,211,238,.14)}
+.portal-search input:focus{border-color:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent,#22d3ee) 14%,transparent)}
 .portal-search-input-wrap{position:relative;flex:1}
 .portal-search-input-wrap input{width:100%;box-sizing:border-box;padding-left:46px}
 .portal-search-glogo{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:20px;height:20px;pointer-events:none;display:flex;align-items:center;justify-content:center}
@@ -42,7 +42,7 @@ PORTAL_MAIN_CSS = r"""
   gap:8px;
   transition:filter .15s, box-shadow .15s, transform .05s;
 }
-.portal-search button:hover{filter:brightness(1.05);box-shadow:0 0 0 4px rgba(34,211,238,.18)}
+.portal-search button:hover{filter:brightness(1.05);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent,#22d3ee) 18%,transparent)}
 .portal-search button:active{transform:translateY(1px)}
 .portal-search-hint{font-size:11px;color:var(--muted);margin-top:8px;text-align:left}
 .portal-settings-corner{
@@ -54,7 +54,7 @@ PORTAL_MAIN_CSS = r"""
   padding:0;font-family:inherit}
 .portal-settings-corner:hover{
   border-color:var(--accent);background:var(--accent-bg);color:var(--accent);
-  box-shadow:0 8px 28px rgba(34,211,238,.12)}
+  box-shadow:0 8px 28px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .portal-settings-corner:active{transform:translateY(1px)}
 .portal-settings-corner:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .portal-corner-stack{position:fixed;top:20px;right:20px;z-index:120;display:flex;flex-direction:column;gap:10px}
@@ -103,18 +103,18 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 .portal-apps--reorderable .portal-app--placeholder{
   cursor:default;
   background:transparent;
-  border:2px dashed rgba(34,211,238,.55);
+  border:2px dashed color-mix(in srgb,var(--accent,#22d3ee) 55%,transparent);
   box-shadow:none!important;
   transform:none!important;
 }
-body.light .portal-apps--reorderable .portal-app--placeholder{border-color:rgba(8,145,178,.55)}
+body.light .portal-apps--reorderable .portal-app--placeholder{border-color:color-mix(in srgb,var(--accent,#0891b2) 55%,transparent)}
 .portal-apps--reorderable .portal-app--placeholder:hover{
-  border-color:rgba(34,211,238,.75);
-  background:rgba(34,211,238,.06);
+  border-color:color-mix(in srgb,var(--accent,#22d3ee) 75%,transparent);
+  background:color-mix(in srgb,var(--accent,#22d3ee) 6%,transparent);
   box-shadow:none!important;
   transform:none!important;
 }
-body.light .portal-apps--reorderable .portal-app--placeholder:hover{background:rgba(8,145,178,.06)}
+body.light .portal-apps--reorderable .portal-app--placeholder:hover{background:color-mix(in srgb,var(--accent,#0891b2) 6%,transparent)}
 .portal-apps--reorderable .portal-app--placeholder .portal-ph-plus{
   font-size:28px;
   font-weight:900;
@@ -140,7 +140,7 @@ body.light .portal-apps--reorderable .portal-app--placeholder:hover{background:r
 .portal-app--disabled:hover{border-color:var(--border);background-color:var(--card)}
 .badge-dev{position:absolute;top:8px;right:8px;font-size:9px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--warn);color:#0a0e17;text-transform:uppercase;letter-spacing:.5px}
 .portal-app:hover{border-color:var(--accent);background-color:var(--card);
-  transform:translateY(-3px);box-shadow:0 10px 32px rgba(34,211,238,.14)}
+  transform:translateY(-3px);box-shadow:0 10px 32px color-mix(in srgb,var(--accent,#22d3ee) 14%,transparent)}
 .portal-app--busy{pointer-events:none;opacity:.8;position:relative;transform:none!important;box-shadow:none!important}
 .portal-app--busy::after{
   content:'Chargement…';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
@@ -157,9 +157,9 @@ body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(-
   font-size:12px;font-family:inherit;text-decoration:underline;
   display:inline-flex;align-items:center;gap:6px;line-height:1;padding:4px 6px;border-radius:6px;
   transition:color .15s,box-shadow .2s,background .15s}
-.portal-logout:hover{color:var(--accent);text-shadow:0 0 12px rgba(34,211,238,.45);background:rgba(34,211,238,.08)}
+.portal-logout:hover{color:var(--accent);text-shadow:0 0 12px color-mix(in srgb,var(--accent,#22d3ee) 45%,transparent);background:color-mix(in srgb,var(--accent,#22d3ee) 8%,transparent)}
 .portal-logout:hover:last-of-type{color:var(--danger);text-shadow:0 0 12px rgba(248,113,113,.4);background:rgba(248,113,113,.08)}
-body.light .portal-logout:hover{text-shadow:0 0 12px rgba(8,145,178,.35)}
+body.light .portal-logout:hover{text-shadow:0 0 12px color-mix(in srgb,var(--accent,#0891b2) 35%,transparent)}
 body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38,.35)}
 
 /* ── Hover tuiles d'application — pastille icône qui passe du fond accent translucide au plein accent ── */
@@ -178,7 +178,7 @@ body.light .portal-corner-stack{box-shadow:0 8px 32px rgba(15,23,42,.10)}
   color:var(--muted);box-shadow:none;transition:background .15s,color .15s,border-color .15s}
 .portal-corner-stack .portal-settings-corner:hover{
   background:var(--accent-bg);color:var(--accent);border-color:transparent;box-shadow:none}
-.portal-corner-stack .portal-settings-corner:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.25);background:var(--accent-bg);color:var(--accent)}
+.portal-corner-stack .portal-settings-corner:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 25%,transparent);background:var(--accent-bg);color:var(--accent)}
 .portal-corner-stack .portal-corner-badge{top:4px;left:4px;box-shadow:0 0 0 2px var(--card)}
 .portal-corner-stack .portal-prof-ring.prof-ring{top:-2px;left:-2px;width:24px;height:24px}
 .portal-corner-stack .portal-prof-ring.prof-ring svg{width:24px;height:24px}
@@ -718,7 +718,7 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
   padding:9px 12px;color:var(--text);font-size:13px;cursor:pointer
 }
 .mytraduction-lang-picker select:focus{
-  outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)
+  outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)
 }
 .mytraduction-swap-btn{
   background:var(--bg);border:1px solid var(--border);border-radius:10px;
@@ -751,7 +751,7 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
   line-height:1.5;resize:vertical
 }
 .mytraduction-textarea:focus{
-  outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)
+  outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)
 }
 .mytraduction-textarea:read-only{background:var(--card)}
 .mytraduction-footer{

@@ -214,7 +214,7 @@ body.sb-open .sidebar-overlay{display:block}
 .rh-chip{
   display:inline-flex;align-items:center;gap:5px;padding:4px 8px;
   border-radius:20px;font-size:12px;font-weight:600;background:var(--accent-bg);
-  color:var(--accent);border:1px solid rgba(34,211,238,.25);
+  color:var(--accent);border:1px solid color-mix(in srgb,var(--accent,#22d3ee) 25%,transparent);
   transition:all .15s;
 }
 .rh-chip.warn{background:rgba(251,191,36,.12);color:var(--warn);border-color:rgba(251,191,36,.3)}
@@ -450,9 +450,9 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
   background:transparent;cursor:pointer;font-size:11px;font-weight:700;
   color:var(--muted);transition:all .15s;
 }
-.rh-dd-day-btn.on{background:rgba(34,211,238,.12);border-color:var(--accent);color:var(--accent)}
+.rh-dd-day-btn.on{background:color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent);border-color:var(--accent);color:var(--accent)}
 .rh-dd-day-btn.conge{background:rgba(234,179,8,.08);border-color:rgba(234,179,8,.3);color:var(--warn);cursor:default;font-size:9px}
-.rh-dd-day-btn:not(.conge):hover{border-color:var(--accent);color:var(--accent);background:rgba(34,211,238,.06)}
+.rh-dd-day-btn:not(.conge):hover{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent,#22d3ee) 6%,transparent)}
 .rh-dd-day-hdr{font-size:11px}
 .rh-dd-day-date{font-size:10px;color:var(--muted);font-weight:400;margin-top:2px}
 .rh-dd-eye-btn{
@@ -647,18 +647,18 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='planning_rh';</script>
-<link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
+<link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_guides.js"></script>
-<script src="/static/mysifa_ai_chat.js?v=4"></script>
+<script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=11"></script>
+<script src="/static/chat_widget.js?v=13"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <div id="root" class="app">
   <div class="sidebar-overlay" id="rh-sb-overlay" onclick="closeSidebar()"></div>
   <nav class="sidebar" id="rh-sb">

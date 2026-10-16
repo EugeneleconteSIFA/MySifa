@@ -18,6 +18,9 @@ Ce que ce test protège :
 3bis. **La valeur du jour est figée à 18 h** (RELEVES_HEURE_FIGEE) : elle
    suit l'état courant avant, le premier passage à partir de 18 h l'arrête,
    et minimum et maximum couvrent toute la journée.
+5. **L'historique suit les droits du chiffre en direct** (`peut_voir`) : un
+   opérateur ne lit ni les notes de frais, ni la valorisation, ni les
+   compteurs d'équipe ; le superadmin, si.
 4. **L'utilisateur système ne sort pas de son bloc.** Hors de
    `en_tant_que_systeme()`, une requête sans cookie reste refusée.
 
@@ -69,6 +72,11 @@ for nom in reg.BLOCS:
     verifier(n_ == 1, f"{nom} : dans {n_} table(s) — l'ajouter à une seule de RELEVEURS, RECONSTITUABLES, NON_RELEVES")
     if nom in releves and reg.BLOCS[nom].objet:
         verifier(nom in objets, f"{nom} : relevé sur un objet sans énumération dans OBJETS")
+    # Une courbe de relevés ne se lit que si le bloc est relevé.
+    if reg.BLOCS[nom].historique:
+        verifier(nom in releves, f"{nom} : historique= déclaré mais le bloc n'est pas dans RELEVEURS")
+for nom in releves:
+    verifier(bool(reg.BLOCS[nom].historique), f"{nom} : relevé sans historique= au registre — la courbe n'en saura rien")
 for nom in releves | ecartes | reconst | objets:
     verifier(nom in reg.BLOCS, f"{nom} : cité dans accueil_releves.py mais absent du registre")
 fin()
@@ -145,6 +153,37 @@ with get_db() as conn:
     lignes = conn.execute("SELECT COUNT(*) FROM accueil_releves WHERE jour < '2030-01-01'").fetchone()[0]
 verifier(n1 > 0 and n1 == n2, f"tour : {n1} puis {n2} relevés écrits")
 verifier(lignes == n1, f"tour rejoué le même jour : {lignes} lignes pour {n1} relevés")
+
+# ── 5. L'historique suit les droits du chiffre en direct ────────────────
+# Faille du 14/10/2026 : seul l'accès à l'appli était contrôlé. Un opérateur
+# de fabrication ne doit lire ni le montant des notes de frais, ni la
+# valorisation du stock, ni les compteurs d'équipe des tâches ; le
+# superadmin, si.
+from starlette.requests import Request as _Req  # noqa: E402
+from app.services.auth_service import create_session  # noqa: E402
+
+
+def _requete_de(role):
+    with get_db() as conn:
+        cur = conn.execute(
+            "INSERT INTO users (nom, email, role, actif, password_hash, created_at) VALUES (?,?,?,1,'x',?)",
+            ("Test " + role, role + "@test.local", role, "2026-10-14"),
+        )
+        uid = cur.lastrowid
+        conn.commit()
+    jeton = create_session(uid)
+    from config import COOKIE_NAME
+    return _Req({"type": "http", "method": "GET", "path": "/", "raw_path": b"/", "query_string": b"",
+                 "headers": [(b"cookie", (COOKIE_NAME + "=" + jeton).encode())],
+                 "client": ("127.0.0.1", 0), "server": ("127.0.0.1", 80), "scheme": "http", "root_path": ""})
+
+
+operateur, chef = _requete_de("fabrication"), _requete_de("superadmin")
+for bloc in ("rh-coffre.ndf", "stock.valorisation.kpis", "taches.compteurs"):
+    verifier(not ar.peut_voir(bloc, "", {}, operateur), f"{bloc} : historique lisible par un opérateur de fabrication")
+    verifier(ar.peut_voir(bloc, "", {}, chef), f"{bloc} : historique refusé au superadmin")
+verifier(not ar.peut_voir("planning-rh.conges", "", {"bloc_scope": "rh"}, operateur),
+         "congés en vue RH : historique lisible sans droit RH")
 
 refuse = False
 try:

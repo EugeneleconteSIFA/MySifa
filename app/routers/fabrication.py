@@ -13,6 +13,7 @@ _PARIS = ZoneInfo("Europe/Paris")
 logger = logging.getLogger(__name__)
 
 from app.services.audit_service import log_action
+from config import PROD_VITESSE_MAX_M_MIN
 from app.services import origine_bobine
 from app.services import poste_bobine, bobines_montees
 from database import get_db, parse_datetime
@@ -818,7 +819,8 @@ def list_machines(request: Request):
         rows = conn.execute(
             "SELECT id, nom, code, dernier_metrage FROM machines WHERE actif=1 ORDER BY nom"
         ).fetchall()
-    return {"machines": [dict(r) for r in rows]}
+    return {"machines": [dict(r) for r in rows],
+            "vitesse_max_m_min": PROD_VITESSE_MAX_M_MIN}
 
 
 @router.get("/api/fabrication/machines-du-jour")
@@ -1061,6 +1063,9 @@ def get_session(request: Request, machine_id: int = None):
             "machine_id_courant": rh_payload["machine_id_courant"],
             "creneau_courant": rh_payload["creneau_courant"],
             "fallback_actif": rh_payload["fallback_actif"],
+            # Plafond machine : la page demande confirmation d'un compteur
+            # qui donnerait une vitesse impossible.
+            "vitesse_max_m_min": PROD_VITESSE_MAX_M_MIN,
         }
 
 
@@ -1659,6 +1664,27 @@ async def create_saisie(request: Request):
                             ).replace(",", " "),
                         )
 
+        # ── Calage déclaré à la clôture ───────────────────────────────────────
+        # Les trois heures du dossier de prod papier. Validées AVANT l'insertion :
+        # une déclaration incohérente renvoie l'opérateur à l'écran sans avoir
+        # clôturé. L'heure de fin de prod devient celle de la saisie de clôture.
+        calage_declare = None
+        fin_prod_mesure = date_op
+        fin_prod_motif = None
+        if cl["code"] == "89" and fin_dossier_flag and no_dossier:
+            from app.services import calage_cloture
+            try:
+                calage_declare = calage_cloture.lire_declaration(body.get("calage"))
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+            if calage_declare:
+                heure, fin_prod_motif = calage_cloture.heure_fin_prod(
+                    conn, no_dossier, machine_name, calage_declare,
+                    datetime.now(_PARIS).replace(tzinfo=None),
+                )
+                if heure:
+                    date_op = heure
+
         # ── Changement d'outil ────────────────────────────────────────────────
         # Le code porte-t-il une nature d'outil ? La réponse vit dans le
         # référentiel (Paramètres › Opérations), jamais dans une liste de codes
@@ -1775,6 +1801,34 @@ async def create_saisie(request: Request):
                 conn.commit()
             except Exception:
                 logger.exception("[fabrication] fin_dossier non enregistré")
+
+        # ── Calage déclaré : corriger les saisies, garder la déclaration ──────
+        # Best-effort : la clôture est enregistrée, une erreur ici ne la défait
+        # pas. Ce qui n'a pas pu être appliqué est dit dans la réponse.
+        calage_resultat = None
+        if calage_declare:
+            try:
+                calage_resultat = calage_cloture.appliquer(
+                    conn, no_dossier=no_dossier, machine=machine_name,
+                    declare=calage_declare, saisie_cloture_id=new_id,
+                    fin_prod_mesure=fin_prod_mesure, fin_prod_motif=fin_prod_motif,
+                    auteur=operateur,
+                    signalement=(body.get("calage") or {}).get("signalement"),
+                    maintenant=datetime.now(_PARIS).replace(tzinfo=None),
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                logger.exception("[fabrication] calage déclaré non enregistré")
+
+        # Écarts de saisie (signalement, heures non reportées, dossier fictif) :
+        # la pastille MyProd s'allume maintenant, pas au passage des 30 minutes.
+        if calage_declare or (no_dossier and no_dossier.startswith("FICTIF:")):
+            try:
+                from app.services import coherence
+                coherence.rafraichir_saisies(conn)
+            except Exception:
+                logger.exception("[fabrication] écarts de saisie non rafraîchis")
 
         # ── Début de production : les bobines restées montées ────────────────
         # Seul l'écran « Démarrer un dossier » envoie `bobines_montees` : une
@@ -2107,6 +2161,31 @@ async def create_saisie(request: Request):
             "SELECT * FROM production_data WHERE id=?", (new_id,)
         ).fetchone()
 
+        # « Production » qui ferme un calage : on propose de relever le
+        # compteur. La différence avec le relevé du début donne la gâche de
+        # calage, que rien d'autre ne mesure. Facultatif — la saisie est déjà
+        # partie, le relevé se complète par PUT .../compteur-fin-calage.
+        compteur_calage = None
+        if cl["code"] == "03":
+            try:
+                prec = conn.execute(
+                    """SELECT operation_category FROM production_data
+                        WHERE id <> ? AND COALESCE(est_annule, 0) = 0
+                          AND trim(machine) = trim(?)
+                          AND (date_operation < ? OR (date_operation = ? AND id < ?))
+                        ORDER BY date_operation DESC, id DESC LIMIT 1""",
+                    (new_id, machine_name, date_op, date_op, new_id),
+                ).fetchone()
+                if prec and str(prec["operation_category"] or "").lower() == "calage":
+                    compteur_calage = {
+                        "saisie_id": new_id,
+                        "dernier_metrage": (
+                            float(dernier_metrage) if dernier_metrage is not None else None
+                        ),
+                    }
+            except Exception:
+                logger.exception("[fabrication] contrôle fin de calage indisponible")
+
         # Changement d'outil non renseigné : le poste doit ouvrir le formulaire
         # sur la ligne qui vient de partir. On lui donne tout d'un coup —
         # nature, compteur machine, outil en place — pour qu'il n'ait pas à
@@ -2136,6 +2215,10 @@ async def create_saisie(request: Request):
         reponse["bobines_heritees"] = bobines_heritees
     if contexte_outil:
         reponse["outil_requis"] = contexte_outil
+    if compteur_calage:
+        reponse["compteur_fin_calage"] = compteur_calage
+    if calage_resultat:
+        reponse["calage"] = calage_resultat
     return reponse
 
 
@@ -4003,6 +4086,125 @@ async def update_matiere_commentaire(matiere_id: int, request: Request):
     return {"success": True}
 
 
+def _dernier_releve_avant(conn, saisie_id, date_operation, machine):
+    """Dernier relevé du compteur machine ANTÉRIEUR à une saisie.
+
+    On ne compare pas à `machines.dernier_metrage` quand une saisie plus
+    récente l'a déjà fait avancer : corriger un relevé de la veille
+    deviendrait impossible.
+
+    Le DERNIER relevé, pas le plus grand : une seule faute de frappe dans
+    l'historique (636 367 000 m saisis le 05/10/2026 sur Cohésio 1 au lieu de
+    6 367 000) bloquait pour toujours tout relevé de la machine. Chaque saisie
+    ne porte que son propre compteur : le début au 01, la fin au 89 / 90, le
+    relevé intermédiaire ailleurs."""
+    row = conn.execute(
+        """SELECT ctr FROM (
+               SELECT date_operation, id,
+                      CASE WHEN operation_code = '01'
+                             THEN COALESCE(metrage_total_debut, metrage_prevu)
+                           WHEN operation_code IN ('89', '90')
+                             THEN COALESCE(metrage_total_fin, metrage_reel)
+                           ELSE metrage_compteur END AS ctr
+                 FROM production_data
+                WHERE id <> ? AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
+                  AND (date_operation < ? OR (date_operation = ? AND id < ?))
+           ) WHERE ctr IS NOT NULL
+           ORDER BY date_operation DESC, id DESC LIMIT 1""",
+        (saisie_id, machine, date_operation, date_operation, saisie_id),
+    ).fetchone()
+    return row[0] if row else None
+
+
+@router.put("/api/fabrication/saisie/{saisie_id}/compteur-fin-calage")
+async def releve_compteur_fin_calage(saisie_id: int, request: Request):
+    """Compteur machine relevé au « 03 Production » qui ferme un calage.
+
+    Le compteur du début de dossier et celui de la fin existent depuis
+    longtemps ; celui-ci manquait. La différence avec le relevé du début est la
+    gâche de calage."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    body = await request.json()
+    try:
+        m = float(str(body.get("metrage_compteur")).replace(",", "."))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Compteur invalide — un nombre de mètres.")
+    if m < 0:
+        raise HTTPException(status_code=400, detail="Compteur invalide — un nombre de mètres.")
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM production_data WHERE id=?", (saisie_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Saisie non trouvée")
+        user_operateur = user.get("operateur_lie") or user.get("nom") or ""
+        if not is_admin(user) and row["operateur"] != user_operateur:
+            raise HTTPException(status_code=403, detail="Non autorisé")
+        if str(row["operation_code"] or "").strip() != "03":
+            raise HTTPException(status_code=409, detail="Cette saisie n'est pas une reprise de production.")
+        dernier = _dernier_releve_avant(conn, saisie_id, row["date_operation"], row["machine"])
+        if dernier is not None and m < float(dernier):
+            raise HTTPException(
+                status_code=400,
+                detail=(f"Compteur invalide : le dernier relevé était à {int(dernier):,} m "
+                        f"— la valeur saisie ({int(m):,} m) ne peut pas être inférieure.").replace(",", " "),
+            )
+        conn.execute("UPDATE production_data SET metrage_compteur=? WHERE id=?", (m, saisie_id))
+        # Le relevé se lit aussi dans le commentaire de la saisie, avec le
+        # métrage passé au calage quand le compteur d'avant est connu. Ce que
+        # le conducteur avait écrit reste derrière ; un nouveau relevé remplace
+        # l'ancienne mention au lieu de l'empiler.
+        try:
+            from app.services.calage_cloture import gache_calage
+            metres = None
+            if row["no_dossier"]:
+                for pl in gache_calage(conn, row["no_dossier"])["plages"]:
+                    if pl["fin"] == row["date_operation"]:
+                        metres = pl["metres"]
+            fr = lambda v: f"{int(round(v)):,}".replace(",", " ")
+            mention = f"Fin de calage · compteur {fr(m)} m" + (f" · calage {fr(metres)} m" if metres is not None else "")
+            ancien = (row["commentaire"] or "").strip()
+            if ancien.startswith("Fin de calage ·"):
+                ancien = ancien.split(" — ", 1)[1].strip() if " — " in ancien else ""
+            conn.execute("UPDATE production_data SET commentaire=? WHERE id=?",
+                         (mention + (" — " + ancien if ancien else ""), saisie_id))
+        except Exception:
+            logger.exception("[fabrication] commentaire de fin de calage non écrit")
+        machine = conn.execute(
+            "SELECT id, dernier_metrage FROM machines WHERE trim(nom) = trim(?) OR trim(code) = trim(?) LIMIT 1",
+            (row["machine"] or "", row["machine"] or ""),
+        ).fetchone()
+        if machine and (machine["dernier_metrage"] is None or m > float(machine["dernier_metrage"])):
+            conn.execute("UPDATE machines SET dernier_metrage=? WHERE id=?", (m, machine["id"]))
+        conn.commit()
+    log_action(
+        user=user, action="SAISIE", module="fabrication",
+        objet=f"Compteur fin de calage · saisie {saisie_id} · {row['machine']}",
+        detail={"metrage_compteur": m, "no_dossier": row["no_dossier"]},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "metrage_compteur": m}
+
+
+@router.get("/api/fabrication/calage-cloture")
+def get_calage_cloture(request: Request, no_dossier: str = "", machine_id: Optional[int] = None):
+    """Les trois heures du dossier de prod papier, pré-remplies depuis les
+    saisies, pour l'écran Calage de la clôture."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    if not no_dossier.strip():
+        raise HTTPException(status_code=400, detail="Dossier manquant.")
+    from app.services import calage_cloture
+    with get_db() as conn:
+        machine = _resolve_machine(user, {"machine_id": machine_id} if machine_id else {}, conn)
+        out = calage_cloture.proposer(
+            conn, no_dossier.strip(), machine["nom"],
+            datetime.now(_PARIS).replace(tzinfo=None),
+        )
+    out["no_dossier"] = no_dossier.strip()
+    out["machine"] = machine["nom"]
+    return out
+
+
 def _saisie_changement_outil(conn, saisie_id, user):
     """Charge une saisie de changement d'outil et vérifie qu'elle est bien à
     cet utilisateur. Rend (ligne, nature, machine)."""
@@ -4087,25 +4289,7 @@ async def completer_changement_outil(saisie_id: int, request: Request):
         # saisie plus récente l'a déjà fait avancer : on compare au dernier
         # relevé ANTÉRIEUR à cette saisie, sinon corriger un changement de la
         # veille deviendrait impossible.
-        dernier = conn.execute(
-            """SELECT MAX(ctr) FROM (
-                   SELECT COALESCE(metrage_total_debut, metrage_prevu) AS ctr
-                     FROM production_data
-                    WHERE id <> ? AND date_operation <= ?
-                      AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
-                   UNION ALL
-                   SELECT COALESCE(metrage_total_fin, metrage_reel)
-                     FROM production_data
-                    WHERE id <> ? AND date_operation <= ?
-                      AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
-                   UNION ALL
-                   SELECT metrage_compteur
-                     FROM production_data
-                    WHERE id <> ? AND date_operation <= ?
-                      AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
-               )""",
-            (saisie_id, row["date_operation"], row["machine"]) * 3,
-        ).fetchone()[0]
+        dernier = _dernier_releve_avant(conn, saisie_id, row["date_operation"], row["machine"])
 
         commentaire = _valider_changement_outil(
             conn, outil_type=outil_type, m_ctr=m_ctr,

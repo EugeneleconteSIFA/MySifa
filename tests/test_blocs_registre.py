@@ -138,7 +138,7 @@ for nom, b in reg.BLOCS.items():
 for nom in SERIES_JS | LISTES_JS:
     verifier(nom in reg.BLOCS and reg.BLOCS[nom].grand, f"{nom} : série ou liste sans déclaration au registre")
 try:
-    reg.valider_widget({"bloc": "stock.dashboard.kpis", "hauteur": "l"}, creation=False)
+    reg.valider_widget({"bloc": "messages.non-lus", "hauteur": "l"}, creation=False)
     verifier(False, "grand format accepté sur un bloc sans série ni liste")
 except ValueError:
     pass
@@ -203,6 +203,8 @@ refuse("nom trop long", nom="x" * 81)
 refuse("hauteur", hauteur="xl")
 refuse("affichage", affichage="graphique")
 refuse("aucune valeur cochée", valeurs=[])
+refuse("compact avec deux valeurs", hauteur="s", valeurs=[{"cle": "a"}, {"cle": "b"}])
+verifier(creer(hauteur="s", valeurs=[{"cle": "a"}])["hauteur"] == "s", "compact avec une valeur accepté")
 verifier(creer(affichage=None)["affichage"] == "valeurs", "affichage « valeurs » par défaut")
 refuse("opérateur d'alerte", valeurs=[{"cle": "a", "alerte": {"op": ">=", "seuil": "3"}}])
 refuse("seuil non numérique", valeurs=[{"cle": "a", "alerte": {"op": ">", "seuil": "beaucoup"}}])

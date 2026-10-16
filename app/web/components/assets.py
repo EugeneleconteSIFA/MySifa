@@ -19,7 +19,7 @@ evite l'aller-retour conditionnel quand on y pense.
     from app.web.components import asset
 
     f'<script src="{asset("/static/mysifa_dock.js")}"></script>'
-    # -> /static/mysifa_dock.js?v=3.0.1
+    # -> /static/mysifa_dock.js?v=3.0.2
 
 Ne JAMAIS revenir aux compteurs manuels (`?v=4`, `?v=11`) : sur 485 balises, 110
 en portaient un, et rien ne signalait les 375 autres.

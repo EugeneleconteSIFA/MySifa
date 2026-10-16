@@ -78,7 +78,11 @@ n'en reçoit pas une seconde.
 
 **Taille de l'indicateur** (décision du 11/10/2026) : colonne `hauteur` de
 `accueil_widgets`, `s` compact (une ligne : nom, valeur, tendance), `m`
-standard, `l` grand. Elle se règle dans Personnaliser (trois boutons sous la
+standard, `l` grand. **Compact = une seule valeur** (décision du 14/10/2026) :
+le serveur refuse un compact à plusieurs valeurs (`COMPACT_UNE_VALEUR`, contrôlé
+sur l'état final au PATCH) ; le questionnaire ne garde que la première en
+passant en compact et rend les autres si l'on change de taille ; le bouton
+Compact de Personnaliser garde la première et le dit. Elle se règle dans Personnaliser (trois boutons sous la
 carte). Le grand format n'existe que pour un bloc qui déclare :
 
 - `series=(("metrage", "+"), …)` : une série **qui s'additionne jour par jour**
@@ -88,11 +92,53 @@ carte). Le grand format n'existe que pour un bloc qui déclare :
   `SERIES` de `mysifa_blocs_sources.js` et rend `{jours, quotidien,
   tendances}` : la période capturée comparée à la précédente de même durée
   (jour travaillé précédent pour « hier »), calculée sur la même série des
-  deux côtés. Grand format = barres sur 30 jours, seuil d'alerte en pointillé
-  quand la période est d'un jour ; standard = mini-courbe sur 14 jours.
+  deux côtés. Grand format = barres sur la période capturée (30 derniers
+  jours quand elle fait moins de 7 jours), seuil d'alerte en pointillé quand la
+  période est d'un jour ; standard = mini-courbe sur 14 jours.
 - `liste=True` : la source va dans `LISTES` et rend `{lignes: [{libelle,
   detail, ratio}], total}`, avec les libellés et mises en forme de la page.
   Grand format = les 5 premières lignes, les plus urgentes d'abord.
+
+- `historique=(("lignes", "-"), …)` (décision du 14/10/2026) : valeurs
+  **relevées** chaque jour (bloc dans `RELEVEURS`), sens `+`, `-` ou `=`
+  (neutre, sans couleur). Ce sont des NIVEAUX, pas des flux : grand format en
+  **courbe** (tracé lissé de la valeur de 18 h sur une aire légère, fourchette
+  min–max du jour en trait vertical discret, repères d'échelle haut et bas,
+  trou pour un jour sans relevé, aujourd'hui = valeur du moment en point creux
+  « en cours » ; retour du 14/10 : une bande en polygone ne se lisait pas), horizon
+  7 / 30 / 90 jours en pastilles (`bloc_horizon`), **seulement celles que
+  l'historique remplit** : 30 j au-delà de 7 jours de relevés, 90 j au-delà de
+  30 ; aucune pastille tant qu'il n'y a qu'une option. Le réglage enregistré
+  reste et reprend effet quand l'historique suit. L'axe part du premier relevé
+  si l'historique est plus court que l'horizon. Tendance : vs hier en
+  standard et compact, vs le début de l'horizon en courbe ; en nombre, en %
+  au-delà de 100. Standard : mini-courbe sur 14 jours. Données :
+  `GET /api/accueil/releves/{bloc}?url=&objet=&jours=`. **Droits** (faille
+  corrigée le 14/10/2026) : l'accès à l'appli ne suffit pas, car les relevés sont
+  faits en vue complète. La route rejoue le relevé sous les droits du
+  demandeur (`peut_voir` dans `accueil_releves.py`, objet et filtres compris)
+  et refuse (403) s'il ne verrait pas ce chiffre en direct. Une route qui filtre
+  par périmètre sans refuser (tâches) a une garde explicite dans `GARDES`. Tout
+  relevé ajouté sur une route de ce genre doit y entrer ; le test des relevés
+  vérifie qu'un opérateur ne lit ni notes de frais, ni valorisation, ni
+  compteurs d'équipe. Un bloc
+  qui a une liste ET un historique choisit « Liste » (défaut) ou « Courbe »
+  (`bloc_vue`), dans le questionnaire comme par la bascule en pastilles sur la
+  carte. `bloc_vue` et `bloc_horizon` sont des
+  réglages d'affichage (`PARAMS_AFFICHAGE`) : ils ne comptent pas dans la clé
+  des relevés. `series=` et `historique=` s'excluent. Le test des relevés
+  exige `historique=` sur tout bloc relevé, et inversement.
+
+**Filtres sur la carte en grand format** (décision du 14/10/2026) : un bloc
+qui a des filtres (`mysifa_blocs_filtres.js`) les montre, en grand format
+seulement, sous le titre de sa carte. Les choix et périodes deviennent des
+pastilles (libellés courts `PERIODE_COURT`), et les filtres multiples (machines)
+un menu dépliant. Un choix est **enregistré** : PATCH `url_capture`, comme
+depuis Personnaliser, qui garde tous les filtres, dates choisies comprises. Le
+graphique suit la période dès qu'elle couvre 7 jours (la série rend `du` et
+`au`), au plus 93 jours. En dessous (aujourd'hui, dernier jour), il garde les 30
+derniers jours. Barre masquée en compact, en standard, en mode Personnaliser et
+dans l'aperçu de la capture.
 
 Le serveur refuse `hauteur="l"` sur un bloc qui n'a ni l'un ni l'autre. Dans
 la colonne de 220 px, le grand format s'affiche en standard. Le test du
@@ -289,7 +335,32 @@ et `user_dashboards` le 06/10/2026 (migration
 
 Un indicateur existant se modifie depuis l'accueil (Personnaliser › curseurs) :
 c'est le même questionnaire qu'à la capture, exposé par
-`window.MySifaBlocs.questionnaire(o)` — ne pas en écrire un second.
+`window.MySifaBlocs.questionnaire(o)` — ne pas en écrire un second. Pendant
+la modification, **la carte elle-même sert d'aperçu** (retour du 14/10) : le
+questionnaire signale chaque réglage par `o.surChange({nom, valeurs, url,
+hauteur})`, la carte l'applique sans rien enregistrer (`modifierValeurs`), et
+`o.annuler` la remet à l'identique. `o.annuler` est appelé par
+`fermerPanneau()` pour toute fermeture sans enregistrement : bouton Annuler,
+Échap, ouverture d'un autre panneau.
+
+**Taille et aperçu à la création** (décision du 14/10/2026) : le
+questionnaire propose la taille (compact, standard, grand si le bloc a une
+série ou une liste) et, à la capture (`o.apercu`), montre en tête du panneau
+(accroché pendant le défilement, juste au-dessus des réglages — retour du
+14/10 : centré sur la page, il paraissait perdu) l'indicateur tel qu'il
+apparaîtra : même carte, rendue par
+`MySifaAccueil.apercu()` de `mysifa_accueil.js` (chargé hors de l'accueil avec
+`window.__mysifaAccueilApercuSeul`, sans colonne). Ses valeurs sont **calculées
+par la source du bloc avec les filtres choisis** dans le questionnaire, comme
+sur l'accueil une fois créé (retour du 14/10 : lues sur la page, elles ne
+suivaient pas un changement de période) ; celles de la page ne servent qu'en
+attendant la réponse, ou pour un bloc sans source. Série et liste viennent
+aussi des sources. La bulle de survol du mode capture est masquée à
+l'ouverture du questionnaire. Ne pas écrire un second rendu de carte pour
+l'aperçu. Le questionnaire est redessiné à chaque réglage : l'aperçu est un
+élément durable, replacé dans `.cap-apercu-ici` après chaque dessin, jamais
+recréé. Sa largeur est celle d'une carte dans la colonne de l'utilisateur,
+bornée par le panneau (pleine largeur sur téléphone).
 
 **Demande de tableau de bord** : quand le bloc voulu n'existe pas, le lien en
 bas de la colonne (et le toast « aucun bloc capturable ») ouvre

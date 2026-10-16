@@ -780,12 +780,13 @@
     "prod.ensemble.quantites": function (ctx) {
       return prodDashboard(ctx).then(function (d) {
         var p = d.produit || {};
-        var vit = d.vitesse_m_min;
+        // Comme la page : « erreur saisie » au-dela du plafond, « — » sans valeur.
+        var vit = d.vitesse_aberrante ? 0 : Number(d.vitesse_m_min || 0);
         return r({
           dossiers: fN(p.dossiers || 0),
           metrage: fN(p.metrage_m || 0) + " m",
-          vitesse: (vit != null ? Number(vit).toFixed(2) : "0.00") + " m/min"
-        }, { dossiers: p.dossiers || 0, metrage: p.metrage_m || 0, vitesse: vit || 0 });
+          vitesse: d.vitesse_aberrante ? "erreur saisie" : (vit > 0 ? vit.toFixed(2) + " m/min" : "—")
+        }, { dossiers: p.dossiers || 0, metrage: p.metrage_m || 0, vitesse: vit });
       });
     },
     "prod.ensemble.temps": function (ctx) {
@@ -815,7 +816,8 @@
 
   /* ── Séries par jour (tendance, mini-courbe, grand format) ─────────────
      Une série rend { jours: {"AAAA-MM-JJ": {cle: nombre}}, quotidien,
-     tendances: {cle: {actuel, precedent, libelle}} }. Elle s'additionne jour
+     tendances: {cle: {actuel, precedent, libelle}}, du, au } (du / au : la
+     période capturée). Elle s'additionne jour
      par jour (registre : series=). La tendance compare la période capturée à
      la précédente de même durée, calculée sur la même série des deux côtés. */
   function jourIso(d) { return iso(d); }
@@ -876,14 +878,15 @@
         var pDu = prec.from, pAu = prec.to;
         if (prec.jourTravaille) {
           var avant = Object.keys(jours).filter(function (j) { return j < p.from; }).sort();
-          if (!avant.length) return { jours: jours, quotidien: true, tendances: {} };
+          if (!avant.length) return { jours: jours, quotidien: true, tendances: {}, du: p.from, au: p.to };
           pDu = pAu = avant[avant.length - 1];
         }
         cles.forEach(function (k) {
           var a = somme(jours, p.from, p.to, k), b = somme(jours, pDu, pAu, k);
           if (a != null && b) tendances[k] = { actuel: a, precedent: b, libelle: prec.libelle };
         });
-        return { jours: jours, quotidien: p.from === p.to, tendances: tendances };
+        // du / au : la période capturée, que le grand format suit dès 7 jours.
+        return { jours: jours, quotidien: p.from === p.to, tendances: tendances, du: p.from, au: p.to };
       });
     });
   }

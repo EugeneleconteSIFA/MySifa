@@ -1,13 +1,15 @@
 /* Couleur propre à l'agent IA (décisions d'Eugène du 14/10/2026) : elle doit
    trancher sur le thème. Palette par défaut (cyan) : rose franc. Autres
    palettes : violet. Pivoine, déjà rose : indigo.
+   15/10/2026 : teintes nettement éclaircies partout sauf Pivoine. Un fond
+   aussi clair ne porte plus du blanc : --ia-ink donne l'encre posée dessus.
    Définition de thème : hexadécimaux légitimes ici. */
-:root, body { --ia: #ff4fa3; --ia-bg: rgba(255, 79, 163, .14); --ia-glow: rgba(255, 79, 163, .45); } /* hex-ok */
-body.light { --ia: #db2777; --ia-bg: rgba(219, 39, 119, .10); --ia-glow: rgba(219, 39, 119, .35); } /* hex-ok */
-body[class*="palette-"] { --ia: #c77dff; --ia-bg: rgba(199, 125, 255, .14); --ia-glow: rgba(199, 125, 255, .45); } /* hex-ok */
-body[class*="palette-"].light { --ia: #9d4edd; --ia-bg: rgba(157, 78, 221, .10); --ia-glow: rgba(157, 78, 221, .35); } /* hex-ok */
-body.palette-pivoine { --ia: #818cf8; --ia-bg: rgba(129, 140, 248, .14); --ia-glow: rgba(129, 140, 248, .45); } /* hex-ok */
-body.palette-pivoine.light { --ia: #4f46e5; --ia-bg: rgba(79, 70, 229, .10); --ia-glow: rgba(79, 70, 229, .35); } /* hex-ok */
+:root, body { --ia: #ff9acb; --ia-bg: rgba(255, 154, 203, .16); --ia-glow: rgba(255, 154, 203, .45); --ia-ink: #3b0a24; } /* hex-ok */
+body.light { --ia: #f472b6; --ia-bg: rgba(244, 114, 182, .12); --ia-glow: rgba(244, 114, 182, .35); --ia-ink: #3b0a24; } /* hex-ok */
+body[class*="palette-"] { --ia: #dcb4ff; --ia-bg: rgba(220, 180, 255, .16); --ia-glow: rgba(220, 180, 255, .45); --ia-ink: #2a0f45; } /* hex-ok */
+body[class*="palette-"].light { --ia: #c084fc; --ia-bg: rgba(192, 132, 252, .12); --ia-glow: rgba(192, 132, 252, .35); --ia-ink: #2a0f45; } /* hex-ok */
+body.palette-pivoine { --ia: #818cf8; --ia-bg: rgba(129, 140, 248, .14); --ia-glow: rgba(129, 140, 248, .45); --ia-ink: #ffffff; } /* hex-ok */
+body.palette-pivoine.light { --ia: #4f46e5; --ia-bg: rgba(79, 70, 229, .10); --ia-glow: rgba(79, 70, 229, .35); --ia-ink: #ffffff; } /* hex-ok */
 /* MySifa — Agent IA (widget flottant) */
 #ai-chat-root {
   display: none;
@@ -41,7 +43,7 @@ body.palette-pivoine.light { --ia: #4f46e5; --ia-bg: rgba(79, 70, 229, .10); --i
 }
 #ai-chat-btn svg {
   display: block;
-  color: white;
+  color: var(--ia-ink, white);
 }
 #ai-chat-panel {
   position: fixed;
@@ -169,7 +171,7 @@ body.palette-pivoine.light { --ia: #4f46e5; --ia-bg: rgba(79, 70, 229, .10); --i
 }
 .ai-msg.user .ai-bubble {
   background: var(--ia);
-  color: white;
+  color: var(--ia-ink, white);
   font-weight: 600;
   border-bottom-right-radius: 3px;
 }
@@ -283,7 +285,7 @@ body.palette-pivoine.light { --ia: #4f46e5; --ia-bg: rgba(79, 70, 229, .10); --i
   cursor: not-allowed;
 }
 #ai-send svg {
-  color: white;
+  color: var(--ia-ink, white);
 }
 .ai-confirm-actions {
   display: flex;
@@ -308,7 +310,7 @@ body.palette-pivoine.light { --ia: #4f46e5; --ia-bg: rgba(79, 70, 229, .10); --i
 }
 .ai-confirm-btn.primary {
   background: var(--ia);
-  color: white;
+  color: var(--ia-ink, white);
   border-color: var(--ia);
 }
 @media (max-width: 900px) {
@@ -405,12 +407,12 @@ body.palette-pivoine.light { --ia: #4f46e5; --ia-bg: rgba(79, 70, 229, .10); --i
 .ai-hist-sup:hover { color: var(--danger); border-color: var(--danger); }
 
 /* ── Bulle d'annonce au-dessus du bouton ── */
-.ai-annonce { position: fixed; z-index: 8005; max-width: 260px; background: var(--ia); color: white; border-radius: 14px;
+.ai-annonce { position: fixed; z-index: 8005; max-width: 260px; background: var(--ia); color: var(--ia-ink, white); border-radius: 14px;
   padding: 10px 34px 10px 14px; font-size: 13px; font-weight: 600; line-height: 1.4; cursor: pointer;
   box-shadow: 0 8px 28px var(--ia-glow); animation: ai-annonce-pulse 2.4s ease-in-out infinite; }
 .ai-annonce::after { content: ""; position: absolute; right: 18px; bottom: -7px; width: 14px; height: 14px; background: var(--ia); transform: rotate(45deg); border-radius: 2px; }
 .ai-annonce-x { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 50%; border: none;
-  background: rgba(255, 255, 255, .22); color: white; font-size: 14px; line-height: 1; cursor: pointer; }
+  background: rgba(255, 255, 255, .22); color: var(--ia-ink, white); font-size: 14px; line-height: 1; cursor: pointer; }
 .ai-annonce-x:hover { background: rgba(255, 255, 255, .38); }
 @keyframes ai-annonce-pulse { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 .perf-eco .ai-annonce, .reduce-anim .ai-annonce { animation: none; }
@@ -420,3 +422,29 @@ body.palette-pivoine.light { --ia: #4f46e5; --ia-bg: rgba(79, 70, 229, .10); --i
 html body.mysifa-dock-barre #ai-chat-root #ai-chat-btn { color: var(--ia) !important; background: var(--ia-bg) !important; }
 html body.mysifa-dock-barre #ai-chat-root #ai-chat-btn:hover,
 html body.mysifa-dock-barre #ai-chat-root #ai-chat-btn.mysifa-dock-fab-active { border-color: var(--ia) !important; }
+
+/* Mise en forme des réponses : le gras porte la couleur de l'agent, les
+   mesures (durées, %, montants) ressortent, « > » encadre un point à traiter. */
+#ai-typing { margin: 2px 14px 12px; }
+.ai-msg.bot .ai-bubble strong { color: var(--ia); font-weight: 700; }
+.ai-msg.bot .ai-bubble .ai-num { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ai-msg.bot .ai-bubble ol { margin: 4px 0 6px; padding-left: 20px; }
+.ai-msg.bot .ai-bubble li { margin: 2px 0; }
+.ai-msg.bot .ai-bubble li::marker { color: var(--ia); font-weight: 700; }
+.ai-h { color: var(--ia); font-size: 11.5px; text-transform: uppercase; letter-spacing: .5px; margin: 10px 0 4px; }
+.ai-h:first-child { margin-top: 0; }
+.ai-note { margin: 6px 0; padding: 6px 10px; border-left: 3px solid var(--warn); border-radius: 0 8px 8px 0; background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.ai-table th { font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; }
+.ai-table td:first-child { font-weight: 700; color: var(--text); white-space: nowrap; }
+.ai-table tbody tr:nth-child(even) td { background: var(--card); }
+/* Réponses compactes (retour d'Eugène du 15/10/2026) : moins d'air entre les
+   blocs, interligne resserré, tableau plus dense. */
+.ai-msg.bot .ai-bubble { line-height: 1.42; padding: 7px 11px; }
+.ai-msg.bot .ai-bubble p { margin: 0 0 3px; }
+.ai-msg.bot .ai-bubble ul, .ai-msg.bot .ai-bubble ol { margin: 2px 0 4px; }
+.ai-msg.bot .ai-bubble li { margin: 1px 0; }
+.ai-h { margin: 7px 0 2px; }
+.ai-note { margin: 4px 0; padding: 4px 9px; }
+.ai-table-wrap { margin: 4px 0; }
+.ai-table th, .ai-table td { padding: 3px 6px; }
+#ai-messages { gap: 6px; }

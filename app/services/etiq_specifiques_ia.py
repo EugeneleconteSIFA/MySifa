@@ -21,6 +21,7 @@ import json
 import os
 from typing import Optional
 
+from app.services import ia_usage
 from config import ETIQ_IA_MODELE, etiq_ia_modeles
 from app.services.etiq_specifiques import (
     EtiquetteInvalide, SYMBOLOGIES, TYPES_VARIABLE, normaliser_format, normaliser_layout,
@@ -205,6 +206,7 @@ def proposer(consigne: str, largeur_mm: float, hauteur_mm: float, dpi: int,
         )
     except Exception as e:
         raise EtiquetteInvalide(f"Appel à l'assistant en échec : {e}")
+    ia_usage.noter(reponse, "etiquettes")
 
     if getattr(reponse, "stop_reason", "") == "refusal":
         raise EtiquetteInvalide("L'assistant a refusé cette demande. Reformuler la consigne.")

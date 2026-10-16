@@ -84,10 +84,18 @@
   function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
+  // Durées, pourcentages et montants ressortent d'eux-mêmes, sans que le
+  // modèle ait à les mettre en gras. Seul le texte hors balises est touché.
+  var RE_MESURE = /(?<![\w:.,\/])(\d+(?:[\s  ]\d{3})*(?:[.,]\d+)?\s?(?:%|k?€|h(?:\s?\d{1,2}(?!\d))?|min|jours?))(?![\w])/g;
+  function mesures(html) {
+    return html.split(/(<[^>]+>)/).map(function (p) {
+      return p.charAt(0) === '<' ? p : p.replace(RE_MESURE, '<span class="ai-num">$1</span>');
+    }).join('');
+  }
   function inline(t) {
-    return t.replace(/`([^`]+)`/g, '<code>$1</code>')
+    return mesures(t.replace(/`([^`]+)`/g, '<code>$1</code>')
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+      .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>'));
   }
   function md(texte) {
     var lignes = esc(texte).split('\n'), out = [], i = 0;
@@ -107,6 +115,18 @@
         var items = [];
         while (i < lignes.length && /^\s*[-•]\s+/.test(lignes[i])) { items.push('<li>' + inline(lignes[i].replace(/^\s*[-•]\s+/, '')) + '</li>'); i++; }
         out.push('<ul>' + items.join('') + '</ul>');
+        continue;
+      }
+      if (/^\s*\d+[.)]\s+/.test(l)) {
+        var nums = [];
+        while (i < lignes.length && /^\s*\d+[.)]\s+/.test(lignes[i])) { nums.push('<li>' + inline(lignes[i].replace(/^\s*\d+[.)]\s+/, '')) + '</li>'); i++; }
+        out.push('<ol>' + nums.join('') + '</ol>');
+        continue;
+      }
+      if (/^\s*&gt;\s?/.test(l)) {
+        var note = [];
+        while (i < lignes.length && /^\s*&gt;\s?/.test(lignes[i])) { note.push(inline(lignes[i].replace(/^\s*&gt;\s?/, ''))); i++; }
+        out.push('<div class="ai-note">' + note.join('<br>') + '</div>');
         continue;
       }
       if (/^#{1,4}\s+/.test(l)) { out.push('<div class="ai-h">' + inline(l.replace(/^#{1,4}\s+/, '')) + '</div>'); i++; continue; }

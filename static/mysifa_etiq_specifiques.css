@@ -25,7 +25,8 @@
 .es-carte .es-btn:not(.es-btn-accent):not(.es-btn-danger):hover { background: var(--card); }
 
 /* Champs */
-.es-input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+/* Fond blanc (var(--card)) imposé : un champ n'hérite jamais du fond gris de la page. */
+.es-input { width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 10px;
   padding: 9px 12px; color: var(--text); font: inherit; font-size: 13px; transition: border-color .15s; }
 .es-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
 textarea.es-input { resize: vertical; min-height: 38px; }
@@ -163,7 +164,6 @@ textarea.es-input { resize: vertical; min-height: 38px; }
 .es-var summary::-webkit-details-marker { display: none; }
 .es-var[open] summary { border-bottom: 1px solid var(--border); }
 .es-var .es-form { padding: 10px; }
-.es-var .es-input { background: var(--card); }
 .es-ia { border-color: var(--accent); }
 .es-propo { display: flex; flex-direction: column; gap: 8px; background: var(--accent-bg); border-radius: 10px; padding: 10px; }
 .es-propo-resume { font-weight: 600; line-height: 1.4; }

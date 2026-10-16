@@ -75,7 +75,7 @@ align-items:start}
    champ en var(--bg) est invisible tant qu'on ne clique pas dedans. */
 .pf-imp-row input{padding:6px 9px;font-size:12px;border-radius:6px;background:var(--card);
 border:1px solid var(--border);color:var(--text);width:100%}
-.pf-imp-row input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.pf-imp-row input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .pf-imp-row input.is-missing{border-color:var(--danger);box-shadow:0 0 0 3px rgba(248,113,113,.16)}
 .pf-imp-req{color:var(--danger);font-style:normal;font-weight:700;margin-left:2px}
 /* Ligne Aplat : pleine largeur au-dessus de la grille, pour que Recto et

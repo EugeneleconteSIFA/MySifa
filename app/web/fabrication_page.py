@@ -75,7 +75,7 @@ FABRICATION_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
-<link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=fiche-mp2">
+<link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=fiche2-mp2">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
@@ -298,10 +298,10 @@ table.fab-table td{
 }
 table.fab-table tr:last-child td{border-bottom:none}
 table.fab-table tr.fab-row-last td{
-  background:rgba(34,211,238,.04);
+  background:color-mix(in srgb,var(--accent,#22d3ee) 4%,transparent);
 }
 body.light table.fab-table tr.fab-row-last td{
-  background:rgba(8,145,178,.06);
+  background:color-mix(in srgb,var(--accent,#0891b2) 6%,transparent);
 }
 .fab-time{font-family:monospace;font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;letter-spacing:.2px}
 .fab-client-cell{display:inline-block;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
@@ -483,7 +483,7 @@ body.light table.fab-table tr.fab-row-last td{
 .fab-btn-success{background:var(--success);color:var(--bg)}
 .fab-btn-warn{background:var(--warn);color:var(--bg)}
 .fab-btn-danger{background:var(--danger);color:#fff}
-.fab-btn-ghost{background:var(--accent-bg);color:var(--accent);border:1px solid rgba(34,211,238,.3)}
+.fab-btn-ghost{background:var(--accent-bg);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent,#22d3ee) 30%,transparent)}
 .fab-btn-muted{background:transparent;color:var(--text2);border:1px solid var(--border)}
 .fab-btn-muted:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .fab-btn-sm{padding:7px 12px;font-size:12px;border-radius:8px}
@@ -503,7 +503,7 @@ body.light table.fab-table tr.fab-row-last td{
   border-radius:8px;padding:8px 12px;font-size:12px;color:var(--text);
   outline:none;transition:border-color .15s;font-family:inherit;
 }
-.fab-search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.fab-search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .fab-search-input::placeholder{color:var(--muted)}
 .fab-search-btn{
   padding:8px 14px;background:var(--accent);color:#0a0e17;
@@ -559,7 +559,7 @@ body.light table.fab-table tr.fab-row-last td{
   outline:none;font-family:inherit;transition:border-color .15s;
 }
 .fab-field input:focus,.fab-field textarea:focus,.fab-field select:focus{
-  border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)
+  border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)
 }
 .fab-field textarea{resize:vertical;min-height:70px}
 /* Moteur de saisie d'outil : resultats sous le champ de recherche. La liste
@@ -593,6 +593,26 @@ body.light table.fab-table tr.fab-row-last td{
 }
 .fab-modal-btns .fab-btn-fictif{width:auto;flex:0 1 auto;margin-top:0}
 
+/* Fin de production en écrans : passage animé, barre de progression. */
+.fin-etape-entre{animation:finEntre .32s cubic-bezier(.2,.8,.2,1)}
+.fin-etape-entre.arriere{animation-name:finEntreArriere}
+@keyframes finEntre{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:none}}
+@keyframes finEntreArriere{from{opacity:0;transform:translateX(-28px)}to{opacity:1;transform:none}}
+.fin-progres{height:4px;border-radius:2px;background:var(--border);margin:0 0 16px;overflow:hidden}
+.fin-progres-barre{height:100%;background:var(--accent);border-radius:2px}
+.fin-progres-barre.anime{animation:finProgres .5s ease-out}
+@keyframes finProgres{from{width:var(--fin-de)}}
+.fin-pill-allume{animation:finPill 1.2s ease-out}
+@keyframes finPill{0%{box-shadow:0 0 0 0 rgba(34,211,238,.55)}100%{box-shadow:0 0 0 10px rgba(34,211,238,0)}}
+.reduce-anim .fin-etape-entre,.reduce-anim .fin-progres-barre.anime,.reduce-anim .fin-pill-allume{animation:none}
+@media (prefers-reduced-motion:reduce){
+  .fin-etape-entre,.fin-progres-barre.anime,.fin-pill-allume{animation:none}
+}
+.fin-lien-signal{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:8px;
+  border:1px dashed var(--warn);background:var(--bg);color:var(--warn);font-family:inherit;
+  font-size:13px;font-weight:700;cursor:pointer}
+.fin-lien-signal:hover,.fin-lien-signal.actif{background:rgba(251,191,36,.10)}
+
 /* Modals #mroot (design system) */
 #mroot{position:fixed;inset:0;z-index:1100;pointer-events:none}
 #mroot:empty{display:none;position:static;inset:auto;width:0;height:0;overflow:hidden;z-index:auto}
@@ -622,7 +642,7 @@ body.light table.fab-table tr.fab-row-last td{
   display:flex;flex-direction:column;gap:3px;
 }
 .fab-picker-item:hover{border-color:var(--accent);background:var(--accent-bg)}
-.fab-picker-item--hi{border-color:var(--accent);background:var(--accent-bg);outline:2px solid rgba(34,211,238,.35);outline-offset:1px}
+.fab-picker-item--hi{border-color:var(--accent);background:var(--accent-bg);outline:2px solid color-mix(in srgb,var(--accent,#22d3ee) 35%,transparent);outline-offset:1px}
 /* Dossier certifié dans le sélecteur : liseré vert à gauche. Discret sur
    une liste longue, mais suffisant pour repérer les dossiers FSC d'un coup
    d'œil sans les lire un par un. */
@@ -874,7 +894,7 @@ table.fab-of-table tr:last-child td{border-bottom:none}
 .fab-of-preview-table tr.fab-of-missing td{background:rgba(251,191,36,.08)}
 .fab-of-preview-table input{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;
   background:var(--bg);color:var(--text);font-size:13px;font-family:inherit}
-.fab-of-preview-table input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.fab-of-preview-table input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .fab-of-modal-wide{max-width:720px;width:100%;max-height:88vh;overflow-y:auto}
 .fab-of-spinner{display:flex;align-items:center;justify-content:center;gap:10px;padding:40px;color:var(--muted);font-size:13px}
 
@@ -905,11 +925,11 @@ table.fab-of-table tr:last-child td{border-bottom:none}
   border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);
   outline:none;font-family:inherit;transition:border-color .15s;
 }
-.fab-traca-manual:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.fab-traca-manual:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .fab-traca-video-wrap{position:relative;border-radius:10px;overflow:hidden;background:#000;height:140px;flex-shrink:0}
 .fab-traca-video-wrap video{width:100%;height:100%;object-fit:cover;display:block}
 .fab-traca-scan-line{
-  position:absolute;left:0;right:0;height:2px;background:rgba(34,211,238,.8);
+  position:absolute;left:0;right:0;height:2px;background:color-mix(in srgb,var(--accent,#22d3ee) 80%,transparent);
   animation:scanLine 1.8s ease-in-out infinite;
 }
 @keyframes scanLine{0%{top:10%}50%{top:85%}100%{top:10%}}
@@ -1269,7 +1289,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='fabrication';</script>
-<link rel="stylesheet" href="/static/mysifa_dock.css?v=2">
+<link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
@@ -1278,16 +1298,16 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <script src="/static/mysifa_poste_bobine.js?v=1"></script>
-<script src="/static/mysifa_bobine_edit.js?v=1.0"></script>
+<script src="/static/mysifa_bobine_edit.js?v=1.1"></script>
 <script src="/static/mysifa_calc.js"></script>
-<script src="/static/mysifa_ai_chat.js?v=4"></script>
+<script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=11"></script>
+<script src="/static/chat_widget.js?v=13"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
-<script src="/static/mysifa_alert_runtime.js?v=2.4.5"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.4.19"></script>
 <!-- Memoire produit : fiche par reference produit, partagee avec MyProd -->
-<script src="/static/mysifa_produit_memoire.js?v=2.3"></script>
+<script src="/static/mysifa_produit_memoire.js?v=2.6"></script>
 <script>
   // Démarre le polleur d'alertes maintenance dès que la page est prête.
   // Le runtime interroge /api/maintenance/alerts/active toutes les 15 s,
@@ -1392,6 +1412,18 @@ let S = {
   fictifOf: '',
   showDebutModal: false,
   showFinModal: false,
+  finEtape: 'choix',
+  finCalage: null,
+  finCalageVals: null,
+  finCalageConfirme: false,
+  vitesseMax: 0,                // plafond machine (m/min), fourni par le serveur
+  debutCompteurConfirme: null,  // compteur deja signale improbable, confirme au 2e clic
+  finCompteurConfirme: null,
+  confirmCompteur: null,
+  showCompteurCalage: false,
+  compteurCalageCtx: null,
+  compteurCalageVal: '',
+  compteurCalageBusy: false,
   showCommentModal: false,
   explicationSeuil: null,
   commentSaisieId: null,
@@ -1608,7 +1640,7 @@ function fscTypeRequisLabel(t){
 }
 
 function fabIsModalOpen(){
-  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showAnnulModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showOpCommentModal || S.showOutilModal || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
+  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showAnnulModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showOpCommentModal || S.showOutilModal || S.showCompteurCalage || S.confirmCompteur || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
   try{
     const mr = document.getElementById('mroot');
     if(mr && mr.firstElementChild) return true;
@@ -1972,6 +2004,7 @@ async function loadSession(opts){
     machineIdCourant: d.machine_id_courant||null,
     creneauCourant: d.creneau_courant||'',
     fallbackActif: !!d.fallback_actif,
+    vitesseMax: Number(d.vitesse_max_m_min)||S.vitesseMax||0,
   };
   if(S.wantedMachineId && Array.isArray(d.machines_du_jour) && d.machines_du_jour.length){
     const stillValid = d.machines_du_jour.some(m=>m.machine_id===S.wantedMachineId);
@@ -2074,7 +2107,52 @@ async function loadDossiers(){
 
 async function loadMachines(){
   const d = await apiFetch('/api/fabrication/machines').catch(()=>null);
-  if(d) set({machines: d.machines||[]});
+  if(d) set({machines: d.machines||[], vitesseMax: Number(d.vitesse_max_m_min)||S.vitesseMax||0});
+}
+
+/* Un compteur dont l'ecart donnerait une vitesse impossible est presque
+   toujours un chiffre en trop ou une ligne mal lue. On ne bloque pas (la
+   machine a pu tourner hors dossier), on fait relire : une seconde validation
+   de la meme valeur passe. Rend true si la saisie peut partir. */
+/* Compteur improbable : une seconde fenêtre montre le calcul (métrage, durée,
+   vitesse comparée au maximum de la machine) et demande de confirmer. Rend
+   true si cette valeur a déjà été confirmée ; sinon ouvre la fenêtre et rend
+   false. « Confirmer » relance l'action interrompue (`relance`). */
+function compteurConfirme(cle, valeur, info, relance){
+  if(S[cle] === valeur) return true;
+  S.confirmCompteur = Object.assign({cle, valeur, relance}, info || {});
+  render();
+  return false;
+}
+
+function renderConfirmCompteurModal(){
+  const c = S.confirmCompteur || {};
+  const fermer = () => set({confirmCompteur:null});
+  const ligne = (lib, val, fort) => h('div',{style:{display:'flex',justifyContent:'space-between',
+      gap:'16px',padding:'8px 0',borderBottom:'1px solid var(--border)',fontSize:'14px'}},
+    h('span',{style:{color:'var(--text2)'}},lib),
+    h('span',{style:{fontWeight:fort?'800':'600',fontVariantNumeric:'tabular-nums',
+      color:fort?'var(--danger)':'var(--text)'}},val));
+  return h('div',{className:'fab-modal-overlay',style:{zIndex:'1200'},
+      onClick:(e)=>{ if(e.target===e.currentTarget) fermer(); }},
+    h('div',{className:'fab-modal',style:{maxWidth:'440px'}},
+      h('div',{className:'fab-modal-title'},c.titre || 'Compteur à vérifier'),
+      h('div',{className:'fab-modal-sub'},
+        'Ce relevé donne une vitesse au-dessus de ce que la machine peut faire. '
+        +'Vérifiez le compteur avant de confirmer.'),
+      ...(c.lignes||[]).map(l => ligne(l[0], l[1], l[2])),
+      h('div',{className:'fab-modal-btns'},
+        h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',style:{background:'var(--bg)'},
+          onClick:fermer},'Corriger le compteur'),
+        h('button',{className:'fab-btn fab-btn-primary',style:{color:'white'},
+          onClick:()=>{
+            const r = c.relance;
+            S[c.cle] = c.valeur;
+            set({confirmCompteur:null});
+            if(typeof r === 'function') r();
+          }},'Confirmer ce compteur'))
+    )
+  );
 }
 
 async function triggerOp(opCode, opLabel, extra={}){
@@ -2114,6 +2192,12 @@ async function triggerOp(opCode, opLabel, extra={}){
       // Changement d'outil : la ligne est partie, il reste a dire avec quoi.
       if(d.outil_requis){
         ouvrirFormulaireOutil({code:opCode, label:opLabel}, d.outil_requis);
+      }
+      // Production qui ferme un calage : relevé du compteur, facultatif.
+      if(d.compteur_fin_calage){
+        Object.assign(S, {showCompteurCalage:true, compteurCalageCtx:d.compteur_fin_calage,
+                          compteurCalageVal:'', compteurCalageBusy:false});
+        fabPauseAutoRefresh(120000);
       }
       if(d.explication_requise){
         const ex = d.explication_requise;
@@ -2288,7 +2372,7 @@ function renderSidebar(){
                 display:'flex', flexDirection:'column', gap:'2px',
                 transition:'background .12s',
               },
-              onMouseEnter:(e)=>{ if(!isActive) e.currentTarget.style.background='rgba(34,211,238,.06)'; },
+              onMouseEnter:(e)=>{ if(!isActive) e.currentTarget.style.background='color-mix(in srgb,var(--accent,#22d3ee) 6%,transparent)'; },
               onMouseLeave:(e)=>{ if(!isActive) e.currentTarget.style.background='transparent'; },
               onClick:()=>{ if(!isActive) openRepiquageDossier(ref); },
             },
@@ -2645,14 +2729,14 @@ function handleOpTrigger(code, label, cat){
   }
   if(code==='89'){
     // Fin dossier → modal metrage + étiquettes + info prod
-    set({showFinModal:true, metrageFinVal:'', nbEtiquettes:'', finNoteVal:'', finNoteChargee:false,
-         finNbMatieres:null, finMatiereMotif:''});
+    set(Object.assign({showFinModal:true, metrageFinVal:'', nbEtiquettes:''}, finReinitialiser()));
     // Une info prod peut déjà exister — saisie en Traçabilité avant le
     // lancement, ou par le conducteur du poste précédent. On la relit pour
     // que l'opérateur complète au lieu d'écraser sans le savoir.
     S.finMontees = null;
     loadInfoProdDossier();
     loadNbMatieresDossier();
+    loadCalageCloture();
     return;
   }
   // Sur les dix-neuf codes d'arret, dix-sept se decrivent tout seuls : « Casse
@@ -6513,6 +6597,20 @@ function renderDebutModal(){
       showToast('Métrage invalide : le compteur était à '+Math.round(dernierM).toLocaleString('fr-FR')+' m — valeur saisie trop petite','danger');
       return;
     }
+    // Plus d'une heure a pleine vitesse depuis le dernier releve : suspect.
+    const ecartDebut = (dernierM != null) ? mDebut - dernierM : 0;
+    if(S.vitesseMax && ecartDebut > S.vitesseMax * 60
+       && !compteurConfirme('debutCompteurConfirme', mDebut, {
+            titre:'Compteur de début à vérifier',
+            lignes:[
+              ['Dernier relevé de la machine', Math.round(dernierM).toLocaleString('fr-FR')+' m'],
+              ['Compteur saisi', Math.round(mDebut).toLocaleString('fr-FR')+' m'],
+              ['Écart', Math.round(ecartDebut).toLocaleString('fr-FR')+' m', true],
+              ['Soit, à la vitesse maximale ('+Math.round(S.vitesseMax)+' m/min)',
+               finDureeTxt(Math.round(ecartDebut / S.vitesseMax))+' de production'],
+            ]}, submit)){
+      return;
+    }
 
     set({showDebutModal:false, loading:true});
     try{
@@ -6637,7 +6735,161 @@ async function loadInfoProdDossier(){
   if(S.showFinModal) fabRenderPreserveUi({});
 }
 
+/* ── Fin de production : une question, puis des écrans courts ─────────────
+   La première question décide de tout le reste : « À reprendre plus tard »
+   n'a besoin que du compteur, « Dossier terminé » déroule trois écrans
+   (compteur, calage, clôture). Rien ne part avant le dernier : on peut
+   revenir en arrière sans rien défaire. */
+
+const FIN_ETAPES_CLOTURE = [
+  {cle:'compteur', label:'Compteur'},
+  {cle:'calage',   label:'Calage'},
+  {cle:'cloture',  label:'Clôture'},
+];
+
+function finReinitialiser(){
+  return {finDossierOui:null, finEtape:'choix', finNoteVal:'', finNoteChargee:false,
+          finNbMatieres:null, finMatiereMotif:'', finCalage:null, finCalageVals:null,
+          finCalageConfirme:false, finCompteurConfirme:null, finSignalOuvert:false,
+          finSignalement:'', _finEtapeVue:null, _finModalVue:false};
+}
+
+// Ordre des écrans, pour savoir dans quel sens animer le passage.
+const FIN_ORDRE = ['choix','compteur','calage','cloture'];
+
+
+function fermerFinModal(){
+  set(Object.assign({showFinModal:false}, finReinitialiser()));
+}
+
+/* Les trois heures du dossier de prod papier, pré-remplies depuis les
+   saisies. Ce que l'opérateur a déjà commencé à taper n'est pas écrasé. */
+async function loadCalageCloture(){
+  const ref = S.dossier ? (S.dossier.reference||'') : '';
+  if(!ref){ S.finCalage = {erreur:true, jours:[]}; return; }
+  let qs = '?no_dossier='+encodeURIComponent(ref);
+  const mid = S.adminMachineId || S.wantedMachineId;
+  if(mid) qs += '&machine_id='+encodeURIComponent(mid);
+  try{
+    S.finCalage = await apiFetch('/api/fabrication/calage-cloture'+qs);
+  }catch(e){
+    S.finCalage = {erreur:true, jours:[]};
+  }
+  if(!S.finCalageVals) S.finCalageVals = finCalageValsDepuis(S.finCalage);
+  if(S.showFinModal) fabRenderPreserveUi({});
+}
+
+function finCalageValsDepuis(p){
+  const auj = nowIsoLocal().slice(0,10);
+  const part = (iso, jourDefaut) => iso
+    ? {jour:String(iso).slice(0,10), hm:String(iso).slice(11,16)}
+    : {jour:jourDefaut, hm:''};
+  const jours = (p && p.jours && p.jours.length) ? p.jours : [auj];
+  return {
+    debut: part(p && p.debut_calage, jours[0]),
+    fin:   part(p && p.fin_calage,   jours[0]),
+    prod:  part(p && p.fin_prod,     auj),
+  };
+}
+
+function finCalageIso(v){
+  return (v && v.jour && /^\d{2}:\d{2}$/.test(v.hm||'')) ? v.jour+'T'+v.hm+':00' : null;
+}
+
+function finMinutesEntre(a, b){
+  if(!a || !b) return null;
+  return Math.round((new Date(b) - new Date(a)) / 60000);
+}
+
+function finDureeTxt(min){
+  if(min==null || isNaN(min)) return '—';
+  const sign = min < 0 ? '−' : '';
+  const m = Math.abs(min);
+  return sign + (m >= 60 ? Math.floor(m/60)+' h '+String(m%60).padStart(2,'0') : m+' min');
+}
+
+function finJourTxt(jour){
+  const d = new Date(jour+'T12:00:00');
+  if(isNaN(d)) return jour;
+  return d.toLocaleDateString('fr-FR',{weekday:'short', day:'2-digit', month:'2-digit'});
+}
+
+/* Lit le compteur saisi. Rend le métrage, ou null après avoir dit pourquoi. */
+function finValiderCompteur(relance){
+  let mFin = S.metrageFinVal ? parseFloat(String(S.metrageFinVal).replace(',','.')) : null;
+  if(mFin !== null && isNaN(mFin)) mFin = null;
+
+  // Le metrage n'est pas un champ de confort : sans lui la serie produit sort
+  // sans longueur ni vitesse, et le dossier ne pese rien dans Besoins
+  // matieres. Aucune sortie de secours ici — un compteur illisible se traite
+  // avec la maintenance, pas en cloturant un dossier vide.
+  if(mFin === null){
+    showToast('Relevez le compteur machine — sans métrage, ni la vitesse ni '
+             +'le besoin matière de ce dossier ne peuvent être calculés.','danger');
+    return null;
+  }
+  const machine = S.machine || (S.adminMachineId && S.machines.find(m=>m.id===S.adminMachineId));
+  const dernierM = machine ? machine.dernier_metrage : null;
+  if(dernierM !== null && dernierM !== undefined && mFin < dernierM){
+    showToast('Métrage invalide : le compteur était à '+Math.round(dernierM).toLocaleString('fr-FR')+' m — valeur saisie trop petite','danger');
+    return null;
+  }
+  if(S.saisies.length){
+    const debutRow = S.saisies.find(s=>s.operation_code==='01'&&(s.metrage_total_debut??s.metrage_prevu)!=null);
+    const debutCtr = debutRow ? parseFloat(debutRow.metrage_total_debut ?? debutRow.metrage_prevu) : null;
+    if(debutCtr !== null && mFin < debutCtr){
+      showToast('Métrage fin ('+Math.round(mFin).toLocaleString('fr-FR')+' m) inférieur au début de production ('+Math.round(debutCtr).toLocaleString('fr-FR')+' m)','danger');
+      return null;
+    }
+    // Metrage du dossier rapporte au temps ecoule depuis le demarrage : au-dela
+    // du plafond machine, le compteur est mal releve.
+    const minutes = debutRow ? finMinutesEntre(debutRow.date_operation, nowIsoLocal()) : null;
+    if(debutCtr !== null && S.vitesseMax && minutes != null){
+      const metres = mFin - debutCtr;
+      const vit = metres / Math.max(minutes, 1);
+      if(vit > S.vitesseMax
+         && !compteurConfirme('finCompteurConfirme', mFin, {
+              titre:'Métrage à vérifier',
+              lignes:[
+                ['Compteur au début du dossier', Math.round(debutCtr).toLocaleString('fr-FR')+' m'],
+                ['Compteur saisi', Math.round(mFin).toLocaleString('fr-FR')+' m'],
+                ['Métrage', Math.round(metres).toLocaleString('fr-FR')+' m'],
+                ['Durée depuis le démarrage', finDureeTxt(minutes)],
+                ['Vitesse calculée', Math.round(vit).toLocaleString('fr-FR')+' m/min', true],
+                ['Vitesse maximale de la machine', Math.round(S.vitesseMax)+' m/min'],
+              ]}, relance)){
+        return null;
+      }
+    }
+  }
+  return mFin;
+}
+
+/* Les trois heures, contrôlées. Rend {debut_calage, fin_calage, fin_prod},
+   ou null après avoir dit pourquoi. */
+function finValiderCalage(){
+  const v = S.finCalageVals || {};
+  const d = finCalageIso(v.debut), f = finCalageIso(v.fin), p = finCalageIso(v.prod);
+  if(!d || !f || !p){
+    showToast('Recopiez les trois heures du dossier de prod : début de calage, fin de calage, fin de prod.','danger');
+    return null;
+  }
+  if(d > f){ showToast('La fin de calage ne peut pas précéder le début de calage.','danger'); return null; }
+  if(!(f <= p)){ showToast('La fin de prod ne peut pas précéder la fin de calage.','danger'); return null; }
+  if(p > nowIsoLocal()){ showToast('La fin de prod ne peut pas être dans le futur.','danger'); return null; }
+  const seuil = S.finCalage && S.finCalage.seuil_alerte_min;
+  if(seuil && finMinutesEntre(d, f) > seuil && !S.finCalageConfirme){
+    showToast('Calage inhabituellement long — vérifiez les heures, puis confirmez.','danger');
+    return null;
+  }
+  return {debut_calage:d, fin_calage:f, fin_prod:p};
+}
+
 function renderFinModal(){
+  const etape = S.finEtape || 'choix';
+  const termine = S.finDossierOui === true;
+
+  // ── Champs du compteur ────────────────────────────────────────────────────
   const metInp = h('input',{type:'number',placeholder:'Ex: 14200',step:'1',min:'0',
     style:{textAlign:'right'}});
   metInp.value = S.metrageFinVal||'';
@@ -6648,35 +6900,22 @@ function renderFinModal(){
   etiqInp.value = S.nbEtiquettes||'';
   etiqInp.addEventListener('input',e=>{ S.nbEtiquettes=e.target.value; });
 
-  // ── Sélecteur "Fin de dossier ?" ─────────────────────────────────────────
-  // Le code 89 recouvre deux gestes distincts : clôturer le dossier (il sort
-  // du planning et la série part en mémoire produit) ou seulement s'arrêter
-  // pour aujourd'hui (il reste au planning). Chaque option annonce donc sa
-  // conséquence plutôt qu'un « oui / non » qui laisse deviner.
-  const finDossierVal = S.finDossierOui; // null | true | false
-  const mkFdBtn = (val, label, consequence, colorVar, rgb) => {
-    const isActive = finDossierVal === val;
-    return h('button',{
-      type:'button',
-      style:{
-        flex:'1',padding:'14px 10px',borderRadius:'10px',border:'2px solid',
-        borderColor: isActive ? `var(${colorVar})` : 'var(--border2)',
-        background: isActive ? `rgba(${rgb},.15)` : 'var(--bg)',
-        color: isActive ? `var(${colorVar})` : 'var(--text2)',
-        fontWeight: isActive ? '800' : '600',
-        fontSize:'15px',cursor:'pointer',transition:'all .15s',fontFamily:'inherit',
-        display:'flex',flexDirection:'column',alignItems:'center',gap:'5px',
-        textAlign:'center',
-      },
-      onClick:()=>{ set({finDossierOui:val}); }
-    },
-      h('span',null,label),
-      h('span',{style:{
-        fontSize:'11px',fontWeight:'500',lineHeight:'1.3',
-        color: isActive ? 'inherit' : 'var(--muted)',
-      }},consequence)
-    );
-  };
+  const compteurBloc = h('div',null,
+    h('div',{className:'fab-field'},
+      h('label',null,'Compteur machine, en mètres'),
+      (()=>{
+        const m = S.machine||(S.adminMachineId&&S.machines.find(x=>x.id===S.adminMachineId));
+        if(!m || m.dernier_metrage==null) return null;
+        return h('div',{className:'fab-field-hint'},
+          'Dernier relevé : '+Math.round(m.dernier_metrage).toLocaleString('fr-FR')+' m');
+      })(),
+      metInp
+    ),
+    h('div',{className:'fab-field'},
+      h('label',null,'Étiquettes produites'),
+      etiqInp
+    )
+  );
 
   // ── Info prod : ce que le prochain doit savoir ────────────────────────────
   // Un dossier qui se termine sans un mot laisse la production suivante
@@ -6684,28 +6923,26 @@ function renderFinModal(){
   // que le dossier est déclaré terminé — « R.A.S. » est une réponse valable,
   // le silence n'en est pas une.
   const noteInp = h('textarea',{
-    rows:'3',
-    placeholder:'Ce qu\'il faut savoir la prochaine fois que ce dossier passe…',
+    rows:'2',
+    placeholder:'À savoir pour la prochaine fois…',
     style:{width:'100%',fontFamily:'inherit',fontSize:'14px',padding:'10px 12px',
            borderRadius:'8px',border:'1px solid var(--border2)',background:'var(--bg)',
-           color:'var(--text)',resize:'vertical'},
+           color:'var(--text)',resize:'vertical',minHeight:'58px'},
   });
   noteInp.value = S.finNoteVal||'';
   noteInp.addEventListener('input',e=>{ S.finNoteVal=e.target.value; });
 
-  const rasBtn = h('button',{
-    type:'button',
-    className:'fab-btn fab-btn-muted fab-btn-sm',
-    style:{marginTop:'8px'},
-    onClick:()=>{ S.finNoteVal='R.A.S.'; noteInp.value='R.A.S.'; noteInp.focus(); }
-  },'R.A.S. — rien à signaler');
-
   const noteBloc = h('div',{className:'fab-field'},
-    h('label',null,'Info prod — obligatoire'),
-    h('div',{className:'fab-field-hint'},
-      'Visible en Traçabilité et à la prochaine production de cette référence.'),
-    noteInp,
-    rasBtn
+    h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',
+        gap:'8px',marginBottom:'6px'}},
+      h('label',{style:{margin:0}},'Info prod'),
+      h('button',{
+        type:'button',
+        className:'fab-btn fab-btn-muted fab-btn-sm',
+        style:{background:'var(--bg)'},
+        onClick:()=>{ S.finNoteVal='R.A.S.'; noteInp.value='R.A.S.'; noteInp.focus(); }
+      },'R.A.S.')),
+    noteInp
   );
 
   // ── Aucun code matiere scanne : on demande pourquoi ──────────────────────
@@ -6722,11 +6959,11 @@ function renderFinModal(){
   const aucuneMatiere = (S.finNbMatieres === 0);
 
   const motifInp = h('textarea',{
-    rows:'2',
-    placeholder:'Ex : bobine deja scannee sur le dossier precedent, poste sans matiere...',
+    rows:'1',
+    placeholder:'Autre raison…',
     style:{width:'100%',fontFamily:'inherit',fontSize:'14px',padding:'10px 12px',
            borderRadius:'8px',border:'1px solid var(--border2)',background:'var(--bg)',
-           color:'var(--text)',resize:'vertical'},
+           color:'var(--text)',resize:'vertical',minHeight:'42px'},
   });
   motifInp.value = S.finMatiereMotif||'';
   motifInp.addEventListener('input',e=>{ S.finMatiereMotif=e.target.value; });
@@ -6769,44 +7006,162 @@ function renderFinModal(){
   const matiereBloc = aucuneMatiere ? h('div',{className:'fab-field',
     style:{padding:'12px 14px',borderRadius:'10px',
            background:'rgba(251,191,36,.10)',border:'1px solid rgba(251,191,36,.4)'}},
-    h('label',null,'Aucun code matiere scanne \u2014 pourquoi ? (obligatoire)'),
+    h('label',null,'Aucune bobine scannée — pourquoi ?'),
     repriseBloc,
-    h('div',{className:'fab-field-hint'},
-      'Ce dossier n\'a aucune bobine en tracabilite. Dites ce qui s\'est passe : '
-      +'la reponse est conservee avec la saisie.'),
-    motifInp,
-    h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'8px'}},
+    h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',marginBottom:'8px'}},
       mkMotifBtn('Bobine deja scannee sur un dossier precedent'),
       mkMotifBtn('Poste sans matiere')
-    )
+    ),
+    motifInp
   ) : null;
 
-  const fdSelector = h('div',{style:{marginBottom:'0'}},
-    h('div',{style:{
-      fontWeight:'800',fontSize:'14px',color:'var(--text)',marginBottom:'10px',
-      padding:'10px 14px',borderRadius:'10px',
-      background:'rgba(251,191,36,.12)',border:'1px solid rgba(251,191,36,.4)',
-    }},
-      'Que devient ce dossier ?'
-    ),
-    h('div',{style:{display:'flex',gap:'10px'}},
-      mkFdBtn(true,  'Dossier terminé',      'Il sort du planning',  '--success', '52,211,153'),
-      mkFdBtn(false, 'À reprendre plus tard', 'Il reste au planning', '--warn',    '251,191,36')
-    )
-  );
+  // ── Écran Calage : la ligne du dossier de prod papier ─────────────────────
+  // Trois heures, dans l'ordre où l'opérateur les a notées, pré-remplies
+  // depuis les saisies. Une heure se règle au doigt, en 24 h : on touche la
+  // ligne, une grille d'heures et une grille de minutes s'ouvrent dessous —
+  // pas de sélecteur du navigateur, qui affiche AM/PM selon la langue du poste
+  // et se manipule mal sur une tablette d'atelier.
+  const renderCalage = () => {
+    const p = S.finCalage;
+    if(!p) return h('div',{className:'fab-modal-sub'},'Chargement des heures du dossier…');
+    if(!S.finCalageVals) S.finCalageVals = finCalageValsDepuis(p);
+    const vals = S.finCalageVals;
+    const seuil = p.seuil_alerte_min;
 
+    const dureesDe = () => {
+      const d = finCalageIso(vals.debut), f = finCalageIso(vals.fin), pr = finCalageIso(vals.prod);
+      return {mc: finMinutesEntre(d, f), mp: finMinutesEntre(f, pr)};
+    };
+    const {mc} = dureesDe();
+
+    // ── Durées, en tête ── (recalculées à chaque frappe, sans reconstruire l'écran)
+    const grand = (couleur) => h('div',{style:{fontSize:'30px',fontWeight:'800',lineHeight:'1.1',
+      color:couleur,fontVariantNumeric:'tabular-nums'}}, '');
+    const elCalage = grand('var(--accent)'), elProd = grand('var(--text)');
+    const tuile = (libelle, valeur) => h('div',{style:{flex:'1',padding:'12px 14px',
+        borderRadius:'10px',background:'var(--bg)',border:'1px solid var(--border)'}},
+      h('div',{style:{fontSize:'11px',fontWeight:'700',letterSpacing:'.5px',
+        textTransform:'uppercase',color:'var(--muted)',marginBottom:'4px'}},libelle),
+      valeur);
+    const durees = h('div',{style:{display:'flex',gap:'10px',marginBottom:'14px'}},
+      tuile('Calage', elCalage), tuile('Production', elProd));
+    const majDurees = () => {
+      const x = dureesDe();
+      elCalage.textContent = finDureeTxt(x.mc);
+      elProd.textContent = finDureeTxt(x.mp);
+    };
+    majDurees();
+
+    const long = seuil && mc != null && mc > seuil;
+    if(!long && S.finCalageConfirme) S.finCalageConfirme = false;
+    const alerte = long ? h('div',{style:{display:'flex',alignItems:'center',gap:'10px',
+        flexWrap:'wrap',padding:'10px 14px',borderRadius:'10px',marginBottom:'14px',
+        background:'rgba(251,191,36,.10)',border:'1px solid rgba(251,191,36,.4)',
+        fontSize:'13px',color:'var(--text)'}},
+      h('span',{style:{flex:'1'}},'Calage inhabituel — habituellement '
+        +finDureeTxt(Math.round(p.mediane_machine_min||0))+'.'),
+      S.finCalageConfirme
+        ? h('span',{style:{fontWeight:'700',color:'var(--success)'}},'✓ Confirmé')
+        : h('button',{type:'button',className:'fab-btn fab-btn-muted fab-btn-sm',
+            style:{background:'var(--bg)'},
+            onClick:()=>{ S.finCalageConfirme = true; fabRenderPreserveUi({}); }},
+            'Les heures sont justes')) : null;
+
+    // ── Heures : date + heure 24 h tapée au clavier ──
+    // Même saisie que la fenêtre de modification d'une saisie dans MyProd
+    // (makeDateTimeFields) : un champ date, un champ texte HH:MM. Le sélecteur
+    // d'heure du navigateur passe en AM/PM selon la langue du poste.
+    const champ = {background:'var(--card)',border:'1.5px solid var(--border)',borderRadius:'8px',
+      padding:'9px 10px',color:'var(--text)',fontFamily:'inherit'};
+    const ligne = (cle, libelle) => {
+      const v = vals[cle];
+      const jour = h('input',{type:'date',lang:'fr',value:v.jour||'',
+        style:Object.assign({},champ,{fontSize:'14px',minWidth:'0'})});
+      jour.addEventListener('change',()=>{ v.jour = jour.value; majDurees(); });
+      const heure = h('input',{type:'text',inputmode:'numeric',autocomplete:'off',maxlength:'5',
+        placeholder:'HH:MM',value:v.hm||'',
+        style:Object.assign({},champ,{width:'96px',textAlign:'center',fontSize:'20px',
+          fontWeight:'800',fontVariantNumeric:'tabular-nums'})});
+      heure.addEventListener('input',()=>{
+        const c = heure.value.replace(/\D/g,'').slice(0,4);
+        heure.value = c.length > 2 ? c.slice(0,2)+':'+c.slice(2) : c;
+        v.hm = /^([01]\d|2[0-3]):[0-5]\d$/.test(heure.value) ? heure.value : '';
+        heure.style.borderColor = (heure.value.length === 5 && !v.hm) ? 'var(--danger)' : 'var(--border)';
+        majDurees();
+      });
+      // L'alerte de calage inhabituel se réévalue quand on quitte le champ.
+      heure.addEventListener('change',()=>fabRenderPreserveUi({}));
+      return h('div',{style:{display:'grid',gridTemplateColumns:'1fr 150px 96px 22px',gap:'8px',
+          alignItems:'center',marginBottom:'10px'}},
+        h('div',{style:{fontSize:'11px',fontWeight:'700',letterSpacing:'.5px',
+          textTransform:'uppercase',color:'var(--text2)'}},libelle),
+        jour, heure,
+        h('span',{style:{display:'inline-flex',color:'var(--accent)'},title:'Modifiable'},svgIcon('edit',16)));
+    };
+
+    // ── Métrages : compteur avant calage, en fin de calage, en fin de prod ──
+    const cDeb = p.compteur_debut, cCal = p.compteur_fin_calage;
+    const cFinRaw = S.metrageFinVal ? parseFloat(String(S.metrageFinVal).replace(',','.')) : null;
+    const cFin = (cFinRaw != null && isFinite(cFinRaw)) ? cFinRaw : null;
+    const diff = (a, b) => (a != null && b != null && a >= b) ? a - b : null;
+    const mCal = diff(cCal, cDeb), mProd = diff(cFin, cCal), mTot = diff(cFin, cDeb);
+    const fm = v => v == null ? '—' : Math.round(v).toLocaleString('fr-FR')+' m';
+    const metre = (libelle, v, accent) => h('div',{style:{flex:'1',minWidth:'0'}},
+      h('div',{style:{fontSize:'11px',fontWeight:'700',letterSpacing:'.5px',
+        textTransform:'uppercase',color:'var(--muted)'}},libelle),
+      h('div',{style:{fontSize:'18px',fontWeight:'800',fontVariantNumeric:'tabular-nums',
+        color: accent ? 'var(--accent)' : 'var(--text)'}}, fm(v)));
+    const metrages = h('div',{style:{marginTop:'6px',paddingTop:'12px',borderTop:'1px solid var(--border)'}},
+      h('div',{style:{display:'flex',gap:'10px'}},
+        metre('Métrage calage', mCal, true),
+        metre('Métrage production', mProd, false),
+        metre('Métrage total', mTot, false)),
+      cCal == null ? h('div',{className:'fab-field-hint',style:{marginTop:'4px'}},
+        'Compteur non relevé en fin de calage.') : null);
+
+    // ── Signaler un chiffrage incohérent ──
+    const sigInp = h('textarea',{rows:'2',placeholder:'Ce qui ne colle pas…',
+      style:{width:'100%',fontFamily:'inherit',fontSize:'14px',padding:'10px 12px',minHeight:'58px',
+             borderRadius:'8px',border:'1px solid var(--warn)',background:'var(--bg)',
+             color:'var(--text)',resize:'vertical',marginTop:'8px'}});
+    sigInp.value = S.finSignalement || '';
+    sigInp.addEventListener('input', e=>{ S.finSignalement = e.target.value; });
+    const signal = h('div',{style:{marginTop:'12px'}},
+      h('button',{type:'button',className:'fin-lien-signal'+(S.finSignalOuvert?' actif':''),
+          onClick:()=>{ set({finSignalOuvert: !S.finSignalOuvert});
+                        if(!S.finSignalOuvert) return;
+                        setTimeout(()=>{ try{ document.querySelector('.fin-signal-txt').focus(); }catch(_){} }, 60); }},
+        svgIcon('alert',15), ' Signaler un chiffrage incohérent'),
+      S.finSignalOuvert ? (sigInp.classList.add('fin-signal-txt'), sigInp) : null);
+
+    return h('div',null,
+      durees,
+      alerte,
+      p.erreur ? h('div',{className:'fab-modal-sub'},'Heures des saisies indisponibles.') : null,
+      ligne('debut','Début calage'),
+      ligne('fin','Fin calage'),
+      ligne('prod','Fin de prod'),
+      metrages,
+      signal
+    );
+  };
+
+  // ── Envoi ─────────────────────────────────────────────────────────────────
   const submit = async()=>{
-    // Validation : fin_dossier obligatoire
-    if(S.finDossierOui === null || S.finDossierOui === undefined){
-      showToast('Indiquez ce que devient le dossier.','danger');
-      return;
+    const mFin = finValiderCompteur(submit);
+    if(mFin === null){ set({finEtape:'compteur'}); return; }
+
+    let calage = null;
+    if(termine){
+      calage = finValiderCalage();
+      if(!calage){ set({finEtape:'calage'}); return; }
     }
 
     // Validation : info prod obligatoire à la clôture. « À reprendre plus
     // tard » n'exige rien — le dossier n'est pas fini, il n'y a pas encore de
     // bilan à en tirer.
     const noteTxt = String(S.finNoteVal||'').trim();
-    if(S.finDossierOui === true && !noteTxt){
+    if(termine && !noteTxt){
       showToast('Notez ce qu\'il faut savoir sur ce dossier — « R.A.S. » si rien à signaler.','danger');
       return;
     }
@@ -6818,37 +7173,6 @@ function renderFinModal(){
     if(aucuneMatiere && !motifTxt){
       showToast('Aucun code matiere scanne sur ce dossier — indiquez pourquoi.','danger');
       return;
-    }
-
-    let mFin = S.metrageFinVal ? parseFloat(String(S.metrageFinVal).replace(',','.')) : null;
-    if(mFin !== null && isNaN(mFin)) mFin = null;
-
-    // Le metrage n'est pas un champ de confort : sans lui la serie produit sort
-    // sans longueur ni vitesse, et le dossier ne pese rien dans Besoins
-    // matieres. Aucune sortie de secours ici — un compteur illisible se traite
-    // avec la maintenance, pas en cloturant un dossier vide.
-    if(mFin === null){
-      showToast('Relevez le compteur machine — sans métrage, ni la vitesse ni '
-               +'le besoin matière de ce dossier ne peuvent être calculés.','danger');
-      return;
-    }
-
-    // Validation locale 1 : métrage fin < dernier_metrage machine
-    const machine = S.machine || (S.adminMachineId && S.machines.find(m=>m.id===S.adminMachineId));
-    const dernierM = machine ? machine.dernier_metrage : null;
-    if(mFin !== null && dernierM !== null && mFin < dernierM){
-      showToast('Métrage invalide : le compteur était à '+Math.round(dernierM).toLocaleString('fr-FR')+' m — valeur saisie trop petite','danger');
-      return;
-    }
-
-    // Validation locale 2 : métrage fin < métrage début du dossier
-    if(mFin !== null && S.saisies.length){
-      const debutRow = S.saisies.find(s=>s.operation_code==='01'&&(s.metrage_total_debut??s.metrage_prevu)!=null);
-      const debutCtr = debutRow ? parseFloat(debutRow.metrage_total_debut ?? debutRow.metrage_prevu) : null;
-      if(debutCtr !== null && mFin < debutCtr){
-        showToast('Métrage fin ('+Math.round(mFin).toLocaleString('fr-FR')+' m) inférieur au début de production ('+Math.round(debutCtr).toLocaleString('fr-FR')+' m)','danger');
-        return;
-      }
     }
 
     set({showFinModal:false, loading:true});
@@ -6869,9 +7193,14 @@ function renderFinModal(){
         machine: S.machine ? S.machine.nom : null,
         client: S.dossier ? (S.dossier.client||'') : '',
         designation: S.dossier ? (S.dossier.description||'') : '',
-        fin_dossier: S.finDossierOui === true,
+        fin_dossier: termine,
       };
-      if(S.finDossierOui === true && noteTxt) body.info_prod = noteTxt;
+      if(termine && noteTxt) body.info_prod = noteTxt;
+      if(calage){
+        const sig = String(S.finSignalement||'').trim();
+        if(sig) calage.signalement = sig;
+        body.calage = calage;
+      }
       if(aucuneMatiere && motifTxt) body.matiere_absente_motif = motifTxt;
       body.metrage_fin = mFin;
       if(S.nbEtiquettes) body.qte_etiquettes = parseFloat(String(S.nbEtiquettes).replace(',','.'));
@@ -6881,9 +7210,12 @@ function renderFinModal(){
         body:JSON.stringify(body),
       });
       if(r&&r.success){
-        showToast(S.finDossierOui
-          ? 'Dossier clôturé.'
-          : 'Arrêt enregistré. Le dossier reste au planning.');
+        const nonAppliques = (r.calage && r.calage.motifs) ? r.calage.motifs.length : 0;
+        if(termine && nonAppliques){
+          showToast('Dossier clôturé. Une partie des heures de calage n\'a pas pu être reportée sur les saisies — voir Retour de prod.','info');
+        } else {
+          showToast(termine ? 'Dossier clôturé.' : 'Arrêt enregistré. Le dossier reste au planning.');
+        }
         // v2.2.67 : refresh alertes — code 89 déclenche l'ack auto backend v2.2.65
         try { if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh==='function') window.MysifaAlerts.refresh(); } catch(_){}
         fabPauseAutoRefresh(10000);
@@ -6892,14 +7224,102 @@ function renderFinModal(){
     }catch(e){
       showToast('Erreur : '+e.message,'danger');
     }finally{
-      fabRenderPreserveUi({loading:false, metrageFinVal:'', nbEtiquettes:'', finDossierOui:null,
-                           finNoteVal:'', finNoteChargee:false,
-                           finNbMatieres:null, finMatiereMotif:''});
+      fabRenderPreserveUi(Object.assign({loading:false, metrageFinVal:'', nbEtiquettes:''},
+                                        finReinitialiser()));
     }
   };
 
-  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showFinModal:false,finDossierOui:null,finNoteVal:'',finNoteChargee:false,finNbMatieres:null,finMatiereMotif:''});}},
-    h('div',{className:'fab-modal'},
+  // ── Navigation ────────────────────────────────────────────────────────────
+  const etapes = termine ? FIN_ETAPES_CLOTURE.map(e=>e.cle) : ['compteur'];
+  const idx = etapes.indexOf(etape);
+  const precedent = () => set({finEtape: idx > 0 ? etapes[idx-1] : 'choix'});
+  const suivant = () => {
+    if(etape === 'compteur' && finValiderCompteur(suivant) === null) return;
+    if(etape === 'calage' && !finValiderCalage()) return;
+    set({finEtape: etapes[idx+1]});
+  };
+  const dernier = idx === etapes.length - 1;
+
+  const mkChoix = (val, label, consequence, colorVar, rgb) => h('button',{
+      type:'button',
+      style:{
+        flex:'1',padding:'18px 12px',borderRadius:'12px',border:'2px solid',
+        borderColor:`rgba(${rgb},.45)`,background:`rgba(${rgb},.08)`,
+        color:`var(${colorVar})`,fontWeight:'800',fontSize:'16px',cursor:'pointer',
+        fontFamily:'inherit',display:'flex',flexDirection:'column',alignItems:'center',
+        gap:'6px',textAlign:'center',transition:'background .15s',
+      },
+      onClick:()=>set({finDossierOui:val, finEtape:'compteur'})
+    },
+    h('span',null,label),
+    h('span',{style:{fontSize:'12px',fontWeight:'500',color:'var(--text2)'}},consequence)
+  );
+
+  // Fil d'étapes : où on en est, et ce qu'il reste.
+  // Passage d'un écran à l'autre : il glisse, la barre avance, la pastille de
+  // l'étape s'allume. Le conducteur VOIT qu'il a changé d'écran et qu'il en
+  // reste — sans ça trois écrans se ressemblent et il valide en croyant avoir
+  // fini. L'animation ne joue qu'au changement d'écran, pas à chaque rendu.
+  const etapeAvant = S._finEtapeVue;
+  const change = etapeAvant !== etape;
+  const sens = (change && etapeAvant != null && FIN_ORDRE.indexOf(etape) < FIN_ORDRE.indexOf(etapeAvant))
+    ? 'arriere' : 'avant';
+  S._finEtapeVue = etape;
+  const pct = i => Math.max(0, Math.min(100, ((i+1) / FIN_ETAPES_CLOTURE.length) * 100));
+  const idxAvant = etapes.indexOf(etapeAvant);
+  let progres = null;
+  if(termine && etape !== 'choix'){
+    const barre = h('div',{className:'fin-progres-barre'+(change?' anime':''),style:{width:pct(idx)+'%'}});
+    barre.style.setProperty('--fin-de', (idxAvant >= 0 ? pct(idxAvant) : 0)+'%');
+    progres = h('div',{className:'fin-progres'}, barre);
+  }
+
+  const fil = (etape !== 'choix') ? h('div',{style:{display:'flex',alignItems:'center',gap:'8px',
+      flexWrap:'wrap',marginBottom:'10px',fontSize:'12px'}},
+    h('button',{type:'button',className:'fab-btn fab-btn-muted fab-btn-sm',
+        style:{background:'var(--bg)'},onClick:()=>set({finEtape:'choix'})},
+      termine ? 'Dossier terminé' : 'À reprendre plus tard', ' · Changer'),
+    termine ? h('div',{style:{display:'flex',gap:'6px',alignItems:'center',marginLeft:'auto'}},
+      ...FIN_ETAPES_CLOTURE.map((e,i)=>h('span',{className:(i===idx && change)?'fin-pill-allume':'',style:{
+          padding:'4px 10px',borderRadius:'20px',fontWeight:'700',
+          border:'1px solid '+(i===idx?'var(--accent)':'var(--border)'),
+          background: i===idx ? 'var(--accent-bg)' : 'var(--bg)',
+          color: i===idx ? 'var(--accent)' : (i<idx ? 'var(--success)' : 'var(--muted)'),
+        }}, (i<idx?'✓ ':(i+1)+' ')+e.label))) : null
+  ) : null;
+
+  let corps, boutons;
+  if(etape === 'choix'){
+    corps = h('div',null,
+      h('div',{style:{fontWeight:'800',fontSize:'15px',color:'var(--text)',marginBottom:'12px'}},
+        'Que devient ce dossier ?'),
+      h('div',{style:{display:'flex',gap:'12px'}},
+        mkChoix(true,  'Dossier terminé',      'Il sort du planning',  '--success', '52,211,153'),
+        mkChoix(false, 'À reprendre plus tard', 'Il reste au planning', '--warn',    '251,191,36')
+      ));
+    boutons = [h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',onClick:fermerFinModal},'Annuler')];
+  } else {
+    if(etape === 'compteur') corps = h('div',null, compteurBloc, termine ? null : matiereBloc);
+    else if(etape === 'calage') corps = renderCalage();
+    else corps = h('div',null, matiereBloc, noteBloc);
+    boutons = [
+      h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',onClick:fermerFinModal},'Annuler'),
+      h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',style:{background:'var(--bg)'},
+        onClick:precedent},'← Retour'),
+      dernier
+        ? h('button',{className:'fab-btn '+(termine?'fab-btn-danger':'fab-btn-warn'),onClick:submit},
+            svgIcon('flag',15),' '+(termine ? 'Clôturer le dossier' : 'Arrêter pour aujourd\'hui'))
+        : h('button',{className:'fab-btn fab-btn-primary',onClick:suivant},'Suivant →'),
+    ];
+  }
+
+  // La fenêtre entre en scène une fois. Les rendus suivants (un toucher sur la
+  // grille des heures, un écran de plus) ne rejouent pas son apparition : elle
+  // clignoterait à chaque geste.
+  const premiere = !S._finModalVue;
+  S._finModalVue = true;
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)fermerFinModal();}},
+    h('div',{className:'fab-modal',style:premiere?null:{animation:'none'}},
       h('div',{className:'fab-modal-title'},opLabel('89','Fin de production')),
       S.dossier ? h('div',{className:'fab-modal-sub'},
         'Dossier ',
@@ -6907,36 +7327,77 @@ function renderFinModal(){
           fabDossierRefLabel(S.dossier)),
         (S.dossier.client && !(S.dossier.fictif||isFictifDossierRef(S.dossier.reference))) ? (' — '+S.dossier.client) : ''
       ) : null,
+      fil,
+      progres,
+      h('div',{className: change ? 'fin-etape-entre '+sens : ''}, corps),
+      h('div',{className:'fab-modal-btns'}, ...boutons)
+    )
+  );
+}
+
+/* ── Compteur en fin de calage ───────────────────────────────────────────
+   Le « 03 Production » qui suit un calage est déjà enregistré, à l'heure du
+   clic. On propose seulement de relever le compteur : la différence avec le
+   relevé du début de dossier est la gâche de calage. Facultatif — « Passer »
+   ne coûte rien. */
+
+function fermerCompteurCalage(){
+  set({showCompteurCalage:false, compteurCalageCtx:null, compteurCalageVal:'', compteurCalageBusy:false});
+}
+
+async function enregistrerCompteurCalage(){
+  const ctx = S.compteurCalageCtx;
+  if(!ctx) return;
+  const raw = String(S.compteurCalageVal||'').trim().replace(',','.');
+  const m = raw ? parseFloat(raw) : NaN;
+  if(isNaN(m) || m < 0){ showToast('Indiquez le compteur en mètres, ou passez.','danger'); return; }
+  if(ctx.dernier_metrage != null && m < ctx.dernier_metrage){
+    showToast('Compteur invalide : le dernier relevé était à '
+      +Math.round(ctx.dernier_metrage).toLocaleString('fr-FR')+' m.','danger');
+    return;
+  }
+  set({compteurCalageBusy:true});
+  try{
+    await apiFetch('/api/fabrication/saisie/'+ctx.saisie_id+'/compteur-fin-calage',{
+      method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({metrage_compteur:m}),
+    });
+    showToast('Compteur enregistré.');
+    fermerCompteurCalage();
+    await loadSession({noRender:true, silent:true});
+    render();
+  }catch(e){
+    showToast('Erreur : '+e.message,'danger');
+    set({compteurCalageBusy:false});
+  }
+}
+
+function renderCompteurCalageModal(){
+  const ctx = S.compteurCalageCtx || {};
+  const inp = h('input',{type:'number',placeholder:'Ex: 14200',step:'1',min:'0',
+    style:{textAlign:'right',fontSize:'18px'}});
+  inp.value = S.compteurCalageVal||'';
+  inp.addEventListener('input',e=>{ S.compteurCalageVal=e.target.value; });
+  inp.addEventListener('keydown',e=>{ if(e.key==='Enter') enregistrerCompteurCalage(); });
+  requestAnimationFrame(()=>{ try{ inp.focus(); }catch(_){} });
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)fermerCompteurCalage();}},
+    h('div',{className:'fab-modal',style:{maxWidth:'420px'}},
+      h('div',{className:'fab-modal-title'},'Fin de calage'),
+      h('div',{className:'fab-modal-sub'},
+        'Production démarrée. Relevez le compteur machine maintenant pour mesurer '
+        +'la gâche de calage — facultatif.'),
       h('div',{className:'fab-field'},
         h('label',null,'Compteur machine, en mètres'),
-        (()=>{
-          const m = S.machine||(S.adminMachineId&&S.machines.find(x=>x.id===S.adminMachineId));
-          if(!m || m.dernier_metrage==null) return null;
-          return h('div',{className:'fab-field-hint'},
-            'Dernier relevé : '+Math.round(m.dernier_metrage).toLocaleString('fr-FR')+' m');
-        })(),
-        metInp
-      ),
-      h('div',{className:'fab-field'},
-        h('label',null,'Étiquettes produites'),
-        etiqInp
-      ),
-      matiereBloc,
-      h('div',{className:'fab-field'},fdSelector),
-      S.finDossierOui===true ? noteBloc : null,
+        ctx.dernier_metrage != null
+          ? h('div',{className:'fab-field-hint'},
+              'Dernier relevé : '+Math.round(ctx.dernier_metrage).toLocaleString('fr-FR')+' m')
+          : null,
+        inp),
       h('div',{className:'fab-modal-btns'},
-        h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
-          onClick:()=>set({showFinModal:false,finDossierOui:null,finNoteVal:'',finNoteChargee:false,finNbMatieres:null,finMatiereMotif:''})},'Annuler'),
-        h('button',{
-          className:'fab-btn '+(S.finDossierOui===true?'fab-btn-danger':'fab-btn-warn'),
-          style:{opacity: S.finDossierOui===null?'.55':'1'},
-          onClick:submit},
-          svgIcon('flag',15),' '+(
-            S.finDossierOui===true  ? 'Clôturer le dossier' :
-            S.finDossierOui===false ? 'Arrêter pour aujourd\'hui' :
-                                      'Enregistrer')
-        )
-      )
+        h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',style:{background:'var(--bg)'},
+          disabled:!!S.compteurCalageBusy,onClick:fermerCompteurCalage},'Passer'),
+        h('button',{className:'fab-btn fab-btn-primary',disabled:!!S.compteurCalageBusy,
+          onClick:enregistrerCompteurCalage},'Enregistrer'))
     )
   );
 }
@@ -9103,6 +9564,8 @@ function render(){
   if(S.showFictifModal)   root.appendChild(renderFictifModal());
   if(S.showDebutModal)    root.appendChild(renderDebutModal());
   if(S.showFinModal)      root.appendChild(renderFinModal());
+  if(S.confirmCompteur)   root.appendChild(renderConfirmCompteurModal());
+  if(S.showCompteurCalage) root.appendChild(renderCompteurCalageModal());
   if(S.showCommentModal)  root.appendChild(renderCommentModal());
   if(S.showAnnulModal)    root.appendChild(renderAnnulModal());
   if(S.showTracaCommentModal) root.appendChild(renderTracaCommentModal());

@@ -19,6 +19,7 @@ Endpoints superadmin (écran « Widgets et tableaux de bord » de Paramètres) :
   GET    /api/accueil/blocs/admin/usages    qui a épinglé quels indicateurs
   GET    /api/accueil/blocs/admin/releves   état des relevés quotidiens (contrôle)
   GET    /api/accueil/blocs/admin/releves/{nom}  relevés d'un bloc, jour par jour
+  GET    /api/accueil/releves/{nom}         courbe d'un indicateur (relevés, accès du bloc)
   GET    /api/accueil/boutons/admin         grille applis × boutons flottants
   PUT    /api/accueil/boutons/admin         activer / couper un bouton dans une appli
 
@@ -92,6 +93,8 @@ def _bloc_public(nom: str, b: reg.Bloc) -> dict:
                     for c, l in b.valeurs],
         "liste": b.liste,
         "grand": b.grand,
+        # Relevés quotidiens : sens par valeur, grand format en courbe.
+        "historique": {c: sens for c, sens in b.historique},
         "url": b.url,
     }
 
@@ -338,6 +341,18 @@ def modifier_widget(widget_id: int, body: WidgetUpdate, request: Request):
             raise HTTPException(400, str(e)) from None
         if "valeurs" in w and not w["valeurs"]:
             raise HTTPException(400, "Cochez au moins une valeur.")
+        # Compact = une valeur : contrôlé sur l'état final, quand l'un des deux change.
+        if "hauteur" in w or "valeurs" in w:
+            h_fin = w.get("hauteur", actuel["hauteur"])
+            if "valeurs" in w:
+                n_fin = len(w["valeurs"])
+            else:
+                try:
+                    n_fin = len(json.loads(actuel["valeurs"] or "[]"))
+                except (TypeError, ValueError):
+                    n_fin = 0
+            if h_fin == "s" and n_fin > 1:
+                raise HTTPException(400, reg.COMPACT_UNE_VALEUR)
         if "valeurs" in w:
             w["valeurs"] = json.dumps(w["valeurs"], ensure_ascii=False)
         sets, params = [], []
@@ -533,6 +548,66 @@ def blocs_releves(request: Request):
 
 
 RELEVES_JOURS_MAX = 400
+
+
+@router.get("/api/accueil/releves/{nom}")
+def releves_indicateur(nom: str, request: Request, url: str = "", objet: str = "", jours: int = 30):
+    """Relevés d'un bloc pour la courbe d'un indicateur : la combinaison
+    (objet, filtres) de son adresse capturée, sur `jours` jours.
+
+    Ouvert à tout utilisateur qui a accès au bloc (même contrôle que la
+    capture) : les relevés sont faits en vue complète, comme ce que montrent
+    déjà ces applis. Rend {jours: {AAAA-MM-JJ: {cle: n}}, minimums, maximums,
+    depuis} ; seules les clés d'historique du bloc sortent."""
+    from datetime import date, timedelta
+    from app.services.accueil_releves import cle_filtres, filtres_de, peut_voir
+    user = get_current_user(request)
+    res = reg.resoudre(nom)
+    if not res:
+        raise HTTPException(404, "Bloc inconnu.")
+    nom, b = res
+    if not b.historique or not _bloc_accessible(user, b):
+        raise HTTPException(404, "Pas d'historique pour ce bloc.")
+    # Mêmes droits que le chiffre en direct : le relevé est rejoué sous les
+    # droits du demandeur (filtres et objet compris) avant de servir l'historique.
+    if not peut_voir(nom, str(objet or ""), filtres_de(url), request):
+        raise HTTPException(403, "Historique réservé aux personnes qui voient ce chiffre.")
+    try:
+        jours = max(1, min(int(jours), 120))
+    except (TypeError, ValueError):
+        jours = 30
+    cles = {c for c, _ in b.historique}
+    depuis = (date.today() - timedelta(days=jours - 1)).isoformat()
+    filtres = cle_filtres(filtres_de(url))
+    with get_db() as conn:
+        if nom in _desactives(conn):
+            raise HTTPException(404, "Bloc non capturable.")
+        rows = []
+        try:
+            rows = conn.execute(
+                "SELECT jour, valeurs, minimums, maximums FROM accueil_releves"
+                " WHERE bloc=? AND objet=? AND filtres=? AND jour>=? ORDER BY jour",
+                (nom, str(objet or ""), filtres, depuis),
+            ).fetchall()
+            premier = conn.execute(
+                "SELECT MIN(jour) FROM accueil_releves WHERE bloc=? AND objet=? AND filtres=?",
+                (nom, str(objet or ""), filtres),
+            ).fetchone()[0]
+        except Exception:
+            premier = None   # table ou colonnes pas encore migrées
+
+    def garder(t):
+        try:
+            d = json.loads(t or "{}")
+        except (TypeError, ValueError):
+            return {}
+        return {k: v for k, v in (d if isinstance(d, dict) else {}).items() if k in cles}
+    out = {"jours": {}, "minimums": {}, "maximums": {}, "depuis": premier}
+    for r in rows:
+        out["jours"][r["jour"]] = garder(r["valeurs"])
+        out["minimums"][r["jour"]] = garder(r["minimums"])
+        out["maximums"][r["jour"]] = garder(r["maximums"])
+    return out
 
 
 @router.get("/api/accueil/blocs/admin/releves/{nom}")

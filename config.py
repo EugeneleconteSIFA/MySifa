@@ -301,9 +301,13 @@ STOCK_EMPLACEMENT_SORTIE_PROD_LABEL = "En attente - sortie de prod"
 # une instance Kernse surcharge via STOCK_UNITE_VENTE_DEFAUT dans son .env.
 STOCK_UNITE_VENTE_DEFAUT = os.getenv("STOCK_UNITE_VENTE_DEFAUT", "étiquette")
 
-# Vitesse (m/min) au-delà de laquelle un métrage saisi est une faute de frappe
-# sur un compteur : le déstockage refuse alors de s'en servir.
-PROD_VITESSE_MAX_M_MIN = float(os.getenv("PROD_VITESSE_MAX_M_MIN", "400"))
+# Plafond de vitesse machine (m/min), unique pour tout MySifa. Au-delà, le
+# métrage saisi est une faute de compteur (chiffre en trop, 03 et 89 à la même
+# minute) : le déstockage refuse de s'en servir, les écrans affichent « erreur
+# saisie », la saisie atelier demande confirmation, et la série est écartée des
+# repères de cadence. Ramené de 400 à 200 le 15/10/2026 : les machines
+# tournent autour de 75-100 m/min.
+PROD_VITESSE_MAX_M_MIN = float(os.getenv("PROD_VITESSE_MAX_M_MIN", "200"))
 
 # ─── Certification FSC ────────────────────────────────────────────
 # Volontairement mono-certification : FSC est le seul référentiel dont SIFA a
@@ -1005,6 +1009,10 @@ CODES_CALAGE: frozenset[str] = frozenset({
     "02", "10", "11", "12", "58", "59", "60", "74", "75"
 })
 
+# Calage déclaré à la clôture : au-delà de ce multiple de la médiane de la
+# machine, l'écran demande de confirmer les heures recopiées du dossier papier.
+CALAGE_ALERTE_FACTEUR = float(os.getenv("CALAGE_ALERTE_FACTEUR", "3"))
+
 # ─── Sanity score (qualité de saisie MyProd) ─────────────────────
 # Journée opérateur (86 → 87) plus courte que ce seuil : le départ demande un
 # motif, et la journée n'est pénalisée que si le motif n'a pas été donné.
@@ -1157,6 +1165,43 @@ GIPHY_API_KEY = os.getenv("GIPHY_API_KEY", "")
 
 # ─── MyExpé — parsing grilles tarifaires (IA) ───────────────────────
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
+# ─── Usage IA — tarifs Anthropic pour le calcul du coût ────────────
+# Prix publics en dollars par million de tokens (entrée, sortie), repérés par
+# préfixe de l'identifiant de modèle : « claude-sonnet-4-5-20250929 » se range
+# sous « claude-sonnet-4-5 ». Le préfixe le plus long l'emporte. La lecture de
+# cache coûte 10 % du prix d'entrée, l'écriture 125 %. Le coût est figé à
+# l'enregistrement de l'appel : une baisse de tarif ne réécrit pas l'historique.
+# Surcharge sans redéploiement : IA_TARIFS_MODELES_JSON='{"claude-x": [1, 5]}'.
+_IA_TARIFS_DEFAUT = {
+    "claude-haiku-4-5":  (1.00, 5.00),
+    "claude-haiku-5-5":  (0.10, 0.50),
+    "claude-sonnet-4":   (3.00, 15.00),
+    "claude-sonnet-5":   (2.00, 10.00),
+    "claude-sonnet-5-5": (2.00, 10.00),
+    "claude-opus-4-5":   (5.00, 25.00),
+    "claude-opus-4-6":   (5.00, 25.00),
+    "claude-opus-4-7":   (5.00, 25.00),
+    "claude-opus-4-8":   (5.00, 25.00),
+    "claude-opus-5":     (5.00, 25.00),
+    "claude-opus-5-5":   (4.00, 20.00),
+    "claude-fable-5":    (10.00, 50.00),
+}
+IA_CACHE_LECTURE_FACTEUR = 0.10
+IA_CACHE_ECRITURE_FACTEUR = 1.25
+
+
+def ia_tarifs_modeles() -> dict:
+    """Grille {préfixe de modèle: (entrée, sortie)} en $ par million de tokens."""
+    tarifs = dict(_IA_TARIFS_DEFAUT)
+    brut = os.getenv("IA_TARIFS_MODELES_JSON", "").strip()
+    if brut:
+        try:
+            for cle, val in json.loads(brut).items():
+                tarifs[str(cle)] = (float(val[0]), float(val[1]))
+        except Exception:
+            pass
+    return tarifs
 
 # ─── Rentabilité — lecture des devis (parser puis IA) ──────────────
 # Chaque commercial devise à sa façon. Le parser à motifs traite le modèle

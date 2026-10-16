@@ -82,7 +82,7 @@ h1{font-size:22px;margin:0 0 8px;font-weight:700}
 /* Liste des formations */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;cursor:pointer;transition:all .15s;position:relative}
-.card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 24px rgba(34,211,238,.08)}
+.card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 24px color-mix(in srgb,var(--accent,#22d3ee) 8%,transparent)}
 .card-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:6px}
 .card-titre{font-size:16px;font-weight:700;margin-bottom:8px}
 .card-desc{font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:16px;min-height:36px}
@@ -500,7 +500,7 @@ window.submitQuiz = async function(module_id) {
 loadYtApi();
 route();
 </script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 </body>
 </html>
 """
@@ -558,7 +558,7 @@ body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;backgrou
 .form-row{display:grid;grid-template-columns:180px 1fr;gap:12px;margin-bottom:12px;align-items:center}
 .form-row label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
 .form-row input, .form-row textarea, .form-row select{width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:13px}
-.form-row input:focus,.form-row textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.form-row input:focus,.form-row textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .form-row textarea{min-height:60px;resize:vertical}
 .form-actions{display:flex;gap:8px;margin-top:16px}
 
@@ -1077,7 +1077,7 @@ window.deleteQuestion = async function(qid) {
 
 loadFormations();
 </script>
-<script src="/static/mysifa_cal_rappel.js?v=8"></script>
+<script src="/static/mysifa_cal_rappel.js?v=9"></script>
 </body>
 </html>
 """

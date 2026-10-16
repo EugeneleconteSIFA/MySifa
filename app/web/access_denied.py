@@ -43,7 +43,7 @@ p{{font-size:15px;line-height:1.6;margin:0 0 18px;color:#cbd5e1;}}
 a.btn-portal{{display:inline-flex;align-items:center;gap:0;padding:10px 16px;background:transparent;
   color:#94a3b8;text-decoration:none;border-radius:10px;font-weight:500;font-size:14px;
   font-family:'Segoe UI',system-ui,sans-serif;border:1px solid #475569;transition:color .15s,border-color .15s,background .15s;}}
-a.btn-portal:hover{{border-color:#22d3ee;color:#e2e8f0;background:rgba(34,211,238,.08);}}
+a.btn-portal:hover{{border-color:#22d3ee;color:#e2e8f0;background:color-mix(in srgb,var(--accent,#22d3ee) 8%,transparent);}}
 a.btn-portal .wm{{font-weight:800;color:#f1f5f9;letter-spacing:-.3px}}
 a.btn-portal .wm span{{color:#22d3ee}}
 a.btn2{{display:inline-block;padding:10px 18px;background:transparent;color:#94a3b8;text-decoration:none;border-radius:10px;font-weight:600;font-size:14px;border:1px solid #475569;}}
