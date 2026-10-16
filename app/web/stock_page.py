@@ -2429,7 +2429,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=fiche2-mp2">
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
-<script src="/static/mysifa_stock_modals.js?v=unite1"></script>
+<script src="/static/mysifa_stock_modals.js?v=unite2"></script>
 <script src="/static/mysifa_etiq_specifiques.js?v=3"></script>
 <script src="/static/mysifa_etiq_editeur.js?v=2"></script>
 <script src="/static/mysifa_donnees_prod.js?v=1"></script>
@@ -5809,6 +5809,7 @@ function mpSeuilFieldLabel(catOrMatiere) {
   if (u === 'palette') return 'Seuil d\'alerte (pal.)';
   if (u === 'kg') return 'Seuil d\'alerte (kg)';
   if (u === 'unite') return 'Seuil d\'alerte (u.)';
+  if (u) return 'Seuil d\'alerte (' + u + 's)';
   return 'Seuil d\'alerte (pal.)';
 }
 function mpStockMini(qty, catOrMatiere) {
@@ -6443,7 +6444,7 @@ function buildMatiereDetail() {
     meta.push('Couleur : ' + m.couleur);
   }
   if (mpHasConditionnement(m.categorie) && m.stock_a_l_unite) {
-    meta.push('Stock tenu à l\'unité (' + mpUniteAchat(m.categorie) + 's)');
+    meta.push('Stock tenu à l\'unité (' + (m.unite_comptage || mpUniteAchat(m.categorie)) + 's)');
   } else if (mpHasConditionnement(m.categorie) && m.unites_par_palette > 0) {
     const u = mpUniteAchat(m.categorie);
     meta.push('Conditionnement : ' + Number(m.unites_par_palette).toLocaleString('fr-FR') + ' ' + u + '/palette');
@@ -8811,6 +8812,9 @@ function matiereRefEditPayload(item, fields) {
     payload.sous_section = fields.sousSectionSel.getValue();
   }
   if (fields.hasCond && fields.unChk) payload.stock_a_l_unite = fields.unChk.checked ? 1 : 0;
+  if (fields.hasCond && fields.unChk && fields.unChk.checked && fields.unSel) {
+    payload.unite_comptage = fields.unSel.value;
+  }
   if (fields.hasCond && fields.unChk && fields.unChk.checked) {
     // Conditionnement fixé à 1 par le serveur : rien à envoyer.
   } else if (fields.hasCond && fields.uppInp) {
@@ -9308,25 +9312,37 @@ function appendMatiereRefEditFields(parent, item) {
   const unChk = el('input', { attrs: { type: 'checkbox' } });
   unChk.checked = !!item.stock_a_l_unite;
   const unHint = el('div', { cls: 'mp-hint' }, '');
+  // Ce qu'on compte : une bague n'est pas un tube. Les choix viennent du
+  // serveur (config.STOCK_UNITES_COMPTAGE), le premier est le défaut.
+  const choixCpt = (item.unites_comptage && item.unites_comptage.length) ? item.unites_comptage : [uniteAchat];
+  const unSel = el('select', null, ...choixCpt.map(u => el('option', { attrs: { value: u } },
+    u.charAt(0).toUpperCase() + u.slice(1) + 's')));
+  unSel.value = choixCpt.includes(item.unite_comptage) ? item.unite_comptage : choixCpt[0];
+  const unSelWrap = el('div', { style: 'margin-top:10px' },
+    el('label', null, 'Compté en'), unSel);
   const unWrap = el('div', { cls: 'mp-field', style: { display: hasCond ? '' : 'none' } },
     el('label', { style: 'display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;cursor:pointer' },
-      unChk, 'Stock tenu à l\'unité (' + uniteAchat + 's), sans palette'),
+      unChk, 'Stock tenu à l\'unité, sans palette'),
+    unSelWrap,
     unHint);
   function refreshALUnite() {
     const on = unChk.checked;
+    const u = unSel.value || uniteAchat;
     uppWrap.style.display = (hasCond && !on) ? '' : 'none';
+    unSelWrap.style.display = (on && choixCpt.length > 1) ? '' : 'none';
     if (on && !item.stock_a_l_unite) {
       const upp = Number(item.unites_par_palette || 0);
       unHint.textContent = upp > 0
-        ? 'Le stock sera converti : 1 palette = ' + fN(upp) + ' ' + uniteAchat + 's.'
+        ? 'Le stock sera converti : 1 palette = ' + fN(upp) + ' ' + u + 's.'
         : 'Aucun conditionnement connu : le stock actuel restera tel quel.';
     } else if (!on && item.stock_a_l_unite) {
       unHint.textContent = 'Renseigne les ' + uniteAchat + 's par palette : le stock sera divisé d\'autant.';
     } else {
-      unHint.textContent = on ? 'Réception, déstockage et inventaire comptent en ' + uniteAchat + 's.' : '';
+      unHint.textContent = on ? 'Réception, déstockage et inventaire comptent en ' + u + 's.' : '';
     }
   }
   unChk.addEventListener('change', refreshALUnite);
+  unSel.addEventListener('change', refreshALUnite);
   refreshALUnite();
 
   // ── Mandrins : longueur du tube acheté ────────────────────────────────────
@@ -9465,7 +9481,7 @@ function appendMatiereRefEditFields(parent, item) {
     ? mpFormSection('Laizes & tarification', laizeWrap)
     : null;
   parent.append(...[grille, sectionLaizes].filter(Boolean));
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, unChk, ltInp, isMandrin, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds: null, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, isTech, epInp, abbrevInp, hasAbbrev, sousCategorieSel, fscChk, hasFsc };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, unChk, unSel, ltInp, isMandrin, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds: null, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, isTech, epInp, abbrevInp, hasAbbrev, sousCategorieSel, fscChk, hasFsc };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -11020,7 +11036,10 @@ function mpStockMySifa(m, laizeMm) {
 
 // Un mandrin se stocke à la palette mais se compte en tubes : la palette n'est
 // qu'un conditionnement. Sans tubes par palette sur la fiche, on reste en palettes.
+// Un mandrin tenu à l'unité (bagues) se compte déjà dans son unité : pas de
+// conversion palette -> tubes, mpStockLine() dit « 1 500 bagues ».
 function mpTubesParPalette(m) {
+  if (m && m.stock_a_l_unite) return 0;
   return (m && String(m.categorie || '').toLowerCase() === 'mandrin') ? Number(m.unites_par_palette || 0) : 0;
 }
 function mpFmtTubes(qPalettes, m) {

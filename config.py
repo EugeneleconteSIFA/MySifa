@@ -301,6 +301,19 @@ STOCK_EMPLACEMENT_SORTIE_PROD_LABEL = "En attente - sortie de prod"
 # une instance Kernse surcharge via STOCK_UNITE_VENTE_DEFAUT dans son .env.
 STOCK_UNITE_VENTE_DEFAUT = os.getenv("STOCK_UNITE_VENTE_DEFAUT", "étiquette")
 
+# MyStock — unité dans laquelle se compte une matière tenue à l'unité
+# (`matieres_premieres.stock_a_l_unite`), par catégorie. La première est le
+# défaut. Singulier : l'affichage met au pluriel.
+STOCK_UNITES_COMPTAGE = {
+    "mandrin": ("tube", "mandrin", "bague"),
+    "carton": ("carton",),
+}
+
+
+def unites_comptage(categorie):
+    """Unités de comptage proposées pour une catégorie, ou ()."""
+    return STOCK_UNITES_COMPTAGE.get((categorie or "").strip().lower(), ())
+
 # Plafond de vitesse machine (m/min), unique pour tout MySifa. Au-delà, le
 # métrage saisi est une faute de compteur (chiffre en trop, 03 et 89 à la même
 # minute) : le déstockage refuse de s'en servir, les écrans affichent « erreur

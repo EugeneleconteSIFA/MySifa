@@ -684,9 +684,10 @@
         palettes_par_pile: parseFloat(catOrMatiere.palettes_par_pile) || 0,
         couleur: (catOrMatiere.couleur || '').trim(),
         a_l_unite: !!catOrMatiere.stock_a_l_unite,
+        unite_comptage: (catOrMatiere.unite_comptage || '').trim(),
       };
     }
-    return { categorie: mpCategorieKey(catOrMatiere), palettes_par_pile: 0, couleur: '', a_l_unite: false };
+    return { categorie: mpCategorieKey(catOrMatiere), palettes_par_pile: 0, couleur: '', a_l_unite: false, unite_comptage: '' };
   }
 
   function mpIsBobineCategory(catOrMatiere) {
@@ -708,8 +709,9 @@
     if (c === 'encre') return 'kg';
     // Bagues, cartons achetés au lot : stock tenu à l'unité, sans palette.
     const ctx = mpCtx(catOrMatiere);
-    if (ctx.a_l_unite && c === 'carton') return 'carton';
-    if (ctx.a_l_unite && c === 'mandrin') return 'tube';
+    // L'unité de comptage (tube, mandrin, bague) vient de la fiche.
+    if (ctx.a_l_unite && c === 'carton') return ctx.unite_comptage || 'carton';
+    if (ctx.a_l_unite && c === 'mandrin') return ctx.unite_comptage || 'tube';
     if (c === 'carton') return 'palette';
     if (c === 'palette') return 'palette';
     if (c === 'autre') return 'unite';
@@ -722,9 +724,8 @@
     if (u === 'palette') return 'pal.';
     if (u === 'kg') return 'kg';
     if (u === 'unite') return 'u.';
-    if (u === 'carton') return 'cartons';
-    if (u === 'tube') return 'tubes';
-    return 'pal.';
+    if (u === 'palette' || !u) return 'pal.';
+    return u + 's';
   }
 
   function mpQuantiteFieldLabel(catOrMatiere, uniteSaisie) {
@@ -735,8 +736,7 @@
     if (u === 'palette') return 'Quantité (palettes)';
     if (u === 'kg') return 'Quantité (kg)';
     if (u === 'unite') return 'Quantité (unités)';
-    if (u === 'carton') return 'Quantité (cartons)';
-    if (u === 'tube') return 'Quantité (tubes)';
+    if (u && u !== 'palette') return 'Quantité (' + u + 's)';
     return 'Quantité (palettes)';
   }
 
