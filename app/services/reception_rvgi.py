@@ -269,15 +269,25 @@ def details_matieres(conn):
     RVGI, il faut le libelle TECHNIQUE des variantes fournisseur et les laizes
     deja connues de la matiere.
     """
-    techs, laizes = {}, {}
+    # Seule la variante PRINCIPALE nomme la matiere dans la liste. Les joindre
+    # toutes mettait en tete le libelle d'un fournisseur secondaire des que
+    # celui du principal ne citait pas son nom : changer le principal sur la
+    # fiche (16/10/2026, tube Ø 76 passe chez JOYE) laissait la liste
+    # afficher ALLPACK. Le fournisseur est lu sur sa fiche, pas dans le texte.
+    techs, fourn, laizes, vues = {}, {}, {}, set()
     try:
         for r in conn.execute(
-                "SELECT matiere_id, libelle_technique FROM mp_variantes "
-                "WHERE actif = 1 AND COALESCE(libelle_technique, '') <> '' "
-                "ORDER BY principal DESC, id"):
-            l = techs.setdefault(int(r["matiere_id"]), [])
-            if r["libelle_technique"] not in l:
-                l.append(r["libelle_technique"])
+                "SELECT v.matiere_id, v.libelle_technique, f.nom AS fournisseur "
+                "FROM mp_variantes v LEFT JOIN fournisseurs_fsc f ON f.id = v.fournisseur_id "
+                "WHERE v.actif = 1 ORDER BY v.principal DESC, v.id"):
+            mid = int(r["matiere_id"])
+            if mid in vues:
+                continue
+            vues.add(mid)
+            if (r["libelle_technique"] or "").strip():
+                techs[mid] = [r["libelle_technique"].strip()]
+            if (r["fournisseur"] or "").strip():
+                fourn[mid] = r["fournisseur"].strip()
     except Exception:
         pass  # table mp_variantes absente : migration pas encore passee
     try:
@@ -289,12 +299,13 @@ def details_matieres(conn):
                 laizes.setdefault(int(r["matiere_id"]), []).append(float(r["valeur_mm"]))
     except Exception:
         pass
-    return {mid: {"libelles_techniques": techs.get(mid, []), "laizes_mm": laizes.get(mid, [])}
-            for mid in set(techs) | set(laizes)}
+    return {mid: {"libelles_techniques": techs.get(mid, []), "laizes_mm": laizes.get(mid, []),
+                  "fournisseur_principal": fourn.get(mid)}
+            for mid in set(techs) | set(fourn) | set(laizes)}
 
 
 def _habiller(choix, details):
-    vide = {"libelles_techniques": [], "laizes_mm": []}
+    vide = {"libelles_techniques": [], "laizes_mm": [], "fournisseur_principal": None}
     for c in choix:
         c.update(details.get(c["matiere_id"], vide))
     return choix
@@ -397,6 +408,12 @@ def convertir(type_rvgi, qte_rvgi, matiere, libt2=None, ml_variante=None):
             # Une palette reste une palette : la quantite EST deja l'unite.
             return {"quantite": round(q, 4), "unite": "palette", "detail": None,
                     "alerte": None, "manque": []}
+        if int(matiere.get("stock_a_l_unite") or 0):
+            # Bagues, cartons achetes au lot : RVGI compte deja des unites
+            # (175 cartons x 2,016 EUR = 352,80 EUR sur la commande 5962), et
+            # le stock est tenu dans cette unite. Rien a convertir.
+            return {"quantite": round(q, 4), "unite": "carton" if cat == "carton" else "tube",
+                    "detail": None, "alerte": None, "manque": []}
         upp = _f(matiere.get("unites_par_palette"))
         if not upp:
             return {"quantite": None, "unite": "palette", "detail": None, "alerte": None,
@@ -440,7 +457,7 @@ _SQL_LIGNES = """
            e.rs AS fournisseur, e.numfou,
            c.code1, c.code2, c.code3 AS laize_mm, c.type AS type_code,
            c.des1, c.cua,
-           m.libc1 AS lib_erp, m.libt2 AS cond_erp
+           m.libc1 AS lib_erp, m.libt1 AS lib_tech_erp, m.libt2 AS cond_erp
     FROM lif_ligne l
     JOIN cdf_ligne c
       ON c.numero = l.numero AND c.ligne = l.ligne AND c.corbeille = 0
@@ -505,10 +522,13 @@ def ml_variantes(conn):
 
 
 def _matieres(conn):
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
+    a_l_unite = ("COALESCE(stock_a_l_unite, 0)" if "stock_a_l_unite" in cols else "0")
     return [dict(r) for r in conn.execute(
         "SELECT id, categorie, sous_section, reference, designation,"
-        "       metres_lineaires_par_bobine, unites_par_palette"
-        " FROM matieres_premieres WHERE COALESCE(actif, 1) = 1"
+        "       metres_lineaires_par_bobine, unites_par_palette,"
+        "       %s AS stock_a_l_unite"
+        " FROM matieres_premieres WHERE COALESCE(actif, 1) = 1" % a_l_unite
     ).fetchall()]
 
 
@@ -575,6 +595,12 @@ def lignes_a_integrer(conn, conn_erp, limite=300):
             # une matiere morte qu'on ne peut que delier.
             mid = None
         libelle = ((r["lib_erp"] or r["des1"] or "") + " " + (r["cond_erp"] or "")).strip()
+        # Affiche : le libelle TECHNIQUE de l'article (`libt1`, celui du
+        # fournisseur), pas le commercial (`libc1`) -- c'est lui qui dit ce qui
+        # est livre. Le commercial reste la base du rapprochement, parce que la
+        # reference MyStock est elle aussi un libelle commercial.
+        libelle_tech = ((r["lib_tech_erp"] or r["des1"] or r["lib_erp"] or "") + " "
+                        + (r["cond_erp"] or "")).strip()
         candidates = [] if matiere else _candidates(matieres, type_code)
         propositions = proposer(libelle, candidates) if candidates else []
         if type_code in PERIMETRE_SOUS_CONDITION and not matiere:
@@ -604,6 +630,7 @@ def lignes_a_integrer(conn, conn_erp, limite=300):
             "article": "%s/%s" % (r["code1"], r["code2"]),
             "code1": r["code1"], "code2": r["code2"], "type_code": type_code,
             "libelle": libelle or None,
+            "libelle_technique": libelle_tech or None,
             "laize_mm": _f(r["laize_mm"]),
             "qte_rvgi": _f(r["qte"]),
             "matiere_id": mid,
@@ -639,7 +666,7 @@ def lignes_a_integrer(conn, conn_erp, limite=300):
 _SQL_HISTO_ERP = """
     SELECT l.id AS lif_id, l.dtem, l.operateur, l.ref AS ref_br,
            c.code1, c.code2, c.type AS type_code, c.des1,
-           e.rs AS fournisseur, m.libc1 AS lib_erp
+           e.rs AS fournisseur, m.libc1 AS lib_erp, m.libt1 AS lib_tech_erp
     FROM lif_ligne l
     LEFT JOIN cdf_ligne c
       ON c.numero = l.numero AND c.ligne = l.ligne AND c.corbeille = 0
@@ -690,6 +717,8 @@ def historique(conn, conn_erp=None, limite=300):
         l["ref_br"] = r["ref_br"] if r else None
         l["article"] = ("%s/%s" % (r["code1"], r["code2"])) if r and r["code1"] else None
         l["libelle"] = ((r["lib_erp"] or r["des1"] or "").strip() or None) if r else None
+        l["libelle_technique"] = ((r["lib_tech_erp"] or r["des1"] or r["lib_erp"] or "").strip()
+                                  or None) if r else None
     return lignes
 
 

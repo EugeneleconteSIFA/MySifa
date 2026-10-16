@@ -2429,7 +2429,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=fiche2-mp2">
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
-<script src="/static/mysifa_stock_modals.js?v=encre2"></script>
+<script src="/static/mysifa_stock_modals.js?v=unite1"></script>
 <script src="/static/mysifa_etiq_specifiques.js?v=3"></script>
 <script src="/static/mysifa_etiq_editeur.js?v=2"></script>
 <script src="/static/mysifa_donnees_prod.js?v=1"></script>
@@ -6442,7 +6442,9 @@ function buildMatiereDetail() {
   if ((mpIsGlassineCategory(m) || mTech) && m.couleur) {
     meta.push('Couleur : ' + m.couleur);
   }
-  if (mpHasConditionnement(m.categorie) && m.unites_par_palette > 0) {
+  if (mpHasConditionnement(m.categorie) && m.stock_a_l_unite) {
+    meta.push('Stock tenu à l\'unité (' + mpUniteAchat(m.categorie) + 's)');
+  } else if (mpHasConditionnement(m.categorie) && m.unites_par_palette > 0) {
     const u = mpUniteAchat(m.categorie);
     meta.push('Conditionnement : ' + Number(m.unites_par_palette).toLocaleString('fr-FR') + ' ' + u + '/palette');
   }
@@ -8808,7 +8810,10 @@ function matiereRefEditPayload(item, fields) {
     // sous_section toujours envoye pour les categories qui la supportent (autorise vidage)
     payload.sous_section = fields.sousSectionSel.getValue();
   }
-  if (fields.hasCond && fields.uppInp) {
+  if (fields.hasCond && fields.unChk) payload.stock_a_l_unite = fields.unChk.checked ? 1 : 0;
+  if (fields.hasCond && fields.unChk && fields.unChk.checked) {
+    // Conditionnement fixé à 1 par le serveur : rien à envoyer.
+  } else if (fields.hasCond && fields.uppInp) {
     const raw = (fields.uppInp.value || '').replace(',', '.').trim();
     if (raw === '') {
       payload.unites_par_palette = null;
@@ -9297,6 +9302,32 @@ function appendMatiereRefEditFields(parent, item) {
   const uppInp = el('input', { attrs: { type: 'number', min: '0', step: '1', placeholder: 'Ex. 260' } });
   uppInp.value = String(item.unites_par_palette != null && item.unites_par_palette > 0 ? item.unites_par_palette : '');
   uppWrap.append(el('label', null, mpLabelUnitesParPalette(item.categorie)), uppInp);
+  // Stock tenu à l'unité : bagues, cartons achetés au lot dont le lot change
+  // d'une commande à l'autre. Plus de palette, donc plus de conditionnement à
+  // saisir ; le serveur convertit le stock à la bascule.
+  const unChk = el('input', { attrs: { type: 'checkbox' } });
+  unChk.checked = !!item.stock_a_l_unite;
+  const unHint = el('div', { cls: 'mp-hint' }, '');
+  const unWrap = el('div', { cls: 'mp-field', style: { display: hasCond ? '' : 'none' } },
+    el('label', { style: 'display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;cursor:pointer' },
+      unChk, 'Stock tenu à l\'unité (' + uniteAchat + 's), sans palette'),
+    unHint);
+  function refreshALUnite() {
+    const on = unChk.checked;
+    uppWrap.style.display = (hasCond && !on) ? '' : 'none';
+    if (on && !item.stock_a_l_unite) {
+      const upp = Number(item.unites_par_palette || 0);
+      unHint.textContent = upp > 0
+        ? 'Le stock sera converti : 1 palette = ' + fN(upp) + ' ' + uniteAchat + 's.'
+        : 'Aucun conditionnement connu : le stock actuel restera tel quel.';
+    } else if (!on && item.stock_a_l_unite) {
+      unHint.textContent = 'Renseigne les ' + uniteAchat + 's par palette : le stock sera divisé d\'autant.';
+    } else {
+      unHint.textContent = on ? 'Réception, déstockage et inventaire comptent en ' + uniteAchat + 's.' : '';
+    }
+  }
+  unChk.addEventListener('change', refreshALUnite);
+  refreshALUnite();
 
   // ── Mandrins : longueur du tube acheté ────────────────────────────────────
   // Un mandrin ne s'achète pas à l'unité : on achète des tubes qu'on redécoupe
@@ -9390,7 +9421,7 @@ function appendMatiereRefEditFields(parent, item) {
   // Formulaire organisé en sections : la fiche mélangeait identification,
   // conditionnement, seuils et laizes dans une seule colonne de champs.
   const sectionConditionnement = (isAdhesif || hasCond || mpIsPaletteCategory(item))
-    ? mpFormSection('Conditionnement à l\'achat', ...adhesifCondFields, pppWrap, uppWrap, ltWrap)
+    ? mpFormSection('Conditionnement à l\'achat', ...adhesifCondFields, pppWrap, unWrap, uppWrap, ltWrap)
     : null;
 
   // Mise en page deux colonnes. Identification et Classement d'un cote,
@@ -9434,7 +9465,7 @@ function appendMatiereRefEditFields(parent, item) {
     ? mpFormSection('Laizes & tarification', laizeWrap)
     : null;
   parent.append(...[grille, sectionLaizes].filter(Boolean));
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, ltInp, isMandrin, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds: null, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, isTech, epInp, abbrevInp, hasAbbrev, sousCategorieSel, fscChk, hasFsc };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, unChk, ltInp, isMandrin, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds: null, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, isTech, epInp, abbrevInp, hasAbbrev, sousCategorieSel, fscChk, hasFsc };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -22337,7 +22368,7 @@ function buildRvgiHistorique() {
   const q = (S.rvgiHistoQ || '').trim().toLowerCase();
   const toutes = h.lignes || [];
   const lignes = q ? toutes.filter(l => [
-      l.fournisseur, l.article, l.libelle, l.matiere_ref, l.matiere_designation,
+      l.fournisseur, l.article, l.libelle, l.libelle_technique, l.matiere_ref, l.matiere_designation,
       l.integre_par, l.ref_br, l.numero, l.operateur_erp,
     ].map(x => String(x == null ? '' : x).toLowerCase()).join(' ').includes(q)) : toutes;
 
@@ -22378,7 +22409,8 @@ function buildRvgiHistorique() {
         l.ref_br ? el('div', { style: petit }, 'BL ' + l.ref_br) : null),
       el('td', { style: 'vertical-align:top;min-width:200px' },
         el('div', { style: 'font-family:var(--mono,monospace);font-weight:700' }, l.article || '—'),
-        l.libelle ? el('div', { style: petit + ';max-width:360px' }, l.libelle) : null),
+        (l.libelle_technique || l.libelle)
+          ? el('div', { style: petit + ';max-width:360px' }, l.libelle_technique || l.libelle) : null),
       el('td', { style: 'vertical-align:top;min-width:180px' },
         el('div', { style: 'font-weight:700;display:flex;gap:6px;align-items:center;flex-wrap:wrap' },
           l.matiere_ref || ('#' + (l.matiere_id || '?')),
@@ -22450,10 +22482,14 @@ async function rvgiAnnulerEntree(l, btn) {
 // départagent deux candidates voisines.
 // Un seul libellé : le technique s'il existe (il contient déjà le commercial,
 // « PP blanc brillant 100 µm (Jindal 100 LH 243) »), sinon la référence.
+// Le fournisseur affiché est le PRINCIPAL de la fiche matière : le serveur ne
+// renvoie que sa variante, et son nom quand le libellé ne le cite pas.
 function rvgiLibelleChoix(p, avecScore) {
   const tech = (p.libelles_techniques || []).join(' / ');
   let txt = tech || p.reference || ('#' + p.matiere_id);
   if (!tech && p.designation && p.designation !== p.reference) txt += ' — ' + p.designation;
+  const fp = p.fournisseur_principal;
+  if (fp && txt.toLowerCase().indexOf(fp.toLowerCase()) < 0) txt += ' — ' + fp;
   const lz = (p.laizes_mm || []).map(v => fN(v)).join(', ');
   if (lz) txt += ' · laize ' + lz + ' mm';
   if (avecScore && p.score != null) txt += '  (' + Math.round(p.score * 100) + ' %)';
@@ -22497,7 +22533,7 @@ function rvgiLigne(l) {
   tr.appendChild(el('td', { style: 'vertical-align:top;min-width:220px' },
     el('div', { style: 'font-family:var(--mono,monospace);font-weight:700' }, l.article),
     el('div', { style: petit + ';max-width:420px' },
-      (l.libelle || '') + (l.laize_mm ? ' · laize ' + l.laize_mm + ' mm' : ''))));
+      (l.libelle_technique || l.libelle || '') + (l.laize_mm ? ' · laize ' + l.laize_mm + ' mm' : ''))));
 
   // Colonne matière : la référence appariée, ou le choix à faire. Les
   // candidates sont déjà restreintes à ce que le type RVGI peut désigner —

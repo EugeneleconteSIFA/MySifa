@@ -358,7 +358,7 @@ erp.executescript("""
         code2 TEXT, code3 TEXT, type INTEGER, des1 TEXT, cua TEXT);
     CREATE TABLE cdf_entete (numero INTEGER, corbeille INTEGER, rs TEXT, numfou INTEGER);
     CREATE TABLE mat_mat (code1 TEXT, code2 TEXT, type INTEGER, corbeille INTEGER,
-        libc1 TEXT, libt2 TEXT);
+        libc1 TEXT, libt2 TEXT, libt1 TEXT);
     INSERT INTO lif_ligne VALUES
         (28691, 0, '2026-09-17 10:55', 6037, 1, '2026-09-14', 4160, 'BL1'),
         (28693, 0, '2026-09-17 10:55', 6041, 1, '2026-09-14', 2072, 'BL1'),
@@ -370,9 +370,10 @@ erp.executescript("""
     INSERT INTO cdf_entete VALUES (6037, 0, 'LGP PACKAGING', 1), (6041, 0, 'LGP PACKAGING', 1),
         (6065, 0, 'Antalis', 2);
     INSERT INTO mat_mat VALUES
-        ('1162', '0008', 17, 0, 'Carton 385 x 385 x 208 mm', 'Qualité FEFCO201 C140; 280 cartons par palette'),
-        ('1162', '0002', 14, 0, 'Intercalaire Grand Box/Palette', 'FT 1175X775 MM'),
-        ('1165', '0001', 14, 0, 'Film Etirable Machine 30µ', 'Laize 450 mm x 230 ml');
+        ('1162', '0008', 17, 0, 'Carton 385 x 385 x 208 mm', 'Qualité FEFCO201 C140; 280 cartons par palette',
+         'Caisse 3BR49 385x385x208'),
+        ('1162', '0002', 14, 0, 'Intercalaire Grand Box/Palette', 'FT 1175X775 MM', NULL),
+        ('1165', '0001', 14, 0, 'Film Etirable Machine 30µ', 'Laize 450 mm x 230 ml', NULL);
 """)
 res = rr.lignes_a_integrer(base, erp)
 par_lif = {l["lif_id"]: l for l in res["lignes"]}
@@ -383,6 +384,11 @@ vrai("la ligne intercalaire (type 16) est dans la file", 28693 in par_lif)
 check("…proposée sur l'intercalaire",
       par_lif[28693]["propositions"][0]["matiere_id"], 77)
 check("…en entrée directe", par_lif[28693]["regime"], "direct")
+check("libellé affiché : le technique RVGI (libt1), pas le commercial",
+      par_lif[28691]["libelle_technique"],
+      "Caisse 3BR49 385x385x208 Qualité FEFCO201 C140; 280 cartons par palette")
+check("sans libellé technique : la désignation de la commande",
+      par_lif[28693]["libelle_technique"], "INTERCALAIRE PC20T FT 1175X775 MM")
 vrai("le film étirable (type 16, sans référence) reste dehors", 28755 not in par_lif)
 
 rr.apparier(base, "1165", "0001", 16, 77, auteur="Test")
@@ -415,6 +421,7 @@ check("entrée MySifa : qui", h[0]["integre_par"], "Eugene Leconte")
 check("fournisseur et article relus dans l'ERP",
       (h[0]["fournisseur"], h[0]["article"]), ("LGP PACKAGING", "1162/0008"))
 check("référence MySifa", h[0]["matiere_ref"], "385 x 385 x 208 mm")
+check("historique : libellé technique", h[0]["libelle_technique"], "Caisse 3BR49 385x385x208")
 check("sans miroir, l'historique reste lisible", rr.historique(base, None)[0]["saisie_erp"], None)
 base.close()
 erp.close()

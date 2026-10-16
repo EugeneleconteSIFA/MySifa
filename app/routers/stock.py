@@ -24,6 +24,7 @@ from app.services import encres_rvgi as _encres_rvgi
 from app.services import valo_cloture as _valo_cloture
 from app.services import packing_list as _pl
 from app.services import stock_bobines as _sb
+from app.services.stock_a_l_unite import passer_a_l_unite, repasser_a_la_palette
 from app.services.audit_service import log_action
 from app.services.conditionnement_pf import conditionnement_produit
 from app.services import fsc_registre as _registre
@@ -495,6 +496,11 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
         unite_reelle = _mp_unite_achat(cat) if _mp_a_conditionnement(cat) else "unité"
         stock_reel = round(qte * unites_par_palette, 1)
         stock_reel_source = "conditionnement"
+    # Matière tenue à l'unité (bagues, cartons au lot) : sa « palette » vaut une
+    # unité, le stock se lit donc directement en cartons ou en tubes.
+    a_l_unite = bool(int(r["stock_a_l_unite"] or 0)) if "stock_a_l_unite" in keys else False
+    if a_l_unite and _mp_a_conditionnement(cat):
+        unite_simplifiee = _mp_unite_achat(cat)
 
     return {
         "id": r["id"],
@@ -505,7 +511,9 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
         "actif": r["actif"],
         "quantite": qte,
         "en_alerte": seuil > 0 and qte <= seuil,
-        "unite": _mp_unite_gestion(cat),
+        "unite": _mp_unite_achat(cat) if a_l_unite and _mp_a_conditionnement(cat)
+                 else _mp_unite_gestion(cat),
+        "stock_a_l_unite": a_l_unite,
         "palettes_par_pile": palettes_par_pile,
         "couleur": (r["couleur"] or "").strip() if "couleur" in r.keys() and r["couleur"] else None,
         "laizee": laizee,
@@ -6328,6 +6336,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
                    mp.metres_lineaires_par_bobine, mp.prix_eur_m2,
                    COALESCE(mp.prix_par_laize, 0) AS prix_par_laize,
                    mp.unites_par_palette, mp.longueur_tube_mm,
+                   COALESCE(mp.stock_a_l_unite, 0) AS stock_a_l_unite,
                    mp.cartons_par_palette, mp.kg_par_carton, mp.weight_gsm,
                    mp.epaisseur_um,
                    mp.sous_section, COALESCE(mp.matiere_fsc, 0) AS matiere_fsc,
@@ -6964,10 +6973,42 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
 
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id, categorie FROM matieres_premieres WHERE id=?", (matiere_id,)
+            "SELECT id, categorie, COALESCE(stock_a_l_unite, 0) AS stock_a_l_unite "
+            "FROM matieres_premieres WHERE id=?", (matiere_id,)
         ).fetchone()
         if not row:
             raise HTTPException(404, "Matière non trouvée.")
+
+        # Stock tenu à l'unité (bagues, cartons achetés au lot) : la bascule
+        # convertit le stock et son historique, voir services/stock_a_l_unite.
+        # Tant qu'elle est active, le conditionnement reste 1 : un autre
+        # nombre réinterpréterait le stock en palettes.
+        bascule = None
+        if "stock_a_l_unite" in body:
+            if not _mp_a_conditionnement(row["categorie"]):
+                raise HTTPException(400, "Stock à l'unité réservé aux cartons et mandrins.")
+            voulu = 1 if body.get("stock_a_l_unite") else 0
+            if voulu != int(row["stock_a_l_unite"] or 0):
+                bascule = voulu
+        a_l_unite = (bascule if bascule is not None else int(row["stock_a_l_unite"] or 0)) == 1
+        if "unites_par_palette" in body:
+            i = sets.index("unites_par_palette=?")
+            upp_body = params[i]
+            del sets[i]
+            del params[i]
+            if bascule == 0 and not (upp_body and upp_body > 0):
+                raise HTTPException(
+                    400, "Indiquer les unités par palette pour repasser le stock à la palette.")
+            if not a_l_unite and bascule is None:
+                sets.append("unites_par_palette=?")
+                params.append(upp_body)
+            elif a_l_unite and bascule is None and upp_body not in (None, 1, 1.0):
+                raise HTTPException(
+                    400, "Stock tenu à l'unité : pas de conditionnement par palette. "
+                         "Décocher « Stock tenu à l'unité » dans la fiche pour en saisir un.")
+        elif bascule == 0:
+            raise HTTPException(
+                400, "Indiquer les unités par palette pour repasser le stock à la palette.")
 
         # Conditionnement à l'achat (adhésifs) — traité ici et non plus haut car il
         # dépend de la catégorie, qu'on ne connaît qu'après lecture de la ligne.
@@ -7029,7 +7070,7 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
             sets.append("epaisseur_um=?")
             params.append(v_f)
 
-        if not sets:
+        if not sets and bascule is None:
             raise HTTPException(400, "Aucun champ à mettre à jour.")
 
         sets.append("updated_at=strftime('%Y-%m-%dT%H:%M:%S','now','localtime')")
@@ -7062,6 +7103,10 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
                 f"UPDATE matieres_premieres SET {', '.join(sets)} WHERE id=?",
                 params,
             )
+            if bascule == 1:
+                passer_a_l_unite(conn, matiere_id)
+            elif bascule == 0:
+                repasser_a_la_palette(conn, matiere_id, upp_body)
             conn.commit()
         except sqlite3.IntegrityError:
             conn.rollback()
