@@ -132,7 +132,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <script src="/static/mysifa_donnees_prod.js?v=1"></script>
 <!-- Adresse de la page : onglet, filtres, tri et objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=2"></script>
-<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent17-ecart3-sais4-bob5-msb1-san3-mpm2-ton1-vit2-sev1-url6-ecart4"></script>
+<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent18-ecart3-sais4-bob5-msb1-san3-mpm2-ton1-vit2-sev1-url6-ecart4"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>
 <!-- v2.3.42 : viewer partagé du détail d'un ack d'alerte (identique à Maintenance) -->
