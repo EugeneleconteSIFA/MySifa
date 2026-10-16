@@ -16,7 +16,7 @@ from app.services.auth_service import get_current_user
 from app.services.audit_service import log_action
 from fastapi.responses import Response
 
-from app.services.gc import cahiers, compta, demo, envoi, export_compta, fichiers, fsc, pieces, rapprochement
+from app.services.gc import cahiers, compta, demo, envoi, export_compta, fichiers, fsc, myao, pieces, rapprochement
 from app.services.gc.pieces import ErreurPiece
 
 router = APIRouter(prefix="/api/erp2", tags=["erp2"])
@@ -363,6 +363,30 @@ async def ligne_solde(ligne_id: int, request: Request):
 def stock(request: Request):
     _user(request)
     return _lecture(fichiers.stock)
+
+
+# ── MyAO (demandes de prix de MySifa) ─────────────────────────────────
+
+@router.get("/myao")
+def myao_liste(request: Request):
+    _user(request)
+    return _lecture(myao.demandes)
+
+
+@router.get("/myao/{ao_id}")
+def myao_detail(ao_id: int, request: Request):
+    _user(request)
+    return _lecture(myao.detail, ao_id)
+
+
+@router.post("/myao/{ao_id}/commande")
+async def myao_commande(ao_id: int, request: Request):
+    u = _user(request)
+    b = await request.json()
+    with _ecriture() as conn:
+        pid = myao.vers_commande(conn, ao_id, b, u)
+    _trace(request, u, "CREATE", f"Commande fournisseur #{pid} depuis la demande MyAO #{ao_id}")
+    return {"id": pid}
 
 
 @router.get("/cahiers/{objet}/{objet_id}")

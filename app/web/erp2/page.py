@@ -97,6 +97,7 @@ _COQUE = """<body class="erp">
 <script src="/static/erp/erp_gestion.js?v=__V__"></script>
 <script src="/static/erp/erp_compta.js?v=__V__"></script>
 <script src="/static/erp/erp_analyse.js?v=__V__"></script>
+<script src="/static/erp/erp_myao.js?v=__V__"></script>
 <script src="/static/erp/erp_demo.js?v=__V__"></script>
 <!-- Assistant IA de MySifa (même agent, avec les actions de l'ERP). Les autres
      boutons flottants ne sont pas injectés sur le sous-domaine de l'ERP. -->

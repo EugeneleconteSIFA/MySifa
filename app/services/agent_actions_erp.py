@@ -143,6 +143,19 @@ def _corps_mouvement(v: dict) -> dict:
     return c
 
 
+def _corps_myao(v: dict) -> dict:
+    lignes = []
+    for x in v.get("lignes") or []:
+        d = {k: x[k] for k in ("ligne_id", "article_id", "serie_id") if x.get(k) is not None}
+        if x.get("quantite") not in (None, ""):
+            d["quantite_milli"] = _milli(x["quantite"])
+        if x.get("prix") not in (None, ""):
+            d["prix_cents"] = _cents(x["prix"])
+            d["base_prix"] = 1000
+        lignes.append(d)
+    return {"tiers_id": v.get("tiers_id"), "lignes": lignes}
+
+
 # ── Ce que la carte affiche ──────────────────────────────────────────
 
 def _tiers(conn, tid) -> str:
@@ -204,6 +217,25 @@ def _det_article(conn, v):
     for k in ("client_id", "fournisseur_id"):
         if v.get(k):
             out.append(["Client" if k == "client_id" else "Fournisseur", _tiers(conn, v[k])])
+    return out
+
+
+def _det_myao(conn, v):
+    r = conn.execute("SELECT reference, titre, statut FROM ao_demandes WHERE id=?", (int(v["ao_id"]),)).fetchone()
+    if not r:
+        raise _invalide(f"Demande MyAO {v['ao_id']} introuvable.")
+    out = [["Demande", f"{r['reference']} — {r['titre'] or ''}".strip(" —")]]
+    if v.get("tiers_id"):
+        out.append(["Fournisseur", _tiers(conn, v["tiers_id"])])
+    n = 0
+    for x in v.get("lignes") or []:
+        if not x.get("article_id"):
+            continue
+        n += 1
+        a = conn.execute("SELECT code, libelle FROM gc_articles WHERE id=?", (int(x["article_id"]),)).fetchone()
+        if not a:
+            raise _invalide(f"Article {x['article_id']} introuvable.")
+        out.append([f"Ligne {n}", f"{a['code']} — {a['libelle']}"])
     return out
 
 
@@ -335,6 +367,19 @@ ACTIONS: list[dict[str, Any]] = [
         "construire": _corps_reglement, "detailler": _det_tiers,
     },
     {
+        "cle": "erp_myao_commande", "libelle": "ERP — commande fournisseur depuis MyAO", "module": "erp2",
+        "methode": "POST", "chemin": "/api/erp2/myao/{ao_id}/commande", "lien": "/achats/myao", "autorise": _erp,
+        "aide": "Transforme une demande MyAO clôturée en commande fournisseur en brouillon chez le fournisseur retenu. "
+                "Lire d'abord erp_myao_demande : lignes, séries, prix proposés, article ERP déjà associé. "
+                "Une ligne sans article_id n'est pas commandée ; un prix à la bobine est à donner (prix au mille, €).",
+        "params": {
+            "ao_id": ("int", True, "Demande MyAO (ao_demandes.id)", ""),
+            "tiers_id": ("int", False, "Fournisseur ERP (gc_tiers.id)", "absent = celui déjà associé"),
+            "lignes": ("objets", True, "Lignes", "liste {ligne_id*, article_id, serie_id, quantite (unités), prix (€ HT au mille)}"),
+        },
+        "construire": lambda v: _corps_myao(v), "detailler": lambda conn, v: _det_myao(conn, v),
+    },
+    {
         "cle": "erp_mouvement_stock", "libelle": "ERP — mouvement de stock", "module": "erp2",
         "methode": "POST", "chemin": "/api/erp2/mouvements", "lien": "/stocks/etat", "autorise": _erp,
         "aide": "Inventaire (quantité comptée), ajustement (+/−) ou transfert entre dépôts, hors pièce.",
@@ -390,6 +435,11 @@ LECTURES: list[dict[str, Any]] = [
     {"cle": "erp_rapprochement", "chemin": "/api/erp2/pieces/{piece_id}/rapprochement",
      "aide": "ERP : facture fournisseur rapprochée de ses réceptions et des prix commandés (écarts de quantité et de prix par ligne).",
      "params": {"piece_id": ("int", True, "gc_pieces.id d'une facture fournisseur")}},
+    {"cle": "erp_myao_demandes", "chemin": "/api/erp2/myao",
+     "aide": "ERP : demandes de prix MyAO (état, fournisseur retenu, commande ERP déjà créée ou non).", "params": {}},
+    {"cle": "erp_myao_demande", "chemin": "/api/erp2/myao/{ao_id}",
+     "aide": "ERP : une demande MyAO prête à commander (lignes, séries, prix du fournisseur retenu, article ERP proposé).",
+     "params": {"ao_id": ("int", True, "ao_demandes.id")}},
     {"cle": "erp_stock", "chemin": "/api/erp2/stock",
      "aide": "ERP : stock par article, dépôt et laize, avec mini / maxi.", "params": {}},
     {"cle": "erp_echeances", "chemin": "/api/erp2/echeances",

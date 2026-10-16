@@ -26,6 +26,7 @@
     ]},
     {groupe: 'Achats', liens: [
       {chemin: '/achats/appels-offre', libelle: 'Appels d\'offre'},
+      {chemin: '/achats/myao', libelle: 'Demandes MyAO'},
       {chemin: '/achats/commandes', libelle: 'Commandes fournisseur'},
       {chemin: '/achats/receptions', libelle: 'Réceptions'},
       {chemin: '/achats/factures', libelle: 'Factures fournisseur'},
