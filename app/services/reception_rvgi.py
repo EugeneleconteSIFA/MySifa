@@ -53,6 +53,8 @@ tracabilite. `regime` distingue encore les deux familles pour l'affichage.
 import re
 import unicodedata
 
+from config import unites_comptage
+
 # ── Ce que MyStock sait recevoir ────────────────────────────────────────────
 #
 # type RVGI -> (categorie MyStock, sous-section si elle discrimine, regime)
@@ -412,7 +414,10 @@ def convertir(type_rvgi, qte_rvgi, matiere, libt2=None, ml_variante=None):
             # Bagues, cartons achetes au lot : RVGI compte deja des unites
             # (175 cartons x 2,016 EUR = 352,80 EUR sur la commande 5962), et
             # le stock est tenu dans cette unite. Rien a convertir.
-            return {"quantite": round(q, 4), "unite": "carton" if cat == "carton" else "tube",
+            choix = unites_comptage(cat)
+            u = (matiere.get("unite_comptage") or "").strip()
+            return {"quantite": round(q, 4),
+                    "unite": u if u in choix else (choix[0] if choix else "unité"),
                     "detail": None, "alerte": None, "manque": []}
         upp = _f(matiere.get("unites_par_palette"))
         if not upp:
@@ -524,11 +529,12 @@ def ml_variantes(conn):
 def _matieres(conn):
     cols = {r[1] for r in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
     a_l_unite = ("COALESCE(stock_a_l_unite, 0)" if "stock_a_l_unite" in cols else "0")
+    unite_cpt = "unite_comptage" if "unite_comptage" in cols else "NULL"
     return [dict(r) for r in conn.execute(
         "SELECT id, categorie, sous_section, reference, designation,"
         "       metres_lineaires_par_bobine, unites_par_palette,"
-        "       %s AS stock_a_l_unite"
-        " FROM matieres_premieres WHERE COALESCE(actif, 1) = 1" % a_l_unite
+        "       %s AS stock_a_l_unite, %s AS unite_comptage"
+        " FROM matieres_premieres WHERE COALESCE(actif, 1) = 1" % (a_l_unite, unite_cpt)
     ).fetchall()]
 
 

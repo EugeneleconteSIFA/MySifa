@@ -18,6 +18,7 @@ from app.services import reception_rvgi as rr                # noqa: E402
 from app.services.stock_a_l_unite import repasser_a_la_palette  # noqa: E402
 
 mig = importlib.import_module("app.core.migrations.2026_10_16_mp_stock_a_l_unite")
+mig_cpt = importlib.import_module("app.core.migrations.2026_10_16_mp_unite_comptage")
 
 ko = 0
 
@@ -83,6 +84,8 @@ print("1. Migration")
 c = base()
 mig.appliquer(c)
 mig.appliquer(c)
+mig_cpt.appliquer(c)
+mig_cpt.appliquer(c)
 check("bague : 12 palettes de 125 -> 1 500 bagues", stock(c, 1), 1500)
 check("bague : seuil converti", c.execute("SELECT seuil_alerte FROM matieres_premieres WHERE id=1").fetchone()[0], 250)
 check("bague : historique converti",
@@ -94,11 +97,14 @@ check("bague sans conditionnement : basculée, stock nul inchangé", (tuple(flag
 check("carton RAJA : 1 lot de 25 -> 25 cartons", stock(c, 3), 25)
 check("carton LGP (RAJA secondaire) : intact", (tuple(flag(c, 4)), stock(c, 4)), ((0, 260), 3))
 check("tube : intact", tuple(flag(c, 5)), (0, 338))
+check("bagues comptées en bagues, le reste sans unité imposée",
+      [r[0] for r in c.execute("SELECT unite_comptage FROM matieres_premieres ORDER BY id")],
+      ["bague", "bague", None, None, None])
 
 print("2. Réception RVGI")
 ms = {m["id"]: m for m in rr._matieres(c)}
 r = rr.convertir(15, 4000, ms[2])
-check("4 000 bagues sans conditionnement -> 4 000 tubes", (r["quantite"], r["unite"], r["manque"]), (4000, "tube", []))
+check("4 000 bagues sans conditionnement -> 4 000 bagues", (r["quantite"], r["unite"], r["manque"]), (4000, "bague", []))
 r = rr.convertir(19, 175, ms[3])
 check("175 cartons au lot -> 175 cartons", (r["quantite"], r["unite"]), (175, "carton"))
 r = rr.convertir(19, 520, ms[4])

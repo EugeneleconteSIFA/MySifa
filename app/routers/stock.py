@@ -42,6 +42,7 @@ from config import (
     STOCK_EMPLACEMENT_SORTIE_PROD_LABEL,
     ROLES_SETTINGS_LOGISTIQUE,
     ROLES_TRACA_VIEWER,
+    unites_comptage,
 )
 from database import get_db, parse_file
 from services.auth_service import get_current_user, effective_role, user_has_app_access
@@ -499,8 +500,14 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
     # Matière tenue à l'unité (bagues, cartons au lot) : sa « palette » vaut une
     # unité, le stock se lit donc directement en cartons ou en tubes.
     a_l_unite = bool(int(r["stock_a_l_unite"] or 0)) if "stock_a_l_unite" in keys else False
+    # Ce qu'on compte : une bague n'est pas un tube, la catégorie ne le dit pas.
+    choix_cpt = unites_comptage(cat)
+    unite_cpt = (r["unite_comptage"] or "").strip() if "unite_comptage" in keys and r["unite_comptage"] else ""
+    if unite_cpt not in choix_cpt:
+        unite_cpt = choix_cpt[0] if choix_cpt else _mp_unite_achat(cat)
     if a_l_unite and _mp_a_conditionnement(cat):
-        unite_simplifiee = _mp_unite_achat(cat)
+        unite_simplifiee = unite_cpt
+        unite_reelle = unite_cpt
 
     return {
         "id": r["id"],
@@ -511,9 +518,11 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
         "actif": r["actif"],
         "quantite": qte,
         "en_alerte": seuil > 0 and qte <= seuil,
-        "unite": _mp_unite_achat(cat) if a_l_unite and _mp_a_conditionnement(cat)
+        "unite": unite_cpt if a_l_unite and _mp_a_conditionnement(cat)
                  else _mp_unite_gestion(cat),
         "stock_a_l_unite": a_l_unite,
+        "unite_comptage": unite_cpt if _mp_a_conditionnement(cat) else None,
+        "unites_comptage": list(choix_cpt),
         "palettes_par_pile": palettes_par_pile,
         "couleur": (r["couleur"] or "").strip() if "couleur" in r.keys() and r["couleur"] else None,
         "laizee": laizee,
@@ -6336,7 +6345,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
                    mp.metres_lineaires_par_bobine, mp.prix_eur_m2,
                    COALESCE(mp.prix_par_laize, 0) AS prix_par_laize,
                    mp.unites_par_palette, mp.longueur_tube_mm,
-                   COALESCE(mp.stock_a_l_unite, 0) AS stock_a_l_unite,
+                   COALESCE(mp.stock_a_l_unite, 0) AS stock_a_l_unite, mp.unite_comptage,
                    mp.cartons_par_palette, mp.kg_par_carton, mp.weight_gsm,
                    mp.epaisseur_um,
                    mp.sous_section, COALESCE(mp.matiere_fsc, 0) AS matiere_fsc,
@@ -6991,6 +7000,12 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
             if voulu != int(row["stock_a_l_unite"] or 0):
                 bascule = voulu
         a_l_unite = (bascule if bascule is not None else int(row["stock_a_l_unite"] or 0)) == 1
+        if "unite_comptage" in body:
+            u = (body.get("unite_comptage") or "").strip().lower() or None
+            if u is not None and u not in unites_comptage(row["categorie"]):
+                raise HTTPException(400, "Unité de comptage invalide pour cette catégorie.")
+            sets.append("unite_comptage=?")
+            params.append(u)
         if "unites_par_palette" in body:
             i = sets.index("unites_par_palette=?")
             upp_body = params[i]
