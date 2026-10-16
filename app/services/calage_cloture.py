@@ -231,8 +231,8 @@ def lire_declaration(body_calage: Any) -> Optional[Dict[str, datetime]]:
         if d is None:
             raise ValueError(f"{libelle} manquant — recopiez l'heure du dossier de prod.")
         out[cle] = d.replace(second=0, microsecond=0)
-    if not out["debut_calage"] < out["fin_calage"]:
-        raise ValueError("La fin de calage doit suivre le début de calage.")
+    if out["debut_calage"] > out["fin_calage"]:
+        raise ValueError("La fin de calage ne peut pas précéder le début de calage.")
     if not out["fin_calage"] <= out["fin_prod"]:
         raise ValueError("La fin de prod ne peut pas précéder la fin de calage.")
     return out
@@ -278,6 +278,11 @@ def _deplacer(conn, saisie_id: int, quand: datetime, auteur: str, note: str, mai
     )
 
 
+def _meme_minute(iso, quand: datetime) -> bool:
+    """La saisie tombe-t-elle dans la minute déclarée ?"""
+    return str(iso or "")[:16] == _iso(quand)[:16]
+
+
 def _place_libre(rows, i, quand: datetime) -> bool:
     """La saisie d'indice i peut-elle prendre l'heure `quand` sans dépasser
     ses voisines ?"""
@@ -306,6 +311,10 @@ def appliquer(conn, *, no_dossier: str, machine: str, declare: Dict[str, datetim
     debut_ok = False
     if i_debut is None:
         motifs.append("Aucune saisie de calage sur le dossier : début non appliqué.")
+    elif _meme_minute(rows[i_debut]["date_operation"], D):
+        # Les heures déclarées sont à la minute : une saisie faite dans cette
+        # minute est déjà à la bonne heure, ses secondes ne sont pas un écart.
+        debut_ok = True
     elif _place_libre(rows, i_debut, D):
         _deplacer(conn, rows[i_debut]["id"], D, auteur, note, maintenant)
         rows[i_debut]["date_operation"] = _iso(D)
@@ -327,7 +336,9 @@ def appliquer(conn, *, no_dossier: str, machine: str, declare: Dict[str, datetim
     F = declare["fin_calage"]
     fin_ok = False
     if i_fin is not None:
-        if _place_libre(rows, i_fin, F):
+        if _meme_minute(rows[i_fin]["date_operation"], F):
+            fin_ok = True
+        elif _place_libre(rows, i_fin, F):
             _deplacer(conn, rows[i_fin]["id"], F, auteur, note, maintenant)
             rows[i_fin]["date_operation"] = _iso(F)
             fin_ok = True

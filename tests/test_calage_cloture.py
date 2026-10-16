@@ -274,6 +274,9 @@ class TestCalageCloture(unittest.TestCase):
         r3 = self.client.put(url, json={"metrage_compteur": 820})
         self.assertEqual(r3.status_code, 200, r3.text)
         self.assertEqual(self._ligne(ctx["saisie_id"])["metrage_compteur"], 820.0)
+        # Le relevé et le métrage de calage se lisent dans le commentaire.
+        self.assertEqual(self._ligne(ctx["saisie_id"])["commentaire"],
+                         "Fin de calage · compteur 820 m · calage 320 m")
         with get_db() as conn:
             self.assertEqual(conn.execute("SELECT dernier_metrage FROM machines WHERE id=?",
                                           (MACHINE_ID,)).fetchone()[0], 820.0)
@@ -404,6 +407,28 @@ class TestCalageCloture(unittest.TestCase):
             cr = rd.compte_rendu(conn, DOSSIER)
         self.assertEqual(cr["calage"]["declaration"]["signalement"], "Calage noté 45 min sur le papier")
         self.assertIn("calage_signale", [v["cle"] for v in cr["vigilance"]])
+
+    # ── 9. Début et fin de calage dans la même minute ────────────────────
+    def test_8_calage_meme_minute(self):
+        from database import get_db
+
+        self._saisie("01", 0)
+        s02 = self._saisie("02", 1)
+        s03 = self._saisie("03", 1)
+        with get_db() as conn:  # 02 à mm:20, 03 à mm:45 : même minute
+            conn.execute("UPDATE production_data SET date_operation=? WHERE id=?",
+                         (_iso(self.t0 + timedelta(minutes=1, seconds=20)), s02))
+            conn.execute("UPDATE production_data SET date_operation=? WHERE id=?",
+                         (_iso(self.t0 + timedelta(minutes=1, seconds=45)), s03))
+            conn.commit()
+        meme = self.t0 + timedelta(minutes=1)
+        prod = datetime.now().replace(second=0, microsecond=0) - timedelta(minutes=5)
+        r = self._cloturer(meme, meme, prod)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["calage"]["motifs"], [])
+        # Rien n'a bougé : les secondes ne sont pas un écart.
+        self.assertEqual(self._ligne(s02)["date_operation"], _iso(self.t0 + timedelta(minutes=1, seconds=20)))
+        self.assertEqual(self._ligne(s03)["date_operation"], _iso(self.t0 + timedelta(minutes=1, seconds=45)))
 
 
 if __name__ == "__main__":
