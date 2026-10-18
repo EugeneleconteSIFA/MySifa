@@ -1339,6 +1339,9 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/mysifa_alert_runtime.js?v=2.4.19"></script>
 <!-- Memoire produit : fiche par reference produit, partagee avec MyProd -->
 <script src="/static/mysifa_produit_memoire.js?v=2.6"></script>
+<!-- Adresse de la page : onglet, vue admin, repiquage, fenêtres de consultation (url-etat.md). -->
+<script src="/static/mysifa_url.js?v=3"></script>
+<script src="/static/fabrication_url.js?v=1"></script>
 <script>
   // Démarre le polleur d'alertes maintenance dès que la page est prête.
   // Le runtime interroge /api/maintenance/alerts/active toutes les 15 s,
@@ -2801,7 +2804,7 @@ function handleOpTrigger(code, label, cat){
 /* ── Main table ──────────────────────────────────────────────── */
 /* ── Tab navigation ──────────────────────────────────────────── */
 async function switchFabTab(tab){
-  try{var target='#'+tab;if(location.hash!==target)history.replaceState(null,'',target);}catch(e){}
+  // L'adresse (?onglet=) suit l'écran : static/fabrication_url.js.
   if(tab!=='traca' && S.tracaScanning) tracaStopCamera();
   set({fabTab:tab});
   if(tab==='traca'){
@@ -5723,6 +5726,7 @@ async function openTracabiliteModal(noDossier){
     const data = await apiFetch('/api/fabrication/tracabilite/'+encodeURIComponent(ref));
     if(!data) return;
     renderTracabiliteModal(data, ref);
+    try{ fabTracaOuverte(ref); fabSyncUrl(); }catch(e){}
   }catch(e){
     showToast(e.message || 'Rapport indisponible.','danger');
   }
@@ -9708,11 +9712,23 @@ async function init(){
 
   // Load session
   await loadSession();
-  var _initFabTab=_readFabTab(); if(_initFabTab!=='saisie') set({fabTab:_initFabTab});
+  // Adresse : onglet, vue admin, machine, repiquage, fenêtre (fabrication_url.js).
+  // La vue admin demandée par l'adresse est posée ici, la liste est chargée
+  // juste dessous comme pour la préférence enregistrée.
+  try{
+    if(window.MySifaUrl){
+      const _n = fabLireNavigation(MySifaUrl.lire());
+      if(isAdm && _n.admin) S.saisieViewMode = 'admin';
+    }
+  }catch(e){}
   // Vue admin (lecture) : charger la liste globale du jour si sélectionnée
   if(isAdm && S.saisieViewMode==='admin'){
     await loadAdminSaisiesJour();
   }
+  try{ if(window.MySifaUrl) await fabAllerUrl(false); }catch(e){}
+  _fabUrlPrete = true;
+  fabSyncUrl();
+  fabUrlObserver();
 
   // Vérifier les annonces de mise à jour
   checkUpdates();
