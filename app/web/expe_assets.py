@@ -7547,7 +7547,11 @@ window.addEventListener('scroll',expeTipHide,true);
 window.addEventListener('resize',expeTipHide);
 
 function renderExpe(){
-  if(!_expeHashRestored){_expeHashRestored=true;var _ht=_readExpeHash();if(_ht){S.expeTab=_ht;}}
+  // Premier rendu : l'adresse (onglet, filtres, objet, fenêtre) est lue par
+  // static/expe_url.js — l'ancien #onglet y est encore compris.
+  if(!_expeHashRestored){_expeHashRestored=true;
+    if(typeof expeDemarrerUrl==='function') expeDemarrerUrl();
+    else {var _ht=_readExpeHash();if(_ht){S.expeTab=_ht;}}}
   if(S.expeTab==='historique_departs'){
     S.expeTab='suivi_departs';
     S.expeDepartSubTab='historique';
@@ -7556,7 +7560,9 @@ function renderExpe(){
   if(S.expeTab==='pilotage'&&!expePilotageVisible())S.expeTab='suivi_departs';
   if(S.expeTab==='emails'&&!expePilotageVisible())S.expeTab='suivi_departs';
   const tab=S.expeTab||'suivi_departs';
-  _syncExpeHash();
+  // L'adresse suit l'écran (expe_url.js) : plus d'écriture de #onglet, qui
+  // effaçait l'état d'historique du helper.
+  if(typeof expeSyncUrl!=='function') _syncExpeHash();
   const sub=S.expeDepartSubTab||'jour';
   const loadKey=tab==='suivi_departs'?tab+'_'+sub:tab;
   if(loadKey!==_expeLastRenderedInnerTab){
