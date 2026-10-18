@@ -98,6 +98,14 @@ et ce qui est exclu, avec la raison. Seules exclusions admises : caméra,
 d'impression. Les outils flottants communs (messagerie, post-it, calculatrice,
 assistant, support, palette de commandes) n'appartiennent à aucune page.
 
+**L'inventaire se fait par NOM d'état, jamais par préfixe** (retour du
+18/10/2026 sur MyExpé) : chercher toutes les affectations `S.<x> =`, les clés
+de `set({…})`, les champs des objets d'état propres à l'appli (`T.`, `N.`,
+`Z.`, `C.`) ET les préférences `localStorage` qui rendent une section ouverte
+ou fermée. Chercher seulement les champs `S.expe…` avait laissé passer
+`S.devis_filtre`, `Z.typeEnvoi` et la section « Thématiques d'avis »
+(`mysifa.expe.thematiques`).
+
 Un état tenu **seulement dans le DOM** (une ligne « Détail » dépliée en
 basculant un `style.display`) n'a pas d'adresse possible : le faire passer
 par l'état (`st.detail` des écarts RVGI), puis l'écrire. Une sous-page
@@ -208,5 +216,5 @@ rendrait les anciens filtres.
 | MyStock | Fait le 15/10/2026 : `tab`, `sous` (réception, contrôle ERP, déstockage), `vue` (besoins), objets (`matiere`+`fiche`, `produit`, `ref`, `empl`, `inventaire`, `negoce`, `batiment`, `element`, `poste`, `lot`), filtres et tris par onglet, fenêtres de consultation et de réglages (`fiche_pf`, `historique_prix`, `historique_pf`, `besoins_dossier`, `parametres_matiere`, `conditionnement`, `reglages=valorisation|matieres|correspondances`) |
 | Planning | Fait le 15/10/2026 : `machine`, `vue`, `horizon` (1w/4w), `semaine` (lundi en date, pas un décalage), fenêtres `dossier`, `of` (aperçu), `stats`, `fsc`, `reglages=machine`, `reglages_semaine`, `horaires`, `commentaire_jour`, `commentaire_semaine` (dates en `AAAA-MM-JJ`). Changer de machine ou de vue recharge la page, comme au clic |
 | Saisie Prod (`/fabrication`) | Fait le 18/10/2026, périmètre réduit (voir plus bas) : `onglet`, `sous`, `vue=admin`, `machine` (choix de l'admin), `repiquage` + `repiquage_onglet`, fenêtres `fiche`, `of`, `import_of`, `tracabilite`, `commentaire`, `commentaire_bobine`, `repiquage_modifier`, mémoire produit ; onglet Stock : `mouvement=entree-mp|sortie-mp|entree-z1|sortie-z1[:id]` ; onglet Traça : correction d'une bobine (`bobine`) — le scan et la fiche manuelle restent des étapes de saisie. Code dans `static/fabrication_url.js` |
-| MyExpé | Fait le 18/10/2026 : `onglet` ; Départs `sous`, `jour`, fenêtre `depart=<id>|nouveau` (clé du lien du camion du Planning, conservée), `dupliquer_depart`, `avis` ; Palettes `sous`, `client`, `statut`, `contest_statut`, `tri`/`sens`, `releve_palettes`, `mouvement_palettes`, `contestation` ; Pilotage `filtre`, `memo`, `reglages`, `transport` ; Emails `filtre`, `reglages`, `email` ; Comparateur `poids`, `palettes`, `cp`, `envoi` ; Zones `lieu`|`region`, `envoi` ; Devis `demande`, `envoi_demande`, `reponse`, `prospect`, `modifier_demande`, `relance`, `suivi_reponse` ; `transporteur` + `transporteur_onglet` ; Taxe `historique_taxe`, `modifier_taxe`, `demande_taxe` ; carte `carte`, `departement`. Code dans `static/expe_url.js`, chargé par le gabarit commun `html.py` mais inactif hors de `/expe` |
+| MyExpé | Fait le 18/10/2026 : `onglet` ; Départs `sous`, `jour`, fenêtre `depart=<id>|nouveau` (clé du lien du camion du Planning, conservée), `dupliquer_depart`, `avis` ; Palettes `sous`, `client`, `statut`, `contest_statut`, `tri`/`sens`, `releve_palettes`, `mouvement_palettes`, `contestation` ; Pilotage `filtre`, `memo`, `reglages`, `transport` ; Emails `filtre`, `reglages`, `email` ; Comparateur `poids`, `palettes`, `cp`, `envoi` ; Zones `lieu`|`region`, `envoi` ; Devis `demande`, `envoi_demande`, `reponse`, `prospect`, `modifier_demande`, `relance`, `suivi_reponse` ; `transporteur` + `transporteur_onglet` ; Taxe `historique_taxe`, `modifier_taxe`, `demande_taxe` ; carte `carte=ouverte|edition`, `departement` ; Devis `filtre` ; Transporteurs `thematiques=ouvertes`, `avis_filtre` ; Zones `envoi` même sans recherche ; `panneau=transporteurs`. Code dans `static/expe_url.js`, chargé par le gabarit commun `html.py` mais inactif hors de `/expe` |
 | Paramètres, Qualité, Maintenance, RH, Compta, Tâches | À faire |

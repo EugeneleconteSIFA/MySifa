@@ -22,6 +22,12 @@
  *   d'engagement ; Transporteurs : fiche et son onglet ; Taxe carburant :
  *   historique déplié, modification, demande ; carte des délais : ouverte,
  *   département sélectionné.
+ * Complété le 18/10/2026 après un inventaire par NOM d'état, pas par préfixe
+ * (`S.devis_filtre`, une préférence localStorage et `Z.typeEnvoi` avaient
+ * échappé à la recherche des champs `S.expe…`) : filtre des devis, section
+ * « Thématiques d'avis », type d'envoi des zones même sans recherche, filtre
+ * de l'historique des avis, mode édition de la carte, panneau des
+ * transporteurs.
  * Hors adresse, volontairement : le calculateur de poids (lignes en cours de
  * saisie), les recherches texte, la pagination, le petit calendrier de date
  * limite d'un devis (une bulle, pas une fenêtre), la copie d'un texte.
@@ -29,6 +35,7 @@
 let _expeUrlPrete = false;
 const _EXPE_ID = /^[0-9]+$/;
 const _expeSurPage = () => location.pathname === '/expe';
+let _expeZoneTypeChange = false;     // type d'envoi changé par l'adresse : relancer la recherche
 
 // ── Fenêtres posées sur body par une fonction de la page ──────────────
 // La fonction est enveloppée (expeEnvelopper) et la fenêtre retenue par
@@ -109,8 +116,10 @@ function _expeModale() {
   if (S.expePilModal && S.expePilModal.cle) return { cle: 'transport', id: S.expePilModal.cle };
   if (S.expeEmModal && S.expeEmModal.id != null) return { cle: 'email', id: S.expeEmModal.id };
   if (typeof T !== 'undefined' && T.modalOpen) {
-    return { cle: 'transporteur', id: T.editId != null ? T.editId : 'nouveau',
-             extra: T.modalTab && T.modalTab !== 'fiche' ? { transporteur_onglet: T.modalTab } : null };
+    const extra = {};
+    if (T.modalTab && T.modalTab !== 'fiche') extra.transporteur_onglet = T.modalTab;
+    if (T.modalTab === 'note' && N.histFiltre && N.histFiltre !== 'tous') extra.avis_filtre = N.histFiltre;
+    return { cle: 'transporteur', id: T.editId != null ? T.editId : 'nouveau', extra };
   }
   const cb = S.expeCarb;
   if (cb && cb.modal) return { cle: 'demande_taxe', id: 'envoi' };
@@ -141,6 +150,12 @@ function expeParams() {
   } else if (tab === 'emails') {
     if (S.expeEmFiltre && S.expeEmFiltre !== 'ouverts') p.filtre = S.expeEmFiltre;
     if (S.expeEmReglagesOuvert) { p.reglages = 'ouverts'; nav += '/reglages'; }
+  } else if (tab === 'devis') {
+    if (S.devis_filtre && S.devis_filtre !== 'ouverte') p.filtre = S.devis_filtre;
+  } else if (tab === 'transporteurs') {
+    // Section repliable, mémorisée par le navigateur : l'adresse la porte
+    // aussi, pour qu'un lien l'ouvre.
+    if (typeof expeThSectionOuverte === 'function' && expeThSectionOuverte()) p.thematiques = 'ouvertes';
   } else if (tab === 'comparateur') {
     const f = S.comparateur_form;
     if (f && f.code_postal_destination) {
@@ -149,19 +164,26 @@ function expeParams() {
       p.cp = f.code_postal_destination;
       if (f.type_envoi && f.type_envoi !== 'messagerie') p.envoi = f.type_envoi;
     }
-  } else if (tab === 'zones' && typeof Z !== 'undefined' && Z.data) {
-    if (String(Z.saisie || '').trim()) p.lieu = String(Z.saisie).trim();
-    else if (Z.region) p.region = Z.region;
-    if (Z.typeEnvoi && Z.typeEnvoi !== 'affretement') p.envoi = Z.typeEnvoi;
+  } else if (tab === 'zones' && typeof Z !== 'undefined') {
+    // Le type d'envoi colore la carte : il compte dès qu'on le change, avec
+    // ou sans destination recherchée.
+    if (Z.typeEnvoi !== 'affretement') p.envoi = Z.typeEnvoi || 'tous';
+    if (Z.data) {
+      if (String(Z.saisie || '').trim()) p.lieu = String(Z.saisie).trim();
+      else if (Z.region) p.region = Z.region;
+    }
   } else if (tab === 'carburant') {
     const cb = S.expeCarb;
     if (cb && cb.open != null) p.historique_taxe = String(cb.open);
   }
   // Carte des délais (panneau flottant de MyExpé)
   if (typeof C !== 'undefined' && C.panelOpen) {
-    p.carte = 'ouverte'; nav += '/carte';
-    if (C.selected) p.departement = String(C.selected);
+    p.carte = C.editMode ? 'edition' : 'ouverte'; nav += '/carte';
+    const dep = (C.editMode && C.editDept) || C.selected;
+    if (dep) p.departement = String(dep);
   }
+  // Panneau latéral des transporteurs, ouvrable depuis tout onglet.
+  if (typeof T !== 'undefined' && T.panelOpen) { p.panneau = 'transporteurs'; nav += '/panneau'; }
   const mo = _expeModale();
   if (mo) { p[mo.cle] = String(mo.id); nav += '/' + mo.cle; if (mo.extra) Object.assign(p, mo.extra); }
   return { params: p, nav };
@@ -203,6 +225,15 @@ function expeLireFiltres(u, complet) {
     const st = ou('statut', ''); if (st !== undefined) S.expePalettesEuropeStatutFilter = st;
     const cs = ou('contest_statut', ''); if (cs !== undefined) S.expePalContestStatut = cs;
     const tri = ou('tri', ''); if (tri !== undefined) { S.expePalSortKey = tri || null; S.expePalSortDir = u.get('sens', 'asc') === 'desc' ? 'desc' : 'asc'; }
+  } else if (tab === 'devis') {
+    const f = ou('filtre', 'ouverte');
+    if (f !== undefined && ['ouverte', 'historique', 'toutes', 'corbeille'].indexOf(f) !== -1) S.devis_filtre = f;
+  } else if (tab === 'zones') {
+    const e = ou('envoi', 'affretement');
+    if (e !== undefined && typeof Z !== 'undefined') {
+      const t = e === 'tous' ? '' : e;
+      if (Z.typeEnvoi !== t) { Z.typeEnvoi = t; Z.carteChargee = false; _expeZoneTypeChange = true; }
+    }
   } else if (tab === 'pilotage') {
     const f = ou('filtre', ''); if (f !== undefined && (!f || EXPE_PIL_FILTRES.some(x => x.key === f))) S.expePilFiltre = f || null;
     if (u.a('memo') || complet) S.expePilMemoOuvert = u.a('memo');
@@ -298,6 +329,8 @@ const _EXPE_REOUVRIR = {
     openTransporteurModal(v === 'nouveau' ? null : Number(v));
     const o = u.get('transporteur_onglet', null);
     if (o && T.modalOpen) setTransporteurModalTab(o);
+    const af = u.get('avis_filtre', null);
+    if (af) N.histFiltre = af;
     render();
   },
   demande_taxe: async () => { await _expeAttendre(() => S.expeCarb && S.expeCarb.list); expeCarbOuvrirDemande(); },
@@ -339,10 +372,11 @@ async function expeObjetsUrl(u, complet) {
         || String(f.nb_palette || '') !== u.get('palettes', '')) lancerComparateur();
   }
   if (tab === 'zones' && (u.get('lieu', null) || u.get('region', null))) {
-    Z.typeEnvoi = u.get('envoi', 'affretement');
+    // Le type d'envoi est déjà posé par expeLireFiltres.
+    const relancer = _expeZoneTypeChange; _expeZoneTypeChange = false;
     const lieu = u.get('lieu', null);
-    if (lieu) { if (Z.saisie !== lieu || !Z.data) { Z.saisie = lieu; expeZonesRechercher(); } }
-    else if (Z.region !== u.get('region') || !Z.data) expeZonesClicRegion(u.get('region'));
+    if (lieu) { if (Z.saisie !== lieu || !Z.data || relancer) { Z.saisie = lieu; expeZonesRechercher(); } }
+    else if (Z.region !== u.get('region') || !Z.data || relancer) expeZonesClicRegion(u.get('region'));
   }
   if (tab === 'carburant') {
     const h = u.get('historique_taxe', null);
@@ -351,9 +385,26 @@ async function expeObjetsUrl(u, complet) {
     if (h && String(cb.open) !== h) expeCarbToggleHist(isNaN(Number(h)) ? h : Number(h));
     else if (!h && complet && cb.open != null) expeCarbToggleHist(cb.open);
   }
-  const carte = u.a('carte');
-  if (typeof C !== 'undefined' && (carte !== !!C.panelOpen) && (carte || complet) && typeof setExpeCarteOpen === 'function') setExpeCarteOpen(carte);
-  if (typeof C !== 'undefined' && carte && u.get('departement', null)) C.selected = u.get('departement');
+  if (tab === 'devis' && complet) chargerDemandes();
+  if (tab === 'zones' && typeof Z !== 'undefined' && !Z.carteChargee) expeZonesChargerCarte();
+  if (tab === 'transporteurs' && typeof expeThSectionOuverte === 'function') {
+    const voulue = u.get('thematiques', null) === 'ouvertes';
+    if (voulue !== expeThSectionOuverte() && (voulue || complet)) expeThBasculerSection();
+  }
+  const carte = u.get('carte', null);
+  if (typeof C !== 'undefined' && (!!carte !== !!C.panelOpen) && (carte || complet) && typeof setExpeCarteOpen === 'function') setExpeCarteOpen(!!carte);
+  if (typeof C !== 'undefined' && carte) {
+    const edition = carte === 'edition' && typeof expeCanEditDelais === 'function' && expeCanEditDelais();
+    if (!!C.editMode !== edition) { C.editMode = edition; C.editDept = null; }
+    const dep = u.get('departement', null);
+    if (dep) { C.selected = dep; if (edition) C.editDept = dep; }
+    if (typeof refreshExpeCartePanel === 'function') { refreshExpeCartePanel(); queueMicrotask(() => { try { initCarteExpe(); } catch (e) {} }); }
+  }
+  if (typeof T !== 'undefined') {
+    const panneau = u.get('panneau', null) === 'transporteurs';
+    if (panneau && !T.panelOpen) openExpeTranspPanel();
+    else if (!panneau && complet && T.panelOpen) closeExpeTranspPanel();
+  }
   await expeModaleUrl(u);
 }
 
