@@ -655,7 +655,7 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : vue, onglet, semaine, horizon, fenêtre ouverte (url-etat.md). -->
-<script src="/static/mysifa_url.js?v=3"></script>
+<script src="/static/mysifa_url.js?v=4"></script>
 <script src="/static/planning_rh_url.js?v=1"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script src="/static/chat_mentions.js"></script>

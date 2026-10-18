@@ -52,6 +52,10 @@ MySifaUrl.surRetour(async u => { …réappliquer, recharger… });
   recul (fenêtre fermée PUIS éditeur ouvert dans le même geste) est mise en
   attente et appliquée à l'arrivée — sinon le rappel réappliquait l'ancienne
   adresse et refermait ce qui venait de s'ouvrir.
+- **Option `chemin`** : une page dont le routeur change le chemin
+  (`/pricing/...`) écrit chemin et paramètres en une seule entrée
+  (`MySifaUrl.ecrire(p, {navigation, chemin})`) au lieu d'un `pushState`
+  maison suivi d'une écriture du helper, qui en ferait deux.
 - **Fermer recule.** Revenir exactement à l'adresse qu'on avait quittée
   (fermer une fiche, « ← Retour à la liste ») fait `history.back()` au lieu
   d'empiler : sinon Retour, juste après, rouvrirait la fiche fermée.
@@ -219,4 +223,8 @@ rendrait les anciens filtres.
 | MyExpé | Fait le 18/10/2026 : `onglet` ; Départs `sous`, `jour`, fenêtre `depart=<id>|nouveau` (clé du lien du camion du Planning, conservée), `dupliquer_depart`, `avis` ; Palettes `sous`, `client`, `statut`, `contest_statut`, `tri`/`sens`, `releve_palettes`, `mouvement_palettes`, `contestation` ; Pilotage `filtre`, `memo`, `reglages`, `transport` ; Emails `filtre`, `reglages`, `email` ; Comparateur `poids`, `palettes`, `cp`, `envoi` ; Zones `lieu`|`region`, `envoi` ; Devis `demande`, `envoi_demande`, `reponse`, `prospect`, `modifier_demande`, `relance`, `suivi_reponse` ; `transporteur` + `transporteur_onglet` ; Taxe `historique_taxe`, `modifier_taxe`, `demande_taxe` ; carte `carte=ouverte|edition`, `departement` ; Devis `filtre` ; Transporteurs `thematiques=ouvertes`, `avis_filtre` ; Zones `envoi` même sans recherche ; `panneau=transporteurs`. Code dans `static/expe_url.js`, chargé par le gabarit commun `html.py` mais inactif hors de `/expe` |
 | Planning RH | Fait le 18/10/2026 : `vue=rh`, `onglet`, `semaine` (semaine ISO `2026-W43`), `horizon`, `detail`, `annee` ; fenêtres `ajout_personne` et `jour_detail` (cellule `semaine~machine~poste~créneau`), `solde`, `config_machine`, `maintenance`, `modifier_conge`. Code dans `static/planning_rh_url.js` |
 | MyCompta | Fait le 18/10/2026 : `onglet`, `mode=collage` (import Factor), fenêtres `acheteur`, `compte`, `banque`, Paie `periode` (AAAA-MM), `employe`, `historique=periodes`. Code dans `static/compta_url.js` (gabarit commun, inactif hors de `/compta`) |
+| MyAO | Fait le 18/10/2026 : `section`, `filtre`, `ao` + `onglet`, `produit` ; fenêtres `nouvel_ao=formulaire|assistant`, `ligne`, `serie`, `ajout_fournisseur`, `fournisseur_ao`, `suivi_fournisseur`, `cloture`, `saisie_prix`, `dupliquer_ao`, `contact_carnet`, `client_carnet`, `fournisseur`, `contact`, `apercu_bat`, `apercu_etiquette`. Code dans `static/ao_url.js` |
+| MyBAT | Fait le 18/10/2026 : `statut`, `tri` (plusieurs colonnes `cle:sens,…`), fenêtres `nouveau`, `ajout_pdf`, `modifier`, `statut_bat`, `pdfs`. Fenêtres = blocs fixes affichés par `style` : l'observateur suit aussi l'attribut `style`. Code dans `static/bat_url.js` |
+| MyCoûts | Fait le 18/10/2026 : le chemin portait déjà la fiche (`/pricing/mystock/<id>`…) ; la query ajoute `cat`, `actives`, `ref`, `onglet` (produits), `tri`/`sens`, filtres de colonnes `f_<cle>`, fiche technique `fiche=matiere:<id>`. Le code vit DANS `pricing_app.js` (état privé de son IIFE) ; `navigate()` passe par le helper avec l'option `chemin` (une seule entrée d'historique) |
+| MyRH | Fait le 18/10/2026 : `dossier`, `service`, `contrat_type`, fenêtres `nouvel_employe`, `contrat`, `pieces`, `catalogue`, `categories`, `justificatifs`, `exigee_pour`. Fenêtres EMPILABLES : l'adresse porte celle du dessus. Code dans `static/myrh_url.js` (gabarit commun, inactif hors de `/rh`) |
 | Paramètres, Qualité, Maintenance, Tâches | À faire |

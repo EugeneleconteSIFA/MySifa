@@ -444,6 +444,9 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
 <!-- Toasts -->
 <div class="toast-wrap" id="toast-wrap"></div>
 
+<!-- Adresse de la page : statut, tri, fenêtre ouverte (url-etat.md). -->
+<script src="/static/mysifa_url.js?v=4"></script>
+<script src="/static/bat_url.js?v=1"></script>
 <script>
 'use strict';
 
@@ -793,6 +796,8 @@ async function loadEntries(){
     if(!r.ok){showToast('Erreur de chargement','danger');return;}
     S.entries=await r.json();
     render();
+    // Adresse : statut, tri, fenêtre (static/bat_url.js) — une fois la liste là.
+    if(typeof batDemarrerUrl==='function') batDemarrerUrl();
   }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
 }
 

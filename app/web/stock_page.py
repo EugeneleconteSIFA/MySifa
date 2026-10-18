@@ -2440,7 +2440,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : onglet, filtres, tri, objet ouvert (url-etat.md). -->
-<script src="/static/mysifa_url.js?v=3"></script>
+<script src="/static/mysifa_url.js?v=4"></script>
 <script src="/static/stock_url.js?v=3"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
