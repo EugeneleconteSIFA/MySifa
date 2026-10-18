@@ -1703,6 +1703,9 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script src="/static/mysifa_guides.js"></script>
+<!-- Adresse de la page (url-etat.md) : MyExpé ; inactif sur les autres applis. -->
+<script src="/static/mysifa_url.js?v=3"></script>
+<script src="/static/expe_url.js?v=1"></script>
 <script src="/static/motion.js" defer></script>
 <script>
 const API=window.location.origin;

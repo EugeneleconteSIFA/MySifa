@@ -136,6 +136,16 @@ porte la navigation et la consultation. Un même formulaire peut être des deux
 côtés : le commentaire d'une saisie va dans l'adresse ouvert depuis la liste,
 pas quand un dépassement de seuil l'impose (`S.explicationSeuil`).
 
+### Page servie par le gabarit commun (`html.py`)
+
+MyExpé (et Compta, le portail…) sont rendues par `render_frontend_html` : un
+seul gros script, un seul `S` pour toutes. Le fichier d'adresse d'une telle
+appli est inclus pour toutes, il doit donc **ne rien faire hors de son
+chemin** (`location.pathname === '/expe'`, `S.app === 'expe'`), et ses noms de
+premier niveau ne doivent heurter ceux d'**aucune** appli du gabarit :
+contrôler les collisions en reconstituant le script (assets réinjectés depuis
+les modules Python, pas par expression régulière sur le source — elle en rate).
+
 ### Où vit le code
 
 Une page générée en chaîne Python géante ne s'alourdit pas de son code
@@ -198,4 +208,5 @@ rendrait les anciens filtres.
 | MyStock | Fait le 15/10/2026 : `tab`, `sous` (réception, contrôle ERP, déstockage), `vue` (besoins), objets (`matiere`+`fiche`, `produit`, `ref`, `empl`, `inventaire`, `negoce`, `batiment`, `element`, `poste`, `lot`), filtres et tris par onglet, fenêtres de consultation et de réglages (`fiche_pf`, `historique_prix`, `historique_pf`, `besoins_dossier`, `parametres_matiere`, `conditionnement`, `reglages=valorisation|matieres|correspondances`) |
 | Planning | Fait le 15/10/2026 : `machine`, `vue`, `horizon` (1w/4w), `semaine` (lundi en date, pas un décalage), fenêtres `dossier`, `of` (aperçu), `stats`, `fsc`, `reglages=machine`, `reglages_semaine`, `horaires`, `commentaire_jour`, `commentaire_semaine` (dates en `AAAA-MM-JJ`). Changer de machine ou de vue recharge la page, comme au clic |
 | Saisie Prod (`/fabrication`) | Fait le 18/10/2026, périmètre réduit (voir plus bas) : `onglet`, `sous`, `vue=admin`, `machine` (choix de l'admin), `repiquage` + `repiquage_onglet`, fenêtres `fiche`, `of`, `import_of`, `tracabilite`, `commentaire`, `commentaire_bobine`, `repiquage_modifier`, mémoire produit ; onglet Stock : `mouvement=entree-mp|sortie-mp|entree-z1|sortie-z1[:id]` ; onglet Traça : correction d'une bobine (`bobine`) — le scan et la fiche manuelle restent des étapes de saisie. Code dans `static/fabrication_url.js` |
-| MyExpé, Paramètres, Qualité, Maintenance, RH, Compta, Tâches | À faire |
+| MyExpé | Fait le 18/10/2026 : `onglet` ; Départs `sous`, `jour`, fenêtre `depart=<id>|nouveau` (clé du lien du camion du Planning, conservée), `dupliquer_depart`, `avis` ; Palettes `sous`, `client`, `statut`, `contest_statut`, `tri`/`sens`, `releve_palettes`, `mouvement_palettes`, `contestation` ; Pilotage `filtre`, `memo`, `reglages`, `transport` ; Emails `filtre`, `reglages`, `email` ; Comparateur `poids`, `palettes`, `cp`, `envoi` ; Zones `lieu`|`region`, `envoi` ; Devis `demande`, `envoi_demande`, `reponse`, `prospect`, `modifier_demande`, `relance`, `suivi_reponse` ; `transporteur` + `transporteur_onglet` ; Taxe `historique_taxe`, `modifier_taxe`, `demande_taxe` ; carte `carte`, `departement`. Code dans `static/expe_url.js`, chargé par le gabarit commun `html.py` mais inactif hors de `/expe` |
+| Paramètres, Qualité, Maintenance, RH, Compta, Tâches | À faire |
