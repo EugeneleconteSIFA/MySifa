@@ -124,6 +124,18 @@ en `onClick` (l'événement serait pris pour `sansAdresse`). La clé de
 navigation ne porte pas l'id : passer d'un détail au suivant remplace.
 Fermer ou rouvrir une fenêtre au Retour ne recharge pas la page.
 
+### Écran piloté par le serveur (Saisie Prod)
+
+L'écran de saisie d'un opérateur ne se choisit pas en naviguant : machine du
+jour, dossier en cours, état calage / production / arrêt viennent du serveur.
+L'adresse n'en porte rien, ni aucune **étape d'une saisie** (choix du dossier
+à démarrer, début, fin, compteur, commentaire imposé par un seuil, changement
+d'outil, annulation, dossier fictif, tête de sortie) : un rafraîchissement de
+tablette rouvrirait une étape périmée, et l'opérateur saisirait dessus. Elle
+porte la navigation et la consultation. Un même formulaire peut être des deux
+côtés : le commentaire d'une saisie va dans l'adresse ouvert depuis la liste,
+pas quand un dépassement de seuil l'impose (`S.explicationSeuil`).
+
 ### Où vit le code
 
 Une page générée en chaîne Python géante ne s'alourdit pas de son code
@@ -185,4 +197,5 @@ rendrait les anciens filtres.
 | ERP RVGI | Déjà conforme (`#/ecran?filtres`) |
 | MyStock | Fait le 15/10/2026 : `tab`, `sous` (réception, contrôle ERP, déstockage), `vue` (besoins), objets (`matiere`+`fiche`, `produit`, `ref`, `empl`, `inventaire`, `negoce`, `batiment`, `element`, `poste`, `lot`), filtres et tris par onglet, fenêtres de consultation et de réglages (`fiche_pf`, `historique_prix`, `historique_pf`, `besoins_dossier`, `parametres_matiere`, `conditionnement`, `reglages=valorisation|matieres|correspondances`) |
 | Planning | Fait le 15/10/2026 : `machine`, `vue`, `horizon` (1w/4w), `semaine` (lundi en date, pas un décalage), fenêtres `dossier`, `of` (aperçu), `stats`, `fsc`, `reglages=machine`, `reglages_semaine`, `horaires`, `commentaire_jour`, `commentaire_semaine` (dates en `AAAA-MM-JJ`). Changer de machine ou de vue recharge la page, comme au clic |
+| Saisie Prod (`/fabrication`) | Fait le 18/10/2026, périmètre réduit (voir plus bas) : `onglet`, `sous`, `vue=admin`, `machine` (choix de l'admin), `repiquage` + `repiquage_onglet`, fenêtres `fiche`, `of`, `import_of`, `tracabilite`, `commentaire`, `commentaire_bobine`, `repiquage_modifier`, mémoire produit. Code dans `static/fabrication_url.js` |
 | MyExpé, Paramètres, Qualité, Maintenance, RH, Compta, Tâches | À faire |
