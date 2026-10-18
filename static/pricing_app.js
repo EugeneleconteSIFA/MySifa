@@ -700,9 +700,26 @@
   // MyStock déjà en usage) et la fenêtre de confirmation.
   let _adressePrete = false;
   let _ficheUrl = null;              // "matiere:12" — fiche technique ouverte
+  // Autres fenêtres de #modal-root (inventaire complété le 18/10/2026 : elles
+  // avaient échappé à la recherche, qui ne visait pas #modal-root). Toutes se
+  // ferment en vidant #modal-root : la fenêtre est réputée fermée dès qu'il
+  // est vide, après avoir été vue ouverte (l'ouverture attend une API).
+  let _modaleUrl = null;             // { cle, id, vue }
+  function modaleOuverte(cle, id) { _ficheUrl = null; _modaleUrl = { cle: cle, id: String(id), vue: false, t: Date.now() }; }
+  function modaleCourante() {
+    if (!_modaleUrl) return null;
+    const mr = document.getElementById("modal-root");
+    const pleine = !!(mr && mr.children.length);
+    if (pleine) _modaleUrl.vue = true;
+    // Fermée après avoir été vue, ou jamais apparue (API en échec) : oubliée.
+    else if (_modaleUrl.vue || Date.now() - _modaleUrl.t > 10000) _modaleUrl = null;
+    return _modaleUrl;
+  }
   function parseRouteDe(path) { return parseRoute(path); }
   function navCle(route) {
-    return route.name + (route.id ? ":" + route.id : "") + (_ficheUrl && document.getElementById("ft-back") ? "/fiche" : "");
+    const mo = modaleCourante();
+    return route.name + (route.id ? ":" + route.id : "") + (_ficheUrl && document.getElementById("ft-back") ? "/fiche" : "")
+      + (mo ? "/" + mo.cle : "");
   }
   function pricingParams(route) {
     const p = {};
@@ -722,6 +739,7 @@
       tri("produits"); cols("produits");
     }
     if (_ficheUrl && document.getElementById("ft-back")) p.fiche = _ficheUrl;
+    else { const mo = modaleCourante(); if (mo) p[mo.cle] = mo.id; }
     return p;
   }
   function pricingSyncUrl() {
@@ -752,12 +770,27 @@
     u.forEach((v, k) => { if (k.indexOf("f_") === 0 && /^f_[a-z_]{1,30}$/i.test(k)) f[k.slice(2)] = v; });
     if (Object.keys(f).length || complet) S.colFiltres[table] = f;
   }
-  // Fiche technique demandée par l'adresse (fiche=matiere:12).
-  function pricingFicheUrl(complet) {
-    let v = null;
-    try { v = new URLSearchParams(window.location.search).get("fiche"); } catch (e) {}
+  // Fiche technique ou autre fenêtre demandée par l'adresse.
+  async function pricingFicheUrl(complet) {
+    let u;
+    try { u = new URLSearchParams(window.location.search); } catch (e) { return; }
+    const mr = document.getElementById("modal-root");
+    const cles = ["parametres", "tarif", "historique_prix", "panneau_matiere"];
+    const k = cles.find((c) => u.has(c));
+    const mo = modaleCourante();
+    if (mo && (!k || mo.cle !== k || mo.id !== u.get(k))) { if (mr) mr.innerHTML = ""; _modaleUrl = null; }
+    if (k && !(modaleCourante() && _modaleUrl.cle === k)) {
+      const v = u.get(k);
+      const recharger = async () => { await bootRoute(); };
+      if (k === "parametres") { if (S.canWrite) openSettingsModal(); }
+      else if (k === "tarif") { const m = /^([0-9]+):([0-9]+)$/.exec(v); if (m) await openTarifModal(parseInt(m[1], 10), parseInt(m[2], 10), recharger); }
+      else if (k === "historique_prix" && /^[0-9]+$/.test(v)) await openPriceHistoryModal(v);
+      else if (k === "panneau_matiere" && /^[0-9]+$/.test(v)) await openMaterialDrawer(v);
+      return;
+    }
+    let v = u.get("fiche");
     const ouverte = document.getElementById("ft-back");
-    if (!v) { if (ouverte && complet) ouverte.remove(); _ficheUrl = null; return; }
+    if (!v) { if (ouverte && complet && !k) ouverte.remove(); _ficheUrl = null; return; }
     const m = /^(matiere|produit):([0-9]+)$/.exec(v);
     if (!m || (ouverte && _ficheUrl === v) || !window.PricingFiches) return;
     _ficheUrl = v;
@@ -765,7 +798,7 @@
   }
   async function pricingDemarrerUrl() {
     if (!window.MySifaUrl) return;
-    pricingFicheUrl(false);
+    await pricingFicheUrl(false);
     _adressePrete = true;
     pricingSyncUrl();
     if (typeof MutationObserver !== "undefined") {
@@ -1227,6 +1260,7 @@
         b.onclick = (e) => {
           e.stopPropagation();
           if (!window.PricingFiches) return;
+          _modaleUrl = null;
           _ficheUrl = objet + ":" + parseInt(b.getAttribute(attr), 10);   // adresse (?fiche=)
           window.PricingFiches.open(objet, parseInt(b.getAttribute(attr), 10), {
             canWrite: S.canWrite,
@@ -2130,6 +2164,7 @@
    * d'accord, et c'est celui qu'on oublie qui écrit des bêtises.
    */
   async function openTarifModal(fournisseurId, matiereId, apres) {
+    modaleOuverte("tarif", fournisseurId + ":" + matiereId);   // adresse (?tarif=)
     let data;
     try {
       data = await api("/api/pricing/tarifs/matiere/" + matiereId);
@@ -3591,6 +3626,7 @@
   }
 
   async function openMaterialDrawer(id) {
+    modaleOuverte("panneau_matiere", id);                      // adresse
     const m = await api("/api/pricing/materials/" + id);
     const root = document.getElementById("modal-root");
     root.innerHTML = `
@@ -3643,6 +3679,7 @@
   }
 
   async function openPriceHistoryModal(materialId) {
+    modaleOuverte("historique_prix", materialId);              // adresse
     const h = await api("/api/pricing/materials/" + materialId + "/history");
     const history = h.history || [];
     const rows = history
@@ -4213,6 +4250,7 @@
 
   function openSettingsModal() {
     if (!S.canWrite) return;
+    modaleOuverte("parametres", "ouverts");                    // adresse (?parametres=)
     const s = S.settings || {};
     const fxDate = s.eur_usd_rate_updated_at
       ? String(s.eur_usd_rate_updated_at).replace("T", " ").slice(0, 16)
@@ -5718,7 +5756,7 @@
       // Seule la fiche technique change : pas de rechargement de la liste.
       // Seule la fiche technique change : la liste n'a pas bougé.
       if ((r.name + (r.id || "")) !== avant) { S.route = r; await bootRoute(); }
-      pricingFicheUrl(true);
+      await pricingFicheUrl(true);
     });
   } else {
     window.addEventListener("popstate", bootRoute);
