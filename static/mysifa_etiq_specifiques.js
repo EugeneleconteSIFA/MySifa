@@ -148,7 +148,11 @@
   // Posée sur document.body, pas dans MyStock : un rafraîchissement de la
   // page hôte ne la détruit pas pendant qu'on la remplit.
   function modale(titre, corps, actions, large) {
-    fermerModale();
+    fermerModale(true);
+    // Fenêtre que l'adresse de MyStock doit porter (posée par l'appelant
+    // juste avant, voir « Adresse » plus bas). Une confirmation n'en a pas.
+    ES.modaleUrl = ES.adresseModale || null;
+    ES.adresseModale = null;
     const fond = h('div', { cls: 'es-modale-fond', id: 'es-modale',
       onmousedown: (e) => { if (e.target === fond) fermerModale(); } });
     const boite = h('div', { cls: 'es-modale' + (large ? ' es-modale-large' : ''), role: 'dialog' },
@@ -164,8 +168,12 @@
     return boite;
   }
   function escModale(e) { if (e.key === 'Escape') fermerModale(); }
-  function fermerModale() {
-    document.getElementById('es-modale')?.remove();
+  // `interne` : remplacée aussitôt par une autre (modale()) — sa clé
+  // d'adresse est alors réécrite, pas effacée.
+  function fermerModale(interne) {
+    const ouverte = document.getElementById('es-modale');
+    if (ouverte) ouverte.remove();
+    if (interne !== true && ouverte) ES.modaleUrl = null;
     document.removeEventListener('keydown', escModale);
   }
   function confirmer(message, libelle, action) {
@@ -291,6 +299,7 @@
       } catch (e) { toast(e.message, 'danger'); occupe(ok, false); }
     }, 'accent');
     nom.addEventListener('keydown', e => { if (e.key === 'Enter') ok.click(); });
+    ES.adresseModale = { cle: 'dossier_etiq', id: d ? d.id : 'nouveau' };
     modale(d ? 'Renommer le dossier' : 'Nouveau dossier', h('div', { cls: 'es-form' },
       champ('Nom', nom), champ('Description', desc, 'Facultatif.')), [bouton('Annuler', fermerModale), ok]);
   }
@@ -314,6 +323,7 @@
         fermerModale(); toast('Étiquette créée.'); await charger(); ouvrirEditeur(r.id);
       } catch (e) { toast(e.message, 'danger'); occupe(ok, false); }
     }, 'accent');
+    ES.adresseModale = { cle: 'nouvelle_etiquette', id: 'oui' };
     modale('Nouvelle étiquette', h('div', { cls: 'es-form' },
       champ('Nom', nom), champ('Dossier', dossier), champ('Description', desc, 'Ce qui distingue cette étiquette des autres du dossier.'),
       h('div', { cls: 'es-champ' }, h('span', { cls: 'es-champ-label', text: 'Format' }), formats,
@@ -331,6 +341,7 @@
         fermerModale(); toast('Étiquette dupliquée.'); await charger(); ouvrirEditeur(r.id);
       } catch (e) { toast(e.message, 'danger'); occupe(ok, false); }
     }, 'accent');
+    ES.adresseModale = { cle: 'dupliquer', id: m.id };
     modale('Dupliquer « ' + m.nom + ' »', h('div', { cls: 'es-form' }, champ('Nom de la copie', nom), champ('Dossier', dossier),
       h('p', { cls: 'es-aide', text: 'Les compteurs de la copie repartent de leur valeur de départ. Les SSCC restent partagés : un même préfixe GS1 ne réémet jamais un numéro.' })),
     [bouton('Annuler', fermerModale), ok]);
@@ -420,6 +431,7 @@
       } catch (e) { toast(e.message, 'danger'); occupe(ok, false); majPlage(); }
     }, 'accent', 'printer');
 
+    ES.adresseModale = { cle: 'imprimer', id: m.id };
     modale('Imprimer « ' + m.nom + ' »', h('div', { cls: 'es-form' },
       h('label', { cls: 'es-champ' }, h('span', { cls: 'es-champ-label', text: 'Imprimante' }), selImp, aideImp),
       h('div', { cls: 'es-ligne2' },
@@ -447,6 +459,7 @@
           try { const x = await api('/impressions/' + r.id + '/reimprimer', { method: 'POST', body: {} }); toast('Réimpression envoyée à ' + x.imprimante + '.'); fermerModale(); }
           catch (err) { toast(err.message, 'danger'); occupe(b, false); }
         })))))) : h('div', { cls: 'es-vide', text: 'Aucune impression pour cette étiquette.' });
+    ES.adresseModale = { cle: 'historique_etiq', id: m.id };
     modale('Historique — ' + m.nom, h('div', {},
       h('p', { cls: 'es-aide', text: 'La réimpression renvoie exactement les mêmes étiquettes, avec les mêmes numéros. Aucun compteur n\'avance.' }),
       h('div', { cls: 'es-table-wrap' }, corps)), [bouton('Fermer', fermerModale)], true);
@@ -474,6 +487,7 @@
       try { await api('/demandes', { method: 'POST', form: fd }); fermerModale(); toast('Demande envoyée.'); await charger(); rendre(); }
       catch (e) { toast(e.message, 'danger'); occupe(ok, false); }
     }, 'accent');
+    ES.adresseModale = { cle: 'demande_format', id: 'nouvelle' };
     modale('Demander un nouveau format', h('div', { cls: 'es-form' },
       champ('Titre', titre),
       h('div', { cls: 'es-ligne2' }, champ('Client', client), champ('Dossier', dossier, 'Facultatif.')),
@@ -562,6 +576,48 @@
     return h('div', { cls: 'es-demande-detail' }, ...blocs);
   }
 
+  // ── Adresse (static/stock_url.js, .claude/rules/url-etat.md) ──────────
+  // MyStock lit ce que l'écran montre (etat) et y retourne depuis son
+  // adresse (aller). Il recalcule son adresse à chaque changement
+  // d'affichage : rien à signaler d'ici.
+  function adresseEtat() {
+    const ed = window.EtiqSpec.editeur && window.EtiqSpec.editeur._ED;
+    return {
+      vue: ES.view,
+      dossier: ES.dossierId,
+      demande: ES.view === 'demandes' ? ES.demandeSel : null,
+      modele: (ES.view === 'editeur' && ed && ed.m && ed.m.id) ? ed.m.id : null,
+      modale: document.getElementById('es-modale') ? ES.modaleUrl : null,
+    };
+  }
+  const num = (v) => (v === null || v === undefined || v === '') ? null : (isNaN(Number(v)) ? v : Number(v));
+  async function adresseAller(a) {
+    a = a || {};
+    if (!ES.boot) { ES.allerApres = a; return; }   // repris à la fin de mount()
+    ES.dossierId = num(a.dossier);
+    if (a.modele) {
+      const ed = window.EtiqSpec.editeur && window.EtiqSpec.editeur._ED;
+      if (!(ES.view === 'editeur' && ed && ed.m && String(ed.m.id) === String(a.modele))) await ouvrirEditeur(num(a.modele));
+    } else if (a.vue === 'demandes') {
+      ES.view = 'demandes'; ES.demandeSel = num(a.demande);
+      if (!ES.demandes) await chargerDemandes(); else rendre();
+    } else {
+      ES.view = 'liste'; rendre();
+    }
+    const mo = a.modale, ouverte = document.getElementById('es-modale');
+    if (!mo) { if (ouverte) fermerModale(); return; }
+    if (ouverte && ES.modaleUrl && ES.modaleUrl.cle === mo.cle && String(ES.modaleUrl.id) === String(mo.id)) return;
+    const m = (ES.boot.modeles || []).find(x => String(x.id) === String(mo.id));
+    const d = (ES.boot.dossiers || []).find(x => String(x.id) === String(mo.id));
+    if (mo.cle === 'imprimer' && m) await modaleImpression(m);
+    else if (mo.cle === 'historique_etiq' && m) await modaleHistorique(m);
+    else if (mo.cle === 'dupliquer' && m) modaleDupliquer(m);
+    else if (mo.cle === 'dossier_etiq') modaleDossier(mo.id === 'nouveau' ? undefined : d);
+    else if (mo.cle === 'nouvelle_etiquette') modaleNouvelle();
+    else if (mo.cle === 'demande_format') modaleDemande();
+  }
+  const CLES_MODALES = ['imprimer', 'historique_etiq', 'dupliquer', 'dossier_etiq', 'nouvelle_etiquette', 'demande_format'];
+
   // ── Montage ─────────────────────────────────────────────────────────
   async function mount(conteneur) {
     if (!conteneur) return;
@@ -571,13 +627,16 @@
       rendre();
       try { await charger(); } catch (e) { toast(e.message, 'danger'); }
       rendre();
+      if (ES.allerApres) { const a = ES.allerApres; ES.allerApres = null; await adresseAller(a); }
       return;
     }
     conteneur.appendChild(ES.host);
   }
 
   window.EtiqSpec = Object.assign(window.EtiqSpec || {}, {
-    mount, _: { ES, h, ic, api, toast, champ, bouton, occupe, modale, fermerModale, confirmer,
+    mount,
+    adresse: { etat: adresseEtat, aller: adresseAller, cles: CLES_MODALES },
+    _: { ES, h, ic, api, toast, champ, bouton, occupe, modale, fermerModale, confirmer,
       selectDossiers, selectModeleIa, fmtNum, fmtFormat, rendre, charger, modaleImpression, modaleHistorique, API },
   });
 })();
