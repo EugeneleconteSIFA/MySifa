@@ -1341,7 +1341,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/mysifa_produit_memoire.js?v=2.6"></script>
 <!-- Adresse de la page : onglet, vue admin, repiquage, fenêtres de consultation (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=3"></script>
-<script src="/static/fabrication_url.js?v=1"></script>
+<script src="/static/fabrication_url.js?v=2"></script>
 <script>
   // Démarre le polleur d'alertes maintenance dès que la page est prête.
   // Le runtime interroge /api/maintenance/alerts/active toutes les 15 s,
@@ -9725,6 +9725,7 @@ async function init(){
   if(isAdm && S.saisieViewMode==='admin'){
     await loadAdminSaisiesJour();
   }
+  try{ fabEnvelopper(); }catch(e){}
   try{ if(window.MySifaUrl) await fabAllerUrl(false); }catch(e){}
   _fabUrlPrete = true;
   fabSyncUrl();
