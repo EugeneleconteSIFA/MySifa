@@ -448,6 +448,9 @@ function renderComptaCompteModal(){
 }
 
 function renderCompta(){
+  // Premier rendu : l'adresse (onglet, fenêtre, période de paie) est lue par
+  // static/compta_url.js, qui la tient ensuite à jour.
+  if(typeof comptaDemarrerUrl==='function') comptaDemarrerUrl();
   const tab = S.comptaTab || 'factor';
   const sidebar=h('nav',{className:'sidebar'},
     h('div',{className:'logo'},
