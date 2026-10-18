@@ -149,10 +149,11 @@
       "  body.mysifa-accueil-on #root{margin-left:var(--mac-w)}",
       // Rail étiqueté (choix du 15/10/2026, parmi quatre maquettes) : dépliée,
       // un chevron dans l'en-tête, à droite du titre, et un trait sépare la
-      // colonne de la page ; repliée, un rail de 30 px qui dit ce qu'il
+      // colonne de la page ; repliée, un onglet de 30 px qui dit ce qu'il
       // contient (libellé vertical) et combien d'indicateurs sont en alerte.
-      // Tout le rail se clique pour rouvrir. Le bouton tableau ne sert plus
-      // que sur téléphone.
+      // L'onglet ne couvre que son libellé, pas toute la hauteur (retour
+      // d'Eugène du 18/10/2026). Il se clique en entier pour rouvrir. Le
+      // bouton tableau ne sert plus que sur téléphone.
       "  #mysifa-accueil .mac-repli{display:none}",
       // En-tête sur une ligne (15/10/2026) : titre, guide, Personnaliser en
       // icône (libellé « Terminer » seulement pendant l'édition), chevron.
@@ -165,10 +166,10 @@
       "  .mac-languette svg{flex-shrink:0}",
       "  .mac-languette:hover,.mac-languette:focus-visible{color:var(--accent,#22d3ee);border-color:var(--accent,#22d3ee)}",
       "  .mac-languette .mac-rail-nom,.mac-languette .mac-rail-alertes{display:none}",
-      "  #mysifa-accueil.repliee{width:30px;padding:0;background:var(--card,#111827)}",
+      "  #mysifa-accueil.repliee{width:30px;bottom:auto;padding:0;border-right:0}",
       "  #mysifa-accueil.repliee .mac-tete{display:none}",
-      "  #mysifa-accueil.repliee .mac-languette{top:0;right:0;bottom:0;left:0;width:auto;height:auto;justify-content:flex-start;padding:12px 0;border:0;border-radius:0;background:none}",
-      "  #mysifa-accueil.repliee .mac-languette:hover{background:color-mix(in srgb,var(--accent,#22d3ee) 7%,transparent)}",
+      "  #mysifa-accueil.repliee .mac-languette{position:relative;top:auto;right:auto;width:30px;height:auto;justify-content:flex-start;padding:12px 0;border-left:0;border-radius:0 10px 10px 0}",
+      "  #mysifa-accueil.repliee .mac-languette:hover{background:color-mix(in srgb,var(--accent,#22d3ee) 7%,var(--card,#111827))}",
       "  #mysifa-accueil.repliee .mac-rail-nom{display:block;writing-mode:vertical-rl;transform:rotate(180deg);text-transform:uppercase;letter-spacing:.5px;color:var(--muted,#94a3b8);white-space:nowrap}",
       "  #mysifa-accueil.repliee .mac-rail-alertes:not([hidden]){display:flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:var(--danger,#f87171);color:#fff}",
       "  body.mysifa-accueil-on.mysifa-accueil-repliee #root{margin-left:30px}",
