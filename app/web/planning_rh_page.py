@@ -654,6 +654,9 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_guides.js"></script>
+<!-- Adresse de la page : vue, onglet, semaine, horizon, fenêtre ouverte (url-etat.md). -->
+<script src="/static/mysifa_url.js?v=3"></script>
+<script src="/static/planning_rh_url.js?v=1"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=13"></script>
@@ -2784,7 +2787,7 @@ function setTab(t, opts){
   // La vue RH ne propose que l'onglet Congés — bloquer la bascule vers Planning
   if(S.view==='rh' && t==='planning') t='conges';
   S.tab=t;
-  if(!silent){try{var target='#'+t;if(location.hash!==target)history.replaceState(null,'',target);}catch(e){}}
+  // L'adresse (?onglet=) suit l'écran : static/planning_rh_url.js.
   closeSidebar();
   if(t==='conges'&&!S.soldes.length)loadSoldes();
   render();
@@ -3316,9 +3319,12 @@ if(window.MySifaSidebar)MySifaSidebar.configure({onTheme:render});
   if(S.view==='rh'){ S.tab='conges'; }
   var _initPrhTab=_readPrhTab(); if(_initPrhTab!=='planning'){S.tab=_initPrhTab;}
   if(S.isEditor || S.isReadOnlyAdmin)S.viewRange=2; else S.viewRange=1;
+  // Adresse : vue, onglet, semaine, horizon, détail, année (planning_rh_url.js).
+  try{ if(typeof prhLireUrl==='function') prhLireUrl(false); }catch(e){}
   if(S.view!=='rh'){ await loadMachines(); }
   await loadData();
   if(S.tab==='conges')await loadSoldes();
+  try{ if(typeof prhDemarrerUrl==='function') await prhDemarrerUrl(); }catch(e){}
   try{ initPlanningRhGuides(); }catch(e){}
 })();
 window.addEventListener('hashchange',function(){try{setTab(_readPrhTab(),{silent:true});}catch(e){}});
