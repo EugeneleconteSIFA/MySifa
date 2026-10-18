@@ -91,6 +91,10 @@ class Valorisation(unittest.TestCase):
     def test_prix_au_m2_et_parametres(self):
         c = self.c
         fichiers.enregistrer_article(c, self.mp, {"prix_stock_m2_cents": 50})      # 0,50 €/m²
+        # Le prix est historisé au jour d'exécution : antidaté comme dans
+        # test_quantite_et_prix_a_la_date, sinon le test casse dès le lendemain
+        # de NOW (valorisation au 16/10, prix daté du jour où tourne la CI).
+        c.execute("UPDATE gc_prix_stock_historique SET depuis='2026-09-01' WHERE article_id=?", (self.mp,))
         V = valorisation.valoriser(c, "2026-10-16")
         self.assertEqual(self.ligne(V, self.mp)["valeur_cents"], 33_000)           # 2 000 ML × 0,33 m × 0,50 €
         T = V["totaux"]
