@@ -2430,7 +2430,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
 <script src="/static/mysifa_stock_modals.js?v=unite2"></script>
-<script src="/static/mysifa_etiq_specifiques.js?v=3"></script>
+<script src="/static/mysifa_etiq_specifiques.js?v=4"></script>
 <script src="/static/mysifa_etiq_editeur.js?v=2"></script>
 <script src="/static/mysifa_donnees_prod.js?v=1"></script>
 <script src="/static/mysifa_destockage.js?v=9"></script>
@@ -2440,8 +2440,8 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : onglet, filtres, tri, objet ouvert (url-etat.md). -->
-<script src="/static/mysifa_url.js?v=2"></script>
-<script src="/static/stock_url.js?v=2"></script>
+<script src="/static/mysifa_url.js?v=3"></script>
+<script src="/static/stock_url.js?v=3"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=13"></script>
@@ -27087,7 +27087,11 @@ function ervTableMatieres(st) {
     ...['Matière', 'Entrées RVGI', 'Entrées MySifa', '', 'Sorties RVGI', 'Sorties MySifa', '', ''].map(h => el('th', {}, h)))));
   const tbody = el('tbody', {});
   rows.forEach(lm => {
-    const detailTr = el('tr', { style: 'display:none' }, el('td', { attrs: { colspan: '8' } }, ervDetail(lm)));
+    // Matière dépliée : tenue dans l'état (st.detail), donc dans l'adresse
+    // (?detail=) — un lien rouvre le même détail.
+    const cle = String(lm.matiere_id != null ? lm.matiere_id : (lm.reference || ''));
+    const deplie = st.detail != null && String(st.detail) === cle;
+    const detailTr = el('tr', { style: deplie ? '' : 'display:none' }, el('td', { attrs: { colspan: '8' } }, ervDetail(lm)));
     tbody.appendChild(el('tr', {},
       el('td', {}, el('div', { style: 'font-weight:700' }, lm.reference || '—'),
         el('div', { cls: 'bes-dossier-meta' }, [lm.designation, lm.categorie].filter(Boolean).join(' · ')),
@@ -27104,11 +27108,19 @@ function ervTableMatieres(st) {
         style: 'padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:12px;cursor:pointer',
         on: { click: (e) => {
           const ouvert = detailTr.style.display !== 'none';
+          // Un seul détail à la fois dans l'état ; replier les autres lignes
+          // garde l'écran conforme à ce que dit l'adresse.
+          tbody.querySelectorAll('tr[data-erv-detail]').forEach(t => { if (t !== detailTr) t.style.display = 'none'; });
+          tbody.querySelectorAll('button[data-erv-btn]').forEach(b => { b.textContent = 'Détail'; });
           detailTr.style.display = ouvert ? 'none' : '';
           e.currentTarget.textContent = ouvert ? 'Détail' : 'Masquer';
+          st.detail = ouvert ? null : cle;
+          if (typeof stockSyncUrl === 'function') stockSyncUrl();
         } },
-      }, 'Détail')),
+        attrs: { 'data-erv-btn': '' },
+      }, deplie ? 'Masquer' : 'Détail')),
     ));
+    detailTr.setAttribute('data-erv-detail', '');
     tbody.appendChild(detailTr);
   });
   table.appendChild(tbody);

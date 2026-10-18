@@ -19,7 +19,8 @@
  *   MySifaUrl.surRetour(async function (params) { …réappliquer… });
  *
  * Pendant le rappel, toute écriture remplace : réappliquer un état ne doit
- * pas recréer l'entrée qu'on vient de quitter.
+ * pas recréer l'entrée qu'on vient de quitter. Le rappel n'a PAS lieu pour un
+ * recul que ce fichier a lui-même déclenché (voir plus bas).
  *
  * Revenir là d'où l'on vient (fermer une fiche, « ← Retour à la liste »)
  * RECULE dans l'historique au lieu d'empiler : sinon Retour, juste après,
@@ -45,6 +46,14 @@
   // Recul demandé (history.back) dont le popstate n'est pas encore arrivé :
   // les écritures sont suspendues, c'est lui qui fixera l'adresse.
   var reculEnCours = false;
+  // Écriture demandée pendant ce recul (une fenêtre fermée puis, dans le même
+  // geste, un éditeur ouvert) : appliquée dès que le recul est arrivé.
+  var enAttente = null;
+  function finRecul() {
+    reculEnCours = false;
+    var a = enAttente; enAttente = null;
+    if (a) ecrire(a.params, a.opts);
+  }
 
   function embarque() {
     try {
@@ -105,13 +114,14 @@
     var cible = location.pathname + (qs ? "?" + qs : "") + (opts.hash ? "#" + opts.hash : "");
     var nav = opts.navigation === undefined ? navCourante : String(opts.navigation);
     var actuelle = location.pathname + location.search + location.hash;
-    if (reculEnCours) return;
+    if (reculEnCours) { enAttente = { params: params, opts: opts }; return; }
     var st = history.state || {};
     var libre = !enRetour && !embarque() && navCourante !== null && nav !== navCourante;
     try {
       if (libre && st.depuisUrl === cible) {
         reculEnCours = true;
-        setTimeout(function () { reculEnCours = false; }, 1500);
+        // Filet si le popstate n'arrive jamais (navigateur qui l'avale).
+        setTimeout(function () { if (reculEnCours) finRecul(); }, 1500);
         history.back();
         return;
       }
@@ -129,8 +139,14 @@
 
   function surRetour(fn) {
     window.addEventListener("popstate", function (ev) {
-      reculEnCours = false;
+      var propre = reculEnCours;
       navCourante = ev.state && ev.state.mysifaNav !== undefined ? ev.state.mysifaNav : null;
+      // Recul déclenché par ecrire() lui-même : la page est DÉJÀ dans l'état
+      // que porte cette adresse (c'est elle qui l'a demandé). La réappliquer
+      // annulerait ce que le même geste a ouvert entre-temps — on n'applique
+      // que l'écriture mise en attente.
+      if (propre) { finRecul(); return; }
+      reculEnCours = false;
       enRetour++;
       var fin = function () { enRetour = Math.max(0, enRetour - 1); };
       try {

@@ -1000,7 +1000,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
 <!-- Adresse de la page : machine, vue, horizon, semaine, fenêtre ouverte (url-etat.md). -->
-<script src="/static/mysifa_url.js?v=2"></script>
+<script src="/static/mysifa_url.js?v=3"></script>
 <script src="/static/planning_url.js?v=2"></script>
 <script>
 // Handler d'erreurs installé *avant* le script principal (capte aussi les erreurs de parsing).

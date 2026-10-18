@@ -23,7 +23,7 @@ let _stockUrlPrete = false;   // posé à la fin d'init() : avant, l'adresse por
                               // encore les paramètres à lire.
 const _STOCK_SOUS = {
   reception: ['nouvelle', 'liste', 'historique', 'rvgi', 'rvgi-historique'],
-  monitoring: ['quantites', 'mouvements'],
+  monitoring: ['quantites', 'mouvements', 'ecarts-mp'],
   destockage: ['a_traiter', 'destockes', 'mouvements'],
 };
 const _STOCK_CLE = /^[A-Za-z0-9_.\-]{1,60}$/;
@@ -123,6 +123,8 @@ const _STOCK_OUVREURS = [
   ['openBesoinsHelpModal',     'aide',           () => 'besoins'],
   ['openValorisationConteneurModal', 'conteneur', a => a[0] && (a[0].id != null ? a[0].id : a[0].matiere_id)],
   ['openValorisationClotureModal',   'cloture',  () => 'valorisation'],
+  // Module mysifa_destockage.js, ouvert par cette fonction de la page.
+  ['dstOuvrirRelecture',       'controle',       a => a[0] && a[0].planning_id],
 ];
 
 const _STOCK_REOUVRIR = {
@@ -192,6 +194,11 @@ const _STOCK_REOUVRIR = {
     if (it) openValorisationConteneurModal(it);
   },
   cloture: () => openValorisationClotureModal(),
+  controle: v => {
+    const lignes = (S.destockage && S.destockage.data && S.destockage.data.dossiers) || [];
+    const x = lignes.find(l => String(l.planning_id) === String(v));
+    dstOuvrirRelecture(x || { planning_id: Number(v) });
+  },
   import: () => { S.importRefsOpen = true; S.importRefsPreview = null; render(); },
   unites: () => { S.unitModalOpen = true; S.unitNewLabel = ''; S.unitNewBase = 'cartons'; S.unitNewQty = ''; render(); },
 };
@@ -330,7 +337,18 @@ function _stockParamsBase() {
     if (f.date_fin) p.au = f.date_fin;
   } else if (tab === 'monitoring') {
     const m = S.monitoring;
-    if (m) {
+    if (m && m.monPage === 'ecarts-mp') {
+      // Écarts matières RVGI : période (heures, ou dates), « afficher aussi
+      // ce qui concorde », onglet intérieur, matière dépliée.
+      const st = S.ecartsRvgi;
+      if (st) {
+        if (st.heures) { if (Number(st.heures) !== 48) p.heures = String(st.heures); }
+        else { p.heures = 'periode'; if (st.debut) p.du = st.debut; if (st.fin) p.au = st.fin; }
+        if (st.tout) p.concorde = '1';
+        if (st.onglet && st.onglet !== 'matieres') { p.onglet = st.onglet; nav += '/onglet:' + st.onglet; }
+        if (st.detail != null && st.detail !== '') p.detail = String(st.detail);
+      }
+    } else if (m) {
       if (m.filterStatut) p.statut = m.filterStatut;
       if (m.sortColumn) { p.tri = m.sortColumn; if (m.sortDirection === 'desc') p.sens = 'desc'; }
     }
@@ -368,6 +386,16 @@ function _stockParamsBase() {
     if (S.planSel != null) p.element = String(S.planSel);
   } else if (tab === 'traca') {
     if (S.tracaPoste) { p.poste = S.tracaPoste; nav += '/poste:' + S.tracaPoste; }
+    // Étiquettes spécifiques : le module dit ce qu'il montre (vue, dossier,
+    // étiquette ouverte dans l'éditeur, demande, fenêtre).
+    const ad = S.tracaPoste === 'specifiques' && window.EtiqSpec && window.EtiqSpec.adresse;
+    if (ad) {
+      const e = ad.etat();
+      if (e.dossier != null) p.dossier = String(e.dossier);
+      if (e.modele) { p.modele = String(e.modele); nav += '/modele:' + e.modele; }
+      else if (e.vue === 'demandes') { p.vue = 'demandes'; nav += '/demandes'; if (e.demande != null) p.demande = String(e.demande); }
+      if (e.modale && e.modale.cle) { p[e.modale.cle] = String(e.modale.id); nav += '/' + e.modale.cle; }
+    }
   }
   return { params: p, nav: nav };
 }
@@ -436,6 +464,27 @@ function stockLireFiltres(u, tab, complet) {
   if (tab === 'monitoring') {
     const m = monEnsureState();
     if (sous && _STOCK_SOUS.monitoring.includes(sous)) m.monPage = sous; else if (complet) m.monPage = 'quantites';
+    if (m.monPage === 'ecarts-mp') {
+      const st = ervEtat();
+      const avant = JSON.stringify([st.heures, st.debut, st.fin]);
+      const h = ou('heures', '48');
+      if (h !== undefined) {
+        if (h === 'periode') {
+          st.heures = null;
+          const du = u.get('du', ''), au = u.get('au', '');
+          if (_STOCK_JOUR.test(du)) st.debut = du;
+          if (_STOCK_JOUR.test(au)) st.fin = au;
+        } else if (/^[0-9]{1,4}$/.test(h)) st.heures = Number(h);
+      }
+      if (u.a('concorde') || complet) st.tout = u.a('concorde');
+      const o = ou('onglet', 'matieres');
+      if (o !== undefined && ['matieres', 'dossiers', 'non_apparies'].includes(o)) st.onglet = o;
+      const det = ou('detail', '');
+      if (det !== undefined) st.detail = det || null;
+      // Autre période : les chiffres sont à recharger (le rendu de la
+      // sous-page relance la comparaison quand data est vide).
+      if (avant !== JSON.stringify([st.heures, st.debut, st.fin])) st.data = null;
+    }
     const st = ou('statut', ''); if (st !== undefined) m.filterStatut = st || null;
     const tri = ou('tri', ''); if (tri !== undefined) { m.sortColumn = (tri && _STOCK_CLE.test(tri)) ? tri : null; m.sortDirection = val('sens', 'asc') === 'desc' ? 'desc' : 'asc'; }
   }
@@ -506,6 +555,13 @@ async function stockOuvrirObjetsUrl(u, complet) {
     const ok = poste && (TRACA_OUTILS.some(o => o.id === poste) || TRACA_POSTES.some(x => x.id === poste));
     const voulu = ok ? poste : null;
     if (voulu !== (S.tracaPoste || null) && (voulu || complet)) { S.tracaPoste = voulu; renderContent(); }
+    const ad = voulu === 'specifiques' && window.EtiqSpec && window.EtiqSpec.adresse;
+    if (ad) {
+      const a = { vue: u.get('vue', null), dossier: u.get('dossier', null), demande: u.get('demande', null),
+                  modele: u.get('modele', null), modale: null };
+      (ad.cles || []).forEach(k => { const v = u.get(k, null); if (v && v.length <= 60) a.modale = { cle: k, id: v }; });
+      try { await ad.aller(a); } catch (e) {}
+    }
   }
   await stockModaleUrl(u);
 }

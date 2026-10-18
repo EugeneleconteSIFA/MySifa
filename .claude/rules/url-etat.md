@@ -47,6 +47,11 @@ MySifaUrl.surRetour(async u => { …réappliquer, recharger… });
   Quand elle change, l'adresse **s'empile** (Retour y ramène). Un filtre ou
   un tri **remplace** : dix filtres essayés ne font pas dix retours.
 - Pendant `surRetour`, toute écriture remplace.
+- **Un recul déclenché par le helper ne rappelle pas `surRetour`** : la page
+  est déjà dans l'état de l'adresse visée. Une écriture demandée pendant le
+  recul (fenêtre fermée PUIS éditeur ouvert dans le même geste) est mise en
+  attente et appliquée à l'arrivée — sinon le rappel réappliquait l'ancienne
+  adresse et refermait ce qui venait de s'ouvrir.
 - **Fermer recule.** Revenir exactement à l'adresse qu'on avait quittée
   (fermer une fiche, « ← Retour à la liste ») fait `history.back()` au lieu
   d'empiler : sinon Retour, juste après, rouvrirait la fiche fermée.
@@ -82,12 +87,26 @@ pagination, sections repliées, formulaire de CRÉATION en cours.
 **TOUTES les fenêtres en font partie, formulaires compris** (retour du
 15/10/2026 : « tu les oublies presque toujours »). Avant de déclarer une appli
 faite, inventaire par grep — toute fonction qui écrit dans `#mroot` ou pose
-une surcouche sur `body`, page ET `static/*.js` partagés — et inventaire des
+une surcouche sur `body`, dans la page ET dans **chaque** `static/*.js` que la
+page charge (relever la liste des `<script src>` : le contrôle du déstockage
+vit dans `mysifa_destockage.js`, l'impression des étiquettes spécifiques dans
+`mysifa_etiq_specifiques.js` — oubliés le 15/10/2026) — et inventaire des
 clics qui ouvrent un objet par sa référence (lignes de liste, activité
 récente, tuiles, résultats de recherche). La réponse liste ce qui est couvert
 et ce qui est exclu, avec la raison. Seules exclusions admises : caméra,
 étape interne d'un geste en cours (confirmation, écart à justifier), sortie
-d'impression.
+d'impression. Les outils flottants communs (messagerie, post-it, calculatrice,
+assistant, support, palette de commandes) n'appartiennent à aucune page.
+
+Un état tenu **seulement dans le DOM** (une ligne « Détail » dépliée en
+basculant un `style.display`) n'a pas d'adresse possible : le faire passer
+par l'état (`st.detail` des écarts RVGI), puis l'écrire. Une sous-page
+ajoutée (`ecarts-mp` du Monitoring) va dans la liste des valeurs admises :
+oubliée, l'adresse l'écrit mais la relecture la rejette.
+
+Un module qui garde ses fonctions privées (closure) ne s'enveloppe pas de
+l'extérieur : il expose `adresse: { etat(), aller(a), cles }`
+(`EtiqSpec.adresse`), la page lit l'un et appelle l'autre.
 
 Contrôler aussi que l'objet ouvert est lu au BON endroit de l'état : la fiche
 produit de MyStock range son id dans `S.selProduit.produit.id`, pas

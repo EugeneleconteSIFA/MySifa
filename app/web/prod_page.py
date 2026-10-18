@@ -131,7 +131,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- Panneau « Données de prod » d'un dossier (partage avec le destockage) -->
 <script src="/static/mysifa_donnees_prod.js?v=1"></script>
 <!-- Adresse de la page : onglet, filtres, tri et objet ouvert (url-etat.md). -->
-<script src="/static/mysifa_url.js?v=2"></script>
+<script src="/static/mysifa_url.js?v=3"></script>
 <script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent19-ecart3-sais4-bob5-msb1-san3-mpm2-ton1-vit2-sev1-url6-ecart4-cal1"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>
