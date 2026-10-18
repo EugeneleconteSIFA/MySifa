@@ -643,8 +643,9 @@
     return data;
   }
 
-  function parseRoute() {
-    const p = window.location.pathname.replace(/\/+$/, "") || "/pricing";
+  // `path` : route d'un chemin donné (navigate() en a besoin avant de l'empiler).
+  function parseRoute(path) {
+    const p = (path || window.location.pathname).replace(/\/+$/, "") || "/pricing";
     const parts = p.split("/").filter(Boolean);
     // Plus de tableau de bord : /pricing ouvre directement les matières.
     if (parts.length <= 1 || parts[0] !== "pricing") {
@@ -680,10 +681,100 @@
   function navigate(path) {
     document.body.classList.remove("sb-open");
     if (window.location.pathname !== path) {
-      history.pushState(null, "", path);
+      // Le helper d'adresse empile chemin + paramètres en une seule entrée
+      // (url-etat.md) ; repli sur l'ancien pushState s'il manque.
+      if (window.MySifaUrl && _adressePrete) {
+        _ficheUrl = null;
+        MySifaUrl.ecrire(pricingParams(parseRouteDe(path)), { navigation: navCle(parseRouteDe(path)), chemin: path });
+      } else history.pushState(null, "", path);
     }
     S.route = parseRoute();
     bootRoute();
+  }
+
+  // ── Adresse de la page (static/mysifa_url.js, .claude/rules/url-etat.md) ──
+  // Le chemin porte déjà la fiche ouverte (/pricing/mystock/12…). La query
+  // porte ce que le chemin ne dit pas : filtres et tris des listes, onglet des
+  // produits, fiche technique ouverte en fenêtre. Inventaire du 18/10/2026 :
+  // hors adresse, les recherches texte (sauf `ref`, lien d'entrée depuis
+  // MyStock déjà en usage) et la fenêtre de confirmation.
+  let _adressePrete = false;
+  let _ficheUrl = null;              // "matiere:12" — fiche technique ouverte
+  function parseRouteDe(path) { return parseRoute(path); }
+  function navCle(route) {
+    return route.name + (route.id ? ":" + route.id : "") + (_ficheUrl && document.getElementById("ft-back") ? "/fiche" : "");
+  }
+  function pricingParams(route) {
+    const p = {};
+    const r = (route || S.route).name;
+    const tri = (t) => { const x = S.tri && S.tri[t]; if (x) { p.tri = x.cle; if (x.sens === -1) p.sens = "desc"; } };
+    const cols = (t) => {
+      const f = (S.colFiltres && S.colFiltres[t]) || {};
+      Object.keys(f).forEach((k) => { if (f[k] && /^[a-z_]{1,30}$/i.test(k)) p["f_" + k] = String(f[k]); });
+    };
+    if (r === "materials" || r === "settings") {
+      if (S.filters.msCat) p.cat = S.filters.msCat;
+      if (S.filters.msActive && S.filters.msActive !== "1") p.actives = S.filters.msActive;
+      if (S.filters.msQ) p.ref = S.filters.msQ;
+      tri("matieres"); cols("matieres");
+    } else if (r === "products") {
+      if (S.filters.prodTab && S.filters.prodTab !== "mystock") p.onglet = S.filters.prodTab;
+      tri("produits"); cols("produits");
+    }
+    if (_ficheUrl && document.getElementById("ft-back")) p.fiche = _ficheUrl;
+    return p;
+  }
+  function pricingSyncUrl() {
+    if (!_adressePrete || !window.MySifaUrl) return;
+    if (!document.getElementById("ft-back")) _ficheUrl = null;
+    try { MySifaUrl.ecrire(pricingParams(), { navigation: navCle(S.route) }); } catch (e) {}
+  }
+  // Filtres, tris et onglet lus dans l'adresse. `complet` (Retour/Suivant) :
+  // une clé absente remet le défaut.
+  function pricingLireUrl(complet) {
+    let u;
+    try { u = new URLSearchParams(window.location.search); } catch (e) { return; }
+    const ou = (k, def) => (u.has(k) ? u.get(k) : (complet ? def : undefined));
+    const r = parseRoute().name;
+    if (r === "materials" || r === "settings") {
+      const c = ou("cat", ""); if (c !== undefined) S.filters.msCat = c;
+      const a = ou("actives", "1"); if (a !== undefined && ["1", "0", "all"].includes(a)) S.filters.msActive = a;
+      const q = ou("ref", ""); if (q !== undefined) S.filters.msQ = q;
+    } else if (r === "products") {
+      const o = ou("onglet", "mystock"); if (o !== undefined && ["mystock", "couts"].includes(o)) S.filters.prodTab = o;
+    }
+    const table = r === "products" ? "produits" : "matieres";
+    if (u.has("tri") || complet) {
+      const cle = u.get("tri");
+      S.tri[table] = cle && /^[a-z_]{1,30}$/i.test(cle) ? { cle: cle, sens: u.get("sens") === "desc" ? -1 : 1 } : null;
+    }
+    const f = {};
+    u.forEach((v, k) => { if (k.indexOf("f_") === 0 && /^f_[a-z_]{1,30}$/i.test(k)) f[k.slice(2)] = v; });
+    if (Object.keys(f).length || complet) S.colFiltres[table] = f;
+  }
+  // Fiche technique demandée par l'adresse (fiche=matiere:12).
+  function pricingFicheUrl(complet) {
+    let v = null;
+    try { v = new URLSearchParams(window.location.search).get("fiche"); } catch (e) {}
+    const ouverte = document.getElementById("ft-back");
+    if (!v) { if (ouverte && complet) ouverte.remove(); _ficheUrl = null; return; }
+    const m = /^(matiere|produit):([0-9]+)$/.exec(v);
+    if (!m || (ouverte && _ficheUrl === v) || !window.PricingFiches) return;
+    _ficheUrl = v;
+    window.PricingFiches.open(m[1], parseInt(m[2], 10), { canWrite: S.canWrite, toast: showToast });
+  }
+  async function pricingDemarrerUrl() {
+    if (!window.MySifaUrl) return;
+    pricingFicheUrl(false);
+    _adressePrete = true;
+    pricingSyncUrl();
+    if (typeof MutationObserver !== "undefined") {
+      let attente = 0;
+      new MutationObserver(() => {
+        if (attente) return;
+        attente = requestAnimationFrame(() => { attente = 0; pricingSyncUrl(); });
+      }).observe(document.body, { childList: true, subtree: true });
+    }
   }
 
   function currencyBadge(cur) {
@@ -1136,6 +1227,7 @@
         b.onclick = (e) => {
           e.stopPropagation();
           if (!window.PricingFiches) return;
+          _ficheUrl = objet + ":" + parseInt(b.getAttribute(attr), 10);   // adresse (?fiche=)
           window.PricingFiches.open(objet, parseInt(b.getAttribute(attr), 10), {
             canWrite: S.canWrite,
             toast: showToast,
@@ -5590,8 +5682,10 @@
     }
     updateChromeControls();
     appliquerParamsUrl();
+    pricingLireUrl(false);
     S.route = parseRoute();
     await bootRoute();
+    await pricingDemarrerUrl();
   }
 
   /**
@@ -5616,7 +5710,19 @@
     }
   }
 
-  window.addEventListener("popstate", bootRoute);
+  if (window.MySifaUrl) {
+    MySifaUrl.surRetour(async () => {
+      pricingLireUrl(true);
+      const avant = S.route.name + (S.route.id || "");
+      const r = parseRoute();
+      // Seule la fiche technique change : pas de rechargement de la liste.
+      // Seule la fiche technique change : la liste n'a pas bougé.
+      if ((r.name + (r.id || "")) !== avant) { S.route = r; await bootRoute(); }
+      pricingFicheUrl(true);
+    });
+  } else {
+    window.addEventListener("popstate", bootRoute);
+  }
   document.addEventListener("DOMContentLoaded", () => {
     initApp();
   });

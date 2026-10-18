@@ -679,6 +679,8 @@ function rhOutilPieces(L,m,x,baseCible){
 // commun. Un seul écran pour l'instant ; d'autres outils RH viendront se
 // ranger dans la barre latérale.
 function renderMyRH(){
+  // Premier rendu : l'adresse (filtres, fenêtre) est lue par static/myrh_url.js.
+  if(typeof myrhDemarrerUrl==='function') myrhDemarrerUrl();
   const sidebar=h('nav',{className:'sidebar'},
     h('div',{className:'logo'},
       h('div',{className:'logo-row'},h('div',{className:'logo-brand'},'My',h('span',null,'RH'))),

@@ -194,6 +194,8 @@ PRICING_SHELL = r"""<!DOCTYPE html>
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/mysifa_sidebar.js?v=__V__"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
+<!-- Adresse de la page : filtres, tris, fiche technique ouverte (url-etat.md). -->
+<script src="/static/mysifa_url.js?v=4"></script>
 <script src="/static/pricing_fiches.js?v=__ASSETS__" defer></script>
 <script src="/static/pricing_app.js?v=__ASSETS__" defer></script>
 <script src="/static/mysifa_impersonate.js?v=2"></script>

@@ -459,6 +459,9 @@ margin-left:6px;cursor:help;vertical-align:middle}
 <script src="/static/chat_widget.js?v=13"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
+<!-- Adresse de la page : section, AO ouvert, onglet, produit, fenêtre (url-etat.md). -->
+<script src="/static/mysifa_url.js?v=4"></script>
+<script src="/static/ao_url.js?v=1"></script>
 <script>
 const BASE_URL = __BASE_URL__;
 const S = {
@@ -4600,6 +4603,8 @@ function render() {
     if (!S.matieres) S.matieres = {};
   }
   render();
+  // Adresse : section, AO, onglet, produit, fenêtre (static/ao_url.js).
+  try { if (typeof aoDemarrerUrl === 'function') await aoDemarrerUrl(); } catch (e) {}
 })();
 </script>
 <script src="/static/mysifa_impersonate.js?v=2"></script>

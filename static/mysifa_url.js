@@ -111,7 +111,9 @@
   function ecrire(params, opts) {
     opts = opts || {};
     var qs = construire(params);
-    var cible = location.pathname + (qs ? "?" + qs : "") + (opts.hash ? "#" + opts.hash : "");
+    // `opts.chemin` : page dont le routeur change aussi le chemin (MyCoûts,
+    // /pricing/mystock/12). Chemin et paramètres partent dans UNE entrée.
+    var cible = (opts.chemin || location.pathname) + (qs ? "?" + qs : "") + (opts.hash ? "#" + opts.hash : "");
     var nav = opts.navigation === undefined ? navCourante : String(opts.navigation);
     var actuelle = location.pathname + location.search + location.hash;
     if (reculEnCours) { enAttente = { params: params, opts: opts }; return; }

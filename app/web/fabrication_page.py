@@ -1340,7 +1340,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <!-- Memoire produit : fiche par reference produit, partagee avec MyProd -->
 <script src="/static/mysifa_produit_memoire.js?v=2.6"></script>
 <!-- Adresse de la page : onglet, vue admin, repiquage, fenêtres de consultation (url-etat.md). -->
-<script src="/static/mysifa_url.js?v=3"></script>
+<script src="/static/mysifa_url.js?v=4"></script>
 <script src="/static/fabrication_url.js?v=2"></script>
 <script>
   // Démarre le polleur d'alertes maintenance dès que la page est prête.
