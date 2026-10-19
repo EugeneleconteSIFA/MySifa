@@ -76,7 +76,7 @@
     + '.dp-t .dp-tot td{font-weight:700;color:var(--text);background:var(--bg)}'
     + '.dp-t tr.dp-borne td{background:color-mix(in srgb,var(--accent) 7%,transparent)}'
     + '.dp-t td.dp-com{white-space:normal;min-width:140px}'
-    + '.dp-code{display:inline-block;min-width:24px;padding:1px 6px;margin-right:6px;border-radius:6px;text-align:center;font-weight:700;'
+    + '.dp-code{display:inline-block;padding:2px 9px;margin-right:6px;border-radius:999px;font-weight:600;'
     + 'color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent);border:1px solid color-mix(in srgb,var(--c) 40%,transparent)}'
     + '.dp-cpt{font-family:ui-monospace,Consolas,monospace;font-weight:700;color:var(--text)}'
     + '.dp-clos{margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;color:white;background:var(--accent)}'
@@ -91,6 +91,17 @@
     + 'box-shadow:0 4px 14px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .1s}'
     + '.dp-frise i.g::after{left:0;transform:none}.dp-frise i.d::after{left:auto;right:0;transform:none}'
     + '.dp-frise i:hover::after{opacity:1}'
+    + '.dp-frise b{position:absolute;top:-7px;z-index:3;width:12px;height:12px;margin-left:-6px;border-radius:50%;'
+    + 'background:var(--c,var(--accent));border:2px solid var(--card);box-sizing:border-box;cursor:default}'
+    + '.dp-frise b:hover{transform:scale(1.3)}'
+    + '.dp-frise b::after{content:attr(data-bulle);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);'
+    + 'width:max-content;max-width:320px;padding:7px 10px;border-radius:8px;background:var(--text);color:var(--card);'
+    + 'font-size:12px;font-weight:500;line-height:1.5;white-space:pre-line;text-align:left;'
+    + 'box-shadow:0 4px 14px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .1s}'
+    + '.dp-frise b.g::after{left:0;transform:none}.dp-frise b.d::after{left:auto;right:0;transform:none}'
+    + '.dp-frise b:hover::after{opacity:1}'
+    + '.dp-frise-leg{display:inline-flex;align-items:center;gap:5px;margin-left:auto;font-weight:600;text-transform:none;letter-spacing:0;color:var(--muted)}'
+    + '.dp-frise-leg i{width:9px;height:9px;border-radius:50%;background:var(--accent);display:inline-block}'
     + '.dp-cartes.dp-3{grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:8px}'
     + '.dp-cartes.dp-3+.dp-cartes.dp-3{margin-bottom:14px}'
     + '.dp-carte-sub{font-size:11px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
@@ -280,7 +291,7 @@
   // ── Déroulé : une bande par saisie, de son heure à celle de la suivante ──
   // Une saisie dont la suivante tombe un autre jour s'arrête là : la nuit
   // n'est ni du calage, ni de la production.
-  function friseHtml(saisies) {
+  function friseHtml(saisies, alertes) {
     const rows = (saisies || []).filter(r => r && r.date_operation)
       .slice().sort((a, b) => String(a.date_operation).localeCompare(String(b.date_operation)));
     if (rows.length < 2) return '';
@@ -300,7 +311,7 @@
       // déborderait de la carte.
       const cote = x + w / 2 < 18 ? ' class="g"' : (x + w / 2 > 82 ? ' class="d"' : '');
       bandes += '<i' + cote + ' style="left:' + x.toFixed(3) + '%;width:' + w.toFixed(3) + '%;--c:' + c + '" data-bulle="'
-        + esc((a.operation_code ? a.operation_code + ' · ' : '') + lib + '\n'
+        + esc(lib + '\n'
           + dateCourte(a.date_operation).slice(6) + ' → ' + dateCourte(b.date_operation).slice(6)
           + ' · ' + duree((t(b) - t(a)) / 60000) + (a.operateur ? '\n' + a.operateur : ''))
           .replace(/\n/g, '&#10;') + '"></i>';
@@ -316,9 +327,33 @@
       reperes += '<span style="left:' + x.toFixed(2) + '%">' + (d.getHours() === 0
         ? String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') : hh) + '</span>';
     }
+    // Relevés d'alerte : un point à l'heure de la validation, la réponse au
+    // survol. Rouge si une réponse est non conforme.
+    let points = '';
+    (alertes || []).forEach(a => {
+      const v = Date.parse(String(a.ack_at || '').replace(' ', 'T').slice(0, 19));
+      if (!isFinite(v) || v < t0 || v > t1) return;
+      const items = a.items || [], rep = a.reponses || {};
+      let nc = false;
+      const lignes = items.map((it, i) => {
+        const r = rep[String(i)];
+        const vals = Array.isArray(r) ? r : (r == null || r === '' ? [] : [r]);
+        if (!vals.length) return '';
+        const ko = vals.some(x => (it.nc_responses || []).indexOf(x) !== -1);
+        if (ko) nc = true;
+        return (it.label || 'Contrôle') + ' : ' + vals.join(', ') + (it.unit ? ' ' + it.unit : '') + (ko ? ' · NC' : '');
+      }).filter(Boolean);
+      const x = pos(v);
+      points += '<b' + (x < 18 ? ' class="g"' : (x > 82 ? ' class="d"' : '')) + ' style="left:' + x.toFixed(3) + '%'
+        + (nc ? ';--c:var(--danger)' : '') + '" data-bulle="'
+        + esc([(a.nom || 'Alerte') + ' · ' + dateCourte(a.ack_at).slice(6) + (a.user_nom ? ' · ' + a.user_nom : '')]
+          .concat(lignes, a.commentaire ? ['« ' + a.commentaire + ' »'] : []).join('\n')).replace(/\n/g, '&#10;')
+        + '"></b>';
+    });
     return '<div class="dp-titre">Déroulé <span class="dp-cmp-src">' + esc(dateCourte(rows[0].date_operation))
-      + ' → ' + esc(dateCourte(rows[rows.length - 1].date_operation)) + '</span></div>'
-      + '<div class="dp-frise">' + bandes + '</div><div class="dp-frise-axe">' + reperes + '</div>';
+      + ' → ' + esc(dateCourte(rows[rows.length - 1].date_operation)) + '</span>'
+      + (points ? '<span class="dp-frise-leg"><i></i>Relevé d\'alerte</span>' : '') + '</div>'
+      + '<div class="dp-frise">' + bandes + points + '</div><div class="dp-frise-axe">' + reperes + '</div>';
   }
 
   // Fiche dossier de MyProd : durée / métrage / vitesse, puis calage /
@@ -370,7 +405,7 @@
     const dur = (m) => Number(m || 0) ? duree(m) : vide;
     let h = '<style>' + DP_CSS + '</style><div class="dp">';
     if (d.alerte) h += '<div class="dp-alerte">' + esc(d.alerte.charAt(0).toUpperCase() + d.alerte.slice(1)) + '.</div>';
-    if (fiche) h += identiteHtml(d.identite) + cartesFicheHtml(d) + friseHtml(d.saisies);
+    if (fiche) h += identiteHtml(d.identite) + cartesFicheHtml(d) + friseHtml(d.saisies, d.alertes);
     else h += '<div class="dp-cartes">'
       + carte('Durée totale', duree(tt.duree_totale_min), 'var(--text2)')
       + carte('Calage', duree(tt.calage_min), DP_CATS.calage[1])
@@ -424,8 +459,9 @@
         const libelle = String(r.operation || '').replace(/^\s*\d+\s*-\s*/, '');
         return '<tr' + (borne ? ' class="dp-borne"' : '') + '>'
           + '<td>' + esc(dateCourte(r.date_operation)) + '</td>'
-          + '<td><span class="dp-code" style="--c:' + (borne ? 'var(--text)' : c) + '">' + esc(code) + '</span>'
-          + esc(libelle) + (r.fin_dossier ? '<span class="dp-clos">Dossier clôturé</span>' : '') + '</td>'
+          // Le libellé dans la pastille de couleur : le numéro d'opération
+          // ne dit rien à l'opérateur qui relit sa saisie.
+          + '<td><span class="dp-code" style="--c:' + (borne ? 'var(--text)' : c) + '">' + esc(libelle) + '</span>' + (r.fin_dossier ? '<span class="dp-clos">Dossier clôturé</span>' : '') + '</td>'
           + '<td>' + esc(r.operateur || '') + '</td><td>' + esc(r.machine || '') + '</td>'
           + '<td class="n">' + (r.quantite_traitee ? nombre(r.quantite_traitee) : '') + '</td>'
           + '<td class="n">' + (code === '01' ? cpt(r.metrage_prevu) : '') + '</td>'

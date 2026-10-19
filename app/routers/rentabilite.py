@@ -907,11 +907,16 @@ def supprimer_lien(planning_entry_id: int, request: Request):
     return {"success": True, "supprime": n}
 
 
-def _comparaison_planning(conn, planning_entry_id: int) -> Optional[dict]:
+def _comparaison_planning(conn, planning_entry_id: int,
+                          dossiers_si_aucun_lien: Optional[list] = None) -> Optional[dict]:
     """Comparaison devis / réel d'un créneau, ou None s'il n'a pas de devis.
 
     Une seule écriture du calcul : la Rentabilité et le détail d'un dossier
-    dans la synthèse de MyProd affichent le même chiffre."""
+    dans la synthèse de MyProd affichent le même chiffre.
+
+    `dossiers_si_aucun_lien` : saisies à comparer quand le créneau n'a encore
+    aucun dossier de production rattaché (le créneau porte alors lui-même la
+    référence du dossier)."""
     link = conn.execute(
         "SELECT devis_id FROM rent_links WHERE planning_entry_id=?",
         (planning_entry_id,),
@@ -925,7 +930,7 @@ def _comparaison_planning(conn, planning_entry_id: int) -> Optional[dict]:
         "SELECT no_dossier FROM rent_prod_links WHERE planning_entry_id=?",
         (planning_entry_id,),
     ).fetchall()
-    no_dossiers = [r["no_dossier"] for r in prod]
+    no_dossiers = [r["no_dossier"] for r in prod] or list(dossiers_si_aucun_lien or [])
     etat = _palier_du_lien(conn, planning_entry_id, d, _qte_of(conn, planning_entry_id))
     res = _comparaison_from_no_dossiers(conn, etat["devis"], no_dossiers)
     # Le devis d'origine reste exposé tel quel : l'écran doit pouvoir dire
@@ -957,7 +962,9 @@ def comparaison_pour_dossier(conn, no_dossier: str) -> Optional[dict]:
             (ref, ref),
         ).fetchall()]
     for pe_id in ids:
-        res = _comparaison_planning(conn, int(pe_id))
+        # Créneau trouvé par sa référence : s'il n'a aucun dossier rattaché,
+        # ses saisies sont celles de ce dossier.
+        res = _comparaison_planning(conn, int(pe_id), dossiers_si_aucun_lien=[ref])
         if res and res.get("reel") is not None:
             return res
     return None

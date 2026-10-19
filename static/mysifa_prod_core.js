@@ -11418,6 +11418,7 @@ function _prodVueCss(){
     +'.ps-met-barre i{display:block;height:100%;border-radius:2px;background:var(--accent)}'
     // Vue d'ensemble : synthèses en colonne, fiche du dossier choisi à côté.
     // Écran étroit : la fiche passe sous la colonne (flex-wrap).
+    +'.prod-section-wrap.ferme .section-outils{display:none!important}'
     +'.ps-vue{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start}'
     +'.ps-col{flex:1 1 360px;max-width:480px;min-width:0;display:flex;flex-direction:column;gap:12px}'
     +'.ps-col>.card{margin:0}'
@@ -11981,6 +11982,7 @@ function renderMachineStatusCards(){
   const titleNode = h('span',{className:'section-title',style:{display:'inline-flex',alignItems:'center',gap:'4px',margin:0,padding:0,border:'none',flex:'1'}},
     iconEl('cpu',13),' Statut machines',
     h('span',{
+      className:'section-outils',
       style:{marginLeft:'auto',display:'inline-flex',gap:'8px',alignItems:'center'},
     },
       h('span',{className:'mst-choix',title:'Machines affichées'},
@@ -13540,7 +13542,9 @@ function _prodSetSectionState(key, open){
 // `bloc` : attributs data-bloc du widget d'accueil (voir blocs_registre.py).
 function makeCollapsibleSection(titleNode, contentNode, storageKey, defaultOpen, bloc){
   const isOpen = _prodSectionState(storageKey, defaultOpen!==false);
-  return h('div',Object.assign({className:'prod-section-wrap',style:{marginBottom:'14px'}},bloc||{}),
+  // `ferme` sur la section repliée : les outils de son en-tête
+  // (.section-outils : filtres, Actualiser) n'ont rien à piloter, ils se masquent.
+  return h('div',Object.assign({className:'prod-section-wrap'+(isOpen?'':' ferme'),style:{marginBottom:'14px'}},bloc||{}),
     h('div',{
       className:'prod-section-header',
       'data-bloc-entete':'',
@@ -13552,6 +13556,7 @@ function makeCollapsibleSection(titleNode, contentNode, storageKey, defaultOpen,
         const isVisible = ct.style.display !== 'none';
         const next = !isVisible;
         ct.style.display = next ? '' : 'none';
+        root.classList.toggle('ferme', !next);
         if(cv) cv.style.transform = next ? 'rotate(90deg)' : 'rotate(0deg)';
         _prodSetSectionState(storageKey, next);
       },

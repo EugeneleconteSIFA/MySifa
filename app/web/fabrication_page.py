@@ -2463,6 +2463,11 @@ function renderSidebar(){
     if(!grouped[c]) grouped[c]=[];
     grouped[c].push({code,...op});
   });
+  // Tri par code numérique dans chaque catégorie. L'ordre d'un objet JS ne
+  // suffit pas : « 10 », « 11 », « 58 » sont des clés entières, rangées en
+  // tête ; « 02 » (zéro de tête) ne l'est pas et passait en bas des calages.
+  Object.values(grouped).forEach(liste=>liste.sort((x,y)=>
+    (parseInt(x.code,10)||0)-(parseInt(y.code,10)||0) || String(x.code).localeCompare(String(y.code))));
 
   // Les opérations de la sidebar ne sont actives qu'en cours de production/arrêt
   // 'en_calage' ouvre la grille au meme titre que la production : c'est
