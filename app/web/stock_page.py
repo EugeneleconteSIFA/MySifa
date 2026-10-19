@@ -26751,7 +26751,7 @@ function dstTableDossiers(st) {
        { k: 'machine', l: 'Machine', val: x => x.machine || '' },
        { k: 'fin', l: 'Fin', val: x => x.fin || '' },
        { k: 'etat', l: 'État', val: x => x.destockage === 'todo' ? (x.pret ? 'Prêt' : 'Bloqué') : (x.destockage || '') },
-       { k: 'motif', l: 'Motif', val: x => x.destockage === 'reserve' ? (x.reserve || '') : (x.pret ? '' : (x.blocage || '')) },
+       { k: 'motif', l: 'Motif', val: x => x.destockage === 'reserve' ? (x.reserve || '') : x.destockage === 'done' ? 'Sortie non relue' : (x.pret ? '' : (x.blocage || '')) },
        { k: '', l: '' }]
     : [{ k: 'dossier', l: 'Dossier', val: x => x.numero_of || x.reference || '' },
        { k: 'client', l: 'Client', val: x => x.client || '' },
@@ -26791,6 +26791,7 @@ function dstTableDossiers(st) {
     }
     if (st.vue === 'a_traiter') {
       const motif = x.destockage === 'reserve' ? (x.reserve || '')
+        : x.destockage === 'done' ? 'Sortie non relue' + (x.destockage_par ? ' · déstocké par ' + x.destockage_par : '')
         : (x.pret ? ((x.reserves_prevues || []).length ? 'Réserves prévues : ' + x.reserves_prevues.join(' ; ') : 'Données complètes')
                   : (x.blocage || ''));
       tbody.appendChild(el('tr', {},
