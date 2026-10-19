@@ -13,6 +13,8 @@ from fastapi import Request, HTTPException
 from database import get_db
 from config import (
     SESSION_HOURS,
+    ROLES_SESSION_PERMANENTE,
+    session_hours_for_role,
     COOKIE_NAME,
     ROLES_ADMIN,
     ROLES_ADMINISTRATION_ALL,
@@ -136,10 +138,11 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 # ─── Sessions ─────────────────────────────────────────────────────
-def create_session(user_id: int) -> str:
+def create_session(user_id: int, role: Optional[str] = None) -> str:
     token = secrets.token_urlsafe(32)
     now = datetime.now()
-    expires = now + timedelta(hours=SESSION_HOURS)
+    hours = session_hours_for_role(role) if role else SESSION_HOURS
+    expires = now + timedelta(hours=hours)
     with get_db() as conn:
         conn.execute("DELETE FROM sessions WHERE user_id=? AND expires_at<?",
                      (user_id, now.isoformat()))
@@ -149,6 +152,26 @@ def create_session(user_id: int) -> str:
                      (now.isoformat(), user_id))
         conn.commit()
     return token
+
+def prolonger_session(token: str, role: str) -> bool:
+    """Repousse l'expiration d'une session sans déconnexion.
+
+    Ne touche la base que si l'échéance a reculé de plus d'un jour : un appel
+    à chaque page ne coûte donc qu'une écriture par jour et par session. Vrai
+    si la session a été prolongée (le cookie doit alors être reposé).
+    """
+    if not token or role not in ROLES_SESSION_PERMANENTE:
+        return False
+    now = datetime.now()
+    hours = session_hours_for_role(role)
+    seuil = (now + timedelta(hours=hours) - timedelta(days=1)).isoformat()
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE sessions SET expires_at=? WHERE token=? AND expires_at>? AND expires_at<?",
+            ((now + timedelta(hours=hours)).isoformat(), token, now.isoformat(), seuil),
+        )
+        conn.commit()
+    return cur.rowcount > 0
 
 def delete_session(token: str):
     with get_db() as conn:
@@ -520,5 +543,5 @@ def login_user(login: str, password: str) -> dict:
         raise HTTPException(status_code=401, detail="Identifiant/email ou mot de passe incorrect")
     if not verify_password(password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Identifiant/email ou mot de passe incorrect")
-    token = create_session(user["id"])
+    token = create_session(user["id"], user["role"])
     return {"user": dict(user), "token": token}

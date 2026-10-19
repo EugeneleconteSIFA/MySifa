@@ -17,6 +17,7 @@ from services.audit_service import log_action
 from services.auth_service import (
     login_user,
     delete_session,
+    prolonger_session,
     get_current_user,
     get_optional_user,
     hash_password,
@@ -34,6 +35,7 @@ from config import (
     ROLE_DIRECTION,
     ROLE_SUPERADMIN,
     SESSION_HOURS,
+    session_hours_for_role,
     SUPERADMIN_EMAIL,
     ENV_NAME,
 )
@@ -184,7 +186,8 @@ async def login(request: Request):
     })
     response.set_cookie(
         key=COOKIE_NAME, value=token, httponly=True,
-        samesite="lax", secure=False, max_age=SESSION_HOURS * 3600,
+        samesite="lax", secure=False,
+        max_age=session_hours_for_role(u_pub.get("role")) * 3600,
     )
     client_ip = request.client.host if request.client else None
     log_action(
@@ -270,7 +273,7 @@ def _delete_avatar_file(url: Optional[str]) -> None:
 
 # ─── Profil courant ───────────────────────────────────────────────
 @router.get("/api/auth/me")
-def me(request: Request):
+def me(request: Request, response: Response):
     """200 + JSON utilisateur, ou 200 + `null` si pas de session (pas de 401 : évite le bruit console / DevTools)."""
     user = get_optional_user(request)
     if not user:
@@ -298,6 +301,17 @@ def me(request: Request):
         d["machine_id"] = eff_machine_id
     d["real_role"] = real_role
     d["real_machine_id"] = real_machine_id
+    # Session sans déconnexion (direction, administration, superadmin) : chaque
+    # ouverture de page repousse l'échéance, en base comme dans le cookie.
+    token = request.cookies.get(COOKIE_NAME)
+    try:
+        if prolonger_session(token, real_role):
+            response.set_cookie(
+                key=COOKIE_NAME, value=token, httponly=True, samesite="lax",
+                secure=False, max_age=session_hours_for_role(real_role) * 3600,
+            )
+    except Exception:
+        pass
     d["effective_role"] = eff_role
     d["effective_machine_id"] = eff_machine_id
     d["is_impersonating"] = is_imp
