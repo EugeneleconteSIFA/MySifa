@@ -300,6 +300,10 @@
     return (m[0][0] + (m.length > 1 ? m[m.length - 1][0] : '')).toUpperCase();
   }
 
+  var ICONE_CRAYON =
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    + 'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
   var ICONE_CAL =
       '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
     + 'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
@@ -309,8 +313,11 @@
     var retard = enRetard(a, aujourdhui);
     var qui = String(a.responsable || '').trim();
     var st = statutDe(a);
+    // Toute la tuile ouvre la correction (texte, responsable, echeance) ; seul
+    // le selecteur de statut garde son propre clic.
     return '<article class="reu-carte st-' + st + (retard ? ' retard' : '') + '" '
-      + 'draggable="true" data-carte="' + escA(a.id) + '">'
+      + 'draggable="true" data-carte="' + escA(a.id) + '" data-editer="' + escA(a.id) + '" '
+      + 'title="Modifier l\'action">'
       + '<div class="reu-carte-haut">'
       +   '<span class="reu-carte-qui' + (qui ? '' : ' vide') + '">'
       +     '<span class="reu-avatar" aria-hidden="true">' + esc(initiales(qui)) + '</span>'
@@ -320,10 +327,10 @@
               + (retard ? 'En retard · ' : '') + esc(dateFr(a.echeance)) + '</span>'
             : '')
       + '</div>'
-      + '<div class="reu-carte-t" data-editer="' + escA(a.id) + '" role="button" tabindex="0" '
-      +   'title="Modifier l\'action">' + esc(a.texte) + '</div>'
+      + '<div class="reu-carte-t">' + esc(a.texte) + '</div>'
       + '<div class="reu-carte-pied">'
-      +   '<span></span>'
+      +   '<button type="button" class="reu-carte-reu" data-editer="' + escA(a.id) + '">'
+      +     ICONE_CRAYON + '<span>Modifier</span></button>'
       +   selectStatut(a)
       + '</div>'
       + '</article>';
@@ -1033,6 +1040,8 @@
 
   function brancher(rac){
     rac.addEventListener('click', async function(ev){
+      // Le statut se change sur la tuile sans ouvrir sa correction.
+      if(ev.target.closest && ev.target.closest('.reu-carte select')) return;
       var corb = ev.target.closest ? ev.target.closest('[data-suppr-reunion]') : null;
       if(corb && rac.contains(corb)){
         ev.stopPropagation();
