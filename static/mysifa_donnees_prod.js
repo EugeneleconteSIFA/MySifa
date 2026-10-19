@@ -78,7 +78,9 @@
     + '.dp-t td.dp-com{white-space:normal;min-width:140px}'
     + '.dp-code{display:inline-block;padding:2px 9px;margin-right:6px;border-radius:999px;font-weight:600;'
     + 'color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent);border:1px solid color-mix(in srgb,var(--c) 40%,transparent)}'
-    + '.dp-cpt{font-family:ui-monospace,Consolas,monospace;font-weight:700;color:var(--text)}'
+    + '.dp-cpt{font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}'
+    + '.dp-cpt-lib{margin-right:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}'
+    + '.dp-saisies td.dp-com{min-width:0;width:100%}'
     + '.dp-clos{margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;color:white;background:var(--accent)}'
     + '.dp-vide{color:var(--muted)}'
     + '.dp-frise{position:relative;height:30px;border-radius:8px;background:var(--bg);border:1px solid var(--border)}'
@@ -487,9 +489,13 @@
     h += '<div class="dp-titre">Saisies <span class="dp-n">' + rows.length + '</span>'
       + (rows.length ? '<span class="dp-legende">' + legende + '</span>' : '') + '</div>';
     if (!rows.length) return h + '<div class="dp-vide" style="font-size:13px">Aucune saisie de production pour ce dossier.</div></div>';
-    h += '<div class="dp-wrap dp-haut"><table class="dp-t"><thead><tr>'
-      + '<th>Date</th><th>Opération</th><th>Opérateur</th><th>Machine</th>'
-      + '<th class="n">Qté traitée</th><th class="n">Compteur début</th><th class="n">Compteur fin</th><th>Commentaire</th>'
+    // Colonnes utiles seulement : la machine si le dossier en a connu
+    // plusieurs. Un seul compteur :
+    // celui du début sur le 01, celui de la fin sur le 89.
+    const multiMachine = new Set(rows.map(r => r.machine || '')).size > 1;
+    h += '<div class="dp-wrap dp-haut"><table class="dp-t dp-saisies"><thead><tr>'
+      + '<th>Date</th><th>Opération</th><th>Opérateur</th>' + (multiMachine ? '<th>Machine</th>' : '')
+      + '<th class="n">Compteur</th><th>Commentaire</th>'
       + '</tr></thead><tbody>'
       + rows.map(r => {
         const code = String(r.operation_code || '');
@@ -501,11 +507,11 @@
           + '<td>' + esc(dateCourte(r.date_operation)) + '</td>'
           // Le libellé dans la pastille de couleur : le numéro d'opération
           // ne dit rien à l'opérateur qui relit sa saisie.
-          + '<td><span class="dp-code" style="--c:' + (borne ? 'var(--text)' : c) + '">' + esc(libelle) + '</span>' + (r.fin_dossier ? '<span class="dp-clos">Dossier clôturé</span>' : '') + '</td>'
-          + '<td>' + esc(r.operateur || '') + '</td><td>' + esc(r.machine || '') + '</td>'
-          + '<td class="n">' + (r.quantite_traitee ? nombre(r.quantite_traitee) : '') + '</td>'
-          + '<td class="n">' + (code === '01' ? cpt(r.metrage_prevu) : '') + '</td>'
-          + '<td class="n">' + (code === '89' ? cpt(r.metrage_reel) : '') + '</td>'
+          + '<td><span class="dp-code" style="--c:' + (borne ? 'var(--text)' : c) + '">' + esc(libelle) + '</span>'
+          + (r.fin_dossier ? '<span class="dp-clos" title="Dossier clôturé">✓ clôturé</span>' : '') + '</td>'
+          + '<td>' + esc(r.operateur || '') + '</td>' + (multiMachine ? '<td>' + esc(r.machine || '') + '</td>' : '')
+          + '<td class="n">' + (code === '01' && r.metrage_prevu ? '<span class="dp-cpt-lib">début</span>' + cpt(r.metrage_prevu)
+            : code === '89' && r.metrage_reel ? '<span class="dp-cpt-lib">fin</span>' + cpt(r.metrage_reel) : '') + '</td>'
           + '<td class="dp-com">' + esc(r.commentaire || '') + '</td></tr>';
       }).join('')
       + '</tbody></table></div></div>';
