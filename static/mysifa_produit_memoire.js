@@ -313,6 +313,9 @@
       'border-radius:12px;padding:3px 16px 0;margin-bottom:14px}',
       '.pmem-tabs.is-sobre .pmem-tab{background:transparent;border:none;border-radius:0;',
       'border-bottom:2px solid transparent;color:var(--muted);padding:10px 2px;margin-right:24px}',
+      '.pmem-docnav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}',
+      '.pmem-docnav .pmem-btn[disabled]{opacity:.4;cursor:default;pointer-events:none}',
+      '.pmem-docnav-pos{font-size:12px;font-weight:700;color:var(--muted)}',
       '.pmem-tabs.is-sobre .pmem-tab:hover{color:var(--text);border-bottom-color:var(--border)}',
       '.pmem-tabs.is-sobre .pmem-tab.is-on{background:transparent;color:var(--text);',
       'border-bottom-color:var(--accent)}',
@@ -414,6 +417,10 @@
   // un element = page de MyProd (entree de barre laterale). La vue est
   // construite une seule fois : c'est le contenant qui change, pas l'ecran.
   var contenantInline = null;
+  // Reglages de la page hote (MySifaProduitMemoire.regler) :
+  // - ongletParDefaut : onglet ouvert quand l'adresse n'en demande aucun ;
+  // - ofUnParUn       : OF scannes un par un, du plus recent au plus ancien.
+  var reglages = { ongletParDefaut: 'series', ofUnParUn: false };
 
   function closeInterne() {
     fermerApercuScan();
@@ -1285,12 +1292,32 @@
   }
 
   // ── Rendu : documents ──────────────────────────────────────────────
+  function dateDoc(doc) { return String(doc.date_document || doc.importe_le || ''); }
+
   function renderDocuments(d) {
-    var docs = d.documents || [];
+    var docs = (d.documents || []).slice().sort(function (a, b) {
+      return dateDoc(b).localeCompare(dateDoc(a));
+    });
     if (!docs.length) {
       return [el('div', { className: 'pmem-empty', text: 'Aucun OF scanne rattache a cette reference.' })];
     }
-    return docs.map(function (doc) {
+    if (!reglages.ofUnParUn || docs.length < 2) return docs.map(carteDocument);
+    // Un scan a la fois, le plus recent d'abord : c'est celui qu'on vient
+    // chercher au poste ; les anciens se parcourent a la demande.
+    var i = Math.min(Math.max(state.docIdx || 0, 0), docs.length - 1);
+    state.docIdx = i;
+    function aller(n) { state.docIdx = n; renderCourant(); }
+    var nav = el('div', { className: 'pmem-docnav' }, [
+      el('button', { type: 'button', className: 'pmem-btn pmem-btn-sm', disabled: i === 0 ? 'disabled' : null,
+                     text: '‹ Plus récent', onclick: function () { aller(i - 1); } }),
+      el('span', { className: 'pmem-docnav-pos', text: (i + 1) + ' / ' + docs.length }),
+      el('button', { type: 'button', className: 'pmem-btn pmem-btn-sm', disabled: i === docs.length - 1 ? 'disabled' : null,
+                     text: 'Plus ancien ›', onclick: function () { aller(i + 1); } }),
+    ]);
+    return [nav, carteDocument(docs[i])];
+  }
+
+  function carteDocument(doc) {
       var ops = Array.isArray(doc.serie_operateurs) ? doc.serie_operateurs : [];
       // Ligne du haut : quand, et sur quelle machine. C'est ce qu'on cherche
       // en premier dans une pile de scans.
@@ -1329,7 +1356,6 @@
           : null,
       ]));
       return el('div', { className: 'pmem-card' }, enfants);
-    });
   }
 
   // ── Rendu courant ──────────────────────────────────────────────────
@@ -1398,7 +1424,14 @@
   // l'adresse de la page hôte.
   var ONGLETS_FICHE = ['series', 'savoirs', 'documents'];
   function ongletDemande(o) {
-    return (o && ONGLETS_FICHE.indexOf(o.onglet) !== -1) ? o.onglet : 'series';
+    if (o && ONGLETS_FICHE.indexOf(o.onglet) !== -1) return o.onglet;
+    return ONGLETS_FICHE.indexOf(reglages.ongletParDefaut) !== -1 ? reglages.ongletParDefaut : 'series';
+  }
+  // Onglet par defaut sans scan a montrer : retour sur les productions plutot
+  // qu'une fenetre vide. Un onglet demande explicitement (adresse) est garde.
+  function ongletSiVide(o) {
+    if (o && o.onglet) return;
+    if (state.tab === 'documents' && !((state.data || {}).documents || []).length) state.tab = 'series';
   }
   async function openHistorique(noDossier, o) {
     contenantInline = null;
@@ -1408,6 +1441,7 @@
       state.data = await api(urlHistorique(noDossier));
     } catch (e) { toast(e.message || 'Historique indisponible.', 'danger'); return; }
     if (!state.data || !state.data.disponible) { toast('Aucun historique pour ce produit.'); return; }
+    ongletSiVide(o);
     renderCourant();
   }
 
@@ -1418,6 +1452,7 @@
     try {
       state.data = await api('/api/produits/' + encodeURI(ref));
     } catch (e) { toast(e.message || 'Fiche indisponible.', 'danger'); return; }
+    ongletSiVide(o);
     renderCourant();
   }
 
@@ -2058,6 +2093,7 @@
     monterScansDans: monterScansDans,
     normRef: normRef,
     fermer: close,
+    regler: function (o) { Object.keys(o || {}).forEach(function (k) { reglages[k] = o[k]; }); },
     surAdresse: function (fn) { surAdresse = typeof fn === 'function' ? fn : null; },
   };
 })();

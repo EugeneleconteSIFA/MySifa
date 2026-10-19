@@ -1338,7 +1338,9 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.19"></script>
 <!-- Memoire produit : fiche par reference produit, partagee avec MyProd -->
-<script src="/static/mysifa_produit_memoire.js?v=2.6"></script>
+<script src="/static/mysifa_produit_memoire.js?v=2.7"></script>
+<!-- Au poste, la fiche s'ouvre sur le dernier OF scanne, les precedents a la demande. -->
+<script>if(window.MySifaProduitMemoire)window.MySifaProduitMemoire.regler({ongletParDefaut:'documents',ofUnParUn:true});</script>
 <!-- Adresse de la page : onglet, vue admin, repiquage, fenêtres de consultation (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
 <script src="/static/fabrication_url.js?v=2"></script>
