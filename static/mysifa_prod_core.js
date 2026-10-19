@@ -5453,14 +5453,21 @@ function rentEtat(head, link){
   const statut = String(head.statut||'attente');
   const aDevis = link ? !!link.devis_id : null;
   const aProd  = link ? ((link.no_dossiers||[]).length>0) : null;
+  // Machine retirée du suivi des devis (bascule du Pilotage) : ses dossiers
+  // ne sont jamais « à lier » ni « à venir sans devis ».
+  const suivi  = rentMachineSuivie(head);
   return {
     statut, termine: statut==='termine', aDevis, aProd,
     comparable: aDevis===true && aProd===true,
-    aLier: statut==='termine' && aDevis===false,
+    aLier: suivi && statut==='termine' && aDevis===false,
     aConfirmer: rentEtatLien(link)==='orange',
     // Planifié après aujourd'hui, sans devis : à rattacher avant la machine.
-    aVenir: aDevis===false && String(head.planned_start||'').slice(0,10) > rentISOJour(new Date()),
+    aVenir: suivi && aDevis===false && String(head.planned_start||'').slice(0,10) > rentISOJour(new Date()),
   };
+}
+
+function rentMachineSuivie(head){
+  return Number(head && head.machine_suivi_devis != null ? head.machine_suivi_devis : 1) !== 0;
 }
 
 /* Regroupe les entrées de planning fractionnées : un dossier coupé en deux
@@ -5896,6 +5903,61 @@ async function rentRejeterLien(entryId){
   toast('Rattachement retiré.');
 }
 
+/* Menu déroulant aux couleurs MySifa, à la place d'un <select> dont la liste
+   ouverte est dessinée par le système (gris, sans arrondi). Clavier : flèches,
+   Entrée, Échap. La liste est en position:fixed pour ne pas être rognée par
+   une carte en overflow:hidden.
+
+   `o` : {valeur, options:[{valeur, libelle}], onChange(valeur)} */
+function rentMenuDeroulant(o){
+  const options = o.options || [];
+  const courante = options.find(x => x.valeur === o.valeur) || options[0] || {libelle:''};
+  let actif = -1;
+  const liste = h('div',{className:'rent-dd-liste', role:'listbox'});
+  liste.hidden = true;
+  const btn = h('button',{type:'button', className:'rent-dd-btn',
+      'aria-haspopup':'listbox', 'aria-expanded':'false'},
+    h('span',{className:'rent-dd-lib'}, courante.libelle), iconEl('chevron-down',14));
+  const items = options.map((x, i) => h('button',{type:'button', role:'option',
+      className:'rent-dd-item' + (x.valeur === courante.valeur ? ' is-sel' : ''),
+      'aria-selected': String(x.valeur === courante.valeur),
+      onMouseenter:() => marquer(i),
+      onClick:e => { e.stopPropagation(); choisir(x); }}, x.libelle));
+  liste.append(...items);
+  const marquer = i => { actif = i; items.forEach((el, k) => el.classList.toggle('is-actif', k === i)); };
+  const fermer = () => {
+    if(liste.hidden) return;
+    liste.hidden = true; btn.setAttribute('aria-expanded','false');
+    document.removeEventListener('click', horsMenu, true);
+    window.removeEventListener('scroll', fermer, true);
+  };
+  function horsMenu(e){ if(!racine.contains(e.target)) fermer(); }
+  const ouvrir = () => {
+    const r = btn.getBoundingClientRect();
+    liste.style.top = (r.bottom + 4) + 'px';
+    liste.style.left = r.left + 'px';
+    liste.style.minWidth = r.width + 'px';
+    liste.hidden = false; btn.setAttribute('aria-expanded','true');
+    marquer(Math.max(0, options.indexOf(courante)));
+    document.addEventListener('click', horsMenu, true);
+    window.addEventListener('scroll', fermer, true);
+  };
+  const choisir = x => { fermer(); if(x.valeur !== courante.valeur) o.onChange(x.valeur); };
+  btn.addEventListener('click', () => liste.hidden ? ouvrir() : fermer());
+  btn.addEventListener('keydown', e => {
+    if(liste.hidden){
+      if(e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' '){ e.preventDefault(); ouvrir(); }
+      return;
+    }
+    if(e.key === 'Escape'){ e.preventDefault(); fermer(); }
+    else if(e.key === 'ArrowDown'){ e.preventDefault(); marquer(Math.min(options.length - 1, actif + 1)); }
+    else if(e.key === 'ArrowUp'){ e.preventDefault(); marquer(Math.max(0, actif - 1)); }
+    else if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); if(options[actif]) choisir(options[actif]); }
+  });
+  const racine = h('div',{className:'rent-dd'}, btn, liste);
+  return racine;
+}
+
 /* Choisir le devis d'un dossier. Remplace le menu déroulant de sept cents
    devis, qu'on ne pouvait que faire défiler.
 
@@ -6120,7 +6182,7 @@ async function ouvrirRattachementModal(entryId, file){
     h('div',{className:'contact-modal-head'},
       h('div',null,
         h('h3',{style:{margin:'0 0 3px'}}, entree.client || '(client non renseigné)'),
-        h('div',{style:{fontSize:'11px',color:'var(--muted)'}},
+        h('div',{className:'rent-lier-sous'},
           [entree.reference, entree.machine_nom, rentFmtFormat(entree) + ' mm']
             .filter(Boolean).join(' · '))
       ),
@@ -6194,19 +6256,21 @@ function renderRentPilotage(){
   groupes.forEach(g => {
     const head = g.head;
     const m = head.machine_nom || head.machine_code || '—';
-    parMachine[m] = parMachine[m] || {nom:m, total:0, rouge:0, orange:0, vert:0};
+    const suivi = rentMachineSuivie(head);
+    parMachine[m] = parMachine[m] || {nom:m, id:head.machine_id, suivi, total:0, rouge:0, orange:0, vert:0};
     parMachine[m].total++;
     const etat = rentEtatLien(charges ? (liens[Number(head.id)] || {devis_id:null}) : null);
     if(etat !== 'inconnu') parMachine[m][etat]++;
     if(String(head.statut || '') === 'termine') termines++;
     if(etat === 'vert') avecDevis++;
     if(etat === 'orange') aConfirmer++;
-    if(etat === 'rouge') aLier++;
+    if(etat === 'rouge' && suivi) aLier++;
   });
 
   const machines = Object.values(parMachine).sort((a, b) => b.total - a.total);
   // Par défaut, la machine qui a le plus à lier : c'est par là qu'on commence.
-  const machineDefaut = (machines.slice().sort((a, b) => b.rouge - a.rouge)[0] || {}).nom || '';
+  const machineDefaut = (machines.slice()
+    .sort((a, b) => (b.suivi - a.suivi) || (b.rouge - a.rouge))[0] || {}).nom || '';
   const machineSel = S.rentPilotMachine || machineDefaut;
   const nbSemaines = Number(S.rentPilotSemaines || 2);
   const lundi = S.rentPilotLundi ? new Date(S.rentPilotLundi + 'T00:00:00')
@@ -6245,10 +6309,36 @@ function renderRentPilotage(){
   ) : null;
 
   // ── Barre de commande ──
-  const selMachine = h('select',{className:'form-sel',style:{minWidth:'170px'}},
-    ...machines.map(m => h('option',{value:m.nom, selected:m.nom === machineSel},
-      m.nom + ' (' + m.total + ')')));
-  selMachine.addEventListener('change', () => set({rentPilotMachine:selMachine.value}));
+  const selMachine = rentMenuDeroulant({
+    valeur: machineSel,
+    options: machines.map(m => ({valeur:m.nom, libelle:m.nom})),
+    onChange: v => set({rentPilotMachine:v}),
+  });
+
+  /* Compter ou non la machine dans les devis à lier : sur une machine de
+     finition, le nombre de dossiers sans devis n'intéresse personne. */
+  const machineCourante = machines.find(m => m.nom === machineSel);
+  const basculeSuivi = (machineCourante && machineCourante.id != null) ? (() => {
+    const on = !!machineCourante.suivi;
+    return h('button',{type:'button', className:'saisies-bascule' + (on ? ' on' : ''),
+        'aria-pressed': on ? 'true' : 'false',
+        title: on ? 'Les dossiers sans devis de ' + machineSel + ' sont comptés dans les devis à lier. Cliquer pour les retirer.'
+                  : 'Les dossiers de ' + machineSel + ' ne sont pas comptés dans les devis à lier. Cliquer pour les compter.',
+        onClick: async () => {
+          try{
+            await api('/api/rentabilite/machines/' + machineCourante.id + '/suivi-devis',
+              {method:'PUT', body:JSON.stringify({suivi:!on})});
+            (S.rentList || []).forEach(e => {
+              if(Number(e.machine_id) === Number(machineCourante.id)) e.machine_suivi_devis = on ? 0 : 1;
+            });
+            toast(on ? machineSel + ' retirée des devis à lier.' : machineSel + ' comptée dans les devis à lier.');
+            render();
+            loadDevisATraiterCount();
+          }catch(e){ toast(e.message || 'Réglage non enregistré.', 'error'); }
+        }},
+      h('span',{className:'saisies-bascule-piste'}, h('span',{className:'saisies-bascule-pastille'})),
+      'Compter dans les devis à lier');
+  })() : null;
 
   const horizons = h('div',{className:'rent-filtres'},
     ...[{n:1,l:'Semaine'},{n:2,l:'2 semaines'},{n:4,l:'4 semaines'}].map(o =>
@@ -6447,7 +6537,7 @@ function renderRentPilotage(){
   const timeline = h('div',{className:'card'},
     h('div',{className:'card-header rent-tl-barre'},
       h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
-        selMachine, horizons),
+        selMachine, basculeSuivi, horizons),
       h('div',{style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
         nav, btnMoteur)
     ),
@@ -6466,7 +6556,7 @@ function renderRentPilotage(){
   const resteAFaire = (charges && machines.length) ? h('div',{className:'card'},
     h('div',{className:'card-header'}, h('h3',null,'Reste à lier, par machine')),
     h('div',{style:{padding:'4px 18px 14px'}},
-      ...machines.filter(m => m.rouge).sort((a, b) => b.rouge - a.rouge).map(m => {
+      ...machines.filter(m => m.rouge && m.suivi).sort((a, b) => b.rouge - a.rouge).map(m => {
         const pct = aLier ? Math.round(m.rouge / aLier * 100) : 0;
         return h('button',{type:'button',className:'rent-machine-ligne'
             + (m.nom === machineSel ? ' is-active' : ''),
@@ -8493,36 +8583,76 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
 }
  
 function getVisibleSaisiesRowsForNav(){
-  // Base : déjà filtré côté API (/api/saisies + filtres). Ici on applique seulement tri + enrichissements UI.
+  // Base : déjà filtré côté API (/api/saisies + filtres). Ici on applique
+  // tri, enrichissements UI et bascules d'affichage : on ne navigue que sur
+  // les lignes que l'on voit.
   const d = S.saisies;
   if(!d) return [];
   let rows = (d.rows || []).slice();
   // Même calcul de durées que le tableau.
   try{ rows = saisiesAvecDurees(rows); }catch(e){}
+  const aff = saisiesAffichage();
+  rows = rows.filter(r=>saisieVisible(r, aff));
   if(S.sortState && S.sortState.col) rows = sortRows(rows, S.sortState.col, S.sortState.asc);
   return rows;
 }
 
-function attachSaisieNav(modal, currentId){
-  // Ctrl+← / Ctrl+→ : naviguer sur la liste affichée (bouclage).
-  const handler = (e)=>{
-    if(!e || !e.ctrlKey) return;
-    if(e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-    const list = getVisibleSaisiesRowsForNav();
-    if(!list || !list.length) return;
-    const idx = list.findIndex(r=>String(r.id)===String(currentId));
-    if(idx < 0) return;
+// ── Navigation entre saisies ────────────────────────────────────
+// Saisie de production, mouvement de stock ou alerte validée : chaque ligne
+// a sa fenêtre, mais ‹ / › et Ctrl+← / Ctrl+→ parcourent la liste affichée
+// d'une fenêtre à l'autre. L'identité passe par saisieSelKey : un mouvement
+// de stock peut porter le même id numérique qu'une saisie de production.
+function ouvrirLigneSaisie(row){
+  if(!row) return;
+  fermerFenetresSaisie();
+  if(row.kind==='alert_ack') _openAlertAckViewer(row);
+  else if(row.kind==='stock_pf'||row.kind==='stock_mp') openEditStockModal(row);
+  else openEditModal(row);
+}
+function fermerFenetresSaisie(){
+  try{ closeModal(); }catch(_){}
+  try{ document.querySelectorAll('.add-row-modal').forEach(m=>m.remove()); }catch(_){}
+  try{ if(window.MysifaAckViewer) window.MysifaAckViewer.close(); }catch(_){}
+  S._saisieNavCourante = null;
+}
+function navSaisie(row){
+  const list = getVisibleSaisiesRowsForNav();
+  const total = list.length;
+  const cle = saisieSelKey(row);
+  const i = total ? list.findIndex(r=>String(saisieSelKey(r))===String(cle)) : -1;
+  return {
+    libelle: (i>=0 ? String(i+1) : '—') + '/' + String(total),
+    prec: (total && i>=0) ? list[(i - 1 + total) % total] : null,
+    suiv: (total && i>=0) ? list[(i + 1) % total] : null,
+  };
+}
+function compteurNavSaisie(row){
+  const nav = navSaisie(row);
+  return h('span',{className:'add-row-counter',title:'Ctrl+← / Ctrl+→'},
+    h('button',{type:'button',className:'add-row-nav-btn',title:'Précédente (Ctrl+←)',onClick:(e)=>{e.stopPropagation(); ouvrirLigneSaisie(nav.prec);}},'‹'),
+    h('span',null,nav.libelle),
+    h('button',{type:'button',className:'add-row-nav-btn',title:'Suivante (Ctrl+→)',onClick:(e)=>{e.stopPropagation(); ouvrirLigneSaisie(nav.suiv);}},'›')
+  );
+}
+// Un seul écouteur clavier pour toutes les fenêtres : il lit la ligne
+// ouverte dans S, et ne fait rien quand aucune fenêtre de saisie n'est là.
+function attachSaisieNav(row){
+  S._saisieNavCourante = row;
+  if(window.__saisieNavClavier) return;
+  window.__saisieNavClavier = true;
+  document.addEventListener('keydown', (e)=>{
+    if(!e || !e.ctrlKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+    const row = S._saisieNavCourante;
+    if(!row) return;
+    const ouverte = document.querySelector('.add-row-modal') || document.getElementById('mysifa-ack-viewer-overlay');
+    if(!ouverte){ S._saisieNavCourante = null; return; }
+    const nav = navSaisie(row);
+    const cible = e.key === 'ArrowRight' ? nav.suiv : nav.prec;
+    if(!cible) return;
     e.preventDefault();
     e.stopPropagation();
-    const nextIdx = (e.key === 'ArrowRight')
-      ? ((idx + 1) % list.length)
-      : ((idx - 1 + list.length) % list.length);
-    const nxt = list[nextIdx];
-    if(nxt) openEditModal(nxt);
-  };
-  // Éviter d'empiler des listeners si on remplace la modale.
-  document.addEventListener('keydown', handler, true);
-  modal._navKeyHandler = handler;
+    ouvrirLigneSaisie(cible);
+  }, true);
 }
 
 function attachModalDrag(modal){
@@ -8642,7 +8772,13 @@ function _openAlertAckViewer(row){
     date           : row.date_operation || '',
     operateur      : row.operateur || row.operateur_nom || '',
     no_dossier     : row.no_dossier || '',
+    nav            : (()=>{ const n = navSaisie(row); return {
+      libelle: n.libelle,
+      prec: ()=>ouvrirLigneSaisie(n.prec),
+      suiv: ()=>ouvrirLigneSaisie(n.suiv),
+    }; })(),
   });
+  attachSaisieNav(row);
 }
 
 function openEditStockModal(row){
@@ -8660,7 +8796,8 @@ function openEditStockModal(row){
   const badgeBg = 'rgba(196,181,253,.22)';
   box.appendChild(h('div',{style:{display:'flex',alignItems:'center',gap:'10px',marginBottom:'6px'}},
     h('span',{style:{padding:'3px 10px',borderRadius:'8px',background:badgeBg,color:badgeColor,fontWeight:'700',fontFamily:'monospace',fontSize:'13px'}},code),
-    h('h3',{style:{margin:0}},codeLabel)
+    h('h3',{style:{margin:0,flex:'1'}},codeLabel),
+    compteurNavSaisie(row)
   ));
   box.appendChild(h('div',{style:{color:'var(--muted)',fontSize:'12px',marginBottom:'16px'}},
     (row.produit_reference||row.matiere_reference||'') + ' · ' +
@@ -8765,6 +8902,7 @@ function openEditStockModal(row){
   overlay.appendChild(box);
   overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.remove(); });
   document.getElementById('root').appendChild(overlay);
+  attachSaisieNav(row);
 }
 
 function openEditModal(row) {
@@ -8782,18 +8920,10 @@ function openEditModal(row) {
     if(m) m.remove();
   }catch(e){}
 
-  const list = getVisibleSaisiesRowsForNav();
-  const total = list.length || 0;
-  const curIdx0 = total ? list.findIndex(r=>String(r.id)===String(row.id)) : -1;
-  const idx = (curIdx0>=0) ? (curIdx0 + 1) : 0;
-  const prevRow = (total && curIdx0>=0) ? list[(curIdx0 - 1 + total) % total] : null;
-  const nextRow = (total && curIdx0>=0) ? list[(curIdx0 + 1) % total] : null;
+  // Une ligne de stock a sa propre fenêtre (navigation depuis une saisie).
+  if(row && (row.kind==='stock_pf' || row.kind==='stock_mp')){ ouvrirLigneSaisie(row); return; }
 
-  const counter = h('span',{className:'add-row-counter',title:'Ctrl+← / Ctrl+→'},
-    h('button',{type:'button',className:'add-row-nav-btn',title:'Précédente (Ctrl+←)',onClick:(e)=>{e.stopPropagation(); if(prevRow) openEditModal(prevRow);}},'‹'),
-    h('span',null,(idx>0?String(idx):'—')+'/'+String(total)),
-    h('button',{type:'button',className:'add-row-nav-btn',title:'Suivante (Ctrl+→)',onClick:(e)=>{e.stopPropagation(); if(nextRow) openEditModal(nextRow);}},'›')
-  );
+  const counter = compteurNavSaisie(row);
   const titleNode = h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'12px',width:'100%'}},
     h('h3',null,'Modifier la saisie'),
     counter
@@ -8857,7 +8987,7 @@ function openEditModal(row) {
     },
     leftBtns
   );
-  attachSaisieNav(modal, row.id);
+  attachSaisieNav(row);
   attachModalDrag(modal);
   document.getElementById('root').appendChild(modal);
 }
@@ -9587,7 +9717,7 @@ async function openFictifReassignModal(){
             body:JSON.stringify({from_no_dossier:from,to_no_dossier:to})
           });
           closeModal();
-          toast((r.updated_saisies||0)+' saisie(s) rattachée(s) → '+r.to_no_dossier,'success');
+          toast((r.updated_saisies||0)+' saisie(s)'+(r.updated_alertes?' et '+r.updated_alertes+' alerte(s)':'')+' rattachée(s) → '+r.to_no_dossier,'success');
           await loadFilters();
           await loadSaisies();
         }catch(err){ toast(err.message||'Rattachement impossible','error'); }

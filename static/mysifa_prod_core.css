@@ -1655,9 +1655,16 @@ body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
 
 /* ── Fenêtre de rattachement ─────────────────────────────────────── */
 .rent-lier-modal{max-width:640px}
-.rent-lier-etat{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  font-size:13px;font-weight:600;padding:12px 16px;margin:4px 0 18px;
-  border-radius:10px}
+.rent-lier-sous{font-size:13px;font-weight:500;color:var(--text2);margin-top:2px}
+/* Le bandeau d'état reste discret : sa couleur suffit à signaler, il ne doit
+   pas écraser l'identité du dossier au-dessus (retour du 19/10/2026). */
+.rent-lier-etat{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  font-size:12px;font-weight:600;padding:6px 12px;margin:2px 0 14px;
+  border-radius:8px}
+.rent-lier-etat .rent-point{width:7px;height:7px}
+/* Sans action à droite (rouge, chargement), il se réduit à une pastille. */
+.rent-lier-etat-rouge,.rent-lier-etat-inconnu{width:fit-content;border-radius:999px;padding:4px 12px}
+.rent-lier-etat-rouge .rent-lier-etat-lib,.rent-lier-etat-inconnu .rent-lier-etat-lib{flex:none;min-width:0}
 .rent-lier-etat-lib{flex:1;min-width:180px}
 .rent-lier-etat .rent-lier-actions{display:flex;gap:8px;margin:0}
 .rent-lier-etat-vert{background:var(--success-bg);color:var(--success)}
@@ -1828,3 +1835,22 @@ body.recopie-en-cours,body.recopie-en-cours *{cursor:ns-resize !important;user-s
 .rent-nav-pastille{margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--danger);
   color:white;font-size:10px;font-weight:700;line-height:1.5;flex-shrink:0;font-variant-numeric:tabular-nums}
 .nav-tab .rent-nav-pastille{margin-left:6px}
+
+/* ── Menu déroulant MySifa (rentMenuDeroulant) ─────────────────── */
+.rent-dd{position:relative;display:inline-flex}
+.rent-dd-btn{display:inline-flex;align-items:center;justify-content:space-between;gap:10px;
+  min-width:170px;background:var(--card);border:1px solid var(--border);border-radius:8px;
+  padding:8px 10px 8px 12px;color:var(--text);font:inherit;font-size:13px;font-weight:600;
+  cursor:pointer;transition:border-color .15s}
+.rent-dd-btn:hover,.rent-dd-btn[aria-expanded="true"]{border-color:var(--accent)}
+.rent-dd-btn:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.rent-dd-btn svg{color:var(--muted);flex-shrink:0;transition:transform .15s}
+.rent-dd-btn[aria-expanded="true"] svg{transform:rotate(180deg)}
+.rent-dd-liste{position:fixed;z-index:1000;background:var(--card);border:1px solid var(--border);
+  border-radius:10px;padding:4px;box-shadow:0 8px 24px rgba(0,0,0,.14);
+  display:flex;flex-direction:column;gap:1px;max-height:320px;overflow-y:auto}
+.rent-dd-liste[hidden]{display:none}
+.rent-dd-item{display:block;width:100%;text-align:left;background:none;border:none;
+  border-radius:6px;padding:8px 10px;color:var(--text);font:inherit;font-size:13px;cursor:pointer}
+.rent-dd-item.is-actif{background:var(--accent-bg)}
+.rent-dd-item.is-sel{color:var(--accent);font-weight:600}

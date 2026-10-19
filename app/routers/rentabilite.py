@@ -398,6 +398,7 @@ def list_planning_entries(request: Request):
               e.*,
               m.nom AS machine_nom,
               m.code AS machine_code,
+              COALESCE(m.rent_suivi_devis, 1) AS machine_suivi_devis,
               o.qte_etiquettes   AS of_qte_etiquettes,
               o.qte_bobines      AS of_qte_bobines,
               o.metrage          AS of_metrage,
@@ -1332,6 +1333,24 @@ def a_venir_sans_devis_count(request: Request):
     from app.services.notifications import dossiers_a_venir_sans_devis
     with get_db() as conn:
         return {"total": len(dossiers_a_venir_sans_devis(conn))}
+
+
+@router.put("/api/rentabilite/machines/{machine_id}/suivi-devis")
+async def basculer_suivi_devis(machine_id: int, request: Request):
+    """Compter ou non les dossiers d'une machine dans les « devis à lier »
+    (tuile Sans devis, filtres, pastilles, notification du portail)."""
+    require_rentabilite(request)
+    body = await request.json()
+    suivi = 1 if body.get("suivi") else 0
+    with get_db() as conn:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(machines)").fetchall()}
+        if "rent_suivi_devis" not in cols:
+            raise HTTPException(409, "Migration machines_suivi_devis non appliquée.")
+        cur = conn.execute("UPDATE machines SET rent_suivi_devis=? WHERE id=?", (suivi, machine_id))
+        if not cur.rowcount:
+            raise HTTPException(404, "Machine introuvable.")
+        conn.commit()
+    return {"success": True, "suivi": suivi}
 
 
 @router.post("/api/rentabilite/devis/{devis_id}/valider")

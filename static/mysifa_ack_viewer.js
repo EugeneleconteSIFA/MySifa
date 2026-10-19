@@ -23,7 +23,9 @@
  * API publique :
  *   MysifaAckViewer.open(ack)   ack = {alert_nom, responses, checklist_items,
  *                                      comment, machine, date, operateur,
- *                                      no_dossier}
+ *                                      no_dossier, nav?}
+ *       nav = {libelle:'3/69', prec(), suiv()} : compteur ‹ › de la liste
+ *       des saisies (MyProd), comme sur les autres fenetres de saisie.
  *   MysifaAckViewer.coquille({id, titre, sousTitre, corps, onClose})
  *       corps : HTML deja echappe par l'appelant. Renvoie l'overlay insere.
  *   MysifaAckViewer.close()
@@ -102,6 +104,12 @@
       '.mav-badge{display:inline-flex;align-items:center;padding:5px 11px;border-radius:8px;',
       '  border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);',
       '  font-size:12px;font-weight:600}',
+      '.mav-nav{position:absolute;top:14px;right:56px;display:inline-flex;align-items:center;gap:4px;',
+      '  font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}',
+      '.mav-nav button{width:28px;height:28px;border-radius:8px;border:1px solid var(--border);',
+      '  background:var(--bg);color:var(--text2);cursor:pointer;font-size:16px;line-height:1;font-family:inherit}',
+      '.mav-nav button:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}',
+      '.mav-form.mav-avec-nav h3,.mav-form.mav-avec-nav .mav-sub{padding-right:150px}',
       '.mav-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}',
       // Jamais de fond transparent au repos : dans une carte (--card), un
       // bouton se pose sur --bg.
@@ -195,8 +203,14 @@
     const overlay = document.createElement('div');
     overlay.className = 'mav-overlay';
     overlay.id = id;
-    overlay.innerHTML = '<div class="mav-form" role="dialog" aria-modal="true">'
+    const nav = opts.nav;
+    overlay.innerHTML = '<div class="mav-form'+(nav?' mav-avec-nav':'')+'" role="dialog" aria-modal="true">'
       + '<button type="button" class="mav-close" data-close title="Fermer (Échap)" aria-label="Fermer">×</button>'
+      + (nav ? '<span class="mav-nav" title="Ctrl+← / Ctrl+→">'
+          + '<button type="button" data-nav="prec" title="Précédente (Ctrl+←)" aria-label="Précédente">‹</button>'
+          + '<span>'+_esc(nav.libelle||'')+'</span>'
+          + '<button type="button" data-nav="suiv" title="Suivante (Ctrl+→)" aria-label="Suivante">›</button>'
+          + '</span>' : '')
       + '<h3>'+_esc(opts.titre || 'Alerte')+'</h3>'
       + (opts.sousTitre ? '<div class="mav-sub">'+opts.sousTitre+'</div>' : '')
       + (opts.corps || '')
@@ -207,6 +221,15 @@
     overlay.querySelectorAll('[data-close]').forEach(function(b){
       b.addEventListener('click', fermer);
     });
+    if(nav){
+      overlay.querySelectorAll('[data-nav]').forEach(function(b){
+        b.addEventListener('click', function(e){
+          e.stopPropagation();
+          const f = nav[b.getAttribute('data-nav')];
+          if(typeof f === 'function') f();
+        });
+      });
+    }
     document.addEventListener('keydown', onKey);
     return overlay;
   }
@@ -227,6 +250,7 @@
       sousTitre: _esc(ack.machine||'—') + ' · ' + _esc(_fmtDate(ack.date))
                  + ' · ' + _esc(ack.operateur||'—'),
       corps: corps,
+      nav: ack.nav || null,
     });
   }
 

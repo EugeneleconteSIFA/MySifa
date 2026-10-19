@@ -162,10 +162,13 @@ def dossiers_a_venir_sans_devis(conn) -> list[int]:
     cols = {r[1] for r in conn.execute("PRAGMA table_info(planning_entries)")}
     groupe = "COALESCE(NULLIF(TRIM(e.group_id), ''), CAST(e.id AS TEXT))" \
         if "group_id" in cols else "CAST(e.id AS TEXT)"
+    # Les machines retirées du suivi des devis (Pilotage) ne comptent pas.
+    mcols = {r[1] for r in conn.execute("PRAGMA table_info(machines)")}
+    suivi = " AND COALESCE(m.rent_suivi_devis, 1) = 1" if "rent_suivi_devis" in mcols else ""
     today = datetime.now(_PARIS).date().isoformat()
     rows = conn.execute(
         f"""SELECT e.id, {groupe} AS grp FROM planning_entries e
-              JOIN machines m ON m.id = e.machine_id AND m.actif = 1
+              JOIN machines m ON m.id = e.machine_id AND m.actif = 1{suivi}
              WHERE substr(COALESCE(e.planned_start, ''), 1, 10) > ?
                AND NOT EXISTS (SELECT 1 FROM rent_links l
                                 WHERE l.planning_entry_id = e.id AND l.devis_id IS NOT NULL)
