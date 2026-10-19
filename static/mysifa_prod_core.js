@@ -327,6 +327,7 @@
       if(so.col){ p.tri=so.col; if(so.asc===false) p.sens='desc'; }
     }
     if(sousEff==='erreurs'&&S.ecartsFiltre) p.ecart=String(S.ecartsFiltre).replace(/^prod\./,'');
+    if(sousEff==='kpis'&&S.psSel){ p.ouvert=S.psSel; nav+='/ouvert'; }
     if(sousEff==='retour'){
       var rp=S.retourProd||{};
       if(rp.vue==='liste') p.vue='liste';
@@ -525,6 +526,12 @@
         machine:u.get('retour_machine',''),
         dossier:u.get('cr',null), cr:null
       });
+    }
+    if(page==='production'&&S.subPage==='kpis'){
+      // Fiche dossier de la vue d'ensemble : référence libre (« 9932548 + stock »),
+      // bornée en longueur et sans caractère de contrôle.
+      var ov=u.get('ouvert',null);
+      S.psSel=(ov&&ov.length<=80&&!/[\u0000-\u001f<>]/.test(ov))?ov:null;
     }
     if(page==='production'&&S.subPage==='erreurs'){
       var ec=u.get('ecart',null);
@@ -10054,12 +10061,52 @@ async function openCorrigerEcart(e){
 
   if(ap.action === 'saisie'){
     if(!ap.saisie){ toast('Saisie concernée introuvable — ouvrez le dossier dans Saisies.','error'); return; }
-    openEditModal(ap.saisie);
-    toast('Corrigez la saisie, puis validez l\'écart.','info');
+    closeModal();
+    await allerASaisie(ap.saisie);
+    toast('Saisie concernée surlignée : corrigez-la, puis validez l\'écart.','info');
     return;
   }
 
   if(ap.lien) window.location.href = ap.lien;
+}
+
+// Ouvrir Saisies centré sur une saisie : le jour et la machine de la saisie,
+// sans autre filtre, dans l'ordre chronologique — la saisie est vue avec ce
+// qui l'entoure sur la machine ce jour-là. La ligne est centrée et surlignée.
+// Les filtres passent par S.fv : l'adresse les reprend au rendu.
+async function allerASaisie(saisie){
+  const jour = String(saisie.date_operation || '').slice(0, 10);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(jour)){ S.fv.date_from = jour; S.fv.date_to = jour; }
+  S.fv.machines = saisie.machine ? [String(saisie.machine)] : [];
+  S.fv.operateurs = [];
+  S.fv.dossiers = [];
+  S.sortState = {col:null, asc:true};
+  // Une saisie de production masquée par la bascule ne pourrait pas être montrée.
+  const aff = saisiesAffichage();
+  if(!aff.prod){
+    S.saisiesAffichage = Object.assign({}, aff, {prod:true});
+    try{ localStorage.setItem(SAISIES_AFFICHAGE_CLE, JSON.stringify(S.saisiesAffichage)); }catch(_){}
+  }
+  S.page = 'production';
+  S.subPage = 'saisies';
+  await applyF();
+  render();
+  centrerSaisie(saisie);
+}
+function centrerSaisie(saisie, essai){
+  const cle = String(saisieSelKey(Object.assign({kind:'prod'}, saisie)));
+  const tr = document.querySelector('tr.data-row[data-cle="'+(window.CSS && CSS.escape ? CSS.escape(cle) : cle)+'"]');
+  if(!tr){
+    if(_mpmPortrait()) return;  // fil de cartes sur téléphone : pas de ligne à centrer
+    // Le tableau peut se dessiner une image plus tard (chargement, défilement miroir).
+    if((essai||0) < 10) setTimeout(()=>centrerSaisie(saisie, (essai||0)+1), 80);
+    else toast('Saisie hors de la page affichée — elle est peut-être sur la page suivante.','error');
+    return;
+  }
+  tr.scrollIntoView({block:'center', behavior:'smooth'});
+  tr.style.outline = '2px solid var(--accent)';
+  tr.style.outlineOffset = '-2px';
+  setTimeout(()=>{ tr.style.outline = ''; tr.style.outlineOffset = ''; }, 4000);
 }
 
 // Filtre par type d'écart : dans l'adresse (clé `ecart`), comme tout filtre.
@@ -10407,6 +10454,7 @@ function renderSaisies(){
     // Dernière saisie d'un calage : même mise en avant, en orange.
     const finCalage = !annuleRow ? row._fin_calage : null;
     const tr=h('tr',{className:'data-row'+(fictifRow?' saisie-row-fictif':'')+(annuleRow?' saisie-row-annule':'')+(finDossierRow?' saisie-row-fin-dossier':'')+(finCalage?' saisie-row-fin-calage':''),
+      'data-cle':String(saisieSelKey(row)),
       style:{cursor:(readOnly||annuleRow)?'default':'pointer'}});
     if(annuleRow) tr.title = annuleTip;
     else if(cycleAnnule) tr.title = cycleTip;
@@ -11352,19 +11400,39 @@ function _prodVueCss(){
     +'.ps-met{position:relative;min-width:110px}'
     +'.ps-met-barre{position:absolute;left:8px;right:8px;bottom:5px;height:3px;border-radius:2px;background:var(--border)}'
     +'.ps-met-barre i{display:block;height:100%;border-radius:2px;background:var(--accent)}'
-    +'tr.ps-ligne{cursor:pointer}'
-    +'tr.ps-ligne:hover td{background:var(--accent-bg)}'
-    +'tr.ps-ligne.ouvert td{background:var(--accent-bg);border-bottom-color:transparent}'
-    +'.ps-chev{display:inline-flex;transition:transform .15s;margin-right:6px;color:var(--muted);vertical-align:middle}'
-    +'tr.ps-ligne.ouvert .ps-chev{transform:rotate(90deg);color:var(--accent)}'
-    +'tr.ps-detail>td{padding:10px 12px 16px!important;background:var(--bg)}'
-    // Un dossier déplié forme un bloc : trait d'accent au-dessus de sa ligne,
-    // bande à gauche sur la ligne et son détail, trait épais dessous. Deux
-    // dossiers ouverts à la suite ne se confondent plus.
-    +'tr.ps-ligne.ouvert td{border-top:2px solid var(--accent)!important}'
-    +'tr.ps-ligne.ouvert td:first-child,tr.ps-detail>td{box-shadow:inset 4px 0 0 var(--accent)}'
-    +'tr.ps-detail>td{border-bottom:3px solid var(--accent)!important}'
-    +'tr.ps-detail+tr.ps-ligne:not(.ouvert) td{border-top:6px solid var(--card)!important}'
+    // Vue d'ensemble : synthèses en colonne, fiche du dossier choisi à côté.
+    // Écran étroit : la fiche passe sous la colonne (flex-wrap).
+    +'.ps-vue{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start}'
+    +'.ps-col{flex:1 1 360px;max-width:480px;min-width:0;display:flex;flex-direction:column;gap:12px}'
+    +'.ps-col>.card{margin:0}'
+    +'.ps-l{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) max-content;gap:12px;align-items:center;'
+    +'width:100%;box-sizing:border-box;padding:9px 14px;border:0;border-top:1px solid var(--border);background:var(--card);'
+    +'color:var(--text);text-align:left;font:inherit;cursor:pointer}'
+    +'.ps-l:hover{background:var(--bg)}'
+    +'.ps-l.actif{background:var(--accent-bg);box-shadow:inset 3px 0 0 var(--accent)}'
+    +'.ps-l-nom{display:block;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    +'.ps-l.actif .ps-l-nom{color:var(--accent)}'
+    +'.ps-l-sous{display:block;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}'
+    +'.ps-barre{display:flex;height:7px;border-radius:4px;overflow:hidden;background:var(--bg)}'
+    +'.ps-barre i{display:block;height:100%;background:var(--c)}'
+    +'.ps-l-tps{display:block;font-family:monospace;font-size:11px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    +'.ps-l-chif{text-align:right;white-space:nowrap}'
+    +'.ps-l-vit{display:block;font-family:monospace;font-size:12px;font-weight:800;color:var(--warn)}'
+    +'.ps-l-met{display:block;font-family:monospace;font-size:11px;color:var(--muted);margin-top:1px}'
+    +'.ps-legende{display:flex;flex-wrap:wrap;gap:12px;padding:0 4px;font-size:11px;color:var(--muted)}'
+    +'.ps-fiche{flex:999 1 560px;min-width:0;margin:0!important;padding:16px 18px}'
+    +'.ps-fiche-tete{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:10px;'
+    +'padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid var(--border)}'
+    +'.ps-fiche-no{font-family:monospace;font-size:20px;font-weight:800;color:var(--text)}'
+    +'.ps-fiche-client{font-size:14px;font-weight:600;color:var(--text);margin-top:2px}'
+    +'.ps-fiche-meta{font-size:12px;color:var(--muted);margin-top:2px}'
+    +'.ps-fiche-defaut{display:inline-block;margin-left:8px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;'
+    +'vertical-align:3px;color:var(--accent);background:var(--accent-bg)}'
+    +'.ps-fiche-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}'
+    +'.ps-fiche .dp{border:none;padding:0;background:transparent}'
+    +'.ps-fiche-lien{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;font-size:12px;font-weight:600;'
+    +'text-decoration:none;background:var(--bg);border:1px solid var(--border);color:var(--accent)}'
+    +'.ps-fiche-lien:hover{border-color:var(--accent)}'
     +'.ps-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--c);margin-right:5px;vertical-align:1px}'
     // Bulle des boutons d'outils du détail : immédiate au survol comme au
     // focus clavier (le title natif met une seconde à venir, et pas toujours).
@@ -11380,31 +11448,32 @@ function _prodVueCss(){
 
 // Detail d'un dossier sous sa ligne : le panneau « Donnees de prod » du
 // destockage (static/mysifa_donnees_prod.js), charge au premier depliage.
-function _psDetailCharger(no, cible){
+function _psDetailCharger(no, cible, hote){
   S.psDetailCache = S.psDetailCache || {};
   const cache = S.psDetailCache[no];
-  if(cache && cache.html){ cible.innerHTML = cache.html; _psBoutonSignaler(no, cible); return; }
+  if(cache && cache.html){ cible.innerHTML = cache.html; _psBoutonSignaler(no, cible, hote); return; }
   cible.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:12px">Chargement des saisies…</div>';
   api('/api/production/dossier-detail?no_dossier='+encodeURIComponent(no)).then(d=>{
-    const html = (window.MySifaDonneesProd && d) ? window.MySifaDonneesProd.html(d)
+    const html = (window.MySifaDonneesProd && d) ? window.MySifaDonneesProd.html(d, {frise:true})
       : '<div style="color:var(--danger)">Affichage indisponible — rechargez la page.</div>';
     S.psDetailCache[no] = {html};
-    if(cible.isConnected){ cible.innerHTML = html; _psBoutonSignaler(no, cible); }
+    if(cible.isConnected){ cible.innerHTML = html; _psBoutonSignaler(no, cible, hote); }
   }).catch(e=>{
     cible.textContent = (e && e.message) || 'Saisies indisponibles.';
     cible.style.color = 'var(--danger)';
   });
 }
-// Outils du détail d'un dossier, en haut à droite du panneau :
+// Outils du détail d'un dossier, dans `hote` (en-tête de la fiche) :
 // - alertes validées (courbes des valeurs relevées), dépliées dans le panneau ;
 // - signaler une incohérence : l'écart rejoint « À traiter » (Erreurs & Qualité).
-function _psBoutonSignaler(no, cible){
+function _psBoutonSignaler(no, cible, hote){
   const panneau = cible.querySelector('.dp');
-  if(!panneau || panneau.querySelector('.ps-outils')) return;
+  if(!panneau || !hote) return;
+  const ancien = hote.querySelector('.ps-outils'); if(ancien) ancien.remove();
   S.psAlertesOuvertes = S.psAlertesOuvertes || {};
   const styleBtn = {display:'inline-flex',alignItems:'center',gap:'6px',background:'var(--bg)',
     border:'1px solid var(--border)',padding:'5px 9px',borderRadius:'8px',fontSize:'12px',fontWeight:'600',color:'var(--text2)'};
-  const outils = h('div',{className:'ps-outils',style:{position:'absolute',top:'10px',right:'10px',display:'flex',gap:'6px'}});
+  const outils = h('div',{className:'ps-outils',style:{display:'flex',gap:'6px'}});
   const zone = panneau.querySelector('.dp-alertes');
   if(zone && window.MySifaDonneesProd && window.MySifaDonneesProd.basculerAlertes){
     const n = zone.querySelector('.dp-n') ? zone.querySelector('.dp-n').textContent : '';
@@ -11441,9 +11510,7 @@ function _psBoutonSignaler(no, cible){
       style:styleBtn,
       onClick:e=>{ e.stopPropagation(); openSignalerIncoherence(no); }},
     iconEl('flag',14)));
-  panneau.style.position = 'relative';
-  panneau.style.paddingTop = '48px';
-  panneau.prepend(outils);
+  hote.prepend(outils);
 }
 function openSignalerIncoherence(no){
   try{ const m=document.querySelector('.add-row-modal'); if(m) m.remove(); }catch(_){}
@@ -11476,27 +11543,6 @@ function openSignalerIncoherence(no){
   document.getElementById('root').appendChild(modal);
   requestAnimationFrame(()=>txt.focus());
 }
-function _psDetailLigne(no, colSpan){
-  const zone = h('div');
-  _psDetailCharger(no, zone);
-  return h('tr',{className:'ps-detail','data-ps-detail':no}, h('td',{colSpan:colSpan}, zone));
-}
-// Une ligne de dossier qui se deplie ; l'etat tient au re-rendu.
-function _psLigneDossier(no, cells, colSpan){
-  S.psOuverts = S.psOuverts || {};
-  const tr = h('tr',{className:'ps-ligne'+(S.psOuverts[no]?' ouvert':''),
-    title:'Voir les saisies du dossier',
-    onClick:()=>{
-      const ouvert = !S.psOuverts[no];
-      S.psOuverts[no] = ouvert;
-      tr.classList.toggle('ouvert', ouvert);
-      const suiv = tr.nextElementSibling;
-      if(suiv && suiv.getAttribute('data-ps-detail') === no) suiv.remove();
-      if(ouvert) tr.after(_psDetailLigne(no, colSpan));
-    }}, ...cells);
-  return S.psOuverts[no] ? [tr, _psDetailLigne(no, colSpan)] : [tr];
-}
-
 // Modale « Comment c'est calculé » : les règles viennent du serveur
 // (sanity_regles), la même source que le calcul.
 function openSanityExplication(sanity, title){
@@ -13553,76 +13599,118 @@ function renderProdKpis(){
   const _psMetrage = (v,max) => h('td',{className:'ps-met',style:{fontFamily:'monospace'}},
     fN(v||0)+' m',
     h('span',{className:'ps-met-barre'},h('i',{style:{width:(max>0?Math.round(Number(v||0)/max*100):0)+'%'}})));
+  // Ligne compacte d'une synthèse : nom, répartition du temps, vitesse et
+  // métrage. Couleurs des temps = celles des saisies (calage, prod, arrêts).
+  const _psLigne = (o) => {
+    const cal = Number(o.cal||0), prd = Number(o.prd||0), arr = Number(o.arr||0);
+    const tot = cal + prd + arr;
+    const pc = v => tot > 0 ? (v / tot * 100).toFixed(1) + '%' : '0%';
+    return h('button',Object.assign({type:'button',className:'ps-l'+(o.actif?' actif':''),
+        title:o.title||'', onClick:o.onClick}, o.actif?{'aria-current':'true'}:{}),
+      h('span',{style:{minWidth:0}},
+        h('span',{className:'ps-l-nom'}, o.nom),
+        o.sous ? h('span',{className:'ps-l-sous'}, o.sous) : null),
+      h('span',{style:{minWidth:0}},
+        h('span',{className:'ps-barre'},
+          h('i',{style:'--c:var(--c4);width:'+pc(cal)}),
+          h('i',{style:'--c:var(--success);width:'+pc(prd)}),
+          h('i',{style:'--c:var(--danger);width:'+pc(arr)})),
+        h('span',{className:'ps-l-tps'}, fMin(tot) + ' · ' + (Math.round(arr) > 0 ? 'arrêts ' + fMin(arr) : 'aucun arrêt'))),
+      h('span',{className:'ps-l-chif'},
+        h('span',{className:'ps-l-vit'}, vitEl(o.vit)),
+        h('span',{className:'ps-l-met'}, fN(o.met||0) + ' m')));
+  };
+  const _psCarte = (titre, compte, bloc, lignes) => h('div',{className:'card',
+      'data-bloc':bloc, 'data-bloc-valeur-lignes':String(lignes.length)},
+    h('div',{className:'card-header','data-bloc-entete':''},h('h3',null,titre),
+      h('span',{style:{fontSize:'11px',color:'var(--muted)'}},compte)),
+    h('div',null,...lignes));
+
+  // Fiche du dossier choisi. Par défaut : le dernier dossier terminé (il a
+  // son 89) — celui en cours n'a pas encore ses chiffres définitifs.
+  function buildFicheDossier(rowsAgg, defaut){
+    const sel = (S.psSel && rowsAgg.some(r=>String(r.no_dossier)===S.psSel)) ? S.psSel : defaut;
+    if(!sel) return null;
+    const r = rowsAgg.filter(x=>String(x.no_dossier)===sel)[0] || {};
+    const machines = [...new Set(byDosNoRep.filter(x=>String(x.no_dossier||'').trim()===sel)
+      .map(x=>x.machine).filter(Boolean))];
+    const outils = h('div',{className:'ps-fiche-actions'},
+      h('a',{className:'ps-fiche-lien',href:'/prod?sous=retour&cr='+encodeURIComponent(sel),
+          title:'Compte-rendu du dossier dans Retour de prod'},
+        'Retour de prod', iconEl('chevron-right',12)));
+    const zone = h('div');
+    _psDetailCharger(sel, zone, outils);
+    return h('article',{className:'card ps-fiche','aria-label':'Dossier '+sel},
+      h('div',{className:'ps-fiche-tete'},
+        h('div',{style:{minWidth:0}},
+          h('div',null,
+            h('span',{className:'ps-fiche-no'}, sel),
+            sel === defaut && !S.psSel ? h('span',{className:'ps-fiche-defaut'},'Dernier dossier terminé') : null),
+          h('div',{className:'ps-fiche-client'}, prodSynthCleanClient(r.client) || '—'),
+          machines.length ? h('div',{className:'ps-fiche-meta'}, machines.join(' · ')) : null),
+        outils),
+      zone);
+  }
+
   function buildMachinesPart(){
-    const synthParts = [];
-    // Par numéro de dossier (+ Client, − Étiquettes)
-    const rowsAgg = _prodAggDossier(byDosNoRep);
-    const metMaxDos = Math.max(0, ...rowsAgg.map(r=>Number(r.metrage_m||0)));
+    const colonne = [];
+    // Par dossier : trié par heure de fin, le plus récent en haut.
+    const fin = {};
+    byDosNoRep.forEach(x=>{
+      const k = String(x.no_dossier||'').trim(), f = String(x.fin_ts||'');
+      if(k && f > (fin[k]||'')) fin[k] = f;
+    });
+    const rowsAgg = _prodAggDossier(byDosNoRep)
+      .sort((a,b)=>String(fin[b.no_dossier]||'').localeCompare(String(fin[a.no_dossier]||'')));
+    const cles = new Set(rowsAgg.map(r=>String(r.no_dossier)));
+    const termine = (d.completed_dossiers||[])
+      .filter(c=>!_isRepMachine(c.machine) && cles.has(String(c.no_dossier||'').trim()))
+      .sort((a,b)=>String(b.date_operation||'').localeCompare(String(a.date_operation||'')))[0];
+    const defaut = termine ? String(termine.no_dossier).trim() : (rowsAgg[0] ? String(rowsAgg[0].no_dossier) : null);
+    const actif = (S.psSel && cles.has(S.psSel)) ? S.psSel : defaut;
     if(rowsAgg.length){
-      const dossierKeys = rowsAgg.map(r=>String(r.no_dossier));
-      synthParts.push(h('div',{className:'card','data-bloc':'prod.ensemble.par-dossier',
-          'data-bloc-valeur-lignes':String(rowsAgg.length)},
-        h('div',{className:'card-header','data-bloc-entete':''},h('h3',null,'Par numéro de dossier'),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},rowsAgg.length+' dossiers')),
-        h('div',{style:{overflowX:'auto'}},h('table',null,
-          h('thead',null,h('tr',null,
-            h('th',null,'Dossier'),
-            h('th',null,'Client'),
-            h('th',null,'Métrage'),
-            _psTh('Calage','var(--c4)'),
-            _psTh('Prod','var(--success)'),
-            _psTh('Arrêts','var(--danger)'),
-            _psTh('Vitesse','var(--warn)')
-          )),
-          h('tbody',null,...rowsAgg.flatMap(r=>_psLigneDossier(String(r.no_dossier||''), [
-            h('td',{style:{fontWeight:'700',color:'var(--text)'}},
-              h('span',{className:'ps-chev'},iconEl('chevron-right',12)), r.no_dossier||''),
-            h('td',{className:'prod-synth-detail-td-text'}, prodSynthCleanClient(r.client) || '—'),
-            _psMetrage(r.metrage_m, metMaxDos),
-            _psMin(r.temps_calage_min,'ps-c-cal'),
-            _psMin(r.temps_prod_min,'ps-c-prod'),
-            _psMin(r.temps_arret_min,'ps-c-arr'),
-            h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},vitEl(vitCalc(r.metrage_m, Number(r.temps_prod_min||0)+Number(r.temps_arret_min||0))))
-          ], 7)))
-        ))
-      ));
+      colonne.push(_psCarte('Par dossier', rowsAgg.length+' · par heure de fin', 'prod.ensemble.par-dossier',
+        rowsAgg.map(r=>{
+          const no = String(r.no_dossier||'');
+          return _psLigne({nom:no, sous:prodSynthCleanClient(r.client) || '—',
+            cal:r.temps_calage_min, prd:r.temps_prod_min, arr:r.temps_arret_min, met:r.metrage_m,
+            vit:vitCalc(r.metrage_m, Number(r.temps_prod_min||0)+Number(r.temps_arret_min||0)),
+            actif:no===actif, title:'Afficher la fiche du dossier',
+            onClick:()=>{
+              S.psSel = no; render();
+              // Fiche sous la colonne (écran étroit) : on l'amène à l'écran.
+              const f = document.querySelector('.ps-fiche');
+              if(f && f.getBoundingClientRect().top > window.innerHeight * 0.6) f.scrollIntoView({behavior:'smooth',block:'start'});
+            }});
+        })));
     }
-    // Helper card agrégation (Par opérateur / Par machine / Par jour) — sans Étiquettes
-    function renderAggCard(title, rows, keyLabel, synthType){
+    // Par opérateur / machine / jour : un clic ouvre le détail de la ligne.
+    function carteAgg(titre, rows, keyLabel, st, bloc, unite){
       if(!rows||!rows.length) return null;
-      const keys=rows.map(r=>String(r.key));
-      const metMax=Math.max(0, ...rows.map(r=>Number(r.metrage_m||0)));
-      const typeMap={'Opérateur':'operator','Machine':'machine','Jour':'day'};
-      const st=synthType||(typeMap[keyLabel]||'');
-      const bloc=keyLabel==='Opérateur'?'prod.ensemble.par-operateur'
-        :keyLabel==='Machine'?'prod.ensemble.par-machine'
-        :keyLabel==='Jour'?'prod.ensemble.par-jour':null;
-      return h('div',Object.assign({className:'card'},
-          bloc?{'data-bloc':bloc,'data-bloc-valeur-lignes':String(rows.length)}:{}),
-        h('div',{className:'card-header','data-bloc-entete':''},h('h3',null,title),h('span',{style:{fontSize:'11px',color:'var(--muted)'}},rows.length+' items')),
-        h('div',{style:{overflowX:'auto'}},h('table',null,
-          h('thead',null,h('tr',null,
-            h('th',null,keyLabel),h('th',null,'Dossiers'),
-            h('th',null,'Métrage'),_psTh('Calage','var(--c4)'),_psTh('Prod','var(--success)'),_psTh('Arrêts','var(--danger)'),_psTh('Vitesse','var(--warn)')
-          )),
-          h('tbody',null,...rows.map((r,i)=>h('tr',null,
-            makeProdSynthKeyCell(keyLabel==='Opérateur'?opName(r.key):(keyLabel==='Jour'?formatJourLabel(r.key):r.key),st,keys,i),
-            h('td',{style:{fontFamily:'monospace'}},fN(r.dossiers||0)),
-            _psMetrage(r.metrage_m, metMax),
-            _psMin(r.calage_min,'ps-c-cal'),
-            _psMin(r.prod_min,'ps-c-prod'),
-            _psMin(r.arret_min,'ps-c-arr'),
-            h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},vitEl(vitSrv(r.vitesse_m_min,r.vitesse_aberrante)))
-          )))
-        ))
-      );
+      const keys = rows.map(r=>String(r.key));
+      return _psCarte(titre, rows.length+' '+unite+(rows.length>1?'s':''), bloc,
+        rows.map((r,i)=>_psLigne({
+          nom: keyLabel==='Opérateur' ? opName(r.key) : (keyLabel==='Jour' ? formatJourLabel(r.key) : r.key),
+          sous: fN(r.dossiers||0)+' dossier'+(Number(r.dossiers)>1?'s':''),
+          cal:r.calage_min, prd:r.prod_min, arr:r.arret_min, met:r.metrage_m,
+          vit:vitSrv(r.vitesse_m_min, r.vitesse_aberrante),
+          title:'Voir le détail — flèches pour naviguer',
+          onClick:e=>{ e.stopPropagation(); openProdSynthDetail(st, keys, i); }})));
     }
     const byOp   = _prodAggBy(byDosNoRep, 'operateur').sort((a,b)=>(b.metrage_m||0)-(a.metrage_m||0));
     const byMach = _prodAggBy(byDosNoRep, 'machine').sort((a,b)=>(b.metrage_m||0)-(a.metrage_m||0));
     const byDay  = _prodAggBy(byDosNoRep, 'jour').sort((a,b)=>String(b.key).localeCompare(String(a.key)));
-    synthParts.push(renderAggCard('Par opérateur', byOp, 'Opérateur'));
-    synthParts.push(renderAggCard('Par machine',   byMach, 'Machine'));
-    synthParts.push(renderAggCard('Par jour',      byDay, 'Jour'));
-    return h('div',null,...synthParts.filter(Boolean));
+    colonne.push(carteAgg('Par opérateur', byOp, 'Opérateur', 'operator', 'prod.ensemble.par-operateur', 'opérateur'));
+    colonne.push(carteAgg('Par machine', byMach, 'Machine', 'machine', 'prod.ensemble.par-machine', 'machine'));
+    colonne.push(carteAgg('Par jour', byDay, 'Jour', 'day', 'prod.ensemble.par-jour', 'jour'));
+    const legende = h('div',{className:'ps-legende'},
+      h('span',null,h('i',{className:'ps-dot',style:'--c:var(--c4)'}),'Calage'),
+      h('span',null,h('i',{className:'ps-dot',style:'--c:var(--success)'}),'Production'),
+      h('span',null,h('i',{className:'ps-dot',style:'--c:var(--danger)'}),'Arrêts'),
+      h('span',null,'Vitesse en m/min, métrage dessous'));
+    return h('div',{className:'ps-vue'},
+      h('div',{className:'ps-col'}, ...colonne.filter(Boolean), legende),
+      buildFicheDossier(rowsAgg, defaut));
   }
 
   function buildRepiquagePart(){

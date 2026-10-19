@@ -81,6 +81,10 @@
     + '.dp-cpt{font-family:ui-monospace,Consolas,monospace;font-weight:700;color:var(--text)}'
     + '.dp-clos{margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;color:white;background:var(--accent)}'
     + '.dp-vide{color:var(--muted)}'
+    + '.dp-frise{position:relative;height:30px;border-radius:8px;overflow:hidden;background:var(--bg);border:1px solid var(--border)}'
+    + '.dp-frise i{position:absolute;top:0;bottom:0;background:var(--c);box-shadow:inset -1px 0 0 var(--card)}'
+    + '.dp-frise-axe{position:relative;height:16px;margin:4px 0 14px;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}'
+    + '.dp-frise-axe span{position:absolute;transform:translateX(-50%);white-space:nowrap}'
     + '.dp-cmp-tete{display:flex;align-items:center;gap:8px;flex-wrap:wrap}'
     + '.dp-cmp-src{font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted)}'
     + '.dp-cmp-concl{margin-left:auto;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;text-transform:none;letter-spacing:0;'
@@ -231,7 +235,48 @@
       + (avert.length ? '<div class="dp-avert">' + avert.join(' · ') + '</div>' : '');
   }
 
-  function prodHtml(d) {
+  // ── Déroulé : une bande par saisie, de son heure à celle de la suivante ──
+  // Une saisie dont la suivante tombe un autre jour s'arrête là : la nuit
+  // n'est ni du calage, ni de la production.
+  function friseHtml(saisies) {
+    const rows = (saisies || []).filter(r => r && r.date_operation)
+      .slice().sort((a, b) => String(a.date_operation).localeCompare(String(b.date_operation)));
+    if (rows.length < 2) return '';
+    const t = (r) => new Date(String(r.date_operation).slice(0, 19)).getTime();
+    const t0 = t(rows[0]), t1 = t(rows[rows.length - 1]);
+    if (!isFinite(t0) || !isFinite(t1) || t1 <= t0) return '';
+    const pos = (v) => Math.max(0, Math.min(100, (v - t0) / (t1 - t0) * 100));
+    let bandes = '';
+    for (let i = 0; i < rows.length - 1; i++) {
+      const a = rows[i], b = rows[i + 1];
+      if (String(a.date_operation).slice(0, 10) !== String(b.date_operation).slice(0, 10)) continue;
+      const x = pos(t(a)), w = pos(t(b)) - x;
+      if (!(w > 0)) continue;
+      const c = (DP_CATS[String(a.operation_category || '').toLowerCase()] || [null, 'var(--muted)'])[1];
+      const lib = String(a.operation || '').replace(/^\s*\d+\s*-\s*/, '');
+      bandes += '<i style="left:' + x.toFixed(3) + '%;width:' + w.toFixed(3) + '%;--c:' + c + '" title="'
+        + esc((a.operation_code ? a.operation_code + ' ' : '') + lib + ' · ' + dateCourte(a.date_operation).slice(6)
+          + ' → ' + dateCourte(b.date_operation).slice(6) + ' · ' + duree((t(b) - t(a)) / 60000)
+          + (a.operateur ? ' · ' + a.operateur : '')) + '"></i>';
+    }
+    // Repères : heures pleines, assez espacées pour tenir sur la largeur.
+    const pas = Math.max(1, Math.ceil((t1 - t0) / 3600000 / 8)) * 3600000;
+    const d0 = new Date(t0); d0.setMinutes(0, 0, 0);
+    let reperes = '';
+    for (let v = d0.getTime() + 3600000; v < t1; v += pas) {
+      const d = new Date(v), x = pos(v);
+      if (x < 3 || x > 97) continue;
+      const hh = String(d.getHours()).padStart(2, '0') + ':00';
+      reperes += '<span style="left:' + x.toFixed(2) + '%">' + (d.getHours() === 0
+        ? String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') : hh) + '</span>';
+    }
+    return '<div class="dp-titre">Déroulé <span class="dp-cmp-src">' + esc(dateCourte(rows[0].date_operation))
+      + ' → ' + esc(dateCourte(rows[rows.length - 1].date_operation)) + '</span></div>'
+      + '<div class="dp-frise">' + bandes + '</div><div class="dp-frise-axe">' + reperes + '</div>';
+  }
+
+  // `opts.frise` : ajoute le déroulé sous les cartes (fiche dossier de MyProd).
+  function prodHtml(d, opts) {
     const st = d.stats || {};
     const tt = st.temps_totaux || {};
     const q = st.quantites || {};
@@ -252,6 +297,7 @@
       + carte('Vitesse', st.vitesse_aberrante ? '<span style="color:var(--danger);font-weight:400">erreur saisie</span>'
           : st.vitesse_m_min ? nombre(Math.round(st.vitesse_m_min * 10) / 10) + ' m/min' : '—', 'var(--accent)')
       + '</div>';
+    if (opts && opts.frise) h += friseHtml(d.saisies);
     h += comparaisonHtml(d.comparaison);
     // Caché par défaut : la page qui l'affiche pose un bouton qui le déplie
     // (MySifaDonneesProd.basculerAlertes). Sans liste d'alertes, rien.
