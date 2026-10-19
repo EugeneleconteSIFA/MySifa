@@ -224,6 +224,12 @@ with get_db() as conn:
 check("formulaire : pas de préremplissage par la saisie manuelle",
       client.get("/api/portail/eudr/tok-manuel").json()["precedente"], None)
 
+# Questionnaire PDF.
+r = client.get(f"/api/qualite/eudr/questionnaire.pdf?lang=es&fournisseur_id={FID}")
+check("PDF servi", (r.status_code, r.content[:5]), (200, b"%PDF-"))
+check("PDF : nom de fichier en espagnol", "EUDR_questionnaire_ES" in r.headers["content-disposition"], True)
+check("PDF vierge", client.get("/api/qualite/eudr/questionnaire.pdf").status_code, 200)
+
 print()
 if ECHECS:
     print(f"{len(ECHECS)} échec(s)")

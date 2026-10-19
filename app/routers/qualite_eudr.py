@@ -165,6 +165,29 @@ def piece_jointe(request: Request, reponse_id: int):
                         headers={"Content-Disposition": f'{mode}; filename="{nom}"'})
 
 
+@router.get("/questionnaire.pdf")
+def questionnaire_pdf(request: Request):
+    """Le questionnaire à remplir à la main, dans la langue demandée (?lang=).
+    `?fournisseur_id=` pré-inscrit le nom du fournisseur ; l'adresse de retour
+    est celle de l'utilisateur qui télécharge."""
+    from fastapi.responses import Response
+    from app.services.eudr_questionnaire_pdf import construire_pdf
+
+    user = _require_qualite_view(request)
+    lang = eudr_langue(request.query_params.get("lang"))
+    nom = ""
+    fid = (request.query_params.get("fournisseur_id") or "").strip()
+    if fid.isdigit():
+        with get_db() as conn:
+            row = conn.execute("SELECT nom FROM fournisseurs_fsc WHERE id=?", (int(fid),)).fetchone()
+            nom = row["nom"] if row else ""
+    retour = _auteur(user) or ""
+    pdf = construire_pdf(lang, fournisseur=nom, retour=retour if "@" in retour else "")
+    fichier = _sanitize_filename(f"EUDR_questionnaire_{lang.upper()}{'_' + nom if nom else ''}.pdf")
+    return Response(pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{fichier}"'})
+
+
 @router.post("/demandes/{demande_id}/annuler")
 def annuler_demande(request: Request, demande_id: int):
     """Retire un destinataire : son lien cesse de fonctionner."""

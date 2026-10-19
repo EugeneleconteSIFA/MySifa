@@ -86,7 +86,8 @@ function eudrRender(){
       </div>
       <div class="fsc-hero-actions">
         <a class="fsc-btn" href="/qualite/eudr/apercu?lang=fr" target="_blank" rel="noopener" title="Le formulaire tel que le voit le fournisseur — rien n'est enregistré">Aperçu du questionnaire</a>
-        ${admin ? `<button type="button" class="btn btn-accent" id="eudr-send-btn" onclick="eudrOuvrirEnvoi()">Envoyer le questionnaire</button>` : ''}
+        <button type="button" class="fsc-btn" onclick="eudrOuvrirPdf()" title="Le questionnaire à remplir à la main, en anglais, français ou espagnol">Questionnaire PDF</button>
+        ${admin ? `<button type="button" class="btn btn-accent" id="eudr-send-btn" onclick="eudrOuvrirEnvoi()" title="Cochez un ou plusieurs fournisseurs : chacun reçoit son lien personnel">Envoyer le questionnaire${S.eudr.sel.size ? ` (${S.eudr.sel.size})` : ''}</button>` : ''}
       </div>
     </div>
     <div class="fsc-kpis">
@@ -119,7 +120,9 @@ function eudrRenderList(){
   const rows = eudrLignes();
   const admin = fscEstAdmin();
   const info = document.getElementById('eudr-selinfo');
-  if(info) info.textContent = S.eudr.sel.size ? `${S.eudr.sel.size} sélectionné(s)` : '';
+  if(info) info.textContent = S.eudr.sel.size ? `${S.eudr.sel.size} sélectionné(s)` : (admin ? 'Cochez les fournisseurs à solliciter, puis « Envoyer le questionnaire ».' : '');
+  const sb = document.getElementById('eudr-send-btn');
+  if(sb) sb.textContent = 'Envoyer le questionnaire' + (S.eudr.sel.size ? ` (${S.eudr.sel.size})` : '');
   if(!rows.length){
     box.innerHTML = `<div class="eudr-empty">${S.eudr.q ? `Aucun résultat pour « ${escHtml(S.eudr.q)} »` : 'Aucun fournisseur dans cette vue.'}</div>`;
     return;
@@ -217,6 +220,45 @@ async function eudrEnregistrerSaisie(fid){
     showToast('Réponse enregistrée.','success');
     eudrRender();
   }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); go.disabled = false; go.textContent = 'Enregistrer'; }
+}
+
+// ─── Questionnaire PDF ───────────────────────────────────────────────
+function eudrOuvrirPdf(){
+  const fours = (S.eudr.data.fournisseurs||[]).filter(l => !S.eudr.bobines || l.bobines);
+  const un = S.eudr.sel.size === 1 ? [...S.eudr.sel][0] : null;
+  eudrMroot().innerHTML = `
+  <div class="modal-ov" style="display:flex" onclick="if(event.target===this)closeMroot()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <button type="button" class="modal-close" onclick="closeMroot()">×</button>
+      <div class="modal-hd"><h3>Questionnaire PDF</h3></div>
+      <div class="modal-bd">
+        <p style="margin:0 0 12px">Les mêmes questions que le formulaire en ligne, à remplir à la main. Votre adresse email figure comme adresse de retour ; la réponse se saisit ensuite avec « Saisie manuelle ».</p>
+        <label class="eudr-f"><span>Langue</span>
+          <select id="eudr-pdf-lang">${Object.keys(EUDR_LANGUES).map(k => `<option value="${k}">${EUDR_LANGUES[k]}</option>`).join('')}</select></label>
+        <label class="eudr-f"><span>Fournisseur (nom imprimé en tête)</span>
+          <select id="eudr-pdf-four"><option value="">— Questionnaire vierge —</option>
+            ${fours.map(l => `<option value="${l.id}"${l.id===un?' selected':''}>${escHtml(l.nom)}</option>`).join('')}</select></label>
+      </div>
+      <div class="modal-ft">
+        <button type="button" class="fsc-btn" onclick="closeMroot()">Annuler</button>
+        <button type="button" class="btn btn-accent" onclick="eudrTelechargerPdf()">Ouvrir le PDF</button>
+      </div>
+    </div>
+  </div>`;
+  const sl = document.getElementById('eudr-pdf-four');
+  sl.addEventListener('change', () => {
+    const l = fours.find(x => String(x.id) === sl.value);
+    if(l && l.langue) document.getElementById('eudr-pdf-lang').value = l.langue;
+  });
+  if(un){ const l = fours.find(x => x.id === un); if(l && l.langue) document.getElementById('eudr-pdf-lang').value = l.langue; }
+}
+
+function eudrTelechargerPdf(){
+  const q = new URLSearchParams({lang: document.getElementById('eudr-pdf-lang').value});
+  const f = document.getElementById('eudr-pdf-four').value;
+  if(f) q.set('fournisseur_id', f);
+  window.open('/api/qualite/eudr/questionnaire.pdf?' + q.toString(), '_blank', 'noopener');
+  closeMroot();
 }
 
 function eudrSel(id, on){ if(on) S.eudr.sel.add(id); else S.eudr.sel.delete(id); eudrRenderList(); }
