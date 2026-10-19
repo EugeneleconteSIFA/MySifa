@@ -5,7 +5,7 @@
  * d'opération. Un seul rendu, sinon les deux écrans divergent au premier
  * correctif.
  *
- * Entrée : { stats, saisies, alerte } — `stats` vient de
+ * Entrée : { stats, saisies, alerte, comparaison?, alertes? } — `stats` vient de
  * `build_dossier_production_stats`, les saisies de production_data.
  * API : MySifaDonneesProd.html(d) → chaîne HTML.
  */
@@ -80,7 +80,156 @@
     + 'color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent);border:1px solid color-mix(in srgb,var(--c) 40%,transparent)}'
     + '.dp-cpt{font-family:ui-monospace,Consolas,monospace;font-weight:700;color:var(--text)}'
     + '.dp-clos{margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;color:white;background:var(--accent)}'
-    + '.dp-vide{color:var(--muted)}';
+    + '.dp-vide{color:var(--muted)}'
+    + '.dp-cmp-tete{display:flex;align-items:center;gap:8px;flex-wrap:wrap}'
+    + '.dp-cmp-src{font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted)}'
+    + '.dp-cmp-concl{margin-left:auto;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;text-transform:none;letter-spacing:0;'
+    + 'color:var(--c);background:color-mix(in srgb,var(--c) 12%,transparent);border:1px solid color-mix(in srgb,var(--c) 40%,transparent)}'
+    + '.dp-ec{font-weight:700;font-variant-numeric:tabular-nums}'
+    + '.dp-ec.bon{color:var(--success)}.dp-ec.mauvais{color:var(--danger)}'
+    + '.dp-avert{margin:-6px 0 14px;font-size:12px;color:var(--warn)}'
+    + '.dp-al{margin-bottom:14px}'
+    + '.dp-al-bloc{border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:var(--card)}'
+    + '.dp-al-nom{font-size:13px;font-weight:700;color:var(--text);display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}'
+    + '.dp-al-nom span{font-size:11px;font-weight:500;color:var(--muted)}'
+    + '.dp-al-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-top:8px}'
+    + '.dp-al-g{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--bg)}'
+    + '.dp-al-g-lib{font-size:11px;font-weight:700;color:var(--text2);display:flex;justify-content:space-between;gap:8px}'
+    + '.dp-al-g-lib b{font-variant-numeric:tabular-nums;color:var(--text)}'
+    + '.dp-al-svg{display:block;width:100%;height:auto;margin-top:4px;overflow:visible}'
+    + '.dp-al-svg .ligne{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}'
+    + '.dp-al-svg .grille{stroke:var(--border);stroke-width:1}'
+    + '.dp-al-svg .pt{fill:var(--accent);stroke:var(--bg);stroke-width:2}'
+    + '.dp-al-svg .cible{fill:transparent;cursor:default}'
+    + '.dp-al-svg .cible:hover+.pt,.dp-al-svg .pt:hover{r:5.5}'
+    + '.dp-al-svg text{font-size:10px;fill:var(--muted);font-variant-numeric:tabular-nums}'
+    + '.dp-al-choix{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}'
+    + '.dp-al-c{padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid var(--border);color:var(--text2);background:var(--card)}'
+    + '.dp-al-c b{color:var(--text)}'
+    + '.dp-al-c.nc{border-color:var(--danger);color:var(--danger)}.dp-al-c.nc b{color:var(--danger)}';
+
+  // ── Alertes validées pendant le dossier ─────────────────────────────────
+  // Une valeur relevée = une courbe dans le temps (une seule série : le titre
+  // la nomme, pas de légende). Une question à choix n'est pas un graphe : le
+  // compte de chaque réponse, les non-conformes marquées « NC » en toutes
+  // lettres. Chaque point dit sa valeur, son heure et son opérateur au survol.
+  function nombreFr(v) {
+    const n = parseFloat(String(v == null ? '' : v).replace(',', '.').trim());
+    return isFinite(n) ? n : null;
+  }
+  function courbe(points, unite) {
+    const W = 300, H = 92, G = 34, D = 10, Hh = 10, B = 18;
+    const ys = points.map(p => p.v);
+    let lo = Math.min.apply(null, ys), hi = Math.max.apply(null, ys);
+    if (lo === hi) { lo -= Math.abs(lo) * 0.05 || 1; hi += Math.abs(hi) * 0.05 || 1; }
+    const ts = points.map(p => p.t);
+    const t0 = Math.min.apply(null, ts), t1 = Math.max.apply(null, ts);
+    const x = (p, i) => G + (t1 > t0 ? (p.t - t0) / (t1 - t0) : (points.length > 1 ? i / (points.length - 1) : 0.5)) * (W - G - D);
+    const y = (v) => Hh + (1 - (v - lo) / (hi - lo)) * (H - Hh - B);
+    const fmt = (v) => nombre(Math.round(v * 1000) / 1000);
+    const pts = points.map((p, i) => [x(p, i), y(p.v)]);
+    let svg = '<svg class="dp-al-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Évolution sur le dossier">'
+      + '<line class="grille" x1="' + G + '" x2="' + (W - D) + '" y1="' + y(hi) + '" y2="' + y(hi) + '"/>'
+      + '<line class="grille" x1="' + G + '" x2="' + (W - D) + '" y1="' + y(lo) + '" y2="' + y(lo) + '"/>'
+      + '<text x="' + (G - 6) + '" y="' + (y(hi) + 3) + '" text-anchor="end">' + fmt(hi) + '</text>'
+      + '<text x="' + (G - 6) + '" y="' + (y(lo) + 3) + '" text-anchor="end">' + fmt(lo) + '</text>'
+      + '<text x="' + G + '" y="' + (H - 3) + '">' + esc(dateCourte(points[0].iso).slice(6)) + '</text>'
+      + (points.length > 1 ? '<text x="' + (W - D) + '" y="' + (H - 3) + '" text-anchor="end">'
+        + esc(dateCourte(points[points.length - 1].iso).slice(6)) + '</text>' : '');
+    if (pts.length > 1) svg += '<polyline class="ligne" points="' + pts.map(q => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ') + '"/>';
+    points.forEach((p, i) => {
+      const titre = esc(fmt(p.v) + (unite ? ' ' + unite : '') + ' · ' + dateCourte(p.iso) + (p.qui ? ' · ' + p.qui : ''));
+      svg += '<circle class="cible" cx="' + pts[i][0].toFixed(1) + '" cy="' + pts[i][1].toFixed(1) + '" r="10"><title>' + titre + '</title></circle>'
+        + '<circle class="pt" cx="' + pts[i][0].toFixed(1) + '" cy="' + pts[i][1].toFixed(1) + '" r="4"><title>' + titre + '</title></circle>';
+    });
+    return svg + '</svg>';
+  }
+  function alertesHtml(alertes) {
+    if (!alertes || !alertes.length) return '<div class="dp-vide" style="font-size:13px;margin-bottom:14px">Aucune alerte validée sur ce dossier.</div>';
+    const parAlerte = {};
+    alertes.forEach(a => { (parAlerte[a.alert_id || a.nom] = parAlerte[a.alert_id || a.nom] || []).push(a); });
+    let h = '<div class="dp-al">';
+    Object.keys(parAlerte).forEach(k => {
+      const acks = parAlerte[k];
+      const items = (acks[acks.length - 1].items || []);
+      h += '<div class="dp-al-bloc"><div class="dp-al-nom">' + esc(acks[0].nom)
+        + '<span>' + acks.length + ' validation' + (acks.length > 1 ? 's' : '') + ' · '
+        + esc(dateCourte(acks[0].ack_at)) + (acks.length > 1 ? ' → ' + esc(dateCourte(acks[acks.length - 1].ack_at)) : '') + '</span></div>'
+        + '<div class="dp-al-grille">';
+      items.forEach((it, idx) => {
+        const cle = String(idx);
+        if (it.type === 'value') {
+          const pts = acks.map(a => ({v: nombreFr((a.reponses || {})[cle]), iso: a.ack_at,
+            t: Date.parse(String(a.ack_at || '').replace(' ', 'T')) || 0, qui: a.user_nom || ''})).filter(p => p.v !== null);
+          if (!pts.length) return;
+          const der = pts[pts.length - 1].v;
+          h += '<div class="dp-al-g"><div class="dp-al-g-lib">' + esc(it.label || 'Valeur')
+            + '<span>dernière <b>' + nombre(der) + (it.unit ? ' ' + esc(it.unit) : '') + '</b></span></div>'
+            + courbe(pts, it.unit || '') + '</div>';
+        } else {
+          const comptes = {};
+          acks.forEach(a => {
+            let r = (a.reponses || {})[cle];
+            (Array.isArray(r) ? r : (r == null || r === '' ? [] : [r])).forEach(v => { comptes[v] = (comptes[v] || 0) + 1; });
+          });
+          const nc = new Set(it.nc_responses || []);
+          const cles = Object.keys(comptes);
+          if (!cles.length) return;
+          h += '<div class="dp-al-g"><div class="dp-al-g-lib">' + esc(it.label || 'Contrôle') + '</div><div class="dp-al-choix">'
+            + cles.sort((a, b) => comptes[b] - comptes[a]).map(v => '<span class="dp-al-c' + (nc.has(v) ? ' nc' : '') + '">'
+              + esc(v) + (nc.has(v) ? ' · NC' : '') + ' <b>×' + comptes[v] + '</b></span>').join('')
+            + '</div></div>';
+        }
+      });
+      h += '</div>';
+      const coms = acks.filter(a => (a.commentaire || '').trim());
+      if (coms.length) h += '<div style="margin-top:8px;font-size:12px;color:var(--text2)">'
+        + coms.map(a => '<div>' + esc(dateCourte(a.ack_at)) + ' · ' + esc(a.user_nom || '') + ' : « ' + esc(a.commentaire) + ' »</div>').join('') + '</div>';
+      h += '</div>';
+    });
+    return h + '</div>';
+  }
+
+  // ── Théorique (devis) contre réel ───────────────────────────────────────
+  // Même calcul que la Rentabilité (`comparaison_pour_dossier`), lu tel quel :
+  // l'écart vient du serveur, l'écran ne fait que dire s'il est bon ou non.
+  // Un temps plus court est bon ; une vitesse ou une quantité plus haute aussi.
+  function comparaisonHtml(c) {
+    if (!c || !c.theorique || !c.reel) return '';
+    const th = c.theorique, re = c.reel, ec = c.ecarts || {};
+    const m = (v) => (v == null || v === '' || !isFinite(Number(v))) ? '<span class="dp-vide">—</span>' : nombre(Math.round(Number(v)));
+    const dmin = (v) => Number(v || 0) ? duree(v) : '<span class="dp-vide">—</span>';
+    const vit = (v) => Number(v || 0) ? nombre(Math.round(Number(v) * 10) / 10) + ' m/min' : '<span class="dp-vide">—</span>';
+    const ecart = (cle, plusEstMieux) => {
+      const t = ec[cle];
+      if (!t) return '<span class="dp-vide">—</span>';
+      const n = parseFloat(String(t).replace(',', '.'));
+      const sens = !isFinite(n) || n === 0 ? '' : ((n > 0) === plusEstMieux ? ' bon' : ' mauvais');
+      return '<span class="dp-ec' + sens + '">' + esc(t) + '</span>';
+    };
+    const ligne = (lib, t, r, e) => '<tr><td style="font-weight:600;color:var(--text)">' + lib + '</td>'
+      + '<td class="n">' + t + '</td><td class="n">' + r + '</td><td class="n">' + e + '</td></tr>';
+    const dv = c.devis || {};
+    const src = 'Devis' + (dv.client ? ' ' + esc(dv.client) : '') + (dv.date_devis ? ' du ' + esc(String(dv.date_devis).slice(0, 10).split('-').reverse().join('/')) : '')
+      // Palier retenu : le devis a été recalé sur la quantité réellement commandée.
+      + (c.palier && Number(c.palier.qte_retenue) > 0 ? ' · recalé sur ' + nombre(c.palier.qte_retenue) + ' étiquettes' : '');
+    const concl = c.conclusion || {};
+    const coul = {success: 'var(--success)', warn: 'var(--warn)', danger: 'var(--danger)'}[concl.color] || 'var(--muted)';
+    const avert = (c.avertissements || []).map(a => esc(a.message || a.texte || a)).filter(Boolean);
+    return '<div class="dp-titre dp-cmp-tete">Théorique vs réel <span class="dp-cmp-src">' + src + '</span>'
+      + (concl.label ? '<span class="dp-cmp-concl" style="--c:' + coul + '">' + esc(concl.label) + '</span>' : '') + '</div>'
+      + '<div class="dp-wrap"><table class="dp-t"><thead><tr><th></th><th class="n">Théorique</th><th class="n">Réel</th><th class="n">Écart</th></tr></thead><tbody>'
+      + ligne('Calage', dmin(th.temps_calage_mn), dmin(re.temps_calage_mn), ecart('temps_calage_mn', false))
+      + ligne('Production', dmin(th.temps_production_mn), dmin(re.temps_production_mn), ecart('temps_production_mn', false))
+      + ligne('Gâche de calage', th.metrage_calage_ml ? m(th.metrage_calage_ml) + ' m' : m(null),
+              re.metrage_calage_ml != null ? m(re.metrage_calage_ml) + ' m' : m(null), ecart('metrage_calage_ml', false))
+      + ligne('Métrage', th.metrage_ml ? m(th.metrage_ml) + ' m' : m(null), re.metrage_ml ? m(re.metrage_ml) + ' m' : m(null), ecart('metrage_ml', false))
+      + ligne('Étiquettes', m(th.qte_etiquettes), m(re.qte_etiquettes), ecart('qte_etiquettes', true))
+      + ligne('Vitesse', vit(th.vitesse), vit(re.vitesse), ecart('vitesse', true))
+      + ligne('Vitesse calage compris', vit(th.vitesse_avec_calage), vit(re.vitesse_avec_calage), ecart('vitesse_avec_calage', true))
+      + '</tbody></table></div>'
+      + (avert.length ? '<div class="dp-avert">' + avert.join(' · ') + '</div>' : '');
+  }
 
   function prodHtml(d) {
     const st = d.stats || {};
@@ -103,6 +252,13 @@
       + carte('Vitesse', st.vitesse_aberrante ? '<span style="color:var(--danger);font-weight:400">erreur saisie</span>'
           : st.vitesse_m_min ? nombre(Math.round(st.vitesse_m_min * 10) / 10) + ' m/min' : '—', 'var(--accent)')
       + '</div>';
+    h += comparaisonHtml(d.comparaison);
+    // Caché par défaut : la page qui l'affiche pose un bouton qui le déplie
+    // (MySifaDonneesProd.basculerAlertes). Sans liste d'alertes, rien.
+    if (Array.isArray(d.alertes)) {
+      h += '<div class="dp-alertes" hidden><div class="dp-titre">Alertes validées <span class="dp-n">'
+        + d.alertes.length + '</span></div>' + alertesHtml(d.alertes) + '</div>';
+    }
 
     const ops = st.operateurs || [];
     if (ops.length) {
@@ -150,5 +306,12 @@
     return h;
   }
 
-  window.MySifaDonneesProd = { html: prodHtml };
+  function basculerAlertes(panneau, ouvert) {
+    const z = panneau && panneau.querySelector('.dp-alertes');
+    if (!z) return false;
+    z.hidden = (ouvert === undefined) ? !z.hidden : !ouvert;
+    return !z.hidden;
+  }
+
+  window.MySifaDonneesProd = { html: prodHtml, basculerAlertes: basculerAlertes };
 })();
