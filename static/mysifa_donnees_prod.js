@@ -105,8 +105,6 @@
     + 'box-shadow:0 4px 14px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .1s}'
     + '.dp-frise b.g::after{left:0;transform:none}.dp-frise b.d::after{left:auto;right:0;transform:none}'
     + '.dp-frise b:hover::after{opacity:1}'
-    + '.dp-frise-leg{display:inline-flex;align-items:center;gap:5px;margin-left:auto;font-weight:600;text-transform:none;letter-spacing:0;color:var(--muted)}'
-    + '.dp-frise-leg i{width:9px;height:9px;border-radius:50%;background:var(--accent);display:inline-block}'
     + '.dp-cartes.dp-3{grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:8px}'
     + '.dp-cartes.dp-3+.dp-cartes.dp-3{margin-bottom:14px}'
     + '.dp-carte-sub{font-size:11px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
@@ -397,7 +395,7 @@
     return '<div class="dp-titre">Déroulé <span class="dp-cmp-src">' + esc(dateCourte(rows[0].date_operation))
       + ' → ' + esc(dateCourte(rows[rows.length - 1].date_operation))
       + (plusieurs ? ' · ' + plages.length + ' jours de production' : '') + '</span>'
-      + (points ? '<span class="dp-frise-leg"><i></i>Relevé d\'alerte</span>' : '') + '</div>'
+      + '</div>'
       + '<div class="dp-frise">' + bandes + separations + points + '</div><div class="dp-frise-axe">' + reperes + '</div>';
   }
 
