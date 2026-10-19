@@ -270,6 +270,20 @@ SUPERADMIN_EMAIL = "eleconte@sifa.pro"
 # Rôles ayant accès aux fonctions d'administration (imports, dossiers, stats, etc.)
 ROLES_ADMIN = {ROLE_DIRECTION, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
 
+# Sessions sans déconnexion : ces rôles ne sont pas renvoyés à l'écran de
+# connexion au bout de SESSION_HOURS. Leur session dure SESSION_HOURS_PERMANENTE
+# et se prolonge d'autant à chaque visite (au plus une écriture par jour).
+# 400 jours = plafond de durée de vie d'un cookie imposé par Chrome.
+ROLES_SESSION_PERMANENTE = set(ROLES_ADMIN)
+SESSION_HOURS_PERMANENTE = int(os.getenv("SESSION_HOURS_PERMANENTE", str(400 * 24)))
+
+
+def session_hours_for_role(role: str) -> int:
+    """Durée de session (heures) attribuée à un rôle réel."""
+    if role in ROLES_SESSION_PERMANENTE:
+        return SESSION_HOURS_PERMANENTE
+    return SESSION_HOURS
+
 # Rôles autorisés à ouvrir un accès MCP à un agent externe (écran de
 # consentement OAuth). Un jeton accordé ici donne la lecture de la production et
 # du miroir RVGI : c'est une décision de direction, pas une manipulation

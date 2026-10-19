@@ -970,7 +970,22 @@ async def update_saisie(row_id: int, request: Request):
             except Exception:
                 pass
         conn.commit()
-    return {"success": True}
+
+        # Fin de production : « Dossier terminé » / « À reprendre » corrigé
+        # après coup. Une saisie qui cesse d'être un 89 perd ce choix.
+        cloture = None
+        if str(cl["code"] or "").strip() == "89":
+            if body.get("fin_dossier") is not None:
+                from app.services.cloture_saisie import changer
+                try:
+                    cloture = changer(conn, row_id, bool(body.get("fin_dossier")),
+                                      (user.get("nom") or user.get("email") or "").strip())
+                except ValueError as e:
+                    raise HTTPException(status_code=409, detail=str(e))
+        elif "fin_dossier" in ex.keys() and ex["fin_dossier"] is not None:
+            conn.execute("UPDATE production_data SET fin_dossier = NULL WHERE id = ?", (row_id,))
+            conn.commit()
+    return {"success": True, "cloture": cloture}
 
 
 @router.post("/api/saisies")
@@ -1036,6 +1051,13 @@ async def add_saisie(request: Request):
             except Exception:
                 pass
             conn.commit()
+            if str(cl["code"] or "").strip() == "89" and body.get("fin_dossier") is not None:
+                try:
+                    from app.services.cloture_saisie import changer
+                    changer(conn, cursor.lastrowid, bool(body.get("fin_dossier")),
+                            (user.get("nom") or user.get("email") or "").strip())
+                except ValueError:
+                    pass  # saisie enregistrée ; le choix reste « non renseigné »
     except Exception as e:
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erreur : {str(e)}")
