@@ -833,6 +833,27 @@ def rattacher_fictif(conn, from_ref: str, to_raw: str, user_email: str) -> dict:
         )
         updated_saisies += 1
 
+    # Les saisies rejoignent le créneau du dossier réel, qui se recale sur
+    # elles : un dossier produit puis clôturé en fictif était resté « en
+    # attente » au planning.
+    creneaux = set()
+    try:
+        from app.services.lien_saisie_planning import rattacher
+        for r in rows:
+            pe_id = rattacher(conn, r["id"], forcer=True)
+            if pe_id:
+                creneaux.add(int(pe_id))
+        from app.services.cloture_saisie import resynchroniser_creneau, ranger_dans_historique
+        from app.routers.planning import _invalidate_attente_plans
+        for pe_id in creneaux:
+            if resynchroniser_creneau(conn, pe_id) == "termine":
+                mid = conn.execute("SELECT machine_id FROM planning_entries WHERE id=?", (pe_id,)).fetchone()
+                if mid:
+                    ranger_dans_historique(conn, int(mid[0]), pe_id)
+                    _invalidate_attente_plans(conn, int(mid[0]))
+    except Exception:
+        pass  # le rattachement des saisies reste fait
+
     mat_res = conn.execute(
         "UPDATE fab_matieres_utilisees SET no_dossier=? WHERE TRIM(no_dossier)=TRIM(?)",
         (to_ref, from_ref),
@@ -901,6 +922,39 @@ async def reassign_fictif_dossier(request: Request):
 
     with get_db() as conn:
         return rattacher_fictif(conn, from_ref, to_raw, user["email"])
+
+
+@router.patch("/api/saisies/alert-acks/{ack_id}")
+async def modifier_dossier_alerte(ack_id: int, request: Request):
+    """Change le dossier d'une alerte validée, depuis la liste des Saisies.
+
+    Seul le dossier se corrige : l'alerte a été validée sur un dossier saisi
+    en fictif, ou sur le mauvais. Réponses et horodatage restent ceux de
+    l'opérateur."""
+    user = get_current_user(request)
+    if is_fabrication(user) or not is_admin(user):
+        raise HTTPException(status_code=403, detail="Modification réservée aux administrateurs.")
+    body = await request.json()
+    no_dossier = str(body.get("no_dossier") or "").strip()
+    with get_db() as conn:
+        ex = conn.execute("SELECT id, no_dossier, machine FROM maintenance_alert_acks WHERE id = ?",
+                          (ack_id,)).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Alerte validée introuvable.")
+        conn.execute("UPDATE maintenance_alert_acks SET no_dossier = ? WHERE id = ?",
+                     (no_dossier or None, ack_id))
+        conn.commit()
+    try:
+        from app.services.audit_service import log_action
+        log_action(
+            user=user, action="UPDATE", module="saisies",
+            objet=f"Alerte validée · dossier {ex['no_dossier'] or '-'} → {no_dossier or '-'} · {ex['machine'] or ''}",
+            detail={"ack_id": ack_id, "avant": ex["no_dossier"], "apres": no_dossier or None},
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return {"success": True}
 
 
 @router.put("/api/saisies/{row_id}")
