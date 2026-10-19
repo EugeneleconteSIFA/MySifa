@@ -1,4 +1,8 @@
-/* MySifa - Points de production : rendu et pilotage de l'onglet Reunions.
+/* MySifa - Suivi des actions : rendu et pilotage de l'onglet Actions de MyProd.
+ *
+ * L'onglet s'appelait Reunions. Il ne sert plus qu'a suivre les actions ; le
+ * rendu d'une reunion reste dans ce fichier (et ses tests) mais n'est plus
+ * atteint depuis l'ecran.
  *
  * Ce fichier ne connait pas MyProd : il recoit un contenant et s'y installe.
  * C'est ce qui permet a l'onglet Reunions d'etre une page de MyProd comme
@@ -138,15 +142,10 @@
     try{
       S.erreur = null;
       await chargerContexte();
-      await Promise.all([chargerListe(), chargerSuivi()]);
+      await chargerSuivi();
       if(S.allerApres){
-        // L'adresse demande un endroit précis : il prime sur la reprise de la
-        // réunion laissée ouverte.
         var a = S.allerApres; S.allerApres = null;
         await appliquerAller(a);
-      }else if(S.ouverteId && !S.reunion){
-        await chargerReunion(S.ouverteId);
-        S.vue = 'reunion';
       }
     }catch(e){
       S.erreur = e.message;
@@ -165,41 +164,30 @@
     + '<path d="M10 11v6"/><path d="M14 11v6"/>'
     + '<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
 
+  /* L'onglet ne sert qu'a suivre les actions : la barre porte la creation,
+     la modale sert a creer comme a corriger une action. Les reunions et leur
+     API restent en base, mais l'ecran ne les montre plus. */
   function squelette(){
     return ''
       + '<div class="reu-barre">'
-      +   '<button type="button" class="reu-btn ghost" data-r="liste" style="display:none">'
-      +     '&larr; Toutes les r&eacute;unions</button>'
-      +   '<span id="reu-etat"></span>'
       +   '<div class="reu-sep"></div>'
-      +   '<button type="button" class="reu-btn" data-r="lancer">+ Lancer une r&eacute;union</button>'
+      +   '<button type="button" class="reu-btn" data-r="nouvelle">+ Nouvelle action</button>'
       + '</div>'
       + '<div id="reu-erreur"></div>'
       + '<div id="reu-vue"></div>'
       + '<div class="reu-modal-ov" id="reu-mov"><div class="reu-modal">'
-      +   '<h3>Lancer une r&eacute;union</h3>'
-      +   '<div class="reu-champ"><label>Moment</label>'
-      +     '<div class="reu-moment" role="radiogroup" aria-label="Moment de la r&eacute;union">'
-      +       '<button type="button" class="reu-moment-btn" role="radio" data-r="moment" data-moment="matin">Matin</button>'
-      +       '<button type="button" class="reu-moment-btn" role="radio" data-r="moment" data-moment="apres-midi">Apr&egrave;s-midi</button>'
-      +     '</div></div>'
-      +   '<div class="reu-champ"><label for="reu-n-titre">Titre</label>'
-      +     '<input id="reu-n-titre"></div>'
-      +   '<div class="reu-champ"><label for="reu-n-du">P&eacute;riode analys&eacute;e &mdash; du</label>'
-      +     '<input type="date" id="reu-n-du"></div>'
-      +   '<div class="reu-champ"><label for="reu-n-au">au</label>'
-      +     '<input type="date" id="reu-n-au"></div>'
+      +   '<h3 id="reu-n-h">Nouvelle action</h3>'
+      +   '<div class="reu-champ"><label for="reu-n-texte">Action</label>'
+      +     '<input id="reu-n-texte" autocomplete="off"></div>'
+      +   '<div class="reu-champ"><label for="reu-n-qui">Responsable</label>'
+      +     '<select id="reu-n-qui"></select></div>'
+      +   '<div class="reu-champ"><label for="reu-n-quand">&Eacute;ch&eacute;ance</label>'
+      +     '<input type="date" id="reu-n-quand"></div>'
       +   '<div class="reu-fin">'
+      +     '<button type="button" class="reu-btn danger" data-r="suppr-action" id="reu-n-sup" '
+      +       'style="margin-right:auto">Supprimer</button>'
       +     '<button type="button" class="reu-btn ghost" data-r="annuler">Annuler</button>'
-      +     '<button type="button" class="reu-btn" data-r="creer">Lancer</button>'
-      +   '</div>'
-      + '</div></div>'
-      + '<div class="reu-modal-ov" id="reu-mov-sup"><div class="reu-modal">'
-      +   '<h3>Supprimer cette r&eacute;union ?</h3>'
-      +   '<div class="reu-confirme" id="reu-sup-quoi"></div>'
-      +   '<div class="reu-fin">'
-      +     '<button type="button" class="reu-btn ghost" data-r="suppr-non">Annuler</button>'
-      +     '<button type="button" class="reu-btn danger" data-r="suppr-oui">Supprimer</button>'
+      +     '<button type="button" class="reu-btn" data-r="enreg-action">Enregistrer</button>'
       +   '</div>'
       + '</div></div>';
   }
@@ -316,11 +304,6 @@
       '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
     + 'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
     + '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>';
-  var ICONE_REU =
-      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-    + 'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
-    + '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>'
-    + '<path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
 
   function rendreCarte(a, aujourdhui){
     var retard = enRetard(a, aujourdhui);
@@ -337,13 +320,10 @@
               + (retard ? 'En retard · ' : '') + esc(dateFr(a.echeance)) + '</span>'
             : '')
       + '</div>'
-      + '<div class="reu-carte-t">' + esc(a.texte) + '</div>'
+      + '<div class="reu-carte-t" data-editer="' + escA(a.id) + '" role="button" tabindex="0" '
+      +   'title="Modifier l\'action">' + esc(a.texte) + '</div>'
       + '<div class="reu-carte-pied">'
-      +   (a.reunion_id
-            ? '<button type="button" class="reu-carte-reu" data-ouvrir="' + escA(a.reunion_id) + '" '
-              + 'title="Ouvrir la réunion">' + ICONE_REU
-              + '<span>' + esc(a.reunion_titre || 'Réunion') + '</span></button>'
-            : '<span></span>')
+      +   '<span></span>'
       +   selectStatut(a)
       + '</div>'
       + '</article>';
@@ -362,7 +342,7 @@
       var n = String(a.responsable || '').trim();
       if(filtre === NON_ATTRIBUE && n) return false;
       if(filtre && filtre !== NON_ATTRIBUE && n !== filtre) return false;
-      if(q && pli([a.texte, n, a.reunion_titre].join(' ')).indexOf(q) === -1) return false;
+      if(q && pli([a.texte, n].join(' ')).indexOf(q) === -1) return false;
       return true;
     });
   }
@@ -421,8 +401,8 @@
     if(l === null || l === undefined) return '<div class="reu-vide">Chargement&hellip;</div>';
     etat = etat || {};
     if(!l.length){
-      return '<div class="reu-vide">Aucune action décidée pour l\'instant.<br>'
-           + 'Les actions se créent pendant une réunion et se suivent ici.</div>';
+      return '<div class="reu-vide">Aucune action pour l\'instant.<br>'
+           + 'Ajoutez-en une avec « + Nouvelle action ».</div>';
     }
     var filtre = etat.filtreResp || '';
     var gens = responsables(l);
@@ -453,14 +433,7 @@
   }
 
   function rendreAccueil(reunions, suivi, etat){
-    var n = (reunions || []).length;
-    return '<h2 class="reu-titre-sec">Suivi des actions</h2>'
-      + rendreSuivi(suivi, etat)
-      + '<details class="reu-hist"' + (etat && etat.histOuvert ? ' open' : '') + '>'
-      + '<summary>R\u00e9unions' + (reunions ? ' <span class="reu-col-n">' + n + '</span>' : '')
-      + '</summary>'
-      + rendreListe(reunions)
-      + '</details>';
+    return rendreSuivi(suivi, etat);
   }
 
   function rendreListe(l){
@@ -1069,7 +1042,8 @@
       }
       var el = ev.target.closest
         ? ev.target.closest('[data-r],[data-sup],[data-part-add],[data-part-sup],'
-                            + '[data-mach],[data-mach-tout],[data-resp],[data-ouvrir]') : null;
+                            + '[data-mach],[data-mach-tout],[data-resp],[data-ouvrir],'
+                            + '[data-editer]') : null;
       if(el && rac.contains(el)){
         var act = el.getAttribute('data-r');
         if(act === 'liste'){
@@ -1081,7 +1055,9 @@
           peindre();
           return;
         }
-        if(act === 'lancer'){ ouvrirModale(rac); return; }
+        if(act === 'nouvelle'){ ouvrirAction(rac, null); return; }
+        if(act === 'enreg-action'){ await enregistrerAction(rac); return; }
+        if(act === 'suppr-action'){ await supprimerAction(rac); return; }
         if(act === 'tout-termine'){ S.toutTermine = true; peindre(); return; }
         if(act === 'voir-termine'){
           S.voirTermine = !S.voirTermine;
@@ -1091,6 +1067,7 @@
         if(el.hasAttribute('data-resp')){
           S.filtreResp = el.getAttribute('data-resp') || ''; peindre(); return;
         }
+        if(el.hasAttribute('data-editer')){ ouvrirAction(rac, el.getAttribute('data-editer')); return; }
         if(el.hasAttribute('data-ouvrir')){ await ouvrir(el.getAttribute('data-ouvrir')); return; }
         if(act === 'moment'){ choisirMoment(rac, el.getAttribute('data-moment')); return; }
         if(act === 'annuler'){ fermerModale(rac); return; }
@@ -1209,6 +1186,17 @@
       if(ev.target.id === 'reu-p-q' && ev.key === 'Escape'){
         S.rechercheP = '';
         peindreParticipants(rac, true);
+        return;
+      }
+      if(ev.target.hasAttribute && ev.target.hasAttribute('data-editer')
+         && (ev.key === 'Enter' || ev.key === ' ')){
+        ev.preventDefault();
+        ouvrirAction(rac, ev.target.getAttribute('data-editer'));
+        return;
+      }
+      if(ev.target.id === 'reu-n-texte' && ev.key === 'Enter'){
+        ev.preventDefault();
+        await enregistrerAction(rac);
         return;
       }
       if(ev.target.id === 'reu-a-txt' && ev.key === 'Enter'){
@@ -1381,6 +1369,72 @@
     }catch(e){ toast(e.message, 'danger'); }
   }
 
+  /* Action : creation et correction ----------------------------
+     Meme modale pour les deux. Le responsable se choisit dans l'annuaire ;
+     un nom qui n'y est plus (compte desactive) reste propose pour ne pas
+     etre efface a la premiere correction. */
+
+  function ouvrirAction(rac, id){
+    var a = id ? (S.suivi || []).filter(function(x){ return String(x.id) === String(id); })[0] : null;
+    if(id && !a) return;
+    S.actionEditee = a ? a.id : null;
+    var qui = String((a && a.responsable) || '').trim();
+    var noms = (S.personnes || []).map(function(p){ return String(p.nom || '').trim(); })
+                                  .filter(Boolean);
+    if(qui && noms.indexOf(qui) === -1) noms.push(qui);
+    var sel = rac.querySelector('#reu-n-qui');
+    if(sel){
+      sel.innerHTML = '<option value="">Non attribuée</option>'
+        + noms.map(function(n){
+            return '<option value="' + escA(n) + '"' + (n === qui ? ' selected' : '') + '>'
+                 + esc(n) + '</option>';
+          }).join('');
+    }
+    var t = rac.querySelector('#reu-n-texte');
+    if(t) t.value = a ? (a.texte || '') : '';
+    var q = rac.querySelector('#reu-n-quand');
+    if(q) q.value = a && a.echeance ? String(a.echeance).slice(0, 10) : '';
+    var h = rac.querySelector('#reu-n-h');
+    if(h) h.textContent = a ? 'Modifier l\'action' : 'Nouvelle action';
+    var sup = rac.querySelector('#reu-n-sup');
+    if(sup) sup.style.display = a ? '' : 'none';
+    var mov = rac.querySelector('#reu-mov');
+    if(mov) mov.classList.add('open');
+    if(t) setTimeout(function(){ try{ t.focus(); }catch(e){} }, 0);
+  }
+
+  async function enregistrerAction(rac){
+    var texte = ((rac.querySelector('#reu-n-texte') || {}).value || '').trim();
+    if(!texte){ toast('Action vide — décrivez ce qu\'il faut faire.', 'danger'); return; }
+    var corps = {
+      texte: texte,
+      responsable: (rac.querySelector('#reu-n-qui') || {}).value || '',
+      echeance: (rac.querySelector('#reu-n-quand') || {}).value || ''
+    };
+    var modif = !!S.actionEditee;
+    try{
+      if(modif){
+        await poster('/api/reunions/actions/' + encodeURIComponent(S.actionEditee), corps);
+      }else{
+        await poster('/api/reunions/actions', corps);
+      }
+      fermerModale(rac);
+      S.actionEditee = null;
+      toast(modif ? 'Action modifiée.' : 'Action ajoutée.', 'info');
+      await chargerSuivi();
+      peindre();
+    }catch(e){ toast(e.message, 'danger'); }
+  }
+
+  async function supprimerAction(rac){
+    if(!S.actionEditee) return;
+    var id = S.actionEditee;
+    S.actionEditee = null;
+    fermerModale(rac);
+    await majAction(id, {texte: ''});
+    toast('Action supprimée.', 'info');
+  }
+
   /* Adresse de la page hôte ------------------------------------ */
 
   // Ce que l'adresse doit porter : la réunion ouverte, le filtre du suivi
@@ -1391,28 +1445,21 @@
       resp: S.filtreResp || ''
     };
   }
+  // Une ancienne adresse peut encore nommer une reunion : l'ecran n'en
+  // affiche plus, on retombe sur le suivi.
   async function appliquerAller(a){
     S.filtreResp = a.resp || '';
-    if(a.reunion){
-      if(!S.reunion || String(S.reunion.id) !== String(a.reunion)){
-        try{ await chargerReunion(a.reunion); S.vue = 'reunion'; }
-        catch(e){ S.vue = 'liste'; S.reunion = null; toast(e.message, 'danger'); }
-      }else S.vue = 'reunion';
-    }else{
-      S.vue = 'liste'; S.reunion = null; S.prod = null; S.notesLocal = null;
-    }
+    S.vue = 'liste'; S.reunion = null; S.prod = null; S.notesLocal = null;
   }
   // Va à l'endroit décrit par l'adresse. Avant le premier chargement, la
   // demande attend la fin d'amorcer().
   async function aller(a){
     a = a || {};
-    if(!S.contexteCharge || S.reunions === null){
+    if(!S.contexteCharge || S.suivi === null){
       // Résolue par amorcer(), une fois l'endroit affiché.
       return new Promise(function(fin){ S.allerApres = a; S.allerFin = fin; });
     }
-    var cible = a.reunion ? String(a.reunion) : null;
-    var cour = etatAdresse();
-    if(String(cour.reunion || '') === String(cible || '') && cour.resp === (a.resp || '')) return;
+    if(S.vue !== 'reunion' && (S.filtreResp || '') === (a.resp || '')) return;
     await appliquerAller(a);
     peindre();
   }
@@ -1427,7 +1474,7 @@
     brancher(racine);
     poserEchap();
     appliquerPlein();
-    if(!S.contexteCharge || S.reunions === null || S.suivi === null){ amorcer(); }
+    if(!S.contexteCharge || S.suivi === null){ amorcer(); }
     else{ peindre(); }
   }
 

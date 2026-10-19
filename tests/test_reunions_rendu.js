@@ -392,12 +392,13 @@ verifier("suivi : recherche", M.rendreSuivi(SUIVI, { recherche: "anilox" }).inde
 verifier("suivi : sans statut, la case decide", M.rendreSuivi(SUIVI, { voirTermine: true }).includes('<article class="reu-carte st-termine'));
 verifier("suivi : retard signale", board.includes(' retard" draggable') && board.includes("En retard"));
 verifier("suivi : non attribuee nommee", board.includes("Non attribuée"));
-verifier("suivi : lien vers la reunion", board.includes('data-ouvrir="4"'));
+verifier("suivi : plus de lien vers la reunion", !board.includes('data-ouvrir='));
+verifier("suivi : le texte ouvre la correction", board.includes('data-editer="1"'));
 verifier("suivi : filtre Paul", M.rendreSuivi(SUIVI, { filtreResp: "Paul" }).indexOf("Regler la DSI") === -1);
 verifier("suivi : filtre non attribuees", M.rendreSuivi(SUIVI, { filtreResp: "~" }).includes("Devis")
          && M.rendreSuivi(SUIVI, { filtreResp: "~" }).indexOf("anilox") === -1);
 verifier("suivi : echappement", !M.rendreSuivi([{ id: 9, texte: piege, responsable: piege, statut: "a_faire" }]).includes("<img src=x"));
-verifier("accueil : liste des reunions repliee", M.rendreAccueil([], SUIVI, {}).includes('<details class="reu-hist">'));
+verifier("accueil : plus de liste des reunions", !M.rendreAccueil([], SUIVI, {}).includes('reu-hist'));
 
 console.log("\n" + "=".repeat(60));
 if (ECHECS.length) {
