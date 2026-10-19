@@ -915,7 +915,10 @@ def dossier_detail(request: Request, no_dossier: str = ""):
 
     Même lecture que le déstockage (`/api/stock/destockage/{id}/production`) :
     mêmes saisies, même calcul, même rendu. Un compte qui ne voit que sa
-    production ne voit que ses propres saisies.
+    production (poste fabrication) voit les chiffres du dossier ENTIER — les
+    réduire à ses propres saisies faussait temps, métrage et vitesse — mais
+    pas qui a produit : noms d'opérateurs retirés des saisies, des alertes et
+    du tableau par opérateur.
     """
     from app.routers.besoins_matieres import _saisies_dossier, _alerte_metrage
     from app.services.dossier_stats import build_dossier_production_stats
@@ -926,15 +929,15 @@ def dossier_detail(request: Request, no_dossier: str = ""):
     with get_db() as conn:
         rows = _saisies_dossier(conn, ref)
         alertes = _alertes_dossier(conn, ref)
-    if not can_view_all_prod(user):
-        moi = (user.get("operateur_lie") or user.get("nom") or "").strip().lower()
-        if not moi:
-            raise HTTPException(status_code=403, detail="Compte non lié à un opérateur.")
-        rows = [r for r in rows if str(r.get("operateur") or "").strip().lower() == moi]
-        alertes = [a for a in alertes
-                   if moi in (str(a.get("user_nom") or "").strip().lower(),
-                              str(a.get("operateur_lie") or "").strip().lower())]
+    anonyme = not can_view_all_prod(user)
     stats = build_dossier_production_stats(rows, ref)
+    if anonyme:
+        # Calcul fait sur les saisies nominatives (les temps se découpent par
+        # opérateur), les noms ne sortent qu'ensuite.
+        if isinstance(stats, dict):
+            stats["operateurs"] = []
+        rows = [dict(r, operateur="") for r in rows]
+        alertes = [dict(a, user_nom="") for a in alertes]
     metrage = float(((stats or {}).get("quantites") or {}).get("metrage_m") or 0)
     # Théorique (devis) contre réel : le devis est une donnée de prix, réservée
     # aux rôles qui ouvrent la Rentabilité.

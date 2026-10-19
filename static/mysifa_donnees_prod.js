@@ -496,8 +496,10 @@
     // plusieurs. Un seul compteur :
     // celui du début sur le 01, celui de la fin sur le 89.
     const multiMachine = new Set(rows.map(r => r.machine || '')).size > 1;
+    // Sans nom d'opérateur (compte qui ne voit pas qui a produit) : pas de colonne.
+    const avecOperateur = rows.some(r => r.operateur);
     h += '<div class="dp-wrap dp-haut"><table class="dp-t dp-saisies"><thead><tr>'
-      + '<th>Date</th><th>Opération</th><th>Opérateur</th>' + (multiMachine ? '<th>Machine</th>' : '')
+      + '<th>Date</th><th>Opération</th>' + (avecOperateur ? '<th>Opérateur</th>' : '') + (multiMachine ? '<th>Machine</th>' : '')
       + '<th class="n">Compteur</th><th>Commentaire</th>'
       + '</tr></thead><tbody>'
       + rows.map(r => {
@@ -514,7 +516,7 @@
           // ne dit rien à l'opérateur qui relit sa saisie.
           + '<td><span class="dp-code" style="--c:' + (borne ? 'var(--text)' : c) + '">' + esc(libelle) + '</span>'
           + '</td>'
-          + '<td>' + esc(r.operateur || '') + '</td>' + (multiMachine ? '<td>' + esc(r.machine || '') + '</td>' : '')
+          + (avecOperateur ? '<td>' + esc(r.operateur || '') + '</td>' : '') + (multiMachine ? '<td>' + esc(r.machine || '') + '</td>' : '')
           + '<td class="n">' + (code === '01' && r.metrage_prevu ? '<span class="dp-cpt-lib">début</span>' + cpt(r.metrage_prevu)
             : code === '89' && r.metrage_reel ? '<span class="dp-cpt-lib">fin</span>' + cpt(r.metrage_reel) : '') + '</td>'
           + '<td class="dp-com">' + esc(r.commentaire || '') + '</td></tr>';

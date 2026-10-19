@@ -6829,12 +6829,15 @@ async function loadCalageCloture(){
   const ref = S.dossier ? (S.dossier.reference||'') : '';
   if(!ref){ S.finCalage = {erreur:true, jours:[]}; return; }
   let qs = '?no_dossier='+encodeURIComponent(ref);
-  const mid = S.adminMachineId || S.wantedMachineId;
+  // La machine du dossier affiché d'abord : sans elle, un poste sans machine
+  // choisie au sélecteur (administrateur, opérateur non planifié) recevait un
+  // refus, et les trois heures restaient à recopier à la main.
+  const mid = (S.machine && S.machine.id) || S.adminMachineId || S.wantedMachineId || S.machineIdCourant;
   if(mid) qs += '&machine_id='+encodeURIComponent(mid);
   try{
     S.finCalage = await apiFetch('/api/fabrication/calage-cloture'+qs);
   }catch(e){
-    S.finCalage = {erreur:true, jours:[]};
+    S.finCalage = {erreur:true, jours:[], message:(e && e.message) || ''};
   }
   if(!S.finCalageVals) S.finCalageVals = finCalageValsDepuis(S.finCalage);
   if(S.showFinModal) fabRenderPreserveUi({});
@@ -7198,7 +7201,8 @@ function renderFinModal(){
     return h('div',null,
       durees,
       alerte,
-      p.erreur ? h('div',{className:'fab-modal-sub'},'Heures des saisies indisponibles.') : null,
+      p.erreur ? h('div',{className:'fab-modal-sub'},'Heures des saisies indisponibles'
+        + (p.message ? ' — '+p.message : '') + '. Recopiez-les du dossier de prod.') : null,
       ligne('debut','Début calage'),
       ligne('fin','Fin calage'),
       ligne('prod','Fin de prod'),
