@@ -10968,7 +10968,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
      meme que dans MyProd : une alerte validee se relit comme une saisie.
      Ne touche pas au runtime des alertes ci-dessus, qui garde son style
      d'alerte — c'est une interruption, pas une consultation. -->
-<script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__-ack2"></script>
+<script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__-ack3"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js?v=2"></script>
 

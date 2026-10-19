@@ -1,5 +1,6 @@
 """SIFA — Saisies v0.8 — commentaire + métrages"""
 import json
+import sqlite3
 import io
 import pandas as pd
 from datetime import datetime
@@ -838,6 +839,16 @@ def rattacher_fictif(conn, from_ref: str, to_raw: str, user_email: str) -> dict:
     )
     updated_matieres = mat_res.rowcount
 
+    # Alertes validées pendant le dossier fictif : elles portent le dossier
+    # en texte et restaient sur FICTIF:… une fois les saisies rattachées.
+    try:
+        updated_alertes = conn.execute(
+            "UPDATE maintenance_alert_acks SET no_dossier=? WHERE TRIM(no_dossier)=TRIM(?)",
+            (to_ref, from_ref),
+        ).rowcount
+    except sqlite3.OperationalError:
+        updated_alertes = 0
+
     link_rows = conn.execute(
         "SELECT id, planning_entry_id FROM rent_prod_links WHERE TRIM(no_dossier)=TRIM(?)",
         (from_ref,),
@@ -864,6 +875,7 @@ def rattacher_fictif(conn, from_ref: str, to_raw: str, user_email: str) -> dict:
         "updated_saisies": updated_saisies,
         "updated_matieres": updated_matieres,
         "updated_links": updated_links,
+        "updated_alertes": updated_alertes,
         "target": target,
     }
 

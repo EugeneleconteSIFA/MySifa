@@ -8493,36 +8493,76 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
 }
  
 function getVisibleSaisiesRowsForNav(){
-  // Base : déjà filtré côté API (/api/saisies + filtres). Ici on applique seulement tri + enrichissements UI.
+  // Base : déjà filtré côté API (/api/saisies + filtres). Ici on applique
+  // tri, enrichissements UI et bascules d'affichage : on ne navigue que sur
+  // les lignes que l'on voit.
   const d = S.saisies;
   if(!d) return [];
   let rows = (d.rows || []).slice();
   // Même calcul de durées que le tableau.
   try{ rows = saisiesAvecDurees(rows); }catch(e){}
+  const aff = saisiesAffichage();
+  rows = rows.filter(r=>saisieVisible(r, aff));
   if(S.sortState && S.sortState.col) rows = sortRows(rows, S.sortState.col, S.sortState.asc);
   return rows;
 }
 
-function attachSaisieNav(modal, currentId){
-  // Ctrl+← / Ctrl+→ : naviguer sur la liste affichée (bouclage).
-  const handler = (e)=>{
-    if(!e || !e.ctrlKey) return;
-    if(e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-    const list = getVisibleSaisiesRowsForNav();
-    if(!list || !list.length) return;
-    const idx = list.findIndex(r=>String(r.id)===String(currentId));
-    if(idx < 0) return;
+// ── Navigation entre saisies ────────────────────────────────────
+// Saisie de production, mouvement de stock ou alerte validée : chaque ligne
+// a sa fenêtre, mais ‹ / › et Ctrl+← / Ctrl+→ parcourent la liste affichée
+// d'une fenêtre à l'autre. L'identité passe par saisieSelKey : un mouvement
+// de stock peut porter le même id numérique qu'une saisie de production.
+function ouvrirLigneSaisie(row){
+  if(!row) return;
+  fermerFenetresSaisie();
+  if(row.kind==='alert_ack') _openAlertAckViewer(row);
+  else if(row.kind==='stock_pf'||row.kind==='stock_mp') openEditStockModal(row);
+  else openEditModal(row);
+}
+function fermerFenetresSaisie(){
+  try{ closeModal(); }catch(_){}
+  try{ document.querySelectorAll('.add-row-modal').forEach(m=>m.remove()); }catch(_){}
+  try{ if(window.MysifaAckViewer) window.MysifaAckViewer.close(); }catch(_){}
+  S._saisieNavCourante = null;
+}
+function navSaisie(row){
+  const list = getVisibleSaisiesRowsForNav();
+  const total = list.length;
+  const cle = saisieSelKey(row);
+  const i = total ? list.findIndex(r=>String(saisieSelKey(r))===String(cle)) : -1;
+  return {
+    libelle: (i>=0 ? String(i+1) : '—') + '/' + String(total),
+    prec: (total && i>=0) ? list[(i - 1 + total) % total] : null,
+    suiv: (total && i>=0) ? list[(i + 1) % total] : null,
+  };
+}
+function compteurNavSaisie(row){
+  const nav = navSaisie(row);
+  return h('span',{className:'add-row-counter',title:'Ctrl+← / Ctrl+→'},
+    h('button',{type:'button',className:'add-row-nav-btn',title:'Précédente (Ctrl+←)',onClick:(e)=>{e.stopPropagation(); ouvrirLigneSaisie(nav.prec);}},'‹'),
+    h('span',null,nav.libelle),
+    h('button',{type:'button',className:'add-row-nav-btn',title:'Suivante (Ctrl+→)',onClick:(e)=>{e.stopPropagation(); ouvrirLigneSaisie(nav.suiv);}},'›')
+  );
+}
+// Un seul écouteur clavier pour toutes les fenêtres : il lit la ligne
+// ouverte dans S, et ne fait rien quand aucune fenêtre de saisie n'est là.
+function attachSaisieNav(row){
+  S._saisieNavCourante = row;
+  if(window.__saisieNavClavier) return;
+  window.__saisieNavClavier = true;
+  document.addEventListener('keydown', (e)=>{
+    if(!e || !e.ctrlKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+    const row = S._saisieNavCourante;
+    if(!row) return;
+    const ouverte = document.querySelector('.add-row-modal') || document.getElementById('mysifa-ack-viewer-overlay');
+    if(!ouverte){ S._saisieNavCourante = null; return; }
+    const nav = navSaisie(row);
+    const cible = e.key === 'ArrowRight' ? nav.suiv : nav.prec;
+    if(!cible) return;
     e.preventDefault();
     e.stopPropagation();
-    const nextIdx = (e.key === 'ArrowRight')
-      ? ((idx + 1) % list.length)
-      : ((idx - 1 + list.length) % list.length);
-    const nxt = list[nextIdx];
-    if(nxt) openEditModal(nxt);
-  };
-  // Éviter d'empiler des listeners si on remplace la modale.
-  document.addEventListener('keydown', handler, true);
-  modal._navKeyHandler = handler;
+    ouvrirLigneSaisie(cible);
+  }, true);
 }
 
 function attachModalDrag(modal){
@@ -8642,7 +8682,13 @@ function _openAlertAckViewer(row){
     date           : row.date_operation || '',
     operateur      : row.operateur || row.operateur_nom || '',
     no_dossier     : row.no_dossier || '',
+    nav            : (()=>{ const n = navSaisie(row); return {
+      libelle: n.libelle,
+      prec: ()=>ouvrirLigneSaisie(n.prec),
+      suiv: ()=>ouvrirLigneSaisie(n.suiv),
+    }; })(),
   });
+  attachSaisieNav(row);
 }
 
 function openEditStockModal(row){
@@ -8660,7 +8706,8 @@ function openEditStockModal(row){
   const badgeBg = 'rgba(196,181,253,.22)';
   box.appendChild(h('div',{style:{display:'flex',alignItems:'center',gap:'10px',marginBottom:'6px'}},
     h('span',{style:{padding:'3px 10px',borderRadius:'8px',background:badgeBg,color:badgeColor,fontWeight:'700',fontFamily:'monospace',fontSize:'13px'}},code),
-    h('h3',{style:{margin:0}},codeLabel)
+    h('h3',{style:{margin:0,flex:'1'}},codeLabel),
+    compteurNavSaisie(row)
   ));
   box.appendChild(h('div',{style:{color:'var(--muted)',fontSize:'12px',marginBottom:'16px'}},
     (row.produit_reference||row.matiere_reference||'') + ' · ' +
@@ -8765,6 +8812,7 @@ function openEditStockModal(row){
   overlay.appendChild(box);
   overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.remove(); });
   document.getElementById('root').appendChild(overlay);
+  attachSaisieNav(row);
 }
 
 function openEditModal(row) {
@@ -8782,18 +8830,10 @@ function openEditModal(row) {
     if(m) m.remove();
   }catch(e){}
 
-  const list = getVisibleSaisiesRowsForNav();
-  const total = list.length || 0;
-  const curIdx0 = total ? list.findIndex(r=>String(r.id)===String(row.id)) : -1;
-  const idx = (curIdx0>=0) ? (curIdx0 + 1) : 0;
-  const prevRow = (total && curIdx0>=0) ? list[(curIdx0 - 1 + total) % total] : null;
-  const nextRow = (total && curIdx0>=0) ? list[(curIdx0 + 1) % total] : null;
+  // Une ligne de stock a sa propre fenêtre (navigation depuis une saisie).
+  if(row && (row.kind==='stock_pf' || row.kind==='stock_mp')){ ouvrirLigneSaisie(row); return; }
 
-  const counter = h('span',{className:'add-row-counter',title:'Ctrl+← / Ctrl+→'},
-    h('button',{type:'button',className:'add-row-nav-btn',title:'Précédente (Ctrl+←)',onClick:(e)=>{e.stopPropagation(); if(prevRow) openEditModal(prevRow);}},'‹'),
-    h('span',null,(idx>0?String(idx):'—')+'/'+String(total)),
-    h('button',{type:'button',className:'add-row-nav-btn',title:'Suivante (Ctrl+→)',onClick:(e)=>{e.stopPropagation(); if(nextRow) openEditModal(nextRow);}},'›')
-  );
+  const counter = compteurNavSaisie(row);
   const titleNode = h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'12px',width:'100%'}},
     h('h3',null,'Modifier la saisie'),
     counter
@@ -8857,7 +8897,7 @@ function openEditModal(row) {
     },
     leftBtns
   );
-  attachSaisieNav(modal, row.id);
+  attachSaisieNav(row);
   attachModalDrag(modal);
   document.getElementById('root').appendChild(modal);
 }
@@ -9587,7 +9627,7 @@ async function openFictifReassignModal(){
             body:JSON.stringify({from_no_dossier:from,to_no_dossier:to})
           });
           closeModal();
-          toast((r.updated_saisies||0)+' saisie(s) rattachée(s) → '+r.to_no_dossier,'success');
+          toast((r.updated_saisies||0)+' saisie(s)'+(r.updated_alertes?' et '+r.updated_alertes+' alerte(s)':'')+' rattachée(s) → '+r.to_no_dossier,'success');
           await loadFilters();
           await loadSaisies();
         }catch(err){ toast(err.message||'Rattachement impossible','error'); }
