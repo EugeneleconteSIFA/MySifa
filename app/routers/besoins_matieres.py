@@ -602,6 +602,17 @@ def _nb_bobines_dossier(pe: dict, qte: Optional[float]) -> dict:
     puis la quantité d'étiquettes divisée par les étiquettes par bobine.
     """
     n = _f(pe.get("of_nb_mandrins"))
+    pr = pe.get("prorata_reel")
+    if n and pr:
+        return {"nb": n,
+                "formule": f"{_n(round(pr['mandrins'], 1))} mandrins prévus × "
+                           f"{pr['ratio'] * 100:.1f} % du métrage (réel / théorique)".replace(".", ","),
+                "variables": [
+                    {"label": "Mandrins prévus", "champ": "calculé (OF)",
+                     "origine": "OF", "valeur": round(pr["mandrins"], 1), "unite": "u"},
+                    {"label": "Métrage réel / théorique", "champ": "production_data",
+                     "origine": "Saisies", "valeur": round(pr["ratio"], 4), "unite": ""}],
+                "manque": []}
     if n:
         return {"nb": n, "formule": f"{_n(n)} mandrins (chiffrés sur l'OF)",
                 "variables": [
@@ -861,8 +872,11 @@ def _compute_besoins_dossier(pe: dict, mapping: dict,
     if pe.get("ft_cartons"):
         if of_cart:
             nb_cartons = of_cart
+            pr = pe.get("prorata_reel")
             _add("carton", pe["ft_cartons"], nb_cartons,
-                 f"{_n(of_cart)} cartons (chiffrés sur l'OF)", [
+                 (f"{_n(round(pr['cartons'], 1))} cartons prévus × "
+                  f"{pr['ratio'] * 100:.1f} % du métrage (réel / théorique)".replace(".", ","))
+                 if pr and pr.get("cartons") else f"{_n(of_cart)} cartons (chiffrés sur l'OF)", [
                      {"label": "Cartons", "champ": "of_imports.nb_cartons",
                       "origine": "OF", "valeur": of_cart, "unite": "u"},
                  ])
@@ -3407,10 +3421,27 @@ def _destockage_lignes(conn, planning_id: int) -> dict:
     # reparte des quantités effectivement produites.
     reel = _production_reelle(conn, pe)
     pe_calc = dict(pe)
+    theo_met = _metrage_dossier(pe)["metrage"]
+    theo_bob = _nb_bobines_dossier(pe, _f(pe.get("qte_etiquettes")))["nb"]
     if reel["source"] == "reel":
         if reel["metrage"]:
             pe_calc["of_metrage"] = reel["metrage"]
-        if reel["etiquettes"]:
+        if reel["metrage"] and theo_met and theo_bob:
+            # Le conditionnement suit le métrage réel, comme la colle : le
+            # prévu de l'OF ramené au prorata du métrage passé en machine. Le
+            # compteur métrage est relevé à chaque fin ; le nombre d'étiquettes
+            # saisi ne l'est pas toujours (Solde marché 772, 15/10/2026 :
+            # 1 885 800 étiquettes pour 43 % du métrage, et 868 mandrins sortis
+            # sur 1 092 prévus).
+            ratio = reel["metrage"] / theo_met
+            of_cart = _f(pe.get("of_nb_cartons"))
+            pe_calc["of_nb_mandrins"] = theo_bob * ratio
+            pe_calc["qte_bobines"] = None
+            pe_calc["of_nb_cartons"] = of_cart * ratio if of_cart else None
+            if _f(pe.get("qte_etiquettes")):
+                pe_calc["qte_etiquettes"] = _f(pe.get("qte_etiquettes")) * ratio
+            pe_calc["prorata_reel"] = {"ratio": ratio, "mandrins": theo_bob, "cartons": of_cart}
+        elif reel["etiquettes"]:
             pe_calc["qte_etiquettes"] = reel["etiquettes"]
             # Les bobines de l'OF décrivent le prévu : elles primeraient sur la
             # quantité réelle dans le calcul des mandrins.
@@ -3637,11 +3668,16 @@ def destockage_suivi(request: Request, vue: str = "a_traiter", jours: int = 30,
             "  FROM planning_entries pe "
             "  LEFT JOIN machines m ON m.id = pe.machine_id " % extra)
         if vue == "a_traiter":
+            # Une sortie faite mais pas encore relue reste à traiter : le
+            # contrôle n'est pas fini tant que personne ne l'a validé.
+            non_relu = (" OR (pe.destockage = 'done' AND pe.destockage_relu_at IS NULL)"
+                        if "destockage_relu_at" in cols else "")
             rows = conn.execute(
                 base + "WHERE pe.statut = 'termine' "
-                "   AND COALESCE(pe.destockage, 'todo') IN ('todo', 'reserve') "
+                "   AND (COALESCE(pe.destockage, 'todo') IN ('todo', 'reserve')" + non_relu + ") "
                 "   AND COALESCE(pe.planned_end, pe.updated_at, '') >= ? "
-                " ORDER BY CASE COALESCE(pe.destockage, 'todo') WHEN 'reserve' THEN 0 ELSE 1 END, "
+                " ORDER BY CASE COALESCE(pe.destockage, 'todo') WHEN 'reserve' THEN 0 "
+                "          WHEN 'done' THEN 1 ELSE 2 END, "
                 "          COALESCE(pe.planned_end, pe.updated_at) DESC "
                 " LIMIT ?", (depuis[:10], limite)).fetchall()
         else:
