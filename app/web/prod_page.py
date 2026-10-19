@@ -84,7 +84,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
      intitules de section de la barre laterale. Sans suffixe, le navigateur
      ressert l'ancienne et la section s'affiche nue. -->
 <link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem13-mob1-msb1">
-<link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__-sais4-rent17-san3-sev1">
+<link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__-sais4-rent19-san3-sev1">
 <!-- Portrait telephone de MyProd > Production. Le socle mobile partage
      (prefixe .msf-) fournit les briques ; la feuille qui suit ne porte que
      ce qui appartient a MyProd (.mpm-) et quelques reprises du bureau. -->
@@ -132,7 +132,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <script src="/static/mysifa_donnees_prod.js?v=1"></script>
 <!-- Adresse de la page : onglet, filtres, tri et objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent19-ecart3-sais4-bob5-msb1-san3-mpm2-ton1-vit2-sev1-url6-ecart4-cal1-clot2"></script>
+<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent22-ecart3-sais4-bob5-msb1-san3-mpm2-ton1-vit2-sev1-url6-ecart4-cal1-clot2"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>
 <!-- v2.3.42 : viewer partagé du détail d'un ack d'alerte (identique à Maintenance) -->
