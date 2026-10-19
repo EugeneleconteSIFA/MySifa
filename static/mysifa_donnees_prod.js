@@ -32,6 +32,9 @@
     const h = Math.floor(m / 60);
     return h ? h + ' h ' + String(m % 60).padStart(2, '0') : m + ' min';
   }
+  function libelleOperation(r) {
+    return String((r && r.operation) || '').replace(/^\s*\d{1,3}\s*(?:[-–:.]\s*|\s+)/, '');
+  }
   function dateCourte(iso) {
     const t = String(iso || '');
     return t.length >= 16 ? t.slice(8, 10) + '/' + t.slice(5, 7) + ' ' + t.slice(11, 16) : t;
@@ -334,7 +337,7 @@
       if (xa == null || xb == null || !(xb > xa)) continue;
       const x = xa, w = xb - xa;
       const c = (DP_CATS[String(a.operation_category || '').toLowerCase()] || [null, 'var(--muted)'])[1];
-      const lib = String(a.operation || '').replace(/^\s*\d+\s*-\s*/, '');
+      const lib = libelleOperation(a);
       // Bulle ancrée à gauche ou à droite près des bords : centrée, elle
       // déborderait de la carte.
       const cote = x + w / 2 < 18 ? ' class="g"' : (x + w / 2 > 82 ? ' class="d"' : '');
@@ -502,13 +505,15 @@
         const borne = code === '01' || code === '89';
         const c = (DP_CATS[String(r.operation_category || '').toLowerCase()] || [null, 'var(--muted)'])[1];
         const cpt = (v) => v ? '<span class="dp-cpt">' + nombre(v) + '</span>' : '';
-        const libelle = String(r.operation || '').replace(/^\s*\d+\s*-\s*/, '');
+        // La saisie qui clôture le dossier se lit « Dossier clôturé », pas
+        // « Fin de production » suivi d'un badge.
+        const libelle = r.fin_dossier ? 'Dossier clôturé' : libelleOperation(r);
         return '<tr' + (borne ? ' class="dp-borne"' : '') + '>'
           + '<td>' + esc(dateCourte(r.date_operation)) + '</td>'
           // Le libellé dans la pastille de couleur : le numéro d'opération
           // ne dit rien à l'opérateur qui relit sa saisie.
           + '<td><span class="dp-code" style="--c:' + (borne ? 'var(--text)' : c) + '">' + esc(libelle) + '</span>'
-          + (r.fin_dossier ? '<span class="dp-clos" title="Dossier clôturé">✓ clôturé</span>' : '') + '</td>'
+          + '</td>'
           + '<td>' + esc(r.operateur || '') + '</td>' + (multiMachine ? '<td>' + esc(r.machine || '') + '</td>' : '')
           + '<td class="n">' + (code === '01' && r.metrage_prevu ? '<span class="dp-cpt-lib">début</span>' + cpt(r.metrage_prevu)
             : code === '89' && r.metrage_reel ? '<span class="dp-cpt-lib">fin</span>' + cpt(r.metrage_reel) : '') + '</td>'
