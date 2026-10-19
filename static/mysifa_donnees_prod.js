@@ -76,7 +76,7 @@
     + '.dp-t .dp-tot td{font-weight:700;color:var(--text);background:var(--bg)}'
     + '.dp-t tr.dp-borne td{background:color-mix(in srgb,var(--accent) 7%,transparent)}'
     + '.dp-t td.dp-com{white-space:normal;min-width:140px}'
-    + '.dp-code{display:inline-block;min-width:24px;padding:1px 6px;margin-right:6px;border-radius:6px;text-align:center;font-weight:700;'
+    + '.dp-code{display:inline-block;padding:2px 9px;margin-right:6px;border-radius:999px;font-weight:600;'
     + 'color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent);border:1px solid color-mix(in srgb,var(--c) 40%,transparent)}'
     + '.dp-cpt{font-family:ui-monospace,Consolas,monospace;font-weight:700;color:var(--text)}'
     + '.dp-clos{margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;color:white;background:var(--accent)}'
@@ -311,7 +311,7 @@
       // déborderait de la carte.
       const cote = x + w / 2 < 18 ? ' class="g"' : (x + w / 2 > 82 ? ' class="d"' : '');
       bandes += '<i' + cote + ' style="left:' + x.toFixed(3) + '%;width:' + w.toFixed(3) + '%;--c:' + c + '" data-bulle="'
-        + esc((a.operation_code ? a.operation_code + ' · ' : '') + lib + '\n'
+        + esc(lib + '\n'
           + dateCourte(a.date_operation).slice(6) + ' → ' + dateCourte(b.date_operation).slice(6)
           + ' · ' + duree((t(b) - t(a)) / 60000) + (a.operateur ? '\n' + a.operateur : ''))
           .replace(/\n/g, '&#10;') + '"></i>';
@@ -459,8 +459,9 @@
         const libelle = String(r.operation || '').replace(/^\s*\d+\s*-\s*/, '');
         return '<tr' + (borne ? ' class="dp-borne"' : '') + '>'
           + '<td>' + esc(dateCourte(r.date_operation)) + '</td>'
-          + '<td><span class="dp-code" style="--c:' + (borne ? 'var(--text)' : c) + '">' + esc(code) + '</span>'
-          + esc(libelle) + (r.fin_dossier ? '<span class="dp-clos">Dossier clôturé</span>' : '') + '</td>'
+          // Le libellé dans la pastille de couleur : le numéro d'opération
+          // ne dit rien à l'opérateur qui relit sa saisie.
+          + '<td><span class="dp-code" style="--c:' + (borne ? 'var(--text)' : c) + '">' + esc(libelle) + '</span>' + (r.fin_dossier ? '<span class="dp-clos">Dossier clôturé</span>' : '') + '</td>'
           + '<td>' + esc(r.operateur || '') + '</td><td>' + esc(r.machine || '') + '</td>'
           + '<td class="n">' + (r.quantite_traitee ? nombre(r.quantite_traitee) : '') + '</td>'
           + '<td class="n">' + (code === '01' ? cpt(r.metrage_prevu) : '') + '</td>'
