@@ -6288,25 +6288,9 @@ function renderRentPilotage(){
     kpi(termines, 'Terminés')
   );
 
-  const devisDouteux = (S.devisList || []).filter(d => Number(d.a_verifier) === 1);
-  /* Superadmin : les devis qui n'ont pas trouvé de dossier, et ceux datés
-     après aujourd'hui (date mal lue). Même compte que la pastille MyProd du
-     portail (`prod.devis_a_traiter`), pour qu'on lise le même nombre. */
-  const nAVenir = Number(S.devisATraiterCount || 0);
-  const rappelATraiter = (isSuperAdmin(S.user) && nAVenir) ? h('button',{type:'button',
-      className:'rent-rappel rent-rappel-info',
-      onClick:()=>set({rentSubTab:'dossiers', rentFiltre:'a_venir', rentOffset:0, rentSelEntryId:null})},
-    iconEl('bell',14),
-    h('span',null,' ' + nAVenir + ' dossier' + (nAVenir > 1 ? 's' : '') + ' à venir sans devis'
-      + ' — à rattacher avant leur passage en machine')
-  ) : null;
-
-  const rappelDevis = devisDouteux.length ? h('button',{type:'button',className:'rent-rappel',
-    onClick:()=>set({rentSubTab:'devis', rentDevisFiltre:'verifier'})},
-    iconEl('alert-triangle',14),
-    h('span',null,' ' + devisDouteux.length + ' devis importé' + (devisDouteux.length > 1 ? 's' : '')
-      + ' automatiquement demande' + (devisDouteux.length > 1 ? 'nt' : '') + ' une vérification')
-  ) : null;
+  /* Plus de bandeaux « devis à vérifier » / « dossiers à venir sans devis »
+     sous les tuiles (retiré le 19/10/2026) : les filtres de l'onglet Devis et
+     Dossiers, et la pastille du menu, portent déjà ces nombres. */
 
   // ── Barre de commande ──
   const selMachine = rentMenuDeroulant({
@@ -6649,7 +6633,7 @@ function renderRentPilotage(){
             : 'Chargement des liaisons…')
   );
 
-  return h('div',null, tuiles, rappelDevis, rappelATraiter, timeline, resteAFaire, tableauEcarts);
+  return h('div',null, tuiles, timeline, resteAFaire, tableauEcarts);
 }
 
 // ── Sous-onglet Dossiers ─────────────────────────────────────────
@@ -9482,6 +9466,8 @@ const RECOPIE_LIBELLES = {operation:'Opération', operateur:'Opérateur', machin
 let __recopie = null;
 function valeurRecopie(row, champ){ return String(row[champ] == null ? '' : row[champ]); }
 function recopieEligible(row, champ){
+  // Une alerte validée ne change que de dossier (saisie en fictif, puis rattachée).
+  if(row && row.kind==='alert_ack') return champ==='no_dossier' && isAdmin(S.user);
   if(!row || estLigneAnnexe(row) || Number(row.est_annule||0)) return false;
   // Arrivée / départ personnel : jamais de dossier.
   if(champ==='no_dossier' && CODES_PERSONNEL.has(String(row.operation_code||''))) return false;
@@ -9569,7 +9555,8 @@ async function appliquerRecopie(champ, source, cibles){
   const avant = []; const erreurs = [];
   for(const row of cibles){
     try{
-      await api('/api/saisies/' + row.id, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(corps)});
+      if(row.kind==='alert_ack') await majDossierAlerte(row, corps.no_dossier);
+      else await api('/api/saisies/' + row.id, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(corps)});
       avant.push(JSON.parse(JSON.stringify(row)));
     }catch(e){ erreurs.push(e.message); }
   }
@@ -9582,6 +9569,11 @@ async function appliquerRecopie(champ, source, cibles){
   else toast(avant.length + ' saisie(s) modifiée(s).');
   await loadSaisies();
 }
+function majDossierAlerte(row, noDossier){
+  const ackId = row.ack_id!=null ? row.ack_id : String(row.id).replace(/^ack-/,'');
+  return api('/api/saisies/alert-acks/'+encodeURIComponent(ackId), {method:'PATCH',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify({no_dossier: noDossier || ''})});
+}
 function corpsRestauration(d, note){
   return {operation:d.operation, date_operation:d.date_operation, operateur:d.operateur,
     machine:d.machine, no_dossier:d.no_dossier, client:d.client || '', designation:d.designation || '',
@@ -9591,13 +9583,14 @@ function corpsRestauration(d, note){
 async function basculerGroupe(entry, depuisUndo){
   const cur = (S.saisies && S.saisies.rows) ? S.saisies.rows : [];
   const actuels = entry.data.items
-    .map(it => cur.find(r => !estLigneAnnexe(r) && r.id === it.id))
+    .map(it => cur.find(r => saisieSelKey(r) === saisieSelKey(it)))
     .filter(Boolean);
   (depuisUndo ? redoStack : undoStack).push({action:'edit_groupe', data:{items: JSON.parse(JSON.stringify(actuels))}});
   const note = depuisUndo ? 'Restauration undo' : 'Restauration redo';
   for(const it of entry.data.items){
     try{
-      await api('/api/saisies/' + it.id, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(corpsRestauration(it, note))});
+      if(it.kind==='alert_ack') await majDossierAlerte(it, it.no_dossier);
+      else await api('/api/saisies/' + it.id, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(corpsRestauration(it, note))});
     }catch(e){ toast(e.message, 'error'); }
   }
   updateUndoRedoBtns();

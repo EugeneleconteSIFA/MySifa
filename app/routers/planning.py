@@ -3470,6 +3470,14 @@ async def changer_machine_entry(machine_id: int, entry_id: int, request: Request
         src_ids, _ = _ordre_machine(conn, machine_id)
         _ecrire_ordre(conn, machine_id, src_ids, now)
         _ecrire_ordre(conn, cible, wanted_dst, now)
+        # Le dossier a peut-être déjà tourné sur la machine cible (saisi en
+        # fictif, ou planifié sur la mauvaise machine) : ses saisies font foi.
+        try:
+            from app.services.cloture_saisie import resynchroniser_creneau, ranger_dans_historique
+            if resynchroniser_creneau(conn, int(entry_id)) == "termine":
+                ranger_dans_historique(conn, cible, int(entry_id))
+        except Exception:
+            _log.exception("[planning] resynchronisation du dossier %s", entry_id)
         _invalidate_attente_plans(conn, machine_id)
         _invalidate_attente_plans(conn, cible)
         gel_src = _garde_transport_apres_ecriture(conn, machine_id, avant_src, request, body)

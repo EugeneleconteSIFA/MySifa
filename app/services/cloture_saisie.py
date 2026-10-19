@@ -133,3 +133,120 @@ def changer(conn, row_id: int, cloture: bool, auteur: str) -> dict:
         pass
 
     return {"no_dossier": ref, "fin_dossier": nouveau, "planning": planning, "serie": serie}
+
+
+# ── Recaler un créneau sur les saisies déjà faites ───────────────────────────
+# Une saisie ne met le planning à jour qu'au moment où elle est faite, et
+# seulement si elle trouve son créneau sur SA machine. Quand le créneau la
+# rejoint après coup — dossier fictif rattaché, dossier changé de machine —
+# personne ne relisait les saisies : 9932585 (16/10/2026) a été produit et
+# clôturé sur Cohésio 2 pendant que son créneau était encore sur Cohésio 1,
+# puis déplacé sur Cohésio 2, où il est resté « en attente ».
+
+_CODES_HORS_CYCLE = ("86", "87")
+
+
+def resynchroniser_creneau(conn, entry_id: int) -> Optional[str]:
+    """Rattache au créneau ses saisies orphelines et recale son statut.
+
+    Renvoie « termine » (fin « Dossier terminé » trouvée), « en_saisie »
+    (dossier démarré, pas fini) ou None (rien à faire). Ne commite pas.
+
+    Prudence sur les saisies non rattachées : elles ne sont prises que si ce
+    créneau est le seul de la référence sur la machine — sinon elles peuvent
+    appartenir à un passage précédent (reliquat), et clôturer le nouveau
+    créneau avec l'ancienne fin serait faux.
+    """
+    pe = conn.execute(
+        """SELECT pe.id, pe.reference, pe.numero_of, pe.statut, pe.statut_reel,
+                  m.nom AS machine_nom, m.code AS machine_code
+             FROM planning_entries pe JOIN machines m ON m.id = pe.machine_id
+            WHERE pe.id = ?""",
+        (entry_id,),
+    ).fetchone()
+    if not pe or pe["statut"] == "termine":
+        return None
+    refs = [r for r in {(pe["reference"] or "").strip(), (pe["numero_of"] or "").strip()} if r]
+    macs = [m for m in {(pe["machine_nom"] or "").strip(), (pe["machine_code"] or "").strip()} if m]
+    if not refs or not macs:
+        return None
+
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(production_data)").fetchall()}
+    if "planning_entry_id" not in cols:
+        return None
+    from app.services.lien_saisie_planning import candidats
+    seul = len(candidats(conn, refs[0], macs[0])) <= 1
+    ph_r, ph_m, ph_c = ",".join("?" * len(refs)), ",".join("?" * len(macs)), ",".join("?" * len(_CODES_HORS_CYCLE))
+    orphelines = "OR planning_entry_id IS NULL" if seul else ""
+    saisies = [dict(r) for r in conn.execute(
+        f"""SELECT id, date_operation, operation_code, fin_dossier, planning_entry_id
+              FROM production_data
+             WHERE trim(no_dossier) IN ({ph_r}) AND trim(machine) IN ({ph_m})
+               AND operation_code NOT IN ({ph_c})
+               AND COALESCE(est_annule, 0) = 0
+               AND (planning_entry_id = ? {orphelines})
+             ORDER BY date_operation, id""",
+        (*refs, *macs, *_CODES_HORS_CYCLE, entry_id),
+    ).fetchall()]
+    if not saisies:
+        return None
+
+    a_lier = [s["id"] for s in saisies if not s["planning_entry_id"]]
+    if a_lier:
+        conn.execute(
+            f"UPDATE production_data SET planning_entry_id = ? WHERE id IN ({','.join('?' * len(a_lier))})",
+            (entry_id, *a_lier),
+        )
+
+    now_iso = datetime.now().isoformat()
+    derniere = saisies[-1]
+    code = str(derniere["operation_code"] or "").strip()
+    if code == "90":
+        return None  # annulation : elle a son propre circuit
+    if code == "89" and derniere["fin_dossier"] is not None and int(derniere["fin_dossier"]) == 1:
+        debut = next((s["date_operation"] for s in saisies if str(s["operation_code"]).strip() == "01"),
+                     saisies[0]["date_operation"])
+        conn.execute(
+            """UPDATE planning_entries
+                  SET statut = 'termine', statut_force = 1, statut_reel = 'reellement_termine',
+                      planned_start = ?, planned_end = ?, updated_at = ?
+                WHERE id = ?""",
+            (debut, derniere["date_operation"], now_iso, entry_id),
+        )
+        return "termine"
+    if (pe["statut_reel"] or "reellement_en_attente") == "reellement_en_attente":
+        conn.execute(
+            "UPDATE planning_entries SET statut_reel = 'reellement_en_saisie', updated_at = ? WHERE id = ?",
+            (now_iso, entry_id),
+        )
+        return "en_saisie"
+    return None
+
+
+def ranger_dans_historique(conn, machine_id: int, entry_id: int) -> None:
+    """Range un dossier qui vient de passer Terminé parmi l'historique de la
+    machine, à sa date de fin, au lieu de le laisser au milieu de la file.
+    Ne commite pas."""
+    rows = [dict(r) for r in conn.execute(
+        """SELECT id, statut, planned_end FROM planning_entries
+            WHERE machine_id = ? ORDER BY position ASC, id ASC""",
+        (machine_id,),
+    ).fetchall()]
+    moi = next((r for r in rows if int(r["id"]) == int(entry_id)), None)
+    if not moi:
+        return
+    rows = [r for r in rows if r is not moi]
+    fin = moi["planned_end"] or ""
+    rang = len(rows)
+    for i, r in enumerate(rows):
+        # Historique en tête : terminés puis en cours, avant la file d'attente.
+        if r["statut"] != "termine" or (r["planned_end"] or "") > fin:
+            rang = i
+            break
+    ordre = rows[:rang] + [moi] + rows[rang:]
+    now_iso = datetime.now().isoformat()
+    for pos, r in enumerate(ordre, start=1):
+        conn.execute(
+            "UPDATE planning_entries SET position = ?, updated_at = ? WHERE id = ? AND machine_id = ?",
+            (pos, now_iso, r["id"], machine_id),
+        )
