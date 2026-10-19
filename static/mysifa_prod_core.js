@@ -9669,7 +9669,7 @@ async function openFictifReassignModal(){
     })
   );
   const toInp=h('input',{type:'text',className:'form-sel',style:{width:'100%'},
-    placeholder:'N° dossier planning (référence ou OF)…'});
+    placeholder:'Rechercher (dossier, OF, réf. produit, client)…'});
   const sugWrap=h('div',{className:'fictif-reassign-suggest'});
   let sugTok=0;
   const refreshSug=async()=>{
@@ -9680,9 +9680,10 @@ async function openFictifReassignModal(){
     if(tok!==sugTok) return;
     sugWrap.innerHTML='';
     (sugs||[]).slice(0,10).forEach(d=>{
-      const lbl=[d.no_dossier,d.client].filter(Boolean).join(' — ');
+      const lbl=[d.no_dossier,d.ref_produit,d.client].filter(Boolean).join(' — ');
+      const statut=({attente:'En attente',en_cours:'En cours',termine:'Terminé'})[d.statut]||d.statut;
       const btn=h('button',{type:'button',onClick:()=>{ toInp.value=d.no_dossier; sugWrap.innerHTML=''; }},
-        lbl+(d.statut?(' ['+d.statut+']'):''));
+        lbl+(statut?(' · '+statut):''));
       sugWrap.appendChild(btn);
     });
   };

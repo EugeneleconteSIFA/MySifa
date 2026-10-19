@@ -699,24 +699,31 @@ def suggest_target_dossiers(request: Request, q: str = "", limit: int = 20):
     out: list[dict] = []
 
     with get_db() as conn:
+        # La référence produit (« 1183/0030 ») est souvent ce que porte le
+        # dossier fictif : l'opérateur connaissait le produit, pas le dossier.
+        pe_cols = {r[1] for r in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
+        ref_produit = "COALESCE(ref_produit,'')" if "ref_produit" in pe_cols else "''"
         if qn:
             plan_rows = conn.execute(
-                """SELECT reference, numero_of, client, description, statut
+                f"""SELECT reference, numero_of, client, description, statut,
+                          {ref_produit} AS ref_produit
                    FROM planning_entries
                    WHERE TRIM(COALESCE(reference,'')) != ''
                      AND (
                        LOWER(reference) LIKE LOWER(?)
                        OR LOWER(COALESCE(numero_of,'')) LIKE LOWER(?)
                        OR LOWER(COALESCE(client,'')) LIKE LOWER(?)
+                       OR LOWER({ref_produit}) LIKE LOWER(?)
                      )
                    ORDER BY CASE statut WHEN 'en_cours' THEN 0 WHEN 'attente' THEN 1 ELSE 2 END,
                             reference
                    LIMIT ?""",
-                (like, like, like, lim * 2),
+                (like, like, like, like, lim * 2),
             ).fetchall()
         else:
             plan_rows = conn.execute(
-                """SELECT reference, numero_of, client, description, statut
+                f"""SELECT reference, numero_of, client, description, statut,
+                          {ref_produit} AS ref_produit
                    FROM planning_entries
                    WHERE TRIM(COALESCE(reference,'')) != ''
                    ORDER BY updated_at DESC
@@ -736,6 +743,7 @@ def suggest_target_dossiers(request: Request, q: str = "", limit: int = 20):
                     "numero_of": (r["numero_of"] or "").strip(),
                     "client": (r["client"] or "").strip(),
                     "description": (r["description"] or "").strip(),
+                    "ref_produit": (r["ref_produit"] or "").strip(),
                     "statut": r["statut"],
                     "source": "planning",
                 }
