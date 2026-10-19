@@ -538,3 +538,148 @@ def email_reponse_recue(*, nom_fournisseur: str, reponse: dict, lien_mysifa: str
         marque=APP_ORG_NAME,
     )
     return f"EUDR — réponse de {nom_fournisseur}", body
+
+
+# ── Lien commun ──────────────────────────────────────────────────────────
+# Un lien que l'on colle dans un email adressé à plusieurs fournisseurs.
+# Celui qui répond donne sa société ; la réponse attend d'être rattachée à une
+# fiche (eudr_reponses_commun), avec une suggestion faite sur le nom.
+
+_FORMES = re.compile(
+    r"\b(sas|sa|sarl|gmbh|ag|kg|bv|nv|spa|srl|sl|ltd|limited|inc|co|corp|company|"
+    r"group|groupe|industrial|industries|france|europe)\b"
+)
+
+
+def _norme(nom: str | None) -> str:
+    s = (nom or "").lower()
+    s = _FORMES.sub(" ", s)
+    return re.sub(r"[^a-z0-9]+", "", s)
+
+
+def creer_lien_commun(conn, *, libelle: str, langue: str, auteur: str | None) -> dict:
+    libelle = (libelle or "").strip()[:200]
+    if not libelle:
+        raise ValueError("Libellé obligatoire — par exemple « Email distributeurs octobre ».")
+    cur = conn.execute(
+        """INSERT INTO eudr_liens_communs (token, libelle, langue, actif, cree_par, created_at)
+           VALUES (?,?,?,1,?,?)""",
+        (str(uuid.uuid4()), libelle, eudr_langue(langue), auteur, now_paris_iso()),
+    )
+    return dict(conn.execute("SELECT * FROM eudr_liens_communs WHERE id=?", (cur.lastrowid,)).fetchone())
+
+
+def liens_communs(conn) -> list[dict]:
+    rows = conn.execute(
+        """SELECT l.*, (SELECT COUNT(*) FROM eudr_reponses_commun r WHERE r.lien_id=l.id) AS nb_reponses
+           FROM eudr_liens_communs l WHERE l.actif=1 ORDER BY l.id DESC"""
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def desactiver_lien_commun(conn, lien_id: int) -> dict | None:
+    row = conn.execute("SELECT * FROM eudr_liens_communs WHERE id=? AND actif=1", (int(lien_id),)).fetchone()
+    if not row:
+        return None
+    conn.execute("UPDATE eudr_liens_communs SET actif=0 WHERE id=?", (int(lien_id),))
+    return dict(row)
+
+
+def lien_commun_par_token(conn, token: str) -> dict | None:
+    row = conn.execute("SELECT * FROM eudr_liens_communs WHERE token=? AND actif=1", (token,)).fetchone()
+    return dict(row) if row else None
+
+
+def enregistrer_reponse_commune(conn, *, lien: dict, reponse: dict, ip: str | None) -> int:
+    cur = conn.execute(
+        """INSERT INTO eudr_reponses_commun (lien_id, donnees, repondant_societe, repondant_nom,
+               repondant_email, ip, created_at) VALUES (?,?,?,?,?,?,?)""",
+        (int(lien["id"]), json.dumps(reponse, ensure_ascii=False), reponse.get("repondant_societe"),
+         reponse.get("repondant_nom"), reponse.get("repondant_email"), ip, now_paris_iso()),
+    )
+    return int(cur.lastrowid)
+
+
+def suggerer_fournisseur(fournisseurs: list[dict], societe: str | None) -> int | None:
+    """Fiche dont le nom correspond à la société déclarée ; None si aucune ou
+    si plusieurs se valent (on ne devine pas)."""
+    cible = _norme(societe)
+    if not cible:
+        return None
+    exacts, contenus, englobants = [], [], []
+    for f in fournisseurs:
+        n = _norme(f["nom"])
+        if not n:
+            continue
+        if n == cible:
+            exacts.append(int(f["id"]))
+        elif n in cible:
+            contenus.append((len(n), int(f["id"])))   # « Kanzan » dans « Kanzan Spezialpapiere »
+        elif cible in n:
+            englobants.append(int(f["id"]))          # « Frimpeks » dans « Frimpeks UK »
+    if len(exacts) == 1:
+        return exacts[0]
+    if exacts:
+        return None
+    if contenus:
+        contenus.sort(reverse=True)
+        if len(contenus) > 1 and contenus[0][0] == contenus[1][0]:
+            return None
+        return contenus[0][1]
+    return englobants[0] if len(englobants) == 1 else None
+
+
+def a_rattacher(conn) -> list[dict]:
+    """Réponses par lien commun pas encore rattachées, avec une suggestion."""
+    fours = [dict(r) for r in conn.execute(
+        "SELECT id, nom FROM fournisseurs_fsc WHERE actif=1 AND COALESCE(fusionne_dans,0)=0"
+    ).fetchall()]
+    out = []
+    for r in conn.execute(
+        """SELECT r.*, l.libelle AS lien_libelle FROM eudr_reponses_commun r
+           JOIN eudr_liens_communs l ON l.id=r.lien_id
+           WHERE r.rattache_fournisseur_id IS NULL ORDER BY r.id DESC"""
+    ).fetchall():
+        d = dict(r)
+        d.pop("ip", None)
+        donnees = json.loads(d.pop("donnees") or "{}")
+        d["reponse"] = _reponse_lisible(donnees)
+        d["suggestion"] = suggerer_fournisseur(fours, d.get("repondant_societe"))
+        out.append(d)
+    return out
+
+
+def rattacher(conn, *, reponse_commune_id: int, fournisseur_id: int, auteur: str | None) -> dict:
+    """Crée la réponse de la fiche à partir d'une réponse par lien commun.
+    Lève ValueError si elle est introuvable ou déjà rattachée."""
+    rc = conn.execute(
+        "SELECT * FROM eudr_reponses_commun WHERE id=? AND rattache_fournisseur_id IS NULL",
+        (int(reponse_commune_id),),
+    ).fetchone()
+    if not rc:
+        raise ValueError("Réponse introuvable ou déjà rattachée.")
+    four = conn.execute("SELECT id, nom FROM fournisseurs_fsc WHERE id=?", (int(fournisseur_id),)).fetchone()
+    if not four:
+        raise ValueError("Fournisseur introuvable.")
+    donnees = json.loads(rc["donnees"] or "{}")
+    now = now_paris_iso()
+    # Demande inactive : la réponse garde un demande_id, aucun lien personnel n'existe.
+    dem = conn.execute(
+        """INSERT INTO eudr_demandes (fournisseur_id, email, token, statut, envoye_par,
+                                      repondu_le, actif, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, 0, ?)""",
+        (int(fournisseur_id), (rc["repondant_email"] or "").lower(), str(uuid.uuid4()),
+         ST_REPONDUE, auteur, now, now),
+    )
+    cols = ("demande_id", "fournisseur_id") + COLONNES_REPONSE + ("ip", "source", "saisi_par", "created_at")
+    vals = (dem.lastrowid, int(fournisseur_id)) + tuple(donnees.get(c) for c in COLONNES_REPONSE) + (
+        rc["ip"], "lien_commun", auteur, rc["created_at"])
+    cur = conn.execute(
+        f"INSERT INTO eudr_reponses ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", vals
+    )
+    conn.execute(
+        """UPDATE eudr_reponses_commun SET rattache_fournisseur_id=?, reponse_id=?,
+               rattache_par=?, rattache_le=? WHERE id=?""",
+        (int(fournisseur_id), cur.lastrowid, auteur, now, int(reponse_commune_id)),
+    )
+    return {"fournisseur": four["nom"], "reponse_id": int(cur.lastrowid)}

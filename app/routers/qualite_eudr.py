@@ -51,7 +51,75 @@ def _auteur(user: dict) -> str | None:
 def liste_fournisseurs(request: Request):
     _require_qualite_view(request)
     with get_db() as conn:
-        return {"fournisseurs": eudr.liste(conn), "choix": EUDR_CHOIX}
+        return {
+            "fournisseurs": eudr.liste(conn),
+            "choix": EUDR_CHOIX,
+            "liens_communs": _liens_avec_url(eudr.liens_communs(conn)),
+            "a_rattacher": eudr.a_rattacher(conn),
+        }
+
+
+def _liens_avec_url(liens: list[dict]) -> list[dict]:
+    for l in liens:
+        l["url"] = f"{public_base_url()}/portail/eudr/commun/{l['token']}?lang={l['langue']}"
+    return liens
+
+
+# ── Lien commun : gestion ────────────────────────────────────────────────
+
+
+@router.post("/liens-communs")
+def creer_lien_commun(request: Request, body: dict = Body(...)):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        try:
+            lien = eudr.creer_lien_commun(conn, libelle=body.get("libelle"),
+                                          langue=body.get("langue"), auteur=_auteur(user))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        conn.commit()
+        liens = _liens_avec_url(eudr.liens_communs(conn))
+    log_action(user=user, action="CREATE", module="qualite",
+               objet=f"EUDR — lien commun « {lien['libelle']} » créé",
+               ip=request.client.host if request.client else None)
+    return {"liens_communs": liens}
+
+
+@router.post("/liens-communs/{lien_id}/desactiver")
+def desactiver_lien_commun(request: Request, lien_id: int):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        lien = eudr.desactiver_lien_commun(conn, lien_id)
+        if not lien:
+            raise HTTPException(status_code=404, detail="Lien introuvable ou déjà désactivé.")
+        conn.commit()
+        liens = _liens_avec_url(eudr.liens_communs(conn))
+    log_action(user=user, action="DELETE", module="qualite",
+               objet=f"EUDR — lien commun « {lien['libelle']} » désactivé",
+               ip=request.client.host if request.client else None)
+    return {"liens_communs": liens}
+
+
+@router.post("/a-rattacher/{reponse_commune_id}")
+def rattacher_reponse(request: Request, reponse_commune_id: int, body: dict = Body(...)):
+    """Range une réponse reçue par lien commun sous la fiche fournisseur choisie."""
+    user = _require_qualite_access(request)
+    try:
+        fid = int(body.get("fournisseur_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Choisissez le fournisseur.")
+    with get_db() as conn:
+        try:
+            res = eudr.rattacher(conn, reponse_commune_id=reponse_commune_id,
+                                 fournisseur_id=fid, auteur=_auteur(user))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        conn.commit()
+        out = {"fournisseurs": eudr.liste(conn), "a_rattacher": eudr.a_rattacher(conn)}
+    log_action(user=user, action="UPDATE", module="qualite",
+               objet=f"EUDR — réponse par lien commun rattachée à {res['fournisseur']}",
+               ip=request.client.host if request.client else None)
+    return out
 
 
 @router.get("/fournisseurs/{fournisseur_id}/reponses")
@@ -282,6 +350,66 @@ def _demande_ou_none(conn, token: str, ip: str) -> dict | None:
     if not dem:
         _record_invalid_attempt(ip)
     return dem
+
+
+@router_html.get("/portail/eudr/commun/{token}", response_class=HTMLResponse)
+def page_portail_commun(request: Request, token: str):
+    ip = _client_ip(request)
+    try:
+        with get_db() as conn:
+            _check_rate_limit(ip)
+            lien = eudr.lien_commun_par_token(conn, token)
+            if not lien:
+                _record_invalid_attempt(ip)
+                return HTMLResponse(get_eudr_404_html(), status_code=404)
+    except HTTPException as exc:
+        if exc.status_code == 429:
+            return HTMLResponse(get_eudr_404_html(), status_code=429)
+        raise
+    return HTMLResponse(get_eudr_portail_html(token, commun=True))
+
+
+def _lien_ou_404(conn, token: str, ip: str) -> dict:
+    _check_rate_limit(ip)
+    lien = eudr.lien_commun_par_token(conn, token)
+    if not lien:
+        _record_invalid_attempt(ip)
+        raise HTTPException(status_code=404, detail="Invalid or expired link.")
+    return lien
+
+
+@router_api.get("/commun/{token}")
+def donnees_portail_commun(request: Request, token: str):
+    with get_db() as conn:
+        lien = _lien_ou_404(conn, token, _client_ip(request))
+    return _donnees_formulaire(fournisseur="", email="", langue=lien["langue"], precedente=None)
+
+
+@router_api.post("/commun/{token}")
+def repondre_commun(request: Request, token: str, body: dict = Body(...)):
+    ip = _client_ip(request)
+    with get_db() as conn:
+        lien = _lien_ou_404(conn, token, ip)
+        try:
+            reponse = eudr.valider_reponse(body or {})
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        eudr.enregistrer_reponse_commune(conn, lien=lien, reponse=reponse, ip=ip)
+        conn.commit()
+    destinataire = (lien.get("cree_par") or "").strip()
+    if "@" in destinataire:
+        try:
+            sujet, corps = eudr.email_reponse_recue(
+                nom_fournisseur=f"{reponse.get('repondant_societe')} (lien commun, à rattacher)",
+                reponse=reponse,
+                lien_mysifa=f"{public_base_url()}/qualite",
+            )
+            send_email(to=destinataire, subject=sujet, html_body=corps)
+        except Exception:
+            pass
+    log_action(user=None, action="SEND", module="qualite",
+               objet=f"EUDR — réponse par lien commun de {reponse.get('repondant_societe')}", ip=ip)
+    return {"ok": True}
 
 
 @router_html.get("/portail/eudr/{token}", response_class=HTMLResponse)

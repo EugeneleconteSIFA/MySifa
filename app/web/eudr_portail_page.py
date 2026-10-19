@@ -232,10 +232,11 @@ _I18N = {
 }
 
 
-def get_eudr_portail_html(token: str, apercu: dict | None = None) -> str:
+def get_eudr_portail_html(token: str, apercu: dict | None = None, commun: bool = False) -> str:
     """Page du formulaire. `apercu` : données factices servies par MyQualité
     (bouton « Aperçu du questionnaire ») — la page ne contacte alors aucune API
-    et n'enregistre rien."""
+    et n'enregistre rien. `commun` : lien commun (/portail/eudr/commun/<jeton>),
+    sans fournisseur connu d'avance."""
     org = APP_ORG_NAME
     i18n = json.dumps(_I18N, ensure_ascii=False).replace("__ORG__", _esc(org)).replace("</", "<\\/")
     return (_PAGE
@@ -243,6 +244,7 @@ def get_eudr_portail_html(token: str, apercu: dict | None = None) -> str:
             .replace("__ORG_HTML__", _esc(org))
             .replace("__I18N__", i18n)
             .replace("__TOKEN__", json.dumps(token))
+            .replace("__COMMUN__", "true" if commun else "false")
             .replace("__APERCU__", json.dumps(apercu, ensure_ascii=False).replace("</", "<\\/")))
 
 
@@ -269,7 +271,8 @@ __HEAD__<title>EUDR — __ORG_HTML__</title>
 <script>
 const TOKEN = __TOKEN__;
 const APERCU = __APERCU__;
-const API = '/api/portail/eudr/' + encodeURIComponent(TOKEN);
+const COMMUN = __COMMUN__;
+const API = '/api/portail/eudr/' + (COMMUN ? 'commun/' : '') + encodeURIComponent(TOKEN);
 const I18N = __I18N__;
 // Drapeaux en SVG : les drapeaux emoji s'affichent en lettres sous Windows.
 const FLAGS = {
@@ -338,7 +341,7 @@ function changerLangue(l){
   try{ const u = new URL(location.href); u.searchParams.set('lang', l); history.replaceState(null, '', u); }catch(e){}
   if(D){
     render();
-    if(!APERCU) fetch(API + '/langue', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({langue:l})}).catch(() => {});
+    if(!APERCU && !COMMUN) fetch(API + '/langue', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({langue:l})}).catch(() => {});
   } else {
     entete();
     const ld = document.getElementById('t-loading'); if(ld) ld.textContent = t('loading');
@@ -375,7 +378,7 @@ function pageAccueil(){
   const p = D.precedente;
   return `
     <h1>${esc(t('title'))}</h1>
-    <p class="lead">${esc(D.fournisseur)}</p>
+    ${D.fournisseur ? '<p class="lead">'+esc(D.fournisseur)+'</p>' : ''}
     ${p ? '<div class="card"><p class="note">'+esc(t('already').replace('{d}', (p.created_at||'').slice(0,10)))+'</p></div>' : ''}
     <div class="card">
       <p>${t('intro_purpose')}</p>
@@ -415,7 +418,7 @@ function pagePartie(n){
     </div>`;
   return `
     <h1>${esc(t('title'))}</h1>
-    <p class="lead">${esc(D.fournisseur)}</p>
+    ${D.fournisseur ? '<p class="lead">'+esc(D.fournisseur)+'</p>' : ''}
     <div class="steps">${barres}</div>
     <div class="steplbl">${esc(t('part').replace('{n}', n))} · ${esc(t('p'+n))}</div>
     ${corps}`;

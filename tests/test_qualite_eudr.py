@@ -230,6 +230,45 @@ check("PDF servi", (r.status_code, r.content[:5]), (200, b"%PDF-"))
 check("PDF : nom de fichier en espagnol", "EUDR_questionnaire_ES" in r.headers["content-disposition"], True)
 check("PDF vierge", client.get("/api/qualite/eudr/questionnaire.pdf").status_code, 200)
 
+# Lien commun : un lien pour plusieurs fournisseurs, réponses à rattacher.
+check("lien commun sans libellé refusé",
+      client.post("/api/qualite/eudr/liens-communs", json={"libelle": ""}).status_code, 400)
+r = client.post("/api/qualite/eudr/liens-communs", json={"libelle": "Email distributeurs", "langue": "fr"})
+check("lien commun créé", r.status_code, 200)
+LC = r.json()["liens_communs"][0]
+check("lien commun : URL en français", LC["url"].endswith("?lang=fr"), True)
+TOKC = LC["token"]
+check("page lien commun servie", client.get(f"/portail/eudr/commun/{TOKC}").status_code, 200)
+check("page lien commun : mode commun", "const COMMUN = true;" in client.get(f"/portail/eudr/commun/{TOKC}").text, True)
+check("lien commun inconnu : 404", client.get("/portail/eudr/commun/inconnu").status_code, 404)
+d = client.get(f"/api/portail/eudr/commun/{TOKC}").json()
+check("lien commun : aucun fournisseur connu", (d["fournisseur"], d["precedente"], d["langue"]), ("", None, "fr"))
+n_av = len(ENVOIS)
+r = client.post(f"/api/portail/eudr/commun/{TOKC}", json={**base, "repondant_societe": "PAPETERIE TEST GmbH", "role": "aval"})
+check("réponse par lien commun acceptée", r.status_code, 200)
+check("créateur du lien prévenu", ENVOIS[n_av]["to"] if len(ENVOIS) > n_av else None, USER["email"])
+liste_c = client.get("/api/qualite/eudr/fournisseurs").json()
+ar = liste_c["a_rattacher"]
+check("réponse en attente de rattachement", len(ar), 1)
+check("suggestion d'après la société", ar[0]["suggestion"], FID)
+check("compteur de réponses du lien", liste_c["liens_communs"][0]["nb_reponses"], 1)
+check("rattachement sans fournisseur refusé",
+      client.post(f"/api/qualite/eudr/a-rattacher/{ar[0]['id']}", json={}).status_code, 400)
+nb_avant = len(client.get(f"/api/qualite/eudr/fournisseurs/{FID}/reponses").json()["reponses"])
+r = client.post(f"/api/qualite/eudr/a-rattacher/{ar[0]['id']}", json={"fournisseur_id": FID})
+check("rattachement accepté", r.status_code, 200)
+check("plus rien à rattacher", r.json()["a_rattacher"], [])
+reps = client.get(f"/api/qualite/eudr/fournisseurs/{FID}/reponses").json()["reponses"]
+check("réponse ajoutée à la fiche", (len(reps), reps[0]["source"], reps[0]["role"]), (nb_avant + 1, "lien_commun", "aval"))
+check("rattachement en double refusé",
+      client.post(f"/api/qualite/eudr/a-rattacher/{ar[0]['id']}", json={"fournisseur_id": FID}).status_code, 400)
+check("lien commun désactivé", client.post(f"/api/qualite/eudr/liens-communs/{LC['id']}/desactiver").status_code, 200)
+check("lien commun désactivé : 404", client.get(f"/portail/eudr/commun/{TOKC}").status_code, 404)
+
+import app.services.qualite_eudr as _s  # noqa: E402
+check("suggestion ambiguë : aucune", _s.suggerer_fournisseur([{"id": 1, "nom": "Frimpeks UK"}, {"id": 2, "nom": "Frimpeks Italy"}], "Frimpeks"), None)
+check("suggestion : forme juridique ignorée", _s.suggerer_fournisseur([{"id": 7, "nom": "Kanzan"}], "KANZAN Spezialpapiere GmbH"), 7)
+
 print()
 if ECHECS:
     print(f"{len(ECHECS)} échec(s)")

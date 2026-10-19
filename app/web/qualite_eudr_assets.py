@@ -87,6 +87,7 @@ function eudrRender(){
       <div class="fsc-hero-actions">
         <a class="fsc-btn" href="/qualite/eudr/apercu?lang=fr" target="_blank" rel="noopener" title="Le formulaire tel que le voit le fournisseur — rien n'est enregistré">Aperçu du questionnaire</a>
         <button type="button" class="fsc-btn" onclick="eudrOuvrirPdf()" title="Le questionnaire à remplir à la main, en anglais, français ou espagnol">Questionnaire PDF</button>
+        ${admin ? `<button type="button" class="fsc-btn" onclick="eudrOuvrirLiensCommuns()" title="Un seul lien à coller dans un email adressé à plusieurs fournisseurs">Lien commun</button>` : ''}
         ${admin ? `<button type="button" class="btn btn-accent" id="eudr-send-btn" onclick="eudrOuvrirEnvoi()" title="Cochez un ou plusieurs fournisseurs : chacun reçoit son lien personnel">Envoyer le questionnaire${S.eudr.sel.size ? ` (${S.eudr.sel.size})` : ''}</button>` : ''}
       </div>
     </div>
@@ -96,6 +97,7 @@ function eudrRender(){
       ${kpi('repondus', n('repondue'), 'Ont répondu')}
       ${kpi('jamais', n('jamais'), 'Jamais sollicités')}
     </div>
+    ${eudrRattacherHtml(admin)}
     <div class="eudr-bar">
       <input type="text" id="eudr-q" class="eudr-search" placeholder="Rechercher (fournisseur, groupe, pays)"
         value="${escAttr(S.eudr.q)}" oninput="S.eudr.q=this.value;eudrRenderList()"
@@ -223,6 +225,106 @@ async function eudrEnregistrerSaisie(fid){
 }
 
 // ─── Questionnaire PDF ───────────────────────────────────────────────
+// ─── Lien commun ─────────────────────────────────────────────────────
+// Un lien unique pour un email adressé à plusieurs fournisseurs. Les réponses
+// arrivent sans fiche : bloc « à rattacher » au-dessus de la liste.
+function eudrOuvrirLiensCommuns(){
+  const liens = S.eudr.data.liens_communs || [];
+  eudrMroot().innerHTML = `
+  <div class="modal-ov" style="display:flex" onclick="if(event.target===this)closeMroot()">
+    <div class="modal lg" onclick="event.stopPropagation()">
+      <button type="button" class="modal-close" onclick="closeMroot()">×</button>
+      <div class="modal-hd"><h3>Lien commun</h3></div>
+      <div class="modal-bd">
+        <p style="margin:0 0 12px">Un lien à coller dans un email adressé à plusieurs fournisseurs. Chacun indique sa société sur la page d'accueil ; sa réponse arrive dans « Réponses à rattacher », où vous la rangez sous la bonne fiche. Les liens personnels restent préférables quand l'adresse du fournisseur est connue.</p>
+        ${liens.length ? liens.map(l => `
+          <div class="eudr-lien">
+            <div class="eudr-lien-hd"><b>${escHtml(l.libelle)}</b>
+              <span class="fsc-muted">${escHtml(EUDR_LANGUES[l.langue] || l.langue)} · ${l.nb_reponses} réponse(s) · créé le ${escHtml(fmtDate(l.created_at))}</span></div>
+            <div class="eudr-lien-url">
+              <input type="text" readonly value="${escAttr(l.url)}" onclick="this.select()">
+              <button type="button" class="fsc-btn sm" onclick="eudrCopierLien(this.previousElementSibling.value)">Copier</button>
+              <button type="button" class="fsc-btn sm" onclick="eudrDesactiverLien(${l.id})" title="Le lien cessera de fonctionner">Désactiver</button>
+            </div>
+          </div>`).join('') : '<p class="fsc-muted" style="margin:0 0 12px">Aucun lien commun actif.</p>'}
+        <div class="eudr-lien-new">
+          <label class="eudr-f" style="flex:1"><span>Nouveau lien — libellé</span>
+            <input type="text" id="eudr-lc-lib" placeholder="Ex. Email distributeurs octobre"></label>
+          <label class="eudr-f"><span>Langue d'ouverture</span>
+            <select id="eudr-lc-lang">${Object.keys(EUDR_LANGUES).map(k => `<option value="${k}">${EUDR_LANGUES[k]}</option>`).join('')}</select></label>
+        </div>
+      </div>
+      <div class="modal-ft">
+        <button type="button" class="fsc-btn" onclick="closeMroot()">Fermer</button>
+        <button type="button" class="btn btn-accent" onclick="eudrCreerLien()">Créer le lien</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function eudrCopierLien(url){
+  try{ await navigator.clipboard.writeText(url); showToast('Lien copié.','success'); }
+  catch(e){ showToast('Copie impossible — sélectionnez le lien et copiez-le.','danger'); }
+}
+
+async function eudrCreerLien(){
+  const libelle = document.getElementById('eudr-lc-lib').value.trim();
+  if(!libelle){ showToast('Libellé obligatoire — par exemple « Email distributeurs octobre ».','danger'); return; }
+  try{
+    const r = await api('/api/qualite/eudr/liens-communs', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({libelle, langue: document.getElementById('eudr-lc-lang').value})});
+    const j = await r.json().catch(() => ({}));
+    if(!r.ok){ showToast(j.detail || 'Création impossible.','danger'); return; }
+    S.eudr.data.liens_communs = j.liens_communs || [];
+    showToast('Lien créé.','success');
+    eudrOuvrirLiensCommuns();
+  }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); }
+}
+
+async function eudrDesactiverLien(id){
+  if(!confirm("Désactiver ce lien ? Il cessera de fonctionner pour tous ceux qui l'ont reçu. Les réponses déjà reçues restent.")) return;
+  try{
+    const r = await api(`/api/qualite/eudr/liens-communs/${id}/desactiver`, {method:'POST'});
+    const j = await r.json().catch(() => ({}));
+    if(!r.ok){ showToast(j.detail || 'Désactivation impossible.','danger'); return; }
+    S.eudr.data.liens_communs = j.liens_communs || [];
+    showToast('Lien désactivé.','success');
+    eudrOuvrirLiensCommuns();
+  }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); }
+}
+
+function eudrRattacherHtml(admin){
+  const items = S.eudr.data.a_rattacher || [];
+  if(!items.length) return '';
+  const fours = (S.eudr.data.fournisseurs||[]).slice().sort((a,b) => a.nom.localeCompare(b.nom));
+  return `<div class="eudr-ratt">
+    <div class="eudr-ratt-hd">${items.length} réponse(s) reçue(s) par lien commun, à rattacher à une fiche fournisseur</div>
+    ${items.map(x => `<div class="eudr-ratt-row">
+      <div class="eudr-ratt-qui"><b>${escHtml(x.repondant_societe || '—')}</b>
+        <span class="fsc-muted">${escHtml([x.repondant_nom, x.repondant_email].filter(Boolean).join(' · '))} · ${escHtml(fmtDateTime(x.created_at))} · ${escHtml(x.lien_libelle)}</span>
+        <span>${escHtml(x.reponse.libelles.role || '—')}</span></div>
+      ${admin ? `<select id="eudr-ratt-${x.id}"><option value="">— Choisir le fournisseur —</option>
+          ${fours.map(f => `<option value="${f.id}"${f.id===x.suggestion?' selected':''}>${escHtml(f.nom)}</option>`).join('')}</select>
+        <button type="button" class="btn btn-accent" onclick="eudrRattacher(${x.id})">Rattacher</button>` : ''}
+    </div>`).join('')}
+  </div>`;
+}
+
+async function eudrRattacher(id){
+  const fid = document.getElementById('eudr-ratt-'+id).value;
+  if(!fid){ showToast('Choisissez le fournisseur.','danger'); return; }
+  try{
+    const r = await api(`/api/qualite/eudr/a-rattacher/${id}`, {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({fournisseur_id: parseInt(fid, 10)})});
+    const j = await r.json().catch(() => ({}));
+    if(!r.ok){ showToast(j.detail || 'Rattachement impossible.','danger'); return; }
+    S.eudr.data.fournisseurs = j.fournisseurs || S.eudr.data.fournisseurs;
+    S.eudr.data.a_rattacher = j.a_rattacher || [];
+    showToast('Réponse rattachée.','success');
+    eudrRender();
+  }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); }
+}
+
 function eudrOuvrirPdf(){
   const fours = (S.eudr.data.fournisseurs||[]).filter(l => !S.eudr.bobines || l.bobines);
   const un = S.eudr.sel.size === 1 ? [...S.eudr.sel][0] : null;
@@ -378,6 +480,19 @@ async function eudrVoirReponse(fid){
   .eudr-row.ro{grid-template-columns:minmax(180px,2fr) 120px 110px minmax(140px,1.5fr) minmax(150px,1.5fr) 150px}
   .eudr-head{border-top:none;font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:700;color:var(--muted)}
   .eudr-row b{color:var(--text)}
+  .eudr-ratt{background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+  .eudr-ratt-hd{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--accent);margin-bottom:8px}
+  .eudr-ratt-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--border)}
+  .eudr-ratt-qui{flex:1;min-width:240px;display:flex;flex-direction:column;font-size:13px;color:var(--text2)}
+  .eudr-ratt-qui b{color:var(--text)}
+  .eudr-ratt-row select{padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:inherit;font-size:13px;min-width:200px}
+  .eudr-lien{padding:10px 0;border-bottom:1px solid var(--border)}
+  .eudr-lien-hd{display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;margin-bottom:6px}
+  .eudr-lien-url{display:flex;gap:6px;flex-wrap:wrap}
+  .eudr-lien-url input{flex:1;min-width:220px;padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);
+    color:var(--text);font-family:ui-monospace,Consolas,monospace;font-size:12px}
+  .eudr-lien-new{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  .eudr-lien-new input[type=text]{width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:inherit;font-size:13px}
   .eudr-acts{display:flex;gap:6px;flex-wrap:wrap}
   .eudr-f{display:block;margin-bottom:12px}
   .eudr-f span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:700;color:var(--muted);margin-bottom:5px}
