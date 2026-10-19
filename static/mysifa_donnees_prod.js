@@ -96,6 +96,10 @@
     + '.dp-carte-sub{font-size:11px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
     + '.dp-devis{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 8px;font-size:12px;color:var(--muted)}'
     + '.dp-devis .dp-cmp-concl{margin-left:0}'
+    + '.dp-ident{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}'
+    + '.dp-ident span{display:inline-flex;align-items:baseline;gap:6px;padding:5px 10px;border-radius:8px;'
+    + 'background:var(--bg);border:1px solid var(--border);font-size:13px;font-weight:600;color:var(--text)}'
+    + '.dp-ident em{font-style:normal;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}'
     + '.dp-frise-axe{position:relative;height:16px;margin:4px 0 14px;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}'
     + '.dp-frise-axe span{position:absolute;transform:translateX(-50%);white-space:nowrap}'
     + '.dp-cmp-tete{display:flex;align-items:center;gap:8px;flex-wrap:wrap}'
@@ -344,6 +348,15 @@
       + '</div>';
   }
 
+  // Format, laize et matière du dossier : ce qui décrit le produit fabriqué.
+  function identiteHtml(id) {
+    if (!id) return '';
+    const puce = (lib, v) => v ? '<span><em>' + lib + '</em>' + esc(v) + '</span>' : '';
+    const h = puce('Format', String(id.format || '').replace(/(\d+)\.0\b/g, '$1')) + puce('Laize', id.laize_mm ? nombre(id.laize_mm) + ' mm' : '')
+      + puce('Matière', id.matiere);
+    return h ? '<div class="dp-ident">' + h + '</div>' : '';
+  }
+
   // `opts.fiche` : fiche dossier de MyProd — cartes resserrées, devis dans
   // les cartes, déroulé des saisies.
   function prodHtml(d, opts) {
@@ -357,7 +370,7 @@
     const dur = (m) => Number(m || 0) ? duree(m) : vide;
     let h = '<style>' + DP_CSS + '</style><div class="dp">';
     if (d.alerte) h += '<div class="dp-alerte">' + esc(d.alerte.charAt(0).toUpperCase() + d.alerte.slice(1)) + '.</div>';
-    if (fiche) h += cartesFicheHtml(d) + friseHtml(d.saisies);
+    if (fiche) h += identiteHtml(d.identite) + cartesFicheHtml(d) + friseHtml(d.saisies);
     else h += '<div class="dp-cartes">'
       + carte('Durée totale', duree(tt.duree_totale_min), 'var(--text2)')
       + carte('Calage', duree(tt.calage_min), DP_CATS.calage[1])
