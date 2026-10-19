@@ -3681,9 +3681,13 @@ def destockage_suivi(request: Request, vue: str = "a_traiter", jours: int = 30,
                 "          COALESCE(pe.planned_end, pe.updated_at) DESC "
                 " LIMIT ?", (depuis[:10], limite)).fetchall()
         else:
+            # Une sortie non relue est encore « À traiter » : elle n'arrive ici
+            # qu'une fois le contrôle validé.
+            relu = (" AND pe.destockage_relu_at IS NOT NULL"
+                    if "destockage_relu_at" in cols else "")
             rows = conn.execute(
                 base + "WHERE COALESCE(pe.destockage, 'todo') IN ('done', 'reserve') "
-                "   AND COALESCE(pe.destockage_at, '') >= ? "
+                "   AND COALESCE(pe.destockage_at, '') >= ? " + relu + " "
                 " ORDER BY pe.destockage_at DESC LIMIT ?", (depuis, limite)).fetchall()
 
         # Nombre de mouvements et dernier mouvement, en une requête.
