@@ -962,7 +962,46 @@ def dossier_detail(request: Request, no_dossier: str = ""):
         a.pop("operateur_lie", None)
     return {"no_dossier": ref, "stats": stats, "saisies": rows,
             "alerte": _alerte_metrage(metrage, rows), "comparaison": comparaison,
-            "alertes": alertes}
+            "alertes": alertes, "identite": _identite_dossier(ref)}
+
+
+def _identite_dossier(ref: str) -> dict:
+    """Format, laize et matière du dossier, pour l'en-tête de sa fiche.
+
+    Même source que la mémoire produit (`contexte_dossier`) : planning, puis
+    fiche technique ; la matière vient de l'OF rattaché, à défaut de la série
+    déjà clôturée. Une donnée absente reste vide — jamais devinée.
+    """
+    out = {"format": None, "laize_mm": None, "matiere": None, "ref_produit_norm": None}
+    try:
+        import re
+        from app.services.produit_memoire import contexte_dossier
+        with get_db() as conn:
+            ctx = contexte_dossier(conn, ref)
+            # Dossier regroupé (« 9932610+611+612 », « 9932548 + stock ») : le
+            # planning le connaît sous son premier numéro.
+            base = (re.match(r"\s*(\d+)", ref) or [None, None])[1]
+            if not ctx.get("planning_entry_id") and base and base != ref:
+                ctx = contexte_dossier(conn, base)
+            out["format"] = ctx.get("format")
+            out["laize_mm"] = ctx.get("laize_mm")
+            out["ref_produit_norm"] = ctx.get("ref_produit_norm")
+            if ctx.get("of_import_id"):
+                row = conn.execute("SELECT matiere FROM of_imports WHERE id=?",
+                                   (ctx["of_import_id"],)).fetchone()
+                if row and (row["matiere"] or "").strip():
+                    out["matiere"] = row["matiere"].strip()
+            if not out["matiere"]:
+                row = conn.execute(
+                    "SELECT matiere, format, laize_mm FROM produit_series "
+                    "WHERE TRIM(no_dossier) = TRIM(?) ORDER BY id DESC LIMIT 1", (ref,)).fetchone()
+                if row:
+                    out["matiere"] = (row["matiere"] or "").strip() or None
+                    out["format"] = out["format"] or row["format"]
+                    out["laize_mm"] = out["laize_mm"] or row["laize_mm"]
+    except Exception:
+        pass  # l'en-tête s'affiche sans, le détail reste lisible
+    return out
 
 
 def _alertes_dossier(conn, ref: str) -> list:

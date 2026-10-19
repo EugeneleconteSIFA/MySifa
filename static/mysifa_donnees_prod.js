@@ -81,8 +81,25 @@
     + '.dp-cpt{font-family:ui-monospace,Consolas,monospace;font-weight:700;color:var(--text)}'
     + '.dp-clos{margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;color:white;background:var(--accent)}'
     + '.dp-vide{color:var(--muted)}'
-    + '.dp-frise{position:relative;height:30px;border-radius:8px;overflow:hidden;background:var(--bg);border:1px solid var(--border)}'
-    + '.dp-frise i{position:absolute;top:0;bottom:0;background:var(--c);box-shadow:inset -1px 0 0 var(--card)}'
+    + '.dp-frise{position:relative;height:30px;border-radius:8px;background:var(--bg);border:1px solid var(--border)}'
+    + '.dp-frise i{position:absolute;top:0;bottom:0;background:var(--c);box-shadow:inset -1px 0 0 var(--card);cursor:default}'
+    + '.dp-frise i:first-child{border-radius:7px 0 0 7px}.dp-frise i:last-child{border-radius:0 7px 7px 0}'
+    + '.dp-frise i:hover{z-index:2;filter:brightness(1.15);box-shadow:0 0 0 2px var(--card),0 0 0 3px var(--c)}'
+    + '.dp-frise i::after{content:attr(data-bulle);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);'
+    + 'width:max-content;max-width:260px;padding:7px 10px;border-radius:8px;background:var(--text);color:var(--card);'
+    + 'font-size:12px;font-weight:500;line-height:1.45;white-space:pre-line;text-align:left;'
+    + 'box-shadow:0 4px 14px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .1s}'
+    + '.dp-frise i.g::after{left:0;transform:none}.dp-frise i.d::after{left:auto;right:0;transform:none}'
+    + '.dp-frise i:hover::after{opacity:1}'
+    + '.dp-cartes.dp-3{grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:8px}'
+    + '.dp-cartes.dp-3+.dp-cartes.dp-3{margin-bottom:14px}'
+    + '.dp-carte-sub{font-size:11px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    + '.dp-devis{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 8px;font-size:12px;color:var(--muted)}'
+    + '.dp-devis .dp-cmp-concl{margin-left:0}'
+    + '.dp-ident{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}'
+    + '.dp-ident span{display:inline-flex;align-items:baseline;gap:6px;padding:5px 10px;border-radius:8px;'
+    + 'background:var(--bg);border:1px solid var(--border);font-size:13px;font-weight:600;color:var(--text)}'
+    + '.dp-ident em{font-style:normal;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}'
     + '.dp-frise-axe{position:relative;height:16px;margin:4px 0 14px;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}'
     + '.dp-frise-axe span{position:absolute;transform:translateX(-50%);white-space:nowrap}'
     + '.dp-cmp-tete{display:flex;align-items:center;gap:8px;flex-wrap:wrap}'
@@ -97,20 +114,24 @@
     + '.dp-al-nom{font-size:13px;font-weight:700;color:var(--text);display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}'
     + '.dp-al-nom span{font-size:11px;font-weight:500;color:var(--muted)}'
     + '.dp-al-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-top:8px}'
-    + '.dp-al-g{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--bg)}'
+    + '.dp-al-g{border:1px solid var(--border);border-left:4px solid var(--c,var(--accent));border-radius:8px;padding:8px 10px;'
+    + 'background:color-mix(in srgb,var(--c,var(--accent)) 6%,var(--card))}'
     + '.dp-al-g-lib{font-size:11px;font-weight:700;color:var(--text2);display:flex;justify-content:space-between;gap:8px}'
     + '.dp-al-g-lib b{font-variant-numeric:tabular-nums;color:var(--text)}'
     + '.dp-al-svg{display:block;width:100%;height:auto;margin-top:4px;overflow:visible}'
-    + '.dp-al-svg .ligne{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}'
+    + '.dp-al-svg .ligne{fill:none;stroke:var(--c,var(--accent));stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}'
+    + '.dp-al-svg .aire{fill:var(--c,var(--accent));opacity:.14;stroke:none}'
     + '.dp-al-svg .grille{stroke:var(--border);stroke-width:1}'
-    + '.dp-al-svg .pt{fill:var(--accent);stroke:var(--bg);stroke-width:2}'
+    + '.dp-al-svg .pt{fill:var(--c,var(--accent));stroke:var(--card);stroke-width:2}'
     + '.dp-al-svg .cible{fill:transparent;cursor:default}'
     + '.dp-al-svg .cible:hover+.pt,.dp-al-svg .pt:hover{r:5.5}'
     + '.dp-al-svg text{font-size:10px;fill:var(--muted);font-variant-numeric:tabular-nums}'
     + '.dp-al-choix{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}'
-    + '.dp-al-c{padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid var(--border);color:var(--text2);background:var(--card)}'
-    + '.dp-al-c b{color:var(--text)}'
-    + '.dp-al-c.nc{border-color:var(--danger);color:var(--danger)}.dp-al-c.nc b{color:var(--danger)}';
+    + '.dp-al-c{padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;color:var(--success);'
+    + 'border:1px solid color-mix(in srgb,var(--success) 45%,transparent);background:color-mix(in srgb,var(--success) 12%,var(--card))}'
+    + '.dp-al-c b{color:inherit}'
+    + '.dp-al-c.nc{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 45%,transparent);'
+    + 'background:color-mix(in srgb,var(--danger) 12%,var(--card))}';
 
   // ── Alertes validées pendant le dossier ─────────────────────────────────
   // Une valeur relevée = une courbe dans le temps (une seule série : le titre
@@ -140,7 +161,12 @@
       + '<text x="' + G + '" y="' + (H - 3) + '">' + esc(dateCourte(points[0].iso).slice(6)) + '</text>'
       + (points.length > 1 ? '<text x="' + (W - D) + '" y="' + (H - 3) + '" text-anchor="end">'
         + esc(dateCourte(points[points.length - 1].iso).slice(6)) + '</text>' : '');
-    if (pts.length > 1) svg += '<polyline class="ligne" points="' + pts.map(q => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ') + '"/>';
+    if (pts.length > 1) {
+      const trace = pts.map(q => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ');
+      svg += '<polygon class="aire" points="' + pts[0][0].toFixed(1) + ',' + y(lo) + ' ' + trace + ' '
+        + pts[pts.length - 1][0].toFixed(1) + ',' + y(lo) + '"/>'
+        + '<polyline class="ligne" points="' + trace + '"/>';
+    }
     points.forEach((p, i) => {
       const titre = esc(fmt(p.v) + (unite ? ' ' + unite : '') + ' · ' + dateCourte(p.iso) + (p.qui ? ' · ' + p.qui : ''));
       svg += '<circle class="cible" cx="' + pts[i][0].toFixed(1) + '" cy="' + pts[i][1].toFixed(1) + '" r="10"><title>' + titre + '</title></circle>'
@@ -152,6 +178,9 @@
     if (!alertes || !alertes.length) return '<div class="dp-vide" style="font-size:13px;margin-bottom:14px">Aucune alerte validée sur ce dossier.</div>';
     const parAlerte = {};
     alertes.forEach(a => { (parAlerte[a.alert_id || a.nom] = parAlerte[a.alert_id || a.nom] || []).push(a); });
+    const teintes = ['var(--accent)', 'var(--c4)', 'var(--c2)', 'var(--warn)', 'var(--c3)'];
+    let ng = 0;
+    const teinte = () => ' style="--c:' + teintes[(ng++) % teintes.length] + '"';
     let h = '<div class="dp-al">';
     Object.keys(parAlerte).forEach(k => {
       const acks = parAlerte[k];
@@ -167,7 +196,7 @@
             t: Date.parse(String(a.ack_at || '').replace(' ', 'T')) || 0, qui: a.user_nom || ''})).filter(p => p.v !== null);
           if (!pts.length) return;
           const der = pts[pts.length - 1].v;
-          h += '<div class="dp-al-g"><div class="dp-al-g-lib">' + esc(it.label || 'Valeur')
+          h += '<div class="dp-al-g"' + teinte() + '><div class="dp-al-g-lib">' + esc(it.label || 'Valeur')
             + '<span>dernière <b>' + nombre(der) + (it.unit ? ' ' + esc(it.unit) : '') + '</b></span></div>'
             + courbe(pts, it.unit || '') + '</div>';
         } else {
@@ -179,7 +208,7 @@
           const nc = new Set(it.nc_responses || []);
           const cles = Object.keys(comptes);
           if (!cles.length) return;
-          h += '<div class="dp-al-g"><div class="dp-al-g-lib">' + esc(it.label || 'Contrôle') + '</div><div class="dp-al-choix">'
+          h += '<div class="dp-al-g" style="--c:var(--success)"><div class="dp-al-g-lib">' + esc(it.label || 'Contrôle') + '</div><div class="dp-al-choix">'
             + cles.sort((a, b) => comptes[b] - comptes[a]).map(v => '<span class="dp-al-c' + (nc.has(v) ? ' nc' : '') + '">'
               + esc(v) + (nc.has(v) ? ' · NC' : '') + ' <b>×' + comptes[v] + '</b></span>').join('')
             + '</div></div>';
@@ -198,19 +227,32 @@
   // Même calcul que la Rentabilité (`comparaison_pour_dossier`), lu tel quel :
   // l'écart vient du serveur, l'écran ne fait que dire s'il est bon ou non.
   // Un temps plus court est bon ; une vitesse ou une quantité plus haute aussi.
+  // Écart rendu par le serveur, coloré selon le sens qui est bon.
+  function ecartHtml(ec, cle, plusEstMieux) {
+    const t = (ec || {})[cle];
+    if (!t) return '<span class="dp-vide">—</span>';
+    const n = parseFloat(String(t).replace(',', '.'));
+    const sens = !isFinite(n) || n === 0 ? '' : ((n > 0) === plusEstMieux ? ' bon' : ' mauvais');
+    return '<span class="dp-ec' + sens + '">' + esc(t) + '</span>';
+  }
+  function devisSource(c) {
+    const dv = c.devis || {};
+    return 'Devis' + (dv.client ? ' ' + esc(dv.client) : '') + (dv.date_devis ? ' du ' + esc(String(dv.date_devis).slice(0, 10).split('-').reverse().join('/')) : '')
+      + (c.palier && Number(c.palier.qte_retenue) > 0 ? ' · recalé sur ' + nombre(c.palier.qte_retenue) + ' étiquettes' : '');
+  }
+  function devisConclusion(c) {
+    const concl = c.conclusion || {};
+    const coul = {success: 'var(--success)', warn: 'var(--warn)', danger: 'var(--danger)'}[concl.color] || 'var(--muted)';
+    return concl.label ? '<span class="dp-cmp-concl" style="--c:' + coul + '">' + esc(concl.label) + '</span>' : '';
+  }
+
   function comparaisonHtml(c) {
     if (!c || !c.theorique || !c.reel) return '';
     const th = c.theorique, re = c.reel, ec = c.ecarts || {};
     const m = (v) => (v == null || v === '' || !isFinite(Number(v))) ? '<span class="dp-vide">—</span>' : nombre(Math.round(Number(v)));
     const dmin = (v) => Number(v || 0) ? duree(v) : '<span class="dp-vide">—</span>';
     const vit = (v) => Number(v || 0) ? nombre(Math.round(Number(v) * 10) / 10) + ' m/min' : '<span class="dp-vide">—</span>';
-    const ecart = (cle, plusEstMieux) => {
-      const t = ec[cle];
-      if (!t) return '<span class="dp-vide">—</span>';
-      const n = parseFloat(String(t).replace(',', '.'));
-      const sens = !isFinite(n) || n === 0 ? '' : ((n > 0) === plusEstMieux ? ' bon' : ' mauvais');
-      return '<span class="dp-ec' + sens + '">' + esc(t) + '</span>';
-    };
+    const ecart = (cle, plusEstMieux) => ecartHtml(ec, cle, plusEstMieux);
     const ligne = (lib, t, r, e) => '<tr><td style="font-weight:600;color:var(--text)">' + lib + '</td>'
       + '<td class="n">' + t + '</td><td class="n">' + r + '</td><td class="n">' + e + '</td></tr>';
     const dv = c.devis || {};
@@ -254,10 +296,14 @@
       if (!(w > 0)) continue;
       const c = (DP_CATS[String(a.operation_category || '').toLowerCase()] || [null, 'var(--muted)'])[1];
       const lib = String(a.operation || '').replace(/^\s*\d+\s*-\s*/, '');
-      bandes += '<i style="left:' + x.toFixed(3) + '%;width:' + w.toFixed(3) + '%;--c:' + c + '" title="'
-        + esc((a.operation_code ? a.operation_code + ' ' : '') + lib + ' · ' + dateCourte(a.date_operation).slice(6)
-          + ' → ' + dateCourte(b.date_operation).slice(6) + ' · ' + duree((t(b) - t(a)) / 60000)
-          + (a.operateur ? ' · ' + a.operateur : '')) + '"></i>';
+      // Bulle ancrée à gauche ou à droite près des bords : centrée, elle
+      // déborderait de la carte.
+      const cote = x + w / 2 < 18 ? ' class="g"' : (x + w / 2 > 82 ? ' class="d"' : '');
+      bandes += '<i' + cote + ' style="left:' + x.toFixed(3) + '%;width:' + w.toFixed(3) + '%;--c:' + c + '" data-bulle="'
+        + esc((a.operation_code ? a.operation_code + ' · ' : '') + lib + '\n'
+          + dateCourte(a.date_operation).slice(6) + ' → ' + dateCourte(b.date_operation).slice(6)
+          + ' · ' + duree((t(b) - t(a)) / 60000) + (a.operateur ? '\n' + a.operateur : ''))
+          .replace(/\n/g, '&#10;') + '"></i>';
     }
     // Repères : heures pleines, assez espacées pour tenir sur la largeur.
     const pas = Math.max(1, Math.ceil((t1 - t0) / 3600000 / 8)) * 3600000;
@@ -275,8 +321,46 @@
       + '<div class="dp-frise">' + bandes + '</div><div class="dp-frise-axe">' + reperes + '</div>';
   }
 
-  // `opts.frise` : ajoute le déroulé sous les cartes (fiche dossier de MyProd).
+  // Fiche dossier de MyProd : durée / métrage / vitesse, puis calage /
+  // production / arrêts, chacun avec la valeur du devis rattaché s'il y en a un.
+  function cartesFicheHtml(d) {
+    const st = d.stats || {}, tt = st.temps_totaux || {}, q = st.quantites || {};
+    const c = d.comparaison && d.comparaison.theorique && d.comparaison.reel ? d.comparaison : null;
+    const th = c ? c.theorique : {}, ec = c ? (c.ecarts || {}) : {};
+    const carte = (lib, val, coul, sub) => '<div class="dp-carte" style="--c:' + coul + '">'
+      + '<div class="dp-carte-lib">' + lib + '</div><div class="dp-carte-val">' + val + '</div>'
+      + (sub ? '<div class="dp-carte-sub">' + sub + '</div>' : '') + '</div>';
+    const vit = (v) => nombre(Math.round(Number(v) * 10) / 10) + ' m/min';
+    const devis = (v, fmt, cle, plusEstMieux) => (c && Number(v || 0))
+      ? 'Devis ' + fmt(v) + ' · ' + ecartHtml(ec, cle, plusEstMieux) : '';
+    return (c ? '<div class="dp-devis">' + devisSource(c) + devisConclusion(c) + '</div>' : '')
+      + '<div class="dp-cartes dp-3">'
+      + carte('Durée totale', duree(tt.duree_totale_min), 'var(--text2)')
+      + carte('Métrage', q.metrage_m ? nombre(Math.round(q.metrage_m)) + ' m' : '—', d.alerte ? 'var(--danger)' : 'var(--accent)',
+        devis(th.metrage_ml, (v) => nombre(Math.round(v)) + ' m', 'metrage_ml', false))
+      + carte('Vitesse', st.vitesse_aberrante ? '<span style="color:var(--danger);font-weight:400">erreur saisie</span>'
+          : st.vitesse_m_min ? vit(st.vitesse_m_min) : '—', 'var(--accent)', devis(th.vitesse, vit, 'vitesse', true))
+      + '</div><div class="dp-cartes dp-3">'
+      + carte('Calage', duree(tt.calage_min), DP_CATS.calage[1], devis(th.temps_calage_mn, duree, 'temps_calage_mn', false))
+      + carte('Production', duree(tt.production_min), DP_CATS.production[1],
+        devis(th.temps_production_mn, duree, 'temps_production_mn', false))
+      + carte('Arrêts', duree(tt.arret_min), DP_CATS.arret[1])
+      + '</div>';
+  }
+
+  // Format, laize et matière du dossier : ce qui décrit le produit fabriqué.
+  function identiteHtml(id) {
+    if (!id) return '';
+    const puce = (lib, v) => v ? '<span><em>' + lib + '</em>' + esc(v) + '</span>' : '';
+    const h = puce('Format', String(id.format || '').replace(/(\d+)\.0\b/g, '$1')) + puce('Laize', id.laize_mm ? nombre(id.laize_mm) + ' mm' : '')
+      + puce('Matière', id.matiere);
+    return h ? '<div class="dp-ident">' + h + '</div>' : '';
+  }
+
+  // `opts.fiche` : fiche dossier de MyProd — cartes resserrées, devis dans
+  // les cartes, déroulé des saisies.
   function prodHtml(d, opts) {
+    const fiche = !!(opts && opts.fiche);
     const st = d.stats || {};
     const tt = st.temps_totaux || {};
     const q = st.quantites || {};
@@ -286,7 +370,8 @@
     const dur = (m) => Number(m || 0) ? duree(m) : vide;
     let h = '<style>' + DP_CSS + '</style><div class="dp">';
     if (d.alerte) h += '<div class="dp-alerte">' + esc(d.alerte.charAt(0).toUpperCase() + d.alerte.slice(1)) + '.</div>';
-    h += '<div class="dp-cartes">'
+    if (fiche) h += identiteHtml(d.identite) + cartesFicheHtml(d) + friseHtml(d.saisies);
+    else h += '<div class="dp-cartes">'
       + carte('Durée totale', duree(tt.duree_totale_min), 'var(--text2)')
       + carte('Calage', duree(tt.calage_min), DP_CATS.calage[1])
       + carte('Production', duree(tt.production_min), DP_CATS.production[1])
@@ -297,8 +382,7 @@
       + carte('Vitesse', st.vitesse_aberrante ? '<span style="color:var(--danger);font-weight:400">erreur saisie</span>'
           : st.vitesse_m_min ? nombre(Math.round(st.vitesse_m_min * 10) / 10) + ' m/min' : '—', 'var(--accent)')
       + '</div>';
-    if (opts && opts.frise) h += friseHtml(d.saisies);
-    h += comparaisonHtml(d.comparaison);
+    if (!fiche) h += comparaisonHtml(d.comparaison);
     // Caché par défaut : la page qui l'affiche pose un bouton qui le déplie
     // (MySifaDonneesProd.basculerAlertes). Sans liste d'alertes, rien.
     if (Array.isArray(d.alertes)) {
@@ -359,5 +443,5 @@
     return !z.hidden;
   }
 
-  window.MySifaDonneesProd = { html: prodHtml, basculerAlertes: basculerAlertes };
+  window.MySifaDonneesProd = { html: prodHtml, basculerAlertes: basculerAlertes, css: DP_CSS };
 })();

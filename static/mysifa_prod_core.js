@@ -327,7 +327,8 @@
       if(so.col){ p.tri=so.col; if(so.asc===false) p.sens='desc'; }
     }
     if(sousEff==='erreurs'&&S.ecartsFiltre) p.ecart=String(S.ecartsFiltre).replace(/^prod\./,'');
-    if(sousEff==='kpis'&&S.psSel){ p.ouvert=S.psSel; nav+='/ouvert'; }
+    if(sousEff==='kpis'&&S.psLigne){ p.ligne=S.psLigne.type+':'+S.psLigne.key; nav+='/ligne'; }
+    else if(sousEff==='kpis'&&S.psSel){ p.ouvert=S.psSel; nav+='/ouvert'; }
     if(sousEff==='retour'){
       var rp=S.retourProd||{};
       if(rp.vue==='liste') p.vue='liste';
@@ -396,6 +397,9 @@
     devis:{page:'rentabilite',
       ouvrir:function(id){ if((S.devisList||[]).some(function(d){return String(d.id)===String(id);})) ouvrirDevisModal(Number(id)); },
       fermer:function(){ fermerDevisModal(true); }},
+    alertes:{page:'production',
+      ouvrir:function(no){ if(no&&String(no).length<=80) openAlertesDossier(String(no)); },
+      fermer:function(){ fermerAlertesDossier(true); }},
     synthese:{page:'production',
       ouvrir:function(v){ var i=String(v).indexOf(':'); if(i>0) openProdSynthDetail(v.slice(0,i),[v.slice(i+1)],0); },
       fermer:function(){ closeProdSynthModal(true); }},
@@ -532,6 +536,9 @@
       // bornée en longueur et sans caractère de contrôle.
       var ov=u.get('ouvert',null);
       S.psSel=(ov&&ov.length<=80&&!/[\u0000-\u001f<>]/.test(ov))?ov:null;
+      var li=u.get('ligne',null), ip=li?li.indexOf(':'):-1;
+      S.psLigne=(ip>0&&li.length<=100&&['operator','machine','day'].indexOf(li.slice(0,ip))!==-1&&!/[\u0000-\u001f<>]/.test(li))
+        ?{type:li.slice(0,ip),key:li.slice(ip+1)}:null;
     }
     if(page==='production'&&S.subPage==='erreurs'){
       var ec=u.get('ecart',null);
@@ -11187,10 +11194,13 @@ function syncDossierFilterSuggest(){
   const inp = document.getElementById('prod-filter-dossier-search');
   if(!dd || !inp) return;
   const all = (S.filters && S.filters.dossiers) ? S.filters.dossiers : [];
+  // Référence produit du dossier (planning) : cherchée comme le numéro.
+  const refsProduit = (S.filters && S.filters.dossiers_ref_produit) || {};
   const q = (inp.value || '').trim().toLowerCase();
   const selected = new Set((S.fv.dossiers || []).map(d=>String(d)));
   let matches = all;
-  if(q) matches = all.filter(d=>String(d).toLowerCase().includes(q));
+  if(q) matches = all.filter(d=>String(d).toLowerCase().includes(q)
+    || String(refsProduit[d] || '').toLowerCase().includes(q));
   matches = matches.filter(d=>!selected.has(String(d))).slice(0, 24);
   dd.innerHTML = '';
   if(!q){
@@ -11210,6 +11220,12 @@ function syncDossierFilterSuggest(){
     const row = document.createElement('div');
     row.className = 'prod-dossier-suggest-item' + (i === hi ? ' prod-dossier-suggest-item--hi' : '');
     row.textContent = ref;
+    if(refsProduit[ref]){
+      const rp = document.createElement('span');
+      rp.style.cssText = 'margin-left:8px;color:var(--muted);font-size:12px';
+      rp.textContent = refsProduit[ref];
+      row.appendChild(rp);
+    }
     row.addEventListener('mousedown', e=>{
       e.preventDefault();
       pickDossierFilter(ref);
@@ -11247,7 +11263,7 @@ function makeDossierFilterSearch(allDossiers){
     type: 'text',
     id: 'prod-filter-dossier-search',
     className: 'search-bar',
-    placeholder: 'Rechercher (n° dossier…)',
+    placeholder: 'Rechercher (n° dossier, réf. produit…)',
     autocomplete: 'off',
     value: S.fv.dossierSearchQ || '',
   });
@@ -11415,21 +11431,22 @@ function _prodVueCss(){
     +'.ps-l-sous{display:block;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}'
     +'.ps-barre{display:flex;height:7px;border-radius:4px;overflow:hidden;background:var(--bg)}'
     +'.ps-barre i{display:block;height:100%;background:var(--c)}'
-    +'.ps-l-tps{display:block;font-family:monospace;font-size:11px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    +'.ps-l-tps{display:block;font-size:11px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}'
     +'.ps-l-chif{text-align:right;white-space:nowrap}'
-    +'.ps-l-vit{display:block;font-family:monospace;font-size:12px;font-weight:800;color:var(--warn)}'
-    +'.ps-l-met{display:block;font-family:monospace;font-size:11px;color:var(--muted);margin-top:1px}'
+    +'.ps-l-vit{display:block;font-size:13px;font-weight:700;color:var(--warn);font-variant-numeric:tabular-nums}'
+    +'.ps-l-met{display:block;font-size:11px;color:var(--muted);margin-top:1px;font-variant-numeric:tabular-nums}'
     +'.ps-legende{display:flex;flex-wrap:wrap;gap:12px;padding:0 4px;font-size:11px;color:var(--muted)}'
     +'.ps-fiche{flex:999 1 560px;min-width:0;margin:0!important;padding:16px 18px}'
     +'.ps-fiche-tete{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:10px;'
     +'padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid var(--border)}'
-    +'.ps-fiche-no{font-family:monospace;font-size:20px;font-weight:800;color:var(--text)}'
+    +'.ps-fiche-no{font-size:20px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}'
     +'.ps-fiche-client{font-size:14px;font-weight:600;color:var(--text);margin-top:2px}'
     +'.ps-fiche-meta{font-size:12px;color:var(--muted);margin-top:2px}'
     +'.ps-fiche-defaut{display:inline-block;margin-left:8px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;'
     +'vertical-align:3px;color:var(--accent);background:var(--accent-bg)}'
     +'.ps-fiche-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}'
     +'.ps-fiche .dp{border:none;padding:0;background:transparent}'
+    +'.ps-fiche tr.ps-sess{cursor:pointer}'
     +'.ps-fiche-lien{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;font-size:12px;font-weight:600;'
     +'text-decoration:none;background:var(--bg);border:1px solid var(--border);color:var(--accent)}'
     +'.ps-fiche-lien:hover{border-color:var(--accent)}'
@@ -11454,7 +11471,7 @@ function _psDetailCharger(no, cible, hote){
   if(cache && cache.html){ cible.innerHTML = cache.html; _psBoutonSignaler(no, cible, hote); return; }
   cible.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:12px">Chargement des saisies…</div>';
   api('/api/production/dossier-detail?no_dossier='+encodeURIComponent(no)).then(d=>{
-    const html = (window.MySifaDonneesProd && d) ? window.MySifaDonneesProd.html(d, {frise:true})
+    const html = (window.MySifaDonneesProd && d) ? window.MySifaDonneesProd.html(d, {fiche:true})
       : '<div style="color:var(--danger)">Affichage indisponible — rechargez la page.</div>';
     S.psDetailCache[no] = {html};
     if(cible.isConnected){ cible.innerHTML = html; _psBoutonSignaler(no, cible, hote); }
@@ -11464,44 +11481,25 @@ function _psDetailCharger(no, cible, hote){
   });
 }
 // Outils du détail d'un dossier, dans `hote` (en-tête de la fiche) :
-// - alertes validées (courbes des valeurs relevées), dépliées dans le panneau ;
+// - alertes validées (courbes des valeurs relevées), dans une fenêtre ;
 // - signaler une incohérence : l'écart rejoint « À traiter » (Erreurs & Qualité).
 function _psBoutonSignaler(no, cible, hote){
   const panneau = cible.querySelector('.dp');
   if(!panneau || !hote) return;
   const ancien = hote.querySelector('.ps-outils'); if(ancien) ancien.remove();
-  S.psAlertesOuvertes = S.psAlertesOuvertes || {};
   const styleBtn = {display:'inline-flex',alignItems:'center',gap:'6px',background:'var(--bg)',
     border:'1px solid var(--border)',padding:'5px 9px',borderRadius:'8px',fontSize:'12px',fontWeight:'600',color:'var(--text2)'};
   const outils = h('div',{className:'ps-outils',style:{display:'flex',gap:'6px'}});
   const zone = panneau.querySelector('.dp-alertes');
-  if(zone && window.MySifaDonneesProd && window.MySifaDonneesProd.basculerAlertes){
+  if(zone){
     const n = zone.querySelector('.dp-n') ? zone.querySelector('.dp-n').textContent : '';
-    const bulleAlertes = o => o
-      ? 'Masquer les alertes validées'
-      : 'Alertes validées sur ce dossier : '+n+' validation'+(Number(n)>1?'s':'')
-        +'. Affiche les valeurs relevées en courbes et les réponses aux contrôles.';
-    const btn = h('button',{type:'button',className:'btn-ghost ps-bulle',
-        'data-bulle':bulleAlertes(false),'aria-label':'Alertes validées sur ce dossier',
-        style:styleBtn,
-        onClick:e=>{
-          e.stopPropagation();
-          const ouvert = window.MySifaDonneesProd.basculerAlertes(panneau);
-          S.psAlertesOuvertes[no] = ouvert;
-          btn.style.borderColor = ouvert ? 'var(--accent)' : 'var(--border)';
-          btn.style.color = ouvert ? 'var(--accent)' : 'var(--text2)';
-          btn.setAttribute('aria-pressed', ouvert ? 'true' : 'false');
-          btn.setAttribute('data-bulle', bulleAlertes(ouvert));
-          if(ouvert) zone.scrollIntoView({block:'nearest'});
-        }},
-      iconEl('activity',14), n);
-    outils.appendChild(btn);
-    if(S.psAlertesOuvertes[no]){
-      window.MySifaDonneesProd.basculerAlertes(panneau, true);
-      btn.style.borderColor = 'var(--accent)'; btn.style.color = 'var(--accent)';
-      btn.setAttribute('aria-pressed','true');
-      btn.setAttribute('data-bulle', bulleAlertes(true));
-    }
+    outils.appendChild(h('button',{type:'button',className:'btn-ghost ps-bulle',
+        'data-bulle':'Alertes validées sur ce dossier : '+n+' validation'+(Number(n)>1?'s':'')
+          +'. Ouvre les valeurs relevées en courbes et les réponses aux contrôles.',
+        'aria-label':'Alertes validées sur ce dossier',
+        style:Object.assign({}, styleBtn, Number(n)>0 ? {color:'var(--accent)',borderColor:'var(--accent)'} : {}),
+        onClick:e=>{ e.stopPropagation(); openAlertesDossier(no); }},
+      iconEl('activity',14), n));
   }
   outils.appendChild(h('button',{type:'button',className:'btn-ghost ps-bulle',
       'data-bulle':'Signaler une incohérence : un chiffre ou une saisie qui ne colle pas. '
@@ -11511,6 +11509,52 @@ function _psBoutonSignaler(no, cible, hote){
       onClick:e=>{ e.stopPropagation(); openSignalerIncoherence(no); }},
     iconEl('flag',14)));
   hote.prepend(outils);
+}
+// Alertes validées d'un dossier, en fenêtre. Le contenu est celui que le
+// panneau du dossier a déjà rendu (même chargement, même cache) ; arrivée par
+// l'adresse (?alertes=) : chargé ici.
+function fermerAlertesDossier(sansAdresse){
+  const m = document.querySelector('.ps-alertes-modal');
+  if(!m) return;
+  if(m._clavier) document.removeEventListener('keydown', m._clavier, true);
+  m.remove();
+  if(!sansAdresse && S.urlModale && S.urlModale.cle==='alertes'){ S.urlModale=null; prodSyncUrl(); }
+}
+async function openAlertesDossier(no){
+  fermerAlertesDossier(true);
+  S.psDetailCache = S.psDetailCache || {};
+  if(!(S.psDetailCache[no] && S.psDetailCache[no].html)){
+    try{
+      const d = await api('/api/production/dossier-detail?no_dossier='+encodeURIComponent(no));
+      if(!d || !window.MySifaDonneesProd) return;
+      S.psDetailCache[no] = {html: window.MySifaDonneesProd.html(d, {fiche:true})};
+    }catch(e){ toast((e && e.message) || 'Alertes indisponibles.','error'); return; }
+  }
+  // HTML produit par mysifa_donnees_prod.js (donnees echappees a la source).
+  const tmp = document.createElement('div');
+  tmp.innerHTML = S.psDetailCache[no].html;
+  const zone = tmp.querySelector('.dp-alertes');
+  if(!zone) return;
+  zone.hidden = false;
+  const titre = zone.querySelector('.dp-titre'); if(titre) titre.remove();
+  const n = (zone.querySelectorAll('.dp-al-bloc')||[]).length;
+  const corps = h('div',{style:{overflowY:'auto',maxHeight:'calc(90vh - 90px)',paddingRight:'4px'}});
+  if(window.MySifaDonneesProd && window.MySifaDonneesProd.css) corps.appendChild(h('style',null,window.MySifaDonneesProd.css));
+  corps.appendChild(zone);
+  const form = h('div',{className:'add-row-form',role:'dialog','aria-modal':'true','aria-label':'Alertes validées · dossier '+no,
+      style:{width:'min(980px,94vw)',maxHeight:'90vh',boxSizing:'border-box'}},
+    h('button',{type:'button',className:'add-row-close',title:'Fermer',onClick:e=>{ e.stopPropagation(); fermerAlertesDossier(); }},'×'),
+    h('h3',{style:{marginBottom:'4px',display:'flex',alignItems:'center',gap:'8px'}},
+      h('span',{style:{color:'var(--accent)',display:'inline-flex'}},iconEl('activity',16)),' Alertes validées'),
+    h('p',{style:{fontSize:'12px',color:'var(--muted)',margin:'0 0 12px'}},
+      'Dossier '+no+(n ? ' · '+n+' alerte'+(n>1?'s':'') : '')),
+    corps);
+  const modal = h('div',{className:'add-row-modal ps-alertes-modal',onClick:e=>{ if(e.target===modal) fermerAlertesDossier(); }}, form);
+  modal._clavier = e=>{ if(e.key==='Escape'){ e.stopPropagation(); fermerAlertesDossier(); } };
+  document.addEventListener('keydown', modal._clavier, true);
+  document.getElementById('root').appendChild(modal);
+  S.urlModale = {cle:'alertes', id:no};
+  prodSyncUrl();
 }
 function openSignalerIncoherence(no){
   try{ const m=document.querySelector('.add-row-modal'); if(m) m.remove(); }catch(_){}
@@ -13652,6 +13696,54 @@ function renderProdKpis(){
       zone);
   }
 
+  // Fiche d'une ligne de synthèse (opérateur, machine, jour) : mêmes cartes
+  // que la fiche dossier, puis ses sessions. Un clic sur une session ouvre
+  // le dossier.
+  function buildFicheLigne(type, key){
+    const sessions = prodSynthFilterSessions(type, key, {isRep:false});
+    const tot = prodSynthTotals(sessions);
+    const nbDos = new Set(sessions.map(x=>String(x.no_dossier||'').trim()).filter(Boolean)).size;
+    const TITRES = {operator:'Opérateur', machine:'Machine', day:'Jour'};
+    const carte = (lib, val, c) => h('div',{className:'dp-carte',style:'--c:'+c},
+      h('div',{className:'dp-carte-lib'},lib), h('div',{className:'dp-carte-val'},val));
+    const th = (lib, n) => h('th',{className:n?'n':null},lib);
+    const lignes = sessions.slice().sort((a,b)=>String(b.jour||'').localeCompare(String(a.jour||''))).map(x=>{
+      const no = String(x.no_dossier||'').trim();
+      return h('tr',{className:'ps-sess',title:no?'Afficher la fiche du dossier '+no:'',
+          onClick:()=>{ if(!no) return; S.psSel = no; S.psLigne = null; render(); }},
+        h('td',null,formatJourLabel(x.jour)),
+        type!=='operator' ? h('td',null,opName(x.operateur)) : null,
+        type!=='machine' ? h('td',null,x.machine||'—') : null,
+        h('td',{style:{fontWeight:'700',color:'var(--text)'}},no||'—'),
+        h('td',null,prodSynthCleanClient(x.client)||'—'),
+        h('td',{className:'n'},fN(x.metrage_m||0)+' m'),
+        h('td',{className:'n ps-c-cal'},fMin(x.temps_calage_min)),
+        h('td',{className:'n ps-c-prod'},fMin(x.temps_prod_min)),
+        h('td',{className:'n ps-c-arr'},fMin(x.temps_arret_min)),
+        h('td',{className:'n',style:{fontWeight:'700',color:'var(--warn)'}},vitEl(vitSessions([x]))));
+    });
+    return h('article',{className:'card ps-fiche','aria-label':(TITRES[type]||'')+' '+key},
+      (window.MySifaDonneesProd && window.MySifaDonneesProd.css) ? h('style',null,window.MySifaDonneesProd.css) : null,
+      h('div',{className:'ps-fiche-tete'},
+        h('div',{style:{minWidth:0}},
+          h('div',{className:'ps-fiche-meta',style:{textTransform:'uppercase',letterSpacing:'.5px',fontWeight:'700',marginTop:0}},TITRES[type]||''),
+          h('div',{className:'ps-fiche-no'}, prodSynthDisplayKey(type, key)),
+          h('div',{className:'ps-fiche-meta'}, nbDos+' dossier'+(nbDos>1?'s':'')+' · '+tot.sessions+' session'+(tot.sessions>1?'s':'')))),
+      h('div',{className:'dp-cartes dp-3'},
+        carte('Durée totale', fMin(tot.calage_min+tot.prod_min+tot.arret_min), 'var(--text2)'),
+        carte('Métrage', fN(tot.metrage_m)+' m', 'var(--accent)'),
+        carte('Vitesse', vitEl(tot.vit), 'var(--accent)')),
+      h('div',{className:'dp-cartes dp-3'},
+        carte('Calage', fMin(tot.calage_min), 'var(--c4)'),
+        carte('Production', fMin(tot.prod_min), 'var(--success)'),
+        carte('Arrêts', fMin(tot.arret_min), 'var(--danger)')),
+      h('div',{className:'dp-titre'},'Sessions ',h('span',{className:'dp-n'},String(lignes.length))),
+      h('div',{className:'dp-wrap dp-haut'},h('table',{className:'dp-t'},
+        h('thead',null,h('tr',null,th('Jour'),type!=='operator'?th('Opérateur'):null,type!=='machine'?th('Machine'):null,
+          th('Dossier'),th('Client'),th('Métrage',1),th('Calage',1),th('Prod',1),th('Arrêts',1),th('Vitesse',1))),
+        h('tbody',null,...lignes))));
+  }
+
   function buildMachinesPart(){
     const colonne = [];
     // Par dossier : trié par heure de fin, le plus récent en haut.
@@ -13667,7 +13759,7 @@ function renderProdKpis(){
       .filter(c=>!_isRepMachine(c.machine) && cles.has(String(c.no_dossier||'').trim()))
       .sort((a,b)=>String(b.date_operation||'').localeCompare(String(a.date_operation||'')))[0];
     const defaut = termine ? String(termine.no_dossier).trim() : (rowsAgg[0] ? String(rowsAgg[0].no_dossier) : null);
-    const actif = (S.psSel && cles.has(S.psSel)) ? S.psSel : defaut;
+    const actif = S.psLigne ? null : ((S.psSel && cles.has(S.psSel)) ? S.psSel : defaut);
     if(rowsAgg.length){
       colonne.push(_psCarte('Par dossier', rowsAgg.length+' · par heure de fin', 'prod.ensemble.par-dossier',
         rowsAgg.map(r=>{
@@ -13677,7 +13769,7 @@ function renderProdKpis(){
             vit:vitCalc(r.metrage_m, Number(r.temps_prod_min||0)+Number(r.temps_arret_min||0)),
             actif:no===actif, title:'Afficher la fiche du dossier',
             onClick:()=>{
-              S.psSel = no; render();
+              S.psSel = no; S.psLigne = null; render();
               // Fiche sous la colonne (écran étroit) : on l'amène à l'écran.
               const f = document.querySelector('.ps-fiche');
               if(f && f.getBoundingClientRect().top > window.innerHeight * 0.6) f.scrollIntoView({behavior:'smooth',block:'start'});
@@ -13687,15 +13779,20 @@ function renderProdKpis(){
     // Par opérateur / machine / jour : un clic ouvre le détail de la ligne.
     function carteAgg(titre, rows, keyLabel, st, bloc, unite){
       if(!rows||!rows.length) return null;
-      const keys = rows.map(r=>String(r.key));
+      if(S.psLigne && S.psLigne.type===st && !rows.some(r=>String(r.key)===S.psLigne.key)) S.psLigne = null;
       return _psCarte(titre, rows.length+' '+unite+(rows.length>1?'s':''), bloc,
-        rows.map((r,i)=>_psLigne({
+        rows.map(r=>_psLigne({
           nom: keyLabel==='Opérateur' ? opName(r.key) : (keyLabel==='Jour' ? formatJourLabel(r.key) : r.key),
           sous: fN(r.dossiers||0)+' dossier'+(Number(r.dossiers)>1?'s':''),
           cal:r.calage_min, prd:r.prod_min, arr:r.arret_min, met:r.metrage_m,
           vit:vitSrv(r.vitesse_m_min, r.vitesse_aberrante),
-          title:'Voir le détail — flèches pour naviguer',
-          onClick:e=>{ e.stopPropagation(); openProdSynthDetail(st, keys, i); }})));
+          actif:!!(S.psLigne && S.psLigne.type===st && S.psLigne.key===String(r.key)),
+          title:'Afficher le détail à côté',
+          onClick:()=>{
+            S.psLigne = {type:st, key:String(r.key)}; render();
+            const f = document.querySelector('.ps-fiche');
+            if(f && f.getBoundingClientRect().top > window.innerHeight * 0.6) f.scrollIntoView({behavior:'smooth',block:'start'});
+          }})));
     }
     const byOp   = _prodAggBy(byDosNoRep, 'operateur').sort((a,b)=>(b.metrage_m||0)-(a.metrage_m||0));
     const byMach = _prodAggBy(byDosNoRep, 'machine').sort((a,b)=>(b.metrage_m||0)-(a.metrage_m||0));
@@ -13710,7 +13807,7 @@ function renderProdKpis(){
       h('span',null,'Vitesse en m/min, métrage dessous'));
     return h('div',{className:'ps-vue'},
       h('div',{className:'ps-col'}, ...colonne.filter(Boolean), legende),
-      buildFicheDossier(rowsAgg, defaut));
+      S.psLigne ? buildFicheLigne(S.psLigne.type, S.psLigne.key) : buildFicheDossier(rowsAgg, defaut));
   }
 
   function buildRepiquagePart(){
