@@ -31,6 +31,7 @@
   // Mêmes raccourcis que _datePresets() de mysifa_prod_core.js.
   var PERIODES = [
     ["today", "Aujourd'hui"], ["yesterday", "Dernier jour travaillé"],
+    ["deux_jours", "Dernier jour travaillé et aujourd'hui"],
     ["last7", "7 derniers jours"], ["last30", "30 derniers jours"],
     ["thisMonth", "Mois en cours"], ["prevMonth", "Mois dernier"],
     ["dates", "Dates choisies"]
