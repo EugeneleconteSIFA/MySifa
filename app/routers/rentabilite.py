@@ -907,6 +907,62 @@ def supprimer_lien(planning_entry_id: int, request: Request):
     return {"success": True, "supprime": n}
 
 
+def _comparaison_planning(conn, planning_entry_id: int) -> Optional[dict]:
+    """Comparaison devis / réel d'un créneau, ou None s'il n'a pas de devis.
+
+    Une seule écriture du calcul : la Rentabilité et le détail d'un dossier
+    dans la synthèse de MyProd affichent le même chiffre."""
+    link = conn.execute(
+        "SELECT devis_id FROM rent_links WHERE planning_entry_id=?",
+        (planning_entry_id,),
+    ).fetchone()
+    if not link or not link["devis_id"]:
+        return None
+    d = conn.execute("SELECT * FROM devis WHERE id=?", (int(link["devis_id"]),)).fetchone()
+    if not d:
+        return None
+    prod = conn.execute(
+        "SELECT no_dossier FROM rent_prod_links WHERE planning_entry_id=?",
+        (planning_entry_id,),
+    ).fetchall()
+    no_dossiers = [r["no_dossier"] for r in prod]
+    etat = _palier_du_lien(conn, planning_entry_id, d, _qte_of(conn, planning_entry_id))
+    res = _comparaison_from_no_dossiers(conn, etat["devis"], no_dossiers)
+    # Le devis d'origine reste exposé tel quel : l'écran doit pouvoir dire
+    # « le classeur chiffrait 500 000, on compare sur 1 000 000 ».
+    res["palier"] = etat["palier"]
+    res["proposition_palier"] = etat["proposition"]
+    res["devis_origine"] = dict(d)
+    res["planning_entry_id"] = planning_entry_id
+    return res
+
+
+def comparaison_pour_dossier(conn, no_dossier: str) -> Optional[dict]:
+    """Comparaison devis / réel du créneau auquel ce numéro de dossier est lié.
+
+    Le lien de rentabilité (`rent_prod_links`) fait foi ; à défaut, le créneau
+    du planning qui porte cette référence et un devis. None sinon."""
+    ref = (no_dossier or "").strip()
+    if not ref:
+        return None
+    ids = [r[0] for r in conn.execute(
+        "SELECT planning_entry_id FROM rent_prod_links WHERE TRIM(no_dossier) = ?", (ref,)
+    ).fetchall()]
+    if not ids:
+        ids = [r[0] for r in conn.execute(
+            """SELECT pe.id FROM planning_entries pe
+                 JOIN rent_links l ON l.planning_entry_id = pe.id AND l.devis_id IS NOT NULL
+                WHERE TRIM(pe.reference) = ? OR TRIM(COALESCE(pe.numero_of, '')) = ?
+                ORDER BY pe.id DESC""",
+            (ref, ref),
+        ).fetchall()]
+    for pe_id in ids:
+        res = _comparaison_planning(conn, int(pe_id))
+        if res and res.get("reel") is not None:
+            return res
+    return None
+
+
 @router.get("/api/rentabilite/planning/{planning_entry_id}/comparaison")
 def comparaison_for_planning(planning_entry_id: int, request: Request):
     """Comparaison basée sur le devis lié + les no_dossier liés à une entrée planning."""
@@ -915,27 +971,15 @@ def comparaison_for_planning(planning_entry_id: int, request: Request):
         ex = conn.execute("SELECT id FROM planning_entries WHERE id=?", (planning_entry_id,)).fetchone()
         if not ex:
             raise HTTPException(404, "Entrée planning introuvable")
-        link = conn.execute(
-            "SELECT devis_id FROM rent_links WHERE planning_entry_id=?",
-            (planning_entry_id,),
-        ).fetchone()
-        if not link or not link["devis_id"]:
+        res = _comparaison_planning(conn, planning_entry_id)
+        if res is None:
+            link = conn.execute(
+                "SELECT devis_id FROM rent_links WHERE planning_entry_id=?", (planning_entry_id,)
+            ).fetchone()
+            if link and link["devis_id"]:
+                raise HTTPException(404, "Devis introuvable")
             return {"devis": None, "reel": None, "message": "Aucun devis lié"}
-        d = conn.execute("SELECT * FROM devis WHERE id=?", (int(link["devis_id"]),)).fetchone()
-        if not d:
-            raise HTTPException(404, "Devis introuvable")
-        prod = conn.execute(
-            "SELECT no_dossier FROM rent_prod_links WHERE planning_entry_id=?",
-            (planning_entry_id,),
-        ).fetchall()
-        no_dossiers = [r["no_dossier"] for r in prod]
-        etat = _palier_du_lien(conn, planning_entry_id, d, _qte_of(conn, planning_entry_id))
-        res = _comparaison_from_no_dossiers(conn, etat["devis"], no_dossiers)
-        # Le devis d'origine reste exposé tel quel : l'écran doit pouvoir dire
-        # « le classeur chiffrait 500 000, on compare sur 1 000 000 ».
-        res["palier"] = etat["palier"]
-        res["proposition_palier"] = etat["proposition"]
-        res["devis_origine"] = dict(d)
+        res.pop("planning_entry_id", None)
         return res
 
 

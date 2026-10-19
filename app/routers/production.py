@@ -1,4 +1,5 @@
 """SIFA — Production v0.9 — métrage produit = fin_machine - debut_machine"""
+import json
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Request, Query
 from datetime import datetime as _dt_cls, timedelta as _timedelta
@@ -924,15 +925,88 @@ def dossier_detail(request: Request, no_dossier: str = ""):
         raise HTTPException(status_code=400, detail="Référence dossier manquante.")
     with get_db() as conn:
         rows = _saisies_dossier(conn, ref)
+        alertes = _alertes_dossier(conn, ref)
     if not can_view_all_prod(user):
         moi = (user.get("operateur_lie") or user.get("nom") or "").strip().lower()
         if not moi:
             raise HTTPException(status_code=403, detail="Compte non lié à un opérateur.")
         rows = [r for r in rows if str(r.get("operateur") or "").strip().lower() == moi]
+        alertes = [a for a in alertes
+                   if moi in (str(a.get("user_nom") or "").strip().lower(),
+                              str(a.get("operateur_lie") or "").strip().lower())]
     stats = build_dossier_production_stats(rows, ref)
     metrage = float(((stats or {}).get("quantites") or {}).get("metrage_m") or 0)
+    # Théorique (devis) contre réel : le devis est une donnée de prix, réservée
+    # aux rôles qui ouvrent la Rentabilité.
+    comparaison = None
+    from config import ROLES_ADMIN
+    if user.get("role") in ROLES_ADMIN:
+        try:
+            from app.routers.rentabilite import comparaison_pour_dossier
+            with get_db() as conn:
+                c = comparaison_pour_dossier(conn, ref)
+            if c:
+                dv = c.get("devis_origine") or c.get("devis") or {}
+                comparaison = {
+                    "theorique": c.get("theorique"), "reel": c.get("reel"),
+                    "ecarts": c.get("ecarts"), "conclusion": c.get("conclusion"),
+                    "avertissements": c.get("avertissements") or [],
+                    "palier": c.get("palier"), "dossiers": c.get("dossiers") or [],
+                    "devis": {"id": dv.get("id"), "client": dv.get("client"),
+                              "date_devis": dv.get("date_devis"), "filename": dv.get("filename")},
+                    "planning_entry_id": c.get("planning_entry_id"),
+                }
+        except Exception:
+            comparaison = None  # le détail s'affiche, sans la comparaison
+    for a in alertes:
+        a.pop("operateur_lie", None)
     return {"no_dossier": ref, "stats": stats, "saisies": rows,
-            "alerte": _alerte_metrage(metrage, rows)}
+            "alerte": _alerte_metrage(metrage, rows), "comparaison": comparaison,
+            "alertes": alertes}
+
+
+def _alertes_dossier(conn, ref: str) -> list:
+    """Alertes validées pendant le dossier, avec leur questionnaire.
+
+    Les réponses sont rendues telles quelles ({"0": "Conforme", "1": "19.3"}) ;
+    les points de contrôle de l'alerte disent comment les lire (choix ou
+    valeur, unité, réponses non conformes). Ordre chronologique : l'écran en
+    tire des courbes."""
+    try:
+        acks = conn.execute(
+            """SELECT a.id, a.alert_id, a.user_nom, a.machine, a.ack_at, a.responses, a.comment,
+                      m.nom AS alerte_nom, m.params AS alerte_params, u.operateur_lie
+                 FROM maintenance_alert_acks a
+                 LEFT JOIN maintenance_alerts m ON m.id = a.alert_id
+                 LEFT JOIN users u ON u.id = a.user_id
+                WHERE TRIM(a.no_dossier) = ? AND COALESCE(a.dismissed, 0) = 0
+                ORDER BY a.ack_at, a.id""",
+            (ref,),
+        ).fetchall()
+    except Exception:
+        return []  # tables de maintenance absentes : le détail reste lisible
+    out = []
+    for r in acks:
+        try:
+            reponses = json.loads(r["responses"] or "{}")
+        except (TypeError, ValueError):
+            reponses = {}
+        try:
+            params = json.loads(r["alerte_params"] or "{}")
+        except (TypeError, ValueError):
+            params = {}
+        items = ((params.get("checklist") or {}).get("items")) or []
+        out.append({
+            "id": r["id"], "alert_id": r["alert_id"], "nom": r["alerte_nom"] or "Alerte",
+            "user_nom": r["user_nom"], "operateur_lie": r["operateur_lie"],
+            "machine": r["machine"], "ack_at": r["ack_at"],
+            "reponses": reponses if isinstance(reponses, dict) else {},
+            "commentaire": r["comment"] or "",
+            "items": [{"type": it.get("type"), "label": it.get("label"), "unit": it.get("unit"),
+                       "nc_responses": it.get("nc_responses") or []}
+                      for it in items if isinstance(it, dict)],
+        })
+    return out
 
 
 @router.get("/api/production/dernier-jour-saisi")

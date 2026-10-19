@@ -77,6 +77,12 @@ REGLES: Dict[str, Regle] = {r.code: r for r in (
           "Le conducteur a signalé, à la clôture, que les durées ou métrages affichés "
           "ne collaient pas avec ce qu'il a vu.",
           "moyenne", "/prod#erreurs"),
+    # Aucun contrôleur ne la produit : l'écart naît d'un signalement fait
+    # dans MyProd (synthèse d'un dossier) et vit jusqu'à ce qu'on le valide.
+    Regle("prod.signalement", "prod", "Incohérence signalée",
+          "Un utilisateur a signalé, depuis le détail d'un dossier, un chiffre "
+          "de production qui ne colle pas.",
+          "moyenne", "/prod#retour"),
     Regle("prod.calage_non_reporte", "prod", "Heures de calage non reportées",
           "Heures du dossier de prod déclarées à la clôture qui n'ont pas pu être "
           "reportées sur les saisies : le temps de calage affiché reste celui des clics.",
@@ -815,6 +821,31 @@ def rouvrir(conn, ecart_id: int) -> None:
     conn.execute("""UPDATE coherence_ecarts SET statut='ouvert', explication=NULL, explique_par=NULL,
                            explique_le=NULL WHERE id=? AND statut='explique'""", (ecart_id,))
     conn.commit()
+
+
+def signaler(conn, no_dossier: str, commentaire: str, qui: str,
+             machine: str = "", planning_entry_id: Optional[int] = None) -> int:
+    """Ouvre un écart « Incohérence signalée » sur un dossier. Rend son id.
+
+    Une clé par signalement (horodatée) : deux personnes qui signalent deux
+    choses différentes sur le même dossier font deux lignes à traiter."""
+    regle = REGLES["prod.signalement"]
+    horodatage = _iso(maintenant())
+    ref = (no_dossier or "").strip()
+    titre = ref + (f" · {machine}" if machine else "")
+    detail = f"{commentaire.strip()} — signalé par {qui}"
+    donnees = {"no_dossier": ref, "commentaire": commentaire.strip(), "par": qui}
+    if planning_entry_id:
+        donnees["planning_entry_id"] = int(planning_entry_id)
+    cur = conn.execute(
+        """INSERT INTO coherence_ecarts (cle, regle, famille, objet_type, objet_ref, titre, detail,
+                  donnees_json, gravite, statut, premiere_vue, derniere_vue)
+           VALUES (?,?,?,?,?,?,?,?,?,'ouvert',?,?)""",
+        (f"prod.signalement:{ref}:{horodatage}:{qui}", regle.code, regle.famille, "dossier", ref,
+         titre, detail[:1000], json.dumps(donnees, ensure_ascii=False), regle.gravite,
+         horodatage, horodatage))
+    conn.commit()
+    return int(cur.lastrowid)
 
 
 def compter_ouverts(conn, famille: Optional[str] = None, exclure=None) -> tuple:

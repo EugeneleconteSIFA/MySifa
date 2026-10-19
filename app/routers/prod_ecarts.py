@@ -18,6 +18,7 @@ Cette route en fait une liste de travail pour MyProd, avec deux gestes :
   GET  /api/prod/ecarts/{id}/correction  aperçu de la correction
   POST /api/prod/ecarts/{id}/corriger
   GET  /api/prod/ecarts/reglages         catégories et leur prise en compte
+  POST /api/prod/ecarts/signaler         {no_dossier, commentaire} : incohérence signalée
   PUT  /api/prod/ecarts/reglages         {regle, compte} : compte ou non dans « À traiter »
 
 Réservé aux rôles d'administration (ceux qui corrigent des saisies).
@@ -250,6 +251,46 @@ def compter(request: Request):
     with get_db() as conn:
         n, _sig = coherence.compter_ouverts(conn, "prod", exclure=regles_hors_compteur(conn))
     return {"n": n}
+
+
+@router.post("/signaler")
+async def signaler(request: Request):
+    """Signaler une incohérence sur un dossier, depuis son détail dans MyProd.
+
+    Ouvert à tout compte connecté : celui qui voit le chiffre faux n'est pas
+    forcément celui qui le corrige. L'écart rejoint « À traiter »."""
+    user = get_current_user(request)
+    body = await request.json()
+    ref = str(body.get("no_dossier") or "").strip()
+    commentaire = str(body.get("commentaire") or "").strip()
+    if not ref:
+        raise HTTPException(status_code=400, detail="Dossier manquant.")
+    if len(commentaire) < 5:
+        raise HTTPException(status_code=400, detail="Décrire l'incohérence — 5 caractères minimum.")
+    with get_db() as conn:
+        if "coherence_ecarts" not in coherence._tables(conn):
+            raise HTTPException(status_code=503, detail="File des écarts indisponible.")
+        pe = conn.execute(
+            """SELECT pe.id, m.nom FROM planning_entries pe LEFT JOIN machines m ON m.id = pe.machine_id
+                WHERE TRIM(pe.reference) = ? OR TRIM(COALESCE(pe.numero_of, '')) = ?
+                ORDER BY pe.id DESC LIMIT 1""",
+            (ref, ref),
+        ).fetchone()
+        ecart_id = coherence.signaler(conn, ref, commentaire[:800], _qui(user),
+                                      machine=(pe["nom"] or "") if pe else "",
+                                      planning_entry_id=pe["id"] if pe else None)
+    try:
+        from app.services import notifications
+        notifications._cache.pop("prod.ecarts", None)
+    except Exception:
+        pass
+    log_action(
+        user=user, action="CREATE", module="saisies",
+        objet=f"Incohérence signalée · dossier {ref}",
+        detail={"ecart_id": ecart_id, "commentaire": commentaire[:800]},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "ecart_id": ecart_id}
 
 
 @router.get("/reglages")

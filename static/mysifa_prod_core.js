@@ -721,6 +721,8 @@
       'alert-triangle': '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
       'alert-circle': '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
       'settings': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+      'activity': '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+      'flag': '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
       'wrench': '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
       'package': '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
       'search': '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
@@ -11372,17 +11374,90 @@ function _prodVueCss(){
 function _psDetailCharger(no, cible){
   S.psDetailCache = S.psDetailCache || {};
   const cache = S.psDetailCache[no];
-  if(cache && cache.html){ cible.innerHTML = cache.html; return; }
+  if(cache && cache.html){ cible.innerHTML = cache.html; _psBoutonSignaler(no, cible); return; }
   cible.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:12px">Chargement des saisies…</div>';
   api('/api/production/dossier-detail?no_dossier='+encodeURIComponent(no)).then(d=>{
     const html = (window.MySifaDonneesProd && d) ? window.MySifaDonneesProd.html(d)
       : '<div style="color:var(--danger)">Affichage indisponible — rechargez la page.</div>';
     S.psDetailCache[no] = {html};
-    if(cible.isConnected) cible.innerHTML = html;
+    if(cible.isConnected){ cible.innerHTML = html; _psBoutonSignaler(no, cible); }
   }).catch(e=>{
     cible.textContent = (e && e.message) || 'Saisies indisponibles.';
     cible.style.color = 'var(--danger)';
   });
+}
+// Outils du détail d'un dossier, en haut à droite du panneau :
+// - alertes validées (courbes des valeurs relevées), dépliées dans le panneau ;
+// - signaler une incohérence : l'écart rejoint « À traiter » (Erreurs & Qualité).
+function _psBoutonSignaler(no, cible){
+  const panneau = cible.querySelector('.dp');
+  if(!panneau || panneau.querySelector('.ps-outils')) return;
+  S.psAlertesOuvertes = S.psAlertesOuvertes || {};
+  const styleBtn = {display:'inline-flex',alignItems:'center',gap:'6px',background:'var(--bg)',
+    border:'1px solid var(--border)',padding:'5px 9px',borderRadius:'8px',fontSize:'12px',fontWeight:'600',color:'var(--text2)'};
+  const outils = h('div',{className:'ps-outils',style:{position:'absolute',top:'10px',right:'10px',display:'flex',gap:'6px'}});
+  const zone = panneau.querySelector('.dp-alertes');
+  if(zone && window.MySifaDonneesProd && window.MySifaDonneesProd.basculerAlertes){
+    const n = zone.querySelector('.dp-n') ? zone.querySelector('.dp-n').textContent : '';
+    const btn = h('button',{type:'button',className:'btn-ghost',
+        title:'Alertes validées sur ce dossier','aria-label':'Alertes validées sur ce dossier',
+        style:styleBtn,
+        onClick:e=>{
+          e.stopPropagation();
+          const ouvert = window.MySifaDonneesProd.basculerAlertes(panneau);
+          S.psAlertesOuvertes[no] = ouvert;
+          btn.style.borderColor = ouvert ? 'var(--accent)' : 'var(--border)';
+          btn.style.color = ouvert ? 'var(--accent)' : 'var(--text2)';
+          btn.setAttribute('aria-pressed', ouvert ? 'true' : 'false');
+          if(ouvert) zone.scrollIntoView({block:'nearest'});
+        }},
+      iconEl('activity',14), n);
+    outils.appendChild(btn);
+    if(S.psAlertesOuvertes[no]){
+      window.MySifaDonneesProd.basculerAlertes(panneau, true);
+      btn.style.borderColor = 'var(--accent)'; btn.style.color = 'var(--accent)';
+      btn.setAttribute('aria-pressed','true');
+    }
+  }
+  outils.appendChild(h('button',{type:'button',className:'btn-ghost',
+      title:'Signaler une incohérence sur ce dossier','aria-label':'Signaler une incohérence',
+      style:styleBtn,
+      onClick:e=>{ e.stopPropagation(); openSignalerIncoherence(no); }},
+    iconEl('flag',14)));
+  panneau.style.position = 'relative';
+  panneau.style.paddingTop = '48px';
+  panneau.prepend(outils);
+}
+function openSignalerIncoherence(no){
+  try{ const m=document.querySelector('.add-row-modal'); if(m) m.remove(); }catch(_){}
+  const txt = h('textarea',{rows:4,placeholder:'Ce qui ne colle pas : chiffre, saisie, écart avec le dossier papier…',
+    style:{width:'100%',boxSizing:'border-box',padding:'9px 12px',borderRadius:'8px',border:'1px solid var(--border)',
+           background:'var(--bg)',color:'var(--text)',fontFamily:'inherit',fontSize:'13px',resize:'vertical'}});
+  const envoyer = async ()=>{
+    const c = txt.value.trim();
+    if(c.length < 5){ toast('Décrire l\'incohérence — 5 caractères minimum.','error'); txt.focus(); return; }
+    try{
+      await api('/api/prod/ecarts/signaler',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({no_dossier:no, commentaire:c})});
+    }catch(err){ toast(err.message,'error'); return; }
+    closeModal();
+    toast('Incohérence signalée.','success');
+    if(isAdmin(S.user)){ try{ await loadProdEcarts(); render(); }catch(_){} }
+  };
+  const form = h('div',{className:'add-row-form',style:{minWidth:'min(480px,92vw)'}},
+    h('button',{type:'button',className:'add-row-close',title:'Fermer',onClick:(e)=>{e.stopPropagation();closeModal();}},'×'),
+    h('h3',{style:{marginBottom:'6px'}},iconEl('flag',15),' Signaler une incohérence'),
+    h('p',{style:{fontSize:'12px',color:'var(--muted)',margin:'0 0 10px',lineHeight:1.5}},
+      'Dossier '+no+'. Le signalement rejoint « À traiter » dans Erreurs & Qualité.'),
+    txt,
+    h('div',{style:{display:'flex',gap:'8px',justifyContent:'flex-end',marginTop:'14px'}},
+      h('button',{type:'button',className:'btn-ghost',style:{background:'var(--bg)'},onClick:()=>closeModal()},'Annuler'),
+      h('button',{type:'button',className:'btn-sm',
+        style:{background:'var(--accent)',color:'white',border:'none',padding:'8px 16px',borderRadius:'8px',fontWeight:'700'},
+        onClick:envoyer},'Signaler')));
+  const modal = h('div',{className:'add-row-modal',onClick:e=>{ if(e.target===modal) closeModal(); }}, form);
+  document.getElementById('root').appendChild(modal);
+  requestAnimationFrame(()=>txt.focus());
 }
 function _psDetailLigne(no, colSpan){
   const zone = h('div');
