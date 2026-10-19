@@ -8266,6 +8266,7 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
     montrer('cpt-fin', fin);
     montrer('metrage-compteurs', debut || fin);
     montrer('dossier', !CODES_PERSONNEL.has(code));
+    montrer('fin-dossier', !isStock && code === CODE_FIN_DOS);
   }
   opSel.addEventListener('change', updateFormForOp);
   // Init si prefill == stock code
@@ -8308,6 +8309,15 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
   const metrageReelI      = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_reel!=null)        ? prefill.metrage_reel        : '' });
   const metrageDebutI     = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_total_debut!=null) ? prefill.metrage_total_debut : '' });
   const metrageFinI       = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_total_fin!=null)   ? prefill.metrage_total_fin   : '' });
+  // Fin de production : le choix de l'opérateur (« Dossier terminé » / « À
+  // reprendre plus tard ») se corrige ici ; le serveur rejoue planning et série.
+  const finDossierAvant = (prefill && prefill.fin_dossier!=null && prefill.fin_dossier!=='') ? String(Number(prefill.fin_dossier)) : '';
+  const finDossierSel = h('select', null,
+    h('option', { value: '' }, '— Non renseigné —'),
+    h('option', { value: '1' }, 'Dossier terminé (clôturé)'),
+    h('option', { value: '0' }, 'À reprendre plus tard')
+  );
+  finDossierSel.value = finDossierAvant;
 
   // -- Stock EP/SP/EM/SM : inputs specifiques --
   const stockRefInput = h('input', { type:'text', placeholder:'Ref produit ou matiere', list:'stock-ref-datalist-'+Math.random().toString(36).slice(2,7) });
@@ -8377,6 +8387,12 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
         h('div', { 'data-role':'cpt-fin' },
           h('label', null, 'Compteur fin (m)'),
           metrageFinI
+        )
+      ),
+      h('div', { className: 'form-row', 'data-role':'fin-dossier', style:{display:'none'} },
+        h('div', { style:{ gridColumn:'span 2' } },
+          h('label', null, 'Fin de dossier'),
+          finDossierSel
         )
       ),
       h('div', { className: 'form-row', 'data-role':'prod-only' },
@@ -8459,6 +8475,11 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
             if(CODES_CPT_FIN.has(code)){
               corps.metrage_total_fin = nombre(metrageFinI);
               if(corps.metrage_total_fin != null) corps.metrage_reel = corps.metrage_total_fin;
+            }
+            // Envoyé seulement s'il change : le serveur rejoue alors planning et série.
+            if(code === CODE_FIN_DOS && finDossierSel.value !== '' && finDossierSel.value !== finDossierAvant){
+              if(estPers || !dosEtat.no_dossier){ toast('Fin de dossier : un dossier est requis.', 'error'); return; }
+              corps.fin_dossier = finDossierSel.value === '1';
             }
             onSubmit(corps);
           }}, submitLabel)
@@ -8822,12 +8843,15 @@ function openEditModal(row) {
     async (body) => {
       pushUndo('edit', row);  //
       try {
-        await api('/api/saisies/' + row.id, {
+        const r = await api('/api/saisies/' + row.id, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body)
         });
-        toast('Saisie modifiée');
+        const cl = r && r.cloture;
+        toast(!cl ? 'Saisie modifiée'
+          : cl.fin_dossier ? ('Dossier clôturé.' + (cl.planning==='termine' ? ' Planning : Terminé.' : ''))
+          : ('Dossier à reprendre.' + (cl.planning==='attente' ? ' Planning : En attente.' : '')));
         await loadSaisies();
       } catch(e) { toast(e.message, 'error'); }
     },
@@ -9172,22 +9196,41 @@ async function supprimerLigneAnnexe(row){
   throw new Error('Ligne non supprimable.');
 }
 
-// Afficher ou masquer les entrées Z1 et les alertes validées. Préférence
-// propre au poste : elle ne concerne que la lecture de la liste.
+// Afficher ou masquer les entrées Z1, les sorties matière, les saisies de
+// production et les alertes validées. Préférence propre au poste : elle ne
+// concerne que la lecture de la liste.
 const SAISIES_AFFICHAGE_CLE = 'mysifa_saisies_affichage';
+const SAISIES_AFFICHAGE_CLES = ['prod','sorties','z1','alertes'];
 function saisiesAffichage(){
   if(!S.saisiesAffichage){
-    let p = {z1:true, alertes:true};
+    let p = {prod:true, sorties:true, z1:true, alertes:true};
     try{
       const brut = JSON.parse(localStorage.getItem(SAISIES_AFFICHAGE_CLE)||'null');
       if(brut && typeof brut==='object'){
-        if(typeof brut.z1==='boolean') p.z1 = brut.z1;
-        if(typeof brut.alertes==='boolean') p.alertes = brut.alertes;
+        SAISIES_AFFICHAGE_CLES.forEach(k=>{ if(typeof brut[k]==='boolean') p[k] = brut[k]; });
       }
     }catch(e){}
     S.saisiesAffichage = p;
   }
   return S.saisiesAffichage;
+}
+// Une ligne est-elle visible avec les bascules courantes ? Même règle pour le
+// tableau, le fil de cartes et l'export PDF.
+function saisieVisible(r, aff){
+  aff = aff || saisiesAffichage();
+  if(!aff.alertes && r.kind==='alert_ack') return false;
+  if(!aff.z1 && (r.kind==='stock_pf' || r.operation_category==='stock_pf')) return false;
+  if(!aff.sorties && r.kind==='stock_mp' && String(r.operation_code||'').trim()==='SM') return false;
+  if(!aff.prod && (!r.kind || r.kind==='prod')) return false;
+  return true;
+}
+function basculesSaisies(court){
+  return [
+    basculeSaisies('prod', court?'Prod':'Saisies prod','Afficher ou masquer les saisies de production'),
+    basculeSaisies('sorties', court?'Sorties':'Sorties matière','Afficher ou masquer les sorties matière'),
+    basculeSaisies('z1', court?'Z1':'Entrées Z1','Afficher ou masquer les entrées en stock Z1'),
+    basculeSaisies('alertes','Alertes','Afficher ou masquer les alertes validées'),
+  ];
 }
 function basculeSaisies(cle, libelle, titre){
   const on = !!saisiesAffichage()[cle];
@@ -9268,15 +9311,11 @@ async function exportSaisiesPdf(){
   try{
     const d = await api('/api/saisies?'+buildParams()+'&limit='+SAISIES_PDF_MAX+'&offset=0');
     if(!d){ win.close(); return; }
-    // Mêmes calculs et mêmes bascules Z1 / alertes que le tableau.
+    // Mêmes calculs et mêmes bascules d'affichage que le tableau.
     let rows = saisiesAvecDurees(d.rows||[]);
     saisiesCalculerMetrages(rows);
     const aff = saisiesAffichage();
-    rows = rows.filter(r=>{
-      if(!aff.alertes && r.kind==='alert_ack') return false;
-      if(!aff.z1 && (r.kind==='stock_pf' || r.operation_category==='stock_pf')) return false;
-      return true;
-    });
+    rows = rows.filter(r=>saisieVisible(r, aff));
     const nbProd = (d.rows||[]).filter(r=>!r.kind || r.kind==='prod').length;
     const nbProdTotal = Number(d.total||0) - ((d.rows||[]).length - nbProd);
     const fv = S.fv||{};
@@ -10077,11 +10116,7 @@ function renderSaisies(){
   // qui se calculent sur la page complète. Remonté au-dessus de COLS pour
   // servir les deux rendus, le tableau et le fil de cartes.
   const affichage = saisiesAffichage();
-  const rowsVisibles = rows.filter(r=>{
-    if(!affichage.alertes && r.kind==='alert_ack') return false;
-    if(!affichage.z1 && (r.kind==='stock_pf' || r.operation_category==='stock_pf')) return false;
-    return true;
-  });
+  const rowsVisibles = rows.filter(r=>saisieVisible(r, affichage));
 
   // Portrait telephone : onze colonnes ne rentrent pas sur 390 px et la
   // scrollbar miroir ne se manipule pas au doigt. Meme donnee, meme
@@ -10394,8 +10429,7 @@ function renderSaisies(){
       render();
     }},'›'),
   );
-  headerRight.appendChild(basculeSaisies('z1','Entrées Z1','Afficher ou masquer les entrées en stock Z1'));
-  headerRight.appendChild(basculeSaisies('alertes','Alertes','Afficher ou masquer les alertes validées'));
+  basculesSaisies(false).forEach(b=>headerRight.appendChild(b));
   headerRight.appendChild(pager);
  
   if(readOnly){
@@ -12506,8 +12540,7 @@ function renderMpmSaisies(d, rows, readOnly){
   const a     = total ? Math.min(total, off + (rows||[]).length) : 0;
 
   const groupeG = h('div',{className:'mpm-outils-g'},
-    basculeSaisies('z1','Z1','Afficher ou masquer les entrées en stock Z1'),
-    basculeSaisies('alertes','Alertes','Afficher ou masquer les alertes validées')
+    ...basculesSaisies(true)
   );
   if(!readOnly){
     groupeG.appendChild(boutonExportSaisies('msf-chip'));
