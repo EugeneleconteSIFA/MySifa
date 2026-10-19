@@ -13802,7 +13802,8 @@ function renderProdKpis(){
     const byOp   = _prodAggBy(byDosNoRep, 'operateur').sort((a,b)=>(b.metrage_m||0)-(a.metrage_m||0));
     const byMach = _prodAggBy(byDosNoRep, 'machine').sort((a,b)=>(b.metrage_m||0)-(a.metrage_m||0));
     const byDay  = _prodAggBy(byDosNoRep, 'jour').sort((a,b)=>String(b.key).localeCompare(String(a.key)));
-    colonne.push(carteAgg('Par opérateur', byOp, 'Opérateur', 'operator', 'prod.ensemble.par-operateur', 'opérateur'));
+    // Poste fabrication : on ne montre pas qui a produit.
+    if(canViewAllProd(S.user)) colonne.push(carteAgg('Par opérateur', byOp, 'Opérateur', 'operator', 'prod.ensemble.par-operateur', 'opérateur'));
     colonne.push(carteAgg('Par machine', byMach, 'Machine', 'machine', 'prod.ensemble.par-machine', 'machine'));
     colonne.push(carteAgg('Par jour', byDay, 'Jour', 'day', 'prod.ensemble.par-jour', 'jour'));
     const legende = h('div',{className:'ps-legende'},
