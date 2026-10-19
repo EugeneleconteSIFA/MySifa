@@ -203,7 +203,8 @@ def _compter_ecarts_prod(conn):
     """Écarts ouverts de la famille Production : dossiers fictifs, chiffrages
     signalés, heures non reportées, arrêts sans explication…"""
     from app.services.coherence import compter_ouverts
-    return compter_ouverts(conn, "prod")
+    from app.routers.prod_ecarts import regles_hors_compteur
+    return compter_ouverts(conn, "prod", exclure=regles_hors_compteur(conn))
 
 
 DETECTEURS: dict[str, Detecteur] = {d.code: d for d in (

@@ -410,6 +410,9 @@
     produits:{page:null,
       ouvrir:function(){ var M=window.MySifaProduitMemoire; if(M) M.openListe(); },
       fermer:function(){ _pmemFermer(); }},
+    reglages:{page:'production',
+      ouvrir:function(v){ if(v==='ecarts') openReglagesEcarts(); },
+      fermer:function(){ fermerReglagesEcarts(true); }},
     of:{page:'of',
       ouvrir:function(id){ if(/^[0-9]+$/.test(id)) openOfEditModal({id:Number(id)}); },
       fermer:function(){ if(S.ofEditModal) closeOfEditModal(); }},
@@ -717,6 +720,7 @@
       'pencil': '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
       'alert-triangle': '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
       'alert-circle': '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+      'settings': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
       'wrench': '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
       'package': '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
       'search': '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
@@ -9741,8 +9745,74 @@ async function loadProdEcarts(){
   try{
     const d = await api('/api/prod/ecarts');
     S.prodEcarts = (d && d.ecarts) || [];
-    S.prodEcartsCount = S.prodEcarts.length;
+    S.prodEcartsHors = (d && d.hors_compteur) || [];
+    S.prodEcartsCount = _ecartsComptes(S.prodEcarts).length;
   }catch(e){ S.prodEcarts = []; }
+}
+
+// Catégories réglées « ne compte pas » : toujours listées, jamais comptées
+// dans la pastille (onglet, tuile MyProd, notification).
+function _ecartsComptes(liste){
+  const hors = new Set(S.prodEcartsHors || []);
+  return (liste || []).filter(e => !hors.has(e.regle));
+}
+
+// ── Réglage : quelles catégories comptent dans « À traiter » ────
+function fermerReglagesEcarts(sansAdresse){
+  const el = document.getElementById('ecarts-reglages-modal');
+  if(el) el.remove();
+  if(!sansAdresse && el && S.urlModale && S.urlModale.cle==='reglages'){
+    S.urlModale = null; prodSyncUrl();
+  }
+}
+async function openReglagesEcarts(){
+  fermerReglagesEcarts(true);
+  let d;
+  try{ d = await api('/api/prod/ecarts/reglages'); }
+  catch(err){ toast(err.message, 'error'); return; }
+  const regles = (d && d.regles) || [];
+  const ligne = r => {
+    const bascule = h('button',{type:'button',className:'saisies-bascule'+(r.compte?' on':''),
+        'aria-pressed':r.compte?'true':'false',
+        title:r.compte?'Compté dans « À traiter »':'Non compté dans « À traiter »',
+        onClick:async ()=>{
+          const voulu = !r.compte;
+          try{
+            await api('/api/prod/ecarts/reglages',{method:'PUT',headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({regle:r.regle, compte:voulu})});
+          }catch(err){ toast(err.message,'error'); return; }
+          r.compte = voulu;
+          bascule.classList.toggle('on', voulu);
+          bascule.setAttribute('aria-pressed', voulu?'true':'false');
+          bascule.title = voulu ? 'Compté dans « À traiter »' : 'Non compté dans « À traiter »';
+          const hors = new Set(S.prodEcartsHors || []);
+          if(voulu) hors.delete(r.regle); else hors.add(r.regle);
+          S.prodEcartsHors = [...hors];
+          S.prodEcartsCount = _ecartsComptes(S.prodEcarts).length;
+          render();
+        }},
+      h('span',{className:'saisies-bascule-piste'},h('span',{className:'saisies-bascule-pastille'})),
+      'Compte');
+    return h('div',{style:{display:'grid',gridTemplateColumns:'1fr auto',gap:'12px',alignItems:'center',
+        padding:'10px 0',borderBottom:'1px solid var(--border)'}},
+      h('div',{style:{minWidth:'0'}},
+        h('div',{style:{fontSize:'13px',fontWeight:'700'}}, r.titre,
+          h('span',{style:{fontWeight:'500',color:'var(--muted)'}},' · '+r.ouverts+' ouvert'+(r.ouverts>1?'s':''))),
+        r.description ? h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'2px'}}, r.description) : null),
+      bascule);
+  };
+  const form = h('div',{className:'add-row-form',style:{minWidth:'min(560px,92vw)',maxWidth:'680px'}},
+    h('button',{type:'button',className:'add-row-close',title:'Fermer',onClick:(e)=>{e.stopPropagation();fermerReglagesEcarts();}},'×'),
+    h('h3',{style:{marginBottom:'6px'}},iconEl('settings',15),' Compteur « À traiter »'),
+    h('p',{style:{fontSize:'12px',color:'var(--muted)',margin:'0 0 8px',lineHeight:1.5}},
+      'Une catégorie non comptée reste dans la liste, mais n\'allume plus la pastille de MyProd ni la notification.'),
+    ...(regles.length ? regles.map(ligne) : [h('div',{className:'card-empty'},'Aucune catégorie d\'écart.')]),
+    h('div',{style:{display:'flex',justifyContent:'flex-end',marginTop:'16px'}},
+      h('button',{type:'button',className:'btn-ghost',style:{background:'var(--bg)'},onClick:()=>fermerReglagesEcarts()},'Fermer')));
+  const modal = h('div',{className:'add-row-modal',id:'ecarts-reglages-modal',
+    onClick:e=>{ if(e.target===modal) fermerReglagesEcarts(); }}, form);
+  document.getElementById('root').appendChild(modal);
+  S.urlModale = {cle:'reglages', id:'ecarts'}; prodSyncUrl();
 }
 
 async function _ecartsApresAction(msg){
@@ -10039,12 +10109,15 @@ function renderProdEcarts(){
   const types = {};
   liste.forEach(e=>{ (types[e.regle] = types[e.regle] || {titre:e.regle_titre, n:0}).n++; });
   if(S.ecartsFiltre && !types[S.ecartsFiltre]) S.ecartsFiltre = '';
+  const horsCompteur = new Set(S.prodEcartsHors || []);
   const pastille = (code, libelle, n)=>{
     const actif = (S.ecartsFiltre||'') === code;
     return h('button',{type:'button',onClick:()=>set({ecartsFiltre:code}),
+      title: horsCompteur.has(code) ? 'Hors compteur « À traiter »' : '',
       style:{padding:'5px 10px',borderRadius:'999px',fontSize:'12px',fontWeight:'700',cursor:'pointer',
         fontFamily:'inherit',border:'1px solid '+(actif?'var(--accent)':'var(--border)'),
-        background:actif?'var(--accent-bg)':'var(--card)',color:actif?'var(--accent)':'var(--text2)'}},
+        background:actif?'var(--accent-bg)':'var(--card)',color:actif?'var(--accent)':'var(--text2)',
+        opacity:horsCompteur.has(code)?'.6':'1'}},
       libelle+' '+n);
   };
   // La liste se redessine seule pendant la frappe : la barre de recherche
@@ -10066,10 +10139,17 @@ function renderProdEcarts(){
   redessiner();
   // Liste de travail : volontairement pas capturable en widget (pas de
   // data-bloc), la pastille du portail porte déjà le nombre.
+  const nCompte = _ecartsComptes(liste).length;
   return h('div',{className:'card',style:{marginBottom:'16px'}},
     h('div',{className:'card-header'},
       h('h3',null,iconEl('alert-triangle',15),' À traiter'),
-      h('span',{className:'nav-tab-badge',style:{marginLeft:'8px'}},String(liste.length))),
+      h('div',{style:{display:'flex',alignItems:'center',gap:'8px',marginLeft:'auto'}},
+        nCompte ? h('span',{className:'nav-tab-badge',
+          title:nCompte===liste.length ? '' : (liste.length-nCompte)+' écart(s) hors compteur'},String(nCompte)) : null,
+        h('button',{type:'button',className:'btn-ghost',title:'Catégories comptées dans « À traiter »',
+          'aria-label':'Réglages du compteur',
+          style:{background:'var(--bg)',border:'1px solid var(--border)',padding:'5px 8px',borderRadius:'8px'},
+          onClick:()=>openReglagesEcarts()}, iconEl('settings',14)))),
     liste.length ? h('div',{style:{display:'flex',flexWrap:'wrap',gap:'6px',alignItems:'center',padding:'4px 14px 10px'}},
       pastille('', 'Tous', liste.length),
       ...Object.keys(types).map(c=>pastille(c, types[c].titre, types[c].n)),
