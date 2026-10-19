@@ -153,6 +153,9 @@ def _enrich_saisies_outils(conn, saisies: list) -> None:
 _STOCK_PF_CODES = {"entree": "EP", "sortie": "SP"}   # mouvements_stock -> EP/SP
 _STOCK_MP_CODES = {"entree": "EM", "sortie": "SM"}   # mp_mouvements    -> EM/SM
 
+# Prefixe de note pose par besoins_matieres._destockage_auto_un.
+_NOTE_DESTOCKAGE_AUTO = "Déstockage automatique"
+
 _STOCK_LABELS = {
     "EP": "Entree Z1",
     "SP": "Sortie produit fini",
@@ -244,10 +247,15 @@ def _fetch_stock_saisies_du_jour(
     *,
     user_id: Optional[int] = None,
     user_email: Optional[str] = None,
+    sans_destockage_auto: bool = False,
 ) -> list:
     """Retourne la liste des mouvements stock du jour (EP/SP/EM/SM) rattaches
     a un dossier, filtres eventuellement par utilisateur (id pour MP, email
     pour PF). Format normalise identique aux saisies production_data.
+
+    `sans_destockage_auto` ecarte les sorties matiere ecrites par le
+    destockage a la cloture : elles portent le nom de l'operateur qui a saisi
+    la fin de dossier, mais il ne les a pas faites. Elles restent dans MyProd.
     """
     saisies: list = []
 
@@ -288,6 +296,9 @@ def _fetch_stock_saisies_du_jour(
     if user_id is not None:
         mp_where.append("mm.created_by = ?")
         mp_args.append(int(user_id))
+    if sans_destockage_auto:
+        mp_where.append("COALESCE(mm.note,'') NOT LIKE ?")
+        mp_args.append(_NOTE_DESTOCKAGE_AUTO + "%")
     mp_sql = f"""
         SELECT
           mm.id, mm.matiere_id, mm.type_mouvement, mm.quantite,
@@ -1007,6 +1018,7 @@ def get_session(request: Request, machine_id: int = None):
         saisies.extend(_fetch_stock_saisies_du_jour(
             conn, today, today_fr,
             user_id=user_id_scope, user_email=user_email_scope,
+            sans_destockage_auto=True,
         ))
         _enrich_saisies_client(conn, [s for s in saisies if not (s.get("client") or "").strip()])
         _merge_and_sort_timeline(saisies)
