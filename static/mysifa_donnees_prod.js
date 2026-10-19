@@ -32,6 +32,9 @@
     const h = Math.floor(m / 60);
     return h ? h + ' h ' + String(m % 60).padStart(2, '0') : m + ' min';
   }
+  function libelleOperation(r) {
+    return String((r && r.operation) || '').replace(/^\s*\d{1,3}\s*(?:[-–:.]\s*|\s+)/, '');
+  }
   function dateCourte(iso) {
     const t = String(iso || '');
     return t.length >= 16 ? t.slice(8, 10) + '/' + t.slice(5, 7) + ' ' + t.slice(11, 16) : t;
@@ -65,8 +68,10 @@
     + '.dp-wrap{border:1px solid var(--border);border-radius:10px;overflow:auto;margin-bottom:14px}'
     + '.dp-wrap.dp-haut{max-height:340px}'
     + '.dp-t{width:100%;border-collapse:collapse;font-size:12px}'
-    + '.dp-t th{position:sticky;top:0;z-index:1;background:var(--bg);text-align:left;padding:7px 10px;font-size:10px;font-weight:700;'
-    + 'text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap}'
+    // En-têtes dans la police de l'interface (la feuille de MyProd met ses
+    // th en monospace) et en couleur de texte secondaire, lisibles.
+    + '.dp-t th{position:sticky;top:0;z-index:1;background:var(--bg);text-align:left;padding:8px 10px;font-family:inherit;font-size:11px;font-weight:700;'
+    + 'text-transform:uppercase;letter-spacing:.4px;color:var(--text2);border-bottom:1px solid var(--border);white-space:nowrap}'
     + '.dp-t td{padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text2);white-space:nowrap}'
     + '.dp-t th+th,.dp-t td+td{border-left:1px solid var(--border)}'
     + '.dp-t tbody tr:nth-child(even) td{background:color-mix(in srgb,var(--bg) 55%,transparent)}'
@@ -78,7 +83,9 @@
     + '.dp-t td.dp-com{white-space:normal;min-width:140px}'
     + '.dp-code{display:inline-block;padding:2px 9px;margin-right:6px;border-radius:999px;font-weight:600;'
     + 'color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent);border:1px solid color-mix(in srgb,var(--c) 40%,transparent)}'
-    + '.dp-cpt{font-family:ui-monospace,Consolas,monospace;font-weight:700;color:var(--text)}'
+    + '.dp-cpt{font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}'
+    + '.dp-cpt-lib{margin-right:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}'
+    + '.dp-saisies td.dp-com{min-width:0;width:100%}'
     + '.dp-clos{margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;color:white;background:var(--accent)}'
     + '.dp-vide{color:var(--muted)}'
     + '.dp-frise{position:relative;height:30px;border-radius:8px;background:var(--bg);border:1px solid var(--border)}'
@@ -100,8 +107,6 @@
     + 'box-shadow:0 4px 14px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .1s}'
     + '.dp-frise b.g::after{left:0;transform:none}.dp-frise b.d::after{left:auto;right:0;transform:none}'
     + '.dp-frise b:hover::after{opacity:1}'
-    + '.dp-frise-leg{display:inline-flex;align-items:center;gap:5px;margin-left:auto;font-weight:600;text-transform:none;letter-spacing:0;color:var(--muted)}'
-    + '.dp-frise-leg i{width:9px;height:9px;border-radius:50%;background:var(--accent);display:inline-block}'
     + '.dp-cartes.dp-3{grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:8px}'
     + '.dp-cartes.dp-3+.dp-cartes.dp-3{margin-bottom:14px}'
     + '.dp-carte-sub{font-size:11px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
@@ -113,6 +118,8 @@
     + '.dp-ident em{font-style:normal;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}'
     + '.dp-frise-axe{position:relative;height:16px;margin:4px 0 14px;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}'
     + '.dp-frise-axe span{position:absolute;transform:translateX(-50%);white-space:nowrap}'
+    + '.dp-frise-axe span.dp-frise-jour{transform:none;font-weight:700;color:var(--text2)}'
+    + '.dp-frise u{position:absolute;top:-4px;bottom:-4px;width:3px;margin-left:-1.5px;background:var(--card);z-index:1}'
     + '.dp-cmp-tete{display:flex;align-items:center;gap:8px;flex-wrap:wrap}'
     + '.dp-cmp-src{font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted)}'
     + '.dp-cmp-concl{margin-left:auto;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;text-transform:none;letter-spacing:0;'
@@ -289,24 +296,48 @@
   }
 
   // ── Déroulé : une bande par saisie, de son heure à celle de la suivante ──
-  // Une saisie dont la suivante tombe un autre jour s'arrête là : la nuit
-  // n'est ni du calage, ni de la production.
+  // L'axe ne garde que les jours de production : chaque jour qui a des
+  // saisies occupe une plage, de sa première à sa dernière saisie, et les
+  // jours se suivent sans la nuit ni le week-end entre eux. Une saisie dont
+  // la suivante tombe un autre jour s'arrête là : la nuit n'est ni du
+  // calage, ni de la production.
+  const JOURS_COURTS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
   function friseHtml(saisies, alertes) {
     const rows = (saisies || []).filter(r => r && r.date_operation)
       .slice().sort((a, b) => String(a.date_operation).localeCompare(String(b.date_operation)));
     if (rows.length < 2) return '';
-    const t = (r) => new Date(String(r.date_operation).slice(0, 19)).getTime();
-    const t0 = t(rows[0]), t1 = t(rows[rows.length - 1]);
-    if (!isFinite(t0) || !isFinite(t1) || t1 <= t0) return '';
-    const pos = (v) => Math.max(0, Math.min(100, (v - t0) / (t1 - t0) * 100));
+    const ms = (iso) => new Date(String(iso || '').replace(' ', 'T').slice(0, 19)).getTime();
+    const t = (r) => ms(r.date_operation);
+    const jour = (iso) => String(iso || '').slice(0, 10);
+
+    // Plages de jour : bornes, puis largeur proportionnelle à leur durée.
+    const plages = [];
+    rows.forEach(r => {
+      const j = jour(r.date_operation), v = t(r);
+      if (!isFinite(v)) return;
+      const p = plages[plages.length - 1];
+      if (p && p.j === j) p.f = v; else plages.push({j: j, d: v, f: v});
+    });
+    plages.forEach(p => { p.dur = Math.max(p.f - p.d, 60000); });
+    const total = plages.reduce((s, p) => s + p.dur, 0);
+    if (!total) return '';
+    let cumul = 0;
+    plages.forEach(p => { p.x = cumul / total * 100; p.w = p.dur / total * 100; cumul += p.dur; });
+    const pos = (v, j) => {
+      const p = plages.filter(q => q.j === j)[0];
+      if (!p || v < p.d || v > p.f) return null;
+      return p.x + (v - p.d) / p.dur * p.w;
+    };
+
     let bandes = '';
     for (let i = 0; i < rows.length - 1; i++) {
       const a = rows[i], b = rows[i + 1];
-      if (String(a.date_operation).slice(0, 10) !== String(b.date_operation).slice(0, 10)) continue;
-      const x = pos(t(a)), w = pos(t(b)) - x;
-      if (!(w > 0)) continue;
+      if (jour(a.date_operation) !== jour(b.date_operation)) continue;
+      const xa = pos(t(a), jour(a.date_operation)), xb = pos(t(b), jour(b.date_operation));
+      if (xa == null || xb == null || !(xb > xa)) continue;
+      const x = xa, w = xb - xa;
       const c = (DP_CATS[String(a.operation_category || '').toLowerCase()] || [null, 'var(--muted)'])[1];
-      const lib = String(a.operation || '').replace(/^\s*\d+\s*-\s*/, '');
+      const lib = libelleOperation(a);
       // Bulle ancrée à gauche ou à droite près des bords : centrée, elle
       // déborderait de la carte.
       const cote = x + w / 2 < 18 ? ' class="g"' : (x + w / 2 > 82 ? ' class="d"' : '');
@@ -316,34 +347,47 @@
           + ' · ' + duree((t(b) - t(a)) / 60000) + (a.operateur ? '\n' + a.operateur : ''))
           .replace(/\n/g, '&#10;') + '"></i>';
     }
-    // Repères : heures pleines, assez espacées pour tenir sur la largeur.
-    const pas = Math.max(1, Math.ceil((t1 - t0) / 3600000 / 8)) * 3600000;
-    const d0 = new Date(t0); d0.setMinutes(0, 0, 0);
-    let reperes = '';
-    for (let v = d0.getTime() + 3600000; v < t1; v += pas) {
-      const d = new Date(v), x = pos(v);
-      if (x < 3 || x > 97) continue;
-      const hh = String(d.getHours()).padStart(2, '0') + ':00';
-      reperes += '<span style="left:' + x.toFixed(2) + '%">' + (d.getHours() === 0
-        ? String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') : hh) + '</span>';
-    }
+
+    // Repères : le nom du jour au début de sa plage (s'il y en a plusieurs),
+    // et des heures pleines là où la plage a la place.
+    const plusieurs = plages.length > 1;
+    let reperes = '', separations = '';
+    plages.forEach((p, k) => {
+      const d = new Date(p.d);
+      if (plusieurs) {
+        reperes += '<span class="dp-frise-jour" style="left:' + p.x.toFixed(2) + '%">'
+          + JOURS_COURTS[d.getDay()] + ' ' + String(d.getDate()).padStart(2, '0') + '/'
+          + String(d.getMonth() + 1).padStart(2, '0') + '</span>';
+        if (k) separations += '<u style="left:' + p.x.toFixed(3) + '%"></u>';
+      }
+      const places = Math.floor(p.w / 11);
+      if (places < 1) return;
+      const heures = (p.f - p.d) / 3600000;
+      const pas = Math.max(1, Math.ceil(heures / places)) * 3600000;
+      const h0 = new Date(p.d); h0.setMinutes(0, 0, 0);
+      for (let v = h0.getTime() + 3600000; v < p.f; v += pas) {
+        const x = pos(v, p.j);
+        if (x == null || x - p.x < (plusieurs ? 9 : 3) || x > 97) continue;
+        reperes += '<span style="left:' + x.toFixed(2) + '%">' + String(new Date(v).getHours()).padStart(2, '0') + ':00</span>';
+      }
+    });
+
     // Relevés d'alerte : un point à l'heure de la validation, la réponse au
     // survol. Rouge si une réponse est non conforme.
     let points = '';
     (alertes || []).forEach(a => {
-      const v = Date.parse(String(a.ack_at || '').replace(' ', 'T').slice(0, 19));
-      if (!isFinite(v) || v < t0 || v > t1) return;
+      const x = pos(ms(a.ack_at), jour(a.ack_at));
+      if (x == null) return;
       const items = a.items || [], rep = a.reponses || {};
       let nc = false;
       const lignes = items.map((it, i) => {
         const r = rep[String(i)];
         const vals = Array.isArray(r) ? r : (r == null || r === '' ? [] : [r]);
         if (!vals.length) return '';
-        const ko = vals.some(x => (it.nc_responses || []).indexOf(x) !== -1);
+        const ko = vals.some(v => (it.nc_responses || []).indexOf(v) !== -1);
         if (ko) nc = true;
         return (it.label || 'Contrôle') + ' : ' + vals.join(', ') + (it.unit ? ' ' + it.unit : '') + (ko ? ' · NC' : '');
       }).filter(Boolean);
-      const x = pos(v);
       points += '<b' + (x < 18 ? ' class="g"' : (x > 82 ? ' class="d"' : '')) + ' style="left:' + x.toFixed(3) + '%'
         + (nc ? ';--c:var(--danger)' : '') + '" data-bulle="'
         + esc([(a.nom || 'Alerte') + ' · ' + dateCourte(a.ack_at).slice(6) + (a.user_nom ? ' · ' + a.user_nom : '')]
@@ -351,9 +395,10 @@
         + '"></b>';
     });
     return '<div class="dp-titre">Déroulé <span class="dp-cmp-src">' + esc(dateCourte(rows[0].date_operation))
-      + ' → ' + esc(dateCourte(rows[rows.length - 1].date_operation)) + '</span>'
-      + (points ? '<span class="dp-frise-leg"><i></i>Relevé d\'alerte</span>' : '') + '</div>'
-      + '<div class="dp-frise">' + bandes + points + '</div><div class="dp-frise-axe">' + reperes + '</div>';
+      + ' → ' + esc(dateCourte(rows[rows.length - 1].date_operation))
+      + (plusieurs ? ' · ' + plages.length + ' jours de production' : '') + '</span>'
+      + '</div>'
+      + '<div class="dp-frise">' + bandes + separations + points + '</div><div class="dp-frise-axe">' + reperes + '</div>';
   }
 
   // Fiche dossier de MyProd : durée / métrage / vitesse, puis calage /
@@ -447,25 +492,31 @@
     h += '<div class="dp-titre">Saisies <span class="dp-n">' + rows.length + '</span>'
       + (rows.length ? '<span class="dp-legende">' + legende + '</span>' : '') + '</div>';
     if (!rows.length) return h + '<div class="dp-vide" style="font-size:13px">Aucune saisie de production pour ce dossier.</div></div>';
-    h += '<div class="dp-wrap dp-haut"><table class="dp-t"><thead><tr>'
-      + '<th>Date</th><th>Opération</th><th>Opérateur</th><th>Machine</th>'
-      + '<th class="n">Qté traitée</th><th class="n">Compteur début</th><th class="n">Compteur fin</th><th>Commentaire</th>'
+    // Colonnes utiles seulement : la machine si le dossier en a connu
+    // plusieurs. Un seul compteur :
+    // celui du début sur le 01, celui de la fin sur le 89.
+    const multiMachine = new Set(rows.map(r => r.machine || '')).size > 1;
+    h += '<div class="dp-wrap dp-haut"><table class="dp-t dp-saisies"><thead><tr>'
+      + '<th>Date</th><th>Opération</th><th>Opérateur</th>' + (multiMachine ? '<th>Machine</th>' : '')
+      + '<th class="n">Compteur</th><th>Commentaire</th>'
       + '</tr></thead><tbody>'
       + rows.map(r => {
         const code = String(r.operation_code || '');
         const borne = code === '01' || code === '89';
         const c = (DP_CATS[String(r.operation_category || '').toLowerCase()] || [null, 'var(--muted)'])[1];
         const cpt = (v) => v ? '<span class="dp-cpt">' + nombre(v) + '</span>' : '';
-        const libelle = String(r.operation || '').replace(/^\s*\d+\s*-\s*/, '');
+        // La saisie qui clôture le dossier se lit « Dossier clôturé », pas
+        // « Fin de production » suivi d'un badge.
+        const libelle = r.fin_dossier ? 'Dossier clôturé' : libelleOperation(r);
         return '<tr' + (borne ? ' class="dp-borne"' : '') + '>'
           + '<td>' + esc(dateCourte(r.date_operation)) + '</td>'
           // Le libellé dans la pastille de couleur : le numéro d'opération
           // ne dit rien à l'opérateur qui relit sa saisie.
-          + '<td><span class="dp-code" style="--c:' + (borne ? 'var(--text)' : c) + '">' + esc(libelle) + '</span>' + (r.fin_dossier ? '<span class="dp-clos">Dossier clôturé</span>' : '') + '</td>'
-          + '<td>' + esc(r.operateur || '') + '</td><td>' + esc(r.machine || '') + '</td>'
-          + '<td class="n">' + (r.quantite_traitee ? nombre(r.quantite_traitee) : '') + '</td>'
-          + '<td class="n">' + (code === '01' ? cpt(r.metrage_prevu) : '') + '</td>'
-          + '<td class="n">' + (code === '89' ? cpt(r.metrage_reel) : '') + '</td>'
+          + '<td><span class="dp-code" style="--c:' + (borne ? 'var(--text)' : c) + '">' + esc(libelle) + '</span>'
+          + '</td>'
+          + '<td>' + esc(r.operateur || '') + '</td>' + (multiMachine ? '<td>' + esc(r.machine || '') + '</td>' : '')
+          + '<td class="n">' + (code === '01' && r.metrage_prevu ? '<span class="dp-cpt-lib">début</span>' + cpt(r.metrage_prevu)
+            : code === '89' && r.metrage_reel ? '<span class="dp-cpt-lib">fin</span>' + cpt(r.metrage_reel) : '') + '</td>'
           + '<td class="dp-com">' + esc(r.commentaire || '') + '</td></tr>';
       }).join('')
       + '</tbody></table></div></div>';
