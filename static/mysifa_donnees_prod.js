@@ -113,6 +113,8 @@
     + '.dp-ident em{font-style:normal;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}'
     + '.dp-frise-axe{position:relative;height:16px;margin:4px 0 14px;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}'
     + '.dp-frise-axe span{position:absolute;transform:translateX(-50%);white-space:nowrap}'
+    + '.dp-frise-axe span.dp-frise-jour{transform:none;font-weight:700;color:var(--text2)}'
+    + '.dp-frise u{position:absolute;top:-4px;bottom:-4px;width:3px;margin-left:-1.5px;background:var(--card);z-index:1}'
     + '.dp-cmp-tete{display:flex;align-items:center;gap:8px;flex-wrap:wrap}'
     + '.dp-cmp-src{font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted)}'
     + '.dp-cmp-concl{margin-left:auto;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;text-transform:none;letter-spacing:0;'
@@ -289,22 +291,46 @@
   }
 
   // ── Déroulé : une bande par saisie, de son heure à celle de la suivante ──
-  // Une saisie dont la suivante tombe un autre jour s'arrête là : la nuit
-  // n'est ni du calage, ni de la production.
+  // L'axe ne garde que les jours de production : chaque jour qui a des
+  // saisies occupe une plage, de sa première à sa dernière saisie, et les
+  // jours se suivent sans la nuit ni le week-end entre eux. Une saisie dont
+  // la suivante tombe un autre jour s'arrête là : la nuit n'est ni du
+  // calage, ni de la production.
+  const JOURS_COURTS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
   function friseHtml(saisies, alertes) {
     const rows = (saisies || []).filter(r => r && r.date_operation)
       .slice().sort((a, b) => String(a.date_operation).localeCompare(String(b.date_operation)));
     if (rows.length < 2) return '';
-    const t = (r) => new Date(String(r.date_operation).slice(0, 19)).getTime();
-    const t0 = t(rows[0]), t1 = t(rows[rows.length - 1]);
-    if (!isFinite(t0) || !isFinite(t1) || t1 <= t0) return '';
-    const pos = (v) => Math.max(0, Math.min(100, (v - t0) / (t1 - t0) * 100));
+    const ms = (iso) => new Date(String(iso || '').replace(' ', 'T').slice(0, 19)).getTime();
+    const t = (r) => ms(r.date_operation);
+    const jour = (iso) => String(iso || '').slice(0, 10);
+
+    // Plages de jour : bornes, puis largeur proportionnelle à leur durée.
+    const plages = [];
+    rows.forEach(r => {
+      const j = jour(r.date_operation), v = t(r);
+      if (!isFinite(v)) return;
+      const p = plages[plages.length - 1];
+      if (p && p.j === j) p.f = v; else plages.push({j: j, d: v, f: v});
+    });
+    plages.forEach(p => { p.dur = Math.max(p.f - p.d, 60000); });
+    const total = plages.reduce((s, p) => s + p.dur, 0);
+    if (!total) return '';
+    let cumul = 0;
+    plages.forEach(p => { p.x = cumul / total * 100; p.w = p.dur / total * 100; cumul += p.dur; });
+    const pos = (v, j) => {
+      const p = plages.filter(q => q.j === j)[0];
+      if (!p || v < p.d || v > p.f) return null;
+      return p.x + (v - p.d) / p.dur * p.w;
+    };
+
     let bandes = '';
     for (let i = 0; i < rows.length - 1; i++) {
       const a = rows[i], b = rows[i + 1];
-      if (String(a.date_operation).slice(0, 10) !== String(b.date_operation).slice(0, 10)) continue;
-      const x = pos(t(a)), w = pos(t(b)) - x;
-      if (!(w > 0)) continue;
+      if (jour(a.date_operation) !== jour(b.date_operation)) continue;
+      const xa = pos(t(a), jour(a.date_operation)), xb = pos(t(b), jour(b.date_operation));
+      if (xa == null || xb == null || !(xb > xa)) continue;
+      const x = xa, w = xb - xa;
       const c = (DP_CATS[String(a.operation_category || '').toLowerCase()] || [null, 'var(--muted)'])[1];
       const lib = String(a.operation || '').replace(/^\s*\d+\s*-\s*/, '');
       // Bulle ancrée à gauche ou à droite près des bords : centrée, elle
@@ -316,34 +342,47 @@
           + ' · ' + duree((t(b) - t(a)) / 60000) + (a.operateur ? '\n' + a.operateur : ''))
           .replace(/\n/g, '&#10;') + '"></i>';
     }
-    // Repères : heures pleines, assez espacées pour tenir sur la largeur.
-    const pas = Math.max(1, Math.ceil((t1 - t0) / 3600000 / 8)) * 3600000;
-    const d0 = new Date(t0); d0.setMinutes(0, 0, 0);
-    let reperes = '';
-    for (let v = d0.getTime() + 3600000; v < t1; v += pas) {
-      const d = new Date(v), x = pos(v);
-      if (x < 3 || x > 97) continue;
-      const hh = String(d.getHours()).padStart(2, '0') + ':00';
-      reperes += '<span style="left:' + x.toFixed(2) + '%">' + (d.getHours() === 0
-        ? String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') : hh) + '</span>';
-    }
+
+    // Repères : le nom du jour au début de sa plage (s'il y en a plusieurs),
+    // et des heures pleines là où la plage a la place.
+    const plusieurs = plages.length > 1;
+    let reperes = '', separations = '';
+    plages.forEach((p, k) => {
+      const d = new Date(p.d);
+      if (plusieurs) {
+        reperes += '<span class="dp-frise-jour" style="left:' + p.x.toFixed(2) + '%">'
+          + JOURS_COURTS[d.getDay()] + ' ' + String(d.getDate()).padStart(2, '0') + '/'
+          + String(d.getMonth() + 1).padStart(2, '0') + '</span>';
+        if (k) separations += '<u style="left:' + p.x.toFixed(3) + '%"></u>';
+      }
+      const places = Math.floor(p.w / 11);
+      if (places < 1) return;
+      const heures = (p.f - p.d) / 3600000;
+      const pas = Math.max(1, Math.ceil(heures / places)) * 3600000;
+      const h0 = new Date(p.d); h0.setMinutes(0, 0, 0);
+      for (let v = h0.getTime() + 3600000; v < p.f; v += pas) {
+        const x = pos(v, p.j);
+        if (x == null || x - p.x < (plusieurs ? 9 : 3) || x > 97) continue;
+        reperes += '<span style="left:' + x.toFixed(2) + '%">' + String(new Date(v).getHours()).padStart(2, '0') + ':00</span>';
+      }
+    });
+
     // Relevés d'alerte : un point à l'heure de la validation, la réponse au
     // survol. Rouge si une réponse est non conforme.
     let points = '';
     (alertes || []).forEach(a => {
-      const v = Date.parse(String(a.ack_at || '').replace(' ', 'T').slice(0, 19));
-      if (!isFinite(v) || v < t0 || v > t1) return;
+      const x = pos(ms(a.ack_at), jour(a.ack_at));
+      if (x == null) return;
       const items = a.items || [], rep = a.reponses || {};
       let nc = false;
       const lignes = items.map((it, i) => {
         const r = rep[String(i)];
         const vals = Array.isArray(r) ? r : (r == null || r === '' ? [] : [r]);
         if (!vals.length) return '';
-        const ko = vals.some(x => (it.nc_responses || []).indexOf(x) !== -1);
+        const ko = vals.some(v => (it.nc_responses || []).indexOf(v) !== -1);
         if (ko) nc = true;
         return (it.label || 'Contrôle') + ' : ' + vals.join(', ') + (it.unit ? ' ' + it.unit : '') + (ko ? ' · NC' : '');
       }).filter(Boolean);
-      const x = pos(v);
       points += '<b' + (x < 18 ? ' class="g"' : (x > 82 ? ' class="d"' : '')) + ' style="left:' + x.toFixed(3) + '%'
         + (nc ? ';--c:var(--danger)' : '') + '" data-bulle="'
         + esc([(a.nom || 'Alerte') + ' · ' + dateCourte(a.ack_at).slice(6) + (a.user_nom ? ' · ' + a.user_nom : '')]
@@ -351,9 +390,10 @@
         + '"></b>';
     });
     return '<div class="dp-titre">Déroulé <span class="dp-cmp-src">' + esc(dateCourte(rows[0].date_operation))
-      + ' → ' + esc(dateCourte(rows[rows.length - 1].date_operation)) + '</span>'
+      + ' → ' + esc(dateCourte(rows[rows.length - 1].date_operation))
+      + (plusieurs ? ' · ' + plages.length + ' jours de production' : '') + '</span>'
       + (points ? '<span class="dp-frise-leg"><i></i>Relevé d\'alerte</span>' : '') + '</div>'
-      + '<div class="dp-frise">' + bandes + points + '</div><div class="dp-frise-axe">' + reperes + '</div>';
+      + '<div class="dp-frise">' + bandes + separations + points + '</div><div class="dp-frise-axe">' + reperes + '</div>';
   }
 
   // Fiche dossier de MyProd : durée / métrage / vitesse, puis calage /
