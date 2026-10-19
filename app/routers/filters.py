@@ -58,8 +58,28 @@ def get_filters(request: Request):
         """).fetchall()
         machine_list = list_filter_machines(conn)
 
+        # Référence produit de chaque dossier, lue au planning (référence ou
+        # n° d'OF) : la recherche du filtre Dossier trouve « 1183 » dans
+        # « 1183/0030 ». On cherche souvent un produit, pas un numéro.
+        dossiers = [r["no_dossier"] for r in dos]
+        refs_produit = {}
+        try:
+            connus = set(dossiers)
+            for r in conn.execute(
+                """SELECT TRIM(COALESCE(reference,'')) AS ref, TRIM(COALESCE(numero_of,'')) AS of_,
+                          TRIM(ref_produit) AS rp
+                     FROM planning_entries
+                    WHERE TRIM(COALESCE(ref_produit,'')) <> ''"""
+            ).fetchall():
+                for cle in (r["ref"], r["of_"]):
+                    if cle and cle in connus:
+                        refs_produit.setdefault(cle, r["rp"])
+        except Exception:
+            refs_produit = {}  # colonne absente : recherche par numéro seul
+
     return {
         "operators": [r["operateur"] for r in ops],
-        "dossiers":  [r["no_dossier"] for r in dos],
+        "dossiers":  dossiers,
+        "dossiers_ref_produit": refs_produit,
         "machines":  machine_list,
     }
