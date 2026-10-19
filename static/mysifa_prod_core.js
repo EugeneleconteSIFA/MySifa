@@ -13098,7 +13098,7 @@ function renderProdPage(){
   // Points de production : un sous-onglet comme les autres. Le module se monte
   // dans le contenant que lui donne renderReunionsTab() — la coquille MyProd
   // (barre laterale, titre, sous-onglets) n'est pas dupliquee.
-  allTabs.push({key:'reunions', label:'Réunions', icon:'users'});
+  allTabs.push({key:'reunions', label:'Actions', icon:'check-circle'});
   const tabs = hideErreurs ? allTabs.filter(t=>t.key!=='erreurs') : allTabs;
   const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Production'},
     ...tabs.map(t=>h('button',{
@@ -14853,11 +14853,11 @@ function renderProdKpis(){
     }else if(S.page === 'production'){
       pageTitle = (S.subPage === 'saisies' ? 'Saisies' :
                    S.subPage === 'erreurs' ? 'Historique & Erreurs' :
-                   S.subPage === 'reunions' ? 'Points de production' :
+                   S.subPage === 'reunions' ? 'Actions' :
                    'Production');
       pageSubtitle = (S.subPage === 'saisies' ? 'Consulter, corriger et importer des saisies' :
                       S.subPage === 'erreurs' ? 'Sanity Score, incidents et erreurs de saisie' :
-                      S.subPage === 'reunions' ? 'Tenir un point, prendre les notes et suivre les actions' :
+                      S.subPage === 'reunions' ? 'Suivre les actions \u00e0 mener' :
                       'KPIs, temps, quantit\u00e9s et qualit\u00e9 de saisie');
       pageContent = renderProdPage();
     }else if(S.page === 'scans'){

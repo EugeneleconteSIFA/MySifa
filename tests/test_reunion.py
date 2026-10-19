@@ -39,6 +39,8 @@ mig_mach = _charger("mig_reunion_machines",
                     RACINE / "app" / "core" / "migrations" / "2026_09_01_reunion_machines.py")
 mig_statut = _charger("mig_reunion_actions_statut",
                       RACINE / "app" / "core" / "migrations" / "2026_10_12_reunion_actions_statut.py")
+mig_libre = _charger("mig_reunion_actions_sans_reunion",
+                     RACINE / "app" / "core" / "migrations" / "2026_10_19_reunion_actions_sans_reunion.py")
 
 FAIL = []
 
@@ -57,6 +59,7 @@ def base():
     mig.appliquer(conn)
     mig_mach.appliquer(conn)
     mig_statut.appliquer(conn)
+    mig_libre.appliquer(conn)
     return conn
 
 
@@ -170,6 +173,12 @@ def test_actions():
 
     verifier("compteur d'actions restantes",
              svc.reunion(conn, r["id"])["actions_restantes"], 1)
+
+    libre = svc.ajouter_action(conn, None, "Ranger le vestiaire", "Alan")
+    verifier("action sans reunion", libre["reunion_id"], None)
+    verifier("reunion inconnue refusee", svc.ajouter_action(conn, 999, "X"), None)
+    verifier("suivi : action sans reunion listee",
+             any(x["id"] == libre["id"] for x in svc.toutes_actions(conn)), True)
 
 
 def test_liste():

@@ -138,11 +138,12 @@ def toutes_actions(conn) -> List[Dict[str, Any]]:
     """
     if not _table_existe(conn, "reunion_actions") or not _table_existe(conn, "reunions"):
         return []
+    # LEFT JOIN : une action creee depuis le suivi n'a pas de reunion.
     rows = conn.execute(
         """SELECT a.*, r.titre AS reunion_titre, r.date_debut AS reunion_date
              FROM reunion_actions a
-             JOIN reunions r ON r.id = a.reunion_id
-            ORDER BY a.echeance IS NULL, a.echeance, r.date_debut DESC, a.id"""
+             LEFT JOIN reunions r ON r.id = a.reunion_id
+            ORDER BY a.echeance IS NULL, a.echeance, a.id"""
     ).fetchall()
     return [_action(r) for r in rows]
 
@@ -375,16 +376,19 @@ def supprimer(conn, reunion_id: int) -> bool:
 
 # ─── Actions ─────────────────────────────────────────────────────────────────
 
-def ajouter_action(conn, reunion_id: int, texte: str, responsable: str = "",
+def ajouter_action(conn, reunion_id: Optional[int], texte: str, responsable: str = "",
                    echeance: str = "") -> Optional[Dict[str, Any]]:
-    """Une action, c'est un quoi, un qui et un pour quand. Le quoi suffit."""
+    """Une action, c'est un quoi, un qui et un pour quand. Le quoi suffit.
+
+    Sans `reunion_id`, l'action est creee directement depuis le suivi.
+    """
     texte = _txt(texte)
-    if not texte or not reunion(conn, reunion_id):
+    if not texte or (reunion_id is not None and not reunion(conn, reunion_id)):
         return None
     cur = conn.execute(
         """INSERT INTO reunion_actions (reunion_id, texte, responsable, echeance, created_at)
            VALUES (?,?,?,?,?)""",
-        (int(reunion_id), texte, _txt(responsable) or None, _jour(echeance) or None, _now()),
+        (None if reunion_id is None else int(reunion_id), texte, _txt(responsable) or None, _jour(echeance) or None, _now()),
     )
     conn.commit()
     row = conn.execute("SELECT * FROM reunion_actions WHERE id=?", (cur.lastrowid,)).fetchone()

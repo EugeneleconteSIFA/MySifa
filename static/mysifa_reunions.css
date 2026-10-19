@@ -268,7 +268,7 @@ body.reu-plein .reu-colonne{max-height:calc(100vh - 32px)}
 .reu-btn.danger{background:var(--danger);border-color:var(--danger);color:#fff}
 .reu-btn.danger:hover{filter:brightness(1.07)}
 .reu-modal .reu-champ{margin-bottom:12px}
-.reu-modal .reu-champ input{width:100%}
+.reu-modal .reu-champ input,.reu-modal .reu-champ select{width:100%}
 .reu-fin{display:flex;gap:9px;justify-content:flex-end;margin-top:18px}
 
 @media (max-width:1100px){
@@ -466,3 +466,7 @@ body.reduce-anim .reu-carte:hover{transform:none}
 .reu-hist>summary{cursor:pointer;font-size:15px;font-weight:700;color:var(--text);
   margin:4px 0 10px;display:flex;align-items:center;gap:8px}
 .reu-doc-act-st{font-weight:700}
+
+/* Le texte d'une tuile ouvre sa correction. */
+.reu-carte-t[data-editer]{cursor:pointer}
+.reu-carte-t[data-editer]:hover{color:var(--accent)}

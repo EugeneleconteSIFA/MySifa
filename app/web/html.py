@@ -6040,9 +6040,10 @@ function renderProdPage(){
   ];
   // Retour de prod : ouvert aux services de production — l'API filtre (ROLES_PROD).
   tabs.push({key:'retour', label:'Retour de prod', icon:'clipboard'});
-  // Points de production : un sous-onglet comme les autres, monte par
+  // Suivi des actions : un sous-onglet comme les autres, monte par
   // mysifa_reunions.js dans le contenant que lui donne renderReunionsTab().
-  tabs.push({key:'reunions', label:'Réunions', icon:'users'});
+  // La cle reste 'reunions' : les adresses /prod#reunions deja partagees.
+  tabs.push({key:'reunions', label:'Actions', icon:'check-circle'});
   const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Production'},
     ...tabs.map(t=>h('button',{
       type:'button',

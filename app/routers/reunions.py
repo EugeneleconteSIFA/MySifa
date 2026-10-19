@@ -91,6 +91,21 @@ def suivi_actions(request: Request):
         return {"actions": rn.toutes_actions(conn), "statuts": rn.action_statuts()}
 
 
+@router.post("/api/reunions/actions")
+async def creer_action(request: Request):
+    """Une action creee depuis le suivi, hors reunion. Declaree avant
+    /api/reunions/{reunion_id} pour la meme raison que le suivi."""
+    _autorise(request)
+    body = await request.json()
+    with get_db() as conn:
+        a = rn.ajouter_action(conn, None, str(body.get("texte") or ""),
+                              str(body.get("responsable") or ""),
+                              str(body.get("echeance") or ""))
+    if not a:
+        raise HTTPException(status_code=400, detail="Action vide.")
+    return a
+
+
 @router.get("/api/reunions/contexte")
 def contexte(request: Request):
     """De quoi ouvrir la page : reunion en cours, plage proposee, participants."""
