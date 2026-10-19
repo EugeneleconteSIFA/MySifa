@@ -17,6 +17,8 @@ Cette route en fait une liste de travail pour MyProd, avec deux gestes :
   POST /api/prod/ecarts/{id}/valider
   GET  /api/prod/ecarts/{id}/correction  aperçu de la correction
   POST /api/prod/ecarts/{id}/corriger
+  GET  /api/prod/ecarts/reglages         catégories et leur prise en compte
+  PUT  /api/prod/ecarts/reglages         {regle, compte} : compte ou non dans « À traiter »
 
 Réservé aux rôles d'administration (ceux qui corrigent des saisies).
 """
@@ -213,13 +215,27 @@ def _saisies_machine(conn, pe_id) -> Dict[str, Any]:
     }
 
 
+def regles_hors_compteur(conn) -> list:
+    """Catégories d'écart réglées pour ne pas compter dans « À traiter ».
+
+    Elles restent dans la liste, consultables et traitables : seul le
+    compteur (pastilles, notification) les ignore."""
+    try:
+        return [r[0] for r in conn.execute(
+            "SELECT regle FROM prod_ecarts_reglages WHERE compte = 0"
+        ).fetchall()]
+    except Exception:
+        return []  # base non migrée : tout compte
+
+
 @router.get("")
 def lister(request: Request):
     _admin(request)
     with get_db() as conn:
         if "coherence_ecarts" not in coherence._tables(conn):
-            return {"ecarts": [], "total": 0}
+            return {"ecarts": [], "total": 0, "hors_compteur": []}
         res = coherence.lister(conn, famille="prod", statut="ouvert", limite=300)
+        res["hors_compteur"] = regles_hors_compteur(conn)
     for e in res["ecarts"]:
         e["action"] = _action(e["regle"])
     res["total"] = len(res["ecarts"])
@@ -232,8 +248,64 @@ def compter(request: Request):
     if not is_admin(user):
         return {"n": 0}
     with get_db() as conn:
-        n, _sig = coherence.compter_ouverts(conn, "prod")
+        n, _sig = coherence.compter_ouverts(conn, "prod", exclure=regles_hors_compteur(conn))
     return {"n": n}
+
+
+@router.get("/reglages")
+def lire_reglages(request: Request):
+    """Toutes les catégories de la famille prod, ouvertes ou non : on règle
+    aussi une catégorie qui n'a aucun écart aujourd'hui."""
+    _admin(request)
+    from app.services.coherence import REGLES
+    with get_db() as conn:
+        hors = set(regles_hors_compteur(conn))
+        ouverts = {}
+        if "coherence_ecarts" in coherence._tables(conn):
+            ouverts = {r["regle"]: int(r["n"]) for r in conn.execute(
+                """SELECT regle, COUNT(*) AS n FROM coherence_ecarts
+                    WHERE statut = 'ouvert' AND famille = 'prod' GROUP BY regle"""
+            ).fetchall()}
+    regles = [
+        {"regle": r.code, "titre": r.titre, "description": r.description,
+         "compte": r.code not in hors, "ouverts": ouverts.get(r.code, 0)}
+        for r in REGLES.values() if r.famille == "prod"
+    ]
+    regles.sort(key=lambda x: (-x["ouverts"], x["titre"]))
+    return {"regles": regles}
+
+
+@router.put("/reglages")
+async def ecrire_reglage(request: Request):
+    user = _admin(request)
+    body = await request.json()
+    regle = str(body.get("regle") or "").strip()
+    from app.services.coherence import REGLES
+    if regle not in REGLES or REGLES[regle].famille != "prod":
+        raise HTTPException(status_code=400, detail="Catégorie d'écart inconnue.")
+    compte = 1 if body.get("compte") else 0
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO prod_ecarts_reglages (regle, compte, updated_at, updated_by)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(regle) DO UPDATE SET compte = excluded.compte,
+                   updated_at = excluded.updated_at, updated_by = excluded.updated_by""",
+            (regle, compte, _maintenant().isoformat(timespec="seconds"), _qui(user)),
+        )
+        conn.commit()
+    try:
+        # La pastille du portail est mise en cache : elle suit tout de suite.
+        from app.services import notifications
+        notifications._cache.pop("prod.ecarts", None)
+    except Exception:
+        pass
+    log_action(
+        user=user, action="UPDATE", module="saisies",
+        objet=f"À traiter · {REGLES[regle].titre} : {'compté' if compte else 'non compté'}",
+        detail={"regle": regle, "compte": bool(compte)},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "regle": regle, "compte": bool(compte)}
 
 
 @router.post("/{ecart_id}/valider")

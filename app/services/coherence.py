@@ -817,8 +817,8 @@ def rouvrir(conn, ecart_id: int) -> None:
     conn.commit()
 
 
-def compter_ouverts(conn, famille: Optional[str] = None) -> tuple:
-    """(nombre, signature) pour la pastille."""
+def compter_ouverts(conn, famille: Optional[str] = None, exclure=None) -> tuple:
+    """(nombre, signature) pour la pastille. `exclure` : règles hors compteur."""
     if "coherence_ecarts" not in _tables(conn):
         return 0, None
     q = "SELECT COUNT(*) AS n, MAX(id) AS m FROM coherence_ecarts WHERE statut='ouvert'"
@@ -826,6 +826,10 @@ def compter_ouverts(conn, famille: Optional[str] = None) -> tuple:
     if famille:
         q += " AND famille = ?"
         params.append(famille)
+    exclure = [r for r in (exclure or []) if r]
+    if exclure:
+        q += f" AND regle NOT IN ({','.join('?' * len(exclure))})"
+        params.extend(exclure)
     r = conn.execute(q, params).fetchone()
     n = int(r["n"] or 0)
     return n, (str(r["m"]) if n else None)
