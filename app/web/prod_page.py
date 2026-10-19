@@ -91,7 +91,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_mobile.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_prod_mobile.css?v=__V_LABEL__-mpm2">
 <link rel="stylesheet" href="/static/mysifa_retour_prod.css?v=__V_LABEL__-reu14">
-<link rel="stylesheet" href="/static/mysifa_reunions.css?v=__V_LABEL__-reu18">
+<link rel="stylesheet" href="/static/mysifa_reunions.css?v=__V_LABEL__-reu19">
 <link rel="stylesheet" href="/static/mysifa_print_modal.css?v=__V_LABEL__">
 <script src="/static/motion.js?v=__V_LABEL__" defer></script>
 <link rel="stylesheet" href="/static/mysifa_perf.css">
@@ -111,7 +111,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <script src="/static/mysifa_retour_prod.js?v=__V_LABEL__-reu18"></script>
 <!-- Points de production : monte par l'onglet Reunions de MyProd. Charge
      AVANT le coeur, qui le cherche sur window au moment du rendu. -->
-<script src="/static/mysifa_reunions.js?v=__V_LABEL__-reu18"></script>
+<script src="/static/mysifa_reunions.js?v=__V_LABEL__-reu19"></script>
 <!-- Selecteur de pieces RVGI, partage avec le planning et MyExpe. Charge
      AVANT le coeur : la modale OF l'appelle des son premier rendu. -->
 <script src="/static/mysifa_rvgi_picker.js?v=__V_LABEL__"></script>

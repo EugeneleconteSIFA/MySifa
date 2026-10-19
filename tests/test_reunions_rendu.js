@@ -393,7 +393,8 @@ verifier("suivi : sans statut, la case decide", M.rendreSuivi(SUIVI, { voirTermi
 verifier("suivi : retard signale", board.includes(' retard" draggable') && board.includes("En retard"));
 verifier("suivi : non attribuee nommee", board.includes("Non attribuée"));
 verifier("suivi : plus de lien vers la reunion", !board.includes('data-ouvrir='));
-verifier("suivi : le texte ouvre la correction", board.includes('data-editer="1"'));
+verifier("suivi : la tuile ouvre la correction", board.includes('data-carte="1" data-editer="1"'));
+verifier("suivi : bouton Modifier", board.includes('class="reu-carte-reu" data-editer="1"'));
 verifier("suivi : filtre Paul", M.rendreSuivi(SUIVI, { filtreResp: "Paul" }).indexOf("Regler la DSI") === -1);
 verifier("suivi : filtre non attribuees", M.rendreSuivi(SUIVI, { filtreResp: "~" }).includes("Devis")
          && M.rendreSuivi(SUIVI, { filtreResp: "~" }).indexOf("anilox") === -1);

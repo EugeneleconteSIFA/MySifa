@@ -467,6 +467,6 @@ body.reduce-anim .reu-carte:hover{transform:none}
   margin:4px 0 10px;display:flex;align-items:center;gap:8px}
 .reu-doc-act-st{font-weight:700}
 
-/* Le texte d'une tuile ouvre sa correction. */
-.reu-carte-t[data-editer]{cursor:pointer}
-.reu-carte-t[data-editer]:hover{color:var(--accent)}
+/* La tuile ouvre sa correction. */
+.reu-carte[data-editer]{cursor:pointer}
+.reu-carte[data-editer]:hover .reu-carte-t{color:var(--accent)}
