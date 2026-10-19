@@ -1019,6 +1019,11 @@ def _alertes_dossier(conn, ref: str) -> list:
                  LEFT JOIN maintenance_alerts m ON m.id = a.alert_id
                  LEFT JOIN users u ON u.id = a.user_id
                 WHERE TRIM(a.no_dossier) = ? AND COALESCE(a.dismissed, 0) = 0
+                  -- Fermetures automatiques (arrêt, fin de dossier) : aucune
+                  -- réponse d'opérateur. Mêmes deux orthographes que la liste
+                  -- des saisies (saisies.py).
+                  AND TRIM(COALESCE(a.comment, '')) NOT LIKE 'Fermée auto%'
+                  AND TRIM(COALESCE(a.comment, '')) NOT LIKE 'Fermee auto%'
                 ORDER BY a.ack_at, a.id""",
             (ref,),
         ).fetchall()
