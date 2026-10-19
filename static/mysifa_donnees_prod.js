@@ -68,8 +68,10 @@
     + '.dp-wrap{border:1px solid var(--border);border-radius:10px;overflow:auto;margin-bottom:14px}'
     + '.dp-wrap.dp-haut{max-height:340px}'
     + '.dp-t{width:100%;border-collapse:collapse;font-size:12px}'
-    + '.dp-t th{position:sticky;top:0;z-index:1;background:var(--bg);text-align:left;padding:7px 10px;font-size:10px;font-weight:700;'
-    + 'text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap}'
+    // En-têtes dans la police de l'interface (la feuille de MyProd met ses
+    // th en monospace) et en couleur de texte secondaire, lisibles.
+    + '.dp-t th{position:sticky;top:0;z-index:1;background:var(--bg);text-align:left;padding:8px 10px;font-family:inherit;font-size:11px;font-weight:700;'
+    + 'text-transform:uppercase;letter-spacing:.4px;color:var(--text2);border-bottom:1px solid var(--border);white-space:nowrap}'
     + '.dp-t td{padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text2);white-space:nowrap}'
     + '.dp-t th+th,.dp-t td+td{border-left:1px solid var(--border)}'
     + '.dp-t tbody tr:nth-child(even) td{background:color-mix(in srgb,var(--bg) 55%,transparent)}'
