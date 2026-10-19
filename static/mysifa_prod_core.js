@@ -11365,7 +11365,16 @@ function _prodVueCss(){
     +'tr.ps-ligne.ouvert td:first-child,tr.ps-detail>td{box-shadow:inset 4px 0 0 var(--accent)}'
     +'tr.ps-detail>td{border-bottom:3px solid var(--accent)!important}'
     +'tr.ps-detail+tr.ps-ligne:not(.ouvert) td{border-top:6px solid var(--card)!important}'
-    +'.ps-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--c);margin-right:5px;vertical-align:1px}';
+    +'.ps-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--c);margin-right:5px;vertical-align:1px}'
+    // Bulle des boutons d'outils du détail : immédiate au survol comme au
+    // focus clavier (le title natif met une seconde à venir, et pas toujours).
+    // Ancrée à droite : les boutons sont collés au bord droit du panneau.
+    +'.ps-bulle{position:relative}'
+    +'.ps-bulle::after{content:attr(data-bulle);position:absolute;top:calc(100% + 6px);right:0;z-index:5;'
+    +'width:max-content;max-width:240px;padding:6px 9px;border-radius:7px;background:var(--text);color:var(--card);'
+    +'font-size:11px;font-weight:500;line-height:1.4;text-align:left;white-space:normal;'
+    +'box-shadow:0 4px 14px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .12s}'
+    +'.ps-bulle:hover::after,.ps-bulle:focus-visible::after{opacity:1}';
   document.head.appendChild(st);
 }
 
@@ -11399,8 +11408,12 @@ function _psBoutonSignaler(no, cible){
   const zone = panneau.querySelector('.dp-alertes');
   if(zone && window.MySifaDonneesProd && window.MySifaDonneesProd.basculerAlertes){
     const n = zone.querySelector('.dp-n') ? zone.querySelector('.dp-n').textContent : '';
-    const btn = h('button',{type:'button',className:'btn-ghost',
-        title:'Alertes validées sur ce dossier','aria-label':'Alertes validées sur ce dossier',
+    const bulleAlertes = o => o
+      ? 'Masquer les alertes validées'
+      : 'Alertes validées sur ce dossier : '+n+' validation'+(Number(n)>1?'s':'')
+        +'. Affiche les valeurs relevées en courbes et les réponses aux contrôles.';
+    const btn = h('button',{type:'button',className:'btn-ghost ps-bulle',
+        'data-bulle':bulleAlertes(false),'aria-label':'Alertes validées sur ce dossier',
         style:styleBtn,
         onClick:e=>{
           e.stopPropagation();
@@ -11409,6 +11422,7 @@ function _psBoutonSignaler(no, cible){
           btn.style.borderColor = ouvert ? 'var(--accent)' : 'var(--border)';
           btn.style.color = ouvert ? 'var(--accent)' : 'var(--text2)';
           btn.setAttribute('aria-pressed', ouvert ? 'true' : 'false');
+          btn.setAttribute('data-bulle', bulleAlertes(ouvert));
           if(ouvert) zone.scrollIntoView({block:'nearest'});
         }},
       iconEl('activity',14), n);
@@ -11417,10 +11431,13 @@ function _psBoutonSignaler(no, cible){
       window.MySifaDonneesProd.basculerAlertes(panneau, true);
       btn.style.borderColor = 'var(--accent)'; btn.style.color = 'var(--accent)';
       btn.setAttribute('aria-pressed','true');
+      btn.setAttribute('data-bulle', bulleAlertes(true));
     }
   }
-  outils.appendChild(h('button',{type:'button',className:'btn-ghost',
-      title:'Signaler une incohérence sur ce dossier','aria-label':'Signaler une incohérence',
+  outils.appendChild(h('button',{type:'button',className:'btn-ghost ps-bulle',
+      'data-bulle':'Signaler une incohérence : un chiffre ou une saisie qui ne colle pas. '
+        +'Le signalement part dans Erreurs & Qualité › À traiter.',
+      'aria-label':'Signaler une incohérence',
       style:styleBtn,
       onClick:e=>{ e.stopPropagation(); openSignalerIncoherence(no); }},
     iconEl('flag',14)));
