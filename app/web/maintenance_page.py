@@ -3046,6 +3046,8 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 
 <div class="toast-wrap" id="toast-wrap"></div>
 
+<script src="/static/mysifa_url.js?v=5"></script>
+<script src="/static/maintenance_url.js?v=1"></script>
 <script>
 'use strict';
 
@@ -3213,7 +3215,7 @@ function switchView(name){
   const s = document.querySelector('.mobile-topbar-sub');
   if(t) t.textContent = meta.title;
   if(s) s.textContent = meta.sub;
-  try{ history.replaceState(null, '', '#' + name); }catch(e){}
+  // L'adresse (vue, filtres, fenêtres) est tenue par static/maintenance_url.js.
   closeSidebar();
 }
 
@@ -10291,6 +10293,8 @@ async function loadMe(){
       }
     }
   }catch(e){}
+  // Adresse : vue, sous-onglets, filtres, tris et fenêtres (?vue=…).
+  if(typeof maintenanceDemarrerUrl === 'function') maintenanceDemarrerUrl(_initMePromise);
 })();
 
 // ═══════════════════════════════════════════════════════════════════
