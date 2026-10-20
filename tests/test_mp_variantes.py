@@ -149,18 +149,26 @@ with get_db() as c:
     vl = mv.creer(c, ml, {"libelle_technique": "Couché 80 réf X", "fournisseur_id": F}, "t")
     mv.poser_laize_fournisseur(c, vl, {"valeur_mm": "333", "ml_bobine": "6000"})
     det = [v for v in mv.lister(c, ml)["variantes"] if v["id"] == vl][0]["laizes_detail"]
-    check("laize fournisseur : nouvelle laize créée et rattachée", [(d["valeur_mm"], d["ml_bobine"]) for d in det],
-          [(333.0, 6000.0)])
+    check("laize fournisseur : nouvelle laize créée et rattachée",
+          [(d["valeur_mm"], [x["ml_bobine"] for x in d["conditionnements"]]) for d in det], [(333.0, [6000.0])])
     check("laize fournisseur : ajoutée à la matière", [l["valeur_mm"] for l in mv.lister(c, ml)["laizes_matiere"]],
           [333.0])
     lid = det[0]["laize_id"]
-    mv.poser_laize_fournisseur(c, vl, {"laize_id": lid, "ml_bobine": ""})
+    mv.poser_laize_fournisseur(c, vl, {"laize_id": lid, "ml_bobine": "2000"})
     det = [v for v in mv.lister(c, ml)["variantes"] if v["id"] == vl][0]["laizes_detail"]
-    check("laize fournisseur : métrage remis à vide", det[0]["ml_bobine"], None)
+    check("conditionnement : deux longueurs sur la même laize",
+          (len(det), [x["ml_bobine"] for x in det[0]["conditionnements"]]), (1, [2000.0, 6000.0]))
+    refus("conditionnement : doublon refusé",
+          lambda: mv.poser_laize_fournisseur(c, vl, {"laize_id": lid, "ml_bobine": "2000"}))
+    mv.retirer_conditionnement(c, vl, det[0]["conditionnements"][0]["id"])
+    det = [v for v in mv.lister(c, ml)["variantes"] if v["id"] == vl][0]["laizes_detail"]
+    check("conditionnement : retiré, la laize reste", [x["ml_bobine"] for x in det[0]["conditionnements"]], [6000.0])
     mv.retirer_laize_fournisseur(c, vl, lid)
     check("laize fournisseur : retirée du fournisseur, gardée sur la matière",
           ([v for v in mv.lister(c, ml)["variantes"] if v["id"] == vl][0]["laizes_detail"],
            len(mv.lister(c, ml)["laizes_matiere"])), ([], 1))
+    check("laize fournisseur : ses conditionnements partent avec elle", c.execute(
+        "SELECT COUNT(*) FROM mp_conditionnements_fournisseur WHERE matiere_id=?", (ml,)).fetchone()[0], 0)
     refus("laize fournisseur : valeur invalide", lambda: mv.poser_laize_fournisseur(c, vl, {"valeur_mm": "abc"}))
     vsans = mv.creer(c, ml, {"libelle_technique": "Sans fournisseur", "fournisseur_id": None}, "t")
     refus("laize fournisseur : article sans fournisseur", lambda: mv.poser_laize_fournisseur(c, vsans, {"valeur_mm": 400}))

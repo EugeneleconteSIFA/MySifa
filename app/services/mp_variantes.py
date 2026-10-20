@@ -134,11 +134,9 @@ def lister(conn: sqlite3.Connection, matiere_id: int, avec_inactives: bool = Fal
     # Laizes livrées par fournisseur, et laizes où ce fournisseur a un prix.
     laizes_fou: dict[Optional[int], list[str]] = {}
     laizes_fou_det: dict[Optional[int], list[dict]] = {}
-    ml_col = "mlf.ml_bobine" if "ml_bobine" in {
-        c[1] for c in conn.execute("PRAGMA table_info(matiere_laize_fournisseurs)").fetchall()
-    } else "NULL"
+    conds = _conditionnements(conn, matiere_id)
     for r in conn.execute(
-        f"""SELECT mlf.fournisseur_id, mlf.laize_id, l.valeur_mm, l.label, {ml_col} AS ml_bobine
+        """SELECT mlf.fournisseur_id, mlf.laize_id, l.valeur_mm, l.label
              FROM matiere_laize_fournisseurs mlf JOIN mp_laizes l ON l.id = mlf.laize_id
             WHERE mlf.matiere_id = ? ORDER BY l.valeur_mm""",
         (matiere_id,),
@@ -147,7 +145,7 @@ def lister(conn: sqlite3.Connection, matiere_id: int, avec_inactives: bool = Fal
         laizes_fou.setdefault(r["fournisseur_id"], []).append(lib)
         laizes_fou_det.setdefault(r["fournisseur_id"], []).append({
             "laize_id": int(r["laize_id"]), "valeur_mm": r["valeur_mm"], "label": lib,
-            "ml_bobine": r["ml_bobine"],
+            "conditionnements": conds.get((r["fournisseur_id"], int(r["laize_id"])), []),
         })
     # Laizes de la matière (stock compris) : ce qu'on peut rattacher à un fournisseur.
     laizes_matiere = [
@@ -629,11 +627,31 @@ def _laize_par_valeur(conn: sqlite3.Connection, valeur: Any) -> int:
                             (v, label)).lastrowid)
 
 
-def poser_laize_fournisseur(conn: sqlite3.Connection, variante_id: int, data: dict) -> int:
-    """Ce fournisseur livre cette laize, avec son métrage par bobine (facultatif).
+def _conditionnements(conn: sqlite3.Connection, matiere_id: int) -> dict:
+    """{(fournisseur_id, laize_id): [{id, ml_bobine}]} — vide si la table manque."""
+    out: dict = {}
+    try:
+        rows = conn.execute(
+            """SELECT id, fournisseur_id, laize_id, ml_bobine FROM mp_conditionnements_fournisseur
+                WHERE matiere_id = ? ORDER BY ml_bobine""",
+            (matiere_id,),
+        ).fetchall()
+    except sqlite3.Error:
+        return out
+    for r in rows:
+        out.setdefault((r["fournisseur_id"], int(r["laize_id"])), []).append(
+            {"id": int(r["id"]), "ml_bobine": float(r["ml_bobine"])})
+    return out
+
+
+def poser_laize_fournisseur(conn: sqlite3.Connection, variante_id: int, data: dict,
+                            auteur: Optional[str] = None) -> int:
+    """Ce fournisseur livre cette laize ; `ml_bobine` y ajoute un conditionnement.
 
     `data` : `laize_id` ou `valeur_mm` (laize créée au référentiel si nouvelle),
-    `ml_bobine` (vide = longueur de l'article, puis de la matière). La laize est
+    `ml_bobine` facultatif. Une laize peut porter plusieurs conditionnements
+    (2 000 m et 6 000 m) : chaque appel en ajoute un, sans remplacer les autres ;
+    sans conditionnement, la longueur est celle de l'article. La laize est
     ajoutée à la matière si elle n'y était pas, sans stock. Renvoie l'id matière.
     """
     r = _get(conn, variante_id)
@@ -657,25 +675,41 @@ def poser_laize_fournisseur(conn: sqlite3.Connection, variante_id: int, data: di
         raise ValueError("Laize obligatoire.")
     ml = _norm_float(data.get("ml_bobine")) if "ml_bobine" in data else None
     mid = int(r["matiere_id"])
+    if ml is not None and ml <= 0:
+        ml = None
     conn.execute("INSERT OR IGNORE INTO mp_matiere_laizes (matiere_id, laize_id) VALUES (?, ?)", (mid, laize_id))
     conn.execute("INSERT OR IGNORE INTO mp_stock_laize (matiere_id, laize_id, quantite) VALUES (?, ?, 0)",
                  (mid, laize_id))
-    existe = conn.execute(
-        "SELECT 1 FROM matiere_laize_fournisseurs WHERE matiere_id=? AND laize_id=? AND fournisseur_id=?",
+    conn.execute(
+        "INSERT OR IGNORE INTO matiere_laize_fournisseurs (matiere_id, laize_id, fournisseur_id) VALUES (?,?,?)",
         (mid, laize_id, r["fournisseur_id"]),
-    ).fetchone()
-    if existe:
-        if "ml_bobine" in data:
-            conn.execute(
-                "UPDATE matiere_laize_fournisseurs SET ml_bobine=? WHERE matiere_id=? AND laize_id=? AND fournisseur_id=?",
-                (ml, mid, laize_id, r["fournisseur_id"]),
-            )
-    else:
-        conn.execute(
-            "INSERT INTO matiere_laize_fournisseurs (matiere_id, laize_id, fournisseur_id, ml_bobine) VALUES (?,?,?,?)",
+    )
+    if ml:
+        if conn.execute(
+            """SELECT 1 FROM mp_conditionnements_fournisseur
+                WHERE matiere_id=? AND laize_id=? AND fournisseur_id=? AND ABS(ml_bobine - ?) < 0.001""",
             (mid, laize_id, r["fournisseur_id"], ml),
+        ).fetchone():
+            raise ValueError("Ce conditionnement existe déjà sur cette laize.")
+        conn.execute(
+            """INSERT INTO mp_conditionnements_fournisseur
+                   (matiere_id, laize_id, fournisseur_id, ml_bobine, created_at, created_by_name)
+               VALUES (?,?,?,?,?,?)""",
+            (mid, laize_id, r["fournisseur_id"], ml, _now(), auteur),
         )
     return mid
+
+
+def retirer_conditionnement(conn: sqlite3.Connection, variante_id: int, cond_id: int) -> int:
+    """Retire une longueur de bobine. La laize reste livrée par le fournisseur."""
+    r = _get(conn, variante_id)
+    n = conn.execute(
+        "DELETE FROM mp_conditionnements_fournisseur WHERE id=? AND matiere_id=? AND fournisseur_id=?",
+        (int(cond_id), r["matiere_id"], r["fournisseur_id"]),
+    ).rowcount
+    if not n:
+        raise LookupError("Conditionnement introuvable.")
+    return int(r["matiere_id"])
 
 
 def retirer_laize_fournisseur(conn: sqlite3.Connection, variante_id: int, laize_id: int) -> int:
@@ -685,6 +719,10 @@ def retirer_laize_fournisseur(conn: sqlite3.Connection, variante_id: int, laize_
         raise ValueError("Article sans fournisseur.")
     conn.execute(
         "DELETE FROM matiere_laize_fournisseurs WHERE matiere_id=? AND laize_id=? AND fournisseur_id=?",
+        (r["matiere_id"], int(laize_id), r["fournisseur_id"]),
+    )
+    conn.execute(
+        "DELETE FROM mp_conditionnements_fournisseur WHERE matiere_id=? AND laize_id=? AND fournisseur_id=?",
         (r["matiere_id"], int(laize_id), r["fournisseur_id"]),
     )
     return int(r["matiere_id"])
