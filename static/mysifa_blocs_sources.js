@@ -302,32 +302,6 @@
       });
     },
 
-    /* ── MyStock › Contrôle › Monitoring stocks PF ──────────────────────
-       Dernier import ERP, comme à l'ouverture de l'écran (loadMonitoring).
-       Même calcul que buildMonitoringKpis : « Sans correspondance » ajoute
-       aux références ERP sans correspondance les lignes MySifa sans
-       correspondance (seules ces lignes sont demandées). */
-    "stock.monitoring.kpis": function (ctx) {
-      return ctx.json("/api/reconciliation/snapshots").then(function (snaps) {
-        var snap = Array.isArray(snaps) && snaps.length ? snaps[0] : null;
-        if (!snap) {
-          return r({ comparees: "0", ecarts: "0", "sans-corresp": "0", negatifs: "0" },
-                   { comparees: 0, ecarts: 0, "sans-corresp": 0, negatifs: 0 });
-        }
-        return ctx.json("/api/reconciliation/snapshots/" + snap.id + "?statut=sans_corresp_mysifa").then(function (d) {
-          var v = {
-            comparees: snap.nb_matched || 0,
-            ecarts: snap.nb_ecarts || 0,
-            "sans-corresp": (snap.nb_sans_corresp || 0) + ((d && d.lines) || []).length,
-            negatifs: snap.nb_negatifs || 0
-          };
-          var t = {};
-          Object.keys(v).forEach(function (k) { t[k] = fN(v[k]); });
-          return r(t, v);
-        });
-      });
-    },
-
     /* ── MyStock › Produits finis ──────────────────────────────────────
        Les trois cartes de buildProduitsFinisTab, calculées par le serveur. */
     "stock.pf.kpis": function (ctx) {

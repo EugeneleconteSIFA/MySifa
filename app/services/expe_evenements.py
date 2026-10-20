@@ -59,6 +59,7 @@ EV_EMAIL_OUVERT = "email_ouvert"
 EV_EMAIL_RELANCE = "email_relance"
 EV_EMAIL_ATTRIBUTION = "email_attribution"
 EV_EMAIL_ISSUE = "email_issue"
+EV_EMAIL_MODIFICATION = "email_modification"
 EV_PORTAIL_OUVERT = "portail_ouvert"
 EV_REPONSE_DEPOSEE = "reponse_deposee"
 EV_REPONSE_SAISIE = "reponse_saisie"
@@ -72,6 +73,7 @@ LIBELLES = {
     EV_EMAIL_RELANCE: "Relance envoyée par email",
     EV_EMAIL_ATTRIBUTION: "Confirmation d'attribution envoyée",
     EV_EMAIL_ISSUE: "Issue de la demande notifiée par email",
+    EV_EMAIL_MODIFICATION: "Modification de la demande envoyée par email",
     EV_PORTAIL_OUVERT: "Portail consulté",
     EV_REPONSE_DEPOSEE: "Offre déposée sur le portail",
     EV_REPONSE_SAISIE: "Offre saisie en interne",
@@ -79,17 +81,20 @@ LIBELLES = {
     EV_PJ_DEPOSEE: "Fichier déposé par le transporteur",
 }
 
-# Trois emails peuvent partir vers un transporteur : la demande de tarif, la
-# relance, et la confirmation d'attribution. Chacun porte son pixel avec son
-# code de contexte — « email ouvert » sans préciser lequel ne se lit pas quand
+# Quatre emails peuvent partir vers un transporteur : la demande de tarif, la
+# relance, la modification et la confirmation d'attribution. Chacun porte son
+# pixel avec son code de contexte — « email ouvert » sans préciser lequel ne se lit pas quand
 # une relance suit la demande de trois jours.
 CONTEXTES = {
     "rfq": "demande de tarif",
     "rel": "relance",
     "attr": "attribution",
+    "rev": "modification",
 }
 
-EMAILS_SORTANTS = (EV_EMAIL_ENVOYE, EV_EMAIL_RELANCE, EV_EMAIL_ATTRIBUTION)
+EMAILS_SORTANTS = (
+    EV_EMAIL_ENVOYE, EV_EMAIL_RELANCE, EV_EMAIL_ATTRIBUTION, EV_EMAIL_MODIFICATION,
+)
 
 # Motif réservé aux hits qui viennent de CHEZ NOUS. Le créateur d'une demande
 # est en copie du mail : il reçoit le même corps, donc le même pixel, et sa
@@ -141,6 +146,7 @@ _CONTEXTE_EVENEMENT = {
     "rfq": EV_EMAIL_ENVOYE,
     "rel": EV_EMAIL_RELANCE,
     "attr": EV_EMAIL_ATTRIBUTION,
+    "rev": EV_EMAIL_MODIFICATION,
 }
 
 

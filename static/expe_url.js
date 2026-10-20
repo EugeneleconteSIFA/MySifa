@@ -289,7 +289,7 @@ const _EXPE_REOUVRIR = {
     ouvrirModalProspect(Number(v));
   },
   modifier_demande: async v => {
-    try { const data = await api('/api/expe/devis/demandes/' + v); if (data && data.demande) ouvrirEditionDemande(data.demande); } catch (e) {}
+    try { const data = await api('/api/expe/devis/demandes/' + v); if (data && data.demande) ouvrirEditionDemande(data.demande, data); } catch (e) {}
   },
   relance: async v => {
     const [rid, did] = _expeDeux(v);

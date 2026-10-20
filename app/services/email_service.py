@@ -326,6 +326,80 @@ def _rfq_email_body_block(
     </p>"""
 
 
+def _rfq_modification_bloc(modification: dict, lang: str) -> str:
+    """Bandeau « la demande a changé » d'un email de modification.
+
+    Il liste chaque champ modifié, ancienne valeur barrée puis nouvelle : le
+    transporteur doit voir en un coup d'œil ce qui l'oblige à reprendre son
+    prix, sans comparer deux emails de mémoire. Le texte d'appel dépend du
+    mode — un renvoi (le prix n'est plus valable) et une simple information
+    (il l'est toujours) ne demandent pas la même chose.
+    """
+    from app.services.expe_email_i18n import (
+        expe_rfq_email_strings,
+        expe_type_envoi_label,
+        expe_type_palette_label,
+    )
+
+    s = expe_rfq_email_strings(lang, cp="", user_nom="")
+    libelles = {
+        "code_postal_destination": s["cp_label"],
+        "type_envoi": s["type_label"],
+        "poids_total_kg": s["weight_label"],
+        "nb_palette": s["pallets_label"],
+        "type_palette": s["pallet_type_label"],
+        "contraintes": s["constraints_label"],
+    }
+
+    def _val(champ: str, v) -> str:
+        if v is None or str(v).strip() == "":
+            return "—"
+        if champ == "type_envoi":
+            return expe_type_envoi_label(str(v), lang)
+        if champ == "type_palette":
+            return expe_type_palette_label(str(v), lang) or str(v)
+        if champ == "poids_total_kg":
+            return f"{_format_number(v, lang)} kg"
+        if champ == "nb_palette":
+            return _format_number(v, lang)
+        return str(v)
+
+    rows = []
+    for c in modification.get("changements") or []:
+        champ = c.get("champ")
+        if champ not in libelles:
+            continue
+        rows.append((
+            libelles[champ],
+            f'<span style="color:#94a3b8;text-decoration:line-through;font-weight:500">'
+            f'{_esc(_val(champ, c.get("avant")))}</span>'
+            f'<span style="color:#94a3b8"> &rarr; </span>'
+            f'<span style="color:#0f172a">{_esc(_val(champ, c.get("apres")))}</span>',
+        ))
+    rechiffrage = modification.get("mode") == "rechiffrage"
+    if lang == "en":
+        txt = (
+            "This request has been updated. Any quote you already sent was based on the "
+            "previous version: please confirm or revise your price on the portal."
+            if rechiffrage
+            else "Additional information on this request. Any quote you already sent remains valid."
+        )
+    else:
+        txt = (
+            "Cette demande a été modifiée. Si vous avez déjà répondu, votre offre porte sur "
+            "l'ancienne version : merci de confirmer ou de réviser votre prix sur le portail."
+            if rechiffrage
+            else "Information complémentaire sur cette demande. Si vous avez déjà répondu, "
+            "votre offre reste valable."
+        )
+    bandeau = (
+        '<div style="background:#fef9e7;border:1px solid #fcd34d;border-radius:10px;'
+        'padding:12px 16px;margin:0 0 14px;font-size:13px;font-weight:700;color:#92400e;'
+        f'line-height:1.55">{_esc(txt)}</div>'
+    )
+    return bandeau + (_email_detail_table(rows) if rows else "")
+
+
 def email_expe_rfq_transport(
     *,
     demande: dict,
@@ -336,6 +410,7 @@ def email_expe_rfq_transport(
     relance: bool = False,
     message_perso: str | None = None,
     date_limite: str | None = None,
+    modification: dict | None = None,
 ) -> tuple[str, str]:
     """Sujet et corps HTML — demande de tarif transport (MyExpé → transporteur).
 
@@ -347,6 +422,10 @@ def email_expe_rfq_transport(
     `relance` ne change pas le corps du message mais son enveloppe : sujet
     préfixé et bandeau de rappel. Renvoyer un texte identique à l'original
     laisserait le destinataire croire à un doublon technique.
+
+    `modification` (`{mode, changements}`, cf. `expe_devis_revision`) fait de
+    l'email l'avis d'une demande modifiée après envoi : sujet préfixé, et les
+    champs changés en tête de chaque langue, avant la demande à jour.
     """
     from app.services.expe_email_i18n import expe_rfq_email_strings
 
@@ -383,19 +462,34 @@ def email_expe_rfq_transport(
             f'{_esc(lbl)} <strong style="color:#0f172a">{_esc(date_limite)}</strong></p>'
         )
 
+    def _modif(lg: str) -> str:
+        return _rfq_modification_bloc(modification, lg) if modification else ""
+
+    rechiffrage = bool(modification) and modification.get("mode") == "rechiffrage"
     if mono:
-        inner = entete + _rfq_email_body_block(
+        inner = entete + _modif(mono) + _rfq_email_body_block(
             demande=demande, user=user, lang=mono, portail_lien=lien
         )
         s = s_en if mono == "en" else s_fr
         subtitle = s["subtitle"]
         footer_note = s["footer"]
         subject = s["subject"]
+        # Modification d'abord, relance ensuite : « Relance — Modification — … »
+        # se lit comme un rappel de la demande modifiée.
+        if modification:
+            if mono == "en":
+                subject = "Update — " + subject
+            else:
+                subject = ("Modification — " if rechiffrage else "Information — ") + subject
         if relance:
             subject = ("Reminder — " if mono == "en" else "Relance — ") + subject
     else:
-        fr_body = _rfq_email_body_block(demande=demande, user=user, lang="fr", portail_lien=lien)
-        en_body = _rfq_email_body_block(demande=demande, user=user, lang="en", portail_lien=lien)
+        fr_body = _modif("fr") + _rfq_email_body_block(
+            demande=demande, user=user, lang="fr", portail_lien=lien
+        )
+        en_body = _modif("en") + _rfq_email_body_block(
+            demande=demande, user=user, lang="en", portail_lien=lien
+        )
         inner = (
             f"{entete}{_email_lang_picker_html()}"
             f'<div class="sifa-em-fr">{fr_body}</div>'
@@ -404,6 +498,10 @@ def email_expe_rfq_transport(
         subtitle = "Demande de tarif / Transport quote"
         footer_note = f"{s_fr['footer']} / {s_en['footer']}"
         subject = f"Demande de tarif transport / Transport quote — SIFA — {cp}"
+        if modification:
+            subject = (
+                "Modification / Update — " if rechiffrage else "Information / Update — "
+            ) + subject
         if relance:
             subject = "Relance / Reminder — " + subject
 

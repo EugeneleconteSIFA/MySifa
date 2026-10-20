@@ -1547,6 +1547,18 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .mon-statut-warn{background:rgba(251,191,36,.12);color:var(--warn)}
 .mon-ecart-danger{color:var(--danger);font-weight:700;font-variant-numeric:tabular-nums}
 .mon-qty-neg{color:var(--danger);font-weight:600}
+.mon-page .mon-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mon-page .mon-sous{font-size:11px;margin-top:2px;white-space:normal}
+.mon-page .mon-th{cursor:pointer;user-select:none;white-space:nowrap}
+.mon-page .mon-th:hover{color:var(--accent)}
+.mon-page .mon-col-filtres th{padding-top:0;padding-bottom:8px}
+.mon-page .mon-col-filtre{width:100%;min-width:64px;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:5px 7px;font-size:12px;color:var(--text);font-family:inherit;font-weight:400;text-transform:none;letter-spacing:0}
+.mon-page .mon-col-filtre:focus{outline:none;border-color:var(--accent)}
+.mon-page .mon-col-filtre.actif{border-color:var(--accent);background:var(--accent-bg)}
+.mon-page .mon-date{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 9px;color:var(--text);font-family:inherit}
+.mon-page .mon-alerte{margin-bottom:12px;padding:10px 14px;border-radius:9px;background:var(--card);border:1px solid var(--warn);font-size:12.5px;color:var(--text)}
+.mon-page .mon-relacher{margin-left:auto;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}
+.mon-page .mon-table td{vertical-align:top}
 .hist-cell-badges{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .hist-ref{font-family:ui-monospace,monospace;font-size:12px;font-weight:700;color:var(--text)}
 .hist-ref .mvt-ref-link,.hist-card-ref .mvt-ref-link{font-family:inherit;font-size:inherit;font-weight:inherit;color:inherit}
@@ -2441,7 +2453,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : onglet, filtres, tri, objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/stock_url.js?v=3"></script>
+<script src="/static/stock_url.js?v=4"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=13"></script>
@@ -2635,7 +2647,7 @@ let S = {
   historiqueFiltresOpen: false,
   historiquePage: 0,
   historiqueHasMore: false,
-  // Monitoring réconciliation ERP
+  // Monitoring des flux produits finis (monEnsureState)
   monitoring: null,
   // Valorisation stock (Contrôle)
   valorisation: null,
@@ -4282,7 +4294,11 @@ function goToTab(tab) {
     if (S.monitoring) {
       S.monitoring.query = '';
       S.monitoring.filterStatut = null;
-      S.monitoring.monPage = 'quantites';
+      S.monitoring.monPage = 'production';
+      S.monitoring.sortColumn = null;
+      S.monitoring.colFiltres = {};
+      S.monitoring.data = null;
+      S.monitoring.cleData = null;
     }
   }
   if (tab !== 'valorisation') {
@@ -19665,425 +19681,256 @@ function buildBobines() {
   return el('div', { cls: 'content' }, page);
 }
 
-// ── Monitoring réconciliation ERP ───────────────────────────────
+// ── Monitoring — flux des produits finis ────────────────────────
+// Deux comparaisons servies par /api/reconciliation/flux/{production,expedition}
+// (app/services/monitoring_flux_pf.py), plus les Écarts matières RVGI.
+// Période par défaut : les 7 derniers jours. Tables triables (3 états) et
+// filtrables (recherche, statut, filtre par colonne) ; tout est dans l'adresse
+// (static/stock_url.js).
+
+const MON_PAGES = [
+  ['production', 'Production → stock'],
+  ['expedition', 'Expédition'],
+  ['ecarts-mp', 'Écarts matières RVGI'],
+];
+const MON_PERIODES = [['last7', '7 derniers jours'], ['last14', '14 jours'], ['last30', '30 jours'], ['perso', 'Dates']];
+const MON_STATUTS = {
+  production: [
+    ['ok', 'OK', 'ok'], ['ecart', 'Écart', 'ecart'], ['non_entre', 'Non entré en stock', 'ecart'],
+    ['sans_saisie', 'Entrée sans saisie', 'warn'], ['ref_diff', 'Réf. différente', 'warn'],
+    ['hors_dossier', 'Hors dossier', 'warn'], ['en_cours', 'En cours', ''],
+  ],
+  expedition: [
+    ['ok', 'OK', 'ok'], ['ecart', 'Écart', 'ecart'], ['bl_sans_sortie', 'BL sans sortie', 'ecart'],
+    ['sortie_sans_bl', 'Sortie sans BL', 'warn'], ['sortie', 'Sortie', ''],
+    ['depart_prevu', 'Départ prévu', ''], ['a_expedier', 'À expédier', 'warn'],
+  ],
+};
+const MON_STATUT_PLANNING = { attente: 'En attente', en_cours: 'En cours', termine: 'Terminé' };
+const MON_STATUT_DEPART = { en_attente: 'En attente', valide: 'Validé' };
+
+function monPad(n) { return String(n).padStart(2, '0'); }
+function monJour(d) { return d.getFullYear() + '-' + monPad(d.getMonth() + 1) + '-' + monPad(d.getDate()); }
+function monDecale(jours) { const d = new Date(); d.setDate(d.getDate() - jours); return monJour(d); }
 
 function monEnsureState() {
   if (!S.monitoring) {
     S.monitoring = {
-      snapshots: [],
-      current: null,
-      lines: [],
-      allLines: [],
+      monPage: 'production',
+      periode: 'last7',
+      du: null,
+      au: null,
       filterStatut: null,
       query: '',
-      loading: false,
-      importing: false,
-      selectedId: null,
-      monPage: 'quantites',
       sortColumn: null,
       sortDirection: 'asc',
+      colFiltres: {},
+      data: null,
+      cleData: null,
+      loading: false,
+      erreur: null,
     };
   }
   return S.monitoring;
 }
 
-function monSnapshotLabel(s) {
-  const dt = fDateTime(s.created_at);
-  const who = (s.created_by_name || '').trim();
-  const file = (s.source_filename || '').trim();
-  if (who) return dt + ' — ' + who;
-  if (file) return dt + ' — ' + file;
-  return dt;
+// Période effective : raccourci glissant ou dates fixes.
+function monPeriode() {
+  const m = monEnsureState();
+  if (m.periode === 'perso') {
+    const au = m.au || monJour(new Date());
+    return { du: m.du || monDecale(6), au };
+  }
+  const n = m.periode === 'last30' ? 29 : m.periode === 'last14' ? 13 : 6;
+  return { du: monDecale(n), au: monJour(new Date()) };
 }
 
-function monFilteredLines() {
+function monStatutDef(page, statut) {
+  return (MON_STATUTS[page] || []).find(s => s[0] === statut) || [statut, statut || '—', ''];
+}
+
+function monBadge(page, statut) {
+  const [, label, ton] = monStatutDef(page, statut);
+  return el('span', { cls: 'mon-statut' + (ton ? ' mon-statut-' + ton : '') }, label);
+}
+
+function monQte(v, unite) {
+  if (v == null || v === '') return '—';
+  return unite ? fU(v, unite) : fN(v);
+}
+
+function monQteTd(v, unite, sous) {
+  return el('td', { cls: 'mon-num' },
+    el('div', null, monQte(v, unite)),
+    sous ? el('div', { cls: 'hist-muted mon-sous' }, sous) : null);
+}
+
+function monEcartTd(l) {
+  if (l.ecart == null) return el('td', { cls: 'mon-num hist-muted' }, '—');
+  const n = Number(l.ecart);
+  const txt = (n > 0 ? '+' : '') + monQte(n, l.unite);
+  return el('td', { cls: 'mon-num' }, el('span', { cls: l.statut === 'ok' || n === 0 ? '' : 'mon-ecart-danger' }, txt));
+}
+
+function monListeTd(items, max) {
+  const lst = (items || []).filter(Boolean);
+  if (!lst.length) return el('td', { cls: 'hist-muted' }, '—');
+  const vis = lst.slice(0, max || 3);
+  return el('td', { title: escAttr(lst.join(', ')) },
+    vis.map(t => el('div', null, t)),
+    lst.length > vis.length ? el('div', { cls: 'hist-muted mon-sous' }, '+' + (lst.length - vis.length)) : null);
+}
+
+// Colonnes : clé (tri, filtre, adresse), libellé, valeur de tri/filtre, cellule.
+function monColonnes(page) {
+  if (page === 'expedition') return [
+    { cle: 'reference', label: 'Référence', val: l => l.reference || '', td: l => el('td', { cls: 'hist-ref' }, l.reference || '—') },
+    { cle: 'designation', label: 'Désignation', val: l => l.designation || '', td: l => el('td', { cls: 'hist-des', title: escAttr(l.designation || '') }, truncStr(l.designation || '', 34) || '—') },
+    { cle: 'clients', label: 'Client', val: l => (l.clients || []).join(' '), td: l => monListeTd(l.clients, 2) },
+    { cle: 'dossiers', label: 'Dossier de prod', val: l => (l.dossiers || []).map(d => d.no_dossier).join(' '),
+      td: l => monListeTd((l.dossiers || []).map(d => d.no_dossier + (d.statut ? ' · ' + (MON_STATUT_PLANNING[d.statut] || d.statut) : '')), 2) },
+    { cle: 'date_livraison', label: 'Livraison prévue', num: false, val: l => l.date_livraison || '', td: l => el('td', null, l.date_livraison ? fD(l.date_livraison) : '—') },
+    { cle: 'bls', label: 'BL RVGI', val: l => (l.bls || []).join(' '), td: l => monListeTd(l.bls, 3) },
+    { cle: 'date_bl', label: 'Date BL', val: l => l.date_bl || '', td: l => el('td', null, l.date_bl ? fD(l.date_bl) : '—') },
+    { cle: 'qte_bl', label: 'Qté BL', num: true, val: l => Number(l.qte_bl) || 0, td: l => monQteTd(l.qte_bl, l.unite) },
+    { cle: 'departs', label: 'Départ MyExpé', val: l => (l.departs || []).map(d => d.jour).join(' '),
+      td: l => monListeTd((l.departs || []).map(d => fD(d.jour) + ' · ' + (MON_STATUT_DEPART[d.statut] || d.statut || '—')), 2) },
+    { cle: 'qte_sortie', label: 'Sortie MyStock', num: true, val: l => Number(l.qte_sortie) || 0,
+      td: l => monQteTd(l.qte_sortie, l.unite, l.nb_sorties ? l.nb_sorties + ' mvt · ' + (l.emplacements_sortie || []).slice(0, 3).join(', ') : '') },
+    { cle: 'derniere_sortie', label: 'Dernière sortie', val: l => l.derniere_sortie || '', td: l => el('td', null, l.derniere_sortie ? fDateTime(l.derniere_sortie) : '—') },
+    { cle: 'stock_actuel', label: 'Stock actuel', num: true, val: l => Number(l.stock_actuel) || 0, td: l => monQteTd(l.stock_actuel, l.unite) },
+    { cle: 'ecart', label: 'Écart', num: true, val: l => l.ecart == null ? -Infinity : Number(l.ecart), td: monEcartTd },
+    { cle: 'statut', label: 'Contrôle', val: l => monStatutDef(page, l.statut)[1], td: l => el('td', null, monBadge(page, l.statut)) },
+  ];
+  return [
+    { cle: 'no_dossier', label: 'Dossier', val: l => l.no_dossier || '', td: l => el('td', { cls: 'hist-ref' }, l.no_dossier || el('span', { cls: 'hist-muted' }, 'Hors dossier')) },
+    { cle: 'reference', label: 'Référence', val: l => l.reference || '',
+      td: l => el('td', { cls: 'hist-ref' }, l.reference || '—',
+        l.statut === 'ref_diff' ? el('div', { cls: 'hist-muted mon-sous' }, 'Stock : ' + (l.refs_stock || []).join(', ')) : null) },
+    { cle: 'designation', label: 'Désignation', val: l => l.designation || '', td: l => el('td', { cls: 'hist-des', title: escAttr(l.designation || '') }, truncStr(l.designation || '', 34) || '—') },
+    { cle: 'client', label: 'Client', val: l => l.client || '', td: l => el('td', null, l.client || '—') },
+    { cle: 'machine', label: 'Machine', val: l => l.machine || '', td: l => el('td', null, l.machine || '—') },
+    { cle: 'statut_planning', label: 'Planning', val: l => MON_STATUT_PLANNING[l.statut_planning] || l.statut_planning || '',
+      td: l => el('td', null, MON_STATUT_PLANNING[l.statut_planning] || l.statut_planning || '—') },
+    { cle: 'qte_of', label: 'Qté OF', num: true, val: l => Number(l.qte_of) || 0, td: l => monQteTd(l.qte_of, 'étiquette') },
+    { cle: 'qte_produite', label: 'Qté saisie', num: true, val: l => Number(l.qte_produite) || 0,
+      td: l => monQteTd(l.qte_produite, 'étiquette',
+        [l.qte_produite_max && l.qte_produite_max !== l.qte_produite ? 'max ' + fN(l.qte_produite_max) : '', l.cloture ? 'clôturé' : ''].filter(Boolean).join(' · ')) },
+    { cle: 'derniere_saisie', label: 'Dernière saisie', val: l => l.derniere_saisie || '', td: l => el('td', null, l.derniere_saisie ? fDateTime(l.derniere_saisie) : '—') },
+    { cle: 'qte_entree', label: 'Entrée MyStock', num: true, val: l => Number(l.qte_entree) || 0,
+      td: l => monQteTd(l.qte_entree, l.unite,
+        [l.nb_entrees ? l.nb_entrees + ' mvt · ' + (l.emplacements_entree || []).slice(0, 3).join(', ') : '',
+         (l.rattachement || []).includes('reference') ? 'rapprochée par la réf.' : '',
+         (l.rattachement || []).includes('of') ? 'rapprochée par l\'OF' : ''].filter(Boolean).join(' · ')) },
+    { cle: 'derniere_entree', label: 'Dernière entrée', val: l => l.derniere_entree || '', td: l => el('td', null, l.derniere_entree ? fDateTime(l.derniere_entree) : '—') },
+    { cle: 'nb_deplacements', label: 'Déplacements', num: true, val: l => Number(l.nb_deplacements) || 0,
+      td: l => l.nb_deplacements
+        ? el('td', null, el('div', null, l.nb_deplacements + ' · ' + monQte(l.qte_deplacee, l.unite)),
+            el('div', { cls: 'hist-muted mon-sous' }, '→ ' + (l.derniere_destination || '—') + (l.dernier_deplacement ? ' le ' + fDateTime(l.dernier_deplacement) : '')))
+        : el('td', { cls: 'hist-muted' }, '—') },
+    { cle: 'stock_restant', label: 'Stock restant', num: true, val: l => Number(l.stock_restant) || 0,
+      td: l => monQteTd(l.stock_restant, l.unite, (l.emplacements_restants || []).slice(0, 3).join(', ')) },
+    { cle: 'ecart', label: 'Écart', num: true, val: l => l.ecart == null ? -Infinity : Number(l.ecart), td: monEcartTd },
+    { cle: 'statut', label: 'Contrôle', val: l => monStatutDef(page, l.statut)[1], td: l => el('td', null, monBadge(page, l.statut)) },
+  ];
+}
+
+function monNormTxt(s) {
+  return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+// Filtre de colonne : « contient » sur le texte ; sur un nombre, accepte
+// aussi « >100 », « <0 », « =0 ».
+function monFiltreOk(col, l, f) {
+  const v = col.val(l);
+  const t = String(f || '').trim();
+  if (!t) return true;
+  if (col.num) {
+    const m = t.replace(/\s/g, '').replace(',', '.').match(/^(>=|<=|>|<|=)?(-?\d+(\.\d+)?)$/);
+    if (m) {
+      const n = Number(m[2]), x = Number(v);
+      if (!Number.isFinite(x)) return false;
+      if (m[1] === '>') return x > n;
+      if (m[1] === '<') return x < n;
+      if (m[1] === '>=') return x >= n;
+      if (m[1] === '<=') return x <= n;
+      return x === n;
+    }
+  }
+  return monNormTxt(v).includes(monNormTxt(t));
+}
+
+function monLignesBase() {
   const m = monEnsureState();
-  let rows = m.allLines || m.lines || [];
-  if (m.filterStatut === 'sans_corresp') {
-    rows = rows.filter(r =>
-      r.statut === 'sans_corresp_erp' || r.statut === 'sans_corresp_mysifa'
-    );
-  } else if (m.filterStatut === 'stock_mysifa_zero') {
-    rows = rows.filter(r => r.stock_mysifa === 0);
-  } else if (m.filterStatut === 'stock_erp_zero') {
-    rows = rows.filter(r => r.stock_erp === 0);
-  } else if (m.filterStatut) {
-    rows = rows.filter(r => r.statut === m.filterStatut);
-  }
-  const q = (m.query || '').trim().toLowerCase();
+  return (m.data && m.data.lignes) || [];
+}
+
+function monLignesFiltrees() {
+  const m = monEnsureState();
+  const cols = monColonnes(m.monPage);
+  let rows = monLignesBase().slice();
+  if (m.filterStatut) rows = rows.filter(l => l.statut === m.filterStatut);
+  const q = monNormTxt((m.query || '').trim());
   if (q) {
-    rows = rows.filter(r =>
-      (r.reference || '').toLowerCase().includes(q) ||
-      (r.designation || '').toLowerCase().includes(q)
-    );
+    rows = rows.filter(l => monNormTxt([l.reference, l.designation, l.no_dossier, l.client,
+      (l.clients || []).join(' '), (l.bls || []).join(' '),
+      (l.dossiers || []).map(d => d.no_dossier).join(' ')].join(' ')).includes(q));
   }
-  // Exclure les références avec stock mySifa = 0 et sans correspondance ERP
-  rows = rows.filter(r => {
-    const stockMysifa = Number(r.stock_mysifa);
-    const isStockMysifaZero = stockMysifa === 0 || r.stock_mysifa == null || r.stock_mysifa === '';
-    const isSansCorrespErp = r.statut === 'sans_corresp_erp';
-    return !(isStockMysifaZero && isSansCorrespErp);
+  Object.entries(m.colFiltres || {}).forEach(([cle, f]) => {
+    const col = cols.find(c => c.cle === cle);
+    if (col && f) rows = rows.filter(l => monFiltreOk(col, l, f));
   });
-  // Exclure les lignes où stock ERP et stock Mysifa sont tous deux égaux à 0
-  rows = rows.filter(r => {
-    const stockErp = Number(r.stock_erp);
-    const stockMysifa = Number(r.stock_mysifa);
-    const isStockErpZero = stockErp === 0 || r.stock_erp == null || r.stock_erp === '';
-    const isStockMysifaZero = stockMysifa === 0 || r.stock_mysifa == null || r.stock_mysifa === '';
-    return !(isStockErpZero && isStockMysifaZero);
-  });
-  // Apply sorting
-  if (m.sortColumn) {
+  const col = cols.find(c => c.cle === m.sortColumn);
+  if (col) {
+    const sens = m.sortDirection === 'desc' ? -1 : 1;
     rows.sort((a, b) => {
-      let valA, valB;
-      switch (m.sortColumn) {
-        case 'reference':
-          valA = (a.reference || '').toLowerCase();
-          valB = (b.reference || '').toLowerCase();
-          break;
-        case 'designation':
-          valA = (a.designation || '').toLowerCase();
-          valB = (b.designation || '').toLowerCase();
-          break;
-        case 'unite':
-          valA = (a.unite || '').toLowerCase();
-          valB = (b.unite || '').toLowerCase();
-          break;
-        case 'stock_erp':
-          valA = Number(a.stock_erp) || 0;
-          valB = Number(b.stock_erp) || 0;
-          break;
-        case 'stock_mysifa':
-          valA = Number(a.stock_mysifa) || 0;
-          valB = Number(b.stock_mysifa) || 0;
-          break;
-        case 'ecart':
-          valA = (Number(a.stock_erp) || 0) - (Number(a.stock_mysifa) || 0);
-          valB = (Number(b.stock_erp) || 0) - (Number(b.stock_mysifa) || 0);
-          break;
-        case 'dernier_mvt_erp':
-          valA = a.dernier_mvt_erp || '';
-          valB = b.dernier_mvt_erp || '';
-          break;
-        case 'mysifa_date_fifo':
-          valA = a.mysifa_date_fifo || '';
-          valB = b.mysifa_date_fifo || '';
-          break;
-        case 'statut':
-          valA = (a.statut || '').toLowerCase();
-          valB = (b.statut || '').toLowerCase();
-          break;
-        default:
-          return 0;
-      }
-      if (valA < valB) return m.sortDirection === 'asc' ? -1 : 1;
-      if (valA > valB) return m.sortDirection === 'asc' ? 1 : -1;
-      return 0;
+      const va = col.val(a), vb = col.val(b);
+      // Les valeurs manquantes vont en bas, dans les deux sens.
+      const vida = va === '' || va === -Infinity, vidb = vb === '' || vb === -Infinity;
+      if (vida !== vidb) return vida ? 1 : -1;
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * sens;
+      return String(va).localeCompare(String(vb), 'fr', { numeric: true }) * sens;
     });
   }
   return rows;
 }
 
-function monToggleSort(column) {
+// Tri en trois états : croissant, décroissant, ordre d'origine.
+function monToggleSort(cle) {
   const m = monEnsureState();
-  if (m.sortColumn === column) {
-    m.sortDirection = m.sortDirection === 'asc' ? 'desc' : 'asc';
-  } else {
-    m.sortColumn = column;
-    m.sortDirection = 'asc';
-  }
+  if (m.sortColumn !== cle) { m.sortColumn = cle; m.sortDirection = 'asc'; }
+  else if (m.sortDirection === 'asc') m.sortDirection = 'desc';
+  else { m.sortColumn = null; m.sortDirection = 'asc'; }
   renderMonitoringView(false);
 }
 
-function monFmtEcart(val) {
-  if (val == null || val === '') return '—';
-  const n = Number(val);
-  if (Number.isNaN(n)) return '—';
-  const sign = n > 0 ? '+' : '';
-  return sign + fN(n);
+function monTitre(page) {
+  if (page === 'expedition') return {
+    titre: 'Monitoring — expédition',
+    sous: 'Références à expédier : BL RVGI, départs MyExpé et dates de livraison des dossiers, contre les sorties MyStock.',
+  };
+  return {
+    titre: 'Monitoring — production → stock',
+    sous: 'Références produites : dossiers au planning et saisies de production, contre les entrées et déplacements MyStock.',
+  };
 }
 
-function monStatutBadge(statut) {
-  if (statut === 'ok') return el('span', { cls: 'mon-statut mon-statut-ok' }, 'OK');
-  if (statut === 'ecart') return el('span', { cls: 'mon-statut mon-statut-ecart' }, 'Écart');
-  if (statut === 'sans_corresp_erp') return el('span', { cls: 'mon-statut mon-statut-warn' }, 'Absent ERP');
-  if (statut === 'sans_corresp_mysifa') return el('span', { cls: 'mon-statut mon-statut-warn' }, 'Absent MySifa');
-  return el('span', { cls: 'mon-statut' }, statut || '—');
-}
-
-function monQtyTd(val, unite) {
-  const n = val != null && val !== '' ? Number(val) : null;
-  const style = n != null && n < 0 ? { color: 'var(--danger)', fontWeight: '600' } : {};
-  const txt = val != null && val !== '' ? (unite ? fU(val, unite) : fN(val)) : '—';
-  return el('td', { style }, txt);
-}
-
-function monEcartTd(ln) {
-  if (ln.ecart == null || ln.ecart === '') return el('td', null, '—');
-  const cls = ln.statut === 'ecart' ? 'mon-ecart-danger' : '';
-  return el('td', null, el('span', { cls }, monFmtEcart(ln.ecart)));
-}
-
-function monMvtErpCell(ln) {
-  const lib = (ln.erp_dernier_mvt_libelle || '').trim();
-  const dt = ln.erp_dernier_mvt_date ? fDateTime(ln.erp_dernier_mvt_date) : '';
-  if (!lib && !dt) return el('td', { cls: 'hist-muted' }, '—');
-  return el('td', null,
-    lib ? el('div', { title: escAttr(lib) }, truncStr(lib, 48)) : null,
-    dt ? el('div', { cls: 'hist-muted', style: { fontSize: '11px', marginTop: '2px' } }, dt) : null,
-  );
-}
-
-function buildMonitoringKpis(snap, allLines) {
-  const sansMysifa = (allLines || []).filter(l => l.statut === 'sans_corresp_mysifa').length;
-  const sansTotal = (snap.nb_sans_corresp || 0) + sansMysifa;
-  const kpis = [
-    { label: 'Références comparées', value: snap.nb_matched || 0, mod: 'accent' },
-    { label: 'Écarts', value: snap.nb_ecarts || 0, mod: (snap.nb_ecarts > 0 ? 'danger' : 'accent') },
-    { label: 'Sans correspondance', value: sansTotal, mod: (sansTotal > 0 ? 'warn' : 'accent') },
-    { label: 'Stocks négatifs', value: snap.nb_negatifs || 0, mod: (snap.nb_negatifs > 0 ? 'danger' : 'accent') },
-  ];
-  // Widget d'accueil (app/services/blocs_registre.py) : le widget suit
-  // toujours le DERNIER import, comme l'ouverture de l'écran.
-  return el('div', { cls: 'dash-kpi-grid', style: { marginBottom: '16px' },
-                     'data-bloc': 'stock.monitoring.kpis',
-                     'data-bloc-valeur-comparees': fN(kpis[0].value),
-                     'data-bloc-nombre-comparees': String(kpis[0].value),
-                     'data-bloc-valeur-ecarts': fN(kpis[1].value),
-                     'data-bloc-nombre-ecarts': String(kpis[1].value),
-                     'data-bloc-valeur-sans-corresp': fN(kpis[2].value),
-                     'data-bloc-nombre-sans-corresp': String(kpis[2].value),
-                     'data-bloc-valeur-negatifs': fN(kpis[3].value),
-                     'data-bloc-nombre-negatifs': String(kpis[3].value) },
-    ...kpis.map(k => el('div', { cls: 'stat-card' },
-      el('div', { cls: 'stat-label' }, k.label),
-      el('div', { cls: 'stat-value ' + k.mod }, fN(k.value)),
-    )),
-  );
-}
-
-function buildMonitoringTableRow(ln) {
-  const ref = ln.reference || '—';
-  const des = ln.designation || '—';
-  const unite = ln.unite || '';
-  return el('tr', null,
-    el('td', { cls: 'hist-ref' }, ref),
-    el('td', { cls: 'hist-des', title: escAttr(des) }, truncStr(des, 40) || '—'),
-    el('td', { cls: 'hist-unite' }, unite || '—'),
-    monQtyTd(ln.stock_erp, unite),
-    monQtyTd(ln.stock_mysifa, unite),
-    monEcartTd(ln),
-    monMvtErpCell(ln),
-    el('td', { cls: 'hist-muted' }, ln.mysifa_date_fifo ? fDateTime(ln.mysifa_date_fifo) : '—'),
-    el('td', null, monStatutBadge(ln.statut)),
-  );
-}
-
-function renderMonitoringResults(container) {
-  if (!container) return;
-  container.innerHTML = '';
+function monPagePills() {
   const m = monEnsureState();
-  if (m.monPage === 'mouvements') {
-    renderMonitoringMovements(container);
-    return;
-  }
-  if (m.loading) {
-    container.appendChild(el('div', { cls: 'hist-loading' },
-      el('div', { cls: 'hist-spinner' }),
-      'Chargement…',
-    ));
-    return;
-  }
-  if (!m.current) {
-    container.appendChild(el('div', { cls: 'hist-empty' },
-      'Aucun snapshot — importez un export ERP Table Stocks (.xlsx) pour démarrer la réconciliation.',
-    ));
-    return;
-  }
-  const rows = monFilteredLines();
-  const q = (m.query || '').trim();
-  const card = el('div', { cls: 'hist-results-card' });
-  card.appendChild(el('div', { cls: 'hist-results-head' },
-    el('div', { cls: 'hist-results-head-left' },
-      el('span', { cls: 'hist-results-title' }, 'Lignes comparées'),
-      el('span', { cls: 'hist-count' }, fN(rows.length) + ' ligne' + (rows.length > 1 ? 's' : '')),
-    ),
-  ));
-  if (!rows.length) {
-    card.appendChild(el('div', { cls: 'hist-empty', style: { border: 'none', borderRadius: '0' } },
-      q
-        ? 'Aucun résultat pour « ' + escHtml(q) + ' ».'
-        : 'Aucune ligne pour ce filtre.',
-    ));
-  } else {
-    const table = el('table', { cls: 'hist-table' });
-    const m = monEnsureState();
-    const sortIcon = (col) => {
-      if (m.sortColumn !== col) return '';
-      return m.sortDirection === 'asc' ? ' ▲' : ' ▼';
-    };
-    table.appendChild(el('thead', null, el('tr', null,
-      el('th', { 
-        style: { cursor: 'pointer', userSelect: 'none' },
-        on: { click: () => monToggleSort('reference') }
-      }, 'Référence' + sortIcon('reference')),
-      el('th', { 
-        style: { cursor: 'pointer', userSelect: 'none' },
-        on: { click: () => monToggleSort('designation') }
-      }, 'Désignation' + sortIcon('designation')),
-      el('th', { 
-        style: { cursor: 'pointer', userSelect: 'none' },
-        on: { click: () => monToggleSort('unite') }
-      }, 'Unité' + sortIcon('unite')),
-      el('th', { 
-        style: { cursor: 'pointer', userSelect: 'none' },
-        on: { click: () => monToggleSort('stock_erp') }
-      }, 'Stock ERP' + sortIcon('stock_erp')),
-      el('th', { 
-        style: { cursor: 'pointer', userSelect: 'none' },
-        on: { click: () => monToggleSort('stock_mysifa') }
-      }, 'Stock MySifa' + sortIcon('stock_mysifa')),
-      el('th', { 
-        style: { cursor: 'pointer', userSelect: 'none' },
-        on: { click: () => monToggleSort('ecart') }
-      }, 'Écart' + sortIcon('ecart')),
-      el('th', { 
-        style: { cursor: 'pointer', userSelect: 'none' },
-        on: { click: () => monToggleSort('dernier_mvt_erp') }
-      }, 'Dernier mvt ERP' + sortIcon('dernier_mvt_erp')),
-      el('th', { 
-        style: { cursor: 'pointer', userSelect: 'none' },
-        on: { click: () => monToggleSort('mysifa_date_fifo') }
-      }, 'Dernier flux MySifa' + sortIcon('mysifa_date_fifo')),
-      el('th', { 
-        style: { cursor: 'pointer', userSelect: 'none' },
-        on: { click: () => monToggleSort('statut') }
-      }, 'Statut' + sortIcon('statut')),
-    )));
-    const tbody = el('tbody', null);
-    rows.forEach(ln => tbody.appendChild(buildMonitoringTableRow(ln)));
-    table.appendChild(tbody);
-    card.appendChild(el('div', { cls: 'hist-table-wrap' }, table));
-  }
-  container.appendChild(card);
+  return el('div', { cls: 'mp-pills', id: 'mon-page-pills' },
+    ...MON_PAGES.map(([id, label]) => el('button', {
+      cls: 'mp-pill' + (m.monPage === id ? ' active' : ''), type: 'button',
+      on: { click: () => { if (m.monPage === id) return; m.monPage = id; monResetFiltres(); renderMonitoringView(true); } },
+    }, label)));
 }
 
-function renderMonitoringMovements(container) {
-  if (!container) return;
-  container.innerHTML = '';
+function monResetFiltres() {
   const m = monEnsureState();
-  if (m.loading) {
-    container.appendChild(el('div', { cls: 'hist-loading' },
-      el('div', { cls: 'hist-spinner' }),
-      'Chargement…',
-    ));
-    return;
-  }
-  if (!m.current) {
-    container.appendChild(el('div', { cls: 'hist-empty' },
-      'Aucun snapshot — importez un export ERP Table Stocks (.xlsx) pour démarrer la réconciliation.',
-    ));
-    return;
-  }
-  const cutoff = Date.now() - 7 * 24 * 3600 * 1000;
-  let rows = (m.allLines || []).filter(ln => {
-    const stockErp = Number(ln.stock_erp);
-    const stockMysifa = Number(ln.stock_mysifa);
-    const isStockErpZero = stockErp === 0 || ln.stock_erp == null || ln.stock_erp === '';
-    const isStockMysifaZero = stockMysifa === 0 || ln.stock_mysifa == null || ln.stock_mysifa === '';
-    if (isStockErpZero && isStockMysifaZero) return false;
-    const erpMs = ln.erp_dernier_mvt_date ? new Date(ln.erp_dernier_mvt_date).getTime() : 0;
-    const erpBougeCetteSemaine = erpMs > cutoff;
-    const mysifaBougeCetteSemaine = (ln.mysifa_mvt_semaine_count || 0) > 0;
-    return erpBougeCetteSemaine || mysifaBougeCetteSemaine;
-  });
-  const card = el('div', { cls: 'hist-results-card' });
-  card.appendChild(el('div', { cls: 'hist-results-head' },
-    el('div', { cls: 'hist-results-head-left' },
-      el('span', { cls: 'hist-results-title' }, 'Mouvements de la semaine'),
-      el('span', { cls: 'hist-count' }, fN(rows.length) + ' référence(s) avec activité cette semaine'),
-    ),
-  ));
-  if (!rows.length) {
-    card.appendChild(el('div', { cls: 'hist-empty', style: { border: 'none', borderRadius: '0' } },
-      'Aucun mouvement ERP ou MySifa enregistré sur les 7 derniers jours.',
-    ));
-  } else {
-    const table = el('table', { cls: 'hist-table' });
-    table.appendChild(el('thead', null, el('tr', null,
-      el('th', null, 'Référence'),
-      el('th', null, 'Désignation'),
-      el('th', null, 'Dernier mvt ERP'),
-      el('th', null, 'Dernier mvt MySifa'),
-      el('th', null, 'ERP semaine'),
-      el('th', null, 'MySifa semaine'),
-      el('th', null, 'Correspondance'),
-    )));
-    const tbody = el('tbody', null);
-    rows.forEach(ln => {
-      const erpMs = ln.erp_dernier_mvt_date ? new Date(ln.erp_dernier_mvt_date).getTime() : 0;
-      const erpBougeCetteSemaine = erpMs > cutoff;
-      const mysifaBougeCetteSemaine = (ln.mysifa_mvt_semaine_count || 0) > 0;
-      const erpColor = erpBougeCetteSemaine ? 'var(--text)' : 'var(--muted)';
-      const mysifaColor = mysifaBougeCetteSemaine ? 'var(--text)' : 'var(--muted)';
-      const erpLib = (ln.erp_dernier_mvt_libelle || '').trim();
-      const erpDt = ln.erp_dernier_mvt_date ? fDateTime(ln.erp_dernier_mvt_date) : '';
-      const erpQte = ln.erp_dernier_mvt_qte != null ? fN(ln.erp_dernier_mvt_qte) : '';
-      const mysifaDt = ln.mysifa_dernier_mvt_date ? fDateTime(ln.mysifa_dernier_mvt_date) : (ln.mysifa_date_fifo ? fDateTime(ln.mysifa_date_fifo) : '');
-      let erpBadge = null;
-      if (erpBougeCetteSemaine) {
-        erpBadge = el('span', { cls: 'mon-statut mon-statut-ok' }, 'Cette semaine');
-      } else {
-        erpBadge = el('span', { cls: 'hist-muted' }, '—');
-      }
-      let mysifaBadge = null;
-      if (mysifaBougeCetteSemaine) {
-        mysifaBadge = el('span', { cls: 'mon-statut mon-statut-ok' }, 'Cette semaine');
-      } else if (ln.mysifa_mvt_semaine_count == null) {
-        mysifaBadge = el('span', { cls: 'hist-muted' }, '?');
-      } else {
-        mysifaBadge = el('span', { cls: 'hist-muted' }, '—');
-      }
-      let correspBadge = null;
-      if (erpBougeCetteSemaine && mysifaBougeCetteSemaine) {
-        correspBadge = el('span', { cls: 'mon-statut mon-statut-ok' }, 'OK');
-      } else if (erpBougeCetteSemaine && !mysifaBougeCetteSemaine) {
-        correspBadge = el('span', { cls: 'mon-statut mon-statut-ecart' }, 'ERP sans MySifa');
-      } else if (!erpBougeCetteSemaine && mysifaBougeCetteSemaine) {
-        correspBadge = el('span', { cls: 'mon-statut mon-statut-warn' }, 'MySifa sans ERP');
-      } else {
-        correspBadge = el('span', { cls: 'hist-muted' }, '—');
-      }
-      tbody.appendChild(el('tr', null,
-        el('td', { cls: 'hist-ref' }, ln.reference || '—'),
-        el('td', { cls: 'hist-des', title: escAttr(ln.designation || '') }, truncStr(ln.designation || '', 40) || '—'),
-        el('td', null,
-          erpLib ? el('div', { style: { color: erpColor }, title: escAttr(erpLib) }, truncStr(erpLib, 36)) : null,
-          erpDt ? el('div', { cls: 'hist-muted', style: { fontSize: '11px', marginTop: '2px', color: erpColor } }, erpDt) : null,
-          erpQte ? el('div', { cls: 'hist-muted', style: { fontSize: '11px', marginTop: '2px', color: erpColor } }, erpQte) : null,
-        ),
-        el('td', null,
-          mysifaDt ? el('div', { style: { color: mysifaColor } }, mysifaDt) : el('span', { cls: 'hist-muted' }, '—'),
-        ),
-        el('td', null, erpBadge),
-        el('td', null, mysifaBadge),
-        el('td', null, correspBadge),
-      ));
-    });
-    table.appendChild(tbody);
-    card.appendChild(el('div', { cls: 'hist-table-wrap' }, table));
-  }
-  container.appendChild(card);
+  m.filterStatut = null; m.query = ''; m.sortColumn = null; m.sortDirection = 'asc'; m.colFiltres = {};
+  m.data = null; m.cleData = null; m.erreur = null;
 }
 
 function buildMonitoringEcartsMp() {
-  const m = monEnsureState();
-  const pills = el('div', { cls: 'mp-pills', id: 'mon-page-pills' },
-    ...[['quantites', 'Quantités'], ['mouvements', 'Mouvements'], ['ecarts-mp', 'Écarts matières RVGI']].map(([id, label]) =>
-      el('button', {
-        cls: 'mp-pill' + (m.monPage === id ? ' active' : ''), type: 'button',
-        on: { click: () => { m.monPage = id; renderMonitoringView(true); } },
-      }, label)));
   const entete = el('div', { style: 'margin-bottom:14px' },
     el('div', { cls: 'hist-head' },
       el('div', null,
@@ -20096,14 +19943,15 @@ function buildMonitoringEcartsMp() {
         el('p', { cls: 'hist-subtitle' },
           'Entrées et sorties de matières : ce que MySifa a écrit, ce que RVGI a enregistré, sur la même période.'),
       )),
-    pills);
+    monPagePills());
   return buildEcartsRvgi(entete);
 }
 
 function renderMonitoringView(fullRebuild) {
   if (S.tab !== 'monitoring') return;
-  if (monEnsureState().monPage === 'ecarts-mp') {
-    // Écran autonome : ni import ERP produits finis, ni instantanés ici.
+  const m = monEnsureState();
+  if (m.monPage === 'ecarts-mp') {
+    // Écran autonome, rendu par buildEcartsRvgi.
     const zone = document.getElementById('scroll-area');
     if (!zone) return;
     zone.innerHTML = '';
@@ -20118,241 +19966,205 @@ function renderMonitoringView(fullRebuild) {
   const caretEnd = ae?.selectionEnd;
   const area = document.getElementById('scroll-area');
   if (!area) return;
-  const resultsOnly = !fullRebuild && document.getElementById('mon-results-wrap');
-  if (resultsOnly) {
+  const wrap = !fullRebuild && document.getElementById('mon-results-wrap');
+  if (wrap) {
+    renderMonitoringResults(wrap);
+  } else {
+    area.innerHTML = '';
+    area.appendChild(buildMonitoring());
     renderMonitoringResults(document.getElementById('mon-results-wrap'));
-    if (focusId) {
-      const foc = document.getElementById(focusId);
-      if (foc) {
-        foc.focus();
-        if (caretStart != null) {
-          try { foc.setSelectionRange(caretStart, caretEnd); } catch (e) {}
-        }
-      }
-    }
-    return;
   }
-  area.innerHTML = '';
-  const content = buildMonitoring();
-  if (content) area.appendChild(content);
-  renderMonitoringResults(document.getElementById('mon-results-wrap'));
   if (focusId) {
     const foc = document.getElementById(focusId);
     if (foc) {
       foc.focus();
-      if (caretStart != null) {
-        try { foc.setSelectionRange(caretStart, caretEnd); } catch (e) {}
-      }
+      if (caretStart != null) { try { foc.setSelectionRange(caretStart, caretEnd); } catch (e) {} }
     }
   }
+  const p = monPeriode();
+  if (m.cleData !== m.monPage + '|' + p.du + '|' + p.au) loadMonitoring();
 }
 
 function buildMonitoring() {
   const m = monEnsureState();
+  const t = monTitre(m.monPage);
   const head = el('div', { cls: 'hist-head' },
     el('div', null,
-      el('h2', { cls: 'hist-title' }, 'Monitoring stocks PF'),
-      el('p', { cls: 'hist-subtitle' }, 'Réconciliation hebdomadaire ERP vs MySifa — produits finis'),
+      el('h2', { cls: 'hist-title' }, t.titre),
+      el('p', { cls: 'hist-subtitle' }, t.sous),
     ),
   );
 
-  const fileInp = el('input', {
-    type: 'file',
-    accept: '.xlsx',
-    style: { display: 'none' },
-    id: 'mon-import-file',
-  });
-  fileInp.addEventListener('change', async () => {
-    const f = fileInp.files && fileInp.files[0];
-    fileInp.value = '';
-    if (!f) return;
-    await monitoringImportFile(f);
-  });
-
-  const importBtn = el('button', {
-    cls: 'btn btn-accent',
-    type: 'button',
-    disabled: m.importing ? true : null,
-    on: { click: () => fileInp.click() },
-  }, m.importing ? 'Import en cours…' : 'Importer l\'export ERP (.xlsx)');
-
-  const snapSel = el('select', {
-    cls: 'mon-snapshot-select',
-    id: 'mon-snapshot-select',
-    disabled: !m.snapshots.length ? true : null,
-  });
-  if (!m.snapshots.length) {
-    snapSel.appendChild(el('option', { value: '' }, 'Aucun snapshot'));
-  } else {
-    m.snapshots.forEach(s => {
-      snapSel.appendChild(el('option', {
-        value: String(s.id),
-        selected: String(m.selectedId) === String(s.id) ? true : null,
-      }, monSnapshotLabel(s)));
+  // Période
+  const barre = el('div', { cls: 'mon-actions', id: 'mon-periode-bar' });
+  MON_PERIODES.forEach(([id, label]) => barre.appendChild(el('button', {
+    cls: 'mp-pill' + (m.periode === id ? ' active' : ''), type: 'button',
+    on: { click: () => {
+      if (id === 'perso' && m.periode !== 'perso') { const p = monPeriode(); m.du = p.du; m.au = p.au; }
+      m.periode = id;
+      renderMonitoringView(true);
+    } },
+  }, label)));
+  if (m.periode === 'perso') {
+    const p = monPeriode();
+    const inp = (cle, val) => el('input', {
+      type: 'date', id: 'mon-' + cle, value: val, cls: 'mon-date',
+      on: { change: (e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) { m[cle] = e.target.value; renderMonitoringView(true); } } },
     });
+    barre.appendChild(el('span', { cls: 'hist-muted' }, 'du'));
+    barre.appendChild(inp('du', p.du));
+    barre.appendChild(el('span', { cls: 'hist-muted' }, 'au'));
+    barre.appendChild(inp('au', p.au));
   }
-  snapSel.addEventListener('change', () => {
-    const id = parseInt(snapSel.value, 10);
-    if (id) loadMonitoringSnapshot(id);
+  barre.appendChild(el('span', { cls: 'hist-muted', id: 'mon-periode-lib', style: { marginLeft: 'auto' } },
+    (() => { const p = monPeriode(); return 'Du ' + fD(p.du) + ' au ' + fD(p.au); })()));
+
+  // Recherche + statuts
+  const searchInp = el('input', {
+    type: 'search', id: 'mon-search',
+    placeholder: m.monPage === 'expedition' ? 'Rechercher (référence, client, BL, dossier…)' : 'Rechercher (dossier, référence, client…)',
+    autocomplete: 'off', spellcheck: 'false',
   });
-
-  const actions = el('div', { cls: 'mon-actions', id: 'mon-actions-bar' },
-    importBtn,
-    fileInp,
-    snapSel,
+  searchInp.value = m.query || '';
+  searchInp.addEventListener('input', (e) => { m.query = e.target.value; renderMonitoringView(false); });
+  searchInp.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { m.query = ''; e.target.value = ''; renderMonitoringView(false); }
+  });
+  const filtres = el('div', { cls: 'mon-filters-row', id: 'mon-filters-bar' },
+    el('div', { cls: 'mon-search-wrap' },
+      el('span', { attrs: { 'aria-hidden': 'true' } }, iconEl('search', 18)),
+      searchInp,
+    ),
+    el('div', { cls: 'mp-pills', id: 'mon-filter-pills' }),
   );
-
-  const kpisWrap = el('div', { id: 'mon-kpis-wrap' });
-  if (m.current) kpisWrap.appendChild(buildMonitoringKpis(m.current, m.allLines));
-
-  const pageDefs = [
-    { id: 'quantites', label: 'Quantités' },
-    { id: 'mouvements', label: 'Mouvements' },
-    { id: 'ecarts-mp', label: 'Écarts matières RVGI' },
-  ];
-  const pagePills = el('div', { cls: 'mp-pills', id: 'mon-page-pills' },
-    ...pageDefs.map(pd => el('button', {
-      cls: 'mp-pill' + (m.monPage === pd.id ? ' active' : ''),
-      type: 'button',
-      on: { click: () => {
-        m.monPage = pd.id;
-        renderMonitoringView(true);
-      } },
-    }, pd.label)),
-  );
-
-  let filtersRow = null;
-  if (m.monPage === 'quantites') {
-    const filterDefs = [
-      { id: null, label: 'Tout' },
-      { id: 'ecart', label: 'Écarts' },
-      { id: 'ok', label: 'OK' },
-      { id: 'sans_corresp', label: 'Sans correspondance' },
-      { id: 'stock_mysifa_zero', label: 'Stock MySIFA = 0' },
-      { id: 'stock_erp_zero', label: 'Stock ERP = 0' },
-    ];
-    const pills = el('div', { cls: 'mp-pills', id: 'mon-filter-pills' },
-      ...filterDefs.map(fd => el('button', {
-        cls: 'mp-pill' + (
-          (fd.id == null && !m.filterStatut) || m.filterStatut === fd.id ? ' active' : ''
-        ),
-        type: 'button',
-        on: { click: () => {
-          m.filterStatut = fd.id;
-          renderMonitoringView(true);
-        } },
-      }, fd.label)),
-    );
-
-    const searchInp = el('input', {
-      type: 'search',
-      id: 'mon-search',
-      placeholder: 'Rechercher (référence, désignation…)',
-      autocomplete: 'off',
-      spellcheck: 'false',
-    });
-    searchInp.value = m.query || '';
-    searchInp.addEventListener('input', (e) => {
-      m.query = e.target.value;
-      renderMonitoringView(false);
-    });
-    searchInp.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        m.query = '';
-        renderMonitoringView(false);
-      }
-    });
-
-    filtersRow = el('div', { cls: 'mon-filters-row', id: 'mon-filters-bar' },
-      el('div', { cls: 'mon-search-wrap' },
-        el('span', { attrs: { 'aria-hidden': 'true' } }, iconEl('search', 18)),
-        searchInp,
-      ),
-      pills,
-    );
-  }
-
-  const resultsWrap = el('div', { id: 'mon-results-wrap' });
 
   return el('div', { cls: 'content mon-page hist-page' },
     head,
-    actions,
-    kpisWrap,
-    pagePills,
-    filtersRow,
-    resultsWrap,
+    monPagePills(),
+    barre,
+    filtres,
+    el('div', { id: 'mon-results-wrap' }),
   );
 }
 
-async function loadMonitoringSnapshot(snapshotId) {
+// Pastilles de statut : comptées sur la période, avant les autres filtres.
+function monRenderStatutPills() {
+  const zone = document.getElementById('mon-filter-pills');
+  if (!zone) return;
   const m = monEnsureState();
+  const base = monLignesBase();
+  const compte = {};
+  base.forEach(l => { compte[l.statut] = (compte[l.statut] || 0) + 1; });
+  zone.innerHTML = '';
+  zone.appendChild(el('button', {
+    cls: 'mp-pill' + (!m.filterStatut ? ' active' : ''), type: 'button',
+    on: { click: () => { m.filterStatut = null; renderMonitoringView(false); } },
+  }, 'Tout · ' + fN(base.length)));
+  (MON_STATUTS[m.monPage] || []).forEach(([id, label]) => {
+    if (!compte[id] && m.filterStatut !== id) return;
+    zone.appendChild(el('button', {
+      cls: 'mp-pill' + (m.filterStatut === id ? ' active' : ''), type: 'button',
+      on: { click: () => { m.filterStatut = m.filterStatut === id ? null : id; renderMonitoringView(false); } },
+    }, label + ' · ' + fN(compte[id] || 0)));
+  });
+}
+
+function renderMonitoringResults(container) {
+  if (!container) return;
+  container.innerHTML = '';
+  const m = monEnsureState();
+  monRenderStatutPills();
+  if (m.erreur) {
+    container.appendChild(el('div', { cls: 'hist-empty', style: { color: 'var(--danger)' } }, m.erreur));
+    return;
+  }
+  if (!m.data) {
+    container.appendChild(el('div', { cls: 'hist-loading' }, el('div', { cls: 'hist-spinner' }), 'Chargement…'));
+    return;
+  }
+  if (m.monPage === 'expedition' && m.data.miroir === false) {
+    container.appendChild(el('div', { cls: 'mon-alerte' },
+      'Miroir RVGI absent : les BL ne sont pas comparés. Seuls les départs, les dates de livraison et les sorties MyStock sont affichés.'));
+  }
+  const cols = monColonnes(m.monPage);
+  const rows = monLignesFiltrees();
+  const nbFiltres = Object.values(m.colFiltres || {}).filter(Boolean).length;
+  const card = el('div', { cls: 'hist-results-card' });
+  card.appendChild(el('div', { cls: 'hist-results-head' },
+    el('div', { cls: 'hist-results-head-left' },
+      el('span', { cls: 'hist-results-title' }, m.monPage === 'expedition' ? 'Références à expédier' : 'Dossiers produits'),
+      el('span', { cls: 'hist-count' }, fN(rows.length) + ' ligne' + (rows.length > 1 ? 's' : '')
+        + (rows.length !== monLignesBase().length ? ' sur ' + fN(monLignesBase().length) : '')),
+    ),
+    nbFiltres ? el('button', {
+      cls: 'btn btn-sm mon-relacher', type: 'button',
+      on: { click: () => { m.colFiltres = {}; renderMonitoringView(false); } },
+    }, 'Retirer les filtres de colonne (' + nbFiltres + ')') : null,
+  ));
+  const sortIcon = (cle) => m.sortColumn !== cle ? '' : (m.sortDirection === 'asc' ? ' ▲' : ' ▼');
+  const table = el('table', { cls: 'hist-table mon-table' });
+  table.appendChild(el('thead', null,
+    el('tr', null, ...cols.map(c => el('th', {
+      cls: 'mon-th' + (c.num ? ' mon-num' : ''),
+      title: 'Trier',
+      on: { click: () => monToggleSort(c.cle) },
+    }, c.label + sortIcon(c.cle)))),
+    el('tr', { cls: 'mon-col-filtres' }, ...cols.map(c => {
+      const inp = el('input', {
+        type: 'text', id: 'mon-f-' + c.cle, cls: 'mon-col-filtre' + ((m.colFiltres || {})[c.cle] ? ' actif' : ''),
+        placeholder: c.num ? '>0' : 'Filtrer', autocomplete: 'off', spellcheck: 'false',
+        'aria-label': 'Filtrer ' + c.label,
+      });
+      inp.value = (m.colFiltres || {})[c.cle] || '';
+      inp.addEventListener('input', (e) => {
+        m.colFiltres = Object.assign({}, m.colFiltres, { [c.cle]: e.target.value });
+        if (!e.target.value) delete m.colFiltres[c.cle];
+        renderMonitoringView(false);
+      });
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { delete m.colFiltres[c.cle]; renderMonitoringView(false); }
+      });
+      return el('th', null, inp);
+    })),
+  ));
+  const tbody = el('tbody', null);
+  if (!rows.length) {
+    const q = (m.query || '').trim();
+    tbody.appendChild(el('tr', null, el('td', { attrs: { colspan: String(cols.length) }, cls: 'hist-empty', style: { border: 'none' } },
+      m.loading ? 'Chargement…'
+        : q ? 'Aucun résultat pour « ' + q + ' ».'
+        : monLignesBase().length ? 'Aucune ligne pour ces filtres.'
+        : 'Aucun mouvement sur la période.')));
+  } else {
+    rows.forEach(l => tbody.appendChild(el('tr', { cls: 'mon-ligne-' + l.statut }, ...cols.map(c => c.td(l)))));
+  }
+  table.appendChild(tbody);
+  card.appendChild(el('div', { cls: 'hist-table-wrap' }, table));
+  container.appendChild(card);
+}
+
+async function loadMonitoring() {
+  const m = monEnsureState();
+  if (m.monPage === 'ecarts-mp') { renderMonitoringView(true); return; }
+  const page = m.monPage;
+  const p = monPeriode();
+  const cle = page + '|' + p.du + '|' + p.au;
+  if (m.cleData === cle && (m.loading || m.data)) return;   // déjà chargé ou en cours
   m.loading = true;
+  m.cleData = cle;
+  m.erreur = null;
+  if (m.data && m.data._cle !== cle) m.data = null;
   renderMonitoringView(false);
   try {
-    const d = await api('/api/reconciliation/snapshots/' + snapshotId);
-    if (d) {
-      m.current = d.snapshot;
-      m.lines = d.lines || [];
-      m.allLines = d.lines || [];
-      m.selectedId = snapshotId;
-    }
+    const d = await api('/api/reconciliation/flux/' + page + '?du=' + encodeURIComponent(p.du) + '&au=' + encodeURIComponent(p.au));
+    if (m.cleData !== cle) return;           // période ou page changée entre-temps
+    m.data = Object.assign({ lignes: [] }, d || {}, { _cle: cle });
   } catch (e) {
-    showToast(e.message || 'Chargement impossible.', 'error');
+    if (m.cleData !== cle) return;
+    m.erreur = (e && e.message) || 'Chargement impossible.';
   }
   m.loading = false;
-  renderMonitoringView(true);
-}
-
-async function loadMonitoring(selectSnapshotId) {
-  const m = monEnsureState();
-  m.loading = true;
-  renderMonitoringView(true);
-  try {
-    const snaps = await api('/api/reconciliation/snapshots');
-    m.snapshots = snaps || [];
-    let id = selectSnapshotId;
-    if (!id && m.snapshots.length) id = m.snapshots[0].id;
-    if (id) {
-      await loadMonitoringSnapshot(id);
-      return;
-    }
-    m.current = null;
-    m.lines = [];
-    m.allLines = [];
-    m.selectedId = null;
-    m.loading = false;
-    renderMonitoringView(true);
-  } catch (e) {
-    m.loading = false;
-    showToast(e.message || 'Chargement impossible.', 'error');
-    renderMonitoringView(true);
-  }
-}
-
-async function monitoringImportFile(file) {
-  const m = monEnsureState();
-  m.importing = true;
-  renderMonitoringView(true);
-  try {
-    const fd = new FormData();
-    fd.append('file', file);
-    const r = await apiUpload('/api/reconciliation/import', fd);
-    const msg = 'Snapshot enregistré'
-      + (r.nb_ecarts != null ? ' — ' + r.nb_ecarts + ' écart(s)' : '')
-      + '.';
-    showToast(msg);
-    await loadMonitoring(r.snapshot_id);
-  } catch (e) {
-    console.error('reconciliation import:', e.message, e);
-    const msg = (e && e.message) ? String(e.message) : 'Import impossible.';
-    showToast(msg.length > 220 ? msg.slice(0, 217) + '…' : msg, 'error');
-    S.toast = { message: msg, type: 'error' };
-    renderToast();
-    setTimeout(() => { S.toast = null; renderToast(); }, 10000);
-  } finally {
-    m.importing = false;
-    renderMonitoringView(true);
-  }
+  renderMonitoringView(false);
 }
 
 // ── Réception matière ───────────────────────────────────────────
@@ -27698,7 +27510,7 @@ function buildStockMenu(){
     tiles.push({ic:'grid',lbl:'Tableau de bord',desc:'Vue d\'ensemble et alertes de stock',go:'dashboard'});
     tiles.push({ic:'layers',lbl:'Matières premières',desc:'Matières, réception et inventaire matière',go:'matieres'});
     tiles.push({ic:'package',lbl:'Produits',desc:'Produits finis, négoce et référentiel',go:'produits-finis'});
-    if(isAdm) tiles.push({ic:'euro',lbl:'Contrôle',desc:'Monitoring ERP et valorisation du stock',go:'monitoring'});
+    if(isAdm) tiles.push({ic:'euro',lbl:'Contrôle',desc:'Flux production, expédition et valorisation du stock',go:'monitoring'});
     tiles.push({ic:'clock',lbl:'Outils',desc:'Historique, étiquettes traça, plan entrepôt',go:'historique'});
   }
   var grid=el('div',{cls:'mystock-menu-tiles'}, tiles.map(function(t){
@@ -27979,17 +27791,17 @@ var STOCK_GUIDES = {
   'mystock-controle': { steps: [
     {
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>`,
-      title: 'Contrôle — Monitoring ERP',
-      body: `<span class="mguide-tag">En cours de développement</span> La section <strong>Contrôle</strong> (encadrement) réconcilie le stock avec l'<strong>ERP</strong> (Monitoring) et le <strong>valorise</strong> en euros. Le Monitoring classera les lignes par statut : concordant, écart, ou <span class="mguide-tag">sans correspondance</span>.`,
-      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>À quoi sert cette section</div><ul class="mguide-svc-list"><li>C'est ici que la direction et l'administration réconcilient le stock avec l'ERP et le valorisent pour la clôture comptable.</li></ul></div></div>`,
+      title: 'Contrôle — Monitoring des flux',
+      body: `Le <strong>Monitoring</strong> rapproche, sur une période (par défaut les <span class="mguide-hl">7 derniers jours</span>), ce que les autres applis disent d'un produit fini et ce que MyStock en a fait. <strong>Production → stock</strong> : dossier au planning, quantité saisie en fin de production, entrées et déplacements MyStock. <strong>Expédition</strong> : BL RVGI, départs MyExpé, date de livraison du dossier, sorties MyStock.`,
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Lire et filtrer</div><ul class="mguide-svc-list"><li>La colonne <strong>Contrôle</strong> classe chaque ligne : OK, Écart, Non entré en stock, BL sans sortie…</li><li>Clic sur un en-tête pour trier (croissant, décroissant, ordre d'origine), champ sous l'en-tête pour filtrer la colonne (« &gt;0 » sur une quantité).</li></ul></div></div>`,
       illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
-        <text x="14" y="22" font-size="12" fill="var(--text)" font-weight="800">Monitoring</text>
-        <rect x="230" y="10" width="102" height="20" rx="9" fill="rgba(251,191,36,.15)" stroke="var(--warn,#fbbf24)"/><text x="281" y="24" font-size="8" fill="var(--warn,#fbbf24)" text-anchor="middle" font-weight="700">En développement</text>
-        <rect x="14" y="36" width="156" height="26" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="24" y="53" font-size="9" fill="var(--text2)">MySifa : 312 réf.</text>
-        <rect x="176" y="36" width="156" height="26" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="186" y="53" font-size="9" fill="var(--text2)">ERP : 315 réf.</text>
-        <g font-size="8" opacity="0.85"><rect x="14" y="70" width="318" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><rect x="22" y="76" width="66" height="14" rx="7" fill="rgba(52,211,153,.15)"/><text x="55" y="87" fill="var(--ok,#34d399)" text-anchor="middle" font-weight="700">Concordant</text><text x="100" y="87" fill="var(--text2)">REF-1201 · 3 = 3</text>
-        <rect x="14" y="98" width="318" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><rect x="22" y="104" width="44" height="14" rx="7" fill="rgba(251,191,36,.2)"/><text x="44" y="115" fill="var(--warn,#fbbf24)" text-anchor="middle" font-weight="700">Écart</text><text x="100" y="115" fill="var(--text2)">REF-1330 · 11 &#8800; 10</text>
-        <rect x="14" y="126" width="318" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><rect x="22" y="132" width="92" height="14" rx="7" fill="rgba(248,113,113,.15)"/><text x="68" y="143" fill="var(--danger,#f87171)" text-anchor="middle" font-weight="700">Sans corresp.</text><text x="122" y="143" fill="var(--text2)">REF-1402 (ERP seul)</text></g>
+        <text x="14" y="22" font-size="12" fill="var(--text)" font-weight="800">Production → stock</text>
+        <rect x="236" y="10" width="96" height="20" rx="10" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="284" y="24" font-size="8" fill="var(--accent)" text-anchor="middle" font-weight="700">7 derniers jours</text>
+        <rect x="14" y="36" width="318" height="20" rx="5" fill="var(--bg)" stroke="var(--border)"/><g font-size="8" fill="var(--muted)"><text x="22" y="50">Dossier</text><text x="92" y="50">Saisi</text><text x="156" y="50">Entré stock</text><text x="230" y="50">Déplacé</text><text x="282" y="50">Contrôle</text></g>
+        <g font-size="8"><rect x="14" y="60" width="318" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="22" y="75" fill="var(--text)">9932689</text><text x="92" y="75" fill="var(--text2)">2,0 M</text><text x="156" y="75" fill="var(--text2)">2,0 M</text><text x="230" y="75" fill="var(--text2)">→ A111</text><rect x="280" y="66" width="34" height="13" rx="6" fill="rgba(52,211,153,.15)"/><text x="297" y="76" fill="var(--success)" text-anchor="middle" font-weight="700">OK</text>
+        <rect x="14" y="88" width="318" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="22" y="103" fill="var(--text)">9932700</text><text x="92" y="103" fill="var(--text2)">500 k</text><text x="156" y="103" fill="var(--muted)">—</text><text x="230" y="103" fill="var(--muted)">—</text><rect x="280" y="94" width="48" height="13" rx="6" fill="rgba(248,113,113,.15)"/><text x="304" y="104" fill="var(--danger)" text-anchor="middle" font-weight="700">Non entré</text>
+        <rect x="14" y="116" width="318" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="22" y="131" fill="var(--text)">9932585</text><text x="92" y="131" fill="var(--text2)">304 k</text><text x="156" y="131" fill="var(--text2)">280 k</text><text x="230" y="131" fill="var(--muted)">—</text><rect x="280" y="122" width="38" height="13" rx="6" fill="rgba(248,113,113,.15)"/><text x="299" y="132" fill="var(--danger)" text-anchor="middle" font-weight="700">Écart</text></g>
+        <text x="14" y="160" font-size="8" fill="var(--muted)">En-tête : trier · champ sous l'en-tête : filtrer la colonne</text>
       </svg>`
     },
     {

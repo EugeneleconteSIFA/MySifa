@@ -826,3 +826,58 @@ def delete_snapshot(request: Request, snapshot_id: int):
         )
         conn.commit()
     return {"ok": True, "snapshot_id": snapshot_id}
+
+
+# ─── Flux produits finis : production → stock, expédition ───────────────────
+#
+# Les deux pages du Monitoring. Lecture seule, sur la base MySifa et le miroir
+# RVGI ; le rapprochement vit dans app/services/monitoring_flux_pf.py.
+
+_FLUX_MAX_JOURS = 93
+
+
+def _periode_flux(du: Optional[str], au: Optional[str]) -> tuple[str, str]:
+    """Période validée, 7 derniers jours par défaut (aujourd'hui compris)."""
+    aujourdhui = datetime.now(_PARIS).date()
+
+    def lire(v: Optional[str], defaut: date) -> date:
+        if not v:
+            return defaut
+        try:
+            return date.fromisoformat(v[:10])
+        except ValueError:
+            raise HTTPException(400, "Date invalide — format AAAA-MM-JJ attendu.")
+
+    fin = lire(au, aujourdhui)
+    debut = lire(du, fin - timedelta(days=6))
+    if debut > fin:
+        debut, fin = fin, debut
+    if (fin - debut).days >= _FLUX_MAX_JOURS:
+        raise HTTPException(400, "Période trop longue — %d jours au plus." % _FLUX_MAX_JOURS)
+    return debut.isoformat(), fin.isoformat()
+
+
+@router.get("/api/reconciliation/flux/production")
+def flux_production(request: Request, du: Optional[str] = Query(None), au: Optional[str] = Query(None)):
+    """Dossiers produits (planning + saisies) contre les entrées et déplacements MyStock."""
+    require_monitoring(request)
+    from app.services.monitoring_flux_pf import flux_production as calcul
+
+    debut, fin = _periode_flux(du, au)
+    with get_db() as conn:
+        return calcul(conn, debut, fin)
+
+
+@router.get("/api/reconciliation/flux/expedition")
+def flux_expedition(request: Request, du: Optional[str] = Query(None), au: Optional[str] = Query(None)):
+    """Références livrées (BL RVGI, départs MyExpé, dates de livraison) contre les sorties MyStock."""
+    require_monitoring(request)
+    from app.services.monitoring_flux_pf import flux_expedition as calcul
+    from app.services import erp_mirror
+
+    debut, fin = _periode_flux(du, au)
+    with get_db() as conn:
+        if not erp_mirror.miroir_present():
+            return calcul(conn, None, debut, fin)
+        with erp_mirror.get_erp_db() as erp:
+            return calcul(conn, erp, debut, fin)
