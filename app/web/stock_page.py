@@ -19779,7 +19779,7 @@ const MON_STATUTS = {
   production: [
     ['ok', 'OK', 'ok'], ['ecart', 'Écart', 'ecart'], ['non_entre', 'Non entré en stock', 'ecart'],
     ['sans_saisie', 'Entrée sans saisie', 'warn'], ['ref_diff', 'Réf. différente', 'warn'],
-    ['hors_dossier', 'Hors dossier', 'warn'], ['en_cours', 'En cours', ''],
+    ['en_cours', 'En cours', ''],
   ],
   expedition: [
     ['ok', 'OK', 'ok'], ['ecart', 'Écart', 'ecart'], ['bl_sans_sortie', 'BL sans sortie', 'ecart'],
@@ -19838,7 +19838,6 @@ const MON_AIDE = {
     non_entre: 'Dossier clôturé en production, rien n\'est entré dans MyStock.',
     sans_saisie: 'Entré en stock sans quantité saisie en fin de production.',
     ref_diff: 'La référence entrée en stock n\'est pas celle du planning.',
-    hors_dossier: 'Entrée de stock rattachée à aucun dossier de la période.',
     en_cours: 'Production en cours, pas encore de fin de dossier.',
   },
   expedition: {
@@ -20308,9 +20307,14 @@ function renderMonitoringResults(container) {
   const voirFiltres = m.filtresOuverts || nbFiltres > 0;
 
   const card = el('div', { cls: 'mon-carte' });
+  const ign = Number(m.data.ajustements_ignores) || 0;
   card.appendChild(el('div', { cls: 'mon-carte-tete' },
     el('span', { cls: 'mon-carte-titre' }, m.monPage === 'expedition' ? 'Références à expédier' : 'Dossiers produits'),
     el('span', { cls: 'mon-compte' }, fN(rows.length) + (rows.length !== total ? ' sur ' + fN(total) : '') + ' ligne' + (rows.length > 1 ? 's' : '')),
+    m.monPage === 'expedition' && Number(m.data.sous_traitance_ignorees) ? el('span', { cls: 'mon-sous', title: 'Références achetées en sous-traitance (RVGI) : non comparées' },
+      fN(m.data.sous_traitance_ignorees) + ' réf. sous-traitée' + (m.data.sous_traitance_ignorees > 1 ? 's' : '') + ' non affichée' + (m.data.sous_traitance_ignorees > 1 ? 's' : '')) : null,
+    ign && m.monPage === 'production' ? el('span', { cls: 'mon-sous', title: 'Entrées de stock rattachées à aucun dossier : ajustements, non comparés' },
+      fN(ign) + ' ajustement' + (ign > 1 ? 's' : '') + ' sans dossier non affiché' + (ign > 1 ? 's' : '')) : null,
     (nbFiltres || m.filterStatut || m.filterEtat || (m.query || '').trim()) ? el('button', {
       cls: 'mon-relacher', type: 'button',
       on: { click: () => { m.colFiltres = {}; m.filterStatut = null; m.filterEtat = null; m.query = ''; renderMonitoringView(true); } },
