@@ -19,7 +19,8 @@
  *              explorateur : dossier, fichier, corbeille ;
  *              FSC : sous (appro), filtre, debut, fin, eligible, certifies ;
  *              EUDR : filtre, bobines
- *   formulaires filtre (actifs par défaut) ; objet formulaire (éditeur)
+ *   formulaires filtre (actifs par défaut) ; objet formulaire (éditeur) ;
+ *              fenêtre ia_formulaire (nouveau | modifier)
  *   fenêtres   voir _QUAL_OUVREURS — toutes celles de #mroot et les deux
  *              modales fixes (création et import de NC).
  * Hors adresse : textes de recherche, confirmations (suppression), sous-
@@ -76,6 +77,7 @@ const _QUAL_OUVREURS = [
   ['eudrOuvrirPdf',                'pdf_eudr',           () => 'apercu'],
   ['eudrOuvrirEnvoi',              'envoi_eudr',         () => 'formulaire'],
   ['eudrVoirReponse',              'reponse_eudr',       a => a[0]],
+  ['formuIaOuvrir',                'ia_formulaire',      a => a[0] === 'modifier' ? 'modifier' : 'nouveau'],
 ];
 const _qualFixe = cle => { const o = _QUAL_OUVREURS.find(x => x[1] === cle); return o ? o[3] || null : null; };
 
@@ -249,6 +251,7 @@ const _QUAL_REOUVRIR = {
   pdf_eudr:             async () => { await _qualAttendre(() => S.eudr.data); eudrOuvrirPdf(); },
   envoi_eudr:           async () => { await _qualAttendre(() => S.eudr.data); eudrOuvrirEnvoi(); },
   reponse_eudr:         async v => { await _qualAttendre(() => S.eudr.data); eudrVoirReponse(_qualNum(v)); },
+  ia_formulaire:        v => { if (v === 'modifier') { if (S.view === 'formulaire-edit') formuIaOuvrir('modifier'); } else formuIaOuvrir('nouveau'); },
 };
 const _QUAL_FERMER = {
   nouvelle_nc: () => closeCreateModal(),

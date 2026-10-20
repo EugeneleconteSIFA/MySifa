@@ -1296,6 +1296,21 @@ ETIQ_IA_MODELES = (
 
 def etiq_ia_modeles() -> list[dict]:
     return [{"id": i, "libelle": l, "aide": a, "repli": r} for i, l, a, r in ETIQ_IA_MODELES]
+
+
+# MyQualité › Formulaires : l'assistant construit un formulaire depuis une
+# consigne ou un formulaire papier (photo, PDF). Même liste et même logique
+# que les étiquettes spécifiques : choix de l'utilisateur à chaque appel,
+# identifiant hors liste refusé par le serveur.
+FORMULAIRES_IA_MODELE = os.getenv("FORMULAIRES_IA_MODELE", "claude-sonnet-5-5")
+FORMULAIRES_IA_MODELES = (
+    ("claude-sonnet-5-5", "Claude Sonnet 5.5", "Recommandé — formulaires complets, lecture des documents scannés.", True),
+    ("claude-haiku-5-5", "Claude Haiku 5.5", "Plus rapide et moins cher, pour les retouches simples.", False),
+)
+
+
+def formulaires_ia_modeles() -> list[dict]:
+    return [{"id": i, "libelle": l, "aide": a, "repli": r} for i, l, a, r in FORMULAIRES_IA_MODELES]
 ETIQ_UPLOAD_DIR = os.path.join(UPLOADS_ROOT, "etiquettes_specifiques")
 
 # ─── Agent IA (widget présent sur tout le site) ───────────────────
