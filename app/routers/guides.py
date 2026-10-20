@@ -39,6 +39,7 @@ GUIDE_CATALOG = [
     {"key": "nc-list",          "label": "MyQualité — Non-conformités", "module": "MyQualité"},
     {"key": "audits",           "label": "MyQualité — Audits client",   "module": "MyQualité"},
     {"key": "ref-rse",          "label": "MyQualité — Référentiel RSE", "module": "MyQualité"},
+    {"key": "formulaires",      "label": "MyQualité — Formulaires",     "module": "MyQualité"},
 ]
 
 

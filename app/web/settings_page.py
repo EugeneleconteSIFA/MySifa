@@ -8322,6 +8322,7 @@ const _FMT_GUIDES = {
   'nc-list': 'MyQualité — Non-conformités',
   'audits': 'MyQualité — Audits client',
   'ref-rse': 'MyQualité — Référentiel RSE',
+  'formulaires': 'MyQualité — Formulaires',
   'planningrh-overview': 'Planning RH — Vue d\'ensemble',
   'planningrh-operator': 'Planning RH — Ma semaine',
   'taches-kanban': 'Gestionnaire de tâches — Kanban',

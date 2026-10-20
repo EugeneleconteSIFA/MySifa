@@ -19,6 +19,7 @@
  *              explorateur : dossier, fichier, corbeille ;
  *              FSC : sous (appro), filtre, debut, fin, eligible, certifies ;
  *              EUDR : filtre, bobines
+ *   formulaires filtre (actifs par défaut) ; objet formulaire (éditeur)
  *   fenêtres   voir _QUAL_OUVREURS — toutes celles de #mroot et les deux
  *              modales fixes (création et import de NC).
  * Hors adresse : textes de recherche, confirmations (suppression), sous-
@@ -37,8 +38,10 @@ let _qualNcVisee = null;      // openDetail() passe en vue détail AVANT de char
 const _QUAL_VUES = {
   menu: 'menu', audits: 'audits-list', ressources: 'ressources-list',
   certifications: 'sifa-docs-list', referentiel: 'ref-list',
+  formulaires: 'formulaires-list',
 };
-const _QUAL_VUES_HASH = ['menu', 'list', 'audits-list', 'ressources-list', 'sifa-docs-list', 'ref-list'];
+const _QUAL_VUES_HASH = ['menu', 'list', 'audits-list', 'ressources-list', 'sifa-docs-list', 'ref-list', 'formulaires-list'];
+const _QUAL_FORMU_FILTRES = ['actifs', 'brouillon', 'publie', 'archive'];
 const _QUAL_SECTIONS = { explorateur: 'explorer', fsc: 'fsc', eudr: 'eudr' };
 
 // [fonction, clé d'adresse, valeur tirée des arguments, conteneur fixe éventuel]
@@ -139,6 +142,8 @@ function qualiteParams() {
     p.fournisseur = S.currentRes.fournisseur.id; nav = 'fournisseur:' + p.fournisseur;
   } else if (v === 'ressources-group' && S.currentGroupe) {
     p.groupe = S.currentGroupe.groupe; nav = 'groupe:' + p.groupe;
+  } else if (v === 'formulaire-edit' && S.formu && S.formu.courant) {
+    p.formulaire = S.formu.courant.id; nav = 'formulaire:' + p.formulaire;
   } else {
     const vue = Object.keys(_QUAL_VUES).find(k => _QUAL_VUES[k] === v);
     if (vue) p.vue = vue;
@@ -149,6 +154,8 @@ function qualiteParams() {
     if (S.filterGravite !== 'all') p.gravite = S.filterGravite;
   } else if (v === 'audits-list') {
     if (S.auditFilterStatut !== 'all') p.statut = S.auditFilterStatut;
+  } else if (v === 'formulaires-list' && S.formu) {
+    if (S.formu.filtre !== 'actifs') p.filtre = S.formu.filtre;
   } else if (v === 'ref-list') {
     if (S.refFilterCat !== 'all') p.categorie = S.refFilterCat;
     if (S.refFilterStatV !== 'all') p.validation = S.refFilterStatV;
@@ -277,6 +284,7 @@ async function qualiteAllerUrl(complet) {
   else if (u.a('fiche')) vue = 'ref-detail';
   else if (u.a('fournisseur')) vue = 'ressources-detail';
   else if (u.a('groupe')) vue = 'ressources-group';
+  else if (u.a('formulaire')) vue = 'formulaire-edit';
   else if (u.a('vue')) vue = _QUAL_VUES[u.get('vue')] || null;
   else if (h && _QUAL_VUES_HASH.indexOf(h) !== -1) vue = h;
   if (!vue && complet) vue = 'list';
@@ -371,6 +379,13 @@ async function qualiteAllerUrl(complet) {
         else if (!fid && S.ged.detail) gedCloseDetail();
       }
     }
+  } else if (vue === 'formulaires-list' && S.formu) {
+    const fi = ou('filtre', 'actifs');
+    if (fi !== undefined) S.formu.filtre = _QUAL_FORMU_FILTRES.indexOf(fi) !== -1 ? fi : 'actifs';
+    setView('formulaires-list');
+  } else if (vue === 'formulaire-edit' && S.formu) {
+    const id = u.get('formulaire');
+    if (/^\d+$/.test(String(id)) && !(S.view === 'formulaire-edit' && S.formu.courant && memes(S.formu.courant.id, id))) await formuOuvrir(Number(id));
   } else if (vue === 'menu') {
     setView('menu');
   }
