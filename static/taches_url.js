@@ -23,6 +23,8 @@
 let _tacUrlPrete = false;
 let _tacDemarre = false;
 let _tacNouvelle = null;      // fenêtre de création ouverte : 'formulaire' ou statut de sa colonne
+// La fiche chargée est {tache, commentaires, fichiers…} : l'identifiant est dans `tache`.
+const _tacOuverte = () => (S.detail && S.detail.tache && S.detail.tache.id) || null;
 const _TAC_FILTRES = ['assigne', 'createur', 'priorite', 'type', 'module', 'service'];
 const _TAC_ONGLETS = ['detail', 'commentaires', 'fichiers', 'activite'];
 
@@ -48,8 +50,9 @@ function tachesParams() {
     if (!S.sousTaches) p.sous = 0;
     if (S.tri && !(S.tri.champ === 'ordre' && S.tri.sens === 'asc')) p.tri = S.tri.champ + ':' + S.tri.sens;
   }
-  if (S.detail && S.detail.id) {
-    p.tache = S.detail.id; nav += '/tache:' + S.detail.id;
+  const ouverte = _tacOuverte();
+  if (ouverte) {
+    p.tache = ouverte; nav += '/tache:' + ouverte;
     if (S.detailTab && S.detailTab !== 'detail') { p.onglet = S.detailTab; nav += '/' + S.detailTab; }
   }
   const m = document.getElementById('modal-root');
@@ -117,7 +120,7 @@ async function _tacObjet(u, complet) {
   const id = u.get('tache', null);
   if (id && /^\d+$/.test(id)) {
     const onglet = u.get('onglet', 'detail', _TAC_ONGLETS);
-    if (!(S.detail && String(S.detail.id) === id)) {
+    if (String(_tacOuverte()) !== id) {
       S.detailTab = onglet;
       await openDetail(Number(id), { silent: true });
     } else if (S.detailTab !== onglet) { S.detailTab = onglet; renderDrawer(); }

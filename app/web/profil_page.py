@@ -357,6 +357,8 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 <script src="/static/chat_widget.js?v=13"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
+<script src="/static/mysifa_url.js?v=4"></script>
+<script src="/static/profil_url.js?v=1"></script>
 <script>
 const ROLE_LABELS={
   direction:'Direction',administration:'Administration',fabrication:'Fabrication',
@@ -488,7 +490,7 @@ function showTab(tab, opts){
   if(tab==='calendrier')renderCalendrier();
   if(tab==='notifs')renderNotifs();
   closeSidebar();
-  if(!silent){try{var target='#'+tab;if(location.hash!==target)history.replaceState(null,'',target);}catch(e){}}
+  // L'adresse (?onglet=) est tenue par static/profil_url.js.
 }
 
 // ── Complétion profil ─────────────────────────────────────────────
@@ -1266,6 +1268,7 @@ if(window.MySifaSidebar)MySifaSidebar.configure({onTheme:()=>{
     if(window.MySifaHumeur)requestAnimationFrame(()=>MySifaHumeur.maybeShow(ME));
     var _initTab=_readProfilTab(); if(_initTab!=='info') showTab(_initTab,{silent:false});
     if(location.hash&&location.hash.startsWith('#cal-'))openCalColorFromHash();
+    if(typeof profilDemarrerUrl==='function') profilDemarrerUrl();
   }catch(e){
     if(e.message!=='auth'){
 
