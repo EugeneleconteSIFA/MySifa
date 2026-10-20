@@ -527,6 +527,8 @@ body.cal-dragging{user-select:none}
 <script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_calendar.js"></script>
 <script>window.__MYSIFA_APP__='calendrier';</script>
+<script src="/static/mysifa_url.js?v=4"></script>
+<script src="/static/calendrier_url.js?v=1"></script>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
@@ -2011,7 +2013,11 @@ function lireLienDirect(){
     S.lienDirect={id:id,action:q.get('action')||''};
     const jour=parseDayStr(q.get('jour')||'');
     if(jour)S.anchor=jour;
-    history.replaceState(null,'',location.pathname);
+    // Seuls les paramètres du lien sont retirés : vue, calendriers et autres
+    // clés de l'adresse (static/calendrier_url.js) restent lisibles.
+    ['ev','action','jour'].forEach(k=>q.delete(k));
+    const reste=q.toString();
+    history.replaceState(history.state,'',location.pathname+(reste?'?'+reste:''));
   }catch(e){}
 }
 function consommerLienDirect(){
@@ -3434,6 +3440,7 @@ window.addEventListener('resize',()=>{
     syncThemeBtn();
     bindCalendarBodyClicks();
     await fetchEvents();
+    if(typeof calDemarrerUrl==='function') await calDemarrerUrl();
   }catch(e){
     if(e.message!=='auth')showToast(e.message||'Initialisation impossible','danger');
   }

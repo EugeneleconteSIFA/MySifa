@@ -1703,8 +1703,9 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_ai_chat.js?v=5"></script>
 <script src="/static/mysifa_guides.js"></script>
-<!-- Adresse de la page (url-etat.md) : MyExpé, MyCompta, MyRH ; chacun inactif hors de son chemin. -->
+<!-- Adresse de la page (url-etat.md) : portail, MyExpé, MyCompta, MyRH ; chacun inactif hors de son chemin. -->
 <script src="/static/mysifa_url.js?v=4"></script>
+<script src="/static/portail_url.js?v=1"></script>
 <script src="/static/expe_url.js?v=3"></script>
 <script src="/static/compta_url.js?v=1"></script>
 <script src="/static/myrh_url.js?v=1"></script>
@@ -10807,13 +10808,14 @@ function render(){
   else if(S.app==='portal'){
     root.appendChild(renderPortal());
     if(window._postitDragCleanup) window._postitDragCleanup();
+    if(typeof portailDemarrerUrl==='function') portailDemarrerUrl();
   }
   else if(S.app==='stock'){root.appendChild(renderStock());}
   else if(S.app==='compta'){root.appendChild(renderCompta());}
   else if(S.app==='myrh'){root.appendChild(renderMyRH());}
   else if(S.app==='expe'){root.appendChild(renderExpe());}
   else if(S.app==='devis'){window.location.href='/pricing';return;}
-  else if(S.app==='messages'){root.appendChild(renderMessagesApp());}
+  else if(S.app==='messages'){root.appendChild(renderMessagesApp());if(typeof portailDemarrerUrl==='function') portailDemarrerUrl();}
   else if(S.app==='prod'){
     if(isComptaPlanning(S.user)){window.location.href='/planning';return;}
     const titles={
