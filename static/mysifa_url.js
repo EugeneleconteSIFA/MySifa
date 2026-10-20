@@ -118,7 +118,9 @@
     var actuelle = location.pathname + location.search + location.hash;
     if (reculEnCours) { enAttente = { params: params, opts: opts }; return; }
     var st = history.state || {};
-    var libre = !enRetour && !embarque() && navCourante !== null && nav !== navCourante;
+    // `opts.remplacer` : l'entrée vient d'être créée par la page elle-même
+    // (location.hash = …, ERP RVGI) ; on la met au propre sans en ajouter une.
+    var libre = !opts.remplacer && !enRetour && !embarque() && navCourante !== null && nav !== navCourante;
     try {
       if (libre && st.depuisUrl === cible) {
         reculEnCours = true;

@@ -687,6 +687,8 @@ body.light .tdb-tip{box-shadow:0 12px 34px rgba(15,23,42,.16)}
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_guides.js"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
+<script src="/static/mysifa_url.js?v=5"></script>
+<script src="/static/erp_url.js?v=1"></script>
 
 <div class="sidebar-overlay" id="sb-ov" onclick="fermerSidebar()"></div>
 
@@ -3498,6 +3500,8 @@ async function boot(){
     document.getElementById('corps').innerHTML='<div class="vide-msg">'+esc(e.message)+'</div>';
     return;
   }
+  // Adresse complète (fiche, tri, page, filtres d'en-tête) : static/erp_url.js.
+  if(typeof erpBrancherUrl==='function') erpBrancherUrl();
   renderFraicheur();renderNav();renderMenuService();initRecherche();initMenuService();appliquerHash();
   window.addEventListener('hashchange',appliquerHash);
   initGuides();
