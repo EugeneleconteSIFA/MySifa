@@ -6755,6 +6755,98 @@ async def set_matiere_emplacement(matiere_id: int, request: Request):
     return {"ok": True, "emplacements": emplacements}
 
 
+@router.get("/api/stock/mp-emplacements-connus")
+def mp_emplacements_connus(request: Request):
+    """Emplacements déjà utilisés par les matières (noms du terrain compris), et le plan.
+
+    Sert au champ emplacement de la fiche matière : on choisit dans la liste,
+    ou on tape un nom nouveau.
+    """
+    require_stock(request)
+    with get_db() as conn:
+        try:
+            rows = conn.execute(
+                """SELECT emplacement, COUNT(DISTINCT matiere_id) AS n
+                     FROM mp_emplacements WHERE quantite > 0
+                    GROUP BY emplacement ORDER BY emplacement"""
+            ).fetchall()
+        except sqlite3.Error:
+            rows = []
+        plan = conn.execute("SELECT code FROM emplacements_plan ORDER BY code").fetchall()
+    utilises = [{"code": r["emplacement"], "matieres": int(r["n"] or 0)} for r in rows]
+    vus = {u["code"] for u in utilises}
+    return {"utilises": utilises, "plan": [r["code"] for r in plan if r["code"] not in vus]}
+
+
+@router.put("/api/stock/matieres/{matiere_id}/emplacements/{empl_id}")
+async def update_matiere_emplacement(matiere_id: int, empl_id: int, request: Request):
+    """Modifie une ligne d'emplacement : code, laize, quantité.
+
+    Si la cible (même code, même laize) existe déjà, les quantités s'additionnent
+    et la ligne d'origine disparaît : on a déplacé des bobines vers un endroit
+    qui en contenait déjà. Le stock total n'est pas modifié.
+    """
+    user = require_stock_write(request)
+    body = await request.json() or {}
+    code = str(body.get("emplacement") or "").strip().upper()
+    if not code:
+        raise HTTPException(400, "Emplacement obligatoire.")
+    if len(code) > 20 or not _MP_EMPL_RE.match(code):
+        raise HTTPException(400, "Emplacement invalide — code de grille (ex. A121) ou nom du terrain, 20 caractères au plus.")
+    try:
+        quantite = float(str(body.get("quantite", "")).replace(",", "."))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Quantité invalide.") from None
+    if quantite <= 0:
+        raise HTTPException(400, "Quantité invalide — valeur positive attendue.")
+    auteur = (user.get("nom") or "").strip() or None
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM mp_emplacements WHERE id=? AND matiere_id=?", (empl_id, matiere_id)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Emplacement non trouvé.")
+        mp = conn.execute(
+            "SELECT id, categorie, reference FROM matieres_premieres WHERE id=?", (matiere_id,)
+        ).fetchone()
+        laize_id = int(row["laize_id"] or 0)
+        if _mp_is_laizee(mp["categorie"]) and body.get("laize_id") not in (None, ""):
+            try:
+                laize_id = int(body.get("laize_id"))
+            except (TypeError, ValueError):
+                raise HTTPException(400, "laize_id invalide.") from None
+            if not conn.execute(
+                "SELECT 1 FROM mp_matiere_laizes WHERE matiere_id=? AND laize_id=?",
+                (matiere_id, laize_id),
+            ).fetchone():
+                raise HTTPException(400, "Cette laize n'est pas associée à cette matière.")
+        now = _now_paris().strftime("%Y-%m-%dT%H:%M:%S")
+        cible = conn.execute(
+            "SELECT id, quantite FROM mp_emplacements WHERE matiere_id=? AND laize_id=? AND emplacement=? AND id<>?",
+            (matiere_id, laize_id, code, empl_id),
+        ).fetchone()
+        fusion = bool(cible)
+        if cible:
+            conn.execute(
+                "UPDATE mp_emplacements SET quantite=?, updated_at=?, updated_by_name=? WHERE id=?",
+                (float(cible["quantite"] or 0) + quantite, now, auteur, cible["id"]),
+            )
+            conn.execute("DELETE FROM mp_emplacements WHERE id=?", (empl_id,))
+        else:
+            conn.execute(
+                """UPDATE mp_emplacements SET emplacement=?, laize_id=?, quantite=?,
+                          updated_at=?, updated_by_name=? WHERE id=?""",
+                (code, laize_id, quantite, now, auteur, empl_id),
+            )
+        conn.commit()
+        emplacements = _mp_emplacements_par_matiere(conn).get(int(matiere_id), [])
+    log_action(user=user, request=request, module="stock", action="UPDATE",
+               objet=f"matiere:{matiere_id}:emplacement:{code}",
+               detail=f"{mp['reference']} · {row['emplacement']} → {code} = {quantite:g}"
+                      + (" (regroupé)" if fusion else ""))
+    return {"ok": True, "fusion": fusion, "emplacements": emplacements}
+
+
 @router.delete("/api/stock/matieres/{matiere_id}/emplacements/{empl_id}")
 def delete_matiere_emplacement(matiere_id: int, empl_id: int, request: Request):
     user = require_stock_write(request)

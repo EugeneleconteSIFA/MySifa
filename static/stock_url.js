@@ -296,6 +296,8 @@ function _stockParamsBase() {
     if (S.mpVarGrain && S.mpVarGrain !== 'fournisseur') p.var_grain = S.mpVarGrain;
     if (S.mpVarFiltreFourn) p.var_fournisseur = S.mpVarFiltreFourn;
     if (S.mpVarFiltreLaize) p.var_laize = S.mpVarFiltreLaize;
+    // Ligne dépliée de la fiche (laize de l'onglet Stock, article fournisseur).
+    if (S.selMatiere.ouvert) p.detail = S.selMatiere.ouvert;
     return { params: p, nav: nav + '/matiere:' + p.matiere + '/' + (p.fiche || '') };
   }
   // loadProduit() range la réponse de l'API telle quelle : l'id est dans
@@ -622,6 +624,9 @@ async function stockAllerUrl() {
     if (!(S.selMatiere && S.selMatiere.matiere && S.selMatiere.matiere.id === matiere)) { try { await loadMatiere(matiere); } catch (e) {} }
     const fiche = u.get('fiche', 'stock', ['stock', 'fournisseurs', 'mouvements']);
     if (S.selMatiere && S.selMatiere.vue !== fiche) { S.selMatiere.vue = fiche; renderContent(); }
+    const det = u.get('detail', null);
+    const detOk = (det && /^(laize|article):\d+$/.test(det)) ? det : null;
+    if (S.selMatiere && (S.selMatiere.ouvert || null) !== detOk) { S.selMatiere.ouvert = detOk; renderContent(); }
   } else if (produit > 0) {
     try { await loadProduit(produit); } catch (e) {}
   } else if (ref) {

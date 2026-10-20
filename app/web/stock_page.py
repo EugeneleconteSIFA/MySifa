@@ -1430,7 +1430,7 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-cond-champ{display:inline-flex;align-items:center;gap:6px;margin-right:10px;white-space:nowrap;font-size:12px;color:var(--muted)}
 .mp-cond-inp{width:96px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
 .mp-cond-inp:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
-.mp-var-table td .mp-cond-inp{background:var(--bg)}
+.mp-var-table td .mp-cond-inp{background:var(--card)}
 .mp-modal.mp-modal-cond{max-width:980px;padding:22px}
 .mp-cond-scroll{max-height:62vh;overflow:auto;margin-top:10px}
 .mp-cond-table td{vertical-align:middle}
@@ -1468,8 +1468,95 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-empl-code{font-size:13px;font-weight:700;color:var(--text);min-width:56px}
 .mp-empl-lbl{flex:1;min-width:0;font-size:12px;color:var(--muted)}
 .mp-empl-qty{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text)}
-.mp-empl-ico{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text2);cursor:pointer}
-.mp-empl-ico:hover{border-color:var(--accent);color:var(--accent)}
+.mp-empl-ico{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);cursor:pointer;transition:border-color .12s,color .12s,background .12s}
+.mp-empl-ico:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.mp-empl-ico.ico-danger:hover{border-color:var(--danger);color:var(--danger);background:color-mix(in srgb,var(--danger) 12%,transparent)}
+.mp-empl-ico.ico-warn:hover{border-color:var(--warn);color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.mp-empl-ico.ico-ok:hover{border-color:var(--success);color:var(--success);background:color-mix(in srgb,var(--success) 12%,transparent)}
+/* Actions de la fiche matière : mêmes teintes que les produits finis
+   (entrée verte, inventaire violet), la correction en accent. */
+.mp-act.mp-act--entree{background:color-mix(in srgb,var(--success) 14%,transparent);border-color:color-mix(in srgb,var(--success) 40%,transparent);color:var(--success)}
+.mp-act.mp-act--entree svg{color:var(--success)}
+.mp-act.mp-act--entree:hover{border-color:var(--success);color:var(--success);background:color-mix(in srgb,var(--success) 22%,transparent)}
+.mp-act.mp-act--inventaire{background:color-mix(in srgb,var(--c2) 14%,transparent);border-color:color-mix(in srgb,var(--c2) 40%,transparent);color:var(--c2)}
+.mp-act.mp-act--inventaire svg{color:var(--c2)}
+.mp-act.mp-act--inventaire:hover{border-color:var(--c2);color:var(--c2);background:color-mix(in srgb,var(--c2) 22%,transparent)}
+.mp-act.mp-act--ajust{background:var(--accent-bg);border-color:color-mix(in srgb,var(--accent) 40%,transparent);color:var(--accent)}
+.mp-act.mp-act--ajust:hover{border-color:var(--accent)}
+/* Bulle d'aide MySifa (remplace l'infobulle du navigateur sur MyStock). */
+.mtip{position:fixed;z-index:10050;max-width:300px;padding:5px 9px;border-radius:6px;background:var(--text);color:var(--card);font-size:11px;font-weight:600;line-height:1.4;pointer-events:none;opacity:0;transform:translateY(3px);transition:opacity .12s,transform .12s;white-space:normal}
+.mtip.on{opacity:1;transform:none}
+/* Lignes dépliables (laizes, articles fournisseur) */
+.mp-row-click{cursor:pointer;transition:background .12s}
+.mp-row-click:hover>td{background:var(--accent-bg)}
+.mp-row-click.open>td{background:var(--accent-bg)}
+.mp-chev{display:inline-flex;vertical-align:-2px;margin-right:6px;color:var(--muted);transition:transform .15s}
+.mp-chev.open{transform:rotate(90deg);color:var(--accent)}
+.mp-row-detail>td{background:var(--bg);padding:12px 14px!important;border-bottom:1px solid var(--border)}
+.mp-det{display:flex;flex-direction:column;gap:12px}
+.mp-det-titre{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px}
+.mp-det-meta{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12px;color:var(--text2)}
+.mp-det-meta strong{color:var(--text)}
+.mp-det-table{width:100%;border-collapse:collapse;font-size:13px;background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.mp-det-table th{text-align:left;padding:6px 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border)}
+.mp-det-table td{padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:middle}
+.mp-det-table tr:last-child td{border-bottom:none}
+.mp-det-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mp-det-vide{font-size:12px;color:var(--muted)}
+.mp-det-ajout{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px}
+.mp-det-ajout input{width:120px;padding:6px 9px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font:inherit;font-size:13px}
+.mp-det-ajout input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.mp-det-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;border:1px solid var(--accent);border-radius:8px;background:var(--accent-bg);color:var(--accent);font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.mp-det-btn:hover{background:var(--accent);color:white}
+.mp-det-btn:disabled{opacity:.5;cursor:default}
+.mp-lz-chips{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.mp-var-table td .mp-lz-chips{min-width:150px}
+.mp-cond-inp::placeholder{color:var(--muted);font-style:italic}
+.mp-lz-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:6px;background:var(--bg);border:1px solid var(--border);font-size:12px;color:var(--text);white-space:nowrap}
+.mp-lz-chip em{font-style:normal;color:var(--muted);font-size:11px}
+.mp-lz-chip-btn{cursor:pointer;font:inherit;font-size:12px}
+.mp-lz-chip-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.mp-lz-plus{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;border:1px dashed var(--accent);border-radius:6px;background:var(--card);color:var(--accent);cursor:pointer}
+.mp-lz-plus:hover{background:var(--accent-bg)}
+/* Prix d'achat : carte à part, bordée d'accent, pour qu'on la voie. */
+.mp-prix-card{margin-top:14px;padding:14px 16px;background:var(--card);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:12px}
+.mp-prix-card-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 14px}
+.mp-prix-card-titre{font-size:15px;font-weight:700;color:var(--text)}
+.mp-prix-vig{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;background:var(--accent-bg);color:var(--accent);font-size:13px;font-weight:700}
+.mp-prix-grille th .mp-var-badge{margin-left:6px}
+.mp-prix-grille td.mp-prix-vigueur{background:var(--accent-bg)}
+/* Emplacement : liste des emplacements connus sous le champ. */
+.mp-ec-wrap{position:relative}
+.mp-ec-list{position:fixed;z-index:10040;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.18);overflow:auto;padding:4px}
+.mp-ec-sec{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:6px 8px 3px}
+.mp-ec-opt{display:flex;justify-content:space-between;gap:10px;width:100%;padding:6px 8px;border:none;border-radius:6px;background:var(--card);color:var(--text);font:inherit;font-size:13px;text-align:left;cursor:pointer}
+.mp-ec-opt span:last-child{color:var(--muted);font-size:11px}
+.mp-ec-opt:hover,.mp-ec-opt.on{background:var(--accent-bg);color:var(--accent)}
+.mp-ec-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.mp-empl-metres{font-size:12px;color:var(--muted);font-weight:500;margin-left:6px}
+.mp-empl-line.mp-row-click{border-radius:8px;padding-left:6px;padding-right:6px;margin:0 -6px}
+.mp-empl-line.mp-row-click:hover{background:var(--accent-bg)}
+/* Matières désactivées */
+.mp-inact{margin-top:18px;border:1px dashed var(--border);border-radius:12px;background:var(--card)}
+.mp-inact-head{display:flex;align-items:center;gap:8px;width:100%;padding:12px 14px;border:none;background:none;font:inherit;font-size:13px;font-weight:700;color:var(--text2);cursor:pointer;text-align:left;border-radius:12px}
+.mp-inact-head:hover{color:var(--accent);background:var(--accent-bg)}
+.mp-inact-n{font-size:11px;font-weight:700;color:var(--muted);background:var(--bg);border-radius:6px;padding:1px 7px}
+.mp-inact-row{display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--border);font-size:13px}
+.mp-inact-titre{flex:1;min-width:0;color:var(--muted);font-weight:600}
+.mp-inact-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.mp-inact-btn:hover{border-color:var(--success);color:var(--success);background:color-mix(in srgb,var(--success) 12%,transparent)}
+/* Synthèse colorée des mouvements */
+.mvt-sum{display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px;border-bottom:1px solid var(--border)}
+.mvt-sum-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700}
+.mvt-sum-chip.entree{background:color-mix(in srgb,var(--success) 14%,transparent);color:var(--success)}
+.mvt-sum-chip.sortie{background:color-mix(in srgb,var(--danger) 14%,transparent);color:var(--danger)}
+.mvt-sum-chip.ajustement{background:var(--accent-bg);color:var(--accent)}
+.mvt-sum-chip.inventaire{background:color-mix(in srgb,var(--c2) 16%,transparent);color:var(--c2)}
+.mvt-sum-chip.transfert{background:color-mix(in srgb,var(--c4) 16%,transparent);color:var(--c4)}
+.mvt-icon.ajustement{background:var(--accent-bg);color:var(--accent)}
+.mvt-icon.transfert{background:color-mix(in srgb,var(--c4) 16%,transparent);color:var(--c4)}
+.mvt-qte-ajustement{color:var(--accent);font-family:monospace;font-weight:700}
+.mvt-qte-transfert{color:var(--c4);font-family:monospace;font-weight:700}
 .mp-empl-rows{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
 .mp-empl-rows:empty{display:none}
 .mp-empl-row{display:flex;align-items:flex-start;gap:6px}
@@ -2550,7 +2637,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : onglet, filtres, tri, objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/stock_url.js?v=6"></script>
+<script src="/static/stock_url.js?v=7"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=13"></script>
@@ -6297,8 +6384,11 @@ async function loadMatiere(id) {
       varInactives: false,
       // Précédent / suivant garde la sous-page ; un lien direct l'impose.
       vue: S.mpVueInit || (S.selMatiere && S.selMatiere.vue) || 'stock',
+      // Ligne dépliée (laize:<id> ou article:<id>) : seulement depuis un lien.
+      ouvert: S.mpDetailInit || null,
     };
     S.mpVueInit = null;
+    S.mpDetailInit = null;
     S.selProduit = null;
     S.selEmpl = null;
     S.searchResults = null;
@@ -6327,8 +6417,12 @@ async function refreshSelMatiere() {
       variantes: await mpFetchVariantes(id, varInactives),
       varInactives,
       vue: (S.selMatiere && S.selMatiere.vue) || 'stock',
+      ouvert: (S.selMatiere && S.selMatiere.ouvert) || null,
     };
+    const zone = document.getElementById('scroll-area');
+    const y = zone ? zone.scrollTop : 0;
     renderContent();
+    if (zone) zone.scrollTop = y;
     updateNavActive();
   } catch (e) {
     showToast(e.message, 'error');
@@ -6412,12 +6506,27 @@ function mpAdhesifEquivalent(qty, m) {
   return '';
 }
 
+// Compte des mouvements par type, aux couleurs de l'historique (et des produits finis).
+function mpMvtSynthese(mouvements) {
+  const n = {};
+  mouvements.forEach(m => {
+    const raw = (m.type_mouvement || '').toLowerCase();
+    const t = (raw === 'ajustement' && (m.note || '').startsWith('Inventaire du')) ? 'inventaire' : raw;
+    n[t] = (n[t] || 0) + 1;
+  });
+  const lib = { entree: 'entrée', sortie: 'sortie', ajustement: 'ajustement', inventaire: 'inventaire', transfert: 'transfert' };
+  return el('div', { cls: 'mvt-sum' },
+    ...['entree', 'sortie', 'ajustement', 'inventaire', 'transfert'].filter(t => n[t]).map(t =>
+      el('span', { cls: 'mvt-sum-chip ' + t }, fN(n[t]) + ' ' + lib[t] + (n[t] > 1 ? 's' : ''))));
+}
+
 function buildMpMvtHistory(mouvements, matiere) {
   const mpCat = matiere || null;
   // marginTop : sépare visuellement l'historique du tableau « Stocks par laize »
   // qui le précède sur la fiche matière (les deux cartes se touchaient).
   return el('div', { cls: 'card', style: { marginTop: '14px' } },
     el('div', { cls: 'card-header' }, el('div', { cls: 'card-title' }, 'Historique des mouvements')),
+    mouvements.length ? mpMvtSynthese(mouvements) : null,
     !mouvements.length
       ? el('div', { cls: 'card-empty' }, 'Aucun mouvement')
       : el('div', null, ...mouvements.slice(0, 30).map(m => {
@@ -6533,19 +6642,22 @@ function buildMatiereDetail() {
   // (10/09/2026) : elles viennent des réceptions RVGI et du déstockage ; reste
   // la correction, réservée aux administrateurs matières.
   const actionBtns = [];
-  const act = (icone, label, onClick, titre) => el('button', {
-    cls: 'mp-act', type: 'button', attrs: titre ? { title: titre } : {}, on: { click: onClick },
+  const act = (icone, label, onClick, titre, ton) => el('button', {
+    cls: 'mp-act' + (ton ? ' mp-act--' + ton : ''), type: 'button', attrs: titre ? { title: titre } : {}, on: { click: onClick },
   }, iconEl(icone, 15), el('span', null, label));
   if (!S.stockReadOnly) {
-    if (m.laizee) actionBtns.push(act('truck', 'Réception', () => openReceptionMatiereModal(m)));
+    if (m.laizee) actionBtns.push(act('truck', 'Réception', () => openReceptionMatiereModal(m),
+      'Réceptionner des bobines livrées', 'entree'));
     if (isMatieresAdmin()) {
-      actionBtns.push(act('clipboard', 'Inventaire', () => openModalInventaireMatiere(m)));
+      actionBtns.push(act('clipboard', 'Inventaire', () => openModalInventaireMatiere(m),
+        'Compter le stock réel, laize par laize', 'inventaire'));
       actionBtns.push(act('edit', 'Corriger le stock', () => openModalMouvement('ajustement', m),
-        'Fixer le stock à sa valeur réelle, avec un motif. Les entrées viennent des réceptions RVGI, les sorties du déstockage des dossiers.'));
+        'Fixer le stock à sa valeur réelle, avec un motif. Les entrées viennent des réceptions RVGI, les sorties du déstockage des dossiers.', 'ajust'));
     }
   }
   if (isMatieresAdmin()) {
-    actionBtns.push(act('settings', 'Modifier la référence', () => openMatiereRefEditModal(m)));
+    actionBtns.push(act('settings', 'Modifier la référence', () => openMatiereRefEditModal(m),
+      'Libellé, catégorie, laizes, conditionnement — et désactivation'));
   }
   const actions = actionBtns.length ? el('div', { cls: 'mp-actions' }, ...actionBtns) : null;
 
@@ -6605,8 +6717,16 @@ function buildMatiereDetail() {
         const valoBobine = (parseFloat(spl.valeur_mm || 0) / 1000) * metres * prix_m2;
         const valo = valoBobine * parseFloat(spl.quantite || 0);
         const metrageTotal = metres * parseFloat(spl.quantite || 0);
-        tbody.appendChild(el('tr', { style: 'border-bottom:1px solid var(--border)' },
+        const cleLz = 'laize:' + spl.laize_id;
+        const ouvLz = mpDetailOuvert() === cleLz;
+        tbody.appendChild(el('tr', {
+          cls: 'mp-row-click' + (ouvLz ? ' open' : ''),
+          style: 'border-bottom:1px solid var(--border)',
+          attrs: { title: ouvLz ? 'Replier' : 'Voir les fournisseurs et emplacements de cette laize' },
+          on: { click: () => mpBasculerDetail(cleLz) },
+        },
           el('td', { style: 'padding:8px 10px;font-size:13px;color:var(--text);font-weight:600' },
+            el('span', { cls: 'mp-chev' + (ouvLz ? ' open' : '') }, iconEl('chevron-right', 12)),
             (spl.label || (spl.valeur_mm + ' mm')) + (prixParLaize && prix_m2 > 0
               ? ' · ' + prix_m2.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' €/m²'
               : '')),
@@ -6617,6 +6737,10 @@ function buildMatiereDetail() {
           el('td', { style: 'padding:8px 10px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;color:' + (valo > 0 ? 'var(--text)' : 'var(--muted)') },
             valo > 0 ? valo.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €' : '—'),
         ));
+        if (ouvLz) {
+          tbody.appendChild(el('tr', { cls: 'mp-row-detail' },
+            el('td', { attrs: { colspan: '4' } }, buildMpLaizeDetail(m, spl))));
+        }
       });
       tbl.appendChild(tbody);
       const paramsLine = el('div', { style: 'font-size:12px;color:var(--text2);margin-top:8px' },
@@ -6720,6 +6844,7 @@ function buildMpDetailTabs(m, mouvements) {
     on: { click: () => {
       if (!S.selMatiere || vue === cle) return;
       S.selMatiere.vue = cle;
+      S.selMatiere.ouvert = null;
       if (typeof stockSyncUrl === 'function') stockSyncUrl();
       renderMatieresView();
     } },
@@ -9679,6 +9804,7 @@ async function deleteMatiereRef(item) {
     await api('/api/stock/matieres/' + item.id, { method: 'DELETE' });
     closeMroot();
     showToast('Référence désactivée.', 'success');
+    S.mpInactives = null;
     if (S.selMatiere && S.selMatiere.matiere && S.selMatiere.matiere.id === item.id) {
       S.selMatiere = null;
     }
@@ -10540,9 +10666,115 @@ function buildMatieres() {
     filtres,
     el('label', { cls: 'mp-tri-wrap' }, el('span', null, 'Trier'), triSel),
   );
+  const inactives = grain === 'matiere' ? buildMpInactives(q) : null;
   return el('div', { cls: 'content' },
-    el('div', { cls: 'hist-page' }, head, banner, searchWrap, pills, subPills, barre, corps, rvgiBloc));
+    el('div', { cls: 'hist-page' }, head, banner, searchWrap, pills, subPills, barre, corps, inactives, rvgiBloc));
 }
+
+// Matières désactivées de la catégorie (et de la recherche) en cours, repliées
+// sous la liste : on les retrouve, on les réactive. Administrateurs matières.
+function buildMpInactives(q) {
+  if (!isMatieresAdmin()) return null;
+  if (S.mpInactives == null) {
+    if (!S.mpInactivesLoading) {
+      S.mpInactivesLoading = true;
+      api('/api/stock/matieres?all=1')
+        .then(d => { S.mpInactives = (Array.isArray(d) ? d : []).filter(x => x.actif === 0 || x.actif === false); })
+        .catch(() => { S.mpInactives = []; })
+        .finally(() => {
+          S.mpInactivesLoading = false;
+          const root = document.getElementById('mroot');
+          if (!(root && root.firstElementChild) && S.tab === 'matieres' && !S.selMatiere) mpRerenderGarde();
+        });
+    }
+    return null;
+  }
+  const norm = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const cat = S.matieresCat && S.matieresCat !== 'tout' ? S.matieresCat : null;
+  const k = norm(q).trim();
+  const items = S.mpInactives
+    .filter(x => (!cat || x.categorie === cat) && (!k || norm((x.designation || '') + ' ' + (x.reference || '')).includes(k)))
+    .sort((a, b) => mpTitre(a).localeCompare(mpTitre(b), 'fr'));
+  if (!items.length) return null;
+  const ouvert = !!S.mpInactivesOuvert;
+  return el('div', { cls: 'mp-inact' },
+    el('button', {
+      cls: 'mp-inact-head', type: 'button',
+      attrs: { 'aria-expanded': ouvert ? 'true' : 'false' },
+      on: { click: () => { S.mpInactivesOuvert = !ouvert; mpRerenderGarde(); } },
+    },
+      el('span', { cls: 'mp-chev' + (ouvert ? ' open' : '') }, iconEl('chevron-right', 12)),
+      'Matières désactivées', el('span', { cls: 'mp-inact-n' }, String(items.length))),
+    ...(ouvert ? items.map(x => el('div', { cls: 'mp-inact-row' },
+      dashMpCatBadge(x.categorie, x.sous_section),
+      el('span', { cls: 'mp-inact-titre' }, mpTitre(x),
+        (x.reference && x.designation) ? el('span', { cls: 'mp-var-meta', style: 'margin-left:8px' }, 'Réf. ' + x.reference) : null),
+      el('button', {
+        cls: 'mp-inact-btn', type: 'button',
+        attrs: { title: 'Remettre cette matière dans la liste' },
+        on: { click: () => mpReactiverMatiere(x) },
+      }, iconEl('rotate-ccw', 13), 'Réactiver'))) : []));
+}
+
+async function mpReactiverMatiere(x) {
+  if (!confirm('Réactiver « ' + mpTitre(x) + ' » ? Elle revient dans la liste des matières.')) return;
+  try {
+    await api('/api/stock/matieres/' + x.id, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ actif: 1 }),
+    });
+    showToast('Matière réactivée.', 'success');
+    S.mpInactives = null;
+    await loadMatieres();
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+// Bulles d'aide MySifa : sur la fiche, la liste et les fenêtres de MyStock,
+// le `title` d'un bouton s'affiche dans une bulle aux couleurs de l'appli au
+// lieu de l'infobulle grise du navigateur, et sans son délai.
+(function mpInstallerBulles() {
+  if (window.__mpBulles) return;
+  window.__mpBulles = true;
+  const PORTEE = '.mp-detail, .hist-page, .mp-modal';
+  let bulle = null;
+  let cible = null;
+  const cacher = () => { if (bulle) bulle.classList.remove('on'); cible = null; };
+  document.addEventListener('mouseover', (e) => {
+    const t = e.target && e.target.closest ? e.target.closest('[title], [data-mtip]') : null;
+    if (!t || !t.closest(PORTEE)) { if (cible) cacher(); return; }
+    if (t === cible) return;
+    if (t.hasAttribute('title')) {
+      t.setAttribute('data-mtip', t.getAttribute('title'));
+      t.removeAttribute('title');
+    }
+    const txt = t.getAttribute('data-mtip');
+    if (!txt) { cacher(); return; }
+    cible = t;
+    if (!bulle) {
+      bulle = document.createElement('div');
+      bulle.className = 'mtip';
+      bulle.setAttribute('role', 'tooltip');
+      document.body.appendChild(bulle);
+    }
+    bulle.textContent = txt;
+    const r = t.getBoundingClientRect();
+    const b = bulle.getBoundingClientRect();
+    const vw = window.innerWidth || document.documentElement.clientWidth;
+    let x = r.left + r.width / 2 - b.width / 2;
+    x = Math.max(8, Math.min(vw - b.width - 8, x));
+    let y = r.top - b.height - 8;
+    if (y < 8) y = r.bottom + 8;
+    bulle.style.left = Math.round(x) + 'px';
+    bulle.style.top = Math.round(y) + 'px';
+    bulle.classList.add('on');
+  });
+  document.addEventListener('mouseout', (e) => {
+    if (cible && !(e.relatedTarget && cible.contains(e.relatedTarget))) cacher();
+  });
+  document.addEventListener('mousedown', cacher, true);
+  window.addEventListener('scroll', cacher, true);
+})();
 
 // ── Widget « Métrage bobine » ───────────────────────────────────────────────
 // Longueur approximative enroulée sur une bobine, d'après l'épaisseur de la
@@ -10994,6 +11226,7 @@ function buildMpEmplacementsCard(m) {
       ? el('button', {
           cls: 'mp-empl-add-link',
           type: 'button',
+          attrs: { title: 'Indiquer où une partie du stock est rangée' },
           on: { click: () => openMpEmplacementModal(m, null) },
         }, iconEl('plus', 14), 'Ajouter un emplacement')
       : null,
@@ -11008,21 +11241,27 @@ function buildMpEmplacementsCard(m) {
       isStockZoneSpeciale(e.emplacement) ? stockEmplLabel(e.emplacement) : '',
       e.laize_label || '',
     ].filter(Boolean).join(' · ');
-    card.appendChild(el('div', { cls: 'mp-empl-line' },
+    const metres = mpMetresDe(m, e.quantite);
+    card.appendChild(el('div', {
+      cls: 'mp-empl-line' + (canEdit ? ' mp-row-click' : ''),
+      attrs: canEdit ? { title: 'Modifier : emplacement, laize ou quantité' } : {},
+      on: canEdit ? { click: (ev) => { if (!ev.target.closest('button')) openMpEmplacementModal(m, e); } } : {},
+    },
       el('span', { cls: 'mp-empl-code' }, e.emplacement),
       el('span', { cls: 'mp-empl-lbl' }, lbl),
-      el('span', { cls: 'mp-empl-qty' }, mpStockLine(e.quantite, m)),
+      el('span', { cls: 'mp-empl-qty' }, mpStockLine(e.quantite, m),
+        metres != null ? el('span', { cls: 'mp-empl-metres' }, fN(metres) + ' m') : null),
       canEdit
         ? el('button', {
             cls: 'mp-empl-ico',
             type: 'button',
-            attrs: { title: 'Modifier la quantité', 'aria-label': 'Modifier la quantité' },
+            attrs: { title: 'Modifier l\'emplacement', 'aria-label': 'Modifier l\'emplacement' },
             on: { click: () => openMpEmplacementModal(m, e) },
           }, iconEl('edit', 14))
         : null,
       canEdit
         ? el('button', {
-            cls: 'mp-empl-ico',
+            cls: 'mp-empl-ico ico-danger',
             type: 'button',
             attrs: { title: 'Retirer l\'emplacement', 'aria-label': 'Retirer l\'emplacement' },
             on: { click: () => deleteMpEmplacement(m, e) },
@@ -11035,10 +11274,178 @@ function buildMpEmplacementsCard(m) {
   const estNc = (e) => /^NC\b/.test(String(e.emplacement || ''));
   const total = rows.filter(e => !estNc(e)).reduce((s, e) => s + (parseFloat(e.quantite) || 0), 0);
   const nc = rows.filter(estNc).reduce((s, e) => s + (parseFloat(e.quantite) || 0), 0);
+  const mTot = mpMetresDe(m, total);
   card.appendChild(el('div', { cls: 'mp-hint', style: 'margin-top:8px' },
-    'Localisé : ' + mpStockLine(total, m) + ' sur ' + mpStockLine(m.quantite, m) + ' en stock.'
+    'Localisé : ' + mpStockLine(total, m) + (mTot != null ? ' (' + fN(mTot) + ' m)' : '')
+    + ' sur ' + mpStockLine(m.quantite, m) + ' en stock.'
     + (nc > 0 ? ' Hors stock : ' + mpStockLine(nc, m) + ' en non-conformité.' : '')));
   return card;
+}
+
+// Métrage d'une quantité de bobines, au métrage standard de la matière. Null
+// quand on ne sait pas le calculer : « 0 m » se lirait « il n'y en a plus ».
+function mpMetresDe(m, q) {
+  const ml = Number((m && m.metres_lineaires_par_bobine) || 0);
+  if (!m || !m.laizee || !(ml > 0)) return null;
+  return Math.round(Number(q || 0) * ml);
+}
+
+// Détail d'une laize (onglet Stock) : qui la livre, à quelle longueur et quel
+// prix, combien RVGI en voit chez chacun, et où elle est rangée.
+function buildMpLaizeDetail(m, spl) {
+  const data = S.selMatiere && S.selMatiere.variantes;
+  const vs = (data && Array.isArray(data.variantes) ? data.variantes : []).filter(v => v.actif);
+  const mlStd = Number(m.metres_lineaires_par_bobine || 0);
+  const mm = Math.round(Number(spl.valeur_mm || 0));
+  const stock = mpStockFournData();
+  const rvgi = (stock && stock.disponible ? mpLignesFourn(m.id) : []).filter(l => Math.round(l.laize_mm || 0) === mm);
+  const lignes = new Map();
+  vs.forEach(v => {
+    const d = (v.laizes_detail || []).find(x => x.laize_id === spl.laize_id);
+    const k = v.fournisseur_id || 0;
+    if (!d || lignes.has(k)) return;
+    lignes.set(k, { nom: v.fournisseur_nom || 'Fournisseur non identifié', fid: k, principal: false,
+      ml: Number(d.ml_bobine || 0) || Number(v.ml_bobine || 0) || mlStd,
+      mlSource: d.ml_bobine ? 'laize' : (v.ml_bobine ? 'article' : 'standard') });
+  });
+  vs.filter(v => v.principal).forEach(v => { const l = lignes.get(v.fournisseur_id || 0); if (l) l.principal = true; });
+  // Fournisseurs vus en stock RVGI sur cette laize sans y être rattachés.
+  rvgi.forEach(l => {
+    const k = l.fournisseur_id || 0;
+    if (!lignes.has(k)) lignes.set(k, { nom: l.fournisseur || 'Fournisseur non identifié', fid: k, principal: false, ml: null, horsLien: true });
+  });
+  const parts = [];
+  const tbl = el('table', { cls: 'mp-det-table' });
+  tbl.appendChild(el('thead', null, el('tr', null,
+    el('th', null, 'Fournisseur'), el('th', { cls: 'num' }, 'm / bobine'),
+    el('th', { cls: 'num' }, 'Prix d\'achat'), el('th', { cls: 'num' }, 'Stock RVGI'))));
+  const tb = el('tbody');
+  const decl = mpDeclDeLaize(data, mm);
+  [...lignes.values()].sort((a, b) => (b.principal - a.principal) || a.nom.localeCompare(b.nom, 'fr')).forEach(l => {
+    const st = mpTotalRvgi(rvgi.filter(x => (x.fournisseur_id || 0) === l.fid));
+    tb.appendChild(el('tr', null,
+      el('td', null, el('strong', { style: 'color:var(--text)' }, l.nom),
+        l.principal ? el('span', { cls: 'mp-var-badge', style: 'margin-left:6px' }, 'Principal') : null,
+        l.horsLien ? el('div', { cls: 'mp-var-meta', style: 'margin-top:2px' }, 'Vu en stock RVGI, laize non rattachée à ce fournisseur') : null),
+      el('td', { cls: 'num', attrs: l.ml ? { title: { laize: 'Longueur propre à cette laize', article: 'Longueur de l\'article fournisseur', standard: 'Métrage standard de la matière' }[l.mlSource] || '' } : {} },
+        l.ml ? fN(l.ml) + ' m' : '—'),
+      el('td', { cls: 'num' }, data ? mpPrixTexte(data, l.fid, decl ? decl.id : undefined) : '—'),
+      el('td', { cls: 'num' }, mpFmtStockRvgi(st))));
+  });
+  tbl.appendChild(tb);
+  parts.push(el('div', null, el('div', { cls: 'mp-det-titre' }, 'Fournisseurs de la laize ' + fN(mm) + ' mm'),
+    lignes.size ? tbl : el('div', { cls: 'mp-det-vide' },
+      'Aucun fournisseur rattaché à cette laize. ',
+      el('button', { cls: 'mp-var-link', type: 'button', on: { click: (e) => {
+        e.stopPropagation(); S.selMatiere.vue = 'fournisseurs';
+        if (typeof stockSyncUrl === 'function') stockSyncUrl(); mpRerenderGarde();
+      } } }, 'Rattacher depuis l\'onglet Fournisseurs'))));
+  const empls = (Array.isArray(m.emplacements) ? m.emplacements : []).filter(e => (e.laize_id || 0) === spl.laize_id);
+  parts.push(el('div', null, el('div', { cls: 'mp-det-titre' }, 'Emplacements'),
+    empls.length
+      ? el('div', { cls: 'mp-lz-chips' }, ...empls.map(e => {
+          const mt = mpMetresDe(m, e.quantite);
+          return el('span', { cls: 'mp-lz-chip' }, el('strong', null, e.emplacement),
+            el('em', null, mpStockLine(e.quantite, m) + (mt != null ? ' · ' + fN(mt) + ' m' : '')));
+        }))
+      : el('div', { cls: 'mp-det-vide' }, 'Aucun emplacement renseigné pour cette laize.')));
+  return el('div', { cls: 'mp-det' }, ...parts);
+}
+
+// Déclinaison de prix d'une laize ; à défaut la seule déclinaison de la
+// matière (prix commun à toutes ses laizes).
+function mpDeclDeLaize(data, mm) {
+  const decls = (data && data.prix && Array.isArray(data.prix.declinaisons)) ? data.prix.declinaisons : [];
+  return decls.find(d => Math.round(d.laize_mm || 0) === Math.round(mm || 0)) || (decls.length === 1 ? decls[0] : null);
+}
+
+// Champ emplacement de la fiche matière : la liste des emplacements connus
+// s'ouvre au focus (ceux de cette matière, ceux des autres matières, puis le
+// plan dès qu'on tape), et un nom nouveau reste possible.
+function mpEmplCombo(m, valeur) {
+  const inp = el('input', { cls: 'field-input empl-upper', attrs: {
+    type: 'text', autocomplete: 'off', maxlength: '20', role: 'combobox', 'aria-expanded': 'false',
+    'aria-label': 'Emplacement',
+    placeholder: 'Choisir dans la liste ou taper un nom (A121, DROITE 3…)',
+  } });
+  inp.value = valeur || '';
+  const liste = el('div', { cls: 'mp-ec-list', attrs: { role: 'listbox' }, style: 'display:none' });
+  const connus = S.mpEmplConnus || { utilises: [], plan: [] };
+  const ici = [...new Set((Array.isArray(m.emplacements) ? m.emplacements : []).map(e => e.emplacement))].sort();
+  const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
+  let opts = [];
+  let actif = -1;
+  const fermer = () => { liste.style.display = 'none'; inp.setAttribute('aria-expanded', 'false'); };
+  const choisir = (code) => { inp.value = code; fermer(); inp.dispatchEvent(new Event('change')); };
+  const placer = () => {
+    if (liste.style.display === 'none' || !inp.isConnected) return;
+    const r = inp.getBoundingClientRect();
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const dessous = vh - r.bottom - 8;
+    const haut = dessous < 180 && r.top > dessous;
+    liste.style.left = Math.round(r.left) + 'px';
+    liste.style.width = Math.round(r.width) + 'px';
+    liste.style.maxHeight = Math.max(140, Math.min(300, haut ? r.top - 8 : dessous)) + 'px';
+    if (haut) { liste.style.top = 'auto'; liste.style.bottom = Math.round(vh - r.top + 4) + 'px'; }
+    else { liste.style.bottom = 'auto'; liste.style.top = Math.round(r.bottom + 4) + 'px'; }
+  };
+  const dessiner = () => {
+    const k = norm(inp.value);
+    liste.innerHTML = '';
+    opts = []; actif = -1;
+    const vus = new Set();
+    const ok = (c) => !k || norm(c).includes(k);
+    const section = (titre, items) => {
+      if (!items.length) return;
+      liste.appendChild(el('div', { cls: 'mp-ec-sec' }, titre));
+      items.forEach(it => {
+        const b = el('button', { cls: 'mp-ec-opt', type: 'button', attrs: { role: 'option', tabindex: '-1' },
+          on: { mousedown: (e) => { e.preventDefault(); choisir(it.code); } } },
+          el('span', null, it.code), el('span', null, it.info || ''));
+        opts.push({ b, code: it.code });
+        liste.appendChild(b);
+      });
+    };
+    const a = ici.filter(ok).map(c => { vus.add(c); return { code: c, info: 'cette matière' }; });
+    const b = (connus.utilises || []).filter(u => !vus.has(u.code) && ok(u.code))
+      .map(u => { vus.add(u.code); return { code: u.code, info: u.matieres + ' matière' + (u.matieres > 1 ? 's' : '') }; });
+    const c = k ? (connus.plan || []).filter(x => !vus.has(x) && ok(x)).slice(0, 30)
+      .map(x => { vus.add(x); return { code: x, info: 'plan' }; }) : [];
+    if (k && !vus.has(k)) {
+      section('Nouvel emplacement', [{ code: k, info: validateMpEmplacement(k) ? 'format invalide' : 'à créer' }]);
+    }
+    section('Utilisés pour cette matière', a);
+    section('Emplacements des matières', b);
+    section('Plan d\'entrepôt', c);
+    if (!opts.length) liste.appendChild(el('div', { cls: 'mp-ec-sec' }, 'Aucun emplacement connu — tape un nom.'));
+    placer();
+  };
+  const ouvrir = () => { liste.style.display = ''; inp.setAttribute('aria-expanded', 'true'); dessiner(); };
+  inp.addEventListener('focus', ouvrir);
+  inp.addEventListener('input', ouvrir);
+  inp.addEventListener('blur', () => setTimeout(fermer, 150));
+  inp.addEventListener('keydown', (e) => {
+    if (liste.style.display === 'none') {
+      if (e.key === 'ArrowDown') { e.preventDefault(); ouvrir(); }
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!opts.length) return;
+      actif = (actif + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length;
+      opts.forEach((o, i) => o.b.classList.toggle('on', i === actif));
+      opts[actif].b.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter' && actif >= 0) {
+      e.preventDefault(); e.stopPropagation();
+      choisir(opts[actif].code);
+    } else if (e.key === 'Escape') {
+      e.stopPropagation(); fermer();
+    }
+  });
+  window.addEventListener('scroll', placer, true);
+  window.addEventListener('resize', placer);
+  const wrap = el('div', { cls: 'mp-field mp-ec-wrap' }, el('label', null, 'Emplacement'), inp, liste);
+  return { wrap, inp };
 }
 
 // ── Stock par fournisseur (RVGI) ───────────────────────────────────
@@ -11344,7 +11751,25 @@ async function mpFetchVariantes(id, inactives) {
 function mpVarSetData(d) {
   if (!S.selMatiere || !d) return;
   S.selMatiere.variantes = Object.assign({}, S.selMatiere.variantes || {}, d);
+  mpRerenderGarde();
+}
+
+// Redessine la vue matières sans perdre la position de défilement.
+function mpRerenderGarde() {
+  const zone = document.getElementById('scroll-area');
+  const y = zone ? zone.scrollTop : 0;
   renderMatieresView();
+  if (zone) zone.scrollTop = y;
+}
+
+function mpDetailOuvert() { return (S.selMatiere && S.selMatiere.ouvert) || null; }
+
+// Déplie une ligne (une seule à la fois) ; un second clic la replie.
+function mpBasculerDetail(cle, forcer) {
+  if (!S.selMatiere) return;
+  S.selMatiere.ouvert = (forcer || S.selMatiere.ouvert !== cle) ? cle : null;
+  if (typeof stockSyncUrl === 'function') stockSyncUrl();
+  mpRerenderGarde();
 }
 
 function mpVarDate(iso) {
@@ -11385,7 +11810,7 @@ function buildMpVariantesTable(m) {
   if (!rows.length) {
     card.appendChild(el('div', { cls: 'mp-hint' },
       'Aucun fournisseur renseigné. Chaque fournisseur porte le libellé technique de la matière chez lui.'));
-    return card;
+    return mpAvecPrix(card, m, data);
   }
   // Stock RVGI des articles : une ligne par fournisseur, ou par fournisseur et laize.
   const stockData = mpStockFournData();
@@ -11411,9 +11836,7 @@ function buildMpVariantesTable(m) {
   const lignesVues = lignesRvgi.filter(l => mpFiltreLigne(l, 'mpVarFiltre'));
   if (varGrain === 'laize') {
     card.appendChild(buildMpVarParLaize(m, lignesVues));
-    const grille = buildMpPrixParLaize(m, data);
-    if (grille) card.appendChild(grille);
-    return card;
+    return mpAvecPrix(card, m, data);
   }
   const totVar = mpTotalRvgi(lignesVues);
   card.appendChild(el('div', { cls: 'mp-var-stock' },
@@ -11477,17 +11900,25 @@ function buildMpVariantesTable(m) {
       });
       if (!canEdit || !v.actif || v.principal) radio.disabled = true;
       const note = (v.note && !/^Reprise de l'inventaire/.test(v.note)) ? v.note : '';
-      tb.appendChild(el('tr', { cls: 'mp-var-row' + (v.actif ? '' : ' inactive') },
+      const cleArt = 'article:' + v.id;
+      const ouvArt = mpDetailOuvert() === cleArt;
+      tb.appendChild(el('tr', {
+        cls: 'mp-var-row mp-row-click' + (v.actif ? '' : ' inactive') + (ouvArt ? ' open' : ''),
+        on: { click: (e) => {
+          if (e.target.closest('button,input,select,a,textarea,label')) return;
+          mpBasculerDetail(cleArt);
+        } },
+      },
         el('td', { cls: 'c-radio' }, radio),
-        el('td', { cls: 'c-type' },
-          el('div', { cls: 'mp-var-type' }, mpVarLibelle(v) || '—'),
+        el('td', { cls: 'c-type', attrs: { title: ouvArt ? 'Replier le détail' : 'Détail : laizes, m / bobine, prix, stock RVGI' } },
+          el('div', { cls: 'mp-var-type' },
+            el('span', { cls: 'mp-chev' + (ouvArt ? ' open' : '') }, iconEl('chevron-right', 12)),
+            mpVarLibelle(v) || '—'),
           note ? el('div', { cls: 'mp-var-meta' }, note) : null,
           v.actif ? null : el('div', { cls: 'mp-var-meta' }, 'Désactivé')),
         el('td', null, v.ref_fournisseur || '—'),
         el('td', null, v.ref_rvgi || '—'),
-        el('td', null, (v.laizes && v.laizes.length) ? v.laizes.join(', ')
-          : (stockArticle(v) && stockArticle(v).laizes.size
-            ? [...stockArticle(v).laizes].sort((x, y) => x - y).map(x => fN(x)).join(', ') : '—')),
+        el('td', null, mpLaizeChips(m, data, v, stockArticle(v), canEdit)),
         el('td', { cls: 'num' }, (canEdit && v.actif) ? mpVarMlInput(m, v) : (v.ml_bobine ? fN(v.ml_bobine) : '—')),
         el('td', { cls: 'num' },
           v.dernier_achat ? mpVarDate(v.dernier_achat) : '—',
@@ -11499,16 +11930,16 @@ function buildMpVariantesTable(m) {
           ? el('div', { cls: 'mp-var-actions' },
               v.actif ? el('button', {
                 cls: 'mp-empl-ico', type: 'button',
-                attrs: { title: 'Modifier', 'aria-label': 'Modifier le fournisseur' },
+                attrs: { title: 'Modifier : fournisseur, libellé, références', 'aria-label': 'Modifier le fournisseur' },
                 on: { click: () => openMpVarianteModal(m, v) },
               }, iconEl('edit', 14)) : null,
               v.actif ? el('button', {
                 cls: 'mp-empl-ico', type: 'button',
-                attrs: { title: 'Déplacer vers une autre matière', 'aria-label': 'Déplacer vers une autre matière' },
+                attrs: { title: 'Ranger sous une autre matière, existante ou nouvelle', 'aria-label': 'Déplacer vers une autre matière' },
                 on: { click: () => openMpDeplacerModal(m, v) },
               }, iconEl('move', 14)) : null,
               el('button', {
-                cls: 'mp-empl-ico', type: 'button',
+                cls: 'mp-empl-ico ' + (v.actif ? 'ico-warn' : 'ico-ok'), type: 'button',
                 attrs: v.actif
                   ? { title: 'Désactiver', 'aria-label': 'Désactiver cet article' }
                   : { title: 'Réactiver', 'aria-label': 'Réactiver cet article' },
@@ -11516,6 +11947,10 @@ function buildMpVariantesTable(m) {
               }, iconEl(v.actif ? 'archive' : 'rotate-ccw', 14)))
           : null),
       ));
+      if (ouvArt) {
+        tb.appendChild(el('tr', { cls: 'mp-row-detail' },
+          el('td', { attrs: { colspan: String(cols.length) } }, buildMpArticleDetail(m, data, v, lignesVues, canEdit))));
+      }
     });
   });
   tbl.appendChild(tb);
@@ -11545,7 +11980,187 @@ function buildMpVariantesTable(m) {
       } },
     }, S.selMatiere.varInactives ? 'Masquer les désactivés' : 'Voir les désactivés'),
   ));
-  return card;
+  return mpAvecPrix(card, m, data);
+}
+
+// Laizes livrées par le fournisseur de l'article, avec leur longueur propre.
+function mpLaizeChips(m, data, v, st, canEdit) {
+  const det = Array.isArray(v.laizes_detail) ? v.laizes_detail : [];
+  const out = el('div', { cls: 'mp-lz-chips' });
+  if (det.length) {
+    det.forEach(d => out.appendChild(el('span', {
+      cls: 'mp-lz-chip',
+      attrs: { title: d.ml_bobine ? fN(d.ml_bobine) + ' m par bobine sur cette laize' : 'Longueur de l\'article' },
+    }, fN(d.valeur_mm), d.ml_bobine ? el('em', null, fN(d.ml_bobine) + ' m') : null)));
+  } else if (st && st.laizes.size) {
+    [...st.laizes].sort((a, b) => a - b).forEach(x => out.appendChild(el('span', {
+      cls: 'mp-lz-chip', attrs: { title: 'Vue en stock RVGI, non rattachée à ce fournisseur' },
+    }, el('em', null, fN(x)))));
+  } else {
+    out.appendChild(el('span', null, '—'));
+  }
+  if (canEdit && v.actif && v.fournisseur_id && data.laizee) {
+    out.appendChild(el('button', {
+      cls: 'mp-lz-plus', type: 'button',
+      attrs: { title: 'Ajouter une laize à ce fournisseur', 'aria-label': 'Ajouter une laize' },
+      on: { click: (e) => { e.stopPropagation(); S.mpFocusAjoutLaize = v.id; mpBasculerDetail('article:' + v.id, true); } },
+    }, iconEl('plus', 12)));
+  }
+  return out;
+}
+
+async function mpPoserLaizeFourn(v, body, msg) {
+  const avant = ((S.selMatiere && S.selMatiere.variantes && S.selMatiere.variantes.laizes_matiere) || []).length;
+  try {
+    const d = await api('/api/stock/variantes/' + v.id + '/laizes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    showToast(msg || 'Laize enregistrée.', 'success');
+    mpVarSetData(d);
+    // Laize nouvelle sur la matière : son stock par laize change aussi.
+    if ((d.laizes_matiere || []).length !== avant) await refreshSelMatiere();
+    return true;
+  } catch (err) {
+    showToast(err.message, 'error');
+    return false;
+  }
+}
+
+// Détail d'un article fournisseur, déplié sous sa ligne.
+function buildMpArticleDetail(m, data, v, lignesVues, canEdit) {
+  const edit = canEdit && v.actif;
+  const mlStd = Number(m.metres_lineaires_par_bobine || 0);
+  const mlArt = Number(v.ml_bobine || 0);
+  const info = (lib, val) => val ? el('span', null, lib + ' ', el('strong', null, val)) : null;
+  const parts = [el('div', { cls: 'mp-det-meta' },
+    info('Libellé technique :', v.libelle_technique || ''),
+    info('Réf. fournisseur :', v.ref_fournisseur),
+    info('Article RVGI :', v.ref_rvgi),
+    data.laizee ? info('m / bobine de l\'article :', mlArt ? fN(mlArt) + ' m' : (mlStd ? fN(mlStd) + ' m (standard)' : '—')) : null,
+    v.note ? info('Note :', v.note) : null,
+    v.updated_at ? info('Modifié le', mpVarDate(v.updated_at) + (v.updated_by_name ? ' par ' + v.updated_by_name : '')) : null,
+  )];
+  if (!data.laizee) return el('div', { cls: 'mp-det' }, ...parts);
+  if (!v.fournisseur_id) {
+    parts.push(el('div', { cls: 'mp-det-vide' }, 'Article sans fournisseur : le choisir (Modifier) pour lui rattacher des laizes.'));
+    return el('div', { cls: 'mp-det' }, ...parts);
+  }
+  const det = Array.isArray(v.laizes_detail) ? v.laizes_detail : [];
+  const deCetArticle = (l) => (l.variante_id && l.variante_id === v.id) || (!l.variante_id && v.ref_rvgi && l.article === v.ref_rvgi);
+  const stockLz = (mm) => mpTotalRvgi(lignesVues.filter(l => deCetArticle(l) && Math.round(l.laize_mm || 0) === Math.round(mm)));
+  const tbl = el('table', { cls: 'mp-det-table' });
+  tbl.appendChild(el('thead', null, el('tr', null,
+    el('th', null, 'Laize'),
+    el('th', { cls: 'num', attrs: { title: 'Conditionnement chez ce fournisseur. Vide : longueur de l\'article, puis métrage standard.' } }, 'm / bobine'),
+    el('th', { cls: 'num' }, 'Prix d\'achat'),
+    el('th', { cls: 'num' }, 'Stock RVGI'),
+    edit ? el('th', null, '') : null)));
+  const tb = el('tbody');
+  det.forEach(d => {
+    let mlCell;
+    if (edit) {
+      const inp = mpCondInput({ step: '1', label: 'm / bobine sur la laize ' + fN(d.valeur_mm), val: d.ml_bobine });
+      inp.placeholder = mlArt ? '= ' + mlArt : (mlStd ? '= ' + mlStd : '');
+      inp.title = 'Vide : ' + (mlArt ? fN(mlArt) + ' m, longueur de l\'article' : (mlStd ? fN(mlStd) + ' m, métrage standard' : 'non renseigné'));
+      inp.addEventListener('change', async () => {
+        const r = mpLireNombre(inp);
+        if (r.error) { showToast('m / bobine : valeur > 0, ou vide.', 'error'); return; }
+        await mpPoserLaizeFourn(v, { laize_id: d.laize_id, ml_bobine: r.vide ? '' : r.value }, 'Conditionnement enregistré.');
+      });
+      mlCell = inp;
+    } else {
+      mlCell = d.ml_bobine ? fN(d.ml_bobine) + ' m' : (mlArt ? fN(mlArt) + ' m' : '—');
+    }
+    const decl = mpDeclDeLaize(data, d.valeur_mm);
+    const declPropre = decl && Math.round(decl.laize_mm || 0) === Math.round(d.valeur_mm || 0);
+    tb.appendChild(el('tr', null,
+      el('td', null, el('strong', { style: 'color:var(--text)' }, d.label || fN(d.valeur_mm) + ' mm')),
+      el('td', { cls: 'num' }, mlCell),
+      el('td', { cls: 'num' }, (declPropre && data.peut_modifier_prix && v.actif)
+        ? mpPrixInput(m, data, v.fournisseur_id, v.fournisseur_nom || 'ce fournisseur', decl.id)
+        : mpPrixTexte(data, v.fournisseur_id, decl ? decl.id : undefined)),
+      el('td', { cls: 'num' }, mpFmtStockRvgi(stockLz(d.valeur_mm))),
+      edit ? el('td', { cls: 'num' }, el('button', {
+        cls: 'mp-empl-ico ico-danger', type: 'button',
+        attrs: { title: 'Ce fournisseur ne livre plus cette laize', 'aria-label': 'Retirer la laize' },
+        on: { click: async () => {
+          if (!confirm('Retirer la laize ' + fN(d.valeur_mm) + ' mm de ' + (v.fournisseur_nom || 'ce fournisseur') + ' ?\n\nElle reste sur la matière, avec son stock.')) return;
+          try {
+            mpVarSetData(await api('/api/stock/variantes/' + v.id + '/laizes/' + d.laize_id, { method: 'DELETE' }));
+            showToast('Laize retirée du fournisseur.', 'success');
+          } catch (err) { showToast(err.message, 'error'); }
+        } },
+      }, iconEl('trash-2', 13))) : null));
+  });
+  tbl.appendChild(tb);
+  parts.push(el('div', null,
+    el('div', { cls: 'mp-det-titre' }, 'Laizes livrées par ' + (v.fournisseur_nom || 'ce fournisseur')),
+    det.length ? tbl : el('div', { cls: 'mp-det-vide' }, 'Aucune laize rattachée à ce fournisseur.')));
+  if (edit) {
+    const lies = new Set(det.map(d => Math.round(d.valeur_mm || 0)));
+    const proposees = new Set((data.laizes_matiere || []).map(l => Math.round(l.valeur_mm || 0)));
+    lignesVues.filter(deCetArticle).forEach(l => { if (l.laize_mm) proposees.add(Math.round(l.laize_mm)); });
+    const lzInp = el('input', { attrs: { type: 'number', min: '1', max: '5000', step: '1', inputmode: 'numeric',
+      placeholder: 'Laize (mm)', 'aria-label': 'Laize en mm' } });
+    const mlInp = el('input', { attrs: { type: 'number', min: '0', step: '1', inputmode: 'numeric',
+      placeholder: 'm / bobine', 'aria-label': 'Mètres par bobine (facultatif)',
+      title: 'Facultatif : longueur de bobine propre à cette laize' } });
+    const okBtn = el('button', { cls: 'mp-det-btn', type: 'button' }, iconEl('plus', 13), 'Ajouter la laize');
+    const ajouter = async () => {
+      const mm = parseFloat(String(lzInp.value || '').replace(',', '.'));
+      if (!(mm > 0)) { showToast('Laize invalide — valeur en mm attendue.', 'error'); lzInp.focus(); return; }
+      const r = mpLireNombre(mlInp);
+      if (r.error) { showToast('m / bobine : valeur > 0, ou vide.', 'error'); return; }
+      okBtn.disabled = true;
+      S.mpFocusAjoutLaize = v.id;
+      const body = { valeur_mm: mm };
+      if (!r.vide) body.ml_bobine = r.value;
+      if (!(await mpPoserLaizeFourn(v, body, 'Laize ' + fN(mm) + ' mm ajoutée à ' + (v.fournisseur_nom || 'ce fournisseur') + '.'))) okBtn.disabled = false;
+    };
+    okBtn.addEventListener('click', ajouter);
+    [lzInp, mlInp].forEach(i => i.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); ajouter(); } }));
+    const libres = [...proposees].filter(x => x && !lies.has(x)).sort((a, b) => a - b);
+    parts.push(el('div', null,
+      el('div', { cls: 'mp-det-titre' }, 'Ajouter une laize'),
+      libres.length ? el('div', { cls: 'mp-lz-chips', style: 'margin-bottom:6px' },
+        el('span', { cls: 'mp-var-meta', style: 'margin:0 4px 0 0' }, 'Déjà connues :'),
+        ...libres.map(x => el('button', {
+          cls: 'mp-lz-chip mp-lz-chip-btn', type: 'button',
+          attrs: { title: 'Reprendre ' + fN(x) + ' mm' },
+          on: { click: () => { lzInp.value = String(x); mlInp.focus(); } },
+        }, fN(x)))) : null,
+      el('div', { cls: 'mp-det-ajout' }, lzInp, mlInp, okBtn),
+      el('div', { cls: 'mp-var-meta' },
+        'Une laize nouvelle est ajoutée à la matière, sans stock. Le m / bobine est facultatif : vide, c\'est la longueur de l\'article.')));
+    if (S.mpFocusAjoutLaize === v.id) {
+      S.mpFocusAjoutLaize = null;
+      requestAnimationFrame(() => lzInp.focus());
+    }
+  }
+  return el('div', { cls: 'mp-det' }, ...parts);
+}
+
+// Le tableau des fournisseurs, suivi de la carte des prix d'achat.
+function mpAvecPrix(card, m, data) {
+  const prix = buildMpPrixCard(m, data);
+  return prix ? el('div', null, card, prix) : card;
+}
+
+function buildMpPrixCard(m, data) {
+  const grille = buildMpPrixParLaize(m, data);
+  if (!grille) return null;
+  const unite = (data.prix && data.prix.unite) || '';
+  const princ = (data.variantes || []).find(v => v.principal && v.actif);
+  const vig = mpPrixFourchette(((data.prix && data.prix.lignes) || []).filter(l => l.principal).map(l => Number(l.prix || 0)));
+  return el('div', { cls: 'mp-prix-card' },
+    el('div', { cls: 'mp-prix-card-head' },
+      el('div', { cls: 'mp-prix-card-titre' }, 'Prix d\'achat par fournisseur'),
+      vig
+        ? el('span', { cls: 'mp-prix-vig', attrs: { title: 'Prix en vigueur : celui du fournisseur principal, repris par les devis et Coûts matières' } },
+            'En vigueur ' + vig.txt + ' ' + unite + (princ ? ' · ' + (princ.fournisseur_nom || 'principal') : ''))
+        : el('span', { cls: 'mp-prix-vig', style: 'background:color-mix(in srgb,var(--warn) 14%,transparent);color:var(--warn)' },
+            'Aucun prix en vigueur')),
+    grille);
 }
 
 // ── Prix d'achat par fournisseur et par laize ─────────────────────
@@ -11695,9 +12310,9 @@ function buildMpPrixParLaize(m, data) {
   });
   tbl.appendChild(tb);
   return el('div', { cls: 'mp-prix-bloc' },
-    el('div', { cls: 'mp-empl-card-title', style: 'margin:16px 0 4px' }, 'Prix d\'achat par laize'),
-    el('div', { cls: 'mp-hint', style: 'margin:0 0 8px' },
-      'Un prix par fournisseur et par laize. Le prix en vigueur (encadré) est celui du principal ; il sert aux devis et aux coûts produits.'),
+    el('div', { cls: 'mp-hint', style: 'margin:4px 0 8px' },
+      'Un prix par fournisseur et par laize. Le prix en vigueur (surligné) est celui du fournisseur principal ; il sert aux devis et aux coûts produits.'
+      + (peut ? ' Un prix saisi est enregistré dès qu\'on quitte le champ.' : '')),
     el('div', { cls: 'mp-var-scroll' }, tbl));
 }
 
@@ -11800,7 +12415,9 @@ function openMpDeplacerModal(m, v) {
   const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   const toutes = (Array.isArray(S.matieres) ? S.matieres : [])
     .filter(x => x.id !== m.id && x.actif !== false && x.actif !== 0)
-    .sort((a, b) => String(a.designation || a.reference || '').localeCompare(String(b.designation || b.reference || ''), 'fr'));
+    // Même catégorie d'abord : c'est presque toujours là qu'on range l'article.
+    .sort((a, b) => ((a.categorie === m.categorie ? 0 : 1) - (b.categorie === m.categorie ? 0 : 1))
+      || String(a.designation || a.reference || '').localeCompare(String(b.designation || b.reference || ''), 'fr'));
   const remplir = () => {
     const k = norm(q.value);
     sel.innerHTML = '';
@@ -11838,13 +12455,45 @@ function openMpDeplacerModal(m, v) {
   };
   okBtn.addEventListener('click', valider);
   sel.addEventListener('dblclick', valider);
+  const nouvBtn = el('button', {
+    cls: 'mp-det-btn', type: 'button',
+    attrs: { title: 'Créer une matière (libellé commercial) et y ranger cet article' },
+    on: { click: () => mpDeplacerVersNouvelle(m, v) },
+  }, iconEl('plus', 13), 'Nouvelle matière');
   box.appendChild(el('div', { cls: 'mp-modal-actions' },
+    nouvBtn,
     el('div', { cls: 'mp-modal-actions-right' },
       el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMroot } }, 'Annuler'),
       okBtn)));
   overlay.appendChild(box);
   mroot.appendChild(overlay);
   q.focus();
+}
+
+// Crée une matière à partir de l'article (même catégorie, libellé repris), puis
+// y range l'article. Le formulaire de création reste celui de MyStock.
+function mpDeplacerVersNouvelle(m, v) {
+  const origine = m.id;
+  openMatiereCreateModal({
+    categorie: m.categorie,
+    sous_section: m.sous_section || '',
+    reference: v.ref_fournisseur || '',
+    designation: mpVarLibelle(v) || v.libelle_technique || m.designation || '',
+  }, { onCreated: async (created) => {
+    if (!created || !created.id) return;
+    try {
+      const d = await api('/api/stock/variantes/' + v.id + '/deplacer', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matiere_id: created.id }),
+      });
+      showToast('Matière créée, article rangé dessous'
+        + ((d.deplacement && d.deplacement.principal) ? ' comme fournisseur principal.' : '.'), 'success');
+    } catch (err) {
+      showToast('Matière créée, mais l\'article n\'a pas été déplacé : ' + err.message, 'error');
+    }
+    if (S.selMatiere && S.selMatiere.matiere && S.selMatiere.matiere.id === origine) await refreshSelMatiere();
+    else await loadMatiere(origine);
+  } });
 }
 
 function openMpVarianteModal(m, existing) {
@@ -11964,7 +12613,7 @@ async function deleteMpEmplacement(m, e) {
 
 async function openMpEmplacementModal(m, existing) {
   if (!m || S.stockReadOnly) return;
-  if (!_emplListFromDB.length) await fetchEmplacementsFromDB();
+  try { S.mpEmplConnus = await api('/api/stock/mp-emplacements-connus'); } catch (e) { /* liste vide : saisie libre */ }
   closeMroot();
   const mroot = document.getElementById('mroot');
   if (!mroot) return;
@@ -11985,11 +12634,7 @@ async function openMpEmplacementModal(m, existing) {
   box.appendChild(el('div', { cls: 'mp-modal-sub' },
     (m.reference || '') + (m.designation ? ' — ' + m.designation : '')));
 
-  const f = mpEmplacementFieldFlottant();
-  if (existing) {
-    f.emplInp.value = existing.emplacement;
-    f.emplInp.readOnly = true;
-  }
+  const f = mpEmplCombo(m, existing ? existing.emplacement : '');
   box.appendChild(f.wrap);
 
   let laizeSel = null;
@@ -11998,13 +12643,9 @@ async function openMpEmplacementModal(m, existing) {
     laizeSel = el('select');
     laizeSel.appendChild(el('option', { value: '' }, laizes.length ? 'Choisir une laize…' : 'Aucune laize associée'));
     laizes.forEach(l => laizeSel.appendChild(el('option', { value: String(l.laize_id) },
-      l.label || (l.valeur_mm + ' mm'))));
-    if (existing && existing.laize_id) {
-      laizeSel.value = String(existing.laize_id);
-      laizeSel.disabled = true;
-    } else if (laizes.length === 1) {
-      laizeSel.value = String(laizes[0].laize_id);
-    }
+      (l.label || (l.valeur_mm + ' mm')) + ' · ' + fN(l.quantite) + ' bob. en stock')));
+    if (existing && existing.laize_id) laizeSel.value = String(existing.laize_id);
+    else if (laizes.length === 1) laizeSel.value = String(laizes[0].laize_id);
     box.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Laize'), laizeSel));
   }
 
@@ -12013,16 +12654,27 @@ async function openMpEmplacementModal(m, existing) {
     attrs: { type: 'number', min: '0', step: 'any', inputmode: 'decimal' },
   });
   if (existing) qtyInp.value = String(existing.quantite);
+  const metresEl = el('div', { cls: 'mp-hint', style: 'margin-top:-6px' });
+  const majMetres = () => {
+    const q = parseFloat(String(qtyInp.value || '').replace(',', '.'));
+    const mt = q > 0 ? mpMetresDe(m, q) : null;
+    metresEl.textContent = mt != null ? '= ' + fN(mt) + ' m au métrage standard ('
+      + fN(m.metres_lineaires_par_bobine) + ' m / bobine)' : '';
+  };
+  qtyInp.addEventListener('input', majMetres);
+  majMetres();
   box.appendChild(el('div', { cls: 'mp-field' },
     el('label', null, mpQuantiteFieldLabel(m)), qtyInp));
-  box.appendChild(el('div', { cls: 'mp-hint' },
-    'Le stock total n\'est pas modifié : l\'emplacement indique où se trouve la matière.'));
+  box.appendChild(metresEl);
+  box.appendChild(el('div', { cls: 'mp-hint' }, existing
+    ? 'Changer l\'emplacement ou la laize déplace la ligne ; si la cible existe déjà, les quantités s\'additionnent. Le stock total n\'est pas modifié.'
+    : 'Le stock total n\'est pas modifié : l\'emplacement indique où se trouve la matière. Un emplacement déjà renseigné pour cette laize reçoit la quantité en plus.'));
   const errEl = el('div', { cls: 'mp-admin-err' });
   box.appendChild(errEl);
 
   const submit = async (btn) => {
     errEl.textContent = '';
-    const code = mpEmplacementValue(f.emplInp);
+    const code = mpEmplacementValue(f.inp);
     if (!code) { errEl.textContent = 'Emplacement obligatoire.'; return; }
     const errCode = validateMpEmplacement(code);
     if (errCode) { errEl.textContent = errCode; return; }
@@ -12035,13 +12687,28 @@ async function openMpEmplacementModal(m, existing) {
     }
     btn.disabled = true;
     try {
-      await api('/api/stock/matieres/' + m.id + '/emplacements', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ emplacement: code, quantite: qv, laize_id: laizeId }),
-      });
+      let msg = 'Emplacement enregistré.';
+      if (existing && existing.id) {
+        const r = await api('/api/stock/matieres/' + m.id + '/emplacements/' + existing.id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ emplacement: code, quantite: qv, laize_id: laizeId }),
+        });
+        if (r && r.fusion) msg = 'Regroupé avec ' + code + '.';
+      } else {
+        // Même emplacement, même laize : la quantité s'ajoute à celle déjà posée.
+        const deja = (Array.isArray(m.emplacements) ? m.emplacements : [])
+          .find(e => e.emplacement === code && (e.laize_id || 0) === (laizeId || 0));
+        const total = deja ? (parseFloat(deja.quantite) || 0) + qv : qv;
+        await api('/api/stock/matieres/' + m.id + '/emplacements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ emplacement: code, quantite: total, laize_id: laizeId }),
+        });
+        if (deja) msg = 'Ajouté à ' + code + ' : ' + mpStockLine(total, m) + ' au total.';
+      }
       closeMroot();
-      showToast('Emplacement enregistré.', 'success');
+      showToast(msg, 'success');
       await fetchEmplacementsFromDB();
       await loadMatieres();
     } catch (err) {
@@ -12051,6 +12718,7 @@ async function openMpEmplacementModal(m, existing) {
   };
   const saveBtn = el('button', { cls: 'btn', type: 'button' }, 'Enregistrer');
   saveBtn.addEventListener('click', () => submit(saveBtn));
+  qtyInp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(saveBtn); } });
   if (m.laizee && !laizes.length) saveBtn.disabled = true;
   box.appendChild(el('div', { cls: 'mp-modal-actions' },
     el('div', { cls: 'mp-modal-actions-right' },
@@ -12060,7 +12728,7 @@ async function openMpEmplacementModal(m, existing) {
   ));
   overlay.appendChild(box);
   mroot.appendChild(overlay);
-  requestAnimationFrame(() => (existing ? qtyInp : f.emplInp).focus());
+  requestAnimationFrame(() => (existing ? qtyInp : f.inp).focus());
 }
 
 
@@ -12676,6 +13344,7 @@ async function toggleMatieresActif(item) {
       });
       showToast('Référence réactivée.', 'success');
     }
+    S.mpInactives = null;
     await loadMatieresAdminList();
     await loadMatieres();
     renderMatieresAdminDrawer();
@@ -28341,6 +29010,8 @@ async function init() {
   }
   const urlFiche = (urlParams.get('fiche') || '').trim();
   if (['fournisseurs', 'mouvements'].includes(urlFiche)) S.mpVueInit = urlFiche;
+  const urlDetail = (urlParams.get('detail') || '').trim();
+  if (/^(laize|article):\d+$/.test(urlDetail)) S.mpDetailInit = urlDetail;
   const urlProduitId = parseInt(urlParams.get('produit') || '', 10);
   const urlProduitRef = (urlParams.get('ref') || '').trim();
   if (urlMatiereId > 0 && !S.tracaOnly) {
