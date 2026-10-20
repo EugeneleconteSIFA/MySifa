@@ -1547,18 +1547,86 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .mon-statut-warn{background:rgba(251,191,36,.12);color:var(--warn)}
 .mon-ecart-danger{color:var(--danger);font-weight:700;font-variant-numeric:tabular-nums}
 .mon-qty-neg{color:var(--danger);font-weight:600}
-.mon-page .mon-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.mon-page .mon-sous{font-size:11px;margin-top:2px;white-space:normal}
-.mon-page .mon-th{cursor:pointer;user-select:none;white-space:nowrap}
-.mon-page .mon-th:hover{color:var(--accent)}
-.mon-page .mon-col-filtres th{padding-top:0;padding-bottom:8px}
-.mon-page .mon-col-filtre{width:100%;min-width:64px;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:5px 7px;font-size:12px;color:var(--text);font-family:inherit;font-weight:400;text-transform:none;letter-spacing:0}
-.mon-page .mon-col-filtre:focus{outline:none;border-color:var(--accent)}
+.mon-page .mon-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:16px}
+.mon-page .mon-head .hist-title{margin:0}
+.mon-page .mon-head .mp-pills{margin:0}
+.mon-page .mon-outils{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px}
+.mon-page .mon-seg{display:inline-flex;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:3px;gap:2px}
+.mon-page .mon-seg-btn{border:none;background:transparent;color:var(--text2);font:inherit;font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:7px;cursor:pointer;transition:background .15s,color .15s}
+.mon-page .mon-seg-btn:hover{background:var(--bg);color:var(--text)}
+.mon-page .mon-seg-btn.actif{background:var(--accent);color:white}
+.mon-page .mon-periode-lib{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.mon-page .mon-dates{display:inline-flex;gap:6px}
+.mon-page .mon-date{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 9px;color:var(--text);font-family:inherit;font-size:12.5px}
+.mon-page .mon-outils .mon-search-wrap{flex:1;min-width:220px;background:var(--card);border-radius:10px;padding:0 12px}
+.mon-page .mon-outils .mon-search-wrap input{padding:9px 0;font-size:13px}
+.mon-page .mon-outil-btn{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);color:var(--text2);border-radius:10px;padding:8px 12px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;transition:background .15s}
+.mon-page .mon-outil-btn:hover{background:var(--bg);color:var(--text)}
+.mon-page .mon-outil-btn.actif{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.mon-page .mon-tuiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.mon-page .mon-tuile{--t:var(--muted);position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px 12px 16px;cursor:pointer;font:inherit;overflow:hidden;transition:border-color .15s,background .15s,transform .15s}
+.mon-page .mon-tuile::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--t)}
+.mon-page .mon-tuile:hover{border-color:var(--t);transform:translateY(-1px)}
+.mon-page .mon-tuile.actif{border-color:var(--t);background:color-mix(in srgb,var(--t) 10%,var(--card))}
+.mon-page .mon-tuile-n{font-size:24px;font-weight:800;line-height:1.1;color:var(--t);font-variant-numeric:tabular-nums}
+.mon-page .mon-tuile-l{font-size:12px;font-weight:600;color:var(--text2)}
+.mon-page .mon-tuile-tout{--t:var(--accent)}
+.mon-page .mon-tuile-ok{--t:var(--success)}
+.mon-page .mon-tuile-danger{--t:var(--danger)}
+.mon-page .mon-tuile-warn{--t:var(--warn)}
+.mon-page .mon-tuile-neutre{--t:var(--muted)}
+.mon-page .mon-carte{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.mon-page .mon-carte-tete{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)}
+.mon-page .mon-carte-titre{font-size:14px;font-weight:700;color:var(--text)}
+.mon-page .mon-compte{font-size:12px;color:var(--muted);background:var(--bg);border-radius:20px;padding:2px 10px;font-variant-numeric:tabular-nums}
+.mon-page .mon-relacher{margin-left:auto;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:5px 10px;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.mon-page .mon-relacher:hover{border-color:var(--accent);color:var(--accent)}
+.mon-page .mon-table-wrap{overflow-x:auto}
+.mon-page .mon-table{width:100%;border-collapse:collapse;font-size:13px}
+.mon-page .mon-th{position:sticky;top:0;z-index:1;background:var(--bg);text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:10px 14px;cursor:pointer;user-select:none;white-space:nowrap;border-bottom:1px solid var(--border)}
+.mon-page .mon-th:hover,.mon-page .mon-th.trie{color:var(--accent)}
+.mon-page .mon-tri{opacity:.35;font-size:10px}
+.mon-page .mon-tri.actif{opacity:1}
+.mon-page .mon-col-filtres th{background:var(--bg);padding:0 14px 10px;border-bottom:1px solid var(--border)}
+.mon-page .mon-col-filtre{width:100%;min-width:70px;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:5px 8px;font-size:12px;color:var(--text);font-family:inherit}
+.mon-page .mon-col-filtre:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 .mon-page .mon-col-filtre.actif{border-color:var(--accent);background:var(--accent-bg)}
-.mon-page .mon-date{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 9px;color:var(--text);font-family:inherit}
+.mon-page .mon-ligne td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+.mon-page .mon-ligne:hover td{background:color-mix(in srgb,var(--accent) 4%,var(--card))}
+.mon-page .mon-ligne td:first-child{box-shadow:inset 4px 0 0 var(--t,transparent)}
+.mon-page .mon-ligne-ok{--t:var(--success)}
+.mon-page .mon-ligne-danger{--t:var(--danger)}
+.mon-page .mon-ligne-warn{--t:var(--warn)}
+.mon-page .mon-ligne-neutre{--t:var(--border)}
+.mon-page .mon-badge{--t:var(--muted);display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:20px;color:var(--t);background:color-mix(in srgb,var(--t) 13%,transparent)}
+.mon-page .mon-badge::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--t)}
+.mon-page .mon-ton-ok{--t:var(--success)}
+.mon-page .mon-ton-danger{--t:var(--danger)}
+.mon-page .mon-ton-warn{--t:var(--warn)}
+.mon-page .mon-ton-neutre{--t:var(--muted)}
+.mon-page .mon-ref{font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.mon-page .mon-principal{color:var(--text)}
+.mon-page .mon-sous{font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.35}
+.mon-page .mon-vide{color:var(--muted);font-style:italic;font-size:12px}
+.mon-page .mon-qte{font-size:15px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.mon-page .mon-u{font-size:11px;font-weight:500;color:var(--muted)}
+.mon-page .mon-jauge-tete{display:flex;align-items:baseline;gap:8px;margin-bottom:5px}
+.mon-page .mon-pct{font-size:14px;font-weight:800;font-variant-numeric:tabular-nums}
+.mon-page .mon-jauge{position:relative;height:6px;min-width:90px;border-radius:4px;background:var(--bg);overflow:hidden}
+.mon-page .mon-jauge-fill{height:100%;border-radius:4px}
+.mon-page .mon-jauge-trop{position:absolute;top:-1px;bottom:-1px;width:2px;background:var(--text)}
+.mon-page .mon-txt-ok{color:var(--success)}
+.mon-page .mon-txt-danger{color:var(--danger)}
+.mon-page .mon-txt-warn{color:var(--warn)}
+.mon-page .mon-txt-neutre{color:var(--text2)}
+.mon-page .mon-bg-ok{background:var(--success)}
+.mon-page .mon-bg-danger{background:var(--danger)}
+.mon-page .mon-bg-warn{background:var(--warn)}
+.mon-page .mon-bg-neutre{background:var(--muted)}
+.mon-page .mon-depart{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.mon-page .mon-point{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.mon-page .mon-etat{padding:28px 16px;text-align:center;color:var(--muted)}
 .mon-page .mon-alerte{margin-bottom:12px;padding:10px 14px;border-radius:9px;background:var(--card);border:1px solid var(--warn);font-size:12.5px;color:var(--text)}
-.mon-page .mon-relacher{margin-left:auto;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:5px 10px;font-weight:600;cursor:pointer}
-.mon-page .mon-table td{vertical-align:top}
 .hist-cell-badges{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .hist-ref{font-family:ui-monospace,monospace;font-size:12px;font-weight:700;color:var(--text)}
 .hist-ref .mvt-ref-link,.hist-card-ref .mvt-ref-link{font-family:inherit;font-size:inherit;font-weight:inherit;color:inherit}
@@ -19749,90 +19817,184 @@ function monStatutDef(page, statut) {
   return (MON_STATUTS[page] || []).find(s => s[0] === statut) || [statut, statut || '—', ''];
 }
 
+// Ce que veut dire chaque statut, en une phrase (bulle des tuiles et des badges).
+const MON_AIDE = {
+  production: {
+    ok: 'Saisi et entré en stock, quantités concordantes.',
+    ecart: 'Entré en stock, mais la quantité ne correspond pas à la saisie.',
+    non_entre: 'Dossier clôturé en production, rien n\'est entré dans MyStock.',
+    sans_saisie: 'Entré en stock sans quantité saisie en fin de production.',
+    ref_diff: 'La référence entrée en stock n\'est pas celle du planning.',
+    hors_dossier: 'Entrée de stock rattachée à aucun dossier de la période.',
+    en_cours: 'Production en cours, pas encore de fin de dossier.',
+  },
+  expedition: {
+    ok: 'Livré dans RVGI et sorti de MyStock, quantités concordantes.',
+    ecart: 'Livré et sorti, mais les quantités ne correspondent pas.',
+    bl_sans_sortie: 'BL émis dans RVGI, aucune sortie dans MyStock.',
+    sortie_sans_bl: 'Sorti de MyStock sans BL RVGI sur la période.',
+    sortie: 'Sorti de MyStock (miroir RVGI absent : BL non comparés).',
+    depart_prevu: 'Départ MyExpé programmé, pas encore de BL ni de sortie.',
+    a_expedier: 'Date de livraison du dossier sur la période, rien n\'est parti.',
+  },
+};
+
+function monTon(page, statut) {
+  const t = monStatutDef(page, statut)[2];
+  return t === 'ok' ? 'ok' : t === 'ecart' ? 'danger' : t === 'warn' ? 'warn' : 'neutre';
+}
+
 function monBadge(page, statut) {
-  const [, label, ton] = monStatutDef(page, statut);
-  return el('span', { cls: 'mon-statut' + (ton ? ' mon-statut-' + ton : '') }, label);
+  const [, label] = monStatutDef(page, statut);
+  return el('span', {
+    cls: 'mon-badge mon-ton-' + monTon(page, statut),
+    title: (MON_AIDE[page] || {})[statut] || '',
+  }, label);
 }
 
-function monQte(v, unite) {
-  if (v == null || v === '') return '—';
-  return unite ? fU(v, unite) : fN(v);
+// 5 860 800 → « 5,86 M », 304 000 → « 304 k » ; la valeur exacte reste au survol.
+function monCompact(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '—';
+  const a = Math.abs(n);
+  const f = (x, d) => x.toLocaleString('fr-FR', { maximumFractionDigits: d });
+  if (a >= 1e6) return f(n / 1e6, a >= 1e7 ? 1 : 2) + ' M';
+  if (a >= 1e4) return f(n / 1e3, a >= 1e5 ? 0 : 1) + ' k';
+  return f(n, 0);
 }
 
-function monQteTd(v, unite, sous) {
-  return el('td', { cls: 'mon-num' },
-    el('div', null, monQte(v, unite)),
-    sous ? el('div', { cls: 'hist-muted mon-sous' }, sous) : null);
+function monUnite(u) {
+  const s = String(u || '').trim().toLowerCase();
+  if (!s) return '';
+  if (s.startsWith('étiquette') || s.startsWith('etiquette')) return 'éti.';
+  return s;
 }
 
-function monEcartTd(l) {
-  if (l.ecart == null) return el('td', { cls: 'mon-num hist-muted' }, '—');
-  const n = Number(l.ecart);
-  const txt = (n > 0 ? '+' : '') + monQte(n, l.unite);
-  return el('td', { cls: 'mon-num' }, el('span', { cls: l.statut === 'ok' || n === 0 ? '' : 'mon-ecart-danger' }, txt));
+function monCourt(iso) {
+  if (!iso) return '';
+  const s = String(iso);
+  return s.slice(8, 10) + '/' + s.slice(5, 7) + (s.length >= 16 ? ' ' + s.slice(11, 16) : '');
 }
 
-function monListeTd(items, max) {
-  const lst = (items || []).filter(Boolean);
-  if (!lst.length) return el('td', { cls: 'hist-muted' }, '—');
-  const vis = lst.slice(0, max || 3);
-  return el('td', { title: escAttr(lst.join(', ')) },
-    vis.map(t => el('div', null, t)),
-    lst.length > vis.length ? el('div', { cls: 'hist-muted mon-sous' }, '+' + (lst.length - vis.length)) : null);
+// Une quantité : grand chiffre, unité discrète, ligne de contexte dessous.
+function monQteCell(v, unite, sous, vide) {
+  if (v == null || v === '' || Number(v) === 0) {
+    return el('td', { cls: 'mon-cell' }, el('div', { cls: 'mon-vide' }, vide || '—'),
+      sous ? el('div', { cls: 'mon-sous' }, sous) : null);
+  }
+  return el('td', { cls: 'mon-cell' },
+    el('div', { cls: 'mon-qte', title: fN(v) + (unite ? ' ' + unite : '') },
+      monCompact(v), unite ? el('span', { cls: 'mon-u' }, ' ' + monUnite(unite)) : null),
+    sous ? el('div', { cls: 'mon-sous' }, sous) : null);
 }
 
-// Colonnes : clé (tri, filtre, adresse), libellé, valeur de tri/filtre, cellule.
+// Jauge : la quantité comparée rapportée à la quantité de référence.
+// `attendu` = ce que l'autre source annonce (saisie, BL).
+function monJaugeCell(page, l, attendu, obtenu) {
+  const ton = monTon(page, l.statut);
+  if (!(attendu > 0) || !(obtenu > 0)) {
+    return el('td', { cls: 'mon-cell' }, el('div', { cls: 'mon-vide' }, '—'));
+  }
+  const pct = obtenu / attendu * 100;
+  const larg = Math.max(4, Math.min(100, pct));
+  const ecart = obtenu - attendu;
+  return el('td', { cls: 'mon-cell' },
+    el('div', { cls: 'mon-jauge-tete' },
+      el('span', { cls: 'mon-pct mon-txt-' + ton }, Math.round(pct) + ' %'),
+      ecart ? el('span', { cls: 'mon-sous', title: fN(ecart) }, (ecart > 0 ? '+' : '') + monCompact(ecart)) : null),
+    el('div', { cls: 'mon-jauge' },
+      el('div', { cls: 'mon-jauge-fill mon-bg-' + ton, style: { width: larg + '%' } }),
+      pct > 100 ? el('div', { cls: 'mon-jauge-trop', style: { left: (100 / Math.min(pct, 200) * 100) + '%' } }) : null));
+}
+
+// Deux lignes : un libellé principal et un contexte discret.
+function monDouble(principal, sous, clsPrincipal) {
+  return el('td', { cls: 'mon-cell' },
+    el('div', { cls: clsPrincipal || 'mon-principal' }, principal || '—'),
+    sous ? el('div', { cls: 'mon-sous' }, sous) : null);
+}
+
+function monDesignation(l) {
+  const d = (l.designation || '').trim();
+  // « 601/0161 » en désignation de « 601/0161 » n'apprend rien.
+  if (!d || d === l.reference || d.startsWith(l.reference + ' ')) return '';
+  return truncStr(d, 42);
+}
+
+// Colonnes : clé (tri, filtre, adresse), libellé, valeur de tri, texte filtré, cellule.
 function monColonnes(page) {
+  const statut = {
+    cle: 'statut', label: 'Contrôle', val: l => monStatutDef(page, l.statut)[1],
+    txt: l => monStatutDef(page, l.statut)[1], td: l => el('td', { cls: 'mon-cell' }, monBadge(page, l.statut)),
+  };
   if (page === 'expedition') return [
-    { cle: 'reference', label: 'Référence', val: l => l.reference || '', td: l => el('td', { cls: 'hist-ref' }, l.reference || '—') },
-    { cle: 'designation', label: 'Désignation', val: l => l.designation || '', td: l => el('td', { cls: 'hist-des', title: escAttr(l.designation || '') }, truncStr(l.designation || '', 34) || '—') },
-    { cle: 'clients', label: 'Client', val: l => (l.clients || []).join(' '), td: l => monListeTd(l.clients, 2) },
-    { cle: 'dossiers', label: 'Dossier de prod', val: l => (l.dossiers || []).map(d => d.no_dossier).join(' '),
-      td: l => monListeTd((l.dossiers || []).map(d => d.no_dossier + (d.statut ? ' · ' + (MON_STATUT_PLANNING[d.statut] || d.statut) : '')), 2) },
-    { cle: 'date_livraison', label: 'Livraison prévue', num: false, val: l => l.date_livraison || '', td: l => el('td', null, l.date_livraison ? fD(l.date_livraison) : '—') },
-    { cle: 'bls', label: 'BL RVGI', val: l => (l.bls || []).join(' '), td: l => monListeTd(l.bls, 3) },
-    { cle: 'date_bl', label: 'Date BL', val: l => l.date_bl || '', td: l => el('td', null, l.date_bl ? fD(l.date_bl) : '—') },
-    { cle: 'qte_bl', label: 'Qté BL', num: true, val: l => Number(l.qte_bl) || 0, td: l => monQteTd(l.qte_bl, l.unite) },
-    { cle: 'departs', label: 'Départ MyExpé', val: l => (l.departs || []).map(d => d.jour).join(' '),
-      td: l => monListeTd((l.departs || []).map(d => fD(d.jour) + ' · ' + (MON_STATUT_DEPART[d.statut] || d.statut || '—')), 2) },
-    { cle: 'qte_sortie', label: 'Sortie MyStock', num: true, val: l => Number(l.qte_sortie) || 0,
-      td: l => monQteTd(l.qte_sortie, l.unite, l.nb_sorties ? l.nb_sorties + ' mvt · ' + (l.emplacements_sortie || []).slice(0, 3).join(', ') : '') },
-    { cle: 'derniere_sortie', label: 'Dernière sortie', val: l => l.derniere_sortie || '', td: l => el('td', null, l.derniere_sortie ? fDateTime(l.derniere_sortie) : '—') },
-    { cle: 'stock_actuel', label: 'Stock actuel', num: true, val: l => Number(l.stock_actuel) || 0, td: l => monQteTd(l.stock_actuel, l.unite) },
-    { cle: 'ecart', label: 'Écart', num: true, val: l => l.ecart == null ? -Infinity : Number(l.ecart), td: monEcartTd },
-    { cle: 'statut', label: 'Contrôle', val: l => monStatutDef(page, l.statut)[1], td: l => el('td', null, monBadge(page, l.statut)) },
+    statut,
+    { cle: 'reference', label: 'Référence', val: l => l.reference || '',
+      txt: l => [l.reference, l.designation].join(' '),
+      td: l => monDouble(l.reference, monDesignation(l), 'mon-ref') },
+    { cle: 'clients', label: 'Client · dossier', val: l => (l.clients || [])[0] || '',
+      txt: l => [(l.clients || []).join(' '), (l.dossiers || []).map(d => d.no_dossier).join(' ')].join(' '),
+      td: l => monDouble((l.clients || []).join(', '),
+        (l.dossiers || []).map(d => d.no_dossier + (d.date_livraison ? ' · livr. ' + monCourt(d.date_livraison) : '')).join(' / ')) },
+    { cle: 'qte_bl', label: 'Livré RVGI', num: true, val: l => Number(l.qte_bl) || 0, txt: l => l.qte_bl,
+      td: l => monQteCell(l.qte_bl, l.unite,
+        (l.bls || []).length ? 'BL ' + l.bls.slice(0, 2).join(', ') + (l.bls.length > 2 ? ' +' + (l.bls.length - 2) : '') + (l.date_bl ? ' · ' + monCourt(l.date_bl) : '') : '',
+        data().miroir === false ? 'miroir absent' : 'aucun BL') },
+    { cle: 'departs', label: 'Départ MyExpé', val: l => ((l.departs || [])[0] || {}).jour || '',
+      txt: l => (l.departs || []).map(d => d.jour + ' ' + (MON_STATUT_DEPART[d.statut] || '')).join(' '),
+      td: l => {
+        const deps = l.departs || [];
+        if (!deps.length) return el('td', { cls: 'mon-cell' }, el('div', { cls: 'mon-vide' }, 'aucun départ'));
+        return el('td', { cls: 'mon-cell' }, deps.slice(0, 2).map(d => el('div', { cls: 'mon-depart' },
+          el('span', { cls: 'mon-point mon-bg-' + (d.statut === 'valide' ? 'ok' : 'neutre') }),
+          monCourt(d.jour), el('span', { cls: 'mon-sous' }, ' ' + (MON_STATUT_DEPART[d.statut] || d.statut || '')))),
+          deps.length > 2 ? el('div', { cls: 'mon-sous' }, '+' + (deps.length - 2)) : null);
+      } },
+    { cle: 'qte_sortie', label: 'Sorti MyStock', num: true, val: l => Number(l.qte_sortie) || 0, txt: l => l.qte_sortie,
+      td: l => monQteCell(l.qte_sortie, l.unite,
+        l.nb_sorties ? monCourt(l.derniere_sortie) + ' · ' + (l.emplacements_sortie || []).slice(0, 3).join(', ') : '', 'aucune sortie') },
+    { cle: 'ecart', label: 'Sorti / livré', num: true, val: l => l.ecart == null ? -Infinity : Number(l.ecart), txt: l => l.ecart,
+      td: l => monJaugeCell(page, l, Number(l.qte_bl) || 0, Number(l.qte_sortie) || 0) },
+    { cle: 'stock_actuel', label: 'Stock actuel', num: true, val: l => Number(l.stock_actuel) || 0, txt: l => l.stock_actuel,
+      td: l => monQteCell(l.stock_actuel, l.unite, '', '0') },
   ];
   return [
-    { cle: 'no_dossier', label: 'Dossier', val: l => l.no_dossier || '', td: l => el('td', { cls: 'hist-ref' }, l.no_dossier || el('span', { cls: 'hist-muted' }, 'Hors dossier')) },
+    statut,
+    { cle: 'no_dossier', label: 'Dossier', val: l => l.no_dossier || '',
+      txt: l => [l.no_dossier, l.client, l.machine].join(' '),
+      td: l => monDouble(l.no_dossier || 'Hors dossier',
+        [l.client, l.machine, MON_STATUT_PLANNING[l.statut_planning]].filter(Boolean).join(' · '),
+        l.no_dossier ? 'mon-ref' : 'mon-vide') },
     { cle: 'reference', label: 'Référence', val: l => l.reference || '',
-      td: l => el('td', { cls: 'hist-ref' }, l.reference || '—',
-        l.statut === 'ref_diff' ? el('div', { cls: 'hist-muted mon-sous' }, 'Stock : ' + (l.refs_stock || []).join(', ')) : null) },
-    { cle: 'designation', label: 'Désignation', val: l => l.designation || '', td: l => el('td', { cls: 'hist-des', title: escAttr(l.designation || '') }, truncStr(l.designation || '', 34) || '—') },
-    { cle: 'client', label: 'Client', val: l => l.client || '', td: l => el('td', null, l.client || '—') },
-    { cle: 'machine', label: 'Machine', val: l => l.machine || '', td: l => el('td', null, l.machine || '—') },
-    { cle: 'statut_planning', label: 'Planning', val: l => MON_STATUT_PLANNING[l.statut_planning] || l.statut_planning || '',
-      td: l => el('td', null, MON_STATUT_PLANNING[l.statut_planning] || l.statut_planning || '—') },
-    { cle: 'qte_of', label: 'Qté OF', num: true, val: l => Number(l.qte_of) || 0, td: l => monQteTd(l.qte_of, 'étiquette') },
-    { cle: 'qte_produite', label: 'Qté saisie', num: true, val: l => Number(l.qte_produite) || 0,
-      td: l => monQteTd(l.qte_produite, 'étiquette',
-        [l.qte_produite_max && l.qte_produite_max !== l.qte_produite ? 'max ' + fN(l.qte_produite_max) : '', l.cloture ? 'clôturé' : ''].filter(Boolean).join(' · ')) },
-    { cle: 'derniere_saisie', label: 'Dernière saisie', val: l => l.derniere_saisie || '', td: l => el('td', null, l.derniere_saisie ? fDateTime(l.derniere_saisie) : '—') },
-    { cle: 'qte_entree', label: 'Entrée MyStock', num: true, val: l => Number(l.qte_entree) || 0,
-      td: l => monQteTd(l.qte_entree, l.unite,
-        [l.nb_entrees ? l.nb_entrees + ' mvt · ' + (l.emplacements_entree || []).slice(0, 3).join(', ') : '',
+      txt: l => [l.reference, l.designation].join(' '),
+      td: l => monDouble(l.reference,
+        l.statut === 'ref_diff' ? 'en stock : ' + (l.refs_stock || []).join(', ') : monDesignation(l), 'mon-ref') },
+    { cle: 'qte_produite', label: 'Saisi en prod', num: true, val: l => Number(l.qte_produite) || 0, txt: l => l.qte_produite,
+      td: l => monQteCell(l.qte_produite, 'étiquette',
+        [l.qte_of ? 'OF ' + monCompact(l.qte_of) : '',
+         l.qte_produite_max && l.qte_produite_max !== l.qte_produite ? 'dernier relevé ' + monCompact(l.qte_produite_max) : '',
+         l.cloture ? 'clôturé ' + monCourt(l.derniere_saisie) : (l.derniere_saisie ? 'en cours · ' + monCourt(l.derniere_saisie) : '')].filter(Boolean).join(' · '),
+        'rien saisi') },
+    { cle: 'qte_entree', label: 'Entré MyStock', num: true, val: l => Number(l.qte_entree) || 0, txt: l => l.qte_entree,
+      td: l => monQteCell(l.qte_entree, l.unite,
+        [l.nb_entrees ? monCourt(l.derniere_entree) + ' · ' + (l.emplacements_entree || []).slice(0, 3).join(', ') : '',
          (l.rattachement || []).includes('reference') ? 'rapprochée par la réf.' : '',
-         (l.rattachement || []).includes('of') ? 'rapprochée par l\'OF' : ''].filter(Boolean).join(' · ')) },
-    { cle: 'derniere_entree', label: 'Dernière entrée', val: l => l.derniere_entree || '', td: l => el('td', null, l.derniere_entree ? fDateTime(l.derniere_entree) : '—') },
-    { cle: 'nb_deplacements', label: 'Déplacements', num: true, val: l => Number(l.nb_deplacements) || 0,
-      td: l => l.nb_deplacements
-        ? el('td', null, el('div', null, l.nb_deplacements + ' · ' + monQte(l.qte_deplacee, l.unite)),
-            el('div', { cls: 'hist-muted mon-sous' }, '→ ' + (l.derniere_destination || '—') + (l.dernier_deplacement ? ' le ' + fDateTime(l.dernier_deplacement) : '')))
-        : el('td', { cls: 'hist-muted' }, '—') },
-    { cle: 'stock_restant', label: 'Stock restant', num: true, val: l => Number(l.stock_restant) || 0,
-      td: l => monQteTd(l.stock_restant, l.unite, (l.emplacements_restants || []).slice(0, 3).join(', ')) },
-    { cle: 'ecart', label: 'Écart', num: true, val: l => l.ecart == null ? -Infinity : Number(l.ecart), td: monEcartTd },
-    { cle: 'statut', label: 'Contrôle', val: l => monStatutDef(page, l.statut)[1], td: l => el('td', null, monBadge(page, l.statut)) },
+         (l.rattachement || []).includes('of') ? 'rapprochée par l\'OF' : ''].filter(Boolean).join(' · '),
+        'rien entré') },
+    { cle: 'ecart', label: 'Entré / saisi', num: true, val: l => l.ecart == null ? -Infinity : Number(l.ecart), txt: l => l.ecart,
+      td: l => monJaugeCell(page, l, (Number(l.qte_entree) || 0) - (Number(l.ecart) || 0), Number(l.qte_entree) || 0) },
+    { cle: 'nb_deplacements', label: 'Après l\'entrée', num: true, val: l => Number(l.stock_restant) || 0,
+      txt: l => [l.derniere_destination, (l.emplacements_restants || []).join(' ')].join(' '),
+      td: l => {
+        const lignes = [];
+        if (l.nb_deplacements) lignes.push(el('div', { cls: 'mon-principal' }, '→ ' + (l.derniere_destination || '—'),
+          el('span', { cls: 'mon-sous' }, ' · ' + l.nb_deplacements + ' dépl.' + (l.dernier_deplacement ? ' · ' + monCourt(l.dernier_deplacement) : ''))));
+        if (l.stock_restant) lignes.push(el('div', { cls: 'mon-sous', title: fN(l.stock_restant) },
+          'reste ' + monCompact(l.stock_restant) + ' ' + monUnite(l.unite) + ((l.emplacements_restants || []).length ? ' en ' + l.emplacements_restants.slice(0, 3).join(', ') : '')));
+        return el('td', { cls: 'mon-cell' }, lignes.length ? lignes : el('div', { cls: 'mon-vide' }, '—'));
+      } },
   ];
+  function data() { return monEnsureState().data || {}; }
 }
 
 function monNormTxt(s) {
@@ -19842,13 +20004,12 @@ function monNormTxt(s) {
 // Filtre de colonne : « contient » sur le texte ; sur un nombre, accepte
 // aussi « >100 », « <0 », « =0 ».
 function monFiltreOk(col, l, f) {
-  const v = col.val(l);
   const t = String(f || '').trim();
   if (!t) return true;
   if (col.num) {
     const m = t.replace(/\s/g, '').replace(',', '.').match(/^(>=|<=|>|<|=)?(-?\d+(\.\d+)?)$/);
     if (m) {
-      const n = Number(m[2]), x = Number(v);
+      const n = Number(m[2]), x = Number(col.txt(l));
       if (!Number.isFinite(x)) return false;
       if (m[1] === '>') return x > n;
       if (m[1] === '<') return x < n;
@@ -19857,7 +20018,7 @@ function monFiltreOk(col, l, f) {
       return x === n;
     }
   }
-  return monNormTxt(v).includes(monNormTxt(t));
+  return monNormTxt(col.txt(l)).includes(monNormTxt(t));
 }
 
 function monLignesBase() {
@@ -19988,38 +20149,30 @@ function renderMonitoringView(fullRebuild) {
 function buildMonitoring() {
   const m = monEnsureState();
   const t = monTitre(m.monPage);
-  const head = el('div', { cls: 'hist-head' },
+  const head = el('div', { cls: 'mon-head' },
     el('div', null,
       el('h2', { cls: 'hist-title' }, t.titre),
       el('p', { cls: 'hist-subtitle' }, t.sous),
     ),
+    monPagePills(),
   );
 
-  // Période
-  const barre = el('div', { cls: 'mon-actions', id: 'mon-periode-bar' });
-  MON_PERIODES.forEach(([id, label]) => barre.appendChild(el('button', {
-    cls: 'mp-pill' + (m.periode === id ? ' active' : ''), type: 'button',
+  // Barre d'outils : période (segmentée), recherche, filtres de colonne.
+  const seg = el('div', { cls: 'mon-seg', role: 'group', 'aria-label': 'Période' });
+  MON_PERIODES.forEach(([id, label]) => seg.appendChild(el('button', {
+    cls: 'mon-seg-btn' + (m.periode === id ? ' actif' : ''), type: 'button',
     on: { click: () => {
       if (id === 'perso' && m.periode !== 'perso') { const p = monPeriode(); m.du = p.du; m.au = p.au; }
       m.periode = id;
       renderMonitoringView(true);
     } },
   }, label)));
-  if (m.periode === 'perso') {
-    const p = monPeriode();
-    const inp = (cle, val) => el('input', {
-      type: 'date', id: 'mon-' + cle, value: val, cls: 'mon-date',
+  const dates = m.periode === 'perso' ? el('div', { cls: 'mon-dates' },
+    ...['du', 'au'].map(cle => el('input', {
+      type: 'date', id: 'mon-' + cle, value: monPeriode()[cle], cls: 'mon-date', 'aria-label': cle === 'du' ? 'Du' : 'Au',
       on: { change: (e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) { m[cle] = e.target.value; renderMonitoringView(true); } } },
-    });
-    barre.appendChild(el('span', { cls: 'hist-muted' }, 'du'));
-    barre.appendChild(inp('du', p.du));
-    barre.appendChild(el('span', { cls: 'hist-muted' }, 'au'));
-    barre.appendChild(inp('au', p.au));
-  }
-  barre.appendChild(el('span', { cls: 'hist-muted', id: 'mon-periode-lib', style: { marginLeft: 'auto' } },
-    (() => { const p = monPeriode(); return 'Du ' + fD(p.du) + ' au ' + fD(p.au); })()));
+    }))) : el('span', { cls: 'mon-periode-lib' }, (() => { const p = monPeriode(); return fD(p.du) + ' → ' + fD(p.au); })());
 
-  // Recherche + statuts
   const searchInp = el('input', {
     type: 'search', id: 'mon-search',
     placeholder: m.monPage === 'expedition' ? 'Rechercher (référence, client, BL, dossier…)' : 'Rechercher (dossier, référence, client…)',
@@ -20030,42 +20183,52 @@ function buildMonitoring() {
   searchInp.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { m.query = ''; e.target.value = ''; renderMonitoringView(false); }
   });
-  const filtres = el('div', { cls: 'mon-filters-row', id: 'mon-filters-bar' },
+
+  const outils = el('div', { cls: 'mon-outils' },
+    seg, dates,
     el('div', { cls: 'mon-search-wrap' },
-      el('span', { attrs: { 'aria-hidden': 'true' } }, iconEl('search', 18)),
-      searchInp,
-    ),
-    el('div', { cls: 'mp-pills', id: 'mon-filter-pills' }),
+      el('span', { attrs: { 'aria-hidden': 'true' } }, iconEl('search', 16)),
+      searchInp),
+    el('button', {
+      cls: 'mon-outil-btn', type: 'button', id: 'mon-filtres-btn',
+      on: { click: () => { m.filtresOuverts = !m.filtresOuverts; renderMonitoringView(false); } },
+    }, iconEl('list', 15), ' Filtres de colonne'),
+    el('button', {
+      cls: 'mon-outil-btn', type: 'button', title: 'Recharger les données',
+      on: { click: () => { m.cleData = null; m.data = null; loadMonitoring(); } },
+    }, iconEl('refresh-ccw', 15)),
   );
 
   return el('div', { cls: 'content mon-page hist-page' },
     head,
-    monPagePills(),
-    barre,
-    filtres,
+    outils,
+    el('div', { cls: 'mon-tuiles', id: 'mon-tuiles' }),
     el('div', { id: 'mon-results-wrap' }),
   );
 }
 
-// Pastilles de statut : comptées sur la période, avant les autres filtres.
-function monRenderStatutPills() {
-  const zone = document.getElementById('mon-filter-pills');
+// Tuiles de synthèse : une par statut présent, comptée sur la période.
+// Un clic filtre, un second relâche.
+function monRenderTuiles() {
+  const zone = document.getElementById('mon-tuiles');
   if (!zone) return;
   const m = monEnsureState();
   const base = monLignesBase();
   const compte = {};
   base.forEach(l => { compte[l.statut] = (compte[l.statut] || 0) + 1; });
   zone.innerHTML = '';
-  zone.appendChild(el('button', {
-    cls: 'mp-pill' + (!m.filterStatut ? ' active' : ''), type: 'button',
-    on: { click: () => { m.filterStatut = null; renderMonitoringView(false); } },
-  }, 'Tout · ' + fN(base.length)));
+  const tuile = (id, label, n, ton, aide) => el('button', {
+    cls: 'mon-tuile mon-tuile-' + ton + (m.filterStatut === id || (id == null && !m.filterStatut) ? ' actif' : ''),
+    type: 'button', title: aide || '',
+    on: { click: () => { m.filterStatut = (id == null || m.filterStatut === id) ? null : id; renderMonitoringView(false); } },
+  },
+    el('span', { cls: 'mon-tuile-n' }, m.data ? fN(n) : '…'),
+    el('span', { cls: 'mon-tuile-l' }, label));
+  zone.appendChild(tuile(null, m.monPage === 'expedition' ? 'Références' : 'Lignes', base.length, 'tout',
+    'Toutes les lignes de la période'));
   (MON_STATUTS[m.monPage] || []).forEach(([id, label]) => {
     if (!compte[id] && m.filterStatut !== id) return;
-    zone.appendChild(el('button', {
-      cls: 'mp-pill' + (m.filterStatut === id ? ' active' : ''), type: 'button',
-      on: { click: () => { m.filterStatut = m.filterStatut === id ? null : id; renderMonitoringView(false); } },
-    }, label + ' · ' + fN(compte[id] || 0)));
+    zone.appendChild(tuile(id, label, compte[id] || 0, monTon(m.monPage, id), (MON_AIDE[m.monPage] || {})[id]));
   });
 }
 
@@ -20073,13 +20236,19 @@ function renderMonitoringResults(container) {
   if (!container) return;
   container.innerHTML = '';
   const m = monEnsureState();
-  monRenderStatutPills();
+  monRenderTuiles();
+  const fb = document.getElementById('mon-filtres-btn');
+  const nbFiltres = Object.values(m.colFiltres || {}).filter(Boolean).length;
+  if (fb) {
+    fb.classList.toggle('actif', !!(m.filtresOuverts || nbFiltres));
+    fb.lastChild.textContent = ' Filtres de colonne' + (nbFiltres ? ' (' + nbFiltres + ')' : '');
+  }
   if (m.erreur) {
-    container.appendChild(el('div', { cls: 'hist-empty', style: { color: 'var(--danger)' } }, m.erreur));
+    container.appendChild(el('div', { cls: 'mon-etat mon-txt-danger' }, m.erreur));
     return;
   }
   if (!m.data) {
-    container.appendChild(el('div', { cls: 'hist-loading' }, el('div', { cls: 'hist-spinner' }), 'Chargement…'));
+    container.appendChild(el('div', { cls: 'hist-loading' }, el('div', { cls: 'hist-spinner' }), 'Comparaison en cours…'));
     return;
   }
   if (m.monPage === 'expedition' && m.data.miroir === false) {
@@ -20088,31 +20257,32 @@ function renderMonitoringResults(container) {
   }
   const cols = monColonnes(m.monPage);
   const rows = monLignesFiltrees();
-  const nbFiltres = Object.values(m.colFiltres || {}).filter(Boolean).length;
-  const card = el('div', { cls: 'hist-results-card' });
-  card.appendChild(el('div', { cls: 'hist-results-head' },
-    el('div', { cls: 'hist-results-head-left' },
-      el('span', { cls: 'hist-results-title' }, m.monPage === 'expedition' ? 'Références à expédier' : 'Dossiers produits'),
-      el('span', { cls: 'hist-count' }, fN(rows.length) + ' ligne' + (rows.length > 1 ? 's' : '')
-        + (rows.length !== monLignesBase().length ? ' sur ' + fN(monLignesBase().length) : '')),
-    ),
-    nbFiltres ? el('button', {
-      cls: 'btn btn-sm mon-relacher', type: 'button',
-      on: { click: () => { m.colFiltres = {}; renderMonitoringView(false); } },
-    }, 'Retirer les filtres de colonne (' + nbFiltres + ')') : null,
+  const total = monLignesBase().length;
+  const voirFiltres = m.filtresOuverts || nbFiltres > 0;
+
+  const card = el('div', { cls: 'mon-carte' });
+  card.appendChild(el('div', { cls: 'mon-carte-tete' },
+    el('span', { cls: 'mon-carte-titre' }, m.monPage === 'expedition' ? 'Références à expédier' : 'Dossiers produits'),
+    el('span', { cls: 'mon-compte' }, fN(rows.length) + (rows.length !== total ? ' sur ' + fN(total) : '') + ' ligne' + (rows.length > 1 ? 's' : '')),
+    (nbFiltres || m.filterStatut || (m.query || '').trim()) ? el('button', {
+      cls: 'mon-relacher', type: 'button',
+      on: { click: () => { m.colFiltres = {}; m.filterStatut = null; m.query = ''; renderMonitoringView(true); } },
+    }, 'Tout afficher') : null,
   ));
-  const sortIcon = (cle) => m.sortColumn !== cle ? '' : (m.sortDirection === 'asc' ? ' ▲' : ' ▼');
-  const table = el('table', { cls: 'hist-table mon-table' });
-  table.appendChild(el('thead', null,
+
+  const sortIcon = (cle) => m.sortColumn !== cle ? el('span', { cls: 'mon-tri' }, '↕')
+    : el('span', { cls: 'mon-tri actif' }, m.sortDirection === 'asc' ? '▲' : '▼');
+  const table = el('table', { cls: 'mon-table' });
+  const thead = el('thead', null,
     el('tr', null, ...cols.map(c => el('th', {
-      cls: 'mon-th' + (c.num ? ' mon-num' : ''),
-      title: 'Trier',
+      cls: 'mon-th' + (m.sortColumn === c.cle ? ' trie' : ''), title: 'Trier',
       on: { click: () => monToggleSort(c.cle) },
-    }, c.label + sortIcon(c.cle)))),
-    el('tr', { cls: 'mon-col-filtres' }, ...cols.map(c => {
+    }, c.label, ' ', sortIcon(c.cle)))));
+  if (voirFiltres) {
+    thead.appendChild(el('tr', { cls: 'mon-col-filtres' }, ...cols.map(c => {
       const inp = el('input', {
         type: 'text', id: 'mon-f-' + c.cle, cls: 'mon-col-filtre' + ((m.colFiltres || {})[c.cle] ? ' actif' : ''),
-        placeholder: c.num ? '>0' : 'Filtrer', autocomplete: 'off', spellcheck: 'false',
+        placeholder: c.num ? 'ex. >0' : 'contient…', autocomplete: 'off', spellcheck: 'false',
         'aria-label': 'Filtrer ' + c.label,
       });
       inp.value = (m.colFiltres || {})[c.cle] || '';
@@ -20125,21 +20295,22 @@ function renderMonitoringResults(container) {
         if (e.key === 'Escape') { delete m.colFiltres[c.cle]; renderMonitoringView(false); }
       });
       return el('th', null, inp);
-    })),
-  ));
+    })));
+  }
+  table.appendChild(thead);
   const tbody = el('tbody', null);
   if (!rows.length) {
     const q = (m.query || '').trim();
-    tbody.appendChild(el('tr', null, el('td', { attrs: { colspan: String(cols.length) }, cls: 'hist-empty', style: { border: 'none' } },
-      m.loading ? 'Chargement…'
-        : q ? 'Aucun résultat pour « ' + q + ' ».'
-        : monLignesBase().length ? 'Aucune ligne pour ces filtres.'
+    tbody.appendChild(el('tr', null, el('td', { attrs: { colspan: String(cols.length) }, cls: 'mon-etat' },
+      q ? 'Aucun résultat pour « ' + q + ' ».'
+        : total ? 'Aucune ligne pour ces filtres.'
         : 'Aucun mouvement sur la période.')));
   } else {
-    rows.forEach(l => tbody.appendChild(el('tr', { cls: 'mon-ligne-' + l.statut }, ...cols.map(c => c.td(l)))));
+    rows.forEach(l => tbody.appendChild(el('tr', { cls: 'mon-ligne mon-ligne-' + monTon(m.monPage, l.statut) },
+      ...cols.map(c => c.td(l)))));
   }
   table.appendChild(tbody);
-  card.appendChild(el('div', { cls: 'hist-table-wrap' }, table));
+  card.appendChild(el('div', { cls: 'mon-table-wrap' }, table));
   container.appendChild(card);
 }
 
