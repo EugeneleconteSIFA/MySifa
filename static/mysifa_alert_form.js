@@ -116,6 +116,13 @@
         max: (it && it.max != null && it.max !== '') ? Number(it.max) : null,
         // v2.3.45 : préserver required (v2.2.86 dans settings_page — oublié ici)
         required: !!(it && it.required),
+        // Plusieurs mesures (ex. début / milieu / fin de prod) : un libellé
+        // par mesure. Vide = une seule valeur, comme avant.
+        points: _afPoints(it && it.points),
+        placeholder: (it && typeof it.placeholder === 'string') ? it.placeholder : '',
+        help: (it && typeof it.help === 'string') ? it.help : '',
+        target_value: (it && it.target_value != null && it.target_value !== '') ? Number(it.target_value) : null,
+        out_of_range_is_nc: !!(it && it.out_of_range_is_nc),
       };
     }
     const responses = Array.isArray(it && it.responses) ? it.responses.filter(r => typeof r === 'string' && r.trim()) : [];
@@ -140,6 +147,7 @@
       comment_responses: comResp,
       // v2.3.45 : préserver required (v2.2.86 dans settings_page — oublié ici)
       required: !!(it && it.required),
+      help: (it && typeof it.help === 'string') ? it.help : '',
     };
   });
   return {
@@ -203,6 +211,7 @@
   // ── _renderAlertFormFields ──
   function _renderAlertFormFields(params, opts) {
   opts = opts || {};
+  _afInjectCss();
   const d = _alertDefaults(params);
   // Machines (multi-sélection via dropdown)
   const machineList = _ALERT_MACHINES.filter(m => m !== '*');
@@ -257,35 +266,33 @@
     +   '<textarea id="af-description" class="alert-field-input" rows="2" maxlength="800" placeholder="Ex. Vérifier la tension Errepi et le serrage de la bobine — noter la valeur exacte pour analyse.">' + esc(d.description || '') + '</textarea>'
     +   '<div class="alert-field-help">Optionnel. Affiché sous le titre de l\'alerte quand elle apparaît chez l\'opérateur.</div>'
     + '</div>';
+  // v2.6 : formulaire en sections repliables, chacune résumée dans son
+  // en-tête (« Périodique — toutes les 120 min », « 3 machines »…) pour
+  // retrouver un réglage sans tout déplier. Le questionnaire est ouvert.
+  const _nbPoints = (d.checklist.items || []).filter(it => it && it.label).length;
   return nomBlock
     + descBlock
+    + _afSection('questionnaire', 'Questionnaire', _afSumQuestionnaire(d.checklist.enabled, _nbPoints), ''
     // v2.3.33 : questionnaire remonté juste après la description (l'admin
     // pense d'abord au contenu, ensuite au paramétrage technique)
-    + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
+    + '<div class="alert-field">'
     +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
     +     '<div>'
-    +       '<label class="alert-field-label" style="margin-bottom:2px">Questionnaire (points de contrôle)</label>'
+    +       '<label class="alert-field-label" style="margin-bottom:2px">Activer le questionnaire</label>'
     +       '<span style="font-size:11px;color:var(--muted)">Ex. découpe nette, colle conforme, centrage OK… L\'opérateur cochera chaque point lors de la validation.</span>'
     +     '</div>'
     +     '<label class="toggle"><input type="checkbox" id="af-checklist-enabled" ' + (d.checklist.enabled ? 'checked' : '') + ' onchange="_afOnChecklistToggle()"><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
     +   '</div>'
     +   '<div id="af-checklist-wrap" style="' + (d.checklist.enabled ? '' : 'display:none;') + '">'
-    +     '<div id="af-checklist-items" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">' + _afRenderChecklistItems(d.checklist.items) + '</div>'
+    +     '<div id="af-checklist-items" ondragover="_afDragOver(event)" ondrop="event.preventDefault()" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">' + _afRenderChecklistItems(d.checklist.items) + '</div>'
     +     '<button type="button" class="btn-sm btn-ghost" onclick="_afAddChecklistItem()" style="margin-bottom:10px"><span style="font-weight:700;margin-right:4px">+</span> Ajouter un point de contrôle</button>'
     +   '</div>'
     + '</div>'
     + '<div class="alert-field-sub" style="border-style:solid;background:var(--accent-bg);border-color:var(--accent);margin-top:14px">'
     +   '<p style="margin:0;font-size:12px;color:var(--text)"><strong>Zone de commentaires</strong> — toujours disponible pour l\'opérateur (champ texte libre, optionnel, joint à chaque acquittement).</p>'
     + '</div>'
-    // v2.3.33 : bouton de bascule pour la section Paramètres (repliable in-place)
-    + '<button type="button" id="af-settings-toggle" class="btn btn-sec" onclick="_afToggleSettings()" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:14px;padding:12px 16px;text-align:left;background:var(--bg);border:1px solid var(--border)">'
-    +   '<span style="display:flex;flex-direction:column;gap:2px">'
-    +     '<span style="font-weight:700;font-size:14px">Paramètres</span>'
-    +     '<span style="font-size:11px;color:var(--muted);font-weight:400">Déclencheur · Machines · Affichage · Blocage · Esquive</span>'
-    +   '</span>'
-    +   '<span id="af-settings-caret" style="transition:transform .18s ease;font-size:12px;color:var(--muted)">▼</span>'
-    + '</button>'
-    + '<div id="af-settings-wrap" style="display:none;margin-top:12px">'
+    , true)
+    + _afSection('declencheur', 'Déclenchement', _alertTriggerLabel(d.trigger), ''
     +   '<div class="alert-field">'
     +     '<label class="alert-field-label">Déclencheur <span style="color:var(--danger)">*</span></label>'
     +     legacyTriggerBanner
@@ -326,6 +333,8 @@
     +       '</div>'
     +     '</div>'
     +   '</div>'
+    , _isLegacyTriggerType(d.trigger.type))
+    + _afSection('machines', 'Machines ciblées', machinesInitialLabel, ''
     +   '<div class="alert-field">'
     +     '<label class="alert-field-label">Machines ciblées <span style="color:var(--danger)">*</span></label>'
     +     '<div class="af-md-wrap">'
@@ -344,8 +353,10 @@
     +     '</div>'
     +     '<div class="alert-field-help">Les alertes sont toujours visibles par les opérateurs <strong>fabrication</strong> ainsi que par le super administrateur (pour les tests).</div>'
     +   '</div>'
+    , false)
+    + _afSection('affichage', 'Affichage et blocage', _afSumAffichage(d.placement, d.size, d.block_production), ''
     // v2.3.33 : section Affichage — Placement + Taille uniquement
-    +   '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
+    +   '<div class="alert-field">'
     +     '<div style="font-size:11px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Affichage</div>'
     +     '<div class="alert-field-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
     +       '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Placement à l\'écran</label>'
@@ -373,7 +384,9 @@
     +       '<label class="toggle"><input type="checkbox" id="af-block-production"' + (d.block_production ? ' checked' : '') + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
     +     '</div>'
     +   '</div>'
-    +   '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
+    , false)
+    + _afSection('esquive', 'Fermeture sans saisie', _afSumEsquive(d.dismiss_button), ''
+    +   '<div class="alert-field">'
     +     '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
     +       '<div>'
     +         '<label class="alert-field-label" style="margin-bottom:2px">Autoriser la fermeture sans saisie</label>'
@@ -386,7 +399,7 @@
     +       '<div class="alert-field-help">Libellé du bouton d\'esquive (bouton orange à côté du bouton principal Valider). Ce libellé apparaît aussi dans l\'historique (ex. « Fermée auto (esquive) : Pas d\'Errepi »).</div>'
     +     '</div>'
     +   '</div>'
-    + '</div>';
+    , false);
 }
 
 
@@ -401,10 +414,16 @@
   const isRequired = !!(item && item.required);
   const typeOpts = '<option value="choice"' + (type === 'choice' ? ' selected' : '') + '>Cases à cocher</option>'
                  + '<option value="value"' + (type === 'value' ? ' selected' : '') + '>Valeur à saisir</option>';
-  return '<div class="af-cl-card" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">'
+  return '<div class="af-cl-card" ondragstart="_afDragStart(event)" ondragend="_afDragEnd(event)" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">'
     + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
+    +   '<span class="af-cl-poignee" title="Glisser pour réordonner" onmousedown="_afArmDrag(this)" onmouseup="_afDisarmDrag(this)" ontouchstart="_afArmDrag(this)">'
+    +     '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>'
+    +   '</span>'
     +   '<input type="text" class="alert-field-input af-cl-label" maxlength="200" placeholder="Ex. Découpe" value="' + safeLabel + '" style="flex:1;min-width:140px;font-weight:500">'
     +   '<select class="alert-field-input af-cl-type" onchange="_afOnTypeChange(this)" style="flex:0 0 auto;width:auto;padding:8px 10px;font-size:13px">' + typeOpts + '</select>'
+    +   '<button type="button" class="btn-sm af-cl-dupliquer" onclick="_afDuplicateItem(this)" title="Dupliquer ce point de contrôle" aria-label="Dupliquer">'
+    +     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>'
+    +   '</button>'
     +   '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveItem(this)" title="Supprimer ce point de contrôle" style="flex:0 0 auto">×</button>'
     + '</div>'
     + '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer;padding:4px 2px">'
@@ -412,6 +431,11 @@
     +   '<span>Obligatoire <span style="color:var(--muted);font-weight:500">(l\'opérateur ne peut pas valider tant que cette question n\'est pas répondue)</span></span>'
     + '</label>'
     + _afChecklistCardBody(item)
+    + '<div>'
+    +   '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Méthode opératoire <span style="text-transform:none;letter-spacing:0">(optionnel)</span></div>'
+    +   '<textarea class="alert-field-input af-cl-help" rows="2" maxlength="300" placeholder="Ex. Peser 10 étiquettes sur la balance de précision, diviser par 10." style="padding:6px 10px;font-size:13px;resize:vertical">' + esc((item && item.help) || '') + '</textarea>'
+    +   '<div class="alert-field-help" style="margin-top:4px">Affiché sous la question, chez l\'opérateur.</div>'
+    + '</div>'
     + '</div>';
 }
 
@@ -423,13 +447,34 @@
     const safeUnit = ((item && item.unit) || '').replace(/"/g, '&quot;');
     const safeMin = (item && item.min != null && item.min !== '') ? String(item.min) : '';
     const safeMax = (item && item.max != null && item.max !== '') ? String(item.max) : '';
+    const safeCible = (item && item.target_value != null && item.target_value !== '') ? String(item.target_value) : '';
+    const oorNc = !!(item && item.out_of_range_is_nc);
+    const safePh = escAttr((item && item.placeholder) || '');
+    const pts = _afPoints(item && item.points);
+    const multiOn = pts.length > 1;
+    const ptsTxt = escAttr((multiOn ? pts : _AF_POINTS_DEFAUT).join(' / '));
     return '<div class="af-cl-body" data-type="value">'
-      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">'
+      + '<div class="af-cl-grid4">'
       +   '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Unité</div><input type="text" class="alert-field-input af-cl-unit" maxlength="20" placeholder="bar, °C, mm…" value="' + safeUnit + '" style="padding:6px 10px;font-size:13px"></div>'
       +   '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Min</div><input type="number" step="any" class="alert-field-input af-cl-min" placeholder="2.5" value="' + safeMin + '" style="padding:6px 10px;font-size:13px"></div>'
+      +   '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Cible</div><input type="number" step="any" class="alert-field-input af-cl-cible" placeholder="2.85" value="' + safeCible + '" style="padding:6px 10px;font-size:13px"></div>'
       +   '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Max</div><input type="number" step="any" class="alert-field-input af-cl-max" placeholder="3.2" value="' + safeMax + '" style="padding:6px 10px;font-size:13px"></div>'
       + '</div>'
-      + '<div class="alert-field-help" style="margin-top:6px">Pour pression, température, dimension… L\'opérateur saisira une valeur. Min/Max sont optionnels (vide = pas de borne).</div>'
+      + '<div class="alert-field-help" style="margin-top:6px">Pour pression, température, dimension… Min, Cible et Max sont optionnels. La cible s\'affiche chez l\'opérateur avec l\'écart de sa mesure.</div>'
+      + '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer;font-size:12px;color:var(--text2)">'
+      +   '<input type="checkbox" class="af-cl-oor-nc"' + (oorNc ? ' checked' : '') + ' style="width:14px;height:14px;accent-color:var(--danger);cursor:pointer">'
+      +   '<span>Valeur hors tolérance = <strong style="color:var(--danger)">non-conformité</strong> <span style="color:var(--muted)">(signalée dans l\'historique des contrôles ; Min ou Max requis)</span></span>'
+      + '</label>'
+      + '<div style="margin-top:8px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Texte d\'exemple dans le champ <span style="text-transform:none;letter-spacing:0">(optionnel)</span></div>'
+      +   '<input type="text" class="alert-field-input af-cl-placeholder" maxlength="60" placeholder="Valeur" value="' + safePh + '" style="padding:6px 10px;font-size:13px"></div>'
+      + '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);cursor:pointer;font-size:12px;color:var(--text2)">'
+      +   '<input type="checkbox" class="af-cl-points-toggle"' + (multiOn ? ' checked' : '') + ' onchange="_afOnPointsToggle(this)" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">'
+      +   '<span><strong style="color:var(--text)">Plusieurs valeurs</strong> à saisir pour ce point (ex. début, milieu et fin de production)</span>'
+      + '</label>'
+      + '<div class="af-cl-points-wrap" style="display:' + (multiOn ? 'block' : 'none') + ';margin-top:6px;margin-left:22px">'
+      +   '<input type="text" class="alert-field-input af-cl-points" maxlength="300" placeholder="Début de prod / Milieu de prod / Fin de prod" value="' + ptsTxt + '" style="padding:6px 10px;font-size:13px">'
+      +   '<div class="alert-field-help" style="margin-top:4px">Un libellé par mesure, séparés par « / » (10 au plus). Si le point est obligatoire, toutes les mesures doivent être saisies.</div>'
+      + '</div>'
       + '</div>';
   }
   // type "choice"
@@ -560,6 +605,264 @@
 }
 
 
+
+  // ── Sections repliables ──
+  function _afSection(key, title, summary, body, open) {
+    return '<section class="af-sec' + (open ? ' open' : '') + '" data-sec="' + key + '">'
+      + '<button type="button" class="af-sec-head" onclick="_afToggleSection(this)" aria-expanded="' + (open ? 'true' : 'false') + '">'
+      +   '<span class="af-sec-titre">' + esc(title) + '</span>'
+      +   '<span class="af-sec-sum" data-sum="' + key + '">' + esc(summary || '') + '</span>'
+      +   '<svg class="af-sec-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>'
+      + '</button>'
+      + '<div class="af-sec-body">' + body + '</div>'
+      + '</section>';
+  }
+  function _afToggleSection(btn) {
+    const sec = btn.closest('.af-sec');
+    if (!sec) return;
+    const open = !sec.classList.contains('open');
+    sec.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  function _afOpenSection(key) {
+    document.querySelectorAll('.af-sec' + (key ? '[data-sec="' + key + '"]' : '')).forEach(sec => {
+      sec.classList.add('open');
+      sec.querySelector('.af-sec-head')?.setAttribute('aria-expanded', 'true');
+    });
+  }
+  function _afSumQuestionnaire(enabled, n) {
+    if (!enabled) return 'Désactivé';
+    return n + ' point' + (n > 1 ? 's' : '') + ' de contrôle';
+  }
+  function _afSumAffichage(placement, size, block) {
+    const pl = placement === 'center' ? 'Centre' : 'Coin haut droit';
+    const sz = ({ small: 'petite', medium: 'moyenne', large: 'grande' })[size] || 'moyenne';
+    return pl + ' · ' + sz + (block ? ' · bloque la production' : '');
+  }
+  function _afSumEsquive(db) {
+    return (db && db.enabled) ? '« ' + (db.label || 'Fermer l\'alerte') + ' »' : 'Désactivée';
+  }
+  // Recalcule les résumés depuis les champs, à chaque saisie.
+  function _afRefreshSummaries() {
+    const set = (k, v) => { const t = document.querySelector('[data-sum="' + k + '"]'); if (t) t.textContent = v; };
+    const clOn = !!document.getElementById('af-checklist-enabled')?.checked;
+    const n = Array.from(document.querySelectorAll('.af-cl-card .af-cl-label')).filter(i => (i.value || '').trim()).length;
+    set('questionnaire', _afSumQuestionnaire(clOn, n));
+    const tt = document.getElementById('af-trigger-type')?.value;
+    if (tt) {
+      const trig = { type: tt,
+        interval_minutes: document.getElementById('af-trigger-interval-minutes')?.value || '?',
+        time: document.getElementById('af-trigger-time')?.value || '',
+        days: Array.from(document.querySelectorAll('.af-day:checked')).map(x => x.value),
+        event: document.getElementById('af-trigger-event')?.value || '' };
+      set('declencheur', _alertTriggerLabel(trig));
+    }
+    const ml = document.getElementById('af-md-label');
+    if (ml) set('machines', ml.textContent || '');
+    set('affichage', _afSumAffichage(document.getElementById('af-placement')?.value, document.getElementById('af-size')?.value, !!document.getElementById('af-block-production')?.checked));
+    set('esquive', _afSumEsquive({ enabled: !!document.getElementById('af-dismiss-enabled')?.checked, label: (document.getElementById('af-dismiss-label')?.value || '').trim() }));
+  }
+
+  // ── Dupliquer / réordonner les points de contrôle ──
+  function _afDuplicateItem(btn) {
+    const card = btn.closest('.af-cl-card');
+    if (!card) return;
+    const item = _afReadCard(card) || { type: card.querySelector('.af-cl-type')?.value || 'choice', label: '' };
+    if (item.label) item.label = (item.label + ' (copie)').slice(0, 200);
+    const tmp = document.createElement('div');
+    tmp.innerHTML = _afChecklistCard(item);
+    const copie = tmp.firstElementChild;
+    card.after(copie);
+    const lbl = copie.querySelector('.af-cl-label');
+    if (lbl) { lbl.focus(); lbl.select(); }
+  }
+  // Le glisser ne part que de la poignée : une carte toujours « draggable »
+  // empêcherait de sélectionner le texte de ses champs.
+  function _afArmDrag(handle) {
+    const card = handle.closest('.af-cl-card');
+    if (card) card.setAttribute('draggable', 'true');
+  }
+  // Clic sur la poignée sans glisser : la carte redevient normale.
+  function _afDisarmDrag(handle) {
+    const card = handle.closest('.af-cl-card');
+    if (card && card !== _afDragged) card.removeAttribute('draggable');
+  }
+  let _afDragged = null;
+  function _afDragStart(ev) {
+    const card = ev.target.closest && ev.target.closest('.af-cl-card');
+    if (!card || card.getAttribute('draggable') !== 'true') return;
+    _afDragged = card;
+    card.classList.add('af-cl-glisse');
+    try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', ''); } catch (e) {}
+  }
+  function _afDragEnd(ev) {
+    const card = ev.target.closest && ev.target.closest('.af-cl-card');
+    if (card) { card.classList.remove('af-cl-glisse'); card.removeAttribute('draggable'); }
+    _afDragged = null;
+  }
+  function _afDragOver(ev) {
+    if (!_afDragged) return;
+    ev.preventDefault();
+    const list = ev.currentTarget;
+    const cards = Array.from(list.querySelectorAll(':scope > .af-cl-card')).filter(c => c !== _afDragged);
+    let avant = null;
+    for (const c of cards) {
+      const r = c.getBoundingClientRect();
+      if (ev.clientY < r.top + r.height / 2) { avant = c; break; }
+    }
+    if (avant) { if (_afDragged.nextElementSibling !== avant) list.insertBefore(_afDragged, avant); }
+    else if (list.lastElementChild !== _afDragged) list.appendChild(_afDragged);
+  }
+
+  // ── Aperçu opérateur en direct ──
+  // Lecture silencieuse du formulaire (aucun toast) : ce qui sert à dessiner
+  // la carte chez l'opérateur.
+  function _afPreviewParams() {
+    const clOn = !!document.getElementById('af-checklist-enabled')?.checked;
+    const items = clOn ? Array.from(document.querySelectorAll('.af-cl-card')).map(_afReadCard).filter(Boolean) : [];
+    return {
+      description: (document.getElementById('af-description')?.value || '').trim(),
+      size: document.getElementById('af-size')?.value || 'medium',
+      dismiss_button: { enabled: !!document.getElementById('af-dismiss-enabled')?.checked,
+                        label: (document.getElementById('af-dismiss-label')?.value || '').trim() || 'Fermer l\'alerte' },
+      checklist: { enabled: items.length > 0, items: items },
+    };
+  }
+  // Monte l'aperçu à côté du formulaire dans la fenêtre `overlay` (ou tout
+  // conteneur qui porte .alert-modal / .alert-modal-body). Rien n'est envoyé.
+  function mount(overlay) {
+    _afInjectCss();
+    const modal = overlay && (overlay.querySelector('.alert-modal') || overlay);
+    const body = modal && modal.querySelector('.alert-modal-body');
+    if (!body || body.querySelector('.af-col-form')) return;
+    modal.classList.add('af-avec-apercu');
+    const col = document.createElement('div');
+    col.className = 'af-col-form';
+    while (body.firstChild) col.appendChild(body.firstChild);
+    const aside = document.createElement('aside');
+    aside.className = 'af-col-apercu';
+    aside.innerHTML = '<div class="af-apercu-titre">Aperçu opérateur</div>'
+      + '<div class="af-apercu-zone"></div>'
+      + '<div class="alert-field-help" style="margin-top:8px">Se met à jour pendant la saisie. Les réponses tapées ici ne sont pas enregistrées.</div>';
+    body.classList.add('af-grille');
+    body.appendChild(col);
+    body.appendChild(aside);
+    const zone = aside.querySelector('.af-apercu-zone');
+    const nomFixe = (col.querySelector('#af-nom') ? null : (col.querySelector('.alert-field-input[disabled]')?.value || ''));
+    let timer = null;
+    const dessiner = () => {
+      timer = null;
+      _afRefreshSummaries();
+      if (!window.MysifaAlerts || typeof window.MysifaAlerts.apercu !== 'function') {
+        zone.innerHTML = '<div class="alert-field-help">Aperçu indisponible sur cette page.</div>';
+        return;
+      }
+      const nom = nomFixe != null ? nomFixe : ((col.querySelector('#af-nom')?.value || '').trim() || 'Titre de l\'alerte');
+      try { window.MysifaAlerts.apercu({ id: 'apercu', nom: nom, params: _afPreviewParams() }, zone); }
+      catch (e) { zone.innerHTML = '<div class="alert-field-help">Aperçu indisponible.</div>'; }
+    };
+    const planifier = () => { if (!timer) timer = setTimeout(dessiner, 120); };
+    col.addEventListener('input', planifier);
+    col.addEventListener('change', planifier);
+    // Ajout, suppression, duplication, glisser, changement de type : la
+    // structure des cartes change sans événement de saisie.
+    try { new MutationObserver(planifier).observe(col, { childList: true, subtree: true }); } catch (e) {}
+    dessiner();
+  }
+
+  function _afInjectCss() {
+    if (document.getElementById('mysifa-alert-form-css')) return;
+    const st = document.createElement('style');
+    st.id = 'mysifa-alert-form-css';
+    st.textContent = [
+      '.af-sec{border:1px solid var(--border);border-radius:10px;margin-top:10px;background:var(--card)}',
+      '.af-sec-head{all:unset;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;border-radius:10px}',
+      '.af-sec-head:hover{background:var(--accent-bg)}',
+      '.af-sec-head:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}',
+      '.af-sec-titre{font-weight:700;font-size:14px;color:var(--text);flex:0 0 auto}',
+      '.af-sec-sum{flex:1;min-width:0;font-size:12px;color:var(--muted);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.af-sec-caret{flex:0 0 auto;color:var(--muted);transition:transform .15s}',
+      '.af-sec.open .af-sec-caret{transform:rotate(180deg)}',
+      '.af-sec-body{padding:4px 14px 14px}',
+      '.af-sec:not(.open) .af-sec-body{display:none}',
+      '.af-cl-grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}',
+      '@media(max-width:520px){.af-cl-grid4{grid-template-columns:repeat(2,minmax(0,1fr))}}',
+      '.af-cl-poignee{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:22px;height:30px;color:var(--muted);cursor:grab;border-radius:6px}',
+      '.af-cl-poignee:hover{color:var(--accent);background:var(--accent-bg)}',
+      '.af-cl-glisse{opacity:.45;border-style:dashed !important}',
+      '.af-cl-dupliquer{flex:0 0 auto;display:inline-flex;align-items:center;background:var(--card);border:1px solid var(--border);color:var(--text2);border-radius:8px;padding:6px 8px;cursor:pointer}',
+      '.af-cl-dupliquer:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}',
+      '.alert-modal.af-avec-apercu{max-width:1060px}',
+      '.af-grille{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:20px;align-items:start}',
+      '.af-col-apercu{position:sticky;top:0;padding:12px;border-radius:12px;background:var(--bg);border:1px solid var(--border)}',
+      '.af-apercu-titre{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}',
+      '.af-apercu-zone .ta-sim-alert{width:100% !important}',
+      '@media(max-width:900px){.af-grille{grid-template-columns:minmax(0,1fr)}.af-col-apercu{position:static}}'
+    ].join('\n');
+    document.head.appendChild(st);
+  }
+
+
+  // ── _afReadCard ──
+  // Lit une carte « point de contrôle » du formulaire. null = carte ignorée
+  // (libellé vide, aucune réponse). Sert à l'enregistrement, à la duplication
+  // et à l'aperçu.
+  function _afReadCard(card) {
+      const label = (card.querySelector('.af-cl-label')?.value || '').trim();
+      if (!label) return null;
+      const type = card.querySelector('.af-cl-type')?.value || 'choice';
+      if (type === 'value') {
+        const unit = (card.querySelector('.af-cl-unit')?.value || '').trim();
+        const minStr = (card.querySelector('.af-cl-min')?.value || '').trim();
+        const maxStr = (card.querySelector('.af-cl-max')?.value || '').trim();
+        const item = { type: 'value', label: label };
+        if (unit) item.unit = unit;
+        if (minStr !== '' && !isNaN(parseFloat(minStr))) item.min = parseFloat(minStr);
+        if (maxStr !== '' && !isNaN(parseFloat(maxStr))) item.max = parseFloat(maxStr);
+        const cibleStr = (card.querySelector('.af-cl-cible')?.value || '').trim();
+        if (cibleStr !== '' && !isNaN(parseFloat(cibleStr))) item.target_value = parseFloat(cibleStr);
+        if (card.querySelector('.af-cl-oor-nc')?.checked) item.out_of_range_is_nc = true;
+        // v2.3.28 : required manquait — les items marqués obligatoires
+        // repassaient optionnels à chaque save via /maintenance.
+        if (card.querySelector('.af-cl-required')?.checked) item.required = true;
+        const ph = (card.querySelector('.af-cl-placeholder')?.value || '').trim();
+        if (ph) item.placeholder = ph;
+        if (card.querySelector('.af-cl-points-toggle')?.checked) {
+          const pts = _afPoints(card.querySelector('.af-cl-points')?.value || '');
+          if (pts.length > 1) item.points = pts;
+        }
+        const helpV = (card.querySelector('.af-cl-help')?.value || '').trim();
+        if (helpV) item.help = helpV;
+        return item;
+      }
+      const responses = [];
+      const ncResponses = [];
+      // v2.5.21 : comResponses = réponses cochées COM (commentaire obligatoire)
+      const comResponses = [];
+      card.querySelectorAll('.af-cl-resp-row').forEach(row => {
+        const r = (row.querySelector('.af-cl-resp-input')?.value || '').trim();
+        if (!r) return;
+        responses.push(r);
+        if (row.querySelector('.af-cl-resp-nc')?.checked) ncResponses.push(r);
+        if (row.querySelector('.af-cl-resp-com')?.checked) comResponses.push(r);
+      });
+      if (!responses.length) return null;
+      const multiSel = card.querySelector('.af-cl-multi-sel')?.value;
+      const multi = (multiSel === 'single') ? false : true;
+      const allowOther = !!card.querySelector('.af-cl-other-toggle')?.checked;
+      const otherIsNc = allowOther && !!card.querySelector('.af-cl-other-nc')?.checked;
+      const otherNeedsComment = allowOther && !!card.querySelector('.af-cl-other-com')?.checked;
+      // v2.3.28 : required manquait — les items requis repassaient
+      // optionnels à chaque save via /maintenance.
+      const _reqCk = !!card.querySelector('.af-cl-required')?.checked;
+      const _choiceItem = { type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses, comment_responses: comResponses, other_needs_comment: otherNeedsComment };
+      if (_reqCk) _choiceItem.required = true;
+      const _helpC = (card.querySelector('.af-cl-help')?.value || '').trim();
+      if (_helpC) _choiceItem.help = _helpC;
+      return _choiceItem;
+  }
+
+
   // ── _afReadParams ──
   function _afReadParams() {
   // v2.3.33 : force l'ouverture de la section Paramètres pour que les
@@ -602,46 +905,8 @@
   const items = [];
   if (clEnabled) {
     document.querySelectorAll('.af-cl-card').forEach(card => {
-      const label = (card.querySelector('.af-cl-label')?.value || '').trim();
-      if (!label) return;
-      const type = card.querySelector('.af-cl-type')?.value || 'choice';
-      if (type === 'value') {
-        const unit = (card.querySelector('.af-cl-unit')?.value || '').trim();
-        const minStr = (card.querySelector('.af-cl-min')?.value || '').trim();
-        const maxStr = (card.querySelector('.af-cl-max')?.value || '').trim();
-        const item = { type: 'value', label: label };
-        if (unit) item.unit = unit;
-        if (minStr !== '' && !isNaN(parseFloat(minStr))) item.min = parseFloat(minStr);
-        if (maxStr !== '' && !isNaN(parseFloat(maxStr))) item.max = parseFloat(maxStr);
-        // v2.3.28 : required manquait — les items marqués obligatoires
-        // repassaient optionnels à chaque save via /maintenance.
-        if (card.querySelector('.af-cl-required')?.checked) item.required = true;
-        items.push(item);
-        return;
-      }
-      const responses = [];
-      const ncResponses = [];
-      // v2.5.21 : comResponses = réponses cochées COM (commentaire obligatoire)
-      const comResponses = [];
-      card.querySelectorAll('.af-cl-resp-row').forEach(row => {
-        const r = (row.querySelector('.af-cl-resp-input')?.value || '').trim();
-        if (!r) return;
-        responses.push(r);
-        if (row.querySelector('.af-cl-resp-nc')?.checked) ncResponses.push(r);
-        if (row.querySelector('.af-cl-resp-com')?.checked) comResponses.push(r);
-      });
-      if (!responses.length) return;
-      const multiSel = card.querySelector('.af-cl-multi-sel')?.value;
-      const multi = (multiSel === 'single') ? false : true;
-      const allowOther = !!card.querySelector('.af-cl-other-toggle')?.checked;
-      const otherIsNc = allowOther && !!card.querySelector('.af-cl-other-nc')?.checked;
-      const otherNeedsComment = allowOther && !!card.querySelector('.af-cl-other-com')?.checked;
-      // v2.3.28 : required manquait — les items requis repassaient
-      // optionnels à chaque save via /maintenance.
-      const _reqCk = !!card.querySelector('.af-cl-required')?.checked;
-      const _choiceItem = { type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses, comment_responses: comResponses, other_needs_comment: otherNeedsComment };
-      if (_reqCk) _choiceItem.required = true;
-      items.push(_choiceItem);
+      const it = _afReadCard(card);
+      if (it) items.push(it);
     });
   }
   // Cible (lue en premier — interrompt si rien sélectionné)
@@ -682,6 +947,22 @@
     },
   };
 }
+
+
+  // ── _afPoints ──
+  // Libellés des mesures d'un point « Valeur à saisir » : liste ou texte
+  // séparé par « / ». Moins de deux libellés = une seule valeur.
+  const _AF_POINTS_DEFAUT = ['Début de prod', 'Milieu de prod', 'Fin de prod'];
+  function _afPoints(v) {
+    const arr = Array.isArray(v) ? v : (typeof v === 'string' ? v.split('/') : []);
+    const out = arr.map(x => String(x == null ? '' : x).trim().slice(0, 40)).filter(Boolean).slice(0, 10);
+    return out.length > 1 ? out : [];
+  }
+
+  function _afOnPointsToggle(cb) {
+    const wrap = cb.closest('.af-cl-body')?.querySelector('.af-cl-points-wrap');
+    if (wrap) wrap.style.display = cb.checked ? 'block' : 'none';
+  }
 
 
   // ── _afOnTypeChange ──
@@ -839,30 +1120,16 @@ function _afRowClick(ev, inputId) {
 }
 
 
-  // ── _afToggleSettings ──
+  // ── _afToggleSettings / _afOpenSettings ──
+  // Compat : l'ancien bloc « Paramètres » est devenu quatre sections.
+  // _afReadParams ouvre tout, pour que l'erreur signalée soit visible.
   function _afToggleSettings(){
-  const w = document.getElementById('af-settings-wrap');
-  const c = document.getElementById('af-settings-caret');
-  if(!w) return;
-  const open = w.style.display !== 'none';
-  if(open){
-    w.style.display = 'none';
-    if(c) c.style.transform = 'rotate(0deg)';
-  } else {
-    w.style.display = 'block';
-    if(c) c.style.transform = 'rotate(180deg)';
-  }
+  const secs = Array.from(document.querySelectorAll('.af-sec:not([data-sec="questionnaire"])'));
+  const open = !secs.every(sec => sec.classList.contains('open'));
+  secs.forEach(sec => sec.classList.toggle('open', open));
 }
-
-
-  // ── _afOpenSettings ──
   function _afOpenSettings(){
-  const w = document.getElementById('af-settings-wrap');
-  const c = document.getElementById('af-settings-caret');
-  if(w && w.style.display === 'none'){
-    w.style.display = 'block';
-    if(c) c.style.transform = 'rotate(180deg)';
-  }
+  _afOpenSection(null);
 }
 
   // ─────────────────────────────────────────────────────────
@@ -889,6 +1156,14 @@ function _afRowClick(ev, inputId) {
   try { window._afOnMachineChange = _afOnMachineChange; } catch(e) {}
   try { window._afOnAllMachinesToggle = _afOnAllMachinesToggle; } catch(e) {}
   try { window._afOnOtherToggle = _afOnOtherToggle; } catch(e) {}
+  try { window._afOnPointsToggle = _afOnPointsToggle; } catch(e) {}
+  try { window._afToggleSection = _afToggleSection; } catch(e) {}
+  try { window._afDuplicateItem = _afDuplicateItem; } catch(e) {}
+  try { window._afArmDrag = _afArmDrag; } catch(e) {}
+  try { window._afDisarmDrag = _afDisarmDrag; } catch(e) {}
+  try { window._afDragStart = _afDragStart; } catch(e) {}
+  try { window._afDragEnd = _afDragEnd; } catch(e) {}
+  try { window._afDragOver = _afDragOver; } catch(e) {}
   try { window._afToggleMachinesPanel = _afToggleMachinesPanel; } catch(e) {}
   try { window._afRowClick = _afRowClick; } catch(e) {}
   try { window._afRowClickByValue = _afRowClickByValue; } catch(e) {}
@@ -905,6 +1180,8 @@ function _afRowClick(ev, inputId) {
   try { window._ALERT_DAYS = _ALERT_DAYS; } catch(e) {}
 
   window.MysifaAlertForm = {
+    mount: mount,
+    _afReadCard: _afReadCard,
     _alertDefaults: _alertDefaults,
     _alertIsConfigured: _alertIsConfigured,
     _alertTriggerLabel: _alertTriggerLabel,

@@ -8039,6 +8039,8 @@ function openNewAlertModal() {
     +   '<button type="button" class="btn" id="new-alert-confirm">Créer</button>'
     + '</div></div>';
   document.body.appendChild(overlay);
+  // Aperçu opérateur à côté du formulaire (mysifa_alert_form.js)
+  if (window.MysifaAlertForm && window.MysifaAlertForm.mount) window.MysifaAlertForm.mount(overlay);
   const close = () => overlay.remove();
   overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
@@ -8237,6 +8239,8 @@ function openEditAlertModal(id) {
     +   '<button type="button" class="btn" id="edit-alert-save">Enregistrer</button>'
     + '</div></div>';
   document.body.appendChild(overlay);
+  // Aperçu opérateur à côté du formulaire (mysifa_alert_form.js)
+  if (window.MysifaAlertForm && window.MysifaAlertForm.mount) window.MysifaAlertForm.mount(overlay);
   const close = () => overlay.remove();
   overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
@@ -8846,9 +8850,9 @@ async function unlinkBridge(mp_id) {
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <script src="/static/mysifa_postes_deroulement.js?v=2"></script>
-<script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
+<script src="/static/mysifa_alert_form.js?v=2.4.19"></script>
 <script src="/static/mysifa_maint_form.js?v=2.7.4-usure"></script>
-<script src="/static/mysifa_alert_runtime.js?v=2.4.19"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.4.20"></script>
 <script src="/static/mysifa_impersonate.js?v=2"></script>
 <!-- Panneau Déploiement (Promouvoir v1→v2 + Sync DB) — fonctions en fichier externe
      autonome pour éviter qu'un refacto du script inline ne les supprime à nouveau. -->

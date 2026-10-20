@@ -430,7 +430,7 @@ margin-left:6px;cursor:help;vertical-align:middle}
 }
 
 </style>
-<link rel="stylesheet" href="/static/mysifa_mobile.css?v=2">
+<link rel="stylesheet" href="/static/mysifa_mobile.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_perf.css">
 <script src="/static/mysifa_perf.js"></script>
 </head>

@@ -89,7 +89,7 @@
 .msf-chip{
   flex:0 0 auto;height:34px;display:inline-flex;align-items:center;gap:6px;padding:0 13px;
   border-radius:17px;border:1px solid var(--border);background:var(--card);color:var(--text2);
-  font:600 12.5px/1 inherit;white-space:nowrap;cursor:pointer;
+  font-weight:600;font-size:12.5px;line-height:1;font-family:inherit;white-space:nowrap;cursor:pointer;
 }
 .msf-chip:hover{background:var(--bg)}
 .msf-chip--on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:700}
@@ -100,7 +100,7 @@
 .msf-seg{display:flex;gap:4px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:4px}
 .msf-seg button{
   flex:1;height:38px;border:0;border-radius:9px;background:transparent;color:var(--muted);
-  font:600 13px/1 inherit;display:flex;align-items:center;justify-content:center;gap:6px;
+  font-weight:600;font-size:13px;line-height:1;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;
   white-space:nowrap;cursor:pointer;
 }
 .msf-seg button:hover{color:var(--text2)}
@@ -139,7 +139,7 @@
 .msf-btn{
   height:50px;padding:0 20px;border-radius:10px;border:0;cursor:pointer;
   background:var(--accent);color:var(--bg);
-  font:800 14.5px/1 inherit;letter-spacing:-.1px;
+  font-weight:800;font-size:14.5px;line-height:1;font-family:inherit;letter-spacing:-.1px;
   display:inline-flex;align-items:center;justify-content:center;gap:8px;
 }
 .msf-btn:hover{filter:brightness(1.05)}
@@ -284,7 +284,7 @@
   flex:1;min-width:0;height:44px;padding:0 13px;
   border-radius:11px;border:1px solid var(--border);
   background:var(--filter-input-bg);color:var(--text);
-  font:500 15px/1 inherit; /* 15px minimum : en dessous, iOS zoome au focus */
+  font-weight:500;font-size:16px;line-height:1;font-family:inherit; /* 16px minimum : en dessous, iOS zoome au focus */
 }
 .msf-searchbar input:focus{outline:none;border-color:var(--accent);
   box-shadow:0 0 0 3px var(--accent-bg)}
@@ -323,7 +323,7 @@
 .msf-tabs::-webkit-scrollbar{display:none}
 .msf-tabs button{
   flex:0 0 auto;height:46px;padding:0 13px;border:0;background:transparent;
-  color:var(--muted);font:600 13px/1 inherit;cursor:pointer;position:relative;
+  color:var(--muted);font-weight:600;font-size:13px;line-height:1;font-family:inherit;cursor:pointer;position:relative;
   display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
 }
 .msf-tabs button.msf-tab-on{color:var(--accent);font-weight:800}
@@ -366,7 +366,7 @@
 .msf-field input,.msf-field select,.msf-field textarea{
   width:100%;min-height:48px;padding:11px 13px;
   border-radius:11px;border:1px solid var(--border);
-  background:var(--bg);color:var(--text);font:600 16px/1.2 inherit;
+  background:var(--bg);color:var(--text);font-weight:600;font-size:16px;line-height:1.2;font-family:inherit;
 }
 .msf-field textarea{min-height:88px;font-weight:500;resize:vertical}
 .msf-field input:focus,.msf-field select:focus,.msf-field textarea:focus{
@@ -512,7 +512,7 @@
 .msf-composer input,.msf-composer textarea{
   flex:1;min-width:0;min-height:44px;padding:11px 13px;border-radius:11px;
   border:1px solid var(--border);background:var(--bg);color:var(--text);
-  font:500 16px/1.2 inherit;resize:none;
+  font-weight:500;font-size:16px;line-height:1.2;font-family:inherit;resize:none;
 }
 
 /* ── Utilitaires ─────────────────────────────────────────────────────── */

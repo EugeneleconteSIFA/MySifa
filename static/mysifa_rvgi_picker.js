@@ -70,7 +70,7 @@
     '.mrp{width:min(1080px,96vw);max-height:90vh;display:flex;flex-direction:column;',
     '  background:var(--card,#fff);color:var(--text,#111);border:1px solid var(--border,#dcdfe4);',
     '  border-radius:14px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.4);',
-    '  font:14px/1.45 inherit}',
+    '  font-size:14px;line-height:1.45;font-family:inherit}',
     '.mrp-tete{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border,#dcdfe4)}',
     '.mrp-tete h2{margin:0;font-size:16px;font-weight:800}',
     '.mrp-tete .st{margin:2px 0 0;font-size:12px;color:var(--muted,#6b7280)}',
@@ -147,7 +147,7 @@
     /* Suggestions sous le champ de saisie d'origine */
     '.mrp-sug{position:fixed;z-index:9200;background:var(--card,#fff);border:1px solid var(--border,#dcdfe4);',
     '  border-radius:11px;box-shadow:0 14px 40px rgba(0,0,0,.22);overflow:hidden;max-height:340px;overflow-y:auto;',
-    '  font:13px/1.4 inherit;color:var(--text,#111)}',
+    '  font-size:13px;line-height:1.4;font-family:inherit;color:var(--text,#111)}',
     /* Une suggestion tient sur UNE ligne : numéro, client, article, machine,
        nombre de lignes. Deux lignes par proposition faisaient une liste de
        huit commandes haute comme la moitié de l'écran. */

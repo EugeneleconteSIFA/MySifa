@@ -819,7 +819,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 .plan-agenda-chip{
   flex:0 0 auto;height:38px;display:inline-flex;align-items:center;gap:6px;padding:0 15px;
   border-radius:19px;border:1px solid var(--border);background:var(--card);color:var(--text2);
-  font:600 13px/1 inherit;white-space:nowrap;cursor:pointer;
+  font-weight:600;font-size:13px;line-height:1;font-family:inherit;white-space:nowrap;cursor:pointer;
 }
 .plan-agenda-chip:hover{background:var(--bg)}
 .plan-agenda-chip.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:700}
@@ -979,13 +979,13 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
-<script src="/static/mysifa_rvgi_picker.js?v=2"></script>
+<script src="/static/mysifa_rvgi_picker.js?v=3"></script>
 <script src="/static/motion.js" defer></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div id="app"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='planning';</script>
-<link rel="stylesheet" href="/static/mysifa_mobile.css?v=2">
+<link rel="stylesheet" href="/static/mysifa_mobile.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">

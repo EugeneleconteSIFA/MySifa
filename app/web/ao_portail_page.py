@@ -201,6 +201,8 @@ input,textarea,select{{
   padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;
   transition:border-color .15s,box-shadow .15s;
 }}
+/* iOS zoome au focus sous 16 px et ne dezoome plus : 16 px sur ecran tactile. */
+@media (pointer:coarse){{input,textarea,select{{font-size:16px}}}}
 input:focus,textarea:focus,select:focus{{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}}
 body.light input:focus,body.light textarea:focus,body.light select:focus{{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#0891b2) 12%,transparent)}}
 input:disabled,textarea:disabled{{opacity:.65;cursor:not-allowed}}

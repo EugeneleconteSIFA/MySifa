@@ -1915,8 +1915,6 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 .af-cl-nc-lbl,.af-cl-com-lbl{background:var(--card)}
 /* Bandeau "Parametres" repliable : il porte deja var(--bg) sur fond blanc,
    on renforce juste la lisibilite du libelle. */
-.alert-modal-overlay #af-settings-toggle{color:var(--text)}
-.alert-modal-overlay #af-settings-toggle:hover{border-color:var(--accent)}
 .alert-modal-overlay a.btn-sm{text-decoration:none}
 .alert-modal-overlay .maint-doc-add-btn{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;background:var(--accent);color:var(--accent-fg,#fff);border:1px solid var(--accent);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;transition:filter .12s,transform .06s;font-family:inherit;user-select:none}
 .alert-modal-overlay .maint-doc-add-btn:hover{filter:brightness(1.06)}
@@ -9602,14 +9600,16 @@ function _matchPointFilters(ackRow){
     if(!it) continue;
     const r = responses[String(idx)];
     if(it.type === 'value'){
-      const num = (r != null && r !== '') ? parseFloat(r) : NaN;
+      // Plusieurs mesures : chaque mesure saisie doit respecter le filtre.
+      const nums = (Array.isArray(r) ? r : [r])
+        .map(x => (x != null && x !== '') ? parseFloat(x) : NaN).filter(n => !isNaN(n));
       if(filt.min != null && filt.min !== ''){
         const mn = parseFloat(filt.min);
-        if(!isNaN(mn) && (isNaN(num) || num < mn)) return false;
+        if(!isNaN(mn) && (!nums.length || nums.some(n => n < mn))) return false;
       }
       if(filt.max != null && filt.max !== ''){
         const mx = parseFloat(filt.max);
-        if(!isNaN(mx) && (isNaN(num) || num > mx)) return false;
+        if(!isNaN(mx) && (!nums.length || nums.some(n => n > mx))) return false;
       }
     } else {
       // choice : la réponse cochée doit inclure la valeur filtrée
@@ -9756,9 +9756,9 @@ function closeAckDetail(){
 
 // Détecte une non-conformité : au moins une réponse choice de l'ack figure
 // dans la liste nc_responses définie par l'admin lors de la création de
-// l'alerte. Les items de type "value" et les clés "_other" (précision de la
-// case Autre) ne sont pas évalués — l'admin cible explicitement quelles
-// réponses signalent un problème.
+// l'alerte, ou une valeur hors tolérance sur un point « valeur » marqué
+// out_of_range_is_nc. Les clés "_other" (précision de la case Autre) ne sont
+// pas évaluées — l'admin cible explicitement ce qui signale un problème.
 function _ackHasNonConformite(c){
   if(!c || c._source !== 'alert') return false;
   const meta = (CTRL_STATE.alerts_meta || {})[String(c._alert_id)];
@@ -9766,7 +9766,20 @@ function _ackHasNonConformite(c){
   const resp = c._responses || {};
   for(let i = 0; i < meta.checklist_items.length; i++){
     const it = meta.checklist_items[i];
-    if(!it || it.type === 'value') continue;
+    if(!it) continue;
+    if(it.type === 'value'){
+      // Hors tolérance = NC, si l'admin l'a demandé sur ce point.
+      if(!it.out_of_range_is_nc) continue;
+      const mn = (it.min != null) ? parseFloat(it.min) : NaN;
+      const mx = (it.max != null) ? parseFloat(it.max) : NaN;
+      const rv = resp[String(i)];
+      for(const x of (Array.isArray(rv) ? rv : [rv])){
+        const n = (x != null && x !== '') ? parseFloat(x) : NaN;
+        if(isNaN(n)) continue;
+        if((!isNaN(mn) && n < mn) || (!isNaN(mx) && n > mx)) return true;
+      }
+      continue;
+    }
     const ncSet = Array.isArray(it.nc_responses) ? it.nc_responses.map(String) : [];
     const otherIsNc = !!it.other_is_nc;
     const r = resp[String(i)];
@@ -9859,7 +9872,9 @@ function renderCtrl(){
     }
     for(const col of extraCols){
       const unitSuffix = (col.type === 'value' && col.unit) ? ' (' + escHtml(col.unit) + ')' : '';
-      h += '<th>' + escHtml(col.label || '') + unitSuffix + '</th>';
+      const ptsSuffix = (col.type === 'value' && Array.isArray(col.points) && col.points.length > 1)
+        ? '<div style="font-weight:500;font-size:11px;color:var(--muted)">' + escHtml(col.points.join(' / ')) + '</div>' : '';
+      h += '<th>' + escHtml(col.label || '') + unitSuffix + ptsSuffix + '</th>';
     }
     if(showExtra){
       h += '<th data-sort-ctrl="_no_dossier"' + activeAttr('_no_dossier') + ' onclick="sortCtrl(\'_no_dossier\')">Dossier' + sortIco('_no_dossier') + '</th>';
@@ -9902,7 +9917,11 @@ function renderCtrl(){
         let val = '';
         if(c._source === 'alert' && c._responses){
           const r = c._responses[String(i)];
-          if(Array.isArray(r)){ val = r.join(', '); }
+          if(Array.isArray(r)){
+            val = (extraCols[i] && extraCols[i].type === 'value')
+              ? r.map(x => (x == null || x === '') ? '—' : String(x)).join(' / ')
+              : r.join(', ');
+          }
           else if(r != null && r !== ''){ val = String(r); }
           // Si "Autre" a été coché avec une précision, on l'ajoute au texte du cell.
           const otherTxt = c._responses[String(i) + '_other'];
@@ -10712,6 +10731,8 @@ function openNewAlertModal() {
     +   '<button type="button" class="btn" id="new-alert-confirm">Créer</button>'
     + '</div></div>';
   document.body.appendChild(overlay);
+  // Aperçu opérateur à côté du formulaire (mysifa_alert_form.js)
+  if (window.MysifaAlertForm && window.MysifaAlertForm.mount) window.MysifaAlertForm.mount(overlay);
   const close = () => overlay.remove();
   overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
@@ -10910,6 +10931,8 @@ function openEditAlertModal(id) {
     +   '<button type="button" class="btn" id="edit-alert-save">Enregistrer</button>'
     + '</div></div>';
   document.body.appendChild(overlay);
+  // Aperçu opérateur à côté du formulaire (mysifa_alert_form.js)
+  if (window.MysifaAlertForm && window.MysifaAlertForm.mount) window.MysifaAlertForm.mount(overlay);
   const close = () => overlay.remove();
   overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
@@ -10961,14 +10984,14 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
-<script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
+<script src="/static/mysifa_alert_form.js?v=2.4.19"></script>
 <script src="/static/mysifa_maint_form.js?v=2.7.4-usure"></script>
-<script src="/static/mysifa_alert_runtime.js?v=2.4.19"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.4.20"></script>
 <!-- Chassis partage de la fenetre de detail d'un ack (openAckDetail). Le
      meme que dans MyProd : une alerte validee se relit comme une saisie.
      Ne touche pas au runtime des alertes ci-dessus, qui garde son style
      d'alerte — c'est une interruption, pas une consultation. -->
-<script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__-ack3"></script>
+<script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__-ack4"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js?v=2"></script>
 

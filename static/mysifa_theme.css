@@ -320,3 +320,19 @@ body.style-round input,
 body.style-round button {
   border-radius: 14px !important;
 }
+
+/* ── iOS : pas de zoom au focus d'un champ ────────────────────────────
+   Safari iOS zoome la page dès qu'on touche un champ dont la police
+   calculée fait moins de 16 px, et ne dézoome jamais ensuite : la page
+   reste plus large que l'écran (bulles et bouton « Envoyer » coupés).
+   On impose 16 px à tous les champs sur écran tactile. :where() ramène
+   la spécificité à zéro : un champ volontairement plus grand le reste
+   s'il le redéclare en !important ci-dessous. Ne JAMAIS régler ce
+   problème par maximum-scale=1 dans le viewport (bloque le zoom). */
+@media (pointer:coarse){
+  :where(input:not([type=checkbox],[type=radio],[type=range],[type=color],[type=file],[type=button],[type=submit],[type=reset],[type=image]),
+         textarea,select,[contenteditable]:not([contenteditable=false])){
+    font-size:16px!important;
+  }
+  .reu-hdr input.reu-nom{font-size:22px!important}
+}

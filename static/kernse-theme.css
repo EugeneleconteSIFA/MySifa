@@ -696,7 +696,7 @@ body.kernse-theme .portal-search {
 }
 body.kernse-theme .portal-search input {
   padding: 16px 60px 16px 52px !important;
-  font-size: 15px !important;
+  font-size: 16px !important; /* 16px minimum : en dessous, iOS zoome au focus */
   border-radius: 14px !important;
   background: var(--card) !important;
   border: 1px solid var(--border) !important;

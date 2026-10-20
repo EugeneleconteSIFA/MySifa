@@ -136,14 +136,40 @@
     const rows = items.map((it, idx)=>{
       const r = responses ? responses[String(idx)] : undefined;
       if(it && it.type === 'value'){
-        const val  = (r != null && r !== '') ? String(r) : '';
         const unit = it.unit ? '<span class="mav-unite">'+_esc(it.unit)+'</span>' : '';
+        const num = (x)=>{ const n = parseFloat(String(x == null ? '' : x).replace(',', '.')); return isFinite(n) ? n : null; };
+        const mn = num(it.min), mx = num(it.max), cible = num(it.target_value);
+        // Plusieurs mesures : une ligne par libellé, dans l'ordre saisi.
+        const pts = (Array.isArray(it.points) && it.points.length > 1) ? it.points : [null];
+        const arr = pts.length > 1 ? (Array.isArray(r) ? r : []) : [r];
+        const lignes = pts.map((pl, k)=>{
+          const v = arr[k];
+          const n = num(v);
+          const hors = n !== null && ((mn !== null && n < mn) || (mx !== null && n > mx));
+          let ecart = '';
+          if(n !== null && cible !== null){
+            const e = Math.round((n - cible) * 1000) / 1000;
+            ecart = '<span class="mav-unite">écart '+(e > 0 ? '+' : (e < 0 ? '−' : ''))+_esc(String(Math.abs(e)).replace('.', ','))+'</span>';
+          }
+          const etat = hors
+            ? '<span class="mav-unite" style="color:var(--danger);font-weight:700">'+(it.out_of_range_is_nc ? 'NC' : 'hors tolérance')+'</span>'
+            : '';
+          return '<div class="mav-val">'
+            + (pl != null ? '<span class="mav-unite" style="flex:0 0 110px">'+_esc(pl)+'</span>' : '')
+            + '<input type="text" disabled value="'+_esc(v != null && v !== '' ? String(v) : '')+'"'+(hors ? ' style="border-color:var(--danger);color:var(--danger)"' : '')+'>'
+            + unit + ecart + etat
+            + '</div>';
+        }).join('');
+        const bornes = [];
+        if(mn !== null || mx !== null) bornes.push('Tolérance : '+(mn !== null ? mn : '−∞')+' à '+(mx !== null ? mx : '+∞'));
+        if(cible !== null) bornes.push('Cible : '+cible);
+        const hint = bornes.length
+          ? '<div class="mav-vide" style="font-style:normal;margin-top:4px">'+_esc(bornes.join(' · ')+(it.unit ? ' '+it.unit : ''))+'</div>'
+          : '';
         return '<div class="mav-champ">'
           +   '<b>'+_esc(it.label||'')+'</b>'
-          +   '<div class="mav-val">'
-          +     '<input type="text" disabled value="'+_esc(val)+'">'
-          +     unit
-          +   '</div>'
+          +   lignes
+          +   hint
           + '</div>';
       }
       const selected = Array.isArray(r) ? r : (r != null ? [String(r)] : []);
