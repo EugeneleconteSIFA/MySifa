@@ -11,6 +11,7 @@ from config import APP_VERSION
 from app.web.qualite_ged_assets import GED_JS
 from app.web.qualite_fsc_assets import FSC_JS
 from app.web.qualite_eudr_assets import EUDR_JS
+from app.web.qualite_formulaires_assets import FORMULAIRES_JS
 
 ROLES_QUALITE = {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}
 ROLES_QUALITE_READONLY = {"commercial"}
@@ -44,6 +45,7 @@ def qualite_page(request: Request):
         .replace("__GED_ASSETS__", GED_JS)
         .replace("__FSC_ASSETS__", FSC_JS)
         .replace("__EUDR_ASSETS__", EUDR_JS)
+        .replace("__FORMULAIRES_ASSETS__", FORMULAIRES_JS)
     )
     return HTMLResponse(
         content=html,
@@ -377,6 +379,10 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
         Référentiel RSE
       </button>
+      <button type="button" class="nav-btn" id="nav-formulaires" onclick="setView('formulaires-list')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/></svg>
+        Formulaires
+      </button>
     </div>
 
     <!-- Pied commun (static/mysifa_sidebar.js), rempli au chargement. -->
@@ -521,7 +527,9 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/qualite_url.js?v=1"></script>
+<script src="/static/qualite_url.js?v=2"></script>
+<script src="/static/mysifa_formulaire.js?v=1"></script>
+<script src="/static/mysifa_formulaire_editeur.js?v=1"></script>
 <script>
 'use strict';
 
@@ -781,6 +789,14 @@ function renderMenuQualite(){
         {v:'ref-list', title:'Référentiel RSE', desc:'Normes et certifs (définitions, statut SIFA, réponses type).', icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>`, show: true},
       ]
     },
+    {
+      label: "Outils",
+      desc: "Questionnaires à faire remplir.",
+      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/></svg>`,
+      items: [
+        {v:'formulaires-list', title:'Formulaires', desc:'Créer et publier des questionnaires pour fournisseurs, personnel et clients.', icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/></svg>`, show: S.isQualiteAdmin || S.isQualiteReadonly},
+      ]
+    },
   ];
 
   const groupHtml = groups.map(g => {
@@ -815,7 +831,7 @@ function renderMenuQualite(){
 }
 
 // ── Vue Liste ──────────────────────────────────────────────────────
-var QUALITE_PERSIST_VIEWS=['menu','list','audits-list','ressources-list','sifa-docs-list','ref-list'];
+var QUALITE_PERSIST_VIEWS=['menu','list','audits-list','ressources-list','sifa-docs-list','ref-list','formulaires-list'];
 function _readQualiteView(){
   try{var h=(location.hash||'').replace(/^#/,'').trim();
     if(QUALITE_PERSIST_VIEWS.indexOf(h)!==-1)return h;}catch(e){}
@@ -823,6 +839,8 @@ function _readQualiteView(){
 }
 function setView(v, opts){
   var silent=!!(opts&&opts.silent);
+  // Quitter l'éditeur de formulaire : la dernière frappe part tout de suite.
+  if(S.view==='formulaire-edit' && v!=='formulaire-edit' && typeof formuQuitter==='function') formuQuitter();
   S.view=v;
   // L'adresse (vue, objet, filtres, fenêtre) est tenue par static/qualite_url.js.
   document.querySelectorAll('.sidebar .nav-btn').forEach(b=>b.classList.remove('active'));
@@ -877,6 +895,14 @@ function setView(v, opts){
     else if(typeof gedActiveTab==='function' && gedActiveTab()==='fsc' && typeof fscEnter==='function'){ fscEnter(); }
     else if(typeof gedActiveTab==='function' && gedActiveTab()==='eudr' && typeof eudrEnter==='function'){ eudrEnter(); }
     else if(typeof loadSifaDocsList==='function') loadSifaDocsList();
+  } else if(v==='formulaires-list'){
+    const nav=document.getElementById('nav-formulaires'); if(nav) nav.classList.add('active');
+    document.getElementById('mobile-sub').textContent='Formulaires';
+    if(typeof formuEnter==='function') formuEnter();
+  } else if(v==='formulaire-edit'){
+    const nav=document.getElementById('nav-formulaires'); if(nav) nav.classList.add('active');
+    document.getElementById('mobile-sub').textContent=(S.formu&&S.formu.courant)?S.formu.courant.titre:'Formulaire';
+    if(typeof formuRenderEdition==='function') formuRenderEdition();
   } else if(v==='sifa-docs-detail'){
     const nav=document.getElementById('nav-sifa-docs'); if(nav) nav.classList.add('active');
     document.getElementById('mobile-sub').textContent=S.currentSifaDoc?S.currentSifaDoc.titre:'Certification';
@@ -3732,7 +3758,7 @@ async function init(){
   await loadMe();
   // Rôle sans droits Qualite ni lecture seule : on masque NC/Audits et on bascule sur le référentiel
   if(!S.isQualiteAdmin && !S.isQualiteReadonly){
-    ['nav-nc','nav-audits','nav-sifa-docs'].forEach(id=>{
+    ['nav-nc','nav-audits','nav-sifa-docs','nav-formulaires'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.style.display='none';
     });
     // Basculer directement sur le referentiel
@@ -5981,7 +6007,8 @@ function _qualiteGuides(){
           body: "La barre de recherche (raccourci <strong>/</strong>) filtre par nom, acronyme, mot-clé ou catégorie. Utilise le référentiel comme <strong>base de connaissances</strong> quand tu réponds à un appel d'offres — les réponses type sont copiables en un clic."
         },
       ]
-    }
+    },
+    'formulaires': (typeof formuGuide === 'function') ? formuGuide() : {steps: []}
   };
 }
 
@@ -5991,6 +6018,7 @@ const VIEW_TO_GUIDE = {
   'list': 'nc-list',
   'audits-list': 'audits',
   'ref-list': 'ref-rse',
+  'formulaires-list': 'formulaires',
 };
 
 function _isGuideDisabled(key){
@@ -7682,6 +7710,7 @@ window.addEventListener('hashchange',function(){try{var hv=_readQualiteView();if
 __GED_ASSETS__
 __FSC_ASSETS__
 __EUDR_ASSETS__
+__FORMULAIRES_ASSETS__
 init();
 </script>
 <script src="/static/mysifa_impersonate.js?v=2"></script>
