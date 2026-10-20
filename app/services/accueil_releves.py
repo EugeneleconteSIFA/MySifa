@@ -190,19 +190,6 @@ def r_stock_valorisation(objet, f):
             "pf": round(pf_reel if charges_pf else pf_base), "pf-sans-prix": _n(pf.get("nb_refs_sans_prix"))}
 
 
-def r_stock_monitoring(objet, f):
-    # stock.monitoring.kpis
-    from app.routers import reconciliation
-    snaps = appeler(reconciliation.list_snapshots) or []
-    if not snaps:
-        return {"comparees": 0, "ecarts": 0, "sans-corresp": 0, "negatifs": 0}
-    s = snaps[0]
-    d = appeler(reconciliation.get_snapshot, snapshot_id=s["id"], statut="sans_corresp_mysifa") or {}
-    return {"comparees": _n(s.get("nb_matched")), "ecarts": _n(s.get("nb_ecarts")),
-            "sans-corresp": _n(s.get("nb_sans_corresp")) + len(d.get("lines") or []),
-            "negatifs": _n(s.get("nb_negatifs"))}
-
-
 def r_stock_besoins(objet, f):
     # stock.besoins.kpis
     from app.routers import besoins_matieres as bm
@@ -475,7 +462,6 @@ RELEVEURS = {
     "stock.dashboard.reappro": r_stock_reappro,
     "stock.dashboard.kpis": r_stock_kpis,
     "stock.matieres.categorie": r_stock_categorie,
-    "stock.monitoring.kpis": r_stock_monitoring,
     "stock.besoins.kpis": r_stock_besoins,
     "stock.pf.kpis": r_stock_pf,
     "stock.bobines.kpis": r_stock_bobines,

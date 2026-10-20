@@ -23,7 +23,7 @@ let _stockUrlPrete = false;   // posé à la fin d'init() : avant, l'adresse por
                               // encore les paramètres à lire.
 const _STOCK_SOUS = {
   reception: ['nouvelle', 'liste', 'historique', 'rvgi', 'rvgi-historique'],
-  monitoring: ['quantites', 'mouvements', 'ecarts-mp'],
+  monitoring: ['production', 'expedition', 'ecarts-mp'],
   destockage: ['a_traiter', 'destockes', 'mouvements'],
 };
 const _STOCK_CLE = /^[A-Za-z0-9_.\-]{1,60}$/;
@@ -32,7 +32,7 @@ const _STOCK_JOUR = /^\d{4}-\d{2}-\d{2}$/;
 function _stockSous() {
   const t = S.tab;
   if (t === 'reception') return S.recepSubTab || 'nouvelle';
-  if (t === 'monitoring') return (S.monitoring && S.monitoring.monPage) || 'quantites';
+  if (t === 'monitoring') return (S.monitoring && S.monitoring.monPage) || 'production';
   if (t === 'destockage') return (S.destockage && S.destockage.vue) || 'a_traiter';
   return null;
 }
@@ -349,8 +349,13 @@ function _stockParamsBase() {
         if (st.detail != null && st.detail !== '') p.detail = String(st.detail);
       }
     } else if (m) {
+      // Production → stock / Expédition : période (raccourci glissant ou
+      // dates), statut, tri, filtres de colonne (f_<colonne>).
+      if (m.periode === 'perso') { p.periode = 'perso'; const pe = monPeriode(); p.du = pe.du; p.au = pe.au; }
+      else if (m.periode && m.periode !== 'last7') p.periode = m.periode;
       if (m.filterStatut) p.statut = m.filterStatut;
       if (m.sortColumn) { p.tri = m.sortColumn; if (m.sortDirection === 'desc') p.sens = 'desc'; }
+      Object.entries(m.colFiltres || {}).forEach(([k, v]) => { if (v && _STOCK_CLE.test(k)) p['f_' + k] = v; });
     }
   } else if (tab === 'valorisation') {
     const v = S.valorisation;
@@ -463,7 +468,7 @@ function stockLireFiltres(u, tab, complet) {
   }
   if (tab === 'monitoring') {
     const m = monEnsureState();
-    if (sous && _STOCK_SOUS.monitoring.includes(sous)) m.monPage = sous; else if (complet) m.monPage = 'quantites';
+    if (sous && _STOCK_SOUS.monitoring.includes(sous)) m.monPage = sous; else if (complet) m.monPage = 'production';
     if (m.monPage === 'ecarts-mp') {
       const st = ervEtat();
       const avant = JSON.stringify([st.heures, st.debut, st.fin]);
@@ -485,8 +490,23 @@ function stockLireFiltres(u, tab, complet) {
       // sous-page relance la comparaison quand data est vide).
       if (avant !== JSON.stringify([st.heures, st.debut, st.fin])) st.data = null;
     }
-    const st = ou('statut', ''); if (st !== undefined) m.filterStatut = st || null;
-    const tri = ou('tri', ''); if (tri !== undefined) { m.sortColumn = (tri && _STOCK_CLE.test(tri)) ? tri : null; m.sortDirection = val('sens', 'asc') === 'desc' ? 'desc' : 'asc'; }
+    if (m.monPage !== 'ecarts-mp') {
+      const avant = JSON.stringify([m.monPage, m.periode, m.du, m.au]);
+      const per = ou('periode', 'last7');
+      if (per !== undefined && ['last7', 'last14', 'last30', 'perso'].includes(per)) m.periode = per;
+      if (m.periode === 'perso') {
+        const du = u.get('du', ''), au = u.get('au', '');
+        if (_STOCK_JOUR.test(du)) m.du = du;
+        if (_STOCK_JOUR.test(au)) m.au = au;
+      }
+      const st = ou('statut', ''); if (st !== undefined) m.filterStatut = (st && _STOCK_CLE.test(st)) ? st : null;
+      const tri = ou('tri', ''); if (tri !== undefined) { m.sortColumn = (tri && _STOCK_CLE.test(tri)) ? tri : null; m.sortDirection = val('sens', 'asc') === 'desc' ? 'desc' : 'asc'; }
+      const cf = {};
+      let vuF = false;
+      Array.from(u.brut.keys()).forEach(k => { if (k.startsWith('f_') && _STOCK_CLE.test(k.slice(2))) { vuF = true; cf[k.slice(2)] = String(u.get(k, '')).slice(0, 60); } });
+      if (vuF || complet) m.colFiltres = cf;
+      if (avant !== JSON.stringify([m.monPage, m.periode, m.du, m.au])) { m.data = null; m.cleData = null; }
+    }
   }
   if (tab === 'valorisation') {
     const v = valEnsureState();

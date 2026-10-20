@@ -1816,3 +1816,8 @@ def eudr_libelle(champ: str, cle: str | None, langue: str = "court") -> str:
     if not opt:
         return cle or ""
     return opt.get(langue) or opt["court"]
+
+# MyStock › Monitoring — tolérance (en %) en dessous de laquelle un écart de
+# quantité entre deux sources (saisie de prod / entrée en stock, BL RVGI /
+# sortie de stock) est considéré comme concordant.
+MONITORING_TOLERANCE_PCT = float(os.getenv("MONITORING_TOLERANCE_PCT", "2"))

@@ -169,14 +169,6 @@ BLOCS: dict[str, Bloc] = {
         acces="stock", objet="categorie", lien="/stock?tab=matieres&cat={objet}",
         liste=True,
     ),
-    "stock.monitoring.kpis": Bloc(
-        appli="stock", libelle="Monitoring stocks PF", url="/stock?tab=monitoring",
-        type="chiffre",
-        historique=(("comparees", "="), ("ecarts", "-"), ("sans-corresp", "-"), ("negatifs", "-")),
-        valeurs=(("comparees", "Références comparées"), ("ecarts", "Écarts"),
-                 ("sans-corresp", "Sans correspondance"), ("negatifs", "Stocks négatifs")),
-        acces="stock",
-    ),
     "stock.dashboard.kpis": Bloc(
         appli="stock",
         libelle="Chiffres du stock",
