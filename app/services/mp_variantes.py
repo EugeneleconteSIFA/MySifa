@@ -25,6 +25,9 @@ from typing import Any, Optional
 
 _CHAMPS_TEXTE = ("libelle_technique", "ref_fournisseur", "note")
 
+# Même liste que _MP_CATEGORIES_LAIZEES de app/routers/stock.py.
+CATEGORIES_LAIZEES = frozenset({"frontal", "glassine", "complexe"})
+
 
 def _col(r: sqlite3.Row, nom: str) -> Any:
     """Colonne facultative : None sur une base où la migration n'est pas passée."""
@@ -130,13 +133,34 @@ def lister(conn: sqlite3.Connection, matiere_id: int, avec_inactives: bool = Fal
 
     # Laizes livrées par fournisseur, et laizes où ce fournisseur a un prix.
     laizes_fou: dict[Optional[int], list[str]] = {}
+    laizes_fou_det: dict[Optional[int], list[dict]] = {}
+    ml_col = "mlf.ml_bobine" if "ml_bobine" in {
+        c[1] for c in conn.execute("PRAGMA table_info(matiere_laize_fournisseurs)").fetchall()
+    } else "NULL"
     for r in conn.execute(
-        """SELECT mlf.fournisseur_id, l.valeur_mm, l.label
+        f"""SELECT mlf.fournisseur_id, mlf.laize_id, l.valeur_mm, l.label, {ml_col} AS ml_bobine
              FROM matiere_laize_fournisseurs mlf JOIN mp_laizes l ON l.id = mlf.laize_id
             WHERE mlf.matiere_id = ? ORDER BY l.valeur_mm""",
         (matiere_id,),
     ).fetchall():
-        laizes_fou.setdefault(r["fournisseur_id"], []).append(r["label"] or "%g mm" % r["valeur_mm"])
+        lib = r["label"] or "%g mm" % r["valeur_mm"]
+        laizes_fou.setdefault(r["fournisseur_id"], []).append(lib)
+        laizes_fou_det.setdefault(r["fournisseur_id"], []).append({
+            "laize_id": int(r["laize_id"]), "valeur_mm": r["valeur_mm"], "label": lib,
+            "ml_bobine": r["ml_bobine"],
+        })
+    # Laizes de la matière (stock compris) : ce qu'on peut rattacher à un fournisseur.
+    laizes_matiere = [
+        {"laize_id": int(r["laize_id"]), "valeur_mm": r["valeur_mm"],
+         "label": r["label"] or "%g mm" % r["valeur_mm"], "quantite": float(r["quantite"] or 0)}
+        for r in conn.execute(
+            """SELECT ml.laize_id, l.valeur_mm, l.label, COALESCE(s.quantite, 0) AS quantite
+                 FROM mp_matiere_laizes ml JOIN mp_laizes l ON l.id = ml.laize_id
+                 LEFT JOIN mp_stock_laize s ON s.matiere_id = ml.matiere_id AND s.laize_id = ml.laize_id
+                WHERE ml.matiere_id = ? ORDER BY l.valeur_mm""",
+            (matiere_id,),
+        ).fetchall()
+    ]
     decls = conn.execute(
         """SELECT d.id, d.laize_id, d.grammage_id, l.valeur_mm, l.label AS laize_label,
                   g.valeur_gsm, g.label AS grammage_label
@@ -180,6 +204,7 @@ def lister(conn: sqlite3.Connection, matiere_id: int, avec_inactives: bool = Fal
             "actif": bool(r["actif"]),
             "note": r["note"] or "",
             "laizes": laizes_fou.get(r["fournisseur_id"], []) if r["fournisseur_id"] else [],
+            "laizes_detail": laizes_fou_det.get(r["fournisseur_id"], []) if r["fournisseur_id"] else [],
             "declinaisons_avec_prix": len(prix_fou.get(r["fournisseur_id"], set())) if r["fournisseur_id"] else 0,
             "prix_achat": _col(r, "prix_achat"),
             "prix_maj_le": _col(r, "prix_maj_le"),
@@ -214,6 +239,8 @@ def lister(conn: sqlite3.Connection, matiere_id: int, avec_inactives: bool = Fal
         "matiere": {"id": mp["id"], "reference": mp["reference"], "designation": mp["designation"],
                     "categorie": mp["categorie"]},
         "variantes": variantes,
+        "laizes_matiere": laizes_matiere,
+        "laizee": (mp["categorie"] or "").strip().lower() in CATEGORIES_LAIZEES,
         "ecarts_prix": ecarts,
         # Prix d'achat par fournisseur et par laize, pour la saisie depuis la fiche.
         "prix": {
@@ -581,6 +608,86 @@ def deplacer(
             )
     return {"ok": True, "matiere_origine": r["matiere_id"], "matiere_cible": cible,
             "principal": devient_principal}
+
+
+def _laize_par_valeur(conn: sqlite3.Connection, valeur: Any) -> int:
+    """Laize du référentiel pour une valeur en mm, créée si elle n'existe pas."""
+    try:
+        v = float(str(valeur).replace(",", ".").replace("mm", "").strip())
+    except (TypeError, ValueError):
+        raise ValueError("Laize invalide — valeur en mm attendue.") from None
+    if v <= 0 or v > 5000:
+        raise ValueError("Laize hors limites — entre 1 et 5 000 mm.")
+    r = conn.execute("SELECT id, actif FROM mp_laizes WHERE ABS(valeur_mm - ?) < 0.001 ORDER BY actif DESC, id LIMIT 1",
+                     (v,)).fetchone()
+    if r:
+        if not r["actif"]:
+            conn.execute("UPDATE mp_laizes SET actif=1 WHERE id=?", (r["id"],))
+        return int(r["id"])
+    label = ("%d mm" % int(v)) if abs(v - int(v)) < 1e-9 else ("%g mm" % v)
+    return int(conn.execute("INSERT INTO mp_laizes (valeur_mm, label, ordre, actif) VALUES (?,?,0,1)",
+                            (v, label)).lastrowid)
+
+
+def poser_laize_fournisseur(conn: sqlite3.Connection, variante_id: int, data: dict) -> int:
+    """Ce fournisseur livre cette laize, avec son métrage par bobine (facultatif).
+
+    `data` : `laize_id` ou `valeur_mm` (laize créée au référentiel si nouvelle),
+    `ml_bobine` (vide = longueur de l'article, puis de la matière). La laize est
+    ajoutée à la matière si elle n'y était pas, sans stock. Renvoie l'id matière.
+    """
+    r = _get(conn, variante_id)
+    if not r["actif"]:
+        raise ValueError("Article désactivé : le réactiver avant de lui ajouter une laize.")
+    if not r["fournisseur_id"]:
+        raise ValueError("Article sans fournisseur : choisir d'abord le fournisseur.")
+    mp = conn.execute("SELECT categorie FROM matieres_premieres WHERE id=?", (r["matiere_id"],)).fetchone()
+    if not mp or (mp["categorie"] or "").strip().lower() not in CATEGORIES_LAIZEES:
+        raise ValueError("Cette matière n'est pas laizée.")
+    if data.get("laize_id") not in (None, "", 0, "0"):
+        try:
+            laize_id = int(data.get("laize_id"))
+        except (TypeError, ValueError):
+            raise ValueError("Laize invalide.") from None
+        if not conn.execute("SELECT 1 FROM mp_laizes WHERE id=?", (laize_id,)).fetchone():
+            raise ValueError("Laize inconnue.")
+    elif data.get("valeur_mm") not in (None, ""):
+        laize_id = _laize_par_valeur(conn, data.get("valeur_mm"))
+    else:
+        raise ValueError("Laize obligatoire.")
+    ml = _norm_float(data.get("ml_bobine")) if "ml_bobine" in data else None
+    mid = int(r["matiere_id"])
+    conn.execute("INSERT OR IGNORE INTO mp_matiere_laizes (matiere_id, laize_id) VALUES (?, ?)", (mid, laize_id))
+    conn.execute("INSERT OR IGNORE INTO mp_stock_laize (matiere_id, laize_id, quantite) VALUES (?, ?, 0)",
+                 (mid, laize_id))
+    existe = conn.execute(
+        "SELECT 1 FROM matiere_laize_fournisseurs WHERE matiere_id=? AND laize_id=? AND fournisseur_id=?",
+        (mid, laize_id, r["fournisseur_id"]),
+    ).fetchone()
+    if existe:
+        if "ml_bobine" in data:
+            conn.execute(
+                "UPDATE matiere_laize_fournisseurs SET ml_bobine=? WHERE matiere_id=? AND laize_id=? AND fournisseur_id=?",
+                (ml, mid, laize_id, r["fournisseur_id"]),
+            )
+    else:
+        conn.execute(
+            "INSERT INTO matiere_laize_fournisseurs (matiere_id, laize_id, fournisseur_id, ml_bobine) VALUES (?,?,?,?)",
+            (mid, laize_id, r["fournisseur_id"], ml),
+        )
+    return mid
+
+
+def retirer_laize_fournisseur(conn: sqlite3.Connection, variante_id: int, laize_id: int) -> int:
+    """Ce fournisseur ne livre plus cette laize. La laize reste sur la matière."""
+    r = _get(conn, variante_id)
+    if not r["fournisseur_id"]:
+        raise ValueError("Article sans fournisseur.")
+    conn.execute(
+        "DELETE FROM matiere_laize_fournisseurs WHERE matiere_id=? AND laize_id=? AND fournisseur_id=?",
+        (r["matiere_id"], int(laize_id), r["fournisseur_id"]),
+    )
+    return int(r["matiere_id"])
 
 
 def _assurer_variante(conn: sqlite3.Connection, matiere_id: int, fournisseur_id: int,

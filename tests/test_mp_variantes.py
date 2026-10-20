@@ -139,6 +139,33 @@ with get_db() as c:
         "SELECT variante_id FROM erp_article_matiere WHERE code1='9999'").fetchone()[0], None)
     c.rollback()
 
+# Laizes et métrage par bobine d'un fournisseur.
+with get_db() as c:
+    F = c.execute("INSERT INTO fournisseurs_fsc (nom) VALUES ('Fournisseur L')").lastrowid
+    ml = c.execute(
+        """INSERT INTO matieres_premieres (categorie, reference, designation, actif, is_europe, prix_par_laize,
+                                           suivi_bobine, sous_section)
+           VALUES ('frontal', 'TESTL', 'Couché 80', 1, 0, 0, 0, 'Couchés')""").lastrowid
+    vl = mv.creer(c, ml, {"libelle_technique": "Couché 80 réf X", "fournisseur_id": F}, "t")
+    mv.poser_laize_fournisseur(c, vl, {"valeur_mm": "333", "ml_bobine": "6000"})
+    det = [v for v in mv.lister(c, ml)["variantes"] if v["id"] == vl][0]["laizes_detail"]
+    check("laize fournisseur : nouvelle laize créée et rattachée", [(d["valeur_mm"], d["ml_bobine"]) for d in det],
+          [(333.0, 6000.0)])
+    check("laize fournisseur : ajoutée à la matière", [l["valeur_mm"] for l in mv.lister(c, ml)["laizes_matiere"]],
+          [333.0])
+    lid = det[0]["laize_id"]
+    mv.poser_laize_fournisseur(c, vl, {"laize_id": lid, "ml_bobine": ""})
+    det = [v for v in mv.lister(c, ml)["variantes"] if v["id"] == vl][0]["laizes_detail"]
+    check("laize fournisseur : métrage remis à vide", det[0]["ml_bobine"], None)
+    mv.retirer_laize_fournisseur(c, vl, lid)
+    check("laize fournisseur : retirée du fournisseur, gardée sur la matière",
+          ([v for v in mv.lister(c, ml)["variantes"] if v["id"] == vl][0]["laizes_detail"],
+           len(mv.lister(c, ml)["laizes_matiere"])), ([], 1))
+    refus("laize fournisseur : valeur invalide", lambda: mv.poser_laize_fournisseur(c, vl, {"valeur_mm": "abc"}))
+    vsans = mv.creer(c, ml, {"libelle_technique": "Sans fournisseur", "fournisseur_id": None}, "t")
+    refus("laize fournisseur : article sans fournisseur", lambda: mv.poser_laize_fournisseur(c, vsans, {"valeur_mm": 400}))
+    c.rollback()
+
 print()
 if FAIL:
     print("ÉCHEC : %d contrôle(s) en erreur" % len(FAIL))
