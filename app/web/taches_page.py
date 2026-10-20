@@ -520,7 +520,7 @@ tbody tr.row-sous:hover td{background:var(--accent-bg)}
 <div id="drawer-root"></div>
 <div id="modal-root"></div>
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/taches_url.js?v=1"></script>
+<script src="/static/taches_url.js?v=2"></script>
 
 <script>
 // ══════════════════════════════════════════════════════════════════
