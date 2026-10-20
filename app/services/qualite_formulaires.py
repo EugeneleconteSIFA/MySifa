@@ -207,7 +207,13 @@ def liste(conn) -> list[dict]:
                   (SELECT v.schema_json FROM qualite_formulaires_versions v
                     WHERE v.formulaire_id = f.id AND v.numero = f.version_courante) AS publie_json,
                   (SELECT v.titre FROM qualite_formulaires_versions v
-                    WHERE v.formulaire_id = f.id AND v.numero = f.version_courante) AS publie_titre
+                    WHERE v.formulaire_id = f.id AND v.numero = f.version_courante) AS publie_titre,
+                  (SELECT COUNT(*) FROM qualite_formulaires_destinataires d
+                     JOIN qualite_formulaires_envois e ON e.id = d.envoi_id
+                    WHERE e.formulaire_id = f.id AND d.actif = 1) AS nb_destinataires,
+                  (SELECT COUNT(*) FROM qualite_formulaires_destinataires d
+                     JOIN qualite_formulaires_envois e ON e.id = d.envoi_id
+                    WHERE e.formulaire_id = f.id AND d.actif = 1 AND d.statut = 'repondu') AS nb_reponses
              FROM qualite_formulaires f
             ORDER BY f.modifie_le DESC"""
     ).fetchall()
@@ -249,6 +255,18 @@ def lire(conn, fid: int) -> dict | None:
                                 courante["titre"] if courante else None)
     d["versions"] = [{"numero": v["numero"], "titre": v["titre"], "publie_par": v["publie_par"],
                       "publie_le": v["publie_le"]} for v in versions]
+    try:
+        c = conn.execute(
+            """SELECT COUNT(*) AS n, SUM(CASE WHEN d.statut = 'repondu' THEN 1 ELSE 0 END) AS r
+                 FROM qualite_formulaires_destinataires d
+                 JOIN qualite_formulaires_envois e ON e.id = d.envoi_id
+                WHERE e.formulaire_id = ? AND d.actif = 1""",
+            (fid,),
+        ).fetchone()
+        d["nb_destinataires"], d["nb_reponses"] = int(c["n"] or 0), int(c["r"] or 0)
+    except Exception:
+        # Tables d'envoi pas encore créées (migration en attente)
+        d["nb_destinataires"] = d["nb_reponses"] = 0
     return d
 
 

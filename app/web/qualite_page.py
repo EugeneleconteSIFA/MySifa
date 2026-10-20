@@ -7,7 +7,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.services.auth_service import get_current_user
 from app.web.access_denied import access_denied_response
-from config import APP_VERSION
+import json
+
+from config import APP_ORG_NAME, APP_VERSION
 from app.web.qualite_ged_assets import GED_JS
 from app.web.qualite_fsc_assets import FSC_JS
 from app.web.qualite_eudr_assets import EUDR_JS
@@ -45,7 +47,7 @@ def qualite_page(request: Request):
         .replace("__GED_ASSETS__", GED_JS)
         .replace("__FSC_ASSETS__", FSC_JS)
         .replace("__EUDR_ASSETS__", EUDR_JS)
-        .replace("__FORMULAIRES_ASSETS__", FORMULAIRES_JS)
+        .replace("__FORMULAIRES_ASSETS__", FORMULAIRES_JS.replace("__ORG_NAME_JS__", json.dumps(APP_ORG_NAME)))
     )
     return HTMLResponse(
         content=html,
@@ -527,8 +529,8 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/qualite_url.js?v=3"></script>
-<script src="/static/mysifa_formulaire.js?v=1"></script>
+<script src="/static/qualite_url.js?v=4"></script>
+<script src="/static/mysifa_formulaire.js?v=2"></script>
 <script src="/static/mysifa_formulaire_editeur.js?v=1"></script>
 <script>
 'use strict';

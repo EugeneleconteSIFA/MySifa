@@ -6,7 +6,10 @@
  * aujourd'hui, portail public des destinataires et questionnaire des alertes
  * maintenance ensuite. Structure du schéma : app/services/qualite_formulaires.py.
  *
- *   MysifaFormulaire.rendre(schema, conteneur, {onChange})
+ *   MysifaFormulaire.rendre(schema, conteneur, {onChange, valeurs, lectureSeule, nc})
+ *     valeurs       réponses à pré-remplir (même forme que lire())
+ *     lectureSeule  champs désactivés (consultation d'une réponse)
+ *     nc            identifiants des questions à signaler non conformes
  *   MysifaFormulaire.lire(conteneur)       → {id_question: réponse}
  *   MysifaFormulaire.manquantes(conteneur) → [id_question obligatoire sans réponse]
  *
@@ -62,7 +65,11 @@
       '.mf-echelle{display:flex;flex-wrap:wrap;gap:6px;align-items:center}',
       '.mf-echelle .mf-chip{min-width:38px;justify-content:center}',
       '.mf-echelle-lbl{font-size:11px;color:var(--muted)}',
-      '.mf-vide{font-size:13px;color:var(--muted);font-style:italic}'
+      '.mf-vide{font-size:13px;color:var(--muted);font-style:italic}',
+      '.mf-lecture .mf-in:disabled{opacity:1;color:var(--text);background:var(--bg)}',
+      '.mf-lecture .mf-chip{cursor:default}',
+      '.mf-q.mf-nc{border-left:3px solid var(--danger);padding-left:10px}',
+      '.mf-nc-lbl{display:inline-block;margin-left:8px;font-size:11px;font-weight:700;color:var(--danger)}'
     ].join('\n');
     document.head.appendChild(st);
   }
@@ -145,8 +152,19 @@
         + qs.map(question).join('')
         + '</section>';
     }).join('');
-    el.innerHTML = '<div class="mf">' + (html || '<div class="mf-vide">Aucune question pour l\'instant.</div>') + '</div>';
+    el.innerHTML = '<div class="mf' + (opts.lectureSeule ? ' mf-lecture' : '') + '">' + (html || '<div class="mf-vide">Aucune question pour l\'instant.</div>') + '</div>';
     el._mfQuestions = parId;
+    if (opts.valeurs) remplir(el, opts.valeurs);
+    if (Array.isArray(opts.nc)) {
+      opts.nc.forEach(id => {
+        const qEl = el.querySelector('.mf-q[data-qid="' + cssEsc(id) + '"]');
+        if (!qEl) return;
+        qEl.classList.add('mf-nc');
+        const lbl = qEl.querySelector('.mf-q-label');
+        if (lbl) lbl.insertAdjacentHTML('beforeend', '<span class="mf-nc-lbl">Non conforme</span>');
+      });
+    }
+    if (opts.lectureSeule) el.querySelectorAll('input, select, textarea').forEach(i => { i.disabled = true; });
     const surSaisie = (ev) => {
       const qEl = ev.target.closest && ev.target.closest('.mf-q');
       if (qEl) maj(qEl, parId[qEl.getAttribute('data-qid')]);
@@ -204,6 +222,36 @@
     return t || undefined;
   }
 
+  const cssEsc = (s) => (window.CSS && CSS.escape) ? CSS.escape(String(s)) : String(s).replace(/["\\]/g, '\\$&');
+
+  // Pose des réponses déjà données dans les champs (mêmes formes que lire()).
+  function remplir(el, valeurs) {
+    const parId = (el && el._mfQuestions) || {};
+    Object.keys(parId).forEach(id => {
+      const q = parId[id];
+      const qEl = el.querySelector('.mf-q[data-qid="' + cssEsc(id) + '"]');
+      const r = valeurs[id];
+      if (!qEl || r === undefined || r === null) return;
+      if (q.type === 'value') {
+        const vals = Array.isArray(r) ? r : [r];
+        qEl.querySelectorAll('.mf-val').forEach((inp, k) => { const v = vals[k]; inp.value = (v === null || v === undefined) ? '' : String(v); });
+      } else if (q.type === 'choice') {
+        const sel = qEl.querySelector('.mf-select');
+        const choix = Array.isArray(r) ? r.map(String) : [String(r)];
+        if (sel) sel.value = choix[0] === 'Autre' ? '__autre' : choix[0];
+        else qEl.querySelectorAll('.mf-opt').forEach(i => { i.checked = choix.indexOf(i.value) !== -1; });
+        const autre = qEl.querySelector('.mf-autre');
+        if (autre && valeurs[id + '_other']) autre.value = String(valeurs[id + '_other']);
+      } else if (q.type === 'scale') {
+        qEl.querySelectorAll('.mf-opt').forEach(i => { i.checked = String(i.value) === String(r); });
+      } else {
+        const t = qEl.querySelector('.mf-texte');
+        if (t) t.value = String(r);
+      }
+      maj(qEl, q);
+    });
+  }
+
   function lire(el) {
     const out = {};
     const parId = (el && el._mfQuestions) || {};
@@ -230,5 +278,5 @@
     return out;
   }
 
-  window.MysifaFormulaire = { rendre: rendre, lire: lire, manquantes: manquantes, esc: esc };
+  window.MysifaFormulaire = { rendre: rendre, lire: lire, manquantes: manquantes, remplir: remplir, esc: esc };
 })();

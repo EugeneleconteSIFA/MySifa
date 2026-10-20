@@ -30,7 +30,22 @@ S.formu = {
   iaModeles: null,     // /api/qualite/formulaires/ia/modeles
   iaNote: null,        // {id, resume, remarques, modele} — dernière proposition appliquée
   iaAvant: null,       // {id, titre, description, schema} — pour « Annuler la modification »
+  onglet: 'questions', // questions | suivi
+  envois: null,        // /api/qualite/formulaires/{id}/envois (formulaire ouvert)
+  envoiType: 'fournisseur',
+  envoiQ: '',
+  envoiCandidats: [],
+  envoiSel: new Map(), // email → destinataire choisi
 };
+// Nom de l'entreprise (config.APP_ORG_NAME), injecté par qualite_page.py.
+const FORMU_ORG = __ORG_NAME_JS__;
+const FORMU_TYPES_DEST = [
+  {v:'fournisseur', l:'Fournisseurs'},
+  {v:'client',      l:'Clients'},
+  {v:'personnel',   l:'Personnel'},
+  {v:'libre',       l:'Adresse libre'},
+];
+const FORMU_STATUTS_DEST = {envoye:'Envoyé', ouvert:'Ouvert', repondu:'Répondu'};
 
 const FORMU_FILTRES = [
   {v:'actifs',    l:'En cours'},
@@ -95,6 +110,39 @@ const FORMU_FILTRES = [
 .formu-ia-f textarea,.formu-ia-f select,.formu-ia-f input[type=file]{width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-family:inherit;font-size:13px}
 .formu-ia-f textarea{resize:vertical;min-height:110px}
 .formu-ia-aide{font-size:11px;color:var(--muted)}
+.formu-onglets{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:14px}
+.formu-onglet{padding:9px 14px;border:none;border-bottom:2px solid transparent;background:none;color:var(--text2);font:inherit;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:-1px}
+.formu-onglet:hover{color:var(--accent)}
+.formu-onglet.active{color:var(--accent);border-bottom-color:var(--accent)}
+.formu-envoi{background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:12px;overflow:hidden}
+.formu-envoi-hd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid var(--border)}
+.formu-envoi-hd b{font-size:14px;color:var(--text)}
+.formu-envoi-meta{font-size:12px;color:var(--muted);flex:1;min-width:200px}
+.formu-envoi .fsc-btn{background:var(--bg)}
+.formu-envoi .fsc-btn:hover{background:var(--card)}
+.formu-dest{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px}
+.formu-dest:last-child{border-bottom:none}
+.formu-dest.retire{opacity:.5}
+.formu-dest-qui{flex:1;min-width:200px}
+.formu-dest-qui b{color:var(--text)}
+.formu-dest-qui span{display:block;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.formu-dest-actions{display:flex;gap:6px;flex-wrap:wrap}
+.formu-badge.ouvert{border-color:var(--accent);color:var(--accent);background:transparent}
+.formu-badge.nc{border-color:var(--danger);color:var(--danger);background:transparent}
+.formu-env-types{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.formu-env-liste{border:1px solid var(--border);border-radius:10px;max-height:280px;overflow:auto;background:var(--card)}
+.formu-env-ligne{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px}
+.formu-env-ligne:last-child{border-bottom:none}
+.formu-env-ligne:hover{background:var(--accent-bg)}
+.formu-env-ligne input{width:15px;height:15px;accent-color:var(--accent);margin:0}
+.formu-env-ligne span{flex:1;min-width:0}
+.formu-env-ligne small{display:block;color:var(--muted);overflow-wrap:anywhere}
+.formu-env-sel{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.formu-env-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 6px 4px 10px;border-radius:999px;background:var(--accent-bg);border:1px solid var(--accent);color:var(--accent);font-size:12px;max-width:100%}
+.formu-env-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.formu-env-chip button{border:none;background:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 2px}
+.formu-env-2{display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:10px}
+@media(max-width:600px){.formu-env-2{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:980px){.formu-grille{grid-template-columns:minmax(0,1fr)}.formu-apercu{position:static;max-height:none}}
 @media(max-width:600px){.formu-row{flex-wrap:wrap}.formu-row-actions{width:100%}}
 `;
@@ -197,7 +245,8 @@ function formuRenderLignes(){
   }
   box.innerHTML = lignes.map(f => {
     const meta = [f.nb_questions + ' question' + (f.nb_questions > 1 ? 's' : ''),
-                  'modifié le ' + formuDate(f.modifie_le) + (f.modifie_par ? ' par ' + f.modifie_par : '')].join(' · ');
+                  f.nb_destinataires ? f.nb_reponses + ' / ' + f.nb_destinataires + ' réponse' + (f.nb_reponses > 1 ? 's' : '') : '',
+                  'modifié le ' + formuDate(f.modifie_le) + (f.modifie_par ? ' par ' + f.modifie_par : '')].filter(Boolean).join(' · ');
     let actions = '';
     if(admin){
       actions += `<button type="button" class="fsc-btn sm" onclick="event.stopPropagation();formuDupliquer(${f.id})">Dupliquer</button>`;
@@ -285,6 +334,7 @@ async function formuOuvrir(id, deja){
       f = await r.json();
     }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); return; }
   }
+  if(!S.formu.courant || S.formu.courant.id !== f.id){ S.formu.onglet = 'questions'; S.formu.envois = null; }
   S.formu.courant = f;
   S.formu.etat = '';
   setView('formulaire-edit');
@@ -312,7 +362,8 @@ function formuRenderEdition(){
         ? `<button type="button" class="fsc-btn sm" onclick="formuArchiver(${f.id})">Archiver</button>`
         : `<button type="button" class="fsc-btn sm" onclick="formuSupprimer(${f.id})">Supprimer</button>`;
       boutons += `<button type="button" class="fsc-btn sm" onclick="formuIaOuvrir('modifier')">Modifier avec l'IA</button>`;
-      boutons += `<button type="button" class="fsc-btn sm primary" id="formu-publier" onclick="formuPublier()">Publier</button>`;
+      boutons += `<button type="button" class="fsc-btn sm" id="formu-publier" onclick="formuPublier()">Publier</button>`;
+      boutons += `<button type="button" class="fsc-btn sm primary" onclick="formuEnvoiOuvrir(${f.id})"${f.version_courante ? '' : ' disabled title="Publier le formulaire avant de l\'envoyer"'}>Envoyer</button>`;
     }
   }
   const entete = edit
@@ -332,11 +383,21 @@ function formuRenderEdition(){
     </div>
     ${bandeauIaHtml}
     ${entete}
-    ${edit
+    <div class="formu-onglets">
+      <button type="button" class="formu-onglet${S.formu.onglet !== 'suivi' ? ' active' : ''}" onclick="formuSetOnglet('questions')">Questions</button>
+      <button type="button" class="formu-onglet${S.formu.onglet === 'suivi' ? ' active' : ''}" onclick="formuSetOnglet('suivi')">Envois et réponses${f.nb_destinataires ? ' (' + (f.nb_reponses || 0) + ' / ' + f.nb_destinataires + ')' : ''}</button>
+    </div>
+    ${S.formu.onglet === 'suivi' ? '<div id="formu-suivi"><div class="formu-vide">Chargement…</div></div>' : edit
       ? `<div class="formu-grille"><div id="formu-editeur"></div>
            <aside class="formu-apercu"><div class="formu-apercu-lbl">Aperçu destinataire</div><div id="formu-apercu"></div>
            <div class="formu-apercu-note">Se met à jour pendant la saisie. Les réponses tapées ici ne sont pas enregistrées.</div></aside></div>`
       : `<div class="formu-lecture"><div id="formu-apercu"></div></div>`}`;
+  if(S.formu.onglet === 'suivi'){
+    S.formu.ed = null;
+    formuMajEtat();
+    formuSuiviCharger();
+    return;
+  }
   if(edit && window.MysifaFormulaireEditeur){
     S.formu.ed = MysifaFormulaireEditeur.monter(document.getElementById('formu-editeur'), f.schema, {onChange: formuSurChangement});
   } else {
@@ -344,6 +405,16 @@ function formuRenderEdition(){
   }
   formuMajEtat();
   formuApercu();
+}
+
+// Le schéma de l'éditeur est recopié dans le formulaire avant de quitter
+// l'onglet Questions : l'enregistrement automatique le relit.
+function formuSetOnglet(o){
+  const f = S.formu.courant;
+  if(!f) return;
+  if(S.formu.ed) f.schema = S.formu.ed.schema();
+  S.formu.onglet = o === 'suivi' ? 'suivi' : 'questions';
+  formuRenderEdition();
 }
 
 let _formuApercuT = null;
@@ -388,12 +459,12 @@ function formuMajEtat(){
 async function formuEnregistrer(){
   clearTimeout(S.formu.timer); S.formu.timer = null;
   const f = S.formu.courant;
-  if(!f || !S.formu.ed || S.formu.etat !== 'attente') return;
+  if(!f || S.formu.etat !== 'attente' || !formuModifiable()) return;
   if(S.formu.enCours) await S.formu.enCours;
   const corps = {
     titre: document.getElementById('formu-titre')?.value ?? f.titre,
     description: document.getElementById('formu-desc')?.value ?? f.description,
-    schema: S.formu.ed.schema(),
+    schema: S.formu.ed ? S.formu.ed.schema() : f.schema,
   };
   S.formu.etat = 'envoi'; formuMajEtat();
   S.formu.enCours = (async () => {
@@ -612,6 +683,267 @@ function formuIaAnnuler(){
   showToast('Modification annulée.','success');
 }
 
+
+// ── Envois et réponses ─────────────────────────────────────────────────
+
+async function formuSuiviCharger(){
+  const f = S.formu.courant;
+  if(!f) return;
+  try{
+    const r = await api('/api/qualite/formulaires/' + f.id + '/envois');
+    if(!r.ok){ showToast(await formuErreur(r, 'Chargement des envois impossible.'),'danger'); return; }
+    S.formu.envois = (await r.json()).envois || [];
+  }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); return; }
+  formuSuiviRender();
+}
+
+function formuSuiviRender(){
+  const box = document.getElementById('formu-suivi');
+  const f = S.formu.courant;
+  if(!box || !f) return;
+  const envois = S.formu.envois || [];
+  const admin = formuEstAdmin() && f.statut !== 'archive';
+  if(!envois.length){
+    box.innerHTML = '<div class="formu-vide">' + (f.version_courante
+      ? 'Pas encore envoyé.' + (admin ? ' Le bouton « Envoyer » choisit les destinataires : fournisseurs, clients, personnel ou adresse libre.' : '')
+      : 'Publier le formulaire, puis l\'envoyer.') + '</div>';
+    return;
+  }
+  box.innerHTML = envois.map(e => {
+    const meta = ['v' + e.version, 'par ' + (e.cree_par || '—'), e.echeance ? 'réponse attendue avant le ' + formuDate(e.echeance) : '',
+                  e.nb_repondus + ' / ' + e.nb + ' réponse' + (e.nb_repondus > 1 ? 's' : ''), e.nb_ouverts + ' ouvert' + (e.nb_ouverts > 1 ? 's' : '')]
+      .filter(Boolean).join(' · ');
+    const enAttente = e.nb - e.nb_repondus;
+    const lignes = e.destinataires.map(d => {
+      const st = d.actif ? `<span class="formu-badge ${d.statut === 'repondu' ? 'publie' : (d.statut === 'ouvert' ? 'ouvert' : '')}">${escHtml(FORMU_STATUTS_DEST[d.statut] || d.statut)}${d.statut === 'repondu' && d.repondu_le ? ' le ' + escHtml(formuDate(d.repondu_le)) : ''}</span>`
+                         : '<span class="formu-badge archive">Retiré</span>';
+      const nc = d.nb_nc ? `<span class="formu-badge nc">${d.nb_nc} NC</span>` : '';
+      let act = '';
+      if(d.statut === 'repondu') act += `<button type="button" class="fsc-btn sm" onclick="formuReponseVoir(${d.id})">Voir la réponse</button>`;
+      if(admin && d.actif && d.statut !== 'repondu') act += `<button type="button" class="fsc-btn sm" onclick="formuRelancer(${d.id})">Relancer</button>`;
+      if(admin && d.actif) act += `<button type="button" class="fsc-btn sm" onclick="formuRetirer(${d.id})">Retirer</button>`;
+      const perso = d.type === 'personnel';
+      const qui = (perso ? d.nom : d.organisation) || d.nom || d.email;
+      const sous = [!perso && d.organisation && d.nom ? d.nom : '', d.email, d.nb_envois > 1 ? (d.nb_envois - 1) + ' relance' + (d.nb_envois > 2 ? 's' : '') : ''].filter(Boolean).join(' · ');
+      return `<div class="formu-dest${d.actif ? '' : ' retire'}">
+        <div class="formu-dest-qui"><b>${escHtml(qui)}</b><span>${escHtml(sous)}</span></div>
+        ${st} ${nc}
+        <div class="formu-dest-actions">${act}</div>
+      </div>`;
+    }).join('');
+    return `<div class="formu-envoi">
+      <div class="formu-envoi-hd"><b>Envoi du ${escHtml(formuDate(e.cree_le))}</b><span class="formu-envoi-meta">${escHtml(meta)}</span>
+        ${admin && enAttente > 0 ? `<button type="button" class="fsc-btn sm" onclick="formuRelancerEnvoi(${e.id}, ${enAttente})">Relancer les ${enAttente} sans réponse</button>` : ''}
+      </div>
+      ${lignes}
+    </div>`;
+  }).join('');
+}
+
+async function formuApresEnvoi(){
+  const f = S.formu.courant;
+  if(!f) return;
+  try{
+    const r = await api('/api/qualite/formulaires/' + f.id);
+    if(r.ok){ const d = await r.json(); f.nb_destinataires = d.nb_destinataires; f.nb_reponses = d.nb_reponses; }
+  }catch(e){}
+  S.formu.liste = null;
+  if(S.formu.onglet === 'suivi') formuRenderEdition(); else formuSetOnglet('suivi');
+}
+
+function formuResultatEnvoi(res, quoi){
+  if(!res) return;
+  const n = (res.envoyes || []).length, ko = res.echecs || [];
+  if(ko.length) showToast(n + ' ' + quoi + ', ' + ko.length + ' en échec : ' + ko.slice(0, 3).join(', ') + (ko.length > 3 ? '…' : ''),'danger');
+  else showToast(n + ' ' + quoi + '.','success');
+}
+
+async function formuRelancer(did){
+  formuResultatEnvoi(await formuAction('destinataires/' + did, '/relancer', null, null, true), 'relance envoyée');
+  formuSuiviCharger();
+}
+async function formuRelancerEnvoi(eid, n){
+  if(!confirm('Relancer les ' + n + ' destinataire(s) sans réponse ?')) return;
+  formuResultatEnvoi(await formuAction('envois/' + eid, '/relancer', null, null, true), 'relance(s) envoyée(s)');
+  formuSuiviCharger();
+}
+async function formuRetirer(did){
+  if(!confirm('Retirer ce destinataire ? Le formulaire disparaît de son espace ; sa réponse éventuelle reste consultable ici.')) return;
+  if(await formuAction('destinataires/' + did, '/retirer', 'Destinataire retiré.', null, true)) formuApresEnvoi();
+}
+
+// ── Fenêtre d'envoi ────────────────────────────────────────────────────
+
+async function formuEnvoiOuvrir(fid){
+  const f = S.formu.courant;
+  if(!f || f.id !== fid || !formuEstAdmin()) return;
+  if(!f.version_courante){ showToast('Publier le formulaire avant de l\'envoyer.','danger'); return; }
+  await formuEnregistrerMaintenant();
+  S.formu.envoiSel = new Map();
+  S.formu.envoiQ = '';
+  const avert = f.a_publier
+    ? `<p class="formu-ia-aide" style="color:var(--warn);font-size:12px;margin:0 0 10px">Des modifications ne sont pas publiées : c'est la version v${f.version_courante} qui sera envoyée. Publier d'abord pour les inclure.</p>` : '';
+  formuMroot().innerHTML = `
+  <div class="modal-ov" style="display:flex" onclick="if(event.target===this)closeMroot()">
+    <div class="modal lg" onclick="event.stopPropagation()">
+      <button type="button" class="modal-close" onclick="closeMroot()">×</button>
+      <div class="modal-hd"><h3>Envoyer « ${escHtml(f.titre)} »</h3></div>
+      <div class="modal-bd">
+        ${avert}
+        <p style="margin:0 0 10px">Chaque destinataire reçoit un email avec le lien de son espace ${escHtml(FORMU_ORG)}, où il retrouve ce formulaire et toutes les autres demandes qui lui sont adressées. Le personnel reçoit aussi une tâche dans MySifa.</p>
+        <div class="formu-env-types" id="formu-env-types"></div>
+        <div id="formu-env-zone"></div>
+        <div class="formu-env-sel" id="formu-env-sel"></div>
+        <div class="formu-env-2">
+          <label class="formu-ia-f"><span>Message (optionnel)</span><textarea id="formu-env-message" maxlength="2000" style="min-height:70px" placeholder="Affiché en tête du formulaire et dans l'email."></textarea></label>
+          <label class="formu-ia-f"><span>Réponse attendue avant le</span><input type="date" id="formu-env-echeance" style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-family:inherit"></label>
+        </div>
+      </div>
+      <div class="modal-ft">
+        <button type="button" class="fsc-btn" onclick="closeMroot()">Annuler</button>
+        <button type="button" class="btn btn-accent" id="formu-env-go" onclick="formuEnvoiValider()" disabled>Envoyer</button>
+      </div>
+    </div>
+  </div>`;
+  formuEnvoiType(S.formu.envoiType || 'fournisseur');
+}
+
+function formuEnvoiType(t){
+  S.formu.envoiType = FORMU_TYPES_DEST.some(x => x.v === t) ? t : 'fournisseur';
+  const types = document.getElementById('formu-env-types');
+  if(types) types.innerHTML = FORMU_TYPES_DEST.map(x => `<button type="button" class="formu-pill${S.formu.envoiType === x.v ? ' active' : ''}" onclick="formuEnvoiType('${x.v}')">${escHtml(x.l)}</button>`).join('');
+  const zone = document.getElementById('formu-env-zone');
+  if(!zone) return;
+  if(S.formu.envoiType === 'libre'){
+    zone.innerHTML = `<label class="formu-ia-f"><span>Adresses email (une par ligne, ou séparées par des virgules)</span>
+      <textarea id="formu-env-libres" style="min-height:90px" placeholder="prenom.nom@exemple.com"></textarea></label>
+      <button type="button" class="fsc-btn sm" onclick="formuEnvoiAjouterLibres()">Ajouter à la sélection</button>`;
+    requestAnimationFrame(() => document.getElementById('formu-env-libres')?.focus());
+  } else {
+    zone.innerHTML = `<input type="search" id="formu-env-q" class="formu-search" style="max-width:none;width:100%;margin:0 0 8px" placeholder="Rechercher (nom, contact, email)" value="${escAttr(S.formu.envoiQ)}" oninput="formuEnvoiChercher(this.value)" onkeydown="if(event.key==='Escape'){this.value='';formuEnvoiChercher('');}">
+      <div class="formu-env-liste" id="formu-env-liste"><div class="formu-vide" style="border:none">Chargement…</div></div>`;
+    requestAnimationFrame(() => document.getElementById('formu-env-q')?.focus());
+    formuEnvoiCharger();
+  }
+  formuEnvoiMajSel();
+}
+
+let _formuEnvT = null;
+function formuEnvoiChercher(q){
+  S.formu.envoiQ = q;
+  clearTimeout(_formuEnvT);
+  _formuEnvT = setTimeout(formuEnvoiCharger, 200);
+}
+
+async function formuEnvoiCharger(){
+  const t = S.formu.envoiType, q = S.formu.envoiQ || '';
+  try{
+    const r = await api('/api/qualite/formulaires/destinataires?type=' + encodeURIComponent(t) + '&q=' + encodeURIComponent(q));
+    if(!r.ok){ showToast(await formuErreur(r, 'Chargement des destinataires impossible.'),'danger'); return; }
+    if(t !== S.formu.envoiType || q !== (S.formu.envoiQ || '')) return;
+    S.formu.envoiCandidats = (await r.json()).destinataires || [];
+  }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); return; }
+  formuEnvoiListe();
+}
+
+function formuEnvoiListe(){
+  const box = document.getElementById('formu-env-liste');
+  if(!box) return;
+  const c = S.formu.envoiCandidats || [];
+  if(!c.length){
+    const q = (S.formu.envoiQ || '').trim();
+    box.innerHTML = '<div class="formu-vide" style="border:none">' + (q ? 'Aucun résultat pour « ' + escHtml(q) + ' ».' : 'Aucun contact avec une adresse email.') + '</div>';
+    return;
+  }
+  box.innerHTML = c.map((d, i) => `<label class="formu-env-ligne">
+      <input type="checkbox" ${S.formu.envoiSel.has(d.email) ? 'checked' : ''} onchange="formuEnvoiCocher(${i}, this.checked)">
+      <span><b>${escHtml(d.organisation || d.nom || d.email)}</b><small>${escHtml([d.organisation && d.nom ? d.nom : '', d.email].filter(Boolean).join(' · '))}</small></span>
+    </label>`).join('');
+}
+
+function formuEnvoiCocher(i, on){
+  const d = (S.formu.envoiCandidats || [])[i];
+  if(!d) return;
+  if(on) S.formu.envoiSel.set(d.email, d); else S.formu.envoiSel.delete(d.email);
+  formuEnvoiMajSel();
+}
+
+function formuEnvoiAjouterLibres(){
+  const t = document.getElementById('formu-env-libres');
+  if(!t) return;
+  const ok = [], ko = [];
+  t.value.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean).forEach(e => {
+    if(/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)){ const m = e.toLowerCase(); ok.push(m); if(!S.formu.envoiSel.has(m)) S.formu.envoiSel.set(m, {type:'libre', email:m, nom:'', organisation:''}); }
+    else ko.push(e);
+  });
+  t.value = ko.join('\n');
+  if(ko.length) showToast(ko.length + ' adresse(s) invalide(s) laissée(s) dans le champ.','danger');
+  else if(ok.length) showToast(ok.length + ' adresse(s) ajoutée(s).','success');
+  formuEnvoiMajSel();
+}
+
+function formuEnvoiRetirerSel(email){
+  S.formu.envoiSel.delete(email);
+  formuEnvoiMajSel();
+  formuEnvoiListe();
+}
+
+function formuEnvoiMajSel(){
+  const box = document.getElementById('formu-env-sel');
+  const go = document.getElementById('formu-env-go');
+  const sel = Array.from(S.formu.envoiSel.values());
+  if(box) box.innerHTML = sel.length
+    ? sel.map(d => `<span class="formu-env-chip" title="${escAttr(d.email)}"><span>${escHtml(d.organisation || d.nom || d.email)}</span><button type="button" aria-label="Retirer" onclick='formuEnvoiRetirerSel(${JSON.stringify(d.email).replace(/'/g, '&#39;')})'>×</button></span>`).join('')
+    : '<span class="formu-ia-aide">Aucun destinataire sélectionné.</span>';
+  if(go){ go.disabled = !sel.length; go.textContent = sel.length ? 'Envoyer à ' + sel.length + ' destinataire' + (sel.length > 1 ? 's' : '') : 'Envoyer'; }
+}
+
+async function formuEnvoiValider(){
+  const f = S.formu.courant;
+  const sel = Array.from(S.formu.envoiSel.values());
+  if(!f || !sel.length) return;
+  const go = document.getElementById('formu-env-go');
+  if(go){ go.disabled = true; go.textContent = 'Envoi en cours…'; }
+  const res = await formuAction(f.id, '/envois', null, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({destinataires: sel, message: document.getElementById('formu-env-message')?.value || '',
+                          echeance: document.getElementById('formu-env-echeance')?.value || ''})});
+  if(!res){ formuEnvoiMajSel(); return; }
+  closeMroot();
+  formuResultatEnvoi(res, 'email(s) envoyé(s)');
+  formuApresEnvoi();
+}
+
+// ── Consultation d'une réponse ─────────────────────────────────────────
+
+async function formuReponseVoir(did){
+  let d;
+  try{
+    const r = await api('/api/qualite/formulaires/destinataires/' + did + '/reponse');
+    if(!r.ok){ showToast(await formuErreur(r, 'Réponse introuvable.'),'danger'); return; }
+    d = await r.json();
+  }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); return; }
+  const dest = d.destinataire, rep = d.reponse;
+  const qui = (dest.type === 'personnel' ? dest.nom : dest.organisation) || dest.nom || dest.email;
+  const meta = ['Réponse du ' + formuDate(rep.soumis_le) + ' à ' + String(rep.soumis_le || '').slice(11, 16),
+                rep.repondant_nom ? 'par ' + rep.repondant_nom : '', dest.email, 'version v' + d.version,
+                rep.nb_versions > 1 ? 'modifiée ' + (rep.nb_versions - 1) + ' fois' : ''].filter(Boolean).join(' · ');
+  formuMroot().innerHTML = `
+  <div class="modal-ov" style="display:flex" onclick="if(event.target===this)closeMroot()">
+    <div class="modal lg" onclick="event.stopPropagation()">
+      <button type="button" class="modal-close" onclick="closeMroot()">×</button>
+      <div class="modal-hd"><h3>${escHtml(qui)} — ${escHtml(d.titre)}</h3></div>
+      <div class="modal-bd">
+        <p class="formu-ia-aide" style="font-size:12px;margin:0 0 6px">${escHtml(meta)}</p>
+        ${d.nc.length ? `<p style="margin:0 0 12px;color:var(--danger);font-weight:600;font-size:13px">${d.nc.length} réponse${d.nc.length > 1 ? 's' : ''} non conforme${d.nc.length > 1 ? 's' : ''}.</p>` : ''}
+        <div id="formu-reponse-corps"></div>
+      </div>
+      <div class="modal-ft"><button type="button" class="fsc-btn" onclick="closeMroot()">Fermer</button></div>
+    </div>
+  </div>`;
+  MysifaFormulaire.rendre(d.schema, document.getElementById('formu-reponse-corps'), {valeurs: rep.reponses, lectureSeule: true, nc: d.nc});
+}
+
 // ── Guide in-app « formulaires » (branché dans _qualiteGuides) ──────────
 
 QUALITE_TASKS_MODULES.formulaires = {
@@ -750,7 +1082,7 @@ function formuGuide(){
       {
         icon: ico('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'),
         title: "Sections et questions",
-        body: "Six boutons ajoutent une question : <strong>Texte</strong>, <strong>Nombre</strong>, <strong>Choix</strong>, <strong>Oui / Non</strong>, <strong>Date</strong>, <strong>Note</strong>. La poignée ou les flèches réordonnent, l'icône copie duplique. Une réponse de choix cochée <strong>NC</strong> signale une non-conformité.",
+        body: "Six boutons ajoutent une question : <strong>Texte</strong>, <strong>Nombre</strong>, <strong>Choix</strong>, <strong>Oui / Non</strong>, <strong>Date</strong>, <strong>Note</strong>. La poignée ou les flèches réordonnent, l'icône copie duplique. Une réponse de choix cochée <strong>NC</strong> signale une non-conformité. L'aperçu à droite montre le formulaire tel que le destinataire le remplira.",
         illu: FORMU_MOCKUPS.editeur
       },
       {
@@ -765,9 +1097,9 @@ function formuGuide(){
         body: "<strong>Créer avec l'IA</strong> part d'une consigne ou d'un formulaire existant (fiche papier photographiée, PDF) et ouvre un brouillon. <strong>Modifier avec l'IA</strong> retouche le formulaire ouvert ; <strong>Annuler la modification</strong> le remet en l'état. Les remarques de l'IA disent ce qu'il reste à vérifier."
       },
       {
-        icon: ico('<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'),
-        title: "Aperçu destinataire",
-        body: "La colonne de droite montre le formulaire tel que le destinataire le remplira, et suit chaque frappe. On peut y tester les réponses : rien n'est enregistré."
+        icon: ico('<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/>'),
+        title: "Envoyer et suivre les réponses",
+        body: "<strong>Envoyer</strong> choisit les destinataires : fournisseurs, clients (contacts de l'ERP), personnel ou adresse libre. Chacun reçoit le lien de son <strong>espace " + escHtml(FORMU_ORG) + "</strong>, où il retrouve tout ce que " + escHtml(FORMU_ORG) + " lui adresse. L'onglet <strong>Envois et réponses</strong> suit qui a ouvert et répondu, relance et affiche chaque réponse, non-conformités en rouge."
       },
       {
         icon: ico('<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'),

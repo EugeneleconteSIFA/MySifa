@@ -19,7 +19,9 @@ from app.core.database import get_db
 from app.routers.qualite import _require_qualite_access, _require_qualite_view
 from app.services import ia_usage
 from app.services import qualite_formulaires as formulaires
+from app.services import qualite_formulaires_envois as envois
 from app.services import qualite_formulaires_ia as formulaires_ia
+from app.services.email_service import send_email
 from app.services.audit_service import log_action
 
 router = APIRouter(prefix="/api/qualite/formulaires", tags=["qualite_formulaires"])
@@ -114,6 +116,168 @@ async def ia_proposer(
                 pieces=pieces, modele=modele)
     except formulaires_ia.FormulaireIaErreur as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+# ── Envoi aux destinataires ──────────────────────────────────────────────
+# Le lien de chaque email ouvre l'Espace SIFA du destinataire
+# (app/routers/portail_espace.py), là où se trouve tout ce que SIFA lui adresse.
+
+
+@router.get("/destinataires")
+def destinataires_possibles(request: Request, type: str = "fournisseur", q: str = ""):
+    _require_qualite_access(request)
+    if type not in ("fournisseur", "client", "personnel"):
+        raise HTTPException(status_code=400, detail="Type de destinataire inconnu.")
+    with get_db() as conn:
+        return {"destinataires": envois.candidats(conn, type, q)}
+
+
+def _envoyer(conn, dest_ids: list[int], *, user: dict, relance: bool) -> dict:
+    """Envoie l'invitation (ou la relance) à chaque destinataire. Commit après
+    chaque envoi réussi : un échec au milieu ne fait pas oublier les envois
+    déjà partis."""
+    expediteur = (user.get("email") or "").strip() or None
+    envoyes, echecs = [], []
+    for did in dest_ids:
+        dest = envois.destinataire(conn, did)
+        if not dest or not dest["actif"]:
+            continue
+        sujet, corps = envois.email_invitation(dest, url=envois.url_destinataire(conn, dest), relance=relance)
+        conn.commit()
+        if send_email(to=dest["email"], subject=sujet, html_body=corps, reply_to=expediteur, from_upn=expediteur):
+            envois.noter_envoi(conn, did)
+            conn.commit()
+            envoyes.append(dest["email"])
+        else:
+            echecs.append(dest["email"])
+    return {"envoyes": envoyes, "echecs": echecs}
+
+
+def _taches_personnel(conn, user: dict, envoi_id: int) -> None:
+    """Destinataire du personnel : une tâche « formulaire à remplir » dans
+    MySifa, terminée automatiquement à la réponse. Ne bloque jamais l'envoi."""
+    try:
+        from app.routers.taches import creer_tache_pour
+        from config import TACHES_SERVICES_CODES
+    except Exception:
+        return
+    rows = conn.execute(
+        """SELECT d.id, d.user_id, d.email, e.titre, e.echeance, u.role
+             FROM qualite_formulaires_destinataires d
+             JOIN qualite_formulaires_envois e ON e.id = d.envoi_id
+             LEFT JOIN users u ON u.id = d.user_id
+            WHERE d.envoi_id = ? AND d.type = 'personnel' AND d.user_id IS NOT NULL""",
+        (envoi_id,),
+    ).fetchall()
+    for r in rows:
+        try:
+            dest = envois.destinataire(conn, r["id"])
+            lien = envois.url_destinataire(conn, dest)
+            description = (f"Formulaire à compléter : {r['titre']}.\n"
+                           + (f"Réponse attendue avant le {r['echeance']}.\n" if r["echeance"] else "")
+                           + f"Lien : {lien}")
+            service = r["role"] if r["role"] in TACHES_SERVICES_CODES else "superadmin"
+            tid = creer_tache_pour(conn, user, titre=f"Formulaire à remplir : {r['titre']}"[:200],
+                                   description=description, ttype="autre", module="qualite",
+                                   service=service, assignes=[int(r["user_id"])])
+            conn.execute("UPDATE qualite_formulaires_destinataires SET tache_id = ? WHERE id = ?", (tid, r["id"]))
+        except Exception:
+            continue
+
+
+@router.get("/{fid}/envois")
+def suivi_envois(fid: int, request: Request):
+    _require_qualite_view(request)
+    with get_db() as conn:
+        _lire_ou_404(conn, fid)
+        return {"envois": envois.suivi(conn, fid)}
+
+
+@router.post("/{fid}/envois")
+def envoyer(fid: int, request: Request, body: dict = Body(...)):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        d = _lire_ou_404(conn, fid)
+        try:
+            cree = envois.creer_envoi(conn, fid, body.get("destinataires") or [], message=body.get("message") or "",
+                                      echeance=body.get("echeance"), auteur=_auteur(user),
+                                      auteur_email=(user.get("email") or None))
+        except (ValueError, LookupError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        _taches_personnel(conn, user, cree["envoi_id"])
+        conn.commit()
+        res = _envoyer(conn, cree["destinataires"], user=user, relance=False)
+    log_action(user=user, action="SEND", module="qualite", objet=_objet(fid, d["titre"]),
+               detail={"envoi": cree["envoi_id"], "envoyes": len(res["envoyes"]), "echecs": res["echecs"][:20]},
+               request=request)
+    return {"envoi_id": cree["envoi_id"], **res}
+
+
+@router.post("/destinataires/{did}/relancer")
+def relancer_un(did: int, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        dest = envois.destinataire(conn, did)
+        if not dest or not dest["actif"]:
+            raise HTTPException(status_code=404, detail="Destinataire introuvable.")
+        if dest["statut"] == "repondu":
+            raise HTTPException(status_code=409, detail="Ce destinataire a déjà répondu.")
+        res = _envoyer(conn, [did], user=user, relance=True)
+    log_action(user=user, action="SEND", module="qualite",
+               objet=_objet(dest["formulaire_id"], dest["titre"]) + f" · relance {dest['email']}", request=request)
+    return res
+
+
+@router.post("/envois/{eid}/relancer")
+def relancer_envoi(eid: int, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        e = conn.execute("SELECT formulaire_id, titre FROM qualite_formulaires_envois WHERE id = ?", (eid,)).fetchone()
+        if not e:
+            raise HTTPException(status_code=404, detail="Envoi introuvable.")
+        ids = [r["id"] for r in conn.execute(
+            """SELECT id FROM qualite_formulaires_destinataires
+                WHERE envoi_id = ? AND actif = 1 AND statut != 'repondu'""", (eid,)).fetchall()]
+        if not ids:
+            raise HTTPException(status_code=409, detail="Tous les destinataires ont répondu.")
+        res = _envoyer(conn, ids, user=user, relance=True)
+    log_action(user=user, action="SEND", module="qualite",
+               objet=_objet(e["formulaire_id"], e["titre"]) + f" · relance de {len(ids)} destinataire(s)", request=request)
+    return res
+
+
+@router.post("/destinataires/{did}/retirer")
+def retirer(did: int, request: Request):
+    """Le destinataire ne voit plus ce formulaire dans son Espace. Sa réponse
+    éventuelle reste consultable ici."""
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        dest = envois.destinataire(conn, did)
+        if not dest:
+            raise HTTPException(status_code=404, detail="Destinataire introuvable.")
+        conn.execute("UPDATE qualite_formulaires_destinataires SET actif = 0 WHERE id = ?", (did,))
+        conn.commit()
+    log_action(user=user, action="DELETE", module="qualite",
+               objet=_objet(dest["formulaire_id"], dest["titre"]) + f" · destinataire {dest['email']} retiré", request=request)
+    return {"ok": True}
+
+
+@router.get("/destinataires/{did}/reponse")
+def voir_reponse(did: int, request: Request):
+    _require_qualite_view(request)
+    with get_db() as conn:
+        dest = envois.destinataire(conn, did)
+        if not dest:
+            raise HTTPException(status_code=404, detail="Destinataire introuvable.")
+        rep = envois.derniere_reponse(conn, did)
+        if not rep:
+            raise HTTPException(status_code=404, detail="Pas encore de réponse.")
+        schema = envois.schema_envoi(conn, dest)
+        return {
+            "destinataire": {k: dest[k] for k in ("id", "nom", "organisation", "email", "type", "statut", "repondu_le")},
+            "titre": dest["titre"], "version": dest["version"], "schema": schema,
+            "reponse": rep, "nc": envois.non_conformites(schema, rep["reponses"]),
+        }
 
 
 @router.get("/{fid}")
