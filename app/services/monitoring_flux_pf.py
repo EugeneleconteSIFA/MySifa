@@ -100,10 +100,25 @@ def _dossiers_par_of(conn, ofs: List[str]) -> Dict[str, str]:
     return out
 
 
-def _dossier_anterieur(conn, ref: str, quand: str) -> Optional[str]:
-    """Dernier dossier de la référence `ref` produit avant `quand`, dans la fenêtre
-    `MONITORING_RAPPROCHEMENT_JOURS`. La date retenue est la dernière saisie de
-    production, sinon la fin planifiée."""
+_SQL_BORNES = """
+    SELECT TRIM(pe.reference) AS ref,
+           COALESCE((SELECT MIN(pd.date_operation) FROM production_data pd
+                      WHERE TRIM(pd.no_dossier) = TRIM(pe.reference)
+                        AND COALESCE(pd.est_annule, 0) = 0),
+                    pe.planned_start, pe.planned_end) AS debut,
+           COALESCE((SELECT MAX(pd.date_operation) FROM production_data pd
+                      WHERE TRIM(pd.no_dossier) = TRIM(pe.reference)
+                        AND COALESCE(pd.est_annule, 0) = 0),
+                    pe.planned_end) AS fin
+      FROM planning_entries pe"""
+
+
+def _dossier_de_l_entree(conn, ref: str, quand: str) -> Optional[str]:
+    """Le dossier d'une entrée de stock qui n'en porte pas : celui de même
+    référence produit dont la production a commencé avant l'entrée et s'est
+    terminée au plus `MONITORING_RAPPROCHEMENT_JOURS` avant elle — le plus
+    récemment commencé. Une entrée faite pendant la production va donc au
+    dossier en cours, une entrée tardive au dernier dossier produit."""
     if not ref or not quand:
         return None
     try:
@@ -111,19 +126,20 @@ def _dossier_anterieur(conn, ref: str, quand: str) -> Optional[str]:
     except ValueError:
         return None
     r = conn.execute(
-        """SELECT ref, fin FROM (
-             SELECT TRIM(pe.reference) AS ref,
-                    COALESCE((SELECT MAX(pd.date_operation) FROM production_data pd
-                               WHERE TRIM(pd.no_dossier) = TRIM(pe.reference)
-                                 AND COALESCE(pd.est_annule, 0) = 0),
-                             pe.planned_end) AS fin
-               FROM planning_entries pe
+        f"""SELECT ref FROM ({_SQL_BORNES}
               WHERE TRIM(COALESCE(pe.ref_produit_norm, '')) = ?)
-            WHERE fin IS NOT NULL AND fin <= ? AND fin >= ?
-            ORDER BY fin DESC LIMIT 1""",
+             WHERE debut IS NOT NULL AND fin IS NOT NULL
+               AND debut <= ? AND fin >= ?
+             ORDER BY debut DESC LIMIT 1""",
         (ref, quand[:19], borne),
     ).fetchone()
     return r["ref"] if r else None
+
+
+def _bornes(conn, dossier: str) -> tuple:
+    r = conn.execute(f"SELECT debut, fin FROM ({_SQL_BORNES} WHERE TRIM(pe.reference) = ?) LIMIT 1",
+                     (dossier,)).fetchone()
+    return (r["debut"], r["fin"]) if r else (None, None)
 
 
 def flux_production(conn, du: str, au: str) -> dict:
@@ -168,44 +184,62 @@ def flux_production(conn, du: str, au: str) -> dict:
     liste = sorted(dossiers)
     infos = _infos_dossiers(conn, liste)
 
-    # Une entrée sans dossier se rattache au dossier de même référence s'il
-    # est le seul de la période — sinon elle reste une ligne à part.
-    dossiers_par_ref: Dict[str, List[str]] = defaultdict(list)
-    for d in liste:
-        ref = ((infos.get(d) or {}).get("ref_produit_norm") or "").strip()
-        if ref:
-            dossiers_par_ref[ref].append(d)
+    # Une entrée sans n° de dossier se rattache au dossier de même référence
+    # dont elle suit la production (_dossier_de_l_entree). Une entrée qu'aucun
+    # dossier ne réclame est un ajustement : elle n'est pas comparée.
     hors_dossier: List[dict] = []
     rattachees: Dict[str, List[dict]] = defaultdict(list)
+    vus: set = set()
+    nouveaux: set = set()
     for e in entrees_periode:
         if e["no_dossier"]:
             continue
-        cands = dossiers_par_ref.get((e["reference"] or "").strip()) or []
-        if len(cands) == 1:
-            e["rattachement"] = "reference"
-            rattachees[cands[0]].append(e)
-        else:
-            hors_dossier.append(e)
-
-    # Entrée tardive : le dossier a été produit AVANT la période (fin le 09,
-    # mise en stock le 19). On cherche le dernier dossier de même référence
-    # dont la production s'est terminée au plus tard N jours avant l'entrée.
-    reste: List[dict] = []
-    nouveaux: set = set()
-    for e in hors_dossier:
-        d = _dossier_anterieur(conn, (e["reference"] or "").strip(), e["created_at"] or "")
+        d = _dossier_de_l_entree(conn, (e["reference"] or "").strip(), e["created_at"] or "")
         if d:
             e["rattachement"] = "reference"
             rattachees[d].append(e)
+            vus.add(e["id"])
             if d not in dossiers:
                 nouveaux.add(d)
         else:
-            reste.append(e)
-    hors_dossier = reste
+            hors_dossier.append(e)
     if nouveaux:
         dossiers |= nouveaux
         liste = sorted(dossiers)
         infos.update(_infos_dossiers(conn, sorted(nouveaux)))
+
+    # La période coupe les flux : un dossier saisi le 09 peut entrer en stock le
+    # 19, hors de la période affichée. Chaque dossier va donc chercher ses
+    # entrées sans n° sur SA fenêtre (début de prod → fin + N jours).
+    for d in liste:
+        ref = ((infos.get(d) or {}).get("ref_produit_norm") or "").strip()
+        if not ref:
+            continue
+        debut, fin = _bornes(conn, d)
+        if not debut or not fin:
+            continue
+        try:
+            jusqua = (datetime.fromisoformat(fin[:19]) + timedelta(days=MONITORING_RAPPROCHEMENT_JOURS)).isoformat()
+        except ValueError:
+            continue
+        for r in conn.execute(
+            """SELECT m.id, m.created_at, m.emplacement, m.quantite, m.note,
+                      '' AS no_dossier, m.created_by_name, p.reference, p.designation, p.unite
+                 FROM mouvements_stock m JOIN produits p ON p.id = m.produit_id
+                WHERE m.type_mouvement = 'entree'
+                  AND COALESCE(m.note, '') NOT LIKE ?
+                  AND TRIM(COALESCE(m.no_dossier, '')) = ''
+                  AND TRIM(p.reference) = ?
+                  AND substr(m.created_at, 1, 19) >= ? AND substr(m.created_at, 1, 19) <= ?""",
+            (_NOTE_DEPLACEMENT_ENTREE, ref, debut[:19], jusqua[:19]),
+        ).fetchall():
+            e = dict(r)
+            if e["id"] in vus:
+                continue
+            if _dossier_de_l_entree(conn, ref, e["created_at"] or "") == d:
+                e["rattachement"] = "reference"
+                rattachees[d].append(e)
+                vus.add(e["id"])
 
     saisies: Dict[str, dict] = {}
     entrees: Dict[str, List[dict]] = defaultdict(list)
@@ -340,34 +374,11 @@ def flux_production(conn, du: str, au: str) -> dict:
             "statut": statut,
         })
 
-    # Entrées hors dossier, regroupées par référence.
-    par_ref: Dict[str, List[dict]] = defaultdict(list)
-    for e in hors_dossier:
-        par_ref[(e["reference"] or "").strip()].append(e)
-    for ref, ents in sorted(par_ref.items()):
-        ents.sort(key=lambda x: x["created_at"] or "")
-        lignes.append({
-            "cle": "r:" + ref,
-            "no_dossier": None,
-            "reference": ref,
-            "refs_stock": [ref],
-            "designation": ents[0].get("designation"),
-            "unite": ents[0].get("unite"),
-            "client": None, "machine": None, "statut_planning": None,
-            "qte_of": None, "qte_produite": None, "qte_produite_max": None,
-            "cloture": False, "derniere_saisie": None,
-            "qte_entree": sum(_f(e["quantite"]) for e in ents) or None,
-            "nb_entrees": len(ents),
-            "derniere_entree": ents[-1]["created_at"],
-            "emplacements_entree": sorted({e["emplacement"] for e in ents if e.get("emplacement")}),
-            "rattachement": [],
-            "nb_deplacements": 0, "qte_deplacee": None,
-            "dernier_deplacement": None, "derniere_destination": None,
-            "stock_restant": None, "emplacements_restants": [],
-            "ecart": None,
-            "statut": "hors_dossier",
-        })
-    return {"du": du, "au": au, "tolerance_pct": MONITORING_TOLERANCE_PCT, "lignes": lignes}
+    # Les entrées rattachées à aucun dossier (ni par leur n°, ni par l'OF de
+    # leur note, ni par la référence) sont des ajustements de stock, pas de la
+    # production : elles ne sont pas comparées. Seul leur nombre est rendu.
+    return {"du": du, "au": au, "tolerance_pct": MONITORING_TOLERANCE_PCT, "lignes": lignes,
+            "ajustements_ignores": len(hors_dossier)}
 
 
 # ─── Expédition ─────────────────────────────────────────────────────────────
@@ -393,6 +404,42 @@ def _bl_rvgi(erp, du: str, au: str) -> List[dict]:
             continue
         out.append({"bl": str(r["bl"]), "jour": r["jour"], "client": r["client"],
                     "numcde": str(r["numcde"] or "").strip(), "qte": _f(r["qte"]), "reference": ref})
+    return out
+
+
+def _sous_traites(conn, erp) -> set:
+    """Références sous-traitées : achetées chez un fournisseur comme article
+    (`cdf_ligne.type = 1`, cf. .claude/rules/erp-rvgi.md) sans aucun dossier
+    au planning MySifa, ou marquées `origine = 'sous_traite'` dans MyStock. Elles ne passent pas par la
+    production ni, en général, par le stock : elles sont écartées."""
+    from app.routers.reconciliation import _erp_reference
+
+    out = set()
+    if erp is not None:
+        try:
+            for r in erp.execute(
+                "SELECT DISTINCT code1, code2 FROM cdf_ligne WHERE corbeille = 0 AND type = 1"
+            ).fetchall():
+                ref = _erp_reference(r["code1"], r["code2"])
+                if ref:
+                    out.add(ref)
+        except Exception:
+            pass      # miroir sans cdf_ligne : rien n'est écarté
+    # Un article sous-traité une fois peut être fabriqué depuis chez SIFA :
+    # dès qu'il a un dossier au planning, il reste comparé.
+    try:
+        fabriques = {(r[0] or "").strip() for r in conn.execute(
+            "SELECT DISTINCT ref_produit_norm FROM planning_entries WHERE ref_produit_norm IS NOT NULL").fetchall()}
+        out -= fabriques
+    except Exception:
+        pass
+    # Le marquage explicite dans MyStock l'emporte.
+    try:
+        for r in conn.execute("SELECT reference FROM produits WHERE origine = 'sous_traite'").fetchall():
+            if r["reference"]:
+                out.add(r["reference"].strip())
+    except Exception:
+        pass
     return out
 
 
@@ -516,8 +563,12 @@ def flux_expedition(conn, erp, du: str, au: str) -> dict:
         ).fetchall():
             produits[r["reference"]] = dict(r)
 
+    sous_traites = _sous_traites(conn, erp)
+    ecartees = sorted(r for r in lignes if r in sous_traites)
     out = []
     for ref, L in sorted(lignes.items()):
+        if ref in sous_traites:
+            continue
         p = produits.get(ref) or {}
         q_bl = sum(b["qte"] for b in L["bls"])
         q_sortie = sum(_f(s["quantite"]) for s in L["sorties"])
@@ -556,4 +607,5 @@ def flux_expedition(conn, erp, du: str, au: str) -> dict:
             "statut": statut,
         })
     return {"du": du, "au": au, "tolerance_pct": MONITORING_TOLERANCE_PCT,
-            "miroir": erp is not None, "lignes": out}
+            "miroir": erp is not None, "lignes": out,
+            "sous_traitance_ignorees": len(ecartees)}

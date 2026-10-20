@@ -18,7 +18,7 @@ CREATE TABLE machines(id INTEGER PRIMARY KEY, nom TEXT);
 CREATE TABLE of_imports(id INTEGER PRIMARY KEY, qte_etiquettes REAL);
 CREATE TABLE planning_entries(id INTEGER PRIMARY KEY, reference TEXT, numero_of TEXT,
   ref_produit TEXT, ref_produit_norm TEXT, client TEXT, statut TEXT, date_livraison TEXT,
-  machine_id INT, of_import_id INT, planned_end TEXT, planned_end_manual TEXT);
+  machine_id INT, of_import_id INT, planned_end TEXT, planned_end_manual TEXT, planned_start TEXT);
 CREATE TABLE production_data(id INTEGER PRIMARY KEY, no_dossier TEXT, date_operation TEXT,
   operation_code TEXT, machine TEXT, quantite_traitee REAL, fin_dossier INT, est_annule INT);
 CREATE TABLE produits(id INTEGER PRIMARY KEY, reference TEXT, designation TEXT, unite TEXT);
@@ -37,13 +37,15 @@ INSERT INTO of_imports VALUES (1, 2000000);
 INSERT INTO produits VALUES (1,'890/0007','Etiq 1','étiquette'),(2,'601/0161','Etiq 2','étiquette'),
                             (3,'470/0020','Etiq 3','étiquette'),(4,'24/0012','Etiq 4','étiquette'),
                             (5,'931/0005','Etiq 5','étiquette'),
-                            (6,'1120/0003','Etiq 6','étiquette');
+                            (6,'1120/0003','Etiq 6','étiquette'),
+                            (7,'890/0115','Etiq 7','étiquette');
 INSERT INTO planning_entries VALUES
-  (10,'9932689','9932689','890/0007 - X','890/0007','CLIENT A','termine','2026-10-14',1,1,'2026-10-15T10:00:00',NULL),
-  (11,'9932700','9932700','470/0020 - X','470/0020','CLIENT B','termine','2026-10-30',1,NULL,NULL,NULL),
-  (12,'9932585','9932585','24/0012 - X','24/0012','CLIENT C','termine','2026-10-14',1,NULL,NULL,NULL),
-  (13,'9932800','9932800','601/0161 - X','601/0161','CLIENT D','attente','2026-10-16',1,NULL,'2026-10-21T08:00:00',NULL),
-  (14,'9932648 + Stock','9932648 + Stock','1120/0003 - X','1120/0003','CLIENT E','termine','2026-10-07',1,NULL,'2026-10-09T10:22:45',NULL);
+  (10,'9932689','9932689','890/0007 - X','890/0007','CLIENT A','termine','2026-10-14',1,1,'2026-10-15T10:00:00',NULL,NULL),
+  (11,'9932700','9932700','470/0020 - X','470/0020','CLIENT B','termine','2026-10-30',1,NULL,NULL,NULL,NULL),
+  (12,'9932585','9932585','24/0012 - X','24/0012','CLIENT C','termine','2026-10-14',1,NULL,NULL,NULL,NULL),
+  (13,'9932800','9932800','601/0161 - X','601/0161','CLIENT D','attente','2026-10-16',1,NULL,'2026-10-21T08:00:00',NULL,NULL),
+  (14,'9932648 + Stock','9932648 + Stock','1120/0003 - X','1120/0003','CLIENT E','termine','2026-10-07',1,NULL,'2026-10-09T10:22:45',NULL,NULL),
+  (15,'9932573','9932573','890/0115 - X','890/0115','XEROX','termine','2026-10-10',1,NULL,'2026-10-14T17:00:00',NULL,NULL);
 -- 9932689 : deux fins de prod, la dernière porte le cumul ; entré en deux fois.
 INSERT INTO production_data VALUES
   (1,'9932689','2026-10-14T12:00:00','89','Machine A',1000000,0,0),
@@ -51,7 +53,8 @@ INSERT INTO production_data VALUES
   (3,'9932700','2026-10-15T10:00:00','89','Machine A',500000,1,0),
   (4,'9932700','2026-10-15T11:00:00','89','Machine A',900000,1,1),
   (5,'9932800','2026-10-15T06:00:00','01','Machine A',0,NULL,0),
-  (6,'9932648 + Stock','2026-10-09T10:22:45','89','Machine A',363000,1,0);
+  (6,'9932648 + Stock','2026-10-09T10:22:45','89','Machine A',363000,1,0),
+  (7,'9932573','2026-10-14T17:00:00','89','Machine A',1500000,1,0);
 INSERT INTO mouvements_stock VALUES
   (1,1,'Z1','entree',1000000,'Production dossier 9932689','2026-10-15T07:00:00','A','9932689'),
   (2,1,'Z1','entree',1000000,'Production dossier 9932689','2026-10-15T11:00:00','A','9932689'),
@@ -63,7 +66,8 @@ INSERT INTO mouvements_stock VALUES
   (6,4,'A131','sortie',300000,'Expédition | BL OK','2026-10-19T10:00:00','C',NULL),
   (7,4,'A131','sortie',5,'Annulation de l''entree #2','2026-10-19T10:00:00','C',NULL),
   (8,5,'B302','entree',363000,'','2026-10-19T13:00:00','D',NULL),
-  (9,6,'B302','entree',363000,'','2026-10-19T13:16:00','D',NULL);
+  (9,6,'B302','entree',363000,'','2026-10-19T13:16:00','D',NULL),
+  (10,7,'B200','entree',1500000,'','2026-10-23T08:00:00','D',NULL);
 INSERT INTO lots_stock VALUES (1,1,'A111',1000000,'9932689'),(2,1,'Z1',1000000,'9932689');
 INSERT INTO stock_emplacements VALUES (4,'A131',10000);
 INSERT INTO expe_departs VALUES (1,'2026-10-19','valide','CLIENT C','9939121','T',NULL,NULL,12),
@@ -90,9 +94,12 @@ ok(h.get("statut") == "sans_saisie", "entrée sans saisie de production signalé
 t = L.get("d:9932648 + Stock") or {}
 ok(t.get("statut") == "ok" and "reference" in t.get("rattachement", []),
    "entrée tardive (prod le 09, stock le 19) rattachée au dossier produit avant la période")
+x5 = L.get("d:9932573") or {}
+ok(x5.get("statut") == "ok" and x5.get("qte_entree") == 1500000,
+   "saisi dans la période, entré APRÈS la période sans n° de dossier → entrée retrouvée")
 hd = L.get("r:931/0005") or {}
-ok(hd.get("statut") == "hors_dossier" and hd.get("qte_entree") == 363000,
-   "entrée sans dossier ni dossier de même référence sur la période → Hors dossier")
+ok(not hd and r.get("ajustements_ignores") == 1,
+   "entrée sans aucun dossier (ajustement) : pas de ligne, comptée à part")
 
 print("— expédition")
 erp = sqlite3.connect(":memory:")
@@ -101,6 +108,11 @@ erp.executescript("""
 CREATE TABLE liv_entete(numero INT, amje TEXT, lrs TEXT, corbeille INT);
 CREATE TABLE liv_ligne(numero INT, numcde INT, lignecde INT, qte REAL, corbeille INT);
 CREATE TABLE cde_ligne(numero INT, ligne INT, code1 TEXT, code2 TEXT, corbeille INT);
+CREATE TABLE cdf_ligne(numero INT, ligne INT, code1 TEXT, code2 TEXT, type INT, corbeille INT);
+INSERT INTO cdf_ligne VALUES (1,1,'1004','0219',1,0),(2,1,'24','0012',3,0);
+INSERT INTO liv_entete VALUES (9939053,'2026-10-17 00:00:00','LC2',0);
+INSERT INTO liv_ligne VALUES (9939053,9932999,1,350000,0);
+INSERT INTO cde_ligne VALUES (9932999,1,'1004','0219',0);
 INSERT INTO liv_entete VALUES (9939121,'2026-10-19 00:00:00','CLIENT C',0);
 INSERT INTO liv_ligne VALUES (9939121,9932585,1,304000,0),(9939121,9932585,2,1,0);
 INSERT INTO cde_ligne VALUES (9932585,1,'24','0012',0),(9932585,2,'FR','FRAIS_DE_PORT',0);
@@ -113,6 +125,9 @@ ok(x.get("statut") == "ok" and x.get("qte_bl") == 304000 and x.get("qte_sortie")
 ok([dd["no_dossier"] for dd in x.get("dossiers", [])] == ["9932585"], "dossier retrouvé par la commande du BL")
 ok([dp["id"] for dp in x.get("departs", [])] == [1], "départ retrouvé par son numéro de BL")
 ok("FR/FRAIS_DE_PORT" not in E and "FR" not in E, "les frais de port ne sont pas un article")
+ok("1004/0219" not in E and e.get("sous_traitance_ignorees") == 1,
+   "sous-traitance (achetée en article, cdf_ligne.type = 1) écartée, comptée à part")
+ok("24/0012" in E, "une matière de même code (type 3) n'écarte pas l'article")
 y = E.get("601/0161") or {}
 ok(y.get("statut") == "depart_prevu", "dossier à livrer avec départ en attente → Départ prévu")
 z = E.get("890/0007") or {}
