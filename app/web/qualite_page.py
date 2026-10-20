@@ -527,7 +527,7 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/qualite_url.js?v=2"></script>
+<script src="/static/qualite_url.js?v=3"></script>
 <script src="/static/mysifa_formulaire.js?v=1"></script>
 <script src="/static/mysifa_formulaire_editeur.js?v=1"></script>
 <script>

@@ -10,11 +10,16 @@ Structure et règles : `app/services/qualite_formulaires.py`.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, HTTPException, Request
+import json
+from typing import Optional
+
+from fastapi import APIRouter, Body, File, Form, HTTPException, Request, UploadFile
 
 from app.core.database import get_db
 from app.routers.qualite import _require_qualite_access, _require_qualite_view
+from app.services import ia_usage
 from app.services import qualite_formulaires as formulaires
+from app.services import qualite_formulaires_ia as formulaires_ia
 from app.services.audit_service import log_action
 
 router = APIRouter(prefix="/api/qualite/formulaires", tags=["qualite_formulaires"])
@@ -55,6 +60,60 @@ def creer(request: Request, body: dict = Body(default={})):
         d = formulaires.lire(conn, fid)
     log_action(user=user, action="CREATE", module="qualite", objet=_objet(fid, d["titre"]), request=request)
     return d
+
+
+# ── Assistant IA ─────────────────────────────────────────────────────────
+# Déclarées avant /{fid} : « ia » ne doit pas être lu comme un identifiant.
+
+
+@router.get("/ia/modeles")
+def ia_modeles(request: Request):
+    _require_qualite_access(request)
+    choix = formulaires_ia.choisir_modele(None)
+    return {"modeles": formulaires_ia.formulaires_ia_modeles(), "defaut": choix["id"]}
+
+
+@router.post("/ia/proposer")
+async def ia_proposer(
+    request: Request,
+    consigne: str = Form(""),
+    etat: str = Form(""),
+    modele: Optional[str] = Form(None),
+    fichiers: list[UploadFile] = File(default=[]),
+):
+    """Propose un formulaire. `etat` (JSON {titre, description, schema}) = le
+    formulaire ouvert dans l'éditeur, enregistré ou non ; vide = création.
+    Rien n'est enregistré : la proposition revient à l'écran."""
+    user = _require_qualite_access(request)
+    consigne = (consigne or "").strip()[:6000]
+    fichiers = [f for f in (fichiers or []) if f and f.filename]
+    if not consigne and not fichiers:
+        raise HTTPException(status_code=400, detail="Décrire le formulaire souhaité ou joindre un document.")
+    if len(fichiers) > formulaires_ia.PIECES_MAX:
+        raise HTTPException(status_code=400, detail=f"{formulaires_ia.PIECES_MAX} documents au plus.")
+    pieces = []
+    for f in fichiers:
+        mime = (f.content_type or "").lower()
+        if mime not in formulaires_ia.PIECES_ACCEPTEES:
+            raise HTTPException(status_code=400, detail=f"« {f.filename} » : seuls les PDF et les images (PNG, JPG, WEBP, GIF) sont lus.")
+        contenu = await f.read(formulaires_ia.PIECE_MAX_OCTETS + 1)
+        if len(contenu) > formulaires_ia.PIECE_MAX_OCTETS:
+            raise HTTPException(status_code=400, detail=f"« {f.filename} » dépasse 15 Mo.")
+        pieces.append({"mime": mime, "contenu": contenu, "nom": f.filename[:120]})
+    try:
+        e = json.loads(etat) if etat else {}
+    except ValueError:
+        e = {}
+    if not isinstance(e, dict):
+        e = {}
+    try:
+        with ia_usage.suivi(user, "formulaires", "qualite"):
+            return formulaires_ia.proposer(
+                consigne, titre=str(e.get("titre") or ""), description=str(e.get("description") or ""),
+                schema=e.get("schema") if isinstance(e.get("schema"), dict) else None,
+                pieces=pieces, modele=modele)
+    except formulaires_ia.FormulaireIaErreur as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("/{fid}")

@@ -27,6 +27,9 @@ S.formu = {
   etat: '',            // '' | 'attente' | 'envoi' | 'ok' | 'erreur'
   timer: null,
   enCours: null,       // promesse d'enregistrement en vol
+  iaModeles: null,     // /api/qualite/formulaires/ia/modeles
+  iaNote: null,        // {id, resume, remarques, modele} — dernière proposition appliquée
+  iaAvant: null,       // {id, titre, description, schema} — pour « Annuler la modification »
 };
 
 const FORMU_FILTRES = [
@@ -79,6 +82,19 @@ const FORMU_FILTRES = [
 .formu-apercu-carte .formu-apercu-desc{font-size:13px;color:var(--text2);white-space:pre-wrap;line-height:1.5;margin:0 0 14px}
 .formu-apercu-note{font-size:11px;color:var(--muted);margin-top:8px}
 .formu-lecture{max-width:720px}
+.formu-ia-note{background:var(--accent-bg);border:1px solid var(--accent);border-radius:12px;padding:12px 14px;margin-bottom:14px;display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.formu-ia-note-txt{flex:1;min-width:240px;font-size:13px;color:var(--text);line-height:1.5}
+.formu-ia-note-txt b{color:var(--accent)}
+.formu-ia-note ul{margin:6px 0 0;padding-left:18px;color:var(--text2);font-size:12px}
+.formu-ia-note .fsc-btn{background:var(--card)}
+.formu-ia-ex{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
+.formu-ia-ex button{padding:5px 10px;border-radius:999px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit;text-align:left}
+.formu-ia-ex button:hover{border-color:var(--accent);color:var(--accent)}
+.formu-ia-f{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.formu-ia-f>span{font-size:12px;font-weight:600;color:var(--text2)}
+.formu-ia-f textarea,.formu-ia-f select,.formu-ia-f input[type=file]{width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-family:inherit;font-size:13px}
+.formu-ia-f textarea{resize:vertical;min-height:110px}
+.formu-ia-aide{font-size:11px;color:var(--muted)}
 @media(max-width:980px){.formu-grille{grid-template-columns:minmax(0,1fr)}.formu-apercu{position:static;max-height:none}}
 @media(max-width:600px){.formu-row{flex-wrap:wrap}.formu-row-actions{width:100%}}
 `;
@@ -158,7 +174,7 @@ function formuRenderListe(){
         </div>
         <p>Questionnaires à faire remplir aux fournisseurs, au personnel ou aux clients : enquêtes, autoévaluations, contrôles. Chaque publication fige une version ; c'est elle qui sera envoyée.</p>
       </div>
-      ${admin ? `<div class="fsc-hero-actions"><button type="button" class="fsc-btn primary" onclick="formuNouveau()">+ Nouveau formulaire</button></div>` : ''}
+      ${admin ? `<div class="fsc-hero-actions"><button type="button" class="fsc-btn" onclick="formuIaOuvrir('nouveau')">Créer avec l'IA</button><button type="button" class="fsc-btn primary" onclick="formuNouveau()">+ Nouveau formulaire</button></div>` : ''}
     </div>
     <div class="formu-filtres">${pills}
       <input type="search" id="formu-q" class="formu-search" placeholder="Rechercher (titre, description)" value="${escAttr(S.formu.q)}" oninput="formuSetQ(this.value)" onkeydown="if(event.key==='Escape'){this.value='';formuSetQ('');}">
@@ -295,6 +311,7 @@ function formuRenderEdition(){
       boutons += f.version_courante
         ? `<button type="button" class="fsc-btn sm" onclick="formuArchiver(${f.id})">Archiver</button>`
         : `<button type="button" class="fsc-btn sm" onclick="formuSupprimer(${f.id})">Supprimer</button>`;
+      boutons += `<button type="button" class="fsc-btn sm" onclick="formuIaOuvrir('modifier')">Modifier avec l'IA</button>`;
       boutons += `<button type="button" class="fsc-btn sm primary" id="formu-publier" onclick="formuPublier()">Publier</button>`;
     }
   }
@@ -305,6 +322,7 @@ function formuRenderEdition(){
         <div class="formu-version" id="formu-version">${escHtml(version)}</div>
       </div>`
     : `<div class="formu-entete"><div class="formu-version">${escHtml(version)}${f.statut === 'archive' ? ' · archivé, en lecture seule' : ''}</div></div>`;
+  const bandeauIaHtml = formuIaNoteHtml(f);
   root.innerHTML = `
     <div class="formu-barre">
       <button type="button" class="fsc-btn sm" onclick="setView('formulaires-list')">← Formulaires</button>
@@ -312,6 +330,7 @@ function formuRenderEdition(){
       <span class="formu-etat" id="formu-etat"></span>
       ${boutons}
     </div>
+    ${bandeauIaHtml}
     ${entete}
     ${edit
       ? `<div class="formu-grille"><div id="formu-editeur"></div>
@@ -424,6 +443,173 @@ async function formuPublier(){
     S.formu.courant = d;
     formuRenderEdition();
   }
+}
+
+
+// ── Assistant IA ───────────────────────────────────────────────────────
+
+const FORMU_IA_EXEMPLES = {
+  nouveau: [
+    "Enquête de satisfaction client : qualité, délais, service, une note de 1 à 5 par thème et un commentaire libre",
+    "Autoévaluation fournisseur : certifications (FSC, ISO), traçabilité des lots, engagements environnementaux",
+    "Contrôle produits finis : centrage étiquette, poids de l'étiquette en début, milieu et fin de production",
+  ],
+  modifier: [
+    "Ajoute une section « Sécurité » avec trois questions oui / non",
+    "Rends obligatoires toutes les questions de la première section",
+    "Pour chaque question oui / non, la réponse « Non » est une non-conformité",
+  ],
+};
+
+function formuIaNoteHtml(f){
+  const n = S.formu.iaNote;
+  if(!n || !f || n.id !== f.id) return '';
+  const rem = (n.remarques || []).length
+    ? '<ul>' + n.remarques.map(r => '<li>' + escHtml(r) + '</li>').join('') + '</ul>' : '';
+  const annuler = (S.formu.iaAvant && S.formu.iaAvant.id === f.id && formuModifiable())
+    ? '<button type="button" class="fsc-btn sm" onclick="formuIaAnnuler()">Annuler la modification</button>' : '';
+  return `<div class="formu-ia-note">
+    <div class="formu-ia-note-txt"><b>Proposition de l'IA</b> (${escHtml(n.modele || '')}) — à relire avant publication.<br>${escHtml(n.resume || '')}${rem}</div>
+    ${annuler}
+    <button type="button" class="fsc-btn sm" onclick="formuIaMasquer()">Masquer</button>
+  </div>`;
+}
+function formuIaMasquer(){ S.formu.iaNote = null; S.formu.iaAvant = null; formuRenderEdition(); }
+
+async function formuIaModeles(){
+  if(S.formu.iaModeles) return S.formu.iaModeles;
+  try{
+    const r = await api('/api/qualite/formulaires/ia/modeles');
+    if(r.ok) S.formu.iaModeles = await r.json();
+  }catch(e){}
+  return S.formu.iaModeles || {modeles: [], defaut: ''};
+}
+
+async function formuIaOuvrir(mode){
+  mode = mode === 'modifier' ? 'modifier' : 'nouveau';
+  if(mode === 'modifier' && !(S.view === 'formulaire-edit' && formuModifiable())) return;
+  const m = await formuIaModeles();
+  const opts = (m.modeles || []).map(x => `<option value="${escAttr(x.id)}"${x.id === m.defaut ? ' selected' : ''}>${escHtml(x.libelle)}</option>`).join('');
+  const aide = (m.modeles || []).find(x => x.id === m.defaut);
+  const ex = FORMU_IA_EXEMPLES[mode].map((t, i) => `<button type="button" onclick="formuIaExemple('${mode}', ${i})">${escHtml(t)}</button>`).join('');
+  const titre = mode === 'nouveau' ? "Créer un formulaire avec l'IA" : "Modifier le formulaire avec l'IA";
+  const intro = mode === 'nouveau'
+    ? "Décrivez le formulaire voulu, ou joignez un formulaire existant (fiche papier photographiée, PDF) à reproduire. Le résultat s'ouvre en brouillon dans l'éditeur."
+    : "Décrivez la modification. Les questions que la consigne ne vise pas restent telles quelles ; la modification s'annule en un clic.";
+  formuMroot().innerHTML = `
+  <div class="modal-ov" style="display:flex" onclick="if(event.target===this)closeMroot()">
+    <div class="modal lg" onclick="event.stopPropagation()">
+      <button type="button" class="modal-close" onclick="closeMroot()">×</button>
+      <div class="modal-hd"><h3>${escHtml(titre)}</h3></div>
+      <div class="modal-bd">
+        <p style="margin:0 0 4px">${escHtml(intro)}</p>
+        <div class="formu-ia-ex">${ex}</div>
+        <label class="formu-ia-f"><span>Consigne</span>
+          <textarea id="formu-ia-consigne" maxlength="6000" placeholder="Ex. ${escAttr(FORMU_IA_EXEMPLES[mode][0])}"></textarea></label>
+        ${mode === 'nouveau' ? `<label class="formu-ia-f"><span>Formulaire existant à reproduire (optionnel)</span>
+          <input type="file" id="formu-ia-fichiers" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.gif">
+          <span class="formu-ia-aide">PDF ou photo, 5 documents de 15 Mo au plus.</span></label>` : ''}
+        <label class="formu-ia-f"><span>Modèle</span>
+          <select id="formu-ia-modele" onchange="formuIaAideModele()">${opts}</select>
+          <span class="formu-ia-aide" id="formu-ia-modele-aide">${escHtml(aide ? aide.aide : '')}</span></label>
+      </div>
+      <div class="modal-ft">
+        <button type="button" class="fsc-btn" onclick="closeMroot()">Annuler</button>
+        <button type="button" class="btn btn-accent" id="formu-ia-go" onclick="formuIaGenerer('${mode}')">Générer</button>
+      </div>
+    </div>
+  </div>`;
+  requestAnimationFrame(() => document.getElementById('formu-ia-consigne')?.focus());
+}
+
+function formuMroot(){
+  return document.getElementById('mroot') || (function(){
+    const d = document.createElement('div'); d.id = 'mroot'; document.body.appendChild(d); return d;
+  })();
+}
+
+function formuIaExemple(mode, i){
+  const t = document.getElementById('formu-ia-consigne');
+  if(t){ t.value = FORMU_IA_EXEMPLES[mode][i]; t.focus(); }
+}
+function formuIaAideModele(){
+  const id = document.getElementById('formu-ia-modele')?.value;
+  const m = ((S.formu.iaModeles || {}).modeles || []).find(x => x.id === id);
+  const el = document.getElementById('formu-ia-modele-aide');
+  if(el) el.textContent = m ? m.aide : '';
+}
+
+async function formuIaGenerer(mode){
+  const consigne = (document.getElementById('formu-ia-consigne')?.value || '').trim();
+  const fichiers = Array.from(document.getElementById('formu-ia-fichiers')?.files || []);
+  if(!consigne && !fichiers.length){ showToast('Décrire le formulaire souhaité ou joindre un document.','danger'); return; }
+  if(fichiers.length > 5){ showToast('5 documents au plus.','danger'); return; }
+  const trop = fichiers.find(f => f.size > 15 * 1024 * 1024);
+  if(trop){ showToast('« ' + trop.name + ' » dépasse 15 Mo.','danger'); return; }
+  const fd = new FormData();
+  fd.append('consigne', consigne);
+  fd.append('modele', document.getElementById('formu-ia-modele')?.value || '');
+  fichiers.forEach(f => fd.append('fichiers', f));
+  const f = S.formu.courant;
+  if(mode === 'modifier' && f){
+    fd.append('etat', JSON.stringify({
+      titre: document.getElementById('formu-titre')?.value ?? f.titre,
+      description: document.getElementById('formu-desc')?.value ?? f.description,
+      schema: S.formu.ed ? S.formu.ed.schema() : f.schema,
+    }));
+  }
+  const go = document.getElementById('formu-ia-go');
+  if(go){ go.disabled = true; go.textContent = "Claude prépare le formulaire…"; }
+  let p = null;
+  try{
+    const r = await api('/api/qualite/formulaires/ia/proposer', {method:'POST', body: fd});
+    if(!r.ok){ showToast(await formuErreur(r, 'Génération impossible.'),'danger'); }
+    else p = await r.json();
+  }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); }
+  if(!p){ if(go){ go.disabled = false; go.textContent = 'Générer'; } return; }
+  closeMroot();
+  const note = {resume: p.resume, remarques: p.remarques, modele: p.modele_libelle || p.modele};
+  if(mode === 'nouveau'){
+    try{
+      const r = await api('/api/qualite/formulaires', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({titre: p.titre, description: p.description, schema: p.schema})});
+      if(!r.ok){ showToast(await formuErreur(r, 'Création impossible.'),'danger'); return; }
+      const nf = await r.json();
+      S.formu.liste = null;
+      S.formu.iaNote = Object.assign({id: nf.id}, note);
+      S.formu.iaAvant = null;
+      showToast('Brouillon créé — à relire.','success');
+      await formuOuvrir(nf.id, nf);
+    }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); }
+    return;
+  }
+  // Modification : l'éditeur reprend la proposition, l'état précédent est
+  // gardé pour « Annuler la modification ».
+  if(!f) return;
+  S.formu.iaAvant = {id: f.id,
+    titre: document.getElementById('formu-titre')?.value ?? f.titre,
+    description: document.getElementById('formu-desc')?.value ?? f.description,
+    schema: S.formu.ed ? S.formu.ed.schema() : f.schema};
+  S.formu.iaNote = Object.assign({id: f.id}, note);
+  formuIaAppliquer({titre: p.titre, description: p.description, schema: p.schema});
+  showToast('Modification appliquée — à relire.','success');
+}
+
+function formuIaAppliquer(etat){
+  const f = S.formu.courant;
+  if(!f) return;
+  f.titre = etat.titre; f.description = etat.description; f.schema = etat.schema;
+  formuRenderEdition();
+  formuSurChangement();
+}
+
+function formuIaAnnuler(){
+  const a = S.formu.iaAvant;
+  if(!a || !S.formu.courant || a.id !== S.formu.courant.id) return;
+  S.formu.iaAvant = null;
+  S.formu.iaNote = null;
+  formuIaAppliquer(a);
+  showToast('Modification annulée.','success');
 }
 
 // ── Guide in-app « formulaires » (branché dans _qualiteGuides) ──────────
@@ -572,6 +758,11 @@ function formuGuide(){
         title: "Mesures, tolérance et cible",
         body: "Une question <strong>Nombre</strong> prend une unité, un min, une cible et un max. L'écart à la cible s'affiche à côté de la mesure. <strong>Plusieurs valeurs</strong> demande une mesure par libellé (début, milieu, fin de production). Une valeur hors tolérance peut compter comme NC.",
         illu: FORMU_MOCKUPS.apercu
+      },
+      {
+        icon: ico('<path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6l-4.9 3.6 1.9-5.8L4 8.8h6.1z"/>'),
+        title: "Créer ou modifier avec l'IA",
+        body: "<strong>Créer avec l'IA</strong> part d'une consigne ou d'un formulaire existant (fiche papier photographiée, PDF) et ouvre un brouillon. <strong>Modifier avec l'IA</strong> retouche le formulaire ouvert ; <strong>Annuler la modification</strong> le remet en l'état. Les remarques de l'IA disent ce qu'il reste à vérifier."
       },
       {
         icon: ico('<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'),
