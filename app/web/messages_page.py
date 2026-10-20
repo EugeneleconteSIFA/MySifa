@@ -693,6 +693,8 @@ body.sb-open .sidebar-overlay{display:block}
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_humeur.js"></script>
+<script src="/static/mysifa_url.js?v=5"></script>
+<script src="/static/messages_url.js?v=1"></script>
 <script>
 window.__MYSIFA_UID__ = __USER_ID__;
 window.__MYSIFA_NOM__ = __USER_NOM_JSON__;
@@ -2372,9 +2374,13 @@ if(window.MySifaSidebar)MySifaSidebar.configure({user:{
   await loadChannels();
   checkNotifPermission();
   checkUpdates();
-  const params=new URLSearchParams(location.search);
-  const openId=parseInt(params.get('channel')||'0',10);
-  if(openId)selectChannel(openId);
+  // Conversation et fenêtre de l'adresse (?channel=…) : static/messages_url.js.
+  if(typeof messagesDemarrerUrl==='function'){await messagesDemarrerUrl();}
+  else{
+    const params=new URLSearchParams(location.search);
+    const openId=parseInt(params.get('channel')||'0',10);
+    if(openId)selectChannel(openId);
+  }
 })();
 </script>
 <script src="/static/mysifa_impersonate.js?v=2"></script>
