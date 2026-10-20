@@ -640,6 +640,8 @@ _BOUTONS_JS = (
     (b"/static/chat_mentions.js", "messagerie"),
     (b"/static/chat_widget.js", "messagerie"),
     (b"/static/chat_widget_v2.js", "messagerie"),
+    # Conversation ouverte dans l'adresse (?chat=) : aucune page ne l'inclut.
+    (b"/static/chat_url.js", "messagerie"),
 )
 
 
@@ -648,6 +650,7 @@ _BOUTONS_JS = (
 _VERSION_ASSET = {
     b"/static/mysifa_ai_chat.css": b"?v=4",
     b"/static/mysifa_ai_chat.js": b"?v=4",
+    b"/static/chat_url.js": b"?v=1",
 }
 
 
