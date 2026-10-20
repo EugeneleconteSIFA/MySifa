@@ -213,7 +213,7 @@ async def poser_laize_variante(variante_id: int, request: Request):
     body = await request.json() or {}
     with get_db() as conn:
         try:
-            mid = mv.poser_laize_fournisseur(conn, variante_id, body)
+            mid = mv.poser_laize_fournisseur(conn, variante_id, body, _auteur(user))
         except (LookupError, ValueError) as e:
             _erreur(e)
         conn.commit()
@@ -238,4 +238,19 @@ def retirer_laize_variante(variante_id: int, laize_id: int, request: Request):
         out = mv.lister(conn, mid)
     log_action(user=user, request=request, module="stock", action="UPDATE",
                objet=f"matiere:{mid}:variante:{variante_id}", detail=f"Laize {laize_id} retirée du fournisseur")
+    return out
+
+
+@router.delete("/api/stock/variantes/{variante_id}/conditionnements/{cond_id}")
+def retirer_conditionnement_variante(variante_id: int, cond_id: int, request: Request):
+    user = require_stock_matieres_admin(request)
+    with get_db() as conn:
+        try:
+            mid = mv.retirer_conditionnement(conn, variante_id, cond_id)
+        except (LookupError, ValueError) as e:
+            _erreur(e)
+        conn.commit()
+        out = mv.lister(conn, mid)
+    log_action(user=user, request=request, module="stock", action="UPDATE",
+               objet=f"matiere:{mid}:variante:{variante_id}", detail=f"Conditionnement {cond_id} retiré")
     return out

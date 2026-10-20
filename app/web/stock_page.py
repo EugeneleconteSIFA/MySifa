@@ -1493,7 +1493,26 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-chev{display:inline-flex;vertical-align:-2px;margin-right:6px;color:var(--muted);transition:transform .15s}
 .mp-chev.open{transform:rotate(90deg);color:var(--accent)}
 .mp-row-detail>td{background:var(--bg);padding:12px 14px!important;border-bottom:1px solid var(--border)}
-.mp-det{display:flex;flex-direction:column;gap:12px}
+.mp-det{display:flex;flex-direction:column;gap:8px;max-width:1100px}
+.mp-lzc{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.mp-lzc-row{display:grid;grid-template-columns:90px minmax(0,1fr) 150px 120px 36px;align-items:center;gap:12px;padding:8px 12px;border-top:1px solid var(--border);font-size:13px;color:var(--text2)}
+.mp-lzc-row>strong{color:var(--text)}
+.mp-lzc-row .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mp-lzc-head{border-top:none;padding-top:7px;padding-bottom:7px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.mp-lzc-vide{padding:10px 12px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)}
+.mp-lzc-ajout{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:9px 12px;border-top:1px dashed var(--border);background:var(--bg)}
+.mp-lzc-ajout .mp-cond-inp{width:110px;text-align:left}
+.mp-lzc-sugg{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px;margin-left:6px;font-size:11px;color:var(--muted)}
+.mp-cond-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 4px 3px 9px;border-radius:999px;background:var(--accent-bg);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);color:var(--accent);font-size:12px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.mp-cond-chip.defaut{background:var(--bg);border-color:var(--border);color:var(--text2);font-weight:600;padding-right:9px}
+.mp-cond-chip em{font-style:normal;font-weight:500;font-size:11px;color:var(--muted)}
+.mp-cond-x{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;padding:0;border:none;border-radius:50%;background:transparent;color:inherit;font-size:14px;line-height:1;cursor:pointer}
+.mp-cond-x:hover{background:var(--danger);color:white}
+.mp-cond-plus{display:inline-flex;align-items:center;gap:3px;padding:3px 9px;border:1px dashed var(--accent);border-radius:999px;background:var(--card);color:var(--accent);font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.mp-cond-plus:hover{background:var(--accent-bg)}
+.mp-cond-new{width:96px;padding:3px 8px;border-radius:999px}
+.mp-det-pied{font-size:11px;color:var(--muted);line-height:1.5}
+@media(max-width:760px){.mp-lzc-row{grid-template-columns:70px minmax(0,1fr) 36px}.mp-lzc-row>.num{display:none}}
 .mp-det-titre{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px}
 .mp-det-meta{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12px;color:var(--text2)}
 .mp-det-meta strong{color:var(--text)}
@@ -11304,9 +11323,10 @@ function buildMpLaizeDetail(m, spl) {
     const d = (v.laizes_detail || []).find(x => x.laize_id === spl.laize_id);
     const k = v.fournisseur_id || 0;
     if (!d || lignes.has(k)) return;
+    const conds = (d.conditionnements || []).map(c => c.ml_bobine);
     lignes.set(k, { nom: v.fournisseur_nom || 'Fournisseur non identifié', fid: k, principal: false,
-      ml: Number(d.ml_bobine || 0) || Number(v.ml_bobine || 0) || mlStd,
-      mlSource: d.ml_bobine ? 'laize' : (v.ml_bobine ? 'article' : 'standard') });
+      mls: conds.length ? conds : [Number(v.ml_bobine || 0) || mlStd].filter(x => x > 0),
+      mlSource: conds.length ? 'laize' : (v.ml_bobine ? 'article' : 'standard') });
   });
   vs.filter(v => v.principal).forEach(v => { const l = lignes.get(v.fournisseur_id || 0); if (l) l.principal = true; });
   // Fournisseurs vus en stock RVGI sur cette laize sans y être rattachés.
@@ -11327,8 +11347,8 @@ function buildMpLaizeDetail(m, spl) {
       el('td', null, el('strong', { style: 'color:var(--text)' }, l.nom),
         l.principal ? el('span', { cls: 'mp-var-badge', style: 'margin-left:6px' }, 'Principal') : null,
         l.horsLien ? el('div', { cls: 'mp-var-meta', style: 'margin-top:2px' }, 'Vu en stock RVGI, laize non rattachée à ce fournisseur') : null),
-      el('td', { cls: 'num', attrs: l.ml ? { title: { laize: 'Longueur propre à cette laize', article: 'Longueur de l\'article fournisseur', standard: 'Métrage standard de la matière' }[l.mlSource] || '' } : {} },
-        l.ml ? fN(l.ml) + ' m' : '—'),
+      el('td', { cls: 'num', attrs: (l.mls && l.mls.length) ? { title: { laize: 'Conditionnements de ce fournisseur sur cette laize', article: 'Longueur de l\'article fournisseur', standard: 'Métrage standard de la matière' }[l.mlSource] || '' } : {} },
+        (l.mls && l.mls.length) ? l.mls.map(x => fN(x)).join(' / ') + ' m' : '—'),
       el('td', { cls: 'num' }, data ? mpPrixTexte(data, l.fid, decl ? decl.id : undefined) : '—'),
       el('td', { cls: 'num' }, mpFmtStockRvgi(st))));
   });
@@ -11988,10 +12008,13 @@ function mpLaizeChips(m, data, v, st, canEdit) {
   const det = Array.isArray(v.laizes_detail) ? v.laizes_detail : [];
   const out = el('div', { cls: 'mp-lz-chips' });
   if (det.length) {
-    det.forEach(d => out.appendChild(el('span', {
-      cls: 'mp-lz-chip',
-      attrs: { title: d.ml_bobine ? fN(d.ml_bobine) + ' m par bobine sur cette laize' : 'Longueur de l\'article' },
-    }, fN(d.valeur_mm), d.ml_bobine ? el('em', null, fN(d.ml_bobine) + ' m') : null)));
+    det.forEach(d => {
+      const mls = (d.conditionnements || []).map(c => fN(c.ml_bobine));
+      out.appendChild(el('span', {
+        cls: 'mp-lz-chip',
+        attrs: { title: mls.length ? 'Conditionnements : ' + mls.join(' / ') + ' m par bobine' : 'Longueur de l\'article' },
+      }, fN(d.valeur_mm), mls.length ? el('em', null, mls.join(' / ') + ' m') : null));
+    });
   } else if (st && st.laizes.size) {
     [...st.laizes].sort((a, b) => a - b).forEach(x => out.appendChild(el('span', {
       cls: 'mp-lz-chip', attrs: { title: 'Vue en stock RVGI, non rattachée à ce fournisseur' },
@@ -12026,86 +12049,126 @@ async function mpPoserLaizeFourn(v, body, msg) {
   }
 }
 
-// Détail d'un article fournisseur, déplié sous sa ligne.
+// Détail d'un article fournisseur, déplié sous sa ligne : ses laizes, chacune
+// avec ses conditionnements (une ou plusieurs longueurs de bobine), son prix et
+// son stock RVGI. Ce que la ligne dit déjà (réf. fournisseur, article RVGI,
+// m / bobine de l'article) n'est pas répété.
 function buildMpArticleDetail(m, data, v, lignesVues, canEdit) {
   const edit = canEdit && v.actif;
   const mlStd = Number(m.metres_lineaires_par_bobine || 0);
-  const mlArt = Number(v.ml_bobine || 0);
-  const info = (lib, val) => val ? el('span', null, lib + ' ', el('strong', null, val)) : null;
-  const parts = [el('div', { cls: 'mp-det-meta' },
-    info('Libellé technique :', v.libelle_technique || ''),
-    info('Réf. fournisseur :', v.ref_fournisseur),
-    info('Article RVGI :', v.ref_rvgi),
-    data.laizee ? info('m / bobine de l\'article :', mlArt ? fN(mlArt) + ' m' : (mlStd ? fN(mlStd) + ' m (standard)' : '—')) : null,
-    v.note ? info('Note :', v.note) : null,
-    v.updated_at ? info('Modifié le', mpVarDate(v.updated_at) + (v.updated_by_name ? ' par ' + v.updated_by_name : '')) : null,
-  )];
-  if (!data.laizee) return el('div', { cls: 'mp-det' }, ...parts);
+  const mlArt = Number(v.ml_bobine || 0) || mlStd;
+  const nomF = v.fournisseur_nom || 'ce fournisseur';
+  const pied = [];
+  const libCourt = mpVarLibelle(v);
+  if (v.libelle_technique && v.libelle_technique !== libCourt) pied.push(v.libelle_technique);
+  const note = (v.note && !/^Reprise de l'inventaire/.test(v.note)) ? v.note : '';
+  if (note) pied.push('Note : ' + note);
+  if (v.updated_at) pied.push('Modifié le ' + mpVarDate(v.updated_at) + (v.updated_by_name ? ' par ' + v.updated_by_name : ''));
+  const piedEl = pied.length ? el('div', { cls: 'mp-det-pied' }, pied.join(' · ')) : null;
+
+  if (!data.laizee) return el('div', { cls: 'mp-det' }, piedEl || el('div', { cls: 'mp-det-vide' }, 'Rien de plus sur cet article.'));
   if (!v.fournisseur_id) {
-    parts.push(el('div', { cls: 'mp-det-vide' }, 'Article sans fournisseur : le choisir (Modifier) pour lui rattacher des laizes.'));
-    return el('div', { cls: 'mp-det' }, ...parts);
+    return el('div', { cls: 'mp-det' },
+      el('div', { cls: 'mp-det-vide' }, 'Article sans fournisseur : le choisir (Modifier) pour lui rattacher des laizes.'), piedEl);
   }
   const det = Array.isArray(v.laizes_detail) ? v.laizes_detail : [];
   const deCetArticle = (l) => (l.variante_id && l.variante_id === v.id) || (!l.variante_id && v.ref_rvgi && l.article === v.ref_rvgi);
   const stockLz = (mm) => mpTotalRvgi(lignesVues.filter(l => deCetArticle(l) && Math.round(l.laize_mm || 0) === Math.round(mm)));
-  const tbl = el('table', { cls: 'mp-det-table' });
-  tbl.appendChild(el('thead', null, el('tr', null,
-    el('th', null, 'Laize'),
-    el('th', { cls: 'num', attrs: { title: 'Conditionnement chez ce fournisseur. Vide : longueur de l\'article, puis métrage standard.' } }, 'm / bobine'),
-    el('th', { cls: 'num' }, 'Prix d\'achat'),
-    el('th', { cls: 'num' }, 'Stock RVGI'),
-    edit ? el('th', null, '') : null)));
-  const tb = el('tbody');
+
+  const grille = el('div', { cls: 'mp-lzc' });
+  grille.appendChild(el('div', { cls: 'mp-lzc-row mp-lzc-head' },
+    el('span', null, 'Laize'),
+    el('span', { attrs: { title: 'Longueurs de bobine livrées sur cette laize. Aucune : longueur de l\'article (' + (mlArt ? fN(mlArt) + ' m' : 'non renseignée') + ').' } }, 'Conditionnements (m / bobine)'),
+    el('span', { cls: 'num' }, 'Prix d\'achat'),
+    el('span', { cls: 'num' }, 'Stock RVGI'),
+    el('span', null, '')));
+
   det.forEach(d => {
-    let mlCell;
+    const conds = Array.isArray(d.conditionnements) ? d.conditionnements : [];
+    const cell = el('div', { cls: 'mp-lz-chips' });
+    conds.forEach(c => cell.appendChild(el('span', { cls: 'mp-cond-chip' },
+      fN(c.ml_bobine) + ' m',
+      edit ? el('button', {
+        cls: 'mp-cond-x', type: 'button',
+        attrs: { title: 'Retirer ce conditionnement', 'aria-label': 'Retirer ' + fN(c.ml_bobine) + ' m' },
+        on: { click: async () => {
+          try {
+            mpVarSetData(await api('/api/stock/variantes/' + v.id + '/conditionnements/' + c.id, { method: 'DELETE' }));
+            showToast('Conditionnement retiré.', 'success');
+          } catch (err) { showToast(err.message, 'error'); }
+        } },
+      }, '×') : null)));
+    if (!conds.length) {
+      cell.appendChild(el('span', { cls: 'mp-cond-chip defaut', attrs: { title: 'Aucun conditionnement propre : longueur de l\'article' } },
+        mlArt ? fN(mlArt) + ' m' : '—', el('em', null, 'article')));
+    }
     if (edit) {
-      const inp = mpCondInput({ step: '1', label: 'm / bobine sur la laize ' + fN(d.valeur_mm), val: d.ml_bobine });
-      inp.placeholder = mlArt ? '= ' + mlArt : (mlStd ? '= ' + mlStd : '');
-      inp.title = 'Vide : ' + (mlArt ? fN(mlArt) + ' m, longueur de l\'article' : (mlStd ? fN(mlStd) + ' m, métrage standard' : 'non renseigné'));
-      inp.addEventListener('change', async () => {
-        const r = mpLireNombre(inp);
-        if (r.error) { showToast('m / bobine : valeur > 0, ou vide.', 'error'); return; }
-        await mpPoserLaizeFourn(v, { laize_id: d.laize_id, ml_bobine: r.vide ? '' : r.value }, 'Conditionnement enregistré.');
+      const ajout = el('button', {
+        cls: 'mp-cond-plus', type: 'button',
+        attrs: { title: 'Ajouter une longueur de bobine sur cette laize' },
+      }, iconEl('plus', 11), 'longueur');
+      ajout.addEventListener('click', () => {
+        const inp = el('input', { cls: 'mp-cond-inp mp-cond-new', attrs: {
+          type: 'number', min: '1', step: '1', inputmode: 'numeric', placeholder: 'm / bobine',
+          'aria-label': 'Nouvelle longueur sur la laize ' + fN(d.valeur_mm),
+        } });
+        let fait = false;
+        const valider = async () => {
+          if (fait) return;
+          const r = mpLireNombre(inp);
+          if (r.vide) { fait = true; inp.replaceWith(ajout); return; }
+          if (r.error) { showToast('Longueur invalide — nombre de mètres > 0.', 'error'); inp.focus(); return; }
+          fait = true;
+          if (!(await mpPoserLaizeFourn(v, { laize_id: d.laize_id, ml_bobine: r.value }, 'Conditionnement ajouté.'))) {
+            fait = false; inp.focus();
+          }
+        };
+        inp.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); valider(); }
+          else if (e.key === 'Escape') { e.stopPropagation(); fait = true; inp.replaceWith(ajout); }
+        });
+        inp.addEventListener('blur', valider);
+        ajout.replaceWith(inp);
+        inp.focus();
       });
-      mlCell = inp;
-    } else {
-      mlCell = d.ml_bobine ? fN(d.ml_bobine) + ' m' : (mlArt ? fN(mlArt) + ' m' : '—');
+      cell.appendChild(ajout);
     }
     const decl = mpDeclDeLaize(data, d.valeur_mm);
     const declPropre = decl && Math.round(decl.laize_mm || 0) === Math.round(d.valeur_mm || 0);
-    tb.appendChild(el('tr', null,
-      el('td', null, el('strong', { style: 'color:var(--text)' }, d.label || fN(d.valeur_mm) + ' mm')),
-      el('td', { cls: 'num' }, mlCell),
-      el('td', { cls: 'num' }, (declPropre && data.peut_modifier_prix && v.actif)
-        ? mpPrixInput(m, data, v.fournisseur_id, v.fournisseur_nom || 'ce fournisseur', decl.id)
+    grille.appendChild(el('div', { cls: 'mp-lzc-row' },
+      el('strong', null, d.label || fN(d.valeur_mm) + ' mm'),
+      cell,
+      el('span', { cls: 'num' }, (declPropre && data.peut_modifier_prix)
+        ? mpPrixInput(m, data, v.fournisseur_id, nomF, decl.id)
         : mpPrixTexte(data, v.fournisseur_id, decl ? decl.id : undefined)),
-      el('td', { cls: 'num' }, mpFmtStockRvgi(stockLz(d.valeur_mm))),
-      edit ? el('td', { cls: 'num' }, el('button', {
+      el('span', { cls: 'num' }, mpFmtStockRvgi(stockLz(d.valeur_mm))),
+      edit ? el('button', {
         cls: 'mp-empl-ico ico-danger', type: 'button',
-        attrs: { title: 'Ce fournisseur ne livre plus cette laize', 'aria-label': 'Retirer la laize' },
+        attrs: { title: nomF + ' ne livre plus cette laize', 'aria-label': 'Retirer la laize' },
         on: { click: async () => {
-          if (!confirm('Retirer la laize ' + fN(d.valeur_mm) + ' mm de ' + (v.fournisseur_nom || 'ce fournisseur') + ' ?\n\nElle reste sur la matière, avec son stock.')) return;
+          if (!confirm('Retirer la laize ' + fN(d.valeur_mm) + ' mm de ' + nomF + ' ?\n\nElle reste sur la matière, avec son stock.')) return;
           try {
             mpVarSetData(await api('/api/stock/variantes/' + v.id + '/laizes/' + d.laize_id, { method: 'DELETE' }));
             showToast('Laize retirée du fournisseur.', 'success');
           } catch (err) { showToast(err.message, 'error'); }
         } },
-      }, iconEl('trash-2', 13))) : null));
+      }, iconEl('trash-2', 13)) : el('span', null, '')));
   });
-  tbl.appendChild(tb);
-  parts.push(el('div', null,
-    el('div', { cls: 'mp-det-titre' }, 'Laizes livrées par ' + (v.fournisseur_nom || 'ce fournisseur')),
-    det.length ? tbl : el('div', { cls: 'mp-det-vide' }, 'Aucune laize rattachée à ce fournisseur.')));
+  if (!det.length) {
+    grille.appendChild(el('div', { cls: 'mp-lzc-vide' }, 'Aucune laize rattachée à ' + nomF + '.'));
+  }
+
   if (edit) {
     const lies = new Set(det.map(d => Math.round(d.valeur_mm || 0)));
     const proposees = new Set((data.laizes_matiere || []).map(l => Math.round(l.valeur_mm || 0)));
     lignesVues.filter(deCetArticle).forEach(l => { if (l.laize_mm) proposees.add(Math.round(l.laize_mm)); });
-    const lzInp = el('input', { attrs: { type: 'number', min: '1', max: '5000', step: '1', inputmode: 'numeric',
-      placeholder: 'Laize (mm)', 'aria-label': 'Laize en mm' } });
-    const mlInp = el('input', { attrs: { type: 'number', min: '0', step: '1', inputmode: 'numeric',
+    const libres = [...proposees].filter(x => x && !lies.has(x)).sort((a, b) => a - b);
+    const lzInp = el('input', { cls: 'mp-cond-inp', attrs: { type: 'number', min: '1', max: '5000', step: '1',
+      inputmode: 'numeric', placeholder: 'Laize (mm)', 'aria-label': 'Laize en mm' } });
+    const mlInp = el('input', { cls: 'mp-cond-inp', attrs: { type: 'number', min: '0', step: '1', inputmode: 'numeric',
       placeholder: 'm / bobine', 'aria-label': 'Mètres par bobine (facultatif)',
-      title: 'Facultatif : longueur de bobine propre à cette laize' } });
-    const okBtn = el('button', { cls: 'mp-det-btn', type: 'button' }, iconEl('plus', 13), 'Ajouter la laize');
+      title: 'Facultatif. Vide : longueur de l\'article' } });
+    const okBtn = el('button', { cls: 'mp-det-btn', type: 'button' }, iconEl('plus', 13), 'Ajouter');
     const ajouter = async () => {
       const mm = parseFloat(String(lzInp.value || '').replace(',', '.'));
       if (!(mm > 0)) { showToast('Laize invalide — valeur en mm attendue.', 'error'); lzInp.focus(); return; }
@@ -12115,29 +12178,28 @@ function buildMpArticleDetail(m, data, v, lignesVues, canEdit) {
       S.mpFocusAjoutLaize = v.id;
       const body = { valeur_mm: mm };
       if (!r.vide) body.ml_bobine = r.value;
-      if (!(await mpPoserLaizeFourn(v, body, 'Laize ' + fN(mm) + ' mm ajoutée à ' + (v.fournisseur_nom || 'ce fournisseur') + '.'))) okBtn.disabled = false;
+      const deja = lies.has(Math.round(mm));
+      const msg = deja ? 'Conditionnement ajouté sur la ' + fN(mm) + ' mm.' : 'Laize ' + fN(mm) + ' mm ajoutée à ' + nomF + '.';
+      if (!(await mpPoserLaizeFourn(v, body, msg))) okBtn.disabled = false;
     };
     okBtn.addEventListener('click', ajouter);
-    [lzInp, mlInp].forEach(i => i.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); ajouter(); } }));
-    const libres = [...proposees].filter(x => x && !lies.has(x)).sort((a, b) => a - b);
-    parts.push(el('div', null,
-      el('div', { cls: 'mp-det-titre' }, 'Ajouter une laize'),
-      libres.length ? el('div', { cls: 'mp-lz-chips', style: 'margin-bottom:6px' },
-        el('span', { cls: 'mp-var-meta', style: 'margin:0 4px 0 0' }, 'Déjà connues :'),
+    [lzInp, mlInp].forEach(x => x.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); ajouter(); } }));
+    grille.appendChild(el('div', { cls: 'mp-lzc-ajout' },
+      lzInp, mlInp, okBtn,
+      libres.length ? el('span', { cls: 'mp-lzc-sugg' }, 'Connues :',
         ...libres.map(x => el('button', {
           cls: 'mp-lz-chip mp-lz-chip-btn', type: 'button',
           attrs: { title: 'Reprendre ' + fN(x) + ' mm' },
           on: { click: () => { lzInp.value = String(x); mlInp.focus(); } },
-        }, fN(x)))) : null,
-      el('div', { cls: 'mp-det-ajout' }, lzInp, mlInp, okBtn),
-      el('div', { cls: 'mp-var-meta' },
-        'Une laize nouvelle est ajoutée à la matière, sans stock. Le m / bobine est facultatif : vide, c\'est la longueur de l\'article.')));
+        }, fN(x)))) : null));
     if (S.mpFocusAjoutLaize === v.id) {
       S.mpFocusAjoutLaize = null;
       requestAnimationFrame(() => lzInp.focus());
     }
   }
-  return el('div', { cls: 'mp-det' }, ...parts);
+  return el('div', { cls: 'mp-det' },
+    el('div', { cls: 'mp-det-titre' }, 'Laizes livrées par ' + nomF),
+    grille, piedEl);
 }
 
 // Le tableau des fournisseurs, suivi de la carte des prix d'achat.
