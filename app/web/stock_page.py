@@ -1610,7 +1610,19 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .mon-page .mon-vide{color:var(--muted);font-style:italic;font-size:12px}
 .mon-page .mon-qte{font-size:15px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
 .mon-page .mon-u{font-size:11px;font-weight:500;color:var(--muted)}
-.mon-page .mon-jauge-tete{display:flex;align-items:baseline;gap:8px;margin-bottom:5px}
+.mon-page .mon-jauge-tete{display:flex;align-items:baseline;gap:8px;margin-bottom:5px;white-space:nowrap}
+.mon-page .mon-dossier-tete{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.mon-page .mon-etat-dos{--t:var(--muted);display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:2px 9px;border-radius:6px;white-space:nowrap;color:white;background:var(--t)}
+.mon-page .mon-etat-termine{--t:var(--success)}
+.mon-page .mon-etat-en-cours{--t:var(--accent)}
+.mon-page .mon-etat-bientot{--t:var(--warn)}
+.mon-page .mon-etat-attente{color:var(--text2);background:var(--bg);border:1px solid var(--border)}
+.mon-page .mon-etats{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.mon-page .mon-etats-lib{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-right:4px}
+.mon-page .mon-etat-btn{border:none;font:inherit;font-size:12px;font-weight:700;padding:5px 12px;cursor:pointer;opacity:.75;transition:opacity .15s,box-shadow .15s}
+.mon-page .mon-etat-btn:hover{opacity:1}
+.mon-page .mon-etat-btn.actif{opacity:1;box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--t)}
+.mon-page .mon-etat-btn.mon-etat-attente{border:1px solid var(--border)}
 .mon-page .mon-pct{font-size:14px;font-weight:800;font-variant-numeric:tabular-nums}
 .mon-page .mon-jauge{position:relative;height:6px;min-width:90px;border-radius:4px;background:var(--bg);overflow:hidden}
 .mon-page .mon-jauge-fill{height:100%;border-radius:4px}
@@ -2521,7 +2533,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : onglet, filtres, tri, objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/stock_url.js?v=4"></script>
+<script src="/static/stock_url.js?v=5"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=13"></script>
@@ -4362,6 +4374,7 @@ function goToTab(tab) {
     if (S.monitoring) {
       S.monitoring.query = '';
       S.monitoring.filterStatut = null;
+      S.monitoring.filterEtat = null;
       S.monitoring.monPage = 'production';
       S.monitoring.sortColumn = null;
       S.monitoring.colFiltres = {};
@@ -19914,6 +19927,21 @@ function monDouble(principal, sous, clsPrincipal) {
     sous ? el('div', { cls: 'mon-sous' }, sous) : null);
 }
 
+// État du dossier au planning, mis en avant à côté de son numéro. « Fin sous
+// 2 j » : pas encore terminé, fin prévue dans les deux jours (ou dépassée).
+function monEtatDossier(l) {
+  const st = l.statut_planning;
+  if (!l.no_dossier || !st) return { cle: '', label: '', ordre: 9 };
+  if (st === 'termine') return { cle: 'termine', label: 'Terminé', ordre: 3, aide: 'Dossier terminé au planning' };
+  const fin = l.fin_prevue ? new Date(String(l.fin_prevue).slice(0, 19)) : null;
+  if (fin && !isNaN(fin) && fin.getTime() - Date.now() <= 2 * 86400000) {
+    return { cle: 'bientot', label: 'Fin sous 2 j', ordre: 1,
+      aide: 'Fin prévue le ' + fDateTime(l.fin_prevue) + (st === 'en_cours' ? ' · en cours' : ' · en attente') };
+  }
+  if (st === 'en_cours') return { cle: 'en-cours', label: 'En cours', ordre: 2, aide: 'Dossier en cours de production' };
+  return { cle: 'attente', label: 'En attente', ordre: 4, aide: 'Dossier en attente au planning' };
+}
+
 function monDesignation(l) {
   const d = (l.designation || '').trim();
   // « 601/0161 » en désignation de « 601/0161 » n'apprend rien.
@@ -19961,10 +19989,16 @@ function monColonnes(page) {
   return [
     statut,
     { cle: 'no_dossier', label: 'Dossier', val: l => l.no_dossier || '',
-      txt: l => [l.no_dossier, l.client, l.machine].join(' '),
-      td: l => monDouble(l.no_dossier || 'Hors dossier',
-        [l.client, l.machine, MON_STATUT_PLANNING[l.statut_planning]].filter(Boolean).join(' · '),
-        l.no_dossier ? 'mon-ref' : 'mon-vide') },
+      txt: l => [l.no_dossier, l.client, l.machine, monEtatDossier(l).label].join(' '),
+      td: l => {
+        if (!l.no_dossier) return monDouble('Hors dossier', '', 'mon-vide');
+        const e = monEtatDossier(l);
+        return el('td', { cls: 'mon-cell' },
+          el('div', { cls: 'mon-dossier-tete' },
+            el('span', { cls: 'mon-ref' }, l.no_dossier),
+            e.label ? el('span', { cls: 'mon-etat-dos mon-etat-' + e.cle, title: e.aide || '' }, e.label) : null),
+          el('div', { cls: 'mon-sous' }, [l.client, l.machine].filter(Boolean).join(' · ')));
+      } },
     { cle: 'reference', label: 'Référence', val: l => l.reference || '',
       txt: l => [l.reference, l.designation].join(' '),
       td: l => monDouble(l.reference,
@@ -19982,7 +20016,7 @@ function monColonnes(page) {
          (l.rattachement || []).includes('of') ? 'rapprochée par l\'OF' : ''].filter(Boolean).join(' · '),
         'rien entré') },
     { cle: 'ecart', label: 'Entré / saisi', num: true, val: l => l.ecart == null ? -Infinity : Number(l.ecart), txt: l => l.ecart,
-      td: l => monJaugeCell(page, l, (Number(l.qte_entree) || 0) - (Number(l.ecart) || 0), Number(l.qte_entree) || 0) },
+      td: l => monJaugeCell(page, l, Number(l.qte_produite) > 0 ? (Number(l.qte_entree) || 0) - (Number(l.ecart) || 0) : 0, Number(l.qte_entree) || 0) },
     { cle: 'nb_deplacements', label: 'Après l\'entrée', num: true, val: l => Number(l.stock_restant) || 0,
       txt: l => [l.derniere_destination, (l.emplacements_restants || []).join(' ')].join(' '),
       td: l => {
@@ -20031,6 +20065,7 @@ function monLignesFiltrees() {
   const cols = monColonnes(m.monPage);
   let rows = monLignesBase().slice();
   if (m.filterStatut) rows = rows.filter(l => l.statut === m.filterStatut);
+  if (m.filterEtat && m.monPage === 'production') rows = rows.filter(l => monEtatDossier(l).cle === m.filterEtat);
   const q = monNormTxt((m.query || '').trim());
   if (q) {
     rows = rows.filter(l => monNormTxt([l.reference, l.designation, l.no_dossier, l.client,
@@ -20087,7 +20122,7 @@ function monPagePills() {
 
 function monResetFiltres() {
   const m = monEnsureState();
-  m.filterStatut = null; m.query = ''; m.sortColumn = null; m.sortDirection = 'asc'; m.colFiltres = {};
+  m.filterStatut = null; m.filterEtat = null; m.query = ''; m.sortColumn = null; m.sortDirection = 'asc'; m.colFiltres = {};
   m.data = null; m.cleData = null; m.erreur = null;
 }
 
@@ -20230,6 +20265,18 @@ function monRenderTuiles() {
     if (!compte[id] && m.filterStatut !== id) return;
     zone.appendChild(tuile(id, label, compte[id] || 0, monTon(m.monPage, id), (MON_AIDE[m.monPage] || {})[id]));
   });
+  // Production : état du dossier au planning, filtrable d'un clic.
+  if (m.monPage !== 'production') return;
+  const etats = {};
+  base.forEach(l => { const e = monEtatDossier(l); if (e.cle) etats[e.cle] = (etats[e.cle] || 0) + 1; });
+  const defs = [['bientot', 'Fin sous 2 j'], ['en-cours', 'En cours'], ['termine', 'Terminé'], ['attente', 'En attente']];
+  if (!defs.some(([k]) => etats[k])) return;
+  zone.appendChild(el('div', { cls: 'mon-etats' },
+    el('span', { cls: 'mon-etats-lib' }, 'Dossier au planning'),
+    ...defs.filter(([k]) => etats[k] || m.filterEtat === k).map(([k, lib]) => el('button', {
+      cls: 'mon-etat-dos mon-etat-' + k + ' mon-etat-btn' + (m.filterEtat === k ? ' actif' : ''), type: 'button',
+      on: { click: () => { m.filterEtat = m.filterEtat === k ? null : k; renderMonitoringView(false); } },
+    }, lib + ' · ' + fN(etats[k] || 0)))));
 }
 
 function renderMonitoringResults(container) {
@@ -20264,9 +20311,9 @@ function renderMonitoringResults(container) {
   card.appendChild(el('div', { cls: 'mon-carte-tete' },
     el('span', { cls: 'mon-carte-titre' }, m.monPage === 'expedition' ? 'Références à expédier' : 'Dossiers produits'),
     el('span', { cls: 'mon-compte' }, fN(rows.length) + (rows.length !== total ? ' sur ' + fN(total) : '') + ' ligne' + (rows.length > 1 ? 's' : '')),
-    (nbFiltres || m.filterStatut || (m.query || '').trim()) ? el('button', {
+    (nbFiltres || m.filterStatut || m.filterEtat || (m.query || '').trim()) ? el('button', {
       cls: 'mon-relacher', type: 'button',
-      on: { click: () => { m.colFiltres = {}; m.filterStatut = null; m.query = ''; renderMonitoringView(true); } },
+      on: { click: () => { m.colFiltres = {}; m.filterStatut = null; m.filterEtat = null; m.query = ''; renderMonitoringView(true); } },
     }, 'Tout afficher') : null,
   ));
 

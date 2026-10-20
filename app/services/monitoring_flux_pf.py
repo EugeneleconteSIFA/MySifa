@@ -71,7 +71,7 @@ def _infos_dossiers(conn, refs: List[str]) -> Dict[str, dict]:
         for r in conn.execute(
             f"""SELECT pe.id, pe.reference, pe.numero_of, pe.ref_produit,
                        pe.ref_produit_norm, pe.client, pe.statut, pe.date_livraison,
-                       m.nom AS machine,
+                       pe.planned_end, pe.planned_end_manual, m.nom AS machine,
                        (SELECT o.qte_etiquettes FROM of_imports o
                          WHERE o.id = pe.of_import_id) AS qte_of
                   FROM planning_entries pe
@@ -272,6 +272,7 @@ def flux_production(conn, du: str, au: str) -> dict:
             "client": pe.get("client"),
             "machine": pe.get("machine") or s.get("machines"),
             "statut_planning": pe.get("statut"),
+            "fin_prevue": pe.get("planned_end_manual") or pe.get("planned_end"),
             "qte_of": _f(pe.get("qte_of")) or None,
             "qte_produite": q_somme or None,
             "qte_produite_max": q_maxi or None,
