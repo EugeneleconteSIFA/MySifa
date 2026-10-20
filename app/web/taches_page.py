@@ -519,6 +519,8 @@ tbody tr.row-sous:hover td{background:var(--accent-bg)}
 
 <div id="drawer-root"></div>
 <div id="modal-root"></div>
+<script src="/static/mysifa_url.js?v=4"></script>
+<script src="/static/taches_url.js?v=1"></script>
 
 <script>
 // ══════════════════════════════════════════════════════════════════
@@ -809,7 +811,7 @@ function showView(v,opts){
   syncMoi();
   syncGuideBtn();
   closeSidebar();
-  if(!(opts&&opts.silent)){try{if(location.hash!=='#'+v)history.replaceState(null,'','#'+v);}catch(e){}}
+  // L'adresse (vue, filtres, tri, tâche ouverte) est tenue par static/taches_url.js.
   chargerTaches();
 }
 
@@ -2139,7 +2141,8 @@ function initGuides(){
   brancherMoi();
   brancherSousTaches();
   brancherArchivage();
-  showView(readView(),{silent:true});
+  if(typeof tachesDemarrerUrl==='function') await tachesDemarrerUrl();
+  else showView(readView(),{silent:true});
   await chargerStats();
   await chargerBadgeMes();
   initGuides();

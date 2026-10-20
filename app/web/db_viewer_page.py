@@ -340,6 +340,8 @@ body.light .tbl-rows-badge{{background:color-mix(in srgb,var(--accent,#0891b2) 1
 <script src="/static/chat_widget.js?v=13"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
+<script src="/static/mysifa_url.js?v=4"></script>
+<script src="/static/db_url.js?v=1"></script>
 <script>
 (function(){{
   function bootChatDock(){{
@@ -475,6 +477,7 @@ const S = {{
 (async () => {{
   applyStoredTheme();
   await Promise.all([loadStats(), loadTables()]);
+  if (typeof dbDemarrerUrl === 'function') dbDemarrerUrl();
 }})();
 
 /* ── Theme ── */
