@@ -325,6 +325,12 @@
     if(S.page==='saisies'||sousEff==='saisies'){
       var so=S.sortState||{};
       if(so.col){ p.tri=so.col; if(so.asc===false) p.sens='desc'; }
+      // Bascules d'affichage (Saisies prod, Sorties matière, Entrées Z1,
+      // Alertes) : toutes actives par défaut, l'adresse nomme celles coupées.
+      try{
+        var aff=saisiesAffichage(), off=SAISIES_AFFICHAGE_CLES.filter(function(k){return aff[k]===false;});
+        if(off.length) p.masquer=off.join(',');
+      }catch(e){}
     }
     if(sousEff==='erreurs'&&S.ecartsFiltre) p.ecart=String(S.ecartsFiltre).replace(/^prod\./,'');
     if(sousEff==='kpis'&&S.psLigne){ p.ligne=S.psLigne.type+':'+S.psLigne.key; nav+='/ligne'; }
@@ -523,6 +529,16 @@
     if(tri&&!_RE_CLE.test(tri)) tri=null;
     if(page==='saisies'||(page==='production'&&S.subPage==='saisies')){
       S.sortState=tri?{col:tri,asc:!desc}:{col:null,asc:true};
+      // masquer=sorties,alertes : bascules coupées. Absent : au démarrage, la
+      // préférence du navigateur reste ; au Retour, tout redevient visible.
+      if(u.a('masquer')||complet){
+        try{
+          var off=(u.get('masquer','')||'').split(',');
+          var aff={};
+          SAISIES_AFFICHAGE_CLES.forEach(function(k){ aff[k]=off.indexOf(k)===-1; });
+          if(JSON.stringify(aff)!==JSON.stringify(saisiesAffichage())){ S.saisiesAffichage=aff; S.selectedRows=new Set(); }
+        }catch(e){}
+      }
     }
     if(page==='production'&&S.subPage==='retour'){
       S.retourProd=Object.assign({},S.retourProd||{},{
