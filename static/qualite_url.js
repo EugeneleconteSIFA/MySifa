@@ -20,7 +20,8 @@
  *              FSC : sous (appro), filtre, debut, fin, eligible, certifies ;
  *              EUDR : filtre, bobines
  *   formulaires filtre (actifs par défaut) ; objet formulaire (éditeur) ;
- *              fenêtre ia_formulaire (nouveau | modifier)
+ *              onglet (suivi) ; fenêtres ia_formulaire (nouveau | modifier),
+ *              envoi_formulaire (id), reponse_formulaire (id du destinataire)
  *   fenêtres   voir _QUAL_OUVREURS — toutes celles de #mroot et les deux
  *              modales fixes (création et import de NC).
  * Hors adresse : textes de recherche, confirmations (suppression), sous-
@@ -78,6 +79,8 @@ const _QUAL_OUVREURS = [
   ['eudrOuvrirEnvoi',              'envoi_eudr',         () => 'formulaire'],
   ['eudrVoirReponse',              'reponse_eudr',       a => a[0]],
   ['formuIaOuvrir',                'ia_formulaire',      a => a[0] === 'modifier' ? 'modifier' : 'nouveau'],
+  ['formuEnvoiOuvrir',             'envoi_formulaire',   a => a[0]],
+  ['formuReponseVoir',             'reponse_formulaire', a => a[0]],
 ];
 const _qualFixe = cle => { const o = _QUAL_OUVREURS.find(x => x[1] === cle); return o ? o[3] || null : null; };
 
@@ -146,6 +149,7 @@ function qualiteParams() {
     p.groupe = S.currentGroupe.groupe; nav = 'groupe:' + p.groupe;
   } else if (v === 'formulaire-edit' && S.formu && S.formu.courant) {
     p.formulaire = S.formu.courant.id; nav = 'formulaire:' + p.formulaire;
+    if (S.formu.onglet === 'suivi') { p.onglet = 'suivi'; nav += '/suivi'; }
   } else {
     const vue = Object.keys(_QUAL_VUES).find(k => _QUAL_VUES[k] === v);
     if (vue) p.vue = vue;
@@ -252,6 +256,8 @@ const _QUAL_REOUVRIR = {
   envoi_eudr:           async () => { await _qualAttendre(() => S.eudr.data); eudrOuvrirEnvoi(); },
   reponse_eudr:         async v => { await _qualAttendre(() => S.eudr.data); eudrVoirReponse(_qualNum(v)); },
   ia_formulaire:        v => { if (v === 'modifier') { if (S.view === 'formulaire-edit') formuIaOuvrir('modifier'); } else formuIaOuvrir('nouveau'); },
+  envoi_formulaire:     v => { if (S.view === 'formulaire-edit') formuEnvoiOuvrir(_qualNum(v)); },
+  reponse_formulaire:   v => { if (S.view === 'formulaire-edit') formuReponseVoir(_qualNum(v)); },
 };
 const _QUAL_FERMER = {
   nouvelle_nc: () => closeCreateModal(),
@@ -389,6 +395,8 @@ async function qualiteAllerUrl(complet) {
   } else if (vue === 'formulaire-edit' && S.formu) {
     const id = u.get('formulaire');
     if (/^\d+$/.test(String(id)) && !(S.view === 'formulaire-edit' && S.formu.courant && memes(S.formu.courant.id, id))) await formuOuvrir(Number(id));
+    const og = u.get('onglet', 'questions', ['questions', 'suivi']);
+    if (S.view === 'formulaire-edit' && S.formu.courant && memes(S.formu.courant.id, id) && S.formu.onglet !== og) formuSetOnglet(og);
   } else if (vue === 'menu') {
     setView('menu');
   }
