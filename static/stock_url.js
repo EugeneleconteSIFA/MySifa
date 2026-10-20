@@ -354,6 +354,7 @@ function _stockParamsBase() {
       if (m.periode === 'perso') { p.periode = 'perso'; const pe = monPeriode(); p.du = pe.du; p.au = pe.au; }
       else if (m.periode && m.periode !== 'last7') p.periode = m.periode;
       if (m.filterStatut) p.statut = m.filterStatut;
+      if (m.filterEtat) p.etat = m.filterEtat;
       if (m.sortColumn) { p.tri = m.sortColumn; if (m.sortDirection === 'desc') p.sens = 'desc'; }
       Object.entries(m.colFiltres || {}).forEach(([k, v]) => { if (v && _STOCK_CLE.test(k)) p['f_' + k] = v; });
     }
@@ -500,6 +501,7 @@ function stockLireFiltres(u, tab, complet) {
         if (_STOCK_JOUR.test(au)) m.au = au;
       }
       const st = ou('statut', ''); if (st !== undefined) m.filterStatut = (st && _STOCK_CLE.test(st)) ? st : null;
+      const et = ou('etat', ''); if (et !== undefined) m.filterEtat = ['bientot', 'en-cours', 'termine', 'attente'].includes(et) ? et : null;
       const tri = ou('tri', ''); if (tri !== undefined) { m.sortColumn = (tri && _STOCK_CLE.test(tri)) ? tri : null; m.sortDirection = val('sens', 'asc') === 'desc' ? 'desc' : 'asc'; }
       const cf = {};
       let vuF = false;

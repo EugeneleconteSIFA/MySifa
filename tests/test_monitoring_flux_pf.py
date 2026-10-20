@@ -18,7 +18,7 @@ CREATE TABLE machines(id INTEGER PRIMARY KEY, nom TEXT);
 CREATE TABLE of_imports(id INTEGER PRIMARY KEY, qte_etiquettes REAL);
 CREATE TABLE planning_entries(id INTEGER PRIMARY KEY, reference TEXT, numero_of TEXT,
   ref_produit TEXT, ref_produit_norm TEXT, client TEXT, statut TEXT, date_livraison TEXT,
-  machine_id INT, of_import_id INT);
+  machine_id INT, of_import_id INT, planned_end TEXT, planned_end_manual TEXT);
 CREATE TABLE production_data(id INTEGER PRIMARY KEY, no_dossier TEXT, date_operation TEXT,
   operation_code TEXT, machine TEXT, quantite_traitee REAL, fin_dossier INT, est_annule INT);
 CREATE TABLE produits(id INTEGER PRIMARY KEY, reference TEXT, designation TEXT, unite TEXT);
@@ -38,10 +38,10 @@ INSERT INTO produits VALUES (1,'890/0007','Etiq 1','étiquette'),(2,'601/0161','
                             (3,'470/0020','Etiq 3','étiquette'),(4,'24/0012','Etiq 4','étiquette'),
                             (5,'931/0005','Etiq 5','étiquette');
 INSERT INTO planning_entries VALUES
-  (10,'9932689','9932689','890/0007 - X','890/0007','CLIENT A','termine','2026-10-14',1,1),
-  (11,'9932700','9932700','470/0020 - X','470/0020','CLIENT B','termine','2026-10-30',1,NULL),
-  (12,'9932585','9932585','24/0012 - X','24/0012','CLIENT C','termine','2026-10-14',1,NULL),
-  (13,'9932800','9932800','601/0161 - X','601/0161','CLIENT D','attente','2026-10-16',1,NULL);
+  (10,'9932689','9932689','890/0007 - X','890/0007','CLIENT A','termine','2026-10-14',1,1,'2026-10-15T10:00:00',NULL),
+  (11,'9932700','9932700','470/0020 - X','470/0020','CLIENT B','termine','2026-10-30',1,NULL,NULL,NULL),
+  (12,'9932585','9932585','24/0012 - X','24/0012','CLIENT C','termine','2026-10-14',1,NULL,NULL,NULL),
+  (13,'9932800','9932800','601/0161 - X','601/0161','CLIENT D','attente','2026-10-16',1,NULL,'2026-10-21T08:00:00',NULL);
 -- 9932689 : deux fins de prod, la dernière porte le cumul ; entré en deux fois.
 INSERT INTO production_data VALUES
   (1,'9932689','2026-10-14T12:00:00','89','Machine A',1000000,0,0),
@@ -75,6 +75,7 @@ ok(d.get("qte_entree") == 2000000, "les déplacements ne comptent pas comme entr
 ok(d.get("nb_deplacements") == 1 and d.get("derniere_destination") == "A111", "déplacement vers A111 suivi")
 ok(d.get("stock_restant") == 2000000, "stock restant du dossier = lots")
 ok(d.get("qte_of") == 2000000 and d.get("machine") == "Machine A", "OF et machine du planning")
+ok(d.get("fin_prevue") == "2026-10-15T10:00:00", "fin prévue du planning transmise")
 n = L.get("d:9932700") or {}
 ok(n.get("statut") == "non_entre", "9932700 clôturé sans entrée → Non entré")
 ok(n.get("qte_produite") == 500000, "une saisie annulée n'est pas comptée")
