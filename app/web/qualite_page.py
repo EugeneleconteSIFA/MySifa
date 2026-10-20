@@ -520,6 +520,8 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
 
 <div class="toast-wrap" id="toast-wrap"></div>
 
+<script src="/static/mysifa_url.js?v=4"></script>
+<script src="/static/qualite_url.js?v=1"></script>
 <script>
 'use strict';
 
@@ -822,7 +824,7 @@ function _readQualiteView(){
 function setView(v, opts){
   var silent=!!(opts&&opts.silent);
   S.view=v;
-  if(!silent&&QUALITE_PERSIST_VIEWS.indexOf(v)!==-1){try{var target='#'+v;if(location.hash!==target)history.replaceState(null,'',target);}catch(e){}}
+  // L'adresse (vue, objet, filtres, fenêtre) est tenue par static/qualite_url.js.
   document.querySelectorAll('.sidebar .nav-btn').forEach(b=>b.classList.remove('active'));
   if(v==='menu'){
     document.getElementById('mobile-sub').textContent='MyQualité';
@@ -3738,6 +3740,7 @@ async function init(){
     // Charger meta + fiches
     await loadRefMeta();
     await loadRefFiches();
+    if(typeof qualiteDemarrerUrl==='function') qualiteDemarrerUrl();
     return;
   }
   // Rôle lecture seule (commercial) : masquer le tab Référentiel (édition ref réservée aux admin qualité)
@@ -3759,8 +3762,9 @@ async function init(){
   if(S._qguideAckedKeys && !S._qguideAckedKeys.has('qualite-overview')){
     setTimeout(() => openGuide('qualite-overview', {autoOpened: true}), 600);
   }
-  var _hashView=_readQualiteView();
-  if(_hashView){setView(_hashView,{silent:true});}
+  // Vue, objet, filtres et fenêtre de l'adresse (ancienne forme #vue comprise).
+  if(typeof qualiteDemarrerUrl==='function') qualiteDemarrerUrl();
+  else { var _hashView=_readQualiteView(); if(_hashView){setView(_hashView,{silent:true});} }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
