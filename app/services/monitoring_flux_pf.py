@@ -270,6 +270,7 @@ def flux_production(conn, du: str, au: str) -> dict:
                 vus.add(e["id"])
 
     saisies: Dict[str, dict] = {}
+    fins: Dict[str, List[dict]] = defaultdict(list)
     entrees: Dict[str, List[dict]] = defaultdict(list)
     deplacements: Dict[str, List[dict]] = defaultdict(list)
     restants: Dict[str, List[dict]] = defaultdict(list)
@@ -289,6 +290,18 @@ def flux_production(conn, du: str, au: str) -> dict:
             lot,
         ).fetchall():
             saisies[r["d"]] = dict(r)
+        for r in conn.execute(
+            f"""SELECT TRIM(no_dossier) AS d, date_operation, machine, operateur,
+                       quantite_traitee, fin_dossier
+                  FROM production_data
+                 WHERE COALESCE(est_annule, 0) = 0 AND operation_code = '89'
+                   AND TRIM(no_dossier) IN ({ph})
+                 ORDER BY date_operation""",
+            lot,
+        ).fetchall():
+            fins[r["d"]].append({"date": r["date_operation"], "machine": r["machine"],
+                                 "operateur": r["operateur"], "quantite": _f(r["quantite_traitee"]),
+                                 "cloture": bool(r["fin_dossier"])})
         # Entrées du dossier, toutes dates : un dossier saisi le 14 peut entrer en stock le 21.
         for r in conn.execute(
             f"""SELECT m.id, m.created_at, m.emplacement, m.quantite, m.note,
@@ -421,6 +434,16 @@ def flux_production(conn, du: str, au: str) -> dict:
             "emplacements_restants": sorted(x["emplacement"] for x in rest),
             "ecart": ecart,
             "statut": statut,
+            "detail": {
+                "fins": fins.get(d) or [],
+                "entrees": [{"date": e["created_at"], "emplacement": e.get("emplacement"),
+                             "quantite": _f(e.get("quantite")), "note": e.get("note") or "",
+                             "par": e.get("created_by_name") or "", "reference": e.get("reference"),
+                             "rattachement": e.get("rattachement") or ""} for e in ents],
+                "deplacements": [{"date": x["created_at"], "vers": x["emplacement"],
+                                  "quantite": _f(x["quantite"]), "note": x.get("note") or ""} for x in deps],
+                "restants": rest,
+            },
         })
 
     # Les entrées rattachées à aucun dossier (ni par leur n°, ni par l'OF de
@@ -690,6 +713,15 @@ def flux_expedition(conn, erp, du: str, au: str) -> dict:
             "stock_actuel": _f(p.get("stock")) if p else None,
             "ecart": (q_sortie - q_bl) if (q_bl > 0 or q_sortie > 0) and erp is not None else None,
             "statut": statut,
+            "detail": {
+                "bls": [{"bl": b["bl"], "jour": b["jour"], "client": b["client"],
+                         "commande": b["numcde"], "quantite": b["qte"]}
+                        for b in sorted(L["bls"], key=lambda x: (x["jour"] or "", x["bl"]))],
+                "sorties": [{"date": s["created_at"], "emplacement": s.get("emplacement"),
+                             "quantite": _f(s.get("quantite")), "note": s.get("note") or "",
+                             "par": s.get("created_by_name") or "", "bl_jour": s.get("bl_jour")}
+                            for s in sorties_tri],
+            },
         })
     return {"du": du, "au": au, "tolerance_pct": MONITORING_TOLERANCE_PCT,
             "miroir": erp is not None, "lignes": out,

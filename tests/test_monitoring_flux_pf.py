@@ -20,7 +20,8 @@ CREATE TABLE planning_entries(id INTEGER PRIMARY KEY, reference TEXT, numero_of 
   ref_produit TEXT, ref_produit_norm TEXT, client TEXT, statut TEXT, date_livraison TEXT,
   machine_id INT, of_import_id INT, planned_end TEXT, planned_end_manual TEXT, planned_start TEXT);
 CREATE TABLE production_data(id INTEGER PRIMARY KEY, no_dossier TEXT, date_operation TEXT,
-  operation_code TEXT, machine TEXT, quantite_traitee REAL, fin_dossier INT, est_annule INT);
+  operation_code TEXT, machine TEXT, quantite_traitee REAL, fin_dossier INT, est_annule INT,
+  operateur TEXT);
 CREATE TABLE produits(id INTEGER PRIMARY KEY, reference TEXT, designation TEXT, unite TEXT);
 CREATE TABLE mouvements_stock(id INTEGER PRIMARY KEY, produit_id INT, emplacement TEXT,
   type_mouvement TEXT, quantite REAL, note TEXT, created_at TEXT, created_by_name TEXT,
@@ -49,13 +50,13 @@ INSERT INTO planning_entries VALUES
   (15,'9932573','9932573','890/0115 - X','890/0115','XEROX','termine','2026-10-10',1,NULL,'2026-10-14T17:00:00',NULL,NULL);
 -- 9932689 : deux fins de prod, la dernière porte le cumul ; entré en deux fois.
 INSERT INTO production_data VALUES
-  (1,'9932689','2026-10-14T12:00:00','89','Machine A',1000000,0,0),
-  (2,'9932689','2026-10-15T10:00:00','89','Machine A',2000000,1,0),
-  (3,'9932700','2026-10-15T10:00:00','89','Machine A',500000,1,0),
-  (4,'9932700','2026-10-15T11:00:00','89','Machine A',900000,1,1),
-  (5,'9932800','2026-10-15T06:00:00','01','Machine A',0,NULL,0),
-  (6,'9932648 + Stock','2026-10-09T10:22:45','89','Machine A',363000,1,0),
-  (7,'9932573','2026-10-14T17:00:00','89','Machine A',1500000,1,0);
+  (1,'9932689','2026-10-14T12:00:00','89','Machine A',1000000,0,0,NULL),
+  (2,'9932689','2026-10-15T10:00:00','89','Machine A',2000000,1,0,NULL),
+  (3,'9932700','2026-10-15T10:00:00','89','Machine A',500000,1,0,NULL),
+  (4,'9932700','2026-10-15T11:00:00','89','Machine A',900000,1,1,NULL),
+  (5,'9932800','2026-10-15T06:00:00','01','Machine A',0,NULL,0,NULL),
+  (6,'9932648 + Stock','2026-10-09T10:22:45','89','Machine A',363000,1,0,NULL),
+  (7,'9932573','2026-10-14T17:00:00','89','Machine A',1500000,1,0,NULL);
 INSERT INTO mouvements_stock VALUES
   (1,1,'Z1','entree',1000000,'Production dossier 9932689','2026-10-15T07:00:00','A','9932689'),
   (2,1,'Z1','entree',1000000,'Production dossier 9932689','2026-10-15T11:00:00','A','9932689'),
@@ -86,6 +87,8 @@ ok(d.get("statut") == "ok", "9932689 : entrée 2 M entre le plus grand relevé (
 ok(d.get("qte_entree") == 2000000, "les déplacements ne comptent pas comme entrée")
 ok(d.get("nb_deplacements") == 1 and d.get("derniere_destination") == "A111", "déplacement vers A111 suivi")
 ok(d.get("stock_restant") == 2000000, "stock restant du dossier = lots")
+ok(len((d.get("detail") or {}).get("fins", [])) == 2 and len(d["detail"]["deplacements"]) == 1,
+   "détail : fins de production et déplacements du dossier")
 ok(d.get("qte_of") == 2000000 and d.get("machine") == "Machine A", "OF et machine du planning")
 ok(d.get("fin_prevue") == "2026-10-15T10:00:00", "fin prévue du planning transmise")
 n = L.get("d:9932700") or {}
@@ -143,6 +146,9 @@ ok(y.get("statut") == "depart_prevu", "dossier à livrer avec départ en attente
 w = E.get("1013/0068") or {}
 ok(w.get("statut") == "ok" and w.get("qte_sortie") == 968,
    "BL du 15, sortie du 21 (hors période) : rapprochée du BL à 7 jours près")
+ok([b["bl"] for b in (w.get("detail") or {}).get("bls", [])] == ["9939054"]
+   and (w["detail"]["sorties"][0] or {}).get("bl_jour") == "2026-10-15",
+   "détail : lignes de BL et sorties avec le BL rapproché")
 ok(w.get("nb_sorties") == 1, "la sortie qui corrige une entrée du jour n'est pas une expédition")
 ok("890/0007" not in E, "la date de livraison du planning ne fait pas entrer de ligne")
 sans = flux_expedition(conn, None, "2026-10-14", "2026-10-20")

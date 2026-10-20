@@ -1617,6 +1617,23 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .mon-page .mon-etat-en-cours{--t:var(--accent)}
 .mon-page .mon-etat-bientot{--t:var(--warn)}
 .mon-page .mon-etat-attente{color:var(--text2);background:var(--bg);border:1px solid var(--border)}
+.mon-page .mon-ligne{cursor:pointer}
+.mon-page .mon-ligne.ouvert td{background:color-mix(in srgb,var(--accent) 6%,var(--card));border-bottom-color:transparent}
+.mon-page .mon-det-ligne td{padding:0 14px 16px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--accent) 6%,var(--card));box-shadow:inset 4px 0 0 var(--t,transparent)}
+.mon-page .mon-det{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.mon-page .mon-det-tete{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px;font-size:13px;color:var(--text)}
+.mon-page .mon-det-grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:12px}
+.mon-page .mon-det-sec{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px 12px;min-width:0;overflow-x:auto}
+.mon-page .mon-det-titre{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:6px}
+.mon-page .mon-det-nb{font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-bg);border-radius:10px;padding:0 7px}
+.mon-page .mon-det-total{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:700;color:var(--text)}
+.mon-page .mon-det-vide{padding:4px 0}
+.mon-page .mon-det-table{width:100%;border-collapse:collapse;font-size:12px}
+.mon-page .mon-det-table th{text-align:left;font-size:10.5px;font-weight:600;color:var(--muted);padding:4px 6px;border-bottom:1px solid var(--border);white-space:nowrap}
+.mon-page .mon-det-table td{padding:5px 6px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);color:var(--text);vertical-align:top}
+.mon-page .mon-det-table tr:last-child td{border-bottom:none}
+.mon-page .mon-det-lien{color:var(--accent);font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap}
+.mon-page .mon-det-lien:hover{text-decoration:underline}
 .mon-page .mon-etats{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .mon-page .mon-etats-lib{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-right:4px}
 .mon-page .mon-etat-btn{border:none;font:inherit;font-size:12px;font-weight:700;padding:5px 12px;cursor:pointer;opacity:.75;transition:opacity .15s,box-shadow .15s}
@@ -2533,7 +2550,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : onglet, filtres, tri, objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/stock_url.js?v=5"></script>
+<script src="/static/stock_url.js?v=6"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=13"></script>
@@ -4375,6 +4392,7 @@ function goToTab(tab) {
       S.monitoring.query = '';
       S.monitoring.filterStatut = null;
       S.monitoring.filterEtat = null;
+      S.monitoring.detail = null;
       S.monitoring.monPage = 'production';
       S.monitoring.sortColumn = null;
       S.monitoring.colFiltres = {};
@@ -20121,7 +20139,7 @@ function monPagePills() {
 
 function monResetFiltres() {
   const m = monEnsureState();
-  m.filterStatut = null; m.filterEtat = null; m.query = ''; m.sortColumn = null; m.sortDirection = 'asc'; m.colFiltres = {};
+  m.filterStatut = null; m.filterEtat = null; m.detail = null; m.query = ''; m.sortColumn = null; m.sortDirection = 'asc'; m.colFiltres = {};
   m.data = null; m.cleData = null; m.erreur = null;
 }
 
@@ -20178,6 +20196,122 @@ function renderMonitoringView(fullRebuild) {
   }
   const p = monPeriode();
   if (m.cleData !== m.monPage + '|' + p.du + '|' + p.au) loadMonitoring();
+}
+
+// ── Détail d'une ligne (clic) ───────────────────────────────────
+// Une ligne dépliée à la fois ; sa clé est dans l'adresse (detail=).
+function monToggleDetail(cle) {
+  const m = monEnsureState();
+  m.detail = m.detail === cle ? null : cle;
+  renderMonitoringView(false);
+}
+
+// Mini-tableau d'une section : colonnes [libellé, (x) => contenu, num?].
+function monSection(titre, lignes, cols, vide, extra) {
+  const sec = el('div', { cls: 'mon-det-sec' },
+    el('div', { cls: 'mon-det-titre' }, titre,
+      el('span', { cls: 'mon-det-nb' }, String((lignes || []).length)), extra || null));
+  if (!lignes || !lignes.length) {
+    sec.appendChild(el('div', { cls: 'mon-vide mon-det-vide' }, vide || 'Rien.'));
+    return sec;
+  }
+  sec.appendChild(el('table', { cls: 'mon-det-table' },
+    el('thead', null, el('tr', null, ...cols.map(c => el('th', { cls: c[2] ? 'mon-num' : '' }, c[0])))),
+    el('tbody', null, ...lignes.map(x => el('tr', null,
+      ...cols.map(c => { const v = c[1](x); return el('td', { cls: c[2] ? 'mon-num' : '' }, v == null || v === '' ? '—' : v); }))))));
+  return sec;
+}
+
+function monQteExacte(v, unite) {
+  if (v == null) return '—';
+  return fN(v) + (unite ? ' ' + monUnite(unite) : '');
+}
+
+function monTotal(lignes, unite) {
+  const t = (lignes || []).reduce((a, x) => a + (Number(x.quantite) || 0), 0);
+  return t ? el('span', { cls: 'mon-det-total' }, 'total ' + monQteExacte(t, unite)) : null;
+}
+
+function monLienProduit(ref) {
+  if (!ref) return null;
+  return el('a', { cls: 'mon-det-lien', href: '/stock?tab=produits-finis&ref=' + encodeURIComponent(ref) },
+    'Fiche produit ' + ref + ' ↗');
+}
+
+function monDetailProduction(l) {
+  const d = l.detail || {};
+  const u = l.unite;
+  return el('div', { cls: 'mon-det' },
+    el('div', { cls: 'mon-det-tete' },
+      el('span', null, el('strong', null, l.no_dossier || '—'), ' · ', l.reference || '—',
+        l.designation ? el('span', { cls: 'mon-sous' }, ' · ' + l.designation) : null),
+      monLienProduit(l.reference)),
+    el('div', { cls: 'mon-det-grille' },
+      monSection('Fins de production', d.fins, [
+        ['Date', x => fDateTime(x.date)],
+        ['Machine', x => x.machine],
+        ['Opérateur', x => x.operateur],
+        ['Quantité', x => monQteExacte(x.quantite, 'étiquette'), true],
+        ['Clôture', x => x.cloture ? el('span', { cls: 'mon-txt-ok' }, '✓ clôturé') : el('span', { cls: 'mon-sous' }, 'à reprendre')],
+      ], 'Aucune fin de production saisie.'),
+      monSection('Entrées MyStock', d.entrees, [
+        ['Date', x => fDateTime(x.date)],
+        ['Emplacement', x => x.emplacement],
+        ['Quantité', x => monQteExacte(x.quantite, u), true],
+        ['Par', x => x.par],
+        ['Note', x => [x.note, x.rattachement === 'reference' ? '(rapprochée par la réf.)' : x.rattachement === 'of' ? '(rapprochée par l\'OF)' : ''].filter(Boolean).join(' ')],
+      ], 'Aucune entrée en stock.', monTotal(d.entrees, u)),
+      monSection('Déplacements', d.deplacements, [
+        ['Date', x => fDateTime(x.date)],
+        ['Vers', x => x.vers],
+        ['Quantité', x => monQteExacte(x.quantite, u), true],
+        ['Depuis', x => String(x.note || '').replace(/^Déplacement depuis\s*/, '')],
+      ], 'Aucun déplacement.'),
+      monSection('Stock restant du dossier', d.restants, [
+        ['Emplacement', x => x.emplacement],
+        ['Quantité', x => monQteExacte(x.quantite, u), true],
+      ], 'Plus rien en stock pour ce dossier.', monTotal(d.restants, u)),
+    ));
+}
+
+function monDetailExpedition(l) {
+  const d = l.detail || {};
+  const u = l.unite;
+  return el('div', { cls: 'mon-det' },
+    el('div', { cls: 'mon-det-tete' },
+      el('span', null, el('strong', null, l.reference || '—'),
+        l.designation ? el('span', { cls: 'mon-sous' }, ' · ' + l.designation) : null),
+      monLienProduit(l.reference)),
+    el('div', { cls: 'mon-det-grille' },
+      monSection('BL RVGI', d.bls, [
+        ['BL', x => x.bl],
+        ['Date', x => fD(x.jour)],
+        ['Client', x => x.client],
+        ['Commande', x => x.commande],
+        ['Quantité', x => monQteExacte(x.quantite, u), true],
+      ], monEnsureState().data && monEnsureState().data.miroir === false ? 'Miroir RVGI absent.' : 'Aucun BL sur la période.', monTotal(d.bls, u)),
+      monSection('Sorties MyStock', d.sorties, [
+        ['Date', x => fDateTime(x.date)],
+        ['Emplacement', x => x.emplacement],
+        ['Quantité', x => monQteExacte(x.quantite, u), true],
+        ['BL rapproché', x => x.bl_jour ? 'BL du ' + fD(x.bl_jour) : el('span', { cls: 'mon-sous' }, 'aucun')],
+        ['Par', x => x.par],
+        ['Note', x => x.note],
+      ], 'Aucune sortie rapprochée.', monTotal(d.sorties, u)),
+      monSection('Départs MyExpé', l.departs, [
+        ['Date', x => fD(x.jour)],
+        ['Statut', x => el('span', { cls: 'mon-depart' }, el('span', { cls: 'mon-point mon-bg-' + (x.statut === 'valide' ? 'ok' : 'neutre') }), MON_STATUT_DEPART[x.statut] || x.statut || '—')],
+        ['Transporteur', x => x.transporteur],
+        ['BL', x => x.no_bl],
+        ['Dossier', x => x.no_dossier],
+        ['', x => el('a', { cls: 'mon-det-lien', href: '/expe?onglet=suivi_departs' + (x.jour ? '&jour=' + encodeURIComponent(x.jour) : '') + '&depart=' + encodeURIComponent(x.id) }, 'Ouvrir ↗')],
+      ], 'Aucun départ MyExpé.'),
+      monSection('Dossiers de production', l.dossiers, [
+        ['Dossier', x => x.no_dossier],
+        ['Livraison prévue', x => x.date_livraison ? fD(x.date_livraison) : ''],
+        ['Planning', x => MON_STATUT_PLANNING[x.statut] || x.statut],
+      ], 'Aucun dossier relié.'),
+    ));
 }
 
 function buildMonitoring() {
@@ -20357,8 +20491,19 @@ function renderMonitoringResults(container) {
         : total ? 'Aucune ligne pour ces filtres.'
         : 'Aucun mouvement sur la période.')));
   } else {
-    rows.forEach(l => tbody.appendChild(el('tr', { cls: 'mon-ligne mon-ligne-' + monTon(m.monPage, l.statut) },
-      ...cols.map(c => c.td(l)))));
+    rows.forEach(l => {
+      const ouvert = m.detail === l.cle;
+      tbody.appendChild(el('tr', {
+        cls: 'mon-ligne mon-ligne-' + monTon(m.monPage, l.statut) + (ouvert ? ' ouvert' : ''),
+        title: ouvert ? 'Replier' : 'Voir le détail',
+        on: { click: (e) => { if (e.target.closest('a,button,input')) return; monToggleDetail(l.cle); } },
+      }, ...cols.map(c => c.td(l))));
+      if (ouvert) {
+        tbody.appendChild(el('tr', { cls: 'mon-det-ligne mon-ligne-' + monTon(m.monPage, l.statut) },
+          el('td', { attrs: { colspan: String(cols.length) } },
+            m.monPage === 'expedition' ? monDetailExpedition(l) : monDetailProduction(l))));
+      }
+    });
   }
   table.appendChild(tbody);
   card.appendChild(el('div', { cls: 'mon-table-wrap' }, table));
