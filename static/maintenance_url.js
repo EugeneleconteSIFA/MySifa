@@ -12,7 +12,9 @@
  * filt-*, préférences localStorage) :
  *   vue          maintenance · planning · controles · operations · op-tasks ·
  *                op-planning (toujours écrite : le défaut dépend du rôle)
- *   Suivi        machine, categorie (entretien par défaut), statut
+ *   Suivi        machine, categorie (entretien par défaut), statut,
+ *                position.<pièce>=<position> (Bande / Rive… des pièces d'usure,
+ *                écrite quand elle n'est pas la première déclarée)
  *   Planning     sous=historique ; calendrier : cal (month, week, day), date
  *   Opérations   sous=liste ; historique : type_op, operateur, machine, du,
  *                au, nature (kind), tri ; liste : machine, tri,
@@ -67,6 +69,11 @@ const _MT_OUVREURS = [
   ['openMaintForm', 'code', a => a[0] || 'nouveau', () => closeMaintForm()],
 ];
 const _MT_CLES = [...new Set(_MT_OUVREURS.map(o => o[1]))];
+
+// Pièces d'usure affichées (cartes du Suivi machine).
+function _mtPieces() {
+  return [...new Set([...document.querySelectorAll('.maint-wearpart[data-wearpart]')].map(el => el.getAttribute('data-wearpart')))];
+}
 
 function _mtVisibles() { return [...document.querySelectorAll(_MT_VISIBLE)]; }
 
@@ -139,6 +146,12 @@ function maintenanceParams() {
     p.machine = getMaintMachine();
     const c = getMaintCatFilter(); if (c !== 'entretien') p.categorie = c;
     const s = getMaintStatusFilter(); if (s !== 'all') p.statut = s;
+    _mtPieces().forEach(pc => {
+      const pos = getWearPartPos(pc, p.machine);
+      const def = _wearPartDef(pc);
+      const premiere = def && (def.positions || [])[0];
+      if (pos && pos !== 'single' && pos !== premiere) p['position.' + pc] = pos;
+    });
   } else if (v === 'planning') {
     const sous = _mtActif('[data-plan-subtab]') || 'calendrier';
     if (sous !== 'calendrier') { p.sous = sous; nav += '/' + sous; }
@@ -217,15 +230,24 @@ function _mtTri(etat, v, defChamp, defSens) {
   etat.sortBy = m[1]; etat.sortDir = m[2];
   return true;
 }
-// Pose une valeur dans un champ de filtre, une fois ses options chargées.
-async function _mtChamp(id, v) {
+// Pose une valeur dans un champ de filtre. Les listes « Nom de l'opération »,
+// « Opérateur »… sont remplies à partir des saisies chargées : tant que la
+// valeur n'y figure pas, on régénère les options (rafraichir) et on attend
+// l'arrivée des données — posée trop tôt, la valeur se perdait.
+async function _mtChamp(id, v, rafraichir) {
   const el = document.getElementById(id);
   if (!el) return false;
   v = v || '';
   if (el.value === v) return false;
-  if (el.tagName === 'SELECT' && v) await _mtAttendre(() => [...el.options].some(o => o.value === v), 20);
+  if (el.tagName === 'SELECT' && v) {
+    await _mtAttendre(() => {
+      if ([...el.options].some(o => o.value === v)) return true;
+      try { if (rafraichir) rafraichir(); } catch (e) {}
+      return [...el.options].some(o => o.value === v);
+    }, 60);
+  }
   el.value = v;
-  return true;
+  return el.value === v;
 }
 
 const _MT_REOUVRIR = {
@@ -283,6 +305,19 @@ async function maintenanceAllerUrl(complet) {
     const m = u.get('machine', null); if (m && m !== getMaintMachine()) setMaintMachine(m);
     const c = ou('categorie', 'entretien'); if (c !== undefined && c !== getMaintCatFilter()) setMaintCatFilter(c);
     const s = ou('statut', 'all'); if (s !== undefined && s !== getMaintStatusFilter()) setMaintStatusFilter(s);
+    // Positions des pièces d'usure, une fois les cartes dessinées.
+    const voulues = {};
+    u.brut.forEach((val, k) => { if (k.indexOf('position.') === 0) voulues[k.slice(9)] = val; });
+    if (Object.keys(voulues).length || complet) {
+      await _mtAttendre(() => _mtPieces().length, 20);
+      const machine = getMaintMachine();
+      _mtPieces().forEach(pc => {
+        const def = _wearPartDef(pc);
+        if (!def || def.no_position) return;
+        const pos = voulues[pc] || (complet ? (def.positions || [])[0] : null);
+        if (pos && pos !== getWearPartPos(pc, machine)) setWearPartPos(pc, pos);
+      });
+    }
   } else if (v === 'planning') {
     const sous = ou('sous', 'calendrier');
     if (sous !== undefined && sous !== (_mtActif('[data-plan-subtab]') || 'calendrier')) setPlanSubtab(sous);
@@ -312,7 +347,7 @@ async function maintenanceAllerUrl(complet) {
       let ch = false;
       const champs = [['filt-operations-kind', 'nature', 'all'], ['filt-operations-type', 'type_op', ''], ['filt-operations-operateur', 'operateur', ''],
                       ['filt-operations-machine', 'machine', ''], ['filt-operations-date-from', 'du', ''], ['filt-operations-date-to', 'au', '']];
-      for (const [id, k, def] of champs) { const x = ou(k, def); if (x !== undefined && await _mtChamp(id, x)) ch = true; }
+      for (const [id, k, def] of champs) { const x = ou(k, def); if (x !== undefined && await _mtChamp(id, x, refreshOpsFiltersOptions)) ch = true; }
       if (u.a('tri') || complet) { if (_mtTri(OPS_STATE, u.get('tri'), 'date_saisie', 'desc')) ch = true; }
       if (ch) renderOps();
     }
@@ -326,7 +361,7 @@ async function maintenanceAllerUrl(complet) {
       let ch = false;
       const champs = [['filt-controles-type', 'type_ctrl'], ['filt-controles-operateur', 'operateur'], ['filt-controles-machine', 'machine'],
                       ['filt-controles-conformite', 'conformite'], ['filt-controles-date-from', 'du'], ['filt-controles-date-to', 'au']];
-      for (const [id, k] of champs) { const x = ou(k, ''); if (x !== undefined && await _mtChamp(id, x)) ch = true; }
+      for (const [id, k] of champs) { const x = ou(k, ''); if (x !== undefined && await _mtChamp(id, x, refreshCtrlFiltersOptions)) ch = true; }
       const auto = ou('auto', '0');
       if (auto !== undefined && (auto === '1') !== ctrlLoadShowAutoClose()) { ctrlSaveShowAutoClose(auto === '1'); updateAutoCloseToggleUI(); ch = true; }
       if (u.a('tri') || complet) { if (_mtTri(CTRL_STATE, u.get('tri'), 'date_saisie', 'desc')) ch = true; }
