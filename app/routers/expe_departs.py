@@ -37,6 +37,8 @@ from config import (
 from app.services import expe_evenements as expe_ev
 from app.services import transport_planning as tp
 from app.services import expe_carburant, expe_notes, expe_regions
+from app.services import expe_devis_revision as devis_rev
+from app.services import expe_bl_arc
 from app.services.expe_transporteurs_seed import seed_expe_transporteurs_if_empty
 from database import get_db
 from services.auth_service import get_current_user, user_can_write_expe, user_has_app_access
@@ -1097,7 +1099,8 @@ def list_departs_jour(
                         LOWER(COALESCE(d.transporteur, '')) ASC,
                         d.id ASC""",
         ).fetchall()
-    return [_depart_dict(r) for r in rows]
+    # Badge BL × ARC du suivi : une seule lecture du miroir pour tous les départs.
+    return expe_bl_arc.annoter([_depart_dict(r) for r in rows])
 
 
 @router.post("/departs")
@@ -4127,8 +4130,9 @@ def modifier_demande_devis(request: Request, demande_id: int, body: dict = Body(
             raise HTTPException(
                 status_code=409,
                 detail=(
-                    "Des demandes de tarif sont déjà parties : l'entête ne peut plus "
-                    "changer. Seule la date limite reste modifiable."
+                    "Des demandes de tarif sont déjà parties : la modification passe "
+                    "par « Modifier et prévenir », qui renvoie la demande à jour aux "
+                    "transporteurs."
                 ),
             )
         for champ in _DEVIS_CHAMPS_EDITABLES:
@@ -4164,6 +4168,141 @@ def modifier_demande_devis(request: Request, demande_id: int, body: dict = Body(
         request, user, "UPDATE", f"Demande devis {demande.get('reference') or demande_id}"
     )
     return dict(row)
+
+
+@router.post("/devis/demandes/{demande_id}/reviser")
+def reviser_demande_devis(request: Request, demande_id: int, body: dict = Body(...)):
+    """Modifie une demande déjà partie et prévient les transporteurs sollicités.
+
+    Remplace « clôturer puis dupliquer » : la demande garde sa référence, ses
+    offres et son historique. Le classement des champs (renvoi, information,
+    interne) vit dans `expe_devis_revision` ; ici on écrit, puis on envoie un
+    email par destinataire déjà sollicité, avec les champs changés en tête.
+
+    Corps : les champs de l'entête (mêmes clés que le PUT) et `message`,
+    facultatif, ajouté en tête de l'email.
+    """
+    user = _require_expe_write(request)
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+    email_user = (user.get("email") or user.get("identifiant") or "").strip() or None
+    reply_to = (EXPE_DEVIS_FROM or "").strip() or None
+    cc_devis = _devis_cc(user)
+    message = (body.get("message") or "").strip() or None
+    if message and len(message) > 2000:
+        raise HTTPException(status_code=400, detail="Message trop long — 2 000 caractères au plus.")
+    entete = {k: body[k] for k in devis_rev.CHAMPS if k in body}
+    if "type_palette" in entete:
+        entete["type_palette"] = _normalize_type_palette(entete["type_palette"])
+    if "type_envoi" in entete:
+        entete["type_envoi"] = (str(entete["type_envoi"] or "").strip() or "messagerie")
+
+    envois_ok: list[str] = []
+    envois_ko: list[str] = []
+    with get_db() as conn:
+        demande = _require_demande_ouverte(conn, demande_id)
+        if not devis_rev.deja_envoyee(conn, demande_id):
+            raise HTTPException(
+                status_code=409,
+                detail="Aucune demande n'est encore partie : enregistrer la modification sans prévenir.",
+            )
+        try:
+            chg = devis_rev.changements(demande, entete)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        if any(c["champ"] in ("code_postal_destination", "client") and not c["apres"] for c in chg):
+            raise HTTPException(status_code=400, detail="Client et code postal obligatoires.")
+        if not chg:
+            raise HTTPException(status_code=400, detail="Aucun champ modifié.")
+
+        res = devis_rev.appliquer(
+            conn, demande=demande, chg=chg, now=now, email=email_user, message=message
+        )
+        demande_maj = dict(
+            conn.execute("SELECT * FROM expe_demandes_devis WHERE id=?", (demande_id,)).fetchone()
+        )
+        if res["mode"] in (devis_rev.MODE_RECHIFFRAGE, devis_rev.MODE_INFORMATION):
+            modif = {"mode": res["mode"], "changements": devis_rev.visibles(chg)}
+            for rep in devis_rev.destinataires(conn, demande_id):
+                reponse_id = int(rep["id"])
+                nom = rep.get("nom_transporteur") or rep.get("destinataire_email")
+                email_dest = (rep.get("destinataire_email") or "").strip()
+                token_row = conn.execute(
+                    "SELECT token FROM expe_portal_transporteurs WHERE LOWER(email)=LOWER(?) AND actif=1 LIMIT 1",
+                    (email_dest,),
+                ).fetchone()
+                ok = False
+                langue = _devis_langue_destinataire(conn, rep)
+                px = None
+                if token_row and token_row["token"]:
+                    portail_lien = f"{public_base_url()}/portail/expe/{token_row['token']}"
+                    px = expe_ev.url_pixel(expe_ev.token_pixel(conn, reponse_id), "rev")
+                    sujet, corps = email_expe_rfq_transport(
+                        demande=demande_maj,
+                        user=user,
+                        portail_lien=portail_lien,
+                        pixel_url=px,
+                        langue=langue,
+                        message_perso=message,
+                        date_limite=(demande_maj.get("date_limite") or None),
+                        modification=modif,
+                    )
+                    ok = send_email(
+                        to=email_dest,
+                        subject=sujet,
+                        html_body=corps,
+                        reply_to=reply_to,
+                        cc=cc_devis,
+                        from_upn=EXPE_DEVIS_FROM,
+                    )
+                expe_ev.log_evenement(
+                    conn,
+                    reponse_id=reponse_id,
+                    demande_id=demande_id,
+                    canal=expe_ev.CANAL_EMAIL,
+                    type_evenement=(
+                        expe_ev.EV_EMAIL_MODIFICATION if ok else expe_ev.EV_EMAIL_ECHEC
+                    ),
+                    date=now,
+                    fiable=bool(ok),
+                    motif=(
+                        None if ok
+                        else ("envoi refusé par le fournisseur d'email" if token_row
+                              else "aucun accès portail pour cette adresse")
+                    ),
+                    meta={
+                        "destinataire": email_dest,
+                        "suivi": bool(px),
+                        "langue": langue,
+                        "revision": res["revision"],
+                        "mode": res["mode"],
+                    },
+                )
+                (envois_ok if ok else envois_ko).append(nom)
+            devis_rev.bilan_envoi(conn, res["revision_id"], len(envois_ok), len(envois_ko))
+        conn.commit()
+
+    libelle_mode = {
+        devis_rev.MODE_RECHIFFRAGE: f"révision {res['revision']}",
+        devis_rev.MODE_INFORMATION: "information",
+        devis_rev.MODE_INTERNE: "interne",
+    }.get(res["mode"], "")
+    _log_devis(
+        request,
+        user,
+        "UPDATE",
+        f"Demande devis {demande.get('reference') or demande_id} modifiée après envoi · "
+        f"{libelle_mode} · {', '.join(c['champ'] for c in chg)} · "
+        f"{len(envois_ok)} OK / {len(envois_ko)} KO",
+    )
+    return {
+        "demande": demande_maj,
+        "mode": res["mode"],
+        "revision": res["revision"],
+        "envoyes": len(envois_ok),
+        "echecs": len(envois_ko),
+        "destinataires_ok": envois_ok,
+        "destinataires_ko": envois_ko,
+    }
 
 
 @router.patch("/devis/demandes/{demande_id}/date-limite")
@@ -4557,10 +4696,12 @@ def list_demandes_devis(request: Request, statut: str = "ouverte"):
                       THEN 1 ELSE 0 END) AS envoyes,
                   SUM(CASE WHEN statut IN ('recue','retenue') THEN 1 ELSE 0 END) AS recues,
                   SUM(CASE WHEN statut='sans_suite' THEN 1 ELSE 0 END) AS sans_suite,
-                  SUM(CASE WHEN statut='retenue' THEN 1 ELSE 0 END) AS retenues
+                  SUM(CASE WHEN statut='retenue' THEN 1 ELSE 0 END) AS retenues,
+                  SUM(CASE WHEN statut='recue' AND prix IS NOT NULL
+                            AND COALESCE(revision_offre,0) < ? THEN 1 ELSE 0 END) AS a_confirmer
                 FROM expe_devis_reponses WHERE demande_id=?
                 """,
-                (dd["id"],),
+                (int(dd.get("revision") or 0), dd["id"]),
             ).fetchone()
             dd["nb_envoyes"] = counts["envoyes"] or 0
             dd["nb_recus"] = counts["recues"] or 0
@@ -4569,6 +4710,9 @@ def list_demandes_devis(request: Request, statut: str = "ouverte"):
             # silences — c'est le moment d'en solliciter d'autres.
             dd["nb_sans_suite"] = counts["sans_suite"] or 0
             dd["nb_retenus"] = counts["retenues"] or 0
+            # Offres reçues sur une révision antérieure : toujours comptées
+            # dans `nb_recus` (le prix existe), mais à faire confirmer.
+            dd["nb_a_confirmer"] = counts["a_confirmer"] or 0
             pj = conn.execute(
                 "SELECT COUNT(*) AS n FROM expe_devis_pieces_jointes WHERE demande_id=?",
                 (dd["id"],),
@@ -4594,6 +4738,8 @@ def get_demande_devis(request: Request, demande_id: int):
         ).fetchall()
         engagement = expe_ev.resume_par_reponse(conn, demande_id)
         pieces_jointes = _devis_pj_list(conn, demande_id)
+        revisions = devis_rev.historique(conn, demande_id)
+        deja_envoyee = devis_rev.deja_envoyee(conn, demande_id)
 
     reponses_out = []
     for r in reponses:
@@ -4602,11 +4748,14 @@ def get_demande_devis(request: Request, demande_id: int):
         # suivi, il n'a rien à faire dans le JSON d'une page d'administration.
         d.pop("token_pixel", None)
         d["engagement"] = engagement.get(int(d["id"]), {})
+        d["a_confirmer"] = devis_rev.offre_a_confirmer(d, dict(demande))
         reponses_out.append(d)
     return {
         "demande": dict(demande),
         "reponses": reponses_out,
         "pieces_jointes": pieces_jointes,
+        "revisions": revisions,
+        "deja_envoyee": deja_envoyee,
     }
 
 
@@ -5131,7 +5280,9 @@ def saisir_reponse_devis(request: Request, reponse_id: int, body: dict = Body(..
             conn.execute(
                 """
                 UPDATE expe_devis_reponses
-                SET prix=?, delai_jours=?, commentaire=?, statut=?, recu_at=?
+                SET prix=?, delai_jours=?, commentaire=?, statut=?, recu_at=?,
+                    revision_offre=(SELECT COALESCE(revision,0) FROM expe_demandes_devis
+                                    WHERE id=expe_devis_reponses.demande_id)
                 WHERE id=?
                 """,
                 (prix, delai, commentaire, statut, now, reponse_id),
@@ -5817,10 +5968,23 @@ def relancer_destinataire_devis(request: Request, reponse_id: int, body: dict = 
             raise HTTPException(status_code=404, detail="Destinataire introuvable")
         rep = dict(rep)
         demande = _require_demande_ouverte(conn, int(rep["demande_id"]))
-        if (rep.get("statut") or "") in ("recue", "retenue", "sans_suite"):
+        # Une offre « à confirmer » a été donnée sur une version antérieure :
+        # la relancer est précisément ce qu'on veut, et le mail rappelle ce
+        # qui a changé.
+        a_confirmer = devis_rev.offre_a_confirmer(rep, demande)
+        if (rep.get("statut") or "") in ("recue", "retenue", "sans_suite") and not a_confirmer:
             raise HTTPException(
                 status_code=409, detail="Ce transporteur a déjà répondu."
             )
+        modif_relance = None
+        if a_confirmer:
+            for r_ in devis_rev.historique(conn, int(rep["demande_id"])):
+                if r_["rechiffrage"]:
+                    modif_relance = {
+                        "mode": devis_rev.MODE_RECHIFFRAGE,
+                        "changements": r_["changements"],
+                    }
+                    break
         email_dest = (rep.get("destinataire_email") or "").strip()
         if not email_dest or "@" not in email_dest:
             raise HTTPException(
@@ -5849,6 +6013,7 @@ def relancer_destinataire_devis(request: Request, reponse_id: int, body: dict = 
             # La relance sert précisément à rappeler l'échéance : l'omettre
             # ferait un mail qui insiste sans dire jusqu'à quand.
             date_limite=(demande.get("date_limite") or None),
+            modification=modif_relance,
         )
         ok = send_email(
             to=email_dest,

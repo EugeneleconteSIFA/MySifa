@@ -23,6 +23,7 @@ from app.web.expe_portail_page import get_portail_404_html, get_portail_html
 from app.services.email_service import email_expe_reponse_recue, send_email
 from app.services import expe_evenements as expe_ev
 from app.services import expe_carburant as carb
+from app.services import expe_devis_revision as devis_rev
 from app.services.auth_service import get_optional_user
 
 logger = logging.getLogger(__name__)
@@ -339,7 +340,10 @@ def portail_expe_data(request: Request, token: str):
               d.date_limite,
               d.reference,
               d.statut AS demande_statut,
+              d.revision,
+              d.revise_le,
               r.id AS reponse_id,
+              r.revision_offre,
               r.nom_transporteur,
               r.prix,
               r.delai_jours,
@@ -370,6 +374,20 @@ def portail_expe_data(request: Request, token: str):
         # pouvait pas consulter le plan de chargement qu'on lui avait préparé,
         # et devait le redemander par mail.
         for dem in demandes:
+            # Demande modifiée après envoi : le transporteur voit ce qui a
+            # changé, et une offre donnée sur l'ancienne version repasse dans
+            # « À répondre » jusqu'à ce qu'il la confirme ou la révise.
+            dem["a_confirmer"] = devis_rev.offre_a_confirmer(dem, dem)
+            der = devis_rev.derniere(conn, int(dem["demande_id"]))
+            dem["modification"] = (
+                {
+                    "date": der["created_at"],
+                    "rechiffrage": der["rechiffrage"],
+                    "changements": der["changements"],
+                }
+                if der
+                else None
+            )
             dem["pieces_jointes"] = [
                 {"id": int(p["id"]), "filename": p["filename"], "taille_octets": p["taille_octets"]}
                 for p in conn.execute(
@@ -516,7 +534,9 @@ def portail_expe_repondre(
             """
             UPDATE expe_devis_reponses
             SET prix=?, delai_jours=?, commentaire=?, statut='recue', recu_at=?,
-                destinataire_email=COALESCE(NULLIF(TRIM(destinataire_email),''), ?)
+                destinataire_email=COALESCE(NULLIF(TRIM(destinataire_email),''), ?),
+                revision_offre=(SELECT COALESCE(revision,0) FROM expe_demandes_devis
+                                WHERE id=expe_devis_reponses.demande_id)
             WHERE id=?
             """,
             (prix, delai, commentaire, now, email, int(rep["id"])),

@@ -191,6 +191,18 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     .offer-sep{color:var(--muted)}
     .offer-c{font-size:12px;color:var(--text2);margin-top:6px;line-height:1.5}
     .btn-sm{padding:6px 12px;font-size:12px;margin-top:10px}
+    /* Demande modifiée après envoi : l'ancienne valeur barrée, la nouvelle à
+       côté, pour que le transporteur voie ce qui change sans relire l'email. */
+    .modif{padding:10px 16px;border-bottom:1px solid var(--border);
+      background:color-mix(in srgb,var(--warn) 9%,transparent)}
+    .modif-l{display:block;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
+      color:var(--warn);margin-bottom:5px}
+    .modif-r{font-size:13px;color:var(--text2);line-height:1.6}
+    .modif-r s{color:var(--muted)}
+    .modif-r b{color:var(--text)}
+    .offer-confirm{background:color-mix(in srgb,var(--warn) 9%,transparent)}
+    .offer-confirm .offer-v{color:var(--text2)}
+    .offer-btns{display:flex;gap:8px;flex-wrap:wrap}
     .offer .btn-ghost{background:var(--card)}
     .sect{padding:12px 16px;border-bottom:1px solid var(--border)}
     .sect-t{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
@@ -458,6 +470,21 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     document.getElementById('ov').style.display='flex';
     setTimeout(()=>{ document.getElementById('prix').focus(); },0);
   }
+  // Confirmer = redéposer la même offre sur la version à jour. Le serveur
+  // enregistre alors la révision sur laquelle elle porte.
+  async function confirmerOffre(it,btn){
+    if(btn) btn.disabled=true;
+    try{
+      await api('/api/portail/expe/'+encodeURIComponent(TOKEN)+'/demandes/'+it.demande_id+'/repondre', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({reponse_id: it.reponse_id, prix: it.prix,
+          delai_jours: it.delai_jours, commentaire: it.commentaire||null})
+      });
+      showToast(t('toastConfirmed'),'ok');
+      await load();
+    }catch(e){ if(btn) btn.disabled=false; showToast(e.message||t('error'),'bad'); }
+  }
   function closeModal(){
     document.getElementById('ov').style.display='none';
     S.editing=null; S.pendingFiles=[];
@@ -486,7 +513,9 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     // A repondre : l'echeance la plus proche en tete, les demandes sans
     // echeance ensuite, par date de creation. Le reste garde l'ordre serveur
     // (plus recente d'abord).
-    const aFaire=rows.filter(function(it){ return !estClose(it) && it.prix==null; })
+    // Une offre « à confirmer » (donnée avant une modification de la
+    // demande) revient dans « À répondre » : c'est une action attendue.
+    const aFaire=rows.filter(function(it){ return !estClose(it) && (it.prix==null || it.a_confirmer); })
       .sort(function(a,b){
         const da=(a.date_limite||'').slice(0,10), db=(b.date_limite||'').slice(0,10);
         if(da && db && da!==db) return da<db?-1:1;
@@ -494,7 +523,7 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
         if(db && !da) return 1;
         return (a.created_at||'')<(b.created_at||'')?-1:1;
       });
-    const envoyees=rows.filter(function(it){ return !estClose(it) && it.prix!=null; });
+    const envoyees=rows.filter(function(it){ return !estClose(it) && it.prix!=null && !it.a_confirmer; });
     const closes=rows.filter(estClose);
 
     const section=function(titre, items, opts){
@@ -665,9 +694,41 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
         +'<span class="dl-v">'+esc(dl)+'</span></div>';
     }
 
+    // ── Modification après envoi : ce qui a changé ──
+    let modifNote='';
+    const mo=it.modification;
+    if(mo && !isClosed && (mo.changements||[]).length){
+      const lib={code_postal_destination:t('destination'), type_envoi:t('shipmentType'),
+        poids_total_kg:t('weight'), nb_palette:t('pallets'), type_palette:t('palletType'),
+        contraintes:t('constraints')};
+      const val=function(ch,v){
+        if(v==null||v==='') return t('dash');
+        if(ch==='type_envoi') return typeLabel(v);
+        if(ch==='type_palette'){ const k='pallet_'+String(v).toLowerCase(); return t(k)!==k?t(k):String(v); }
+        if(ch==='poids_total_kg') return v+' kg';
+        return String(v);
+      };
+      const lignes=(mo.changements||[]).filter(function(c){ return lib[c.champ]; }).map(function(c){
+        return '<div class="modif-r">'+esc(lib[c.champ])+' : <s>'+esc(val(c.champ,c.avant))+'</s> → <b>'
+          +esc(val(c.champ,c.apres))+'</b></div>';
+      }).join('');
+      modifNote='<div class="modif"><span class="modif-l">'
+        +esc((mo.rechiffrage?t('modifiedOn'):t('infoAddedOn'))+' '+fmtDate(mo.date))+'</span>'+lignes+'</div>';
+    }
+
     // ── Votre offre : le bloc qui appelle à l'action ──
     let offre;
-    if(aRepondu){
+    if(aRepondu && it.a_confirmer && canReply){
+      offre = '<div class="offer offer-confirm">'
+        +'<div class="offer-t">'+esc(t('yourOffer'))+' · '+esc(t('toConfirm'))+'</div>'
+        +'<div class="offer-ask">'+esc(t('prevOffer'))+'</div>'
+        +'<div class="offer-vals"><span class="offer-v">'+Number(it.prix).toFixed(2)+' €</span>'
+        +'<span class="offer-sep">·</span><span class="offer-v">J+'+esc(it.delai_jours)+'</span></div>'
+        +'<div class="offer-btns">'
+        +'<button class="btn btn-accent btn-sm" data-confirm="'+it.demande_id+'">'+esc(t('confirmPrice'))+'</button>'
+        +'<button class="btn btn-ghost btn-sm" data-id="'+it.demande_id+'">'+esc(t('revisePrice'))+'</button>'
+        +'</div></div>';
+    }else if(aRepondu){
       offre = '<div class="offer offer-done">'
         +'<div class="offer-t">'+esc(t('yourOffer'))+'</div>'
         +'<div class="offer-vals"><span class="offer-v">'+Number(it.prix).toFixed(2)+' €</span>'
@@ -703,10 +764,13 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
 
     const wrap=document.createElement('div');
     wrap.innerHTML = '<div class="d'+(isClosed?' closed':'')+'">'
-      +head+facts+note+dlNote+offre+docsHtml+mineHtml+closedNote+cree+'</div>';
+      +head+modifNote+facts+note+dlNote+offre+docsHtml+mineHtml+closedNote+cree+'</div>';
     const node=wrap.firstElementChild;
     node.querySelectorAll('button[data-id]').forEach(function(b){
       b.addEventListener('click',()=>openModal(it));
+    });
+    node.querySelectorAll('button[data-confirm]').forEach(function(b){
+      b.addEventListener('click',()=>confirmerOffre(it,b));
     });
     return node;
   }
