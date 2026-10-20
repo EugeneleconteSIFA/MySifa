@@ -1050,6 +1050,10 @@ def _alertes_dossier(conn, ref: str) -> list:
             "reponses": reponses if isinstance(reponses, dict) else {},
             "commentaire": r["comment"] or "",
             "items": [{"type": it.get("type"), "label": it.get("label"), "unit": it.get("unit"),
+                       "points": it.get("points") or [],
+                       "min": it.get("min"), "max": it.get("max"),
+                       "target_value": it.get("target_value"),
+                       "out_of_range_is_nc": bool(it.get("out_of_range_is_nc", False)),
                        "nc_responses": it.get("nc_responses") or []}
                       for it in items if isinstance(it, dict)],
         })

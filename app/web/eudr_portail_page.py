@@ -72,6 +72,8 @@ _HEAD = """
     .hint{font-size:12.5px;color:var(--muted);margin:-2px 0 8px}
     input[type=text],input[type=email],input[type=tel],input[type=date],textarea{width:100%;padding:11px 13px;border-radius:10px;
       border:1px solid var(--border);background:var(--field);color:var(--text);font:inherit;font-size:14px}
+    /* iOS zoome au focus sous 16 px et ne dezoome plus : 16 px sur ecran tactile. */
+    @media (pointer:coarse){input,textarea{font-size:16px}}
     input:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
     textarea{min-height:76px;resize:vertical}
     .opts{display:flex;flex-direction:column;gap:6px}

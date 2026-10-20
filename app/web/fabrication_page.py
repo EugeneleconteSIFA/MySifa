@@ -1065,7 +1065,7 @@ body.has-topbar .fab-main{padding-top:74px}
   /* Quick-add : input + bouton inline */
   .rep-quick-add{max-width:none!important;padding:0 4px;gap:5px!important}
   .rep-quick-add > div{flex-direction:row!important;gap:5px!important}
-  .rep-quick-add > div input{flex:1!important;min-width:0!important;padding:7px 9px!important;font-size:12px!important}
+  .rep-quick-add > div input{flex:1!important;min-width:0!important;padding:7px 9px!important;font-size:16px!important}
   .rep-quick-add > div button{padding:7px 10px!important;font-size:11px!important;min-width:80px!important;white-space:nowrap}
   /* Compteurs : horizontal partagé, gros et lisibles */
   .rep-compteurs{max-width:none!important;flex-direction:row!important;gap:6px!important;padding:0 4px;margin-top:0!important}
@@ -1336,7 +1336,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/chat_widget.js?v=13"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
-<script src="/static/mysifa_alert_runtime.js?v=2.4.19"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.4.20"></script>
 <!-- Memoire produit : fiche par reference produit, partagee avec MyProd -->
 <script src="/static/mysifa_produit_memoire.js?v=2.7"></script>
 <!-- Au poste, la fiche s'ouvre sur le dernier OF scanne, les precedents a la demande. -->

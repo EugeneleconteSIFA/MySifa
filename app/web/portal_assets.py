@@ -824,7 +824,7 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
     flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;
     height:30px;padding:0 9px;border-radius:8px;
     border:1px solid var(--border);background:var(--bg);
-    font:600 11px/1 inherit;color:var(--text2);cursor:pointer;
+    font-weight:600;font-size:11px;line-height:1;font-family:inherit;color:var(--text2);cursor:pointer;
   }
   .portal-msearch-google:hover{border-color:var(--accent);color:var(--accent)}
   .portal-msearch-google svg{width:14px;height:14px}

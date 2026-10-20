@@ -73,6 +73,11 @@
       /* Mobile : marges réduites, largeur presque pleine */
       '@media(max-width:600px){.ta-sim-alert{padding:14px}.ta-sz-small .ta-sim-alert,.ta-sz-medium .ta-sim-alert,.ta-sz-large .ta-sim-alert{width:calc(100vw - 24px) !important;max-width:calc(100vw - 24px) !important}.ta-sim.ta-pl-top-right .ta-sim-alert{top:12px !important;right:12px !important}}',
 
+      /* Aperçu dans le formulaire d'alerte : même carte, posée dans le flux */
+      '.ta-apercu .ta-sim-alert{position:static !important;transform:none !important;max-height:none;animation:none;box-shadow:0 6px 20px rgba(0,0,0,.12);max-width:100% !important}',
+      '.ta-apercu .ta-sim-min,.ta-apercu .ta-sim-restore-icon{display:none !important}',
+      '.ta-apercu .ta-sim-title{cursor:default}',
+      '.ta-cl-ecart{font-size:11px;font-weight:600;color:var(--muted);min-width:52px;text-align:right;font-variant-numeric:tabular-nums}',
       /* Bouton "Quitter le test" du simulateur — fixed indépendant */
       '.ta-sim-exit{position:fixed;top:12px;left:12px;z-index:2100;background:rgba(0,0,0,.7);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;pointer-events:auto}',
       '.ta-sim-exit:hover{background:rgba(0,0,0,.9)}'
@@ -190,6 +195,13 @@
           min: (it && it.min != null && it.min !== '') ? Number(it.min) : null,
           max: (it && it.max != null && it.max !== '') ? Number(it.max) : null,
           required: !!(it && it.required),
+          // Plusieurs mesures (début / milieu / fin de prod…) : un champ par
+          // libellé, réponse rendue en liste. Vide = une seule valeur.
+          points: (Array.isArray(it && it.points) ? it.points : []).map(x => String(x || '').trim()).filter(Boolean),
+          placeholder: (it && typeof it.placeholder === 'string') ? it.placeholder : '',
+          help: (it && typeof it.help === 'string') ? it.help : '',
+          target_value: (it && it.target_value != null && it.target_value !== '' && isFinite(Number(it.target_value))) ? Number(it.target_value) : null,
+          out_of_range_is_nc: !!(it && it.out_of_range_is_nc),
         };
       }
       const responses = Array.isArray(it && it.responses) ? it.responses.filter(r => typeof r === 'string' && r.trim()) : [];
@@ -207,6 +219,7 @@
         required: !!(it && it.required),
         comment_responses: comResponses,
         other_needs_comment: !!(it && it.other_needs_comment),
+        help: (it && typeof it.help === 'string') ? it.help : '',
       };
     });
     const description = (typeof p.description === 'string') ? p.description : '';
@@ -234,6 +247,17 @@
     }
     inp.style.borderColor = oor ? 'var(--danger)' : 'var(--border)';
     inp.style.color = oor ? 'var(--danger)' : 'var(--text)';
+    // Écart à la cible, affiché à droite de la mesure.
+    const ecartEl = inp.parentElement && inp.parentElement.querySelector('.ta-cl-ecart');
+    const cibleAttr = item.getAttribute('data-cible');
+    if (ecartEl && cibleAttr !== null && cibleAttr !== '') {
+      if (isNaN(v)) { ecartEl.textContent = ''; }
+      else {
+        const e = Math.round((v - parseFloat(cibleAttr)) * 1000) / 1000;
+        ecartEl.textContent = 'écart ' + (e > 0 ? '+' : (e < 0 ? '−' : '')) + String(Math.abs(e)).replace('.', ',');
+        ecartEl.style.color = oor ? 'var(--danger)' : 'var(--muted)';
+      }
+    }
   }
   window._mysifaAlertOnValueInput = _onValueInput;
 
@@ -284,6 +308,12 @@
     }
   }
 
+  // Méthode opératoire saisie par l'admin, affichée sous la question.
+  function _helpHtml(it) {
+    if (!it || !it.help) return '';
+    return '<div style="font-size:12px;color:var(--muted);margin:-2px 0 6px 12px;white-space:pre-wrap;line-height:1.4">' + _esc(it.help) + '</div>';
+  }
+
   function _renderChecklist(cl) {
     if (!cl.enabled || !cl.items.length) return '';
     return '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Points de contrôle</label>'
@@ -292,21 +322,35 @@
             if (it.type === 'value') {
               const unit = it.unit ? '<span style="font-size:12px;color:var(--text2);font-weight:500;min-width:24px">' + _esc(it.unit) + '</span>' : '';
               let hint = '';
+              const _u = it.unit ? ' ' + _esc(it.unit) : '';
+              const _hintParts = [];
               if (it.min != null || it.max != null) {
                 const minStr = (it.min != null) ? String(it.min) : '−∞';
                 const maxStr = (it.max != null) ? String(it.max) : '+∞';
-                hint = '<div style="font-size:10px;color:var(--muted);margin-top:3px">Tolérance : ' + _esc(minStr) + ' à ' + _esc(maxStr) + (it.unit ? ' ' + _esc(it.unit) : '') + '</div>';
+                _hintParts.push('Tolérance : ' + _esc(minStr) + ' à ' + _esc(maxStr) + _u);
               }
+              if (it.target_value != null) _hintParts.push('Cible : ' + _esc(String(it.target_value)) + _u);
+              if (_hintParts.length) hint = '<div style="font-size:10px;color:var(--muted);margin-top:3px">' + _hintParts.join(' · ') + '</div>';
+              const _ecart = (it.target_value != null) ? '<span class="ta-cl-ecart"></span>' : '';
               const _reqStarV = it.required ? '<span style="color:var(--danger);font-weight:700;margin-left:2px" title="Question obligatoire">*</span>' : '';
+              const _ph = _esc(it.placeholder || 'Valeur');
+              const _inp = (sub) => '<input type="number" step="any" inputmode="decimal" class="ta-cl-val" data-point="' + idx + '"' + (sub != null ? ' data-sub="' + sub + '"' : '') + ' placeholder="' + _ph + '" style="flex:1;min-width:0;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box" oninput="window._mysifaAlertOnValueInput(this)">';
+              const _multi = Array.isArray(it.points) && it.points.length > 1;
+              const _champs = _multi
+                ? '<div style="display:flex;flex-direction:column;gap:6px">' + it.points.map((pl, k) =>
+                    '<div style="display:flex;align-items:center;gap:8px">'
+                    + '<span style="flex:0 0 110px;font-size:12px;color:var(--text2);font-weight:600">' + _esc(pl) + '</span>'
+                    + _inp(k) + unit + _ecart
+                    + '</div>').join('') + '</div>'
+                : '<div style="display:flex;align-items:center;gap:8px">' + _inp(null) + unit + _ecart + '</div>';
               return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="value"'
                 + (it.required ? ' data-required="1"' : '')
                 + (it.min != null ? ' data-min="' + _esc(String(it.min)) + '"' : '')
-                + (it.max != null ? ' data-max="' + _esc(String(it.max)) + '"' : '') + '>'
+                + (it.max != null ? ' data-max="' + _esc(String(it.max)) + '"' : '')
+                + (it.target_value != null ? ' data-cible="' + _esc(String(it.target_value)) + '"' : '') + '>'
                 + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + _esc(it.label) + _reqStarV + '</div>'
-                + '<div style="display:flex;align-items:center;gap:8px">'
-                +   '<input type="number" step="any" class="ta-cl-val" data-point="' + idx + '" placeholder="Valeur" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box" oninput="window._mysifaAlertOnValueInput(this)">'
-                +   unit
-                + '</div>'
+                + _helpHtml(it)
+                + _champs
                 + hint
                 + '</div>';
             }
@@ -351,6 +395,7 @@
             const _reqStarC = it.required ? '<span style="color:var(--danger);font-weight:700;margin-left:2px" title="Question obligatoire">*</span>' : '';
             return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice"' + (it.allow_other ? ' data-allow-other="1"' : '') + (it.required ? ' data-required="1"' : '') + '>'
               + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + _esc(it.label) + _reqStarC + '</div>'
+              + _helpHtml(it)
               + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + otherHtml + '</div>'
               + otherArea
               + comArea
@@ -365,8 +410,16 @@
       const idx = item.getAttribute('data-point-idx');
       const t = item.getAttribute('data-type') || 'choice';
       if (t === 'value') {
-        const v = (item.querySelector('.ta-cl-val')?.value || '').trim();
-        if (v !== '') responses[idx] = parseFloat(v);
+        const inputs = Array.from(item.querySelectorAll('.ta-cl-val'));
+        if (inputs.length > 1) {
+          // Plusieurs mesures : liste dans l'ordre des libellés, null pour
+          // une mesure laissée vide.
+          const vals = inputs.map(i => { const v = (i.value || '').trim(); return v === '' ? null : parseFloat(v); });
+          if (vals.some(v => v !== null)) responses[idx] = vals;
+        } else {
+          const v = (item.querySelector('.ta-cl-val')?.value || '').trim();
+          if (v !== '') responses[idx] = parseFloat(v);
+        }
       } else {
         const checks = Array.from(item.querySelectorAll('.ta-cl-resp:checked'));
         if (checks.length) {
@@ -412,8 +465,9 @@
       if (it.getAttribute('data-required') !== '1') continue;
       const t = it.getAttribute('data-type') || 'choice';
       if (t === 'value') {
-        const v = (it.querySelector('.ta-cl-val')?.value || '').trim();
-        if (v === '') return false;
+        for (const inp of it.querySelectorAll('.ta-cl-val')) {
+          if ((inp.value || '').trim() === '') return false;
+        }
       } else {
         if (!it.querySelectorAll('.ta-cl-resp:checked').length) return false;
       }
@@ -722,18 +776,9 @@
     ev.preventDefault();
   }
 
-  function _renderAlert(alert) {
-    const wrap = document.createElement('div');
-    // v2.3.12 : priorité aux valeurs par alerte, fallback aux réglages globaux
-    const _p = alert.placement || _settings.placement || 'top-right';
-    const _s = alert.size || _settings.size || 'medium';
-    wrap.className = 'ta-sim ta-pl-' + _p + ' ta-sz-' + _s;
-    wrap.setAttribute('data-alert-runtime-id', String(alert.id));
-    // v2.4.17 : mémorise le placement sur le wrap pour que les fonctions
-    // drag puissent le passer à _saveAlertPos (invalidation par mismatch).
-    wrap.setAttribute('data-placement', _p);
-    // v2.2.88 : bloquant par alerte (défaut) ; fallback sur le réglage global si présent (rétrocompat).
-    if (alert.block_production || _settings.block_production) wrap.classList.add('ta-blocking');
+  // HTML de la carte d'alerte, partagé par l'affichage réel et l'aperçu
+  // du formulaire d'administration (MysifaAlerts.apercu).
+  function _alertHtml(alert) {
     const machines = alert.target.machines || ['*'];
     const machinesLbl = machines.includes('*') ? 'Toutes les machines' : machines.map(_esc).join(', ');
 
@@ -741,7 +786,7 @@
     const _descHtml = _desc
       ? '<div class="ta-sim-desc" style="font-size:13px;color:var(--text2);line-height:1.5;margin:-8px 0 14px 0;padding:10px 12px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;white-space:pre-wrap">' + _esc(_desc) + '</div>'
       : '';
-    const html = '<div class="ta-sim-alert">'
+    return '<div class="ta-sim-alert">'
       + '<button type="button" class="ta-sim-min" title="Réduire l\'alerte" aria-label="Réduire l\'alerte">'
       +   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>'
       + '</button>'
@@ -760,6 +805,21 @@
           : '')
       + '</div>'
       + '</div>';
+  }
+
+  function _renderAlert(alert) {
+    const wrap = document.createElement('div');
+    // v2.3.12 : priorité aux valeurs par alerte, fallback aux réglages globaux
+    const _p = alert.placement || _settings.placement || 'top-right';
+    const _s = alert.size || _settings.size || 'medium';
+    wrap.className = 'ta-sim ta-pl-' + _p + ' ta-sz-' + _s;
+    wrap.setAttribute('data-alert-runtime-id', String(alert.id));
+    // v2.4.17 : mémorise le placement sur le wrap pour que les fonctions
+    // drag puissent le passer à _saveAlertPos (invalidation par mismatch).
+    wrap.setAttribute('data-placement', _p);
+    // v2.2.88 : bloquant par alerte (défaut) ; fallback sur le réglage global si présent (rétrocompat).
+    if (alert.block_production || _settings.block_production) wrap.classList.add('ta-blocking');
+    const html = _alertHtml(alert);
     wrap.innerHTML = html;
     document.body.appendChild(wrap);
     // v2.3.29 : garde une référence à l'objet alerte sur le wrap pour que
@@ -970,7 +1030,27 @@
     return results;
   }
 
+  // Aperçu dans le formulaire d'administration : la carte réelle, posée dans
+  // `container`, interactive (Valider se débloque comme chez l'opérateur)
+  // mais sans aucun envoi.
+  function apercu(rawAlert, container) {
+    if (!container) return;
+    const alert = _normalizeAlert(rawAlert);
+    const _s = alert.size || 'medium';
+    container.innerHTML = '<div class="ta-apercu ta-sz-' + _s + '">' + _alertHtml(alert) + '</div>';
+    const wrap = container.firstElementChild;
+    wrap._alertRef = alert;
+    const _sync = () => _updateValidateState(wrap, alert);
+    wrap.querySelectorAll('.ta-cl-resp, .ta-cl-val, .ta-cl-com-text').forEach(el => {
+      el.addEventListener('change', _sync);
+      el.addEventListener('input', _sync);
+    });
+    wrap.querySelectorAll('.ta-validate, .ta-dismiss').forEach(b => b.addEventListener('click', (e) => e.preventDefault()));
+    _sync();
+  }
+
   window.MysifaAlerts = {
+    apercu: apercu,
     start: async function() {
       if (_started) return;
       _started = true;

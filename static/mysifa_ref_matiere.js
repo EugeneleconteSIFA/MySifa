@@ -48,7 +48,7 @@
     '  justify-content:center;background:rgba(2,6,23,.62);padding:20px}',
     '.mrm{width:min(680px,96vw);max-height:86vh;display:flex;flex-direction:column;',
     '  background:var(--card,#fff);color:var(--text,#111);border:1px solid var(--border,#dcdfe4);',
-    '  border-radius:14px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.4);font:14px/1.45 inherit}',
+    '  border-radius:14px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.4);font-size:14px;line-height:1.45;font-family:inherit}',
     '.mrm-tete{display:flex;align-items:center;gap:12px;padding:14px 16px;',
     '  border-bottom:1px solid var(--border,#dcdfe4)}',
     '.mrm-tete h2{margin:0;font-size:16px;font-weight:800}',

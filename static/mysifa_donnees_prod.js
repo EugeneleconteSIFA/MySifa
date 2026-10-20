@@ -210,13 +210,21 @@
       items.forEach((it, idx) => {
         const cle = String(idx);
         if (it.type === 'value') {
-          const pts = acks.map(a => ({v: nombreFr((a.reponses || {})[cle]), iso: a.ack_at,
-            t: Date.parse(String(a.ack_at || '').replace(' ', 'T')) || 0, qui: a.user_nom || ''})).filter(p => p.v !== null);
-          if (!pts.length) return;
-          const der = pts[pts.length - 1].v;
-          h += '<div class="dp-al-g"' + teinte() + '><div class="dp-al-g-lib">' + esc(it.label || 'Valeur')
-            + '<span>dernière <b>' + nombre(der) + (it.unit ? ' ' + esc(it.unit) : '') + '</b></span></div>'
-            + courbe(pts, it.unit || '') + '</div>';
+          // Plusieurs mesures (début / milieu / fin…) : une courbe par mesure.
+          const sous = (Array.isArray(it.points) && it.points.length > 1) ? it.points.map((pl, k) => ({pl, k})) : [{pl: '', k: null}];
+          sous.forEach(({pl, k}) => {
+            const pts = acks.map(a => {
+              let r = (a.reponses || {})[cle];
+              if (k !== null) r = Array.isArray(r) ? r[k] : null;
+              return {v: nombreFr(r), iso: a.ack_at,
+                t: Date.parse(String(a.ack_at || '').replace(' ', 'T')) || 0, qui: a.user_nom || ''};
+            }).filter(p => p.v !== null);
+            if (!pts.length) return;
+            const der = pts[pts.length - 1].v;
+            h += '<div class="dp-al-g"' + teinte() + '><div class="dp-al-g-lib">' + esc(it.label || 'Valeur') + (pl ? ' · ' + esc(pl) : '')
+              + '<span>dernière <b>' + nombre(der) + (it.unit ? ' ' + esc(it.unit) : '') + '</b></span></div>'
+              + courbe(pts, it.unit || '') + '</div>';
+          });
         } else {
           const comptes = {};
           acks.forEach(a => {
@@ -384,9 +392,12 @@
         const r = rep[String(i)];
         const vals = Array.isArray(r) ? r : (r == null || r === '' ? [] : [r]);
         if (!vals.length) return '';
-        const ko = vals.some(v => (it.nc_responses || []).indexOf(v) !== -1);
+        const flat = vals.flatMap(v => Array.isArray(v) ? v : [v]).filter(v => v != null && v !== '');
+        const ko = (it.type === 'value')
+          ? (!!it.out_of_range_is_nc && flat.some(v => { const n = nombreFr(v); return n !== null && ((it.min != null && n < it.min) || (it.max != null && n > it.max)); }))
+          : vals.some(v => (it.nc_responses || []).indexOf(v) !== -1);
         if (ko) nc = true;
-        return (it.label || 'Contrôle') + ' : ' + vals.join(', ') + (it.unit ? ' ' + it.unit : '') + (ko ? ' · NC' : '');
+        return (it.label || 'Contrôle') + ' : ' + (it.type === 'value' ? flat.join(' / ') : vals.join(', ')) + (it.unit ? ' ' + it.unit : '') + (ko ? ' · NC' : '');
       }).filter(Boolean);
       points += '<b' + (x < 18 ? ' class="g"' : (x > 82 ? ' class="d"' : '')) + ' style="left:' + x.toFixed(3) + '%'
         + (nc ? ';--c:var(--danger)' : '') + '" data-bulle="'

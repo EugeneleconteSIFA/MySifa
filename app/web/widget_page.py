@@ -121,6 +121,8 @@ body.light .bi:hover{background:rgba(15,23,42,.06)}
   padding:10px 12px;color:var(--text);font-size:12px;outline:none;
 }
 .login-row input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+/* iOS zoome au focus sous 16 px et ne dezoome plus : 16 px sur ecran tactile. */
+@media (pointer:coarse){.login-row input{font-size:16px}}
 .login-actions{display:flex;gap:8px;align-items:center}
 .btn{
   border-radius:10px;padding:9px 12px;font-weight:800;cursor:pointer;border:1px solid transparent;

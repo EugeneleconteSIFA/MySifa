@@ -4868,6 +4868,9 @@ def _validate_alert_params(params: dict) -> dict:
         label = (it.get("label") or "").strip()[:200]
         if not label:
             continue
+        # Méthode opératoire affichée sous la question (les deux types).
+        help_txt = it.get("help")
+        help_txt = help_txt.strip()[:300] if isinstance(help_txt, str) else ""
         item_type = (it.get("type") or "choice").strip()
         if item_type not in ("choice", "value"):
             item_type = "choice"
@@ -4893,9 +4896,29 @@ def _validate_alert_params(params: dict) -> dict:
                 item_out["min"] = vmin
             if vmax is not None:
                 item_out["max"] = vmax
+            # Valeur cible : affichée à l'opérateur avec l'écart de sa mesure.
+            vcible = _f(it.get("target_value"))
+            if vcible is not None:
+                item_out["target_value"] = vcible
+            # Hors tolérance = non-conformité. Sans borne, rien à comparer.
+            if bool(it.get("out_of_range_is_nc", False)) and (vmin is not None or vmax is not None):
+                item_out["out_of_range_is_nc"] = True
             # v2.2.85 : required (bool). Défaut false (optionnel = rétro-compat).
             if bool(it.get("required", False)):
                 item_out["required"] = True
+            # Plusieurs mesures (ex. début / milieu / fin de prod) : un libellé
+            # par mesure, la réponse devient une liste. Moins de deux = valeur unique.
+            points_in = it.get("points") or []
+            if isinstance(points_in, list):
+                points = [p.strip()[:40] for p in points_in
+                          if isinstance(p, str) and p.strip()][:10]
+                if len(points) > 1:
+                    item_out["points"] = points
+            placeholder = it.get("placeholder")
+            if isinstance(placeholder, str) and placeholder.strip():
+                item_out["placeholder"] = placeholder.strip()[:60]
+            if help_txt:
+                item_out["help"] = help_txt
             clean_items.append(item_out)
             continue
         # type "choice" (cases à cocher)
@@ -4977,6 +5000,8 @@ def _validate_alert_params(params: dict) -> dict:
                         "other_needs_comment": other_needs_comment}
         if required_choice:
             _choice_item["required"] = True
+        if help_txt:
+            _choice_item["help"] = help_txt
         clean_items.append(_choice_item)
     if len(clean_items) > 30:
         raise HTTPException(422, "checklist.items : 30 points maximum.")
@@ -7549,6 +7574,11 @@ def maintenance_alert_acks_list(request: Request):
                                 entry["min"] = it["min"]
                             if it.get("max") is not None:
                                 entry["max"] = it["max"]
+                            if isinstance(it.get("points"), list) and it["points"]:
+                                entry["points"] = it["points"]
+                            if it.get("target_value") is not None:
+                                entry["target_value"] = it["target_value"]
+                            entry["out_of_range_is_nc"] = bool(it.get("out_of_range_is_nc", False))
                         else:
                             entry["responses"] = it.get("responses") or []
                             entry["multi"] = bool(it.get("multi", True))

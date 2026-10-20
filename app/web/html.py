@@ -104,7 +104,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_resize.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
-<link rel="stylesheet" href="/static/mysifa_mobile.css?v=2">
+<link rel="stylesheet" href="/static/mysifa_mobile.css?v=3">
 <link rel="stylesheet" href="/static/motion.css">
 <link rel="stylesheet" href="/static/mysifa_perf.css">
 <link rel="stylesheet" href="/static/mysifa_portail_tour.css?v=__V_LABEL__">
@@ -1695,7 +1695,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/mysifa_encre_picker.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_bobine_edit.js?v=1.1"></script>
 <script src="/static/mysifa_expe_carte.js"></script>
-<script src="/static/mysifa_rvgi_picker.js?v=2"></script>
+<script src="/static/mysifa_rvgi_picker.js?v=3"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=13"></script>
 <script src="/static/mysifa_humeur.js"></script>

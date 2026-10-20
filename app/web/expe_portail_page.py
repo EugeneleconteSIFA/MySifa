@@ -239,6 +239,8 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
     label{display:block;font-size:11px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
     input,textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:11px 12px;color:var(--text);font-size:14px;font-family:inherit}
+    /* iOS zoome au focus sous 16 px et ne dezoome plus : 16 px sur ecran tactile. */
+    @media (pointer:coarse){input,textarea,select{font-size:16px}}
     input:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
     body.light input:focus,body.light textarea:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#0891b2) 12%,transparent)}
     .modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:18px;z-index:9999}
