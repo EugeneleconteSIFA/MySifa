@@ -1824,3 +1824,6 @@ MONITORING_TOLERANCE_PCT = float(os.getenv("MONITORING_TOLERANCE_PCT", "2"))
 # Une entrée de stock sans n° de dossier se rattache au dernier dossier de même
 # référence produit terminé au plus tard N jours avant elle (entrée tardive).
 MONITORING_RAPPROCHEMENT_JOURS = int(os.getenv("MONITORING_RAPPROCHEMENT_JOURS", "30"))
+# Expédition : une sortie de stock est rapprochée du BL RVGI de même référence
+# le plus proche dans le temps, à N jours près, période affichée ou non.
+MONITORING_EXPE_FENETRE_JOURS = int(os.getenv("MONITORING_EXPE_FENETRE_JOURS", "7"))
