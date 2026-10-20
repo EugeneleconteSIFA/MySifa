@@ -25,8 +25,8 @@ import re
 from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional
 
-from config import MONITORING_RAPPROCHEMENT_JOURS, MONITORING_TOLERANCE_PCT
-from datetime import datetime, timedelta
+from config import MONITORING_EXPE_FENETRE_JOURS, MONITORING_RAPPROCHEMENT_JOURS, MONITORING_TOLERANCE_PCT
+from datetime import date, datetime, timedelta
 
 _RE_OF = re.compile(r"\b(99\d{5})\b")
 _RE_CODE_ARTICLE = re.compile(r"^\d+$")
@@ -98,6 +98,34 @@ def _dossiers_par_of(conn, ofs: List[str]) -> Dict[str, str]:
         ).fetchall():
             out.setdefault(r["of_"], r["ref"])
     return out
+
+
+def _annule(e: dict, s: dict) -> bool:
+    """La sortie `s` corrige l'entrée `e` : même référence, même emplacement,
+    même jour, après elle, quantité à 1 % près (« j'ai noté en étiquette et
+    c'est en carton »). Ni l'une ni l'autre n'est un flux réel."""
+    if (e.get("reference") or "").strip() != (s.get("reference") or "").strip():
+        return False
+    if (e.get("emplacement") or "") != (s.get("emplacement") or ""):
+        return False
+    ce, cs = e.get("created_at") or "", s.get("created_at") or ""
+    if ce[:10] != cs[:10] or ce > cs:
+        return False
+    qe, qs = _f(e.get("quantite")), _f(s.get("quantite"))
+    return qe > 0 and abs(qe - qs) <= qe * 0.01
+
+
+def _apparier_corrections(entrees: List[dict], sorties: List[dict]) -> tuple:
+    """Ids des entrées et des sorties qui s'annulent deux à deux."""
+    e_out, s_out = set(), set()
+    for s in sorted(sorties, key=lambda x: x.get("created_at") or ""):
+        for e in sorted(entrees, key=lambda x: x.get("created_at") or "", reverse=True):
+            if e["id"] in e_out:
+                continue
+            if _annule(e, s):
+                e_out.add(e["id"]); s_out.add(s["id"])
+                break
+    return e_out, s_out
 
 
 _SQL_BORNES = """
@@ -300,6 +328,27 @@ def flux_production(conn, du: str, au: str) -> dict:
     for d, lst in rattachees.items():
         entrees[d].extend(lst)
 
+    # Entrée corrigée le jour même par une sortie de même quantité : saisie
+    # erronée, pas de la production.
+    toutes = [e for lst in entrees.values() for e in lst]
+    refs_c = sorted({(e["reference"] or "").strip() for e in toutes if e.get("reference")})
+    jours_c = sorted({(e["created_at"] or "")[:10] for e in toutes if e.get("created_at")})
+    corrigees: set = set()
+    if refs_c and jours_c:
+        sorties_c = []
+        for lot in _lots(refs_c, 400):
+            sorties_c += [dict(r) for r in conn.execute(
+                f"""SELECT m.id, m.created_at, m.emplacement, m.quantite, p.reference
+                      FROM mouvements_stock m JOIN produits p ON p.id = m.produit_id
+                     WHERE m.type_mouvement = 'sortie'
+                       AND COALESCE(m.note, '') NOT LIKE ?
+                       AND TRIM(p.reference) IN ({_place(len(lot))})
+                       AND substr(m.created_at, 1, 10) IN ({_place(len(jours_c))})""",
+                [_NOTE_DEPLACEMENT_SORTIE, *lot, *jours_c]).fetchall()]
+        corrigees, _ = _apparier_corrections(toutes, sorties_c)
+        for d in list(entrees):
+            entrees[d] = [e for e in entrees[d] if e["id"] not in corrigees]
+
     lignes: List[dict] = []
     for d in liste:
         pe = infos.get(d) or {}
@@ -444,34 +493,77 @@ def _sous_traites(conn, erp) -> set:
 
 
 def flux_expedition(conn, erp, du: str, au: str) -> dict:
-    """Références livrées, parties ou sorties de stock entre `du` et `au`.
+    """Références livrées (BL RVGI) ou parties (départs MyExpé) entre `du` et
+    `au`, contre les sorties MyStock.
+
+    La date de livraison du planning ne fait PAS entrer une ligne : elle est
+    souvent dépassée et ne dit pas qu'un envoi a eu lieu. Elle reste affichée.
+
+    La période coupe les flux : un BL du 08 peut être sorti du stock le 14.
+    Chaque sortie est donc rapprochée du BL de même référence le plus proche,
+    à `MONITORING_EXPE_FENETRE_JOURS` près, et compte pour la période de ce BL.
 
     `erp` peut être `None` (miroir absent) : la page garde alors le côté
     MySifa et le dit.
     """
     from app.services.coherence import numeros_bl
 
-    bls = _bl_rvgi(erp, du, au) if erp is not None else []
+    fen = MONITORING_EXPE_FENETRE_JOURS
+    d0, d1 = date.fromisoformat(du), date.fromisoformat(au)
+    large_du = (d0 - timedelta(days=fen)).isoformat()
+    large_au = (d1 + timedelta(days=fen)).isoformat()
+    bls_large = _bl_rvgi(erp, large_du, large_au) if erp is not None else []
+    bls = [b for b in bls_large if du <= (b["jour"] or "") <= au]
 
-    sorties = [dict(r) for r in conn.execute(
-        """SELECT m.created_at, m.emplacement, m.quantite, m.note, m.created_by_name,
+    sorties_large = [dict(r) for r in conn.execute(
+        """SELECT m.id, m.created_at, m.emplacement, m.quantite, m.note, m.created_by_name,
                   TRIM(COALESCE(m.no_dossier, '')) AS no_dossier, p.reference
              FROM mouvements_stock m JOIN produits p ON p.id = m.produit_id
             WHERE m.type_mouvement = 'sortie'
               AND COALESCE(m.note, '') NOT LIKE ?
               AND COALESCE(m.note, '') NOT LIKE ?
               AND substr(m.created_at, 1, 10) BETWEEN ? AND ?""",
-        (_NOTE_DEPLACEMENT_SORTIE, _NOTE_ANNULATION, du, au),
+        (_NOTE_DEPLACEMENT_SORTIE, _NOTE_ANNULATION, large_du, large_au),
     ).fetchall()]
 
-    # Dossiers : ceux des commandes livrées, et ceux à livrer sur la période.
-    a_livrer = [dict(r) for r in conn.execute(
-        """SELECT pe.id, TRIM(pe.reference) AS reference, TRIM(pe.numero_of) AS numero_of,
-                  pe.ref_produit_norm, pe.client, pe.statut, pe.date_livraison
-             FROM planning_entries pe
-            WHERE substr(COALESCE(pe.date_livraison, ''), 1, 10) BETWEEN ? AND ?""",
-        (du, au),
+    # Une sortie qui annule une entrée du jour (correction de saisie) n'est pas
+    # une expédition.
+    entrees_c = [dict(r) for r in conn.execute(
+        """SELECT m.id, m.created_at, m.emplacement, m.quantite, p.reference
+             FROM mouvements_stock m JOIN produits p ON p.id = m.produit_id
+            WHERE m.type_mouvement = 'entree'
+              AND COALESCE(m.note, '') NOT LIKE ?
+              AND substr(m.created_at, 1, 10) BETWEEN ? AND ?""",
+        (_NOTE_DEPLACEMENT_ENTREE, large_du, large_au),
     ).fetchall()]
+    _, s_corr = _apparier_corrections(entrees_c, sorties_large)
+    sorties_large = [s for s in sorties_large if s["id"] not in s_corr]
+
+    # Chaque sortie va au BL de même référence le plus proche (± fen jours).
+    # Elle compte si ce BL est dans la période ; sans BL proche, elle compte
+    # si elle-même est dans la période (« Sortie sans BL »).
+    jours_bl: Dict[str, List[date]] = defaultdict(list)
+    for b in bls_large:
+        try:
+            jours_bl[b["reference"]].append(date.fromisoformat(b["jour"]))
+        except (TypeError, ValueError):
+            pass
+    sorties = []
+    for s in sorties_large:
+        ref = (s["reference"] or "").strip()
+        try:
+            js = date.fromisoformat((s["created_at"] or "")[:10])
+        except ValueError:
+            continue
+        proches = [j for j in jours_bl.get(ref, []) if abs((j - js).days) <= fen]
+        if proches:
+            jb = min(proches, key=lambda j: (abs((j - js).days), j > js))
+            if d0 <= jb <= d1:
+                s["bl_jour"] = jb.isoformat()
+                sorties.append(s)
+        elif d0 <= js <= d1:
+            sorties.append(s)
+
     ofs = sorted({b["numcde"] for b in bls if b["numcde"]})
     par_of: Dict[str, dict] = {}
     for lot in _lots(ofs):
@@ -521,13 +613,6 @@ def flux_expedition(conn, erp, du: str, au: str) -> dict:
             L["clients"].add(b["client"])
         bl_vers_ref[b["bl"]].add(b["reference"])
         poser_dossier(L, par_of.get(b["numcde"]))
-    for pe in a_livrer:
-        ref = (pe.get("ref_produit_norm") or "").strip()
-        if ref:
-            L = ligne(ref)
-            poser_dossier(L, pe)
-            if pe.get("client"):
-                L["clients"].add(pe["client"])
     dossier_vers_ref: Dict[str, set] = defaultdict(set)
     for ref, L in lignes.items():
         for d in L["dossiers"]:
@@ -583,7 +668,7 @@ def flux_expedition(conn, erp, du: str, au: str) -> dict:
         elif any(d["statut"] != "valide" for d in deps):
             statut = "depart_prevu"
         else:
-            statut = "a_expedier"
+            statut = "depart_sans_bl"
         sorties_tri = sorted(L["sorties"], key=lambda x: x["created_at"] or "")
         out.append({
             "cle": ref,

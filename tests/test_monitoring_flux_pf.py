@@ -38,7 +38,8 @@ INSERT INTO produits VALUES (1,'890/0007','Etiq 1','étiquette'),(2,'601/0161','
                             (3,'470/0020','Etiq 3','étiquette'),(4,'24/0012','Etiq 4','étiquette'),
                             (5,'931/0005','Etiq 5','étiquette'),
                             (6,'1120/0003','Etiq 6','étiquette'),
-                            (7,'890/0115','Etiq 7','étiquette');
+                            (7,'890/0115','Etiq 7','étiquette'),
+                            (8,'1013/0068','Etiq 8','carton');
 INSERT INTO planning_entries VALUES
   (10,'9932689','9932689','890/0007 - X','890/0007','CLIENT A','termine','2026-10-14',1,1,'2026-10-15T10:00:00',NULL,NULL),
   (11,'9932700','9932700','470/0020 - X','470/0020','CLIENT B','termine','2026-10-30',1,NULL,NULL,NULL,NULL),
@@ -65,6 +66,9 @@ INSERT INTO mouvements_stock VALUES
   -- expédition : 24/0012 sorti 300 000 pour 304 000 au BL (écart 1,3 %).
   (6,4,'A131','sortie',300000,'Expédition | BL OK','2026-10-19T10:00:00','C',NULL),
   (7,4,'A131','sortie',5,'Annulation de l''entree #2','2026-10-19T10:00:00','C',NULL),
+  (11,8,'Z1','sortie',968,'Sortie lot FIFO','2026-10-21T09:00:00','E',NULL),
+  (12,8,'Z1','entree',842400,'Production dossier 9932543','2026-10-14T16:51:00','E','9932543'),
+  (13,8,'Z1','sortie',842352,'jai note en etiquette et cest en carton','2026-10-14T17:38:00','E',NULL),
   (8,5,'B302','entree',363000,'','2026-10-19T13:00:00','D',NULL),
   (9,6,'B302','entree',363000,'','2026-10-19T13:16:00','D',NULL),
   (10,7,'B200','entree',1500000,'','2026-10-23T08:00:00','D',NULL);
@@ -101,6 +105,9 @@ hd = L.get("r:931/0005") or {}
 ok(not hd and r.get("ajustements_ignores") == 1,
    "entrée sans aucun dossier (ajustement) : pas de ligne, comptée à part")
 
+ok(not (L.get("d:9932543") or {}).get("qte_entree"),
+   "entrée annulée le jour même par une sortie de même quantité : pas comptée en production")
+
 print("— expédition")
 erp = sqlite3.connect(":memory:")
 erp.row_factory = sqlite3.Row
@@ -113,6 +120,9 @@ INSERT INTO cdf_ligne VALUES (1,1,'1004','0219',1,0),(2,1,'24','0012',3,0);
 INSERT INTO liv_entete VALUES (9939053,'2026-10-17 00:00:00','LC2',0);
 INSERT INTO liv_ligne VALUES (9939053,9932999,1,350000,0);
 INSERT INTO cde_ligne VALUES (9932999,1,'1004','0219',0);
+INSERT INTO liv_entete VALUES (9939054,'2026-10-15 00:00:00','PROSOL',0);
+INSERT INTO liv_ligne VALUES (9939054,9932543,1,968,0);
+INSERT INTO cde_ligne VALUES (9932543,1,'1013','0068',0);
 INSERT INTO liv_entete VALUES (9939121,'2026-10-19 00:00:00','CLIENT C',0);
 INSERT INTO liv_ligne VALUES (9939121,9932585,1,304000,0),(9939121,9932585,2,1,0);
 INSERT INTO cde_ligne VALUES (9932585,1,'24','0012',0),(9932585,2,'FR','FRAIS_DE_PORT',0);
@@ -130,8 +140,11 @@ ok("1004/0219" not in E and e.get("sous_traitance_ignorees") == 1,
 ok("24/0012" in E, "une matière de même code (type 3) n'écarte pas l'article")
 y = E.get("601/0161") or {}
 ok(y.get("statut") == "depart_prevu", "dossier à livrer avec départ en attente → Départ prévu")
-z = E.get("890/0007") or {}
-ok(z.get("statut") == "a_expedier", "dossier à livrer sans BL ni sortie → À expédier")
+w = E.get("1013/0068") or {}
+ok(w.get("statut") == "ok" and w.get("qte_sortie") == 968,
+   "BL du 15, sortie du 21 (hors période) : rapprochée du BL à 7 jours près")
+ok(w.get("nb_sorties") == 1, "la sortie qui corrige une entrée du jour n'est pas une expédition")
+ok("890/0007" not in E, "la date de livraison du planning ne fait pas entrer de ligne")
 sans = flux_expedition(conn, None, "2026-10-14", "2026-10-20")
 ok(sans["miroir"] is False and {l["reference"]: l for l in sans["lignes"]}["24/0012"]["statut"] == "sortie",
    "miroir absent : le côté MySifa reste affiché")

@@ -19784,7 +19784,7 @@ const MON_STATUTS = {
   expedition: [
     ['ok', 'OK', 'ok'], ['ecart', 'Écart', 'ecart'], ['bl_sans_sortie', 'BL sans sortie', 'ecart'],
     ['sortie_sans_bl', 'Sortie sans BL', 'warn'], ['sortie', 'Sortie', ''],
-    ['depart_prevu', 'Départ prévu', ''], ['a_expedier', 'À expédier', 'warn'],
+    ['depart_prevu', 'Départ prévu', ''], ['depart_sans_bl', 'Départ sans BL', 'warn'],
   ],
 };
 const MON_STATUT_PLANNING = { attente: 'En attente', en_cours: 'En cours', termine: 'Terminé' };
@@ -19847,7 +19847,7 @@ const MON_AIDE = {
     sortie_sans_bl: 'Sorti de MyStock sans BL RVGI sur la période.',
     sortie: 'Sorti de MyStock (miroir RVGI absent : BL non comparés).',
     depart_prevu: 'Départ MyExpé programmé, pas encore de BL ni de sortie.',
-    a_expedier: 'Date de livraison du dossier sur la période, rien n\'est parti.',
+    depart_sans_bl: 'Départ MyExpé validé, sans BL RVGI ni sortie MyStock.',
   },
 };
 
@@ -20102,7 +20102,7 @@ function monToggleSort(cle) {
 function monTitre(page) {
   if (page === 'expedition') return {
     titre: 'Monitoring — expédition',
-    sous: 'Références à expédier : BL RVGI, départs MyExpé et dates de livraison des dossiers, contre les sorties MyStock.',
+    sous: 'Références expédiées : BL RVGI et départs MyExpé, contre les sorties MyStock — chaque sortie est rapprochée du BL le plus proche, à 7 jours près.',
   };
   return {
     titre: 'Monitoring — production → stock',
@@ -20309,7 +20309,7 @@ function renderMonitoringResults(container) {
   const card = el('div', { cls: 'mon-carte' });
   const ign = Number(m.data.ajustements_ignores) || 0;
   card.appendChild(el('div', { cls: 'mon-carte-tete' },
-    el('span', { cls: 'mon-carte-titre' }, m.monPage === 'expedition' ? 'Références à expédier' : 'Dossiers produits'),
+    el('span', { cls: 'mon-carte-titre' }, m.monPage === 'expedition' ? 'Références expédiées' : 'Dossiers produits'),
     el('span', { cls: 'mon-compte' }, fN(rows.length) + (rows.length !== total ? ' sur ' + fN(total) : '') + ' ligne' + (rows.length > 1 ? 's' : '')),
     m.monPage === 'expedition' && Number(m.data.sous_traitance_ignorees) ? el('span', { cls: 'mon-sous', title: 'Références achetées en sous-traitance (RVGI) : non comparées' },
       fN(m.data.sous_traitance_ignorees) + ' réf. sous-traitée' + (m.data.sous_traitance_ignorees > 1 ? 's' : '') + ' non affichée' + (m.data.sous_traitance_ignorees > 1 ? 's' : '')) : null,
@@ -28014,7 +28014,7 @@ var STOCK_GUIDES = {
     {
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>`,
       title: 'Contrôle — Monitoring des flux',
-      body: `Le <strong>Monitoring</strong> rapproche, sur une période (par défaut les <span class="mguide-hl">7 derniers jours</span>), ce que les autres applis disent d'un produit fini et ce que MyStock en a fait. <strong>Production → stock</strong> : dossier au planning, quantité saisie en fin de production, entrées et déplacements MyStock. <strong>Expédition</strong> : BL RVGI, départs MyExpé, date de livraison du dossier, sorties MyStock.`,
+      body: `Le <strong>Monitoring</strong> rapproche, sur une période (par défaut les <span class="mguide-hl">7 derniers jours</span>), ce que les autres applis disent d'un produit fini et ce que MyStock en a fait. <strong>Production → stock</strong> : dossier au planning, quantité saisie en fin de production, entrées et déplacements MyStock. <strong>Expédition</strong> : BL RVGI et départs MyExpé contre les sorties MyStock, chaque sortie rapprochée du BL le plus proche.`,
       extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Lire et filtrer</div><ul class="mguide-svc-list"><li>La colonne <strong>Contrôle</strong> classe chaque ligne : OK, Écart, Non entré en stock, BL sans sortie…</li><li>Clic sur un en-tête pour trier (croissant, décroissant, ordre d'origine), champ sous l'en-tête pour filtrer la colonne (« &gt;0 » sur une quantité).</li></ul></div></div>`,
       illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
         <text x="14" y="22" font-size="12" fill="var(--text)" font-weight="800">Production → stock</text>
