@@ -36,19 +36,22 @@ INSERT INTO machines VALUES (1,'Machine A');
 INSERT INTO of_imports VALUES (1, 2000000);
 INSERT INTO produits VALUES (1,'890/0007','Etiq 1','étiquette'),(2,'601/0161','Etiq 2','étiquette'),
                             (3,'470/0020','Etiq 3','étiquette'),(4,'24/0012','Etiq 4','étiquette'),
-                            (5,'931/0005','Etiq 5','étiquette');
+                            (5,'931/0005','Etiq 5','étiquette'),
+                            (6,'1120/0003','Etiq 6','étiquette');
 INSERT INTO planning_entries VALUES
   (10,'9932689','9932689','890/0007 - X','890/0007','CLIENT A','termine','2026-10-14',1,1,'2026-10-15T10:00:00',NULL),
   (11,'9932700','9932700','470/0020 - X','470/0020','CLIENT B','termine','2026-10-30',1,NULL,NULL,NULL),
   (12,'9932585','9932585','24/0012 - X','24/0012','CLIENT C','termine','2026-10-14',1,NULL,NULL,NULL),
-  (13,'9932800','9932800','601/0161 - X','601/0161','CLIENT D','attente','2026-10-16',1,NULL,'2026-10-21T08:00:00',NULL);
+  (13,'9932800','9932800','601/0161 - X','601/0161','CLIENT D','attente','2026-10-16',1,NULL,'2026-10-21T08:00:00',NULL),
+  (14,'9932648 + Stock','9932648 + Stock','1120/0003 - X','1120/0003','CLIENT E','termine','2026-10-07',1,NULL,'2026-10-09T10:22:45',NULL);
 -- 9932689 : deux fins de prod, la dernière porte le cumul ; entré en deux fois.
 INSERT INTO production_data VALUES
   (1,'9932689','2026-10-14T12:00:00','89','Machine A',1000000,0,0),
   (2,'9932689','2026-10-15T10:00:00','89','Machine A',2000000,1,0),
   (3,'9932700','2026-10-15T10:00:00','89','Machine A',500000,1,0),
   (4,'9932700','2026-10-15T11:00:00','89','Machine A',900000,1,1),
-  (5,'9932800','2026-10-15T06:00:00','01','Machine A',0,NULL,0);
+  (5,'9932800','2026-10-15T06:00:00','01','Machine A',0,NULL,0),
+  (6,'9932648 + Stock','2026-10-09T10:22:45','89','Machine A',363000,1,0);
 INSERT INTO mouvements_stock VALUES
   (1,1,'Z1','entree',1000000,'Production dossier 9932689','2026-10-15T07:00:00','A','9932689'),
   (2,1,'Z1','entree',1000000,'Production dossier 9932689','2026-10-15T11:00:00','A','9932689'),
@@ -59,7 +62,8 @@ INSERT INTO mouvements_stock VALUES
   -- expédition : 24/0012 sorti 300 000 pour 304 000 au BL (écart 1,3 %).
   (6,4,'A131','sortie',300000,'Expédition | BL OK','2026-10-19T10:00:00','C',NULL),
   (7,4,'A131','sortie',5,'Annulation de l''entree #2','2026-10-19T10:00:00','C',NULL),
-  (8,5,'B302','entree',363000,'','2026-10-19T13:00:00','D',NULL);
+  (8,5,'B302','entree',363000,'','2026-10-19T13:00:00','D',NULL),
+  (9,6,'B302','entree',363000,'','2026-10-19T13:16:00','D',NULL);
 INSERT INTO lots_stock VALUES (1,1,'A111',1000000,'9932689'),(2,1,'Z1',1000000,'9932689');
 INSERT INTO stock_emplacements VALUES (4,'A131',10000);
 INSERT INTO expe_departs VALUES (1,'2026-10-19','valide','CLIENT C','9939121','T',NULL,NULL,12),
@@ -83,6 +87,9 @@ h = L.get("d:9932800") or {}
 ok(h.get("qte_entree") == 92400 and "reference" in h.get("rattachement", []),
    "entrée sans dossier rapprochée du seul dossier de même référence")
 ok(h.get("statut") == "sans_saisie", "entrée sans saisie de production signalée")
+t = L.get("d:9932648 + Stock") or {}
+ok(t.get("statut") == "ok" and "reference" in t.get("rattachement", []),
+   "entrée tardive (prod le 09, stock le 19) rattachée au dossier produit avant la période")
 hd = L.get("r:931/0005") or {}
 ok(hd.get("statut") == "hors_dossier" and hd.get("qte_entree") == 363000,
    "entrée sans dossier ni dossier de même référence sur la période → Hors dossier")

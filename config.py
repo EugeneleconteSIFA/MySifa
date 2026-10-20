@@ -1821,3 +1821,6 @@ def eudr_libelle(champ: str, cle: str | None, langue: str = "court") -> str:
 # quantité entre deux sources (saisie de prod / entrée en stock, BL RVGI /
 # sortie de stock) est considéré comme concordant.
 MONITORING_TOLERANCE_PCT = float(os.getenv("MONITORING_TOLERANCE_PCT", "2"))
+# Une entrée de stock sans n° de dossier se rattache au dernier dossier de même
+# référence produit terminé au plus tard N jours avant elle (entrée tardive).
+MONITORING_RAPPROCHEMENT_JOURS = int(os.getenv("MONITORING_RAPPROCHEMENT_JOURS", "30"))
