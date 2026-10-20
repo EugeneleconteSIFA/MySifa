@@ -25,7 +25,8 @@ import re
 from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional
 
-from config import MONITORING_TOLERANCE_PCT
+from config import MONITORING_RAPPROCHEMENT_JOURS, MONITORING_TOLERANCE_PCT
+from datetime import datetime, timedelta
 
 _RE_OF = re.compile(r"\b(99\d{5})\b")
 _RE_CODE_ARTICLE = re.compile(r"^\d+$")
@@ -99,6 +100,32 @@ def _dossiers_par_of(conn, ofs: List[str]) -> Dict[str, str]:
     return out
 
 
+def _dossier_anterieur(conn, ref: str, quand: str) -> Optional[str]:
+    """Dernier dossier de la référence `ref` produit avant `quand`, dans la fenêtre
+    `MONITORING_RAPPROCHEMENT_JOURS`. La date retenue est la dernière saisie de
+    production, sinon la fin planifiée."""
+    if not ref or not quand:
+        return None
+    try:
+        borne = (datetime.fromisoformat(quand[:19]) - timedelta(days=MONITORING_RAPPROCHEMENT_JOURS)).isoformat()
+    except ValueError:
+        return None
+    r = conn.execute(
+        """SELECT ref, fin FROM (
+             SELECT TRIM(pe.reference) AS ref,
+                    COALESCE((SELECT MAX(pd.date_operation) FROM production_data pd
+                               WHERE TRIM(pd.no_dossier) = TRIM(pe.reference)
+                                 AND COALESCE(pd.est_annule, 0) = 0),
+                             pe.planned_end) AS fin
+               FROM planning_entries pe
+              WHERE TRIM(COALESCE(pe.ref_produit_norm, '')) = ?)
+            WHERE fin IS NOT NULL AND fin <= ? AND fin >= ?
+            ORDER BY fin DESC LIMIT 1""",
+        (ref, quand[:19], borne),
+    ).fetchone()
+    return r["ref"] if r else None
+
+
 def flux_production(conn, du: str, au: str) -> dict:
     """Dossiers produits ou entrés en stock entre `du` et `au` (inclus, AAAA-MM-JJ)."""
     # 1. Dossiers saisis sur la période.
@@ -159,6 +186,26 @@ def flux_production(conn, du: str, au: str) -> dict:
             rattachees[cands[0]].append(e)
         else:
             hors_dossier.append(e)
+
+    # Entrée tardive : le dossier a été produit AVANT la période (fin le 09,
+    # mise en stock le 19). On cherche le dernier dossier de même référence
+    # dont la production s'est terminée au plus tard N jours avant l'entrée.
+    reste: List[dict] = []
+    nouveaux: set = set()
+    for e in hors_dossier:
+        d = _dossier_anterieur(conn, (e["reference"] or "").strip(), e["created_at"] or "")
+        if d:
+            e["rattachement"] = "reference"
+            rattachees[d].append(e)
+            if d not in dossiers:
+                nouveaux.add(d)
+        else:
+            reste.append(e)
+    hors_dossier = reste
+    if nouveaux:
+        dossiers |= nouveaux
+        liste = sorted(dossiers)
+        infos.update(_infos_dossiers(conn, sorted(nouveaux)))
 
     saisies: Dict[str, dict] = {}
     entrees: Dict[str, List[dict]] = defaultdict(list)
