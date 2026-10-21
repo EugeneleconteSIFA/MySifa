@@ -8,6 +8,10 @@
  *   const ok = await mysifaConfirm({title, message, detail, confirmLabel,
  *                                   cancelLabel, danger});
  *
+ * Avec `saisie: {label, placeholder, requis}`, la fenêtre demande un texte
+ * (motif de refus…) et la promesse rend ce texte, ou false si annulé. Avec
+ * `requis`, le bouton reste inactif tant que le texte est vide.
+ *
  * Style injecté par le module (classes mysifa-cfm-), sur les seules variables
  * CSS communes du thème : il marche sur n'importe quelle page.
  */
@@ -25,7 +29,8 @@
   // sombre, elle tronque les retours a la ligne selon le navigateur, et elle
   // ne sait pas distinguer une action destructrice d'une action anodine.
   //
-  // Retourne une promesse resolue a true (confirme) ou false (annule).
+  // Retourne une promesse resolue a true (confirme) ou false (annule), ou au
+  // texte saisi quand `saisie` est fourni.
   function mysifaConfirm(opts) {
     const o = opts || {};
     const titre   = o.title   || 'Confirmer';
@@ -34,6 +39,7 @@
     const okTxt   = o.confirmLabel || 'Confirmer';
     const koTxt   = o.cancelLabel  || 'Annuler';
     const danger  = !!o.danger;
+    const saisie  = o.saisie || null;
 
     if (!document.getElementById('mysifa-cfm-style')) {
       const st = document.createElement('style');
@@ -65,7 +71,14 @@
       // donnait du blanc sur #f87171 -- illisible. C'est aussi la convention
       // deja suivie par .toast.danger dans les deux pages hotes.
       + '.mysifa-cfm-ok.danger{background:var(--danger,#f87171);color:var(--accent-fg,#fff)}'
-      + '.mysifa-cfm-ok:hover{filter:brightness(1.08)}';
+      + '.mysifa-cfm-ok:hover{filter:brightness(1.08)}'
+      + '.mysifa-cfm-ok:disabled{opacity:.45;cursor:default;filter:none}'
+      + '.mysifa-cfm-label{display:block;margin-top:14px;margin-bottom:6px;font-size:11px;font-weight:600;'
+      + 'color:var(--muted);text-transform:uppercase;letter-spacing:.5px}'
+      + '.mysifa-cfm-input{width:100%;box-sizing:border-box;min-height:80px;resize:vertical;padding:10px 12px;'
+      + 'border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);'
+      + 'font-size:13px;font-family:inherit;outline:none}'
+      + '.mysifa-cfm-input:focus{border-color:var(--accent)}';
       document.head.appendChild(st);
     }
 
@@ -85,6 +98,11 @@
     +   '</div>'
     +   '<div class="mysifa-cfm-body">' + esc(corps)
     +     (detail ? '<div class="mysifa-cfm-detail">' + esc(detail) + '</div>' : '')
+    +     (saisie
+          ? '<label class="mysifa-cfm-label" for="mysifa-cfm-input">' + esc(saisie.label || '') + '</label>'
+          + '<textarea id="mysifa-cfm-input" class="mysifa-cfm-input" maxlength="400" placeholder="'
+          + esc(saisie.placeholder || '') + '"></textarea>'
+          : '')
     +   '</div>'
     +   '<div class="mysifa-cfm-foot">'
     +     '<button type="button" class="mysifa-cfm-btn mysifa-cfm-ghost" data-cfm="0">' + esc(koTxt) + '</button>'
@@ -102,20 +120,31 @@
         ov.remove();
         resolve(val);
       }
+      const champ = ov.querySelector('.mysifa-cfm-input');
+      const ok = ov.querySelector('.mysifa-cfm-ok');
+      function valider() {
+        if (!champ) { fermer(true); return; }
+        const v = champ.value.trim();
+        if (saisie.requis && !v) return;
+        fermer(v);
+      }
+      function majBouton() { if (champ && saisie.requis) ok.disabled = !champ.value.trim(); }
       function onKey(e) {
         if (e.key === 'Escape') fermer(false);
-        if (e.key === 'Enter')  fermer(true);
+        // Dans le champ, Entrée va à la ligne ; Ctrl/Cmd + Entrée valide.
+        if (e.key === 'Enter' && (!champ || e.ctrlKey || e.metaKey)) { e.preventDefault(); valider(); }
       }
       ov.querySelectorAll('[data-cfm]').forEach(function (b) {
         b.addEventListener('click', function () {
-          fermer(b.getAttribute('data-cfm') === '1');
+          if (b.getAttribute('data-cfm') === '1') valider(); else fermer(false);
         });
       });
+      if (champ) champ.addEventListener('input', majBouton);
+      majBouton();
       // Clic sur le fond = annulation, jamais validation.
       ov.addEventListener('click', function (e) { if (e.target === ov) fermer(false); });
       document.addEventListener('keydown', onKey);
-      const ok = ov.querySelector('.mysifa-cfm-ok');
-      if (ok) ok.focus();
+      if (champ) champ.focus(); else if (ok) ok.focus();
     });
   }
 

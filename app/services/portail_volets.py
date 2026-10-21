@@ -237,17 +237,17 @@ VOLETS_TUILES = {
     "coffre": {
         "titre": "Mon coffre",
         "groupes": [_groupe("Aller à", [
-            _entree("cof_bul", "Mes bulletins de paie", "/coffre#bulletins", "lock"),
-            _entree("cof_doc", "Mes documents", "/coffre#documents", "folder"),
-            _entree("cof_ndf", "Mes notes de frais", "/coffre#ndf", "calculator"),
+            _entree("cof_bul", "Mes bulletins de paie", "/coffre?onglet=bulletins", "lock"),
+            _entree("cof_doc", "Mes documents", "/coffre?onglet=documents", "folder"),
+            _entree("cof_ndf", "Mes notes de frais", "/coffre", "calculator"),
         ])],
         "pied": {"label": "Ouvrir Mon coffre", "url": "/coffre"},
     },
     "rh_coffre": {
         "titre": "Coffre RH",
         "groupes": [_groupe("Aller à", [
-            _entree("rhc_bul", "Dépôt des bulletins", "/rh/coffre#bulletins", "folder"),
-            _entree("rhc_ndf", "Notes de frais à valider", "/rh/coffre#ndf", "calculator",
+            _entree("rhc_bul", "Dépôt des bulletins", "/rh/coffre", "folder"),
+            _entree("rhc_ndf", "Notes de frais à valider", "/rh/coffre?onglet=ndf", "calculator",
                     compteur="rh_coffre"),
         ])],
         "pied": {"label": "Ouvrir Coffre RH", "url": "/rh/coffre"},

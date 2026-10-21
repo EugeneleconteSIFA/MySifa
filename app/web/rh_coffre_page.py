@@ -105,6 +105,7 @@ tr:hover td{background:var(--accent-bg)}
 .b-depose{background:rgba(251,191,36,.15);color:var(--warn)}
 .b-distribue{background:color-mix(in srgb,var(--accent,#22d3ee) 15%,transparent);color:var(--accent)}
 .b-consulte{background:rgba(52,211,153,.15);color:var(--ok)}
+tr.ndf-row{cursor:pointer}
 .statut{display:inline-block;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border:1px solid transparent}
 .statut.brouillon{background:transparent;border:1px dashed var(--border);color:var(--muted)}
 .statut.soumise{background:var(--accent-bg);border-color:color-mix(in srgb,var(--accent) 45%,transparent);color:var(--accent)}
@@ -256,7 +257,7 @@ tr:hover td{background:var(--accent-bg)}
             <label style="font-size:12px;color:var(--muted)">Année :</label>
             <select id="ndf-annee"><option value="">Toutes</option></select>
             <button type="button" class="btn ghost" onclick="exportNdf()">Export CSV</button>
-            <button type="button" class="btn ghost" onclick="MySifaNdfReglages.ouvrir()">Réglages</button>
+            <button type="button" class="btn ghost" onclick="ouvrirReglagesRh()">Réglages</button>
           </div>
           <div style="overflow-x:auto" id="ndf-container"></div>
         </div>
@@ -268,12 +269,18 @@ tr:hover td{background:var(--accent-bg)}
 </div>
 
 <script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_ndf_reglages.js?v=2"></script>
+<script src="/static/mysifa_ndf_reglages.js?v=3"></script>
+<script src="/static/mysifa_confirm.js?v=2"></script>
+<script src="/static/mysifa_ndf_fiche.js?v=1"></script>
+<script src="/static/mysifa_url.js?v=5"></script>
+<script src="/static/rh_coffre_url.js?v=1"></script>
 <script>window.__MYSIFA_APP__='rh_coffre';</script>
 <script>
 const MOIS_LABELS=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
 let ME=null;let CURRENT_TAB='bulletins';
+// Liste affichée et fenêtres ouvertes, lues par static/rh_coffre_url.js.
+let NDF_RH=[];let NDF_OUVERTE=null;let APERCU=null;
 const now=new Date();const curYear=now.getFullYear();const curMonth=now.getMonth()+1;
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -309,11 +316,17 @@ function previewDocument(url, filename){
       </div>
     </div>`;
   document.body.appendChild(back);
-  const close=()=>{back.remove();document.removeEventListener('keydown',onKey);};
-  const onKey=(e)=>{if(e.key==='Escape')close();};
-  document.addEventListener('keydown',onKey);
-  back.querySelector('#preview-close').onclick=close;
+  if(APERCU)APERCU.fermer(true);
+  const close=(technique)=>{
+    back.remove();document.removeEventListener('keydown',onKey,true);
+    if(APERCU&&APERCU.el===back){APERCU=null;if(technique!==true)rhCoffreSyncUrl();}
+  };
+  const onKey=(e)=>{if(e.key==='Escape'){e.stopImmediatePropagation();close();}};
+  document.addEventListener('keydown',onKey,true);
+  back.querySelector('#preview-close').onclick=()=>close();
   back.addEventListener('click',(e)=>{if(e.target===back)close();});
+  APERCU={url,el:back,fermer:close};
+  rhCoffreSyncUrl();
 }
 document.addEventListener('click',(e)=>{
   const el=e.target.closest('[data-preview-url]');
@@ -330,13 +343,6 @@ const TAB_META={
   ndf:{title:'Notes de frais',sub:'Validation, marquage payées et export comptable.'},
 };
 var RH_COFFRE_VALID_TABS=['bulletins','ndf'];
-function _readRhCoffreTab(){
-  try{var h=(location.hash||'').replace(/^#/,'').trim();
-    if(RH_COFFRE_VALID_TABS.indexOf(h)!==-1)return h;}catch(e){}
-  try{var u=new URLSearchParams(location.search).get('tab');
-    if(u&&RH_COFFRE_VALID_TABS.indexOf(u)!==-1)return u;}catch(e){}
-  return 'bulletins';
-}
 function showTab(tab, opts){
   var silent=!!(opts&&opts.silent);
   CURRENT_TAB=tab;
@@ -352,7 +358,7 @@ function showTab(tab, opts){
   const ms=document.getElementById('mobile-sub');if(ms)ms.textContent=meta.title;
   if(tab==='ndf')loadNdf();
   closeSidebar();
-  if(!silent){try{var target='#'+tab;if(location.hash!==target)history.replaceState(null,'',target);}catch(e){}}
+  rhCoffreSyncUrl();
 }
 
 {
@@ -429,18 +435,22 @@ async function loadDashboard(){
     </table>`;
   }catch(e){toast(e.message,'err');}
 }
-document.getElementById('upl-annee').addEventListener('change',loadDashboard);
-document.getElementById('upl-mois').addEventListener('change',loadDashboard);
+document.getElementById('upl-annee').addEventListener('change',()=>{loadDashboard();rhCoffreSyncUrl();});
+document.getElementById('upl-mois').addEventListener('change',()=>{loadDashboard();rhCoffreSyncUrl();});
 
 async function delDoc(id){
-  if(!confirm('Supprimer ce document ? (soft delete)'))return;
+  const ok=await mysifaConfirm({title:'Supprimer le document',message:'Le document est retiré du coffre du salarié.',confirmLabel:'Supprimer',danger:true});
+  if(!ok)return;
   try{await api('/api/rh-coffre/documents/'+id,{method:'DELETE'});toast('Document supprimé');loadDashboard();}catch(e){toast(e.message,'err');}
 }
 
-function printAll(mark){
+async function printAll(mark){
   const annee=document.getElementById('upl-annee').value;
   const mois=document.getElementById('upl-mois').value;
-  if(mark && !confirm(`Imprimer et marquer tous les bulletins de ${MOIS_LABELS[+mois]} ${annee} comme distribués ?`))return;
+  if(mark){
+    const ok=await mysifaConfirm({title:'Imprimer et marquer distribués',message:`Tous les bulletins de ${MOIS_LABELS[+mois]} ${annee} seront imprimés et marqués comme distribués.`,confirmLabel:'Imprimer'});
+    if(!ok)return;
+  }
   window.open(`/api/rh-coffre/print?annee=${annee}&mois=${mois}&mark_distribue=${mark?'1':'0'}`,'_blank');
   if(mark)setTimeout(loadDashboard,1500);
 }
@@ -488,6 +498,7 @@ async function loadNdf(){
   const annee=document.getElementById('ndf-annee').value;
   try{
     const j=await api(`/api/rh-coffre/ndf?statut=${statut}&annee=${annee}`);
+    NDF_RH=j.notes||[];
     try{
       const all=await api('/api/rh-coffre/ndf?statut=soumise');
       // Widget d'accueil (app/services/blocs_registre.py) : notes à valider,
@@ -507,13 +518,13 @@ async function loadNdf(){
     c.innerHTML=`<table>
       <thead><tr><th>Salarié</th><th>Date</th><th>Catégorie</th><th>Description</th><th style="text-align:right">Montant</th><th>Statut</th><th>Actions</th></tr></thead>
       <tbody>${j.notes.map(n=>`
-        <tr>
+        <tr class="ndf-row" onclick="if(!event.target.closest('a,button'))ouvrirNoteRh(${n.id})" title="Consulter">
           <td><strong>${esc(n.employe_nom)}</strong><br><span style="font-size:11px;color:var(--muted)">${esc(n.matricule||'')}</span></td>
           <td>${esc(fmtDate(n.date_frais))}</td>
           <td>${esc(n.categorie||'—')}${ndfMeta(n)?`<div style="font-size:11px;color:var(--muted);margin-top:3px">${esc(ndfMeta(n))}</div>`:''}</td>
           <td style="max-width:260px">${esc((n.description||'').slice(0,90))}${(n.description||'').length>90?'…':''}${n.motif_refus?'<div style="font-size:11px;color:var(--danger);margin-top:3px">Refus : '+esc(n.motif_refus)+'</div>':''}</td>
           <td class="montant">${fmtMontant(n.montant_ttc)}${n.montant_tva?`<div style="font-size:10px;color:var(--muted);font-weight:400">TVA ${fmtMontant(n.montant_tva)}${n.montant_ht!=null?' · HT '+fmtMontant(n.montant_ht):''}</div>`:''}</td>
-          <td><span class="statut ${esc(n.statut)}">${esc(n.statut)}</span></td>
+          <td><span class="statut ${esc(n.statut)}">${esc(MySifaNdfFiche.STATUTS[n.statut]||n.statut)}</span></td>
           <td style="white-space:nowrap;text-align:right">
             ${n.justificatif_nom?`<a class="btn ghost small" href="/api/coffre/notes-frais/${n.id}/justificatif" data-preview-url="/api/coffre/notes-frais/${n.id}/justificatif" data-preview-name="${esc(n.justificatif_nom||'Justificatif')}">Voir</a>`:''}
             ${n.statut==='soumise'||n.statut==='refusee'?`<button class="btn small" onclick="validerNdf(${n.id})">Valider</button>`:''}
@@ -525,25 +536,65 @@ async function loadNdf(){
     </table>`;
   }catch(e){document.getElementById('ndf-container').innerHTML='<p style="color:var(--danger)">Erreur : '+esc(e.message)+'</p>';}
 }
-document.getElementById('ndf-statut').addEventListener('change',loadNdf);
-document.getElementById('ndf-annee').addEventListener('change',loadNdf);
+document.getElementById('ndf-statut').addEventListener('change',()=>{loadNdf();rhCoffreSyncUrl();});
+document.getElementById('ndf-annee').addEventListener('change',()=>{loadNdf();rhCoffreSyncUrl();});
 
+// Les trois actions rendent true si elles ont abouti (la fiche se ferme alors).
 async function validerNdf(id){
-  if(!confirm('Valider cette note de frais ?'))return;
-  try{await api('/api/rh-coffre/ndf/'+id+'/valider',{method:'POST'});toast('Note validée');loadNdf();}catch(e){toast(e.message,'err');}
+  const ok=await mysifaConfirm({title:'Valider la note',message:'La note passe au statut Validée, en attente de paiement.',confirmLabel:'Valider'});
+  if(!ok)return false;
+  try{await api('/api/rh-coffre/ndf/'+id+'/valider',{method:'POST'});toast('Note validée.');loadNdf();return true;}catch(e){toast(e.message,'err');return false;}
 }
 async function refuserNdf(id){
-  const motif=prompt('Motif du refus (obligatoire) :');
-  if(!motif||!motif.trim())return;
+  const motif=await mysifaConfirm({title:'Refuser la note',message:'Le salarié verra le motif dans Mon coffre.',confirmLabel:'Refuser',danger:true,
+    saisie:{label:'Motif du refus',placeholder:'ex. Justificatif illisible, dépense non professionnelle…',requis:true}});
+  if(!motif)return false;
   try{
-    await api('/api/rh-coffre/ndf/'+id+'/refuser',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({motif:motif.trim()})});
-    toast('Note refusée');loadNdf();
-  }catch(e){toast(e.message,'err');}
+    await api('/api/rh-coffre/ndf/'+id+'/refuser',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({motif})});
+    toast('Note refusée.');loadNdf();return true;
+  }catch(e){toast(e.message,'err');return false;}
 }
 async function marquerPayee(id){
-  if(!confirm('Marquer cette note comme payée ? (à faire après avoir effectué le virement)'))return;
-  try{await api('/api/rh-coffre/ndf/'+id+'/marquer-payee',{method:'POST'});toast('Note marquée payée');loadNdf();}catch(e){toast(e.message,'err');}
+  const ok=await mysifaConfirm({title:'Marquer la note payée',message:'À faire une fois le remboursement effectué.',confirmLabel:'Marquer payée'});
+  if(!ok)return false;
+  try{await api('/api/rh-coffre/ndf/'+id+'/marquer-payee',{method:'POST'});toast('Note marquée payée.');loadNdf();return true;}catch(e){toast(e.message,'err');return false;}
 }
+
+// ── Fiche d'une note (static/mysifa_ndf_fiche.js) ──
+// La note demandée peut être hors du filtre affiché (lien, Retour) : on la
+// cherche alors dans toutes les notes.
+async function ouvrirNoteRh(id){
+  let n=NDF_RH.find(x=>x.id===id);
+  if(!n){try{const j=await api('/api/rh-coffre/ndf');n=(j.notes||[]).find(x=>x.id===id);}catch(e){}}
+  if(!n){toast('Note introuvable.','err');return;}
+  if(NDF_OUVERTE)NDF_OUVERTE.fermer(true);
+  const actions=[];
+  if(n.statut==='soumise')actions.push({cle:'refuser',label:'Refuser',style:'danger'});
+  if(n.statut==='soumise'||n.statut==='refusee')actions.push({cle:'valider',label:'Valider',style:'primaire'});
+  if(n.statut==='validee')actions.push({cle:'payer',label:'Marquer payée',style:'primaire'});
+  const fiche=MySifaNdfFiche.ouvrir(n,{
+    salarie:true,
+    actions,
+    surAction:async cle=>{
+      if(cle==='valider')return await validerNdf(n.id);
+      if(cle==='refuser')return await refuserNdf(n.id);
+      if(cle==='payer')return await marquerPayee(n.id);
+      return false;
+    },
+    surFermer:()=>{if(NDF_OUVERTE&&NDF_OUVERTE.id===n.id){NDF_OUVERTE=null;rhCoffreSyncUrl();}},
+  });
+  NDF_OUVERTE={id:n.id,fermer:technique=>{
+    if(!NDF_OUVERTE||NDF_OUVERTE.id!==n.id)return;
+    NDF_OUVERTE=null;fiche.fermer(true);
+    if(technique!==true)rhCoffreSyncUrl();
+  }};
+  rhCoffreSyncUrl();
+}
+
+function ouvrirReglagesRh(){
+  if(window.MySifaNdfReglages)MySifaNdfReglages.ouvrir({surAdresse:rhCoffreSyncUrl});
+}
+
 function fmtTaux(t){return String(t).replace('.',',')+' %';}
 function ndfMeta(n){
   const p=[];
@@ -572,10 +623,8 @@ function exportNdf(){
     const badge=document.getElementById('ndf-badge');
     if(badge && all.notes.length>0){badge.style.display='';badge.textContent=String(all.notes.length);}
   }catch(e){}
-  showTab(_readRhCoffreTab(),{silent:false});
-  if(window.MySifaNdfReglages)MySifaNdfReglages.depuisAdresse();
+  await rhCoffreDemarrerUrl();
 })();
-window.addEventListener('hashchange',function(){try{showTab(_readRhCoffreTab(),{silent:true});}catch(e){}});
 </script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 </body>

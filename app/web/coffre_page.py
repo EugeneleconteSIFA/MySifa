@@ -149,22 +149,6 @@ tr:hover td{background:var(--accent-bg)}
 .calc-hint{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.4}
 .ndf-meta{font-size:11px;color:var(--muted);margin-top:3px}
 tr.ndf-row{cursor:pointer}
-.ndf-dl{display:grid;grid-template-columns:140px 1fr;gap:8px 14px;font-size:13px;margin:0 0 16px}
-.ndf-dl dt{color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding-top:2px}
-.ndf-dl dd{margin:0;color:var(--text);white-space:pre-wrap;word-break:break-word}
-.ndf-total{font-weight:700;font-variant-numeric:tabular-nums}
-.ndf-suivi{list-style:none;margin:0 0 12px;padding:0;font-size:13px}
-.ndf-suivi li{display:flex;gap:10px;padding:6px 0;color:var(--text2)}
-.ndf-suivi li::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--border);margin-top:6px;flex-shrink:0}
-.ndf-suivi li.fait::before{background:var(--accent)}
-.ndf-suivi li.refus{color:var(--danger)}
-.ndf-suivi li.refus::before{background:var(--danger)}
-.modal-head .statut{margin-left:auto}
-.modal-close{width:32px;height:32px;flex-shrink:0;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text2);cursor:pointer;font-size:18px;line-height:1;font-family:inherit}
-.modal-close:hover{background:var(--card);color:var(--accent);border-color:var(--accent)}
-.btn.ghost.danger-txt{color:var(--danger)}
-.btn.ghost.danger-txt:hover{border-color:var(--danger);color:var(--danger)}
-@media(max-width:640px){.ndf-dl{grid-template-columns:1fr;gap:2px}.ndf-dl dd{margin-bottom:8px}}
 .file-drop{display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px dashed var(--border);border-radius:8px;padding:14px;text-align:center;font-size:12px;font-weight:500;color:var(--muted);background:var(--card);cursor:pointer;transition:border-color .15s,color .15s}
 .field .file-drop{text-transform:none;letter-spacing:0;margin:0}
 .file-drop:hover{border-color:var(--accent);color:var(--accent)}
@@ -272,13 +256,18 @@ tr.ndf-row{cursor:pointer}
 </div>
 
 <script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_confirm.js?v=1"></script>
+<script src="/static/mysifa_confirm.js?v=2"></script>
+<script src="/static/mysifa_ndf_fiche.js?v=1"></script>
+<script src="/static/mysifa_url.js?v=5"></script>
+<script src="/static/coffre_url.js?v=1"></script>
 <script>window.__MYSIFA_APP__='coffre';</script>
 <script>
 const DOC_TYPE_LABELS={bulletin_paie:'Bulletin de paie',contrat:'Contrat',attestation:'Attestation',autre:'Autre'};
 const MOIS_LABELS=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
-let ME=null;let CURRENT_TAB='ndf';let NDF_CATS=[];let NDF_TAUX=[20,10,5.5,0];let NDF_NOTES=[];let bulData={documents:[],annees_disponibles:[]};
+let ME=null;let CURRENT_TAB='ndf';let NDF_CATS=[];let NDF_TAUX=[20,10,5.5,0];let NDF_NOTES=[];
+// Fenêtres ouvertes, lues par static/coffre_url.js : {id|url, fermer(technique)}.
+let NDF_OUVERTE=null;let NDF_EDITION=null;let APERCU=null;let bulData={documents:[],annees_disponibles:[]};
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function fmtMontant(n){return (Number(n)||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';}
@@ -313,11 +302,17 @@ function previewDocument(url, filename){
       </div>
     </div>`;
   document.body.appendChild(back);
-  const close=()=>{back.remove();document.removeEventListener('keydown',onKey);};
-  const onKey=(e)=>{if(e.key==='Escape')close();};
-  document.addEventListener('keydown',onKey);
-  back.querySelector('#preview-close').onclick=close;
+  if(APERCU)APERCU.fermer(true);
+  const close=(technique)=>{
+    back.remove();document.removeEventListener('keydown',onKey);
+    if(APERCU&&APERCU.el===back){APERCU=null;if(technique!==true)coffreSyncUrl();}
+  };
+  const onKey=(e)=>{if(e.key==='Escape'){e.stopImmediatePropagation();close();}};
+  document.addEventListener('keydown',onKey,true);
+  back.querySelector('#preview-close').onclick=()=>close();
   back.addEventListener('click',(e)=>{if(e.target===back)close();});
+  APERCU={url,el:back,fermer:close};
+  coffreSyncUrl();
 }
 // Délégation globale : tout élément avec data-preview-url déclenche l'aperçu.
 document.addEventListener('click',(e)=>{
@@ -336,13 +331,6 @@ const TAB_META={
   ndf:{title:'Notes de frais',sub:'Dépôt de justificatifs et suivi des remboursements.'},
 };
 var COFFRE_VALID_TABS=['bulletins','documents','ndf'];
-function _readCoffreTab(){
-  try{var h=(location.hash||'').replace(/^#/,'').trim();
-    if(COFFRE_VALID_TABS.indexOf(h)!==-1)return h;}catch(e){}
-  try{var u=new URLSearchParams(location.search).get('tab');
-    if(u&&COFFRE_VALID_TABS.indexOf(u)!==-1)return u;}catch(e){}
-  return 'ndf';
-}
 function showTab(tab, opts){
   var silent=!!(opts&&opts.silent);
   CURRENT_TAB=tab;
@@ -357,7 +345,7 @@ function showTab(tab, opts){
   const s=document.getElementById('page-sub');if(s)s.textContent=meta.sub;
   const ms=document.getElementById('mobile-sub');if(ms)ms.textContent=meta.title;
   closeSidebar();
-  if(!silent){try{var target='#'+tab;if(location.hash!==target)history.replaceState(null,'',target);}catch(e){}}
+  coffreSyncUrl();
 }
 
 async function loadBulletins(){
@@ -396,7 +384,7 @@ function renderBulletins(){
     </div>
   `).join('');
 }
-document.getElementById('filter-bul-annee').addEventListener('change',loadBulletins);
+document.getElementById('filter-bul-annee').addEventListener('change',()=>{loadBulletins();coffreSyncUrl();});
 
 async function loadDocs(){
   try{
@@ -430,13 +418,13 @@ async function loadNdf(){
     c.innerHTML=`<div style="overflow-x:auto"><table>
       <thead><tr><th>Date</th><th>Catégorie</th><th>Description</th><th style="text-align:right">Montant</th><th>Statut</th><th></th></tr></thead>
       <tbody>${j.notes.map(n=>`
-        <tr class="ndf-row" onclick="ouvrirNote(${n.id})" title="Consulter">
+        <tr class="ndf-row" onclick="if(!event.target.closest('a,button'))ouvrirNote(${n.id})" title="Consulter">
           <td>${esc(fmtDate(n.date_frais))}</td>
           <td>${esc(n.categorie||'—')}<div class="ndf-meta">${esc(ndfMeta(n))}</div></td>
           <td style="max-width:280px">${esc((n.description||'').slice(0,80))}${(n.description||'').length>80?'…':''}${n.motif_refus?'<div style="font-size:11px;color:var(--danger);margin-top:3px">Refus : '+esc(n.motif_refus)+'</div>':''}</td>
           <td style="text-align:right" class="montant">${fmtMontant(n.montant_ttc)}</td>
           <td><span class="statut ${esc(n.statut)}">${esc(NDF_STATUTS[n.statut]||n.statut)}</span></td>
-          <td style="text-align:right;white-space:nowrap" onclick="event.stopPropagation()">
+          <td style="text-align:right;white-space:nowrap">
             ${n.justificatif_nom?`<a class="btn ghost small" href="/api/coffre/notes-frais/${n.id}/justificatif" data-preview-url="/api/coffre/notes-frais/${n.id}/justificatif" data-preview-name="${esc(n.justificatif_nom||'Justificatif')}">Voir</a>`:''}
             ${n.statut==='brouillon'?`
               <button class="btn ghost small" onclick="openNdfModal(${n.id})">Modifier</button>
@@ -481,98 +469,33 @@ function ndfCalcul(cat,ttc,taux,km){
   return {ttc:r2(ttc),tva,ht:r2(ttc-tva)};
 }
 
-// Adresse : ?note=<id> pendant la consultation d'une note, ?modifier=<id>
-// pendant la modification d'un brouillon.
-function ndfAdresse(cle,id){
-  try{
-    const u=new URL(location.href);
-    u.searchParams.delete('note');u.searchParams.delete('modifier');
-    if(cle&&id)u.searchParams.set(cle,String(id));
-    if(u.href!==location.href)history.replaceState(history.state,'',u.href);
-  }catch(e){}
-}
-function ndfDepuisAdresse(){
-  try{
-    const q=new URLSearchParams(location.search);
-    const mod=Number(q.get('modifier')),vue=Number(q.get('note'));
-    if(mod&&NDF_NOTES.some(x=>x.id===mod&&x.statut==='brouillon'))openNdfModal(mod);
-    else if(vue&&NDF_NOTES.some(x=>x.id===vue))ouvrirNote(vue);
-    else ndfAdresse(null);
-  }catch(e){}
-}
-
-// ── Consultation d'une note (tous statuts) ──
+// ── Consultation d'une note (tous statuts) : static/mysifa_ndf_fiche.js ──
 function ouvrirNote(id){
   const n=NDF_NOTES.find(x=>x.id===id);
   if(!n){toast('Note introuvable.','err');return;}
-  const back=document.createElement('div');back.className='modal-back';
-  const brouillon=n.statut==='brouillon';
-  const montant=n.distance_km!=null
-    ? `<dt>Distance</dt><dd>${esc(fmtNombre(n.distance_km).replace(/,?0+$/,''))} km × ${esc(fmtNombre(n.taux_km))} €</dd>
-       <dt>Montant</dt><dd class="ndf-total">${fmtMontant(n.montant_ttc)}</dd>`
-    : `<dt>Montant TTC</dt><dd class="ndf-total">${fmtMontant(n.montant_ttc)}</dd>
-       <dt>TVA</dt><dd>${n.taux_tva!=null?(n.taux_tva?fmtTaux(n.taux_tva)+' · ':'Sans TVA · '):''}${fmtMontant(n.montant_tva)}</dd>
-       ${n.montant_ht!=null?`<dt>Montant HT</dt><dd>${fmtMontant(n.montant_ht)}</dd>`:''}`;
-  const suivi=[
-    `<li class="fait">Créée le ${esc(fmtDate(n.created_at))}</li>`,
-    n.soumise_at?`<li class="fait">Soumise à la comptabilité le ${esc(fmtDate(n.soumise_at))}</li>`:(brouillon?'<li>Pas encore soumise</li>':''),
-    n.statut==='refusee'?`<li class="refus">Refusée${n.motif_refus?' : '+esc(n.motif_refus):''}</li>`:'',
-    n.validee_at?`<li class="fait">Validée le ${esc(fmtDate(n.validee_at))}${n.validee_by_nom?' par '+esc(n.validee_by_nom):''}</li>`:'',
-    n.payee_at?`<li class="fait">Payée le ${esc(fmtDate(n.payee_at))}</li>`:'',
-  ].join('');
-  back.innerHTML=`<div class="modal" role="dialog" aria-modal="true">
-    <div class="modal-head">
-      <div class="modal-head-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></div>
-      <div><h3>${esc(n.categorie||'Note de frais')}</h3><div class="modal-head-sub">${esc(fmtDate(n.date_frais))}${n.ville?' · '+esc(n.ville):''}</div></div>
-      <span class="statut ${esc(n.statut)}">${esc(NDF_STATUTS[n.statut]||n.statut)}</span>
-      <button type="button" class="modal-close" data-act="fermer" aria-label="Fermer">×</button>
-    </div>
-    <div class="modal-body">
-      <div class="ndf-section">
-        <div class="ndf-section-titre">Le frais</div>
-        <dl class="ndf-dl">
-          <dt>Catégorie</dt><dd>${esc(n.categorie||'—')}</dd>
-          <dt>Date</dt><dd>${esc(fmtDate(n.date_frais))}</dd>
-          <dt>Ville</dt><dd>${esc(n.ville||'—')}</dd>
-          <dt>Description</dt><dd>${esc(n.description||'—')}</dd>
-        </dl>
-      </div>
-      <div class="ndf-section">
-        <div class="ndf-section-titre">Montant</div>
-        <dl class="ndf-dl">${montant}</dl>
-      </div>
-      <div class="ndf-section">
-        <div class="ndf-section-titre">Justificatif</div>
-        ${n.justificatif_nom
-          ?`<div style="margin-bottom:16px"><a class="btn ghost small" href="/api/coffre/notes-frais/${n.id}/justificatif" data-preview-url="/api/coffre/notes-frais/${n.id}/justificatif" data-preview-name="${esc(n.justificatif_nom)}">Voir ${esc(n.justificatif_nom)}</a></div>`
-          :'<div class="calc-hint" style="margin:0 0 16px">Aucun justificatif joint.</div>'}
-      </div>
-      <div class="ndf-section">
-        <div class="ndf-section-titre">Suivi</div>
-        <ul class="ndf-suivi">${suivi}</ul>
-      </div>
-    </div>
-    ${brouillon?`<div class="modal-actions">
-      <button type="button" class="btn ghost danger-txt" data-act="supprimer">Supprimer</button>
-      <span class="sep"></span>
-      <button type="button" class="btn ghost" data-act="modifier">Modifier</button>
-      <button type="button" class="btn" data-act="soumettre">Soumettre à la compta</button>
-    </div>`:''}
-  </div>`;
-  document.body.appendChild(back);
-  const onKey=e=>{if(e.key==='Escape'&&!document.querySelector('.mysifa-cfm-ov, .preview-back'))fermer();};
-  function fermer(sansAdresse){back.remove();document.removeEventListener('keydown',onKey);if(!sansAdresse)ndfAdresse(null);}
-  document.addEventListener('keydown',onKey);
-  back.addEventListener('click',async e=>{
-    if(e.target===back){fermer();return;}
-    const b=e.target.closest('[data-act]');if(!b)return;
-    const act=b.dataset.act;
-    if(act==='fermer')fermer();
-    else if(act==='modifier'){fermer(true);openNdfModal(n.id);}
-    else if(act==='soumettre'){if(await submitNdf(n.id))fermer();}
-    else if(act==='supprimer'){if(await deleteNdf(n.id))fermer();}
+  if(NDF_OUVERTE)NDF_OUVERTE.fermer(true);
+  const actions=n.statut==='brouillon'?[
+    {cle:'supprimer',label:'Supprimer',style:'danger'},
+    {cle:'modifier',label:'Modifier',style:'secondaire'},
+    {cle:'soumettre',label:'Soumettre à la compta',style:'primaire'},
+  ]:[];
+  const fiche=MySifaNdfFiche.ouvrir(n,{
+    actions,
+    surAction:async cle=>{
+      if(cle==='modifier'){fermerFiche(true);openNdfModal(n.id);return false;}
+      if(cle==='soumettre')return await submitNdf(n.id);
+      if(cle==='supprimer')return await deleteNdf(n.id);
+      return false;
+    },
+    surFermer:()=>{if(NDF_OUVERTE&&NDF_OUVERTE.id===n.id){NDF_OUVERTE=null;coffreSyncUrl();}},
   });
-  ndfAdresse('note',n.id);
+  function fermerFiche(technique){
+    if(!NDF_OUVERTE||NDF_OUVERTE.id!==n.id)return;
+    NDF_OUVERTE=null;fiche.fermer(true);
+    if(!technique)coffreSyncUrl();
+  }
+  NDF_OUVERTE={id:n.id,fermer:fermerFiche};
+  coffreSyncUrl();
 }
 
 // Sans argument : nouvelle note. Avec l'id d'un brouillon : modification.
@@ -693,7 +616,6 @@ function openNdfModal(noteId){
         tvaManuelle=Math.abs(calc.tva-Number(edite.montant_tva))>0.005;
       }
     }
-    ndfAdresse('modifier',edite.id);
   }
   majCalcul();
   const fileEl=$('#ndf-file');
@@ -703,8 +625,12 @@ function openNdfModal(noteId){
     if(fileEl.files.length){dropLbl.classList.add('has-file');dropTxt.textContent=fileEl.files[0].name;}
     else{dropLbl.classList.remove('has-file');dropTxt.textContent='Joindre le justificatif (PDF, JPG, PNG — 10 Mo max)';}
   });
-  const fermer=()=>{back.remove();if(edite)ndfAdresse(null);};
-  $('#ndf-cancel').onclick=fermer;
+  const fermer=(technique)=>{
+    back.remove();
+    if(edite&&NDF_EDITION&&NDF_EDITION.id===edite.id){NDF_EDITION=null;if(technique!==true)coffreSyncUrl();}
+  };
+  if(edite){NDF_EDITION={id:edite.id,fermer};coffreSyncUrl();}
+  $('#ndf-cancel').onclick=()=>fermer();
   back.onclick=(e)=>{if(e.target===back)fermer();};
   form.addEventListener('submit',async(e)=>{
     e.preventDefault();
@@ -731,13 +657,10 @@ function openNdfModal(noteId){
     // Pied commun : les préférences du compte peuvent changer le mode.
     if(window.MySifaSidebar){MySifaSidebar.setUser(ME);MySifaSidebar.refreshTheme();}
   }catch(e){}
-  loadBulletins();
   loadDocs();
-  showTab(_readCoffreTab(),{silent:false});
-  await Promise.all([loadNdf(),loadNdfCategories()]);
-  ndfDepuisAdresse();
+  await Promise.all([loadBulletins(),loadNdf(),loadNdfCategories()]);
+  await coffreDemarrerUrl();
 })();
-window.addEventListener('hashchange',function(){try{showTab(_readCoffreTab(),{silent:true});}catch(e){}});
 </script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 </body>

@@ -368,7 +368,7 @@ BLOCS: dict[str, Bloc] = {
     ),
     # ── Coffre RH (app/web/rh_coffre_page.py) ──
     "rh-coffre.ndf": Bloc(
-        appli="rh_coffre", libelle="Notes de frais à valider", url="/rh/coffre#ndf",
+        appli="rh_coffre", libelle="Notes de frais à valider", url="/rh/coffre?onglet=ndf",
         type="chiffre",
         historique=(("a-valider", "-"), ("montant", "-")),
         valeurs=(("a-valider", "Notes à valider"), ("montant", "Montant à valider (€)")),
