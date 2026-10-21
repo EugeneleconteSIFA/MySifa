@@ -6,7 +6,10 @@ Deux usages, un seul appel :
     (« ajoute le SSCC en GS1-128 sous la référence ») ;
   - construire un premier jet depuis une demande de nouveau format, pièces
     jointes comprises (photo ou PDF d'une étiquette existante, cahier des
-    charges client).
+    charges client) ;
+  - créer une étiquette directement depuis une photo et une explication
+    (`format_libre=True` quand l'utilisateur ne donne pas le format : Claude
+    le déduit de la photo parmi les formats standard de config.py).
 
 Claude ne produit jamais de ZPL : il rend la même mise en page JSON que
 l'éditeur manuel, qui repasse par `normaliser_layout()`. Rien n'est
@@ -22,7 +25,7 @@ import os
 from typing import Optional
 
 from app.services import ia_usage
-from config import ETIQ_IA_MODELE, etiq_ia_modeles
+from config import ETIQ_FORMATS_STANDARD, ETIQ_IA_MODELE, etiq_ia_modeles
 from app.services.etiq_specifiques import (
     EtiquetteInvalide, SYMBOLOGIES, TYPES_VARIABLE, normaliser_format, normaliser_layout,
 )
@@ -49,7 +52,17 @@ Une variable s'utilise dans la `valeur` d'un élément avec {{nom}}.
 
 Règles GS1 : en GS1-128, chaque identifiant d'application s'écrit entre parenthèses, suivi de sa donnée, sans espace — par exemple (00){{sscc}} ou (02){{gtin}}(37){{quantite}}. Le SSCC s'imprime sous l'AI (00). Si la consigne demande un SSCC « sous le code-barre produit », place le GS1-128 SSCC sous le code existant, aligné à gauche sur lui.
 
-Quand tu modifies une étiquette existante : pars de la mise en page fournie, garde les éléments et leurs id que la consigne ne vise pas, et ne déplace que ce qui doit l'être. Quand tu crées depuis une image ou un PDF : reproduis la structure visible (zones, codes, textes), remplace chaque donnée qui change d'une étiquette à l'autre par une variable.
+Quand tu modifies une étiquette existante : pars de la mise en page fournie, garde les éléments et leurs id que la consigne ne vise pas, et ne déplace que ce qui doit l'être.
+
+Quand tu crées depuis une photo ou un PDF d'étiquette :
+- Reproduis fidèlement la disposition visible : mêmes zones, même ordre, mêmes alignements, mêmes cadres et filets, mêmes tailles relatives de texte. Ne réinvente pas la mise en page et n'ajoute rien qui n'y figure pas, sauf si l'explication le demande.
+- Mesure les proportions : situe chaque élément en fraction de la largeur et de la hauteur de l'étiquette sur l'image, puis convertis en mm dans le format retenu. Corrige la perspective et la rotation de la prise de vue : raisonne sur l'étiquette à plat, pas sur le cadre de la photo.
+- Format : s'il est imposé, garde-le. S'il est « à déduire », pars du rapport largeur / hauteur de l'étiquette sur la photo et d'un repère de taille connue (un EAN-13 en module 0,33 mm fait environ 37 mm de large, un SSCC en GS1-128 module 0,5 environ 80 mm), puis retiens le format standard le plus proche de la liste fournie ; indique dans `remarques` le format retenu et sur quoi tu t'es fondé.
+- Codes-barres : identifie la symbologie (EAN-13, GS1-128 avec ses AI entre parenthèses, Code 128, DataMatrix, QR) et reprends sa taille et sa position.
+- Données variables : tout ce qui change d'une étiquette à l'autre (référence, lot, date, quantité, poids, numéro de colis, SSCC, adresse de livraison…) devient une variable, du type qui convient (saisie, compteur, sscc, date). Ce qui est identique sur toutes les étiquettes (logo texte, intitulés de champs, nom du fournisseur) reste du texte fixe. L'explication de l'utilisateur fait foi sur ce point.
+- Valeurs par défaut : reprends les valeurs lues sur la photo comme `valeur` par défaut des variables de saisie, pour que l'aperçu ressemble à l'original.
+- Un logo ou une image ne se reproduit pas : remplace-le par un cadre de même emprise nommé « Logo … » et signale-le dans `remarques`.
+- Signale dans `remarques` tout ce qui est illisible, coupé ou incertain sur la photo, plutôt que de l'inventer.
 
 Appelle l'outil `proposer_etiquette` une seule fois, avec la mise en page complète. `resume` dit en une ou deux phrases ce que tu as fait ; `remarques` liste ce qu'il faut vérifier ou compléter (préfixe GS1 manquant, donnée illisible sur la photo…). Aucun texte en dehors de l'outil."""
 
@@ -167,10 +180,25 @@ def choisir_modele(modele: Optional[str]) -> dict:
     return modeles[modele]
 
 
+def contexte_photo(largeur_mm: Optional[float], hauteur_mm: Optional[float]) -> str:
+    """Ce que l'assistant doit savoir du format pour une création depuis photo."""
+    if largeur_mm and hauteur_mm:
+        return (f"Création depuis une photo. Format imposé par l'utilisateur : "
+                f"{largeur_mm:g} × {hauteur_mm:g} mm (largeur × hauteur) — garde-le.")
+    formats = ", ".join(f"{l}×{h}" for l, h in ETIQ_FORMATS_STANDARD)
+    return ("Création depuis une photo. Format à déduire de la photo (largeur × hauteur en mm). "
+            f"Formats standard du site : {formats}. Une étiquette nettement hors de ces formats "
+            "garde ses dimensions mesurées, arrondies au mm.")
+
+
 def proposer(consigne: str, largeur_mm: float, hauteur_mm: float, dpi: int,
              layout: dict, pieces: Optional[list[dict]] = None, contexte: str = "",
-             modele: Optional[str] = None) -> dict:
+             modele: Optional[str] = None, format_libre: bool = False) -> dict:
     """Rend {"largeur_mm","hauteur_mm","layout","resume","remarques","modele"}.
+
+    `format_libre` : le format n'est pas connu, l'état envoyé le dit « à
+    déduire » au lieu de proposer largeur_mm / hauteur_mm (qui restent le
+    repli si la réponse n'en donne pas).
 
     Lève EtiquetteInvalide avec un message affichable si l'appel échoue.
     """
@@ -180,7 +208,9 @@ def proposer(consigne: str, largeur_mm: float, hauteur_mm: float, dpi: int,
         raise EtiquetteInvalide("Assistant IA indisponible — clé ANTHROPIC_API_KEY absente du serveur.")
 
     etat = {
-        "largeur_mm": largeur_mm, "hauteur_mm": hauteur_mm, "dpi": dpi,
+        "largeur_mm": "à déduire" if format_libre else largeur_mm,
+        "hauteur_mm": "à déduire" if format_libre else hauteur_mm,
+        "dpi": dpi,
         "elements": layout.get("elements", []), "variables": layout.get("variables", []),
     }
     texte = ""

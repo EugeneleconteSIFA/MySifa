@@ -1542,11 +1542,11 @@ function renderPortal(){
   const isMyRH = aa ? !!aa.myrh : isSuper;
   const isExpe = aa ? !!aa.expe : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','expedition','logistique','commercial'].includes(urole)));
   const isFab = aa ? !!aa.fabrication : (isSuper || urole==='fabrication' || !!(urole && ['direction','administration','administration_ventes','administration_technique'].includes(urole)));
-  // MyPrint : les étiquettes de traçabilité. La direction en était exclue par
-  // omission — elle a MyStock en entier, dont l'écran traça, mais pas la tuile
-  // qui y mène. L'administration suit la même logique que sur les autres
-  // modules d'atelier.
-  const isPrint = isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','fabrication','logistique','expedition'].includes(urole));
+  // MyTools (ex-MyPrint, 21/10/2026) : étiquettes, formulaires, éditeur PDF,
+  // traducteur. Ouverte à tout utilisateur connecté — l'éditeur PDF et le
+  // traducteur sont pour tous ; chaque outil applique ses propres droits
+  // dans /tools (app/web/tools_page.py, droits_outils).
+  const isPrint = !!urole;
   const isCom = urole==='commercial';
   const isRH   = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','fabrication','logistique','expedition','comptabilite'].includes(urole)));
   const isComptaPlan = urole === 'comptabilite';
@@ -1623,11 +1623,11 @@ function renderPortal(){
       className:'portal-app',
       'data-portal-id':id,
       draggable:'true',
-      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/stock?tab=traca';}
+      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/tools';}
     },
-      h('div',{className:'portal-app-icon'},iconEl('printer',28)),
-      h('div',{className:'portal-app-name'},'MyPrint'),
-      h('div',{className:'portal-app-desc'},'Étiquettes de traçabilité')
+      h('div',{className:'portal-app-icon'},iconEl('tool',28)),
+      h('div',{className:'portal-app-name'},'MyTools'),
+      h('div',{className:'portal-app-desc'},'Étiquettes, formulaires, PDF, traduction')
     )});
   }
 

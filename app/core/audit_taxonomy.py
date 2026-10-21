@@ -74,7 +74,7 @@ MODULE_LABELS: dict[str, str] = {
     "postit": "Post-it",
     "accueil": "Widgets d'accueil",
     "pricing": "Chiffrage",
-    "print": "MyPrint",
+    "print": "MyTools — Étiquettes",
     "produits": "Mémoire produit",
     "profil": "Profil utilisateur",
     "notifications": "Notifications par service",

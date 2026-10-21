@@ -4278,11 +4278,11 @@ def retirer_document_ligne_rvgi(lif_id: int, doc_id: int, request: Request):
 @router.get("/api/stock/traca/bobines-recentes")
 def traca_bobines_recentes(request: Request, limit: int = 40):
     """Lots de reception recents, reduits aux seuls champs qui figurent sur
-    l'etiquette d'identification bobine de MyPrint.
+    l'etiquette d'identification bobine de MyTools > Etiquettes.
 
     Volontairement ouvert a tout utilisateur connecte, la ou le reste de
-    /api/stock passe par `require_stock` : MyPrint est accessible au role
-    `fabrication` via /stock?tab=traca, et c'est justement au poste que l'on
+    /api/stock passe par `require_stock` : les etiquettes sont accessibles au
+    role `fabrication` via /tools?outil=etiquettes, et c'est justement au poste que l'on
     reimprime l'etiquette d'une bobine entamee ou abimee. Rien n'est expose
     de plus que ce qui est deja colle sur la bobine physique — ni prix, ni
     quantite en stock, ni emplacement.
@@ -6561,7 +6561,10 @@ def _metrage_epaisseurs(conn) -> list[dict]:
 
 @router.get("/api/stock/metrage-epaisseurs")
 def list_metrage_epaisseurs(request: Request):
-    require_stock(request)
+    # Lecture ouverte à tout utilisateur connecté : MyTools › Calculs bobine
+    # s'en sert, et ce ne sont que des épaisseurs types de matière. La
+    # modification (PUT) reste aux administrateurs matières.
+    get_current_user(request)
     with get_db() as conn:
         return _metrage_epaisseurs(conn)
 

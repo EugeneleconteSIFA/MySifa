@@ -1,5 +1,5 @@
 /* MyPrint — étiquettes spécifiques : bibliothèque, impression en série,
- * historique, demandes de nouveau format.
+ * historique, demandes de nouveau format, création depuis une photo.
  *
  * Monté dans MyStock › Traçabilité (poste « specifiques ») par
  * `EtiqSpec.mount(conteneur)`. L'état vit dans `ES` et le DOM dans
@@ -58,6 +58,9 @@
     'check': '<polyline points="20 6 9 17 4 12"/>',
     'save': '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
     'eye': '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+    'camera': '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+    'image': '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+    'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
   };
   function ic(nom, taille) {
     taille = taille || 15;
@@ -220,6 +223,7 @@
         bouton(b.is_super ? `Demandes${b.demandes_ouvertes ? ' (' + b.demandes_ouvertes + ')' : ''}` : 'Mes demandes',
           () => { ES.view = 'demandes'; ES.demandeSel = null; chargerDemandes(); }, b.demandes_ouvertes ? 'actif' : '', 'inbox'),
         bouton('Demander un nouveau format', modaleDemande, '', 'message-square'),
+        bouton('Depuis une photo', () => modaleDepuisPhoto(), '', 'camera'),
         bouton('Nouvelle étiquette', () => modaleNouvelle(), 'accent', 'plus')));
 
     const listeDossiers = h('div', { cls: 'es-dossiers' },
@@ -353,7 +357,161 @@
       window.EtiqSpec.editeur.ouvrir(m);
       ES.view = 'editeur';
       rendre();
-    } catch (e) { toast(e.message, 'danger'); }
+      return m;
+    } catch (e) { toast(e.message, 'danger'); return null; }
+  }
+
+  // ── Création depuis une photo ───────────────────────────────────────
+  // Photo(s) ou PDF d'une étiquette existante + explication → Claude rend la
+  // mise en page, le serveur crée l'étiquette et garde les fichiers comme
+  // source. L'API de Claude refuse une image de plus de 5 Mo et ne lit pas le
+  // HEIC : le navigateur réduit et convertit en JPEG avant l'envoi.
+  const PHOTO_MAX = 4;
+  const PHOTO_TYPES_LUS = ['image/jpeg', 'image/png', 'image/webp'];
+  const PHOTO_OCTETS_SANS_REDUCTION = 3.5 * 1024 * 1024;
+  const PHOTO_COTE_MAX = 2400;
+
+  function chargerImage(fichier) {
+    return new Promise((ok, ko) => {
+      const url = URL.createObjectURL(fichier);
+      const img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); ok(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); ko(new Error(`« ${fichier.name} » : image illisible par ce navigateur — la reprendre en JPEG.`)); };
+      img.src = url;
+    });
+  }
+  async function preparerPhoto(fichier) {
+    const type = (fichier.type || '').toLowerCase();
+    if (type === 'application/pdf') return fichier;
+    if (!type.startsWith('image/') && !/\.(heic|heif)$/i.test(fichier.name)) {
+      throw new Error(`« ${fichier.name} » : format non accepté — photo ou PDF.`);
+    }
+    if (PHOTO_TYPES_LUS.includes(type) && fichier.size <= PHOTO_OCTETS_SANS_REDUCTION) return fichier;
+    const img = await chargerImage(fichier);
+    let blob = null;
+    for (const [cote, qualite] of [[PHOTO_COTE_MAX, 0.9], [2000, 0.85], [1600, 0.8]]) {
+      const k = Math.min(1, cote / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      blob = await new Promise(r => c.toBlob(r, 'image/jpeg', qualite));
+      if (blob && blob.size <= 4.5 * 1024 * 1024) break;
+    }
+    if (!blob) throw new Error(`« ${fichier.name} » : conversion impossible — la reprendre en JPEG.`);
+    const nom = fichier.name.replace(/\.[^.]+$/, '') + '.jpg';
+    return new File([blob], nom, { type: 'image/jpeg' });
+  }
+
+  function modaleDepuisPhoto() {
+    if (!ES.boot.dossiers.length) { toast('Créer d\'abord un dossier.', 'info'); modaleDossier(); return; }
+    const photos = [];   // [{fichier, url}]
+    const vignettes = h('div', { cls: 'es-photo-vignettes' });
+    const rendreVignettes = () => {
+      vignettes.replaceChildren(...photos.map((p, i) => h('div', { cls: 'es-photo-vignette' },
+        p.url ? h('img', { src: p.url, alt: p.fichier.name })
+          : h('div', { cls: 'es-photo-pdf' }, ic('file-text', 22), h('span', { text: p.fichier.name })),
+        h('button', { cls: 'es-photo-retirer', type: 'button', title: 'Retirer', 'aria-label': 'Retirer ' + p.fichier.name,
+          onclick: () => { if (p.url) URL.revokeObjectURL(p.url); photos.splice(i, 1); rendreVignettes(); } }, '×'))));
+      zone.classList.toggle('es-photo-zone-remplie', photos.length > 0);
+      compte.textContent = photos.length ? `${photos.length} / ${PHOTO_MAX}` : '';
+    };
+    const ajouter = async (liste) => {
+      for (const f of Array.from(liste || [])) {
+        if (photos.length >= PHOTO_MAX) { toast(`${PHOTO_MAX} fichiers au plus.`, 'danger'); break; }
+        try {
+          const pret = await preparerPhoto(f);
+          photos.push({ fichier: pret, url: pret.type.startsWith('image/') ? URL.createObjectURL(pret) : null });
+        } catch (e) { toast(e.message, 'danger'); }
+      }
+      rendreVignettes();
+    };
+    const choix = h('input', { type: 'file', multiple: true, accept: 'image/*,application/pdf', hidden: true,
+      onchange: (e) => { ajouter(e.target.files); e.target.value = ''; } });
+    const prise = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true,
+      onchange: (e) => { ajouter(e.target.files); e.target.value = ''; } });
+    const compte = h('span', { cls: 'es-aide' });
+    const zone = h('div', { cls: 'es-photo-zone',
+      ondragover: (e) => { e.preventDefault(); zone.classList.add('es-photo-zone-survol'); },
+      ondragleave: () => zone.classList.remove('es-photo-zone-survol'),
+      ondrop: (e) => { e.preventDefault(); zone.classList.remove('es-photo-zone-survol'); ajouter(e.dataTransfer.files); } },
+      h('div', { cls: 'es-photo-invite' }, ic('image', 22),
+        h('span', { text: 'Déposer ici la photo ou le PDF de l\'étiquette à reproduire' })),
+      h('div', { cls: 'es-ligne-actions es-photo-boutons' },
+        bouton('Prendre une photo', () => prise.click(), '', 'camera'),
+        bouton('Choisir des fichiers', () => choix.click(), '', 'paperclip'), compte),
+      vignettes, choix, prise);
+
+    const explication = h('textarea', { cls: 'es-input', rows: 5, maxlength: 4000,
+      placeholder: 'Étiquette carton 100×150 pour le client X : la référence et le lot changent à chaque impression, le SSCC est en GS1-128 en bas…' });
+    const nom = h('input', { cls: 'es-input', maxlength: 120, placeholder: 'Ex. Carton client X 100×150' });
+    const dossier = selectDossiers(ES.dossierId || ES.boot.dossiers[0].id);
+    const larg = h('input', { cls: 'es-input', type: 'number', step: '0.5', min: 10, placeholder: 'Déduite' });
+    const haut = h('input', { cls: 'es-input', type: 'number', step: '0.5', min: 5, placeholder: 'Déduite' });
+    const dpi = h('select', { cls: 'es-input' }, ...ES.boot.referentiel.dpi.map(x => h('option', { value: x, text: x + ' dpi' })));
+    dpi.value = '203';
+    const formats = h('div', { cls: 'es-puces' },
+      h('button', { cls: 'es-puce', type: 'button', onclick: () => { larg.value = ''; haut.value = ''; }, text: 'Déduire de la photo' }),
+      ...FORMATS.map(([l, ht]) =>
+        h('button', { cls: 'es-puce', type: 'button', onclick: () => { larg.value = l; haut.value = ht; }, text: `${l}×${ht}` })));
+    const modeleIa = selectModeleIa();
+    const attente = h('div', { cls: 'es-photo-attente', hidden: true },
+      h('span', { cls: 'es-photo-spinner' }),
+      h('span', { text: 'Lecture de la photo et mise en page… Compter 30 à 60 secondes.' }));
+
+    const ok = bouton('Générer l\'étiquette', async () => {
+      if (!photos.length) { toast('Joindre au moins une photo ou un PDF de l\'étiquette.', 'danger'); return; }
+      if (!explication.value.trim()) { toast('Expliquer l\'étiquette : ce qui change d\'une impression à l\'autre, les codes attendus.', 'danger'); explication.focus(); return; }
+      if (!nom.value.trim()) { toast('Nom de l\'étiquette obligatoire.', 'danger'); nom.focus(); return; }
+      if (!!larg.value !== !!haut.value) { toast('Format incomplet — donner largeur et hauteur, ou aucune des deux.', 'danger'); return; }
+      const fd = new FormData();
+      fd.append('consigne', explication.value); fd.append('nom', nom.value);
+      fd.append('dossier_id', dossier.value); fd.append('dpi', dpi.value);
+      fd.append('modele', modeleIa.select.value);
+      if (larg.value && haut.value) { fd.append('largeur_mm', larg.value); fd.append('hauteur_mm', haut.value); }
+      for (const p of photos) fd.append('fichiers', p.fichier, p.fichier.name);
+      occupe(ok, true, 'Lecture de la photo et mise en page…');
+      attente.hidden = false;
+      try {
+        const r = await api('/ia/depuis-photo', { method: 'POST', form: fd });
+        photos.forEach(p => p.url && URL.revokeObjectURL(p.url));
+        fermerModale();
+        toast(`Étiquette créée par ${r.modele_libelle} — à relire.`);
+        await charger();
+        const m = await ouvrirEditeur(r.modele_id);
+        bilanPhoto(r, m);
+      } catch (e) { toast(e.message, 'danger'); occupe(ok, false); attente.hidden = true; }
+    }, 'accent', 'zap');
+
+    ES.adresseModale = { cle: 'depuis_photo', id: 'nouvelle' };
+    const boite = modale('Créer une étiquette depuis une photo', h('div', { cls: 'es-form' },
+      zone,
+      champ('Explication', explication, 'Ce qui change d\'une étiquette à l\'autre, les codes-barres attendus, ce qu\'il faut ignorer sur la photo.'),
+      h('div', { cls: 'es-ligne2' }, champ('Nom', nom), champ('Dossier', dossier)),
+      h('div', { cls: 'es-champ' }, h('span', { cls: 'es-champ-label', text: 'Format (facultatif)' }), formats,
+        h('div', { cls: 'es-ligne3' }, champ('Largeur (mm)', larg), champ('Hauteur (mm)', haut), champ('Résolution', dpi)),
+        h('span', { cls: 'es-champ-aide', text: 'Laissé vide, le format est déduit de la photo et ramené au format standard le plus proche.' })),
+      modeleIa.bloc, attente),
+    [bouton('Annuler', fermerModale), ok], true);
+    requestAnimationFrame(() => explication.focus());
+    return boite;
+  }
+
+  // Ce que Claude a fait et ce qu'il faut vérifier, par-dessus l'éditeur.
+  // Simple compte rendu : il n'entre pas dans l'adresse.
+  function bilanPhoto(r, m) {
+    const remarques = r.remarques || [];
+    const sources = (m && m.sources) || [];
+    modale('Étiquette créée — à vérifier', h('div', { cls: 'es-form' },
+      r.resume ? h('p', { cls: 'es-texte', text: r.resume }) : null,
+      h('p', { cls: 'es-aide', text: `Format retenu : ${fmtNum(r.largeur_mm)} × ${fmtNum(r.hauteur_mm)} mm · ${r.modele_libelle}` }),
+      remarques.length ? h('div', { cls: 'es-encart' },
+        h('div', { cls: 'es-encart-titre', text: 'À vérifier' }),
+        h('ul', { cls: 'es-photo-remarques' }, ...remarques.map(x => h('li', { text: x })))) : null,
+      sources.length ? h('div', { cls: 'es-pieces' }, ...sources.map((s, i) =>
+        h('a', { cls: 'es-piece', href: s.url, target: '_blank', rel: 'noopener' }, ic('paperclip', 14),
+          sources.length > 1 ? `Original ${i + 1}` : 'Original'))) : null,
+      h('p', { cls: 'es-aide', text: 'Le résumé et les points à vérifier restent dans la description de l\'étiquette.' })),
+    [bouton('Fermer', fermerModale, 'accent')]);
   }
 
   // ── Impression en série ─────────────────────────────────────────────
@@ -615,8 +773,9 @@
     else if (mo.cle === 'dossier_etiq') modaleDossier(mo.id === 'nouveau' ? undefined : d);
     else if (mo.cle === 'nouvelle_etiquette') modaleNouvelle();
     else if (mo.cle === 'demande_format') modaleDemande();
+    else if (mo.cle === 'depuis_photo') modaleDepuisPhoto();
   }
-  const CLES_MODALES = ['imprimer', 'historique_etiq', 'dupliquer', 'dossier_etiq', 'nouvelle_etiquette', 'demande_format'];
+  const CLES_MODALES = ['imprimer', 'historique_etiq', 'dupliquer', 'dossier_etiq', 'nouvelle_etiquette', 'demande_format', 'depuis_photo'];
 
   // ── Montage ─────────────────────────────────────────────────────────
   async function mount(conteneur) {
