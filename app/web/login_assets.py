@@ -252,7 +252,7 @@ function startLoginTrainAnimation(){
     'edit':          {name:'Saisie Prod',    desc:'Saisie opérateur — machine'},
     'wrench':        {name:'MyProd',         desc:'Suivi de production & Planning'},
     'package':       {name:'MyStock',        desc:'Gestion des stocks produits'},
-    'printer':       {name:'MyPrint',        desc:'Étiquettes de traçabilité'},
+    'tool':          {name:'MyTools',        desc:'Étiquettes, formulaires, PDF, traduction'},
     'calculator':    {name:'MyCompta',       desc:'Comptabilité — accès réservé'},
     'truck':         {name:'MyExpé',         desc:'Expédition & Suivi'},
     'users':         {name:'Planning RH',    desc:'Planning personnel & Congés'},

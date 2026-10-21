@@ -20,6 +20,8 @@ le module MyPrint sans entrée supplémentaire dans la taxonomie.
   GET    /modeles/{id}/impressions      historique
   POST   /impressions/{id}/reimprimer   même ZPL, mêmes numéros
   POST   /ia/proposer                   assistant : consigne → mise en page
+  POST   /ia/depuis-photo               photo(s) + explication → nouvelle étiquette
+  GET    /modeles/{id}/sources/{fichier} photo source d'une étiquette créée par l'IA
   POST   /demandes                      demande de nouveau format (+ pièces)
   GET    /demandes                      toutes (super admin) ou les miennes
   GET    /demandes/{id}
@@ -32,6 +34,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 from datetime import datetime
 from typing import Optional
@@ -40,7 +43,10 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from config import ETIQ_IA_MODELE, ETIQ_PIECE_MAX_OCTETS, ETIQ_UPLOAD_DIR, ROLES_MYPRINT, etiq_ia_modeles
+from config import (
+    ETIQ_IA_MODELE, ETIQ_PHOTO_IMAGE_MAX_OCTETS, ETIQ_PHOTO_MAX_FICHIERS, ETIQ_PIECE_MAX_OCTETS,
+    ETIQ_UPLOAD_DIR, ROLES_MYPRINT, etiq_ia_modeles,
+)
 from app.core.database import get_db
 from app.services.auth_service import get_current_user, is_superadmin
 from app.services import etiq_specifiques as es
@@ -60,6 +66,18 @@ _MIME_PIECES = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
+# Ce que l'assistant lit réellement (etiq_specifiques_ia._blocs_pieces) : une
+# création depuis photo n'accepte que ces formats. HEIC n'est pas lu par
+# l'API ; le navigateur le convertit en JPEG avant l'envoi.
+_MIME_PHOTO = {"application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp"}
+# Photos sources conservées à côté des pièces des demandes, sans table :
+# source_<id étiquette>_<aléa>.<ext>. Le nom porte l'étiquette, le motif
+# ci-dessous est le seul accepté au téléchargement.
+_SOURCES_DIR = os.path.join(ETIQ_UPLOAD_DIR, "sources")
+_SOURCE_RE = re.compile(r"^source_(\d+)_[0-9a-f]{16}\.(jpg|png|gif|webp|pdf)$")
+_EXT_MIME = {"jpg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp",
+             "pdf": "application/pdf"}
+_MIME_EXT = {v: k for k, v in _EXT_MIME.items()}
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────
@@ -101,7 +119,23 @@ def _serialize_modele(row, complet: bool = False) -> dict:
         except EtiquetteInvalide:
             d["layout"] = {"elements": [], "variables": []}
         d["avertissements"] = es.controles(d["layout"])
+        d["sources"] = _sources(row["id"])
     return d
+
+
+def _sources(modele_id: int) -> list[dict]:
+    """Photos d'origine d'une étiquette créée depuis une photo."""
+    try:
+        noms = sorted(os.listdir(_SOURCES_DIR))
+    except OSError:
+        return []
+    out = []
+    for n in noms:
+        m = _SOURCE_RE.match(n)
+        if m and int(m.group(1)) == int(modele_id):
+            out.append({"fichier": n, "mime": _EXT_MIME[m.group(2)],
+                        "url": f"{router.prefix}/modeles/{modele_id}/sources/{n}"})
+    return out
 
 
 def _modele(conn, modele_id: int):
@@ -584,6 +618,129 @@ def ia_proposer(payload: IaPayload, request: Request):
             return proposer(payload.consigne[:4000], l, h, d, layout, modele=payload.modele)
     except EtiquetteInvalide as e:
         _invalide(e)
+
+
+@router.post("/ia/depuis-photo")
+async def ia_depuis_photo(
+    request: Request,
+    consigne: str = Form(""),
+    nom: str = Form(""),
+    dossier_id: Optional[int] = Form(None),
+    largeur_mm: Optional[float] = Form(None),
+    hauteur_mm: Optional[float] = Form(None),
+    dpi: int = Form(203),
+    modele: Optional[str] = Form(None),
+    fichiers: list[UploadFile] = File(default=[]),
+):
+    """Accès direct (tout utilisateur MyPrint) : photo(s) ou PDF d'une
+    étiquette existante + explication → nouvelle étiquette dans le dossier,
+    prête à relire dans l'éditeur. Les fichiers sont conservés comme source."""
+    user = _user(request)
+    from app.services import ia_usage
+    from app.services.etiq_specifiques_ia import choisir_modele, contexte_photo, proposer
+    try:
+        choisir_modele(modele)  # refus immédiat, avant de lire les fichiers
+    except EtiquetteInvalide as e:
+        _invalide(e)
+    consigne = (consigne or "").strip()
+    nom = (nom or "").strip()[:120]
+    if not consigne:
+        raise HTTPException(status_code=400, detail="Expliquer l'étiquette : ce qui change d'une impression à l'autre, les codes attendus.")
+    if len(consigne) > 4000:
+        raise HTTPException(status_code=400, detail="Explication trop longue — 4 000 caractères au plus.")
+    if not nom:
+        raise HTTPException(status_code=400, detail="Nom de l'étiquette obligatoire.")
+    if not dossier_id:
+        raise HTTPException(status_code=400, detail="Choisir le dossier où créer l'étiquette.")
+    if (largeur_mm is None) != (hauteur_mm is None) or any(v is not None and v <= 0 for v in (largeur_mm, hauteur_mm)):
+        raise HTTPException(status_code=400, detail="Format incomplet — donner largeur et hauteur, ou aucune des deux.")
+    with get_db() as conn:
+        _dossier_actif(conn, dossier_id)
+
+    fichiers = [f for f in (fichiers or []) if f and f.filename]
+    if not fichiers:
+        raise HTTPException(status_code=400, detail="Joindre au moins une photo ou un PDF de l'étiquette.")
+    if len(fichiers) > ETIQ_PHOTO_MAX_FICHIERS:
+        raise HTTPException(status_code=400, detail=f"{ETIQ_PHOTO_MAX_FICHIERS} fichiers au plus.")
+    pieces = []
+    for f in fichiers:
+        mime = (f.content_type or "").lower()
+        if mime == "image/jpg":
+            mime = "image/jpeg"
+        if mime not in _MIME_PHOTO:
+            raise HTTPException(status_code=400,
+                                detail=f"« {f.filename} » : format non accepté — photo JPEG, PNG, WebP ou PDF.")
+        contenu = await f.read()
+        if not contenu:
+            raise HTTPException(status_code=400, detail=f"« {f.filename} » est vide.")
+        if len(contenu) > ETIQ_PIECE_MAX_OCTETS:
+            raise HTTPException(status_code=400,
+                                detail=f"« {f.filename} » dépasse {ETIQ_PIECE_MAX_OCTETS // (1024 * 1024)} Mo.")
+        if mime.startswith("image/") and len(contenu) > ETIQ_PHOTO_IMAGE_MAX_OCTETS:
+            raise HTTPException(status_code=400, detail=(
+                f"« {f.filename} » dépasse {ETIQ_PHOTO_IMAGE_MAX_OCTETS // (1024 * 1024)} Mo — "
+                "réduire la photo avant de l'envoyer."))
+        pieces.append({"mime": mime, "contenu": contenu, "nom": f.filename[:200]})
+
+    libre = largeur_mm is None
+    l, h, d = es.normaliser_format(largeur_mm or 100, hauteur_mm or 150, dpi)
+    contexte = contexte_photo(None if libre else l, None if libre else h) + f"\nNom de l'étiquette : {nom}"
+    try:
+        with ia_usage.suivi(user, "etiquettes", "photo"):
+            res = proposer(consigne, l, h, d, {"elements": [], "variables": []}, pieces, contexte,
+                           modele=modele, format_libre=libre)
+    except EtiquetteInvalide as e:
+        _invalide(e)
+    if not libre:
+        # Format imposé : la réponse ne le change pas.
+        res["largeur_mm"], res["hauteur_mm"] = l, h
+
+    description = res["resume"] + f" (créée depuis une photo : {res['modele_libelle']})"
+    if res["remarques"]:
+        description += "\nÀ vérifier : " + " · ".join(res["remarques"])
+    os.makedirs(_SOURCES_DIR, exist_ok=True)
+    ecrits = []
+    now = _now()
+    try:
+        with get_db() as conn:
+            _dossier_actif(conn, dossier_id)
+            cur = conn.execute(
+                "INSERT INTO etiq_modeles (dossier_id,nom,description,largeur_mm,hauteur_mm,dpi,layout_json,"
+                "created_at,created_by,updated_at,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (dossier_id, nom, description[:1000], res["largeur_mm"], res["hauteur_mm"], d,
+                 json.dumps(res["layout"], ensure_ascii=False), now, user.get("email"), now, user.get("email")))
+            mid = cur.lastrowid
+            for p in pieces:
+                chemin = os.path.join(_SOURCES_DIR, f"source_{mid}_{secrets.token_hex(8)}.{_MIME_EXT[p['mime']]}")
+                with open(chemin, "wb") as fh:
+                    fh.write(p["contenu"])
+                ecrits.append(chemin)
+            conn.commit()
+    except Exception:
+        for c in ecrits:
+            try:
+                os.remove(c)
+            except OSError:
+                pass
+        raise
+    return {"ok": True, "modele_id": mid, "resume": res["resume"], "remarques": res["remarques"],
+            "modele_libelle": res["modele_libelle"], "largeur_mm": res["largeur_mm"],
+            "hauteur_mm": res["hauteur_mm"]}
+
+
+@router.get("/modeles/{modele_id}/sources/{fichier}")
+def get_source(modele_id: int, fichier: str, request: Request):
+    _user(request)
+    m = _SOURCE_RE.match(fichier or "")
+    if not m or int(m.group(1)) != modele_id:
+        raise HTTPException(status_code=404, detail="Fichier introuvable.")
+    with get_db() as conn:
+        _modele(conn, modele_id)
+    chemin = os.path.join(_SOURCES_DIR, fichier)
+    if not os.path.exists(chemin):
+        raise HTTPException(status_code=404, detail="Fichier absent du serveur.")
+    return FileResponse(chemin, media_type=_EXT_MIME[m.group(2)], filename=fichier,
+                        content_disposition_type="inline")
 
 
 # ─── Demandes de nouveau format ─────────────────────────────────────────

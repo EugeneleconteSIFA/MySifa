@@ -5,6 +5,8 @@ Fixes:
 - Navigation / back button
 - Add product/emplacement button restored
 """
+from urllib.parse import urlencode
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
@@ -34,13 +36,18 @@ def stock_page(request: Request):
         if e.status_code == 401:
             return RedirectResponse(url="/?next=/stock", status_code=302)
         raise
-    # Les fabricants peuvent accéder uniquement via ?tab=traca (outil d'étiquettes)
+    # Les étiquettes traça sont parties dans MyTools le 21/10/2026 : les liens
+    # posés (favoris, annonces, postes d'atelier) y sont renvoyés avec leurs
+    # paramètres — poste, étiquette spécifique ouverte, fenêtre. MyTools
+    # applique ses propres droits (app/web/tools_page.py).
     tab_param = request.query_params.get("tab", "")
+    if tab_param == "traca":
+        suite = [("outil", "etiquettes")] + [
+            (k, v) for k, v in request.query_params.multi_items() if k != "tab"
+        ]
+        return RedirectResponse(url="/tools?" + urlencode(suite), status_code=302)
     if not user_has_app_access(user, "stock"):
-        if user.get("role") == "fabrication" and tab_param == "traca":
-            pass  # autorisé → accès limité au traça dans le JS
-        else:
-            return access_denied_response("MyStock")
+        return access_denied_response("MyStock")
     # Substitution du placeholder de branding (org name paramétrable, défaut SIFA).
     html = STOCK_HTML.replace("__APP_ORG_NAME__", _js_escape(APP_ORG_NAME))
     html = html.replace(
@@ -79,7 +86,6 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_dock.css?v=3">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
-<link rel="stylesheet" href="/static/mysifa_etiq_specifiques.css?v=2">
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -1784,69 +1790,6 @@ body.light .hist-badge-mvt-inventaire{color:#7c3aed}
 .bob-alerte b{color:var(--warn)}
 .bob-alerte ul{margin:8px 0 0;padding-left:18px;color:var(--text2)}
 
-/* ── Étiquettes traçabilité ── */
-.traca-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:16px 0 10px;padding:0 2px}
-.traca-postes-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:8px}
-.traca-poste-card{background:var(--card);border:1.5px solid var(--border);border-radius:14px;
-  padding:16px 12px;cursor:pointer;transition:all .15s;text-align:center;user-select:none}
-.traca-poste-card:hover{border-color:var(--accent);background:var(--accent-bg);transform:translateY(-1px)}
-.traca-poste-card:active{transform:scale(.97)}
-.traca-poste-icon{display:flex;align-items:center;justify-content:center;
-  width:44px;height:44px;border-radius:12px;margin:0 auto 10px;font-size:22px}
-.traca-poste-label{font-size:12px;font-weight:700;color:var(--text);line-height:1.3}
-.traca-poste-count{font-size:10px;color:var(--muted);margin-top:3px}
-.traca-back-bar{display:flex;align-items:center;gap:10px;margin-bottom:16px}
-.traca-back-btn{display:flex;align-items:center;gap:5px;background:none;border:none;
-  padding:6px 10px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;
-  color:var(--text2);font-family:inherit;transition:background .1s}
-.traca-back-btn:hover{background:var(--accent-bg);color:var(--accent)}
-.traca-poste-heading{font-size:16px;font-weight:800;color:var(--text)}
-.traca-etiq-list{display:flex;flex-direction:column;gap:10px}
-.traca-etiq-card{background:var(--card);border:1.5px solid var(--border);border-radius:14px;
-  padding:14px 16px;display:flex;align-items:center;gap:14px;transition:border-color .15s}
-.traca-etiq-card:hover{border-color:var(--accent)}
-.traca-etiq-icon-wrap{width:40px;height:40px;border-radius:10px;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center}
-.traca-etiq-body{flex:1;min-width:0}
-.traca-etiq-label{font-size:14px;font-weight:700;margin-bottom:3px}
-.traca-etiq-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.traca-format-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;
-  background:var(--accent-bg);color:var(--accent);letter-spacing:.3px}
-.traca-printer-badge{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:3px}
-.traca-print-btn{flex-shrink:0;display:flex;align-items:center;gap:6px;
-  padding:8px 14px;border-radius:10px;border:none;cursor:pointer;
-  font-size:12px;font-weight:700;font-family:inherit;
-  background:var(--accent);color:#fff;transition:opacity .15s}
-.traca-print-btn:active{opacity:.75}
-.traca-dev-banner{display:flex;align-items:center;gap:10px;background:var(--accent-bg);
-  border:1px solid var(--accent);border-radius:10px;padding:10px 14px;
-  font-size:12px;color:var(--accent);margin-bottom:14px;font-weight:600}
-/* -- Affiches memo (groupe Communication, poste Bureaux) -- */
-.traca-group-title{display:flex;align-items:center;gap:10px;margin:22px 0 12px;
-  font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px}
-.traca-group-title::after{content:"";flex:1;height:1px;background:var(--border)}
-.traca-aff-card{background:var(--card);border:1.5px solid var(--border);border-radius:14px;
-  padding:14px 16px;display:flex;align-items:center;gap:14px;transition:border-color .15s}
-.traca-aff-card:hover{border-color:var(--accent)}
-.traca-aff-card--cyan{border-left:4px solid #22d3ee}
-.traca-aff-card--amber{border-left:4px solid #fbbf24}
-.traca-aff-card--violet{border-left:4px solid #8b5cf6}
-body.light .traca-aff-card--cyan{border-left-color:#0891b2}
-body.light .traca-aff-card--amber{border-left-color:#b45309}
-body.light .traca-aff-card--violet{border-left-color:#7c3aed}
-.traca-aff-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
-.traca-aff-title{font-size:14px;font-weight:700;color:var(--text)}
-.traca-aff-sub{font-size:12px;color:var(--text2);line-height:1.4}
-.traca-aff-sub b{color:var(--text)}
-.traca-aff-actions{display:flex;gap:6px;flex-shrink:0}
-.traca-aff-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;
-  border-radius:9px;border:1px solid var(--border);background:transparent;
-  color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
-  text-decoration:none;transition:border-color .15s,color .15s,background .15s}
-.traca-aff-btn:hover{color:var(--text);border-color:var(--accent);background:var(--accent-bg)}
-.traca-aff-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
-.traca-aff-btn--dark .traca-aff-dot{background:#0a0e17;box-shadow:inset 0 0 0 1px rgba(148,163,184,.45)}
-.traca-aff-btn--light .traca-aff-dot{background:#f1f5f9;box-shadow:inset 0 0 0 1px rgba(148,163,184,.45)}
 /* ── Formulaire étiquette palettes ── */
 .etiq-form-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .etiq-form-field{display:flex;flex-direction:column;gap:4px}
@@ -2539,8 +2482,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>
 <script src="/static/mysifa_stock_modals.js?v=unite2"></script>
-<script src="/static/mysifa_etiq_specifiques.js?v=4"></script>
-<script src="/static/mysifa_etiq_editeur.js?v=2"></script>
+<script src="/static/mysifa_scanner.js?v=1"></script>
 <script src="/static/mysifa_donnees_prod.js?v=16"></script>
 <script src="/static/mysifa_destockage.js?v=9"></script>
 <script src="/static/mysifa_dock.js?v=3"></script>
@@ -2550,7 +2492,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_guides.js"></script>
 <!-- Adresse de la page : onglet, filtres, tri, objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/stock_url.js?v=6"></script>
+<script src="/static/stock_url.js?v=7"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=13"></script>
@@ -4370,12 +4312,14 @@ function closeSidebar() { S.sidebarOpen = false; document.body.classList.remove(
 
 // ── Navigation ──────────────────────────────────────────────────
 function goToTab(tab) {
+  // Les étiquettes traça vivent dans MyTools depuis le 21/10/2026.
+  if (tab === 'traca') { tracaVersMyTools(); return; }
   // Accès restreints selon le mode
   if (S.tracaOnly && tab !== 'traca') return;
   if (S.fabStockMode && !['menu','production','matieres','bobines','historique','traca','plan-entrepot'].includes(tab)) return;
   if (tab === 'destockage' && !peutVoirDestockage()) return;
   // Arrêter la caméra si on quitte l'onglet réception
-  if (tab !== 'reception' && S.recepScanning) recepStopCamera();
+  if (tab !== 'reception' && window.MySifaScanner && MySifaScanner.actif()) recepStopCamera();
   S.tab = tab; S.selProduit = null; S.selEmpl = null; S.selMatiere = null; S.searchResults = null; S.showAddForm = false;
   if (tab !== 'produits-finis') { S.pfModal = null; closeMroot(); }
   if (tab !== 'negoce') { S.ngModal = null; S.ngSelDetail = null; S.ngSelDetailLoading = false; }
@@ -4386,7 +4330,6 @@ function goToTab(tab) {
     clearTimeout(_refClientSearchTimer);
   }
   if (tab !== 'dashboard') closeDashboardAddPfModal();
-  if (tab !== 'traca') S.tracaPoste = null;
   if (tab !== 'monitoring') {
     if (S.monitoring) {
       S.monitoring.query = '';
@@ -15215,933 +15158,12 @@ function buildEmplacementDetail() {
 
   return el('div',{cls:'content'}, back, head, actions, refBlock, buildMvtHistory(sel.mouvements||[], '', { primary:'emplacement' }));
 }
-// ── Config traçabilité ────────────────────────────────────────────
-const TRACA_POSTES = [
-  { id:'bureaux',    label:'Bureaux',      icon:'briefcase', color:'#6366f1', colorBg:'rgba(99,102,241,.12)' },
-  { id:'cohesio1',   label:'Cohésio 1',    icon:'cpu',       color:'#f59e0b', colorBg:'rgba(245,158,11,.12)' },
-  { id:'cohesio2',   label:'Cohésio 2',    icon:'cpu',       color:'#f59e0b', colorBg:'rgba(245,158,11,.12)' },
-  { id:'logistique', label:'Logistique',   icon:'truck',     color:'#10b981', colorBg:'rgba(16,185,129,.12)' },
-];
-
-// Outils de MyPrint adressables comme un poste (?tab=traca&poste=…), mais qui
-// ne sont pas un poste d'étiquetage : ils ont leur propre écran.
-const TRACA_OUTILS = [
-  { id:'specifiques', label:'Étiquettes spécifiques', icon:'tag', sous:'Par client, séries, SSCC' },
-];
-
-const TRACA_FORMATS = [
-  { id:'a4p',     label:'A4 paysage',   dims:'297×210 mm' },
-  { id:'120x105', label:'120×105 mm',   dims:'120×105 mm' },
-  { id:'105x50',  label:'105×50 mm',    dims:'105×50 mm'  },
-  // Etiquettes bobine. Les formats 40x20 et 40x30 de l'ancienne
-  // identification bobine ont ete retires avec elle : plus aucune etiquette
-  // ne les utilise, et un format orphelin dans la liste laisse croire qu'on
-  // peut encore imprimer dessus.
-  { id:'100x150', label:'100×150 mm',   dims:'100×150 mm' },
-  { id:'100x50',  label:'100×50 mm',    dims:'100×50 mm'  },
-];
-
-const TRACA_ETIQUETTES = [
-  // Logistique
-  { id:'id_palette_a4',   label:'Identification palette',  format:'a4p',    postes:['logistique']               },
-  { id:'nb_palettes_logi',label:'Nombre de palettes',      format:'120x105',postes:['logistique']               },
-  // Bureaux
-  { id:'id_plaque',       label:'Identification plaques',  format:'105x50', postes:['bureaux']                  },
-  { id:'id_cliche',       label:'Identification clichés',  format:'105x50', postes:['bureaux']                  },
-  // Cohésio
-  { id:'nb_palettes_c',   label:'Nombre de palettes',      format:'105x50', postes:['cohesio1','cohesio2']      },
-  { id:'id_carton',       label:'Identification carton',   format:'105x50', postes:['cohesio1','cohesio2']      },
-  // Identification bobine — section présente sur TOUS les postes.
-  //
-  // Elle remplace l'ancienne étiquette bobine 40×20 des Cohésio, qui ne
-  // portait que la référence produit et le nombre d'étiquettes par bobine :
-  // ni lot, ni claim FSC, ni laize. Une bobine entamée réétiquetée avec ça
-  // perdait sa traçabilité matière, ce qui n'est plus tenable sous
-  // certification.
-  //
-  // Le format n'est pas un choix de l'utilisateur mais une propriété du
-  // poste : la logistique étiquette des bobines qui partent en rack et doit
-  // les lire de loin (grand format), les Cohésio recollent une étiquette sur
-  // le mandrin d'une bobine en cours (petit format). Le bureau ADV dépanne
-  // les deux, donc lui seul voit les deux entrées.
-  { id:'id_bobine_grand', label:'Identification bobine — grand format', format:'100x150',
-    groupe:'bobines', postes:['logistique','bureaux'] },
-  { id:'id_bobine_petit', label:'Identification bobine — petit format',  format:'100x50',
-    groupe:'bobines', postes:['cohesio1','cohesio2','bureaux'] },
-];
-
-// Sections d'un poste. Une étiquette sans `groupe` reste dans la liste
-// principale ; celles qui en portent un sont rassemblées sous ce titre, sur
-// le modèle de la section « Communication » des Bureaux.
-const TRACA_GROUPES = [
-  { id:'bobines', label:'Identification bobines', icon:'layers' },
-];
-
-// -- Affiches memo (poste Bureaux > Communication) --
-const TRACA_AFFICHES = [
-  { id:'expe-z0',        variant:'cyan',
-    title:"Tu prepares une expe ?",
-    sub:"Pense a deplacer ton stock en <b>Z0</b>.",
-    icon:'truck',
-    dark:'/static/affiches/affiche-expe-z0.html',
-    light:'/static/affiches/affiche-expe-z0-light.html' },
-  { id:'palette-z1',     variant:'amber',
-    title:"Ta palette est complete ?",
-    sub:"Pense a l'ajouter en <b>Z1</b>.",
-    icon:'layers',
-    dark:'/static/affiches/affiche-palette-z1.html',
-    light:'/static/affiches/affiche-palette-z1-light.html' },
-  { id:'verif-inv',      variant:'violet',
-    title:"Tu verifies un stock ?",
-    sub:"Profites-en pour faire l'<b>inventaire</b>.",
-    icon:'clipboard',
-    dark:'/static/affiches/affiche-verif-inventaire.html',
-    light:'/static/affiches/affiche-verif-inventaire-light.html' },
-];
-
-// ── Helpers impression ────────────────────────────────────────────
-function _printWin(title, pageSize, css, body) {
-  const w = window.open('', '_blank');
-  if (!w) { showToast('Autorisez les popups pour imprimer', 'error'); return null; }
-  w.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
-<title>${title}</title>
-<style>
-@page { size: ${pageSize}; margin: 0; }
-*{ margin:0; padding:0; box-sizing:border-box; }
-body{ font-family: Arial, Helvetica, sans-serif; background:#fff; }
-${css}
-</style>
-</head><body>${body}<script>window.onload=function(){window.focus();window.print();}<\/script><script src="/static/mysifa_impersonate.js?v=2"><\/script>
-</body></html>`);
-  w.document.close();
-  return w;
-}
-
-function _inp(placeholder, opts={}) {
-  return el('input', { cls:'field-input', attrs:{ type: opts.type||'text', placeholder, autocomplete:'off', ...(opts.attrs||{}) }, style: opts.style||{} });
-}
-
-// ── 1. Logistique — Identification palette (A4 paysage) ───────────
-function buildIdPaletteA4Form() {
-  let _ref='', _qty='', _unit=allUnitLabels()[0]||'étiquettes', _qctn='', _fsc=false;
-  function doPrint() {
-    const ref = _ref.trim(), qty = _qty.trim(), qctn = _qctn.trim();
-    if (!ref) { showToast('Référence requise', 'error'); return; }
-    // Format nombre avec points entre milliers
-    function fmtNb(n){return String(n).replace(/\B(?=(\d{3})+(?!\d))/g,'.');}
-    // Abréviation étiquettes → ETQ
-    const unitDisplay = (_unit||'').toLowerCase()==='étiquettes'?'ETQ':(_unit||'').toUpperCase();
-    const quv = qty ? fmtNb(qty) + '\u00a0' + unitDisplay : '';
-    const unitLow = _unit.toLowerCase().replace(/s$/, '');  // 'cartons' → 'carton'
-    const showCtn = !!qctn && unitLow !== 'carton';
-    const qctnNum = parseInt(qctn) || 0;
-    const ctnLabel = qctnNum === 1 ? '1\u00a0CARTON' : (fmtNb(qctn) + '\u00a0CARTONS');
-    _printWin('Palette — '+ref, '297mm 210mm',
-      `.label{width:297mm;height:210mm;padding:14mm 18mm;display:flex;flex-direction:column;
-              align-items:center;justify-content:center;gap:10mm;
-              text-align:center;page-break-after:always;page-break-inside:avoid;
-              font-family:'Berlin Sans FB','Berlin Sans FB Demi',Arial,sans-serif;text-transform:uppercase}
-       .ref{font-size:112pt;font-weight:900;letter-spacing:1pt;word-break:break-all;line-height:1.1;text-decoration:underline}
-       .quv{font-size:100pt;font-weight:800;color:#111}
-       .qctn{font-size:72pt;font-weight:700;color:#333}
-       /* Bandeau FSC : même code visuel que l'étiquette bobine matière, pour
-          qu'un cariste lise la même chose sur une palette et sur une bobine.
-          Contour épais et non couleur seule : les imprimantes d'atelier sont
-          en noir et blanc. */
-       .fsc-banner{font-size:34pt;font-weight:900;letter-spacing:3pt;
-                   padding:4mm 14mm;border:3mm solid #0f7c3a;border-radius:6mm;
-                   background:#e6f4ea;color:#0f7c3a}`,
-      `<div class="label">
-         ${_fsc?`<div class="fsc-banner">PRODUIT CERTIFIÉ FSC</div>`:''}
-         <div class="ref">${ref} FS</div>
-         ${quv?`<div class="quv">${quv}</div>`:''}
-         ${showCtn?`<div class="qctn">(${ctnLabel})</div>`:''}
-       </div>`);
-  }
-  const rInp=_inp('Référence produit — ex. 1077/0026'); rInp.addEventListener('input',e=>{_ref=e.target.value;});
-  // Quantité
-  const qtyInp=_inp('Quantité — ex. 500',{type:'number',attrs:{min:'1',step:'1'}});
-  qtyInp.style.width='100%';
-  qtyInp.addEventListener('input',e=>{_qty=e.target.value;});
-  // Sélecteur unité de vente (même liste que le dashboard add-form)
-  const unitSel=document.createElement('select');
-  unitSel.className='field-input';
-  unitSel.style.cssText='width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;color:var(--text);font-family:inherit;cursor:pointer;outline:none';
-  allUnitLabels().forEach(u=>{
-    const opt=document.createElement('option');
-    opt.value=u; opt.textContent=u;
-    if(u===_unit) opt.selected=true;
-    unitSel.appendChild(opt);
-  });
-  unitSel.addEventListener('change',e=>{_unit=e.target.value;});
-  // Cartons
-  const cInp=_inp('Quantité cartons — ex. 20',{type:'text'}); cInp.addEventListener('input',e=>{_qctn=e.target.value;});
-  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
-  btn.addEventListener('click',doPrint);
-  // Ligne qty + unité côte-à-côte
-  const qtyUnitRow=el('div',{cls:'etiq-form-row'},
-    el('div',{cls:'etiq-form-field',style:{flex:'1'}},el('label',{cls:'etiq-form-label'},'Quantité'),qtyInp),
-    el('div',{cls:'etiq-form-field',style:{flex:'1.6'}},el('label',{cls:'etiq-form-label'},'Unité de vente'),unitSel)
-  );
-  // Case FSC : l'étiquette palette est saisie à la main (elle ne descend pas
-  // d'un lot précis), donc le claim ne peut pas être hérité automatiquement.
-  // Non cochée par défaut — sur une certification, l'oubli d'un marquage est
-  // récupérable, un marquage abusif ne l'est pas.
-  const fscChk=el('input',{attrs:{type:'checkbox',id:'palette-fsc-chk'},style:{width:'16px',height:'16px',cursor:'pointer'}});
-  fscChk.addEventListener('change',e=>{_fsc=e.target.checked;});
-  const fscRow=el('label',{cls:'etiq-form-field',style:{display:'flex',flexDirection:'row',alignItems:'center',gap:'10px',cursor:'pointer'}},
-    fscChk,
-    el('span',{cls:'etiq-form-label',style:{margin:'0'}},'Palette certifiée FSC — ajouter le bandeau sur l\'étiquette')
-  );
-  return el('div',null,
-    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Référence produit *'),rInp),
-    qtyUnitRow,
-    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Quantité cartons'),cInp),
-    fscRow,
-    btn);
-}
-
-// ── 2. Logistique — Nombre de palettes (120mm × 105mm) ────────────
-function buildNbPalettesLogiForm() {
-  let _n='';
-  function doPrint() {
-    const n=parseInt(_n)||0;
-    if(n<1||n>500){showToast('Nombre invalide (1–500)','error');return;}
-    let html='';
-    for(let i=1;i<=n;i++)
-      html+=`<div class="label"><div class="head">PALETTE</div><div class="num">${i}/${n}</div></div>`;
-    _printWin('Palettes','120mm 105mm',
-      `.label{width:120mm;height:105mm;display:flex;flex-direction:column;align-items:center;
-              justify-content:center;gap:7mm;text-align:center;
-              page-break-after:always;page-break-inside:avoid}
-       .head{font-size:62pt;font-weight:900;letter-spacing:4pt;text-transform:uppercase}
-       .num{font-size:86pt;font-weight:900;letter-spacing:2pt}`,html);
-  }
-  const nInp=_inp('Nombre de palettes — ex. 8',{type:'number',attrs:{min:'1',max:'500'},style:{width:'140px'}});
-  nInp.addEventListener('input',e=>{_n=e.target.value;});
-  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
-  btn.addEventListener('click',doPrint);
-  return el('div',null,
-    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Nombre de palettes *'),nInp),
-    btn);
-}
-
-// ── 3. Bureaux — Identification plaques (105mm × 74mm + EAN128) ───
-function buildIdPlaqueForm() {
-  let _num='', _fl='', _fw='', _note='';
-  const JSBARCODE_CDN='https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js';
-  function doPrint() {
-    const num=_num.trim(), fl=_fl.trim(), fw=_fw.trim(), note=_note.trim();
-    if(!num){showToast('Numéro de plaque requis','error');return;}
-    const fmt=fl&&fw?`${fl} × ${fw} mm`:'';
-    const w=_printWin('Plaque '+num,'105mm 74mm',
-      `.label{width:105mm;height:74mm;padding:3mm 4mm;display:flex;flex-direction:column;
-              align-items:center;justify-content:center;text-align:center;gap:1.5mm;
-              page-break-after:always;page-break-inside:avoid}
-       .head{font-size:14pt;font-weight:700;text-transform:uppercase;letter-spacing:.5pt;color:#555}
-       .num{font-size:88pt;font-weight:900;letter-spacing:.5pt;line-height:0.95}
-       .fmt{font-size:16pt;font-weight:600;color:#333}
-       .note{font-size:12pt;font-weight:500;color:#444;margin-top:1mm}
-       .bar{display:flex;justify-content:center;margin-top:1.5mm}
-       svg{max-width:97mm;height:10mm}`,
-      `<div class="label">
-         <div class="head">Plaque N°</div>
-         <div class="num">${num}</div>
-         ${fmt?`<div class="fmt">${fmt}</div>`:''}
-         ${note?`<div class="note">${escHtml(note)}</div>`:''}
-         <div class="bar"><svg id="bc"></svg></div>
-       </div>
-       <script src="${JSBARCODE_CDN}"><\/script>
-       <script>window.onload=function(){try{JsBarcode('#bc','${num}',{format:'CODE128',displayValue:false,margin:0,height:36});}catch(e){}window.focus();window.print();}<\/script>`);
-    if(w) w.document.close();
-  }
-  const nInp=_inp('N° de plaque — ex. 1234'); nInp.addEventListener('input',e=>{_num=e.target.value;});
-  const lInp=_inp('L (mm)',{style:{width:'90px'}}); lInp.addEventListener('input',e=>{_fl=e.target.value;});
-  const wInp=_inp('l (mm)',{style:{width:'90px'}}); wInp.addEventListener('input',e=>{_fw=e.target.value;});
-  const noteInp=_inp('Note (optionnel)'); noteInp.addEventListener('input',e=>{_note=e.target.value;});
-  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
-  btn.addEventListener('click',doPrint);
-  return el('div',null,
-    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Numéro de plaque *'),nInp),
-    el('div',{cls:'etiq-form-row'},
-      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Format L (mm)'),lInp),
-      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Format l (mm)'),wInp)),
-    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Note'),noteInp),
-    btn);
-}
-
-// ── 4. Bureaux — Identification clichés (105mm × 74mm + EAN128) ───
-function buildIdClicheForm() {
-  let _num='', _fl='', _fw='';
-  const JSBARCODE_CDN='https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js';
-  function doPrint() {
-    const num=_num.trim(), fl=_fl.trim(), fw=_fw.trim();
-    if(!num){showToast('Numéro de cliché requis','error');return;}
-    const fmt=fl&&fw?`${fl} × ${fw} mm`:'';
-    const w=_printWin('Cliché '+num,'105mm 74mm',
-      `.label{width:105mm;height:74mm;padding:3mm 4mm;display:flex;flex-direction:column;
-              align-items:center;justify-content:center;text-align:center;gap:1.5mm;
-              page-break-after:always;page-break-inside:avoid}
-       .head{font-size:14pt;font-weight:700;text-transform:uppercase;letter-spacing:.5pt;color:#555}
-       .num{font-size:88pt;font-weight:900;letter-spacing:.5pt;line-height:0.95}
-       .fmt{font-size:16pt;font-weight:600;color:#333}
-       .bar{display:flex;justify-content:center;margin-top:1.5mm}
-       svg{max-width:97mm;height:10mm}`,
-      `<div class="label">
-         <div class="head">Cliché N°</div>
-         <div class="num">${num}</div>
-         ${fmt?`<div class="fmt">${fmt}</div>`:''}
-         <div class="bar"><svg id="bc"></svg></div>
-       </div>
-       <script src="${JSBARCODE_CDN}"><\/script>
-       <script>window.onload=function(){try{JsBarcode('#bc','${num}',{format:'CODE128',displayValue:false,margin:0,height:36});}catch(e){}window.focus();window.print();}<\/script>`);
-    if(w) w.document.close();
-  }
-  const nInp=_inp('N° de cliché — ex. 5678'); nInp.addEventListener('input',e=>{_num=e.target.value;});
-  const lInp=_inp('L (mm)',{style:{width:'90px'}}); lInp.addEventListener('input',e=>{_fl=e.target.value;});
-  const wInp=_inp('l (mm)',{style:{width:'90px'}}); wInp.addEventListener('input',e=>{_fw=e.target.value;});
-  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
-  btn.addEventListener('click',doPrint);
-  return el('div',null,
-    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Numéro de cliché *'),nInp),
-    el('div',{cls:'etiq-form-row'},
-      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Format L (mm)'),lInp),
-      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Format l (mm)'),wInp)),
-    btn);
-}
-
-// ── 5. Cohésio 1 & 2 — Nombre de palettes (105mm × 50mm) ─────────
-function buildNbPalettesCForm() {
-  let _ref='', _n='';
-  function doPrint() {
-    const ref=_ref.trim(), n=parseInt(_n)||0;
-    if(!ref){showToast('Référence requise','error');return;}
-    if(n<1||n>500){showToast('Nombre invalide (1–500)','error');return;}
-    let html='';
-    for(let i=1;i<=n;i++)
-      html+=`<div class="label">
-        <div class="l1">Produit\u00a0: ${ref}</div>
-        <div class="l2">Palette n.\u00a0:</div>
-        <div class="l3">${i}/${n}</div>
-      </div>`;
-    _printWin('Palettes — '+ref,'105mm 50mm',
-      `.label{width:105mm;height:50mm;padding:2mm 3mm;display:flex;flex-direction:column;
-              align-items:center;justify-content:center;gap:1mm;
-              page-break-after:always;page-break-inside:avoid;text-align:center}
-       .l1{font-size:28pt;font-weight:700;word-break:break-all;line-height:1.2}
-       .l2{font-size:28pt;font-weight:700;line-height:1.2}
-       .l3{font-size:43pt;font-weight:900;line-height:1.1;margin-top:1.5mm}`,
-      html);
-  }
-  const rInp=_inp('Référence — ex. 1077/0026'); rInp.addEventListener('input',e=>{_ref=e.target.value.toUpperCase();});
-  const nInp=_inp('Nb palettes',{type:'number',attrs:{min:'1',max:'500'},style:{width:'120px'}}); nInp.addEventListener('input',e=>{_n=e.target.value;});
-  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
-  btn.addEventListener('click',doPrint);
-  return el('div',null,
-    el('div',{cls:'etiq-form-row'},
-      el('div',{cls:'etiq-form-field',style:{flex:'1'}},el('label',{cls:'etiq-form-label'},'Référence produit *'),rInp),
-      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Nb palettes *'),nInp)),
-    btn);
-}
-
-// ── 6. Cohésio 1 & 2 — Identification carton (105mm × 50mm) ──────
-function buildIdCartonForm() {
-  let _ref='', _bpc='', _epb='';
-  function doPrint() {
-    const ref=_ref.trim(), bpc=_bpc.trim(), epb=_epb.trim();
-    if(!ref){showToast('Référence requise','error');return;}
-    const cond=[bpc?bpc+' bob/ctn':'', epb?epb+' étiq/bob':''].filter(Boolean).join(' · ');
-    _printWin('Carton — '+ref,'105mm 50mm',
-      `.label{width:105mm;height:50mm;padding:3mm 4mm;display:flex;flex-direction:column;justify-content:space-between;page-break-after:always;page-break-inside:avoid}
-       .ref{font-size:20pt;font-weight:900;word-break:break-all}
-       .cond{font-size:13pt;font-weight:600;color:#333}`,
-      `<div class="label"><div class="ref">${ref}</div>${cond?`<div class="cond">${cond}</div>`:''}</div>`);
-  }
-  const rInp=_inp('Référence — ex. 1077/0026'); rInp.addEventListener('input',e=>{_ref=e.target.value.toUpperCase();});
-  const bInp=_inp('Bobines/carton — ex. 12',{type:'number',style:{width:'130px'}}); bInp.addEventListener('input',e=>{_bpc=e.target.value;});
-  const eInp=_inp('Étiquettes/bobine — ex. 500',{type:'number',style:{width:'160px'}}); eInp.addEventListener('input',e=>{_epb=e.target.value;});
-  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
-  btn.addEventListener('click',doPrint);
-  return el('div',null,
-    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Référence produit *'),rInp),
-    el('div',{cls:'etiq-form-row'},
-      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Bobines / carton'),bInp),
-      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Étiquettes / bobine'),eInp)),
-    btn);
-}
-
-// ── 7. Tous postes — Identification bobine matière (100×150 / 100×50) ──
-//
-// Remplace l'ancienne étiquette bobine 40×20. Le contenu est celui de
-// l'étiquette imprimée en réception matière (MyStock › Réception) : même
-// bandeau FSC, mêmes intitulés, même code-barres CODE128. Une bobine porte
-// ainsi la même étiquette qu'elle sorte à la réception, en logistique ou au
-// pied de la machine — c'est ce qui rend la traçabilité lisible d'un bout à
-// l'autre de la chaîne.
-//
-// `taille` vaut 'grand' (100×150, logistique) ou 'petit' (100×50, Cohésio).
-// Le bureau ADV a accès aux deux.
-//
-// Les champs sont pré-remplis depuis un lot de réception mais restent
-// éditables : une bobine peut avoir été reçue avant MySifa, ou son étiquette
-// être refaite pour une bobine qui n'a jamais été scannée. Si l'API n'est pas
-// joignable (opérateur hors ligne, rôle sans accès stock), le sélecteur reste
-// vide et le formulaire fonctionne en saisie manuelle — une étiquette de
-// traçabilité ne doit jamais être indisponible faute de réseau.
-function buildIdBobineMatiereForm(taille) {
-  const grand = (taille === 'grand');
-  const JSBARCODE_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js';
-  const esc = s => String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const SEL_CSS = 'width:100%;background:var(--bg);border:1px solid var(--border);'
-    + 'border-radius:8px;padding:8px 10px;font-size:13px;color:var(--text);'
-    + 'font-family:inherit;cursor:pointer;outline:none';
-
-  let lots = [];              // lots de réception récents ; peut rester vide
-  let lotCourant = null;
-  let toutesBobines = false;
-
-  const refInp   = _inp('Référence matière — ex. 1077/0026');
-  const laizeInp = _inp('Laize — ex. 570 mm');
-  const lotInp   = _inp('N° de lot');
-  const fourInp  = _inp('Fournisseur');
-  const codeInp  = _inp('Code-barres de la bobine');
-  const certInp  = _inp('N° de certificat FSC du fournisseur');
-  const copInp   = _inp('1', { type:'number', attrs:{ min:'1', step:'1' } });
-  copInp.value = '1';
-
-  const claimSel = el('select', { style: SEL_CSS });
-  Object.entries(FSC_CLAIM_LABELS).forEach(([v, lbl]) => {
-    claimSel.appendChild(el('option', { attrs:{ value: v } }, lbl));
-  });
-  claimSel.value = 'non_fsc';
-
-  const lotSel = el('select', { style: SEL_CSS });
-  lotSel.appendChild(el('option', { attrs:{ value:'' } }, 'Saisie manuelle'));
-  lotSel.appendChild(el('option', { attrs:{ value:'', disabled:'disabled' } }, 'Chargement des réceptions…'));
-
-  const bobSel = el('select', { style: SEL_CSS });
-  const bobField = el('div', { cls:'etiq-form-row', style:{ display:'none' } },
-    el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
-      el('label', { cls:'etiq-form-label' }, 'Bobine du lot'), bobSel));
-
-  // Retrouve une bobine dans les lots deja charges a partir de son code-barres.
-  // C'est ce qui fait l'interet du scan face a une saisie clavier : le code
-  // ramene avec lui le lot, le fournisseur, le claim FSC, la reference et la
-  // laize, donc l'etiquette est complete sans rien retaper.
-  function trouverBobineParCode(code) {
-    const c = String(code || '').trim().toLowerCase();
-    if (!c) return null;
-    for (const l of lots) {
-      const bs = l.bobines || [];
-      for (let i = 0; i < bs.length; i++) {
-        if (String(bs[i].code_barre || '').trim().toLowerCase() === c) {
-          return { lot: l, bobine: bs[i], index: i };
-        }
-      }
-    }
-    return null;
-  }
-
-  function appliquerCodeScanne(code) {
-    const c = String(code || '').trim();
-    if (!c) return;
-    codeInp.value = c;
-    // Une bobine scannee n'est plus « toutes les bobines » : ce qui doit
-    // sortir, c'est l'etiquette de la bobine qu'on vient de lire.
-    toutesBobines = false;
-    const t = trouverBobineParCode(c);
-    if (!t) {
-      showToast('Code ' + c + ' — bobine inconnue, complete les champs.', 'warn');
-      return;
-    }
-    lotCourant = t.lot;
-    lotSel.value  = String(t.lot.id);
-    lotInp.value  = t.lot.lot_numero || '';
-    fourInp.value = t.lot.fournisseur || '';
-    certInp.value = t.lot.certificat_fsc || '';
-    claimSel.value = t.lot.fsc_type_claim || 'non_fsc';
-    majBobSel();
-    bobSel.value = String(t.index);
-    toutesBobines = false;
-    remplirDepuisBobine(t.bobine);
-    codeInp.value = c;
-    showToast('Bobine trouvee — lot ' + (t.lot.lot_numero || '?'), 'success');
-  }
-
-  function remplirDepuisBobine(b) {
-    refInp.value   = (b && b.matiere_reference) || '';
-    laizeInp.value = (b && b.laize) || '';
-    codeInp.value  = (b && b.code_barre) || '';
-  }
-
-  function majBobSel() {
-    bobSel.innerHTML = '';
-    const bobines = (lotCourant && lotCourant.bobines) || [];
-    if (!lotCourant || !bobines.length) {
-      bobField.style.display = 'none';
-      toutesBobines = false;
-      return;
-    }
-    // « Toutes les bobines » n'a de sens qu'à partir de deux : sur un lot
-    // d'une seule bobine l'option ferait croire à un choix qui n'en est pas un.
-    if (bobines.length > 1) {
-      bobSel.appendChild(el('option', { attrs:{ value:'*' } },
-        'Toutes les bobines (' + bobines.length + ') — une étiquette chacune'));
-    }
-    bobines.forEach((b, i) => {
-      const parts = [b.code_barre || ('Bobine ' + (i + 1))];
-      if (b.matiere_reference) parts.push(b.matiere_reference);
-      if (b.laize) parts.push(b.laize);
-      bobSel.appendChild(el('option', { attrs:{ value: String(i) } }, parts.join(' · ')));
-    });
-    bobField.style.display = '';
-    bobSel.value = bobines.length > 1 ? '*' : '0';
-    toutesBobines = bobines.length > 1;
-    if (!toutesBobines) remplirDepuisBobine(bobines[0]);
-    else { refInp.value = ''; laizeInp.value = ''; codeInp.value = ''; }
-  }
-
-  bobSel.addEventListener('change', e => {
-    const v = e.target.value;
-    if (v === '*') {
-      toutesBobines = true;
-      refInp.value = ''; laizeInp.value = ''; codeInp.value = '';
-      return;
-    }
-    toutesBobines = false;
-    const bobines = (lotCourant && lotCourant.bobines) || [];
-    remplirDepuisBobine(bobines[parseInt(v, 10)]);
-  });
-
-  lotSel.addEventListener('change', e => {
-    const id = e.target.value;
-    lotCourant = id ? lots.find(l => String(l.id) === String(id)) || null : null;
-    if (!lotCourant) {
-      toutesBobines = false;
-      bobField.style.display = 'none';
-      return;
-    }
-    lotInp.value   = lotCourant.lot_numero || '';
-    fourInp.value  = lotCourant.fournisseur || '';
-    certInp.value  = lotCourant.certificat_fsc || '';
-    claimSel.value = lotCourant.fsc_type_claim || 'non_fsc';
-    majBobSel();
-  });
-
-  // Chargement asynchrone : le formulaire est utilisable immédiatement en
-  // saisie manuelle, la liste des lots se greffe quand elle arrive.
-  (async () => {
-    try {
-      const r = await api('/api/stock/traca/bobines-recentes?limit=40');
-      lots = (r && r.lots) || [];
-    } catch (e) {
-      lots = [];
-    }
-    lotSel.innerHTML = '';
-    lotSel.appendChild(el('option', { attrs:{ value:'' } }, 'Saisie manuelle'));
-    if (!lots.length) {
-      lotSel.appendChild(el('option', { attrs:{ value:'', disabled:'disabled' } },
-        'Aucune réception disponible'));
-      return;
-    }
-    lots.forEach(l => {
-      const parts = [l.lot_numero || ('Lot ' + l.id)];
-      if (l.fournisseur) parts.push(l.fournisseur);
-      if (l.date_reception) parts.push(l.date_reception);
-      const nb = (l.bobines || []).length;
-      if (nb) parts.push(nb + ' bob.');
-      lotSel.appendChild(el('option', { attrs:{ value: String(l.id) } }, parts.join(' · ')));
-    });
-  })();
-
-  // Une entrée = une étiquette imprimée.
-  function etiquettesAImprimer() {
-    const copies = Math.max(1, Math.min(parseInt(copInp.value, 10) || 1, 200));
-    const commun = {
-      lot: lotInp.value.trim(),
-      fournisseur: fourInp.value.trim(),
-      certificat: certInp.value.trim(),
-      claim: claimSel.value || 'non_fsc',
-    };
-    const out = [];
-    const bobines = (lotCourant && lotCourant.bobines) || [];
-    if (toutesBobines && bobines.length) {
-      bobines.forEach(b => {
-        for (let i = 0; i < copies; i++) out.push(Object.assign({
-          ref: b.matiere_reference || '',
-          laize: b.laize || '',
-          code: b.code_barre || commun.lot,
-        }, commun));
-      });
-      return out;
-    }
-    const un = Object.assign({
-      ref: refInp.value.trim(),
-      laize: laizeInp.value.trim(),
-      code: codeInp.value.trim() || commun.lot,
-    }, commun);
-    for (let i = 0; i < copies; i++) out.push(un);
-    return out;
-  }
-
-  // Gabarits — miroir HTML des deux templates ZPL de la réception matière
-  // (print_render.py : DEFAULT_TEMPLATE_RECEPTION_MATIERE_ZPL pour le grand,
-  // DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL pour le petit). Même ordre des
-  // blocs, mêmes intitulés, même hiérarchie de tailles.
-  //
-  // Strictement noir et blanc : ces étiquettes sortent sur thermique
-  // monochrome, où la couleur n'existe pas. Le bandeau FSC est un pavé plein
-  // inversé (l'équivalent HTML du ^GB rempli + ^FR du ZPL), pas un fond vert
-  // ou rouge — sinon la version navigateur ment sur ce que l'étiqueteuse
-  // produira.
-  function labelHtml(d) {
-    const bandeau = (d.claim || 'non_fsc') !== 'non_fsc' ? 'MATIÈRE FSC' : 'MATIÈRE NON FSC';
-    // Ce que porte le code-barres dépend du format, parce que les deux
-    // étiquettes ne sont pas scannées par les mêmes gestes :
-    //   - grand format (logistique) : le NUMÉRO DE LOT, comme le gabarit ZPL
-    //     d'origine — c'est le lot qui rattache la bobine à sa réception, et
-    //     le code bobine reste lisible en clair dans le bloc du bas ;
-    //   - petit format (Cohésio) : le CODE BOBINE, parce que c'est lui que
-    //     l'opérateur scanne dans la traçabilité matière au pied de la
-    //     machine. Un code-barres qu'on ne peut pas scanner là où il est
-    //     collé ne sert à rien.
-    const codeBarre = (grand ? (d.lot || d.code) : (d.code || d.lot)) || '';
-    const bar = codeBarre
-      ? '<div class="bar"><svg class="bc" data-code="' + esc(codeBarre) + '"></svg></div>'
-      : '<div class="bar nobar">Pas de code-barres</div>';
-    if (grand) {
-      return '<div class="label">'
-        + '<div class="brand">__APP_ORG_NAME__</div>'
-        + '<div class="band">' + bandeau + '</div>'
-        + '<div class="lot-big">' + esc(d.lot || '—') + '</div>'
-        + bar
-        + '<div class="lines">'
-        + '<div class="strong">Référence : ' + esc(d.ref || '—') + '</div>'
-        + '<div>' + esc(d.fournisseur || '—') + '</div>'
-        + '<div>FSC : ' + esc(d.certificat || '—') + '</div>'
-        + '<div>Laize : ' + esc(d.laize || '—') + '</div>'
-        + '<div>Réception : ' + esc(d.date) + '</div>'
-        + '</div>'
-        + '<div class="sep"></div>'
-        + '<div class="code-title">CODE BOBINE</div>'
-        + '<div class="code-val">' + esc(d.code || '—') + '</div>'
-        + '</div>';
-    }
-    return '<div class="label">'
-      + '<div class="band">' + bandeau + '</div>'
-      + '<div class="grid">'
-      + '<div class="cell"><div class="lab">Référence</div><div class="val">' + esc(d.ref || '—') + '</div></div>'
-      + '<div class="cell"><div class="lab">Laize</div><div class="val">' + esc(d.laize || '—') + '</div></div>'
-      + '</div>'
-      + '<div class="grid">'
-      + '<div class="cell"><div class="lab">Fournisseur</div><div class="val sm">' + esc(d.fournisseur || '—') + '</div></div>'
-      + '<div class="cell"><div class="lab">Réception</div><div class="val sm">' + esc(d.date) + '</div></div>'
-      + '<div class="cell"><div class="lab">Opérateur</div><div class="val sm">' + esc(d.operateur || '—') + '</div></div>'
-      + '</div>'
-      + '<div class="sep"></div>'
-      + '<div class="lot-title">NUMÉRO LOT</div>'
-      + '<div class="lot-big">' + esc(d.lot || '—') + '</div>'
-      + bar
-      + '</div>';
-  }
-
-  // `print-color-adjust` sur body : sans lui le navigateur « économise »
-  // l'aplat noir du bandeau à l'impression et le rend en gris clair, ce qui
-  // fait disparaître le texte blanc posé dessus.
-  const CSS_COMMUN =
-    'body{-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#000}'
-  + '.band{background:#000;color:#fff;text-align:center;font-weight:900;line-height:1.1}'
-  + '.bar{display:flex;justify-content:center}'
-  + '.bar.nobar{font-size:8pt;color:#555;font-style:italic}'
-  + '.sep{margin-top:auto;border-top:2px solid #000}';
-
-  const CSS_GRAND = CSS_COMMUN
-  + '.label{width:100mm;height:150mm;padding:4mm 5mm;display:flex;flex-direction:column;'
-  + '       overflow:hidden;page-break-after:always;page-break-inside:avoid}'
-  + '.brand{text-align:center;font-size:30pt;font-weight:900;letter-spacing:2pt;line-height:1}'
-  + '.band{margin-top:2.5mm;font-size:21pt;letter-spacing:1.5pt;padding:2.5mm 2mm}'
-  + '.lot-big{margin-top:3mm;text-align:center;font-size:22pt;font-weight:800;'
-  + '         word-break:break-all;line-height:1.1}'
-  + '.bar{margin-top:2mm}'
-  + '.bar svg{max-width:88mm;height:26mm}'
-  + '.lines{margin-top:3mm;text-align:center;font-size:12.5pt;font-weight:700;'
-  + '       line-height:1.5;word-break:break-word}'
-  + '.lines .strong{font-size:14.5pt}'
-  + '.code-title{text-align:center;font-size:12pt;font-weight:800;letter-spacing:1.5pt;margin-top:2.5mm}'
-  + '.code-val{text-align:center;font-size:15pt;font-weight:800;font-family:"Courier New",monospace;'
-  + '          word-break:break-all;margin-top:1mm}';
-
-  const CSS_PETIT = CSS_COMMUN
-  + '.label{width:100mm;height:50mm;padding:2mm 3mm;display:flex;flex-direction:column;'
-  + '       overflow:hidden;page-break-after:always;page-break-inside:avoid}'
-  + '.band{font-size:12pt;letter-spacing:1pt;padding:1.2mm 2mm}'
-  + '.grid{display:flex;gap:3mm;margin-top:1.5mm;min-width:0}'
-  + '.cell{flex:1;min-width:0;overflow:hidden}'
-  + '.lab{font-size:7pt;text-transform:uppercase;letter-spacing:.5pt;color:#333;'
-  + '     font-weight:700;line-height:1.1}'
-  + '.val{font-size:12pt;font-weight:800;line-height:1.15;word-break:break-word}'
-  + '.val.sm{font-size:9pt;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
-  + '.lot-title{text-align:center;font-size:7.5pt;font-weight:800;letter-spacing:1.2pt;margin-top:1mm}'
-  + '.lot-big{text-align:center;font-size:14pt;font-weight:900;font-family:"Courier New",monospace;'
-  + '         line-height:1.1;word-break:break-all}'
-  + '.bar{margin-top:1mm}'
-  + '.bar svg{max-width:88mm;height:9mm}';
-
-  function doPrint() {
-    const items = etiquettesAImprimer();
-    if (!items.length) { showToast('Rien à imprimer', 'error'); return; }
-    if (!toutesBobines && !items[0].ref) { showToast('Référence matière requise', 'error'); return; }
-    const now = new Date();
-    const pad = n => String(n).padStart(2, '0');
-    const dateStr = pad(now.getDate()) + '/' + pad(now.getMonth() + 1) + '/' + now.getFullYear();
-    const operateur = (S && S.user && S.user.nom) || '';
-    const html = items
-      .map(d => labelHtml(Object.assign({}, d, { date: dateStr, operateur: operateur })))
-      .join('');
-    // Le titre part dans <title> sans passer par _printWin : une référence
-    // matière contenant un chevron casserait la page d'impression.
-    const titre = esc('Bobine — ' + (items[0].ref || items[0].lot || 'sans référence'));
-    const w = _printWin(titre, grand ? '100mm 150mm' : '100mm 50mm',
-      grand ? CSS_GRAND : CSS_PETIT,
-      html
-      + '<script src="' + JSBARCODE_CDN + '"><\/script>'
-      + '<script>'
-      /* Génération synchrone, pas de window.onload : _printWin écrit son
-         propre window.onload = print() APRÈS ce bloc et écraserait notre
-         handler — les codes-barres sortiraient vides. Même contrainte que
-         recepPrintLabels. */
-      + '(function(){var n=document.querySelectorAll("svg.bc");'
-      + 'for(var i=0;i<n.length;i++){try{JsBarcode(n[i],n[i].getAttribute("data-code"),'
-      + '{format:"CODE128",displayValue:true,fontSize:' + (grand ? 15 : 9) + ','
-      + 'textMargin:0,margin:0,height:' + (grand ? 95 : 30) + '});}catch(e){}}})();'
-      + '<\/script>');
-    if (w) w.document.close();
-  }
-
-  // Scan camera du code bobine. On appelle le scanner de la reception matiere
-  // avec un callback plutot que d'en ecrire un second : c'est le meme geste,
-  // le meme materiel et les memes pieges (HTTPS obligatoire, autofocus
-  // Android, ZXing sur iOS) — un second scanner divergerait au premier
-  // correctif.
-  const scanBtn = el('button', {
-    cls: 'traca-print-btn',
-    type: 'button',
-    style: { flexShrink:'0', padding:'8px 12px' },
-  }, iconEl('scan', 14), ' Scanner');
-  scanBtn.addEventListener('click', () => {
-    if (typeof recepStartCamera !== 'function') {
-      showToast('Scanner indisponible sur cette page.', 'error');
-      return;
-    }
-    recepStartCamera({
-      hint: 'Pointez vers le code-barres de la bobine',
-      onCode: appliquerCodeScanne,
-    });
-  });
-
-  const btn = el('button', { cls:'traca-print-btn',
-    style:{ width:'100%', marginTop:'12px', justifyContent:'center' } },
-    iconEl('printer', 15), ' Imprimer');
-  btn.addEventListener('click', doPrint);
-
-  return el('div', null,
-    el('div', { cls:'etiq-form-row' },
-      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
-        el('label', { cls:'etiq-form-label' }, 'Lot de réception'), lotSel)),
-    bobField,
-    el('div', { cls:'etiq-form-row' },
-      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
-        el('label', { cls:'etiq-form-label' }, 'Référence matière *'), refInp)),
-    el('div', { cls:'etiq-form-row' },
-      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
-        el('label', { cls:'etiq-form-label' }, 'Laize'), laizeInp),
-      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
-        el('label', { cls:'etiq-form-label' }, 'N° de lot'), lotInp)),
-    el('div', { cls:'etiq-form-row' },
-      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
-        el('label', { cls:'etiq-form-label' }, 'Fournisseur'), fourInp)),
-    el('div', { cls:'etiq-form-row' },
-      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
-        el('label', { cls:'etiq-form-label' }, 'Certificat FSC'), certInp)),
-    el('div', { cls:'etiq-form-row' },
-      el('div', { cls:'etiq-form-field', style:{ flex:'1.6' } },
-        el('label', { cls:'etiq-form-label' }, 'Code-barres'),
-        el('div', { style:{ display:'flex', gap:'6px' } }, codeInp, scanBtn)),
-      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
-        el('label', { cls:'etiq-form-label' }, 'Exemplaires'), copInp)),
-    el('div', { cls:'etiq-form-row' },
-      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
-        el('label', { cls:'etiq-form-label' }, 'Statut FSC'), claimSel)),
-    btn);
-}
-
-function openTracaPrint(etiq) {
-  const overlay = el('div', { cls:'modal-overlay', on:{ click:e=>{ if(e.target===overlay){ overlay.remove(); } } } });
-  const fmtObj = TRACA_FORMATS.find(f=>f.id===etiq.format)||{label:etiq.format,dims:''};
-
-  const formBuilders = {
-    id_palette_a4:    buildIdPaletteA4Form,
-    nb_palettes_logi: buildNbPalettesLogiForm,
-    id_plaque:        buildIdPlaqueForm,
-    id_cliche:        buildIdClicheForm,
-    nb_palettes_c:    buildNbPalettesCForm,
-    id_carton:        buildIdCartonForm,
-    // Même formulaire pour les deux tailles : seul le gabarit d'impression
-    // change, jamais les champs saisis.
-    id_bobine_grand:  () => buildIdBobineMatiereForm('grand'),
-    id_bobine_petit:  () => buildIdBobineMatiereForm('petit'),
-  };
-  const builder = formBuilders[etiq.id];
-  const formContent = builder ? builder() : el('div',{cls:'traca-dev-banner'},iconEl('settings',14),' À venir.');
-
-  const sheet = el('div', { cls:'modal-sheet' },
-    el('span',{cls:'modal-handle'}),
-    el('div',{cls:'modal-title'}, iconEl('printer',17), '\u00a0'+etiq.label),
-    el('div',{cls:'modal-sub'}, 'Format\u00a0: ', el('strong',null,fmtObj.label+' ('+fmtObj.dims+')')),
-    formContent,
-    el('button',{cls:'btn-ghost',style:{width:'100%',marginTop:'10px'},on:{click:()=>overlay.remove()}},'Fermer')
-  );
-  overlay.appendChild(sheet);
-  document.body.appendChild(overlay);
-}
-
-function buildTracaPosteView(poste) {
-  const etiquettes = TRACA_ETIQUETTES.filter(e=>e.postes.includes(poste.id));
-  const backBar = el('div',{cls:'traca-back-bar'},
-    el('button',{cls:'traca-back-btn',on:{click:()=>{ S.tracaPoste=null; tracaSyncUrl(null); renderContent(); }}},
-      iconEl('arrow-left',15), ' Postes'),
-    el('span',{cls:'traca-poste-heading'}, poste.label)
-  );
-  // Une carte d'étiquette. Extraite de la boucle parce que la vue poste rend
-  // désormais plusieurs listes : les étiquettes courantes du poste, puis une
-  // section par groupe (voir TRACA_GROUPES).
-  function mkEtiqCard(etiq){
-    const fmtObj = TRACA_FORMATS.find(f=>f.id===etiq.format)||{label:etiq.format,dims:''};
-    return el('div',{cls:'traca-etiq-card'},
-      el('div',{cls:'traca-etiq-icon-wrap',style:{background:poste.colorBg,color:poste.color}},
-        iconEl('tag',18)),
-      el('div',{cls:'traca-etiq-body'},
-        el('div',{cls:'traca-etiq-label'},etiq.label),
-        el('div',{cls:'traca-etiq-meta'},
-          el('span',{cls:'traca-format-badge'},fmtObj.label),
-          el('span',{cls:'traca-printer-badge'},
-            iconEl('printer',10),
-            '\u00a0'+(etiq.printer||'Non configurée'))
-        )
-      ),
-      el('button',{cls:'traca-print-btn',on:{click:()=>openTracaPrint(etiq)}},
-        iconEl('printer',13),' Imprimer')
-    );
-  }
-
-  const principales = etiquettes.filter(e=>!e.groupe);
-  let listEl = null;
-  if (etiquettes.length===0) {
-    listEl = el('div',{cls:'card'},el('div',{cls:'card-empty'},'Aucune étiquette configurée pour ce poste.'));
-  } else if (principales.length) {
-    listEl = el('div',{cls:'traca-etiq-list'},...principales.map(mkEtiqCard));
-  }
-
-  // Sections groupées — aujourd'hui « Identification bobines », présente sur
-  // les quatre postes. Un groupe sans étiquette pour ce poste ne rend rien :
-  // un titre de section vide se lit comme une fonctionnalité en panne.
-  const groupSections = TRACA_GROUPES.map(g=>{
-    const items = etiquettes.filter(e=>e.groupe===g.id);
-    if(!items.length) return null;
-    return el('div',null,
-      el('div',{cls:'traca-group-title'}, iconEl(g.icon||'folder',12), g.label),
-      el('div',{cls:'traca-etiq-list'}, ...items.map(mkEtiqCard))
-    );
-  }).filter(Boolean);
-
-  // -- Dossier "Communication" - uniquement pour le poste Bureaux --
-  let commSection = null;
-  if (poste.id === 'bureaux') {
-    const POSTE_TINT = {
-      cyan:   { bg:'color-mix(in srgb,var(--accent,#22d3ee) 14%,transparent)',  color:'#22d3ee' },
-      amber:  { bg:'rgba(251,191,36,.16)',  color:'#fbbf24' },
-      violet: { bg:'rgba(139,92,246,.18)',  color:'#a78bfa' },
-    };
-    const affCards = TRACA_AFFICHES.map(aff=>{
-      const tint = POSTE_TINT[aff.variant] || POSTE_TINT.cyan;
-      const body = el('div',{cls:'traca-aff-body'});
-      body.appendChild(el('div',{cls:'traca-aff-title'},aff.title));
-      const subEl = el('div',{cls:'traca-aff-sub'});
-      subEl.innerHTML = aff.sub;
-      body.appendChild(subEl);
-      return el('div',{cls:'traca-aff-card traca-aff-card--'+aff.variant},
-        el('div',{cls:'traca-etiq-icon-wrap',style:{background:tint.bg,color:tint.color}},
-          iconEl(aff.icon,18)),
-        body,
-        el('div',{cls:'traca-aff-actions'},
-          el('a',{cls:'traca-aff-btn traca-aff-btn--dark',
-            attrs:{href:aff.dark,target:'_blank',rel:'noopener'}},
-            el('span',{cls:'traca-aff-dot'}), 'Sombre'),
-          el('a',{cls:'traca-aff-btn traca-aff-btn--light',
-            attrs:{href:aff.light,target:'_blank',rel:'noopener'}},
-            el('span',{cls:'traca-aff-dot'}), 'Clair')
-        )
-      );
-    });
-    commSection = el('div',null,
-      el('div',{cls:'traca-group-title'}, iconEl('folder',12), 'Communication'),
-      el('div',{cls:'traca-etiq-list'}, ...affCards)
-    );
-  }
-
-  return el('div',{cls:'content'}, backBar, listEl, ...groupSections, commSection);
-}
-
-// L'URL suit la navigation entre postes (stockSyncUrl). Choisir un poste
-// empile une entrée — Retour ramène à la grille ; le bouton « ← » de la page
-// RECULE au lieu d'empiler (mysifa_url.js) : regarder quatre postes ne fait
-// donc pas dix retours pour sortir de la page.
-function tracaSyncUrl(posteId) {
-  // S.tracaPoste est déjà posé par l'appelant.
-  stockSyncUrl();
-}
-
-function buildTraca() {
-  // Étiquettes spécifiques : éditeur façon BarTender, monté par
-  // static/mysifa_etiq_specifiques.js. Le module garde son propre nœud et son
-  // état : un renderContent() le rattache sans le reconstruire.
-  if (S.tracaPoste === 'specifiques') {
-    const root = el('div',{id:'etiq-spec-root'});
-    if (window.EtiqSpec) window.EtiqSpec.mount(root);
-    // Pleine largeur : l'éditeur a besoin de place pour l'aperçu à l'échelle.
-    return el('div',{cls:'content',style:{maxWidth:'none'}},
-      el('div',{cls:'traca-back-bar'},
-        el('button',{cls:'traca-back-btn',on:{click:()=>{ S.tracaPoste=null; tracaSyncUrl(null); renderContent(); }}},
-          iconEl('arrow-left',15), ' Postes')),
-      root);
-  }
-  if (S.tracaPoste) {
-    const poste = TRACA_POSTES.find(p=>p.id===S.tracaPoste);
-    if (poste) return buildTracaPosteView(poste);
-  }
-  // Vue sélection poste
-  const cards = TRACA_POSTES.map(poste=>{
-    const count = TRACA_ETIQUETTES.filter(e=>e.postes.includes(poste.id)).length;
-    const card = el('div',{cls:'traca-poste-card',on:{click:()=>{ S.tracaPoste=poste.id; tracaSyncUrl(poste.id); renderContent(); }}},
-      el('div',{cls:'traca-poste-icon',style:{background:poste.colorBg,color:poste.color}},
-        iconEl(poste.icon,22)),
-      el('div',{cls:'traca-poste-label'},poste.label),
-      el('div',{cls:'traca-poste-count'},count+' étiquette'+(count>1?'s':''))
-    );
-    return card;
-  });
-  const outils = TRACA_OUTILS.map(o=>el('div',{cls:'traca-poste-card',on:{click:()=>{ S.tracaPoste=o.id; tracaSyncUrl(o.id); renderContent(); }}},
-    el('div',{cls:'traca-poste-icon',style:{background:'var(--accent-bg)',color:'var(--accent)'}}, iconEl(o.icon,22)),
-    el('div',{cls:'traca-poste-label'},o.label),
-    el('div',{cls:'traca-poste-count'},o.sous)
-  ));
-  return el('div',{cls:'content'},
-    el('div',{cls:'traca-section-title'},'Sélectionner un poste de travail'),
-    el('div',{cls:'traca-postes-grid'},...cards),
-    el('div',{cls:'traca-section-title',style:{marginTop:'18px'}},'Outils'),
-    el('div',{cls:'traca-postes-grid'},...outils)
-  );
+// Étiquettes traça : parties dans MyTools le 21/10/2026
+// (static/mysifa_tools_etiquettes.js). L'onglet `traca` redirige vers
+// /tools?outil=etiquettes — côté serveur au chargement (stock_page), côté
+// client depuis goToTab() et le Retour du navigateur.
+function tracaVersMyTools(poste) {
+  window.location.href = '/tools?outil=etiquettes' + (poste ? '&poste=' + encodeURIComponent(poste) : '');
 }
 
 function buildInventaire() {
@@ -19469,7 +18491,6 @@ function renderContent() {
   else if (S.tab === 'besoins-matieres') content = buildBesoinsMatieres();
   else if (S.tab === 'destockage') content = buildDestockage();
   else if (S.tab === 'bobines') content = buildBobines();
-  else if (S.tab === 'traca') content = buildTraca();
   else if (S.tab === 'reception') content = buildReception();
   else if (S.tab === 'historique') content = buildHistorique();
   else if (S.tab === 'plan-entrepot') { buildPlanEntrepot(); return; }
@@ -21009,191 +20030,26 @@ async function getBackCameraDeviceId() {
   }
 }
 
+// Scanner caméra : static/mysifa_scanner.js depuis le 21/10/2026, partagé avec
+// MyTools › Étiquettes (identification bobine). Les deux noms restent : ils
+// sont branchés tels quels dans l'écran de réception.
+//
 // `opts` est optionnel : la fonction est aussi branchée directement comme
 // handler de clic (`on:{click: recepStartCamera}`), auquel cas le premier
 // argument est l'Event du DOM — d'où le test sur `onCode` plutôt qu'un test
-// de vérité. Sans paramètre, comportement historique inchangé : le code
-// scanné part dans la liste de la réception matière.
-//
-// Le paramétrage existe pour que MyPrint réutilise CE scanner (chemins iOS /
-// Android, ZXing + BarcodeDetector, délai anti-scan-parasite) au lieu d'en
-// faire vivre un second qui divergerait au premier correctif.
+// de vérité. Sans paramètre, le code scanné part dans la liste de la
+// réception matière.
 async function recepStartCamera(opts) {
   const o = (opts && typeof opts.onCode === 'function') ? opts : {};
-  const onFound = o.onCode || recepAddCode;
-  if (S.recepScanning) return;
-  S.recepScanning = true;
-
-  // Overlay créé en premier (synchrone) — le geste utilisateur est encore actif
-  const overlay = el('div', { cls: 'camera-modal recep-overlay' });
-  const wrap = el('div', { cls: 'camera-wrap' });
-  const video = el('video', { cls: 'camera-video', autoplay: '', playsinline: '' });
-  const frame = el('div', { cls: 'camera-frame' });
-  wrap.append(video, frame);
-  const hint = el('p', { cls: 'camera-hint' }, o.hint || 'Pointez vers le code-barres de la bobine');
-  const resultEl = el('div', { cls: 'camera-result' }, 'En attente…');
-  const closeBtn = el('button', { cls: 'btn-close-cam', on: { click: () => recepStopCamera(overlay) } }, '✕ Fermer');
-  overlay.append(wrap, hint, resultEl, closeBtn);
-  document.body.appendChild(overlay);
-
-  try {
-    // getUserMedia est le PREMIER await — Android refuse silencieusement si on a fait
-    // un await long (chargement ZXing CDN) avant : le "user gesture token" est expiré
-    if (!navigator.mediaDevices?.getUserMedia) throw new Error('Caméra non disponible (page non HTTPS ?)');
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-    });
-    S.recepStream = stream;
-    video.srcObject = stream;
-
-    // Stratégie de décodage selon la plateforme :
-    // Android Chrome 83+ → BarcodeDetector (Google ML Kit natif) : gère nativement l'autofocus
-    //   et les codes 1D fins. ZXing JS ne peut pas rivaliser avec le moteur natif de l'OS.
-    // iOS + fallback Android → ZXing (BarcodeDetector absent sur Safari)
-    const useNativeDetector = isAndroid && ('BarcodeDetector' in window);
-
-    // Délai de latence avant activation — évite les scans parasites au démarrage
-    const RECEP_SCAN_DELAY_MS = 1500;
-    const recepScanStartTime = Date.now();
-    resultEl.textContent = 'Positionnez-vous devant le code…';
-    setTimeout(() => { if (S.recepScanning) resultEl.textContent = 'En attente…'; }, RECEP_SCAN_DELAY_MS);
-
-    // Callback partagé — arrêt IMMÉDIAT des deux moteurs dès détection
-    // (évite que ZXing continue d'appeler le callback pendant le délai d'animation)
-    let recepDetected = false;
-    const onRecepCode = (code) => {
-      if (Date.now() - recepScanStartTime < RECEP_SCAN_DELAY_MS) return;
-      if (recepDetected) return;
-      recepDetected = true;
-      // Stopper tout immédiatement — plus aucun callback possible après ça
-      S.recepScanning = false;
-      if (S.recepBarcodeReader) { try { S.recepBarcodeReader.reset(); } catch(e) {} S.recepBarcodeReader = null; }
-      if (S.recepStream) { S.recepStream.getTracks().forEach(t => t.stop()); S.recepStream = null; }
-      resultEl.textContent = '✅ ' + code;
-      resultEl.style.color = 'var(--success)';
-      // Garder l'overlay 600ms pour l'animation, puis fermer et ajouter
-      setTimeout(() => { overlay.remove(); onFound(code); }, 600);
-    };
-
-    // ZXing nécessaire sur iOS et pour QR codes sur Android
-    if (typeof ZXing === 'undefined') {
-      resultEl.textContent = 'Chargement scanner…';
-      await new Promise((res, rej) => {
-        const s = document.createElement('script');
-        s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
-        s.onload = res; s.onerror = rej; document.head.appendChild(s);
-      });
-      resultEl.textContent = 'En attente…';
-    }
-
-    if (useNativeDetector) {
-      // ── Android : BarcodeDetector (codes 1D) + ZXing decodeFromStream (QR) ──────
-      const qrHints = new Map();
-      qrHints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
-      qrHints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      const qrReader = new ZXing.BrowserMultiFormatReader(qrHints);
-      S.recepBarcodeReader = qrReader;
-
-      // Moteur 1 : BarcodeDetector pour codes 1D (ML Kit natif, autofocus natif)
-      const detector = new BarcodeDetector({
-        formats: ['code_128', 'ean_13', 'ean_8', 'data_matrix', 'code_39', 'upc_a', 'upc_e']
-      });
-      const barcodeLoop = async () => {
-        if (!S.recepScanning) return;
-        if (video.readyState < 2 || !video.videoWidth) { setTimeout(barcodeLoop, 100); return; }
-        try {
-          const found = await detector.detect(video);
-          // Pas de `return` ici : le `return` tuait la boucle quand le code etait lu pendant la fenetre
-          // anti-parasite de 1,5 s : lecture ignoree ET plus aucun tick replanifie. La ligne de fin de
-          // boucle (`if (scanning) setTimeout(...)`) decide seule : lecture acceptee -> scanning=false,
-          // pas de replanification ; lecture ignoree -> on continue.
-          if (found.length > 0) onRecepCode(found[0].rawValue);
-        } catch(e) {}
-        if (S.recepScanning) setTimeout(barcodeLoop, 150);
-      };
-      setTimeout(barcodeLoop, 500);
-
-      // Moteur 2 : ZXing decodeFromStream pour QR codes
-      // decodeFromStream est la seule méthode ZXing qui fonctionne pour les QR sur Android
-      // (drawImage canvas ne capture pas correctement les frames live sur certains Android Chrome)
-      // Le double scan est évité par l'arrêt immédiat dans onRecepCode (reader.reset() + stream stop)
-      qrReader.decodeFromStream(stream, video, (result) => {
-        if (result) onRecepCode(result.getText().trim());
-      });
-
-    } else {
-      // ── iOS + fallback : ZXing canvas loop tous formats ──────────────────────────
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      const hints = new Map();
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-        ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
-        ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.DATA_MATRIX, ZXing.BarcodeFormat.CODE_39
-      ]);
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      // MultiFormatReader.decodeWithState() et NON BrowserMultiFormatReader.decode() :
-      // cette derniere attend un element <video>/<img>, pas un BinaryBitmap. Elle levait
-      // un TypeError avale par le catch — le scan restait indefiniment « En attente… ».
-      const reader = new ZXing.MultiFormatReader();
-      reader.setHints(hints);
-      S.recepBarcodeReader = reader;
-      // Passes alternees, une par tick : cadrage du viseur puis plus large, chacune
-      // dans les deux orientations. Un echec coute ~150 ms, une lecture ~10 ms.
-      const SCAN_PASSES = [
-        { zoom: 0.56, rot: 0 }, { zoom: 0.56, rot: 90 },
-        { zoom: 0.42, rot: 0 }, { zoom: 0.42, rot: 90 },
-        { zoom: 0.75, rot: 0 }, { zoom: 0.75, rot: 90 },
-      ];
-      let passIndex = 0;
-      const loop = () => {
-        if (!S.recepScanning) return;
-        if (video.readyState < 2 || !video.videoWidth) { setTimeout(loop, 100); return; }
-        try {
-          // Recadrage sur le viseur + rotation : deux faces d'un meme constat.
-          // (1) Le lecteur 1D binarise chaque ligne sur un histogramme GLOBAL. Une ligne qui
-          //     traverse l'etiquette ET le fond (bois clair, carton sombre) prend un seuil qui
-          //     noie les barres. Mesure sur une frame reelle en 720p : plein cadre -> echec,
-          //     recadre sur le viseur -> lu en 5 ms.
-          // (2) RGBLuminanceSource.isRotateSupported() vaut false : TRY_HARDER n'essaie donc
-          //     JAMAIS l'orientation a 90 degres. Un code tenu a la verticale — le cas normal
-          //     sur une bobine — etait illisible. On tourne nous-memes, canvas carre a l'appui.
-          const pass = SCAN_PASSES[passIndex++ % SCAN_PASSES.length];
-          const side = Math.min(Math.round(video.videoWidth * pass.zoom), video.videoHeight);
-          const sx = (video.videoWidth - side) / 2, sy = (video.videoHeight - side) / 2;
-          canvas.width = side; canvas.height = side;
-          if (pass.rot) { ctx.translate(side / 2, side / 2); ctx.rotate(Math.PI / 2); ctx.translate(-side / 2, -side / 2); }
-          ctx.drawImage(video, sx, sy, side, side, 0, 0, side, side);
-          const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          // getImageData rend du RGBA ; RGBLuminanceSource ne convertit que les
-          // Int32Array. Sans cette conversion il lisait R,G,B,A comme 4 pixels gris.
-          const gray = new Uint8ClampedArray(canvas.width * canvas.height);
-          const px = img.data;
-          for (let i = 0, j = 0; i < gray.length; i++, j += 4) gray[i] = (px[j] * 77 + px[j + 1] * 150 + px[j + 2] * 29) >> 8;
-          const lum = new ZXing.RGBLuminanceSource(gray, canvas.width, canvas.height);
-          const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-          const result = reader.decodeWithState(bmp);
-          // Pas de `return` ici : le `return` tuait la boucle quand le code etait lu pendant la fenetre
-          // anti-parasite de 1,5 s : lecture ignoree ET plus aucun tick replanifie. La ligne de fin de
-          // boucle (`if (scanning) setTimeout(...)`) decide seule : lecture acceptee -> scanning=false,
-          // pas de replanification ; lecture ignoree -> on continue.
-          if (result) onRecepCode(result.getText().trim());
-        } catch(e) {}
-        if (S.recepScanning) setTimeout(loop, 60);
-      };
-      setTimeout(loop, 400);
-    }
-  } catch(e) {
-    showToast(e.message.includes('HTTPS') ? e.message : 'Accès caméra refusé', 'error');
-    recepStopCamera(overlay);
-  }
+  if (!window.MySifaScanner) { showToast('Scanner indisponible — recharger la page.', 'error'); return; }
+  return MySifaScanner.demarrer({
+    hint: o.hint || 'Pointez vers le code-barres de la bobine',
+    onCode: o.onCode || recepAddCode,
+  });
 }
 
 function recepStopCamera(overlay) {
-  if (S.recepStream) { S.recepStream.getTracks().forEach(t => t.stop()); S.recepStream = null; }
-  if (S.recepBarcodeReader) { try { S.recepBarcodeReader.reset(); } catch(e) {} S.recepBarcodeReader = null; }
-  S.recepScanning = false;
-  // Retirer l'overlay du body (passé en paramètre ou recherche de secours)
-  if (overlay) { overlay.remove(); } else { document.querySelector('.camera-modal.recep-overlay')?.remove(); }
+  if (window.MySifaScanner) MySifaScanner.arreter(overlay);
 }
 
 async function recepValider() {
@@ -27494,7 +26350,7 @@ function peutVoirDestockage() {
 
 function buildSidebarNavStructure() {
   if (S.tracaOnly) {
-    return [{ kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes traça' }];
+    return [{ kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes (MyTools)' }];
   }
   // Fabrication : vue dédiée Production + sections Matières premières + Outils
   if (S.fabStockMode) {
@@ -27506,7 +26362,7 @@ function buildSidebarNavStructure() {
       { kind: 'sep', label: 'Outils' },
       { kind: 'btn', tab: 'historique', icon: 'clock', label: 'Historique mouvements' },
       { kind: 'btn', tab: 'bobines', icon: 'disc', label: 'Traçabilité' },
-      { kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes traça' },
+      { kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes (MyTools)' },
       { kind: 'btn', tab: 'plan-entrepot', icon: 'map-pin', label: 'Plan entrepôt' },
     ];
   }
@@ -27541,7 +26397,7 @@ function buildSidebarNavStructure() {
     { kind: 'sep', label: 'Outils' },
     { kind: 'btn', tab: 'historique', icon: 'clock', label: 'Historique mouvements' },
     { kind: 'btn', tab: 'bobines', icon: 'disc', label: 'Traçabilité' },
-    { kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes traça' },
+    { kind: 'btn', tab: 'traca', icon: 'printer', label: 'Étiquettes (MyTools)' },
     { kind: 'btn', tab: 'plan-entrepot', icon: 'map-pin', label: 'Plan entrepôt' },
   );
   return items;
@@ -28365,18 +27221,7 @@ async function init() {
   // l'onglet, qui les passe à l'API ou s'en sert pour son premier rendu.
   try { if (window.MySifaUrl) stockLireFiltres(MySifaUrl.lire(), S.tab, false); } catch (e) {}
   render();
-  if (S.tab === 'traca') {
-    // Poste d'étiquetage adressable par URL. Sans ça, le portail ne peut
-    // proposer que « les étiquettes » en bloc, alors que personne n'imprime
-    // « des étiquettes » : on imprime celles de Cohésio 1 ou de la logistique.
-    // render() est déjà passé au-dessus : il faut redessiner le contenu, sinon
-    // l'écran reste sur la grille des postes malgré l'URL.
-    const urlPoste = urlParams.get('poste');
-    if (urlPoste && (TRACA_OUTILS.some(o => o.id === urlPoste) || TRACA_POSTES.some(p => p.id === urlPoste))) {
-      S.tracaPoste = urlPoste;
-      renderContent();
-    }
-  }
+  if (S.tab === 'traca') { tracaVersMyTools(urlParams.get('poste')); return; }
   else if (S.tab === 'reception') { await loadRecepHistory(); }
   else if (S.tab === 'inventaire') { await loadInventaireList(); }
   else if (S.tab === 'matieres-inventaire') { await loadInventaireMatieres(); }

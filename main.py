@@ -110,6 +110,7 @@ from app.routers.portail_espace import router_html as portail_espace_html_router
 from app.routers.qualite_eudr import router_api as eudr_portail_api_router
 from app.routers.qualite_eudr import router_html as eudr_portail_html_router
 from app.web.qualite_page import router as qualite_page_router
+from app.web.tools_page import router as tools_page_router
 from app.routers.pwa import router as pwa_router
 from app.routers.push import router as push_router
 from app.routers.notifications import router as notifications_router
@@ -615,7 +616,7 @@ async def inject_staging_bandeau(request: Request, call_next):
 # Coût pour les autres rôles : un <script> de 20 Ko en cache navigateur, aucun
 # appel réseau tant que le raccourci n'a pas servi (le script résout le rôle
 # paresseusement). html2canvas n'est chargé qu'à la première capture.
-_TACHE_QUICK_TAG = b'<script src="/static/mysifa_tache_quick.js?v=4" defer></script>'
+_TACHE_QUICK_TAG = b'<script src="/static/mysifa_tache_quick.js?v=5" defer></script>'
 # Même logique pour la capture de blocs en widget d'accueil (mysifa_blocs.js) :
 # un bloc capturable doit l'être sur toutes les pages, sans liste à tenir.
 _BLOCS_TAG = f'<script src="/static/mysifa_blocs.js?v={APP_VERSION}" defer></script>'.encode()
@@ -856,6 +857,7 @@ app.include_router(portail_espace_html_router)
 app.include_router(eudr_portail_html_router)
 app.include_router(eudr_portail_api_router)
 app.include_router(qualite_page_router)
+app.include_router(tools_page_router)
 app.include_router(pwa_router)
 app.include_router(push_router)
 app.include_router(notifications_router)

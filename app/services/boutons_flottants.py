@@ -61,6 +61,7 @@ APPLIS: tuple[Appli, ...] = (
     Appli("stock", "MyStock", ("/stock",)),
     Appli("expe", "MyExpé", ("/expe",)),
     Appli("qualite", "MyQualité", ("/qualite",)),
+    Appli("tools", "MyTools", ("/tools",)),
     Appli("maintenance", "Maintenance", ("/maintenance",)),
     Appli("bat", "MyBAT", ("/bat",)),
     Appli("ao", "MyAO", ("/ao",)),

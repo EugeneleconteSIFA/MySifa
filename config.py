@@ -1298,6 +1298,19 @@ def etiq_ia_modeles() -> list[dict]:
     return [{"id": i, "libelle": l, "aide": a, "repli": r} for i, l, a, r in ETIQ_IA_MODELES]
 
 
+# Création d'une étiquette depuis une photo (MyPrint, accès direct) : formats
+# de rouleau courants, proposés à l'assistant quand l'utilisateur ne donne pas
+# le format (largeur × hauteur en mm). L'API Anthropic refuse une image de
+# plus de 5 Mo : le navigateur réduit la photo avant l'envoi, le serveur
+# refuse le reste avec un message clair.
+ETIQ_FORMATS_STANDARD = (
+    (100, 150), (100, 100), (100, 50), (105, 50), (120, 105), (148, 105),
+    (148, 210), (60, 40), (50, 25), (70, 50), (80, 60),
+)
+ETIQ_PHOTO_IMAGE_MAX_OCTETS = int(os.getenv("ETIQ_PHOTO_IMAGE_MAX_OCTETS", str(5 * 1024 * 1024)))
+ETIQ_PHOTO_MAX_FICHIERS = 4
+
+
 # MyQualité › Formulaires : l'assistant construit un formulaire depuis une
 # consigne ou un formulaire papier (photo, PDF). Même liste et même logique
 # que les étiquettes spécifiques : choix de l'utilisateur à chaque appel,
@@ -1453,7 +1466,7 @@ _TACHES_MODULES_DEFAUT = (
     "maintenance:Maintenance",
     "ao:MyAO",
     "bat:MyBAT",
-    "print:MyPrint",
+    "print:MyTools",
     "planning_rh:Planning RH",
     "pricing:Coûts matières",
     "coffre:Coffres",

@@ -7,13 +7,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.services.auth_service import get_current_user
 from app.web.access_denied import access_denied_response
-import json
+from urllib.parse import urlencode
 
-from config import APP_ORG_NAME, APP_VERSION
+from config import APP_VERSION
 from app.web.qualite_ged_assets import GED_JS
 from app.web.qualite_fsc_assets import FSC_JS
 from app.web.qualite_eudr_assets import EUDR_JS
-from app.web.qualite_formulaires_assets import FORMULAIRES_JS
 
 ROLES_QUALITE = {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}
 ROLES_QUALITE_READONLY = {"commercial"}
@@ -29,6 +28,14 @@ def qualite_page(request: Request):
         if e.status_code == 401:
             return RedirectResponse(url="/?next=/qualite", status_code=302)
         raise
+    # Formulaires : partis dans MyTools le 21/10/2026. Un ancien lien (courriel
+    # de suivi, favori, notification) y est renvoyé avec l'objet ouvert, son
+    # onglet et sa fenêtre — mêmes noms de clés des deux côtés.
+    qp = request.query_params
+    if qp.get("formulaire") or qp.get("vue") == "formulaires":
+        cles = ("formulaire", "onglet", "filtre", "ia_formulaire", "envoi_formulaire", "reponse_formulaire")
+        suite = [("outil", "formulaires")] + [(k, v) for k, v in qp.multi_items() if k in cles]
+        return RedirectResponse(url="/tools?" + urlencode(suite), status_code=302)
     # Acces module Qualite :
     # - Roles ROLES_QUALITE (superadmin/direction/administration) : acces complet
     #   (NC, Certifications SIFA, Audits client, Referentiel RSE).
@@ -47,7 +54,7 @@ def qualite_page(request: Request):
         .replace("__GED_ASSETS__", GED_JS)
         .replace("__FSC_ASSETS__", FSC_JS)
         .replace("__EUDR_ASSETS__", EUDR_JS)
-        .replace("__FORMULAIRES_ASSETS__", FORMULAIRES_JS.replace("__ORG_NAME_JS__", json.dumps(APP_ORG_NAME)))
+        .replace("__FORMULAIRES_ASSETS__", "")
     )
     return HTMLResponse(
         content=html,
@@ -381,9 +388,9 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
         Référentiel RSE
       </button>
-      <button type="button" class="nav-btn" id="nav-formulaires" onclick="setView('formulaires-list')">
+      <button type="button" class="nav-btn" id="nav-formulaires" onclick="setView('formulaires-list')" title="Ouvre l'outil Formulaires de MyTools">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/></svg>
-        Formulaires
+        Formulaires <span style="margin-left:auto;color:var(--muted)">→</span>
       </button>
     </div>
 
@@ -530,8 +537,6 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
 
 <script src="/static/mysifa_url.js?v=4"></script>
 <script src="/static/qualite_url.js?v=4"></script>
-<script src="/static/mysifa_formulaire.js?v=3"></script>
-<script src="/static/mysifa_formulaire_editeur.js?v=2"></script>
 <script>
 'use strict';
 
@@ -796,7 +801,7 @@ function renderMenuQualite(){
       desc: "Questionnaires à faire remplir.",
       icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/></svg>`,
       items: [
-        {v:'formulaires-list', title:'Formulaires', desc:'Créer et publier des questionnaires pour fournisseurs, personnel et clients.', icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/></svg>`, show: S.isQualiteAdmin || S.isQualiteReadonly},
+        {v:'formulaires-list', title:'Formulaires', desc:'Dans MyTools — créer et publier des questionnaires pour fournisseurs, personnel et clients.', icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/></svg>`, show: S.isQualiteAdmin || S.isQualiteReadonly},
       ]
     },
   ];
@@ -840,6 +845,8 @@ function _readQualiteView(){
   return null;
 }
 function setView(v, opts){
+  // Formulaires : outil de MyTools depuis le 21/10/2026.
+  if(v==='formulaires-list' || v==='formulaire-edit'){ location.href='/tools?outil=formulaires'; return; }
   var silent=!!(opts&&opts.silent);
   // Quitter l'éditeur de formulaire : la dernière frappe part tout de suite.
   if(S.view==='formulaire-edit' && v!=='formulaire-edit' && typeof formuQuitter==='function') formuQuitter();

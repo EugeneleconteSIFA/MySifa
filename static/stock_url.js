@@ -115,7 +115,6 @@ const _STOCK_OUVREURS = [
   ['openReceptionMatiereModal','reception_matiere', a => a[0] && a[0].id],
   ['openProductionEdit',       'production_modifier', a => a[0] && a[0].reference],
   ['openProductionAddTo',      'production_ajouter',  a => a[0] && a[0].reference],
-  ['openTracaPrint',           'impression',     a => a[0] && a[0].id],
   ['openBesoinDocApercu',      'apercu_doc',     a => a[0] + ':' + (a[1] || '')],
   ['openDocEtatModal',         'etat_doc',       a => a[0] + ':' + a[1]],
   ['openBesoinAssocierModal',  'associer',       a => a[0] + ':' + a[1]],
@@ -183,7 +182,6 @@ const _STOCK_REOUVRIR = {
   reception_matiere: async v => { const m = await _stockMatiereParId(v); if (m) openReceptionMatiereModal(m); },
   production_modifier: v => { const r = ((S.productionZ1 && S.productionZ1.refs) || []).find(x => x.reference === v); if (r) openProductionEdit(r); },
   production_ajouter: v => { const r = ((S.productionZ1 && S.productionZ1.refs) || []).find(x => x.reference === v); if (r) openProductionAddTo(r); },
-  impression: v => { const e = (typeof TRACA_ETIQUETTES !== 'undefined' ? TRACA_ETIQUETTES : []).find(x => String(x.id) === String(v)); if (e) openTracaPrint(e); },
   apercu_doc: v => { const [d, t] = _deux(v); openBesoinDocApercu(d, t); },
   etat_doc: v => { const [t, id] = _deux(v); openDocEtatModal(t, id, ''); },
   associer: v => { const [k, x] = _deux(v); openBesoinAssocierModal(k, x); },
@@ -391,18 +389,6 @@ function _stockParamsBase() {
   } else if (tab === 'plan-entrepot') {
     if (S.planBat != null) { p.batiment = String(S.planBat); nav += '/bat:' + S.planBat; }
     if (S.planSel != null) p.element = String(S.planSel);
-  } else if (tab === 'traca') {
-    if (S.tracaPoste) { p.poste = S.tracaPoste; nav += '/poste:' + S.tracaPoste; }
-    // Étiquettes spécifiques : le module dit ce qu'il montre (vue, dossier,
-    // étiquette ouverte dans l'éditeur, demande, fenêtre).
-    const ad = S.tracaPoste === 'specifiques' && window.EtiqSpec && window.EtiqSpec.adresse;
-    if (ad) {
-      const e = ad.etat();
-      if (e.dossier != null) p.dossier = String(e.dossier);
-      if (e.modele) { p.modele = String(e.modele); nav += '/modele:' + e.modele; }
-      else if (e.vue === 'demandes') { p.vue = 'demandes'; nav += '/demandes'; if (e.demande != null) p.demande = String(e.demande); }
-      if (e.modale && e.modale.cle) { p[e.modale.cle] = String(e.modale.id); nav += '/' + e.modale.cle; }
-    }
   }
   return { params: p, nav: nav };
 }
@@ -574,19 +560,8 @@ async function stockOuvrirObjetsUrl(u, complet) {
     else if (complet && S.planBat != null) { S.planBat = null; S.planSel = null; buildPlanEntrepot(); }
     if (elt && _STOCK_CLE.test(elt)) { try { selectionnerPlanElement(num(elt), true); } catch (e) {} }
   }
-  if (tab === 'traca') {
-    const poste = u.get('poste', null);
-    const ok = poste && (TRACA_OUTILS.some(o => o.id === poste) || TRACA_POSTES.some(x => x.id === poste));
-    const voulu = ok ? poste : null;
-    if (voulu !== (S.tracaPoste || null) && (voulu || complet)) { S.tracaPoste = voulu; renderContent(); }
-    const ad = voulu === 'specifiques' && window.EtiqSpec && window.EtiqSpec.adresse;
-    if (ad) {
-      const a = { vue: u.get('vue', null), dossier: u.get('dossier', null), demande: u.get('demande', null),
-                  modele: u.get('modele', null), modale: null };
-      (ad.cles || []).forEach(k => { const v = u.get(k, null); if (v && v.length <= 60) a.modale = { cle: k, id: v }; });
-      try { await ad.aller(a); } catch (e) {}
-    }
-  }
+  // Étiquettes traça : parties dans MyTools (21/10/2026).
+  if (tab === 'traca') { tracaVersMyTools(u.get('poste', null)); return; }
   await stockModaleUrl(u);
 }
 
