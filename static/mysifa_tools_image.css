@@ -1,0 +1,61 @@
+/* MyTools › Image — améliorer / vectoriser. Partagé par /tools et /bat.
+   Variables du thème uniquement. */
+.timg{display:flex;flex-direction:column;gap:12px;min-height:0}
+/* L'attribut hidden doit l'emporter sur les display des classes ci-dessous. */
+.timg [hidden]{display:none!important}
+.timg-barre{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.timg-info{font-size:12px;color:var(--muted);margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:50%}
+.timg-pdfnav{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text2)}
+.timg-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 13px;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s,border-color .15s}
+.timg-btn:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
+.timg-btn:disabled{opacity:.5;cursor:default}
+.timg-panneau .timg-btn{background:var(--bg)}
+.timg-panneau .timg-btn:hover{background:var(--card)}
+.timg-btn-accent,.timg-panneau .timg-btn-accent{background:var(--accent);border-color:var(--accent);color:white}
+.timg-btn-accent:hover,.timg-panneau .timg-btn-accent:hover{background:var(--accent);color:white;filter:brightness(1.08)}
+.timg-seg{display:inline-flex;border:1px solid var(--border);border-radius:10px;overflow:hidden;flex-wrap:wrap}
+.timg-seg button{background:var(--bg);border:none;border-right:1px solid var(--border);padding:7px 11px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;font-family:inherit}
+.timg-seg button:last-child{border-right:none}
+.timg-seg button:hover{background:var(--card)}
+.timg-seg button.active{background:var(--accent-bg);color:var(--accent)}
+.timg-modes button{padding:8px 14px;font-size:13px;background:var(--card)}
+.timg-corps{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;min-height:0}
+@media(max-width:900px){.timg-corps{grid-template-columns:1fr}}
+.timg-vue{position:relative;background:var(--card);border:1px solid var(--border);border-radius:14px;min-height:420px;display:flex;align-items:center;justify-content:center;padding:14px;overflow:hidden}
+.timg-vue.timg-survol{border-color:var(--accent);box-shadow:inset 0 0 0 2px var(--accent)}
+.timg-depot{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;padding:60px 20px;border:2px dashed var(--border);border-radius:12px;cursor:pointer;color:var(--text2);width:100%}
+.timg-depot:hover{border-color:var(--accent);color:var(--accent)}
+.timg-depot strong{font-size:15px}
+.timg-depot span{font-size:12px;color:var(--muted)}
+.timg-compare{display:flex;flex-direction:column;gap:8px;width:100%;align-items:center}
+.timg-damier{position:relative;max-width:100%;line-height:0;
+  background-color:var(--bg);
+  background-image:linear-gradient(45deg,var(--border) 25%,transparent 25%),linear-gradient(-45deg,var(--border) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,var(--border) 75%),linear-gradient(-45deg,transparent 75%,var(--border) 75%);
+  background-size:16px 16px;background-position:0 0,0 8px,8px -8px,-8px 0}
+.timg-damier canvas,.timg-damier img{display:block;max-width:100%;max-height:62vh;width:auto;height:auto}
+.timg-damier>img{position:absolute;inset:0;width:100%;height:100%;max-height:none;object-fit:contain}
+.timg-avant{position:absolute;inset:0 auto 0 0;overflow:hidden;border-right:2px solid var(--accent)}
+.timg-avant canvas{max-width:none;max-height:none;height:100%;width:auto}
+.timg-glissiere{width:min(100%,520px);accent-color:var(--accent)}
+.timg-legende{display:flex;justify-content:space-between;width:min(100%,520px);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.timg-occupe{position:absolute;inset:auto 12px 12px auto;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px}
+.timg-panneau{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;overflow-y:auto;max-height:calc(100vh - 160px)}
+.timg-panneau section{display:flex;flex-direction:column;gap:12px}
+.timg-champ{display:flex;flex-direction:column;gap:6px;min-width:0}
+.timg-champ>span{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;display:flex;justify-content:space-between;gap:8px}
+.timg-champ b{color:var(--accent);font-weight:700;text-transform:none;letter-spacing:0}
+.timg-champ input[type=range]{width:100%;accent-color:var(--accent)}
+.timg-in{width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px 12px;color:var(--text);font-size:14px;font-family:inherit;outline:none}
+.timg-in:focus{border-color:var(--accent)}
+.timg-case{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer}
+.timg-case input{width:16px;height:16px;accent-color:var(--accent)}
+.timg-sep{border-top:1px dashed var(--border)}
+.timg-note{font-size:12px;color:var(--muted);line-height:1.45}
+.timg-note:empty{display:none}
+.timg-actions{display:flex;gap:6px;flex-wrap:wrap}
+.timg-actions .timg-btn{flex:1}
+/* Fenêtre plein écran dans MyBAT */
+.timg-fenetre{position:fixed;inset:0;z-index:1200;background:var(--bg);display:flex;flex-direction:column}
+.timg-fenetre-tete{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--card)}
+.timg-fenetre-tete h2{font-size:15px;font-weight:800}
+.timg-fenetre-corps{flex:1;overflow:auto;padding:16px}

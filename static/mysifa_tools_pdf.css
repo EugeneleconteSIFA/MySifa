@@ -170,7 +170,11 @@ textarea.tpdf-champ { resize: vertical; min-height: 60px; line-height: 1.4; }
   text-align: center;
 }
 
-.tpdf-scene { flex: 1; min-width: 0; overflow: auto; position: relative; background: var(--bg); }
+.tpdf-scene { flex: 1; min-width: 0; overflow: auto; position: relative; background: var(--bg);
+  /* Place de la barre de défilement réservée : sans elle, une page pivotée
+     qui fait apparaître la barre réduit la largeur, « Ajuster » recalcule,
+     la barre disparaît, et la page sautille indéfiniment. */
+  scrollbar-gutter: stable; }
 .tpdf-boite { min-height: 100%; display: flex; justify-content: center; align-items: flex-start; padding: 24px; }
 .tpdf-feuille {
   position: relative;

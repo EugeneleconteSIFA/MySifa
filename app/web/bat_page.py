@@ -233,6 +233,7 @@ body.light .toast.danger{background:#fee2e2;color:#991b1b}
 body.light .toast.info{background:#f1f5f9;color:var(--text)}
 </style>
 <link rel="stylesheet" href="/static/mysifa_perf.css">
+<link rel="stylesheet" href="/static/mysifa_tools_image.css?v=__V_LABEL__">
 <script src="/static/mysifa_perf.js"></script>
 </head>
 <body>
@@ -250,6 +251,10 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
       <button type="button" class="nav-btn active">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         BAT
+      </button>
+      <button type="button" class="nav-btn" id="nav-image" onclick="openImageOutil()" title="Outil Image de MyTools">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 16l5-5 4 4"/><path d="M14 13l2-2 5 5"/><circle cx="8.5" cy="8" r="1.5"/></svg>
+        Améliorer / vectoriser
       </button>
     </div>
     <!-- Pied commun (static/mysifa_sidebar.js), rempli au chargement. -->
@@ -310,6 +315,15 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
       <div class="table-wrap" id="table-wrap"></div>
     </div>
   </main>
+</div>
+
+<!-- Outil Image de MyTools (static/mysifa_tools_image.js), plein écran -->
+<div class="timg-fenetre" id="image-outil" style="display:none" role="dialog" aria-label="Améliorer et vectoriser une image">
+  <div class="timg-fenetre-tete">
+    <h2>Image — améliorer et vectoriser</h2>
+    <button type="button" class="timg-btn" onclick="closeImageOutil()">Fermer</button>
+  </div>
+  <div class="timg-fenetre-corps" id="image-outil-corps"></div>
 </div>
 
 <!-- Modal création -->
@@ -446,7 +460,7 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
 
 <!-- Adresse de la page : statut, tri, fenêtre ouverte (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/bat_url.js?v=1"></script>
+<script src="/static/bat_url.js?v=2"></script>
 <script>
 'use strict';
 
@@ -517,6 +531,33 @@ function showToast(msg, type='info'){
 
 function toggleSidebar(){document.body.classList.toggle('sb-open');}
 function closeSidebar(){document.body.classList.remove('sb-open');}
+
+// Outil Image de MyTools (static/mysifa_tools_image.js) : vectoriser un logo,
+// remonter la qualité d'une image client avant un BAT. Chargé au premier usage.
+let _imageOutilCharge=null;
+function openImageOutil(){
+  const ov=document.getElementById('image-outil');
+  ov.style.display='flex'; closeSidebar();
+  document.getElementById('nav-image').classList.add('active');
+  if(!_imageOutilCharge){
+    _imageOutilCharge=new Promise((ok,ko)=>{
+      const s=document.createElement('script');
+      s.src='/static/mysifa_tools_image.js?v=__V_LABEL__';
+      s.onload=ok; s.onerror=()=>{_imageOutilCharge=null;ko();};
+      document.head.appendChild(s);
+    });
+  }
+  _imageOutilCharge
+    .then(()=>window.MyToolsImage.mount(document.getElementById('image-outil-corps'),{toast:(m,t)=>showToast(m,t)}))
+    .catch(()=>showToast('Outil image indisponible — vérifier la connexion.','danger'));
+}
+function closeImageOutil(){
+  const ov=document.getElementById('image-outil');
+  if(!ov || ov.style.display==='none') return;
+  ov.style.display='none';
+  document.getElementById('nav-image').classList.remove('active');
+  if(window.MyToolsImage) window.MyToolsImage.demonter();
+}
 
 // Le pied commun bascule le thème via MySifaTheme ; on recopie le mode dans
 // l'ancienne clé lue par le script de pré-rendu (light-pre) pour éviter un flash.
@@ -1153,7 +1194,7 @@ async function submitPdfDelete(){
   document.addEventListener('keydown', e=>{
     if(e.key==='Escape'){
       closeCreateModal();closeUploadModal();closeEditModal();closeStatutModal();closeDelModal();
-      closePdfPicker();closePdfDelModal();
+      closePdfPicker();closePdfDelModal();closeImageOutil();
     }
   });
 })();

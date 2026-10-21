@@ -18,6 +18,7 @@ const _batVisible = id => { const el = document.getElementById(id); return !!(el
 const _batDefautTri = () => (typeof DEFAULT_SORT !== 'undefined' ? DEFAULT_SORT : []).map(s => s.key + ':' + s.dir).join(',');
 
 function _batModale() {
+  if (_batVisible('image-outil')) return { cle: 'outil', id: 'image' };
   if (_batVisible('create-modal')) return { cle: 'nouveau', id: 'bat' };
   if (_batVisible('upload-modal') && S.uploadBatId != null) return { cle: 'ajout_pdf', id: S.uploadBatId };
   if (_batVisible('edit-modal') && S.editBatId != null) return { cle: 'modifier', id: S.editBatId };
@@ -46,14 +47,15 @@ function batUrlObserver() {
   let attente = 0;
   new MutationObserver(() => {
     if (attente) return;
-    attente = requestAnimationFrame(() => { attente = 0; batSyncUrl(); });
+    // setTimeout : un onglet en arrière-plan ne rend plus d'images.
+    attente = setTimeout(() => { attente = 0; batSyncUrl(); }, 60);
   }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
 }
 
 function _batFermer(mo) {
   if (!mo) return;
   ({ nouveau: closeCreateModal, ajout_pdf: closeUploadModal, modifier: closeEditModal,
-     statut_bat: closeStatutModal, pdfs: closePdfPicker })[mo.cle]();
+     statut_bat: closeStatutModal, pdfs: closePdfPicker, outil: closeImageOutil })[mo.cle]();
 }
 
 async function batAllerUrl(complet) {
@@ -70,13 +72,14 @@ async function batAllerUrl(complet) {
   }
   if (changer) render();
   let voulue = null;
-  ['nouveau', 'ajout_pdf', 'modifier', 'statut_bat', 'pdfs'].forEach(k => { const v = u.get(k, null); if (v) voulue = { cle: k, id: v }; });
+  ['nouveau', 'ajout_pdf', 'modifier', 'statut_bat', 'pdfs', 'outil'].forEach(k => { const v = u.get(k, null); if (v) voulue = { cle: k, id: v }; });
   const cour = _batModale();
   if (cour && (!voulue || cour.cle !== voulue.cle || String(cour.id) !== String(voulue.id))) _batFermer(cour);
   if (voulue && !_batModale()) {
     const id = /^[0-9]+$/.test(voulue.id) ? Number(voulue.id) : voulue.id;
     const e = (S.entries || []).find(x => String(x.id) === String(voulue.id));
     if (voulue.cle === 'nouveau') openCreateModal();
+    else if (voulue.cle === 'outil') { if (voulue.id === 'image') openImageOutil(); }
     else if (!e) return;
     else if (voulue.cle === 'ajout_pdf') openUploadModal(id, e.reference);
     else if (voulue.cle === 'modifier') openEditModal(id);
