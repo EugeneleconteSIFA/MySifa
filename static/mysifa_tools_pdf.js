@@ -202,7 +202,7 @@
   /* ── Extensions (texte existant, formulaires, création) ───────────── */
   // Chargées par ce fichier, avec la même querystring de version que lui.
   var MON_SRC = (typeof document !== 'undefined' && document.currentScript && document.currentScript.src) || '';
-  var EXTENSIONS = ['mysifa_tools_pdf_texte.js', 'mysifa_tools_pdf_formulaires.js', 'mysifa_tools_pdf_creation.js'];
+  var EXTENSIONS = ['mysifa_tools_pdf_texte.js', 'mysifa_tools_pdf_formulaires.js', 'mysifa_tools_pdf_creation.js', 'mysifa_tools_pdf_flou.js'];
   var EXT = { types: {}, outils: {}, actions: {}, hooks: {}, boutons: [], modeAnnot: null, docPourExport: null };
   function hook(nom) {
     var args = Array.prototype.slice.call(arguments, 1);
@@ -894,6 +894,7 @@
         b.textContent = p.annots.length; pied.appendChild(b);
       }
       v.appendChild(pied);
+      hook('vignette', p, v);
       box.appendChild(v);
     });
     majVignettesEtat();
@@ -1027,7 +1028,7 @@
         a.x1 = q1[0]; a.y1 = q1[1]; a.x2 = q2[0]; a.y2 = q2[1];
       } else if (a.t === 'main') {
         a.pts = a.pts.map(function (q) { return tp(q[0], q[1]); });
-      } else if (a.t === 'rect' || a.t === 'ellipse' || a.t === 'surligneur') {
+      } else if (a.t === 'rect' || a.t === 'ellipse' || a.t === 'surligneur' || (T && T.boiteTournante)) {
         var c1 = tp(a.x, a.y), c2 = tp(a.x + a.w, a.y + a.h);
         a.x = Math.min(c1[0], c2[0]); a.y = Math.min(c1[1], c2[1]);
         a.w = Math.abs(c2[0] - c1[0]); a.h = Math.abs(c2[1] - c1[1]);
@@ -1224,6 +1225,7 @@
     svg.setAttribute('width', '100%'); svg.setAttribute('height', '100%');
     p.annots.forEach(function (a) { dessinerAnnot(a, svg); });
     dessinerResultats(p, d);
+    hook('calque', p, d);
     var a = trouverAnnot(S.annSel);
     if (!a) return;
     var t = 8 / z, cadre = sv('g', { 'class': 'tpdf-sel' }, svg), T = EXT.types[a.t];
@@ -1871,7 +1873,10 @@
       for (var k = 0; k < p.annots.length; k++) await dessinerPdf(L, out, pg, p.annots[k], d.meta.view, d.R, pol, imgs);
     }
     await hookAsync('export', ctx);
-    return out.save(ctx.optionsSave || {});
+    // Dernière passe : une extension peut remplacer le document produit
+    // (floutage : pages refaites en image dans un document neuf).
+    await hookAsync('exportFinal', ctx);
+    return (ctx.final || out).save(ctx.optionsSave || {});
   }
   function nomBase() { return nomFichierSur(S.nom || 'document'); }
 
@@ -2077,7 +2082,7 @@
     pageCourante: pageCourante, dims: dims, trouverAnnot: trouverAnnot, versPdf: versPdf, versVue: versVue,
     hexRgb: hexRgb, sv: sv, boite: boite, mesureTexte: mesureTexte, nettoyerTexte: nettoyerTexte,
     dessinerCalque: dessinerCalque, rendreProps: rendreProps, rendreBarre: rendreBarre, toutRendre: toutRendre,
-    rendrePage: rendrePage, allerPage: allerPage, choisirOutil: choisirOutil, majBadges: majBadges,
+    rendrePage: rendrePage, rendreVignettes: rendreVignettes, allerPage: allerPage, choisirOutil: choisirOutil, majBadges: majBadges,
     champ: champ, section: section, majProp: majProp, validerProp: validerProp, focaliserTexte: focaliserTexte,
     ouvrirModale: ouvrirModale, fermerModale: fermerModale, ajouterSource: ajouterSource, nouvellePage: nouvellePage,
     occuper: occuper, liberer: liberer, construire: function (pages) { return construire(pages || S.pages); }

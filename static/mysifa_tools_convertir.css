@@ -1,0 +1,39 @@
+/* MyTools › Convertir. Variables du thème uniquement. */
+.tconv{display:flex;flex-direction:column;gap:12px;max-width:900px}
+.tconv [hidden]{display:none!important}
+.tconv-carte{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:14px}
+.tconv-depot{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;padding:40px 16px;border:2px dashed var(--border);border-radius:12px;cursor:pointer;color:var(--text2);background:var(--bg)}
+.tconv-depot:hover,.tconv-depot:focus-visible,.tconv-depot.tconv-survol{border-color:var(--accent);color:var(--accent);outline:none}
+.tconv-depot strong{font-size:15px}
+.tconv-depot span{font-size:12px;color:var(--muted)}
+.tconv-liste{display:flex;flex-direction:column;gap:6px}
+.tconv-fichier{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--bg);min-width:0}
+.tconv-fichier img{width:36px;height:36px;object-fit:contain;border-radius:6px;background:var(--card)}
+.tconv-nom{flex:1;min-width:0;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tconv-fichier small{font-size:11px;color:var(--muted);white-space:nowrap}
+.tconv-x{background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:3px 8px;font-family:inherit}
+.tconv-x:hover{color:var(--danger);border-color:var(--danger)}
+.tconv-lien{align-self:flex-start;background:none;border:none;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;padding:2px 0;font-family:inherit}
+.tconv-titre{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.tconv-pastilles{display:flex;gap:6px;flex-wrap:wrap}
+.tconv-pastille{background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:7px 12px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px}
+.tconv-pastille:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.tconv-pastille.actif{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.tconv-pastille:disabled{opacity:.45;cursor:not-allowed}
+.tconv-srv{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:0 5px}
+.tconv-option{display:flex;flex-direction:column;gap:6px}
+.tconv-option>span{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
+.tconv-action{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.tconv-ou{font-size:12px;color:var(--muted)}
+.tconv-go{background:var(--accent);color:white;border:none;border-radius:10px;padding:10px 22px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+.tconv-go:hover:not(:disabled){filter:brightness(1.08)}
+.tconv-go:disabled{opacity:.6;cursor:progress}
+.tconv-prog{width:100%;max-width:420px;height:6px;border-radius:999px;background:var(--accent-bg);overflow:hidden}
+.tconv-prog span{display:block;height:100%;background:var(--accent);transition:width .2s}
+.tconv-etape{font-size:12px;color:var(--text2)}
+.tconv-etape:empty{display:none}
+.tconv-btn{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:7px 12px;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;font-family:inherit;white-space:nowrap}
+.tconv-btn:hover{border-color:var(--accent);color:var(--accent)}
+.tconv-formats summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--text)}
+.tconv-formats p{font-size:12px;color:var(--text2);line-height:1.6;margin-top:8px}
+.tconv-muted{color:var(--muted)}

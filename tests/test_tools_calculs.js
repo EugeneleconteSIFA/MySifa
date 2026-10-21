@@ -45,5 +45,27 @@ ok('4 fronts → 52 492 étiquettes', e.total === 52492);
 ok('quantité visée 10 000 sur 4 fronts → 381 m', proche(F.metragePour(10000, 148.4, 4, 4), 381, 1e-9));
 ok('aller-retour : le métrage calculé porte la quantité', F.etiquettes(F.metragePour(10000, 148.4, 4, 4), 148.4, 4, 4).total >= 10000);
 
+// Carton : rangement en grille, debout ou couché, jeu retiré.
+const sens = { debout: true, couche: true };
+const c385 = { l: 385, w: 385, h: 208, libelle: 'Carton 385 x 385 x 208 mm' };
+const r1 = F.rangement(90, 100, c385, 4, sens);
+ok('Ø90 × 100 dans 385×385×208 : 4×4×2 debout = 32', r1.nb === 32 && r1.sens === 'debout' && r1.a === 4 && r1.c === 2);
+const r2 = F.rangement(90, 100, c385, 4, { debout: false, couche: true });
+ok('couchées seulement : 3×4×2 = 24', r2.nb === 24 && r2.sens === 'couchées');
+ok('bobine trop grosse : aucun rangement', F.rangement(400, 100, c385, 4, sens) === null);
+ok('le jeu compte : Ø96 × 4 = 384 > 381', F.rangement(96, 100, c385, 4, sens).a === 3);
+const cartons = [c385, { l: 385, w: 385, h: 105, libelle: '105' }, { l: 200, w: 200, h: 115, libelle: 'petit' }];
+const cl = F.classerCartons(cartons, 90, 100, 40, 4, sens);
+// 3 × 385×385×105 (46,7 dm³) contiennent 40 bobines avec moins de vide que 2 × 385×385×208 (61,7 dm³).
+ok('40 bobines : moins de vide, et à volume proche le moins de cartons', cl[0].carton.libelle === '105' && cl[0].nbCartons === 3);
+ok('dix petits cartons après trois moyens (2 % de vide en moins seulement)', cl.findIndex(x => x.carton.libelle === 'petit') > 0);
+const parNb = F.classerCartons(cartons, 90, 100, 40, 4, sens, 'cartons');
+ok('priorité « moins de cartons » : 2 cartons de 32', parNb[0].carton.libelle === 'Carton 385 x 385 x 208 mm' && parNb[0].nbCartons === 2);
+const avecBox = F.classerCartons(cartons.concat([{ l: 1180, w: 780, h: 1070, libelle: 'grand box' }]), 90, 100, 40, 4, sens);
+ok('un grand box presque vide passe en dernier', avecBox[avecBox.length - 1].carton.libelle === 'grand box');
+const sansQ = F.classerCartons(cartons, 90, 100, 0, 4, sens);
+ok('sans quantité : meilleur remplissage d\'abord', sansQ[0].remplissage >= sansQ[1].remplissage);
+ok('carton trop petit écarté', !cl.some(x => x.carton.libelle === 'petit' && x.parCarton < 1));
+
 if (echecs) { console.log('\n' + echecs + ' cas en échec'); process.exit(1); }
 console.log('\nTous les cas passent.');

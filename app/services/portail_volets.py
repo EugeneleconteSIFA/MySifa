@@ -225,6 +225,7 @@ VOLETS_TUILES = {
                         roles=_ROLES_FORMULAIRES),
                 _entree("tools_pdf", "Éditeur PDF", "/tools?outil=pdf", "file-text"),
                 _entree("tools_image", "Image — améliorer, vectoriser", "/tools?outil=image", "layers"),
+                _entree("tools_convertir", "Convertir un fichier", "/tools?outil=convertir", "file-text"),
                 _entree("tools_calculs", "Calculs bobine", "/tools?outil=calculs", "layers"),
                 _entree("tools_traduction", "Traducteur", "/tools?outil=traduction", "globe"),
             ]),

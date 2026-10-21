@@ -1294,6 +1294,20 @@ ETIQ_IA_MODELES = (
 )
 
 
+# ─── MyTools — carton optimal (Calculs bobine) ───────────────────
+# Catégorie MyStock des cartons, et mots qui écartent une référence de la
+# recherche (pièces sans volume utile : couvercle seul, intercalaire).
+CARTONS_CATEGORIE = os.getenv("CARTONS_CATEGORIE", "carton")
+CARTONS_EXCLUS = tuple(m.strip().lower() for m in os.getenv("CARTONS_EXCLUS", "couvercle,intercalaire").split(",") if m.strip())
+
+# ─── MyTools — convertisseur (repris de Prismix) ──────────────────
+# Taille totale d'un envoi, conversions serveur simultanées (LibreOffice et
+# ffmpeg sont gourmands), quota par utilisateur et par heure.
+CONVERTIR_MAX_MO = int(os.getenv("CONVERTIR_MAX_MO", "300"))
+CONVERTIR_PARALLELE = int(os.getenv("CONVERTIR_PARALLELE", "2"))
+CONVERTIR_PAR_HEURE = int(os.getenv("CONVERTIR_PAR_HEURE", "60"))
+
+
 def etiq_ia_modeles() -> list[dict]:
     return [{"id": i, "libelle": l, "aide": a, "repli": r} for i, l, a, r in ETIQ_IA_MODELES]
 

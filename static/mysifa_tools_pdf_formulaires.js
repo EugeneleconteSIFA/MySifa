@@ -308,6 +308,30 @@
     // Document produit : pdf-lib recopie les widgets des pages, pas le formulaire.
     // On rattache chaque champ au formulaire du fichier produit pour qu'il reste
     // remplissable après fusion, découpage ou réordonnancement.
+    // Rattache au formulaire du document chaque champ dont un widget est sur
+    // une de ses pages. Réutilisée par le floutage sur son document refait.
+    function reconstruire(out, L) {
+      var P = L.PDFName, tops = [], vus = {};
+      out.getPages().forEach(function (pg) {
+        var annots = pg.node.Annots(); if (!annots) return;
+        for (var i = 0; i < annots.size(); i++) {
+          var ref = annots.get(i), dict = out.context.lookup(ref);
+          if (!(dict instanceof L.PDFDict) || String(dict.get(P.of('Subtype'))) !== '/Widget') continue;
+          var top = ref, cur = dict, par;
+          while ((par = cur.get(P.of('Parent')))) { top = par; cur = out.context.lookup(par); }
+          if (!(top instanceof L.PDFRef) || vus[top.toString()]) continue;
+          vus[top.toString()] = 1; tops.push(top);
+        }
+      });
+      if (!tops.length) return false;
+      var acro = out.catalog.getOrCreateAcroForm(), deja = {};
+      try { acro.getAllFields().forEach(function (f) { deja[f[1].toString()] = 1; }); } catch (e) { /* formulaire vide */ }
+      tops.forEach(function (t) { if (!deja[t.toString()]) acro.addField(t); });
+      if (!acro.dict.get(P.of('DA'))) acro.dict.set(P.of('DA'), L.PDFString.of('/Helv 0 Tf 0 g'));
+      acro.dict.set(P.of('NeedAppearances'), L.PDFBool.True);
+      return true;
+    }
+    EXT.reconstruireFormulaire = reconstruire;
     EXT.hooks.export = (EXT.hooks.export || []).concat(async function (ctx) {
       var s = S(), L = ctx.L, out = ctx.out;
       var ids = {}; ctx.pages.forEach(function (p) { ids[p.src] = 1; });
@@ -320,23 +344,7 @@
         srcs.forEach(function (src) { src.champs.forEach(function (c) { if (vus[c.nom] && vus[c.nom] !== src.id) doublon = c.nom; vus[c.nom] = src.id; }); });
         if (doublon) api.toast('Deux fichiers fusionnés ont un champ « ' + doublon + ' » : ils partageront leur valeur. Cocher « Aplatir » pour l\'éviter.', 'info');
       }
-      var acro = out.catalog.getOrCreateAcroForm(), deja = {};
-      try { acro.getAllFields().forEach(function (f) { deja[f[1].toString()] = 1; }); } catch (e) { /* formulaire vide */ }
-      var P = L.PDFName;
-      out.getPages().forEach(function (pg) {
-        var annots = pg.node.Annots(); if (!annots) return;
-        for (var i = 0; i < annots.size(); i++) {
-          var ref = annots.get(i), dict = out.context.lookup(ref);
-          if (!(dict instanceof L.PDFDict) || String(dict.get(P.of('Subtype'))) !== '/Widget') continue;
-          var top = ref, cur = dict, par;
-          while ((par = cur.get(P.of('Parent')))) { top = par; cur = out.context.lookup(par); }
-          if (!(top instanceof L.PDFRef) || deja[top.toString()]) continue;
-          deja[top.toString()] = 1;
-          acro.addField(top);
-        }
-      });
-      if (!acro.dict.get(P.of('DA'))) acro.dict.set(P.of('DA'), L.PDFString.of('/Helv 0 Tf 0 g'));
-      acro.dict.set(P.of('NeedAppearances'), L.PDFBool.True);
+      reconstruire(out, L);
       ctx.optionsSave = { updateFieldAppearances: false };
     });
 

@@ -185,17 +185,19 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 .ttr-compte.ttr-trop{color:var(--danger);font-weight:700}
 .ttr-aide{font-size:12px;color:var(--muted)}
 
-/* ── Calculs bobine ── */
-.tcal{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;align-items:start;max-width:1200px}
-@media(max-width:420px){.tcal{grid-template-columns:1fr}}
-.tcal-carte{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0}
-.tcal-carte header h2{font-size:15px;font-weight:800;color:var(--text)}
-.tcal-carte header p{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.45}
-.tcal-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
-.tcal-grille--sep{border-top:1px dashed var(--border);padding-top:12px}
+/* ── Calculs bobine : un calcul à la fois (onglets), réglages fins repliés ── */
+.tcal{display:flex;flex-direction:column;gap:12px;max-width:720px}
+.tcal [hidden]{display:none!important}
+.tcal-onglets{display:flex;gap:6px;flex-wrap:wrap}
+.tcal-onglet{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 14px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;font-family:inherit}
+.tcal-onglet:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
+.tcal-onglet.actif{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.tcal-carte{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.tcal-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
 .tcal-champ{display:flex;flex-direction:column;gap:5px;min-width:0}
 .tcal-champ span{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
 .tcal-in{width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;outline:none;transition:border-color .15s}
+.tcal-in::placeholder{color:var(--muted);opacity:.6}
 .tcal-in:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 .tcal-seg{display:inline-flex;border:1px solid var(--border);border-radius:10px;overflow:hidden;align-self:flex-start;flex-wrap:wrap}
 .tcal-seg-b{background:var(--bg);border:none;border-right:1px solid var(--border);padding:8px 12px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;font-family:inherit}
@@ -203,7 +205,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 .tcal-seg-b:hover{background:var(--card)}
 .tcal-seg-b.active{background:var(--accent-bg);color:var(--accent)}
 .tcal-res{background:var(--accent-bg);border:1px solid var(--accent);border-radius:12px;padding:12px 14px}
-.tcal-res-v{font-size:22px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums}
+.tcal-res-v{font-size:22px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .tcal-res-l{font-size:12px;color:var(--text2);margin-top:2px}
 .tcal-res--vide{background:var(--bg);border-color:var(--border)}
 .tcal-res--vide .tcal-res-v{color:var(--muted)}
@@ -212,5 +214,19 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 .tcal-err{font-size:12px;color:var(--danger);font-weight:600}
 .tcal-aide{font-size:11px;color:var(--muted);line-height:1.45}
 .tcal-liens{display:flex;gap:6px;flex-wrap:wrap}
-.tcal-lien{background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;font-family:inherit}
+.tcal-lien{background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;font-family:inherit;align-self:flex-start}
 .tcal-lien:hover{border-color:var(--accent);color:var(--accent)}
+.tcal-fins{border-top:1px dashed var(--border);padding-top:10px}
+.tcal-fins summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--muted);list-style:revert}
+.tcal-fins summary:hover{color:var(--accent)}
+.tcal-fins[open] summary{margin-bottom:10px}
+.tcal-case{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;align-self:end;padding-bottom:10px}
+.tcal-case input{width:16px;height:16px;accent-color:var(--accent)}
+.tcal-titre{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.tcal-cartons{display:flex;flex-direction:column;gap:6px}
+.tcal-carton{display:grid;grid-template-columns:minmax(0,1fr) auto 90px;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--bg)}
+.tcal-carton-nom{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tcal-carton-chiffres{font-size:12px;color:var(--text2);white-space:nowrap;font-variant-numeric:tabular-nums}
+.tcal-jauge{height:6px;border-radius:999px;background:var(--accent-bg);overflow:hidden}
+.tcal-jauge i{display:block;height:100%;background:var(--accent)}
+@media(max-width:520px){.tcal-carton{grid-template-columns:1fr auto}.tcal-jauge{grid-column:1/-1}}
