@@ -147,10 +147,6 @@ tr:hover td{background:var(--accent-bg)}
 .field label{display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
 .field input,.field select,.field textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent)}
-.cat-table input,.cat-table select{width:100%;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;font-family:inherit;outline:none;min-width:70px}
-.cat-table input:focus,.cat-table select:focus{border-color:var(--accent)}
-.cat-table tr.inactive td{opacity:.55}
-.cat-hint{font-size:12px;color:var(--muted);margin:0 0 14px;line-height:1.5}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
 .toast{position:fixed;top:24px;right:24px;background:var(--card);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;padding:12px 18px;font-size:13px;color:var(--text);z-index:1000;box-shadow:0 10px 24px rgba(0,0,0,.3)}
@@ -184,10 +180,6 @@ tr:hover td{background:var(--accent-bg)}
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
       Notes de frais
       <span class="nav-badge" id="ndf-badge" style="display:none">0</span>
-    </button>
-    <button type="button" class="nav-btn" id="nav-categories" onclick="showTab('categories')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
-      Catégories de frais
     </button>
     <button type="button" class="nav-btn" onclick="location.href='/coffre'">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -264,24 +256,19 @@ tr:hover td{background:var(--accent-bg)}
             <label style="font-size:12px;color:var(--muted)">Année :</label>
             <select id="ndf-annee"><option value="">Toutes</option></select>
             <button type="button" class="btn ghost" onclick="exportNdf()">Export CSV</button>
+            <button type="button" class="btn ghost" onclick="MySifaNdfReglages.ouvrir()">Réglages</button>
           </div>
           <div style="overflow-x:auto" id="ndf-container"></div>
         </div>
       </div>
 
-      <div class="pane-tab" id="pane-categories">
-        <div class="card">
-          <h2>Catégories proposées aux salariés</h2>
-          <p class="cat-hint">Le taux de TVA est celui proposé par défaut : le salarié peut le changer sur sa note. Une catégorie en kilomètres calcule le montant à partir de la distance et du taux par km. Une catégorie déjà utilisée ne se supprime pas : la désactiver la retire du formulaire sans toucher aux notes existantes.</p>
-          <div style="overflow-x:auto" id="cat-container"></div>
-        </div>
-      </div>
 
     </div>
   </main>
 </div>
 
 <script src="/static/support_widget.js"></script>
+<script src="/static/mysifa_ndf_reglages.js?v=1"></script>
 <script>window.__MYSIFA_APP__='rh_coffre';</script>
 <script>
 const MOIS_LABELS=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
@@ -341,9 +328,8 @@ function closeSidebar(){document.body.classList.remove('sb-open');}
 const TAB_META={
   bulletins:{title:'Bulletins',sub:'Dépôt mensuel, dashboard et impression groupée.'},
   ndf:{title:'Notes de frais',sub:'Validation, marquage payées et export comptable.'},
-  categories:{title:'Catégories de frais',sub:'Catégories, taux de TVA par défaut et barème kilométrique.'},
 };
-var RH_COFFRE_VALID_TABS=['bulletins','ndf','categories'];
+var RH_COFFRE_VALID_TABS=['bulletins','ndf'];
 function _readRhCoffreTab(){
   try{var h=(location.hash||'').replace(/^#/,'').trim();
     if(RH_COFFRE_VALID_TABS.indexOf(h)!==-1)return h;}catch(e){}
@@ -365,7 +351,6 @@ function showTab(tab, opts){
   const s=document.getElementById('page-sub');if(s)s.textContent=meta.sub;
   const ms=document.getElementById('mobile-sub');if(ms)ms.textContent=meta.title;
   if(tab==='ndf')loadNdf();
-  if(tab==='categories')loadCategories();
   closeSidebar();
   if(!silent){try{var target='#'+tab;if(location.hash!==target)history.replaceState(null,'',target);}catch(e){}}
 }
@@ -568,54 +553,6 @@ function ndfMeta(n){
   return p.join(' · ');
 }
 
-// ── Catégories de notes de frais ──
-let CATS={categories:[],taux_tva:[20,10,5.5,0]};
-function catLigne(c){
-  const nouveau=!c.id;
-  const km=c.saisie==='km';
-  return `<tr data-cat="${nouveau?'new':c.id}" class="${c.actif===0?'inactive':''}">
-    <td><input type="text" data-f="libelle" maxlength="60" value="${esc(c.libelle||'')}" placeholder="${nouveau?'Nouvelle catégorie':''}"></td>
-    <td><select data-f="saisie" onchange="catSaisieChange(this)">
-      <option value="montant"${km?'':' selected'}>Montant</option>
-      <option value="km"${km?' selected':''}>Kilomètres</option>
-    </select></td>
-    <td><select data-f="taux_tva"${km?' disabled':''}>${CATS.taux_tva.map(t=>`<option value="${t}"${Number(c.taux_tva)===t?' selected':''}>${t?fmtTaux(t):'Sans TVA'}</option>`).join('')}</select></td>
-    <td><input type="number" data-f="taux_km" step="0.001" min="0" value="${c.taux_km!=null?esc(c.taux_km):''}" placeholder="€ / km"${km?'':' disabled'}></td>
-    <td style="text-align:center">${nouveau?'':`<input type="checkbox" data-f="actif" style="width:auto;min-width:0"${c.actif?' checked':''}>`}</td>
-    <td style="text-align:right;color:var(--muted);font-size:12px">${nouveau?'':c.nb_notes}</td>
-    <td style="text-align:right;white-space:nowrap"><button type="button" class="btn small" onclick="saveCategorie(this)">${nouveau?'Ajouter':'Enregistrer'}</button></td>
-  </tr>`;
-}
-function catSaisieChange(sel){
-  const tr=sel.closest('tr');const km=sel.value==='km';
-  tr.querySelector('[data-f="taux_tva"]').disabled=km;
-  tr.querySelector('[data-f="taux_km"]').disabled=!km;
-}
-async function loadCategories(){
-  const c=document.getElementById('cat-container');
-  try{
-    CATS=await api('/api/rh-coffre/ndf-categories');
-    c.innerHTML=`<table class="cat-table">
-      <thead><tr><th>Libellé</th><th>Saisie</th><th>TVA par défaut</th><th>Taux km (€)</th><th style="text-align:center">Active</th><th style="text-align:right">Notes</th><th></th></tr></thead>
-      <tbody>${CATS.categories.map(catLigne).join('')}${catLigne({saisie:'montant',taux_tva:20})}</tbody>
-    </table>`;
-  }catch(e){c.innerHTML='<p style="color:var(--danger)">Erreur : '+esc(e.message)+'</p>';}
-}
-async function saveCategorie(btn){
-  const tr=btn.closest('tr');const id=tr.dataset.cat;
-  const v=f=>{const el=tr.querySelector(`[data-f="${f}"]`);return el?(el.type==='checkbox'?el.checked:el.value):undefined;};
-  const body={libelle:v('libelle').trim(),saisie:v('saisie')};
-  if(body.saisie==='km')body.taux_km=v('taux_km');else body.taux_tva=Number(v('taux_tva'));
-  if(id!=='new')body.actif=v('actif');
-  if(!body.libelle){toast('Libellé requis.','err');return;}
-  try{
-    await api(id==='new'?'/api/rh-coffre/ndf-categories':'/api/rh-coffre/ndf-categories/'+id,{
-      method:id==='new'?'POST':'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    toast(id==='new'?'Catégorie ajoutée.':'Catégorie enregistrée.');
-    loadCategories();
-  }catch(e){toast(e.message,'err');}
-}
-
 function exportNdf(){
   const statut=document.getElementById('ndf-statut').value;
   const annee=document.getElementById('ndf-annee').value;
@@ -636,6 +573,7 @@ function exportNdf(){
     if(badge && all.notes.length>0){badge.style.display='';badge.textContent=String(all.notes.length);}
   }catch(e){}
   showTab(_readRhCoffreTab(),{silent:false});
+  if(window.MySifaNdfReglages)MySifaNdfReglages.depuisAdresse();
 })();
 window.addEventListener('hashchange',function(){try{showTab(_readRhCoffreTab(),{silent:true});}catch(e){}});
 </script>
