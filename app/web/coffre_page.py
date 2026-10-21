@@ -147,6 +147,23 @@ tr:hover td{background:var(--accent-bg)}
 .calc-val{padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:13px;color:var(--text);font-weight:700;font-variant-numeric:tabular-nums;min-height:40px;display:flex;align-items:center}
 .calc-hint{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.4}
 .ndf-meta{font-size:11px;color:var(--muted);margin-top:3px}
+tr.ndf-row{cursor:pointer}
+.ndf-dl{display:grid;grid-template-columns:140px 1fr;gap:8px 14px;font-size:13px;margin:0 0 16px}
+.ndf-dl dt{color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding-top:2px}
+.ndf-dl dd{margin:0;color:var(--text);white-space:pre-wrap;word-break:break-word}
+.ndf-total{font-weight:700;font-variant-numeric:tabular-nums}
+.ndf-suivi{list-style:none;margin:0 0 12px;padding:0;font-size:13px}
+.ndf-suivi li{display:flex;gap:10px;padding:6px 0;color:var(--text2)}
+.ndf-suivi li::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--border);margin-top:6px;flex-shrink:0}
+.ndf-suivi li.fait::before{background:var(--accent)}
+.ndf-suivi li.refus{color:var(--danger)}
+.ndf-suivi li.refus::before{background:var(--danger)}
+.modal-head .statut{margin-left:auto}
+.modal-close{width:32px;height:32px;flex-shrink:0;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text2);cursor:pointer;font-size:18px;line-height:1;font-family:inherit}
+.modal-close:hover{background:var(--card);color:var(--accent);border-color:var(--accent)}
+.btn.ghost.danger-txt{color:var(--danger)}
+.btn.ghost.danger-txt:hover{border-color:var(--danger);color:var(--danger)}
+@media(max-width:640px){.ndf-dl{grid-template-columns:1fr;gap:2px}.ndf-dl dd{margin-bottom:8px}}
 .file-drop{display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px dashed var(--border);border-radius:8px;padding:14px;text-align:center;font-size:12px;font-weight:500;color:var(--muted);background:var(--card);cursor:pointer;transition:border-color .15s,color .15s}
 .field .file-drop{text-transform:none;letter-spacing:0;margin:0}
 .file-drop:hover{border-color:var(--accent);color:var(--accent)}
@@ -253,6 +270,7 @@ tr:hover td{background:var(--accent-bg)}
 </div>
 
 <script src="/static/support_widget.js"></script>
+<script src="/static/mysifa_confirm.js?v=1"></script>
 <script>window.__MYSIFA_APP__='coffre';</script>
 <script>
 const DOC_TYPE_LABELS={bulletin_paie:'Bulletin de paie',contrat:'Contrat',attestation:'Attestation',autre:'Autre'};
@@ -410,13 +428,13 @@ async function loadNdf(){
     c.innerHTML=`<div style="overflow-x:auto"><table>
       <thead><tr><th>Date</th><th>Catégorie</th><th>Description</th><th style="text-align:right">Montant</th><th>Statut</th><th></th></tr></thead>
       <tbody>${j.notes.map(n=>`
-        <tr>
+        <tr class="ndf-row" onclick="ouvrirNote(${n.id})" title="Consulter">
           <td>${esc(fmtDate(n.date_frais))}</td>
           <td>${esc(n.categorie||'—')}<div class="ndf-meta">${esc(ndfMeta(n))}</div></td>
           <td style="max-width:280px">${esc((n.description||'').slice(0,80))}${(n.description||'').length>80?'…':''}${n.motif_refus?'<div style="font-size:11px;color:var(--danger);margin-top:3px">Refus : '+esc(n.motif_refus)+'</div>':''}</td>
           <td style="text-align:right" class="montant">${fmtMontant(n.montant_ttc)}</td>
-          <td><span class="statut ${esc(n.statut)}">${esc(n.statut)}</span></td>
-          <td style="text-align:right;white-space:nowrap">
+          <td><span class="statut ${esc(n.statut)}">${esc(NDF_STATUTS[n.statut]||n.statut)}</span></td>
+          <td style="text-align:right;white-space:nowrap" onclick="event.stopPropagation()">
             ${n.justificatif_nom?`<a class="btn ghost small" href="/api/coffre/notes-frais/${n.id}/justificatif" data-preview-url="/api/coffre/notes-frais/${n.id}/justificatif" data-preview-name="${esc(n.justificatif_nom||'Justificatif')}">Voir</a>`:''}
             ${n.statut==='brouillon'?`
               <button class="btn ghost small" onclick="openNdfModal(${n.id})">Modifier</button>
@@ -429,13 +447,16 @@ async function loadNdf(){
     </table></div>`;
   }catch(e){document.getElementById('ndf-container').innerHTML='<div class="empty">Erreur : '+esc(e.message)+'</div>';}
 }
+const NDF_STATUTS={brouillon:'Brouillon',soumise:'Soumise',validee:'Validée',payee:'Payée',refusee:'Refusée'};
 async function submitNdf(id){
-  if(!confirm('Soumettre cette note de frais à la comptabilité ?\nUne fois soumise, elle ne pourra plus être modifiée.'))return;
-  try{await api('/api/coffre/notes-frais/'+id+'/soumettre',{method:'POST'});toast('Note soumise');loadNdf();}catch(e){toast(e.message,'err');}
+  const ok=await mysifaConfirm({title:'Soumettre la note',message:'La note part à la comptabilité pour validation.',detail:'Une fois soumise, elle ne pourra plus être modifiée.',confirmLabel:'Soumettre'});
+  if(!ok)return false;
+  try{await api('/api/coffre/notes-frais/'+id+'/soumettre',{method:'POST'});toast('Note soumise.');loadNdf();return true;}catch(e){toast(e.message,'err');return false;}
 }
 async function deleteNdf(id){
-  if(!confirm('Supprimer ce brouillon ?'))return;
-  try{await api('/api/coffre/notes-frais/'+id,{method:'DELETE'});toast('Brouillon supprimé');loadNdf();}catch(e){toast(e.message,'err');}
+  const ok=await mysifaConfirm({title:'Supprimer le brouillon',message:'Le brouillon et son justificatif seront retirés de vos notes de frais.',confirmLabel:'Supprimer',danger:true});
+  if(!ok)return false;
+  try{await api('/api/coffre/notes-frais/'+id,{method:'DELETE'});toast('Brouillon supprimé.');loadNdf();return true;}catch(e){toast(e.message,'err');return false;}
 }
 
 function fmtTaux(t){return String(t).replace('.',',')+' %';}
@@ -458,21 +479,98 @@ function ndfCalcul(cat,ttc,taux,km){
   return {ttc:r2(ttc),tva,ht:r2(ttc-tva)};
 }
 
-// Adresse : ?note=<id> tant qu'un brouillon est ouvert en modification.
-function ndfAdresse(id){
+// Adresse : ?note=<id> pendant la consultation d'une note, ?modifier=<id>
+// pendant la modification d'un brouillon.
+function ndfAdresse(cle,id){
   try{
     const u=new URL(location.href);
-    if(id)u.searchParams.set('note',String(id));else u.searchParams.delete('note');
+    u.searchParams.delete('note');u.searchParams.delete('modifier');
+    if(cle&&id)u.searchParams.set(cle,String(id));
     if(u.href!==location.href)history.replaceState(history.state,'',u.href);
   }catch(e){}
 }
 function ndfDepuisAdresse(){
   try{
-    const id=Number(new URLSearchParams(location.search).get('note'));
-    if(!id)return;
-    const n=NDF_NOTES.find(x=>x.id===id&&x.statut==='brouillon');
-    if(n)openNdfModal(id);else ndfAdresse(null);
+    const q=new URLSearchParams(location.search);
+    const mod=Number(q.get('modifier')),vue=Number(q.get('note'));
+    if(mod&&NDF_NOTES.some(x=>x.id===mod&&x.statut==='brouillon'))openNdfModal(mod);
+    else if(vue&&NDF_NOTES.some(x=>x.id===vue))ouvrirNote(vue);
+    else ndfAdresse(null);
   }catch(e){}
+}
+
+// ── Consultation d'une note (tous statuts) ──
+function ouvrirNote(id){
+  const n=NDF_NOTES.find(x=>x.id===id);
+  if(!n){toast('Note introuvable.','err');return;}
+  const back=document.createElement('div');back.className='modal-back';
+  const brouillon=n.statut==='brouillon';
+  const montant=n.distance_km!=null
+    ? `<dt>Distance</dt><dd>${esc(fmtNombre(n.distance_km).replace(/,?0+$/,''))} km × ${esc(fmtNombre(n.taux_km))} €</dd>
+       <dt>Montant</dt><dd class="ndf-total">${fmtMontant(n.montant_ttc)}</dd>`
+    : `<dt>Montant TTC</dt><dd class="ndf-total">${fmtMontant(n.montant_ttc)}</dd>
+       <dt>TVA</dt><dd>${n.taux_tva!=null?(n.taux_tva?fmtTaux(n.taux_tva)+' · ':'Sans TVA · '):''}${fmtMontant(n.montant_tva)}</dd>
+       ${n.montant_ht!=null?`<dt>Montant HT</dt><dd>${fmtMontant(n.montant_ht)}</dd>`:''}`;
+  const suivi=[
+    `<li class="fait">Créée le ${esc(fmtDate(n.created_at))}</li>`,
+    n.soumise_at?`<li class="fait">Soumise à la comptabilité le ${esc(fmtDate(n.soumise_at))}</li>`:(brouillon?'<li>Pas encore soumise</li>':''),
+    n.statut==='refusee'?`<li class="refus">Refusée${n.motif_refus?' : '+esc(n.motif_refus):''}</li>`:'',
+    n.validee_at?`<li class="fait">Validée le ${esc(fmtDate(n.validee_at))}${n.validee_by_nom?' par '+esc(n.validee_by_nom):''}</li>`:'',
+    n.payee_at?`<li class="fait">Payée le ${esc(fmtDate(n.payee_at))}</li>`:'',
+  ].join('');
+  back.innerHTML=`<div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <div class="modal-head-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></div>
+      <div><h3>${esc(n.categorie||'Note de frais')}</h3><div class="modal-head-sub">${esc(fmtDate(n.date_frais))}${n.ville?' · '+esc(n.ville):''}</div></div>
+      <span class="statut ${esc(n.statut)}">${esc(NDF_STATUTS[n.statut]||n.statut)}</span>
+      <button type="button" class="modal-close" data-act="fermer" aria-label="Fermer">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="ndf-section">
+        <div class="ndf-section-titre">Le frais</div>
+        <dl class="ndf-dl">
+          <dt>Catégorie</dt><dd>${esc(n.categorie||'—')}</dd>
+          <dt>Date</dt><dd>${esc(fmtDate(n.date_frais))}</dd>
+          <dt>Ville</dt><dd>${esc(n.ville||'—')}</dd>
+          <dt>Description</dt><dd>${esc(n.description||'—')}</dd>
+        </dl>
+      </div>
+      <div class="ndf-section">
+        <div class="ndf-section-titre">Montant</div>
+        <dl class="ndf-dl">${montant}</dl>
+      </div>
+      <div class="ndf-section">
+        <div class="ndf-section-titre">Justificatif</div>
+        ${n.justificatif_nom
+          ?`<div style="margin-bottom:16px"><a class="btn ghost small" href="/api/coffre/notes-frais/${n.id}/justificatif" data-preview-url="/api/coffre/notes-frais/${n.id}/justificatif" data-preview-name="${esc(n.justificatif_nom)}">Voir ${esc(n.justificatif_nom)}</a></div>`
+          :'<div class="calc-hint" style="margin:0 0 16px">Aucun justificatif joint.</div>'}
+      </div>
+      <div class="ndf-section">
+        <div class="ndf-section-titre">Suivi</div>
+        <ul class="ndf-suivi">${suivi}</ul>
+      </div>
+    </div>
+    ${brouillon?`<div class="modal-actions">
+      <button type="button" class="btn ghost danger-txt" data-act="supprimer">Supprimer</button>
+      <span class="sep"></span>
+      <button type="button" class="btn ghost" data-act="modifier">Modifier</button>
+      <button type="button" class="btn" data-act="soumettre">Soumettre à la compta</button>
+    </div>`:''}
+  </div>`;
+  document.body.appendChild(back);
+  const onKey=e=>{if(e.key==='Escape'&&!document.querySelector('.mysifa-cfm-ov, .preview-back'))fermer();};
+  function fermer(sansAdresse){back.remove();document.removeEventListener('keydown',onKey);if(!sansAdresse)ndfAdresse(null);}
+  document.addEventListener('keydown',onKey);
+  back.addEventListener('click',async e=>{
+    if(e.target===back){fermer();return;}
+    const b=e.target.closest('[data-act]');if(!b)return;
+    const act=b.dataset.act;
+    if(act==='fermer')fermer();
+    else if(act==='modifier'){fermer(true);openNdfModal(n.id);}
+    else if(act==='soumettre'){if(await submitNdf(n.id))fermer();}
+    else if(act==='supprimer'){if(await deleteNdf(n.id))fermer();}
+  });
+  ndfAdresse('note',n.id);
 }
 
 // Sans argument : nouvelle note. Avec l'id d'un brouillon : modification.
@@ -595,7 +693,7 @@ function openNdfModal(noteId){
         tvaManuelle=Math.abs(calc.tva-Number(note.montant_tva))>0.005;
       }
     }
-    ndfAdresse(note.id);
+    ndfAdresse('modifier',note.id);
   }
   majCalcul();
   const fileEl=$('#ndf-file');
