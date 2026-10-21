@@ -140,8 +140,11 @@
         const num = (x)=>{ const n = parseFloat(String(x == null ? '' : x).replace(',', '.')); return isFinite(n) ? n : null; };
         const mn = num(it.min), mx = num(it.max), cible = num(it.target_value);
         // Plusieurs mesures : une ligne par libellé, dans l'ordre saisi.
-        const pts = (Array.isArray(it.points) && it.points.length > 1) ? it.points : [null];
-        const arr = pts.length > 1 ? (Array.isArray(r) ? r : []) : [r];
+        // Nombre libre : autant de lignes que de mesures saisies (« Front 1 »…).
+        const pts = it.points_libres
+          ? (Array.isArray(r) && r.length ? r : [null]).map((_, k) => (it.libelle_point || 'Mesure') + ' ' + (k + 1))
+          : ((Array.isArray(it.points) && it.points.length > 1) ? it.points : [null]);
+        const arr = (it.points_libres || pts.length > 1) ? (Array.isArray(r) ? r : (r != null ? [r] : [])) : [r];
         const lignes = pts.map((pl, k)=>{
           const v = arr[k];
           const n = num(v);

@@ -66,6 +66,11 @@
       '.mf-echelle .mf-chip{min-width:38px;justify-content:center}',
       '.mf-echelle-lbl{font-size:11px;color:var(--muted)}',
       '.mf-vide{font-size:13px;color:var(--muted);font-style:italic}',
+      '.mf-libres{display:flex;flex-direction:column;gap:6px}',
+      '.mf-retirer{flex:0 0 auto;width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-size:15px;line-height:1}',
+      '.mf-retirer:hover{border-color:var(--danger);color:var(--danger)}',
+      '.mf-ajouter{align-self:flex-start;padding:6px 11px;border-radius:8px;border:1px dashed var(--accent);background:var(--card);color:var(--accent);font:inherit;font-size:12px;font-weight:600;cursor:pointer}',
+      '.mf-lecture .mf-ajouter,.mf-lecture .mf-retirer{display:none}',
       '.mf-lecture .mf-in:disabled{opacity:1;color:var(--text);background:var(--bg)}',
       '.mf-lecture .mf-chip{cursor:default}',
       '.mf-q.mf-nc{border-left:3px solid var(--danger);padding-left:10px}',
@@ -80,12 +85,30 @@
       + (q.help ? '<div class="mf-q-aide">' + esc(q.help) + '</div>' : '');
   }
 
+  // Nombre libre : une ligne par mesure, l'utilisateur en ajoute ou en retire.
+  const LIB = (q) => q.libelle_point || 'Mesure';
+  const MINP = (q) => Math.max(1, parseInt(q.min_points, 10) || 1);
+  const MAXP = (q) => Math.max(MINP(q), parseInt(q.max_points, 10) || 50);
+  function ligneLibre(q, k) {
+    const ph = esc(q.placeholder || 'Valeur');
+    return '<div class="mf-ligne mf-libre">'
+      + '<span class="mf-mesure">' + esc(LIB(q)) + ' ' + (k + 1) + '</span>'
+      + '<input type="number" step="any" inputmode="decimal" class="mf-in mf-val" data-k="' + k + '" placeholder="' + ph + '">'
+      + (q.unit ? '<span class="mf-unite">' + esc(q.unit) + '</span>' : '')
+      + (q.target_value != null ? '<span class="mf-ecart"></span>' : '')
+      + '<button type="button" class="mf-retirer" data-mf="retirer" title="Retirer cette mesure" aria-label="Retirer cette mesure"' + (k < MINP(q) ? ' style="visibility:hidden"' : '') + '>×</button>'
+      + '</div>';
+  }
+
   function champValeur(q) {
     const pts = (Array.isArray(q.points) && q.points.length > 1) ? q.points : [null];
     const ph = esc(q.placeholder || 'Valeur');
     const unite = q.unit ? '<span class="mf-unite">' + esc(q.unit) + '</span>' : '';
     const ecart = q.target_value != null ? '<span class="mf-ecart"></span>' : '';
-    const lignes = pts.map((pl, k) => '<div class="mf-ligne">'
+    const lignes = q.points_libres
+      ? '<div class="mf-libres">' + Array.from({length: MINP(q)}, (_, k) => ligneLibre(q, k)).join('') + '</div>'
+        + '<button type="button" class="mf-ajouter" data-mf="ajouter">+ Ajouter : ' + esc(LIB(q)) + '</button>'
+      : pts.map((pl, k) => '<div class="mf-ligne">'
       + (pl != null ? '<span class="mf-mesure">' + esc(pl) + '</span>' : '')
       + '<input type="number" step="any" inputmode="decimal" class="mf-in mf-val" data-k="' + k + '" placeholder="' + ph + '">'
       + unite + ecart + '</div>').join('');
@@ -172,6 +195,43 @@
     };
     el.oninput = surSaisie;
     el.onchange = surSaisie;
+    el.onclick = (ev) => {
+      const b = ev.target.closest && ev.target.closest('[data-mf]');
+      if (!b || b.disabled) return;
+      const qEl = b.closest('.mf-q');
+      const q = qEl && parId[qEl.getAttribute('data-qid')];
+      if (!q) return;
+      if (b.getAttribute('data-mf') === 'ajouter') ajouterMesure(qEl, q, true);
+      else retirerMesure(qEl, q, b.closest('.mf-libre'));
+      if (typeof opts.onChange === 'function') opts.onChange();
+    };
+  }
+
+  function renumeroter(qEl, q) {
+    const lignes = qEl.querySelectorAll('.mf-libre');
+    lignes.forEach((l, k) => {
+      l.querySelector('.mf-mesure').textContent = LIB(q) + ' ' + (k + 1);
+      l.querySelector('.mf-val').setAttribute('data-k', String(k));
+      l.querySelector('.mf-retirer').style.visibility = k < MINP(q) ? 'hidden' : '';
+    });
+    const aj = qEl.querySelector('.mf-ajouter');
+    if (aj) aj.style.display = lignes.length >= MAXP(q) ? 'none' : '';
+  }
+  function ajouterMesure(qEl, q, focus) {
+    const liste = qEl.querySelector('.mf-libres');
+    if (!liste || liste.children.length >= MAXP(q)) return null;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = ligneLibre(q, liste.children.length);
+    const ligne = tmp.firstElementChild;
+    liste.appendChild(ligne);
+    renumeroter(qEl, q);
+    if (focus) ligne.querySelector('.mf-val').focus();
+    return ligne;
+  }
+  function retirerMesure(qEl, q, ligne) {
+    if (!ligne || qEl.querySelectorAll('.mf-libre').length <= MINP(q)) return;
+    ligne.remove();
+    renumeroter(qEl, q);
   }
 
   // Écart à la cible, mesure hors tolérance, champ « Autre » : recalculés
@@ -203,6 +263,11 @@
 
   function reponseDe(qEl, q) {
     if (!q) return undefined;
+    if (q.type === 'value' && q.points_libres) {
+      // Nombre libre : les lignes vides ne comptent pas.
+      const vals = Array.from(qEl.querySelectorAll('.mf-val')).map(i => num(i.value)).filter(v => v !== null);
+      return vals.length ? vals : undefined;
+    }
     if (q.type === 'value') {
       const vals = Array.from(qEl.querySelectorAll('.mf-val')).map(i => num(i.value));
       if (vals.length > 1) return vals.some(v => v !== null) ? vals : undefined;
@@ -234,6 +299,7 @@
       if (!qEl || r === undefined || r === null) return;
       if (q.type === 'value') {
         const vals = Array.isArray(r) ? r : [r];
+        if (q.points_libres) { while (qEl.querySelectorAll('.mf-libre').length < vals.length && ajouterMesure(qEl, q, false)); }
         qEl.querySelectorAll('.mf-val').forEach((inp, k) => { const v = vals[k]; inp.value = (v === null || v === undefined) ? '' : String(v); });
       } else if (q.type === 'choice') {
         const sel = qEl.querySelector('.mf-select');
@@ -272,6 +338,8 @@
       const id = qEl.getAttribute('data-qid');
       const q = parId[id];
       const r = reponseDe(qEl, q);
+      // Nombre libre : au moins le minimum de mesures.
+      if (q && q.points_libres) { if (!r || r.length < MINP(q)) out.push(id); return; }
       // Plusieurs mesures : une question obligatoire attend toutes les mesures.
       if (r === undefined || (Array.isArray(r) && q && q.type === 'value' && r.some(v => v === null))) out.push(id);
     });

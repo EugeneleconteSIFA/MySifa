@@ -56,7 +56,7 @@ Champs de l'alerte :
 - `dismiss_button` : bouton pour fermer l'alerte sans répondre ({{"enabled": true, "label": "Pas de production"}}). Par défaut désactivé.
 - `checklist` : le questionnaire, `enabled` = true et `items` = points de contrôle :
   - choice : `responses` (réponses courtes, ex. ["Conforme", "Non conforme"]), `multi` (plusieurs réponses possibles, défaut true ; false pour un choix unique), `nc_responses` (réponses qui signalent une non-conformité), `allow_other` (ajoute « Autre » avec précision), `other_is_nc`, `comment_responses` (réponses qui exigent un commentaire de l'opérateur).
-  - value : valeur mesurée, `unit`, `min` et `max` (tolérance), `target_value` (cible), `points` (libellés quand il faut plusieurs mesures, ex. ["Début de prod", "Milieu de prod", "Fin de prod"]), `out_of_range_is_nc` (hors tolérance = non-conformité, seulement avec min ou max), `placeholder`.
+  - value : valeur mesurée, `unit`, `min` et `max` (tolérance), `target_value` (cible), `points` (libellés fixes quand il faut plusieurs mesures, ex. ["Début de prod", "Milieu de prod", "Fin de prod"]), ou bien `points_libres` = true quand le nombre de mesures varie et que l'opérateur ajoute lui-même ses lignes (ex. un poids par front, selon la laize) avec `libelle_point` (ex. "Front"), `min_points` et `max_points` (1 à 50), `out_of_range_is_nc` (hors tolérance = non-conformité, seulement avec min ou max), `placeholder`.
   - pour tous : `label` (la question), `required` (réponse obligatoire), `help` (méthode de contrôle en une ou deux phrases).
 
 Règles :
@@ -87,6 +87,10 @@ _ITEM = {
         "max": {"type": "number"},
         "target_value": {"type": "number"},
         "points": {"type": "array", "items": {"type": "string"}},
+        "points_libres": {"type": "boolean"},
+        "libelle_point": {"type": "string"},
+        "min_points": {"type": "integer"},
+        "max_points": {"type": "integer"},
         "out_of_range_is_nc": {"type": "boolean"},
         "placeholder": {"type": "string"},
     },

@@ -98,7 +98,7 @@ _PAGE = """<!DOCTYPE html>
 <main id="es-main"><p class="es-intro">Chargement…</p></main>
 <footer>Ce lien est personnel : il donne accès aux demandes que __ORG__ vous a adressées. Merci de ne pas le transférer.</footer>
 <div class="es-toast" id="es-toast" role="alert"></div>
-<script src="/static/mysifa_formulaire.js?v=2"></script>
+<script src="/static/mysifa_formulaire.js?v=3"></script>
 <script>
 'use strict';
 const TOKEN = "__TOKEN_JS__";

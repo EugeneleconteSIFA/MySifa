@@ -211,7 +211,12 @@
         const cle = String(idx);
         if (it.type === 'value') {
           // Plusieurs mesures (début / milieu / fin…) : une courbe par mesure.
-          const sous = (Array.isArray(it.points) && it.points.length > 1) ? it.points.map((pl, k) => ({pl, k})) : [{pl: '', k: null}];
+          // Nombre libre : une courbe par rang de mesure (« Front 1 », « Front 2 »…),
+          // jusqu'à la plus longue série saisie.
+          const nLibres = it.points_libres ? Math.max(0, ...acks.map(a => { const r = (a.reponses || {})[cle]; return Array.isArray(r) ? r.length : 0; })) : 0;
+          const sous = it.points_libres
+            ? Array.from({length: nLibres}, (_, k) => ({pl: (it.libelle_point || 'Mesure') + ' ' + (k + 1), k}))
+            : (Array.isArray(it.points) && it.points.length > 1) ? it.points.map((pl, k) => ({pl, k})) : [{pl: '', k: null}];
           sous.forEach(({pl, k}) => {
             const pts = acks.map(a => {
               let r = (a.reponses || {})[cle];

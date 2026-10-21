@@ -14,12 +14,14 @@ import json
 from typing import Optional
 
 from fastapi import APIRouter, Body, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import Response
 
 from app.core.database import get_db
 from app.routers.qualite import _require_qualite_access, _require_qualite_view
 from app.services import ia_usage
 from app.services import qualite_formulaires as formulaires
 from app.services import qualite_formulaires_envois as envois
+from app.services import qualite_formulaires_exports as exports
 from app.services import qualite_formulaires_ia as formulaires_ia
 from app.services.email_service import send_email
 from app.services.audit_service import log_action
@@ -278,6 +280,64 @@ def voir_reponse(did: int, request: Request):
             "titre": dest["titre"], "version": dest["version"], "schema": schema,
             "reponse": rep, "nc": envois.non_conformites(schema, rep["reponses"]),
         }
+
+
+# ── Exports des réponses ─────────────────────────────────────────────────
+# Lecture (rôles qualité, commercial compris). Chaque export est journalisé :
+# il sort de MySifa des réponses de tiers (journal-audit.md : une lecture
+# n'est pas tracée d'office, une extraction de données l'est explicitement).
+
+
+def _telecharger(contenu, nom: str, media_type: str) -> Response:
+    return Response(content=contenu, media_type=media_type,
+                    headers={"Content-Disposition": f'attachment; filename="{nom}"', "Cache-Control": "no-store"})
+
+
+@router.get("/{fid}/reponses.csv")
+def export_csv(fid: int, request: Request, envoi: Optional[int] = None, tous: int = 0):
+    """Toutes les réponses (dernière version par destinataire). `envoi` limite
+    à un envoi ; `tous=1` ajoute les destinataires sans réponse."""
+    user = _require_qualite_view(request)
+    with get_db() as conn:
+        d = _lire_ou_404(conn, fid)
+        entrees = exports.lignes(conn, fid, envoi_id=envoi, avec_sans_reponse=bool(tous))
+    nom, texte = exports.csv_reponses(entrees, d["titre"])
+    log_action(user=user, action="EXPORT", module="qualite", objet=_objet(fid, d["titre"]) + f" · CSV ({len(entrees)} ligne(s))",
+               request=request)
+    return _telecharger(texte, nom, "text/csv; charset=utf-8")
+
+
+@router.get("/{fid}/reponses.pdf")
+def export_pdf(fid: int, request: Request, envoi: Optional[int] = None):
+    """Synthèse par question, liste des destinataires, puis chaque réponse."""
+    user = _require_qualite_view(request)
+    with get_db() as conn:
+        d = _lire_ou_404(conn, fid)
+        entrees = exports.lignes(conn, fid, envoi_id=envoi, avec_sans_reponse=True)
+    if not any(e["reponse"] for e in entrees):
+        raise HTTPException(status_code=404, detail="Aucune réponse à exporter.")
+    nom, contenu = exports.pdf_ensemble(entrees, d["titre"], nb_destinataires=len(entrees))
+    log_action(user=user, action="EXPORT", module="qualite", objet=_objet(fid, d["titre"]) + " · PDF des réponses",
+               request=request)
+    return _telecharger(contenu, nom, "application/pdf")
+
+
+@router.get("/destinataires/{did}/reponse.pdf")
+def export_reponse_pdf(did: int, request: Request):
+    user = _require_qualite_view(request)
+    with get_db() as conn:
+        dest = envois.destinataire(conn, did)
+        if not dest:
+            raise HTTPException(status_code=404, detail="Destinataire introuvable.")
+        rep = envois.derniere_reponse(conn, did)
+        if not rep:
+            raise HTTPException(status_code=404, detail="Pas encore de réponse.")
+        schema = envois.schema_envoi(conn, dest)
+        e = {"dest": dest, "schema": schema, "reponse": rep, "nc": envois.non_conformites(schema, rep["reponses"])}
+    nom, contenu = exports.pdf_reponse(e, dest["titre"])
+    log_action(user=user, action="EXPORT", module="qualite",
+               objet=_objet(dest["formulaire_id"], dest["titre"]) + f" · PDF de la réponse de {dest['email']}", request=request)
+    return _telecharger(contenu, nom, "application/pdf")
 
 
 @router.get("/{fid}")

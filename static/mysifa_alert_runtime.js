@@ -198,6 +198,11 @@
           // Plusieurs mesures (début / milieu / fin de prod…) : un champ par
           // libellé, réponse rendue en liste. Vide = une seule valeur.
           points: (Array.isArray(it && it.points) ? it.points : []).map(x => String(x || '').trim()).filter(Boolean),
+          // Nombre libre : l'opérateur ajoute ses mesures (« Front 1 », « Front 2 »…).
+          points_libres: !!(it && it.points_libres),
+          libelle_point: (it && typeof it.libelle_point === 'string' && it.libelle_point.trim()) ? it.libelle_point.trim() : 'Mesure',
+          min_points: Math.max(1, parseInt(it && it.min_points, 10) || 1),
+          max_points: Math.max(1, parseInt(it && it.max_points, 10) || 50),
           placeholder: (it && typeof it.placeholder === 'string') ? it.placeholder : '',
           help: (it && typeof it.help === 'string') ? it.help : '',
           target_value: (it && it.target_value != null && it.target_value !== '' && isFinite(Number(it.target_value))) ? Number(it.target_value) : null,
@@ -260,6 +265,48 @@
     }
   }
   window._mysifaAlertOnValueInput = _onValueInput;
+
+  // Nombre libre : l'opérateur ajoute ou retire une mesure. Les lignes sont
+  // renumérotées ; les premières (minimum demandé) ne se retirent pas.
+  function _renumeroterMesures(item) {
+    const lib = item.getAttribute('data-libelle') || 'Mesure';
+    const mini = parseInt(item.getAttribute('data-min-pts'), 10) || 1;
+    const maxi = parseInt(item.getAttribute('data-max-pts'), 10) || 50;
+    const lignes = item.querySelectorAll('.ta-cl-libre');
+    lignes.forEach((l, k) => {
+      const lbl = l.querySelector('.ta-cl-libre-lbl'); if (lbl) lbl.textContent = lib + ' ' + (k + 1);
+      const inp = l.querySelector('.ta-cl-val'); if (inp) inp.setAttribute('data-sub', String(k));
+      const x = l.querySelector('.ta-cl-retirer'); if (x) x.style.visibility = k < mini ? 'hidden' : '';
+    });
+    const aj = item.querySelector('.ta-cl-ajouter');
+    if (aj) aj.style.display = lignes.length >= maxi ? 'none' : '';
+    const wrap = item.closest('.ta-sim, .ta-apercu');
+    if (wrap && wrap._alertRef) _updateValidateState(wrap, wrap._alertRef);
+  }
+  window._mysifaAlertAjouterMesure = function (btn) {
+    const item = btn.closest('.ta-cl-item');
+    const liste = item && item.querySelector('.ta-cl-libres');
+    const modele = liste && liste.querySelector('.ta-cl-libre');
+    if (!modele) return;
+    const maxi = parseInt(item.getAttribute('data-max-pts'), 10) || 50;
+    if (liste.children.length >= maxi) return;
+    const neuve = modele.cloneNode(true);
+    const inp = neuve.querySelector('.ta-cl-val');
+    inp.value = ''; inp.style.borderColor = ''; inp.style.color = '';
+    const ec = neuve.querySelector('.ta-cl-ecart'); if (ec) ec.textContent = '';
+    liste.appendChild(neuve);
+    _renumeroterMesures(item);
+    inp.focus();
+  };
+  window._mysifaAlertRetirerMesure = function (btn) {
+    const item = btn.closest('.ta-cl-item');
+    const ligne = btn.closest('.ta-cl-libre');
+    if (!item || !ligne) return;
+    const mini = parseInt(item.getAttribute('data-min-pts'), 10) || 1;
+    if (item.querySelectorAll('.ta-cl-libre').length <= mini) return;
+    ligne.remove();
+    _renumeroterMesures(item);
+  };
 
   // v2.5.21 : handler unique pour TOUTE réponse de type "choice". Il recalcule
   // l'état de la question à partir du DOM au lieu de se fier au seul input qui
@@ -336,7 +383,16 @@
               const _ph = _esc(it.placeholder || 'Valeur');
               const _inp = (sub) => '<input type="number" step="any" inputmode="decimal" class="ta-cl-val" data-point="' + idx + '"' + (sub != null ? ' data-sub="' + sub + '"' : '') + ' placeholder="' + _ph + '" style="flex:1;min-width:0;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box" oninput="window._mysifaAlertOnValueInput(this)">';
               const _multi = Array.isArray(it.points) && it.points.length > 1;
-              const _champs = _multi
+              const _ligneLibre = (k) => '<div class="ta-cl-libre" style="display:flex;align-items:center;gap:8px">'
+                + '<span class="ta-cl-libre-lbl" style="flex:0 0 110px;font-size:12px;color:var(--text2);font-weight:600">' + _esc(it.libelle_point) + ' ' + (k + 1) + '</span>'
+                + _inp(k) + unit + _ecart
+                + '<button type="button" class="ta-cl-retirer" title="Retirer cette mesure" aria-label="Retirer cette mesure" onclick="window._mysifaAlertRetirerMesure(this)" style="flex:0 0 auto;width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text2);cursor:pointer;font-size:14px;line-height:1;' + (k < it.min_points ? 'visibility:hidden' : '') + '">×</button>'
+                + '</div>';
+              const _champs = it.points_libres
+                ? '<div class="ta-cl-libres" style="display:flex;flex-direction:column;gap:6px">'
+                    + Array.from({length: it.min_points}, (_, k) => _ligneLibre(k)).join('') + '</div>'
+                  + '<button type="button" class="ta-cl-ajouter" onclick="window._mysifaAlertAjouterMesure(this)" style="align-self:flex-start;margin-top:6px;padding:5px 10px;border-radius:7px;border:1px dashed var(--accent);background:var(--bg);color:var(--accent);font:inherit;font-size:12px;font-weight:600;cursor:pointer">+ Ajouter : ' + _esc(it.libelle_point) + '</button>'
+                : _multi
                 ? '<div style="display:flex;flex-direction:column;gap:6px">' + it.points.map((pl, k) =>
                     '<div style="display:flex;align-items:center;gap:8px">'
                     + '<span style="flex:0 0 110px;font-size:12px;color:var(--text2);font-weight:600">' + _esc(pl) + '</span>'
@@ -345,6 +401,7 @@
                 : '<div style="display:flex;align-items:center;gap:8px">' + _inp(null) + unit + _ecart + '</div>';
               return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="value"'
                 + (it.required ? ' data-required="1"' : '')
+                + (it.points_libres ? ' data-libres="1" data-libelle="' + _esc(it.libelle_point) + '" data-min-pts="' + it.min_points + '" data-max-pts="' + it.max_points + '"' : '')
                 + (it.min != null ? ' data-min="' + _esc(String(it.min)) + '"' : '')
                 + (it.max != null ? ' data-max="' + _esc(String(it.max)) + '"' : '')
                 + (it.target_value != null ? ' data-cible="' + _esc(String(it.target_value)) + '"' : '') + '>'
@@ -411,7 +468,11 @@
       const t = item.getAttribute('data-type') || 'choice';
       if (t === 'value') {
         const inputs = Array.from(item.querySelectorAll('.ta-cl-val'));
-        if (inputs.length > 1) {
+        if (item.getAttribute('data-libres') === '1') {
+          // Nombre libre : les lignes laissées vides ne comptent pas.
+          const vals = inputs.map(i => (i.value || '').trim()).filter(v => v !== '').map(parseFloat).filter(v => !isNaN(v));
+          if (vals.length) responses[idx] = vals;
+        } else if (inputs.length > 1) {
           // Plusieurs mesures : liste dans l'ordre des libellés, null pour
           // une mesure laissée vide.
           const vals = inputs.map(i => { const v = (i.value || '').trim(); return v === '' ? null : parseFloat(v); });
@@ -464,7 +525,10 @@
       }
       if (it.getAttribute('data-required') !== '1') continue;
       const t = it.getAttribute('data-type') || 'choice';
-      if (t === 'value') {
+      if (t === 'value' && it.getAttribute('data-libres') === '1') {
+        const remplies = Array.from(it.querySelectorAll('.ta-cl-val')).filter(i => (i.value || '').trim() !== '').length;
+        if (remplies < Math.max(1, parseInt(it.getAttribute('data-min-pts'), 10) || 1)) return false;
+      } else if (t === 'value') {
         for (const inp of it.querySelectorAll('.ta-cl-val')) {
           if ((inp.value || '').trim() === '') return false;
         }
@@ -908,10 +972,10 @@
     const _syncValidate = () => _updateValidateState(wrap, alert);
     // .ta-cl-com-text ajouté : taper dans la zone de commentaire obligatoire
     // doit débloquer Valider en temps réel, sans attendre un autre événement.
-    wrap.querySelectorAll('.ta-cl-resp, .ta-cl-val, .ta-cl-com-text').forEach(el => {
-      el.addEventListener('change', _syncValidate);
-      el.addEventListener('input', _syncValidate);
-    });
+    // Écoute sur la carte entière : les mesures ajoutées par l'opérateur
+    // (nombre libre) débloquent Valider comme les autres champs.
+    wrap.addEventListener('change', _syncValidate);
+    wrap.addEventListener('input', _syncValidate);
     _syncValidate();
 
     // v164 : bouton dismiss (fermeture silencieuse, aucune trace)
@@ -1041,10 +1105,8 @@
     const wrap = container.firstElementChild;
     wrap._alertRef = alert;
     const _sync = () => _updateValidateState(wrap, alert);
-    wrap.querySelectorAll('.ta-cl-resp, .ta-cl-val, .ta-cl-com-text').forEach(el => {
-      el.addEventListener('change', _sync);
-      el.addEventListener('input', _sync);
-    });
+    wrap.addEventListener('change', _sync);
+    wrap.addEventListener('input', _sync);
     wrap.querySelectorAll('.ta-validate, .ta-dismiss').forEach(b => b.addEventListener('click', (e) => e.preventDefault()));
     _sync();
   }

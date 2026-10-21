@@ -35,7 +35,7 @@ Un formulaire est une suite de sections ; chaque section a un `titre` (court), u
 
 Types :
 - text : réponse libre. `long` = true pour un commentaire de plusieurs lignes ; `placeholder` = exemple de réponse.
-- value : nombre. `unit` (g, mm, °C, %…), `min` et `max` (tolérance), `target_value` (valeur cible). `points` = libellés quand il faut plusieurs mesures du même point (ex. ["Début de prod", "Milieu de prod", "Fin de prod"]). `out_of_range_is_nc` = true si une valeur hors tolérance est une non-conformité (seulement avec min ou max).
+- value : nombre. `unit` (g, mm, °C, %…), `min` et `max` (tolérance), `target_value` (valeur cible). `points` = libellés fixes quand il faut plusieurs mesures du même point (ex. ["Début de prod", "Milieu de prod", "Fin de prod"]) ; ou `points_libres` = true quand le nombre de mesures varie et que le destinataire ajoute lui-même ses lignes, avec `libelle_point` (ex. "Front"), `min_points` et `max_points` (1 à 50). `out_of_range_is_nc` = true si une valeur hors tolérance est une non-conformité (seulement avec min ou max).
 - choice : `responses` (liste de réponses proposées, courtes), `multi` (plusieurs réponses possibles), `display` = "select" pour une longue liste à réponse unique, `allow_other` (ajoute « Autre » avec précision libre), `nc_responses` (sous-ensemble de `responses` qui signale une non-conformité, ex. ["Non conforme"]). Une question oui/non est un choice ["Oui", "Non"].
 - date : une date.
 - scale : note de `min` (0 ou 1) à `max` (2 à 10), avec `label_min` et `label_max` (ex. « Pas du tout satisfait », « Très satisfait »).
@@ -65,6 +65,10 @@ _QUESTION = {
         "max": {"type": "number"},
         "target_value": {"type": "number"},
         "points": {"type": "array", "items": {"type": "string"}},
+        "points_libres": {"type": "boolean"},
+        "libelle_point": {"type": "string"},
+        "min_points": {"type": "integer"},
+        "max_points": {"type": "integer"},
         "out_of_range_is_nc": {"type": "boolean"},
         "responses": {"type": "array", "items": {"type": "string"}},
         "multi": {"type": "boolean"},

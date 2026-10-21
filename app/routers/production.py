@@ -1051,6 +1051,8 @@ def _alertes_dossier(conn, ref: str) -> list:
             "commentaire": r["comment"] or "",
             "items": [{"type": it.get("type"), "label": it.get("label"), "unit": it.get("unit"),
                        "points": it.get("points") or [],
+                       "points_libres": bool(it.get("points_libres")),
+                       "libelle_point": it.get("libelle_point") or "",
                        "min": it.get("min"), "max": it.get("max"),
                        "target_value": it.get("target_value"),
                        "out_of_range_is_nc": bool(it.get("out_of_range_is_nc", False)),

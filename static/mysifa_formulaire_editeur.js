@@ -140,8 +140,17 @@
           + '</div>'
           + coche('out_of_range_is_nc', q.out_of_range_is_nc, 'Valeur hors tolérance = <strong style="color:var(--danger)">non-conformité</strong> <span class="fe-aide">(Min ou Max requis)</span>', 'fe-nc')
           + '<div><div class="fe-lbl">Texte d\'exemple <span style="text-transform:none;letter-spacing:0">(optionnel)</span></div><input class="fe-in" data-k="placeholder" maxlength="60" placeholder="Valeur" value="' + esc(q.placeholder || '') + '"></div>'
-          + coche('points_on', multi, '<strong>Plusieurs valeurs</strong> à saisir (ex. début, milieu et fin de production)')
-          + (multi ? '<div><input class="fe-in" data-k="points" maxlength="300" value="' + esc(q.points.join(' / ')) + '"><div class="fe-aide" style="margin-top:4px">Un libellé par mesure, séparés par « / » (10 au plus).</div></div>' : '');
+          + '<div><div class="fe-lbl">Nombre de valeurs</div><select class="fe-in" data-k="mesures">'
+          +   '<option value="une"' + (!multi && !q.points_libres ? ' selected' : '') + '>Une seule valeur</option>'
+          +   '<option value="fixes"' + (multi && !q.points_libres ? ' selected' : '') + '>Plusieurs valeurs, libellés fixes</option>'
+          +   '<option value="libres"' + (q.points_libres ? ' selected' : '') + '>Nombre libre : le destinataire ajoute ses valeurs</option>'
+          + '</select></div>'
+          + (multi && !q.points_libres ? '<div><input class="fe-in" data-k="points" maxlength="300" value="' + esc(q.points.join(' / ')) + '"><div class="fe-aide" style="margin-top:4px">Un libellé par mesure, séparés par « / » (10 au plus).</div></div>' : '')
+          + (q.points_libres ? '<div class="fe-grille" style="grid-template-columns:2fr 1fr 1fr">'
+              + '<div><div class="fe-lbl">Libellé d\'une valeur</div><input class="fe-in" data-k="libelle_point" maxlength="30" placeholder="Front" value="' + esc(q.libelle_point || '') + '"></div>'
+              + '<div><div class="fe-lbl">Minimum</div><input class="fe-in" type="number" min="1" max="50" step="1" data-k="min_points" value="' + num(q.min_points || 1) + '"></div>'
+              + '<div><div class="fe-lbl">Maximum</div><input class="fe-in" type="number" min="1" max="50" step="1" data-k="max_points" value="' + num(q.max_points || 50) + '"></div>'
+              + '</div><div class="fe-aide">Le destinataire part du minimum de lignes (« Front 1 »…) et en ajoute autant qu\'il en faut, jusqu\'au maximum.</div>' : '');
       }
       if (q.type === 'choice') {
         const reps = q.responses || [];
@@ -257,7 +266,17 @@
       }
       else if (k === 'multi') { q.multi = v === '1'; if (q.multi) delete q.display; redessiner = true; }
       else if (k === 'display') { if (v === 'select') q.display = 'select'; else delete q.display; }
-      else if (k === 'points_on') { if (v) q.points = (q.points && q.points.length > 1) ? q.points : POINTS_DEFAUT.slice(); else delete q.points; redessiner = true; }
+      else if (k === 'mesures') {
+        delete q.points_libres; delete q.libelle_point; delete q.min_points; delete q.max_points;
+        if (v === 'fixes') q.points = (q.points && q.points.length > 1) ? q.points : POINTS_DEFAUT.slice();
+        else delete q.points;
+        if (v === 'libres') { q.points_libres = true; q.min_points = 1; q.max_points = 50; }
+        redessiner = true;
+      }
+      else if (k === 'min_points' || k === 'max_points') {
+        const n = parseInt(v, 10);
+        if (!isNaN(n)) q[k] = Math.max(1, Math.min(50, n));
+      }
       else if (k === 'points') { q.points = String(v).split('/').map(x => x.trim()).filter(Boolean).slice(0, 10); }
       else if (k === 'resp') {
         const i = +t.getAttribute('data-i');

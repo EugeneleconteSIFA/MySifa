@@ -114,6 +114,8 @@ const FORMU_FILTRES = [
 .formu-onglet{padding:9px 14px;border:none;border-bottom:2px solid transparent;background:none;color:var(--text2);font:inherit;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:-1px}
 .formu-onglet:hover{color:var(--accent)}
 .formu-onglet.active{color:var(--accent);border-bottom-color:var(--accent)}
+.formu-export{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.formu-export-lbl{font-size:12px;color:var(--muted);margin-right:auto}
 .formu-envoi{background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:12px;overflow:hidden}
 .formu-envoi-hd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid var(--border)}
 .formu-envoi-hd b{font-size:14px;color:var(--text)}
@@ -709,7 +711,14 @@ function formuSuiviRender(){
       : 'Publier le formulaire, puis l\'envoyer.') + '</div>';
     return;
   }
-  box.innerHTML = envois.map(e => {
+  const nbRep = envois.reduce((n, e) => n + (e.nb_repondus || 0), 0);
+  const exportHtml = `<div class="formu-export">
+      <span class="formu-export-lbl">${nbRep} réponse${nbRep > 1 ? 's' : ''} au total</span>
+      <button type="button" class="fsc-btn sm" onclick="formuExporter('csv')"${nbRep ? '' : ' disabled'} title="Une ligne par destinataire, une colonne par question — s'ouvre dans Excel">Exporter en CSV</button>
+      <button type="button" class="fsc-btn sm" onclick="formuExporter('csv', null, true)" title="Ajoute les destinataires qui n'ont pas répondu">CSV avec les sans réponse</button>
+      <button type="button" class="fsc-btn sm" onclick="formuExporter('pdf')"${nbRep ? '' : ' disabled'} title="Synthèse par question, puis chaque réponse">Exporter en PDF</button>
+    </div>`;
+  box.innerHTML = exportHtml + envois.map(e => {
     const meta = ['v' + e.version, 'par ' + (e.cree_par || '—'), e.echeance ? 'réponse attendue avant le ' + formuDate(e.echeance) : '',
                   e.nb_repondus + ' / ' + e.nb + ' réponse' + (e.nb_repondus > 1 ? 's' : ''), e.nb_ouverts + ' ouvert' + (e.nb_ouverts > 1 ? 's' : '')]
       .filter(Boolean).join(' · ');
@@ -733,7 +742,8 @@ function formuSuiviRender(){
     }).join('');
     return `<div class="formu-envoi">
       <div class="formu-envoi-hd"><b>Envoi du ${escHtml(formuDate(e.cree_le))}</b><span class="formu-envoi-meta">${escHtml(meta)}</span>
-        ${admin && enAttente > 0 ? `<button type="button" class="fsc-btn sm" onclick="formuRelancerEnvoi(${e.id}, ${enAttente})">Relancer les ${enAttente} sans réponse</button>` : ''}
+        ${e.nb_repondus ? `<button type="button" class="fsc-btn sm" onclick="formuExporter('csv', ${e.id})">CSV</button><button type="button" class="fsc-btn sm" onclick="formuExporter('pdf', ${e.id})">PDF</button>` : ''}
+        ${admin && enAttente > 0 ? `<button type="button" class="fsc-btn sm" onclick="formuRelancerEnvoi(${e.id}, ${enAttente})">Relancer (${enAttente} sans réponse)</button>` : ''}
       </div>
       ${lignes}
     </div>`;
@@ -914,6 +924,37 @@ async function formuEnvoiValider(){
   formuApresEnvoi();
 }
 
+// ── Exports ────────────────────────────────────────────────────────────
+
+function formuExporter(format, envoiId, avecSansReponse){
+  const f = S.formu.courant;
+  if(!f) return;
+  const p = new URLSearchParams();
+  if(envoiId) p.set('envoi', envoiId);
+  if(avecSansReponse) p.set('tous', '1');
+  const q = p.toString();
+  formuTelecharger('/api/qualite/formulaires/' + f.id + '/reponses.' + (format === 'pdf' ? 'pdf' : 'csv') + (q ? '?' + q : ''));
+}
+
+// Téléchargement par fetch : une erreur du serveur (aucune réponse…) s'affiche
+// en toast au lieu d'ouvrir une page JSON.
+async function formuTelecharger(url){
+  try{
+    const r = await api(url);
+    if(!r.ok){ showToast(await formuErreur(r, 'Export impossible.'),'danger'); return; }
+    const dispo = r.headers.get('Content-Disposition') || '';
+    const m = dispo.match(/filename="([^"]+)"/);
+    const blob = await r.blob();
+    const lien = document.createElement('a');
+    lien.href = URL.createObjectURL(blob);
+    lien.download = m ? m[1] : 'export';
+    document.body.appendChild(lien);
+    lien.click();
+    setTimeout(() => { URL.revokeObjectURL(lien.href); lien.remove(); }, 1000);
+    showToast('Export téléchargé.','success');
+  }catch(e){ if(e.message !== 'unauth') showToast('Erreur réseau','danger'); }
+}
+
 // ── Consultation d'une réponse ─────────────────────────────────────────
 
 async function formuReponseVoir(did){
@@ -938,7 +979,10 @@ async function formuReponseVoir(did){
         ${d.nc.length ? `<p style="margin:0 0 12px;color:var(--danger);font-weight:600;font-size:13px">${d.nc.length} réponse${d.nc.length > 1 ? 's' : ''} non conforme${d.nc.length > 1 ? 's' : ''}.</p>` : ''}
         <div id="formu-reponse-corps"></div>
       </div>
-      <div class="modal-ft"><button type="button" class="fsc-btn" onclick="closeMroot()">Fermer</button></div>
+      <div class="modal-ft">
+        <button type="button" class="fsc-btn" onclick="formuTelecharger('/api/qualite/formulaires/destinataires/${Number(did)}/reponse.pdf')">Télécharger le PDF</button>
+        <button type="button" class="fsc-btn" onclick="closeMroot()">Fermer</button>
+      </div>
     </div>
   </div>`;
   MysifaFormulaire.rendre(d.schema, document.getElementById('formu-reponse-corps'), {valeurs: rep.reponses, lectureSeule: true, nc: d.nc});
@@ -1099,7 +1143,7 @@ function formuGuide(){
       {
         icon: ico('<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/>'),
         title: "Envoyer et suivre les réponses",
-        body: "<strong>Envoyer</strong> choisit les destinataires : fournisseurs, clients (contacts de l'ERP), personnel ou adresse libre. Chacun reçoit le lien de son <strong>espace " + escHtml(FORMU_ORG) + "</strong>, où il retrouve tout ce que " + escHtml(FORMU_ORG) + " lui adresse. L'onglet <strong>Envois et réponses</strong> suit qui a ouvert et répondu, relance et affiche chaque réponse, non-conformités en rouge."
+        body: "<strong>Envoyer</strong> choisit les destinataires : fournisseurs, clients (contacts de l'ERP), personnel ou adresse libre. Chacun reçoit le lien de son <strong>espace " + escHtml(FORMU_ORG) + "</strong>, où il retrouve tout ce que " + escHtml(FORMU_ORG) + " lui adresse. L'onglet <strong>Envois et réponses</strong> suit qui a ouvert et répondu, relance et affiche chaque réponse, non-conformités en rouge. Les réponses s'exportent en CSV (Excel) ou en PDF avec une synthèse par question."
       },
       {
         icon: ico('<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'),
