@@ -421,6 +421,7 @@ def flux_production(conn, du: str, au: str) -> dict:
             "qte_produite_max": q_maxi or None,
             "cloture": cloture,
             "derniere_saisie": s.get("fin"),
+            "debut_prod": s.get("debut"),
             "qte_entree": q_entree or None,
             "nb_entrees": len(ents),
             "derniere_entree": ents[-1]["created_at"] if ents else None,
@@ -706,6 +707,11 @@ def flux_expedition(conn, erp, du: str, au: str) -> dict:
             "qte_bl": q_bl or None,
             "departs": deps,
             "date_depart": deps[-1]["jour"] if deps else None,
+            # Date d'expédition : le BL fait foi, sinon le départ, sinon la sortie.
+            "date_expedition": (max((b["jour"] for b in L["bls"]), default=None)
+                                or (deps[-1]["jour"] if deps else None)
+                                or ((sorties_tri[-1]["created_at"] or "")[:10] if sorties_tri else None)),
+            "date_expedition_source": ("bl" if L["bls"] else "depart" if deps else "sortie" if sorties_tri else None),
             "nb_sorties": len(sorties_tri),
             "qte_sortie": q_sortie or None,
             "derniere_sortie": sorties_tri[-1]["created_at"] if sorties_tri else None,
