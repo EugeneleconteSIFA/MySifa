@@ -1619,18 +1619,23 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .mon-page .mon-etat-attente{color:var(--text2);background:var(--bg);border:1px solid var(--border)}
 .mon-page .mon-ligne{cursor:pointer}
 .mon-page .mon-ligne.ouvert td{background:color-mix(in srgb,var(--accent) 6%,var(--card));border-bottom-color:transparent}
-.mon-page .mon-det-ligne td{padding:0 14px 16px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--accent) 6%,var(--card));box-shadow:inset 4px 0 0 var(--t,transparent)}
+.mon-page .mon-det-ligne > td{padding:0 14px 16px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--accent) 6%,var(--card));box-shadow:inset 4px 0 0 var(--t,transparent)}
 .mon-page .mon-det{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
 .mon-page .mon-det-tete{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px;font-size:13px;color:var(--text)}
-.mon-page .mon-det-grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:12px}
-.mon-page .mon-det-sec{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px 12px;min-width:0;overflow-x:auto}
-.mon-page .mon-det-titre{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:6px}
+.mon-page .mon-det-grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,560px),1fr));gap:14px}
+.mon-page .mon-det-sec{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:12px 14px;min-width:0;overflow-x:auto}
+.mon-page .mon-det-sec.vide{align-self:start}
+.mon-page .mon-det-titre{display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:6px}
 .mon-page .mon-det-nb{font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-bg);border-radius:10px;padding:0 7px}
 .mon-page .mon-det-total{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:700;color:var(--text)}
 .mon-page .mon-det-vide{padding:4px 0}
-.mon-page .mon-det-table{width:100%;border-collapse:collapse;font-size:12px}
-.mon-page .mon-det-table th{text-align:left;font-size:10.5px;font-weight:600;color:var(--muted);padding:4px 6px;border-bottom:1px solid var(--border);white-space:nowrap}
-.mon-page .mon-det-table td{padding:5px 6px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);color:var(--text);vertical-align:top}
+.mon-page .mon-det-table{width:100%;border-collapse:collapse;font-size:13px}
+.mon-page .mon-det-table th{text-align:left;font-size:11px;font-weight:600;color:var(--muted);padding:6px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+.mon-page .mon-det-table th.mon-num,.mon-page .mon-det-table td.mon-num{text-align:right}
+.mon-page .mon-det-table td{padding:8px 10px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);color:var(--text);vertical-align:top;white-space:nowrap;background:var(--card)}
+.mon-page .mon-det-table td.mon-det-libre{white-space:normal;min-width:160px;color:var(--text2)}
+.mon-page .mon-det-table tbody tr:hover td{background:color-mix(in srgb,var(--accent) 5%,var(--card))}
+.mon-page .mon-date-cell{font-weight:700;color:var(--text);white-space:nowrap;font-variant-numeric:tabular-nums}
 .mon-page .mon-det-table tr:last-child td{border-bottom:none}
 .mon-page .mon-det-lien{color:var(--accent);font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap}
 .mon-page .mon-det-lien:hover{text-decoration:underline}
@@ -19974,6 +19979,10 @@ function monColonnes(page) {
   };
   if (page === 'expedition') return [
     statut,
+    { cle: 'date_expedition', label: 'Expédié le', val: l => l.date_expedition || '', txt: l => l.date_expedition ? fD(l.date_expedition) : '',
+      td: l => l.date_expedition
+        ? monDouble(fD(l.date_expedition), { bl: 'date du BL', depart: 'date du départ', sortie: 'date de sortie' }[l.date_expedition_source] || '', 'mon-date-cell')
+        : el('td', { cls: 'mon-cell' }, el('div', { cls: 'mon-vide' }, '—')) },
     { cle: 'reference', label: 'Référence', val: l => l.reference || '',
       txt: l => [l.reference, l.designation].join(' '),
       td: l => monDouble(l.reference, monDesignation(l), 'mon-ref') },
@@ -20005,6 +20014,14 @@ function monColonnes(page) {
   ];
   return [
     statut,
+    { cle: 'derniere_saisie', label: 'Produit le', val: l => l.derniere_saisie || l.derniere_entree || '',
+      txt: l => [l.derniere_saisie ? fD(l.derniere_saisie) : '', l.debut_prod ? fD(l.debut_prod) : ''].join(' '),
+      td: l => {
+        const fin = l.derniere_saisie, deb = l.debut_prod;
+        if (!fin) return el('td', { cls: 'mon-cell' }, el('div', { cls: 'mon-vide' }, 'pas de saisie'));
+        const memeJour = deb && deb.slice(0, 10) === fin.slice(0, 10);
+        return monDouble(fD(fin), deb && !memeJour ? 'depuis le ' + fD(deb) : (fin.length >= 16 ? 'à ' + fin.slice(11, 16) : ''), 'mon-date-cell');
+      } },
     { cle: 'no_dossier', label: 'Dossier', val: l => l.no_dossier || '',
       txt: l => [l.no_dossier, l.client, l.machine, monEtatDossier(l).label].join(' '),
       td: l => {
@@ -20208,7 +20225,7 @@ function monToggleDetail(cle) {
 
 // Mini-tableau d'une section : colonnes [libellé, (x) => contenu, num?].
 function monSection(titre, lignes, cols, vide, extra) {
-  const sec = el('div', { cls: 'mon-det-sec' },
+  const sec = el('div', { cls: 'mon-det-sec' + (!lignes || !lignes.length ? ' vide' : '') },
     el('div', { cls: 'mon-det-titre' }, titre,
       el('span', { cls: 'mon-det-nb' }, String((lignes || []).length)), extra || null));
   if (!lignes || !lignes.length) {
@@ -20216,9 +20233,9 @@ function monSection(titre, lignes, cols, vide, extra) {
     return sec;
   }
   sec.appendChild(el('table', { cls: 'mon-det-table' },
-    el('thead', null, el('tr', null, ...cols.map(c => el('th', { cls: c[2] ? 'mon-num' : '' }, c[0])))),
+    el('thead', null, el('tr', null, ...cols.map(c => el('th', { cls: c[2] === true ? 'mon-num' : '' }, c[0])))),
     el('tbody', null, ...lignes.map(x => el('tr', null,
-      ...cols.map(c => { const v = c[1](x); return el('td', { cls: c[2] ? 'mon-num' : '' }, v == null || v === '' ? '—' : v); }))))));
+      ...cols.map(c => { const v = c[1](x); return el('td', { cls: c[2] === true ? 'mon-num' : c[2] === 'libre' ? 'mon-det-libre' : '' }, v == null || v === '' ? '—' : v); }))))));
   return sec;
 }
 
@@ -20259,7 +20276,7 @@ function monDetailProduction(l) {
         ['Emplacement', x => x.emplacement],
         ['Quantité', x => monQteExacte(x.quantite, u), true],
         ['Par', x => x.par],
-        ['Note', x => [x.note, x.rattachement === 'reference' ? '(rapprochée par la réf.)' : x.rattachement === 'of' ? '(rapprochée par l\'OF)' : ''].filter(Boolean).join(' ')],
+        ['Note', x => [x.note, x.rattachement === 'reference' ? '(rapprochée par la réf.)' : x.rattachement === 'of' ? '(rapprochée par l\'OF)' : ''].filter(Boolean).join(' '), 'libre'],
       ], 'Aucune entrée en stock.', monTotal(d.entrees, u)),
       monSection('Déplacements', d.deplacements, [
         ['Date', x => fDateTime(x.date)],
@@ -20286,7 +20303,7 @@ function monDetailExpedition(l) {
       monSection('BL RVGI', d.bls, [
         ['BL', x => x.bl],
         ['Date', x => fD(x.jour)],
-        ['Client', x => x.client],
+        ['Client', x => x.client, 'libre'],
         ['Commande', x => x.commande],
         ['Quantité', x => monQteExacte(x.quantite, u), true],
       ], monEnsureState().data && monEnsureState().data.miroir === false ? 'Miroir RVGI absent.' : 'Aucun BL sur la période.', monTotal(d.bls, u)),
@@ -20296,7 +20313,7 @@ function monDetailExpedition(l) {
         ['Quantité', x => monQteExacte(x.quantite, u), true],
         ['BL rapproché', x => x.bl_jour ? 'BL du ' + fD(x.bl_jour) : el('span', { cls: 'mon-sous' }, 'aucun')],
         ['Par', x => x.par],
-        ['Note', x => x.note],
+        ['Note', x => x.note, 'libre'],
       ], 'Aucune sortie rapprochée.', monTotal(d.sorties, u)),
       monSection('Départs MyExpé', l.departs, [
         ['Date', x => fD(x.jour)],

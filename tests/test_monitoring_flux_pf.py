@@ -89,6 +89,7 @@ ok(d.get("nb_deplacements") == 1 and d.get("derniere_destination") == "A111", "d
 ok(d.get("stock_restant") == 2000000, "stock restant du dossier = lots")
 ok(len((d.get("detail") or {}).get("fins", [])) == 2 and len(d["detail"]["deplacements"]) == 1,
    "détail : fins de production et déplacements du dossier")
+ok(d.get("debut_prod") == "2026-10-14T12:00:00" and d.get("derniere_saisie") == "2026-10-15T10:00:00", "dates de production du dossier")
 ok(d.get("qte_of") == 2000000 and d.get("machine") == "Machine A", "OF et machine du planning")
 ok(d.get("fin_prevue") == "2026-10-15T10:00:00", "fin prévue du planning transmise")
 n = L.get("d:9932700") or {}
@@ -149,6 +150,7 @@ ok(w.get("statut") == "ok" and w.get("qte_sortie") == 968,
 ok([b["bl"] for b in (w.get("detail") or {}).get("bls", [])] == ["9939054"]
    and (w["detail"]["sorties"][0] or {}).get("bl_jour") == "2026-10-15",
    "détail : lignes de BL et sorties avec le BL rapproché")
+ok(w.get("date_expedition") == "2026-10-15" and w.get("date_expedition_source") == "bl", "date d'expédition = date du BL")
 ok(w.get("nb_sorties") == 1, "la sortie qui corrige une entrée du jour n'est pas une expédition")
 ok("890/0007" not in E, "la date de livraison du planning ne fait pas entrer de ligne")
 sans = flux_expedition(conn, None, "2026-10-14", "2026-10-20")
