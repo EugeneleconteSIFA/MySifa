@@ -8,15 +8,15 @@
  * Les taux de TVA proposés ne se règlent pas ici : ce sont les taux légaux,
  * NDF_TAUX_TVA de config.py.
  *
- * Adresse : ?reglages=ndf tant que la fenêtre est ouverte (relue au
- * chargement par depuisAdresse()).
+ * Adresse : la page la tient (static/rh_coffre_url.js écrit ?reglages=ndf
+ * tant que estOuvert()). ouvrir({surAdresse}) la prévient à l'ouverture et à
+ * la fermeture ; fermer(true) ferme sans la prévenir (Retour du navigateur).
  */
 (function () {
   'use strict';
 
   var API = '/api/rh-coffre/ndf-categories';
-  var CLE_URL = 'reglages';
-  var etat = { cats: [], taux: [20, 10, 5.5, 0], back: null, surChange: null };
+  var etat = { cats: [], taux: [20, 10, 5.5, 0], back: null, surChange: null, surAdresse: null };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -40,13 +40,8 @@
     return r.json();
   }
 
-  function ecrireAdresse(ouvert) {
-    try {
-      var u = new URL(location.href);
-      if (ouvert) u.searchParams.set(CLE_URL, 'ndf');
-      else u.searchParams.delete(CLE_URL);
-      if (u.href !== location.href) history.replaceState(history.state, '', u.href);
-    } catch (e) {}
+  function prevenirAdresse() {
+    if (typeof etat.surAdresse === 'function') { try { etat.surAdresse(); } catch (e) {} }
   }
 
   function injecterStyle() {
@@ -238,18 +233,19 @@
     tr.querySelector('[data-zone="km"]').style.display = km ? '' : 'none';
   }
 
-  function fermer() {
+  function fermer(technique) {
     if (!etat.back) return;
     etat.back.remove();
     etat.back = null;
     document.removeEventListener('keydown', surTouche);
-    ecrireAdresse(false);
+    if (technique !== true) prevenirAdresse();
   }
-  function surTouche(e) { if (e.key === 'Escape') fermer(); }
+  function surTouche(e) { if (e.key === 'Escape') fermer(false); }
 
   async function ouvrir(opts) {
     opts = opts || {};
     etat.surChange = opts.surChange || null;
+    etat.surAdresse = opts.surAdresse || null;
     if (etat.back) return;
     injecterStyle();
     var back = document.createElement('div');
@@ -266,12 +262,12 @@
     document.body.appendChild(back);
     etat.back = back;
     back.addEventListener('click', function (e) {
-      if (e.target === back || e.target.closest('.nr-close')) { fermer(); return; }
+      if (e.target === back || e.target.closest('.nr-close')) { fermer(false); return; }
       surClic(e);
     });
     back.addEventListener('change', surChangement);
     document.addEventListener('keydown', surTouche);
-    ecrireAdresse(true);
+    prevenirAdresse();
     try {
       await charger();
     } catch (err) {
@@ -279,12 +275,9 @@
     }
   }
 
-  // Rouvre la fenêtre si l'adresse la porte (rafraîchissement, lien partagé).
-  function depuisAdresse(opts) {
-    try {
-      if (new URLSearchParams(location.search).get(CLE_URL) === 'ndf') ouvrir(opts);
-    } catch (e) {}
-  }
-
-  window.MySifaNdfReglages = { ouvrir: ouvrir, fermer: fermer, depuisAdresse: depuisAdresse };
+  window.MySifaNdfReglages = {
+    ouvrir: ouvrir,
+    fermer: fermer,
+    estOuvert: function () { return !!etat.back; }
+  };
 })();
