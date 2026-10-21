@@ -129,41 +129,32 @@ tr:hover td{background:var(--accent-bg)}
 .preview-body .preview-unknown{color:var(--muted);font-size:13px;text-align:center;padding:30px}
 @media(max-width:640px){.preview-back{padding:0}.preview-modal{border-radius:0;max-width:none;border:none}.preview-header{padding:10px 12px}.preview-title{font-size:12px}.preview-body{padding:8px}}
 .modal-back{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:16px}
-.modal{background:var(--card);border:1px solid var(--border);border-top:3px solid var(--accent);border-radius:14px;padding:0;max-width:520px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 24px 64px rgba(0,0,0,.35)}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:0;max-width:520px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 24px 64px rgba(0,0,0,.35)}
 .modal h3{margin:0;font-size:16px;font-weight:700;color:var(--text)}
-.modal-head{display:flex;align-items:center;gap:12px;padding:18px 22px;background:var(--accent-bg);border-bottom:1px solid var(--border)}
-.modal-head-ico{width:36px;height:36px;flex-shrink:0;border-radius:10px;background:var(--accent);color:white;display:flex;align-items:center;justify-content:center}
-.modal-head-sub{font-size:12px;color:var(--text2);margin-top:2px}
+.modal-head{display:flex;align-items:center;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--border)}
+.modal-head-ico{width:34px;height:34px;flex-shrink:0;border-radius:9px;background:var(--bg);border:1px solid var(--border);color:var(--text2);display:flex;align-items:center;justify-content:center}
+.modal-head-sub{font-size:12px;color:var(--muted);margin-top:2px}
 .modal-body{padding:18px 22px 4px}
-.ndf-section{border:1px solid var(--border);border-radius:12px;padding:14px 14px 0;margin-bottom:14px;background:var(--bg)}
-.ndf-section.montants{background:color-mix(in srgb,var(--accent) 7%,var(--card));border-color:color-mix(in srgb,var(--accent) 30%,var(--border))}
-.ndf-section-titre{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px}
-.ndf-section-titre::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.ndf-section{padding:0;margin-bottom:4px}
+.ndf-section+.ndf-section{border-top:1px solid var(--border);padding-top:16px}
+.ndf-section-titre{font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px}
 .field{margin-bottom:14px}
 .field label{display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
 .field input,.field select,.field textarea{width:100%;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s;min-height:40px}
 .field select{-webkit-appearance:none;appearance:none;padding-right:34px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center} /* hex-ok : flèche SVG */
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .field textarea{min-height:64px;resize:vertical}
-.cat-chips{display:flex;flex-wrap:wrap;gap:8px}
-.field .cat-chip,.field .file-drop{text-transform:none;letter-spacing:0;margin:0}
-.field .cat-chip{display:inline-block}
-.cat-chip{position:relative;cursor:pointer}
-.cat-chip input{position:absolute;opacity:0;pointer-events:none}
-.cat-chip span{display:inline-flex;align-items:center;padding:8px 14px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:13px;font-weight:600;transition:all .15s}
-.cat-chip:hover span{border-color:var(--accent);color:var(--accent)}
-.cat-chip input:checked+span{background:var(--accent);border-color:var(--accent);color:white}
-.cat-chip input:focus-visible+span{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent)}
-.calc-val{padding:10px 12px;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:8px;background:var(--accent-bg);font-size:14px;color:var(--accent);font-family:'SF Mono','Consolas',monospace;font-weight:700;min-height:40px;display:flex;align-items:center}
+.calc-val{padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:13px;color:var(--text);font-weight:700;font-variant-numeric:tabular-nums;min-height:40px;display:flex;align-items:center}
 .calc-hint{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.4}
 .ndf-meta{font-size:11px;color:var(--muted);margin-top:3px}
-.file-drop{display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px dashed color-mix(in srgb,var(--accent) 40%,var(--border));border-radius:10px;padding:14px;text-align:center;font-size:12px;font-weight:600;color:var(--accent);background:var(--card);cursor:pointer;transition:all .15s}
-.file-drop:hover{border-color:var(--accent);background:var(--accent-bg)}
-.file-drop.has-file{border-style:solid;color:var(--text);background:var(--accent-bg)}
+.file-drop{display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px dashed var(--border);border-radius:8px;padding:14px;text-align:center;font-size:12px;font-weight:500;color:var(--muted);background:var(--card);cursor:pointer;transition:border-color .15s,color .15s}
+.field .file-drop{text-transform:none;letter-spacing:0;margin:0}
+.file-drop:hover{border-color:var(--accent);color:var(--accent)}
+.file-drop.has-file{border-style:solid;color:var(--text)}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.modal-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap;padding:14px 22px;background:var(--bg);border-top:1px solid var(--border);position:sticky;bottom:0}
-.modal-actions .btn.ghost{background:var(--card)}
-.modal-actions .btn.ghost:hover{background:var(--bg)}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap;padding:14px 22px;background:var(--card);border-top:1px solid var(--border);position:sticky;bottom:0}
+.modal-actions .btn.ghost{background:var(--bg)}
+.modal-actions .btn.ghost:hover{background:var(--card)}
 .modal-actions .sep{flex:1}
 .toast{position:fixed;top:24px;right:24px;background:var(--card);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;padding:12px 18px;font-size:13px;color:var(--text);z-index:1000;box-shadow:0 10px 24px rgba(0,0,0,.3);animation:slideIn .2s}
 .toast.err{border-left-color:var(--danger)}
@@ -267,7 +258,7 @@ tr:hover td{background:var(--accent-bg)}
 const DOC_TYPE_LABELS={bulletin_paie:'Bulletin de paie',contrat:'Contrat',attestation:'Attestation',autre:'Autre'};
 const MOIS_LABELS=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
-let ME=null;let CURRENT_TAB='ndf';let NDF_CATS=[];let NDF_TAUX=[20,10,5.5,0];let bulData={documents:[],annees_disponibles:[]};
+let ME=null;let CURRENT_TAB='ndf';let NDF_CATS=[];let NDF_TAUX=[20,10,5.5,0];let NDF_NOTES=[];let bulData={documents:[],annees_disponibles:[]};
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function fmtMontant(n){return (Number(n)||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';}
@@ -410,6 +401,7 @@ async function loadDocs(){
 async function loadNdf(){
   try{
     const j=await api('/api/coffre/notes-frais');
+    NDF_NOTES=j.notes||[];
     const c=document.getElementById('ndf-container');
     const badge=document.getElementById('ndf-badge');
     const pending=j.notes.filter(n=>n.statut==='brouillon'||n.statut==='soumise').length;
@@ -427,6 +419,7 @@ async function loadNdf(){
           <td style="text-align:right;white-space:nowrap">
             ${n.justificatif_nom?`<a class="btn ghost small" href="/api/coffre/notes-frais/${n.id}/justificatif" data-preview-url="/api/coffre/notes-frais/${n.id}/justificatif" data-preview-name="${esc(n.justificatif_nom||'Justificatif')}">Voir</a>`:''}
             ${n.statut==='brouillon'?`
+              <button class="btn ghost small" onclick="openNdfModal(${n.id})">Modifier</button>
               <button class="btn small" onclick="submitNdf(${n.id})">Soumettre</button>
               <button class="btn ghost small" onclick="deleteNdf(${n.id})">×</button>
             `:''}
@@ -465,23 +458,44 @@ function ndfCalcul(cat,ttc,taux,km){
   return {ttc:r2(ttc),tva,ht:r2(ttc-tva)};
 }
 
-function openNdfModal(){
+// Adresse : ?note=<id> tant qu'un brouillon est ouvert en modification.
+function ndfAdresse(id){
+  try{
+    const u=new URL(location.href);
+    if(id)u.searchParams.set('note',String(id));else u.searchParams.delete('note');
+    if(u.href!==location.href)history.replaceState(history.state,'',u.href);
+  }catch(e){}
+}
+function ndfDepuisAdresse(){
+  try{
+    const id=Number(new URLSearchParams(location.search).get('note'));
+    if(!id)return;
+    const n=NDF_NOTES.find(x=>x.id===id&&x.statut==='brouillon');
+    if(n)openNdfModal(id);else ndfAdresse(null);
+  }catch(e){}
+}
+
+// Sans argument : nouvelle note. Avec l'id d'un brouillon : modification.
+function openNdfModal(noteId){
   if(!NDF_CATS.length){toast('Aucune catégorie de note de frais — à créer par la comptabilité.','err');return;}
+  const note=noteId?NDF_NOTES.find(n=>n.id===noteId&&n.statut==='brouillon'):null;
+  if(noteId&&!note){toast('Brouillon introuvable — il a peut-être déjà été soumis.','err');return;}
   const back=document.createElement('div');back.className='modal-back';
   const today=new Date().toISOString().slice(0,10);
   back.innerHTML=`<div class="modal">
     <div class="modal-head">
       <div class="modal-head-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></div>
-      <div><h3>Nouvelle note de frais</h3><div class="modal-head-sub">HT et TVA sont calculés à partir du montant TTC.</div></div>
+      <div><h3>${note?'Modifier le brouillon':'Nouvelle note de frais'}</h3><div class="modal-head-sub">HT et TVA sont calculés à partir du montant TTC.</div></div>
     </div>
     <form id="ndf-form">
       <div class="modal-body">
         <div class="ndf-section">
           <div class="ndf-section-titre">Le frais</div>
           <div class="field"><label>Catégorie</label>
-            <div class="cat-chips" id="ndf-cats">
-              ${NDF_CATS.map((c,i)=>`<label class="cat-chip"><input type="radio" name="categorie_id" value="${c.id}"${i===0?' required':''}><span>${esc(c.libelle)}</span></label>`).join('')}
-            </div>
+            <select name="categorie_id" id="ndf-cats" required>
+              <option value="">Choisir…</option>
+              ${NDF_CATS.map(c=>`<option value="${c.id}">${esc(c.libelle)}</option>`).join('')}
+            </select>
           </div>
           <div class="row2">
             <div class="field"><label>Date du frais</label><input type="date" name="date_frais" value="${today}" required></div>
@@ -515,9 +529,10 @@ function openNdfModal(){
           <div class="ndf-section-titre">Détails et justificatif</div>
           <div class="field"><label>Description</label><textarea name="description" placeholder="Détails, contexte, participants…" maxlength="1000"></textarea></div>
           <div class="field">
+            ${note&&note.justificatif_nom?`<div class="calc-hint" style="margin:0 0 6px">Joint : ${esc(note.justificatif_nom)}</div>`:''}
             <label class="file-drop" id="drop-label">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-              <span id="drop-txt">Joindre le justificatif (PDF, JPG, PNG — 10 Mo max)</span>
+              <span id="drop-txt">${note&&note.justificatif_nom?'Remplacer le justificatif joint':'Joindre le justificatif (PDF, JPG, PNG — 10 Mo max)'}</span>
               <input type="file" name="justificatif" id="ndf-file" accept="application/pdf,image/*" style="display:none">
             </label>
           </div>
@@ -526,16 +541,17 @@ function openNdfModal(){
       <div class="modal-actions">
         <button type="button" class="btn ghost" id="ndf-cancel">Annuler</button>
         <span class="sep"></span>
-        <button type="submit" class="btn ghost" name="soumettre" value="0">Enregistrer brouillon</button>
+        <button type="submit" class="btn ghost" name="soumettre" value="0">${note?'Enregistrer':'Enregistrer brouillon'}</button>
         <button type="submit" class="btn" name="soumettre" value="1">Soumettre à la compta</button>
       </div>
     </form>
   </div>`;
   document.body.appendChild(back);
   const $=s=>back.querySelector(s);
+  const form=$('#ndf-form');
   const catsEl=$('#ndf-cats'),ttcEl=$('#ndf-ttc'),tauxEl=$('#ndf-taux'),tvaEl=$('#ndf-tva'),kmEl=$('#ndf-km');
   let tvaManuelle=false;
-  const catCourante=()=>{const r=back.querySelector('input[name="categorie_id"]:checked');return r?NDF_CATS.find(c=>String(c.id)===r.value)||null:null;};
+  const catCourante=()=>NDF_CATS.find(c=>String(c.id)===catsEl.value)||null;
   function majCalcul(){
     const cat=catCourante();
     const km=!!(cat&&cat.saisie==='km');
@@ -563,6 +579,25 @@ function openNdfModal(){
   ttcEl.addEventListener('input',majCalcul);
   kmEl.addEventListener('input',majCalcul);
   tvaEl.addEventListener('input',()=>{tvaManuelle=tvaEl.value!=='';majCalcul();});
+  if(note){
+    form.elements.date_frais.value=(note.date_frais||'').slice(0,10);
+    form.elements.ville.value=note.ville||'';
+    form.elements.description.value=note.description||'';
+    if(NDF_CATS.some(c=>c.id===note.categorie_id))catsEl.value=String(note.categorie_id);
+    const cat=catCourante();
+    if(cat&&cat.saisie==='km'){kmEl.value=note.distance_km!=null?note.distance_km:'';}
+    else{
+      ttcEl.value=note.montant_ttc!=null?Number(note.montant_ttc).toFixed(2):'';
+      tauxEl.value=String(note.taux_tva!=null?note.taux_tva:(cat?cat.taux_tva:20));
+      if(note.montant_tva!=null){
+        const calc=ndfCalcul(cat,Number(note.montant_ttc)||0,parseFloat(tauxEl.value)||0,0);
+        tvaEl.value=Number(note.montant_tva).toFixed(2);
+        tvaManuelle=Math.abs(calc.tva-Number(note.montant_tva))>0.005;
+      }
+    }
+    ndfAdresse(note.id);
+  }
+  majCalcul();
   const fileEl=$('#ndf-file');
   const dropLbl=$('#drop-label');
   const dropTxt=$('#drop-txt');
@@ -570,9 +605,9 @@ function openNdfModal(){
     if(fileEl.files.length){dropLbl.classList.add('has-file');dropTxt.textContent=fileEl.files[0].name;}
     else{dropLbl.classList.remove('has-file');dropTxt.textContent='Joindre le justificatif (PDF, JPG, PNG — 10 Mo max)';}
   });
-  $('#ndf-cancel').onclick=()=>back.remove();
-  back.onclick=(e)=>{if(e.target===back)back.remove();};
-  const form=$('#ndf-form');
+  const fermer=()=>{back.remove();if(note)ndfAdresse(null);};
+  $('#ndf-cancel').onclick=fermer;
+  back.onclick=(e)=>{if(e.target===back)fermer();};
   form.addEventListener('submit',async(e)=>{
     e.preventDefault();
     const btn=e.submitter;
@@ -582,10 +617,10 @@ function openNdfModal(){
     if(cat&&cat.saisie==='km'){fd.delete('montant_ttc');fd.delete('montant_tva');fd.delete('taux_tva');}
     else fd.delete('distance_km');
     try{
-      const r=await fetch('/api/coffre/notes-frais',{method:'POST',credentials:'include',body:fd});
+      const r=await fetch(note?'/api/coffre/notes-frais/'+note.id:'/api/coffre/notes-frais',{method:note?'PUT':'POST',credentials:'include',body:fd});
       if(!r.ok){let m='Erreur';try{const j=await r.json();m=j.detail||m;}catch{}throw new Error(m);}
       toast(btn.value==='1'?'Note soumise.':'Brouillon enregistré.');
-      back.remove();
+      fermer();
       loadNdf();
     }catch(e){toast(e.message,'err');}
   });
@@ -600,9 +635,9 @@ function openNdfModal(){
   }catch(e){}
   loadBulletins();
   loadDocs();
-  loadNdf();
-  loadNdfCategories();
   showTab(_readCoffreTab(),{silent:false});
+  await Promise.all([loadNdf(),loadNdfCategories()]);
+  ndfDepuisAdresse();
 })();
 window.addEventListener('hashchange',function(){try{showTab(_readCoffreTab(),{silent:true});}catch(e){}});
 </script>
