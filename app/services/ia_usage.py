@@ -23,6 +23,7 @@ FONCTIONS = {
     "agent": "Assistant IA",
     "devis": "Lecture de devis",
     "fsc": "Lecture de certificat FSC",
+    "ndf": "Lecture de justificatif de frais",
     "tarif_transport": "Grille transporteur",
     "sql": "Requête DB Viewer",
     "memo_expe": "Mémo expédition",
