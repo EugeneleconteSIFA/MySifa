@@ -8375,6 +8375,12 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
     montrer('cpt-debut', debut);
     montrer('cpt-fin', fin);
     montrer('metrage-compteurs', debut || fin);
+    // Le compteur relevé : sur toute opération de calage (changements
+    // d'outil) et sur la reprise de production qui ferme un calage — ou dès
+    // que la saisie en porte déjà un.
+    const cat = ((ops && ops[code]) || {}).category || '';
+    montrer('cpt-releve', !isStock && !debut && !fin
+      && (cat === 'calage' || code === '03' || code === '88' || compteurAvant != null));
     montrer('dossier', !CODES_PERSONNEL.has(code));
     montrer('fin-dossier', !isStock && code === CODE_FIN_DOS);
   }
@@ -8419,6 +8425,10 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
   const metrageReelI      = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_reel!=null)        ? prefill.metrage_reel        : '' });
   const metrageDebutI     = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_total_debut!=null) ? prefill.metrage_total_debut : '' });
   const metrageFinI       = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_total_fin!=null)   ? prefill.metrage_total_fin   : '' });
+  // Compteur relevé en cours de dossier : changement d'outil (plaque,
+  // contre-partie, magnétique…) et « Production » qui ferme un calage.
+  const compteurAvant = (prefill && prefill.metrage_compteur!=null && prefill.metrage_compteur!=='') ? Number(prefill.metrage_compteur) : null;
+  const metrageCompteurI  = h('input', { type: 'number', placeholder: '0', min: '0', step: '1', value: compteurAvant!=null ? compteurAvant : '' });
   // Fin de production : le choix de l'opérateur (« Dossier terminé » / « À
   // reprendre plus tard ») se corrige ici ; le serveur rejoue planning et série.
   const finDossierAvant = (prefill && prefill.fin_dossier!=null && prefill.fin_dossier!=='') ? String(Number(prefill.fin_dossier)) : '';
@@ -8498,6 +8508,14 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
           h('label', null, 'Compteur fin (m)'),
           metrageFinI
         )
+      ),
+      h('div', { className: 'form-row', 'data-role':'cpt-releve', style:{display:'none'} },
+        h('div', null,
+          h('label', null, 'Compteur relevé (m)'),
+          metrageCompteurI
+        ),
+        h('div', { style:{fontSize:'12px',color:'var(--muted)',alignSelf:'end',paddingBottom:'10px'} },
+          'Compteur machine noté au changement ou à la fin du calage. Le commentaire suit la correction.')
       ),
       h('div', { className: 'form-row', 'data-role':'fin-dossier', style:{display:'none'} },
         h('div', { style:{ gridColumn:'span 2' } },
@@ -8585,6 +8603,14 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
             if(CODES_CPT_FIN.has(code)){
               corps.metrage_total_fin = nombre(metrageFinI);
               if(corps.metrage_total_fin != null) corps.metrage_reel = corps.metrage_total_fin;
+            }
+            // Compteur relevé : envoyé seulement s'il est visible et a changé.
+            const blocReleve = form.querySelector('[data-role="cpt-releve"]');
+            if(blocReleve && blocReleve.style.display !== 'none'){
+              const brut = String(metrageCompteurI.value||'').trim();
+              const v = brut === '' ? null : parseFloat(brut);
+              if(brut !== '' && (!isFinite(v) || v < 0)){ toast('Compteur invalide — un nombre de mètres.', 'error'); return; }
+              if(v !== compteurAvant) corps.metrage_compteur = v;
             }
             // Envoyé seulement s'il change : le serveur rejoue alors planning et série.
             if(code === CODE_FIN_DOS && finDossierSel.value !== '' && finDossierSel.value !== finDossierAvant){
