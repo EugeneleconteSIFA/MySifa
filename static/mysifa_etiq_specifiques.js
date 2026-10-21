@@ -125,7 +125,7 @@
   function selectModeleIa() {
     const ref = ES.boot.referentiel;
     const liste = ref.modeles_ia || [];
-    const s = h('select', { cls: 'es-input', title: 'Modèle utilisé par l\'assistant' },
+    const s = h('select', { cls: 'es-input', 'data-bulle': 'Modèle IA', 'aria-label': 'Modèle utilisé par l\'assistant' },
       ...liste.map(m => h('option', { value: m.id, text: m.libelle })));
     let mem = null;
     try { mem = localStorage.getItem(LS_MODELE_IA); } catch (e) {}
@@ -161,7 +161,7 @@
     const boite = h('div', { cls: 'es-modale' + (large ? ' es-modale-large' : ''), role: 'dialog' },
       h('div', { cls: 'es-modale-tete' },
         h('div', { cls: 'es-modale-titre', text: titre }),
-        h('button', { cls: 'es-btn es-btn-icone', type: 'button', title: 'Fermer', onclick: fermerModale }, '×')),
+        h('button', { cls: 'es-btn es-btn-icone', type: 'button', 'data-bulle': 'Fermer', 'aria-label': 'Fermer', onclick: fermerModale }, '×')),
       h('div', { cls: 'es-modale-corps' }, corps),
       actions && actions.length ? h('div', { cls: 'es-modale-pied' }, actions) : null);
     fond.appendChild(boite);
@@ -228,7 +228,7 @@
 
     const listeDossiers = h('div', { cls: 'es-dossiers' },
       h('div', { cls: 'es-dossiers-titre' }, 'Dossiers',
-        h('button', { cls: 'es-btn es-btn-icone', type: 'button', title: 'Nouveau dossier', onclick: () => modaleDossier() }, ic('plus', 14))),
+        h('button', { cls: 'es-btn es-btn-icone', type: 'button', 'data-bulle': 'Nouveau dossier', 'aria-label': 'Nouveau dossier', onclick: () => modaleDossier() }, ic('plus', 14))),
       ligneDossier(null, 'Toutes les étiquettes', b.modeles.length),
       ...b.dossiers.map(d => ligneDossier(d, d.nom, d.nb)),
       b.dossiers.length ? null : h('div', { cls: 'es-aide', text: 'Créer un premier dossier (un par client, par exemple) pour y ranger les étiquettes.' }));
@@ -247,9 +247,9 @@
       h('span', { cls: 'es-dossier-nom', text: nom }),
       h('span', { cls: 'es-badge', text: String(nb) }),
       d ? h('span', { cls: 'es-dossier-outils' },
-        h('button', { cls: 'es-btn es-btn-icone', type: 'button', title: 'Renommer',
+        h('button', { cls: 'es-btn es-btn-icone', type: 'button', 'data-bulle': 'Renommer', 'aria-label': 'Renommer',
           onclick: (e) => { e.stopPropagation(); modaleDossier(d); } }, ic('edit', 13)),
-        d.nb ? null : h('button', { cls: 'es-btn es-btn-icone', type: 'button', title: 'Archiver le dossier',
+        d.nb ? null : h('button', { cls: 'es-btn es-btn-icone', type: 'button', 'data-bulle': 'Archiver', 'aria-label': 'Archiver le dossier',
           onclick: (e) => { e.stopPropagation(); confirmer(`Archiver le dossier « ${d.nom} » ?`, 'Archiver', async () => {
             await api('/dossiers/' + d.id, { method: 'DELETE' }); toast('Dossier archivé.'); await charger(); rendre(); }); } }, ic('trash-2', 13))) : null);
   }
@@ -274,7 +274,7 @@
   function carte(m) {
     const ratio = Math.max(0.35, Math.min(2.2, m.hauteur_mm / m.largeur_mm));
     return h('div', { cls: 'es-carte' },
-      h('div', { cls: 'es-carte-haut', onclick: () => ouvrirEditeur(m.id), title: 'Ouvrir dans l\'éditeur' },
+      h('div', { cls: 'es-carte-haut', onclick: () => ouvrirEditeur(m.id), 'data-bulle': 'Ouvrir' },
         h('div', { cls: 'es-vignette', style: { width: (34 / Math.max(1, ratio)) + 'px', height: Math.min(44, 34 * ratio) + 'px' } }),
         h('div', { cls: 'es-carte-info' },
           h('div', { cls: 'es-carte-nom', text: m.nom }),
@@ -283,9 +283,9 @@
       h('div', { cls: 'es-carte-pied' },
         bouton('Imprimer', () => modaleImpression(m), 'accent', 'printer'),
         bouton('Modifier', () => ouvrirEditeur(m.id), '', 'edit'),
-        h('button', { cls: 'es-btn es-btn-icone', type: 'button', title: 'Dupliquer', onclick: () => modaleDupliquer(m) }, ic('copy', 15)),
-        h('button', { cls: 'es-btn es-btn-icone', type: 'button', title: 'Historique des impressions', onclick: () => modaleHistorique(m) }, ic('clock', 15)),
-        h('button', { cls: 'es-btn es-btn-icone', type: 'button', title: 'Archiver', onclick: () => confirmer(
+        h('button', { cls: 'es-btn es-btn-icone', type: 'button', 'data-bulle': 'Dupliquer', 'aria-label': 'Dupliquer', onclick: () => modaleDupliquer(m) }, ic('copy', 15)),
+        h('button', { cls: 'es-btn es-btn-icone', type: 'button', 'data-bulle': 'Historique', 'aria-label': 'Historique des impressions', onclick: () => modaleHistorique(m) }, ic('clock', 15)),
+        h('button', { cls: 'es-btn es-btn-icone', type: 'button', 'data-bulle': 'Archiver', 'aria-label': 'Archiver', onclick: () => confirmer(
           `Archiver l'étiquette « ${m.nom} » ? Son historique d'impression est conservé.`, 'Archiver', async () => {
             await api('/modeles/' + m.id, { method: 'DELETE' }); toast('Étiquette archivée.'); await charger(); rendre(); }) }, ic('trash-2', 15))));
   }
@@ -410,7 +410,7 @@
       vignettes.replaceChildren(...photos.map((p, i) => h('div', { cls: 'es-photo-vignette' },
         p.url ? h('img', { src: p.url, alt: p.fichier.name })
           : h('div', { cls: 'es-photo-pdf' }, ic('file-text', 22), h('span', { text: p.fichier.name })),
-        h('button', { cls: 'es-photo-retirer', type: 'button', title: 'Retirer', 'aria-label': 'Retirer ' + p.fichier.name,
+        h('button', { cls: 'es-photo-retirer', type: 'button', 'data-bulle': 'Retirer', 'aria-label': 'Retirer ' + p.fichier.name,
           onclick: () => { if (p.url) URL.revokeObjectURL(p.url); photos.splice(i, 1); rendreVignettes(); } }, '×'))));
       zone.classList.toggle('es-photo-zone-remplie', photos.length > 0);
       compte.textContent = photos.length ? `${photos.length} / ${PHOTO_MAX}` : '';

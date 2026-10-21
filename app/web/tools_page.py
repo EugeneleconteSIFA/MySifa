@@ -91,6 +91,7 @@ def tools_page(request: Request):
 _ASSETS = (
     "/static/mysifa_tools.css",
     "/static/mysifa_etiq_specifiques.css",
+    "/static/mysifa_bulles.js",
     "/static/mysifa_scanner.js",
     "/static/mysifa_tools_etiquettes.js",
     "/static/mysifa_etiq_specifiques.js",
@@ -102,27 +103,28 @@ _ASSETS = (
     "/static/mysifa_tools.js",
 )
 
+# (clé, libellé, icône, infobulle)
 _NAV = [
     ("etiquettes", "Étiquettes",
-     '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>'),
+     '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>', "Traçabilité"),
     ("formulaires", "Formulaires",
-     '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/>'),
+     '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/>', "Questionnaires"),
     ("pdf", "Éditeur PDF",
-     '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/>'),
+     '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/>', "Annoter, signer"),
     ("image", "Image",
-     '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 16l5-5 4 4"/><path d="M14 13l2-2 5 5"/><circle cx="8.5" cy="8" r="1.5"/>'),
+     '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 16l5-5 4 4"/><path d="M14 13l2-2 5 5"/><circle cx="8.5" cy="8" r="1.5"/>', "Vectoriser"),
     ("calculs", "Calculs bobine",
-     '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6"/>'),
+     '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6"/>', "Métrage, fronts"),
     ("traduction", "Traducteur",
-     '<path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/>'),
+     '<path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/>', "DeepL"),
 ]
 
 
 def _nav_html() -> str:
     lignes = []
-    for cle, label, svg in _NAV:
+    for cle, label, svg, bulle in _NAV:
         lignes.append(
-            f'      <button type="button" class="nav-btn" data-outil="{cle}" onclick="toolsAller(\'{cle}\')">'
+            f'      <button type="button" class="nav-btn" data-outil="{cle}" data-bulle="{bulle}" onclick="toolsAller(\'{cle}\')">'
             f'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
             f'stroke-linecap="round" stroke-linejoin="round">{svg}</svg>{label}</button>'
         )
@@ -156,7 +158,7 @@ TOOLS_HTML = r"""<!DOCTYPE html>
   <div class="sidebar-overlay" onclick="closeSidebar()"></div>
 
   <nav class="sidebar" id="sidebar">
-    <div class="logo" onclick="toolsAller('accueil')" title="Menu MyTools">
+    <div class="logo" onclick="toolsAller('accueil')" data-bulle="Accueil MyTools" aria-label="Menu MyTools">
       <div class="logo-brand">My<span>Tools</span></div>
       <div class="logo-sub">Boîte à outils</div>
     </div>
@@ -169,14 +171,14 @@ __NAV__
 
   <main class="main">
     <div class="mobile-topbar">
-      <button type="button" class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Menu">
+      <button type="button" class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Menu" data-bulle="Menu">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
       <div>
         <div class="mobile-topbar-title">MyTools</div>
         <div class="mobile-topbar-sub" id="mobile-sub">Boîte à outils</div>
       </div>
-      <button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil">
+      <button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil" data-bulle="Portail">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/></svg>
       </button>
     </div>
@@ -187,6 +189,7 @@ __NAV__
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <script src="/static/mysifa_url.js?v=4"></script>
+<script src="/static/mysifa_bulles.js"></script>
 <script src="/static/mysifa_scanner.js"></script>
 <script src="/static/mysifa_tools_etiquettes.js"></script>
 <script src="/static/mysifa_etiq_specifiques.js"></script>
