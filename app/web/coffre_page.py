@@ -129,21 +129,42 @@ tr:hover td{background:var(--accent-bg)}
 .preview-body .preview-unknown{color:var(--muted);font-size:13px;text-align:center;padding:30px}
 @media(max-width:640px){.preview-back{padding:0}.preview-modal{border-radius:0;max-width:none;border:none}.preview-header{padding:10px 12px}.preview-title{font-size:12px}.preview-body{padding:8px}}
 .modal-back{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:16px}
-.modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:480px;width:100%;max-height:90vh;overflow:auto}
-.modal h3{margin:0 0 16px;font-size:16px;font-weight:700}
+.modal{background:var(--card);border:1px solid var(--border);border-top:3px solid var(--accent);border-radius:14px;padding:0;max-width:520px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 24px 64px rgba(0,0,0,.35)}
+.modal h3{margin:0;font-size:16px;font-weight:700;color:var(--text)}
+.modal-head{display:flex;align-items:center;gap:12px;padding:18px 22px;background:var(--accent-bg);border-bottom:1px solid var(--border)}
+.modal-head-ico{width:36px;height:36px;flex-shrink:0;border-radius:10px;background:var(--accent);color:white;display:flex;align-items:center;justify-content:center}
+.modal-head-sub{font-size:12px;color:var(--text2);margin-top:2px}
+.modal-body{padding:18px 22px 4px}
+.ndf-section{border:1px solid var(--border);border-radius:12px;padding:14px 14px 0;margin-bottom:14px;background:var(--bg)}
+.ndf-section.montants{background:color-mix(in srgb,var(--accent) 7%,var(--card));border-color:color-mix(in srgb,var(--accent) 30%,var(--border))}
+.ndf-section-titre{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px}
+.ndf-section-titre::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--accent)}
 .field{margin-bottom:14px}
 .field label{display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
-.field input,.field select,.field textarea{width:100%;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s}
+.field input,.field select,.field textarea{width:100%;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s;min-height:40px}
+.field select{-webkit-appearance:none;appearance:none;padding-right:34px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center} /* hex-ok : flèche SVG */
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
-.field textarea{min-height:70px;resize:vertical}
-.calc-val{padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:13px;color:var(--text);font-family:'SF Mono','Consolas',monospace;font-weight:700;min-height:40px;display:flex;align-items:center}
-.calc-hint{font-size:11px;color:var(--muted);margin-top:5px}
+.field textarea{min-height:64px;resize:vertical}
+.cat-chips{display:flex;flex-wrap:wrap;gap:8px}
+.field .cat-chip,.field .file-drop{text-transform:none;letter-spacing:0;margin:0}
+.field .cat-chip{display:inline-block}
+.cat-chip{position:relative;cursor:pointer}
+.cat-chip input{position:absolute;opacity:0;pointer-events:none}
+.cat-chip span{display:inline-flex;align-items:center;padding:8px 14px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:13px;font-weight:600;transition:all .15s}
+.cat-chip:hover span{border-color:var(--accent);color:var(--accent)}
+.cat-chip input:checked+span{background:var(--accent);border-color:var(--accent);color:white}
+.cat-chip input:focus-visible+span{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent)}
+.calc-val{padding:10px 12px;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:8px;background:var(--accent-bg);font-size:14px;color:var(--accent);font-family:'SF Mono','Consolas',monospace;font-weight:700;min-height:40px;display:flex;align-items:center}
+.calc-hint{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.4}
 .ndf-meta{font-size:11px;color:var(--muted);margin-top:3px}
-.file-drop{border:1.5px dashed var(--border);border-radius:8px;padding:16px;text-align:center;font-size:12px;color:var(--muted);cursor:pointer;transition:all .15s}
-.file-drop:hover{border-color:var(--accent);color:var(--accent)}
-.file-drop.has-file{border-style:solid;color:var(--text2);background:var(--bg)}
+.file-drop{display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px dashed color-mix(in srgb,var(--accent) 40%,var(--border));border-radius:10px;padding:14px;text-align:center;font-size:12px;font-weight:600;color:var(--accent);background:var(--card);cursor:pointer;transition:all .15s}
+.file-drop:hover{border-color:var(--accent);background:var(--accent-bg)}
+.file-drop.has-file{border-style:solid;color:var(--text);background:var(--accent-bg)}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap;padding:14px 22px;background:var(--bg);border-top:1px solid var(--border);position:sticky;bottom:0}
+.modal-actions .btn.ghost{background:var(--card)}
+.modal-actions .btn.ghost:hover{background:var(--bg)}
+.modal-actions .sep{flex:1}
 .toast{position:fixed;top:24px;right:24px;background:var(--card);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;padding:12px 18px;font-size:13px;color:var(--text);z-index:1000;box-shadow:0 10px 24px rgba(0,0,0,.3);animation:slideIn .2s}
 .toast.err{border-left-color:var(--danger)}
 .toast.ok{border-left-color:var(--ok)}
@@ -449,48 +470,62 @@ function openNdfModal(){
   const back=document.createElement('div');back.className='modal-back';
   const today=new Date().toISOString().slice(0,10);
   back.innerHTML=`<div class="modal">
-    <h3>Nouvelle note de frais</h3>
+    <div class="modal-head">
+      <div class="modal-head-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></div>
+      <div><h3>Nouvelle note de frais</h3><div class="modal-head-sub">HT et TVA sont calculés à partir du montant TTC.</div></div>
+    </div>
     <form id="ndf-form">
-      <div class="row2">
-        <div class="field"><label>Date du frais</label><input type="date" name="date_frais" value="${today}" required></div>
-        <div class="field"><label>Ville</label><input type="text" name="ville" maxlength="80" placeholder="ex. Lyon"></div>
-      </div>
-      <div class="field"><label>Catégorie</label>
-        <select name="categorie_id" id="ndf-cat" required>
-          <option value="">Choisir…</option>
-          ${NDF_CATS.map(c=>`<option value="${c.id}">${esc(c.libelle)}</option>`).join('')}
-        </select>
-      </div>
-      <div id="ndf-montant-zone">
-        <div class="row2">
-          <div class="field"><label>Montant TTC (€)</label><input type="number" step="0.01" min="0.01" name="montant_ttc" id="ndf-ttc" placeholder="0,00"></div>
-          <div class="field"><label>Taux de TVA</label>
-            <select name="taux_tva" id="ndf-taux">${NDF_TAUX.map(t=>`<option value="${t}">${t?fmtTaux(t):'Sans TVA'}</option>`).join('')}</select>
+      <div class="modal-body">
+        <div class="ndf-section">
+          <div class="ndf-section-titre">Le frais</div>
+          <div class="field"><label>Catégorie</label>
+            <div class="cat-chips" id="ndf-cats">
+              ${NDF_CATS.map((c,i)=>`<label class="cat-chip"><input type="radio" name="categorie_id" value="${c.id}"${i===0?' required':''}><span>${esc(c.libelle)}</span></label>`).join('')}
+            </div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>Date du frais</label><input type="date" name="date_frais" value="${today}" required></div>
+            <div class="field"><label>Ville</label><input type="text" name="ville" maxlength="80" placeholder="ex. Lyon"></div>
           </div>
         </div>
-        <div class="row2">
-          <div class="field"><label>TVA (€)</label><input type="number" step="0.01" min="0" name="montant_tva" id="ndf-tva" placeholder="0,00">
-            <div class="calc-hint">Calculée depuis le taux. Corrigez-la pour un ticket à plusieurs taux.</div></div>
-          <div class="field"><label>Montant HT (€)</label><div class="calc-val" id="ndf-ht">—</div></div>
+        <div class="ndf-section montants">
+          <div class="ndf-section-titre">Montant</div>
+          <div id="ndf-montant-zone">
+            <div class="row2">
+              <div class="field"><label>Montant TTC (€)</label><input type="number" step="0.01" min="0.01" name="montant_ttc" id="ndf-ttc" placeholder="0,00"></div>
+              <div class="field"><label>Taux de TVA</label>
+                <select name="taux_tva" id="ndf-taux">${NDF_TAUX.map(t=>`<option value="${t}">${t?fmtTaux(t):'Sans TVA'}</option>`).join('')}</select>
+              </div>
+            </div>
+            <div class="row2">
+              <div class="field"><label>TVA (€)</label><input type="number" step="0.01" min="0" name="montant_tva" id="ndf-tva" placeholder="0,00">
+                <div class="calc-hint">Modifiable pour un ticket à plusieurs taux.</div></div>
+              <div class="field"><label>Montant HT</label><div class="calc-val" id="ndf-ht">0,00 €</div></div>
+            </div>
+          </div>
+          <div id="ndf-km-zone" style="display:none">
+            <div class="row2">
+              <div class="field"><label>Distance (km)</label><input type="number" step="0.1" min="0.1" name="distance_km" id="ndf-km" placeholder="0"></div>
+              <div class="field"><label>Montant</label><div class="calc-val" id="ndf-km-total">0,00 €</div>
+                <div class="calc-hint" id="ndf-km-hint"></div></div>
+            </div>
+          </div>
         </div>
-      </div>
-      <div id="ndf-km-zone" style="display:none">
-        <div class="row2">
-          <div class="field"><label>Distance (km)</label><input type="number" step="0.1" min="0.1" name="distance_km" id="ndf-km" placeholder="0"></div>
-          <div class="field"><label>Montant</label><div class="calc-val" id="ndf-km-total">—</div>
-            <div class="calc-hint" id="ndf-km-hint"></div></div>
+        <div class="ndf-section">
+          <div class="ndf-section-titre">Détails et justificatif</div>
+          <div class="field"><label>Description</label><textarea name="description" placeholder="Détails, contexte, participants…" maxlength="1000"></textarea></div>
+          <div class="field">
+            <label class="file-drop" id="drop-label">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              <span id="drop-txt">Joindre le justificatif (PDF, JPG, PNG — 10 Mo max)</span>
+              <input type="file" name="justificatif" id="ndf-file" accept="application/pdf,image/*" style="display:none">
+            </label>
+          </div>
         </div>
-      </div>
-      <div class="field"><label>Description</label><textarea name="description" placeholder="Détails, contexte, participants…" maxlength="1000"></textarea></div>
-      <div class="field">
-        <label>Justificatif (PDF, JPG, PNG — 10 Mo max)</label>
-        <label class="file-drop" id="drop-label">
-          <span id="drop-txt">Choisir un fichier ou glisser-déposer</span>
-          <input type="file" name="justificatif" id="ndf-file" accept="application/pdf,image/*" style="display:none">
-        </label>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn ghost" id="ndf-cancel">Annuler</button>
+        <span class="sep"></span>
         <button type="submit" class="btn ghost" name="soumettre" value="0">Enregistrer brouillon</button>
         <button type="submit" class="btn" name="soumettre" value="1">Soumettre à la compta</button>
       </div>
@@ -498,9 +533,9 @@ function openNdfModal(){
   </div>`;
   document.body.appendChild(back);
   const $=s=>back.querySelector(s);
-  const catEl=$('#ndf-cat'),ttcEl=$('#ndf-ttc'),tauxEl=$('#ndf-taux'),tvaEl=$('#ndf-tva'),kmEl=$('#ndf-km');
+  const catsEl=$('#ndf-cats'),ttcEl=$('#ndf-ttc'),tauxEl=$('#ndf-taux'),tvaEl=$('#ndf-tva'),kmEl=$('#ndf-km');
   let tvaManuelle=false;
-  const catCourante=()=>NDF_CATS.find(c=>String(c.id)===catEl.value)||null;
+  const catCourante=()=>{const r=back.querySelector('input[name="categorie_id"]:checked');return r?NDF_CATS.find(c=>String(c.id)===r.value)||null:null;};
   function majCalcul(){
     const cat=catCourante();
     const km=!!(cat&&cat.saisie==='km');
@@ -509,7 +544,7 @@ function openNdfModal(){
     ttcEl.required=!km;kmEl.required=km;
     if(km){
       const r=ndfCalcul(cat,0,0,parseFloat(kmEl.value)||0);
-      $('#ndf-km-total').textContent=r.ttc?fmtMontant(r.ttc):'—';
+      $('#ndf-km-total').textContent=fmtMontant(r.ttc);
       $('#ndf-km-hint').textContent=cat.taux_km?'Barème : '+fmtNombre(cat.taux_km)+' € par km':'Taux kilométrique non défini — prévenir la comptabilité.';
       return;
     }
@@ -517,9 +552,9 @@ function openNdfModal(){
     const r=ndfCalcul(cat,ttc,parseFloat(tauxEl.value)||0,0);
     if(!tvaManuelle)tvaEl.value=ttc?r.tva.toFixed(2):'';
     const tva=parseFloat(tvaEl.value)||0;
-    $('#ndf-ht').textContent=ttc?fmtMontant(ttc-tva):'—';
+    $('#ndf-ht').textContent=fmtMontant(ttc?ttc-tva:0);
   }
-  catEl.addEventListener('change',()=>{
+  catsEl.addEventListener('change',()=>{
     const cat=catCourante();
     if(cat&&cat.saisie!=='km')tauxEl.value=String(cat.taux_tva);
     tvaManuelle=false;majCalcul();
@@ -533,7 +568,7 @@ function openNdfModal(){
   const dropTxt=$('#drop-txt');
   fileEl.addEventListener('change',()=>{
     if(fileEl.files.length){dropLbl.classList.add('has-file');dropTxt.textContent=fileEl.files[0].name;}
-    else{dropLbl.classList.remove('has-file');dropTxt.textContent='Choisir un fichier ou glisser-déposer';}
+    else{dropLbl.classList.remove('has-file');dropTxt.textContent='Joindre le justificatif (PDF, JPG, PNG — 10 Mo max)';}
   });
   $('#ndf-cancel').onclick=()=>back.remove();
   back.onclick=(e)=>{if(e.target===back)back.remove();};
