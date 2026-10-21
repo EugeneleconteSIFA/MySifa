@@ -165,7 +165,7 @@ tr:hover td{background:var(--accent-bg)}
       <div class="logo-sub">Mon coffre RH</div>
     </div>
 
-    <button type="button" class="nav-btn active" id="nav-bulletins" onclick="showTab('bulletins')">
+    <button type="button" class="nav-btn" id="nav-bulletins" onclick="showTab('bulletins')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
       Mes bulletins
     </button>
@@ -173,7 +173,7 @@ tr:hover td{background:var(--accent-bg)}
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
       Autres documents
     </button>
-    <button type="button" class="nav-btn" id="nav-ndf" onclick="showTab('ndf')">
+    <button type="button" class="nav-btn active" id="nav-ndf" onclick="showTab('ndf')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
       Notes de frais
       <span class="nav-badge" id="ndf-badge" style="display:none">0</span>
@@ -192,21 +192,21 @@ tr:hover td{background:var(--accent-bg)}
         </button>
         <div>
           <div class="mobile-topbar-title">Mon coffre</div>
-          <div class="mobile-topbar-sub" id="mobile-sub">Mes bulletins</div>
+          <div class="mobile-topbar-sub" id="mobile-sub">Notes de frais</div>
         </div>
         <button type="button" class="mobile-home-btn" onclick="location.href='/'" aria-label="Accueil">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/></svg>
         </button>
       </div>
 
-      <h1 id="page-title">Mes bulletins</h1>
-      <p class="subtitle" id="page-sub">Bulletins de paie mis à disposition par la comptabilité.</p>
+      <h1 id="page-title">Notes de frais</h1>
+      <p class="subtitle" id="page-sub">Dépôt de justificatifs et suivi des remboursements.</p>
 
       <div class="info-banner">
         Coffre interne SIFA — le bulletin officiel reste celui remis en main propre par la comptabilité.
       </div>
 
-      <div class="pane-tab active" id="pane-bulletins">
+      <div class="pane-tab" id="pane-bulletins">
         <div class="card">
           <div class="filters">
             <label style="font-size:12px;color:var(--muted)">Année :</label>
@@ -223,7 +223,7 @@ tr:hover td{background:var(--accent-bg)}
         </div>
       </div>
 
-      <div class="pane-tab" id="pane-ndf">
+      <div class="pane-tab active" id="pane-ndf">
         <div class="card">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
             <h2 style="margin:0">Mes notes de frais</h2>
@@ -243,7 +243,7 @@ tr:hover td{background:var(--accent-bg)}
 const DOC_TYPE_LABELS={bulletin_paie:'Bulletin de paie',contrat:'Contrat',attestation:'Attestation',autre:'Autre'};
 const MOIS_LABELS=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
-let ME=null;let CURRENT_TAB='bulletins';let bulData={documents:[],annees_disponibles:[]};
+let ME=null;let CURRENT_TAB='ndf';let bulData={documents:[],annees_disponibles:[]};
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function fmtMontant(n){return (Number(n)||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';}
@@ -306,7 +306,7 @@ function _readCoffreTab(){
     if(COFFRE_VALID_TABS.indexOf(h)!==-1)return h;}catch(e){}
   try{var u=new URLSearchParams(location.search).get('tab');
     if(u&&COFFRE_VALID_TABS.indexOf(u)!==-1)return u;}catch(e){}
-  return 'bulletins';
+  return 'ndf';
 }
 function showTab(tab, opts){
   var silent=!!(opts&&opts.silent);
