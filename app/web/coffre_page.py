@@ -155,6 +155,13 @@ tr.ndf-row{cursor:pointer}
 .file-drop.grand svg{color:var(--accent)}
 .file-drop.survol{border-color:var(--accent);background:var(--accent-bg)}
 .drop-sub{font-size:11px;font-weight:400;color:var(--muted)}
+.justif-apercu{display:flex;align-items:center;gap:12px;margin-top:8px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--card)}
+.justif-apercu[hidden]{display:none}
+.justif-apercu img,.justif-doc{width:56px;height:56px;flex-shrink:0;border-radius:6px;border:1px solid var(--border);object-fit:cover;background:var(--bg)}
+.justif-doc{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted)}
+.justif-nom{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:13px}
+.justif-nom strong{font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.justif-nom span{font-size:11px;color:var(--muted)}
 .scan-etat{margin-top:8px;font-size:12px;line-height:1.45;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text2)}
 .scan-etat.encours{color:var(--accent)}
 .scan-etat.ok{border-color:color-mix(in srgb,var(--success) 40%,var(--border));color:var(--text)}
@@ -287,12 +294,14 @@ async function api(url,opts){opts=opts||{};opts.credentials='include';const r=aw
 
 // ── Prévisualisation documents (PDF / image) ──
 const PREVIEW_IMG_RE=/\.(png|jpe?g|gif|webp|heic|bmp|svg)$/i;
-function previewDocument(url, filename){
+// `local` : fichier choisi dans le formulaire et pas encore envoyé (adresse
+// blob:). Il n'entre pas dans l'adresse de la page et ne se télécharge pas.
+function previewDocument(url, filename, local){
   const back=document.createElement('div');
   back.className='preview-back';
   const isImg=PREVIEW_IMG_RE.test(filename||'');
   const sep=url.indexOf('?')>=0?'&':'?';
-  const inlineUrl=url+sep+'inline=1';
+  const inlineUrl=local?url:url+sep+'inline=1';
   const safeName=esc(filename||'Document');
   const safeUrl=esc(url);
   const safeInline=esc(inlineUrl);
@@ -301,7 +310,7 @@ function previewDocument(url, filename){
       <div class="preview-header">
         <div class="preview-title">${safeName}</div>
         <div class="preview-actions">
-          <a class="btn ghost small" href="${safeUrl}" target="_blank" rel="noopener">Télécharger</a>
+          ${local?'':`<a class="btn ghost small" href="${safeUrl}" target="_blank" rel="noopener">Télécharger</a>`}
           <button type="button" class="btn ghost small" id="preview-close">Fermer</button>
         </div>
       </div>
@@ -314,13 +323,14 @@ function previewDocument(url, filename){
   document.body.appendChild(back);
   if(APERCU)APERCU.fermer(true);
   const close=(technique)=>{
-    back.remove();document.removeEventListener('keydown',onKey);
+    back.remove();document.removeEventListener('keydown',onKey,true);
     if(APERCU&&APERCU.el===back){APERCU=null;if(technique!==true)coffreSyncUrl();}
   };
   const onKey=(e)=>{if(e.key==='Escape'){e.stopImmediatePropagation();close();}};
   document.addEventListener('keydown',onKey,true);
   back.querySelector('#preview-close').onclick=()=>close();
   back.addEventListener('click',(e)=>{if(e.target===back)close();});
+  if(local)return;
   APERCU={url,el:back,fermer:close};
   coffreSyncUrl();
 }
@@ -526,13 +536,13 @@ function openNdfModal(noteId){
         <div class="ndf-section">
           <div class="ndf-section-titre">Justificatif</div>
           <div class="field">
-            ${edite&&edite.justificatif_nom?`<div class="calc-hint" style="margin:0 0 6px">Joint : ${esc(edite.justificatif_nom)}</div>`:''}
             <label class="file-drop grand" id="drop-label">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
               <span id="drop-txt">${edite&&edite.justificatif_nom?'Remplacer le justificatif joint':'Photographier ou déposer le justificatif'}</span>
               <span class="drop-sub" id="drop-sub">PDF, JPG ou PNG — 10 Mo max. Les champs marqués « lu » viennent du ticket.</span>
               <input type="file" name="justificatif" id="ndf-file" accept="application/pdf,image/*" style="display:none">
             </label>
+            <div class="justif-apercu" id="justif-apercu" hidden></div>
             <div class="scan-etat" id="scan-etat" hidden></div>
             <div class="calc-hint" id="scan-manuel">Pas de justificatif ? Remplissez directement les champs ci-dessous.</div>
           </div>
@@ -688,9 +698,37 @@ function openNdfModal(noteId){
     }catch(e){etat(e.message,'err');}
     finally{boutons.forEach(b=>b.disabled=false);}
   }
+  // Vignette du justificatif : le fichier qu'on vient de choisir, sinon celui
+  // déjà joint au brouillon. « Voir » l'ouvre en grand par-dessus le formulaire.
+  let urlLocale=null;
+  function majApercu(){
+    const zone=$('#justif-apercu');
+    if(urlLocale){URL.revokeObjectURL(urlLocale);urlLocale=null;}
+    const f=fileEl.files[0];
+    zone.innerHTML='';
+    if(f){
+      urlLocale=URL.createObjectURL(f);
+      const image=(f.type||'').startsWith('image/');
+      zone.innerHTML=(image?`<img alt="" src="${esc(urlLocale)}">`:'<div class="justif-doc">PDF</div>')+
+        `<div class="justif-nom"><strong></strong><span>Nouveau justificatif</span></div>`+
+        `<button type="button" class="btn ghost small" id="justif-voir">Voir</button>`;
+      zone.querySelector('strong').textContent=f.name;
+      zone.querySelector('#justif-voir').onclick=()=>previewDocument(urlLocale,f.name,true);
+      zone.hidden=false;
+    }else if(edite&&edite.justificatif_nom){
+      const url='/api/coffre/notes-frais/'+edite.id+'/justificatif';
+      const image=PREVIEW_IMG_RE.test(edite.justificatif_nom);
+      zone.innerHTML=(image?`<img alt="" src="${esc(url)}?inline=1">`:'<div class="justif-doc">PDF</div>')+
+        `<div class="justif-nom"><strong></strong><span>Justificatif joint</span></div>`+
+        `<button type="button" class="btn ghost small" data-preview-url="${esc(url)}" data-preview-name="${esc(edite.justificatif_nom)}">Voir</button>`;
+      zone.querySelector('strong').textContent=edite.justificatif_nom;
+      zone.hidden=false;
+    }else zone.hidden=true;
+  }
   function fichierChoisi(){
+    majApercu();
     if(fileEl.files.length){
-      dropLbl.classList.add('has-file');dropTxt.textContent=fileEl.files[0].name;
+      dropLbl.classList.add('has-file');dropTxt.textContent='Remplacer le justificatif';
       $('#scan-manuel').hidden=true;
       lire(fileEl.files[0]);
     }else{
@@ -706,7 +744,9 @@ function openNdfModal(noteId){
     if(!e.dataTransfer||!e.dataTransfer.files.length)return;
     fileEl.files=e.dataTransfer.files;fichierChoisi();
   });
+  majApercu();
   const fermer=(technique)=>{
+    if(urlLocale)URL.revokeObjectURL(urlLocale);
     back.remove();
     if(edite&&NDF_EDITION&&NDF_EDITION.id===edite.id){NDF_EDITION=null;if(technique!==true)coffreSyncUrl();}
   };
