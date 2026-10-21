@@ -2,8 +2,8 @@
 Catégories de notes de frais, taux de TVA et indemnités kilométriques.
 
 La catégorie d'une note de frais était un texte libre. Elle devient un
-référentiel `ndf_categories`, éditable par la comptabilité dans Coffre RH ›
-Catégories, seedé avec les natures de la feuille de frais Excel de SIFA
+référentiel `ndf_categories`, éditable par la comptabilité dans Notes de frais ›
+Réglages, seedé avec les natures de la feuille de frais Excel de SIFA
 (Repas, Déplacement, Divers, KM). Le taux de TVA y est un défaut : la note
 porte son propre taux, puisqu'un même repas peut être à 10 % ou à 20 %.
 
