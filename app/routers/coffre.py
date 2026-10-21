@@ -23,7 +23,7 @@ from typing import Optional
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 
-from config import BASE_DIR, ROLE_COMPTABILITE, ROLE_SUPERADMIN
+from config import BASE_DIR, NDF_TAUX_TVA, ROLE_COMPTABILITE, ROLE_SUPERADMIN
 from database import get_db
 from services.auth_service import get_current_user
 
@@ -155,6 +155,64 @@ def download_document(doc_id: int, request: Request, inline: bool = False):
 
 # ── Notes de frais — vue salarié (dépôt + workflow) ──────────────────────
 
+def ndf_categories(conn, toutes: bool = False) -> list:
+    """Catégories de notes de frais, actives seulement sauf `toutes`."""
+    where = "" if toutes else "WHERE actif=1"
+    rows = conn.execute(
+        f"""SELECT id,code,libelle,saisie,taux_tva,taux_km,ordre,actif
+            FROM ndf_categories {where} ORDER BY ordre, libelle"""
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def ndf_montants(saisie: str, montant_ttc: Optional[float], taux_tva: float,
+                 montant_tva: Optional[float], distance_km: Optional[float],
+                 taux_km: Optional[float]) -> dict:
+    """TTC, TVA et HT d'une note. Même calcul que `ndfCalcul()` de la page.
+
+    Kilométrique : TTC = distance × taux, sans TVA. Sinon la TVA se déduit du
+    TTC et du taux, sauf si l'utilisateur l'a corrigée (ticket à deux taux).
+    """
+    if saisie == "km":
+        if not distance_km or distance_km <= 0:
+            raise HTTPException(400, "Distance invalide — nombre de km supérieur à 0.")
+        if not taux_km or taux_km <= 0:
+            raise HTTPException(400, "Taux kilométrique non défini — à régler par la comptabilité dans Coffre RH › Catégories.")
+        ttc = round(distance_km * taux_km, 2)
+        return {"montant_ttc": ttc, "montant_tva": 0.0, "montant_ht": ttc, "taux_tva": 0.0}
+    if montant_ttc is None or montant_ttc <= 0:
+        raise HTTPException(400, "Montant TTC invalide — valeur supérieure à 0.")
+    ttc = round(montant_ttc, 2)
+    if montant_tva is None:
+        montant_tva = round(ttc - ttc / (1 + taux_tva / 100), 2)
+    if montant_tva < 0 or montant_tva >= ttc:
+        raise HTTPException(400, "TVA invalide — doit rester inférieure au montant TTC.")
+    return {
+        "montant_ttc": ttc,
+        "montant_tva": round(montant_tva, 2),
+        "montant_ht": round(ttc - montant_tva, 2),
+        "taux_tva": taux_tva,
+    }
+
+
+def _nombre_ou_none(v: str, quoi: str) -> Optional[float]:
+    v = (v or "").strip().replace(",", ".")
+    if not v:
+        return None
+    try:
+        return float(v)
+    except ValueError:
+        raise HTTPException(400, f"{quoi} invalide — nombre attendu.")
+
+
+@router.get("/api/coffre/ndf-categories")
+def list_ndf_categories(request: Request):
+    get_current_user(request)
+    with get_db() as conn:
+        cats = ndf_categories(conn)
+    return {"categories": cats, "taux_tva": list(NDF_TAUX_TVA)}
+
+
 @router.get("/api/coffre/notes-frais")
 def list_my_ndf(request: Request, annee: Optional[int] = None):
     user = get_current_user(request)
@@ -166,7 +224,8 @@ def list_my_ndf(request: Request, annee: Optional[int] = None):
         params.append(str(annee))
     with get_db() as conn:
         rows = conn.execute(
-            f"""SELECT id,date_frais,categorie,montant_ttc,montant_tva,description,
+            f"""SELECT id,date_frais,categorie,categorie_id,montant_ttc,montant_tva,
+                       montant_ht,taux_tva,distance_km,taux_km,ville,description,
                        justificatif_nom,statut,created_at,soumise_at,validee_at,
                        validee_by_nom,payee_at,motif_refus
                 FROM notes_de_frais
@@ -181,9 +240,12 @@ def list_my_ndf(request: Request, annee: Optional[int] = None):
 async def create_ndf(
     request: Request,
     date_frais: str = Form(...),
-    categorie: str = Form(""),
-    montant_ttc: float = Form(...),
+    categorie_id: int = Form(...),
+    montant_ttc: str = Form(""),
+    taux_tva: str = Form(""),
     montant_tva: str = Form(""),
+    distance_km: str = Form(""),
+    ville: str = Form(""),
     description: str = Form(""),
     soumettre: str = Form("0"),
     justificatif: Optional[UploadFile] = File(None),
@@ -197,14 +259,27 @@ async def create_ndf(
         datetime.fromisoformat(date_frais[:10])
     except ValueError:
         raise HTTPException(400, "Date invalide (format YYYY-MM-DD attendu)")
-    if montant_ttc <= 0:
-        raise HTTPException(400, "Montant TTC doit être positif")
-    tva_val: Optional[float] = None
-    if montant_tva.strip():
-        try:
-            tva_val = float(montant_tva.replace(",", "."))
-        except ValueError:
-            raise HTTPException(400, "TVA invalide")
+    with get_db() as conn:
+        cat = conn.execute(
+            "SELECT id,libelle,saisie,taux_tva,taux_km FROM ndf_categories WHERE id=? AND actif=1",
+            (categorie_id,),
+        ).fetchone()
+    if not cat:
+        raise HTTPException(400, "Catégorie inconnue — choisir dans la liste.")
+    taux = _nombre_ou_none(taux_tva, "Taux de TVA")
+    if taux is None:
+        taux = float(cat["taux_tva"])
+    if taux not in NDF_TAUX_TVA:
+        raise HTTPException(400, "Taux de TVA invalide.")
+    m = ndf_montants(
+        cat["saisie"],
+        _nombre_ou_none(montant_ttc, "Montant TTC"),
+        taux,
+        _nombre_ou_none(montant_tva, "TVA"),
+        _nombre_ou_none(distance_km, "Distance"),
+        cat["taux_km"],
+    )
+    est_km = cat["saisie"] == "km"
 
     # Justificatif
     just_path: Optional[str] = None
@@ -233,12 +308,16 @@ async def create_ndf(
     with get_db() as conn:
         cur = conn.execute(
             """INSERT INTO notes_de_frais
-               (employe_user_id,date_frais,categorie,montant_ttc,montant_tva,description,
+               (employe_user_id,date_frais,categorie,categorie_id,montant_ttc,montant_tva,
+                montant_ht,taux_tva,distance_km,taux_km,ville,description,
                 justificatif_path,justificatif_nom,statut,created_at,soumise_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
-                uid, date_frais[:10], (categorie or "").strip()[:80],
-                float(montant_ttc), tva_val,
+                uid, date_frais[:10], cat["libelle"], cat["id"],
+                m["montant_ttc"], m["montant_tva"], m["montant_ht"], m["taux_tva"],
+                _nombre_ou_none(distance_km, "Distance") if est_km else None,
+                cat["taux_km"] if est_km else None,
+                (ville or "").strip()[:80] or None,
                 (description or "").strip()[:1000],
                 just_path, just_nom, statut, now,
                 now if do_soumettre else None,
