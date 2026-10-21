@@ -3238,13 +3238,35 @@ def list_api_keys(request: Request):
 
 
 @router.get("/api/settings/ia-usage")
-def ia_usage_synthese(request: Request, jours: int = 30):
-    """Consommation de l'IA sur la période : coût, utilisateurs, fonctions."""
+def ia_usage_synthese(request: Request, jours: int = 30, utilisateur: str = "", fonction: str = "",
+                      application: Optional[str] = None, modele: str = "", statut: str = ""):
+    """Consommation de l'IA sur la période : coût, applications et écrans,
+    utilisateurs, fonctions, modèles. Filtres facultatifs ; `application=`
+    vide (présent mais vide) désigne les appels sans application connue."""
     require_settings_audit(request)
     from database import get_db
     from app.services.ia_usage import synthese
+    filtres = {"utilisateur": utilisateur, "fonction": fonction, "modele": modele, "statut": statut}
+    if application is not None and "application" in request.query_params:
+        filtres["application"] = application
     with get_db() as conn:
-        return synthese(conn, jours)
+        res = synthese(conn, jours, filtres)
+    # Présence de la clé (même vide) : le front doit pouvoir resélectionner « Non renseignée ».
+    res["filtres"]["application_pose"] = "application" in request.query_params
+    return res
+
+
+@router.get("/api/settings/ia-usage/appels/{appel_id}")
+def ia_usage_appel(appel_id: int, request: Request):
+    """Fiche d'un appel : origine, modèles, tokens, coût décomposé, erreur."""
+    require_settings_audit(request)
+    from database import get_db
+    from app.services.ia_usage import detail
+    with get_db() as conn:
+        d = detail(conn, appel_id)
+    if not d:
+        raise HTTPException(status_code=404, detail="Appel introuvable.")
+    return d
 
 
 @router.post("/api/settings/api-keys")

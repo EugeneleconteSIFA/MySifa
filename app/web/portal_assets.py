@@ -1625,7 +1625,7 @@ function renderPortal(){
       draggable:'true',
       onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/tools';}
     },
-      h('div',{className:'portal-app-icon'},iconEl('tool',28)),
+      h('div',{className:'portal-app-icon'},iconEl('mytools',28)),
       h('div',{className:'portal-app-name'},'MyTools'),
       h('div',{className:'portal-app-desc'},'Étiquettes, formulaires, PDF, traduction')
     )});

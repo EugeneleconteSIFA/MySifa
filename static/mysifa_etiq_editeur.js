@@ -536,16 +536,16 @@
       placeholder: 'Ex. Ajoute un SSCC en GS1-128 sous le code produit, préfixe 3012345, avec le numéro en clair au-dessus.' });
     const go = bouton('Proposer', async () => {
       if (!consigne.value.trim()) { toast('Décrire la modification souhaitée.', 'danger'); return; }
-      ED.iaBusy = true; go.disabled = true; go.textContent = 'Claude travaille…';
+      ED.iaBusy = true; go.disabled = true; go.textContent = 'Claude travaille…'; go.classList.add('ia-travail');
       try {
         const r = await api('/ia/proposer', { method: 'POST', body: {
           consigne: consigne.value, modele: modeleIa.select.value, largeur_mm: ED.m.largeur_mm, hauteur_mm: ED.m.hauteur_mm, dpi: ED.m.dpi, layout: nettoyer(layout()) } });
         ED.propo = r; ED.voirPropo = true; X().rendre();
-      } catch (e) { toast(e.message, 'danger'); go.disabled = false; go.textContent = 'Proposer'; }
+      } catch (e) { toast(e.message, 'danger'); go.disabled = false; go.textContent = 'Proposer'; go.classList.remove('ia-travail'); }
       ED.iaBusy = false;
-    }, 'accent', 'zap');
+    }, 'ia', 'zap');
     consigne.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) go.click(); });
-    const blocs = [h('div', { cls: 'es-panneau-titre', text: 'Assistant' }),
+    const blocs = [h('div', { cls: 'es-panneau-titre' }, 'Assistant ', h('span', { cls: 'ia-badge', text: 'IA' })),
       h('div', { cls: 'es-aide', text: 'Décrire la modification. Claude propose une nouvelle mise en page, rien n\'est enregistré avant « Appliquer ».' })];
     if (ED.propo) {
       const p = ED.propo;
@@ -567,7 +567,7 @@
           }, 'accent', 'check'))));
     }
     blocs.push(modeleIa.bloc, consigne, h('div', { cls: 'es-ligne-actions' }, go));
-    return h('div', { cls: 'es-panneau es-ia' }, ...blocs);
+    return h('div', { cls: 'es-panneau es-ia ia-zone' }, ...blocs);
   }
 
   // Les clés « _xxx » sont de l'état d'écran (variable dépliée…), pas des données.

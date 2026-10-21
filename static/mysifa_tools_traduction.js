@@ -80,13 +80,13 @@
       + '<div class="ttr-panneau"><textarea class="ttr-zone" data-r="src" placeholder="Saisir ou coller le texte à traduire, ou déposer un fichier .txt" spellcheck="true"></textarea>'
       + '<div class="ttr-pied"><span class="ttr-compte" data-r="compte">0 caractère</span>'
       + '<span class="ttr-actions"><button type="button" class="ttr-btn" data-r="effacer" data-bulle="Vider">Effacer</button>'
-      + '<button type="button" class="ttr-btn ttr-btn-accent" data-r="go" data-bulle="Traduire">Traduire</button></span></div></div>'
+      + '<button type="button" class="ttr-btn ttr-btn-accent ia-btn" data-r="go" data-bulle="Utilise l\'IA">Traduire</button></span></div></div>'
       + '<div class="ttr-panneau ttr-panneau-sortie"><textarea class="ttr-zone" data-r="dst" readonly placeholder="Traduction"></textarea>'
       + '<div class="ttr-pied"><span class="ttr-detecte" data-r="detecte"></span>'
       + '<span class="ttr-actions"><button type="button" class="ttr-btn" data-r="copier" data-bulle="Presse-papiers">Copier</button>'
       + '<button type="button" class="ttr-btn" data-r="telecharger" data-bulle="Fichier texte">Télécharger .txt</button></span></div></div>'
       + '</div>'
-      + '<div class="ttr-aide">Cmd/Ctrl + Entrée pour traduire. <span class="ttr-usage"></span></div>';
+      + '<div class="ttr-aide"><span class="ia-texte">Traduction automatique par l\'IA de DeepL : relire avant d\'envoyer.</span> Cmd/Ctrl + Entrée pour traduire. <span class="ttr-usage"></span></div>';
     const q = r => h.querySelector('[data-r="' + r + '"]');
     if (window.MySifaBulles) q('go').setAttribute('data-bulle-touche', window.MySifaBulles.touche('↵'));
     const de = q('de'), vers = q('vers'), src = q('src'), dst = q('dst');

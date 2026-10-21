@@ -90,6 +90,7 @@ def tools_page(request: Request):
 # Assets versionnés par asset() : remplacés dans le gabarit à la volée.
 _ASSETS = (
     "/static/mysifa_tools.css",
+    "/static/mysifa_ia.css",
     "/static/mysifa_etiq_specifiques.css",
     "/static/mysifa_bulles.js",
     "/static/mysifa_scanner.js",
@@ -103,7 +104,9 @@ _ASSETS = (
     "/static/mysifa_tools.js",
 )
 
-# (clé, libellé, icône, infobulle)
+# (clé, libellé, icône, infobulle) ; IA_OUTILS : outils qui font appel à l'IA
+# (pastille violette, static/mysifa_ia.css).
+IA_OUTILS = {"etiquettes", "formulaires", "traduction"}
 _NAV = [
     ("etiquettes", "Étiquettes",
      '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>', "Traçabilité"),
@@ -126,7 +129,9 @@ def _nav_html() -> str:
         lignes.append(
             f'      <button type="button" class="nav-btn" data-outil="{cle}" data-bulle="{bulle}" onclick="toolsAller(\'{cle}\')">'
             f'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
-            f'stroke-linecap="round" stroke-linejoin="round">{svg}</svg>{label}</button>'
+            f'stroke-linecap="round" stroke-linejoin="round">{svg}</svg>{label}'
+            + ('<span class="ia-badge" style="margin-left:auto">IA</span>' if cle in IA_OUTILS else '')
+            + '</button>'
         )
     return "\n".join(lignes)
 
@@ -144,6 +149,7 @@ TOOLS_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_sidebar.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_tools.css">
+<link rel="stylesheet" href="/static/mysifa_ia.css">
 <link rel="stylesheet" href="/static/mysifa_etiq_specifiques.css">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <script src="/static/mysifa_theme.js"></script>

@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR, ENV_NAME, IS_STAGING, UPLOADS_ROOT, SLOW_REQUEST_MS, ERP2_HOSTS, ERP2_PREFIXE
 from app.core.audit_middleware import AuditMiddleware
+from app.core.requete_courante import RequeteCouranteMiddleware
 from app.web.html import render_frontend_html
 
 from routers.auth       import router as auth_router
@@ -759,6 +760,11 @@ async def inject_tache_quick(request: Request, call_next):
 # AVANT GZip pour rester a l'interieur de la compression, et cede le pas aux
 # appels explicites des routers, plus precis (voir app/core/audit_middleware.py).
 app.add_middleware(AuditMiddleware)
+
+# Requête en cours (API appelée + page d'origine) lisible par les services :
+# le suivi de l'usage IA s'en sert pour dire d'où vient chaque appel
+# (app/core/requete_courante.py).
+app.add_middleware(RequeteCouranteMiddleware)
 
 # Compression des reponses (>1 Ko). Ajoute en dernier => middleware le plus
 # externe : compresse apres l'injection du bandeau staging (qui lit le HTML

@@ -279,6 +279,7 @@ def converser(conn, user: dict, historique: list[dict], page: Optional[dict] = N
         except Exception as e:
             raise ErreurAgent(f"Appel au modèle en échec : {e}")
         ia_usage.noter(rep, "agent")
+        ia_usage.preciser(modele_demande=choix["id"])
         texte = "".join(b.text for b in rep.content if getattr(b, "type", "") == "text")
         if rep.stop_reason == "refusal":
             texte = texte or "Je ne peux pas traiter cette demande."

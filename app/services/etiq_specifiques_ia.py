@@ -237,6 +237,7 @@ def proposer(consigne: str, largeur_mm: float, hauteur_mm: float, dpi: int,
     except Exception as e:
         raise EtiquetteInvalide(f"Appel à l'assistant en échec : {e}")
     ia_usage.noter(reponse, "etiquettes")
+    ia_usage.preciser(modele_demande=choix["id"], fichiers=len(pieces or []))
 
     if getattr(reponse, "stop_reason", "") == "refusal":
         raise EtiquetteInvalide("L'assistant a refusé cette demande. Reformuler la consigne.")

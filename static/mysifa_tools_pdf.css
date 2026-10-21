@@ -59,14 +59,14 @@
 }
 .tpdf-btn:hover:not(:disabled) { background: var(--card); border-color: var(--accent); color: var(--text); }
 .tpdf-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.tpdf-btn:disabled { opacity: .4; cursor: default; }
+.tpdf-btn:disabled { opacity: .4; cursor: default; pointer-events: none; }
 .tpdf-btn.tpdf-actif,
 .tpdf-btn.tpdf-actif:hover { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
 .tpdf-btn-txt { padding: 0 11px; }
 .tpdf-btn-plein { background: var(--accent); border-color: var(--accent); color: white; padding: 0 11px; }
 .tpdf-btn-plein:hover:not(:disabled) { background: var(--accent); color: white; filter: brightness(1.08); }
 .tpdf-btn-mini { min-width: 28px; height: 28px; padding: 0 5px; }
-.tpdf-btn-props { display: none; }
+.tpdf-btn-props, .tpdf-bw-btn-props { display: none; }
 
 .tpdf-champ {
   background: var(--card);
@@ -201,11 +201,17 @@ circle.tpdf-poignee { cursor: move; }
 .tpdf-sans-doc .tpdf-vide {
   display: flex;
   flex-direction: column;
+  gap: 12px;
+  position: absolute;
+  inset: 24px;
+}
+.tpdf-vide-zone {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  position: absolute;
-  inset: 24px;
   background: var(--card);
   border: 2px dashed var(--border);
   border-radius: 14px;
@@ -216,8 +222,10 @@ circle.tpdf-poignee { cursor: move; }
   padding: 24px;
   transition: border-color .15s, color .15s;
 }
-.tpdf-sans-doc .tpdf-vide:hover,
-.tpdf-sans-doc .tpdf-vide:focus-visible { border-color: var(--accent); color: var(--text); outline: none; }
+.tpdf-vide-zone:hover,
+.tpdf-vide-zone:focus-visible { border-color: var(--accent); color: var(--text); outline: none; }
+.tpdf-vide .tpdf-vide-actions { display: flex; justify-content: center; gap: 8px; }
+.tpdf-vide-actions .tpdf-b { gap: 8px; background: var(--card); }
 .tpdf-vide-ico { color: var(--accent); }
 .tpdf-vide-titre { font-size: 15px; font-weight: 700; color: var(--text); }
 .tpdf-vide-sous { font-size: 12px; color: var(--muted); }
@@ -369,7 +377,7 @@ circle.tpdf-poignee { cursor: move; }
   .tpdf-btn-txt, .tpdf-btn-plein { padding: 0 7px; }
   .tpdf-q { width: 140px; }
   .tpdf-fin { margin-left: 0; }
-  .tpdf-btn-props { display: inline-flex; }
+  .tpdf-btn-props, .tpdf-bw-btn-props { display: inline-flex; }
   .tpdf-corps { flex-direction: column; }
   .tpdf-vignettes {
     order: 2;
@@ -402,3 +410,82 @@ circle.tpdf-poignee { cursor: move; }
   .tpdf-props-ouvert .tpdf-props { transform: none; }
   .tpdf-props-fermer { display: inline-flex; }
 }
+
+/* ── Lot 2 : extensions (texte existant, formulaires, création) ──── */
+.tpdf-ext { display: contents; }
+.tpdf-bw { display: inline-flex; }
+
+/* Calque HTML au-dessus de la page : contrôles de formulaire, zones de
+   texte modifiables, éditeurs posés sur la page. */
+.tpdf-html { position: absolute; inset: 0; pointer-events: none; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+.tpdf-html > * { pointer-events: auto; position: absolute; box-sizing: border-box; }
+.tpdf-html:not([data-outil="select"]) > .tpdf-fc { pointer-events: none; }
+
+/* Champs de formulaire existants : posés sur une feuille toujours blanche,
+   d'où le texte noir quel que soit le thème. */
+.tpdf-fc {
+  margin: 0;
+  padding: 0 3px;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  background: var(--accent-bg);
+  color: black;
+  font-family: Helvetica, Arial, sans-serif;
+  outline: none;
+}
+textarea.tpdf-fc { resize: none; padding-top: 2px; line-height: 1.2; }
+select.tpdf-fc { padding: 0 1px; }
+.tpdf-fc:focus, .tpdf-fc:focus-within { box-shadow: 0 0 0 2px var(--accent); }
+.tpdf-fc-coche { display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; }
+.tpdf-fc-coche input { margin: 0; width: 80%; height: 80%; max-width: 18px; max-height: 18px; accent-color: var(--accent); cursor: pointer; }
+.tpdf-fc.tpdf-fc-ro { border-style: dashed; border-color: var(--muted); background: transparent; cursor: not-allowed; }
+.tpdf-fc-vu { box-shadow: 0 0 0 3px var(--warn); }
+
+/* Modifier un texte existant */
+.tpdf-tx { border-radius: 2px; cursor: text; }
+.tpdf-tx:hover { background: var(--accent-bg); outline: 1px solid var(--accent); }
+.tpdf-tx-fait { outline: 1px dashed var(--accent); }
+.tpdf-tx-edit, .tpdf-cell-edit {
+  margin: 0;
+  border: 0;
+  outline: 2px solid var(--accent);
+  border-radius: 1px;
+  padding: 0 1px;
+  line-height: 1;
+  z-index: 2;
+}
+.tpdf-cell-edit { background: white; color: black; font-family: Helvetica, Arial, sans-serif; resize: none; line-height: 1.25; }
+.tpdf-avert { color: var(--warn); font-weight: 600; }
+
+/* Champs créés (mode conception) */
+.tpdf-chp { fill: var(--accent-bg); stroke: var(--accent); stroke-width: .75; }
+.tpdf-chp-cadre { fill: none; stroke: var(--muted); stroke-width: .75; }
+.tpdf-chp-txt { fill: var(--accent); }
+.tpdf-chp-nom { fill: var(--accent); font-weight: 600; }
+.tpdf-chp-fl { fill: none; stroke: var(--accent); }
+.tpdf-poignee-col { cursor: ew-resize; }
+
+/* Liste des champs du formulaire */
+.tpdf-lc { display: flex; flex-direction: column; gap: 4px; }
+.tpdf-lc-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  width: 100%;
+  padding: 7px 9px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tpdf-lc-item:hover { border-color: var(--accent); }
+.tpdf-lc-nom { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tpdf-lc-type { font-size: 11px; color: var(--muted); text-align: right; }
+.tpdf-lc-val { grid-column: 1 / -1; font-size: 12px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Alignement (bloc de texte) */
+.tpdf-seg { display: flex; gap: 4px; }
+.tpdf-seg .tpdf-btn { flex: 1; font-size: 12px; }

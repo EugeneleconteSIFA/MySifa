@@ -276,7 +276,10 @@
       try {
         var fk = await fontkit();
         c.out.registerFontkit(fk);
-        c.uni[g] = await c.out.embedFont(await octetsNoto(g), { subset: true });
+        // Police entière : le sous-ensemble de pdf-lib perd des glyphes avec
+        // cette police (vérifié : « Œuvre » sortait « Œuv »). ~550 Ko de plus,
+        // seulement quand le texte sort de WinAnsi.
+        c.uni[g] = await c.out.embedFont(await octetsNoto(g), { subset: false });
       } catch (e) {
         c.uni[g] = c.std[k];
         toast('Police Unicode indisponible — caractères spéciaux remplacés par « ? ».', 'info');
@@ -475,11 +478,36 @@
   }
 
   /* ── Construction du DOM ──────────────────────────────────────────── */
+  /* Infobulles : mécanisme commun static/mysifa_bulles.js (data-bulle, un ou
+     deux mots). Posées sur une enveloppe : un bouton désactivé ne reçoit pas
+     le survol, son enveloppe si. */
+  var BULLES = {
+    ouvrir: 'Ouvrir', enregistrer: 'Enregistrer', imprimer: 'Imprimer', annuler: 'Annuler', retablir: 'Rétablir',
+    image: 'Image', signer: 'Signer', pivg: 'Pivoter gauche', pivd: 'Pivoter droite', dupliquer: 'Dupliquer',
+    blanche: 'Page blanche', supprimerPages: 'Supprimer', extraire: 'Extraire', decouper: 'Découper',
+    compresser: 'Compresser', formulaire: 'Formulaire', zmoins: 'Zoom −', zplus: 'Zoom +', pagePrec: 'Précédente',
+    pageSuiv: 'Suivante', rechPrec: 'Précédent', rechSuiv: 'Suivant', props: 'Propriétés', nouveau: 'Nouveau',
+    select: 'Sélection', texte: 'Texte', surligneur: 'Surligneur', rect: 'Rectangle', ellipse: 'Ellipse', ligne: 'Ligne',
+    fleche: 'Flèche', main: 'Main levée', tampon: 'Tampon', champ: 'Champ', editer: 'Modifier texte', bloc: 'Bloc texte', tableau: 'Tableau'
+  };
+  var NOMS_COULEURS = { '#d92626': 'Rouge', '#e8590c': 'Orange', '#f2b705': 'Jaune', '#2f9e44': 'Vert', '#1971c2': 'Bleu', '#7048e8': 'Violet', '#1a1a1a': 'Noir', '#ffffff': 'Blanc', '#1c3f94': 'Bleu' };
+  var MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
+  function touche(k, maj) {
+    var t = window.MySifaBulles && window.MySifaBulles.touche ? window.MySifaBulles.touche(k) : (MAC ? '⌘' : 'Ctrl+') + k;
+    return maj ? (MAC ? '⇧' : 'Maj+') + t : t;
+  }
+  var TOUCHES = { annuler: ['Z'], retablir: ['Z', 1], enregistrer: ['S'] };
+  function attrBulle(mot, tch) {
+    return ' data-bulle="' + mot + '" data-bulle-base="' + mot + '"' + (tch ? ' data-bulle-touche="' + tch + '"' : '');
+  }
   function bouton(act, icone, titre, extra) {
-    return '<button type="button" class="tpdf-btn' + (extra && extra.cls ? ' ' + extra.cls : '') + '" data-act="' + act + '"' +
-      (extra && extra.doc ? ' data-doc="1"' : '') + (extra && extra.outil ? ' data-outil="' + extra.outil + '"' : '') +
-      ' title="' + titre + '" aria-label="' + titre + '">' + ico(icone) +
-      (extra && extra.txt ? '<span>' + extra.txt + '</span>' : '') + '</button>';
+    extra = extra || {};
+    var mot = extra.bulle || BULLES[extra.outil || act] || titre, t = TOUCHES[act];
+    return '<span class="tpdf-bw' + (extra.cls ? ' tpdf-bw-' + extra.cls.split(' ')[0].replace('tpdf-', '') : '') + '"' + attrBulle(mot, t ? touche(t[0], t[1]) : '') + '>' +
+      '<button type="button" class="tpdf-btn' + (extra.cls ? ' ' + extra.cls : '') + '" data-act="' + act + '"' +
+      (extra.doc ? ' data-doc="1"' : '') + (extra.outil ? ' data-outil="' + extra.outil + '"' : '') +
+      ' aria-label="' + titre + '">' + ico(icone) +
+      (extra.txt ? '<span>' + extra.txt + '</span>' : '') + '</button></span>';
   }
   function outilBtn(o, icone, titre) { return bouton('outil', icone, titre, { doc: 1, outil: o }); }
 
@@ -528,12 +556,12 @@
         '</div>' +
         '<div class="tpdf-groupe">' +
           bouton('zmoins', 'zmoins', 'Zoom arrière', { doc: 1 }) +
-          '<select class="tpdf-zoom" data-doc="1" aria-label="Zoom">' + zooms + '</select>' +
+          '<span class="tpdf-bw" data-bulle="Zoom"><select class="tpdf-zoom" data-doc="1" aria-label="Zoom">' + zooms + '</select></span>' +
           bouton('zplus', 'zplus', 'Zoom avant', { doc: 1 }) +
         '</div>' +
         '<div class="tpdf-groupe">' +
           bouton('pagePrec', 'prec', 'Page précédente', { doc: 1 }) +
-          '<span class="tpdf-nav"><input class="tpdf-champ tpdf-num" type="text" inputmode="numeric" data-doc="1" aria-label="Page"><span class="tpdf-total">/ 0</span></span>' +
+          '<span class="tpdf-nav" data-bulle="Page"><input class="tpdf-champ tpdf-num" type="text" inputmode="numeric" data-doc="1" aria-label="Page"><span class="tpdf-total">/ 0</span></span>' +
           bouton('pageSuiv', 'suiv', 'Page suivante', { doc: 1 }) +
         '</div>' +
         '<div class="tpdf-groupe tpdf-recherche">' +
@@ -749,6 +777,10 @@
   function rendreBarre() {
     var el = S.el, vide = !S.pages.length;
     el.querySelectorAll('[data-doc]').forEach(function (b) { b.disabled = vide; });
+    el.querySelectorAll('.tpdf-barre [data-bulle-base]').forEach(function (w) {
+      var b = w.querySelector('[data-doc]');
+      w.setAttribute('data-bulle', w.getAttribute('data-bulle-base') + (vide && b ? ' · aucun document' : ''));
+    });
     if (!vide) {
       el.querySelector('[data-act="annuler"]').disabled = !S.hist.length;
       el.querySelector('[data-act="retablir"]').disabled = !S.redo.length;
@@ -858,7 +890,7 @@
       var n = document.createElement('span'); n.textContent = i + 1; pied.appendChild(n);
       if (p.annots.length) {
         var b = document.createElement('span'); b.className = 'tpdf-vig-badge';
-        b.title = p.annots.length + ' annotation' + (p.annots.length > 1 ? 's' : '');
+        b.setAttribute('data-bulle', p.annots.length > 1 ? 'Annotations' : 'Annotation');
         b.textContent = p.annots.length; pied.appendChild(b);
       }
       v.appendChild(pied);
@@ -1442,7 +1474,7 @@
     var encre = ENCRES[0], enc = opts.querySelector('.tpdf-encres');
     ENCRES.forEach(function (c, i) {
       var b = document.createElement('button'); b.type = 'button'; b.className = 'tpdf-pastille' + (i ? '' : ' tpdf-actif');
-      b.style.background = c; b.title = i ? 'Encre bleue' : 'Encre noire'; b.setAttribute('aria-label', b.title);
+      b.style.background = c; b.setAttribute('aria-label', i ? 'Encre bleue' : 'Encre noire'); b.setAttribute('data-bulle', i ? 'Bleu' : 'Noir');
       b.addEventListener('click', function () { encre = c; enc.querySelectorAll('.tpdf-pastille').forEach(function (x) { x.classList.toggle('tpdf-actif', x === b); }); });
       enc.appendChild(b);
     });
@@ -1507,7 +1539,7 @@
     m.className = 'tpdf-modale'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true');
     var tete = document.createElement('div'); tete.className = 'tpdf-modale-tete';
     var h = document.createElement('div'); h.className = 'tpdf-modale-titre'; h.textContent = titre;
-    var x = document.createElement('button'); x.type = 'button'; x.className = 'tpdf-btn tpdf-btn-mini'; x.title = 'Fermer'; x.setAttribute('aria-label', 'Fermer');
+    var x = document.createElement('button'); x.type = 'button'; x.className = 'tpdf-btn tpdf-btn-mini'; x.setAttribute('data-bulle', 'Fermer'); x.setAttribute('aria-label', 'Fermer');
     x.innerHTML = ico('fermer', 16); x.addEventListener('click', fermerModale);
     tete.appendChild(h); tete.appendChild(x);
     var pied = document.createElement('div'); pied.className = 'tpdf-modale-pied';
@@ -1564,7 +1596,7 @@
     var tete = document.createElement('div'); tete.className = 'tpdf-props-tete';
     tete.innerHTML = '<span>Propriétés</span>';
     var xb = document.createElement('button'); xb.type = 'button'; xb.className = 'tpdf-btn tpdf-btn-mini tpdf-props-fermer';
-    xb.setAttribute('data-act', 'fermerProps'); xb.title = 'Fermer'; xb.setAttribute('aria-label', 'Fermer'); xb.innerHTML = ico('fermer', 16);
+    xb.setAttribute('data-act', 'fermerProps'); xb.setAttribute('data-bulle', 'Fermer'); xb.setAttribute('aria-label', 'Fermer'); xb.innerHTML = ico('fermer', 16);
     tete.appendChild(xb); box.appendChild(tete);
     if (!S.pages.length) return;
     var a = trouverAnnot(S.annSel);
@@ -1609,7 +1641,7 @@
         COULEURS.forEach(function (c) {
           var b = document.createElement('button'); b.type = 'button';
           b.className = 'tpdf-pastille' + (ref.couleur && ref.couleur.toLowerCase() === c ? ' tpdf-actif' : '');
-          b.style.background = c; b.title = c; b.setAttribute('aria-label', 'Couleur ' + c);
+          b.style.background = c; b.setAttribute('data-bulle', NOMS_COULEURS[c] || 'Couleur'); b.setAttribute('aria-label', 'Couleur ' + (NOMS_COULEURS[c] || c).toLowerCase());
           b.addEventListener('click', function () {
             majProp('couleur', c, a); validerProp();
             pal.querySelectorAll('.tpdf-pastille').forEach(function (x) { x.classList.toggle('tpdf-actif', x === b); });
@@ -2039,7 +2071,7 @@
   // qu'à l'appel : etat() rend l'objet courant, null hors montage.
   var API = {
     ext: EXT, etat: function () { return S; }, IC: IC, ico: ico, bouton: bouton, outilBtn: outilBtn,
-    COULEURS: COULEURS, LIBELLES: LIBELLES, AIDE_OUTIL: AIDE_OUTIL, ASC: ASC, INTERLIGNE: INTERLIGNE, POLICE: POLICE,
+    COULEURS: COULEURS, NOMS_COULEURS: NOMS_COULEURS, BULLES: BULLES, touche: touche, LIBELLES: LIBELLES, AIDE_OUTIL: AIDE_OUTIL, ASC: ASC, INTERLIGNE: INTERLIGNE, POLICE: POLICE,
     pdfjs: pdfjs, pdflib: pdflib, fontkit: fontkit, octetsNoto: octetsNoto, cleStandard: cleStandard, encodable: encodable,
     nid: nid, toast: toast, msgErreur: msgErreur, snapshot: snapshot, pushHist: pushHist, notifier: notifier,
     pageCourante: pageCourante, dims: dims, trouverAnnot: trouverAnnot, versPdf: versPdf, versVue: versVue,
@@ -2061,7 +2093,7 @@
     _interne: {
       versPdf: versPdf, versVue: versVue, tournerPoint: tournerPoint, lirePlages: lirePlages,
       deplacerSelection: deplacerSelection, normaliser: normaliser, tailleLisible: tailleLisible,
-      hexRgb: hexRgb, sansExt: sansExt, nomFichierSur: nomFichierSur, typeImage: typeImage,
+      hexRgb: hexRgb, cleStandard: cleStandard, sansExt: sansExt, nomFichierSur: nomFichierSur, typeImage: typeImage,
       etat: function () { return S; }, ouvrirFichiers: function (f) { return S && ouvrirFichiers(f); },
       construire: function () { return S && construire(S.pages); }
     }

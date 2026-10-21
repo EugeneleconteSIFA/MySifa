@@ -137,14 +137,17 @@
     return { select: s, bloc: h('label', { cls: 'es-champ' }, h('span', { cls: 'es-champ-label', text: 'Modèle' }), s, aide) };
   }
 
+  // Variante « ia » : bouton qui fait travailler l'IA, en violet (static/mysifa_ia.css).
   function bouton(label, onclick, variante, icone) {
-    return h('button', { cls: 'es-btn' + (variante ? ' es-btn-' + variante : ''), type: 'button', onclick },
+    const cls = variante === 'ia' ? ' ia-btn' : (variante ? ' es-btn-' + variante : '');
+    return h('button', { cls: 'es-btn' + cls, type: 'button', onclick, 'data-bulle': variante === 'ia' ? 'Utilise l\'IA' : null },
       icone ? ic(icone, 15) : null, label);
   }
   function occupe(btn, oui, texte) {
     if (!btn) return;
     if (oui) { btn.dataset.lbl = btn.textContent; btn.disabled = true; if (texte) btn.textContent = texte; }
     else { btn.disabled = false; if (btn.dataset.lbl) btn.textContent = btn.dataset.lbl; }
+    btn.classList.toggle('ia-travail', !!oui && btn.classList.contains('ia-btn'));
   }
 
   // ── Modale ──────────────────────────────────────────────────────────
@@ -223,7 +226,7 @@
         bouton(b.is_super ? `Demandes${b.demandes_ouvertes ? ' (' + b.demandes_ouvertes + ')' : ''}` : 'Mes demandes',
           () => { ES.view = 'demandes'; ES.demandeSel = null; chargerDemandes(); }, b.demandes_ouvertes ? 'actif' : '', 'inbox'),
         bouton('Demander un nouveau format', modaleDemande, '', 'message-square'),
-        bouton('Depuis une photo', () => modaleDepuisPhoto(), '', 'camera'),
+        bouton('Depuis une photo', () => modaleDepuisPhoto(), 'ia', 'camera'),
         bouton('Nouvelle étiquette', () => modaleNouvelle(), 'accent', 'plus')));
 
     const listeDossiers = h('div', { cls: 'es-dossiers' },
@@ -480,10 +483,11 @@
         const m = await ouvrirEditeur(r.modele_id);
         bilanPhoto(r, m);
       } catch (e) { toast(e.message, 'danger'); occupe(ok, false); attente.hidden = true; }
-    }, 'accent', 'zap');
+    }, 'ia', 'zap');
 
     ES.adresseModale = { cle: 'depuis_photo', id: 'nouvelle' };
     const boite = modale('Créer une étiquette depuis une photo', h('div', { cls: 'es-form' },
+      h('p', { cls: 'ia-texte', text: 'Fait appel à l\'IA (Claude) : l\'étiquette proposée est à relire avant d\'imprimer.' }),
       zone,
       champ('Explication', explication, 'Ce qui change d\'une étiquette à l\'autre, les codes-barres attendus, ce qu\'il faut ignorer sur la photo.'),
       h('div', { cls: 'es-ligne2' }, champ('Nom', nom), champ('Dossier', dossier)),
@@ -492,6 +496,7 @@
         h('span', { cls: 'es-champ-aide', text: 'Laissé vide, le format est déduit de la photo et ramené au format standard le plus proche.' })),
       modeleIa.bloc, attente),
     [bouton('Annuler', fermerModale), ok], true);
+    if (boite && boite.classList) boite.classList.add('ia-zone');
     requestAnimationFrame(() => explication.focus());
     return boite;
   }
@@ -713,7 +718,7 @@
           await charger(); ES.demandes = await api('/demandes');
           ouvrirEditeur(r.modele_id);
         } catch (e) { toast(e.message, 'danger'); occupe(gen, false); }
-      }, 'accent', 'zap');
+      }, 'ia', 'zap');
       const statut = h('select', { cls: 'es-input' }, ...Object.entries(ES.boot.referentiel.statuts_demande).map(([k, l]) => h('option', { value: k, text: l })));
       statut.value = d.statut;
       const reponse = h('textarea', { cls: 'es-input', rows: 3, maxlength: 3000, value: d.reponse || '', placeholder: 'Réponse visible par le demandeur' });
