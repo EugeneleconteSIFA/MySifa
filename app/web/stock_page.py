@@ -1384,6 +1384,22 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-liste-n{font-size:12px;color:var(--muted)}
 .mp-tri-wrap{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
 .mp-tri{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:7px 10px;font:inherit;font-size:13px;color:var(--text)}
+/* Menu déroulant MySifa (mpSelect) */
+.mp-sel{display:inline-flex;align-items:center;gap:6px;max-width:260px;padding:7px 10px 7px 12px;background:var(--card);border:1px solid var(--border);border-radius:10px;font:inherit;font-size:13px;font-weight:500;color:var(--text);cursor:pointer;transition:border-color .12s,background .12s,color .12s}
+.mp-sel:hover,.mp-sel.ouvert{border-color:var(--accent)}
+.mp-sel:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-bg);border-color:var(--accent)}
+.mp-sel-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mp-sel-chev{display:inline-flex;color:var(--muted)}
+.mp-sel.ouvert .mp-sel-chev{color:var(--accent);transform:rotate(180deg)}
+.mp-sel.actif{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:700}
+.mp-sel-pre{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;opacity:.75}
+.mp-sel-x{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-right:-3px;border-radius:50%;font-size:15px;line-height:1}
+.mp-sel-x:hover{background:var(--accent);color:white}
+.mp-sel-pop{position:fixed;z-index:10060;max-height:320px;overflow:auto;padding:4px;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.18)}
+.mp-sel-opt{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px 7px 6px;border:none;border-radius:7px;background:var(--card);color:var(--text);font:inherit;font-size:13px;text-align:left;white-space:nowrap;cursor:pointer}
+.mp-sel-opt:hover,.mp-sel-opt:focus{outline:none;background:var(--accent-bg);color:var(--accent)}
+.mp-sel-opt.on{font-weight:700;color:var(--accent)}
+.mp-sel-check{width:14px;text-align:center;font-weight:700;color:var(--accent)}
 .mp-seg{display:inline-flex;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:2px;gap:2px}
 .mp-seg-btn{border:none;background:transparent;border-radius:8px;padding:6px 11px;font:inherit;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;white-space:nowrap}
 .mp-seg-btn:hover{color:var(--text)}
@@ -1493,14 +1509,31 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-chev{display:inline-flex;vertical-align:-2px;margin-right:6px;color:var(--muted);transition:transform .15s}
 .mp-chev.open{transform:rotate(90deg);color:var(--accent)}
 .mp-row-detail>td{background:var(--bg);padding:12px 14px!important;border-bottom:1px solid var(--border)}
-.mp-det{display:flex;flex-direction:column;gap:8px;max-width:1100px}
-.mp-lzc{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
-.mp-lzc-row{display:grid;grid-template-columns:90px minmax(0,1fr) 150px 120px 36px;align-items:center;gap:12px;padding:8px 12px;border-top:1px solid var(--border);font-size:13px;color:var(--text2)}
+/* Détail d'une laize : à plat sous sa ligne, filet d'accent à gauche, pas de carte dans la carte. */
+.mp-row-detail.plat>td{background:var(--card);border-left:3px solid var(--accent);padding:12px 14px 14px 24px!important}
+.mp-ld{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:28px}
+@media(max-width:900px){.mp-ld{grid-template-columns:minmax(0,1fr);gap:16px}}
+.mp-ld-titre{display:flex;align-items:baseline;gap:8px;margin-bottom:4px;font-size:13px;font-weight:700;color:var(--text)}
+.mp-ld-titre span{font-size:12px;font-weight:500;color:var(--muted)}
+.mp-ld-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.mp-ld-tbl th{padding:4px 10px 5px 0;font-size:11px;font-weight:600;color:var(--muted);text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+.mp-ld-tbl td{padding:7px 10px 7px 0;color:var(--text);border-bottom:1px solid var(--border);vertical-align:middle}
+.mp-ld-tbl tr:last-child td{border-bottom:none}
+.mp-ld-tbl .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;padding-right:0;padding-left:10px}
+.mp-ld-tbl td.faible{color:var(--text2)}
+.mp-fl-table tr.mp-fl-premiere td{border-top:2px solid var(--border)}
+.mp-fl-table td{vertical-align:middle}
+.mp-ld-tag{margin-left:8px;font-size:11px;font-weight:600;color:var(--warn)}
+.mp-ld-vide{padding:6px 0;font-size:13px;color:var(--text2)}
+.mp-ld-note{margin-top:6px;font-size:12px;color:var(--text2)}
+.mp-det{display:flex;flex-direction:column;gap:6px;max-width:1100px}
+.mp-lzc{max-width:980px}
+.mp-lzc-row{display:grid;grid-template-columns:90px minmax(0,1fr) 150px 120px 36px;align-items:center;gap:12px;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--text)}
 .mp-lzc-row>strong{color:var(--text)}
 .mp-lzc-row .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.mp-lzc-head{border-top:none;padding-top:7px;padding-bottom:7px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
-.mp-lzc-vide{padding:10px 12px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)}
-.mp-lzc-ajout{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:9px 12px;border-top:1px dashed var(--border);background:var(--bg)}
+.mp-lzc-head{padding:4px 0 5px;font-size:11px;font-weight:600;color:var(--muted)}
+.mp-lzc-vide{padding:6px 0 8px;font-size:13px;color:var(--text2)}
+.mp-lzc-ajout{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 0 2px}
 .mp-lzc-ajout .mp-cond-inp{width:110px;text-align:left}
 .mp-lzc-sugg{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px;margin-left:6px;font-size:11px;color:var(--muted)}
 .mp-cond-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 4px 3px 9px;border-radius:999px;background:var(--accent-bg);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);color:var(--accent);font-size:12px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -1511,7 +1544,7 @@ body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,4
 .mp-cond-plus{display:inline-flex;align-items:center;gap:3px;padding:3px 9px;border:1px dashed var(--accent);border-radius:999px;background:var(--card);color:var(--accent);font:inherit;font-size:12px;font-weight:600;cursor:pointer}
 .mp-cond-plus:hover{background:var(--accent-bg)}
 .mp-cond-new{width:96px;padding:3px 8px;border-radius:999px}
-.mp-det-pied{font-size:11px;color:var(--muted);line-height:1.5}
+.mp-det-pied{margin-top:6px;font-size:12px;color:var(--text2);line-height:1.5}
 @media(max-width:760px){.mp-lzc-row{grid-template-columns:70px minmax(0,1fr) 36px}.mp-lzc-row>.num{display:none}}
 .mp-det-titre{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px}
 .mp-det-meta{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12px;color:var(--text2)}
@@ -3218,6 +3251,7 @@ function icon(name, size=16){
     'settings': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
     'tag': '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
     'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
+    'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
     'move': '<polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/>',
     'atelier': '<path d="M2 20h20"/><path d="M4 20V10l8-6 8 6v10"/><path d="M9 20v-5h6v5"/><path d="M10 10h4"/><path d="M12 10v5"/>',
     'scan': '<rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/><line x1="21" y1="16" x2="21" y2="21"/><line x1="16" y1="21" x2="21" y2="21"/><line x1="11" y1="3" x2="11" y2="7"/><line x1="11" y1="11" x2="11" y2="17"/><line x1="3" y1="11" x2="7" y2="11"/><line x1="11" y1="11" x2="17" y2="11"/>',
@@ -6757,7 +6791,7 @@ function buildMatiereDetail() {
             valo > 0 ? valo.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €' : '—'),
         ));
         if (ouvLz) {
-          tbody.appendChild(el('tr', { cls: 'mp-row-detail' },
+          tbody.appendChild(el('tr', { cls: 'mp-row-detail plat' },
             el('td', { attrs: { colspan: '4' } }, buildMpLaizeDetail(m, spl))));
         }
       });
@@ -10648,14 +10682,11 @@ function buildMatieres() {
     : null;
   const rvgiBloc = buildMpRvgiResults(q, filtered);
   if (S.matieresAccueil && !q) return buildMatieresAccueil(head, banner, searchWrap);
-  const triSel = el('select', { cls: 'mp-tri', attrs: { 'aria-label': 'Ordre de la liste' } },
-    ...MP_TRIS.map(t => el('option', { value: t.id }, t.label)));
-  triSel.value = S.mpTri || 'alpha';
-  triSel.addEventListener('change', () => {
-    S.mpTri = triSel.value;
+  const triSel = mpSelect(MP_TRIS.map(t => ({ value: t.id, label: t.label })), S.mpTri || 'alpha', (v) => {
+    S.mpTri = v;
     try { localStorage.setItem('mp_tri', S.mpTri); } catch (e) {}
     renderMatieresView();
-  });
+  }, { aria: 'Ordre de la liste' });
   const grain = MP_GRAINS.some(g => g.id === S.mpGrain) ? S.mpGrain : 'matiere';
   let corps = list;
   let filtres = null;
@@ -11334,42 +11365,62 @@ function buildMpLaizeDetail(m, spl) {
     const k = l.fournisseur_id || 0;
     if (!lignes.has(k)) lignes.set(k, { nom: l.fournisseur || 'Fournisseur non identifié', fid: k, principal: false, ml: null, horsLien: true });
   });
-  const parts = [];
-  const tbl = el('table', { cls: 'mp-det-table' });
-  tbl.appendChild(el('thead', null, el('tr', null,
-    el('th', null, 'Fournisseur'), el('th', { cls: 'num' }, 'm / bobine'),
-    el('th', { cls: 'num' }, 'Prix d\'achat'), el('th', { cls: 'num' }, 'Stock RVGI'))));
-  const tb = el('tbody');
   const decl = mpDeclDeLaize(data, mm);
-  [...lignes.values()].sort((a, b) => (b.principal - a.principal) || a.nom.localeCompare(b.nom, 'fr')).forEach(l => {
-    const st = mpTotalRvgi(rvgi.filter(x => (x.fournisseur_id || 0) === l.fid));
-    tb.appendChild(el('tr', null,
-      el('td', null, el('strong', { style: 'color:var(--text)' }, l.nom),
-        l.principal ? el('span', { cls: 'mp-var-badge', style: 'margin-left:6px' }, 'Principal') : null,
-        l.horsLien ? el('div', { cls: 'mp-var-meta', style: 'margin-top:2px' }, 'Vu en stock RVGI, laize non rattachée à ce fournisseur') : null),
-      el('td', { cls: 'num', attrs: (l.mls && l.mls.length) ? { title: { laize: 'Conditionnements de ce fournisseur sur cette laize', article: 'Longueur de l\'article fournisseur', standard: 'Métrage standard de la matière' }[l.mlSource] || '' } : {} },
-        (l.mls && l.mls.length) ? l.mls.map(x => fN(x)).join(' / ') + ' m' : '—'),
-      el('td', { cls: 'num' }, data ? mpPrixTexte(data, l.fid, decl ? decl.id : undefined) : '—'),
-      el('td', { cls: 'num' }, mpFmtStockRvgi(st))));
-  });
-  tbl.appendChild(tb);
-  parts.push(el('div', null, el('div', { cls: 'mp-det-titre' }, 'Fournisseurs de la laize ' + fN(mm) + ' mm'),
-    lignes.size ? tbl : el('div', { cls: 'mp-det-vide' },
-      'Aucun fournisseur rattaché à cette laize. ',
+  const th = (t, num, titre) => el('th', { cls: num ? 'num' : '', attrs: titre ? { title: titre } : {} }, t);
+
+  // Fournisseurs : une ligne chacun, le principal d'abord.
+  const fours = [...lignes.values()].sort((a, b) => (b.principal - a.principal) || a.nom.localeCompare(b.nom, 'fr'));
+  let blocF;
+  if (fours.length) {
+    const tb = el('tbody');
+    fours.forEach(l => {
+      const st = mpTotalRvgi(rvgi.filter(x => (x.fournisseur_id || 0) === l.fid));
+      const mls = (l.mls && l.mls.length) ? l.mls.map(x => fN(x)).join(' / ') + ' m' : '—';
+      tb.appendChild(el('tr', null,
+        el('td', null, el('strong', null, l.nom),
+          l.principal ? el('span', { cls: 'mp-var-badge', style: 'margin-left:6px' }, 'Principal') : null,
+          l.horsLien ? el('span', { cls: 'mp-ld-tag', attrs: { title: 'Vu dans le stock RVGI, mais cette laize n\'est pas rattachée à ce fournisseur (onglet Fournisseurs).' } }, 'non rattachée') : null),
+        el('td', { cls: 'num' + (l.mlSource === 'laize' ? '' : ' faible'), attrs: { title: { laize: 'Conditionnements de ce fournisseur sur cette laize', article: 'Longueur de l\'article fournisseur', standard: 'Métrage standard de la matière' }[l.mlSource] || '' } }, mls),
+        el('td', { cls: 'num' }, data ? mpPrixTexte(data, l.fid, decl ? decl.id : undefined) : '—'),
+        el('td', { cls: 'num' }, mpFmtStockRvgi(st))));
+    });
+    blocF = el('table', { cls: 'mp-ld-tbl' },
+      el('thead', null, el('tr', null, th('Fournisseur'), th('m / bobine', true), th('Prix d\'achat', true), th('Stock RVGI', true))),
+      tb);
+  } else {
+    blocF = el('div', { cls: 'mp-ld-vide' }, 'Aucun fournisseur rattaché. ',
       el('button', { cls: 'mp-var-link', type: 'button', on: { click: (e) => {
-        e.stopPropagation(); S.selMatiere.vue = 'fournisseurs';
+        e.stopPropagation(); S.selMatiere.vue = 'fournisseurs'; S.selMatiere.ouvert = null;
         if (typeof stockSyncUrl === 'function') stockSyncUrl(); mpRerenderGarde();
-      } } }, 'Rattacher depuis l\'onglet Fournisseurs'))));
-  const empls = (Array.isArray(m.emplacements) ? m.emplacements : []).filter(e => (e.laize_id || 0) === spl.laize_id);
-  parts.push(el('div', null, el('div', { cls: 'mp-det-titre' }, 'Emplacements'),
-    empls.length
-      ? el('div', { cls: 'mp-lz-chips' }, ...empls.map(e => {
-          const mt = mpMetresDe(m, e.quantite);
-          return el('span', { cls: 'mp-lz-chip' }, el('strong', null, e.emplacement),
-            el('em', null, mpStockLine(e.quantite, m) + (mt != null ? ' · ' + fN(mt) + ' m' : '')));
-        }))
-      : el('div', { cls: 'mp-det-vide' }, 'Aucun emplacement renseigné pour cette laize.')));
-  return el('div', { cls: 'mp-det' }, ...parts);
+      } } }, 'Rattacher dans l\'onglet Fournisseurs'));
+  }
+
+  // Emplacements de la laize, avec leur métrage.
+  const empls = (Array.isArray(m.emplacements) ? m.emplacements : []).filter(e => (e.laize_id || 0) === spl.laize_id)
+    .sort((a, b) => (parseFloat(b.quantite) || 0) - (parseFloat(a.quantite) || 0));
+  let blocE;
+  if (empls.length) {
+    const tb = el('tbody');
+    empls.forEach(e => {
+      const mt = mpMetresDe(m, e.quantite);
+      tb.appendChild(el('tr', null,
+        el('td', null, el('strong', null, e.emplacement)),
+        el('td', { cls: 'num' }, mpStockLine(e.quantite, m)),
+        el('td', { cls: 'num' }, mt != null ? fN(mt) + ' m' : '—')));
+    });
+    const loc = empls.reduce((t, e) => t + (parseFloat(e.quantite) || 0), 0);
+    const reste = Math.round((Number(spl.quantite || 0) - loc) * 1000) / 1000;
+    blocE = el('div', null,
+      el('table', { cls: 'mp-ld-tbl' },
+        el('thead', null, el('tr', null, th('Emplacement'), th('Bobines', true), th('Métrage', true))), tb),
+      reste > 0 ? el('div', { cls: 'mp-ld-note' }, mpStockLine(reste, m) + ' non localisé' + (reste > 1 ? 's' : '') + '.') : null);
+  } else {
+    blocE = el('div', { cls: 'mp-ld-vide' }, 'Aucun emplacement renseigné.');
+  }
+
+  return el('div', { cls: 'mp-ld' },
+    el('div', null, el('div', { cls: 'mp-ld-titre' }, 'Fournisseurs', el('span', null, fN(mm) + ' mm')), blocF),
+    el('div', null, el('div', { cls: 'mp-ld-titre' }, 'Emplacements', el('span', null, empls.length ? String(empls.length) : '')), blocE));
 }
 
 // Déclinaison de prix d'une laize ; à défaut la seule déclinaison de la
@@ -11478,9 +11529,11 @@ const MP_GRAINS = [
   { id: 'fournisseur', label: 'Fournisseur' },
   { id: 'laize', label: 'Fournisseur × laize' },
 ];
+// `laize` garde son id (liens existants : ?var_grain=laize) : c'est la vue par laize.
 const MP_VAR_GRAINS = [
   { id: 'fournisseur', label: 'Par fournisseur' },
-  { id: 'laize', label: 'Fournisseur × laize' },
+  { id: 'fourn_laize', label: 'Fournisseur × laize' },
+  { id: 'laize', label: 'Par laize' },
 ];
 
 function mpSeg(options, value, onPick, aria) {
@@ -11599,23 +11652,96 @@ function mpFiltresFourn(lignes, avecLaize, cle, laizesEnPlus) {
   });
   if (S[kF] && !fours.has(S[kF])) S[kF] = '';
   if (S[kL] && !laizes.has(Number(S[kL]))) S[kL] = '';
-  const selF = el('select', { cls: 'mp-tri', attrs: { 'aria-label': 'Filtrer par fournisseur' } },
-    el('option', { value: '' }, 'Tous les fournisseurs'),
-    ...[...fours.entries()].sort((a, b) => a[1].localeCompare(b[1], 'fr'))
-      .map(([id, nom]) => el('option', { value: id }, nom)));
-  selF.value = S[kF] || '';
-  selF.addEventListener('change', () => { S[kF] = selF.value; renderMatieresView(); });
+  const selF = mpSelect([{ value: '', label: 'Tous les fournisseurs' }]
+    .concat([...fours.entries()].sort((a, b) => a[1].localeCompare(b[1], 'fr')).map(([id, nom]) => ({ value: id, label: nom }))),
+    S[kF] || '', (v) => { S[kF] = v; mpRerenderGarde(); },
+    { aria: 'Filtrer par fournisseur', defaut: '', prefixe: 'Fournisseur' });
   const out = [selF];
   if (avecLaize && laizes.size) {
-    const selL = el('select', { cls: 'mp-tri', attrs: { 'aria-label': 'Filtrer par laize' } },
-      el('option', { value: '' }, 'Toutes les laizes'),
-      ...[...laizes].sort((a, b) => a - b).map(v => el('option', { value: String(v) }, fN(v) + ' mm')));
-    selL.value = S[kL] || '';
-    selL.addEventListener('change', () => { S[kL] = selL.value; renderMatieresView(); });
-    out.push(selL);
+    out.push(mpSelect([{ value: '', label: 'Toutes les laizes' }]
+      .concat([...laizes].sort((a, b) => a - b).map(v => ({ value: String(v), label: fN(v) + ' mm' }))),
+      S[kL] || '', (v) => { S[kL] = v; mpRerenderGarde(); },
+      { aria: 'Filtrer par laize', defaut: '', prefixe: 'Laize' }));
   }
   return el('div', { cls: 'mp-filtres' }, ...out);
 }
+
+// Menu déroulant aux couleurs de MySifa, à la place du <select> natif.
+// `o.defaut` : valeur « sans filtre ». Un autre choix colore le bouton (accent),
+// préfixe son libellé (« Laize : 333 mm ») et ajoute un × qui retire le filtre.
+function mpSelect(opts, valeur, onPick, o) {
+  o = o || {};
+  const cur = opts.find(x => x.value === valeur) || opts[0];
+  const actif = o.defaut !== undefined && valeur !== o.defaut && !!cur && cur.value === valeur;
+  const btn = el('button', {
+    cls: 'mp-sel' + (actif ? ' actif' : ''), type: 'button',
+    attrs: { 'aria-haspopup': 'listbox', 'aria-expanded': 'false', 'aria-label': (o.aria || '') + (cur ? ' : ' + cur.label : '') },
+  },
+    actif && o.prefixe ? el('span', { cls: 'mp-sel-pre' }, o.prefixe) : null,
+    el('span', { cls: 'mp-sel-txt' }, cur ? cur.label : ''),
+    actif
+      ? el('span', { cls: 'mp-sel-x', attrs: { title: 'Retirer ce filtre', 'aria-label': 'Retirer ce filtre' },
+          on: { click: (e) => { e.stopPropagation(); mpSelFermer(); onPick(o.defaut); } } }, '×')
+      : el('span', { cls: 'mp-sel-chev' }, iconEl('chevron-down', 14)));
+  btn.addEventListener('click', () => {
+    if (window.__mpSelPop && window.__mpSelPop.btn === btn) { mpSelFermer(); return; }
+    mpSelFermer();
+    const pop = el('div', { cls: 'mp-sel-pop', attrs: { role: 'listbox' } });
+    const boutons = opts.map(x => {
+      const on = x.value === valeur;
+      const b = el('button', {
+        cls: 'mp-sel-opt' + (on ? ' on' : ''), type: 'button',
+        attrs: { role: 'option', 'aria-selected': on ? 'true' : 'false' },
+        on: { click: (e) => { e.stopPropagation(); mpSelFermer(); btn.focus(); if (!on) onPick(x.value); } },
+      }, el('span', { cls: 'mp-sel-check' }, on ? '✓' : ''), el('span', null, x.label));
+      pop.appendChild(b);
+      return b;
+    });
+    pop.addEventListener('keydown', (e) => {
+      const i = boutons.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const k = (i + (e.key === 'ArrowDown' ? 1 : -1) + boutons.length) % boutons.length;
+        boutons[k].focus();
+      } else if (e.key === 'Escape' || e.key === 'Tab') {
+        e.preventDefault(); mpSelFermer(); btn.focus();
+      }
+    });
+    document.body.appendChild(pop);
+    const r = btn.getBoundingClientRect();
+    const vh = window.innerHeight, vw = window.innerWidth;
+    pop.style.minWidth = Math.round(r.width) + 'px';
+    const h = pop.offsetHeight, w = pop.offsetWidth;
+    const top = (r.bottom + 4 + h > vh - 8 && r.top - 4 - h > 8) ? r.top - 4 - h : r.bottom + 4;
+    pop.style.top = Math.round(top) + 'px';
+    pop.style.left = Math.round(Math.max(8, Math.min(r.left, vw - w - 8))) + 'px';
+    window.__mpSelPop = { pop, btn };
+    btn.setAttribute('aria-expanded', 'true');
+    btn.classList.add('ouvert');
+    (boutons.find(b => b.classList.contains('on')) || boutons[0]).focus();
+  });
+  btn.addEventListener('keydown', (e) => { if (e.key === 'ArrowDown') { e.preventDefault(); btn.click(); } });
+  return btn;
+}
+
+function mpSelFermer() {
+  const p = window.__mpSelPop;
+  if (!p) return;
+  window.__mpSelPop = null;
+  p.pop.remove();
+  p.btn.setAttribute('aria-expanded', 'false');
+  p.btn.classList.remove('ouvert');
+}
+
+document.addEventListener('mousedown', (e) => {
+  const p = window.__mpSelPop;
+  if (p && !p.pop.contains(e.target) && !p.btn.contains(e.target)) mpSelFermer();
+}, true);
+window.addEventListener('scroll', (e) => {
+  const p = window.__mpSelPop;
+  if (p && !p.pop.contains(e.target)) mpSelFermer();
+}, true);
+window.addEventListener('resize', () => mpSelFermer());
 
 // Liste des matières, une ligne par fournisseur (ou par fournisseur et laize).
 // Stock MySifa d'une laize, en chiffre : mètres pour une bobine dont la fiche
@@ -11858,6 +11984,10 @@ function buildMpVariantesTable(m) {
     card.appendChild(buildMpVarParLaize(m, lignesVues));
     return mpAvecPrix(card, m, data);
   }
+  if (varGrain === 'fourn_laize') {
+    card.appendChild(buildMpVarFournLaize(m, data, lignesVues, canEdit));
+    return mpAvecPrix(card, m, data);
+  }
   const totVar = mpTotalRvgi(lignesVues);
   card.appendChild(el('div', { cls: 'mp-var-stock' },
     'Stock MySifa' + (S.mpVarFiltreLaize ? ' (' + S.mpVarFiltreLaize + ' mm)' : '') + ' ',
@@ -11868,7 +11998,7 @@ function buildMpVariantesTable(m) {
       : mpStockMySifa(m)),
     ' · Stock RVGI des articles ', el('strong', null, totVar ? mpFmtStockRvgi(totVar) : '—'),
     el('span', { cls: 'mp-var-meta', style: 'margin-left:8px' },
-      'MySifa ne sait pas de quel fournisseur vient une bobine : son stock se lit par laize (vue Fournisseur × laize).')));
+      'MySifa ne sait pas de quel fournisseur vient une bobine : son stock se lit par laize (vue Par laize).')));
   const stockArticle = (v) => mpTotalRvgi(lignesVues.filter(l =>
     (l.variante_id && l.variante_id === v.id) || (!l.variante_id && v.ref_rvgi && l.article === v.ref_rvgi)));
   // Un groupe par fournisseur : le principal d'abord, puis l'ordre alphabétique,
@@ -11968,7 +12098,7 @@ function buildMpVariantesTable(m) {
           : null),
       ));
       if (ouvArt) {
-        tb.appendChild(el('tr', { cls: 'mp-row-detail' },
+        tb.appendChild(el('tr', { cls: 'mp-row-detail plat' },
           el('td', { attrs: { colspan: String(cols.length) } }, buildMpArticleDetail(m, data, v, lignesVues, canEdit))));
       }
     });
@@ -12001,6 +12131,78 @@ function buildMpVariantesTable(m) {
     }, S.selMatiere.varInactives ? 'Masquer les désactivés' : 'Voir les désactivés'),
   ));
   return mpAvecPrix(card, m, data);
+}
+
+// Une ligne par fournisseur et par laize : laizes rattachées au fournisseur et
+// laizes que RVGI voit en stock chez lui. Conditionnements, prix, stock RVGI ;
+// une laize vue dans RVGI mais pas rattachée se rattache d'un clic.
+function buildMpVarFournLaize(m, data, lignes, canEdit) {
+  const vs = (data.variantes || []).filter(v => v.actif);
+  const mlStd = Number(m.metres_lineaires_par_bobine || 0);
+  const fours = new Map();
+  const fiche = (fid, nom) => {
+    if (!fours.has(fid)) fours.set(fid, { fid, nom: nom || 'Fournisseur non identifié', principal: false, v: null, laizes: new Map() });
+    return fours.get(fid);
+  };
+  vs.forEach(v => {
+    const f = fiche(v.fournisseur_id || 0, v.fournisseur_nom);
+    if (v.principal) f.principal = true;
+    if (!f.v || v.principal) f.v = v;
+    (v.laizes_detail || []).forEach(d => {
+      const mm = Math.round(d.valeur_mm || 0);
+      const prev = f.laizes.get(mm);
+      const conds = (d.conditionnements || []).map(c => c.ml_bobine);
+      f.laizes.set(mm, { mm, laize_id: d.laize_id, lie: true,
+        mls: [...new Set([...(prev ? prev.mls : []), ...conds])].sort((a, b) => a - b) });
+    });
+  });
+  lignes.forEach(l => {
+    const f = fiche(l.fournisseur_id || 0, l.fournisseur);
+    const mm = Math.round(l.laize_mm || 0);
+    if (mm && !f.laizes.has(mm)) f.laizes.set(mm, { mm, laize_id: null, lie: false, mls: [] });
+  });
+  const tbl = el('table', { cls: 'mp-var-table mp-fl-table' });
+  tbl.appendChild(el('thead', null, el('tr', null,
+    el('th', null, 'Fournisseur'), el('th', null, 'Laize'),
+    el('th', { attrs: { title: 'Conditionnements du fournisseur sur la laize ; à défaut, longueur de son article' } }, 'm / bobine'),
+    el('th', { cls: 'num' }, 'Prix d\'achat'), el('th', { cls: 'num' }, 'Stock RVGI'), el('th', null, ''))));
+  const tb = el('tbody');
+  let n = 0;
+  [...fours.values()]
+    .filter(f => !S.mpVarFiltreFourn || String(f.fid) === S.mpVarFiltreFourn)
+    .sort((a, b) => (b.principal - a.principal) || (!a.fid - !b.fid) || a.nom.localeCompare(b.nom, 'fr'))
+    .forEach(f => {
+      const lz = [...f.laizes.values()].filter(x => !S.mpVarFiltreLaize || String(x.mm) === S.mpVarFiltreLaize)
+        .sort((a, b) => b.mm - a.mm);
+      if (!lz.length) return;
+      const mlArt = Number((f.v && f.v.ml_bobine) || 0) || mlStd;
+      lz.forEach((x, i) => {
+        n++;
+        const st = mpTotalRvgi(lignes.filter(l => (l.fournisseur_id || 0) === f.fid && Math.round(l.laize_mm || 0) === x.mm));
+        const decl = mpDeclDeLaize(data, x.mm);
+        const peutLier = canEdit && !x.lie && f.v && f.fid && data.laizee;
+        tb.appendChild(el('tr', { cls: i === 0 ? 'mp-fl-premiere' : '' },
+          el('td', null, i === 0 ? el('span', null, el('strong', { style: 'color:var(--text)' }, f.nom),
+            f.principal ? el('span', { cls: 'mp-var-badge', style: 'margin-left:6px' }, 'Principal') : null) : null),
+          el('td', null, el('strong', { style: 'color:var(--text)' }, fN(x.mm) + ' mm')),
+          el('td', null, x.mls.length
+            ? el('div', { cls: 'mp-lz-chips' }, ...x.mls.map(v => el('span', { cls: 'mp-cond-chip', style: 'padding-right:9px' }, fN(v) + ' m')))
+            : el('span', { style: 'color:var(--text2)' }, mlArt ? fN(mlArt) + ' m' : '—',
+                mlArt ? el('span', { cls: 'mp-var-meta', style: 'margin-left:6px' }, 'article') : null)),
+          el('td', { cls: 'num' }, f.fid ? mpPrixTexte(data, f.fid, decl ? decl.id : undefined) : '—'),
+          el('td', { cls: 'num' }, mpFmtStockRvgi(st)),
+          el('td', { cls: 'num' }, x.lie ? null
+            : peutLier
+              ? el('button', { cls: 'mp-det-btn', type: 'button',
+                  attrs: { title: 'Vue dans le stock RVGI : la rattacher à ' + f.nom },
+                  on: { click: () => mpPoserLaizeFourn(f.v, { valeur_mm: x.mm }, 'Laize ' + fN(x.mm) + ' mm rattachée à ' + f.nom + '.') },
+                }, iconEl('plus', 12), 'Rattacher')
+              : el('span', { cls: 'mp-ld-tag', attrs: { title: 'Vue dans le stock RVGI, laize non rattachée à ce fournisseur' } }, 'non rattachée'))));
+      });
+    });
+  tbl.appendChild(tb);
+  if (!n) return el('div', { cls: 'mp-hint' }, 'Aucune laize rattachée ni vue en stock RVGI pour cette sélection.');
+  return el('div', { cls: 'mp-var-scroll' }, tbl);
 }
 
 // Laizes livrées par le fournisseur de l'article, avec leur longueur propre.
@@ -12076,9 +12278,9 @@ function buildMpArticleDetail(m, data, v, lignesVues, canEdit) {
   const stockLz = (mm) => mpTotalRvgi(lignesVues.filter(l => deCetArticle(l) && Math.round(l.laize_mm || 0) === Math.round(mm)));
 
   const grille = el('div', { cls: 'mp-lzc' });
-  grille.appendChild(el('div', { cls: 'mp-lzc-row mp-lzc-head' },
+  if (det.length) grille.appendChild(el('div', { cls: 'mp-lzc-row mp-lzc-head' },
     el('span', null, 'Laize'),
-    el('span', { attrs: { title: 'Longueurs de bobine livrées sur cette laize. Aucune : longueur de l\'article (' + (mlArt ? fN(mlArt) + ' m' : 'non renseignée') + ').' } }, 'Conditionnements (m / bobine)'),
+    el('span', { attrs: { title: 'Longueurs de bobine livrées sur cette laize. Aucune : longueur de l\'article (' + (mlArt ? fN(mlArt) + ' m' : 'non renseignée') + ').' } }, 'm / bobine'),
     el('span', { cls: 'num' }, 'Prix d\'achat'),
     el('span', { cls: 'num' }, 'Stock RVGI'),
     el('span', null, '')));
@@ -12155,7 +12357,8 @@ function buildMpArticleDetail(m, data, v, lignesVues, canEdit) {
       }, iconEl('trash-2', 13)) : el('span', null, '')));
   });
   if (!det.length) {
-    grille.appendChild(el('div', { cls: 'mp-lzc-vide' }, 'Aucune laize rattachée à ' + nomF + '.'));
+    grille.appendChild(el('div', { cls: 'mp-lzc-vide' }, 'Aucune laize rattachée. Ajouter ci-dessous celles que '
+      + nomF + ' livre' + (edit ? '.' : ' (administrateurs matières).')));
   }
 
   if (edit) {
@@ -12198,7 +12401,7 @@ function buildMpArticleDetail(m, data, v, lignesVues, canEdit) {
     }
   }
   return el('div', { cls: 'mp-det' },
-    el('div', { cls: 'mp-det-titre' }, 'Laizes livrées par ' + nomF),
+    el('div', { cls: 'mp-ld-titre' }, 'Laizes livrées', el('span', null, nomF)),
     grille, piedEl);
 }
 
