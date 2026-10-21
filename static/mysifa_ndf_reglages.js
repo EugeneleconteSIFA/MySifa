@@ -1,9 +1,9 @@
 /* Réglages des notes de frais : barème kilométrique et catégories.
  *
- * Fenêtre commune à Mon coffre (/coffre) et Coffre RH (/rh/coffre), ouverte
- * par le bouton « Réglages » de la section Notes de frais. Réservée à la
- * comptabilité et au superadmin : l'API /api/rh-coffre/ndf-categories
- * refuse les autres rôles.
+ * Coffre RH (/rh/coffre) › Notes de frais, bouton « Réglages ». Les salariés
+ * n'y ont pas accès : Mon coffre ne fait que lire les catégories actives, et
+ * l'API /api/rh-coffre/ndf-categories refuse les autres rôles que la
+ * comptabilité et le superadmin.
  *
  * Les taux de TVA proposés ne se règlent pas ici : ce sont les taux légaux,
  * NDF_TAUX_TVA de config.py.
