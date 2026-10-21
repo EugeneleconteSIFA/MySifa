@@ -268,7 +268,7 @@ tr:hover td{background:var(--accent-bg)}
 </div>
 
 <script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_ndf_reglages.js?v=1"></script>
+<script src="/static/mysifa_ndf_reglages.js?v=2"></script>
 <script>window.__MYSIFA_APP__='rh_coffre';</script>
 <script>
 const MOIS_LABELS=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];

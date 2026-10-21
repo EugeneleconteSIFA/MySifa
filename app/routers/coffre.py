@@ -177,7 +177,7 @@ def ndf_montants(saisie: str, montant_ttc: Optional[float], taux_tva: float,
         if not distance_km or distance_km <= 0:
             raise HTTPException(400, "Distance invalide — nombre de km supérieur à 0.")
         if not taux_km or taux_km <= 0:
-            raise HTTPException(400, "Taux kilométrique non défini — à régler par la comptabilité dans Notes de frais › Réglages.")
+            raise HTTPException(400, "Taux kilométrique non défini — à régler par la comptabilité dans Coffre RH › Notes de frais › Réglages.")
         ttc = round(distance_km * taux_km, 2)
         return {"montant_ttc": ttc, "montant_tva": 0.0, "montant_ht": ttc, "taux_tva": 0.0}
     if montant_ttc is None or montant_ttc <= 0:

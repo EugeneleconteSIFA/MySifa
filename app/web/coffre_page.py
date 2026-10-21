@@ -251,10 +251,7 @@ tr:hover td{background:var(--accent-bg)}
         <div class="card">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
             <h2 style="margin:0">Mes notes de frais</h2>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button type="button" class="btn ghost" id="ndf-reglages-btn" style="display:none" onclick="ouvrirReglagesNdf()">Réglages</button>
-              <button type="button" class="btn" onclick="openNdfModal()">+ Nouvelle note</button>
-            </div>
+            <button type="button" class="btn" onclick="openNdfModal()">+ Nouvelle note</button>
           </div>
           <div id="ndf-container"><div class="empty">Chargement…</div></div>
         </div>
@@ -265,7 +262,6 @@ tr:hover td{background:var(--accent-bg)}
 </div>
 
 <script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_ndf_reglages.js?v=1"></script>
 <script>window.__MYSIFA_APP__='coffre';</script>
 <script>
 const DOC_TYPE_LABELS={bulletin_paie:'Bulletin de paie',contrat:'Contrat',attestation:'Attestation',autre:'Autre'};
@@ -469,13 +465,6 @@ function ndfCalcul(cat,ttc,taux,km){
   return {ttc:r2(ttc),tva,ht:r2(ttc-tva)};
 }
 
-// Réglages (barème km, catégories) : comptabilité et superadmin seulement,
-// comme l'API /api/rh-coffre/ndf-categories.
-function peutReglerNdf(){return !!(ME&&(ME.role==='comptabilite'||ME.role==='superadmin'));}
-function ouvrirReglagesNdf(){
-  if(window.MySifaNdfReglages)MySifaNdfReglages.ouvrir({surChange:loadNdfCategories});
-}
-
 function openNdfModal(){
   if(!NDF_CATS.length){toast('Aucune catégorie de note de frais — à créer par la comptabilité.','err');return;}
   const back=document.createElement('div');back.className='modal-back';
@@ -613,10 +602,6 @@ function openNdfModal(){
   loadDocs();
   loadNdf();
   loadNdfCategories();
-  if(peutReglerNdf()){
-    const b=document.getElementById('ndf-reglages-btn');if(b)b.style.display='';
-    if(window.MySifaNdfReglages)MySifaNdfReglages.depuisAdresse({surChange:loadNdfCategories});
-  }
   showTab(_readCoffreTab(),{silent:false});
 })();
 window.addEventListener('hashchange',function(){try{showTab(_readCoffreTab(),{silent:true});}catch(e){}});
