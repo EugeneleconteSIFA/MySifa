@@ -1746,6 +1746,10 @@ def regime_tva_label(code: str) -> str:
 # arrêt y aurait passé pour une information (arbitrage du 11/10/2026).
 TONS_ETAT = ("ok", "warn", "danger", "neutre")
 
+# Taux de TVA proposés sur une note de frais (Mon coffre). Taux légaux
+# français : changent par la loi, pas par un réglage de la compta.
+NDF_TAUX_TVA = (20.0, 10.0, 5.5, 0.0)
+
 TONS_STATUT_MACHINE = {
     "production": "ok",
     "calage": "warn",

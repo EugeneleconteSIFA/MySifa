@@ -25,7 +25,7 @@ from typing import Optional
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
-from config import BASE_DIR, ROLE_COMPTABILITE, ROLE_SUPERADMIN
+from config import BASE_DIR, NDF_TAUX_TVA, ROLE_COMPTABILITE, ROLE_SUPERADMIN
 from database import get_db
 from services.auth_service import get_current_user
 from app.routers.coffre import (
@@ -34,6 +34,7 @@ from app.routers.coffre import (
     ALLOWED_NDF_STATUTS,
     _log_doc_access,
     _sanitize_filename,
+    ndf_categories,
 )
 
 router = APIRouter(tags=["rh_coffre"])
@@ -522,6 +523,132 @@ def marquer_payee(ndf_id: int, request: Request):
     return {"success": True}
 
 
+# ── Catégories de notes de frais (référentiel de la compta) ────────────
+
+def _champs_categorie(body: dict, saisie_actuelle: Optional[str] = None) -> dict:
+    """Valide les champs envoyés ; ne renvoie que ceux présents dans `body`."""
+    out: dict = {}
+    if "libelle" in body:
+        libelle = str(body.get("libelle") or "").strip()[:60]
+        if not libelle:
+            raise HTTPException(400, "Libellé requis.")
+        out["libelle"] = libelle
+    if "saisie" in body:
+        saisie = body.get("saisie")
+        if saisie not in {"montant", "km"}:
+            raise HTTPException(400, "Saisie invalide — montant ou km.")
+        out["saisie"] = saisie
+    if "taux_tva" in body:
+        try:
+            taux = float(body.get("taux_tva"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Taux de TVA invalide.")
+        if taux not in NDF_TAUX_TVA:
+            raise HTTPException(400, "Taux de TVA invalide.")
+        out["taux_tva"] = taux
+    if "taux_km" in body:
+        v = body.get("taux_km")
+        if v in (None, ""):
+            out["taux_km"] = None
+        else:
+            try:
+                out["taux_km"] = float(str(v).replace(",", "."))
+            except ValueError:
+                raise HTTPException(400, "Taux kilométrique invalide — nombre attendu.")
+            if out["taux_km"] <= 0 or out["taux_km"] > 5:
+                raise HTTPException(400, "Taux kilométrique invalide — entre 0 et 5 € par km.")
+    if "ordre" in body:
+        try:
+            out["ordre"] = int(body.get("ordre"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Ordre invalide — nombre entier attendu.")
+    if "actif" in body:
+        out["actif"] = 1 if body.get("actif") else 0
+    saisie = out.get("saisie", saisie_actuelle)
+    if saisie == "km":
+        out["taux_tva"] = 0.0
+        if out.get("taux_km", 1) is None:
+            raise HTTPException(400, "Taux kilométrique requis pour une catégorie en km.")
+    return out
+
+
+@router.get("/api/rh-coffre/ndf-categories")
+def list_ndf_categories_rh(request: Request):
+    _require_rh(request)
+    with get_db() as conn:
+        cats = ndf_categories(conn, toutes=True)
+        usages = dict(conn.execute(
+            """SELECT categorie_id, COUNT(*) FROM notes_de_frais
+               WHERE categorie_id IS NOT NULL AND deleted_at IS NULL
+               GROUP BY categorie_id"""
+        ).fetchall())
+    for c in cats:
+        c["nb_notes"] = usages.get(c["id"], 0)
+    return {"categories": cats, "taux_tva": list(NDF_TAUX_TVA)}
+
+
+@router.post("/api/rh-coffre/ndf-categories")
+async def create_ndf_categorie(request: Request):
+    _require_rh(request)
+    body = await request.json()
+    body.setdefault("saisie", "montant")
+    body.setdefault("taux_tva", 20)
+    champs = _champs_categorie(body)
+    if "libelle" not in champs:
+        raise HTTPException(400, "Libellé requis.")
+    if champs["saisie"] == "km" and not champs.get("taux_km"):
+        raise HTTPException(400, "Taux kilométrique requis pour une catégorie en km.")
+    code = "cat_" + uuid.uuid4().hex[:8]
+    with get_db() as conn:
+        if "ordre" not in champs:
+            champs["ordre"] = (conn.execute(
+                "SELECT COALESCE(MAX(ordre),0) FROM ndf_categories"
+            ).fetchone()[0] or 0) + 10
+        cols = ["code"] + list(champs)
+        cur = conn.execute(
+            f"INSERT INTO ndf_categories ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
+            [code] + list(champs.values()),
+        )
+        conn.commit()
+    return {"success": True, "id": cur.lastrowid}
+
+
+@router.patch("/api/rh-coffre/ndf-categories/{cat_id}")
+async def update_ndf_categorie(cat_id: int, request: Request):
+    """Modifier ou désactiver une catégorie. Pas de suppression : des notes
+    y sont rattachées, et elles gardent leur libellé et leurs montants."""
+    _require_rh(request)
+    body = await request.json()
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id,saisie FROM ndf_categories WHERE id=?", (cat_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Catégorie introuvable")
+        champs = _champs_categorie(body, row["saisie"])
+        if not champs:
+            return {"success": True}
+        conn.execute(
+            f"UPDATE ndf_categories SET {', '.join(k + '=?' for k in champs)} WHERE id=?",
+            list(champs.values()) + [cat_id],
+        )
+        conn.commit()
+    return {"success": True}
+
+
+def _rubrique_feuille(r) -> str:
+    """Colonne de la feuille de frais Excel : « Repas à 10% », « KM »…"""
+    if r["distance_km"] is not None:
+        return "KM"
+    libelle = r["categorie"] or ""
+    taux = r["taux_tva"]
+    if taux is None:
+        return libelle
+    if not taux:
+        return f"{libelle} sans TVA"
+    return f"{libelle} à {taux:g}%".replace(".", ",")
+
+
 @router.get("/api/rh-coffre/ndf/export")
 def export_ndf_csv(request: Request, annee: str = "", statut: str = ""):
     """Export CSV des notes de frais (filtrable). Pour intégration compta."""
@@ -537,7 +664,8 @@ def export_ndf_csv(request: Request, annee: str = "", statut: str = ""):
     with get_db() as conn:
         rows = conn.execute(
             f"""SELECT n.id,u.nom AS employe,u.matricule,n.date_frais,n.categorie,
-                       n.montant_ttc,n.montant_tva,n.description,n.statut,
+                       n.ville,n.distance_km,n.taux_km,n.taux_tva,
+                       n.montant_ht,n.montant_tva,n.montant_ttc,n.description,n.statut,
                        n.soumise_at,n.validee_at,n.validee_by_nom,
                        n.payee_at,n.payee_by_nom,n.motif_refus
                 FROM notes_de_frais n
@@ -550,12 +678,13 @@ def export_ndf_csv(request: Request, annee: str = "", statut: str = ""):
     w = csv.writer(buf, delimiter=";")
     w.writerow([
         "id", "salarie", "matricule", "date_frais", "categorie",
-        "montant_ttc", "montant_tva", "description", "statut",
+        "ville", "distance_km", "taux_km", "taux_tva",
+        "montant_ht", "montant_tva", "montant_ttc", "description", "statut",
         "soumise_at", "validee_at", "validee_par",
-        "payee_at", "payee_par", "motif_refus",
+        "payee_at", "payee_par", "motif_refus", "rubrique_feuille",
     ])
     for r in rows:
-        w.writerow([str(r[k] if r[k] is not None else "") for k in r.keys()])
+        w.writerow([str(r[k] if r[k] is not None else "") for k in r.keys()] + [_rubrique_feuille(r)])
     buf.seek(0)
     filename = f"notes_de_frais_{annee or 'toutes'}.csv"
     return StreamingResponse(
