@@ -10965,10 +10965,10 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
-<script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
-<script src="/static/mysifa_confirm.js?v=2"></script>
+<script src="/static/mysifa_alert_form.js?v=2.4.21"></script>
+<script src="/static/mysifa_confirm.js?v=1"></script>
 <script src="/static/mysifa_maint_form.js?v=2.7.5-confirm"></script>
-<script src="/static/mysifa_alert_runtime.js?v=2.4.19"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.4.21"></script>
 <!-- Chassis partage de la fenetre de detail d'un ack (openAckDetail). Le
      meme que dans MyProd : une alerte validee se relit comme une saisie.
      Ne touche pas au runtime des alertes ci-dessus, qui garde son style
