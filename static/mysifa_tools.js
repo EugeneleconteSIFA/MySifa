@@ -37,10 +37,10 @@ var S = {
 };
 
 const TOOLS_OUTILS = [
-  { id: 'etiquettes', label: 'Étiquettes', titre: 'Étiquettes',
+  { id: 'etiquettes', label: 'Étiquettes', titre: 'Étiquettes', ia: true,
     desc: 'Étiquettes de traçabilité par poste, étiquettes spécifiques par client, création depuis une photo.',
     icon: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>' },
-  { id: 'formulaires', label: 'Formulaires', titre: 'Formulaires',
+  { id: 'formulaires', label: 'Formulaires', titre: 'Formulaires', ia: true,
     desc: 'Questionnaires pour fournisseurs, personnel et clients : création, envoi, relances, réponses.',
     icon: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/>' },
   { id: 'pdf', label: 'Éditeur PDF', titre: 'Éditeur PDF',
@@ -52,11 +52,13 @@ const TOOLS_OUTILS = [
   { id: 'calculs', label: 'Calculs bobine', titre: 'Calculs bobine',
     desc: 'Métrage ↔ diamètre, fronts sur la laize, étiquettes par bobine.',
     icon: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6"/>' },
-  { id: 'traduction', label: 'Traducteur', titre: 'Traducteur',
+  { id: 'traduction', label: 'Traducteur', titre: 'Traducteur', ia: true,
     desc: 'Traduire un texte ou un courrier dans huit langues, vouvoiement ou tutoiement.',
     icon: '<path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/>' },
 ];
 const TOOLS_IDS = ['accueil'].concat(TOOLS_OUTILS.map(o => o.id));
+// Icône de l'appli (même tracé que 'mytools' de html.py et mysifa_cmdk.js).
+const TOOLS_ICONE = '<rect x="2.5" y="14" width="19" height="6.5" rx="3.25"/><path d="M6.5 14c3.5-4.5 8-7.8 14-9.5L10 14"/><path d="M15.5 14l2.2-3.6"/><path d="M6 17.25h.01M18 17.25h.01"/>';
 
 function toolsPermis(id) {
   if (id === 'accueil') return true;
@@ -164,11 +166,12 @@ function toolsAccueil(root) {
   const tuiles = TOOLS_OUTILS.filter(o => toolsPermis(o.id)).map(o =>
     '<button type="button" class="tools-tile" onclick="toolsAller(\'' + o.id + '\')">'
     + '<span class="tools-tile-ic">' + toolsSvg(o.icon, 22) + '</span>'
-    + '<span class="tools-tile-txt"><span class="tools-tile-t">' + escHtml(o.titre) + '</span>'
+    + '<span class="tools-tile-txt"><span class="tools-tile-t">' + escHtml(o.titre)
+    + (o.ia ? ' <span class="ia-badge" data-bulle="Utilise l\'IA">IA</span>' : '') + '</span>'
     + '<span class="tools-tile-d">' + escHtml(o.desc) + '</span></span></button>').join('');
   root.innerHTML = '<div class="tools-page">'
-    + '<div class="tools-hero"><h1>My<span>Tools</span></h1>'
-    + '<p>Les outils du quotidien, au même endroit.</p></div>'
+    + '<div class="tools-hero"><h1><span class="tools-hero-ic">' + toolsSvg(TOOLS_ICONE, 28) + '</span><span>My<span>Tools</span></span></h1>'
+    + '<p>Les outils du quotidien, au même endroit. <span class="ia-badge">IA</span> signale les outils qui font appel à l\'intelligence artificielle.</p></div>'
     + '<div class="tools-grid">' + (tuiles || '<div class="tools-empty">Aucun outil ouvert à votre profil.</div>') + '</div></div>';
 }
 

@@ -237,7 +237,7 @@ function renderLogin(){
 // ── Animation train d'icônes sur la page de login ─────────────────
 // Fait défiler périodiquement une file d'icônes des tuiles du portail
 // (edit, wrench, package, printer, calculator, truck, users, file-text,
-// clipboard, palette, shield-check, tool) le long d'une trajectoire
+// clipboard, palette, shield-check, mytools) le long d'une trajectoire
 // courbe (arc quadratique) aléatoire. Chaque wagon suit le précédent
 // avec un léger décalage — effet train. Ne se relance pas tant qu'une
 // instance tourne déjà (résiste aux re-renders).
@@ -252,7 +252,7 @@ function startLoginTrainAnimation(){
     'edit':          {name:'Saisie Prod',    desc:'Saisie opérateur — machine'},
     'wrench':        {name:'MyProd',         desc:'Suivi de production & Planning'},
     'package':       {name:'MyStock',        desc:'Gestion des stocks produits'},
-    'tool':          {name:'MyTools',        desc:'Étiquettes, formulaires, PDF, traduction'},
+    'mytools':       {name:'MyTools',        desc:'Étiquettes, formulaires, PDF, traduction'},
     'calculator':    {name:'MyCompta',       desc:'Comptabilité — accès réservé'},
     'truck':         {name:'MyExpé',         desc:'Expédition & Suivi'},
     'users':         {name:'Planning RH',    desc:'Planning personnel & Congés'},

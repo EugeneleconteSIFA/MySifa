@@ -1,0 +1,33 @@
+{
+ "titre": "MySifa — icône de l'appli MyTools",
+ "da": "Trait net, monochrome, épaisseur 2 comme les tuiles du portail",
+ "trait": 2,
+ "ordre": [
+  "mytools",
+  "mytools-deplie",
+  "mytools-etiquette",
+  "tool",
+  "toolbox"
+ ],
+ "libelles": {
+  "mytools": "A3 · Lame + ouvre-boîte",
+  "mytools-deplie": "A4 · Lame + tournevis",
+  "mytools-etiquette": "B · Étiquette et stylet",
+  "tool": "Existant : MyProd (clé)",
+  "toolbox": "Existant : Maintenance"
+ },
+ "contextes": [
+  {
+   "nom": "Clair",
+   "fond": "#ffffff",
+   "texte": "#0f172a",
+   "accent": "#0891b2"
+  },
+  {
+   "nom": "Sombre",
+   "fond": "#111827",
+   "texte": "#f1f5f9",
+   "accent": "#22d3ee"
+  }
+ ]
+}

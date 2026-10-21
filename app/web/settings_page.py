@@ -2502,8 +2502,9 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <div style="margin-bottom:20px">
           <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px">Usage IA</div>
           <div style="font-size:13px;color:var(--muted)">
-            Chaque action qui appelle Claude : assistant IA, lecture de devis, de certificats FSC,
-            de grilles transporteur, requêtes du DB Viewer.
+            Chaque action qui appelle Claude, avec l'application et l'écran d'où elle part, le modèle,
+            la durée et le coût. Filtrer par utilisateur, application, fonction, modèle ou statut ;
+            cliquer une ligne de synthèse pour filtrer, un appel pour son détail.
           </div>
         </div>
         <div id="ia-usage-root"></div>
@@ -3469,7 +3470,8 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
      pastille d'origine, bloc « fiche RVGI ». Tout est dans ce fichier,
      la page n'y accroche que trois appels. -->
 <script src="/static/mysifa_rvgi_tiers.js?v=__V_LABEL__"></script>
-<script src="/static/settings_ia_usage.js?v=1"></script>
+<script src="/static/settings_ia_usage.js?v=2"></script>
+<script src="/static/mysifa_bulles.js?v=1"></script>
 <script src="/static/settings_coherence.js?v=1"></script>
 <link rel="stylesheet" href="/static/plan_site.css?v=2">
 <script src="/static/plan_site.js?v=2"></script>

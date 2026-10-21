@@ -71,5 +71,80 @@ verifier("nom de fichier assaini", I.nomFichierSur('a/b:c*"d') === "a-b-c-d");
 verifier("type d'image par signature", I.typeImage(new Uint8Array([0x89, 0x50, 0x4e, 0x47])) === "png"
   && I.typeImage(new Uint8Array([0xff, 0xd8, 0xff])) === "jpg" && I.typeImage(new Uint8Array([1, 2])) === null);
 
+// ── Extensions du lot 2 (chargées dans l'ordre où la page les charge) ──
+for (const f of ["mysifa_tools_pdf_texte.js", "mysifa_tools_pdf_formulaires.js", "mysifa_tools_pdf_creation.js"]) {
+  require(path.join(__dirname, "..", "static", f));
+}
+const TX = I.texte, FO = I.formulaires, CR = I.creation;
+verifier("extensions enregistrées", !!(TX && FO && CR));
+
+// Correspondance de polices
+const pol = (nom, autre) => TX.correspondancePolice(Object.assign({ nom }, autre || {}));
+verifier("Arial-BoldMT -> sans gras", egal(pol("ABCDEF+Arial-BoldMT"), { famille: "sans", gras: true, italique: false }));
+verifier("TimesNewRomanPS-ItalicMT -> serif italique", egal(pol("TimesNewRomanPS-ItalicMT"), { famille: "serif", gras: false, italique: true }));
+verifier("CourierNewPS-BoldItalicMT -> mono gras italique", egal(pol("CourierNewPS-BoldItalicMT"), { famille: "mono", gras: true, italique: true }));
+verifier("DejaVuSans -> sans (« sans » l'emporte sur « serif »)", pol("DejaVuSans").famille === "sans");
+verifier("NotoSerif-Regular -> serif", pol("NotoSerif-Regular").famille === "serif");
+verifier("indices pdf.js : style monospace", pol("g_d0_f3", { famille: "monospace" }).famille === "mono");
+verifier("indices pdf.js : gras signalé par la police", pol("Calibri", { gras: true }).gras === true);
+
+// Clé de police standard (fichier principal)
+const cle = I.cleStandard;
+verifier("clé standard sans", cle({}) === "Helvetica" && cle({ gras: true }) === "HelveticaBold" && cle({ italique: true }) === "HelveticaOblique");
+verifier("clé standard serif / mono", cle({ famille: "serif", gras: true, italique: true }) === "TimesRomanBoldItalic" && cle({ famille: "mono", italique: true }) === "CourierOblique");
+
+// Échantillonnage des couleurs
+function px(n, c) { const a = []; for (let i = 0; i < n; i++) a.push(c[0], c[1], c[2], 255); return a; }
+const fondBeige = [245, 235, 210], encre = [20, 40, 120];
+const e1 = TX.echantillonner(px(80, fondBeige).concat(px(20, encre)), px(60, fondBeige).concat(px(3, encre)));
+verifier("fond échantillonné = couleur dominante de l'anneau", e1.fond === "#f5ebd2");
+verifier("texte échantillonné = pixels éloignés du fond", e1.texte === "#142878");
+verifier("intérieur uni : texte noir sur fond clair", TX.echantillonner(px(10, [255, 255, 255]), px(10, [255, 255, 255])).texte === "#000000");
+
+// Boîte d'un élément de texte pdf.js
+const bi = TX.boiteItem([12, 0, 0, 12, 100, 700], 60, [0, 0, 595, 842]);
+verifier("boîte d'un texte : ligne de base et taille", bi.bx === 100 && bi.by === 142 && bi.taille === 12 && bi.w === 60);
+verifier("boîte d'un texte : englobe ascendantes et descendantes", bi.y < 142 - 9 && bi.y + bi.h > 142 + 2);
+verifier("texte horizontal détecté", TX.estHorizontal([12, 0, 0, 12, 0, 0]) && !TX.estHorizontal([0, 12, -12, 0, 0, 0]));
+
+// Champs de formulaire
+verifier("nom unique : premier libre", FO.nomUnique("Champ", ["Champ 1", "Champ 2", "client"]) === "Champ 3");
+verifier("nom unique : liste vide", FO.nomUnique("Champ", []) === "Champ 1");
+const bc = FO.boiteChamp([60, 600, 260, 624], [0, 0, 595, 842], 0, I.versVue);
+verifier("rectangle PDF -> boîte affichée", egal(bc, { x: 60, y: 218, w: 200, h: 24 }));
+const bc90 = FO.boiteChamp([60, 600, 260, 624], [0, 0, 595, 842], 90, I.versVue);
+verifier("rectangle PDF -> boîte, page pivotée (largeur et hauteur échangées)", bc90.w === 24 && bc90.h === 200);
+const P0 = (u, v) => I.versPdf([0, 0, 595, 842], 0, u, v);
+verifier("boîte affichée -> rectangle pdf-lib (aller-retour)", egal(FO.rectPdf(bc, P0), { x: 60, y: 600, width: 200, height: 24 }));
+verifier("genre de widget", FO.genreWidget({ fieldType: "Tx", multiLine: true }) === "multi" && FO.genreWidget({ fieldType: "Btn", checkBox: true }) === "case"
+  && FO.genreWidget({ fieldType: "Btn", radioButton: true }) === "radio" && FO.genreWidget({ fieldType: "Ch", combo: true }) === "liste"
+  && FO.genreWidget({ fieldType: "Btn", pushButton: true }) === null);
+
+verifier("radio : état pdf-lib « 1 » -> libellé de l'option", FO.optionRadio({ options: ["camion", "retrait"] }, "1") === "retrait"
+  && FO.optionRadio({ options: ["camion", "retrait"] }, "camion") === "camion" && FO.optionRadio(null, "Oui") === "Oui");
+
+// Bloc de texte : retour à la ligne (mesure : 1 point par caractère)
+const m1 = s => s.length;
+verifier("couper : mots entiers", egal(CR.couperLignes("un deux trois quatre", 9, m1), ["un deux", "trois", "quatre"]));
+verifier("couper : retours à la ligne conservés", egal(CR.couperLignes("a\n\nb", 10, m1), ["a", "", "b"]));
+verifier("couper : mot trop long coupé", egal(CR.couperLignes("abcdefghij", 4, m1), ["abcd", "efgh", "ij"]));
+verifier("couper : texte vide = une ligne vide", egal(CR.couperLignes("", 10, m1), [""]));
+
+// Tableau
+const tab = { x: 10, y: 20, w: 300, cols: [1, 1, 1], cells: [["A", "B", "C"], ["un texte assez long", "", ""]], entete: true, taille: 10, pad: 4 };
+const G = CR.geometrieTableau(tab, (s) => s.length * 5);
+verifier("tableau : bords de colonnes", egal(G.xs, [10, 110, 210, 310]));
+verifier("tableau : la ligne longue passe sur deux lignes", G.lignes[1][0].length === 2 && G.ys.length === 3 && (G.ys[2] - G.ys[1]) > (G.ys[1] - G.ys[0]));
+verifier("tableau : retailler sans perdre le contenu", egal(CR.retaillerCellules([["a", "b"], ["c", "d"]], 3, 1), [["a"], ["c"], [""]]));
+verifier("tableau : colonnes renormalisées", Math.abs(CR.retaillerColonnes([0.5, 0.5], 3).reduce((s, x) => s + x, 0) - 1) < 1e-9);
+const nb = CR.deplacerBord({ x: 0, w: 300, cols: [1, 1, 1] }, 1, 150, 12);
+verifier("tableau : déplacer un bord élargit la colonne de gauche", Math.abs(nb[0] * 300 - 150) < 1e-9 && Math.abs(nb[1] * 300 - 50) < 1e-9 && Math.abs(nb[2] * 300 - 100) < 1e-9);
+verifier("tableau : bord borné par la largeur minimale", Math.abs(CR.deplacerBord({ x: 0, w: 300, cols: [1, 1, 1] }, 1, 500, 12)[1] * 300 - 12) < 1e-9);
+
+// Formats
+verifier("format A4", egal(CR.dimensionsFormat("a4"), [595.28, 841.89]));
+verifier("format personnalisé en mm", Math.abs(CR.dimensionsFormat("perso", 100, 50)[0] - 283.46) < 0.01);
+verifier("format personnalisé hors bornes refusé", leve(() => CR.dimensionsFormat("perso", 5, 50), /entre 20 et 2000 mm/));
+
 if (ECHECS.length) { console.log("\n" + ECHECS.length + " échec(s)"); process.exit(1); }
 console.log("\nTous les cas passent.");

@@ -131,6 +131,7 @@ def natural_language_to_sql(question: str, schema: str) -> dict[str, str]:
         messages=[{"role": "user", "content": user_msg}],
     )
     ia_usage.noter(message, "sql")
+    ia_usage.preciser(modele_demande=ANTHROPIC_MODEL)
     raw = ""
     for block in message.content:
         if getattr(block, "type", None) == "text":
