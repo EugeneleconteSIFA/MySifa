@@ -112,6 +112,8 @@ from app.routers.qualite_eudr import router_api as eudr_portail_api_router
 from app.routers.qualite_eudr import router_html as eudr_portail_html_router
 from app.web.qualite_page import router as qualite_page_router
 from app.web.tools_page import router as tools_page_router
+from app.routers.tools_convertir import router as tools_convertir_router
+from app.routers.tools_cartons import router as tools_cartons_router
 from app.routers.pwa import router as pwa_router
 from app.routers.push import router as push_router
 from app.routers.notifications import router as notifications_router
@@ -864,6 +866,8 @@ app.include_router(eudr_portail_html_router)
 app.include_router(eudr_portail_api_router)
 app.include_router(qualite_page_router)
 app.include_router(tools_page_router)
+app.include_router(tools_convertir_router)
+app.include_router(tools_cartons_router)
 app.include_router(pwa_router)
 app.include_router(push_router)
 app.include_router(notifications_router)

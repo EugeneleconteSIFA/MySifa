@@ -489,3 +489,16 @@ select.tpdf-fc { padding: 0 1px; }
 /* Alignement (bloc de texte) */
 .tpdf-seg { display: flex; gap: 4px; }
 .tpdf-seg .tpdf-btn { flex: 1; font-size: 12px; }
+
+/* ── Lot 3 : floutage ───────────────────────────────────────────── */
+.tpdf-flou-attente { fill: var(--muted); fill-opacity: .85; }
+.tpdf-flou-cadre { stroke: var(--accent); stroke-width: .75; stroke-dasharray: 3 2; }
+.tpdf-vig-flou {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px; height: 18px;
+  border-radius: 9px;
+  background: var(--warn);
+  color: white;
+}

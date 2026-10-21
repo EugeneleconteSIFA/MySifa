@@ -107,6 +107,30 @@ verifier("boîte d'un texte : ligne de base et taille", bi.bx === 100 && bi.by =
 verifier("boîte d'un texte : englobe ascendantes et descendantes", bi.y < 142 - 9 && bi.y + bi.h > 142 + 2);
 verifier("texte horizontal détecté", TX.estHorizontal([12, 0, 0, 12, 0, 0]) && !TX.estHorizontal([0, 12, -12, 0, 0, 0]));
 
+// Regroupement des éléments de texte pdf.js en blocs (bug du titre coupé)
+const it = (str, x, y, w, t) => ({ str, transform: [t || 16, 0, 0, t || 16, x, y], width: w });
+const blocs = TX.grouperItems([
+  it("DEMANDE DE SOUSCRIPTION", 60, 720, 230), it(" ", 290, 720, 4.4), it("DE COMPTE", 294.4, 720, 95),
+  { str: "", transform: [1, 0, 0, 1, 0, 0], width: 0, hasEOL: true },
+  it("CONDITIONS PARTICULIÈR", 60, 700, 225), it("ES", 285, 700.5, 22, 15),
+  it("Page 1", 500, 700, 40, 10)
+]);
+verifier("blocs : trois blocs (deux lignes de titre + un texte éloigné)", blocs.length === 3);
+verifier("blocs : « CONDITIONS PARTICULIÈR » + « ES » collés = un seul bloc", blocs[1].str === "CONDITIONS PARTICULIÈRES" && blocs[1].idx.length === 2);
+verifier("blocs : largeur = union des éléments", blocs[1].X0 === 60 && blocs[1].X1 === 307);
+verifier("blocs : l'espace séparé est conservé", blocs[0].str === "DEMANDE DE SOUSCRIPTION DE COMPTE" && Math.abs(blocs[0].X1 - 389.4) < 1e-9);
+verifier("blocs : un texte loin sur la même ligne reste à part", blocs[2].str === "Page 1");
+const ecarte = TX.grouperItems([it("A", 0, 100, 10, 10), it("B", 13, 100, 10, 10), it("C", 30, 100, 10, 10)]);
+verifier("blocs : écart < 1,5 espace fusionné avec une espace, écart plus grand coupé", ecarte.length === 2 && ecarte[0].str === "A B" && ecarte[1].str === "C");
+verifier("blocs : lignes de base différentes séparées", TX.grouperItems([it("A", 0, 100, 10, 10), it("B", 10, 96, 10, 10)]).length === 2);
+const bb = TX.boiteBloc(blocs[1], [0, 0, 595, 842]);
+verifier("boîte d'un bloc : toute la largeur", bb.x === 60 && bb.w === 247 && bb.largeur === 247);
+const esp = TX.grouperItems([it("L E T T R E S", 60, 700, 90, 12), it("E S P A C E E S", 154, 700, 100, 12)]);
+verifier("blocs : lettres espacées par pdf.js recollées, espace entre les mots gardée", esp.length === 1 && esp[0].str === "LETTRES ESPACEES");
+verifier("espacement : police plus étroite -> espacement positif", Math.abs(TX.espacement(120, 100, 10, 16) - 2) < 1e-9);
+verifier("espacement : borné", TX.espacement(400, 100, 10, 16) === 0.6 * 16 && TX.espacement(10, 100, 10, 16) === -1.6);
+verifier("espacement : écart négligeable -> 0", TX.espacement(100.05, 100, 10, 16) === 0);
+
 // Champs de formulaire
 verifier("nom unique : premier libre", FO.nomUnique("Champ", ["Champ 1", "Champ 2", "client"]) === "Champ 3");
 verifier("nom unique : liste vide", FO.nomUnique("Champ", []) === "Champ 1");
@@ -145,6 +169,33 @@ verifier("tableau : bord borné par la largeur minimale", Math.abs(CR.deplacerBo
 verifier("format A4", egal(CR.dimensionsFormat("a4"), [595.28, 841.89]));
 verifier("format personnalisé en mm", Math.abs(CR.dimensionsFormat("perso", 100, 50)[0] - 283.46) < 0.01);
 verifier("format personnalisé hors bornes refusé", leve(() => CR.dimensionsFormat("perso", 5, 50), /entre 20 et 2000 mm/));
+
+// ── Floutage ──
+require(path.join(__dirname, "..", "static", "mysifa_tools_pdf_flou.js"));
+const FL = I.flou;
+verifier("extension floutage enregistrée", !!FL);
+verifier("zone -> pixels (200 dpi)", egal(FL.zonePixels({ x: 72, y: 36, w: 36, h: 18 }, 200 / 72, 2000, 2000), { x: 200, y: 100, w: 100, h: 50 }));
+verifier("zone -> pixels bornée au bord de l'image", egal(FL.zonePixels({ x: -10, y: 90, w: 30, h: 50 }, 1, 100, 100), { x: 0, y: 90, w: 20, h: 10 }));
+verifier("zone hors image -> null", FL.zonePixels({ x: 200, y: 0, w: 10, h: 10 }, 1, 100, 100) === null);
+function img(W, H, f) { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const v = f(x, y), i = (y * W + x) * 4; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; } return d; }
+const dam = img(4, 4, (x, y) => (x + y) % 2 ? 255 : 0);
+FL.pixeliser(dam, 4, 4, { x: 0, y: 0, w: 4, h: 2 }, 2);
+verifier("pixeliser : un bloc 2x2 de damier devient gris moyen", dam[0] === 128 && dam[4] === 128 && dam[(1 * 4 + 1) * 4] === 128);
+verifier("pixeliser : rien hors de la zone", dam[(2 * 4 + 0) * 4] === 0 && dam[(2 * 4 + 1) * 4] === 255);
+const raies = img(20, 20, (x) => x % 2 ? 255 : 0);
+FL.flouter(raies, 20, 20, { x: 5, y: 5, w: 10, h: 10 }, 2, 3);
+let ecart = 0; for (let y = 5; y < 15; y++) for (let x = 5; x < 15; x++) ecart = Math.max(ecart, Math.abs(raies[(y * 20 + x) * 4] - 127.5));
+verifier("flouter : des raies d'un pixel deviennent un gris uniforme", ecart < 20);
+verifier("flouter : rien hors de la zone", raies[(0 * 20 + 1) * 4] === 255 && raies[(0 * 20 + 0) * 4] === 0);
+const blanc = img(4, 4, () => 255); FL.masquer(blanc, 4, 4, { x: 1, y: 1, w: 2, h: 2 }, [0, 0, 0]);
+verifier("masquer : aplat noir dans la zone seulement", blanc[(1 * 4 + 1) * 4] === 0 && blanc[0] === 255);
+const vue = [0, 0, 595, 842];
+const bt = FL.boiteTexte([10, 0, 0, 10, 100, 700], 100, 0, 10, 10, vue, 0, I.versVue);
+verifier("boîte d'un texte entier (page à l'endroit)", bt.x === 99 && bt.w === 102 && bt.y < 142 - 9 && bt.y + bt.h > 142);
+const bp = FL.boiteTexte([10, 0, 0, 10, 100, 700], 100, 5, 5, 10, vue, 0, I.versVue);
+verifier("boîte d'une partie du texte (occurrence)", Math.abs(bp.x - 149) < 1e-9 && Math.abs(bp.w - 52) < 1e-9);
+const b90 = FL.boiteTexte([10, 0, 0, 10, 100, 700], 100, 0, 10, 10, vue, 90, I.versVue);
+verifier("boîte d'un texte sur page pivotée : largeur et hauteur échangées", Math.abs(b90.h - 102) < 1e-9 && b90.w < 20 && Math.abs(b90.y - 99) < 1e-9);
 
 if (ECHECS.length) { console.log("\n" + ECHECS.length + " échec(s)"); process.exit(1); }
 console.log("\nTous les cas passent.");

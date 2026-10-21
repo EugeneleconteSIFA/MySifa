@@ -11,6 +11,7 @@
  *                FORMULAIRES_JS de app/web/qualite_formulaires_assets.py)
  *   pdf          éditeur PDF dans le navigateur (static/mysifa_tools_pdf.js, chargé à la demande)
  *   traduction   traducteur DeepL (static/mysifa_tools_traduction.js)
+ *   convertir    convertisseur de formats (static/mysifa_tools_convertir.js, chargé à la demande)
  *   calculs      calculs bobine : métrage ↔ diamètre, fronts, étiquettes par bobine
  *                (static/mysifa_tools_calculs.js)
  *
@@ -49,8 +50,11 @@ const TOOLS_OUTILS = [
   { id: 'image', label: 'Image', titre: 'Image — améliorer et vectoriser',
     desc: 'Agrandir, nettoyer, détourer une image ; la vectoriser en SVG ou PDF. Les fichiers restent sur le poste.',
     icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 16l5-5 4 4"/><path d="M14 13l2-2 5 5"/><circle cx="8.5" cy="8" r="1.5"/>' },
+  { id: 'convertir', label: 'Convertir', titre: 'Convertir',
+    desc: 'Plus de 50 formats : images, PDF, documents, présentations, tableurs, audio, vidéo. Ce qui peut se faire sur le poste s\'y fait.',
+    icon: '<path d="M4 7h11.5"/><path d="M12.5 3.5L16 7l-3.5 3.5"/><path d="M20 17H8.5"/><path d="M11.5 13.5L8 17l3.5 3.5"/>' },
   { id: 'calculs', label: 'Calculs bobine', titre: 'Calculs bobine',
-    desc: 'Métrage ↔ diamètre, fronts sur la laize, étiquettes par bobine.',
+    desc: 'Métrage ↔ diamètre, fronts sur la laize, étiquettes par bobine, carton optimal.',
     icon: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6"/>' },
   { id: 'traduction', label: 'Traducteur', titre: 'Traducteur', ia: true,
     desc: 'Traduire un texte ou un courrier dans huit langues, vouvoiement ou tutoiement.',
@@ -179,6 +183,7 @@ function toolsAccueil(root) {
 const _TOOLS_DIFFERES = {
   pdf:   { js: 'mysifa_tools_pdf.js', css: 'mysifa_tools_pdf.css', glob: 'MyToolsPDF', nom: 'Éditeur PDF' },
   image: { js: 'mysifa_tools_image.js', css: 'mysifa_tools_image.css', glob: 'MyToolsImage', nom: 'Outil image' },
+  convertir: { js: 'mysifa_tools_convertir.js', css: 'mysifa_tools_convertir.css', glob: 'MyToolsConvertir', nom: 'Convertisseur' },
 };
 const _toolsCharges = {};
 function toolsCharger(id) {
@@ -338,6 +343,9 @@ function toolsParams() {
     if (f) { p[f.cle] = f.id; nav += '/' + f.cle; }
   } else if (S.outil === 'pdf' && window.MyToolsPDF && window.MyToolsPDF.adresse) {
     try { const e = window.MyToolsPDF.adresse.etat() || {}; if (e.page && Number(e.page) > 1) p.page = String(e.page); } catch (e) {}
+  } else if (S.outil === 'calculs' && window.MyToolsCalculs && window.MyToolsCalculs.adresse) {
+    const e = window.MyToolsCalculs.adresse.etat();
+    if (e.calcul && e.calcul !== 'metrage') { p.calcul = e.calcul; nav += '/' + e.calcul; }
   } else if (S.outil === 'image' && window.MyToolsImage) {
     if (window.MyToolsImage.adresse.etat().mode === 'vectoriser') { p.mode = 'vectoriser'; nav += '/vectoriser'; }
   } else if (S.outil === 'traduction' && window.MyToolsTraduction) {
@@ -428,6 +436,8 @@ async function toolsLireUrl(u, complet) {
     const a = { page: /^\d+$/.test(String(pg || '')) ? Number(pg) : 1 };
     if (window.MyToolsPDF && window.MyToolsPDF.adresse) { try { window.MyToolsPDF.adresse.aller(a); } catch (e) {} }
     else _toolsAttente.pdf = a;
+  } else if (cible === 'calculs' && window.MyToolsCalculs && window.MyToolsCalculs.adresse) {
+    if (complet || u.a('calcul')) window.MyToolsCalculs.adresse.aller({ calcul: u.get('calcul', 'metrage', ['metrage', 'fronts', 'etiquettes', 'carton']) });
   } else if (cible === 'image') {
     const a = { mode: u.get('mode', 'ameliorer', ['ameliorer', 'vectoriser']) };
     if (window.MyToolsImage) { if (complet || u.a('mode')) window.MyToolsImage.adresse.aller(a); }

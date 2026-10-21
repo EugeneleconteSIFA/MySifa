@@ -25,6 +25,49 @@
     return { x: x, y: base - h * 0.9, w: Math.max(largeur, h * 0.3), h: h * 1.15, bx: x, by: base, taille: h };
   }
   function estHorizontal(tr) { return tr[0] > 0 && Math.abs(tr[1]) < 1e-3 && Math.abs(tr[2]) < 1e-3; }
+  // pdf.js découpe souvent une ligne en plusieurs éléments (changement de
+  // police, accent, crénage, lettres espacées). Un bloc = les éléments
+  // consécutifs d'une même ligne de base (±25 % de la hauteur), séparés de
+  // moins d'1,5 espace. Largeur = union des éléments, pas celle d'un seul.
+  function grouperItems(items) {
+    var blocs = [], cur = null;
+    (items || []).forEach(function (it, i) {
+      var tr = it.transform, str = it.str || '';
+      // Lettres espacées : pdf.js rend « L E T T R E S » ; on retrouve « LETTRES ».
+      if (str.length >= 5 && /^(\S )+\S$/.test(str)) str = str.replace(/ /g, '');
+      if (!tr || (!str && !(it.width > 0))) { if (it.hasEOL) cur = null; return; }
+      if (!estHorizontal(tr)) { cur = null; return; }
+      var h = Math.abs(tr[3]) || Math.hypot(tr[2], tr[3]) || 10, x0 = tr[4], x1 = tr[4] + (it.width || 0), vide = !str.trim();
+      if (cur) {
+        var H = Math.max(h, cur.h), gap = x0 - cur.X1;
+        if (Math.abs(tr[5] - cur.Y) <= 0.25 * H && gap < 1.5 * 0.28 * H && gap > -H) {
+          if (gap > 0.15 * H && !/\s$/.test(cur.str) && !/^\s/.test(str)) cur.str += ' ';
+          cur.str += str; cur.X1 = Math.max(cur.X1, x1); cur.X0 = Math.min(cur.X0, x0); cur.h = H; cur.idx.push(i);
+          if (!vide && str.trim().length > cur.principal.str.trim().length) cur.principal = it;
+          if (it.hasEOL) cur = null;
+          return;
+        }
+      }
+      if (vide) { cur = null; return; }
+      cur = { idx: [i], premier: i, str: str, X0: x0, X1: x1, Y: tr[5], h: h, principal: it };
+      blocs.push(cur);
+      if (it.hasEOL) cur = null;
+    });
+    blocs.forEach(function (b) { b.str = b.str.replace(/\s+$/, ''); });
+    return blocs;
+  }
+  function boiteBloc(b, view) {
+    var r = boiteItem([b.h, 0, 0, b.h, b.X0, b.Y], b.X1 - b.X0, view);
+    r.largeur = b.X1 - b.X0;
+    return r;
+  }
+  // Espacement par caractère pour qu'un texte mesuré `mesure` occupe `cible`.
+  function espacement(cible, mesure, n, taille) {
+    if (!(cible > 0) || !(n > 0)) return 0;
+    var e = (cible - mesure) / n;
+    e = Math.max(-0.1 * taille, Math.min(0.6 * taille, e));
+    return Math.abs(e) < 0.01 ? 0 : e;
+  }
   // Nom de police PDF + indices pdf.js -> famille standard, gras, italique.
   function correspondancePolice(info) {
     info = info || {};
@@ -70,7 +113,7 @@
   }
 
   M._interne = M._interne || {};
-  M._interne.texte = { boiteItem: boiteItem, estHorizontal: estHorizontal, correspondancePolice: correspondancePolice, echantillonner: echantillonner, rgbHex: rgbHex };
+  M._interne.texte = { boiteItem: boiteItem, estHorizontal: estHorizontal, grouperItems: grouperItems, boiteBloc: boiteBloc, espacement: espacement, correspondancePolice: correspondancePolice, echantillonner: echantillonner, rgbHex: rgbHex };
 
   M.etendre(function (api) {
     var EXT = api.ext;
@@ -114,9 +157,8 @@
       contenu(src, p.idx).then(function (tc) {
         if (S() !== s || _zonesPour !== cle || api.pageCourante() !== p) return;
         var n = 0;
-        tc.items.forEach(function (it, ii) {
-          if (!it.str || !it.str.trim() || !estHorizontal(it.transform)) return;
-          var b = boiteItem(it.transform, it.width, d.meta.view);
+        grouperItems(tc.items).forEach(function (bl) {
+          var it = bl.principal, ii = bl.premier, b = boiteBloc(bl, d.meta.view);
           var z0 = document.createElement('div');
           z0.className = 'tpdf-tx';
           var deja = trouverRemplace(p, ii);
@@ -124,7 +166,7 @@
           z0.style.left = (b.x * z) + 'px'; z0.style.top = (b.y * z) + 'px';
           z0.style.width = (b.w * z) + 'px'; z0.style.height = (b.h * z) + 'px';
           z0.setAttribute('data-bulle', deja ? 'Reprendre' : 'Modifier');
-          z0.addEventListener('click', function (ev) { ev.stopPropagation(); ouvrir(p, d, z, it, ii, b, tc); });
+          z0.addEventListener('click', function (ev) { ev.stopPropagation(); ouvrir(p, d, z, it, ii, b, tc, bl.str); });
           s.html.appendChild(z0); n++;
         });
         if (!n && !_prevenu['v' + p.uid]) { _prevenu['v' + p.uid] = 1; api.toast('Pas de texte modifiable sur cette page (scan ?)', 'info'); }
@@ -177,15 +219,23 @@
     }
 
     /* ── Éditeur posé sur le texte ────────────────────────────────────── */
-    function ouvrir(p, d, z, it, ii, b, tc) {
+    var _cm = null;
+    function mesureCss(txt, a) {
+      if (!_cm) _cm = document.createElement('canvas').getContext('2d');
+      _cm.font = (a.police.italique ? 'italic ' : '') + (a.police.gras ? 'bold ' : '') + a.taille + 'px ' + cssPolice(a.police);
+      return _cm.measureText(txt).width;
+    }
+    function ouvrir(p, d, z, it, ii, b, tc, str) {
       var s = S();
       s.html.querySelectorAll('.tpdf-tx-edit').forEach(function (e) { e.remove(); });
       var a = trouverRemplace(p, ii), neuf = !a;
       if (neuf) {
         var col = echantillonCanvas(b, d);
-        a = { id: api.nid('n'), t: 'remplace', item: ii, orig: it.str, texte: it.str,
-          x: b.x, y: b.y, w: b.w, h: b.h, bx: b.bx, by: b.by, taille: b.taille,
+        a = { id: api.nid('n'), t: 'remplace', item: ii, orig: str, texte: str,
+          x: b.x, y: b.y, w: b.w, h: b.h, bx: b.bx, by: b.by, taille: b.taille, largeur: b.largeur,
           police: infoPolice(tc, it), couleur: col.texte, fond: col.fond };
+        // Même texte, même largeur : l'écart de police se rattrape par l'espacement.
+        a.esp = espacement(a.largeur, mesureCss(str, a), str.length, a.taille);
       }
       editer(a, p, z, neuf);
     }
@@ -194,7 +244,9 @@
       var inp = document.createElement('input');
       inp.type = 'text'; inp.className = 'tpdf-tx-edit'; inp.value = a.texte;
       inp.style.left = (a.x * z) + 'px'; inp.style.top = (a.y * z) + 'px';
-      inp.style.minWidth = (a.w * z + 8) + 'px'; inp.style.height = (a.h * z) + 'px';
+      inp.style.minWidth = (a.w * z + 2) + 'px'; inp.style.height = (a.h * z) + 'px';
+      inp.style.width = Math.max(a.w * z + 2, (mesureCss(a.texte, a) + (a.esp || 0) * a.texte.length) * z + 12) + 'px';
+      inp.style.letterSpacing = ((a.esp || 0) * z) + 'px';
       inp.style.fontSize = (a.taille * z) + 'px';
       inp.style.fontFamily = cssPolice(a.police);
       inp.style.fontWeight = a.police.gras ? '700' : '400';
@@ -228,8 +280,8 @@
       repere: 'pdf0', fixe: true,
       boite: function (a) { return { x: a.x, y: a.y, w: a.w, h: a.h }; },
       dessiner: function (a, g) {
-        api.sv('rect', { x: a.x - 0.6, y: a.y - 0.6, width: a.w + 1.2, height: a.h + 1.2, fill: a.fond }, g);
-        var t = api.sv('text', { x: a.bx, y: a.by, 'font-size': a.taille, 'font-family': cssPolice(a.police),
+        api.sv('rect', { x: a.x - 1, y: a.y - 1, width: a.w + 2, height: a.h + 2, fill: a.fond }, g);
+        var t = api.sv('text', { x: a.bx, y: a.by, 'font-size': a.taille, 'letter-spacing': a.esp || 0, 'font-family': cssPolice(a.police),
           'font-weight': a.police.gras ? 'bold' : 'normal', 'font-style': a.police.italique ? 'italic' : 'normal', fill: a.couleur }, g);
         t.textContent = a.texte;
       },
@@ -255,11 +307,16 @@
       },
       exporter: async function (a, c) {
         var L = c.L, f = api.hexRgb(a.fond), t = api.hexRgb(a.couleur);
-        var p1 = c.P(a.x - 0.6, a.y - 0.6), p2 = c.P(a.x + a.w + 0.6, a.y + a.h + 0.6);
+        // Toute la boîte d'origine + 1 pt, quelle que soit la longueur du nouveau texte.
+        var p1 = c.P(a.x - 1, a.y - 1), p2 = c.P(a.x + a.w + 1, a.y + a.h + 1);
         c.pg.drawRectangle({ x: Math.min(p1[0], p2[0]), y: Math.min(p1[1], p2[1]), width: Math.abs(p2[0] - p1[0]), height: Math.abs(p2[1] - p1[1]), color: L.rgb(f[0], f[1], f[2]) });
         if (!a.texte) return;
-        var font = await c.pol.police(a.texte, a.police), b = c.P(a.bx, a.by);
+        var font = await c.pol.police(a.texte + a.orig, a.police), b = c.P(a.bx, a.by);
+        var orig = api.nettoyerTexte(font, a.orig || '');
+        var cs = a.largeur ? espacement(a.largeur, font.widthOfTextAtSize(orig, a.taille), orig.length, a.taille) : 0;
+        if (cs) c.pg.pushOperators(L.pushGraphicsState(), L.setCharacterSpacing(cs));
         c.pg.drawText(api.nettoyerTexte(font, a.texte), { x: b[0], y: b[1], size: a.taille, font: font, color: L.rgb(t[0], t[1], t[2]) });
+        if (cs) c.pg.pushOperators(L.popGraphicsState());
       }
     };
   });
