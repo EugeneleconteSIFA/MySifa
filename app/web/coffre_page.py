@@ -150,7 +150,17 @@ tr:hover td{background:var(--accent-bg)}
 .ndf-meta{font-size:11px;color:var(--muted);margin-top:3px}
 tr.ndf-row{cursor:pointer}
 .file-drop{display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px dashed var(--border);border-radius:8px;padding:14px;text-align:center;font-size:12px;font-weight:500;color:var(--muted);background:var(--card);cursor:pointer;transition:border-color .15s,color .15s}
-.field .file-drop{text-transform:none;letter-spacing:0;margin:0}
+.field .file-drop{display:flex;text-transform:none;letter-spacing:0;margin:0}
+.file-drop.grand{flex-direction:column;gap:6px;padding:22px 16px;font-size:13px;font-weight:600;color:var(--text2)}
+.file-drop.grand svg{color:var(--accent)}
+.file-drop.survol{border-color:var(--accent);background:var(--accent-bg)}
+.drop-sub{font-size:11px;font-weight:400;color:var(--muted)}
+.scan-etat{margin-top:8px;font-size:12px;line-height:1.45;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text2)}
+.scan-etat.encours{color:var(--accent)}
+.scan-etat.ok{border-color:color-mix(in srgb,var(--success) 40%,var(--border));color:var(--text)}
+.scan-etat.err{border-color:color-mix(in srgb,var(--danger) 40%,var(--border));color:var(--danger)}
+.field label .lu{display:inline-block;margin-left:6px;padding:0 6px;border-radius:5px;background:var(--accent-bg);text-transform:none;letter-spacing:0;font-weight:600;font-size:10px;line-height:16px;color:var(--accent)}
+#scan-manuel{margin-top:6px}
 .file-drop:hover{border-color:var(--accent);color:var(--accent)}
 .file-drop.has-file{border-style:solid;color:var(--text)}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -509,10 +519,24 @@ function openNdfModal(noteId){
   back.innerHTML=`<div class="modal">
     <div class="modal-head">
       <div class="modal-head-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></div>
-      <div><h3>${titre}</h3><div class="modal-head-sub">Saisissez le montant payé (TTC) : la TVA se calcule seule.</div></div>
+      <div><h3>${titre}</h3><div class="modal-head-sub">Joignez le justificatif : les champs se remplissent seuls.</div></div>
     </div>
     <form id="ndf-form">
       <div class="modal-body">
+        <div class="ndf-section">
+          <div class="ndf-section-titre">Justificatif</div>
+          <div class="field">
+            ${edite&&edite.justificatif_nom?`<div class="calc-hint" style="margin:0 0 6px">Joint : ${esc(edite.justificatif_nom)}</div>`:''}
+            <label class="file-drop grand" id="drop-label">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              <span id="drop-txt">${edite&&edite.justificatif_nom?'Remplacer le justificatif joint':'Photographier ou déposer le justificatif'}</span>
+              <span class="drop-sub" id="drop-sub">PDF, JPG ou PNG — 10 Mo max. Les champs marqués « lu » viennent du ticket.</span>
+              <input type="file" name="justificatif" id="ndf-file" accept="application/pdf,image/*" style="display:none">
+            </label>
+            <div class="scan-etat" id="scan-etat" hidden></div>
+            <div class="calc-hint" id="scan-manuel">Pas de justificatif ? Remplissez directement les champs ci-dessous.</div>
+          </div>
+        </div>
         <div class="ndf-section">
           <div class="ndf-section-titre">Le frais</div>
           <div class="field"><label>Catégorie</label>
@@ -547,16 +571,8 @@ function openNdfModal(noteId){
           </div>
         </div>
         <div class="ndf-section">
-          <div class="ndf-section-titre">Détails et justificatif</div>
+          <div class="ndf-section-titre">Détails</div>
           <div class="field"><label>Description</label><textarea name="description" placeholder="Détails, contexte, participants…" maxlength="1000"></textarea></div>
-          <div class="field">
-            ${edite&&edite.justificatif_nom?`<div class="calc-hint" style="margin:0 0 6px">Joint : ${esc(edite.justificatif_nom)}</div>`:''}
-            <label class="file-drop" id="drop-label">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-              <span id="drop-txt">${edite&&edite.justificatif_nom?'Remplacer le justificatif joint':'Joindre le justificatif (PDF, JPG, PNG — 10 Mo max)'}</span>
-              <input type="file" name="justificatif" id="ndf-file" accept="application/pdf,image/*" style="display:none">
-            </label>
-          </div>
         </div>
       </div>
       <div class="modal-actions">
@@ -618,12 +634,77 @@ function openNdfModal(noteId){
     }
   }
   majCalcul();
+  // ── Justificatif et lecture automatique (POST /api/coffre/notes-frais/scan) ──
   const fileEl=$('#ndf-file');
   const dropLbl=$('#drop-label');
   const dropTxt=$('#drop-txt');
-  fileEl.addEventListener('change',()=>{
-    if(fileEl.files.length){dropLbl.classList.add('has-file');dropTxt.textContent=fileEl.files[0].name;}
-    else{dropLbl.classList.remove('has-file');dropTxt.textContent='Joindre le justificatif (PDF, JPG, PNG — 10 Mo max)';}
+  const scanEtat=$('#scan-etat');
+  const boutons=[...back.querySelectorAll('button[type=submit]')];
+  // Champs touchés à la main : la lecture ne les écrase jamais.
+  const manuels=new Set();
+  form.addEventListener('input',e=>{const n=e.target.name;if(n){manuels.add(n);marquerLu(e.target,false);}});
+  form.addEventListener('change',e=>{const n=e.target.name;if(n&&e.isTrusted){manuels.add(n);marquerLu(e.target,false);}});
+  function marquerLu(el,oui){
+    const lbl=el&&el.closest('.field')&&el.closest('.field').querySelector('label');
+    if(!lbl)return;
+    let m=lbl.querySelector('.lu');
+    if(oui&&!m){m=document.createElement('span');m.className='lu';m.textContent='lu';m.title='Lu sur le justificatif : vérifiez';lbl.appendChild(m);}
+    if(!oui&&m)m.remove();
+  }
+  function etat(texte,type){
+    scanEtat.hidden=!texte;scanEtat.className='scan-etat'+(type?' '+type:'');scanEtat.textContent=texte||'';
+  }
+  function poser(nom,valeur){
+    const el=form.elements[nom];
+    if(!el||valeur==null||manuels.has(nom))return false;
+    el.value=String(valeur);marquerLu(el,true);return true;
+  }
+  async function lire(fichier){
+    const cat=catCourante();
+    if(cat&&cat.saisie==='km')return;
+    etat('Lecture du justificatif…','encours');
+    boutons.forEach(b=>b.disabled=true);
+    try{
+      const fd=new FormData();fd.append('justificatif',fichier);
+      const r=await fetch('/api/coffre/notes-frais/scan',{method:'POST',credentials:'include',body:fd});
+      if(!r.ok){let m='Lecture impossible — complétez à la main.';try{const j=await r.json();m=j.detail||m;}catch{}throw new Error(m);}
+      const j=await r.json();
+      if(fileEl.files[0]!==fichier)return;
+      if(!j.ok){etat(j.erreur||'Lecture impossible — complétez à la main.','err');return;}
+      const c=j.champs||{};
+      if(c.categorie_id!=null&&!manuels.has('categorie_id')&&NDF_CATS.some(x=>x.id===c.categorie_id)){
+        catsEl.value=String(c.categorie_id);marquerLu(catsEl,true);
+        const cc=catCourante();if(cc&&cc.saisie!=='km'&&!manuels.has('taux_tva'))tauxEl.value=String(cc.taux_tva);
+      }
+      if(c.taux_tva!=null)poser('taux_tva',c.taux_tva);
+      if(c.montant_ttc!=null)poser('montant_ttc',Number(c.montant_ttc).toFixed(2));
+      if(c.montant_tva!=null&&poser('montant_tva',Number(c.montant_tva).toFixed(2)))tvaManuelle=true;
+      else if(!manuels.has('montant_tva'))tvaManuelle=false;
+      poser('date_frais',c.date_frais);
+      poser('ville',c.ville);
+      if(c.description&&!form.elements.description.value.trim())poser('description',c.description);
+      majCalcul();
+      etat(j.remarque?'Justificatif lu. '+j.remarque+' Vérifiez avant d\'envoyer.':'Justificatif lu — vérifiez les champs avant d\'envoyer.','ok');
+    }catch(e){etat(e.message,'err');}
+    finally{boutons.forEach(b=>b.disabled=false);}
+  }
+  function fichierChoisi(){
+    if(fileEl.files.length){
+      dropLbl.classList.add('has-file');dropTxt.textContent=fileEl.files[0].name;
+      $('#scan-manuel').hidden=true;
+      lire(fileEl.files[0]);
+    }else{
+      dropLbl.classList.remove('has-file');
+      dropTxt.textContent=edite&&edite.justificatif_nom?'Remplacer le justificatif joint':'Photographier ou déposer le justificatif';
+      etat('');$('#scan-manuel').hidden=false;
+    }
+  }
+  fileEl.addEventListener('change',e=>{e.stopPropagation();fichierChoisi();});
+  ['dragenter','dragover'].forEach(ev=>dropLbl.addEventListener(ev,e=>{e.preventDefault();dropLbl.classList.add('survol');}));
+  ['dragleave','drop'].forEach(ev=>dropLbl.addEventListener(ev,e=>{e.preventDefault();dropLbl.classList.remove('survol');}));
+  dropLbl.addEventListener('drop',e=>{
+    if(!e.dataTransfer||!e.dataTransfer.files.length)return;
+    fileEl.files=e.dataTransfer.files;fichierChoisi();
   });
   const fermer=(technique)=>{
     back.remove();

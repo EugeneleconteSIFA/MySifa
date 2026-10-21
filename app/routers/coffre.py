@@ -205,6 +205,28 @@ def _nombre_ou_none(v: str, quoi: str) -> Optional[float]:
         raise HTTPException(400, f"{quoi} invalide — nombre attendu.")
 
 
+@router.post("/api/coffre/notes-frais/scan")
+async def scan_justificatif(request: Request, justificatif: UploadFile = File(...)):
+    """Lit un justificatif et propose les champs de la note (rien n'est
+    enregistré). Le fichier est renvoyé avec la note à l'enregistrement."""
+    from app.services import ia_usage
+    from app.services.ndf_scan import lire_justificatif
+
+    user = get_current_user(request)
+    contenu = await justificatif.read()
+    if not contenu:
+        raise HTTPException(400, "Fichier vide.")
+    if len(contenu) > MAX_JUSTIFICATIF_BYTES:
+        raise HTTPException(400, f"Justificatif > {MAX_JUSTIFICATIF_MB} Mo")
+    mime = (justificatif.content_type or "").lower()
+    if not mime or mime == "application/octet-stream":
+        mime = (mimetypes.guess_type(justificatif.filename or "")[0] or "").lower()
+    with get_db() as conn:
+        cats = [c for c in ndf_categories(conn) if c["saisie"] == "montant"]
+    with ia_usage.suivi(user, "ndf", "coffre"):
+        return lire_justificatif(contenu, mime, cats)
+
+
 @router.get("/api/coffre/ndf-categories")
 def list_ndf_categories(request: Request):
     get_current_user(request)

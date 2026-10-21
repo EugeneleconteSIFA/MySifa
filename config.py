@@ -1749,6 +1749,11 @@ TONS_ETAT = ("ok", "warn", "danger", "neutre")
 # Taux de TVA proposés sur une note de frais (Mon coffre). Taux légaux
 # français : changent par la loi, pas par un réglage de la compta.
 NDF_TAUX_TVA = (20.0, 10.0, 5.5, 0.0)
+# Scan des justificatifs de note de frais : Claude lit le ticket et pré-remplit
+# le formulaire, que le salarié vérifie avant d'envoyer. Coupure sans
+# redéploiement : NDF_SCAN_IA_ACTIVE=0 (la saisie à la main reste).
+NDF_SCAN_IA_ACTIVE = os.getenv("NDF_SCAN_IA_ACTIVE", "1") not in ("0", "false", "False")
+NDF_SCAN_IA_MODELE = os.getenv("NDF_SCAN_IA_MODELE", "claude-opus-5-5")
 
 TONS_STATUT_MACHINE = {
     "production": "ok",
