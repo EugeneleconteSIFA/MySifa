@@ -153,6 +153,11 @@ tr.ndf-row{cursor:pointer}
 .field .file-drop{display:flex;text-transform:none;letter-spacing:0;margin:0}
 .file-drop.grand{flex-direction:column;gap:6px;padding:22px 16px;font-size:13px;font-weight:600;color:var(--text2)}
 .file-drop.grand svg{color:var(--accent)}
+.drop-mobile{display:none;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:6px}
+.file-drop.tactile{cursor:default}
+.file-drop.tactile .drop-mobile{display:flex}
+.file-drop.tactile .drop-ico-fichier{display:none}
+.drop-mobile .btn svg{color:currentColor}
 .file-drop.survol{border-color:var(--accent);background:var(--accent-bg)}
 .drop-sub{font-size:11px;font-weight:400;color:var(--muted)}
 .justif-apercu{display:flex;align-items:center;gap:12px;margin-top:8px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--card)}
@@ -524,6 +529,8 @@ function openNdfModal(noteId){
   const edite=noteId?NDF_NOTES.find(n=>n.id===noteId&&n.statut==='brouillon'):null;
   if(noteId&&!edite){toast('Brouillon introuvable — il a peut-être déjà été soumis.','err');return;}
   const titre=edite?'Modifier le brouillon':'Nouvelle note de frais';
+  // Téléphone ou tablette : on photographie le ticket. Ordinateur : on dépose un fichier.
+  const tactile=window.matchMedia&&matchMedia('(pointer: coarse)').matches;
   const back=document.createElement('div');back.className='modal-back';
   const today=new Date().toISOString().slice(0,10);
   back.innerHTML=`<div class="modal">
@@ -536,12 +543,19 @@ function openNdfModal(noteId){
         <div class="ndf-section">
           <div class="ndf-section-titre">Justificatif</div>
           <div class="field">
-            <label class="file-drop grand" id="drop-label">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-              <span id="drop-txt">${edite&&edite.justificatif_nom?'Remplacer le justificatif joint':'Photographier ou déposer le justificatif'}</span>
-              <span class="drop-sub" id="drop-sub">PDF, JPG ou PNG — 10 Mo max. Les champs marqués « lu » viennent du ticket.</span>
-              <input type="file" name="justificatif" id="ndf-file" accept="application/pdf,image/*" style="display:none">
-            </label>
+            <div class="file-drop grand${tactile?' tactile':''}" id="drop-label" role="button" tabindex="0">
+              <svg class="drop-ico-fichier" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span id="drop-txt"></span>
+              <span class="drop-sub">PDF, JPG ou PNG — 10 Mo max. Les champs marqués « lu » viennent du ticket.</span>
+              <div class="drop-mobile">
+                <button type="button" class="btn small" id="btn-photo">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                  Prendre une photo</button>
+                <button type="button" class="btn ghost small" id="btn-fichier">Choisir un fichier</button>
+              </div>
+            </div>
+            <input type="file" id="ndf-file" accept="application/pdf,image/*" hidden>
+            <input type="file" id="ndf-photo" accept="image/*" capture="environment" hidden>
             <div class="justif-apercu" id="justif-apercu" hidden></div>
             <div class="scan-etat" id="scan-etat" hidden></div>
             <div class="calc-hint" id="scan-manuel">Pas de justificatif ? Remplissez directement les champs ci-dessous.</div>
@@ -646,6 +660,9 @@ function openNdfModal(noteId){
   majCalcul();
   // ── Justificatif et lecture automatique (POST /api/coffre/notes-frais/scan) ──
   const fileEl=$('#ndf-file');
+  const photoEl=$('#ndf-photo');
+  // Fichier retenu, d'où qu'il vienne (sélecteur, appareil photo, dépôt).
+  let justif=null;
   const dropLbl=$('#drop-label');
   const dropTxt=$('#drop-txt');
   const scanEtat=$('#scan-etat');
@@ -679,7 +696,7 @@ function openNdfModal(noteId){
       const r=await fetch('/api/coffre/notes-frais/scan',{method:'POST',credentials:'include',body:fd});
       if(!r.ok){let m='Lecture impossible — complétez à la main.';try{const j=await r.json();m=j.detail||m;}catch{}throw new Error(m);}
       const j=await r.json();
-      if(fileEl.files[0]!==fichier)return;
+      if(justif!==fichier)return;
       if(!j.ok){etat(j.erreur||'Lecture impossible — complétez à la main.','err');return;}
       const c=j.champs||{};
       if(c.categorie_id!=null&&!manuels.has('categorie_id')&&NDF_CATS.some(x=>x.id===c.categorie_id)){
@@ -704,7 +721,7 @@ function openNdfModal(noteId){
   function majApercu(){
     const zone=$('#justif-apercu');
     if(urlLocale){URL.revokeObjectURL(urlLocale);urlLocale=null;}
-    const f=fileEl.files[0];
+    const f=justif;
     zone.innerHTML='';
     if(f){
       urlLocale=URL.createObjectURL(f);
@@ -725,24 +742,31 @@ function openNdfModal(noteId){
       zone.hidden=false;
     }else zone.hidden=true;
   }
-  function fichierChoisi(){
-    majApercu();
-    if(fileEl.files.length){
-      dropLbl.classList.add('has-file');dropTxt.textContent='Remplacer le justificatif';
-      $('#scan-manuel').hidden=true;
-      lire(fileEl.files[0]);
-    }else{
-      dropLbl.classList.remove('has-file');
-      dropTxt.textContent=edite&&edite.justificatif_nom?'Remplacer le justificatif joint':'Photographier ou déposer le justificatif';
-      etat('');$('#scan-manuel').hidden=false;
-    }
+  function texteZone(){
+    if(justif)return 'Remplacer le justificatif';
+    if(edite&&edite.justificatif_nom)return 'Remplacer le justificatif joint';
+    return tactile?'Photographiez le ticket':'Déposez le justificatif ici ou cliquez pour le choisir';
   }
-  fileEl.addEventListener('change',e=>{e.stopPropagation();fichierChoisi();});
+  function fichierChoisi(f){
+    justif=f||null;
+    majApercu();
+    dropTxt.textContent=texteZone();
+    dropLbl.classList.toggle('has-file',!!justif);
+    $('#scan-manuel').hidden=!!justif;
+    if(justif)lire(justif);else etat('');
+  }
+  dropTxt.textContent=texteZone();
+  fileEl.addEventListener('change',e=>{e.stopPropagation();if(fileEl.files[0])fichierChoisi(fileEl.files[0]);fileEl.value='';});
+  photoEl.addEventListener('change',e=>{e.stopPropagation();if(photoEl.files[0])fichierChoisi(photoEl.files[0]);photoEl.value='';});
+  $('#btn-photo').onclick=e=>{e.stopPropagation();photoEl.click();};
+  $('#btn-fichier').onclick=e=>{e.stopPropagation();fileEl.click();};
+  // Sur ordinateur, toute la zone ouvre le sélecteur ; sur téléphone, les deux boutons.
+  dropLbl.addEventListener('click',()=>{if(!tactile)fileEl.click();});
+  dropLbl.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fileEl.click();}});
   ['dragenter','dragover'].forEach(ev=>dropLbl.addEventListener(ev,e=>{e.preventDefault();dropLbl.classList.add('survol');}));
   ['dragleave','drop'].forEach(ev=>dropLbl.addEventListener(ev,e=>{e.preventDefault();dropLbl.classList.remove('survol');}));
   dropLbl.addEventListener('drop',e=>{
-    if(!e.dataTransfer||!e.dataTransfer.files.length)return;
-    fileEl.files=e.dataTransfer.files;fichierChoisi();
+    if(e.dataTransfer&&e.dataTransfer.files.length)fichierChoisi(e.dataTransfer.files[0]);
   });
   majApercu();
   const fermer=(technique)=>{
@@ -758,6 +782,7 @@ function openNdfModal(noteId){
     const btn=e.submitter;
     const fd=new FormData(form);
     fd.set('soumettre',btn && btn.value==='1'?'1':'0');
+    if(justif)fd.set('justificatif',justif,justif.name||'justificatif.jpg');
     const cat=catCourante();
     if(cat&&cat.saisie==='km'){fd.delete('montant_ttc');fd.delete('montant_tva');fd.delete('taux_tva');}
     else fd.delete('distance_km');
