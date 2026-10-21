@@ -965,6 +965,52 @@ async def modifier_dossier_alerte(ack_id: int, request: Request):
     return {"success": True}
 
 
+def _maj_compteur_releve(conn, row_id: int, ex, valeur) -> None:
+    """Écrit le compteur relevé d'une saisie corrigée dans MyProd.
+
+    - la trace d'un changement d'outil (« … · compteur X m ») cite le
+      compteur : le nombre y est remplacé ;
+    - un « Production » qui ferme un calage réécrit la mention « Fin de
+      calage » de la ligne de calage, métrage de calage recalculé ;
+    - le compteur de la machine n'avance que si la valeur dépasse le dernier
+      relevé connu : corriger une saisie ancienne ne le fait pas reculer."""
+    if valeur in (None, ""):
+        nouveau = None
+    else:
+        try:
+            nouveau = float(str(valeur).replace(",", ".").replace(" ", ""))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Compteur invalide — un nombre de mètres.")
+        if nouveau < 0:
+            raise HTTPException(status_code=400, detail="Compteur invalide — un nombre de mètres.")
+    ancien = ex["metrage_compteur"] if "metrage_compteur" in ex.keys() else None
+    if (ancien is None and nouveau is None) or (
+            ancien is not None and nouveau is not None and abs(float(ancien) - nouveau) < 0.5):
+        return
+    conn.execute("UPDATE production_data SET metrage_compteur=? WHERE id=?", (nouveau, row_id))
+    if nouveau is None:
+        return
+    fr = lambda v: f"{int(round(float(v))):,}".replace(",", " ")
+    com = conn.execute("SELECT commentaire, operation_category, machine FROM production_data WHERE id=?",
+                       (row_id,)).fetchone()
+    if ancien is not None and com and com["commentaire"] and f"compteur {fr(ancien)} m" in com["commentaire"]:
+        conn.execute("UPDATE production_data SET commentaire=? WHERE id=?",
+                     (com["commentaire"].replace(f"compteur {fr(ancien)} m", f"compteur {fr(nouveau)} m", 1),
+                      row_id))
+    if com and (com["operation_category"] or "") == "production":
+        try:
+            from app.services.calage_cloture import ecrire_mention_fin_calage
+            ecrire_mention_fin_calage(conn, row_id)
+        except Exception:
+            pass
+    if com and com["machine"]:
+        conn.execute(
+            """UPDATE machines SET dernier_metrage=?
+                WHERE (trim(nom)=trim(?) OR trim(code)=trim(?))
+                  AND (dernier_metrage IS NULL OR dernier_metrage < ?)""",
+            (nouveau, com["machine"], com["machine"], nouveau))
+
+
 @router.put("/api/saisies/{row_id}")
 async def update_saisie(row_id: int, request: Request):
     user = get_current_user(request)
@@ -1036,6 +1082,10 @@ async def update_saisie(row_id: int, request: Request):
              json.dumps(new_data, default=str), row_id)
         )
         # Dossier ou machine changés : la saisie change de créneau.
+        # Compteur relevé en cours de dossier (changement d'outil, fin de
+        # calage) : corrigeable ici. Le commentaire qui le cite suit.
+        if "metrage_compteur" in body:
+            _maj_compteur_releve(conn, row_id, ex, body.get("metrage_compteur"))
         if (str(body.get("no_dossier", _ex("no_dossier")) or "").strip() != str(_ex("no_dossier") or "").strip()
                 or str(body.get("machine", _ex("machine")) or "").strip() != str(_ex("machine") or "").strip()):
             try:

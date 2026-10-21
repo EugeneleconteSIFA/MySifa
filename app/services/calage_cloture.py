@@ -565,6 +565,59 @@ def prevu_devis(conn, no_dossier: str) -> Optional[Dict[str, Any]]:
     }
 
 
+def _fr_metres(v) -> str:
+    return f"{int(round(float(v))):,}".replace(",", " ")
+
+
+def _sans_mention_fin_calage(txt) -> str:
+    txt = (txt or "").strip()
+    if txt.startswith("Fin de calage ·"):
+        txt = txt.split(" — ", 1)[1].strip() if " — " in txt else ""
+    return txt
+
+
+def ecrire_mention_fin_calage(conn, saisie_id: int) -> None:
+    """Commentaire « Fin de calage · compteur X m · calage Y m » du relevé fait
+    au « Production » qui ferme un calage. Il va sur la LIGNE DE CALAGE que ce
+    « Production » ferme (la saisie juste avant sur la machine), pas sur la
+    reprise. Ce que le conducteur avait écrit reste derrière ; un nouveau
+    relevé remplace l'ancienne mention au lieu de l'empiler. Appelé par le
+    relevé au poste et par la correction d'une saisie dans MyProd."""
+    row = conn.execute("SELECT * FROM production_data WHERE id=?", (saisie_id,)).fetchone()
+    if not row or row["metrage_compteur"] is None:
+        return
+    m = float(row["metrage_compteur"])
+    metres = None
+    if row["no_dossier"]:
+        for pl in gache_calage(conn, row["no_dossier"])["plages"]:
+            if pl["fin"] == row["date_operation"]:
+                metres = pl["metres"]
+    mention = f"Fin de calage · compteur {_fr_metres(m)} m" + (
+        f" · calage {_fr_metres(metres)} m" if metres is not None else "")
+    prec = conn.execute(
+        """SELECT id, commentaire, operation_category FROM production_data
+            WHERE id <> ? AND COALESCE(est_annule,0)=0 AND trim(machine)=trim(?)
+              AND COALESCE(operation_category,'') NOT IN ('alert_ack','stock_pf','stock_mp')
+              AND (date_operation < ? OR (date_operation = ? AND id < ?))
+            ORDER BY date_operation DESC, id DESC LIMIT 1""",
+        (saisie_id, row["machine"] or "", row["date_operation"], row["date_operation"], saisie_id),
+    ).fetchone()
+    if prec and (prec["operation_category"] or "") == "calage":
+        ancien = _sans_mention_fin_calage(prec["commentaire"])
+        conn.execute("UPDATE production_data SET commentaire=? WHERE id=?",
+                     (mention + (" — " + ancien if ancien else ""), prec["id"]))
+        # Une mention posée sur la reprise par une version précédente n'a
+        # plus lieu d'être.
+        reste = _sans_mention_fin_calage(row["commentaire"])
+        if reste != (row["commentaire"] or "").strip():
+            conn.execute("UPDATE production_data SET commentaire=? WHERE id=?",
+                         (reste or None, saisie_id))
+    else:
+        ancien = _sans_mention_fin_calage(row["commentaire"])
+        conn.execute("UPDATE production_data SET commentaire=? WHERE id=?",
+                     (mention + (" — " + ancien if ancien else ""), saisie_id))
+
+
 def devis_saisie(conn, planning_entry_id, no_dossier: str = "") -> Optional[Dict[str, Any]]:
     """Ce que le devis rattaché annonce, pour le conducteur au lancement :
     vitesse devisée (m/min) et calage devisé (outil + impression, comme

@@ -349,6 +349,56 @@ async def ecrire_reglage(request: Request):
     return {"success": True, "regle": regle, "compte": bool(compte)}
 
 
+def _valider(conn, e: Dict[str, Any], texte: str, qui: str) -> None:
+    """Sort l'écart de la file ; une déclaration de calage validée ne revient
+    pas au passage suivant."""
+    coherence.expliquer(conn, e["id"], texte, qui)
+    decl_id = e["donnees"].get("declaration_id")
+    if decl_id:
+        calage_cloture.marquer_traite(conn, int(decl_id), qui, _maintenant())
+        conn.commit()
+
+
+@router.post("/valider-groupe")
+async def valider_groupe(request: Request):
+    """Valide plusieurs écarts d'un coup, avec un seul commentaire. Un écart
+    déjà traité ou introuvable est ignoré : la liste à l'écran peut dater de
+    quelques secondes."""
+    user = _admin(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        ids = sorted({int(x) for x in (body.get("ids") or [])})
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Sélection invalide.")
+    if not ids:
+        raise HTTPException(status_code=400, detail="Aucun écart sélectionné.")
+    if len(ids) > 500:
+        raise HTTPException(status_code=400, detail="Sélection trop grande — 500 écarts au plus.")
+    texte = (body.get("commentaire") or "").strip() or "Validé dans MyProd."
+    valides, ignores, regles = 0, 0, {}
+    with get_db() as conn:
+        for ecart_id in ids:
+            try:
+                e = _ecart(conn, ecart_id)
+            except HTTPException:
+                ignores += 1
+                continue
+            if e.get("statut") != "ouvert":
+                ignores += 1
+                continue
+            _valider(conn, e, texte, _qui(user))
+            valides += 1
+            regles[e["regle"]] = regles.get(e["regle"], 0) + 1
+    log_action(user=user, action="UPDATE", module="saisies",
+               objet=f"{valides} écart(s) validé(s) en groupe",
+               detail={"ids": ids, "regles": regles, "commentaire": texte, "ignores": ignores},
+               ip=request.client.host if request.client else None)
+    return {"success": True, "valides": valides, "ignores": ignores}
+
+
 @router.post("/{ecart_id}/valider")
 async def valider(ecart_id: int, request: Request):
     user = _admin(request)
@@ -359,11 +409,7 @@ async def valider(ecart_id: int, request: Request):
     texte = (body.get("commentaire") or "").strip() or "Validé dans MyProd."
     with get_db() as conn:
         e = _ecart(conn, ecart_id)
-        coherence.expliquer(conn, ecart_id, texte, _qui(user))
-        decl_id = e["donnees"].get("declaration_id")
-        if decl_id:
-            calage_cloture.marquer_traite(conn, int(decl_id), _qui(user), _maintenant())
-            conn.commit()
+        _valider(conn, e, texte, _qui(user))
     log_action(user=user, action="UPDATE", module="saisies",
                objet=f"Écart validé · {e['titre']}", detail={"regle": e["regle"], "commentaire": texte},
                ip=request.client.host if request.client else None)

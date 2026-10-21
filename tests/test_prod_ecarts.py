@@ -17,6 +17,8 @@ Ce que chaque bloc protège, posé le 16/10/2026 :
    notée par l'opérateur, un dossier « en cours » sans saisie montre les
    saisies de sa machine et un lien planning (machine, semaine, fiche), et
    l'info prod absente s'écrit depuis l'écart.
+7. **Valider en groupe** sort tous les écarts cochés d'un coup ; un écart
+   déjà traité est ignoré, pas une erreur.
 
 Lancer : python3 tests/test_prod_ecarts.py
 """
@@ -276,6 +278,27 @@ class TestProdEcarts(unittest.TestCase):
         with get_db() as conn:
             st = conn.execute("SELECT statut FROM coherence_ecarts WHERE id=?", (e_id,)).fetchone()[0]
         self.assertEqual(st, "resolu")
+
+    def test_6_valider_en_groupe(self):
+        from database import get_db
+
+        a = self._ecart_brut("prod.info_prod_absente", "GRP-1", {})
+        b = self._ecart_brut("prod.info_prod_absente", "GRP-2", {})
+        c = self._ecart_brut("prod.info_prod_absente", "GRP-3", {})
+        self.assertEqual(self.client.post("/api/prod/ecarts/valider-groupe", json={"ids": []}).status_code, 400)
+        r = self.client.post("/api/prod/ecarts/valider-groupe",
+                             json={"ids": [a, b], "commentaire": "Dossiers de test"})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["valides"], 2)
+        # Rejouer la même sélection : déjà traités, ignorés.
+        r = self.client.post("/api/prod/ecarts/valider-groupe", json={"ids": [a, b, 999999]})
+        self.assertEqual((r.json()["valides"], r.json()["ignores"]), (0, 3))
+        with get_db() as conn:
+            st = dict(conn.execute("SELECT id, statut FROM coherence_ecarts WHERE id IN (?,?,?)",
+                                   (a, b, c)).fetchall())
+        self.assertEqual(st[a], "explique")
+        self.assertEqual(st[b], "explique")
+        self.assertEqual(st[c], "ouvert")
 
 
 if __name__ == "__main__":

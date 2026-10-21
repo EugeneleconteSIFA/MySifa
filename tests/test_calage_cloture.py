@@ -455,6 +455,48 @@ class TestCalageCloture(unittest.TestCase):
             conn.execute("DELETE FROM planning_entries WHERE id=?", (pe,))
             conn.commit()
 
+    # ── 10. Le compteur relevé se corrige dans MyProd ─────────────────────
+    def test_10_corriger_compteur_releve(self):
+        from database import get_db
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.routers.saisies import router as saisies_router
+
+        app = FastAPI()
+        app.include_router(saisies_router)
+        cli = TestClient(app, raise_server_exceptions=True)
+        with patch("app.routers.saisies.get_current_user", return_value=dict(USER)), \
+                patch("app.routers.saisies.is_admin", return_value=True), \
+                patch("app.routers.saisies.is_fabrication", return_value=False):
+            s01 = self._saisie("01", 0)
+            s02 = self._saisie("02", 1)
+            s03 = self._saisie("03", 30)
+            s60 = self._saisie("60", 60)
+            with get_db() as conn:
+                conn.execute("UPDATE production_data SET metrage_total_debut=500 WHERE id=?", (s01,))
+                conn.execute("UPDATE production_data SET metrage_compteur=820 WHERE id=?", (s03,))
+                conn.execute("UPDATE production_data SET metrage_compteur=900, "
+                             "commentaire='Plaque 1 → 2 · compteur 900 m — reglage' WHERE id=?", (s60,))
+                conn.commit()
+
+            def corriger(sid, valeur):
+                ligne = self._ligne(sid)
+                r = cli.put(f"/api/saisies/{sid}", json={
+                    "operation": ligne["operation"], "operateur": ligne["operateur"],
+                    "date_operation": ligne["date_operation"], "machine": ligne["machine"],
+                    "no_dossier": ligne["no_dossier"], "commentaire": ligne["commentaire"] or "",
+                    "metrage_compteur": valeur})
+                self.assertEqual(r.status_code, 200, r.text)
+
+            # Fin de calage corrigée : la mention de la ligne de calage suit.
+            corriger(s03, 850)
+            self.assertEqual(self._ligne(s03)["metrage_compteur"], 850.0)
+            self.assertEqual(self._ligne(s02)["commentaire"],
+                             "Fin de calage · compteur 850 m · calage 350 m")
+            # Changement d'outil : le nombre cité dans la trace est remplacé.
+            corriger(s60, 950)
+            self.assertEqual(self._ligne(s60)["commentaire"], "Plaque 1 → 2 · compteur 950 m — reglage")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -8375,6 +8375,12 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
     montrer('cpt-debut', debut);
     montrer('cpt-fin', fin);
     montrer('metrage-compteurs', debut || fin);
+    // Le compteur relevé : sur toute opération de calage (changements
+    // d'outil) et sur la reprise de production qui ferme un calage — ou dès
+    // que la saisie en porte déjà un.
+    const cat = ((ops && ops[code]) || {}).category || '';
+    montrer('cpt-releve', !isStock && !debut && !fin
+      && (cat === 'calage' || code === '03' || code === '88' || compteurAvant != null));
     montrer('dossier', !CODES_PERSONNEL.has(code));
     montrer('fin-dossier', !isStock && code === CODE_FIN_DOS);
   }
@@ -8419,6 +8425,10 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
   const metrageReelI      = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_reel!=null)        ? prefill.metrage_reel        : '' });
   const metrageDebutI     = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_total_debut!=null) ? prefill.metrage_total_debut : '' });
   const metrageFinI       = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_total_fin!=null)   ? prefill.metrage_total_fin   : '' });
+  // Compteur relevé en cours de dossier : changement d'outil (plaque,
+  // contre-partie, magnétique…) et « Production » qui ferme un calage.
+  const compteurAvant = (prefill && prefill.metrage_compteur!=null && prefill.metrage_compteur!=='') ? Number(prefill.metrage_compteur) : null;
+  const metrageCompteurI  = h('input', { type: 'number', placeholder: '0', min: '0', step: '1', value: compteurAvant!=null ? compteurAvant : '' });
   // Fin de production : le choix de l'opérateur (« Dossier terminé » / « À
   // reprendre plus tard ») se corrige ici ; le serveur rejoue planning et série.
   const finDossierAvant = (prefill && prefill.fin_dossier!=null && prefill.fin_dossier!=='') ? String(Number(prefill.fin_dossier)) : '';
@@ -8498,6 +8508,14 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
           h('label', null, 'Compteur fin (m)'),
           metrageFinI
         )
+      ),
+      h('div', { className: 'form-row', 'data-role':'cpt-releve', style:{display:'none'} },
+        h('div', null,
+          h('label', null, 'Compteur relevé (m)'),
+          metrageCompteurI
+        ),
+        h('div', { style:{fontSize:'12px',color:'var(--muted)',alignSelf:'end',paddingBottom:'10px'} },
+          'Compteur machine noté au changement ou à la fin du calage. Le commentaire suit la correction.')
       ),
       h('div', { className: 'form-row', 'data-role':'fin-dossier', style:{display:'none'} },
         h('div', { style:{ gridColumn:'span 2' } },
@@ -8585,6 +8603,14 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
             if(CODES_CPT_FIN.has(code)){
               corps.metrage_total_fin = nombre(metrageFinI);
               if(corps.metrage_total_fin != null) corps.metrage_reel = corps.metrage_total_fin;
+            }
+            // Compteur relevé : envoyé seulement s'il est visible et a changé.
+            const blocReleve = form.querySelector('[data-role="cpt-releve"]');
+            if(blocReleve && blocReleve.style.display !== 'none'){
+              const brut = String(metrageCompteurI.value||'').trim();
+              const v = brut === '' ? null : parseFloat(brut);
+              if(brut !== '' && (!isFinite(v) || v < 0)){ toast('Compteur invalide — un nombre de mètres.', 'error'); return; }
+              if(v !== compteurAvant) corps.metrage_compteur = v;
             }
             // Envoyé seulement s'il change : le serveur rejoue alors planning et série.
             if(code === CODE_FIN_DOS && finDossierSel.value !== '' && finDossierSel.value !== finDossierAvant){
@@ -9890,6 +9916,29 @@ function openValiderEcart(e){
     }, 'Valider'));
 }
 
+function openValiderEcartsGroupe(ids){
+  const txt=h('textarea',{rows:'2',placeholder:'Pourquoi c\'est normal (facultatif, commun à tous)',
+    style:{width:'100%',padding:'10px 12px',borderRadius:'8px',border:'1px solid var(--border)',
+           background:'var(--card)',color:'var(--text)',fontFamily:'inherit',fontSize:'13px'}});
+  const parType = {};
+  (S.prodEcarts||[]).filter(e=>ids.indexOf(e.id) !== -1)
+    .forEach(e=>{ parType[e.regle_titre] = (parType[e.regle_titre]||0) + 1; });
+  _ecartModal('Valider '+ids.length+' écart'+(ids.length>1?'s':''),
+    h('ul',{style:{fontSize:'13px',color:'var(--text2)',margin:'0 0 10px',paddingLeft:'18px'}},
+      ...Object.keys(parType).map(t=>h('li',null,t+' · '+parType[t]))),
+    txt,
+    _ecartBoutons(async()=>{
+      try{
+        const r = await api('/api/prod/ecarts/valider-groupe',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({ids:ids, commentaire:txt.value||''})});
+        S.ecartsSel = new Set();
+        const n = (r && r.valides) || 0;
+        await _ecartsApresAction(n+' écart'+(n>1?'s':'')+' validé'+(n>1?'s':'')+'.');
+      }catch(err){ toast(err.message||'Validation impossible','error'); }
+    }, 'Valider '+ids.length));
+  requestAnimationFrame(()=>{ try{ txt.focus(); }catch(_){} });
+}
+
 function _heureFr(iso){
   if(!iso) return '—';
   const s=String(iso); return s.slice(8,10)+'/'+s.slice(5,7)+' '+s.slice(11,16);
@@ -10141,13 +10190,26 @@ function _ecartsFiltres(liste){
     && (!q || [e.titre, e.detail, e.objet_ref, e.regle_titre].join(' ').toLowerCase().indexOf(q) !== -1));
 }
 
-function _ecartLigne(e){
+// Sélection pour la validation groupée : ids cochés, hors adresse (étape
+// d'un geste en cours, comme une confirmation — url-etat.md).
+function _ecartsSel(){ return S.ecartsSel || (S.ecartsSel = new Set()); }
+
+function _ecartLigne(e, surCoche){
   const couleur = g => g==='haute' ? 'var(--danger)' : g==='moyenne' ? 'var(--warn)' : 'var(--muted)';
+  const coche = h('input',{type:'checkbox','aria-label':'Sélectionner cet écart',
+    style:{width:'16px',height:'16px',cursor:'pointer',accentColor:'var(--accent)',margin:'0'}});
+  coche.checked = _ecartsSel().has(e.id);
+  coche.addEventListener('change',()=>{
+    if(coche.checked) _ecartsSel().add(e.id); else _ecartsSel().delete(e.id);
+    if(surCoche) surCoche();
+  });
   const libAction = {rattacher:'Rattacher', reappliquer:'Reporter les heures', heures:'Corriger les heures',
                      saisie:'Ouvrir la saisie', machine_saisies:'Voir les saisies', planning:'Ouvrir au planning',
                      info_prod:'Saisir l\'info prod', lien:'Ouvrir'};
-  return h('div',{style:{display:'grid',gridTemplateColumns:'10px 1fr auto',gap:'12px',
-      alignItems:'center',padding:'10px 4px',borderBottom:'1px solid var(--border)'}},
+  return h('div',{style:{display:'grid',gridTemplateColumns:'16px 10px 1fr auto',gap:'12px',
+      alignItems:'center',padding:'10px 4px',borderBottom:'1px solid var(--border)',
+      background:_ecartsSel().has(e.id)?'var(--accent-bg)':''}},
+    coche,
     h('span',{style:{width:'10px',height:'10px',borderRadius:'50%',background:couleur(e.gravite)},
       title:'Gravité '+(e.gravite||'')}),
     h('div',{style:{minWidth:'0'}},
@@ -10195,9 +10257,38 @@ function renderProdEcarts(){
   // La liste se redessine seule pendant la frappe : la barre de recherche
   // n'est jamais reconstruite, elle garde le focus.
   const zone = h('div',{style:{padding:'0 14px 6px'}});
+  // Une sélection ne garde que les écarts encore dans la liste.
+  const presents = new Set(liste.map(e=>e.id));
+  _ecartsSel().forEach(id=>{ if(!presents.has(id)) _ecartsSel().delete(id); });
   const redessiner = ()=>{
     const vues = _ecartsFiltres(liste);
-    zone.replaceChildren(...(vues.length ? vues.map(_ecartLigne)
+    const sel = _ecartsSel();
+    const nSel = sel.size;
+    const tousVus = vues.length > 0 && vues.every(e=>sel.has(e.id));
+    const tout = h('input',{type:'checkbox','aria-label':'Sélectionner les écarts affichés',
+      style:{width:'16px',height:'16px',cursor:'pointer',accentColor:'var(--accent)',margin:'0'}});
+    tout.checked = tousVus;
+    tout.indeterminate = !tousVus && vues.some(e=>sel.has(e.id));
+    tout.addEventListener('change',()=>{
+      vues.forEach(e=>{ if(tout.checked) sel.add(e.id); else sel.delete(e.id); });
+      redessiner();
+    });
+    // Barre de sélection : la case « tout » porte sur les écarts AFFICHÉS
+    // (filtre et recherche compris) ; l'action, sur tout ce qui est coché.
+    const barre = vues.length ? h('div',{style:{display:'flex',alignItems:'center',gap:'12px',
+        padding:'8px 4px',borderBottom:'1px solid var(--border)',fontSize:'13px',minHeight:'36px'}},
+      tout,
+      nSel
+        ? h('span',{style:{fontWeight:'700'}},nSel+' sélectionné'+(nSel>1?'s':''))
+        : h('span',{style:{color:'var(--muted)'}},'Tout sélectionner'),
+      nSel ? h('div',{style:{display:'flex',gap:'6px',marginLeft:'auto'}},
+        h('button',{type:'button',className:'btn-ghost',
+          style:{background:'var(--bg)',border:'1px solid var(--border)',padding:'6px 12px',borderRadius:'8px'},
+          onClick:()=>{ sel.clear(); redessiner(); }},'Désélectionner'),
+        h('button',{type:'button',className:'btn-sm',
+          style:{background:'var(--accent)',color:'white',border:'none',padding:'6px 12px',borderRadius:'8px',fontWeight:'700'},
+          onClick:()=>openValiderEcartsGroupe(Array.from(sel))},iconEl('check',13),' Valider la sélection')) : null) : null;
+    zone.replaceChildren(...(vues.length ? [barre, ...vues.map(e=>_ecartLigne(e, redessiner))]
       : [h('div',{className:'card-empty'}, liste.length
           ? 'Aucun écart pour « '+(S.ecartsRecherche||'')+' ».'
           : 'Rien à traiter : aucune saisie à valider ou corriger.')]));
