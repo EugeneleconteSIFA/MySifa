@@ -236,25 +236,10 @@ def list_my_ndf(request: Request, annee: Optional[int] = None):
     return {"notes": [dict(r) for r in rows]}
 
 
-@router.post("/api/coffre/notes-frais")
-async def create_ndf(
-    request: Request,
-    date_frais: str = Form(...),
-    categorie_id: int = Form(...),
-    montant_ttc: str = Form(""),
-    taux_tva: str = Form(""),
-    montant_tva: str = Form(""),
-    distance_km: str = Form(""),
-    ville: str = Form(""),
-    description: str = Form(""),
-    soumettre: str = Form("0"),
-    justificatif: Optional[UploadFile] = File(None),
-):
-    """Créer une note de frais. Si soumettre=1, statut=soumise directement."""
-    user = get_current_user(request)
-    uid = user.get("id")
-
-    # Validations
+def _ndf_champs(date_frais: str, categorie_id: int, montant_ttc: str, taux_tva: str,
+                montant_tva: str, distance_km: str, ville: str, description: str) -> dict:
+    """Valide une saisie de note et rend les colonnes à écrire (création et
+    modification d'un brouillon passent par ici)."""
     try:
         datetime.fromisoformat(date_frais[:10])
     except ValueError:
@@ -280,51 +265,125 @@ async def create_ndf(
         cat["taux_km"],
     )
     est_km = cat["saisie"] == "km"
+    return {
+        "date_frais": date_frais[:10],
+        "categorie": cat["libelle"],
+        "categorie_id": cat["id"],
+        **m,
+        "distance_km": _nombre_ou_none(distance_km, "Distance") if est_km else None,
+        "taux_km": cat["taux_km"] if est_km else None,
+        "ville": (ville or "").strip()[:80] or None,
+        "description": (description or "").strip()[:1000],
+    }
 
-    # Justificatif
-    just_path: Optional[str] = None
-    just_nom: Optional[str] = None
-    if justificatif is not None and justificatif.filename:
-        allowed_ct = {"image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf"}
-        ct = (justificatif.content_type or "").lower()
-        if ct not in allowed_ct:
-            raise HTTPException(400, "Format justificatif : PDF, JPG, PNG, WEBP, HEIC uniquement")
-        content = await justificatif.read()
-        if len(content) > MAX_JUSTIFICATIF_BYTES:
-            raise HTTPException(400, f"Justificatif > {MAX_JUSTIFICATIF_MB} Mo")
-        user_dir = NDF_ROOT / str(uid)
-        user_dir.mkdir(parents=True, exist_ok=True)
-        safe_name = _sanitize_filename(justificatif.filename)
-        fname = f"{uuid.uuid4().hex[:12]}_{safe_name}"
-        dest = user_dir / fname
-        with open(dest, "wb") as f:
-            f.write(content)
-        just_path = str(dest)
-        just_nom = justificatif.filename[:180]
+
+async def _ndf_justificatif(uid, justificatif: Optional[UploadFile]) -> Optional[tuple]:
+    """Enregistre le justificatif envoyé ; (chemin, nom) ou None sans fichier."""
+    if justificatif is None or not justificatif.filename:
+        return None
+    allowed_ct = {"image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf"}
+    ct = (justificatif.content_type or "").lower()
+    if ct not in allowed_ct:
+        raise HTTPException(400, "Format justificatif : PDF, JPG, PNG, WEBP, HEIC uniquement")
+    content = await justificatif.read()
+    if len(content) > MAX_JUSTIFICATIF_BYTES:
+        raise HTTPException(400, f"Justificatif > {MAX_JUSTIFICATIF_MB} Mo")
+    user_dir = NDF_ROOT / str(uid)
+    user_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = _sanitize_filename(justificatif.filename)
+    dest = user_dir / f"{uuid.uuid4().hex[:12]}_{safe_name}"
+    with open(dest, "wb") as f:
+        f.write(content)
+    return str(dest), justificatif.filename[:180]
+
+
+@router.post("/api/coffre/notes-frais")
+async def create_ndf(
+    request: Request,
+    date_frais: str = Form(...),
+    categorie_id: int = Form(...),
+    montant_ttc: str = Form(""),
+    taux_tva: str = Form(""),
+    montant_tva: str = Form(""),
+    distance_km: str = Form(""),
+    ville: str = Form(""),
+    description: str = Form(""),
+    soumettre: str = Form("0"),
+    justificatif: Optional[UploadFile] = File(None),
+):
+    """Créer une note de frais. Si soumettre=1, statut=soumise directement."""
+    user = get_current_user(request)
+    uid = user.get("id")
+    champs = _ndf_champs(date_frais, categorie_id, montant_ttc, taux_tva,
+                         montant_tva, distance_km, ville, description)
+    just = await _ndf_justificatif(uid, justificatif)
+    if just:
+        champs["justificatif_path"], champs["justificatif_nom"] = just
 
     do_soumettre = str(soumettre).strip() in {"1", "true", "yes"}
-    statut = "soumise" if do_soumettre else "brouillon"
     now = datetime.now().isoformat(timespec="seconds")
+    champs.update({
+        "employe_user_id": uid,
+        "statut": "soumise" if do_soumettre else "brouillon",
+        "created_at": now,
+        "soumise_at": now if do_soumettre else None,
+    })
     with get_db() as conn:
         cur = conn.execute(
-            """INSERT INTO notes_de_frais
-               (employe_user_id,date_frais,categorie,categorie_id,montant_ttc,montant_tva,
-                montant_ht,taux_tva,distance_km,taux_km,ville,description,
-                justificatif_path,justificatif_nom,statut,created_at,soumise_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (
-                uid, date_frais[:10], cat["libelle"], cat["id"],
-                m["montant_ttc"], m["montant_tva"], m["montant_ht"], m["taux_tva"],
-                _nombre_ou_none(distance_km, "Distance") if est_km else None,
-                cat["taux_km"] if est_km else None,
-                (ville or "").strip()[:80] or None,
-                (description or "").strip()[:1000],
-                just_path, just_nom, statut, now,
-                now if do_soumettre else None,
-            ),
+            f"""INSERT INTO notes_de_frais ({','.join(champs)})
+                VALUES ({','.join('?' * len(champs))})""",
+            list(champs.values()),
         )
         conn.commit()
-    return {"success": True, "id": cur.lastrowid, "statut": statut}
+    return {"success": True, "id": cur.lastrowid, "statut": champs["statut"]}
+
+
+@router.put("/api/coffre/notes-frais/{ndf_id}")
+async def update_ndf(
+    ndf_id: int,
+    request: Request,
+    date_frais: str = Form(...),
+    categorie_id: int = Form(...),
+    montant_ttc: str = Form(""),
+    taux_tva: str = Form(""),
+    montant_tva: str = Form(""),
+    distance_km: str = Form(""),
+    ville: str = Form(""),
+    description: str = Form(""),
+    soumettre: str = Form("0"),
+    justificatif: Optional[UploadFile] = File(None),
+):
+    """Modifier un brouillon (le sien uniquement). Sans nouveau fichier, le
+    justificatif déjà joint est conservé. soumettre=1 l'envoie à la compta."""
+    user = get_current_user(request)
+    uid = user.get("id")
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id,employe_user_id,statut FROM notes_de_frais WHERE id=? AND deleted_at IS NULL",
+            (ndf_id,),
+        ).fetchone()
+    if not row:
+        raise HTTPException(404, "Note introuvable")
+    if row["employe_user_id"] != uid:
+        raise HTTPException(403, "Accès refusé")
+    if row["statut"] != "brouillon":
+        raise HTTPException(400, "Note déjà soumise — elle n'est plus modifiable.")
+    champs = _ndf_champs(date_frais, categorie_id, montant_ttc, taux_tva,
+                         montant_tva, distance_km, ville, description)
+    just = await _ndf_justificatif(uid, justificatif)
+    if just:
+        champs["justificatif_path"], champs["justificatif_nom"] = just
+    if str(soumettre).strip() in {"1", "true", "yes"}:
+        champs["statut"] = "soumise"
+        champs["soumise_at"] = datetime.now().isoformat(timespec="seconds")
+    with get_db() as conn:
+        conn.execute(
+            f"""UPDATE notes_de_frais SET {', '.join(k + '=?' for k in champs)}
+                WHERE id=? AND statut='brouillon'""",
+            list(champs.values()) + [ndf_id],
+        )
+        conn.commit()
+    return {"success": True, "id": ndf_id, "statut": champs.get("statut", "brouillon")}
 
 
 @router.post("/api/coffre/notes-frais/{ndf_id}/soumettre")
