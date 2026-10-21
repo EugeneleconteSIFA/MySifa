@@ -199,6 +199,92 @@
       [a.x2 - L * Math.cos(ang + o), a.y2 - L * Math.sin(ang + o)]];
   }
 
+  /* ── Extensions (texte existant, formulaires, création) ───────────── */
+  // Chargées par ce fichier, avec la même querystring de version que lui.
+  var MON_SRC = (typeof document !== 'undefined' && document.currentScript && document.currentScript.src) || '';
+  var EXTENSIONS = ['mysifa_tools_pdf_texte.js', 'mysifa_tools_pdf_formulaires.js', 'mysifa_tools_pdf_creation.js'];
+  var EXT = { types: {}, outils: {}, actions: {}, hooks: {}, boutons: [], modeAnnot: null, docPourExport: null };
+  function hook(nom) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    (EXT.hooks[nom] || []).forEach(function (fn) {
+      try { fn.apply(null, args); } catch (e) { if (window.console) console.error(e); }
+    });
+  }
+  async function hookAsync(nom) {
+    var args = Array.prototype.slice.call(arguments, 1), l = EXT.hooks[nom] || [];
+    for (var i = 0; i < l.length; i++) await l[i].apply(null, args);
+  }
+  function chargerScript(url) {
+    return new Promise(function (ok, ko) {
+      var s = document.createElement('script');
+      s.src = url; s.async = true;
+      s.onload = function () { ok(); };
+      s.onerror = function () { ko(new Error('bibli')); };
+      document.head.appendChild(s);
+    });
+  }
+  var _extCharge = null;
+  function chargerExtensions() {
+    if (_extCharge) return _extCharge;
+    if (!MON_SRC) return Promise.resolve();
+    _extCharge = Promise.all(EXTENSIONS.map(function (f) {
+      return chargerScript(MON_SRC.replace(/mysifa_tools_pdf\.js/, f)).catch(function () {
+        if (window.console) console.warn('[MyTools PDF] extension indisponible : ' + f);
+      });
+    }));
+    return _extCharge;
+  }
+
+  /* ── Polices : standard tant que possible, Unicode si le texte l'exige ── */
+  var URL_FONTKIT = 'https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js';
+  var URL_NOTO = 'https://cdn.jsdelivr.net/npm/@expo-google-fonts/noto-sans@0.2.3/NotoSans_';
+  var _fontkit = null, _noto = {};
+  function fontkit() {
+    if (window.fontkit) return Promise.resolve(window.fontkit);
+    if (!_fontkit) {
+      _fontkit = chargerScript(URL_FONTKIT).then(function () {
+        if (!window.fontkit) throw new Error('bibli');
+        return window.fontkit;
+      }, function (e) { _fontkit = null; throw e; });
+    }
+    return _fontkit;
+  }
+  function octetsNoto(gras) {
+    var k = gras ? '700Bold' : '400Regular';
+    if (!_noto[k]) {
+      _noto[k] = fetch(URL_NOTO + k + '.ttf').then(function (r) {
+        if (!r.ok) throw new Error('police');
+        return r.arrayBuffer();
+      }).catch(function (e) { _noto[k] = null; throw e; });
+    }
+    return _noto[k];
+  }
+  // {famille: 'sans'|'serif'|'mono', gras, italique} -> clé de StandardFonts (pdf-lib)
+  function cleStandard(st) {
+    st = st || {};
+    var f = st.famille === 'serif' ? 'TimesRoman' : st.famille === 'mono' ? 'Courier' : 'Helvetica';
+    var it = f === 'TimesRoman' ? 'Italic' : 'Oblique';
+    return f + (st.gras && st.italique ? 'Bold' + it : st.gras ? 'Bold' : st.italique ? it : '');
+  }
+  function encodable(font, s) { try { font.encodeText(s); return true; } catch (e) { return false; } }
+  async function policePour(c, txt, st) {
+    var k = cleStandard(st);
+    if (!c.std[k]) c.std[k] = await c.out.embedFont(c.L.StandardFonts[k]);
+    if (encodable(c.std[k], String(txt || '').replace(/[\r\n]/g, ''))) return c.std[k];
+    var g = st && st.gras ? 1 : 0;
+    if (!c.uni[g]) {
+      try {
+        var fk = await fontkit();
+        c.out.registerFontkit(fk);
+        c.uni[g] = await c.out.embedFont(await octetsNoto(g), { subset: true });
+      } catch (e) {
+        c.uni[g] = c.std[k];
+        toast('Police Unicode indisponible — caractères spéciaux remplacés par « ? ».', 'info');
+      }
+    }
+    return c.uni[g];
+  }
+
   /* ── État ─────────────────────────────────────────────────────────── */
   var S = null;
   var _n = 0;
@@ -296,24 +382,6 @@
   function attendre(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
   /* ── Sources (fichiers ouverts) ───────────────────────────────────── */
-  function lireChamps(L, lib) {
-    var out = [];
-    var fields = [];
-    try { fields = lib.getForm().getFields(); } catch (e) { return out; }
-    fields.forEach(function (f) {
-      var c = { nom: f.getName() };
-      try {
-        if (f instanceof L.PDFTextField) { c.type = 'texte'; c.valeur = f.getText() || ''; c.multi = f.isMultiline(); }
-        else if (f instanceof L.PDFCheckBox) { c.type = 'case'; c.valeur = f.isChecked(); }
-        else if (f instanceof L.PDFDropdown || f instanceof L.PDFOptionList) { c.type = 'liste'; c.options = f.getOptions(); c.valeur = (f.getSelected() || [])[0] || ''; }
-        else if (f instanceof L.PDFRadioGroup) { c.type = 'liste'; c.options = f.getOptions(); c.valeur = f.getSelected() || ''; }
-        else return;
-      } catch (e) { return; }
-      out.push(c);
-    });
-    return out;
-  }
-
   async function ajouterSource(nom, bytes) {
     var pj = await pdfjs(), L = await pdflib();
     var doc;
@@ -336,8 +404,9 @@
       var pg = await doc.getPage(i);
       metas.push({ view: pg.view.slice(), rotate: pg.rotate || 0 });
     }
-    var src = { id: nid('s'), nom: nom, bytes: bytes, pdf: doc, lib: lib, metas: metas, champs: lireChamps(L, lib), valeurs: {} };
+    var src = { id: nid('s'), nom: nom, bytes: bytes, pdf: doc, lib: lib, metas: metas, champs: [], valeurs: {} };
     S.sources[src.id] = src;
+    hook('source', src, L, lib);
     return src;
   }
 
@@ -422,6 +491,7 @@
       '<div class="tpdf-barre" role="toolbar" aria-label="Outils PDF">' +
         '<div class="tpdf-groupe">' +
           bouton('ouvrir', 'ouvrir', 'Ouvrir ou ajouter des fichiers', { txt: 'Ouvrir', cls: 'tpdf-btn-txt' }) +
+          '<span class="tpdf-ext" data-ext="fichier"></span>' +
           bouton('enregistrer', 'enregistrer', 'Enregistrer le PDF (Ctrl+S)', { doc: 1, txt: 'Enregistrer', cls: 'tpdf-btn-plein' }) +
           bouton('imprimer', 'imprimer', 'Imprimer', { doc: 1 }) +
         '</div>' +
@@ -441,6 +511,7 @@
           outilBtn('tampon', 'tampon', 'Tampon') +
           bouton('image', 'image', 'Insérer une image', { doc: 1 }) +
           bouton('signer', 'signature', 'Signer', { doc: 1 }) +
+          '<span class="tpdf-ext" data-ext="outils"></span>' +
         '</div>' +
         '<div class="tpdf-groupe">' +
           bouton('pivg', 'pivg', 'Pivoter à gauche', { doc: 1 }) +
@@ -453,7 +524,7 @@
           bouton('extraire', 'extraire', 'Exporter la sélection en PDF', { doc: 1 }) +
           bouton('decouper', 'decouper', 'Découper en plusieurs fichiers', { doc: 1 }) +
           bouton('compresser', 'compresser', 'Compresser', { doc: 1 }) +
-          bouton('formulaire', 'formulaire', 'Remplir le formulaire', { doc: 1 }) +
+          '<span class="tpdf-ext" data-ext="export"></span>' +
         '</div>' +
         '<div class="tpdf-groupe">' +
           bouton('zmoins', 'zmoins', 'Zoom arrière', { doc: 1 }) +
@@ -480,12 +551,15 @@
       '<div class="tpdf-corps">' +
         '<aside class="tpdf-vignettes" aria-label="Pages"></aside>' +
         '<main class="tpdf-scene">' +
-          '<button type="button" class="tpdf-vide" data-act="ouvrir">' +
-            '<span class="tpdf-vide-ico">' + ico('depot', 40) + '</span>' +
-            '<span class="tpdf-vide-titre">Déposer un PDF ou une image, ou cliquer pour choisir</span>' +
-            '<span class="tpdf-vide-sous">Les fichiers restent sur ce poste.</span>' +
-          '</button>' +
-          '<div class="tpdf-boite"><div class="tpdf-feuille"><svg class="tpdf-calque" xmlns="' + NS + '"></svg></div></div>' +
+          '<div class="tpdf-vide">' +
+            '<button type="button" class="tpdf-vide-zone" data-act="ouvrir">' +
+              '<span class="tpdf-vide-ico">' + ico('depot', 40) + '</span>' +
+              '<span class="tpdf-vide-titre">Déposer un PDF ou une image, ou cliquer pour choisir</span>' +
+              '<span class="tpdf-vide-sous">Les fichiers restent sur ce poste.</span>' +
+            '</button>' +
+            '<div class="tpdf-vide-actions tpdf-ext" data-ext="vide"></div>' +
+          '</div>' +
+          '<div class="tpdf-boite"><div class="tpdf-feuille"><svg class="tpdf-calque" xmlns="' + NS + '"></svg><div class="tpdf-html"></div></div></div>' +
         '</main>' +
         '<aside class="tpdf-props" aria-label="Propriétés"></aside>' +
       '</div>' +
@@ -496,9 +570,19 @@
     S.scene = el.querySelector('.tpdf-scene');
     S.feuille = el.querySelector('.tpdf-feuille');
     S.svg = el.querySelector('.tpdf-calque');
+    S.html = el.querySelector('.tpdf-html');
     S.vig = el.querySelector('.tpdf-vignettes');
     S.props = el.querySelector('.tpdf-props');
     brancher();
+    placerBoutonsExt();
+  }
+  function placerBoutonsExt() {
+    if (!S || !S.el) return;
+    S.el.querySelectorAll('[data-ext]').forEach(function (c) { c.textContent = ''; });
+    EXT.boutons.forEach(function (b) {
+      var c = S.el.querySelector('[data-ext="' + b.groupe + '"]');
+      if (c) c.insertAdjacentHTML('beforeend', b.html);
+    });
   }
 
   /* ── Écouteurs ────────────────────────────────────────────────────── */
@@ -563,7 +647,10 @@
       var tempo = null, largeur = 0;
       S.ro = new ResizeObserver(function () {
         var w = S.scene.clientWidth;
-        if (w === largeur) return; largeur = w;
+        // Une variation de l'ordre d'une barre de défilement n'est pas un vrai
+        // redimensionnement : la suivre relançait le rendu en boucle (page
+        // pivotée qui sautille).
+        if (Math.abs(w - largeur) <= 24) return; largeur = w;
         if (S.zoom !== 'fit' || !S.pages.length) return;
         clearTimeout(tempo); tempo = setTimeout(rendrePage, 120);
       });
@@ -577,7 +664,10 @@
 
   function action(act, b) {
     if (act === 'ouvrir') { S.el.querySelector('.tpdf-fichier').click(); return; }
+    var E = EXT.actions[act];
+    if (E && E.sansDoc) return E.fn(b);
     if (!S.pages.length) return;
+    if (E) return E.fn(b);
     switch (act) {
       case 'enregistrer': return enregistrer();
       case 'imprimer': return imprimer();
@@ -594,7 +684,6 @@
       case 'extraire': return extraireSelection();
       case 'decouper': return modaleDecouper();
       case 'compresser': return modaleCompresser();
-      case 'formulaire': return montrerFormulaire();
       case 'zmoins': return zoomPas(-1);
       case 'zplus': return zoomPas(1);
       case 'pagePrec': return allerPage(S.cur - 1, true);
@@ -680,6 +769,8 @@
     var c = el.querySelector('.tpdf-compte');
     c.textContent = S.rech.q ? (S.rech.res.length ? (S.rech.i + 1) + ' / ' + S.rech.res.length : 'Aucun résultat pour « ' + S.rech.q + ' »') : '';
     S.svg.setAttribute('data-outil', S.outil);
+    S.html.setAttribute('data-outil', S.outil);
+    hook('barre');
   }
 
   function zoomEffectif(d) {
@@ -704,6 +795,7 @@
     S.feuille.style.width = Math.round(d.w * z) + 'px';
     S.feuille.style.height = Math.round(d.h * z) + 'px';
     dessinerCalque();
+    hook('page', p, d, z);
     var pg;
     try { pg = await src.pdf.getPage(p.idx + 1); } catch (e) { return; }
     if (jeton !== S.jeton) return;
@@ -713,13 +805,16 @@
     cv.width = Math.floor(vp.width); cv.height = Math.floor(vp.height);
     cv.className = 'tpdf-toile';
     if (S.tache) { try { S.tache.cancel(); } catch (e) { /* rendu déjà fini */ } }
-    var tache = pg.render({ canvasContext: cv.getContext('2d'), viewport: vp });
+    var opts = { canvasContext: cv.getContext('2d'), viewport: vp };
+    if (EXT.modeAnnot != null) opts.annotationMode = EXT.modeAnnot;
+    var tache = pg.render(opts);
     S.tache = tache;
     try { await tache.promise; } catch (e) { return; }
     if (jeton !== S.jeton) return;
     var ancien = S.feuille.querySelector('canvas');
     if (ancien) ancien.remove();
     S.feuille.insertBefore(cv, S.svg);
+    hook('rendu', p, d, z, cv, pg);
   }
 
   function allerPage(i, notif) {
@@ -893,6 +988,8 @@
     var d = dims(p), W = d.w, H = d.h;
     function tp(x, y) { return tournerPoint(x, y, W, H, sens); }
     p.annots.forEach(function (a) {
+      var T = EXT.types[a.t];
+      if (T && T.repere === 'pdf0') return; // rangé dans le repère de la page non pivotée
       if (a.t === 'ligne' || a.t === 'fleche') {
         var q1 = tp(a.x1, a.y1), q2 = tp(a.x2, a.y2);
         a.x1 = q1[0]; a.y1 = q1[1]; a.x2 = q2[0]; a.y2 = q2[1];
@@ -967,6 +1064,7 @@
     return { w: Math.max(w, taille * 0.6), h: lignes.length * taille * INTERLIGNE };
   }
   function boite(a) {
+    if (EXT.types[a.t] && EXT.types[a.t].boite) return EXT.types[a.t].boite(a);
     if (a.t === 'texte') { var m = mesureTexte(a.texte, a.taille); return { x: a.x, y: a.y, w: m.w, h: m.h }; }
     if (a.t === 'ligne' || a.t === 'fleche') {
       return { x: Math.min(a.x1, a.x2), y: Math.min(a.y1, a.y2), w: Math.abs(a.x2 - a.x1), h: Math.abs(a.y2 - a.y1) };
@@ -979,11 +1077,15 @@
     return { x: a.x, y: a.y, w: a.w, h: a.h };
   }
   function deplacer(a, o, dx, dy) {
+    if (EXT.types[a.t] && EXT.types[a.t].fixe) return;
     if (o.x != null) { a.x = o.x + dx; a.y = o.y + dy; }
     if (o.x1 != null) { a.x1 = o.x1 + dx; a.y1 = o.y1 + dy; a.x2 = o.x2 + dx; a.y2 = o.y2 + dy; }
     if (o.pts) a.pts = o.pts.map(function (q) { return [q[0] + dx, q[1] + dy]; });
   }
   function redimensionner(a, o, poignee, pt, garderRatio) {
+    var T = EXT.types[a.t];
+    if (T && T.fixe) return;
+    if (T && T.redim) { T.redim(a, o, poignee, pt, garderRatio); return; }
     if (poignee === 'p1') { a.x1 = pt.x; a.y1 = pt.y; return; }
     if (poignee === 'p2') { a.x2 = pt.x; a.y2 = pt.y; return; }
     var ob = boite(o);
@@ -1016,9 +1118,22 @@
   function cheminPts(pts) {
     return pts.map(function (q, i) { return (i ? 'L' : 'M') + q[0].toFixed(2) + ' ' + q[1].toFixed(2); }).join(' ');
   }
+  // Matrice SVG qui passe du repère de la page non pivotée à la page affichée.
+  function matriceR0(d) {
+    if (!d.R) return null;
+    var v = d.meta.view;
+    function f(u, w) { var q = versPdf(v, 0, u, w); return versVue(v, d.R, q[0], q[1]); }
+    var e = f(0, 0), x = f(1, 0), y = f(0, 1);
+    return 'matrix(' + [x[0] - e[0], x[1] - e[1], y[0] - e[0], y[1] - e[1], e[0], e[1]].join(' ') + ')';
+  }
   function dessinerAnnot(a, svg) {
     var g = sv('g', { 'data-id': a.id, 'class': 'tpdf-annot' }, svg);
-    var b;
+    var b, T = EXT.types[a.t];
+    if (T) {
+      if (T.repere === 'pdf0') { var m = matriceR0(dims(pageCourante())); if (m) g.setAttribute('transform', m); }
+      if (T.dessiner) T.dessiner(a, g, S.zoomCourant || 1);
+      return;
+    }
     switch (a.t) {
       case 'texte': {
         b = boite(a);
@@ -1079,7 +1194,8 @@
     dessinerResultats(p, d);
     var a = trouverAnnot(S.annSel);
     if (!a) return;
-    var t = 8 / z, cadre = sv('g', { 'class': 'tpdf-sel' }, svg);
+    var t = 8 / z, cadre = sv('g', { 'class': 'tpdf-sel' }, svg), T = EXT.types[a.t];
+    if (T && T.repere === 'pdf0') { var mx = matriceR0(d); if (mx) cadre.setAttribute('transform', mx); }
     if (a.t === 'ligne' || a.t === 'fleche') {
       [['p1', a.x1, a.y1], ['p2', a.x2, a.y2]].forEach(function (h) {
         sv('circle', { cx: h[1], cy: h[2], r: t * 0.7, 'class': 'tpdf-poignee', 'data-poignee': h[0], 'stroke-width': 1.5 / z }, cadre);
@@ -1088,6 +1204,8 @@
     }
     var b = boite(a), m = 3 / z;
     sv('rect', { x: b.x - m, y: b.y - m, width: b.w + 2 * m, height: b.h + 2 * m, 'class': 'tpdf-cadre', 'stroke-width': 1.2 / z, 'stroke-dasharray': (4 / z) + ' ' + (3 / z) }, cadre);
+    if (T && T.decorations) T.decorations(a, cadre, z);
+    if (T && T.fixe) return;
     [['nw', b.x - m, b.y - m], ['ne', b.x + b.w + m, b.y - m], ['sw', b.x - m, b.y + b.h + m], ['se', b.x + b.w + m, b.y + b.h + m]].forEach(function (h) {
       sv('rect', { x: h[1] - t / 2, y: h[2] - t / 2, width: t, height: t, 'class': 'tpdf-poignee tpdf-poignee-' + h[0], 'data-poignee': h[0], 'stroke-width': 1.5 / z }, cadre);
     });
@@ -1157,6 +1275,13 @@
         }
         p.annots.push(a);
         S.drag = { mode: 'creer', id: a.id, debut: pt, avant: avant };
+      } else if (EXT.outils[S.outil] && EXT.outils[S.outil].down) {
+        var r = EXT.outils[S.outil].down(pt, p, ev, avant);
+        if (!r) return;
+        if (r === true) { ev.preventDefault(); return; }
+        if (!r.id) r.id = nid('n');
+        p.annots.push(r);
+        S.drag = { mode: 'creer', id: r.id, debut: pt, avant: avant };
       } else return;
       ev.preventDefault();
       try { svg.setPointerCapture(ev.pointerId); } catch (e) { /* pointeur déjà relâché */ }
@@ -1197,9 +1322,11 @@
         } else if (a.t === 'ligne' || a.t === 'fleche') {
           if (Math.hypot(a.x2 - a.x1, a.y2 - a.y1) < 3) { a.x2 = a.x1 + 100; a.y2 = a.y1; }
         } else if (a.w < 3 && a.h < 3) {
-          var dw = a.t === 'surligneur' ? 120 : 100, dh = a.t === 'surligneur' ? 16 : 60;
-          a.x -= dw / 2; a.y -= dh / 2; a.w = dw; a.h = dh;
+          var T = EXT.types[a.t], dz = T && T.tailleDefaut ? T.tailleDefaut(a) : null;
+          var dw = dz ? dz[0] : a.t === 'surligneur' ? 120 : 100, dh = dz ? dz[1] : a.t === 'surligneur' ? 16 : 60;
+          if (dz) { a.w = dw; a.h = dh; } else { a.x -= dw / 2; a.y -= dh / 2; a.w = dw; a.h = dh; }
         }
+        if (a && EXT.types[a.t] && EXT.types[a.t].apresCreation) EXT.types[a.t].apresCreation(a);
         if (a) S.annSel = a.id;
         rendreProps();
       }
@@ -1212,6 +1339,7 @@
       var g = ev.target.closest('[data-id]'); if (!g) return;
       var a = trouverAnnot(g.getAttribute('data-id'));
       if (a && a.t === 'texte') focaliserTexte();
+      else if (a && EXT.types[a.t] && EXT.types[a.t].dblclic) EXT.types[a.t].dblclic(a, pointSvg(ev));
     });
   }
   function majBadges() {
@@ -1440,7 +1568,8 @@
     tete.appendChild(xb); box.appendChild(tete);
     if (!S.pages.length) return;
     var a = trouverAnnot(S.annSel);
-    var type = a ? a.t : (OUTILS_TRACE[S.outil] ? S.outil : null);
+    var type = a ? a.t : (OUTILS_TRACE[S.outil] || EXT.outils[S.outil] ? S.outil : null);
+    var E = type ? EXT.types[type] || EXT.outils[type] : null;
     var src = S.style;
     var ref = a || {
       couleur: type === 'surligneur' && src.couleur === COULEURS[0] ? COULEURS[2] : src.couleur,
@@ -1450,6 +1579,7 @@
     if (type) {
       var s = section(a ? LIBELLES[a.t] : 'Outil : ' + LIBELLES[type]);
       if (!a && AIDE_OUTIL[type]) { var ai = document.createElement('p'); ai.className = 'tpdf-aide'; ai.textContent = AIDE_OUTIL[type]; s.appendChild(ai); }
+      if (E && E.props) E.props(s, a);
       if (type === 'texte') {
         if (a) {
           var ta = document.createElement('textarea'); ta.className = 'tpdf-champ'; ta.rows = 3; ta.value = a.texte; ta.setAttribute('data-prop', 'texte');
@@ -1474,7 +1604,7 @@
         cd.appendChild(ci); cd.appendChild(document.createTextNode(' Date du jour'));
         s.appendChild(cd);
       }
-      if (type !== 'image') {
+      if (type !== 'image' && !E) {
         var pal = document.createElement('div'); pal.className = 'tpdf-palette';
         COULEURS.forEach(function (c) {
           var b = document.createElement('button'); b.type = 'button';
@@ -1525,61 +1655,7 @@
     sd.appendChild(inf);
     box.appendChild(sd);
 
-    rendreFormulaire(box);
-  }
-
-  function rendreFormulaire(box) {
-    var p = pageCourante(); if (!p) return;
-    var src = S.sources[p.src];
-    if (!src || !src.champs.length) return;
-    var s = section('Formulaire');
-    s.classList.add('tpdf-section-form');
-    var ai = document.createElement('p'); ai.className = 'tpdf-aide';
-    ai.textContent = src.champs.length + ' champ' + (src.champs.length > 1 ? 's' : '') + ' dans « ' + src.nom + ' ». Les valeurs saisies sont écrites à l\'enregistrement.';
-    s.appendChild(ai);
-    src.champs.forEach(function (c) {
-      var v = Object.prototype.hasOwnProperty.call(src.valeurs, c.nom) ? src.valeurs[c.nom] : c.valeur, inp;
-      if (c.type === 'case') {
-        var l = document.createElement('label'); l.className = 'tpdf-case';
-        inp = document.createElement('input'); inp.type = 'checkbox'; inp.checked = !!v;
-        inp.addEventListener('change', function () { src.valeurs[c.nom] = inp.checked; });
-        l.appendChild(inp); l.appendChild(document.createTextNode(' ' + c.nom));
-        s.appendChild(l);
-        return;
-      }
-      if (c.type === 'liste') {
-        inp = document.createElement('select'); inp.className = 'tpdf-champ';
-        var o0 = document.createElement('option'); o0.value = ''; o0.textContent = '—'; inp.appendChild(o0);
-        (c.options || []).forEach(function (op) { var o = document.createElement('option'); o.value = op; o.textContent = op; inp.appendChild(o); });
-        inp.value = v || '';
-        inp.addEventListener('change', function () { src.valeurs[c.nom] = inp.value; });
-      } else {
-        inp = document.createElement(c.multi ? 'textarea' : 'input'); inp.className = 'tpdf-champ';
-        if (!c.multi) inp.type = 'text'; else inp.rows = 3;
-        inp.value = v || '';
-        inp.addEventListener('input', function () { src.valeurs[c.nom] = inp.value; });
-      }
-      s.appendChild(champ(c.nom, inp));
-    });
-    var ap = document.createElement('label'); ap.className = 'tpdf-case';
-    var ac = document.createElement('input'); ac.type = 'checkbox'; ac.checked = S.aplatir;
-    ac.addEventListener('change', function () { S.aplatir = ac.checked; });
-    ap.appendChild(ac); ap.appendChild(document.createTextNode(' Aplatir les champs à l\'enregistrement'));
-    s.appendChild(ap);
-    box.appendChild(s);
-  }
-  function montrerFormulaire() {
-    var p = pageCourante(), src = p && S.sources[p.src];
-    if (!src || !src.champs.length) {
-      var autre = S.pages.findIndex(function (q) { return S.sources[q.src].champs.length > 0; });
-      if (autre < 0) { toast('Aucun champ de formulaire dans ce document.', 'info'); return; }
-      allerPage(autre, true);
-    }
-    S.el.classList.add('tpdf-props-ouvert');
-    requestAnimationFrame(function () {
-      var f = S.props.querySelector('.tpdf-section-form');
-      if (f) { f.scrollIntoView({ block: 'start' }); var i = f.querySelector('input,select,textarea'); if (i) i.focus(); }
-    });
+    hook('props', box);
   }
 
   /* ── Recherche ────────────────────────────────────────────────────── */
@@ -1658,30 +1734,16 @@
     for (var ch of s) { try { font.encodeText(ch); out += ch; } catch (e) { out += '?'; } }
     return out;
   }
-  async function docPourExport(src, L) {
-    var modif = Object.keys(src.valeurs).length > 0, aplat = S.aplatir && src.champs.length > 0;
-    if (!modif && !aplat) return src.lib;
-    var d = await L.PDFDocument.load(src.bytes, { updateMetadata: false });
-    var form = d.getForm();
-    Object.keys(src.valeurs).forEach(function (nom) {
-      var v = src.valeurs[nom];
-      try {
-        var f = form.getField(nom);
-        if (f instanceof L.PDFTextField) f.setText(String(v || ''));
-        else if (f instanceof L.PDFCheckBox) { if (v) f.check(); else f.uncheck(); }
-        else if (f instanceof L.PDFDropdown || f instanceof L.PDFOptionList) { if (v) f.select(v); else f.clear(); }
-        else if (f instanceof L.PDFRadioGroup) { if (v) f.select(v); else f.clear(); }
-      } catch (e) { /* champ non modifiable : valeur ignorée */ }
-    });
-    if (aplat) {
-      try { form.flatten(); } catch (e) { toast('Aplatissement impossible sur « ' + src.nom + ' » — champs conservés.', 'info'); }
-    } else {
-      try { form.updateFieldAppearances(); } catch (e) { /* apparences d'origine conservées */ }
-    }
-    return d;
-  }
-
   async function dessinerPdf(L, out, pg, a, view, R, pol, imgs) {
+    var T = EXT.types[a.t];
+    if (T) {
+      if (!T.exporter) return;
+      var R2 = T.repere === 'pdf0' ? 0 : R;
+      return T.exporter(a, {
+        L: L, out: out, pg: pg, view: view, R: R2, rot: L.degrees(R2), pol: pol, imgs: imgs,
+        P: function (u, v) { return versPdf(view, R2, u, v); }
+      });
+    }
     function P(u, v) { return versPdf(view, R, u, v); }
     var c = hexRgb(a.couleur), col = L.rgb(c[0], c[1], c[2]), rot = L.degrees(R);
     function boiteTexte(txt, font, size, u, v) {
@@ -1719,11 +1781,13 @@
         pg.drawSvgPath(d, { x: 0, y: 0, borderColor: col, borderWidth: a.ep, borderLineCap: L.LineCapStyle.Round });
         break;
       }
-      case 'texte':
+      case 'texte': {
+        var ft = await pol.police(a.texte, {});
         String(a.texte).split('\n').forEach(function (l, i) {
-          if (l) boiteTexte(l, pol.n, a.taille, a.x, a.y + a.taille * ASC + i * a.taille * INTERLIGNE);
+          if (l) boiteTexte(l, ft, a.taille, a.x, a.y + a.taille * ASC + i * a.taille * INTERLIGNE);
         });
         break;
+      }
       case 'tampon': {
         var ep = a.h * 0.06, k1 = P(a.x + ep / 2, a.y + ep / 2), k2 = P(a.x + a.w - ep / 2, a.y + a.h - ep / 2);
         pg.drawRectangle({ x: Math.min(k1[0], k2[0]), y: Math.min(k1[1], k2[1]), width: Math.abs(k2[0] - k1[0]), height: Math.abs(k2[1] - k1[1]), borderColor: col, borderWidth: ep });
@@ -1749,7 +1813,13 @@
   async function construire(pages) {
     var L = await pdflib();
     var out = await L.PDFDocument.create();
-    var pol = { n: await out.embedFont(L.StandardFonts.Helvetica), g: await out.embedFont(L.StandardFonts.HelveticaBold) };
+    var cpol = { out: out, L: L, std: {}, uni: {} };
+    var pol = {
+      n: await policePour(cpol, '', {}), g: await policePour(cpol, '', { gras: true }),
+      police: function (txt, st) { return policePour(cpol, txt, st); },
+      nettoyer: nettoyerTexte
+    };
+    var ctx = { L: L, out: out, pol: pol, pages: pages, optionsSave: null };
     var parSrc = {}, ordre = [];
     pages.forEach(function (p) {
       if (!parSrc[p.src]) { parSrc[p.src] = []; ordre.push(p.src); }
@@ -1757,7 +1827,7 @@
     });
     var copies = {};
     for (var i = 0; i < ordre.length; i++) {
-      var id = ordre[i], doc = await docPourExport(S.sources[id], L);
+      var id = ordre[i], doc = EXT.docPourExport ? await EXT.docPourExport(S.sources[id], L, ctx) : S.sources[id].lib;
       copies[id] = await out.copyPages(doc, parSrc[id]);
     }
     var imgs = {};
@@ -1768,7 +1838,8 @@
       pg.setRotation(L.degrees(d.R));
       for (var k = 0; k < p.annots.length; k++) await dessinerPdf(L, out, pg, p.annots[k], d.meta.view, d.R, pol, imgs);
     }
-    return out.save();
+    await hookAsync('export', ctx);
+    return out.save(ctx.optionsSave || {});
   }
   function nomBase() { return nomFichierSur(S.nom || 'document'); }
 
@@ -1939,10 +2010,16 @@
     construireDom();
     root.appendChild(S.el);
     toutRendre();
+    var monEtat = S;
+    chargerExtensions().then(function () {
+      if (S !== monEtat || !S.el) return;
+      placerBoutonsExt(); hook('monte'); toutRendre();
+    });
   }
   function demonter() {
     if (!S) return;
     var s = S;
+    hook('demonter');
     if (s.ecoute) document.removeEventListener('keydown', s.ecoute);
     if (s.ro) { try { s.ro.disconnect(); } catch (e) { /* déjà déconnecté */ } }
     if (s.tache) { try { s.tache.cancel(); } catch (e) { /* rendu fini */ } }
@@ -1958,8 +2035,26 @@
     if (n <= S.pages.length) allerPage(n - 1, false);
   }
 
+  // Ce que voient les extensions (mysifa_tools_pdf_*.js). Elles ne lisent l'état
+  // qu'à l'appel : etat() rend l'objet courant, null hors montage.
+  var API = {
+    ext: EXT, etat: function () { return S; }, IC: IC, ico: ico, bouton: bouton, outilBtn: outilBtn,
+    COULEURS: COULEURS, LIBELLES: LIBELLES, AIDE_OUTIL: AIDE_OUTIL, ASC: ASC, INTERLIGNE: INTERLIGNE, POLICE: POLICE,
+    pdfjs: pdfjs, pdflib: pdflib, fontkit: fontkit, octetsNoto: octetsNoto, cleStandard: cleStandard, encodable: encodable,
+    nid: nid, toast: toast, msgErreur: msgErreur, snapshot: snapshot, pushHist: pushHist, notifier: notifier,
+    pageCourante: pageCourante, dims: dims, trouverAnnot: trouverAnnot, versPdf: versPdf, versVue: versVue,
+    hexRgb: hexRgb, sv: sv, boite: boite, mesureTexte: mesureTexte, nettoyerTexte: nettoyerTexte,
+    dessinerCalque: dessinerCalque, rendreProps: rendreProps, rendreBarre: rendreBarre, toutRendre: toutRendre,
+    rendrePage: rendrePage, allerPage: allerPage, choisirOutil: choisirOutil, majBadges: majBadges,
+    champ: champ, section: section, majProp: majProp, validerProp: validerProp, focaliserTexte: focaliserTexte,
+    ouvrirModale: ouvrirModale, fermerModale: fermerModale, ajouterSource: ajouterSource, nouvellePage: nouvellePage,
+    occuper: occuper, liberer: liberer, construire: function (pages) { return construire(pages || S.pages); }
+  };
+  function etendre(fn) { try { fn(API); } catch (e) { if (window.console) console.error(e); } }
+
   window.MyToolsPDF = {
     mount: mount,
+    etendre: etendre,
     demonter: demonter,
     adresse: { etat: function () { return etatAdresse(); }, aller: aller, cles: ['page'] },
     // Fonctions pures, exposées pour tests/test_tools_pdf.js.

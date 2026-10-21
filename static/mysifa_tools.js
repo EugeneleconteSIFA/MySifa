@@ -46,6 +46,9 @@ const TOOLS_OUTILS = [
   { id: 'pdf', label: 'Éditeur PDF', titre: 'Éditeur PDF',
     desc: 'Fusionner, découper, réordonner, annoter, signer, remplir et compresser. Les fichiers restent sur le poste.',
     icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/>' },
+  { id: 'image', label: 'Image', titre: 'Image — améliorer et vectoriser',
+    desc: 'Agrandir, nettoyer, détourer une image ; la vectoriser en SVG ou PDF. Les fichiers restent sur le poste.',
+    icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 16l5-5 4 4"/><path d="M14 13l2-2 5 5"/><circle cx="8.5" cy="8" r="1.5"/>' },
   { id: 'calculs', label: 'Calculs bobine', titre: 'Calculs bobine',
     desc: 'Métrage ↔ diamètre, fronts sur la laize, étiquettes par bobine.',
     icon: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6"/>' },
@@ -169,23 +172,29 @@ function toolsAccueil(root) {
     + '<div class="tools-grid">' + (tuiles || '<div class="tools-empty">Aucun outil ouvert à votre profil.</div>') + '</div></div>';
 }
 
-let _toolsPdfCharge = null;
-function toolsChargerPdf() {
-  if (window.MyToolsPDF) return Promise.resolve();
-  if (_toolsPdfCharge) return _toolsPdfCharge;
-  _toolsPdfCharge = new Promise((ok, ko) => {
+// Modules lourds chargés au premier usage (script + feuille de style).
+const _TOOLS_DIFFERES = {
+  pdf:   { js: 'mysifa_tools_pdf.js', css: 'mysifa_tools_pdf.css', glob: 'MyToolsPDF', nom: 'Éditeur PDF' },
+  image: { js: 'mysifa_tools_image.js', css: 'mysifa_tools_image.css', glob: 'MyToolsImage', nom: 'Outil image' },
+};
+const _toolsCharges = {};
+function toolsCharger(id) {
+  const d = _TOOLS_DIFFERES[id];
+  if (window[d.glob]) return Promise.resolve();
+  if (_toolsCharges[id]) return _toolsCharges[id];
+  _toolsCharges[id] = new Promise((ok, ko) => {
     const v = TOOLS.version ? '?v=' + encodeURIComponent(TOOLS.version) : '';
-    if (!document.getElementById('tools-pdf-css')) {
+    if (!document.getElementById('tools-css-' + id)) {
       const l = document.createElement('link');
-      l.id = 'tools-pdf-css'; l.rel = 'stylesheet'; l.href = '/static/mysifa_tools_pdf.css' + v;
+      l.id = 'tools-css-' + id; l.rel = 'stylesheet'; l.href = '/static/' + d.css + v;
       document.head.appendChild(l);
     }
-    const s = document.createElement('script');
-    s.src = '/static/mysifa_tools_pdf.js' + v;
-    s.onload = () => ok(); s.onerror = () => { _toolsPdfCharge = null; ko(new Error('Éditeur PDF indisponible.')); };
-    document.head.appendChild(s);
+    const sc = document.createElement('script');
+    sc.src = '/static/' + d.js + v;
+    sc.onload = () => ok(); sc.onerror = () => { _toolsCharges[id] = null; ko(new Error(d.nom + ' indisponible.')); };
+    document.head.appendChild(sc);
   });
-  return _toolsPdfCharge;
+  return _toolsCharges[id];
 }
 
 const _toolsCtx = {
@@ -199,7 +208,8 @@ const _toolsCtx = {
 let _toolsMonte = null;
 function toolsDemonter(sauf) {
   if (_toolsMonte && _toolsMonte !== sauf) {
-    const m = { etiquettes: window.MyToolsEtiquettes, pdf: window.MyToolsPDF, traduction: window.MyToolsTraduction }[_toolsMonte];
+    const m = { etiquettes: window.MyToolsEtiquettes, pdf: window.MyToolsPDF, traduction: window.MyToolsTraduction,
+                image: window.MyToolsImage }[_toolsMonte];
     if (m && typeof m.demonter === 'function') { try { m.demonter(); } catch (e) {} }
   }
   _toolsMonte = sauf || null;
@@ -210,7 +220,7 @@ function toolsRendre() {
   toolsNav();
   const content = document.getElementById('content');
   if (!content) return;
-  content.classList.toggle('content--large', S.outil === 'pdf' || S.outil === 'etiquettes');
+  content.classList.toggle('content--large', S.outil === 'pdf' || S.outil === 'etiquettes' || S.outil === 'image');
   toolsDemonter(S.outil);
   if (S.outil === 'formulaires') {
     if (S.view === 'formulaire-edit' && S.formu && S.formu.courant) { if (typeof formuRenderEdition === 'function') formuRenderEdition(); }
@@ -233,13 +243,15 @@ function toolsRendre() {
   } else if (S.outil === 'traduction') {
     if (window.MyToolsTraduction) window.MyToolsTraduction.mount(root, _toolsCtx);
     else root.innerHTML = '<div class="tools-empty">Traducteur indisponible.</div>';
-  } else if (S.outil === 'pdf') {
-    root.innerHTML = '<div class="tools-empty"><span class="spin"></span> Chargement de l\'éditeur…</div>';
-    toolsChargerPdf().then(() => {
-      if (S.outil !== 'pdf' || !root.isConnected) return;
+  } else if (_TOOLS_DIFFERES[S.outil]) {
+    const id = S.outil, d = _TOOLS_DIFFERES[id];
+    root.innerHTML = '<div class="tools-empty"><span class="spin"></span> Chargement…</div>';
+    toolsCharger(id).then(() => {
+      if (S.outil !== id || !root.isConnected) return;
       root.innerHTML = '';
-      window.MyToolsPDF.mount(root, _toolsCtx);
-      if (_toolsPdfAttente) { const a = _toolsPdfAttente; _toolsPdfAttente = null; try { window.MyToolsPDF.adresse.aller(a); } catch (e) {} }
+      window[d.glob].mount(root, _toolsCtx);
+      const a = _toolsAttente[id];
+      if (a) { _toolsAttente[id] = null; try { window[d.glob].adresse.aller(a); } catch (e) {} }
       toolsSyncUrl();
     }).catch(e => { root.innerHTML = '<div class="tools-empty">' + escHtml(e.message) + '</div>'; });
   }
@@ -262,7 +274,9 @@ const _TOOLS_OUVREURS = [
   ['formuEnvoiOuvrir',  'envoi_formulaire',   a => a[0]],
   ['formuReponseVoir',  'reponse_formulaire', a => a[0]],
 ];
-let _toolsFen = null, _toolsOuvrant = 0, _toolsUrlPrete = false, _toolsPdfAttente = null;
+let _toolsFen = null, _toolsOuvrant = 0, _toolsUrlPrete = false;
+// Adresse demandée pour un module pas encore chargé, appliquée au montage.
+const _toolsAttente = {};
 
 function toolsEnvelopper() {
   _TOOLS_OUVREURS.forEach(([nom, cle, valeur]) => {
@@ -321,6 +335,8 @@ function toolsParams() {
     if (f) { p[f.cle] = f.id; nav += '/' + f.cle; }
   } else if (S.outil === 'pdf' && window.MyToolsPDF && window.MyToolsPDF.adresse) {
     try { const e = window.MyToolsPDF.adresse.etat() || {}; if (e.page && Number(e.page) > 1) p.page = String(e.page); } catch (e) {}
+  } else if (S.outil === 'image' && window.MyToolsImage) {
+    if (window.MyToolsImage.adresse.etat().mode === 'vectoriser') { p.mode = 'vectoriser'; nav += '/vectoriser'; }
   } else if (S.outil === 'traduction' && window.MyToolsTraduction) {
     const e = window.MyToolsTraduction.adresse.etat();
     if (e.de && e.de !== 'auto') p.de = e.de;
@@ -408,7 +424,11 @@ async function toolsLireUrl(u, complet) {
     const pg = u.get('page');
     const a = { page: /^\d+$/.test(String(pg || '')) ? Number(pg) : 1 };
     if (window.MyToolsPDF && window.MyToolsPDF.adresse) { try { window.MyToolsPDF.adresse.aller(a); } catch (e) {} }
-    else _toolsPdfAttente = a;
+    else _toolsAttente.pdf = a;
+  } else if (cible === 'image') {
+    const a = { mode: u.get('mode', 'ameliorer', ['ameliorer', 'vectoriser']) };
+    if (window.MyToolsImage) { if (complet || u.a('mode')) window.MyToolsImage.adresse.aller(a); }
+    else if (complet || u.a('mode')) _toolsAttente.image = a;
   }
 }
 
