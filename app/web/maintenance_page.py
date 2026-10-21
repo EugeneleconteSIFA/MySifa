@@ -9872,7 +9872,9 @@ function renderCtrl(){
     }
     for(const col of extraCols){
       const unitSuffix = (col.type === 'value' && col.unit) ? ' (' + escHtml(col.unit) + ')' : '';
-      const ptsSuffix = (col.type === 'value' && Array.isArray(col.points) && col.points.length > 1)
+      const ptsSuffix = (col.type === 'value' && col.points_libres)
+        ? '<div style="font-weight:500;font-size:11px;color:var(--muted)">' + escHtml((col.libelle_point || 'Mesure') + ' 1 / 2 / …') + '</div>'
+        : (col.type === 'value' && Array.isArray(col.points) && col.points.length > 1)
         ? '<div style="font-weight:500;font-size:11px;color:var(--muted)">' + escHtml(col.points.join(' / ')) + '</div>' : '';
       h += '<th>' + escHtml(col.label || '') + unitSuffix + ptsSuffix + '</th>';
     }
@@ -10984,14 +10986,14 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
-<script src="/static/mysifa_alert_form.js?v=2.4.20"></script>
+<script src="/static/mysifa_alert_form.js?v=2.4.21"></script>
 <script src="/static/mysifa_maint_form.js?v=2.7.4-usure"></script>
-<script src="/static/mysifa_alert_runtime.js?v=2.4.20"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.4.21"></script>
 <!-- Chassis partage de la fenetre de detail d'un ack (openAckDetail). Le
      meme que dans MyProd : une alerte validee se relit comme une saisie.
      Ne touche pas au runtime des alertes ci-dessus, qui garde son style
      d'alerte — c'est une interruption, pas une consultation. -->
-<script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__-ack4"></script>
+<script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__-ack5"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js?v=2"></script>
 

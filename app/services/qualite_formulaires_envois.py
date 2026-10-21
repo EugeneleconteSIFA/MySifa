@@ -304,7 +304,15 @@ def nettoyer_reponses(schema: dict, brutes: Any) -> tuple[dict, list[str]]:
         for q in s["questions"]:
             qid, t, r = q["id"], q["type"], brutes.get(q["id"])
             val: Any = None
-            if t == "value":
+            if t == "value" and q.get("points_libres"):
+                # Nombre libre : les lignes laissées vides sont ignorées.
+                vals = [v for v in (_num(x) for x in (r if isinstance(r, list) else [r])) if v is not None]
+                vals = vals[: int(q.get("max_points") or 50)]
+                if q.get("required") and len(vals) < max(1, int(q.get("min_points") or 1)):
+                    manquantes.append(q["label"])
+                    continue
+                val = vals or None
+            elif t == "value":
                 if isinstance(r, list) and len(q.get("points") or []) > 1:
                     vals = [_num(x) for x in r[: len(q["points"])]]
                     vals += [None] * (len(q["points"]) - len(vals))

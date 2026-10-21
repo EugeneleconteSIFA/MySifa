@@ -4908,8 +4908,14 @@ def _validate_alert_params(params: dict) -> dict:
                 item_out["required"] = True
             # Plusieurs mesures (ex. début / milieu / fin de prod) : un libellé
             # par mesure, la réponse devient une liste. Moins de deux = valeur unique.
+            # Nombre libre (app/services/mesures_libres.py) : l'opérateur ajoute
+            # autant de valeurs qu'il en faut ; les libellés fixes sont ignorés.
+            from app.services.mesures_libres import normaliser as _mesures_libres
+            libres = _mesures_libres(it)
             points_in = it.get("points") or []
-            if isinstance(points_in, list):
+            if libres:
+                item_out.update(libres)
+            elif isinstance(points_in, list):
                 points = [p.strip()[:40] for p in points_in
                           if isinstance(p, str) and p.strip()][:10]
                 if len(points) > 1:
@@ -7576,6 +7582,9 @@ def maintenance_alert_acks_list(request: Request):
                                 entry["max"] = it["max"]
                             if isinstance(it.get("points"), list) and it["points"]:
                                 entry["points"] = it["points"]
+                            if it.get("points_libres"):
+                                entry["points_libres"] = True
+                                entry["libelle_point"] = it.get("libelle_point") or "Mesure"
                             if it.get("target_value") is not None:
                                 entry["target_value"] = it["target_value"]
                             entry["out_of_range_is_nc"] = bool(it.get("out_of_range_is_nc", False))

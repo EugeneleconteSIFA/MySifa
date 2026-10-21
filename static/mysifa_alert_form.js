@@ -119,6 +119,11 @@
         // Plusieurs mesures (ex. début / milieu / fin de prod) : un libellé
         // par mesure. Vide = une seule valeur, comme avant.
         points: _afPoints(it && it.points),
+        // Nombre libre : l'opérateur ajoute autant de mesures qu'il en faut.
+        points_libres: !!(it && it.points_libres),
+        libelle_point: (it && typeof it.libelle_point === 'string') ? it.libelle_point : '',
+        min_points: (it && it.min_points) ? Number(it.min_points) : 1,
+        max_points: (it && it.max_points) ? Number(it.max_points) : 50,
         placeholder: (it && typeof it.placeholder === 'string') ? it.placeholder : '',
         help: (it && typeof it.help === 'string') ? it.help : '',
         target_value: (it && it.target_value != null && it.target_value !== '') ? Number(it.target_value) : null,
@@ -453,6 +458,7 @@
     const oorNc = !!(item && item.out_of_range_is_nc);
     const safePh = escAttr((item && item.placeholder) || '');
     const pts = _afPoints(item && item.points);
+    const libreOn = !!(item && item.points_libres);
     const multiOn = pts.length > 1;
     const ptsTxt = escAttr((multiOn ? pts : _AF_POINTS_DEFAUT).join(' / '));
     return '<div class="af-cl-body" data-type="value">'
@@ -469,13 +475,25 @@
       + '</label>'
       + '<div style="margin-top:8px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Texte d\'exemple dans le champ <span style="text-transform:none;letter-spacing:0">(optionnel)</span></div>'
       +   '<input type="text" class="alert-field-input af-cl-placeholder" maxlength="60" placeholder="Valeur" value="' + safePh + '" style="padding:6px 10px;font-size:13px"></div>'
-      + '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);cursor:pointer;font-size:12px;color:var(--text2)">'
-      +   '<input type="checkbox" class="af-cl-points-toggle"' + (multiOn ? ' checked' : '') + ' onchange="_afOnPointsToggle(this)" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">'
-      +   '<span><strong style="color:var(--text)">Plusieurs valeurs</strong> à saisir pour ce point (ex. début, milieu et fin de production)</span>'
-      + '</label>'
-      + '<div class="af-cl-points-wrap" style="display:' + (multiOn ? 'block' : 'none') + ';margin-top:6px;margin-left:22px">'
+      + '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)">'
+      +   '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Nombre de valeurs</div>'
+      +   '<select class="alert-field-input af-cl-mesures" onchange="_afOnPointsToggle(this)" style="padding:6px 10px;font-size:13px">'
+      +     '<option value="une"' + (!multiOn && !libreOn ? ' selected' : '') + '>Une seule valeur</option>'
+      +     '<option value="fixes"' + (multiOn && !libreOn ? ' selected' : '') + '>Plusieurs valeurs, libellés fixes (ex. début, milieu, fin de production)</option>'
+      +     '<option value="libres"' + (libreOn ? ' selected' : '') + '>Nombre libre : l\'opérateur ajoute ses valeurs (ex. un poids par front)</option>'
+      +   '</select>'
+      + '</div>'
+      + '<div class="af-cl-points-wrap" style="display:' + (multiOn && !libreOn ? 'block' : 'none') + ';margin-top:6px">'
       +   '<input type="text" class="alert-field-input af-cl-points" maxlength="300" placeholder="Début de prod / Milieu de prod / Fin de prod" value="' + ptsTxt + '" style="padding:6px 10px;font-size:13px">'
       +   '<div class="alert-field-help" style="margin-top:4px">Un libellé par mesure, séparés par « / » (10 au plus). Si le point est obligatoire, toutes les mesures doivent être saisies.</div>'
+      + '</div>'
+      + '<div class="af-cl-libres-wrap" style="display:' + (libreOn ? 'block' : 'none') + ';margin-top:6px">'
+      +   '<div class="af-cl-grid4" style="grid-template-columns:2fr 1fr 1fr">'
+      +     '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Libellé d\'une valeur</div><input type="text" class="alert-field-input af-cl-libelle-point" maxlength="30" placeholder="Front" value="' + escAttr((item && item.libelle_point) || '') + '" style="padding:6px 10px;font-size:13px"></div>'
+      +     '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Minimum</div><input type="number" min="1" max="50" step="1" class="alert-field-input af-cl-min-points" value="' + escAttr(String((item && item.min_points) || 1)) + '" style="padding:6px 10px;font-size:13px"></div>'
+      +     '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Maximum</div><input type="number" min="1" max="50" step="1" class="alert-field-input af-cl-max-points" value="' + escAttr(String((item && item.max_points) || 50)) + '" style="padding:6px 10px;font-size:13px"></div>'
+      +   '</div>'
+      +   '<div class="alert-field-help" style="margin-top:4px">L\'opérateur part du minimum de lignes (« Front 1 »…) et en ajoute autant qu\'il en faut, jusqu\'au maximum. Si le point est obligatoire, le minimum doit être rempli.</div>'
       + '</div>'
       + '</div>';
   }
@@ -1018,9 +1036,17 @@
         if (card.querySelector('.af-cl-required')?.checked) item.required = true;
         const ph = (card.querySelector('.af-cl-placeholder')?.value || '').trim();
         if (ph) item.placeholder = ph;
-        if (card.querySelector('.af-cl-points-toggle')?.checked) {
+        const mode = card.querySelector('.af-cl-mesures')?.value || 'une';
+        if (mode === 'fixes') {
           const pts = _afPoints(card.querySelector('.af-cl-points')?.value || '');
           if (pts.length > 1) item.points = pts;
+        } else if (mode === 'libres') {
+          item.points_libres = true;
+          item.libelle_point = (card.querySelector('.af-cl-libelle-point')?.value || '').trim() || 'Mesure';
+          const mini = Math.max(1, Math.min(50, parseInt(card.querySelector('.af-cl-min-points')?.value, 10) || 1));
+          const maxi = Math.max(mini, Math.min(50, parseInt(card.querySelector('.af-cl-max-points')?.value, 10) || 50));
+          item.min_points = mini;
+          item.max_points = maxi;
         }
         const helpV = (card.querySelector('.af-cl-help')?.value || '').trim();
         if (helpV) item.help = helpV;
@@ -1150,9 +1176,14 @@
     return out.length > 1 ? out : [];
   }
 
-  function _afOnPointsToggle(cb) {
-    const wrap = cb.closest('.af-cl-body')?.querySelector('.af-cl-points-wrap');
-    if (wrap) wrap.style.display = cb.checked ? 'block' : 'none';
+  // Choix du nombre de valeurs : une, libellés fixes, ou nombre libre.
+  function _afOnPointsToggle(sel) {
+    const body = sel.closest('.af-cl-body');
+    if (!body) return;
+    const fixes = body.querySelector('.af-cl-points-wrap');
+    const libres = body.querySelector('.af-cl-libres-wrap');
+    if (fixes) fixes.style.display = sel.value === 'fixes' ? 'block' : 'none';
+    if (libres) libres.style.display = sel.value === 'libres' ? 'block' : 'none';
   }
 
 

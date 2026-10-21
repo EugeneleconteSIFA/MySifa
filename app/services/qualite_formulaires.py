@@ -117,8 +117,12 @@ def normaliser_question(q: dict, pris: set[str]) -> dict | None:
         cible = _num(q.get("target_value"))
         if cible is not None:
             out["target_value"] = cible
+        from app.services.mesures_libres import normaliser as _mesures_libres
+        libres = _mesures_libres(q)
         points = _liste_txt(q.get("points"), 10, 40)
-        if len(points) > 1:
+        if libres:
+            out.update(libres)
+        elif len(points) > 1:
             out["points"] = points
         ph = _txt(q.get("placeholder"), 60)
         if ph:

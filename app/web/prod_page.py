@@ -129,14 +129,14 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- Export PDF des saisies par operateur et par session (appele par le core) -->
 <script src="/static/mysifa_saisies_pdf.js?v=1"></script>
 <!-- Panneau « Données de prod » d'un dossier (partage avec le destockage) -->
-<script src="/static/mysifa_donnees_prod.js?v=15"></script>
+<script src="/static/mysifa_donnees_prod.js?v=16"></script>
 <!-- Adresse de la page : onglet, filtres, tri et objet ouvert (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
 <script src="/static/mysifa_prod_core.js?v=__V_LABEL__-of1-annul1-rent23-ecart3-sais4-bob5-msb1-san3-mpm2-ton1-vit2-sev1-url7-ecart4-cal1-clot7-fiche5-act1"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>
 <!-- v2.3.42 : viewer partagé du détail d'un ack d'alerte (identique à Maintenance) -->
-<script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__-ack4"></script>
+<script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__-ack5"></script>
 <!-- Memoire produit : fiche par reference (partagee avec Saisieprod) -->
 <script src="/static/mysifa_produit_memoire.js?v=__V_LABEL__-pmem21"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
