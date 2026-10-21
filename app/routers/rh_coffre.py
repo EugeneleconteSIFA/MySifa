@@ -524,59 +524,41 @@ def marquer_payee(ndf_id: int, request: Request):
 
 
 # ── Catégories de notes de frais (référentiel de la compta) ────────────
+# Réglages > Catégories enregistre la liste entière d'un coup (PUT). Une
+# catégorie retirée de la liste est désactivée, pas effacée : les notes qui la
+# portent gardent leur libellé et leurs montants, et l'export reste juste.
 
-def _champs_categorie(body: dict, saisie_actuelle: Optional[str] = None) -> dict:
-    """Valide les champs envoyés ; ne renvoie que ceux présents dans `body`."""
-    out: dict = {}
-    if "libelle" in body:
-        libelle = str(body.get("libelle") or "").strip()[:60]
-        if not libelle:
-            raise HTTPException(400, "Libellé requis.")
-        out["libelle"] = libelle
-    if "saisie" in body:
-        saisie = body.get("saisie")
-        if saisie not in {"montant", "km"}:
-            raise HTTPException(400, "Saisie invalide — montant ou km.")
-        out["saisie"] = saisie
-    if "taux_tva" in body:
-        try:
-            taux = float(body.get("taux_tva"))
-        except (TypeError, ValueError):
-            raise HTTPException(400, "Taux de TVA invalide.")
-        if taux not in NDF_TAUX_TVA:
-            raise HTTPException(400, "Taux de TVA invalide.")
-        out["taux_tva"] = taux
-    if "taux_km" in body:
-        v = body.get("taux_km")
-        if v in (None, ""):
-            out["taux_km"] = None
-        else:
-            try:
-                out["taux_km"] = float(str(v).replace(",", "."))
-            except ValueError:
-                raise HTTPException(400, "Taux kilométrique invalide — nombre attendu.")
-            if out["taux_km"] <= 0 or out["taux_km"] > 5:
-                raise HTTPException(400, "Taux kilométrique invalide — entre 0 et 5 € par km.")
-    if "ordre" in body:
-        try:
-            out["ordre"] = int(body.get("ordre"))
-        except (TypeError, ValueError):
-            raise HTTPException(400, "Ordre invalide — nombre entier attendu.")
-    if "actif" in body:
-        out["actif"] = 1 if body.get("actif") else 0
-    saisie = out.get("saisie", saisie_actuelle)
+def _categorie_valide(item: dict, saisie: str) -> dict:
+    """Champs d'une catégorie de la liste, validés. `saisie` est figée pour
+    une catégorie existante : on ne transforme pas des notes en euros en km."""
+    libelle = str(item.get("libelle") or "").strip()[:60]
+    if not libelle:
+        raise HTTPException(400, "Libellé requis pour chaque catégorie.")
+    if saisie not in {"montant", "km"}:
+        raise HTTPException(400, f"{libelle} : saisie invalide — montant ou km.")
     if saisie == "km":
-        out["taux_tva"] = 0.0
-        if out.get("taux_km", 1) is None:
-            raise HTTPException(400, "Taux kilométrique requis pour une catégorie en km.")
-    return out
+        v = item.get("taux_km")
+        try:
+            taux_km = float(str(v).replace(",", "."))
+        except (TypeError, ValueError):
+            raise HTTPException(400, f"{libelle} : taux kilométrique requis.")
+        if taux_km <= 0 or taux_km > 5:
+            raise HTTPException(400, f"{libelle} : taux kilométrique entre 0 et 5 € par km.")
+        return {"libelle": libelle, "saisie": "km", "taux_tva": 0.0, "taux_km": taux_km}
+    try:
+        taux = float(item.get("taux_tva"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, f"{libelle} : taux de TVA invalide.")
+    if taux not in NDF_TAUX_TVA:
+        raise HTTPException(400, f"{libelle} : taux de TVA invalide.")
+    return {"libelle": libelle, "saisie": "montant", "taux_tva": taux, "taux_km": None}
 
 
 @router.get("/api/rh-coffre/ndf-categories")
 def list_ndf_categories_rh(request: Request):
     _require_rh(request)
     with get_db() as conn:
-        cats = ndf_categories(conn, toutes=True)
+        cats = ndf_categories(conn)
         usages = dict(conn.execute(
             """SELECT categorie_id, COUNT(*) FROM notes_de_frais
                WHERE categorie_id IS NOT NULL AND deleted_at IS NULL
@@ -587,51 +569,53 @@ def list_ndf_categories_rh(request: Request):
     return {"categories": cats, "taux_tva": list(NDF_TAUX_TVA)}
 
 
-@router.post("/api/rh-coffre/ndf-categories")
-async def create_ndf_categorie(request: Request):
+@router.put("/api/rh-coffre/ndf-categories")
+async def save_ndf_categories(request: Request):
+    """Enregistre la liste complète, dans l'ordre affiché. Tout est validé
+    avant la première écriture : une erreur ne laisse rien à moitié fait."""
     _require_rh(request)
     body = await request.json()
-    body.setdefault("saisie", "montant")
-    body.setdefault("taux_tva", 20)
-    champs = _champs_categorie(body)
-    if "libelle" not in champs:
-        raise HTTPException(400, "Libellé requis.")
-    if champs["saisie"] == "km" and not champs.get("taux_km"):
-        raise HTTPException(400, "Taux kilométrique requis pour une catégorie en km.")
-    code = "cat_" + uuid.uuid4().hex[:8]
+    items = body.get("categories")
+    if not isinstance(items, list) or not items:
+        raise HTTPException(400, "Au moins une catégorie est requise.")
     with get_db() as conn:
-        if "ordre" not in champs:
-            champs["ordre"] = (conn.execute(
-                "SELECT COALESCE(MAX(ordre),0) FROM ndf_categories"
-            ).fetchone()[0] or 0) + 10
-        cols = ["code"] + list(champs)
-        cur = conn.execute(
-            f"INSERT INTO ndf_categories ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
-            [code] + list(champs.values()),
-        )
-        conn.commit()
-    return {"success": True, "id": cur.lastrowid}
+        existantes = {r["id"]: dict(r) for r in conn.execute(
+            "SELECT id,saisie FROM ndf_categories WHERE actif=1"
+        ).fetchall()}
+        lignes, vus = [], set()
+        for item in items:
+            cid = item.get("id")
+            if cid is not None:
+                if cid not in existantes:
+                    raise HTTPException(400, "Catégorie inconnue — rechargez les réglages.")
+                champs = _categorie_valide(item, existantes[cid]["saisie"])
+            else:
+                champs = _categorie_valide(item, item.get("saisie") or "montant")
+            cle = champs["libelle"].casefold()
+            if cle in vus:
+                raise HTTPException(400, f"Deux catégories s'appellent « {champs['libelle']} ».")
+            vus.add(cle)
+            lignes.append((cid, champs))
 
-
-@router.patch("/api/rh-coffre/ndf-categories/{cat_id}")
-async def update_ndf_categorie(cat_id: int, request: Request):
-    """Modifier ou désactiver une catégorie. Pas de suppression : des notes
-    y sont rattachées, et elles gardent leur libellé et leurs montants."""
-    _require_rh(request)
-    body = await request.json()
-    with get_db() as conn:
-        row = conn.execute(
-            "SELECT id,saisie FROM ndf_categories WHERE id=?", (cat_id,)
-        ).fetchone()
-        if not row:
-            raise HTTPException(404, "Catégorie introuvable")
-        champs = _champs_categorie(body, row["saisie"])
-        if not champs:
-            return {"success": True}
-        conn.execute(
-            f"UPDATE ndf_categories SET {', '.join(k + '=?' for k in champs)} WHERE id=?",
-            list(champs.values()) + [cat_id],
-        )
+        gardees = {cid for cid, _ in lignes if cid is not None}
+        for cid in existantes:
+            if cid not in gardees:
+                conn.execute("UPDATE ndf_categories SET actif=0 WHERE id=?", (cid,))
+        for i, (cid, champs) in enumerate(lignes):
+            ordre = (i + 1) * 10
+            if cid is not None:
+                conn.execute(
+                    """UPDATE ndf_categories SET libelle=?, taux_tva=?, taux_km=?, ordre=?
+                       WHERE id=?""",
+                    (champs["libelle"], champs["taux_tva"], champs["taux_km"], ordre, cid),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO ndf_categories (code,libelle,saisie,taux_tva,taux_km,ordre)
+                       VALUES (?,?,?,?,?,?)""",
+                    ("cat_" + uuid.uuid4().hex[:8], champs["libelle"], champs["saisie"],
+                     champs["taux_tva"], champs["taux_km"], ordre),
+                )
         conn.commit()
     return {"success": True}
 
