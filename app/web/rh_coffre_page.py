@@ -62,7 +62,7 @@ body.palette-foret .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 
 body.palette-cendre .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(100,150,200,.28),0 0 16px rgba(100,150,200,.14)}
 body.palette-braise .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px rgba(240,112,48,.28),0 0 16px rgba(240,112,48,.14)}
 body.light .nav-btn:hover:not(.active):not(.back-mysifa){box-shadow:0 0 0 1px color-mix(in srgb,var(--accent,#0891b2) 32%,transparent),0 0 16px color-mix(in srgb,var(--accent,#0891b2) 12%,transparent)}
-.nav-badge{margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--warn);color:#0a0e17;font-size:10px;font-weight:700;line-height:1.5}
+.nav-badge{margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--accent);color:white;font-size:10px;font-weight:700;line-height:1.5}
 /* Pied de sidebar : static/mysifa_sidebar.css (v3.3.0). La sidebar a ici 12px de marge
    latérale : le pied la déborde pour que son filet aille d'un bord à l'autre, comme sur MyStock. */
 .sidebar>.msb-footer{margin-left:-12px;margin-right:-12px;padding-left:12px;padding-right:12px}
