@@ -316,6 +316,10 @@
       '.pmem-docnav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}',
       '.pmem-docnav .pmem-btn[disabled]{opacity:.4;cursor:default;pointer-events:none}',
       '.pmem-docnav-pos{font-size:12px;font-weight:700;color:var(--muted)}',
+      '.pmem-docin{display:flex;flex-direction:column;gap:8px}',
+      '.pmem-docin-hd{display:flex;align-items:center;gap:8px;min-width:0}',
+      '.pmem-docin-frame{width:100%;height:70vh;min-height:420px;border:1px solid var(--border);',
+      'border-radius:8px;background:var(--bg)}',
       '.pmem-tabs.is-sobre .pmem-tab:hover{color:var(--text);border-bottom-color:var(--border)}',
       '.pmem-tabs.is-sobre .pmem-tab.is-on{background:transparent;color:var(--text);',
       'border-bottom-color:var(--accent)}',
@@ -1301,20 +1305,61 @@
     if (!docs.length) {
       return [el('div', { className: 'pmem-empty', text: 'Aucun OF scanne rattache a cette reference.' })];
     }
-    if (!reglages.ofUnParUn || docs.length < 2) return docs.map(carteDocument);
-    // Un scan a la fois, le plus recent d'abord : c'est celui qu'on vient
-    // chercher au poste ; les anciens se parcourent a la demande.
+    if (!reglages.ofUnParUn) return docs.map(carteDocument);
+    // Au poste : le scan s'affiche tout de suite, le plus recent d'abord ;
+    // Precedent / Suivant parcourent les autres OF scannes de la reference.
     var i = Math.min(Math.max(state.docIdx || 0, 0), docs.length - 1);
     state.docIdx = i;
     function aller(n) { state.docIdx = n; renderCourant(); }
-    var nav = el('div', { className: 'pmem-docnav' }, [
-      el('button', { type: 'button', className: 'pmem-btn pmem-btn-sm', disabled: i === 0 ? 'disabled' : null,
-                     text: '‹ Plus récent', onclick: function () { aller(i - 1); } }),
-      el('span', { className: 'pmem-docnav-pos', text: (i + 1) + ' / ' + docs.length }),
-      el('button', { type: 'button', className: 'pmem-btn pmem-btn-sm', disabled: i === docs.length - 1 ? 'disabled' : null,
-                     text: 'Plus ancien ›', onclick: function () { aller(i + 1); } }),
+    var out = [];
+    if (docs.length > 1) {
+      out.push(el('div', { className: 'pmem-docnav' }, [
+        el('button', { type: 'button', className: 'pmem-btn pmem-btn-sm', disabled: i === 0 ? 'disabled' : null,
+                       text: '‹ Précédent', title: 'OF scanné plus récent',
+                       onclick: function () { aller(i - 1); } }),
+        el('span', { className: 'pmem-docnav-pos', text: (i + 1) + ' / ' + docs.length }),
+        el('button', { type: 'button', className: 'pmem-btn pmem-btn-sm', disabled: i === docs.length - 1 ? 'disabled' : null,
+                       text: 'Suivant ›', title: 'OF scanné plus ancien',
+                       onclick: function () { aller(i + 1); } }),
+      ]));
+    }
+    out.push(apercuInline(docs[i]));
+    // Le suivant est probablement le prochain demande : il arrive en cache.
+    if (docs[i + 1]) prechargerScan(docs[i + 1].id);
+    if (docs[i - 1]) prechargerScan(docs[i - 1].id);
+    return out;
+  }
+
+  // Apercu du scan pose dans le panneau, sans clic intermediaire.
+  function apercuInline(doc) {
+    var ops = Array.isArray(doc.serie_operateurs) ? doc.serie_operateurs : [];
+    var metas = [fDate(doc.date_document || doc.importe_le), 'OF ' + (doc.of_numero || '—'),
+                 doc.no_dossier ? 'dossier ' + doc.no_dossier : null,
+                 doc.machine || null, doc.client || null,
+                 doc.etiquettes ? fNum(doc.etiquettes) + ' etiquettes' : null,
+                 doc.serie_metrage_m ? fNum(doc.serie_metrage_m) + ' m' : null,
+                 ops.length ? ops.join(', ') : null,
+                 doc.fichier_origine || null].filter(Boolean).join(' \u00b7 ');
+    return el('div', { className: 'pmem-docin' }, [
+      el('div', { className: 'pmem-docin-hd' }, [
+        el('span', { className: 'pmem-doc-m', text: metas }),
+        el('span', { style: 'flex:1' }),
+        el('button', {
+          type: 'button', className: 'pmem-btn pmem-btn-sm',
+          text: 'Plein écran', onclick: function () { apercuScan(doc); },
+        }),
+        el('button', {
+          type: 'button', className: 'pmem-btn pmem-btn-sm',
+          text: 'Ouvrir dans un onglet',
+          onclick: function () { window.open(docUrl(doc.id), '_blank'); },
+        }),
+      ]),
+      el('iframe', {
+        className: 'pmem-docin-frame',
+        src: docUrl(doc.id) + '#view=FitH',
+        title: 'Scan OF ' + (doc.of_numero || ''),
+      }),
     ]);
-    return [nav, carteDocument(docs[i])];
   }
 
   function carteDocument(doc) {
