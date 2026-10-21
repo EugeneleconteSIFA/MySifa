@@ -104,6 +104,7 @@ from app.routers.qualite_ged import router as qualite_ged_router
 from app.routers.qualite_fsc import router as qualite_fsc_router
 from app.routers.qualite_eudr import router as qualite_eudr_router
 from app.routers.qualite_formulaires import router as qualite_formulaires_router
+from app.routers.maintenance_alertes_ia import router as maintenance_alertes_ia_router
 from app.routers.portail_espace import router_api as portail_espace_api_router
 from app.routers.portail_espace import router_html as portail_espace_html_router
 from app.routers.qualite_eudr import router_api as eudr_portail_api_router
@@ -849,6 +850,7 @@ app.include_router(qualite_ged_router)
 app.include_router(qualite_fsc_router)
 app.include_router(qualite_eudr_router)
 app.include_router(qualite_formulaires_router)
+app.include_router(maintenance_alertes_ia_router)
 app.include_router(portail_espace_api_router)
 app.include_router(portail_espace_html_router)
 app.include_router(eudr_portail_html_router)

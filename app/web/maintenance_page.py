@@ -10984,7 +10984,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_cal_rappel.js?v=9"></script>
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
-<script src="/static/mysifa_alert_form.js?v=2.4.19"></script>
+<script src="/static/mysifa_alert_form.js?v=2.4.20"></script>
 <script src="/static/mysifa_maint_form.js?v=2.7.4-usure"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.20"></script>
 <!-- Chassis partage de la fenetre de detail d'un ack (openAckDetail). Le
