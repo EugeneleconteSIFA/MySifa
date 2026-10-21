@@ -211,6 +211,7 @@
   // ── _renderAlertFormFields ──
   function _renderAlertFormFields(params, opts) {
   opts = opts || {};
+  _afDernierOpts = opts;
   _afInjectCss();
   const d = _alertDefaults(params);
   // Machines (multi-sélection via dropdown)
@@ -270,7 +271,7 @@
   // en-tête (« Périodique — toutes les 120 min », « 3 machines »…) pour
   // retrouver un réglage sans tout déplier. Le questionnaire est ouvert.
   const _nbPoints = (d.checklist.items || []).filter(it => it && it.label).length;
-  return nomBlock
+  return '<div class="af-champs">' + nomBlock
     + descBlock
     + _afSection('questionnaire', 'Questionnaire', _afSumQuestionnaire(d.checklist.enabled, _nbPoints), ''
     // v2.3.33 : questionnaire remonté juste après la description (l'admin
@@ -399,7 +400,8 @@
     +       '<div class="alert-field-help">Libellé du bouton d\'esquive (bouton orange à côté du bouton principal Valider). Ce libellé apparaît aussi dans l\'historique (ex. « Fermée auto (esquive) : Pas d\'Errepi »).</div>'
     +     '</div>'
     +   '</div>'
-    , false);
+    , false)
+    + '</div>';
 }
 
 
@@ -714,6 +716,169 @@
     else if (list.lastElementChild !== _afDragged) list.appendChild(_afDragged);
   }
 
+
+  // ── Assistant IA ──
+  // Crée ou modifie l'alerte depuis une consigne ou une fiche de contrôle
+  // jointe (app/routers/maintenance_alertes_ia.py). La proposition remplit le
+  // formulaire ; rien n'est enregistré avant « Enregistrer » / « Créer ».
+  var _afDernierOpts = {};
+  var _afIaAvant = null;   // {nom, params} — pour « Annuler la modification »
+  var _afIaModeles = null;
+  var _AF_IA_EXEMPLES = {
+    creer: [
+      "Contrôle des produits finis toutes les 2 heures en production : centrage de l'étiquette, poids de l'étiquette en début, milieu et fin de production",
+      "Contrôle de prise de poste à 6 h, du lundi au vendredi, sur toutes les machines : propreté, sécurité, outillage",
+      "Après le calage : vérifier la tension et le serrage de la bobine, noter la tension mesurée",
+    ],
+    modifier: [
+      "Ajoute un point « Propreté de la machine » avec les réponses Conforme / Non conforme",
+      "Rends obligatoires tous les points de contrôle",
+      "Passe le déclencheur à toutes les 90 minutes",
+    ],
+  };
+
+  function _afIaMode(champs) {
+    const aDuContenu = Array.from(champs.querySelectorAll('.af-cl-card .af-cl-label')).some(i => (i.value || '').trim())
+      || ((champs.querySelector('#af-description') || {}).value || '').trim();
+    return aDuContenu ? 'modifier' : 'creer';
+  }
+
+  // Lecture complète du formulaire, sans message d'erreur ni ouverture des
+  // sections : sert à transmettre l'état courant et à pouvoir l'annuler.
+  function _afLireSilencieux() {
+    const ouvertes = Array.from(document.querySelectorAll('.af-sec.open')).map(x => x.getAttribute('data-sec'));
+    const t = toast;
+    let p = null;
+    toast = function () {};
+    try { p = _afReadParams(); } catch (e) { p = null; }
+    finally {
+      toast = t;
+      document.querySelectorAll('.af-sec').forEach(sec => {
+        const on = ouvertes.indexOf(sec.getAttribute('data-sec')) !== -1;
+        sec.classList.toggle('open', on);
+        sec.querySelector('.af-sec-head')?.setAttribute('aria-expanded', on ? 'true' : 'false');
+      });
+    }
+    return p;
+  }
+
+  async function _afIaChargerModeles() {
+    if (_afIaModeles) return _afIaModeles;
+    try {
+      const r = await fetch('/api/maintenance/alerts/ia/modeles', { credentials: 'include' });
+      if (r.ok) _afIaModeles = await r.json();
+    } catch (e) {}
+    return _afIaModeles || { modeles: [], defaut: '' };
+  }
+
+  function _afIaBarreHtml() {
+    return '<div class="af-ia-barre">'
+      + '<button type="button" class="af-ia-btn" onclick="_afIaOuvrir(this)">'
+      +   '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6l-4.9 3.6 1.9-5.8L4 8.8h6.1z"/></svg>'
+      +   '<span class="af-ia-btn-lbl">Créer avec l\'IA</span>'
+      + '</button>'
+      + '<span class="af-ia-aide">Décrire l\'alerte, ou joindre une fiche de contrôle papier : le formulaire se remplit, à relire avant d\'enregistrer.</span>'
+      + '</div>'
+      + '<div class="af-ia-panneau" hidden></div>'
+      + '<div class="af-ia-note" hidden></div>';
+  }
+
+  function _afIaMajBouton(col) {
+    const champs = col.querySelector('.af-champs');
+    const lbl = col.querySelector('.af-ia-btn-lbl');
+    if (champs && lbl) lbl.textContent = _afIaMode(champs) === 'modifier' ? 'Modifier avec l\'IA' : 'Créer avec l\'IA';
+  }
+
+  async function _afIaOuvrir(btn) {
+    const col = btn.closest('.af-col-form');
+    const panneau = col && col.querySelector('.af-ia-panneau');
+    if (!panneau) return;
+    if (!panneau.hidden) { panneau.hidden = true; return; }
+    const mode = _afIaMode(col.querySelector('.af-champs'));
+    const m = await _afIaChargerModeles();
+    const opts = (m.modeles || []).map(x => '<option value="' + escAttr(x.id) + '"' + (x.id === m.defaut ? ' selected' : '') + '>' + esc(x.libelle) + '</option>').join('');
+    panneau.innerHTML = '<label class="alert-field-label">Consigne</label>'
+      + '<div class="af-ia-ex">' + _AF_IA_EXEMPLES[mode].map((t, i) => '<button type="button" data-ex="' + i + '">' + esc(t) + '</button>').join('') + '</div>'
+      + '<textarea class="alert-field-input af-ia-consigne" rows="3" maxlength="6000" placeholder="' + escAttr('Ex. ' + _AF_IA_EXEMPLES[mode][0]) + '"></textarea>'
+      + '<div class="af-ia-ligne">'
+      +   '<label><span class="af-ia-mini">Fiche de contrôle (optionnel)</span><input type="file" class="af-ia-fichiers" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.gif"></label>'
+      +   '<label><span class="af-ia-mini">Modèle</span><select class="alert-field-input af-ia-modele">' + opts + '</select></label>'
+      + '</div>'
+      + '<div class="af-ia-actions"><button type="button" class="btn-sm" onclick="this.closest(\'.af-ia-panneau\').hidden=true">Fermer</button>'
+      + '<button type="button" class="af-ia-go" onclick="_afIaGenerer(this)">Générer</button></div>';
+    panneau.querySelectorAll('[data-ex]').forEach(b => b.addEventListener('click', () => {
+      const t = panneau.querySelector('.af-ia-consigne');
+      t.value = _AF_IA_EXEMPLES[mode][+b.getAttribute('data-ex')]; t.focus();
+    }));
+    panneau.hidden = false;
+    requestAnimationFrame(() => panneau.querySelector('.af-ia-consigne')?.focus());
+  }
+
+  async function _afIaGenerer(btn) {
+    const col = btn.closest('.af-col-form');
+    const panneau = col.querySelector('.af-ia-panneau');
+    const consigne = (panneau.querySelector('.af-ia-consigne').value || '').trim();
+    const fichiers = Array.from(panneau.querySelector('.af-ia-fichiers').files || []);
+    if (!consigne && !fichiers.length) { toast('Décrire l\'alerte souhaitée ou joindre une fiche de contrôle.', true); return; }
+    if (fichiers.length > 5) { toast('5 documents au plus.', true); return; }
+    const trop = fichiers.find(f => f.size > 15 * 1024 * 1024);
+    if (trop) { toast('« ' + trop.name + ' » dépasse 15 Mo.', true); return; }
+    const nomEl = col.querySelector('#af-nom');
+    const nomFixe = col.querySelector('.af-champs .alert-field-input[disabled]');
+    const creation = _afIaMode(col.querySelector('.af-champs')) === 'creer';
+    const avant = { nom: nomEl ? nomEl.value : '', params: _afLireSilencieux() };
+    const fd = new FormData();
+    fd.append('consigne', consigne);
+    fd.append('nom', nomEl ? nomEl.value : (nomFixe ? nomFixe.value : ''));
+    fd.append('params', JSON.stringify(avant.params || {}));
+    fd.append('modele', panneau.querySelector('.af-ia-modele')?.value || '');
+    fichiers.forEach(f => fd.append('fichiers', f));
+    btn.disabled = true; btn.textContent = 'Claude prépare l\'alerte…';
+    let p = null;
+    try {
+      const r = await fetch('/api/maintenance/alerts/ia/proposer', { method: 'POST', body: fd, credentials: 'include' });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) toast((j && typeof j.detail === 'string') ? j.detail : 'Génération impossible.', true);
+      else p = j;
+    } catch (e) { toast('Erreur réseau', true); }
+    btn.disabled = false; btn.textContent = 'Générer';
+    if (!p) return;
+    panneau.hidden = true;
+    _afIaAvant = avant.params ? avant : null;
+    _afIaAppliquer(col, p.nom, p.params);
+    const note = col.querySelector('.af-ia-note');
+    note.innerHTML = '<div><b>Proposition de l\'IA</b> (' + esc(p.modele_libelle || p.modele || '') + ') — à relire avant d\'enregistrer.<br>' + esc(p.resume || '')
+      + ((p.remarques || []).length ? '<ul>' + p.remarques.map(r => '<li>' + esc(r) + '</li>').join('') + '</ul>' : '') + '</div>'
+      + '<div class="af-ia-note-actions">'
+      + (_afIaAvant ? '<button type="button" class="btn-sm" onclick="_afIaAnnuler(this)">Annuler la modification</button>' : '')
+      + '<button type="button" class="btn-sm" onclick="this.closest(\'.af-ia-note\').hidden=true">Masquer</button></div>';
+    note.hidden = false;
+    toast(creation ? 'Alerte proposée — à relire.' : 'Modification appliquée — à relire.');
+  }
+
+  // exact : le titre est remis tel quel, même vide (annulation).
+  function _afIaAppliquer(col, nom, params, exact) {
+    const champs = col.querySelector('.af-champs');
+    if (!champs) return;
+    const nomEl = col.querySelector('#af-nom');
+    const opts = Object.assign({}, _afDernierOpts);
+    if (nomEl) opts.nomValue = exact ? (nom || '') : ((nom || '').trim() || nomEl.value);
+    const tmp = document.createElement('div');
+    tmp.innerHTML = _renderAlertFormFields(params, opts);
+    champs.replaceWith(tmp.firstElementChild);
+    try { _afOnTriggerChange(); } catch (e) {}
+    _afIaMajBouton(col);
+  }
+
+  function _afIaAnnuler(btn) {
+    const col = btn.closest('.af-col-form');
+    if (!col || !_afIaAvant) return;
+    _afIaAppliquer(col, _afIaAvant.nom, _afIaAvant.params, true);
+    _afIaAvant = null;
+    col.querySelector('.af-ia-note').hidden = true;
+    toast('Modification annulée.');
+  }
+
   // ── Aperçu opérateur en direct ──
   // Lecture silencieuse du formulaire (aucun toast) : ce qui sert à dessiner
   // la carte chez l'opérateur.
@@ -738,7 +903,10 @@
     modal.classList.add('af-avec-apercu');
     const col = document.createElement('div');
     col.className = 'af-col-form';
+    col.insertAdjacentHTML('afterbegin', _afIaBarreHtml());
     while (body.firstChild) col.appendChild(body.firstChild);
+    _afIaAvant = null;
+    _afIaMajBouton(col);
     const aside = document.createElement('aside');
     aside.className = 'af-col-apercu';
     aside.innerHTML = '<div class="af-apercu-titre">Aperçu opérateur</div>'
@@ -761,7 +929,7 @@
       try { window.MysifaAlerts.apercu({ id: 'apercu', nom: nom, params: _afPreviewParams() }, zone); }
       catch (e) { zone.innerHTML = '<div class="alert-field-help">Aperçu indisponible.</div>'; }
     };
-    const planifier = () => { if (!timer) timer = setTimeout(dessiner, 120); };
+    const planifier = () => { if (!timer) timer = setTimeout(() => { dessiner(); _afIaMajBouton(col); }, 120); };
     col.addEventListener('input', planifier);
     col.addEventListener('change', planifier);
     // Ajout, suppression, duplication, glisser, changement de type : la
@@ -786,6 +954,29 @@
       '.af-sec-body{padding:4px 14px 14px}',
       '.af-sec:not(.open) .af-sec-body{display:none}',
       '.af-cl-grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}',
+      '.af-ia-barre{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}',
+      '.af-ia-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 13px;border-radius:9px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font:inherit;font-size:13px;font-weight:700;cursor:pointer}',
+      '.af-ia-btn:hover{filter:brightness(1.05)}',
+      '.af-ia-aide{flex:1;min-width:200px;font-size:11px;color:var(--muted)}',
+      '.af-ia-panneau{border:1px solid var(--accent);border-radius:10px;padding:12px;margin-bottom:12px;background:var(--bg)}',
+      '.af-ia-panneau textarea{resize:vertical;background:var(--card)}',
+      '.af-ia-ex{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}',
+      '.af-ia-ex button{padding:5px 10px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--text2);font:inherit;font-size:12px;cursor:pointer;text-align:left}',
+      '.af-ia-ex button:hover{border-color:var(--accent);color:var(--accent)}',
+      '.af-ia-ligne{display:grid;grid-template-columns:minmax(0,1fr) 200px;gap:10px;margin-top:8px}',
+      '.af-ia-ligne label{display:flex;flex-direction:column;gap:4px;min-width:0}',
+      '.af-ia-ligne select{background:var(--card)}',
+      '.af-ia-mini{font-size:11px;color:var(--muted)}',
+      '@media(max-width:600px){.af-ia-ligne{grid-template-columns:minmax(0,1fr)}}',
+      '.af-ia-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}',
+      '.af-ia-go{padding:8px 16px;border-radius:9px;border:none;background:var(--accent);color:white;font:inherit;font-weight:700;cursor:pointer}',
+      '.af-ia-go:disabled{opacity:.6;cursor:wait}',
+      '.af-ia-note{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;border:1px solid var(--accent);background:var(--accent-bg);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;color:var(--text)}',
+      '.af-ia-note[hidden],.af-ia-panneau[hidden]{display:none}',
+      '.af-ia-note>div:first-child{flex:1;min-width:220px}',
+      '.af-ia-note b{color:var(--accent)}',
+      '.af-ia-note ul{margin:6px 0 0;padding-left:18px;color:var(--text2);font-size:12px}',
+      '.af-ia-note-actions{display:flex;gap:6px;flex-wrap:wrap}',
       '@media(max-width:520px){.af-cl-grid4{grid-template-columns:repeat(2,minmax(0,1fr))}}',
       '.af-cl-poignee{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:22px;height:30px;color:var(--muted);cursor:grab;border-radius:6px}',
       '.af-cl-poignee:hover{color:var(--accent);background:var(--accent-bg)}',
@@ -1158,6 +1349,9 @@ function _afRowClick(ev, inputId) {
   try { window._afOnOtherToggle = _afOnOtherToggle; } catch(e) {}
   try { window._afOnPointsToggle = _afOnPointsToggle; } catch(e) {}
   try { window._afToggleSection = _afToggleSection; } catch(e) {}
+  try { window._afIaOuvrir = _afIaOuvrir; } catch(e) {}
+  try { window._afIaGenerer = _afIaGenerer; } catch(e) {}
+  try { window._afIaAnnuler = _afIaAnnuler; } catch(e) {}
   try { window._afDuplicateItem = _afDuplicateItem; } catch(e) {}
   try { window._afArmDrag = _afArmDrag; } catch(e) {}
   try { window._afDisarmDrag = _afDisarmDrag; } catch(e) {}

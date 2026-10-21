@@ -29,6 +29,7 @@ FONCTIONS = {
     "emails_commandes": "Tri des e-mails commandes",
     "etiquettes": "Étiquettes spécifiques",
     "formulaires": "Création de formulaires",
+    "alertes": "Alertes maintenance",
 }
 
 _suivi_courant: ContextVar[Optional["Suivi"]] = ContextVar("ia_suivi_courant", default=None)

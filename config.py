@@ -1311,6 +1311,16 @@ FORMULAIRES_IA_MODELES = (
 
 def formulaires_ia_modeles() -> list[dict]:
     return [{"id": i, "libelle": l, "aide": a, "repli": r} for i, l, a, r in FORMULAIRES_IA_MODELES]
+
+
+# Maintenance › alertes : l'assistant crée ou modifie une alerte (déclencheur,
+# machines, questionnaire) depuis une consigne ou une fiche de contrôle papier.
+# Mêmes modèles que les formulaires de MyQualité.
+ALERTES_IA_MODELE = os.getenv("ALERTES_IA_MODELE", FORMULAIRES_IA_MODELE)
+
+
+def alertes_ia_modeles() -> list[dict]:
+    return formulaires_ia_modeles()
 ETIQ_UPLOAD_DIR = os.path.join(UPLOADS_ROOT, "etiquettes_specifiques")
 
 # ─── Agent IA (widget présent sur tout le site) ───────────────────
