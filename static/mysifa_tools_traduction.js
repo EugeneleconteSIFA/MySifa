@@ -68,26 +68,27 @@
     h.innerHTML =
       '<div class="ttr-barre">'
       + '<select class="ttr-select" data-r="de" aria-label="Langue source"></select>'
-      + '<button type="button" class="ttr-btn ttr-swap" data-r="swap" title="Inverser les langues" aria-label="Inverser les langues">'
+      + '<button type="button" class="ttr-btn ttr-swap" data-r="swap" data-bulle="Inverser" aria-label="Inverser les langues">'
       + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16V4M3 8l4-4 4 4"/><path d="M17 8v12M21 16l-4 4-4-4"/></svg></button>'
       + '<select class="ttr-select" data-r="vers" aria-label="Langue cible"></select>'
       + '<div class="ttr-seg" role="group" aria-label="Registre">'
-      + '<button type="button" class="ttr-seg-b" data-f="default">Neutre</button>'
-      + '<button type="button" class="ttr-seg-b" data-f="more">Vouvoiement</button>'
-      + '<button type="button" class="ttr-seg-b" data-f="less">Tutoiement</button></div>'
+      + '<button type="button" class="ttr-seg-b" data-f="default" data-bulle="Registre neutre">Neutre</button>'
+      + '<button type="button" class="ttr-seg-b" data-f="more" data-bulle="Vous">Vouvoiement</button>'
+      + '<button type="button" class="ttr-seg-b" data-f="less" data-bulle="Tu">Tutoiement</button></div>'
       + '</div>'
       + '<div class="ttr-panneaux">'
       + '<div class="ttr-panneau"><textarea class="ttr-zone" data-r="src" placeholder="Saisir ou coller le texte à traduire, ou déposer un fichier .txt" spellcheck="true"></textarea>'
       + '<div class="ttr-pied"><span class="ttr-compte" data-r="compte">0 caractère</span>'
-      + '<span class="ttr-actions"><button type="button" class="ttr-btn" data-r="effacer">Effacer</button>'
-      + '<button type="button" class="ttr-btn ttr-btn-accent" data-r="go">Traduire</button></span></div></div>'
+      + '<span class="ttr-actions"><button type="button" class="ttr-btn" data-r="effacer" data-bulle="Vider">Effacer</button>'
+      + '<button type="button" class="ttr-btn ttr-btn-accent" data-r="go" data-bulle="Traduire">Traduire</button></span></div></div>'
       + '<div class="ttr-panneau ttr-panneau-sortie"><textarea class="ttr-zone" data-r="dst" readonly placeholder="Traduction"></textarea>'
       + '<div class="ttr-pied"><span class="ttr-detecte" data-r="detecte"></span>'
-      + '<span class="ttr-actions"><button type="button" class="ttr-btn" data-r="copier">Copier</button>'
-      + '<button type="button" class="ttr-btn" data-r="telecharger">Télécharger .txt</button></span></div></div>'
+      + '<span class="ttr-actions"><button type="button" class="ttr-btn" data-r="copier" data-bulle="Presse-papiers">Copier</button>'
+      + '<button type="button" class="ttr-btn" data-r="telecharger" data-bulle="Fichier texte">Télécharger .txt</button></span></div></div>'
       + '</div>'
       + '<div class="ttr-aide">Cmd/Ctrl + Entrée pour traduire. <span class="ttr-usage"></span></div>';
     const q = r => h.querySelector('[data-r="' + r + '"]');
+    if (window.MySifaBulles) q('go').setAttribute('data-bulle-touche', window.MySifaBulles.touche('↵'));
     const de = q('de'), vers = q('vers'), src = q('src'), dst = q('dst');
     option(de, 'auto', 'Détecter la langue', T.de);
     T.langs.forEach(l => option(de, l.code, l.label, T.de));

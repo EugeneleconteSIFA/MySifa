@@ -157,8 +157,8 @@
         const nc = q.nc_responses || [];
         const lignes = reps.map((r, i) => '<div class="fe-rep">'
           + '<input class="fe-in" data-k="resp" data-i="' + i + '" maxlength="150" value="' + esc(r) + '">'
-          + '<label class="fe-coche fe-nc" title="Cette réponse signale une non-conformité"><input type="checkbox" data-k="resp_nc" data-i="' + i + '"' + (nc.indexOf(r) !== -1 ? ' checked' : '') + '><span>NC</span></label>'
-          + '<button type="button" class="fe-ico fe-danger" data-act="del-resp" data-i="' + i + '" title="Retirer cette réponse"' + (reps.length <= 1 ? ' disabled' : '') + '>' + ICO.croix + '</button>'
+          + '<label class="fe-coche fe-nc" data-bulle="Non-conformité"><input type="checkbox" data-k="resp_nc" data-i="' + i + '"' + (nc.indexOf(r) !== -1 ? ' checked' : '') + '><span>NC</span></label>'
+          + '<button type="button" class="fe-ico fe-danger" data-act="del-resp" data-i="' + i + '" data-bulle="Retirer" aria-label="Retirer cette réponse"' + (reps.length <= 1 ? ' disabled' : '') + '>' + ICO.croix + '</button>'
           + '</div>').join('');
         return '<div class="fe-grille2">'
           + '<div><div class="fe-lbl">Réponses</div><select class="fe-in" data-k="multi"><option value="0"' + (!q.multi ? ' selected' : '') + '>Une seule</option><option value="1"' + (q.multi ? ' selected' : '') + '>Plusieurs</option></select></div>'
@@ -185,13 +185,13 @@
       const types = TYPES.map(t => '<option value="' + t.v + '"' + (t.v === q.type ? ' selected' : '') + '>' + t.l + '</option>').join('');
       return '<div class="fe-q" data-s="' + si + '" data-q="' + qi + '">'
         + '<div class="fe-q-hd">'
-        +   '<span class="fe-poignee" data-act="armer" title="Glisser pour déplacer">' + ICO.poignee + '</span>'
+        +   '<span class="fe-poignee" data-act="armer" data-bulle="Déplacer">' + ICO.poignee + '</span>'
         +   '<input class="fe-in fe-label" data-k="label" maxlength="300" placeholder="Question" value="' + esc(q.label || '') + '">'
         +   '<select class="fe-in" data-k="type" aria-label="Type de question">' + types + '</select>'
-        +   '<button type="button" class="fe-ico" data-act="up-q" title="Monter"' + (si === 0 && qi === 0 ? ' disabled' : '') + '>' + ICO.haut + '</button>'
-        +   '<button type="button" class="fe-ico" data-act="down-q" title="Descendre"' + (si === secs().length - 1 && qi === nbQ - 1 ? ' disabled' : '') + '>' + ICO.bas + '</button>'
-        +   '<button type="button" class="fe-ico" data-act="dup-q" title="Dupliquer">' + ICO.copie + '</button>'
-        +   '<button type="button" class="fe-ico fe-danger" data-act="del-q" title="Supprimer la question">' + ICO.croix + '</button>'
+        +   '<button type="button" class="fe-ico" data-act="up-q" data-bulle="Monter" aria-label="Monter"' + (si === 0 && qi === 0 ? ' disabled' : '') + '>' + ICO.haut + '</button>'
+        +   '<button type="button" class="fe-ico" data-act="down-q" data-bulle="Descendre" aria-label="Descendre"' + (si === secs().length - 1 && qi === nbQ - 1 ? ' disabled' : '') + '>' + ICO.bas + '</button>'
+        +   '<button type="button" class="fe-ico" data-act="dup-q" data-bulle="Dupliquer" aria-label="Dupliquer">' + ICO.copie + '</button>'
+        +   '<button type="button" class="fe-ico fe-danger" data-act="del-q" data-bulle="Supprimer" aria-label="Supprimer la question">' + ICO.croix + '</button>'
         + '</div>'
         + coche('required', q.required, 'Réponse obligatoire', 'fe-nc')
         + corps(q)
@@ -204,9 +204,9 @@
       const qs = s.questions || [];
       return '<div class="fe-sec" data-s="' + si + '">'
         + '<div class="fe-sec-hd"><span class="fe-sec-num">Section ' + (si + 1) + ' / ' + n + '</span>'
-        +   '<button type="button" class="fe-ico" data-act="up-s" title="Monter la section"' + (si === 0 ? ' disabled' : '') + '>' + ICO.haut + '</button>'
-        +   '<button type="button" class="fe-ico" data-act="down-s" title="Descendre la section"' + (si === n - 1 ? ' disabled' : '') + '>' + ICO.bas + '</button>'
-        +   '<button type="button" class="fe-ico fe-danger" data-act="del-s" title="Supprimer la section"' + (n <= 1 ? ' disabled' : '') + '>' + ICO.croix + '</button>'
+        +   '<button type="button" class="fe-ico" data-act="up-s" data-bulle="Monter" aria-label="Monter la section"' + (si === 0 ? ' disabled' : '') + '>' + ICO.haut + '</button>'
+        +   '<button type="button" class="fe-ico" data-act="down-s" data-bulle="Descendre" aria-label="Descendre la section"' + (si === n - 1 ? ' disabled' : '') + '>' + ICO.bas + '</button>'
+        +   '<button type="button" class="fe-ico fe-danger" data-act="del-s" data-bulle="Supprimer" aria-label="Supprimer la section"' + (n <= 1 ? ' disabled' : '') + '>' + ICO.croix + '</button>'
         + '</div>'
         + '<input class="fe-in fe-titre" data-k="titre" maxlength="200" placeholder="Titre de la section (optionnel)" value="' + esc(s.titre || '') + '">'
         + '<textarea class="fe-in" data-k="description" rows="1" maxlength="1000" placeholder="Description (optionnel)">' + esc(s.description || '') + '</textarea>'

@@ -114,8 +114,8 @@
       '<section class="tcal-carte">'
       + '<header><h2>Métrage ↔ diamètre</h2><p>Longueur enroulée sur une bobine, ou diamètre atteint pour un métrage.</p></header>'
       + '<div class="tcal-seg" role="group" aria-label="Sens du calcul">'
-      + '<button type="button" class="tcal-seg-b" data-sens="metrage">Je connais le diamètre</button>'
-      + '<button type="button" class="tcal-seg-b" data-sens="diametre">Je connais le métrage</button></div>'
+      + '<button type="button" class="tcal-seg-b" data-sens="metrage" data-bulle="Diamètre → métrage">Je connais le diamètre</button>'
+      + '<button type="button" class="tcal-seg-b" data-sens="diametre" data-bulle="Métrage → diamètre">Je connais le métrage</button></div>'
       + '<div class="tcal-grille">'
       + '<label class="tcal-champ" for="tcal-type"><span>Matière</span><select id="tcal-type" class="tcal-in"><option value="">Saisie libre</option></select></label>'
       + '</div><div class="tcal-grille" id="tcal-g1"></div>'
@@ -206,7 +206,7 @@
   }
 
   function lien(cible, valeur, texte) {
-    return '<button type="button" class="tcal-lien" data-reprendre="' + cible + '" data-valeur="' + valeur + '">' + texte + '</button>';
+    return '<button type="button" class="tcal-lien" data-reprendre="' + cible + '" data-valeur="' + valeur + '" data-bulle="Copier ici">' + texte + '</button>';
   }
 
   function maj() {

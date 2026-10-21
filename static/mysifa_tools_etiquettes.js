@@ -814,6 +814,7 @@
     const scanBtn = el('button', {
       cls: 'traca-print-btn',
       type: 'button',
+      'data-bulle': 'Caméra',
       style: { flexShrink:'0', padding:'8px 12px' },
     }, iconEl('scan', 14), ' Scanner');
     scanBtn.addEventListener('click', () => {
@@ -916,7 +917,7 @@
 
   function enTete(titre) {
     return el('div', { cls: 'traca-back-bar' },
-      el('button', { cls: 'traca-back-btn', type: 'button', on: { click: () => allerPoste(null) } },
+      el('button', { cls: 'traca-back-btn', type: 'button', 'data-bulle': 'Tous les postes', on: { click: () => allerPoste(null) } },
         iconEl('arrow-left', 15), ' Postes'),
       titre ? el('span', { cls: 'traca-poste-heading' }, titre) : null);
   }
@@ -930,9 +931,9 @@
         el('div', { cls: 'traca-etiq-body' },
           el('div', { cls: 'traca-etiq-label' }, etiq.label),
           el('div', { cls: 'traca-etiq-meta' },
-            el('span', { cls: 'traca-format-badge' }, fmtObj.label),
+            el('span', { cls: 'traca-format-badge', 'data-bulle': 'Format' }, fmtObj.label),
             el('span', { cls: 'traca-printer-badge' }, iconEl('printer', 10), ' ' + (etiq.printer || 'Non configurée')))),
-        el('button', { cls: 'traca-print-btn', type: 'button', on: { click: () => openTracaPrint(etiq) } },
+        el('button', { cls: 'traca-print-btn', type: 'button', 'data-bulle': 'Remplir et imprimer', on: { click: () => openTracaPrint(etiq) } },
           iconEl('printer', 13), ' Imprimer'));
     }
     const principales = etiquettes.filter(e => !e.groupe);
@@ -965,9 +966,9 @@
             el('div', { cls: 'traca-etiq-icon-wrap', style: { background: t.bg, color: t.color } }, iconEl(aff.icon, 18)),
             el('div', { cls: 'traca-aff-body' }, el('div', { cls: 'traca-aff-title' }, aff.title), sub),
             el('div', { cls: 'traca-aff-actions' },
-              el('a', { cls: 'traca-aff-btn traca-aff-btn--dark', href: aff.dark, target: '_blank', rel: 'noopener' },
+              el('a', { cls: 'traca-aff-btn traca-aff-btn--dark', 'data-bulle': 'Affiche sombre', href: aff.dark, target: '_blank', rel: 'noopener' },
                 el('span', { cls: 'traca-aff-dot' }), 'Sombre'),
-              el('a', { cls: 'traca-aff-btn traca-aff-btn--light', href: aff.light, target: '_blank', rel: 'noopener' },
+              el('a', { cls: 'traca-aff-btn traca-aff-btn--light', 'data-bulle': 'Affiche claire', href: aff.light, target: '_blank', rel: 'noopener' },
                 el('span', { cls: 'traca-aff-dot' }), 'Clair')));
         })));
     }

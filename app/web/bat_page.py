@@ -252,7 +252,7 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         BAT
       </button>
-      <button type="button" class="nav-btn" id="nav-image" onclick="openImageOutil()" title="Outil Image de MyTools">
+      <button type="button" class="nav-btn" id="nav-image" onclick="openImageOutil()" data-bulle="Outil Image de MyTools">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 16l5-5 4 4"/><path d="M14 13l2-2 5 5"/><circle cx="8.5" cy="8" r="1.5"/></svg>
         Améliorer / vectoriser
       </button>
@@ -321,7 +321,7 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
 <div class="timg-fenetre" id="image-outil" style="display:none" role="dialog" aria-label="Améliorer et vectoriser une image">
   <div class="timg-fenetre-tete">
     <h2>Image — améliorer et vectoriser</h2>
-    <button type="button" class="timg-btn" onclick="closeImageOutil()">Fermer</button>
+    <button type="button" class="timg-btn" onclick="closeImageOutil()" data-bulle="Retour aux BAT" data-bulle-touche="Échap">Fermer</button>
   </div>
   <div class="timg-fenetre-corps" id="image-outil-corps"></div>
 </div>
@@ -461,6 +461,7 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
 <!-- Adresse de la page : statut, tri, fenêtre ouverte (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
 <script src="/static/bat_url.js?v=2"></script>
+<script src="/static/mysifa_bulles.js?v=__V_LABEL__"></script>
 <script>
 'use strict';
 

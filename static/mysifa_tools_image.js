@@ -204,21 +204,30 @@
     return { x: Math.max(0, x0 - m), y: Math.max(0, y0 - m), w: Math.min(w, x1 + m + 1) - Math.max(0, x0 - m), h: Math.min(h, y1 + m + 1) - Math.max(0, y0 - m) };
   }
 
+  // Libellé de l'étape en cours dans le voile « Traitement », puis une pause
+  // pour que le navigateur l'affiche avant le calcul suivant.
+  async function etape(texte) {
+    const e = I.host && I.host.querySelector('[data-etape]');
+    if (e) e.textContent = texte;
+    await pause();
+  }
+
   async function traiter() {
     const r = I.r;
     let c = I.original;
     const f = Math.min(r.echelle, Math.sqrt(MAX_PIXELS / (c.width * c.height)));
-    if (f > 1.001) c = agrandir(c, f);
+    if (f > 1.001) { await etape('Agrandissement ×' + Math.round(f * 10) / 10 + '…'); c = agrandir(c, f); }
     else { const n = toile(c.width, c.height); ctx2d(n).drawImage(c, 0, 0); c = n; }
     const x = ctx2d(c), w = c.width, h = c.height;
     const d = x.getImageData(0, 0, w, h);
     await pause();
-    for (let k = 0; k < r.bruit; k++) { median(d, w, h); await pause(); }
+    for (let k = 0; k < r.bruit; k++) { await etape('Débruitage' + (r.bruit > 1 ? ' ' + (k + 1) + '/' + r.bruit : '') + '…'); median(d, w, h); }
+    if (r.auto || r.lum || r.contraste || r.satur !== 100) await etape('Réglage des tons…');
     if (r.auto) niveauxAuto(d);
     if (r.lum || r.contraste || r.satur !== 100) tons(d, r.lum, r.contraste, r.satur);
-    if (r.nettete > 0) { nettete(d, w, h, r.nettete); await pause(); }
+    if (r.nettete > 0) { await etape('Netteté…'); nettete(d, w, h, r.nettete); }
     if (r.nb !== 'couleur') noirBlanc(d, r.nb, r.seuil);
-    if (r.transparent) fondTransparent(d, w, h, r.tolerance);
+    if (r.transparent) { await etape('Détourage du fond…'); fondTransparent(d, w, h, r.tolerance); }
     x.putImageData(d, 0, 0);
     if (r.rogner) {
       const b = boiteUtile(d, w, h);
@@ -273,6 +282,7 @@
 
   // ── Vectorisation ──────────────────────────────────────────────────
   async function vectoriser() {
+    await etape('Chargement du traceur…');
     const IT = await tracer();
     let c = I.resultat;
     const f = Math.min(1, MAX_TRACE_COTE / Math.max(c.width, c.height));
@@ -287,7 +297,7 @@
       blurradius: 0, strokewidth: 0, linefilter: v.details > 0,
       roundcoords: 2, viewbox: true, desc: false, scale: 1,
     };
-    await pause();
+    await etape('Vectorisation en ' + opts.numberofcolors + ' couleurs…');
     const td = IT.imagedataToTracedata(d, opts);
     // Fond retiré : couches transparentes, et la couleur de fond si demandé
     // (la plus claire, si elle couvre les quatre coins).
@@ -369,16 +379,16 @@
   // ── Interface ──────────────────────────────────────────────────────
   const $ = s => I.host.querySelector(s);
 
-  function curseur(cle, label, min, max, pas, unite) {
-    return '<label class="timg-champ"><span>' + label + ' <b data-val="' + cle + '"></b></span>'
+  function curseur(cle, label, min, max, pas, unite, bulle) {
+    return '<label class="timg-champ"' + (bulle ? ' data-bulle="' + bulle + '"' : '') + '><span>' + label + ' <b data-val="' + cle + '"></b></span>'
       + '<input type="range" data-r="' + cle + '" min="' + min + '" max="' + max + '" step="' + pas + '" data-unite="' + (unite || '') + '"></label>';
   }
   function choix(cle, label, options) {
     return '<div class="timg-champ"><span>' + label + '</span><div class="timg-seg" data-choix="' + cle + '">'
-      + options.map(o => '<button type="button" data-v="' + o[0] + '">' + o[1] + '</button>').join('') + '</div></div>';
+      + options.map(o => '<button type="button" data-v="' + o[0] + '"' + (o[2] ? ' data-bulle="' + o[2] + '"' : '') + '>' + o[1] + '</button>').join('') + '</div></div>';
   }
-  function case_(cle, label) {
-    return '<label class="timg-case"><input type="checkbox" data-r="' + cle + '"> ' + label + '</label>';
+  function case_(cle, label, bulle) {
+    return '<label class="timg-case"' + (bulle ? ' data-bulle="' + bulle + '"' : '') + '><input type="checkbox" data-r="' + cle + '"> ' + label + '</label>';
   }
 
   function construire() {
@@ -387,11 +397,11 @@
     h.innerHTML =
       '<div class="timg-barre">'
       + '<div class="timg-seg timg-modes" data-mode-seg>'
-      + '<button type="button" data-mode="ameliorer">Améliorer</button>'
-      + '<button type="button" data-mode="vectoriser">Vectoriser</button></div>'
-      + '<button type="button" class="timg-btn" data-act="ouvrir">Ouvrir une image</button>'
-      + '<span class="timg-pdfnav" hidden><button type="button" class="timg-btn" data-act="pdf-prec" aria-label="Page précédente">‹</button>'
-      + '<span data-pdfpage></span><button type="button" class="timg-btn" data-act="pdf-suiv" aria-label="Page suivante">›</button></span>'
+      + '<button type="button" data-mode="ameliorer" data-bulle="Retoucher">Améliorer</button>'
+      + '<button type="button" data-mode="vectoriser" data-bulle="Tracer en SVG">Vectoriser</button></div>'
+      + '<button type="button" class="timg-btn" data-act="ouvrir" data-bulle="Image ou PDF">Ouvrir une image</button>'
+      + '<span class="timg-pdfnav" hidden><button type="button" class="timg-btn" data-act="pdf-prec" aria-label="Page précédente" data-bulle="Page précédente">‹</button>'
+      + '<span data-pdfpage></span><button type="button" class="timg-btn" data-act="pdf-suiv" aria-label="Page suivante" data-bulle="Page suivante">›</button></span>'
       + '<span class="timg-info" data-info></span>'
       + '<input type="file" accept="image/*,application/pdf" hidden data-fichier></div>'
       + '<div class="timg-corps">'
@@ -400,42 +410,45 @@
       + '<div class="timg-compare" data-compare hidden>'
       + '<div class="timg-damier"><canvas data-apres></canvas><div class="timg-avant" data-avant-clip><canvas data-avant></canvas></div>'
       + '<img data-svg alt="Aperçu vectoriel" hidden></div>'
-      + '<input type="range" class="timg-glissiere" data-glissiere min="0" max="100" value="50" aria-label="Avant / après">'
+      + '<input type="range" class="timg-glissiere" data-glissiere min="0" max="100" value="50" aria-label="Avant / après" data-bulle="Comparer">'
       + '<div class="timg-legende"><span>Avant</span><span data-legende-apres>Après</span></div></div>'
-      + '<div class="timg-occupe" data-occupe hidden><span class="spin"></span> Traitement…</div>'
+      + '<div class="timg-occupe" data-occupe hidden role="status" aria-live="polite"><div class="timg-occupe-carte">'
+      + '<span class="timg-roue" aria-hidden="true"></span>'
+      + '<div><div class="timg-occupe-t" data-etape>Traitement…</div><div class="timg-occupe-s">L\'image reste sur ce poste.</div></div>'
+      + '<div class="timg-barre-prog" aria-hidden="true"><span></span></div></div></div>'
       + '</div>'
       + '<aside class="timg-panneau">'
       + '<section data-panneau="ameliorer">'
-      + choix('echelle', 'Agrandir', [[1, '×1'], [2, '×2'], [3, '×3'], [4, '×4']])
-      + choix('bruit', 'Débruiter', [[0, 'Non'], [1, 'Léger'], [2, 'Fort']])
-      + curseur('nettete', 'Netteté', 0, 200, 5, ' %')
-      + case_('auto', 'Niveaux automatiques')
-      + curseur('lum', 'Luminosité', -100, 100, 1)
-      + curseur('contraste', 'Contraste', -100, 100, 1)
-      + curseur('satur', 'Saturation', 0, 200, 5, ' %')
-      + choix('nb', 'Couleurs', [['couleur', 'Couleur'], ['gris', 'Gris'], ['seuil', 'Noir & blanc']])
-      + '<div data-si="seuil">' + curseur('seuil', 'Seuil', 1, 254, 1) + '</div>'
-      + case_('transparent', 'Fond transparent')
-      + '<div data-si="transparent">' + curseur('tolerance', 'Tolérance du fond', 1, 60, 1, ' %') + '</div>'
-      + case_('rogner', 'Rogner les marges')
+      + choix('echelle', 'Agrandir', [[1, '×1', 'Taille d\'origine'], [2, '×2', 'Double'], [3, '×3', 'Triple'], [4, '×4', 'Quadruple']])
+      + choix('bruit', 'Débruiter', [[0, 'Non', 'Aucun lissage'], [1, 'Léger', 'Grain fin'], [2, 'Fort', 'Grain marqué']])
+      + curseur('nettete', 'Netteté', 0, 200, 5, ' %', 'Contours')
+      + case_('auto', 'Niveaux automatiques', 'Contraste auto')
+      + curseur('lum', 'Luminosité', -100, 100, 1, '', 'Clair / sombre')
+      + curseur('contraste', 'Contraste', -100, 100, 1, '', 'Écart des tons')
+      + curseur('satur', 'Saturation', 0, 200, 5, ' %', 'Vivacité')
+      + choix('nb', 'Couleurs', [['couleur', 'Couleur', 'Inchangé'], ['gris', 'Gris', 'Niveaux de gris'], ['seuil', 'Noir & blanc', 'Deux tons']])
+      + '<div data-si="seuil">' + curseur('seuil', 'Seuil', 1, 254, 1, '', 'Limite noir / blanc') + '</div>'
+      + case_('transparent', 'Fond transparent', 'Détourage')
+      + '<div data-si="transparent">' + curseur('tolerance', 'Tolérance du fond', 1, 60, 1, ' %', 'Écart accepté') + '</div>'
+      + case_('rogner', 'Rogner les marges', 'Recadrage')
       + '<div class="timg-sep"></div>'
-      + choix('format', 'Format', [['png', 'PNG'], ['jpg', 'JPG'], ['webp', 'WebP']])
-      + '<div data-si="qualite">' + curseur('qualite', 'Qualité', 50, 100, 1, ' %') + '</div>'
+      + choix('format', 'Format', [['png', 'PNG', 'Transparence'], ['jpg', 'JPG', 'Photo'], ['webp', 'WebP', 'Web']])
+      + '<div data-si="qualite">' + curseur('qualite', 'Qualité', 50, 100, 1, ' %', 'Compression') + '</div>'
       + '<label class="timg-champ"><span>Résolution d\'impression (dpi)</span><input type="number" class="timg-in" data-r="dpi" min="72" max="4800" step="1"></label>'
       + '<div class="timg-note" data-taille></div>'
-      + '<div class="timg-actions"><button type="button" class="timg-btn" data-act="reinit">Réinitialiser</button>'
-      + '<button type="button" class="timg-btn timg-btn-accent" data-act="exporter">Enregistrer l\'image</button></div>'
+      + '<div class="timg-actions"><button type="button" class="timg-btn" data-act="reinit" data-bulle="Réglages d\'origine">Réinitialiser</button>'
+      + '<button type="button" class="timg-btn timg-btn-accent" data-act="exporter" data-bulle="Télécharger">Enregistrer l\'image</button></div>'
       + '</section>'
       + '<section data-panneau="vectoriser" hidden>'
       + '<p class="timg-note">Le tracé part de l\'image améliorée : nettoyer d\'abord (contraste, débruitage, fond) donne des formes plus franches.</p>'
-      + choix('couleurs', 'Couleurs', [[2, '2'], [3, '3'], [4, '4'], [6, '6'], [8, '8'], [16, '16']])
-      + curseur('lissage', 'Lissage', 0.1, 5, 0.1)
-      + curseur('details', 'Ignorer les détails sous', 0, 60, 1, ' px²')
-      + case_('fond', 'Retirer le fond')
+      + choix('couleurs', 'Couleurs', [[2, '2', '2 couleurs'], [3, '3', '3 couleurs'], [4, '4', '4 couleurs'], [6, '6', '6 couleurs'], [8, '8', '8 couleurs'], [16, '16', '16 couleurs']])
+      + curseur('lissage', 'Lissage', 0.1, 5, 0.1, '', 'Courbes')
+      + curseur('details', 'Ignorer les détails sous', 0, 60, 1, ' px²', 'Poussières')
+      + case_('fond', 'Retirer le fond', 'Sans fond')
       + '<div class="timg-note" data-trace></div>'
-      + '<div class="timg-actions"><button type="button" class="timg-btn" data-act="copier-svg">Copier le SVG</button>'
-      + '<button type="button" class="timg-btn" data-act="svg">Enregistrer en SVG</button>'
-      + '<button type="button" class="timg-btn timg-btn-accent" data-act="pdf">Enregistrer en PDF</button></div>'
+      + '<div class="timg-actions"><button type="button" class="timg-btn" data-act="copier-svg" data-bulle="Presse-papiers">Copier le SVG</button>'
+      + '<button type="button" class="timg-btn" data-act="svg" data-bulle="Vectoriel web">Enregistrer en SVG</button>'
+      + '<button type="button" class="timg-btn timg-btn-accent" data-act="pdf" data-bulle="Vectoriel impression">Enregistrer en PDF</button></div>'
       + '</section>'
       + '</aside></div>';
 
@@ -567,7 +580,9 @@
     if (!I.original) return;
     if (I.enCours) { I.encore = I.encore || depuisImage || 'v'; return; }
     I.enCours = true;
+    $('[data-etape]').textContent = 'Traitement…';
     $('[data-occupe]').hidden = false;
+    $('[data-vue]').classList.add('timg-vue--occupe');
     try {
       if (depuisImage === true || !I.resultat) { I.resultat = await traiter(); I.svg = null; I.traceInfo = null; }
       if (I.mode === 'vectoriser') await vectoriser();
@@ -575,7 +590,7 @@
       toast(e.message || 'Traitement impossible.', 'danger');
     } finally {
       I.enCours = false;
-      if (I.host) { $('[data-occupe]').hidden = true; majInterface(); }
+      if (I.host) { $('[data-occupe]').hidden = true; $('[data-vue]').classList.remove('timg-vue--occupe'); majInterface(); }
       if (I.encore) { const r = I.encore; I.encore = null; recalculer(r === true); }
     }
   }

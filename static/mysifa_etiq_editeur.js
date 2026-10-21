@@ -415,7 +415,7 @@
     const blocs = [i];
     if (cle === 'valeur' && layout().variables.length) {
       blocs.push(h('div', { cls: 'es-puces' }, ...layout().variables.map(v => h('button', {
-        cls: 'es-puce', type: 'button', title: 'Insérer ' + v.libelle, text: '{{' + v.nom + '}}',
+        cls: 'es-puce', type: 'button', 'data-bulle': 'Insérer', 'aria-label': 'Insérer ' + v.libelle, text: '{{' + v.nom + '}}',
         onclick: () => {
           const pos = i.selectionStart ?? i.value.length;
           i.value = i.value.slice(0, pos) + '{{' + v.nom + '}}' + i.value.slice(i.selectionEnd ?? pos);
@@ -512,7 +512,7 @@
     });
     return h('div', { cls: 'es-panneau' },
       h('div', { cls: 'es-panneau-titre' }, 'Variables',
-        h('button', { cls: 'es-btn es-btn-icone', type: 'button', title: 'Ajouter une variable', onclick: () => {
+        h('button', { cls: 'es-btn es-btn-icone', type: 'button', 'data-bulle': 'Variable', 'aria-label': 'Ajouter une variable', onclick: () => {
           memoriser();
           const noms = new Set(layout().variables.map(v => v.nom));
           let n = 'champ', i = 1; while (noms.has(n + i)) i++;
@@ -624,7 +624,7 @@
 
   function barreHaut() {
     const { h, bouton, selectDossiers, ES, ic } = X();
-    const nom = h('input', { cls: 'es-input es-nom', value: ED.m.nom, maxlength: 120, title: 'Nom de l\'étiquette' });
+    const nom = h('input', { cls: 'es-input es-nom', value: ED.m.nom, maxlength: 120, 'data-bulle': 'Nom', 'aria-label': 'Nom de l\'étiquette' });
     nom.addEventListener('input', () => { ED.m.nom = nom.value; salir(); });
     const desc = h('input', { cls: 'es-input', value: ED.m.description || '', maxlength: 1000, placeholder: 'Description (ce qui la distingue)' });
     desc.addEventListener('input', () => { ED.m.description = desc.value; salir(); });

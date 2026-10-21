@@ -38,7 +38,22 @@
 .timg-avant canvas{max-width:none;max-height:none;height:100%;width:auto}
 .timg-glissiere{width:min(100%,520px);accent-color:var(--accent)}
 .timg-legende{display:flex;justify-content:space-between;width:min(100%,520px);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
-.timg-occupe{position:absolute;inset:auto 12px 12px auto;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px}
+/* Traitement en cours : voile sur tout l'aperçu, carte centrée bien visible. */
+.timg-occupe{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;
+  background:color-mix(in srgb,var(--bg) 72%,transparent);cursor:progress}
+.timg-occupe-carte{position:relative;overflow:hidden;display:flex;align-items:center;gap:14px;min-width:260px;
+  background:var(--card);border:2px solid var(--accent);border-radius:14px;padding:18px 22px 20px;
+  box-shadow:0 12px 40px rgba(0,0,0,.28)}
+.timg-roue{width:30px;height:30px;flex-shrink:0;border-radius:50%;border:3px solid var(--accent-bg);
+  border-top-color:var(--accent);animation:timg-tourne .75s linear infinite}
+.timg-occupe-t{font-size:15px;font-weight:800;color:var(--text)}
+.timg-occupe-s{font-size:12px;color:var(--muted);margin-top:2px}
+.timg-barre-prog{position:absolute;left:0;right:0;bottom:0;height:4px;background:var(--accent-bg)}
+.timg-barre-prog span{position:absolute;top:0;bottom:0;width:35%;background:var(--accent);animation:timg-glisse 1.1s ease-in-out infinite}
+.timg-vue--occupe .timg-damier{filter:grayscale(.4)}
+@keyframes timg-tourne{to{transform:rotate(360deg)}}
+@keyframes timg-glisse{0%{left:-35%}100%{left:100%}}
+@media (prefers-reduced-motion:reduce){.timg-roue,.timg-barre-prog span{animation-duration:2.4s}}
 .timg-panneau{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;overflow-y:auto;max-height:calc(100vh - 160px)}
 .timg-panneau section{display:flex;flex-direction:column;gap:12px}
 .timg-champ{display:flex;flex-direction:column;gap:6px;min-width:0}
@@ -59,3 +74,5 @@
 .timg-fenetre-tete{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--card)}
 .timg-fenetre-tete h2{font-size:15px;font-weight:800}
 .timg-fenetre-corps{flex:1;overflow:auto;padding:16px}
+/* Postes lents (static/mysifa_perf.js) : pas de filtre sur la grande image. */
+.perf-eco .timg-vue--occupe .timg-damier{filter:none}
