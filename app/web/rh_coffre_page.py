@@ -105,12 +105,12 @@ tr:hover td{background:var(--accent-bg)}
 .b-depose{background:rgba(251,191,36,.15);color:var(--warn)}
 .b-distribue{background:color-mix(in srgb,var(--accent,#22d3ee) 15%,transparent);color:var(--accent)}
 .b-consulte{background:rgba(52,211,153,.15);color:var(--ok)}
-.statut{display:inline-block;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
-.statut.brouillon{background:rgba(148,163,184,.15);color:var(--muted)}
-.statut.soumise{background:rgba(251,191,36,.15);color:var(--warn)}
-.statut.validee{background:color-mix(in srgb,var(--accent,#22d3ee) 15%,transparent);color:var(--accent)}
-.statut.payee{background:rgba(52,211,153,.15);color:var(--ok)}
-.statut.refusee{background:rgba(248,113,113,.15);color:var(--danger)}
+.statut{display:inline-block;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border:1px solid transparent}
+.statut.brouillon{background:transparent;border:1px dashed var(--border);color:var(--muted)}
+.statut.soumise{background:var(--accent-bg);border-color:color-mix(in srgb,var(--accent) 45%,transparent);color:var(--accent)}
+.statut.validee{background:color-mix(in srgb,var(--success) 14%,transparent);border-color:color-mix(in srgb,var(--success) 40%,transparent);color:var(--success)}
+.statut.payee{background:var(--success);color:white}
+.statut.refusee{background:color-mix(in srgb,var(--danger) 12%,transparent);border-color:color-mix(in srgb,var(--danger) 40%,transparent);color:var(--danger)}
 .montant{font-family:'SF Mono','Consolas',monospace;font-weight:700;color:var(--text);text-align:right}
 .upload-zone{border:2px dashed var(--border);border-radius:12px;padding:24px;text-align:center;transition:all .15s;cursor:pointer;background:var(--bg);display:block}
 .upload-zone:hover,.upload-zone.dragover{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}

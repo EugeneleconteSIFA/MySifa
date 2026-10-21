@@ -107,12 +107,12 @@ table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;padding:10px 12px;background:var(--bg);color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
 td{padding:12px;border-bottom:1px solid var(--border);color:var(--text2)}
 tr:hover td{background:var(--accent-bg)}
-.statut{display:inline-block;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
-.statut.brouillon{background:rgba(148,163,184,.15);color:var(--muted)}
-.statut.soumise{background:rgba(251,191,36,.15);color:var(--warn)}
-.statut.validee{background:color-mix(in srgb,var(--accent,#22d3ee) 15%,transparent);color:var(--accent)}
-.statut.payee{background:rgba(52,211,153,.15);color:var(--ok)}
-.statut.refusee{background:rgba(248,113,113,.15);color:var(--danger)}
+.statut{display:inline-block;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border:1px solid transparent}
+.statut.brouillon{background:transparent;border:1px dashed var(--border);color:var(--muted)}
+.statut.soumise{background:var(--accent-bg);border-color:color-mix(in srgb,var(--accent) 45%,transparent);color:var(--accent)}
+.statut.validee{background:color-mix(in srgb,var(--success) 14%,transparent);border-color:color-mix(in srgb,var(--success) 40%,transparent);color:var(--success)}
+.statut.payee{background:var(--success);color:white}
+.statut.refusee{background:color-mix(in srgb,var(--danger) 12%,transparent);border-color:color-mix(in srgb,var(--danger) 40%,transparent);color:var(--danger)}
 .montant{font-family:'SF Mono','Consolas',monospace;font-weight:700;color:var(--text)}
 .filters{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
 .filters select{padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:12px;font-family:inherit;outline:none}
@@ -144,7 +144,8 @@ tr:hover td{background:var(--accent-bg)}
 .field select{-webkit-appearance:none;appearance:none;padding-right:34px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center} /* hex-ok : flèche SVG */
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .field textarea{min-height:64px;resize:vertical}
-.calc-val{padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:13px;color:var(--text);font-weight:700;font-variant-numeric:tabular-nums;min-height:40px;display:flex;align-items:center}
+.ndf-calcule{padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:13px;line-height:1.4;color:var(--text);font-weight:700;font-variant-numeric:tabular-nums;min-height:40px;display:flex;align-items:center}
+.ndf-ht{font-size:12px;color:var(--muted);margin-top:-6px;margin-bottom:14px;font-variant-numeric:tabular-nums}
 .calc-hint{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.4}
 .ndf-meta{font-size:11px;color:var(--muted);margin-top:3px}
 tr.ndf-row{cursor:pointer}
@@ -169,6 +170,7 @@ tr.ndf-row{cursor:pointer}
 .file-drop:hover{border-color:var(--accent);color:var(--accent)}
 .file-drop.has-file{border-style:solid;color:var(--text)}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row3{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:10px}
 .modal-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap;padding:14px 22px;background:var(--card);border-top:1px solid var(--border);position:sticky;bottom:0}
 .modal-actions .btn.ghost{background:var(--bg)}
 .modal-actions .btn.ghost:hover{background:var(--card)}
@@ -178,7 +180,7 @@ tr.ndf-row{cursor:pointer}
 .toast.ok{border-left-color:var(--ok)}
 @keyframes slideIn{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
 
-@media(max-width:640px){.container{max-width:100%}.row2{grid-template-columns:1fr}table{font-size:12px}th,td{padding:8px}.doc-list{grid-template-columns:1fr}}
+@media(max-width:640px){.container{max-width:100%}.row2,.row3{grid-template-columns:1fr}table{font-size:12px}th,td{padding:8px}.doc-list{grid-template-columns:1fr}}
 </style>
 <link rel="stylesheet" href="/static/mysifa_perf.css">
 <script src="/static/mysifa_perf.js"></script>
@@ -584,7 +586,7 @@ function openNdfModal(noteId){
   back.innerHTML=`<div class="modal">
     <div class="modal-head">
       <div class="modal-head-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></div>
-      <div><h3>${titre}</h3><div class="modal-head-sub">HT et TVA sont calculés à partir du montant TTC.</div></div>
+      <div><h3>${titre}</h3><div class="modal-head-sub">Saisissez le montant payé (TTC) : la TVA se calcule seule.</div></div>
     </div>
     <form id="ndf-form">
       <div class="modal-body">
@@ -604,22 +606,19 @@ function openNdfModal(noteId){
         <div class="ndf-section montants">
           <div class="ndf-section-titre">Montant</div>
           <div id="ndf-montant-zone">
-            <div class="row2">
+            <div class="row3">
               <div class="field"><label>Montant TTC (€)</label><input type="number" step="0.01" min="0.01" name="montant_ttc" id="ndf-ttc" placeholder="0,00"></div>
               <div class="field"><label>Taux de TVA</label>
                 <select name="taux_tva" id="ndf-taux">${NDF_TAUX.map(t=>`<option value="${t}">${t?fmtTaux(t):'Sans TVA'}</option>`).join('')}</select>
               </div>
+              <div class="field"><label>TVA (€)</label><input type="number" step="0.01" min="0" name="montant_tva" id="ndf-tva" placeholder="0,00"></div>
             </div>
-            <div class="row2">
-              <div class="field"><label>TVA (€)</label><input type="number" step="0.01" min="0" name="montant_tva" id="ndf-tva" placeholder="0,00">
-                <div class="calc-hint">Modifiable pour un ticket à plusieurs taux.</div></div>
-              <div class="field"><label>Montant HT</label><div class="calc-val" id="ndf-ht">0,00 €</div></div>
-            </div>
+            <div class="ndf-ht">Soit <span id="ndf-ht">0,00 €</span> HT · la TVA se corrige à la main pour un ticket à plusieurs taux.</div>
           </div>
           <div id="ndf-km-zone" style="display:none">
             <div class="row2">
               <div class="field"><label>Distance (km)</label><input type="number" step="0.1" min="0.1" name="distance_km" id="ndf-km" placeholder="0"></div>
-              <div class="field"><label>Montant</label><div class="calc-val" id="ndf-km-total">0,00 €</div>
+              <div class="field"><label>Montant</label><div class="ndf-calcule" id="ndf-km-total">0,00 €</div>
                 <div class="calc-hint" id="ndf-km-hint"></div></div>
             </div>
           </div>
