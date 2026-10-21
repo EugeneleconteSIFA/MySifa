@@ -576,14 +576,15 @@ function ouvrirNote(id){
 // Sans argument : nouvelle note. Avec l'id d'un brouillon : modification.
 function openNdfModal(noteId){
   if(!NDF_CATS.length){toast('Aucune catégorie de note de frais — à créer par la comptabilité.','err');return;}
-  const note=noteId?NDF_NOTES.find(n=>n.id===noteId&&n.statut==='brouillon'):null;
-  if(noteId&&!note){toast('Brouillon introuvable — il a peut-être déjà été soumis.','err');return;}
+  const edite=noteId?NDF_NOTES.find(n=>n.id===noteId&&n.statut==='brouillon'):null;
+  if(noteId&&!edite){toast('Brouillon introuvable — il a peut-être déjà été soumis.','err');return;}
+  const titre=edite?'Modifier le brouillon':'Nouvelle note de frais';
   const back=document.createElement('div');back.className='modal-back';
   const today=new Date().toISOString().slice(0,10);
   back.innerHTML=`<div class="modal">
     <div class="modal-head">
       <div class="modal-head-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></div>
-      <div><h3>${note?'Modifier le brouillon':'Nouvelle note de frais'}</h3><div class="modal-head-sub">HT et TVA sont calculés à partir du montant TTC.</div></div>
+      <div><h3>${titre}</h3><div class="modal-head-sub">HT et TVA sont calculés à partir du montant TTC.</div></div>
     </div>
     <form id="ndf-form">
       <div class="modal-body">
@@ -627,10 +628,10 @@ function openNdfModal(noteId){
           <div class="ndf-section-titre">Détails et justificatif</div>
           <div class="field"><label>Description</label><textarea name="description" placeholder="Détails, contexte, participants…" maxlength="1000"></textarea></div>
           <div class="field">
-            ${note&&note.justificatif_nom?`<div class="calc-hint" style="margin:0 0 6px">Joint : ${esc(note.justificatif_nom)}</div>`:''}
+            ${edite&&edite.justificatif_nom?`<div class="calc-hint" style="margin:0 0 6px">Joint : ${esc(edite.justificatif_nom)}</div>`:''}
             <label class="file-drop" id="drop-label">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-              <span id="drop-txt">${note&&note.justificatif_nom?'Remplacer le justificatif joint':'Joindre le justificatif (PDF, JPG, PNG — 10 Mo max)'}</span>
+              <span id="drop-txt">${edite&&edite.justificatif_nom?'Remplacer le justificatif joint':'Joindre le justificatif (PDF, JPG, PNG — 10 Mo max)'}</span>
               <input type="file" name="justificatif" id="ndf-file" accept="application/pdf,image/*" style="display:none">
             </label>
           </div>
@@ -639,7 +640,7 @@ function openNdfModal(noteId){
       <div class="modal-actions">
         <button type="button" class="btn ghost" id="ndf-cancel">Annuler</button>
         <span class="sep"></span>
-        <button type="submit" class="btn ghost" name="soumettre" value="0">${note?'Enregistrer':'Enregistrer brouillon'}</button>
+        <button type="submit" class="btn ghost" name="soumettre" value="0">${edite?'Enregistrer':'Enregistrer brouillon'}</button>
         <button type="submit" class="btn" name="soumettre" value="1">Soumettre à la compta</button>
       </div>
     </form>
@@ -677,23 +678,23 @@ function openNdfModal(noteId){
   ttcEl.addEventListener('input',majCalcul);
   kmEl.addEventListener('input',majCalcul);
   tvaEl.addEventListener('input',()=>{tvaManuelle=tvaEl.value!=='';majCalcul();});
-  if(note){
-    form.elements.date_frais.value=(note.date_frais||'').slice(0,10);
-    form.elements.ville.value=note.ville||'';
-    form.elements.description.value=note.description||'';
-    if(NDF_CATS.some(c=>c.id===note.categorie_id))catsEl.value=String(note.categorie_id);
+  if(edite){
+    form.elements.date_frais.value=(edite.date_frais||'').slice(0,10);
+    form.elements.ville.value=edite.ville||'';
+    form.elements.description.value=edite.description||'';
+    if(NDF_CATS.some(c=>c.id===edite.categorie_id))catsEl.value=String(edite.categorie_id);
     const cat=catCourante();
-    if(cat&&cat.saisie==='km'){kmEl.value=note.distance_km!=null?note.distance_km:'';}
+    if(cat&&cat.saisie==='km'){kmEl.value=edite.distance_km!=null?edite.distance_km:'';}
     else{
-      ttcEl.value=note.montant_ttc!=null?Number(note.montant_ttc).toFixed(2):'';
-      tauxEl.value=String(note.taux_tva!=null?note.taux_tva:(cat?cat.taux_tva:20));
-      if(note.montant_tva!=null){
-        const calc=ndfCalcul(cat,Number(note.montant_ttc)||0,parseFloat(tauxEl.value)||0,0);
-        tvaEl.value=Number(note.montant_tva).toFixed(2);
-        tvaManuelle=Math.abs(calc.tva-Number(note.montant_tva))>0.005;
+      ttcEl.value=edite.montant_ttc!=null?Number(edite.montant_ttc).toFixed(2):'';
+      tauxEl.value=String(edite.taux_tva!=null?edite.taux_tva:(cat?cat.taux_tva:20));
+      if(edite.montant_tva!=null){
+        const calc=ndfCalcul(cat,Number(edite.montant_ttc)||0,parseFloat(tauxEl.value)||0,0);
+        tvaEl.value=Number(edite.montant_tva).toFixed(2);
+        tvaManuelle=Math.abs(calc.tva-Number(edite.montant_tva))>0.005;
       }
     }
-    ndfAdresse('modifier',note.id);
+    ndfAdresse('modifier',edite.id);
   }
   majCalcul();
   const fileEl=$('#ndf-file');
@@ -703,7 +704,7 @@ function openNdfModal(noteId){
     if(fileEl.files.length){dropLbl.classList.add('has-file');dropTxt.textContent=fileEl.files[0].name;}
     else{dropLbl.classList.remove('has-file');dropTxt.textContent='Joindre le justificatif (PDF, JPG, PNG — 10 Mo max)';}
   });
-  const fermer=()=>{back.remove();if(note)ndfAdresse(null);};
+  const fermer=()=>{back.remove();if(edite)ndfAdresse(null);};
   $('#ndf-cancel').onclick=fermer;
   back.onclick=(e)=>{if(e.target===back)fermer();};
   form.addEventListener('submit',async(e)=>{
@@ -715,7 +716,7 @@ function openNdfModal(noteId){
     if(cat&&cat.saisie==='km'){fd.delete('montant_ttc');fd.delete('montant_tva');fd.delete('taux_tva');}
     else fd.delete('distance_km');
     try{
-      const r=await fetch(note?'/api/coffre/notes-frais/'+note.id:'/api/coffre/notes-frais',{method:note?'PUT':'POST',credentials:'include',body:fd});
+      const r=await fetch(edite?'/api/coffre/notes-frais/'+edite.id:'/api/coffre/notes-frais',{method:edite?'PUT':'POST',credentials:'include',body:fd});
       if(!r.ok){let m='Erreur';try{const j=await r.json();m=j.detail||m;}catch{}throw new Error(m);}
       toast(btn.value==='1'?'Note soumise.':'Brouillon enregistré.');
       fermer();
