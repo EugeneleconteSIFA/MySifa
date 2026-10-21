@@ -158,7 +158,8 @@
   const seg = (nom, choix) => '<div class="tcal-seg" role="group" data-seg="' + nom + '">'
     + choix.map(c => '<button type="button" class="tcal-seg-b" data-v="' + c[0] + '"' + (c[2] ? ' data-bulle="' + esc(c[2]) + '"' : '') + '>' + esc(c[1]) + '</button>').join('') + '</div>';
   const res = id => '<div class="tcal-res tcal-res--vide" id="tcal-r-' + id + '"><div class="tcal-res-v">—</div><div class="tcal-res-l"></div></div>';
-  const fins = (contenu, bulle) => '<details class="tcal-fins"><summary data-bulle="' + esc(bulle || 'Valeurs par défaut sinon') + '">Réglages fins</summary><div class="tcal-grille">' + contenu + '</div></details>';
+  // Ouverts par défaut (retour d'Eugène du 21/10) : on peut toujours les replier.
+  const fins = (contenu, bulle) => '<details class="tcal-fins" open><summary data-bulle="' + esc(bulle || 'Valeurs par défaut sinon') + '">Réglages fins</summary><div class="tcal-grille">' + contenu + '</div></details>';
 
   function tete(id) {
     const o = ONGLETS.find(x => x[0] === id);
