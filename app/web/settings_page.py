@@ -8854,7 +8854,8 @@ async function unlinkBridge(mp_id) {
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <script src="/static/mysifa_postes_deroulement.js?v=2"></script>
 <script src="/static/mysifa_alert_form.js?v=2.4.21"></script>
-<script src="/static/mysifa_maint_form.js?v=2.7.4-usure"></script>
+<script src="/static/mysifa_confirm.js?v=1"></script>
+<script src="/static/mysifa_maint_form.js?v=2.7.5-confirm"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.21"></script>
 <script src="/static/mysifa_impersonate.js?v=2"></script>
 <!-- Panneau Déploiement (Promouvoir v1→v2 + Sync DB) — fonctions en fichier externe
