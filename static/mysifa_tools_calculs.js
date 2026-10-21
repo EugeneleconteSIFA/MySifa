@@ -31,12 +31,18 @@
 
   const LS_MTR = 'mysifa_mtr_saisie_v1';
   const LS_CALC = 'mysifa_tools_calculs_v2';
+  // [id, titre, ce que le calculateur donne, icône (grille 24)]
   const ONGLETS = [
-    ['metrage', 'Métrage ↔ diamètre', 'Longueur ou diamètre de bobine'],
-    ['fronts', 'Fronts', 'Étiquettes de front sur la laize'],
-    ['etiquettes', 'Étiquettes / bobine', 'Quantité sur un métrage'],
-    ['carton', 'Carton', 'Meilleur carton parmi nos références'],
+    ['metrage', 'Métrage ↔ diamètre', 'La longueur enroulée sur une bobine, ou le diamètre qu\'elle atteint.',
+      '<circle cx="10" cy="10" r="6.5"/><circle cx="10" cy="10" r="2"/><path d="M10 16.5h10.5"/>'],
+    ['fronts', 'Fronts sur la laize', 'Combien d\'étiquettes de front tiennent sur la bobine, et la chute.',
+      '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M9 5v14M15 5v14"/>'],
+    ['etiquettes', 'Étiquettes par bobine', 'Combien d\'étiquettes sur un métrage, ou quel métrage pour une quantité.',
+      '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 9h14M5 15h14"/>'],
+    ['carton', 'Carton optimal', 'Le carton de nos références qui range le mieux les bobines.',
+      '<path d="M12 3.5l8 4.5v8l-8 4.5L4 16V8z"/><path d="M4 8l8 4.5L20 8M12 12.5v8"/>'],
   ];
+  const svg = (d, t) => '<svg width="' + (t || 22) + '" height="' + (t || 22) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
 
   // ── Calculs purs (tests/test_tools_calculs.js) ─────────────────────
   const n = v => { const x = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isFinite(x) ? x : NaN; };
@@ -143,19 +149,32 @@
     return '<label class="tcal-champ" for="tcal-' + id + '"' + (bulle ? ' data-bulle="' + esc(bulle) + '"' : '') + '><span>' + esc(label) + '</span>'
       + '<input id="tcal-' + id + '" class="tcal-in"' + Object.keys(a).map(k => ' ' + k + '="' + esc(a[k]) + '"').join('') + '></label>';
   }
+  // Question à deux réponses, en cartes : « Ce que je cherche : … ».
+  const question = (nom, libelle, choix) => '<div class="tcal-question"><div class="tcal-question-l">' + esc(libelle) + '</div>'
+    + '<div class="tcal-choix" role="radiogroup" data-seg="' + nom + '">'
+    + choix.map(c => '<button type="button" role="radio" class="tcal-choix-b" data-v="' + c[0] + '">'
+      + '<span class="tcal-choix-coche" aria-hidden="true"></span><span class="tcal-choix-txt"><b>' + esc(c[1]) + '</b><small>' + esc(c[2]) + '</small></span></button>').join('')
+    + '</div></div>';
   const seg = (nom, choix) => '<div class="tcal-seg" role="group" data-seg="' + nom + '">'
     + choix.map(c => '<button type="button" class="tcal-seg-b" data-v="' + c[0] + '"' + (c[2] ? ' data-bulle="' + esc(c[2]) + '"' : '') + '>' + esc(c[1]) + '</button>').join('') + '</div>';
   const res = id => '<div class="tcal-res tcal-res--vide" id="tcal-r-' + id + '"><div class="tcal-res-v">—</div><div class="tcal-res-l"></div></div>';
   const fins = (contenu, bulle) => '<details class="tcal-fins"><summary data-bulle="' + esc(bulle || 'Valeurs par défaut sinon') + '">Réglages fins</summary><div class="tcal-grille">' + contenu + '</div></details>';
 
+  function tete(id) {
+    const o = ONGLETS.find(x => x[0] === id);
+    return '<header class="tcal-tete"><span class="tcal-tete-ic">' + svg(o[3], 26) + '</span><div><h2>' + esc(o[1]) + '</h2><p>' + esc(o[2]) + '</p></div></header>';
+  }
   function construire() {
     const h = C.host;
     h.className = 'tcal';
     h.innerHTML =
-      '<div class="tcal-onglets" role="tablist">' + ONGLETS.map(o =>
-        '<button type="button" role="tab" class="tcal-onglet" data-onglet="' + o[0] + '" data-bulle="' + esc(o[2]) + '">' + esc(o[1]) + '</button>').join('') + '</div>'
-      + '<section class="tcal-carte" data-panneau="metrage">'
-      + seg('sens', [['metrage', 'Je connais le diamètre', 'Diamètre → métrage'], ['diametre', 'Je connais le métrage', 'Métrage → diamètre']])
+      '<div class="tcal-onglets" role="tablist" aria-label="Calculateurs">' + ONGLETS.map(o =>
+        '<button type="button" role="tab" class="tcal-onglet" data-onglet="' + o[0] + '">'
+        + '<span class="tcal-onglet-ic">' + svg(o[3]) + '</span><span class="tcal-onglet-t">' + esc(o[1]) + '</span>'
+        + '<span class="tcal-onglet-d">' + esc(o[2]) + '</span></button>').join('') + '</div>'
+      + '<section class="tcal-carte" data-panneau="metrage">' + tete('metrage')
+      + question('sens', 'Ce que je cherche', [['metrage', 'Le métrage', 'Je mesure le Ø de la bobine → j\'obtiens les mètres'],
+        ['diametre', 'Le diamètre', 'Je connais les mètres → j\'obtiens le Ø de la bobine']])
       + '<div class="tcal-grille">' + champ('ep', 'Épaisseur (µm)', { placeholder: '145' }, 'Matière + adhésif + glassine')
       + champ('dm', 'Ø mandrin (mm)', { placeholder: '76' }, 'Diamètre extérieur')
       + champ('db', 'Ø bobine (mm)', { placeholder: '1000' }, 'Diamètre extérieur')
@@ -165,15 +184,16 @@
       + fins('<label class="tcal-champ" for="tcal-type"><span>Matière</span><select id="tcal-type" class="tcal-in"><option value="">Saisie libre</option></select></label>',
         'Épaisseurs types de MyStock')
       + '</section>'
-      + '<section class="tcal-carte" data-panneau="fronts" hidden>'
+      + '<section class="tcal-carte" data-panneau="fronts" hidden>' + tete('fronts')
       + '<div class="tcal-grille">' + champ('laize', 'Laize bobine (mm)', { placeholder: '440' }) + champ('larg', 'Largeur étiquette (mm)', { placeholder: '104,5' }) + '</div>'
       + res('fronts') + '<div class="tcal-detail" id="tcal-d-fronts"></div><div class="tcal-err" id="tcal-e-fronts"></div>'
       + fins(champ('espl', 'Espace entre fronts (mm)', { placeholder: '0' }) + champ('rive', 'Rive par bord (mm)', { placeholder: '0' })
         + champ('nbv', 'Fronts voulus', { placeholder: '4', step: '1', min: '1', inputmode: 'numeric' }, 'Donne la laize minimale'))
       + '<div class="tcal-detail" id="tcal-d-fronts2"></div>'
       + '</section>'
-      + '<section class="tcal-carte" data-panneau="etiquettes" hidden>'
-      + seg('sens3', [['qte', 'Étiquettes sur un métrage', 'Métrage → quantité'], ['metres', 'Métrage pour une quantité', 'Quantité → métrage']])
+      + '<section class="tcal-carte" data-panneau="etiquettes" hidden>' + tete('etiquettes')
+      + question('sens3', 'Ce que je cherche', [['qte', 'Le nombre d\'étiquettes', 'Je connais le métrage → j\'obtiens la quantité'],
+        ['metres', 'Le métrage', 'Je connais la quantité → j\'obtiens les mètres']])
       + '<div class="tcal-grille">' + champ('haut', 'Hauteur étiquette (mm)', { placeholder: '148,4' }, 'Dans le sens de déroulement')
       + champ('nbf', 'Fronts', { placeholder: '1', step: '1', min: '1', inputmode: 'numeric' })
       + champ('l3m', 'Métrage (m)', { placeholder: '2000' })
@@ -182,7 +202,7 @@
       + res('etiquettes') + '<div class="tcal-detail" id="tcal-d-etiquettes"></div>'
       + fins(champ('espa', 'Espace entre étiquettes (mm)', { placeholder: '0' }))
       + '</section>'
-      + '<section class="tcal-carte" data-panneau="carton" hidden>'
+      + '<section class="tcal-carte" data-panneau="carton" hidden>' + tete('carton')
       + '<div class="tcal-grille">' + champ('cd', 'Ø bobine (mm)', { placeholder: '200' }, 'Diamètre extérieur')
       + champ('cl', 'Largeur bobine (mm)', { placeholder: '110' }, 'Laize de la bobine')
       + champ('cq', 'Nombre de bobines', { placeholder: 'facultatif', step: '1', inputmode: 'numeric' }, 'Pour compter les cartons') + '</div>'
@@ -257,7 +277,10 @@
 
     C.host.querySelectorAll('[data-onglet]').forEach(b => { const on = b.getAttribute('data-onglet') === C.onglet; b.classList.toggle('actif', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
     C.host.querySelectorAll('[data-panneau]').forEach(p => { p.hidden = p.getAttribute('data-panneau') !== C.onglet; });
-    C.host.querySelectorAll('[data-seg]').forEach(g => g.querySelectorAll('[data-v]').forEach(b => b.classList.toggle('active', b.getAttribute('data-v') === C[g.getAttribute('data-seg')])));
+    C.host.querySelectorAll('[data-seg]').forEach(g => g.querySelectorAll('[data-v]').forEach(b => {
+      const on = b.getAttribute('data-v') === C[g.getAttribute('data-seg')];
+      b.classList.toggle('active', on); if (b.getAttribute('role') === 'radio') b.setAttribute('aria-checked', on ? 'true' : 'false');
+    }));
 
     // Métrage ↔ diamètre
     montrer('tcal-db', C.sens === 'metrage'); montrer('tcal-lm', C.sens === 'diametre');
