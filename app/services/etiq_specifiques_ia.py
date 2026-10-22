@@ -41,14 +41,20 @@ Repère : millimètres, origine en haut à gauche, x vers la droite, y vers le b
 - code_barre : `symbologie` (code128, gs1_128, ean13, datamatrix, qrcode), `valeur`, `hauteur` en mm (codes linéaires), `module` = largeur du plus petit barreau en mm (0,25 à 0,5 pour les linéaires ; 0,5 à 1 pour datamatrix/QR), `lisible` (texte en clair sous le code), `rotation`. Largeur approximative d'un Code 128 : (11 × nb_caractères + 35) × module mm — vérifie qu'il tient.
 - cadre : `largeur`, `hauteur`, `epaisseur` en mm, `arrondi` (0 à 8), `plein` (rectangle noir).
 - ligne : `orientation` (h|v), `longueur`, `epaisseur` en mm.
+- picto : pictogramme réglementaire `picto` (recyclage, fsc, deroulage, fragile, haut, humidite), `largeur`, `hauteur` en mm, `legende` (texte sous le dessin ; pour fsc, mets {{fsc_licence}}).
+Symbologies supplémentaires : gs1_datamatrix (données GS1 avec AI entre parenthèses), pdf417. code128 choisit seul le jeu de caractères.
+
+Champs communs à tous les éléments : `calque` (« fond » pour ce qui est identique sur toutes les étiquettes : logo, intitulés, mentions légales, filets ; « donnees » pour ce qui change), `verrou` (vrai pour un logo ou une mention imposée que l'opérateur ne doit pas toucher), `condition` (expression : l'objet ne s'imprime que si elle est vraie, ex. NON(VIDE(lot))), `masquer_si_vide` (vrai : l'objet disparaît quand sa valeur est vide — utile pour une ligne facultative).
 
 Variables (`variables`) — `nom` en minuscules (a-z, 0-9, _), `libelle` lisible, `type` :
 - fixe : `valeur`
 - saisie : demandée à l'opérateur à chaque impression, `valeur` = valeur par défaut, `obligatoire`
 - compteur : numéro qui avance à chaque étiquette — `debut`, `pas`, `longueur` (zéros de tête), `prefixe`, `suffixe`
 - sscc : SSCC GS1 de 18 chiffres calculé (extension + préfixe GS1 + série + clé) — `extension` (1 chiffre), `prefixe_gs1` (7 à 10 chiffres). Si le préfixe n'est pas connu, laisse-le vide et signale-le dans `remarques`.
-- date : `format` strftime (%d/%m/%Y), `decalage_jours`
-Une variable s'utilise dans la `valeur` d'un élément avec {{nom}}.
+- date : date calculée — `base` (« impression » ou le nom d'une autre variable, ex. date de fabrication saisie), `decalage_jours`, `decalage_mois` (DLUO, DDM), `format` (%d/%m/%Y, %y%m%d pour GS1, S%V-%G semaine ISO, %y%j lot daté AAJJJ)
+- source : donnée lue dans MySifa à l'impression — `champ` parmi la liste fournie (ex. dossier.reference, produit.designation, client.raison_sociale, lot.lot_fournisseur), `valeur` = valeur lue sur la photo (aperçu). Préfère une source à une saisie quand la donnée existe dans MySifa : référence dossier, OF, désignation produit, client, lot matière.
+- formule : `expression` sur les autres variables, sans {{}} : concaténation avec &, MAJUSCULE(t), GAUCHE(t;n), SI(cond;a;b), ARRONDI(x;n), TEXTE(x;n), ZEROS(x;n), NUM(t), VIDE(t), CLE_GS1(t)… Ex. MAJUSCULE(client) & " - " & lot.
+Une variable s'utilise dans la `valeur` d'un élément avec {{nom}}. {{fsc_licence}} et {{gs1_prefixe}} sont fournis par MySifa sans déclaration.
 
 Règles GS1 : en GS1-128, chaque identifiant d'application s'écrit entre parenthèses, suivi de sa donnée, sans espace — par exemple (00){{sscc}} ou (02){{gtin}}(37){{quantite}}. Le SSCC s'imprime sous l'AI (00). Si la consigne demande un SSCC « sous le code-barre produit », place le GS1-128 SSCC sous le code existant, aligné à gauche sur lui.
 
@@ -59,7 +65,8 @@ Quand tu crées depuis une photo ou un PDF d'étiquette :
 - Mesure les proportions : situe chaque élément en fraction de la largeur et de la hauteur de l'étiquette sur l'image, puis convertis en mm dans le format retenu. Corrige la perspective et la rotation de la prise de vue : raisonne sur l'étiquette à plat, pas sur le cadre de la photo.
 - Format : s'il est imposé, garde-le. S'il est « à déduire », pars du rapport largeur / hauteur de l'étiquette sur la photo et d'un repère de taille connue (un EAN-13 en module 0,33 mm fait environ 37 mm de large, un SSCC en GS1-128 module 0,5 environ 80 mm), puis retiens le format standard le plus proche de la liste fournie ; indique dans `remarques` le format retenu et sur quoi tu t'es fondé.
 - Codes-barres : identifie la symbologie (EAN-13, GS1-128 avec ses AI entre parenthèses, Code 128, DataMatrix, QR) et reprends sa taille et sa position.
-- Données variables : tout ce qui change d'une étiquette à l'autre (référence, lot, date, quantité, poids, numéro de colis, SSCC, adresse de livraison…) devient une variable, du type qui convient (saisie, compteur, sscc, date). Ce qui est identique sur toutes les étiquettes (logo texte, intitulés de champs, nom du fournisseur) reste du texte fixe. L'explication de l'utilisateur fait foi sur ce point.
+- Données variables : tout ce qui change d'une étiquette à l'autre (référence, lot, date, quantité, poids, numéro de colis, SSCC, adresse de livraison…) devient une variable, du type qui convient (source si la donnée est dans MySifa, sinon saisie, compteur, sscc, date, formule). Ce qui est identique sur toutes les étiquettes (logo texte, intitulés de champs, nom du fournisseur) reste du texte fixe, sur le calque « fond ». L'explication de l'utilisateur fait foi sur ce point. Liste chaque champ variable détecté dans `champs_detectes` (nom de la variable, ce que tu as lu sur l'original, pourquoi ce type).
+- Pictogrammes : un pictogramme de manutention ou de recyclage visible devient un élément picto de même emprise.
 - Valeurs par défaut : reprends les valeurs lues sur la photo comme `valeur` par défaut des variables de saisie, pour que l'aperçu ressemble à l'original.
 - Un logo ou une image ne se reproduit pas : remplace-le par un cadre de même emprise nommé « Logo … » et signale-le dans `remarques`.
 - Signale dans `remarques` tout ce qui est illisible, coupé ou incertain sur la photo, plutôt que de l'inventer.
@@ -71,7 +78,7 @@ _ELEMENT = {
     "type": "object",
     "properties": {
         "id": {"type": "string"},
-        "type": {"type": "string", "enum": ["texte", "code_barre", "cadre", "ligne"]},
+        "type": {"type": "string", "enum": ["texte", "code_barre", "cadre", "ligne", "picto"]},
         "nom": {"type": "string"},
         "x": {"type": "number"},
         "y": {"type": "number"},
@@ -92,6 +99,12 @@ _ELEMENT = {
         "plein": {"type": "boolean"},
         "orientation": {"type": "string", "enum": ["h", "v"]},
         "longueur": {"type": "number"},
+        "picto": {"type": "string", "enum": ["recyclage", "fsc", "deroulage", "fragile", "haut", "humidite"]},
+        "legende": {"type": "string"},
+        "calque": {"type": "string", "enum": ["fond", "donnees"]},
+        "verrou": {"type": "boolean"},
+        "condition": {"type": "string"},
+        "masquer_si_vide": {"type": "boolean"},
     },
     "required": ["id", "type", "x", "y"],
 }
@@ -113,6 +126,11 @@ _VARIABLE = {
         "prefixe_gs1": {"type": "string"},
         "format": {"type": "string"},
         "decalage_jours": {"type": "integer"},
+        "decalage_mois": {"type": "integer"},
+        "base": {"type": "string"},
+        "champ": {"type": "string"},
+        "expression": {"type": "string"},
+        "reprise": {"type": "boolean"},
     },
     "required": ["nom", "libelle", "type"],
 }
@@ -129,6 +147,9 @@ _OUTIL = {
             "variables": {"type": "array", "items": _VARIABLE},
             "resume": {"type": "string"},
             "remarques": {"type": "array", "items": {"type": "string"}},
+            "champs_detectes": {"type": "array", "items": {"type": "object", "properties": {
+                "variable": {"type": "string"}, "lu": {"type": "string"}, "raison": {"type": "string"}},
+                "required": ["variable"]}},
         },
         "required": ["largeur_mm", "hauteur_mm", "elements", "variables", "resume"],
     },
@@ -216,6 +237,9 @@ def proposer(consigne: str, largeur_mm: float, hauteur_mm: float, dpi: int,
     texte = ""
     if contexte:
         texte += contexte.strip() + "\n\n"
+    from app.services.etiq_sources import CHAMPS
+    texte += ("Champs MySifa disponibles pour les variables de type source : "
+              + ", ".join(f"{t}.{c}" for t, lst in CHAMPS.items() for c, _l, _ in lst) + "\n\n")
     texte += "Étiquette actuelle :\n" + json.dumps(etat, ensure_ascii=False) + "\n\n"
     texte += "Consigne :\n" + (consigne or "").strip()
     contenu = _blocs_pieces(pieces or []) + [{"type": "text", "text": texte}]
@@ -260,10 +284,19 @@ def proposer(consigne: str, largeur_mm: float, hauteur_mm: float, dpi: int,
     l, h, _ = normaliser_format(entree.get("largeur_mm", largeur_mm), entree.get("hauteur_mm", hauteur_mm), dpi)
     nouveau = normaliser_layout({"elements": entree.get("elements"), "variables": entree.get("variables")})
     remarques = [str(r)[:300] for r in (entree.get("remarques") or []) if r][:10]
+    noms = {v["nom"]: v for v in nouveau["variables"]}
+    champs = []
+    for c in (entree.get("champs_detectes") or [])[:40]:
+        if isinstance(c, dict) and str(c.get("variable") or "").lower() in noms:
+            v = noms[str(c["variable"]).lower()]
+            champs.append({"variable": v["nom"], "libelle": v["libelle"], "type": v["type"],
+                           "champ": v.get("champ", ""), "lu": str(c.get("lu") or "")[:120],
+                           "raison": str(c.get("raison") or "")[:200]})
     return {
         "largeur_mm": l, "hauteur_mm": h, "layout": nouveau,
         "resume": str(entree.get("resume") or "")[:600],
         "remarques": remarques,
+        "champs_detectes": champs,
         "modele": choix["id"],
         "modele_libelle": choix.get("libelle", choix["id"]),
         # Le modèle qui a réellement répondu (différent si le repli a joué)

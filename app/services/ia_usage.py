@@ -39,6 +39,7 @@ FONCTIONS = {
     "etiquettes": "Étiquettes spécifiques",
     "formulaires": "Création de formulaires",
     "alertes": "Alertes maintenance",
+    "pdf": "Éditeur PDF",
 }
 
 _suivi_courant: ContextVar[Optional["Suivi"]] = ContextVar("ia_suivi_courant", default=None)

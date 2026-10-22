@@ -379,6 +379,7 @@ SKIP_PREFIXES: tuple[str, ...] = (
     "/api/print/agent/jobs",
     "/api/print/preview",
     "/api/print/specifiques/apercu",
+    "/api/tools/etiquettes/impression/apercu",
     "/api/perf",
     "/api/notifications/vu",
     "/api/push/subscribe",

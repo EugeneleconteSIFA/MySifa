@@ -2926,7 +2926,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
               <label class="pr-lbl">Langage</label>
               <select id="pr-f-langage" class="pr-inp">
                 <option value="zpl">ZPL — Zebra</option>
-                <option value="epl">EPL — vieilles Zebra</option>
+                <option value="epl">EPL — vieilles Zebra</option><option value="tspl">TSPL — TSC, Godex</option>
                 <option value="escpos">ESC/POS — Brother, tickets</option>
               </select>
             </div>
@@ -3237,7 +3237,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
                   <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Langage *</label>
                   <select id="pr-wiz-imp-langage" class="pr-inp" style="width:100%">
                     <option value="zpl">ZPL — Zebra</option>
-                    <option value="epl">EPL — vieilles Zebra</option>
+                    <option value="epl">EPL — vieilles Zebra</option><option value="tspl">TSPL — TSC, Godex</option>
                     <option value="escpos">ESC/POS — Brother, tickets</option>
                   </select>
                 </div>

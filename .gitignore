@@ -30,6 +30,8 @@ mysifa.db
 # Fichiers deposes par les utilisateurs a l'execution (certificats fournisseurs,
 # justificatifs de controle, lots d'import). Donnee d'exploitation, jamais du code.
 data/uploads/
+# Parapheur : PDF signés et originaux (config.PARAPHEUR_DIR).
+data/parapheur/
 production.db
 
 # Widget Electron (build local — upload via deploy.sh --widget)

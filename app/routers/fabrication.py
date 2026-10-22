@@ -2055,6 +2055,18 @@ async def create_saisie(request: Request):
             except Exception:
                 pass  # Ne jamais bloquer la saisie opérateur
 
+        # ── Étiquettes : impression automatique (MyTools, règles par machine) ─
+        # Fil séparé : la saisie ne l'attend pas et n'échoue jamais à cause de
+        # lui. Un échec est consigné au journal d'impression (app/services/etiq_auto.py).
+        try:
+            from app.services.etiq_auto import apres_saisie
+            apres_saisie(machine_id=machine_id_resolved, machine_nom=machine_name, code=cl["code"],
+                         fin_dossier=fin_dossier_flag, no_dossier=no_dossier, operateur=operateur,
+                         email=user.get("email"), saisie_id=new_id, quantite=m_etiq, metrage=m_fin,
+                         client=client or "", designation=designation or "")
+        except Exception:
+            pass  # Ne jamais bloquer la saisie opérateur
+
         # ── Mémoire produit : figer la série à la clôture réelle ─────────────
         # Une production terminée devient une ligne d'historique rattachée à la
         # référence produit, consultable la prochaine fois qu'elle repasse.

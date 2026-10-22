@@ -404,6 +404,7 @@
           cb.addToPage(c.pg, o);
           if (a.defaut) cb.check();
           if (a.requis) cb.enableRequired();
+          if (EXT.apresChamp) await EXT.apresChamp(a, cb, c);
           return;
         }
         var textes = String(a.defaut || '') + (a.options || []).join('');
@@ -417,6 +418,7 @@
           dd.addToPage(c.pg, o);
           if (a.taille) { try { dd.setFontSize(a.taille); dd.updateAppearances(font); } catch (e) { /* taille auto */ } }
           if (a.requis) dd.enableRequired();
+          if (EXT.apresChamp) await EXT.apresChamp(a, dd, c);
           return;
         }
         if (a.genre === 'signature') {
@@ -442,6 +444,7 @@
         if (a.genre === 'signature') {
           try { tf.acroField.dict.set(L.PDFName.of('TU'), L.PDFHexString.fromText('Signature')); } catch (e) { /* infobulle facultative */ }
         }
+        if (EXT.apresChamp) await EXT.apresChamp(a, tf, c);
       }
     };
 
@@ -517,6 +520,7 @@
         sec.appendChild(api.champ('Taille de police (0 = auto)', tp));
       }
       sec.appendChild(note);
+      (EXT.hooks.propsChamp || []).forEach(function (fn) { try { fn(sec, a); } catch (e) { if (window.console) console.error(e); } });
     }
   });
 })();

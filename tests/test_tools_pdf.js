@@ -24,7 +24,7 @@ function leve(fn, motif) { try { fn(); return false; } catch (e) { return motif.
 
 // Contrat de montage
 verifier("contrat : mount, demonter, adresse", typeof M.mount === "function" && typeof M.demonter === "function"
-  && typeof M.adresse.etat === "function" && typeof M.adresse.aller === "function" && egal(M.adresse.cles, ["page"]));
+  && typeof M.adresse.etat === "function" && typeof M.adresse.aller === "function" && egal(M.adresse.cles, ["page", "panneau"]));
 verifier("adresse vide sans document", egal(M.adresse.etat(), {}));
 
 // Coordonnées : page A4 avec une boîte décalée
@@ -79,7 +79,7 @@ const TX = I.texte, FO = I.formulaires, CR = I.creation;
 verifier("extensions enregistrées", !!(TX && FO && CR));
 
 // Correspondance de polices
-const pol = (nom, autre) => TX.correspondancePolice(Object.assign({ nom }, autre || {}));
+const pol = (nom, autre) => { const r = TX.correspondancePolice(Object.assign({ nom }, autre || {})); return { famille: r.famille, gras: r.gras, italique: r.italique }; };
 verifier("Arial-BoldMT -> sans gras", egal(pol("ABCDEF+Arial-BoldMT"), { famille: "sans", gras: true, italique: false }));
 verifier("TimesNewRomanPS-ItalicMT -> serif italique", egal(pol("TimesNewRomanPS-ItalicMT"), { famille: "serif", gras: false, italique: true }));
 verifier("CourierNewPS-BoldItalicMT -> mono gras italique", egal(pol("CourierNewPS-BoldItalicMT"), { famille: "mono", gras: true, italique: true }));
@@ -130,6 +130,43 @@ verifier("blocs : lettres espacées par pdf.js recollées, espace entre les mots
 verifier("espacement : police plus étroite -> espacement positif", Math.abs(TX.espacement(120, 100, 10, 16) - 2) < 1e-9);
 verifier("espacement : borné", TX.espacement(400, 100, 10, 16) === 0.6 * 16 && TX.espacement(10, 100, 10, 16) === -1.6);
 verifier("espacement : écart négligeable -> 0", TX.espacement(100.05, 100, 10, 16) === 0);
+
+// Mesure de la boîte sur l'encre réelle (titre Hello bank coupé à « …DE COM »)
+function matrice(W, H, fond, encres) {
+  const d = new Uint8ClampedArray(W * H * 4);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 4, e = encres.some(([x0, x1, y0, y1]) => x >= x0 && x < x1 && y >= y0 && y < y1);
+    const c = e ? [255, 255, 255] : fond; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255;
+  }
+  return d;
+}
+// Fond cyan (non blanc), texte blanc : mot 1 (5-14), espace de 3 px, mot 2 (17-27), grand écart, numéro (45-50).
+const cyan = [0, 160, 200];
+const mx = matrice(60, 20, cyan, [[5, 14, 8, 15], [17, 27, 8, 15], [45, 50, 8, 15], [20, 22, 6, 8]]);
+const declaree = { x: 5, y: 6, w: 10, h: 11, base: 15, taille: 10 };
+const me = TX.mesurerEncre(mx, 60, 20, declaree, {});
+verifier("encre : fond coloré reconnu", egal(me.fond, cyan));
+verifier("encre : l'espace entre mots est franchi (la boîte va jusqu'au bout du 2e mot)", me.x === 5 && me.x + me.w === 27);
+verifier("encre : arrêt au grand écart (le numéro voisin n'est pas pris)", me.x + me.w < 45);
+verifier("encre : hauteur de capitale = sommet médian, accent ignoré", me.cap === 7);
+verifier("encre : le haut suit l'accent", me.y === 6);
+const borne = TX.mesurerEncre(mx, 60, 20, declaree, { droite: 16 });
+verifier("encre : borne du bloc voisin respectée", borne.x + borne.w <= 16);
+const jamaisMoins = TX.mesurerEncre(matrice(60, 20, cyan, []), 60, 20, declaree, {});
+const deuxLignes = matrice(60, 40, cyan, [[5, 30, 8, 15], [5, 30, 18, 20], [5, 30, 21, 28]]);
+const l1 = TX.mesurerEncre(deuxLignes, 60, 40, { x: 5, y: 6, w: 25, h: 11, base: 15, taille: 10 }, {});
+verifier("encre : l'accent de la ligne du dessous n'agrandit pas la boîte", l1.y + l1.h <= 18);
+verifier("encre : jamais plus petite que la boîte déclarée", jamaisMoins.x === 5 && jamaisMoins.w === 10 && jamaisMoins.h >= 11);
+const gauche = TX.mesurerEncre(mx, 60, 20, { x: 18, y: 6, w: 9, h: 11, base: 15, taille: 10 }, {});
+verifier("encre : extension vers la gauche aussi", gauche.x === 5);
+const traits = matrice(40, 20, [255, 255, 255], []);
+for (const [x0, x1] of [[2, 6], [10, 14], [20, 24]]) for (let y = 4; y < 16; y++) for (let x = x0; x < x1; x++) { const i = (y * 40 + x) * 4; traits[i] = traits[i + 1] = traits[i + 2] = 0; }
+verifier("épaisseur : traits de 4 px sur une capitale de 12 px = 0,33", Math.abs(TX.epaisseurTraits(traits, 40, { x: 0, w: 40 }, 16, 12, [255, 255, 255]) - 4 / 12) < 1e-9);
+const vois = TX.bornesVoisins([{ X0: 60, X1: 200, Y: 700, h: 16 }, { X0: 400, X1: 430, Y: 700, h: 10 }, { X0: 60, X1: 300, Y: 680, h: 16 }]);
+verifier("bornes : voisin de droite sur la même ligne, pas celui de la ligne d'en dessous", egal(vois[0], [null, 400]) && egal(vois[1], [200, null]) && egal(vois[2], [null, null]));
+verifier("police : « Gotham-Black » = gras, graisse connue", TX.correspondancePolice({ nom: "ABCDEF+Gotham-Black" }).gras === true && TX.correspondancePolice({ nom: "Gotham-Black" }).graisseConnue);
+verifier("police : « Brandon-Medium » = normal, graisse connue", TX.correspondancePolice({ nom: "Brandon-Medium" }).gras === false && TX.correspondancePolice({ nom: "Brandon-Medium" }).graisseConnue);
+verifier("police : nom sans graisse = à mesurer", TX.correspondancePolice({ nom: "HelloTitre" }).graisseConnue === false);
 
 // Champs de formulaire
 verifier("nom unique : premier libre", FO.nomUnique("Champ", ["Champ 1", "Champ 2", "client"]) === "Champ 3");

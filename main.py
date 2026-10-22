@@ -114,6 +114,10 @@ from app.web.qualite_page import router as qualite_page_router
 from app.web.tools_page import router as tools_page_router
 from app.routers.tools_convertir import router as tools_convertir_router
 from app.routers.tools_cartons import router as tools_cartons_router
+from app.routers.tools_parapheur import router as tools_parapheur_router
+from app.routers.tools_parapheur import router_espace as tools_parapheur_espace_router
+from app.routers.tools_pdf_ia import router as tools_pdf_ia_router
+from app.routers.tools_pdf import router as tools_pdf_router
 from app.routers.pwa import router as pwa_router
 from app.routers.push import router as push_router
 from app.routers.notifications import router as notifications_router
@@ -131,6 +135,9 @@ from app.routers.guides import router as guides_api_router
 from app.web.learning_page import router as learning_page_router
 from app.routers.print import router as print_router
 from app.routers.print_specifiques import router as print_specifiques_router
+from app.routers.etiq_impression import router as etiq_impression_router
+from app.routers.etiq_atelier import router as etiq_atelier_router
+from app.routers.etiq_avance import router as etiq_avance_router
 from app.routers.besoins_matieres import router as besoins_matieres_router
 from app.routers.taches import router as taches_api_router
 from app.web.taches_page import router as taches_page_router
@@ -202,6 +209,7 @@ async def lifespan(app: FastAPI):
     _emails_task = asyncio.create_task(_boucle_emails_commandes())
     _cloture_task = asyncio.create_task(_boucle_cloture_fin_prevue())
     _coherence_task = asyncio.create_task(_boucle_coherence())
+    _parapheur_task = asyncio.create_task(_boucle_parapheur())
     try:
         yield
     finally:
@@ -211,6 +219,7 @@ async def lifespan(app: FastAPI):
         _emails_task.cancel()
         _cloture_task.cancel()
         _coherence_task.cancel()
+        _parapheur_task.cancel()
 
 
 async def _boucle_releves_accueil():
@@ -312,6 +321,27 @@ async def _boucle_coherence():
         except Exception as e:
             print(f"[MySifa] cohérence : tour en échec ({e})")
         await asyncio.sleep(1800)
+
+
+async def _boucle_parapheur():
+    """Toutes les 15 minutes, expire les demandes de signature échues et
+    relance les signataires qui tardent (MyTools › Parapheur ; jours ouvrés,
+    8 h – 18 h, rythme réglé par demande). Prod uniquement, comme les autres
+    boucles qui écrivent ou envoient : v1 a déjà quitté le lifespan."""
+    from app.core.database import get_db as _get_db
+    from app.services import parapheur as _parapheur
+
+    await asyncio.sleep(180)
+    while True:
+        try:
+            res = await asyncio.to_thread(_parapheur.tour, _get_db)
+            if res.get("relances") or res.get("expirees"):
+                print(f"[MySifa] parapheur : {res['relances']} relance(s), {res['expirees']} demande(s) expirée(s)")
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[MySifa] parapheur : tour en échec ({e})")
+        await asyncio.sleep(900)
 
 
 async def _boucle_emails_commandes():
@@ -868,6 +898,10 @@ app.include_router(qualite_page_router)
 app.include_router(tools_page_router)
 app.include_router(tools_convertir_router)
 app.include_router(tools_cartons_router)
+app.include_router(tools_parapheur_router)
+app.include_router(tools_parapheur_espace_router)
+app.include_router(tools_pdf_ia_router)
+app.include_router(tools_pdf_router)
 app.include_router(pwa_router)
 app.include_router(push_router)
 app.include_router(notifications_router)
@@ -885,6 +919,9 @@ app.include_router(guides_api_router)
 app.include_router(learning_page_router)
 app.include_router(print_router)
 app.include_router(print_specifiques_router)
+app.include_router(etiq_impression_router)
+app.include_router(etiq_atelier_router)
+app.include_router(etiq_avance_router)
 app.include_router(taches_api_router)
 app.include_router(taches_page_router)
 # Les deux : sans include_router, /api/erp/* renverrait un 404 silencieux.

@@ -37,6 +37,20 @@
     audio: { lib: 'Audio', ext: ['mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'flac', 'opus', 'aiff', 'aif', 'wma'] },
     video: { lib: 'Vidéo', ext: ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp', 'wmv', 'mpg', 'mpeg', 'flv'] },
   };
+  // Icônes des familles (grille 24, trait).
+  const ICONES = {
+    image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>',
+    svg: '<path d="M4 20c4-1 6-5 8-8s4-6 8-8"/><circle cx="4" cy="20" r="1.6"/><circle cx="20" cy="4" r="1.6"/><path d="M12 12h.01"/>',
+    pdf: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h8M8 17h5"/>',
+    presentation: '<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M12 17v4M8 21h8"/>',
+    document: '<path d="M6 2h9l5 5v15H6z"/><path d="M9 11h7M9 15h7M9 19h4"/>',
+    tableur: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>',
+    audio: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+    video: '<rect x="2" y="5" width="15" height="14" rx="2"/><path d="M17 10l5-3v10l-5-3z"/>',
+    convertir: '<path d="M4 7h11.5"/><path d="M12.5 3.5L16 7l-3.5 3.5"/><path d="M20 17H8.5"/><path d="M11.5 13.5L8 17l3.5 3.5"/>',
+    deposer: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+  };
+  const svg = (k, t) => '<svg width="' + (t || 22) + '" height="' + (t || 22) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONES[k] + '</svg>';
   const extDe = f => ((f.name.match(/\.([a-z0-9]{1,6})$/i) || [])[1] || '').toLowerCase();
   const familleDe = f => Object.keys(FAMILLES).find(k => FAMILLES[k].ext.includes(extDe(f)));
 
@@ -374,13 +388,18 @@
     const h = C.host;
     h.className = 'tconv';
     h.innerHTML =
-      '<div class="tconv-carte">'
+      '<header class="tconv-tete"><span class="tconv-tete-ic">' + svg('convertir', 26) + '</span><div><h2>Convertir un fichier</h2>'
+      + '<p>Plus de 50 formats. Ce qui peut se faire sur ce poste s\'y fait ; le reste passe par le serveur MySifa, qui efface tout aussitôt.</p></div></header>'
+      + '<ol class="tconv-etapes" data-etapes>'
+      + '<li data-n="1"><b>1</b><span>Déposer</span></li><li data-n="2"><b>2</b><span>Choisir le format</span></li><li data-n="3"><b>3</b><span>Convertir</span></li></ol>'
+      + '<div class="tconv-carte">'
       + '<div class="tconv-depot" tabindex="0" role="button" data-a="choisir" data-bulle="Choisir des fichiers">'
-      + '<strong>Déposer un ou plusieurs fichiers</strong><span>ou cliquer pour les choisir</span></div>'
+      + '<span class="tconv-depot-ic">' + svg('deposer', 30) + '</span>'
+      + '<strong>Déposer un ou plusieurs fichiers</strong><span>ou cliquer pour les choisir · 50 fichiers d\'un même type au plus</span></div>'
       + '<input type="file" multiple hidden data-fichiers>'
       + '<div data-zone="fichiers"></div><div data-zone="cibles"></div><div data-zone="options"></div><div data-zone="action"></div><div data-zone="resultats"></div>'
       + '</div>'
-      + '<details class="tconv-carte tconv-formats"><summary>Formats pris en charge</summary><div data-zone="formats"></div></details>';
+      + '<section class="tconv-familles" data-zone="familles"></section>';
     const inp = h.querySelector('[data-fichiers]');
     inp.addEventListener('change', () => { ajouter([...inp.files]); inp.value = ''; });
     const depot = h.querySelector('.tconv-depot');
@@ -437,10 +456,27 @@
         + '<button type="button" class="tconv-btn" data-dl="' + i + '" data-bulle="Télécharger">Télécharger</button></div>').join('')
         + (C.resultats.length > 1 ? '<button type="button" class="tconv-btn" data-a="zip" data-bulle="Un seul fichier ZIP">Tout télécharger (ZIP)</button>' : '');
     }
-    const f = h.querySelector('[data-zone="formats"]');
-    if (f && !f.innerHTML) f.innerHTML = Object.entries(FAMILLES).map(([k, fa]) => '<p><b>' + esc(fa.lib) + '</b> <span class="tconv-muted">' + fa.ext.join(', ') + '</span><br>→ '
-      + CIBLES[k].map(c => esc(c.lib) + (c.ou === 'serveur' ? ' <span class="tconv-srv">serveur</span>' : '')).join(', ') + '</p>').join('')
-      + '<p class="tconv-muted">« serveur » : traité sur le serveur MySifa, effacé dès la fin. Le reste se fait sur ce poste.</p>';
+    // Étapes : où en est-on ?
+    const etape = vide ? 1 : (!C.cible ? 2 : 3);
+    h.querySelectorAll('[data-etapes] li').forEach(li => {
+      const n = Number(li.getAttribute('data-n'));
+      li.classList.toggle('fait', n < etape); li.classList.toggle('actif', n === etape);
+    });
+    // Familles de formats, en tuiles, tant qu'aucun fichier n'est déposé ;
+    // une fois déposé, seule la famille du fichier reste, en rappel.
+    const fam = h.querySelector('[data-zone="familles"]');
+    const tuile = (k, fa) => {
+      const cibles = CIBLES[k], local = cibles.filter(c => c.ou !== 'serveur').length;
+      const lieu = local === cibles.length ? 'Sur ce poste' : local ? 'Poste et serveur' : 'Sur le serveur';
+      return '<div class="tconv-famille' + (C.fam === k ? ' actif' : '') + '"><span class="tconv-famille-ic">' + svg(k) + '</span>'
+        + '<div class="tconv-famille-txt"><b>' + esc(fa.lib) + '</b>'
+        + '<small>' + esc(fa.ext.slice(0, 6).join(', ').toUpperCase()) + (fa.ext.length > 6 ? '…' : '') + '</small>'
+        + '<span class="tconv-famille-vers">→ ' + esc(cibles.slice(0, 4).map(c => c.lib.replace(/ \(.*\)$/, '').replace(/^Images? /, '')).join(', ')) + (cibles.length > 4 ? '…' : '') + '</span></div>'
+        + '<span class="tconv-lieu' + (local === cibles.length ? ' local' : '') + '">' + lieu + '</span></div>';
+    };
+    if (vide) fam.innerHTML = '<div class="tconv-titre">Ce que l\'outil sait convertir</div><div class="tconv-grille">'
+      + Object.entries(FAMILLES).map(([k, fa]) => tuile(k, fa)).join('') + '</div>';
+    else fam.innerHTML = '';
   }
 
   function etape(texte, p) {

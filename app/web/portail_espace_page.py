@@ -8,6 +8,9 @@ transporteur », .claude/rules/expe-notes-transporteurs.md).
 
 Adresse : `?formulaire=<id>` ouvre un formulaire (lien des emails) ; Retour
 ramène à la liste.
+Documents à signer (MyTools › Parapheur) : `?signature=<id>`, et `#signer=<jeton>`
+dans le lien de l'email — rendus par static/mysifa_parapheur_signer.js
+(`ParapheurEspace`), branché ici en trois points : carte, adresse, retour.
 
 API : app/routers/portail_espace.py.
 """
@@ -86,6 +89,7 @@ _PAGE = """<!DOCTYPE html>
 <meta name="robots" content="noindex, nofollow">
 <title>Votre espace __ORG__</title>
 <link rel="icon" href="/static/expe_portail_favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/mysifa_tools_parapheur.css?v=1">
 <style>__TOKENS__
 """ + _CSS + """</style>
 </head>
@@ -99,6 +103,8 @@ _PAGE = """<!DOCTYPE html>
 <footer>Ce lien est personnel : il donne accès aux demandes que __ORG__ vous a adressées. Merci de ne pas le transférer.</footer>
 <div class="es-toast" id="es-toast" role="alert"></div>
 <script src="/static/mysifa_formulaire.js?v=3"></script>
+<script src="/static/mysifa_bulles.js"></script>
+<script src="/static/mysifa_parapheur_signer.js?v=1"></script>
 <script>
 'use strict';
 const TOKEN = "__TOKEN_JS__";
@@ -134,6 +140,7 @@ function badge(e){
   return e.a_traiter ? '<span class="es-badge attente">À traiter</span>' : '<span class="es-badge ok">À jour</span>';
 }
 function carte(e){
+  if(e.module === 'signature' && window.ParapheurEspace) return ParapheurEspace.carte(e);
   const detail = [e.detail, e.de ? 'de ' + e.de : '', e.envoye_le ? 'envoyé le ' + dateFr(e.envoye_le) : ''].filter(Boolean).join(' · ');
   const corps = '<span class="es-ico">' + (ICO[e.module] || ICO.formulaire) + '</span>'
     + '<span class="es-carte-main"><span class="es-carte-titre">' + esc(e.titre) + '</span>'
@@ -162,6 +169,8 @@ async function charger(){
 }
 
 async function suivreAdresse(){
+  if(window.ParapheurEspace && await ParapheurEspace.suivre({api: API, main: document.getElementById('es-main'), retour: retour,
+      recharger: async () => { E.data = await appel(''); }})) return;
   const id = new URLSearchParams(location.search).get('formulaire');
   if(id && /^\\d+$/.test(id)) await afficherFormulaire(Number(id));
   else { E.form = null; rendreListe(); }
@@ -173,7 +182,7 @@ async function ouvrir(id){
   window.scrollTo(0, 0);
 }
 function retour(){
-  if(history.state && history.state.formulaire) history.back();
+  if(history.state && (history.state.formulaire || history.state.signature)) history.back();
   else { history.replaceState(null, '', location.pathname); E.form = null; rendreListe(); }
 }
 window.addEventListener('popstate', () => { suivreAdresse(); });

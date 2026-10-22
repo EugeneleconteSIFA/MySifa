@@ -228,6 +228,8 @@ VOLETS_TUILES = {
                 _entree("tools_convertir", "Convertir un fichier", "/tools?outil=convertir", "file-text"),
                 _entree("tools_calculs", "Calculs bobine", "/tools?outil=calculs", "layers"),
                 _entree("tools_traduction", "Traducteur", "/tools?outil=traduction", "globe"),
+                _entree("tools_parapheur", "Parapheur — envoyer à signer", "/tools?outil=parapheur", "edit"),
+                _entree("tools_utilitaires", "Utilitaires — QR, scanner, comparer, zip", "/tools?outil=utilitaires", "toolbox"),
             ]),
             _groupe("Configuration", [
                 _entree("print_imprimantes", "Imprimantes", "/settings#printers", "sliders",

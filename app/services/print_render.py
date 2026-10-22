@@ -31,7 +31,7 @@ from typing import Any
 # passthrough : les bytes du PDF sont stockes tels quels dans print_jobs.payload
 # et transmis a l'agent, qui les envoie a SumatraPDF pour impression sur la
 # queue Windows cible (avec params copies/duplex/format/bac/N&B via data_json).
-LANGAGES = ("zpl", "epl", "escpos", "pdf")
+LANGAGES = ("zpl", "epl", "tspl", "escpos", "pdf")
 
 # Placeholder simple : {{ clef }} ou {{ clef.sous_clef }} (support dot notation)
 _PLACEHOLDER_RE = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_.]*)\s*\}\}")
