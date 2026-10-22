@@ -67,7 +67,14 @@ check('logistique : SSCC le plus bas', codes[codes.length - 1].valeur, '(00){{ss
 check('logistique : AI variable (10) en dernier', /\(10\)\{\{lot\}\}$/.test(codes[0].valeur), true);
 const vl = M.valeurs(log.layout, { saisies: { gtin: '03012345000017', quantite: '24', lot: 'L1', poids_kg: '12,5' }, maintenant: new Date(2026, 9, 22) });
 check('logistique : données GS1 conformes', M.controlerGs1(M.substituer(codes[0].valeur, vl)), []);
-check('logistique : SSCC conforme', M.controlerGs1(M.substituer(codes[1].valeur, vl)), []);
+check('logistique : SSCC conforme', M.controlerGs1(M.substituer(codes[1].valeur, Object.assign({}, vl, { sscc: '030123450000000017' }))), []);
+check('logistique : SSCC fourni par le client (saisie contrôlée)', log.layout.variables.find(v => v.nom === 'sscc').type, 'saisie');
+// Plage confiée par le client : SSCC calculé sur son préfixe.
+const logP = M.etiquetteLogistique({ fourni: false, prefixe: '3012345', serie_debut: 500, serie_fin: 900, ai: ['02'] });
+const vs = logP.layout.variables.find(v => v.nom === 'sscc');
+check('logistique : plage du client', [vs.type, vs.serie_debut, vs.serie_fin], ['sscc', 500, 900]);
+const vlP = M.valeurs(logP.layout, { plan: { sscc: { premier: 500 } }, maintenant: new Date(2026, 9, 22) });
+check('logistique : SSCC calculé conforme', M.controlerGs1('(00)' + vlP.sscc), []);
 check('logistique : intitulés figés', log.layout.elements.filter(e => e.calque === 'fond').every(e => e.verrou), true);
 
 console.log(ko ? '\n' + ko + ' échec(s)' : '\nTout est bon.');

@@ -2,7 +2,7 @@
  *
  * - Étiquette logistique palette conforme GS1 (SSCC en bas, données en clair
  *   au milieu, AI 00, 02, 37, 10, 11, 15, 310x) : EtiqMoteur.etiquetteLogistique,
- *   préfixe entreprise lu dans la configuration (ETIQ_GS1_PREFIXE).
+ *   SSCC fourni par le client (saisie contrôlée) ou calculé sur la plage qu'il a confiée.
  * - Aide à la saisie des AI d'un code GS1-128 / GS1 DataMatrix, contrôle des
  *   longueurs, dates et clés en direct.
  * - Bibliothèque de pictogrammes réglementaires (SVG inline, primitives
@@ -70,16 +70,30 @@
       ['15', 'Date de durabilité minimale (15)'], ['3102', 'Poids net en kg (3102)']];
     const coches = {};
     const cases = AIS.map(([k, l]) => { const c = h('input', { type: 'checkbox', checked: ['02', '37', '10', '15'].includes(k) }); coches[k] = c; return h('label', { cls: 'es-case' }, c, h('span', { text: l })); });
-    const prefixe = h('input', { cls: 'es-input es-mono', maxlength: 10, value: (ref.gs1 || {}).prefixe || '' });
+    // D'où viennent les SSCC : le client les fournit (cas courant), ou il a
+    // confié son préfixe GS1 et une plage de numéros.
+    const origine = h('select', { cls: 'es-input' },
+      h('option', { value: 'fourni', text: 'Le client fournit les numéros SSCC' }),
+      h('option', { value: 'plage', text: 'Le client a confié son préfixe et une plage' }));
+    const prefixe = h('input', { cls: 'es-input es-mono', maxlength: 10, value: '' });
     const ext = h('input', { cls: 'es-input', maxlength: 1, value: '0' });
+    const debut = h('input', { cls: 'es-input', type: 'number', min: 0, value: '' });
+    const fin = h('input', { cls: 'es-input', type: 'number', min: 0, value: '' });
+    const zonePlage = h('div', { cls: 'es-form', hidden: true },
+      h('div', { cls: 'es-ligne2' }, champ('Préfixe GS1 du client', prefixe, '7 à 10 chiffres'), champ('Extension SSCC', ext, '1 chiffre')),
+      h('div', { cls: 'es-ligne2' }, champ('Première série', debut, 'Plage attribuée par le client'), champ('Dernière série', fin, 'Vide = sans borne')));
+    const aideFourni = h('div', { cls: 'es-aide', text: 'Le SSCC est demandé à chaque impression : saisi, scanné ou repris d\'une série importée (liste du client). Il est contrôlé : 18 chiffres et clé de contrôle exacte.' });
+    origine.addEventListener('change', () => { const pl = origine.value === 'plage'; zonePlage.hidden = !pl; aideFourni.hidden = pl; });
     const format = h('select', { cls: 'es-input' }, h('option', { value: '105x148', text: 'A6 · 105 × 148 mm' }), h('option', { value: '148x210', text: 'A5 · 148 × 210 mm' }), h('option', { value: '100x150', text: '100 × 150 mm' }));
     const nom = h('input', { cls: 'es-input', maxlength: 120, value: 'Palette SSCC' + (mActuel && mActuel.client ? ' ' + mActuel.client : '') });
     const dossier = selectDossiers((mActuel && mActuel.dossier_id) || (ES.boot.dossiers[0] || {}).id);
     const ok = bouton('Créer l\'étiquette', async () => {
+      const fourni = origine.value === 'fourni';
       const pre = prefixe.value.replace(/\D/g, '');
-      if (pre.length < 7 || pre.length > 10) { toast('Préfixe entreprise GS1 : 7 à 10 chiffres (ETIQ_GS1_PREFIXE).', 'danger'); return; }
+      if (!fourni && (pre.length < 7 || pre.length > 10)) { toast('Préfixe GS1 du client : 7 à 10 chiffres.', 'danger'); return; }
       const [L, H] = format.value.split('x').map(Number);
-      const g = MO().etiquetteLogistique({ largeur: L, hauteur: H, prefixe: pre, extension: ext.value.replace(/\D/g, '') || '0',
+      const g = MO().etiquetteLogistique({ largeur: L, hauteur: H, fourni, prefixe: pre, extension: ext.value.replace(/\D/g, '') || '0',
+        serie_debut: parseInt(debut.value, 10) || 0, serie_fin: parseInt(fin.value, 10) || 0,
         ai: AIS.map(a => a[0]).filter(k => coches[k].checked) });
       ok.disabled = true;
       try {
@@ -96,7 +110,8 @@
     modale('Étiquette logistique palette (GS1)', h('div', { cls: 'es-form' },
       h('p', { cls: 'es-aide', text: 'Disposition des spécifications GS1 : expéditeur et destinataire en haut, données en clair au milieu, codes GS1-128 en bas, le SSCC toujours le plus bas (dimension X 0,5 mm, barres de 32 mm).' }),
       h('div', { cls: 'es-ligne2' }, champ('Nom', nom), champ('Dossier', dossier)),
-      h('div', { cls: 'es-ligne3' }, champ('Format', format), champ('Préfixe GS1', prefixe, '7 à 10 chiffres'), champ('Extension SSCC', ext, '1 chiffre')),
+      h('div', { cls: 'es-ligne2' }, champ('Format', format), champ('Numéros SSCC', origine)),
+      aideFourni, zonePlage,
       h('div', { cls: 'es-champ' }, h('span', { cls: 'es-champ-label', text: 'Identifiants (AI)' }), ...cases)),
     [bouton('Annuler', fermerModale), ok]);
   }

@@ -156,7 +156,15 @@ const jamaisMoins = TX.mesurerEncre(matrice(60, 20, cyan, []), 60, 20, declaree,
 const deuxLignes = matrice(60, 40, cyan, [[5, 30, 8, 15], [5, 30, 18, 20], [5, 30, 21, 28]]);
 const l1 = TX.mesurerEncre(deuxLignes, 60, 40, { x: 5, y: 6, w: 25, h: 11, base: 15, taille: 10 }, {});
 verifier("encre : l'accent de la ligne du dessous n'agrandit pas la boîte", l1.y + l1.h <= 18);
-verifier("encre : jamais plus petite que la boîte déclarée", jamaisMoins.x === 5 && jamaisMoins.w === 10 && jamaisMoins.h >= 11);
+verifier("encre : jamais plus étroite que la boîte déclarée", jamaisMoins.x === 5 && jamaisMoins.w === 10 && jamaisMoins.h > 0);
+// Logo collé sous la ligne (1 px de fond entre les deux) : la boîte s'arrête à la ligne.
+const logo = matrice(60, 40, cyan, [[5, 30, 8, 15], [3, 35, 16, 30]].map(([a, b, c, d], i) => i ? [a, b, c + 1, d] : [a, b, c, d]));
+const sansLogo = TX.mesurerEncre(logo, 60, 40, { x: 5, y: 6, w: 25, h: 11, base: 15, taille: 10 }, {});
+verifier("encre : un logo sous la ligne, séparé par un liseré, n'est pas recouvert", sansLogo.y + sansLogo.h <= 17);
+// Jambage : encre continue sous la ligne de base, prise en entier.
+const jamb = matrice(60, 40, cyan, [[5, 30, 8, 15], [10, 12, 15, 18]]);
+const avecJ = TX.mesurerEncre(jamb, 60, 40, { x: 5, y: 6, w: 25, h: 11, base: 15, taille: 10 }, {});
+verifier("encre : le jambage collé à la lettre est couvert", avecJ.y + avecJ.h >= 18);
 const gauche = TX.mesurerEncre(mx, 60, 20, { x: 18, y: 6, w: 9, h: 11, base: 15, taille: 10 }, {});
 verifier("encre : extension vers la gauche aussi", gauche.x === 5);
 const traits = matrice(40, 20, [255, 255, 255], []);

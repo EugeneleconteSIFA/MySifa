@@ -778,7 +778,9 @@
         if (ED.m.id) corps.push(h('div', { cls: 'es-ligne-actions' }, bouton('Numéros', () => ext('biblio') && ext('biblio').modaleCompteurs(ED.m), '', 'hash')));
       }
       if (v.type === 'sscc') corps.push(
-        h('div', { cls: 'es-ligne2' }, ch('Extension', 'extension', { maxlength: 1 }, '1 chiffre'), ch('Préfixe GS1', 'prefixe_gs1', { maxlength: 10 }, '7 à 10 chiffres')),
+        h('div', { cls: 'es-aide', text: 'À utiliser seulement si le client vous a confié son préfixe GS1 et une plage de numéros. S\'il fournit lui-même ses SSCC, prendre une variable « Saisie » avec le contrôle « SSCC fourni par le client ».' }),
+        h('div', { cls: 'es-ligne2' }, ch('Extension', 'extension', { maxlength: 1 }, '1 chiffre'), ch('Préfixe GS1 du client', 'prefixe_gs1', { maxlength: 10 }, '7 à 10 chiffres')),
+        h('div', { cls: 'es-ligne2' }, ch('Première série', 'serie_debut', { type: 'number', min: 0 }, 'Plage attribuée par le client'), ch('Dernière série', 'serie_fin', { type: 'number', min: 0 }, '0 = sans borne')),
         h('div', { cls: 'es-aide', text: 'Série et clé calculées. Le compteur est commun à toutes les étiquettes de ce préfixe : un SSCC ne sort jamais deux fois.' }));
       if (v.type === 'date') {
         const fmt = h('select', { cls: 'es-input' }, ...(ref.formats_date || []).map(f => h('option', { value: f.format, text: f.libelle })), h('option', { value: '__libre', text: 'Autre format…' }));
@@ -813,7 +815,7 @@
   function defautsVar(type) {
     return { fixe: { valeur: '' }, saisie: { valeur: '', obligatoire: true }, source: { champ: '', valeur: '', obligatoire: false },
       compteur: { debut: 1, pas: 1, longueur: 6, prefixe: '', suffixe: '', reprise: true },
-      sscc: { extension: '0', prefixe_gs1: (X().ES.boot.referentiel.gs1 || {}).prefixe || '' },
+      sscc: { extension: '0', prefixe_gs1: '', serie_debut: 0, serie_fin: 0 },
       date: { base: 'impression', format: '%d/%m/%Y', decalage_jours: 0, decalage_mois: 0 }, formule: { expression: '' } }[type] || {};
   }
 

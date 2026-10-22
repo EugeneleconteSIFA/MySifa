@@ -50,7 +50,7 @@ Variables (`variables`) — `nom` en minuscules (a-z, 0-9, _), `libelle` lisible
 - fixe : `valeur`
 - saisie : demandée à l'opérateur à chaque impression, `valeur` = valeur par défaut, `obligatoire`
 - compteur : numéro qui avance à chaque étiquette — `debut`, `pas`, `longueur` (zéros de tête), `prefixe`, `suffixe`
-- sscc : SSCC GS1 de 18 chiffres calculé (extension + préfixe GS1 + série + clé) — `extension` (1 chiffre), `prefixe_gs1` (7 à 10 chiffres). Si le préfixe n'est pas connu, laisse-le vide et signale-le dans `remarques`.
+- sscc : SSCC GS1 de 18 chiffres calculé (extension + préfixe GS1 + série + clé) — `extension` (1 chiffre), `prefixe_gs1` (7 à 10 chiffres). À n'utiliser que si la consigne donne le préfixe GS1 du client. Par défaut, les SSCC sont fournis par le client : variable `saisie` nommée sscc, avec `controle: {"type": "sscc"}`.
 - date : date calculée — `base` (« impression » ou le nom d'une autre variable, ex. date de fabrication saisie), `decalage_jours`, `decalage_mois` (DLUO, DDM), `format` (%d/%m/%Y, %y%m%d pour GS1, S%V-%G semaine ISO, %y%j lot daté AAJJJ)
 - source : donnée lue dans MySifa à l'impression — `champ` parmi la liste fournie (ex. dossier.reference, produit.designation, client.raison_sociale, lot.lot_fournisseur), `valeur` = valeur lue sur la photo (aperçu). Préfère une source à une saisie quand la donnée existe dans MySifa : référence dossier, OF, désignation produit, client, lot matière.
 - formule : `expression` sur les autres variables, sans {{}} : concaténation avec &, MAJUSCULE(t), GAUCHE(t;n), SI(cond;a;b), ARRONDI(x;n), TEXTE(x;n), ZEROS(x;n), NUM(t), VIDE(t), CLE_GS1(t)… Ex. MAJUSCULE(client) & " - " & lot.
@@ -131,6 +131,7 @@ _VARIABLE = {
         "champ": {"type": "string"},
         "expression": {"type": "string"},
         "reprise": {"type": "boolean"},
+        "controle": {"type": "object", "properties": {"type": {"type": "string", "enum": ["texte", "entier", "nombre", "date", "motif", "sscc"]}}},
     },
     "required": ["nom", "libelle", "type"],
 }

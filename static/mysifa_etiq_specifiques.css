@@ -295,3 +295,4 @@ textarea.es-input { resize: vertical; min-height: 38px; }
   .es-serie, .es-versions, .es-ed-corps-op { grid-template-columns: 1fr; }
   .es-ligne4 { grid-template-columns: 1fr 1fr; }
 }
+.es-form[hidden], .es-aide[hidden] { display: none; }
