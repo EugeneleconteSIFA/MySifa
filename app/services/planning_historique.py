@@ -329,6 +329,8 @@ def mettre_en_forme(row: dict, machines: Dict[int, str]) -> dict:
         titre = titre[len(nom_m) + 3:]
     elif nom_m and titre.endswith(" · " + nom_m):
         titre = titre[: -(len(nom_m) + 3)]
+    elif nom_m and titre.endswith(" " + nom_m):           # « Réorganisation planning Cohésio 1 »
+        titre = titre[: -(len(nom_m) + 1)]
     jour, quand = _quand(row.get("created_at"))
     action = str(row.get("action") or "")
     return {

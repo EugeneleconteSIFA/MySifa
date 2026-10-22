@@ -146,6 +146,24 @@ function _histJour(iso){
   return (ecart===0?"Aujourd'hui · ":ecart===1?"Hier · ":"")+lib.charAt(0).toUpperCase()+lib.slice(1);
 }
 
+// Une couleur par personne, stable d'une ouverture à l'autre (tirée du nom).
+const _HIST_TEINTES=["var(--c1)","var(--c2)","var(--c3)","var(--c4)","var(--blue)","var(--purple)"];
+function _histCouleur(nom){
+  let h=0; for(const ch of String(nom||"")) h=(h*31+ch.charCodeAt(0))>>>0;
+  return _HIST_TEINTES[h%_HIST_TEINTES.length];
+}
+// Couleur du type d'action : celle de la taxonomie du journal, sauf que la page
+// Planning ne définit pas --ok, et que les réorganisations (le geste le plus
+// fréquent ici) y sont grises — on leur donne une teinte à elles.
+function _histTeinteAction(l){
+  if(l.action==="REORDER"||l.action==="MOVE") return "var(--purple)";
+  return String(l.action_couleur||"var(--muted)").replace("var(--ok)","var(--success)");
+}
+function _histInitiales(nom){
+  const m=String(nom||"?").trim().split(/\s+/).filter(Boolean);
+  return ((m[0]||"?")[0]+(m.length>1?m[m.length-1][0]:"")).toUpperCase();
+}
+
 function _histLigneDetail(l){
   const champ=l.champ?`<span class="hist-champ">${escHtml(l.champ)}</span>`:"";
   if(l.valeur!=null) return `<div class="hist-det">${champ}<span>${escHtml(l.valeur)}</span></div>`;
@@ -166,15 +184,17 @@ function _histRendreListe(){
   for(const l of h.lignes){
     if(l.jour!==jour){ jour=l.jour; html+=`<div class="hist-jour">${escHtml(_histJour(jour))}</div>`; }
     const heure=(l.quand||"").slice(-5);
-    html+=`<div class="hist-item${l.inchange?" hist-item--inchange":""}">
-      <div class="hist-heure">${escHtml(heure)}</div>
+    html+=`<div class="hist-item${l.inchange?" hist-item--inchange":""}" style="--hist-u:${_histCouleur(l.utilisateur)};--hist-c:${escAttr(_histTeinteAction(l))}">
+      <div class="hist-av" aria-hidden="true">${escHtml(_histInitiales(l.utilisateur))}</div>
       <div class="hist-corps">
         <div class="hist-tete">
-          <span class="hist-badge" style="--hist-c:${escAttr(l.action_couleur||"var(--muted)")}">${escHtml(l.action_label||l.action)}</span>
+          <span class="hist-qui">${escHtml(l.utilisateur)}</span>
+          <span class="hist-heure">${escHtml(heure)}</span>
+          <span class="hist-type">${escHtml(l.action_label||l.action)}</span>
           ${toutes&&l.machine?`<span class="hist-machine">${escHtml(l.machine)}</span>`:""}
-          <span class="hist-titre">${escHtml(l.titre)}</span>
+          ${l.inchange?`<span class="hist-inch">aucun changement</span>`:""}
         </div>
-        <div class="hist-qui">${escHtml(l.utilisateur)}${l.inchange?" · aucun changement":""}</div>
+        <div class="hist-titre">${escHtml(l.titre)}</div>
         ${(l.lignes||[]).map(_histLigneDetail).join("")}
       </div>
     </div>`;

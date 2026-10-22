@@ -606,18 +606,22 @@ body.light .btn-p{color:#fff}
 .hist-compte{font-size:11px;color:var(--muted);margin-bottom:6px;min-height:14px}
 .hist-liste{overflow-y:auto;flex:1;min-height:200px;padding-right:4px}
 .hist-vide{padding:40px 0;text-align:center;color:var(--muted);font-size:13px}
-.hist-jour{position:sticky;top:0;background:var(--card);z-index:1;padding:10px 0 6px;font-size:11px;font-weight:700;
-  text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border2)}
-.hist-item{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border2)}
+.hist-jour{position:sticky;top:0;background:var(--card);z-index:1;padding:12px 0 6px;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.5px;color:var(--accent);border-bottom:1px solid var(--border2)}
+.hist-item{display:flex;gap:12px;padding:12px 10px 12px 12px;margin:6px 0;border-radius:10px;
+  background:var(--bg);border:1px solid var(--border2);border-left:3px solid var(--hist-c)}
 .hist-item--inchange{opacity:.55}
-.hist-heure{font-family:var(--mono);font-size:12px;color:var(--muted);width:44px;flex-shrink:0;padding-top:2px}
+.hist-av{width:34px;height:34px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  background:var(--hist-u);color:white;font-size:12px;font-weight:700;letter-spacing:.3px}
 .hist-corps{flex:1;min-width:0}
-.hist-tete{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.hist-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 7px;border-radius:999px;
-  color:var(--hist-c);border:1px solid var(--hist-c);background:var(--bg)}
-.hist-machine{font-size:11px;font-weight:600;padding:2px 7px;border-radius:6px;background:var(--accent-bg);color:var(--accent)}
-.hist-titre{font-size:13px;font-weight:600;color:var(--text);overflow-wrap:anywhere}
-.hist-qui{font-size:11px;color:var(--muted);margin:2px 0 4px}
+.hist-tete{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.hist-qui{font-size:14px;font-weight:700;color:var(--text)}
+.hist-heure{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--hist-u)}
+.hist-type{font-size:11px;font-weight:600;color:var(--hist-c);display:inline-flex;align-items:center;gap:5px}
+.hist-type::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--hist-c)}
+.hist-machine{font-size:11px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--accent-bg);color:var(--accent)}
+.hist-inch{font-size:11px;color:var(--muted)}
+.hist-titre{font-size:13px;color:var(--text2);margin:3px 0 4px;overflow-wrap:anywhere}
 .hist-det{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;font-size:12px;color:var(--text2);padding-left:2px}
 .hist-champ{color:var(--muted);min-width:110px}
 .hist-avant{color:var(--muted);text-decoration:line-through}
@@ -1038,7 +1042,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <!-- Adresse de la page : machine, vue, horizon, semaine, fenêtre ouverte (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
 <script src="/static/planning_url.js?v=3"></script>
-<script src="/static/planning_historique.js?v=1"></script>
+<script src="/static/planning_historique.js?v=3"></script>
 <script>
 // Handler d'erreurs installé *avant* le script principal (capte aussi les erreurs de parsing).
 function showFatal(message, lineno, colno, extra){
