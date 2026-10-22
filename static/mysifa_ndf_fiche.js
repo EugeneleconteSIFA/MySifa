@@ -58,12 +58,36 @@
       '.nf-dl dd{margin:0;white-space:pre-wrap;word-break:break-word}',
       '.nf-total{font-weight:700;font-variant-numeric:tabular-nums}',
       '.nf-vide{font-size:12px;color:var(--muted);margin:0 0 16px}',
-      '.nf-suivi{list-style:none;margin:0 0 12px;padding:0;font-size:13px}',
-      '.nf-suivi li{display:flex;gap:10px;padding:6px 0;color:var(--text2)}',
-      '.nf-suivi li::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--border);margin-top:6px;flex-shrink:0}',
-      '.nf-suivi li.fait::before{background:var(--accent)}',
-      '.nf-suivi li.refus{color:var(--danger)}',
-      '.nf-suivi li.refus::before{background:var(--danger)}',
+      '.nf-resume{padding:4px 0 18px;margin-bottom:16px;border-bottom:1px solid var(--border)}',
+      '.nf-montant{font-size:28px;font-weight:800;letter-spacing:-.5px;font-variant-numeric:tabular-nums;line-height:1.1}',
+      '.nf-montant span{font-size:12px;font-weight:600;color:var(--muted);margin-left:6px;letter-spacing:0}',
+      '.nf-puces{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}',
+      '.nf-puce{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;border:1px solid var(--border);background:var(--bg);font-size:12px;font-weight:600;color:var(--text2);font-variant-numeric:tabular-nums}',
+      '.nf-puce:first-child{color:var(--text)}',
+      '.nf-frise{list-style:none;margin:0 0 14px;padding:0;display:grid;grid-template-columns:repeat(4,1fr);position:relative}',
+      '.nf-frise li{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;position:relative;font-size:12px}',
+      '.nf-frise li::before{content:"";position:absolute;top:6px;left:-50%;width:100%;height:2px;background:var(--border);z-index:0}',
+      '.nf-frise li:first-child::before{display:none}',
+      '.nf-frise li.fait::before,.nf-frise li.refus::before{background:var(--accent)}',
+      '.nf-point{width:14px;height:14px;border-radius:50%;border:2px solid var(--border);background:var(--card);position:relative;z-index:1}',
+      '.nf-frise li.fait .nf-point{background:var(--accent);border-color:var(--accent)}',
+      '.nf-frise li.courante .nf-point{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}',
+      '.nf-frise li.refus .nf-point{background:var(--danger);border-color:var(--danger)}',
+      '.nf-etape{font-weight:600;color:var(--muted)}',
+      '.nf-frise li.fait .nf-etape,.nf-frise li.courante .nf-etape{color:var(--text)}',
+      '.nf-frise li.refus .nf-etape{color:var(--danger)}',
+      '.nf-date{font-size:11px;color:var(--muted);min-height:14px}',
+      '.nf-refus{margin:0 0 14px;padding:10px 12px;border-radius:8px;border:1px solid color-mix(in srgb,var(--danger) 35%,var(--border));font-size:13px;color:var(--text)}',
+      '.nf-refus strong{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--danger);margin-bottom:2px}',
+      '.nf-par{font-size:12px;color:var(--muted);margin:-6px 0 14px;text-align:center}',
+      '.nf-justif{display:flex;align-items:center;gap:12px;padding:8px;margin-bottom:16px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);text-decoration:none}',
+      '.nf-justif:hover{border-color:var(--accent)}',
+      '.nf-justif img,.nf-justif-doc{width:56px;height:56px;flex-shrink:0;border-radius:6px;border:1px solid var(--border);object-fit:cover;background:var(--card)}',
+      '.nf-justif-doc{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted)}',
+      '.nf-justif-nom{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}',
+      '.nf-justif-nom strong{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.nf-justif-nom span{font-size:11px;color:var(--muted)}',
+      '.nf-justif-voir{font-size:12px;font-weight:700;color:var(--accent);padding:0 6px}',
       '.nf-foot{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:14px 22px;border-top:1px solid var(--border);position:sticky;bottom:0;background:var(--card)}',
       '.nf-foot .nf-sep{flex:1}',
       '.nf-btn{padding:9px 16px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s,background .15s}',
@@ -74,8 +98,6 @@
       '.nf-btn.danger{border:1px solid var(--border);background:var(--bg);color:var(--danger)}',
       '.nf-btn.danger:hover{border-color:var(--danger);background:var(--card)}',
       '.nf-btn:disabled{opacity:.5;cursor:default}',
-      '.nf-lien{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-size:12px;font-weight:600;text-decoration:none}',
-      '.nf-lien:hover{border-color:var(--accent);color:var(--accent)}',
       '.nf-modal{overflow-x:hidden;overscroll-behavior:contain}.nf-modal *{box-sizing:border-box}',
       'html:has(.nf-back),html:has(.nf-back) body{overflow:hidden}',
       '@media(max-width:640px){.nf-back{padding:10px}.nf-head,.nf-body,.nf-foot{padding-left:16px;padding-right:16px}' +
@@ -86,39 +108,62 @@
     document.head.appendChild(st);
   }
 
+  // Frise de suivi : Créée → Soumise → Validée (ou Refusée) → Payée.
+  function frise(n) {
+    var refusee = n.statut === 'refusee';
+    // Le statut fait foi : une note payée a forcément été soumise et validée.
+    var rang = { brouillon: 0, soumise: 1, refusee: 1, validee: 2, payee: 3 }[n.statut] || 0;
+    var etapes = [
+      { lib: 'Créée', date: n.created_at, fait: true },
+      { lib: 'Soumise', date: n.soumise_at, fait: rang >= 1 },
+      refusee
+        ? { lib: 'Refusée', date: null, fait: true, refus: true }
+        : { lib: 'Validée', date: n.validee_at, fait: rang >= 2 },
+      { lib: 'Payée', date: n.payee_at, fait: rang >= 3 }
+    ];
+    var courante = refusee ? -1 : etapes.findIndex(function (x) { return !x.fait; });
+    return '<ol class="nf-frise">' + etapes.map(function (x, i) {
+      var cls = x.refus ? 'refus' : (x.fait ? 'fait' : (i === courante ? 'courante' : ''));
+      return '<li class="' + cls + '"><span class="nf-point"></span><span class="nf-etape">' + esc(x.lib) + '</span>' +
+        '<span class="nf-date">' + (x.date ? esc(date(x.date)) : (i === courante ? 'en attente' : '')) + '</span></li>';
+    }).join('') + '</ol>' +
+      (refusee && n.motif_refus ? '<div class="nf-refus"><strong>Motif du refus</strong>' + esc(n.motif_refus) + '</div>' : '') +
+      (n.validee_by_nom && n.validee_at ? '<div class="nf-par">Validée par ' + esc(n.validee_by_nom) + '</div>' : '');
+  }
+
   function corps(n, opts) {
     var km = n.distance_km != null;
-    var lignesMontant = km
-      ? '<dt>Distance</dt><dd>' + esc(nombre(n.distance_km)) + ' km × ' + esc(nombre(n.taux_km)) + ' €</dd>' +
-        '<dt>Montant</dt><dd class="nf-total">' + montant(n.montant_ttc) + '</dd>'
-      : '<dt>Montant TTC</dt><dd class="nf-total">' + montant(n.montant_ttc) + '</dd>' +
-        '<dt>TVA</dt><dd>' + (n.taux_tva != null ? esc(taux(n.taux_tva)) + ' · ' : '') + montant(n.montant_tva) + '</dd>' +
-        (n.montant_ht != null ? '<dt>Montant HT</dt><dd>' + montant(n.montant_ht) + '</dd>' : '');
+    var puces = [esc(n.categorie || 'Note de frais')];
+    if (km) {
+      puces.push(esc(nombre(n.distance_km)) + ' km × ' + esc(nombre(n.taux_km)) + ' €');
+      puces.push('Sans TVA');
+    } else {
+      puces.push(n.taux_tva ? 'TVA ' + esc(taux(n.taux_tva)) + ' · ' + montant(n.montant_tva) : 'Sans TVA');
+      if (n.montant_ht != null) puces.push('HT ' + montant(n.montant_ht));
+    }
     var just = '/api/coffre/notes-frais/' + encodeURIComponent(n.id) + '/justificatif';
-    var suivi = [
-      '<li class="fait">Créée le ' + esc(date(n.created_at)) + '</li>',
-      n.soumise_at ? '<li class="fait">Soumise à la comptabilité le ' + esc(date(n.soumise_at)) + '</li>'
-        : (n.statut === 'brouillon' ? '<li>Pas encore soumise</li>' : ''),
-      n.statut === 'refusee' ? '<li class="refus">Refusée' + (n.motif_refus ? ' : ' + esc(n.motif_refus) : '') + '</li>' : '',
-      n.validee_at ? '<li class="fait">Validée le ' + esc(date(n.validee_at)) + (n.validee_by_nom ? ' par ' + esc(n.validee_by_nom) : '') + '</li>' : '',
-      n.payee_at ? '<li class="fait">Payée le ' + esc(date(n.payee_at)) + (n.payee_by_nom && opts.salarie ? ' par ' + esc(n.payee_by_nom) : '') + '</li>' : ''
-    ].join('');
+    var image = /\.(png|jpe?g|gif|webp|heic)$/i.test(n.justificatif_nom || '');
+    var details =
+      (opts.salarie ? '<dt>Salarié</dt><dd>' + esc(n.employe_nom || '—') + (n.matricule ? ' · ' + esc(n.matricule) : '') + '</dd>' : '') +
+      '<dt>Date du frais</dt><dd>' + esc(date(n.date_frais)) + '</dd>' +
+      (n.ville ? '<dt>Ville</dt><dd>' + esc(n.ville) + '</dd>' : '') +
+      (n.description ? '<dt>Description</dt><dd>' + esc(n.description) + '</dd>' : '');
     return '' +
-      '<div class="nf-section"><div class="nf-titre">Le frais</div><dl class="nf-dl">' +
-        (opts.salarie ? '<dt>Salarié</dt><dd>' + esc(n.employe_nom || '—') + (n.matricule ? ' · ' + esc(n.matricule) : '') + '</dd>' : '') +
-        '<dt>Catégorie</dt><dd>' + esc(n.categorie || '—') + '</dd>' +
-        '<dt>Date</dt><dd>' + esc(date(n.date_frais)) + '</dd>' +
-        '<dt>Ville</dt><dd>' + esc(n.ville || '—') + '</dd>' +
-        '<dt>Description</dt><dd>' + esc(n.description || '—') + '</dd>' +
-      '</dl></div>' +
-      '<div class="nf-section"><div class="nf-titre">Montant</div><dl class="nf-dl">' + lignesMontant + '</dl></div>' +
+      '<div class="nf-resume">' +
+        '<div class="nf-montant">' + montant(n.montant_ttc) + '<span>TTC</span></div>' +
+        '<div class="nf-puces">' + puces.map(function (p) { return '<span class="nf-puce">' + p + '</span>'; }).join('') + '</div>' +
+      '</div>' +
+      '<div class="nf-section"><div class="nf-titre">Suivi</div>' + frise(n) + '</div>' +
+      '<div class="nf-section"><div class="nf-titre">Détails</div><dl class="nf-dl">' + details + '</dl></div>' +
       '<div class="nf-section"><div class="nf-titre">Justificatif</div>' +
         (n.justificatif_nom
-          ? '<div style="margin-bottom:16px"><a class="nf-lien" href="' + esc(just) + '" data-preview-url="' + esc(just) +
-            '" data-preview-name="' + esc(n.justificatif_nom) + '">Voir ' + esc(n.justificatif_nom) + '</a></div>'
+          ? '<a class="nf-justif" href="' + esc(just) + '" data-preview-url="' + esc(just) + '" data-preview-name="' + esc(n.justificatif_nom) + '">' +
+              (image ? '<img alt="" src="' + esc(just) + '?inline=1">' : '<span class="nf-justif-doc">PDF</span>') +
+              '<span class="nf-justif-nom"><strong>' + esc(n.justificatif_nom) + '</strong><span>Justificatif joint à la note</span></span>' +
+              '<span class="nf-justif-voir">Voir</span>' +
+            '</a>'
           : '<p class="nf-vide">Aucun justificatif joint.</p>') +
-      '</div>' +
-      '<div class="nf-section"><div class="nf-titre">Suivi</div><ul class="nf-suivi">' + suivi + '</ul></div>';
+      '</div>';
   }
 
   function ouvrir(n, opts) {
