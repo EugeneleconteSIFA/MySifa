@@ -11,9 +11,14 @@
  *                FORMULAIRES_JS de app/web/qualite_formulaires_assets.py)
  *   pdf          éditeur PDF dans le navigateur (static/mysifa_tools_pdf.js, chargé à la demande)
  *   traduction   traducteur DeepL (static/mysifa_tools_traduction.js)
+ *   parapheur    envoi de PDF à signer, suivi, signature (static/mysifa_tools_parapheur.js,
+ *                chargé à la demande ; noyau de signature static/mysifa_parapheur_signer.js)
  *   convertir    convertisseur de formats (static/mysifa_tools_convertir.js, chargé à la demande)
  *   calculs      calculs bobine : métrage ↔ diamètre, fronts, étiquettes par bobine
  *                (static/mysifa_tools_calculs.js)
+ *   utilitaires  codes, scanner, comparer, unités et couleurs, renommer, archives
+ *                (static/mysifa_tools_utilitaires.js, chargé à la demande ; un fichier
+ *                static/mysifa_tools_util_<sous>.js par sous-onglet, clé d'adresse `sous`)
  *
  * Adresse : /tools?outil=<id>&… — chaque module dit ce qu'il montre par son
  * `adresse.etat()` et sait y retourner par `adresse.aller()`. La page observe
@@ -47,6 +52,9 @@ const TOOLS_OUTILS = [
   { id: 'pdf', label: 'Éditeur PDF', titre: 'Éditeur PDF',
     desc: 'Fusionner, découper, réordonner, annoter, signer, remplir et compresser. Les fichiers restent sur le poste.',
     icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/>' },
+  { id: 'parapheur', label: 'Parapheur', titre: 'Parapheur',
+    desc: 'Envoyer un PDF à signer à une ou plusieurs personnes, dans un ordre défini, avec relances et certificat.',
+    icon: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8.5 16.5c1.4 0 1.9-3.5 3-3.5s-.1 3.3 1 3.3c.8 0 1.1-1.2 1.8-1.2.6 0 .5.9 1.2.9"/>' },
   { id: 'image', label: 'Image', titre: 'Image — améliorer et vectoriser',
     desc: 'Agrandir, nettoyer, détourer une image ; la vectoriser en SVG ou PDF. Les fichiers restent sur le poste.',
     icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 16l5-5 4 4"/><path d="M14 13l2-2 5 5"/><circle cx="8.5" cy="8" r="1.5"/>' },
@@ -56,6 +64,9 @@ const TOOLS_OUTILS = [
   { id: 'calculs', label: 'Calculs bobine', titre: 'Calculs bobine',
     desc: 'Métrage ↔ diamètre, fronts sur la laize, étiquettes par bobine, carton optimal.',
     icon: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6"/>' },
+  { id: 'utilitaires', label: 'Utilitaires', titre: 'Utilitaires',
+    desc: 'Codes QR et barres, scanner de documents, comparer, unités et couleurs, renommer en lot, archives zip. Tout reste sur le poste.',
+    icon: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><circle cx="17.25" cy="17.25" r="3.75"/>' },
   { id: 'traduction', label: 'Traducteur', titre: 'Traducteur', ia: true,
     desc: 'Traduire un texte ou un courrier dans huit langues, vouvoiement ou tutoiement.',
     icon: '<path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/>' },
@@ -184,6 +195,8 @@ const _TOOLS_DIFFERES = {
   pdf:   { js: 'mysifa_tools_pdf.js', css: 'mysifa_tools_pdf.css', glob: 'MyToolsPDF', nom: 'Éditeur PDF' },
   image: { js: 'mysifa_tools_image.js', css: 'mysifa_tools_image.css', glob: 'MyToolsImage', nom: 'Outil image' },
   convertir: { js: 'mysifa_tools_convertir.js', css: 'mysifa_tools_convertir.css', glob: 'MyToolsConvertir', nom: 'Convertisseur' },
+  parapheur: { js: 'mysifa_tools_parapheur.js', css: 'mysifa_tools_parapheur.css', glob: 'MyToolsParapheurModule', nom: 'Parapheur' },
+  utilitaires: { js: 'mysifa_tools_utilitaires.js', css: 'mysifa_tools_utilitaires.css', glob: 'MyToolsUtilitaires', nom: 'Utilitaires' },
 };
 const _toolsCharges = {};
 function toolsCharger(id) {
@@ -204,6 +217,18 @@ function toolsCharger(id) {
   });
   return _toolsCharges[id];
 }
+// API de l'Éditeur PDF (« Envoyer à signer ») : charge le Parapheur au besoin,
+// puis ouvre sa fenêtre de création avec le document. Le module, une fois
+// chargé, remplace cet objet par le sien.
+if (!window.MyToolsParapheur) window.MyToolsParapheur = {
+  ouvrir: function (f) {
+    if (!(TOOLS.droits && TOOLS.droits.parapheur_creer)) {
+      showToast('Votre profil ne permet pas d\'envoyer un document à signer.', 'danger');
+      return Promise.resolve(false);
+    }
+    return toolsCharger('parapheur').then(() => window.MyToolsParapheurModule.ouvrir(f));
+  },
+};
 
 const _toolsCtx = {
   toast: (m, t) => showToast(m, t),
@@ -217,7 +242,8 @@ let _toolsMonte = null;
 function toolsDemonter(sauf) {
   if (_toolsMonte && _toolsMonte !== sauf) {
     const m = { etiquettes: window.MyToolsEtiquettes, pdf: window.MyToolsPDF, traduction: window.MyToolsTraduction,
-                image: window.MyToolsImage }[_toolsMonte];
+                image: window.MyToolsImage, parapheur: window.MyToolsParapheurModule,
+                utilitaires: window.MyToolsUtilitaires }[_toolsMonte];
     if (m && typeof m.demonter === 'function') { try { m.demonter(); } catch (e) {} }
   }
   _toolsMonte = sauf || null;
@@ -331,6 +357,12 @@ function toolsParams() {
       if (e.modele) { p.modele = String(e.modele); nav += '/modele:' + e.modele; }
       else if (e.vue === 'demandes') { p.vue = 'demandes'; nav += '/demandes'; if (e.demande != null) p.demande = String(e.demande); }
       if (e.modale && e.modale.cle) { p[e.modale.cle] = String(e.modale.id); nav += '/' + e.modale.cle; }
+      // Filtres, mode, onglet, langue, enregistrement : clés déclarées par le module.
+      for (const [k, v] of Object.entries(e.extra || {})) {
+        if (v == null || v === '') continue;
+        p[k] = String(v);
+        if (k === 'edition' || k === 'panneau') nav += '/' + v;
+      }
     }
   } else if (S.outil === 'formulaires' && S.formu) {
     if (S.view === 'formulaire-edit' && S.formu.courant) {
@@ -342,7 +374,26 @@ function toolsParams() {
     const f = _toolsFenetre();
     if (f) { p[f.cle] = f.id; nav += '/' + f.cle; }
   } else if (S.outil === 'pdf' && window.MyToolsPDF && window.MyToolsPDF.adresse) {
-    try { const e = window.MyToolsPDF.adresse.etat() || {}; if (e.page && Number(e.page) > 1) p.page = String(e.page); } catch (e) {}
+    try {
+      const e = window.MyToolsPDF.adresse.etat() || {};
+      if (e.page && Number(e.page) > 1) p.page = String(e.page);
+      // Fenêtre ouverte de l'éditeur (comparer, protéger, IA…) : un endroit, donc empilé.
+      if (e.panneau) { p.panneau = String(e.panneau); nav += '/' + p.panneau; }
+    } catch (e) {}
+  } else if (S.outil === 'parapheur') {
+    // Module pas encore chargé : l'adresse demandée fait foi en attendant.
+    const m = window.MyToolsParapheurModule;
+    const e = (m && m.adresse) ? m.adresse.etat() : (_toolsAttente.parapheur || {});
+    if (e.statut && e.statut !== 'en_cours') p.statut = e.statut;
+    if (e.demande) { p.demande = String(e.demande); nav += ':' + e.demande; if (e.signer) { p.signer = '1'; nav += '/signer'; } }
+  } else if (S.outil === 'utilitaires') {
+    // Sous-onglet (un endroit, donc empilé) et ses options ; l'adresse demandée
+    // fait foi tant que le module n'est pas chargé.
+    const m = window.MyToolsUtilitaires, a = _toolsAttente.utilitaires;
+    const e = m ? m.adresse.etat() : { sous: a && a.sous, options: (a && a.params) || {} };
+    if (e.sous && e.sous !== 'qr') p.sous = e.sous;
+    nav += '/' + (e.sous || 'qr');
+    Object.keys(e.options || {}).forEach(k => { if (!(k in p)) p[k] = String(e.options[k]); });
   } else if (S.outil === 'calculs' && window.MyToolsCalculs && window.MyToolsCalculs.adresse) {
     const e = window.MyToolsCalculs.adresse.etat();
     if (e.calcul && e.calcul !== 'metrage') { p.calcul = e.calcul; nav += '/' + e.calcul; }
@@ -353,6 +404,10 @@ function toolsParams() {
     if (e.de && e.de !== 'auto') p.de = e.de;
     if (e.vers && e.vers !== 'EN') p.vers = e.vers;
   }
+  // Fenêtre de création du Parapheur : ouverte par-dessus n'importe quel outil
+  // (l'Éditeur PDF l'ouvre avec son document).
+  const ppx = window.MyToolsParapheurModule;
+  if ((ppx && ppx.adresse.creation()) || (!ppx && _toolsAttente.parapheurCreation)) { p.parapheur = 'nouvelle'; nav += '/parapheur'; }
   return { params: p, nav: nav };
 }
 
@@ -427,15 +482,31 @@ async function toolsLireUrl(u, complet) {
       const a = { vue: u.get('vue', null), dossier: u.get('dossier', null), demande: u.get('demande', null),
                   modele: u.get('modele', null), modale: null };
       (ad.cles || []).forEach(k => { const v = u.get(k, null); if (v && v.length <= 60) a.modale = { cle: k, id: v }; });
+      a.extra = {};
+      (ad.clesExtra || []).forEach(k => { const v = u.get(k, null); if (v && v.length <= 120) a.extra[k] = v; });
       try { await ad.aller(a); } catch (e) {}
     }
   } else if (cible === 'traduction' && window.MyToolsTraduction) {
     window.MyToolsTraduction.adresse.aller({ de: u.get('de'), vers: u.get('vers') }, complet);
   } else if (cible === 'pdf') {
-    const pg = u.get('page');
-    const a = { page: /^\d+$/.test(String(pg || '')) ? Number(pg) : 1 };
+    const pg = u.get('page'), pan = u.get('panneau', null);
+    const a = { page: /^\d+$/.test(String(pg || '')) ? Number(pg) : 1,
+                panneau: pan && /^[a-z][a-z-]{1,30}$/.test(pan) ? pan : (complet ? null : undefined) };
     if (window.MyToolsPDF && window.MyToolsPDF.adresse) { try { window.MyToolsPDF.adresse.aller(a); } catch (e) {} }
     else _toolsAttente.pdf = a;
+  } else if (cible === 'parapheur') {
+    const id = u.get('demande');
+    const a = { statut: u.get('statut', 'en_cours', ['a_signer', 'en_cours', 'signee', 'refusee', 'expiree', 'annulee', 'toutes']),
+                demande: /^\d+$/.test(String(id || '')) ? Number(id) : null, signer: u.get('signer') === '1' };
+    if (window.MyToolsParapheurModule) window.MyToolsParapheurModule.adresse.aller(a, complet);
+    else _toolsAttente.parapheur = a;
+  } else if (cible === 'utilitaires') {
+    // Chaque sous-outil valide ses propres clés (MyToolsUtilitaires.CLES).
+    const params = {};
+    try { u.brut.forEach((v, k) => { if (!['outil', 'sous', 'parapheur'].includes(k) && /^[a-z_]{1,20}$/.test(k) && v.length <= 40) params[k] = v; }); } catch (e) {}
+    const a = { sous: u.get('sous', 'qr'), params: params };
+    if (window.MyToolsUtilitaires) window.MyToolsUtilitaires.adresse.aller(a);
+    else _toolsAttente.utilitaires = a;
   } else if (cible === 'calculs' && window.MyToolsCalculs && window.MyToolsCalculs.adresse) {
     if (complet || u.a('calcul')) window.MyToolsCalculs.adresse.aller({ calcul: u.get('calcul', 'metrage', ['metrage', 'fronts', 'etiquettes', 'carton']) });
   } else if (cible === 'image') {
@@ -443,6 +514,16 @@ async function toolsLireUrl(u, complet) {
     if (window.MyToolsImage) { if (complet || u.a('mode')) window.MyToolsImage.adresse.aller(a); }
     else if (complet || u.a('mode')) _toolsAttente.image = a;
   }
+  // Fenêtre de création du Parapheur, sur tout outil.
+  const pn = u.get('parapheur', null, ['nouvelle']);
+  const ppx = window.MyToolsParapheurModule;
+  if (pn && TOOLS.droits && TOOLS.droits.parapheur_creer && !(ppx && ppx.adresse.creation())) {
+    _toolsAttente.parapheurCreation = true;
+    toolsCharger('parapheur')
+      .then(() => window.MyToolsParapheurModule.adresse.ouvrirCreation())
+      .catch(() => {})
+      .then(() => { _toolsAttente.parapheurCreation = false; toolsSyncUrl(); });
+  } else if (!pn && complet && ppx && ppx.adresse.creation()) ppx.adresse.fermerCreation();
 }
 
 // ── Démarrage ────────────────────────────────────────────────────────

@@ -8,10 +8,14 @@ servis à la page dans window.__MYTOOLS__, et revérifiés par chaque API).
   pdf          tous — rien ne quitte le poste
   traduction   tous — API /api/translate (DeepL)
   calculs      tous — calculs bobine, rien n'est enregistré côté serveur
+  parapheur    tous signent ce qu'on leur adresse ; créer : ROLES_PARAPHEUR_CREATION
+               (app/routers/tools_parapheur.py, static/mysifa_tools_parapheur.js)
   convertir    tous — convertisseur de formats (repris de Prismix) : navigateur
                d'abord, serveur pour le reste (app/routers/tools_convertir.py)
   image        tous — améliorer / vectoriser une image, dans le navigateur
                (static/mysifa_tools_image.js, aussi monté dans MyBAT)
+  utilitaires  tous — codes, scanner, comparer, unités et couleurs, renommer,
+               archives ; tout dans le navigateur (static/mysifa_tools_utilitaires.js)
 
 Le code des outils vit dans static/ : mysifa_tools.js (navigation, adresse),
 mysifa_tools_etiquettes.js, mysifa_tools_traduction.js, mysifa_tools_pdf.js
@@ -26,6 +30,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from config import APP_ORG_NAME, APP_VERSION, ROLES_MYPRINT
 from app.routers.qualite import ROLES_QUALITE, ROLES_QUALITE_VIEW
 from app.services.auth_service import get_current_user, is_superadmin
+from app.services.parapheur import peut_creer as parapheur_peut_creer
 from app.web.components import asset
 from app.web.qualite_formulaires_assets import FORMULAIRES_JS
 
@@ -45,6 +50,9 @@ def droits_outils(user: dict) -> dict:
         "calculs": True,
         "image": True,
         "convertir": True,
+        "utilitaires": True,
+        "parapheur": True,
+        "parapheur_creer": parapheur_peut_creer(user),
     }
 
 
@@ -95,11 +103,20 @@ _ASSETS = (
     "/static/mysifa_tools.css",
     "/static/mysifa_ia.css",
     "/static/mysifa_etiq_specifiques.css",
+    "/static/mysifa_etiq_impression.css",
     "/static/mysifa_bulles.js",
     "/static/mysifa_scanner.js",
+    "/static/mysifa_etiq_impression.js",
+    "/static/mysifa_etiq_kiosque.js",
     "/static/mysifa_tools_etiquettes.js",
+    "/static/mysifa_etiq_moteur.js",
     "/static/mysifa_etiq_specifiques.js",
     "/static/mysifa_etiq_editeur.js",
+    "/static/mysifa_etiq_mise_en_page.js",
+    "/static/mysifa_etiq_donnees.js",
+    "/static/mysifa_etiq_gs1.js",
+    "/static/mysifa_etiq_controle.js",
+    "/static/mysifa_etiq_bibliotheque.js",
     "/static/mysifa_formulaire.js",
     "/static/mysifa_formulaire_editeur.js",
     "/static/mysifa_tools_traduction.js",
@@ -117,12 +134,16 @@ _NAV = [
      '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/>', "Questionnaires"),
     ("pdf", "Éditeur PDF",
      '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/>', "Annoter, signer"),
+    ("parapheur", "Parapheur",
+     '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8.5 16.5c1.4 0 1.9-3.5 3-3.5s-.1 3.3 1 3.3c.8 0 1.1-1.2 1.8-1.2.6 0 .5.9 1.2.9"/>', "Signatures"),
     ("image", "Image",
      '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 16l5-5 4 4"/><path d="M14 13l2-2 5 5"/><circle cx="8.5" cy="8" r="1.5"/>', "Vectoriser"),
     ("convertir", "Convertir",
      '<path d="M4 7h11.5"/><path d="M12.5 3.5L16 7l-3.5 3.5"/><path d="M20 17H8.5"/><path d="M11.5 13.5L8 17l3.5 3.5"/>', "Changer de format"),
     ("calculs", "Calculs bobine",
      '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6"/>', "Métrage, fronts"),
+    ("utilitaires", "Utilitaires",
+     '<rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><circle cx="17.25" cy="17.25" r="3.75"/>', "Codes, zip"),
     ("traduction", "Traducteur",
      '<path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/>', "DeepL"),
 ]
@@ -156,6 +177,7 @@ TOOLS_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_tools.css">
 <link rel="stylesheet" href="/static/mysifa_ia.css">
 <link rel="stylesheet" href="/static/mysifa_etiq_specifiques.css">
+<link rel="stylesheet" href="/static/mysifa_etiq_impression.css">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
@@ -202,9 +224,17 @@ __NAV__
 <script src="/static/mysifa_url.js?v=4"></script>
 <script src="/static/mysifa_bulles.js"></script>
 <script src="/static/mysifa_scanner.js"></script>
+<script src="/static/mysifa_etiq_impression.js"></script>
+<script src="/static/mysifa_etiq_kiosque.js"></script>
 <script src="/static/mysifa_tools_etiquettes.js"></script>
+<script src="/static/mysifa_etiq_moteur.js"></script>
 <script src="/static/mysifa_etiq_specifiques.js"></script>
 <script src="/static/mysifa_etiq_editeur.js"></script>
+<script src="/static/mysifa_etiq_mise_en_page.js"></script>
+<script src="/static/mysifa_etiq_donnees.js"></script>
+<script src="/static/mysifa_etiq_gs1.js"></script>
+<script src="/static/mysifa_etiq_controle.js"></script>
+<script src="/static/mysifa_etiq_bibliotheque.js"></script>
 <script src="/static/mysifa_formulaire.js"></script>
 <script src="/static/mysifa_formulaire_editeur.js"></script>
 <script src="/static/mysifa_tools_traduction.js"></script>

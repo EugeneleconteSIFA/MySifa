@@ -187,7 +187,48 @@
   ];
 
   // ── Helpers impression ────────────────────────────────────────────
+  // Avec le module d'impression (static/mysifa_etiq_impression.js) : la page
+  // est rendue hors écran, tramée en image et confiée à
+  // MySifaEtiqImpression.imprimerRendu (imprimante choisie, journal, scan de
+  // contrôle). Repli : la fenêtre d'impression du navigateur, comme avant.
+  const HTML2CANVAS = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+  let _direct = false;
+  function _charger(src) {
+    return new Promise((ok, ko) => {
+      if (window.html2canvas) { ok(); return; }
+      const sc = document.createElement('script'); sc.src = src; sc.onload = ok; sc.onerror = () => ko(new Error('Rendu indisponible.'));
+      document.head.appendChild(sc);
+    });
+  }
+  async function _imprimerViaModule(title, pageSize, css, body) {
+    const M = window.MySifaEtiqImpression;
+    const mm = String(pageSize).match(/([\d.]+)mm\s+([\d.]+)mm/);
+    const repli = () => { _direct = true; try { const w = _printWin(title, pageSize, css, body); if (w) w.document.close(); } finally { _direct = false; } };
+    if (!mm) { repli(); return; }
+    const L = parseFloat(mm[1]), H = parseFloat(mm[2]);
+    const fr = document.createElement('iframe');
+    fr.setAttribute('aria-hidden', 'true');
+    fr.style.cssText = `position:fixed;left:-10000px;top:0;width:${L}mm;height:${H}mm;border:0;background:white`;
+    document.body.appendChild(fr);
+    try {
+      const sansPrint = body.replace(/window\.focus\(\);\s*window\.print\(\);/g, '').replace(/window\.print\(\)/g, '0');
+      await new Promise(ok => {
+        fr.onload = ok;
+        fr.srcdoc = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><style>@page{size:${pageSize};margin:0}*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;background:#fff}${css}</style></head><body>${sansPrint}</body></html>`;
+      });
+      await new Promise(ok => setTimeout(ok, 500));   // codes-barres (JsBarcode) dessinés au chargement
+      const doc = fr.contentDocument;
+      const etiquettes = doc.querySelectorAll('.label');
+      if (etiquettes.length > 1) { repli(); return; }   // plusieurs étiquettes : impression navigateur
+      await _charger(HTML2CANVAS);
+      const cible = etiquettes[0] || doc.body;
+      const canvas = await window.html2canvas(cible, { backgroundColor: 'white', scale: Math.max(2, 600 / Math.max(1, cible.getBoundingClientRect().width)), logging: false });
+      await M.imprimerRendu({ nom: title, image: canvas, largeur_mm: L, hauteur_mm: H, donnees: { titre: title }, attendu: [], quantite: 1, repli });
+    } catch (e) { repli(); } finally { fr.remove(); }
+  }
   function _printWin(title, pageSize, css, body) {
+    const M = window.MySifaEtiqImpression;
+    if (!_direct && M && typeof M.imprimerRendu === 'function') { _imprimerViaModule(title, pageSize, css, body); return null; }
     const w = window.open('', '_blank');
     if (!w) { toast('Autorisez les popups pour imprimer', 'error'); return null; }
     w.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
@@ -996,7 +1037,9 @@
       el('div', { cls: 'traca-poste-icon', style: { background: 'var(--accent-bg)', color: 'var(--accent)' } }, iconEl(o.icon, 22)),
       el('div', { cls: 'traca-poste-label' }, o.label),
       el('div', { cls: 'traca-poste-count' }, o.sous)));
+    const M = window.MySifaEtiqImpression;
     return el('div', { cls: 'tet-page' },
+      M && typeof M.barreOutils === 'function' ? M.barreOutils() : null,
       el('div', { cls: 'traca-section-title' }, 'Sélectionner un poste de travail'),
       el('div', { cls: 'traca-postes-grid' }, ...cartes),
       el('div', { cls: 'traca-section-title', style: { marginTop: '18px' } }, 'Outils'),

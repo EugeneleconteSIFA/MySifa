@@ -502,3 +502,135 @@ select.tpdf-fc { padding: 0 1px; }
   background: var(--warn);
   color: white;
 }
+
+/* ── Lot 4 : menus de la barre et nouveaux panneaux ─────────────── */
+.tpdf-btn-menu { gap: 5px; padding: 0 9px; }
+.tpdf-btn-menu span { font-size: 12px; }
+.tpdf-menu {
+  position: fixed;
+  z-index: 950;
+  min-width: 250px;
+  max-width: calc(100vw - 16px);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .3);
+}
+.tpdf-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--card);
+  color: var(--text);
+  border: 0;
+  border-radius: 7px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tpdf-menu-item svg { color: var(--text2); flex: none; }
+.tpdf-menu-item:hover:not(:disabled), .tpdf-menu-item:focus-visible { background: var(--accent-bg); color: var(--accent); outline: none; }
+.tpdf-menu-item:hover:not(:disabled) svg { color: var(--accent); }
+.tpdf-menu-item:disabled { opacity: .45; cursor: default; }
+.tpdf-menu.ia-zone .tpdf-menu-item svg { color: var(--iav-1); }
+.tpdf-menu-sep { height: 1px; margin: 4px 6px; background: var(--border); }
+
+.tpdf-modale-large { max-width: 980px; }
+.tpdf-mp .tpdf-section { border-top: 1px solid var(--border); }
+
+/* Recadrage : zone hors cadre voilée */
+.tpdf-recadre-voile { fill: var(--bg); fill-opacity: .55; }
+.tpdf-recadre-cadre { stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 5 3; }
+.tpdf-apercu-mp { pointer-events: none; }
+.tpdf-vig-format {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 5px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text2);
+  font-size: 10px;
+  line-height: 16px;
+}
+
+/* Commentaires */
+.tpdf-note { stroke: var(--warn); fill: transparent; }
+.tpdf-note-resolue { stroke: var(--success); }
+.tpdf-note-zone { stroke-dasharray: 4 2; }
+.tpdf-note-bulle { fill: var(--warn); stroke: none; }
+.tpdf-note-bulle.tpdf-note-resolue { fill: var(--success); }
+.tpdf-note-nb { fill: white; font-weight: 700; pointer-events: none; }
+.tpdf-fil { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
+.tpdf-fil-msg { padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+.tpdf-fil-tete { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
+.tpdf-fil-tete b { color: var(--text2); }
+.tpdf-fil-tete .tpdf-btn-mini { margin-left: auto; min-width: 22px; height: 22px; }
+.tpdf-fil-txt { margin-top: 3px; font-size: 13px; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Comparer */
+.tpdf-cmp-scene { max-height: 62vh; overflow: auto; position: relative; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+.tpdf-cmp-cote { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tpdf-cmp-scene figure { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.tpdf-cmp-scene figcaption { font-size: 12px; font-weight: 600; color: var(--text2); }
+.tpdf-cmp-scene canvas { width: 100%; height: auto; background: white; border-radius: 4px; box-shadow: 0 1px 4px rgba(0, 0, 0, .25); }
+.tpdf-cmp-texte { font-size: 13px; line-height: 1.7; color: var(--text); background: var(--card); padding: 12px; border-radius: 8px; }
+.tpdf-cmp-texte del { color: var(--danger); background: rgba(220, 38, 38, .12); text-decoration: line-through; }
+.tpdf-cmp-texte ins { color: var(--success); background: rgba(5, 150, 105, .14); text-decoration: none; }
+
+/* IA */
+.tpdf-ia-sortie { white-space: pre-wrap; font-size: 13px; line-height: 1.5; color: var(--text); }
+.tpdf-ia-sortie:empty { display: none; }
+.tpdf-ia-fil { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }
+.tpdf-ia-fil:empty { display: none; }
+.tpdf-ia-q { align-self: flex-end; max-width: 85%; padding: 8px 11px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); color: var(--text); }
+.tpdf-ia-r { max-width: 92%; padding: 8px 11px; border-radius: 10px; background: var(--iav-bg); border: 1px solid var(--iav-bord); color: var(--text); white-space: pre-wrap; }
+.tpdf-ia-tablewrap { max-height: 46vh; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+.tpdf-ia-table { border-collapse: collapse; width: 100%; font-size: 12px; white-space: normal; }
+.tpdf-ia-table th, .tpdf-ia-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.tpdf-ia-table th { position: sticky; top: 0; background: var(--card); color: var(--text2); font-weight: 700; }
+.tpdf-modale .ia-btn { align-self: flex-start; }
+
+@media (max-width: 767px) {
+  .tpdf-btn-menu span { display: none; }
+  .tpdf-cmp-cote { grid-template-columns: 1fr; }
+}
+
+/* ── Lot 5 : navigation, mesure, prépresse, lot, partage ───────── */
+.tpdf-boite { gap: 16px; }
+.tpdf-feuille2 { cursor: pointer; }
+.tpdf-feuille2 img { display: block; width: 100%; height: 100%; }
+.tpdf-signets { display: flex; flex-direction: column; gap: 4px; max-height: 50vh; overflow-y: auto; }
+.tpdf-signet { display: flex; align-items: center; gap: 4px; }
+.tpdf-signet .tpdf-champ { flex: 1; min-width: 0; }
+.tpdf-signet .tpdf-b { padding: 6px 9px; white-space: nowrap; }
+.tpdf-lien { stroke: var(--accent); stroke-dasharray: 3 2; }
+.tpdf-lien-txt { fill: var(--accent); font-weight: 600; }
+.tpdf-par-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tpdf-par-col { max-height: 64vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; }
+.tpdf-par-col canvas { width: 100%; height: auto; background: white; box-shadow: 0 1px 4px rgba(0, 0, 0, .25); }
+.tpdf-par-tete { font-size: 12px; font-weight: 700; color: var(--text2); }
+.tpdf-mesure-txt { fill: var(--accent); font-weight: 700; }
+.tpdf-pipette-ech { height: 44px; border-radius: 8px; border: 1px solid var(--border); }
+.tpdf-flash { fill: var(--warn); fill-opacity: .25; stroke: var(--warn); stroke-width: 2; pointer-events: none; }
+.tpdf-sep-vue { width: 100%; height: auto; max-height: 62vh; object-fit: contain; background: white; border-radius: 6px; cursor: crosshair; }
+.tpdf-sep-lecture { font-size: 13px; font-weight: 600; color: var(--text); }
+.tpdf-lot-etapes { display: flex; flex-direction: column; gap: 8px; }
+.tpdf-lot-etape { display: flex; flex-direction: column; gap: 6px; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; }
+.tpdf-partage { display: flex; flex-direction: column; gap: 10px; }
+.tpdf-iazone { fill: var(--iav-bg); stroke: var(--iav-2); stroke-dasharray: 4 2; }
+.tpdf-bat-ecart { border-color: var(--danger); }
+.tpdf-bat-ecart .tpdf-lc-type { color: var(--danger); font-weight: 700; }
+.tpdf-bat-conforme .tpdf-lc-type { color: var(--success); font-weight: 700; }
+.tpdf-bat-a_verifier .tpdf-lc-type { color: var(--warn); font-weight: 700; }
+@media (max-width: 767px) {
+  .tpdf-par-cols { grid-template-columns: 1fr; }
+  .tpdf-feuille2 { display: none; }
+}

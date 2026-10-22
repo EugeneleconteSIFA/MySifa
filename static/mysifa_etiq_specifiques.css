@@ -210,3 +210,88 @@ textarea.es-input { resize: vertical; min-height: 38px; }
 @media (max-width: 860px) {
   .es-photo-vignettes { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); }
 }
+
+/* ── Étiquettes niveau BarTender (22/10/2026) ─────────────────────────── */
+.es-court-l { width: 160px; }
+.es-ligne4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.es-ligne-champ { display: flex; gap: 6px; align-items: center; }
+.es-ligne-champ > .es-input { flex: 1; min-width: 0; }
+.es-lien { border: none; background: none; color: inherit; font: inherit; cursor: pointer; padding: 0 2px; }
+.es-ok { color: var(--success); }
+.es-onglets { display: flex; gap: 4px; flex-wrap: wrap; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 4px; }
+.es-onglet { flex: 1; border: 1px solid transparent; background: var(--bg); color: var(--text2); border-radius: 8px; padding: 6px 8px;
+  font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.es-onglet:hover { border-color: var(--accent); }
+.es-onglet.actif { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+.es-onglet-ia.actif { background: var(--iav-bg, var(--accent-bg)); border-color: var(--iav-1, var(--accent)); color: var(--iav-1, var(--accent)); }
+.es-calque { display: flex; align-items: center; gap: 6px; }
+.es-cadenas { color: var(--muted); display: inline-flex; }
+.es-el-masque { opacity: .45; }
+.es-el.es-fige { cursor: not-allowed; }
+.es-el.es-masque { opacity: .3; }
+.es-fige-encart { flex-direction: row; align-items: center; gap: 8px; color: var(--muted); }
+.es-ed-corps-op { grid-template-columns: 360px minmax(0, 1fr); }
+.es-champ-erreur { font-size: 12px; color: var(--danger); min-height: 0; }
+.es-champ-erreur:empty { display: none; }
+.es-input-ko { border-color: var(--danger); }
+/* Grille, règles, guides : couleurs du thème, discrètes sur le papier blanc */
+.es-grille line { stroke: var(--accent); stroke-opacity: .12; stroke-width: .05; }
+.es-grille line.fort { stroke-opacity: .28; stroke-width: .08; }
+.es-regle line { stroke: var(--muted); stroke-width: .12; }
+.es-regle text { fill: var(--muted); font-size: 1.6px; font-family: system-ui, sans-serif; }
+.es-guides line { stroke: var(--accent); stroke-width: .18; stroke-dasharray: 1 .6; }
+.es-guides line.es-pose { stroke: var(--warn); }
+.es-repere { stroke: var(--danger); stroke-width: .15; }
+.es-ecart { fill: var(--danger); fill-opacity: .28; stroke: var(--danger); stroke-width: .15; }
+.es-outils-canevas { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: center; }
+.es-barre-align { display: inline-flex; gap: 2px; flex-wrap: wrap; }
+.es-barre-align .es-btn { background: var(--card); }
+/* Données, sources */
+.es-src-liste { display: flex; flex-direction: column; gap: 2px; max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; padding: 4px; background: var(--card); }
+.es-src-item { display: flex; gap: 8px; align-items: baseline; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
+.es-src-item:hover, .es-src-item.actif { background: var(--accent-bg); }
+.es-src-lib { font-weight: 600; white-space: nowrap; }
+.es-src-val { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: baseline; }
+.es-src-val > span:last-child { grid-column: 1 / -1; color: var(--text); }
+/* Série */
+.es-serie { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; }
+.es-serie-gauche { display: flex; flex-direction: column; gap: 10px; }
+.es-serie-apercu { background: var(--bg); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+.es-serie-nav { justify-content: space-between; align-items: center; }
+.es-serie-planche { display: grid; gap: 8px; }
+.es-serie-cellule { background: var(--card); border-radius: 8px; padding: 4px; border: 1px solid var(--border); }
+.es-serie-cellule .es-svg { max-height: 260px; }
+.es-serie-ko { border-color: var(--danger); }
+/* Pictogrammes */
+.es-pictos { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.es-picto-choix { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; font-size: 12px; cursor: pointer; }
+.es-picto-choix:hover { border-color: var(--accent); color: var(--accent); }
+/* Contrôle */
+.es-alerte { display: flex; gap: 8px; align-items: baseline; font-size: 12px; line-height: 1.4; padding: 6px 8px; border-radius: 8px;
+  background: var(--card); border: 1px solid var(--border); border-left-width: 3px; cursor: default; }
+.es-alerte[onclick], .es-alerte { cursor: pointer; }
+.es-alerte-g { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
+.es-alerte-bloquant { border-left-color: var(--danger); }
+.es-alerte-bloquant .es-alerte-g { color: var(--danger); }
+.es-alerte-attention { border-left-color: var(--warn); }
+.es-alerte-attention .es-alerte-g { color: var(--warn); }
+.es-alerte-info { border-left-color: var(--accent); }
+.es-alerte-info .es-alerte-g { color: var(--accent); }
+/* Bibliothèque, validation, versions */
+.es-filtres { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+.es-carte-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.es-tag { font-size: 11px; font-weight: 600; border-radius: 999px; padding: 1px 8px; background: var(--bg); color: var(--text2); border: 1px solid var(--border); margin-left: 4px; }
+.es-tag-ok { color: var(--success); border-color: var(--success); }
+.es-valid-brouillon { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+.es-valid-a_approuver { background: var(--bg); color: var(--warn); border: 1px solid var(--warn); }
+.es-valid-approuve { background: var(--bg); color: var(--success); border: 1px solid var(--success); }
+.es-statut-btn { cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; }
+.es-versions { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; align-items: start; }
+.es-version-apercu { background: var(--bg); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.es-ligne-cliquable { cursor: pointer; }
+.es-ligne-cliquable:hover td { background: var(--bg); }
+@media (max-width: 860px) {
+  .es-serie, .es-versions, .es-ed-corps-op { grid-template-columns: 1fr; }
+  .es-ligne4 { grid-template-columns: 1fr 1fr; }
+}

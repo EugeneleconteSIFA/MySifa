@@ -1307,6 +1307,25 @@ CONVERTIR_MAX_MO = int(os.getenv("CONVERTIR_MAX_MO", "300"))
 CONVERTIR_PARALLELE = int(os.getenv("CONVERTIR_PARALLELE", "2"))
 CONVERTIR_PAR_HEURE = int(os.getenv("CONVERTIR_PAR_HEURE", "60"))
 
+# ─── MyTools — Éditeur PDF, fonctions IA ─────────────────────────
+# Résumer, poser une question, extraire des données, détecter les champs d'un
+# PDF à plat. Le PDF produit dans le navigateur est envoyé tel quel à Claude
+# (seules ces fonctions font sortir un document du poste). Taille d'envoi
+# bornée : l'API refuse au-delà de 32 Mo (base64 compris).
+PDF_IA_MODELE = os.getenv("PDF_IA_MODELE", "claude-opus-5-5")
+PDF_IA_MAX_MO = int(os.getenv("PDF_IA_MAX_MO", "20"))
+PDF_IA_PAR_HEURE = int(os.getenv("PDF_IA_PAR_HEURE", "40"))
+# Preflight BAT de l'éditeur PDF : seuils d'alerte. Résolution minimale d'une
+# image à sa taille d'impression, épaisseur de trait minimale (un filet plus fin
+# disparaît à l'impression flexo), fond perdu attendu autour du format fini.
+PREFLIGHT_DPI_MIN = int(os.getenv("PREFLIGHT_DPI_MIN", "300"))
+PREFLIGHT_TRAIT_MIN_PT = float(os.getenv("PREFLIGHT_TRAIT_MIN_PT", "0.25"))
+PREFLIGHT_FOND_PERDU_MM = float(os.getenv("PREFLIGHT_FOND_PERDU_MM", "3"))
+# Actions enregistrées (suites d'étapes rejouées par lot) : nombre par
+# utilisateur et taille du JSON d'une action.
+PDF_ACTIONS_MAX = int(os.getenv("PDF_ACTIONS_MAX", "50"))
+PDF_ACTIONS_MAX_OCTETS = 20000
+
 
 def etiq_ia_modeles() -> list[dict]:
     return [{"id": i, "libelle": l, "aide": a, "repli": r} for i, l, a, r in ETIQ_IA_MODELES]
@@ -1323,6 +1342,24 @@ ETIQ_FORMATS_STANDARD = (
 )
 ETIQ_PHOTO_IMAGE_MAX_OCTETS = int(os.getenv("ETIQ_PHOTO_IMAGE_MAX_OCTETS", str(5 * 1024 * 1024)))
 ETIQ_PHOTO_MAX_FICHIERS = 4
+
+# Étiquettes spécifiques — niveau BarTender (22/10/2026).
+# Préfixe entreprise GS1 (7 à 10 chiffres) proposé aux SSCC et aux étiquettes
+# logistiques. Vide tant qu'il n'est pas renseigné : l'éditeur le signale
+# plutôt que d'émettre des SSCC sous un préfixe faux.
+ETIQ_GS1_PREFIXE = re.sub(r"\D", "", os.getenv("ETIQ_GS1_PREFIXE", ""))[:10]
+# Usages de la bibliothèque (catégorie d'une étiquette, en plus du client).
+ETIQ_USAGES = (
+    ("bobine", "Bobine"), ("palette", "Palette"), ("carton", "Carton"),
+    ("echantillon", "Échantillon"), ("expedition", "Expédition"),
+)
+# Qui peut modifier un objet verrouillé (logo, mentions) ou un calque figé.
+# Les autres rôles MyPrint gardent l'édition du reste (arbitrage du 14/10/2026).
+ETIQ_ROLES_CONCEPTION = {ROLE_SUPERADMIN, ROLE_DIRECTION} | ROLES_ADMINISTRATION_ALL
+
+
+def etiq_usages() -> list[dict]:
+    return [{"id": i, "libelle": l} for i, l in ETIQ_USAGES]
 
 
 # MyQualité › Formulaires : l'assistant construit un formulaire depuis une
@@ -1879,3 +1916,53 @@ MONITORING_RAPPROCHEMENT_JOURS = int(os.getenv("MONITORING_RAPPROCHEMENT_JOURS",
 # Expédition : une sortie de stock est rapprochée du BL RVGI de même référence
 # le plus proche dans le temps, à N jours près, période affichée ou non.
 MONITORING_EXPE_FENETRE_JOURS = int(os.getenv("MONITORING_EXPE_FENETRE_JOURS", "7"))
+
+# ─── MyTools — Parapheur (envoi de PDF à signer) ──────────────────
+# Documents d'origine et documents scellés : hors de UPLOADS_ROOT, qui est
+# servi publiquement sous /uploads/*. Un contrat signé ne se lit que par l'API,
+# droits revérifiés. Surcharge PARAPHEUR_DIR pour que v1 et v2 partagent le
+# même dossier, comme la base.
+PARAPHEUR_DIR = os.getenv("PARAPHEUR_DIR", os.path.join(DATA_DIR, "parapheur"))
+PARAPHEUR_TAILLE_MAX_MO = int(os.getenv("PARAPHEUR_TAILLE_MAX_MO", "25"))
+PARAPHEUR_SIGNATAIRES_MAX = int(os.getenv("PARAPHEUR_SIGNATAIRES_MAX", "20"))
+PARAPHEUR_ECHEANCE_JOURS = int(os.getenv("PARAPHEUR_ECHEANCE_JOURS", "30"))
+PARAPHEUR_RELANCE_JOURS = int(os.getenv("PARAPHEUR_RELANCE_JOURS", "3"))
+PARAPHEUR_RELANCES_MAX = int(os.getenv("PARAPHEUR_RELANCES_MAX", "5"))
+# Lien de signature d'un externe : durée de vie (bornée par l'échéance) et
+# nombre de consultations. Une signature ou un refus le révoque.
+PARAPHEUR_JETON_JOURS = int(os.getenv("PARAPHEUR_JETON_JOURS", "14"))
+PARAPHEUR_JETON_USAGES = int(os.getenv("PARAPHEUR_JETON_USAGES", "30"))
+# Nouveaux liens qu'un externe peut se faire renvoyer depuis son Espace, par jour.
+PARAPHEUR_LIENS_PAR_JOUR = int(os.getenv("PARAPHEUR_LIENS_PAR_JOUR", "3"))
+# Niveau de signature : « simple » (signature électronique simple, seul niveau
+# implémenté). Point d'extension eIDAS avancée / qualifiée : NIVEAUX de
+# app/services/parapheur_pdf.py.
+PARAPHEUR_NIVEAU = os.getenv("PARAPHEUR_NIVEAU", "simple").strip().lower() or "simple"
+# Qui peut créer une demande (tous les rôles par défaut ; tout utilisateur peut
+# signer ce qu'on lui adresse). Surcharge : PARAPHEUR_ROLES_CREATION="direction,commercial".
+_PARAPHEUR_CREATION_ENV = [r.strip() for r in os.getenv("PARAPHEUR_ROLES_CREATION", "").split(",") if r.strip()]
+ROLES_PARAPHEUR_CREATION = frozenset(_PARAPHEUR_CREATION_ENV) if _PARAPHEUR_CREATION_ENV else (
+    ASSIGNABLE_ROLES | {ROLE_SUPERADMIN, ROLE_ADMINISTRATION})
+# Qui voit toutes les demandes, pas seulement les siennes.
+ROLES_PARAPHEUR_SUPERVISION = frozenset({ROLE_SUPERADMIN, ROLE_DIRECTION})
+
+# ─── MyTools › Étiquettes — chaîne d'impression ─────────────────────
+# Ports qu'un profil d'imprimante peut viser en impression réseau directe
+# depuis le serveur (socket brute, comme l'agent local). Liste fermée : le
+# serveur ne doit pas servir à joindre n'importe quel service d'un réseau.
+ETIQ_PORTS_RESEAU = tuple(
+    int(p) for p in os.getenv("ETIQ_PORTS_RESEAU", "9100").split(",") if p.strip().isdigit()
+)
+# Délai de connexion et d'envoi à l'imprimante, en secondes.
+ETIQ_TIMEOUT_RESEAU_S = float(os.getenv("ETIQ_TIMEOUT_RESEAU_S", "4"))
+# Taille maximale d'un rendu (PDF ou image) envoyé par un poste traça, en octets.
+ETIQ_RENDU_MAX_OCTETS = int(os.getenv("ETIQ_RENDU_MAX_OCTETS", str(8 * 1024 * 1024)))
+# Modes d'envoi proposés à l'opérateur (clé → libellé).
+ETIQ_MODES_ENVOI = {
+    "auto": "Automatique",
+    "reseau": "Réseau direct (port 9100)",
+    "agent": "Agent local",
+    "navigateur": "Zebra Browser Print",
+    "fichier": "Fichier à télécharger",
+    "pdf": "PDF",
+}
