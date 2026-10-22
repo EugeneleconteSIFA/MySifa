@@ -979,7 +979,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/mysifa_sidebar.js?v=__V_LABEL__"></script>
-<script src="/static/mysifa_rvgi_picker.js?v=3"></script>
+<script src="/static/mysifa_rvgi_picker.js?v=4"></script>
 <script src="/static/motion.js" defer></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div id="app"></div>
@@ -4595,7 +4595,7 @@ function rvgiBrancherChamp(){
     onChange:(res)=>{
       rvgiInjecterProduit(res);
       if(res.enregistre){
-        MysRvgiPicker.resume(document.getElementById('f-of-res'),'dossier',lireId());
+        MysRvgiPicker.resume(document.getElementById('f-of-res'),'dossier',lireId(),null,rvgiOptsResume());
       }else{
         _rvgiEnAttente={lignes:res.lignes||[],etat:res.etat||null};
         rvgiPeindreEnAttente(_rvgiEnAttente);
@@ -4668,12 +4668,25 @@ async function rvgiPoserEnAttente(nouvelId){
   }
 }
 
+// Une commande rattachée par erreur se détache depuis le résumé (croix sur
+// chaque pièce). Le planning derrière la modale est rechargé à la fermeture.
+function rvgiOptsResume(){
+  return {
+    detacher:true,
+    onChange:(r)=>{
+      _planningNeedsReload=true;
+      showToast(r.detache==='tout'?"Commandes détachées.":"Commande "+r.detache+" détachée.","success");
+    },
+    onErreur:(e)=>showToast(e.message||"Détachement impossible.","danger")
+  };
+}
+
 function rvgiRafraichirResume(entryId){
   rvgiBrancherChamp();
   if(!window.MysRvgiPicker)return;
   const z=document.getElementById('f-of-res');
   if(!z)return;
-  if(entryId)MysRvgiPicker.resume(z,'dossier',entryId);
+  if(entryId)MysRvgiPicker.resume(z,'dossier',entryId,null,rvgiOptsResume());
   else if(_rvgiEnAttente)rvgiPeindreEnAttente(_rvgiEnAttente);
   else z.innerHTML='';
 }
