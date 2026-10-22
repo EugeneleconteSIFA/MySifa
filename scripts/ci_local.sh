@@ -25,9 +25,16 @@ export PYTHONPATH=.
 # un depot parfaitement sain, et le pre-push refusait chaque push (21/09/2026).
 # On teste donc l'execution, pas la presence. PY_CMD est exporte : les
 # travailleurs relances par xargs l'heritent au lieu de refaire la detection.
+# En tete : l'environnement complet du projet s'il existe
+# (scripts/installer_ci_local.sh). Avec lui, les tests qui demandent FastAPI,
+# reportlab ou un pydantic recent tournent en local au lieu d'etre ignores, et
+# un rouge se voit avant le push plutot que dans l'onglet Actions (22/10/2026).
 if [ -z "${PY_CMD:-}" ]; then
     PY_CMD=""; PY_ARG=""
-    if python3 -c "import sys" >/dev/null 2>&1; then
+    racine_ci="$(cd "$(dirname "$0")/.." && pwd)"
+    if [ -x "$racine_ci/.venv-ci/bin/python" ] && "$racine_ci/.venv-ci/bin/python" -c "import fastapi" >/dev/null 2>&1; then
+        PY_CMD="$racine_ci/.venv-ci/bin/python"
+    elif python3 -c "import sys" >/dev/null 2>&1; then
         PY_CMD=python3
     elif python -c "import sys" >/dev/null 2>&1; then
         PY_CMD=python
@@ -35,6 +42,7 @@ if [ -z "${PY_CMD:-}" ]; then
         PY_CMD=py; PY_ARG=-3
     fi
 fi
+PY_ARG=${PY_ARG:-}
 export PY_CMD PY_ARG
 
 # UTF-8 partout. Sous Windows, Python prend l'encodage de la console (cp1252)
@@ -84,8 +92,17 @@ if [ "${1:-}" = "--un" ]; then
     echo $? >"$dossier/$nom.code"
     exit 0
 fi
+# Syntaxe JS : node si present. Sinon, sur macOS, JavaScriptCore via
+# osascript (livre avec le systeme) : sans ce repli, le Mac sans Node marquait
+# TOUS les fichiers KO et le push partait en --no-verify, ce qui coupait aussi
+# les tests. Aucun des deux : on ignore, GitHub juge.
 if [ "${1:-}" = "--js" ]; then
-    node --check "$2" >/dev/null 2>&1 || echo "  KO  $2"
+    if command -v node >/dev/null 2>&1; then
+        node --check "$2" >/dev/null 2>&1 || echo "  KO  $2"
+    elif command -v osascript >/dev/null 2>&1; then
+        r=$(osascript -l JavaScript -e 'function run(a){var s=$.NSString.stringWithContentsOfFileEncodingError(a[0],4,null);if(!s)return "KO";try{new Function(s.js);return "ok"}catch(e){return "KO "+e}}' "$2" 2>&1)
+        case "$r" in ok) ;; *) echo "  KO  $2 — $r" ;; esac
+    fi
     exit 0
 fi
 
@@ -161,6 +178,10 @@ for t in tests/test_*.py; do
         # requirements.txt et reste juge. Un module DU PROJET introuvable reste
         # un echec : c'est en general un renommage a moitie fait.
         echo "ignore (dependance absente de ce poste)"
+    elif [[ "$sortie" == *"No such file or directory: 'node'"* ]] && ! command -v node >/dev/null 2>&1; then
+        # Test qui execute du JavaScript avec Node : la CI GitHub l'a, le Mac
+        # non. Meme regle qu'un paquet tiers absent.
+        echo "ignore (Node absent de ce poste)"
     else
         echo "KO"; echec=1
         # Les dernieres lignes du test : sans elles, un KO local oblige a
