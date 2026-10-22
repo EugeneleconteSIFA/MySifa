@@ -1789,6 +1789,32 @@ async def create_saisie(request: Request):
         except Exception:
             logger.exception("[fabrication] rattachement planning non posé")
 
+        # ── Début de production : l'outil confirmé (plaque…) ─────────────────
+        # Seul l'écran « Démarrer un dossier » envoie `outils_demarrage`. Jamais
+        # bloquant : le dossier démarre même si l'outil ne s'enregistre pas.
+        outils_confirmes = []
+        if cl["code"] == "01" and body.get("outils_demarrage"):
+            try:
+                from app.services import outils_demarrage
+                outils_confirmes = outils_demarrage.enregistrer(
+                    conn, saisie_id=new_id, choix=body.get("outils_demarrage"),
+                    machine=machine_name, no_dossier=no_dossier,
+                    date_operation=date_op, cree_par=operateur,
+                    machine_id=machine_id_resolved,
+                )
+                if outils_confirmes:
+                    phrase = outils_demarrage.trace(conn, outils_confirmes)
+                    commentaire = f"{phrase} — {commentaire}" if commentaire else phrase
+                    conn.execute(
+                        "UPDATE production_data SET commentaire=? WHERE id=?",
+                        (commentaire, new_id),
+                    )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                outils_confirmes = []
+                logger.exception("[fabrication] outil confirmé au démarrage non enregistré")
+
         # ── Aucun code matière scanné : la raison, attachée à la saisie ───────
         # Écrite après l'INSERT plutôt que dedans : la colonne n'est renseignée
         # que sur une fin de production, et l'ajouter à un INSERT qui sert cinq
@@ -2246,6 +2272,8 @@ async def create_saisie(request: Request):
         reponse["bobines_heritees"] = bobines_heritees
     if contexte_outil:
         reponse["outil_requis"] = contexte_outil
+    if outils_confirmes:
+        reponse["outils_demarrage"] = outils_confirmes
     if compteur_calage:
         reponse["compteur_fin_calage"] = compteur_calage
     if calage_resultat:
