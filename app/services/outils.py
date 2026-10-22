@@ -75,6 +75,15 @@ def _colonnes(conn, table: str) -> set:
         return set()
 
 
+def _table_existe(conn, table: str) -> bool:
+    try:
+        return bool(conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone())
+    except sqlite3.Error:
+        return False
+
+
 def _row_to_type(r) -> Dict[str, Any]:
     def champ(nom):
         try:
@@ -93,6 +102,8 @@ def _row_to_type(r) -> Dict[str, Any]:
         # le seul référentiel local.
         "source_table": (champ("source_table") or "").strip() or None,
         "source_types": (champ("source_types") or "").strip() or None,
+        # Confirmée au démarrage d'un dossier : migration `outils_au_demarrage`.
+        "au_demarrage": bool(champ("au_demarrage")),
     }
 
 
@@ -100,6 +111,8 @@ def list_types(conn, *, inclure_inactifs: bool = False) -> List[Dict[str, Any]]:
     where = "" if inclure_inactifs else "WHERE actif = 1"
     cols = _colonnes(conn, TABLE_TYPES)
     src = ", source_table, source_types" if "source_table" in cols else ""
+    if "au_demarrage" in cols:
+        src += ", au_demarrage"
     rows = conn.execute(
         f"""SELECT cle, label, label_pluriel, ordre, actif{src}
             FROM {TABLE_TYPES} {where} ORDER BY ordre, label"""
@@ -110,6 +123,8 @@ def list_types(conn, *, inclure_inactifs: bool = False) -> List[Dict[str, Any]]:
 def get_type(conn, type_cle: str) -> Optional[Dict[str, Any]]:
     cols = _colonnes(conn, TABLE_TYPES)
     src = ", source_table, source_types" if "source_table" in cols else ""
+    if "au_demarrage" in cols:
+        src += ", au_demarrage"
     r = conn.execute(
         f"""SELECT cle, label, label_pluriel, ordre, actif{src}
             FROM {TABLE_TYPES} WHERE cle = ?""",
@@ -320,21 +335,41 @@ def dernier_outil_monte(
     saisies. C'est la seule source qui suit la machine et non le dossier :
     un outil reste en place d'un dossier au suivant."""
     codes = [c for c, t in codes_par_type(conn).items() if t == type_cle]
-    if not codes:
-        return None
     placeholders = ",".join("?" for _ in codes)
     mn = (machine_nom or "").strip()
     mc = (machine_code or "").strip()
+    machine_sql = "(trim(pd.machine) = trim(?) OR (trim(?) <> '' AND trim(pd.machine) = trim(?)))"
+    requetes = []
+    params: List[Any] = []
+    if codes:
+        requetes.append(
+            f"""SELECT pd.outil_apres_id AS oid, pd.date_operation AS dt, pd.id AS sid, 0 AS rang
+                FROM production_data pd
+                WHERE pd.operation_code IN ({placeholders})
+                  AND pd.outil_apres_id IS NOT NULL
+                  AND COALESCE(pd.est_annule, 0) = 0
+                  AND {machine_sql}"""
+        )
+        params.extend([*codes, mn, mc, mc])
+    if _table_existe(conn, "outils_demarrage"):
+        # Confirmé au démarrage d'un dossier : c'est là que la plaque se monte
+        # en pratique. Le rang 1 (premier outil de la fiche) représente la
+        # machine quand la fiche en prévoit deux.
+        requetes.append(
+            f"""SELECT od.outil_id AS oid, pd.date_operation AS dt, pd.id AS sid, od.rang AS rang
+                FROM outils_demarrage od
+                JOIN production_data pd ON pd.id = od.saisie_id
+                WHERE od.type_cle = ? AND od.rang = 1
+                  AND COALESCE(pd.est_annule, 0) = 0
+                  AND {machine_sql}"""
+        )
+        params.extend([type_cle, mn, mc, mc])
+    if not requetes:
+        return None
     row = conn.execute(
-        f"""SELECT outil_apres_id AS oid
-            FROM production_data
-            WHERE operation_code IN ({placeholders})
-              AND outil_apres_id IS NOT NULL
-              AND COALESCE(est_annule, 0) = 0
-              AND (trim(machine) = trim(?) OR (trim(?) <> '' AND trim(machine) = trim(?)))
-            ORDER BY date_operation DESC, id DESC
-            LIMIT 1""",
-        (*codes, mn, mc, mc),
+        "SELECT oid FROM (" + " UNION ALL ".join(requetes) + ") "
+        "ORDER BY dt DESC, sid DESC LIMIT 1",
+        params,
     ).fetchone()
     if not row or row["oid"] is None:
         return None

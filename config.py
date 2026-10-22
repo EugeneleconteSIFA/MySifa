@@ -1975,3 +1975,10 @@ ETIQ_MODES_ENVOI = {
     "fichier": "Fichier à télécharger",
     "pdf": "PDF",
 }
+
+# ─── Outils de découpe — formes de fiche technique ────────────────
+# Formes de la fiche technique (outil1/2/3_forme, saisies dans Access) qui
+# désignent un outil de découpe montable : c'est cet outil que le conducteur
+# confirme au démarrage du dossier. Comparaison sans accent ni casse, sur le
+# début du mot. « Sheeter » en est volontairement absent : c'est un autre poste.
+FORMES_OUTIL_DECOUPE = ("plaque", "special")

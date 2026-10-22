@@ -583,6 +583,25 @@ body.light table.fab-table tr.fab-row-last td{
 .fab-outil-vide{font-size:12px;color:var(--muted);padding:6px 2px}
 .fab-outil-choisi{display:flex;align-items:center;gap:5px;margin-top:6px;
   font-size:12px;font-weight:700;color:var(--success)}
+/* Plaque confirmée au démarrage : la proposition de la fiche en gros, deux
+   boutons, la recherche seulement si on change. */
+.fab-demarrage-outil{background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:10px 12px;margin-top:6px;display:flex;flex-direction:column;gap:8px}
+.fab-demarrage-tete{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.fab-demarrage-nature{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text2)}
+.fab-demarrage-source{font-size:12px;color:var(--muted)}
+.fab-demarrage-choisi{display:flex;align-items:center;gap:8px;color:var(--success);flex-wrap:wrap}
+.fab-demarrage-choisi.is-ecart{color:var(--warn)}
+.fab-demarrage-num{font-size:22px;font-weight:800;color:var(--text);letter-spacing:.3px}
+.fab-demarrage-ecart{font-size:12px;font-weight:700}
+.fab-demarrage-vide{font-size:13px;color:var(--muted)}
+.fab-demarrage-choix{display:flex;gap:8px;flex-wrap:wrap}
+.fab-demarrage-btn{display:inline-flex;align-items:center;gap:4px;background:var(--card);
+  border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-family:inherit;
+  font-size:13px;font-weight:700;color:var(--text);cursor:pointer;transition:border-color .12s,background .12s}
+.fab-demarrage-btn:hover:not(:disabled){border-color:var(--accent)}
+.fab-demarrage-btn:disabled{opacity:.45;cursor:default}
+.fab-demarrage-btn.is-actif{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .fab-modal-btns{
   display:flex;gap:8px;justify-content:flex-end;align-items:center;
   flex-wrap:wrap;margin-top:18px;
@@ -1344,6 +1363,8 @@ body.has-topbar .fab-main{padding-top:74px}
 <!-- Adresse de la page : onglet, vue admin, repiquage, fenêtres de consultation (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
 <script src="/static/fabrication_url.js?v=2"></script>
+<!-- Plaque confirmée au démarrage du dossier. -->
+<script src="/static/fabrication_outils_demarrage.js?v=1"></script>
 <script>
   // Démarre le polleur d'alertes maintenance dès que la page est prête.
   // Le runtime interroge /api/maintenance/alerts/active toutes les 15 s,
@@ -6630,6 +6651,8 @@ function renderDebutModal(){
     S.debutMontees = null;
     S.debutRetirer = {};
     loadDebutMontees(refChoisie);
+    // Plaque prévue par la fiche, à confirmer (static/fabrication_outils_demarrage.js).
+    loadDebutOutils(refChoisie);
   }
   const inp = h('input',{type:'number',placeholder:'Ex: 15000',step:'1',min:'0',
     style:{textAlign:'right'}});
@@ -6696,6 +6719,8 @@ function renderDebutModal(){
         const retirer = Object.keys(S.debutRetirer||{}).filter(k => S.debutRetirer[k]).map(Number);
         body.bobines_montees = {retirer: retirer};
       }
+      const outilsDemarrage = debutOutilsPayload();
+      if(outilsDemarrage) body.outils_demarrage = outilsDemarrage;
       const r = await apiFetch('/api/fabrication/saisie',{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify(body),
@@ -6703,7 +6728,11 @@ function renderDebutModal(){
       if(r&&r.success){
         const bh = r.bobines_heritees;
         const nRep = bh && bh.rattachees ? bh.rattachees.length : 0;
-        showToast(nRep ? 'Dossier démarré · '+nRep+' bobine'+(nRep>1?'s':'')+' reprise'+(nRep>1?'s':'')+'.' : 'Dossier démarré.');
+        const od = r.outils_demarrage || [];
+        const txtOutils = od.map(o => String(o.label||'').toLowerCase()+' '+o.numero).join(', ');
+        showToast('Dossier démarré'
+          + (txtOutils ? ' · '+txtOutils : '')
+          + (nRep ? ' · '+nRep+' bobine'+(nRep>1?'s':'')+' reprise'+(nRep>1?'s':'') : '') + '.');
         S.debutMonteesPour = null;
         if(bh) setTimeout(()=>debutConfirmerFscHeritees(bh), 400);
         // v2.2.67 : refresh alertes (code 01 = pas d'ack auto, mais on refresh
@@ -6737,6 +6766,7 @@ function renderDebutModal(){
         })()),
         inp
       ),
+      renderDebutOutils(),
       renderDebutMatieres(),
       h('div',{className:'fab-modal-btns'},
         h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
