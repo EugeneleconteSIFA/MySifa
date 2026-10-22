@@ -78,3 +78,6 @@ Claude outputs/
 
 # Documents fournisseurs déposés dans l'ERP (si UPLOADS_ROOT reste à sa valeur par défaut)
 uploads/erp/
+
+# Environnement Python complet de la CI locale (scripts/installer_ci_local.sh)
+.venv-ci/
