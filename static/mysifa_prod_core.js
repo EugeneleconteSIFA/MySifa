@@ -14472,6 +14472,8 @@ function renderProdKpis(){
     render();
   }
 
+// Studio Kernse : compte les connexions réussies (événement seul : ni page vue, ni donnée personnelle).
+function kernseConnexion(){try{if(window.kernse)return window.kernse.track('connexion');var s=document.createElement('script');s.src='https://www.kernse.fr/k.js';s.defer=true;s.dataset.app='mysifa';s.dataset.badge='off';s.dataset.view='off';s.onload=function(){window.kernse&&window.kernse.track('connexion')};document.head.appendChild(s);}catch(e){}}
   async function doLogin(email, password){
     if(S.loginSubmitting) return;
     S.loginError = null;
@@ -14490,6 +14492,7 @@ function renderProdKpis(){
         return;
       }
       authEpoch++;
+      kernseConnexion();
       // Profil complet via /me (login partial reply)
       try{
         const me = await api('/api/auth/me');
