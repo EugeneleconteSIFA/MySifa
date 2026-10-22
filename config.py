@@ -1344,9 +1344,9 @@ ETIQ_PHOTO_IMAGE_MAX_OCTETS = int(os.getenv("ETIQ_PHOTO_IMAGE_MAX_OCTETS", str(5
 ETIQ_PHOTO_MAX_FICHIERS = 4
 
 # Étiquettes spécifiques — niveau BarTender (22/10/2026).
-# Préfixe entreprise GS1 (7 à 10 chiffres) proposé aux SSCC et aux étiquettes
-# logistiques. Vide tant qu'il n'est pas renseigné : l'éditeur le signale
-# plutôt que d'émettre des SSCC sous un préfixe faux.
+# Préfixe entreprise GS1 propre (7 à 10 chiffres). Vide par défaut : SIFA n'en
+# a pas, les SSCC sont ceux des clients (fournis, ou calculés sur la plage
+# qu'un client confie avec son préfixe, réglée dans l'étiquette).
 ETIQ_GS1_PREFIXE = re.sub(r"\D", "", os.getenv("ETIQ_GS1_PREFIXE", ""))[:10]
 # Usages de la bibliothèque (catégorie d'une étiquette, en plus du client).
 ETIQ_USAGES = (

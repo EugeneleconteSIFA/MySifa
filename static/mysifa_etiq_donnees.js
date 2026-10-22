@@ -129,6 +129,11 @@
       if (c.max != null && n > c.max) return `${lib} : ${String(c.max).replace('.', ',')} au plus.`;
     } else if (t === 'date') {
       if (!MO().lireDate(val)) return `${lib} : date JJ/MM/AAAA attendue.`;
+    } else if (t === 'sscc') {
+      const d = val.replace(/\D/g, '');
+      if (d.length !== 18) return `${lib} : SSCC de 18 chiffres attendu (${d.length} lus).`;
+      const cle = MO().cleGs1(d.slice(0, 17));
+      if (cle !== d[17]) return `${lib} : SSCC invalide — clé de contrôle ${cle} attendue.`;
     } else if (t === 'motif' && c.motif) {
       try { if (!new RegExp('^(?:' + c.motif + ')$').test(val)) return lib + ' : format attendu ' + c.motif + '.'; } catch (e) { return ''; }
     }
@@ -181,7 +186,7 @@
     const { h, champ } = X();
     v.controle = v.controle || { type: 'texte' };
     const c = v.controle;
-    const typ = h('select', { cls: 'es-input' }, ...Object.entries({ texte: 'Texte libre', entier: 'Nombre entier', nombre: 'Nombre', date: 'Date', motif: 'Format imposé' }).map(([k, l]) => h('option', { value: k, text: l })));
+    const typ = h('select', { cls: 'es-input' }, ...Object.entries({ texte: 'Texte libre', entier: 'Nombre entier', nombre: 'Nombre', date: 'Date', motif: 'Format imposé', sscc: 'SSCC fourni par le client' }).map(([k, l]) => h('option', { value: k, text: l })));
     typ.value = c.type || 'texte';
     typ.addEventListener('change', () => { ctx.memoriser(); c.type = typ.value; ctx.salir(); X().rendre(); });
     const nb = (cle, label) => { const i = h('input', { cls: 'es-input', type: 'number', value: c[cle] ?? '' }); i.addEventListener('input', () => { c[cle] = i.value === '' ? null : parseFloat(i.value); ctx.salir(); }); return champ(label, i); };

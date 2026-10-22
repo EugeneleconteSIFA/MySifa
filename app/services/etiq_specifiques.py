@@ -20,10 +20,14 @@ Variables, référencées dans un élément par {{nom}} :
   saisie     demandée à l'impression (lot, quantité, référence client…)
   compteur   numéro qui avance d'une étiquette à l'autre, et d'une impression
              à la suivante (compteur conservé en base, par étiquette)
-  sscc       SSCC GS1 de 18 chiffres : extension + préfixe GS1 + série +
-             clé de contrôle. Le compteur est partagé par toutes les
-             étiquettes qui utilisent le même préfixe : un SSCC ne sort
-             jamais deux fois.
+  sscc       SSCC GS1 de 18 chiffres calculé : extension + préfixe GS1 + série +
+             clé de contrôle. Cas d'un client qui confie son préfixe et une
+             plage de séries (serie_debut, serie_fin : la plage épuisée est
+             refusée). Le compteur est partagé par toutes les étiquettes du
+             même préfixe : un SSCC ne sort jamais deux fois.
+             Cas courant : le client FOURNIT ses SSCC — variable « saisie »
+             avec le contrôle « sscc » (18 chiffres, clé vérifiée), remplie à
+             la main, au scan ou par une série importée.
   date       date calculée : base (jour d'impression ou autre variable, ex.
              date de fabrication) + N mois + N jours, format au choix
              (JJ/MM/AAAA, semaine ISO, lot daté AAJJJ…) — etiq_formules.py
@@ -86,7 +90,7 @@ _CALQUE_RE = re.compile(r"^[a-z][a-z0-9_]{0,19}$")
 _LANGUE_RE = re.compile(r"^[a-z]{2}(-[a-z]{2})?$")
 FORMES = ("rectangle", "arrondi", "ronde", "ovale", "libre")
 _CHEMIN_RE = re.compile(r"^[MmLlHhVvCcSsQqTtAaZz0-9 ,.\-eE]*$")
-CONTROLES_SAISIE = ("texte", "entier", "nombre", "date", "motif")
+CONTROLES_SAISIE = ("texte", "entier", "nombre", "date", "motif", "sscc")
 IMAGE_MAX_CARACTERES = 800_000   # data URL d'un logo, ~600 Ko
 
 
@@ -226,6 +230,9 @@ def normaliser_layout(layout: Any) -> dict:
             pre = re.sub(r"\D", "", _txt(v.get("prefixe_gs1"), 12))
             var["extension"] = ext[:1]
             var["prefixe_gs1"] = pre
+            # Plage de séries attribuée par le client (0 = sans borne).
+            var["serie_debut"] = _ent(v.get("serie_debut"), 0, 0, 10**10)
+            var["serie_fin"] = _ent(v.get("serie_fin"), 0, 0, 10**10)
         elif typ == "date":
             fmt = _txt(v.get("format") or "%d/%m/%Y", 40)
             if "%" not in fmt:
@@ -386,7 +393,7 @@ def controles(layout: dict) -> list[str]:
     exemple = {v["nom"]: (v.get("valeur") or "1") for v in layout.get("variables", [])}
     for v in layout.get("variables", []):
         if v["type"] == "sscc" and not (7 <= len(v.get("prefixe_gs1", "")) <= 10):
-            out.append(f"Variable « {v['nom']} » : le préfixe GS1 doit compter 7 à 10 chiffres.")
+            out.append(f"Variable « {v['nom']} » : le préfixe GS1 du client doit compter 7 à 10 chiffres.")
         if v["type"] == "formule":
             r = evaluer(v.get("expression", ""), exemple)
             if r["erreur"]:
@@ -456,7 +463,7 @@ def plan_serie(conn, modele_id: int, layout: dict, quantite: int,
         if var["type"] == "compteur":
             suivant = var["debut"] if (dernier is None or not var.get("reprise", True)) else dernier + pas
         else:
-            suivant = 1 if dernier is None else dernier + 1
+            suivant = max(1 if dernier is None else dernier + 1, var.get("serie_debut") or 0)
         demande = departs.get(var["nom"])
         if demande not in (None, ""):
             try:
@@ -470,6 +477,12 @@ def plan_serie(conn, modele_id: int, layout: dict, quantite: int,
             suivant = demande
         if var["type"] == "sscc":
             sscc(var["extension"], var["prefixe_gs1"], suivant + quantite - 1)  # lève si épuisé
+            fin = var.get("serie_fin") or 0
+            if fin and suivant + quantite - 1 > fin:
+                reste = max(0, fin - suivant + 1)
+                raise EtiquetteInvalide(
+                    f"Plage SSCC du client épuisée : {reste} numéro(s) restant(s) jusqu'à la série {fin}. "
+                    "Demander une nouvelle plage au client.")
         plan[var["nom"]] = {"cle": cle, "premier": suivant, "pas": pas, "type": var["type"]}
     return plan
 
@@ -600,6 +613,12 @@ def controle_saisie(v: dict, val: str) -> str:
         from app.services.etiq_formules import lire_date
         if lire_date(val) is None:
             return f"{lib} : date JJ/MM/AAAA attendue."
+    elif t == "sscc":
+        chiffres = re.sub(r"\D", "", val)
+        if len(chiffres) != 18:
+            return f"{lib} : SSCC de 18 chiffres attendu ({len(chiffres)} lus)."
+        if cle_gs1(chiffres[:17]) != chiffres[17]:
+            return f"{lib} : SSCC invalide — clé de contrôle {cle_gs1(chiffres[:17])} attendue."
     elif t == "motif" and c.get("motif"):
         try:
             if not re.fullmatch(c["motif"], val):

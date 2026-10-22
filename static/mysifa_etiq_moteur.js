@@ -562,7 +562,10 @@
     els.push(fond({ id: id(), type: 'ligne', nom: 'Séparation haut', x: m, y, orientation: 'h', longueur: L - 2 * m, epaisseur: 0.4 }));
     y += 2;
     const lignesClair = [['00', 'SSCC', '{{sscc}}']];
-    vars.push({ nom: 'sscc', libelle: 'SSCC', type: 'sscc', extension: String(opts.extension || '0'), prefixe_gs1: String(opts.prefixe || '') });
+    // SSCC fourni par le client (cas courant) ou calculé sur la plage qu'il a confiée.
+    if (opts.fourni !== false) vars.push({ nom: 'sscc', libelle: 'SSCC (fourni par le client)', type: 'saisie', valeur: '', obligatoire: true, controle: { type: 'sscc' } });
+    else vars.push({ nom: 'sscc', libelle: 'SSCC', type: 'sscc', extension: String(opts.extension || '0'), prefixe_gs1: String(opts.prefixe || ''),
+      serie_debut: Number(opts.serie_debut) || 0, serie_fin: Number(opts.serie_fin) || 0 });
     const codeProduit = [];
     if (ai.includes('02')) { vars.push({ nom: 'gtin', libelle: 'GTIN du contenu (14 chiffres)', type: 'saisie', valeur: '', obligatoire: true }); lignesClair.push(['02', 'CONTENT', '{{gtin}}']); codeProduit.push('(02){{gtin}}'); }
     if (ai.includes('37')) { vars.push({ nom: 'quantite', libelle: 'Nombre d\'unités', type: 'source', champ: 'dossier.etiquettes_par_carton', valeur: '' }); lignesClair.push(['37', 'COUNT', '{{quantite}}']); codeProduit.push('(37){{quantite}}'); }

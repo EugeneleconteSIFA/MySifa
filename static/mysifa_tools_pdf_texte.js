@@ -116,13 +116,30 @@
     var xl = Math.round(b.x), xr = Math.round(b.x + b.w), x, vide;
     for (x = xr, vide = 0; x < dMax; x++) { if (encre(x, c0, c1)) { xr = x + 1; vide = 0; } else if (++vide > trou) break; }
     for (x = xl - 1, vide = 0; x >= gMin; x--) { if (encre(x, c0, c1)) { xl = x; vide = 0; } else if (++vide > trou) break; }
-    // Haut et bas : encre réelle dans la largeur trouvée ; hauteur de capitale
-    // = médiane des sommets des colonnes encrées les plus hautes (accents exclus).
-    var haut = Math.round(b.y), bas = Math.round(b.y + b.h), sommets = [], y;
+    // Haut et bas : seulement l'encre RATTACHÉE aux lettres de cette ligne.
+    // Par colonne encrée dans le corps de la ligne : on remonte tant que l'encre
+    // continue (petit saut toléré pour un accent), on descend depuis la ligne de
+    // base tant qu'elle continue sans interruption (jambages). Un logo ou une
+    // image séparés de la ligne par un liseré de fond ne sont pas pris : en cas
+    // de doute la boîte rétrécit plutôt que de mordre sur l'objet voisin.
+    function e(xx, yy) { return dist2(d, (yy * W + xx) * 4, fond) > s2; }
+    var sautAccent = Math.max(1, Math.round(0.15 * t));
+    var haut = Math.round(b.y), bas = Math.min(y1, base + Math.max(1, Math.round(0.06 * t))), sommets = [], y;
     for (x = xl; x < xr; x++) {
-      var premier = -1, dernier = -1;
-      for (y = y0; y < y1; y++) if (dist2(d, (y * W + x) * 4, fond) > s2) { if (premier < 0) premier = y; dernier = y; }
-      if (premier >= 0) { sommets.push(premier); haut = Math.min(haut, premier); bas = Math.max(bas, dernier + 1); }
+      var coeur = -1;
+      for (y = c0; y < c1; y++) if (e(x, y)) { coeur = y; break; }
+      if (coeur < 0) continue;
+      var sommet = coeur;
+      while (sommet - 1 >= y0 && e(x, sommet - 1)) sommet--;
+      sommets.push(sommet);
+      var hautCol = sommet, vide = 0;
+      for (y = sommet - 1; y >= y0; y--) { if (e(x, y)) { hautCol = y; vide = 0; } else if (++vide > sautAccent) break; }
+      haut = Math.min(haut, hautCol);
+      if (e(x, Math.min(H - 1, base - 1))) {
+        var fond_ = base - 1;
+        while (fond_ + 1 < y1 && e(x, fond_ + 1)) fond_++;
+        bas = Math.max(bas, fond_ + 1);
+      }
     }
     sommets.sort(function (u, v) { return u - v; });
     var cap = sommets.length ? base - sommets[Math.min(sommets.length - 1, Math.floor(sommets.length * 0.5))] : null;
@@ -196,7 +213,8 @@
     api.LIBELLES.editer = 'Modifier le texte';
     api.LIBELLES.remplace = 'Texte modifié';
     api.AIDE_OUTIL.editer = 'Survoler le texte de la page, cliquer un bloc pour le corriger. Entrée valide, Échap annule.';
-    EXT.boutons.push({ groupe: 'outils', html: api.outilBtn('editer', 'editerTexte', 'Modifier le texte existant') });
+    // Juste à côté de l'outil Texte.
+    EXT.boutons.push({ groupe: 'apres-texte', html: api.outilBtn('editer', 'editerTexte', 'Modifier le texte existant') });
 
     function avertir(sec) {
       var p = document.createElement('p'); p.className = 'tpdf-aide tpdf-avert'; p.textContent = AVERTISSEMENT;
@@ -418,7 +436,7 @@
       var s = S();
       var inp = document.createElement('input');
       inp.type = 'text'; inp.className = 'tpdf-tx-edit'; inp.value = a.texte;
-      inp.style.left = (a.x * z) + 'px'; inp.style.top = (a.y * z) + 'px';
+      inp.style.left = ((a.x + (a.dx || 0)) * z) + 'px'; inp.style.top = ((a.y + (a.dy || 0)) * z) + 'px';
       inp.style.minWidth = (a.w * z + 2) + 'px'; inp.style.height = (a.h * z) + 'px';
       inp.style.width = Math.max(a.w * z + 2, (mesureCss(a.texte, a) + (a.esp || 0) * a.texte.length) * z + 12) + 'px';
       inp.style.letterSpacing = ((a.esp || 0) * z) + 'px';
@@ -451,12 +469,26 @@
     }
 
     /* ── Type d'annotation « remplace » ───────────────────────────────── */
+    // Déplacement du texte seul (le cache reste sur l'ancien texte) : vecteur
+    // de l'écran ramené au repère de la page non pivotée.
+    function versR0(dx, dy) {
+      var d = api.dims(api.pageCourante()); if (!d.R) return [dx, dy];
+      var v = d.meta.view;
+      function f(u, w) { var q = api.versPdf(v, 0, u, w); return api.versVue(v, d.R, q[0], q[1]); }
+      var o = f(0, 0), ex = f(1, 0), ey = f(0, 1), m = [ex[0] - o[0], ex[1] - o[1], ey[0] - o[0], ey[1] - o[1]];
+      // Matrice orthonormée : l'inverse est la transposée.
+      return [m[0] * dx + m[1] * dy, m[2] * dx + m[3] * dy];
+    }
+    function largeurTexte(a) { return Math.max(a.w, mesureCss(a.texte, a) + (a.esp || 0) * a.texte.length); }
     EXT.types.remplace = {
-      repere: 'pdf0', fixe: true,
-      boite: function (a) { return { x: a.x, y: a.y, w: a.w, h: a.h }; },
+      repere: 'pdf0', sansPoignees: true,
+      boite: function (a) { return { x: a.x + (a.dx || 0), y: a.y + (a.dy || 0), w: largeurTexte(a), h: a.h }; },
+      deplacer: function (a, o, dx, dy) { var r = versR0(dx, dy); a.dx = (o.dx || 0) + r[0]; a.dy = (o.dy || 0) + r[1]; },
+      redim: function () { /* taille tenue par le texte d'origine */ },
       dessiner: function (a, g) {
         api.sv('rect', { x: a.x - 1, y: a.y - 1, width: a.w + 2, height: a.h + 2, fill: a.fond }, g);
-        var t = api.sv('text', { x: a.bx, y: a.by, 'font-size': a.taille, 'letter-spacing': a.esp || 0, 'font-family': cssPolice(a.police),
+        if (a.dx || a.dy) api.sv('rect', { x: a.x + (a.dx || 0), y: a.y + (a.dy || 0), width: largeurTexte(a), height: a.h, fill: 'transparent' }, g);
+        var t = api.sv('text', { x: a.bx + (a.dx || 0), y: a.by + (a.dy || 0), 'font-size': a.taille, 'letter-spacing': a.esp || 0, 'font-family': cssPolice(a.police),
           'font-weight': a.police.gras ? 'bold' : 'normal', 'font-style': a.police.italique ? 'italic' : 'normal', fill: a.couleur }, g);
         t.textContent = a.texte;
       },
@@ -478,6 +510,14 @@
         var nf = { sans: 'Helvetica', serif: 'Times', mono: 'Courier' }[a.police.famille] + (a.police.gras ? ' gras' : '') + (a.police.italique ? ' italique' : '');
         f.textContent = 'Police : ' + nf + (a.police.nom ? ' (au plus près de « ' + a.police.nom + ' »)' : '') + '. Supprimer l\'annotation rétablit le texte d\'origine.';
         sec.appendChild(f);
+        var dep = document.createElement('p'); dep.className = 'tpdf-aide';
+        dep.textContent = 'Glisser le texte ou utiliser les flèches (Maj : par 10) pour le déplacer ; le cache reste sur l\'ancien texte.';
+        sec.appendChild(dep);
+        if (a.dx || a.dy) {
+          var rz = document.createElement('button'); rz.type = 'button'; rz.className = 'tpdf-b'; rz.textContent = 'Remettre en place'; rz.setAttribute('data-bulle', 'Replacer');
+          rz.addEventListener('click', function () { var av = api.snapshot(); a.dx = 0; a.dy = 0; api.pushHist(av); api.dessinerCalque(); api.rendreProps(); api.rendreBarre(); });
+          sec.appendChild(rz);
+        }
         avertir(sec);
       },
       exporter: async function (a, c) {
@@ -486,7 +526,7 @@
         var p1 = c.P(a.x - 1, a.y - 1), p2 = c.P(a.x + a.w + 1, a.y + a.h + 1);
         c.pg.drawRectangle({ x: Math.min(p1[0], p2[0]), y: Math.min(p1[1], p2[1]), width: Math.abs(p2[0] - p1[0]), height: Math.abs(p2[1] - p1[1]), color: L.rgb(f[0], f[1], f[2]) });
         if (!a.texte) return;
-        var font = await c.pol.police(a.texte + a.orig, a.police), b = c.P(a.bx, a.by);
+        var font = await c.pol.police(a.texte + a.orig, a.police), b = c.P(a.bx + (a.dx || 0), a.by + (a.dy || 0));
         var orig = api.nettoyerTexte(font, a.orig || '');
         var cs = a.largeur ? espacement(a.largeur, font.widthOfTextAtSize(orig, a.taille), orig.length, a.taille) : 0;
         if (cs) c.pg.pushOperators(L.pushGraphicsState(), L.setCharacterSpacing(cs));

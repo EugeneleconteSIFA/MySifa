@@ -551,6 +551,7 @@
         '<div class="tpdf-groupe">' +
           outilBtn('select', 'select', 'Sélection') +
           outilBtn('texte', 'texte', 'Texte libre') +
+          '<span class="tpdf-ext" data-ext="apres-texte"></span>' +
           outilBtn('surligneur', 'surligneur', 'Surligneur') +
           outilBtn('rect', 'rect', 'Rectangle') +
           outilBtn('ellipse', 'ellipse', 'Ellipse') +
@@ -1185,6 +1186,7 @@
   }
   function deplacer(a, o, dx, dy) {
     if (EXT.types[a.t] && EXT.types[a.t].fixe) return;
+    if (EXT.types[a.t] && EXT.types[a.t].deplacer) { EXT.types[a.t].deplacer(a, o, dx, dy); return; }
     if (o.x != null) { a.x = o.x + dx; a.y = o.y + dy; }
     if (o.x1 != null) { a.x1 = o.x1 + dx; a.y1 = o.y1 + dy; a.x2 = o.x2 + dx; a.y2 = o.y2 + dy; }
     if (o.pts) a.pts = o.pts.map(function (q) { return [q[0] + dx, q[1] + dy]; });
@@ -1313,7 +1315,7 @@
     var b = boite(a), m = 3 / z;
     sv('rect', { x: b.x - m, y: b.y - m, width: b.w + 2 * m, height: b.h + 2 * m, 'class': 'tpdf-cadre', 'stroke-width': 1.2 / z, 'stroke-dasharray': (4 / z) + ' ' + (3 / z) }, cadre);
     if (T && T.decorations) T.decorations(a, cadre, z);
-    if (T && T.fixe) return;
+    if (T && (T.fixe || T.sansPoignees)) return;
     [['nw', b.x - m, b.y - m], ['ne', b.x + b.w + m, b.y - m], ['sw', b.x - m, b.y + b.h + m], ['se', b.x + b.w + m, b.y + b.h + m]].forEach(function (h) {
       sv('rect', { x: h[1] - t / 2, y: h[2] - t / 2, width: t, height: t, 'class': 'tpdf-poignee tpdf-poignee-' + h[0], 'data-poignee': h[0], 'stroke-width': 1.5 / z }, cadre);
     });
