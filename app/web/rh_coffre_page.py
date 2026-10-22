@@ -106,6 +106,13 @@ tr:hover td{background:var(--accent-bg)}
 .b-distribue{background:color-mix(in srgb,var(--accent,#22d3ee) 15%,transparent);color:var(--accent)}
 .b-consulte{background:rgba(52,211,153,.15);color:var(--ok)}
 tr.ndf-row{cursor:pointer}
+/* Téléphone : filtres sur deux colonnes (libellé, liste), boutons côte à côte. */
+@media(max-width:640px){
+  #ndf-bloc .toolbar{display:grid;grid-template-columns:auto 1fr 1fr;align-items:center;gap:8px}
+  #ndf-bloc .toolbar select{grid-column:2/-1;width:100%}
+  #ndf-bloc .toolbar .btn{justify-content:center}
+  #ndf-bloc .toolbar .btn:first-of-type{grid-column:1/3}
+}
 .statut{display:inline-block;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border:1px solid transparent}
 .statut.brouillon{background:transparent;border:1px dashed var(--border);color:var(--muted)}
 .statut.soumise{background:var(--accent-bg);border-color:color-mix(in srgb,var(--accent) 45%,transparent);color:var(--accent)}
@@ -271,7 +278,7 @@ tr.ndf-row{cursor:pointer}
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_ndf_reglages.js?v=4"></script>
 <script src="/static/mysifa_confirm.js?v=2"></script>
-<script src="/static/mysifa_ndf_fiche.js?v=3"></script>
+<script src="/static/mysifa_ndf_fiche.js?v=4"></script>
 <script src="/static/mysifa_url.js?v=5"></script>
 <script src="/static/rh_coffre_url.js?v=1"></script>
 <script>window.__MYSIFA_APP__='rh_coffre';</script>
@@ -515,7 +522,9 @@ async function loadNdf(){
     }catch(e){}
     const c=document.getElementById('ndf-container');
     if(!j.notes.length){c.innerHTML='<p style="color:var(--muted);text-align:center;padding:30px 0">Aucune note de frais.</p>';return;}
-    c.innerHTML=`<table>
+    // Téléphone : cartes par mois à la place du tableau (static/mysifa_ndf_fiche.js).
+    const cartes=MySifaNdfFiche.cartes(NDF_RH,{salarie:true,ouvrir:'ouvrirNoteRh'});
+    c.innerHTML=`<div class="ndf-tableau"><table>
       <thead><tr><th>Salarié</th><th>Date</th><th>Catégorie</th><th>Description</th><th style="text-align:right">Montant</th><th>Statut</th><th>Actions</th></tr></thead>
       <tbody>${j.notes.map(n=>`
         <tr class="ndf-row" onclick="if(!event.target.closest('a,button'))ouvrirNoteRh(${n.id})" title="Consulter">
@@ -533,7 +542,7 @@ async function loadNdf(){
           </td>
         </tr>
       `).join('')}</tbody>
-    </table>`;
+    </table></div>${cartes}`;
   }catch(e){document.getElementById('ndf-container').innerHTML='<p style="color:var(--danger)">Erreur : '+esc(e.message)+'</p>';}
 }
 document.getElementById('ndf-statut').addEventListener('change',()=>{loadNdf();rhCoffreSyncUrl();});

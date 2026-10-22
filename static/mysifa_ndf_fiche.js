@@ -12,11 +12,19 @@
  * `note` est une ligne des API /api/coffre/notes-frais ou /api/rh-coffre/ndf.
  * Le justificatif s'ouvre par data-preview-url : chaque page a déjà son aperçu.
  * Le badge de statut reprend les classes .statut de la page.
+ *
+ *   MySifaNdfFiche.cartes(notes, {salarie: true, ouvrir: 'ouvrirNoteRh'})
+ *
+ * rend la liste en cartes regroupées par mois (téléphone). La page enveloppe
+ * son tableau dans .ndf-tableau : sous 640 px, le tableau se masque et les
+ * cartes prennent sa place. `ouvrir` est le nom de la fonction de la page qui
+ * ouvre la fiche d'une note.
  */
 (function () {
   'use strict';
 
   var STATUTS = { brouillon: 'Brouillon', soumise: 'Soumise', validee: 'Validée', payee: 'Payée', refusee: 'Refusée' };
+  var MOIS = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -99,6 +107,18 @@
       '.nf-btn.danger:hover{border-color:var(--danger);background:var(--card)}',
       '.nf-btn:disabled{opacity:.5;cursor:default}',
       '.nf-modal{overflow-x:hidden;overscroll-behavior:contain}.nf-modal *{box-sizing:border-box}',
+      '.ndf-cartes{display:none}',
+      '.ndf-mois+.ndf-mois{margin-top:16px}',
+      '.ndf-mois-tete{display:flex;justify-content:space-between;gap:8px;padding:0 2px 6px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}',
+      '.ndf-carte{display:flex;flex-direction:column;gap:6px;width:100%;text-align:left;padding:12px;margin-bottom:8px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-family:inherit;cursor:pointer;box-sizing:border-box}',
+      '.ndf-carte:active{border-color:var(--accent)}',
+      '.ndf-carte-l1,.ndf-carte-l2{display:flex;justify-content:space-between;align-items:center;gap:10px}',
+      '.ndf-carte-cat{font-size:14px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.ndf-carte-mt{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}',
+      '.ndf-carte-l2{font-size:12px;color:var(--muted)}',
+      '.ndf-carte-l2>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.ndf-carte-refus{font-size:12px;color:var(--danger)}',
+      '@media(max-width:640px){.ndf-tableau{display:none}.ndf-cartes{display:block}}',
       'html:has(.nf-back),html:has(.nf-back) body{overflow:hidden}',
       '@media(max-width:640px){.nf-back{padding:10px}.nf-head,.nf-body,.nf-foot{padding-left:16px;padding-right:16px}' +
         '.nf-dl{grid-template-columns:1fr;gap:2px}.nf-dl dd{margin-bottom:8px}' +
@@ -224,5 +244,39 @@
     return { fermer: fermer, element: back };
   }
 
-  window.MySifaNdfFiche = { ouvrir: ouvrir, STATUTS: STATUTS };
+  function cartes(liste, opts) {
+    opts = opts || {};
+    injecterStyle();
+    var ouvrirFn = /^[A-Za-z_$][\w$]*$/.test(opts.ouvrir || '') ? opts.ouvrir : 'void';
+    var groupes = [];
+    (liste || []).forEach(function (n) {
+      var cle = String(n.date_frais || '').slice(0, 7);
+      var g = groupes.find(function (x) { return x.cle === cle; });
+      if (!g) { g = { cle: cle, lignes: [], total: 0 }; groupes.push(g); }
+      g.lignes.push(n);
+      g.total += Number(n.montant_ttc) || 0;
+    });
+    return '<div class="ndf-cartes">' + groupes.map(function (g) {
+      var am = g.cle.split('-');
+      var titre = am[1] ? (MOIS[Number(am[1])] || am[1]) + ' ' + am[0] : 'Sans date';
+      var resume = g.lignes.length + (g.lignes.length > 1 ? ' notes · ' : ' note · ') + montant(g.total);
+      return '<div class="ndf-mois"><div class="ndf-mois-tete"><span>' + esc(titre) + '</span><span>' + esc(resume) + '</span></div>' +
+        g.lignes.map(function (n) {
+          // Coffre RH : le salarié d'abord (c'est lui que la compta cherche),
+          // Mon coffre : la catégorie.
+          var titreCarte = opts.salarie ? (n.employe_nom || '—') : (n.categorie || 'Note de frais');
+          var sous = opts.salarie
+            ? [n.categorie, date(n.date_frais)]
+            : [date(n.date_frais), n.ville];
+          return '<button type="button" class="ndf-carte" onclick="' + ouvrirFn + '(' + Number(n.id) + ')">' +
+            '<span class="ndf-carte-l1"><span class="ndf-carte-cat">' + esc(titreCarte) + '</span><span class="ndf-carte-mt">' + montant(n.montant_ttc) + '</span></span>' +
+            '<span class="ndf-carte-l2"><span>' + esc(sous.filter(Boolean).join(' · ')) + '</span>' +
+              '<span class="statut ' + esc(n.statut) + '">' + esc(STATUTS[n.statut] || n.statut) + '</span></span>' +
+            (n.motif_refus ? '<span class="ndf-carte-refus">Refus : ' + esc(n.motif_refus) + '</span>' : '') +
+          '</button>';
+        }).join('') + '</div>';
+    }).join('') + '</div>';
+  }
+
+  window.MySifaNdfFiche = { ouvrir: ouvrir, cartes: cartes, STATUTS: STATUTS };
 })();
