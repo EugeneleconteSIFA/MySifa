@@ -262,3 +262,10 @@ select.tcal-in{font-size:15px}
 .tcal-jauge{height:8px;border-radius:999px;background:var(--accent-bg);overflow:hidden}
 .tcal-jauge i{display:block;height:100%;background:var(--accent)}
 @media(max-width:520px){.tcal-carton{grid-template-columns:1fr auto}.tcal-jauge{grid-column:1/-1}}
+
+/* Onglets d'un outil et de ses sous-outils (Éditeur PDF › Parapheur, Scanner…). */
+.tools-onglets{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 18px;padding:5px;background:var(--card);border:1px solid var(--border);border-radius:14px;width:fit-content;max-width:100%}
+.tools-onglet{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid transparent;border-radius:10px;padding:9px 16px;font:inherit;font-size:14px;font-weight:700;color:var(--text2);cursor:pointer;transition:background .15s,color .15s}
+.tools-onglet:hover{background:var(--bg);color:var(--text)}
+.tools-onglet.actif{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.tools-util-seul .tut-onglets{display:none}

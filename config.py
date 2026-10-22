@@ -1312,7 +1312,7 @@ CONVERTIR_PAR_HEURE = int(os.getenv("CONVERTIR_PAR_HEURE", "60"))
 # PDF à plat. Le PDF produit dans le navigateur est envoyé tel quel à Claude
 # (seules ces fonctions font sortir un document du poste). Taille d'envoi
 # bornée : l'API refuse au-delà de 32 Mo (base64 compris).
-PDF_IA_MODELE = os.getenv("PDF_IA_MODELE", "claude-opus-5-5")
+PDF_IA_MODELE = os.getenv("PDF_IA_MODELE", "claude-sonnet-5-5")
 PDF_IA_MAX_MO = int(os.getenv("PDF_IA_MAX_MO", "20"))
 PDF_IA_PAR_HEURE = int(os.getenv("PDF_IA_PAR_HEURE", "40"))
 # Preflight BAT de l'éditeur PDF : seuils d'alerte. Résolution minimale d'une
