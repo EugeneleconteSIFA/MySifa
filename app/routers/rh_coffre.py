@@ -35,6 +35,7 @@ from app.routers.coffre import (
     _log_doc_access,
     _sanitize_filename,
     ndf_categories,
+    ndf_joindre_lignes,
 )
 
 router = APIRouter(tags=["rh_coffre"])
@@ -443,7 +444,8 @@ def list_all_ndf(request: Request, statut: str = "", annee: str = ""):
                   n.date_frais DESC, n.id DESC""",
             params,
         ).fetchall()
-    return {"notes": [dict(r) for r in rows]}
+        notes = ndf_joindre_lignes(conn, [dict(r) for r in rows])
+    return {"notes": notes}
 
 
 @router.post("/api/rh-coffre/ndf/{ndf_id}/valider")
@@ -620,12 +622,11 @@ async def save_ndf_categories(request: Request):
     return {"success": True}
 
 
-def _rubrique_feuille(r) -> str:
+def _rubrique_feuille(categorie: str, taux, km: bool) -> str:
     """Colonne de la feuille de frais Excel : « Repas à 10% », « KM »…"""
-    if r["distance_km"] is not None:
+    if km:
         return "KM"
-    libelle = r["categorie"] or ""
-    taux = r["taux_tva"]
+    libelle = categorie or ""
     if taux is None:
         return libelle
     if not taux:
@@ -635,7 +636,13 @@ def _rubrique_feuille(r) -> str:
 
 @router.get("/api/rh-coffre/ndf/export")
 def export_ndf_csv(request: Request, annee: str = "", statut: str = ""):
-    """Export CSV des notes de frais (filtrable). Pour intégration compta."""
+    """Export CSV des notes de frais (filtrable). Pour intégration compta.
+
+    Une ligne par taux de TVA : un ticket de restaurant à 10 % et 20 % donne
+    deux lignes, chacune avec ses propres HT, TVA et TTC, et le même id de
+    note. `ligne` les numérote (« 1/2 ») et `montant_ttc_note` rappelle le
+    total du ticket. Une indemnité kilométrique tient sur une ligne.
+    """
     _require_rh(request)
     where = ["n.deleted_at IS NULL"]
     params: list = []
@@ -655,20 +662,37 @@ def export_ndf_csv(request: Request, annee: str = "", statut: str = ""):
                 FROM notes_de_frais n
                 JOIN users u ON u.id = n.employe_user_id
                 WHERE {' AND '.join(where)}
-                ORDER BY n.date_frais DESC""",
+                ORDER BY n.date_frais DESC, n.id DESC""",
             params,
         ).fetchall()
+        notes = ndf_joindre_lignes(conn, [dict(r) for r in rows])
+
+    def txt(v):
+        return "" if v is None else str(v)
+
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";")
     w.writerow([
-        "id", "salarie", "matricule", "date_frais", "categorie",
+        "id", "ligne", "salarie", "matricule", "date_frais", "categorie", "rubrique_feuille",
         "ville", "distance_km", "taux_km", "taux_tva",
-        "montant_ht", "montant_tva", "montant_ttc", "description", "statut",
-        "soumise_at", "validee_at", "validee_par",
-        "payee_at", "payee_par", "motif_refus", "rubrique_feuille",
+        "montant_ht", "montant_tva", "montant_ttc", "montant_ttc_note", "description", "statut",
+        "soumise_at", "validee_at", "validee_par", "payee_at", "payee_par", "motif_refus",
     ])
-    for r in rows:
-        w.writerow([str(r[k] if r[k] is not None else "") for k in r.keys()] + [_rubrique_feuille(r)])
+    for n in notes:
+        km = n["distance_km"] is not None
+        lignes = n["tva_lignes"] or [{
+            "taux_tva": n["taux_tva"], "montant_ht": n["montant_ht"],
+            "montant_tva": n["montant_tva"], "montant_ttc": n["montant_ttc"],
+        }]
+        for i, l in enumerate(lignes, start=1):
+            w.writerow([txt(v) for v in (
+                n["id"], f"{i}/{len(lignes)}", n["employe"], n["matricule"], n["date_frais"],
+                n["categorie"], _rubrique_feuille(n["categorie"], l["taux_tva"], km),
+                n["ville"], n["distance_km"], n["taux_km"], l["taux_tva"],
+                l["montant_ht"], l["montant_tva"], l["montant_ttc"], n["montant_ttc"],
+                n["description"], n["statut"], n["soumise_at"], n["validee_at"],
+                n["validee_by_nom"], n["payee_at"], n["payee_by_nom"], n["motif_refus"],
+            )])
     buf.seek(0)
     filename = f"notes_de_frais_{annee or 'toutes'}.csv"
     return StreamingResponse(

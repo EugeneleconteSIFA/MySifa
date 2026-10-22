@@ -66,6 +66,11 @@
       '.nf-dl dd{margin:0;white-space:pre-wrap;word-break:break-word}',
       '.nf-total{font-weight:700;font-variant-numeric:tabular-nums}',
       '.nf-vide{font-size:12px;color:var(--muted);margin:0 0 16px}',
+      '.nf-vent{width:100%;border-collapse:collapse;font-size:13px;margin:0 0 16px;font-variant-numeric:tabular-nums}',
+      '.nf-vent th{text-align:right;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:0 0 6px;border-bottom:1px solid var(--border)}',
+      '.nf-vent td{text-align:right;padding:6px 0;border-bottom:1px solid var(--border)}',
+      '.nf-vent th:first-child,.nf-vent td:first-child{text-align:left}',
+      '.nf-vent tfoot td{font-weight:700;border-bottom:none}',
       '.nf-resume{padding:4px 0 18px;margin-bottom:16px;border-bottom:1px solid var(--border)}',
       '.nf-montant{font-size:28px;font-weight:800;letter-spacing:-.5px;font-variant-numeric:tabular-nums;line-height:1.1}',
       '.nf-montant span{font-size:12px;font-weight:600;color:var(--muted);margin-left:6px;letter-spacing:0}',
@@ -158,9 +163,24 @@
       puces.push(esc(nombre(n.distance_km)) + ' km × ' + esc(nombre(n.taux_km)) + ' €');
       puces.push('Sans TVA');
     } else {
-      puces.push(n.taux_tva ? 'TVA ' + esc(taux(n.taux_tva)) + ' · ' + montant(n.montant_tva) : 'Sans TVA');
+      var lignes = n.tva_lignes && n.tva_lignes.length ? n.tva_lignes
+        : [{ taux_tva: n.taux_tva, montant_tva: n.montant_tva }];
+      lignes.forEach(function (l) {
+        puces.push(l.taux_tva ? 'TVA ' + esc(taux(l.taux_tva)) + ' · ' + montant(l.montant_tva) : 'Sans TVA');
+      });
       if (n.montant_ht != null) puces.push('HT ' + montant(n.montant_ht));
     }
+    // Ticket à plusieurs taux : le détail ligne par ligne, comme sur le ticket.
+    var ventilation = (n.tva_lignes || []).length > 1
+      ? '<div class="nf-section"><div class="nf-titre">Ventilation de la TVA</div><table class="nf-vent">' +
+          '<thead><tr><th>Taux</th><th>HT</th><th>TVA</th><th>TTC</th></tr></thead><tbody>' +
+          n.tva_lignes.map(function (l) {
+            return '<tr><td>' + esc(taux(l.taux_tva)) + '</td><td>' + montant(l.montant_ht) + '</td><td>' +
+              montant(l.montant_tva) + '</td><td>' + montant(l.montant_ttc) + '</td></tr>';
+          }).join('') +
+          '</tbody><tfoot><tr><td>Total</td><td>' + montant(n.montant_ht) + '</td><td>' + montant(n.montant_tva) +
+          '</td><td>' + montant(n.montant_ttc) + '</td></tr></tfoot></table></div>'
+      : '';
     var just = '/api/coffre/notes-frais/' + encodeURIComponent(n.id) + '/justificatif';
     var image = /\.(png|jpe?g|gif|webp|heic)$/i.test(n.justificatif_nom || '');
     var details =
@@ -173,6 +193,7 @@
         '<div class="nf-montant">' + montant(n.montant_ttc) + '<span>TTC</span></div>' +
         '<div class="nf-puces">' + puces.map(function (p) { return '<span class="nf-puce">' + p + '</span>'; }).join('') + '</div>' +
       '</div>' +
+      ventilation +
       '<div class="nf-section"><div class="nf-titre">Suivi</div>' + frise(n) + '</div>' +
       '<div class="nf-section"><div class="nf-titre">Détails</div><dl class="nf-dl">' + details + '</dl></div>' +
       '<div class="nf-section"><div class="nf-titre">Justificatif</div>' +

@@ -7,11 +7,12 @@ propose une catégorie. Le formulaire se pré-remplit, le salarié vérifie et
 corrige avant d'envoyer.
 
 Ce module LIT et PROPOSE. Il n'écrit rien en base : la note n'existe que quand
-le salarié l'enregistre, avec les montants recalculés par `ndf_montants()`.
+le salarié l'enregistre, avec les montants recalculés par `ndf_lignes_tva()`.
 
 Ticket à plusieurs taux (restaurant : 10 % sur la nourriture, 20 % sur
-l'alcool) : la TVA rendue est le total, le taux retenu celui qui porte le plus
-de TVA, et la remarque le dit au salarié.
+l'alcool) : une ligne par taux, avec son TTC et sa TVA, comme sur le ticket.
+Si la somme des lignes ne retombe pas sur le total du ticket, la remarque le
+dit au salarié au lieu de corriger en silence.
 """
 from __future__ import annotations
 
@@ -62,8 +63,10 @@ def _schema(codes: list[str]) -> dict:
                     "properties": {
                         "taux": {"type": "number", "description": "Taux en %, ex. 10 ou 5.5."},
                         "montant": {"type": "number", "description": "Montant de TVA à ce taux, en euros."},
+                        "base_ht": _nombre_ou_nul("Montant HT à ce taux, s'il est imprimé."),
+                        "ttc": _nombre_ou_nul("Montant TTC à ce taux, s'il est imprimé."),
                     },
-                    "required": ["taux", "montant"],
+                    "required": ["taux", "montant", "base_ht", "ttc"],
                     "additionalProperties": False,
                 },
             },
@@ -83,7 +86,7 @@ Relève uniquement ce qui est imprimé sur le document :
 - la date de la dépense ;
 - le nom du commerce et sa ville ;
 - le total payé TTC ;
-- la TVA, une ligne par taux imprimé (taux en % et montant en euros).
+- la TVA, une ligne par taux imprimé : le taux en %, le montant de TVA, et le montant HT (base) et TTC à ce taux s'ils sont imprimés. Un restaurant a souvent deux taux (10 % et 20 %) : relève les deux lignes séparément.
 
 Choisis la catégorie dans cette liste, d'après la nature de la dépense :
 {liste}
@@ -157,27 +160,50 @@ def interpreter(brut: dict, categories: list[dict]) -> dict:
         return {"ok": False, "erreur": (brut.get("remarque") or "Justificatif illisible — saisissez la note à la main.")}
 
     ttc = _montant(brut.get("montant_ttc"))
-    lignes = []
+
+    # Lignes de TVA : une par taux légal, au centime près.
+    par_taux: dict = {}
     for l in brut.get("tva") or []:
         try:
             taux = float(l.get("taux"))
-            mt = round(float(l.get("montant")), 2)
+            tva_l = round(float(l.get("montant")), 2)
         except (TypeError, ValueError, AttributeError):
             continue
-        if taux in NDF_TAUX_TVA and mt >= 0:
-            lignes.append((taux, mt))
-    tva = round(sum(m for _, m in lignes), 2) if lignes else None
-    if tva is not None and ttc is not None and tva >= ttc:
-        tva, lignes = None, []
-    taux = max(lignes, key=lambda x: x[1])[0] if lignes else None
+        if taux not in NDF_TAUX_TVA or tva_l < 0:
+            continue
+        ttc_l = _montant(l.get("ttc"))
+        if ttc_l is None:
+            base = _montant(l.get("base_ht"))
+            if base is not None:
+                ttc_l = round(base + tva_l, 2)
+            elif taux > 0 and tva_l > 0:
+                ttc_l = round(tva_l * (100 + taux) / taux, 2)
+        d = par_taux.setdefault(taux, {"taux": taux, "ttc": 0.0, "tva": 0.0, "complet": True})
+        d["tva"] = round(d["tva"] + tva_l, 2)
+        if ttc_l is None:
+            d["complet"] = False
+        else:
+            d["ttc"] = round(d["ttc"] + ttc_l, 2)
+    lignes = sorted(par_taux.values(), key=lambda d: -d["taux"])
 
     remarques = []
-    taux_distincts = sorted({t for t, _ in lignes}, reverse=True)
-    if len(taux_distincts) > 1:
-        remarques.append("Ticket à plusieurs taux (" + " et ".join(
-            f"{t:g} %".replace(".", ",") for t in taux_distincts) + ") : TVA totale reprise.")
+    if len(lignes) == 1 and ttc is not None:
+        # Un seul taux : le total du ticket fait foi pour le TTC de la ligne.
+        lignes[0]["ttc"], lignes[0]["complet"] = ttc, True
+    lignes = [l for l in lignes if l["complet"] and l["ttc"] > 0 and l["tva"] < l["ttc"]]
+    if lignes:
+        somme = round(sum(l["ttc"] for l in lignes), 2)
+        if ttc is None:
+            ttc = somme
+        elif abs(somme - ttc) > 0.02:
+            remarques.append(
+                f"Écart de {abs(somme - ttc):.2f} € entre les lignes de TVA et le total du ticket — vérifiez.".replace(".", ",", 1))
+    if len(lignes) > 1:
+        remarques.append("Ticket à " + " et ".join(
+            f"{l['taux']:g} %".replace(".", ",") for l in lignes) + " : une ligne par taux.")
     if brut.get("remarque"):
         remarques.append(str(brut["remarque"]).strip())
+    tva_lignes = [{"taux": l["taux"], "ttc": l["ttc"], "tva": l["tva"]} for l in lignes] or None
 
     cat = next((c for c in categories if c["code"] == brut.get("categorie")), None)
     commerce = (brut.get("commerce") or "").strip()[:80] or None
@@ -186,8 +212,9 @@ def interpreter(brut: dict, categories: list[dict]) -> dict:
     champs = {
         "date_frais": _date(brut.get("date")),
         "montant_ttc": ttc,
-        "taux_tva": taux,
-        "montant_tva": tva,
+        "tva_lignes": tva_lignes,
+        "taux_tva": tva_lignes[0]["taux"] if tva_lignes and len(tva_lignes) == 1 else None,
+        "montant_tva": round(sum(l["tva"] for l in tva_lignes), 2) if tva_lignes else None,
         "ville": ville,
         "categorie_id": cat["id"] if cat else None,
         "description": commerce,

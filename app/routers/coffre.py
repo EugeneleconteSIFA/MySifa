@@ -12,6 +12,7 @@ reste celui remis en main propre / par email par la comptabilité.
 from __future__ import annotations
 
 import hashlib
+import json
 import mimetypes
 import os
 import re
@@ -165,13 +166,63 @@ def ndf_categories(conn, toutes: bool = False) -> list:
     return [dict(r) for r in rows]
 
 
+NDF_MAX_LIGNES_TVA = 6
+
+
+def ndf_lignes_tva(lignes: list) -> dict:
+    """Ventilation de la TVA d'une note : une ligne par taux, telle qu'imprimée
+    sur le ticket. Chaque ligne donne son TTC et, si elle est connue, sa TVA
+    (sinon déduite du taux). Rend les lignes validées et les totaux de la note.
+    Même calcul que `ndfLigneCalcul()` de la page."""
+    if not isinstance(lignes, list) or not lignes:
+        raise HTTPException(400, "Montant manquant — au moins une ligne de TVA.")
+    if len(lignes) > NDF_MAX_LIGNES_TVA:
+        raise HTTPException(400, f"Au plus {NDF_MAX_LIGNES_TVA} taux de TVA par note.")
+    propres, vus = [], set()
+    for l in lignes:
+        try:
+            taux = float(l.get("taux"))
+            ttc = round(float(str(l.get("ttc")).replace(",", ".")), 2)
+        except (TypeError, ValueError, AttributeError):
+            raise HTTPException(400, "Ligne de TVA invalide — taux et montant TTC attendus.")
+        if taux not in NDF_TAUX_TVA:
+            raise HTTPException(400, "Taux de TVA invalide.")
+        if taux in vus:
+            raise HTTPException(400, "Deux lignes au même taux de TVA — regroupez-les.")
+        vus.add(taux)
+        if ttc <= 0:
+            raise HTTPException(400, "Montant TTC invalide — valeur supérieure à 0.")
+        brut = l.get("tva")
+        if brut in (None, ""):
+            tva = round(ttc - ttc / (1 + taux / 100), 2)
+        else:
+            try:
+                tva = round(float(str(brut).replace(",", ".")), 2)
+            except ValueError:
+                raise HTTPException(400, "TVA invalide — nombre attendu.")
+        if tva < 0 or (tva >= ttc and ttc > 0) or (taux == 0 and tva != 0):
+            raise HTTPException(400, "TVA invalide — doit rester inférieure au montant TTC.")
+        propres.append({"taux_tva": taux, "montant_ttc": ttc, "montant_tva": tva,
+                        "montant_ht": round(ttc - tva, 2)})
+    tot_ttc = round(sum(l["montant_ttc"] for l in propres), 2)
+    tot_tva = round(sum(l["montant_tva"] for l in propres), 2)
+    return {
+        "lignes": propres,
+        "montant_ttc": tot_ttc,
+        "montant_tva": tot_tva,
+        "montant_ht": round(tot_ttc - tot_tva, 2),
+        # Un seul taux : il qualifie la note. Plusieurs : ce sont les lignes.
+        "taux_tva": propres[0]["taux_tva"] if len(propres) == 1 else None,
+    }
+
+
 def ndf_montants(saisie: str, montant_ttc: Optional[float], taux_tva: float,
                  montant_tva: Optional[float], distance_km: Optional[float],
                  taux_km: Optional[float]) -> dict:
-    """TTC, TVA et HT d'une note. Même calcul que `ndfCalcul()` de la page.
+    """TTC, TVA et HT d'une note saisie sur une seule ligne.
 
-    Kilométrique : TTC = distance × taux, sans TVA. Sinon la TVA se déduit du
-    TTC et du taux, sauf si l'utilisateur l'a corrigée (ticket à deux taux).
+    Kilométrique : TTC = distance × taux, sans TVA ni ligne de TVA. Sinon la
+    note n'a qu'un taux : c'est une ventilation à une ligne.
     """
     if saisie == "km":
         if not distance_km or distance_km <= 0:
@@ -179,20 +230,40 @@ def ndf_montants(saisie: str, montant_ttc: Optional[float], taux_tva: float,
         if not taux_km or taux_km <= 0:
             raise HTTPException(400, "Taux kilométrique non défini — à régler par la comptabilité dans Coffre RH › Notes de frais › Réglages.")
         ttc = round(distance_km * taux_km, 2)
-        return {"montant_ttc": ttc, "montant_tva": 0.0, "montant_ht": ttc, "taux_tva": 0.0}
+        return {"montant_ttc": ttc, "montant_tva": 0.0, "montant_ht": ttc, "taux_tva": 0.0, "lignes": []}
     if montant_ttc is None or montant_ttc <= 0:
         raise HTTPException(400, "Montant TTC invalide — valeur supérieure à 0.")
-    ttc = round(montant_ttc, 2)
-    if montant_tva is None:
-        montant_tva = round(ttc - ttc / (1 + taux_tva / 100), 2)
-    if montant_tva < 0 or montant_tva >= ttc:
-        raise HTTPException(400, "TVA invalide — doit rester inférieure au montant TTC.")
-    return {
-        "montant_ttc": ttc,
-        "montant_tva": round(montant_tva, 2),
-        "montant_ht": round(ttc - montant_tva, 2),
-        "taux_tva": taux_tva,
-    }
+    return ndf_lignes_tva([{"taux": taux_tva, "ttc": montant_ttc, "tva": montant_tva}])
+
+
+def ndf_joindre_lignes(conn, notes: list) -> list:
+    """Ajoute à chaque note (dict) sa ventilation `tva_lignes`."""
+    ids = [n["id"] for n in notes]
+    par_note: dict = {i: [] for i in ids}
+    for i in range(0, len(ids), 500):
+        lot = ids[i:i + 500]
+        if not lot:
+            continue
+        for r in conn.execute(
+            f"""SELECT note_id,taux_tva,montant_ttc,montant_tva,montant_ht
+                FROM notes_de_frais_tva WHERE note_id IN ({','.join('?' * len(lot))})
+                ORDER BY note_id, ordre, id""",
+            lot,
+        ).fetchall():
+            par_note[r["note_id"]].append({k: r[k] for k in ("taux_tva", "montant_ttc", "montant_tva", "montant_ht")})
+    for n in notes:
+        n["tva_lignes"] = par_note.get(n["id"], [])
+    return notes
+
+
+def _ecrire_lignes(conn, note_id: int, lignes: list) -> None:
+    conn.execute("DELETE FROM notes_de_frais_tva WHERE note_id=?", (note_id,))
+    for i, l in enumerate(lignes):
+        conn.execute(
+            """INSERT INTO notes_de_frais_tva
+               (note_id,ordre,taux_tva,montant_ttc,montant_tva,montant_ht) VALUES (?,?,?,?,?,?)""",
+            (note_id, i, l["taux_tva"], l["montant_ttc"], l["montant_tva"], l["montant_ht"]),
+        )
 
 
 def _nombre_ou_none(v: str, quoi: str) -> Optional[float]:
@@ -255,13 +326,19 @@ def list_my_ndf(request: Request, annee: Optional[int] = None):
                 ORDER BY date_frais DESC, id DESC""",
             params,
         ).fetchall()
-    return {"notes": [dict(r) for r in rows]}
+        notes = ndf_joindre_lignes(conn, [dict(r) for r in rows])
+    return {"notes": notes}
 
 
 def _ndf_champs(date_frais: str, categorie_id: int, montant_ttc: str, taux_tva: str,
-                montant_tva: str, distance_km: str, ville: str, description: str) -> dict:
+                montant_tva: str, distance_km: str, ville: str, description: str,
+                tva_lignes: str = "") -> dict:
     """Valide une saisie de note et rend les colonnes à écrire (création et
-    modification d'un brouillon passent par ici)."""
+    modification d'un brouillon passent par ici). La ventilation par taux
+    part sous la clé `_lignes`, à écrire dans notes_de_frais_tva.
+
+    `tva_lignes` (JSON : [{taux, ttc, tva}]) l'emporte sur montant_ttc /
+    taux_tva / montant_tva, qui restent acceptés pour une note à un taux."""
     try:
         datetime.fromisoformat(date_frais[:10])
     except ValueError:
@@ -278,14 +355,22 @@ def _ndf_champs(date_frais: str, categorie_id: int, montant_ttc: str, taux_tva: 
         taux = float(cat["taux_tva"])
     if taux not in NDF_TAUX_TVA:
         raise HTTPException(400, "Taux de TVA invalide.")
-    m = ndf_montants(
-        cat["saisie"],
-        _nombre_ou_none(montant_ttc, "Montant TTC"),
-        taux,
-        _nombre_ou_none(montant_tva, "TVA"),
-        _nombre_ou_none(distance_km, "Distance"),
-        cat["taux_km"],
-    )
+    if cat["saisie"] == "montant" and (tva_lignes or "").strip():
+        try:
+            brutes = json.loads(tva_lignes)
+        except ValueError:
+            raise HTTPException(400, "Lignes de TVA illisibles.")
+        m = ndf_lignes_tva(brutes)
+    else:
+        m = ndf_montants(
+            cat["saisie"],
+            _nombre_ou_none(montant_ttc, "Montant TTC"),
+            taux,
+            _nombre_ou_none(montant_tva, "TVA"),
+            _nombre_ou_none(distance_km, "Distance"),
+            cat["taux_km"],
+        )
+    lignes = m.pop("lignes")
     est_km = cat["saisie"] == "km"
     return {
         "date_frais": date_frais[:10],
@@ -296,6 +381,7 @@ def _ndf_champs(date_frais: str, categorie_id: int, montant_ttc: str, taux_tva: 
         "taux_km": cat["taux_km"] if est_km else None,
         "ville": (ville or "").strip()[:80] or None,
         "description": (description or "").strip()[:1000],
+        "_lignes": lignes,
     }
 
 
@@ -330,6 +416,7 @@ async def create_ndf(
     distance_km: str = Form(""),
     ville: str = Form(""),
     description: str = Form(""),
+    tva_lignes: str = Form(""),
     soumettre: str = Form("0"),
     justificatif: Optional[UploadFile] = File(None),
 ):
@@ -337,7 +424,8 @@ async def create_ndf(
     user = get_current_user(request)
     uid = user.get("id")
     champs = _ndf_champs(date_frais, categorie_id, montant_ttc, taux_tva,
-                         montant_tva, distance_km, ville, description)
+                         montant_tva, distance_km, ville, description, tva_lignes)
+    lignes = champs.pop("_lignes")
     just = await _ndf_justificatif(uid, justificatif)
     if just:
         champs["justificatif_path"], champs["justificatif_nom"] = just
@@ -356,6 +444,7 @@ async def create_ndf(
                 VALUES ({','.join('?' * len(champs))})""",
             list(champs.values()),
         )
+        _ecrire_lignes(conn, cur.lastrowid, lignes)
         conn.commit()
     return {"success": True, "id": cur.lastrowid, "statut": champs["statut"]}
 
@@ -372,6 +461,7 @@ async def update_ndf(
     distance_km: str = Form(""),
     ville: str = Form(""),
     description: str = Form(""),
+    tva_lignes: str = Form(""),
     soumettre: str = Form("0"),
     justificatif: Optional[UploadFile] = File(None),
 ):
@@ -391,7 +481,8 @@ async def update_ndf(
     if row["statut"] != "brouillon":
         raise HTTPException(400, "Note déjà soumise — elle n'est plus modifiable.")
     champs = _ndf_champs(date_frais, categorie_id, montant_ttc, taux_tva,
-                         montant_tva, distance_km, ville, description)
+                         montant_tva, distance_km, ville, description, tva_lignes)
+    lignes = champs.pop("_lignes")
     just = await _ndf_justificatif(uid, justificatif)
     if just:
         champs["justificatif_path"], champs["justificatif_nom"] = just
@@ -399,11 +490,13 @@ async def update_ndf(
         champs["statut"] = "soumise"
         champs["soumise_at"] = datetime.now().isoformat(timespec="seconds")
     with get_db() as conn:
-        conn.execute(
+        cur = conn.execute(
             f"""UPDATE notes_de_frais SET {', '.join(k + '=?' for k in champs)}
                 WHERE id=? AND statut='brouillon'""",
             list(champs.values()) + [ndf_id],
         )
+        if cur.rowcount:
+            _ecrire_lignes(conn, ndf_id, lignes)
         conn.commit()
     return {"success": True, "id": ndf_id, "statut": champs.get("statut", "brouillon")}
 

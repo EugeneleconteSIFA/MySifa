@@ -278,7 +278,7 @@ tr.ndf-row{cursor:pointer}
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_ndf_reglages.js?v=4"></script>
 <script src="/static/mysifa_confirm.js?v=2"></script>
-<script src="/static/mysifa_ndf_fiche.js?v=4"></script>
+<script src="/static/mysifa_ndf_fiche.js?v=5"></script>
 <script src="/static/mysifa_url.js?v=5"></script>
 <script src="/static/rh_coffre_url.js?v=1"></script>
 <script>window.__MYSIFA_APP__='rh_coffre';</script>
@@ -608,6 +608,7 @@ function fmtTaux(t){return String(t).replace('.',',')+' %';}
 function ndfMeta(n){
   const p=[];
   if(n.distance_km!=null)p.push(String(n.distance_km).replace('.',',')+' km × '+String(n.taux_km).replace('.',',')+' €');
+  else if((n.tva_lignes||[]).length>1)p.push('TVA '+n.tva_lignes.map(l=>fmtTaux(l.taux_tva)).join(' + ')+' · '+fmtMontant(n.montant_tva));
   else if(n.taux_tva!=null)p.push(n.taux_tva?'TVA '+fmtTaux(n.taux_tva):'Sans TVA');
   if(n.ville)p.push(n.ville);
   return p.join(' · ');

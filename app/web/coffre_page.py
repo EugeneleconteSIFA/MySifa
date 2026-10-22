@@ -151,7 +151,14 @@ html:has(.modal-back),html:has(.modal-back) body{overflow:hidden}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#22d3ee) 12%,transparent)}
 .field textarea{min-height:64px;resize:vertical}
 .ndf-calcule{padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:13px;line-height:1.4;color:var(--text);font-weight:700;font-variant-numeric:tabular-nums;min-height:40px;display:flex;align-items:center}
-.ndf-ht{font-size:12px;color:var(--muted);margin-top:-6px;margin-bottom:14px;font-variant-numeric:tabular-nums}
+.ndf-ht{font-size:12px;color:var(--muted);margin-top:8px;font-variant-numeric:tabular-nums;line-height:1.45}
+.ligne-tva{display:grid;grid-template-columns:minmax(84px,1fr) minmax(96px,1.2fr) minmax(84px,1fr) 30px;gap:8px;align-items:center;margin-bottom:8px}
+.ligne-tete{margin-bottom:4px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.suppr-taux{width:30px;height:30px;padding:0;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text2);cursor:pointer;font-size:16px;line-height:1;font-family:inherit}
+.suppr-taux:hover{border-color:var(--danger);color:var(--danger)}
+.ajout-taux{padding:6px 10px;border-radius:8px;border:1px dashed var(--border);background:var(--card);color:var(--text2);font-weight:600;font-size:12px;cursor:pointer;font-family:inherit}
+.ajout-taux:hover{border-color:var(--accent);color:var(--accent)}
+.ajout-taux[hidden]{display:none}
 .calc-hint{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.4}
 .ndf-meta{font-size:11px;color:var(--muted);margin-top:3px}
 tr.ndf-row{cursor:pointer}
@@ -293,7 +300,7 @@ tr.ndf-row{cursor:pointer}
 
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_confirm.js?v=2"></script>
-<script src="/static/mysifa_ndf_fiche.js?v=4"></script>
+<script src="/static/mysifa_ndf_fiche.js?v=5"></script>
 <script src="/static/mysifa_url.js?v=5"></script>
 <script src="/static/coffre_url.js?v=1"></script>
 <script>window.__MYSIFA_APP__='coffre';</script>
@@ -495,6 +502,7 @@ function fmtNombre(n){return (Number(n)||0).toLocaleString('fr-FR',{minimumFract
 function ndfMeta(n){
   const p=[];
   if(n.distance_km!=null)p.push(fmtNombre(n.distance_km).replace(/,?0+$/,'')+' km × '+fmtNombre(n.taux_km)+' €');
+  else if((n.tva_lignes||[]).length>1)p.push('TVA '+n.tva_lignes.map(l=>fmtTaux(l.taux_tva)).join(' + ')+' · '+fmtMontant(n.montant_tva));
   else if(n.taux_tva!=null)p.push(n.taux_tva?'TVA '+fmtTaux(n.taux_tva)+' · '+fmtMontant(n.montant_tva):'Sans TVA');
   if(n.ville)p.push(n.ville);
   return p.join(' · ');
@@ -592,15 +600,12 @@ function openNdfModal(noteId){
         </div>
         <div class="ndf-section montants">
           <div class="ndf-section-titre">Montant</div>
-          <div id="ndf-montant-zone">
-            <div class="row3">
-              <div class="field"><label>Montant TTC (€)</label><input type="number" step="0.01" min="0.01" name="montant_ttc" id="ndf-ttc" placeholder="0,00"></div>
-              <div class="field"><label>Taux de TVA</label>
-                <select name="taux_tva" id="ndf-taux">${NDF_TAUX.map(t=>`<option value="${t}">${t?fmtTaux(t):'Sans TVA'}</option>`).join('')}</select>
-              </div>
-              <div class="field"><label>TVA (€)</label><input type="number" step="0.01" min="0" name="montant_tva" id="ndf-tva" placeholder="0,00"></div>
-            </div>
-            <div class="ndf-ht">Soit <span id="ndf-ht">0,00 €</span> HT · la TVA se corrige à la main pour un ticket à plusieurs taux.</div>
+          <div id="ndf-montant-zone" class="field">
+            <label id="lignes-titre">Montant par taux de TVA</label>
+            <div class="ligne-tva ligne-tete"><span>Taux</span><span>TTC (€)</span><span>TVA (€)</span><span></span></div>
+            <div id="ndf-lignes"></div>
+            <button type="button" class="ajout-taux" id="ajout-taux">+ Ajouter un taux</button>
+            <div class="ndf-ht" id="ndf-ht"></div>
           </div>
           <div id="ndf-km-zone" style="display:none">
             <div class="row2">
@@ -626,36 +631,87 @@ function openNdfModal(noteId){
   document.body.appendChild(back);
   const $=s=>back.querySelector(s);
   const form=$('#ndf-form');
-  const catsEl=$('#ndf-cats'),ttcEl=$('#ndf-ttc'),tauxEl=$('#ndf-taux'),tvaEl=$('#ndf-tva'),kmEl=$('#ndf-km');
-  let tvaManuelle=false;
+  const catsEl=$('#ndf-cats'),kmEl=$('#ndf-km');
   const catCourante=()=>NDF_CATS.find(c=>String(c.id)===catsEl.value)||null;
+  // Ventilation de la TVA : une ligne par taux, comme sur le ticket. La TVA
+  // d'une ligne se déduit de son TTC tant qu'on ne l'a pas corrigée à la main.
+  // Même calcul que ndf_lignes_tva() de app/routers/coffre.py.
+  const tauxDefaut=()=>{const c=catCourante();return c&&c.saisie!=='km'?Number(c.taux_tva):20;};
+  const ligneVide=t=>({taux:t,ttc:'',tva:'',tvaManuelle:false});
+  let lignes=[ligneVide(tauxDefaut())];
+  const r2=x=>Math.round(x*100)/100;
+  function calcLigne(l){
+    const ttc=parseFloat(l.ttc)||0;
+    if(!l.tvaManuelle)l.tva=ttc?r2(ttc-ttc/(1+l.taux/100)).toFixed(2):'';
+  }
+  function rendreLignes(){
+    const km=!!(catCourante()&&catCourante().saisie==='km');
+    const plusieurs=lignes.length>1;
+    $('#ndf-lignes').innerHTML=lignes.map((l,i)=>`<div class="ligne-tva" data-l="${i}">
+      <select data-f="taux" aria-label="Taux de TVA">${NDF_TAUX.map(t=>`<option value="${t}"${Number(l.taux)===t?' selected':''}${t!==Number(l.taux)&&lignes.some(x=>Number(x.taux)===t)?' disabled':''}>${t?fmtTaux(t):'Sans TVA'}</option>`).join('')}</select>
+      <input type="number" data-f="ttc" step="0.01" min="0.01" placeholder="0,00" value="${esc(l.ttc)}"${km||(plusieurs&&i>0)?'':' required'} aria-label="Montant TTC">
+      <input type="number" data-f="tva" step="0.01" min="0" placeholder="0,00" value="${esc(l.tva)}" aria-label="TVA">
+      ${plusieurs?`<button type="button" class="suppr-taux" data-act="suppr" title="Retirer ce taux" aria-label="Retirer ce taux">×</button>`:'<span></span>'}
+    </div>`).join('');
+    $('#ajout-taux').hidden=lignes.length>=NDF_TAUX.length;
+    majTotaux();
+  }
+  function majTotaux(){
+    lignes.forEach(calcLigne);
+    back.querySelectorAll('#ndf-lignes .ligne-tva').forEach((el,i)=>{
+      const champ=el.querySelector('[data-f=tva]');
+      if(champ&&document.activeElement!==champ)champ.value=lignes[i].tva;
+    });
+    const ttc=r2(lignes.reduce((s,l)=>s+(parseFloat(l.ttc)||0),0));
+    const tva=r2(lignes.reduce((s,l)=>s+(parseFloat(l.tva)||0),0));
+    $('#ndf-ht').textContent=lignes.length>1
+      ?'Total '+fmtMontant(ttc)+' TTC · TVA '+fmtMontant(tva)+' · HT '+fmtMontant(ttc-tva)
+      :'Soit '+fmtMontant(ttc?ttc-tva:0)+' HT. Ticket à plusieurs taux (restaurant…) : ajoutez une ligne par taux.';
+  }
   function majCalcul(){
     const cat=catCourante();
     const km=!!(cat&&cat.saisie==='km');
     $('#ndf-montant-zone').style.display=km?'none':'';
     $('#ndf-km-zone').style.display=km?'':'none';
-    ttcEl.required=!km;kmEl.required=km;
+    kmEl.required=km;
+    back.querySelectorAll('#ndf-lignes [data-f=ttc]').forEach((el,i)=>{el.required=!km&&i===0;});
     if(km){
       const r=ndfCalcul(cat,0,0,parseFloat(kmEl.value)||0);
       $('#ndf-km-total').textContent=fmtMontant(r.ttc);
       $('#ndf-km-hint').textContent=cat.taux_km?'Barème : '+fmtNombre(cat.taux_km)+' € par km':'Taux kilométrique non défini — prévenir la comptabilité.';
       return;
     }
-    const ttc=parseFloat(ttcEl.value)||0;
-    const r=ndfCalcul(cat,ttc,parseFloat(tauxEl.value)||0,0);
-    if(!tvaManuelle)tvaEl.value=ttc?r.tva.toFixed(2):'';
-    const tva=parseFloat(tvaEl.value)||0;
-    $('#ndf-ht').textContent=fmtMontant(ttc?ttc-tva:0);
+    majTotaux();
   }
+  $('#ndf-lignes').addEventListener('input',e=>{
+    const el=e.target.closest('[data-f]');if(!el)return;
+    const l=lignes[Number(el.closest('.ligne-tva').dataset.l)];if(!l)return;
+    if(el.dataset.f==='ttc')l.ttc=el.value;
+    else if(el.dataset.f==='tva'){l.tva=el.value;l.tvaManuelle=el.value!=='';}
+    majTotaux();
+  });
+  $('#ndf-lignes').addEventListener('change',e=>{
+    const el=e.target.closest('[data-f=taux]');if(!el)return;
+    const l=lignes[Number(el.closest('.ligne-tva').dataset.l)];if(!l)return;
+    l.taux=Number(el.value);l.tvaManuelle=false;rendreLignes();
+  });
+  $('#ndf-lignes').addEventListener('click',e=>{
+    const b=e.target.closest('[data-act=suppr]');if(!b)return;
+    lignes.splice(Number(b.closest('.ligne-tva').dataset.l),1);
+    manuels.add('tva_lignes');marquerLu($('#lignes-titre'),false);rendreLignes();
+  });
+  $('#ajout-taux').addEventListener('click',()=>{
+    const libre=NDF_TAUX.find(t=>!lignes.some(l=>Number(l.taux)===t));
+    if(libre==null)return;
+    lignes.push(ligneVide(libre));manuels.add('tva_lignes');rendreLignes();
+    const champs=back.querySelectorAll('#ndf-lignes [data-f=ttc]');champs[champs.length-1].focus();
+  });
   catsEl.addEventListener('change',()=>{
     const cat=catCourante();
-    if(cat&&cat.saisie!=='km')tauxEl.value=String(cat.taux_tva);
-    tvaManuelle=false;majCalcul();
+    if(cat&&cat.saisie!=='km'&&lignes.length===1&&!manuels.has('tva_lignes')){lignes[0].taux=Number(cat.taux_tva);lignes[0].tvaManuelle=false;}
+    rendreLignes();majCalcul();
   });
-  tauxEl.addEventListener('change',()=>{tvaManuelle=false;majCalcul();});
-  ttcEl.addEventListener('input',majCalcul);
   kmEl.addEventListener('input',majCalcul);
-  tvaEl.addEventListener('input',()=>{tvaManuelle=tvaEl.value!=='';majCalcul();});
   if(edite){
     form.elements.date_frais.value=(edite.date_frais||'').slice(0,10);
     form.elements.ville.value=edite.ville||'';
@@ -664,15 +720,22 @@ function openNdfModal(noteId){
     const cat=catCourante();
     if(cat&&cat.saisie==='km'){kmEl.value=edite.distance_km!=null?edite.distance_km:'';}
     else{
-      ttcEl.value=edite.montant_ttc!=null?Number(edite.montant_ttc).toFixed(2):'';
-      tauxEl.value=String(edite.taux_tva!=null?edite.taux_tva:(cat?cat.taux_tva:20));
-      if(edite.montant_tva!=null){
-        const calc=ndfCalcul(cat,Number(edite.montant_ttc)||0,parseFloat(tauxEl.value)||0,0);
-        tvaEl.value=Number(edite.montant_tva).toFixed(2);
-        tvaManuelle=Math.abs(calc.tva-Number(edite.montant_tva))>0.005;
-      }
+      const src=(edite.tva_lignes&&edite.tva_lignes.length)?edite.tva_lignes
+        :[{taux_tva:edite.taux_tva!=null?edite.taux_tva:tauxDefaut(),montant_ttc:edite.montant_ttc,montant_tva:edite.montant_tva}];
+      lignes=src.map(x=>{
+        const l=ligneVide(Number(x.taux_tva));
+        l.ttc=x.montant_ttc!=null?Number(x.montant_ttc).toFixed(2):'';
+        if(x.montant_tva!=null){
+          const ttc=Number(x.montant_ttc)||0;
+          l.tva=Number(x.montant_tva).toFixed(2);
+          l.tvaManuelle=Math.abs(r2(ttc-ttc/(1+l.taux/100))-Number(x.montant_tva))>0.005;
+        }
+        return l;
+      });
     }
   }
+  const manuels=new Set();
+  rendreLignes();
   majCalcul();
   // ── Justificatif et lecture automatique (POST /api/coffre/notes-frais/scan) ──
   const fileEl=$('#ndf-file');
@@ -683,10 +746,16 @@ function openNdfModal(noteId){
   const dropTxt=$('#drop-txt');
   const scanEtat=$('#scan-etat');
   const boutons=[...back.querySelectorAll('button[type=submit]')];
-  // Champs touchés à la main : la lecture ne les écrase jamais.
-  const manuels=new Set();
-  form.addEventListener('input',e=>{const n=e.target.name;if(n){manuels.add(n);marquerLu(e.target,false);}});
-  form.addEventListener('change',e=>{const n=e.target.name;if(n&&e.isTrusted){manuels.add(n);marquerLu(e.target,false);}});
+  // Champs touchés à la main (manuels, déclaré plus haut) : la lecture ne les
+  // écrase jamais. Les lignes de TVA comptent pour un seul champ.
+  form.addEventListener('input',e=>{
+    if(e.target.closest('#ndf-lignes')){manuels.add('tva_lignes');marquerLu($('#lignes-titre'),false);return;}
+    const n=e.target.name;if(n){manuels.add(n);marquerLu(e.target,false);}
+  });
+  form.addEventListener('change',e=>{
+    if(e.target.closest('#ndf-lignes')){if(e.isTrusted){manuels.add('tva_lignes');marquerLu($('#lignes-titre'),false);}return;}
+    const n=e.target.name;if(n&&e.isTrusted){manuels.add(n);marquerLu(e.target,false);}
+  });
   function marquerLu(el,oui){
     const lbl=el&&el.closest('.field')&&el.closest('.field').querySelector('label');
     if(!lbl)return;
@@ -717,12 +786,15 @@ function openNdfModal(noteId){
       const c=j.champs||{};
       if(c.categorie_id!=null&&!manuels.has('categorie_id')&&NDF_CATS.some(x=>x.id===c.categorie_id)){
         catsEl.value=String(c.categorie_id);marquerLu(catsEl,true);
-        const cc=catCourante();if(cc&&cc.saisie!=='km'&&!manuels.has('taux_tva'))tauxEl.value=String(cc.taux_tva);
       }
-      if(c.taux_tva!=null)poser('taux_tva',c.taux_tva);
-      if(c.montant_ttc!=null)poser('montant_ttc',Number(c.montant_ttc).toFixed(2));
-      if(c.montant_tva!=null&&poser('montant_tva',Number(c.montant_tva).toFixed(2)))tvaManuelle=true;
-      else if(!manuels.has('montant_tva'))tvaManuelle=false;
+      if(!manuels.has('tva_lignes')&&(c.tva_lignes||c.montant_ttc!=null)){
+        if(c.tva_lignes&&c.tva_lignes.length){
+          lignes=c.tva_lignes.map(x=>({taux:Number(x.taux),ttc:Number(x.ttc).toFixed(2),tva:Number(x.tva).toFixed(2),tvaManuelle:true}));
+        }else{
+          lignes=[ligneVide(tauxDefaut())];lignes[0].ttc=Number(c.montant_ttc).toFixed(2);
+        }
+        rendreLignes();marquerLu($('#lignes-titre'),true);
+      }
       poser('date_frais',c.date_frais);
       poser('ville',c.ville);
       if(c.description&&!form.elements.description.value.trim())poser('description',c.description);
@@ -800,8 +872,13 @@ function openNdfModal(noteId){
     fd.set('soumettre',btn && btn.value==='1'?'1':'0');
     if(justif)fd.set('justificatif',justif,justif.name||'justificatif.jpg');
     const cat=catCourante();
-    if(cat&&cat.saisie==='km'){fd.delete('montant_ttc');fd.delete('montant_tva');fd.delete('taux_tva');}
-    else fd.delete('distance_km');
+    if(cat&&cat.saisie==='km')fd.delete('tva_lignes');
+    else{
+      fd.delete('distance_km');
+      // Une ligne ajoutée puis laissée vide ne part pas.
+      const pleines=lignes.filter((l,i)=>i===0||String(l.ttc).trim()!=='');
+      fd.set('tva_lignes',JSON.stringify(pleines.map(l=>({taux:Number(l.taux),ttc:String(l.ttc).replace(',','.'),tva:l.tva===''?null:String(l.tva).replace(',','.')}))));
+    }
     try{
       const r=await fetch(edite?'/api/coffre/notes-frais/'+edite.id:'/api/coffre/notes-frais',{method:edite?'PUT':'POST',credentials:'include',body:fd});
       if(!r.ok){let m='Erreur';try{const j=await r.json();m=j.detail||m;}catch{}throw new Error(m);}
