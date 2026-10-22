@@ -437,9 +437,18 @@ def action_color(action: str) -> str:
     return ACTION_COLORS.get((action or "").upper(), DEFAULT_ACTION_COLOR)
 
 
+# Bruit machine reconnu à la fin du chemin, quand le début porte un identifiant.
+SKIP_SUFFIXES: tuple[str, ...] = (
+    # Rafraîchissement automatique de la timeline, appelé par la page Planning
+    # à intervalle régulier : ~1 400 lignes par jour, aucun geste humain.
+    "/live-refresh",
+)
+
+
 def is_skipped(path: str) -> bool:
     p = (path or "").lower()
-    return any(p.startswith(pref) for pref in SKIP_PREFIXES)
+    return (any(p.startswith(pref) for pref in SKIP_PREFIXES)
+            or any(p.rstrip("/").endswith(suf) for suf in SKIP_SUFFIXES))
 
 
 def resolve_module(path: str) -> str:

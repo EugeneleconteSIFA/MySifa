@@ -197,6 +197,113 @@ _HORAIRES_COL = {
 }
 
 
+# ── Journal des réglages d'horaires (avant → après) ─────────────────────────
+# Tout ce qui change la largeur d'un jour sur la timeline passe par ici, pour
+# qu'on puisse toujours répondre à « qui a mis ces horaires, et que valaient-ils
+# avant ? ». `avant` / `apres` à None = aucune valeur enregistrée à ce niveau :
+# la timeline appliquait alors le réglage du niveau supérieur (machine).
+
+_JOURS_COURTS = ("lun", "mar", "mer", "jeu", "ven", "sam", "dim")
+
+
+def _hm(h: Any) -> Optional[str]:
+    """Heure décimale → 'HH:MM' (5.41666 → '05:25')."""
+    if h is None:
+        return None
+    try:
+        tot = int(round(float(h) * 60))
+    except (TypeError, ValueError):
+        return str(h)
+    return f"{tot // 60:02d}:{tot % 60:02d}"
+
+
+def _libelle_date(date: str) -> str:
+    try:
+        d = datetime.strptime(date, "%Y-%m-%d")
+    except (TypeError, ValueError):
+        return str(date)
+    return f"{_JOURS_COURTS[d.weekday()]} {d.strftime('%d/%m/%Y')}"
+
+
+def _nom_machine(conn, machine_id: int) -> str:
+    r = conn.execute("SELECT nom FROM machines WHERE id=?", (machine_id,)).fetchone()
+    return (r["nom"] if r and r["nom"] else f"Machine {machine_id}")
+
+
+def _parite_lisible(raw: Any) -> Optional[dict]:
+    defs = _parity_defs_from_raw(raw)
+    if not defs:
+        return None
+    return {
+        par: {slot: f"{_hm(defs[par][slot][0])}–{_hm(defs[par][slot][1])}" for slot in ("week", "fri")}
+        for par in ("pair", "impair")
+    }
+
+
+def _horaire_affiche(conn, machine_id: int, date: str) -> Optional[str]:
+    """Ce que la timeline affichait pour ce jour, tous niveaux confondus."""
+    try:
+        m = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()
+        if not m:
+            return None
+        maps = _load_planning_calendar_maps(conn, machine_id)
+        h = _hours_for_date_factory(dict(m), *maps)(datetime.strptime(date, "%Y-%m-%d"))
+        return "non travaillé" if h is None else f"{_hm(h[0])}–{_hm(h[1])}"
+    except Exception:
+        return None
+
+
+# Champs d'un dossier qui n'apprennent rien dans le journal : techniques,
+# recalculés, ou déjà portés par l'objet de la ligne.
+_DIFF_IGNORES = {
+    "id", "machine_id", "position", "created_at", "updated_at", "created_by", "updated_by",
+    "ref_produit_norm", "planned_start", "planned_end", "statut_reel", "rvgi_etat", "rvgi_maj_le",
+    "confirme_gel", "motif_gel",
+}
+
+
+def _diff_entree(exd: dict, body: dict) -> tuple[dict, dict]:
+    """(avant, après) des colonnes de `planning_entries` que `body` modifie."""
+    def norm(v: Any) -> Any:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        if isinstance(v, bool):
+            return int(v)
+        if isinstance(v, (int, float)):
+            return float(v)
+        if isinstance(v, str):
+            try:
+                return float(v.replace(",", "."))
+            except ValueError:
+                return v.strip()
+        return v
+    avant: dict = {}
+    apres: dict = {}
+    for k, v in (body or {}).items():
+        if k in _DIFF_IGNORES or k not in exd:
+            continue
+        if norm(v) != norm(exd.get(k)):
+            avant[k], apres[k] = exd.get(k), v
+    return avant, apres
+
+
+def _journal_horaires(request: Request, user: Any, *, machine: str, quoi: str,
+                      avant: Any, apres: Any, action: str = "UPDATE", **extra) -> None:
+    inchange = avant == apres
+    detail: Dict[str, Any] = {"avant": avant, "apres": apres}
+    if inchange:
+        detail["inchange"] = True
+    detail.update({k: v for k, v in extra.items() if v is not None})
+    log_action(
+        user=user,
+        action=action,
+        module="planning",
+        objet=f"{machine} · {quoi}" + (" (inchangé)" if inchange else ""),
+        detail=detail,
+        request=request,
+    )
+
+
 def _parse_horaires_val(val: Optional[str], default: str = "5,21") -> tuple[float, float]:
     """'5,21' ou '05:30,21:15' → (début, fin) en heures décimales depuis minuit."""
     raw = (val or "").strip() or default
@@ -484,16 +591,6 @@ def _machine_key_from_record(m: dict) -> str:
     return norm or raw
 
 
-# Horaires paire/impaire — miroir exact du JS DEFAULTS_BY_KEY.
-# Clés : (heure_début, heure_fin) en heures décimales depuis minuit.
-_PARITY_DEFAULTS: Dict[str, Any] = {
-    "C1":  {"pair": {"week": (5, 20), "fri": (7, 19)}, "impair": {"week": (5, 20), "fri": (7, 19)}},
-    "C2":  {"pair": {"week": (5, 13), "fri": (6, 13)}, "impair": {"week": (13, 20), "fri": (14, 20)}},
-    "DSI": {"pair": {"week": (8, 14), "fri": (8, 14)}, "impair": {"week": (8, 14), "fri": (8, 14)}},
-    "REP": {"pair": {"week": (6, 20), "fri": (7, 19)}, "impair": {"week": (6, 20), "fri": (7, 19)}},
-}
-
-
 def _parity_slot_to_tuple(slot: Any) -> Optional[tuple[float, float]]:
     if slot is None:
         return None
@@ -530,14 +627,12 @@ def _parity_defs_from_raw(raw: Any) -> Optional[Dict[str, Any]]:
 
 
 def _parity_defs_for_machine(m: dict) -> Optional[Dict[str, Any]]:
-    """Horaires paire/impaire : DB (horaires_parity) puis repli codé en dur pour Cohésio 2."""
-    db_defs = _parity_defs_from_raw(m.get("horaires_parity"))
-    if db_defs:
-        return db_defs
-    mk = _machine_key_from_record(m)
-    if mk == "C2":
-        return _parity_defs_from_raw(_PARITY_DEFAULTS.get("C2"))
-    return None
+    """Horaires paire/impaire : uniquement ce qui est enregistré en base (horaires_parity).
+
+    Pas de repli codé en dur : une valeur que personne n'a enregistrée ne doit
+    jamais piloter la timeline (cf. migration horaires_parite_cohesio2_en_base).
+    """
+    return _parity_defs_from_raw(m.get("horaires_parity"))
 
 
 def _normalize_parity_body(body: dict) -> Dict[str, Any]:
@@ -1943,17 +2038,15 @@ async def set_machine_horaires(machine_id: int, request: Request):
         if not ex:
             raise HTTPException(404, "Machine non trouvée")
         machine_nom = ex["nom"] or ""
+        avant = conn.execute(f"SELECT {col} FROM machines WHERE id=?", (machine_id,)).fetchone()[0]
         conn.execute(f"UPDATE machines SET {col} = ? WHERE id = ?", (val, machine_id))
         _invalidate_attente_plans(conn, machine_id)
         _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request, body)
         conn.commit()
-    log_action(
-        user=user,
-        action="UPDATE",
-        module="planning",
-        objet=f"Horaires machine {machine_nom}",
-        detail={"day": day, "start": start, "end": end},
-        ip=request.client.host if request.client else None,
+    _journal_horaires(
+        request, user, machine=machine_nom or f"Machine {machine_id}",
+        quoi=f"Horaires machine du {day}",
+        avant={col: avant} if avant else None, apres={col: val},
     )
     return {"success": True, "field": col, "value": val}
 
@@ -1964,7 +2057,7 @@ async def set_machine_horaires_bulk(machine_id: int, request: Request):
 
     Body: { horaires_lundi: "HH:MM,HH:MM", ..., horaires_samedi: "HH:MM,HH:MM" }
     """
-    require_admin(request)
+    user = require_admin(request)
     body = await request.json()
     if not isinstance(body, dict) or not body:
         raise HTTPException(400, "Body invalide")
@@ -1993,14 +2086,20 @@ async def set_machine_horaires_bulk(machine_id: int, request: Request):
 
     with get_db() as conn:
         _tr_avant = _transport_avant(conn, machine_id)
-        ex = conn.execute("SELECT id FROM machines WHERE id=?", (machine_id,)).fetchone()
+        ex = conn.execute("SELECT * FROM machines WHERE id=?", (machine_id,)).fetchone()
         if not ex:
             raise HTTPException(404, "Machine non trouvée")
+        avant = {k: ex[k] for k in updates}
+        machine_nom = ex["nom"] or f"Machine {machine_id}"
         sets = ", ".join([f"{col}=?" for col in updates.keys()])
         conn.execute(f"UPDATE machines SET {sets} WHERE id=?", (*updates.values(), machine_id))
         _invalidate_attente_plans(conn, machine_id)
         _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request, body)
         conn.commit()
+    _journal_horaires(
+        request, user, machine=machine_nom, quoi="Horaires machine (semaine type)",
+        avant=avant, apres=updates,
+    )
     return {"success": True, "updated": updates}
 
 
@@ -2013,16 +2112,18 @@ async def set_machine_horaires_parity(machine_id: int, request: Request):
       "impair": {"week": {"s": 13, "e": 20}, "fri": {"s": 14, "e": 20}}
     }
     """
-    require_admin(request)
+    user = require_admin(request)
     body = await request.json()
     if not isinstance(body, dict):
         raise HTTPException(400, "Body invalide")
     normalized = _normalize_parity_body(body)
     with get_db() as conn:
         _tr_avant = _transport_avant(conn, machine_id)
-        ex = conn.execute("SELECT id FROM machines WHERE id=?", (machine_id,)).fetchone()
+        ex = conn.execute("SELECT id, nom, horaires_parity FROM machines WHERE id=?", (machine_id,)).fetchone()
         if not ex:
             raise HTTPException(404, "Machine non trouvée")
+        avant = _parite_lisible(ex["horaires_parity"])
+        machine_nom = ex["nom"] or f"Machine {machine_id}"
         conn.execute(
             "UPDATE machines SET horaires_parity=? WHERE id=?",
             (json.dumps(normalized), machine_id),
@@ -2030,6 +2131,10 @@ async def set_machine_horaires_parity(machine_id: int, request: Request):
         _invalidate_attente_plans(conn, machine_id)
         _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request, body)
         conn.commit()
+    _journal_horaires(
+        request, user, machine=machine_nom, quoi="Horaires semaines paires / impaires",
+        avant=avant, apres=_parite_lisible(normalized),
+    )
     return {"success": True, "horaires_parity": normalized}
 
 
@@ -2190,7 +2295,7 @@ async def force_statut(machine_id: int, entry_id: int, request: Request):
         action="CLOSE" if statut == "termine" else "UPDATE",
         module="planning",
         objet=f"Statut dossier {ref_audit} → {statut}",
-        detail={"statut": statut, "override": override},
+        detail={"statut": statut, "override": override, "machine_id": machine_id},
         ip=request.client.host if request.client else None,
     )
     return {"ok": True, "saisie_found": saisie_found}
@@ -2345,7 +2450,8 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
     user = get_current_user(request)
     user_name = user.get("nom") or user.get("email") or "Admin"
     ref_audit = ""
-    audit_detail: dict = {}
+    audit_avant: dict = {}
+    audit_apres: dict = {}
 
     with get_db() as conn:
         ex = conn.execute(
@@ -2357,14 +2463,10 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
 
         exd = dict(ex)
         ref_audit = (exd.get("reference") or "").strip()
-        if body.get("reference") is not None and str(body.get("reference")) != str(exd.get("reference") or ""):
-            audit_detail["reference"] = body.get("reference")
-        if body.get("duree_heures") is not None and float(body.get("duree_heures")) != float(exd.get("duree_heures") or 0):
-            audit_detail["duree_heures"] = body.get("duree_heures")
-        if body.get("statut") is not None and body.get("statut") != exd.get("statut"):
-            audit_detail["statut"] = body.get("statut")
-        if body.get("client") is not None and body.get("client") != exd.get("client"):
-            audit_detail["client"] = body.get("client")
+        # Journal : avant → après de chaque champ envoyé qui change réellement.
+        # (Avant le 22/10/2026, seuls référence, durée, statut et client étaient
+        # notés : la plupart des modifications de dossier sortaient sans détail.)
+        audit_avant, audit_apres = _diff_entree(exd, body)
         fsc_requis_new = (
             _parse_fsc_requis(body["fsc_requis"])
             if "fsc_requis" in body
@@ -2375,12 +2477,14 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
             fsc_requis_new,
         )
         if "fsc_requis" in body and fsc_requis_new != int(exd.get("fsc_requis") or 0):
-            audit_detail["fsc_requis"] = fsc_requis_new
+            audit_avant["fsc_requis"] = int(exd.get("fsc_requis") or 0)
+            audit_apres["fsc_requis"] = fsc_requis_new
         if (
             "fsc_requis" in body
             or "fsc_type_requis" in body
         ) and fsc_type_new != (exd.get("fsc_type_requis") or "").strip():
-            audit_detail["fsc_type_requis"] = fsc_type_new
+            audit_avant["fsc_type_requis"] = (exd.get("fsc_type_requis") or "").strip()
+            audit_apres["fsc_type_requis"] = fsc_type_new
         statut_auto = compute_statut(exd)
         set_manual_end = _body_flag_true(body.get("planned_end_manual"))
         clear_manual_end = body.get("planned_end_manual") is not None and not set_manual_end
@@ -2575,7 +2679,7 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
         action="UPDATE",
         module="planning",
         objet=f"Dossier {ref_audit}",
-        detail=audit_detail or None,
+        detail={"avant": audit_avant, "apres": audit_apres, "machine_id": machine_id},
         ip=request.client.host if request.client else None,
     )
     return {"success": True}
@@ -2617,7 +2721,7 @@ def toggle_destockage(machine_id: int, entry_id: int, request: Request):
     log_action(
         user=user, action="UPDATE", module="planning",
         objet="Dossier %s" % ((ex["numero_of"] or ex["reference"] or entry_id)),
-        detail="Repère déstockage RVGI : %s" % ("fait" if new_val == "done" else "retiré"),
+        detail={"destockage_rvgi": "fait" if new_val == "done" else "retiré", "machine_id": machine_id},
         ip=request.client.host if request.client else None,
     )
     return {"success": True, "destockage_rvgi": new_val}
@@ -2816,7 +2920,7 @@ def split_entry(machine_id: int, entry_id: int, request: Request):
         action="CREATE",
         module="planning",
         objet=f"Scission dossier {ref_audit}",
-        detail={"duree_1": d1, "duree_2": d2},
+        detail={"duree_1": d1, "duree_2": d2, "machine_id": machine_id},
         ip=request.client.host if request.client else None,
     )
     return {"success": True, "split": [d1, d2]}
@@ -3589,7 +3693,7 @@ def reset_default_days(machine_id: int, request: Request):
     - horaires_* de la machine pour lun–ven
     - planning_config.samedi_travaille pour les samedis
     """
-    require_admin(request)
+    user = require_admin(request)
     with get_db() as conn:
         _tr_avant = _transport_avant(conn, machine_id)
         m = conn.execute("SELECT id, nom, code FROM machines WHERE id=?", (machine_id,)).fetchone()
@@ -3604,6 +3708,17 @@ def reset_default_days(machine_id: int, request: Request):
         # - supprimer les overrides jours off / samedis
         # - remettre les horaires_* sur les valeurs "génériques" de schéma
         #   (la UI Planning appliquera ensuite les défauts Cohésio 2 paire/impair en fallback)
+        avant = {
+            "jours_feries_ou_off": conn.execute(
+                "SELECT COUNT(*) FROM planning_holidays WHERE machine_id=?", (machine_id,)).fetchone()[0],
+            "jours_forces": conn.execute(
+                "SELECT COUNT(*) FROM planning_day_worked WHERE machine_id=?", (machine_id,)).fetchone()[0],
+            **{c: v for c, v in zip(
+                ("horaires_lundi", "horaires_mardi", "horaires_mercredi", "horaires_jeudi", "horaires_vendredi"),
+                conn.execute("""SELECT horaires_lundi, horaires_mardi, horaires_mercredi,
+                                       horaires_jeudi, horaires_vendredi FROM machines WHERE id=?""",
+                             (machine_id,)).fetchone())},
+        }
         conn.execute("DELETE FROM planning_holidays WHERE machine_id=?", (machine_id,))
         conn.execute("DELETE FROM planning_day_worked WHERE machine_id=?", (machine_id,))
         conn.execute(
@@ -3619,13 +3734,21 @@ def reset_default_days(machine_id: int, request: Request):
         _invalidate_attente_plans(conn, machine_id)
         _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request)
         conn.commit()
+    _journal_horaires(
+        request, user, action="DELETE", machine=nom or f"Machine {machine_id}",
+        quoi="Réinitialisation des jours (jours off, samedis, horaires machine)",
+        avant=avant,
+        apres={"jours_feries_ou_off": 0, "jours_forces": 0, "horaires_lundi": "5,21",
+               "horaires_mardi": "5,21", "horaires_mercredi": "5,21", "horaires_jeudi": "5,21",
+               "horaires_vendredi": "6,20"},
+    )
     return {"success": True}
 
 
 @router.put("/machines/{machine_id}/day-work")
 async def set_day_work(machine_id: int, request: Request):
     """Body: {date:'YYYY-MM-DD', is_worked:1|0}. Samedi non travaillé par défaut ; 1 = travaillé."""
-    require_admin(request)
+    user = require_admin(request)
     body = await request.json()
     date = (body.get("date") or "").strip()
     if not date:
@@ -3637,6 +3760,11 @@ async def set_day_work(machine_id: int, request: Request):
         raise HTTPException(400, "date invalide (YYYY-MM-DD)")
     with get_db() as conn:
         _tr_avant = _transport_avant(conn, machine_id)
+        r = conn.execute("SELECT is_worked FROM planning_day_worked WHERE machine_id=? AND date=?",
+                         (machine_id, date)).fetchone()
+        avant = None if r is None else ("travaillé" if r["is_worked"] else "non travaillé")
+        affiche_avant = _horaire_affiche(conn, machine_id, date)
+        machine_nom = _nom_machine(conn, machine_id)
         conn.execute(
             """INSERT INTO planning_day_worked (machine_id, date, is_worked)
                VALUES (?,?,?)
@@ -3652,13 +3780,18 @@ async def set_day_work(machine_id: int, request: Request):
         _invalidate_attente_plans(conn, machine_id)
         _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request, body)
         conn.commit()
+    _journal_horaires(
+        request, user, machine=machine_nom, quoi=f"Jour travaillé du {_libelle_date(date)}",
+        avant=avant, apres="travaillé" if is_worked else "non travaillé",
+        affiche_avant=affiche_avant,
+    )
     return {"success": True}
 
 
 @router.put("/machines/{machine_id}/holidays")
 async def set_holiday(machine_id: int, request: Request):
     """Body: {date:'YYYY-MM-DD', is_off:1/0, label:''}"""
-    require_admin(request)
+    user = require_admin(request)
     body = await request.json()
     date = (body.get("date") or "").strip()
     if not date:
@@ -3667,6 +3800,11 @@ async def set_holiday(machine_id: int, request: Request):
     label = body.get("label", "") or ""
     with get_db() as conn:
         _tr_avant = _transport_avant(conn, machine_id)
+        r = conn.execute("SELECT is_off, label FROM planning_holidays WHERE machine_id=? AND date=?",
+                         (machine_id, date)).fetchone()
+        avant = None if r is None else {"off": bool(r["is_off"]), "libelle": r["label"] or ""}
+        affiche_avant = _horaire_affiche(conn, machine_id, date)
+        machine_nom = _nom_machine(conn, machine_id)
         conn.execute(
             """INSERT INTO planning_holidays (machine_id,date,is_off,label)
                VALUES (?,?,?,?)
@@ -3677,6 +3815,11 @@ async def set_holiday(machine_id: int, request: Request):
         _invalidate_attente_plans(conn, machine_id)
         _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request, body)
         conn.commit()
+    _journal_horaires(
+        request, user, machine=machine_nom, quoi=f"Jour off du {_libelle_date(date)}",
+        avant=avant, apres={"off": bool(is_off), "libelle": label},
+        affiche_avant=affiche_avant,
+    )
     return {"success": True}
 
 
@@ -3716,7 +3859,7 @@ async def set_day_horaires(machine_id: int, request: Request):
     Passer heure_debut==null supprime l'override.
     Quand journee_entiere==1, on force heure_debut=0 et heure_fin=24 (3×8).
     """
-    require_admin(request)
+    user = require_admin(request)
     body = await request.json()
     date = (body.get("date") or "").strip()
     if not date:
@@ -3728,10 +3871,26 @@ async def set_day_horaires(machine_id: int, request: Request):
     except (TypeError, ValueError):
         je = 0
 
+    def _avant(conn):
+        r = conn.execute(
+            """SELECT heure_debut, heure_fin, COALESCE(journee_entiere, 0) AS je
+                 FROM planning_day_horaires WHERE machine_id=? AND date=?""",
+            (machine_id, date),
+        ).fetchone()
+        if r is None:
+            return None
+        if int(r["je"] or 0) == 1:
+            return "journée entière"
+        return f"{_hm(r['heure_debut'])}–{_hm(r['heure_fin'])}"
+
+    quoi = f"Horaires du {_libelle_date(date)}"
+
     # Suppression de l'override (heure_debut null ET pas de journee_entiere).
     if body.get("heure_debut") is None and je == 0:
         with get_db() as conn:
             _tr_avant = _transport_avant(conn, machine_id)
+            avant = _avant(conn)
+            machine_nom = _nom_machine(conn, machine_id)
             conn.execute(
                 "DELETE FROM planning_day_horaires WHERE machine_id=? AND date=?",
                 (machine_id, date),
@@ -3740,6 +3899,10 @@ async def set_day_horaires(machine_id: int, request: Request):
             # qui repousse la production, au même titre qu'un jour chômé.
             _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request, body)
             conn.commit()
+        _journal_horaires(
+            request, user, action="DELETE", machine=machine_nom, quoi=quoi,
+            avant=avant, apres=None,
+        )
         return {"success": True, "deleted": True}
 
     if je == 1:
@@ -3755,6 +3918,9 @@ async def set_day_horaires(machine_id: int, request: Request):
 
     with get_db() as conn:
         _tr_avant = _transport_avant(conn, machine_id)
+        avant = _avant(conn)
+        affiche_avant = _horaire_affiche(conn, machine_id, date) if avant is None else None
+        machine_nom = _nom_machine(conn, machine_id)
         conn.execute(
             """INSERT INTO planning_day_horaires (machine_id, date, heure_debut, heure_fin, journee_entiere)
                VALUES (?,?,?,?,?)
@@ -3767,6 +3933,11 @@ async def set_day_horaires(machine_id: int, request: Request):
         _invalidate_attente_plans(conn, machine_id)
         _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request, body)
         conn.commit()
+    _journal_horaires(
+        request, user, machine=machine_nom, quoi=quoi, avant=avant,
+        apres="journée entière" if je == 1 else f"{_hm(hd)}–{_hm(hf)}",
+        affiche_avant=affiche_avant,
+    )
     return {"success": True, "journee_entiere": je}
 
 
@@ -3911,7 +4082,7 @@ async def set_machine_journee_entiere(machine_id: int, request: Request):
         je = 0
     with get_db() as conn:
         _tr_avant = _transport_avant(conn, machine_id)
-        ex = conn.execute("SELECT id, nom FROM machines WHERE id=?", (machine_id,)).fetchone()
+        ex = conn.execute("SELECT id, nom, journee_entiere FROM machines WHERE id=?", (machine_id,)).fetchone()
         if not ex:
             raise HTTPException(404, "Machine non trouvée")
         conn.execute(
@@ -3921,17 +4092,11 @@ async def set_machine_journee_entiere(machine_id: int, request: Request):
         _invalidate_attente_plans(conn, machine_id)
         _garde_transport_apres_ecriture(conn, machine_id, _tr_avant, request, body)
         conn.commit()
-    try:
-        log_action(
-            user=user,
-            action="UPDATE",
-            module="planning",
-            objet=f"Journée entière machine {ex['nom']}",
-            detail={"journee_entiere": je},
-            ip=request.client.host if request.client else None,
-        )
-    except Exception:
-        pass
+    _journal_horaires(
+        request, user, machine=ex["nom"] or f"Machine {machine_id}",
+        quoi="Journée entière par défaut",
+        avant=bool(int(ex["journee_entiere"] or 0)), apres=bool(je),
+    )
     return {"success": True, "journee_entiere": je}
 
 
@@ -4064,7 +4229,7 @@ def get_week_config(machine_id: int, request: Request, semaine: Optional[str] = 
 @router.put("/machines/{machine_id}/config")
 async def set_week_config(machine_id: int, request: Request):
     """Définir la config d'une semaine. Body: {"semaine": "2026-W14", "samedi_travaille": 1}"""
-    require_admin(request)
+    user = require_admin(request)
     body = await request.json()
     semaine = body.get("semaine")
     if not semaine:
@@ -4077,6 +4242,16 @@ async def set_week_config(machine_id: int, request: Request):
         je = 0
 
     with get_db() as conn:
+        r = conn.execute(
+            """SELECT samedi_travaille, notes, COALESCE(journee_entiere, 0) AS je
+                 FROM planning_config WHERE machine_id=? AND semaine=?""",
+            (machine_id, semaine),
+        ).fetchone()
+        avant = None if r is None else {
+            "samedi_travaille": bool(r["samedi_travaille"]), "journee_entiere": bool(r["je"]),
+            "notes": r["notes"] or "",
+        }
+        machine_nom = _nom_machine(conn, machine_id)
         conn.execute("""
             INSERT INTO planning_config (machine_id, semaine, samedi_travaille, notes, journee_entiere)
             VALUES (?, ?, ?, ?, ?)
@@ -4092,7 +4267,36 @@ async def set_week_config(machine_id: int, request: Request):
         ))
         _invalidate_attente_plans(conn, machine_id)
         conn.commit()
+    _journal_horaires(
+        request, user, machine=machine_nom, quoi=f"Réglage de la semaine {semaine}",
+        avant=avant,
+        apres={"samedi_travaille": bool(body.get("samedi_travaille", 0)),
+               "journee_entiere": bool(je), "notes": body.get("notes", "") or ""},
+    )
     return {"success": True, "journee_entiere": je}
+
+
+@router.get("/historique")
+def historique_modifications(
+    request: Request,
+    machine_id: Optional[int] = None,
+    utilisateur: str = "",
+    action: str = "",
+    jours: Optional[int] = 30,
+    q: str = "",
+    offset: int = 0,
+    limite: int = 100,
+):
+    """Historique des modifications du Planning (fenêtre « Historique » de la page).
+
+    Réservé à ceux qui peuvent modifier le planning : il nomme qui a fait quoi.
+    `machine_id` absent = toutes les machines ; `jours` absent ou 0 = tout.
+    """
+    require_admin(request)
+    from app.services.planning_historique import lister
+    with get_db() as conn:
+        return lister(conn, machine_id=machine_id, utilisateur=utilisateur, action=action,
+                      jours=jours or None, q=q, offset=offset, limite=limite)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -4823,7 +5027,7 @@ async def update_etiquettes_par_carton(machine_id: int, entry_id: int, request: 
         action="UPDATE",
         module="planning",
         objet=f"Parametrage carton dossier {ref}",
-        detail={"old": old_val, "new": new_val, "notif_admin": not is_admin(user)},
+        detail={"old": old_val, "new": new_val, "notif_admin": not is_admin(user), "machine_id": machine_id},
         ip=request.client.host if request.client else None,
     )
     return {"success": True, "etiquettes_par_carton": new_val}

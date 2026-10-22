@@ -1759,7 +1759,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
           <span class="hint" id="mac-hint"></span>
         </div>
         <div id="mac-horaires-wrap">
-          <p class="sub" style="margin-top:-4px;margin-bottom:14px">Horaires par défaut du planning de production (lun–sam). Cohésio 2 : semaines paires / impaires.</p>
+          <p class="sub" style="margin-top:-4px;margin-bottom:14px">Horaires par défaut du planning de production (lun–sam). Une machine réglée en semaines paires / impaires suit ces dernières du lundi au vendredi.</p>
           <label id="mac-je-row" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer;margin-bottom:14px;font-size:13px">
             <input type="checkbox" id="mac-je">
             <span style="font-weight:600;color:var(--text)">Journée entière par défaut (00:00 → 23:59, 3 équipes 8 h)</span>
@@ -4060,9 +4060,10 @@ function renderMacHorairesForm() {
   const cfpBox = document.getElementById('mac-cfp');
   if (cfpBox) cfpBox.checked = !!(m && +m.cloture_fin_prevue === 1);
   if (!weekly || !m) return;
-  const mk = macMachineKey(m);
-  const isC2 = mk === 'C2';
-  if (parityBox) parityBox.classList.toggle('hidden', !isC2);
+  // Bloc paire / impaire : affiché pour toute machine qui en a en base
+  // (plus de cas particulier codé en dur).
+  const hasParity = !!m.horaires_parity;
+  if (parityBox) parityBox.classList.toggle('hidden', !hasParity);
 
   let rows = '';
   MAC_DAY_ROWS.forEach(d => {
@@ -4073,14 +4074,14 @@ function renderMacHorairesForm() {
   });
   weekly.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Jour</th><th>Début (HH:MM)</th><th>Fin (HH:MM)</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 
-  if (isC2 && parityBox) {
+  if (hasParity && parityBox) {
     const defs = macGetParityDefaults(m);
     function pr(lbl, id, val) {
       return '<div class="fd" style="margin-bottom:8px"><label class="sub" style="display:block;margin-bottom:4px">' + lbl + '</label>' +
         '<input type="text" id="' + id + '" value="' + esc(macFloatToHm(val)) + '" placeholder="07:00" inputmode="numeric" style="width:100%"></div>';
     }
     parityBox.innerHTML =
-      '<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">Semaines paires / impaires (Cohésio 2)</div>' +
+      '<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">Semaines paires / impaires</div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
       '<div style="border:1px solid var(--border);border-radius:12px;padding:14px">' +
       '<div style="font-weight:600;margin-bottom:8px;font-size:13px">Semaine paire</div>' +
@@ -4193,8 +4194,9 @@ async function saveMacHoraires() {
   const id = macMachine.id;
   const mk = macMachineKey(macMachine);
   const bulk = macCollectHorairesPayload();
+  const hasParity = !!macMachine.horaires_parity;
   try {
-    if (mk === 'C2') {
+    if (hasParity) {
       const nd = macCollectParityPayload();
       function okR(r) { return r.s != null && r.e != null && r.e > r.s && r.s >= 0 && r.e <= 24; }
       if (![nd.pair.week, nd.pair.fri, nd.impair.week, nd.impair.fri].every(okR)) {
@@ -4214,7 +4216,7 @@ async function saveMacHoraires() {
         body: JSON.stringify(bulk),
       });
     }
-    if (mk !== 'C2' && !Object.keys(bulk).length && !document.getElementById('mac-je')?.checked) {
+    if (!hasParity && !Object.keys(bulk).length && !document.getElementById('mac-je')?.checked) {
       toast('Renseignez au moins un créneau horaire.', true);
       return;
     }

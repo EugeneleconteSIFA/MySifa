@@ -589,6 +589,42 @@ body.light .btn-p{color:#fff}
 .md--compact .dur-b{margin-top:4px}
 .md--compact .md-acts{margin-top:18px}
 .md.md--stats{width:min(720px,95vw);max-height:90vh;overflow-y:auto}
+/* Historique des modifications (static/planning_historique.js) */
+.hist-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:8px;border:1px solid var(--border2);
+  background:var(--card);color:var(--text);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:background .15s}
+.hist-btn:hover{background:var(--bg);color:var(--accent)}
+.md.md--hist{width:min(860px,95vw);height:min(820px,90vh);display:flex;flex-direction:column;padding:24px 28px}
+.hist-hdr{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.hist-hdr h3{margin:0;font-size:18px;font-family:var(--mono);color:var(--text);display:flex;align-items:center;gap:8px}
+.hist-sub{font-size:12px;color:var(--muted);margin:8px 0 14px}
+.hist-filtres{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.hist-filtres select,.hist-search input{padding:7px 10px;border:1px solid var(--border2);border-radius:8px;background:var(--card);
+  color:var(--text);font-size:12px;font-family:inherit;outline:none}
+.hist-filtres select:focus,.hist-search input:focus{border-color:var(--accent)}
+.hist-search{flex:1;min-width:200px}
+.hist-search input{width:100%;box-sizing:border-box}
+.hist-compte{font-size:11px;color:var(--muted);margin-bottom:6px;min-height:14px}
+.hist-liste{overflow-y:auto;flex:1;min-height:200px;padding-right:4px}
+.hist-vide{padding:40px 0;text-align:center;color:var(--muted);font-size:13px}
+.hist-jour{position:sticky;top:0;background:var(--card);z-index:1;padding:10px 0 6px;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border2)}
+.hist-item{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border2)}
+.hist-item--inchange{opacity:.55}
+.hist-heure{font-family:var(--mono);font-size:12px;color:var(--muted);width:44px;flex-shrink:0;padding-top:2px}
+.hist-corps{flex:1;min-width:0}
+.hist-tete{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.hist-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 7px;border-radius:999px;
+  color:var(--hist-c);border:1px solid var(--hist-c);background:var(--bg)}
+.hist-machine{font-size:11px;font-weight:600;padding:2px 7px;border-radius:6px;background:var(--accent-bg);color:var(--accent)}
+.hist-titre{font-size:13px;font-weight:600;color:var(--text);overflow-wrap:anywhere}
+.hist-qui{font-size:11px;color:var(--muted);margin:2px 0 4px}
+.hist-det{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;font-size:12px;color:var(--text2);padding-left:2px}
+.hist-champ{color:var(--muted);min-width:110px}
+.hist-avant{color:var(--muted);text-decoration:line-through}
+.hist-fleche{color:var(--muted)}
+.hist-apres{color:var(--text);font-weight:600}
+.hist-plus{text-align:center;padding:14px 0}
+@media (max-width:640px){.md.md--hist{padding:18px 16px}.hist-filtres select{flex:1 1 45%}.hist-champ{min-width:0}}
 .ds-section{margin:20px 0 0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);display:flex;align-items:center;gap:6px}
 .ds-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:10px}
 .ds-stat{background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:12px 14px}
@@ -1001,7 +1037,8 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
 <!-- Adresse de la page : machine, vue, horizon, semaine, fenêtre ouverte (url-etat.md). -->
 <script src="/static/mysifa_url.js?v=4"></script>
-<script src="/static/planning_url.js?v=2"></script>
+<script src="/static/planning_url.js?v=3"></script>
+<script src="/static/planning_historique.js?v=1"></script>
 <script>
 // Handler d'erreurs installé *avant* le script principal (capte aussi les erreurs de parsing).
 function showFatal(message, lineno, colno, extra){
@@ -2101,10 +2138,10 @@ function getWhForDate(di,dateObj,ds,forEdit){
   }
   const mk=machineKey();
   const mrec=S.machine;
-  // Priorité 2 : horaires paire/impaire — toute machine ayant horaires_parity en base
-  // (+ Cohésio 2 via ses défauts), lun–ven uniquement : aligné backend
+  // Priorité 2 : horaires paire/impaire — seulement si enregistrés en base
+  // (horaires_parity), lun–ven uniquement : aligné backend
   // (_hours_for_date_factory applique la parité avant les horaires hebdo, jamais le samedi).
-  if(di>=1&&di<=5&&(mk==="C2"||(mrec&&mrec.horaires_parity))){
+  if(di>=1&&di<=5&&mrec&&mrec.horaires_parity){
     const defs=getMachineDefaults();
     const par=isWeekPair(dateObj)?"pair":"impair";
     const isFri=(di===5);
@@ -2797,6 +2834,7 @@ function render(){
       ${SHOW_DOSSIERS?`<button type="button" class="reset-days-btn" onclick="packAttenteAfterEnCours()" title="Recaler les en attente derrière le en cours">⇥ En attente</button>`:""}
       ${SHOW_DOSSIERS?`<button type="button" class="reset-days-btn" onclick="packTerminesToNow()" title="Recaler les terminés jusqu'à maintenant">⇤ Terminés</button>`:""}
       ${SHOW_DOSSIERS?`<button type="button" class="reset-days-btn" onclick="packTerminesBeforeEnCoursAll()" title="Replacer les terminés avant le en cours (toutes machines)">⇤ Terminés → en cours</button>`:""}
+      ${CAN_EDIT?`<button type="button" class="hist-btn" onclick="openHistoriqueModal('machine')" title="Qui a modifié quoi sur le planning, et quand">${icon('clock',14)} Historique des modifications</button>`:""}
       ${CAN_EDIT?`<button type="button" class="gear-btn" onclick="openDefaultsModal()" title="Réglages horaires par défaut" aria-label="Réglages">${icon('settings',16)}</button>`:""}
       ${IS_COMPTA_RO?`<div class="badge" style="background:var(--accent-bg);color:var(--accent);border:1px solid var(--border)">Lecture seule</div>`:""}
       ${runLbl?`<div class="badge badge-run"><div class="dot"></div>${escAttr(runLbl)}</div>`:""}
@@ -6181,6 +6219,7 @@ async function annulerAnnulationPlanning(entryId){
 // Appelée sans argument partout ailleurs (onclick="closeM()").
 function closeM(sansAdresse){
   document.getElementById("mroot").innerHTML="";
+  if(typeof _histFermee==="function") _histFermee();
   if(S.urlModale&&S.urlModale.cle!=="of"){
     S.urlModale=null;
     if(!sansAdresse) planningSyncUrl();
@@ -6605,12 +6644,15 @@ async function submitWeekSettings(monTs){
 function openDefaultsModal(){
   planningModaleOuverte("reglages","machine");
   const defs=getMachineDefaults();
+  const enBase=!!(S.machine&&S.machine.horaires_parity);
   function row(lbl,id,val){
     return `<div class="fd"><label>${lbl} (HH:MM)</label><input type="text" inputmode="numeric" placeholder="07:00" id="${id}" value="${timeInputFromFloat(val)}"></div>`;
   }
   const f=`
     <p style="font-size:12px;color:var(--muted);margin:-8px 0 16px">
-      Horaires de production enregistrés en base pour cette machine. Ils déterminent la largeur des jours sur la timeline (semaines paires / impaires pour Cohésio 2).
+      ${enBase
+        ? "Horaires de production enregistrés en base pour cette machine. Ils déterminent la largeur des jours sur la timeline, semaine paire et semaine impaire."
+        : "Aucun horaire paire / impaire enregistré pour cette machine : les valeurs ci-dessous sont des propositions, sans effet sur la timeline tant qu'elles ne sont pas enregistrées."}
     </p>
     <div class="fd-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div style="border:1px solid var(--border2);border-radius:14px;padding:14px">
@@ -6641,6 +6683,7 @@ function openDefaultsModal(){
   );
 }
 async function resetDefaults(){
+  if(!confirm("Remplacer les horaires de cette machine par les valeurs d'usine ?\n\nLes horaires saisis jour par jour ne sont pas touchés.")) return;
   const mk=machineKey();
   const d=DEFAULTS_BY_KEY[mk]||DEFAULTS_BY_KEY["C1"];
   saveMachineDefaults(d);
