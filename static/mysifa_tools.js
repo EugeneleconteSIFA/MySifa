@@ -43,40 +43,62 @@ var S = {
 };
 
 const TOOLS_OUTILS = [
-  { id: 'etiquettes', label: 'Étiquettes', titre: 'Étiquettes', ia: true,
+  { id: 'etiquettes', label: 'Étiquettes', titre: 'Étiquettes', ia: true, onglet: 'Étiquettes',
     desc: 'Étiquettes de traçabilité par poste, étiquettes spécifiques par client, création depuis une photo.',
     icon: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>' },
   { id: 'formulaires', label: 'Formulaires', titre: 'Formulaires', ia: true,
     desc: 'Questionnaires pour fournisseurs, personnel et clients : création, envoi, relances, réponses.',
     icon: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/>' },
-  { id: 'pdf', label: 'Éditeur PDF', titre: 'Éditeur PDF',
-    desc: 'Fusionner, découper, réordonner, annoter, signer, remplir et compresser. Les fichiers restent sur le poste.',
+  { id: 'pdf', label: 'Éditeur PDF', titre: 'Éditeur PDF', onglet: 'Éditer un PDF',
+    desc: 'Fusionner, découper, annoter, remplir, compresser ; scanner un document ; envoyer à signer (parapheur).',
     icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/>' },
-  { id: 'parapheur', label: 'Parapheur', titre: 'Parapheur',
+  { id: 'parapheur', label: 'Parapheur', titre: 'Parapheur', parent: 'pdf', onglet: 'Parapheur',
     desc: 'Envoyer un PDF à signer à une ou plusieurs personnes, dans un ordre défini, avec relances et certificat.',
     icon: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8.5 16.5c1.4 0 1.9-3.5 3-3.5s-.1 3.3 1 3.3c.8 0 1.1-1.2 1.8-1.2.6 0 .5.9 1.2.9"/>' },
-  { id: 'image', label: 'Image', titre: 'Image — améliorer et vectoriser',
+  { id: 'image', label: 'Image et BAT', titre: 'Image et BAT',
     desc: 'Agrandir, nettoyer, détourer une image ; la vectoriser en SVG ou PDF. Les fichiers restent sur le poste.',
     icon: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 16l5-5 4 4"/><path d="M14 13l2-2 5 5"/><circle cx="8.5" cy="8" r="1.5"/>' },
-  { id: 'convertir', label: 'Convertir', titre: 'Convertir',
-    desc: 'Plus de 50 formats : images, PDF, documents, présentations, tableurs, audio, vidéo. Ce qui peut se faire sur le poste s\'y fait.',
+  { id: 'convertir', label: 'Convertir', titre: 'Convertir', onglet: 'Convertir',
+    desc: 'Plus de 50 formats ; renommer des fichiers en lot, créer ou ouvrir un zip, comparer deux textes ou tableaux.',
     icon: '<path d="M4 7h11.5"/><path d="M12.5 3.5L16 7l-3.5 3.5"/><path d="M20 17H8.5"/><path d="M11.5 13.5L8 17l3.5 3.5"/>' },
-  { id: 'calculs', label: 'Calculs bobine', titre: 'Calculs bobine',
-    desc: 'Métrage ↔ diamètre, fronts sur la laize, étiquettes par bobine, carton optimal.',
+  { id: 'calculs', label: 'Calculs bobine', titre: 'Calculs bobine', onglet: 'Bobine',
+    desc: 'Métrage ↔ diamètre, fronts sur la laize, étiquettes par bobine, carton optimal ; unités et couleurs.',
     icon: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6"/>' },
-  { id: 'utilitaires', label: 'Utilitaires', titre: 'Utilitaires',
-    desc: 'Codes QR et barres, scanner de documents, comparer, unités et couleurs, renommer en lot, archives zip. Tout reste sur le poste.',
-    icon: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><circle cx="17.25" cy="17.25" r="3.75"/>' },
   { id: 'traduction', label: 'Traducteur', titre: 'Traducteur', ia: true,
     desc: 'Traduire un texte ou un courrier dans huit langues, vouvoiement ou tutoiement.',
     icon: '<path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/>' },
+  // Sous-outils : un onglet de leur outil parent, pas une entrée du menu.
+  // `util` : sous-outil de static/mysifa_tools_utilitaires.js monté seul.
+  { id: 'scanner', parent: 'pdf', util: 'scanner', onglet: 'Scanner', label: 'Scanner', titre: 'Scanner un document',
+    desc: 'Photo d\'un document → page redressée et contrastée, en PDF.', icon: '' },
+  { id: 'codes', parent: 'etiquettes', util: 'qr', onglet: 'Code rapide', label: 'Code rapide', titre: 'Code QR ou code-barres',
+    desc: 'QR, Code 128, EAN-13, DataMatrix à copier ou télécharger.', icon: '' },
+  { id: 'unites', parent: 'calculs', util: 'unites', onglet: 'Unités et couleurs', label: 'Unités et couleurs', titre: 'Unités et couleurs',
+    desc: 'Longueurs, grammage, laize ↔ m², CMJN, contraste, Pantone.', icon: '' },
+  { id: 'renommer', parent: 'convertir', util: 'renommer', onglet: 'Renommer en lot', label: 'Renommer', titre: 'Renommer des fichiers',
+    desc: 'Préfixe, numéro, date, remplacement sur tout un lot.', icon: '' },
+  { id: 'archives', parent: 'convertir', util: 'archives', onglet: 'Zip', label: 'Zip', titre: 'Créer ou ouvrir un zip',
+    desc: 'Créer un zip, ouvrir un zip et en extraire un fichier.', icon: '' },
+  { id: 'comparer', parent: 'convertir', util: 'comparer', onglet: 'Comparer', label: 'Comparer', titre: 'Comparer deux textes ou tableaux',
+    desc: 'Deux textes, deux listes ou deux tableaux CSV.', icon: '' },
 ];
-const TOOLS_IDS = ['accueil'].concat(TOOLS_OUTILS.map(o => o.id));
+// `utilitaires` : ancienne page, ses adresses mènent au sous-outil (toolsLegacy).
+const TOOLS_IDS = ['accueil', 'utilitaires'].concat(TOOLS_OUTILS.map(o => o.id));
+const _TOOLS_UTIL_IDS = { qr: 'codes', scanner: 'scanner', unites: 'unites', renommer: 'renommer', archives: 'archives', comparer: 'comparer' };
+// Ancienne adresse ?outil=utilitaires&sous=<x> → l'outil qui porte ce sous-outil.
+function toolsLegacy(outil, u) {
+  if (outil !== 'utilitaires') return outil;
+  return _TOOLS_UTIL_IDS[u.get('sous', 'qr')] || 'codes';
+}
+const toolsParent = id => { const o = toolsOutil(id); return (o && o.parent) || id; };
+const toolsOnglets = id => { const p = toolsParent(id); return TOOLS_OUTILS.filter(o => (o.id === p || o.parent === p) && toolsPermis(o.id)); };
 // Icône de l'appli (même tracé que 'mytools' de html.py et mysifa_cmdk.js).
 const TOOLS_ICONE = '<rect x="2.5" y="14" width="19" height="6.5" rx="3.25"/><path d="M6.5 14c3.5-4.5 8-7.8 14-9.5L10 14"/><path d="M15.5 14l2.2-3.6"/><path d="M6 17.25h.01M18 17.25h.01"/>';
 
 function toolsPermis(id) {
   if (id === 'accueil') return true;
+  const o = TOOLS_OUTILS.find(x => x.id === id);
+  if (o && o.util) return !!(TOOLS.droits && TOOLS.droits.utilitaires) && toolsPermis(o.parent);
   return !!(TOOLS.droits && TOOLS.droits[id]);
 }
 function toolsOutil(id) { return TOOLS_OUTILS.find(o => o.id === id) || null; }
@@ -169,7 +191,7 @@ function toolsNav() {
   document.querySelectorAll('.nav-btn[data-outil]').forEach(b => {
     const id = b.getAttribute('data-outil');
     b.style.display = toolsPermis(id) ? '' : 'none';
-    b.classList.toggle('active', id === S.outil);
+    b.classList.toggle('active', id === toolsParent(S.outil));
   });
   const o = toolsOutil(S.outil);
   const sub = document.getElementById('mobile-sub');
@@ -178,7 +200,7 @@ function toolsNav() {
 }
 
 function toolsAccueil(root) {
-  const tuiles = TOOLS_OUTILS.filter(o => toolsPermis(o.id)).map(o =>
+  const tuiles = TOOLS_OUTILS.filter(o => !o.parent && toolsPermis(o.id)).map(o =>
     '<button type="button" class="tools-tile" onclick="toolsAller(\'' + o.id + '\')">'
     + '<span class="tools-tile-ic">' + toolsSvg(o.icon, 22) + '</span>'
     + '<span class="tools-tile-txt"><span class="tools-tile-t">' + escHtml(o.titre)
@@ -243,7 +265,7 @@ function toolsDemonter(sauf) {
   if (_toolsMonte && _toolsMonte !== sauf) {
     const m = { etiquettes: window.MyToolsEtiquettes, pdf: window.MyToolsPDF, traduction: window.MyToolsTraduction,
                 image: window.MyToolsImage, parapheur: window.MyToolsParapheurModule,
-                utilitaires: window.MyToolsUtilitaires }[_toolsMonte];
+                utilitaires: window.MyToolsUtilitaires }[_toolsMonte] || (toolsOutil(_toolsMonte) && toolsOutil(_toolsMonte).util ? window.MyToolsUtilitaires : null);
     if (m && typeof m.demonter === 'function') { try { m.demonter(); } catch (e) {} }
   }
   _toolsMonte = sauf || null;
@@ -254,7 +276,7 @@ function toolsRendre() {
   toolsNav();
   const content = document.getElementById('content');
   if (!content) return;
-  content.classList.toggle('content--large', S.outil === 'pdf' || S.outil === 'etiquettes' || S.outil === 'image');
+  content.classList.toggle('content--large', ['pdf', 'etiquettes', 'image'].includes(toolsParent(S.outil)));
   toolsDemonter(S.outil);
   if (S.outil === 'formulaires') {
     if (S.view === 'formulaire-edit' && S.formu && S.formu.courant) { if (typeof formuRenderEdition === 'function') formuRenderEdition(); }
@@ -265,9 +287,36 @@ function toolsRendre() {
   S.view = 'menu';
   if (S.outil === 'accueil') { toolsAccueil(content); return; }
   content.innerHTML = '';
+  const ongl = toolsOnglets(S.outil);
+  if (ongl.length > 1) {
+    const bar = document.createElement('div');
+    bar.className = 'tools-onglets'; bar.setAttribute('role', 'tablist');
+    bar.innerHTML = ongl.map(o => '<button type="button" role="tab" class="tools-onglet' + (o.id === S.outil ? ' actif' : '') + '"'
+      + ' aria-selected="' + (o.id === S.outil) + '" data-bulle="' + escAttr(o.titre) + '" onclick="toolsAller(\'' + o.id + '\')">'
+      + escHtml(o.onglet || o.label) + (o.ia ? ' <span class="ia-badge">IA</span>' : '') + '</button>').join('');
+    content.appendChild(bar);
+  }
   const root = document.createElement('div');
   root.className = 'tools-module';
   content.appendChild(root);
+  const so = toolsOutil(S.outil);
+  if (so && so.util) {
+    const id = S.outil;
+    root.classList.add('tools-util-seul');
+    root.innerHTML = '<div class="tools-empty"><span class="spin"></span> Chargement…</div>';
+    const a = _toolsAttente.utilitaires;
+    if (!a || a.sous !== so.util) _toolsAttente.utilitaires = { sous: so.util, params: {} };
+    toolsCharger('utilitaires').then(() => {
+      if (S.outil !== id || !root.isConnected) return;
+      root.innerHTML = '';
+      window.MyToolsUtilitaires.mount(root, _toolsCtx);
+      const at = _toolsAttente.utilitaires || { sous: so.util, params: {} };
+      _toolsAttente.utilitaires = null;
+      try { window.MyToolsUtilitaires.adresse.aller(at); } catch (e) {}
+      toolsSyncUrl();
+    }).catch(e => { root.innerHTML = '<div class="tools-empty">' + escHtml(e.message) + '</div>'; });
+    return;
+  }
   if (S.outil === 'etiquettes') {
     if (window.MyToolsEtiquettes) window.MyToolsEtiquettes.mount(root, _toolsCtx);
     else root.innerHTML = '<div class="tools-empty">Module Étiquettes indisponible.</div>';
@@ -386,13 +435,11 @@ function toolsParams() {
     const e = (m && m.adresse) ? m.adresse.etat() : (_toolsAttente.parapheur || {});
     if (e.statut && e.statut !== 'en_cours') p.statut = e.statut;
     if (e.demande) { p.demande = String(e.demande); nav += ':' + e.demande; if (e.signer) { p.signer = '1'; nav += '/signer'; } }
-  } else if (S.outil === 'utilitaires') {
-    // Sous-onglet (un endroit, donc empilé) et ses options ; l'adresse demandée
-    // fait foi tant que le module n'est pas chargé.
+  } else if (toolsOutil(S.outil) && toolsOutil(S.outil).util) {
+    // Sous-outil de Utilitaires : ses options ; l'adresse demandée fait foi
+    // tant que le module n'est pas chargé.
     const m = window.MyToolsUtilitaires, a = _toolsAttente.utilitaires;
-    const e = m ? m.adresse.etat() : { sous: a && a.sous, options: (a && a.params) || {} };
-    if (e.sous && e.sous !== 'qr') p.sous = e.sous;
-    nav += '/' + (e.sous || 'qr');
+    const e = (m && !a) ? m.adresse.etat() : { options: (a && a.params) || {} };
     Object.keys(e.options || {}).forEach(k => { if (!(k in p)) p[k] = String(e.options[k]); });
   } else if (S.outil === 'calculs' && window.MyToolsCalculs && window.MyToolsCalculs.adresse) {
     const e = window.MyToolsCalculs.adresse.etat();
@@ -437,7 +484,7 @@ function _toolsAttendre(cond) {
 // Applique l'adresse. `complet` : retour du navigateur — une clé absente
 // remet le défaut. Toute valeur lue est validée.
 async function toolsLireUrl(u, complet) {
-  const outil = u.get('outil', 'accueil', TOOLS_IDS);
+  const outil = toolsLegacy(u.get('outil', 'accueil', TOOLS_IDS), u);
   const cible = toolsPermis(outil) ? outil : 'accueil';
 
   if (cible === 'formulaires') {
@@ -500,12 +547,13 @@ async function toolsLireUrl(u, complet) {
                 demande: /^\d+$/.test(String(id || '')) ? Number(id) : null, signer: u.get('signer') === '1' };
     if (window.MyToolsParapheurModule) window.MyToolsParapheurModule.adresse.aller(a, complet);
     else _toolsAttente.parapheur = a;
-  } else if (cible === 'utilitaires') {
+  } else if (toolsOutil(cible) && toolsOutil(cible).util) {
     // Chaque sous-outil valide ses propres clés (MyToolsUtilitaires.CLES).
     const params = {};
     try { u.brut.forEach((v, k) => { if (!['outil', 'sous', 'parapheur'].includes(k) && /^[a-z_]{1,20}$/.test(k) && v.length <= 40) params[k] = v; }); } catch (e) {}
-    const a = { sous: u.get('sous', 'qr'), params: params };
-    if (window.MyToolsUtilitaires) window.MyToolsUtilitaires.adresse.aller(a);
+    const a = { sous: toolsOutil(cible).util, params: params };
+    const m = window.MyToolsUtilitaires;
+    if (m && document.querySelector('.tools-util-seul .tut')) m.adresse.aller(a);
     else _toolsAttente.utilitaires = a;
   } else if (cible === 'calculs' && window.MyToolsCalculs && window.MyToolsCalculs.adresse) {
     if (complet || u.a('calcul')) window.MyToolsCalculs.adresse.aller({ calcul: u.get('calcul', 'metrage', ['metrage', 'fronts', 'etiquettes', 'carton']) });
@@ -530,7 +578,7 @@ async function toolsLireUrl(u, complet) {
 async function toolsBoot() {
   toolsEnvelopper();
   const u = window.MySifaUrl ? MySifaUrl.lire() : { get: (k, d) => d, a: () => false };
-  const outil = u.get('outil', 'accueil', TOOLS_IDS);
+  const outil = toolsLegacy(u.get('outil', 'accueil', TOOLS_IDS), u);
   S.outil = toolsPermis(outil) ? outil : 'accueil';
   // Formulaires et étiquettes ont besoin de leurs données avant de rouvrir
   // l'objet de l'adresse : on rend d'abord, on applique ensuite.
