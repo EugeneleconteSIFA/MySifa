@@ -155,6 +155,17 @@ html:has(.modal-back),html:has(.modal-back) body{overflow:hidden}
 .calc-hint{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.4}
 .ndf-meta{font-size:11px;color:var(--muted);margin-top:3px}
 tr.ndf-row{cursor:pointer}
+.ndf-cartes{display:none}
+.ndf-mois+.ndf-mois{margin-top:16px}
+.ndf-mois-tete{display:flex;justify-content:space-between;gap:8px;padding:0 2px 6px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.ndf-carte{display:flex;flex-direction:column;gap:6px;width:100%;text-align:left;padding:12px;margin-bottom:8px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-family:inherit;cursor:pointer}
+.ndf-carte:active{border-color:var(--accent)}
+.ndf-carte-l1,.ndf-carte-l2{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.ndf-carte-cat{font-size:14px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ndf-carte-mt{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ndf-carte-l2{font-size:12px;color:var(--muted)}
+.ndf-carte-refus{font-size:12px;color:var(--danger)}
+@media(max-width:640px){.ndf-tableau{display:none}.ndf-cartes{display:block}}
 .file-drop{display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px dashed var(--border);border-radius:8px;padding:14px;text-align:center;font-size:12px;font-weight:500;color:var(--muted);background:var(--card);cursor:pointer;transition:border-color .15s,color .15s}
 .field .file-drop{display:flex;text-transform:none;letter-spacing:0;margin:0}
 .file-drop.grand{flex-direction:column;gap:6px;padding:22px 16px;font-size:13px;font-weight:600;color:var(--text2)}
@@ -454,7 +465,8 @@ async function loadNdf(){
     const pending=j.notes.filter(n=>n.statut==='brouillon'||n.statut==='soumise').length;
     if(badge){if(pending>0){badge.style.display='';badge.textContent=String(pending);}else{badge.style.display='none';}}
     if(!j.notes.length){c.innerHTML='<div class="empty">Aucune note de frais. Cliquez sur « Nouvelle note » pour en créer une.</div>';return;}
-    c.innerHTML=`<div style="overflow-x:auto"><table>
+    const cartes=ndfCartes(NDF_NOTES);
+    c.innerHTML=`<div class="ndf-tableau" style="overflow-x:auto"><table>
       <thead><tr><th>Date</th><th>Catégorie</th><th>Description</th><th style="text-align:right">Montant</th><th>Statut</th><th></th></tr></thead>
       <tbody>${j.notes.map(n=>`
         <tr class="ndf-row" onclick="if(!event.target.closest('a,button'))ouvrirNote(${n.id})" title="Consulter">
@@ -473,7 +485,7 @@ async function loadNdf(){
           </td>
         </tr>
       `).join('')}</tbody>
-    </table></div>`;
+    </table></div>${cartes}`;
   }catch(e){document.getElementById('ndf-container').innerHTML='<div class="empty">Erreur : '+esc(e.message)+'</div>';}
 }
 const NDF_STATUTS={brouillon:'Brouillon',soumise:'Soumise',validee:'Validée',payee:'Payée',refusee:'Refusée'};
@@ -496,6 +508,32 @@ function ndfMeta(n){
   else if(n.taux_tva!=null)p.push(n.taux_tva?'TVA '+fmtTaux(n.taux_tva)+' · '+fmtMontant(n.montant_tva):'Sans TVA');
   if(n.ville)p.push(n.ville);
   return p.join(' · ');
+}
+// Téléphone : une carte par note, regroupées par mois avec leur total. Le
+// tableau, trop large pour un petit écran, est alors masqué (CSS). Les actions
+// (Modifier, Soumettre, Supprimer) sont dans la fiche qu'ouvre la carte.
+function ndfCartes(liste){
+  const mois=[];
+  liste.forEach(n=>{
+    const cle=(n.date_frais||'').slice(0,7);
+    let g=mois.find(x=>x.cle===cle);
+    if(!g){g={cle,lignes:[],total:0};mois.push(g);}
+    g.lignes.push(n);g.total+=Number(n.montant_ttc)||0;
+  });
+  return '<div class="ndf-cartes">'+mois.map(g=>{
+    const [a,m]=g.cle.split('-');
+    const titre=m?(MOIS_LABELS[Number(m)]||m)+' '+a:'Sans date';
+    const resume=g.lignes.length+(g.lignes.length>1?' notes · ':' note · ')+fmtMontant(g.total);
+    return `<div class="ndf-mois">
+      <div class="ndf-mois-tete"><span>${esc(titre)}</span><span>${esc(resume)}</span></div>
+      ${g.lignes.map(n=>`
+        <button type="button" class="ndf-carte" onclick="ouvrirNote(${n.id})">
+          <span class="ndf-carte-l1"><span class="ndf-carte-cat">${esc(n.categorie||'Note de frais')}</span><span class="ndf-carte-mt">${fmtMontant(n.montant_ttc)}</span></span>
+          <span class="ndf-carte-l2"><span>${esc([fmtDate(n.date_frais),n.ville].filter(Boolean).join(' · '))}</span><span class="statut ${esc(n.statut)}">${esc(NDF_STATUTS[n.statut]||n.statut)}</span></span>
+          ${n.motif_refus?`<span class="ndf-carte-refus">Refus : ${esc(n.motif_refus)}</span>`:''}
+        </button>`).join('')}
+    </div>`;
+  }).join('')+'</div>';
 }
 async function loadNdfCategories(){
   try{const j=await api('/api/coffre/ndf-categories');NDF_CATS=j.categories||[];NDF_TAUX=j.taux_tva||NDF_TAUX;}catch(e){}
