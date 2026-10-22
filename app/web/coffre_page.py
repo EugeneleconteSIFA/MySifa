@@ -154,6 +154,7 @@ html:has(.modal-back),html:has(.modal-back) body{overflow:hidden}
 .ndf-ht{font-size:12px;color:var(--muted);margin-top:8px;font-variant-numeric:tabular-nums;line-height:1.45}
 .ligne-tva{display:grid;grid-template-columns:minmax(84px,1fr) minmax(96px,1.2fr) minmax(84px,1fr) 30px;gap:8px;align-items:center;margin-bottom:8px}
 .ligne-tete{margin-bottom:4px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.tva-calc{display:flex;align-items:center;min-height:40px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);font-size:13px;font-variant-numeric:tabular-nums}
 .suppr-taux{width:30px;height:30px;padding:0;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text2);cursor:pointer;font-size:16px;line-height:1;font-family:inherit}
 .suppr-taux:hover{border-color:var(--danger);color:var(--danger)}
 .ajout-taux{padding:6px 10px;border-radius:8px;border:1px dashed var(--border);background:var(--card);color:var(--text2);font-weight:600;font-size:12px;cursor:pointer;font-family:inherit}
@@ -602,7 +603,7 @@ function openNdfModal(noteId){
           <div class="ndf-section-titre">Montant</div>
           <div id="ndf-montant-zone" class="field">
             <label id="lignes-titre">Montant par taux de TVA</label>
-            <div class="ligne-tva ligne-tete"><span>Taux</span><span>TTC (€)</span><span>TVA (€)</span><span></span></div>
+            <div class="ligne-tva ligne-tete"><span>Taux</span><span>TTC (€)</span><span>TVA</span><span></span></div>
             <div id="ndf-lignes"></div>
             <button type="button" class="ajout-taux" id="ajout-taux">+ Ajouter un taux</button>
             <div class="ndf-ht" id="ndf-ht"></div>
@@ -634,15 +635,15 @@ function openNdfModal(noteId){
   const catsEl=$('#ndf-cats'),kmEl=$('#ndf-km');
   const catCourante=()=>NDF_CATS.find(c=>String(c.id)===catsEl.value)||null;
   // Ventilation de la TVA : une ligne par taux, comme sur le ticket. La TVA
-  // d'une ligne se déduit de son TTC tant qu'on ne l'a pas corrigée à la main.
-  // Même calcul que ndf_lignes_tva() de app/routers/coffre.py.
+  // d'une ligne découle de son taux et de son TTC : elle s'affiche, elle ne se
+  // saisit pas. Même calcul que ndf_lignes_tva() de app/routers/coffre.py.
   const tauxDefaut=()=>{const c=catCourante();return c&&c.saisie!=='km'?Number(c.taux_tva):20;};
-  const ligneVide=t=>({taux:t,ttc:'',tva:'',tvaManuelle:false});
+  const ligneVide=t=>({taux:t,ttc:'',tva:''});
   let lignes=[ligneVide(tauxDefaut())];
   const r2=x=>Math.round(x*100)/100;
   function calcLigne(l){
     const ttc=parseFloat(l.ttc)||0;
-    if(!l.tvaManuelle)l.tva=ttc?r2(ttc-ttc/(1+l.taux/100)).toFixed(2):'';
+    l.tva=ttc?r2(ttc-ttc/(1+l.taux/100)).toFixed(2):'';
   }
   function rendreLignes(){
     const km=!!(catCourante()&&catCourante().saisie==='km');
@@ -650,7 +651,7 @@ function openNdfModal(noteId){
     $('#ndf-lignes').innerHTML=lignes.map((l,i)=>`<div class="ligne-tva" data-l="${i}">
       <select data-f="taux" aria-label="Taux de TVA">${NDF_TAUX.map(t=>`<option value="${t}"${Number(l.taux)===t?' selected':''}${t!==Number(l.taux)&&lignes.some(x=>Number(x.taux)===t)?' disabled':''}>${t?fmtTaux(t):'Sans TVA'}</option>`).join('')}</select>
       <input type="number" data-f="ttc" step="0.01" min="0.01" placeholder="0,00" value="${esc(l.ttc)}"${km||(plusieurs&&i>0)?'':' required'} aria-label="Montant TTC">
-      <input type="number" data-f="tva" step="0.01" min="0" placeholder="0,00" value="${esc(l.tva)}" aria-label="TVA">
+      <output class="tva-calc" data-f="tva" aria-label="TVA calculée">${l.tva?esc(fmtMontant(l.tva)):'—'}</output>
       ${plusieurs?`<button type="button" class="suppr-taux" data-act="suppr" title="Retirer ce taux" aria-label="Retirer ce taux">×</button>`:'<span></span>'}
     </div>`).join('');
     $('#ajout-taux').hidden=lignes.length>=NDF_TAUX.length;
@@ -660,7 +661,7 @@ function openNdfModal(noteId){
     lignes.forEach(calcLigne);
     back.querySelectorAll('#ndf-lignes .ligne-tva').forEach((el,i)=>{
       const champ=el.querySelector('[data-f=tva]');
-      if(champ&&document.activeElement!==champ)champ.value=lignes[i].tva;
+      if(champ)champ.textContent=lignes[i].tva?fmtMontant(lignes[i].tva):'—';
     });
     const ttc=r2(lignes.reduce((s,l)=>s+(parseFloat(l.ttc)||0),0));
     const tva=r2(lignes.reduce((s,l)=>s+(parseFloat(l.tva)||0),0));
@@ -687,13 +688,12 @@ function openNdfModal(noteId){
     const el=e.target.closest('[data-f]');if(!el)return;
     const l=lignes[Number(el.closest('.ligne-tva').dataset.l)];if(!l)return;
     if(el.dataset.f==='ttc')l.ttc=el.value;
-    else if(el.dataset.f==='tva'){l.tva=el.value;l.tvaManuelle=el.value!=='';}
     majTotaux();
   });
   $('#ndf-lignes').addEventListener('change',e=>{
     const el=e.target.closest('[data-f=taux]');if(!el)return;
     const l=lignes[Number(el.closest('.ligne-tva').dataset.l)];if(!l)return;
-    l.taux=Number(el.value);l.tvaManuelle=false;rendreLignes();
+    l.taux=Number(el.value);rendreLignes();
   });
   $('#ndf-lignes').addEventListener('click',e=>{
     const b=e.target.closest('[data-act=suppr]');if(!b)return;
@@ -708,7 +708,7 @@ function openNdfModal(noteId){
   });
   catsEl.addEventListener('change',()=>{
     const cat=catCourante();
-    if(cat&&cat.saisie!=='km'&&lignes.length===1&&!manuels.has('tva_lignes')){lignes[0].taux=Number(cat.taux_tva);lignes[0].tvaManuelle=false;}
+    if(cat&&cat.saisie!=='km'&&lignes.length===1&&!manuels.has('tva_lignes')){lignes[0].taux=Number(cat.taux_tva);}
     rendreLignes();majCalcul();
   });
   kmEl.addEventListener('input',majCalcul);
@@ -725,11 +725,6 @@ function openNdfModal(noteId){
       lignes=src.map(x=>{
         const l=ligneVide(Number(x.taux_tva));
         l.ttc=x.montant_ttc!=null?Number(x.montant_ttc).toFixed(2):'';
-        if(x.montant_tva!=null){
-          const ttc=Number(x.montant_ttc)||0;
-          l.tva=Number(x.montant_tva).toFixed(2);
-          l.tvaManuelle=Math.abs(r2(ttc-ttc/(1+l.taux/100))-Number(x.montant_tva))>0.005;
-        }
         return l;
       });
     }
@@ -789,7 +784,7 @@ function openNdfModal(noteId){
       }
       if(!manuels.has('tva_lignes')&&(c.tva_lignes||c.montant_ttc!=null)){
         if(c.tva_lignes&&c.tva_lignes.length){
-          lignes=c.tva_lignes.map(x=>({taux:Number(x.taux),ttc:Number(x.ttc).toFixed(2),tva:Number(x.tva).toFixed(2),tvaManuelle:true}));
+          lignes=c.tva_lignes.map(x=>({taux:Number(x.taux),ttc:Number(x.ttc).toFixed(2),tva:''}));
         }else{
           lignes=[ligneVide(tauxDefaut())];lignes[0].ttc=Number(c.montant_ttc).toFixed(2);
         }
@@ -877,7 +872,8 @@ function openNdfModal(noteId){
       fd.delete('distance_km');
       // Une ligne ajoutée puis laissée vide ne part pas.
       const pleines=lignes.filter((l,i)=>i===0||String(l.ttc).trim()!=='');
-      fd.set('tva_lignes',JSON.stringify(pleines.map(l=>({taux:Number(l.taux),ttc:String(l.ttc).replace(',','.'),tva:l.tva===''?null:String(l.tva).replace(',','.')}))));
+      // La TVA n'est pas envoyée : le serveur la recalcule du taux et du TTC.
+      fd.set('tva_lignes',JSON.stringify(pleines.map(l=>({taux:Number(l.taux),ttc:String(l.ttc).replace(',','.')}))));
     }
     try{
       const r=await fetch(edite?'/api/coffre/notes-frais/'+edite.id:'/api/coffre/notes-frais',{method:edite?'PUT':'POST',credentials:'include',body:fd});

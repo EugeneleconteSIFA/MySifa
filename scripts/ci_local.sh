@@ -88,7 +88,10 @@ avec_delai() {
 # boucle meme apres le timeout (test_mystock_declinaisons, 27/08/2026).
 if [ "${1:-}" = "--un" ]; then
     t=$2; dossier=$3; nom=$(basename "$t")
-    avec_delai 120 $PY_CMD $PY_ARG "$t" </dev/null >"$dossier/$nom.log" 2>&1
+    # 300 s par test : seul, le plus long prend une vingtaine de secondes, mais
+    # huit en parallele sur un portable (chacun rejoue ~200 migrations) en
+    # faisaient depasser deux de 120 s (22/10/2026) — faux rouge.
+    avec_delai "${CI_DELAI_TEST:-300}" $PY_CMD $PY_ARG "$t" </dev/null >"$dossier/$nom.log" 2>&1
     echo $? >"$dossier/$nom.code"
     exit 0
 fi
@@ -182,6 +185,8 @@ for t in tests/test_*.py; do
         # Test qui execute du JavaScript avec Node : la CI GitHub l'a, le Mac
         # non. Meme regle qu'un paquet tiers absent.
         echo "ignore (Node absent de ce poste)"
+    elif [[ $code -eq 142 || $code -eq 124 || $code -eq 137 ]]; then
+        echo "KO (trop long : arrete apres ${CI_DELAI_TEST:-300} s)"; echec=1
     else
         echo "KO"; echec=1
         # Les dernieres lignes du test : sans elles, un KO local oblige a
