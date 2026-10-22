@@ -55,11 +55,13 @@
      onValider   (res) => void  — res : {lignes, reference, etat}
      onFermer    () => void
 
-   MysRvgiPicker.resume(el, objet, objetId, piece)
+   MysRvgiPicker.resume(el, objet, objetId, piece, opts)
        Peint dans `el` le résumé de ce qui est rattaché, et le tient
        à jour. Sert sous le champ du formulaire. `piece` le limite à
        une nature : sous l'ARC d'un départ, ses BL n'ont rien à
-       faire.
+       faire. `opts.detacher` ajoute une croix sur chaque pièce (et
+       « Tout détacher ») pour défaire un rattachement fait par
+       erreur ; `opts.onChange(res)` est appelé après.
    ============================================================ */
 (function (global) {
   'use strict';
@@ -144,6 +146,13 @@
     '.mrp-res .e.a_verifier{background:rgba(234,88,12,.14);color:#c2410c}',
     '.mrp-res .e.a_rattacher{background:rgba(148,163,184,.2);color:#475569}',
     '.mrp-res .e.hors_commande{background:rgba(148,163,184,.2);color:#475569}',
+    '.mrp-res .p .x{border:none;background:none;color:inherit;cursor:pointer;font:inherit;',
+    '  font-weight:700;padding:0 0 0 5px;margin:0;opacity:.6;line-height:1}',
+    '.mrp-res .p .x:hover{opacity:1;color:var(--danger,#dc2626)}',
+    '.mrp-res .tout{border:none;background:none;color:var(--muted,#6b7280);cursor:pointer;font:inherit;',
+    '  font-size:11.5px;padding:0;text-decoration:underline}',
+    '.mrp-res .tout:hover{color:var(--danger,#dc2626)}',
+    '.mrp-res button:disabled{opacity:.4;cursor:wait}',
     /* Suggestions sous le champ de saisie d'origine */
     '.mrp-sug{position:fixed;z-index:9200;background:var(--card,#fff);border:1px solid var(--border,#dcdfe4);',
     '  border-radius:11px;box-shadow:0 14px 40px rgba(0,0,0,.22);overflow:hidden;max-height:340px;overflow-y:auto;',
@@ -653,31 +662,85 @@
 
   // ── Résumé sous un champ de formulaire ────────────────────────────────────
 
-  async function resume(el, objet, objetId, piece) {
+  async function resume(el, objet, objetId, piece, opts) {
     if (!el) return;
     styles();
+    var o = opts || {};
     if (!objetId) { el.innerHTML = ''; return; }
+    var rows;
     try {
       var r = await api('/api/rvgi/rattachements/' + encodeURIComponent(objet) + '/' +
                         encodeURIComponent(objetId) +
                         (piece ? '?piece=' + encodeURIComponent(piece) : ''));
+      rows = r.rattachements || [];
       var e = r.etat || 'a_rattacher';
       var h = '<span class="e ' + esc(e) + '">' + esc(ETATS[e] || e) + '</span>';
-      (r.rattachements || []).slice(0, 8).forEach(function (x) {
-        h += '<span class="p">' + esc(x.numero) + (x.ligne != null ? '/L' + x.ligne : '') +
-             (x.qte != null ? ' · ' + nb(x.qte) : '') + '</span>';
+      rows.slice(0, 8).forEach(function (x, i) {
+        var lib = esc(x.numero) + (x.ligne != null ? '/L' + x.ligne : '');
+        h += '<span class="p">' + lib + (x.qte != null ? ' · ' + nb(x.qte) : '') +
+             (o.detacher
+               ? '<button type="button" class="x" data-detacher="' + i + '" title="Détacher ' +
+                 lib + '" aria-label="Détacher ' + lib + '">×</button>'
+               : '') +
+             '</span>';
       });
-      if ((r.rattachements || []).length > 8) {
-        h += '<span>+ ' + ((r.rattachements || []).length - 8) + '</span>';
+      if (rows.length > 8) {
+        h += '<span>+ ' + (rows.length - 8) + '</span>';
       }
-      if (!(r.rattachements || []).length) {
+      if (o.detacher && rows.length > 1) {
+        h += '<button type="button" class="tout" data-detacher="tout">Tout détacher</button>';
+      }
+      if (!rows.length) {
         h += '<span>' + (piece === 'commande' && objet === 'depart'
           ? 'aucune ligne de commande rattachée'
           : 'aucune pièce RVGI rattachée') + '</span>';
       }
       el.className = 'mrp-res';
       el.innerHTML = h;
-    } catch (err) { el.innerHTML = ''; }
+    } catch (err) { el.innerHTML = ''; return; }
+
+    if (!o.detacher) return;
+    el.querySelectorAll('[data-detacher]').forEach(function (b) {
+      b.addEventListener('click', function (ev) {
+        ev.preventDefault(); ev.stopPropagation();
+        var cle = b.getAttribute('data-detacher');
+        detacher(cle === 'tout' ? null : rows[Number(cle)]);
+      });
+    });
+
+    // L'enregistrement est un remplacement : on renvoie tout ce qui reste,
+    // tel que lu, en retirant la pièce visée (ou tout, pour « Tout détacher »).
+    async function detacher(cible) {
+      var lib = cible ? cible.numero + (cible.ligne != null ? '/L' + cible.ligne : '') : '';
+      var q = cible
+        ? 'Détacher ' + lib + ' de ce ' + (objet === 'depart' ? 'départ' : 'dossier') + ' ?'
+        : 'Détacher toutes les pièces RVGI de ce ' + (objet === 'depart' ? 'départ' : 'dossier') + ' ?';
+      if (!confirm(q)) return;
+      var restes = cible ? rows.filter(function (x) { return x !== cible; }) : [];
+      var lignes = restes.map(function (x) {
+        return { numero: String(x.numero), ligne: x.ligne == null ? null : Number(x.ligne),
+                 qte: x.qte == null ? null : Number(x.qte), confirme: x.etat === 'confirme',
+                 vu_qte: x.vu_qte == null ? null : Number(x.vu_qte),
+                 vu_article: x.vu_article || null, vu_client: x.vu_client || null,
+                 note: x.note || null };
+      });
+      el.querySelectorAll('button').forEach(function (x) { x.disabled = true; });
+      var res;
+      try {
+        res = await api('/api/rvgi/rattachements', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ objet: objet, objet_id: Number(objetId),
+                                 piece: piece || null, lignes: lignes, etat: null })
+        });
+      } catch (err) {
+        el.querySelectorAll('button').forEach(function (x) { x.disabled = false; });
+        if (o.onErreur) o.onErreur(err); else alert(err.message);
+        return;
+      }
+      await resume(el, objet, objetId, piece, o);
+      if (o.onChange) o.onChange({ etat: res.etat, texte: res.texte, lignes: lignes,
+                                   detache: cible ? lib : 'tout' });
+    }
   }
 
   // ── Le champ de saisie EST le lien vers RVGI ─────────────────────────────
